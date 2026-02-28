@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `ast_find` tool for structural code search using AST matching via ast-grep, enabling syntax-aware pattern discovery across codebases
@@ -24,6 +23,10 @@
 
 ### Changed
 
+- Unified `path` parameter in ast_find and ast_replace tools to accept files, directories, or glob patterns directly, eliminating the separate `glob` parameter
+- Removed `strictness` parameter from ast_find and ast_replace tools
+- Removed `fail_on_parse_error` parameter from ast_replace tool (now always false)
+- Updated ast_find and ast_replace prompt guidance to clarify that `path` accepts glob patterns and no longer requires separate glob specification
 - Refactored prompt template rendering to use unified `formatPromptContent()` function with phase-aware formatting (pre-render vs post-render)
 - Updated `format-prompts.ts` script to use centralized prompt formatting utility instead of inline implementation
 - Replaced `column` parameter with `symbol` parameter for more intuitive position specification

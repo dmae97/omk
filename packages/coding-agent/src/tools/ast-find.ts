@@ -11,24 +11,16 @@ import astFindDescription from "../prompts/tools/ast-find.md" with { type: "text
 import { Ellipsis, Hasher, type RenderCache, renderStatusLine, renderTreeList, truncateToWidth } from "../tui";
 import type { ToolSession } from ".";
 import type { OutputMeta } from "./output-meta";
-import { resolveToCwd } from "./path-utils";
+import { hasGlobPathChars, parseSearchPath, resolveToCwd } from "./path-utils";
 import { formatCount, formatEmptyMessage, formatErrorMessage, PREVIEW_LIMITS } from "./render-utils";
 import { ToolError } from "./tool-errors";
 import { toolResult } from "./tool-result";
 
-const strictnessValues = ["cst", "smart", "ast", "relaxed", "signature"] as const;
-
 const astFindSchema = Type.Object({
-	pattern: Type.Optional(Type.String({ description: "AST pattern, e.g. 'foo($A)'" })),
-	lang: Type.Optional(
-		Type.String({ description: "Language override (optional; inferred from file extension when omitted)" }),
-	),
-	path: Type.Optional(Type.String({ description: "File or directory to search (default: cwd)" })),
-	glob: Type.Optional(
-		Type.String({ description: "Glob filter within path (`*.ts` direct children, `**/*.ts` recursive)" }),
-	),
+	pattern: Type.String({ description: "AST pattern, e.g. 'foo($A)'" }),
+	lang: Type.Optional(Type.String({ description: "Language override" })),
+	path: Type.Optional(Type.String({ description: "File, directory, or glob pattern to search (default: cwd)" })),
 	selector: Type.Optional(Type.String({ description: "Optional selector for contextual pattern mode" })),
-	strictness: Type.Optional(Type.Union(strictnessValues.map(value => Type.Literal(value)))),
 	limit: Type.Optional(Type.Number({ description: "Max matches (default: 50)" })),
 	offset: Type.Optional(Type.Number({ description: "Skip first N matches (default: 0)" })),
 	context: Type.Optional(Type.Number({ description: "Context lines around each match" })),
@@ -81,16 +73,23 @@ export class AstFindTool implements AgentTool<typeof astFindSchema, AstFindToolD
 			}
 
 			let searchPath: string | undefined;
-			if (params.path) {
+			let globFilter: string | undefined;
+			const rawPath = params.path?.trim();
+			if (rawPath) {
 				const internalRouter = this.session.internalRouter;
-				if (internalRouter?.canHandle(params.path)) {
-					const resource = await internalRouter.resolve(params.path);
+				if (internalRouter?.canHandle(rawPath)) {
+					if (hasGlobPathChars(rawPath)) {
+						throw new ToolError(`Glob patterns are not supported for internal URLs: ${rawPath}`);
+					}
+					const resource = await internalRouter.resolve(rawPath);
 					if (!resource.sourcePath) {
-						throw new ToolError(`Cannot search internal URL without backing file: ${params.path}`);
+						throw new ToolError(`Cannot search internal URL without backing file: ${rawPath}`);
 					}
 					searchPath = resource.sourcePath;
 				} else {
-					searchPath = resolveToCwd(params.path, this.session.cwd);
+					const parsedPath = parseSearchPath(rawPath);
+					searchPath = resolveToCwd(parsedPath.basePath, this.session.cwd);
+					globFilter = parsedPath.glob;
 				}
 			}
 
@@ -98,9 +97,8 @@ export class AstFindTool implements AgentTool<typeof astFindSchema, AstFindToolD
 				pattern,
 				lang: params.lang?.trim(),
 				path: searchPath,
-				glob: params.glob?.trim(),
+				glob: globFilter,
 				selector: params.selector?.trim(),
-				strictness: params.strictness,
 				limit,
 				offset,
 				context,
@@ -151,7 +149,7 @@ export class AstFindTool implements AgentTool<typeof astFindSchema, AstFindToolD
 				}
 			}
 			if (result.limitReached) {
-				lines.push("", "Result limit reached; narrow path/glob or increase limit.");
+				lines.push("", "Result limit reached; narrow path pattern or increase limit.");
 			}
 			if (result.parseErrors?.length) {
 				lines.push("", "Parse issues:", ...result.parseErrors.map(err => `- ${err}`));
@@ -171,9 +169,7 @@ interface AstFindRenderArgs {
 	pattern?: string;
 	lang?: string;
 	path?: string;
-	glob?: string;
 	selector?: string;
-	strictness?: string;
 	limit?: number;
 	offset?: number;
 	context?: number;
@@ -188,9 +184,7 @@ export const astFindToolRenderer = {
 		const meta: string[] = [];
 		if (args.lang) meta.push(`lang:${args.lang}`);
 		if (args.path) meta.push(`in ${args.path}`);
-		if (args.glob) meta.push(`glob:${args.glob}`);
 		if (args.selector) meta.push("selector");
-		if (args.strictness) meta.push(args.strictness);
 		if (args.limit !== undefined && args.limit > 0) meta.push(`limit:${args.limit}`);
 		if (args.offset !== undefined && args.offset > 0) meta.push(`offset:${args.offset}`);
 		if (args.context !== undefined) meta.push(`context:${args.context}`);
@@ -279,7 +273,7 @@ export const astFindToolRenderer = {
 
 		const extraLines: string[] = [];
 		if (limitReached) {
-			extraLines.push(uiTheme.fg("warning", "limit reached; narrow path/glob or increase limit"));
+			extraLines.push(uiTheme.fg("warning", "limit reached; narrow path pattern or increase limit"));
 		}
 		if (details?.parseErrors?.length) {
 			extraLines.push(uiTheme.fg("warning", `${details.parseErrors.length} parse issue(s)`));

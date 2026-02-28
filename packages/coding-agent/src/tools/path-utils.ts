@@ -88,6 +88,40 @@ export function resolveToCwd(filePath: string, cwd: string): string {
 	return path.resolve(cwd, expanded);
 }
 
+const GLOB_PATH_CHARS = ["*", "?", "[", "{"] as const;
+
+export function hasGlobPathChars(filePath: string): boolean {
+	return GLOB_PATH_CHARS.some(char => filePath.includes(char));
+}
+
+export interface ParsedSearchPath {
+	basePath: string;
+	glob?: string;
+}
+
+/**
+ * Split a user path into a base path + glob pattern for tools that delegate to
+ * APIs accepting separate `path` and `glob` arguments.
+ */
+export function parseSearchPath(filePath: string): ParsedSearchPath {
+	const normalizedPath = filePath.replace(/\\/g, "/");
+	if (!hasGlobPathChars(normalizedPath)) {
+		return { basePath: filePath };
+	}
+
+	const segments = normalizedPath.split("/");
+	const firstGlobIndex = segments.findIndex(segment => hasGlobPathChars(segment));
+
+	if (firstGlobIndex <= 0) {
+		return { basePath: ".", glob: normalizedPath };
+	}
+
+	return {
+		basePath: segments.slice(0, firstGlobIndex).join("/"),
+		glob: segments.slice(firstGlobIndex).join("/"),
+	};
+}
+
 export function resolveReadPath(filePath: string, cwd: string): string {
 	const resolved = resolveToCwd(filePath, cwd);
 

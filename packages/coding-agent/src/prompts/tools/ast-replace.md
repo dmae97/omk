@@ -2,8 +2,7 @@ Performs structural AST-aware rewrites via native ast-grep.
 
 <instruction>
 - Use for codemods and structural rewrites where plain text replace is unsafe
-- Narrow scope with `path` and `glob` before replacing
-- `glob` follows standard matching semantics (`*.ts` matches only direct children of `path`; use `**/*.ts` for recursive matches)
+- Narrow scope with `path` before replacing (`path` accepts files, directories, or glob patterns)
 - `pattern` + `rewrite` are required; `lang` is optional only when all matched files resolve to a single language
 - Keep `dry_run` enabled unless explicit apply intent is clear
 - Use `max_files` and `max_replacements` as safety caps on broad rewrites
@@ -17,6 +16,6 @@ Performs structural AST-aware rewrites via native ast-grep.
 
 <critical>
 - `pattern` + `rewrite` are required
-- If path/glob spans multiple languages, set `lang` explicitly for deterministic rewrites
+- If the path pattern spans multiple languages, set `lang` explicitly for deterministic rewrites
 - For one-off local text edits, prefer the Edit tool instead of AST replace
 </critical>

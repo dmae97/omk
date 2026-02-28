@@ -311,7 +311,10 @@ function parseAlternateLinks(html: string, pageUrl: string): string[] {
 
 			if (type.includes("markdown")) {
 				links.push(href);
-			} else if ((type.includes("rss") || type.includes("atom") || type.includes("feed")) && (href.includes(pagePath) || href.includes("comments"))) {
+			} else if (
+				(type.includes("rss") || type.includes("atom") || type.includes("feed")) &&
+				(href.includes(pagePath) || href.includes("comments"))
+			) {
 				links.push(href);
 			}
 		}
