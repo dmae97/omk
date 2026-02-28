@@ -92,6 +92,7 @@ Execute Python code with a persistent IPython kernel and rich helper prelude:
 - **Shared gateway**: Resource-efficient kernel reuse across sessions (`python.sharedGateway` setting)
 - **Custom modules**: Load extensions from `.omp/modules/` and `~/.omp/agent/modules/`
 - **Rich output**: Supports `display()` for HTML, Markdown, images, and interactive JSON trees
+- **Markdown rendering**: Python cell output with Markdown content renders inline
 - **Mermaid diagrams**: Renders mermaid code blocks as inline graphics in iTerm2/Kitty terminals
 - Install dependencies via `omp setup python`
 
@@ -103,12 +104,13 @@ Execute Python code with a persistent IPython kernel and rich helper prelude:
 
 Full IDE-like code intelligence with automatic formatting and diagnostics:
 
+- **11 LSP operations**: `diagnostics`, `definition`, `type_definition`, `implementation`, `references`, `hover`, `symbols`, `rename`, `code_actions`, `status`, `reload`
 - **Format-on-write**: Auto-format code using the language server's formatter (rustfmt, gofmt, prettier, etc.)
 - **Diagnostics on write/edit**: Immediate feedback on syntax errors and type issues after every file change
 - **Workspace diagnostics**: Check entire project for errors with `lsp` action `diagnostics` (without a file)
 - **40+ language configs**: Out-of-the-box support for Rust, Go, Python, TypeScript, Java, Kotlin, Scala, Haskell, OCaml, Elixir, Ruby, PHP, C#, Lua, Nix, and many more
 - **Local binary resolution**: Auto-discovers project-local LSP servers in `node_modules/.bin/`, `.venv/bin/`, etc.
-- Hover docs, symbol references, code actions, workspace-wide symbol search
+- **Symbol disambiguation**: `occurrence` parameter resolves repeated symbols on the same line
 
 ### + Time Traveling Streamed Rules (TTSR)
 
@@ -151,9 +153,12 @@ Parallel execution framework with specialized agents and real-time streaming:
 - **Parallel exploration**: Reviewer agent can spawn explore agents for large codebase analysis
 - **Real-time artifact streaming**: Task outputs stream as they're created, not just at completion
 - **Full output access**: Read complete subagent output via `agent://<id>` resources when previews truncate
-- **Isolated execution**: `isolated: true` runs tasks in git worktrees, generates patches, and applies cleanly
+- **Isolation backends**: `isolated: true` runs tasks in git worktrees or fuse-overlay filesystems, with patch or branch merge strategies
+- **Async background jobs**: Background execution with configurable concurrency (up to 100 jobs) and `await` tool for blocking on results
+- **Agent Control Center**: `/agents` dashboard for managing and creating custom agents
+- **AI-powered agent creation**: Generate custom agent definitions with the architect model
+- **Per-agent model overrides**: Assign specific models to individual agents via swarm extension
 - User-level (`~/.omp/agent/agents/`) and project-level (`.omp/agents/`) custom agents
-- Concurrency-limited batch execution with progress tracking
 
 ### + Model Roles
 
@@ -171,11 +176,13 @@ Configure different models for different purposes with automatic discovery:
 
 ### + Todo Tool (Task Tracking)
 
-Structured task management with persistent visual tracking:
+Structured task management with phased progress tracking:
 
-- **`todo_write` tool**: Create and manage task lists during coding sessions
+- **Phased task lists**: Organize work into named phases with ordered tasks
+- **5 operations**: `replace` (setup), `add_phase`, `add_task`, `update` (status changes), `remove_task`
+- **4 task states**: `pending`, `in_progress`, `completed`, `abandoned`
+- **Auto-normalization**: Ensures exactly one task is `in_progress` at all times
 - **Persistent panel**: Todo list displays above the editor with real-time progress
-- **Task states**: `pending`, `in_progress`, `completed` with automatic status updates
 - **Completion reminders**: Agent warned when stopping with incomplete todos (`todo.reminders` setting)
 - **Toggle visibility**: `Ctrl+T` expands/collapses the todo panel
 
@@ -229,9 +236,12 @@ Unified capability-based discovery that loads configuration from 8 AI coding too
 Full Model Context Protocol support with external tool integration:
 
 - Stdio and HTTP transports for connecting to MCP servers
+- **OAuth support**: Explicit `clientId` and `callbackPort` in MCP server config, manual OAuth callbacks via slash commands
+- **Browser server filtering**: Automatically filters browser-type MCP servers to prevent conflicts with built-in browser tool
 - Plugin CLI (`omp plugin install/enable/configure/doctor`)
 - Hot-loadable plugins from `~/.omp/plugins/` with npm/bun integration
 - Automatic Exa MCP server filtering with API key extraction
+- `disabledServers` works on both project-level and user-level third-party servers
 
 ### + Web Search & Fetch
 
@@ -241,7 +251,7 @@ Full Model Context Protocol support with external tool integration:
 
 Multi-provider search and full-page scraping with specialized handlers:
 
-- **Multi-provider search**: `auto`, `exa`, `jina`, `zai`, `anthropic`, `perplexity`, `gemini`, `codex`
+- **Multi-provider search**: `auto`, `exa`, `brave`, `jina`, `kimi`, `zai`, `anthropic`, `perplexity`, `gemini`, `codex`, `synthetic`
 - **Specialized handlers**: Site-specific extraction for code hosts, registries, research sources, forums, and docs
 - **Package registries**: npm, PyPI, crates.io, Hex, Hackage, NuGet, Maven, RubyGems, Packagist, pub.dev, Go packages
 - **Security databases**: NVD, OSV, CISA KEV vulnerability data
@@ -252,6 +262,7 @@ Multi-provider search and full-page scraping with specialized handlers:
 Remote command execution with persistent connections:
 
 - **Project discovery**: Reads SSH hosts from `ssh.json` / `.ssh.json` in your project
+- **Host management**: Add, remove, and list hosts via `omp ssh` CLI or `/ssh` slash command
 - **Persistent connections**: Reuses SSH connections across commands for faster execution
 - **OS/shell detection**: Automatically detects remote OS and shell type
 - **SSHFS mounts**: Optional automatic mounting of remote directories
@@ -307,6 +318,10 @@ Modern terminal interface with smart session management:
 - **Hotkeys**: `?` displays shortcuts when editor empty
 - **Persistent prompt history**: SQLite-backed with `Ctrl+R` search across sessions
 - **Grouped tool display**: Consecutive Read calls shown in compact tree view
+- **Streaming text preview**: Real-time delta updates during agent output
+- **Overlay UI**: Custom hooks can display components as bottom-centered overlays
+- **Configurable tab width**: `display.tabWidth` setting with `.editorconfig` integration
+- **Scrollback preservation**: Uses home+erase-below instead of clear-screen
 - **Emergency terminal restore**: Crash handlers prevent terminal corruption
 
 ### + Hashline Edits
@@ -350,14 +365,17 @@ Supported platforms: `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`, `
 - **`xhigh` thinking level**: Extended reasoning for Anthropic models with increased token budgets
 - **Background mode**: `/background` detaches UI and continues agent execution
 - **Completion notifications**: Configurable bell/OSC99/OSC9 when agent finishes
-- **65+ built-in themes**: Catppuccin, Dracula, Nord, Gruvbox, Tokyo Night, and material variants
+- **65+ built-in themes**: Catppuccin, Dracula, Nord, Gruvbox, Tokyo Night, Poimandres, and material variants
+- **Automatic dark/light switching**: Mode 2031 terminal detection, native macOS appearance via CoreFoundation FFI, COLORFGBG fallback
 - **Auto environment detection**: OS, distro, kernel, CPU, GPU, shell, terminal, DE in system prompt
 - **Git context**: System prompt includes branch, status, recent commits
 - **Bun runtime**: Native TypeScript execution, faster startup, all packages migrated
 - **Centralized file logging**: Debug logs with daily rotation to `~/.omp/logs/`
 - **Bash interceptor**: Optionally block shell commands that have dedicated tools
+- **Per-command PTY control**: Bash tool supports `pty: true` for commands requiring a real terminal (sudo, ssh)
 - **@file auto-read**: Type `@path/to/file` in prompts to inject file contents inline
-- **Additional tools**: AST (structural code analysis), Replace (find & replace across files)
+- **AST tools**: `ast_find` and `ast_replace` for syntax-aware code search and codemods via ast-grep
+- **Sampling controls**: `topP`, `topK`, `minP`, `presencePenalty`, `repetitionPenalty` settings for fine-grained model tuning
 
 ---
 
@@ -457,31 +475,35 @@ return config
 
 **Option 1: Environment variables** (common examples)
 
-| Provider   | Environment Variable |
-| ---------- | -------------------- |
-| Anthropic  | `ANTHROPIC_API_KEY`  |
-| OpenAI     | `OPENAI_API_KEY`     |
-| Google     | `GEMINI_API_KEY`     |
-| Mistral    | `MISTRAL_API_KEY`    |
-| Groq       | `GROQ_API_KEY`       |
-| Cerebras   | `CEREBRAS_API_KEY`   |
-| Hugging Face (`huggingface`) | `HUGGINGFACE_HUB_TOKEN` or `HF_TOKEN` |
-| Synthetic  | `SYNTHETIC_API_KEY`  |
-| NVIDIA (`nvidia`) | `NVIDIA_API_KEY` |
-| NanoGPT (`nanogpt`) | `NANO_GPT_API_KEY` |
-| Together (`together`) | `TOGETHER_API_KEY` |
-| Ollama (`ollama`) | `OLLAMA_API_KEY` *(optional)* |
-| LiteLLM (`litellm`) | `LITELLM_API_KEY` |
-| Xiaomi MiMo (`xiaomi`) | `XIAOMI_API_KEY` |
-| Moonshot (`moonshot`) | `MOONSHOT_API_KEY` |
-| Venice (`venice`) | `VENICE_API_KEY` |
-| xAI        | `XAI_API_KEY`        |
-| OpenRouter | `OPENROUTER_API_KEY` |
-| Z.AI       | `ZAI_API_KEY`        |
-| Qwen Portal (`qwen-portal`) | `QWEN_OAUTH_TOKEN` or `QWEN_PORTAL_API_KEY` |
-| vLLM (`vllm`) | `VLLM_API_KEY` |
-| Cloudflare AI Gateway (`cloudflare-ai-gateway`) | `CLOUDFLARE_AI_GATEWAY_API_KEY` |
-| Qianfan (`qianfan`) | `QIANFAN_API_KEY` |
+| Provider                                        | Environment Variable                         |
+| ----------------------------------------------- | -------------------------------------------- |
+| Anthropic                                       | `ANTHROPIC_API_KEY`                          |
+| OpenAI                                          | `OPENAI_API_KEY`                             |
+| Google                                          | `GEMINI_API_KEY`                             |
+| Mistral                                         | `MISTRAL_API_KEY`                            |
+| Groq                                            | `GROQ_API_KEY`                               |
+| Cerebras                                        | `CEREBRAS_API_KEY`                           |
+| Hugging Face (`huggingface`)                    | `HUGGINGFACE_HUB_TOKEN` or `HF_TOKEN`        |
+| Synthetic                                       | `SYNTHETIC_API_KEY`                          |
+| NVIDIA (`nvidia`)                               | `NVIDIA_API_KEY`                             |
+| NanoGPT (`nanogpt`)                             | `NANO_GPT_API_KEY`                           |
+| Together (`together`)                           | `TOGETHER_API_KEY`                           |
+| Ollama (`ollama`)                               | `OLLAMA_API_KEY` _(optional)_                |
+| LiteLLM (`litellm`)                             | `LITELLM_API_KEY`                            |
+| Xiaomi MiMo (`xiaomi`)                          | `XIAOMI_API_KEY`                             |
+| Moonshot (`moonshot`)                           | `MOONSHOT_API_KEY`                           |
+| Venice (`venice`)                               | `VENICE_API_KEY`                             |
+| Kilo Gateway (`kilo`)                           | `KILO_API_KEY`                               |
+| GitLab Duo (`gitlab-duo`)                       | _OAuth only_                                 |
+| Jina (`jina`, web search)                       | `JINA_API_KEY`                               |
+| Perplexity                                      | `PERPLEXITY_API_KEY` or `PERPLEXITY_COOKIES` |
+| xAI                                             | `XAI_API_KEY`                                |
+| OpenRouter                                      | `OPENROUTER_API_KEY`                         |
+| Z.AI                                            | `ZAI_API_KEY`                                |
+| Qwen Portal (`qwen-portal`)                     | `QWEN_OAUTH_TOKEN` or `QWEN_PORTAL_API_KEY`  |
+| vLLM (`vllm`)                                   | `VLLM_API_KEY`                               |
+| Cloudflare AI Gateway (`cloudflare-ai-gateway`) | `CLOUDFLARE_AI_GATEWAY_API_KEY`              |
+| Qianfan (`qianfan`)                             | `QIANFAN_API_KEY`                            |
 
 See [Environment Variables](docs/environment-variables.md) for the full list.
 
@@ -501,6 +523,8 @@ Use `/login` with supported providers:
 - NanoGPT (`nanogpt`)
 - Hugging Face Inference (`huggingface`)
 - OpenCode Zen
+- Kilo Gateway (`kilo`)
+- GitLab Duo (`gitlab-duo`)
 - Qianfan (`qianfan`)
 - Ollama (local / self-hosted, `ollama`)
 - vLLM (local OpenAI-compatible, `vllm`)
@@ -521,6 +545,7 @@ For `nanogpt`, `/login nanogpt` opens `https://nano-gpt.com/api` and prompts for
 For `cloudflare-ai-gateway`, set provider base URL to
 `https://gateway.ai.cloudflare.com/v1/<account_id>/<gateway_id>/anthropic`
 (for example in `~/.omp/agent/models.yml`).
+
 ```bash
 omp
 /login
@@ -848,7 +873,7 @@ theme:
 modelRoles:
   default: anthropic/claude-sonnet-4-20250514
 
-defaultThinkingLevel: medium
+defaultThinkingLevel: high
 enabledModels:
   - anthropic/*
   - "*gpt*"
@@ -880,6 +905,23 @@ retry:
 
 terminal:
   showImages: true
+
+topP: -1 # Nucleus sampling (0-1, -1 = provider default)
+topK: -1 # Top-K tokens (-1 = provider default)
+minP: -1 # Minimum probability (0-1, -1 = provider default)
+
+display:
+  tabWidth: 4 # Tab rendering width (.editorconfig integration)
+
+async:
+  enabled: false
+  maxJobs: 100
+
+task:
+  eager: false
+  isolation:
+    mode: none # none | worktree | fuse-overlay
+    merge: patch # patch | branch
 ```
 
 Legacy migration notes:
@@ -895,6 +937,8 @@ Legacy migration notes:
 ### Themes
 
 Built-in themes include `dark`, `light`, and many bundled variants.
+
+**Automatic dark/light switching**: omp detects terminal appearance via Mode 2031, native macOS CoreFoundation FFI, or `COLORFGBG` fallback, and switches between `theme.dark` and `theme.light` automatically.
 
 Select theme via `/settings` or set in `~/.omp/agent/config.yml`:
 
@@ -981,13 +1025,19 @@ Hook locations:
 import type { HookAPI } from "@oh-my-pi/pi-coding-agent/hooks";
 
 export default function (omp: HookAPI) {
-	omp.on("tool_call", async (event, ctx) => {
-		if (event.toolName === "bash" && /sudo/.test(event.input.command as string)) {
-			const ok = await ctx.ui.confirm("Allow sudo?", event.input.command as string);
-			if (!ok) return { block: true, reason: "Blocked by user" };
-		}
-		return undefined;
-	});
+  omp.on("tool_call", async (event, ctx) => {
+    if (
+      event.toolName === "bash" &&
+      /sudo/.test(event.input.command as string)
+    ) {
+      const ok = await ctx.ui.confirm(
+        "Allow sudo?",
+        event.input.command as string,
+      );
+      if (!ok) return { block: true, reason: "Blocked by user" };
+    }
+    return undefined;
+  });
 }
 ```
 
@@ -1012,16 +1062,16 @@ Auto-discovered locations:
 import { Type } from "@sinclair/typebox";
 import type { CustomToolFactory } from "@oh-my-pi/pi-coding-agent";
 const factory: CustomToolFactory = () => ({
-	name: "greet",
-	label: "Greeting",
-	description: "Generate a greeting",
-	parameters: Type.Object({
-		name: Type.String({ description: "Name to greet" }),
-	}),
-	async execute(_toolCallId, params) {
-		const { name } = params as { name: string };
-		return { content: [{ type: "text", text: `Hello, ${name}!` }] };
-	},
+  name: "greet",
+  label: "Greeting",
+  description: "Generate a greeting",
+  parameters: Type.Object({
+    name: Type.String({ description: "Name to greet" }),
+  }),
+  async execute(_toolCallId, params) {
+    const { name } = params as { name: string };
+    return { content: [{ type: "text", text: `Hello, ${name}!` }] };
+  },
 });
 export default factory;
 ```
@@ -1068,7 +1118,7 @@ omp <command> [args] [flags]
 | `--no-extensions`                     | Disable extension discovery (`-e` paths still load)                |
 | `--no-skills`                         | Disable skills discovery and loading                               |
 | `--skills <patterns>`                 | Comma-separated glob patterns to filter skills                     |
-| `--no-rules`                          | Disable rules discovery and loading                               |
+| `--no-rules`                          | Disable rules discovery and loading                                |
 | `--allow-home`                        | Allow starting from home dir without auto-chdir                    |
 | `--no-title`                          | Disable automatic session title generation                         |
 | `--export <file> [output]`            | Export session to HTML                                             |
@@ -1087,6 +1137,7 @@ omp <command> [args] [flags]
 - `search` (alias: `q`)
 - `setup`
 - `shell`
+- `ssh`
 - `stats`
 - `update`
 
@@ -1143,25 +1194,31 @@ Use `--tools <list>` to restrict available built-in tools.
 
 ### Built-in Tool Names (`--tools`)
 
-| Tool         | Description                                                    |
-| ------------ | -------------------------------------------------------------- |
-| `ask`        | Ask the user structured follow-up questions (interactive mode) |
-| `bash`       | Execute shell commands                                         |
-| `python`     | Execute Python code in IPython kernel                          |
-| `calc`       | Deterministic calculator/evaluator                             |
-| `ssh`        | Execute commands on configured SSH hosts                       |
-| `edit`       | In-place file editing (hashline/patch/replace modes)           |
-| `find`       | Find files by glob pattern                                     |
-| `grep`       | Search file content                                            |
-| `lsp`        | Language server actions                                        |
-| `notebook`   | Edit Jupyter notebooks                                         |
-| `read`       | Read files/directories (default text cap: 3000 lines)          |
-| `browser`    | Browser automation tool (model-facing name: `puppeteer`)       |
-| `task`       | Launch subagents                                               |
-| `todo_write` | Track task progress                                            |
-| `fetch`      | Fetch and extract URL content                                  |
-| `web_search` | Search the web                                                 |
-| `write`      | Create/overwrite files                                         |
+| Tool             | Description                                                    |
+| ---------------- | -------------------------------------------------------------- |
+| `ask`            | Ask the user structured follow-up questions (interactive mode) |
+| `bash`           | Execute shell commands                                         |
+| `python`         | Execute Python code in IPython kernel                          |
+| `calc`           | Deterministic calculator/evaluator                             |
+| `ssh`            | Execute commands on configured SSH hosts                       |
+| `edit`           | In-place file editing with LINE#ID anchors                     |
+| `find`           | Find files by glob pattern                                     |
+| `grep`           | Search file content                                            |
+| `ast_find`       | Structural code search using AST matching (ast-grep)           |
+| `ast_replace`    | Structural AST-aware code rewrites (ast-grep)                  |
+| `lsp`            | Language server actions (11 operations)                        |
+| `notebook`       | Edit Jupyter notebooks                                         |
+| `read`           | Read files/directories (default text cap: 3000 lines)          |
+| `browser`        | Browser automation tool (model-facing name: `puppeteer`)       |
+| `task`           | Launch subagents for parallel execution                        |
+| `await`          | Block on async background jobs                                 |
+| `todo_write`     | Phased task tracking with progress management                  |
+| `fetch`          | Fetch and extract URL content                                  |
+| `web_search`     | Multi-provider web search                                      |
+| `deep_search`    | AI-powered deep research with synthesized results (Exa)        |
+| `code_search`    | Search code snippets and technical documentation (Exa)         |
+| `write`          | Create/overwrite files                                         |
+| `generate_image` | Generate or edit images using Gemini image models              |
 
 Notes:
 
@@ -1184,19 +1241,27 @@ For adding new tools, see [Custom Tools](#custom-tools).
 For embedding omp in Node.js/TypeScript applications, use the SDK:
 
 ```typescript
-import { ModelRegistry, SessionManager, createAgentSession, discoverAuthStorage } from "@oh-my-pi/pi-coding-agent";
+import {
+  ModelRegistry,
+  SessionManager,
+  createAgentSession,
+  discoverAuthStorage,
+} from "@oh-my-pi/pi-coding-agent";
 const authStorage = await discoverAuthStorage();
 const modelRegistry = new ModelRegistry(authStorage);
 await modelRegistry.refresh();
 const { session } = await createAgentSession({
-	sessionManager: SessionManager.inMemory(),
-	authStorage,
-	modelRegistry,
+  sessionManager: SessionManager.inMemory(),
+  authStorage,
+  modelRegistry,
 });
 session.subscribe((event) => {
-	if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
-		process.stdout.write(event.assistantMessageEvent.delta);
-	}
+  if (
+    event.type === "message_update" &&
+    event.assistantMessageEvent.type === "text_delta"
+  ) {
+    process.stdout.write(event.assistantMessageEvent.delta);
+  }
 });
 await session.prompt("What files are in the current directory?");
 ```
