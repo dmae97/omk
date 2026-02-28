@@ -1,8 +1,13 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added `ast_find` tool for structural code search using AST matching via ast-grep, enabling syntax-aware pattern discovery across codebases
+- Added `ast_replace` tool for structural AST-aware rewrites via ast-grep, enabling safe syntax-level codemods without text-based fragility
+- Added `astFind.enabled` and `astReplace.enabled` settings to control availability of AST tools
+- Added system prompt guidance to prefer AST tools over bash text manipulation (grep/sed/awk/perl) for syntax-aware operations
 - Extracted prompt formatting logic into reusable `formatPromptContent()` utility with configurable render phases and formatting options
 - Added `type_definition` action to navigate to symbol type definitions with source context
 - Added `implementation` action to find concrete implementations of symbols with source context

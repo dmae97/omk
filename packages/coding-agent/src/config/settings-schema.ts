@@ -455,6 +455,20 @@ export const SETTINGS_SCHEMA = {
 			submenu: true,
 		},
 	},
+	"astFind.enabled": {
+		type: "boolean",
+		default: true,
+		ui: { tab: "tools", label: "Enable AST Find", description: "Enable the ast_find tool for structural AST search" },
+	},
+	"astReplace.enabled": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "tools",
+			label: "Enable AST Replace",
+			description: "Enable the ast_replace tool for structural AST rewrites",
+		},
+	},
 	"notebook.enabled": {
 		type: "boolean",
 		default: true,

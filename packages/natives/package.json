@@ -60,6 +60,14 @@
 			"types": "./src/*.ts",
 			"import": "./src/*.ts"
 		},
+		"./ast": {
+			"types": "./src/ast/index.ts",
+			"import": "./src/ast/index.ts"
+		},
+		"./ast/*": {
+			"types": "./src/ast/*.ts",
+			"import": "./src/ast/*.ts"
+		},
 		"./clipboard": {
 			"types": "./src/clipboard/index.ts",
 			"import": "./src/clipboard/index.ts"

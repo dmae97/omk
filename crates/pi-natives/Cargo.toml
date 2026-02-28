@@ -31,6 +31,8 @@ grep-matcher = "0.1"
 globset = "0.4"
 ignore = "0.4"
 rayon = "1.10"
+ast-grep-core = "0.39"
+ast-grep-language = "0.39"
 inferno = { version = "0.12", default-features = false }
 image = { version = "0.25", default-features = false, features = [
    "png",
