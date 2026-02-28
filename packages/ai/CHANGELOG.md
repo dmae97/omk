@@ -1,6 +1,32 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Exported schema utilities from new `./utils/schema` module, consolidating JSON Schema handling across providers
+- Added `CredentialRankingStrategy` interface for providers to implement usage-based credential selection
+- Added `claudeRankingStrategy` for Anthropic OAuth credentials to enable smart multi-account selection based on usage windows
+- Added `codexRankingStrategy` for OpenAI Codex OAuth credentials with priority boost for fresh 5-hour window starts
+- Added `adaptSchemaForStrict()` helper for unified OpenAI strict schema enforcement across providers
+- Added schema equality and merging utilities: `areJsonValuesEqual()`, `mergeCompatibleEnumSchemas()`, `mergePropertySchemas()`
+- Added Cloud Code Assist schema normalization: `copySchemaWithout()`, `stripResidualCombiners()`, `prepareSchemaForCloudCodeAssistClaude()`
+- Added `sanitizeSchemaForGoogle()` and `sanitizeSchemaForCloudCodeAssistClaude()` for provider-specific schema sanitization
+- Added `StringEnum()` helper for creating string enum schemas compatible with Google and other providers
+- Added `enforceStrictSchema()` and `sanitizeSchemaForStrictMode()` for OpenAI strict mode schema validation
+- Added package exports for `./utils/schema` and `./utils/schema/*` subpaths
+
+### Changed
+
+- Moved schema utilities from `./utils/typebox-helpers` to new `./utils/schema` module with expanded functionality
+- Refactored OpenAI provider tool conversion to use unified `adaptSchemaForStrict()` helper across codex, completions, and responses
+- Updated `AuthStorage` to support generic credential ranking via `CredentialRankingStrategy` instead of Codex-only logic
+- Moved Google schema sanitization functions from `google-shared.ts` to `./utils/schema` module
+- Changed export path: `./utils/typebox-helpers` → `./utils/schema` in main index
+
+### Removed
+
+- Removed `./utils/typebox-helpers` module; use `./utils/schema` instead
+- Removed 500+ lines of schema normalization code from `google-shared.ts` (moved to `./utils/schema/normalize-cca.ts`)
 
 ## [13.3.8] - 2026-02-28
 ### Fixed

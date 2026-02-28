@@ -349,3 +349,257 @@ describe("AuthStorage codex oauth ranking", () => {
 		expect(apiKey).toBe("api-acct-known");
 	});
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Claude (Anthropic) ranking tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+function createClaudeLimit(args: {
+	key: "5h" | "7d";
+	durationMs: number;
+	usedFraction: number;
+	resetInMs: number;
+}): UsageLimit {
+	const clamped = Math.min(Math.max(args.usedFraction, 0), 1);
+	const now = Date.now();
+	const used = clamped * 100;
+	const label = args.key === "5h" ? "Claude 5 Hour" : "Claude 7 Day";
+	return {
+		id: `anthropic:${args.key}`,
+		label,
+		scope: {
+			provider: "anthropic",
+			windowId: args.key,
+			shared: true,
+		},
+		window: {
+			id: args.key,
+			label,
+			durationMs: args.durationMs,
+			resetsAt: now + args.resetInMs,
+			resetInMs: args.resetInMs,
+		},
+		amount: {
+			unit: "percent",
+			used,
+			limit: 100,
+			remaining: 100 - used,
+			usedFraction: clamped,
+			remainingFraction: Math.max(0, 1 - clamped),
+		},
+		status: clamped >= 1 ? "exhausted" : clamped >= 0.9 ? "warning" : "ok",
+	};
+}
+
+function createClaudeUsageReport(args: {
+	accountId: string;
+	primary: { usedFraction: number; resetInMs: number };
+	secondary: { usedFraction: number; resetInMs: number };
+}): UsageReport {
+	return {
+		provider: "anthropic",
+		fetchedAt: Date.now(),
+		limits: [
+			createClaudeLimit({
+				key: "5h",
+				durationMs: FIVE_HOUR_MS,
+				usedFraction: args.primary.usedFraction,
+				resetInMs: args.primary.resetInMs,
+			}),
+			createClaudeLimit({
+				key: "7d",
+				durationMs: WEEK_MS,
+				usedFraction: args.secondary.usedFraction,
+				resetInMs: args.secondary.resetInMs,
+			}),
+		],
+		metadata: { accountId: args.accountId },
+	};
+}
+
+describe("AuthStorage claude oauth ranking", () => {
+	let tempDir = "";
+	let store: AuthCredentialStore | null = null;
+	let authStorage: AuthStorage | null = null;
+	const usageByAccount = new Map<string, UsageReport>();
+
+	const usageProvider: UsageProvider = {
+		id: "anthropic",
+		async fetchUsage(params) {
+			const accountId = params.credential.accountId;
+			if (!accountId) return null;
+			return usageByAccount.get(accountId) ?? null;
+		},
+	};
+
+	beforeEach(async () => {
+		tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "pi-ai-auth-claude-selection-"));
+		store = await AuthCredentialStore.open(path.join(tempDir, "agent.db"));
+		authStorage = new AuthStorage(store, {
+			usageProviderResolver: provider => (provider === "anthropic" ? usageProvider : undefined),
+		});
+		usageByAccount.clear();
+		vi.spyOn(oauthUtils, "getOAuthApiKey").mockImplementation(async (_provider, credentials) => {
+			const credential = credentials.anthropic as OAuthCredentials | undefined;
+			if (!credential?.accountId) return null;
+			return {
+				apiKey: `api-${credential.accountId}`,
+				newCredentials: credential,
+			};
+		});
+	});
+
+	afterEach(async () => {
+		vi.restoreAllMocks();
+		store?.close();
+		store = null;
+		authStorage = null;
+		if (tempDir) {
+			await fs.rm(tempDir, { recursive: true, force: true });
+			tempDir = "";
+		}
+	});
+
+	test("prefers lower secondary drain rate account", async () => {
+		if (!authStorage) throw new Error("test setup failed");
+
+		await authStorage.set("anthropic", [
+			{ type: "oauth", ...createCredential("acct-near", "near@example.com") },
+			{ type: "oauth", ...createCredential("acct-far", "far@example.com") },
+		]);
+
+		usageByAccount.set(
+			"acct-near",
+			createClaudeUsageReport({
+				accountId: "acct-near",
+				primary: { usedFraction: 0.4, resetInMs: 2 * HOUR_MS },
+				secondary: { usedFraction: 0.92, resetInMs: 15 * 60 * 1000 },
+			}),
+		);
+		usageByAccount.set(
+			"acct-far",
+			createClaudeUsageReport({
+				accountId: "acct-far",
+				primary: { usedFraction: 0.3, resetInMs: 4 * HOUR_MS },
+				secondary: { usedFraction: 0.55, resetInMs: 6 * 24 * HOUR_MS },
+			}),
+		);
+
+		const apiKey = await authStorage.getApiKey("anthropic", "session-claude-drain");
+		expect(apiKey).toBe("api-acct-near");
+	});
+
+	test("skips exhausted account and picks healthy", async () => {
+		if (!authStorage) throw new Error("test setup failed");
+
+		await authStorage.set("anthropic", [
+			{ type: "oauth", ...createCredential("acct-exhausted", "exhausted@example.com") },
+			{ type: "oauth", ...createCredential("acct-healthy", "healthy@example.com") },
+		]);
+
+		usageByAccount.set(
+			"acct-exhausted",
+			createClaudeUsageReport({
+				accountId: "acct-exhausted",
+				primary: { usedFraction: 1, resetInMs: 5 * 60 * 1000 },
+				secondary: { usedFraction: 1, resetInMs: 5 * 60 * 1000 },
+			}),
+		);
+		usageByAccount.set(
+			"acct-healthy",
+			createClaudeUsageReport({
+				accountId: "acct-healthy",
+				primary: { usedFraction: 0.5, resetInMs: 3 * HOUR_MS },
+				secondary: { usedFraction: 0.4, resetInMs: 3 * 24 * HOUR_MS },
+			}),
+		);
+
+		const apiKey = await authStorage.getApiKey("anthropic", "session-claude-exhausted");
+		expect(apiKey).toBe("api-acct-healthy");
+	});
+
+	test("falls back to earliest-unblocking when all exhausted", async () => {
+		if (!authStorage) throw new Error("test setup failed");
+
+		await authStorage.set("anthropic", [
+			{ type: "oauth", ...createCredential("acct-soon", "soon@example.com") },
+			{ type: "oauth", ...createCredential("acct-later", "later@example.com") },
+		]);
+
+		usageByAccount.set(
+			"acct-soon",
+			createClaudeUsageReport({
+				accountId: "acct-soon",
+				primary: { usedFraction: 1, resetInMs: 5 * 60 * 1000 },
+				secondary: { usedFraction: 1, resetInMs: 5 * 60 * 1000 },
+			}),
+		);
+		usageByAccount.set(
+			"acct-later",
+			createClaudeUsageReport({
+				accountId: "acct-later",
+				primary: { usedFraction: 1, resetInMs: 30 * 60 * 1000 },
+				secondary: { usedFraction: 1, resetInMs: 30 * 60 * 1000 },
+			}),
+		);
+
+		const apiKey = await authStorage.getApiKey("anthropic", "session-claude-all-exhausted");
+		expect(apiKey).toBe("api-acct-soon");
+	});
+
+	test("sorts 3 accounts by secondary drain rate", async () => {
+		if (!authStorage) throw new Error("test setup failed");
+
+		await authStorage.set("anthropic", [
+			{ type: "oauth", ...createCredential("acct-fast", "fast@example.com") },
+			{ type: "oauth", ...createCredential("acct-medium", "medium@example.com") },
+			{ type: "oauth", ...createCredential("acct-slow", "slow@example.com") },
+		]);
+
+		usageByAccount.set(
+			"acct-slow",
+			createClaudeUsageReport({
+				accountId: "acct-slow",
+				primary: { usedFraction: 0.2, resetInMs: 4 * HOUR_MS },
+				secondary: { usedFraction: 0.1, resetInMs: 6 * 24 * HOUR_MS },
+			}),
+		);
+		usageByAccount.set(
+			"acct-medium",
+			createClaudeUsageReport({
+				accountId: "acct-medium",
+				primary: { usedFraction: 0.2, resetInMs: 4 * HOUR_MS },
+				secondary: { usedFraction: 0.3, resetInMs: 5 * 24 * HOUR_MS },
+			}),
+		);
+		usageByAccount.set(
+			"acct-fast",
+			createClaudeUsageReport({
+				accountId: "acct-fast",
+				primary: { usedFraction: 0.2, resetInMs: 4 * HOUR_MS },
+				secondary: { usedFraction: 0.7, resetInMs: 3 * 24 * HOUR_MS },
+			}),
+		);
+
+		const apiKey = await authStorage.getApiKey("anthropic", "session-claude-three");
+		expect(apiKey).toBe("api-acct-slow");
+	});
+
+	test("single credential works without ranking", async () => {
+		if (!authStorage) throw new Error("test setup failed");
+
+		await authStorage.set("anthropic", [{ type: "oauth", ...createCredential("acct-solo", "solo@example.com") }]);
+
+		usageByAccount.set(
+			"acct-solo",
+			createClaudeUsageReport({
+				accountId: "acct-solo",
+				primary: { usedFraction: 0.3, resetInMs: 3 * HOUR_MS },
+				secondary: { usedFraction: 0.2, resetInMs: 5 * 24 * HOUR_MS },
+			}),
+		);
+
+		const apiKey = await authStorage.getApiKey("anthropic", "session-claude-single");
+		expect(apiKey).toBe("api-acct-solo");
+	});
+});

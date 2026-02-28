@@ -130,3 +130,19 @@ export interface UsageProvider {
 	fetchUsage(params: UsageFetchParams, ctx: UsageFetchContext): Promise<UsageReport | null>;
 	supports?(params: UsageFetchParams): boolean;
 }
+
+/** Strategy for usage-based credential ranking. Providers implement this to opt into smart credential selection. */
+export interface CredentialRankingStrategy {
+	/** Extract the primary (short) and secondary (long) window limits from a usage report. */
+	findWindowLimits(report: UsageReport): {
+		primary?: UsageLimit;
+		secondary?: UsageLimit;
+	};
+	/** Fallback window durations (ms) when limits don't specify durationMs. */
+	windowDefaults: {
+		primaryMs: number;
+		secondaryMs: number;
+	};
+	/** Optional: priority boost for specific credential states (e.g., fresh 5h ticker start). */
+	hasPriorityBoost?(primary: UsageLimit | undefined): boolean;
+}

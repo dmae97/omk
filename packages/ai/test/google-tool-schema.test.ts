@@ -1,10 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import {
-	convertTools,
-	sanitizeSchemaForCloudCodeAssistClaude,
-	sanitizeSchemaForGoogle,
-} from "@oh-my-pi/pi-ai/providers/google-shared";
+import { convertTools } from "@oh-my-pi/pi-ai/providers/google-shared";
 import type { Model, Tool } from "@oh-my-pi/pi-ai/types";
+import { sanitizeSchemaForCloudCodeAssistClaude, sanitizeSchemaForGoogle } from "@oh-my-pi/pi-ai/utils/schema";
 import type { TSchema } from "@sinclair/typebox";
 
 function createModel(id: string): Model<"google-gemini-cli"> {
@@ -200,6 +197,65 @@ describe("Cloud Code Assist Claude tool schema conversion", () => {
 			description: "Updated task description",
 		});
 		expect(JSON.stringify(declaration.parameters)).not.toContain('"anyOf"');
+	});
+	it("preserves nullable unions as optional properties instead of full fallback", () => {
+		const parameters = {
+			type: "object",
+			properties: {
+				value: {
+					anyOf: [{ enum: ["A", "B"] }, { type: "null" }],
+				},
+			},
+			required: ["value"],
+		} as unknown as TSchema;
+		const tools: Tool[] = [{ name: "test_tool", description: "Test tool", parameters }];
+		const claudeModel = createModel("claude-sonnet-4-5");
+		const geminiModel = createModel("gemini-2.5-pro");
+
+		const claudeDeclaration = convertTools(tools, claudeModel)?.[0]?.functionDeclarations[0] as Record<
+			string,
+			unknown
+		>;
+		const geminiDeclaration = convertTools(tools, geminiModel)?.[0]?.functionDeclarations[0] as Record<
+			string,
+			unknown
+		>;
+
+		expect(claudeDeclaration.parameters).toEqual({
+			type: "object",
+			properties: {
+				value: { enum: ["A", "B"] },
+			},
+			required: [],
+		});
+		expect(JSON.stringify(claudeDeclaration.parameters)).not.toContain('"anyOf"');
+		expect(
+			(geminiDeclaration.parametersJsonSchema as { properties?: Record<string, unknown> })?.properties?.value,
+		).toEqual(parameters.properties.value);
+	});
+
+	it("falls back to minimal object schema when non-null unresolved unions remain for CCA Claude", () => {
+		const parameters = {
+			type: "object",
+			properties: {
+				value: {
+					anyOf: [{ enum: ["A", "B"] }, { enum: ["C", "D"] }],
+				},
+			},
+			required: ["value"],
+		} as unknown as TSchema;
+		const tools: Tool[] = [{ name: "test_tool", description: "Test tool", parameters }];
+		const claudeModel = createModel("claude-sonnet-4-5");
+
+		const claudeDeclaration = convertTools(tools, claudeModel)?.[0]?.functionDeclarations[0] as Record<
+			string,
+			unknown
+		>;
+
+		expect(claudeDeclaration.parameters).toEqual({
+			type: "object",
+			properties: {},
+		});
 	});
 	it("keeps google sanitizer behavior for non-claude schema path", () => {
 		const schema = {

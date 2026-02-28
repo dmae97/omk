@@ -32,8 +32,8 @@ import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-ins
 import { parseStreamingJson } from "../utils/json-parse";
 import { getKimiCommonHeaders } from "../utils/oauth/kimi";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode";
+import { adaptSchemaForStrict, NO_STRICT } from "../utils/schema";
 import { mapToOpenAICompletionsToolChoice } from "../utils/tool-choice";
-import { NO_STRICT, tryEnforceStrictSchema } from "../utils/typebox-helpers";
 import {
 	buildCopilotDynamicHeaders,
 	getCopilotInitiatorOverride,
@@ -983,9 +983,7 @@ function convertTools(tools: Tool[], compat: ResolvedOpenAICompat): OpenAI.Chat.
 	return tools.map(tool => {
 		const strict = !NO_STRICT && compat.supportsStrictMode !== false && tool.strict !== false;
 		const baseParameters = tool.parameters as unknown as Record<string, unknown>;
-		const strictResult = strict ? tryEnforceStrictSchema(baseParameters) : { schema: baseParameters, strict: false };
-		const parameters = strictResult.schema;
-		const effectiveStrict = strict && strictResult.strict;
+		const { schema: parameters, strict: effectiveStrict } = adaptSchemaForStrict(baseParameters, strict);
 		return {
 			type: "function",
 			function: {

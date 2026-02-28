@@ -1,4 +1,5 @@
 import type {
+	CredentialRankingStrategy,
 	UsageAmount,
 	UsageFetchContext,
 	UsageFetchParams,
@@ -399,4 +400,13 @@ export const claudeUsageProvider: UsageProvider = {
 	id: "anthropic",
 	fetchUsage: fetchClaudeUsage,
 	supports: params => params.provider === "anthropic" && params.credential.type === "oauth",
+};
+
+export const claudeRankingStrategy: CredentialRankingStrategy = {
+	findWindowLimits(report) {
+		const primary = report.limits.find(l => l.id === "anthropic:5h");
+		const secondary = report.limits.find(l => l.id === "anthropic:7d");
+		return { primary, secondary };
+	},
+	windowDefaults: { primaryMs: 5 * 60 * 60 * 1000, secondaryMs: 7 * 24 * 60 * 60 * 1000 },
 };

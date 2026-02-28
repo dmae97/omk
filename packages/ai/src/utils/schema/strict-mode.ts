@@ -1,4 +1,6 @@
 import { type TUnsafe, Type } from "@sinclair/typebox";
+import { NON_STRUCTURAL_SCHEMA_KEYS } from "./fields";
+import { isJsonObject } from "./types";
 
 /**
  * Creates a string enum schema compatible with Google's API and other providers
@@ -25,55 +27,7 @@ export function StringEnum<const T extends readonly string[]>(
 
 export const NO_STRICT = Bun.env.PI_NO_STRICT === "1";
 
-const NON_STRUCTURAL_SCHEMA_KEYS = new Set([
-	"format",
-	"pattern",
-	"minLength",
-	"maxLength",
-	"minimum",
-	"maximum",
-	"exclusiveMinimum",
-	"exclusiveMaximum",
-	"minItems",
-	"maxItems",
-	"uniqueItems",
-	"multipleOf",
-	"$schema",
-	"examples",
-	"default",
-	"title",
-	"$comment",
-	"if",
-	"then",
-	"else",
-	"not",
-	"prefixItems",
-	"unevaluatedProperties",
-	"unevaluatedItems",
-	"patternProperties",
-	"propertyNames",
-	"contains",
-	"minContains",
-	"maxContains",
-	"dependentRequired",
-	"dependentSchemas",
-	"contentEncoding",
-	"contentMediaType",
-	"contentSchema",
-	"deprecated",
-	"readOnly",
-	"writeOnly",
-	"minProperties",
-	"maxProperties",
-	"$dynamicRef",
-	"$dynamicAnchor",
-]);
-
 const COMBINATOR_KEYS = ["anyOf", "allOf", "oneOf"] as const;
-
-function isObjectRecord(value: unknown): value is Record<string, unknown> {
-	return value != null && typeof value === "object" && !Array.isArray(value);
-}
 
 export function sanitizeSchemaForStrictMode(schema: Record<string, unknown>): Record<string, unknown> {
 	const typeValue = schema.type;
@@ -115,11 +69,11 @@ export function sanitizeSchemaForStrictMode(schema: Record<string, unknown>): Re
 			continue;
 		}
 
-		if (key === "properties" && isObjectRecord(value)) {
+		if (key === "properties" && isJsonObject(value)) {
 			const properties = Object.fromEntries(
 				Object.entries(value).map(([propertyName, propertySchema]) => [
 					propertyName,
-					isObjectRecord(propertySchema) ? sanitizeSchemaForStrictMode(propertySchema) : propertySchema,
+					isJsonObject(propertySchema) ? sanitizeSchemaForStrictMode(propertySchema) : propertySchema,
 				]),
 			);
 			sanitized.properties = properties;
@@ -127,10 +81,10 @@ export function sanitizeSchemaForStrictMode(schema: Record<string, unknown>): Re
 		}
 
 		if (key === "items") {
-			if (isObjectRecord(value)) {
+			if (isJsonObject(value)) {
 				sanitized.items = sanitizeSchemaForStrictMode(value);
 			} else if (Array.isArray(value)) {
-				sanitized.items = value.map(entry => (isObjectRecord(entry) ? sanitizeSchemaForStrictMode(entry) : entry));
+				sanitized.items = value.map(entry => (isJsonObject(entry) ? sanitizeSchemaForStrictMode(entry) : entry));
 			} else {
 				sanitized.items = value;
 			}
@@ -138,21 +92,21 @@ export function sanitizeSchemaForStrictMode(schema: Record<string, unknown>): Re
 		}
 
 		if (COMBINATOR_KEYS.includes(key as (typeof COMBINATOR_KEYS)[number]) && Array.isArray(value)) {
-			sanitized[key] = value.map(entry => (isObjectRecord(entry) ? sanitizeSchemaForStrictMode(entry) : entry));
+			sanitized[key] = value.map(entry => (isJsonObject(entry) ? sanitizeSchemaForStrictMode(entry) : entry));
 			continue;
 		}
 
-		if ((key === "$defs" || key === "definitions") && isObjectRecord(value)) {
+		if ((key === "$defs" || key === "definitions") && isJsonObject(value)) {
 			sanitized[key] = Object.fromEntries(
 				Object.entries(value).map(([definitionName, definitionSchema]) => [
 					definitionName,
-					isObjectRecord(definitionSchema) ? sanitizeSchemaForStrictMode(definitionSchema) : definitionSchema,
+					isJsonObject(definitionSchema) ? sanitizeSchemaForStrictMode(definitionSchema) : definitionSchema,
 				]),
 			);
 			continue;
 		}
 
-		if (key === "additionalProperties" && isObjectRecord(value)) {
+		if (key === "additionalProperties" && isJsonObject(value)) {
 			sanitized.additionalProperties = sanitizeSchemaForStrictMode(value);
 			continue;
 		}
@@ -168,7 +122,7 @@ export function sanitizeSchemaForStrictMode(schema: Record<string, unknown>): Re
 		sanitized.type = typeValue;
 	}
 
-	if (sanitized.type === undefined && isObjectRecord(sanitized.properties)) {
+	if (sanitized.type === undefined && isJsonObject(sanitized.properties)) {
 		sanitized.type = "object";
 	}
 
@@ -241,7 +195,7 @@ export function enforceStrictSchema(schema: Record<string, unknown>): Record<str
 		result.type === undefined &&
 		result.$ref === undefined &&
 		!COMBINATOR_KEYS.some(key => Array.isArray(result[key])) &&
-		!isObjectRecord(result.not)
+		!isJsonObject(result.not)
 	) {
 		throw new Error("Schema node has no type, combinator, or $ref — cannot enforce strict mode");
 	}

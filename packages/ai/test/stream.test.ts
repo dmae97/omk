@@ -5,7 +5,7 @@ import * as path from "node:path";
 import { getBundledModel } from "@oh-my-pi/pi-ai/models";
 import { complete, stream } from "@oh-my-pi/pi-ai/stream";
 import type { Api, Context, ImageContent, Model, OptionsForApi, Tool, ToolResultMessage } from "@oh-my-pi/pi-ai/types";
-import { StringEnum } from "@oh-my-pi/pi-ai/utils/typebox-helpers";
+import { StringEnum } from "@oh-my-pi/pi-ai/utils/schema";
 import { Type } from "@sinclair/typebox";
 import { e2eApiKey, resolveApiKey } from "./oauth";
 

@@ -117,6 +117,14 @@
 		"./utils/oauth/*": {
 			"types": "./src/utils/oauth/*.ts",
 			"import": "./src/utils/oauth/*.ts"
+		},
+		"./utils/schema": {
+			"types": "./src/utils/schema/index.ts",
+			"import": "./src/utils/schema/index.ts"
+		},
+		"./utils/schema/*": {
+			"types": "./src/utils/schema/*.ts",
+			"import": "./src/utils/schema/*.ts"
 		}
 	}
 }

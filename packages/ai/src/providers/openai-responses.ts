@@ -33,8 +33,8 @@ import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
 import { parseStreamingJson } from "../utils/json-parse";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode";
+import { adaptSchemaForStrict, NO_STRICT } from "../utils/schema";
 import { mapToOpenAIResponsesToolChoice } from "../utils/tool-choice";
-import { NO_STRICT, tryEnforceStrictSchema } from "../utils/typebox-helpers";
 import {
 	buildCopilotDynamicHeaders,
 	getCopilotInitiatorOverride,
@@ -700,9 +700,7 @@ function convertTools(tools: Tool[], strictMode: boolean): OpenAITool[] {
 	return tools.map(tool => {
 		const strict = !NO_STRICT && strictMode && tool.strict !== false;
 		const baseParameters = tool.parameters as unknown as Record<string, unknown>;
-		const strictResult = strict ? tryEnforceStrictSchema(baseParameters) : { schema: baseParameters, strict: false };
-		const parameters = strictResult.schema;
-		const effectiveStrict = strict && strictResult.strict;
+		const { schema: parameters, strict: effectiveStrict } = adaptSchemaForStrict(baseParameters, strict);
 		return {
 			type: "function",
 			name: tool.name,

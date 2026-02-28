@@ -15,6 +15,7 @@ import { googleGeminiCliUsageProvider } from "./providers/google-gemini-cli-usag
 import { getEnvApiKey } from "./stream";
 import type { Provider } from "./types";
 import type {
+	CredentialRankingStrategy,
 	UsageCache,
 	UsageCacheEntry,
 	UsageCredential,
@@ -23,11 +24,11 @@ import type {
 	UsageProvider,
 	UsageReport,
 } from "./usage";
-import { claudeUsageProvider } from "./usage/claude";
+import { claudeRankingStrategy, claudeUsageProvider } from "./usage/claude";
 import { githubCopilotUsageProvider } from "./usage/github-copilot";
 import { antigravityUsageProvider } from "./usage/google-antigravity";
 import { kimiUsageProvider } from "./usage/kimi";
-import { openaiCodexUsageProvider } from "./usage/openai-codex";
+import { codexRankingStrategy, openaiCodexUsageProvider } from "./usage/openai-codex";
 import { zaiUsageProvider } from "./usage/zai";
 import { getOAuthApiKey, getOAuthProvider } from "./utils/oauth";
 // Re-export login functions so consumers of AuthStorage.login() have access
@@ -114,6 +115,7 @@ export interface StoredAuthCredential {
 
 export type AuthStorageOptions = {
 	usageProviderResolver?: (provider: Provider) => UsageProvider | undefined;
+	rankingStrategyResolver?: (provider: Provider) => CredentialRankingStrategy | undefined;
 	usageCache?: UsageCache;
 	usageFetch?: typeof fetch;
 	usageNow?: () => number;
@@ -161,6 +163,15 @@ const USAGE_CACHE_PREFIX = "usage_cache:";
 
 function resolveDefaultUsageProvider(provider: Provider): UsageProvider | undefined {
 	return DEFAULT_USAGE_PROVIDER_MAP.get(provider);
+}
+
+const DEFAULT_RANKING_STRATEGIES = new Map<Provider, CredentialRankingStrategy>([
+	["openai-codex", codexRankingStrategy],
+	["anthropic", claudeRankingStrategy],
+]);
+
+function resolveDefaultRankingStrategy(provider: Provider): CredentialRankingStrategy | undefined {
+	return DEFAULT_RANKING_STRATEGIES.get(provider);
 }
 
 function parseUsageCacheEntry(raw: string): UsageCacheEntry | undefined {
@@ -228,6 +239,7 @@ export class AuthStorage {
 	/** Maps provider:type -> credentialIndex -> blockedUntilMs for temporary backoff. */
 	#credentialBackoff: Map<string, Map<number, number>> = new Map();
 	#usageProviderResolver?: (provider: Provider) => UsageProvider | undefined;
+	#rankingStrategyResolver?: (provider: Provider) => CredentialRankingStrategy | undefined;
 	#usageCache?: UsageCache;
 	#usageFetch: typeof fetch;
 	#usageNow: () => number;
@@ -240,6 +252,7 @@ export class AuthStorage {
 		this.#store = store;
 		this.#configValueResolver = options.configValueResolver ?? defaultConfigValueResolver;
 		this.#usageProviderResolver = options.usageProviderResolver ?? resolveDefaultUsageProvider;
+		this.#rankingStrategyResolver = options.rankingStrategyResolver ?? resolveDefaultRankingStrategy;
 		this.#usageCache = options.usageCache ?? new AuthStorageUsageCache(this.#store);
 		this.#usageFetch = options.usageFetch ?? fetch;
 		this.#usageNow = options.usageNow ?? Date.now;
@@ -1278,7 +1291,7 @@ export class AuthStorage {
 		const now = this.#usageNow();
 		let blockedUntil = now + (options?.retryAfterMs ?? AuthStorage.#defaultBackoffMs);
 
-		if (provider === "openai-codex" && sessionCredential.type === "oauth") {
+		if (sessionCredential.type === "oauth" && this.#rankingStrategyResolver?.(provider)) {
 			const credential = this.#getCredentialsForProvider(provider)[sessionCredential.index];
 			if (credential?.type === "oauth") {
 				const report = await this.#getUsageReport(provider, credential, options);
@@ -1345,33 +1358,13 @@ export class AuthStorage {
 		return usedFraction / elapsedHours;
 	}
 
-	#isFiveHourCodexTickerStart(limit: UsageLimit | undefined): boolean {
-		if (!limit) return false;
-		const windowId = limit.scope.windowId?.toLowerCase();
-		const durationMs = limit.window?.durationMs;
-		const fiveHourMs = 5 * 60 * 60 * 1000;
-		const isFiveHourWindow =
-			windowId === "5h" ||
-			(typeof durationMs === "number" && Number.isFinite(durationMs) && Math.abs(durationMs - fiveHourMs) <= 60_000);
-		if (!isFiveHourWindow) return false;
-		const usedFraction = limit.amount.usedFraction;
-		return typeof usedFraction === "number" && Number.isFinite(usedFraction) && usedFraction === 0;
-	}
-
-	#findCodexWindowLimit(report: UsageReport, key: "primary" | "secondary"): UsageLimit | undefined {
-		const direct = report.limits.find(limit => limit.id === `openai-codex:${key}`);
-		if (direct) return direct;
-		const byId = report.limits.find(limit => limit.id.toLowerCase().includes(key));
-		if (byId) return byId;
-		const windowId = key === "secondary" ? "7d" : "1h";
-		return report.limits.find(limit => limit.scope.windowId?.toLowerCase() === windowId);
-	}
-
-	async #rankCodexOAuthSelections(args: {
+	async #rankOAuthSelections(args: {
 		providerKey: string;
+		provider: string;
 		order: number[];
 		credentials: Array<{ credential: OAuthCredential; index: number }>;
 		options?: { baseUrl?: string };
+		strategy: CredentialRankingStrategy;
 	}): Promise<
 		Array<{
 			selection: { credential: OAuthCredential; index: number };
@@ -1380,17 +1373,16 @@ export class AuthStorage {
 		}>
 	> {
 		const nowMs = this.#usageNow();
-		const weeklyWindowMs = 7 * 24 * 60 * 60 * 1000;
-		const primaryWindowMs = 60 * 60 * 1000;
+		const { strategy } = args;
 		const ranked: Array<{
 			selection: { credential: OAuthCredential; index: number };
 			usage: UsageReport | null;
 			usageChecked: boolean;
 			blocked: boolean;
 			blockedUntil?: number;
-			startsFiveHourTicker: boolean;
-			weeklyUsed: number;
-			weeklyDrainRate: number;
+			hasPriorityBoost: boolean;
+			secondaryUsed: number;
+			secondaryDrainRate: number;
 			primaryUsed: number;
 			primaryDrainRate: number;
 			orderPos: number;
@@ -1402,7 +1394,7 @@ export class AuthStorage {
 				if (!selection) return null;
 				const blockedUntil = this.#getCredentialBlockedUntil(args.providerKey, selection.index);
 				if (blockedUntil !== undefined) return { selection, usage: null, usageChecked: false, blockedUntil };
-				const usage = await this.#getUsageReport("openai-codex", selection.credential, args.options);
+				const usage = await this.#getUsageReport(args.provider, selection.credential, args.options);
 				return { selection, usage, usageChecked: true, blockedUntil: undefined as number | undefined };
 			}),
 		);
@@ -1419,20 +1411,25 @@ export class AuthStorage {
 				this.#markCredentialBlocked(args.providerKey, selection.index, blockedUntil);
 				blocked = true;
 			}
-			const secondary = usage ? this.#findCodexWindowLimit(usage, "secondary") : undefined;
-			const primary = usage ? this.#findCodexWindowLimit(usage, "primary") : undefined;
-			const weeklyTarget = secondary ?? primary;
+			const windows = usage ? strategy.findWindowLimits(usage) : undefined;
+			const primary = windows?.primary;
+			const secondary = windows?.secondary;
+			const secondaryTarget = secondary ?? primary;
 			ranked.push({
 				selection,
 				usage,
 				usageChecked,
 				blocked,
 				blockedUntil,
-				startsFiveHourTicker: this.#isFiveHourCodexTickerStart(primary),
-				weeklyUsed: this.#normalizeUsageFraction(weeklyTarget),
-				weeklyDrainRate: this.#computeWindowDrainRate(weeklyTarget, nowMs, weeklyWindowMs),
+				hasPriorityBoost: strategy.hasPriorityBoost?.(primary) ?? false,
+				secondaryUsed: this.#normalizeUsageFraction(secondaryTarget),
+				secondaryDrainRate: this.#computeWindowDrainRate(
+					secondaryTarget,
+					nowMs,
+					strategy.windowDefaults.secondaryMs,
+				),
 				primaryUsed: this.#normalizeUsageFraction(primary),
-				primaryDrainRate: this.#computeWindowDrainRate(primary, nowMs, primaryWindowMs),
+				primaryDrainRate: this.#computeWindowDrainRate(primary, nowMs, strategy.windowDefaults.primaryMs),
 				orderPos,
 			});
 		}
@@ -1444,11 +1441,12 @@ export class AuthStorage {
 				if (leftBlockedUntil !== rightBlockedUntil) return leftBlockedUntil - rightBlockedUntil;
 				return left.orderPos - right.orderPos;
 			}
-			if (left.startsFiveHourTicker !== right.startsFiveHourTicker) {
-				return left.startsFiveHourTicker ? -1 : 1;
+			if (left.hasPriorityBoost !== right.hasPriorityBoost) {
+				return left.hasPriorityBoost ? -1 : 1;
 			}
-			if (left.weeklyDrainRate !== right.weeklyDrainRate) return left.weeklyDrainRate - right.weeklyDrainRate;
-			if (left.weeklyUsed !== right.weeklyUsed) return left.weeklyUsed - right.weeklyUsed;
+			if (left.secondaryDrainRate !== right.secondaryDrainRate)
+				return left.secondaryDrainRate - right.secondaryDrainRate;
+			if (left.secondaryUsed !== right.secondaryUsed) return left.secondaryUsed - right.secondaryUsed;
 			if (left.primaryDrainRate !== right.primaryDrainRate) return left.primaryDrainRate - right.primaryDrainRate;
 			if (left.primaryUsed !== right.primaryUsed) return left.primaryUsed - right.primaryUsed;
 			return left.orderPos - right.orderPos;
@@ -1478,9 +1476,10 @@ export class AuthStorage {
 
 		const providerKey = this.#getProviderTypeKey(provider, "oauth");
 		const order = this.#getCredentialOrder(providerKey, sessionId, credentials.length);
-		const checkUsage = provider === "openai-codex" && credentials.length > 1;
+		const strategy = this.#rankingStrategyResolver?.(provider);
+		const checkUsage = strategy !== undefined && credentials.length > 1;
 		const candidates = checkUsage
-			? await this.#rankCodexOAuthSelections({ providerKey, order, credentials, options })
+			? await this.#rankOAuthSelections({ providerKey, provider, order, credentials, options, strategy })
 			: order
 					.map(idx => credentials[idx])
 					.filter((selection): selection is { credential: OAuthCredential; index: number } => Boolean(selection))

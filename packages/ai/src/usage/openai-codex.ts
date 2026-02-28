@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import { CODEX_BASE_URL } from "../providers/openai-codex/constants";
 import type {
+	CredentialRankingStrategy,
 	UsageAmount,
 	UsageCache,
 	UsageFetchContext,
@@ -409,5 +410,35 @@ export const openaiCodexUsageProvider: UsageProvider = {
 		const expiresAt = resolveCacheExpiry({ report, nowMs });
 		await setCachedReport(ctx.cache, cacheKey, report, expiresAt);
 		return report;
+	},
+};
+
+const FIVE_HOUR_MS = 5 * 60 * 60 * 1000;
+
+export const codexRankingStrategy: CredentialRankingStrategy = {
+	findWindowLimits(report) {
+		const findLimit = (key: "primary" | "secondary"): UsageLimit | undefined => {
+			const direct = report.limits.find(l => l.id === `openai-codex:${key}`);
+			if (direct) return direct;
+			const byId = report.limits.find(l => l.id.toLowerCase().includes(key));
+			if (byId) return byId;
+			const windowId = key === "secondary" ? "7d" : "1h";
+			return report.limits.find(l => l.scope.windowId?.toLowerCase() === windowId);
+		};
+		return { primary: findLimit("primary"), secondary: findLimit("secondary") };
+	},
+	windowDefaults: { primaryMs: 60 * 60 * 1000, secondaryMs: 7 * 24 * 60 * 60 * 1000 },
+	hasPriorityBoost(primary) {
+		if (!primary) return false;
+		const windowId = primary.scope.windowId?.toLowerCase();
+		const durationMs = primary.window?.durationMs;
+		const isFiveHourWindow =
+			windowId === "5h" ||
+			(typeof durationMs === "number" &&
+				Number.isFinite(durationMs) &&
+				Math.abs(durationMs - FIVE_HOUR_MS) <= 60_000);
+		if (!isFiveHourWindow) return false;
+		const usedFraction = primary.amount.usedFraction;
+		return typeof usedFraction === "number" && Number.isFinite(usedFraction) && usedFraction === 0;
 	},
 };
