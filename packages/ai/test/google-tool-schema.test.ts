@@ -120,6 +120,83 @@ describe("Cloud Code Assist Claude tool schema conversion", () => {
 			(geminiDeclaration.parametersJsonSchema as { properties?: Record<string, unknown> })?.properties?.lines,
 		).toEqual(parameters.properties.lines);
 	});
+
+	it("collapses mixed anyOf with shared metadata for edit-style lines fields", () => {
+		const parameters = {
+			type: "object",
+			properties: {
+				edits: {
+					type: "array",
+					items: {
+						type: "object",
+						properties: {
+							lines: {
+								anyOf: [
+									{
+										type: "array",
+										description: "content (preferred format)",
+										items: { type: "string" },
+									},
+									{ type: "string" },
+									{ type: "null" },
+								],
+							},
+						},
+					},
+				},
+			},
+		} as unknown as TSchema;
+		const tools: Tool[] = [{ name: "edit", description: "Edit tool", parameters }];
+		const model = createModel("claude-sonnet-4-5");
+
+		const declaration = convertTools(tools, model)?.[0]?.functionDeclarations[0] as Record<string, unknown>;
+		const linesSchema = ((
+			(declaration.parameters as { properties?: Record<string, unknown> })?.properties?.edits as {
+				items?: { properties?: Record<string, unknown> };
+			}
+		)?.items?.properties?.lines ?? null) as Record<string, unknown> | null;
+
+		expect(linesSchema).toEqual({
+			type: ["array", "string", "null"],
+			description: "content (preferred format)",
+			items: { type: "string" },
+		});
+		expect(JSON.stringify(declaration.parameters)).not.toContain('"anyOf"');
+	});
+
+	it("collapses mixed unions for todo_write-style nullable content fields", () => {
+		const parameters = {
+			type: "object",
+			properties: {
+				ops: {
+					type: "array",
+					items: {
+						type: "object",
+						properties: {
+							content: {
+								anyOf: [{ type: "string", description: "Updated task description" }, { type: "null" }],
+							},
+						},
+					},
+				},
+			},
+		} as unknown as TSchema;
+		const tools: Tool[] = [{ name: "todo_write", description: "Todo tool", parameters }];
+		const model = createModel("claude-sonnet-4-5");
+
+		const declaration = convertTools(tools, model)?.[0]?.functionDeclarations[0] as Record<string, unknown>;
+		const contentSchema = ((
+			(declaration.parameters as { properties?: Record<string, unknown> })?.properties?.ops as {
+				items?: { properties?: Record<string, unknown> };
+			}
+		)?.items?.properties?.content ?? null) as Record<string, unknown> | null;
+
+		expect(contentSchema).toEqual({
+			type: ["string", "null"],
+			description: "Updated task description",
+		});
+		expect(JSON.stringify(declaration.parameters)).not.toContain('"anyOf"');
+	});
 	it("keeps google sanitizer behavior for non-claude schema path", () => {
 		const schema = {
 			type: "object",

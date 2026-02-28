@@ -566,6 +566,16 @@ const CLOUD_CODE_ASSIST_TYPE_SPECIFIC_KEYS: Record<string, ReadonlySet<string>> 
 	null: new Set(),
 };
 
+const CLOUD_CODE_ASSIST_SHARED_SCHEMA_KEYS = new Set([
+	"title",
+	"description",
+	"default",
+	"examples",
+	"deprecated",
+	"readOnly",
+	"writeOnly",
+	"$comment",
+]);
 function collapseMixedTypeCombinerVariants(schema: JsonObject, combiner: "anyOf" | "oneOf"): JsonObject {
 	const variantsRaw = schema[combiner];
 	if (!Array.isArray(variantsRaw) || variantsRaw.length === 0) {
@@ -592,7 +602,7 @@ function collapseMixedTypeCombinerVariants(schema: JsonObject, combiner: "anyOf"
 
 		for (const [key, variantValue] of Object.entries(entry)) {
 			if (key === "type") continue;
-			if (!allowedKeys.has(key)) {
+			if (!allowedKeys.has(key) && !CLOUD_CODE_ASSIST_SHARED_SCHEMA_KEYS.has(key)) {
 				return schema;
 			}
 
@@ -619,7 +629,13 @@ function collapseMixedTypeCombinerVariants(schema: JsonObject, combiner: "anyOf"
 
 	nextSchema.type = variantTypes;
 	for (const [key, value] of Object.entries(mergedVariantFields)) {
-		nextSchema[key] = value;
+		const existingValue = nextSchema[key];
+		if (existingValue !== undefined && !areJsonValuesEqual(existingValue, value)) {
+			return schema;
+		}
+		if (existingValue === undefined) {
+			nextSchema[key] = value;
+		}
 	}
 	return nextSchema;
 }

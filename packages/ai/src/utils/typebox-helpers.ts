@@ -224,7 +224,8 @@ export function tryEnforceStrictSchema(schema: Record<string, unknown>): {
 	strict: boolean;
 } {
 	try {
-		return { schema: enforceStrictSchema(schema), strict: true };
+		const sanitized = sanitizeSchemaForStrictMode(schema);
+		return { schema: enforceStrictSchema(sanitized), strict: true };
 	} catch {
 		return { schema, strict: false };
 	}

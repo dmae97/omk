@@ -175,6 +175,24 @@ describe("enforceStrictSchema", () => {
 });
 
 describe("tryEnforceStrictSchema", () => {
+	it("sanitizes strict schemas by stripping unsupported format keywords", () => {
+		const schema = {
+			type: "object",
+			properties: {
+				url: { type: "string", format: "uri" },
+			},
+			required: ["url"],
+			format: "uuid",
+		} as Record<string, unknown>;
+
+		const result = tryEnforceStrictSchema(schema);
+		const properties = result.schema.properties as Record<string, Record<string, unknown>>;
+
+		expect(result.strict).toBe(true);
+		expect(result.schema.format).toBeUndefined();
+		expect(properties.url.format).toBeUndefined();
+		expect(properties.url.type).toBe("string");
+	});
 	it("downgrades to non-strict mode when strict enforcement throws", () => {
 		const circularSchema: Record<string, unknown> = {
 			type: "object",
