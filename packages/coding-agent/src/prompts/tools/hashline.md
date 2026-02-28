@@ -247,4 +247,5 @@ Good — anchors to structural line:
 - Every tag **MUST** be copied exactly from fresh tool result as `N#ID`.
 - You **MUST** re-read after each edit call before issuing another on same file.
 - Formatting is a batch operation. You **MUST** never use this tool for formatting.
+- `lines` entries **MUST** be literal file content with real space indentation. (`\\t` in JSON inserts a literal backslash-t into the file, not a tab.)
 </critical>
