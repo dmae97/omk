@@ -524,6 +524,22 @@ function b() {
 			expect(output).toMatch(/>>\s*2#[ZPMQVRWSNKTXJBYH]{2}:match line/);
 		});
 
+		it("should accept wildcard patterns in the path parameter", async () => {
+			fs.writeFileSync(path.join(testDir, "schema-review-alpha.test.ts"), "review target\n");
+			fs.writeFileSync(path.join(testDir, "schema-review-beta.test.ts"), "review target\n");
+			fs.writeFileSync(path.join(testDir, "schema-other.test.ts"), "review target\n");
+
+			const result = await grepTool.execute("test-call-11-path-glob", {
+				pattern: "review target",
+				path: `${testDir}/schema-review-*.test.ts`,
+			});
+
+			const output = getTextOutput(result);
+			expect(output).toContain("# schema-review-alpha.test.ts");
+			expect(output).toContain("# schema-review-beta.test.ts");
+			expect(output).not.toContain("schema-other.test.ts");
+			expect(result.details?.fileCount).toBe(2);
+		});
 		it("should respect global limit and include context lines", async () => {
 			const testFile = path.join(testDir, "context.txt");
 			const content = ["before", "match one", "after", "middle", "match two", "after two"].join("\n");

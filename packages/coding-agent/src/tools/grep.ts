@@ -16,7 +16,7 @@ import { Ellipsis, Hasher, type RenderCache, renderStatusLine, renderTreeList, t
 import { resolveFileDisplayMode } from "../utils/file-display-mode";
 import type { ToolSession } from ".";
 import { formatFullOutputReference, type OutputMeta } from "./output-meta";
-import { resolveToCwd } from "./path-utils";
+import { hasGlobPathChars, parseSearchPath, resolveToCwd } from "./path-utils";
 import { formatCount, formatEmptyMessage, formatErrorMessage, PREVIEW_LIMITS } from "./render-utils";
 import { ToolError } from "./tool-errors";
 import { toolResult } from "./tool-result";
@@ -106,15 +106,33 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 
 			const useHashLines = resolveFileDisplayMode(this.session).hashLines;
 			let searchPath: string;
+			let globFilter = glob?.trim() || undefined;
 			const internalRouter = this.session.internalRouter;
-			if (searchDir && internalRouter?.canHandle(searchDir)) {
-				const resource = await internalRouter.resolve(searchDir);
-				if (!resource.sourcePath) {
-					throw new ToolError(`Cannot grep internal URL without a backing file: ${searchDir}`);
+			if (searchDir?.trim()) {
+				const rawPath = searchDir.trim();
+				if (internalRouter?.canHandle(rawPath)) {
+					if (hasGlobPathChars(rawPath)) {
+						throw new ToolError(`Glob patterns are not supported for internal URLs: ${rawPath}`);
+					}
+					const resource = await internalRouter.resolve(rawPath);
+					if (!resource.sourcePath) {
+						throw new ToolError(`Cannot grep internal URL without a backing file: ${rawPath}`);
+					}
+					searchPath = resource.sourcePath;
+				} else {
+					const parsedPath = parseSearchPath(rawPath);
+					searchPath = resolveToCwd(parsedPath.basePath, this.session.cwd);
+					if (parsedPath.glob) {
+						if (globFilter) {
+							throw new ToolError(
+								"When path already includes glob characters, omit the separate glob parameter",
+							);
+						}
+						globFilter = parsedPath.glob;
+					}
 				}
-				searchPath = resource.sourcePath;
 			} else {
-				searchPath = resolveToCwd(searchDir || ".", this.session.cwd);
+				searchPath = resolveToCwd(".", this.session.cwd);
 			}
 			const scopePath = (() => {
 				const relative = path.relative(this.session.cwd, searchPath).replace(/\\/g, "/");
@@ -139,7 +157,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 				result = await grep({
 					pattern: normalizedPattern,
 					path: searchPath,
-					glob: glob?.trim() || undefined,
+					glob: globFilter,
 					type: type?.trim() || undefined,
 					ignoreCase,
 					multiline: effectiveMultiline,

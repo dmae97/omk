@@ -12,6 +12,7 @@
 ### Fixed
 
 - Non-code files (.md, .zip, .bin, .gitignore, etc.) are now silently skipped by AST tools instead of producing misleading parse errors
+- Fixed `grep` path wildcard handling so file patterns passed via `path` (for example `schema-review-*.test.ts`) are resolved as glob filters instead of failing path existence checks
 
 ## [13.3.11] - 2026-02-28
 
