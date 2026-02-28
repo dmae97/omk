@@ -6,6 +6,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { isEnoent } from "@oh-my-pi/pi-utils";
+import { invalidate as invalidateFsCache } from "../capability/fs";
 
 import { validateServerConfig } from "./config";
 import type { MCPConfigFile, MCPServerConfig } from "./types";
@@ -44,6 +45,8 @@ export async function writeMCPConfigFile(filePath: string, config: MCPConfigFile
 
 	// Rename to final path (atomic on most systems)
 	await fs.promises.rename(tmpPath, filePath);
+	// Invalidate the capability fs cache so subsequent reads see the new content
+	invalidateFsCache(filePath);
 }
 
 /**
