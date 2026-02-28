@@ -211,6 +211,97 @@ describe("runSubprocess submit_result reminders", () => {
 		expect(result.exitCode).toBe(0);
 		expect(result.output).toContain('"ok": true');
 	});
+	it("uses provided thinking level when model override has no explicit suffix", async () => {
+		vi.clearAllMocks();
+		const session = createMockSession(({ emit }) => {
+			emit({
+				type: "tool_execution_end",
+				toolCallId: "tool-thinking-fallback",
+				toolName: "submit_result",
+				result: {
+					content: [{ type: "text", text: "Result submitted." }],
+					details: { status: "success", data: { ok: true } },
+				},
+				isError: false,
+			});
+		});
+
+		(sdkModule.createAgentSession as unknown as { mockResolvedValue: (value: unknown) => void }).mockResolvedValue({
+			session,
+			extensionsResult: {} as unknown as LoadExtensionsResult,
+			setToolUIContext: () => {},
+		});
+
+		const modelRegistry = {
+			refresh: async () => {},
+			getAvailable: () => [{ provider: "openai", id: "gpt-4o", name: "GPT-4o" }],
+		} as unknown as import("../../src/config/model-registry").ModelRegistry;
+
+		await runSubprocess({
+			...baseOptions,
+			id: "subagent-thinking-fallback",
+			modelOverride: "openai/gpt-4o",
+			thinkingLevel: "high",
+			modelRegistry,
+		});
+
+		const createAgentSessionMock = sdkModule.createAgentSession as unknown as {
+			mock: { calls: Array<[Record<string, unknown>]> };
+		};
+		expect(createAgentSessionMock.mock.calls).toHaveLength(1);
+		expect(createAgentSessionMock.mock.calls[0]?.[0]?.thinkingLevel).toBe("high");
+	});
+
+	it("prefers explicit modelOverride thinking suffix over provided thinking level, including off", async () => {
+		vi.clearAllMocks();
+		const modelRegistry = {
+			refresh: async () => {},
+			getAvailable: () => [{ provider: "openai", id: "gpt-4o", name: "GPT-4o" }],
+		} as unknown as import("../../src/config/model-registry").ModelRegistry;
+
+		const cases = [
+			{ modelOverride: "openai/gpt-4o:low", expectedThinkingLevel: "low" },
+			{ modelOverride: "openai/gpt-4o:off", expectedThinkingLevel: "off" },
+		] as const;
+
+		for (const [index, testCase] of cases.entries()) {
+			const session = createMockSession(({ emit }) => {
+				emit({
+					type: "tool_execution_end",
+					toolCallId: `tool-thinking-override-${index}`,
+					toolName: "submit_result",
+					result: {
+						content: [{ type: "text", text: "Result submitted." }],
+						details: { status: "success", data: { ok: true } },
+					},
+					isError: false,
+				});
+			});
+
+			(sdkModule.createAgentSession as unknown as { mockResolvedValue: (value: unknown) => void }).mockResolvedValue(
+				{
+					session,
+					extensionsResult: {} as unknown as LoadExtensionsResult,
+					setToolUIContext: () => {},
+				},
+			);
+
+			await runSubprocess({
+				...baseOptions,
+				id: `subagent-thinking-override-${index}`,
+				modelOverride: testCase.modelOverride,
+				thinkingLevel: "high",
+				modelRegistry,
+			});
+		}
+
+		const createAgentSessionMock = sdkModule.createAgentSession as unknown as {
+			mock: { calls: Array<[Record<string, unknown>]> };
+		};
+		expect(createAgentSessionMock.mock.calls).toHaveLength(2);
+		expect(createAgentSessionMock.mock.calls[0]?.[0]?.thinkingLevel).toBe(cases[0].expectedThinkingLevel);
+		expect(createAgentSessionMock.mock.calls[1]?.[0]?.thinkingLevel).toBe(cases[1].expectedThinkingLevel);
+	});
 	it("aborts after 3 reminders when submit_result is never called", async () => {
 		const prompts: string[] = [];
 		const session = createMockSession(({ text, promptIndex, emit, state }) => {

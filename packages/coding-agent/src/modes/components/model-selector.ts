@@ -1,10 +1,12 @@
-import { type Model, modelsAreEqual } from "@oh-my-pi/pi-ai";
+import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
+import { type Model, modelsAreEqual, supportsXhigh } from "@oh-my-pi/pi-ai";
 import { Container, Input, matchesKey, Spacer, type Tab, TabBar, Text, type TUI, visibleWidth } from "@oh-my-pi/pi-tui";
 import { MODEL_ROLE_IDS, MODEL_ROLES, type ModelRegistry, type ModelRole } from "../../config/model-registry";
-import { parseModelString } from "../../config/model-resolver";
+import { resolveModelRoleValue } from "../../config/model-resolver";
 import type { Settings } from "../../config/settings";
 import { type ThemeColor, theme } from "../../modes/theme/theme";
 import { fuzzyFilter } from "../../utils/fuzzy";
+import { formatThinkingEffortLabel } from "../../utils/thinking-effort-label";
 import { getTabBarTheme } from "../shared";
 import { DynamicBorder } from "./dynamic-border";
 
@@ -25,13 +27,26 @@ interface ScopedModelItem {
 	thinkingLevel: string;
 }
 
-interface MenuAction {
+type RoleThinkingMode = "default" | ThinkingLevel;
+
+interface RoleAssignment {
+	model: Model;
+	thinkingMode: RoleThinkingMode;
+}
+
+type RoleSelectCallback = (model: Model, role: ModelRole | null, thinkingMode?: RoleThinkingMode) => void;
+type CancelCallback = () => void;
+interface MenuRoleAction {
 	label: string;
 	role: ModelRole;
 }
 
-const MENU_ACTIONS: MenuAction[] = MODEL_ROLE_IDS.map(role => ({ label: `Set as ${MODEL_ROLES[role].name}`, role }));
+const MENU_ROLE_ACTIONS: MenuRoleAction[] = MODEL_ROLE_IDS.map(role => ({
+	label: `Set as ${MODEL_ROLES[role].name}`,
+	role,
+}));
 
+const THINKING_MODE_OPTIONS: RoleThinkingMode[] = ["default", "off", "minimal", "low", "medium", "high"];
 const ALL_TAB = "ALL";
 
 /**
@@ -50,11 +65,11 @@ export class ModelSelectorComponent extends Container {
 	#allModels: ModelItem[] = [];
 	#filteredModels: ModelItem[] = [];
 	#selectedIndex: number = 0;
-	#roles: { [key in ModelRole]?: Model } = {};
-	#settings: Settings;
-	#modelRegistry: ModelRegistry;
-	#onSelectCallback: (model: Model, role: ModelRole | null) => void;
-	#onCancelCallback: () => void;
+	#roles = {} as Record<ModelRole, RoleAssignment | undefined>;
+	#settings = null as unknown as Settings;
+	#modelRegistry = null as unknown as ModelRegistry;
+	#onSelectCallback = (() => {}) as RoleSelectCallback;
+	#onCancelCallback = (() => {}) as CancelCallback;
 	#errorMessage?: unknown;
 	#tui: TUI;
 	#scopedModels: ReadonlyArray<ScopedModelItem>;
@@ -67,6 +82,8 @@ export class ModelSelectorComponent extends Container {
 	// Context menu state
 	#isMenuOpen: boolean = false;
 	#menuSelectedIndex: number = 0;
+	#menuStep: "role" | "thinking" = "role";
+	#menuSelectedRole: ModelRole | null = null;
 
 	constructor(
 		tui: TUI,
@@ -74,7 +91,7 @@ export class ModelSelectorComponent extends Container {
 		settings: Settings,
 		modelRegistry: ModelRegistry,
 		scopedModels: ReadonlyArray<ScopedModelItem>,
-		onSelect: (model: Model, role: ModelRole | null) => void,
+		onSelect: (model: Model, role: ModelRole | null, thinkingMode?: RoleThinkingMode) => void,
 		onCancel: () => void,
 		options?: { temporaryOnly?: boolean; initialSearchInput?: string },
 	) {
@@ -157,15 +174,20 @@ export class ModelSelectorComponent extends Container {
 
 	#loadRoleModels(): void {
 		const allModels = this.#modelRegistry.getAll();
+		const matchPreferences = { usageOrder: this.#settings.getStorage()?.getModelUsageOrder() };
 		for (const role of MODEL_ROLE_IDS) {
-			const modelId = this.#settings.getModelRole(role);
-			if (!modelId) continue;
-			const parsed = parseModelString(modelId);
-			if (parsed) {
-				const model = allModels.find(m => m.provider === parsed.provider && m.id === parsed.id);
-				if (model) {
-					this.#roles[role] = model;
-				}
+			const roleValue = this.#settings.getModelRole(role);
+			if (!roleValue) continue;
+
+			const { model, thinkingLevel, explicitThinkingLevel } = resolveModelRoleValue(roleValue, allModels, {
+				settings: this.#settings,
+				matchPreferences,
+			});
+			if (model) {
+				this.#roles[role] = {
+					model,
+					thinkingMode: explicitThinkingLevel && thinkingLevel !== undefined ? thinkingLevel : "default",
+				};
 			}
 		}
 	}
@@ -179,7 +201,8 @@ export class ModelSelectorComponent extends Container {
 			let i = 0;
 			while (i < MODEL_ROLE_IDS.length) {
 				const role = MODEL_ROLE_IDS[i];
-				if (this.#roles[role] && modelsAreEqual(this.#roles[role], model.model)) {
+				const assigned = this.#roles[role];
+				if (assigned && modelsAreEqual(assigned.model, model.model)) {
 					break;
 				}
 				i++;
@@ -373,14 +396,22 @@ export class ModelSelectorComponent extends Container {
 			const isSelected = i === this.#selectedIndex;
 
 			// Build role badges (inverted: color as background, black text)
-			const badges: string[] = [];
+			const roleBadgeTokens: string[] = [];
 			for (const role of MODEL_ROLE_IDS) {
 				const { tag, color } = MODEL_ROLES[role];
-				if (tag && modelsAreEqual(this.#roles[role], item.model)) {
-					badges.push(makeInvertedBadge(tag, color ?? "success"));
+				const assigned = this.#roles[role];
+				if (!tag || !assigned || !modelsAreEqual(assigned.model, item.model)) continue;
+
+				const badge = makeInvertedBadge(tag, color ?? "success");
+				if (assigned.thinkingMode === "default") {
+					roleBadgeTokens.push(badge);
+					continue;
 				}
+
+				const thinkingLabel = formatThinkingEffortLabel(assigned.thinkingMode);
+				roleBadgeTokens.push(`${badge} ${theme.fg("dim", `(${thinkingLabel})`)}`);
 			}
-			const badgeText = badges.length > 0 ? ` ${badges.join(" ")}` : "";
+			const badgeText = roleBadgeTokens.length > 0 ? ` ${roleBadgeTokens.join(" ")}` : "";
 
 			let line = "";
 			if (isSelected) {
@@ -424,17 +455,40 @@ export class ModelSelectorComponent extends Container {
 			this.#listContainer.addChild(new Text(theme.fg("muted", `  Model Name: ${selected.model.name}`), 0, 0));
 		}
 	}
+	#getThinkingModesForModel(model: Model): RoleThinkingMode[] {
+		const thinkingModes = [...THINKING_MODE_OPTIONS];
+		if (supportsXhigh(model)) {
+			thinkingModes.push("xhigh");
+		}
+		return thinkingModes;
+	}
+
+	#getCurrentRoleThinkingMode(role: ModelRole): RoleThinkingMode {
+		return this.#roles[role]?.thinkingMode ?? "default";
+	}
+
+	#getThinkingPreselectIndex(role: ModelRole, model: Model): number {
+		const options = this.#getThinkingModesForModel(model);
+		const currentMode = this.#getCurrentRoleThinkingMode(role);
+		const preferredMode = currentMode === "xhigh" && !options.includes("xhigh") ? "high" : currentMode;
+		const foundIndex = options.indexOf(preferredMode);
+		return foundIndex >= 0 ? foundIndex : 0;
+	}
 
 	#openMenu(): void {
 		if (this.#filteredModels.length === 0) return;
 
 		this.#isMenuOpen = true;
+		this.#menuStep = "role";
+		this.#menuSelectedRole = null;
 		this.#menuSelectedIndex = 0;
 		this.#updateMenu();
 	}
 
 	#closeMenu(): void {
 		this.#isMenuOpen = false;
+		this.#menuStep = "role";
+		this.#menuSelectedRole = null;
 		this.#menuContainer.clear();
 	}
 
@@ -444,35 +498,50 @@ export class ModelSelectorComponent extends Container {
 		const selectedModel = this.#filteredModels[this.#selectedIndex];
 		if (!selectedModel) return;
 
-		const headerText = `  Action for: ${selectedModel.id}`;
-		const hintText = "  Enter: confirm  Esc: cancel";
-		const actionLines = MENU_ACTIONS.map((action, index) => {
-			const prefix = index === this.#menuSelectedIndex ? `  ${theme.nav.cursor} ` : "    ";
-			return `${prefix}${action.label}`;
-		});
+		const showingThinking = this.#menuStep === "thinking" && this.#menuSelectedRole !== null;
+		const thinkingOptions = showingThinking ? this.#getThinkingModesForModel(selectedModel.model) : [];
+		const optionLines = showingThinking
+			? thinkingOptions.map((thinkingMode, index) => {
+					const prefix = index === this.#menuSelectedIndex ? `  ${theme.nav.cursor} ` : "    ";
+					return `${prefix}${thinkingMode}`;
+				})
+			: MENU_ROLE_ACTIONS.map((action, index) => {
+					const prefix = index === this.#menuSelectedIndex ? `  ${theme.nav.cursor} ` : "    ";
+					return `${prefix}${action.label}`;
+				});
+
+		const selectedRoleName = this.#menuSelectedRole ? MODEL_ROLES[this.#menuSelectedRole].name : "";
+		const headerText = showingThinking ? `  Thinking for: ${selectedRoleName}` : `  Action for: ${selectedModel.id}`;
+		const hintText = showingThinking ? "  Enter: confirm  Esc: back" : "  Enter: continue  Esc: cancel";
 		const menuWidth = Math.max(
 			visibleWidth(headerText),
 			visibleWidth(hintText),
-			...actionLines.map(line => visibleWidth(line)),
+			...optionLines.map(line => visibleWidth(line)),
 		);
 
-		// Menu header
 		this.#menuContainer.addChild(new Spacer(1));
 		this.#menuContainer.addChild(new Text(theme.fg("border", theme.boxSharp.horizontal.repeat(menuWidth)), 0, 0));
-		this.#menuContainer.addChild(new Text(theme.fg("text", `  Action for: ${theme.bold(selectedModel.id)}`), 0, 0));
+		if (showingThinking && this.#menuSelectedRole) {
+			const roleName = MODEL_ROLES[this.#menuSelectedRole].name;
+			this.#menuContainer.addChild(
+				new Text(
+					theme.fg("text", `  Thinking for: ${theme.bold(roleName)} (${theme.bold(selectedModel.id)})`),
+					0,
+					0,
+				),
+			);
+		} else {
+			this.#menuContainer.addChild(
+				new Text(theme.fg("text", `  Action for: ${theme.bold(selectedModel.id)}`), 0, 0),
+			);
+		}
 		this.#menuContainer.addChild(new Spacer(1));
 
-		// Menu options
-		for (let i = 0; i < MENU_ACTIONS.length; i++) {
-			const action = MENU_ACTIONS[i]!;
+		for (let i = 0; i < optionLines.length; i++) {
+			const lineText = optionLines[i];
+			if (!lineText) continue;
 			const isSelected = i === this.#menuSelectedIndex;
-
-			let line: string;
-			if (isSelected) {
-				line = theme.fg("accent", `  ${theme.nav.cursor} ${action.label}`);
-			} else {
-				line = theme.fg("muted", `    ${action.label}`);
-			}
+			const line = isSelected ? theme.fg("accent", lineText) : theme.fg("muted", lineText);
 			this.#menuContainer.addChild(new Text(line, 0, 0));
 		}
 
@@ -532,55 +601,84 @@ export class ModelSelectorComponent extends Container {
 		this.#searchInput.handleInput(keyData);
 		this.#filterModels(this.#searchInput.getValue());
 	}
-
 	#handleMenuInput(keyData: string): void {
-		// Up arrow - navigate menu
+		const selectedModel = this.#filteredModels[this.#selectedIndex];
+		if (!selectedModel) return;
+
+		const optionCount =
+			this.#menuStep === "thinking" && this.#menuSelectedRole !== null
+				? this.#getThinkingModesForModel(selectedModel.model).length
+				: MENU_ROLE_ACTIONS.length;
+		if (optionCount === 0) return;
+
 		if (matchesKey(keyData, "up")) {
-			this.#menuSelectedIndex = (this.#menuSelectedIndex - 1 + MENU_ACTIONS.length) % MENU_ACTIONS.length;
+			this.#menuSelectedIndex = (this.#menuSelectedIndex - 1 + optionCount) % optionCount;
 			this.#updateMenu();
 			return;
 		}
 
-		// Down arrow - navigate menu
 		if (matchesKey(keyData, "down")) {
-			this.#menuSelectedIndex = (this.#menuSelectedIndex + 1) % MENU_ACTIONS.length;
+			this.#menuSelectedIndex = (this.#menuSelectedIndex + 1) % optionCount;
 			this.#updateMenu();
 			return;
 		}
 
-		// Enter - confirm selection
 		if (matchesKey(keyData, "enter") || matchesKey(keyData, "return") || keyData === "\n") {
-			const selectedModel = this.#filteredModels[this.#selectedIndex];
-			const action = MENU_ACTIONS[this.#menuSelectedIndex];
-			if (selectedModel && action) {
-				this.#handleSelect(selectedModel.model, action.role);
-				this.#closeMenu();
+			if (this.#menuStep === "role") {
+				const action = MENU_ROLE_ACTIONS[this.#menuSelectedIndex];
+				if (!action) return;
+				this.#menuSelectedRole = action.role;
+				this.#menuStep = "thinking";
+				this.#menuSelectedIndex = this.#getThinkingPreselectIndex(action.role, selectedModel.model);
+				this.#updateMenu();
+				return;
 			}
+
+			if (!this.#menuSelectedRole) return;
+			const thinkingOptions = this.#getThinkingModesForModel(selectedModel.model);
+			const thinkingMode = thinkingOptions[this.#menuSelectedIndex];
+			if (!thinkingMode) return;
+			this.#handleSelect(selectedModel.model, this.#menuSelectedRole, thinkingMode);
+			this.#closeMenu();
 			return;
 		}
 
-		// Escape or Ctrl+C - close menu only
 		if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc") || matchesKey(keyData, "ctrl+c")) {
+			if (this.#menuStep === "thinking" && this.#menuSelectedRole !== null) {
+				this.#menuStep = "role";
+				const roleIndex = MENU_ROLE_ACTIONS.findIndex(action => action.role === this.#menuSelectedRole);
+				this.#menuSelectedRole = null;
+				this.#menuSelectedIndex = roleIndex >= 0 ? roleIndex : 0;
+				this.#updateMenu();
+				return;
+			}
 			this.#closeMenu();
 			return;
 		}
 	}
 
-	#handleSelect(model: Model, role: ModelRole | null): void {
+	#formatRoleModelValue(model: Model, thinkingMode: RoleThinkingMode): string {
+		const modelKey = `${model.provider}/${model.id}`;
+		if (thinkingMode === "default") return modelKey;
+		return `${modelKey}:${thinkingMode}`;
+	}
+	#handleSelect(model: Model, role: ModelRole | null, thinkingMode?: RoleThinkingMode): void {
 		// For temporary role, don't save to settings - just notify caller
 		if (role === null) {
 			this.#onSelectCallback(model, null);
 			return;
 		}
 
+		const selectedThinkingMode = thinkingMode ?? this.#getCurrentRoleThinkingMode(role);
+
 		// Save to settings
-		this.#settings.setModelRole(role, `${model.provider}/${model.id}`);
+		this.#settings.setModelRole(role, this.#formatRoleModelValue(model, selectedThinkingMode));
 
 		// Update local state for UI
-		this.#roles[role] = model;
+		this.#roles[role] = { model, thinkingMode: selectedThinkingMode };
 
 		// Notify caller (for updating agent state if needed)
-		this.#onSelectCallback(model, role);
+		this.#onSelectCallback(model, role, selectedThinkingMode);
 
 		// Update list to show new badges
 		this.#updateList();

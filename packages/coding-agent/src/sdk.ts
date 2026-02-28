@@ -15,7 +15,7 @@ import { AsyncJobManager } from "./async";
 import { loadCapability } from "./capability";
 import { type Rule, ruleCapability } from "./capability/rule";
 import { ModelRegistry } from "./config/model-registry";
-import { formatModelString, parseModelPattern, parseModelString } from "./config/model-resolver";
+import { formatModelString, parseModelPattern, parseModelString, resolveModelRoleValue } from "./config/model-resolver";
 import {
 	loadPromptTemplates as loadPromptTemplatesInternal,
 	type PromptTemplate,
@@ -651,6 +651,13 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const hasThinkingEntry = sessionManager.getBranch().some(entry => entry.type === "thinking_level_change");
 
 	const hasExplicitModel = options.model !== undefined || options.modelPattern !== undefined;
+	const modelMatchPreferences = {
+		usageOrder: settings.getStorage()?.getModelUsageOrder(),
+	};
+	const defaultRoleSpec = resolveModelRoleValue(settings.getModelRole("default"), modelRegistry.getAvailable(), {
+		settings,
+		matchPreferences: modelMatchPreferences,
+	});
 	let model = options.model;
 	let modelFallbackMessage: string | undefined;
 	// If session has data, try to restore model from it.
@@ -671,16 +678,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 	// If still no model, try settings default.
 	// Skip settings fallback when an explicit model was requested.
-	if (!hasExplicitModel && !model) {
-		const settingsDefaultModel = settings.getModelRole("default");
-		if (settingsDefaultModel) {
-			const parsedModel = parseModelString(settingsDefaultModel);
-			if (parsedModel) {
-				const settingsModel = modelRegistry.find(parsedModel.provider, parsedModel.id);
-				if (settingsModel && (await hasModelApiKey(settingsModel))) {
-					model = settingsModel;
-				}
-			}
+	if (!hasExplicitModel && !model && defaultRoleSpec.model) {
+		if (await hasModelApiKey(defaultRoleSpec.model)) {
+			model = defaultRoleSpec.model;
 		}
 	}
 
@@ -700,11 +700,13 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 	let thinkingLevel = options.thinkingLevel;
 
-	// If session has data, restore thinking level from it
-	if (thinkingLevel === undefined && hasExistingSession) {
-		thinkingLevel = hasThinkingEntry
-			? (existingSession.thinkingLevel as ThinkingLevel)
-			: ((settings.get("defaultThinkingLevel") ?? "off") as ThinkingLevel);
+	// If session has data and includes a thinking entry, restore it
+	if (thinkingLevel === undefined && hasExistingSession && hasThinkingEntry) {
+		thinkingLevel = existingSession.thinkingLevel as ThinkingLevel;
+	}
+
+	if (thinkingLevel === undefined && !hasThinkingEntry && defaultRoleSpec.explicitThinkingLevel) {
+		thinkingLevel = defaultRoleSpec.thinkingLevel;
 	}
 
 	// Fall back to settings default

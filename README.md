@@ -875,7 +875,8 @@ theme:
 
 modelRoles:
   default: anthropic/claude-sonnet-4-20250514
-
+  plan: anthropic/claude-opus-4-1:high
+  smol: anthropic/claude-sonnet-4-20250514
 defaultThinkingLevel: high
 enabledModels:
   - anthropic/*

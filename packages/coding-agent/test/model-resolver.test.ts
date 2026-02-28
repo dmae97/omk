@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { Model } from "@oh-my-pi/pi-ai";
-import { parseModelPattern, resolveCliModel } from "@oh-my-pi/pi-coding-agent/config/model-resolver";
+import {
+	parseModelPattern,
+	resolveCliModel,
+	resolveModelFromString,
+	resolveModelOverride,
+} from "@oh-my-pi/pi-coding-agent/config/model-resolver";
 
 // Mock models for testing
 const mockModels: Model<"anthropic-messages">[] = [
@@ -264,6 +269,46 @@ describe("parseModelPattern", () => {
 	});
 });
 
+describe("resolveModelFromString", () => {
+	test("falls back to pattern parsing for provider/model:thinking when strict provider+id miss", () => {
+		const resolved = resolveModelFromString("openrouter/qwen/qwen3-coder:exacto:high", allModels);
+		expect(resolved?.provider).toBe("openrouter");
+		expect(resolved?.id).toBe("qwen/qwen3-coder:exacto");
+	});
+
+	test("treats colon-containing model IDs without thinking suffix as exact IDs", () => {
+		const resolved = resolveModelFromString("openrouter/qwen/qwen3-coder:exacto", allModels);
+		expect(resolved?.provider).toBe("openrouter");
+		expect(resolved?.id).toBe("qwen/qwen3-coder:exacto");
+	});
+});
+
+describe("resolveModelOverride", () => {
+	test("preserves explicit off and explicit-thinking metadata", () => {
+		const registry = {
+			getAvailable: () => allModels,
+		} as Parameters<typeof resolveModelOverride>[1];
+
+		const result = resolveModelOverride(["sonnet:off"], registry);
+
+		expect(result.model?.id).toBe("claude-sonnet-4-5");
+		expect(result.thinkingLevel).toBe("off");
+		expect(result.explicitThinkingLevel).toBe(true);
+	});
+
+	test("resolves colon-containing model IDs with appended thinking suffix", () => {
+		const registry = {
+			getAvailable: () => allModels,
+		} as Parameters<typeof resolveModelOverride>[1];
+
+		const result = resolveModelOverride(["openrouter/qwen/qwen3-coder:exacto:high"], registry);
+
+		expect(result.model?.provider).toBe("openrouter");
+		expect(result.model?.id).toBe("qwen/qwen3-coder:exacto");
+		expect(result.thinkingLevel).toBe("high");
+		expect(result.explicitThinkingLevel).toBe(true);
+	});
+});
 describe("resolveCliModel", () => {
 	test("resolves --model provider/id without --provider", () => {
 		const registry = {

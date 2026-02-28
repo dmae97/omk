@@ -49,7 +49,7 @@ import { abortableSleep, getAgentDbPath, isEnoent, logger } from "@oh-my-pi/pi-u
 import type { AsyncJob, AsyncJobManager } from "../async";
 import type { Rule } from "../capability/rule";
 import { MODEL_ROLE_IDS, type ModelRegistry, type ModelRole } from "../config/model-registry";
-import { expandRoleAlias, parseModelString } from "../config/model-resolver";
+import { parseModelString, resolveModelRoleValue } from "../config/model-resolver";
 import { expandPromptTemplate, type PromptTemplate, renderPromptTemplate } from "../config/prompt-templates";
 import type { Settings, SkillsSettings } from "../config/settings";
 import { type BashResult, executeBash as executeBashCommand } from "../exec/bash-executor";
@@ -2630,7 +2630,7 @@ export class AgentSession {
 
 		this.#setModelWithProviderSessionReset(model);
 		this.sessionManager.appendModelChange(`${model.provider}/${model.id}`, role);
-		this.settings.setModelRole(role, `${model.provider}/${model.id}`);
+		this.settings.setModelRole(role, this.#formatRoleModelValue(role, model));
 		this.settings.getStorage()?.recordModelUsage(`${model.provider}/${model.id}`);
 
 		// Re-clamp thinking level for new model's capabilities without persisting settings
@@ -2684,7 +2684,13 @@ export class AgentSession {
 
 		const currentModel = this.model;
 		if (!currentModel) return undefined;
-		const roleModels: Array<{ role: ModelRole; model: Model }> = [];
+		const matchPreferences = { usageOrder: this.settings.getStorage()?.getModelUsageOrder() };
+		const roleModels: Array<{
+			role: ModelRole;
+			model: Model;
+			thinkingLevel?: ThinkingLevel;
+			explicitThinkingLevel: boolean;
+		}> = [];
 
 		for (const role of roleOrder) {
 			const roleModelStr =
@@ -2693,18 +2699,18 @@ export class AgentSession {
 					: this.settings.getModelRole(role);
 			if (!roleModelStr) continue;
 
-			const expandedRoleModelStr = expandRoleAlias(roleModelStr, this.settings);
-			const parsed = parseModelString(expandedRoleModelStr);
-			let match: Model | undefined;
-			if (parsed) {
-				match = availableModels.find(m => m.provider === parsed.provider && m.id === parsed.id);
-			}
-			if (!match) {
-				match = availableModels.find(m => m.id.toLowerCase() === expandedRoleModelStr.toLowerCase());
-			}
-			if (!match) continue;
+			const resolved = resolveModelRoleValue(roleModelStr, availableModels, {
+				settings: this.settings,
+				matchPreferences,
+			});
+			if (!resolved.model) continue;
 
-			roleModels.push({ role, model: match });
+			roleModels.push({
+				role,
+				model: resolved.model,
+				thinkingLevel: resolved.thinkingLevel,
+				explicitThinkingLevel: resolved.explicitThinkingLevel,
+			});
 		}
 
 		if (roleModels.length <= 1) return undefined;
@@ -2722,6 +2728,10 @@ export class AgentSession {
 			await this.setModelTemporary(next.model);
 		} else {
 			await this.setModel(next.model, next.role);
+		}
+
+		if (next.explicitThinkingLevel && next.thinkingLevel !== undefined) {
+			this.setThinkingLevel(next.thinkingLevel);
 		}
 
 		return { model: next.model, thinkingLevel: this.thinkingLevel, role: next.role };
@@ -2764,7 +2774,7 @@ export class AgentSession {
 		// Apply model
 		this.#setModelWithProviderSessionReset(next.model);
 		this.sessionManager.appendModelChange(`${next.model.provider}/${next.model.id}`);
-		this.settings.setModelRole("default", `${next.model.provider}/${next.model.id}`);
+		this.settings.setModelRole("default", this.#formatRoleModelValue("default", next.model));
 		this.settings.getStorage()?.recordModelUsage(`${next.model.provider}/${next.model.id}`);
 
 		// Apply thinking level (setThinkingLevel clamps to model capabilities)
@@ -2792,7 +2802,7 @@ export class AgentSession {
 
 		this.#setModelWithProviderSessionReset(nextModel);
 		this.sessionManager.appendModelChange(`${nextModel.provider}/${nextModel.id}`);
-		this.settings.setModelRole("default", `${nextModel.provider}/${nextModel.id}`);
+		this.settings.setModelRole("default", this.#formatRoleModelValue("default", nextModel));
 		this.settings.getStorage()?.recordModelUsage(`${nextModel.provider}/${nextModel.id}`);
 
 		// Re-clamp thinking level for new model's capabilities without persisting settings
@@ -3597,6 +3607,22 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		return `${model.provider}/${model.id}`;
 	}
 
+	#formatRoleModelValue(role: ModelRole, model: Model): string {
+		const modelKey = `${model.provider}/${model.id}`;
+		const existingRoleValue = this.settings.getModelRole(role);
+		if (!existingRoleValue) return modelKey;
+
+		const { thinkingLevel, explicitThinkingLevel } = resolveModelRoleValue(
+			existingRoleValue,
+			this.#modelRegistry.getAvailable(),
+			{
+				settings: this.settings,
+				matchPreferences: { usageOrder: this.settings.getStorage()?.getModelUsageOrder() },
+			},
+		);
+		if (!explicitThinkingLevel || thinkingLevel === undefined) return modelKey;
+		return `${modelKey}:${thinkingLevel}`;
+	}
 	#resolveContextPromotionConfiguredTarget(currentModel: Model, availableModels: Model[]): Model | undefined {
 		const configuredTarget = currentModel.contextPromotionTarget?.trim();
 		if (!configuredTarget) return undefined;
@@ -3619,12 +3645,10 @@ Be thorough - include exact file paths, function names, error messages, and tech
 
 		if (!roleModelStr) return undefined;
 
-		const parsed = parseModelString(roleModelStr);
-		if (parsed) {
-			return availableModels.find(m => m.provider === parsed.provider && m.id === parsed.id);
-		}
-		const roleLower = roleModelStr.toLowerCase();
-		return availableModels.find(m => m.id.toLowerCase() === roleLower);
+		return resolveModelRoleValue(roleModelStr, availableModels, {
+			settings: this.settings,
+			matchPreferences: { usageOrder: this.settings.getStorage()?.getModelUsageOrder() },
+		}).model;
 	}
 
 	#getCompactionModelCandidates(availableModels: Model[]): Model[] {

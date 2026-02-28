@@ -320,6 +320,40 @@ export function expandRoleAlias(value: string, settings?: Settings): string {
 }
 
 /**
+ * Resolve a model role value into a concrete model and thinking metadata.
+ */
+export interface ResolvedModelRoleValue {
+	model: Model<Api> | undefined;
+	thinkingLevel?: ThinkingLevel;
+	explicitThinkingLevel: boolean;
+	warning: string | undefined;
+}
+
+export function resolveModelRoleValue(
+	roleValue: string | undefined,
+	availableModels: Model<Api>[],
+	options?: { settings?: Settings; matchPreferences?: ModelMatchPreferences },
+): ResolvedModelRoleValue {
+	if (!roleValue) {
+		return { model: undefined, thinkingLevel: undefined, explicitThinkingLevel: false, warning: undefined };
+	}
+
+	const normalized = roleValue.trim();
+	if (!normalized || isDefaultModelAlias(normalized)) {
+		return { model: undefined, thinkingLevel: undefined, explicitThinkingLevel: false, warning: undefined };
+	}
+
+	const effectivePattern = expandRoleAlias(normalized, options?.settings);
+	const { model, thinkingLevel, warning, explicitThinkingLevel } = parseModelPattern(
+		effectivePattern,
+		availableModels,
+		options?.matchPreferences,
+	);
+
+	return { model, thinkingLevel, explicitThinkingLevel, warning };
+}
+
+/**
  * Resolve a model identifier or pattern to a Model instance.
  */
 export function resolveModelFromString(
@@ -329,7 +363,8 @@ export function resolveModelFromString(
 ): Model<Api> | undefined {
 	const parsed = parseModelString(value);
 	if (parsed) {
-		return available.find(model => model.provider === parsed.provider && model.id === parsed.id);
+		const exact = available.find(model => model.provider === parsed.provider && model.id === parsed.id);
+		if (exact) return exact;
 	}
 	return parseModelPattern(value, available, matchPreferences).model;
 }
@@ -361,25 +396,20 @@ export function resolveModelOverride(
 	modelPatterns: string[],
 	modelRegistry: ModelRegistry,
 	settings?: Settings,
-): { model?: Model<Api>; thinkingLevel?: ThinkingLevel } {
-	if (modelPatterns.length === 0) return {};
+): { model?: Model<Api>; thinkingLevel?: ThinkingLevel; explicitThinkingLevel: boolean } {
+	if (modelPatterns.length === 0) return { explicitThinkingLevel: false };
+	const availableModels = modelRegistry.getAvailable();
 	const matchPreferences = { usageOrder: settings?.getStorage()?.getModelUsageOrder() };
 	for (const pattern of modelPatterns) {
-		const normalized = pattern.trim();
-		if (!normalized || isDefaultModelAlias(normalized)) {
-			continue;
-		}
-		const effectivePattern = expandRoleAlias(pattern, settings);
-		const { model, thinkingLevel } = parseModelPattern(
-			effectivePattern,
-			modelRegistry.getAvailable(),
+		const { model, thinkingLevel, explicitThinkingLevel } = resolveModelRoleValue(pattern, availableModels, {
+			settings,
 			matchPreferences,
-		);
+		});
 		if (model) {
-			return { model, thinkingLevel: thinkingLevel !== "off" ? thinkingLevel : undefined };
+			return { model, thinkingLevel, explicitThinkingLevel };
 		}
 	}
-	return {};
+	return { explicitThinkingLevel: false };
 }
 
 /**

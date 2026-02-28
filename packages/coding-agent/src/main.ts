@@ -19,7 +19,7 @@ import { listModels } from "./cli/list-models";
 import { selectSession } from "./cli/session-picker";
 import { findConfigFile } from "./config";
 import { ModelRegistry, ModelsConfigFile } from "./config/model-registry";
-import { parseModelString, resolveCliModel, resolveModelScope, type ScopedModel } from "./config/model-resolver";
+import { resolveCliModel, resolveModelRoleValue, resolveModelScope, type ScopedModel } from "./config/model-resolver";
 import { Settings, settings } from "./config/settings";
 import { initializeWithSettings } from "./discovery";
 import { exportFromFile } from "./export/html";
@@ -361,10 +361,10 @@ async function buildSessionOptions(
 	// Model from CLI
 	// - supports --provider <name> --model <pattern>
 	// - supports --model <provider>/<pattern>
+	const modelMatchPreferences = {
+		usageOrder: settings.getStorage()?.getModelUsageOrder(),
+	};
 	if (parsed.model) {
-		const modelMatchPreferences = {
-			usageOrder: settings.getStorage()?.getModelUsageOrder(),
-		};
 		const resolved = resolveCliModel({
 			cliProvider: parsed.provider,
 			cliModel: parsed.model,
@@ -394,20 +394,27 @@ async function buildSessionOptions(
 	} else if (scopedModels.length > 0 && !parsed.continue && !parsed.resume) {
 		const remembered = settings.getModelRole("default");
 		if (remembered) {
-			const parsedModel = parseModelString(remembered);
-			const rememberedModel = parsedModel
+			const rememberedSpec = resolveModelRoleValue(
+				remembered,
+				scopedModels.map(scopedModel => scopedModel.model),
+				{
+					settings,
+					matchPreferences: modelMatchPreferences,
+				},
+			);
+			const rememberedResolvedModel = rememberedSpec.model;
+			const rememberedModel = rememberedResolvedModel
 				? scopedModels.find(
 						scopedModel =>
-							scopedModel.model.provider === parsedModel.provider && scopedModel.model.id === parsedModel.id,
+							scopedModel.model.provider === rememberedResolvedModel.provider &&
+							scopedModel.model.id === rememberedResolvedModel.id,
 					)
 				: scopedModels.find(scopedModel => scopedModel.model.id.toLowerCase() === remembered.toLowerCase());
 			if (rememberedModel) {
 				options.model = rememberedModel.model;
 			}
 		}
-		if (!options.model) {
-			options.model = scopedModels[0].model;
-		}
+		if (!options.model) options.model = scopedModels[0].model;
 	}
 
 	// Thinking level
