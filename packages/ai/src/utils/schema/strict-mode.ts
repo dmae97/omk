@@ -29,6 +29,61 @@ export function StringEnum<const T extends readonly string[]>(
 export const NO_STRICT = Bun.env.PI_NO_STRICT === "1";
 
 const strictSchemaCache = new WeakMap<Record<string, unknown>, { schema: Record<string, unknown>; strict: boolean }>();
+function hasUnrepresentableStrictObjectMap(schema: Record<string, unknown>, seen?: WeakSet<object>): boolean {
+	if (!seen) seen = new WeakSet();
+	if (seen.has(schema)) return false;
+	seen.add(schema);
+
+	const hasPatternProperties =
+		isJsonObject(schema.patternProperties) && Object.keys(schema.patternProperties).length > 0;
+	const additionalPropertiesValue = schema.additionalProperties;
+	const hasSchemaAdditionalProperties = additionalPropertiesValue === true || isJsonObject(additionalPropertiesValue);
+	if (hasPatternProperties || hasSchemaAdditionalProperties) {
+		return true;
+	}
+
+	if (isJsonObject(schema.properties)) {
+		for (const propertySchema of Object.values(schema.properties)) {
+			if (isJsonObject(propertySchema) && hasUnrepresentableStrictObjectMap(propertySchema, seen)) {
+				return true;
+			}
+		}
+	}
+
+	if (isJsonObject(schema.items)) {
+		if (hasUnrepresentableStrictObjectMap(schema.items, seen)) {
+			return true;
+		}
+	} else if (Array.isArray(schema.items)) {
+		for (const itemSchema of schema.items) {
+			if (isJsonObject(itemSchema) && hasUnrepresentableStrictObjectMap(itemSchema, seen)) {
+				return true;
+			}
+		}
+	}
+
+	for (const key of COMBINATOR_KEYS) {
+		const variants = schema[key];
+		if (!Array.isArray(variants)) continue;
+		for (const variant of variants) {
+			if (isJsonObject(variant) && hasUnrepresentableStrictObjectMap(variant, seen)) {
+				return true;
+			}
+		}
+	}
+
+	for (const defsKey of ["$defs", "definitions"] as const) {
+		const defs = schema[defsKey];
+		if (!isJsonObject(defs)) continue;
+		for (const defSchema of Object.values(defs)) {
+			if (isJsonObject(defSchema) && hasUnrepresentableStrictObjectMap(defSchema, seen)) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
 export function sanitizeSchemaForStrictMode(
 	schema: Record<string, unknown>,
 	seen?: WeakSet<object>,
@@ -283,6 +338,9 @@ export function tryEnforceStrictSchema(schema: Record<string, unknown>): {
 	}
 
 	try {
+		if (hasUnrepresentableStrictObjectMap(schema)) {
+			throw new Error("Schema uses dynamic object keys that are not representable in strict mode");
+		}
 		const sanitized = sanitizeSchemaForStrictMode(schema);
 		const result = { schema: enforceStrictSchema(sanitized), strict: true };
 		strictSchemaCache.set(schema, result);

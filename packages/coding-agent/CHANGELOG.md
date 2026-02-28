@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added `gemini`, `codex`, and `synthetic` as supported values for the `providers.webSearch` setting
+
 ## [13.3.14] - 2026-02-28
 
 ### Added

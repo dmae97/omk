@@ -737,7 +737,19 @@ export const SETTINGS_SCHEMA = {
 	// ─────────────────────────────────────────────────────────────────────────
 	"providers.webSearch": {
 		type: "enum",
-		values: ["auto", "exa", "brave", "jina", "kimi", "zai", "perplexity", "anthropic"] as const,
+		values: [
+			"auto",
+			"exa",
+			"brave",
+			"jina",
+			"kimi",
+			"zai",
+			"perplexity",
+			"anthropic",
+			"gemini",
+			"codex",
+			"synthetic",
+		] as const,
 		default: "auto",
 		ui: { tab: "services", label: "Web search provider", description: "Provider for web search tool", submenu: true },
 	},

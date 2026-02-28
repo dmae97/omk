@@ -242,4 +242,22 @@ describe("adaptSchemaForStrict", () => {
 		expect(result.strict).toBe(false);
 		expect(result.schema).toBe(schema);
 	});
+
+	it("degrades gracefully for schemas with patternProperties maps", () => {
+		const schema = {
+			type: "object",
+			properties: {
+				rewrites: {
+					type: "object",
+					patternProperties: {
+						"^(.*)$": { type: "string" },
+					},
+				},
+			},
+			required: ["rewrites"],
+		};
+		const result = adaptSchemaForStrict(schema, true);
+		expect(result.strict).toBe(false);
+		expect(result.schema).toBe(schema);
+	});
 });
