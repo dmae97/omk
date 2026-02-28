@@ -46,8 +46,8 @@ async function callJinaSearch(apiKey: string, query: string): Promise<JinaSearch
 		throw new SearchProviderError("jina", `Jina API error (${response.status}): ${errorText}`, response.status);
 	}
 
-	const data = (await response.json()) as unknown;
-	return Array.isArray(data) ? (data as JinaSearchResponse) : [];
+	const payload = (await response.json()) as { data?: JinaSearchResponse } | null;
+	return Array.isArray(payload?.data) ? payload.data : [];
 }
 
 /** Execute Jina web search. */
