@@ -54,7 +54,7 @@ import { SSHCommandController } from "./controllers/ssh-command-controller";
 import { OAuthManualInputManager } from "./oauth-manual-input";
 import { setMermaidRenderCallback } from "./theme/mermaid-cache";
 import type { Theme } from "./theme/theme";
-import { getEditorTheme, getMarkdownTheme, onThemeChange, theme } from "./theme/theme";
+import { getEditorTheme, getMarkdownTheme, onTerminalAppearanceChange, onThemeChange, theme } from "./theme/theme";
 import type { CompactionQueuedMessage, InteractiveModeContext, TodoItem, TodoPhase } from "./types";
 import { UiHelpers } from "./utils/ui-helpers";
 
@@ -361,6 +361,13 @@ export class InteractiveMode implements InteractiveModeContext {
 			this.ui.invalidate();
 			this.updateEditorBorderColor();
 			this.ui.requestRender();
+		});
+
+		// Subscribe to terminal Mode 2031 dark/light appearance change notifications.
+		// When the OS or terminal switches between dark and light mode, the terminal
+		// sends a DSR and we re-evaluate which theme to use.
+		this.ui.terminal.onAppearanceChange(mode => {
+			onTerminalAppearanceChange(mode);
 		});
 
 		// Set up git branch watcher

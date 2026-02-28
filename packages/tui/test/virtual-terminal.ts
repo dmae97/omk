@@ -1,4 +1,4 @@
-import type { Terminal } from "@oh-my-pi/pi-tui/terminal";
+import type { Terminal, TerminalAppearance } from "@oh-my-pi/pi-tui/terminal";
 import type { Terminal as XtermTerminalType } from "@xterm/headless";
 import xterm from "@xterm/headless";
 
@@ -62,6 +62,14 @@ export class VirtualTerminal implements Terminal {
 	get kittyProtocolActive(): boolean {
 		// Virtual terminal always reports Kitty protocol as active for testing
 		return true;
+	}
+
+	get appearance(): TerminalAppearance | undefined {
+		return undefined;
+	}
+
+	onAppearanceChange(_callback: (appearance: TerminalAppearance) => void): void {
+		// No-op for virtual terminal
 	}
 
 	moveBy(lines: number): void {

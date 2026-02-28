@@ -30,6 +30,7 @@ export function emergencyTerminalRestore(): void {
 			// This avoids writing escape sequences for non-TUI commands (grep, commit, etc.)
 			process.stdout.write(
 				"\x1b[?2004l" + // Disable bracketed paste
+					"\x1b[?2031l" + // Disable Mode 2031 appearance notifications
 					"\x1b[<u" + // Pop kitty keyboard protocol
 					"\x1b[?25h", // Show cursor
 			);
@@ -41,6 +42,8 @@ export function emergencyTerminalRestore(): void {
 		// Terminal may already be dead during crash cleanup - ignore errors
 	}
 }
+/** Terminal-reported appearance (dark/light mode). */
+export type TerminalAppearance = "dark" | "light";
 export interface Terminal {
 	// Start the terminal with input and resize handlers
 	start(onInput: (data: string) => void, onResize: () => void): void;
@@ -80,6 +83,16 @@ export interface Terminal {
 
 	// Title operations
 	setTitle(title: string): void; // Set terminal window title
+
+	/**
+	 * Register a callback for Mode 2031 dark/light appearance change notifications.
+	 * Supported by Ghostty, Kitty, Contour, VTE (GNOME Terminal), and tmux 3.6+.
+	 * The callback fires when the terminal reports a change; it does NOT fire for the initial query.
+	 */
+	onAppearanceChange(callback: (appearance: TerminalAppearance) => void): void;
+
+	/** The last appearance reported by the terminal, or undefined if not yet known. */
+	get appearance(): TerminalAppearance | undefined;
 }
 
 /**
@@ -95,9 +108,19 @@ export class ProcessTerminal implements Terminal {
 	#dead = false;
 	#writeLogPath = $env.PI_TUI_WRITE_LOG || "";
 	#windowsVTInputRestore?: () => void;
+	#appearanceCallbacks: Array<(appearance: TerminalAppearance) => void> = [];
+	#appearance: TerminalAppearance | undefined;
 
 	get kittyProtocolActive(): boolean {
 		return this.#kittyProtocolActive;
+	}
+
+	get appearance(): TerminalAppearance | undefined {
+		return this.#appearance;
+	}
+
+	onAppearanceChange(callback: (appearance: TerminalAppearance) => void): void {
+		this.#appearanceCallbacks.push(callback);
 	}
 
 	start(onInput: (data: string) => void, onResize: () => void): void {
@@ -137,6 +160,13 @@ export class ProcessTerminal implements Terminal {
 		// The query handler intercepts input temporarily, then installs the user's handler
 		// See: https://sw.kovidgoyal.net/kitty/keyboard-protocol/
 		this.#queryAndEnableKittyProtocol();
+
+		// Enable Mode 2031: terminal will send DSR notifications on dark/light appearance changes.
+		// Query current mode with CSI ? 996 n, then subscribe with CSI ? 2031 h.
+		// Supported by Ghostty, Kitty, Contour, VTE/GNOME Terminal, tmux 3.6+.
+		// Unsupported terminals silently ignore these sequences.
+		this.#safeWrite("\x1b[?996n"); // Query current appearance
+		this.#safeWrite("\x1b[?2031h"); // Subscribe to appearance changes
 	}
 
 	/**
@@ -203,6 +233,9 @@ export class ProcessTerminal implements Terminal {
 		// Kitty protocol response pattern: \x1b[?<flags>u
 		const kittyResponsePattern = /^\x1b\[\?(\d+)u$/;
 
+		// Mode 2031 DSR response pattern: \x1b[?997;{1=dark,2=light}n
+		const appearanceDsrPattern = /^\x1b\[\?997;([12])n$/;
+
 		// Forward individual sequences to the input handler
 		this.#stdinBuffer.on("data", (sequence: string) => {
 			// Check for Kitty protocol response (only if not already enabled)
@@ -221,6 +254,19 @@ export class ProcessTerminal implements Terminal {
 				}
 			}
 
+			// Check for Mode 2031 appearance DSR response: CSI ? 997 ; {1,2} n
+			const appearanceMatch = sequence.match(appearanceDsrPattern);
+			if (appearanceMatch) {
+				const mode: TerminalAppearance = appearanceMatch[1] === "1" ? "dark" : "light";
+				const changed = mode !== this.#appearance;
+				this.#appearance = mode;
+				if (changed) {
+					for (const cb of this.#appearanceCallbacks) {
+						try { cb(mode); } catch { /* ignore callback errors */ }
+					}
+				}
+				return; // Don't forward DSR to TUI
+			}
 			if (this.#inputHandler) {
 				this.#inputHandler(sequence);
 			}
@@ -297,6 +343,10 @@ export class ProcessTerminal implements Terminal {
 		// Disable bracketed paste mode
 		this.#safeWrite("\x1b[?2004l");
 
+		// Disable Mode 2031 appearance change notifications
+		this.#safeWrite("\x1b[?2031l");
+		this.#appearanceCallbacks = [];
+
 		// Disable Kitty keyboard protocol if not already done by drainInput()
 		if (this.#kittyProtocolActive) {
 			this.#safeWrite("\x1b[<u");
@@ -317,6 +367,7 @@ export class ProcessTerminal implements Terminal {
 			this.#stdinDataHandler = undefined;
 		}
 		this.#inputHandler = undefined;
+		this.#appearance = undefined;
 		if (this.#resizeHandler) {
 			process.stdout.removeListener("resize", this.#resizeHandler);
 			this.#resizeHandler = undefined;

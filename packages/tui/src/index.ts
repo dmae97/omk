@@ -57,7 +57,7 @@ export {
 export { StdinBuffer, type StdinBufferEventMap, type StdinBufferOptions } from "./stdin-buffer";
 export type { BoxSymbols, SymbolTheme } from "./symbols";
 // Terminal interface and implementations
-export { emergencyTerminalRestore, ProcessTerminal, type Terminal } from "./terminal";
+export { emergencyTerminalRestore, ProcessTerminal, type Terminal, type TerminalAppearance } from "./terminal";
 // Terminal image support
 export * from "./terminal-capabilities";
 // TTY ID

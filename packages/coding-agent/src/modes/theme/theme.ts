@@ -1616,7 +1616,15 @@ export async function getThemeByName(name: string): Promise<Theme | undefined> {
 	}
 }
 
+/** Appearance reported by Mode 2031 (terminal DSR), or undefined if not (yet) available. */
+var terminalReportedAppearance: "dark" | "light" | undefined;
+
 function detectTerminalBackground(): "dark" | "light" {
+	// Prefer terminal-reported appearance from Mode 2031 (CSI ? 997 ; {1,2} n)
+	if (terminalReportedAppearance) {
+		return terminalReportedAppearance;
+	}
+	// Fallback: COLORFGBG environment variable (static, set once at terminal launch)
 	const colorfgbg = Bun.env.COLORFGBG || "";
 	if (colorfgbg) {
 		const parts = colorfgbg.split(";");
@@ -1790,6 +1798,31 @@ export function setAutoThemeMapping(mode: "dark" | "light", themeName: string): 
 		})
 		.catch(err => {
 			logger.debug("Auto theme mapping switch failed", { error: String(err) });
+		});
+}
+
+/**
+ * Called when the terminal reports a dark/light appearance change via Mode 2031.
+ * Updates the cached appearance and triggers auto-theme re-evaluation.
+ * This is the cross-platform mechanism supported by Ghostty, Kitty, Contour,
+ * VTE (GNOME Terminal), and tmux 3.6+.
+ */
+export function onTerminalAppearanceChange(mode: "dark" | "light"): void {
+	if (terminalReportedAppearance === mode) return;
+	terminalReportedAppearance = mode;
+	if (!autoDetectedTheme) return;
+	const resolved = getDefaultTheme();
+	if (resolved === currentThemeName) return;
+	currentThemeName = resolved;
+	loadTheme(resolved, getCurrentThemeOptions())
+		.then(loadedTheme => {
+			theme = loadedTheme;
+			if (onThemeChangeCallback) {
+				onThemeChangeCallback();
+			}
+		})
+		.catch(err => {
+			logger.debug("Mode 2031 appearance switch failed", { error: String(err) });
 		});
 }
 
