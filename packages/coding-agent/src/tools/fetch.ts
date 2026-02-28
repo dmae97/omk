@@ -250,19 +250,53 @@ async function tryContentNegotiation(
 }
 
 /**
+ * Read a single HTML attribute from a tag string
+ */
+function getHtmlAttribute(tag: string, attribute: string): string | null {
+	const pattern = new RegExp(`\\b${attribute}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>]+))`, "i");
+	const match = tag.match(pattern);
+	if (!match) return null;
+	return (match[1] ?? match[2] ?? match[3] ?? "").trim();
+}
+
+/**
+ * Extract bounded <head> markup to avoid expensive whole-page parsing
+ */
+function extractHeadHtml(html: string): string {
+	const lower = html.toLowerCase();
+	const headStart = lower.indexOf("<head");
+	if (headStart === -1) {
+		return html.slice(0, 32 * 1024);
+	}
+
+	const headTagEnd = html.indexOf(">", headStart);
+	if (headTagEnd === -1) {
+		return html.slice(headStart, headStart + 32 * 1024);
+	}
+
+	const headEnd = lower.indexOf("</head>", headTagEnd + 1);
+	const fallbackEnd = Math.min(html.length, headTagEnd + 1 + 32 * 1024);
+	return html.slice(headStart, headEnd === -1 ? fallbackEnd : headEnd + 7);
+}
+
+/**
  * Parse alternate links from HTML head
  */
 function parseAlternateLinks(html: string, pageUrl: string): string[] {
 	const links: string[] = [];
 
 	try {
-		const doc = parseHtml(html.slice(0, 262144));
-		const alternateLinks = doc.querySelectorAll('link[rel="alternate"]');
+		const pagePath = new URL(pageUrl).pathname;
+		const headHtml = extractHeadHtml(html);
+		const linkTags = headHtml.match(/<link\b[^>]*>/gi) ?? [];
 
-		for (const link of alternateLinks) {
-			const href = link.getAttribute("href");
-			const type = link.getAttribute("type")?.toLowerCase() ?? "";
+		for (const tag of linkTags) {
+			const rel = getHtmlAttribute(tag, "rel")?.toLowerCase() ?? "";
+			const relTokens = rel.split(/\s+/).filter(Boolean);
+			if (!relTokens.includes("alternate")) continue;
 
+			const href = getHtmlAttribute(tag, "href");
+			const type = getHtmlAttribute(tag, "type")?.toLowerCase() ?? "";
 			if (!href) continue;
 
 			// Skip site-wide feeds
@@ -277,10 +311,7 @@ function parseAlternateLinks(html: string, pageUrl: string): string[] {
 
 			if (type.includes("markdown")) {
 				links.push(href);
-			} else if (
-				(type.includes("rss") || type.includes("atom") || type.includes("feed")) &&
-				(href.includes(new URL(pageUrl).pathname) || href.includes("comments"))
-			) {
+			} else if ((type.includes("rss") || type.includes("atom") || type.includes("feed")) && (href.includes(pagePath) || href.includes("comments"))) {
 				links.push(href);
 			}
 		}
