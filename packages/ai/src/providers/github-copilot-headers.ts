@@ -42,9 +42,7 @@ export function hasCopilotVisionInput(messages: Message[]): boolean {
  * Resolve an explicitly configured Copilot initiator header, if present.
  * Handles case-insensitive X-Initiator keys and returns the last valid value.
  */
-export function getCopilotInitiatorOverride(
-	headers: Record<string, string> | undefined,
-): "user" | "agent" | undefined {
+export function getCopilotInitiatorOverride(headers: Record<string, string> | undefined): "user" | "agent" | undefined {
 	if (!headers) return undefined;
 
 	let override: "user" | "agent" | undefined;

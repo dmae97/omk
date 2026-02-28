@@ -35,7 +35,11 @@ import { parseStreamingJson } from "../utils/json-parse";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode";
 import { mapToOpenAIResponsesToolChoice } from "../utils/tool-choice";
 import { NO_STRICT, tryEnforceStrictSchema } from "../utils/typebox-helpers";
-import { buildCopilotDynamicHeaders, getCopilotInitiatorOverride, hasCopilotVisionInput } from "./github-copilot-headers";
+import {
+	buildCopilotDynamicHeaders,
+	getCopilotInitiatorOverride,
+	hasCopilotVisionInput,
+} from "./github-copilot-headers";
 import { transformMessages } from "./transform-messages";
 
 /**

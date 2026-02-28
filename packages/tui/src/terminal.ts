@@ -262,7 +262,11 @@ export class ProcessTerminal implements Terminal {
 				this.#appearance = mode;
 				if (changed) {
 					for (const cb of this.#appearanceCallbacks) {
-						try { cb(mode); } catch { /* ignore callback errors */ }
+						try {
+							cb(mode);
+						} catch {
+							/* ignore callback errors */
+						}
 					}
 				}
 				return; // Don't forward DSR to TUI
