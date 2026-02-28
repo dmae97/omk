@@ -3,7 +3,7 @@ import { searchAnthropic } from "../../src/web/search/providers/anthropic";
 
 type CapturedRequest = {
 	url: string;
-	headers: HeadersInit | undefined;
+	headers: RequestInit["headers"];
 	body: Record<string, unknown> | null;
 };
 
@@ -23,7 +23,7 @@ function makeAnthropicResponse() {
 	};
 }
 
-function getHeaderCaseInsensitive(headers: HeadersInit | undefined, name: string): string | undefined {
+function getHeaderCaseInsensitive(headers: RequestInit["headers"], name: string): string | undefined {
 	if (!headers) return undefined;
 
 	if (headers instanceof Headers) {
@@ -37,7 +37,7 @@ function getHeaderCaseInsensitive(headers: HeadersInit | undefined, name: string
 
 	for (const [key, value] of Object.entries(headers)) {
 		if (key.toLowerCase() === name.toLowerCase()) {
-			return value;
+			return value as string;
 		}
 	}
 
