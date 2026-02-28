@@ -85,11 +85,7 @@ describe("Cloud Code Assist Claude tool schema conversion", () => {
 			type: "object",
 			properties: {
 				lines: {
-					anyOf: [
-						{ type: "array", items: { type: "string" } },
-						{ type: "string" },
-						{ type: "null" },
-					],
+					anyOf: [{ type: "array", items: { type: "string" } }, { type: "string" }, { type: "null" }],
 				},
 			},
 			required: ["lines"],
@@ -101,7 +97,10 @@ describe("Cloud Code Assist Claude tool schema conversion", () => {
 		const claudeFirst = convertTools(tools, claudeModel);
 		const claudeSecond = convertTools(tools, claudeModel);
 		const claudeDeclaration = claudeFirst?.[0]?.functionDeclarations[0] as Record<string, unknown>;
-		const geminiDeclaration = convertTools(tools, geminiModel)?.[0]?.functionDeclarations[0] as Record<string, unknown>;
+		const geminiDeclaration = convertTools(tools, geminiModel)?.[0]?.functionDeclarations[0] as Record<
+			string,
+			unknown
+		>;
 
 		expect(claudeFirst).toEqual(claudeSecond);
 		expect(claudeDeclaration.parameters).toEqual({
@@ -114,12 +113,12 @@ describe("Cloud Code Assist Claude tool schema conversion", () => {
 			},
 			required: ["lines"],
 		});
-		expect(JSON.stringify(claudeDeclaration.parameters)).not.toContain("\"anyOf\"");
-		expect(JSON.stringify(claudeDeclaration.parameters)).not.toContain("\"oneOf\"");
+		expect(JSON.stringify(claudeDeclaration.parameters)).not.toContain('"anyOf"');
+		expect(JSON.stringify(claudeDeclaration.parameters)).not.toContain('"oneOf"');
 		expect(claudeDeclaration.parametersJsonSchema).toBeUndefined();
-		expect((geminiDeclaration.parametersJsonSchema as { properties?: Record<string, unknown> })?.properties?.lines).toEqual(
-			parameters.properties.lines,
-		);
+		expect(
+			(geminiDeclaration.parametersJsonSchema as { properties?: Record<string, unknown> })?.properties?.lines,
+		).toEqual(parameters.properties.lines);
 	});
 	it("keeps google sanitizer behavior for non-claude schema path", () => {
 		const schema = {
