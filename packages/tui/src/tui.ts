@@ -886,7 +886,7 @@ export class TUI extends Container {
 		const fullRender = (clear: boolean): void => {
 			this.#fullRedrawCount += 1;
 			let buffer = "\x1b[?2026h"; // Begin synchronized output
-			if (clear) buffer += this.#clearScrollbackOnNextFullRender ? "\x1b[3J\x1b[2J\x1b[H" : "\x1b[2J\x1b[H"; // Clear viewport (and optionally scrollback), then home
+			if (clear) buffer += this.#clearScrollbackOnNextFullRender ? "\x1b[3J\x1b[H\x1b[0J" : "\x1b[H\x1b[0J"; // Home + clear from cursor (and optionally scrollback)
 			for (let i = 0; i < newLines.length; i++) {
 				if (i > 0) buffer += "\r\n";
 				buffer += newLines[i];

@@ -446,7 +446,7 @@ export class ProcessTerminal implements Terminal {
 	}
 
 	clearScreen(): void {
-		this.#safeWrite("\x1b[2J\x1b[H"); // Clear screen and move to home (1,1)
+		this.#safeWrite("\x1b[H\x1b[0J"); // Move to home (1,1) and clear from cursor to end
 	}
 
 	setTitle(title: string): void {
