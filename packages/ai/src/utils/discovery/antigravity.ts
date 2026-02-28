@@ -72,7 +72,7 @@ const AntigravityDiscoveryApiModelSchema: z.ZodType<AntigravityDiscoveryApiModel
 		isInternal: z.preprocess(value => (typeof value === "boolean" ? value : undefined), z.boolean().optional()),
 		supportsVideo: z.preprocess(value => (typeof value === "boolean" ? value : undefined), z.boolean().optional()),
 	})
-	.passthrough();
+	.loose();
 const AntigravityDiscoveryAgentModelGroupSchema: z.ZodType<AntigravityDiscoveryAgentModelGroup> = z
 	.object({
 		modelIds: z.preprocess(
@@ -83,7 +83,7 @@ const AntigravityDiscoveryAgentModelGroupSchema: z.ZodType<AntigravityDiscoveryA
 			z.array(z.string()).optional(),
 		),
 	})
-	.passthrough();
+	.loose();
 const AntigravityDiscoveryAgentModelSortSchema: z.ZodType<AntigravityDiscoveryAgentModelSort> = z
 	.object({
 		groups: z.preprocess(
@@ -99,7 +99,7 @@ const AntigravityDiscoveryAgentModelSortSchema: z.ZodType<AntigravityDiscoveryAg
 				.optional(),
 		),
 	})
-	.passthrough();
+	.loose();
 const AntigravityDiscoveryApiResponseSchema: z.ZodType<AntigravityDiscoveryApiResponse> = z
 	.object({
 		models: z.preprocess(
@@ -134,7 +134,7 @@ const AntigravityDiscoveryApiResponseSchema: z.ZodType<AntigravityDiscoveryApiRe
 				.optional(),
 		),
 	})
-	.passthrough();
+	.loose();
 
 /**
  * Options for fetching Antigravity discovery models.

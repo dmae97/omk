@@ -40,7 +40,7 @@ const openAICompatibleModelRecordSchema = z
 		object: z.unknown().optional(),
 		owned_by: z.unknown().optional(),
 	})
-	.passthrough();
+	.loose();
 
 const openAICompatibleModelsEnvelopeSchema = z
 	.object({
@@ -49,7 +49,7 @@ const openAICompatibleModelsEnvelopeSchema = z
 		result: z.unknown().optional(),
 		items: z.unknown().optional(),
 	})
-	.passthrough();
+	.loose();
 
 const openAICompatibleModelsPayloadSchema = z.union([z.array(z.unknown()), openAICompatibleModelsEnvelopeSchema]);
 

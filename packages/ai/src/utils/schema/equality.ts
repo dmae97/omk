@@ -57,7 +57,7 @@ export function mergeCompatibleEnumSchemas(existing: unknown, incoming: unknown)
 
 	const mergedEnum = [...existingEnum];
 	for (const enumValue of incomingEnum) {
-		if (!mergedEnum.some(existingValue => Object.is(existingValue, enumValue))) {
+		if (!mergedEnum.some(existingValue => areJsonValuesEqual(existingValue, enumValue))) {
 			mergedEnum.push(enumValue);
 		}
 	}

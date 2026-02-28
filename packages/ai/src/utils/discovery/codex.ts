@@ -13,7 +13,7 @@ const codexReasoningPresetSchema = z
 	.object({
 		effort: z.unknown().optional(),
 	})
-	.passthrough();
+	.loose();
 
 const codexModelEntrySchema = z
 	.object({
@@ -28,14 +28,14 @@ const codexModelEntrySchema = z
 		priority: z.unknown().optional(),
 		prefer_websockets: z.unknown().optional(),
 	})
-	.passthrough();
+	.loose();
 
 const codexModelsResponseSchema = z
 	.object({
 		models: z.array(z.unknown()).optional(),
 		data: z.array(z.unknown()).optional(),
 	})
-	.passthrough();
+	.loose();
 
 type CodexModelEntry = z.infer<typeof codexModelEntrySchema>;
 

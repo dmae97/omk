@@ -178,18 +178,29 @@ describe("enforceStrictSchema", () => {
 		expect(validBranch.additionalProperties).toBe(false);
 	});
 
-	it("treats type arrays containing object as object schemas", () => {
+	it("treats type arrays containing object as object schemas via tryEnforceStrictSchema", () => {
 		const schema = {
 			type: ["object", "null"],
 			properties: { value: { type: "string" } },
 			required: ["value"],
 		} as Record<string, unknown>;
 
-		const strict = enforceStrictSchema(schema);
-		const properties = strict.properties as Record<string, Record<string, unknown>>;
+		const result = tryEnforceStrictSchema(schema);
 
-		expect(strict.additionalProperties).toBe(false);
-		expect(strict.required).toEqual(["value"]);
+		expect(result.strict).toBe(true);
+		// sanitizeSchemaForStrictMode splits type arrays into anyOf variants
+		const branches = result.schema.anyOf as Array<Record<string, unknown>>;
+		expect(branches).toHaveLength(2);
+
+		const objectBranch = branches.find(b => b.type === "object") as Record<string, unknown>;
+		const nullBranch = branches.find(b => b.type === "null");
+		expect(objectBranch).toBeDefined();
+		expect(nullBranch).toBeDefined();
+
+		// enforceStrictSchema applied object constraints to the object variant
+		expect(objectBranch.additionalProperties).toBe(false);
+		expect(objectBranch.required).toEqual(["value"]);
+		const properties = objectBranch.properties as Record<string, Record<string, unknown>>;
 		expect(properties.value.type).toBe("string");
 	});
 });

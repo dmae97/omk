@@ -8,6 +8,7 @@
 - AST find now emits all lines of multiline matches with hashline tags (LINE#HASH:content) consistent with read/grep output
 - Added AST pattern syntax reference (metavariables, wildcards, variadics) to system prompt
 - Added examples and scoping guidance to ast-find and ast-replace tool prompts
+- Added `provider-schema-compatibility.test.ts`: integration test that instantiates every builtin and hidden tool, runs their parameter schemas through `adaptSchemaForStrict`, `sanitizeSchemaForGoogle`, and `prepareSchemaForCCA`, and asserts zero violations against each provider's compatibility rules
 
 ### Fixed
 
@@ -104,6 +105,7 @@
 - Fixed `todo_write` task normalization to auto-activate the first remaining task and include explicit remaining-items output in tool results, removing the need for an immediate follow-up start update
 
 ## [13.3.7] - 2026-02-27
+
 ### Breaking Changes
 
 - Removed `preloadedSkills` option from `CreateAgentSessionOptions`; skills are no longer inlined into system prompts
@@ -137,11 +139,13 @@
 - Fixed handling of union type schemas (e.g., object|null) to normalize them into strict-mode compatible variants
 
 ## [13.3.6] - 2026-02-26
+
 ### Breaking Changes
 
 - Changed `submit_result` tool parameter structure from top-level `data` or `error` fields to nested `result` object containing either `result.data` or `result.error`
 
 ## [13.3.5] - 2026-02-26
+
 ### Added
 
 - Added support for setting array and record configuration values using JSON syntax
@@ -156,6 +160,7 @@
 - Enhanced type display in config list output to show correct type indicators for number, array, and record settings
 
 ## [13.3.3] - 2026-02-26
+
 ### Added
 
 - Support for `move` parameter in `computeHashlineDiff` to enable file move operations alongside content edits
@@ -207,13 +212,16 @@
 ## [13.2.1] - 2026-02-24
 
 ### Fixed
+
 - Fixed changelog tools to enforce category-specific arrays and reuse the shared category list for generation
 - Non-interactive environment variables (pager, editor, prompt suppression) were not applied to non-PTY bash execution, causing commands to potentially block on pagers or prompts
 
 ### Changed
 
 - Extracted non-interactive environment config from `bash-interactive.ts` into shared `non-interactive-env.ts` module, applied consistently to all bash execution paths
+
 ## [13.2.0] - 2026-02-23
+
 ### Breaking Changes
 
 - Made `description` field required in CustomTool interface
@@ -237,19 +245,24 @@
 ## [13.1.2] - 2026-02-23
 
 ### Breaking Changes
+
 - Removed `timeout` parameter from await tool—tool now waits indefinitely until jobs complete or the call is aborted
 - Renamed `job_ids` parameter to `jobs` in await tool schema
 - Removed `timedOut` field from await tool result details
 
 ### Changed
+
 - Resolved docs index generation paths using path.resolve relative to the script directory
+
 ## [13.1.1] - 2026-02-23
 
 ### Fixed
 
 - Fixed bash internal URL expansion to resolve `local://` targets to concrete filesystem paths, including newly created destination files for commands like `mv src.json local://dest.json`
 - Fixed bash local URL resolution to create missing parent directories under the session local root before command execution, preventing `mv` destination failures for new paths
+
 ## [13.1.0] - 2026-02-23
+
 ### Breaking Changes
 
 - Renamed `file` parameter to `path` in replace, patch, and hashline edit operations
@@ -266,6 +279,7 @@
 - Moved intent field documentation from per-tool JSON schema descriptions into a single system prompt block, reducing token overhead proportional to tool count
 
 ## [13.0.1] - 2026-02-22
+
 ### Changed
 
 - Simplified hashline edit schema to use unified `first`/`last` anchor fields instead of operation-specific field names (`tag`, `before`, `after`)
@@ -273,6 +287,7 @@
 - Updated hashline tool documentation to reflect new unified anchor syntax across all operations (replace, append, prepend, insert)
 
 ## [13.0.0] - 2026-02-22
+
 ### Added
 
 - Added `getTodoPhases()` and `setTodoPhases()` methods to ToolSession API for managing todo state programmatically
@@ -313,6 +328,7 @@
 - Fixed todo reminder XML tags from underscore to kebab-case format (`system-reminder`)
 
 ## [12.19.3] - 2026-02-22
+
 ### Added
 
 - Added `pty` parameter to bash tool to enable PTY mode for commands requiring a real terminal (e.g., sudo, ssh, top, less)
@@ -326,12 +342,14 @@
 - Removed `bash.virtualTerminal` setting; use the `pty` parameter on individual bash commands instead
 
 ## [12.19.1] - 2026-02-22
+
 ### Removed
 
 - Removed `replaceText` edit operation from hashline mode (substring-based text replacement)
 - Removed autocorrect heuristics that attempted to detect and fix line merges and formatting rewrites in hashline edits
 
 ## [12.19.0] - 2026-02-22
+
 ### Added
 
 - Added `poll_jobs` tool to block until background jobs complete, providing an alternative to polling `read jobs://` in loops
@@ -379,6 +397,7 @@
 - Fixed `submit_result` schema generation to use valid JSON Schema when no explicit output schema is provided
 
 ## [12.18.1] - 2026-02-21
+
 ### Added
 
 - Added Buffer.toBase64() polyfill for Bun compatibility to enable base64 encoding of buffers
@@ -407,6 +426,7 @@
 - Fixed potential race condition in bash interactive component where output could be appended after the component was closed
 
 ## [12.17.2] - 2026-02-21
+
 ### Changed
 
 - Modified bash command normalization to only apply explicit head/tail parameters from tool input, removing automatic extraction from command pipes
@@ -418,6 +438,7 @@
 - Fixed hard timeout handling to properly interrupt long-running commands that exceed the grace period beyond the configured timeout
 
 ## [12.17.1] - 2026-02-21
+
 ### Added
 
 - Added `filterBrowser` option to filter out browser automation MCP servers when builtin browser tool is enabled
@@ -426,6 +447,7 @@
 - Added `BrowserFilterResult` type for browser MCP server filtering results
 
 ## [12.17.0] - 2026-02-21
+
 ### Added
 
 - Added timeout protection (5 seconds) for system prompt preparation with graceful fallback to minimal context on timeout

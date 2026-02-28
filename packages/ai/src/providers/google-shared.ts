@@ -4,7 +4,7 @@
 import { type Content, FinishReason, FunctionCallingConfigMode, type Part } from "@google/genai";
 import type { Context, ImageContent, Model, StopReason, TextContent, Tool } from "../types";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode";
-import { prepareSchemaForCloudCodeAssistClaude, sanitizeSchemaForGoogle } from "../utils/schema";
+import { prepareSchemaForCCA, sanitizeSchemaForGoogle } from "../utils/schema";
 import { transformMessages } from "./transform-messages";
 
 export { sanitizeSchemaForGoogle };
@@ -285,7 +285,7 @@ export function convertTools(
 				name: tool.name,
 				description: tool.description || "",
 				...(useParameters
-					? { parameters: prepareSchemaForCloudCodeAssistClaude(tool.parameters) }
+					? { parameters: prepareSchemaForCCA(tool.parameters) }
 					: { parametersJsonSchema: tool.parameters }),
 			})),
 		},

@@ -4,6 +4,7 @@
  * Converts MCP tool definitions to CustomTool format for the agent.
  */
 import type { AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
+import { sanitizeSchemaForMCP } from "@oh-my-pi/pi-ai/utils/schema";
 import type { TSchema } from "@sinclair/typebox";
 import type { SourceMeta } from "../capability/types";
 import type {
@@ -49,46 +50,6 @@ export interface MCPToolDetails {
 	/** Provider display name (e.g., "Claude Code", "MCP Config") */
 	providerName?: string;
 }
-
-/**
- * Recursively strip JSON Schema fields that cause AJV validation errors.
- *
- * - `$schema`: AJV throws on unknown meta-schema URIs (e.g. draft 2020-12 from schemars 1.x / rmcp 0.15+)
- * - `nullable`: OpenAPI 3.0 extension, not standard JSON Schema — AJV rejects it as an unknown keyword.
- */
-function sanitizeSchema(schema: unknown): unknown {
-	if (Array.isArray(schema)) {
-		return schema.map(sanitizeSchema);
-	}
-	if (schema !== null && typeof schema === "object") {
-		const { $schema: _, nullable: __, ...rest } = schema as Record<string, unknown>;
-		const out: Record<string, unknown> = {};
-		for (const [k, v] of Object.entries(rest)) {
-			out[k] = sanitizeSchema(v);
-		}
-		return out;
-	}
-	return schema;
-}
-
-/**
- * Convert JSON Schema from MCP to TypeBox-compatible schema.
- * MCP uses standard JSON Schema, TypeBox uses a compatible subset.
- *
- * Also normalizes schemas to work around common issues:
- * - Adds `properties: {}` to object schemas missing it (some LLM providers require this)
- * - Strips `$schema` and `nullable` fields (see sanitizeSchema)
- */
-function convertSchema(mcpSchema: MCPToolDefinition["inputSchema"]): TSchema {
-	const schema = sanitizeSchema(mcpSchema) as Record<string, unknown>;
-
-	// Normalize: object schemas must have properties field for some providers
-	if (schema.type === "object" && !("properties" in schema)) {
-		return { ...schema, properties: {} } as unknown as TSchema;
-	}
-	return schema as unknown as TSchema;
-}
-
 /**
  * Format MCP content for LLM consumption.
  */
@@ -193,7 +154,7 @@ export class MCPTool implements CustomTool<TSchema, MCPToolDetails> {
 		this.name = createMCPToolName(connection.name, tool.name);
 		this.label = `${connection.name}/${tool.name}`;
 		this.description = tool.description ?? `MCP tool from ${connection.name}`;
-		this.parameters = convertSchema(tool.inputSchema);
+		this.parameters = sanitizeSchemaForMCP(tool.inputSchema) as TSchema;
 		this.mcpToolName = tool.name;
 		this.mcpServerName = connection.name;
 	}
@@ -297,7 +258,7 @@ export class DeferredMCPTool implements CustomTool<TSchema, MCPToolDetails> {
 		this.name = createMCPToolName(serverName, tool.name);
 		this.label = `${serverName}/${tool.name}`;
 		this.description = tool.description ?? `MCP tool from ${serverName}`;
-		this.parameters = convertSchema(tool.inputSchema);
+		this.parameters = sanitizeSchemaForMCP(tool.inputSchema) as TSchema;
 		this.mcpToolName = tool.name;
 		this.mcpServerName = serverName;
 		this.#fallbackProvider = source?.provider;

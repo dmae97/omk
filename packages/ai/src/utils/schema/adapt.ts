@@ -1,5 +1,4 @@
 import { tryEnforceStrictSchema } from "./strict-mode";
-
 /**
  * Consolidated helper for OpenAI-style strict schema enforcement.
  *
@@ -13,6 +12,9 @@ export function adaptSchemaForStrict(
 	schema: Record<string, unknown>,
 	strict: boolean,
 ): { schema: Record<string, unknown>; strict: boolean } {
-	if (!strict) return { schema, strict: false };
+	if (!strict) {
+		return { schema, strict: false };
+	}
+
 	return tryEnforceStrictSchema(schema);
 }

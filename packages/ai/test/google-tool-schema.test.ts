@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { convertTools } from "@oh-my-pi/pi-ai/providers/google-shared";
 import type { Model, Tool } from "@oh-my-pi/pi-ai/types";
-import { sanitizeSchemaForCloudCodeAssistClaude, sanitizeSchemaForGoogle } from "@oh-my-pi/pi-ai/utils/schema";
+import { sanitizeSchemaForCCA, sanitizeSchemaForGoogle } from "@oh-my-pi/pi-ai/utils/schema";
 import type { TSchema } from "@sinclair/typebox";
 
 function createModel(id: string): Model<"google-gemini-cli"> {
@@ -38,7 +38,7 @@ describe("Cloud Code Assist Claude tool schema conversion", () => {
 
 		// normalizeTypeArrayToNullable converts type array to scalar + nullable,
 		// then stripNullableKeyword removes the nullable marker.
-		expect(sanitizeSchemaForCloudCodeAssistClaude(schema)).toEqual({
+		expect(sanitizeSchemaForCCA(schema)).toEqual({
 			type: "object",
 			properties: {
 				value: {

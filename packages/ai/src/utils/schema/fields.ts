@@ -7,7 +7,7 @@
 
 /**
  * Google Generative AI unsupported schema fields.
- * Stripped during sanitizeSchemaForGoogle / sanitizeSchemaForCloudCodeAssistClaude.
+ * Stripped during sanitizeSchemaForGoogle / sanitizeSchemaForCCA.
  */
 export const UNSUPPORTED_SCHEMA_FIELDS = new Set([
 	"$schema",
@@ -131,3 +131,17 @@ export const CLOUD_CODE_ASSIST_SHARED_SCHEMA_KEYS = new Set([
 	"writeOnly",
 	"$comment",
 ]);
+
+/**
+ * Combinator keys used across schema sanitization modules.
+ * Defined once to avoid duplication in strict-mode.ts and normalize-cca.ts.
+ */
+export const COMBINATOR_KEYS = ["anyOf", "allOf", "oneOf"] as const;
+
+/**
+ * Cloud Code Assist Claude unsupported schema fields.
+ * Much smaller than UNSUPPORTED_SCHEMA_FIELDS (Google) because CCA supports
+ * validation keywords like additionalProperties, minLength, pattern, etc.
+ * Only meta/reference keywords that CCA cannot resolve are stripped.
+ */
+export const CCA_UNSUPPORTED_SCHEMA_FIELDS = new Set(["$schema", "$ref", "$defs", "$dynamicRef", "$dynamicAnchor"]);

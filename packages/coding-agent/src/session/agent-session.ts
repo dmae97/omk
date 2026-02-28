@@ -3200,7 +3200,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			this.model && assistantMessage.provider === this.model.provider && assistantMessage.model === this.model.id;
 		// This handles the case where an error was kept after compaction (in the "kept" region).
 		// The error shouldn't trigger another compaction since we already compacted.
-		// Example: opus fails \u2192 switch to codex \u2192 compact \u2192 switch back to opus \u2192 opus error
+		// Example: opus fails -> switch to codex -> compact -> switch back to opus -> opus error
 		// is still in context but shouldn't trigger compaction again.
 		const compactionEntry = getLatestCompactionEntry(this.sessionManager.getBranch());
 		const errorIsFromBeforeCompaction =
@@ -3213,7 +3213,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				this.agent.replaceMessages(messages.slice(0, -1));
 			}
 
-			// Try context promotion first \u2014 switch to a larger model and retry without compacting
+			// Try context promotion first - switch to a larger model and retry without compacting
 			const promoted = await this.#tryContextPromotion(assistantMessage);
 			if (promoted) {
 				// Retry on the promoted (larger) model without compacting
@@ -3221,7 +3221,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				return;
 			}
 
-			// No promotion target available \u2014 fall through to compaction
+			// No promotion target available fall through to compaction
 			const compactionSettings = this.settings.getGroup("compaction");
 			if (compactionSettings.enabled) {
 				await this.#runAutoCompaction("overflow", true);
