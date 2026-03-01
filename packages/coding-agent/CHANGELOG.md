@@ -1,14 +1,17 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Auto-include `ast_grep` and `ast_edit` tools when their text-based counterparts (`grep`, `edit`) are requested and the AST tools are enabled
 - Enforced tool decision in plan mode—agent now requires calling either `ask` or `exit_plan_mode` when a turn ends without a required tool call
 - Auto-correction of escaped tab indentation in edits (enabled by default, controllable via `PI_HASHLINE_AUTOCORRECT_ESCAPED_TABS` environment variable)
 - Warning when suspicious Unicode escape placeholder `\uDDDD` is detected in edit content
 
 ### Changed
 
+- Updated bash tool description to conditionally show `ast_grep` and `ast_edit` guidance based on tool availability in the session
 - Replaced timeout-based cancellation with AbortSignal-based cancellation in the `ask` tool for more reliable user interaction handling
 - Updated `ask` tool to distinguish between user-initiated cancellation and timeout-driven auto-selection, with only user cancellation aborting the turn
 - Updated hashline documentation to clarify that `\t` in JSON represents a real tab character, not a literal backslash-t sequence

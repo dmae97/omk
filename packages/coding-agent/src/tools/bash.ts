@@ -98,7 +98,11 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 	constructor(private readonly session: ToolSession) {
 		this.#asyncEnabled = this.session.settings.get("async.enabled");
 		this.parameters = this.#asyncEnabled ? bashSchemaWithAsync : bashSchemaBase;
-		this.description = renderPromptTemplate(bashDescription, { asyncEnabled: this.#asyncEnabled });
+		this.description = renderPromptTemplate(bashDescription, {
+			asyncEnabled: this.#asyncEnabled,
+			hasAstGrep: this.session.settings.get("astGrep.enabled"),
+			hasAstEdit: this.session.settings.get("astEdit.enabled"),
+		});
 	}
 
 	#formatResultOutput(result: BashResult | BashInteractiveResult, headLines?: number, tailLines?: number): string {

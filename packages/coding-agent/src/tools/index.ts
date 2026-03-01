@@ -282,6 +282,16 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 	) {
 		requestedTools.push("bash");
 	}
+
+	// Auto-include AST counterparts when their text-based sibling is present
+	if (requestedTools) {
+		if (requestedTools.includes("grep") && !requestedTools.includes("ast_grep") && session.settings.get("astGrep.enabled")) {
+			requestedTools.push("ast_grep");
+		}
+		if (requestedTools.includes("edit") && !requestedTools.includes("ast_edit") && session.settings.get("astEdit.enabled")) {
+			requestedTools.push("ast_edit");
+		}
+	}
 	const allTools: Record<string, ToolFactory> = { ...BUILTIN_TOOLS, ...HIDDEN_TOOLS };
 	const isToolAllowed = (name: string) => {
 		if (name === "lsp") return enableLsp;
