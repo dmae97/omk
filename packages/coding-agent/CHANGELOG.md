@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ## [13.5.6] - 2026-03-01
+### Changed
+
+- Updated OAuth client name from 'oh-my-pi MCP' to 'Codex' for dynamic client registration
 ### Fixed
 
 - Fixed exit_plan_mode handler to abort active agent turn before opening plan approval selector, ensuring proper session cleanup

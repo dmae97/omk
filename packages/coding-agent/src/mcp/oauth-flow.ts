@@ -181,7 +181,7 @@ export class MCPOAuthFlow extends OAuthCallbackFlow {
 					Accept: "application/json",
 				},
 				body: JSON.stringify({
-					client_name: "oh-my-pi MCP",
+					client_name: "Codex",
 					redirect_uris: [redirectUri],
 					grant_types: ["authorization_code", "refresh_token"],
 					response_types: ["code"],
