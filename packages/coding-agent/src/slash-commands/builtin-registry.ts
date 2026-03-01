@@ -394,7 +394,7 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 	},
 	{
 		name: "debug",
-		description: "Write debug log (TUI state and messages)",
+		description: "Open debug tools selector",
 		handle: (_command, runtime) => {
 			runtime.ctx.showDebugSelector();
 			runtime.ctx.editor.setText("");

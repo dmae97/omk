@@ -28,6 +28,7 @@ import type { AuthStorage } from "../../session/auth-storage";
 import { createCompactionSummaryMessage } from "../../session/messages";
 import { outputMeta } from "../../tools/output-meta";
 import { resolveToCwd } from "../../tools/path-utils";
+import { replaceTabs } from "../../tools/render-utils";
 import { getChangelogPath, parseChangelog } from "../../utils/changelog";
 import { openPath } from "../../utils/open";
 
@@ -67,6 +68,25 @@ export class CommandController {
 			this.ctx.showStatus("Session copied to clipboard");
 		} catch (error: unknown) {
 			this.ctx.showError(`Failed to copy session: ${error instanceof Error ? error.message : "Unknown error"}`);
+		}
+	}
+
+	async handleDebugTranscriptCommand(): Promise<void> {
+		try {
+			const width = Math.max(1, this.ctx.ui.terminal.columns);
+			const renderedLines = this.ctx.chatContainer.render(width).map(line => replaceTabs(Bun.stripANSI(line)));
+			const rendered = renderedLines.join("\n").trimEnd();
+			if (!rendered) {
+				this.ctx.showError("No messages to dump yet.");
+				return;
+			}
+			const tmpPath = path.join(os.tmpdir(), `${Snowflake.next()}-tmp.txt`);
+			await Bun.write(tmpPath, `${rendered}\n`);
+			this.ctx.showStatus(`Debug transcript written to:\n${tmpPath}`);
+		} catch (error: unknown) {
+			this.ctx.showError(
+				`Failed to write debug transcript: ${error instanceof Error ? error.message : "Unknown error"}`,
+			);
 		}
 	}
 

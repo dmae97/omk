@@ -27,6 +27,11 @@ const DEBUG_MENU_ITEMS: SelectItem[] = [
 	{ value: "memory", label: "Report: memory issue", description: "Heap snapshot + bundle" },
 	{ value: "logs", label: "View: recent logs", description: "Show last 50 log entries" },
 	{ value: "system", label: "View: system info", description: "Show environment details" },
+	{
+		value: "transcript",
+		label: "Export: TUI transcript",
+		description: "Write visible TUI conversation to a temp txt",
+	},
 	{ value: "clear-cache", label: "Clear: artifact cache", description: "Remove old session artifacts" },
 ];
 
@@ -94,6 +99,9 @@ export class DebugSelectorComponent extends Container {
 				break;
 			case "system":
 				await this.#handleViewSystemInfo();
+				break;
+			case "transcript":
+				await this.#handleTranscriptExport();
 				break;
 			case "clear-cache":
 				await this.#handleClearCache();
@@ -323,6 +331,9 @@ export class DebugSelectorComponent extends Container {
 		this.ctx.ui.requestRender();
 	}
 
+	async #handleTranscriptExport(): Promise<void> {
+		await this.ctx.handleDebugTranscriptCommand();
+	}
 	async #handleOpenArtifacts(): Promise<void> {
 		const sessionFile = this.ctx.sessionManager.getSessionFile();
 		if (!sessionFile) {

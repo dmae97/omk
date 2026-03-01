@@ -947,6 +947,10 @@ export class InteractiveMode implements InteractiveModeContext {
 		return this.#commandController.handleDumpCommand();
 	}
 
+	handleDebugTranscriptCommand(): Promise<void> {
+		return this.#commandController.handleDebugTranscriptCommand();
+	}
+
 	handleShareCommand(): Promise<void> {
 		return this.#commandController.handleShareCommand();
 	}
