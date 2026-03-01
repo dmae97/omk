@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Auto-correction of escaped tab indentation in edits (enabled by default, controllable via `PI_HASHLINE_AUTOCORRECT_ESCAPED_TABS` environment variable)
+- Warning when suspicious Unicode escape placeholder `\uDDDD` is detected in edit content
+
+### Changed
+
+- Updated hashline documentation to clarify that `\t` in JSON represents a real tab character, not a literal backslash-t sequence
 
 ## [13.5.2] - 2026-03-01
 

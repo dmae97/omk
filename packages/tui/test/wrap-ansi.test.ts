@@ -99,7 +99,6 @@ describe("wrapTextWithAnsi", () => {
 		});
 	});
 
-
 	describe("strikethrough styling", () => {
 		it("disables strikethrough at wrapped line ends while preserving fg/bg colors", () => {
 			const strikeOn = "\x1b[9m";

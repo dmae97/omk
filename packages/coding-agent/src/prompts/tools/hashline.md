@@ -249,15 +249,15 @@ Good — anchors to structural line:
 </example>
 
 <example name="indentation must match context">
-Leading whitespace in `lines` **MUST** be copied from the `read` output, not reconstructed from memory. Check the actual indent of neighboring lines.
+Leading whitespace in `lines` **MUST** be copied from the `read` output, not reconstructed from memory. If the file uses tabs, use `\t` in JSON — you **MUST NOT** use `\\t`, which produces a literal backslash-t in the file.
 ```ts
 {{hlinefull 10 "class Foo {"}}
-{{hlinefull 11 "  bar() {"}}
-{{hlinefull 12 "    return 1;"}}
-{{hlinefull 13 "  }"}}
-{{hlinefull 14 "}"}}
+{{hlinefull 11 "\tbar() {"}}
+{{hlinefull 12 "\t\treturn 1;"}}
+{{hlinefull 13 "\t}"}}
+{{hlinefull 14 "}}"}}
 ```
-Bad — indent guessed as 4 spaces instead of 2 (as seen on lines 11–13):
+Bad — indent guessed as spaces; `\\t` emits literal backslash-t:
 ```
 {
   path: "…",
@@ -272,7 +272,7 @@ Bad — indent guessed as 4 spaces instead of 2 (as seen on lines 11–13):
   }]
 }
 ```
-Good — indent matches the 2-space style visible on adjacent lines:
+Good — `\t` in JSON is a real tab, matching the file's indentation:
 ```
 {
   path: "…",
@@ -280,9 +280,9 @@ Good — indent matches the 2-space style visible on adjacent lines:
     op: "prepend",
     pos: {{hlinejsonref 14 "}"}},
     lines: [
-      "  baz() {",
-      "    return 2;",
-      "  }"
+      "\tbaz() {",
+      "\t\treturn 2;",
+      "\t}"
     ]
   }]
 }
@@ -294,5 +294,5 @@ Good — indent matches the 2-space style visible on adjacent lines:
 - Every tag **MUST** be copied exactly from fresh tool result as `N#ID`.
 - You **MUST** re-read after each edit call before issuing another on same file.
 - Formatting is a batch operation. You **MUST NOT** use this tool to reformat, reindent, or adjust whitespace — run the project's formatter instead. If the only change is whitespace, it is formatting; do not touch it.
-- `lines` entries **MUST** be literal file content with real space indentation. (`\\t` in JSON inserts a literal backslash-t into the file, not a tab.)
+- `lines` entries **MUST** be literal file content with indentation copied exactly from the `read` output. If the file uses tabs, use `\t` in JSON (a real tab character) — you **MUST NOT** use `\\t` (two characters: backslash + t), which produces the literal string `\t` in the file.
 </critical>
