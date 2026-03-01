@@ -19,7 +19,6 @@ Subagents lack your conversation history. Every decision, file content, and user
 </parameters>
 
 <critical>
-- **MUST NOT** include AGENTS.md rules, coding conventions, or style guidelines — subagents already have them.
 - **MUST NOT** duplicate shared constraints across assignments — put them in `context` once.
 - **MUST NOT** tell tasks to run project-wide build/test/lint. Parallel agents share the working tree; each task edits, stops. Caller verifies after all complete.
 - For large payloads (traces, JSON blobs), write to `local://<path>` and pass the path in context.
@@ -47,7 +46,7 @@ Each task: **at most 3–5 files**. Globs in file paths, "update all", or packag
 ```
 ## Goal         ← one sentence: what the batch accomplishes
 ## Non-goals    ← what tasks must not touch
-## Constraints  ← MUST/MUST NOT rules beyond AGENTS.md; session decisions
+## Constraints  ← MUST/MUST NOT rules and session decisions
 ## API Contract ← exact types/signatures if tasks share an interface (omit if N/A)
 ## Acceptance   ← definition of done; build/lint runs AFTER all tasks complete
 ```
@@ -62,7 +61,7 @@ Each task: **at most 3–5 files**. Globs in file paths, "update all", or packag
 
 <checklist>
 Before invoking:
-- `context` contains only session-specific info not in AGENTS.md
+- `context` contains only session-specific info
 - Every `assignment` follows the template; no one-liners; edge cases covered
 - Tasks are truly parallel — you can articulate why none depends on another's output
 - File paths are explicit; no globs

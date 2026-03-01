@@ -691,7 +691,9 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 			// Build full prompts with context prepended
 			const tasksWithContext = tasksWithUniqueIds.map(t => renderTemplate(context, t));
 			const availableSkills = [...(this.session.skills ?? [])];
-			const contextFiles = this.session.contextFiles;
+			const contextFiles = this.session.contextFiles?.filter(
+				file => path.basename(file.path).toLowerCase() !== "agents.md",
+			);
 			const promptTemplates = this.session.promptTemplates;
 
 			// Initialize progress for all tasks

@@ -13,6 +13,7 @@
 - Enhanced `discoverOAuthEndpoints()` to accept optional `authServerUrl` parameter and query both auth server and resource server for OAuth metadata
 - Improved OAuth metadata extraction to handle additional field name variations (`clientId`, `default_client_id`, `public_client_id`)
 - Refactored OAuth endpoint discovery logic into reusable `findEndpoints()` helper for consistent metadata parsing across multiple sources
+- Task subagents now strip inherited `AGENTS.md` context files and the task tool prompt no longer warns against repeating AGENTS guidance, aligning subagent context with explicit task inputs ([#233](https://github.com/can1357/oh-my-pi/issues/233))
 
 ### Fixed
 
