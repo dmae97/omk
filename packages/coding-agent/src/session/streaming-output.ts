@@ -1,5 +1,6 @@
 import { sanitizeText } from "@oh-my-pi/pi-natives";
 import { formatBytes } from "../tools/render-utils";
+import { sanitizeWithOptionalSixelPassthrough } from "../utils/sixel";
 
 // =============================================================================
 // Constants
@@ -571,7 +572,7 @@ export class OutputSink {
 	}
 
 	async push(chunk: string): Promise<void> {
-		chunk = sanitizeText(chunk);
+		chunk = sanitizeWithOptionalSixelPassthrough(chunk, sanitizeText);
 		this.#onChunk?.(chunk);
 
 		const dataBytes = Buffer.byteLength(chunk, "utf-8");

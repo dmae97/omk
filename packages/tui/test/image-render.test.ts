@@ -4,6 +4,7 @@ import {
 	type CellDimensions,
 	getCellDimensions,
 	ImageProtocol,
+	isWindowsTerminalPreviewSixelSupported,
 	renderImage,
 	setCellDimensions,
 	TERMINAL,
@@ -16,6 +17,8 @@ type MutableTerminalInfo = {
 const terminal = TERMINAL as unknown as MutableTerminalInfo;
 const BASE64_DUMMY = "AA==";
 const SQUARE_DIMENSIONS = { widthPx: 100, heightPx: 100 };
+const BASE64_ONE_PIXEL_PNG =
+	"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGNgAAAAAgABSK+kcQAAAABJRU5ErkJggg==";
 
 function parseKittyParam(sequence: string, key: "c" | "r"): number | null {
 	const match = sequence.match(new RegExp(`${key}=(\\d+)`));
@@ -79,6 +82,18 @@ describe("terminal image rendering", () => {
 		expect(result?.sequence).toContain("height=auto");
 	});
 
+	it("encodes SIXEL output when protocol is SIXEL", () => {
+		terminal.imageProtocol = ImageProtocol.Sixel;
+		const result = renderImage(BASE64_ONE_PIXEL_PNG, SQUARE_DIMENSIONS, {
+			maxWidthCells: 10,
+			maxHeightCells: 2,
+		});
+
+		expect(result).not.toBeNull();
+		expect(result?.rows).toBe(2);
+		expect(result?.sequence.startsWith("\x1bP")).toBe(true);
+	});
+
 	it("Image component forwards maxHeightCells to terminal rendering", () => {
 		terminal.imageProtocol = ImageProtocol.Kitty;
 		const image = new Image(
@@ -95,5 +110,31 @@ describe("terminal image rendering", () => {
 		expect(lines[1]).toContain("\x1b[1A");
 		expect(lines[1]).toContain("c=2");
 		expect(lines[1]).toContain("r=2");
+	});
+});
+
+describe("Windows Terminal Preview SIXEL detection", () => {
+	it("requires Windows platform, WT session, and known version 1.22+", () => {
+		expect(
+			isWindowsTerminalPreviewSixelSupported(
+				{ WT_SESSION: "1", TERM_PROGRAM: "Windows_Terminal", TERM_PROGRAM_VERSION: "1.22.2362.0" },
+				"win32",
+			),
+		).toBe(true);
+		expect(
+			isWindowsTerminalPreviewSixelSupported(
+				{ WT_SESSION: "1", TERM_PROGRAM: "Windows_Terminal", TERM_PROGRAM_VERSION: "1.21.0.0" },
+				"win32",
+			),
+		).toBe(false);
+		expect(
+			isWindowsTerminalPreviewSixelSupported({ WT_SESSION: "1", TERM_PROGRAM: "Windows_Terminal" }, "win32"),
+		).toBe(false);
+		expect(
+			isWindowsTerminalPreviewSixelSupported(
+				{ WT_SESSION: "1", TERM_PROGRAM: "Windows_Terminal", TERM_PROGRAM_VERSION: "1.22.2362.0" },
+				"linux",
+			),
+		).toBe(false);
 	});
 });

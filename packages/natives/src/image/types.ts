@@ -61,5 +61,7 @@ declare module "../bindings" {
 		SamplingFilter: typeof SamplingFilter;
 		/** Photon image constructor exposed by the native module. */
 		PhotonImage: PhotonImageConstructor;
+		/** Encode image bytes to SIXEL escape sequence at target pixel size. */
+		encodeSixel(bytes: Uint8Array, targetWidthPx: number, targetHeightPx: number): string;
 	}
 }

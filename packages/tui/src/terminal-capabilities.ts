@@ -1,8 +1,10 @@
+import { encodeSixel } from "@oh-my-pi/pi-natives";
 import { $env } from "@oh-my-pi/pi-utils";
 
 export enum ImageProtocol {
 	Kitty = "\x1b_G",
 	Iterm2 = "\x1b]1337;File=",
+	Sixel = "\x1bPq",
 }
 
 export enum NotifyProtocol {
@@ -13,6 +15,7 @@ export enum NotifyProtocol {
 
 export type TerminalId = "kitty" | "ghostty" | "wezterm" | "iterm2" | "vscode" | "alacritty" | "base" | "trueColor";
 
+const SIXEL_DCS_START_REGEX = /\x1bP(?:[0-9;]*)q/u;
 /** Terminal capability details used for rendering and protocol selection. */
 export class TerminalInfo {
 	constructor(
@@ -25,6 +28,9 @@ export class TerminalInfo {
 
 	isImageLine(line: string): boolean {
 		if (!this.imageProtocol) return false;
+		if (this.imageProtocol === ImageProtocol.Sixel) {
+			return SIXEL_DCS_START_REGEX.test(line.slice(0, 128));
+		}
 		return line.slice(0, 64).includes(this.imageProtocol);
 	}
 
@@ -52,10 +58,39 @@ function getForcedImageProtocol(): ImageProtocol | null | undefined {
 	if (!raw) return undefined;
 	if (raw === "kitty") return ImageProtocol.Kitty;
 	if (raw === "iterm2" || raw === "iterm") return ImageProtocol.Iterm2;
+	if (raw === "sixel") return ImageProtocol.Sixel;
 	if (raw === "off" || raw === "none" || raw === "0" || raw === "false") return null;
 	return null;
 }
 
+function parseMajorMinorVersion(versionRaw?: string): { major: number; minor: number } | null {
+	if (!versionRaw) return null;
+	const match = /^(\d+)\.(\d+)/u.exec(versionRaw.trim());
+	if (!match) return null;
+	const major = Number.parseInt(match[1] ?? "", 10);
+	const minor = Number.parseInt(match[2] ?? "", 10);
+	if (!Number.isFinite(major) || !Number.isFinite(minor)) return null;
+	return { major, minor };
+}
+
+/**
+ * Returns true when running in Windows Terminal with known SIXEL support.
+ *
+ * Windows Terminal introduced SIXEL support in preview 1.22.
+ */
+export function isWindowsTerminalPreviewSixelSupported(
+	env: NodeJS.ProcessEnv = Bun.env,
+	platform: NodeJS.Platform = process.platform,
+): boolean {
+	if (platform !== "win32") return false;
+	if (!env.WT_SESSION) return false;
+	if (env.TERM_PROGRAM && env.TERM_PROGRAM.toLowerCase() !== "windows_terminal") {
+		return false;
+	}
+	const version = parseMajorMinorVersion(env.TERM_PROGRAM_VERSION);
+	if (!version) return false;
+	return version.major > 1 || (version.major === 1 && version.minor >= 22);
+}
 function getFallbackImageProtocol(terminalId: TerminalId): ImageProtocol | null {
 	if (!process.stdout.isTTY) return null;
 	if (terminalId === "vscode" || terminalId === "alacritty") return null;
@@ -145,6 +180,17 @@ export const TERMINAL = (() => {
 	}
 	return terminal;
 })();
+
+type MutableTerminalInfo = {
+	imageProtocol: ImageProtocol | null;
+};
+
+/**
+ * Override terminal image protocol at runtime after capability probes complete.
+ */
+export function setTerminalImageProtocol(imageProtocol: ImageProtocol | null): void {
+	(TERMINAL as unknown as MutableTerminalInfo).imageProtocol = imageProtocol;
+}
 
 export function getTerminalInfo(terminalId: TerminalId): TerminalInfo {
 	return KNOWN_TERMINALS[terminalId];
@@ -436,7 +482,8 @@ export function renderImage(
 		return null;
 	}
 
-	const fit = calculateImageFit(imageDimensions, options, getCellDimensions());
+	const cellDims = getCellDimensions();
+	const fit = calculateImageFit(imageDimensions, options, cellDims);
 
 	if (TERMINAL.imageProtocol === ImageProtocol.Kitty) {
 		const sequence = encodeKitty(base64Data, {
@@ -446,6 +493,17 @@ export function renderImage(
 		return { sequence, rows: fit.rows };
 	}
 
+	if (TERMINAL.imageProtocol === ImageProtocol.Sixel) {
+		try {
+			const targetWidthPx = Math.max(1, fit.columns * cellDims.widthPx);
+			const targetHeightPx = Math.max(1, fit.rows * cellDims.heightPx);
+			const decoded = new Uint8Array(Buffer.from(base64Data, "base64"));
+			const sequence = encodeSixel(decoded, targetWidthPx, targetHeightPx);
+			return { sequence, rows: fit.rows };
+		} catch {
+			return null;
+		}
+	}
 	if (TERMINAL.imageProtocol === ImageProtocol.Iterm2) {
 		const sequence = encodeITerm2(base64Data, {
 			width: fit.columns,

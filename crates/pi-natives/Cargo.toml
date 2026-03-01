@@ -41,6 +41,7 @@ image = { version = "0.25", default-features = false, features = [
    "webp",
 ] }
 arboard = { version = "3.5.0", features = ["wayland-data-control"] }
+icy_sixel = "0.5"
 bstr = "1"
 unicode-segmentation = "1.11"
 unicode-width = "0.2"

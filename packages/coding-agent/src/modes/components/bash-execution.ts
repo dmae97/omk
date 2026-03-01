@@ -3,9 +3,10 @@
  */
 
 import { sanitizeText } from "@oh-my-pi/pi-natives";
-import { Container, Loader, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
+import { Container, ImageProtocol, Loader, Spacer, TERMINAL, Text, type TUI } from "@oh-my-pi/pi-tui";
 import { getSymbolTheme, theme } from "../../modes/theme/theme";
 import { formatTruncationMetaNotice, type TruncationMeta } from "../../tools/output-meta";
+import { getSixelLineMask, sanitizeWithOptionalSixelPassthrough } from "../../utils/sixel";
 import { DynamicBorder } from "./dynamic-border";
 import { truncateToVisualLines } from "./visual-truncate";
 
@@ -75,18 +76,18 @@ export class BashExecutionComponent extends Container {
 	}
 
 	appendOutput(chunk: string): void {
-		const clean = sanitizeText(chunk);
+		const clean = sanitizeWithOptionalSixelPassthrough(chunk, sanitizeText);
 
 		// Append to output lines
-		const newLines = clean.split("\n").map(line => this.#clampDisplayLine(line));
-		if (this.#outputLines.length > 0 && newLines.length > 0) {
-			// Append first chunk to last line (incomplete line continuation)
-			this.#outputLines[this.#outputLines.length - 1] = this.#clampDisplayLine(
-				`${this.#outputLines[this.#outputLines.length - 1]}${newLines[0]}`,
-			);
-			this.#outputLines.push(...newLines.slice(1));
+		const incomingLines = clean.split("\n");
+		if (this.#outputLines.length > 0 && incomingLines.length > 0) {
+			const lastIndex = this.#outputLines.length - 1;
+			const mergedLines = [`${this.#outputLines[lastIndex]}${incomingLines[0]}`, ...incomingLines.slice(1)];
+			const clampedMergedLines = this.#clampLinesPreservingSixel(mergedLines);
+			this.#outputLines[lastIndex] = clampedMergedLines[0] ?? "";
+			this.#outputLines.push(...clampedMergedLines.slice(1));
 		} else {
-			this.#outputLines.push(...newLines);
+			this.#outputLines.push(...this.#clampLinesPreservingSixel(incomingLines));
 		}
 
 		this.#updateDisplay();
@@ -120,6 +121,9 @@ export class BashExecutionComponent extends Container {
 		// Apply preview truncation based on expanded state
 		const previewLogicalLines = availableLines.slice(-PREVIEW_LINES);
 		const hiddenLineCount = availableLines.length - previewLogicalLines.length;
+		const sixelLineMask =
+			TERMINAL.imageProtocol === ImageProtocol.Sixel ? getSixelLineMask(availableLines) : undefined;
+		const hasSixelOutput = sixelLineMask?.some(Boolean) ?? false;
 
 		// Rebuild content container
 		this.#contentContainer.clear();
@@ -130,9 +134,10 @@ export class BashExecutionComponent extends Container {
 
 		// Output
 		if (availableLines.length > 0) {
-			if (this.#expanded) {
-				// Show all lines
-				const displayText = availableLines.map(line => theme.fg("muted", line)).join("\n");
+			if (this.#expanded || hasSixelOutput) {
+				const displayText = availableLines
+					.map((line, index) => (sixelLineMask?.[index] ? line : theme.fg("muted", line)))
+					.join("\n");
 				this.#contentContainer.addChild(new Text(`\n${displayText}`, 1, 0));
 			} else {
 				// Use shared visual truncation utility, recomputed per render width
@@ -155,7 +160,7 @@ export class BashExecutionComponent extends Container {
 			const statusParts: string[] = [];
 
 			// Show how many lines are hidden (collapsed preview)
-			if (hiddenLineCount > 0) {
+			if (hiddenLineCount > 0 && !hasSixelOutput) {
 				statusParts.push(theme.fg("dim", `… ${hiddenLineCount} more lines (ctrl+o to expand)`));
 			}
 
@@ -183,9 +188,18 @@ export class BashExecutionComponent extends Container {
 		return `${line.slice(0, MAX_DISPLAY_LINE_CHARS)}… [${omitted} chars omitted]`;
 	}
 
+	#clampLinesPreservingSixel(lines: string[]): string[] {
+		if (lines.length === 0) return [];
+		const sixelLineMask = getSixelLineMask(lines);
+		if (!sixelLineMask.some(Boolean)) {
+			return lines.map(line => this.#clampDisplayLine(line));
+		}
+		return lines.map((line, index) => (sixelLineMask[index] ? line : this.#clampDisplayLine(line)));
+	}
+
 	#setOutput(output: string): void {
-		const clean = sanitizeText(output);
-		this.#outputLines = clean ? clean.split("\n").map(line => this.#clampDisplayLine(line)) : [];
+		const clean = sanitizeWithOptionalSixelPassthrough(output, sanitizeText);
+		this.#outputLines = clean ? this.#clampLinesPreservingSixel(clean.split("\n")) : [];
 	}
 
 	/**

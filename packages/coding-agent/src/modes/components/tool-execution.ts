@@ -34,6 +34,7 @@ import { formatExpandHint, truncateToWidth } from "../../tools/render-utils";
 import { toolRenderers } from "../../tools/renderers";
 import { renderStatusLine } from "../../tui";
 import { convertToPng } from "../../utils/image-convert";
+import { sanitizeWithOptionalSixelPassthrough } from "../../utils/sixel";
 import { renderDiff } from "./diff";
 
 function ensureInvalidate(component: unknown): Component {
@@ -589,7 +590,7 @@ export class ToolExecutionComponent extends Container {
 
 		let output = textBlocks
 			.map((c: any) => {
-				return sanitizeText(c.text || "");
+				return sanitizeWithOptionalSixelPassthrough(c.text || "", sanitizeText);
 			})
 			.join("\n");
 

@@ -14,6 +14,7 @@ import xterm from "@xterm/headless";
 import { NON_INTERACTIVE_ENV } from "../exec/non-interactive-env";
 import type { Theme } from "../modes/theme/theme";
 import { OutputSink, type OutputSummary } from "../session/streaming-output";
+import { sanitizeWithOptionalSixelPassthrough } from "../utils/sixel";
 import { formatStatusIcon, replaceTabs } from "./render-utils";
 
 export interface BashInteractiveResult extends OutputSummary {
@@ -24,7 +25,7 @@ export interface BashInteractiveResult extends OutputSummary {
 
 function normalizeCaptureChunk(chunk: string): string {
 	const normalized = chunk.replace(/\r\n/gu, "\n").replace(/\r/gu, "\n");
-	return sanitizeText(normalized);
+	return sanitizeWithOptionalSixelPassthrough(normalized, sanitizeText);
 }
 
 const XtermTerminal = xterm.Terminal;

@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
-import { Text } from "@oh-my-pi/pi-tui";
+import { ImageProtocol, TERMINAL, Text } from "@oh-my-pi/pi-tui";
 import { $env, getProjectDir, isEnoent } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "../config/prompt-templates";
@@ -15,6 +15,7 @@ import bashDescription from "../prompts/tools/bash.md" with { type: "text" };
 import { DEFAULT_MAX_BYTES, TailBuffer } from "../session/streaming-output";
 import { renderStatusLine } from "../tui";
 import { CachedOutputBlock } from "../tui/output-block";
+import { getSixelLineMask } from "../utils/sixel";
 import type { ToolSession } from ".";
 import { type BashInteractiveResult, runInteractiveBashPty } from "./bash-interactive";
 import { checkBashInterception } from "./bash-interceptor";
@@ -414,14 +415,21 @@ export const bashToolRenderer = {
 
 				const outputLines: string[] = [];
 				const hasOutput = displayOutput.trim().length > 0;
+				const rawOutputLines = displayOutput.split("\n");
+				const sixelLineMask =
+					TERMINAL.imageProtocol === ImageProtocol.Sixel ? getSixelLineMask(rawOutputLines) : undefined;
+				const hasSixelOutput = sixelLineMask?.some(Boolean) ?? false;
 				if (hasOutput) {
-					if (expanded) {
+					if (hasSixelOutput) {
 						outputLines.push(
-							...displayOutput.split("\n").map(line => uiTheme.fg("toolOutput", replaceTabs(line))),
+							...rawOutputLines.map((line, index) =>
+								sixelLineMask?.[index] ? line : uiTheme.fg("toolOutput", replaceTabs(line)),
+							),
 						);
+					} else if (expanded) {
+						outputLines.push(...rawOutputLines.map(line => uiTheme.fg("toolOutput", replaceTabs(line))));
 					} else {
-						const styledOutput = displayOutput
-							.split("\n")
+						const styledOutput = rawOutputLines
 							.map(line => uiTheme.fg("toolOutput", replaceTabs(line)))
 							.join("\n");
 						const textContent = styledOutput;

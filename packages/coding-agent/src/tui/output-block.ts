@@ -1,8 +1,9 @@
 /**
  * Bordered output container with optional header and sections.
  */
-import { padding, visibleWidth } from "@oh-my-pi/pi-tui";
+import { ImageProtocol, padding, TERMINAL, visibleWidth } from "@oh-my-pi/pi-tui";
 import type { Theme } from "../modes/theme/theme";
+import { getSixelLineMask } from "../utils/sixel";
 import type { State } from "./types";
 import type { RenderCache } from "./utils";
 import { getStateBgColor, Hasher, padToWidth, truncateToWidth } from "./utils";
@@ -80,7 +81,13 @@ export function renderOutputBlock(options: OutputBlockOptions, theme: Theme): st
 			);
 		}
 		const allLines = section.lines.flatMap(l => l.split("\n"));
-		for (const line of allLines) {
+		const sixelLineMask = TERMINAL.imageProtocol === ImageProtocol.Sixel ? getSixelLineMask(allLines) : undefined;
+		for (let lineIndex = 0; lineIndex < allLines.length; lineIndex++) {
+			const line = allLines[lineIndex]!;
+			if (sixelLineMask?.[lineIndex]) {
+				lines.push(line);
+				continue;
+			}
 			// Sections may receive content that was already padded to terminal width
 			// (e.g. from Text.render()). Trailing spaces would trigger truncateToWidth()
 			// to append an ellipsis even when the *semantic* content fits.
