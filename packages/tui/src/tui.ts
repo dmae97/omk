@@ -944,6 +944,12 @@ export class TUI extends Container {
 
 			let buffer = "\x1b[?2026h"; // Begin synchronized output
 
+			const resizeAutoScroll = heightChanged ? Math.max(0, this.#previousHeight - height) : 0;
+			const scrollNeeded = overflow - previousViewportTop - resizeAutoScroll;
+			if (scrollNeeded > 0) {
+				buffer += this.#moveToScreenPosition(height - 1, 0);
+				buffer += "\r\n".repeat(Math.min(scrollNeeded, height));
+			}
 			// Move cursor to top-left of the viewport using absolute addressing.
 			buffer += this.#moveToScreenPosition(0, 0);
 

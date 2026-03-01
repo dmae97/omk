@@ -279,6 +279,32 @@ describe("TUI overlays", () => {
 		}
 	});
 
+	it("pushes overflow growth into scrollback during viewport repaint", async () => {
+		const term = new VirtualTerminal(40, 4);
+		const tui = new TUI(term);
+		const component = new MutableContentComponent(buildRows(4));
+		tui.addChild(component);
+		try {
+			tui.start();
+			await Bun.sleep(0);
+			await term.flush();
+
+			for (let count = 5; count <= 45; count++) {
+				component.setLines(buildRows(count));
+				term.resize(40, count % 2 === 0 ? 4 : 5);
+				await Bun.sleep(0);
+				await term.flush();
+			}
+
+			const scrollbackLines = term.getScrollBuffer().map(line => line.trim());
+			expect(scrollbackLines).toContain("row-0");
+			expect(scrollbackLines).toContain("row-20");
+			const viewport = term.getViewport().map(line => line.trim());
+			expect(viewport.at(-1)).toBe("row-44");
+		} finally {
+			tui.stop();
+		}
+	});
 	it("keeps viewport pinned to latest content after repeated tail shrink", async () => {
 		const term = new VirtualTerminal(20, 8);
 		const tui = new TUI(term);
