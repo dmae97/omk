@@ -530,3 +530,13 @@ export function shortenPath(filePath: string, homeDir?: string): string {
 export function wrapBrackets(text: string, theme: Theme): string {
 	return `${theme.format.bracketLeft}${text}${theme.format.bracketRight}`;
 }
+
+export const PARSE_ERRORS_LIMIT = 20;
+
+export function formatParseErrors(errors: string[]): string[] {
+	if (errors.length === 0) return [];
+	const capped = errors.slice(0, PARSE_ERRORS_LIMIT);
+	const header =
+		errors.length > PARSE_ERRORS_LIMIT ? `Parse issues (${PARSE_ERRORS_LIMIT} / ${errors.length}):` : "Parse issues:";
+	return [header, ...capped.map(err => `- ${err}`)];
+}

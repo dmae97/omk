@@ -7,22 +7,21 @@ Performs structural code search using AST matching via native ast-grep.
 - `patterns` is required and must include at least one non-empty AST pattern; `lang` is optional (`lang` is inferred per file extension when omitted)
 - Multiple patterns run in one native pass; results are merged and then `offset`/`limit` are applied to the combined match set
 - Use `selector` only for contextual pattern mode; otherwise provide direct patterns
-- Enable `include_meta` when metavariable captures are needed in output
 - For variadic arguments/fields, use `$$$NAME` (not `$$NAME`)
 - Patterns match AST structure, not text — whitespace/formatting differences are ignored
 - When the same metavariable appears multiple times, all occurrences must match identical code
 </instruction>
 
 <output>
-- Returns grouped matches with file path, byte range, and line/column ranges
+- Returns grouped matches with file path, byte range, line/column ranges, and metavariable captures
 - Includes summary counts (`totalMatches`, `filesWithMatches`, `filesSearched`) and parse issues when present
 </output>
 
 <examples>
-- Find prompt-template and status-line call sites in one request (scoped + typed):
-  `{"patterns":["renderPromptTemplate($A)","renderStatusLine($$$ARGS)"],"lang":"typescript","path":"packages/coding-agent/src/tools/**/*.ts","include_meta":true}`
-- Exact call-shape match in one file:
-  `{"patterns":["renderStatusLine({ icon: \"pending\", title: \"AST Grep\", description, meta }, uiTheme)"],"lang":"typescript","path":"packages/coding-agent/src/tools/ast-grep.ts"}`
+- Find all console logging calls in one pass (multi-pattern, scoped):
+  `{"patterns":["console.log($$$)","console.error($$$)"],"lang":"typescript","path":"src/"}`
+- Capture and inspect metavariable bindings from a pattern:
+  `{"patterns":["require($MOD)"],"lang":"javascript","path":"src/"}`
 - Contextual pattern with selector — match only the identifier `foo`, not the whole call:
   `{"patterns":["foo()"],"selector":"identifier","lang":"typescript","path":"src/utils.ts"}`
 </examples>

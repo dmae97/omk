@@ -6,6 +6,13 @@
 - `ast_grep` parameter `pattern` (string) replaced by `patterns` (string[])
 - `ast_edit` parameters `pattern` + `rewrite` replaced by `ops: Array<{ pat: string; out: string }>`
 
+### Changed
+
+- `ast_grep`: `include_meta` parameter removed; metavariable captures are now always included in output
+- `ast_edit`: `dry_run` renamed to `preview`; `max_files` removed from schema and capped globally via `$PI_MAX_AST_FILES` (default 1000); `max_replacements` renamed to `limit`
+- `ast_grep` and `ast_edit`: parse errors in tool output are now capped at `PARSE_ERRORS_LIMIT` (20); excess errors are summarised as `N / total parse issues` rather than flooding the context
+- Updated `ast_grep` and `ast_edit` tool prompt examples to use concise, idiomatic patterns
+
 ### Added
 
 - Added `gemini`, `codex`, and `synthetic` as supported values for the `providers.webSearch` setting

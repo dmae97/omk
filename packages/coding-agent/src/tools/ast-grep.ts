@@ -15,7 +15,14 @@ import { resolveFileDisplayMode } from "../utils/file-display-mode";
 import type { ToolSession } from ".";
 import type { OutputMeta } from "./output-meta";
 import { hasGlobPathChars, parseSearchPath, resolveToCwd } from "./path-utils";
-import { formatCount, formatEmptyMessage, formatErrorMessage, PREVIEW_LIMITS } from "./render-utils";
+import {
+	formatCount,
+	formatEmptyMessage,
+	formatErrorMessage,
+	formatParseErrors,
+	PARSE_ERRORS_LIMIT,
+	PREVIEW_LIMITS,
+} from "./render-utils";
 import { ToolError } from "./tool-errors";
 import { toolResult } from "./tool-result";
 
@@ -27,7 +34,6 @@ const astGrepSchema = Type.Object({
 	limit: Type.Optional(Type.Number({ description: "Max matches (default: 50)" })),
 	offset: Type.Optional(Type.Number({ description: "Skip first N matches (default: 0)" })),
 	context: Type.Optional(Type.Number({ description: "Context lines around each match" })),
-	include_meta: Type.Optional(Type.Boolean({ description: "Include metavariable captures" })),
 });
 
 export interface AstGrepToolDetails {
@@ -123,7 +129,7 @@ export class AstGrepTool implements AgentTool<typeof astGrepSchema, AstGrepToolD
 				limit,
 				offset,
 				context,
-				includeMeta: params.include_meta,
+				includeMeta: true,
 				signal,
 			});
 
@@ -167,7 +173,7 @@ export class AstGrepTool implements AgentTool<typeof astGrepSchema, AstGrepToolD
 
 			if (result.matches.length === 0) {
 				const parseMessage = result.parseErrors?.length
-					? `\nParse issues:\n${result.parseErrors.map(err => `- ${err}`).join("\n")}`
+					? `\n${formatParseErrors(result.parseErrors).join("\n")}`
 					: "";
 				return toolResult(baseDetails).text(`No matches found${parseMessage}`).done();
 			}
@@ -248,7 +254,7 @@ export class AstGrepTool implements AgentTool<typeof astGrepSchema, AstGrepToolD
 				outputLines.push("", "Result limit reached; narrow path pattern or increase limit.");
 			}
 			if (result.parseErrors?.length) {
-				outputLines.push("", "Parse issues:", ...result.parseErrors.map(err => `- ${err}`));
+				outputLines.push("", ...formatParseErrors(result.parseErrors));
 			}
 
 			return toolResult(details).text(outputLines.join("\n")).done();
@@ -268,7 +274,6 @@ interface AstGrepRenderArgs {
 	limit?: number;
 	offset?: number;
 	context?: number;
-	include_meta?: boolean;
 }
 
 const COLLAPSED_MATCH_LIMIT = PREVIEW_LIMITS.COLLAPSED_LINES * 2;
@@ -283,7 +288,6 @@ export const astGrepToolRenderer = {
 		if (args.limit !== undefined && args.limit > 0) meta.push(`limit:${args.limit}`);
 		if (args.offset !== undefined && args.offset > 0) meta.push(`offset:${args.offset}`);
 		if (args.context !== undefined) meta.push(`context:${args.context}`);
-		if (args.include_meta) meta.push("meta");
 		if (args.patterns && args.patterns.length > 1) meta.push(`${args.patterns.length} patterns`);
 
 		const description =
@@ -318,8 +322,12 @@ export const astGrepToolRenderer = {
 			const header = renderStatusLine({ icon: "warning", title: "AST Grep", description, meta }, uiTheme);
 			const lines = [header, formatEmptyMessage("No matches found", uiTheme)];
 			if (details?.parseErrors?.length) {
-				for (const err of details.parseErrors) {
+				const capped = details.parseErrors.slice(0, PARSE_ERRORS_LIMIT);
+				for (const err of capped) {
 					lines.push(uiTheme.fg("warning", `  - ${err}`));
+				}
+				if (details.parseErrors.length > PARSE_ERRORS_LIMIT) {
+					lines.push(uiTheme.fg("dim", `  … ${details.parseErrors.length - PARSE_ERRORS_LIMIT} more`));
 				}
 			}
 			return new Text(lines.join("\n"), 0, 0);
@@ -381,7 +389,12 @@ export const astGrepToolRenderer = {
 			extraLines.push(uiTheme.fg("warning", "limit reached; narrow path pattern or increase limit"));
 		}
 		if (details?.parseErrors?.length) {
-			extraLines.push(uiTheme.fg("warning", `${details.parseErrors.length} parse issue(s)`));
+			const total = details.parseErrors.length;
+			const label =
+				total > PARSE_ERRORS_LIMIT
+					? `${PARSE_ERRORS_LIMIT} / ${total} parse issues`
+					: `${total} parse issue${total !== 1 ? "s" : ""}`;
+			extraLines.push(uiTheme.fg("warning", label));
 		}
 
 		let cached: RenderCache | undefined;
