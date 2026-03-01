@@ -1026,7 +1026,6 @@ function applyPromptCaching(params: MessageCreateParamsStreaming, cacheControl?:
 	}
 }
 
-
 function normalizeCacheControlBlockTtl(block: CacheControlBlock, seenFiveMinute: { value: boolean }): void {
 	const cacheControl = block.cache_control;
 	if (!cacheControl) return;
@@ -1129,9 +1128,10 @@ function enforceCacheControlLimit(params: MessageCreateParamsStreaming, maxBreak
 	const total = countCacheControlBreakpoints(params);
 	if (total <= maxBreakpoints) return;
 	const excessCounter = { value: total - maxBreakpoints };
-	const systemBlocks = params.system && Array.isArray(params.system)
-		? (params.system as Array<AnthropicSystemBlock & CacheControlBlock>)
-		: [];
+	const systemBlocks =
+		params.system && Array.isArray(params.system)
+			? (params.system as Array<AnthropicSystemBlock & CacheControlBlock>)
+			: [];
 	const toolBlocks = (params.tools ?? []) as Array<Anthropic.Messages.Tool & CacheControlBlock>;
 	const lastSystemIndex = findLastCacheControlIndex(systemBlocks);
 	const lastToolIndex = findLastCacheControlIndex(toolBlocks);
