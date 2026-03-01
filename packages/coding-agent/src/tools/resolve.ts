@@ -70,7 +70,7 @@ export class ResolveTool implements AgentTool<typeof resolveSchema, ResolveToolD
 			};
 
 			if (params.action === "apply") {
-				const applyResult = await pendingAction.apply();
+				const applyResult = await pendingAction.apply(params.reason);
 				const appliedText = applyResult.content
 					.filter(part => part.type === "text")
 					.map(part => part.text)
@@ -82,6 +82,12 @@ export class ResolveTool implements AgentTool<typeof resolveSchema, ResolveToolD
 				return { ...baseResult, details: resolveDetails };
 			}
 
+			if (params.action === "discard" && pendingAction.reject != null) {
+				const discardResult = await pendingAction.reject(params.reason);
+				if (discardResult != null) {
+					return { ...discardResult, details: resolveDetails };
+				}
+			}
 			const discardResult = toolResult().text(`Discarded: ${pendingAction.label}. Reason: ${params.reason}`).done();
 			return { ...discardResult, details: resolveDetails };
 		});

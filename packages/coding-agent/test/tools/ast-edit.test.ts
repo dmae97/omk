@@ -108,7 +108,7 @@ describe("ast_edit tool schema", () => {
 			if (!pending) throw new Error("Expected pending action to be registered");
 			expect(pending.sourceToolName).toBe("ast_edit");
 
-			await pending.apply();
+			await pending.apply("apply previewed AST edit");
 			const updated = await Bun.file(filePath).text();
 			expect(updated).toContain("modernWrap(x, value)");
 		} finally {

@@ -15,8 +15,8 @@ This document explains how preview/apply workflows are modeled in coding-agent a
 
 `resolve` is a hidden tool that finalizes a pending preview action.
 
-- `action: "apply"` executes the pending action callback and persists changes.
-- `action: "discard"` drops the pending action without applying.
+- `action: "apply"` executes `apply(reason)` on the pending action and persists changes.
+- `action: "discard"` invokes `reject(reason)` if provided; otherwise drops the action with a default "Discarded" message.
 
 If no pending action exists, `resolve` fails with:
 
@@ -39,9 +39,9 @@ Pending actions are stored in `PendingActionStore` as a push/pop stack:
 
 - label (human-readable summary)
 - `sourceToolName` (`ast_edit`)
-- `apply()` callback that reruns AST edit with `dryRun: false`
+- `apply(reason: string)` callback that reruns AST edit with `dryRun: false`
 
-`resolve(action="apply")` later executes this callback.
+`resolve(action="apply", reason="...")` passes `reason` into this callback.
 
 ## Custom tools: `pushPendingAction`
 
@@ -50,7 +50,8 @@ Custom tools can register resolve-compatible pending actions through `CustomTool
 `CustomToolPendingAction`:
 
 - `label: string` (required)
-- `apply(): Promise<AgentToolResult<unknown>>` (required)
+- `apply(reason: string): Promise<AgentToolResult<unknown>>` (required) — invoked on apply; `reason` is the string passed to `resolve`
+- `reject?(reason: string): Promise<AgentToolResult<unknown> | undefined>` (optional) — invoked on discard; return value replaces the default "Discarded" message if provided
 - `details?: unknown` (optional)
 - `sourceToolName?: string` (optional, defaults to `"custom_tool"`)
 
@@ -73,10 +74,16 @@ const factory: CustomToolFactory = pi => ({
 		pi.pushPendingAction({
 			label: `Batch rename: ${params.files.length} files`,
 			sourceToolName: "batch_rename_preview",
-			apply: async () => {
+			apply: async (reason) => {
 				// apply writes here
 				return {
-					content: [{ type: "text", text: "Applied batch rename." }],
+					content: [{ type: "text", text: `Applied batch rename. Reason: ${reason}` }],
+				};
+			},
+			reject: async (reason) => {
+				// optional: cleanup or notify on discard
+				return {
+					content: [{ type: "text", text: `Discarded batch rename. Reason: ${reason}` }],
 				};
 			},
 		});
@@ -106,5 +113,6 @@ When `PendingActionStore.hasPending` is true, the agent runtime biases tool choi
 
 - Use pending actions only for destructive or high-impact operations that should support explicit apply/discard.
 - Keep `label` concise and specific; it is shown in resolve renderer output.
-- Ensure `apply()` is deterministic and idempotent enough for one-shot execution.
+- Ensure `apply(reason)` is deterministic and idempotent enough for one-shot execution; `reason` is informational and should not change behavior.
+- Implement `reject(reason)` when the discard needs cleanup (temp state, locks, notifications); omit it for stateless previews where the default message suffices.
 - If your tool can stage multiple previews, remember LIFO semantics: latest pushed action resolves first.

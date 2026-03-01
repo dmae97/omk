@@ -60,7 +60,7 @@ export class AstEditTool implements AgentTool<typeof astEditSchema, AstEditToolD
 	readonly description: string;
 	readonly parameters = astEditSchema;
 	readonly strict = true;
-
+	readonly deferrable = true;
 	constructor(private readonly session: ToolSession) {
 		this.description = renderPromptTemplate(astEditDescription);
 	}
@@ -251,13 +251,10 @@ export class AstEditTool implements AgentTool<typeof astEditSchema, AstEditToolD
 				}
 			}
 
-			const details: AstEditToolDetails = {
-				...baseDetails,
-				fileReplacements: fileList.map(filePath => ({
-					path: filePath,
-					count: fileReplacementCounts.get(filePath) ?? 0,
-				})),
-			};
+			const fileReplacements = fileList.map(filePath => ({
+				path: filePath,
+				count: fileReplacementCounts.get(filePath) ?? 0,
+			}));
 			if (result.limitReached) {
 				outputLines.push("", "Limit reached; narrow path or increase limit.");
 			}
@@ -269,10 +266,10 @@ export class AstEditTool implements AgentTool<typeof astEditSchema, AstEditToolD
 			if (!result.applied && result.totalReplacements > 0) {
 				const previewReplacementPlural = result.totalReplacements !== 1 ? "s" : "";
 				const previewFilePlural = result.filesTouched !== 1 ? "s" : "";
-				this.session.pendingActionStore?.set({
+				this.session.pendingActionStore?.push({
 					label: `AST Edit: ${result.totalReplacements} replacement${previewReplacementPlural} in ${result.filesTouched} file${previewFilePlural}`,
 					sourceToolName: this.name,
-					apply: async () => {
+					apply: async (_reason: string) => {
 						const applyResult = await astEdit({
 							rewrites: normalizedRewrites,
 							lang: params.lang?.trim(),
@@ -293,7 +290,7 @@ export class AstEditTool implements AgentTool<typeof astEditSchema, AstEditToolD
 							parseErrors: applyResult.parseErrors,
 							scopePath,
 							files: fileList,
-							fileReplacements: details.fileReplacements,
+							fileReplacements,
 						};
 						const appliedReplacementPlural = applyResult.totalReplacements !== 1 ? "s" : "";
 						const appliedFilePlural = applyResult.filesTouched !== 1 ? "s" : "";
@@ -303,6 +300,10 @@ export class AstEditTool implements AgentTool<typeof astEditSchema, AstEditToolD
 				});
 			}
 
+			const details: AstEditToolDetails = {
+				...baseDetails,
+				fileReplacements,
+			};
 			return toolResult(details).text(outputLines.join("\n")).done();
 		});
 	}
@@ -382,10 +383,6 @@ export const astEditToolRenderer = {
 		if (limitReached) meta.push(uiTheme.fg("warning", "limit reached"));
 		const rewriteCount = args?.ops?.length ?? 0;
 		const description = rewriteCount === 1 ? args?.ops?.[0]?.pat : undefined;
-		const header = renderStatusLine(
-			{ icon: limitReached ? "warning" : "success", title: "AST Edit", description, meta },
-			uiTheme,
-		);
 
 		const textContent = result.content?.find(c => c.type === "text")?.text ?? "";
 		const rawLines = textContent.split("\n");
@@ -426,6 +423,11 @@ export const astEditToolRenderer = {
 			}
 			return count;
 		};
+		const badge = { label: "proposed", color: "warning" as const };
+		const header = renderStatusLine(
+			{ icon: limitReached ? "warning" : "success", title: "AST Edit", description, badge, meta },
+			uiTheme,
+		);
 
 		const extraLines: string[] = [];
 		if (limitReached) {
@@ -439,7 +441,6 @@ export const astEditToolRenderer = {
 					: `${total} parse issue${total !== 1 ? "s" : ""}`;
 			extraLines.push(uiTheme.fg("warning", label));
 		}
-
 		let cached: RenderCache | undefined;
 		return {
 			render(width: number): string[] {

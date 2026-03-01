@@ -37,20 +37,25 @@ describe("ResolveTool", () => {
 
 	it("discards pending action and clears store", async () => {
 		const pendingActionStore = new PendingActionStore();
+		let rejectedReason: string | undefined;
 		pendingActionStore.push({
 			label: "AST Edit: 2 replacements in 1 file",
 			sourceToolName: "ast_edit",
-			apply: async () => ({ content: [{ type: "text", text: "should not run" }] }),
+			apply: async (_reason: string) => ({ content: [{ type: "text", text: "should not run" }] }),
+			reject: async (reason: string) => {
+				rejectedReason = reason;
+				return { content: [{ type: "text", text: "Rejected pending preview." }] };
+			},
 		});
-
 		const tool = new ResolveTool(createSession(pendingActionStore));
 		const result = await tool.execute("call-discard", {
 			action: "discard",
 			reason: "Preview changed wrong callsites",
 		});
 
-		expect(getText(result)).toContain("Discarded: AST Edit: 2 replacements in 1 file");
+		expect(getText(result)).toContain("Rejected pending preview.");
 		expect(pendingActionStore.hasPending).toBe(false);
+		expect(rejectedReason).toBe("Preview changed wrong callsites");
 		expect(result.details).toEqual({
 			action: "discard",
 			reason: "Preview changed wrong callsites",
@@ -62,11 +67,13 @@ describe("ResolveTool", () => {
 	it("applies pending action and clears store", async () => {
 		const pendingActionStore = new PendingActionStore();
 		let applied = false;
+		let appliedReason: string | undefined;
 		pendingActionStore.push({
 			label: "AST Edit: 1 replacement in 1 file",
 			sourceToolName: "ast_edit",
-			apply: async () => {
+			apply: async reason => {
 				applied = true;
+				appliedReason = reason;
 				return { content: [{ type: "text", text: "Applied 1 replacement in 1 file." }] };
 			},
 		});
@@ -78,6 +85,7 @@ describe("ResolveTool", () => {
 		});
 
 		expect(applied).toBe(true);
+		expect(appliedReason).toBe("Preview is correct");
 		expect(pendingActionStore.hasPending).toBe(false);
 		expect(getText(result)).toContain("Applied 1 replacement in 1 file.");
 		expect(result.details).toEqual({
@@ -96,7 +104,7 @@ describe("ResolveTool", () => {
 		pendingActionStore.push({
 			label: "First action",
 			sourceToolName: "ast_edit",
-			apply: async () => {
+			apply: async (_reason: string) => {
 				firstApplied = true;
 				return { content: [{ type: "text", text: "first" }] };
 			},

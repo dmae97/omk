@@ -31,7 +31,9 @@ export interface CustomToolPendingAction {
 	/** Human-readable preview label shown in resolve flow */
 	label: string;
 	/** Apply callback invoked when resolve(action="apply") is called */
-	apply(): Promise<AgentToolResult<unknown>>;
+	apply(reason: string): Promise<AgentToolResult<unknown>>;
+	/** Optional reject callback invoked when resolve(action="discard") is called */
+	reject?(reason: string): Promise<AgentToolResult<unknown> | undefined>;
 	/** Optional details metadata stored with the pending action */
 	details?: unknown;
 	/** Optional source tool name shown by resolve renderer (defaults to "custom_tool") */

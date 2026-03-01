@@ -103,6 +103,7 @@ export class CustomToolLoader {
 					label: action.label,
 					sourceToolName: action.sourceToolName ?? "custom_tool",
 					apply: action.apply,
+					reject: action.reject,
 					details: action.details,
 				});
 			},

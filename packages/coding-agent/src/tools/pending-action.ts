@@ -3,7 +3,8 @@ import type { AgentToolResult } from "@oh-my-pi/pi-agent-core";
 export interface PendingAction {
 	label: string;
 	sourceToolName: string;
-	apply(): Promise<AgentToolResult<unknown>>;
+	apply(reason: string): Promise<AgentToolResult<unknown>>;
+	reject?(reason: string): Promise<AgentToolResult<unknown> | undefined>;
 	details?: unknown;
 }
 
