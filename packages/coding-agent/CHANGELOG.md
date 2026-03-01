@@ -1,6 +1,15 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `render_mermaid` tool to convert Mermaid graph source into ASCII diagram output
+- Added `renderMermaid.enabled` setting to control availability of the render_mermaid tool
+
+### Changed
+
+- Changed Mermaid rendering from PNG images to ASCII diagrams in theme rendering
+- Changed `prerenderMermaid()` function to synchronously render ASCII instead of asynchronously rendering PNG
 
 ## [13.5.0] - 2026-03-01
 

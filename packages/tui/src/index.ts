@@ -25,7 +25,6 @@ export * from "./keybindings";
 // Kitty keyboard protocol helpers
 export * from "./keys";
 // Mermaid diagram support
-export * from "./mermaid";
 // Input buffering for batch splitting
 export * from "./stdin-buffer";
 export type * from "./symbols";

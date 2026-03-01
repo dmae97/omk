@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Breaking Changes
+
+- Removed `getMermaidImage` callback from MarkdownTheme; replaced with `getMermaidAscii` that accepts ASCII string instead of image data
+- Removed mermaid module exports (`renderMermaidToPng`, `extractMermaidBlocks`, `prerenderMermaidBlocks`, `MermaidImage` interface)
+
+### Changed
+
+- Mermaid diagrams now render as ASCII text instead of terminal graphics protocol images
 
 ## [13.5.1] - 2026-03-01
 ### Fixed

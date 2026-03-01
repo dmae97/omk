@@ -30,6 +30,7 @@ import { NotebookTool } from "./notebook";
 import { wrapToolWithMetaNotice } from "./output-meta";
 import { PythonTool } from "./python";
 import { ReadTool } from "./read";
+import { RenderMermaidTool } from "./render-mermaid";
 import { ResolveTool } from "./resolve";
 import { reportFindingTool } from "./review";
 import { loadSshTool } from "./ssh";
@@ -63,6 +64,7 @@ export * from "./notebook";
 export * from "./pending-action";
 export * from "./python";
 export * from "./read";
+export * from "./render-mermaid";
 export * from "./resolve";
 export * from "./review";
 export * from "./ssh";
@@ -150,6 +152,7 @@ type ToolFactory = (session: ToolSession) => Tool | null | Promise<Tool | null>;
 export const BUILTIN_TOOLS: Record<string, ToolFactory> = {
 	ast_grep: s => new AstGrepTool(s),
 	ast_edit: s => new AstEditTool(s),
+	render_mermaid: s => new RenderMermaidTool(s),
 	ask: AskTool.createIf,
 	bash: s => new BashTool(s),
 	python: s => new PythonTool(s),
@@ -281,6 +284,7 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 		if (name === "grep") return session.settings.get("grep.enabled");
 		if (name === "ast_grep") return session.settings.get("astGrep.enabled");
 		if (name === "ast_edit") return session.settings.get("astEdit.enabled");
+		if (name === "render_mermaid") return session.settings.get("renderMermaid.enabled");
 		if (name === "notebook") return session.settings.get("notebook.enabled");
 		if (name === "fetch") return session.settings.get("fetch.enabled");
 		if (name === "web_search") return session.settings.get("web_search.enabled");

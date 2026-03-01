@@ -460,6 +460,15 @@ export const SETTINGS_SCHEMA = {
 			description: "Enable the ast_edit tool for structural AST rewrites",
 		},
 	},
+	"renderMermaid.enabled": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "tools",
+			label: "Enable Render Mermaid",
+			description: "Enable the render_mermaid tool for Mermaid-to-ASCII rendering",
+		},
+	},
 	"notebook.enabled": {
 		type: "boolean",
 		default: true,

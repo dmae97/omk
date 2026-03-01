@@ -16,7 +16,7 @@ import chalk from "chalk";
 import darkThemeJson from "./dark.json" with { type: "json" };
 import { defaultThemes } from "./defaults";
 import lightThemeJson from "./light.json" with { type: "json" };
-import { getMermaidImage } from "./mermaid-cache";
+import { getMermaidAscii } from "./mermaid-cache";
 
 // ============================================================================
 // Symbol Presets
@@ -2340,7 +2340,7 @@ export function getMarkdownTheme(): MarkdownTheme {
 		underline: (text: string) => theme.underline(text),
 		strikethrough: (text: string) => chalk.strikethrough(text),
 		symbols: getSymbolTheme(),
-		getMermaidImage,
+		getMermaidAscii,
 		highlightCode: (code: string, lang?: string): string[] => {
 			const validLang = lang && nativeSupportsLanguage(lang) ? lang : undefined;
 			try {

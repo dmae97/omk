@@ -9,6 +9,7 @@ export * from "./glob";
 export * from "./indent";
 export * from "./json";
 export * as logger from "./logger";
+export * from "./mermaid-ascii";
 export * as postmortem from "./postmortem";
 export * as procmgr from "./procmgr";
 export { setNativeKillTree } from "./procmgr";

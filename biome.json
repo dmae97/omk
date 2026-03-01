@@ -45,7 +45,8 @@
 			"!**/template.generated.ts",
 			"!**/docs-index.generated.ts",
 			"!**/gen/agent_pb.ts",
-			"!.worktrees/**/*"
+			"!.worktrees/**/*",
+			"!.wt/**/*"
 		]
 	},
 	"assist": { "actions": { "source": { "organizeImports": "on" } } }

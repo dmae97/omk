@@ -1,88 +1,48 @@
-import {
-	extractMermaidBlocks,
-	type MermaidImage,
-	type MermaidRenderOptions,
-	renderMermaidToPng,
-} from "@oh-my-pi/pi-tui";
-import { logger } from "@oh-my-pi/pi-utils";
+import { extractMermaidBlocks, logger, renderMermaidAsciiSafe } from "@oh-my-pi/pi-utils";
 
-const cache = new Map<bigint, MermaidImage>();
-const pending = new Map<bigint, Promise<MermaidImage | null>>();
+const cache = new Map<bigint, string>();
 const failed = new Set<bigint>();
-
-const defaultOptions: MermaidRenderOptions = {
-	theme: "dark",
-	backgroundColor: "transparent",
-};
 
 let onRenderNeeded: (() => void) | null = null;
 
 /**
- * Set callback to trigger TUI re-render when mermaid images become available.
+ * Set callback to trigger TUI re-render when mermaid ASCII renders become available.
  */
 export function setMermaidRenderCallback(callback: (() => void) | null): void {
 	onRenderNeeded = callback;
 }
 
 /**
- * Get a pre-rendered mermaid image by hash.
+ * Get a pre-rendered mermaid ASCII diagram by hash.
  * Returns null if not cached or rendering failed.
  */
-export function getMermaidImage(hash: bigint): MermaidImage | null {
+export function getMermaidAscii(hash: bigint): string | null {
 	return cache.get(hash) ?? null;
 }
 
 /**
- * Pre-render all mermaid blocks in markdown text.
- * Renders in parallel, deduplicates concurrent requests.
- * Calls render callback when new images are cached.
+ * Render all mermaid blocks in markdown text.
+ * Caches results and calls render callback when new diagrams are available.
  */
-export async function prerenderMermaid(
-	markdown: string,
-	options: MermaidRenderOptions = defaultOptions,
-): Promise<void> {
+export function prerenderMermaid(markdown: string): void {
 	const blocks = extractMermaidBlocks(markdown);
 	if (blocks.length === 0) return;
 
-	const promises: Promise<boolean>[] = [];
+	let hasNew = false;
 
 	for (const { source, hash } of blocks) {
 		if (cache.has(hash) || failed.has(hash)) continue;
 
-		let promise = pending.get(hash);
-		if (!promise) {
-			promise = renderMermaidToPng(source, options);
-			pending.set(hash, promise);
+		const ascii = renderMermaidAsciiSafe(source);
+		if (ascii) {
+			cache.set(hash, ascii);
+			hasNew = true;
+		} else {
+			failed.add(hash);
 		}
-
-		promises.push(
-			promise
-				.then(image => {
-					pending.delete(hash);
-					if (image) {
-						cache.set(hash, image);
-						failed.delete(hash);
-						return true;
-					}
-					failed.add(hash);
-					return false;
-				})
-				.catch(error => {
-					pending.delete(hash);
-					failed.add(hash);
-					logger.warn("Mermaid render failed", {
-						hash,
-						error: error instanceof Error ? error.message : String(error),
-					});
-					return false;
-				}),
-		);
 	}
 
-	const results = await Promise.all(promises);
-	const newImages = results.some(added => added);
-
-	if (newImages && onRenderNeeded) {
+	if (hasNew && onRenderNeeded) {
 		try {
 			onRenderNeeded();
 		} catch (error) {
@@ -107,5 +67,4 @@ export function hasPendingMermaid(markdown: string): boolean {
 export function clearMermaidCache(): void {
 	cache.clear();
 	failed.clear();
-	pending.clear();
 }

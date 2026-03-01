@@ -1,7 +1,6 @@
 import { marked, type Token } from "marked";
-import type { MermaidImage } from "../mermaid";
 import type { SymbolTheme } from "../symbols";
-import { encodeITerm2, encodeKitty, getCellDimensions, ImageProtocol, TERMINAL } from "../terminal-capabilities";
+import { TERMINAL } from "../terminal-capabilities";
 import type { Component } from "../tui";
 import { applyBackgroundToLine, padding, replaceTabs, visibleWidth, wrapTextWithAnsi } from "../utils";
 
@@ -45,11 +44,11 @@ export interface MarkdownTheme {
 	underline: (text: string) => string;
 	highlightCode?: (code: string, lang?: string) => string[];
 	/**
-	 * Lookup a pre-rendered mermaid image by source hash.
+	 * Lookup a pre-rendered mermaid ASCII rendering by source hash.
 	 * Hash is computed as `Bun.hash.xxHash64(source.trim())`.
-	 * Return null to fall back to text rendering.
+	 * Return null to fall back to fenced code rendering.
 	 */
-	getMermaidImage?: (sourceHash: bigint) => MermaidImage | null;
+	getMermaidAscii?: (sourceHash: bigint) => string | null;
 	symbols: SymbolTheme;
 }
 
@@ -320,20 +319,19 @@ export class Markdown implements Component {
 			}
 
 			case "code": {
-				// Handle mermaid diagrams with image rendering when available
-				if (token.lang === "mermaid" && this.#theme.getMermaidImage) {
+				// Handle mermaid diagrams with ASCII rendering when available
+				if (token.lang === "mermaid" && this.#theme.getMermaidAscii) {
 					const hash = Bun.hash.xxHash64(token.text.trim());
-					const image = this.#theme.getMermaidImage(hash);
+					const ascii = this.#theme.getMermaidAscii(hash);
 
-					if (image && TERMINAL.imageProtocol) {
-						const imageLines = this.#renderMermaidImage(image, width);
-						if (imageLines) {
-							lines.push(...imageLines);
-							if (nextTokenType !== "space") {
-								lines.push("");
-							}
-							break;
+					if (ascii) {
+						for (const asciiLine of Bun.stripANSI(ascii).split("\n")) {
+							lines.push(asciiLine);
 						}
+						if (nextTokenType !== "space") {
+							lines.push("");
+						}
+						break;
 					}
 				}
 
@@ -809,63 +807,6 @@ export class Markdown implements Component {
 		lines.push(`${t.bottomLeft}${h}${bottomBorderCells.join(`${h}${t.teeUp}${h}`)}${h}${t.bottomRight}`);
 
 		lines.push(""); // Add spacing after table
-		return lines;
-	}
-
-	/**
-	 * Render a mermaid image using terminal graphics protocol.
-	 * Returns array of lines (image placeholder rows) or null if rendering fails.
-	 */
-	#renderMermaidImage(image: MermaidImage, availableWidth: number): string[] | null {
-		if (!TERMINAL.imageProtocol) return null;
-
-		const cellDims = getCellDimensions();
-		const scale = 0.5; // Render at 50% of natural size
-
-		// Calculate natural size in cells (don't scale up, only down if needed)
-		const naturalColumns = Math.ceil((image.widthPx * scale) / cellDims.widthPx);
-		const naturalRows = Math.ceil((image.heightPx * scale) / cellDims.heightPx);
-
-		// Use natural size, but cap to available width
-		const columns = Math.min(naturalColumns, availableWidth);
-
-		// If we had to shrink width, calculate proportional height
-		let rows: number;
-		if (columns < naturalColumns) {
-			// Scaled down - recalculate height
-			const scale = columns / naturalColumns;
-			rows = Math.max(1, Math.ceil(naturalRows * scale));
-		} else {
-			// Natural size
-			rows = naturalRows;
-		}
-
-		let sequence: string;
-		switch (TERMINAL.imageProtocol) {
-			case ImageProtocol.Kitty:
-				sequence = encodeKitty(image.base64, { columns, rows });
-				break;
-			case ImageProtocol.Iterm2:
-				sequence = encodeITerm2(image.base64, {
-					width: columns,
-					height: "auto",
-					preserveAspectRatio: true,
-				});
-				break;
-			default:
-				return null;
-		}
-
-		// Reserve space with empty lines, then output image with cursor-up
-		// This ensures TUI accounts for image height in layout
-		const lines: string[] = [];
-		for (let i = 0; i < rows - 1; i++) {
-			lines.push("");
-		}
-		// Move cursor up to first row, then output image
-		const moveUp = rows > 1 ? `\x1b[${rows - 1}A` : "";
-		lines.push(moveUp + sequence);
-
 		return lines;
 	}
 }

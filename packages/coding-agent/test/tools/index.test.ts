@@ -130,6 +130,25 @@ describe("createTools", () => {
 		expect(names).toContain("ask");
 	});
 
+	it("excludes render_mermaid tool by default", async () => {
+		const session = createTestSession();
+		const tools = await createTools(session);
+		const names = tools.map(t => t.name);
+
+		expect(names).not.toContain("render_mermaid");
+	});
+
+	it("includes render_mermaid tool when enabled", async () => {
+		const session = createTestSession({
+			settings: createSettingsWithOverrides({
+				"renderMermaid.enabled": true,
+			}),
+		});
+		const tools = await createTools(session);
+		const names = tools.map(t => t.name);
+
+		expect(names).toContain("render_mermaid");
+	});
 	it("HIDDEN_TOOLS contains review tools", () => {
 		expect(Object.keys(HIDDEN_TOOLS).sort()).toEqual([
 			"exit_plan_mode",
