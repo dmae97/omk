@@ -425,6 +425,12 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 
 					// Handle 429 rate limits with time budget
 					if (response.status === 429) {
+						if (/quota|exhausted|too many requests|per minute|rate limit/i.test(errorText)) {
+							throw withHttpStatus(
+								new Error(`Cloud Code Assist API error (429): ${extractErrorMessage(errorText)}`),
+								429,
+							);
+						}
 						const serverDelay = extractRetryDelay(errorText, response);
 						if (serverDelay && rateLimitTimeSpent + serverDelay <= RATE_LIMIT_BUDGET_MS) {
 							rateLimitTimeSpent += serverDelay;

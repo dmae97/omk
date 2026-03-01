@@ -19,6 +19,7 @@ export * from "./providers/kimi";
 export * from "./providers/openai-completions";
 export * from "./providers/openai-responses";
 export * from "./providers/synthetic";
+export * from "./rate-limit-utils";
 export * from "./stream";
 export * from "./types";
 export * from "./usage";
