@@ -476,7 +476,7 @@ export const SETTINGS_SCHEMA = {
 	},
 	"checkpoint.enabled": {
 		type: "boolean",
-		default: true,
+		default: false,
 		ui: {
 			tab: "tools",
 			label: "Enable Checkpoint/Rewind",
