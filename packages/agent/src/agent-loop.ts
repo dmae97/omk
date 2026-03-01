@@ -435,7 +435,7 @@ async function executeToolCalls(
 ): Promise<{ toolResults: ToolResultMessage[]; steeringMessages?: AgentMessage[] }> {
 	type ToolCallContent = Extract<AssistantMessage["content"][number], { type: "toolCall" }>;
 	const toolCalls = assistantMessage.content.filter((c): c is ToolCallContent => c.type === "toolCall");
-	const results: ToolResultMessage[] = [];
+	const emittedToolResults: ToolResultMessage[] = [];
 	let steeringMessages: AgentMessage[] | undefined;
 	const shouldInterruptImmediately = interruptMode !== "wait";
 	const toolCallInfos = toolCalls.map(call => ({ id: call.id, name: call.name }));
@@ -476,7 +476,48 @@ async function executeToolCalls(
 		result: undefined as AgentToolResult<any> | undefined,
 		isError: false,
 		skipped: false,
+		toolResultMessage: undefined as ToolResultMessage | undefined,
+		resultEmitted: false,
 	}));
+
+	const emitToolResult = (record: (typeof records)[number], result: AgentToolResult<any>, isError: boolean): void => {
+		if (record.resultEmitted) return;
+		const { toolCall } = record;
+		if (!record.started) {
+			stream.push({
+				type: "tool_execution_start",
+				toolCallId: toolCall.id,
+				toolName: toolCall.name,
+				args: record.args,
+				intent: toolCall.intent,
+			});
+		}
+		stream.push({
+			type: "tool_execution_end",
+			toolCallId: toolCall.id,
+			toolName: toolCall.name,
+			result,
+			isError,
+		});
+
+		const toolResultMessage: ToolResultMessage = {
+			role: "toolResult",
+			toolCallId: toolCall.id,
+			toolName: toolCall.name,
+			content: result.content,
+			details: result.details,
+			isError,
+			timestamp: Date.now(),
+		};
+		record.result = result;
+		record.isError = isError;
+		record.toolResultMessage = toolResultMessage;
+		record.resultEmitted = true;
+		emittedToolResults.push(toolResultMessage);
+
+		stream.push({ type: "message_start", message: toolResultMessage });
+		stream.push({ type: "message_end", message: toolResultMessage });
+	};
 
 	const runTool = async (record: (typeof records)[number], index: number): Promise<void> => {
 		if (interruptState.triggered) {
@@ -551,11 +592,11 @@ async function executeToolCalls(
 			isError = true;
 		}
 
-		if (!interruptState.triggered) {
-			record.result = result;
-			record.isError = isError;
-		} else {
+		if (interruptState.triggered) {
 			record.skipped = true;
+			emitToolResult(record, createSkippedToolResult(), true);
+		} else {
+			emitToolResult(record, result, isError);
 		}
 
 		await checkSteering();
@@ -582,43 +623,13 @@ async function executeToolCalls(
 	await Promise.allSettled(tasks);
 
 	for (const record of records) {
-		const toolCall = record.toolCall;
-		const shouldSkip = record.skipped || record.result === undefined;
-		const result = shouldSkip ? createSkippedToolResult() : (record.result ?? createSkippedToolResult());
-		const isError = shouldSkip ? true : record.isError;
-		if (!record.started) {
-			stream.push({
-				type: "tool_execution_start",
-				toolCallId: toolCall.id,
-				toolName: toolCall.name,
-				args: record.args,
-				intent: toolCall.intent,
-			});
+		if (!record.toolResultMessage) {
+			record.skipped = true;
+			emitToolResult(record, createSkippedToolResult(), true);
 		}
-		stream.push({
-			type: "tool_execution_end",
-			toolCallId: toolCall.id,
-			toolName: toolCall.name,
-			result,
-			isError,
-		});
-
-		const toolResultMessage: ToolResultMessage = {
-			role: "toolResult",
-			toolCallId: toolCall.id,
-			toolName: toolCall.name,
-			content: result.content,
-			details: result.details,
-			isError,
-			timestamp: Date.now(),
-		};
-
-		results.push(toolResultMessage);
-		stream.push({ type: "message_start", message: toolResultMessage });
-		stream.push({ type: "message_end", message: toolResultMessage });
 	}
 
-	return { toolResults: results, steeringMessages };
+	return { toolResults: emittedToolResults, steeringMessages };
 }
 
 function createSkippedToolResult(): AgentToolResult<any> {

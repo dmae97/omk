@@ -452,7 +452,7 @@ describe("agentLoop with AgentMessage", () => {
 		}
 	});
 
-	it("runs shared tools in parallel but emits ordered results", async () => {
+	it("runs shared tools in parallel and emits completion-ordered results", async () => {
 		const toolSchema = Type.Object({ value: Type.String() });
 		const startTimes: Record<string, number> = {};
 		const finishTimes: Record<string, number> = {};
@@ -543,8 +543,13 @@ describe("agentLoop with AgentMessage", () => {
 				e.type === "message_start" && e.message.role === "toolResult",
 		);
 		expect(toolResultStarts).toHaveLength(2);
-		expect((toolResultStarts[0].message as ToolResultMessage).toolCallId).toBe("tool-1");
-		expect((toolResultStarts[1].message as ToolResultMessage).toolCallId).toBe("tool-2");
+		expect((toolResultStarts[0].message as ToolResultMessage).toolCallId).toBe("tool-2");
+		expect((toolResultStarts[1].message as ToolResultMessage).toolCallId).toBe("tool-1");
+
+		const turnEndEvent = events.find((e): e is Extract<AgentEvent, { type: "turn_end" }> => e.type === "turn_end");
+		expect(turnEndEvent).toBeDefined();
+		if (!turnEndEvent) return;
+		expect(turnEndEvent.toolResults.map(result => result.toolCallId)).toEqual(["tool-2", "tool-1"]);
 	});
 
 	it("emits an explicit warning toolResult when assistant aborts after issuing tool calls", async () => {
