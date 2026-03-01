@@ -3635,9 +3635,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 	}
 
 	#isUsageLimitErrorMessage(errorMessage: string): boolean {
-		return /usage.?limit|usage_limit_reached|limit_reached|quota.?exceeded|resource.?exhausted|429/i.test(
-			errorMessage,
-		);
+		return /usage.?limit|usage_limit_reached|limit_reached|quota.?exceeded|resource.?exhausted/i.test(errorMessage);
 	}
 
 	#parseRetryAfterMsFromError(errorMessage: string): number | undefined {

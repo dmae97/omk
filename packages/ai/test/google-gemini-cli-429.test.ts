@@ -3,7 +3,8 @@ import { extractRetryDelay } from "@oh-my-pi/pi-ai/providers/google-gemini-cli";
 
 // The fail-fast regex used inside the provider to distinguish "known quota errors" (throw immediately)
 // from "ambiguous 429s" (retry up to RATE_LIMIT_BUDGET_MS).
-const FAIL_FAST_RE = /quota|exhausted|too many requests|per minute|rate limit/i;
+// Option A (minimal): only hard quota limits fail-fast; transient rate-limit messages fall through to retry.
+const FAIL_FAST_RE = /quota|exhausted/i;
 const shouldFailFast = (errorText: string) => FAIL_FAST_RE.test(errorText);
 
 // normalizeDelay adds a 1 second buffer and rounds up:
@@ -19,12 +20,12 @@ describe("google-gemini-cli 429 fail-fast detection", () => {
 		expect(shouldFailFast("Resource has been exhausted")).toBe(true);
 	});
 
-	it("fails fast on 'Too many requests'", () => {
-		expect(shouldFailFast("Too many requests")).toBe(true);
+	it("retries (does NOT fail fast) on 'Too many requests'", () => {
+		expect(shouldFailFast("Too many requests")).toBe(false);
 	});
 
-	it("fails fast on 'rate limit exceeded'", () => {
-		expect(shouldFailFast("rate limit exceeded")).toBe(true);
+	it("retries (does NOT fail fast) on 'rate limit exceeded'", () => {
+		expect(shouldFailFast("rate limit exceeded")).toBe(false);
 	});
 
 	it("fails fast on per-minute quota message", () => {
@@ -41,8 +42,8 @@ describe("google-gemini-cli 429 fail-fast detection", () => {
 
 	it("is case-insensitive for all variants", () => {
 		expect(shouldFailFast("QUOTA EXHAUSTED")).toBe(true);
-		expect(shouldFailFast("Rate Limit Exceeded")).toBe(true);
-		expect(shouldFailFast("TOO MANY REQUESTS")).toBe(true);
+		expect(shouldFailFast("Rate Limit Exceeded")).toBe(false);
+		expect(shouldFailFast("TOO MANY REQUESTS")).toBe(false);
 	});
 });
 
