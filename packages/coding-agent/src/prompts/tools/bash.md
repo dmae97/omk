@@ -33,8 +33,8 @@ You **MUST** use specialized tools instead of bash for ALL file operations:
 |`rg 'pattern' dir/`|`grep(pattern="pattern", path="dir/")`|
 |`find dir -name '*.ts'`|`find(pattern="dir/**/*.ts")`|
 |`ls dir/`|`read(path="dir/")`|
-|`cat <<'EOF' > file`|`write(path="file", content="...")`|
-|`sed -i 's/old/new/' file`|`edit(path="file", edits=[...])`|
+|`cat <<'EOF' > file`|`write(path="file", content="…")`|
+|`sed -i 's/old/new/' file`|`edit(path="file", edits=[…])`|
 - If `ast_grep` / `ast_edit` tools are available in the session, you **MUST** use them for structural code search/rewrites instead of bash `grep`/`sed`/`awk`/`perl` pipelines
 - Bash is for command execution, not syntax-aware code transformation; prefer `ast_grep` for discovery and `ast_edit` for codemods
 - You **MUST NOT** use Bash for these operations like read, grep, find, edit, write, where specialized tools exist.

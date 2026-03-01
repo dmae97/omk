@@ -43,4 +43,15 @@ describe("formatPromptContent renderPhase", () => {
 		expect(preRender).toBe("<root>\n{{#if ok}}\nvalue\n{{/if}}\n</root>");
 		expect(postRender).toBe("<root>\n{{#if ok}}\nvalue\n\n{{/if}}\n</root>");
 	});
+	test("pre-render compacts table rows and does not duplicate content when replacing ascii", () => {
+		const input =
+			'|`cat <<\'EOF\' > file`|`write(path="file", content="...")`|\n|`sed -i \'s/old/new/\' file`|`edit(path="file", edits=[...])`|';
+		const output = formatPromptContent(input, {
+			renderPhase: "pre-render",
+			replaceAsciiSymbols: true,
+		});
+		expect(output).toBe(
+			'|`cat <<\'EOF\' > file`|`write(path="file", content="…")`|\n|`sed -i \'s/old/new/\' file`|`edit(path="file", edits=[…])`|',
+		);
+	});
 });

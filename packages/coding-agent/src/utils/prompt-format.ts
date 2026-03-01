@@ -86,9 +86,7 @@ export function formatPromptContent(content: string, options: PromptFormatOption
 
 	for (let i = 0; i < lines.length; i++) {
 		let line = lines[i].trimEnd();
-		const trimmed = line.trim();
-		const trimmedStart = line.trimStart();
-
+		let trimmedStart = line.trimStart();
 		if (CODE_FENCE.test(trimmedStart)) {
 			inCodeBlock = !inCodeBlock;
 			result.push(line);
@@ -103,6 +101,8 @@ export function formatPromptContent(content: string, options: PromptFormatOption
 		if (replaceAsciiSymbols) {
 			line = replaceCommonAsciiSymbols(line);
 		}
+		trimmedStart = line.trimStart();
+		const trimmed = line.trim();
 
 		const isOpeningXml = OPENING_XML.test(trimmedStart) && !trimmedStart.endsWith("/>");
 		if (isOpeningXml && line.length === trimmedStart.length) {
