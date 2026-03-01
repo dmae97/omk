@@ -229,21 +229,6 @@ Leading whitespace in `lines` **MUST** be copied from the `read` output, not rec
 {{hlinefull 13 "\t}"}}
 {{hlinefull 14 "}"}}
 ```
-Bad — indent guessed as spaces; `\\t` emits literal backslash-t:
-```
-{
-  path: "…",
-  edits: [{
-    op: "prepend",
-    pos: {{hlinejsonref 14 "}"}},
-    lines: [
-      "    baz() {",
-      "        return 2;",
-      "    }"
-    ]
-  }]
-}
-```
 Good — `\t` in JSON is a real tab, matching the file's indentation:
 ```
 {
