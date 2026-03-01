@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Removed `PI_TUI_RESIZE_CLEAR_STRATEGY`; resize behavior is no longer configurable between viewport/scrollback modes. The renderer now uses fixed semantics: width changes perform a hard reset (`3J` + full content rewrite), while height changes and diff fallbacks use viewport-scoped repainting.
+
+### Added
+
+- Added a new terminal regression suite in `packages/tui/test/render-regressions.test.ts` covering no-op render stability, targeted middle-line diffs, shrink cleanup, width-resize truncation without ghost rows, shrink/grow viewport tail anchoring, scrollback deduplication across forced redraws, overlay restore behavior, and rapid mutation convergence.
+- Expanded `packages/tui/test/overlay-scroll.test.ts` with stress coverage for overflow shrink/regrow cycles, resize oscillation, overlay toggle churn, no-op render loops, and hardware-cursor-only updates while bounding scrollback growth and blank-run artifacts.
+
+### Changed
+
+- Refactored render orchestration to explicit `hardReset` and `viewportRepaint` paths, with targeted fallbacks for offscreen diff ranges and unsafe row deltas.
+- Switched startup to `requestRender(true)` so the first frame always initializes renderer state with a forced full path.
+- Replaced legacy viewport bookkeeping (`previousViewportTop`) with `viewportTopRow` tracking and consistent screen-relative cursor calculations.
+- Updated stop-sequence cursor placement to target the visible working area and clamp to terminal bounds before final newline emission.
+- Documented the intentional performance policy of not forcing full repaint on every viewport-top shift, relying on narrower safety guards instead.
+
+### Fixed
+
+- Fixed stale/duplicated terminal cursor dedup state by synchronizing `#lastCursorSequence` in all render write paths (hard reset, viewport repaint, deleted-lines clear path, append fast path, and differential path).
+- Fixed scroll overshoot on `stop()` when content fills the viewport by clamping target row movement to valid screen rows.
 ## [13.4.0] - 2026-03-01
 
 ### Added
