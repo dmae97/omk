@@ -6,6 +6,10 @@ Applies precise file edits using `LINE#ID` tags from `read` output.
 3. You **MUST** submit one `edit` call per file with all operations, think your changes through before submitting.
 </workflow>
 
+<prohibited>
+You **MUST NOT** use this tool for formatting-only edits: reindenting, realigning, brace-style changes, whitespace normalization, or line-length wrapping. Any edit whose diff is purely whitespace is a formatting operation — run the appropriate formatter for the project instead.
+</prohibited>
+
 <operations>
 Every edit has `op`, `pos`, and `lines`. Range replaces also have `end`. Both `pos` and `end` use `"N#ID"` format (e.g. `"23#XY"`).
 **`pos`** — the anchor line. Meaning depends on `op`:
@@ -44,6 +48,7 @@ Every edit has `op`, `pos`, and `lines`. Range replaces also have `end`. Both `p
    - If `lines` includes a closing boundary token (`}`, `]`, `)`, `);`, `},`), `end` **MUST** include the original boundary line.
    - You **MUST NOT** set `end` to an interior line and then re-add the boundary token in `lines`; that duplicates the next surviving line.
    - To remove a line while keeping its neighbors, **delete** it (`lines: null`). You **MUST NOT** replace it with the content of an adjacent line — that line still exists and will be duplicated.
+4. **Match surrounding indentation:** Leading whitespace in `lines` **MUST** be copied verbatim from adjacent lines in the `read` output. Do not infer or reconstruct indentation from memory — count the actual leading spaces on the lines immediately above and below the insertion or replacement point.
 </rules>
 
 <recovery>
@@ -60,7 +65,7 @@ Every edit has `op`, `pos`, and `lines`. Range replaces also have `end`. Both `p
   path: "…",
   edits: [{
     op: "replace",
-    pos: "{{hlineref 23 "  const timeout: number = 5000;"}}",
+    pos: {{hlinejsonref 23 "  const timeout: number = 5000;"}},
     lines: ["  const timeout: number = 30_000;"]
   }]
 }
@@ -74,7 +79,7 @@ Single line — `lines: null` deletes entirely:
   path: "…",
   edits: [{
     op: "replace",
-    pos: "{{hlineref 7 "// @ts-ignore"}}",
+    pos: {{hlinejsonref 7 "// @ts-ignore"}},
     lines: null
   }]
 }
@@ -85,8 +90,8 @@ Range — add `end`:
   path: "…",
   edits: [{
     op: "replace",
-    pos: "{{hlineref 80 "  // TODO: remove after migration"}}",
-    end: "{{hlineref 83 "  }"}}",
+    pos: {{hlinejsonref 80 "  // TODO: remove after migration"}},
+    end: {{hlinejsonref 83 "  }"}},
     lines: null
   }]
 }
@@ -102,7 +107,7 @@ Range — add `end`:
   path: "…",
   edits: [{
     op: "replace",
-    pos: "{{hlineref 14 "  placeholder: \"DO NOT SHIP\","}}",
+    pos: {{hlinejsonref 14 "  placeholder: \"DO NOT SHIP\","}},
     lines: [""]
   }]
 }
@@ -121,8 +126,8 @@ Range — add `end`:
   path: "…",
   edits: [{
     op: "replace",
-    pos: "{{hlineref 60 "    } catch (err) {"}}",
-    end: "{{hlineref 63 "    }"}}",
+    pos: {{hlinejsonref 60 "    } catch (err) {"}},
+    end: {{hlinejsonref 63 "    }"}},
     lines: [
       "    } catch (err) {",
       "      if (isEnoent(err)) return null;",
@@ -147,8 +152,8 @@ Bad — `end` stops before `}` while `lines` already includes `}`:
   path: "…",
   edits: [{
     op: "replace",
-    pos: "{{hlineref 70 "if (ok) {"}}",
-    end: "{{hlineref 71 "  run();"}}",
+    pos: {{hlinejsonref 70 "if (ok) {"}},
+    end: {{hlinejsonref 71 "  run();"}},
     lines: [
       "if (ok) {",
       "  runSafe();",
@@ -163,8 +168,8 @@ Good — include original `}` in the replaced range when replacement keeps `}`:
   path: "…",
   edits: [{
     op: "replace",
-    pos: "{{hlineref 70 "if (ok) {"}}",
-    end: "{{hlineref 72 "}"}}",
+    pos: {{hlinejsonref 70 "if (ok) {"}},
+    end: {{hlinejsonref 72 "}"}},
     lines: [
       "if (ok) {",
       "  runSafe();",
@@ -191,7 +196,7 @@ Also apply the same rule to `);`, `],`, and `},` closers: if replacement include
   path: "…",
   edits: [{
     op: "prepend",
-    pos: "{{hlineref 48 "function y() {"}}",
+    pos: {{hlinejsonref 48 "function y() {"}},
     lines: [
       "function z() {",
       "  runZ();",
@@ -231,7 +236,7 @@ Good — anchors to structural line:
   path: "…",
   edits: [{
     op: "prepend",
-    pos: "{{hlineref 103 "export function serialize(data: unknown): string {"}}",
+    pos: {{hlinejsonref 103 "export function serialize(data: unknown): string {"}},
     lines: [
       "function validate(data: unknown): boolean {",
       "  return data != null && typeof data === \"object\";",
@@ -243,10 +248,51 @@ Good — anchors to structural line:
 ```
 </example>
 
+<example name="indentation must match context">
+Leading whitespace in `lines` **MUST** be copied from the `read` output, not reconstructed from memory. Check the actual indent of neighboring lines.
+```ts
+{{hlinefull 10 "class Foo {"}}
+{{hlinefull 11 "  bar() {"}}
+{{hlinefull 12 "    return 1;"}}
+{{hlinefull 13 "  }"}}
+{{hlinefull 14 "}"}}
+```
+Bad — indent guessed as 4 spaces instead of 2 (as seen on lines 11–13):
+```
+{
+  path: "…",
+  edits: [{
+    op: "prepend",
+    pos: {{hlinejsonref 14 "}"}},
+    lines: [
+      "    baz() {",
+      "        return 2;",
+      "    }"
+    ]
+  }]
+}
+```
+Good — indent matches the 2-space style visible on adjacent lines:
+```
+{
+  path: "…",
+  edits: [{
+    op: "prepend",
+    pos: {{hlinejsonref 14 "}"}},
+    lines: [
+      "  baz() {",
+      "    return 2;",
+      "  }"
+    ]
+  }]
+}
+```
+</example>
+
 <critical>
 - Edit payload: `{ path, edits[] }`. Each entry: `op`, `lines`, optional `pos`/`end`. No extra keys.
 - Every tag **MUST** be copied exactly from fresh tool result as `N#ID`.
 - You **MUST** re-read after each edit call before issuing another on same file.
-- Formatting is a batch operation. You **MUST** never use this tool for formatting.
+- Formatting is a batch operation. You **MUST NOT** use this tool to reformat, reindent, or adjust whitespace — run the project's formatter instead. If the only change is whitespace, it is formatting; do not touch it.
 - `lines` entries **MUST** be literal file content with real space indentation. (`\\t` in JSON inserts a literal backslash-t into the file, not a tab.)
 </critical>

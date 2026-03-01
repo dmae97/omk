@@ -1,8 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added `hlinejsonref` Handlebars helper for embedding hashline references inside JSON blocks in prompts
 - Added `librarian` agent for researching external libraries and APIs by reading source code
 - Added `oracle` agent for deep reasoning on debugging, architecture decisions, and technical advice
 - Added `dependencies` and `risks` output fields to explore agent for better context handoff
@@ -10,6 +12,8 @@
 
 ### Changed
 
+- Enhanced hashline tool documentation with explicit prohibition on formatting-only edits
+- Added mandatory rule requiring indentation in `lines` to match surrounding context exactly from `read` output
 - Changed explore agent output field `query` to `summary` with expanded description for findings and conclusions
 
 ## [13.4.1] - 2026-03-01

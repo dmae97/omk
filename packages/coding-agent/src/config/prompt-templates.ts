@@ -266,6 +266,15 @@ handlebars.registerHelper("hlineref", (lineNum: unknown, content: unknown): stri
 });
 
 /**
+ * {{hlinejsonref lineNum "content"}} — same as hlineref but returns a JSON-quoted string.
+ * Useful for embedding hashline refs inside JSON blocks in prompts.
+ */
+handlebars.registerHelper("hlinejsonref", (lineNum: unknown, content: unknown): string => {
+	const { ref } = formatHashlineRef(lineNum, content);
+	return JSON.stringify(ref);
+});
+
+/**
  * {{hlinefull lineNum "content"}} — format a full read-style line with prefix.
  * Returns `"lineNum#hash:content"`.
  */
