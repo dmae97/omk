@@ -179,6 +179,43 @@ describe("Tool argument coercion", () => {
 		expect(result.edits).toEqual([{ target: "13#cf", new_content: "..." }]);
 	});
 
+	it("coerces array strings with trailing wrapper braces from malformed nested JSON", () => {
+		const tool: Tool = {
+			name: "t16",
+			description: "",
+			parameters: Type.Object({
+				path: Type.String(),
+				edits: Type.Array(
+					Type.Object({
+						op: Type.String(),
+						pos: Type.String(),
+						end: Type.String(),
+						lines: Type.Array(Type.String()),
+					}),
+				),
+			}),
+		};
+
+		const toolCall: ToolCall = {
+			type: "toolCall",
+			id: "call-16",
+			name: "t16",
+			arguments: {
+				path: "packages/coding-agent/src/prompts/tools/bash.md",
+				edits: '[{"op":"replace","pos":"38#BR","end":"39#QY","lines":["line 1","line 2"]}]}\n',
+			},
+		};
+
+		const result = validateToolArguments(tool, toolCall);
+		expect(result.edits).toEqual([
+			{
+				op: "replace",
+				pos: "38#BR",
+				end: "39#QY",
+				lines: ["line 1", "line 2"],
+			},
+		]);
+	});
 	it("iteratively coerces nested array items that are JSON-serialized objects", () => {
 		const tool: Tool = {
 			name: "t8",

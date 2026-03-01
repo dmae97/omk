@@ -89,6 +89,55 @@ function tryParseNumberString(value: string, expectedTypes: string[]): { value: 
 	return { value: parsed, changed: true };
 }
 
+function tryParseLeadingJsonContainer(value: string): unknown | undefined {
+	const firstChar = value[0];
+	const closingChar = firstChar === "{" ? "}" : firstChar === "[" ? "]" : undefined;
+	if (!closingChar) return undefined;
+
+	let depth = 0;
+	let inString = false;
+	let escaped = false;
+
+	for (let index = 0; index < value.length; index += 1) {
+		const char = value[index];
+
+		if (inString) {
+			if (escaped) {
+				escaped = false;
+				continue;
+			}
+			if (char === "\\") {
+				escaped = true;
+				continue;
+			}
+			if (char === '"') inString = false;
+			continue;
+		}
+
+		if (char === '"') {
+			inString = true;
+			continue;
+		}
+
+		if (char === firstChar) {
+			depth += 1;
+			continue;
+		}
+
+		if (char !== closingChar) continue;
+		depth -= 1;
+		if (depth !== 0) continue;
+
+		try {
+			return JSON.parse(value.slice(0, index + 1)) as unknown;
+		} catch {
+			return undefined;
+		}
+	}
+
+	return undefined;
+}
+
 /**
  * Attempts to parse a string as JSON if it looks like a JSON literal and
  * the parsed result matches one of the expected types.
@@ -112,8 +161,8 @@ function tryParseJsonForTypes(value: string, expectedTypes: string[]): { value: 
 	}
 
 	// Quick syntactic checks to avoid unnecessary parse attempts
-	const looksJsonObject = trimmed.startsWith("{") && trimmed.endsWith("}");
-	const looksJsonArray = trimmed.startsWith("[") && trimmed.endsWith("]");
+	const looksJsonObject = trimmed.startsWith("{");
+	const looksJsonArray = trimmed.startsWith("[");
 	const looksJsonLiteral =
 		trimmed === "true" || trimmed === "false" || trimmed === "null" || JSON_NUMBER_PATTERN.test(trimmed);
 
@@ -128,7 +177,12 @@ function tryParseJsonForTypes(value: string, expectedTypes: string[]): { value: 
 			return { value: parsed, changed: true };
 		}
 	} catch {
-		// Invalid JSON - leave as-is
+		if (looksJsonObject || looksJsonArray) {
+			const parsed = tryParseLeadingJsonContainer(trimmed);
+			if (parsed !== undefined && matchesExpectedType(parsed, expectedTypes)) {
+				return { value: parsed, changed: true };
+			}
+		}
 		return { value, changed: false };
 	}
 
