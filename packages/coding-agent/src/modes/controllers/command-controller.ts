@@ -983,19 +983,6 @@ function resolveAggregateStatus(limits: UsageLimit[]): UsageLimit["status"] {
 	return "exhausted";
 }
 
-function isZeroUsage(limit: UsageLimit): boolean {
-	const amount = limit.amount;
-	if (amount.usedFraction !== undefined) return amount.usedFraction <= 0;
-	if (amount.used !== undefined) return amount.used <= 0;
-	if (amount.unit === "percent" && amount.used !== undefined) return amount.used <= 0;
-	if (amount.remainingFraction !== undefined) return amount.remainingFraction >= 1;
-	return false;
-}
-
-function isZeroUsageGroup(limits: UsageLimit[]): boolean {
-	return limits.length > 0 && limits.every(limit => isZeroUsage(limit));
-}
-
 function formatAggregateAmount(limits: UsageLimit[]): string {
 	const fractions = limits
 		.map(limit => resolveFraction(limit))
@@ -1117,13 +1104,6 @@ function renderUsageReports(reports: UsageReport[], uiTheme: typeof theme, nowMs
 			}
 		}
 
-		const providerAllZero = isZeroUsageGroup(Array.from(limitGroups.values()).flatMap(group => group.limits));
-		if (providerAllZero) {
-			const providerTitle = `${resolveStatusIcon("ok", uiTheme)} ${uiTheme.fg("accent", `${providerName} (0%)`)}`;
-			lines.push(uiTheme.bold(providerTitle));
-			continue;
-		}
-
 		lines.push(uiTheme.bold(uiTheme.fg("accent", providerName)));
 
 		for (const group of limitGroups.values()) {
@@ -1144,18 +1124,6 @@ function renderUsageReports(reports: UsageReport[], uiTheme: typeof theme, nowMs
 
 			const status = resolveAggregateStatus(sortedLimits);
 			const statusIcon = resolveStatusIcon(status, uiTheme);
-			if (isZeroUsageGroup(sortedLimits)) {
-				const resetText = resolveResetRange(sortedLimits, nowMs);
-				const resetSuffix = resetText ? ` | ${resetText}` : "";
-				const windowSuffix = formatWindowSuffix(group.label, group.windowLabel, uiTheme);
-				lines.push(
-					`${statusIcon} ${uiTheme.bold(group.label)} ${windowSuffix} ${uiTheme.fg(
-						"dim",
-						`0%${resetSuffix}`,
-					)}`.trim(),
-				);
-				continue;
-			}
 
 			const windowSuffix = formatWindowSuffix(group.label, group.windowLabel, uiTheme);
 			lines.push(`${statusIcon} ${uiTheme.bold(group.label)} ${windowSuffix}`.trim());

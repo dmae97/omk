@@ -38,7 +38,13 @@ import type {
 	Usage,
 	UsageReport,
 } from "@oh-my-pi/pi-ai";
-import { isContextOverflow, modelsAreEqual, supportsXhigh } from "@oh-my-pi/pi-ai";
+import {
+	calculateRateLimitBackoffMs,
+	isContextOverflow,
+	modelsAreEqual,
+	parseRateLimitReason,
+	supportsXhigh,
+} from "@oh-my-pi/pi-ai";
 import { abortableSleep, getAgentDbPath, isEnoent, logger } from "@oh-my-pi/pi-utils";
 import type { AsyncJob, AsyncJobManager } from "../async";
 import type { Rule } from "../capability/rule";
@@ -3959,7 +3965,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 	}
 
 	#isUsageLimitErrorMessage(errorMessage: string): boolean {
-		return /usage.?limit|usage_limit_reached|limit_reached/i.test(errorMessage);
+		return /usage.?limit|usage_limit_reached|limit_reached|quota.?exceeded|resource.?exhausted/i.test(errorMessage);
 	}
 
 	#parseRetryAfterMsFromError(errorMessage: string): number | undefined {
@@ -4004,6 +4010,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			}
 		}
 
+		// Smart Fallback if no exact headers found
 		return undefined;
 	}
 
@@ -4043,7 +4050,9 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		let delayMs = retrySettings.baseDelayMs * 2 ** (this.#retryAttempt - 1);
 
 		if (this.model && this.#isUsageLimitErrorMessage(errorMessage)) {
-			const retryAfterMs = this.#parseRetryAfterMsFromError(errorMessage);
+			const retryAfterMs =
+				this.#parseRetryAfterMsFromError(errorMessage) ??
+				calculateRateLimitBackoffMs(parseRateLimitReason(errorMessage));
 			const switched = await this.#modelRegistry.authStorage.markUsageLimitReached(
 				this.model.provider,
 				this.sessionId,
@@ -4054,6 +4063,9 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			);
 			if (switched) {
 				delayMs = 0;
+			} else if (retryAfterMs > delayMs) {
+				// No more accounts to switch to — wait out the backoff
+				delayMs = retryAfterMs;
 			}
 		}
 
