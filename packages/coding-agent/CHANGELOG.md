@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.5.0] - 2026-03-01
+
 ### Added
 
 - Added `hlinejsonref` Handlebars helper for embedding hashline references inside JSON blocks in prompts

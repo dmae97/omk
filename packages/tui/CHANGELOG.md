@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.5.0] - 2026-03-01
+
 ### Breaking Changes
 
 - Removed `PI_TUI_RESIZE_CLEAR_STRATEGY`; resize behavior is no longer configurable between viewport/scrollback modes. The renderer now uses fixed semantics: width changes perform a hard reset (`3J` + full content rewrite), while height changes and diff fallbacks use viewport-scoped repainting.
