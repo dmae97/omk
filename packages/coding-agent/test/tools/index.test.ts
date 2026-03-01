@@ -131,6 +131,11 @@ describe("createTools", () => {
 	});
 
 	it("HIDDEN_TOOLS contains review tools", () => {
-		expect(Object.keys(HIDDEN_TOOLS).sort()).toEqual(["exit_plan_mode", "report_finding", "submit_result"]);
+		expect(Object.keys(HIDDEN_TOOLS).sort()).toEqual([
+			"exit_plan_mode",
+			"report_finding",
+			"resolve",
+			"submit_result",
+		]);
 	});
 });

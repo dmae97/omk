@@ -37,7 +37,7 @@ describe("ResolveTool", () => {
 
 	it("discards pending action and clears store", async () => {
 		const pendingActionStore = new PendingActionStore();
-		pendingActionStore.set({
+		pendingActionStore.push({
 			label: "AST Edit: 2 replacements in 1 file",
 			sourceToolName: "ast_edit",
 			apply: async () => ({ content: [{ type: "text", text: "should not run" }] }),
@@ -62,7 +62,7 @@ describe("ResolveTool", () => {
 	it("applies pending action and clears store", async () => {
 		const pendingActionStore = new PendingActionStore();
 		let applied = false;
-		pendingActionStore.set({
+		pendingActionStore.push({
 			label: "AST Edit: 1 replacement in 1 file",
 			sourceToolName: "ast_edit",
 			apply: async () => {
@@ -86,6 +86,41 @@ describe("ResolveTool", () => {
 			sourceToolName: "ast_edit",
 			label: "AST Edit: 1 replacement in 1 file",
 		});
+	});
+
+	it("resolves pending actions in LIFO order", async () => {
+		const pendingActionStore = new PendingActionStore();
+		let firstApplied = false;
+		let secondApplied = false;
+
+		pendingActionStore.push({
+			label: "First action",
+			sourceToolName: "ast_edit",
+			apply: async () => {
+				firstApplied = true;
+				return { content: [{ type: "text", text: "first" }] };
+			},
+		});
+		pendingActionStore.push({
+			label: "Second action",
+			sourceToolName: "ast_edit",
+			apply: async () => {
+				secondApplied = true;
+				return { content: [{ type: "text", text: "second" }] };
+			},
+		});
+
+		const tool = new ResolveTool(createSession(pendingActionStore));
+		const firstResult = await tool.execute("call-apply-1", { action: "apply", reason: "apply top" });
+		expect(getText(firstResult)).toContain("second");
+		expect(firstApplied).toBe(false);
+		expect(secondApplied).toBe(true);
+		expect(pendingActionStore.hasPending).toBe(true);
+
+		const secondResult = await tool.execute("call-apply-2", { action: "apply", reason: "apply next" });
+		expect(getText(secondResult)).toContain("first");
+		expect(firstApplied).toBe(true);
+		expect(pendingActionStore.hasPending).toBe(false);
 	});
 });
 

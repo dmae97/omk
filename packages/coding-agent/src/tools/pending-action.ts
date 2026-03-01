@@ -8,21 +8,25 @@ export interface PendingAction {
 }
 
 export class PendingActionStore {
-	#action: PendingAction | null = null;
+	#actions: PendingAction[] = [];
 
-	set(action: PendingAction): void {
-		this.#action = action;
+	push(action: PendingAction): void {
+		this.#actions.push(action);
 	}
 
-	get(): PendingAction | null {
-		return this.#action;
+	peek(): PendingAction | null {
+		return this.#actions.at(-1) ?? null;
+	}
+
+	pop(): PendingAction | null {
+		return this.#actions.pop() ?? null;
 	}
 
 	clear(): void {
-		this.#action = null;
+		this.#actions = [];
 	}
 
 	get hasPending(): boolean {
-		return this.#action !== null;
+		return this.#actions.length > 0;
 	}
 }

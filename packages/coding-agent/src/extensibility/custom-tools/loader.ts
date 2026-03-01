@@ -14,6 +14,7 @@ import type { ExecOptions } from "../../exec/exec";
 import { execCommand } from "../../exec/exec";
 import type { HookUIContext } from "../../extensibility/hooks/types";
 import { getAllPluginToolPaths } from "../../extensibility/plugins/loader";
+import type { PendingActionStore } from "../../tools/pending-action";
 import { createNoOpUIContext, resolvePath } from "../utils";
 import type { CustomToolAPI, CustomToolFactory, LoadedCustomTool, ToolLoadError } from "./types";
 
@@ -84,7 +85,7 @@ export class CustomToolLoader {
 	#sharedApi: CustomToolAPI;
 	#seenNames: Set<string>;
 
-	constructor(cwd: string, builtInToolNames: string[]) {
+	constructor(cwd: string, builtInToolNames: string[], pendingActionStore?: PendingActionStore) {
 		this.#sharedApi = {
 			cwd,
 			exec: (command: string, args: string[], options?: ExecOptions) =>
@@ -94,6 +95,17 @@ export class CustomToolLoader {
 			logger,
 			typebox,
 			pi: piCodingAgent,
+			pushPendingAction: action => {
+				if (!pendingActionStore) {
+					throw new Error("Pending action store unavailable for custom tools in this runtime.");
+				}
+				pendingActionStore.push({
+					label: action.label,
+					sourceToolName: action.sourceToolName ?? "custom_tool",
+					apply: action.apply,
+					details: action.details,
+				});
+			},
 		};
 		this.#seenNames = new Set<string>(builtInToolNames);
 	}
@@ -138,8 +150,13 @@ export class CustomToolLoader {
  * @param cwd - Current working directory for resolving relative paths
  * @param builtInToolNames - Names of built-in tools to check for conflicts
  */
-export async function loadCustomTools(pathsWithSources: ToolPathWithSource[], cwd: string, builtInToolNames: string[]) {
-	const loader = new CustomToolLoader(cwd, builtInToolNames);
+export async function loadCustomTools(
+	pathsWithSources: ToolPathWithSource[],
+	cwd: string,
+	builtInToolNames: string[],
+	pendingActionStore?: PendingActionStore,
+) {
+	const loader = new CustomToolLoader(cwd, builtInToolNames, pendingActionStore);
 	await loader.load(pathsWithSources);
 	return {
 		tools: loader.tools,
@@ -160,7 +177,12 @@ export async function loadCustomTools(pathsWithSources: ToolPathWithSource[], cw
  * @param cwd - Current working directory
  * @param builtInToolNames - Names of built-in tools to check for conflicts
  */
-export async function discoverAndLoadCustomTools(configuredPaths: string[], cwd: string, builtInToolNames: string[]) {
+export async function discoverAndLoadCustomTools(
+	configuredPaths: string[],
+	cwd: string,
+	builtInToolNames: string[],
+	pendingActionStore?: PendingActionStore,
+) {
 	const allPathsWithSources: ToolPathWithSource[] = [];
 	const seen = new Set<string>();
 
@@ -193,5 +215,5 @@ export async function discoverAndLoadCustomTools(configuredPaths: string[], cwd:
 		addPath(resolvePath(configPath, cwd), { provider: "config", providerName: "Config", level: "project" });
 	}
 
-	return loadCustomTools(allPathsWithSources, cwd, builtInToolNames);
+	return loadCustomTools(allPathsWithSources, cwd, builtInToolNames, pendingActionStore);
 }

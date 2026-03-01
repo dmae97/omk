@@ -45,7 +45,9 @@ import {
 	ModelRegistry,
 	SessionManager,
 	BUILTIN_TOOLS,
+	HIDDEN_TOOLS,
 	createTools,
+	ResolveTool,
 } from "@oh-my-pi/pi-coding-agent";
 
 // Auth and models setup
@@ -104,6 +106,26 @@ session.subscribe((event) => {
 await session.prompt("Hello");
 ```
 
+## Resolve preview workflow (AST edit apply/discard)
+
+`ast_edit` now always returns a preview. To finalize, call hidden `resolve` with a required reason.
+
+- `action: "apply"` → commit pending preview changes
+- `action: "discard"` → drop pending preview changes
+- `reason: string` is required for both paths
+
+`createAgentSession()` / `createTools()` include `resolve` automatically, even when filtering `toolNames`.
+If you are composing tools manually, use `HIDDEN_TOOLS.resolve` (or `ResolveTool`) and wire the same `pendingActionStore`.
+
+```typescript
+const tools = await createTools(toolSession, ["ast_edit"]); // resolve is auto-included
+const resolveTool = tools.find(t => t.name === "resolve") as ResolveTool;
+
+await resolveTool.execute("call-1", {
+  action: "apply",
+  reason: "Preview matches expected replacements",
+});
+```
 ## Options
 
 | Option                      | Default                       | Description                       |

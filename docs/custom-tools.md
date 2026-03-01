@@ -122,6 +122,7 @@ From `types.ts` and `loader.ts`:
 - `logger`: shared file logger
 - `typebox`: injected `@sinclair/typebox`
 - `pi`: injected `@oh-my-pi/pi-coding-agent` exports
+- `pushPendingAction(action)`: register a preview action for hidden `resolve` tool (`docs/resolve-tool-runtime.md`)
 
 Loader starts with a no-op UI context and requires host code to call `setUIContext(...)` when real UI is ready.
 

@@ -396,8 +396,8 @@ A `ToolFactory` is `(session: ToolSession) => Tool | null | Promise<Tool | null>
    - feature toggles (`find.enabled`, `grep.enabled`, etc.)
    - recursion guard for `task` (`task.maxRecursionDepth` vs `session.taskDepth`)
    - submit-result mode (`requireSubmitResultTool`) and `todo_write` suppression
-5. Instantiates tools in parallel with `Promise.all`, records slow factory timings when `PI_TIMING=1`.
-6. Wraps every tool with `wrapToolWithMetaNotice` before returning.
+5. Instantiates selected tools in parallel with `Promise.all`, records slow factory timings when `PI_TIMING=1`, and wraps results with `wrapToolWithMetaNotice`.
+6. Includes `resolve` only when at least one instantiated tool has `deferrable: true` (deferred preview/apply workflows).
 
 The wrapper step is not cosmetic: it enforces uniform meta-notice behavior and normalized error rendering across all tools.
 
@@ -1131,14 +1131,15 @@ Primary file: `packages/coding-agent/src/tools/index.ts`.
    - `export const BUILTIN_TOOLS: Record<string, ToolFactory> = { ... }`
    - Key is the external tool name (e.g. `"read"`, `"web_search"`).
 4. If it should be hidden/system-only, register under `HIDDEN_TOOLS` instead.
-   - Existing hidden names: `submit_result`, `report_finding`, `exit_plan_mode`.
+   - Existing hidden names: `submit_result`, `report_finding`, `exit_plan_mode`, `resolve`.
 5. Wire feature gates in `isToolAllowed(name)` when the tool needs runtime enable/disable behavior.
    - Existing gates use `session.settings.get("<tool>.enabled")` and recursion limits for `task`.
 6. If the tool should be selectable by type, update `ToolName = keyof typeof BUILTIN_TOOLS` consumers as needed.
 
 Notes from current behavior:
 
-- `createTools()` automatically injects `exit_plan_mode` when `toolNames` are specified.
+- `createTools()` always injects `exit_plan_mode` when `toolNames` are specified.
+- `resolve` is included only when at least one active tool is marked `deferrable: true` (built-in or extension/custom).
 - `submit_result` is force-added when `session.requireSubmitResultTool === true`.
 - Python/Bash availability is mode-driven (`PI_PY`, `python.toolMode`) and can auto-fallback to bash.
 

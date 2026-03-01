@@ -8,7 +8,13 @@ describe("Loader component", () => {
 	it("clamps rendered lines to terminal width", async () => {
 		const term = new VirtualTerminal(1, 4);
 		const tui = new TUI(term);
-		const loader = new Loader(tui, text => text, text => text, "Checking", ["⠸"]);
+		const loader = new Loader(
+			tui,
+			text => text,
+			text => text,
+			"Checking",
+			["⠸"],
+		);
 		tui.addChild(loader);
 
 		tui.start();

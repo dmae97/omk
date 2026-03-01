@@ -290,7 +290,8 @@ export interface ToolDefinition<TParams extends TSchema = TSchema, TDetails = un
 	parameters: TParams;
 	/** If true, tool is excluded unless explicitly listed in --tools or agent's tools field */
 	hidden?: boolean;
-
+	/** If true, tool may stage deferred changes that require explicit resolve/discard. */
+	deferrable?: boolean;
 	/** Execute the tool. */
 	execute(
 		toolCallId: string,

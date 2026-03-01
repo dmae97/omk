@@ -58,13 +58,10 @@ export class ResolveTool implements AgentTool<typeof resolveSchema, ResolveToolD
 				throw new ToolError("No pending action to resolve. Nothing to apply or discard.");
 			}
 
-			const pendingAction = store.get();
+			const pendingAction = store.pop();
 			if (!pendingAction) {
 				throw new ToolError("No pending action to resolve. Nothing to apply or discard.");
 			}
-
-			store.clear();
-
 			const resolveDetails: ResolveToolDetails = {
 				action: params.action,
 				reason: params.reason,
@@ -99,7 +96,10 @@ export const resolveToolRenderer = {
 				icon: "pending",
 				title: "Resolve",
 				description: args.action,
-				badge: { label: args.action, color: args.action === "apply" ? "success" : "warning" },
+				badge: {
+					label: args.action === "apply" ? "proposed -> resolved" : "proposed -> rejected",
+					color: args.action === "apply" ? "success" : "warning",
+				},
 				meta: reason ? [uiTheme.fg("muted", reason)] : undefined,
 			},
 			uiTheme,

@@ -229,6 +229,8 @@ export interface AgentTool<TParameters extends TSchema = TSchema, TDetails = any
 	label: string;
 	/** If true, tool is excluded unless explicitly listed in --tools or agent's tools field */
 	hidden?: boolean;
+	/** If true, tool can stage a pending action that requires explicit resolution via the resolve tool. */
+	deferrable?: boolean;
 	/** If true, tool execution ignores abort signals (runs to completion) */
 	nonAbortable?: boolean;
 	/**

@@ -26,6 +26,18 @@ export type { AgentToolResult, AgentToolUpdateCallback };
 // Re-export for backward compatibility
 export type { ExecOptions, ExecResult } from "../../exec/exec";
 
+/** Pending action entry consumed by the hidden resolve tool */
+export interface CustomToolPendingAction {
+	/** Human-readable preview label shown in resolve flow */
+	label: string;
+	/** Apply callback invoked when resolve(action="apply") is called */
+	apply(): Promise<AgentToolResult<unknown>>;
+	/** Optional details metadata stored with the pending action */
+	details?: unknown;
+	/** Optional source tool name shown by resolve renderer (defaults to "custom_tool") */
+	sourceToolName?: string;
+}
+
 /** API passed to custom tool factory (stable across session changes) */
 export interface CustomToolAPI {
 	/** Current working directory */
@@ -42,6 +54,8 @@ export interface CustomToolAPI {
 	typebox: typeof import("@sinclair/typebox");
 	/** Injected pi-coding-agent exports */
 	pi: typeof import("../..");
+	/** Push a preview action that can later be resolved with the hidden resolve tool */
+	pushPendingAction(action: CustomToolPendingAction): void;
 }
 
 /**
@@ -162,7 +176,8 @@ export interface CustomTool<TParams extends TSchema = TSchema, TDetails = any> {
 	parameters: TParams;
 	/** If true, tool is excluded unless explicitly listed in --tools or agent's tools field */
 	hidden?: boolean;
-
+	/** If true, tool may stage deferred changes that require explicit resolve/discard. */
+	deferrable?: boolean;
 	/**
 	 * Execute the tool.
 	 * @param toolCallId - Unique ID for this tool call

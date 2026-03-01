@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
 - `ast_grep` parameter `pattern` (string) replaced by `patterns` (string[])
@@ -10,6 +11,10 @@
 
 - Added `resolve` tool to apply or discard pending preview actions with required reasoning
 - AST edit now registers pending actions after preview, allowing explicit apply/discard workflow via `resolve` tool
+- Custom tools can register pending actions via `pushPendingAction(action)` in `CustomToolAPI`, enabling the `resolve` workflow for custom preview-apply flows
+- `deferrable?: boolean` field added to `AgentTool`, `CustomTool`, and `ToolDefinition` interfaces; tools that set it signal they may stage pending actions
+- `HIDDEN_TOOLS` and `ResolveTool` exported from `@oh-my-pi/pi-coding-agent` SDK for manual tool composition
+- `PendingActionStore` now uses a LIFO stack (`push`/`peek`/`pop`); multiple deferrable tools can stage actions that resolve in reverse order of registration
 - Added `gemini`, `codex`, and `synthetic` as supported values for the `providers.webSearch` setting
 - `ast_grep` tool now accepts a `patterns` array (replaces single `pattern`); multiple patterns run in one native pass and results are merged before offset/limit
 - `ast_edit` tool now accepts an `ops` array of `{ pat, out }` entries (replaces `pattern` + `rewrite`); duplicate patterns are rejected upfront
@@ -28,6 +33,8 @@
 
 - Simplified `resolve` tool output rendering to use inline highlighted format instead of boxed layout
 - Updated `resolve` tool to parse source tool name from label using colon separator for cleaner display
+- `resolve` tool is now conditionally injected: included only when at least one active tool has `deferrable: true` (previously always included)
+- `discoverAndLoadCustomTools` / `loadCustomTools` accept an optional `pendingActionStore` parameter to wire `pushPendingAction` for custom tools
 - AST edit tool no longer accepts `preview` parameter; all AST edit calls now return previews by default
 - AST edit workflow changed: preview is always shown, then use `resolve` tool to apply or discard changes
 - Agent now suggests calling `resolve` tool after AST edit preview with system reminder

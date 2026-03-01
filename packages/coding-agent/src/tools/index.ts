@@ -220,9 +220,6 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 	if (requestedTools && !requestedTools.includes("exit_plan_mode")) {
 		requestedTools.push("exit_plan_mode");
 	}
-	if (requestedTools && !requestedTools.includes("resolve")) {
-		requestedTools.push("resolve");
-	}
 	const pythonMode = getPythonModeFromEnv() ?? session.settings.get("python.toolMode");
 	const skipPythonPreflight = session.skipPythonPreflight === true;
 	let pythonAvailable = true;
@@ -302,25 +299,32 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 	}
 
 	const filteredRequestedTools = requestedTools?.filter(name => name in allTools && isToolAllowed(name));
-
-	const entries =
+	const baseEntries =
 		filteredRequestedTools !== undefined
-			? filteredRequestedTools.map(name => [name, allTools[name]] as const)
+			? filteredRequestedTools.filter(name => name !== "resolve").map(name => [name, allTools[name]] as const)
 			: [
 					...Object.entries(BUILTIN_TOOLS).filter(([name]) => isToolAllowed(name)),
 					...(includeSubmitResult ? ([["submit_result", HIDDEN_TOOLS.submit_result]] as const) : []),
 					...([["exit_plan_mode", HIDDEN_TOOLS.exit_plan_mode]] as const),
-					...([["resolve", HIDDEN_TOOLS.resolve]] as const),
 				];
 
-	const results = await Promise.all(
-		entries.map(async ([name, factory]) => {
-			if (filteredRequestedTools && !filteredRequestedTools.includes(name)) {
-				return null;
-			}
+	const baseResults = await Promise.all(
+		baseEntries.map(async ([name, factory]) => {
 			const tool = await logger.timeAsync(`createTools:${name}`, factory, session);
 			return tool ? wrapToolWithMetaNotice(tool) : null;
 		}),
 	);
-	return results.filter((r): r is Tool => r !== null);
+	const tools = baseResults.filter((r): r is Tool => r !== null);
+	const hasDeferrableTools = tools.some(tool => tool.deferrable === true);
+	if (!hasDeferrableTools) {
+		return tools;
+	}
+	if (tools.some(tool => tool.name === "resolve")) {
+		return tools;
+	}
+	const resolveTool = await logger.timeAsync("createTools:resolve", HIDDEN_TOOLS.resolve, session);
+	if (resolveTool) {
+		tools.push(wrapToolWithMetaNotice(resolveTool));
+	}
+	return tools;
 }
