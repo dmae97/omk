@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.5.3] - 2026-03-01
 ### Fixed
 
 - Fixed tool argument coercion to handle malformed JSON with trailing wrapper braces by parsing leading JSON containers

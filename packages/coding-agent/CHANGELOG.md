@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.5.3] - 2026-03-01
+
 ### Added
 
 - Auto-include `ast_grep` and `ast_edit` tools when their text-based counterparts (`grep`, `edit`) are requested and the AST tools are enabled

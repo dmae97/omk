@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.5.3] - 2026-03-01
+
 ### Fixed
 
 - Fixed append rendering logic to correctly handle offscreen header changes during content overflow growth, preserving scroll history integrity
