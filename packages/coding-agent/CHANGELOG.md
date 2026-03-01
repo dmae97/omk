@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.5.4] - 2026-03-01
 ### Added
 
 - Added `authServerUrl` field to `AuthDetectionResult` to capture OAuth server metadata from `Mcp-Auth-Server` headers
