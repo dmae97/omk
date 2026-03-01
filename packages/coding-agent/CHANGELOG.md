@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+
+- Fixed exit_plan_mode handler to abort active agent turn before opening plan approval selector, ensuring proper session cleanup
 
 ## [13.5.5] - 2026-03-01
 

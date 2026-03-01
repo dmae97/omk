@@ -724,6 +724,12 @@ export class InteractiveMode implements InteractiveModeContext {
 			return;
 		}
 
+		// Abort the agent to prevent it from continuing (e.g., calling exit_plan_mode
+		// again) while the popup is showing. The event listener fires asynchronously
+		// (agent's #emit is fire-and-forget), so without this the model sees "Plan
+		// ready for approval." and immediately calls exit_plan_mode in a loop.
+		await this.session.abort();
+
 		const planFilePath = details.planFilePath || this.planModePlanFilePath || (await this.#getPlanFilePath());
 		this.planModePlanFilePath = planFilePath;
 		const planContent = await this.#readPlanFile(planFilePath);
