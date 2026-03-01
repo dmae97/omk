@@ -264,7 +264,7 @@ export class MCPCommandController {
 						let oauth = authResult.authType === "oauth" ? (authResult.oauth ?? null) : null;
 						if (!oauth && finalConfig.url) {
 							try {
-								oauth = await discoverOAuthEndpoints(finalConfig.url);
+								oauth = await discoverOAuthEndpoints(finalConfig.url, authResult.authServerUrl);
 							} catch {
 								// Ignore discovery error and handle below.
 							}
@@ -574,7 +574,7 @@ export class MCPCommandController {
 		let oauth = authResult.authType === "oauth" ? (authResult.oauth ?? null) : null;
 
 		if (!oauth && (config.type === "http" || config.type === "sse") && config.url) {
-			oauth = await discoverOAuthEndpoints(config.url);
+			oauth = await discoverOAuthEndpoints(config.url, authResult.authServerUrl);
 		}
 
 		if (!oauth) {

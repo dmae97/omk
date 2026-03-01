@@ -947,7 +947,7 @@ export class MCPAddWizard extends Container {
 				let oauth = authResult.authType === "oauth" ? (authResult.oauth ?? null) : null;
 				if (!oauth && this.#state.transport !== "stdio" && this.#state.url) {
 					try {
-						oauth = await discoverOAuthEndpoints(this.#state.url);
+						oauth = await discoverOAuthEndpoints(this.#state.url, authResult.authServerUrl);
 					} catch {
 						// Ignore discovery failures and fallback to manual auth.
 					}

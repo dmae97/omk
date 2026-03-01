@@ -16,7 +16,23 @@ export interface AuthDetectionResult {
 	requiresAuth: boolean;
 	authType?: "oauth" | "apikey" | "unknown";
 	oauth?: OAuthEndpoints;
+	authServerUrl?: string;
 	message?: string;
+}
+
+function parseMcpAuthServerUrl(errorMessage: string): string | undefined {
+	const match = errorMessage.match(/Mcp-Auth-Server:\s*([^;\]\s]+)/i);
+	if (!match || !match[1]) return undefined;
+
+	try {
+		return new URL(match[1]).toString();
+	} catch {
+		return undefined;
+	}
+}
+
+export function extractMcpAuthServerUrl(error: Error): string | undefined {
+	return parseMcpAuthServerUrl(error.message);
 }
 
 /**
@@ -178,6 +194,8 @@ export function analyzeAuthError(error: Error): AuthDetectionResult {
 		return { requiresAuth: false };
 	}
 
+	const authServerUrl = extractMcpAuthServerUrl(error);
+
 	// Try to extract OAuth endpoints
 	const oauth = extractOAuthEndpoints(error);
 
@@ -186,6 +204,7 @@ export function analyzeAuthError(error: Error): AuthDetectionResult {
 			requiresAuth: true,
 			authType: "oauth",
 			oauth,
+			authServerUrl,
 			message: "Server requires OAuth authentication. Launching authorization flow...",
 		};
 	}
@@ -201,6 +220,7 @@ export function analyzeAuthError(error: Error): AuthDetectionResult {
 		return {
 			requiresAuth: true,
 			authType: "apikey",
+			authServerUrl,
 			message: "Server requires API key authentication.",
 		};
 	}
@@ -209,6 +229,7 @@ export function analyzeAuthError(error: Error): AuthDetectionResult {
 	return {
 		requiresAuth: true,
 		authType: "unknown",
+		authServerUrl,
 		message: "Server requires authentication but type could not be determined.",
 	};
 }
@@ -217,56 +238,107 @@ export function analyzeAuthError(error: Error): AuthDetectionResult {
  * Try to discover OAuth endpoints by querying the server's well-known endpoints.
  * This is a fallback when error responses don't include OAuth metadata.
  */
-export async function discoverOAuthEndpoints(serverUrl: string): Promise<OAuthEndpoints | null> {
+export async function discoverOAuthEndpoints(serverUrl: string, authServerUrl?: string): Promise<OAuthEndpoints | null> {
 	const wellKnownPaths = [
 		"/.well-known/oauth-authorization-server",
 		"/.well-known/openid-configuration",
+		"/.well-known/oauth-protected-resource",
 		"/oauth/metadata",
 		"/.mcp/auth",
 		"/authorize", // Some MCP servers expose OAuth config here
 	];
+	const urlsToQuery = [authServerUrl, serverUrl].filter((value): value is string => Boolean(value));
+	const visitedAuthServers = new Set<string>();
 
-	for (const path of wellKnownPaths) {
-		try {
-			const url = new URL(path, serverUrl);
-			const response = await fetch(url.toString(), {
-				method: "GET",
-				headers: { Accept: "application/json" },
-			});
+	const findEndpoints = (metadata: Record<string, unknown>): OAuthEndpoints | null => {
+		if (metadata.authorization_endpoint && metadata.token_endpoint) {
+			const scopesSupported = Array.isArray(metadata.scopes_supported)
+				? metadata.scopes_supported.filter((scope): scope is string => typeof scope === "string").join(" ")
+				: undefined;
+			return {
+				authorizationUrl: String(metadata.authorization_endpoint),
+				tokenUrl: String(metadata.token_endpoint),
+				clientId:
+					typeof metadata.client_id === "string"
+						? metadata.client_id
+						: typeof metadata.clientId === "string"
+							? metadata.clientId
+							: typeof metadata.default_client_id === "string"
+								? metadata.default_client_id
+								: typeof metadata.public_client_id === "string"
+									? metadata.public_client_id
+									: undefined,
+				scopes:
+					scopesSupported ||
+					(typeof metadata.scopes === "string"
+						? metadata.scopes
+						: typeof metadata.scope === "string"
+							? metadata.scope
+							: undefined),
+			};
+		}
 
-			if (response.ok) {
-				const metadata = (await response.json()) as Record<string, any>;
+		if (metadata.oauth || metadata.authorization || metadata.auth) {
+			const oauthData = (metadata.oauth || metadata.authorization || metadata.auth) as Record<string, unknown>;
+			if (typeof oauthData.authorization_url === "string" && typeof oauthData.token_url === "string") {
+				return {
+					authorizationUrl: oauthData.authorization_url || String(oauthData.authorizationUrl),
+					tokenUrl: oauthData.token_url || String(oauthData.tokenUrl),
+					clientId:
+						typeof oauthData.client_id === "string"
+							? oauthData.client_id
+							: typeof oauthData.clientId === "string"
+								? oauthData.clientId
+								: typeof oauthData.default_client_id === "string"
+									? oauthData.default_client_id
+									: typeof oauthData.public_client_id === "string"
+										? oauthData.public_client_id
+										: undefined,
+					scopes:
+						typeof oauthData.scopes === "string"
+							? oauthData.scopes
+							: typeof oauthData.scope === "string"
+								? oauthData.scope
+								: undefined,
+				};
+			}
+		}
 
-				// Check for standard OAuth discovery format
-				if (metadata.authorization_endpoint && metadata.token_endpoint) {
-					return {
-						authorizationUrl: metadata.authorization_endpoint,
-						tokenUrl: metadata.token_endpoint,
-						clientId:
-							metadata.client_id || metadata.clientId || metadata.default_client_id || metadata.public_client_id,
-						scopes: metadata.scopes_supported?.join(" ") || metadata.scopes || metadata.scope,
-					};
-				}
+		return null;
+	};
 
-				// Check for MCP-specific format
-				if (metadata.oauth || metadata.authorization || metadata.auth) {
-					const oauthData = metadata.oauth || metadata.authorization || metadata.auth;
-					if (oauthData.authorization_url && oauthData.token_url) {
-						return {
-							authorizationUrl: oauthData.authorization_url || oauthData.authorizationUrl,
-							tokenUrl: oauthData.token_url || oauthData.tokenUrl,
-							clientId:
-								oauthData.client_id ||
-								oauthData.clientId ||
-								oauthData.default_client_id ||
-								oauthData.public_client_id,
-							scopes: oauthData.scopes || oauthData.scope,
-						};
+	for (const baseUrl of urlsToQuery) {
+		visitedAuthServers.add(baseUrl);
+		for (const path of wellKnownPaths) {
+			try {
+				const url = new URL(path, baseUrl);
+				const response = await fetch(url.toString(), {
+					method: "GET",
+					headers: { Accept: "application/json" },
+				});
+
+				if (response.ok) {
+					const metadata = (await response.json()) as Record<string, unknown>;
+					const endpoints = findEndpoints(metadata);
+					if (endpoints) return endpoints;
+
+					if (path === "/.well-known/oauth-protected-resource") {
+						const authServers = Array.isArray(metadata.authorization_servers)
+							? metadata.authorization_servers.filter((entry): entry is string => typeof entry === "string")
+							: [];
+
+						for (const discoveredAuthServer of authServers) {
+							if (visitedAuthServers.has(discoveredAuthServer)) {
+								continue;
+							}
+							const discovered = await discoverOAuthEndpoints(serverUrl, discoveredAuthServer);
+							if (discovered) return discovered;
+						}
 					}
 				}
+			} catch {
+				// Ignore errors, try next path
 			}
-		} catch {
-			// Ignore errors, try next path
 		}
 	}
 
