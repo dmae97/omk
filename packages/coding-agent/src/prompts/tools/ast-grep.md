@@ -22,7 +22,7 @@ Performs structural code search using AST matching via native ast-grep.
 - Find prompt-template and status-line call sites in one request (scoped + typed):
   `{"patterns":["renderPromptTemplate($A)","renderStatusLine($$$ARGS)"],"lang":"typescript","path":"packages/coding-agent/src/tools/**/*.ts","include_meta":true}`
 - Exact call-shape match in one file:
-  `{"patterns":["renderStatusLine({ icon: \"pending\", title: \"AST Find\", description, meta }, uiTheme)"],"lang":"typescript","path":"packages/coding-agent/src/tools/ast-find.ts"}`
+  `{"patterns":["renderStatusLine({ icon: \"pending\", title: \"AST Grep\", description, meta }, uiTheme)"],"lang":"typescript","path":"packages/coding-agent/src/tools/ast-grep.ts"}`
 - Contextual pattern with selector — match only the identifier `foo`, not the whole call:
   `{"patterns":["foo()"],"selector":"identifier","lang":"typescript","path":"src/utils.ts"}`
 </examples>

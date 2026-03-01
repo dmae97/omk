@@ -15,8 +15,8 @@ import type { AgentOutputManager } from "../task/output-manager";
 import type { EventBus } from "../utils/event-bus";
 import { SearchTool } from "../web/search";
 import { AskTool } from "./ask";
-import { AstFindTool } from "./ast-find";
-import { AstReplaceTool } from "./ast-replace";
+import { AstEditTool } from "./ast-edit";
+import { AstGrepTool } from "./ast-grep";
 import { AwaitTool } from "./await-tool";
 import { BashTool } from "./bash";
 import { BrowserTool } from "./browser";
@@ -46,8 +46,8 @@ export * from "../session/streaming-output";
 export * from "../task";
 export * from "../web/search";
 export * from "./ask";
-export * from "./ast-find";
-export * from "./ast-replace";
+export * from "./ast-edit";
+export * from "./ast-grep";
 export * from "./await-tool";
 export * from "./bash";
 export * from "./browser";
@@ -143,8 +143,8 @@ export interface ToolSession {
 type ToolFactory = (session: ToolSession) => Tool | null | Promise<Tool | null>;
 
 export const BUILTIN_TOOLS: Record<string, ToolFactory> = {
-	ast_find: s => new AstFindTool(s),
-	ast_replace: s => new AstReplaceTool(s),
+	ast_grep: s => new AstGrepTool(s),
+	ast_edit: s => new AstEditTool(s),
 	ask: AskTool.createIf,
 	bash: s => new BashTool(s),
 	python: s => new PythonTool(s),
@@ -273,8 +273,8 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 		if (name === "todo_write") return !includeSubmitResult && session.settings.get("todo.enabled");
 		if (name === "find") return session.settings.get("find.enabled");
 		if (name === "grep") return session.settings.get("grep.enabled");
-		if (name === "ast_find") return session.settings.get("astFind.enabled");
-		if (name === "ast_replace") return session.settings.get("astReplace.enabled");
+		if (name === "ast_grep") return session.settings.get("astGrep.enabled");
+		if (name === "ast_edit") return session.settings.get("astEdit.enabled");
 		if (name === "notebook") return session.settings.get("notebook.enabled");
 		if (name === "fetch") return session.settings.get("fetch.enabled");
 		if (name === "web_search") return session.settings.get("web_search.enabled");

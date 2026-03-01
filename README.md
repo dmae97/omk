@@ -374,7 +374,7 @@ Supported platforms: `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`, `
 - **Bash interceptor**: Optionally block shell commands that have dedicated tools
 - **Per-command PTY control**: Bash tool supports `pty: true` for commands requiring a real terminal (sudo, ssh)
 - **@file auto-read**: Type `@path/to/file` in prompts to inject file contents inline
-- **AST tools**: `ast_find` and `ast_replace` for syntax-aware code search and codemods via ast-grep
+- **AST tools**: `ast_grep` and `ast_edit` for syntax-aware code search and codemods via ast-grep
 - **Sampling controls**: `topP`, `topK`, `minP`, `presencePenalty`, `repetitionPenalty` settings for fine-grained model tuning
 
 ---
@@ -1204,8 +1204,8 @@ Use `--tools <list>` to restrict available built-in tools.
 | `edit`           | In-place file editing with LINE#ID anchors                     |
 | `find`           | Find files by glob pattern                                     |
 | `grep`           | Search file content                                            |
-| `ast_find`       | Structural code search using AST matching (ast-grep)           |
-| `ast_replace`    | Structural AST-aware code rewrites (ast-grep)                  |
+| `ast_grep`       | Structural code search using AST matching (ast-grep)           |
+| `ast_edit`       | Structural AST-aware code rewrites (ast-grep)                  |
 | `lsp`            | Language server actions (11 operations)                        |
 | `notebook`       | Edit Jupyter notebooks                                         |
 | `read`           | Read files/directories (default text cap: 3000 lines)          |

@@ -324,18 +324,18 @@ fn infer_single_replace_lang(
 			.collect::<Vec<_>>()
 			.join("\n");
 		return Err(Error::from_reason(format!(
-			"`lang` is required for ast_replace when language cannot be inferred from all \
+			"`lang` is required for ast_edit when language cannot be inferred from all \
 			 files:\n{details}"
 		)));
 	}
 	if inferred.is_empty() {
 		return Err(Error::from_reason(
-			"`lang` is required for ast_replace when no files match path/glob".to_string(),
+			"`lang` is required for ast_edit when no files match path/glob".to_string(),
 		));
 	}
 	if inferred.len() > 1 {
 		return Err(Error::from_reason(format!(
-			"`lang` is required for ast_replace when path/glob resolves to multiple languages: {}",
+			"`lang` is required for ast_edit when path/glob resolves to multiple languages: {}",
 			inferred.into_iter().collect::<Vec<_>>().join(", ")
 		)));
 	}
@@ -626,8 +626,8 @@ fn run_find_for_pattern(
 
 	Ok(PatternFindResultData { pattern: pattern.to_string(), matches, total_matches, parse_errors })
 }
-#[napi(js_name = "astFind")]
-pub fn ast_find(options: AstFindOptions<'_>) -> task::Async<AstFindResult> {
+#[napi(js_name = "astGrep")]
+pub fn ast_grep(options: AstFindOptions<'_>) -> task::Async<AstFindResult> {
 	let AstFindOptions {
 		patterns,
 		lang,
@@ -647,7 +647,7 @@ pub fn ast_find(options: AstFindOptions<'_>) -> task::Async<AstFindResult> {
 	let normalized_limit = limit.unwrap_or(DEFAULT_FIND_LIMIT).max(1);
 	let normalized_offset = offset.unwrap_or(0);
 
-	task::blocking("ast_find", ct, move |ct| {
+	task::blocking("ast_grep", ct, move |ct| {
 		let patterns = normalize_pattern_list(patterns)?;
 		let strictness = parse_strictness(strictness.as_deref())?;
 		let include_meta = include_meta.unwrap_or(false);
@@ -719,8 +719,8 @@ pub fn ast_find(options: AstFindOptions<'_>) -> task::Async<AstFindResult> {
 	})
 }
 
-#[napi(js_name = "astReplace")]
-pub fn ast_replace(options: AstReplaceOptions<'_>) -> task::Async<AstReplaceResult> {
+#[napi(js_name = "astEdit")]
+pub fn ast_edit(options: AstReplaceOptions<'_>) -> task::Async<AstReplaceResult> {
 	let AstReplaceOptions {
 		rewrites,
 		lang,
@@ -737,7 +737,7 @@ pub fn ast_replace(options: AstReplaceOptions<'_>) -> task::Async<AstReplaceResu
 	} = options;
 
 	let ct = task::CancelToken::new(timeout_ms, signal);
-	task::blocking("ast_replace", ct, move |ct| {
+	task::blocking("ast_edit", ct, move |ct| {
 		let rewrite_rules = normalize_rewrite_map(rewrites)?;
 		let strictness = parse_strictness(strictness.as_deref())?;
 		let dry_run = dry_run.unwrap_or(true);

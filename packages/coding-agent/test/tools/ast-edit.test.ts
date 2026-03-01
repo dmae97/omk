@@ -23,10 +23,10 @@ function asSchemaObject(value: unknown): Record<string, unknown> {
 	return value as Record<string, unknown>;
 }
 
-describe("ast_replace tool schema", () => {
+describe("ast_edit tool schema", () => {
 	it("uses op entries as [{ pat, out }]", async () => {
 		const tools = await createTools(createTestSession());
-		const tool = tools.find(entry => entry.name === "ast_replace");
+		const tool = tools.find(entry => entry.name === "ast_edit");
 		expect(tool).toBeDefined();
 		const schema = asSchemaObject(tool?.parameters);
 		const properties = asSchemaObject(schema.properties);
@@ -43,7 +43,7 @@ describe("ast_replace tool schema", () => {
 
 	it("remains strict-representable after strict adaptation", async () => {
 		const tools = await createTools(createTestSession());
-		const tool = tools.find(entry => entry.name === "ast_replace");
+		const tool = tools.find(entry => entry.name === "ast_edit");
 		expect(tool).toBeDefined();
 		const schema = asSchemaObject(tool?.parameters);
 
@@ -52,16 +52,16 @@ describe("ast_replace tool schema", () => {
 	});
 
 	it("renders +/- lines with aligned hashline prefixes", async () => {
-		const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "ast-replace-render-"));
+		const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "ast-edit-render-"));
 		try {
 			const filePath = path.join(tempDir, "legacy.ts");
 			await Bun.write(filePath, "legacyWrap(x, value)\n");
 
 			const tools = await createTools(createTestSession(tempDir));
-			const tool = tools.find(entry => entry.name === "ast_replace");
+			const tool = tools.find(entry => entry.name === "ast_edit");
 			expect(tool).toBeDefined();
 
-			const result = await tool!.execute("ast-replace-test", {
+			const result = await tool!.execute("ast-edit-test", {
 				ops: [{ pat: "legacyWrap($A, $B)", out: "modernWrap($A, $B)" }],
 				lang: "typescript",
 				path: filePath,

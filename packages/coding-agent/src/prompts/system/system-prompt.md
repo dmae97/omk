@@ -154,12 +154,12 @@ Semantic questions **MUST** be answered with semantic tools.
 - Can the server propose fixes/imports/refactors? → `lsp code_actions` (list first, then apply with `apply: true` + `query`)
 {{/has}}
 
-{{#ifAny (includes tools "ast_find") (includes tools "ast_replace")}}
+{{#ifAny (includes tools "ast_grep") (includes tools "ast_edit")}}
 ### AST tools for structural code work
 
 When AST tools are available, syntax-aware operations take priority over text hacks.
-{{#has tools "ast_find"}}- Use `ast_find` for structural discovery (call shapes, declarations, syntax patterns) before text grep when code structure matters{{/has}}
-{{#has tools "ast_replace"}}- Use `ast_replace` for structural codemods/replacements; do not use bash `sed`/`perl`/`awk` for syntax-level rewrites{{/has}}
+{{#has tools "ast_grep"}}- Use `ast_grep` for structural discovery (call shapes, declarations, syntax patterns) before text grep when code structure matters{{/has}}
+{{#has tools "ast_edit"}}- Use `ast_edit` for structural codemods/replacements; do not use bash `sed`/`perl`/`awk` for syntax-level rewrites{{/has}}
 - Use `grep` for plain text/regex lookup only when AST shape is irrelevant
 
 #### Pattern syntax

@@ -19,7 +19,7 @@ Performs structural AST-aware rewrites via native ast-grep.
 
 <examples>
 - Preview a single exact-shape rewrite in one file:
-  `{"ops":[{"pat":"renderStatusLine({ icon: \"pending\", title: \"AST Find\", description, meta }, uiTheme)","out":"renderStatusLine({ icon: \"success\", title: \"AST Find\", description, meta }, uiTheme)"}],"lang":"typescript","path":"packages/coding-agent/src/tools/ast-find.ts","dry_run":true}`
+  `{"ops":[{"pat":"renderStatusLine({ icon: \"pending\", title: \"AST Grep\", description, meta }, uiTheme)","out":"renderStatusLine({ icon: \"success\", title: \"AST Grep\", description, meta }, uiTheme)"}],"lang":"typescript","path":"packages/coding-agent/src/tools/ast-grep.ts","dry_run":true}`
 - Preview multiple rewrites with safety caps across many files:
   `{"ops":[{"pat":"renderPromptTemplate($A)","out":"String(renderPromptTemplate($A))"},{"pat":"oldApi($$$ARGS)","out":"newApi($$$ARGS)"}],"lang":"typescript","path":"packages/coding-agent/src/tools/**/*.ts","dry_run":true,"max_files":2,"max_replacements":3}`
 - Swap two arguments using captures:
@@ -30,5 +30,5 @@ Performs structural AST-aware rewrites via native ast-grep.
 - `ops` **MUST** contain at least one concrete `{ pat, out }` entry
 - If the path pattern spans multiple languages, set `lang` explicitly for deterministic rewrites
 - Run `dry_run: true` first, review preview, then rerun with `dry_run: false` only when intent is explicit
-- For one-off local text edits, prefer the Edit tool instead of AST replace
+- For one-off local text edits, prefer the Edit tool instead of AST edit
 </critical>

@@ -269,8 +269,8 @@ function validateNative(bindings: NativeBindings, source: string): void {
 	checkFn("listDescendants");
 	checkFn("getWorkProfile");
 	checkFn("invalidateFsScanCache");
-	checkFn("astFind");
-	checkFn("astReplace");
+	checkFn("astGrep");
+	checkFn("astEdit");
 	checkFn("detectMacOSAppearance");
 	checkFn("MacAppearanceObserver");
 	if (missing.length) {

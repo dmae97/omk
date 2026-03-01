@@ -446,18 +446,18 @@ export const SETTINGS_SCHEMA = {
 			submenu: true,
 		},
 	},
-	"astFind.enabled": {
+	"astGrep.enabled": {
 		type: "boolean",
 		default: true,
-		ui: { tab: "tools", label: "Enable AST Find", description: "Enable the ast_find tool for structural AST search" },
+		ui: { tab: "tools", label: "Enable AST Grep", description: "Enable the ast_grep tool for structural AST search" },
 	},
-	"astReplace.enabled": {
+	"astEdit.enabled": {
 		type: "boolean",
 		default: true,
 		ui: {
 			tab: "tools",
-			label: "Enable AST Replace",
-			description: "Enable the ast_replace tool for structural AST rewrites",
+			label: "Enable AST Edit",
+			description: "Enable the ast_edit tool for structural AST rewrites",
 		},
 	},
 	"notebook.enabled": {

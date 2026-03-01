@@ -84,7 +84,7 @@ export interface AstReplaceResult {
 
 declare module "../bindings" {
 	interface NativeBindings {
-		astFind(options: AstFindOptions): Promise<AstFindResult>;
-		astReplace(options: AstReplaceOptions): Promise<AstReplaceResult>;
+		astGrep(options: AstFindOptions): Promise<AstFindResult>;
+		astEdit(options: AstReplaceOptions): Promise<AstReplaceResult>;
 	}
 }

@@ -3,14 +3,14 @@
 ## [Unreleased]
 ### Breaking Changes
 
-- `ast_find` parameter `pattern` (string) replaced by `patterns` (string[])
-- `ast_replace` parameters `pattern` + `rewrite` replaced by `ops: Array<{ pat: string; out: string }>`
+- `ast_grep` parameter `pattern` (string) replaced by `patterns` (string[])
+- `ast_edit` parameters `pattern` + `rewrite` replaced by `ops: Array<{ pat: string; out: string }>`
 
 ### Added
 
 - Added `gemini`, `codex`, and `synthetic` as supported values for the `providers.webSearch` setting
-- `ast_find` tool now accepts a `patterns` array (replaces single `pattern`); multiple patterns run in one native pass and results are merged before offset/limit
-- `ast_replace` tool now accepts an `ops` array of `{ pat, out }` entries (replaces `pattern` + `rewrite`); duplicate patterns are rejected upfront
+- `ast_grep` tool now accepts a `patterns` array (replaces single `pattern`); multiple patterns run in one native pass and results are merged before offset/limit
+- `ast_edit` tool now accepts an `ops` array of `{ pat, out }` entries (replaces `pattern` + `rewrite`); duplicate patterns are rejected upfront
 - AST find output now uses `>>` prefix on match-start lines and pads line numbers; directory-tree grouping with `# dir` / `## └─ file` headers for directory-scoped searches
 - AST replace output now renders diff-style (`-before` / `+after`) change previews grouped by directory
 - Both AST tools now report `scopePath`, `files`, and per-file match/replacement counts in tool details
@@ -29,8 +29,8 @@
 
 ### Fixed
 
-- `ast_replace` no longer rejects empty `out` values; an empty string now deletes matched nodes
-- `ast_replace` no longer trims `pat` and `out` values, preserving intentional whitespace
+- `ast_edit` no longer rejects empty `out` values; an empty string now deletes matched nodes
+- `ast_edit` no longer trims `pat` and `out` values, preserving intentional whitespace
 - `gemini_image` tool: corrected `responseModalities` values from `'Image'`/`'Text'` to uppercase `'IMAGE'`/`'TEXT'` matching the API enum
 
 ## [13.3.14] - 2026-02-28
@@ -40,7 +40,7 @@
 - Expanded AST tool language support from 7 to all 25 ast-grep tree-sitter languages (Bash, C, C++, C#, CSS, Elixir, Go, Haskell, HCL, HTML, Java, JavaScript, JSON, Kotlin, Lua, Nix, PHP, Python, Ruby, Rust, Scala, Solidity, Swift, TSX, TypeScript, YAML)
 - AST find now emits all lines of multiline matches with hashline tags (LINE#HASH:content) consistent with read/grep output
 - Added AST pattern syntax reference (metavariables, wildcards, variadics) to system prompt
-- Added examples and scoping guidance to ast-find and ast-replace tool prompts
+- Added examples and scoping guidance to ast-grep and ast-edit tool prompts
 - Added `provider-schema-compatibility.test.ts`: integration test that instantiates every builtin and hidden tool, runs their parameter schemas through `adaptSchemaForStrict`, `sanitizeSchemaForGoogle`, and `prepareSchemaForCCA`, and asserts zero violations against each provider's compatibility rules
 
 ### Fixed
@@ -59,9 +59,9 @@
 
 ### Added
 
-- Added `ast_find` tool for structural code search using AST matching via ast-grep, enabling syntax-aware pattern discovery across codebases
-- Added `ast_replace` tool for structural AST-aware rewrites via ast-grep, enabling safe syntax-level codemods without text-based fragility
-- Added `astFind.enabled` and `astReplace.enabled` settings to control availability of AST tools
+- Added `ast_grep` tool for structural code search using AST matching via ast-grep, enabling syntax-aware pattern discovery across codebases
+- Added `ast_edit` tool for structural AST-aware rewrites via ast-grep, enabling safe syntax-level codemods without text-based fragility
+- Added `astGrep.enabled` and `astEdit.enabled` settings to control availability of AST tools
 - Added system prompt guidance to prefer AST tools over bash text manipulation (grep/sed/awk/perl) for syntax-aware operations
 - Extracted prompt formatting logic into reusable `formatPromptContent()` utility with configurable render phases and formatting options
 - Added `type_definition` action to navigate to symbol type definitions with source context
@@ -88,10 +88,10 @@
 - Updated HTML parsing API calls from `node-html-parser` to `linkedom` across all web scrapers (arXiv, IACR, Go pkg, Read the Docs, Twitter, Wikipedia)
 - Changed element text extraction from `.text` property to `.textContent` property for compatibility with linkedom DOM API
 - Optimized document link extraction to use regex-based parsing with deduplication and a 20-link limit instead of full DOM traversal
-- Unified `path` parameter in ast_find and ast_replace tools to accept files, directories, or glob patterns directly, eliminating the separate `glob` parameter
-- Removed `strictness` parameter from ast_find and ast_replace tools
-- Removed `fail_on_parse_error` parameter from ast_replace tool (now always false)
-- Updated ast_find and ast_replace prompt guidance to clarify that `path` accepts glob patterns and no longer requires separate glob specification
+- Unified `path` parameter in ast_grep and ast_edit tools to accept files, directories, or glob patterns directly, eliminating the separate `glob` parameter
+- Removed `strictness` parameter from ast_grep and ast_edit tools
+- Removed `fail_on_parse_error` parameter from ast_edit tool (now always false)
+- Updated ast_grep and ast_edit prompt guidance to clarify that `path` accepts glob patterns and no longer requires separate glob specification
 - Refactored prompt template rendering to use unified `formatPromptContent()` function with phase-aware formatting (pre-render vs post-render)
 - Updated `format-prompts.ts` script to use centralized prompt formatting utility instead of inline implementation
 - Replaced `column` parameter with `symbol` parameter for more intuitive position specification

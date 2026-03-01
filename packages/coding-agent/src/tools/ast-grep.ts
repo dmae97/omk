@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
-import { type AstFindMatch, astFind } from "@oh-my-pi/pi-natives";
+import { type AstFindMatch, astGrep } from "@oh-my-pi/pi-natives";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { untilAborted } from "@oh-my-pi/pi-utils";
@@ -9,7 +9,7 @@ import { renderPromptTemplate } from "../config/prompt-templates";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import type { Theme } from "../modes/theme/theme";
 import { computeLineHash } from "../patch/hashline";
-import astFindDescription from "../prompts/tools/ast-find.md" with { type: "text" };
+import astGrepDescription from "../prompts/tools/ast-grep.md" with { type: "text" };
 import { Ellipsis, Hasher, type RenderCache, renderStatusLine, renderTreeList, truncateToWidth } from "../tui";
 import { resolveFileDisplayMode } from "../utils/file-display-mode";
 import type { ToolSession } from ".";
@@ -19,7 +19,7 @@ import { formatCount, formatEmptyMessage, formatErrorMessage, PREVIEW_LIMITS } f
 import { ToolError } from "./tool-errors";
 import { toolResult } from "./tool-result";
 
-const astFindSchema = Type.Object({
+const astGrepSchema = Type.Object({
 	patterns: Type.Array(Type.String(), { minItems: 1, description: "AST patterns to match" }),
 	lang: Type.Optional(Type.String({ description: "Language override" })),
 	path: Type.Optional(Type.String({ description: "File, directory, or glob pattern to search (default: cwd)" })),
@@ -30,7 +30,7 @@ const astFindSchema = Type.Object({
 	include_meta: Type.Optional(Type.Boolean({ description: "Include metavariable captures" })),
 });
 
-export interface AstFindToolDetails {
+export interface AstGrepToolDetails {
 	matchCount: number;
 	fileCount: number;
 	filesSearched: number;
@@ -42,24 +42,24 @@ export interface AstFindToolDetails {
 	meta?: OutputMeta;
 }
 
-export class AstFindTool implements AgentTool<typeof astFindSchema, AstFindToolDetails> {
-	readonly name = "ast_find";
-	readonly label = "AST Find";
+export class AstGrepTool implements AgentTool<typeof astGrepSchema, AstGrepToolDetails> {
+	readonly name = "ast_grep";
+	readonly label = "AST Grep";
 	readonly description: string;
-	readonly parameters = astFindSchema;
+	readonly parameters = astGrepSchema;
 	readonly strict = true;
 
 	constructor(private readonly session: ToolSession) {
-		this.description = renderPromptTemplate(astFindDescription);
+		this.description = renderPromptTemplate(astGrepDescription);
 	}
 
 	async execute(
 		_toolCallId: string,
-		params: Static<typeof astFindSchema>,
+		params: Static<typeof astGrepSchema>,
 		signal?: AbortSignal,
-		_onUpdate?: AgentToolUpdateCallback<AstFindToolDetails>,
+		_onUpdate?: AgentToolUpdateCallback<AstGrepToolDetails>,
 		_context?: AgentToolContext,
-	): Promise<AgentToolResult<AstFindToolDetails>> {
+	): Promise<AgentToolResult<AstGrepToolDetails>> {
 		return untilAborted(signal, async () => {
 			const patterns = [
 				...new Set(params.patterns.map(pattern => pattern.trim()).filter(pattern => pattern.length > 0)),
@@ -114,7 +114,7 @@ export class AstFindTool implements AgentTool<typeof astFindSchema, AstFindToolD
 				throw new ToolError(`Path not found: ${resolvedSearchPath}`);
 			}
 
-			const result = await astFind({
+			const result = await astGrep({
 				patterns,
 				lang: params.lang?.trim(),
 				path: resolvedSearchPath,
@@ -154,7 +154,7 @@ export class AstFindTool implements AgentTool<typeof astFindSchema, AstFindToolD
 				matchesByFile.get(relativePath)!.push(match);
 			}
 
-			const baseDetails: AstFindToolDetails = {
+			const baseDetails: AstGrepToolDetails = {
 				matchCount: result.totalMatches,
 				fileCount: result.filesWithMatches,
 				filesSearched: result.filesSearched,
@@ -237,7 +237,7 @@ export class AstFindTool implements AgentTool<typeof astFindSchema, AstFindToolD
 				}
 			}
 
-			const details: AstFindToolDetails = {
+			const details: AstGrepToolDetails = {
 				...baseDetails,
 				fileMatches: fileList.map(filePath => ({
 					path: filePath,
@@ -260,7 +260,7 @@ export class AstFindTool implements AgentTool<typeof astFindSchema, AstFindToolD
 // TUI Renderer
 // =============================================================================
 
-interface AstFindRenderArgs {
+interface AstGrepRenderArgs {
 	patterns?: string[];
 	lang?: string;
 	path?: string;
@@ -273,9 +273,9 @@ interface AstFindRenderArgs {
 
 const COLLAPSED_MATCH_LIMIT = PREVIEW_LIMITS.COLLAPSED_LINES * 2;
 
-export const astFindToolRenderer = {
+export const astGrepToolRenderer = {
 	inline: true,
-	renderCall(args: AstFindRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
+	renderCall(args: AstGrepRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
 		const meta: string[] = [];
 		if (args.lang) meta.push(`lang:${args.lang}`);
 		if (args.path) meta.push(`in ${args.path}`);
@@ -288,15 +288,15 @@ export const astFindToolRenderer = {
 
 		const description =
 			args.patterns?.length === 1 ? args.patterns[0] : args.patterns ? `${args.patterns.length} patterns` : "?";
-		const text = renderStatusLine({ icon: "pending", title: "AST Find", description, meta }, uiTheme);
+		const text = renderStatusLine({ icon: "pending", title: "AST Grep", description, meta }, uiTheme);
 		return new Text(text, 0, 0);
 	},
 
 	renderResult(
-		result: { content: Array<{ type: string; text?: string }>; details?: AstFindToolDetails; isError?: boolean },
+		result: { content: Array<{ type: string; text?: string }>; details?: AstGrepToolDetails; isError?: boolean },
 		options: RenderResultOptions,
 		uiTheme: Theme,
-		args?: AstFindRenderArgs,
+		args?: AstGrepRenderArgs,
 	): Component {
 		const details = result.details;
 
@@ -315,7 +315,7 @@ export const astFindToolRenderer = {
 			const meta = ["0 matches"];
 			if (details?.scopePath) meta.push(`in ${details.scopePath}`);
 			if (filesSearched > 0) meta.push(`searched ${filesSearched}`);
-			const header = renderStatusLine({ icon: "warning", title: "AST Find", description, meta }, uiTheme);
+			const header = renderStatusLine({ icon: "warning", title: "AST Grep", description, meta }, uiTheme);
 			const lines = [header, formatEmptyMessage("No matches found", uiTheme)];
 			if (details?.parseErrors?.length) {
 				for (const err of details.parseErrors) {
@@ -332,7 +332,7 @@ export const astFindToolRenderer = {
 		if (limitReached) meta.push(uiTheme.fg("warning", "limit reached"));
 		const description = args?.patterns?.length === 1 ? args.patterns[0] : undefined;
 		const header = renderStatusLine(
-			{ icon: limitReached ? "warning" : "success", title: "AST Find", description, meta },
+			{ icon: limitReached ? "warning" : "success", title: "AST Grep", description, meta },
 			uiTheme,
 		);
 

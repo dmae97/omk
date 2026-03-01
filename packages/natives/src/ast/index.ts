@@ -16,10 +16,10 @@ export type {
 	AstStrictness,
 } from "./types";
 
-export async function astFind(options: AstFindOptions): Promise<AstFindResult> {
-	return native.astFind(options);
+export async function astGrep(options: AstFindOptions): Promise<AstFindResult> {
+	return native.astGrep(options);
 }
 
-export async function astReplace(options: AstReplaceOptions): Promise<AstReplaceResult> {
-	return native.astReplace(options);
+export async function astEdit(options: AstReplaceOptions): Promise<AstReplaceResult> {
+	return native.astEdit(options);
 }

@@ -35,8 +35,8 @@ You **MUST** use specialized tools instead of bash for ALL file operations:
 |`ls dir/`|`read(path="dir/")`|
 |`cat <<'EOF' > file`|`write(path="file", content="...")`|
 |`sed -i 's/old/new/' file`|`edit(path="file", edits=[...])`|
-- If `ast_find` / `ast_replace` tools are available in the session, you **MUST** use them for structural code search/rewrites instead of bash `grep`/`sed`/`awk`/`perl` pipelines
-- Bash is for command execution, not syntax-aware code transformation; prefer `ast_find` for discovery and `ast_replace` for codemods
+- If `ast_grep` / `ast_edit` tools are available in the session, you **MUST** use them for structural code search/rewrites instead of bash `grep`/`sed`/`awk`/`perl` pipelines
+- Bash is for command execution, not syntax-aware code transformation; prefer `ast_grep` for discovery and `ast_edit` for codemods
 - You **MUST NOT** use Bash for these operations like read, grep, find, edit, write, where specialized tools exist.
 - You **MUST NOT** use `2>&1` | `2>/dev/null` pattern, stdout and stderr are already merged.
 - You **MUST NOT** use `| head -n 50` or `| tail -n 100` pattern, use `head` and `tail` parameters instead.
