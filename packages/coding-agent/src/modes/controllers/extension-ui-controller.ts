@@ -41,7 +41,7 @@ export class ExtensionUiController {
 		const uiContext: ExtensionUIContext = {
 			select: (title, options, dialogOptions) => this.showHookSelector(title, options, dialogOptions),
 			confirm: (title, message, _dialogOptions) => this.showHookConfirm(title, message),
-			input: (title, placeholder, _dialogOptions) => this.showHookInput(title, placeholder),
+			input: (title, placeholder, dialogOptions) => this.showHookInput(title, placeholder, dialogOptions),
 			notify: (message, type) => this.showHookNotify(message, type),
 			onTerminalInput: handler => this.addExtensionTerminalInputListener(handler),
 			setStatus: (key, text) => this.setHookStatus(key, text),
@@ -561,6 +561,20 @@ export class ExtensionUiController {
 		dialogOptions?: ExtensionUIDialogOptions,
 	): Promise<string | undefined> {
 		const { promise, resolve } = Promise.withResolvers<string | undefined>();
+		let settled = false;
+		const onAbort = () => {
+			this.hideHookSelector();
+			if (!settled) {
+				settled = true;
+				resolve(undefined);
+			}
+		};
+		const finish = (value: string | undefined) => {
+			if (settled) return;
+			settled = true;
+			dialogOptions?.signal?.removeEventListener("abort", onAbort);
+			resolve(value);
+		};
 		this.#hookSelectorOverlay?.hide();
 		this.#hookSelectorOverlay = undefined;
 		const maxVisible = Math.max(4, Math.min(15, this.ctx.ui.terminal.rows - 12));
@@ -569,11 +583,11 @@ export class ExtensionUiController {
 			options,
 			option => {
 				this.hideHookSelector();
-				resolve(option);
+				finish(option);
 			},
 			() => {
 				this.hideHookSelector();
-				resolve(undefined);
+				finish(undefined);
 			},
 			{
 				initialIndex: dialogOptions?.initialIndex,
@@ -584,9 +598,15 @@ export class ExtensionUiController {
 			},
 		);
 		this.#hookSelectorOverlay = this.ctx.ui.showOverlay(this.ctx.hookSelector, this.#dialogOverlayOptions);
+		if (dialogOptions?.signal) {
+			if (dialogOptions.signal.aborted) {
+				onAbort();
+			} else {
+				dialogOptions.signal.addEventListener("abort", onAbort, { once: true });
+			}
+		}
 		return promise;
 	}
-
 	/**
 	 * Hide the hook selector.
 	 */
@@ -610,8 +630,26 @@ export class ExtensionUiController {
 	/**
 	 * Show a text input for hooks.
 	 */
-	showHookInput(title: string, placeholder?: string): Promise<string | undefined> {
+	showHookInput(
+		title: string,
+		placeholder?: string,
+		dialogOptions?: ExtensionUIDialogOptions,
+	): Promise<string | undefined> {
 		const { promise, resolve } = Promise.withResolvers<string | undefined>();
+		let settled = false;
+		const onAbort = () => {
+			this.hideHookInput();
+			if (!settled) {
+				settled = true;
+				resolve(undefined);
+			}
+		};
+		const finish = (value: string | undefined) => {
+			if (settled) return;
+			settled = true;
+			dialogOptions?.signal?.removeEventListener("abort", onAbort);
+			resolve(value);
+		};
 		this.#hookInputOverlay?.hide();
 		this.#hookInputOverlay = undefined;
 		this.ctx.hookInput = new HookInputComponent(
@@ -619,14 +657,21 @@ export class ExtensionUiController {
 			placeholder,
 			value => {
 				this.hideHookInput();
-				resolve(value);
+				finish(value);
 			},
 			() => {
 				this.hideHookInput();
-				resolve(undefined);
+				finish(undefined);
 			},
 		);
 		this.#hookInputOverlay = this.ctx.ui.showOverlay(this.ctx.hookInput, this.#dialogOverlayOptions);
+		if (dialogOptions?.signal) {
+			if (dialogOptions.signal.aborted) {
+				onAbort();
+			} else {
+				dialogOptions.signal.addEventListener("abort", onAbort, { once: true });
+			}
+		}
 		return promise;
 	}
 

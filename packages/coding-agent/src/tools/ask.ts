@@ -14,9 +14,11 @@
  *   - Use recommended: <index> to mark the default option; "(Recommended)" suffix is added automatically
  *   - Questions may time out and auto-select the recommended option (configurable, disabled in plan mode)
  */
+
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { TERMINAL, Text } from "@oh-my-pi/pi-tui";
+import { ptree, untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
@@ -25,6 +27,7 @@ import askDescription from "../prompts/tools/ask.md" with { type: "text" };
 import { renderStatusLine } from "../tui";
 import type { ToolSession } from ".";
 import { formatErrorMessage, formatMeta, formatTitle } from "./render-utils";
+import { ToolAbortError } from "./tool-errors";
 
 // =============================================================================
 // Types
@@ -110,14 +113,9 @@ interface UIContext {
 	select(
 		prompt: string,
 		options: string[],
-		options_?: { initialIndex?: number; timeout?: number; outline?: boolean },
+		options_?: { initialIndex?: number; signal?: AbortSignal; outline?: boolean },
 	): Promise<string | undefined>;
-	input(prompt: string): Promise<string | undefined>;
-}
-
-interface AskQuestionOptions {
-	/** Timeout in milliseconds, null/undefined to disable */
-	timeout?: number | null;
+	input(prompt: string, options_?: { signal?: AbortSignal }): Promise<string | undefined>;
 }
 
 async function askSingleQuestion(
@@ -126,9 +124,8 @@ async function askSingleQuestion(
 	optionLabels: string[],
 	multi: boolean,
 	recommended?: number,
-	options?: AskQuestionOptions,
+	signal?: AbortSignal,
 ): Promise<SelectionResult> {
-	const timeout = options?.timeout ?? undefined;
 	const doneLabel = getDoneOptionLabel();
 	let selectedOptions: string[] = [];
 	let customInput: string | undefined;
@@ -152,22 +149,27 @@ async function askSingleQuestion(
 			opts.push(OTHER_OPTION);
 
 			const prefix = selected.size > 0 ? `(${selected.size} selected) ` : "";
-			const selectionStart = Date.now();
-			const choice = await ui.select(`${prefix}${question}`, opts, {
-				initialIndex: cursorIndex,
-				timeout: timeout ?? undefined,
-				outline: true,
-			});
-			const elapsed = Date.now() - selectionStart;
-			const timedOut = timeout != null && elapsed >= timeout;
+			const choice = signal
+				? await untilAborted(signal, () =>
+						ui.select(`${prefix}${question}`, opts, {
+							initialIndex: cursorIndex,
+							signal,
+							outline: true,
+						}),
+					)
+				: await ui.select(`${prefix}${question}`, opts, {
+						initialIndex: cursorIndex,
+						signal,
+						outline: true,
+					});
 
 			if (choice === undefined || choice === doneLabel) break;
 
 			if (choice === OTHER_OPTION) {
-				if (!timedOut) {
-					const input = await ui.input("Enter your response:");
-					if (input) customInput = input;
-				}
+				const input = signal
+					? await untilAborted(signal, () => ui.input("Enter your response:", { signal }))
+					: await ui.input("Enter your response:", { signal });
+				if (input) customInput = input;
 				break;
 			}
 
@@ -192,21 +194,28 @@ async function askSingleQuestion(
 					selected.add(opt);
 				}
 			}
-
-			if (timedOut) {
-				break;
-			}
 		}
 		selectedOptions = Array.from(selected);
 	} else {
 		const displayLabels = addRecommendedSuffix(optionLabels, recommended);
-		const choice = await ui.select(question, [...displayLabels, OTHER_OPTION], {
-			timeout: timeout ?? undefined,
-			initialIndex: recommended,
-			outline: true,
-		});
+		const choice = signal
+			? await untilAborted(signal, () =>
+					ui.select(question, [...displayLabels, OTHER_OPTION], {
+						initialIndex: recommended,
+						signal,
+						outline: true,
+					}),
+				)
+			: await ui.select(question, [...displayLabels, OTHER_OPTION], {
+					initialIndex: recommended,
+					signal,
+					outline: true,
+				});
+
 		if (choice === OTHER_OPTION) {
-			const input = await ui.input("Enter your response:");
+			const input = signal
+				? await untilAborted(signal, () => ui.input("Enter your response:", { signal }))
+				: await ui.input("Enter your response:", { signal });
 			if (input) customInput = input;
 		} else if (choice) {
 			selectedOptions = [stripRecommendedSuffix(choice)];
@@ -265,7 +274,7 @@ export class AskTool implements AgentTool<typeof askSchema, AskToolDetails> {
 	async execute(
 		_toolCallId: string,
 		params: AskParams,
-		_signal?: AbortSignal,
+		signal?: AbortSignal,
 		_onUpdate?: AgentToolUpdateCallback<AskToolDetails>,
 		context?: AgentToolContext,
 	): Promise<AgentToolResult<AskToolDetails>> {
@@ -277,7 +286,11 @@ export class AskTool implements AgentTool<typeof askSchema, AskToolDetails> {
 			};
 		}
 
-		const { ui } = context;
+		const extensionUi = context.ui;
+		const ui: UIContext = {
+			select: (prompt, options, dialogOptions) => extensionUi.select(prompt, options, dialogOptions),
+			input: (prompt, dialogOptions) => extensionUi.input(prompt, undefined, dialogOptions),
+		};
 
 		// Determine timeout based on settings and plan mode
 		const planModeEnabled = this.session.getPlanModeState?.()?.enabled ?? false;
@@ -296,18 +309,41 @@ export class AskTool implements AgentTool<typeof askSchema, AskToolDetails> {
 			};
 		}
 
+		const askQuestion = async (q: AskParams["questions"][number]) => {
+			const optionLabels = q.options.map(o => o.label);
+			const timeoutSignal = timeout == null ? undefined : AbortSignal.timeout(timeout);
+			const questionSignal = ptree.combineSignals(signal, timeoutSignal);
+			try {
+				const { selectedOptions, customInput } = await askSingleQuestion(
+					ui,
+					q.question,
+					optionLabels,
+					q.multi ?? false,
+					q.recommended,
+					questionSignal,
+				);
+				return { optionLabels, selectedOptions, customInput, timedOut: false };
+			} catch (error) {
+				if (error instanceof Error && error.name === "AbortError") {
+					if (signal?.aborted) {
+						throw new ToolAbortError("Ask input was cancelled");
+					}
+					if (timeoutSignal?.aborted) {
+						return { optionLabels, selectedOptions: [], customInput: undefined, timedOut: true };
+					}
+				}
+				throw error;
+			}
+		};
+
 		if (params.questions.length === 1) {
 			const [q] = params.questions;
-			const optionLabels = q.options.map(o => o.label);
-			const { selectedOptions, customInput } = await askSingleQuestion(
-				ui,
-				q.question,
-				optionLabels,
-				q.multi ?? false,
-				q.recommended,
-				{ timeout },
-			);
+			const { optionLabels, selectedOptions, customInput, timedOut } = await askQuestion(q);
 
+			if (!timedOut && selectedOptions.length === 0 && !customInput) {
+				context.abort();
+				throw new ToolAbortError("Ask tool was cancelled by the user");
+			}
 			const details: AskToolDetails = {
 				question: q.question,
 				options: optionLabels,
@@ -333,16 +369,12 @@ export class AskTool implements AgentTool<typeof askSchema, AskToolDetails> {
 		const results: QuestionResult[] = [];
 
 		for (const q of params.questions) {
-			const optionLabels = q.options.map(o => o.label);
-			const { selectedOptions, customInput } = await askSingleQuestion(
-				ui,
-				q.question,
-				optionLabels,
-				q.multi ?? false,
-				q.recommended,
-				{ timeout },
-			);
+			const { optionLabels, selectedOptions, customInput, timedOut } = await askQuestion(q);
 
+			if (!timedOut && selectedOptions.length === 0 && !customInput) {
+				context.abort();
+				throw new ToolAbortError("Ask tool was cancelled by the user");
+			}
 			results.push({
 				id: q.id,
 				question: q.question,

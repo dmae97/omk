@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Enforced tool decision in plan mode—agent now requires calling either `ask` or `exit_plan_mode` when a turn ends without a required tool call
@@ -10,10 +9,13 @@
 
 ### Changed
 
+- Replaced timeout-based cancellation with AbortSignal-based cancellation in the `ask` tool for more reliable user interaction handling
+- Updated `ask` tool to distinguish between user-initiated cancellation and timeout-driven auto-selection, with only user cancellation aborting the turn
 - Updated hashline documentation to clarify that `\t` in JSON represents a real tab character, not a literal backslash-t sequence
 
 ### Fixed
 
+- Fixed race condition in dialog overlay handling where multiple concurrent resolutions could occur
 - Cancelling the `ask` tool now aborts the current turn instead of returning a normal cancelled selection, while timeout-driven auto-cancel still returns without aborting
 
 ## [13.5.2] - 2026-03-01
