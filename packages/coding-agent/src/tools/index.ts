@@ -22,6 +22,7 @@ import { BashTool } from "./bash";
 import { BrowserTool } from "./browser";
 import { CalculatorTool } from "./calculator";
 import { CancelJobTool } from "./cancel-job";
+import { type CheckpointState, CheckpointTool, RewindTool } from "./checkpoint";
 import { ExitPlanModeTool } from "./exit-plan-mode";
 import { FetchTool } from "./fetch";
 import { FindTool } from "./find";
@@ -55,6 +56,7 @@ export * from "./bash";
 export * from "./browser";
 export * from "./calculator";
 export * from "./cancel-job";
+export * from "./checkpoint";
 export * from "./exit-plan-mode";
 export * from "./fetch";
 export * from "./find";
@@ -145,6 +147,10 @@ export interface ToolSession {
 	setTodoPhases?: (phases: TodoPhase[]) => void;
 	/** Pending action store for preview/apply workflows */
 	pendingActionStore?: import("./pending-action").PendingActionStore;
+	/** Get active checkpoint state if any. */
+	getCheckpointState?: () => CheckpointState | undefined;
+	/** Set or clear active checkpoint state. */
+	setCheckpointState?: (state: CheckpointState | null) => void;
 }
 
 type ToolFactory = (session: ToolSession) => Tool | null | Promise<Tool | null>;
@@ -165,6 +171,8 @@ export const BUILTIN_TOOLS: Record<string, ToolFactory> = {
 	notebook: s => new NotebookTool(s),
 	read: s => new ReadTool(s),
 	browser: s => new BrowserTool(s),
+	checkpoint: CheckpointTool.createIf,
+	rewind: RewindTool.createIf,
 	task: TaskTool.create,
 	cancel_job: CancelJobTool.createIf,
 	await: AwaitTool.createIf,
@@ -291,6 +299,7 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 		if (name === "lsp") return session.settings.get("lsp.enabled");
 		if (name === "calc") return session.settings.get("calc.enabled");
 		if (name === "browser") return session.settings.get("browser.enabled");
+		if (name === "checkpoint" || name === "rewind") return session.settings.get("checkpoint.enabled");
 		if (name === "task") {
 			const maxDepth = session.settings.get("task.maxRecursionDepth") ?? 2;
 			const currentDepth = session.taskDepth ?? 0;

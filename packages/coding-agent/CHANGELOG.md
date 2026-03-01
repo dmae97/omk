@@ -1,8 +1,12 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added `checkpoint` tool to create context checkpoints before exploratory work, allowing you to investigate with many intermediate tool calls and minimize context cost afterward
+- Added `rewind` tool to end an active checkpoint and replace intermediate exploration messages with a concise investigation report
+- Added `checkpoint.enabled` setting to control availability of the checkpoint and rewind tools
 - Added `render_mermaid` tool to convert Mermaid graph source into ASCII diagram output
 - Added `renderMermaid.enabled` setting to control availability of the render_mermaid tool
 

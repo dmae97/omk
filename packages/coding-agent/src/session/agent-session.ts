@@ -84,6 +84,7 @@ import planModeActivePrompt from "../prompts/system/plan-mode-active.md" with { 
 import planModeReferencePrompt from "../prompts/system/plan-mode-reference.md" with { type: "text" };
 import ttsrInterruptTemplate from "../prompts/system/ttsr-interrupt.md" with { type: "text" };
 import type { SecretObfuscator } from "../secrets/obfuscator";
+import type { CheckpointState } from "../tools/checkpoint";
 import { outputMeta } from "../tools/output-meta";
 import { resolveToCwd } from "../tools/path-utils";
 import type { PendingActionStore } from "../tools/pending-action";
@@ -373,6 +374,8 @@ export class AgentSession {
 	#promptInFlight = false;
 	#obfuscator: SecretObfuscator | undefined;
 	#pendingActionStore: PendingActionStore | undefined;
+	#checkpointState: CheckpointState | undefined = undefined;
+	#pendingRewindReport: string | undefined = undefined;
 	#promptGeneration = 0;
 	#providerSessionState = new Map<string, ProviderSessionState>();
 
@@ -512,6 +515,11 @@ export class AgentSession {
 		// TTSR: Increment message count on turn end (for repeat-after-gap tracking)
 		if (event.type === "turn_end" && this.#ttsrManager) {
 			this.#ttsrManager.incrementMessageCount();
+		}
+		if (event.type === "turn_end" && this.#pendingRewindReport) {
+			const report = this.#pendingRewindReport;
+			this.#pendingRewindReport = undefined;
+			await this.#applyRewind(report);
 		}
 
 		// TTSR: Check for pattern matches on assistant text/thinking and tool argument deltas
@@ -674,7 +682,7 @@ export class AgentSession {
 			if (event.message.role === "toolResult") {
 				const { toolName, details, isError, content } = event.message as {
 					toolName?: string;
-					details?: { path?: string; phases?: TodoPhase[] };
+					details?: { path?: string; phases?: TodoPhase[]; report?: string; startedAt?: string };
 					isError?: boolean;
 					content?: Array<TextContent | ImageContent>;
 				};
@@ -704,6 +712,23 @@ export class AgentSession {
 						{ deliverAs: "nextTurn" },
 					);
 				}
+				if (toolName === "checkpoint" && !isError) {
+					const checkpointEntryId = this.sessionManager.getEntries().at(-1)?.id ?? null;
+					this.#checkpointState = {
+						checkpointMessageCount: this.agent.state.messages.length,
+						checkpointEntryId,
+						startedAt: details?.startedAt ?? new Date().toISOString(),
+					};
+					this.#pendingRewindReport = undefined;
+				}
+				if (toolName === "rewind" && !isError && this.#checkpointState) {
+					const detailReport = typeof details?.report === "string" ? details.report.trim() : "";
+					const textReport = content?.find(part => part.type === "text")?.text?.trim() ?? "";
+					const report = detailReport || textReport;
+					if (report.length > 0) {
+						this.#pendingRewindReport = report;
+					}
+				}
 			}
 		}
 
@@ -723,11 +748,18 @@ export class AgentSession {
 				if (didRetry) return; // Retry was initiated, don't proceed to compaction
 			}
 
+			if (msg.stopReason === "aborted" && this.#checkpointState) {
+				this.#checkpointState = undefined;
+				this.#pendingRewindReport = undefined;
+			}
 			const compactionTask = this.#checkCompaction(msg);
 			this.#trackPostPromptTask(compactionTask);
 			await compactionTask;
 			// Check for incomplete todos (unless there was an error or abort)
 			if (msg.stopReason !== "error" && msg.stopReason !== "aborted") {
+				if (this.#enforceRewindBeforeYield()) {
+					return;
+				}
 				await this.#checkTodoCompletion();
 			}
 		}
@@ -1676,6 +1708,17 @@ export class AgentSession {
 
 	setPlanReferencePath(path: string): void {
 		this.#planReferencePath = path;
+	}
+
+	getCheckpointState(): CheckpointState | undefined {
+		return this.#checkpointState;
+	}
+
+	setCheckpointState(state: CheckpointState | undefined): void {
+		this.#checkpointState = state;
+		if (!state) {
+			this.#pendingRewindReport = undefined;
+		}
 	}
 
 	/**
@@ -3237,6 +3280,54 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				await this.#runAutoCompaction("threshold", false);
 			}
 		}
+	}
+	#enforceRewindBeforeYield(): boolean {
+		if (!this.#checkpointState || this.#pendingRewindReport) {
+			return false;
+		}
+		const reminder = [
+			"<system-warning>",
+			"You are in an active checkpoint. You MUST call rewind with your investigation findings before yielding. Do NOT yield without completing the checkpoint.",
+			"</system-warning>",
+		].join("\n");
+		this.agent.appendMessage({
+			role: "developer",
+			content: [{ type: "text", text: reminder }],
+			timestamp: Date.now(),
+		});
+		this.#scheduleAgentContinue({ generation: this.#promptGeneration });
+		return true;
+	}
+
+	async #applyRewind(report: string): Promise<void> {
+		const checkpointState = this.#checkpointState;
+		if (!checkpointState) {
+			return;
+		}
+		const safeCount = Math.max(0, Math.min(checkpointState.checkpointMessageCount, this.agent.state.messages.length));
+		this.agent.replaceMessages(this.agent.state.messages.slice(0, safeCount));
+		try {
+			this.sessionManager.branchWithSummary(checkpointState.checkpointEntryId, report, {
+				startedAt: checkpointState.startedAt,
+			});
+		} catch (error) {
+			logger.warn("Rewind branch checkpoint missing, falling back to root", {
+				error: error instanceof Error ? error.message : String(error),
+			});
+			this.sessionManager.branchWithSummary(null, report, { startedAt: checkpointState.startedAt });
+		}
+		const details = { startedAt: checkpointState.startedAt, rewoundAt: new Date().toISOString() };
+		this.agent.appendMessage({
+			role: "custom",
+			customType: "rewind-report",
+			content: report,
+			display: false,
+			details,
+			timestamp: Date.now(),
+		});
+		this.sessionManager.appendCustomMessageEntry("rewind-report", report, false, details);
+		this.#checkpointState = undefined;
+		this.#pendingRewindReport = undefined;
 	}
 	/**
 	 * Check if agent stopped with incomplete todos and prompt to continue.

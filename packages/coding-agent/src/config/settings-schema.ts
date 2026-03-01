@@ -474,6 +474,15 @@ export const SETTINGS_SCHEMA = {
 		default: true,
 		ui: { tab: "tools", label: "Enable Notebook", description: "Enable the notebook tool for notebook editing" },
 	},
+	"checkpoint.enabled": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "tools",
+			label: "Enable Checkpoint/Rewind",
+			description: "Enable the checkpoint and rewind tools for context checkpointing",
+		},
+	},
 	"fetch.enabled": {
 		type: "boolean",
 		default: true,

@@ -806,6 +806,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		getCompactContext: () => session.formatCompactContext(),
 		getTodoPhases: () => session.getTodoPhases(),
 		setTodoPhases: phases => session.setTodoPhases(phases),
+		getCheckpointState: () => session.getCheckpointState(),
+		setCheckpointState: state => session.setCheckpointState(state ?? undefined),
 		allocateOutputArtifact: async toolType => {
 			try {
 				return await sessionManager.allocateArtifactPath(toolType);
