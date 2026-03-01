@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.5.5] - 2026-03-01
+
 ### Added
 
 - Added Kagi web search provider (Search API v0) with related searches support and automatic `KAGI_API_KEY` detection

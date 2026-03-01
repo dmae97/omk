@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.5.5] - 2026-03-01
+
 ### Changed
 
 - Anthropic Claude system-block cloaking now leaves the agent identity block uncached and applies `cache_control: { type: "ephemeral" }` to injected user system blocks without forcing `ttl: "1h"`

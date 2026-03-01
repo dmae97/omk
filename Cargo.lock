@@ -1264,9 +1264,9 @@ dependencies = [
 
 [[package]]
 name = "html-to-markdown-rs"
-version = "2.27.0"
+version = "2.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "765e4035dc83227d832a8ecf765649cfb962946a53967d0fd05a19dd40b16e11"
+checksum = "88c6e0364111baca9d44e113df6e3150b109146233b350bf24b506d65a2e6963"
 dependencies = [
  "ahash",
  "astral-tl",
@@ -1447,9 +1447,9 @@ dependencies = [
 
 [[package]]
 name = "inferno"
-version = "0.12.5"
+version = "0.12.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20dd69640582458beceefcf045f8de34263d45194999c9a49fcd53e5b503d522"
+checksum = "90807d610575744524d9bdc69f3885d96f0e6c3354565b0828354a7ff2a262b8"
 dependencies = [
  "ahash",
  "itoa",
@@ -2108,7 +2108,7 @@ dependencies = [
 
 [[package]]
 name = "pi-natives"
-version = "13.5.4"
+version = "13.5.5"
 dependencies = [
  "arboard",
  "ast-grep-core",
@@ -2269,12 +2269,9 @@ dependencies = [
 
 [[package]]
 name = "pxfm"
-version = "0.1.27"
+version = "0.1.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7186d3822593aa4393561d186d1393b3923e9d6163d3fbfd6e825e3e6cf3e6a8"
-dependencies = [
- "num-traits",
-]
+checksum = "b5a041e753da8b807c9255f28de81879c78c876392ff2469cde94799b2896b9d"
 
 [[package]]
 name = "quick-error"
