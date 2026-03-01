@@ -599,6 +599,7 @@ async fn run_shell_command(
 	// for a short period, then cancel.
 	const POST_EXIT_IDLE: Duration = Duration::from_millis(250);
 	const POST_EXIT_MAX: Duration = Duration::from_secs(2);
+	const READER_SHUTDOWN_TIMEOUT: Duration = Duration::from_millis(250);
 
 	let mut reader_finished = false;
 	let mut idle_timer = Box::pin(time::sleep(POST_EXIT_IDLE));
@@ -624,7 +625,15 @@ async fn run_shell_command(
 
 	if !reader_finished {
 		reader_cancel.cancel();
-		let _ = reader_handle.await;
+		match time::timeout(READER_SHUTDOWN_TIMEOUT, &mut reader_handle).await {
+			Ok(res) => {
+				let _ = res;
+			}
+			Err(_) => {
+				reader_handle.abort();
+				let _ = reader_handle.await;
+			}
+	}
 	}
 	cancel_bridge.abort();
 	let _ = cancel_bridge.await;

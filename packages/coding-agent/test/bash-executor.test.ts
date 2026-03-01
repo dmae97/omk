@@ -244,6 +244,25 @@ describe("executeBash", () => {
 		}
 	});
 
+	it("completes even when background job keeps stdout pipe open", async () => {
+		if (process.platform === "win32") return;
+
+		const runPromise = executeBash("{ sleep 3; echo late; } & echo immediate", {
+			cwd: tempDir,
+			timeout: 5000,
+		});
+		const timed = await Promise.race([
+			runPromise.then(result => ({ type: "result" as const, result })),
+			Bun.sleep(1500).then(() => ({ type: "timeout" as const })),
+		]);
+
+		expect(timed.type).toBe("result");
+		if (timed.type === "result") {
+			expect(timed.result.cancelled).toBe(false);
+			expect(timed.result.exitCode).toBe(0);
+			expect(timed.result.output).toContain("immediate");
+		}
+	});
 	it("kills spawned process on timeout (not just orphans it)", async () => {
 		if (process.platform === "win32") return;
 
