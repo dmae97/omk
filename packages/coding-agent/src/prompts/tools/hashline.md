@@ -43,6 +43,7 @@ Every edit has `op`, `pos`, and `lines`. Range replaces also have `end`. Both `p
 3. **Range end tag (inclusive):** `end` is inclusive and **MUST** point to the final line being replaced.
    - If `lines` includes a closing boundary token (`}`, `]`, `)`, `);`, `},`), `end` **MUST** include the original boundary line.
    - You **MUST NOT** set `end` to an interior line and then re-add the boundary token in `lines`; that duplicates the next surviving line.
+   - To remove a line while keeping its neighbors, **delete** it (`lines: null`). You **MUST NOT** replace it with the content of an adjacent line — that line still exists and will be duplicated.
 </rules>
 
 <recovery>
