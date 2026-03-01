@@ -99,6 +99,34 @@ describe("wrapTextWithAnsi", () => {
 		});
 	});
 
+
+	describe("strikethrough styling", () => {
+		it("disables strikethrough at wrapped line ends while preserving fg/bg colors", () => {
+			const strikeOn = "\x1b[9m";
+			const strikeOff = "\x1b[29m";
+			const fgRed = "\x1b[38;5;196m";
+			const bgGray = "\x1b[48;5;236m";
+			const reset = "\x1b[0m";
+			const text = `${fgRed}${bgGray}${strikeOn}strikethrough content that wraps across lines${strikeOff}${reset}`;
+
+			const wrapped = wrapTextWithAnsi(text, 16);
+			expect(wrapped.length).toBeGreaterThan(1);
+
+			for (let i = 0; i < wrapped.length - 1; i++) {
+				const line = wrapped[i];
+				if (line.includes(strikeOn) || line.includes(";9") || line.includes("[9;")) {
+					expect(line.endsWith(strikeOff)).toBe(true);
+					expect(line.endsWith("\x1b[0m")).toBe(false);
+				}
+			}
+
+			for (let i = 1; i < wrapped.length; i++) {
+				const line = wrapped[i];
+				expect(line.includes("38;5;196")).toBe(true);
+				expect(line.includes("48;5;236")).toBe(true);
+			}
+		});
+	});
 	describe("basic wrapping", () => {
 		it("should wrap plain text correctly", () => {
 			const text = "hello world this is a test";

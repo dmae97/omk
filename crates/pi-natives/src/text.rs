@@ -496,9 +496,23 @@ fn write_active_codes(state: &AnsiState, out: &mut Vec<u16>) {
 
 #[inline]
 fn write_line_end_reset(state: &AnsiState, out: &mut Vec<u16>) {
-	if state.attrs & ATTR_UNDERLINE != 0 {
-		out.extend_from_slice(&[ESC, b'[' as u16, b'2' as u16, b'4' as u16, b'm' as u16]);
+	let has_underline = state.attrs & ATTR_UNDERLINE != 0;
+	let has_strike = state.attrs & ATTR_STRIKE != 0;
+	if !has_underline && !has_strike {
+		return;
 	}
+
+	out.extend_from_slice(&[ESC, b'[' as u16]);
+	if has_underline {
+		out.extend_from_slice(&[b'2' as u16, b'4' as u16]);
+		if has_strike {
+			out.push(b';' as u16);
+		}
+	}
+	if has_strike {
+		out.extend_from_slice(&[b'2' as u16, b'9' as u16]);
+	}
+	out.push(b'm' as u16);
 }
 
 fn update_state_from_text(data: &[u16], state: &mut AnsiState) {
@@ -1413,5 +1427,26 @@ mod tests {
 		assert!(first.starts_with("\x1b[38;2;156;163;176m"));
 		assert!(second.starts_with("\x1b[38;2;156;163;176m"));
 		assert!(second.contains("world"));
+	}
+
+	#[test]
+	fn test_wrap_text_with_ansi_resets_strike_without_resetting_colors() {
+		let data = to_u16("\x1b[38;5;196m\x1b[48;5;236m\x1b[9mstrikethrough content wraps\x1b[29m\x1b[0m");
+		let lines = wrap_text_with_ansi_impl(&data, 12, DEFAULT_TAB_WIDTH);
+		assert!(lines.len() > 1);
+
+		for line in &lines[..lines.len() - 1] {
+			let line_text = String::from_utf16_lossy(line);
+			if line_text.contains("\x1b[9m") {
+				assert!(line_text.ends_with("\x1b[29m"));
+				assert!(!line_text.ends_with("\x1b[0m"));
+			}
+		}
+
+		for line in &lines[1..] {
+			let line_text = String::from_utf16_lossy(line);
+			assert!(line_text.contains("38;5;196"));
+			assert!(line_text.contains("48;5;236"));
+		}
 	}
 }
