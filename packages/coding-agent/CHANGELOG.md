@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
 - `ast_grep` parameter `pattern` (string) replaced by `patterns` (string[])
@@ -27,6 +26,8 @@
 
 ### Changed
 
+- Simplified `resolve` tool output rendering to use inline highlighted format instead of boxed layout
+- Updated `resolve` tool to parse source tool name from label using colon separator for cleaner display
 - AST edit tool no longer accepts `preview` parameter; all AST edit calls now return previews by default
 - AST edit workflow changed: preview is always shown, then use `resolve` tool to apply or discard changes
 - Agent now suggests calling `resolve` tool after AST edit preview with system reminder

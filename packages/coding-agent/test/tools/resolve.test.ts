@@ -89,7 +89,7 @@ describe("ResolveTool", () => {
 	});
 });
 
-it("renders a boxed decision summary for apply actions", async () => {
+it("renders a highlighted apply summary", async () => {
 	const theme = await getThemeByName("dark");
 	expect(theme).toBeDefined();
 	const uiTheme = theme!;
@@ -99,7 +99,7 @@ it("renders a boxed decision summary for apply actions", async () => {
 			content: [{ type: "text", text: "Applied 2 replacements in 1 file." }],
 			details: {
 				action: "apply",
-				reason: "Preview matches expected replacements",
+				reason: "All replacements are correct",
 				sourceToolName: "ast_edit",
 				label: "AST Edit: 2 replacements in 1 file",
 			},
@@ -109,13 +109,10 @@ it("renders a boxed decision summary for apply actions", async () => {
 	);
 
 	const rendered = sanitizeText(component.render(90).join("\n"));
-	expect(rendered).toContain("Resolve");
-	expect(rendered).toContain("Decision");
-	expect(rendered).toContain("Effect");
-	expect(rendered).toContain("Action:");
-	expect(rendered).toContain("apply");
-	expect(rendered).toContain("Target: AST Edit: 2 replacements in 1 file");
-	expect(rendered).toContain("Reason: Preview matches expected replacements");
-	expect(rendered).toContain("Applied 2 replacements in 1 file.");
-	expect(rendered).toContain("┌");
+	expect(rendered).toContain("Accept: 2 replacements in 1 file");
+	expect(rendered).toContain("AST Edit");
+	expect(rendered).toContain("All replacements are correct");
+	expect(rendered).not.toContain("Applied 2 replacements in 1 file.");
+	expect(rendered).not.toContain("Decision");
+	expect(rendered).not.toContain("┌");
 });

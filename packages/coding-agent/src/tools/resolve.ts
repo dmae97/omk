@@ -7,7 +7,7 @@ import { renderPromptTemplate } from "../config/prompt-templates";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import type { Theme } from "../modes/theme/theme";
 import resolveDescription from "../prompts/tools/resolve.md" with { type: "text" };
-import { CachedOutputBlock, Ellipsis, renderStatusLine, truncateToWidth } from "../tui";
+import { Ellipsis, padToWidth, renderStatusLine, truncateToWidth } from "../tui";
 import type { ToolSession } from ".";
 import { replaceTabs } from "./render-utils";
 import { ToolError } from "./tool-errors";
@@ -33,12 +33,6 @@ function resolveReasonPreview(reason?: string): string | undefined {
 	return truncateToWidth(trimmed, 72, Ellipsis.Omit);
 }
 
-function actionBadge(action: "apply" | "discard", theme: Theme): string {
-	const color = action === "apply" ? "success" : "warning";
-	const left = theme.format.bracketLeft;
-	const right = theme.format.bracketRight;
-	return theme.fg(color, `${left}${action}${right}`);
-}
 export class ResolveTool implements AgentTool<typeof resolveSchema, ResolveToolDetails> {
 	readonly name = "resolve";
 	readonly label = "Resolve";
@@ -119,50 +113,38 @@ export const resolveToolRenderer = {
 		uiTheme: Theme,
 	): Component {
 		const details = result.details;
-		const label = details?.label ?? "pending action";
-		const reason = details?.reason?.trim() || "No reason provided";
-		const textContent = result.content.find(part => part.type === "text")?.text?.trim();
+		const label = replaceTabs(details?.label ?? "pending action");
+		const reason = replaceTabs(details?.reason?.trim() || "No reason provided");
 		const action = details?.action ?? "apply";
-		const state = result.isError ? "error" : action === "discard" ? "warning" : "success";
-		const headerMeta = details?.sourceToolName ? `from ${details.sourceToolName}` : undefined;
-		const actionLine = `${uiTheme.bold("Action")}: ${actionBadge(action, uiTheme)}`;
-		const targetLine = `${uiTheme.bold("Target")}: ${uiTheme.fg("accent", replaceTabs(label))}`;
-		const reasonLine = `${uiTheme.bold("Reason")}: ${replaceTabs(reason)}`;
-		const fallbackEffect = result.isError
-			? "Resolve failed. No pending action was changed."
-			: action === "discard"
-				? `Discarded preview for ${label}.`
-				: `Applied preview for ${label}.`;
-		const effectLines = (textContent || fallbackEffect).split("\n").map(line => replaceTabs(line.trimEnd()));
-		const outputBlock = new CachedOutputBlock();
+		const isApply = action === "apply" && !result.isError;
+		const bgColor = result.isError ? "error" : isApply ? "success" : "warning";
+		const icon = isApply ? uiTheme.status.success : uiTheme.status.error;
+		const verb = isApply ? "Accept" : "Discard";
+		const separator = ": ";
+		const separatorIndex = label.indexOf(separator);
+		const sourceLabel = separatorIndex > 0 ? label.slice(0, separatorIndex).trim() : undefined;
+		const summaryLabel = separatorIndex > 0 ? label.slice(separatorIndex + separator.length).trim() : label;
+		const sourceBadge = sourceLabel
+			? uiTheme.bold(`${uiTheme.format.bracketLeft}${sourceLabel}${uiTheme.format.bracketRight}`)
+			: undefined;
+		const headerLine = `${icon} ${uiTheme.bold(`${verb}:`)} ${summaryLabel}${sourceBadge ? ` ${sourceBadge}` : ""}`;
+		const lines = ["", headerLine, "", uiTheme.italic(reason), ""];
 
 		return {
 			render(width: number) {
-				return outputBlock.render(
-					{
-						header: `${uiTheme.bold("Resolve")}`,
-						headerMeta,
-						state,
-						width,
-						sections: [
-							{
-								label: uiTheme.fg("toolTitle", "Decision"),
-								lines: [actionLine, targetLine, reasonLine],
-							},
-							{
-								label: uiTheme.fg("toolTitle", result.isError ? "Error" : "Effect"),
-								lines: effectLines,
-							},
-						],
-					},
-					uiTheme,
-				);
+				const lineWidth = Math.max(3, width);
+				const innerWidth = Math.max(1, lineWidth - 2);
+				return lines.map(line => {
+					const truncated = truncateToWidth(line, innerWidth, Ellipsis.Omit);
+					const framed = ` ${padToWidth(truncated, innerWidth)} `;
+					const padded = padToWidth(framed, lineWidth);
+					return uiTheme.inverse(uiTheme.fg(bgColor, padded));
+				});
 			},
-			invalidate() {
-				outputBlock.invalidate();
-			},
+			invalidate() {},
 		};
 	},
 
+	inline: true,
 	mergeCallAndResult: true,
 };
