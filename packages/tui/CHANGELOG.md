@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+
+- Fixed loader component rendering lines wider than terminal width, preventing text overflow and display artifacts
 
 ## [13.3.11] - 2026-02-28
 
