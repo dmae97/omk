@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.4.0] - 2026-03-01
+
 ### Breaking Changes
 
 - Removed `TInput` generic parameter from `ToolResultMessage` interface and removed `$normative` property

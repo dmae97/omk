@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.4.0] - 2026-03-01
+
 ### Breaking Changes
 
 - `ast_grep` parameter `pattern` (string) replaced by `patterns` (string[])

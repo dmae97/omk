@@ -1264,9 +1264,9 @@ dependencies = [
 
 [[package]]
 name = "html-to-markdown-rs"
-version = "2.26.2"
+version = "2.26.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "811e4b6aa038c9bb485fbd355d35b6a46b4ec804ec9302cf7d096e62258ed029"
+checksum = "88d4ebd62ed1c62848a3cc6ccac93d5aca5cacb472d46dd15bf3b9e9c4c491b9"
 dependencies = [
  "ahash",
  "astral-tl",
@@ -2108,7 +2108,7 @@ dependencies = [
 
 [[package]]
 name = "pi-natives"
-version = "13.3.14"
+version = "13.4.0"
 dependencies = [
  "arboard",
  "ast-grep-core",

@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.4.0] - 2026-03-01
 ### Breaking Changes
 
 - Changed `AstFindOptions.pattern` to `patterns` (now accepts array of strings instead of single string)
