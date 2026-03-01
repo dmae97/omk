@@ -153,4 +153,51 @@ describe("TUI overlays", () => {
 
 		tui.stop();
 	});
+	it("retains full content on resize when PI_TUI_RESIZE_CLEAR_STRATEGY=viewport", async () => {
+		const previous = process.env.PI_TUI_RESIZE_CLEAR_STRATEGY;
+		process.env.PI_TUI_RESIZE_CLEAR_STRATEGY = "viewport";
+		const term = new VirtualTerminal(60, 8);
+		const tui = new TUI(term);
+		const component = new MutableContentComponent(Array.from({ length: 140 }, (_v, i) => `row-${i}`));
+		tui.addChild(component);
+		try {
+			tui.start();
+			await Bun.sleep(0);
+			await term.flush();
+			term.resize(59, 9);
+			await Bun.sleep(0);
+			await term.flush();
+			const scrollback = term.getScrollBuffer().join("\n");
+			expect(scrollback.includes("row-0")).toBeTruthy();
+			expect(scrollback.includes("row-139")).toBeTruthy();
+		} finally {
+			tui.stop();
+			if (previous === undefined) delete process.env.PI_TUI_RESIZE_CLEAR_STRATEGY;
+			else process.env.PI_TUI_RESIZE_CLEAR_STRATEGY = previous;
+		}
+	});
+
+	it("clears scrollback on resize when PI_TUI_RESIZE_CLEAR_STRATEGY=scrollback", async () => {
+		const previous = process.env.PI_TUI_RESIZE_CLEAR_STRATEGY;
+		process.env.PI_TUI_RESIZE_CLEAR_STRATEGY = "scrollback";
+		const term = new VirtualTerminal(40, 4);
+		term.write("shell-0\r\nshell-1\r\nshell-2\r\nshell-3\r\n");
+		await term.flush();
+		const tui = new TUI(term);
+		tui.addChild(new MutableContentComponent(["ui-0", "ui-1", "ui-2", "ui-3", "ui-4"]));
+		try {
+			tui.start();
+			await Bun.sleep(0);
+			await term.flush();
+			term.resize(39, 4);
+			await Bun.sleep(0);
+			await term.flush();
+			const scrollback = term.getScrollBuffer().join("\n");
+			expect(scrollback.includes("shell-0")).toBeFalsy();
+		} finally {
+			tui.stop();
+			if (previous === undefined) delete process.env.PI_TUI_RESIZE_CLEAR_STRATEGY;
+			else process.env.PI_TUI_RESIZE_CLEAR_STRATEGY = previous;
+		}
+	});
 });

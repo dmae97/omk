@@ -11,6 +11,11 @@ import { extractSegments, sliceByColumn, sliceWithWidth, visibleWidth } from "./
 
 const SEGMENT_RESET = "\x1b[0m";
 
+type ResizeClearStrategy = "viewport" | "scrollback";
+
+function resolveResizeClearStrategy(value: string | undefined): ResizeClearStrategy {
+	return value?.toLowerCase() === "scrollback" ? "scrollback" : "viewport";
+}
 type InputListenerResult = { consume?: boolean; data?: string } | undefined;
 type InputListener = (data: string) => InputListenerResult;
 
@@ -217,6 +222,7 @@ export class TUI extends Container {
 	#cellSizeQueryPending = false;
 	#showHardwareCursor = process.env.PI_HARDWARE_CURSOR === "1";
 	#clearOnShrink = process.env.PI_CLEAR_ON_SHRINK === "1"; // Clear empty rows when content shrinks (default: off)
+	#resizeClearStrategy = resolveResizeClearStrategy(process.env.PI_TUI_RESIZE_CLEAR_STRATEGY); // Resize full-redraw strategy: viewport(default) or scrollback
 	#maxLinesRendered = 0; // Track terminal's working area (max lines ever rendered)
 	#previousViewportTop = 0; // Track previous viewport top for resize-aware cursor moves
 	#fullRedrawCount = 0;
@@ -885,12 +891,14 @@ export class TUI extends Container {
 		// Helper to clear scrollback and viewport and render all new lines
 		const fullRender = (clear: boolean): void => {
 			this.#fullRedrawCount += 1;
+			const isResizeRedraw = clear && (widthChanged || heightChanged);
 			let buffer = "\x1b[?2026h"; // Begin synchronized output
 			if (clear) {
-				// Keep default home+erase-below semantics to avoid scrollback pollution.
-				// On resize, use hard clear to prevent stale wrapped cells/artifacts.
+				// Keep default home+erase-below semantics for non-resize redraws.
+				// On resize, choose behavior via PI_TUI_RESIZE_CLEAR_STRATEGY.
 				if (this.#clearScrollbackOnNextFullRender) buffer += "\x1b[3J\x1b[2J\x1b[H";
-				else if (widthChanged || heightChanged) buffer += "\x1b[2J\x1b[H";
+				else if (isResizeRedraw && this.#resizeClearStrategy === "scrollback") buffer += "\x1b[3J\x1b[2J\x1b[H";
+				else if (isResizeRedraw) buffer += "\x1b[2J\x1b[H";
 				else buffer += "\x1b[H\x1b[0J";
 			}
 			for (let i = 0; i < newLines.length; i++) {

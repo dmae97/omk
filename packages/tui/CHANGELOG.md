@@ -1,6 +1,15 @@
 # Changelog
 
 ## [Unreleased]
+
+### Added
+
+- Added `PI_TUI_RESIZE_CLEAR_STRATEGY` environment variable to control terminal behavior on resize: `viewport` (default) clears/redraws the viewport while preserving scrollback, or `scrollback` clears all history
+
+### Changed
+
+- Changed resize redraw behavior to use configurable clear semantics (`viewport` vs `scrollback`) while keeping full content rendering for scrollback navigation
+
 ### Fixed
 
 - Fixed loader component rendering lines wider than terminal width, preventing text overflow and display artifacts
