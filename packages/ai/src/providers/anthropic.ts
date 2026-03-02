@@ -746,18 +746,18 @@ type SystemBlockOptions = {
 	includeClaudeCodeInstruction?: boolean;
 	extraInstructions?: string[];
 	billingPayload?: unknown;
+	cacheControl?: AnthropicCacheControl;
 };
 
 export function buildAnthropicSystemBlocks(
 	systemPrompt: string | undefined,
 	options: SystemBlockOptions = {},
 ): AnthropicSystemBlock[] | undefined {
-	const { includeClaudeCodeInstruction = false, extraInstructions = [], billingPayload } = options;
+	const { includeClaudeCodeInstruction = false, extraInstructions = [], billingPayload, cacheControl } = options;
 	const blocks: AnthropicSystemBlock[] = [];
 	const sanitizedPrompt = systemPrompt ? systemPrompt.toWellFormed() : "";
 	const trimmedInstructions = extraInstructions.map(instruction => instruction.trim()).filter(Boolean);
 	const hasBillingHeader = sanitizedPrompt.includes(CLAUDE_BILLING_HEADER_PREFIX);
-	const claudeCodeSystemCacheControl: AnthropicCacheControl = { type: "ephemeral" };
 
 	if (includeClaudeCodeInstruction && !hasBillingHeader) {
 		const payloadSeed = billingPayload ?? {
@@ -777,7 +777,7 @@ export function buildAnthropicSystemBlocks(
 		blocks.push({
 			type: "text",
 			text: instruction,
-			...(includeClaudeCodeInstruction ? { cache_control: claudeCodeSystemCacheControl } : {}),
+			...(cacheControl ? { cache_control: cacheControl } : {}),
 		});
 	}
 
@@ -785,7 +785,7 @@ export function buildAnthropicSystemBlocks(
 		blocks.push({
 			type: "text",
 			text: sanitizedPrompt,
-			...(includeClaudeCodeInstruction ? { cache_control: claudeCodeSystemCacheControl } : {}),
+			...(cacheControl ? { cache_control: cacheControl } : {}),
 		});
 	}
 
@@ -923,10 +923,6 @@ type CacheControlBlock = {
 	cache_control?: AnthropicCacheControl | null;
 };
 
-function hasCacheControlInBlocks<T extends CacheControlBlock>(blocks: T[]): boolean {
-	return blocks.some(block => "cache_control" in block && block.cache_control != null);
-}
-
 function applyCacheControlToLastBlock<T extends CacheControlBlock>(
 	blocks: T[],
 	cacheControl: AnthropicCacheControl,
@@ -952,11 +948,12 @@ function applyCacheControlToLastTextBlock(
 
 function applyPromptCaching(params: MessageCreateParamsStreaming, cacheControl?: AnthropicCacheControl): void {
 	if (!cacheControl) return;
-	if (params.tools && hasCacheControlInBlocks(params.tools as Array<CacheControlBlock>)) return;
-	if (params.system && Array.isArray(params.system) && hasCacheControlInBlocks(params.system)) return;
+
+	// Skip if cache_control breakpoints were already placed externally on messages.
 	for (const message of params.messages) {
 		if (Array.isArray(message.content)) {
-			if (hasCacheControlInBlocks(message.content as Array<ContentBlockParam & CacheControlBlock>)) return;
+			if ((message.content as Array<ContentBlockParam & CacheControlBlock>).some(b => b.cache_control != null))
+				return;
 		}
 	}
 

@@ -110,6 +110,24 @@ describe("Anthropic request fingerprint alignment", () => {
 		expect(blocks?.[2]).toEqual({
 			type: "text",
 			text: "Use citations when possible",
+		});
+		expect(blocks?.[3]).toEqual({
+			type: "text",
+			text: "Stay concise.",
+		});
+	});
+
+	it("applies cache_control to system blocks when cacheControl option is set", () => {
+		const blocks = buildAnthropicSystemBlocks("Stay concise.", {
+			includeClaudeCodeInstruction: true,
+			extraInstructions: ["Use citations when possible"],
+			cacheControl: { type: "ephemeral" },
+		});
+
+		expect(blocks).toBeDefined();
+		expect(blocks?.[2]).toEqual({
+			type: "text",
+			text: "Use citations when possible",
 			cache_control: { type: "ephemeral" },
 		});
 		expect(blocks?.[3]).toEqual({
