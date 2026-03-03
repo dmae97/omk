@@ -20,8 +20,7 @@ import type { AssistantMessage } from "../types";
  * - MiniMax: "invalid params, context window exceeds limit"
  * - Kimi For Coding: "Your request exceeded model token limit: X (requested: Y)"
  * - Anthropic 413: "request_too_large" / "Request exceeds the maximum size" (payload too large)
- * - Cerebras: Returns "400/413 status code (no body)" - handled separately below
- * - Mistral: Returns "400/413 status code (no body)" - handled separately below
+ * - HTTP 413 variants: "Payload Too Large" / "Request Entity Too Large"
  * - z.ai: Does NOT error, accepts overflow silently - handled via usage.input > contextWindow
  * - Ollama: Silently truncates input - not detectable via error message
  */
@@ -46,8 +45,11 @@ const OVERFLOW_PATTERNS = [
 	/too many tokens/i, // Generic fallback
 	/token limit exceeded/i, // Generic fallback
 	/request_too_large/i, // Anthropic 413 (request body too large)
+	/request exceeds the maximum size/i, // Anthropic 413 variant
+	/payload too large/i, // Generic HTTP 413 variant
+	/entity too large/i, // Generic HTTP 413 variant
+	/\b413\b.*\b(request|payload|entity)\b.*\btoo large\b/i, // "413 Request Entity Too Large" variants
 ];
-
 /**
  * Check if an assistant message represents a context overflow error.
  *
@@ -67,11 +69,13 @@ const OVERFLOW_PATTERNS = [
  * - Groq: "reduce the length of the messages"
  * - Cerebras: 400/413 status code (no body)
  * - Mistral: 400/413 status code (no body)
+ * - HTTP 413 payload/entity-too-large variants
  * - OpenRouter (all backends): "maximum context length is X tokens"
  * - llama.cpp: "exceeds the available context size"
  * - LM Studio: "greater than the context length"
  * - Kimi For Coding: "exceeded model token limit: X (requested: Y)"
  * - Anthropic 413: "request_too_large" (request body exceeds size limit)
+ * - HTTP 413: "Payload Too Large" / "Request Entity Too Large"
  *
  * **Unreliable detection:**
  * - z.ai: Sometimes accepts overflow silently (detectable via usage.input > contextWindow),

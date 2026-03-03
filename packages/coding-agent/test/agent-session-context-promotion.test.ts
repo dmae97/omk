@@ -29,7 +29,10 @@ describe("AgentSession context promotion", () => {
 		tempDir.removeSync();
 	});
 
-	function createOverflowMessage(model: Model): AssistantMessage {
+	function createOverflowMessage(
+		model: Model,
+		errorMessage = "context_length_exceeded: Your input exceeds the context window of this model.",
+	): AssistantMessage {
 		return {
 			role: "assistant",
 			content: [{ type: "text", text: "" }],
@@ -45,7 +48,7 @@ describe("AgentSession context promotion", () => {
 				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 			},
 			stopReason: "error",
-			errorMessage: "context_length_exceeded: Your input exceeds the context window of this model.",
+			errorMessage,
 			timestamp: Date.now(),
 		};
 	}
@@ -104,6 +107,46 @@ describe("AgentSession context promotion", () => {
 		expect(session.providerSessionState.size).toBe(0);
 	});
 
+	it("promotes on 413 payload-too-large overflow errors", async () => {
+		const sparkModel = modelRegistry.find("openai-codex", "gpt-5.3-codex-spark");
+		const codexModel = modelRegistry.find("openai-codex", "gpt-5.3-codex");
+		if (!sparkModel || !codexModel) {
+			throw new Error("Expected codex spark and codex models to exist");
+		}
+
+		const settings = Settings.isolated({
+			"compaction.enabled": false,
+			"contextPromotion.enabled": true,
+		});
+
+		const agent = new Agent({
+			initialState: {
+				model: sparkModel,
+				systemPrompt: "Test",
+				tools: [],
+				messages: [],
+			},
+		});
+
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings,
+			modelRegistry,
+		});
+
+		const overflowMessage = createOverflowMessage(
+			sparkModel,
+			"413 Request Entity Too Large: payload too large for model request body",
+		);
+		session.agent.emitExternalEvent({ type: "message_end", message: overflowMessage });
+		session.agent.emitExternalEvent({ type: "agent_end", messages: [overflowMessage] });
+
+		await waitFor(() => session.model?.id === codexModel.id);
+
+		expect(session.model?.provider).toBe(codexModel.provider);
+		expect(session.model?.id).toBe(codexModel.id);
+	});
 	it("clears codex provider session state on manual setModel switch away from codex", async () => {
 		const codexModel = modelRegistry.find("openai-codex", "gpt-5.3-codex");
 		const nonCodexModel = modelRegistry.getAll().find(model => model.api !== "openai-codex-responses");
