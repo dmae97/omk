@@ -30,6 +30,7 @@ export interface SegmentContext {
 		output: number;
 		cacheRead: number;
 		cacheWrite: number;
+		premiumRequests: number;
 		cost: number;
 	};
 	contextPercent: number;

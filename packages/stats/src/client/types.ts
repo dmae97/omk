@@ -9,6 +9,7 @@ export interface Usage {
 	cacheRead: number;
 	cacheWrite: number;
 	totalTokens: number;
+	premiumRequests?: number;
 	cost: {
 		input: number;
 		output: number;
@@ -50,6 +51,7 @@ export interface AggregatedStats {
 	totalCacheWriteTokens: number;
 	cacheRate: number;
 	totalCost: number;
+	totalPremiumRequests: number;
 	avgDuration: number | null;
 	avgTtft: number | null;
 	avgTokensPerSecond: number | null;

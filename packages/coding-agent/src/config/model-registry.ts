@@ -99,6 +99,7 @@ const ModelDefinitionSchema = Type.Object({
 			cacheWrite: Type.Number(),
 		}),
 	),
+	premiumMultiplier: Type.Optional(Type.Number()),
 	contextWindow: Type.Optional(Type.Number()),
 	maxTokens: Type.Optional(Type.Number()),
 	headers: Type.Optional(Type.Record(Type.String(), Type.String())),
@@ -119,6 +120,7 @@ const ModelOverrideSchema = Type.Object({
 			cacheWrite: Type.Optional(Type.Number()),
 		}),
 	),
+	premiumMultiplier: Type.Optional(Type.Number()),
 	contextWindow: Type.Optional(Type.Number()),
 	maxTokens: Type.Optional(Type.Number()),
 	headers: Type.Optional(Type.Record(Type.String(), Type.String())),
@@ -378,6 +380,7 @@ function applyModelOverride(model: Model<Api>, override: ModelOverride): Model<A
 	if (override.contextWindow !== undefined) result.contextWindow = override.contextWindow;
 	if (override.maxTokens !== undefined) result.maxTokens = override.maxTokens;
 	if (override.contextPromotionTarget !== undefined) result.contextPromotionTarget = override.contextPromotionTarget;
+	if (override.premiumMultiplier !== undefined) result.premiumMultiplier = override.premiumMultiplier;
 	if (override.cost) {
 		result.cost = {
 			input: override.cost.input ?? model.cost.input,
@@ -405,6 +408,7 @@ interface CustomModelDefinitionLike {
 	headers?: Record<string, string>;
 	compat?: Model<Api>["compat"];
 	contextPromotionTarget?: string;
+	premiumMultiplier?: number;
 }
 
 interface CustomModelBuildOptions {
@@ -456,6 +460,7 @@ function buildCustomModel(
 		headers: mergeCustomModelHeaders(providerHeaders, modelDef.headers, authHeader, providerApiKey),
 		compat: modelDef.compat,
 		contextPromotionTarget: modelDef.contextPromotionTarget,
+		premiumMultiplier: modelDef.premiumMultiplier,
 	} as Model<Api>;
 }
 
@@ -1136,5 +1141,6 @@ export interface ProviderConfigInput {
 		headers?: Record<string, string>;
 		compat?: Model<Api>["compat"];
 		contextPromotionTarget?: string;
+		premiumMultiplier?: number;
 	}>;
 }

@@ -131,6 +131,7 @@ export class FooterComponent implements Component {
 		let totalCacheRead = 0;
 		let totalCacheWrite = 0;
 		let totalCost = 0;
+		let totalPremiumRequests = 0;
 
 		for (const entry of this.session.sessionManager.getEntries()) {
 			if (entry.type === "message" && entry.message.role === "assistant") {
@@ -139,6 +140,7 @@ export class FooterComponent implements Component {
 				totalCacheRead += entry.message.usage.cacheRead;
 				totalCacheWrite += entry.message.usage.cacheWrite;
 				totalCost += entry.message.usage.cost.total;
+				totalPremiumRequests += entry.message.usage.premiumRequests ?? 0;
 			}
 		}
 
@@ -177,11 +179,15 @@ export class FooterComponent implements Component {
 		if (totalCacheRead) statsParts.push(`R${formatNumber(totalCacheRead)}`);
 		if (totalCacheWrite) statsParts.push(`W${formatNumber(totalCacheWrite)}`);
 
-		// Show cost with "(sub)" indicator if using OAuth subscription
+		// Show billing summary with subscription and premium-request indicators
 		const usingSubscription = state.model ? this.session.modelRegistry.isUsingOAuth(state.model) : false;
-		if (totalCost || usingSubscription) {
-			const costStr = `$${totalCost.toFixed(3)}${usingSubscription ? " (sub)" : ""}`;
-			statsParts.push(costStr);
+		const normalizedPremiumRequests = Math.round((totalPremiumRequests + Number.EPSILON) * 100) / 100;
+		if (totalCost || usingSubscription || normalizedPremiumRequests) {
+			const billingParts: string[] = [];
+			if (totalCost) billingParts.push(`$${totalCost.toFixed(3)}`);
+			if (normalizedPremiumRequests) billingParts.push(`★ ${formatNumber(normalizedPremiumRequests)}`);
+			if (usingSubscription) billingParts.push("(sub)");
+			if (billingParts.length > 0) statsParts.push(billingParts.join(" "));
 		}
 
 		// Colorize context percentage based on usage

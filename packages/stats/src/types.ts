@@ -64,6 +64,8 @@ export interface AggregatedStats {
 	cacheRate: number;
 	/** Total cost */
 	totalCost: number;
+	/** Total premium requests */
+	totalPremiumRequests: number;
 	/** Average duration in ms */
 	avgDuration: number | null;
 	/** Average TTFT in ms */

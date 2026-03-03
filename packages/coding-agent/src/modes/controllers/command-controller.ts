@@ -231,6 +231,11 @@ export class CommandController {
 
 	async handleSessionCommand(): Promise<void> {
 		const stats = this.ctx.session.getSessionStats();
+		const premiumRequests =
+			"premiumRequests" in stats && typeof stats.premiumRequests === "number"
+				? stats.premiumRequests
+				: this.ctx.session.sessionManager.getUsageStatistics().premiumRequests;
+		const normalizedPremiumRequests = Math.round((premiumRequests + Number.EPSILON) * 100) / 100;
 
 		let info = `${theme.bold("Session Info")}\n\n`;
 		info += `${theme.fg("dim", "File:")} ${stats.sessionFile ?? "In-memory"}\n`;
@@ -271,9 +276,14 @@ export class CommandController {
 		}
 		info += `${theme.fg("dim", "Total:")} ${stats.tokens.total.toLocaleString()}\n`;
 
-		if (stats.cost > 0) {
+		if (stats.cost > 0 || normalizedPremiumRequests > 0) {
 			info += `\n${theme.bold("Cost")}\n`;
-			info += `${theme.fg("dim", "Total:")} ${stats.cost.toFixed(4)}\n`;
+			if (stats.cost > 0) {
+				info += `${theme.fg("dim", "Total:")} ${stats.cost.toFixed(4)}\n`;
+			}
+			if (normalizedPremiumRequests > 0) {
+				info += `${theme.fg("dim", "Premium Requests:")} ${normalizedPremiumRequests.toLocaleString()}\n`;
+			}
 		}
 
 		const gateway = await getGatewayStatus();

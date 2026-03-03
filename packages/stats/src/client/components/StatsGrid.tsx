@@ -1,4 +1,4 @@
-import { Activity, AlertCircle, BarChart3, Database, Server, Zap } from "lucide-react";
+import { Activity, AlertCircle, BarChart3, Database, Server, Star, Zap } from "lucide-react";
 import type { AggregatedStats } from "../types";
 
 interface StatsGridProps {
@@ -23,6 +23,15 @@ const statConfig = [
 		getValue: (s: AggregatedStats) => `$${s.totalCost.toFixed(2)}`,
 		getDetail: (s: AggregatedStats) =>
 			s.totalRequests > 0 ? `$${(s.totalCost / s.totalRequests).toFixed(4)} avg/req` : "-",
+	},
+	{
+		key: "premiumRequests",
+		title: "Premium Reqs",
+		icon: Star,
+		color: "var(--accent-amber)",
+		getValue: (s: AggregatedStats) => s.totalPremiumRequests.toLocaleString(),
+		getDetail: (s: AggregatedStats) =>
+			s.totalRequests > 0 ? `${((s.totalPremiumRequests / s.totalRequests) * 100).toFixed(1)}% of requests` : "-",
 	},
 	{
 		key: "cache",
@@ -60,7 +69,7 @@ const statConfig = [
 
 export function StatsGrid({ stats }: StatsGridProps) {
 	return (
-		<div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
+		<div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4 mb-8">
 			{statConfig.map(stat => {
 				const Icon = stat.icon;
 				return (

@@ -29,6 +29,10 @@ function formatCost(n: number): string {
 	return `$${n.toFixed(2)}`;
 }
 
+function normalizePremiumRequests(n: number): number {
+	return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
 /**
  * Print stats summary to console.
  */
@@ -44,6 +48,7 @@ async function printStats(): Promise<void> {
 	console.log(`  Total Tokens: ${formatNumber(overall.totalInputTokens + overall.totalOutputTokens)}`);
 	console.log(`  Cache Rate: ${formatPercent(overall.cacheRate)}`);
 	console.log(`  Total Cost: ${formatCost(overall.totalCost)}`);
+	console.log(`  Premium Requests: ${formatNumber(normalizePremiumRequests(overall.totalPremiumRequests ?? 0))}`);
 	console.log(`  Avg Duration: ${overall.avgDuration !== null ? formatDuration(overall.avgDuration) : "-"}`);
 	console.log(`  Avg TTFT: ${overall.avgTtft !== null ? formatDuration(overall.avgTtft) : "-"}`);
 	if (overall.avgTokensPerSecond !== null) {

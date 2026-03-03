@@ -1144,6 +1144,8 @@ export interface ProviderModelConfig {
 	input: ("text" | "image")[];
 	/** Cost per million tokens. */
 	cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
+	/** Premium Copilot requests charged per user-initiated request. */
+	premiumMultiplier?: number;
 	/** Maximum context window size in tokens. */
 	contextWindow: number;
 	/** Maximum output tokens. */

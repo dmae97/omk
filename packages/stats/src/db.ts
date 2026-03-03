@@ -47,6 +47,7 @@ export async function initDb(): Promise<Database> {
 			cache_read_tokens INTEGER NOT NULL,
 			cache_write_tokens INTEGER NOT NULL,
 			total_tokens INTEGER NOT NULL,
+			premium_requests REAL NOT NULL,
 			cost_input REAL NOT NULL,
 			cost_output REAL NOT NULL,
 			cost_cache_read REAL NOT NULL,
@@ -67,6 +68,11 @@ export async function initDb(): Promise<Database> {
 		);
 	`);
 
+	const messageColumns = db.prepare("PRAGMA table_info(messages)").all() as { name: string }[];
+	if (!messageColumns.some(column => column.name === "premium_requests")) {
+		db.exec("ALTER TABLE messages ADD COLUMN premium_requests REAL NOT NULL DEFAULT 0");
+	}
+	db.exec("UPDATE messages SET premium_requests = 0 WHERE premium_requests IS NULL");
 	return db;
 }
 
@@ -105,9 +111,9 @@ export function insertMessageStats(stats: MessageStats[]): number {
 		INSERT OR IGNORE INTO messages (
 			session_file, entry_id, folder, model, provider, api, timestamp,
 			duration, ttft, stop_reason, error_message,
-			input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, total_tokens,
+			input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, total_tokens, premium_requests,
 			cost_input, cost_output, cost_cache_read, cost_cache_write, cost_total
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`);
 
 	let inserted = 0;
@@ -130,6 +136,7 @@ export function insertMessageStats(stats: MessageStats[]): number {
 				s.usage.cacheRead,
 				s.usage.cacheWrite,
 				s.usage.totalTokens,
+				s.usage.premiumRequests ?? 0,
 				s.usage.cost.input,
 				s.usage.cost.output,
 				s.usage.cost.cacheRead,
@@ -160,6 +167,7 @@ function buildAggregatedStats(rows: any[]): AggregatedStats {
 			totalCacheWriteTokens: 0,
 			cacheRate: 0,
 			totalCost: 0,
+			totalPremiumRequests: 0,
 			avgDuration: null,
 			avgTtft: null,
 			avgTokensPerSecond: null,
@@ -174,6 +182,7 @@ function buildAggregatedStats(rows: any[]): AggregatedStats {
 	const successfulRequests = totalRequests - failedRequests;
 	const totalInputTokens = row.total_input_tokens || 0;
 	const totalCacheReadTokens = row.total_cache_read_tokens || 0;
+	const totalPremiumRequests = row.total_premium_requests || 0;
 
 	return {
 		totalRequests,
@@ -189,6 +198,7 @@ function buildAggregatedStats(rows: any[]): AggregatedStats {
 				? totalCacheReadTokens / (totalInputTokens + totalCacheReadTokens)
 				: 0,
 		totalCost: row.total_cost || 0,
+		totalPremiumRequests,
 		avgDuration: row.avg_duration,
 		avgTtft: row.avg_ttft,
 		avgTokensPerSecond: row.avg_tokens_per_second,
@@ -211,6 +221,7 @@ export function getOverallStats(): AggregatedStats {
 			SUM(output_tokens) as total_output_tokens,
 			SUM(cache_read_tokens) as total_cache_read_tokens,
 			SUM(cache_write_tokens) as total_cache_write_tokens,
+			SUM(premium_requests) as total_premium_requests,
 			SUM(cost_total) as total_cost,
 			AVG(duration) as avg_duration,
 			AVG(ttft) as avg_ttft,
@@ -240,6 +251,7 @@ export function getStatsByModel(): ModelStats[] {
 			SUM(output_tokens) as total_output_tokens,
 			SUM(cache_read_tokens) as total_cache_read_tokens,
 			SUM(cache_write_tokens) as total_cache_write_tokens,
+			SUM(premium_requests) as total_premium_requests,
 			SUM(cost_total) as total_cost,
 			AVG(duration) as avg_duration,
 			AVG(ttft) as avg_ttft,
@@ -274,6 +286,7 @@ export function getStatsByFolder(): FolderStats[] {
 			SUM(output_tokens) as total_output_tokens,
 			SUM(cache_read_tokens) as total_cache_read_tokens,
 			SUM(cache_write_tokens) as total_cache_write_tokens,
+			SUM(premium_requests) as total_premium_requests,
 			SUM(cost_total) as total_cost,
 			AVG(duration) as avg_duration,
 			AVG(ttft) as avg_ttft,
@@ -428,6 +441,7 @@ function rowToMessageStats(row: any): MessageStats {
 			cacheRead: row.cache_read_tokens,
 			cacheWrite: row.cache_write_tokens,
 			totalTokens: row.total_tokens,
+			premiumRequests: row.premium_requests ?? 0,
 			cost: {
 				input: row.cost_input,
 				output: row.cost_output,

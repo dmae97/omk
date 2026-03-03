@@ -1,4 +1,4 @@
-import { Clock, Coins, FileJson, Gauge, Hash, X, Zap } from "lucide-react";
+import { Clock, Coins, FileJson, Gauge, Hash, Star, X, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getRequestDetails } from "../api";
 import type { RequestDetails } from "../types";
@@ -93,6 +93,15 @@ export function RequestDetail({ id, onClose }: RequestDetailProps) {
 							</div>
 						</div>
 
+						<div className="surface p-4">
+							<div className="flex items-center gap-2 text-[var(--text-muted)] mb-2">
+								<Star size={14} />
+								<span className="text-xs uppercase tracking-wide">Premium Reqs</span>
+							</div>
+							<div className="text-xl font-semibold text-[var(--text-primary)]">
+								{(details.usage.premiumRequests ?? 0).toLocaleString()}
+							</div>
+						</div>
 						<div className="surface p-4">
 							<div className="flex items-center gap-2 text-[var(--text-muted)] mb-2">
 								<Hash size={14} />

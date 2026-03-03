@@ -32,11 +32,7 @@ import { isAnthropicOAuthToken, normalizeToolCallId, resolveCacheRetention } fro
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
 import { parseStreamingJson } from "../utils/json-parse";
-import {
-	buildCopilotDynamicHeaders,
-	getCopilotInitiatorOverride,
-	hasCopilotVisionInput,
-} from "./github-copilot-headers";
+import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers";
 import { transformMessages } from "./transform-messages";
 
 export type AnthropicHeaderOptions = {
@@ -557,6 +553,15 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 		const startTime = Date.now();
 		let firstTokenTime: number | undefined;
 
+		const copilotDynamicHeaders =
+			model.provider === "github-copilot"
+				? buildCopilotDynamicHeaders({
+						messages: context.messages,
+						hasImages: hasCopilotVisionInput(context.messages),
+						premiumMultiplier: model.premiumMultiplier,
+						headers: { ...(model.headers ?? {}), ...(options?.headers ?? {}) },
+					})
+				: undefined;
 		const output: AssistantMessage = {
 			role: "assistant",
 			content: [],
@@ -580,20 +585,6 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 			const apiKey = options?.apiKey ?? getEnvApiKey(model.provider) ?? "";
 			const baseUrl = resolveAnthropicBaseUrl(model) ?? "https://api.anthropic.com";
 
-			let copilotDynamicHeaders: Record<string, string> | undefined;
-			if (model.provider === "github-copilot") {
-				const hasImages = hasCopilotVisionInput(context.messages);
-				const initiatorOverride = getCopilotInitiatorOverride({
-					...(model.headers ?? {}),
-					...(options?.headers ?? {}),
-				});
-				copilotDynamicHeaders = buildCopilotDynamicHeaders({
-					messages: context.messages,
-					hasImages,
-					initiatorOverride,
-				});
-			}
-
 			const { client, isOAuthToken } = createClient(model, {
 				model,
 				apiKey,
@@ -601,7 +592,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 				stream: true,
 				interleavedThinking: options?.interleavedThinking ?? true,
 				headers: options?.headers,
-				dynamicHeaders: copilotDynamicHeaders,
+				dynamicHeaders: copilotDynamicHeaders?.headers,
 				isOAuth: options?.isOAuth,
 			});
 			const params = buildParams(model, baseUrl, context, isOAuthToken, options);
@@ -625,6 +616,9 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 			let started = false;
 			do {
 				const anthropicStream = client.messages.stream({ ...params, stream: true }, { signal: options?.signal });
+				if (copilotDynamicHeaders && output.usage.premiumRequests === undefined) {
+					output.usage.premiumRequests = copilotDynamicHeaders.premiumRequests;
+				}
 
 				try {
 					for await (const event of anthropicStream) {

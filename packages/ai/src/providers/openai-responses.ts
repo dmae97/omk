@@ -34,11 +34,7 @@ import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-ins
 import { parseStreamingJson } from "../utils/json-parse";
 import { adaptSchemaForStrict, NO_STRICT } from "../utils/schema";
 import { mapToOpenAIResponsesToolChoice } from "../utils/tool-choice";
-import {
-	buildCopilotDynamicHeaders,
-	getCopilotInitiatorOverride,
-	hasCopilotVisionInput,
-} from "./github-copilot-headers";
+import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers";
 import { transformMessages } from "./transform-messages";
 
 /**
@@ -113,7 +109,7 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 		try {
 			// Create OpenAI client
 			const apiKey = options?.apiKey || getEnvApiKey(model.provider) || "";
-			const client = createClient(model, context, apiKey, options?.headers);
+			const { client, copilotPremiumRequests } = createClient(model, context, apiKey, options?.headers);
 			const params = buildParams(model, context, options);
 			options?.onPayload?.(params);
 			rawRequestDump = {
@@ -128,6 +124,7 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 				params,
 				options?.signal ? { signal: options.signal } : undefined,
 			);
+			if (copilotPremiumRequests !== undefined) output.usage.premiumRequests = copilotPremiumRequests;
 			stream.push({ type: "start", partial: output });
 
 			let currentItem: ResponseReasoningItem | ResponseOutputMessage | ResponseFunctionToolCall | null = null;
@@ -332,6 +329,7 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 							cacheRead: cachedTokens,
 							cacheWrite: 0,
 							totalTokens: response.usage.total_tokens || 0,
+							...(copilotPremiumRequests !== undefined ? { premiumRequests: copilotPremiumRequests } : {}),
 							cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 						};
 					}
@@ -392,23 +390,29 @@ function createClient(
 	}
 
 	const headers = { ...(model.headers ?? {}), ...(extraHeaders ?? {}) };
+	let copilotPremiumRequests: number | undefined;
 	if (model.provider === "github-copilot") {
 		const hasImages = hasCopilotVisionInput(context.messages);
-		const copilotHeaders = buildCopilotDynamicHeaders({
+		const copilot = buildCopilotDynamicHeaders({
 			messages: context.messages,
 			hasImages,
-			initiatorOverride: getCopilotInitiatorOverride(headers),
+			premiumMultiplier: model.premiumMultiplier,
+			headers,
 		});
-		Object.assign(headers, copilotHeaders);
+		Object.assign(headers, copilot.headers);
+		copilotPremiumRequests = copilot.premiumRequests;
 	}
 
-	return new OpenAI({
-		apiKey,
-		baseURL: model.baseUrl,
-		dangerouslyAllowBrowser: true,
-		maxRetries: 5,
-		defaultHeaders: headers,
-	});
+	return {
+		client: new OpenAI({
+			apiKey,
+			baseURL: model.baseUrl,
+			dangerouslyAllowBrowser: true,
+			maxRetries: 5,
+			defaultHeaders: headers,
+		}),
+		copilotPremiumRequests,
+	};
 }
 
 function buildParams(model: Model<"openai-responses">, context: Context, options?: OpenAIResponsesOptions) {

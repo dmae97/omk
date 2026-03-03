@@ -3227,6 +3227,7 @@
 			"name": "Claude Haiku 4.5",
 			"api": "anthropic-messages",
 			"provider": "github-copilot",
+			"premiumMultiplier": 0.33,
 			"baseUrl": "https://api.individual.githubcopilot.com",
 			"reasoning": true,
 			"input": [
@@ -3253,6 +3254,7 @@
 			"name": "Claude Opus 4.5",
 			"api": "anthropic-messages",
 			"provider": "github-copilot",
+			"premiumMultiplier": 3,
 			"baseUrl": "https://api.individual.githubcopilot.com",
 			"reasoning": true,
 			"input": [
@@ -3279,6 +3281,7 @@
 			"name": "Claude Opus 4.6",
 			"api": "anthropic-messages",
 			"provider": "github-copilot",
+			"premiumMultiplier": 3,
 			"baseUrl": "https://api.individual.githubcopilot.com",
 			"reasoning": true,
 			"input": [
@@ -3305,6 +3308,7 @@
 			"name": "Claude Sonnet 4",
 			"api": "anthropic-messages",
 			"provider": "github-copilot",
+			"premiumMultiplier": 1,
 			"baseUrl": "https://api.individual.githubcopilot.com",
 			"reasoning": true,
 			"input": [
@@ -3331,6 +3335,7 @@
 			"name": "Claude Sonnet 4.5",
 			"api": "anthropic-messages",
 			"provider": "github-copilot",
+			"premiumMultiplier": 1,
 			"baseUrl": "https://api.individual.githubcopilot.com",
 			"reasoning": true,
 			"input": [
@@ -3357,6 +3362,7 @@
 			"name": "Claude Sonnet 4.6",
 			"api": "anthropic-messages",
 			"provider": "github-copilot",
+			"premiumMultiplier": 1,
 			"baseUrl": "https://api.individual.githubcopilot.com",
 			"reasoning": true,
 			"input": [
@@ -3383,6 +3389,7 @@
 			"name": "Gemini 2.5 Pro",
 			"api": "openai-completions",
 			"provider": "github-copilot",
+			"premiumMultiplier": 1,
 			"baseUrl": "https://api.individual.githubcopilot.com",
 			"reasoning": false,
 			"input": [
@@ -3414,6 +3421,7 @@
 			"name": "Gemini 3 Flash",
 			"api": "openai-completions",
 			"provider": "github-copilot",
+			"premiumMultiplier": 0.33,
 			"baseUrl": "https://api.individual.githubcopilot.com",
 			"reasoning": true,
 			"input": [
@@ -3445,6 +3453,7 @@
 			"name": "Gemini 3 Pro Preview",
 			"api": "openai-completions",
 			"provider": "github-copilot",
+			"premiumMultiplier": 1,
 			"baseUrl": "https://api.individual.githubcopilot.com",
 			"reasoning": true,
 			"input": [
@@ -3476,6 +3485,7 @@
 			"name": "Gemini 3.1 Pro Preview",
 			"api": "openai-completions",
 			"provider": "github-copilot",
+			"premiumMultiplier": 1,
 			"baseUrl": "https://api.individual.githubcopilot.com",
 			"reasoning": true,
 			"input": [
@@ -3507,6 +3517,7 @@
 			"name": "GPT-4.1",
 			"api": "openai-completions",
 			"provider": "github-copilot",
+			"premiumMultiplier": 0,
 			"baseUrl": "https://api.individual.githubcopilot.com",
 			"reasoning": false,
 			"input": [
@@ -3538,6 +3549,7 @@
 			"name": "GPT-4o",
 			"api": "openai-completions",
 			"provider": "github-copilot",
+			"premiumMultiplier": 0,
 			"baseUrl": "https://api.individual.githubcopilot.com",
 			"reasoning": false,
 			"input": [
@@ -3569,6 +3581,7 @@
 			"name": "GPT-5",
 			"api": "openai-responses",
 			"provider": "github-copilot",
+			"premiumMultiplier": 1,
 			"baseUrl": "https://api.individual.githubcopilot.com",
 			"reasoning": true,
 			"input": [
@@ -3595,6 +3608,7 @@
 			"name": "GPT-5-mini",
 			"api": "openai-responses",
 			"provider": "github-copilot",
+			"premiumMultiplier": 0,
 			"baseUrl": "https://api.individual.githubcopilot.com",
 			"reasoning": true,
 			"input": [
@@ -3621,6 +3635,7 @@
 			"name": "GPT-5.1",
 			"api": "openai-responses",
 			"provider": "github-copilot",
+			"premiumMultiplier": 1,
 			"baseUrl": "https://api.individual.githubcopilot.com",
 			"reasoning": true,
 			"input": [
@@ -3647,6 +3662,7 @@
 			"name": "GPT-5.1-Codex",
 			"api": "openai-responses",
 			"provider": "github-copilot",
+			"premiumMultiplier": 1,
 			"baseUrl": "https://api.individual.githubcopilot.com",
 			"reasoning": true,
 			"input": [
@@ -3673,6 +3689,7 @@
 			"name": "GPT-5.1-Codex-max",
 			"api": "openai-responses",
 			"provider": "github-copilot",
+			"premiumMultiplier": 1,
 			"baseUrl": "https://api.individual.githubcopilot.com",
 			"reasoning": true,
 			"input": [
@@ -3699,6 +3716,7 @@
 			"name": "GPT-5.1-Codex-mini",
 			"api": "openai-responses",
 			"provider": "github-copilot",
+			"premiumMultiplier": 0.33,
 			"baseUrl": "https://api.individual.githubcopilot.com",
 			"reasoning": true,
 			"input": [
@@ -3725,6 +3743,7 @@
 			"name": "GPT-5.2",
 			"api": "openai-responses",
 			"provider": "github-copilot",
+			"premiumMultiplier": 1,
 			"baseUrl": "https://api.individual.githubcopilot.com",
 			"reasoning": true,
 			"input": [
@@ -3751,6 +3770,34 @@
 			"name": "GPT-5.2-Codex",
 			"api": "openai-responses",
 			"provider": "github-copilot",
+			"premiumMultiplier": 1,
+			"baseUrl": "https://api.individual.githubcopilot.com",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 128000,
+			"headers": {
+				"User-Agent": "GitHubCopilotChat/0.35.0",
+				"Editor-Version": "vscode/1.107.0",
+				"Editor-Plugin-Version": "copilot-chat/0.35.0",
+				"Copilot-Integration-Id": "vscode-chat"
+			}
+		},
+		"gpt-5.3-codex": {
+			"id": "gpt-5.3-codex",
+			"name": "GPT-5.3-Codex",
+			"api": "openai-responses",
+			"provider": "github-copilot",
+			"premiumMultiplier": 1,
 			"baseUrl": "https://api.individual.githubcopilot.com",
 			"reasoning": true,
 			"input": [
@@ -3777,6 +3824,7 @@
 			"name": "Grok Code Fast 1",
 			"api": "openai-completions",
 			"provider": "github-copilot",
+			"premiumMultiplier": 0.25,
 			"baseUrl": "https://api.individual.githubcopilot.com",
 			"reasoning": true,
 			"input": [

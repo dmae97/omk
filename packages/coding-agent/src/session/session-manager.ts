@@ -1049,6 +1049,7 @@ export interface UsageStatistics {
 	output: number;
 	cacheRead: number;
 	cacheWrite: number;
+	premiumRequests: number;
 	cost: number;
 }
 
@@ -1144,9 +1145,16 @@ export class SessionManager {
 	#fileEntries: FileEntry[] = [];
 	#byId: Map<string, SessionEntry> = new Map();
 	#labelsById: Map<string, string> = new Map();
-	#leafId: string | null = null;
-	#usageStatistics: UsageStatistics = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
-	#persistWriter: NdjsonFileWriter | undefined;
+	#leafId = null as string | null;
+	#usageStatistics = {
+		input: 0,
+		output: 0,
+		cacheRead: 0,
+		cacheWrite: 0,
+		premiumRequests: 0,
+		cost: 0,
+	} satisfies UsageStatistics;
+	#persistWriter = undefined as NdjsonFileWriter | undefined;
 	#persistWriterPath: string | undefined;
 	#persistChain: Promise<void> = Promise.resolve();
 	#persistError: Error | undefined;
@@ -1373,7 +1381,7 @@ export class SessionManager {
 		this.#labelsById.clear();
 		this.#leafId = null;
 		this.#flushed = false;
-		this.#usageStatistics = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+		this.#usageStatistics = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, premiumRequests: 0, cost: 0 };
 
 		if (this.persist) {
 			const fileTimestamp = timestamp.replace(/[:.]/g, "-");
@@ -1387,7 +1395,7 @@ export class SessionManager {
 		this.#byId.clear();
 		this.#labelsById.clear();
 		this.#leafId = null;
-		this.#usageStatistics = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+		this.#usageStatistics = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, premiumRequests: 0, cost: 0 };
 		for (const entry of this.#fileEntries) {
 			if (entry.type === "session") continue;
 			this.#byId.set(entry.id, entry);
@@ -1405,6 +1413,7 @@ export class SessionManager {
 				this.#usageStatistics.output += usage.output;
 				this.#usageStatistics.cacheRead += usage.cacheRead;
 				this.#usageStatistics.cacheWrite += usage.cacheWrite;
+				this.#usageStatistics.premiumRequests += usage.premiumRequests ?? 0;
 				this.#usageStatistics.cost += usage.cost.total;
 			}
 
@@ -1415,6 +1424,7 @@ export class SessionManager {
 					this.#usageStatistics.output += usage.output;
 					this.#usageStatistics.cacheRead += usage.cacheRead;
 					this.#usageStatistics.cacheWrite += usage.cacheWrite;
+					this.#usageStatistics.premiumRequests += usage.premiumRequests ?? 0;
 					this.#usageStatistics.cost += usage.cost.total;
 				}
 			}
@@ -1679,6 +1689,7 @@ export class SessionManager {
 			this.#usageStatistics.output += usage.output;
 			this.#usageStatistics.cacheRead += usage.cacheRead;
 			this.#usageStatistics.cacheWrite += usage.cacheWrite;
+			this.#usageStatistics.premiumRequests += usage.premiumRequests ?? 0;
 			this.#usageStatistics.cost += usage.cost.total;
 		}
 
@@ -1689,6 +1700,7 @@ export class SessionManager {
 				this.#usageStatistics.output += usage.output;
 				this.#usageStatistics.cacheRead += usage.cacheRead;
 				this.#usageStatistics.cacheWrite += usage.cacheWrite;
+				this.#usageStatistics.premiumRequests += usage.premiumRequests ?? 0;
 				this.#usageStatistics.cost += usage.cost.total;
 			}
 		}

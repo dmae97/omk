@@ -237,6 +237,7 @@ export interface SessionStats {
 		cacheWrite: number;
 		total: number;
 	};
+	premiumRequests: number;
 	cost: number;
 }
 
@@ -4781,6 +4782,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		let totalCacheWrite = 0;
 		let totalCost = 0;
 
+		let totalPremiumRequests = 0;
 		const getTaskToolUsage = (details: unknown): Usage | undefined => {
 			if (!details || typeof details !== "object") return undefined;
 			const record = details as Record<string, unknown>;
@@ -4797,6 +4799,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				totalOutput += assistantMsg.usage.output;
 				totalCacheRead += assistantMsg.usage.cacheRead;
 				totalCacheWrite += assistantMsg.usage.cacheWrite;
+				totalPremiumRequests += assistantMsg.usage.premiumRequests ?? 0;
 				totalCost += assistantMsg.usage.cost.total;
 			}
 
@@ -4807,6 +4810,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 					totalOutput += usage.output;
 					totalCacheRead += usage.cacheRead;
 					totalCacheWrite += usage.cacheWrite;
+					totalPremiumRequests += usage.premiumRequests ?? 0;
 					totalCost += usage.cost.total;
 				}
 			}
@@ -4828,6 +4832,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				total: totalInput + totalOutput + totalCacheRead + totalCacheWrite,
 			},
 			cost: totalCost,
+			premiumRequests: totalPremiumRequests,
 		};
 	}
 

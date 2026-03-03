@@ -243,6 +243,7 @@ export interface Usage {
 	cacheRead: number;
 	cacheWrite: number;
 	totalTokens: number;
+	premiumRequests?: number;
 	cost: {
 		input: number;
 		output: number;
@@ -438,6 +439,8 @@ export interface Model<TApi extends Api = any> {
 		cacheRead: number; // $/million tokens
 		cacheWrite: number; // $/million tokens
 	};
+	/** Premium Copilot requests charged per user-initiated request (defaults to 1). */
+	premiumMultiplier?: number;
 	contextWindow: number;
 	maxTokens: number;
 	headers?: Record<string, string>;

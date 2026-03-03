@@ -1,10 +1,16 @@
 import type { Message } from "../types";
-
 /**
  * Infer whether the current request to Copilot is user-initiated or agent-initiated.
  * Accepts `unknown[]` because providers may pass pre-converted message shapes.
  */
-export function inferCopilotInitiator(messages: unknown[]): "user" | "agent" {
+export type CopilotInitiator = "user" | "agent";
+export type CopilotPremiumRequests = number;
+export type CopilotDynamicHeaders = {
+	headers: Record<string, string>;
+	initiator: CopilotInitiator;
+	premiumRequests: CopilotPremiumRequests;
+};
+export function inferCopilotInitiator(messages: unknown[]): CopilotInitiator {
 	if (messages.length === 0) return "user";
 
 	const last = messages[messages.length - 1] as Record<string, unknown>;
@@ -50,10 +56,10 @@ export function hasCopilotVisionInput(messages: Message[]): boolean {
  * Resolve an explicitly configured Copilot initiator header, if present.
  * Handles case-insensitive X-Initiator keys and returns the last valid value.
  */
-export function getCopilotInitiatorOverride(headers: Record<string, string> | undefined): "user" | "agent" | undefined {
+export function getCopilotInitiatorOverride(headers: Record<string, string> | undefined): CopilotInitiator | undefined {
 	if (!headers) return undefined;
 
-	let override: "user" | "agent" | undefined;
+	let override: CopilotInitiator | undefined;
 	for (const [key, value] of Object.entries(headers)) {
 		if (key.toLowerCase() !== "x-initiator") continue;
 		const normalized = value.trim().toLowerCase();
@@ -64,6 +70,19 @@ export function getCopilotInitiatorOverride(headers: Record<string, string> | un
 
 	return override;
 }
+
+export function getCopilotPremiumMultiplier(premiumMultiplier: number | undefined): number {
+	return premiumMultiplier ?? 1;
+}
+
+export function getCopilotPremiumRequests(params: {
+	initiator: CopilotInitiator;
+	premiumMultiplier?: number;
+}): CopilotPremiumRequests {
+	if (params.initiator === "agent") return 0;
+	return getCopilotPremiumMultiplier(params.premiumMultiplier);
+}
+
 /**
  * Build dynamic Copilot headers that vary per-request.
  * Static headers (User-Agent, Editor-Version, etc.) come from model.headers.
@@ -71,10 +90,14 @@ export function getCopilotInitiatorOverride(headers: Record<string, string> | un
 export function buildCopilotDynamicHeaders(params: {
 	messages: unknown[];
 	hasImages: boolean;
-	initiatorOverride?: "user" | "agent";
-}): Record<string, string> {
+	premiumMultiplier?: number;
+	headers?: Record<string, string>;
+	initiatorOverride?: CopilotInitiator;
+}): CopilotDynamicHeaders {
+	const initiator =
+		params.initiatorOverride ?? getCopilotInitiatorOverride(params.headers) ?? inferCopilotInitiator(params.messages);
 	const headers: Record<string, string> = {
-		"X-Initiator": params.initiatorOverride ?? inferCopilotInitiator(params.messages),
+		"X-Initiator": initiator,
 		"Openai-Intent": "conversation-edits",
 	};
 
@@ -82,5 +105,9 @@ export function buildCopilotDynamicHeaders(params: {
 		headers["Copilot-Vision-Request"] = "true";
 	}
 
-	return headers;
+	return {
+		headers,
+		initiator,
+		premiumRequests: getCopilotPremiumRequests({ initiator, premiumMultiplier: params.premiumMultiplier }),
+	};
 }
