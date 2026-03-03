@@ -44,4 +44,44 @@ describe("taskToolRenderer report_finding safety", () => {
 
 		expect(() => rendered.render(120)).not.toThrow();
 	});
+
+	it("renders abort reason inline for aborted subagent results", async () => {
+		const theme = await getThemeByName("dark");
+		expect(theme).toBeDefined();
+		const uiTheme = theme!;
+
+		const details: TaskToolDetails = {
+			projectAgentsDir: null,
+			results: [
+				{
+					index: 0,
+					id: "1-Reviewer",
+					agent: "reviewer",
+					agentSource: "bundled",
+					task: "Review patch",
+					exitCode: 1,
+					output: "",
+					stderr: "",
+					truncated: false,
+					durationMs: 42,
+					tokens: 0,
+					aborted: true,
+					abortReason: "blocked by permissions",
+				},
+			],
+			totalDurationMs: 42,
+		};
+
+		const rendered = taskToolRenderer.renderResult(
+			{
+				content: [{ type: "text", text: "" }],
+				details,
+			},
+			{ expanded: false, isPartial: false },
+			uiTheme,
+		);
+
+		const lines = rendered.render(120);
+		expect(lines.join("\n")).toContain("blocked by permissions");
+	});
 });

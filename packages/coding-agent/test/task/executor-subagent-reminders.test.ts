@@ -235,5 +235,51 @@ describe("runSubprocess submit_result reminders", () => {
 		expect(result.exitCode).toBe(1);
 		expect(result.aborted).toBe(true);
 		expect(result.stderr).toBe(SUBAGENT_WARNING_MISSING_SUBMIT_RESULT);
+		expect(result.abortReason).toBe(SUBAGENT_WARNING_MISSING_SUBMIT_RESULT);
+	});
+
+	it("surfaces abort reason when submit_result reports aborted status", async () => {
+		const session = createMockSession(({ promptIndex, emit, state }) => {
+			if (promptIndex === 1) {
+				const assistant = createAssistantStopMessage("cannot proceed");
+				state.messages.push(assistant);
+				emit({ type: "message_end", message: assistant });
+			}
+			emit({
+				type: "tool_execution_end",
+				toolCallId: "tool-abort",
+				toolName: "submit_result",
+				result: {
+					content: [{ type: "text", text: "Task aborted: blocked by permissions" }],
+					details: { status: "aborted", error: "blocked by permissions" },
+				},
+				isError: false,
+			});
+		});
+
+		(sdkModule.createAgentSession as unknown as { mockResolvedValue: (value: unknown) => void }).mockResolvedValue({
+			session,
+			extensionsResult: {} as unknown as LoadExtensionsResult,
+			setToolUIContext: () => {},
+		});
+
+		const result = await runSubprocess({ ...baseOptions, id: "subagent-aborted-submit-result" });
+		expect(result.aborted).toBe(true);
+		expect(result.abortReason).toBe("blocked by permissions");
+	});
+
+	it("marks pre-aborted subprocess with a concrete reason", async () => {
+		const abortController = new AbortController();
+		abortController.abort("caller cancelled task");
+
+		const result = await runSubprocess({
+			...baseOptions,
+			id: "subagent-cancelled-before-start",
+			signal: abortController.signal,
+		});
+
+		expect(result.aborted).toBe(true);
+		expect(result.abortReason).toBe("Cancelled before start");
+		expect(result.stderr).toBe("Cancelled before start");
 	});
 });

@@ -499,12 +499,14 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 			description: options.description,
 			exitCode: 1,
 			output: "",
-			stderr: "Aborted before start",
+			stderr: "Cancelled before start",
 			truncated: false,
 			durationMs: 0,
 			tokens: 0,
 			modelOverride,
-			error: "Aborted",
+			error: "Cancelled before start",
+			aborted: true,
+			abortReason: "Cancelled before start",
 		};
 	}
 
@@ -612,6 +614,17 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 		signal.addEventListener("abort", onAbort, { once: true, signal: listenerSignal });
 	}
 
+	const resolveSignalAbortReason = (): string => {
+		const reason = signal?.reason;
+		if (reason instanceof Error) {
+			const message = reason.message.trim();
+			if (message.length > 0) return message;
+		} else if (typeof reason === "string") {
+			const message = reason.trim();
+			if (message.length > 0) return message;
+		}
+		return "Cancelled by caller";
+	};
 	const PROGRESS_COALESCE_MS = 150;
 	let lastProgressEmitMs = 0;
 	let progressTimeoutId: NodeJS.Timeout | null = null;
@@ -898,16 +911,20 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 		exitCode: number;
 		error?: string;
 		aborted?: boolean;
+		abortReason?: string;
 		durationMs: number;
 	}> => {
 		const sessionAbortController = new AbortController();
 		let exitCode = 0;
 		let error: string | undefined;
 		let aborted = false;
-
+		let abortReasonText: string | undefined;
 		const checkAbort = () => {
 			if (abortSignal.aborted) {
 				aborted = abortReason === "signal" || abortReason === undefined;
+				if (aborted) {
+					abortReasonText ??= resolveSignalAbortReason();
+				}
 				exitCode = 1;
 				throw new ToolAbortError();
 			}
@@ -1096,6 +1113,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 			if (!submitResultCalled && !abortSignal.aborted) {
 				aborted = true;
 				exitCode = 1;
+				abortReasonText ??= SUBAGENT_WARNING_MISSING_SUBMIT_RESULT;
 				error ??= SUBAGENT_WARNING_MISSING_SUBMIT_RESULT;
 			}
 
@@ -1103,6 +1121,9 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 			if (lastAssistant) {
 				if (lastAssistant.stopReason === "aborted") {
 					aborted = abortReason === "signal" || abortReason === undefined;
+					if (aborted) {
+						abortReasonText ??= resolveSignalAbortReason();
+					}
 					exitCode = 1;
 				} else if (lastAssistant.stopReason === "error") {
 					exitCode = 1;
@@ -1117,6 +1138,9 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 		} finally {
 			if (abortSignal.aborted) {
 				aborted = abortReason === "signal" || abortReason === undefined;
+				if (aborted) {
+					abortReasonText ??= resolveSignalAbortReason();
+				}
 				if (exitCode === 0) exitCode = 1;
 			}
 			sessionAbortController.abort();
@@ -1143,6 +1167,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 			exitCode,
 			error,
 			aborted,
+			abortReason: aborted ? abortReasonText : undefined,
 			durationMs: Date.now() - startTime,
 		};
 	};
@@ -1178,6 +1203,9 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	rawOutput = finalized.rawOutput;
 	exitCode = finalized.exitCode;
 	stderr = finalized.stderr;
+	const lastSubmitResult = submitResultItems?.[submitResultItems.length - 1];
+	const submitResultAbortReason =
+		lastSubmitResult?.status === "aborted" ? lastSubmitResult.error || "Subagent aborted task" : undefined;
 	const { abortedViaSubmitResult, hasSubmitResult } = finalized;
 	const { content: truncatedOutput, truncated } = truncateTail(rawOutput, {
 		maxBytes: MAX_OUTPUT_BYTES,
@@ -1203,6 +1231,11 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 
 	// Update final progress
 	const wasAborted = abortedViaSubmitResult || (!hasSubmitResult && (done.aborted || signal?.aborted || false));
+	const finalAbortReason = wasAborted
+		? abortedViaSubmitResult
+			? submitResultAbortReason
+			: (done.abortReason ?? (signal?.aborted ? resolveSignalAbortReason() : "Subagent aborted task"))
+		: undefined;
 	progress.status = wasAborted ? "aborted" : exitCode === 0 ? "completed" : "failed";
 	scheduleProgress(true);
 
@@ -1223,6 +1256,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 		modelOverride,
 		error: exitCode !== 0 && stderr ? stderr : undefined,
 		aborted: wasAborted,
+		abortReason: finalAbortReason,
 		usage: hasUsage ? accumulatedUsage : undefined,
 		outputPath,
 		extractedToolData: progress.extractedToolData,

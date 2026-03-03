@@ -169,6 +169,7 @@ export interface SingleResult {
 	modelOverride?: string | string[];
 	error?: string;
 	aborted?: boolean;
+	abortReason?: string;
 	/** Aggregated usage from the subprocess, accumulated incrementally from message_end events. */
 	usage?: Usage;
 	/** Output path for the task result */

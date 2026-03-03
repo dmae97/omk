@@ -938,8 +938,9 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 					durationMs: 0,
 					tokens: 0,
 					modelOverride,
-					error: "Skipped",
+					error: "Cancelled before start",
 					aborted: true,
+					abortReason: "Cancelled before start",
 				};
 			});
 

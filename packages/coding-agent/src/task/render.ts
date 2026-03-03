@@ -783,6 +783,11 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 
 	lines.push(...renderTaskSection(result.task, continuePrefix, expanded, theme));
 
+	if (aborted && result.abortReason) {
+		lines.push(
+			`${continuePrefix}${theme.fg("error", theme.status.aborted)} ${theme.fg("dim", truncateToWidth(replaceTabs(result.abortReason), 80))}`,
+		);
+	}
 	// Check for review result (submit_result with review schema + report_finding)
 	const completeData = result.extractedToolData?.submit_result as Array<{ data: unknown }> | undefined;
 	const reportFindingData = normalizeReportFindings(result.extractedToolData?.report_finding);
@@ -873,7 +878,7 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 	}
 
 	// Error message
-	if (result.error && (!success || mergeFailed)) {
+	if (result.error && (!success || mergeFailed) && (!aborted || result.error !== result.abortReason)) {
 		lines.push(`${continuePrefix}${theme.fg(mergeFailed ? "warning" : "error", truncateToWidth(result.error, 70))}`);
 	}
 
