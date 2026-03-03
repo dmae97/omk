@@ -137,14 +137,14 @@ export class McpProtocolHandler implements ProtocolHandler {
 
 		const textParts: string[] = [];
 		for (const item of result.contents) {
-			if (item.text) {
+			if (item.text !== undefined && item.text !== null) {
 				textParts.push(item.text);
 			} else if (item.blob) {
 				textParts.push(`[Binary content: ${item.mimeType ?? "unknown"}, base64 length ${item.blob.length}]`);
 			}
 		}
 
-		const content = textParts.join("\n---\n") || "(empty resource)";
+		const content = textParts.length > 0 ? textParts.join("\n---\n") : "(empty resource)";
 		return {
 			url: url.href,
 			content,

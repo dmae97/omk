@@ -1,3 +1,4 @@
+import { logger } from "@oh-my-pi/pi-utils";
 import type { MCPServerConfig } from "./types";
 
 const SMITHERY_REGISTRY_BASE_URL = "https://registry.smithery.ai";
@@ -324,8 +325,12 @@ async function fetchServerDetailsFromEntry(
 ): Promise<SmitheryServerDetails | null> {
 	const candidates = resolveDetailPathCandidates(entry);
 	for (const candidate of candidates) {
-		const details = await fetchServerDetails(candidate, options);
-		if (details) return details;
+		try {
+			const details = await fetchServerDetails(candidate, options);
+			if (details) return details;
+		} catch (error) {
+			logger.debug("Smithery detail fetch candidate failed", { candidate, error: String(error) });
+		}
 	}
 	return null;
 }
@@ -439,14 +444,31 @@ export async function searchSmitheryRegistry(
 		);
 	});
 
+	const detailFailures: Array<{ identity: string; error: string }> = [];
 	const results = await Promise.all(
 		uniqueEntries.map(async entry => {
-			const details = await fetchServerDetailsFromEntry(entry, { apiKey: options?.apiKey });
-			if (!details) return null;
-			return toSearchResult(entry, details);
+			try {
+				const details = await fetchServerDetailsFromEntry(entry, { apiKey: options?.apiKey });
+				if (!details) return null;
+				return toSearchResult(entry, details);
+			} catch (error) {
+				detailFailures.push({
+					identity: getEntryIdentityKey(entry) ?? entry.id ?? "unknown",
+					error: String(error),
+				});
+				return null;
+			}
 		}),
 	);
 
+	if (detailFailures.length > 0) {
+		logger.warn("Smithery detail fetch failed for some entries", {
+			query,
+			failedEntries: detailFailures.length,
+			totalEntries: uniqueEntries.length,
+			sample: detailFailures.slice(0, 3),
+		});
+	}
 	return results.filter((result): result is SmitherySearchResult => result !== null).slice(0, limit);
 }
 

@@ -883,7 +883,7 @@ export class ModelRegistry {
 		const modelsUrl = `${baseUrl}/models`;
 
 		const headers: Record<string, string> = { ...(providerConfig.headers ?? {}) };
-		const apiKey = await this.authStorage.getApiKey("lm-studio");
+		const apiKey = await this.authStorage.getApiKey(providerConfig.provider);
 		if (apiKey && apiKey !== DEFAULT_LOCAL_TOKEN && apiKey !== kNoAuth) {
 			headers.Authorization = `Bearer ${apiKey}`;
 		}

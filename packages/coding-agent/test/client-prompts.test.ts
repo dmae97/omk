@@ -68,13 +68,17 @@ describe("getPrompt", () => {
 			messages: [{ role: "user", content: { type: "text", text: "Hello!" } }],
 		};
 		const responses = new Map<string, unknown[]>([["prompts/get", [mockResult]]]);
-		const transport = createMockTransport(responses);
+		let requestParams: Record<string, unknown> | undefined;
+		const transport = createMockTransport(responses, (_method, params) => {
+			requestParams = params;
+		});
 		const conn = createMockConnection({ prompts: {} }, transport);
 
 		const result = await getPrompt(conn, "greet");
 		expect(result).toEqual(mockResult);
 		expect(result.messages).toHaveLength(1);
 		expect(result.messages[0].role).toBe("user");
+		expect(requestParams).toEqual({ name: "greet" });
 	});
 
 	it("sends arguments when provided", async () => {
@@ -82,11 +86,17 @@ describe("getPrompt", () => {
 			messages: [{ role: "assistant", content: { type: "text", text: "const x = 1" } }],
 		};
 		const responses = new Map<string, unknown[]>([["prompts/get", [mockResult]]]);
-		const transport = createMockTransport(responses);
+		let requestParams: Record<string, unknown> | undefined;
+		const transport = createMockTransport(responses, (_method, params) => {
+			requestParams = params;
+		});
 		const conn = createMockConnection({ prompts: {} }, transport);
 
-		const result = await getPrompt(conn, "review-code", { code: "const x = 1" });
+		const args = { code: "const x = 1" };
+		const result = await getPrompt(conn, "review-code", args);
 		expect(result).toEqual(mockResult);
+		expect(requestParams).toEqual({ name: "review-code", arguments: args });
+		expect(requestParams?.arguments).toBe(args);
 	});
 
 	it("sends without arguments when args is empty object", async () => {
@@ -94,11 +104,15 @@ describe("getPrompt", () => {
 			messages: [{ role: "user", content: { type: "text", text: "No args" } }],
 		};
 		const responses = new Map<string, unknown[]>([["prompts/get", [mockResult]]]);
-		const transport = createMockTransport(responses);
+		let requestParams: Record<string, unknown> | undefined;
+		const transport = createMockTransport(responses, (_method, params) => {
+			requestParams = params;
+		});
 		const conn = createMockConnection({ prompts: {} }, transport);
 
 		const result = await getPrompt(conn, "no-args-prompt", {});
 		expect(result).toEqual(mockResult);
+		expect(requestParams).toEqual({ name: "no-args-prompt" });
 	});
 
 	it("sends without arguments when args is undefined", async () => {
@@ -106,11 +120,15 @@ describe("getPrompt", () => {
 			messages: [{ role: "user", content: { type: "text", text: "No args" } }],
 		};
 		const responses = new Map<string, unknown[]>([["prompts/get", [mockResult]]]);
-		const transport = createMockTransport(responses);
+		let requestParams: Record<string, unknown> | undefined;
+		const transport = createMockTransport(responses, (_method, params) => {
+			requestParams = params;
+		});
 		const conn = createMockConnection({ prompts: {} }, transport);
 
 		const result = await getPrompt(conn, "no-args-prompt", undefined);
 		expect(result).toEqual(mockResult);
+		expect(requestParams).toEqual({ name: "no-args-prompt" });
 	});
 });
 

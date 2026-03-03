@@ -47,14 +47,6 @@ async function getBunGlobalBinDir(): Promise<string | undefined> {
 	}
 }
 
-function getRealPathOrOriginal(filePath: string): string {
-	try {
-		return fs.realpathSync(filePath);
-	} catch {
-		return filePath;
-	}
-}
-
 function normalizePathForComparison(filePath: string): string {
 	const normalized = path.normalize(filePath);
 	if (process.platform === "win32") return normalized.toLowerCase();
@@ -62,16 +54,13 @@ function normalizePathForComparison(filePath: string): string {
 }
 
 function isPathInDirectory(filePath: string, directoryPath: string): boolean {
-	const normalizedPath = normalizePathForComparison(getRealPathOrOriginal(filePath));
-	const normalizedDirectory = normalizePathForComparison(getRealPathOrOriginal(directoryPath));
+	const normalizedPath = normalizePathForComparison(path.resolve(filePath));
+	const normalizedDirectory = normalizePathForComparison(path.resolve(directoryPath));
 	const relativePath = path.relative(normalizedDirectory, normalizedPath);
 	return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));
 }
 
-interface UpdateTarget {
-	method: "bun" | "binary";
-	path: string;
-}
+type UpdateTarget = { method: "bun" } | { method: "binary"; path: string };
 
 function resolveUpdateMethod(ompPath: string, bunBinDir: string | undefined): "bun" | "binary" {
 	if (!bunBinDir) return "binary";
@@ -82,10 +71,18 @@ export function _resolveUpdateMethodForTest(ompPath: string, bunBinDir: string |
 	return resolveUpdateMethod(ompPath, bunBinDir);
 }
 async function resolveUpdateTarget(): Promise<UpdateTarget> {
-	const ompPath = resolveOmpPath() ?? process.execPath;
 	const bunBinDir = await getBunGlobalBinDir();
-	const method = resolveUpdateMethod(ompPath, bunBinDir);
-	return { method, path: ompPath };
+	const ompPath = resolveOmpPath();
+
+	if (ompPath) {
+		const method = resolveUpdateMethod(ompPath, bunBinDir);
+		if (method === "bun") return { method };
+		return { method, path: ompPath };
+	}
+
+	if (bunBinDir) return { method: "bun" };
+
+	throw new Error(`Could not resolve ${APP_NAME} binary path in PATH`);
 }
 
 /**

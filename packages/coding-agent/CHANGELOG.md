@@ -1,6 +1,12 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+
+- Fixed LM Studio API key retrieval to use configured provider name instead of hardcoded 'lm-studio'
+- Fixed resource content handling to properly check for empty text values (null/undefined)
+- Fixed resource refresh tracking to prevent stale promise reuse when server connection changes
+- Fixed update target resolution to properly handle cases where binary path cannot be resolved
 
 ## [13.6.1] - 2026-03-03
 

@@ -210,13 +210,7 @@ export const PROVIDER_DESCRIPTORS: readonly ProviderDescriptor[] = [
 		config => litellmModelManagerOptions(config),
 		catalog("LiteLLM", ["LITELLM_API_KEY"], { allowUnauthenticated: true }),
 	),
-	catalogDescriptor(
-		"lm-studio",
-		"llama-3-8b",
-		config => lmStudioModelManagerOptions(config),
-		catalog("LM Studio", ["LM_STUDIO_API_KEY"], { allowUnauthenticated: true }),
-		{ allowUnauthenticated: true },
-	),
+	descriptor("lm-studio", "llama-3-8b", config => lmStudioModelManagerOptions(config), { allowUnauthenticated: true }),
 	catalogDescriptor(
 		"vllm",
 		"gpt-oss-20b",

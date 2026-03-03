@@ -126,7 +126,7 @@ export class MCPManager {
 	#notificationsEnabled = false;
 	#notificationsEpoch = 0;
 	#subscribedResources = new Map<string, Set<string>>();
-	#pendingResourceRefresh = new Map<string, Promise<void>>();
+	#pendingResourceRefresh = new Map<string, { connection: MCPServerConnection; promise: Promise<void> }>();
 
 	constructor(
 		private cwd: string,
@@ -590,6 +590,7 @@ export class MCPManager {
 		this.#pendingConnections.delete(name);
 		this.#pendingToolLoads.delete(name);
 		this.#sources.delete(name);
+		this.#pendingResourceRefresh.delete(name);
 
 		const connection = this.#connections.get(name);
 
@@ -622,6 +623,7 @@ export class MCPManager {
 
 		this.#pendingConnections.clear();
 		this.#pendingToolLoads.clear();
+		this.#pendingResourceRefresh.clear();
 		this.#sources.clear();
 		this.#connections.clear();
 		this.#tools = [];
@@ -660,13 +662,13 @@ export class MCPManager {
 	 * Refresh resources from a specific server.
 	 */
 	async refreshServerResources(name: string): Promise<void> {
+		const connection = this.#connections.get(name);
+		if (!connection || !serverSupportsResources(connection.capabilities)) return;
+
 		const existing = this.#pendingResourceRefresh.get(name);
-		if (existing) return existing;
+		if (existing && existing.connection === connection) return existing.promise;
 
 		const doRefresh = async (): Promise<void> => {
-			const connection = this.#connections.get(name);
-			if (!connection || !serverSupportsResources(connection.capabilities)) return;
-
 			// Clear cached resources
 			connection.resources = undefined;
 			connection.resourceTemplates = undefined;
@@ -716,11 +718,12 @@ export class MCPManager {
 		};
 
 		const promise = doRefresh().finally(() => {
-			if (this.#pendingResourceRefresh.get(name) === promise) {
+			const pending = this.#pendingResourceRefresh.get(name);
+			if (pending?.promise === promise) {
 				this.#pendingResourceRefresh.delete(name);
 			}
 		});
-		this.#pendingResourceRefresh.set(name, promise);
+		this.#pendingResourceRefresh.set(name, { connection, promise });
 		return promise;
 	}
 

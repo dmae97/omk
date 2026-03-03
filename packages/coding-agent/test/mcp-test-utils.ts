@@ -1,10 +1,14 @@
 import type { MCPServerCapabilities, MCPServerConnection, MCPTransport } from "../src/mcp/types";
 
-export function createMockTransport(responses: Map<string, unknown[]>): MCPTransport {
+export function createMockTransport(
+	responses: Map<string, unknown[]>,
+	onRequest?: (method: string, params: Record<string, unknown> | undefined) => void,
+): MCPTransport {
 	const callCounts = new Map<string, number>();
 	return {
 		connected: true,
-		async request<T>(method: string): Promise<T> {
+		async request<T>(method: string, params?: Record<string, unknown>): Promise<T> {
+			onRequest?.(method, params);
 			const count = callCounts.get(method) ?? 0;
 			callCounts.set(method, count + 1);
 			const queue = responses.get(method);

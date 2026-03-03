@@ -335,6 +335,14 @@ mod imp {
 			unsafe {
 				drop(Box::from_raw(provider_context_ptr));
 			}
+			if !virtualization_context.is_null() {
+				// SAFETY: `virtualization_context` is only used when ProjFS returned a non-null
+				// context during `PrjStartVirtualizing`; stopping it here prevents a partially
+				// started instance from remaining active after start failure.
+				unsafe {
+					(api.prj_stop_virtualizing)(virtualization_context);
+				}
+			}
 			return Err(classify_start_error("start virtualization", start_hr));
 		}
 
@@ -517,7 +525,7 @@ mod imp {
 
 		let relative_path = callback_relative_path(callback_data);
 		let source_path = context.lower_root.join(relative_path);
-		let metadata = match fs::symlink_metadata(&source_path) {
+		let metadata = match fs::metadata(&source_path) {
 			Ok(metadata) => metadata,
 			Err(err) => return io_error_to_hresult(&err),
 		};

@@ -102,13 +102,17 @@ describe("readResource", () => {
 		const readResult: MCPResourceReadResult = {
 			contents: [{ uri: "file:///a.txt", mimeType: "text/plain", text: "hello" }],
 		};
-		const transport = createMockTransport(new Map([["resources/read", [readResult]]]));
+		let requestParams: Record<string, unknown> | undefined;
+		const transport = createMockTransport(new Map([["resources/read", [readResult]]]), (_method, params) => {
+			requestParams = params;
+		});
 		const conn = createMockConnection({ resources: {} }, transport);
 
 		const result = await readResource(conn, "file:///a.txt");
 		expect(result.contents).toHaveLength(1);
 		expect(result.contents[0].text).toBe("hello");
 		expect(result.contents[0].mimeType).toBe("text/plain");
+		expect(requestParams).toEqual({ uri: "file:///a.txt" });
 	});
 
 	it("handles binary blobs", async () => {
