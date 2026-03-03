@@ -32,6 +32,7 @@ export interface SegmentContext {
 		cacheWrite: number;
 		premiumRequests: number;
 		cost: number;
+		tokensPerSecond: number | null;
 	};
 	contextPercent: number;
 	contextWindow: number;

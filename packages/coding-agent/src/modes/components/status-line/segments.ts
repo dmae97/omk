@@ -203,6 +203,17 @@ const tokenTotalSegment: StatusLineSegment = {
 	},
 };
 
+const tokenRateSegment: StatusLineSegment = {
+	id: "token_rate",
+	render(ctx) {
+		const { tokensPerSecond } = ctx.usageStats;
+		if (!tokensPerSecond) return { content: "", visible: false };
+
+		const content = withIcon(theme.icon.output, `${tokensPerSecond.toFixed(1)}/s`);
+		return { content: theme.fg("statusLineOutput", content), visible: true };
+	},
+};
+
 const costSegment: StatusLineSegment = {
 	id: "cost",
 	render(ctx) {
@@ -351,6 +362,7 @@ export const SEGMENTS: Record<StatusLineSegmentId, StatusLineSegment> = {
 	token_in: tokenInSegment,
 	token_out: tokenOutSegment,
 	token_total: tokenTotalSegment,
+	token_rate: tokenRateSegment,
 	cost: costSegment,
 	context_pct: contextPctSegment,
 	context_total: contextTotalSegment,

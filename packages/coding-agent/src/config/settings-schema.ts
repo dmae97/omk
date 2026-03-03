@@ -68,6 +68,7 @@ export type StatusLineSegmentId =
 	| "token_in"
 	| "token_out"
 	| "token_total"
+	| "token_rate"
 	| "cost"
 	| "context_pct"
 	| "context_total"

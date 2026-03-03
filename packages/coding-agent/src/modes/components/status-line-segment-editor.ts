@@ -25,6 +25,7 @@ const SEGMENT_INFO: Record<StatusLineSegmentId, { label: string; short: string }
 	token_in: { label: "Tokens In", short: "input tokens" },
 	token_out: { label: "Tokens Out", short: "output tokens" },
 	token_total: { label: "Tokens", short: "total tokens" },
+	token_rate: { label: "Tokens/s", short: "output throughput" },
 	cost: { label: "Cost", short: "session cost" },
 	context_pct: { label: "Context %", short: "context usage" },
 	context_total: { label: "Context", short: "context window" },
