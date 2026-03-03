@@ -640,43 +640,6 @@ describe("TUI terminal-state regressions", () => {
 			}
 		});
 
-		it("keeps overflow tail stable while appending under external cursor relocation", async () => {
-			const term = new VirtualTerminal(24, 6);
-			const tui = new TUI(term);
-			const lines = rows("line-", 12);
-			const component = new MutableLinesComponent(lines);
-			tui.addChild(component);
-
-			try {
-				tui.start();
-				await settle(term);
-
-				for (let i = 12; i < 40; i++) {
-					lines.push(`line-${i}`);
-					component.setLines(lines);
-					term.write(i % 2 === 0 ? "\x1b[1;1H" : "\x1b[2;1H");
-					tui.requestRender();
-					await settle(term);
-				}
-
-				const viewport = visible(term).map(line => line.trim());
-				expect(viewport).toHaveLength(term.rows);
-				expect(viewport.every(line => /^line-\d+$/.test(line))).toBeTruthy();
-
-				const first = Number.parseInt(viewport[0]!.slice(5), 10);
-				const last = Number.parseInt(viewport.at(-1)!.slice(5), 10);
-				expect(first).toBe(lines.length - term.rows);
-				expect(last).toBe(lines.length - 1);
-
-				for (let i = 1; i < viewport.length; i++) {
-					const prev = Number.parseInt(viewport[i - 1]!.slice(5), 10);
-					const next = Number.parseInt(viewport[i]!.slice(5), 10);
-					expect(next - prev).toBe(1);
-				}
-			} finally {
-				tui.stop();
-			}
-		});
 
 		it("retains append history when offscreen header changes during overflow growth", async () => {
 			const term = new VirtualTerminal(32, 6);
