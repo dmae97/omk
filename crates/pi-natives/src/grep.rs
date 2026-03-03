@@ -1029,7 +1029,8 @@ fn grep_sync(
 		let mut entries =
 			collect_files(&search_path, &scan.entries, glob_set.as_ref(), type_filter.as_ref());
 		if entries.is_empty() && scan.cache_age_ms >= fs_cache::empty_recheck_ms() {
-			let fresh = fs_cache::force_rescan(&search_path, include_hidden, use_gitignore, true, &ct)?;
+			let fresh =
+				fs_cache::force_rescan(&search_path, include_hidden, use_gitignore, true, &ct)?;
 			entries = collect_files(&search_path, &fresh, glob_set.as_ref(), type_filter.as_ref());
 		}
 		entries

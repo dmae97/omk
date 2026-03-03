@@ -145,7 +145,7 @@ describe("resolveResumableSession", () => {
 		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
-	function writeSession(fileName: string, headerCwd: string, id = Snowflake.next()): string {
+	function writeSession(fileName: string, headerCwd: string, id: string = Snowflake.next()): string {
 		const filePath = path.join(sessionDir, fileName);
 		fs.writeFileSync(
 			filePath,

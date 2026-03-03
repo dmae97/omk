@@ -9,8 +9,8 @@ import {
 	replaceTabs,
 	Spacer,
 	Text,
-	truncateToWidth,
 	type TUI,
+	truncateToWidth,
 	visibleWidth,
 } from "@oh-my-pi/pi-tui";
 import { theme } from "../../modes/theme/theme";
