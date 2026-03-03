@@ -1137,6 +1137,56 @@ async function collectSessionsFromFiles(files: string[], storage: SessionStorage
 	return sessions;
 }
 
+export interface ResolvedSessionMatch {
+	session: SessionInfo;
+	scope: "local" | "global";
+}
+
+function sessionMatchesResumeArg(session: SessionInfo, sessionArg: string): boolean {
+	const normalizedArg = sessionArg.toLowerCase();
+	const normalizedId = session.id.toLowerCase();
+	if (normalizedId.startsWith(normalizedArg)) {
+		return true;
+	}
+
+	const fileName = path.basename(session.path, ".jsonl").toLowerCase();
+	if (fileName.startsWith(normalizedArg)) {
+		return true;
+	}
+
+	const separator = fileName.lastIndexOf("_");
+	if (separator < 0) {
+		return false;
+	}
+
+	const fileSessionId = fileName.slice(separator + 1);
+	return fileSessionId.startsWith(normalizedArg);
+}
+
+export async function resolveResumableSession(
+	sessionArg: string,
+	cwd: string,
+	sessionDir?: string,
+	storage: SessionStorage = new FileSessionStorage(),
+): Promise<ResolvedSessionMatch | undefined> {
+	const localSessions = await SessionManager.list(cwd, sessionDir, storage);
+	const localMatch = localSessions.find(session => sessionMatchesResumeArg(session, sessionArg));
+	if (localMatch) {
+		return { session: localMatch, scope: "local" };
+	}
+
+	if (sessionDir) {
+		return undefined;
+	}
+
+	const globalSessions = await SessionManager.listAll(storage);
+	const globalMatch = globalSessions.find(session => sessionMatchesResumeArg(session, sessionArg));
+	if (!globalMatch) {
+		return undefined;
+	}
+
+	return { session: globalMatch, scope: "global" };
+}
 export class SessionManager {
 	#sessionId: string = "";
 	#sessionName: string | undefined;

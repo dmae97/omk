@@ -28,7 +28,7 @@ import { InteractiveMode, runPrintMode, runRpcMode } from "./modes";
 import { initTheme, stopThemeWatcher } from "./modes/theme/theme";
 import { type CreateAgentSessionOptions, createAgentSession, discoverAuthStorage } from "./sdk";
 import type { AgentSession } from "./session/agent-session";
-import { type SessionInfo, SessionManager } from "./session/session-manager";
+import { resolveResumableSession, type SessionInfo, SessionManager } from "./session/session-manager";
 import { resolvePromptInput } from "./system-prompt";
 import { getChangelogPath, getNewEntries, parseChangelog } from "./utils/changelog";
 
@@ -162,23 +162,13 @@ async function prepareInitialMessage(
 	};
 }
 
-/**
- * Resolve a session argument to a local or global session match.
- */
-async function resolveSessionMatch(
-	sessionArg: string,
-	cwd: string,
-	sessionDir?: string,
-): Promise<SessionInfo | undefined> {
-	const sessions = await SessionManager.list(cwd, sessionDir);
-	let matches = sessions.filter(session => session.id.startsWith(sessionArg));
-
-	if (matches.length === 0 && !sessionDir) {
-		const globalSessions = await SessionManager.listAll();
-		matches = globalSessions.filter(session => session.id.startsWith(sessionArg));
-	}
-
-	return matches[0];
+function normalizePathForComparison(value: string): string {
+	const resolved = path.resolve(value);
+	let realPath = resolved;
+	try {
+		realPath = realpathSync(resolved);
+	} catch {}
+	return process.platform === "win32" ? realPath.toLowerCase() : realPath;
 }
 
 async function promptForkSession(session: SessionInfo): Promise<boolean> {
@@ -229,20 +219,22 @@ async function createSessionManager(parsed: Args, cwd: string): Promise<SessionM
 		if (sessionArg.includes("/") || sessionArg.includes("\\") || sessionArg.endsWith(".jsonl")) {
 			return await SessionManager.open(sessionArg, parsed.sessionDir);
 		}
-		const match = await resolveSessionMatch(sessionArg, cwd, parsed.sessionDir);
+		const match = await resolveResumableSession(sessionArg, cwd, parsed.sessionDir);
 		if (!match) {
 			throw new Error(`Session "${sessionArg}" not found.`);
 		}
-		const normalizedCwd = path.resolve(cwd);
-		const normalizedMatchCwd = path.resolve(match.cwd || cwd);
-		if (normalizedCwd !== normalizedMatchCwd) {
-			const shouldFork = await promptForkSession(match);
-			if (!shouldFork) {
-				throw new Error(`Session "${sessionArg}" is in another project (${match.cwd}).`);
+		if (match.scope === "global") {
+			const normalizedCwd = normalizePathForComparison(cwd);
+			const normalizedMatchCwd = normalizePathForComparison(match.session.cwd || cwd);
+			if (normalizedCwd !== normalizedMatchCwd) {
+				const shouldFork = await promptForkSession(match.session);
+				if (!shouldFork) {
+					throw new Error(`Session "${sessionArg}" is in another project (${match.session.cwd}).`);
+				}
+				return await SessionManager.forkFrom(match.session.path, cwd, parsed.sessionDir);
 			}
-			return await SessionManager.forkFrom(match.path, cwd, parsed.sessionDir);
 		}
-		return await SessionManager.open(match.path, parsed.sessionDir);
+		return await SessionManager.open(match.session.path, parsed.sessionDir);
 	}
 	if (parsed.continue) {
 		return await SessionManager.continueRecent(cwd, parsed.sessionDir);
