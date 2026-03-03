@@ -879,7 +879,9 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 
 	// Error message
 	if (result.error && (!success || mergeFailed) && (!aborted || result.error !== result.abortReason)) {
-		lines.push(`${continuePrefix}${theme.fg(mergeFailed ? "warning" : "error", truncateToWidth(result.error, 70))}`);
+		lines.push(
+			`${continuePrefix}${theme.fg(mergeFailed ? "warning" : "error", truncateToWidth(replaceTabs(result.error), 70))}`,
+		);
 	}
 
 	return lines;
