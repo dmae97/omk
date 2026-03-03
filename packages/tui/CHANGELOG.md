@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+
+- Fixed cursor positioning when content shrinks to empty without clearOnShrink enabled
 
 ## [13.5.4] - 2026-03-01
 

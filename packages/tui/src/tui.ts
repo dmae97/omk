@@ -1113,15 +1113,17 @@ export class TUI extends Container {
 					fullRender(true);
 					return;
 				}
-				if (extraLines > 0) {
-					buffer += "\x1b[1B";
+				const clearStartOffset = newLines.length > 0 && extraLines > 0 ? 1 : 0;
+				if (clearStartOffset > 0) {
+					buffer += `\x1b[${clearStartOffset}B`;
 				}
 				for (let i = 0; i < extraLines; i++) {
 					buffer += "\r\x1b[2K";
 					if (i < extraLines - 1) buffer += "\x1b[1B";
 				}
-				if (extraLines > 0) {
-					buffer += `\x1b[${extraLines}A`;
+				const moveUp = extraLines - 1 + clearStartOffset;
+				if (moveUp > 0) {
+					buffer += `\x1b[${moveUp}A`;
 				}
 				buffer += "\x1b[?2026l";
 				this.terminal.write(buffer);

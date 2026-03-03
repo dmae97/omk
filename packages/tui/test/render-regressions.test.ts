@@ -116,6 +116,28 @@ describe("TUI terminal-state regressions", () => {
 				tui.stop();
 			}
 		});
+
+		it("clears row 0 when content shrinks to empty without clearOnShrink", async () => {
+			const term = new VirtualTerminal(40, 10);
+			const tui = new TUI(term);
+			const component = new MutableLinesComponent(["A"]);
+			tui.setClearOnShrink(false);
+			tui.addChild(component);
+
+			try {
+				tui.start();
+				await settle(term);
+
+				component.setLines([]);
+				tui.requestRender();
+				await settle(term);
+
+				const viewport = visible(term);
+				expect(viewport[0]?.trim()).toBe("");
+			} finally {
+				tui.stop();
+			}
+		});
 	});
 
 	describe("resize + viewport behavior", () => {
