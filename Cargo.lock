@@ -2232,6 +2232,7 @@ dependencies = [
  "tokio-util",
  "unicode-segmentation",
  "unicode-width",
+ "windows-sys 0.61.2",
  "winreg 0.55.0",
 ]
 

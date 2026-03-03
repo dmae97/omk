@@ -6,18 +6,21 @@
 
 - Added LM Studio integration to the model registry and discovery flow.
 - Added support for authenticating with LM Studio using the `/login lm-studio` command.
+- Added `fuse-projfs` task isolation mode for Windows ProjFS-backed overlays.
 
 ### Changed
 
 - Updated Anthropic Foundry environment variable documentation and CLI help text to the canonical names: `CLAUDE_CODE_USE_FOUNDRY`, `CLAUDE_CODE_CLIENT_CERT`, and `CLAUDE_CODE_CLIENT_KEY`
 - Documented Foundry-specific Anthropic runtime configuration (`FOUNDRY_BASE_URL`, `ANTHROPIC_FOUNDRY_API_KEY`, `ANTHROPIC_CUSTOM_HEADERS`, `NODE_EXTRA_CA_CERTS`) in environment variable reference docs
+- `fuse-overlay` task isolation now targets `fuse-overlayfs` on Unix hosts only; on Windows it falls back to `worktree` with a `<system-notification>` suggesting `fuse-projfs`.
+- `fuse-projfs` now performs Windows ProjFS preflight checks and falls back to `worktree` when host or repository prerequisites are unavailable.
+- Cross-repo patch capture now uses the platform null device (`NUL` on Windows, `/dev/null` elsewhere) for `git diff --no-index`.
 
 ### Fixed
 
 - Fixed MCP resource subscription handling to prevent unsubscribing when notifications are re-enabled after being disabled
 - Fixed LM Studio base URL validation to preserve invalid configured URLs instead of silently falling back to localhost
 - Fixed URI template matching to correctly handle expressions that expand to empty strings
-
 ## [13.5.6] - 2026-03-01
 ### Changed
 
@@ -1067,7 +1070,6 @@
 - Improved error reporting in fetch tool to include HTTP status codes when URL fetching fails
 - Fixed fetch tool to preserve actual response metadata (finalUrl, contentType) instead of defaults when requests fail
 
-||||||| parent of a70a34c8b (fix(coding-agent/debug): Sanitized debug log rendering)
 
 ## [12.1.0] - 2026-02-13
 

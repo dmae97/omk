@@ -21,6 +21,7 @@ import "./html/types";
 import "./image/types";
 import "./keys/types";
 import "./ps/types";
+import "./projfs/types";
 import "./pty/types";
 import "./shell/types";
 import "./text/types";
@@ -274,6 +275,9 @@ function validateNative(bindings: NativeBindings, source: string): void {
 	checkFn("astEdit");
 	checkFn("detectMacOSAppearance");
 	checkFn("MacAppearanceObserver");
+	checkFn("projfsOverlayProbe");
+	checkFn("projfsOverlayStart");
+	checkFn("projfsOverlayStop");
 	if (missing.length) {
 		throw new Error(
 			`Native addon missing exports (${source}). Missing: ${missing.join(", ")}. ` +

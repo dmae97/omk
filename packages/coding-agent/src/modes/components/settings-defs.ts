@@ -97,7 +97,16 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 	"task.isolation.mode": [
 		{ value: "none", label: "None", description: "No isolation" },
 		{ value: "worktree", label: "Worktree", description: "Git worktree isolation" },
-		{ value: "fuse-overlay", label: "Fuse Overlay", description: "COW overlay via fuse-overlayfs" },
+		{
+			value: "fuse-overlay",
+			label: "Fuse Overlay",
+			description: "COW overlay via fuse-overlayfs (Unix only)",
+		},
+		{
+			value: "fuse-projfs",
+			label: "Fuse ProjFS",
+			description: "COW overlay via ProjFS (Windows only; falls back to worktree if unavailable)",
+		},
 	],
 	// Task isolation merge strategy
 	"task.isolation.merge": [

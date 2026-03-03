@@ -2,6 +2,7 @@ import type { Dirent } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
+import { projfsOverlayStart, projfsOverlayStop } from "@oh-my-pi/pi-natives";
 import { getWorktreeDir, isEnoent, logger, Snowflake } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
 
@@ -35,6 +36,17 @@ export async function getRepoRoot(cwd: string): Promise<string> {
 		throw new Error("Git repository root could not be resolved for isolated task execution.");
 	}
 	return repoRoot;
+}
+
+const PROJFS_UNAVAILABLE_PREFIX = "PROJFS_UNAVAILABLE:";
+const GIT_NO_INDEX_NULL_PATH = process.platform === "win32" ? "NUL" : "/dev/null";
+
+export function isProjfsUnavailableError(err: unknown): boolean {
+	return err instanceof Error && err.message.includes(PROJFS_UNAVAILABLE_PREFIX);
+}
+
+export function getGitNoIndexNullPath(): string {
+	return GIT_NO_INDEX_NULL_PATH;
 }
 
 export async function ensureWorktree(baseCwd: string, id: string): Promise<string> {
@@ -248,9 +260,10 @@ async function captureRepoDeltaPatch(repoDir: string, rb: RepoBaseline): Promise
 		const baselineUntracked = new Set(rb.untracked);
 		const newUntracked = currentUntracked.filter(entry => !baselineUntracked.has(entry));
 		if (newUntracked.length > 0) {
+			const nullPath = getGitNoIndexNullPath();
 			const untrackedDiffs = await Promise.all(
 				newUntracked.map(entry =>
-					$`git diff --binary --no-index /dev/null ${entry}`.cwd(repoDir).quiet().nothrow().text(),
+					$`git diff --binary --no-index ${nullPath} ${entry}`.cwd(repoDir).quiet().nothrow().text(),
 				),
 			);
 			parts.push(...untrackedDiffs.filter(d => d.trim()));
@@ -273,9 +286,10 @@ async function captureRepoDeltaPatch(repoDir: string, rb: RepoBaseline): Promise
 
 		if (newUntracked.length === 0) return diff;
 
+		const nullPath = getGitNoIndexNullPath();
 		const untrackedDiffs = await Promise.all(
 			newUntracked.map(entry =>
-				$`git diff --binary --no-index /dev/null ${entry}`.cwd(repoDir).quiet().nothrow().text(),
+				$`git diff --binary --no-index ${nullPath} ${entry}`.cwd(repoDir).quiet().nothrow().text(),
 			),
 		);
 		return `${diff}${diff && !diff.endsWith("\n") ? "\n" : ""}${untrackedDiffs.join("\n")}`;
@@ -371,10 +385,14 @@ export async function cleanupWorktree(dir: string): Promise<void> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Fuse-overlay isolation
+// Fuse-overlay isolation (Unix)
 // ═══════════════════════════════════════════════════════════════════════════
 
 export async function ensureFuseOverlay(baseCwd: string, id: string): Promise<string> {
+	if (process.platform === "win32") {
+		throw new Error('fuse-overlay isolation is unsupported on Windows. Use task.isolation.mode = "fuse-projfs".');
+	}
+
 	const repoRoot = await getRepoRoot(baseCwd);
 	const encodedProject = getEncodedProjectName(repoRoot);
 	const baseDir = getWorktreeDir(encodedProject, id);
@@ -382,13 +400,13 @@ export async function ensureFuseOverlay(baseCwd: string, id: string): Promise<st
 	const workDir = path.join(baseDir, "work");
 	const mergedDir = path.join(baseDir, "merged");
 
-	// Clean up any stale mount at this path
+	// Clean up any stale mount at this path (linux only)
 	const fusermount = Bun.which("fusermount3") ?? Bun.which("fusermount");
 	if (fusermount) {
 		await $`${fusermount} -u ${mergedDir}`.quiet().nothrow();
 	}
-	await fs.rm(baseDir, { recursive: true, force: true });
 
+	await fs.rm(baseDir, { recursive: true, force: true });
 	await fs.mkdir(upperDir, { recursive: true });
 	await fs.mkdir(workDir, { recursive: true });
 	await fs.mkdir(mergedDir, { recursive: true });
@@ -418,6 +436,50 @@ export async function cleanupFuseOverlay(mergedDir: string): Promise<void> {
 		const fusermount = Bun.which("fusermount3") ?? Bun.which("fusermount");
 		if (fusermount) {
 			await $`${fusermount} -u ${mergedDir}`.quiet().nothrow();
+		}
+	} finally {
+		// baseDir is the parent of the merged directory
+		const baseDir = path.dirname(mergedDir);
+		await fs.rm(baseDir, { recursive: true, force: true });
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ProjFS isolation (Windows)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function ensureProjfsOverlay(baseCwd: string, id: string): Promise<string> {
+	if (process.platform !== "win32") {
+		throw new Error("fuse-projfs isolation is only available on Windows.");
+	}
+
+	const repoRoot = await getRepoRoot(baseCwd);
+	const encodedProject = getEncodedProjectName(repoRoot);
+	const baseDir = getWorktreeDir(encodedProject, id);
+	const mergedDir = path.join(baseDir, "merged");
+
+	await fs.rm(baseDir, { recursive: true, force: true });
+	await fs.mkdir(mergedDir, { recursive: true });
+	try {
+		projfsOverlayStart(repoRoot, mergedDir);
+		return mergedDir;
+	} catch (err) {
+		await fs.rm(baseDir, { recursive: true, force: true });
+		throw err;
+	}
+}
+
+export async function cleanupProjfsOverlay(mergedDir: string): Promise<void> {
+	try {
+		if (process.platform === "win32") {
+			try {
+				projfsOverlayStop(mergedDir);
+			} catch (err) {
+				logger.warn("ProjFS overlay stop failed during cleanup", {
+					mergedDir,
+					error: err instanceof Error ? err.message : String(err),
+				});
+			}
 		}
 	} finally {
 		// baseDir is the parent of the merged directory

@@ -347,7 +347,7 @@ const fn exit_code(result: &ExecutionResult) -> i32 {
 }
 
 #[cfg(windows)]
-fn normalize_env_key(key: &str) -> &str {
+const fn normalize_env_key(key: &str) -> &str {
 	if key.eq_ignore_ascii_case("PATH") {
 		"PATH"
 	} else {
@@ -368,8 +368,7 @@ fn merge_path_values(existing: &str, incoming: &str) -> String {
 	push_unique_paths(&mut merged, &mut seen, incoming);
 
 	std::env::join_paths(merged.iter())
-		.map(|paths| paths.to_string_lossy().to_string())
-		.unwrap_or_else(|_| merged.join(";"))
+		.map_or_else(|_| merged.join(";"), |paths| paths.to_string_lossy().to_string())
 }
 
 #[cfg(windows)]
@@ -452,10 +451,10 @@ async fn create_session(config: &ShellConfig) -> Result<ShellSessionCore> {
 	}
 
 	#[cfg(windows)]
-	if merged_path.is_none() {
-		if let Some(value) = std::env::var_os("Path").or_else(|| std::env::var_os("PATH")) {
-			merged_path = Some(value.to_string_lossy().to_string());
-		}
+	if merged_path.is_none()
+		&& let Some(value) = std::env::var_os("Path").or_else(|| std::env::var_os("PATH"))
+	{
+		merged_path = Some(value.to_string_lossy().to_string());
 	}
 
 	if let Some(path_value) = merged_path {

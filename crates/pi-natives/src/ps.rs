@@ -131,7 +131,7 @@ mod platform {
 	use smallvec::SmallVec;
 
 	#[repr(C)]
-	#[allow(non_snake_case)]
+	#[allow(non_snake_case, reason = "Windows PROCESSENTRY32W field names must match Win32 ABI")]
 	struct PROCESSENTRY32W {
 		dwSize:              u32,
 		cntUsage:            u32,
@@ -145,25 +145,27 @@ mod platform {
 		szExeFile:           [u16; 260],
 	}
 
-	type HANDLE = *mut std::ffi::c_void;
-	const INVALID_HANDLE_VALUE: HANDLE = -1isize as HANDLE;
+	type Handle = *mut std::ffi::c_void;
+	const INVALID_HANDLE_VALUE: Handle = -1isize as Handle;
 	const TH32CS_SNAPPROCESS: u32 = 0x00000002;
 	const PROCESS_TERMINATE: u32 = 0x0001;
 
 	#[link(name = "kernel32")]
 	unsafe extern "system" {
-		fn CreateToolhelp32Snapshot(dwFlags: u32, th32ProcessID: u32) -> HANDLE;
-		fn Process32FirstW(hSnapshot: HANDLE, lppe: *mut PROCESSENTRY32W) -> i32;
-		fn Process32NextW(hSnapshot: HANDLE, lppe: *mut PROCESSENTRY32W) -> i32;
-		fn CloseHandle(hObject: HANDLE) -> i32;
-		fn OpenProcess(dwDesiredAccess: u32, bInheritHandle: i32, dwProcessId: u32) -> HANDLE;
-		fn TerminateProcess(hProcess: HANDLE, uExitCode: u32) -> i32;
+		fn CreateToolhelp32Snapshot(dwFlags: u32, th32ProcessID: u32) -> Handle;
+		fn Process32FirstW(hSnapshot: Handle, lppe: *mut PROCESSENTRY32W) -> i32;
+		fn Process32NextW(hSnapshot: Handle, lppe: *mut PROCESSENTRY32W) -> i32;
+		fn CloseHandle(hObject: Handle) -> i32;
+		fn OpenProcess(dwDesiredAccess: u32, bInheritHandle: i32, dwProcessId: u32) -> Handle;
+		fn TerminateProcess(hProcess: Handle, uExitCode: u32) -> i32;
 	}
 
-	/// Build a map of parent_pid -> [child_pids] for all processes.
+	/// Build a map of `parent_pid` -> [`child_pids`] for all processes.
 	fn build_process_tree() -> HashMap<u32, SmallVec<[u32; 4]>> {
 		let mut tree: HashMap<u32, SmallVec<[u32; 4]>> = HashMap::new();
 
+		// SAFETY: Toolhelp snapshot APIs are called with initialized structs and valid
+		// handles.
 		unsafe {
 			let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 			if snapshot == INVALID_HANDLE_VALUE {
@@ -173,14 +175,14 @@ mod platform {
 			let mut entry: PROCESSENTRY32W = mem::zeroed();
 			entry.dwSize = mem::size_of::<PROCESSENTRY32W>() as u32;
 
-			if Process32FirstW(snapshot, &mut entry) != 0 {
+			if Process32FirstW(snapshot, &raw mut entry) != 0 {
 				loop {
 					tree
 						.entry(entry.th32ParentProcessID)
 						.or_default()
 						.push(entry.th32ProcessID);
 
-					if Process32NextW(snapshot, &mut entry) == 0 {
+					if Process32NextW(snapshot, &raw mut entry) == 0 {
 						break;
 					}
 				}
@@ -215,6 +217,8 @@ mod platform {
 	/// Terminate `pid` (Windows ignores `signal`).
 	/// Returns true when the process is terminated.
 	pub fn kill_pid(pid: i32, _signal: i32) -> bool {
+		// SAFETY: OpenProcess/TerminateProcess are called with kernel-provided process
+		// IDs and handles are always closed.
 		unsafe {
 			let handle = OpenProcess(PROCESS_TERMINATE, 0, pid as u32);
 			if handle.is_null() || handle == INVALID_HANDLE_VALUE {
@@ -228,13 +232,13 @@ mod platform {
 
 	/// Process groups are not exposed on Windows.
 	/// Always returns `None`.
-	pub fn process_group_id(_pid: i32) -> Option<i32> {
+	pub const fn process_group_id(_pid: i32) -> Option<i32> {
 		None
 	}
 
 	/// Process groups are not exposed on Windows.
 	/// Always returns `false`.
-	pub fn kill_process_group(_pgid: i32, _signal: i32) -> bool {
+	pub const fn kill_process_group(_pgid: i32, _signal: i32) -> bool {
 		false
 	}
 }
@@ -268,12 +272,14 @@ pub fn kill_tree(pid: i32, signal: i32) -> u32 {
 
 /// Get the process group id for `pid`.
 /// Returns `None` when the process is missing or unsupported on the platform.
+#[allow(clippy::missing_const_for_fn, reason = "Dispatches to platform-specific implementation")]
 pub fn process_group_id(pid: i32) -> Option<i32> {
 	platform::process_group_id(pid)
 }
 
 /// Send `signal` to the process group `pgid`.
 /// Returns false when process groups are unsupported on the platform.
+#[allow(clippy::missing_const_for_fn, reason = "Dispatches to platform-specific implementation")]
 pub fn kill_process_group(pgid: i32, signal: i32) -> bool {
 	platform::kill_process_group(pgid, signal)
 }

@@ -570,12 +570,13 @@ export const SETTINGS_SCHEMA = {
 	// ─────────────────────────────────────────────────────────────────────────
 	"task.isolation.mode": {
 		type: "enum",
-		values: ["none", "worktree", "fuse-overlay"] as const,
+		values: ["none", "worktree", "fuse-overlay", "fuse-projfs"] as const,
 		default: "none",
 		ui: {
 			tab: "tools",
 			label: "Task isolation",
-			description: "Isolation mode for subagents (none, git worktree, or fuse-overlay)",
+			description:
+				"Isolation mode for subagents (none, git worktree, fuse-overlayfs on Unix, or ProjFS on Windows via fuse-projfs; unsupported modes fall back to worktree)",
 			submenu: true,
 		},
 	},

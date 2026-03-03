@@ -112,12 +112,11 @@ fn query_git_install_path_from_registry() -> Option<String> {
 	let key_paths = ["SOFTWARE\\GitForWindows", "SOFTWARE\\WOW6432Node\\GitForWindows"];
 
 	for key_path in key_paths {
-		if let Ok(key) = hklm.open_subkey(key_path) {
-			if let Ok(path) = key.get_value::<String, _>("InstallPath") {
-				if !path.is_empty() {
-					return Some(path);
-				}
-			}
+		if let Ok(key) = hklm.open_subkey(key_path)
+			&& let Ok(path) = key.get_value::<String, _>("InstallPath")
+			&& !path.is_empty()
+		{
+			return Some(path);
 		}
 	}
 

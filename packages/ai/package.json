@@ -37,7 +37,7 @@
 		"test": "bun test"
 	},
 	"dependencies": {
-		"@anthropic-ai/sdk": "^0.78",
+		"@anthropic-ai/sdk": "^0.77.0",
 		"@aws-sdk/client-bedrock-runtime": "^3.998",
 		"@bufbuild/protobuf": "^2.11",
 		"@google/genai": "^1.43",
@@ -48,7 +48,7 @@
 		"ajv-formats": "^3.0",
 		"openai": "^6.25",
 		"partial-json": "^0.1",
-		"zod": "^4.3"
+		"zod": "4.3.5"
 	},
 	"devDependencies": {
 		"@types/bun": "^1.3"

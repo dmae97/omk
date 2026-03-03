@@ -34,6 +34,7 @@ pub mod html;
 pub mod image;
 pub mod keys;
 pub mod prof;
+pub mod projfs_overlay;
 pub mod ps;
 pub mod pty;
 pub mod shell;

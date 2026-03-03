@@ -153,7 +153,7 @@ Parallel execution framework with specialized agents and real-time streaming:
 - **Parallel exploration**: Reviewer agent can spawn explore agents for large codebase analysis
 - **Real-time artifact streaming**: Task outputs stream as they're created, not just at completion
 - **Full output access**: Read complete subagent output via `agent://<id>` resources when previews truncate
-- **Isolation backends**: `isolated: true` runs tasks in git worktrees or fuse-overlay filesystems, with patch or branch merge strategies
+- **Isolation backends**: `isolated: true` runs tasks in git worktrees, Unix fuse-overlay filesystems, or Windows ProjFS (`fuse-projfs`), with patch or branch merge strategies
 - **Async background jobs**: Background execution with configurable concurrency (up to 100 jobs) and `await` tool for blocking on results
 - **Agent Control Center**: `/agents` dashboard for managing and creating custom agents
 - **AI-powered agent creation**: Generate custom agent definitions with the architect model
@@ -923,7 +923,7 @@ async:
 task:
   eager: false
   isolation:
-    mode: none # none | worktree | fuse-overlay
+    mode: none # none | worktree | fuse-overlay | fuse-projfs
     merge: patch # patch | branch
 ```
 
