@@ -43,13 +43,12 @@ Every edit has `op`, `pos`, and `lines`. Range replaces also have `end`. Both `p
 
 <rules>
 1. **Minimize scope:** You **MUST** use one logical mutation per operation.
-2. **Prefer insertion over neighbor rewrites:** You **SHOULD** anchor on structural boundaries (`}`, `]`, `},`), not interior lines.
-3. **Range end tag (inclusive):** `end` is inclusive and **MUST** point to the final line being replaced.
-   - If `lines` includes a closing boundary token (`}`, `]`, `)`, `);`, `},`), `end` **MUST** include the original boundary line.
-   - You **MUST NOT** set `end` to an interior line and then re-add the boundary token in `lines`; that duplicates the next surviving line.
-   - To remove a line while keeping its neighbors, **delete** it (`lines: null`). You **MUST NOT** replace it with the content of an adjacent line — that line still exists and will be duplicated.
-4. **Match surrounding indentation:** Leading whitespace in `lines` **MUST** be copied verbatim from adjacent lines in the `read` output. Do not infer or reconstruct indentation from memory — count the actual leading spaces on the lines immediately above and below the insertion or replacement point.
-5. **Preserve idiomatic sibling spacing:** When inserting declarations between top-level siblings, you **MUST** preserve existing blank-line separators. If siblings are separated by one blank line, include a trailing `""` in `lines` so inserted code keeps the same spacing.
+2. **`end` is inclusive:** If `lines` includes a closing token (`}`, `]`, `)`, `);`, `},`), `end` **MUST** include the original boundary line. To delete a line while keeping neighbors, use `lines: null` — do not replace it with an adjacent line's content.
+3. **Copy indentation from `read` output:** Leading whitespace in `lines` **MUST** follow adjacent lines exactly. Do not reconstruct from memory.
+4. **Verify the splice before submitting:** For each edit op, mentally read the result:
+   - Does the last `lines` entry duplicate the line surviving after `end`? → extend `end` or remove the duplicate.
+   - Does the first `lines` entry duplicate the line before `pos`? → the edit is wrong.
+   - For `prepend`/`append`: does new code land inside or outside the enclosing block? Trace the braces.
 </rules>
 
 <recovery>
@@ -62,56 +61,18 @@ Every edit has `op`, `pos`, and `lines`. Range replaces also have `end`. Both `p
 {{hlinefull 23 "  const timeout: number = 5000;"}}
 ```
 ```
-{
-  path: "…",
-  edits: [{
-    op: "replace",
-    pos: {{hlinejsonref 23 "  const timeout: number = 5000;"}},
-    lines: ["  const timeout: number = 30_000;"]
-  }]
-}
+{ op: "replace", pos: {{hlinejsonref 23 "  const timeout: number = 5000;"}}, lines: ["  const timeout: number = 30_000;"] }
 ```
 </example>
 
 <example name="delete lines">
 Single line — `lines: null` deletes entirely:
 ```
-{
-  path: "…",
-  edits: [{
-    op: "replace",
-    pos: {{hlinejsonref 7 "// @ts-ignore"}},
-    lines: null
-  }]
-}
+{ op: "replace", pos: {{hlinejsonref 7 "// @ts-ignore"}}, lines: null }
 ```
 Range — add `end`:
 ```
-{
-  path: "…",
-  edits: [{
-    op: "replace",
-    pos: {{hlinejsonref 80 "  // TODO: remove after migration"}},
-    end: {{hlinejsonref 83 "  }"}},
-    lines: null
-  }]
-}
-```
-</example>
-
-<example name="clear text but keep the line break">
-```ts
-{{hlinefull 14 "  placeholder: \"DO NOT SHIP\","}}
-```
-```
-{
-  path: "…",
-  edits: [{
-    op: "replace",
-    pos: {{hlinejsonref 14 "  placeholder: \"DO NOT SHIP\","}},
-    lines: [""]
-  }]
-}
+{ op: "replace", pos: {{hlinejsonref 80 "  // TODO: remove after migration"}}, end: {{hlinejsonref 83 "  }"}}, lines: null }
 ```
 </example>
 
@@ -124,47 +85,35 @@ Range — add `end`:
 ```
 Include the closing `}` in the replaced range — stopping one line short orphans the brace or duplicates it.
 ```
-{
-  path: "…",
-  edits: [{
-    op: "replace",
-    pos: {{hlinejsonref 61 "      console.error(err);"}},
-    end: {{hlinejsonref 63 "    }"}},
-    lines: [
-      "      if (isEnoent(err)) return null;",
-      "      throw err;",
-      "    }"
-    ]
-  }]
-}
+{ op: "replace", pos: {{hlinejsonref 61 "      console.error(err);"}}, end: {{hlinejsonref 63 "    }"}}, lines: ["      if (isEnoent(err)) return null;", "      throw err;", "    }"] }
 ```
 </example>
 
-<example name="inclusive end avoids duplicate boundary">
+<example name="insert inside a block (good vs bad)">
+Adding a method inside a class — anchor on the **closing brace**, not after it.
 ```ts
-{{hlinefull 70 "\tif (user.isAdmin) {"}}
-{{hlinefull 71 "\t\tdeleteRecord(id);"}}
-{{hlinefull 72 "\t}"}}
-{{hlinefull 73 "\tafter();"}}
+{{hlinefull 20 "  greet() {"}}
+{{hlinefull 21 "    return \"hi\";"}}
+{{hlinefull 22 "  }"}}
+{{hlinefull 23 "}"}}
+{{hlinefull 24 ""}}
+{{hlinefull 25 "function other() {"}}
 ```
-The block grows by one line and the condition changes — two single-line ops would be needed otherwise. Since `}` appears in `lines`, `end` must include `72`:
+Bad — appends **after** closing `}` (method lands outside the class):
 ```
-{
-  path: "…",
-  edits: [{
-    op: "replace",
-    pos: {{hlinejsonref 70 "\tif (user.isAdmin) {"}},
-    end: {{hlinejsonref 72 "\t}"}},
-    lines: [
-      "\tif (user.isAdmin && confirmed) {",
-      "\t\tauditLog(id);",
-      "\t\tdeleteRecord(id);",
-      "\t}"
-    ]
-  }]
-}
+{ op: "append", pos: {{hlinejsonref 23 "}"}}, lines: ["  newMethod() {", "    return 1;", "  }"] }
 ```
-Also apply the same rule to `);`, `],`, and `},` closers: if replacement includes the closer token, `end` must include the original closer line.
+Result — `newMethod` is a **top-level function**, not a class method:
+```
+}         ← class closes here
+  newMethod() {
+    return 1;
+  }
+```
+Good — prepends **before** closing `}` (method stays inside the class):
+```
+{ op: "prepend", pos: {{hlinejsonref 23 "}"}}, lines: ["  newMethod() {", "    return 1;", "  }"] }
+```
 </example>
 
 <example name="insert between sibling declarations">
@@ -179,71 +128,24 @@ Also apply the same rule to `);`, `],`, and `},` closers: if replacement include
 ```
 Use a trailing `""` to preserve the blank line between top-level sibling declarations.
 ```
-{
-  path: "…",
-  edits: [{
-    op: "prepend",
-    pos: {{hlinejsonref 48 "function y() {"}},
-    lines: [
-      "function z() {",
-      "  runZ();",
-      "}",
-      ""
-    ]
-  }]
-}
+{ op: "prepend", pos: {{hlinejsonref 48 "function y() {"}}, lines: ["function z() {", "  runZ();", "}", ""] }
 ```
 </example>
 
-<example name="anchor to structure, not whitespace">
-Trailing `""` in `lines` preserves blank-line separators. Anchor to the structural line, not the blank line above — blank lines are ambiguous and shift.
+<example name="disambiguate anchors">
+Blank lines and repeated patterns (`}`, `return null;`) appear many times — never anchor on them when a unique line exists nearby.
 ```ts
-{{hlinefull 101 "}"}}
-{{hlinefull 102 ""}}
-{{hlinefull 103 "export function serialize(data: unknown): string {"}}
+{{hlinefull 46 "}"}}
+{{hlinefull 47 ""}}
+{{hlinefull 48 "function processItem(item: Item) {"}}
 ```
-Bad — append after "}"
-Good — anchors to structural line:
+Bad — anchoring on the blank line (ambiguous, may shift):
 ```
-{
-  path: "…",
-  edits: [{
-    op: "prepend",
-    pos: {{hlinejsonref 103 "export function serialize(data: unknown): string {"}},
-    lines: [
-      "function validate(data: unknown): boolean {",
-      "  return data != null && typeof data === \"object\";",
-      "}",
-      ""
-    ]
-  }]
-}
+{ op: "append", pos: {{hlinejsonref 47 ""}}, lines: ["function helper() { }"] }
 ```
-</example>
-
-<example name="indentation must match context">
-Leading whitespace in `lines` **MUST** be copied from the `read` output, not reconstructed from memory. If the file uses tabs, use `\t` in JSON — you **MUST NOT** use `\\t`, which produces a literal backslash-t in the file.
-```ts
-{{hlinefull 10 "class Foo {"}}
-{{hlinefull 11 "\tbar() {"}}
-{{hlinefull 12 "\t\treturn 1;"}}
-{{hlinefull 13 "\t}"}}
-{{hlinefull 14 "}"}}
+Good — anchor on the unique declaration line:
 ```
-Good — `\t` in JSON is a real tab, matching the file's indentation:
-```
-{
-  path: "…",
-  edits: [{
-    op: "prepend",
-    pos: {{hlinejsonref 14 "}"}},
-    lines: [
-      "\tbaz() {",
-      "\t\treturn 2;",
-      "\t}"
-    ]
-  }]
-}
+{ op: "prepend", pos: {{hlinejsonref 48 "function processItem(item: Item) {"}}, lines: ["function helper() { }", ""] }
 ```
 </example>
 
