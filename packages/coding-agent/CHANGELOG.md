@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.6.1] - 2026-03-03
+
 ### Fixed
 
 - Fixed `omp update` silently succeeding without actually updating the binary when the update channel (bun global vs compiled binary) doesn't match the installation method ([#247](https://github.com/can1357/oh-my-pi/issues/247))
