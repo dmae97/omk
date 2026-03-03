@@ -1,0 +1,108 @@
+import { afterEach, describe, expect, it, vi } from "bun:test";
+import { getBundledModel } from "../src/models";
+import { streamSimple } from "../src/stream";
+import type { Context, Model } from "../src/types";
+
+interface GeminiCliThinkingConfig {
+	thinkingLevel?: string;
+	thinkingBudget?: number;
+}
+
+interface CapturedRequestBody {
+	request?: {
+		generationConfig?: {
+			thinkingConfig?: GeminiCliThinkingConfig;
+		};
+	};
+}
+
+function createModel(id: string): Model<"google-gemini-cli"> {
+	return {
+		id,
+		name: id,
+		api: "google-gemini-cli",
+		provider: "google-gemini-cli",
+		baseUrl: "https://cloudcode-pa.googleapis.com",
+		reasoning: true,
+		input: ["text", "image"],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 1_000_000,
+		maxTokens: 65_536,
+	};
+}
+
+const context: Context = {
+	messages: [{ role: "user", content: "hello", timestamp: Date.now() }],
+};
+
+function extractThinkingConfig(bodyText: string | undefined): GeminiCliThinkingConfig | undefined {
+	if (!bodyText) return undefined;
+	const parsed = JSON.parse(bodyText) as CapturedRequestBody;
+	return parsed.request?.generationConfig?.thinkingConfig;
+}
+
+describe("google-gemini-cli Gemini 3.x thinking mapping", () => {
+	const originalFetch = globalThis.fetch;
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+		globalThis.fetch = originalFetch;
+	});
+
+	it("includes gemini-3.1-pro-preview in bundled google-gemini-cli models", () => {
+		expect(getBundledModel("google-gemini-cli", "gemini-3.1-pro-preview")?.id).toBe("gemini-3.1-pro-preview");
+	});
+	it("uses thinkingLevel for gemini-3.1-pro-preview", async () => {
+		let requestBody: string | undefined;
+		globalThis.fetch = vi.fn(async (_input, init) => {
+			requestBody = typeof init?.body === "string" ? init.body : undefined;
+			return new Response('{"error":{"message":"bad request"}}', { status: 400 });
+		}) as unknown as typeof fetch;
+
+		const stream = streamSimple(createModel("gemini-3.1-pro-preview"), context, {
+			apiKey: JSON.stringify({ token: "token", projectId: "proj-123" }),
+			reasoning: "medium",
+		});
+		await stream.result();
+
+		const thinkingConfig = extractThinkingConfig(requestBody);
+		expect(thinkingConfig?.thinkingLevel).toBe("HIGH");
+		expect(thinkingConfig?.thinkingBudget).toBeUndefined();
+	});
+
+	it("uses thinkingLevel for gemini-3.1-flash-preview", async () => {
+		let requestBody: string | undefined;
+		globalThis.fetch = vi.fn(async (_input, init) => {
+			requestBody = typeof init?.body === "string" ? init.body : undefined;
+			return new Response('{"error":{"message":"bad request"}}', { status: 400 });
+		}) as unknown as typeof fetch;
+
+		const stream = streamSimple(createModel("gemini-3.1-flash-preview"), context, {
+			apiKey: JSON.stringify({ token: "token", projectId: "proj-123" }),
+			reasoning: "medium",
+		});
+		await stream.result();
+
+		const thinkingConfig = extractThinkingConfig(requestBody);
+		expect(thinkingConfig?.thinkingLevel).toBe("MEDIUM");
+		expect(thinkingConfig?.thinkingBudget).toBeUndefined();
+	});
+
+	it("keeps thinkingBudget for gemini-2.5-pro", async () => {
+		let requestBody: string | undefined;
+		globalThis.fetch = vi.fn(async (_input, init) => {
+			requestBody = typeof init?.body === "string" ? init.body : undefined;
+			return new Response('{"error":{"message":"bad request"}}', { status: 400 });
+		}) as unknown as typeof fetch;
+
+		const stream = streamSimple(createModel("gemini-2.5-pro"), context, {
+			apiKey: JSON.stringify({ token: "token", projectId: "proj-123" }),
+			reasoning: "medium",
+		});
+		await stream.result();
+
+		const thinkingConfig = extractThinkingConfig(requestBody);
+		expect(thinkingConfig?.thinkingLevel).toBeUndefined();
+		expect(thinkingConfig?.thinkingBudget).toBeDefined();
+	});
+});

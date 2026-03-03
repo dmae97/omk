@@ -36801,6 +36801,26 @@
 			},
 			"contextWindow": 1000000,
 			"maxTokens": 64000
+		},
+		"gemini-3.1-pro-preview": {
+			"id": "gemini-3.1-pro-preview",
+			"name": "Gemini 3.1 Pro Preview",
+			"api": "google-gemini-cli",
+			"provider": "google-gemini-cli",
+			"baseUrl": "https://cloudcode-pa.googleapis.com",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 1000000,
+			"maxTokens": 65000
 		}
 	},
 	"google-vertex": {

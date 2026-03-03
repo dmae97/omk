@@ -24,7 +24,7 @@ const GEMINI_TIER_MAP: Array<{ tier: string; models: string[] }> = [
 	},
 	{
 		tier: "Pro",
-		models: ["gemini-2.5-pro", "gemini-3-pro-preview", "gemini-3-pro", "gemini-1.5-pro"],
+		models: ["gemini-2.5-pro", "gemini-3-pro-preview", "gemini-3.1-pro-preview", "gemini-3-pro", "gemini-1.5-pro"],
 	},
 ];
 

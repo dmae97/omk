@@ -574,7 +574,7 @@ function mapOptionsForApi<TApi extends Api>(
 			const googleModel = model as Model<"google-generative-ai">;
 			const effort = clampReasoning(options.reasoning)!;
 
-			// Gemini 3 models use thinkingLevel exclusively instead of thinkingBudget.
+			// Gemini 3+ models use thinkingLevel exclusively instead of thinkingBudget.
 			// https://ai.google.dev/gemini-api/docs/thinking#set-budget
 			if (isGemini3ProModel(googleModel) || isGemini3FlashModel(googleModel)) {
 				return {
@@ -608,8 +608,8 @@ function mapOptionsForApi<TApi extends Api>(
 
 			const effort = clampReasoning(options.reasoning)!;
 
-			// Gemini 3 models use thinkingLevel instead of thinkingBudget
-			if (model.id.includes("3-pro") || model.id.includes("3-flash")) {
+			// Gemini 3+ models use thinkingLevel instead of thinkingBudget
+			if (isGemini3ProModelId(model.id) || isGemini3FlashModelId(model.id)) {
 				return {
 					...base,
 					thinking: {
@@ -699,14 +699,22 @@ function mapOptionsForApi<TApi extends Api>(
 
 type ClampedThinkingLevel = Exclude<ThinkingLevel, "xhigh">;
 
+function isGemini3ProModelId(modelId: string): boolean {
+	return /3(?:\.\d+)?-pro/.test(modelId);
+}
+
+function isGemini3FlashModelId(modelId: string): boolean {
+	return /3(?:\.\d+)?-flash/.test(modelId);
+}
+
 function isGemini3ProModel(model: Model<"google-generative-ai">): boolean {
-	// Covers gemini-3-pro, gemini-3-pro-preview, and possible other prefixed ids in the future
-	return model.id.includes("3-pro");
+	// Covers gemini-3-pro, gemini-3-pro-preview, gemini-3.1-pro-preview, and future 3.x variants
+	return isGemini3ProModelId(model.id);
 }
 
 function isGemini3FlashModel(model: Model<"google-generative-ai">): boolean {
-	// Covers gemini-3-flash, gemini-3-flash-preview, and possible other prefixed ids in the future
-	return model.id.includes("3-flash");
+	// Covers gemini-3-flash, gemini-3-flash-preview, gemini-3.1-flash, and future 3.x variants
+	return isGemini3FlashModelId(model.id);
 }
 
 function getGemini3ThinkingLevel(
@@ -738,7 +746,7 @@ function getGemini3ThinkingLevel(
 }
 
 function getGeminiCliThinkingLevel(effort: ClampedThinkingLevel, modelId: string): GoogleThinkingLevel {
-	if (modelId.includes("3-pro")) {
+	if (isGemini3ProModelId(modelId)) {
 		// Gemini 3 Pro only supports LOW/HIGH (for now)
 		switch (effort) {
 			case "minimal":
