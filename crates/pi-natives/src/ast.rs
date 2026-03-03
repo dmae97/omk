@@ -14,7 +14,6 @@ use ast_grep_core::{
 use ast_grep_language::SupportLang;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use rayon::prelude::*;
 
 use crate::{fs_cache, glob_util, task};
 
@@ -486,13 +485,6 @@ fn apply_edits(content: &str, edits: &[Edit<String>]) -> Result<String> {
 	Ok(output)
 }
 
-struct PatternFindResultData {
-	pattern:       String,
-	matches:       Vec<AstFindMatch>,
-	total_matches: u32,
-	parse_errors:  Vec<String>,
-}
-
 fn normalize_pattern_list(patterns: Option<Vec<String>>) -> Result<Vec<String>> {
 	let mut normalized = Vec::new();
 	let mut seen = BTreeSet::new();
@@ -534,97 +526,85 @@ fn normalize_rewrite_map(
 	normalized.sort_by(|left, right| left.0.cmp(&right.0));
 	Ok(normalized)
 }
+struct CompiledFindPattern {
+	pattern:                String,
+	compiled_by_lang:       HashMap<String, Pattern>,
+	compile_errors_by_lang: HashMap<String, String>,
+}
 
-fn run_find_for_pattern(
-	pattern: &str,
-	candidates: &[FileCandidate],
+struct ResolvedCandidate {
+	candidate:      FileCandidate,
+	language:       Option<SupportLang>,
+	language_error: Option<String>,
+}
+
+fn resolve_candidates_for_find(
+	candidates: Vec<FileCandidate>,
 	lang: Option<&str>,
-	selector: Option<&str>,
-	strictness: &MatchStrictness,
-	include_meta: bool,
 	ct: &task::CancelToken,
-) -> Result<PatternFindResultData> {
-	let mut matches = Vec::new();
-	let mut parse_errors = Vec::new();
-	let mut total_matches = 0u32;
-	let mut compiled_cache: HashMap<String, Pattern> = HashMap::new();
-	let mut compile_errors: HashMap<String, String> = HashMap::new();
+) -> Result<(Vec<ResolvedCandidate>, HashMap<String, SupportLang>)> {
+	let mut resolved = Vec::with_capacity(candidates.len());
+	let mut languages = HashMap::new();
 
 	for candidate in candidates {
 		ct.heartbeat()?;
-		let source = match std::fs::read_to_string(&candidate.absolute_path) {
-			Ok(source) => source,
-			Err(err) => {
-				parse_errors.push(format!("{pattern}: {}: {err}", candidate.display_path));
-				continue;
+		match resolve_language(lang, &candidate.absolute_path) {
+			Ok(language) => {
+				let key = canonical_lang_name(language).to_string();
+				languages.entry(key).or_insert(language);
+				resolved.push(ResolvedCandidate {
+					candidate,
+					language: Some(language),
+					language_error: None,
+				});
 			},
-		};
-
-		let language = match resolve_language(lang, &candidate.absolute_path) {
-			Ok(language) => language,
 			Err(err) => {
-				parse_errors.push(format!("{pattern}: {}: {err}", candidate.display_path));
-				continue;
+				resolved.push(ResolvedCandidate {
+					candidate,
+					language: None,
+					language_error: Some(err.to_string()),
+				});
 			},
-		};
-
-		let lang_key = canonical_lang_name(language).to_string();
-		if let Some(error) = compile_errors.get(&lang_key) {
-			parse_errors.push(format!("{pattern}: {}: {error}", candidate.display_path));
-			continue;
-		}
-		let compiled = if let Some(existing) = compiled_cache.get(&lang_key) {
-			existing.clone()
-		} else {
-			match compile_pattern(pattern, selector, strictness, language) {
-				Ok(compiled) => {
-					compiled_cache.insert(lang_key.clone(), compiled.clone());
-					compiled
-				},
-				Err(err) => {
-					let message = err.to_string();
-					compile_errors.insert(lang_key, message.clone());
-					parse_errors.push(format!("{pattern}: {}: {message}", candidate.display_path));
-					continue;
-				},
-			}
-		};
-
-		let ast = language.ast_grep(source);
-		if has_syntax_error(&ast) {
-			parse_errors.push(format!(
-				"{pattern}: {}: parse error (syntax tree contains error nodes)",
-				candidate.display_path
-			));
-			continue;
-		}
-
-		for matched in ast.root().find_all(compiled.clone()) {
-			ct.heartbeat()?;
-			total_matches = total_matches.saturating_add(1);
-			let range = matched.range();
-			let start = matched.start_pos();
-			let end = matched.end_pos();
-			let meta_variables = if include_meta {
-				Some(HashMap::<String, String>::from(matched.get_env().clone()))
-			} else {
-				None
-			};
-			matches.push(AstFindMatch {
-				path: candidate.display_path.clone(),
-				text: matched.text().into_owned(),
-				byte_start: to_u32(range.start),
-				byte_end: to_u32(range.end),
-				start_line: to_u32(start.line().saturating_add(1)),
-				start_column: to_u32(start.column(matched.get_node()).saturating_add(1)),
-				end_line: to_u32(end.line().saturating_add(1)),
-				end_column: to_u32(end.column(matched.get_node()).saturating_add(1)),
-				meta_variables,
-			});
 		}
 	}
 
-	Ok(PatternFindResultData { pattern: pattern.to_string(), matches, total_matches, parse_errors })
+	Ok((resolved, languages))
+}
+
+fn compile_find_patterns(
+	patterns: &[String],
+	languages: &HashMap<String, SupportLang>,
+	selector: Option<&str>,
+	strictness: &MatchStrictness,
+	ct: &task::CancelToken,
+) -> Result<Vec<CompiledFindPattern>> {
+	let mut compiled = Vec::with_capacity(patterns.len());
+
+	for pattern in patterns {
+		ct.heartbeat()?;
+		let mut compiled_by_lang = HashMap::with_capacity(languages.len());
+		let mut compile_errors_by_lang = HashMap::new();
+
+		for (lang_key, &language) in languages {
+			ct.heartbeat()?;
+			match compile_pattern(pattern, selector, strictness, language) {
+				Ok(compiled_pattern) => {
+					compiled_by_lang.insert(lang_key.clone(), compiled_pattern);
+				},
+				Err(err) => {
+					compile_errors_by_lang.insert(lang_key.clone(), err.to_string());
+				},
+			}
+		}
+
+		compiled.push(CompiledFindPattern {
+			pattern: pattern.clone(),
+			compiled_by_lang,
+			compile_errors_by_lang,
+		});
+	}
+
+	Ok(compiled)
 }
 #[napi(js_name = "astGrep")]
 pub fn ast_grep(options: AstFindOptions<'_>) -> task::Async<AstFindResult> {
@@ -657,32 +637,96 @@ pub fn ast_grep(options: AstFindOptions<'_>) -> task::Async<AstFindResult> {
 			.filter(|candidate| is_supported_file(&candidate.absolute_path, lang_str))
 			.collect();
 
-		let mut pattern_results = patterns
-			.par_iter()
-			.map(|pattern| {
-				run_find_for_pattern(
-					pattern,
-					&candidates,
-					lang_str,
-					selector.as_deref(),
-					&strictness,
-					include_meta,
-					&ct,
-				)
-			})
-			.collect::<Result<Vec<_>>>()?;
-		pattern_results.sort_by(|left, right| left.pattern.cmp(&right.pattern));
+		let (resolved_candidates, languages) =
+			resolve_candidates_for_find(candidates, lang_str, &ct)?;
+		let compiled_patterns =
+			compile_find_patterns(&patterns, &languages, selector.as_deref(), &strictness, &ct)?;
+		let files_searched = to_u32(resolved_candidates.len());
 
 		let mut all_matches = Vec::new();
 		let mut parse_errors = Vec::new();
 		let mut total_matches = 0u32;
 		let mut files_with_matches = BTreeSet::new();
-		for pattern_result in pattern_results {
-			total_matches = total_matches.saturating_add(pattern_result.total_matches);
-			parse_errors.extend(pattern_result.parse_errors);
-			for matched in pattern_result.matches {
-				files_with_matches.insert(matched.path.clone());
-				all_matches.push(matched);
+		for resolved in resolved_candidates {
+			ct.heartbeat()?;
+			let ResolvedCandidate { candidate, language, language_error } = resolved;
+
+			if let Some(error) = language_error.as_deref() {
+				for compiled in &compiled_patterns {
+					parse_errors
+						.push(format!("{}: {}: {error}", compiled.pattern, candidate.display_path));
+				}
+				continue;
+			}
+
+			let Some(language) = language else {
+				continue;
+			};
+			let lang_key = canonical_lang_name(language);
+			let source = match std::fs::read_to_string(&candidate.absolute_path) {
+				Ok(source) => source,
+				Err(err) => {
+					for compiled in &compiled_patterns {
+						parse_errors
+							.push(format!("{}: {}: {err}", compiled.pattern, candidate.display_path));
+					}
+					continue;
+				},
+			};
+
+			let mut runnable_patterns: Vec<(&str, &Pattern)> = Vec::new();
+			for compiled in &compiled_patterns {
+				ct.heartbeat()?;
+				if let Some(error) = compiled.compile_errors_by_lang.get(lang_key) {
+					parse_errors
+						.push(format!("{}: {}: {error}", compiled.pattern, candidate.display_path));
+					continue;
+				}
+				if let Some(pattern) = compiled.compiled_by_lang.get(lang_key) {
+					runnable_patterns.push((compiled.pattern.as_str(), pattern));
+				}
+			}
+			if runnable_patterns.is_empty() {
+				continue;
+			}
+
+			let ast = language.ast_grep(source);
+			if has_syntax_error(&ast) {
+				for (pattern_name, _) in &runnable_patterns {
+					parse_errors.push(format!(
+						"{pattern_name}: {}: parse error (syntax tree contains error nodes)",
+						candidate.display_path
+					));
+				}
+				continue;
+			}
+
+			for (_, pattern) in runnable_patterns {
+				ct.heartbeat()?;
+				for matched in ast.root().find_all(pattern.clone()) {
+					ct.heartbeat()?;
+					total_matches = total_matches.saturating_add(1);
+					let range = matched.range();
+					let start = matched.start_pos();
+					let end = matched.end_pos();
+					let meta_variables = if include_meta {
+						Some(HashMap::<String, String>::from(matched.get_env().clone()))
+					} else {
+						None
+					};
+					all_matches.push(AstFindMatch {
+						path: candidate.display_path.clone(),
+						text: matched.text().into_owned(),
+						byte_start: to_u32(range.start),
+						byte_end: to_u32(range.end),
+						start_line: to_u32(start.line().saturating_add(1)),
+						start_column: to_u32(start.column(matched.get_node()).saturating_add(1)),
+						end_line: to_u32(end.line().saturating_add(1)),
+						end_column: to_u32(end.column(matched.get_node()).saturating_add(1)),
+						meta_variables,
+					});
+					files_with_matches.insert(candidate.display_path.clone());
+				}
 			}
 		}
 
@@ -712,7 +756,7 @@ pub fn ast_grep(options: AstFindOptions<'_>) -> task::Async<AstFindResult> {
 			matches,
 			total_matches,
 			files_with_matches: to_u32(files_with_matches.len()),
-			files_searched: to_u32(candidates.len()),
+			files_searched,
 			limit_reached,
 			parse_errors: (!parse_errors.is_empty()).then_some(parse_errors),
 		})
@@ -760,6 +804,7 @@ pub fn ast_edit(options: AstReplaceOptions<'_>) -> task::Async<AstReplaceResult>
 		let mut parse_errors = Vec::new();
 		let mut compiled_rules = Vec::new();
 		for (pattern, rewrite) in rewrite_rules {
+			ct.heartbeat()?;
 			match compile_pattern(&pattern, selector.as_deref(), &strictness, language) {
 				Ok(compiled) => compiled_rules.push((pattern, rewrite, compiled)),
 				Err(err) => {

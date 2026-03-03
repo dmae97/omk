@@ -206,6 +206,11 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "openai", label: "OpenAI", description: "api.kimi.com" },
 		{ value: "anthropic", label: "Anthropic", description: "api.moonshot.ai" },
 	],
+	"providers.openaiWebsockets": [
+		{ value: "auto", label: "Auto", description: "Use model/provider default websocket behavior" },
+		{ value: "off", label: "Off", description: "Disable websockets for OpenAI Codex models" },
+		{ value: "on", label: "On", description: "Force websockets for OpenAI Codex models" },
+	],
 	// Default thinking level
 	defaultThinkingLevel: [
 		{ value: "off", label: "off", description: "No reasoning" },

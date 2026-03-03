@@ -191,12 +191,12 @@ impl PtySession {
 	}
 }
 
+#[cfg(unix)]
 fn terminate_pty_processes(
 	child: &mut Box<dyn Child + Send + Sync>,
 	child_pid: Option<i32>,
 	process_group_id: Option<i32>,
 ) {
-	#[cfg(unix)]
 	if let Some(pgid) = process_group_id {
 		let _ = crate::ps::kill_process_group(pgid, TERM_SIGNAL);
 	}
@@ -207,10 +207,26 @@ fn terminate_pty_processes(
 
 	let _ = child.kill();
 
-	#[cfg(unix)]
 	if let Some(pgid) = process_group_id {
 		let _ = crate::ps::kill_process_group(pgid, KILL_SIGNAL);
 	}
+
+	if let Some(pid) = child_pid {
+		let _ = crate::ps::kill_tree(pid, KILL_SIGNAL);
+	}
+}
+
+#[cfg(not(unix))]
+fn terminate_pty_processes(
+	child: &mut Box<dyn Child + Send + Sync>,
+	child_pid: Option<i32>,
+	_process_group_id: Option<i32>,
+) {
+	if let Some(pid) = child_pid {
+		let _ = crate::ps::kill_tree(pid, TERM_SIGNAL);
+	}
+
+	let _ = child.kill();
 
 	if let Some(pid) = child_pid {
 		let _ = crate::ps::kill_tree(pid, KILL_SIGNAL);
@@ -396,7 +412,22 @@ fn run_pty_sync(
 			break;
 		}
 		if exit_code.is_none() || !reader_done {
-			std::thread::sleep(Duration::from_millis(16));
+			let wait_duration = reader_drain_deadline.map_or(Duration::from_millis(16), |deadline| {
+				deadline
+					.saturating_duration_since(Instant::now())
+					.min(Duration::from_millis(16))
+			});
+			match reader_rx.recv_timeout(wait_duration) {
+				Ok(ReaderEvent::Chunk(chunk)) => emit_chunk(&chunk, on_chunk.as_ref()),
+				Ok(ReaderEvent::Done) => reader_done = true,
+				Err(mpsc::RecvTimeoutError::Timeout) => {},
+				Err(mpsc::RecvTimeoutError::Disconnected) => {
+					reader_done = true;
+					if exit_code.is_none() {
+						std::thread::sleep(wait_duration);
+					}
+				},
+			}
 		}
 	}
 	if exit_code.is_none() {
@@ -421,14 +452,16 @@ fn run_pty_sync(
 	if !reader_done {
 		let finalize_deadline = Instant::now() + FINAL_READER_DRAIN_TIMEOUT;
 		while Instant::now() < finalize_deadline {
-			match reader_rx.try_recv() {
+			let remaining = finalize_deadline.saturating_duration_since(Instant::now());
+			let wait_duration = remaining.min(Duration::from_millis(5));
+			match reader_rx.recv_timeout(wait_duration) {
 				Ok(ReaderEvent::Chunk(chunk)) => emit_chunk(&chunk, on_chunk.as_ref()),
 				Ok(ReaderEvent::Done) => {
 					reader_done = true;
 					break;
 				},
-				Err(mpsc::TryRecvError::Empty) => std::thread::sleep(Duration::from_millis(5)),
-				Err(mpsc::TryRecvError::Disconnected) => {
+				Err(mpsc::RecvTimeoutError::Timeout) => {},
+				Err(mpsc::RecvTimeoutError::Disconnected) => {
 					reader_done = true;
 					break;
 				},

@@ -74,8 +74,7 @@ fn normalize_fuzzy_text(value: &str) -> String {
 }
 
 /// Scores a query as a subsequence of `target`. Returns 0 if not a subsequence.
-fn fuzzy_subsequence_score(query: &str, target: &str) -> u32 {
-	let query_chars: Vec<char> = query.chars().collect();
+fn fuzzy_subsequence_score(query_chars: &[char], target: &str) -> u32 {
 	if query_chars.is_empty() {
 		return 1;
 	}
@@ -109,34 +108,42 @@ fn score_fuzzy_path(
 	is_directory: bool,
 	query_lower: &str,
 	normalized_query: &str,
+	query_chars: &[char],
 ) -> u32 {
-	let lower_path = path.to_lowercase();
-	let normalized_path = normalize_fuzzy_text(path);
-	let file_name_source = path.trim_end_matches('/');
-	let file_name = Path::new(file_name_source)
+	if query_lower.is_empty() {
+		return if is_directory { 11 } else { 1 };
+	}
+
+	let file_name = Path::new(path)
 		.file_name()
 		.and_then(|name| name.to_str())
-		.unwrap_or(file_name_source);
+		.unwrap_or(path);
 	let lower_file_name = file_name.to_lowercase();
-	let normalized_file_name = normalize_fuzzy_text(file_name);
 
-	let mut score = if query_lower.is_empty() {
-		1
-	} else if lower_file_name == query_lower {
+	let mut score = if lower_file_name == query_lower {
 		120
 	} else if lower_file_name.starts_with(query_lower) {
 		100
 	} else if lower_file_name.contains(query_lower) {
 		80
-	} else if lower_path.contains(query_lower) {
-		60
 	} else {
-		let file_name_fuzzy = fuzzy_subsequence_score(normalized_query, &normalized_file_name);
-		if file_name_fuzzy > 0 {
-			50 + file_name_fuzzy
+		let lower_path = path.to_lowercase();
+		if lower_path.contains(query_lower) {
+			60
 		} else {
-			let path_fuzzy = fuzzy_subsequence_score(normalized_query, &normalized_path);
-			if path_fuzzy > 0 { 30 + path_fuzzy } else { 0 }
+			let normalized_file_name = normalize_fuzzy_text(file_name);
+			let file_name_fuzzy = fuzzy_subsequence_score(query_chars, &normalized_file_name);
+			if file_name_fuzzy > 0 {
+				50 + file_name_fuzzy
+			} else {
+				let normalized_path = normalize_fuzzy_text(path);
+				let path_fuzzy = if normalized_path == normalized_query {
+					40
+				} else {
+					fuzzy_subsequence_score(query_chars, &normalized_path)
+				};
+				if path_fuzzy > 0 { 30 + path_fuzzy } else { 0 }
+			}
 		}
 	};
 
@@ -172,6 +179,7 @@ fn fuzzy_find_sync(config: FuzzyFindConfig, ct: task::CancelToken) -> Result<Fuz
 
 	let query_lower = config.query.trim().to_lowercase();
 	let normalized_query = normalize_fuzzy_text(&query_lower);
+	let query_chars: Vec<char> = normalized_query.chars().collect();
 	if !query_lower.is_empty() && normalized_query.is_empty() {
 		return Ok(FuzzyFindResult { matches: Vec::new(), total_matches: 0 });
 	}
@@ -179,7 +187,8 @@ fn fuzzy_find_sync(config: FuzzyFindConfig, ct: task::CancelToken) -> Result<Fuz
 	let use_cache = config.cache.unwrap_or(false);
 	let mut scored = if use_cache {
 		let scan = fs_cache::get_or_scan(&root, include_hidden, respect_gitignore, &ct)?;
-		let mut scored = score_entries(&scan.entries, &query_lower, &normalized_query, &ct)?;
+		let mut scored =
+			score_entries(&scan.entries, &query_lower, &normalized_query, &query_chars, &ct)?;
 		// Empty-result recheck: if the query was non-trivial but produced zero matches
 		// from a cached scan that's old enough, force one rescan before giving up.
 		if scored.is_empty()
@@ -187,12 +196,12 @@ fn fuzzy_find_sync(config: FuzzyFindConfig, ct: task::CancelToken) -> Result<Fuz
 			&& scan.cache_age_ms >= fs_cache::empty_recheck_ms()
 		{
 			let fresh = fs_cache::force_rescan(&root, include_hidden, respect_gitignore, true, &ct)?;
-			scored = score_entries(&fresh, &query_lower, &normalized_query, &ct)?;
+			scored = score_entries(&fresh, &query_lower, &normalized_query, &query_chars, &ct)?;
 		}
 		scored
 	} else {
 		let fresh = fs_cache::force_rescan(&root, include_hidden, respect_gitignore, false, &ct)?;
-		score_entries(&fresh, &query_lower, &normalized_query, &ct)?
+		score_entries(&fresh, &query_lower, &normalized_query, &query_chars, &ct)?
 	};
 
 	scored.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.path.cmp(&b.path)));
@@ -206,9 +215,10 @@ fn score_entries(
 	entries: &[fs_cache::GlobMatch],
 	query_lower: &str,
 	normalized_query: &str,
+	query_chars: &[char],
 	ct: &task::CancelToken,
 ) -> Result<Vec<FuzzyFindMatch>> {
-	let mut scored = Vec::new();
+	let mut scored = Vec::with_capacity(entries.len().min(256));
 	for entry in entries {
 		ct.heartbeat()?;
 		if entry.file_type == fs_cache::FileType::Symlink {
@@ -216,16 +226,16 @@ fn score_entries(
 		}
 
 		let is_directory = entry.file_type == fs_cache::FileType::Dir;
-		let path = if is_directory {
-			format!("{}/", entry.path)
-		} else {
-			entry.path.clone()
-		};
-		let score = score_fuzzy_path(&path, is_directory, query_lower, normalized_query);
+		let score =
+			score_fuzzy_path(&entry.path, is_directory, query_lower, normalized_query, query_chars);
 		if score == 0 {
 			continue;
 		}
 
+		let mut path = entry.path.clone();
+		if is_directory {
+			path.push('/');
+		}
 		scored.push(FuzzyFindMatch { path, is_directory, score });
 	}
 	Ok(scored)
