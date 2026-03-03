@@ -49,7 +49,7 @@ import { abortableSleep, getAgentDbPath, isEnoent, logger } from "@oh-my-pi/pi-u
 import type { AsyncJob, AsyncJobManager } from "../async";
 import type { Rule } from "../capability/rule";
 import { MODEL_ROLE_IDS, type ModelRegistry, type ModelRole } from "../config/model-registry";
-import { parseModelString, resolveModelRoleValue } from "../config/model-resolver";
+import { extractExplicitThinkingLevel, parseModelString, resolveModelRoleValue } from "../config/model-resolver";
 import { expandPromptTemplate, type PromptTemplate, renderPromptTemplate } from "../config/prompt-templates";
 import type { Settings, SkillsSettings } from "../config/settings";
 import { type BashResult, executeBash as executeBashCommand } from "../exec/bash-executor";
@@ -3612,15 +3612,8 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		const existingRoleValue = this.settings.getModelRole(role);
 		if (!existingRoleValue) return modelKey;
 
-		const { thinkingLevel, explicitThinkingLevel } = resolveModelRoleValue(
-			existingRoleValue,
-			this.#modelRegistry.getAvailable(),
-			{
-				settings: this.settings,
-				matchPreferences: { usageOrder: this.settings.getStorage()?.getModelUsageOrder() },
-			},
-		);
-		if (!explicitThinkingLevel || thinkingLevel === undefined) return modelKey;
+		const thinkingLevel = extractExplicitThinkingLevel(existingRoleValue, this.settings);
+		if (thinkingLevel === undefined) return modelKey;
 		return `${modelKey}:${thinkingLevel}`;
 	}
 	#resolveContextPromotionConfiguredTarget(currentModel: Model, availableModels: Model[]): Model | undefined {

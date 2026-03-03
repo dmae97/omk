@@ -273,7 +273,7 @@ describe("parseModelPattern", () => {
 describe("resolveModelRoleValue", () => {
 	test("resolves pi/<role>:<thinking> by expanding role alias before parsing thinking", () => {
 		const settings = {
-			getModelRole: (role: string) => role === "smol" ? "openrouter/qwen/qwen3-coder:exacto" : undefined,
+			getModelRole: (role: string) => (role === "smol" ? "openrouter/qwen/qwen3-coder:exacto" : undefined),
 		} as NonNullable<Parameters<typeof resolveModelRoleValue>[2]>["settings"];
 
 		const result = resolveModelRoleValue("pi/smol:high", allModels, { settings });
@@ -282,6 +282,20 @@ describe("resolveModelRoleValue", () => {
 		expect(result.model?.id).toBe("qwen/qwen3-coder:exacto");
 		expect(result.thinkingLevel).toBe("high");
 		expect(result.explicitThinkingLevel).toBe(true);
+	});
+
+	test("resolves pi/default through configured default role alias", () => {
+		const settings = {
+			getModelRole: (role: string) => (role === "default" ? "openrouter/qwen/qwen3-coder:exacto" : undefined),
+		} as NonNullable<Parameters<typeof resolveModelRoleValue>[2]>["settings"];
+
+		const result = resolveModelRoleValue("pi/default", allModels, { settings });
+
+		expect(result.model?.provider).toBe("openrouter");
+		expect(result.model?.id).toBe("qwen/qwen3-coder:exacto");
+		expect(result.thinkingLevel).toBeUndefined();
+		expect(result.explicitThinkingLevel).toBe(false);
+		expect(result.warning).toBeUndefined();
 	});
 });
 describe("resolveModelFromString", () => {

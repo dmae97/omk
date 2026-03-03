@@ -9,7 +9,6 @@ import { fuzzyMatch } from "../utils/fuzzy";
 import { MODEL_ROLE_IDS, type ModelRegistry, type ModelRole } from "./model-registry";
 import type { Settings } from "./settings";
 
-
 const VALID_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
 
 function isValidThinkingLevel(level: string): level is ThinkingLevel {
@@ -344,7 +343,7 @@ export function resolveModelRoleValue(
 	}
 
 	const normalized = roleValue.trim();
-	if (!normalized || isDefaultModelAlias(normalized)) {
+	if (!normalized || normalized === DEFAULT_MODEL_ROLE) {
 		return { model: undefined, thinkingLevel: undefined, explicitThinkingLevel: false, warning: undefined };
 	}
 
@@ -363,6 +362,33 @@ export function resolveModelRoleValue(
 	);
 
 	return { model, thinkingLevel, explicitThinkingLevel, warning };
+}
+
+export function extractExplicitThinkingLevel(
+	value: string | undefined,
+	settings?: Settings,
+): ThinkingLevel | undefined {
+	if (!value) return undefined;
+	const normalized = value.trim();
+	if (!normalized || normalized === DEFAULT_MODEL_ROLE) return undefined;
+
+	const visited = new Set<string>();
+	let current = normalized;
+	while (!visited.has(current)) {
+		visited.add(current);
+		const lastColonIndex = current.lastIndexOf(":");
+		const hasThinkingSuffix =
+			lastColonIndex > PREFIX_MODEL_ROLE.length && isValidThinkingLevel(current.slice(lastColonIndex + 1));
+		if (hasThinkingSuffix) {
+			return current.slice(lastColonIndex + 1) as ThinkingLevel;
+		}
+		const expanded = expandRoleAlias(current, settings).trim();
+		if (!expanded || expanded === current) break;
+		if (expanded === DEFAULT_MODEL_ROLE) return undefined;
+		current = expanded;
+	}
+
+	return undefined;
 }
 
 /**

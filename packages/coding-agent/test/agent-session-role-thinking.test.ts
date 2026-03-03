@@ -12,6 +12,7 @@ import { TempDir } from "@oh-my-pi/pi-utils";
 describe("AgentSession role model thinking behavior", () => {
 	let tempDir: TempDir;
 	let session: AgentSession;
+	let sessionSettings: Settings;
 
 	beforeEach(() => {
 		tempDir = TempDir.createSync("@pi-role-thinking-");
@@ -49,10 +50,14 @@ describe("AgentSession role model thinking behavior", () => {
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
 		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir.path(), "models.yml"));
 
+		sessionSettings = Settings.isolated();
+		for (const [role, modelRoleValue] of Object.entries(options.modelRoles)) {
+			sessionSettings.setModelRole(role, modelRoleValue);
+		}
 		session = new AgentSession({
 			agent,
 			sessionManager: SessionManager.inMemory(),
-			settings: Settings.isolated({ modelRoles: options.modelRoles }),
+			settings: sessionSettings,
 			modelRegistry,
 		});
 	}
@@ -117,5 +122,22 @@ describe("AgentSession role model thinking behavior", () => {
 		expect(toDefault?.model.id).toBe(defaultModel.id);
 		expect(toDefault?.thinkingLevel).toBe("minimal");
 		expect(session.thinkingLevel).toBe("minimal");
+	});
+
+	it("preserves explicit role thinking when updating default model despite unresolved previous model", async () => {
+		const defaultModel = getAnthropicModelOrThrow("claude-sonnet-4-5");
+		const slowModel = getAnthropicModelOrThrow("claude-sonnet-4-6");
+
+		await createSession({
+			initialModelId: defaultModel.id,
+			initialThinkingLevel: "high",
+			modelRoles: {
+				default: "anthropic/nonexistent-model:off",
+			},
+		});
+
+		await session.setModel(slowModel);
+
+		expect(sessionSettings.getModelRole("default")).toBe(`${slowModel.provider}/${slowModel.id}:off`);
 	});
 });
