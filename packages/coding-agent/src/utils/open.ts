@@ -13,7 +13,7 @@ export function openPath(urlOrPath: string): void {
 			break;
 	}
 	try {
-		Bun.spawn(cmd, { stdout: "ignore", stderr: "ignore", windowsHide: true });
+		Bun.spawn(cmd, { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
 	} catch {
 		// Best-effort: browser opening is non-critical
 	}
