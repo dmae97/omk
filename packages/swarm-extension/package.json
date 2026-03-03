@@ -23,6 +23,9 @@
 	"bin": {
 		"omp-swarm": "src/cli.ts"
 	},
+	"scripts": {
+		"check": "tsgo -p tsconfig.json"
+	},
 	"dependencies": {},
 	"devDependencies": {
 		"@types/bun": "^1.3"
