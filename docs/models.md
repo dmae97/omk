@@ -129,7 +129,7 @@ ModelRegistry pipeline (on refresh):
 5. Merge custom `models`:
    - same `provider + id` replaces existing
    - otherwise append
-6. Apply runtime-discovered models (currently Ollama), then re-apply model overrides.
+6. Apply runtime-discovered models (currently Ollama and LM Studio), then re-apply model overrides.
 
 Provider defaults vs per-model overrides:
 
@@ -150,6 +150,17 @@ If `ollama` is not explicitly configured, registry adds an implicit discoverable
 - auth mode: keyless (`auth: none` behavior)
 
 Runtime discovery calls `GET /api/tags` on Ollama and synthesizes model entries with local defaults.
+
+### Implicit LM Studio discovery
+
+If `lm-studio` is not explicitly configured, registry adds an implicit discoverable provider:
+
+- provider: `lm-studio`
+- api: `openai-completions`
+- base URL: `LM_STUDIO_BASE_URL` or `http://127.0.0.1:1234/v1`
+- auth mode: keyless (`auth: none` behavior)
+
+Runtime discovery fetches models (`GET /models`) and synthesizes model entries with local defaults.
 
 ### Explicit provider discovery
 

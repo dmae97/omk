@@ -21,6 +21,7 @@ export type OAuthProvider =
 	| "kimi-code"
 	| "kilo"
 	| "litellm"
+	| "lm-studio"
 	| "minimax-code"
 	| "minimax-code-cn"
 	| "moonshot"

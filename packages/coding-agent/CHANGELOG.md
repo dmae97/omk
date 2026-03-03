@@ -6,6 +6,11 @@
 - Updated Anthropic Foundry environment variable documentation and CLI help text to the canonical names: `CLAUDE_CODE_USE_FOUNDRY`, `CLAUDE_CODE_CLIENT_CERT`, and `CLAUDE_CODE_CLIENT_KEY`
 - Documented Foundry-specific Anthropic runtime configuration (`FOUNDRY_BASE_URL`, `ANTHROPIC_FOUNDRY_API_KEY`, `ANTHROPIC_CUSTOM_HEADERS`, `NODE_EXTRA_CA_CERTS`) in environment variable reference docs
 
+### Added
+
+- Added LM Studio integration to the model registry and discovery flow.
+- Added support for authenticating with LM Studio using the `/login lm-studio` command.
+
 ## [13.5.6] - 2026-03-01
 ### Changed
 

@@ -490,6 +490,7 @@ return config
 | Together (`together`)                           | `TOGETHER_API_KEY`                           |
 | Ollama (`ollama`)                               | `OLLAMA_API_KEY` _(optional)_                |
 | LiteLLM (`litellm`)                             | `LITELLM_API_KEY`                            |
+| LM Studio (`lm-studio`)                         | `LM_STUDIO_API_KEY` _(optional)_             |
 | Xiaomi MiMo (`xiaomi`)                          | `XIAOMI_API_KEY`                             |
 | Moonshot (`moonshot`)                           | `MOONSHOT_API_KEY`                           |
 | Venice (`venice`)                               | `VENICE_API_KEY`                             |
@@ -527,6 +528,7 @@ Use `/login` with supported providers:
 - GitLab Duo (`gitlab-duo`)
 - Qianfan (`qianfan`)
 - Ollama (local / self-hosted, `ollama`)
+- LM Studio (local / self-hosted, `lm-studio`)
 - vLLM (local OpenAI-compatible, `vllm`)
 - Z.AI (GLM Coding Plan)
 - Synthetic
@@ -540,6 +542,7 @@ Use `/login` with supported providers:
 - Cloudflare AI Gateway (`cloudflare-ai-gateway`)
 
 For `ollama`, API key is optional. Leave it unset for local no-auth instances, or set `OLLAMA_API_KEY` for authenticated hosts.
+For `lm-studio`, API key is optional. Leave it unset for local no-auth instances, or set `LM_STUDIO_API_KEY` for authenticated hosts.
 For `vllm`, paste your key in `/login` (or use `VLLM_API_KEY`). For local no-auth servers, any placeholder value works (for example `vllm-local`).
 For `nanogpt`, `/login nanogpt` opens `https://nano-gpt.com/api` and prompts for your `sk-...` key (or set `NANO_GPT_API_KEY`). Login validates the key via NanoGPT's models endpoint (not a fixed model entitlement).
 For `cloudflare-ai-gateway`, set provider base URL to

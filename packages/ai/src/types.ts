@@ -104,7 +104,8 @@ export type KnownProvider =
 	| "together"
 	| "venice"
 	| "vllm"
-	| "xiaomi";
+	| "xiaomi"
+	| "lm-studio";
 export type Provider = KnownProvider | string;
 
 export type ThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh";

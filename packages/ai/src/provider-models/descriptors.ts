@@ -17,6 +17,7 @@ import {
 	kiloModelManagerOptions,
 	kimiCodeModelManagerOptions,
 	litellmModelManagerOptions,
+	lmStudioModelManagerOptions,
 	mistralModelManagerOptions,
 	moonshotModelManagerOptions,
 	nanoGptModelManagerOptions,
@@ -208,6 +209,13 @@ export const PROVIDER_DESCRIPTORS: readonly ProviderDescriptor[] = [
 		"claude-opus-4-6",
 		config => litellmModelManagerOptions(config),
 		catalog("LiteLLM", ["LITELLM_API_KEY"], { allowUnauthenticated: true }),
+	),
+	catalogDescriptor(
+		"lm-studio",
+		"llama-3-8b",
+		config => lmStudioModelManagerOptions(config),
+		catalog("LM Studio", ["LM_STUDIO_API_KEY"], { allowUnauthenticated: true }),
+		{ allowUnauthenticated: true },
 	),
 	catalogDescriptor(
 		"vllm",

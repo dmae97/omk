@@ -45,6 +45,7 @@ import { loginHuggingface } from "./utils/oauth/huggingface";
 import { loginKilo } from "./utils/oauth/kilo";
 import { loginKimi } from "./utils/oauth/kimi";
 import { loginLiteLLM } from "./utils/oauth/litellm";
+import { loginLmStudio } from "./utils/oauth/lm-studio";
 import { loginMiniMaxCode, loginMiniMaxCodeCn } from "./utils/oauth/minimax-code";
 import { loginMoonshot } from "./utils/oauth/moonshot";
 import { loginNanoGPT } from "./utils/oauth/nanogpt";
@@ -817,6 +818,11 @@ export class AuthStorage {
 			}
 			case "opencode": {
 				const apiKey = await loginOpenCode(ctrl);
+				await saveApiKeyCredential(apiKey);
+				return;
+			}
+			case "lm-studio": {
+				const apiKey = await loginLmStudio(ctrl);
 				await saveApiKeyCredential(apiKey);
 				return;
 			}

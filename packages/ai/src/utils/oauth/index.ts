@@ -72,6 +72,8 @@ export { loginKilo } from "./kilo";
 export { loginKimi, refreshKimiToken } from "./kimi";
 // LiteLLM (API key)
 export { loginLiteLLM } from "./litellm";
+// LM Studio (optional API key)
+export { DEFAULT_LOCAL_TOKEN, loginLmStudio } from "./lm-studio";
 // MiniMax Coding Plan (API key)
 export { loginMiniMaxCode, loginMiniMaxCodeCn } from "./minimax-code";
 // Moonshot (API key)
@@ -161,6 +163,11 @@ const builtInOAuthProviders: OAuthProviderInfo[] = [
 	{
 		id: "litellm",
 		name: "LiteLLM",
+		available: true,
+	},
+	{
+		id: "lm-studio",
+		name: "LM Studio (Local OpenAI-compatible)",
 		available: true,
 	},
 	{
@@ -338,6 +345,7 @@ export async function refreshOAuthToken(
 		case "synthetic":
 		case "together":
 		case "litellm":
+		case "lm-studio":
 		case "ollama":
 		case "xiaomi":
 		case "zai":

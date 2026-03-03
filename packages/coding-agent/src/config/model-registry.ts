@@ -3,6 +3,7 @@ import {
 	type AssistantMessageEventStream,
 	type Context,
 	createModelManager,
+	DEFAULT_LOCAL_TOKEN,
 	getBundledModels,
 	getBundledProviders,
 	getGitHubCopilotBaseUrl,
@@ -131,7 +132,7 @@ const ModelOverrideSchema = Type.Object({
 type ModelOverride = Static<typeof ModelOverrideSchema>;
 
 const ProviderDiscoverySchema = Type.Object({
-	type: Type.Union([Type.Literal("ollama")]),
+	type: Type.Union([Type.Literal("ollama"), Type.Literal("lm-studio")]),
 });
 
 const ProviderAuthSchema = Type.Union([Type.Literal("apiKey"), Type.Literal("none")]);
@@ -594,14 +595,24 @@ export class ModelRegistry {
 	}
 
 	#addImplicitDiscoverableProviders(configuredProviders: Set<string>): void {
-		if (configuredProviders.has("ollama")) return;
-		this.#discoverableProviders.push({
-			provider: "ollama",
-			api: "openai-completions",
-			baseUrl: Bun.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434",
-			discovery: { type: "ollama" },
-		});
-		this.#keylessProviders.add("ollama");
+		if (!configuredProviders.has("ollama")) {
+			this.#discoverableProviders.push({
+				provider: "ollama",
+				api: "openai-completions",
+				baseUrl: Bun.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434",
+				discovery: { type: "ollama" },
+			});
+			this.#keylessProviders.add("ollama");
+		}
+		if (!configuredProviders.has("lm-studio")) {
+			this.#discoverableProviders.push({
+				provider: "lm-studio",
+				api: "openai-completions",
+				baseUrl: Bun.env.LM_STUDIO_BASE_URL || "http://127.0.0.1:1234/v1",
+				discovery: { type: "lm-studio" },
+			});
+			this.#keylessProviders.add("lm-studio");
+		}
 	}
 
 	#loadCustomModels(): CustomModelsResult {
@@ -724,6 +735,8 @@ export class ModelRegistry {
 		switch (providerConfig.discovery.type) {
 			case "ollama":
 				return this.#discoverOllamaModels(providerConfig);
+			case "lm-studio":
+				return this.#discoverLmStudioModels(providerConfig);
 		}
 	}
 
@@ -871,6 +884,71 @@ export class ModelRegistry {
 			logger.warn("model discovery failed for provider", {
 				provider: providerConfig.provider,
 				url: tagsUrl,
+				error: error instanceof Error ? error.message : String(error),
+			});
+			return [];
+		}
+	}
+
+	async #discoverLmStudioModels(providerConfig: DiscoveryProviderConfig): Promise<Model<Api>[]> {
+		const endpoint = providerConfig.baseUrl || "http://127.0.0.1:1234/v1";
+		let baseUrl = endpoint;
+		if (!baseUrl.endsWith("/v1")) {
+			baseUrl = baseUrl.endsWith("/") ? `${baseUrl}v1` : `${baseUrl}/v1`;
+		} else if (baseUrl.endsWith("/v1/")) {
+			baseUrl = baseUrl.slice(0, -1);
+		}
+		const modelsUrl = `${baseUrl}/models`;
+
+		const headers: Record<string, string> = { ...(providerConfig.headers ?? {}) };
+		const apiKey = await this.authStorage.getApiKey("lm-studio");
+		if (apiKey && apiKey !== DEFAULT_LOCAL_TOKEN && apiKey !== kNoAuth) {
+			headers.Authorization = `Bearer ${apiKey}`;
+		}
+
+		try {
+			const response = await fetch(modelsUrl, {
+				headers,
+				signal: AbortSignal.timeout(3000),
+			});
+			if (!response.ok) {
+				logger.warn("model discovery failed for provider", {
+					provider: providerConfig.provider,
+					status: response.status,
+					url: modelsUrl,
+				});
+				return [];
+			}
+			const payload = (await response.json()) as { data?: Array<{ id: string }> };
+			const models = payload.data ?? [];
+			const discovered: Model<Api>[] = [];
+			for (const item of models) {
+				const id = item.id;
+				if (!id) continue;
+				discovered.push({
+					id,
+					name: id,
+					api: providerConfig.api,
+					provider: providerConfig.provider,
+					baseUrl,
+					reasoning: false,
+					input: ["text"],
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+					contextWindow: 128000,
+					maxTokens: 8192,
+					headers,
+					compat: {
+						supportsStore: false,
+						supportsDeveloperRole: false,
+						supportsReasoningEffort: false,
+					},
+				});
+			}
+			return this.#applyProviderModelOverrides(providerConfig.provider, discovered);
+		} catch (error) {
+			logger.warn("model discovery failed for provider", {
+				provider: providerConfig.provider,
+				url: modelsUrl,
 				error: error instanceof Error ? error.message : String(error),
 			});
 			return [];

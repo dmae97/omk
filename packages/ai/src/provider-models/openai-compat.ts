@@ -797,6 +797,37 @@ export function kimiCodeModelManagerOptions(
 }
 
 // ---------------------------------------------------------------------------
+// 12.5. LM Studio
+// ---------------------------------------------------------------------------
+
+export interface LmStudioModelManagerConfig {
+	apiKey?: string;
+	baseUrl?: string;
+}
+
+export function lmStudioModelManagerOptions(
+	config?: LmStudioModelManagerConfig,
+): ModelManagerOptions<"openai-completions"> {
+	const apiKey = config?.apiKey;
+	const baseUrl = config?.baseUrl ?? Bun.env.LM_STUDIO_BASE_URL ?? "http://127.0.0.1:1234/v1";
+	const references = createBundledReferenceMap<"openai-completions">("lm-studio" as any);
+	return {
+		providerId: "lm-studio",
+		fetchDynamicModels: () =>
+			fetchOpenAICompatibleModels({
+				api: "openai-completions",
+				provider: "lm-studio",
+				baseUrl,
+				apiKey,
+				mapModel: (entry, defaults) => {
+					const reference = references.get(defaults.id);
+					return mapWithBundledReference(entry, defaults, reference);
+				},
+			}),
+	};
+}
+
+// ---------------------------------------------------------------------------
 // 13. Synthetic
 // ---------------------------------------------------------------------------
 

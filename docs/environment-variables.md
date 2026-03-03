@@ -46,6 +46,7 @@ These are consumed via `getEnvApiKey()` (`packages/ai/src/stream.ts`) unless not
 | `NANO_GPT_API_KEY` | NanoGPT auth | Using `nanogpt` provider | |
 | `VENICE_API_KEY` | Venice auth | Using `venice` provider |  |
 | `LITELLM_API_KEY` | LiteLLM auth | Using `litellm` provider | OpenAI-compatible LiteLLM proxy key |
+| `LM_STUDIO_API_KEY` | LM Studio auth (optional) | Using `lm-studio` provider with authenticated hosts | Local LM Studio usually runs without auth; any non-empty token works when a key is required |
 | `OLLAMA_API_KEY` | Ollama auth (optional) | Using `ollama` provider with authenticated hosts | Local Ollama usually runs without auth; any non-empty token works when a key is required |
 | `XIAOMI_API_KEY` | Xiaomi MiMo auth | Using `xiaomi` provider |  |
 | `MOONSHOT_API_KEY` | Moonshot auth | Using `moonshot` provider |  |
@@ -253,6 +254,7 @@ Extra conditional behavior:
 | `PI_DEBUG_STARTUP` | Enables startup stage debug prints to stderr in multiple startup paths |
 | `PI_PACKAGE_DIR` | Overrides package asset base dir resolution (docs/examples/changelog path lookup) |
 | `PI_DISABLE_LSPMUX` | If `1`, disables lspmux detection/integration and forces direct LSP server spawning |
+| `LM_STUDIO_BASE_URL` | Default implicit LM Studio discovery base URL override (`http://127.0.0.1:1234/v1` if unset) |
 | `OLLAMA_BASE_URL` | Default implicit Ollama discovery base URL override (`http://127.0.0.1:11434` if unset) |
 | `PI_EDIT_VARIANT` | If `hashline`, forces hashline read/grep display mode when edit tool available |
 | `PI_NO_PTY` | If `1`, disables interactive PTY path for bash tool |
