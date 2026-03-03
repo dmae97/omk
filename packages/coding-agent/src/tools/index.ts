@@ -27,6 +27,7 @@ import { ExitPlanModeTool } from "./exit-plan-mode";
 import { FetchTool } from "./fetch";
 import { FindTool } from "./find";
 import { GrepTool } from "./grep";
+import { McpReadResourceTool } from "./mcp-read-resource";
 import { NotebookTool } from "./notebook";
 import { wrapToolWithMetaNotice } from "./output-meta";
 import { PythonTool } from "./python";
@@ -62,6 +63,7 @@ export * from "./fetch";
 export * from "./find";
 export * from "./gemini-image";
 export * from "./grep";
+export * from "./mcp-read-resource";
 export * from "./notebook";
 export * from "./pending-action";
 export * from "./python";
@@ -180,6 +182,7 @@ export const BUILTIN_TOOLS: Record<string, ToolFactory> = {
 	fetch: s => new FetchTool(s),
 	web_search: s => new SearchTool(s),
 	write: s => new WriteTool(s),
+	read_resource: s => new McpReadResourceTool(() => s.mcpManager),
 };
 
 export const HIDDEN_TOOLS: Record<string, ToolFactory> = {

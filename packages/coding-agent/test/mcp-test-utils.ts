@@ -1,0 +1,32 @@
+import type { MCPServerCapabilities, MCPServerConnection, MCPTransport } from "../src/mcp/types";
+
+export function createMockTransport(responses: Map<string, unknown[]>): MCPTransport {
+	const callCounts = new Map<string, number>();
+	return {
+		connected: true,
+		async request<T>(method: string): Promise<T> {
+			const count = callCounts.get(method) ?? 0;
+			callCounts.set(method, count + 1);
+			const queue = responses.get(method);
+			if (!queue || count >= queue.length) {
+				throw new Error(`No mock response for ${method} call #${count}`);
+			}
+			return queue[count] as T;
+		},
+		async notify() {},
+		async close() {},
+	};
+}
+
+export function createMockConnection(
+	capabilities: MCPServerCapabilities,
+	transport: MCPTransport,
+): MCPServerConnection {
+	return {
+		name: "test-server",
+		config: { type: "stdio" as const, command: "echo" },
+		transport,
+		serverInfo: { name: "test", version: "1.0" },
+		capabilities,
+	};
+}

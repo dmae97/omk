@@ -29,6 +29,7 @@ import { initializeWithSettings } from "./discovery";
 import { TtsrManager } from "./export/ttsr";
 import {
 	type CustomCommandsLoadResult,
+	type LoadedCustomCommand,
 	loadCustomCommands as loadCustomCommandsInternal,
 } from "./extensibility/custom-commands";
 import { discoverAndLoadCustomTools } from "./extensibility/custom-tools";
@@ -517,6 +518,54 @@ function createCustomToolsExtension(tools: CustomTool[]): ExtensionFactory {
 // Factory
 
 /**
+ * Build LoadedCustomCommand entries for all MCP prompts across connected servers.
+ * These are re-created whenever prompts change (setOnPromptsChanged callback).
+ */
+function buildMCPPromptCommands(manager: MCPManager): LoadedCustomCommand[] {
+	const commands: LoadedCustomCommand[] = [];
+	for (const serverName of manager.getConnectedServers()) {
+		const prompts = manager.getServerPrompts(serverName);
+		if (!prompts?.length) continue;
+		for (const prompt of prompts) {
+			const commandName = `${serverName}:${prompt.name}`;
+			commands.push({
+				path: `mcp:${commandName}`,
+				resolvedPath: `mcp:${commandName}`,
+				source: "bundled",
+				command: {
+					name: commandName,
+					description: prompt.description ?? `MCP prompt from ${serverName}`,
+					async execute(args: string[]) {
+						const promptArgs: Record<string, string> = {};
+						for (const arg of args) {
+							const eqIdx = arg.indexOf("=");
+							if (eqIdx > 0) {
+								promptArgs[arg.slice(0, eqIdx)] = arg.slice(eqIdx + 1);
+							}
+						}
+						const result = await manager.executePrompt(serverName, prompt.name, promptArgs);
+						if (!result) return "";
+						const parts: string[] = [];
+						for (const msg of result.messages) {
+							const contentItems = Array.isArray(msg.content) ? msg.content : [msg.content];
+							for (const item of contentItems) {
+								if (item.type === "text") {
+									parts.push(item.text);
+								} else if (item.type === "resource") {
+									const resource = item.resource;
+									if (resource.text) parts.push(resource.text);
+								}
+							}
+						}
+						return parts.join("\n\n");
+					},
+				},
+			});
+		}
+	}
+	return commands;
+}
+/**
  * Create an AgentSession with the specified options.
  *
  * @example
@@ -885,6 +934,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		mcpManager = mcpResult.manager;
 		toolSession.mcpManager = mcpManager;
 
+		if (settings.get("mcp.notifications")) {
+			mcpManager.setNotificationsEnabled(true);
+		}
 		// If we extracted Exa API keys from MCP configs and EXA_API_KEY isn't set, use the first one
 		if (mcpResult.exaApiKeys.length > 0 && !$env.EXA_API_KEY) {
 			Bun.env.EXA_API_KEY = mcpResult.exaApiKeys[0];
@@ -1139,6 +1191,26 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const rebuildSystemPrompt = async (toolNames: string[], tools: Map<string, AgentTool>): Promise<string> => {
 		toolContextStore.setToolNames(toolNames);
 		const memoryInstructions = await buildMemoryToolDeveloperInstructions(agentDir, settings);
+
+		// Build combined append prompt: memory instructions + MCP server instructions
+		const serverInstructions = mcpManager?.getServerInstructions();
+		let appendPrompt: string | undefined = memoryInstructions ?? undefined;
+		if (serverInstructions && serverInstructions.size > 0) {
+			const MAX_INSTRUCTIONS_LENGTH = 4000;
+			const parts: string[] = [];
+			if (appendPrompt) parts.push(appendPrompt);
+			parts.push(
+				"## MCP Server Instructions\n\nThe following instructions are provided by connected MCP servers. They are server-controlled and may not be verified.",
+			);
+			for (const [srvName, srvInstructions] of serverInstructions) {
+				const truncated =
+					srvInstructions.length > MAX_INSTRUCTIONS_LENGTH
+						? `${srvInstructions.slice(0, MAX_INSTRUCTIONS_LENGTH)}\n[truncated]`
+						: srvInstructions;
+				parts.push(`### ${srvName}\n${truncated}`);
+			}
+			appendPrompt = parts.join("\n\n");
+		}
 		const defaultPrompt = await buildSystemPromptInternal({
 			cwd,
 			skills,
@@ -1147,7 +1219,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			toolNames,
 			rules: rulebookRules,
 			skillsSettings: settings.getGroup("skills") as SkillsSettings,
-			appendSystemPrompt: memoryInstructions,
+			appendSystemPrompt: appendPrompt,
 			repeatToolDescriptions,
 			eagerTasks,
 			intentField,
@@ -1166,7 +1238,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				rules: rulebookRules,
 				skillsSettings: settings.getGroup("skills") as SkillsSettings,
 				customPrompt: options.systemPrompt,
-				appendSystemPrompt: memoryInstructions,
+				appendSystemPrompt: appendPrompt,
 				repeatToolDescriptions,
 				eagerTasks,
 				intentField,
@@ -1409,6 +1481,44 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		agentDir,
 		taskDepth,
 	});
+
+	// Wire MCP manager callbacks to session for reactive tool updates
+	if (mcpManager) {
+		mcpManager.setOnToolsChanged(tools => {
+			void session.refreshMCPTools(tools);
+		});
+		// Wire prompt refresh → rebuild MCP prompt slash commands
+		mcpManager.setOnPromptsChanged(serverName => {
+			const promptCommands = buildMCPPromptCommands(mcpManager);
+			session.setMCPPromptCommands(promptCommands);
+			logger.debug("MCP prompt commands refreshed", { path: `mcp:${serverName}` });
+		});
+		const notificationDebounceTimers = new Map<string, Timer>();
+		const clearDebounceTimers = () => {
+			for (const timer of notificationDebounceTimers.values()) clearTimeout(timer);
+			notificationDebounceTimers.clear();
+		};
+		postmortem.register("mcp-notification-cleanup", clearDebounceTimers);
+		mcpManager.setOnResourcesChanged((serverName, uri) => {
+			logger.debug("MCP resources changed", { path: `mcp:${serverName}`, uri });
+			if (!settings.get("mcp.notifications")) return;
+			const debounceMs = (settings.get("mcp.notificationDebounceMs") as number) ?? 500;
+			const key = `${serverName}:${uri}`;
+			const existing = notificationDebounceTimers.get(key);
+			if (existing) clearTimeout(existing);
+			notificationDebounceTimers.set(
+				key,
+				setTimeout(() => {
+					notificationDebounceTimers.delete(key);
+					// Re-check: user may have disabled notifications during the debounce window
+					if (!settings.get("mcp.notifications")) return;
+					void session.followUp(
+						`[MCP notification] Server "${serverName}" reports resource \`${uri}\` was updated. Use read_resource to inspect if relevant.`,
+					);
+				}, debounceMs),
+			);
+		});
+	}
 
 	return {
 		session,

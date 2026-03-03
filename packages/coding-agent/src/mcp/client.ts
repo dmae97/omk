@@ -3,14 +3,25 @@
  *
  * Handles connection initialization, tool listing, and tool calling.
  */
-import { withTimeout } from "@oh-my-pi/pi-utils";
+import { logger, withTimeout } from "@oh-my-pi/pi-utils";
 import { createHttpTransport } from "./transports/http";
 import { createStdioTransport } from "./transports/stdio";
 import type {
+	MCPGetPromptParams,
+	MCPGetPromptResult,
 	MCPHttpServerConfig,
 	MCPInitializeParams,
 	MCPInitializeResult,
+	MCPPrompt,
+	MCPPromptsListResult,
 	MCPRequestOptions,
+	MCPResource,
+	MCPResourceReadParams,
+	MCPResourceReadResult,
+	MCPResourceSubscribeParams,
+	MCPResourcesListResult,
+	MCPResourceTemplate,
+	MCPResourceTemplatesListResult,
 	MCPServerCapabilities,
 	MCPServerConfig,
 	MCPServerConnection,
@@ -90,15 +101,23 @@ async function initializeConnection(
 export async function connectToServer(
 	name: string,
 	config: MCPServerConfig,
-	options?: { signal?: AbortSignal },
+	options?: { signal?: AbortSignal; onNotification?: (method: string, params: unknown) => void },
 ): Promise<MCPServerConnection> {
 	const timeoutMs = config.timeout ?? CONNECTION_TIMEOUT_MS;
 
 	const connect = async (): Promise<MCPServerConnection> => {
 		const transport = await createTransport(config);
+		if (options?.onNotification) {
+			transport.onNotification = options.onNotification;
+		}
 
 		try {
 			const initResult = await initializeConnection(transport, options);
+
+			// Start SSE background listener for HTTP transports
+			if ("startSSEListener" in transport && typeof transport.startSSEListener === "function") {
+				void (transport as { startSSEListener(): Promise<void> }).startSSEListener();
+			}
 
 			return {
 				name,
@@ -106,6 +125,7 @@ export async function connectToServer(
 				transport,
 				serverInfo: initResult.serverInfo,
 				capabilities: initResult.capabilities,
+				instructions: initResult.instructions,
 			};
 		} catch (error) {
 			await transport.close();
@@ -191,4 +211,217 @@ export async function disconnectServer(connection: MCPServerConnection): Promise
  */
 export function serverSupportsTools(capabilities: MCPServerCapabilities): boolean {
 	return capabilities.tools !== undefined;
+}
+
+/**
+ * List resources from a connected server.
+ */
+export async function listResources(
+	connection: MCPServerConnection,
+	options?: { signal?: AbortSignal },
+): Promise<MCPResource[]> {
+	if (!connection.capabilities.resources) {
+		return [];
+	}
+
+	if (connection.resources) {
+		return connection.resources;
+	}
+
+	const allResources: MCPResource[] = [];
+	let cursor: string | undefined;
+
+	do {
+		const params: Record<string, unknown> = {};
+		if (cursor) {
+			params.cursor = cursor;
+		}
+
+		const result = await connection.transport.request<MCPResourcesListResult>("resources/list", params, options);
+		allResources.push(...result.resources);
+		cursor = result.nextCursor;
+	} while (cursor);
+
+	connection.resources = allResources;
+	return allResources;
+}
+
+/**
+ * List resource templates from a connected server.
+ */
+export async function listResourceTemplates(
+	connection: MCPServerConnection,
+	options?: { signal?: AbortSignal },
+): Promise<MCPResourceTemplate[]> {
+	if (!connection.capabilities.resources) {
+		return [];
+	}
+
+	if (connection.resourceTemplates) {
+		return connection.resourceTemplates;
+	}
+
+	const allTemplates: MCPResourceTemplate[] = [];
+	let cursor: string | undefined;
+
+	do {
+		const params: Record<string, unknown> = {};
+		if (cursor) {
+			params.cursor = cursor;
+		}
+
+		const result = await connection.transport.request<MCPResourceTemplatesListResult>(
+			"resources/templates/list",
+			params,
+			options,
+		);
+		allTemplates.push(...result.resourceTemplates);
+		cursor = result.nextCursor;
+	} while (cursor);
+
+	connection.resourceTemplates = allTemplates;
+	return allTemplates;
+}
+
+/**
+ * Read a resource from a connected server.
+ */
+export async function readResource(
+	connection: MCPServerConnection,
+	uri: string,
+	options?: MCPRequestOptions,
+): Promise<MCPResourceReadResult> {
+	const params: MCPResourceReadParams = { uri };
+	return connection.transport.request<MCPResourceReadResult>(
+		"resources/read",
+		params as unknown as Record<string, unknown>,
+		options,
+	);
+}
+
+/**
+ * Subscribe to resource update notifications.
+ */
+export async function subscribeToResources(
+	connection: MCPServerConnection,
+	uris: string[],
+	options?: MCPRequestOptions,
+): Promise<void> {
+	if (uris.length === 0 || !connection.capabilities.resources?.subscribe) return;
+	const results = await Promise.allSettled(
+		uris.map(uri => {
+			const params: MCPResourceSubscribeParams = { uri };
+			return connection.transport.request(
+				"resources/subscribe",
+				params as unknown as Record<string, unknown>,
+				options,
+			);
+		}),
+	);
+	for (const result of results) {
+		if (result.status === "rejected") {
+			logger.warn("Failed to subscribe to MCP resource", { error: result.reason });
+		}
+	}
+}
+
+/**
+ * Unsubscribe from resource update notifications.
+ */
+export async function unsubscribeFromResources(
+	connection: MCPServerConnection,
+	uris: string[],
+	options?: MCPRequestOptions,
+): Promise<void> {
+	if (uris.length === 0 || !connection.capabilities.resources?.subscribe) return;
+	const results = await Promise.allSettled(
+		uris.map(uri => {
+			const params: MCPResourceSubscribeParams = { uri };
+			return connection.transport.request(
+				"resources/unsubscribe",
+				params as unknown as Record<string, unknown>,
+				options,
+			);
+		}),
+	);
+	for (const result of results) {
+		if (result.status === "rejected") {
+			logger.warn("Failed to unsubscribe from MCP resource", { error: result.reason });
+		}
+	}
+}
+
+/**
+ * Check if a server supports resource subscriptions.
+ */
+export function serverSupportsResourceSubscriptions(capabilities: MCPServerCapabilities): boolean {
+	return capabilities.resources?.subscribe === true;
+}
+
+/**
+ * Check if a server supports resources.
+ */
+export function serverSupportsResources(capabilities: MCPServerCapabilities): boolean {
+	return capabilities.resources !== undefined;
+}
+
+/**
+ * List prompts from a connected server.
+ */
+export async function listPrompts(
+	connection: MCPServerConnection,
+	options?: { signal?: AbortSignal },
+): Promise<MCPPrompt[]> {
+	if (!connection.capabilities.prompts) {
+		return [];
+	}
+
+	if (connection.prompts) {
+		return connection.prompts;
+	}
+
+	const allPrompts: MCPPrompt[] = [];
+	let cursor: string | undefined;
+
+	do {
+		const params: Record<string, unknown> = {};
+		if (cursor) {
+			params.cursor = cursor;
+		}
+
+		const result = await connection.transport.request<MCPPromptsListResult>("prompts/list", params, options);
+		allPrompts.push(...result.prompts);
+		cursor = result.nextCursor;
+	} while (cursor);
+
+	connection.prompts = allPrompts;
+	return allPrompts;
+}
+
+/**
+ * Get a specific prompt from a connected server.
+ */
+export async function getPrompt(
+	connection: MCPServerConnection,
+	name: string,
+	args?: Record<string, string>,
+	options?: MCPRequestOptions,
+): Promise<MCPGetPromptResult> {
+	const params: MCPGetPromptParams = { name };
+	if (args && Object.keys(args).length > 0) {
+		params.arguments = args;
+	}
+
+	return connection.transport.request<MCPGetPromptResult>(
+		"prompts/get",
+		params as unknown as Record<string, unknown>,
+		options,
+	);
+}
+
+/**
+ * Check if a server supports prompts.
+ */
+export function serverSupportsPrompts(capabilities: MCPServerCapabilities): boolean {
+	return capabilities.prompts !== undefined;
 }

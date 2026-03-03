@@ -26,4 +26,4 @@ export * from "./tool-cache";
 export * from "./transports/http";
 export * from "./transports/stdio";
 // Types
-export type * from "./types";
+export * from "./types";

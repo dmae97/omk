@@ -351,6 +351,11 @@ export class SelectorController {
 				setPreferredImageProvider(value as "auto" | "gemini" | "openrouter");
 				break;
 
+			// MCP update injection - live subscribe/unsubscribe
+			case "mcp.notifications":
+				this.ctx.mcpManager?.setNotificationsEnabled(value as boolean);
+				break;
+
 			// All other settings are handled by the definitions (get/set on SettingsManager)
 			// No additional side effects needed
 		}

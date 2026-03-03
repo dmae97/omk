@@ -86,6 +86,15 @@ export class MCPCommandController {
 			case "disable":
 				await this.#handleSetEnabled(parts[2], false);
 				break;
+			case "resources":
+				await this.#handleResources();
+				break;
+			case "prompts":
+				await this.#handlePrompts();
+				break;
+			case "notifications":
+				await this.#handleNotifications();
+				break;
 			case "reload":
 				await this.#handleReload();
 				break;
@@ -115,6 +124,9 @@ export class MCPCommandController {
 			"  /mcp enable <name>    Enable an MCP server",
 			"  /mcp disable <name>   Disable an MCP server",
 			"  /mcp reload           Force reload and rediscover MCP runtime tools",
+			"  /mcp resources        List available resources from connected servers",
+			"  /mcp prompts          List available prompts from connected servers",
+			"  /mcp notifications    Show notification capabilities and subscription state",
 			"  /mcp help             Show this help message",
 			"",
 		].join("\n");
@@ -1274,6 +1286,157 @@ export class MCPCommandController {
 			errorLines.push("");
 			this.#showMessage(errorLines.join("\n"));
 		}
+	}
+
+	/**
+	 * Handle /mcp resources - Show available resources from connected servers
+	 */
+	async #handleResources(): Promise<void> {
+		if (!this.ctx.mcpManager) {
+			this.ctx.showError("No MCP manager available.");
+			return;
+		}
+
+		const servers = this.ctx.mcpManager.getConnectedServers();
+		const lines: string[] = ["", theme.bold("MCP Resources"), ""];
+		let hasAny = false;
+
+		for (const name of servers) {
+			const data = this.ctx.mcpManager.getServerResources(name);
+			if (!data) continue;
+			const { resources, templates } = data;
+			if (resources.length === 0 && templates.length === 0) continue;
+			hasAny = true;
+
+			lines.push(`${theme.fg("accent", name)}:`);
+			for (const r of resources) {
+				const desc = r.description ? ` ${theme.fg("dim", r.description)}` : "";
+				const mime = r.mimeType ? ` ${theme.fg("dim", `[${r.mimeType}]`)}` : "";
+				lines.push(`  ${theme.fg("success", r.uri)}${mime}${desc}`);
+			}
+			if (templates.length > 0) {
+				lines.push(`  ${theme.fg("muted", "Templates:")}`);
+				for (const t of templates) {
+					const desc = t.description ? ` ${theme.fg("dim", t.description)}` : "";
+					lines.push(`    ${theme.fg("accent", t.uriTemplate)}${desc}`);
+				}
+			}
+			lines.push("");
+		}
+
+		if (!hasAny) {
+			lines.push(theme.fg("muted", "No resources available on connected servers."));
+			lines.push("");
+		}
+		this.#showMessage(lines.join("\n"));
+	}
+
+	/**
+	 * Handle /mcp prompts - Show available prompts from connected servers
+	 */
+	async #handlePrompts(): Promise<void> {
+		if (!this.ctx.mcpManager) {
+			this.ctx.showError("No MCP manager available.");
+			return;
+		}
+
+		const servers = this.ctx.mcpManager.getConnectedServers();
+		const lines: string[] = ["", theme.bold("MCP Prompts"), ""];
+		let hasAny = false;
+
+		for (const name of servers) {
+			const prompts = this.ctx.mcpManager.getServerPrompts(name);
+			if (!prompts?.length) continue;
+			hasAny = true;
+
+			lines.push(`${theme.fg("accent", name)}:`);
+			for (const p of prompts) {
+				const commandName = `${name}:${p.name}`;
+				const desc = p.description ? ` ${theme.fg("dim", p.description)}` : "";
+				lines.push(`  ${theme.fg("success", `/${commandName}`)}${desc}`);
+				if (p.arguments?.length) {
+					for (const arg of p.arguments) {
+						const required = arg.required ? theme.fg("warning", " *") : "";
+						const argDesc = arg.description ? ` - ${arg.description}` : "";
+						lines.push(`    ${arg.name}=${required}${theme.fg("dim", argDesc)}`);
+					}
+				}
+			}
+			lines.push("");
+		}
+
+		if (!hasAny) {
+			lines.push(theme.fg("muted", "No prompts available on connected servers."));
+			lines.push("");
+		}
+		this.#showMessage(lines.join("\n"));
+	}
+
+	/**
+	 * Handle /mcp notifications - Show notification and subscription state
+	 */
+	async #handleNotifications(): Promise<void> {
+		if (!this.ctx.mcpManager) {
+			this.ctx.showError("No MCP manager available.");
+			return;
+		}
+
+		const { enabled, subscriptions } = this.ctx.mcpManager.getNotificationState();
+		const servers = this.ctx.mcpManager.getConnectedServers();
+		const statusIcon = enabled ? theme.fg("success", "enabled") : theme.fg("warning", "disabled");
+		const lines: string[] = ["", theme.bold("MCP Notifications"), ""];
+		lines.push(`  Status: ${statusIcon}  ${theme.fg("dim", "(mcp.notifications setting)")}`);
+		lines.push("");
+
+		let hasAny = false;
+		for (const name of servers) {
+			const connection = this.ctx.mcpManager.getConnection(name);
+			if (!connection) continue;
+			const caps = connection.capabilities;
+			const supportsResources = caps.resources !== undefined;
+			const supportsSubscribe = caps.resources?.subscribe === true;
+			const supportsToolsChanged = caps.tools?.listChanged === true;
+			const supportsPromptsChanged = caps.prompts?.listChanged === true;
+			const supportsResourcesChanged = caps.resources?.listChanged === true;
+
+			const hasNotifications =
+				supportsToolsChanged || supportsPromptsChanged || supportsResourcesChanged || supportsSubscribe;
+			if (!hasNotifications) continue;
+			hasAny = true;
+
+			lines.push(`${theme.fg("accent", name)}:`);
+			const check = theme.fg("success", "\u2713");
+			const cross = theme.fg("dim", "\u2717");
+			if (supportsToolsChanged) lines.push(`  ${check} tools/list_changed`);
+			if (supportsResourcesChanged) lines.push(`  ${check} resources/list_changed`);
+			if (supportsPromptsChanged) lines.push(`  ${check} prompts/list_changed`);
+
+			if (supportsSubscribe) {
+				const subscribedUris = subscriptions.get(name);
+				const subCount = subscribedUris?.size ?? 0;
+				const subStatus =
+					enabled && subCount > 0
+						? theme.fg("success", `subscribed (${subCount} URI${subCount !== 1 ? "s" : ""})`)
+						: enabled
+							? theme.fg("muted", "no active subscriptions")
+							: theme.fg("dim", "inactive (notifications disabled)");
+				lines.push(`  ${check} resources/subscribe  ${subStatus}`);
+				if (enabled && subscribedUris && subscribedUris.size > 0) {
+					for (const uri of subscribedUris) {
+						lines.push(`    ${theme.fg("success", "\u2713")} ${theme.fg("dim", uri)}`);
+					}
+				}
+			} else if (supportsResources) {
+				lines.push(`  ${cross} resources/subscribe  ${theme.fg("dim", "not supported")}`);
+			}
+			lines.push("");
+		}
+
+		if (!hasAny) {
+			lines.push(theme.fg("muted", "No servers support notifications."));
+			lines.push("");
+		}
+		this.#showMessage(lines.join("\n"));
 	}
 
 	/**

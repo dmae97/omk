@@ -244,6 +244,14 @@ export interface MCPServerConnection {
 	tools?: MCPToolDefinition[];
 	/** Source metadata (for display) */
 	_source?: SourceMeta;
+	/** Cached resources (populated on demand) */
+	resources?: MCPResource[];
+	/** Cached resource templates (populated on demand) */
+	resourceTemplates?: MCPResourceTemplate[];
+	/** Server instructions from initialize */
+	instructions?: string;
+	/** Cached prompts (populated on demand) */
+	prompts?: MCPPrompt[];
 }
 
 /** MCP tool with server context */
@@ -251,3 +259,135 @@ export interface MCPToolWithServer {
 	server: MCPServerConnection;
 	tool: MCPToolDefinition;
 }
+
+// =============================================================================
+// MCP Resource Types
+// =============================================================================
+
+/** Annotations for resources, templates, and content blocks */
+export interface MCPAnnotations {
+	audience?: ("user" | "assistant")[];
+	priority?: number;
+	lastModified?: string;
+}
+
+/** A concrete resource exposed by an MCP server */
+export interface MCPResource {
+	uri: string;
+	name: string;
+	title?: string;
+	description?: string;
+	mimeType?: string;
+	size?: number;
+	annotations?: MCPAnnotations;
+}
+
+/** A parameterized resource template (RFC 6570 URI template) */
+export interface MCPResourceTemplate {
+	uriTemplate: string;
+	name: string;
+	title?: string;
+	description?: string;
+	mimeType?: string;
+	annotations?: MCPAnnotations;
+}
+
+/** Result of resources/list */
+export interface MCPResourcesListResult {
+	resources: MCPResource[];
+	nextCursor?: string;
+}
+
+/** Result of resources/templates/list */
+export interface MCPResourceTemplatesListResult {
+	resourceTemplates: MCPResourceTemplate[];
+	nextCursor?: string;
+}
+
+/** A single content item from resources/read */
+export interface MCPResourceContentItem {
+	uri: string;
+	mimeType?: string;
+	text?: string;
+	blob?: string;
+}
+
+/** Result of resources/read */
+export interface MCPResourceReadResult {
+	contents: MCPResourceContentItem[];
+}
+
+/** Params for resources/read */
+export interface MCPResourceReadParams {
+	uri: string;
+}
+
+/** Params for resources/subscribe and resources/unsubscribe */
+export interface MCPResourceSubscribeParams {
+	uri: string;
+}
+
+// =============================================================================
+// MCP Prompt Types
+// =============================================================================
+
+/** An argument definition for an MCP prompt */
+export interface MCPPromptArgument {
+	name: string;
+	description?: string;
+	required?: boolean;
+}
+
+/** A prompt definition exposed by an MCP server */
+export interface MCPPrompt {
+	name: string;
+	title?: string;
+	description?: string;
+	arguments?: MCPPromptArgument[];
+}
+
+/** Result of prompts/list */
+export interface MCPPromptsListResult {
+	prompts: MCPPrompt[];
+	nextCursor?: string;
+}
+
+/** Audio content in prompt messages */
+export interface MCPAudioContent {
+	type: "audio";
+	data: string;
+	mimeType: string;
+}
+
+/** Content type union for prompt messages */
+export type MCPPromptContent = MCPTextContent | MCPImageContent | MCPAudioContent | MCPResourceContent;
+
+/** A single message in a prompt result */
+export interface MCPPromptMessage {
+	role: "user" | "assistant";
+	content: MCPPromptContent | MCPPromptContent[];
+}
+
+/** Params for prompts/get */
+export interface MCPGetPromptParams {
+	name: string;
+	arguments?: Record<string, string>;
+}
+
+/** Result of prompts/get */
+export interface MCPGetPromptResult {
+	description?: string;
+	messages: MCPPromptMessage[];
+}
+
+// =============================================================================
+// MCP Notification Method Names
+// =============================================================================
+
+/** MCP server notification method names */
+export const MCPNotificationMethods = {
+	TOOLS_LIST_CHANGED: "notifications/tools/list_changed",
+	RESOURCES_LIST_CHANGED: "notifications/resources/list_changed",
+	RESOURCES_UPDATED: "notifications/resources/updated",
+	PROMPTS_LIST_CHANGED: "notifications/prompts/list_changed",
+} as const;
