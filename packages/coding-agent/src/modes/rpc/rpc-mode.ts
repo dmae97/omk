@@ -98,6 +98,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 
 			if (opts?.timeout !== undefined) {
 				timeoutId = setTimeout(() => {
+					opts.onTimeout?.();
 					cleanup();
 					resolve(defaultValue);
 				}, opts.timeout);
@@ -119,12 +120,14 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				dialogOptions,
 				undefined,
 				{ method: "select", title, options, timeout: dialogOptions?.timeout },
-				response =>
-					"cancelled" in response && response.cancelled
-						? undefined
-						: "value" in response
-							? response.value
-							: undefined,
+				response => {
+					if ("cancelled" in response && response.cancelled) {
+						if (response.timedOut) dialogOptions?.onTimeout?.();
+						return undefined;
+					}
+					if ("value" in response) return response.value;
+					return undefined;
+				},
 			);
 		}
 
@@ -133,12 +136,14 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				dialogOptions,
 				false,
 				{ method: "confirm", title, message, timeout: dialogOptions?.timeout },
-				response =>
-					"cancelled" in response && response.cancelled
-						? false
-						: "confirmed" in response
-							? response.confirmed
-							: false,
+				response => {
+					if ("cancelled" in response && response.cancelled) {
+						if (response.timedOut) dialogOptions?.onTimeout?.();
+						return false;
+					}
+					if ("confirmed" in response) return response.confirmed;
+					return false;
+				},
 			);
 		}
 
@@ -151,12 +156,14 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				dialogOptions,
 				undefined,
 				{ method: "input", title, placeholder, timeout: dialogOptions?.timeout },
-				response =>
-					"cancelled" in response && response.cancelled
-						? undefined
-						: "value" in response
-							? response.value
-							: undefined,
+				response => {
+					if ("cancelled" in response && response.cancelled) {
+						if (response.timedOut) dialogOptions?.onTimeout?.();
+						return undefined;
+					}
+					if ("value" in response) return response.value;
+					return undefined;
+				},
 			);
 		}
 

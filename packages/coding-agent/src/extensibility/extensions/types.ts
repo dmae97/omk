@@ -70,6 +70,8 @@ export type { AgentToolResult, AgentToolUpdateCallback };
 export interface ExtensionUIDialogOptions {
 	signal?: AbortSignal;
 	timeout?: number;
+	/** Invoked when the UI times out while waiting for a selection/input */
+	onTimeout?: () => void;
 	/** Initial cursor position for select dialogs (0-indexed) */
 	initialIndex?: number;
 	/** Render an outlined list for select dialogs */

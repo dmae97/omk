@@ -10,6 +10,7 @@ import { DynamicBorder } from "./dynamic-border";
 export interface HookSelectorOptions {
 	tui?: TUI;
 	timeout?: number;
+	onTimeout?: () => void;
 	initialIndex?: number;
 	outline?: boolean;
 	maxVisible?: number;
@@ -76,6 +77,7 @@ export class HookSelectorComponent extends Container {
 				opts.tui,
 				s => this.#titleText.setText(theme.fg("accent", `${this.#baseTitle} (${s}s)`)),
 				() => {
+					opts?.onTimeout?.();
 					// Auto-select current option on timeout (typically the first/recommended option)
 					const selected = this.#options[this.#selectedIndex];
 					if (selected) {

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed `ask` timeout handling to auto-select the recommended option instead of aborting the turn, while preserving explicit user-cancel abort behavior ([#266](https://github.com/can1357/oh-my-pi/issues/266))
+
 ## [13.6.2] - 2026-03-03
 ### Fixed
 

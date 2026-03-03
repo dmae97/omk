@@ -579,6 +579,7 @@ export class ExtensionUiController {
 			{
 				initialIndex: dialogOptions?.initialIndex,
 				timeout: dialogOptions?.timeout,
+				onTimeout: dialogOptions?.onTimeout,
 				tui: this.ctx.ui,
 				outline: dialogOptions?.outline,
 				maxVisible,
@@ -650,6 +651,11 @@ export class ExtensionUiController {
 			() => {
 				this.hideHookInput();
 				finish(undefined);
+			},
+			{
+				timeout: dialogOptions?.timeout,
+				onTimeout: dialogOptions?.onTimeout,
+				tui: this.ctx.ui,
 			},
 		);
 		this.ctx.editorContainer.clear();
