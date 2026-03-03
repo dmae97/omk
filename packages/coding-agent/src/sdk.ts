@@ -705,7 +705,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		thinkingLevel = existingSession.thinkingLevel as ThinkingLevel;
 	}
 
-	if (thinkingLevel === undefined && !hasThinkingEntry && defaultRoleSpec.explicitThinkingLevel) {
+	if (thinkingLevel === undefined && !hasExplicitModel && !hasThinkingEntry && defaultRoleSpec.explicitThinkingLevel) {
 		thinkingLevel = defaultRoleSpec.thinkingLevel;
 	}
 

@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { createAgentSession, type ExtensionFactory } from "@oh-my-pi/pi-coding-agent/sdk";
+import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { Snowflake } from "@oh-my-pi/pi-utils";
 
@@ -30,6 +31,15 @@ describe("createAgentSession deferred model pattern resolution", () => {
 					id: "runtime-model",
 					name: "Runtime Model",
 					reasoning: false,
+					input: ["text"],
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+					contextWindow: 128000,
+					maxTokens: 8192,
+				},
+				{
+					id: "runtime-reasoning-model",
+					name: "Runtime Reasoning Model",
+					reasoning: true,
 					input: ["text"],
 					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 					contextWindow: 128000,
@@ -74,5 +84,20 @@ describe("createAgentSession deferred model pattern resolution", () => {
 
 		expect(session.model).toBeUndefined();
 		expect(modelFallbackMessage).toBe('Model "missing-provider/missing-model" not found');
+	});
+
+	test("does not apply default role thinking override when modelPattern is explicit", async () => {
+		const settings = Settings.isolated({ defaultThinkingLevel: "off" });
+		settings.setModelRole("smol", "runtime-provider/runtime-reasoning-model");
+		settings.setModelRole("default", "pi/smol:high");
+
+		const { session } = await createAgentSession({
+			...buildSessionOptions("runtime-provider/runtime-reasoning-model"),
+			settings,
+		});
+
+		expect(session.model?.provider).toBe("runtime-provider");
+		expect(session.model?.id).toBe("runtime-reasoning-model");
+		expect(session.thinkingLevel).toBe("off");
 	});
 });

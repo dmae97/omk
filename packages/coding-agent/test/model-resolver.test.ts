@@ -5,6 +5,7 @@ import {
 	resolveCliModel,
 	resolveModelFromString,
 	resolveModelOverride,
+	resolveModelRoleValue,
 } from "@oh-my-pi/pi-coding-agent/config/model-resolver";
 
 // Mock models for testing
@@ -269,6 +270,20 @@ describe("parseModelPattern", () => {
 	});
 });
 
+describe("resolveModelRoleValue", () => {
+	test("resolves pi/<role>:<thinking> by expanding role alias before parsing thinking", () => {
+		const settings = {
+			getModelRole: (role: string) => role === "smol" ? "openrouter/qwen/qwen3-coder:exacto" : undefined,
+		} as NonNullable<Parameters<typeof resolveModelRoleValue>[2]>["settings"];
+
+		const result = resolveModelRoleValue("pi/smol:high", allModels, { settings });
+
+		expect(result.model?.provider).toBe("openrouter");
+		expect(result.model?.id).toBe("qwen/qwen3-coder:exacto");
+		expect(result.thinkingLevel).toBe("high");
+		expect(result.explicitThinkingLevel).toBe(true);
+	});
+});
 describe("resolveModelFromString", () => {
 	test("falls back to pattern parsing for provider/model:thinking when strict provider+id miss", () => {
 		const resolved = resolveModelFromString("openrouter/qwen/qwen3-coder:exacto:high", allModels);

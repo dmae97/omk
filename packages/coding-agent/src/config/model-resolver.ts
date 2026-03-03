@@ -343,9 +343,16 @@ export function resolveModelRoleValue(
 		return { model: undefined, thinkingLevel: undefined, explicitThinkingLevel: false, warning: undefined };
 	}
 
-	const effectivePattern = expandRoleAlias(normalized, options?.settings);
+	const lastColonIndex = normalized.lastIndexOf(":");
+	const hasThinkingSuffix =
+		lastColonIndex > PREFIX_MODEL_ROLE.length && isValidThinkingLevel(normalized.slice(lastColonIndex + 1));
+	const aliasCandidate = hasThinkingSuffix ? normalized.slice(0, lastColonIndex) : normalized;
+	const effectivePattern = expandRoleAlias(aliasCandidate, options?.settings);
+	const patternWithSuffix = hasThinkingSuffix
+		? `${effectivePattern}:${normalized.slice(lastColonIndex + 1)}`
+		: effectivePattern;
 	const { model, thinkingLevel, warning, explicitThinkingLevel } = parseModelPattern(
-		effectivePattern,
+		patternWithSuffix,
 		availableModels,
 		options?.matchPreferences,
 	);
