@@ -115,6 +115,7 @@ export class MCPManager {
 	#onResourcesChanged?: (serverName: string, uri: string) => void;
 	#onPromptsChanged?: (serverName: string) => void;
 	#notificationsEnabled = false;
+	#notificationsEpoch = 0;
 	#subscribedResources = new Map<string, Set<string>>();
 	#pendingResourceRefresh = new Map<string, Promise<void>>();
 
@@ -160,34 +161,44 @@ export class MCPManager {
 	setNotificationsEnabled(enabled: boolean): void {
 		const wasEnabled = this.#notificationsEnabled;
 		this.#notificationsEnabled = enabled;
+		if (enabled === wasEnabled) return;
 
-		if (enabled && !wasEnabled) {
+		this.#notificationsEpoch += 1;
+		const notificationEpoch = this.#notificationsEpoch;
+
+		if (enabled) {
 			// Subscribe to all connected servers that support it
 			for (const [name, connection] of this.#connections) {
 				if (connection.capabilities.resources?.subscribe && connection.resources) {
 					const uris = connection.resources.map(r => r.uri);
 					void subscribeToResources(connection, uris)
 						.then(() => {
-							// Guard: if disabled while subscribe was in-flight, don't repopulate
-							if (this.#notificationsEnabled) {
-								this.#subscribedResources.set(name, new Set(uris));
+							if (!this.#notificationsEnabled || this.#notificationsEpoch !== notificationEpoch) {
+								void unsubscribeFromResources(connection, uris).catch(error => {
+									logger.debug("Failed to rollback stale MCP resource subscription", { path: `mcp:${name}`, error });
+								});
+								return;
 							}
+							this.#subscribedResources.set(name, new Set(uris));
 						})
 						.catch(error => {
 							logger.debug("Failed to subscribe to MCP resources", { path: `mcp:${name}`, error });
 						});
 				}
 			}
-		} else if (!enabled && wasEnabled) {
-			// Unsubscribe from all servers
-			for (const [name, connection] of this.#connections) {
-				const uris = this.#subscribedResources.get(name);
-				if (uris && uris.size > 0) {
-					void unsubscribeFromResources(connection, Array.from(uris)).catch(() => {});
-				}
-			}
-			this.#subscribedResources.clear();
+			return;
 		}
+
+		// Unsubscribe from all servers
+		for (const [name, connection] of this.#connections) {
+			const uris = this.#subscribedResources.get(name);
+			if (uris && uris.size > 0) {
+				void unsubscribeFromResources(connection, Array.from(uris)).catch(error => {
+					logger.debug("Failed to unsubscribe MCP resources", { path: `mcp:${name}`, error });
+				});
+			}
+		}
+		this.#subscribedResources.clear();
 	}
 
 	/**
@@ -323,8 +334,15 @@ export class MCPManager {
 
 							if (this.#notificationsEnabled && connection.capabilities.resources?.subscribe) {
 								const uris = resources.map(r => r.uri);
+								const notificationEpoch = this.#notificationsEpoch;
 								void subscribeToResources(connection, uris)
 									.then(() => {
+										if (!this.#notificationsEnabled || this.#notificationsEpoch !== notificationEpoch) {
+											void unsubscribeFromResources(connection, uris).catch(error => {
+												logger.debug("Failed to rollback stale MCP resource subscription", { path: `mcp:${name}`, error });
+											});
+											return;
+										}
 										this.#subscribedResources.set(name, new Set(uris));
 									})
 									.catch(error => {
@@ -427,15 +445,30 @@ export class MCPManager {
 		this.#tools.push(...tools);
 	}
 
+	#triggerNotificationRefresh(serverName: string, kind: "tools" | "resources" | "prompts"): void {
+		const refresh = (() => {
+			switch (kind) {
+				case "tools":
+					return this.refreshServerTools(serverName);
+				case "resources":
+					return this.refreshServerResources(serverName);
+				case "prompts":
+					return this.refreshServerPrompts(serverName);
+			}
+		})();
+		void refresh.catch(error => {
+			logger.debug("Failed MCP notification refresh", { path: `mcp:${serverName}`, kind, error });
+		});
+	}
 	#handleServerNotification(serverName: string, method: string, params: unknown): void {
 		logger.debug("MCP notification received", { path: `mcp:${serverName}`, method });
 
 		switch (method) {
 			case MCPNotificationMethods.TOOLS_LIST_CHANGED:
-				void this.refreshServerTools(serverName);
+				this.#triggerNotificationRefresh(serverName, "tools");
 				break;
 			case MCPNotificationMethods.RESOURCES_LIST_CHANGED:
-				void this.refreshServerResources(serverName);
+				this.#triggerNotificationRefresh(serverName, "resources");
 				break;
 			case MCPNotificationMethods.RESOURCES_UPDATED: {
 				const uri = (params as { uri?: string })?.uri;
@@ -446,7 +479,7 @@ export class MCPManager {
 				break;
 			}
 			case MCPNotificationMethods.PROMPTS_LIST_CHANGED:
-				void this.refreshServerPrompts(serverName);
+				this.#triggerNotificationRefresh(serverName, "prompts");
 				break;
 			default:
 				break;
@@ -612,6 +645,7 @@ export class MCPManager {
 			if (this.#notificationsEnabled && connection.capabilities.resources?.subscribe) {
 				const newUris = new Set(resources.map(r => r.uri));
 				const oldUris = this.#subscribedResources.get(name);
+				const notificationEpoch = this.#notificationsEpoch;
 
 				// Unsubscribe URIs that were removed
 				if (oldUris) {
@@ -627,7 +661,14 @@ export class MCPManager {
 
 				// Subscribe to the current set and update tracking atomically
 				try {
-					await subscribeToResources(connection, [...newUris]);
+					const allUris = [...newUris];
+					await subscribeToResources(connection, allUris);
+					if (!this.#notificationsEnabled || this.#notificationsEpoch !== notificationEpoch) {
+						await unsubscribeFromResources(connection, allUris).catch(error => {
+							logger.debug("Failed to rollback stale MCP resource subscription", { path: `mcp:${name}`, error });
+						});
+						return;
+					}
 					this.#subscribedResources.set(name, newUris);
 				} catch (error) {
 					logger.debug("Failed to re-subscribe to MCP resources", { path: `mcp:${name}`, error });

@@ -170,21 +170,28 @@ describe("hasCopilotVisionInput", () => {
 });
 
 describe("getCopilotPremiumMultiplier", () => {
-	it("returns multiplier metadata from bundled Copilot models", () => {
-		expect(getCopilotPremiumMultiplier(getBundledModel("github-copilot", "claude-haiku-4.5").premiumMultiplier)).toBe(
-			0.33,
-		);
-		expect(getCopilotPremiumMultiplier(getBundledModel("github-copilot", "claude-opus-4.6").premiumMultiplier)).toBe(
+	it("returns bundled multiplier metadata for paid-tier Copilot plans", () => {
+		expect(
+			getCopilotPremiumMultiplier(getBundledModel("github-copilot", "claude-haiku-4.5").premiumMultiplier, "paid"),
+		).toBe(0.33);
+		expect(getCopilotPremiumMultiplier(getBundledModel("github-copilot", "claude-opus-4.6").premiumMultiplier, "paid")).toBe(
 			3,
 		);
-		expect(getCopilotPremiumMultiplier(getBundledModel("github-copilot", "gpt-4o").premiumMultiplier)).toBe(0);
-		expect(getCopilotPremiumMultiplier(getBundledModel("github-copilot", "grok-code-fast-1").premiumMultiplier)).toBe(
+		expect(getCopilotPremiumMultiplier(getBundledModel("github-copilot", "gpt-4o").premiumMultiplier, "paid")).toBe(0);
+		expect(getCopilotPremiumMultiplier(getBundledModel("github-copilot", "grok-code-fast-1").premiumMultiplier, "paid")).toBe(
 			0.25,
 		);
 	});
 
+	it("treats zero-multiplier models as 1x for free-tier or unknown plans", () => {
+		expect(getCopilotPremiumMultiplier(0, "free")).toBe(1);
+		expect(getCopilotPremiumMultiplier(0, undefined)).toBe(1);
+		expect(getCopilotPremiumMultiplier(0, "enterprise")).toBe(1);
+	});
+
 	it("defaults to 1x when multiplier metadata is missing", () => {
-		expect(getCopilotPremiumMultiplier(undefined)).toBe(1);
+		expect(getCopilotPremiumMultiplier(undefined, "paid")).toBe(1);
+		expect(getCopilotPremiumMultiplier(undefined, "free")).toBe(1);
 	});
 });
 
@@ -200,13 +207,42 @@ describe("buildCopilotDynamicHeaders", () => {
 		expect(premiumRequests).toBe(0.33);
 	});
 
-	it("uses 0x multiplier for included models", () => {
+	it("uses 0x multiplier for included models on paid-tier plans", () => {
 		const { premiumRequests } = buildCopilotDynamicHeaders({
 			messages: [],
 			hasImages: false,
 			premiumMultiplier: 0,
+			planTier: "paid",
 		});
 		expect(premiumRequests).toBe(0);
+	});
+
+	it("treats included models as 1x for free-tier plans", () => {
+		const { premiumRequests } = buildCopilotDynamicHeaders({
+			messages: [],
+			hasImages: false,
+			premiumMultiplier: 0,
+			planTier: "free",
+		});
+		expect(premiumRequests).toBe(1);
+	});
+
+	it("defaults unknown or missing plan tiers to free-tier behavior", () => {
+		expect(
+			buildCopilotDynamicHeaders({
+				messages: [],
+				hasImages: false,
+				premiumMultiplier: 0,
+			}).premiumRequests,
+		).toBe(1);
+		expect(
+			buildCopilotDynamicHeaders({
+				messages: [],
+				hasImages: false,
+				premiumMultiplier: 0,
+				planTier: "enterprise",
+			}).premiumRequests,
+		).toBe(1);
 	});
 
 	it("preserves explicit initiator override over inferred value and sets 0 premium requests for agent", () => {

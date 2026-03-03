@@ -67,23 +67,65 @@ describe("McpReadResourceTool", () => {
 		expect(result.details?.isError).toBeUndefined();
 	});
 
-	it("falls back to template scheme matching when no exact URI match", async () => {
+	it("matches URI templates when no exact URI exists", async () => {
 		const resources = new Map<string, { resources: MCPResource[]; templates: MCPResourceTemplate[] }>();
 		resources.set("tmpl-server", {
 			resources: [],
-			templates: [{ uriTemplate: "test://{id}", name: "test-template" }],
+			templates: [{ uriTemplate: "test://docs/{id}/raw", name: "doc-template" }],
 		});
 		const manager = createMockManager({
 			servers: ["tmpl-server"],
 			resources,
-			readResult: { contents: [{ uri: "test://foo", text: "from template" }] },
+			readResult: { contents: [{ uri: "test://docs/foo/raw", text: "from template" }] },
 		});
 		const tool = new McpReadResourceTool(() => manager);
-		const result = await tool.execute("call-1", { uri: "test://foo" });
+		const result = await tool.execute("call-1", { uri: "test://docs/foo/raw" });
 
 		const text = (result.content[0] as { type: string; text: string }).text;
 		expect(text).toBe("from template");
 		expect(result.details?.serverName).toBe("tmpl-server");
+	});
+
+	it("picks the most specific matching template across overlapping schemes", async () => {
+		const resources = new Map<string, { resources: MCPResource[]; templates: MCPResourceTemplate[] }>();
+		resources.set("broad-server", {
+			resources: [],
+			templates: [{ uriTemplate: "test://{path}", name: "broad" }],
+		});
+		resources.set("specific-server", {
+			resources: [],
+			templates: [{ uriTemplate: "test://foo/{id}", name: "specific" }],
+		});
+		const manager = createMockManager({
+			servers: ["broad-server", "specific-server"],
+			resources,
+			readResult: { contents: [{ uri: "test://foo/123", text: "from specific" }] },
+		});
+		const tool = new McpReadResourceTool(() => manager);
+		const result = await tool.execute("call-1", { uri: "test://foo/123" });
+
+		expect(result.details?.serverName).toBe("specific-server");
+	});
+
+	it("uses connected server order when matching templates are equally specific", async () => {
+		const resources = new Map<string, { resources: MCPResource[]; templates: MCPResourceTemplate[] }>();
+		resources.set("first", {
+			resources: [],
+			templates: [{ uriTemplate: "test://{id}", name: "first-template" }],
+		});
+		resources.set("second", {
+			resources: [],
+			templates: [{ uriTemplate: "test://{id}", name: "second-template" }],
+		});
+		const manager = createMockManager({
+			servers: ["first", "second"],
+			resources,
+			readResult: { contents: [{ uri: "test://foo", text: "from first" }] },
+		});
+		const tool = new McpReadResourceTool(() => manager);
+		const result = await tool.execute("call-1", { uri: "test://foo" });
+
+		expect(result.details?.serverName).toBe("first");
 	});
 
 	it("does not match template with different scheme prefix", async () => {

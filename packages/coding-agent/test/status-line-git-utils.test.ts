@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseDefaultBranch, parseGitHubRepo } from "@oh-my-pi/pi-coding-agent/modes/components/status-line/git-utils";
+import { canReuseCachedPr, createPrCacheContext, isSamePrCacheContext, parseDefaultBranch, parseGitHubRepo } from "@oh-my-pi/pi-coding-agent/modes/components/status-line/git-utils";
 
 describe("parseGitHubRepo", () => {
 	test("parses HTTPS URL", () => {
@@ -74,5 +74,57 @@ describe("parseDefaultBranch", () => {
 
 	test("handles empty string", () => {
 		expect(parseDefaultBranch("")).toBe("");
+	});
+});
+
+describe("isSamePrCacheContext", () => {
+	test("returns true when branch and repo match", () => {
+		expect(
+			isSamePrCacheContext(
+				createPrCacheContext("feature/one", "/repo/.git/HEAD"),
+				createPrCacheContext("feature/one", "/repo/.git/HEAD"),
+			),
+		).toBe(true);
+	});
+
+	test("returns false when repo changes but branch stays the same", () => {
+		expect(
+			isSamePrCacheContext(
+				createPrCacheContext("feature/one", "/repo-a/.git/HEAD"),
+				createPrCacheContext("feature/one", "/repo-b/.git/HEAD"),
+			),
+		).toBe(false);
+	});
+});
+
+describe("canReuseCachedPr", () => {
+	test("allows negative-cache reuse when context is unchanged", () => {
+		expect(
+			canReuseCachedPr(
+				null,
+				createPrCacheContext("feature/one", "/repo/.git/HEAD"),
+				createPrCacheContext("feature/one", "/repo/.git/HEAD"),
+			),
+		).toBe(true);
+	});
+
+	test("rejects cached PR when branch changes", () => {
+		expect(
+			canReuseCachedPr(
+				{ number: 12, url: "https://example.test/pr/12" },
+				createPrCacheContext("feature/one", "/repo/.git/HEAD"),
+				createPrCacheContext("feature/two", "/repo/.git/HEAD"),
+			),
+		).toBe(false);
+	});
+
+	test("rejects cached PR when repo context is unavailable", () => {
+		expect(
+			canReuseCachedPr(
+				{ number: 12, url: "https://example.test/pr/12" },
+				createPrCacheContext("feature/one", "/repo/.git/HEAD"),
+				null,
+			),
+		).toBe(false);
 	});
 });

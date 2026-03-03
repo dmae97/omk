@@ -122,6 +122,56 @@ describe("ModelRegistry LM Studio Fixes", () => {
 			registry = new ModelRegistry(authStorage, modelsJsonPath);
 			await registry.refresh();
 			expect(requestedUrl).toBe("http://127.0.0.1:9999/v1/models");
+
+			// Scenario 4: Custom port with trailing slash
+			fs.writeFileSync(
+				modelsJsonPath,
+				JSON.stringify({
+					providers: {
+						"lm-studio": {
+							baseUrl: "http://127.0.0.1:9999/",
+							api: "openai-completions",
+							discovery: { type: "lm-studio" },
+						},
+					},
+				}),
+			);
+			registry = new ModelRegistry(authStorage, modelsJsonPath);
+			await registry.refresh();
+			expect(requestedUrl).toBe("http://127.0.0.1:9999/v1/models");
+
+			// Scenario 5: /v1 with extra trailing slashes
+			fs.writeFileSync(
+				modelsJsonPath,
+				JSON.stringify({
+					providers: {
+						"lm-studio": {
+							baseUrl: "http://127.0.0.1:1234/v1///",
+							api: "openai-completions",
+							discovery: { type: "lm-studio" },
+						},
+					},
+				}),
+			);
+			registry = new ModelRegistry(authStorage, modelsJsonPath);
+			await registry.refresh();
+			expect(requestedUrl).toBe("http://127.0.0.1:1234/v1/models");
+
+			// Scenario 6: Missing baseUrl falls back to default endpoint
+			fs.writeFileSync(
+				modelsJsonPath,
+				JSON.stringify({
+					providers: {
+						"lm-studio": {
+							api: "openai-completions",
+							discovery: { type: "lm-studio" },
+						},
+					},
+				}),
+			);
+			registry = new ModelRegistry(authStorage, modelsJsonPath);
+			await registry.refresh();
+			expect(requestedUrl).toBe("http://127.0.0.1:1234/v1/models");
 		} finally {
 			globalThis.fetch = originalFetch;
 		}

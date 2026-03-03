@@ -36,12 +36,16 @@ function isFoundryEnabled(): boolean {
 	return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
 }
 
+function normalizeBaseUrl(baseUrl: string | undefined): string | undefined {
+	const trimmed = baseUrl?.trim();
+	return trimmed ? trimmed.replace(/\/+$/, "") : undefined;
+}
 function resolveAnthropicBaseUrlFromEnv(): string | undefined {
 	if (isFoundryEnabled()) {
-		const foundryBaseUrl = $env.FOUNDRY_BASE_URL?.trim();
+		const foundryBaseUrl = normalizeBaseUrl($env.FOUNDRY_BASE_URL);
 		if (foundryBaseUrl) return foundryBaseUrl;
 	}
-	const anthropicBaseUrl = $env.ANTHROPIC_BASE_URL?.trim();
+	const anthropicBaseUrl = normalizeBaseUrl($env.ANTHROPIC_BASE_URL);
 	return anthropicBaseUrl || undefined;
 }
 
@@ -97,10 +101,11 @@ async function readAnthropicOAuthCredentials(store?: AuthCredentialStore): Promi
 }
 
 /**
- * Finds Anthropic auth config using 3-tier priority:
+ * Finds Anthropic auth config using priority:
  *   1. ANTHROPIC_SEARCH_API_KEY / ANTHROPIC_SEARCH_BASE_URL
- *   2. OAuth in agent.db (with 5-minute expiry buffer)
- *   3. ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL fallback
+ *   2. ANTHROPIC_FOUNDRY_API_KEY override when Foundry mode is enabled
+ *   3. OAuth in agent.db (with 5-minute expiry buffer)
+ *   4. ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL fallback
  * @param store - Optional credential store (creates one from default db path if not provided)
  * @returns The first valid auth configuration found, or null if none available
  */
@@ -116,7 +121,16 @@ export async function findAnthropicAuth(store?: AuthCredentialStore): Promise<An
 		};
 	}
 
-	// 2. OAuth credentials in agent.db (with 5-minute expiry buffer)
+	// 2. Foundry explicit env override
+	const foundryApiKey = isFoundryEnabled() ? $env.ANTHROPIC_FOUNDRY_API_KEY?.trim() : undefined;
+	if (foundryApiKey) {
+		return {
+			apiKey: foundryApiKey,
+			baseUrl: resolveAnthropicBaseUrlFromEnv() ?? DEFAULT_BASE_URL,
+			isOAuth: isOAuthToken(foundryApiKey),
+		};
+	}
+	// 3. OAuth credentials in agent.db (with 5-minute expiry buffer)
 	const expiryBuffer = 5 * 60 * 1000; // 5 minutes
 	const now = Date.now();
 	const credentials = await readAnthropicOAuthCredentials(store);
@@ -131,7 +145,7 @@ export async function findAnthropicAuth(store?: AuthCredentialStore): Promise<An
 		}
 	}
 
-	// 3. Generic ANTHROPIC_API_KEY fallback
+	// 4. Generic ANTHROPIC_API_KEY fallback
 	const apiKey = getEnvApiKey("anthropic");
 	const baseUrl = resolveAnthropicBaseUrlFromEnv();
 	if (apiKey) {

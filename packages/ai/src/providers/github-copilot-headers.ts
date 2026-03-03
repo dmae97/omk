@@ -71,16 +71,27 @@ export function getCopilotInitiatorOverride(headers: Record<string, string> | un
 	return override;
 }
 
-export function getCopilotPremiumMultiplier(premiumMultiplier: number | undefined): number {
-	return premiumMultiplier ?? 1;
+export type CopilotPlanTier = "free" | "paid";
+
+function normalizeCopilotPlanTier(planTier: string | undefined): CopilotPlanTier {
+	if (planTier === "paid") return "paid";
+	return "free";
+}
+export function getCopilotPremiumMultiplier(premiumMultiplier: number | undefined, planTier?: string): number {
+	const normalizedMultiplier = premiumMultiplier ?? 1;
+	if (normalizeCopilotPlanTier(planTier) === "free" && normalizedMultiplier === 0) {
+		return 1;
+	}
+	return normalizedMultiplier;
 }
 
 export function getCopilotPremiumRequests(params: {
 	initiator: CopilotInitiator;
 	premiumMultiplier?: number;
+	planTier?: string;
 }): CopilotPremiumRequests {
 	if (params.initiator === "agent") return 0;
-	return getCopilotPremiumMultiplier(params.premiumMultiplier);
+	return getCopilotPremiumMultiplier(params.premiumMultiplier, params.planTier);
 }
 
 /**
@@ -93,6 +104,7 @@ export function buildCopilotDynamicHeaders(params: {
 	premiumMultiplier?: number;
 	headers?: Record<string, string>;
 	initiatorOverride?: CopilotInitiator;
+	planTier?: string;
 }): CopilotDynamicHeaders {
 	const initiator =
 		params.initiatorOverride ?? getCopilotInitiatorOverride(params.headers) ?? inferCopilotInitiator(params.messages);
@@ -108,6 +120,10 @@ export function buildCopilotDynamicHeaders(params: {
 	return {
 		headers,
 		initiator,
-		premiumRequests: getCopilotPremiumRequests({ initiator, premiumMultiplier: params.premiumMultiplier }),
+		premiumRequests: getCopilotPremiumRequests({
+			initiator,
+			premiumMultiplier: params.premiumMultiplier,
+			planTier: params.planTier,
+		}),
 	};
 }

@@ -379,7 +379,7 @@ export type AnthropicClientOptionsResult = {
 const CLAUDE_CODE_TLS_CIPHERS = tls.DEFAULT_CIPHERS;
 
 type FoundryTlsOptions = {
-	ca?: string;
+	ca?: string | string[];
 	cert?: string;
 	key?: string;
 };
@@ -474,7 +474,7 @@ function resolveFoundryTlsOptions(model: Model<"anthropic-messages">): FoundryTl
 	}
 
 	const options: FoundryTlsOptions = {};
-	if (ca) options.ca = ca;
+	if (ca) options.ca = [...tls.rootCertificates, ca];
 	if (cert) options.cert = cert;
 	if (key) options.key = key;
 	return Object.keys(options).length > 0 ? options : undefined;

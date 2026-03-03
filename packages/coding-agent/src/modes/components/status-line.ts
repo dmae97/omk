@@ -8,7 +8,7 @@ import type { StatusLinePreset, StatusLineSegmentId, StatusLineSeparatorStyle } 
 import { theme } from "../../modes/theme/theme";
 import type { AgentSession } from "../../session/agent-session";
 import { findGitHeadPathSync, sanitizeStatusText } from "../shared";
-import { parseDefaultBranch } from "./status-line/git-utils";
+import { canReuseCachedPr, createPrCacheContext, isSamePrCacheContext, parseDefaultBranch, type PrCacheContext } from "./status-line/git-utils";
 import { getPreset } from "./status-line/presets";
 import { renderSegment, type SegmentContext } from "./status-line/segments";
 import { getSeparator } from "./status-line/separators";
@@ -40,6 +40,7 @@ export interface StatusLineSettings {
 export class StatusLineComponent implements Component {
 	#settings: StatusLineSettings = {};
 	#cachedBranch: string | null | undefined = undefined;
+	#cachedBranchRepoId: string | null | undefined = undefined;
 	#gitWatcher: fs.FSWatcher | null = null;
 	#onBranchChange: (() => void) | null = null;
 	#autoCompactEnabled: boolean = true;
@@ -53,8 +54,9 @@ export class StatusLineComponent implements Component {
 	#gitStatusLastFetch = 0;
 	#gitStatusInFlight = false;
 
-	// PR lookup caching (invalidated on branch change)
+	// PR lookup caching (invalidated on branch/repo context changes)
 	#cachedPr: { number: number; url: string } | null | undefined = undefined;
+	#cachedPrContext: PrCacheContext | undefined = undefined;
 	#prLookupInFlight = false;
 	#defaultBranch?: string;
 
@@ -113,14 +115,13 @@ export class StatusLineComponent implements Component {
 
 		try {
 			this.#gitWatcher = fs.watch(gitHeadPath, () => {
-				this.#cachedBranch = undefined;
-				this.#cachedPr = undefined;
+				this.#invalidateGitCaches();
 				if (this.#onBranchChange) {
 					this.#onBranchChange();
 				}
 			});
 		} catch {
-			// Silently fail
+			this.#invalidateGitCaches();
 		}
 	}
 
@@ -132,19 +133,27 @@ export class StatusLineComponent implements Component {
 	}
 
 	invalidate(): void {
-		this.#cachedBranch = undefined;
+		this.#invalidateGitCaches();
 	}
 
+	#invalidateGitCaches(): void {
+		this.#cachedBranch = undefined;
+		this.#cachedBranchRepoId = undefined;
+		this.#cachedPr = undefined;
+		this.#cachedPrContext = undefined;
+	}
 	#getCurrentBranch(): string | null {
-		if (this.#cachedBranch !== undefined) {
+		const gitHeadPath = findGitHeadPathSync();
+		if (this.#cachedBranch !== undefined && this.#cachedBranchRepoId === gitHeadPath) {
 			return this.#cachedBranch;
 		}
 
-		const gitHeadPath = findGitHeadPathSync();
+		this.#cachedBranchRepoId = gitHeadPath;
 		if (!gitHeadPath) {
 			this.#cachedBranch = null;
 			return null;
 		}
+
 		try {
 			const content = fs.readFileSync(gitHeadPath, "utf8").trim();
 
@@ -235,24 +244,35 @@ export class StatusLineComponent implements Component {
 	}
 
 	#lookupPr(): { number: number; url: string } | null {
-		if (this.#cachedPr !== undefined) {
+		const branch = this.#getCurrentBranch();
+		const currentContext = branch ? createPrCacheContext(branch, this.#cachedBranchRepoId ?? null) : null;
+
+		if (canReuseCachedPr(this.#cachedPr, this.#cachedPrContext, currentContext)) {
 			return this.#cachedPr;
 		}
 
+		if (this.#cachedPr !== undefined) {
+			this.#cachedPr = undefined;
+			this.#cachedPrContext = undefined;
+		}
+
 		// Don't look up if no branch, detached HEAD, default branch, or already in flight
-		const branch = this.#getCurrentBranch();
 		if (!branch || branch === "detached" || this.#isDefaultBranch(branch) || this.#prLookupInFlight) {
 			return null;
 		}
 
 		this.#prLookupInFlight = true;
+		const lookupContext = currentContext;
 
 		// Fire async lookup, return null until resolved
 		(async () => {
-			// Helper: only write cache if branch hasn't changed since launch
+			// Helper: only write cache if branch/repo context hasn't changed since launch
 			const setCachedPr = (value: { number: number; url: string } | null) => {
-				if (this.#getCurrentBranch() === branch) {
+				const latestBranch = this.#getCurrentBranch();
+				const latestContext = latestBranch ? createPrCacheContext(latestBranch, this.#cachedBranchRepoId ?? null) : undefined;
+				if (lookupContext && isSamePrCacheContext(latestContext, lookupContext)) {
 					this.#cachedPr = value;
+					this.#cachedPrContext = lookupContext;
 				}
 			};
 			try {

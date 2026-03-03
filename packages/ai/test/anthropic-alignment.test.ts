@@ -18,8 +18,8 @@ import {
 	streamAnthropic,
 	stripClaudeToolPrefix,
 } from "@oh-my-pi/pi-ai/providers/anthropic";
-import type { Context, Model } from "@oh-my-pi/pi-ai/types";
 import { getEnvApiKey } from "@oh-my-pi/pi-ai/stream";
+import type { Context, Model } from "@oh-my-pi/pi-ai/types";
 
 const ANTHROPIC_MODEL: Model<"anthropic-messages"> = {
 	id: "claude-sonnet-4-5",
@@ -40,10 +40,7 @@ function createAbortedSignal(): AbortSignal {
 	return controller.signal;
 }
 
-async function withEnv(
-	overrides: Record<string, string | undefined>,
-	fn: () => void | Promise<void>,
-): Promise<void> {
+async function withEnv(overrides: Record<string, string | undefined>, fn: () => void | Promise<void>): Promise<void> {
 	const previous = new Map<string, string | undefined>();
 	for (const key of Object.keys(overrides)) {
 		previous.set(key, Bun.env[key]);
@@ -392,7 +389,7 @@ describe("Anthropic request fingerprint alignment", () => {
 							| {
 									tls?: {
 										serverName?: string;
-										ca?: string;
+										ca?: string | string[];
 										cert?: string;
 										key?: string;
 									};
@@ -400,7 +397,11 @@ describe("Anthropic request fingerprint alignment", () => {
 							| undefined
 					)?.tls;
 					expect(tlsOptions?.serverName).toBe("foundry.example.com");
-					expect(tlsOptions?.ca).toContain("BEGIN CERTIFICATE");
+					expect(Array.isArray(tlsOptions?.ca)).toBe(true);
+					const caValues = (tlsOptions?.ca ?? []) as string[];
+					expect(caValues.length).toBeGreaterThanOrEqual(tls.rootCertificates.length + 1);
+					expect(caValues.slice(0, tls.rootCertificates.length)).toEqual(tls.rootCertificates);
+					expect(caValues.at(-1)).toContain("BEGIN CERTIFICATE");
 					expect(tlsOptions?.cert).toContain("BEGIN CERTIFICATE");
 					expect(tlsOptions?.key).toContain("BEGIN PRIVATE KEY");
 				},
@@ -408,6 +409,29 @@ describe("Anthropic request fingerprint alignment", () => {
 		} finally {
 			fs.rmSync(tmpDir, { recursive: true, force: true });
 		}
+	});
+
+	it("throws when Foundry mTLS cert/key pair is incomplete", async () => {
+		await withEnv(
+			{
+				CLAUDE_CODE_USE_FOUNDRY: "true",
+				FOUNDRY_BASE_URL: "https://foundry.example.com",
+				CLAUDE_CODE_CLIENT_CERT: "-----BEGIN CERTIFICATE-----\nCERT\n-----END CERTIFICATE-----\n",
+				CLAUDE_CODE_CLIENT_KEY: undefined,
+			},
+			() => {
+				expect(() =>
+					buildAnthropicClientOptions({
+						model: ANTHROPIC_MODEL,
+						apiKey: "foundry-token",
+						extraBetas: [],
+						stream: true,
+						interleavedThinking: false,
+						dynamicHeaders: {},
+					}),
+				).toThrow("Both CLAUDE_CODE_CLIENT_CERT and CLAUDE_CODE_CLIENT_KEY must be set for mTLS.");
+			},
+		);
 	});
 
 	it("resolves Anthropic Foundry API key when Foundry mode is enabled", async () => {

@@ -891,13 +891,7 @@ export class ModelRegistry {
 	}
 
 	async #discoverLmStudioModels(providerConfig: DiscoveryProviderConfig): Promise<Model<Api>[]> {
-		const endpoint = providerConfig.baseUrl || "http://127.0.0.1:1234/v1";
-		let baseUrl = endpoint;
-		if (!baseUrl.endsWith("/v1")) {
-			baseUrl = baseUrl.endsWith("/") ? `${baseUrl}v1` : `${baseUrl}/v1`;
-		} else if (baseUrl.endsWith("/v1/")) {
-			baseUrl = baseUrl.slice(0, -1);
-		}
+		const baseUrl = this.#normalizeLmStudioBaseUrl(providerConfig.baseUrl);
 		const modelsUrl = `${baseUrl}/models`;
 
 		const headers: Record<string, string> = { ...(providerConfig.headers ?? {}) };
@@ -955,6 +949,17 @@ export class ModelRegistry {
 		}
 	}
 
+	#normalizeLmStudioBaseUrl(baseUrl?: string): string {
+		const raw = baseUrl || "http://127.0.0.1:1234/v1";
+		try {
+			const parsed = new URL(raw);
+			const trimmedPath = parsed.pathname.replace(/\/+$/g, "");
+			parsed.pathname = trimmedPath.endsWith("/v1") ? trimmedPath || "/v1" : `${trimmedPath}/v1`;
+			return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+		} catch {
+			return "http://127.0.0.1:1234/v1";
+		}
+	}
 	#normalizeOllamaBaseUrl(baseUrl?: string): string {
 		const raw = baseUrl || "http://127.0.0.1:11434";
 		try {

@@ -25,6 +25,20 @@ export interface McpReadResourceDetails {
 	meta?: OutputMeta;
 }
 
+function escapeRegex(text: string): string {
+	return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function getUriTemplateMatchScore(uri: string, uriTemplate: string): { literalChars: number; expressionCount: number } | undefined {
+	const expressionPattern = /\{[^}]+\}/g;
+	const literalSegments = uriTemplate.split(expressionPattern);
+	const expressionCount = (uriTemplate.match(expressionPattern) ?? []).length;
+	const pattern = literalSegments.map(escapeRegex).join("(.+?)");
+	const regex = new RegExp(`^${pattern}$`);
+	if (!regex.test(uri)) return undefined;
+	const literalChars = literalSegments.reduce((total, segment) => total + segment.length, 0);
+	return { literalChars, expressionCount };
+}
 export class McpReadResourceTool implements AgentTool<typeof mcpReadResourceSchema, McpReadResourceDetails> {
 	readonly name = "read_resource";
 	readonly label = "MCP Read Resource";
@@ -66,18 +80,47 @@ export class McpReadResourceTool implements AgentTool<typeof mcpReadResourceSche
 			}
 		}
 
-		// If no exact match, try servers with templates whose URI scheme matches
+		// If no exact match, try full URI-template matching and pick the most specific match
 		if (!targetServer) {
-			const uriScheme = uri.split("://")[0];
-			for (const name of servers) {
+			let bestTemplateMatch: {
+				serverName: string;
+				literalChars: number;
+				expressionCount: number;
+				serverIndex: number;
+				templateIndex: number;
+			} | undefined;
+
+			for (const [serverIndex, name] of servers.entries()) {
 				const serverResources = mcpManager.getServerResources(name);
-				if (serverResources?.templates.some(t => t.uriTemplate.startsWith(`${uriScheme}://`))) {
-					targetServer = name;
-					break;
+				if (!serverResources) continue;
+
+				for (const [templateIndex, template] of serverResources.templates.entries()) {
+					const match = getUriTemplateMatchScore(uri, template.uriTemplate);
+					if (!match) continue;
+
+					const isBetterMatch =
+						!bestTemplateMatch ||
+						match.literalChars > bestTemplateMatch.literalChars ||
+						(match.literalChars === bestTemplateMatch.literalChars &&
+							(match.expressionCount < bestTemplateMatch.expressionCount ||
+								(match.expressionCount === bestTemplateMatch.expressionCount &&
+									(serverIndex < bestTemplateMatch.serverIndex ||
+										(serverIndex === bestTemplateMatch.serverIndex && templateIndex < bestTemplateMatch.templateIndex)))));
+
+					if (isBetterMatch) {
+						bestTemplateMatch = {
+							serverName: name,
+							literalChars: match.literalChars,
+							expressionCount: match.expressionCount,
+							serverIndex,
+							templateIndex,
+						};
+					}
 				}
 			}
-		}
 
+			targetServer = bestTemplateMatch?.serverName;
+		}
 		if (!targetServer) {
 			const available = servers
 				.flatMap(name => {
