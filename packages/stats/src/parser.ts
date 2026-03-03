@@ -49,6 +49,33 @@ function extractStats(sessionFile: string, folder: string, entry: SessionMessage
 	};
 }
 
+const LF = 0x0a;
+
+function parseSessionEntriesLenient(bytes: Uint8Array): { entries: SessionEntry[]; read: number } {
+	const entries: SessionEntry[] = [];
+	let cursor = 0;
+
+	while (cursor < bytes.length) {
+		const { values, error, read, done } = Bun.JSONL.parseChunk(bytes, cursor, bytes.length);
+		if (values.length > 0) {
+			entries.push(...(values as SessionEntry[]));
+		}
+
+		if (error) {
+			const nextNewline = bytes.indexOf(LF, Math.max(read, cursor));
+			if (nextNewline === -1) break;
+			cursor = nextNewline + 1;
+			continue;
+		}
+
+		if (read <= cursor) break;
+		cursor = read;
+		if (done) break;
+	}
+
+	return { entries, read: cursor };
+}
+
 /**
  * Parse a session file and extract all assistant message stats.
  * Uses incremental reading with offset tracking.
@@ -69,10 +96,7 @@ export async function parseSessionFile(
 	const stats: MessageStats[] = [];
 	const start = Math.max(0, Math.min(fromOffset, bytes.length));
 	const unprocessed = bytes.subarray(start);
-	const { values, error, read } = Bun.JSONL.parseChunk(unprocessed);
-	if (error) throw error;
-	const entries = values as SessionEntry[];
-
+	const { entries, read } = parseSessionEntriesLenient(unprocessed);
 	for (const entry of entries) {
 		if (isAssistantMessage(entry)) {
 			const msgStats = extractStats(sessionPath, folder, entry);
@@ -127,14 +151,15 @@ export async function listAllSessionFiles(): Promise<string[]> {
  * Find a specific entry in a session file.
  */
 export async function getSessionEntry(sessionPath: string, entryId: string): Promise<SessionEntry | null> {
-	let entries: SessionEntry[];
+	let bytes: Uint8Array;
 	try {
-		entries = Bun.JSONL.parse(await Bun.file(sessionPath).bytes()) as SessionEntry[];
+		bytes = await Bun.file(sessionPath).bytes();
 	} catch (err) {
 		if (isEnoent(err)) return null;
 		throw err;
 	}
 
+	const { entries } = parseSessionEntriesLenient(bytes);
 	for (const entry of entries) {
 		if ("id" in entry && entry.id === entryId) {
 			return entry;
