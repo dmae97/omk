@@ -5,7 +5,7 @@ import { skillCapability } from "../capability/skill";
 import type { SourceMeta } from "../capability/types";
 import type { SkillsSettings } from "../config/settings";
 import { type Skill as CapabilitySkill, loadCapability } from "../discovery";
-import { scanSkillsFromDir } from "../discovery/helpers";
+import { compareSkillOrder, scanSkillsFromDir } from "../discovery/helpers";
 import { expandTilde } from "../tools/path-utils";
 
 export interface Skill {
@@ -235,8 +235,12 @@ export async function loadSkills(options: LoadSkillsOptions = {}): Promise<LoadS
 		}
 	}
 
+	const skills = Array.from(skillMap.values());
+	// Deterministic ordering for prompt stability (case-insensitive, then exact name, then path).
+	skills.sort((a, b) => compareSkillOrder(a.name, a.filePath, b.name, b.filePath));
+
 	return {
-		skills: Array.from(skillMap.values()),
+		skills,
 		warnings: [...(result.warnings ?? []).map(w => ({ skillPath: "", message: w })), ...collisionWarnings],
 	};
 }

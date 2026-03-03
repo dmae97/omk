@@ -9,6 +9,16 @@ import { loadSkills, loadSkillsFromDir, type Skill } from "@oh-my-pi/pi-coding-a
 const fixturesDir = path.resolve(import.meta.dirname, "fixtures/skills");
 const collisionFixturesDir = path.resolve(import.meta.dirname, "fixtures/skills-collision");
 
+const longSkillName = "this-is-a-very-long-skill-name-that-exceeds-the-sixty-four-character-limit-set-by-the-standard";
+const expectedFixtureSkillOrder: string[] = [
+	"bad--name",
+	"different-name",
+	"Invalid_Name",
+	longSkillName,
+	"unknown-field",
+	"valid-skill",
+];
+
 describe("skills", () => {
 	describe("loadSkillsFromDir", () => {
 		const loadFixtureRoot = () => loadSkillsFromDir({ dir: fixturesDir, source: "test" });
@@ -95,6 +105,13 @@ describe("skills", () => {
 			expect(skills).toHaveLength(6);
 		});
 
+		it("should return skills sorted by name (case-insensitive)", async () => {
+			const { skills } = await loadFixtureRoot();
+			const names = skills.map(skill => skill.name);
+
+			expect(names).toEqual(expectedFixtureSkillOrder);
+		});
+
 		it("should return empty for non-existent directory", async () => {
 			const { skills, warnings } = await loadSkillsFromDir({
 				dir: "/non/existent/path",
@@ -127,6 +144,19 @@ describe("skills", () => {
 			expect(skills.length).toBeGreaterThan(0);
 			// Custom directory skills have source "custom:user"
 			expect(skills.every(s => s.source.startsWith("custom"))).toBe(true);
+		});
+
+		it("should return customDirectory skills sorted by name (case-insensitive)", async () => {
+			const { skills } = await loadSkills({
+				enableCodexUser: false,
+				enableClaudeUser: false,
+				enableClaudeProject: false,
+				enablePiUser: false,
+				enablePiProject: false,
+				customDirectories: [fixturesDir],
+			});
+
+			expect(skills.map(s => s.name)).toEqual(expectedFixtureSkillOrder);
 		});
 
 		it("should keep user Claude skills when project .claude/skills is missing", async () => {

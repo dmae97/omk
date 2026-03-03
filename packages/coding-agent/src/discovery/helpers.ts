@@ -275,6 +275,16 @@ export interface ScanSkillsFromDirOptions {
 	requireDescription?: boolean;
 }
 
+// Stable ordering used for skill lists in prompts: name (case-insensitive), then name, then path.
+export function compareSkillOrder(aName: string, aPath: string, bName: string, bPath: string): number {
+	const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+	const lowerCompare = cmp(aName.toLowerCase(), bName.toLowerCase());
+	if (lowerCompare !== 0) return lowerCompare;
+	const nameCompare = cmp(aName, bName);
+	if (nameCompare !== 0) return nameCompare;
+	return cmp(aPath, bPath);
+}
+
 export async function scanSkillsFromDir(
 	_ctx: LoadContext,
 	options: ScanSkillsFromDirOptions,
@@ -301,8 +311,10 @@ export async function scanSkillsFromDir(
 				return;
 			}
 			const skillDirName = path.basename(path.dirname(skillPath));
+			const rawName = frontmatter.name;
+			const name = typeof rawName === "string" ? rawName.trim() || skillDirName : skillDirName;
 			items.push({
-				name: (frontmatter.name as string) || skillDirName,
+				name,
 				path: skillPath,
 				content: body,
 				frontmatter: frontmatter as SkillFrontmatter,
@@ -324,6 +336,9 @@ export async function scanSkillsFromDir(
 		}
 	}
 	await Promise.all(work);
+
+	// Deterministic ordering: async file reads complete nondeterministically, so sort after loading.
+	items.sort((a, b) => compareSkillOrder(a.name, a.path, b.name, b.path));
 
 	return { items, warnings };
 }
