@@ -11,7 +11,6 @@
         "@typescript/native-preview": "^7.0.0-dev.20260302.1",
         "lint-staged": "^16.3",
         "prettier": "^3.8",
-        "rustup": "^1.0",
       },
     },
     "packages/agent": {
@@ -887,8 +886,6 @@
     "rfdc": ["rfdc@1.4.1", "", {}, "sha512-q1b3N5QkRUWUl7iyylaaj3kOpIT0N2i9MqIEQXP73GVsN9cw3fdx8X63cEmWhJGi2PPCF23Ijp7ktmd39rawIA=="],
 
     "rimraf": ["rimraf@5.0.10", "", { "dependencies": { "glob": "^10.3.7" }, "bin": { "rimraf": "dist/esm/bin.mjs" } }, "sha512-l0OE8wL34P4nJH/H2ffoaniAokM2qSmrtXHmlpvYr5AVVX8msAyW0l8NVJFDxlSK4u3Uh/f41cQheDVdnYijwQ=="],
-
-    "rustup": ["rustup@1.0.10", "", { "bin": { "rustup-init": "rustup-init", "rustfmt": "rustup", "rustup": "rustup", "cargo": "rustup", "cargo-clippy": "rustup", "cargo-fmt": "rustup", "cargo-miri": "rustup", "clippy-driver": "rustup", "rls": "rustup", "rust-gdb": "rustup", "rust-gdbgui": "rustup", "rust-lldb": "rustup", "rustc": "rustup", "rustdoc": "rustup" } }, "sha512-PnUuHNrwRLQwld4Ha2uiO1wAi+8EYHNebXQlCtgI9pUpP+FLtnL79jAYpa3PvtWBDVZi54CK1I9pnUiR7yKYsQ=="],
 
     "safe-buffer": ["safe-buffer@5.2.1", "", {}, "sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ=="],
 
