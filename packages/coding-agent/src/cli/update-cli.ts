@@ -4,21 +4,13 @@
  * Handles `omp update` to check for and install updates.
  * Uses bun if available, otherwise downloads binary from GitHub releases.
  */
-import { execSync, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
+import * as path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { APP_NAME, isEnoent, VERSION } from "@oh-my-pi/pi-utils";
+import { $ } from "bun";
 import chalk from "chalk";
 import { theme } from "../modes/theme/theme";
-
-/**
- * Detect if we're running as a Bun compiled binary.
- */
-const isBunBinary =
-	Bun.env.PI_COMPILED ||
-	import.meta.url.includes("$bunfs") ||
-	import.meta.url.includes("~BUN") ||
-	import.meta.url.includes("%7EBUN");
 
 const REPO = "can1357/oh-my-pi";
 const PACKAGE = "@oh-my-pi/pi-coding-agent";
@@ -26,7 +18,6 @@ const PACKAGE = "@oh-my-pi/pi-coding-agent";
 interface ReleaseInfo {
 	tag: string;
 	version: string;
-	assets: Array<{ name: string; url: string }>;
 }
 
 /**
@@ -44,16 +35,57 @@ export function parseUpdateArgs(args: string[]): { force: boolean; check: boolea
 	};
 }
 
-/**
- * Check if bun is available in PATH.
- */
-function hasBun(): boolean {
+async function getBunGlobalBinDir(): Promise<string | undefined> {
+	if (!Bun.which("bun")) return undefined;
 	try {
-		const result = spawnSync("bun", ["--version"], { encoding: "utf-8", stdio: "pipe" });
-		return result.status === 0;
+		const result = await $`bun pm bin -g`.quiet().nothrow();
+		if (result.exitCode !== 0) return undefined;
+		const output = result.text().trim();
+		return output.length > 0 ? output : undefined;
 	} catch {
-		return false;
+		return undefined;
 	}
+}
+
+function getRealPathOrOriginal(filePath: string): string {
+	try {
+		return fs.realpathSync(filePath);
+	} catch {
+		return filePath;
+	}
+}
+
+function normalizePathForComparison(filePath: string): string {
+	const normalized = path.normalize(filePath);
+	if (process.platform === "win32") return normalized.toLowerCase();
+	return normalized;
+}
+
+function isPathInDirectory(filePath: string, directoryPath: string): boolean {
+	const normalizedPath = normalizePathForComparison(getRealPathOrOriginal(filePath));
+	const normalizedDirectory = normalizePathForComparison(getRealPathOrOriginal(directoryPath));
+	const relativePath = path.relative(normalizedDirectory, normalizedPath);
+	return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));
+}
+
+interface UpdateTarget {
+	method: "bun" | "binary";
+	path: string;
+}
+
+function resolveUpdateMethod(ompPath: string, bunBinDir: string | undefined): "bun" | "binary" {
+	if (!bunBinDir) return "binary";
+	return isPathInDirectory(ompPath, bunBinDir) ? "bun" : "binary";
+}
+
+export function _resolveUpdateMethodForTest(ompPath: string, bunBinDir: string | undefined): "bun" | "binary" {
+	return resolveUpdateMethod(ompPath, bunBinDir);
+}
+async function resolveUpdateTarget(): Promise<UpdateTarget> {
+	const ompPath = resolveOmpPath() ?? process.execPath;
+	const bunBinDir = await getBunGlobalBinDir();
+	const method = resolveUpdateMethod(ompPath, bunBinDir);
+	return { method, path: ompPath };
 }
 
 /**
@@ -70,15 +102,9 @@ async function getLatestRelease(): Promise<ReleaseInfo> {
 	const version = data.version;
 	const tag = `v${version}`;
 
-	// Construct deterministic GitHub release download URLs for the current platform
-	const makeAsset = (name: string) => ({
-		name,
-		url: `https://github.com/${REPO}/releases/download/${tag}/${name}`,
-	});
 	return {
 		tag,
 		version,
-		assets: [makeAsset(getBinaryName())],
 	};
 }
 
@@ -141,59 +167,92 @@ function getBinaryName(): string {
 }
 
 /**
+ * Resolve the path that `omp` maps to in the user's PATH.
+ */
+function resolveOmpPath(): string | undefined {
+	return Bun.which(APP_NAME) ?? undefined;
+}
+
+/**
+ * Run the resolved omp binary and check if it reports the expected version.
+ */
+async function verifyInstalledVersion(
+	expectedVersion: string,
+): Promise<{ ok: boolean; actual?: string; path?: string }> {
+	const ompPath = resolveOmpPath();
+	if (!ompPath) return { ok: false };
+	try {
+		const result = await $`${ompPath} --version`.quiet().nothrow();
+		if (result.exitCode !== 0) return { ok: false, path: ompPath };
+		const output = result.text().trim();
+		// Output format: "omp/X.Y.Z"
+		const match = output.match(/\/(\d+\.\d+\.\d+)/);
+		const actual = match?.[1];
+		return { ok: actual === expectedVersion, actual, path: ompPath };
+	} catch {
+		return { ok: false, path: ompPath };
+	}
+}
+
+/**
+ * Print post-update verification result.
+ */
+async function printVerification(expectedVersion: string): Promise<void> {
+	const result = await verifyInstalledVersion(expectedVersion);
+	if (result.ok) {
+		console.log(chalk.green(`\n${theme.status.success} Updated to ${expectedVersion}`));
+		return;
+	}
+	if (result.actual) {
+		console.log(
+			chalk.yellow(
+				`\nWarning: ${APP_NAME} at ${result.path} still reports ${result.actual} (expected ${expectedVersion})`,
+			),
+		);
+	} else {
+		console.log(
+			chalk.yellow(`\nWarning: could not verify updated version${result.path ? ` at ${result.path}` : ""}`),
+		);
+	}
+	console.log(
+		chalk.yellow(
+			`You may need to reinstall: curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | bash`,
+		),
+	);
+}
+
+/**
  * Update via bun package manager.
  */
 async function updateViaBun(expectedVersion: string): Promise<void> {
 	console.log(chalk.dim("Updating via bun..."));
-	try {
-		execSync(`bun install -g ${PACKAGE}@${expectedVersion}`, { stdio: "inherit" });
-	} catch (error) {
-		throw new Error("bun install failed", { cause: error });
+	const result = await $`bun install -g ${PACKAGE}@${expectedVersion}`.nothrow();
+	if (result.exitCode !== 0) {
+		throw new Error(`bun install failed with exit code ${result.exitCode}`);
 	}
 
-	// Verify the update actually took effect
-	try {
-		const result = spawnSync("bun", ["pm", "ls", "-g"], { encoding: "utf-8", stdio: "pipe" });
-		const output = result.stdout || "";
-		const match = output.match(new RegExp(`${PACKAGE.replace("/", "\\/")}@(\\S+)`));
-		if (match) {
-			const installedVersion = match[1];
-			if (compareVersions(installedVersion, expectedVersion) < 0) {
-				console.log(
-					chalk.yellow(`\nWarning: bun reports ${installedVersion} installed, expected ${expectedVersion}`),
-				);
-				console.log(chalk.yellow(`Try: bun install -g ${PACKAGE}@latest`));
-				return;
-			}
-		}
-	} catch {
-		// Verification is best-effort, don't fail the update
-	}
-	console.log(chalk.green(`\n${theme.status.success} Update complete`));
+	await printVerification(expectedVersion);
 }
 
 /**
- * Update by downloading binary from GitHub releases.
+ * Download a release binary to a target path, replacing an existing file.
  */
-async function updateViaBinary(release: ReleaseInfo): Promise<void> {
+async function updateViaBinaryAt(targetPath: string, expectedVersion: string): Promise<void> {
 	const binaryName = getBinaryName();
-	const asset = release.assets.find(a => a.name === binaryName);
-	if (!asset) {
-		throw new Error(`No binary found for ${binaryName}`);
-	}
-	const execPath = process.execPath;
-	const tempPath = `${execPath}.new`;
-	const backupPath = `${execPath}.bak`;
+	const tag = `v${expectedVersion}`;
+	const url = `https://github.com/${REPO}/releases/download/${tag}/${binaryName}`;
+
+	const tempPath = `${targetPath}.new`;
+	const backupPath = `${targetPath}.bak`;
 	console.log(chalk.dim(`Downloading ${binaryName}…`));
 
-	// Download binary to temp file
-	const response = await fetch(asset.url, { redirect: "follow" });
+	const response = await fetch(url, { redirect: "follow" });
 	if (!response.ok || !response.body) {
 		throw new Error(`Download failed: ${response.statusText}`);
 	}
 	const fileStream = fs.createWriteStream(tempPath, { mode: 0o755 });
 	await pipeline(response.body, fileStream);
-	// Replace current binary
+
 	console.log(chalk.dim("Installing update..."));
 	try {
 		try {
@@ -201,15 +260,15 @@ async function updateViaBinary(release: ReleaseInfo): Promise<void> {
 		} catch (err) {
 			if (!isEnoent(err)) throw err;
 		}
-		await fs.promises.rename(execPath, backupPath);
-		await fs.promises.rename(tempPath, execPath);
+		await fs.promises.rename(targetPath, backupPath);
+		await fs.promises.rename(tempPath, targetPath);
 		await fs.promises.unlink(backupPath);
 
-		console.log(chalk.green(`\n${theme.status.success} Updated to ${release.version}`));
+		await printVerification(expectedVersion);
 		console.log(chalk.dim(`Restart ${APP_NAME} to use the new version`));
 	} catch (err) {
-		if (fs.existsSync(backupPath) && !fs.existsSync(execPath)) {
-			await fs.promises.rename(backupPath, execPath);
+		if (fs.existsSync(backupPath) && !fs.existsSync(targetPath)) {
+			await fs.promises.rename(backupPath, targetPath);
 		}
 		if (fs.existsSync(tempPath)) {
 			await fs.promises.unlink(tempPath);
@@ -251,12 +310,13 @@ export async function runUpdateCommand(opts: { force: boolean; check: boolean })
 		return;
 	}
 
-	// Choose update method
+	// Choose update method based on the prioritized omp binary in PATH
 	try {
-		if (!isBunBinary && hasBun()) {
+		const target = await resolveUpdateTarget();
+		if (target.method === "bun") {
 			await updateViaBun(release.version);
 		} else {
-			await updateViaBinary(release);
+			await updateViaBinaryAt(target.path, release.version);
 		}
 	} catch (err) {
 		console.error(chalk.red(`Update failed: ${err}`));

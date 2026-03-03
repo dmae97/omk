@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed `omp update` silently succeeding without actually updating the binary when the update channel (bun global vs compiled binary) doesn't match the installation method ([#247](https://github.com/can1357/oh-my-pi/issues/247))
+- Added post-update verification that checks the resolved `omp` binary reports the expected version, with actionable warnings on mismatch
+- `omp update` now detects when the `omp` in PATH is not managed by bun and falls back to binary replacement instead of updating the wrong location
 ## [13.6.0] - 2026-03-03
 ### Added
 
