@@ -1,7 +1,7 @@
 import { matchesKey } from "../keys";
 import type { SymbolTheme } from "../symbols";
 import type { Component } from "../tui";
-import { Ellipsis, padding, truncateToWidth, visibleWidth } from "../utils";
+import { Ellipsis, padding, replaceTabs, truncateToWidth, visibleWidth } from "../utils";
 
 export interface SelectItem {
 	value: string;
@@ -18,6 +18,13 @@ export interface SelectListTheme {
 	scrollInfo: (text: string) => string;
 	noMatch: (text: string) => string;
 	symbols: SymbolTheme;
+}
+
+function sanitizeSingleLine(text: string): string {
+	return replaceTabs(text)
+		.replace(/[\r\n]+/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
 }
 
 export class SelectList implements Component {
@@ -72,15 +79,17 @@ export class SelectList implements Component {
 			if (!item) continue;
 
 			const isSelected = i === this.#selectedIndex;
+			const labelText = sanitizeSingleLine(item.label || item.value);
+			const descriptionText = item.description ? sanitizeSingleLine(item.description) : undefined;
 
 			let line = "";
 			if (isSelected) {
 				// Use arrow indicator for selection - entire line uses selectedText color
 				const prefix = `${this.theme.symbols.cursor} `;
 				const prefixWidth = visibleWidth(prefix);
-				const displayValue = item.label || item.value;
+				const displayValue = labelText;
 
-				if (item.description && width > 40) {
+				if (descriptionText && width > 40) {
 					// Calculate how much space we have for value + description
 					const maxValueWidth = Math.min(30, width - prefixWidth - 4);
 					const truncatedValue = truncateToWidth(displayValue, maxValueWidth, Ellipsis.Omit);
@@ -91,7 +100,7 @@ export class SelectList implements Component {
 					const remainingWidth = width - descriptionStart - 2; // -2 for safety
 
 					if (remainingWidth > 10) {
-						const truncatedDesc = truncateToWidth(item.description, remainingWidth, Ellipsis.Omit);
+						const truncatedDesc = truncateToWidth(descriptionText, remainingWidth, Ellipsis.Omit);
 						// Apply selectedText to entire line content
 						line = this.theme.selectedText(`${prefix}${truncatedValue}${spacing}${truncatedDesc}`);
 					} else {
@@ -105,10 +114,10 @@ export class SelectList implements Component {
 					line = this.theme.selectedText(`${prefix}${truncateToWidth(displayValue, maxWidth, Ellipsis.Omit)}`);
 				}
 			} else {
-				const displayValue = item.label || item.value;
+				const displayValue = labelText;
 				const prefix = padding(visibleWidth(this.theme.symbols.cursor) + 1);
 
-				if (item.description && width > 40) {
+				if (descriptionText && width > 40) {
 					// Calculate how much space we have for value + description
 					const maxValueWidth = Math.min(30, width - prefix.length - 4);
 					const truncatedValue = truncateToWidth(displayValue, maxValueWidth, Ellipsis.Omit);
@@ -119,7 +128,7 @@ export class SelectList implements Component {
 					const remainingWidth = width - descriptionStart - 2; // -2 for safety
 
 					if (remainingWidth > 10) {
-						const truncatedDesc = truncateToWidth(item.description, remainingWidth, Ellipsis.Omit);
+						const truncatedDesc = truncateToWidth(descriptionText, remainingWidth, Ellipsis.Omit);
 						const descText = this.theme.description(spacing + truncatedDesc);
 						line = prefix + truncatedValue + descText;
 					} else {

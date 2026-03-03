@@ -23,10 +23,10 @@ Launch interactive wizard to add a new MCP server.
 
 **Wizard Flow:**
 1. **Server Name** - Unique identifier (letters, numbers, dash, underscore, dot only)
-2. **Transport Type** - Choose stdio/http/sse
+2. **Transport Type** - Choose stdio/http
 3. **Configuration**:
    - **stdio**: Command + optional arguments
-   - **http/sse**: Server URL
+   - **http**: Server URL
 4. **Authentication** - Three options:
    - None (for local/trusted servers)
    - OAuth (web-based authentication)
@@ -40,7 +40,7 @@ List all configured MCP servers with connection status.
 **Output:**
 - Server name
 - Connection status (connected/not connected)
-- Transport type [stdio/http/sse]
+- Transport type [stdio/http]
 - Organized by scope (user-level vs project-level)
 
 ### `/mcp remove <name>`
@@ -61,6 +61,35 @@ Test connection to an MCP server.
 - Shows available tools (up to 10)
 - Disconnects after test
 - Provides helpful error messages
+
+### `/mcp auth <name>`
+Reauthorize OAuth for an existing MCP server.
+
+### `/mcp registry search <keyword> [--scope project|user] [--limit <1-100>] [--semantic]`
+Search Smithery registry and deploy a result from an interactive picker.
+
+**Behavior:**
+- Queries Smithery (`registry.smithery.ai`)
+- Matches by display name and qualified name by default
+- Use `--semantic` to keep raw Smithery results/ranking (no local filtering)
+- Shows a keyboard-selectable list of matches
+- Prompts for local server name before deploy (default generated from registry name, editable)
+- Creates/reuses a Smithery Connect connection and handles provider auth via Smithery when required
+- Deploys selected server to project or user config
+- Immediately triggers MCP reload so tools become available in runtime
+- If Smithery returns auth/rate-limit errors, prompts for Smithery login and retries automatically
+
+### `/mcp registry login`
+Configure Smithery authentication for registry commands.
+
+**Supported flows:**
+- Browser-assisted CLI auth flow (default)
+- Manual API key entry in parallel; whichever completes first proceeds
+
+API key is cached in `~/.omp/agent/smithery.json`.
+
+### `/mcp registry logout`
+Remove cached Smithery API key from `~/.omp/agent/smithery.json`.
 
 ## Authentication Methods
 
@@ -97,7 +126,7 @@ For local or trusted MCP servers that don't require credentials.
 }
 ```
 
-#### HTTP Header (for http/sse servers)
+#### HTTP Header (for http servers)
 ```json
 {
   "type": "http",
@@ -141,7 +170,7 @@ Tokens are stored securely in `~/.omp/agent.db` and referenced by credential ID:
 ```
 
 **Token Injection:**
-- **HTTP/SSE servers**: Added to `Authorization` header as `Bearer <token>`
+- **HTTP servers**: Added to `Authorization` header as `Bearer <token>`
 - **stdio servers**: Added to `OAUTH_ACCESS_TOKEN` environment variable
 
 ## Configuration Files
@@ -195,7 +224,7 @@ Project-specific configuration (usually in project root).
 - Maximum 100 characters
 
 **"Invalid URL format (must start with http:// or https://)"**
-- URLs for HTTP/SSE servers must include protocol
+- URLs for HTTP servers must include protocol
 - Example: `https://api.example.com/mcp`
 
 **"Server already exists"**

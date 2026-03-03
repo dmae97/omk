@@ -54,7 +54,8 @@ export class MCPOAuthFlow extends OAuthCallbackFlow {
 		if (!params.get("response_type")) {
 			params.set("response_type", "code");
 		}
-		if (this.#resolvedClientId && !params.get("client_id")) {
+		const existingClientId = params.get("client_id")?.trim();
+		if (this.#resolvedClientId && !existingClientId) {
 			params.set("client_id", this.#resolvedClientId);
 		}
 		if (this.config.scopes && !params.get("scope")) {
@@ -71,6 +72,10 @@ export class MCPOAuthFlow extends OAuthCallbackFlow {
 
 		// Store code verifier for token exchange
 		this.#codeVerifier = codeVerifier;
+
+		if (!params.get("client_id")) {
+			await this.#assertClientIdNotRequired(authUrl.toString());
+		}
 
 		return { url: authUrl.toString() };
 	}
@@ -227,5 +232,25 @@ export class MCPOAuthFlow extends OAuthCallbackFlow {
 		}
 
 		return null;
+	}
+
+	async #assertClientIdNotRequired(authorizationUrl: string): Promise<void> {
+		try {
+			const response = await fetch(authorizationUrl, {
+				method: "GET",
+				redirect: "manual",
+				headers: { Accept: "text/plain,text/html,application/json" },
+			});
+			if (response.status < 400) return;
+			const body = await response.text();
+			if (/client[_-]?id/i.test(body) && /(required|missing|invalid)/i.test(body)) {
+				throw new Error("OAuth provider requires client_id");
+			}
+		} catch (error) {
+			if (error instanceof Error && /client[_-]?id/i.test(error.message)) {
+				throw error;
+			}
+			// Ignore network/probe failures to avoid blocking flows that still work.
+		}
 	}
 }

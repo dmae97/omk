@@ -7,6 +7,9 @@
 - Added LM Studio integration to the model registry and discovery flow.
 - Added support for authenticating with LM Studio using the `/login lm-studio` command.
 - Added `fuse-projfs` task isolation mode for Windows ProjFS-backed overlays.
+- Added `/mcp registry search <keyword>` integration with Smithery, including interactive result selection, editable server naming before deploy, Smithery `configSchema` prompts, and immediate runtime reload so selected MCP tools are available without restarting
+- Added OAuth failure fallback in `/mcp registry search` deploy flow to prompt for manual bearer tokens and validate them before saving configuration
+- Added Smithery auth support for `/mcp registry search` with cached API key login (`/mcp registry login`, `/mcp registry logout`) and automatic login prompt/retry on auth or rate-limit responses
 
 ### Changed
 
