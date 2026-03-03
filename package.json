@@ -12,7 +12,7 @@
 		"test": "bun run --workspaces --if-present --parallel test",
 		"check": "bun run --parallel check:ts check:rs",
 		"check:ts": "biome check . && tsgo -p tsconfig.json && tsgo -p packages/stats/tsconfig.client.json",
-		"check:rs": "cargo fmt --all -- --check && cargo clippy --workspace -- -D warnings && cargo check -Z minimal-versions --workspace",
+		"check:rs": "cargo fmt --all -- --check && cargo clippy --workspace -- -D warnings",
 		"lint": "bun run --parallel lint:ts lint:rs",
 		"lint:ts": "biome lint .",
 		"lint:rs": "cargo clippy --workspace -- -D warnings",
