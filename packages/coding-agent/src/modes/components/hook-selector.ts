@@ -2,7 +2,17 @@
  * Generic selector component for hooks.
  * Displays a list of string options with keyboard navigation.
  */
-import { Container, matchesKey, padding, Spacer, Text, type TUI, visibleWidth } from "@oh-my-pi/pi-tui";
+import {
+	Container,
+	matchesKey,
+	padding,
+	replaceTabs,
+	Spacer,
+	Text,
+	truncateToWidth,
+	type TUI,
+	visibleWidth,
+} from "@oh-my-pi/pi-tui";
 import { theme } from "../../modes/theme/theme";
 import { CountdownTimer } from "./countdown-timer";
 import { DynamicBorder } from "./dynamic-border";
@@ -32,8 +42,10 @@ class OutlinedList extends Container {
 		const horizontal = borderColor(theme.boxSharp.horizontal.repeat(Math.max(1, width)));
 		const innerWidth = Math.max(1, width - 2);
 		const content = this.#lines.map(line => {
-			const pad = Math.max(0, innerWidth - visibleWidth(line));
-			return `${borderColor(theme.boxSharp.vertical)}${line}${padding(pad)}${borderColor(theme.boxSharp.vertical)}`;
+			const normalized = replaceTabs(line);
+			const fitted = truncateToWidth(normalized, innerWidth);
+			const pad = Math.max(0, innerWidth - visibleWidth(fitted));
+			return `${borderColor(theme.boxSharp.vertical)}${fitted}${padding(pad)}${borderColor(theme.boxSharp.vertical)}`;
 		});
 		return [horizontal, ...content, horizontal];
 	}
