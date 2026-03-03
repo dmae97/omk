@@ -640,7 +640,6 @@ describe("TUI terminal-state regressions", () => {
 			}
 		});
 
-
 		it("retains append history when offscreen header changes during overflow growth", async () => {
 			const term = new VirtualTerminal(32, 6);
 			const tui = new TUI(term);

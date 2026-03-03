@@ -86,6 +86,25 @@ describe("McpReadResourceTool", () => {
 		expect(result.details?.serverName).toBe("tmpl-server");
 	});
 
+	it("matches templates when an expression expands to an empty string", async () => {
+		const resources = new Map<string, { resources: MCPResource[]; templates: MCPResourceTemplate[] }>();
+		resources.set("query-template-server", {
+			resources: [],
+			templates: [{ uriTemplate: "test://docs{?cursor}", name: "query-template" }],
+		});
+		const manager = createMockManager({
+			servers: ["query-template-server"],
+			resources,
+			readResult: { contents: [{ uri: "test://docs", text: "empty expansion" }] },
+		});
+		const tool = new McpReadResourceTool(() => manager);
+		const result = await tool.execute("call-1", { uri: "test://docs" });
+
+		const text = (result.content[0] as { type: string; text: string }).text;
+		expect(text).toBe("empty expansion");
+		expect(result.details?.serverName).toBe("query-template-server");
+	});
+
 	it("picks the most specific matching template across overlapping schemes", async () => {
 		const resources = new Map<string, { resources: MCPResource[]; templates: MCPResourceTemplate[] }>();
 		resources.set("broad-server", {

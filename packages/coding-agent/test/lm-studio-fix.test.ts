@@ -172,6 +172,22 @@ describe("ModelRegistry LM Studio Fixes", () => {
 			registry = new ModelRegistry(authStorage, modelsJsonPath);
 			await registry.refresh();
 			expect(requestedUrl).toBe("http://127.0.0.1:1234/v1/models");
+			// Scenario 7: Invalid configured baseUrl is preserved (no silent localhost fallback)
+			fs.writeFileSync(
+				modelsJsonPath,
+				JSON.stringify({
+					providers: {
+						"lm-studio": {
+							baseUrl: "not a url",
+							api: "openai-completions",
+							discovery: { type: "lm-studio" },
+						},
+					},
+				}),
+			);
+			registry = new ModelRegistry(authStorage, modelsJsonPath);
+			await registry.refresh();
+			expect(requestedUrl).toBe("not a url/models");
 		} finally {
 			globalThis.fetch = originalFetch;
 		}

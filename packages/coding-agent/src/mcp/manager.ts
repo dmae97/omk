@@ -173,10 +173,16 @@ export class MCPManager {
 					const uris = connection.resources.map(r => r.uri);
 					void subscribeToResources(connection, uris)
 						.then(() => {
-							if (!this.#notificationsEnabled || this.#notificationsEpoch !== notificationEpoch) {
+							if (!this.#notificationsEnabled) {
 								void unsubscribeFromResources(connection, uris).catch(error => {
-									logger.debug("Failed to rollback stale MCP resource subscription", { path: `mcp:${name}`, error });
+									logger.debug("Failed to rollback stale MCP resource subscription", {
+										path: `mcp:${name}`,
+										error,
+									});
 								});
+								return;
+							}
+							if (this.#notificationsEpoch !== notificationEpoch) {
 								return;
 							}
 							this.#subscribedResources.set(name, new Set(uris));
@@ -337,10 +343,16 @@ export class MCPManager {
 								const notificationEpoch = this.#notificationsEpoch;
 								void subscribeToResources(connection, uris)
 									.then(() => {
-										if (!this.#notificationsEnabled || this.#notificationsEpoch !== notificationEpoch) {
+										if (!this.#notificationsEnabled) {
 											void unsubscribeFromResources(connection, uris).catch(error => {
-												logger.debug("Failed to rollback stale MCP resource subscription", { path: `mcp:${name}`, error });
+												logger.debug("Failed to rollback stale MCP resource subscription", {
+													path: `mcp:${name}`,
+													error,
+												});
 											});
+											return;
+										}
+										if (this.#notificationsEpoch !== notificationEpoch) {
 											return;
 										}
 										this.#subscribedResources.set(name, new Set(uris));
@@ -663,10 +675,13 @@ export class MCPManager {
 				try {
 					const allUris = [...newUris];
 					await subscribeToResources(connection, allUris);
-					if (!this.#notificationsEnabled || this.#notificationsEpoch !== notificationEpoch) {
+					if (!this.#notificationsEnabled) {
 						await unsubscribeFromResources(connection, allUris).catch(error => {
 							logger.debug("Failed to rollback stale MCP resource subscription", { path: `mcp:${name}`, error });
 						});
+						return;
+					}
+					if (this.#notificationsEpoch !== notificationEpoch) {
 						return;
 					}
 					this.#subscribedResources.set(name, newUris);

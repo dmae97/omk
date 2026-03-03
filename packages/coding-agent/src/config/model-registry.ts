@@ -950,14 +950,15 @@ export class ModelRegistry {
 	}
 
 	#normalizeLmStudioBaseUrl(baseUrl?: string): string {
-		const raw = baseUrl || "http://127.0.0.1:1234/v1";
+		const defaultBaseUrl = "http://127.0.0.1:1234/v1";
+		const raw = baseUrl || defaultBaseUrl;
 		try {
 			const parsed = new URL(raw);
 			const trimmedPath = parsed.pathname.replace(/\/+$/g, "");
 			parsed.pathname = trimmedPath.endsWith("/v1") ? trimmedPath || "/v1" : `${trimmedPath}/v1`;
 			return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
 		} catch {
-			return "http://127.0.0.1:1234/v1";
+			return raw;
 		}
 	}
 	#normalizeOllamaBaseUrl(baseUrl?: string): string {

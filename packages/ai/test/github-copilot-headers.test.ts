@@ -174,13 +174,15 @@ describe("getCopilotPremiumMultiplier", () => {
 		expect(
 			getCopilotPremiumMultiplier(getBundledModel("github-copilot", "claude-haiku-4.5").premiumMultiplier, "paid"),
 		).toBe(0.33);
-		expect(getCopilotPremiumMultiplier(getBundledModel("github-copilot", "claude-opus-4.6").premiumMultiplier, "paid")).toBe(
-			3,
+		expect(
+			getCopilotPremiumMultiplier(getBundledModel("github-copilot", "claude-opus-4.6").premiumMultiplier, "paid"),
+		).toBe(3);
+		expect(getCopilotPremiumMultiplier(getBundledModel("github-copilot", "gpt-4o").premiumMultiplier, "paid")).toBe(
+			0,
 		);
-		expect(getCopilotPremiumMultiplier(getBundledModel("github-copilot", "gpt-4o").premiumMultiplier, "paid")).toBe(0);
-		expect(getCopilotPremiumMultiplier(getBundledModel("github-copilot", "grok-code-fast-1").premiumMultiplier, "paid")).toBe(
-			0.25,
-		);
+		expect(
+			getCopilotPremiumMultiplier(getBundledModel("github-copilot", "grok-code-fast-1").premiumMultiplier, "paid"),
+		).toBe(0.25);
 	});
 
 	it("treats zero-multiplier models as 1x for free-tier or unknown plans", () => {

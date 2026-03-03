@@ -8,7 +8,13 @@ import type { StatusLinePreset, StatusLineSegmentId, StatusLineSeparatorStyle } 
 import { theme } from "../../modes/theme/theme";
 import type { AgentSession } from "../../session/agent-session";
 import { findGitHeadPathSync, sanitizeStatusText } from "../shared";
-import { canReuseCachedPr, createPrCacheContext, isSamePrCacheContext, parseDefaultBranch, type PrCacheContext } from "./status-line/git-utils";
+import {
+	canReuseCachedPr,
+	createPrCacheContext,
+	isSamePrCacheContext,
+	type PrCacheContext,
+	parseDefaultBranch,
+} from "./status-line/git-utils";
 import { getPreset } from "./status-line/presets";
 import { renderSegment, type SegmentContext } from "./status-line/segments";
 import { getSeparator } from "./status-line/separators";
@@ -269,7 +275,9 @@ export class StatusLineComponent implements Component {
 			// Helper: only write cache if branch/repo context hasn't changed since launch
 			const setCachedPr = (value: { number: number; url: string } | null) => {
 				const latestBranch = this.#getCurrentBranch();
-				const latestContext = latestBranch ? createPrCacheContext(latestBranch, this.#cachedBranchRepoId ?? null) : undefined;
+				const latestContext = latestBranch
+					? createPrCacheContext(latestBranch, this.#cachedBranchRepoId ?? null)
+					: undefined;
 				if (lookupContext && isSamePrCacheContext(latestContext, lookupContext)) {
 					this.#cachedPr = value;
 					this.#cachedPrContext = lookupContext;

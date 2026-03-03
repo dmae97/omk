@@ -17,7 +17,6 @@ class LineComponent implements Component {
 	}
 }
 
-
 class MutableContentComponent implements Component {
 	#lines: string[];
 
@@ -349,7 +348,6 @@ describe("TUI overlays", () => {
 			tui.stop();
 		}
 	});
-
 
 	it("limits scrollback while toggling overlays over overflowing content", async () => {
 		const term = new VirtualTerminal(60, 10);

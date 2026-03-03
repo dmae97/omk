@@ -28,10 +28,7 @@ export function createPrCacheContext(branch: string, repoId: string | null): PrC
 	return { branch, repoId };
 }
 
-export function isSamePrCacheContext(
-	a: PrCacheContext | undefined,
-	b: PrCacheContext | undefined,
-): boolean {
+export function isSamePrCacheContext(a: PrCacheContext | undefined, b: PrCacheContext | undefined): boolean {
 	if (!a || !b) return false;
 	return a.branch === b.branch && a.repoId === b.repoId;
 }

@@ -8,10 +8,7 @@ import { AnthropicOAuthFlow, refreshAnthropicToken } from "../src/utils/oauth/an
 
 const originalFetch = global.fetch;
 
-async function withEnv(
-	overrides: Record<string, string | undefined>,
-	fn: () => void | Promise<void>,
-): Promise<void> {
+async function withEnv(overrides: Record<string, string | undefined>, fn: () => void | Promise<void>): Promise<void> {
 	const previous = new Map<string, string | undefined>();
 	for (const key of Object.keys(overrides)) {
 		previous.set(key, Bun.env[key]);
