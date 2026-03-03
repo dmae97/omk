@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.6.2] - 2026-03-03
 ### Fixed
 
 - Fixed LM Studio API key retrieval to use configured provider name instead of hardcoded 'lm-studio'
