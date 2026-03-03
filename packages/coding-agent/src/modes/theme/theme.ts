@@ -91,6 +91,7 @@ export type SymbolKey =
 	| "icon.file"
 	| "icon.git"
 	| "icon.branch"
+	| "icon.pr"
 	| "icon.tokens"
 	| "icon.context"
 	| "icon.cost"
@@ -250,6 +251,7 @@ const UNICODE_SYMBOLS: SymbolMap = {
 	"icon.file": "📄",
 	"icon.git": "⎇",
 	"icon.branch": "⑂",
+	"icon.pr": "⤴",
 	"icon.tokens": "🪙",
 	"icon.context": "◫",
 	"icon.cost": "💲",
@@ -464,6 +466,8 @@ const NERD_SYMBOLS: SymbolMap = {
 	"icon.git": "\uf1d3",
 	// pick:  | alt:  ⎇
 	"icon.branch": "\uf126",
+	// pick:  (nf-cod-git_pull_request) | alt:  (nf-oct-git_pull_request)
+	"icon.pr": "\uea64",
 	// pick:  | alt: ⊛ ◍ 
 	"icon.tokens": "\ue26b",
 	// pick:  | alt: ◫ ▦
@@ -659,6 +663,7 @@ const ASCII_SYMBOLS: SymbolMap = {
 	"icon.file": "[F]",
 	"icon.git": "git:",
 	"icon.branch": "@",
+	"icon.pr": "PR",
 	"icon.tokens": "tok:",
 	"icon.context": "ctx:",
 	"icon.cost": "$",
@@ -1359,6 +1364,7 @@ export class Theme {
 			file: this.#symbols["icon.file"],
 			git: this.#symbols["icon.git"],
 			branch: this.#symbols["icon.branch"],
+			pr: this.#symbols["icon.pr"],
 			tokens: this.#symbols["icon.tokens"],
 			context: this.#symbols["icon.context"],
 			cost: this.#symbols["icon.cost"],

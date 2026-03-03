@@ -8,6 +8,7 @@ import type { StatusLinePreset, StatusLineSegmentId, StatusLineSeparatorStyle } 
 import { theme } from "../../modes/theme/theme";
 import type { AgentSession } from "../../session/agent-session";
 import { findGitHeadPathSync, sanitizeStatusText } from "../shared";
+import { parseDefaultBranch } from "./status-line/git-utils";
 import { getPreset } from "./status-line/presets";
 import { renderSegment, type SegmentContext } from "./status-line/segments";
 import { getSeparator } from "./status-line/separators";
@@ -51,6 +52,11 @@ export class StatusLineComponent implements Component {
 	#cachedGitStatus: { staged: number; unstaged: number; untracked: number } | null = null;
 	#gitStatusLastFetch = 0;
 	#gitStatusInFlight = false;
+
+	// PR lookup caching (invalidated on branch change)
+	#cachedPr: { number: number; url: string } | null | undefined = undefined;
+	#prLookupInFlight = false;
+	#defaultBranch?: string;
 
 	constructor(private readonly session: AgentSession) {
 		this.#settings = {
@@ -108,6 +114,7 @@ export class StatusLineComponent implements Component {
 		try {
 			this.#gitWatcher = fs.watch(gitHeadPath, () => {
 				this.#cachedBranch = undefined;
+				this.#cachedPr = undefined;
 				if (this.#onBranchChange) {
 					this.#onBranchChange();
 				}
@@ -151,6 +158,26 @@ export class StatusLineComponent implements Component {
 		}
 
 		return this.#cachedBranch ?? null;
+	}
+
+	#isDefaultBranch(branch: string): boolean {
+		if (this.#defaultBranch === undefined) {
+			// Kick off async resolution, use hardcoded fallback until it resolves
+			this.#defaultBranch = "main";
+			(async () => {
+				// Try origin/HEAD first, fall back to upstream/HEAD
+				const origin = await $`git rev-parse --abbrev-ref origin/HEAD`.quiet().nothrow();
+				if (origin.exitCode === 0) {
+					this.#defaultBranch = parseDefaultBranch(origin.stdout.toString().trim());
+					return;
+				}
+				const upstream = await $`git rev-parse --abbrev-ref upstream/HEAD`.quiet().nothrow();
+				if (upstream.exitCode === 0) {
+					this.#defaultBranch = parseDefaultBranch(upstream.stdout.toString().trim());
+				}
+			})();
+		}
+		return branch === this.#defaultBranch;
 	}
 
 	#getGitStatus(): { staged: number; unstaged: number; untracked: number } | null {
@@ -207,6 +234,53 @@ export class StatusLineComponent implements Component {
 		return this.#cachedGitStatus;
 	}
 
+	#lookupPr(): { number: number; url: string } | null {
+		if (this.#cachedPr !== undefined) {
+			return this.#cachedPr;
+		}
+
+		// Don't look up if no branch, detached HEAD, default branch, or already in flight
+		const branch = this.#getCurrentBranch();
+		if (!branch || branch === "detached" || this.#isDefaultBranch(branch) || this.#prLookupInFlight) {
+			return null;
+		}
+
+		this.#prLookupInFlight = true;
+
+		// Fire async lookup, return null until resolved
+		(async () => {
+			// Helper: only write cache if branch hasn't changed since launch
+			const setCachedPr = (value: { number: number; url: string } | null) => {
+				if (this.#getCurrentBranch() === branch) {
+					this.#cachedPr = value;
+				}
+			};
+			try {
+				// Requires `gh repo set-default` to be configured; fails gracefully if not
+				const result = await $`gh pr view --json number,url`.quiet().nothrow();
+				if (result.exitCode !== 0) {
+					setCachedPr(null);
+					return;
+				}
+				const pr = JSON.parse(result.stdout.toString()) as { number: number; url: string };
+				if (typeof pr.number === "number") {
+					setCachedPr({ number: pr.number, url: pr.url });
+				} else {
+					setCachedPr(null);
+				}
+			} catch {
+				setCachedPr(null);
+			} finally {
+				this.#prLookupInFlight = false;
+				if (this.#cachedPr && this.#onBranchChange) {
+					this.#onBranchChange();
+				}
+			}
+		})();
+
+		return null;
+	}
+
 	#buildSegmentContext(width: number): SegmentContext {
 		const state = this.session.state;
 
@@ -248,6 +322,7 @@ export class StatusLineComponent implements Component {
 			git: {
 				branch: this.#getCurrentBranch(),
 				status: this.#getGitStatus(),
+				pr: this.#lookupPr(),
 			},
 		};
 	}

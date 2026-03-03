@@ -1,4 +1,5 @@
 import * as os from "node:os";
+import { TERMINAL } from "@oh-my-pi/pi-tui";
 import { formatDuration, formatNumber, getProjectDir } from "@oh-my-pi/pi-utils";
 import { theme } from "../../../modes/theme/theme";
 import { shortenPath } from "../../../tools/render-utils";
@@ -138,6 +139,18 @@ const gitSegment: StatusLineSegment = {
 
 		const colorName = isDirty ? "statusLineGitDirty" : "statusLineGitClean";
 		return { content: theme.fg(colorName, content), visible: true };
+	},
+};
+
+const prSegment: StatusLineSegment = {
+	id: "pr",
+	render(ctx) {
+		const { pr } = ctx.git;
+		if (!pr) return { content: "", visible: false };
+
+		const label = withIcon(theme.icon.pr, `#${pr.number}`);
+		const content = TERMINAL.hyperlinks ? `\x1b]8;;${pr.url}\x07${label}\x1b]8;;\x07` : label;
+		return { content: theme.fg("accent", content), visible: true };
 	},
 };
 
@@ -324,6 +337,7 @@ export const SEGMENTS: Record<StatusLineSegmentId, StatusLineSegment> = {
 	plan_mode: planModeSegment,
 	path: pathSegment,
 	git: gitSegment,
+	pr: prSegment,
 	subagents: subagentsSegment,
 	token_in: tokenInSegment,
 	token_out: tokenOutSegment,

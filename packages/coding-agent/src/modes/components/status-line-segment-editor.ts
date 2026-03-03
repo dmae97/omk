@@ -20,6 +20,7 @@ const SEGMENT_INFO: Record<StatusLineSegmentId, { label: string; short: string }
 	plan_mode: { label: "Plan Mode", short: "plan status" },
 	path: { label: "Path", short: "working dir" },
 	git: { label: "Git", short: "branch/status" },
+	pr: { label: "PR", short: "pull request" },
 	subagents: { label: "Agents", short: "subagent count" },
 	token_in: { label: "Tokens In", short: "input tokens" },
 	token_out: { label: "Tokens Out", short: "output tokens" },

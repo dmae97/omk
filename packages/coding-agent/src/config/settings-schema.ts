@@ -63,6 +63,7 @@ export type StatusLineSegmentId =
 	| "plan_mode"
 	| "path"
 	| "git"
+	| "pr"
 	| "subagents"
 	| "token_in"
 	| "token_out"
