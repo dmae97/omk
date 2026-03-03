@@ -76,6 +76,12 @@ export interface ExtensionUIDialogOptions {
 	initialIndex?: number;
 	/** Render an outlined list for select dialogs */
 	outline?: boolean;
+	/** Invoked when user presses left arrow in select dialogs */
+	onLeft?: () => void;
+	/** Invoked when user presses right arrow in select dialogs */
+	onRight?: () => void;
+	/** Optional footer hint text rendered by interactive selector */
+	helpText?: string;
 }
 
 /** Raw terminal input listener for extensions. */

@@ -14,6 +14,9 @@ export interface HookSelectorOptions {
 	initialIndex?: number;
 	outline?: boolean;
 	maxVisible?: number;
+	onLeft?: () => void;
+	onRight?: () => void;
+	helpText?: string;
 }
 
 class OutlinedList extends Container {
@@ -47,7 +50,8 @@ export class HookSelectorComponent extends Container {
 	#titleText: Text;
 	#baseTitle: string;
 	#countdown: CountdownTimer | undefined;
-
+	#onLeftCallback: (() => void) | undefined;
+	#onRightCallback: (() => void) | undefined;
 	constructor(
 		title: string,
 		options: string[],
@@ -63,6 +67,8 @@ export class HookSelectorComponent extends Container {
 		this.#onSelectCallback = onSelect;
 		this.#onCancelCallback = onCancel;
 		this.#baseTitle = title;
+		this.#onLeftCallback = opts?.onLeft;
+		this.#onRightCallback = opts?.onRight;
 
 		this.addChild(new DynamicBorder());
 		this.addChild(new Spacer(1));
@@ -97,7 +103,8 @@ export class HookSelectorComponent extends Container {
 			this.addChild(this.#listContainer);
 		}
 		this.addChild(new Spacer(1));
-		this.addChild(new Text(theme.fg("dim", "up/down navigate  enter select  esc cancel"), 1, 0));
+		const controlsHint = opts?.helpText ?? "up/down navigate  enter select  esc cancel";
+		this.addChild(new Text(theme.fg("dim", controlsHint), 1, 0));
 		this.addChild(new Spacer(1));
 		this.addChild(new DynamicBorder());
 
@@ -146,6 +153,10 @@ export class HookSelectorComponent extends Container {
 		} else if (matchesKey(keyData, "enter") || matchesKey(keyData, "return") || keyData === "\n") {
 			const selected = this.#options[this.#selectedIndex];
 			if (selected) this.#onSelectCallback(selected);
+		} else if (matchesKey(keyData, "left")) {
+			this.#onLeftCallback?.();
+		} else if (matchesKey(keyData, "right")) {
+			this.#onRightCallback?.();
 		} else if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc") || matchesKey(keyData, "ctrl+c")) {
 			this.#onCancelCallback();
 		}

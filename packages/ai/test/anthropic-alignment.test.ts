@@ -214,7 +214,7 @@ describe("Anthropic request fingerprint alignment", () => {
 
 	it("skips Claude Code instruction injection for claude-3-5-haiku models", async () => {
 		const payload = (await captureAnthropicPayload(
-			{ ...ANTHROPIC_MODEL, id: "claude-3-5-haiku-20241022", name: "Claude 3.5 Haiku" },
+			{ ...ANTHROPIC_MODEL, id: "claude-3-5-haiku", name: "Claude 3.5 Haiku" },
 			{
 				systemPrompt: "Stay concise.",
 				messages: [{ role: "user", content: "Hi", timestamp: Date.now() }],

@@ -577,6 +577,21 @@ export class ExtensionUiController {
 				finish(undefined);
 			},
 			{
+				onLeft: dialogOptions?.onLeft
+					? () => {
+							this.hideHookSelector();
+							dialogOptions.onLeft?.();
+							finish(undefined);
+						}
+					: undefined,
+				onRight: dialogOptions?.onRight
+					? () => {
+							this.hideHookSelector();
+							dialogOptions.onRight?.();
+							finish(undefined);
+						}
+					: undefined,
+				helpText: dialogOptions?.helpText,
 				initialIndex: dialogOptions?.initialIndex,
 				timeout: dialogOptions?.timeout,
 				onTimeout: dialogOptions?.onTimeout,
