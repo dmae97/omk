@@ -23,10 +23,10 @@ Launch interactive wizard to add a new MCP server.
 
 **Wizard Flow:**
 1. **Server Name** - Unique identifier (letters, numbers, dash, underscore, dot only)
-2. **Transport Type** - Choose stdio/http
+2. **Transport Type** - Choose stdio/http/sse
 3. **Configuration**:
    - **stdio**: Command + optional arguments
-   - **http**: Server URL
+   - **http/sse**: Server URL
 4. **Authentication** - Three options:
    - None (for local/trusted servers)
    - OAuth (web-based authentication)
@@ -40,7 +40,7 @@ List all configured MCP servers with connection status.
 **Output:**
 - Server name
 - Connection status (connected/not connected)
-- Transport type [stdio/http]
+- Transport type [stdio/http/sse]
 - Organized by scope (user-level vs project-level)
 
 ### `/mcp remove <name>`
@@ -65,7 +65,7 @@ Test connection to an MCP server.
 ### `/mcp auth <name>`
 Reauthorize OAuth for an existing MCP server.
 
-### `/mcp registry search <keyword> [--scope project|user] [--limit <1-100>] [--semantic]`
+### `/mcp smithery-search <keyword> [--scope project|user] [--limit <1-100>] [--semantic]`
 Search Smithery registry and deploy a result from an interactive picker.
 
 **Behavior:**
@@ -79,8 +79,8 @@ Search Smithery registry and deploy a result from an interactive picker.
 - Immediately triggers MCP reload so tools become available in runtime
 - If Smithery returns auth/rate-limit errors, prompts for Smithery login and retries automatically
 
-### `/mcp registry login`
-Configure Smithery authentication for registry commands.
+### `/mcp smithery-login`
+Configure Smithery authentication for Smithery commands.
 
 **Supported flows:**
 - Browser-assisted CLI auth flow (default)
@@ -88,7 +88,7 @@ Configure Smithery authentication for registry commands.
 
 API key is cached in `~/.omp/agent/smithery.json`.
 
-### `/mcp registry logout`
+### `/mcp smithery-logout`
 Remove cached Smithery API key from `~/.omp/agent/smithery.json`.
 
 ## Authentication Methods
@@ -126,7 +126,7 @@ For local or trusted MCP servers that don't require credentials.
 }
 ```
 
-#### HTTP Header (for http servers)
+#### HTTP/SSE Header (for http/sse servers)
 ```json
 {
   "type": "http",
@@ -170,7 +170,7 @@ Tokens are stored securely in `~/.omp/agent.db` and referenced by credential ID:
 ```
 
 **Token Injection:**
-- **HTTP servers**: Added to `Authorization` header as `Bearer <token>`
+- **HTTP/SSE servers**: Added to `Authorization` header as `Bearer <token>`
 - **stdio servers**: Added to `OAUTH_ACCESS_TOKEN` environment variable
 
 ## Configuration Files
@@ -199,7 +199,7 @@ Project-specific configuration (usually in project root).
 }
 ```
 
-**HTTP server with OAuth:**
+**HTTP/SSE server with OAuth:**
 ```json
 {
   "mcpServers": {
@@ -224,7 +224,7 @@ Project-specific configuration (usually in project root).
 - Maximum 100 characters
 
 **"Invalid URL format (must start with http:// or https://)"**
-- URLs for HTTP servers must include protocol
+- URLs for HTTP/SSE servers must include protocol
 - Example: `https://api.example.com/mcp`
 
 **"Server already exists"**
@@ -275,7 +275,7 @@ Project-specific configuration (usually in project root).
 ```
 /mcp add
 → Name: "external-api"
-→ Transport: http
+→ Transport: http or sse
 → URL: https://api.example.com/mcp
 → Auth: OAuth flow
 → Authorization URL: https://auth.example.com/oauth/authorize
@@ -289,16 +289,16 @@ Project-specific configuration (usually in project root).
 → Confirm: Yes
 ```
 
-### Adding an HTTP Server with API Key
+### Adding an HTTP/SSE Server with API Key
 
 ```
 /mcp add
 → Name: "api-server"
-→ Transport: http
+→ Transport: http or sse
 → URL: https://api.example.com/mcp
 → Auth: Manual API key/token
 → API Key: sk-1234567890abcdef
-→ Location: HTTP header
+→ Location: HTTP/SSE header
 → Header Name: Authorization
 → Scope: User level
 → Confirm: Yes
