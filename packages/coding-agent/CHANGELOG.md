@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added Kagi Universal Summarizer integration for URL summarization, now prioritized before Jina and other methods
@@ -10,8 +11,16 @@
 
 ### Changed
 
+- Updated hashline prompt documentation with clearer operation syntax and improved examples showing full edit structure with path and edits array
+- Refactored `hlineref` Handlebars helper to return JSON-quoted strings for safer embedding in JSON blocks within prompts
+- Improved `hashlineParseText` to correctly preserve blank lines and trailing empty strings in array input while stripping trailing newlines from string input
+- Optimized duplicate line detection in range replacements to use trimmed comparison, reducing false positives from whitespace differences
 - Refactored Kagi search provider to use shared Kagi API utilities from `web/kagi` module
 - Changed HTML-to-text rendering priority order to try Kagi first, then Jina, Trafilatura, and Lynx
+
+### Fixed
+
+- Fixed `isEscapedTabAutocorrectEnabled` environment variable parsing to use switch statement for clearer logic and consistent default behavior
 
 ## [13.7.2] - 2026-03-04
 ### Added

@@ -129,10 +129,11 @@ export function stripNewLinePrefixes(lines: string[]): string[] {
 
 export function hashlineParseText(edit: string[] | string | null): string[] {
 	if (edit === null) return [];
-	const lines = stripNewLinePrefixes(Array.isArray(edit) ? edit : edit.split("\n"));
-	if (lines.length === 0) return [];
-	if (lines[lines.length - 1].trim() === "") return lines.slice(0, -1);
-	return lines;
+	if (typeof edit === "string") {
+		const normalizedEdit = edit.endsWith("\n") ? edit.slice(0, -1) : edit;
+		edit = normalizedEdit.replaceAll("\r", "").split("\n");
+	}
+	return stripNewLinePrefixes(edit);
 }
 
 const hashlineEditSchema = Type.Object(

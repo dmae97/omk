@@ -412,10 +412,14 @@ export function validateLineRef(ref: { line: number; hash: string }, fileLines: 
 }
 
 function isEscapedTabAutocorrectEnabled(): boolean {
-	const value = Bun.env.PI_HASHLINE_AUTOCORRECT_ESCAPED_TABS;
-	if (value === "0") return false;
-	if (value === "1") return true;
-	return true;
+	switch (Bun.env.PI_HASHLINE_AUTOCORRECT_ESCAPED_TABS) {
+		case "0":
+			return false;
+		case "1":
+			return true;
+		default:
+			return true;
+	}
 }
 
 function maybeAutocorrectEscapedTabIndentation(edits: HashlineEdit[], warnings: string[]): void {
@@ -623,20 +627,19 @@ export function applyHashlineEdits(
 				} else {
 					const count = edit.end.line - edit.pos.line + 1;
 					const newLines = [...edit.lines];
-					const trailingReplacementLine = newLines[newLines.length - 1];
-					const nextSurvivingLine = fileLines[edit.end.line];
+					const trailingReplacementLine = newLines[newLines.length - 1]?.trimEnd();
+					const nextSurvivingLine = fileLines[edit.end.line]?.trimEnd();
 					if (
-						trailingReplacementLine !== undefined &&
-						trailingReplacementLine.trim().length > 0 &&
-						nextSurvivingLine !== undefined &&
-						trailingReplacementLine.trim() === nextSurvivingLine.trim() &&
+						trailingReplacementLine &&
+						nextSurvivingLine &&
+						trailingReplacementLine === nextSurvivingLine &&
 						// Safety: only correct when end-line content differs from the duplicate.
 						// If end already points to the boundary, matching next line is coincidence.
-						fileLines[edit.end.line - 1].trim() !== trailingReplacementLine.trim()
+						fileLines[edit.end.line - 1]?.trimEnd() !== trailingReplacementLine
 					) {
 						newLines.pop();
 						warnings.push(
-							`Auto-corrected range replace ${edit.pos.line}#${edit.pos.hash}-${edit.end.line}#${edit.end.hash}: removed trailing replacement line "${trailingReplacementLine.trim()}" that duplicated next surviving line`,
+							`Auto-corrected range replace ${edit.pos.line}#${edit.pos.hash}-${edit.end.line}#${edit.end.hash}: removed trailing replacement line "${trailingReplacementLine}" that duplicated next surviving line`,
 						);
 					}
 					fileLines.splice(edit.pos.line - 1, count, ...newLines);

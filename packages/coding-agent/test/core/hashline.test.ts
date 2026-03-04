@@ -327,6 +327,15 @@ describe("applyHashlineEdits — delete", () => {
 		const result = applyHashlineEdits(content, edits);
 		expect(result.lines).toBe("aaa\nbbb");
 	});
+
+	it("replaces line with blank line when lines is ['']", () => {
+		const content = "aaa\nbbb\nccc";
+		const edits: HashlineEdit[] = [{ op: "replace", pos: makeTag(2, "bbb"), lines: [""] }];
+
+		const result = applyHashlineEdits(content, edits);
+		expect(result.lines).toBe("aaa\n\nccc");
+		expect(result.firstChangedLine).toBe(2);
+	});
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -875,6 +884,18 @@ describe("hashlineParseContent", () => {
 	it("strips '+' diff markers from string input", () => {
 		const result = hashlineParseText("+line one\n+line two");
 		expect(result).toEqual(["line one", "line two"]);
+	});
+
+	it("preserves [''] as a single blank line from array input", () => {
+		expect(hashlineParseText([""])).toEqual([""]);
+	});
+
+	it("preserves trailing empty strings in array input", () => {
+		expect(hashlineParseText(["foo", ""])).toEqual(["foo", ""]);
+	});
+
+	it("still strips trailing empty from string split", () => {
+		expect(hashlineParseText("foo\n")).toEqual(["foo"]);
 	});
 
 	it("regression: set op with Markdown list string content preserves '-' in file", () => {

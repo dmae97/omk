@@ -249,10 +249,6 @@ export function sectionSeparator(name: string): string {
 
 handlebars.registerHelper("SECTION_SEPERATOR", (name: unknown): string => sectionSeparator(String(name)));
 
-/**
- * {{hlineref lineNum "content"}} — compute a real hashline ref for prompt examples.
- * Returns `"lineNum#hash"` using the actual hash algorithm.
- */
 function formatHashlineRef(lineNum: unknown, content: unknown): { num: number; text: string; ref: string } {
 	const num = typeof lineNum === "number" ? lineNum : Number.parseInt(String(lineNum), 10);
 	const raw = typeof content === "string" ? content : String(content ?? "");
@@ -261,16 +257,11 @@ function formatHashlineRef(lineNum: unknown, content: unknown): { num: number; t
 	return { num, text, ref };
 }
 
-handlebars.registerHelper("hlineref", (lineNum: unknown, content: unknown): string => {
-	const { ref } = formatHashlineRef(lineNum, content);
-	return ref;
-});
-
 /**
- * {{hlinejsonref lineNum "content"}} — same as hlineref but returns a JSON-quoted string.
- * Useful for embedding hashline refs inside JSON blocks in prompts.
+ * {{hlineref lineNum "content"}} — compute a real hashline ref for prompt examples.
+ * Returns `"lineNum#hash"` using the actual hash algorithm.
  */
-handlebars.registerHelper("hlinejsonref", (lineNum: unknown, content: unknown): string => {
+handlebars.registerHelper("hlineref", (lineNum: unknown, content: unknown): string => {
 	const { ref } = formatHashlineRef(lineNum, content);
 	return JSON.stringify(ref);
 });
