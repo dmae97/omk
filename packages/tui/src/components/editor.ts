@@ -9,8 +9,8 @@ import { type Component, CURSOR_MARKER, type Focusable } from "../tui";
 import {
 	getSegmenter,
 	getWordNavKind,
-	isWhitespaceChar,
-	isWordNavJoiner,
+	moveWordLeft,
+	moveWordRight,
 	padding,
 	truncateToWidth,
 	visibleWidth,
@@ -59,7 +59,7 @@ function wordWrapLine(line: string, maxWidth: number): TextChunk[] {
 
 	for (const seg of segmenter.segment(line)) {
 		const grapheme = seg.segment;
-		const graphemeIsWhitespace = isWhitespaceChar(grapheme);
+		const graphemeIsWhitespace = getWordNavKind(grapheme) === "whitespace";
 
 		if (currentToken === "") {
 			inWhitespace = graphemeIsWhitespace;
@@ -2006,58 +2006,7 @@ export class Editor implements Component, Focusable {
 			return;
 		}
 
-		const textBeforeCursor = currentLine.slice(0, this.#state.cursorCol);
-		const graphemes = [...segmenter.segment(textBeforeCursor)];
-		let newCol = this.#state.cursorCol;
-
-		// Skip trailing whitespace
-		while (graphemes.length > 0 && getWordNavKind(graphemes[graphemes.length - 1]?.segment || "") === "whitespace") {
-			newCol -= graphemes.pop()?.segment.length || 0;
-		}
-
-		if (graphemes.length > 0) {
-			const last = graphemes[graphemes.length - 1]?.segment || "";
-			const kind = getWordNavKind(last);
-			if (kind === "delimiter") {
-				// Skip delimiter run (punctuation/symbols)
-				while (
-					graphemes.length > 0 &&
-					getWordNavKind(graphemes[graphemes.length - 1]?.segment || "") === "delimiter"
-				) {
-					newCol -= graphemes.pop()?.segment.length || 0;
-				}
-			} else if (kind === "cjk") {
-				// Skip CJK run (Han/Hiragana/Katakana/Hangul)
-				while (graphemes.length > 0 && getWordNavKind(graphemes[graphemes.length - 1]?.segment || "") === "cjk") {
-					newCol -= graphemes.pop()?.segment.length || 0;
-				}
-			} else if (kind === "word") {
-				// Skip word run (letters/numbers/underscore), keeping common joiners inside words.
-				let hasRightWord = false;
-				while (graphemes.length > 0) {
-					const g = graphemes[graphemes.length - 1]?.segment || "";
-					const k = getWordNavKind(g);
-					if (k === "word") {
-						hasRightWord = true;
-						newCol -= graphemes.pop()?.segment.length || 0;
-						continue;
-					}
-					if (hasRightWord && k === "delimiter" && isWordNavJoiner(g)) {
-						const left = graphemes[graphemes.length - 2]?.segment || "";
-						if (getWordNavKind(left) === "word") {
-							newCol -= graphemes.pop()?.segment.length || 0;
-							continue;
-						}
-					}
-					break;
-				}
-			} else {
-				// Fallback: move by one grapheme
-				newCol -= graphemes.pop()?.segment.length || 0;
-			}
-		}
-
-		this.#setCursorCol(newCol);
+		this.#setCursorCol(moveWordLeft(currentLine, this.#state.cursorCol));
 	}
 
 	/**
@@ -2106,60 +2055,7 @@ export class Editor implements Component, Focusable {
 			return;
 		}
 
-		const textAfterCursor = currentLine.slice(this.#state.cursorCol);
-		const graphemes = [...segmenter.segment(textAfterCursor)];
-		let i = 0;
-		let newCol = this.#state.cursorCol;
-
-		// Skip leading whitespace
-		while (i < graphemes.length && getWordNavKind(graphemes[i]?.segment || "") === "whitespace") {
-			newCol += graphemes[i]?.segment.length || 0;
-			i++;
-		}
-
-		if (i < graphemes.length) {
-			const kind = getWordNavKind(graphemes[i]?.segment || "");
-			if (kind === "delimiter") {
-				// Skip delimiter run (punctuation/symbols)
-				while (i < graphemes.length && getWordNavKind(graphemes[i]?.segment || "") === "delimiter") {
-					newCol += graphemes[i]?.segment.length || 0;
-					i++;
-				}
-			} else if (kind === "cjk") {
-				// Skip CJK run (Han/Hiragana/Katakana/Hangul)
-				while (i < graphemes.length && getWordNavKind(graphemes[i]?.segment || "") === "cjk") {
-					newCol += graphemes[i]?.segment.length || 0;
-					i++;
-				}
-			} else if (kind === "word") {
-				// Skip word run (letters/numbers/underscore), keeping common joiners inside words.
-				let hasLeftWord = false;
-				while (i < graphemes.length) {
-					const g = graphemes[i]?.segment || "";
-					const k = getWordNavKind(g);
-					if (k === "word") {
-						hasLeftWord = true;
-						newCol += g.length;
-						i++;
-						continue;
-					}
-					if (hasLeftWord && k === "delimiter" && isWordNavJoiner(g)) {
-						const right = graphemes[i + 1]?.segment || "";
-						if (getWordNavKind(right) === "word") {
-							newCol += g.length;
-							i++;
-							continue;
-						}
-					}
-					break;
-				}
-			} else {
-				// Fallback: move by one grapheme
-				newCol += graphemes[i]?.segment.length || 0;
-			}
-		}
-
-		this.#setCursorCol(newCol);
+		this.#setCursorCol(moveWordRight(currentLine, this.#state.cursorCol));
 	}
 
 	// Helper method to check if cursor is at start of message (for slash command detection)

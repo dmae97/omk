@@ -145,6 +145,120 @@ export function isWordNavJoiner(grapheme: string): boolean {
 }
 
 /**
+ * Move the cursor one "word" to the left using Unicode-aware coarse navigation.
+ *
+ * Returns a new cursor index in the range [0, text.length].
+ */
+export function moveWordLeft(text: string, cursor: number): number {
+	const len = text.length;
+	if (len === 0) return 0;
+	let i = Math.min(Math.max(cursor, 0), len);
+	if (i === 0) return 0;
+
+	const graphemes = [...segmenter.segment(text.slice(0, i))];
+	if (graphemes.length === 0) return 0;
+
+	// Skip trailing whitespace.
+	while (graphemes.length > 0 && getWordNavKind(graphemes[graphemes.length - 1]?.segment || "") === "whitespace") {
+		i -= graphemes.pop()?.segment.length || 0;
+	}
+	if (i === 0 || graphemes.length === 0) return i;
+
+	const kind = getWordNavKind(graphemes[graphemes.length - 1]?.segment || "");
+	if (kind === "delimiter" || kind === "cjk") {
+		while (graphemes.length > 0 && getWordNavKind(graphemes[graphemes.length - 1]?.segment || "") === kind) {
+			i -= graphemes.pop()?.segment.length || 0;
+		}
+		return i;
+	}
+
+	if (kind === "word") {
+		// Skip word run (letters/numbers/underscore), keeping common joiners inside words.
+		let hasRightWord = false;
+		while (graphemes.length > 0) {
+			const g = graphemes[graphemes.length - 1]?.segment || "";
+			const k = getWordNavKind(g);
+			if (k === "word") {
+				hasRightWord = true;
+				i -= graphemes.pop()?.segment.length || 0;
+				continue;
+			}
+			if (hasRightWord && k === "delimiter" && isWordNavJoiner(g)) {
+				const left = graphemes[graphemes.length - 2]?.segment || "";
+				if (getWordNavKind(left) === "word") {
+					i -= graphemes.pop()?.segment.length || 0;
+					continue;
+				}
+			}
+			break;
+		}
+		return i;
+	}
+
+	// Fallback: move by one grapheme.
+	i -= graphemes.pop()?.segment.length || 0;
+	return Math.max(0, i);
+}
+
+/**
+ * Move the cursor one "word" to the right using Unicode-aware coarse navigation.
+ *
+ * Returns a new cursor index in the range [0, text.length].
+ */
+export function moveWordRight(text: string, cursor: number): number {
+	const len = text.length;
+	if (len === 0) return 0;
+	let i = Math.min(Math.max(cursor, 0), len);
+	if (i === len) return len;
+
+	const iterator = segmenter.segment(text.slice(i))[Symbol.iterator]();
+	let next = iterator.next();
+
+	// Skip leading whitespace.
+	while (!next.done && getWordNavKind(next.value.segment) === "whitespace") {
+		i += next.value.segment.length;
+		next = iterator.next();
+	}
+	if (next.done) return i;
+
+	const firstKind = getWordNavKind(next.value.segment);
+	if (firstKind === "delimiter" || firstKind === "cjk") {
+		while (!next.done && getWordNavKind(next.value.segment) === firstKind) {
+			i += next.value.segment.length;
+			next = iterator.next();
+		}
+		return i;
+	}
+
+	if (firstKind === "word") {
+		let hasLeftWord = false;
+		while (!next.done) {
+			const segment = next.value.segment;
+			const k = getWordNavKind(segment);
+			if (k === "word") {
+				hasLeftWord = true;
+				i += segment.length;
+				next = iterator.next();
+				continue;
+			}
+			if (hasLeftWord && k === "delimiter" && isWordNavJoiner(segment)) {
+				const lookahead = iterator.next();
+				if (!lookahead.done && getWordNavKind(lookahead.value.segment) === "word") {
+					i += segment.length;
+					next = lookahead;
+					continue;
+				}
+			}
+			break;
+		}
+		return i;
+	}
+
+	// Fallback: move by one grapheme.
+	return i + next.value.segment.length;
+}
+
+/**
  * Apply background color to a line, padding to full width.
  *
  * @param line - Line of text (may contain ANSI codes)
@@ -164,6 +278,7 @@ export function applyBackgroundToLine(line: string, width: number, bgFn: (text: 
 
 /**
  * Extract a range of visible columns from a line. Handles ANSI codes and wide chars.
+ *
  * @param strict - If true, exclude wide chars at boundary that would extend past the range
  */
 export function sliceByColumn(line: string, startCol: number, length: number, strict = false): string {
