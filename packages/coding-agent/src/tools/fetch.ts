@@ -429,6 +429,7 @@ async function renderHtmlToText(
 	url: string,
 	html: string,
 	timeout: number,
+	useKagiSummarizer: boolean,
 	userSignal?: AbortSignal,
 ): Promise<{ content: string; ok: boolean; method: string }> {
 	const signal = ptree.combineSignals(userSignal, timeout * 1000);
@@ -440,15 +441,17 @@ async function renderHtmlToText(
 		signal,
 	};
 
-	// Try Kagi Universal Summarizer first (if KAGI_API_KEY is configured)
-	try {
-		const kagiSummary = await summarizeUrlWithKagi(url, { signal });
-		if (kagiSummary && kagiSummary.length > 100 && !isLowQualityOutput(kagiSummary)) {
-			return { content: kagiSummary, ok: true, method: "kagi" };
+	// Try Kagi Universal Summarizer first (if enabled and KAGI_API_KEY is configured)
+	if (useKagiSummarizer) {
+		try {
+			const kagiSummary = await summarizeUrlWithKagi(url, { signal });
+			if (kagiSummary && kagiSummary.length > 100 && !isLowQualityOutput(kagiSummary)) {
+				return { content: kagiSummary, ok: true, method: "kagi" };
+			}
+		} catch {
+			// Kagi failed, continue to next method
+			signal?.throwIfAborted();
 		}
-	} catch {
-		// Kagi failed, continue to next method
-		signal?.throwIfAborted();
 	}
 
 	// Try jina next (reader API)
@@ -564,7 +567,13 @@ async function handleSpecialUrls(url: string, timeout: number, signal?: AbortSig
 /**
  * Main render function implementing the full pipeline
  */
-async function renderUrl(url: string, timeout: number, raw: boolean, signal?: AbortSignal): Promise<RenderResult> {
+async function renderUrl(
+	url: string,
+	timeout: number,
+	raw: boolean,
+	useKagiSummarizer: boolean,
+	signal?: AbortSignal,
+): Promise<RenderResult> {
 	const notes: string[] = [];
 	const fetchedAt = new Date().toISOString();
 	if (signal?.aborted) {
@@ -803,7 +812,7 @@ async function renderUrl(url: string, timeout: number, raw: boolean, signal?: Ab
 		}
 
 		// Step 6: Render HTML with lynx or html2text
-		const htmlResult = await renderHtmlToText(finalUrl, rawContent, timeout, signal);
+		const htmlResult = await renderHtmlToText(finalUrl, rawContent, timeout, useKagiSummarizer, signal);
 		if (!htmlResult.ok) {
 			notes.push("html rendering failed (lynx/html2text unavailable)");
 			const output = finalizeOutput(rawContent);
@@ -926,7 +935,8 @@ export class FetchTool implements AgentTool<typeof fetchSchema, FetchToolDetails
 			throw new ToolAbortError();
 		}
 
-		const result = await renderUrl(url, effectiveTimeout, raw, signal);
+		const useKagiSummarizer = this.session.settings.get("fetch.useKagiSummarizer");
+		const result = await renderUrl(url, effectiveTimeout, raw, useKagiSummarizer, signal);
 		const truncation = truncateHead(result.content, {
 			maxBytes: DEFAULT_MAX_BYTES,
 			maxLines: FETCH_DEFAULT_MAX_LINES,

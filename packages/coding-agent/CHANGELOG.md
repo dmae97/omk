@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+- Added `fetch.useKagiSummarizer` setting to toggle Kagi Universal Summarizer usage in the fetch tool.
+
 ### Fixed
 
 - Fixed incorrect message history reference in session title generation that could cause missing or stale titles on first message

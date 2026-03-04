@@ -490,6 +490,15 @@ export const SETTINGS_SCHEMA = {
 		default: true,
 		ui: { tab: "tools", label: "Enable Fetch", description: "Enable the fetch tool for URL fetching" },
 	},
+	"fetch.useKagiSummarizer": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "tools",
+			label: "Use Kagi in Fetch",
+			description: "Use Kagi Universal Summarizer when rendering HTML in fetch",
+		},
+	},
 	"web_search.enabled": {
 		type: "boolean",
 		default: true,
