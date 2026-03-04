@@ -66,6 +66,24 @@ export async function walkUp(
 	}
 }
 
+/**
+ * Walk up from startDir looking for a `.git` entry (file or directory).
+ * Returns the directory containing `.git` (the repo root), or null if not in a git repo.
+ * Results are based on the cached readDirEntries, so repeated calls are cheap.
+ */
+export async function findRepoRoot(startDir: string): Promise<string | null> {
+	let current = resolvePath(startDir);
+	while (true) {
+		const entries = await readDirEntries(current);
+		if (entries.some(e => e.name === ".git")) {
+			return current;
+		}
+		const parent = path.dirname(current);
+		if (parent === current) return null;
+		current = parent;
+	}
+}
+
 export function cacheStats(): { content: number; dir: number } {
 	return {
 		content: contentCache.size,

@@ -27,9 +27,12 @@ export const contextFileCapability = defineCapability<ContextFile>({
 	id: "context-files",
 	displayName: "Context Files",
 	description: "Persistent instruction files (CLAUDE.md, AGENTS.md, etc.) that guide agent behavior",
-	// Deduplicate by level: one user-level file, one project-level file
-	// Higher-priority providers shadow lower-priority ones at the same scope
-	key: file => file.level,
+	// Deduplicate by scope: one user-level file, and one project-level file per directory depth.
+	// Within each depth level, higher-priority providers shadow lower-priority ones.
+	// This supports monorepo hierarchies where AGENTS.md exists at multiple ancestor levels.
+	// Clamp depth >= 0: files inside config subdirectories of an ancestor (e.g. .claude/, .github/)
+	// are same-scope as the ancestor itself.
+	key: file => (file.level === "user" ? "user" : `project:${Math.max(0, file.depth ?? 0)}`),
 	validate: file => {
 		if (!file.path) return "Missing path";
 		if (file.content === undefined) return "Missing content";

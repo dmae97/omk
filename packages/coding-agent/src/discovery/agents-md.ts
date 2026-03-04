@@ -14,7 +14,6 @@ import { calculateDepth, createSourceMeta } from "./helpers";
 
 const PROVIDER_ID = "agents-md";
 const DISPLAY_NAME = "AGENTS.md";
-const MAX_DEPTH = 20; // Prevent walking up excessively far from cwd
 
 /**
  * Load standalone AGENTS.md files.
@@ -25,9 +24,8 @@ async function loadAgentsMd(ctx: LoadContext): Promise<LoadResult<ContextFile>> 
 
 	// Walk up from cwd looking for AGENTS.md files
 	let current = ctx.cwd;
-	let depth = 0;
 
-	while (depth < MAX_DEPTH) {
+	while (true) {
 		const candidate = path.join(current, "AGENTS.md");
 		const content = await readFile(candidate);
 
@@ -49,11 +47,12 @@ async function loadAgentsMd(ctx: LoadContext): Promise<LoadResult<ContextFile>> 
 			}
 		}
 
+		if (current === (ctx.repoRoot ?? ctx.home)) break; // scanned repo root or home, stop
+
 		// Move to parent directory
 		const parent = path.dirname(current);
 		if (parent === current) break; // Reached filesystem root
 		current = parent;
-		depth++;
 	}
 
 	return { items, warnings };

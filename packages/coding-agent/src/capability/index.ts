@@ -11,7 +11,7 @@ import * as path from "node:path";
 import { getProjectDir, logger } from "@oh-my-pi/pi-utils";
 
 import type { Settings } from "../config/settings";
-import { clearCache as clearFsCache, cacheStats as fsCacheStats, invalidate as invalidateFs } from "./fs";
+import { clearCache as clearFsCache, findRepoRoot, cacheStats as fsCacheStats, invalidate as invalidateFs } from "./fs";
 import type {
 	Capability,
 	CapabilityInfo,
@@ -220,7 +220,8 @@ export async function loadCapability<T>(capabilityId: string, options: LoadOptio
 
 	const cwd = options.cwd ?? getProjectDir();
 	const home = os.homedir();
-	const ctx: LoadContext = { cwd, home };
+	const repoRoot = await findRepoRoot(cwd);
+	const ctx: LoadContext = { cwd, home, repoRoot };
 	const providers = filterProviders(capability, options);
 
 	return await loadImpl(capability, providers, ctx, options);

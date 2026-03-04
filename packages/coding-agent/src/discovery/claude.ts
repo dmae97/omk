@@ -145,7 +145,7 @@ async function loadContextFiles(ctx: LoadContext): Promise<LoadResult<ContextFil
 	const projectClaudeMd = path.join(projectBase, "CLAUDE.md");
 	const projectContent = await readFile(projectClaudeMd);
 	if (projectContent !== null) {
-		const depth = calculateDepth(ctx.cwd, projectBase, path.sep);
+		const depth = calculateDepth(ctx.cwd, path.dirname(projectBase), path.sep);
 		items.push({
 			path: projectClaudeMd,
 			content: projectContent,
@@ -164,11 +164,27 @@ async function loadContextFiles(ctx: LoadContext): Promise<LoadResult<ContextFil
 
 async function loadSkills(ctx: LoadContext): Promise<LoadResult<Skill>> {
 	const userSkillsDir = path.join(getUserClaude(ctx), "skills");
-	const projectSkillsDir = path.join(getProjectClaude(ctx), "skills");
 
-	const [userResult, projectResult] = await Promise.allSettled([
+	// Walk up from cwd finding .claude/skills/ in ancestors
+	const projectScans: Promise<LoadResult<Skill>>[] = [];
+	let current = ctx.cwd;
+	while (true) {
+		projectScans.push(
+			scanSkillsFromDir(ctx, {
+				dir: path.join(current, CONFIG_DIR, "skills"),
+				providerId: PROVIDER_ID,
+				level: "project",
+			}),
+		);
+		if (current === (ctx.repoRoot ?? ctx.home)) break;
+		const parent = path.dirname(current);
+		if (parent === current) break; // filesystem root
+		current = parent;
+	}
+
+	const [userResult, ...projectResults] = await Promise.allSettled([
 		scanSkillsFromDir(ctx, { dir: userSkillsDir, providerId: PROVIDER_ID, level: "user" }),
-		scanSkillsFromDir(ctx, { dir: projectSkillsDir, providerId: PROVIDER_ID, level: "project" }),
+		...projectScans,
 	]);
 
 	const items: Skill[] = [];
@@ -181,11 +197,13 @@ async function loadSkills(ctx: LoadContext): Promise<LoadResult<Skill>> {
 		warnings.push(`Failed to scan Claude user skills in ${userSkillsDir}: ${String(userResult.reason)}`);
 	}
 
-	if (projectResult.status === "fulfilled") {
-		items.push(...projectResult.value.items);
-		warnings.push(...(projectResult.value.warnings ?? []));
-	} else if (!isMissingDirectoryError(projectResult.reason)) {
-		warnings.push(`Failed to scan Claude project skills in ${projectSkillsDir}: ${String(projectResult.reason)}`);
+	for (const projectResult of projectResults) {
+		if (projectResult.status === "fulfilled") {
+			items.push(...projectResult.value.items);
+			warnings.push(...(projectResult.value.warnings ?? []));
+		} else if (!isMissingDirectoryError(projectResult.reason)) {
+			warnings.push(`Failed to scan Claude project skills: ${String(projectResult.reason)}`);
+		}
 	}
 
 	return { items, warnings };

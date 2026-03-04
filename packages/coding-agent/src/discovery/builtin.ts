@@ -68,12 +68,13 @@ async function getConfigDirs(ctx: LoadContext): Promise<Array<{ dir: string; lev
 	return result;
 }
 
-function getAncestorDirs(cwd: string): Array<{ dir: string; depth: number }> {
+function getAncestorDirs(cwd: string, stopAt?: string | null): Array<{ dir: string; depth: number }> {
 	const ancestors: Array<{ dir: string; depth: number }> = [];
 	let current = cwd;
 	let depth = 0;
 	while (true) {
 		ancestors.push({ dir: current, depth });
+		if (stopAt && current === stopAt) break;
 		const parent = path.dirname(current);
 		if (parent === current) break;
 		current = parent;
@@ -82,8 +83,11 @@ function getAncestorDirs(cwd: string): Array<{ dir: string; depth: number }> {
 	return ancestors;
 }
 
-async function findNearestProjectConfigDir(cwd: string): Promise<{ dir: string; depth: number } | null> {
-	for (const ancestor of getAncestorDirs(cwd)) {
+async function findNearestProjectConfigDir(
+	cwd: string,
+	repoRoot?: string | null,
+): Promise<{ dir: string; depth: number } | null> {
+	for (const ancestor of getAncestorDirs(cwd, repoRoot)) {
 		const configDir = await ifNonEmptyDir(ancestor.dir, PATHS.projectDir);
 		if (configDir) return { dir: configDir, depth: ancestor.depth };
 	}
@@ -215,7 +219,7 @@ async function loadSystemPrompt(ctx: LoadContext): Promise<LoadResult<SystemProm
 		});
 	}
 
-	const nearestProjectConfigDir = await findNearestProjectConfigDir(ctx.cwd);
+	const nearestProjectConfigDir = await findNearestProjectConfigDir(ctx.cwd, ctx.repoRoot);
 	if (nearestProjectConfigDir) {
 		const projectPath = path.join(nearestProjectConfigDir.dir, "SYSTEM.md");
 		const projectContent = await readFile(projectPath);
@@ -242,17 +246,26 @@ registerProvider<SystemPrompt>(systemPromptCapability.id, {
 
 // Skills
 async function loadSkills(ctx: LoadContext): Promise<LoadResult<Skill>> {
-	const configDirs = await getConfigDirs(ctx);
-	const results = await Promise.all(
-		configDirs.map(({ dir, level }) =>
-			scanSkillsFromDir(ctx, {
-				dir: path.join(dir, "skills"),
-				providerId: PROVIDER_ID,
-				level,
-				requireDescription: true,
-			}),
-		),
+	// Walk up from cwd finding .omp/skills/ in ancestors (closest first)
+	const ancestors = getAncestorDirs(ctx.cwd, ctx.repoRoot ?? ctx.home);
+	const projectScans = ancestors.map(({ dir }) =>
+		scanSkillsFromDir(ctx, {
+			dir: path.join(dir, PATHS.projectDir, "skills"),
+			providerId: PROVIDER_ID,
+			level: "project",
+			requireDescription: true,
+		}),
 	);
+
+	// User-level scan from ~/.omp/agent/skills/
+	const userScan = scanSkillsFromDir(ctx, {
+		dir: path.join(ctx.home, PATHS.userAgent, "skills"),
+		providerId: PROVIDER_ID,
+		level: "user",
+		requireDescription: true,
+	});
+
+	const results = await Promise.all([...projectScans, userScan]);
 
 	return {
 		items: results.flatMap(r => r.items),
@@ -795,7 +808,7 @@ async function loadContextFiles(ctx: LoadContext): Promise<LoadResult<ContextFil
 		});
 	}
 
-	const nearestProjectConfigDir = await findNearestProjectConfigDir(ctx.cwd);
+	const nearestProjectConfigDir = await findNearestProjectConfigDir(ctx.cwd, ctx.repoRoot);
 	if (nearestProjectConfigDir) {
 		const projectPath = path.join(nearestProjectConfigDir.dir, "AGENTS.md");
 		const projectContent = await readFile(projectPath);

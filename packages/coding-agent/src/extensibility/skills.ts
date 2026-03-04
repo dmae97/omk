@@ -40,7 +40,7 @@ export async function loadSkillsFromDir(options: LoadSkillsFromDirOptions): Prom
 	const providerId = rawProviderId || "custom";
 	const level: "user" | "project" = rawLevel === "project" ? "project" : "user";
 	const result = await scanSkillsFromDir(
-		{ cwd: getProjectDir(), home: os.homedir() },
+		{ cwd: getProjectDir(), home: os.homedir(), repoRoot: null },
 		{
 			dir: options.dir,
 			providerId,
@@ -175,7 +175,7 @@ export async function loadSkills(options: LoadSkillsOptions = {}): Promise<LoadS
 		customDirectories.map(async dir => {
 			const expandedDir = expandTilde(dir);
 			const scanResult = await scanSkillsFromDir(
-				{ cwd, home: os.homedir() },
+				{ cwd, home: os.homedir(), repoRoot: null },
 				{
 					dir: expandedDir,
 					providerId: "custom",

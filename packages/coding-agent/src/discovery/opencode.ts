@@ -35,6 +35,7 @@ import {
 	getProjectPath,
 	getUserPath,
 	loadFilesFromDir,
+	SOURCE_PATHS,
 	scanSkillsFromDir,
 } from "./helpers";
 
@@ -183,7 +184,6 @@ function extractMCPServers(
 
 async function loadSkills(ctx: LoadContext): Promise<LoadResult<Skill>> {
 	const userSkillsDir = getUserPath(ctx, "opencode", "skills");
-	const projectSkillsDir = getProjectPath(ctx, "opencode", "skills");
 
 	const promises: Promise<LoadResult<Skill>>[] = [];
 
@@ -197,14 +197,25 @@ async function loadSkills(ctx: LoadContext): Promise<LoadResult<Skill>> {
 		);
 	}
 
-	if (projectSkillsDir) {
-		promises.push(
-			scanSkillsFromDir(ctx, {
-				dir: projectSkillsDir,
-				providerId: PROVIDER_ID,
-				level: "project",
-			}),
-		);
+	// Walk up from cwd finding .opencode/skills/ in ancestors
+	const projectDir = SOURCE_PATHS.opencode.projectDir;
+	if (projectDir) {
+		const projectScans: Promise<LoadResult<Skill>>[] = [];
+		let current = ctx.cwd;
+		while (true) {
+			projectScans.push(
+				scanSkillsFromDir(ctx, {
+					dir: path.join(current, projectDir, "skills"),
+					providerId: PROVIDER_ID,
+					level: "project",
+				}),
+			);
+			if (current === (ctx.repoRoot ?? ctx.home)) break;
+			const parent = path.dirname(current);
+			if (parent === current) break; // filesystem root
+			current = parent;
+		}
+		promises.push(...projectScans);
 	}
 
 	const results = await Promise.all(promises);

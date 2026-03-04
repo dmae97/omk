@@ -36,8 +36,8 @@ async function loadContextFiles(ctx: LoadContext): Promise<LoadResult<ContextFil
 	if (copilotInstructionsPath) {
 		const content = await readFile(copilotInstructionsPath);
 		if (content) {
-			const fileDir = path.dirname(copilotInstructionsPath);
-			const depth = calculateDepth(ctx.cwd, fileDir, path.sep);
+			const ancestorDir = path.dirname(fileDir);
+			const depth = calculateDepth(ctx.cwd, ancestorDir, path.sep);
 
 			items.push({
 				path: copilotInstructionsPath,

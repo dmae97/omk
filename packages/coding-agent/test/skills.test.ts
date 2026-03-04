@@ -183,7 +183,7 @@ describe("skills", () => {
 				const claudeProvider = capability?.providers.find(provider => provider.id === "claude");
 				expect(claudeProvider).toBeDefined();
 
-				const result = await claudeProvider!.load({ cwd: tempProjectDir, home: tempHomeDir });
+				const result = await claudeProvider!.load({ cwd: tempProjectDir, home: tempHomeDir, repoRoot: null });
 				expect(result.items.some(skill => skill.name === "user-only-skill" && skill.level === "user")).toBe(true);
 			} finally {
 				await fs.rm(tempProjectDir, { recursive: true, force: true });

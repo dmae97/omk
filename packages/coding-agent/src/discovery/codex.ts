@@ -209,26 +209,33 @@ function extractMCPServersFromToml(toml: Record<string, unknown>): Record<string
 
 async function loadSkills(ctx: LoadContext): Promise<LoadResult<Skill>> {
 	const userSkillsDir = path.join(ctx.home, SOURCE_PATHS.codex.userBase, "skills");
-	const codexDir = getProjectCodexDir(ctx);
-	const projectSkillsDir = path.join(codexDir, "skills");
+
+	// Walk up from cwd finding .codex/skills/ in ancestors
+	const projectScans: Promise<LoadResult<Skill>>[] = [];
+	let current = ctx.cwd;
+	while (true) {
+		projectScans.push(
+			scanSkillsFromDir(ctx, {
+				dir: path.join(current, ".codex", "skills"),
+				providerId: PROVIDER_ID,
+				level: "project",
+			}),
+		);
+		if (current === (ctx.repoRoot ?? ctx.home)) break;
+		const parent = path.dirname(current);
+		if (parent === current) break; // filesystem root
+		current = parent;
+	}
 
 	const results = await Promise.all([
-		scanSkillsFromDir(ctx, {
-			dir: userSkillsDir,
-			providerId: PROVIDER_ID,
-			level: "user",
-		}),
-		scanSkillsFromDir(ctx, {
-			dir: projectSkillsDir,
-			providerId: PROVIDER_ID,
-			level: "project",
-		}),
+		scanSkillsFromDir(ctx, { dir: userSkillsDir, providerId: PROVIDER_ID, level: "user" }),
+		...projectScans,
 	]);
 
-	const items = results.flatMap(r => r.items);
-	const warnings = results.flatMap(r => r.warnings || []);
-
-	return { items, warnings };
+	return {
+		items: results.flatMap(r => r.items),
+		warnings: results.flatMap(r => r.warnings || []),
+	};
 }
 
 // =============================================================================

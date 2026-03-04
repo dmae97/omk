@@ -14,6 +14,8 @@ export interface LoadContext {
 	cwd: string;
 	/** User home directory */
 	home: string;
+	/** Git repository root (directory containing .git), or null if not in a repo */
+	repoRoot: string | null;
 }
 
 /**

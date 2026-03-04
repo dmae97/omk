@@ -1,7 +1,9 @@
 /**
  * Agents (standard) Provider
  *
- * Loads user-level skills, rules, prompts, commands, context files, and system prompts from ~/.agent/.
+ * Loads skills, rules, prompts, commands, context files, and system prompts
+ * from .agent/ and .agents/ directories at both user (~/) and project levels.
+ * Project-level discovery walks up from cwd to repoRoot.
  */
 import * as path from "node:path";
 import { registerProvider } from "../capability";
@@ -13,76 +15,91 @@ import { type Skill, skillCapability } from "../capability/skill";
 import { type SlashCommand, slashCommandCapability } from "../capability/slash-command";
 import { type SystemPrompt, systemPromptCapability } from "../capability/system-prompt";
 import type { LoadContext, LoadResult } from "../capability/types";
-import { buildRuleFromMarkdown, createSourceMeta, loadFilesFromDir, scanSkillsFromDir } from "./helpers";
+import { buildRuleFromMarkdown, calculateDepth, createSourceMeta, loadFilesFromDir, scanSkillsFromDir } from "./helpers";
 
 const PROVIDER_ID = "agents";
 const DISPLAY_NAME = "Agents (standard)";
 const PRIORITY = 70;
-const USER_AGENT_DIR_CANDIDATES = [".agent", ".agents"] as const;
+const AGENT_DIR_CANDIDATES = [".agent", ".agents"] as const;
 
-function getUserAgentPathCandidates(ctx: LoadContext, ...segments: string[]): string[] {
-	return USER_AGENT_DIR_CANDIDATES.map(baseDir => path.join(ctx.home, baseDir, ...segments));
+/** User-level paths: ~/.agent/<segments> and ~/.agents/<segments>. */
+function getUserPathCandidates(ctx: LoadContext, ...segments: string[]): string[] {
+	return AGENT_DIR_CANDIDATES.map(baseDir => path.join(ctx.home, baseDir, ...segments));
 }
 
-async function loadSkills(ctx: LoadContext): Promise<LoadResult<Skill>> {
-	const items: Skill[] = [];
-	const warnings: string[] = [];
-	for (const userSkillsDir of getUserAgentPathCandidates(ctx, "skills")) {
-		const result = await scanSkillsFromDir(ctx, {
-			dir: userSkillsDir,
-			providerId: PROVIDER_ID,
-			level: "user",
-		});
-		items.push(...result.items);
-		warnings.push(...(result.warnings ?? []));
+/** Project-level paths: walk up from cwd to repoRoot, returning .agent/<segments> and .agents/<segments> at each level. */
+function getProjectPathCandidates(ctx: LoadContext, ...segments: string[]): string[] {
+	const paths: string[] = [];
+	let current = ctx.cwd;
+	while (true) {
+		for (const baseDir of AGENT_DIR_CANDIDATES) {
+			paths.push(path.join(current, baseDir, ...segments));
+		}
+		if (current === (ctx.repoRoot ?? ctx.home)) break;
+		const parent = path.dirname(current);
+		if (parent === current) break;
+		current = parent;
 	}
+	return paths;
+}
+
+// Skills
+async function loadSkills(ctx: LoadContext): Promise<LoadResult<Skill>> {
+	const projectScans = getProjectPathCandidates(ctx, "skills").map(dir =>
+		scanSkillsFromDir(ctx, { dir, providerId: PROVIDER_ID, level: "project" }),
+	);
+	const userScans = getUserPathCandidates(ctx, "skills").map(dir =>
+		scanSkillsFromDir(ctx, { dir, providerId: PROVIDER_ID, level: "user" }),
+	);
+
+	const results = await Promise.all([...projectScans, ...userScans]);
+
 	return {
-		items,
-		warnings,
+		items: results.flatMap(r => r.items),
+		warnings: results.flatMap(r => r.warnings ?? []),
 	};
 }
 
 registerProvider<Skill>(skillCapability.id, {
 	id: PROVIDER_ID,
 	displayName: DISPLAY_NAME,
-	description: "Load skills from ~/.agent/skills (fallback ~/.agents/skills)",
+	description: "Load skills from .agent/skills and .agents/skills (project walk-up + user home)",
 	priority: PRIORITY,
 	load: loadSkills,
 });
 
 // Rules
 async function loadRules(ctx: LoadContext): Promise<LoadResult<Rule>> {
-	const items: Rule[] = [];
-	const warnings: string[] = [];
-	for (const userRulesDir of getUserAgentPathCandidates(ctx, "rules")) {
-		const result = await loadFilesFromDir<Rule>(ctx, userRulesDir, PROVIDER_ID, "user", {
+	const load = (dir: string, level: "user" | "project") =>
+		loadFilesFromDir<Rule>(ctx, dir, PROVIDER_ID, level, {
 			extensions: ["md", "mdc"],
 			transform: (name, content, filePath, source) =>
 				buildRuleFromMarkdown(name, content, filePath, source, { stripNamePattern: /\.(md|mdc)$/ }),
 		});
-		items.push(...result.items);
-		warnings.push(...(result.warnings ?? []));
-	}
+
+	const results = await Promise.all([
+		...getProjectPathCandidates(ctx, "rules").map(dir => load(dir, "project")),
+		...getUserPathCandidates(ctx, "rules").map(dir => load(dir, "user")),
+	]);
+
 	return {
-		items,
-		warnings,
+		items: results.flatMap(r => r.items),
+		warnings: results.flatMap(r => r.warnings ?? []),
 	};
 }
 
 registerProvider<Rule>(ruleCapability.id, {
 	id: PROVIDER_ID,
 	displayName: DISPLAY_NAME,
-	description: "Load rules from ~/.agent/rules (fallback ~/.agents/rules)",
+	description: "Load rules from .agent/rules and .agents/rules (project walk-up + user home)",
 	priority: PRIORITY,
 	load: loadRules,
 });
 
 // Prompts
 async function loadPrompts(ctx: LoadContext): Promise<LoadResult<Prompt>> {
-	const items: Prompt[] = [];
-	const warnings: string[] = [];
-	for (const userPromptsDir of getUserAgentPathCandidates(ctx, "prompts")) {
-		const result = await loadFilesFromDir<Prompt>(ctx, userPromptsDir, PROVIDER_ID, "user", {
+	const load = (dir: string, level: "user" | "project") =>
+		loadFilesFromDir<Prompt>(ctx, dir, PROVIDER_ID, level, {
 			extensions: ["md"],
 			transform: (name, content, filePath, source) => ({
 				name: name.replace(/\.md$/, ""),
@@ -91,109 +108,106 @@ async function loadPrompts(ctx: LoadContext): Promise<LoadResult<Prompt>> {
 				_source: source,
 			}),
 		});
-		items.push(...result.items);
-		warnings.push(...(result.warnings ?? []));
-	}
+
+	const results = await Promise.all([
+		...getProjectPathCandidates(ctx, "prompts").map(dir => load(dir, "project")),
+		...getUserPathCandidates(ctx, "prompts").map(dir => load(dir, "user")),
+	]);
+
 	return {
-		items,
-		warnings,
+		items: results.flatMap(r => r.items),
+		warnings: results.flatMap(r => r.warnings ?? []),
 	};
 }
 
 registerProvider<Prompt>(promptCapability.id, {
 	id: PROVIDER_ID,
 	displayName: DISPLAY_NAME,
-	description: "Load prompts from ~/.agent/prompts (fallback ~/.agents/prompts)",
+	description: "Load prompts from .agent/prompts and .agents/prompts (project walk-up + user home)",
 	priority: PRIORITY,
 	load: loadPrompts,
 });
 
 // Slash Commands
 async function loadSlashCommands(ctx: LoadContext): Promise<LoadResult<SlashCommand>> {
-	const items: SlashCommand[] = [];
-	const warnings: string[] = [];
-	for (const userCommandsDir of getUserAgentPathCandidates(ctx, "commands")) {
-		const result = await loadFilesFromDir<SlashCommand>(ctx, userCommandsDir, PROVIDER_ID, "user", {
+	const load = (dir: string, level: "user" | "project") =>
+		loadFilesFromDir<SlashCommand>(ctx, dir, PROVIDER_ID, level, {
 			extensions: ["md"],
 			transform: (name, content, filePath, source) => ({
 				name: name.replace(/\.md$/, ""),
 				path: filePath,
 				content,
-				level: "user",
+				level,
 				_source: source,
 			}),
 		});
-		items.push(...result.items);
-		warnings.push(...(result.warnings ?? []));
-	}
+
+	const results = await Promise.all([
+		...getProjectPathCandidates(ctx, "commands").map(dir => load(dir, "project")),
+		...getUserPathCandidates(ctx, "commands").map(dir => load(dir, "user")),
+	]);
+
 	return {
-		items,
-		warnings,
+		items: results.flatMap(r => r.items),
+		warnings: results.flatMap(r => r.warnings ?? []),
 	};
 }
 
 registerProvider<SlashCommand>(slashCommandCapability.id, {
 	id: PROVIDER_ID,
 	displayName: DISPLAY_NAME,
-	description: "Load commands from ~/.agent/commands (fallback ~/.agents/commands)",
+	description: "Load commands from .agent/commands and .agents/commands (project walk-up + user home)",
 	priority: PRIORITY,
 	load: loadSlashCommands,
 });
 
 // Context Files (AGENTS.md)
 async function loadContextFiles(ctx: LoadContext): Promise<LoadResult<ContextFile>> {
-	const items: ContextFile[] = [];
-	for (const agentsPath of getUserAgentPathCandidates(ctx, "AGENTS.md")) {
-		const content = await readFile(agentsPath);
-		if (!content) {
-			continue;
-		}
-		items.push({
-			path: agentsPath,
-			content,
-			level: "user",
-			_source: createSourceMeta(PROVIDER_ID, agentsPath, "user"),
-		});
-	}
-	return {
-		items,
-		warnings: [],
+	const load = async (filePath: string, level: "user" | "project"): Promise<ContextFile | null> => {
+		const content = await readFile(filePath);
+		if (!content) return null;
+		// filePath is <ancestor>/.agent(s)/AGENTS.md — go up past the config dir to the ancestor
+		const ancestorDir = path.dirname(path.dirname(filePath));
+		const depth = level === "project" ? calculateDepth(ctx.cwd, ancestorDir, path.sep) : undefined;
+		return { path: filePath, content, level, depth, _source: createSourceMeta(PROVIDER_ID, filePath, level) };
 	};
+
+	const results = await Promise.all([
+		...getProjectPathCandidates(ctx, "AGENTS.md").map(p => load(p, "project")),
+		...getUserPathCandidates(ctx, "AGENTS.md").map(p => load(p, "user")),
+	]);
+
+	return { items: results.filter((r): r is ContextFile => r !== null), warnings: [] };
 }
 
 registerProvider<ContextFile>(contextFileCapability.id, {
 	id: PROVIDER_ID,
 	displayName: DISPLAY_NAME,
-	description: "Load AGENTS.md from ~/.agent (fallback ~/.agents)",
+	description: "Load AGENTS.md from .agent and .agents (project walk-up + user home)",
 	priority: PRIORITY,
 	load: loadContextFiles,
 });
 
 // System Prompt (SYSTEM.md)
 async function loadSystemPrompt(ctx: LoadContext): Promise<LoadResult<SystemPrompt>> {
-	const items: SystemPrompt[] = [];
-	for (const systemPath of getUserAgentPathCandidates(ctx, "SYSTEM.md")) {
-		const content = await readFile(systemPath);
-		if (!content) {
-			continue;
-		}
-		items.push({
-			path: systemPath,
-			content,
-			level: "user",
-			_source: createSourceMeta(PROVIDER_ID, systemPath, "user"),
-		});
-	}
-	return {
-		items,
-		warnings: [],
+	const load = async (filePath: string, level: "user" | "project"): Promise<SystemPrompt | null> => {
+		const content = await readFile(filePath);
+		if (!content) return null;
+		return { path: filePath, content, level, _source: createSourceMeta(PROVIDER_ID, filePath, level) };
 	};
+
+	const results = await Promise.all([
+		...getProjectPathCandidates(ctx, "SYSTEM.md").map(p => load(p, "project")),
+		...getUserPathCandidates(ctx, "SYSTEM.md").map(p => load(p, "user")),
+	]);
+
+	return { items: results.filter((r): r is SystemPrompt => r !== null), warnings: [] };
 }
 
 registerProvider<SystemPrompt>(systemPromptCapability.id, {
 	id: PROVIDER_ID,
 	displayName: DISPLAY_NAME,
-	description: "Load SYSTEM.md from ~/.agent (fallback ~/.agents)",
+	description: "Load SYSTEM.md from .agent and .agents (project walk-up + user home)",
 	priority: PRIORITY,
 	load: loadSystemPrompt,
 });
