@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.7.2] - 2026-03-04
 ### Added
 
 - Added support for direct OAuth provider login via `/login <provider>` command (e.g., `/login kagi`)
