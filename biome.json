@@ -38,6 +38,7 @@
 			"packages/*/src/**/*.tsx",
 			"packages/*/test/**/*.ts",
 			"packages/*/examples/**/*.ts",
+			"packages/*/scripts/**/*.ts",
 			"packages/*/*.ts",
 			"!**/vendor/**/*",
 			"!**/node_modules/**/*",

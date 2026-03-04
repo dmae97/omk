@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 
-import { $ } from "bun";
 import * as fs from "node:fs/promises";
-import * as path from "node:path";
 import * as os from "node:os";
+import * as path from "node:path";
+import { $ } from "bun";
 
 const GENERATED_FILE = path.join("src", "embedded-client.generated.txt");
 const DIST_CLIENT_DIR = path.join("dist", "client");

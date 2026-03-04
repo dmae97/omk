@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
-import { Glob } from "bun";
 import * as path from "node:path";
+import { Glob } from "bun";
 
 const docsDir = path.resolve(import.meta.dir, "../../../docs");
 const outputPath = path.resolve(import.meta.dir, "../src/internal-urls/docs-index.generated.ts");
@@ -14,10 +14,10 @@ for await (const relativePath of glob.scan(docsDir)) {
 entries.sort();
 
 const docsWithContent = await Promise.all(
-	entries.map(async (relativePath) => ({
+	entries.map(async relativePath => ({
 		relativePath,
 		content: await Bun.file(path.join(docsDir, relativePath)).text(),
-	}))
+	})),
 );
 
 const filenamesLiteral = JSON.stringify(entries);

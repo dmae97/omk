@@ -1,7 +1,7 @@
-import { $ } from "bun";
 import * as fsSync from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { $ } from "bun";
 
 const repoRoot = path.join(import.meta.dir, "../../..");
 const rustDir = path.join(repoRoot, "crates/pi-natives");
@@ -12,10 +12,7 @@ const crossTarget = Bun.env.CROSS_TARGET;
 const targetPlatform = Bun.env.TARGET_PLATFORM || process.platform;
 const targetArch = Bun.env.TARGET_ARCH || process.arch;
 const configuredVariantRaw = Bun.env.TARGET_VARIANT;
-const isCrossCompile =
-	Boolean(crossTarget) ||
-	targetPlatform !== process.platform ||
-	targetArch !== process.arch;
+const isCrossCompile = Boolean(crossTarget) || targetPlatform !== process.platform || targetArch !== process.arch;
 
 type X64Variant = "modern" | "baseline";
 
@@ -29,8 +26,6 @@ if (configuredVariantRaw) {
 	}
 	configuredVariant = configuredVariantRaw;
 }
-
-
 
 function runCommand(command: string, args: string[]): string | null {
 	try {
@@ -192,10 +187,9 @@ if (!sourcePath) {
 }
 
 console.log(`Found: ${sourcePath}`);
-const taggedPath =
-	isDev
-		? path.join(nativeDir, "pi_natives.dev.node")
-		: path.join(nativeDir, `pi_natives.${targetPlatform}-${targetArch}${variantSuffix}.node`);
+const taggedPath = isDev
+	? path.join(nativeDir, "pi_natives.dev.node")
+	: path.join(nativeDir, `pi_natives.${targetPlatform}-${targetArch}${variantSuffix}.node`);
 console.log(`Installing: ${taggedPath}`);
 await installBinary(sourcePath, taggedPath);
 

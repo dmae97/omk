@@ -10,29 +10,29 @@ const COPILOT_PREMIUM_MULTIPLIERS: Record<string, number> = {
 
 import * as path from "node:path";
 import { $env } from "@oh-my-pi/pi-utils";
+import { AuthCredentialStore } from "../src/auth-storage";
 import { createModelManager } from "../src/model-manager";
+import prevModelsJson from "../src/models.json" with { type: "json" };
 import {
+	allowsUnauthenticatedCatalogDiscovery,
 	type CatalogDiscoveryConfig,
 	type CatalogProviderDescriptor,
 	isCatalogDescriptor,
-	allowsUnauthenticatedCatalogDiscovery,
 	PROVIDER_DESCRIPTORS,
 } from "../src/provider-models/descriptors";
-import { MODELS_DEV_PROVIDER_DESCRIPTORS, mapModelsDevToModels } from "../src/provider-models/openai-compat";
 import {
-	CLOUDFLARE_FALLBACK_MODEL,
 	applyGeneratedModelPolicies,
+	CLOUDFLARE_FALLBACK_MODEL,
 	linkSparkPromotionTargets,
 } from "../src/provider-models/model-policies";
+import { MODELS_DEV_PROVIDER_DESCRIPTORS, mapModelsDevToModels } from "../src/provider-models/openai-compat";
+import { getGitLabDuoModels } from "../src/providers/gitlab-duo";
 import { JWT_CLAIM_PATH } from "../src/providers/openai-codex/constants";
-import { AuthCredentialStore } from "../src/auth-storage";
 import type { Model } from "../src/types";
 import { fetchAntigravityDiscoveryModels } from "../src/utils/discovery/antigravity";
 import { fetchCodexModels } from "../src/utils/discovery/codex";
-import { getGitLabDuoModels } from "../src/providers/gitlab-duo";
 import { getOAuthApiKey } from "../src/utils/oauth";
 import type { OAuthCredentials, OAuthProvider } from "../src/utils/oauth/types";
-import prevModelsJson from "../src/models.json" with { type: "json" };
 
 const packageRoot = path.join(import.meta.dir, "..");
 
@@ -152,7 +152,6 @@ function applyGlobalModelsDevFallback(models: readonly Model[], modelsDevModels:
 	});
 }
 
-
 function applyPremiumMultiplierOverrides(models: readonly Model[]): Model[] {
 	return models.map(model => {
 		const premiumMultiplier = COPILOT_PREMIUM_MULTIPLIERS[`${model.provider}/${model.id}`];
@@ -167,7 +166,7 @@ function applyPremiumMultiplierOverrides(models: readonly Model[]): Model[] {
 			premiumMultiplier,
 		};
 	});
-	}
+}
 const ANTIGRAVITY_ENDPOINT = "https://daily-cloudcode-pa.sandbox.googleapis.com";
 
 async function getOAuthCredentialsFromStorage(provider: OAuthProvider): Promise<OAuthCredentials | null> {
@@ -272,7 +271,9 @@ async function generateModels() {
 	// Fetch models from dynamic sources
 	const modelsDevModels = await loadModelsDevData();
 	const catalogProviderModels = (
-		await Promise.all(PROVIDER_DESCRIPTORS.filter(isCatalogDescriptor).map(descriptor => fetchProviderModelsFromCatalog(descriptor)))
+		await Promise.all(
+			PROVIDER_DESCRIPTORS.filter(isCatalogDescriptor).map(descriptor => fetchProviderModelsFromCatalog(descriptor)),
+		)
 	).flat();
 	const gitLabDuoModels = getGitLabDuoModels();
 	// Combine models (models.dev has priority)
@@ -281,7 +282,7 @@ async function generateModels() {
 		modelsDevModels,
 	);
 
-	if (!allModels.some((model) => model.provider === "cloudflare-ai-gateway")) {
+	if (!allModels.some(model => model.provider === "cloudflare-ai-gateway")) {
 		allModels.push(CLOUDFLARE_FALLBACK_MODEL);
 	}
 
@@ -339,33 +340,34 @@ async function generateModels() {
 		}
 	}
 
-	// Sort models within each provider by ID
-	for (const provider of Object.keys(providers)) {
-		const models = Object.values(providers[provider]);
+	// Sort providers alphabetically and models within each provider by ID
+	const sortObj = <V>(o: Record<string, V>): Record<string, V> => {
+		return Object.fromEntries(
+			Object.entries(o)
+				.sort(([a], [b]) => a.localeCompare(b))
+				.map(([id, model]) => [id, model]),
+		);
+	};
 
-		models.sort((a, b) => a.id.localeCompare(b.id));
-		// Rebuild the object with sorted keys
-		providers[provider] = {};
-		for (const model of models) {
-			providers[provider][model.id] = model;
-		}
+	const MODELS: Record<string, Record<string, Model>> = sortObj(providers);
+	for (const key in MODELS) {
+		MODELS[key] = sortObj(MODELS[key]);
 	}
 
 	// Generate JSON file
-	const MODELS = providers;
 	await Bun.write(path.join(packageRoot, "src/models.json"), JSON.stringify(MODELS, null, "	"));
 	console.log("Generated src/models.json");
 
 	// Print statistics
 	const totalModels = allModels.length;
-	const reasoningModels = allModels.filter((m) => m.reasoning).length;
+	const reasoningModels = allModels.filter(m => m.reasoning).length;
 
 	console.log(`
 Model Statistics:`);
 	console.log(`  Total tool-capable models: ${totalModels}`);
 	console.log(`  Reasoning-capable models: ${reasoningModels}`);
 
-	for (const [provider, models] of Object.entries(providers)) {
+	for (const [provider, models] of Object.entries(MODELS)) {
 		console.log(`  ${provider}: ${Object.keys(models).length} models`);
 	}
 }

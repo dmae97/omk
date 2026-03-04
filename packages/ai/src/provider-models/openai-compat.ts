@@ -768,6 +768,7 @@ export function zenmuxModelManagerOptions(config?: ZenMuxModelManagerConfig): Mo
 								cacheWrite: getZenMuxCacheWritePrice(pricings),
 							},
 							contextWindow: toPositiveNumber(entry.context_length, defaults.contextWindow),
+							maxTokens: toPositiveNumber(entry.max_completion_tokens, defaults.maxTokens),
 						};
 					},
 				}),
@@ -1944,6 +1945,21 @@ const MODELS_DEV_PROVIDER_DESCRIPTORS_SPECIALIZED: readonly ModelsDevProviderDes
 	openAiCompletionsDescriptor("qwen-portal", "qwen-portal", "https://portal.qwen.ai/v1", {
 		defaultContextWindow: 128000,
 		defaultMaxTokens: 8192,
+	}),
+
+	// --- ZenMux ---
+	openAiCompletionsDescriptor("zenmux", "zenmux", ZENMUX_OPENAI_BASE_URL, {
+		filterModel: (_id, m) => {
+			if (m.tool_call !== true) return false;
+			if (m.status === "deprecated") return false;
+			return true;
+		},
+		resolveApi: modelId => {
+			if (modelId.startsWith("anthropic/")) {
+				return { api: "anthropic-messages" as const, baseUrl: ZENMUX_ANTHROPIC_BASE_URL };
+			}
+			return { api: "openai-completions" as const, baseUrl: ZENMUX_OPENAI_BASE_URL };
+		},
 	}),
 ];
 /** All provider descriptors for models.dev data mapping in generate-models.ts. */

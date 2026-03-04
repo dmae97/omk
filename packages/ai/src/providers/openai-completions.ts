@@ -1032,7 +1032,13 @@ function mapStopReason(reason: ChatCompletionChunk.Choice["finish_reason"]): Sto
 }
 
 function detectStrictModeSupport(provider: string, baseUrl: string): boolean {
-	if (provider === "openai" || provider === "cerebras" || provider === "together" || provider === "github-copilot")
+	if (
+		provider === "openai" ||
+		provider === "cerebras" ||
+		provider === "together" ||
+		provider === "github-copilot" ||
+		provider === "zenmux"
+	)
 		return true;
 
 	const normalizedBaseUrl = baseUrl.toLowerCase();

@@ -1,5 +1,6 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+
 const reset = process.argv.includes("--reset");
 const outputPath = path.join(import.meta.dir, "../src/embedded-addon.ts");
 const packageJsonPath = path.join(import.meta.dir, "../package.json");
@@ -65,8 +66,9 @@ if (available.length === 0) {
 }
 const packageJson = (await Bun.file(packageJsonPath).json()) as { version: string };
 const imports = available
-	.map((candidate, index) =>
-		`import addonPath${index} from ${JSON.stringify("../native/" + candidate.filename)} with { type: \"file\" };`,
+	.map(
+		(candidate, index) =>
+			`import addonPath${index} from ${JSON.stringify(`../native/${candidate.filename}`)} with { type: "file" };`,
 	)
 	.join("\n");
 const files = available
@@ -76,5 +78,5 @@ const files = available
 	)
 	.join("\n");
 
-const content = `${imports}\n\nexport type EmbeddedAddonVariant = \"modern\" | \"baseline\" | \"default\";\n\nexport interface EmbeddedAddonFile {\n\tvariant: EmbeddedAddonVariant;\n\tfilename: string;\n\tfilePath: string;\n}\n\nexport interface EmbeddedAddon {\n\tplatformTag: string;\n\tversion: string;\n\tfiles: EmbeddedAddonFile[];\n}\n\nexport const embeddedAddon: EmbeddedAddon | null = {\n\tplatformTag: ${JSON.stringify(platformTag)},\n\tversion: ${JSON.stringify(packageJson.version)},\n\tfiles: [\n${files}\n\t],\n};\n`;
+const content = `${imports}\n\nexport type EmbeddedAddonVariant = "modern" | "baseline" | "default";\n\nexport interface EmbeddedAddonFile {\n\tvariant: EmbeddedAddonVariant;\n\tfilename: string;\n\tfilePath: string;\n}\n\nexport interface EmbeddedAddon {\n\tplatformTag: string;\n\tversion: string;\n\tfiles: EmbeddedAddonFile[];\n}\n\nexport const embeddedAddon: EmbeddedAddon | null = {\n\tplatformTag: ${JSON.stringify(platformTag)},\n\tversion: ${JSON.stringify(packageJson.version)},\n\tfiles: [\n${files}\n\t],\n};\n`;
 await Bun.write(outputPath, content);
