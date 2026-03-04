@@ -12,23 +12,22 @@ Follow these steps in order for every edit:
 **`move`** — if set, move the file to the given path.
 **`delete`** — if true, delete the file.
 **`edits[n].pos`** — the anchor line. Meaning depends on `op`:
-- `replace`: start of range (or the single line to replace)
-- `prepend`: insert new lines **before** this line; omit for beginning of file
-- `append`: insert new lines **after** this line; omit for end of file
+  - if `replace`: line to rewrite
+  - if `prepend`: line to insert new lines **before**; omit for beginning of file
+  - if `append`: line to insert new lines **after**; omit for end of file
 **`edits[n].end`** — range replace only. The last line of the range (inclusive). Omit for single-line replace.
 **`edits[n].lines`** — the replacement content:
-- `["line1", "line2"]` — replace with these lines (array of strings)
-- `"line1"` — shorthand for `["line1"]` (single-line replace)
-- `[""]` — replace content with a blank line (line preserved, content cleared)
-- `null` or `[]` — **delete** the line(s) entirely
+  - `["line1", "line2"]` — insert `line1` and `line2`
+  - `[""]` — blank line
+  - `null` or `[]` — delete if replace, no-op if append or prepend
 
 Tags are applied bottom-up: later edits (by position) are applied first, so earlier tags remain valid even when subsequent ops add or remove lines. Tags **MUST** be referenced from the most recent `read` output.
 </operations>
 
 <rules>
-1. **Anchor on unique, structural lines.** You **SHOULD** choose anchors like function signatures, class declarations, or distinct statements — lines that appear exactly once. Blank lines, `}`, and `return null;` repeat throughout a file; anchoring on them risks matching the wrong location. When inserting between blocks, anchor on the nearest unique declaration using `prepend` or `append`.
-2. **Prefer insertion over neighbor rewrites.** You **SHOULD** use `prepend`/`append` anchored on a structural boundary (`}`, `]`, `},`) rather than replacing adjacent lines when adding code near existing code. This keeps the edit minimal and avoids accidentally rewriting lines that should stay.
-3. **Include boundary lines in the replaced range.** `end` is inclusive and **MUST** point to the final line being replaced. If your replacement `lines` include a closing token (`}`, `]`, `)`, `);`, `},`), `end` **MUST** include the original closing line. Otherwise the original closer survives and you get a duplicate.
+1. **Anchor on unique, structural lines.** When inserting between blocks, anchor on the nearest unique declaration using `prepend` or `append`.
+2. **Use `prepend`/`append` only when the anchor line itself is not changing.** Inserting near an unchanged boundary keeps the edit minimal.
+3. **Use range `replace` when any line in the span changes.** If you need to both insert lines and modify a neighboring line, a range replace covering all lines to remove is way to go.
 </rules>
 
 <recovery>
