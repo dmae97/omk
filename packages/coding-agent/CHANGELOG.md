@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+
+- Fixed incorrect message history reference in session title generation that could cause missing or stale titles on first message
+- Added startup check requiring Bun 1.3.7+ for JSONL session parsing (`Bun.JSONL.parseChunk`) and clear upgrade guidance so `/resume` and `--resume` do not silently report missing sessions on older Bun runtimes
 
 ## [13.7.3] - 2026-03-04
 

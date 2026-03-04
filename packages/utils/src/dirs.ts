@@ -8,7 +8,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { version } from "../package.json" with { type: "json" };
+import { engines, version } from "../package.json" with { type: "json" };
 
 /** App name (e.g. "omp") */
 export const APP_NAME: string = "omp";
@@ -18,6 +18,9 @@ export const CONFIG_DIR_NAME: string = ".omp";
 
 /** Version (e.g. "1.0.0") */
 export const VERSION: string = version;
+
+/** Minimum Bun version */
+export const MIN_BUN_VERSION: string = engines.bun.replace(/[^0-9.]/g, "");
 
 // =============================================================================
 // Root directories
