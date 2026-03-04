@@ -4,12 +4,16 @@
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { type Api, DEFAULT_MODEL_PER_PROVIDER, type KnownProvider, type Model, modelsAreEqual } from "@oh-my-pi/pi-ai";
 import chalk from "chalk";
-import { isValidThinkingLevel } from "../cli/args";
 import MODEL_PRIO from "../priority.json" with { type: "json" };
 import { fuzzyMatch } from "../utils/fuzzy";
 import { MODEL_ROLE_IDS, type ModelRegistry, type ModelRole } from "./model-registry";
 import type { Settings } from "./settings";
 
+const VALID_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
+
+function isValidThinkingLevel(level: string): level is ThinkingLevel {
+	return VALID_THINKING_LEVELS.includes(level as ThinkingLevel);
+}
 /** Default model IDs for each known provider */
 export const defaultModelPerProvider: Record<KnownProvider, string> = DEFAULT_MODEL_PER_PROVIDER;
 
@@ -332,6 +336,74 @@ export function expandRoleAlias(value: string, settings?: Settings): string {
 }
 
 /**
+ * Resolve a model role value into a concrete model and thinking metadata.
+ */
+export interface ResolvedModelRoleValue {
+	model: Model<Api> | undefined;
+	thinkingLevel?: ThinkingLevel;
+	explicitThinkingLevel: boolean;
+	warning: string | undefined;
+}
+
+export function resolveModelRoleValue(
+	roleValue: string | undefined,
+	availableModels: Model<Api>[],
+	options?: { settings?: Settings; matchPreferences?: ModelMatchPreferences },
+): ResolvedModelRoleValue {
+	if (!roleValue) {
+		return { model: undefined, thinkingLevel: undefined, explicitThinkingLevel: false, warning: undefined };
+	}
+
+	const normalized = roleValue.trim();
+	if (!normalized || normalized === DEFAULT_MODEL_ROLE) {
+		return { model: undefined, thinkingLevel: undefined, explicitThinkingLevel: false, warning: undefined };
+	}
+
+	const lastColonIndex = normalized.lastIndexOf(":");
+	const hasThinkingSuffix =
+		lastColonIndex > PREFIX_MODEL_ROLE.length && isValidThinkingLevel(normalized.slice(lastColonIndex + 1));
+	const aliasCandidate = hasThinkingSuffix ? normalized.slice(0, lastColonIndex) : normalized;
+	const effectivePattern = expandRoleAlias(aliasCandidate, options?.settings);
+	const patternWithSuffix = hasThinkingSuffix
+		? `${effectivePattern}:${normalized.slice(lastColonIndex + 1)}`
+		: effectivePattern;
+	const { model, thinkingLevel, warning, explicitThinkingLevel } = parseModelPattern(
+		patternWithSuffix,
+		availableModels,
+		options?.matchPreferences,
+	);
+
+	return { model, thinkingLevel, explicitThinkingLevel, warning };
+}
+
+export function extractExplicitThinkingLevel(
+	value: string | undefined,
+	settings?: Settings,
+): ThinkingLevel | undefined {
+	if (!value) return undefined;
+	const normalized = value.trim();
+	if (!normalized || normalized === DEFAULT_MODEL_ROLE) return undefined;
+
+	const visited = new Set<string>();
+	let current = normalized;
+	while (!visited.has(current)) {
+		visited.add(current);
+		const lastColonIndex = current.lastIndexOf(":");
+		const hasThinkingSuffix =
+			lastColonIndex > PREFIX_MODEL_ROLE.length && isValidThinkingLevel(current.slice(lastColonIndex + 1));
+		if (hasThinkingSuffix) {
+			return current.slice(lastColonIndex + 1) as ThinkingLevel;
+		}
+		const expanded = expandRoleAlias(current, settings).trim();
+		if (!expanded || expanded === current) break;
+		if (expanded === DEFAULT_MODEL_ROLE) return undefined;
+		current = expanded;
+	}
+
+	return undefined;
+}
+
+/**
  * Resolve a model identifier or pattern to a Model instance.
  */
 export function resolveModelFromString(
@@ -341,7 +413,8 @@ export function resolveModelFromString(
 ): Model<Api> | undefined {
 	const parsed = parseModelString(value);
 	if (parsed) {
-		return available.find(model => model.provider === parsed.provider && model.id === parsed.id);
+		const exact = available.find(model => model.provider === parsed.provider && model.id === parsed.id);
+		if (exact) return exact;
 	}
 	return parseModelPattern(value, available, matchPreferences).model;
 }
@@ -373,25 +446,20 @@ export function resolveModelOverride(
 	modelPatterns: string[],
 	modelRegistry: ModelRegistry,
 	settings?: Settings,
-): { model?: Model<Api>; thinkingLevel?: ThinkingLevel } {
-	if (modelPatterns.length === 0) return {};
+): { model?: Model<Api>; thinkingLevel?: ThinkingLevel; explicitThinkingLevel: boolean } {
+	if (modelPatterns.length === 0) return { explicitThinkingLevel: false };
+	const availableModels = modelRegistry.getAvailable();
 	const matchPreferences = { usageOrder: settings?.getStorage()?.getModelUsageOrder() };
 	for (const pattern of modelPatterns) {
-		const normalized = pattern.trim();
-		if (!normalized || isDefaultModelAlias(normalized)) {
-			continue;
-		}
-		const effectivePattern = expandRoleAlias(pattern, settings);
-		const { model, thinkingLevel } = parseModelPattern(
-			effectivePattern,
-			modelRegistry.getAvailable(),
+		const { model, thinkingLevel, explicitThinkingLevel } = resolveModelRoleValue(pattern, availableModels, {
+			settings,
 			matchPreferences,
-		);
+		});
 		if (model) {
-			return { model, thinkingLevel: thinkingLevel !== "off" ? thinkingLevel : undefined };
+			return { model, thinkingLevel, explicitThinkingLevel };
 		}
 	}
-	return {};
+	return { explicitThinkingLevel: false };
 }
 
 /**

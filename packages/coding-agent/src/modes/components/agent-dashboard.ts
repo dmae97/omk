@@ -63,6 +63,7 @@ interface DashboardAgent extends AgentDefinition {
 interface ModelResolution {
 	resolved: string;
 	thinkingLevel?: string;
+	explicitThinkingLevel: boolean;
 }
 
 interface GeneratedAgentSpec {
@@ -107,6 +108,12 @@ function normalizeModelPatterns(value: string | string[] | undefined): string[] 
 function joinPatterns(patterns: string[]): string {
 	if (patterns.length === 0) return "(session default)";
 	return patterns.join(", ");
+}
+
+function formatResolution(resolution: ModelResolution): string {
+	const resolved = theme.fg("success", resolution.resolved);
+	if (!resolution.explicitThinkingLevel || !resolution.thinkingLevel) return resolved;
+	return `${resolved} ${theme.fg("dim", `(${resolution.thinkingLevel})`)}`;
 }
 
 function matchAgent(agent: DashboardAgent, query: string): boolean {
@@ -289,10 +296,7 @@ class AgentInspectorPane implements Component {
 	}
 
 	#formatResolution(resolution: ModelResolution): string {
-		if (resolution.thinkingLevel && resolution.thinkingLevel !== "off") {
-			return `${theme.fg("success", resolution.resolved)} ${theme.fg("dim", `(${resolution.thinkingLevel})`)}`;
-		}
-		return theme.fg("success", resolution.resolved);
+		return formatResolution(resolution);
 	}
 
 	invalidate(): void {}
@@ -770,7 +774,7 @@ export class AgentDashboard extends Container {
 	#resolvePatterns(patterns: string[]): ModelResolution | undefined {
 		const modelRegistry = this.modelContext.modelRegistry;
 		if (!modelRegistry || patterns.length === 0) return undefined;
-		const { model, thinkingLevel } = resolveModelOverride(
+		const { model, thinkingLevel, explicitThinkingLevel } = resolveModelOverride(
 			patterns,
 			modelRegistry,
 			this.#settingsManager ?? undefined,
@@ -779,6 +783,7 @@ export class AgentDashboard extends Container {
 		return {
 			resolved: formatModelString(model),
 			thinkingLevel,
+			explicitThinkingLevel,
 		};
 	}
 
@@ -930,20 +935,14 @@ export class AgentDashboard extends Container {
 			);
 			this.addChild(
 				new Text(
-					theme.fg(
-						"muted",
-						`Default resolves: ${defaultResolution ? defaultResolution.resolved : "(unresolved)"}`,
-					),
+					`${theme.fg("muted", "Default resolves:")} ${defaultResolution ? formatResolution(defaultResolution) : theme.fg("dim", "(unresolved)")}`,
 					0,
 					0,
 				),
 			);
 			this.addChild(
 				new Text(
-					theme.fg(
-						"muted",
-						`Preview effective: ${previewResolution ? previewResolution.resolved : "(unresolved)"}`,
-					),
+					`${theme.fg("muted", "Preview effective:")} ${previewResolution ? formatResolution(previewResolution) : theme.fg("dim", "(unresolved)")}`,
 					0,
 					0,
 				),

@@ -938,12 +938,14 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 			await modelRegistry.refresh();
 			checkAbort();
 
-			const { model, thinkingLevel: resolvedThinkingLevel } = resolveModelOverride(
-				modelPatterns,
-				modelRegistry,
-				settings,
-			);
-			const effectiveThinkingLevel = thinkingLevel ?? resolvedThinkingLevel;
+			const {
+				model,
+				thinkingLevel: resolvedThinkingLevel,
+				explicitThinkingLevel,
+			} = resolveModelOverride(modelPatterns, modelRegistry, settings);
+			const effectiveThinkingLevel = explicitThinkingLevel
+				? resolvedThinkingLevel
+				: (thinkingLevel ?? resolvedThinkingLevel);
 
 			const sessionManager = sessionFile
 				? await SessionManager.open(sessionFile)
