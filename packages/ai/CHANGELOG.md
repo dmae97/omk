@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.7.7] - 2026-03-04
 ### Changed
 
 - Modified response ID normalization to preserve existing item ID prefixes when truncating oversized IDs
