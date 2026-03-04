@@ -90,7 +90,7 @@ async function handleToolCall<TApi extends Api>(model: Model<TApi>, options?: Op
 		tools: [calculatorTool],
 	};
 
-	const s = await stream(model, context, options);
+	const s = stream(model, context, options);
 	let hasToolStart = false;
 	let hasToolDelta = false;
 	let hasToolEnd = false;

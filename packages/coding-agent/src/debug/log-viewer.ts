@@ -499,7 +499,7 @@ export class DebugLogViewerComponent implements Component {
 		}
 
 		if (matchesKey(keyData, "ctrl+c")) {
-			void this.#copySelected();
+			this.#copySelected();
 			return;
 		}
 

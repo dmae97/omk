@@ -230,7 +230,7 @@ async function startGatewayProcess(
 	const settings = await Settings.init();
 	const { shell, env } = settings.getShellConfig();
 	const filteredEnv = filterEnv(env);
-	const runtime = await resolvePythonRuntime(cwd, filteredEnv);
+	const runtime = resolvePythonRuntime(cwd, filteredEnv);
 	const snapshotPath = await getOrCreateSnapshot(shell, env).catch((err: unknown) => {
 		logger.warn("Failed to resolve shell snapshot for shared Python gateway", {
 			error: err instanceof Error ? err.message : String(err),

@@ -345,7 +345,7 @@ async function executeExaTool(
 	toolName: string,
 ): Promise<{ content: Array<{ type: "text"; text: string }>; details: ExaRenderDetails }> {
 	try {
-		const apiKey = await findExaKey();
+		const apiKey = findExaKey();
 		const response = await callExaTool(mcpToolName, params, apiKey);
 
 		if (isSearchResponse(response)) {
@@ -558,7 +558,7 @@ export async function getSearchTools(options: SearchToolsOptions = {}): Promise<
 	tools.push(webSearchDeepTool, webSearchCodeContextTool);
 
 	// Advanced/add-on tools remain key-gated to avoid exposing known unauthenticated failures
-	const exaKey = await findExaKey();
+	const exaKey = findExaKey();
 	if (exaKey) {
 		tools.push(webSearchCrawlTool);
 

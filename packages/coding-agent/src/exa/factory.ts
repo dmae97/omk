@@ -30,7 +30,7 @@ export function createExaTool(
 		parameters,
 		async execute(_toolCallId, params, _onUpdate, _ctx, _signal) {
 			try {
-				const apiKey = await findApiKey();
+				const apiKey = findApiKey();
 				// Exa MCP endpoint is publicly accessible; API key is optional
 				const args = transformParams ? transformParams(params as Record<string, unknown>) : params;
 				const response = await callExaTool(mcpToolName, args, apiKey);

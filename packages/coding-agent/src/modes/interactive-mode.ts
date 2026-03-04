@@ -949,7 +949,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		return this.#commandController.handleExportCommand(text);
 	}
 
-	handleDumpCommand(): Promise<void> {
+	handleDumpCommand() {
 		return this.#commandController.handleDumpCommand();
 	}
 
@@ -961,7 +961,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		return this.#commandController.handleShareCommand();
 	}
 
-	handleCopyCommand(): Promise<void> {
+	handleCopyCommand() {
 		return this.#commandController.handleCopyCommand();
 	}
 

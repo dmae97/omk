@@ -238,7 +238,7 @@ export class MCPWrappedTool implements CustomTool<TSchema, ExaRenderDetails> {
 		_signal?: AbortSignal,
 	): Promise<CustomToolResult<ExaRenderDetails>> {
 		try {
-			const apiKey = await findApiKey();
+			const apiKey = findApiKey();
 			// Websets tools require an API key; basic Exa MCP tools work without one
 			if (!apiKey && this.config.isWebsetsTool) {
 				return {

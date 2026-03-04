@@ -89,7 +89,7 @@ export class AssistantMessageComponent extends Container {
 			try {
 				for (const content of message.content) {
 					if (content.type === "text" && content.text.trim() && hasPendingMermaid(content.text)) {
-						await prerenderMermaid(content.text);
+						prerenderMermaid(content.text);
 					}
 				}
 			} catch (error) {

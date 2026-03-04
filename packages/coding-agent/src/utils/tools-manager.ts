@@ -296,7 +296,7 @@ type EnsureToolOptions = {
 
 export async function ensureTool(tool: ToolName, silentOrOptions?: EnsureToolOptions): Promise<string | undefined> {
 	const { signal, silent = false, notify } = silentOrOptions ?? {};
-	const existingPath = await getToolPath(tool);
+	const existingPath = getToolPath(tool);
 	if (existingPath) {
 		return existingPath;
 	}

@@ -147,13 +147,13 @@ export interface InteractiveModeContext {
 	// Command handling
 	handleExportCommand(text: string): Promise<void>;
 	handleShareCommand(): Promise<void>;
-	handleCopyCommand(): Promise<void>;
+	handleCopyCommand(): void;
 	handleSessionCommand(): Promise<void>;
 	handleJobsCommand(): Promise<void>;
 	handleUsageCommand(reports?: UsageReport[] | null): Promise<void>;
 	handleChangelogCommand(showFull?: boolean): Promise<void>;
 	handleHotkeysCommand(): void;
-	handleDumpCommand(): Promise<void>;
+	handleDumpCommand(): void;
 	handleDebugTranscriptCommand(): Promise<void>;
 	handleClearCommand(): Promise<void>;
 	handleForkCommand(): Promise<void>;
