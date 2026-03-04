@@ -34,4 +34,25 @@ describe("parseAgentFields", () => {
 		expect(fields).toBeDefined();
 		expect(fields?.blocking).toBeUndefined();
 	});
+	test("parses legacy thinking key", () => {
+		const fields = parseAgentFields({
+			name: "reviewer",
+			description: "desc",
+			thinking: "medium",
+		});
+
+		expect(fields).toBeDefined();
+		expect(fields?.thinkingLevel).toBe("medium");
+	});
+
+	test("prefers thinking-level over legacy thinking", () => {
+		const fields = parseAgentFields({
+			name: "reviewer",
+			description: "desc",
+			thinking: "minimal",
+			thinkingLevel: "high",
+		});
+
+		expect(fields?.thinkingLevel).toBe("high");
+	});
 });

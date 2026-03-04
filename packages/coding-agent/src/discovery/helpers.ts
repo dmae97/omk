@@ -234,8 +234,14 @@ export function parseAgentFields(frontmatter: Record<string, unknown>): ParsedAg
 	}
 
 	const output = frontmatter.output !== undefined ? frontmatter.output : undefined;
-	const thinkingLevel =
-		typeof frontmatter.thinkingLevel === "string" ? parseThinkingLevel(frontmatter.thinkingLevel) : undefined;
+	const rawThinkingLevel =
+		typeof frontmatter.thinkingLevel === "string"
+			? frontmatter.thinkingLevel
+			: typeof frontmatter.thinking === "string"
+				? frontmatter.thinking
+				: undefined;
+
+	const thinkingLevel = parseThinkingLevel(rawThinkingLevel);
 	const model = parseModelList(frontmatter.model);
 	const blocking = parseBoolean(frontmatter.blocking);
 	return { name, description, tools, spawns, model, output, thinkingLevel, blocking };
