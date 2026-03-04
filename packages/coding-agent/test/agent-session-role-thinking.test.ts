@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as path from "node:path";
 import { Agent } from "@oh-my-pi/pi-agent-core";
-import { getBundledModel, type ThinkingLevel } from "@oh-my-pi/pi-ai";
+import {
+	getBundledModel,
+	getBundledModels,
+	getBundledProviders,
+	supportsXhigh,
+	type ThinkingLevel,
+} from "@oh-my-pi/pi-ai";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
@@ -29,6 +35,15 @@ describe("AgentSession role model thinking behavior", () => {
 		const model = getBundledModel("anthropic", id);
 		if (!model) throw new Error(`Expected anthropic model ${id} to exist`);
 		return model;
+	}
+
+	function getReasoningModelWithoutXhighOrThrow() {
+		for (const provider of getBundledProviders()) {
+			for (const model of getBundledModels(provider as Parameters<typeof getBundledModels>[0])) {
+				if (model.reasoning && !supportsXhigh(model)) return model;
+			}
+		}
+		throw new Error("Expected at least one bundled reasoning model without xhigh support");
 	}
 
 	async function createSession(options: {
@@ -167,5 +182,32 @@ describe("AgentSession role model thinking behavior", () => {
 		await session.setModel(slowModel);
 
 		expect(sessionSettings.getModelRole("default")).toBe(`${slowModel.provider}/${slowModel.id}:off`);
+	});
+
+	it("clamps unsupported xhigh to highest supported level instead of off", async () => {
+		const model = getReasoningModelWithoutXhighOrThrow();
+		const agent = new Agent({
+			initialState: {
+				model,
+				systemPrompt: "Test",
+				tools: [],
+				messages: [],
+				thinkingLevel: "off",
+			},
+		});
+		const authStorage = await AuthStorage.create(path.join(tempDir.path(), "testauth-non-xhigh.db"));
+		authStorage.setRuntimeApiKey("anthropic", "test-key");
+		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir.path(), "models-non-xhigh.yml"));
+
+		sessionSettings = Settings.isolated();
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings: sessionSettings,
+			modelRegistry,
+		});
+
+		session.setThinkingLevel("xhigh");
+		expect(session.thinkingLevel).toBe("high");
 	});
 });

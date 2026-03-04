@@ -459,7 +459,7 @@ describe("openai-codex streaming", () => {
 
 		const streamResult = streamOpenAICodexResponses(model, context, {
 			apiKey: token,
-			reasoningEffort: "minimal",
+			reasoning: "minimal",
 		});
 		await streamResult.result();
 	});

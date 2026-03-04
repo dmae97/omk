@@ -75,7 +75,7 @@ export class SelectorController {
 			this.showSelector(done => {
 				const selector = new SettingsSelectorComponent(
 					{
-						availableThinkingLevels: this.ctx.session.getAvailableThinkingLevels(),
+						availableThinkingLevels: [...this.ctx.session.getAvailableThinkingLevels()],
 						thinkingLevel: this.ctx.session.thinkingLevel,
 						availableThemes,
 						cwd: getProjectDir(),
@@ -381,7 +381,7 @@ export class SelectorController {
 						} else if (role === "default") {
 							// Default: update agent state and persist
 							await this.ctx.session.setModel(model, role);
-							if (thinkingMode && thinkingMode !== "default") {
+							if (thinkingMode && thinkingMode !== "inherit") {
 								this.ctx.session.setThinkingLevel(thinkingMode as ThinkingLevel);
 							}
 							this.ctx.statusLine.invalidate();

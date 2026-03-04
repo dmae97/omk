@@ -21,7 +21,7 @@ describe.skipIf(!e2eApiKey("OPENAI_API_KEY"))("xhigh reasoning", () => {
 		// Note: codex models only support the responses API, not chat completions
 		it("should work with openai-responses", async () => {
 			const model = getBundledModel("openai", "gpt-5.1-codex-max");
-			const s = stream(model, makeContext(), { reasoningEffort: "xhigh" });
+			const s = stream(model, makeContext(), { thinkingLevel: "xhigh" });
 			let hasThinking = false;
 
 			for await (const event of s) {
@@ -40,7 +40,7 @@ describe.skipIf(!e2eApiKey("OPENAI_API_KEY"))("xhigh reasoning", () => {
 	describe("gpt-5-mini (does not support xhigh)", () => {
 		it("should error with openai-responses when using xhigh", async () => {
 			const model = getBundledModel("openai", "gpt-5-mini");
-			const s = stream(model, makeContext(), { reasoningEffort: "xhigh" });
+			const s = stream(model, makeContext(), { thinkingLevel: "xhigh" });
 
 			for await (const _ of s) {
 				// drain events
@@ -56,7 +56,7 @@ describe.skipIf(!e2eApiKey("OPENAI_API_KEY"))("xhigh reasoning", () => {
 				...getBundledModel("openai", "gpt-5-mini"),
 				api: "openai-completions",
 			};
-			const s = stream(model, makeContext(), { reasoningEffort: "xhigh" });
+			const s = stream(model, makeContext(), { thinkingLevel: "xhigh" });
 
 			for await (const _ of s) {
 				// drain events

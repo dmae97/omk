@@ -1,5 +1,5 @@
 import { Agent, type AgentEvent, type AgentMessage, type AgentTool, INTENT_FIELD } from "@oh-my-pi/pi-agent-core";
-import { type Message, type Model, supportsXhigh, type ThinkingSelector } from "@oh-my-pi/pi-ai";
+import { type Message, type Model, supportsXhigh, type ThinkingLevel } from "@oh-my-pi/pi-ai";
 
 import { prewarmOpenAICodexResponses } from "@oh-my-pi/pi-ai/providers/openai-codex-responses";
 import type { Component } from "@oh-my-pi/pi-tui";
@@ -118,9 +118,9 @@ export interface CreateAgentSessionOptions {
 	 * Used when model lookup is deferred because extension-provided models aren't registered yet. */
 	modelPattern?: string;
 	/** Thinking level. Default: from settings, else 'off' (clamped to model capabilities) */
-	thinkingLevel?: ThinkingSelector;
+	thinkingLevel?: ThinkingLevel;
 	/** Models available for cycling (Ctrl+P in interactive mode) */
-	scopedModels?: Array<{ model: Model; thinkingLevel: ThinkingSelector }>;
+	scopedModels?: Array<{ model: Model; thinkingLevel: ThinkingLevel }>;
 
 	/** System prompt. String replaces default, function receives default and returns final. */
 	systemPrompt?: string | ((defaultPrompt: string) => string);
@@ -696,7 +696,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 	// If session has data and includes a thinking entry, restore it
 	if (thinkingLevel === undefined && hasExistingSession && hasThinkingEntry) {
-		thinkingLevel = existingSession.thinkingLevel as ThinkingSelector;
+		thinkingLevel = existingSession.thinkingLevel as ThinkingLevel;
 	}
 
 	if (thinkingLevel === undefined && !hasExplicitModel && !hasThinkingEntry && defaultRoleSpec.explicitThinkingLevel) {

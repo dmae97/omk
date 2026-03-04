@@ -329,7 +329,7 @@ export function streamGitLabDuo(
 									sessionId: options.sessionId,
 									providerSessionState: options.providerSessionState,
 									onPayload: options.onPayload,
-									reasoningEffort: options.reasoning,
+									reasoning: options.reasoning,
 									toolChoice: options.toolChoice,
 								} satisfies OpenAIResponsesOptions,
 							)
@@ -358,7 +358,7 @@ export function streamGitLabDuo(
 									sessionId: options.sessionId,
 									providerSessionState: options.providerSessionState,
 									onPayload: options.onPayload,
-									reasoningEffort: options.reasoning,
+									thinkingLevel: options.reasoning,
 									toolChoice: options.toolChoice,
 								} satisfies OpenAICompletionsOptions,
 							);

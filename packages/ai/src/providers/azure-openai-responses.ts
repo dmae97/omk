@@ -61,7 +61,7 @@ function resolveDeploymentName(model: Model<"azure-openai-responses">, options?:
 
 // Azure OpenAI Responses-specific options
 export interface AzureOpenAIResponsesOptions extends StreamOptions {
-	reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
+	reasoning?: "minimal" | "low" | "medium" | "high" | "xhigh";
 	reasoningSummary?: "auto" | "detailed" | "concise" | null;
 	azureApiVersion?: string;
 	azureResourceName?: string;
@@ -499,9 +499,9 @@ function buildParams(
 		// See: https://github.com/can1357/oh-my-pi/issues/41
 		params.include = ["reasoning.encrypted_content"];
 
-		if (options?.reasoningEffort || options?.reasoningSummary) {
+		if (options?.reasoning || options?.reasoningSummary) {
 			params.reasoning = {
-				effort: options?.reasoningEffort || "medium",
+				effort: options?.reasoning || "medium",
 				summary: options?.reasoningSummary || "auto",
 			};
 		} else {

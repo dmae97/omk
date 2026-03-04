@@ -49,7 +49,7 @@ import { parseCodexError } from "./openai-codex/response-handler";
 import { transformMessages } from "./transform-messages";
 
 export interface OpenAICodexResponsesOptions extends StreamOptions {
-	reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
+	reasoning?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
 	reasoningSummary?: "auto" | "concise" | "detailed" | null;
 	textVerbosity?: "low" | "medium" | "high";
 	include?: string[];
@@ -369,7 +369,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 			params.instructions = systemPrompt.instructions;
 
 			const codexOptions: CodexRequestOptions = {
-				reasoningEffort: options?.reasoningEffort,
+				reasoningEffort: options?.reasoning,
 				reasoningSummary: options?.reasoningSummary ?? "auto",
 				textVerbosity: options?.textVerbosity,
 				include: options?.include,

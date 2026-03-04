@@ -2880,7 +2880,7 @@ export class AgentSession {
 	}
 
 	#clampThinkingLevel(level: ThinkingLevel, availableLevels: ReadonlyArray<ThinkingLevel>): ThinkingLevel {
-		const ordered = getAvailableThinkingLevel(this.supportsXhighThinking());
+		const ordered = getAvailableThinkingLevel(true);
 		const available = new Set(availableLevels);
 		const requestedIndex = ordered.indexOf(level);
 		if (requestedIndex === -1) {

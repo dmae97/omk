@@ -102,7 +102,7 @@ export function streamKimi(
 					headers: mergedHeaders,
 					sessionId: options?.sessionId,
 					onPayload: options?.onPayload,
-					reasoningEffort: options?.reasoning,
+					thinkingLevel: options?.reasoning,
 				});
 
 				for await (const event of innerStream) {

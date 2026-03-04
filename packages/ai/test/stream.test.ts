@@ -534,7 +534,7 @@ describe("Generate E2E Tests", () => {
 		it(
 			"should handle thinking",
 			async () => {
-				await handleThinking(llm, { reasoningEffort: "high" });
+				await handleThinking(llm, { thinkingLevel: "high" });
 			},
 			{ retry: 2 },
 		);
@@ -542,7 +542,7 @@ describe("Generate E2E Tests", () => {
 		it(
 			"should handle multi-turn with thinking and tools",
 			async () => {
-				await multiTurn(llm, { reasoningEffort: "high" });
+				await multiTurn(llm, { thinkingLevel: "high" });
 			},
 			{ retry: 3 },
 		);
@@ -658,7 +658,7 @@ describe("Generate E2E Tests", () => {
 		it(
 			"should handle thinking mode",
 			async () => {
-				await handleThinking(llm, { reasoningEffort: "medium" });
+				await handleThinking(llm, { thinkingLevel: "medium" });
 			},
 			{ retry: 3 },
 		);
@@ -666,7 +666,7 @@ describe("Generate E2E Tests", () => {
 		it(
 			"should handle multi-turn with thinking and tools",
 			async () => {
-				await multiTurn(llm, { reasoningEffort: "medium" });
+				await multiTurn(llm, { thinkingLevel: "medium" });
 			},
 			{ retry: 3 },
 		);
@@ -702,7 +702,7 @@ describe("Generate E2E Tests", () => {
 		it(
 			"should handle thinking mode",
 			async () => {
-				await handleThinking(llm, { reasoningEffort: "medium" });
+				await handleThinking(llm, { thinkingLevel: "medium" });
 			},
 			{ retry: 3 },
 		);
@@ -710,7 +710,7 @@ describe("Generate E2E Tests", () => {
 		it(
 			"should handle multi-turn with thinking and tools",
 			async () => {
-				await multiTurn(llm, { reasoningEffort: "medium" });
+				await multiTurn(llm, { thinkingLevel: "medium" });
 			},
 			{ retry: 3 },
 		);
@@ -746,7 +746,7 @@ describe("Generate E2E Tests", () => {
 		it(
 			"should handle thinking mode",
 			async () => {
-				await handleThinking(llm, { reasoningEffort: "medium" });
+				await handleThinking(llm, { thinkingLevel: "medium" });
 			},
 			{ retry: 3 },
 		);
@@ -754,7 +754,7 @@ describe("Generate E2E Tests", () => {
 		it(
 			"should handle multi-turn with thinking and tools",
 			async () => {
-				await multiTurn(llm, { reasoningEffort: "medium" });
+				await multiTurn(llm, { thinkingLevel: "medium" });
 			},
 			{ retry: 3 },
 		);
@@ -790,7 +790,7 @@ describe("Generate E2E Tests", () => {
 		it(
 			"should handle thinking mode",
 			async () => {
-				await handleThinking(llm, { reasoningEffort: "medium" });
+				await handleThinking(llm, { thinkingLevel: "medium" });
 			},
 			{ retry: 3 },
 		);
@@ -798,7 +798,7 @@ describe("Generate E2E Tests", () => {
 		it(
 			"should handle multi-turn with thinking and tools",
 			async () => {
-				await multiTurn(llm, { reasoningEffort: "medium" });
+				await multiTurn(llm, { thinkingLevel: "medium" });
 			},
 			{ retry: 2 },
 		);
@@ -842,7 +842,7 @@ describe("Generate E2E Tests", () => {
 		it.skip(
 			"should handle thinking mode",
 			async () => {
-				await handleThinking(llm, { reasoningEffort: "medium" });
+				await handleThinking(llm, { thinkingLevel: "medium" });
 			},
 			{ retry: 3 },
 		);
@@ -850,7 +850,7 @@ describe("Generate E2E Tests", () => {
 		it(
 			"should handle multi-turn with thinking and tools",
 			async () => {
-				await multiTurn(llm, { reasoningEffort: "medium" });
+				await multiTurn(llm, { thinkingLevel: "medium" });
 			},
 			{ retry: 3 },
 		);
@@ -886,7 +886,7 @@ describe("Generate E2E Tests", () => {
 		it(
 			"should handle thinking mode",
 			async () => {
-				await handleThinking(llm, { reasoningEffort: "medium" });
+				await handleThinking(llm, { thinkingLevel: "medium" });
 			},
 			{ retry: 3 },
 		);
@@ -894,7 +894,7 @@ describe("Generate E2E Tests", () => {
 		it(
 			"should handle multi-turn with thinking and tools",
 			async () => {
-				await multiTurn(llm, { reasoningEffort: "medium" });
+				await multiTurn(llm, { thinkingLevel: "medium" });
 			},
 			{ retry: 3 },
 		);
@@ -950,7 +950,7 @@ describe("Generate E2E Tests", () => {
 			it(
 				"should handle multi-turn with thinking and tools",
 				async () => {
-					await multiTurn(llm, { reasoningEffort: "medium" });
+					await multiTurn(llm, { thinkingLevel: "medium" });
 				},
 				{ retry: 3 },
 			);
@@ -1076,7 +1076,7 @@ describe("Generate E2E Tests", () => {
 			"should handle thinking",
 			async () => {
 				const thinkingModel = getBundledModel("github-copilot", "gpt-5-mini");
-				await handleThinking(thinkingModel, { apiKey: githubCopilotToken, reasoningEffort: "high" });
+				await handleThinking(thinkingModel, { apiKey: githubCopilotToken, thinkingLevel: "high" });
 			},
 			{ retry: 2 },
 		);
@@ -1085,7 +1085,7 @@ describe("Generate E2E Tests", () => {
 			"should handle multi-turn with thinking and tools",
 			async () => {
 				const thinkingModel = getBundledModel("github-copilot", "gpt-5-mini");
-				await multiTurn(thinkingModel, { apiKey: githubCopilotToken, reasoningEffort: "high" });
+				await multiTurn(thinkingModel, { apiKey: githubCopilotToken, thinkingLevel: "high" });
 			},
 			{ retry: 3 },
 		);
@@ -1318,7 +1318,7 @@ describe("Generate E2E Tests", () => {
 		it.skipIf(!openaiCodexToken)(
 			"should handle thinking",
 			async () => {
-				await handleThinking(llm, { apiKey: openaiCodexToken, reasoningEffort: "high" });
+				await handleThinking(llm, { apiKey: openaiCodexToken, thinkingLevel: "high" });
 			},
 			{ retry: 3 },
 		);
@@ -1490,7 +1490,7 @@ describe("Generate E2E Tests", () => {
 			"should handle thinking mode",
 			async () => {
 				if (!llm) return;
-				await handleThinking(llm, { apiKey: "test", reasoningEffort: "medium" });
+				await handleThinking(llm, { apiKey: "test", thinkingLevel: "medium" });
 			},
 			{ retry: 3 },
 		);
@@ -1499,7 +1499,7 @@ describe("Generate E2E Tests", () => {
 			"should handle multi-turn with thinking and tools",
 			async () => {
 				if (!llm) return;
-				await multiTurn(llm, { apiKey: "test", reasoningEffort: "medium" });
+				await multiTurn(llm, { apiKey: "test", thinkingLevel: "medium" });
 			},
 			{ retry: 3 },
 		);

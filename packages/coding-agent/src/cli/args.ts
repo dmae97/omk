@@ -121,12 +121,13 @@ export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "
 			}
 			result.tools = validTools;
 		} else if (arg === "--thinking" && i + 1 < args.length) {
-			const thinking = parseThinkingLevel(args[++i]);
+			const rawThinking = args[++i];
+			const thinking = parseThinkingLevel(rawThinking);
 			if (thinking !== undefined) {
 				result.thinking = thinking;
 			} else {
 				logger.warn("Invalid thinking level passed to --thinking", {
-					level: thinking,
+					level: rawThinking,
 					validThinkingLevels: [...ALL_THINKING_LEVELS],
 				});
 			}

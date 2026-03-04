@@ -21,7 +21,7 @@ import { streamOpenAICodexResponses } from "./providers/openai-codex-responses";
 import { type OpenAICompletionsOptions, streamOpenAICompletions } from "./providers/openai-completions";
 import { streamOpenAIResponses } from "./providers/openai-responses";
 import { isSyntheticModel, streamSynthetic } from "./providers/synthetic";
-import { getAvailableThinkingEffort, type ThinkingEffort } from "./thinking";
+import type { ThinkingEffort } from "./thinking";
 import type {
 	Api,
 	AssistantMessage,
@@ -301,7 +301,7 @@ export async function completeSimple<TApi extends Api>(
 
 const MIN_OUTPUT_TOKENS = 1024;
 export const OUTPUT_FALLBACK_BUFFER = 4000;
-const ANTHROPIC_USE_INTERLEAVED_THINKING = true;
+const ANTHROPIC_USE_INTERLEAVED_THINKING = Bun.env.PI_NO_INTERLEAVED_THINKING !== "1";
 
 export const ANTHROPIC_THINKING: Record<ThinkingEffort, number> = {
 	minimal: 1024,
@@ -404,6 +404,18 @@ function mapOpenAiToolChoice(choice?: ToolChoice): OpenAICompletionsOptions["too
 	return undefined;
 }
 
+function resolveOpenAiReasoningEffort<TApi extends Api>(
+	model: Model<TApi>,
+	options?: SimpleStreamOptions,
+): ThinkingEffort | undefined {
+	const reasoning = options?.reasoning;
+	if (!reasoning || reasoning === "off") return undefined;
+	if (reasoning === "xhigh" && !supportsXhigh(model)) return "high";
+	return reasoning;
+}
+
+const castApi = <TApi extends Api>(api: OptionsForApi<TApi>): OptionsForApi<Api> => api as OptionsForApi<Api>;
+
 function mapOptionsForApi<TApi extends Api>(
 	model: Model<TApi>,
 	options?: SimpleStreamOptions,
@@ -434,20 +446,20 @@ function mapOptionsForApi<TApi extends Api>(
 			// Explicitly disable thinking when reasoning is not specified
 			const reasoning = options?.reasoning;
 			if (!reasoning || reasoning === "off") {
-				return {
+				return castApi<"anthropic-messages">({
 					...base,
 					thinkingEnabled: false,
 					toolChoice: mapAnthropicToolChoice(options?.toolChoice),
-				} as OptionsForApi<TApi>;
+				});
 			}
 
 			let thinkingBudget = options.thinkingBudgets?.[reasoning] ?? ANTHROPIC_THINKING[reasoning];
 			if (thinkingBudget <= 0) {
-				return {
+				return castApi<"anthropic-messages">({
 					...base,
 					thinkingEnabled: false,
 					toolChoice: mapAnthropicToolChoice(options?.toolChoice),
-				} as OptionsForApi<TApi>;
+				});
 			}
 
 			// For Opus 4.6+ and Sonnet 4.6+: use adaptive thinking with effort level
@@ -460,21 +472,21 @@ function mapOptionsForApi<TApi extends Api>(
 			) {
 				const supportsMaxEffort = model.id.includes("opus-4-6") || model.id.includes("opus-4.6");
 				const effort = mapThinkingLevelToAnthropicEffort(reasoning, supportsMaxEffort);
-				return {
+				return castApi<"anthropic-messages">({
 					...base,
 					thinkingEnabled: true,
 					effort,
 					toolChoice: mapAnthropicToolChoice(options?.toolChoice),
-				} as OptionsForApi<TApi>;
+				});
 			}
 
 			if (ANTHROPIC_USE_INTERLEAVED_THINKING) {
-				return {
+				return castApi<"anthropic-messages">({
 					...base,
 					thinkingEnabled: true,
 					thinkingBudgetTokens: thinkingBudget,
 					toolChoice: mapAnthropicToolChoice(options?.toolChoice),
-				} as OptionsForApi<TApi>;
+				});
 			}
 
 			// Caller's maxTokens is the desired output; add thinking budget on top, capped at model limit
@@ -487,19 +499,19 @@ function mapOptionsForApi<TApi extends Api>(
 
 			// If thinking budget is too low, disable thinking
 			if (thinkingBudget <= 0) {
-				return {
+				return castApi<"anthropic-messages">({
 					...base,
 					thinkingEnabled: false,
 					toolChoice: mapAnthropicToolChoice(options?.toolChoice),
-				} as OptionsForApi<TApi>;
+				});
 			} else {
-				return {
+				return castApi<"anthropic-messages">({
 					...base,
 					maxTokens,
 					thinkingEnabled: true,
 					thinkingBudgetTokens: thinkingBudget,
 					toolChoice: mapAnthropicToolChoice(options?.toolChoice),
-				} as OptionsForApi<TApi>;
+				});
 			}
 		}
 
@@ -524,48 +536,48 @@ function mapOptionsForApi<TApi extends Api>(
 				const adjustedBudget = Math.max(0, maxTokens - MIN_OUTPUT_TOKENS);
 				thinkingBudgets = { ...(thinkingBudgets ?? {}), [budgetInfo.level]: adjustedBudget };
 			}
-			return { ...bedrockBase, maxTokens, thinkingBudgets } as OptionsForApi<TApi>;
+			return castApi<"bedrock-converse-stream">({ ...bedrockBase, maxTokens, thinkingBudgets });
 		}
 
 		case "openai-completions":
-			return {
+			return castApi<"openai-completions">({
 				...base,
-				reasoningEffort: getAvailableThinkingEffort(supportsXhigh(model)),
+				reasoning: resolveOpenAiReasoningEffort(model, options),
 				toolChoice: mapOpenAiToolChoice(options?.toolChoice),
-			} as OptionsForApi<TApi>;
+			});
 
 		case "openai-responses":
-			return {
+			return castApi<"openai-responses">({
 				...base,
-				reasoningEffort: getAvailableThinkingEffort(supportsXhigh(model)),
+				reasoning: resolveOpenAiReasoningEffort(model, options),
 				toolChoice: mapOpenAiToolChoice(options?.toolChoice),
-			} as OptionsForApi<TApi>;
+			});
 
 		case "azure-openai-responses":
-			return {
+			return castApi<"azure-openai-responses">({
 				...base,
-				reasoningEffort: getAvailableThinkingEffort(supportsXhigh(model)),
+				reasoning: resolveOpenAiReasoningEffort(model, options),
 				toolChoice: mapOpenAiToolChoice(options?.toolChoice),
-			} as OptionsForApi<TApi>;
+			});
 
 		case "openai-codex-responses":
-			return {
+			return castApi<"openai-codex-responses">({
 				...base,
-				reasoningEffort: getAvailableThinkingEffort(supportsXhigh(model)),
+				reasoning: resolveOpenAiReasoningEffort(model, options),
 				toolChoice: mapOpenAiToolChoice(options?.toolChoice),
 				preferWebsockets: options?.preferWebsockets,
-			} as OptionsForApi<TApi>;
+			});
 
 		case "google-generative-ai": {
 			// Explicitly disable thinking when reasoning is not specified
 			// This is needed because Gemini has "dynamic thinking" enabled by default
 			const reasoning = options?.reasoning;
 			if (!reasoning || reasoning === "off") {
-				return {
+				return castApi<"google-generative-ai">({
 					...base,
 					thinking: { enabled: false },
 					toolChoice: mapGoogleToolChoice(options?.toolChoice),
-				} as OptionsForApi<TApi>;
+				});
 			}
 
 			const googleModel = model as Model<"google-generative-ai">;
@@ -574,48 +586,48 @@ function mapOptionsForApi<TApi extends Api>(
 			// Gemini 3+ models use thinkingLevel exclusively instead of thinkingBudget.
 			// https://ai.google.dev/gemini-api/docs/thinking#set-budget
 			if (isGemini3ProModel(googleModel) || isGemini3FlashModel(googleModel)) {
-				return {
+				return castApi<"google-generative-ai">({
 					...base,
 					thinking: {
 						enabled: true,
 						level: getGemini3ThinkingLevel(effort, googleModel),
 					},
 					toolChoice: mapGoogleToolChoice(options?.toolChoice),
-				} as OptionsForApi<TApi>;
+				});
 			}
 
-			return {
+			return castApi<"google-gemini-cli">({
 				...base,
 				thinking: {
 					enabled: true,
 					budgetTokens: getGoogleBudget(googleModel, effort, options?.thinkingBudgets),
 				},
 				toolChoice: mapGoogleToolChoice(options?.toolChoice),
-			} as OptionsForApi<TApi>;
+			});
 		}
 
 		case "google-gemini-cli": {
 			const reasoning = options?.reasoning;
 			if (!reasoning || reasoning === "off") {
-				return {
+				return castApi<"google-gemini-cli">({
 					...base,
 					thinking: { enabled: false },
 					toolChoice: mapGoogleToolChoice(options?.toolChoice),
-				} as OptionsForApi<TApi>;
+				});
 			}
 
 			const effort = reasoning === "xhigh" ? "high" : reasoning;
 
 			// Gemini 3+ models use thinkingLevel instead of thinkingBudget
 			if (isGemini3ProModelId(model.id) || isGemini3FlashModelId(model.id)) {
-				return {
+				return castApi<"google-vertex">({
 					...base,
 					thinking: {
 						enabled: true,
 						level: getGeminiCliThinkingLevel(effort, model.id),
 					},
 					toolChoice: mapGoogleToolChoice(options?.toolChoice),
-				} as OptionsForApi<TApi>;
+				});
 			}
 
 			let thinkingBudget = options.thinkingBudgets?.[effort] ?? GOOGLE_THINKING[effort];
@@ -630,18 +642,18 @@ function mapOptionsForApi<TApi extends Api>(
 
 			// If thinking budget is too low, disable thinking
 			if (thinkingBudget <= 0) {
-				return {
+				return castApi<"google-gemini-cli">({
 					...base,
 					thinking: { enabled: false },
 					toolChoice: mapGoogleToolChoice(options?.toolChoice),
-				} as OptionsForApi<TApi>;
+				});
 			} else {
-				return {
+				return castApi<"google-gemini-cli">({
 					...base,
 					maxTokens,
 					thinking: { enabled: true, budgetTokens: thinkingBudget },
 					toolChoice: mapGoogleToolChoice(options?.toolChoice),
-				} as OptionsForApi<TApi>;
+				});
 			}
 		}
 
@@ -649,11 +661,11 @@ function mapOptionsForApi<TApi extends Api>(
 			// Explicitly disable thinking when reasoning is not specified
 			const reasoning = options?.reasoning;
 			if (!reasoning || reasoning === "off") {
-				return {
+				return castApi<"google-vertex">({
 					...base,
 					thinking: { enabled: false },
 					toolChoice: mapGoogleToolChoice(options?.toolChoice),
-				} as OptionsForApi<TApi>;
+				});
 			}
 
 			const vertexModel = model as Model<"google-vertex">;
@@ -661,34 +673,34 @@ function mapOptionsForApi<TApi extends Api>(
 			const geminiModel = vertexModel as unknown as Model<"google-generative-ai">;
 
 			if (isGemini3ProModel(geminiModel) || isGemini3FlashModel(geminiModel)) {
-				return {
+				return castApi<"google-vertex">({
 					...base,
 					thinking: {
 						enabled: true,
 						level: getGemini3ThinkingLevel(effort, geminiModel),
 					},
 					toolChoice: mapGoogleToolChoice(options?.toolChoice),
-				} as OptionsForApi<TApi>;
+				});
 			}
 
-			return {
+			return castApi<"google-vertex">({
 				...base,
 				thinking: {
 					enabled: true,
 					budgetTokens: getGoogleBudget(geminiModel, effort, options?.thinkingBudgets),
 				},
 				toolChoice: mapGoogleToolChoice(options?.toolChoice),
-			} as OptionsForApi<TApi>;
+			});
 		}
 
 		case "cursor-agent": {
 			const execHandlers = options?.cursorExecHandlers ?? options?.execHandlers;
 			const onToolResult = options?.cursorOnToolResult ?? execHandlers?.onToolResult;
-			return {
+			return castApi<"cursor-agent">({
 				...base,
 				execHandlers,
 				onToolResult,
-			} as OptionsForApi<TApi>;
+			});
 		}
 
 		default:

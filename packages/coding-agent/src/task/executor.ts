@@ -5,7 +5,7 @@
  */
 import path from "node:path";
 import type { AgentEvent } from "@oh-my-pi/pi-agent-core";
-import type { Api, Model, ThinkingSelector, ToolChoice } from "@oh-my-pi/pi-ai";
+import type { Api, Model, ThinkingLevel, ToolChoice } from "@oh-my-pi/pi-ai";
 import { logger, untilAborted } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
 import Ajv, { type ValidateFunction } from "ajv";
@@ -143,7 +143,7 @@ export interface ExecutorOptions {
 	index: number;
 	id: string;
 	modelOverride?: string | string[];
-	thinkingLevel?: ThinkingSelector;
+	thinkingLevel?: ThinkingLevel;
 	outputSchema?: unknown;
 	/** Parent task recursion depth (0 = top-level, 1 = first child, etc.) */
 	taskDepth?: number;

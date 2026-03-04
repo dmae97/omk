@@ -109,7 +109,7 @@ function hasToolHistory(messages: Message[]): boolean {
 
 export interface OpenAICompletionsOptions extends StreamOptions {
 	toolChoice?: ToolChoice;
-	reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
+	reasoning?: "minimal" | "low" | "medium" | "high" | "xhigh";
 }
 
 type OpenAICompletionsSamplingParams = OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming & {
@@ -611,13 +611,13 @@ function buildParams(model: Model<"openai-completions">, context: Context, optio
 	if (compat.thinkingFormat === "zai" && model.reasoning) {
 		// Z.ai uses binary thinking: { type: "enabled" | "disabled" }
 		// Must explicitly disable since z.ai defaults to thinking enabled
-		(params as any).thinking = { type: options?.reasoningEffort ? "enabled" : "disabled" };
+		(params as any).thinking = { type: options?.reasoning ? "enabled" : "disabled" };
 	} else if (compat.thinkingFormat === "qwen" && model.reasoning) {
 		// Qwen uses enable_thinking: boolean
-		(params as any).enable_thinking = !!options?.reasoningEffort;
-	} else if (options?.reasoningEffort && model.reasoning && compat.supportsReasoningEffort) {
+		(params as any).enable_thinking = !!options?.reasoning;
+	} else if (options?.reasoning && model.reasoning && compat.supportsReasoningEffort) {
 		// OpenAI-style reasoning_effort
-		params.reasoning_effort = options.reasoningEffort;
+		params.reasoning_effort = options?.reasoning;
 	}
 
 	// OpenRouter provider routing preferences
