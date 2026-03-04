@@ -28,7 +28,7 @@ import type {
 	ToolCall,
 	ToolChoice,
 } from "../types";
-import { normalizeResponsesToolCallId, resolveCacheRetention, truncateResponseItemId } from "../utils";
+import { normalizeResponsesToolCallId, resolveCacheRetention } from "../utils";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
 import { parseStreamingJson } from "../utils/json-parse";
@@ -611,9 +611,6 @@ function convertMessages(
 				if (block.type === "thinking" && msg.stopReason !== "error") {
 					if (block.thinkingSignature) {
 						const reasoningItem = JSON.parse(block.thinkingSignature);
-						if (typeof reasoningItem.id === "string" && reasoningItem.id.length > 64) {
-							reasoningItem.id = truncateResponseItemId(reasoningItem.id, "rs");
-						}
 						output.push(reasoningItem);
 					}
 				} else if (block.type === "text") {

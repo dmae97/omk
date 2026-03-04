@@ -27,7 +27,7 @@ import type {
 	ToolCall,
 	ToolChoice,
 } from "../types";
-import { normalizeResponsesToolCallId, truncateResponseItemId } from "../utils";
+import { normalizeResponsesToolCallId } from "../utils";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
 import { parseStreamingJson } from "../utils/json-parse";
@@ -1625,9 +1625,6 @@ function convertMessages(model: Model<"openai-codex-responses">, context: Contex
 				if (block.type === "thinking" && msg.stopReason !== "error") {
 					if (block.thinkingSignature) {
 						const reasoningItem = JSON.parse(block.thinkingSignature) as ResponseReasoningItem;
-						if (typeof reasoningItem.id === "string" && reasoningItem.id.length > 64) {
-							reasoningItem.id = truncateResponseItemId(reasoningItem.id, "rs");
-						}
 						output.push(reasoningItem);
 					}
 				} else if (block.type === "text") {

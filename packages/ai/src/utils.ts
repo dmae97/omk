@@ -31,10 +31,18 @@ export function normalizeToolCallId(id: string): string {
 export function normalizeResponsesToolCallId(id: string): { callId: string; itemId: string } {
 	const [callId, itemId] = id.split("|");
 	if (callId && itemId) {
-		return { callId: truncateResponseItemId(callId, "call"), itemId: truncateResponseItemId(itemId, "fc") };
+		const normalizedCallId = truncateResponseItemId(callId, getIdPrefix(callId, "call"));
+		const normalizedItemId = truncateResponseItemId(itemId, "fc");
+		return { callId: normalizedCallId, itemId: normalizedItemId };
 	}
 	const hash = Bun.hash.xxHash64(id).toString(36);
-	return { callId: `call_${hash}`, itemId: `item_${hash}` };
+	const normalizedCallId = id.startsWith("call_") ? truncateResponseItemId(id, "call") : `call_${hash}`;
+	return { callId: normalizedCallId, itemId: `fc_${hash}` };
+}
+
+function getIdPrefix(id: string, fallback: string): string {
+	const prefix = id.match(/^([a-zA-Z][a-zA-Z0-9]*)_/)?.[1];
+	return prefix || fallback;
 }
 
 /**

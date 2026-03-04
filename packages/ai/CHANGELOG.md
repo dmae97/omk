@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Modified response ID normalization to preserve existing item ID prefixes when truncating oversized IDs
+- Updated tool call ID normalization to use `fc_` prefix for generated item IDs instead of `item_` prefix
+
+### Fixed
+
+- Fixed handling of reasoning item IDs to remain untouched during response normalization while function call IDs are properly normalized
 
 ## [13.7.2] - 2026-03-04
 ### Added
