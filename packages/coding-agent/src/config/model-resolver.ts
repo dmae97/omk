@@ -23,10 +23,22 @@ export interface ScopedModel {
  * Parse a model string in "provider/modelId" format.
  * Returns undefined if the format is invalid.
  */
-export function parseModelString(modelStr: string): { provider: string; id: string } | undefined {
+export function parseModelString(
+	modelStr: string,
+): { provider: string; id: string; thinkingLevel?: ThinkingLevel } | undefined {
 	const slashIdx = modelStr.indexOf("/");
 	if (slashIdx <= 0) return undefined;
-	return { provider: modelStr.slice(0, slashIdx), id: modelStr.slice(slashIdx + 1) };
+	const id = modelStr.slice(slashIdx + 1);
+	const provider = modelStr.slice(0, slashIdx);
+	// Strip valid thinking level suffix (e.g., "claude-sonnet-4-6:high" -> id "claude-sonnet-4-6", thinkingLevel "high")
+	const colonIdx = id.lastIndexOf(":");
+	if (colonIdx !== -1) {
+		const suffix = id.slice(colonIdx + 1);
+		if (isValidThinkingLevel(suffix)) {
+			return { provider, id: id.slice(0, colonIdx), thinkingLevel: suffix };
+		}
+	}
+	return { provider, id };
 }
 
 /**

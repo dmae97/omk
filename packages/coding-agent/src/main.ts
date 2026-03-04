@@ -395,6 +395,10 @@ async function buildSessionOptions(
 				: scopedModels.find(scopedModel => scopedModel.model.id.toLowerCase() === remembered.toLowerCase());
 			if (rememberedModel) {
 				options.model = rememberedModel.model;
+				// Apply thinking level from config role suffix (e.g., "anthropic/claude-opus-4:high")
+				if (!parsed.thinking && parsedModel?.thinkingLevel) {
+					options.thinkingLevel = parsedModel.thinkingLevel;
+				}
 			}
 		}
 		if (!options.model) {

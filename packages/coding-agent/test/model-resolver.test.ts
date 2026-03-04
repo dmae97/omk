@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Model } from "@oh-my-pi/pi-ai";
-import { parseModelPattern, resolveCliModel } from "@oh-my-pi/pi-coding-agent/config/model-resolver";
+import { parseModelPattern, parseModelString, resolveCliModel } from "@oh-my-pi/pi-coding-agent/config/model-resolver";
 
 // Mock models for testing
 const mockModels: Model<"anthropic-messages">[] = [
@@ -369,5 +369,61 @@ describe("resolveCliModel", () => {
 		expect(result.error).toBeUndefined();
 		expect(result.model?.provider).toBe("openrouter");
 		expect(result.model?.id).toBe("qwen/qwen3-coder:exacto");
+	});
+});
+
+describe("parseModelString", () => {
+	test("parses standard provider/id format", () => {
+		const result = parseModelString("anthropic/claude-sonnet-4-5");
+		expect(result).toEqual({ provider: "anthropic", id: "claude-sonnet-4-5" });
+	});
+
+	test("returns undefined for strings without a slash", () => {
+		expect(parseModelString("claude-sonnet-4-5")).toBeUndefined();
+		expect(parseModelString("")).toBeUndefined();
+		expect(parseModelString("sonnet:high")).toBeUndefined();
+	});
+
+	test("returns undefined for strings starting with slash", () => {
+		expect(parseModelString("/claude-sonnet-4-5")).toBeUndefined();
+	});
+
+	describe("thinking level suffix extraction", () => {
+		test("extracts valid thinking level from provider/id:level", () => {
+			const result = parseModelString("anthropic/claude-sonnet-4-5:high");
+			expect(result).toEqual({ provider: "anthropic", id: "claude-sonnet-4-5", thinkingLevel: "high" });
+		});
+
+		test("extracts all valid thinking levels", () => {
+			const levels = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
+			for (const level of levels) {
+				const result = parseModelString(`anthropic/claude-sonnet-4-5:${level}`);
+				expect(result?.id).toBe("claude-sonnet-4-5");
+				expect(result?.thinkingLevel).toBe(level);
+			}
+		});
+
+		test("does NOT strip invalid suffix — treats it as part of model ID", () => {
+			const result = parseModelString("openrouter/qwen/qwen3-coder:exacto");
+			expect(result).toEqual({ provider: "openrouter", id: "qwen/qwen3-coder:exacto" });
+		});
+
+		test("handles model ID with colon followed by valid thinking level", () => {
+			// e.g. "openrouter/qwen/qwen3-coder:exacto:high" — last colon is thinking level
+			const result = parseModelString("openrouter/qwen/qwen3-coder:exacto:high");
+			expect(result).toEqual({ provider: "openrouter", id: "qwen/qwen3-coder:exacto", thinkingLevel: "high" });
+		});
+
+		test("does not extract thinking level from model ID with invalid suffix", () => {
+			const result = parseModelString("openrouter/openai/gpt-4o:extended");
+			// :extended is not a valid thinking level, so it stays as part of the ID
+			expect(result).toEqual({ provider: "openrouter", id: "openai/gpt-4o:extended" });
+		});
+
+		test("handles empty suffix after colon", () => {
+			const result = parseModelString("anthropic/claude-sonnet-4-5:");
+			// Empty string is not a valid thinking level, so colon stays as part of ID
+			expect(result).toEqual({ provider: "anthropic", id: "claude-sonnet-4-5:" });
+		});
 	});
 });

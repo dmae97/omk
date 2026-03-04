@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed `:thinking` suffix in `modelRoles` config values silently breaking model resolution (e.g., `slow: anthropic/claude-opus-4-6:high`) and being stripped on Ctrl+P role cycling
+
 ## [13.7.6] - 2026-03-04
 ### Added
 

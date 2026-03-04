@@ -2684,7 +2684,7 @@ export class AgentSession {
 
 		const currentModel = this.model;
 		if (!currentModel) return undefined;
-		const roleModels: Array<{ role: ModelRole; model: Model }> = [];
+		const roleModels: Array<{ role: ModelRole; model: Model; thinkingLevel?: ThinkingLevel }> = [];
 
 		for (const role of roleOrder) {
 			const roleModelStr =
@@ -2704,7 +2704,7 @@ export class AgentSession {
 			}
 			if (!match) continue;
 
-			roleModels.push({ role, model: match });
+			roleModels.push({ role, model: match, thinkingLevel: parsed?.thinkingLevel });
 		}
 
 		if (roleModels.length <= 1) return undefined;
@@ -2722,6 +2722,14 @@ export class AgentSession {
 			await this.setModelTemporary(next.model);
 		} else {
 			await this.setModel(next.model, next.role);
+		}
+
+		// Apply per-role thinking level from config suffix and preserve it for round-tripping
+		if (next.thinkingLevel) {
+			this.setThinkingLevel(next.thinkingLevel);
+			if (!options?.temporary) {
+				this.settings.setModelRole(next.role, `${next.model.provider}/${next.model.id}:${next.thinkingLevel}`);
+			}
 		}
 
 		return { model: next.model, thinkingLevel: this.thinkingLevel, role: next.role };

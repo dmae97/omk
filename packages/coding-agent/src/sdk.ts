@@ -679,6 +679,10 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				const settingsModel = modelRegistry.find(parsedModel.provider, parsedModel.id);
 				if (settingsModel && (await hasModelApiKey(settingsModel))) {
 					model = settingsModel;
+					// Apply thinking level from config role suffix if not already set
+					if (options.thinkingLevel === undefined && parsedModel.thinkingLevel) {
+						options.thinkingLevel = parsedModel.thinkingLevel;
+					}
 				}
 			}
 		}
