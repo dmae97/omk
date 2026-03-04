@@ -16,6 +16,7 @@ import type { ToolSession } from ".";
 import type { OutputMeta } from "./output-meta";
 import { hasGlobPathChars, parseSearchPath, resolveToCwd } from "./path-utils";
 import {
+	dedupeParseErrors,
 	formatCount,
 	formatEmptyMessage,
 	formatErrorMessage,
@@ -140,6 +141,7 @@ export class AstEditTool implements AgentTool<typeof astEditSchema, AstEditToolD
 				signal,
 			});
 
+			const dedupedParseErrors = dedupeParseErrors(result.parseErrors);
 			const formatPath = (filePath: string): string => {
 				const cleanPath = filePath.startsWith("/") ? filePath.slice(1) : filePath;
 				if (isDirectory) {
@@ -178,15 +180,15 @@ export class AstEditTool implements AgentTool<typeof astEditSchema, AstEditToolD
 				filesSearched: result.filesSearched,
 				applied: result.applied,
 				limitReached: result.limitReached,
-				parseErrors: result.parseErrors,
+				parseErrors: dedupedParseErrors,
 				scopePath,
 				files: fileList,
 				fileReplacements: [],
 			};
 
 			if (result.totalReplacements === 0) {
-				const parseMessage = result.parseErrors?.length
-					? `\n${formatParseErrors(result.parseErrors).join("\n")}`
+				const parseMessage = dedupedParseErrors.length
+					? `\n${formatParseErrors(dedupedParseErrors).join("\n")}`
 					: "";
 				return toolResult(baseDetails).text(`No replacements made${parseMessage}`).done();
 			}
@@ -258,8 +260,8 @@ export class AstEditTool implements AgentTool<typeof astEditSchema, AstEditToolD
 			if (result.limitReached) {
 				outputLines.push("", "Limit reached; narrow path or increase limit.");
 			}
-			if (result.parseErrors?.length) {
-				outputLines.push("", ...formatParseErrors(result.parseErrors));
+			if (dedupedParseErrors.length) {
+				outputLines.push("", ...formatParseErrors(dedupedParseErrors));
 			}
 
 			// Register pending action so `resolve` can apply or discard these previewed changes
@@ -281,13 +283,14 @@ export class AstEditTool implements AgentTool<typeof astEditSchema, AstEditToolD
 							maxFiles,
 							failOnParseError: false,
 						});
+						const dedupedApplyParseErrors = dedupeParseErrors(applyResult.parseErrors);
 						const appliedDetails: AstEditToolDetails = {
 							totalReplacements: applyResult.totalReplacements,
 							filesTouched: applyResult.filesTouched,
 							filesSearched: applyResult.filesSearched,
 							applied: applyResult.applied,
 							limitReached: applyResult.limitReached,
-							parseErrors: applyResult.parseErrors,
+							parseErrors: dedupedApplyParseErrors,
 							scopePath,
 							files: fileList,
 							fileReplacements,

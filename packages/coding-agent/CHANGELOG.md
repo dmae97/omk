@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Exported `dedupeParseErrors` utility function to deduplicate parse error messages while preserving order
+
+### Fixed
+
+- Reduced duplicate parse error messages when multiple patterns fail on the same file
+- Normalized parse error output in ast-grep to remove pattern-specific prefixes and show only file-level errors
 
 ## [13.7.4] - 2026-03-04
 ### Added

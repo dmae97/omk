@@ -16,6 +16,7 @@ import type { ToolSession } from ".";
 import type { OutputMeta } from "./output-meta";
 import { hasGlobPathChars, parseSearchPath, resolveToCwd } from "./path-utils";
 import {
+	dedupeParseErrors,
 	formatCount,
 	formatEmptyMessage,
 	formatErrorMessage,
@@ -133,6 +134,11 @@ export class AstGrepTool implements AgentTool<typeof astGrepSchema, AstGrepToolD
 				signal,
 			});
 
+			const normalizedParseErrors = (result.parseErrors ?? []).map(error => {
+				const parseError = error.match(/^.+: (.+: parse error \(syntax tree contains error nodes\))$/);
+				return parseError?.[1] ?? error;
+			});
+			const dedupedParseErrors = dedupeParseErrors(normalizedParseErrors);
 			const formatPath = (filePath: string): string => {
 				const cleanPath = filePath.startsWith("/") ? filePath.slice(1) : filePath;
 				if (isDirectory) {
@@ -165,15 +171,15 @@ export class AstGrepTool implements AgentTool<typeof astGrepSchema, AstGrepToolD
 				fileCount: result.filesWithMatches,
 				filesSearched: result.filesSearched,
 				limitReached: result.limitReached,
-				parseErrors: result.parseErrors,
+				parseErrors: dedupedParseErrors,
 				scopePath,
 				files: fileList,
 				fileMatches: [],
 			};
 
 			if (result.matches.length === 0) {
-				const parseMessage = result.parseErrors?.length
-					? `\n${formatParseErrors(result.parseErrors).join("\n")}`
+				const parseMessage = dedupedParseErrors.length
+					? `\n${formatParseErrors(dedupedParseErrors).join("\n")}`
 					: "";
 				return toolResult(baseDetails).text(`No matches found${parseMessage}`).done();
 			}
@@ -253,8 +259,8 @@ export class AstGrepTool implements AgentTool<typeof astGrepSchema, AstGrepToolD
 			if (result.limitReached) {
 				outputLines.push("", "Result limit reached; narrow path pattern or increase limit.");
 			}
-			if (result.parseErrors?.length) {
-				outputLines.push("", ...formatParseErrors(result.parseErrors));
+			if (dedupedParseErrors.length) {
+				outputLines.push("", ...formatParseErrors(dedupedParseErrors));
 			}
 
 			return toolResult(details).text(outputLines.join("\n")).done();

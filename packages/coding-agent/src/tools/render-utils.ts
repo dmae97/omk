@@ -533,10 +533,25 @@ export function wrapBrackets(text: string, theme: Theme): string {
 
 export const PARSE_ERRORS_LIMIT = 20;
 
+export function dedupeParseErrors(errors: string[] | undefined): string[] {
+	if (!errors || errors.length === 0) return [];
+	const seen = new Set<string>();
+	const deduped: string[] = [];
+	for (const error of errors) {
+		if (seen.has(error)) continue;
+		seen.add(error);
+		deduped.push(error);
+	}
+	return deduped;
+}
+
 export function formatParseErrors(errors: string[]): string[] {
-	if (errors.length === 0) return [];
-	const capped = errors.slice(0, PARSE_ERRORS_LIMIT);
+	const deduped = dedupeParseErrors(errors);
+	if (deduped.length === 0) return [];
+	const capped = deduped.slice(0, PARSE_ERRORS_LIMIT);
 	const header =
-		errors.length > PARSE_ERRORS_LIMIT ? `Parse issues (${PARSE_ERRORS_LIMIT} / ${errors.length}):` : "Parse issues:";
+		deduped.length > PARSE_ERRORS_LIMIT
+			? `Parse issues (${PARSE_ERRORS_LIMIT} / ${deduped.length}):`
+			: "Parse issues:";
 	return [header, ...capped.map(err => `- ${err}`)];
 }
