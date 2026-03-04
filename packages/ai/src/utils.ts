@@ -31,10 +31,19 @@ export function normalizeToolCallId(id: string): string {
 export function normalizeResponsesToolCallId(id: string): { callId: string; itemId: string } {
 	const [callId, itemId] = id.split("|");
 	if (callId && itemId) {
-		return { callId, itemId };
+		return { callId: truncateResponseItemId(callId, "call"), itemId: truncateResponseItemId(itemId, "fc") };
 	}
 	const hash = Bun.hash.xxHash64(id).toString(36);
 	return { callId: `call_${hash}`, itemId: `item_${hash}` };
+}
+
+/**
+ * Truncate an OpenAI Responses API item ID to 64 characters.
+ * IDs exceeding the limit are replaced with a hash-based ID using the given prefix.
+ */
+export function truncateResponseItemId(id: string, prefix: string): string {
+	if (id.length <= 64) return id;
+	return `${prefix}_${Bun.hash.xxHash64(id).toString(36)}`;
 }
 
 /**
