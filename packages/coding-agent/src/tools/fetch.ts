@@ -13,6 +13,7 @@ import { DEFAULT_MAX_BYTES, truncateHead } from "../session/streaming-output";
 import { renderStatusLine } from "../tui";
 import { CachedOutputBlock } from "../tui/output-block";
 import { ensureTool } from "../utils/tools-manager";
+import { summarizeUrlWithKagi } from "../web/kagi";
 import { specialHandlers } from "../web/scrapers";
 import type { RenderResult } from "../web/scrapers/types";
 import { finalizeOutput, loadPage, MAX_OUTPUT_CHARS } from "../web/scrapers/types";
@@ -422,7 +423,7 @@ function parseFeedToMarkdown(content: string, maxItems = 10): string {
 }
 
 /**
- * Render HTML to markdown using native, jina, trafilatura, lynx (in order of preference)
+ * Render HTML to markdown using kagi, jina, trafilatura, lynx (in order of preference)
  */
 async function renderHtmlToText(
 	url: string,
@@ -439,7 +440,18 @@ async function renderHtmlToText(
 		signal,
 	};
 
-	// Try jina first (reader API)
+	// Try Kagi Universal Summarizer first (if KAGI_API_KEY is configured)
+	try {
+		const kagiSummary = await summarizeUrlWithKagi(url, { signal });
+		if (kagiSummary && kagiSummary.length > 100 && !isLowQualityOutput(kagiSummary)) {
+			return { content: kagiSummary, ok: true, method: "kagi" };
+		}
+	} catch {
+		// Kagi failed, continue to next method
+		signal?.throwIfAborted();
+	}
+
+	// Try jina next (reader API)
 	try {
 		const jinaUrl = `https://r.jina.ai/${url}`;
 		const response = await fetch(jinaUrl, {

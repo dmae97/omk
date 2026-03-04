@@ -1,6 +1,17 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added Kagi Universal Summarizer integration for URL summarization, now prioritized before Jina and other methods
+- Added Kagi Universal Summarizer support for YouTube video summaries when credentials are available
+- Exported `searchWithKagi` and `summarizeUrlWithKagi` functions from new `web/kagi` module for direct API access
+- Added `KagiApiError` exception class for Kagi API-specific error handling
+
+### Changed
+
+- Refactored Kagi search provider to use shared Kagi API utilities from `web/kagi` module
+- Changed HTML-to-text rendering priority order to try Kagi first, then Jina, Trafilatura, and Lynx
 
 ## [13.7.2] - 2026-03-04
 ### Added
