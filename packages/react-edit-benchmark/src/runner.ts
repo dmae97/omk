@@ -7,7 +7,8 @@
 /// <reference types="./bun-imports.d.ts" />
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
+import type { ThinkingSelector } from "@oh-my-pi/pi-ai";
+
 import { computeLineHash, RpcClient, renderPromptTemplate } from "@oh-my-pi/pi-coding-agent";
 import { Snowflake } from "@oh-my-pi/pi-utils";
 import { diffLines } from "diff";
@@ -30,7 +31,7 @@ function makeTempDir(pre?: string): string {
 export interface BenchmarkConfig {
 	provider: string;
 	model: string;
-	thinkingLevel?: ThinkingLevel;
+	thinkingLevel?: ThinkingSelector;
 	runsPerTask: number;
 	timeout: number;
 	maxTurns?: number;

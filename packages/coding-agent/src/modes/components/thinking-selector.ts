@@ -1,16 +1,8 @@
-import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
+import { THINKING_MODE_DESCRIPTIONS, type ThinkingLevel } from "@oh-my-pi/pi-ai";
+
 import { Container, type SelectItem, SelectList } from "@oh-my-pi/pi-tui";
 import { getSelectListTheme } from "../../modes/theme/theme";
 import { DynamicBorder } from "./dynamic-border";
-
-const LEVEL_DESCRIPTIONS: Record<ThinkingLevel, string> = {
-	off: "No reasoning",
-	minimal: "Very brief reasoning (~1k tokens)",
-	low: "Light reasoning (~2k tokens)",
-	medium: "Moderate reasoning (~8k tokens)",
-	high: "Deep reasoning (~16k tokens)",
-	xhigh: "Maximum reasoning (~32k tokens)",
-};
 
 /**
  * Component that renders a thinking level selector with borders
@@ -29,7 +21,7 @@ export class ThinkingSelectorComponent extends Container {
 		const thinkingLevels: SelectItem[] = availableLevels.map(level => ({
 			value: level,
 			label: level,
-			description: LEVEL_DESCRIPTIONS[level],
+			description: THINKING_MODE_DESCRIPTIONS[level],
 		}));
 
 		// Add top border

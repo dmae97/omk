@@ -24,7 +24,6 @@ import {
 	type AgentState,
 	type AgentTool,
 	INTENT_FIELD,
-	type ThinkingLevel,
 } from "@oh-my-pi/pi-agent-core";
 import type {
 	AssistantMessage,
@@ -33,6 +32,7 @@ import type {
 	Model,
 	ProviderSessionState,
 	TextContent,
+	ThinkingLevel,
 	ToolCall,
 	ToolChoice,
 	Usage,
@@ -40,6 +40,7 @@ import type {
 } from "@oh-my-pi/pi-ai";
 import {
 	calculateRateLimitBackoffMs,
+	getAvailableThinkingLevel,
 	isContextOverflow,
 	modelsAreEqual,
 	parseRateLimitReason,
@@ -49,7 +50,7 @@ import { abortableSleep, getAgentDbPath, isEnoent, logger } from "@oh-my-pi/pi-u
 import type { AsyncJob, AsyncJobManager } from "../async";
 import type { Rule } from "../capability/rule";
 import { MODEL_ROLE_IDS, type ModelRegistry, type ModelRole } from "../config/model-registry";
-import { extractExplicitThinkingLevel, parseModelString, resolveModelRoleValue } from "../config/model-resolver";
+import { extractExplicitThinkingSelector, parseModelString, resolveModelRoleValue } from "../config/model-resolver";
 import { expandPromptTemplate, type PromptTemplate, renderPromptTemplate } from "../config/prompt-templates";
 import type { Settings, SkillsSettings } from "../config/settings";
 import { type BashResult, executeBash as executeBashCommand } from "../exec/bash-executor";
@@ -252,10 +253,6 @@ export interface HandoffResult {
 // ============================================================================
 
 /** Standard thinking levels */
-const THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high"];
-
-/** Thinking levels including xhigh (for supported models) */
-const THINKING_LEVELS_WITH_XHIGH: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
 
 const noOpUIContext: ExtensionUIContext = {
 	select: async (_title, _options, _dialogOptions) => undefined,
@@ -295,7 +292,6 @@ export class AgentSession {
 	readonly settings: Settings;
 
 	#asyncJobManager: AsyncJobManager | undefined = undefined;
-
 	#scopedModels: Array<{ model: Model; thinkingLevel: ThinkingLevel }>;
 	#promptTemplates: PromptTemplate[];
 	#slashCommands: FileSlashCommand[];
@@ -2864,9 +2860,9 @@ export class AgentSession {
 	 * Get available thinking levels for current model.
 	 * The provider will clamp to what the specific model supports internally.
 	 */
-	getAvailableThinkingLevels(): ThinkingLevel[] {
+	getAvailableThinkingLevels(): ReadonlyArray<ThinkingLevel> {
 		if (!this.supportsThinking()) return ["off"];
-		return this.supportsXhighThinking() ? THINKING_LEVELS_WITH_XHIGH : THINKING_LEVELS;
+		return getAvailableThinkingLevel(this.supportsXhighThinking());
 	}
 
 	/**
@@ -2883,8 +2879,8 @@ export class AgentSession {
 		return !!this.model?.reasoning;
 	}
 
-	#clampThinkingLevel(level: ThinkingLevel, availableLevels: ThinkingLevel[]): ThinkingLevel {
-		const ordered = THINKING_LEVELS_WITH_XHIGH;
+	#clampThinkingLevel(level: ThinkingLevel, availableLevels: ReadonlyArray<ThinkingLevel>): ThinkingLevel {
+		const ordered = getAvailableThinkingLevel(this.supportsXhighThinking());
 		const available = new Set(availableLevels);
 		const requestedIndex = ordered.indexOf(level);
 		if (requestedIndex === -1) {
@@ -3592,7 +3588,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		const existingRoleValue = this.settings.getModelRole(role);
 		if (!existingRoleValue) return modelKey;
 
-		const thinkingLevel = extractExplicitThinkingLevel(existingRoleValue, this.settings);
+		const thinkingLevel = extractExplicitThinkingSelector(existingRoleValue, this.settings);
 		if (thinkingLevel === undefined) return modelKey;
 		return `${modelKey}:${thinkingLevel}`;
 	}

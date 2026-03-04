@@ -1,5 +1,4 @@
-/**
- * Agent class that uses the agent-loop directly.
+/** Agent class that uses the agent-loop directly.
  * No transport abstraction - calls streamSimple via the loop.
  */
 import {
@@ -14,6 +13,7 @@ import {
 	streamSimple,
 	type TextContent,
 	type ThinkingBudgets,
+	type ThinkingLevel,
 	type ToolChoice,
 	type ToolResultMessage,
 } from "@oh-my-pi/pi-ai";
@@ -27,7 +27,6 @@ import type {
 	AgentTool,
 	AgentToolContext,
 	StreamFn,
-	ThinkingLevel,
 	ToolCallContext,
 } from "./types";
 

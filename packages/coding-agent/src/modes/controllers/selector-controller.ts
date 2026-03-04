@@ -1,5 +1,4 @@
-import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
-import { getOAuthProviders, type OAuthProvider } from "@oh-my-pi/pi-ai";
+import { getOAuthProviders, type OAuthProvider, type ThinkingLevel } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Input, Loader, Spacer, Text } from "@oh-my-pi/pi-tui";
 import { getAgentDbPath, getProjectDir } from "@oh-my-pi/pi-utils";

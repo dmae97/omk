@@ -22,6 +22,7 @@ import {
 import { $env } from "@oh-my-pi/pi-utils";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
 import { calculateCost } from "../models";
+import type { ThinkingEffort, ThinkingLevel } from "../thinking";
 import type {
 	Api,
 	AssistantMessage,
@@ -35,7 +36,6 @@ import type {
 	TextContent,
 	ThinkingBudgets,
 	ThinkingContent,
-	ThinkingLevel,
 	Tool,
 	ToolCall,
 	ToolResultMessage,
@@ -622,14 +622,15 @@ function buildAdditionalModelRequestFields(
 	model: Model<"bedrock-converse-stream">,
 	options: BedrockOptions,
 ): Record<string, any> | undefined {
-	if (!options.reasoning || !model.reasoning) {
+	const reasoning = options.reasoning;
+	if (!reasoning || !model.reasoning || reasoning === "off") {
 		return undefined;
 	}
 
 	if (model.id.includes("anthropic.claude")) {
 		// Opus 4.6+ / Sonnet 4.6+ uses adaptive thinking with effort levels
 		if (supportsAdaptiveThinking(model.id)) {
-			let effort = mapThinkingLevelToEffort(options.reasoning);
+			let effort = mapThinkingLevelToEffort(reasoning);
 			// "max" effort is only supported on Opus 4.6; clamp to "high" for Sonnet 4.6
 			const supportsMax = model.id.includes("opus-4-6") || model.id.includes("opus-4.6");
 			if (effort === "max" && !supportsMax) {
@@ -642,7 +643,7 @@ function buildAdditionalModelRequestFields(
 			return result;
 		}
 
-		const defaultBudgets: Record<ThinkingLevel, number> = {
+		const defaultBudgets: Record<ThinkingEffort, number> = {
 			minimal: 1024,
 			low: 2048,
 			medium: 8192,
@@ -651,8 +652,8 @@ function buildAdditionalModelRequestFields(
 		};
 
 		// Custom budgets override defaults (xhigh not in ThinkingBudgets, use high)
-		const level = options.reasoning === "xhigh" ? "high" : options.reasoning;
-		const budget = options.thinkingBudgets?.[level] ?? defaultBudgets[options.reasoning];
+		const level = reasoning === "xhigh" ? "high" : reasoning;
+		const budget = options.thinkingBudgets?.[level] ?? defaultBudgets[level];
 
 		const result: Record<string, any> = {
 			thinking: {

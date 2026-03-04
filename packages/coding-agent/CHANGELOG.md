@@ -1,6 +1,22 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Moved `ThinkingLevel` type from `@oh-my-pi/pi-agent-core` to `@oh-my-pi/pi-ai` for centralized thinking level definitions
+- Replaced local thinking level validation with `parseThinkingLevel()` and `ALL_THINKING_LEVELS` from `@oh-my-pi/pi-ai`
+- Updated thinking level option providers to use `THINKING_MODE_DESCRIPTIONS` from `@oh-my-pi/pi-ai` for consistent descriptions
+- Renamed `RoleThinkingMode` type to `ThinkingMode` and changed default value from `'default'` to `'inherit'` for clarity
+- Replaced `formatThinkingEffortLabel()` utility with `formatThinking()` from `@oh-my-pi/pi-ai`
+- Renamed `extractExplicitThinkingLevel()` to `extractExplicitThinkingSelector()` in model resolver
+- Updated thinking level clamping to use `getAvailableThinkingLevel()` from `@oh-my-pi/pi-ai`
+
+### Removed
+
+- Removed `thinking-effort-label.ts` utility file (functionality moved to `@oh-my-pi/pi-ai`)
+- Removed local `VALID_THINKING_LEVELS` constant definitions across multiple files
+- Removed `isValidThinkingLevel()` function (replaced by `parseThinkingLevel()` from `@oh-my-pi/pi-ai`)
+- Removed `parseThinkingLevel()` helper from discovery module (now uses centralized version from `@oh-my-pi/pi-ai`)
 
 ## [13.8.0] - 2026-03-04
 ### Added

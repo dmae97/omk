@@ -1,12 +1,17 @@
-import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
-import { type Model, modelsAreEqual, supportsXhigh } from "@oh-my-pi/pi-ai";
+import {
+	formatThinking,
+	getAvailableThinkingLevel,
+	type Model,
+	modelsAreEqual,
+	supportsXhigh,
+	type ThinkingMode,
+} from "@oh-my-pi/pi-ai";
 import { Container, Input, matchesKey, Spacer, type Tab, TabBar, Text, type TUI, visibleWidth } from "@oh-my-pi/pi-tui";
 import { MODEL_ROLE_IDS, MODEL_ROLES, type ModelRegistry, type ModelRole } from "../../config/model-registry";
 import { resolveModelRoleValue } from "../../config/model-resolver";
 import type { Settings } from "../../config/settings";
 import { type ThemeColor, theme } from "../../modes/theme/theme";
 import { fuzzyFilter } from "../../utils/fuzzy";
-import { formatThinkingEffortLabel } from "../../utils/thinking-effort-label";
 import { getTabBarTheme } from "../shared";
 import { DynamicBorder } from "./dynamic-border";
 
@@ -14,11 +19,6 @@ function makeInvertedBadge(label: string, color: ThemeColor): string {
 	const fgAnsi = theme.getFgAnsi(color);
 	const bgAnsi = fgAnsi.replace(/\x1b\[38;/g, "\x1b[48;");
 	return `${bgAnsi}\x1b[30m ${label} \x1b[39m\x1b[49m`;
-}
-
-function formatRoleThinkingModeLabel(thinkingMode: RoleThinkingMode): string {
-	if (thinkingMode === "default") return "inherit";
-	return formatThinkingEffortLabel(thinkingMode);
 }
 
 interface ModelItem {
@@ -32,14 +32,12 @@ interface ScopedModelItem {
 	thinkingLevel: string;
 }
 
-type RoleThinkingMode = "default" | ThinkingLevel;
-
 interface RoleAssignment {
 	model: Model;
-	thinkingMode: RoleThinkingMode;
+	thinkingMode: ThinkingMode;
 }
 
-type RoleSelectCallback = (model: Model, role: ModelRole | null, thinkingMode?: RoleThinkingMode) => void;
+type RoleSelectCallback = (model: Model, role: ModelRole | null, thinkingMode?: ThinkingMode) => void;
 type CancelCallback = () => void;
 interface MenuRoleAction {
 	label: string;
@@ -55,7 +53,6 @@ const MENU_ROLE_ACTIONS: MenuRoleAction[] = MODEL_ROLE_IDS.map(role => {
 	};
 });
 
-const THINKING_MODE_OPTIONS: RoleThinkingMode[] = ["default", "off", "minimal", "low", "medium", "high"];
 const ALL_TAB = "ALL";
 
 /**
@@ -100,7 +97,7 @@ export class ModelSelectorComponent extends Container {
 		settings: Settings,
 		modelRegistry: ModelRegistry,
 		scopedModels: ReadonlyArray<ScopedModelItem>,
-		onSelect: (model: Model, role: ModelRole | null, thinkingMode?: RoleThinkingMode) => void,
+		onSelect: (model: Model, role: ModelRole | null, thinkingMode?: ThinkingMode) => void,
 		onCancel: () => void,
 		options?: { temporaryOnly?: boolean; initialSearchInput?: string },
 	) {
@@ -195,7 +192,7 @@ export class ModelSelectorComponent extends Container {
 			if (model) {
 				this.#roles[role] = {
 					model,
-					thinkingMode: explicitThinkingLevel && thinkingLevel !== undefined ? thinkingLevel : "default",
+					thinkingMode: explicitThinkingLevel && thinkingLevel !== undefined ? thinkingLevel : "inherit",
 				};
 			}
 		}
@@ -412,7 +409,7 @@ export class ModelSelectorComponent extends Container {
 				if (!tag || !assigned || !modelsAreEqual(assigned.model, item.model)) continue;
 
 				const badge = makeInvertedBadge(tag, color ?? "success");
-				const thinkingLabel = formatRoleThinkingModeLabel(assigned.thinkingMode);
+				const thinkingLabel = formatThinking(assigned.thinkingMode);
 				roleBadgeTokens.push(`${badge} ${theme.fg("dim", `(${thinkingLabel})`)}`);
 			}
 			const badgeText = roleBadgeTokens.length > 0 ? ` ${roleBadgeTokens.join(" ")}` : "";
@@ -459,16 +456,12 @@ export class ModelSelectorComponent extends Container {
 			this.#listContainer.addChild(new Text(theme.fg("muted", `  Model Name: ${selected.model.name}`), 0, 0));
 		}
 	}
-	#getThinkingModesForModel(model: Model): RoleThinkingMode[] {
-		const thinkingModes = [...THINKING_MODE_OPTIONS];
-		if (supportsXhigh(model)) {
-			thinkingModes.push("xhigh");
-		}
-		return thinkingModes;
+	#getThinkingModesForModel(model: Model): ReadonlyArray<ThinkingMode> {
+		return ["inherit", ...getAvailableThinkingLevel(supportsXhigh(model))];
 	}
 
-	#getCurrentRoleThinkingMode(role: ModelRole): RoleThinkingMode {
-		return this.#roles[role]?.thinkingMode ?? "default";
+	#getCurrentRoleThinkingMode(role: ModelRole): ThinkingMode {
+		return this.#roles[role]?.thinkingMode ?? "inherit";
 	}
 
 	#getThinkingPreselectIndex(role: ModelRole, model: Model): number {
@@ -507,7 +500,7 @@ export class ModelSelectorComponent extends Container {
 		const optionLines = showingThinking
 			? thinkingOptions.map((thinkingMode, index) => {
 					const prefix = index === this.#menuSelectedIndex ? `  ${theme.nav.cursor} ` : "    ";
-					const label = formatRoleThinkingModeLabel(thinkingMode);
+					const label = formatThinking(thinkingMode);
 					return `${prefix}${label}`;
 				})
 			: MENU_ROLE_ACTIONS.map((action, index) => {
@@ -664,12 +657,12 @@ export class ModelSelectorComponent extends Container {
 		}
 	}
 
-	#formatRoleModelValue(model: Model, thinkingMode: RoleThinkingMode): string {
+	#formatRoleModelValue(model: Model, thinkingMode: ThinkingMode): string {
 		const modelKey = `${model.provider}/${model.id}`;
-		if (thinkingMode === "default") return modelKey;
+		if (thinkingMode === "inherit") return modelKey;
 		return `${modelKey}:${thinkingMode}`;
 	}
-	#handleSelect(model: Model, role: ModelRole | null, thinkingMode?: RoleThinkingMode): void {
+	#handleSelect(model: Model, role: ModelRole | null, thinkingMode?: ThinkingMode): void {
 		// For temporary role, don't save to settings - just notify caller
 		if (role === null) {
 			this.#onSelectCallback(model, null);

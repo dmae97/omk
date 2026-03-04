@@ -1,4 +1,4 @@
-import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
+import type { ThinkingLevel } from "@oh-my-pi/pi-ai";
 import {
 	Container,
 	matchesKey,

@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
+import type { ThinkingLevel } from "@oh-my-pi/pi-ai";
+import { parseThinkingLevel } from "@oh-my-pi/pi-ai";
 import { FileType, glob } from "@oh-my-pi/pi-natives";
 import { CONFIG_DIR_NAME, tryParseJson } from "@oh-my-pi/pi-utils";
 import { readFile } from "../capability/fs";
@@ -8,8 +9,6 @@ import { parseRuleConditionAndScope, type Rule, type RuleFrontmatter } from "../
 import type { Skill, SkillFrontmatter } from "../capability/skill";
 import type { LoadContext, LoadResult, SourceMeta } from "../capability/types";
 import { parseFrontmatter } from "../utils/frontmatter";
-
-const VALID_THINKING_LEVELS: readonly string[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
 
 /**
  * Standard paths for each config source.
@@ -98,18 +97,6 @@ export function createSourceMeta(provider: string, filePath: string, level: "use
 		path: path.resolve(filePath),
 		level,
 	};
-}
-
-/**
- * Parse thinking level from frontmatter.
- * Supports keys: thinkingLevel, thinking-level, thinking
- */
-export function parseThinkingLevel(frontmatter: Record<string, unknown>): ThinkingLevel | undefined {
-	const raw = frontmatter.thinkingLevel ?? frontmatter["thinking-level"] ?? frontmatter.thinking;
-	if (typeof raw === "string" && VALID_THINKING_LEVELS.includes(raw)) {
-		return raw as ThinkingLevel;
-	}
-	return undefined;
 }
 
 export function parseBoolean(value: unknown): boolean | undefined {
@@ -247,10 +234,10 @@ export function parseAgentFields(frontmatter: Record<string, unknown>): ParsedAg
 	}
 
 	const output = frontmatter.output !== undefined ? frontmatter.output : undefined;
+	const thinkingLevel =
+		typeof frontmatter.thinkingLevel === "string" ? parseThinkingLevel(frontmatter.thinkingLevel) : undefined;
 	const model = parseModelList(frontmatter.model);
-	const thinkingLevel = parseThinkingLevel(frontmatter);
 	const blocking = parseBoolean(frontmatter.blocking);
-
 	return { name, description, tools, spawns, model, output, thinkingLevel, blocking };
 }
 

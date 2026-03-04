@@ -109,10 +109,10 @@ export type KnownProvider =
 	| "lm-studio";
 export type Provider = KnownProvider | string;
 
-export type ThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh";
+import type { ThinkingEffort, ThinkingLevel } from "./thinking";
 
 /** Token budgets for each thinking level (token-based providers only) */
-export type ThinkingBudgets = { [key in ThinkingLevel]?: number };
+export type ThinkingBudgets = { [key in ThinkingEffort]?: number };
 
 export type MessageAttribution = "user" | "agent";
 

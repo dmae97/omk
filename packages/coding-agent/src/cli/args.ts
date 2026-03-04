@@ -1,7 +1,7 @@
 /**
  * CLI argument parsing and help display
  */
-import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
+import { ALL_THINKING_LEVELS, parseThinkingLevel, type ThinkingLevel } from "@oh-my-pi/pi-ai";
 import { APP_NAME, CONFIG_DIR_NAME, logger } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
 import { BUILTIN_TOOLS } from "../tools";
@@ -46,12 +46,6 @@ export interface Args {
 	fileArgs: string[];
 	/** Unknown flags (potentially extension flags) - map of flag name to value */
 	unknownFlags: Map<string, boolean | string>;
-}
-
-const VALID_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
-
-export function isValidThinkingLevel(level: string): level is ThinkingLevel {
-	return VALID_THINKING_LEVELS.includes(level as ThinkingLevel);
 }
 
 export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "boolean" | "string" }>): Args {
@@ -127,13 +121,13 @@ export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "
 			}
 			result.tools = validTools;
 		} else if (arg === "--thinking" && i + 1 < args.length) {
-			const level = args[++i];
-			if (isValidThinkingLevel(level)) {
-				result.thinking = level;
+			const thinking = parseThinkingLevel(args[++i]);
+			if (thinking !== undefined) {
+				result.thinking = thinking;
 			} else {
 				logger.warn("Invalid thinking level passed to --thinking", {
-					level,
-					validThinkingLevels: [...VALID_THINKING_LEVELS],
+					level: thinking,
+					validThinkingLevels: [...ALL_THINKING_LEVELS],
 				});
 			}
 		} else if (arg === "--print" || arg === "-p") {

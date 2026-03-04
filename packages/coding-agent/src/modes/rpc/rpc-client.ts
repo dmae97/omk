@@ -3,8 +3,8 @@
  *
  * Spawns the agent in RPC mode and provides a typed API for all operations.
  */
-import type { AgentEvent, AgentMessage, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
-import type { ImageContent } from "@oh-my-pi/pi-ai";
+import type { AgentEvent, AgentMessage } from "@oh-my-pi/pi-agent-core";
+import type { ImageContent, ThinkingLevel } from "@oh-my-pi/pi-ai";
 import { isRecord, ptree, readJsonl } from "@oh-my-pi/pi-utils";
 import type { BashResult } from "../../exec/bash-executor";
 import type { SessionStats } from "../../session/agent-session";

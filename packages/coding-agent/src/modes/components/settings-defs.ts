@@ -6,6 +6,8 @@
  * 1. Add it to settings-schema.ts with a `ui` field
  * 2. That's it - it appears in the UI automatically
  */
+
+import { ALL_THINKING_LEVELS, THINKING_MODE_DESCRIPTIONS } from "@oh-my-pi/pi-ai";
 import { TERMINAL } from "@oh-my-pi/pi-tui";
 import {
 	getDefault,
@@ -222,12 +224,11 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 	],
 	// Default thinking level
 	defaultThinkingLevel: [
-		{ value: "off", label: "off", description: "No reasoning" },
-		{ value: "minimal", label: "minimal", description: "Very brief (~1k tokens)" },
-		{ value: "low", label: "low", description: "Light (~2k tokens)" },
-		{ value: "medium", label: "medium", description: "Moderate (~8k tokens)" },
-		{ value: "high", label: "high", description: "Deep (~16k tokens)" },
-		{ value: "xhigh", label: "xhigh", description: "Maximum (~32k tokens)" },
+		...ALL_THINKING_LEVELS.map(level => ({
+			value: level,
+			label: level,
+			description: THINKING_MODE_DESCRIPTIONS[level],
+		})),
 	],
 	// Temperature
 	temperature: [

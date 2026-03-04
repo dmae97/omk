@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import type { ThinkingLevel } from "@oh-my-pi/pi-ai";
 import {
 	detectMacOSAppearance,
 	type HighlightColors as NativeHighlightColors,
@@ -1219,7 +1220,7 @@ export class Theme {
 		return this.mode;
 	}
 
-	getThinkingBorderColor(level: "off" | "minimal" | "low" | "medium" | "high" | "xhigh"): (str: string) => string {
+	getThinkingBorderColor(level: ThinkingLevel): (str: string) => string {
 		// Map thinking levels to dedicated theme colors
 		switch (level) {
 			case "off":

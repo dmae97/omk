@@ -11,14 +11,12 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseArgs } from "node:util";
-import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
+import { ALL_THINKING_LEVELS, type ThinkingSelector } from "@oh-my-pi/pi-ai";
 import { padding } from "@oh-my-pi/pi-tui";
 import { TempDir } from "@oh-my-pi/pi-utils";
 import { generateJsonReport, generateReport } from "./report";
 import { type BenchmarkConfig, type ProgressEvent, runBenchmark } from "./runner";
 import { type EditTask, loadTasksFromDir, validateFixturesFromDir } from "./tasks";
-
-const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
 
 function generateReportFilename(config: BenchmarkConfig, format: "markdown" | "json"): string {
 	const modelName = config.model
@@ -209,14 +207,14 @@ async function main(): Promise<void> {
 		process.exit(0);
 	}
 
-	let thinkingLevel: ThinkingLevel = "low";
+	let thinkingLevel: ThinkingSelector = "low";
 	if (values.thinking) {
-		if (!THINKING_LEVELS.includes(values.thinking as ThinkingLevel)) {
+		if (!ALL_THINKING_LEVELS.includes(values.thinking as ThinkingSelector)) {
 			console.error(`Invalid thinking level: ${values.thinking}`);
-			console.error(`Valid levels: ${THINKING_LEVELS.join(", ")}`);
+			console.error(`Valid levels: ${ALL_THINKING_LEVELS.join(", ")}`);
 			process.exit(1);
 		}
-		thinkingLevel = values.thinking as ThinkingLevel;
+		thinkingLevel = values.thinking as ThinkingSelector;
 	}
 
 	const runsPerTask = parseInt(values.runs!, 10);

@@ -7,6 +7,7 @@ import type {
 	SimpleStreamOptions,
 	streamSimple,
 	TextContent,
+	ThinkingLevel,
 	Tool,
 	ToolChoice,
 	ToolResultMessage,
@@ -138,12 +139,6 @@ export interface ToolCallContext {
 	total: number;
 	toolCalls: Array<{ id: string; name: string }>;
 }
-
-/**
- * Thinking/reasoning level for models that support it.
- * Note: "xhigh" is only supported by OpenAI gpt-5.1-codex-max, gpt-5.2, gpt-5.2-codex, gpt-5.3, and gpt-5.3-codex models.
- */
-export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 
 /**
  * Extensible interface for custom app messages.

@@ -1,6 +1,21 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Exported new thinking module with `ThinkingEffort`, `ThinkingLevel`, and `ThinkingMode` types for managing reasoning effort levels
+- Added `getAvailableThinkingEffort()` function to determine supported thinking effort levels based on model capabilities
+- Added `parseThinkingEffort()`, `parseThinkingLevel()`, and `parseThinkingMode()` functions for parsing thinking configuration strings
+- Added `THINKING_LEVELS`, `ALL_THINKING_LEVELS`, and `ALL_THINKING_MODES` constants for iterating over available thinking options
+- Added `THINKING_MODE_DESCRIPTIONS` and `THINKING_MODE_LABELS` for displaying thinking modes in user interfaces
+- Added `formatThinking()` function to format thinking modes as compact display labels
+
+### Changed
+
+- Refactored thinking level handling to distinguish between `ThinkingEffort` (provider-level, no "off") and `ThinkingLevel` (user-facing, includes "off")
+- Updated `ThinkingBudgets` type to use `ThinkingEffort` instead of `ThinkingLevel` for more precise token budget configuration
+- Improved reasoning option handling to explicitly support "off" value for disabling reasoning across all providers
+- Simplified thinking effort mapping logic by centralizing provider-specific clamping behavior
 
 ## [13.7.8] - 2026-03-04
 
@@ -9,6 +24,7 @@
 - Added ZenMux provider support with mixed API routing: Anthropic-owned models discovered from `https://zenmux.ai/api/v1/models` now use the Anthropic transport (`https://zenmux.ai/api/anthropic`), while other ZenMux models use the OpenAI-compatible transport.
 
 ## [13.7.7] - 2026-03-04
+
 ### Changed
 
 - Modified response ID normalization to preserve existing item ID prefixes when truncating oversized IDs
@@ -19,6 +35,7 @@
 - Fixed handling of reasoning item IDs to remain untouched during response normalization while function call IDs are properly normalized
 
 ## [13.7.2] - 2026-03-04
+
 ### Added
 
 - Added support for Kagi API key authentication via `login kagi` command
@@ -31,6 +48,7 @@
 - Tool schema compilation is now cached per schema identity, eliminating redundant recompilation on every tool call
 
 ## [13.6.0] - 2026-03-03
+
 ### Added
 
 - Added Anthropic Foundry gateway mode controlled by `CLAUDE_CODE_USE_FOUNDRY`, with support for `FOUNDRY_BASE_URL`, `ANTHROPIC_FOUNDRY_API_KEY`, `ANTHROPIC_CUSTOM_HEADERS`, and optional mTLS material (`CLAUDE_CODE_CLIENT_CERT`, `CLAUDE_CODE_CLIENT_KEY`, `NODE_EXTRA_CA_CERTS`)
@@ -43,6 +61,7 @@
 - Anthropic auth base-URL fallback now prefers `FOUNDRY_BASE_URL` when `CLAUDE_CODE_USE_FOUNDRY` is enabled
 
 ## [13.5.8] - 2026-03-02
+
 ### Fixed
 
 - Fixed schema compatibility issue where patternProperties in tool parameters caused failures when converting to legacy Antigravity format
@@ -59,6 +78,7 @@
 - Anthropic cache-control normalization now removes later `ttl: "1h"` entries when a default/5m block has already appeared earlier in evaluation order
 
 ## [13.5.3] - 2026-03-01
+
 ### Fixed
 
 - Fixed tool argument coercion to handle malformed JSON with trailing wrapper braces by parsing leading JSON containers
