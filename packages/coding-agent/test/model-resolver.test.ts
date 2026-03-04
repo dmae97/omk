@@ -92,7 +92,34 @@ const mockProviderOverlapModels: Model<"anthropic-messages">[] = [
 	},
 ];
 
-const allModels = [...mockModels, ...mockOpenRouterModels, ...mockProviderOverlapModels];
+const mockCodexOverlapModels: Model<"anthropic-messages">[] = [
+	{
+		id: "gpt-5.3-codex",
+		name: "GPT-5.3 Codex",
+		api: "anthropic-messages",
+		provider: "openai-codex",
+		baseUrl: "https://api.openai.com",
+		reasoning: true,
+		input: ["text"],
+		cost: { input: 1.5, output: 6, cacheRead: 0.15, cacheWrite: 1.5 },
+		contextWindow: 200000,
+		maxTokens: 8192,
+	},
+	{
+		id: "gpt-5.3-codex-spark",
+		name: "GPT-5.3 Codex Spark",
+		api: "anthropic-messages",
+		provider: "openai-codex",
+		baseUrl: "https://api.openai.com",
+		reasoning: true,
+		input: ["text"],
+		cost: { input: 1, output: 4, cacheRead: 0.1, cacheWrite: 1 },
+		contextWindow: 200000,
+		maxTokens: 8192,
+	},
+];
+
+const allModels = [...mockModels, ...mockOpenRouterModels, ...mockProviderOverlapModels, ...mockCodexOverlapModels];
 
 describe("parseModelPattern", () => {
 	describe("simple patterns without colons", () => {
@@ -297,6 +324,20 @@ describe("resolveModelRoleValue", () => {
 		expect(result.thinkingLevel).toBeUndefined();
 		expect(result.explicitThinkingLevel).toBe(false);
 		expect(result.warning).toBeUndefined();
+	});
+
+	test("does not resolve exact codex role values to codex-spark via substring matching", () => {
+		const providerQualified = resolveModelRoleValue("openai-codex/gpt-5.3-codex:xhigh", allModels);
+		expect(providerQualified.model?.provider).toBe("openai-codex");
+		expect(providerQualified.model?.id).toBe("gpt-5.3-codex");
+		expect(providerQualified.thinkingLevel).toBe("xhigh");
+		expect(providerQualified.explicitThinkingLevel).toBe(true);
+
+		const idOnly = resolveModelRoleValue("gpt-5.3-codex:xhigh", allModels);
+		expect(idOnly.model?.provider).toBe("openai-codex");
+		expect(idOnly.model?.id).toBe("gpt-5.3-codex");
+		expect(idOnly.thinkingLevel).toBe("xhigh");
+		expect(idOnly.explicitThinkingLevel).toBe(true);
 	});
 });
 describe("resolveModelFromString", () => {

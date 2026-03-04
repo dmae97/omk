@@ -124,6 +124,34 @@ describe("AgentSession role model thinking behavior", () => {
 		expect(session.thinkingLevel).toBe("minimal");
 	});
 
+	it("applies slow role thinking even when plan shares the same model", async () => {
+		const defaultModel = getAnthropicModelOrThrow("claude-sonnet-4-5");
+		const smolModel = getAnthropicModelOrThrow("claude-sonnet-4-6");
+		const slowPlanModel = getAnthropicModelOrThrow("claude-opus-4-5");
+
+		await createSession({
+			initialModelId: defaultModel.id,
+			initialThinkingLevel: "medium",
+			modelRoles: {
+				default: `${defaultModel.provider}/${defaultModel.id}`,
+				smol: `${smolModel.provider}/${smolModel.id}:low`,
+				slow: `${slowPlanModel.provider}/${slowPlanModel.id}:high`,
+				plan: `${slowPlanModel.provider}/${slowPlanModel.id}:off`,
+			},
+		});
+
+		const toSmol = await session.cycleRoleModels(["slow", "default", "smol"]);
+		expect(toSmol?.role).toBe("smol");
+		expect(toSmol?.thinkingLevel).toBe("low");
+		expect(session.thinkingLevel).toBe("low");
+
+		const toSlow = await session.cycleRoleModels(["slow", "default", "smol"]);
+		expect(toSlow?.role).toBe("slow");
+		expect(toSlow?.model.id).toBe(slowPlanModel.id);
+		expect(toSlow?.thinkingLevel).toBe("high");
+		expect(session.thinkingLevel).toBe("high");
+	});
+
 	it("preserves explicit role thinking when updating default model despite unresolved previous model", async () => {
 		const defaultModel = getAnthropicModelOrThrow("claude-sonnet-4-5");
 		const slowModel = getAnthropicModelOrThrow("claude-sonnet-4-6");

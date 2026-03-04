@@ -16,6 +16,11 @@ function makeInvertedBadge(label: string, color: ThemeColor): string {
 	return `${bgAnsi}\x1b[30m ${label} \x1b[39m\x1b[49m`;
 }
 
+function formatRoleThinkingModeLabel(thinkingMode: RoleThinkingMode): string {
+	if (thinkingMode === "default") return "inherit";
+	return formatThinkingEffortLabel(thinkingMode);
+}
+
 interface ModelItem {
 	provider: string;
 	id: string;
@@ -41,10 +46,14 @@ interface MenuRoleAction {
 	role: ModelRole;
 }
 
-const MENU_ROLE_ACTIONS: MenuRoleAction[] = MODEL_ROLE_IDS.map(role => ({
-	label: `Set as ${MODEL_ROLES[role].name}`,
-	role,
-}));
+const MENU_ROLE_ACTIONS: MenuRoleAction[] = MODEL_ROLE_IDS.map(role => {
+	const roleInfo = MODEL_ROLES[role];
+	const roleLabel = roleInfo.tag ? `${roleInfo.tag} (${roleInfo.name})` : roleInfo.name;
+	return {
+		label: `Set as ${roleLabel}`,
+		role,
+	};
+});
 
 const THINKING_MODE_OPTIONS: RoleThinkingMode[] = ["default", "off", "minimal", "low", "medium", "high"];
 const ALL_TAB = "ALL";
@@ -403,12 +412,7 @@ export class ModelSelectorComponent extends Container {
 				if (!tag || !assigned || !modelsAreEqual(assigned.model, item.model)) continue;
 
 				const badge = makeInvertedBadge(tag, color ?? "success");
-				if (assigned.thinkingMode === "default") {
-					roleBadgeTokens.push(badge);
-					continue;
-				}
-
-				const thinkingLabel = formatThinkingEffortLabel(assigned.thinkingMode);
+				const thinkingLabel = formatRoleThinkingModeLabel(assigned.thinkingMode);
 				roleBadgeTokens.push(`${badge} ${theme.fg("dim", `(${thinkingLabel})`)}`);
 			}
 			const badgeText = roleBadgeTokens.length > 0 ? ` ${roleBadgeTokens.join(" ")}` : "";
@@ -503,7 +507,8 @@ export class ModelSelectorComponent extends Container {
 		const optionLines = showingThinking
 			? thinkingOptions.map((thinkingMode, index) => {
 					const prefix = index === this.#menuSelectedIndex ? `  ${theme.nav.cursor} ` : "    ";
-					return `${prefix}${thinkingMode}`;
+					const label = formatRoleThinkingModeLabel(thinkingMode);
+					return `${prefix}${label}`;
 				})
 			: MENU_ROLE_ACTIONS.map((action, index) => {
 					const prefix = index === this.#menuSelectedIndex ? `  ${theme.nav.cursor} ` : "    ";
