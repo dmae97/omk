@@ -14664,82 +14664,6 @@
 			"contextWindow": 200000,
 			"maxTokens": 128000
 		},
-		"anthropic/claude-opus-4.6:thinking": {
-			"id": "anthropic/claude-opus-4.6:thinking",
-			"name": "anthropic/claude-opus-4.6:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 200000,
-			"maxTokens": 8888
-		},
-		"anthropic/claude-opus-4.6:thinking:low": {
-			"id": "anthropic/claude-opus-4.6:thinking:low",
-			"name": "anthropic/claude-opus-4.6:thinking:low",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 200000,
-			"maxTokens": 8888
-		},
-		"anthropic/claude-opus-4.6:thinking:max": {
-			"id": "anthropic/claude-opus-4.6:thinking:max",
-			"name": "anthropic/claude-opus-4.6:thinking:max",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 200000,
-			"maxTokens": 8888
-		},
-		"anthropic/claude-opus-4.6:thinking:medium": {
-			"id": "anthropic/claude-opus-4.6:thinking:medium",
-			"name": "anthropic/claude-opus-4.6:thinking:medium",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 200000,
-			"maxTokens": 8888
-		},
 		"anthropic/claude-sonnet-4.6": {
 			"id": "anthropic/claude-sonnet-4.6",
 			"name": "Claude Sonnet 4.6",
@@ -14759,25 +14683,6 @@
 			},
 			"contextWindow": 200000,
 			"maxTokens": 64000
-		},
-		"anthropic/claude-sonnet-4.6:thinking": {
-			"id": "anthropic/claude-sonnet-4.6:thinking",
-			"name": "anthropic/claude-sonnet-4.6:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 200000,
-			"maxTokens": 8888
 		},
 		"arcee-ai/trinity-large": {
 			"id": "arcee-ai/trinity-large",
@@ -15565,25 +15470,6 @@
 			"contextWindow": 200000,
 			"maxTokens": 64000
 		},
-		"claude-opus-4-5-20251101:thinking": {
-			"id": "claude-opus-4-5-20251101:thinking",
-			"name": "claude-opus-4-5-20251101:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
 		"claude-opus-4-thinking": {
 			"id": "claude-opus-4-thinking",
 			"name": "claude-opus-4-thinking",
@@ -16010,7 +15896,7 @@
 			"api": "openai-completions",
 			"provider": "nanogpt",
 			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
+			"reasoning": true,
 			"input": [
 				"text"
 			],
@@ -16029,45 +15915,7 @@
 			"api": "openai-completions",
 			"provider": "nanogpt",
 			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
-		"deepseek-ai/DeepSeek-V3.1-Terminus:thinking": {
-			"id": "deepseek-ai/DeepSeek-V3.1-Terminus:thinking",
-			"name": "deepseek-ai/DeepSeek-V3.1-Terminus:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
-		"deepseek-ai/DeepSeek-V3.1:thinking": {
-			"id": "deepseek-ai/DeepSeek-V3.1:thinking",
-			"name": "deepseek-ai/DeepSeek-V3.1:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
+			"reasoning": true,
 			"input": [
 				"text"
 			],
@@ -16311,25 +16159,6 @@
 		"deepseek/deepseek-v3.2-speciale": {
 			"id": "deepseek/deepseek-v3.2-speciale",
 			"name": "deepseek/deepseek-v3.2-speciale",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
-		"deepseek/deepseek-v3.2:thinking": {
-			"id": "deepseek/deepseek-v3.2:thinking",
-			"name": "deepseek/deepseek-v3.2:thinking",
 			"api": "openai-completions",
 			"provider": "nanogpt",
 			"baseUrl": "https://nano-gpt.com/api/v1",
@@ -17321,25 +17150,6 @@
 			"contextWindow": 1048576,
 			"maxTokens": 65536
 		},
-		"gemini-2.5-flash-preview-04-17:thinking": {
-			"id": "gemini-2.5-flash-preview-04-17:thinking",
-			"name": "gemini-2.5-flash-preview-04-17:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
 		"gemini-2.5-flash-preview-05-20": {
 			"id": "gemini-2.5-flash-preview-05-20",
 			"name": "Gemini 2.5 Flash Preview 05-20",
@@ -17359,25 +17169,6 @@
 			},
 			"contextWindow": 1048576,
 			"maxTokens": 65536
-		},
-		"gemini-2.5-flash-preview-05-20:thinking": {
-			"id": "gemini-2.5-flash-preview-05-20:thinking",
-			"name": "gemini-2.5-flash-preview-05-20:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
 		},
 		"gemini-2.5-flash-preview-09-2025": {
 			"id": "gemini-2.5-flash-preview-09-2025",
@@ -20704,25 +20495,6 @@
 			"contextWindow": 262144,
 			"maxTokens": 262144
 		},
-		"moonshotai/kimi-k2.5:thinking": {
-			"id": "moonshotai/kimi-k2.5:thinking",
-			"name": "moonshotai/kimi-k2.5:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
 		"NeverSleep/Llama-3-Lumimaid-70B-v0.1": {
 			"id": "NeverSleep/Llama-3-Lumimaid-70B-v0.1",
 			"name": "NeverSleep/Llama-3-Lumimaid-70B-v0.1",
@@ -20843,26 +20615,7 @@
 			"api": "openai-completions",
 			"provider": "nanogpt",
 			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
-		"nousresearch/hermes-4-405b:thinking": {
-			"id": "nousresearch/hermes-4-405b:thinking",
-			"name": "nousresearch/hermes-4-405b:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
+			"reasoning": true,
 			"input": [
 				"text"
 			],
@@ -20889,25 +20642,6 @@
 				"input": 0.11,
 				"output": 0.38,
 				"cacheRead": 0.055,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
-		"NousResearch/Hermes-4-70B:thinking": {
-			"id": "NousResearch/Hermes-4-70B:thinking",
-			"name": "NousResearch/Hermes-4-70B:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
 				"cacheWrite": 0
 			},
 			"contextWindow": 222222,
@@ -22660,26 +22394,7 @@
 			"api": "openai-completions",
 			"provider": "nanogpt",
 			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
-		"qwen3.5-122b-a10b:thinking": {
-			"id": "qwen3.5-122b-a10b:thinking",
-			"name": "qwen3.5-122b-a10b:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
+			"reasoning": true,
 			"input": [
 				"text"
 			],
@@ -22698,26 +22413,7 @@
 			"api": "openai-completions",
 			"provider": "nanogpt",
 			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
-		"qwen3.5-27b:thinking": {
-			"id": "qwen3.5-27b:thinking",
-			"name": "qwen3.5-27b:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
+			"reasoning": true,
 			"input": [
 				"text"
 			],
@@ -22736,26 +22432,7 @@
 			"api": "openai-completions",
 			"provider": "nanogpt",
 			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
-		"qwen3.5-35b-a3b:thinking": {
-			"id": "qwen3.5-35b-a3b:thinking",
-			"name": "qwen3.5-35b-a3b:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
+			"reasoning": true,
 			"input": [
 				"text"
 			],
@@ -22774,26 +22451,7 @@
 			"api": "openai-completions",
 			"provider": "nanogpt",
 			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
-		"qwen3.5-flash:thinking": {
-			"id": "qwen3.5-flash:thinking",
-			"name": "qwen3.5-flash:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
+			"reasoning": true,
 			"input": [
 				"text"
 			],
@@ -23382,26 +23040,7 @@
 			"api": "openai-completions",
 			"provider": "nanogpt",
 			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
-		"stepfun-ai/step-3.5-flash:thinking": {
-			"id": "stepfun-ai/step-3.5-flash:thinking",
-			"name": "stepfun-ai/step-3.5-flash:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
+			"reasoning": true,
 			"input": [
 				"text"
 			],
@@ -24444,25 +24083,6 @@
 			"contextWindow": 2000000,
 			"maxTokens": 64000
 		},
-		"x-ai/grok-4-fast:thinking": {
-			"id": "x-ai/grok-4-fast:thinking",
-			"name": "x-ai/grok-4-fast:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
 		"x-ai/grok-4.1-fast": {
 			"id": "x-ai/grok-4.1-fast",
 			"name": "Grok 4.1 Fast",
@@ -24674,25 +24294,6 @@
 			"contextWindow": 222222,
 			"maxTokens": 8888
 		},
-		"z-ai/glm-4.5v:thinking": {
-			"id": "z-ai/glm-4.5v:thinking",
-			"name": "z-ai/glm-4.5v:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
 		"z-ai/glm-4.6": {
 			"id": "z-ai/glm-4.6",
 			"name": "GLM 4.6",
@@ -24711,25 +24312,6 @@
 			},
 			"contextWindow": 200000,
 			"maxTokens": 64000
-		},
-		"z-ai/glm-4.6:thinking": {
-			"id": "z-ai/glm-4.6:thinking",
-			"name": "z-ai/glm-4.6:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
 		},
 		"zai-org/glm-4.5": {
 			"id": "zai-org/glm-4.5",
@@ -24756,45 +24338,7 @@
 			"api": "openai-completions",
 			"provider": "nanogpt",
 			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
-		"zai-org/GLM-4.5-Air:thinking": {
-			"id": "zai-org/GLM-4.5-Air:thinking",
-			"name": "zai-org/GLM-4.5-Air:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
-		"zai-org/GLM-4.5:thinking": {
-			"id": "zai-org/GLM-4.5:thinking",
-			"name": "zai-org/GLM-4.5:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
+			"reasoning": true,
 			"input": [
 				"text"
 			],
@@ -24832,26 +24376,7 @@
 			"api": "openai-completions",
 			"provider": "nanogpt",
 			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
-		"zai-org/GLM-4.6-turbo:thinking": {
-			"id": "zai-org/GLM-4.6-turbo:thinking",
-			"name": "zai-org/GLM-4.6-turbo:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
+			"reasoning": true,
 			"input": [
 				"text"
 			],
@@ -24927,7 +24452,7 @@
 			"api": "openai-completions",
 			"provider": "nanogpt",
 			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
+			"reasoning": true,
 			"input": [
 				"text"
 			],
@@ -24946,7 +24471,7 @@
 			"api": "openai-completions",
 			"provider": "nanogpt",
 			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
+			"reasoning": true,
 			"input": [
 				"text"
 			],
@@ -24965,45 +24490,7 @@
 			"api": "openai-completions",
 			"provider": "nanogpt",
 			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
-		"zai-org/glm-4.7-flash-original:thinking": {
-			"id": "zai-org/glm-4.7-flash-original:thinking",
-			"name": "zai-org/glm-4.7-flash-original:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
-		"zai-org/glm-4.7-flash:thinking": {
-			"id": "zai-org/glm-4.7-flash:thinking",
-			"name": "zai-org/glm-4.7-flash:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
+			"reasoning": true,
 			"input": [
 				"text"
 			],
@@ -25022,45 +24509,7 @@
 			"api": "openai-completions",
 			"provider": "nanogpt",
 			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
-		"zai-org/glm-4.7-original:thinking": {
-			"id": "zai-org/glm-4.7-original:thinking",
-			"name": "zai-org/glm-4.7-original:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
-		"zai-org/glm-4.7:thinking": {
-			"id": "zai-org/glm-4.7:thinking",
-			"name": "zai-org/glm-4.7:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
+			"reasoning": true,
 			"input": [
 				"text"
 			],
@@ -25079,7 +24528,7 @@
 			"api": "openai-completions",
 			"provider": "nanogpt",
 			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
+			"reasoning": true,
 			"input": [
 				"text"
 			],
@@ -25098,45 +24547,7 @@
 			"api": "openai-completions",
 			"provider": "nanogpt",
 			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
-		"zai-org/glm-5-original:thinking": {
-			"id": "zai-org/glm-5-original:thinking",
-			"name": "zai-org/glm-5-original:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
-		},
-		"zai-org/glm-5:thinking": {
-			"id": "zai-org/glm-5:thinking",
-			"name": "zai-org/glm-5:thinking",
-			"api": "openai-completions",
-			"provider": "nanogpt",
-			"baseUrl": "https://nano-gpt.com/api/v1",
-			"reasoning": false,
+			"reasoning": true,
 			"input": [
 				"text"
 			],

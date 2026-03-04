@@ -15,7 +15,13 @@ import { type Skill, skillCapability } from "../capability/skill";
 import { type SlashCommand, slashCommandCapability } from "../capability/slash-command";
 import { type SystemPrompt, systemPromptCapability } from "../capability/system-prompt";
 import type { LoadContext, LoadResult } from "../capability/types";
-import { buildRuleFromMarkdown, calculateDepth, createSourceMeta, loadFilesFromDir, scanSkillsFromDir } from "./helpers";
+import {
+	buildRuleFromMarkdown,
+	calculateDepth,
+	createSourceMeta,
+	loadFilesFromDir,
+	scanSkillsFromDir,
+} from "./helpers";
 
 const PROVIDER_ID = "agents";
 const DISPLAY_NAME = "Agents (standard)";

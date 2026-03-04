@@ -11,16 +11,14 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { clearCache, readFile } from "@oh-my-pi/pi-coding-agent/capability/fs";
-import type { Skill } from "@oh-my-pi/pi-coding-agent/capability/skill";
-import type { LoadContext, LoadResult } from "@oh-my-pi/pi-coding-agent/capability/types";
+import type { Rule } from "@oh-my-pi/pi-coding-agent/capability/rule";
+import type { LoadContext } from "@oh-my-pi/pi-coding-agent/capability/types";
 import {
 	buildRuleFromMarkdown,
 	calculateDepth,
-	createSourceMeta,
 	loadFilesFromDir,
 	scanSkillsFromDir,
 } from "@oh-my-pi/pi-coding-agent/discovery/helpers";
-import type { Rule } from "@oh-my-pi/pi-coding-agent/capability/rule";
 
 const AGENT_DIR_CANDIDATES = [".agent", ".agents"] as const;
 const PROVIDER_ID = "agents";
