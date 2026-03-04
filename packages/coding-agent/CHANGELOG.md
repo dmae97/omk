@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.7.3] - 2026-03-04
+
 ### Added
 
 - Added Kagi Universal Summarizer integration for URL summarization, now prioritized before Jina and other methods
