@@ -1,41 +1,40 @@
-Applies precise file edits using `LINE#ID` tags from `read` output.
+Applies precise, surgical file edits by referencing `LINE#ID` tags from `read` output. Each tag uniquely identifies a line, so edits remain stable even when lines shift.
 
 <workflow>
-1. You **SHOULD** issue a `read` call before editing if you have no tagged context for a file.
-2. You **MUST** pick the smallest operation per change site.
-3. You **MUST** submit one `edit` call per file with all operations, think your changes through before submitting.
+Follow these steps in order for every edit:
+1. You **SHOULD** issue a `read` call before editing to get fresh `LINE#ID` tags. Editing without current tags causes mismatches because other edits or external changes may have shifted line numbers since your last read.
+2. You **MUST** submit one `edit` call per file with all operations. Multiple calls to the same file require re-reading between each one (tags shift after each edit), so batching avoids wasted round-trips. Think your changes through before submitting.
+3. You **MUST** pick the smallest operation per change site. Each operation should be one logical mutation — a single replace, insert, or delete. Combining unrelated changes into one operation makes errors harder to diagnose and recover from.
 </workflow>
 
 <operations>
 **`path`** — the path to the file to edit.
 **`move`** — if set, move the file to the given path.
 **`delete`** — if true, delete the file.
-**`edits.[n].pos`** — the anchor line. Meaning depends on `op`:
+**`edits[n].pos`** — the anchor line. Meaning depends on `op`:
 - `replace`: start of range (or the single line to replace)
 - `prepend`: insert new lines **before** this line; omit for beginning of file
 - `append`: insert new lines **after** this line; omit for end of file
-**`edits.[n].end`** — range replace only. The last line of the range (inclusive). Omit for single-line replace.
-**`edits.[n].lines`** — the replacement content:
+**`edits[n].end`** — range replace only. The last line of the range (inclusive). Omit for single-line replace.
+**`edits[n].lines`** — the replacement content:
 - `["line1", "line2"]` — replace with these lines (array of strings)
 - `"line1"` — shorthand for `["line1"]` (single-line replace)
 - `[""]` — replace content with a blank line (line preserved, content cleared)
 - `null` or `[]` — **delete** the line(s) entirely
 
-Tags should be referenced from the last `read` output.
-Edits are applied bottom-up, so earlier tags stay valid even when later ops add or remove lines.
+Tags are applied bottom-up: later edits (by position) are applied first, so earlier tags remain valid even when subsequent ops add or remove lines. Tags **MUST** be referenced from the most recent `read` output.
 </operations>
 
 <rules>
-1. **Minimize scope:** You **MUST** use one logical mutation per operation.
-2. **Prefer insertion over neighbor rewrites:** You **SHOULD** anchor on structural boundaries (`}`, `]`, `},`), not interior lines.
-3. **Range end tag (inclusive):** `end` is inclusive and **MUST** point to the final line being replaced.
-   - If `lines` includes a closing boundary token (`}`, `]`, `)`, `);`, `},`), `end` **MUST** include the original boundary line.
-   - You **MUST NOT** set `end` to an interior line and then re-add the boundary token in `lines`; that duplicates the next surviving line.
+1. **Anchor on unique, structural lines.** You **SHOULD** choose anchors like function signatures, class declarations, or distinct statements — lines that appear exactly once. Blank lines, `}`, and `return null;` repeat throughout a file; anchoring on them risks matching the wrong location. When inserting between blocks, anchor on the nearest unique declaration using `prepend` or `append`.
+2. **Prefer insertion over neighbor rewrites.** You **SHOULD** use `prepend`/`append` anchored on a structural boundary (`}`, `]`, `},`) rather than replacing adjacent lines when adding code near existing code. This keeps the edit minimal and avoids accidentally rewriting lines that should stay.
+3. **Include boundary lines in the replaced range.** `end` is inclusive and **MUST** point to the final line being replaced. If your replacement `lines` include a closing token (`}`, `]`, `)`, `);`, `},`), `end` **MUST** include the original closing line. Otherwise the original closer survives and you get a duplicate.
 </rules>
 
 <recovery>
-**Tag mismatch (`>>>`):** You **MUST** retry using fresh tags from the error snippet. If snippet lacks context, or if you repeatedly fail, you **MUST** re-read the file and issue less ambitious edits, i.e. single op.
-**No-op (`identical`):** You **MUST NOT** resubmit. Re-read target lines and adjust the edit.
+Edits can fail in two ways. Here is exactly what to do for each:
+1. **Tag mismatch (`>>>`):** The file changed since your last read, so the tag no longer matches. You **MUST** retry using the fresh tags from the error snippet. If the snippet lacks enough context, or if you fail repeatedly, you **MUST** re-read the entire file and submit a simpler, single-op edit.
+2. **No-op (`identical`):** Your replacement is identical to the existing content — nothing changed. You **MUST NOT** resubmit the same edit. Re-read the target lines to understand what is actually there, then adjust your edit.
 </recovery>
 
 <example name="single-line replace">
@@ -121,6 +120,7 @@ Range — add `end`:
 </example>
 
 <example name="inclusive end avoids duplicate boundary">
+This example demonstrates why `end` must include the original closing line when your replacement also contains that closer.
 ```ts
 {{hlinefull 70 "if (ok) {"}}
 {{hlinefull 71 "  run();"}}
@@ -159,7 +159,6 @@ Good — include original `}` in the replaced range when replacement keeps `}`:
   }]
 }
 ```
-Also apply the same rule to `);`, `],`, and `},` closers: if replacement includes the closer token, `end` must include the original closer line.
 </example>
 
 <example name="insert between sibling declarations">
@@ -191,7 +190,7 @@ Use a trailing `""` to preserve the blank line between top-level sibling declara
 </example>
 
 <example name="disambiguate anchors">
-Blank lines and repeated patterns (`}`, `return null;`) appear many times — never anchor on them when a unique line exists nearby.
+Blank lines and repeated patterns (`}`, `return null;`) appear many times. Always anchor on a unique line nearby instead.
 ```ts
 {{hlinefull 101 "}"}}
 {{hlinefull 102 ""}}
@@ -233,8 +232,8 @@ Good — anchor on the unique declaration line:
 
 <critical>
 - Edit payload: `{ path, edits[] }`. Each entry: `op`, `lines`, optional `pos`/`end`. No extra keys.
-- Every tag **MUST** be copied exactly from fresh tool result as `N#ID`.
-- You **MUST** re-read after each edit call before issuing another on same file.
-- Formatting is a batch operation. You **MUST NOT** use this tool to reformat, reindent, or adjust whitespace — run the project's formatter instead. If the only change is whitespace, it is formatting; do not touch it.
-- `lines` entries **MUST** be literal file content with indentation copied exactly from the `read` output. If the file uses tabs, use `\t` in JSON (a real tab character) — you **MUST NOT** use `\\t` (two characters: backslash + t), which produces the literal string `\t` in the file.
+- Every tag **MUST** be copied exactly from your most recent `read` output as `N#ID`. Stale or mistyped tags cause mismatches.
+- You **MUST** re-read the file after each edit call before issuing another on the same file. Tags shift after every edit, so reusing old tags produces mismatches.
+- You **MUST NOT** use this tool to reformat, reindent, or adjust whitespace — run the project's formatter instead. If the only difference is whitespace, it is formatting; leave it alone.
+- `lines` entries **MUST** be literal file content with indentation copied exactly from the `read` output. If the file uses tabs, use `\t` in JSON (a real tab character). Using `\\t` (backslash + t) writes the literal two-character string `\t` into the file.
 </critical>
