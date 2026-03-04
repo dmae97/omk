@@ -1,8 +1,7 @@
 import * as path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { htmlToMarkdown } from "@oh-my-pi/pi-natives";
-import type { Component } from "@oh-my-pi/pi-tui";
-import { Text } from "@oh-my-pi/pi-tui";
+import { type Component, Text } from "@oh-my-pi/pi-tui";
 import { ptree, truncate } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { parseHTML } from "linkedom";
@@ -1066,8 +1065,8 @@ export function renderFetchResult(
 			if (contentPreviewLines === undefined || lastExpanded !== expanded) {
 				const previewLimit = expanded ? 12 : 3;
 				const previewList = applyListLimit(contentLines, { headLimit: previewLimit });
-				const previewLines = previewList.items.map(line => truncate(line.trimEnd(), 120, "…"));
-				const remaining = Math.max(0, contentLines.length - previewLines.length);
+				const previewLines = previewList.items.map(line => line.trimEnd());
+				const remaining = Math.max(0, contentLines.length - previewList.items.length);
 				contentPreviewLines =
 					previewLines.length > 0
 						? previewLines.map(line => uiTheme.fg("dim", line))

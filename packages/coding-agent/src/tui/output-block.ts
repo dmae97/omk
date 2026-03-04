@@ -1,7 +1,7 @@
 /**
  * Bordered output container with optional header and sections.
  */
-import { ImageProtocol, padding, TERMINAL, visibleWidth } from "@oh-my-pi/pi-tui";
+import { ImageProtocol, padding, TERMINAL, visibleWidth, wrapTextWithAnsi } from "@oh-my-pi/pi-tui";
 import type { Theme } from "../modes/theme/theme";
 import { getSixelLineMask } from "../utils/sixel";
 import type { State } from "./types";
@@ -88,13 +88,12 @@ export function renderOutputBlock(options: OutputBlockOptions, theme: Theme): st
 				lines.push(line);
 				continue;
 			}
-			// Sections may receive content that was already padded to terminal width
-			// (e.g. from Text.render()). Trailing spaces would trigger truncateToWidth()
-			// to append an ellipsis even when the *semantic* content fits.
-			const text = truncateToWidth(line.trimEnd(), contentWidth);
-			const innerPadding = padding(Math.max(0, contentWidth - visibleWidth(text)));
-			const fullLine = `${contentPrefix}${text}${innerPadding}${contentSuffix}`;
-			lines.push(padToWidth(fullLine, lineWidth, bgFn));
+			const wrappedLines = wrapTextWithAnsi(line.trimEnd(), contentWidth);
+			for (const wrappedLine of wrappedLines) {
+				const innerPadding = padding(Math.max(0, contentWidth - visibleWidth(wrappedLine)));
+				const fullLine = `${contentPrefix}${wrappedLine}${innerPadding}${contentSuffix}`;
+				lines.push(padToWidth(fullLine, lineWidth, bgFn));
+			}
 		}
 	}
 
