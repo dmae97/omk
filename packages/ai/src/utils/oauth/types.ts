@@ -39,6 +39,7 @@ export type OAuthProvider =
 	| "venice"
 	| "vllm"
 	| "xiaomi"
+	| "zenmux"
 	| "zai";
 
 export type OAuthProviderId = OAuthProvider | (string & {});

@@ -35,6 +35,7 @@ import {
 	vllmModelManagerOptions,
 	xaiModelManagerOptions,
 	xiaomiModelManagerOptions,
+	zenmuxModelManagerOptions,
 } from "./openai-compat";
 import { cursorModelManagerOptions } from "./special";
 
@@ -240,6 +241,12 @@ export const PROVIDER_DESCRIPTORS: readonly ProviderDescriptor[] = [
 		"mimo-v2-flash",
 		config => xiaomiModelManagerOptions(config),
 		catalog("Xiaomi", ["XIAOMI_API_KEY"]),
+	),
+	catalogDescriptor(
+		"zenmux",
+		"anthropic/claude-opus-4.6",
+		config => zenmuxModelManagerOptions(config),
+		catalog("ZenMux", ["ZENMUX_API_KEY"]),
 	),
 	descriptor("github-copilot", "gpt-4o", config => githubCopilotModelManagerOptions(config)),
 	descriptor("google", "gemini-2.5-pro", config => googleModelManagerOptions(config)),

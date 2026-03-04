@@ -668,8 +668,115 @@ export function openrouterModelManagerOptions(
 	};
 }
 
+const ZENMUX_OPENAI_BASE_URL = "https://zenmux.ai/api/v1";
+const ZENMUX_ANTHROPIC_BASE_URL = "https://zenmux.ai/api/anthropic";
+
+function normalizeZenMuxOpenAiBaseUrl(baseUrl?: string): string {
+	const value = baseUrl?.trim();
+	if (!value) {
+		return ZENMUX_OPENAI_BASE_URL;
+	}
+	return value.endsWith("/") ? value.slice(0, -1) : value;
+}
+
+function toZenMuxAnthropicBaseUrl(openAiBaseUrl: string): string {
+	try {
+		const parsed = new URL(openAiBaseUrl);
+		const trimmedPath = parsed.pathname.replace(/\/+$/g, "");
+		parsed.pathname = trimmedPath.endsWith("/api/v1")
+			? `${trimmedPath.slice(0, -"/api/v1".length)}/api/anthropic`
+			: "/api/anthropic";
+		return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+	} catch {
+		return ZENMUX_ANTHROPIC_BASE_URL;
+	}
+}
+
+function isZenMuxAnthropicModel(entry: OpenAICompatibleModelRecord, modelId: string): boolean {
+	if (typeof entry.owned_by === "string" && entry.owned_by.toLowerCase() === "anthropic") {
+		return true;
+	}
+	return modelId.toLowerCase().startsWith("anthropic/");
+}
+
+function getZenMuxPricingValue(pricings: Record<string, unknown> | undefined, key: string): number {
+	const bucket = pricings?.[key];
+	if (!Array.isArray(bucket)) {
+		return 0;
+	}
+	for (const item of bucket) {
+		if (!isRecord(item)) {
+			continue;
+		}
+		const value = toNumber(item.value);
+		if (value !== undefined) {
+			return value;
+		}
+	}
+	return 0;
+}
+
+function getZenMuxCacheWritePrice(pricings: Record<string, unknown> | undefined): number {
+	const oneHour = getZenMuxPricingValue(pricings, "input_cache_write_1_h");
+	if (oneHour > 0) {
+		return oneHour;
+	}
+	const fiveMinute = getZenMuxPricingValue(pricings, "input_cache_write_5_min");
+	if (fiveMinute > 0) {
+		return fiveMinute;
+	}
+	return getZenMuxPricingValue(pricings, "input_cache_write");
+}
+
 // ---------------------------------------------------------------------------
-// 10.5 Kilo Gateway
+// 10.5 ZenMux
+// ---------------------------------------------------------------------------
+
+export interface ZenMuxModelManagerConfig {
+	apiKey?: string;
+	baseUrl?: string;
+}
+
+export function zenmuxModelManagerOptions(config?: ZenMuxModelManagerConfig): ModelManagerOptions<Api> {
+	const apiKey = config?.apiKey;
+	const openAiBaseUrl = normalizeZenMuxOpenAiBaseUrl(config?.baseUrl);
+	const anthropicBaseUrl = toZenMuxAnthropicBaseUrl(openAiBaseUrl);
+	return {
+		providerId: "zenmux",
+		...(apiKey && {
+			fetchDynamicModels: () =>
+				fetchOpenAICompatibleModels<Api>({
+					api: "openai-completions",
+					provider: "zenmux",
+					baseUrl: openAiBaseUrl,
+					apiKey,
+					mapModel: (entry, defaults) => {
+						const pricings = isRecord(entry.pricings) ? entry.pricings : undefined;
+						const capabilities = isRecord(entry.capabilities) ? entry.capabilities : undefined;
+						const isAnthropicModel = isZenMuxAnthropicModel(entry, defaults.id);
+						return {
+							...defaults,
+							name: toModelName(entry.display_name, defaults.name),
+							api: isAnthropicModel ? "anthropic-messages" : "openai-completions",
+							baseUrl: isAnthropicModel ? anthropicBaseUrl : openAiBaseUrl,
+							reasoning: capabilities?.reasoning === true || defaults.reasoning,
+							input: toInputCapabilities(entry.input_modalities),
+							cost: {
+								input: getZenMuxPricingValue(pricings, "prompt"),
+								output: getZenMuxPricingValue(pricings, "completion"),
+								cacheRead: getZenMuxPricingValue(pricings, "input_cache_read"),
+								cacheWrite: getZenMuxCacheWritePrice(pricings),
+							},
+							contextWindow: toPositiveNumber(entry.context_length, defaults.contextWindow),
+						};
+					},
+				}),
+		}),
+	};
+}
+
+// ---------------------------------------------------------------------------
+// 10.6 Kilo Gateway
 // ---------------------------------------------------------------------------
 
 export interface KiloModelManagerConfig {

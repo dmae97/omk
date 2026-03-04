@@ -61,6 +61,7 @@ These are consumed via `getEnvApiKey()` (`packages/ai/src/stream.ts`) unless not
 | `QIANFAN_API_KEY` | Qianfan auth | Using `qianfan` provider |  |
 | `QWEN_OAUTH_TOKEN` | Qwen Portal auth | Using `qwen-portal` with OAuth token | Takes precedence over `QWEN_PORTAL_API_KEY` |
 | `QWEN_PORTAL_API_KEY` | Qwen Portal auth | Using `qwen-portal` with API key | Fallback after `QWEN_OAUTH_TOKEN` |
+| `ZENMUX_API_KEY` | ZenMux auth | Using `zenmux` provider | Used for ZenMux OpenAI and Anthropic-compatible routes |
 | `VLLM_API_KEY` | vLLM auth/discovery opt-in | Using `vllm` provider (local OpenAI-compatible servers) | Any non-empty value works for no-auth local servers |
 | `CURSOR_ACCESS_TOKEN` | Cursor provider auth | Using Cursor provider |  |
 | `AI_GATEWAY_API_KEY` | Vercel AI Gateway auth | Using `vercel-ai-gateway` provider |  |

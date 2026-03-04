@@ -64,6 +64,7 @@ import { loginVenice } from "./utils/oauth/venice";
 import { loginVllm } from "./utils/oauth/vllm";
 import { loginXiaomi } from "./utils/oauth/xiaomi";
 import { loginZai } from "./utils/oauth/zai";
+import { loginZenMux } from "./utils/oauth/zenmux";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Credential Types
@@ -917,6 +918,11 @@ export class AuthStorage {
 			}
 			case "xiaomi": {
 				const apiKey = await loginXiaomi(ctrl);
+				await saveApiKeyCredential(apiKey);
+				return;
+			}
+			case "zenmux": {
+				const apiKey = await loginZenMux(ctrl);
 				await saveApiKeyCredential(apiKey);
 				return;
 			}

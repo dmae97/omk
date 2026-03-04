@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added ZenMux provider support with mixed API routing: Anthropic-owned models discovered from `https://zenmux.ai/api/v1/models` now use the Anthropic transport (`https://zenmux.ai/api/anthropic`), while other ZenMux models use the OpenAI-compatible transport.
+
 ## [13.7.7] - 2026-03-04
 ### Changed
 

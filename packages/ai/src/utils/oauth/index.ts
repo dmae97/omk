@@ -37,6 +37,7 @@ import type {
  * - NanoGPT
  * - Venice
  * - vLLM
+ * - ZenMux
  */
 // Anthropic
 export { loginAnthropic, refreshAnthropicToken } from "./anthropic";
@@ -111,6 +112,8 @@ export { loginVllm } from "./vllm";
 export { loginXiaomi } from "./xiaomi";
 // Z.AI (API key)
 export { loginZai } from "./zai";
+// ZenMux (API key)
+export { loginZenMux } from "./zenmux";
 
 const builtInOAuthProviders: OAuthProviderInfo[] = [
 	{
@@ -259,6 +262,11 @@ const builtInOAuthProviders: OAuthProviderInfo[] = [
 		available: true,
 	},
 	{
+		id: "zenmux",
+		name: "ZenMux",
+		available: true,
+	},
+	{
 		id: "vllm",
 		name: "vLLM (Local OpenAI-compatible)",
 		available: true,
@@ -365,6 +373,7 @@ export async function refreshOAuthToken(
 		case "kagi":
 		case "cloudflare-ai-gateway":
 		case "qwen-portal":
+		case "zenmux":
 		case "vllm":
 			// API keys / static bearer tokens don't expire, return as-is
 			newCredentials = credentials;

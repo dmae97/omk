@@ -15,6 +15,7 @@ import { loginNanoGPT } from "./utils/oauth/nanogpt";
 import { loginOpenAICodex } from "./utils/oauth/openai-codex";
 import type { OAuthCredentials, OAuthProvider } from "./utils/oauth/types";
 import { loginZai } from "./utils/oauth/zai";
+import { loginZenMux } from "./utils/oauth/zenmux";
 
 const PROVIDERS = getOAuthProviders();
 
@@ -220,6 +221,22 @@ async function login(provider: OAuthProvider): Promise<void> {
 				return;
 			}
 
+			case "zenmux": {
+				const apiKey = await loginZenMux({
+					onAuth(info) {
+						const { url, instructions } = info;
+						console.log(`\nOpen this URL in your browser:\n${url}`);
+						if (instructions) console.log(instructions);
+						console.log();
+					},
+					onPrompt(p) {
+						return promptFn(`${p.message}${p.placeholder ? ` (${p.placeholder})` : ""}:`);
+					},
+				});
+				storage.saveApiKey(provider, apiKey);
+				console.log(`\nAPI key saved to ~/.omp/agent/agent.db`);
+				return;
+			}
 			case "minimax-code": {
 				const apiKey = await loginMiniMaxCode({
 					onAuth(info) {
@@ -294,6 +311,7 @@ Providers:
   minimax-code      MiniMax Coding Plan (International)
   minimax-code-cn   MiniMax Coding Plan (China)
   cursor            Cursor (Claude, GPT, etc.)
+  zenmux            ZenMux
 
 Examples:
   bunx @oh-my-pi/pi-ai login              # interactive provider selection
