@@ -1496,12 +1496,24 @@ export class AuthStorage {
 		const order = this.#getCredentialOrder(providerKey, sessionId, credentials.length);
 		const strategy = this.#rankingStrategyResolver?.(provider);
 		const checkUsage = strategy !== undefined && credentials.length > 1;
+		const sessionCredential = this.#getSessionCredential(provider, sessionId);
+		const sessionPreferredIndex = sessionCredential?.type === "oauth" ? sessionCredential.index : undefined;
 		const candidates = checkUsage
 			? await this.#rankOAuthSelections({ providerKey, provider, order, credentials, options, strategy })
 			: order
-					.map(idx => credentials[idx])
-					.filter((selection): selection is { credential: OAuthCredential; index: number } => Boolean(selection))
-					.map(selection => ({ selection, usage: null, usageChecked: false }));
+				.map(idx => credentials[idx])
+				.filter((selection): selection is { credential: OAuthCredential; index: number } => Boolean(selection))
+				.map(selection => ({ selection, usage: null, usageChecked: false }));
+
+		if (sessionPreferredIndex !== undefined) {
+			const sessionPreferredCandidate = candidates.findIndex(candidate =>
+				!this.#isCredentialBlocked(providerKey, candidate.selection.index) && candidate.selection.index === sessionPreferredIndex
+			);
+			if (sessionPreferredCandidate > 0) {
+				const [preferred] = candidates.splice(sessionPreferredCandidate, 1);
+				candidates.unshift(preferred);
+			}
+		}
 		const fallback = candidates[0];
 
 		for (const candidate of candidates) {
