@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.7.4] - 2026-03-04
 ### Added
 - Added `fetch.useKagiSummarizer` setting to toggle Kagi Universal Summarizer usage in the fetch tool.
 
