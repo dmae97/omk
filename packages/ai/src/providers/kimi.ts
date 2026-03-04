@@ -62,9 +62,10 @@ export function streamKimi(
 
 				// Calculate thinking budget from reasoning level
 				const reasoning = options?.reasoning;
-				const thinkingEnabled = !!reasoning && model.reasoning;
-				const thinkingBudget = reasoning
-					? (options?.thinkingBudgets?.[reasoning] ?? ANTHROPIC_THINKING[reasoning])
+				const reasoningEffort = reasoning === "off" ? undefined : reasoning;
+				const thinkingEnabled = !!reasoningEffort && model.reasoning;
+				const thinkingBudget = reasoningEffort
+					? (options?.thinkingBudgets?.[reasoningEffort] ?? ANTHROPIC_THINKING[reasoningEffort])
 					: undefined;
 
 				const innerStream = streamAnthropic(anthropicModel, context, {
@@ -89,6 +90,7 @@ export function streamKimi(
 				}
 			} else {
 				// OpenAI format - use original model with Kimi headers
+				const reasoningEffort = options?.reasoning === "off" ? undefined : options?.reasoning;
 				const innerStream = streamOpenAICompletions(model, context, {
 					apiKey: options?.apiKey,
 					temperature: options?.temperature,
@@ -102,7 +104,7 @@ export function streamKimi(
 					headers: mergedHeaders,
 					sessionId: options?.sessionId,
 					onPayload: options?.onPayload,
-					thinkingLevel: options?.reasoning,
+					reasoning: reasoningEffort,
 				});
 
 				for await (const event of innerStream) {

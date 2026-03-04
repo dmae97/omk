@@ -267,6 +267,11 @@ export function streamGitLabDuo(
 				...options.headers,
 			};
 
+			const reasoningEffort =
+				options.reasoning === "off"
+					? undefined
+					: (options.reasoning as "minimal" | "low" | "medium" | "high" | "xhigh" | undefined);
+
 			const inner =
 				mapping.provider === "anthropic"
 					? streamAnthropic(
@@ -295,11 +300,11 @@ export function streamGitLabDuo(
 								sessionId: options.sessionId,
 								providerSessionState: options.providerSessionState,
 								onPayload: options.onPayload,
-								thinkingEnabled: Boolean(options.reasoning) && model.reasoning,
-								thinkingBudgetTokens: options.reasoning
-									? (options.thinkingBudgets?.[options.reasoning] ?? ANTHROPIC_THINKING[options.reasoning])
+								thinkingEnabled: Boolean(reasoningEffort) && model.reasoning,
+								thinkingBudgetTokens: reasoningEffort
+									? (options.thinkingBudgets?.[reasoningEffort] ?? ANTHROPIC_THINKING[reasoningEffort])
 									: undefined,
-								reasoning: options.reasoning,
+								reasoning: reasoningEffort,
 								toolChoice: mapAnthropicToolChoice(options.toolChoice),
 							},
 						)
@@ -329,7 +334,7 @@ export function streamGitLabDuo(
 									sessionId: options.sessionId,
 									providerSessionState: options.providerSessionState,
 									onPayload: options.onPayload,
-									reasoning: options.reasoning,
+									reasoning: reasoningEffort,
 									toolChoice: options.toolChoice,
 								} satisfies OpenAIResponsesOptions,
 							)
@@ -358,7 +363,7 @@ export function streamGitLabDuo(
 									sessionId: options.sessionId,
 									providerSessionState: options.providerSessionState,
 									onPayload: options.onPayload,
-									thinkingLevel: options.reasoning,
+									reasoning: reasoningEffort,
 									toolChoice: options.toolChoice,
 								} satisfies OpenAICompletionsOptions,
 							);
