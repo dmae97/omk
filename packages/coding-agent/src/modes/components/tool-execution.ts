@@ -30,7 +30,7 @@ import {
 	stripInternalArgs,
 } from "../../tools/json-tree";
 import { PYTHON_DEFAULT_PREVIEW_LINES } from "../../tools/python";
-import { formatExpandHint, truncateToWidth } from "../../tools/render-utils";
+import { formatExpandHint, replaceTabs, truncateToWidth } from "../../tools/render-utils";
 import { toolRenderers } from "../../tools/renderers";
 import { renderStatusLine } from "../../tui";
 import { convertToPng } from "../../utils/image-convert";
@@ -431,14 +431,14 @@ export class ToolExecutionComponent extends Container {
 					// Fall back to showing raw output on error
 					const output = this.#getTextOutput();
 					if (output) {
-						this.#contentBox.addChild(new Text(theme.fg("toolOutput", output), 0, 0));
+						this.#contentBox.addChild(new Text(theme.fg("toolOutput", replaceTabs(output)), 0, 0));
 					}
 				}
 			} else if (this.#result) {
 				// Has result but no custom renderResult
 				const output = this.#getTextOutput();
 				if (output) {
-					this.#contentBox.addChild(new Text(theme.fg("toolOutput", output), 0, 0));
+					this.#contentBox.addChild(new Text(theme.fg("toolOutput", replaceTabs(output)), 0, 0));
 				}
 			}
 		} else if (this.#toolName in toolRenderers) {
@@ -488,7 +488,7 @@ export class ToolExecutionComponent extends Container {
 					// Fall back to showing raw output on error
 					const output = this.#getTextOutput();
 					if (output) {
-						this.#contentBox.addChild(new Text(theme.fg("toolOutput", output), 0, 0));
+						this.#contentBox.addChild(new Text(theme.fg("toolOutput", replaceTabs(output)), 0, 0));
 					}
 				}
 			}
@@ -679,7 +679,7 @@ export class ToolExecutionComponent extends Container {
 		const displayLines = outputLines.slice(0, maxOutputLines);
 
 		for (const line of displayLines) {
-			lines.push(theme.fg("toolOutput", truncateToWidth(line, 80)));
+			lines.push(theme.fg("toolOutput", truncateToWidth(replaceTabs(line), 80)));
 		}
 
 		if (outputLines.length > maxOutputLines) {
