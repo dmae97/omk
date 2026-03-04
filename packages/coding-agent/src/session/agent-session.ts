@@ -3539,33 +3539,13 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		const availableModels = this.#modelRegistry.getAvailable();
 		if (availableModels.length === 0) return undefined;
 
-		const candidates: Model[] = [];
-		const seen = new Set<string>();
-		const addCandidate = (candidate: Model | undefined): void => {
-			if (!candidate) return;
-			const key = this.#getModelKey(candidate);
-			if (seen.has(key)) return;
-			seen.add(key);
-			candidates.push(candidate);
-		};
-
-		addCandidate(this.#resolveContextPromotionConfiguredTarget(currentModel, availableModels));
-
-		const sameProviderLarger = [...availableModels]
-			.filter(
-				m => m.provider === currentModel.provider && m.api === currentModel.api && m.contextWindow > contextWindow,
-			)
-			.sort((a, b) => a.contextWindow - b.contextWindow);
-		addCandidate(sameProviderLarger[0]);
-		for (const candidate of candidates) {
-			if (modelsAreEqual(candidate, currentModel)) continue;
-			if (candidate.contextWindow <= contextWindow) continue;
-			const apiKey = await this.#modelRegistry.getApiKey(candidate, this.sessionId);
-			if (!apiKey) continue;
-			return candidate;
-		}
-
-		return undefined;
+		const candidate = this.#resolveContextPromotionConfiguredTarget(currentModel, availableModels);
+		if (!candidate) return undefined;
+		if (modelsAreEqual(candidate, currentModel)) return undefined;
+		if (candidate.contextWindow <= contextWindow) return undefined;
+		const apiKey = await this.#modelRegistry.getApiKey(candidate, this.sessionId);
+		if (!apiKey) return undefined;
+		return candidate;
 	}
 
 	#setModelWithProviderSessionReset(model: Model): void {

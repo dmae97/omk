@@ -9,6 +9,7 @@
 ### Changed
 
 - Changed edit tool response to include diff summary with line counts (+added -removed) and a compact diff preview instead of warnings-only output
+- Limited auto context promotion to models with explicit `contextPromotionTarget`; models without a configured target now compact on overflow instead of switching to arbitrary larger models ([#282](https://github.com/can1357/oh-my-pi/issues/282))
 
 ### Fixed
 
