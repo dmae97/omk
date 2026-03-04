@@ -1,3 +1,4 @@
+import { getOAuthProviders } from "@oh-my-pi/pi-ai";
 import type { SettingPath, SettingValue } from "../config/settings";
 import { settings } from "../config/settings";
 import type { InteractiveModeContext } from "../modes/types";
@@ -261,12 +262,27 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 	{
 		name: "login",
 		description: "Login with OAuth provider",
-		inlineHint: "[redirect URL]",
+		inlineHint: "[provider|redirect URL]",
 		allowArgs: true,
 		handle: (command, runtime) => {
 			const manualInput = runtime.ctx.oauthManualInput;
 			const args = command.args.trim();
 			if (args.length > 0) {
+				const matchedProvider = getOAuthProviders().find(provider => provider.id === args);
+				if (matchedProvider) {
+					if (manualInput.hasPending()) {
+						const pendingProvider = manualInput.pendingProviderId;
+						const message = pendingProvider
+							? `OAuth login already in progress for ${pendingProvider}. Paste the redirect URL with /login <url>.`
+							: "OAuth login already in progress. Paste the redirect URL with /login <url>.";
+						runtime.ctx.showWarning(message);
+						runtime.ctx.editor.setText("");
+						return;
+					}
+					void runtime.ctx.showOAuthSelector("login", matchedProvider.id);
+					runtime.ctx.editor.setText("");
+					return;
+				}
 				const submitted = manualInput.submit(args);
 				if (submitted) {
 					runtime.ctx.showStatus("OAuth callback received; completing login…");

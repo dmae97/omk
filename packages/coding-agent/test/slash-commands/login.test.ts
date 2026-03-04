@@ -8,13 +8,14 @@ type RuntimeHarness = {
 	getStatus: () => string | undefined;
 	getWarning: () => string | undefined;
 	getSelectorMode: () => "login" | "logout" | undefined;
+	getSelectorProvider: () => string | undefined;
 };
 
 const createRuntimeHarness = (manualInput: OAuthManualInputManager): RuntimeHarness => {
 	let statusMessage: string | undefined;
 	let warningMessage: string | undefined;
 	let selectorMode: "login" | "logout" | undefined;
-
+	let selectorProvider: string | undefined;
 	const ctx = {
 		oauthManualInput: manualInput,
 		editor: {
@@ -26,8 +27,9 @@ const createRuntimeHarness = (manualInput: OAuthManualInputManager): RuntimeHarn
 		showWarning: (message: string) => {
 			warningMessage = message;
 		},
-		showOAuthSelector: async (mode: "login" | "logout") => {
+		showOAuthSelector: async (mode: "login" | "logout", providerId?: string) => {
 			selectorMode = mode;
+			selectorProvider = providerId;
 		},
 	} as InteractiveModeContext;
 
@@ -39,6 +41,7 @@ const createRuntimeHarness = (manualInput: OAuthManualInputManager): RuntimeHarn
 		getStatus: () => statusMessage,
 		getWarning: () => warningMessage,
 		getSelectorMode: () => selectorMode,
+		getSelectorProvider: () => selectorProvider,
 	};
 };
 
@@ -65,6 +68,17 @@ describe("/login slash command", () => {
 
 		expect(handled).toBe(true);
 		expect(harness.getSelectorMode()).toBe("login");
+	});
+
+	it("routes /login kagi to direct provider login", async () => {
+		const manualInput = new OAuthManualInputManager();
+		const harness = createRuntimeHarness(manualInput);
+
+		const handled = await executeBuiltinSlashCommand("/login kagi", harness.runtime);
+
+		expect(handled).toBe(true);
+		expect(harness.getSelectorMode()).toBe("login");
+		expect(harness.getSelectorProvider()).toBe("kagi");
 	});
 
 	it("warns when no pending login exists for manual callback", async () => {

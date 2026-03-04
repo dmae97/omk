@@ -42,6 +42,7 @@ import { loginGitLabDuo } from "./utils/oauth/gitlab-duo";
 import { loginAntigravity } from "./utils/oauth/google-antigravity";
 import { loginGeminiCli } from "./utils/oauth/google-gemini-cli";
 import { loginHuggingface } from "./utils/oauth/huggingface";
+import { loginKagi } from "./utils/oauth/kagi";
 import { loginKilo } from "./utils/oauth/kilo";
 import { loginKimi } from "./utils/oauth/kimi";
 import { loginLiteLLM } from "./utils/oauth/litellm";
@@ -876,6 +877,11 @@ export class AuthStorage {
 			}
 			case "moonshot": {
 				const apiKey = await loginMoonshot(ctrl);
+				await saveApiKeyCredential(apiKey);
+				return;
+			}
+			case "kagi": {
+				const apiKey = await loginKagi(ctrl);
 				await saveApiKeyCredential(apiKey);
 				return;
 			}

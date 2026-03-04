@@ -126,23 +126,21 @@ function formatCount(label: string, count: number): string {
 function formatForLLM(response: SearchResponse): string {
 	const parts: string[] = [];
 
-	parts.push("## Answer");
-	parts.push(response.answer ? response.answer : "No answer text returned.");
-
-	if (response.sources.length > 0) {
-		parts.push("\n## Sources");
-		parts.push(formatCount("source", response.sources.length));
-		for (const [i, src] of response.sources.entries()) {
-			const age = formatAge(src.ageSeconds) || src.publishedDate;
-			const agePart = age ? ` (${age})` : "";
-			parts.push(`[${i + 1}] ${src.title}${agePart}\n    ${src.url}`);
-			if (src.snippet) {
-				parts.push(`    ${truncateText(src.snippet, 240)}`);
-			}
+	if (response.answer) {
+		parts.push(response.answer);
+		if (response.sources.length > 0) {
+			parts.push("\n## Sources");
+			parts.push(formatCount("source", response.sources.length));
 		}
-	} else {
-		parts.push("\n## Sources");
-		parts.push("0 sources");
+	}
+
+	for (const [i, src] of response.sources.entries()) {
+		const age = formatAge(src.ageSeconds) || src.publishedDate;
+		const agePart = age ? ` (${age})` : "";
+		parts.push(`[${i + 1}] ${src.title}${agePart}\n    ${src.url}`);
+		if (src.snippet) {
+			parts.push(`    ${truncateText(src.snippet, 240)}`);
+		}
 	}
 
 	if (response.citations && response.citations.length > 0) {
@@ -163,29 +161,8 @@ function formatForLLM(response: SearchResponse): string {
 		for (const q of response.relatedQuestions) {
 			parts.push(`- ${q}`);
 		}
-	} else {
-		parts.push("\n## Related");
-		parts.push("0 questions");
 	}
 
-	parts.push("\n## Meta");
-	parts.push(`Provider: ${response.provider}`);
-	if (response.model) {
-		parts.push(`Model: ${response.model}`);
-	}
-	if (response.usage) {
-		const usageParts: string[] = [];
-		if (response.usage.inputTokens !== undefined) usageParts.push(`in ${response.usage.inputTokens}`);
-		if (response.usage.outputTokens !== undefined) usageParts.push(`out ${response.usage.outputTokens}`);
-		if (response.usage.totalTokens !== undefined) usageParts.push(`total ${response.usage.totalTokens}`);
-		if (response.usage.searchRequests !== undefined) usageParts.push(`search ${response.usage.searchRequests}`);
-		if (usageParts.length > 0) {
-			parts.push(`Usage: ${usageParts.join(" | ")}`);
-		}
-	}
-	if (response.requestId) {
-		parts.push(`Request: ${truncateText(response.requestId, 64)}`);
-	}
 	if (response.searchQueries && response.searchQueries.length > 0) {
 		parts.push(`Search queries: ${response.searchQueries.length}`);
 		for (const query of response.searchQueries.slice(0, 3)) {

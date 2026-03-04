@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added support for direct OAuth provider login via `/login <provider>` command (e.g., `/login kagi`)
+- Added optional `providerId` parameter to `showOAuthSelector()` to enable direct provider selection without UI selector
+
+### Changed
+
+- Simplified web search result formatting to omit empty sections and metadata when not present
 
 ## [13.7.0] - 2026-03-03
 

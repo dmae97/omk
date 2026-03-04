@@ -1,12 +1,17 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added support for Kagi API key authentication via `login kagi` command
+- Added Kagi to the list of available OAuth providers
 
 ### Fixed
 
 - MCP tool schemas with `$ref`/`$defs` are now dereferenced before being sent to LLM providers, fixing dangling references that left models without type definitions
 - Ajv schema validation no longer emits `console.warn()` for non-standard format keywords (e.g. `"uint"`) from MCP servers, preventing TUI corruption
 - Tool schema compilation is now cached per schema identity, eliminating redundant recompilation on every tool call
+
 ## [13.6.0] - 2026-03-03
 ### Added
 

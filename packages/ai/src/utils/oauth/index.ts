@@ -28,6 +28,7 @@ import type {
  * - Antigravity (Gemini 3, Claude, GPT-OSS via Google Cloud)
  * - Kimi Code
  * - Kilo Gateway
+ * - Kagi
  * - Cerebras
  * - Hugging Face Inference
  * - Synthetic
@@ -66,6 +67,8 @@ export { loginAntigravity, refreshAntigravityToken } from "./google-antigravity"
 export { loginGeminiCli, refreshGoogleCloudToken } from "./google-gemini-cli";
 // Hugging Face Inference (API key)
 export { loginHuggingface } from "./huggingface";
+// Kagi (API key)
+export { loginKagi } from "./kagi";
 // Kilo Gateway
 export { loginKilo } from "./kilo";
 // Kimi Code
@@ -133,6 +136,11 @@ const builtInOAuthProviders: OAuthProviderInfo[] = [
 	{
 		id: "kilo",
 		name: "Kilo Gateway",
+		available: true,
+	},
+	{
+		id: "kagi",
+		name: "Kagi",
 		available: true,
 	},
 	{
@@ -354,6 +362,7 @@ export async function refreshOAuthToken(
 		case "minimax-code":
 		case "minimax-code-cn":
 		case "moonshot":
+		case "kagi":
 		case "cloudflare-ai-gateway":
 		case "qwen-portal":
 		case "vllm":

@@ -617,7 +617,99 @@ export class SelectorController {
 		this.ctx.showStatus("Resumed session");
 	}
 
-	async showOAuthSelector(mode: "login" | "logout"): Promise<void> {
+	async #handleOAuthLogin(providerId: string): Promise<void> {
+		this.ctx.showStatus(`Logging in to ${providerId}…`);
+		const manualInput = this.ctx.oauthManualInput;
+		const useManualInput = CALLBACK_SERVER_PROVIDERS.has(providerId as OAuthProvider);
+		try {
+			await this.ctx.session.modelRegistry.authStorage.login(providerId as OAuthProvider, {
+				onAuth: (info: { url: string; instructions?: string }) => {
+					this.ctx.chatContainer.addChild(new Spacer(1));
+					this.ctx.chatContainer.addChild(new Text(theme.fg("dim", info.url), 1, 0));
+					const hyperlink = `\x1b]8;;${info.url}\x07Click here to login\x1b]8;;\x07`;
+					this.ctx.chatContainer.addChild(new Text(theme.fg("accent", hyperlink), 1, 0));
+					if (info.instructions) {
+						this.ctx.chatContainer.addChild(new Spacer(1));
+						this.ctx.chatContainer.addChild(new Text(theme.fg("warning", info.instructions), 1, 0));
+					}
+					if (useManualInput) {
+						this.ctx.chatContainer.addChild(new Spacer(1));
+						this.ctx.chatContainer.addChild(new Text(theme.fg("dim", MANUAL_LOGIN_TIP), 1, 0));
+					}
+					this.ctx.ui.requestRender();
+					this.ctx.openInBrowser(info.url);
+				},
+				onPrompt: async (prompt: { message: string; placeholder?: string }) => {
+					this.ctx.chatContainer.addChild(new Spacer(1));
+					this.ctx.chatContainer.addChild(new Text(theme.fg("warning", prompt.message), 1, 0));
+					if (prompt.placeholder) {
+						this.ctx.chatContainer.addChild(new Text(theme.fg("dim", prompt.placeholder), 1, 0));
+					}
+					this.ctx.ui.requestRender();
+					const { promise, resolve } = Promise.withResolvers<string>();
+					const codeInput = new Input();
+					codeInput.onSubmit = () => {
+						const code = codeInput.getValue();
+						this.ctx.editorContainer.clear();
+						this.ctx.editorContainer.addChild(this.ctx.editor);
+						this.ctx.ui.setFocus(this.ctx.editor);
+						resolve(code);
+					};
+					this.ctx.editorContainer.clear();
+					this.ctx.editorContainer.addChild(codeInput);
+					this.ctx.ui.setFocus(codeInput);
+					this.ctx.ui.requestRender();
+					return promise;
+				},
+				onProgress: (message: string) => {
+					this.ctx.chatContainer.addChild(new Text(theme.fg("dim", message), 1, 0));
+					this.ctx.ui.requestRender();
+				},
+				onManualCodeInput: useManualInput ? () => manualInput.waitForInput(providerId) : undefined,
+			});
+			await this.ctx.session.modelRegistry.refresh();
+			this.ctx.chatContainer.addChild(new Spacer(1));
+			this.ctx.chatContainer.addChild(
+				new Text(theme.fg("success", `${theme.status.success} Successfully logged in to ${providerId}`), 1, 0),
+			);
+			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", `Credentials saved to ${getAgentDbPath()}`), 1, 0));
+			this.ctx.ui.requestRender();
+		} catch (error: unknown) {
+			this.ctx.showError(`Login failed: ${error instanceof Error ? error.message : String(error)}`);
+		} finally {
+			if (useManualInput) {
+				manualInput.clear(`Manual OAuth input cleared for ${providerId}`);
+			}
+		}
+	}
+
+	async #handleOAuthLogout(providerId: string): Promise<void> {
+		try {
+			await this.ctx.session.modelRegistry.authStorage.logout(providerId);
+			await this.ctx.session.modelRegistry.refresh();
+			this.ctx.chatContainer.addChild(new Spacer(1));
+			this.ctx.chatContainer.addChild(
+				new Text(theme.fg("success", `${theme.status.success} Successfully logged out of ${providerId}`), 1, 0),
+			);
+			this.ctx.chatContainer.addChild(
+				new Text(theme.fg("dim", `Credentials removed from ${getAgentDbPath()}`), 1, 0),
+			);
+			this.ctx.ui.requestRender();
+		} catch (error: unknown) {
+			this.ctx.showError(`Logout failed: ${error instanceof Error ? error.message : String(error)}`);
+		}
+	}
+
+	async showOAuthSelector(mode: "login" | "logout", providerId?: string): Promise<void> {
+		if (providerId) {
+			if (mode === "login") {
+				await this.#handleOAuthLogin(providerId);
+			} else {
+				await this.#handleOAuthLogout(providerId);
+			}
+			return;
+		}
+
 		if (mode === "logout") {
 			await this.#refreshOAuthProviderAuthState();
 			const oauthProviders = getOAuthProviders();
@@ -635,101 +727,13 @@ export class SelectorController {
 			selector = new OAuthSelectorComponent(
 				mode,
 				this.ctx.session.modelRegistry.authStorage,
-				async (providerId: string) => {
+				async (selectedProviderId: string) => {
 					selector.stopValidation();
 					done();
 					if (mode === "login") {
-						this.ctx.showStatus(`Logging in to ${providerId}…`);
-						const manualInput = this.ctx.oauthManualInput;
-						const useManualInput = CALLBACK_SERVER_PROVIDERS.has(providerId as OAuthProvider);
-						try {
-							await this.ctx.session.modelRegistry.authStorage.login(providerId as OAuthProvider, {
-								onAuth: (info: { url: string; instructions?: string }) => {
-									this.ctx.chatContainer.addChild(new Spacer(1));
-									this.ctx.chatContainer.addChild(new Text(theme.fg("dim", info.url), 1, 0));
-									// Use OSC 8 hyperlink escape sequence for clickable link
-									const hyperlink = `\x1b]8;;${info.url}\x07Click here to login\x1b]8;;\x07`;
-									this.ctx.chatContainer.addChild(new Text(theme.fg("accent", hyperlink), 1, 0));
-									if (info.instructions) {
-										this.ctx.chatContainer.addChild(new Spacer(1));
-										this.ctx.chatContainer.addChild(new Text(theme.fg("warning", info.instructions), 1, 0));
-									}
-									if (useManualInput) {
-										this.ctx.chatContainer.addChild(new Spacer(1));
-										this.ctx.chatContainer.addChild(new Text(theme.fg("dim", MANUAL_LOGIN_TIP), 1, 0));
-									}
-									this.ctx.ui.requestRender();
-									this.ctx.openInBrowser(info.url);
-								},
-								onPrompt: async (prompt: { message: string; placeholder?: string }) => {
-									this.ctx.chatContainer.addChild(new Spacer(1));
-									this.ctx.chatContainer.addChild(new Text(theme.fg("warning", prompt.message), 1, 0));
-									if (prompt.placeholder) {
-										this.ctx.chatContainer.addChild(new Text(theme.fg("dim", prompt.placeholder), 1, 0));
-									}
-									this.ctx.ui.requestRender();
-									return new Promise<string>(resolve => {
-										const codeInput = new Input();
-										codeInput.onSubmit = () => {
-											const code = codeInput.getValue();
-											this.ctx.editorContainer.clear();
-											this.ctx.editorContainer.addChild(this.ctx.editor);
-											this.ctx.ui.setFocus(this.ctx.editor);
-											resolve(code);
-										};
-										this.ctx.editorContainer.clear();
-										this.ctx.editorContainer.addChild(codeInput);
-										this.ctx.ui.setFocus(codeInput);
-										this.ctx.ui.requestRender();
-									});
-								},
-								onProgress: (message: string) => {
-									this.ctx.chatContainer.addChild(new Text(theme.fg("dim", message), 1, 0));
-									this.ctx.ui.requestRender();
-								},
-								onManualCodeInput: useManualInput ? () => manualInput.waitForInput(providerId) : undefined,
-							});
-							// Refresh models to pick up new baseUrl (e.g., github-copilot)
-							await this.ctx.session.modelRegistry.refresh();
-							this.ctx.chatContainer.addChild(new Spacer(1));
-							this.ctx.chatContainer.addChild(
-								new Text(
-									theme.fg("success", `${theme.status.success} Successfully logged in to ${providerId}`),
-									1,
-									0,
-								),
-							);
-							this.ctx.chatContainer.addChild(
-								new Text(theme.fg("dim", `Credentials saved to ${getAgentDbPath()}`), 1, 0),
-							);
-							this.ctx.ui.requestRender();
-						} catch (error: unknown) {
-							this.ctx.showError(`Login failed: ${error instanceof Error ? error.message : String(error)}`);
-						} finally {
-							if (useManualInput) {
-								manualInput.clear(`Manual OAuth input cleared for ${providerId}`);
-							}
-						}
+						await this.#handleOAuthLogin(selectedProviderId);
 					} else {
-						try {
-							await this.ctx.session.modelRegistry.authStorage.logout(providerId);
-							// Refresh models to reset baseUrl
-							await this.ctx.session.modelRegistry.refresh();
-							this.ctx.chatContainer.addChild(new Spacer(1));
-							this.ctx.chatContainer.addChild(
-								new Text(
-									theme.fg("success", `${theme.status.success} Successfully logged out of ${providerId}`),
-									1,
-									0,
-								),
-							);
-							this.ctx.chatContainer.addChild(
-								new Text(theme.fg("dim", `Credentials removed from ${getAgentDbPath()}`), 1, 0),
-							);
-							this.ctx.ui.requestRender();
-						} catch (error: unknown) {
-							this.ctx.showError(`Logout failed: ${error instanceof Error ? error.message : String(error)}`);
-						}
+						await this.#handleOAuthLogout(selectedProviderId);
 					}
 				},
 				() => {
@@ -738,9 +742,9 @@ export class SelectorController {
 					this.ctx.ui.requestRender();
 				},
 				{
-					validateAuth: async (providerId: string) => {
+					validateAuth: async (selectedProviderId: string) => {
 						const apiKey = await this.ctx.session.modelRegistry.getApiKeyForProvider(
-							providerId,
+							selectedProviderId,
 							this.ctx.session.sessionId,
 						);
 						return !!apiKey;
