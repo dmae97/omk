@@ -32,7 +32,7 @@ export function normalizeResponsesToolCallId(id: string): { callId: string; item
 	const [callId, itemId] = id.split("|");
 	if (callId && itemId) {
 		const normalizedCallId = truncateResponseItemId(callId, getIdPrefix(callId, "call"));
-		const normalizedItemId = truncateResponseItemId(itemId, "fc");
+		const normalizedItemId = normalizeResponsesItemId(itemId);
 		return { callId: normalizedCallId, itemId: normalizedItemId };
 	}
 	const hash = Bun.hash.xxHash64(id).toString(36);
@@ -43,6 +43,14 @@ export function normalizeResponsesToolCallId(id: string): { callId: string; item
 function getIdPrefix(id: string, fallback: string): string {
 	const prefix = id.match(/^([a-zA-Z][a-zA-Z0-9]*)_/)?.[1];
 	return prefix || fallback;
+}
+
+function normalizeResponsesItemId(itemId: string): string {
+	const prefix = getIdPrefix(itemId, "fc");
+	if (prefix !== "fc" && prefix !== "fcr") {
+		return `fc_${Bun.hash.xxHash64(itemId).toString(36)}`;
+	}
+	return truncateResponseItemId(itemId, prefix);
 }
 
 /**

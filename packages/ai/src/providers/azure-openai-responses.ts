@@ -678,7 +678,7 @@ function convertMessages(
 					// OpenAI tracks which fc_xxx IDs were paired with rs_xxx reasoning items.
 					// By omitting the id, we avoid triggering that validation (like cross-provider does).
 					let itemId: string | undefined = normalized.itemId;
-					if (isDifferentModel && itemId?.startsWith("fc_")) {
+					if (isDifferentModel && (itemId?.startsWith("fc_") || itemId?.startsWith("fcr_"))) {
 						itemId = undefined;
 					}
 					knownCallIds.add(normalized.callId);

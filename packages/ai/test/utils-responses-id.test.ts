@@ -14,6 +14,13 @@ describe("normalizeResponsesToolCallId", () => {
 		expect(normalized.itemId.length).toBeLessThanOrEqual(64);
 	});
 
+	it("keeps valid responses item ids unchanged", () => {
+		const normalized = normalizeResponsesToolCallId("call_abc|fcr_12345");
+
+		expect(normalized.callId).toBe("call_abc");
+		expect(normalized.itemId).toBe("fcr_12345");
+	});
+
 	it("uses fc-prefixed item id for single-part tool call ids", () => {
 		const normalized = normalizeResponsesToolCallId("call_gemini_123");
 
