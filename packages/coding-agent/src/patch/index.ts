@@ -400,16 +400,16 @@ export class EditTool implements AgentTool<TInput> {
 	 */
 	get mode(): EditMode {
 		if (this.#editMode) return this.#editMode;
+		// 1. Check if edit mode is explicitly set for this model
 		const activeModel = this.session.getActiveModelString?.();
-		const editVariant =
-			this.session.settings.getEditVariantForModel(activeModel) ??
-			normalizeEditMode(this.session.settings.get("edit.mode"));
-		if (editVariant) {
-			return editVariant;
-		}
-		if (activeModel?.includes("-spark")) {
-			return "replace";
-		}
+		const modelVariant = this.session.settings.getEditVariantForModel(activeModel);
+		if (modelVariant) return modelVariant;
+		// 2. Check if model contains "-spark" substring (default to replace mode)
+		if (activeModel?.includes("-spark")) return "replace";
+		// 3. Check if edit mode is explicitly set in session settings
+		const settingsMode = normalizeEditMode(this.session.settings.get("edit.mode"));
+		if (settingsMode) return settingsMode;
+		// 4. Default to DEFAULT_EDIT_MODE
 		return DEFAULT_EDIT_MODE;
 	}
 
