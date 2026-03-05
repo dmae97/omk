@@ -1,6 +1,16 @@
 # Changelog
 
 ## [Unreleased]
+### Breaking Changes
+
+- Removed `THINKING_LEVELS`, `ALL_THINKING_LEVELS`, `ALL_THINKING_MODES`, `THINKING_MODE_DESCRIPTIONS`, and `THINKING_MODE_LABELS` exports
+- Renamed `formatThinking()` to `getThinkingMetadata()` with changed return type from string to `ThinkingMetadata` object
+- Renamed `getAvailableThinkingLevel()` to `getAvailableThinkingLevels()` and added default parameter
+- Renamed `getAvailableThinkingEffort()` to `getAvailableThinkingEfforts()` and added default parameter
+
+### Added
+
+- Added `ThinkingMetadata` type to provide structured access to thinking mode information (value, label, description)
 
 ## [13.9.0] - 2026-03-05
 ### Added

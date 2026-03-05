@@ -44,6 +44,7 @@ function createTestToolSession(cwd: string): ToolSession {
 
 describe("Coding Agent Tools", () => {
 	let testDir: string;
+	let session: ToolSession;
 	let readTool: ReadTool;
 	let writeTool: WriteTool;
 	let editTool: EditTool;
@@ -62,7 +63,7 @@ describe("Coding Agent Tools", () => {
 		fs.mkdirSync(testDir, { recursive: true });
 
 		// Create tools for this test directory
-		const session = createTestToolSession(testDir);
+		session = createTestToolSession(testDir);
 		readTool = wrapToolWithMetaNotice(new ReadTool(session));
 		writeTool = wrapToolWithMetaNotice(new WriteTool(session));
 		editTool = wrapToolWithMetaNotice(new EditTool(session));
@@ -110,14 +111,17 @@ describe("Coding Agent Tools", () => {
 			const testFile = path.join(testDir, "large.txt");
 			const lines = Array.from({ length: 3500 }, (_, i) => `Line ${i + 1}`);
 			fs.writeFileSync(testFile, lines.join("\n"));
+			const defaultLimit = session.settings.get("read.defaultLimit");
 
 			const result = await readTool.execute("test-call-3", { path: testFile });
 			const output = getTextOutput(result);
 
 			expect(output).toContain("Line 1");
-			expect(output).toContain("Line 3000");
-			expect(output).not.toContain("Line 3001");
-			expect(output).toContain("[Showing lines 1-3000 of 3500. Use offset=3001 to continue]");
+			expect(output).toContain(`Line ${defaultLimit}`);
+			expect(output).not.toContain(`Line ${defaultLimit + 1}`);
+			expect(output).toContain(
+				`[Showing lines 1-${defaultLimit} of 3500. Use offset=${defaultLimit + 1} to continue]`,
+			);
 		});
 
 		it("should truncate when byte limit exceeded", async () => {
@@ -199,6 +203,7 @@ describe("Coding Agent Tools", () => {
 			const testFile = path.join(testDir, "large-file.txt");
 			const lines = Array.from({ length: 3500 }, (_, i) => `Line ${i + 1}`);
 			fs.writeFileSync(testFile, lines.join("\n"));
+			const defaultLimit = session.settings.get("read.defaultLimit");
 
 			const result = await readTool.execute("test-call-9", { path: testFile });
 
@@ -207,7 +212,7 @@ describe("Coding Agent Tools", () => {
 			expect(result.details?.truncation?.truncated).toBe(true);
 			expect(result.details?.truncation?.truncatedBy).toBe("lines");
 			expect(result.details?.truncation?.totalLines).toBe(3500);
-			expect(result.details?.truncation?.outputLines).toBe(3000);
+			expect(result.details?.truncation?.outputLines).toBe(defaultLimit);
 		});
 
 		it("should detect image MIME type from file magic (not extension)", async () => {

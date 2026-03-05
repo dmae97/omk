@@ -1,7 +1,7 @@
 /**
  * CLI argument parsing and help display
  */
-import { ALL_THINKING_LEVELS, parseThinkingLevel, type ThinkingLevel } from "@oh-my-pi/pi-ai";
+import { getAvailableThinkingLevels, parseThinkingLevel, type ThinkingLevel } from "@oh-my-pi/pi-ai";
 import { APP_NAME, CONFIG_DIR_NAME, logger } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
 import { BUILTIN_TOOLS } from "../tools";
@@ -128,7 +128,7 @@ export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "
 			} else {
 				logger.warn("Invalid thinking level passed to --thinking", {
 					level: rawThinking,
-					validThinkingLevels: [...ALL_THINKING_LEVELS],
+					validThinkingLevels: getAvailableThinkingLevels(),
 				});
 			}
 		} else if (arg === "--print" || arg === "-p") {

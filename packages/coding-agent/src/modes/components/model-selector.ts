@@ -1,6 +1,6 @@
 import {
-	formatThinking,
-	getAvailableThinkingLevel,
+	getAvailableThinkingLevels,
+	getThinkingMetadata,
 	type Model,
 	modelsAreEqual,
 	supportsXhigh,
@@ -409,7 +409,7 @@ export class ModelSelectorComponent extends Container {
 				if (!tag || !assigned || !modelsAreEqual(assigned.model, item.model)) continue;
 
 				const badge = makeInvertedBadge(tag, color ?? "success");
-				const thinkingLabel = formatThinking(assigned.thinkingMode);
+				const thinkingLabel = getThinkingMetadata(assigned.thinkingMode).label;
 				roleBadgeTokens.push(`${badge} ${theme.fg("dim", `(${thinkingLabel})`)}`);
 			}
 			const badgeText = roleBadgeTokens.length > 0 ? ` ${roleBadgeTokens.join(" ")}` : "";
@@ -457,7 +457,7 @@ export class ModelSelectorComponent extends Container {
 		}
 	}
 	#getThinkingModesForModel(model: Model): ReadonlyArray<ThinkingMode> {
-		return ["inherit", ...getAvailableThinkingLevel(supportsXhigh(model))];
+		return ["inherit", ...getAvailableThinkingLevels(supportsXhigh(model))];
 	}
 
 	#getCurrentRoleThinkingMode(role: ModelRole): ThinkingMode {
@@ -500,7 +500,7 @@ export class ModelSelectorComponent extends Container {
 		const optionLines = showingThinking
 			? thinkingOptions.map((thinkingMode, index) => {
 					const prefix = index === this.#menuSelectedIndex ? `  ${theme.nav.cursor} ` : "    ";
-					const label = formatThinking(thinkingMode);
+					const label = getThinkingMetadata(thinkingMode).label;
 					return `${prefix}${label}`;
 				})
 			: MENU_ROLE_ACTIONS.map((action, index) => {

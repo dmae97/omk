@@ -40,7 +40,7 @@ import type {
 } from "@oh-my-pi/pi-ai";
 import {
 	calculateRateLimitBackoffMs,
-	getAvailableThinkingLevel,
+	getAvailableThinkingLevels,
 	isContextOverflow,
 	modelsAreEqual,
 	parseRateLimitReason,
@@ -2862,7 +2862,7 @@ export class AgentSession {
 	 */
 	getAvailableThinkingLevels(): ReadonlyArray<ThinkingLevel> {
 		if (!this.supportsThinking()) return ["off"];
-		return getAvailableThinkingLevel(this.supportsXhighThinking());
+		return getAvailableThinkingLevels(this.supportsXhighThinking());
 	}
 
 	/**
@@ -2880,7 +2880,7 @@ export class AgentSession {
 	}
 
 	#clampThinkingLevel(level: ThinkingLevel, availableLevels: ReadonlyArray<ThinkingLevel>): ThinkingLevel {
-		const ordered = getAvailableThinkingLevel(true);
+		const ordered = getAvailableThinkingLevels(true);
 		const available = new Set(availableLevels);
 		const requestedIndex = ordered.indexOf(level);
 		if (requestedIndex === -1) {

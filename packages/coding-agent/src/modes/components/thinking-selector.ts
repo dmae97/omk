@@ -1,4 +1,4 @@
-import { THINKING_MODE_DESCRIPTIONS, type ThinkingLevel } from "@oh-my-pi/pi-ai";
+import { getThinkingMetadata, type ThinkingLevel } from "@oh-my-pi/pi-ai";
 
 import { Container, type SelectItem, SelectList } from "@oh-my-pi/pi-tui";
 import { getSelectListTheme } from "../../modes/theme/theme";
@@ -18,11 +18,7 @@ export class ThinkingSelectorComponent extends Container {
 	) {
 		super();
 
-		const thinkingLevels: SelectItem[] = availableLevels.map(level => ({
-			value: level,
-			label: level,
-			description: THINKING_MODE_DESCRIPTIONS[level],
-		}));
+		const thinkingLevels: SelectItem[] = availableLevels.map(getThinkingMetadata);
 
 		// Add top border
 		this.addChild(new DynamicBorder());

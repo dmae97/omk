@@ -11,7 +11,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseArgs } from "node:util";
-import { ALL_THINKING_LEVELS, type ThinkingLevel } from "@oh-my-pi/pi-ai";
+import { getAvailableThinkingLevels, parseThinkingLevel, type ThinkingLevel } from "@oh-my-pi/pi-ai";
 import { padding } from "@oh-my-pi/pi-tui";
 import { TempDir } from "@oh-my-pi/pi-utils";
 import { generateJsonReport, generateReport } from "./report";
@@ -209,12 +209,13 @@ async function main(): Promise<void> {
 
 	let thinkingLevel: ThinkingLevel = "low";
 	if (values.thinking) {
-		if (!ALL_THINKING_LEVELS.includes(values.thinking as ThinkingLevel)) {
+		const level = parseThinkingLevel(values.thinking);
+		if (!level) {
 			console.error(`Invalid thinking level: ${values.thinking}`);
-			console.error(`Valid levels: ${ALL_THINKING_LEVELS.join(", ")}`);
+			console.error(`Valid levels: ${getAvailableThinkingLevels().join(", ")}`);
 			process.exit(1);
 		}
-		thinkingLevel = values.thinking as ThinkingLevel;
+		thinkingLevel = level;
 	}
 
 	const runsPerTask = parseInt(values.runs!, 10);

@@ -15,56 +15,24 @@ export type ThinkingLevel = ThinkingEffort | "off";
  */
 export type ThinkingMode = ThinkingLevel | "inherit";
 
-/** Provider-level thinking levels (no "off"), ordered least to most. */
-export const THINKING_LEVELS = [
-	"minimal",
-	"low",
-	"medium",
-	"high",
-	"xhigh",
-] as const satisfies readonly ThinkingEffort[];
-
-/** All selectable thinking levels including "off", ordered none to maximum. */
-export const ALL_THINKING_LEVELS = [
-	"off",
-	"minimal",
-	"low",
-	"medium",
-	"high",
-	"xhigh",
-] as const satisfies readonly ThinkingLevel[];
-
-/** All thinking modes including "inherit", ordered inherit → none → maximum. */
-export const ALL_THINKING_MODES = [
-	"inherit",
-	"off",
-	"minimal",
-	"low",
-	"medium",
-	"high",
-	"xhigh",
-] as const satisfies readonly ThinkingMode[];
-
-/** Human-readable descriptions for every thinking mode. */
-export const THINKING_MODE_DESCRIPTIONS: Record<ThinkingMode, string> = {
-	inherit: "Inherit session default",
-	off: "No reasoning",
-	minimal: "Very brief reasoning (~1k tokens)",
-	low: "Light reasoning (~2k tokens)",
-	medium: "Moderate reasoning (~8k tokens)",
-	high: "Deep reasoning (~16k tokens)",
-	xhigh: "Maximum reasoning (~32k tokens)",
+/** Metadata for a thinking mode. */
+export type ThinkingMetadata = {
+	/** The value of the thinking mode. */
+	value: ThinkingMode;
+	/** The label to display for the thinking mode. */
+	label: string;
+	/** The description to display for the thinking mode. */
+	description: string;
 };
 
-/** Compact display labels for every thinking mode. */
-export const THINKING_MODE_LABELS: Record<ThinkingMode, string> = {
-	inherit: "inherit",
-	off: "off",
-	minimal: "min",
-	low: "low",
-	medium: "medium",
-	high: "high",
-	xhigh: "xhigh",
+const THINKING_META: Record<ThinkingMode, ThinkingMetadata> = {
+	inherit: { value: "inherit", label: "inherit", description: "Inherit session default" },
+	off: { value: "off", label: "off", description: "No reasoning" },
+	minimal: { value: "minimal", label: "min", description: "Very brief reasoning (~1k tokens)" },
+	low: { value: "low", label: "low", description: "Light reasoning (~2k tokens)" },
+	medium: { value: "medium", label: "medium", description: "Moderate reasoning (~8k tokens)" },
+	high: { value: "high", label: "high", description: "Deep reasoning (~16k tokens)" },
+	xhigh: { value: "xhigh", label: "xhigh", description: "Maximum reasoning (~32k tokens)" },
 };
 
 const F_LEVEL = 3;
@@ -96,22 +64,22 @@ export function parseThinkingMode(level: string | null | undefined): ThinkingMod
 	return level && (F_THINKING[level] ?? 0) >= F_MODE ? (level as ThinkingMode) : undefined;
 }
 
-/** Format a thinking mode as a compact display label. */
-export function formatThinking(mode: ThinkingMode): string {
-	return THINKING_MODE_LABELS[mode];
+/** Get the information for a thinking mode. */
+export function getThinkingMetadata(mode: ThinkingMode): ThinkingMetadata {
+	return THINKING_META[mode];
 }
 
 const REG_LVL: readonly ThinkingLevel[] = ["off", "minimal", "low", "medium", "high"];
 const XHI_LVL: readonly ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
 
 /** Returns the available thinking modes for a model based on whether it supports xhigh. */
-export function getAvailableThinkingLevel(hasXhigh: boolean): ReadonlyArray<ThinkingLevel> {
+export function getAvailableThinkingLevels(hasXhigh: boolean = true): ReadonlyArray<ThinkingLevel> {
 	return hasXhigh ? XHI_LVL : REG_LVL;
 }
 
 const REG_EFF: readonly ThinkingEffort[] = ["minimal", "low", "medium", "high"];
 const XHI_EFF: readonly ThinkingEffort[] = ["minimal", "low", "medium", "high", "xhigh"];
 
-export function getAvailableThinkingEffort(hasXhigh: boolean): ReadonlyArray<ThinkingEffort> {
+export function getAvailableThinkingEfforts(hasXhigh: boolean = true): ReadonlyArray<ThinkingEffort> {
 	return hasXhigh ? XHI_EFF : REG_EFF;
 }
