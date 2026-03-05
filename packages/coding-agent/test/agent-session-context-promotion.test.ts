@@ -53,6 +53,34 @@ describe("AgentSession context promotion", () => {
 		};
 	}
 
+	function createUserMessage(content: string) {
+		return {
+			role: "user" as const,
+			content,
+			timestamp: Date.now(),
+		};
+	}
+
+	function createAssistantMessage(model: Model, text = "ok"): AssistantMessage {
+		return {
+			role: "assistant",
+			content: [{ type: "text", text }],
+			api: model.api,
+			provider: model.provider,
+			model: model.id,
+			usage: {
+				input: 1,
+				output: 1,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 2,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			stopReason: "stop",
+			timestamp: Date.now(),
+		};
+	}
+
 	async function waitFor(predicate: () => boolean, timeoutMs = 500): Promise<void> {
 		const deadline = Date.now() + timeoutMs;
 		while (Date.now() < deadline) {
@@ -217,6 +245,88 @@ describe("AgentSession context promotion", () => {
 
 		expect(session.model?.provider).toBe(codexModel.provider);
 		expect(session.model?.id).toBe(codexModel.id);
+		expect(closeSpy).toHaveBeenCalledTimes(1);
+		expect(session.providerSessionState.size).toBe(0);
+	});
+
+	it("clears codex provider session state when branching rewrites history", async () => {
+		const codexModel = modelRegistry.find("openai-codex", "gpt-5.3-codex");
+		if (!codexModel) {
+			throw new Error("Expected codex model to exist");
+		}
+
+		const agent = new Agent({
+			initialState: {
+				model: codexModel,
+				systemPrompt: "Test",
+				tools: [],
+				messages: [],
+			},
+		});
+
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings: Settings.isolated({ "compaction.enabled": false }),
+			modelRegistry,
+		});
+
+		const firstUserId = session.sessionManager.appendMessage(createUserMessage("first"));
+		session.sessionManager.appendMessage(createAssistantMessage(codexModel, "first response"));
+		session.sessionManager.appendMessage(createUserMessage("second"));
+		session.sessionManager.appendMessage(createAssistantMessage(codexModel, "second response"));
+		const sessionContext = session.sessionManager.buildSessionContext();
+		session.agent.replaceMessages(sessionContext.messages);
+
+		const closeSpy = vi.fn();
+		session.providerSessionState.set("openai-codex-responses", {
+			close: closeSpy,
+		} satisfies ProviderSessionState);
+
+		const result = await session.branch(firstUserId);
+
+		expect(result.cancelled).toBe(false);
+		expect(closeSpy).toHaveBeenCalledTimes(1);
+		expect(session.providerSessionState.size).toBe(0);
+	});
+
+	it("clears codex provider session state when tree navigation rewrites history", async () => {
+		const codexModel = modelRegistry.find("openai-codex", "gpt-5.3-codex");
+		if (!codexModel) {
+			throw new Error("Expected codex model to exist");
+		}
+
+		const agent = new Agent({
+			initialState: {
+				model: codexModel,
+				systemPrompt: "Test",
+				tools: [],
+				messages: [],
+			},
+		});
+
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings: Settings.isolated({ "compaction.enabled": false }),
+			modelRegistry,
+		});
+
+		const firstUserId = session.sessionManager.appendMessage(createUserMessage("first"));
+		session.sessionManager.appendMessage(createAssistantMessage(codexModel, "first response"));
+		session.sessionManager.appendMessage(createUserMessage("second"));
+		session.sessionManager.appendMessage(createAssistantMessage(codexModel, "second response"));
+		const sessionContext = session.sessionManager.buildSessionContext();
+		session.agent.replaceMessages(sessionContext.messages);
+
+		const closeSpy = vi.fn();
+		session.providerSessionState.set("openai-codex-responses", {
+			close: closeSpy,
+		} satisfies ProviderSessionState);
+
+		const result = await session.navigateTree(firstUserId, { summarize: false });
+
+		expect(result.cancelled).toBe(false);
 		expect(closeSpy).toHaveBeenCalledTimes(1);
 		expect(session.providerSessionState.size).toBe(0);
 	});

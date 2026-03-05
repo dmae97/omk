@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Changed
 
 - Moved `ThinkingLevel` type from `@oh-my-pi/pi-agent-core` to `@oh-my-pi/pi-ai` for centralized thinking level definitions
@@ -17,6 +18,10 @@
 - Removed local `VALID_THINKING_LEVELS` constant definitions across multiple files
 - Removed `isValidThinkingLevel()` function (replaced by `parseThinkingLevel()` from `@oh-my-pi/pi-ai`)
 - Removed `parseThinkingLevel()` helper from discovery module (now uses centralized version from `@oh-my-pi/pi-ai`)
+
+### Fixed
+
+- Fixed provider session state not being cleared when branching or navigating tree history, preventing resource leaks with codex provider sessions
 
 ## [13.8.0] - 2026-03-04
 ### Added

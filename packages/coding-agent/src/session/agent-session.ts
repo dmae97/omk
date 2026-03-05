@@ -4568,6 +4568,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 
 		if (!skipConversationRestore) {
 			this.agent.replaceMessages(sessionContext.messages);
+			this.#closeCodexProviderSessionsForHistoryRewrite();
 		}
 
 		return { selectedText, cancelled: false };
@@ -4722,6 +4723,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		const sessionContext = this.sessionManager.buildSessionContext();
 		this.agent.replaceMessages(sessionContext.messages);
 		this.#syncTodoPhasesFromBranch();
+		this.#closeCodexProviderSessionsForHistoryRewrite();
 
 		// Emit session_tree event
 		if (this.#extensionRunner) {
