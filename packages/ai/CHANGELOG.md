@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.9.0] - 2026-03-05
 ### Added
 
 - Exported new thinking module with `ThinkingEffort`, `ThinkingLevel`, and `ThinkingMode` types for managing reasoning effort levels

@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.9.0] - 2026-03-05
 ### Added
 
 - Added `read.defaultLimit` setting to configure default number of lines returned by read tool when no limit is specified (default: 300 lines)
