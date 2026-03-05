@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { convertAnthropicMessages } from "@oh-my-pi/pi-ai/providers/anthropic";
+import { transformMessages } from "@oh-my-pi/pi-ai/providers/transform-messages";
 import type { AssistantMessage, Model, UserMessage } from "@oh-my-pi/pi-ai/types";
 
 /**
@@ -79,4 +80,100 @@ describe("Anthropic assistant-prefill fallback", () => {
 		expect(params.at(-1)?.role).toBe("user");
 		expect(params.at(-1)?.content).toBe("what now?");
 	});
+});
+
+it("preserves redacted thinking blocks in assistant replay payloads", () => {
+	const model: Model<"anthropic-messages"> = {
+		api: "anthropic-messages",
+		provider: "anthropic",
+		id: "claude-3-5-sonnet-20241022",
+		name: "Claude 3.5 Sonnet",
+		baseUrl: "https://api.anthropic.com",
+		input: ["text"],
+		cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+		maxTokens: 8192,
+		contextWindow: 200000,
+		reasoning: true,
+	};
+	const user: UserMessage = {
+		role: "user",
+		content: "continue",
+		timestamp: Date.now(),
+	};
+	const assistant: AssistantMessage = {
+		role: "assistant",
+		content: [
+			{ type: "thinking", thinking: "internal", thinkingSignature: "sig_1" },
+			{ type: "redactedThinking", data: "encrypted_payload" },
+			{ type: "text", text: "Final answer" },
+		],
+		api: "anthropic-messages",
+		provider: "anthropic",
+		model: model.id,
+		usage: {
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 0,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		},
+		stopReason: "stop",
+		timestamp: Date.now(),
+	};
+
+	const params = convertAnthropicMessages([user, assistant], model, false);
+	const assistantParam = params.find(m => m.role === "assistant");
+	expect(assistantParam).toBeDefined();
+	expect(Array.isArray(assistantParam?.content)).toBe(true);
+	const blocks = assistantParam?.content as unknown as Array<Record<string, unknown>>;
+	expect(blocks.map(block => block.type)).toEqual(["thinking", "redacted_thinking", "text"]);
+	expect(blocks[0]?.signature).toBe("sig_1");
+	expect(blocks[1]?.data).toBe("encrypted_payload");
+});
+
+it("preserves latest Anthropic thinking blocks even when model id changes", () => {
+	const model: Model<"anthropic-messages"> = {
+		api: "anthropic-messages",
+		provider: "anthropic",
+		id: "claude-3-5-sonnet-20241022",
+		name: "Claude 3.5 Sonnet",
+		baseUrl: "https://api.anthropic.com",
+		input: ["text"],
+		cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+		maxTokens: 8192,
+		contextWindow: 200000,
+		reasoning: true,
+	};
+	const switchedModel: Model<"anthropic-messages"> = { ...model, id: "claude-opus-4-6-20251201" };
+	const assistant: AssistantMessage = {
+		role: "assistant",
+		content: [
+			{ type: "thinking", thinking: "internal", thinkingSignature: "sig_2" },
+			{ type: "redactedThinking", data: "encrypted_payload_2" },
+			{ type: "text", text: "Answer" },
+		],
+		api: "anthropic-messages",
+		provider: "anthropic",
+		model: "claude-sonnet-4-6-20251201",
+		usage: {
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 0,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		},
+		stopReason: "stop",
+		timestamp: Date.now(),
+	};
+
+	const transformed = transformMessages(
+		[{ role: "user", content: "continue", timestamp: Date.now() }, assistant],
+		switchedModel,
+	);
+	const transformedAssistant = transformed.find(m => m.role === "assistant") as AssistantMessage | undefined;
+	expect(transformedAssistant).toBeDefined();
+	expect(transformedAssistant?.content[0]).toEqual(assistant.content[0]);
+	expect(transformedAssistant?.content[1]).toEqual(assistant.content[1]);
 });

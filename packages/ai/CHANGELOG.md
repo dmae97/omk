@@ -1,6 +1,15 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Support for redacted thinking blocks in Anthropic messages, enabling secure handling of encrypted reasoning content
+- Preservation of latest Anthropic thinking blocks and redacted thinking content during message transformation, even when switching between Anthropic models
+
+### Changed
+
+- Assistant message content now includes `RedactedThinkingContent` type alongside existing text, thinking, and tool call blocks
+- Message transformation logic now preserves signed thinking blocks and redacted thinking for the latest assistant message in Anthropic conversations
 
 ## [13.9.1] - 2026-03-05
 ### Breaking Changes

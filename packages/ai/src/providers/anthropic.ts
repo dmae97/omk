@@ -18,6 +18,7 @@ import type {
 	ImageContent,
 	Message,
 	Model,
+	RedactedThinkingContent,
 	SimpleStreamOptions,
 	StopReason,
 	StreamFunction,
@@ -613,7 +614,12 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 				body: params,
 			};
 
-			type Block = (ThinkingContent | TextContent | (ToolCall & { partialJson: string })) & { index: number };
+			type Block = (
+				| ThinkingContent
+				| RedactedThinkingContent
+				| TextContent
+				| (ToolCall & { partialJson: string })
+			) & { index: number };
 			const blocks = output.content as Block[];
 			stream.push({ type: "start", partial: output });
 			// Retry loop for transient errors from the stream.
@@ -664,6 +670,13 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 									contentIndex: output.content.length - 1,
 									partial: output,
 								});
+							} else if (event.content_block.type === "redacted_thinking") {
+								const block: Block = {
+									type: "redactedThinking",
+									data: event.content_block.data,
+									index: event.index,
+								};
+								output.content.push(block);
 							} else if (event.content_block.type === "tool_use") {
 								const block: Block = {
 									type: "toolCall",
@@ -1403,15 +1416,35 @@ export function convertAnthropicMessages(
 			}
 		} else if (msg.role === "assistant") {
 			const blocks: ContentBlockParam[] = [];
+			const hasSignedThinking = msg.content.some(
+				block =>
+					block.type === "thinking" && !!block.thinkingSignature && block.thinkingSignature.trim().length > 0,
+			);
 
 			for (const block of msg.content) {
 				if (block.type === "text") {
-					if (block.text.trim().length === 0) continue;
+					if (!hasSignedThinking && block.text.trim().length === 0) continue;
 					blocks.push({
 						type: "text",
-						text: block.text.toWellFormed(),
+						text: hasSignedThinking ? block.text : block.text.toWellFormed(),
 					});
 				} else if (block.type === "thinking") {
+					if (hasSignedThinking) {
+						if (!block.thinkingSignature || block.thinkingSignature.trim().length === 0) {
+							if (block.thinking.trim().length === 0) continue;
+							blocks.push({
+								type: "text",
+								text: block.thinking,
+							});
+							continue;
+						}
+						blocks.push({
+							type: "thinking",
+							thinking: block.thinking,
+							signature: block.thinkingSignature,
+						});
+						continue;
+					}
 					if (block.thinking.trim().length === 0) continue;
 					if (!block.thinkingSignature || block.thinkingSignature.trim().length === 0) {
 						blocks.push({
@@ -1425,6 +1458,12 @@ export function convertAnthropicMessages(
 							signature: block.thinkingSignature,
 						});
 					}
+				} else if (block.type === "redactedThinking") {
+					if (!hasSignedThinking && block.data.trim().length === 0) continue;
+					blocks.push({
+						type: "redacted_thinking",
+						data: block.data,
+					});
 				} else if (block.type === "toolCall") {
 					blocks.push({
 						type: "tool_use",

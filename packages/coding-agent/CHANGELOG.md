@@ -1,6 +1,23 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Support for Python code execution messages with output display and error handling
+- Support for mode change entries in session exports
+- Support for TTSR injection and session initialization entries in tree filtering
+
+### Changed
+
+- Updated label lookup to use `targetId` field instead of `parentId` for label references
+- Changed model change entry display to use `model` field instead of separate `provider` and `modelId` fields
+- Simplified model change rendering by removing OpenAI Codex bridge prompt display
+- Updated searchable text extraction to include Python code from `pythonExecution` messages
+
+### Removed
+
+- Removed `codexInjectionInfo` from session data destructuring
+- Removed OpenAI Codex-specific bridge prompt UI from model change entries
 
 ## [13.9.0] - 2026-03-05
 ### Added

@@ -1,4 +1,13 @@
-import type { Api, AssistantMessage, DeveloperMessage, Message, Model, ToolCall, ToolResultMessage } from "../types";
+import type {
+	Api,
+	AssistantMessage,
+	DeveloperMessage,
+	Message,
+	Model,
+	RedactedThinkingContent,
+	ToolCall,
+	ToolResultMessage,
+} from "../types";
 
 const TURN_ABORTED_GUIDANCE =
 	"<turn-aborted>\n" +
@@ -31,8 +40,9 @@ export function transformMessages<TApi extends Api>(
 	// Build a map of original tool call IDs to normalized IDs
 	const toolCallIdMap = new Map<string, string>();
 
+	const latestAssistantIndex = messages.findLastIndex(msg => msg.role === "assistant");
 	// First pass: transform messages (thinking blocks, tool call ID normalization)
-	const transformed = messages.map(msg => {
+	const transformed = messages.map((msg, index) => {
 		// User and developer messages pass through unchanged
 		if (msg.role === "user" || msg.role === "developer") {
 			return msg;
@@ -55,8 +65,14 @@ export function transformMessages<TApi extends Api>(
 				assistantMsg.api === model.api &&
 				assistantMsg.model === model.id;
 
+			const mustPreserveLatestAnthropicThinking =
+				index === latestAssistantIndex &&
+				model.api === "anthropic-messages" &&
+				assistantMsg.api === "anthropic-messages";
+
 			const transformedContent = assistantMsg.content.flatMap(block => {
 				if (block.type === "thinking") {
+					if (mustPreserveLatestAnthropicThinking) return block;
 					// For same model: keep thinking blocks with signatures (needed for replay)
 					// even if the thinking text is empty (OpenAI encrypted reasoning)
 					if (isSameModel && block.thinkingSignature) return block;
@@ -67,6 +83,14 @@ export function transformMessages<TApi extends Api>(
 						type: "text" as const,
 						text: block.thinking,
 					};
+				}
+
+				if (block.type === "redactedThinking") {
+					if (mustPreserveLatestAnthropicThinking) return block;
+					if (isSameModel) return block;
+					const redacted = block as RedactedThinkingContent;
+					if (!redacted.data || redacted.data.trim() === "") return [];
+					return [];
 				}
 
 				if (block.type === "text") {

@@ -33,6 +33,7 @@
 		"release": "bun scripts/release.ts",
 		"generate-models": "bun --cwd=packages/ai scripts/generate-models.ts",
 		"generate-docs-index": "bun --cwd=packages/coding-agent run generate-docs-index",
+		"generate-template": "bun --cwd=packages/coding-agent run generate-template",
 		"sync-exports": "bun scripts/sync-exports.ts"
 	},
 	"devDependencies": {

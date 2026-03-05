@@ -12,7 +12,7 @@
         bytes[i] = binary.charCodeAt(i);
       }
       const data = JSON.parse(new TextDecoder('utf-8').decode(bytes));
-      const { header, entries, leafId: defaultLeafId, systemPrompt, codexInjectionInfo, tools } = data;
+      const { header, entries, leafId: defaultLeafId, systemPrompt, tools } = data;
 
       // ============================================================
       // URL PARAMETER HANDLING
@@ -54,11 +54,11 @@
       }
 
       // Label lookup (entryId -> label string)
-      // Labels are stored in 'label' entries that reference their target via parentId
+      // Labels are stored in 'label' entries that reference their target via targetId
       const labelMap = new Map();
       for (const entry of entries) {
-        if (entry.type === 'label' && entry.parentId && entry.label) {
-          labelMap.set(entry.parentId, entry.label);
+        if (entry.type === 'label' && entry.targetId && entry.label) {
+          labelMap.set(entry.targetId, entry.label);
         }
       }
 
@@ -292,6 +292,7 @@
             parts.push(msg.role);
             if (msg.content) parts.push(extractContent(msg.content));
             if (msg.role === 'bashExecution' && msg.command) parts.push(msg.command);
+            if (msg.role === 'pythonExecution' && msg.code) parts.push(msg.code);
             break;
           }
           case 'custom_message':
@@ -305,10 +306,13 @@
             parts.push('branch summary', entry.summary);
             break;
           case 'model_change':
-            parts.push('model', entry.modelId);
+            parts.push('model', entry.model);
             break;
           case 'thinking_level_change':
             parts.push('thinking', entry.thinkingLevel);
+            break;
+          case 'mode_change':
+            parts.push('mode', entry.mode);
             break;
         }
 
@@ -338,7 +342,7 @@
           }
 
           // Apply filter mode
-          const isSettingsEntry = ['label', 'custom', 'model_change', 'thinking_level_change', 'mode_change'].includes(entry.type);
+          const isSettingsEntry = ['label', 'custom', 'model_change', 'thinking_level_change', 'mode_change', 'ttsr_injection', 'session_init'].includes(entry.type);
           let passesFilter = true;
 
           switch (filterMode) {
@@ -476,6 +480,10 @@
               const cmd = truncate(normalize(msg.command || ''));
               return labelHtml + `<span class="tree-role-tool">[bash]:</span> ${escapeHtml(cmd)}`;
             }
+            if (msg.role === 'pythonExecution') {
+              const code = truncate(normalize(msg.code || ''));
+              return labelHtml + `<span class="tree-role-tool">[python]:</span> ${escapeHtml(code)}`;
+            }
             return labelHtml + `<span class="tree-muted">[${msg.role}]</span>`;
           }
           case 'compaction':
@@ -489,9 +497,11 @@
             return labelHtml + `<span class="tree-custom">[${escapeHtml(entry.customType)}]:</span> ${escapeHtml(truncate(normalize(content)))}`;
           }
           case 'model_change':
-            return labelHtml + `<span class="tree-muted">[model: ${entry.modelId}]</span>`;
+            return labelHtml + `<span class="tree-muted">[model: ${escapeHtml(entry.model)}]</span>`;
           case 'thinking_level_change':
             return labelHtml + `<span class="tree-muted">[thinking: ${entry.thinkingLevel}]</span>`;
+          case 'mode_change':
+            return labelHtml + `<span class="tree-muted">[mode: ${escapeHtml(entry.mode)}]</span>`;
           default:
             return labelHtml + `<span class="tree-muted">[${entry.type}]</span>`;
         }
@@ -967,21 +977,33 @@
             return html;
           }
 
+          if (msg.role === 'pythonExecution') {
+            const isError = msg.cancelled || (msg.exitCode !== 0 && msg.exitCode !== null);
+            let html = `<div class="tool-execution ${isError ? 'error' : 'success'}" id="${entryId}">${tsHtml}`;
+            html += `<div class="tool-command">$ ${escapeHtml(msg.code)}</div>`;
+            if (msg.output) html += formatExpandableOutput(msg.output, 10);
+            if (msg.cancelled) {
+              html += '<div style="color: var(--warning)">(cancelled)</div>';
+            } else if (msg.exitCode !== 0 && msg.exitCode !== null) {
+              html += `<div style="color: var(--error)">(exit ${msg.exitCode})</div>`;
+            }
+            html += '</div>';
+            return html;
+          }
+
           if (msg.role === 'toolResult') return '';
         }
 
         if (entry.type === 'model_change') {
-          let html = `<div class="model-change" id="${entryId}">${tsHtml}Switched to model: <span class="model-name">${escapeHtml(entry.provider)}/${escapeHtml(entry.modelId)}</span>`;
-
-          if (entry.provider === 'openai-codex' && codexInjectionInfo) {
-            const fullContent = `# Codex Instructions\n${codexInjectionInfo.instructions}\n\n# Codex-Pi Bridge\n${codexInjectionInfo.bridge}`;
-            html += ` <span class="codex-bridge-toggle" onclick="event.stopPropagation(); this.parentElement.classList.toggle('show-bridge')">[bridge prompt]</span>`;
-            html += `<div class="codex-bridge-content"><pre>${escapeHtml(fullContent)}</pre></div>`;
-          }
-
-          html += '</div>';
+          const html = `<div class="model-change" id="${entryId}">${tsHtml}Switched to model: <span class="model-name">${escapeHtml(entry.model)}</span></div>`;
           return html;
         }
+
+        if (entry.type === 'thinking_level_change') {
+          const html = `<div class="thinking-change" id="${entryId}">${tsHtml}Thinking level: <span class="thinking-level">${escapeHtml(entry.thinkingLevel)}</span></div>`;
+          return html;
+        }
+
 
         if (entry.type === 'compaction') {
           return `<div class="compaction" id="${entryId}" onclick="this.classList.toggle('expanded')">

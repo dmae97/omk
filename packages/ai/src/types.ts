@@ -224,6 +224,11 @@ export interface ThinkingContent {
 	thinkingSignature?: string; // e.g., for OpenAI responses, the reasoning item ID
 }
 
+export interface RedactedThinkingContent {
+	type: "redactedThinking";
+	data: string;
+}
+
 export interface ImageContent {
 	type: "image";
 	data: string; // base64 encoded image data
@@ -277,7 +282,7 @@ export interface DeveloperMessage {
 
 export interface AssistantMessage {
 	role: "assistant";
-	content: (TextContent | ThinkingContent | ToolCall)[];
+	content: (TextContent | ThinkingContent | RedactedThinkingContent | ToolCall)[];
 	api: Api;
 	provider: Provider;
 	model: string;
