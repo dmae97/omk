@@ -169,6 +169,14 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "300", label: "5 minutes" },
 		{ value: "600", label: "10 minutes" },
 	],
+	// Read line limit
+	"read.defaultLimit": [
+		{ value: "200", label: "200 lines" },
+		{ value: "300", label: "300 lines" },
+		{ value: "500", label: "500 lines" },
+		{ value: "1000", label: "1000 lines" },
+		{ value: "5000", label: "5000 lines" },
+	],
 	// Edit fuzzy threshold
 	"edit.fuzzyThreshold": [
 		{ value: "0.85", label: "0.85", description: "Lenient" },

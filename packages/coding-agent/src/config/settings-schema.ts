@@ -285,6 +285,16 @@ export const SETTINGS_SCHEMA = {
 			description: "Include line hashes in read output for hashline edit mode (LINE#ID:content)",
 		},
 	},
+	"read.defaultLimit": {
+		type: "number",
+		default: 300,
+		ui: {
+			tab: "tools",
+			label: "Read default limit",
+			description: "Default number of lines returned when agent calls read without a limit",
+			submenu: true,
+		},
+	},
 	showHardwareCursor: {
 		type: "boolean",
 		default: true, // will be computed based on platform if undefined

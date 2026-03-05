@@ -1,9 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `read.defaultLimit` setting to configure default number of lines returned by read tool when no limit is specified (default: 300 lines)
+- Added preset options for read default limit (200, 300, 500, 1000, 5000 lines) in settings UI
 
 ### Changed
 
+- Updated read tool prompt to distinguish between default limit and maximum limit per call
 - Moved `ThinkingLevel` type from `@oh-my-pi/pi-agent-core` to `@oh-my-pi/pi-ai` for centralized thinking level definitions
 - Replaced local thinking level validation with `parseThinkingLevel()` and `ALL_THINKING_LEVELS` from `@oh-my-pi/pi-ai`
 - Updated thinking level option providers to use `THINKING_MODE_DESCRIPTIONS` from `@oh-my-pi/pi-ai` for consistent descriptions

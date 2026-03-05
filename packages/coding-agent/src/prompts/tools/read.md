@@ -1,8 +1,8 @@
 Reads files from local filesystem or internal URLs.
 
 <instruction>
-- Reads up to {{DEFAULT_MAX_LINES}} lines default
-- Use `offset` and `limit` for large files
+- Reads up to {{DEFAULT_LIMIT}} lines default
+- Use `offset` and `limit` for large files; max {{DEFAULT_MAX_LINES}} lines per call
 {{#if IS_HASHLINE_MODE}}
 - Text output is CID prefixed: `LINE#ID:content`
 {{else}}

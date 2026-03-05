@@ -365,11 +365,17 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 	readonly strict = true;
 
 	readonly #autoResizeImages: boolean;
+	readonly #defaultLimit: number;
 
 	constructor(private readonly session: ToolSession) {
 		const displayMode = resolveFileDisplayMode(session);
 		this.#autoResizeImages = session.settings.get("images.autoResize");
+		this.#defaultLimit = Math.max(
+			1,
+			Math.min(session.settings.get("read.defaultLimit") ?? DEFAULT_MAX_LINES, DEFAULT_MAX_LINES),
+		);
 		this.description = renderPromptTemplate(readDescription, {
+			DEFAULT_LIMIT: String(this.#defaultLimit),
 			DEFAULT_MAX_LINES: String(DEFAULT_MAX_LINES),
 			IS_HASHLINE_MODE: displayMode.hashLines,
 			IS_LINE_NUMBER_MODE: !displayMode.hashLines && displayMode.lineNumbers,
@@ -530,8 +536,9 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			const startLine = offset ? Math.max(0, offset - 1) : 0;
 			const startLineDisplay = startLine + 1; // For display (1-indexed)
 
-			const maxLinesToCollect = limit !== undefined ? Math.min(limit, DEFAULT_MAX_LINES) : DEFAULT_MAX_LINES;
-			const selectedLineLimit = limit ?? null;
+			const effectiveLimit = limit ?? this.#defaultLimit;
+			const maxLinesToCollect = Math.min(effectiveLimit, DEFAULT_MAX_LINES);
+			const selectedLineLimit = effectiveLimit;
 			const streamResult = await streamLinesFromFile(
 				absolutePath,
 				startLine,
@@ -562,7 +569,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			}
 
 			const selectedContent = collectedLines.join("\n");
-			const userLimitedLines = limit !== undefined ? collectedLines.length : undefined;
+			const userLimitedLines = collectedLines.length;
 
 			const totalSelectedLines = totalFileLines - startLine;
 			const totalSelectedBytes = collectedBytes;
@@ -621,7 +628,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 					result: truncation,
 					options: { direction: "head", startLine: startLineDisplay, totalFileLines },
 				};
-			} else if (userLimitedLines !== undefined && startLine + userLimitedLines < totalFileLines) {
+			} else if (startLine + userLimitedLines < totalFileLines) {
 				const remaining = totalFileLines - (startLine + userLimitedLines);
 				const nextOffset = startLine + userLimitedLines + 1;
 
