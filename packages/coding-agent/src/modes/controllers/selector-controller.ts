@@ -341,12 +341,24 @@ export class SelectorController {
 			}
 
 			// Provider settings - update runtime preferences
-			case "webSearchProvider":
+			case "providers.webSearch":
 				setPreferredSearchProvider(
-					value as "auto" | "exa" | "jina" | "zai" | "perplexity" | "anthropic" | "gemini" | "codex",
+					value as
+						| "auto"
+						| "exa"
+						| "brave"
+						| "jina"
+						| "kimi"
+						| "zai"
+						| "perplexity"
+						| "anthropic"
+						| "gemini"
+						| "codex"
+						| "kagi"
+						| "synthetic",
 				);
 				break;
-			case "imageProvider":
+			case "providers.image":
 				setPreferredImageProvider(value as "auto" | "gemini" | "openrouter");
 				break;
 
