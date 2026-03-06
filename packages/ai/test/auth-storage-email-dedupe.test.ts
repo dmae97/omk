@@ -48,6 +48,20 @@ function countCredentialRows(dbPath: string, provider: string): number {
 	}
 }
 
+function readDisabledCauses(dbPath: string, provider: string): string[] {
+	const db = new Database(dbPath, { readonly: true });
+	try {
+		const rows = db
+			.prepare(
+				"SELECT disabled_cause FROM auth_credentials WHERE provider = ? AND disabled_cause IS NOT NULL ORDER BY id ASC",
+			)
+			.all(provider) as Array<{ disabled_cause?: string | null }>;
+		return rows.flatMap(row => (typeof row.disabled_cause === "string" ? [row.disabled_cause] : []));
+	} finally {
+		db.close();
+	}
+}
+
 describe("AuthStorage openai-codex email dedupe", () => {
 	let tempDir = "";
 	let dbPath = "";
@@ -170,5 +184,59 @@ describe("AuthStorage openai-codex email dedupe", () => {
 
 		const credentials = store.listAuthCredentials("openai-codex");
 		expect(credentials).toHaveLength(2);
+	});
+
+	it("stores the disable cause when a credential is soft-disabled", async () => {
+		if (!store || !dbPath) throw new Error("test setup failed");
+
+		store.replaceAuthCredentialsForProvider("openai-codex", [
+			createCredential({ suffix: "only", accountId: "account-a", email: "only@example.com" }),
+		]);
+
+		const [credential] = store.listAuthCredentials("openai-codex");
+		if (!credential) throw new Error("expected stored credential");
+
+		const disabledCause = "oauth refresh failed: invalid_grant";
+		store.deleteAuthCredential(credential.id, disabledCause);
+
+		expect(store.listAuthCredentials("openai-codex")).toHaveLength(0);
+		expect(readDisabledCauses(dbPath, "openai-codex")).toEqual([disabledCause]);
+	});
+
+	it("backfills a default disabled cause when migrating legacy disabled rows", async () => {
+		if (!tempDir) throw new Error("test setup failed");
+
+		const legacyDbPath = path.join(tempDir, "legacy-agent.db");
+		const legacyDb = new Database(legacyDbPath);
+		legacyDb.exec(`
+			CREATE TABLE auth_credentials (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				provider TEXT NOT NULL,
+				credential_type TEXT NOT NULL,
+				data TEXT NOT NULL,
+				disabled INTEGER NOT NULL DEFAULT 0,
+				created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+				updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+			);
+		`);
+		legacyDb
+			.prepare("INSERT INTO auth_credentials (provider, credential_type, data, disabled) VALUES (?, ?, ?, ?)")
+			.run(
+				"openai-codex",
+				"oauth",
+				JSON.stringify(
+					createCredential({ suffix: "legacy", accountId: "legacy-account", email: "legacy@example.com" }),
+				),
+				1,
+			);
+		legacyDb.close();
+
+		const migratedStore = await AuthCredentialStore.open(legacyDbPath);
+		try {
+			expect(migratedStore.listAuthCredentials("openai-codex")).toHaveLength(0);
+			expect(readDisabledCauses(legacyDbPath, "openai-codex")).toEqual(["disabled"]);
+		} finally {
+			migratedStore.close();
+		}
 	});
 });

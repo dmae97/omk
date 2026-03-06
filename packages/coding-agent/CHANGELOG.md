@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
 - Changed `ThinkingLevel` type to be imported from `@oh-my-pi/pi-agent-core` instead of `@oh-my-pi/pi-ai`
@@ -27,6 +28,8 @@
 
 ### Changed
 
+- Changed credential deletion to disable credentials with persisted cause instead of permanent deletion
+- Added `disabledCause` parameter to credential deletion methods to track reason for disabling
 - Changed thinking level parsing to use `parseEffort()` from local thinking module instead of `parseThinkingLevel()` from pi-ai
 - Changed model list display to show supported thinking efforts (e.g., "low,medium,high") instead of yes/no reasoning indicator
 - Changed footer and status line to check `model.thinking` instead of `model.reasoning` for thinking level display

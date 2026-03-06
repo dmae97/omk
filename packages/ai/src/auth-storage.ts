@@ -108,6 +108,7 @@ export interface StoredAuthCredential {
 	id: number;
 	provider: string;
 	credential: AuthCredential;
+	disabledCause: string | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -484,7 +485,7 @@ export class AuthStorage {
 		}
 		if (removed.length > 0) {
 			for (const entry of removed) {
-				this.#store.deleteAuthCredential(entry.id);
+				this.#store.deleteAuthCredential(entry.id, "deduplicated duplicate credential");
 			}
 			this.#resetProviderAssignments(provider);
 		}
@@ -659,10 +660,10 @@ export class AuthStorage {
 	 * The credential remains in the database but is excluded from active queries.
 	 * Cleans up provider entry if last credential disabled.
 	 */
-	#removeCredentialAt(provider: string, index: number): void {
+	#disableCredentialAt(provider: string, index: number, disabledCause: string): void {
 		const entries = this.#getStoredCredentials(provider);
 		if (index < 0 || index >= entries.length) return;
-		this.#store.deleteAuthCredential(entries[index].id);
+		this.#store.deleteAuthCredential(entries[index].id, disabledCause);
 		const updated = entries.filter((_value, idx) => idx !== index);
 		this.#setStoredCredentials(provider, updated);
 		this.#resetProviderAssignments(provider);
@@ -693,7 +694,7 @@ export class AuthStorage {
 	 * Remove credential for a provider.
 	 */
 	async remove(provider: string): Promise<void> {
-		this.#store.deleteAuthCredentialsForProvider(provider);
+		this.#store.deleteAuthCredentialsForProvider(provider, "deleted by user");
 		this.#data.delete(provider);
 		this.#resetProviderAssignments(provider);
 	}
@@ -1858,8 +1859,8 @@ export class AuthStorage {
 			});
 
 			if (isDefinitiveFailure) {
-				// Permanently remove invalid credentials
-				this.#removeCredentialAt(provider, selection.index);
+				// Permanently disable invalid credentials with an explicit cause for inspection/debugging
+				this.#disableCredentialAt(provider, selection.index, `oauth refresh failed: ${errorMsg}`);
 				if (this.#getCredentialsForProvider(provider).some(credential => credential.type === "oauth")) {
 					return this.getApiKey(provider, sessionId, options);
 				}
@@ -1950,6 +1951,7 @@ type AuthRow = {
 	provider: string;
 	credential_type: string;
 	data: string;
+	disabled_cause: string | null;
 };
 
 function serializeCredential(
@@ -1989,6 +1991,26 @@ function deserializeCredential(row: AuthRow): AuthCredential | null {
 	}
 	if (row.credential_type === "oauth") {
 		return { type: "oauth", ...(parsed as Record<string, unknown>) } as AuthCredential;
+	}
+	return null;
+}
+
+function normalizeDisabledCause(disabledCause: string): string {
+	const normalized = disabledCause.trim();
+	return normalized.length > 0 ? normalized : "disabled";
+}
+
+function toStoredAuthCredential(row: AuthRow, credential: AuthCredential): StoredAuthCredential {
+	return { id: row.id, provider: row.provider, credential, disabledCause: row.disabled_cause };
+}
+
+/** Returns a stable identity string for matching credentials across replace operations. */
+function credentialIdentity(credential: AuthCredential): string | null {
+	if (credential.type === "api_key") return `api_key:${credential.key}`;
+	if (credential.type === "oauth") {
+		if (credential.accountId) return `account:${credential.accountId}`;
+		const [email] = extractCredentialEmails(credential);
+		if (email) return `email:${email}`;
 	}
 	return null;
 }
@@ -2053,13 +2075,13 @@ export class AuthCredentialStore {
 		this.#initializeSchema();
 
 		this.#listActiveStmt = this.#db.prepare(
-			"SELECT id, provider, credential_type, data FROM auth_credentials WHERE disabled = 0 ORDER BY id ASC",
+			"SELECT id, provider, credential_type, data, disabled_cause FROM auth_credentials WHERE disabled_cause IS NULL ORDER BY id ASC",
 		);
 		this.#listActiveByProviderStmt = this.#db.prepare(
-			"SELECT id, provider, credential_type, data FROM auth_credentials WHERE provider = ? AND disabled = 0 ORDER BY id ASC",
+			"SELECT id, provider, credential_type, data, disabled_cause FROM auth_credentials WHERE provider = ? AND disabled_cause IS NULL ORDER BY id ASC",
 		);
 		this.#listDisabledByProviderStmt = this.#db.prepare(
-			"SELECT id, credential_type, data FROM auth_credentials WHERE provider = ? AND disabled = 1 ORDER BY id ASC",
+			"SELECT id, provider, credential_type, data, disabled_cause FROM auth_credentials WHERE provider = ? AND disabled_cause IS NOT NULL ORDER BY id ASC",
 		);
 		this.#insertStmt = this.#db.prepare(
 			"INSERT INTO auth_credentials (provider, credential_type, data) VALUES (?, ?, ?) RETURNING id",
@@ -2068,10 +2090,10 @@ export class AuthCredentialStore {
 			"UPDATE auth_credentials SET credential_type = ?, data = ?, updated_at = unixepoch() WHERE id = ?",
 		);
 		this.#deleteStmt = this.#db.prepare(
-			"UPDATE auth_credentials SET disabled = 1, updated_at = unixepoch() WHERE id = ?",
+			"UPDATE auth_credentials SET disabled_cause = ?, updated_at = unixepoch() WHERE id = ?",
 		);
 		this.#deleteByProviderStmt = this.#db.prepare(
-			"UPDATE auth_credentials SET disabled = 1, updated_at = unixepoch() WHERE provider = ?",
+			"UPDATE auth_credentials SET disabled_cause = ?, updated_at = unixepoch() WHERE provider = ? AND disabled_cause IS NULL",
 		);
 		this.#hardDeleteStmt = this.#db.prepare("DELETE FROM auth_credentials WHERE id = ?");
 		this.#getCacheStmt = this.#db.prepare("SELECT value FROM cache WHERE key = ? AND expires_at > unixepoch()");
@@ -2112,7 +2134,7 @@ CREATE TABLE IF NOT EXISTS auth_credentials (
 	provider TEXT NOT NULL,
 	credential_type TEXT NOT NULL,
 	data TEXT NOT NULL,
-	disabled INTEGER NOT NULL DEFAULT 0,
+	disabled_cause TEXT DEFAULT NULL,
 	created_at INTEGER NOT NULL DEFAULT (unixepoch()),
 	updated_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
@@ -2126,10 +2148,18 @@ CREATE TABLE IF NOT EXISTS cache (
 CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(expires_at);
 		`);
 
-		// Migration: add disabled column if missing (for databases created by old CliAuthStorage)
 		const cols = this.#db.prepare("PRAGMA table_info(auth_credentials)").all() as Array<{ name?: string }>;
-		if (!cols.some(c => c.name === "disabled")) {
-			this.#db.exec("ALTER TABLE auth_credentials ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0");
+		const hasDisabledCause = cols.some(c => c.name === "disabled_cause");
+		const hasDisabled = cols.some(c => c.name === "disabled");
+		if (!hasDisabledCause) {
+			this.#db.exec("ALTER TABLE auth_credentials ADD COLUMN disabled_cause TEXT DEFAULT NULL");
+		}
+		if (hasDisabled) {
+			this.#db.exec(`
+				UPDATE auth_credentials
+				SET disabled_cause = COALESCE(disabled_cause, 'disabled')
+				WHERE disabled = 1 AND disabled_cause IS NULL
+			`);
 		}
 	}
 
@@ -2145,26 +2175,52 @@ CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(expires_at);
 		for (const row of rows) {
 			const credential = deserializeCredential(row);
 			if (!credential) continue;
-			results.push({ id: row.id, provider: row.provider, credential });
+			results.push(toStoredAuthCredential(row, credential));
 		}
 		return results;
 	}
 
 	replaceAuthCredentialsForProvider(provider: string, credentials: AuthCredential[]): StoredAuthCredential[] {
 		const replace = this.#db.transaction((providerName: string, items: AuthCredential[]) => {
-			this.#deleteByProviderStmt.run(providerName);
-			const inserted: StoredAuthCredential[] = [];
+			const existingRows = this.#listActiveByProviderStmt.all(providerName) as AuthRow[];
+			const existing: Array<{ id: number; credential: AuthCredential; identity: string | null }> = [];
+			for (const row of existingRows) {
+				const credential = deserializeCredential(row);
+				if (!credential) continue;
+				existing.push({ id: row.id, credential, identity: credentialIdentity(credential) });
+			}
+
+			const result: StoredAuthCredential[] = [];
+			const matchedExistingIds = new Set<number>();
+
 			for (const credential of items) {
 				const serialized = serializeCredential(credential);
 				if (!serialized) continue;
-				const row = this.#insertStmt.get(providerName, serialized.credentialType, serialized.data) as
-					| { id?: number }
-					| undefined;
-				if (row?.id) {
-					inserted.push({ id: row.id, provider: providerName, credential });
+				const identity = credentialIdentity(credential);
+				const match = identity
+					? existing.find(e => e.identity === identity && !matchedExistingIds.has(e.id))
+					: null;
+				if (match) {
+					matchedExistingIds.add(match.id);
+					this.#updateStmt.run(serialized.credentialType, serialized.data, match.id);
+					result.push({ id: match.id, provider: providerName, credential, disabledCause: null });
+				} else {
+					const row = this.#insertStmt.get(providerName, serialized.credentialType, serialized.data) as
+						| { id?: number }
+						| undefined;
+					if (row?.id) {
+						result.push({ id: row.id, provider: providerName, credential, disabledCause: null });
+					}
 				}
 			}
-			return inserted;
+
+			for (const row of existing) {
+				if (!matchedExistingIds.has(row.id)) {
+					this.#deleteStmt.run("replaced by newer credential", row.id);
+				}
+			}
+
+			return result;
 		});
 
 		const result = replace(provider, credentials);
@@ -2187,13 +2243,9 @@ CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(expires_at);
 			}
 			if (activeEmails.size === 0) return;
 
-			const disabledRows = this.#listDisabledByProviderStmt.all(provider) as Array<{
-				id: number;
-				credential_type: string;
-				data: string;
-			}>;
+			const disabledRows = this.#listDisabledByProviderStmt.all(provider) as AuthRow[];
 			for (const row of disabledRows) {
-				const credential = deserializeCredential({ ...row, provider });
+				const credential = deserializeCredential(row);
 				if (!credential) {
 					this.#hardDeleteStmt.run(row.id);
 					continue;
@@ -2224,17 +2276,17 @@ CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(expires_at);
 		}
 	}
 
-	deleteAuthCredential(id: number): void {
+	deleteAuthCredential(id: number, disabledCause: string): void {
 		try {
-			this.#deleteStmt.run(id);
+			this.#deleteStmt.run(normalizeDisabledCause(disabledCause), id);
 		} catch {
 			// Ignore delete failures
 		}
 	}
 
-	deleteAuthCredentialsForProvider(provider: string): void {
+	deleteAuthCredentialsForProvider(provider: string, disabledCause: string): void {
 		try {
-			this.#deleteByProviderStmt.run(provider);
+			this.#deleteByProviderStmt.run(normalizeDisabledCause(disabledCause), provider);
 		} catch {
 			// Ignore delete failures
 		}
@@ -2328,7 +2380,7 @@ CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(expires_at);
 	 * Delete all credentials for a provider.
 	 */
 	deleteProvider(provider: string): void {
-		this.deleteAuthCredentialsForProvider(provider);
+		this.deleteAuthCredentialsForProvider(provider, "deleted by user");
 	}
 
 	close(): void {

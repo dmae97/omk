@@ -276,22 +276,20 @@ CREATE TABLE settings (
 	 * @returns Array of stored credentials with their database IDs
 	 */
 	listAuthCredentials(provider?: string, includeDisabled = false): StoredAuthCredential[] {
-		// AuthCredentialStore doesn't expose includeDisabled yet, so we filter if needed
 		const credentials = this.#authStore.listAuthCredentials(provider);
 		if (!includeDisabled) return credentials;
 
-		// For now, includeDisabled requires direct DB access
-		// This is only used internally, so it's acceptable
 		const stmt = this.#db.prepare(
 			provider
-				? "SELECT id, provider, credential_type, data FROM auth_credentials WHERE provider = ? ORDER BY id ASC"
-				: "SELECT id, provider, credential_type, data FROM auth_credentials ORDER BY id ASC",
+				? "SELECT id, provider, credential_type, data, disabled_cause FROM auth_credentials WHERE provider = ? ORDER BY id ASC"
+				: "SELECT id, provider, credential_type, data, disabled_cause FROM auth_credentials ORDER BY id ASC",
 		);
 		const rows = (provider ? stmt.all(provider) : stmt.all()) as Array<{
 			id: number;
 			provider: string;
 			credential_type: string;
 			data: string;
+			disabled_cause: string | null;
 		}>;
 
 		const results: StoredAuthCredential[] = [];
@@ -309,7 +307,7 @@ CREATE TABLE settings (
 					continue;
 				}
 
-				results.push({ id: row.id, provider: row.provider, credential });
+				results.push({ id: row.id, provider: row.provider, credential, disabledCause: row.disabled_cause });
 			} catch {}
 		}
 		return results;
@@ -336,19 +334,21 @@ CREATE TABLE settings (
 	}
 
 	/**
-	 * Deletes an auth credential by ID.
-	 * @param id - Database row ID of the credential to delete
+	 * Disables an auth credential by ID with a persisted cause.
+	 * @param id - Database row ID of the credential to disable
+	 * @param disabledCause - Human-readable cause stored with the disabled row
 	 */
-	deleteAuthCredential(id: number): void {
-		this.#authStore.deleteAuthCredential(id);
+	deleteAuthCredential(id: number, disabledCause: string): void {
+		this.#authStore.deleteAuthCredential(id, disabledCause);
 	}
 
 	/**
-	 * Deletes all auth credentials for a provider.
-	 * @param provider - Provider name whose credentials should be deleted
+	 * Disables all auth credentials for a provider with a persisted cause.
+	 * @param provider - Provider name whose credentials should be disabled
+	 * @param disabledCause - Human-readable cause stored with the disabled rows
 	 */
-	deleteAuthCredentialsForProvider(provider: string): void {
-		this.#authStore.deleteAuthCredentialsForProvider(provider);
+	deleteAuthCredentialsForProvider(provider: string, disabledCause: string): void {
+		this.#authStore.deleteAuthCredentialsForProvider(provider, disabledCause);
 	}
 
 	/**

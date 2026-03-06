@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
 - Changed `reasoning` parameter from `ThinkingLevel | undefined` to `Effort | undefined` in `SimpleStreamOptions`; 'off' is no longer valid (omit the field instead)
@@ -32,6 +31,8 @@
 
 ### Changed
 
+- Changed credential disabling mechanism from boolean `disabled` flag to `disabled_cause` text field for tracking why credentials were disabled
+- Changed `deleteAuthCredential()` and `deleteAuthCredentialsForProvider()` methods to require a `disabledCause` parameter explaining the reason for disabling
 - Changed Gemini model parsing to strip `-preview` suffix for consistent model identification
 - Changed OpenAI Codex websocket error handling to detect fatal connection errors and immediately fall back to SSE without retrying
 - Changed OpenAI Codex to always use websockets v2 protocol (removed v1 support)
@@ -65,6 +66,7 @@
 
 ### Fixed
 
+- Fixed credential purging to respect disabled credentials when deduplicating by email, preventing re-enablement of intentionally disabled credentials
 - Fixed OpenAI Codex websocket error reporting to include detailed error messages from error events
 - Fixed conversation history reconstruction to support incremental updates from multiple assistant messages while maintaining backward compatibility with full-snapshot payloads
 - Fixed OpenAI Codex to reject unsupported effort levels instead of silently clamping them, providing clear error messages about supported efforts
