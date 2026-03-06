@@ -194,10 +194,48 @@ describe("shouldCompact", () => {
 			keepRecentTokens: 20000,
 		};
 
+		// default mode uses legacy reserve behavior:
 		// effective reserve = max(floor(100000 * 0.15), 10000) = 15000, threshold = 85000
 		expect(shouldCompact(95000, 100000, settings)).toBe(true);
 		expect(shouldCompact(86000, 100000, settings)).toBe(true);
 		expect(shouldCompact(84000, 100000, settings)).toBe(false);
+	});
+
+	it("should use configured threshold percent", () => {
+		const settings: CompactionSettings = {
+			enabled: true,
+			thresholdPercent: 90,
+			reserveTokens: 10000,
+			keepRecentTokens: 20000,
+		};
+
+		expect(shouldCompact(89_000, 100_000, settings)).toBe(false);
+		expect(shouldCompact(90_001, 100_000, settings)).toBe(true);
+	});
+
+	it("should use legacy reserve behavior when threshold is set to default sentinel", () => {
+		const settings: CompactionSettings = {
+			enabled: true,
+			thresholdPercent: -1,
+			reserveTokens: 30_000,
+			keepRecentTokens: 20_000,
+		};
+
+		// effective reserve = max(15000, 30000) = 30000, threshold = 70000
+		expect(shouldCompact(70_000, 100_000, settings)).toBe(false);
+		expect(shouldCompact(70_001, 100_000, settings)).toBe(true);
+	});
+
+	it("should return false when strategy is off", () => {
+		const settings: CompactionSettings = {
+			enabled: true,
+			strategy: "off",
+			thresholdPercent: 1,
+			reserveTokens: 10000,
+			keepRecentTokens: 20000,
+		};
+
+		expect(shouldCompact(99_000, 100_000, settings)).toBe(false);
 	});
 
 	it("should return false when disabled", () => {

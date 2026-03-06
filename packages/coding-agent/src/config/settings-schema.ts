@@ -345,6 +345,36 @@ export const SETTINGS_SCHEMA = {
 			description: "Automatically compact context when it gets too large",
 		},
 	},
+	"compaction.strategy": {
+		type: "enum",
+		values: ["context-full", "handoff", "off"] as const,
+		default: "context-full",
+		ui: {
+			tab: "agent",
+			label: "Context-full strategy",
+			description: "Choose in-place context-full maintenance, auto-handoff, or disable auto maintenance (off)",
+			submenu: true,
+		},
+	},
+	"compaction.thresholdPercent": {
+		type: "number",
+		default: -1,
+		ui: {
+			tab: "agent",
+			label: "Context threshold",
+			description: "Percent threshold for context maintenance; set to Default to use legacy reserve-based behavior",
+			submenu: true,
+		},
+	},
+	"compaction.handoffSaveToDisk": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "agent",
+			label: "Save auto-handoff docs",
+			description: "Save generated handoff documents to markdown files for the auto-handoff flow",
+		},
+	},
 	"compaction.reserveTokens": { type: "number", default: 16384 },
 	"compaction.keepRecentTokens": { type: "number", default: 20000 },
 	"compaction.autoContinue": { type: "boolean", default: true },
@@ -1265,8 +1295,11 @@ export type StatusLineSeparatorStyle = SettingValue<"statusLine.separator">;
 
 export interface CompactionSettings {
 	enabled: boolean;
+	strategy: "context-full" | "handoff" | "off";
+	thresholdPercent: number;
 	reserveTokens: number;
 	keepRecentTokens: number;
+	handoffSaveToDisk: boolean;
 	autoContinue: boolean;
 	remoteEndpoint: string | undefined;
 }

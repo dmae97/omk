@@ -22,7 +22,7 @@ describe("AgentSession handoff", () => {
 		tempDir = TempDir.createSync("@pi-handoff-");
 		authStorage = await AuthStorage.create(path.join(tempDir.path(), "testauth.db"));
 		modelRegistry = new ModelRegistry(authStorage);
-		sessionManager = SessionManager.inMemory();
+		sessionManager = SessionManager.create(tempDir.path());
 		events = [];
 
 		const model = getBundledModel("anthropic", "claude-sonnet-4-5");
@@ -81,7 +81,9 @@ describe("AgentSession handoff", () => {
 		if (session) {
 			await session.dispose();
 		}
-		tempDir.removeSync();
+		try {
+			await tempDir.remove();
+		} catch {}
 		vi.restoreAllMocks();
 	});
 
@@ -120,9 +122,306 @@ describe("AgentSession handoff", () => {
 		await Bun.sleep(20);
 
 		expect(promptSpy).toHaveBeenCalledTimes(1);
+		expect(promptSpy).toHaveBeenCalledWith(
+			expect.any(String),
+			expect.objectContaining({ skipCompactionCheck: true }),
+		);
 		expect(result?.document).toBe(handoffText);
 		expect(events.filter(event => event.type === "auto_compaction_start")).toHaveLength(0);
 		expect(events.filter(event => event.type === "auto_compaction_end")).toHaveLength(0);
 		expect(sessionManager.getEntries().filter(entry => entry.type === "compaction")).toHaveLength(0);
+	});
+
+	it("does not run auto maintenance when strategy is off", async () => {
+		session.settings.set("compaction.strategy", "off");
+		session.settings.set("compaction.thresholdPercent", 1);
+		session.settings.set("contextPromotion.enabled", false);
+
+		const model = session.model;
+		if (!model) {
+			throw new Error("Expected model to be set");
+		}
+
+		const assistantMessage: AssistantMessage = {
+			role: "assistant",
+			content: [{ type: "text", text: "maintenance trigger" }],
+			api: model.api,
+			provider: model.provider,
+			model: model.id,
+			stopReason: "stop",
+			usage: {
+				input: 10_000,
+				output: 1_000,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 11_000,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			timestamp: Date.now(),
+		};
+
+		const handoffSpy = vi.spyOn(session, "handoff");
+		session.agent.emitExternalEvent({ type: "message_end", message: assistantMessage });
+		session.agent.emitExternalEvent({ type: "agent_end", messages: [assistantMessage] });
+		await Bun.sleep(20);
+
+		expect(handoffSpy).not.toHaveBeenCalled();
+		expect(events.filter(event => event.type === "auto_compaction_start")).toHaveLength(0);
+		expect(events.filter(event => event.type === "auto_compaction_end")).toHaveLength(0);
+	});
+
+	it("restores context-full strategy when enabling auto-compaction from off strategy", () => {
+		session.settings.set("compaction.enabled", true);
+		session.settings.set("compaction.strategy", "off");
+
+		expect(session.autoCompactionEnabled).toBe(false);
+		session.setAutoCompactionEnabled(true);
+		expect(session.settings.get("compaction.strategy")).toBe("context-full");
+		expect(session.autoCompactionEnabled).toBe(true);
+	});
+
+	it("falls back to context-full maintenance for overflow when strategy is handoff", async () => {
+		session.settings.set("compaction.strategy", "handoff");
+		session.settings.set("contextPromotion.enabled", false);
+
+		const model = session.model;
+		if (!model) {
+			throw new Error("Expected model to be set");
+		}
+		const handoffSpy = vi.spyOn(session, "handoff");
+
+		const overflowAssistant: AssistantMessage = {
+			role: "assistant",
+			content: [{ type: "text", text: "overflow" }],
+			api: model.api,
+			provider: model.provider,
+			model: model.id,
+			stopReason: "error",
+			errorMessage: "maximum context length is 200000 tokens, however you requested 200001 tokens",
+			usage: {
+				input: 120_000,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 120_000,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			timestamp: Date.now(),
+		};
+
+		session.agent.emitExternalEvent({ type: "message_end", message: overflowAssistant });
+		session.agent.emitExternalEvent({ type: "agent_end", messages: [overflowAssistant] });
+		await Bun.sleep(20);
+
+		expect(handoffSpy).not.toHaveBeenCalled();
+		const startEvents = events.filter(event => event.type === "auto_compaction_start");
+		expect(startEvents).toHaveLength(1);
+		expect(startEvents[0]).toMatchObject({ type: "auto_compaction_start", reason: "overflow" });
+		const endEvents = events.filter(event => event.type === "auto_compaction_end");
+		expect(endEvents).toHaveLength(1);
+		expect(endEvents[0]).not.toMatchObject({
+			errorMessage: "Auto-handoff failed: no handoff document was generated",
+		});
+	});
+
+	it("uses handoff strategy for threshold-triggered auto maintenance", async () => {
+		session.settings.set("compaction.strategy", "handoff");
+		session.settings.set("compaction.thresholdPercent", 1);
+		session.settings.set("contextPromotion.enabled", false);
+
+		const model = session.model;
+		if (!model) {
+			throw new Error("Expected model to be set");
+		}
+
+		const assistantMessage: AssistantMessage = {
+			role: "assistant",
+			content: [{ type: "text", text: "maintenance trigger" }],
+			api: model.api,
+			provider: model.provider,
+			model: model.id,
+			stopReason: "stop",
+			usage: {
+				input: 10_000,
+				output: 1_000,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 11_000,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			timestamp: Date.now(),
+		};
+
+		const handoffSpy = vi.spyOn(session, "handoff").mockResolvedValue({ document: "handoff document" });
+
+		session.agent.emitExternalEvent({ type: "message_end", message: assistantMessage });
+		session.agent.emitExternalEvent({ type: "agent_end", messages: [assistantMessage] });
+		await Bun.sleep(20);
+
+		expect(handoffSpy).toHaveBeenCalledTimes(1);
+		expect(handoffSpy).toHaveBeenCalledWith(expect.stringContaining("Threshold-triggered maintenance"), {
+			autoTriggered: true,
+			signal: expect.any(AbortSignal),
+		});
+		expect(events.filter(event => event.type === "auto_compaction_start")).toHaveLength(1);
+		const endEvents = events.filter(event => event.type === "auto_compaction_end");
+		expect(endEvents).toHaveLength(1);
+		expect(endEvents[0]).toMatchObject({ type: "auto_compaction_end", aborted: false, willRetry: false });
+	});
+
+	it("falls back to context-full when handoff strategy returns no document", async () => {
+		session.settings.set("compaction.strategy", "handoff");
+		session.settings.set("compaction.thresholdPercent", 1);
+		session.settings.set("contextPromotion.enabled", false);
+
+		const model = session.model;
+		if (!model) {
+			throw new Error("Expected model to be set");
+		}
+
+		const assistantMessage: AssistantMessage = {
+			role: "assistant",
+			content: [{ type: "text", text: "maintenance trigger" }],
+			api: model.api,
+			provider: model.provider,
+			model: model.id,
+			stopReason: "stop",
+			usage: {
+				input: 10_000,
+				output: 1_000,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 11_000,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			timestamp: Date.now(),
+		};
+
+		const handoffSpy = vi.spyOn(session, "handoff").mockResolvedValue(undefined);
+
+		session.agent.emitExternalEvent({ type: "message_end", message: assistantMessage });
+		session.agent.emitExternalEvent({ type: "agent_end", messages: [assistantMessage] });
+		await Bun.sleep(20);
+
+		expect(handoffSpy).toHaveBeenCalledTimes(1);
+		const endEvents = events.filter(event => event.type === "auto_compaction_end");
+		expect(endEvents).toHaveLength(1);
+		expect(endEvents[0]).toMatchObject({
+			type: "auto_compaction_end",
+			action: "context-full",
+			aborted: false,
+			willRetry: false,
+		});
+		expect(endEvents[0]).not.toMatchObject({
+			errorMessage: "Auto-handoff failed: no handoff document was generated",
+		});
+	});
+
+	it("saves auto-handoff document to disk when enabled", async () => {
+		session.settings.set("compaction.handoffSaveToDisk", true);
+
+		const model = session.model;
+		if (!model) {
+			throw new Error("Expected model to be set");
+		}
+
+		const handoffText = "## Goal\nContinue from here";
+		const handoffAssistant: AssistantMessage = {
+			role: "assistant",
+			content: [{ type: "text", text: handoffText }],
+			api: model.api,
+			provider: model.provider,
+			model: model.id,
+			stopReason: "stop",
+			usage: {
+				input: 190_000,
+				output: 1_000,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 191_000,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			timestamp: Date.now(),
+		};
+
+		vi.spyOn(session, "prompt").mockImplementation(async () => {
+			session.agent.replaceMessages([handoffAssistant]);
+			session.agent.emitExternalEvent({ type: "message_end", message: handoffAssistant });
+			session.agent.emitExternalEvent({ type: "agent_end", messages: [handoffAssistant] });
+		});
+
+		const result = await session.handoff(undefined, { autoTriggered: true });
+		expect(result?.savedPath).toBeDefined();
+		if (!result?.savedPath) throw new Error("Expected handoff document path");
+		expect(result.savedPath.endsWith(".md")).toBe(true);
+		const savedText = await Bun.file(result.savedPath).text();
+		expect(savedText).toContain(handoffText);
+	});
+
+	it("does not save manual handoff document when save setting is enabled", async () => {
+		session.settings.set("compaction.handoffSaveToDisk", true);
+
+		const model = session.model;
+		if (!model) {
+			throw new Error("Expected model to be set");
+		}
+
+		const handoffAssistant: AssistantMessage = {
+			role: "assistant",
+			content: [{ type: "text", text: "## Goal\nManual handoff" }],
+			api: model.api,
+			provider: model.provider,
+			model: model.id,
+			stopReason: "stop",
+			usage: {
+				input: 190_000,
+				output: 1_000,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 191_000,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			timestamp: Date.now(),
+		};
+
+		vi.spyOn(session, "prompt").mockImplementation(async () => {
+			session.agent.replaceMessages([handoffAssistant]);
+			session.agent.emitExternalEvent({ type: "message_end", message: handoffAssistant });
+			session.agent.emitExternalEvent({ type: "agent_end", messages: [handoffAssistant] });
+		});
+
+		const result = await session.handoff();
+		expect(result?.savedPath).toBeUndefined();
+	});
+
+	it("does not start handoff prompt when provided signal is already cancelled", async () => {
+		const controller = new AbortController();
+		controller.abort();
+
+		const promptSpy = vi.spyOn(session, "prompt");
+		const abortSpy = vi.spyOn(session.agent, "abort");
+
+		await expect(session.handoff(undefined, { signal: controller.signal })).rejects.toThrow("Handoff cancelled");
+		expect(promptSpy).not.toHaveBeenCalled();
+		expect(abortSpy).toHaveBeenCalledTimes(1);
+	});
+
+	it("aborts handoff generation when provided signal is cancelled", async () => {
+		const controller = new AbortController();
+		const { promise: promptPromise, resolve: resolvePrompt } = Promise.withResolvers<void>();
+		const promptSpy = vi.spyOn(session, "prompt").mockImplementation(async () => {
+			await promptPromise;
+		});
+		const abortSpy = vi.spyOn(session.agent, "abort").mockImplementation(() => {
+			resolvePrompt();
+		});
+
+		const handoffPromise = session.handoff(undefined, { signal: controller.signal });
+		await Bun.sleep(10);
+		controller.abort();
+
+		await expect(handoffPromise).rejects.toThrow("Handoff cancelled");
+		expect(promptSpy).toHaveBeenCalledTimes(1);
+		expect(abortSpy).toHaveBeenCalled();
 	});
 });

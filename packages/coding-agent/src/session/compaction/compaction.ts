@@ -115,6 +115,8 @@ export interface CompactionResult<T = unknown> {
 
 export interface CompactionSettings {
 	enabled: boolean;
+	strategy?: "context-full" | "handoff" | "off";
+	thresholdPercent?: number;
 	reserveTokens: number;
 	keepRecentTokens: number;
 	autoContinue?: boolean;
@@ -123,6 +125,8 @@ export interface CompactionSettings {
 
 export const DEFAULT_COMPACTION_SETTINGS: CompactionSettings = {
 	enabled: true,
+	strategy: "context-full",
+	thresholdPercent: -1,
 	reserveTokens: 16384,
 	keepRecentTokens: 20000,
 	autoContinue: true,
@@ -187,8 +191,18 @@ export function effectiveReserveTokens(contextWindow: number, settings: Compacti
  * Check if compaction should trigger based on context usage.
  */
 export function shouldCompact(contextTokens: number, contextWindow: number, settings: CompactionSettings): boolean {
-	if (!settings.enabled) return false;
-	return contextTokens > contextWindow - effectiveReserveTokens(contextWindow, settings);
+	if (!settings.enabled || settings.strategy === "off" || contextWindow <= 0) return false;
+	const thresholdTokens = resolveThresholdTokens(contextWindow, settings);
+	return contextTokens > thresholdTokens;
+}
+
+function resolveThresholdTokens(contextWindow: number, settings: CompactionSettings): number {
+	const thresholdPercent = settings.thresholdPercent;
+	if (typeof thresholdPercent !== "number" || !Number.isFinite(thresholdPercent) || thresholdPercent <= 0) {
+		return contextWindow - effectiveReserveTokens(contextWindow, settings);
+	}
+	const clampedThresholdPercent = Math.min(99, Math.max(1, thresholdPercent));
+	return Math.floor(contextWindow * (clampedThresholdPercent / 100));
 }
 
 // ============================================================================

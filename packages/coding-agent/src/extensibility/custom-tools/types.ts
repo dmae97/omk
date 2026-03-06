@@ -90,9 +90,11 @@ export type CustomToolSessionEvent =
 	| {
 			reason: "auto_compaction_start";
 			trigger: "threshold" | "overflow";
+			action: "context-full" | "handoff";
 	  }
 	| {
 			reason: "auto_compaction_end";
+			action: "context-full" | "handoff";
 			result: CompactionResult | undefined;
 			aborted: boolean;
 			willRetry: boolean;

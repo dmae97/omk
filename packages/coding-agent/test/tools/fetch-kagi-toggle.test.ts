@@ -253,6 +253,39 @@ describe("fetch tool Kagi summarization toggle", () => {
 		expect(textBlock?.text).toContain("<svg></svg>");
 	});
 
+	it("uses binary conversion fallback for unsupported image MIME when extension is convertible", async () => {
+		const session = createSession({ "fetch.useKagiSummarizer": false });
+		const tool = new FetchTool(session);
+		const convertedText = "Converted image text from markitdown fallback with sufficient length to pass threshold.";
+		const fetchBinarySpy = vi.spyOn(scraperUtils, "fetchBinary").mockResolvedValue({
+			ok: true,
+			buffer: new Uint8Array([255, 216, 255, 224]),
+		});
+		const convertSpy = vi.spyOn(scraperUtils, "convertWithMarkitdown").mockResolvedValue({
+			ok: true,
+			content: convertedText,
+		});
+		vi.spyOn(scrapers, "loadPage").mockResolvedValue({
+			ok: true,
+			status: 200,
+			contentType: "image/jpg",
+			finalUrl: "https://example.com/image.jpg",
+			content: "\u0000\u0001garbage",
+		});
+
+		const result = await tool.execute("fetch-image-jpg-fallback", { url: "https://example.com/image.jpg" });
+		const imageBlock = result.content.find(content => content.type === "image");
+		const textBlock = result.content.find(content => content.type === "text");
+
+		expect(result.details?.method).toBe("markitdown");
+		expect(fetchBinarySpy).toHaveBeenCalledTimes(1);
+		expect(convertSpy).toHaveBeenCalledTimes(1);
+		expect(result.details?.notes).toContain("Attempting binary conversion fallback for unsupported image MIME type");
+		expect(imageBlock).toBeUndefined();
+		expect(textBlock?.type).toBe("text");
+		expect(textBlock?.text).toContain(convertedText);
+	});
+
 	it("does not treat text/html at .png paths as inline images", async () => {
 		const session = createSession({ "fetch.useKagiSummarizer": false });
 		const tool = new FetchTool(session);

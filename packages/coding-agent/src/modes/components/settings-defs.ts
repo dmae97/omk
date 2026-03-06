@@ -68,6 +68,26 @@ type OptionList = ReadonlyArray<{ value: string; label: string; description?: st
 type OptionProvider = (() => OptionList) | OptionList;
 
 const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
+	// Context maintenance strategy
+	"compaction.strategy": [
+		{ value: "context-full", label: "Context-full", description: "Summarize in-place and keep the current session" },
+		{ value: "handoff", label: "Handoff", description: "Generate handoff and continue in a new session" },
+		{
+			value: "off",
+			label: "Off",
+			description: "Disable automatic context maintenance (same behavior as Auto-compact off)",
+		},
+	],
+	// Context maintenance threshold
+	"compaction.thresholdPercent": [
+		{ value: "default", label: "Default", description: "Legacy reserve-based threshold" },
+		{ value: "70", label: "70%", description: "Very early maintenance" },
+		{ value: "75", label: "75%", description: "Early maintenance" },
+		{ value: "80", label: "80%", description: "Balanced" },
+		{ value: "85", label: "85%", description: "Typical threshold" },
+		{ value: "90", label: "90%", description: "Aggressive context usage" },
+		{ value: "95", label: "95%", description: "Near context limit" },
+	],
 	// Retry max retries
 	"retry.maxRetries": [
 		{ value: "1", label: "1 retry" },

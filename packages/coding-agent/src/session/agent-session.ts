@@ -87,6 +87,7 @@ import { executePython as executePythonCommand, type PythonResult } from "../ipy
 import { getCurrentThemeName, theme } from "../modes/theme/theme";
 import { normalizeDiff, normalizeToLF, ParseError, previewPatch, stripBom } from "../patch";
 import type { PlanModeState } from "../plan-mode/state";
+import autoHandoffThresholdFocusPrompt from "../prompts/system/auto-handoff-threshold-focus.md" with { type: "text" };
 import planModeActivePrompt from "../prompts/system/plan-mode-active.md" with { type: "text" };
 import planModeReferencePrompt from "../prompts/system/plan-mode-reference.md" with { type: "text" };
 import planModeToolDecisionReminderPrompt from "../prompts/system/plan-mode-tool-decision-reminder.md" with {
@@ -130,9 +131,10 @@ import { getLatestCompactionEntry } from "./session-manager";
 /** Session-specific events that extend the core AgentEvent */
 export type AgentSessionEvent =
 	| AgentEvent
-	| { type: "auto_compaction_start"; reason: "threshold" | "overflow" }
+	| { type: "auto_compaction_start"; reason: "threshold" | "overflow"; action: "context-full" | "handoff" }
 	| {
 			type: "auto_compaction_end";
+			action: "context-full" | "handoff";
 			result: CompactionResult | undefined;
 			aborted: boolean;
 			willRetry: boolean;
@@ -205,6 +207,8 @@ export interface PromptOptions {
 	toolChoice?: ToolChoice;
 	/** Send as developer/system message instead of user. Providers that support it use the developer role; others fall back to user. */
 	synthetic?: boolean;
+	/** Skip pre-send compaction checks for this prompt (internal use for maintenance flows). */
+	skipCompactionCheck?: boolean;
 }
 
 /** Result from cycleModel() */
@@ -245,6 +249,12 @@ export interface SessionStats {
 /** Result from handoff() */
 export interface HandoffResult {
 	document: string;
+	savedPath?: string;
+}
+
+interface HandoffOptions {
+	autoTriggered?: boolean;
+	signal?: AbortSignal;
 }
 
 /** Internal marker for hook messages queued through the agent loop */
@@ -253,6 +263,8 @@ export interface HandoffResult {
 // ============================================================================
 
 /** Standard thinking levels */
+
+const AUTO_HANDOFF_THRESHOLD_FOCUS = renderPromptTemplate(autoHandoffThresholdFocusPrompt);
 
 const noOpUIContext: ExtensionUIContext = {
 	select: async (_title, _options, _dialogOptions) => undefined,
@@ -1395,10 +1407,15 @@ export class AgentSession {
 			};
 			await this.#extensionRunner.emit(extensionEvent);
 		} else if (event.type === "auto_compaction_start") {
-			await this.#extensionRunner.emit({ type: "auto_compaction_start", reason: event.reason });
+			await this.#extensionRunner.emit({
+				type: "auto_compaction_start",
+				reason: event.reason,
+				action: event.action,
+			});
 		} else if (event.type === "auto_compaction_end") {
 			await this.#extensionRunner.emit({
 				type: "auto_compaction_end",
+				action: event.action,
 				result: event.result,
 				aborted: event.aborted,
 				willRetry: event.willRetry,
@@ -1967,7 +1984,9 @@ export class AgentSession {
 	async #promptWithMessage(
 		message: AgentMessage,
 		expandedText: string,
-		options?: Pick<PromptOptions, "toolChoice" | "images"> & { skipPostPromptRecoveryWait?: boolean },
+		options?: Pick<PromptOptions, "toolChoice" | "images" | "skipCompactionCheck"> & {
+			skipPostPromptRecoveryWait?: boolean;
+		},
 	): Promise<void> {
 		this.#promptInFlight = true;
 		const generation = this.#promptGeneration;
@@ -1999,7 +2018,7 @@ export class AgentSession {
 
 			// Check if we need to compact before sending (catches aborted responses)
 			const lastAssistant = this.#findLastAssistantMessage();
-			if (lastAssistant) {
+			if (lastAssistant && !options?.skipCompactionCheck) {
 				await this.#checkCompaction(lastAssistant, false);
 			}
 
@@ -3104,11 +3123,12 @@ export class AgentSession {
 	}
 
 	/**
-	 * Cancel in-progress compaction (manual or auto).
+	 * Cancel in-progress context maintenance (manual compaction, auto-compaction, or auto-handoff).
 	 */
 	abortCompaction(): void {
 		this.#compactionAbortController?.abort();
 		this.#autoCompactionAbortController?.abort();
+		this.#handoffAbortController?.abort();
 	}
 
 	/**
@@ -3139,9 +3159,10 @@ export class AgentSession {
 	 * waits for completion, then starts a fresh session with the handoff as context.
 	 *
 	 * @param customInstructions Optional focus for the handoff document
+	 * @param options Handoff execution options
 	 * @returns The handoff document text, or undefined if cancelled/failed
 	 */
-	async handoff(customInstructions?: string): Promise<HandoffResult | undefined> {
+	async handoff(customInstructions?: string, options?: HandoffOptions): Promise<HandoffResult | undefined> {
 		const entries = this.sessionManager.getBranch();
 		const messageCount = entries.filter(e => e.type === "message").length;
 
@@ -3152,6 +3173,24 @@ export class AgentSession {
 		this.#skipPostTurnMaintenanceAssistantTimestamp = undefined;
 
 		this.#handoffAbortController = new AbortController();
+		const handoffAbortController = this.#handoffAbortController;
+		const handoffSignal = handoffAbortController.signal;
+		const sourceSignal = options?.signal;
+		const onHandoffAbort = () => {
+			this.agent.abort();
+		};
+		handoffSignal.addEventListener("abort", onHandoffAbort, { once: true });
+		const onSourceAbort = () => {
+			if (!handoffSignal.aborted) {
+				handoffAbortController.abort();
+			}
+		};
+		if (sourceSignal) {
+			sourceSignal.addEventListener("abort", onSourceAbort, { once: true });
+			if (sourceSignal.aborted) {
+				onSourceAbort();
+			}
+		}
 
 		// Build the handoff prompt
 		let handoffPrompt = `Write a comprehensive handoff document that will allow another instance of yourself to seamlessly continue this work. The document should capture everything needed to resume without access to this conversation.
@@ -3192,42 +3231,58 @@ Be thorough - include exact file paths, function names, error messages, and tech
 
 		// Create a promise that resolves when the agent completes
 		let handoffText: string | undefined;
-		const completionPromise = new Promise<void>((resolve, reject) => {
-			const unsubscribe = this.subscribe(event => {
-				if (this.#handoffAbortController?.signal.aborted) {
-					unsubscribe();
-					reject(new Error("Handoff cancelled"));
-					return;
-				}
-
-				if (event.type === "agent_end") {
-					unsubscribe();
-					// Extract text from the last assistant message
-					const messages = this.agent.state.messages;
-					for (let i = messages.length - 1; i >= 0; i--) {
-						const msg = messages[i];
-						if (msg.role === "assistant") {
-							const content = (msg as AssistantMessage).content;
-							const textParts = content
-								.filter((c): c is { type: "text"; text: string } => c.type === "text")
-								.map(c => c.text);
-							if (textParts.length > 0) {
-								handoffText = textParts.join("\n");
-								break;
-							}
+		const { promise: completionPromise, resolve: resolveCompletion } = Promise.withResolvers<void>();
+		let handoffCancelled = false;
+		let unsubscribe: (() => void) | undefined;
+		const onCompletionAbort = () => {
+			unsubscribe?.();
+			handoffCancelled = true;
+			resolveCompletion();
+		};
+		if (handoffSignal.aborted) {
+			onCompletionAbort();
+		} else {
+			handoffSignal.addEventListener("abort", onCompletionAbort, { once: true });
+		}
+		unsubscribe = this.subscribe(event => {
+			if (event.type === "agent_end") {
+				unsubscribe?.();
+				handoffSignal.removeEventListener("abort", onCompletionAbort);
+				// Extract text from the last assistant message
+				const messages = this.agent.state.messages;
+				for (let i = messages.length - 1; i >= 0; i--) {
+					const msg = messages[i];
+					if (msg.role === "assistant") {
+						const content = (msg as AssistantMessage).content;
+						const textParts = content
+							.filter((c): c is { type: "text"; text: string } => c.type === "text")
+							.map(c => c.text);
+						if (textParts.length > 0) {
+							handoffText = textParts.join("\n");
+							break;
 						}
 					}
-					resolve();
 				}
-			});
+				resolveCompletion();
+			}
 		});
 
 		try {
 			// Send the prompt and wait for completion
-			await this.prompt(handoffPrompt, { expandPromptTemplates: false, synthetic: true });
+			if (handoffSignal.aborted) {
+				throw new Error("Handoff cancelled");
+			}
+			await this.prompt(handoffPrompt, {
+				expandPromptTemplates: false,
+				synthetic: true,
+				skipCompactionCheck: true,
+			});
 			await completionPromise;
 
-			if (!handoffText || this.#handoffAbortController.signal.aborted) {
+			if (handoffCancelled || handoffSignal.aborted) {
+				throw new Error("Handoff cancelled");
+			}
+			if (!handoffText) {
 				return undefined;
 			}
 
@@ -3245,26 +3300,49 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			// Inject the handoff document as a custom message
 			const handoffContent = `<handoff-context>\n${handoffText}\n</handoff-context>\n\nThe above is a handoff document from a previous session. Use this context to continue the work seamlessly.`;
 			this.sessionManager.appendCustomMessageEntry("handoff", handoffContent, true, undefined, "agent");
+			let savedPath: string | undefined;
+			if (options?.autoTriggered && this.settings.get("compaction.handoffSaveToDisk")) {
+				const artifactsDir = this.sessionManager.getArtifactsDir();
+				if (artifactsDir) {
+					const fileTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
+					const handoffFilePath = path.join(artifactsDir, `handoff-${fileTimestamp}.md`);
+					try {
+						await Bun.write(handoffFilePath, `${handoffText}\n`);
+						savedPath = handoffFilePath;
+					} catch (error) {
+						logger.warn("Failed to save handoff document to disk", {
+							path: handoffFilePath,
+							error: error instanceof Error ? error.message : String(error),
+						});
+					}
+				} else {
+					logger.debug("Skipping handoff document save because session is not persisted");
+				}
+			}
 
 			// Rebuild agent messages from session
 			const sessionContext = this.sessionManager.buildSessionContext();
 			this.agent.replaceMessages(sessionContext.messages);
 			this.#syncTodoPhasesFromBranch();
 
-			return { document: handoffText };
+			return { document: handoffText, savedPath };
 		} finally {
+			unsubscribe?.();
+			handoffSignal.removeEventListener("abort", onCompletionAbort);
+			handoffSignal.removeEventListener("abort", onHandoffAbort);
+			sourceSignal?.removeEventListener("abort", onSourceAbort);
 			this.#handoffAbortController = undefined;
 		}
 	}
 
 	/**
-	 * Check if compaction or context promotion is needed and run it.
+	 * Check if context maintenance or promotion is needed and run it.
 	 * Called after agent_end and before prompt submission.
 	 *
 	 * Three cases (in order):
-	 * 1. Overflow + promotion: promote to larger model, retry without compacting
-	 * 2. Overflow + no promotion target: compact, auto-retry on same model
-	 * 3. Threshold: Context over threshold, compact, NO auto-retry (user continues manually)
+	 * 1. Overflow + promotion: promote to larger model, retry without maintenance
+	 * 2. Overflow + no promotion target: run context maintenance, auto-retry on same model
+	 * 3. Threshold: Context over threshold, run context maintenance (no auto-retry)
 	 *
 	 * @param assistantMessage The assistant message to check
 	 * @param skipAbortedCheck If false, include aborted messages (for pre-prompt check). Default: true
@@ -3305,13 +3383,13 @@ Be thorough - include exact file paths, function names, error messages, and tech
 
 			// No promotion target available fall through to compaction
 			const compactionSettings = this.settings.getGroup("compaction");
-			if (compactionSettings.enabled) {
+			if (compactionSettings.enabled && compactionSettings.strategy !== "off") {
 				await this.#runAutoCompaction("overflow", true);
 			}
 			return;
 		}
 		const compactionSettings = this.settings.getGroup("compaction");
-		if (!compactionSettings.enabled) return;
+		if (!compactionSettings.enabled || compactionSettings.strategy === "off") return;
 
 		// Case 2: Threshold - turn succeeded but context is getting large
 		// Skip if this was an error (non-overflow errors don't have usage data)
@@ -3654,8 +3732,11 @@ Be thorough - include exact file paths, function names, error messages, and tech
 	async #runAutoCompaction(reason: "overflow" | "threshold", willRetry: boolean): Promise<void> {
 		const compactionSettings = this.settings.getGroup("compaction");
 
+		if (!compactionSettings.enabled || compactionSettings.strategy === "off") return;
 		const generation = this.#promptGeneration;
-		await this.#emitSessionEvent({ type: "auto_compaction_start", reason });
+		let action: "context-full" | "handoff" =
+			compactionSettings.strategy === "handoff" && reason !== "overflow" ? "handoff" : "context-full";
+		await this.#emitSessionEvent({ type: "auto_compaction_start", reason, action });
 		// Properly abort and null existing controller before replacing
 		if (this.#autoCompactionAbortController) {
 			this.#autoCompactionAbortController.abort();
@@ -3663,9 +3744,45 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		this.#autoCompactionAbortController = new AbortController();
 
 		try {
+			if (compactionSettings.strategy === "handoff" && reason !== "overflow") {
+				const handoffFocus = AUTO_HANDOFF_THRESHOLD_FOCUS;
+				const handoffResult = await this.handoff(handoffFocus, {
+					autoTriggered: true,
+					signal: this.#autoCompactionAbortController.signal,
+				});
+				if (!handoffResult) {
+					const aborted = this.#autoCompactionAbortController.signal.aborted;
+					if (aborted) {
+						await this.#emitSessionEvent({
+							type: "auto_compaction_end",
+							action,
+							result: undefined,
+							aborted: true,
+							willRetry: false,
+						});
+						return;
+					}
+					logger.warn("Auto-handoff returned no document; falling back to context-full maintenance", {
+						reason,
+					});
+					action = "context-full";
+				}
+				if (handoffResult) {
+					await this.#emitSessionEvent({
+						type: "auto_compaction_end",
+						action,
+						result: undefined,
+						aborted: false,
+						willRetry: false,
+					});
+					return;
+				}
+			}
+
 			if (!this.model) {
 				await this.#emitSessionEvent({
 					type: "auto_compaction_end",
+					action,
 					result: undefined,
 					aborted: false,
 					willRetry: false,
@@ -3677,6 +3794,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			if (availableModels.length === 0) {
 				await this.#emitSessionEvent({
 					type: "auto_compaction_end",
+					action,
 					result: undefined,
 					aborted: false,
 					willRetry: false,
@@ -3690,6 +3808,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			if (!preparation) {
 				await this.#emitSessionEvent({
 					type: "auto_compaction_end",
+					action,
 					result: undefined,
 					aborted: false,
 					willRetry: false,
@@ -3715,6 +3834,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				if (hookResult?.cancel) {
 					await this.#emitSessionEvent({
 						type: "auto_compaction_end",
+						action,
 						result: undefined,
 						aborted: true,
 						willRetry: false,
@@ -3848,6 +3968,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			if (this.#autoCompactionAbortController.signal.aborted) {
 				await this.#emitSessionEvent({
 					type: "auto_compaction_end",
+					action,
 					result: undefined,
 					aborted: true,
 					willRetry: false,
@@ -3891,7 +4012,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				details,
 				preserveData,
 			};
-			await this.#emitSessionEvent({ type: "auto_compaction_end", result, aborted: false, willRetry });
+			await this.#emitSessionEvent({ type: "auto_compaction_end", action, result, aborted: false, willRetry });
 
 			if (!willRetry && compactionSettings.autoContinue !== false) {
 				await this.#promptWithMessage(
@@ -3927,6 +4048,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			if (this.#autoCompactionAbortController?.signal.aborted) {
 				await this.#emitSessionEvent({
 					type: "auto_compaction_end",
+					action,
 					result: undefined,
 					aborted: true,
 					willRetry: false,
@@ -3936,6 +4058,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			const errorMessage = error instanceof Error ? error.message : "compaction failed";
 			await this.#emitSessionEvent({
 				type: "auto_compaction_end",
+				action,
 				result: undefined,
 				aborted: false,
 				willRetry: false,
@@ -3954,11 +4077,14 @@ Be thorough - include exact file paths, function names, error messages, and tech
 	 */
 	setAutoCompactionEnabled(enabled: boolean): void {
 		this.settings.set("compaction.enabled", enabled);
+		if (enabled && this.settings.get("compaction.strategy") === "off") {
+			this.settings.set("compaction.strategy", "context-full");
+		}
 	}
 
 	/** Whether auto-compaction is enabled */
 	get autoCompactionEnabled(): boolean {
-		return this.settings.get("compaction.enabled");
+		return this.settings.get("compaction.enabled") && this.settings.get("compaction.strategy") !== "off";
 	}
 
 	// =========================================================================

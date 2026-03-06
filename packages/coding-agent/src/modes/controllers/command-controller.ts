@@ -834,6 +834,9 @@ export class CommandController {
 			this.ctx.chatContainer.addChild(
 				new Text(`${theme.fg("accent", `${theme.status.success} New session started with handoff context`)}`, 1, 1),
 			);
+			if (result.savedPath) {
+				this.ctx.showStatus(`Handoff document saved to: ${result.savedPath}`);
+			}
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			if (message === "Handoff cancelled" || (error instanceof Error && error.name === "AbortError")) {

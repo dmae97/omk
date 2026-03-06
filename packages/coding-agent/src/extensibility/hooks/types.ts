@@ -395,11 +395,13 @@ export interface TurnEndEvent {
 export interface AutoCompactionStartEvent {
 	type: "auto_compaction_start";
 	reason: "threshold" | "overflow";
+	action: "context-full" | "handoff";
 }
 
 /** Event data for auto_compaction_end event. */
 export interface AutoCompactionEndEvent {
 	type: "auto_compaction_end";
+	action: "context-full" | "handoff";
 	result: CompactionResult | undefined;
 	aborted: boolean;
 	willRetry: boolean;
