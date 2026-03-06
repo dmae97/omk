@@ -84,6 +84,61 @@ function captureCodexPayload(model: Model<"openai-codex-responses">, context: Co
 	return promise;
 }
 
+const incrementalItems1 = [
+	{
+		type: "message",
+		role: "assistant",
+		content: [{ type: "output_text", text: "First response" }],
+		status: "completed",
+		id: "msg_1",
+	},
+];
+
+const incrementalItems2 = [
+	{
+		type: "message",
+		role: "assistant",
+		content: [{ type: "output_text", text: "Second response" }],
+		status: "completed",
+		id: "msg_2",
+	},
+];
+
+function makeAssistantMessage(items: Record<string, unknown>[], incremental?: boolean) {
+	return {
+		role: "assistant" as const,
+		content: [{ type: "text" as const, text: "ignored" }],
+		api: "openai-responses" as const,
+		provider: "openai" as const,
+		model: "gpt-5-mini",
+		usage: {
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 0,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		},
+		stopReason: "stop" as const,
+		providerPayload: {
+			type: "openaiResponsesHistory" as const,
+			...(incremental ? { dt: true } : {}),
+			items,
+		},
+		timestamp: Date.now(),
+	};
+}
+
+const incrementalContext: Context = {
+	messages: [
+		{ role: "user", content: "first question", timestamp: Date.now() },
+		makeAssistantMessage(incrementalItems1, true),
+		{ role: "user", content: "second question", timestamp: Date.now() },
+		makeAssistantMessage(incrementalItems2, true),
+		{ role: "user", content: "third question", timestamp: Date.now() },
+	],
+};
+
 describe("OpenAI responses history payload", () => {
 	it("inlines preserved replacement history for openai-responses", async () => {
 		const model = getBundledModel("openai", "gpt-5-mini") as Model<"openai-responses">;
@@ -106,6 +161,42 @@ describe("OpenAI responses history payload", () => {
 		expect(payload.input).toEqual([
 			...snapshotHistoryItems,
 			{ role: "user", content: [{ type: "input_text", text: "follow-up user" }] },
+		]);
+	});
+
+	it("builds up history incrementally from multiple assistant messages", async () => {
+		const model = getBundledModel("openai", "gpt-5-mini") as Model<"openai-responses">;
+		const payload = (await captureResponsesPayload(model, incrementalContext)) as { input?: unknown[] };
+		expect(payload.input).toEqual([
+			{ role: "user", content: [{ type: "input_text", text: "first question" }] },
+			...incrementalItems1,
+			{ role: "user", content: [{ type: "input_text", text: "second question" }] },
+			...incrementalItems2,
+			{ role: "user", content: [{ type: "input_text", text: "third question" }] },
+		]);
+	});
+
+	it("backward compat: old full-snapshot payloads still replace history", async () => {
+		const fullSnapshotItems = [
+			{ type: "message", role: "user", content: [{ type: "input_text", text: "Canonical user" }] },
+			{ type: "message", role: "assistant", content: [{ type: "output_text", text: "Canonical assistant" }] },
+		];
+		const context: Context = {
+			messages: [
+				{ role: "user", content: "old user message that gets replaced", timestamp: Date.now() },
+				{
+					...makeAssistantMessage(fullSnapshotItems, false),
+					// no incremental flag — old format
+				},
+				{ role: "user", content: "follow-up", timestamp: Date.now() },
+			],
+		};
+		const model = getBundledModel("openai", "gpt-5-mini") as Model<"openai-responses">;
+		const payload = (await captureResponsesPayload(model, context)) as { input?: unknown[] };
+		// Old full-snapshot should replace all prior history
+		expect(payload.input).toEqual([
+			...fullSnapshotItems,
+			{ role: "user", content: [{ type: "input_text", text: "follow-up" }] },
 		]);
 	});
 });

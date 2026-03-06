@@ -443,7 +443,11 @@ function parseKnownModel(modelId: string): ParsedModel {
 	);
 }
 
+const GEMINI_SUFFIX = "-preview";
 function parseGeminiModel(modelId: string): GeminiModel | null {
+	if (modelId.endsWith(GEMINI_SUFFIX)) {
+		modelId = modelId.slice(0, -GEMINI_SUFFIX.length);
+	}
 	const match = /gemini-(\d+(?:\.\d+){0,2})-(pro|flash)\b/.exec(modelId);
 	if (!match) {
 		return null;

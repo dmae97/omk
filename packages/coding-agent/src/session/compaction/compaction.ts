@@ -705,10 +705,16 @@ function buildOpenAiNativeHistory(
 		}
 
 		if (message.role === "assistant") {
-			const providerPayload = (message as { providerPayload?: { type?: string; items?: unknown } }).providerPayload;
+			const providerPayload = (
+				message as { providerPayload?: { type?: string; incremental?: boolean; items?: unknown } }
+			).providerPayload;
 			const historyItems = getOpenAIResponsesHistoryItems(providerPayload);
 			if (historyItems) {
-				input.splice(0, input.length, ...historyItems);
+				if (providerPayload?.incremental) {
+					input.push(...historyItems);
+				} else {
+					input.splice(0, input.length, ...historyItems);
+				}
 				knownCallIds = collectKnownOpenAiCallIds(input);
 				msgIndex++;
 				continue;
@@ -1134,6 +1140,10 @@ export function prepareCompaction(
 	for (let i = cutPoint.firstKeptEntryIndex; i < boundaryEnd; i++) {
 		const msg = getMessageFromEntry(pathEntries[i]);
 		if (msg) recentMessages.push(msg);
+	}
+	// Nothing to summarize means compaction would be a no-op.
+	if (messagesToSummarize.length === 0 && turnPrefixMessages.length === 0) {
+		return undefined;
 	}
 
 	// Get previous summary and preserved data for iterative updates

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
 import { Effort } from "@oh-my-pi/pi-ai";
+import { enrichModelThinking } from "@oh-my-pi/pi-ai/model-thinking";
 import { getBundledModel } from "../src/models";
 import { streamSimple } from "../src/stream";
 import type { Context, Model } from "../src/types";
@@ -12,13 +13,13 @@ interface GeminiCliThinkingConfig {
 interface CapturedRequestBody {
 	request?: {
 		generationConfig?: {
-			thinking?: GeminiCliThinkingConfig;
+			thinkingConfig?: GeminiCliThinkingConfig;
 		};
 	};
 }
 
 function createModel(id: string): Model<"google-gemini-cli"> {
-	return {
+	return enrichModelThinking({
 		id,
 		name: id,
 		api: "google-gemini-cli",
@@ -29,7 +30,7 @@ function createModel(id: string): Model<"google-gemini-cli"> {
 		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 		contextWindow: 1_000_000,
 		maxTokens: 65_536,
-	};
+	});
 }
 
 const context: Context = {
@@ -39,7 +40,7 @@ const context: Context = {
 function extractThinking(bodyText: string | undefined): GeminiCliThinkingConfig | undefined {
 	if (!bodyText) return undefined;
 	const parsed = JSON.parse(bodyText) as CapturedRequestBody;
-	return parsed.request?.generationConfig?.thinking;
+	return parsed.request?.generationConfig?.thinkingConfig;
 }
 
 describe("google-gemini-cli Gemini 3.x thinking mapping", () => {

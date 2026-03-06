@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
 - Changed `ThinkingLevel` type to be imported from `@oh-my-pi/pi-agent-core` instead of `@oh-my-pi/pi-ai`
@@ -45,6 +44,7 @@
 
 ### Fixed
 
+- Fixed OpenAI remote compaction to correctly append incremental responses instead of replacing entire history
 - Fixed thinking level display logic in main.ts to correctly check for undefined instead of "off"
 - Fixed model registry to preserve explicit thinking configuration on runtime-registered models
 - Fixed usage limit reset time calculation to use absolute `resetsAt` timestamps instead of deprecated `resetInMs` field

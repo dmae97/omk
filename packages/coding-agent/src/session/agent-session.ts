@@ -3813,6 +3813,13 @@ Be thorough - include exact file paths, function names, error messages, and tech
 					aborted: false,
 					willRetry: false,
 				});
+				if (!willRetry && this.agent.hasQueuedMessages()) {
+					this.#scheduleAgentContinue({
+						delayMs: 100,
+						generation,
+						shouldContinue: () => this.agent.hasQueuedMessages(),
+					});
+				}
 				return;
 			}
 

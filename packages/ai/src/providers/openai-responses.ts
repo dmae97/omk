@@ -115,7 +115,7 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 			// Create OpenAI client
 			const apiKey = options?.apiKey || getEnvApiKey(model.provider) || "";
 			const { client, copilotPremiumRequests, baseUrl } = createClient(model, context, apiKey, options?.headers);
-			const { conversationMessages, params } = buildParams(model, context, options);
+			const { params } = buildParams(model, context, options);
 			options?.onPayload?.(params);
 			rawRequestDump = {
 				provider: model.provider,
@@ -370,7 +370,8 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 
 			output.providerPayload = {
 				type: "openaiResponsesHistory",
-				items: [...(conversationMessages as unknown as Array<Record<string, unknown>>), ...nativeOutputItems],
+				dt: true,
+				items: nativeOutputItems,
 			};
 
 			output.duration = Date.now() - startTime;
@@ -637,10 +638,15 @@ function convertConversationMessages(
 				});
 			}
 		} else if (msg.role === "assistant") {
-			const providerPayload = (msg as { providerPayload?: { type?: string; items?: unknown } }).providerPayload;
+			const providerPayload = (msg as { providerPayload?: { type?: string; dt?: boolean; items?: unknown } })
+				.providerPayload;
 			const historyItems = getOpenAIResponsesHistoryItems(providerPayload);
 			if (historyItems) {
-				messages.splice(0, messages.length, ...historyItems);
+				if (providerPayload?.dt) {
+					messages.push(...historyItems);
+				} else {
+					messages.splice(0, messages.length, ...historyItems);
+				}
 				knownCallIds = collectKnownCallIds(messages);
 				msgIndex++;
 				continue;

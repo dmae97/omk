@@ -552,7 +552,7 @@ describe("applyHashlineEdits — heuristics", () => {
 		expect(result.warnings?.[0]).toContain('");"');
 	});
 
-	it("does not auto-correct duplicated trailing non-boundary lines", () => {
+	it("auto-corrects duplicated trailing lines when they match the next surviving line", () => {
 		const content = "start\n  oldCall();\nnextCall();\nafter();";
 		const edits: HashlineEdit[] = [
 			{
@@ -563,11 +563,12 @@ describe("applyHashlineEdits — heuristics", () => {
 			},
 		];
 		const result = applyHashlineEdits(content, edits);
-		expect(result.lines).toBe("start\n  newCall();\nnextCall();\nnextCall();\nafter();");
-		expect(result.warnings).toBeUndefined();
+		expect(result.lines).toBe("start\n  newCall();\nnextCall();\nafter();");
+		expect(result.warnings).toHaveLength(1);
+		expect(result.warnings?.[0]).toContain("removed trailing replacement line");
 	});
 
-	it("preserves off-by-one range start that duplicates a preceding line", () => {
+	it("auto-corrects off-by-one range start that duplicates a preceding line", () => {
 		const content = "if (x) {\n  oldBody();\n}\nafter();";
 		const edits: HashlineEdit[] = [
 			{
@@ -578,8 +579,9 @@ describe("applyHashlineEdits — heuristics", () => {
 			},
 		];
 		const result = applyHashlineEdits(content, edits);
-		expect(result.lines).toBe("if (x) {\nif (x) {\n  newBody();\n}\nafter();");
-		expect(result.warnings).toBeUndefined();
+		expect(result.lines).toBe("if (x) {\n  newBody();\n}\nafter();");
+		expect(result.warnings).toHaveLength(1);
+		expect(result.warnings?.[0]).toContain("removed leading replacement line");
 	});
 	it("auto-corrects leading escaped tab indentation by default", () => {
 		const previous = Bun.env.PI_HASHLINE_AUTOCORRECT_ESCAPED_TABS;

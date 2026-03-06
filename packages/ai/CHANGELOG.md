@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
 - Changed `reasoning` parameter from `ThinkingLevel | undefined` to `Effort | undefined` in `SimpleStreamOptions`; 'off' is no longer valid (omit the field instead)
@@ -12,6 +13,8 @@
 
 ### Added
 
+- Added `incremental` flag to `OpenAIResponsesHistoryPayload` to support building conversation history from multiple assistant messages instead of replacing it
+- Added `dt` flag to `OpenAIResponsesHistoryPayload` for transport-level metadata
 - Added `ThinkingConfig` interface to models for canonical thinking transport metadata with min/max effort levels and provider-specific mode
 - Added `thinking` field to `Model` type containing per-model thinking capabilities used to clamp and map user-facing effort levels
 - Added `Effort` enum (minimal, low, medium, high, xhigh) as canonical user-facing thinking levels replacing `ThinkingLevel`
@@ -29,6 +32,9 @@
 
 ### Changed
 
+- Changed Gemini model parsing to strip `-preview` suffix for consistent model identification
+- Changed OpenAI Codex websocket error handling to detect fatal connection errors and immediately fall back to SSE without retrying
+- Changed OpenAI Codex to always use websockets v2 protocol (removed v1 support)
 - Changed `reasoning` parameter type from `ThinkingLevel` to `Effort` in `SimpleStreamOptions`, removing 'off' value (callers should omit the field instead)
 - Changed thinking configuration to use model-specific metadata instead of hardcoded provider logic for effort mapping
 - Changed OpenAI Codex request transformer to accept `Model` parameter for effort validation instead of string model ID
@@ -59,6 +65,8 @@
 
 ### Fixed
 
+- Fixed OpenAI Codex websocket error reporting to include detailed error messages from error events
+- Fixed conversation history reconstruction to support incremental updates from multiple assistant messages while maintaining backward compatibility with full-snapshot payloads
 - Fixed OpenAI Codex to reject unsupported effort levels instead of silently clamping them, providing clear error messages about supported efforts
 - Fixed model cache normalization to properly apply thinking enrichment when loading cached models
 - Fixed dynamic model merging to apply thinking enrichment to merged model results

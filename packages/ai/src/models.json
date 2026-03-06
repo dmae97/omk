@@ -2014,7 +2014,7 @@
 			"contextWindow": 200000,
 			"maxTokens": 32000,
 			"thinking": {
-				"mode": "anthropic-adaptive",
+				"mode": "budget",
 				"minLevel": "minimal",
 				"maxLevel": "xhigh"
 			}
@@ -2064,7 +2064,7 @@
 			"contextWindow": 200000,
 			"maxTokens": 64000,
 			"thinking": {
-				"mode": "anthropic-budget-effort",
+				"mode": "budget",
 				"minLevel": "minimal",
 				"maxLevel": "xhigh"
 			}
@@ -2139,9 +2139,9 @@
 			"contextWindow": 200000,
 			"maxTokens": 64000,
 			"thinking": {
-				"mode": "anthropic-adaptive",
+				"mode": "budget",
 				"minLevel": "minimal",
-				"maxLevel": "high"
+				"maxLevel": "xhigh"
 			}
 		},
 		"claude-sonnet-4-5": {
@@ -2189,7 +2189,7 @@
 			"contextWindow": 200000,
 			"maxTokens": 64000,
 			"thinking": {
-				"mode": "anthropic-budget-effort",
+				"mode": "budget",
 				"minLevel": "minimal",
 				"maxLevel": "xhigh"
 			}
@@ -8864,6 +8864,63 @@
 			"contextWindow": 222222,
 			"maxTokens": 8888
 		},
+		"kilo-auto/free": {
+			"id": "kilo-auto/free",
+			"name": "Kilo Auto: Free",
+			"api": "openai-completions",
+			"provider": "kilo",
+			"baseUrl": "https://api.kilo.ai/api/gateway",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 222222,
+			"maxTokens": 8888
+		},
+		"kilo-auto/frontier": {
+			"id": "kilo-auto/frontier",
+			"name": "Kilo Auto: Frontier",
+			"api": "openai-completions",
+			"provider": "kilo",
+			"baseUrl": "https://api.kilo.ai/api/gateway",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 222222,
+			"maxTokens": 8888
+		},
+		"kilo-auto/small": {
+			"id": "kilo-auto/small",
+			"name": "Kilo Auto: Small",
+			"api": "openai-completions",
+			"provider": "kilo",
+			"baseUrl": "https://api.kilo.ai/api/gateway",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 222222,
+			"maxTokens": 8888
+		},
 		"kilo/auto": {
 			"id": "kilo/auto",
 			"name": "Kilo: Auto",
@@ -11692,7 +11749,7 @@
 		},
 		"openrouter/free": {
 			"id": "openrouter/free",
-			"name": "Free Models Router (free)",
+			"name": "Free Models Router",
 			"api": "openai-completions",
 			"provider": "kilo",
 			"baseUrl": "https://api.kilo.ai/api/gateway",
@@ -27993,7 +28050,7 @@
 				"cacheRead": 0.375,
 				"cacheWrite": 0
 			},
-			"contextWindow": 272000,
+			"contextWindow": 200000,
 			"maxTokens": 100000,
 			"thinking": {
 				"mode": "effort",
@@ -34353,13 +34410,13 @@
 				"text"
 			],
 			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
+				"input": 0.11,
+				"output": 0.6,
+				"cacheRead": 0.055,
 				"cacheWrite": 0
 			},
-			"contextWindow": 131072,
-			"maxTokens": 8888,
+			"contextWindow": 262144,
+			"maxTokens": 262144,
 			"thinking": {
 				"mode": "effort",
 				"minLevel": "minimal",

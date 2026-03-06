@@ -714,8 +714,8 @@ describe("openai-codex streaming", () => {
 				this.url = url;
 				this.options = options;
 				setTimeout(() => {
-					expect(this.options?.headers?.["OpenAI-Beta"] ?? this.options?.headers?.["openai-beta"]).toBe(
-						"responses_websockets=2026-02-04",
+					expect(this.options?.headers?.["OpenAI-Beta"] ?? this.options?.headers?.["openai-beta"]).toStartWith(
+						"responses_websockets=",
 					);
 					this.#emit("error", new Event("error"));
 					this.#emit("close", new Event("close"));
@@ -780,11 +780,9 @@ describe("openai-codex streaming", () => {
 		expect(fallbackDetails.fallbackCount).toBe(1);
 	});
 
-	it("retries websocket failures before activating sticky fallback", async () => {
+	it("immediately falls back to SSE on fatal websocket connection errors", async () => {
 		const tempDir = TempDir.createSync("@pi-codex-stream-");
 		setAgentDir(tempDir.path());
-		Bun.env.PI_CODEX_WEBSOCKET_RETRY_BUDGET = "1";
-		Bun.env.PI_CODEX_WEBSOCKET_RETRY_DELAY_MS = "1";
 
 		const payload = Buffer.from(
 			JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acc_test" } }),
@@ -792,34 +790,34 @@ describe("openai-codex streaming", () => {
 		).toBase64();
 		const token = `aaa.${payload}.bbb`;
 
+		const sse = `${[
+			`data: ${JSON.stringify({ type: "response.output_item.added", item: { type: "message", id: "msg_sse", role: "assistant", status: "in_progress", content: [] } })}`,
+			`data: ${JSON.stringify({ type: "response.content_part.added", part: { type: "output_text", text: "" } })}`,
+			`data: ${JSON.stringify({ type: "response.output_text.delta", delta: "Hello SSE" })}`,
+			`data: ${JSON.stringify({ type: "response.output_item.done", item: { type: "message", id: "msg_sse", role: "assistant", status: "completed", content: [{ type: "output_text", text: "Hello SSE" }] } })}`,
+			`data: ${JSON.stringify({ type: "response.done", response: { id: "resp_sse", status: "completed", usage: { input_tokens: 5, output_tokens: 3, total_tokens: 8, input_tokens_details: { cached_tokens: 0 } } } })}`,
+		].join("\n\n")}\n\n`;
 		const fetchMock = vi.fn(async () => {
-			throw new Error("SSE fallback should not be called when websocket retry succeeds");
+			return new Response(sse, { headers: { "content-type": "text/event-stream" } });
 		});
 		global.fetch = fetchMock as unknown as typeof fetch;
 
 		type WsListener = (event: Event) => void;
 		let constructorCount = 0;
-		class FlakyWebSocket {
+		class FailingConnectWebSocket {
 			static readonly CONNECTING = 0;
 			static readonly OPEN = 1;
 			static readonly CLOSING = 2;
 			static readonly CLOSED = 3;
-			readyState = FlakyWebSocket.CONNECTING;
+			readyState = FailingConnectWebSocket.CONNECTING;
 			#listeners = new Map<string, Set<WsListener>>();
-			#attempt: number;
 
 			constructor(_url: string, _options?: { headers?: Record<string, string> }) {
 				constructorCount += 1;
-				this.#attempt = constructorCount;
 				setTimeout(() => {
-					if (this.#attempt === 1) {
-						this.#emit("error", new Event("error"));
-						this.#emit("close", new Event("close"));
-						this.readyState = FlakyWebSocket.CLOSED;
-						return;
-					}
-					this.readyState = FlakyWebSocket.OPEN;
-					this.#emit("open", new Event("open"));
+					this.#emit("error", new Event("error"));
+					this.#emit("close", new Event("close"));
+					this.readyState = FailingConnectWebSocket.CLOSED;
 				}, 0);
 			}
 
@@ -836,50 +834,9 @@ describe("openai-codex streaming", () => {
 				listeners?.delete(listener as WsListener);
 			}
 
-			send(): void {
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.output_item.added",
-						item: { type: "message", id: "msg_retry", role: "assistant", status: "in_progress", content: [] },
-					}),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({ type: "response.content_part.added", part: { type: "output_text", text: "" } }),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({ type: "response.output_text.delta", delta: "Hello retry" }),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.output_item.done",
-						item: {
-							type: "message",
-							id: "msg_retry",
-							role: "assistant",
-							status: "completed",
-							content: [{ type: "output_text", text: "Hello retry" }],
-						},
-					}),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.done",
-						response: {
-							id: "resp_retry",
-							status: "completed",
-							usage: {
-								input_tokens: 5,
-								output_tokens: 3,
-								total_tokens: 8,
-								input_tokens_details: { cached_tokens: 0 },
-							},
-						},
-					}),
-				} as unknown as Event);
-			}
-
+			send(): void {}
 			close(): void {
-				this.readyState = FlakyWebSocket.CLOSED;
+				this.readyState = FailingConnectWebSocket.CLOSED;
 			}
 
 			#emit(type: string, event: Event): void {
@@ -891,7 +848,7 @@ describe("openai-codex streaming", () => {
 			}
 		}
 
-		global.WebSocket = FlakyWebSocket as unknown as typeof WebSocket;
+		global.WebSocket = FailingConnectWebSocket as unknown as typeof WebSocket;
 
 		const model: Model<"openai-codex-responses"> = {
 			id: "gpt-5.3-codex-spark",
@@ -913,19 +870,19 @@ describe("openai-codex streaming", () => {
 		const providerSessionState = new Map<string, ProviderSessionState>();
 		const result = await streamOpenAICodexResponses(model, context, {
 			apiKey: token,
-			sessionId: "ws-retry-session",
+			sessionId: "ws-fatal-fallback-session",
 			providerSessionState,
 		}).result();
 		expect(result.role).toBe("assistant");
-		expect(constructorCount).toBe(2);
-		expect(fetchMock).not.toHaveBeenCalled();
+		expect(constructorCount).toBe(1);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
 		const transportDetails = getOpenAICodexTransportDetails(model, {
-			sessionId: "ws-retry-session",
+			sessionId: "ws-fatal-fallback-session",
 			providerSessionState,
 		});
-		expect(transportDetails.lastTransport).toBe("websocket");
-		expect(transportDetails.websocketDisabled).toBe(false);
-		expect(transportDetails.fallbackCount).toBe(0);
+		expect(transportDetails.lastTransport).toBe("sse");
+		expect(transportDetails.websocketDisabled).toBe(true);
+		expect(transportDetails.fallbackCount).toBe(1);
 	});
 
 	it("captures websocket handshake metadata and replays it on later SSE requests", async () => {
@@ -1906,7 +1863,7 @@ describe("openai-codex streaming", () => {
 		}).result();
 		expect(thirdResult.role).toBe("assistant");
 		expect(constructorCount).toBe(2);
-		expect(sentTypesByConnection[0]).toEqual(["response.create", "response.append"]);
+		expect(sentTypesByConnection[0]).toEqual(["response.create", "response.create"]);
 		expect(sentTypesByConnection[1]).toEqual(["response.create"]);
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
@@ -2098,7 +2055,7 @@ describe("openai-codex streaming", () => {
 		}).result();
 		expect(thirdResult.role).toBe("assistant");
 		expect(constructorCount).toBe(1);
-		expect(sentTypes).toEqual(["response.create", "response.append", "response.create"]);
+		expect(sentTypes).toEqual(["response.create", "response.create", "response.create"]);
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
