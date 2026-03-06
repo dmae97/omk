@@ -129,6 +129,9 @@ export type ToolChoice =
 // Base options all providers share
 export type CacheRetention = "none" | "short" | "long";
 
+/** OpenAI service tier for processing priority. Only applies to OpenAI-compatible APIs. */
+export type ServiceTier = "auto" | "default" | "flex" | "scale" | "priority";
+
 export interface ProviderSessionState {
 	close(): void;
 }
@@ -198,6 +201,8 @@ export interface SimpleStreamOptions extends StreamOptions {
 	cursorOnToolResult?: CursorToolResultHandler;
 	/** Optional tool choice override for compatible providers */
 	toolChoice?: ToolChoice;
+	/** OpenAI service tier for processing priority/cost control. Ignored by non-OpenAI providers. */
+	serviceTier?: ServiceTier;
 	/** API format for Kimi Code provider: "openai" or "anthropic" (default: "anthropic") */
 	kimiApiFormat?: "openai" | "anthropic";
 	/** API format for Synthetic provider: "openai" or "anthropic" (default: "openai") */
@@ -263,6 +268,13 @@ export interface Usage {
 
 export type StopReason = "stop" | "length" | "toolUse" | "error" | "aborted";
 
+export interface OpenAIResponsesHistoryPayload {
+	type: "openaiResponsesHistory";
+	items: Array<Record<string, unknown>>;
+}
+
+export type ProviderPayload = OpenAIResponsesHistoryPayload;
+
 export interface UserMessage {
 	role: "user";
 	content: string | (TextContent | ImageContent)[];
@@ -270,6 +282,8 @@ export interface UserMessage {
 	synthetic?: boolean;
 	/** Who initiated this message for billing/attribution semantics. */
 	attribution?: MessageAttribution;
+	/** Provider-specific opaque payload used to reconstruct transport-native history. */
+	providerPayload?: ProviderPayload;
 	timestamp: number; // Unix timestamp in milliseconds
 }
 
@@ -278,6 +292,8 @@ export interface DeveloperMessage {
 	content: string | (TextContent | ImageContent)[];
 	/** Who initiated this message for billing/attribution semantics. */
 	attribution?: MessageAttribution;
+	/** Provider-specific opaque payload used to reconstruct transport-native history. */
+	providerPayload?: ProviderPayload;
 	timestamp: number; // Unix timestamp in milliseconds
 }
 
@@ -290,6 +306,8 @@ export interface AssistantMessage {
 	usage: Usage;
 	stopReason: StopReason;
 	errorMessage?: string;
+	/** Provider-specific opaque payload used to reconstruct transport-native history. */
+	providerPayload?: ProviderPayload;
 	timestamp: number; // Unix timestamp in milliseconds
 	duration?: number; // Request duration in milliseconds
 	ttft?: number; // Time to first token in milliseconds

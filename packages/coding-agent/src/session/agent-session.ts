@@ -31,6 +31,7 @@ import type {
 	Message,
 	Model,
 	ProviderSessionState,
+	ServiceTier,
 	TextContent,
 	ThinkingLevel,
 	ToolCall,
@@ -1547,6 +1548,10 @@ export class AgentSession {
 		return this.agent.state.thinkingLevel;
 	}
 
+	get serviceTier(): ServiceTier | undefined {
+		return this.agent.serviceTier;
+	}
+
 	/** Whether agent is currently streaming a response */
 	get isStreaming(): boolean {
 		return this.agent.state.isStreaming || this.#promptInFlight;
@@ -2539,6 +2544,7 @@ export class AgentSession {
 		this.#pendingNextTurnMessages = [];
 
 		this.sessionManager.appendThinkingLevelChange(this.thinkingLevel);
+		this.sessionManager.appendServiceTierChange(this.serviceTier ?? null);
 
 		this.#todoReminderCount = 0;
 		this.#planReferenceSent = false;
@@ -2875,6 +2881,26 @@ export class AgentSession {
 		return nextLevel;
 	}
 
+	isFastModeEnabled(): boolean {
+		return this.serviceTier === "priority";
+	}
+
+	setServiceTier(serviceTier: ServiceTier | undefined): void {
+		if (this.serviceTier === serviceTier) return;
+		this.agent.serviceTier = serviceTier;
+		this.sessionManager.appendServiceTierChange(serviceTier ?? null);
+	}
+
+	setFastMode(enabled: boolean): void {
+		this.setServiceTier(enabled ? "priority" : undefined);
+	}
+
+	toggleFastMode(): boolean {
+		const enabled = !this.isFastModeEnabled();
+		this.setFastMode(enabled);
+		return enabled;
+	}
+
 	/**
 	 * Get available thinking levels for current model.
 	 * The provider will clamp to what the specific model supports internally.
@@ -3061,13 +3087,14 @@ export class AgentSession {
 					apiKey,
 					customInstructions,
 					this.#compactionAbortController.signal,
-					{ promptOverride: hookPrompt, extraContext: hookContext },
+					{ promptOverride: hookPrompt, extraContext: hookContext, remoteInstructions: this.#baseSystemPrompt },
 				);
 				summary = result.summary;
 				shortSummary = result.shortSummary;
 				firstKeptEntryId = result.firstKeptEntryId;
 				tokensBefore = result.tokensBefore;
 				details = result.details;
+				preserveData = { ...(preserveData ?? {}), ...(result.preserveData ?? {}) };
 			}
 
 			if (this.#compactionAbortController.signal.aborted) {
@@ -3894,7 +3921,11 @@ Be thorough - include exact file paths, function names, error messages, and tech
 								apiKey,
 								undefined,
 								this.#autoCompactionAbortController.signal,
-								{ promptOverride: hookPrompt, extraContext: hookContext },
+								{
+									promptOverride: hookPrompt,
+									extraContext: hookContext,
+									remoteInstructions: this.#baseSystemPrompt,
+								},
 							);
 							break;
 						} catch (error) {
@@ -3963,6 +3994,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				firstKeptEntryId = compactResult.firstKeptEntryId;
 				tokensBefore = compactResult.tokensBefore;
 				details = compactResult.details;
+				preserveData = { ...(preserveData ?? {}), ...(compactResult.preserveData ?? {}) };
 			}
 
 			if (this.#autoCompactionAbortController.signal.aborted) {
@@ -4614,6 +4646,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		}
 
 		const hasThinkingEntry = this.sessionManager.getBranch().some(entry => entry.type === "thinking_level_change");
+		const hasServiceTierEntry = this.sessionManager.getBranch().some(entry => entry.type === "service_tier_change");
 		const defaultThinkingLevel = (this.settings.get("defaultThinkingLevel") ?? "off") as ThinkingLevel;
 
 		if (hasThinkingEntry) {
@@ -4626,6 +4659,12 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				: this.#clampThinkingLevel(defaultThinkingLevel, availableLevels);
 			this.agent.setThinkingLevel(effectiveLevel);
 			this.sessionManager.appendThinkingLevelChange(effectiveLevel);
+		}
+
+		if (hasServiceTierEntry) {
+			this.agent.serviceTier = sessionContext.serviceTier;
+		} else {
+			this.sessionManager.appendServiceTierChange(this.serviceTier ?? null);
 		}
 
 		this.#reconnectToAgent();

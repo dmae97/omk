@@ -10,6 +10,7 @@ import {
 	type Message,
 	type Model,
 	type ProviderSessionState,
+	type ServiceTier,
 	streamSimple,
 	type TextContent,
 	type ThinkingBudgets,
@@ -122,6 +123,7 @@ export interface AgentOptions {
 	minP?: number;
 	presencePenalty?: number;
 	repetitionPenalty?: number;
+	serviceTier?: ServiceTier;
 
 	/**
 	 * Maximum delay in milliseconds to wait for a retry when the server requests a long wait.
@@ -200,6 +202,7 @@ export class Agent {
 	#minP?: number;
 	#presencePenalty?: number;
 	#repetitionPenalty?: number;
+	#serviceTier?: ServiceTier;
 	#maxRetryDelayMs?: number;
 	#getToolContext?: (toolCall?: ToolCallContext) => AgentToolContext | undefined;
 	#cursorExecHandlers?: CursorExecHandlers;
@@ -235,6 +238,7 @@ export class Agent {
 		this.#minP = opts.minP;
 		this.#presencePenalty = opts.presencePenalty;
 		this.#repetitionPenalty = opts.repetitionPenalty;
+		this.#serviceTier = opts.serviceTier;
 		this.#maxRetryDelayMs = opts.maxRetryDelayMs;
 		this.getApiKey = opts.getApiKey;
 		this.#getToolContext = opts.getToolContext;
@@ -342,6 +346,14 @@ export class Agent {
 
 	set repetitionPenalty(value: number | undefined) {
 		this.#repetitionPenalty = value;
+	}
+
+	get serviceTier(): ServiceTier | undefined {
+		return this.#serviceTier;
+	}
+
+	set serviceTier(value: ServiceTier | undefined) {
+		this.#serviceTier = value;
 	}
 
 	/**
@@ -696,6 +708,7 @@ export class Agent {
 			minP: this.#minP,
 			presencePenalty: this.#presencePenalty,
 			repetitionPenalty: this.#repetitionPenalty,
+			serviceTier: this.#serviceTier,
 			interruptMode: this.#interruptMode,
 			sessionId: this.#sessionId,
 			providerSessionState: this.#providerSessionState,

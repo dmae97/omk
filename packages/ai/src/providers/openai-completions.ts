@@ -17,6 +17,7 @@ import type {
 	Message,
 	Model,
 	OpenAICompat,
+	ServiceTier,
 	StopReason,
 	StreamFunction,
 	StreamOptions,
@@ -110,6 +111,7 @@ function hasToolHistory(messages: Message[]): boolean {
 export interface OpenAICompletionsOptions extends StreamOptions {
 	toolChoice?: ToolChoice;
 	reasoning?: "minimal" | "low" | "medium" | "high" | "xhigh";
+	serviceTier?: ServiceTier;
 }
 
 type OpenAICompletionsSamplingParams = OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming & {
@@ -595,6 +597,9 @@ function buildParams(model: Model<"openai-completions">, context: Context, optio
 	}
 	if (options?.repetitionPenalty !== undefined) {
 		params.repetition_penalty = options.repetitionPenalty;
+	}
+	if (options?.serviceTier !== undefined) {
+		params.service_tier = options.serviceTier;
 	}
 
 	if (context.tools) {

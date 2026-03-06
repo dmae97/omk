@@ -2,7 +2,15 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
-import type { ImageContent, Message, MessageAttribution, TextContent, Usage } from "@oh-my-pi/pi-ai";
+import type {
+	ImageContent,
+	Message,
+	MessageAttribution,
+	ProviderPayload,
+	ServiceTier,
+	TextContent,
+	Usage,
+} from "@oh-my-pi/pi-ai";
 import { getTerminalId } from "@oh-my-pi/pi-tui";
 import {
 	getBlobsDir,
@@ -68,6 +76,11 @@ export interface ModelChangeEntry extends SessionEntryBase {
 	model: string;
 	/** Role: "default", "smol", "slow", etc. Undefined treated as "default" */
 	role?: string;
+}
+
+export interface ServiceTierChangeEntry extends SessionEntryBase {
+	type: "service_tier_change";
+	serviceTier: ServiceTier | null;
 }
 
 export interface CompactionEntry<T = unknown> extends SessionEntryBase {
@@ -173,6 +186,7 @@ export type SessionEntry =
 	| SessionMessageEntry
 	| ThinkingLevelChangeEntry
 	| ModelChangeEntry
+	| ServiceTierChangeEntry
 	| CompactionEntry
 	| BranchSummaryEntry
 	| CustomEntry
@@ -196,6 +210,7 @@ export interface SessionTreeNode {
 export interface SessionContext {
 	messages: AgentMessage[];
 	thinkingLevel: string;
+	serviceTier?: ServiceTier;
 	/** Model roles: { default: "provider/modelId", small: "provider/modelId", ... } */
 	models: Record<string, string>;
 	/** Names of TTSR rules that have been injected this session */
@@ -416,7 +431,14 @@ export function buildSessionContext(
 	let leaf: SessionEntry | undefined;
 	if (leafId === null) {
 		// Explicitly null - return no messages (navigated to before first entry)
-		return { messages: [], thinkingLevel: "off", models: {}, injectedTtsrRules: [], mode: "none" };
+		return {
+			messages: [],
+			thinkingLevel: "off",
+			serviceTier: undefined,
+			models: {},
+			injectedTtsrRules: [],
+			mode: "none",
+		};
 	}
 	if (leafId) {
 		leaf = byId.get(leafId);
@@ -427,7 +449,14 @@ export function buildSessionContext(
 	}
 
 	if (!leaf) {
-		return { messages: [], thinkingLevel: "off", models: {}, injectedTtsrRules: [], mode: "none" };
+		return {
+			messages: [],
+			thinkingLevel: "off",
+			serviceTier: undefined,
+			models: {},
+			injectedTtsrRules: [],
+			mode: "none",
+		};
 	}
 
 	// Walk from leaf to root, collecting path
@@ -440,6 +469,7 @@ export function buildSessionContext(
 
 	// Extract settings and find compaction
 	let thinkingLevel = "off";
+	let serviceTier: ServiceTier | undefined;
 	const models: Record<string, string> = {};
 	let compaction: CompactionEntry | null = null;
 	const injectedTtsrRulesSet = new Set<string>();
@@ -455,6 +485,8 @@ export function buildSessionContext(
 				const role = entry.role ?? "default";
 				models[role] = entry.model;
 			}
+		} else if (entry.type === "service_tier_change") {
+			serviceTier = entry.serviceTier ?? undefined;
 		} else if (entry.type === "message" && entry.message.role === "assistant") {
 			// Infer default model from assistant messages
 			models.default = `${entry.message.provider}/${entry.message.model}`;
@@ -500,6 +532,17 @@ export function buildSessionContext(
 	};
 
 	if (compaction) {
+		const remoteReplacementHistory = (() => {
+			const candidate = compaction.preserveData?.openaiRemoteCompaction;
+			if (!candidate || typeof candidate !== "object") return undefined;
+			const replacementHistory = (candidate as { replacementHistory?: unknown }).replacementHistory;
+			if (!Array.isArray(replacementHistory)) return undefined;
+			return replacementHistory as Array<Record<string, unknown>>;
+		})();
+		const providerPayload: ProviderPayload | undefined = remoteReplacementHistory
+			? { type: "openaiResponsesHistory", items: remoteReplacementHistory }
+			: undefined;
+
 		// Emit summary first
 		messages.push(
 			createCompactionSummaryMessage(
@@ -507,21 +550,24 @@ export function buildSessionContext(
 				compaction.tokensBefore,
 				compaction.timestamp,
 				compaction.shortSummary,
+				providerPayload,
 			),
 		);
 
 		// Find compaction index in path
 		const compactionIdx = path.findIndex(e => e.type === "compaction" && e.id === compaction.id);
 
-		// Emit kept messages (before compaction, starting from firstKeptEntryId)
-		let foundFirstKept = false;
-		for (let i = 0; i < compactionIdx; i++) {
-			const entry = path[i];
-			if (entry.id === compaction.firstKeptEntryId) {
-				foundFirstKept = true;
-			}
-			if (foundFirstKept) {
-				appendMessage(entry);
+		if (!remoteReplacementHistory) {
+			// Emit kept messages (before compaction, starting from firstKeptEntryId)
+			let foundFirstKept = false;
+			for (let i = 0; i < compactionIdx; i++) {
+				const entry = path[i];
+				if (entry.id === compaction.firstKeptEntryId) {
+					foundFirstKept = true;
+				}
+				if (foundFirstKept) {
+					appendMessage(entry);
+				}
 			}
 		}
 
@@ -537,7 +583,7 @@ export function buildSessionContext(
 		}
 	}
 
-	return { messages, thinkingLevel, models, injectedTtsrRules, mode, modeData };
+	return { messages, thinkingLevel, serviceTier, models, injectedTtsrRules, mode, modeData };
 }
 
 /**
@@ -1790,6 +1836,18 @@ export class SessionManager {
 			parentId: this.#leafId,
 			timestamp: new Date().toISOString(),
 			thinkingLevel,
+		};
+		this.#appendEntry(entry);
+		return entry.id;
+	}
+
+	appendServiceTierChange(serviceTier: ServiceTier | null): string {
+		const entry: ServiceTierChangeEntry = {
+			type: "service_tier_change",
+			id: generateId(this.#byId),
+			parentId: this.#leafId,
+			timestamp: new Date().toISOString(),
+			serviceTier,
 		};
 		this.#appendEntry(entry);
 		return entry.id;

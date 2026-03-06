@@ -20,8 +20,6 @@ export interface UsageWindow {
 	durationMs?: number;
 	/** Absolute reset timestamp in milliseconds since epoch. */
 	resetsAt?: number;
-	/** Relative reset time in milliseconds, computed at fetch time. */
-	resetInMs?: number;
 }
 
 /** Quantitative usage data. */
@@ -74,20 +72,6 @@ export interface UsageReport {
 	raw?: unknown;
 }
 
-/** Cache entry for usage reports with absolute expiry. */
-export interface UsageCacheEntry {
-	value: UsageReport | null;
-	expiresAt: number;
-}
-
-/** Dependency-injected cache store for usage responses. */
-export interface UsageCache {
-	get(key: string): UsageCacheEntry | undefined | Promise<UsageCacheEntry | undefined>;
-	set(key: string, entry: UsageCacheEntry): void | Promise<void>;
-	delete?(key: string): void | Promise<void>;
-	cleanup?(): void | Promise<void>;
-}
-
 /** Optional logger for usage fetchers. */
 export interface UsageLogger {
 	debug(message: string, meta?: Record<string, unknown>): void;
@@ -118,9 +102,7 @@ export interface UsageFetchParams {
 
 /** Shared runtime utilities for fetchers. */
 export interface UsageFetchContext {
-	cache: UsageCache;
 	fetch: typeof fetch;
-	now: () => number;
 	logger?: UsageLogger;
 }
 

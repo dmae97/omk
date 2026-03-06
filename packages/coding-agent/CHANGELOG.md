@@ -1,6 +1,29 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `/fast` slash command to toggle OpenAI service tier priority mode for faster response processing
+- Added `serviceTier` setting to control OpenAI processing priority (none, auto, default, flex, scale, priority)
+- Added `compaction.remoteEnabled` setting to control use of remote compaction endpoints
+- Added remote compaction support for OpenAI and OpenAI Codex models with encrypted reasoning preservation
+- Added fast mode indicator (⚡) to model segment in status line when priority service tier is active
+- Added context usage threshold levels (normal, warning, purple, error) with token-aware thresholds for better context awareness
+- Added `isFastModeEnabled()`, `setFastMode()`, and `toggleFastMode()` methods to AgentSession for fast mode control
+
+### Changed
+
+- Changed context usage coloring in footer and status line to use token-aware thresholds instead of fixed percentages
+- Changed compaction to preserve OpenAI remote compaction state and encrypted reasoning across sessions
+- Changed compaction to skip emitting kept messages when using OpenAI remote compaction with preserved history
+- Changed session context to include `serviceTier` field for tracking active service tier across session branches
+- Changed `compact()` function to accept `remoteInstructions` option for custom remote compaction prompts
+- Changed model registry to apply hardcoded policies (gpt-5.4 context window) consistently across all model loading paths
+
+### Fixed
+
+- Fixed usage limit reset time calculation to use absolute `resetsAt` timestamps instead of deprecated `resetInMs` field
+- Fixed compaction summary message creation to no longer be automatically added to chat during compaction (now handled by session manager)
 
 ## [13.9.2] - 2026-03-05
 

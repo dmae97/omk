@@ -1,6 +1,34 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `serviceTier` option to control OpenAI processing priority and cost (auto, default, flex, scale, priority)
+- Added `providerPayload` field to messages and responses for reconstructing transport-native history
+- Added Gemini usage provider for tracking quota and tier information
+- Added `getCodexAccountId()` utility to extract account ID from Codex JWT tokens
+- Added email extraction from OpenAI Codex OAuth tokens for credential deduplication
+
+### Changed
+
+- Changed default OpenAI model from gpt-5.1-codex to gpt-5.4 across all providers
+- Changed `UsageFetchContext` to remove cache and now() dependencies—usage fetchers now use Date.now() directly
+- Removed `resetInMs` field from usage windows; consumers should calculate from `resetsAt` timestamp
+- Changed OpenAI Codex credential ranking to deduplicate by email when accountId matches
+- Improved OpenAI Codex error handling with retryable error detection
+
+### Removed
+
+- Removed `UsageCache` and `UsageCacheEntry` interfaces—caching is now handled internally by AuthStorage
+- Removed `google-gemini-cli-usage` export; use new `gemini` usage provider instead
+- Removed `resetInMs` computation from all usage providers
+- Removed cache TTL constants and cache management from usage fetchers (claude, github-copilot, google-antigravity, kimi, openai-codex, zai)
+
+### Fixed
+
+- Fixed OpenAI Codex streaming to properly include service_tier in SSE payloads
+- Fixed type safety in OpenAI responses by removing unsafe type casts on image content blocks
+- Fixed credential purging to respect disabled credentials when deduplicating by email
 
 ## [13.9.2] - 2026-03-05
 

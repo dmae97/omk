@@ -5,6 +5,7 @@ import { theme } from "../../modes/theme/theme";
 import type { AgentSession } from "../../session/agent-session";
 import { shortenPath } from "../../tools/render-utils";
 import { findGitHeadPathAsync, sanitizeStatusText } from "../shared";
+import { getContextUsageLevel, getContextUsageThemeColor } from "./status-line/context-thresholds";
 
 /**
  * Footer component that shows pwd, token stats, and context usage
@@ -197,10 +198,10 @@ export class FooterComponent implements Component {
 			contextPercent === "?"
 				? `?/${formatNumber(contextWindow)}${autoIndicator}`
 				: `${contextPercent}%/${formatNumber(contextWindow)}${autoIndicator}`;
-		if (contextPercentValue > 90) {
-			contextPercentStr = theme.fg("error", contextPercentDisplay);
-		} else if (contextPercentValue > 70) {
-			contextPercentStr = theme.fg("warning", contextPercentDisplay);
+		if (contextUsage?.percent !== null && contextUsage?.percent !== undefined) {
+			const color = getContextUsageThemeColor(getContextUsageLevel(contextPercentValue, contextWindow));
+			contextPercentStr =
+				color === "statusLineContext" ? contextPercentDisplay : theme.fg(color, contextPercentDisplay);
 		} else {
 			contextPercentStr = contextPercentDisplay;
 		}

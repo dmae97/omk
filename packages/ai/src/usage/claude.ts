@@ -12,12 +12,10 @@ import type {
 import { isRecord, toNumber } from "../utils";
 
 const DEFAULT_ENDPOINT = "https://api.anthropic.com/api/oauth";
-const DEFAULT_CACHE_TTL_MS = 60_000;
 const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_RETRIES = 3;
 const BASE_RETRY_DELAY_MS = 500;
-const PROFILE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 const CLAUDE_HEADERS = {
 	accept: "application/json, text/plain, */*",
@@ -82,9 +80,6 @@ function parseBucket(bucket: unknown): ParsedUsageBucket | undefined {
 	const utilization = toNumber(bucket.utilization);
 	const resetsAt = parseIsoTime(typeof bucket.resets_at === "string" ? bucket.resets_at : undefined);
 	if (utilization === undefined && resetsAt === undefined) {
-		if ("utilization" in bucket || "resets_at" in bucket) {
-			return { utilization: 0, resetsAt: undefined };
-		}
 		return undefined;
 	}
 	return { utilization, resetsAt };
@@ -174,14 +169,6 @@ async function fetchProfile(
 	}
 }
 
-function buildProfileCacheKey(params: UsageFetchParams): string {
-	const credential = params.credential;
-	const token = credential.accessToken ?? credential.refreshToken;
-	const fingerprint = token && typeof token === "string" ? Bun.hash(token).toString(16) : "anonymous";
-	const baseUrl = params.baseUrl ?? DEFAULT_ENDPOINT;
-	return `profile:${params.provider}:${fingerprint}:${baseUrl}`;
-}
-
 async function resolveEmail(
 	params: UsageFetchParams,
 	ctx: UsageFetchContext,
@@ -190,23 +177,8 @@ async function resolveEmail(
 ): Promise<string | undefined> {
 	if (params.credential.email) return params.credential.email;
 
-	const cacheKey = buildProfileCacheKey(params);
-	const cached = await ctx.cache.get(cacheKey);
-	const now = ctx.now();
-	if (cached && cached.expiresAt > now && cached.value?.metadata?.email) {
-		return cached.value.metadata.email as string;
-	}
-
 	const profile = await fetchProfile(baseUrl, headers, ctx, params.signal);
-	const email = profile?.account?.email;
-	if (email) {
-		const entry = {
-			value: { provider: params.provider, fetchedAt: now, limits: [], metadata: { email } },
-			expiresAt: now + PROFILE_CACHE_TTL_MS,
-		};
-		await ctx.cache.set(cacheKey, entry);
-	}
-	return email;
+	return profile?.account?.email;
 }
 
 function buildUsageAmount(utilization: number | undefined): UsageAmount | undefined {
@@ -220,24 +192,6 @@ function buildUsageAmount(utilization: number | undefined): UsageAmount | undefi
 		usedFraction,
 		remainingFraction: Math.max(0, 1 - usedFraction),
 		unit: "percent",
-	};
-}
-
-function buildUsageWindow(
-	id: string,
-	label: string,
-	durationMs: number,
-	resetsAt: number | undefined,
-	now: number,
-): UsageWindow {
-	const resolvedResetAt = resetsAt ?? now + durationMs;
-	const resetInMs = Math.max(0, resolvedResetAt - now);
-	return {
-		id,
-		label,
-		durationMs,
-		resetsAt: resolvedResetAt,
-		resetInMs,
 	};
 }
 
@@ -258,12 +212,16 @@ function buildUsageLimit(args: {
 	provider: "anthropic";
 	tier?: string;
 	shared?: boolean;
-	now: number;
 }): UsageLimit | null {
 	if (!args.bucket) return null;
 	const amount = buildUsageAmount(args.bucket.utilization);
 	if (!amount) return null;
-	const window = buildUsageWindow(args.windowId, args.windowLabel, args.durationMs, args.bucket.resetsAt, args.now);
+	const window: UsageWindow = {
+		id: args.windowId,
+		label: args.windowLabel,
+		durationMs: args.durationMs,
+		...(args.bucket.resetsAt !== undefined ? { resetsAt: args.bucket.resetsAt } : {}),
+	};
 	return {
 		id: args.id,
 		label: args.label,
@@ -279,38 +237,10 @@ function buildUsageLimit(args: {
 	};
 }
 
-function buildCacheKey(params: UsageFetchParams): string {
-	const credential = params.credential;
-	const account = credential.accountId ?? credential.email ?? "unknown";
-	const token = credential.accessToken ?? credential.refreshToken;
-	const fingerprint = token && typeof token === "string" ? Bun.hash(token).toString(16) : "anonymous";
-	const baseUrl = params.baseUrl ?? DEFAULT_ENDPOINT;
-	return `usage:${params.provider}:${account}:${fingerprint}:${baseUrl}`;
-}
-
-function resolveCacheExpiry(now: number, limits: UsageLimit[]): number {
-	const earliestReset = limits
-		.map(limit => limit.window?.resetsAt)
-		.filter((value): value is number => typeof value === "number" && Number.isFinite(value))
-		.reduce((min, value) => (min === undefined ? value : Math.min(min, value)), undefined as number | undefined);
-	const exhausted = limits.some(limit => limit.status === "exhausted");
-	if (earliestReset === undefined) return now + DEFAULT_CACHE_TTL_MS;
-	if (exhausted) return earliestReset;
-	return Math.min(now + DEFAULT_CACHE_TTL_MS, earliestReset);
-}
-
 async function fetchClaudeUsage(params: UsageFetchParams, ctx: UsageFetchContext): Promise<UsageReport | null> {
 	if (params.provider !== "anthropic") return null;
 	const credential = params.credential;
 	if (credential.type !== "oauth" || !credential.accessToken) return null;
-
-	const cacheKey = buildCacheKey(params);
-	const cachedEntry = await ctx.cache.get(cacheKey);
-	const now = ctx.now();
-	if (cachedEntry && cachedEntry.expiresAt > now) {
-		return cachedEntry.value;
-	}
-	const cachedValue = cachedEntry?.value ?? null;
 
 	const baseUrl = normalizeClaudeBaseUrl(params.baseUrl);
 	const url = `${baseUrl}/usage`;
@@ -320,7 +250,7 @@ async function fetchClaudeUsage(params: UsageFetchParams, ctx: UsageFetchContext
 	};
 
 	const payloadResult = await fetchUsagePayload(url, headers, ctx, params.signal);
-	if (!payloadResult || !isRecord(payloadResult.payload)) return cachedValue;
+	if (!payloadResult || !isRecord(payloadResult.payload)) return null;
 	const { payload, orgId } = payloadResult;
 
 	const fiveHour = parseBucket(payload.five_hour);
@@ -338,7 +268,6 @@ async function fetchClaudeUsage(params: UsageFetchParams, ctx: UsageFetchContext
 			bucket: fiveHour,
 			provider: "anthropic",
 			shared: true,
-			now,
 		}),
 		buildUsageLimit({
 			id: "anthropic:7d",
@@ -349,7 +278,6 @@ async function fetchClaudeUsage(params: UsageFetchParams, ctx: UsageFetchContext
 			bucket: sevenDay,
 			provider: "anthropic",
 			shared: true,
-			now,
 		}),
 		buildUsageLimit({
 			id: "anthropic:7d:opus",
@@ -360,7 +288,6 @@ async function fetchClaudeUsage(params: UsageFetchParams, ctx: UsageFetchContext
 			bucket: sevenDayOpus,
 			provider: "anthropic",
 			tier: "opus",
-			now,
 		}),
 		buildUsageLimit({
 			id: "anthropic:7d:sonnet",
@@ -371,18 +298,17 @@ async function fetchClaudeUsage(params: UsageFetchParams, ctx: UsageFetchContext
 			bucket: sevenDaySonnet,
 			provider: "anthropic",
 			tier: "sonnet",
-			now,
 		}),
 	].filter((limit): limit is UsageLimit => limit !== null);
 
-	if (limits.length === 0) return cachedValue;
+	if (limits.length === 0) return null;
 	const identity = extractUsageIdentity(payload, orgId);
 	const accountId = identity.accountId ?? credential.accountId;
 	const email = identity.email ?? (await resolveEmail(params, ctx, baseUrl, headers));
 
 	const report: UsageReport = {
 		provider: params.provider,
-		fetchedAt: now,
+		fetchedAt: Date.now(),
 		limits,
 		metadata: {
 			accountId,
@@ -392,8 +318,6 @@ async function fetchClaudeUsage(params: UsageFetchParams, ctx: UsageFetchContext
 		raw: payload,
 	};
 
-	const expiresAt = resolveCacheExpiry(now, limits);
-	await ctx.cache.set(cacheKey, { value: report, expiresAt });
 	return report;
 }
 

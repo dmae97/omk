@@ -19,6 +19,7 @@ import type {
 	CacheRetention,
 	Context,
 	Model,
+	ServiceTier,
 	StopReason,
 	StreamFunction,
 	StreamOptions,
@@ -59,7 +60,7 @@ function getPromptCacheRetention(baseUrl: string, cacheRetention: CacheRetention
 export interface OpenAIResponsesOptions extends StreamOptions {
 	reasoning?: "minimal" | "low" | "medium" | "high" | "xhigh";
 	reasoningSummary?: "auto" | "detailed" | "concise" | null;
-	serviceTier?: ResponseCreateParamsStreaming["service_tier"];
+	serviceTier?: ServiceTier;
 	toolChoice?: ToolChoice;
 	/**
 	 * Enforce strict tool call/result pairing when building Responses API inputs.
@@ -114,7 +115,7 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 			// Create OpenAI client
 			const apiKey = options?.apiKey || getEnvApiKey(model.provider) || "";
 			const { client, copilotPremiumRequests, baseUrl } = createClient(model, context, apiKey, options?.headers);
-			const params = buildParams(model, context, options);
+			const { conversationMessages, params } = buildParams(model, context, options);
 			options?.onPayload?.(params);
 			rawRequestDump = {
 				provider: model.provider,
@@ -135,6 +136,7 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 			let currentBlock: ThinkingContent | TextContent | (ToolCall & { partialJson: string }) | null = null;
 			const blocks = output.content;
 			const blockIndex = () => blocks.length - 1;
+			const nativeOutputItems: Array<Record<string, unknown>> = [];
 
 			for await (const event of openaiStream) {
 				// Handle output item start
@@ -285,9 +287,11 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 				// Handle output item completion
 				else if (event.type === "response.output_item.done") {
 					const item = event.item;
+					const rawItem = item as unknown as Record<string, unknown>;
+					nativeOutputItems.push(structuredClone(rawItem));
 
 					if (item.type === "reasoning" && currentBlock && currentBlock.type === "thinking") {
-						currentBlock.thinking = item.summary?.map(s => s.text).join("\n\n") || "";
+						currentBlock.thinking = item.summary?.map((part: { text: string }) => part.text).join("\n\n") || "";
 						currentBlock.thinkingSignature = JSON.stringify(item);
 						stream.push({
 							type: "thinking_end",
@@ -297,7 +301,11 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 						});
 						currentBlock = null;
 					} else if (item.type === "message" && currentBlock && currentBlock.type === "text") {
-						currentBlock.text = item.content.map(c => (c.type === "output_text" ? c.text : c.refusal)).join("");
+						currentBlock.text = item.content
+							.map((part: { type: string; text?: string; refusal?: string }) =>
+								part.type === "output_text" ? (part.text ?? "") : (part.refusal ?? ""),
+							)
+							.join("");
 						currentBlock.textSignature = item.id;
 						stream.push({
 							type: "text_end",
@@ -359,6 +367,11 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 			if (output.stopReason === "aborted" || output.stopReason === "error") {
 				throw new Error("An unknown error occurred");
 			}
+
+			output.providerPayload = {
+				type: "openaiResponsesHistory",
+				items: [...(conversationMessages as unknown as Array<Record<string, unknown>>), ...nativeOutputItems],
+			};
 
 			output.duration = Date.now() - startTime;
 			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
@@ -422,11 +435,24 @@ function createClient(
 	};
 }
 
-function buildParams(model: Model<"openai-responses">, context: Context, options?: OpenAIResponsesOptions) {
+function buildParams(
+	model: Model<"openai-responses">,
+	context: Context,
+	options?: OpenAIResponsesOptions,
+): { conversationMessages: ResponseInput; params: OpenAIResponsesSamplingParams } {
 	const strictResponsesPairing =
 		options?.strictResponsesPairing ??
 		(isAzureOpenAIBaseUrl(model.baseUrl ?? "") || model.provider === "github-copilot");
-	const messages = convertMessages(model, context, strictResponsesPairing);
+	const conversationMessages = convertConversationMessages(model, context, strictResponsesPairing);
+	const messages: ResponseInput = [...conversationMessages];
+
+	if (context.systemPrompt) {
+		const role = model.reasoning ? "developer" : "system";
+		messages.unshift({
+			role,
+			content: context.systemPrompt.toWellFormed(),
+		});
+	}
 
 	const cacheRetention = resolveCacheRetention(options?.cacheRetention);
 	const promptCacheKey = cacheRetention === "none" ? undefined : options?.sessionId;
@@ -485,23 +511,21 @@ function buildParams(model: Model<"openai-responses">, context: Context, options
 				effort: options?.reasoning || "medium",
 				summary: options?.reasoningSummary || "auto",
 			};
-		} else {
-			if (model.name.startsWith("gpt-5")) {
-				// Jesus Christ, see https://community.openai.com/t/need-reasoning-false-option-for-gpt-5/1351588/7
-				messages.push({
-					role: "developer",
-					content: [
-						{
-							type: "input_text",
-							text: "# Juice: 0 !important",
-						},
-					],
-				});
-			}
+		} else if (model.name.startsWith("gpt-5")) {
+			// Jesus Christ, see https://community.openai.com/t/need-reasoning-false-option-for-gpt-5/1351588/7
+			messages.push({
+				role: "developer",
+				content: [
+					{
+						type: "input_text",
+						text: "# Juice: 0 !important",
+					},
+				],
+			});
 		}
 	}
 
-	return params;
+	return { conversationMessages, params };
 }
 
 function isAzureOpenAIBaseUrl(baseUrl: string): boolean {
@@ -519,13 +543,32 @@ function supportsStrictMode(model: Model<"openai-responses">): boolean {
 	);
 }
 
-function convertMessages(
+function getOpenAIResponsesHistoryItems(
+	providerPayload: { type?: string; items?: unknown } | undefined,
+): ResponseInput | undefined {
+	if (providerPayload?.type !== "openaiResponsesHistory" || !Array.isArray(providerPayload.items)) {
+		return undefined;
+	}
+	return providerPayload.items as ResponseInput;
+}
+
+function collectKnownCallIds(messages: ResponseInput): Set<string> {
+	const knownCallIds = new Set<string>();
+	for (const item of messages) {
+		if (item.type === "function_call" && typeof item.call_id === "string") {
+			knownCallIds.add(item.call_id);
+		}
+	}
+	return knownCallIds;
+}
+
+function convertConversationMessages(
 	model: Model<"openai-responses">,
 	context: Context,
 	strictResponsesPairing: boolean,
 ): ResponseInput {
 	const messages: ResponseInput = [];
-	const knownCallIds = new Set<string>();
+	let knownCallIds = new Set<string>();
 
 	const normalizeToolCallId = (id: string): string => {
 		if (!id.includes("|")) return id;
@@ -545,17 +588,17 @@ function convertMessages(
 	};
 	const transformedMessages = transformMessages(context.messages, model, normalizeToolCallId);
 
-	if (context.systemPrompt) {
-		const role = model.reasoning ? "developer" : "system";
-		messages.push({
-			role,
-			content: context.systemPrompt.toWellFormed(),
-		});
-	}
-
 	let msgIndex = 0;
 	for (const msg of transformedMessages) {
 		if (msg.role === "user" || msg.role === "developer") {
+			const providerPayload = (msg as { providerPayload?: { type?: string; items?: unknown } }).providerPayload;
+			const historyItems = getOpenAIResponsesHistoryItems(providerPayload);
+			if (historyItems) {
+				messages.push(...historyItems);
+				knownCallIds = collectKnownCallIds(messages);
+				msgIndex++;
+				continue;
+			}
 			if (typeof msg.content === "string") {
 				// Skip empty user messages
 				if (!msg.content || msg.content.trim() === "") continue;
@@ -570,13 +613,12 @@ function convertMessages(
 							type: "input_text",
 							text: item.text.toWellFormed(),
 						} satisfies ResponseInputText;
-					} else {
-						return {
-							type: "input_image",
-							detail: "auto",
-							image_url: `data:${item.mimeType};base64,${item.data}`,
-						} satisfies ResponseInputImage;
 					}
+					return {
+						type: "input_image",
+						detail: "auto",
+						image_url: `data:${item.mimeType};base64,${item.data}`,
+					} satisfies ResponseInputImage;
 				});
 				// Filter out images if model doesn't support them, and empty text blocks
 				let filteredContent = !model.input.includes("image")
@@ -595,6 +637,15 @@ function convertMessages(
 				});
 			}
 		} else if (msg.role === "assistant") {
+			const providerPayload = (msg as { providerPayload?: { type?: string; items?: unknown } }).providerPayload;
+			const historyItems = getOpenAIResponsesHistoryItems(providerPayload);
+			if (historyItems) {
+				messages.splice(0, messages.length, ...historyItems);
+				knownCallIds = collectKnownCallIds(messages);
+				msgIndex++;
+				continue;
+			}
+
 			const output: ResponseInput = [];
 			const assistantMsg = msg as AssistantMessage;
 
@@ -657,11 +708,12 @@ function convertMessages(
 			// Extract text and image content
 			const textResult = msg.content
 				.filter(c => c.type === "text")
-				.map(c => (c as any).text)
+				.map(c => c.text)
 				.join("\n");
 			const hasImages = msg.content.some(c => c.type === "image");
 			const normalized = normalizeResponsesToolCallId(msg.toolCallId);
 			if (strictResponsesPairing && !knownCallIds.has(normalized.callId)) {
+				msgIndex++;
 				continue;
 			}
 
@@ -689,7 +741,7 @@ function convertMessages(
 						contentParts.push({
 							type: "input_image",
 							detail: "auto",
-							image_url: `data:${(block as any).mimeType};base64,${(block as any).data}`,
+							image_url: `data:${block.mimeType};base64,${block.data}`,
 						} satisfies ResponseInputImage);
 					}
 				}

@@ -25,7 +25,6 @@ import { getMarkdownTheme, getSymbolTheme, theme } from "../../modes/theme/theme
 import type { InteractiveModeContext } from "../../modes/types";
 import type { AsyncJobSnapshotItem } from "../../session/agent-session";
 import type { AuthStorage } from "../../session/auth-storage";
-import { createCompactionSummaryMessage } from "../../session/messages";
 import { outputMeta } from "../../tools/output-meta";
 import { resolveToCwd } from "../../tools/path-utils";
 import { replaceTabs } from "../../tools/render-utils";
@@ -776,17 +775,9 @@ export class CommandController {
 				customInstructionsOrOptions && typeof customInstructionsOrOptions === "object"
 					? customInstructionsOrOptions
 					: undefined;
-			const result = await this.ctx.session.compact(instructions, options);
+			await this.ctx.session.compact(instructions, options);
 
 			this.ctx.rebuildChatFromMessages();
-
-			const msg = createCompactionSummaryMessage(
-				result.summary,
-				result.tokensBefore,
-				new Date().toISOString(),
-				result.shortSummary,
-			);
-			this.ctx.addMessageToChat(msg);
 
 			this.ctx.statusLine.invalidate();
 			this.ctx.updateEditorTopBorder();
@@ -962,9 +953,6 @@ function formatAccountLabel(limit: UsageLimit, report: UsageReport, index: numbe
 }
 
 function formatResetShort(limit: UsageLimit, nowMs: number): string | undefined {
-	if (limit.window?.resetInMs !== undefined) {
-		return formatDuration(limit.window.resetInMs);
-	}
 	if (limit.window?.resetsAt !== undefined) {
 		return formatDuration(limit.window.resetsAt - nowMs);
 	}
@@ -1024,19 +1012,13 @@ function formatAggregateAmount(limits: UsageLimit[]): string {
 }
 
 function resolveResetRange(limits: UsageLimit[], nowMs: number): string | null {
-	const resets = limits
-		.map(limit => limit.window?.resetInMs ?? undefined)
-		.filter((value): value is number => value !== undefined && Number.isFinite(value) && value > 0);
-	if (resets.length === 0) {
-		const absolute = limits
-			.map(limit => limit.window?.resetsAt)
-			.filter((value): value is number => value !== undefined && Number.isFinite(value) && value > nowMs);
-		if (absolute.length === 0) return null;
-		const earliest = Math.min(...absolute);
-		return `resets at ${new Date(earliest).toLocaleString()}`;
-	}
-	const minReset = Math.min(...resets);
-	const maxReset = Math.max(...resets);
+	const absolute = limits
+		.map(limit => limit.window?.resetsAt)
+		.filter((value): value is number => value !== undefined && Number.isFinite(value) && value > nowMs);
+	if (absolute.length === 0) return null;
+	const offsets = absolute.map(value => value - nowMs);
+	const minReset = Math.min(...offsets);
+	const maxReset = Math.max(...offsets);
 	if (maxReset - minReset > 60_000) {
 		return `resets in ${formatDuration(minReset)}–${formatDuration(maxReset)}`;
 	}

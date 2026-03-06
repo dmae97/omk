@@ -519,7 +519,7 @@ describe("applyHashlineEdits — heuristics", () => {
 		expect(result.lines).toBe("aaa\nBBB\nccc");
 	});
 
-	it("auto-corrects off-by-one range end that would duplicate a closing brace", () => {
+	it("auto-corrects off-by-one range end that duplicates a closing brace", () => {
 		const content = "if (ok) {\n  run();\n}\nafter();";
 		const edits: HashlineEdit[] = [
 			{
@@ -536,7 +536,7 @@ describe("applyHashlineEdits — heuristics", () => {
 		expect(result.warnings?.[0]).toContain('"}"');
 	});
 
-	it('auto-corrects off-by-one range end that would duplicate a ");" closer', () => {
+	it('auto-corrects off-by-one range end that duplicates a ");" closer', () => {
 		const content = "doThing(\n  value,\n);\nnext();";
 		const edits: HashlineEdit[] = [
 			{
@@ -552,38 +552,22 @@ describe("applyHashlineEdits — heuristics", () => {
 		expect(result.warnings?.[0]).toContain('");"');
 	});
 
-	it("does not auto-correct when end already includes the boundary line", () => {
-		const content = "function outer() {\n  function inner() {\n    run();\n  }\n}";
+	it("does not auto-correct duplicated trailing non-boundary lines", () => {
+		const content = "start\n  oldCall();\nnextCall();\nafter();";
 		const edits: HashlineEdit[] = [
 			{
 				op: "replace",
-				pos: makeTag(1, "function outer() {"),
-				end: makeTag(4, "  }"),
-				lines: ["function outer() {", "  function inner() {", "    runSafe();", "  }"],
+				pos: makeTag(1, "start"),
+				end: makeTag(2, "  oldCall();"),
+				lines: ["start", "  newCall();", "nextCall();"],
 			},
 		];
 		const result = applyHashlineEdits(content, edits);
-		expect(result.lines).toBe("function outer() {\n  function inner() {\n    runSafe();\n  }\n}");
-		expect(result.warnings).toBeUndefined();
-	});
-	it("does not auto-correct when trailing replacement line trims to empty", () => {
-		const content = "alpha\nbeta\n\ngamma";
-		const edits: HashlineEdit[] = [
-			{
-				op: "replace",
-				pos: makeTag(1, "alpha"),
-				end: makeTag(2, "beta"),
-				lines: ["ALPHA", ""],
-			},
-		];
-		const result = applyHashlineEdits(content, edits);
-		expect(result.lines).toBe("ALPHA\n\n\ngamma");
+		expect(result.lines).toBe("start\n  newCall();\nnextCall();\nnextCall();\nafter();");
 		expect(result.warnings).toBeUndefined();
 	});
 
-	it("auto-corrects off-by-one range start that would duplicate a preceding line", () => {
-		// Reproduces the failure from assistant history: model anchors at line N+1 but
-		// opens the replacement block with the same content as line N, duplicating it.
+	it("preserves off-by-one range start that duplicates a preceding line", () => {
 		const content = "if (x) {\n  oldBody();\n}\nafter();";
 		const edits: HashlineEdit[] = [
 			{
@@ -594,26 +578,7 @@ describe("applyHashlineEdits — heuristics", () => {
 			},
 		];
 		const result = applyHashlineEdits(content, edits);
-		expect(result.lines).toBe("if (x) {\n  newBody();\n}\nafter();");
-		expect(result.warnings).toHaveLength(1);
-		expect(result.warnings?.[0]).toContain("Auto-corrected range replace");
-		expect(result.warnings?.[0]).toContain('"if (x) {"');
-	});
-
-	it("does not auto-correct leading line when pos already includes the boundary line", () => {
-		// Safety guard: the first replacement line equals the line before pos, but pos itself
-		// already has the same content — coincidence, not off-by-one.
-		const content = "}\n}\nafter();";
-		const edits: HashlineEdit[] = [
-			{
-				op: "replace",
-				pos: makeTag(2, "}"),
-				end: makeTag(2, "}"),
-				lines: ["}", "// inserted"],
-			},
-		];
-		const result = applyHashlineEdits(content, edits);
-		expect(result.lines).toBe("}\n}\n// inserted\nafter();");
+		expect(result.lines).toBe("if (x) {\nif (x) {\n  newBody();\n}\nafter();");
 		expect(result.warnings).toBeUndefined();
 	});
 	it("auto-corrects leading escaped tab indentation by default", () => {

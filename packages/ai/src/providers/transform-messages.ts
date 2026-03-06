@@ -168,7 +168,7 @@ export function transformMessages<TApi extends Api>(
 					} as ToolResultMessage);
 				}
 
-				// Inject turn_aborted guidance marker as developer message
+				// Inject turn-aborted guidance marker as developer message
 				result.push({
 					role: "developer",
 					content: turnAbortedGuidance,

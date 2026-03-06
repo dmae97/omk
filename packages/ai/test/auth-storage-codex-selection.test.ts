@@ -32,7 +32,6 @@ function createLimit(args: {
 	resetInMs: number;
 }): UsageLimit {
 	const clamped = Math.min(Math.max(args.usedFraction, 0), 1);
-	const now = Date.now();
 	const used = clamped * 100;
 	return {
 		id: `openai-codex:${args.key}`,
@@ -46,8 +45,7 @@ function createLimit(args: {
 			id: args.windowId,
 			label: args.windowLabel,
 			durationMs: args.durationMs,
-			resetsAt: now + args.resetInMs,
-			resetInMs: args.resetInMs,
+			resetsAt: Date.now() + args.resetInMs,
 		},
 		amount: {
 			unit: "percent",
@@ -289,6 +287,37 @@ describe("AuthStorage codex oauth ranking", () => {
 		expect(apiKey).toBe("api-acct-solo");
 	});
 
+	test("times out slow usage ranking instead of blocking first account selection", async () => {
+		if (!store) throw new Error("test setup failed");
+
+		const slowAuthStorage = new AuthStorage(store, {
+			usageProviderResolver: provider =>
+				provider === "openai-codex"
+					? ({
+							id: "openai-codex",
+							async fetchUsage(params) {
+								const { promise, resolve } = Promise.withResolvers<UsageReport | null>();
+								params.signal?.addEventListener("abort", () => resolve(null), { once: true });
+								return Promise.race([promise, Bun.sleep(200).then(() => null)]);
+							},
+						} satisfies UsageProvider)
+					: undefined,
+			usageRequestTimeoutMs: 10,
+		});
+
+		await slowAuthStorage.set("openai-codex", [
+			{ type: "oauth", ...createCredential("acct-first", "first@example.com") },
+			{ type: "oauth", ...createCredential("acct-second", "second@example.com") },
+		]);
+
+		const startedAt = Date.now();
+		const apiKey = await slowAuthStorage.getApiKey("openai-codex");
+		const elapsedMs = Date.now() - startedAt;
+
+		expect(apiKey).toBe("api-acct-first");
+		expect(elapsedMs).toBeLessThan(100);
+	});
+
 	test("sorts 3 accounts by weekly drain rate", async () => {
 		if (!authStorage) throw new Error("test setup failed");
 
@@ -327,59 +356,6 @@ describe("AuthStorage codex oauth ranking", () => {
 		expect(apiKey).toBe("api-acct-slow");
 	});
 
-	test("keeps same account within a session even if usage ranking changes", async () => {
-		if (!authStorage) throw new Error("test setup failed");
-
-		await authStorage.set("openai-codex", [
-			{ type: "oauth", ...createCredential("acct-a", "a@example.com") },
-			{ type: "oauth", ...createCredential("acct-b", "b@example.com") },
-		]);
-
-		usageByAccount.set(
-			"acct-a",
-			createCodexUsageReport({
-				accountId: "acct-a",
-				primary: { usedFraction: 0.2, resetInMs: 20 * 60 * 1000 },
-				secondary: { usedFraction: 0.1, resetInMs: 6 * 24 * 60 * 60 * 1000 },
-			}),
-		);
-		usageByAccount.set(
-			"acct-b",
-			createCodexUsageReport({
-				accountId: "acct-b",
-				primary: { usedFraction: 0.2, resetInMs: 20 * 60 * 1000 },
-				secondary: { usedFraction: 0.6, resetInMs: 3 * 24 * 60 * 60 * 1000 },
-			}),
-		);
-
-		const sessionId = "session-sticky-codex";
-		const firstKey = await authStorage.getApiKey("openai-codex", sessionId);
-		expect(firstKey).toBe("api-acct-a");
-
-		usageByAccount.set(
-			"acct-a",
-			createCodexUsageReport({
-				accountId: "acct-a",
-				primary: { usedFraction: 0.4, resetInMs: 40 * 60 * 1000 },
-				secondary: { usedFraction: 0.95, resetInMs: 6 * 24 * 60 * 60 * 1000 },
-			}),
-		);
-		usageByAccount.set(
-			"acct-b",
-			createCodexUsageReport({
-				accountId: "acct-b",
-				primary: { usedFraction: 0.1, resetInMs: 20 * 60 * 1000 },
-				secondary: { usedFraction: 0.05, resetInMs: 6 * 24 * 60 * 60 * 1000 },
-			}),
-		);
-
-		const secondKey = await authStorage.getApiKey("openai-codex", sessionId);
-		expect(secondKey).toBe("api-acct-a");
-
-		const newSessionKey = await authStorage.getApiKey("openai-codex", "session-fresh-codex");
-		expect(newSessionKey).toBe("api-acct-b");
-	});
-
 	test("handles usage fetch failure gracefully (null report)", async () => {
 		if (!authStorage) throw new Error("test setup failed");
 
@@ -401,6 +377,61 @@ describe("AuthStorage codex oauth ranking", () => {
 		const apiKey = await authStorage.getApiKey("openai-codex", "session-null-usage");
 		expect(apiKey).toBe("api-acct-known");
 	});
+	test("refreshes expired oauth candidates in parallel before selection", async () => {
+		if (!authStorage) throw new Error("test setup failed");
+
+		vi.spyOn(oauthUtils, "getOAuthApiKey").mockImplementation(async (_provider, credentials) => {
+			const credential = credentials["openai-codex"] as OAuthCredentials | undefined;
+			if (!credential?.accountId) return null;
+
+			let nextCredential = credential;
+			if (Date.now() >= credential.expires) {
+				nextCredential = await oauthUtils.refreshOAuthToken("openai-codex", credential);
+			}
+
+			if (nextCredential.accountId === "acct-first" || nextCredential.accountId === "acct-second") {
+				return null;
+			}
+
+			return {
+				apiKey: nextCredential.access,
+				newCredentials: nextCredential,
+			};
+		});
+
+		const refreshDelayMs = 75;
+		let inFlight = 0;
+		let maxConcurrent = 0;
+		const refreshStarts: number[] = [];
+		vi.spyOn(oauthUtils, "refreshOAuthToken").mockImplementation(async (_provider, credential) => {
+			refreshStarts.push(Date.now());
+			inFlight += 1;
+			maxConcurrent = Math.max(maxConcurrent, inFlight);
+			await Bun.sleep(refreshDelayMs);
+			inFlight -= 1;
+			return {
+				...credential,
+				access: `refreshed-${credential.accountId}`,
+				expires: Date.now() + HOUR_MS,
+			};
+		});
+
+		const expiredAt = Date.now() - HOUR_MS;
+		await authStorage.set("openai-codex", [
+			{ type: "oauth", ...createCredential("acct-first", "first@example.com"), expires: expiredAt },
+			{ type: "oauth", ...createCredential("acct-second", "second@example.com"), expires: expiredAt },
+			{ type: "oauth", ...createCredential("acct-third", "third@example.com"), expires: expiredAt },
+		]);
+
+		const startedAt = Date.now();
+		const apiKey = await authStorage.getApiKey("openai-codex");
+		const elapsedMs = Date.now() - startedAt;
+
+		expect(apiKey).toBe("refreshed-acct-third");
+		expect(refreshStarts).toHaveLength(3);
+		expect(maxConcurrent).toBe(3);
+		expect(elapsedMs).toBeLessThan(refreshDelayMs * 2);
+	});
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -414,7 +445,6 @@ function createClaudeLimit(args: {
 	resetInMs: number;
 }): UsageLimit {
 	const clamped = Math.min(Math.max(args.usedFraction, 0), 1);
-	const now = Date.now();
 	const used = clamped * 100;
 	const label = args.key === "5h" ? "Claude 5 Hour" : "Claude 7 Day";
 	return {
@@ -429,8 +459,7 @@ function createClaudeLimit(args: {
 			id: args.key,
 			label,
 			durationMs: args.durationMs,
-			resetsAt: now + args.resetInMs,
-			resetInMs: args.resetInMs,
+			resetsAt: Date.now() + args.resetInMs,
 		},
 		amount: {
 			unit: "percent",

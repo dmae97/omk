@@ -25,3 +25,20 @@ export const URL_PATHS = {
 } as const;
 
 export const JWT_CLAIM_PATH = "https://api.openai.com/auth" as const;
+
+/**
+ * Extract account ID from a Codex JWT access token.
+ * Returns undefined if the token is not a valid Codex JWT.
+ */
+export function getCodexAccountId(accessToken: string): string | undefined {
+	try {
+		const parts = accessToken.split(".");
+		if (parts.length !== 3) return undefined;
+		const decoded = Buffer.from(parts[1] ?? "", "base64").toString("utf-8");
+		const payload = JSON.parse(decoded) as Record<string, unknown>;
+		const auth = payload[JWT_CLAIM_PATH] as { chatgpt_account_id?: string } | undefined;
+		return auth?.chatgpt_account_id ?? undefined;
+	} catch {
+		return undefined;
+	}
+}

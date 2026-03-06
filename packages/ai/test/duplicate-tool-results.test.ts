@@ -318,7 +318,7 @@ describe("Codex-style Abort Handling", () => {
 		expect(textContent).toBeDefined();
 	});
 
-	it("should inject turn_aborted guidance marker as synthetic user message", () => {
+	it("should inject turn-aborted guidance marker as synthetic user message", () => {
 		const assistantMessage: AssistantMessage = {
 			role: "assistant",
 			content: [{ type: "toolCall", id: "toolu_marker_test", name: "bash", arguments: { command: "sleep 10" } }],

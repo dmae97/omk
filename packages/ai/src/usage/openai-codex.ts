@@ -3,7 +3,6 @@ import { CODEX_BASE_URL } from "../providers/openai-codex/constants";
 import type {
 	CredentialRankingStrategy,
 	UsageAmount,
-	UsageCache,
 	UsageFetchContext,
 	UsageFetchParams,
 	UsageLimit,
@@ -14,7 +13,6 @@ import type {
 import { isRecord } from "../utils";
 
 const CODEX_USAGE_PATH = "wham/usage";
-const DEFAULT_CACHE_TTL_MS = 60_000;
 const JWT_AUTH_CLAIM = "https://api.openai.com/auth";
 const JWT_PROFILE_CLAIM = "https://api.openai.com/profile";
 
@@ -100,20 +98,6 @@ function normalizeEmail(email: string | undefined): string | undefined {
 	if (!email) return undefined;
 	const normalized = email.trim().toLowerCase();
 	return normalized || undefined;
-}
-
-function getTokenFingerprint(token: string): string {
-	return Bun.hash(token).toString(16);
-}
-
-function buildCacheIdentity(args: {
-	accountId: string | undefined;
-	email: string | undefined;
-	accessToken: string;
-}): string {
-	if (args.email) return `email:${args.email}`;
-	if (args.accountId) return `account:${args.accountId}:token:${getTokenFingerprint(args.accessToken)}`;
-	return `token:${getTokenFingerprint(args.accessToken)}`;
 }
 
 function extractAccountId(token: string | undefined): string | undefined {
@@ -204,29 +188,27 @@ function buildWindowLabel(seconds: number): { id: string; label: string } {
 	return { id: `${hours}h`, label: formatWindowLabel(hours, "hour") };
 }
 
-function resolveResetTimes(window: ParsedUsageWindow, nowMs: number): Pick<UsageWindow, "resetsAt" | "resetInMs"> {
+function resolveResetTime(window: ParsedUsageWindow, nowMs: number): number | undefined {
 	const resetAt = window.resetAt;
 	if (resetAt !== undefined) {
 		const resetAtMs = resetAt > 1_000_000_000_000 ? resetAt : resetAt * 1000;
-		if (Number.isFinite(resetAtMs)) {
-			return { resetsAt: resetAtMs, resetInMs: resetAtMs - nowMs };
-		}
+		if (Number.isFinite(resetAtMs)) return resetAtMs;
 	}
 	if (window.resetAfterSeconds !== undefined) {
-		const resetInMs = window.resetAfterSeconds * 1000;
-		return { resetsAt: nowMs + resetInMs, resetInMs };
+		return nowMs + window.resetAfterSeconds * 1000;
 	}
-	return {};
+	return undefined;
 }
 
 function buildUsageWindow(window: ParsedUsageWindow, key: string, nowMs: number): UsageWindow {
+	const resetsAt = resolveResetTime(window, nowMs);
 	if (window.limitWindowSeconds !== undefined) {
 		const { id, label } = buildWindowLabel(window.limitWindowSeconds);
 		const durationMs = window.limitWindowSeconds * 1000;
-		return { id, label, durationMs, ...resolveResetTimes(window, nowMs) };
+		return { id, label, durationMs, ...(resetsAt !== undefined ? { resetsAt } : {}) };
 	}
 	const fallbackLabel = key === "primary" ? "Primary window" : "Secondary window";
-	return { id: key, label: fallbackLabel, ...resolveResetTimes(window, nowMs) };
+	return { id: key, label: fallbackLabel, ...(resetsAt !== undefined ? { resetsAt } : {}) };
 }
 
 function buildUsageAmount(window: ParsedUsageWindow): UsageAmount {
@@ -280,39 +262,6 @@ function buildUsageLimit(args: {
 	};
 }
 
-function resolveCacheExpiry(args: { report: UsageReport | null; nowMs: number }): number {
-	const { report, nowMs } = args;
-	if (!report) return nowMs + DEFAULT_CACHE_TTL_MS;
-	const exhausted = report.limits.some(limit => limit.status === "exhausted");
-	const resetCandidates = report.limits
-		.map(limit => limit.window?.resetsAt)
-		.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-	const earliestReset = resetCandidates.length > 0 ? Math.min(...resetCandidates) : undefined;
-	if (exhausted && earliestReset) return earliestReset;
-	if (earliestReset) return Math.min(nowMs + DEFAULT_CACHE_TTL_MS, earliestReset);
-	return nowMs + DEFAULT_CACHE_TTL_MS;
-}
-
-async function getCachedReport(
-	cache: UsageCache,
-	cacheKey: string,
-	nowMs: number,
-): Promise<UsageReport | null | undefined> {
-	const cached = await cache.get(cacheKey);
-	if (!cached) return undefined;
-	if (cached.expiresAt <= nowMs) return undefined;
-	return cached.value;
-}
-
-async function setCachedReport(
-	cache: UsageCache,
-	cacheKey: string,
-	report: UsageReport | null,
-	expiresAt: number,
-): Promise<void> {
-	await cache.set(cacheKey, { value: report, expiresAt });
-}
-
 export const openaiCodexUsageProvider: UsageProvider = {
 	id: "openai-codex",
 	supports(params: UsageFetchParams): boolean {
@@ -326,7 +275,7 @@ export const openaiCodexUsageProvider: UsageProvider = {
 		const accessToken = credential.accessToken;
 		if (!accessToken) return null;
 
-		const nowMs = ctx.now();
+		const nowMs = Date.now();
 		if (credential.expiresAt !== undefined && credential.expiresAt <= nowMs) {
 			ctx.logger?.warn("Codex usage token expired", { provider: params.provider });
 			return null;
@@ -335,10 +284,6 @@ export const openaiCodexUsageProvider: UsageProvider = {
 		const baseUrl = normalizeCodexBaseUrl(params.baseUrl);
 		const accountId = credential.accountId ?? extractAccountId(accessToken);
 		const email = normalizeEmail(credential.email ?? extractEmail(accessToken));
-		const cacheIdentity = buildCacheIdentity({ accountId, email, accessToken });
-		const cacheKey = `usage:openai-codex:${cacheIdentity}:${baseUrl}`;
-		const cached = await getCachedReport(ctx.cache, cacheKey, nowMs);
-		if (cached !== undefined) return cached;
 
 		const headers: Record<string, string> = {
 			Authorization: `Bearer ${accessToken}`,
@@ -407,8 +352,6 @@ export const openaiCodexUsageProvider: UsageProvider = {
 			raw: parsed.raw,
 		};
 
-		const expiresAt = resolveCacheExpiry({ report, nowMs });
-		await setCachedReport(ctx.cache, cacheKey, report, expiresAt);
 		return report;
 	},
 };

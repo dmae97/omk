@@ -5,7 +5,14 @@
  * and provides a transformer to convert them to LLM-compatible messages.
  */
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
-import type { ImageContent, Message, MessageAttribution, TextContent, ToolResultMessage } from "@oh-my-pi/pi-ai";
+import type {
+	ImageContent,
+	Message,
+	MessageAttribution,
+	ProviderPayload,
+	TextContent,
+	ToolResultMessage,
+} from "@oh-my-pi/pi-ai";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import branchSummaryContextPrompt from "../prompts/compaction/branch-summary-context.md" with { type: "text" };
 import compactionSummaryContextPrompt from "../prompts/compaction/compaction-summary-context.md" with { type: "text" };
@@ -106,6 +113,7 @@ export interface CompactionSummaryMessage {
 	summary: string;
 	shortSummary?: string;
 	tokensBefore: number;
+	providerPayload?: ProviderPayload;
 	timestamp: number;
 }
 
@@ -193,12 +201,14 @@ export function createCompactionSummaryMessage(
 	tokensBefore: number,
 	timestamp: string,
 	shortSummary?: string,
+	providerPayload?: ProviderPayload,
 ): CompactionSummaryMessage {
 	return {
 		role: "compactionSummary",
 		summary,
 		shortSummary,
 		tokensBefore,
+		providerPayload,
 		timestamp: new Date(timestamp).getTime(),
 	};
 }
@@ -289,6 +299,7 @@ export function convertToLlm(messages: AgentMessage[]): Message[] {
 							},
 						],
 						attribution: "agent",
+						providerPayload: m.providerPayload,
 						timestamp: m.timestamp,
 					};
 				case "fileMention": {

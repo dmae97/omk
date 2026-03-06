@@ -1,3 +1,4 @@
+import { getGeminiCliHeaders } from "../providers/google-gemini-cli";
 import type {
 	UsageAmount,
 	UsageFetchContext,
@@ -8,10 +9,8 @@ import type {
 	UsageWindow,
 } from "../usage";
 import { refreshGoogleCloudToken } from "../utils/oauth/google-gemini-cli";
-import { getGeminiCliHeaders } from "./google-gemini-cli";
 
 const DEFAULT_ENDPOINT = "https://cloudcode-pa.googleapis.com";
-const CACHE_TTL_MS = 60_000;
 
 const GEMINI_TIER_MAP: Array<{ tier: string; models: string[] }> = [
 	{
@@ -64,7 +63,7 @@ function getModelTier(modelId: string): string | undefined {
 	return undefined;
 }
 
-function parseWindow(resetTime: string | undefined, now: number): UsageWindow {
+function parseWindow(resetTime: string | undefined): UsageWindow {
 	if (!resetTime) {
 		return {
 			id: "quota",
@@ -82,7 +81,6 @@ function parseWindow(resetTime: string | undefined, now: number): UsageWindow {
 		id: `reset-${resetsAt}`,
 		label: "Quota window",
 		resetsAt,
-		resetInMs: Math.max(0, resetsAt - now),
 	};
 }
 
@@ -105,8 +103,7 @@ function buildAmount(remainingFraction: number | undefined): UsageAmount {
 async function resolveAccessToken(params: UsageFetchParams, ctx: UsageFetchContext): Promise<string | undefined> {
 	const { credential } = params;
 	if (credential.type !== "oauth") return undefined;
-	const now = ctx.now();
-	if (credential.accessToken && (!credential.expiresAt || credential.expiresAt > now + 60_000)) {
+	if (credential.accessToken && (!credential.expiresAt || credential.expiresAt > Date.now() + 60_000)) {
 		return credential.accessToken;
 	}
 	if (!credential.refreshToken || !credential.projectId) return credential.accessToken;
@@ -199,22 +196,12 @@ export const googleGeminiCliUsageProvider: UsageProvider = {
 			return null;
 		}
 
-		const now = ctx.now();
 		const baseUrl = (params.baseUrl?.trim() || DEFAULT_ENDPOINT).replace(/\/$/, "");
-		const cacheKey = `usage:${params.provider}:${credential.accountId ?? credential.email ?? "default"}:${baseUrl}:${
-			credential.projectId ?? "default"
-		}`;
-		const cached = await ctx.cache.get(cacheKey);
-		if (cached && cached.expiresAt > now) {
-			return cached.value;
-		}
 
 		const loadResponse = await loadCodeAssist(params, ctx, accessToken, baseUrl, credential.projectId);
 		const projectId = credential.projectId ?? getProjectId(loadResponse);
 		const quotaResponse = await fetchQuota(params, ctx, accessToken, baseUrl, projectId);
 		if (!quotaResponse) {
-			const entry = { value: null, expiresAt: now + CACHE_TTL_MS };
-			await ctx.cache.set(cacheKey, entry);
 			return null;
 		}
 
@@ -223,7 +210,7 @@ export const googleGeminiCliUsageProvider: UsageProvider = {
 
 		buckets.forEach((bucket, index) => {
 			const modelId = bucket.modelId;
-			const window = parseWindow(bucket.resetTime, now);
+			const window = parseWindow(bucket.resetTime);
 			const amount = buildAmount(bucket.remainingFraction);
 			const tier = modelId ? getModelTier(modelId) : undefined;
 			const label = modelId ? `Gemini ${modelId}` : "Gemini quota";
@@ -247,7 +234,7 @@ export const googleGeminiCliUsageProvider: UsageProvider = {
 
 		const report: UsageReport = {
 			provider: params.provider,
-			fetchedAt: now,
+			fetchedAt: Date.now(),
 			limits,
 			metadata: {
 				currentTierId: loadResponse?.currentTier?.id,
@@ -256,7 +243,6 @@ export const googleGeminiCliUsageProvider: UsageProvider = {
 			raw: quotaResponse,
 		};
 
-		await ctx.cache.set(cacheKey, { value: report, expiresAt: now + CACHE_TTL_MS });
 		return report;
 	},
 };

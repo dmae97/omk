@@ -3,6 +3,12 @@ import type { SettingPath, SettingValue } from "../config/settings";
 import { settings } from "../config/settings";
 import type { InteractiveModeContext } from "../modes/types";
 
+function refreshStatusLine(ctx: InteractiveModeContext): void {
+	ctx.statusLine.invalidate();
+	ctx.updateEditorTopBorder();
+	ctx.ui.requestRender();
+}
+
 /** Declarative subcommand definition for commands like /mcp. */
 export interface SubcommandDef {
 	name: string;
@@ -89,6 +95,48 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 		description: "Select model (opens selector UI)",
 		handle: (_command, runtime) => {
 			runtime.ctx.showModelSelector();
+			runtime.ctx.editor.setText("");
+		},
+	},
+	{
+		name: "fast",
+		description: "Toggle fast mode (OpenAI service tier priority)",
+		subcommands: [
+			{ name: "on", description: "Enable fast mode" },
+			{ name: "off", description: "Disable fast mode" },
+			{ name: "status", description: "Show fast mode status" },
+		],
+		allowArgs: true,
+		handle: (command, runtime) => {
+			const arg = command.args.trim().toLowerCase();
+			if (!arg || arg === "toggle") {
+				const enabled = runtime.ctx.session.toggleFastMode();
+				refreshStatusLine(runtime.ctx);
+				runtime.ctx.showStatus(`Fast mode ${enabled ? "enabled" : "disabled"}.`);
+				runtime.ctx.editor.setText("");
+				return;
+			}
+			if (arg === "on") {
+				runtime.ctx.session.setFastMode(true);
+				refreshStatusLine(runtime.ctx);
+				runtime.ctx.showStatus("Fast mode enabled.");
+				runtime.ctx.editor.setText("");
+				return;
+			}
+			if (arg === "off") {
+				runtime.ctx.session.setFastMode(false);
+				refreshStatusLine(runtime.ctx);
+				runtime.ctx.showStatus("Fast mode disabled.");
+				runtime.ctx.editor.setText("");
+				return;
+			}
+			if (arg === "status") {
+				const enabled = runtime.ctx.session.isFastModeEnabled();
+				runtime.ctx.showStatus(`Fast mode is ${enabled ? "on" : "off"}.`);
+				runtime.ctx.editor.setText("");
+				return;
+			}
+			runtime.ctx.showStatus("Usage: /fast [on|off|status]");
 			runtime.ctx.editor.setText("");
 		},
 	},

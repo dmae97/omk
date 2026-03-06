@@ -20,6 +20,7 @@ import type {
 	Context,
 	ImageContent,
 	Model,
+	ServiceTier,
 	StopReason,
 	StreamFunction,
 	StreamOptions,
@@ -68,6 +69,7 @@ export interface AzureOpenAIResponsesOptions extends StreamOptions {
 	azureBaseUrl?: string;
 	azureDeploymentName?: string;
 	toolChoice?: ToolChoice;
+	serviceTier?: ServiceTier;
 }
 
 type AzureOpenAIResponsesSamplingParams = ResponseCreateParamsStreaming & {
@@ -483,6 +485,9 @@ function buildParams(
 	}
 	if (options?.repetitionPenalty !== undefined) {
 		params.repetition_penalty = options.repetitionPenalty;
+	}
+	if (options?.serviceTier !== undefined) {
+		params.service_tier = options.serviceTier;
 	}
 
 	if (context.tools) {

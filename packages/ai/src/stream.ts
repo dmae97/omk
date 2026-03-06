@@ -545,6 +545,7 @@ function mapOptionsForApi<TApi extends Api>(
 				...base,
 				reasoning: resolveOpenAiReasoningEffort(model, options),
 				toolChoice: mapOpenAiToolChoice(options?.toolChoice),
+				serviceTier: options?.serviceTier,
 			});
 
 		case "openai-responses":
@@ -552,6 +553,7 @@ function mapOptionsForApi<TApi extends Api>(
 				...base,
 				reasoning: resolveOpenAiReasoningEffort(model, options),
 				toolChoice: mapOpenAiToolChoice(options?.toolChoice),
+				serviceTier: options?.serviceTier,
 			});
 
 		case "azure-openai-responses":
@@ -559,6 +561,7 @@ function mapOptionsForApi<TApi extends Api>(
 				...base,
 				reasoning: resolveOpenAiReasoningEffort(model, options),
 				toolChoice: mapOpenAiToolChoice(options?.toolChoice),
+				serviceTier: options?.serviceTier,
 			});
 
 		case "openai-codex-responses":
@@ -566,6 +569,7 @@ function mapOptionsForApi<TApi extends Api>(
 				...base,
 				reasoning: resolveOpenAiReasoningEffort(model, options),
 				toolChoice: mapOpenAiToolChoice(options?.toolChoice),
+				serviceTier: options?.serviceTier,
 				preferWebsockets: options?.preferWebsockets,
 			});
 

@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { _resetSettingsForTest, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
+import { getPathsForTab, getUi } from "@oh-my-pi/pi-coding-agent/config/settings-schema";
 import { getProjectAgentDir, Snowflake } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
 
@@ -118,6 +119,31 @@ describe("Settings", () => {
 
 			const savedSettings = await readSettings();
 			expect(savedSettings.defaultThinkingLevel).toBe("high");
+		});
+	});
+	describe("compaction remote setting", () => {
+		it("includes remote compaction in the agent settings UI", () => {
+			expect(getPathsForTab("agent")).toContain("compaction.remoteEnabled");
+			expect(getUi("compaction.remoteEnabled")).toMatchObject({
+				tab: "agent",
+				label: "Remote compaction",
+			});
+		});
+
+		it("persists the remote compaction toggle", async () => {
+			const settings = await Settings.init({ cwd: projectDir, agentDir });
+
+			expect(settings.get("compaction.remoteEnabled")).toBe(true);
+
+			settings.set("compaction.remoteEnabled", false);
+			await settings.flush();
+
+			const savedSettings = await readSettings();
+			expect(savedSettings.compaction).toEqual({ remoteEnabled: false });
+
+			_resetSettingsForTest();
+			const reloaded = await Settings.init({ cwd: projectDir, agentDir });
+			expect(reloaded.get("compaction.remoteEnabled")).toBe(false);
 		});
 	});
 });

@@ -13,7 +13,6 @@ import { isRecord, toNumber } from "../utils";
 const DEFAULT_ENDPOINT = "https://api.z.ai";
 const QUOTA_PATH = "/api/monitor/usage/quota/limit";
 const MODEL_USAGE_PATH = "/api/monitor/usage/model-usage";
-const DEFAULT_CACHE_TTL_MS = 60_000;
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 function normalizeZaiBaseUrl(baseUrl?: string): string {
@@ -87,45 +86,11 @@ function buildUsageAmount(args: {
 	};
 }
 
-function buildUsageWindow(
-	id: string,
-	label: string,
-	resetsAt: number | undefined,
-	now: number,
-): UsageWindow | undefined {
-	if (!resetsAt) return { id, label };
-	const resetInMs = Math.max(0, resetsAt - now);
-	return {
-		id,
-		label,
-		resetsAt,
-		resetInMs,
-	};
-}
-
 function getUsageStatus(usedFraction: number | undefined): UsageStatus | undefined {
 	if (usedFraction === undefined) return undefined;
 	if (usedFraction >= 1) return "exhausted";
 	if (usedFraction >= 0.9) return "warning";
 	return "ok";
-}
-
-function buildCacheKey(params: UsageFetchParams): string {
-	const credential = params.credential;
-	const account = credential.accountId ?? credential.email ?? "unknown";
-	const token = credential.apiKey ?? credential.accessToken;
-	const fingerprint = token && typeof token === "string" ? Bun.hash(token).toString(16) : "anonymous";
-	const baseUrl = params.baseUrl ?? DEFAULT_ENDPOINT;
-	return `usage:${params.provider}:${account}:${fingerprint}:${baseUrl}`;
-}
-
-function resolveCacheExpiry(now: number, limits: UsageLimit[]): number {
-	const earliestReset = limits
-		.map(limit => limit.window?.resetsAt)
-		.filter((value): value is number => typeof value === "number" && Number.isFinite(value))
-		.reduce((min, value) => (min === undefined ? value : Math.min(min, value)), undefined as number | undefined);
-	if (!earliestReset) return now + DEFAULT_CACHE_TTL_MS;
-	return Math.min(earliestReset, now + DEFAULT_CACHE_TTL_MS);
 }
 
 function formatDate(value: Date): string {
@@ -146,11 +111,6 @@ async function fetchZaiUsage(params: UsageFetchParams, ctx: UsageFetchContext): 
 	if (params.provider !== "zai") return null;
 	const credential = params.credential;
 	if (credential.type !== "api_key" || !credential.apiKey) return null;
-
-	const cacheKey = buildCacheKey(params);
-	const cachedEntry = await ctx.cache.get(cacheKey);
-	const now = ctx.now();
-	if (cachedEntry && cachedEntry.expiresAt > now) return cachedEntry.value;
 
 	const baseUrl = normalizeZaiBaseUrl(params.baseUrl);
 	const url = `${baseUrl}${QUOTA_PATH}`;
@@ -196,7 +156,12 @@ async function fetchZaiUsage(params: UsageFetchParams, ctx: UsageFetchContext): 
 				percentage: parsed.percentage,
 				unit: "tokens",
 			});
-			const window = buildUsageWindow("quota", "Quota", parsed.nextResetTime, now);
+			const window: UsageWindow = {
+				id: "quota",
+				label: "Quota",
+				durationMs: SEVEN_DAYS_MS,
+				resetsAt: parsed.nextResetTime,
+			};
 			limits.push({
 				id: "zai:tokens",
 				label: "ZAI Token Quota",
@@ -211,7 +176,12 @@ async function fetchZaiUsage(params: UsageFetchParams, ctx: UsageFetchContext): 
 			});
 		}
 		if (parsed.type === "TIME_LIMIT") {
-			const window = buildUsageWindow("quota", "Quota", undefined, now);
+			const window: UsageWindow = {
+				id: "quota",
+				label: "Quota",
+				durationMs: SEVEN_DAYS_MS,
+				resetsAt: parsed.nextResetTime,
+			};
 			const amount = buildUsageAmount({
 				used: parsed.currentValue,
 				limit: parsed.usage,
@@ -238,7 +208,7 @@ async function fetchZaiUsage(params: UsageFetchParams, ctx: UsageFetchContext): 
 
 	const report: UsageReport = {
 		provider: params.provider,
-		fetchedAt: now,
+		fetchedAt: Date.now(),
 		limits,
 		metadata: {
 			endpoint: url,
@@ -248,10 +218,7 @@ async function fetchZaiUsage(params: UsageFetchParams, ctx: UsageFetchContext): 
 		raw: payload,
 	};
 
-	const expiresAt = resolveCacheExpiry(now, limits);
-	await ctx.cache.set(cacheKey, { value: report, expiresAt });
-
-	const modelUsageUrl = buildModelUsageUrl(baseUrl, new Date(now));
+	const modelUsageUrl = buildModelUsageUrl(baseUrl, new Date());
 	try {
 		const response = await ctx.fetch(modelUsageUrl, {
 			headers,

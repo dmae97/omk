@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `serviceTier` option to configure service tier for agent requests
 
 ## [13.4.0] - 2026-03-01
 ### Added

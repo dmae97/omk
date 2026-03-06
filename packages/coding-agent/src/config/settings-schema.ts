@@ -378,6 +378,15 @@ export const SETTINGS_SCHEMA = {
 	"compaction.reserveTokens": { type: "number", default: 16384 },
 	"compaction.keepRecentTokens": { type: "number", default: 20000 },
 	"compaction.autoContinue": { type: "boolean", default: true },
+	"compaction.remoteEnabled": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "agent",
+			label: "Remote compaction",
+			description: "Use remote compaction endpoints when available instead of local summarization",
+		},
+	},
 	"compaction.remoteEndpoint": { type: "string", default: undefined },
 
 	// ─────────────────────────────────────────────────────────────────────────
@@ -1216,6 +1225,17 @@ export const SETTINGS_SCHEMA = {
 			submenu: true,
 		},
 	},
+	serviceTier: {
+		type: "enum",
+		values: ["none", "auto", "default", "flex", "scale", "priority"] as const,
+		default: "none",
+		ui: {
+			tab: "agent",
+			label: "Service tier",
+			description: "OpenAI processing priority (none = omit parameter)",
+			submenu: true,
+		},
+	},
 } as const;
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1301,6 +1321,7 @@ export interface CompactionSettings {
 	keepRecentTokens: number;
 	handoffSaveToDisk: boolean;
 	autoContinue: boolean;
+	remoteEnabled: boolean;
 	remoteEndpoint: string | undefined;
 }
 

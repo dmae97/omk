@@ -192,6 +192,39 @@ describe("buildSessionContext", () => {
 			expect((ctx.messages[0] as any).summary).toContain("Empty summary");
 		});
 
+		it("uses preserved OpenAI replacement history instead of kept raw messages", () => {
+			const remoteCompaction: CompactionEntry = {
+				...compaction("3", "2", "Remote summary", "1"),
+				preserveData: {
+					openaiRemoteCompaction: {
+						replacementHistory: [
+							{ type: "message", role: "user", content: [{ type: "input_text", text: "Preserved user" }] },
+							{ type: "compaction", encrypted_content: "enc_123" },
+						],
+						compactionItem: { type: "compaction", encrypted_content: "enc_123" },
+					},
+				},
+			};
+			const entries: SessionEntry[] = [
+				msg("1", null, "user", "first"),
+				msg("2", "1", "assistant", "response"),
+				remoteCompaction,
+				msg("4", "3", "user", "after compact"),
+			];
+			const ctx = buildSessionContext(entries);
+			expect(ctx.messages).toHaveLength(2);
+			expect(ctx.messages[0]?.role).toBe("compactionSummary");
+			if (ctx.messages[0]?.role !== "compactionSummary") throw new Error("Expected compaction summary message");
+			expect(ctx.messages[0].providerPayload).toEqual({
+				type: "openaiResponsesHistory",
+				items: [
+					{ type: "message", role: "user", content: [{ type: "input_text", text: "Preserved user" }] },
+					{ type: "compaction", encrypted_content: "enc_123" },
+				],
+			});
+			expect((ctx.messages[1] as { content: string }).content).toBe("after compact");
+		});
+
 		it("multiple compactions uses latest", () => {
 			const entries: SessionEntry[] = [
 				msg("1", null, "user", "a"),

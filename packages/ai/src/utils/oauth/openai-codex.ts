@@ -12,10 +12,14 @@ const CALLBACK_PORT = 1455;
 const CALLBACK_PATH = "/auth/callback";
 const SCOPE = "openid profile email offline_access";
 const JWT_CLAIM_PATH = "https://api.openai.com/auth";
+const JWT_PROFILE_CLAIM = "https://api.openai.com/profile";
 
 type JwtPayload = {
 	[JWT_CLAIM_PATH]?: {
 		chatgpt_account_id?: string;
+	};
+	[JWT_PROFILE_CLAIM]?: {
+		email?: string;
 	};
 	[key: string]: unknown;
 };
@@ -32,11 +36,15 @@ function decodeJwt(token: string): JwtPayload | null {
 	}
 }
 
-function getAccountId(accessToken: string): string | null {
+function getTokenProfile(accessToken: string): { accountId?: string; email?: string } {
 	const payload = decodeJwt(accessToken);
 	const auth = payload?.[JWT_CLAIM_PATH];
 	const accountId = auth?.chatgpt_account_id;
-	return typeof accountId === "string" && accountId.length > 0 ? accountId : null;
+	const email = payload?.[JWT_PROFILE_CLAIM]?.email?.trim().toLowerCase();
+	return {
+		accountId: typeof accountId === "string" && accountId.length > 0 ? accountId : undefined,
+		email: typeof email === "string" && email.length > 0 ? email : undefined,
+	};
 }
 
 interface PKCE {
@@ -103,7 +111,7 @@ async function exchangeCodeForToken(code: string, verifier: string, redirectUri:
 		throw new Error("Token response missing required fields");
 	}
 
-	const accountId = getAccountId(tokenData.access_token);
+	const { accountId, email } = getTokenProfile(tokenData.access_token);
 	if (!accountId) {
 		throw new Error("Failed to extract accountId from token");
 	}
@@ -113,6 +121,7 @@ async function exchangeCodeForToken(code: string, verifier: string, redirectUri:
 		refresh: tokenData.refresh_token,
 		expires: Date.now() + tokenData.expires_in * 1000,
 		accountId,
+		email,
 	};
 }
 
@@ -166,12 +175,13 @@ export async function refreshOpenAICodexToken(refreshToken: string): Promise<OAu
 		throw new Error("Token response missing required fields");
 	}
 
-	const accountId = getAccountId(tokenData.access_token);
+	const { accountId, email } = getTokenProfile(tokenData.access_token);
 
 	return {
 		access: tokenData.access_token,
 		refresh: tokenData.refresh_token || refreshToken,
 		expires: Date.now() + tokenData.expires_in * 1000,
 		accountId: accountId ?? undefined,
+		email,
 	};
 }

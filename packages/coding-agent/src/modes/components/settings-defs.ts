@@ -297,6 +297,14 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "1.2", label: "1.2", description: "Balanced" },
 		{ value: "1.5", label: "1.5", description: "Strong penalty" },
 	],
+	serviceTier: [
+		{ value: "none", label: "None", description: "Omit service_tier parameter" },
+		{ value: "auto", label: "Auto", description: "Use provider default tier selection" },
+		{ value: "default", label: "Default", description: "Standard priority processing" },
+		{ value: "flex", label: "Flex", description: "Use flexible capacity tier when available" },
+		{ value: "scale", label: "Scale", description: "Use Scale Tier credits when available" },
+		{ value: "priority", label: "Priority", description: "Use Priority processing" },
+	],
 	// Symbol preset
 	symbolPreset: [
 		{ value: "unicode", label: "Unicode", description: "Standard symbols (default)" },

@@ -12,6 +12,10 @@ describe("SessionManager.saveCustomEntry", () => {
 		const customId = session.appendCustomEntry("my_hook", { foo: "bar" });
 
 		// Save another message
+		const nativeHistory = [
+			{ type: "message", role: "user", content: [{ type: "input_text", text: "hello" }] },
+			{ type: "message", role: "assistant", content: [{ type: "output_text", text: "hi" }] },
+		];
 		const msg2Id = session.appendMessage({
 			role: "assistant",
 			content: [{ type: "text", text: "hi" }],
@@ -27,6 +31,7 @@ describe("SessionManager.saveCustomEntry", () => {
 				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 			},
 			stopReason: "stop",
+			providerPayload: { type: "openaiResponsesHistory", items: nativeHistory },
 			timestamp: 2,
 		});
 
@@ -51,5 +56,7 @@ describe("SessionManager.saveCustomEntry", () => {
 		// buildSessionContext should work (custom entries skipped in messages)
 		const ctx = session.buildSessionContext();
 		expect(ctx.messages).toHaveLength(2); // only message entries
+		if (ctx.messages[1]?.role !== "assistant") throw new Error("Expected assistant message");
+		expect(ctx.messages[1].providerPayload).toEqual({ type: "openaiResponsesHistory", items: nativeHistory });
 	});
 });

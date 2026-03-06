@@ -1344,6 +1344,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const openaiWebsocketSetting = settings.get("providers.openaiWebsockets") ?? "auto";
 	const preferOpenAICodexWebsockets =
 		openaiWebsocketSetting === "on" ? true : openaiWebsocketSetting === "off" ? false : undefined;
+	const serviceTierSetting = settings.get("serviceTier");
 
 	agent = new Agent({
 		initialState: {
@@ -1369,6 +1370,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		minP: settings.get("minP") >= 0 ? settings.get("minP") : undefined,
 		presencePenalty: settings.get("presencePenalty") >= 0 ? settings.get("presencePenalty") : undefined,
 		repetitionPenalty: settings.get("repetitionPenalty") >= 0 ? settings.get("repetitionPenalty") : undefined,
+		serviceTier: serviceTierSetting === "none" ? undefined : serviceTierSetting,
 		kimiApiFormat: settings.get("providers.kimiApiFormat") ?? "anthropic",
 		preferWebsockets: preferOpenAICodexWebsockets,
 		getToolContext: tc => toolContextStore.getContext(tc),

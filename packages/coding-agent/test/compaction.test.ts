@@ -1,8 +1,15 @@
-import { beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock, vi } from "bun:test";
 import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
-import type { AssistantMessage, Usage } from "@oh-my-pi/pi-ai";
-import { getBundledModel } from "@oh-my-pi/pi-ai";
+import { getBundledModel } from "@oh-my-pi/pi-ai/models";
+import type { AssistantMessage, Model, Usage } from "@oh-my-pi/pi-ai/types";
+
+const completeSimpleMock = vi.fn();
+
+mock.module("@oh-my-pi/pi-ai", () => ({
+	completeSimple: completeSimpleMock,
+}));
+
 import {
 	type CompactionSettings,
 	calculateContextTokens,
@@ -12,7 +19,7 @@ import {
 	getLastAssistantUsage,
 	prepareCompaction,
 	shouldCompact,
-} from "@oh-my-pi/pi-coding-agent/session/compaction";
+} from "../src/session/compaction/compaction";
 import {
 	buildSessionContext,
 	type CompactionEntry,
@@ -22,7 +29,7 @@ import {
 	type SessionEntry,
 	type SessionMessageEntry,
 	type ThinkingLevelChangeEntry,
-} from "@oh-my-pi/pi-coding-agent/session/session-manager";
+} from "../src/session/session-manager";
 import { e2eApiKey } from "./utilities";
 
 // ============================================================================
@@ -65,6 +72,37 @@ function createAssistantMessage(text: string, usage?: Usage): AssistantMessage {
 	};
 }
 
+function createOpenAiAssistantMessage(
+	text: string,
+	model: Model,
+	usage?: Usage,
+	encryptedReasoning: string = "encrypted-reasoning",
+	providerPayload?: { type: "openaiResponsesHistory"; items: Array<Record<string, unknown>> },
+): AssistantMessage {
+	return {
+		role: "assistant",
+		content: [
+			{
+				type: "thinking",
+				thinking: "Reasoning summary",
+				thinkingSignature: JSON.stringify({
+					type: "reasoning",
+					encrypted_content: encryptedReasoning,
+					summary: [{ type: "summary_text", text: "Reasoning summary" }],
+				}),
+			},
+			{ type: "text", text },
+		],
+		usage: usage || createMockUsage(100, 50),
+		stopReason: "stop",
+		providerPayload,
+		timestamp: Date.now(),
+		api: model.api,
+		provider: model.provider,
+		model: model.id,
+	};
+}
+
 let entryCounter = 0;
 let lastId: string | null = null;
 
@@ -76,6 +114,11 @@ function resetEntryCounter() {
 // Reset counter before each test to get predictable IDs
 beforeEach(() => {
 	resetEntryCounter();
+});
+
+afterEach(() => {
+	completeSimpleMock.mockReset();
+	vi.restoreAllMocks();
 });
 
 function createMessageEntry(message: AgentMessage): SessionMessageEntry {
@@ -246,6 +289,326 @@ describe("shouldCompact", () => {
 		};
 
 		expect(shouldCompact(95000, 100000, settings)).toBe(false);
+	});
+});
+
+describe("remote compaction setting", () => {
+	it("uses local summarization when remote compaction is disabled", async () => {
+		const model = getBundledModel("openai", "gpt-4o");
+		if (!model) {
+			throw new Error("Expected openai/gpt-4o model to exist");
+		}
+
+		const entries: SessionEntry[] = [
+			createMessageEntry(createUserMessage("Turn 1")),
+			createMessageEntry(createAssistantMessage("Answer 1", createMockUsage(0, 100, 2000, 0))),
+			createMessageEntry(createUserMessage("Turn 2")),
+			createMessageEntry(createAssistantMessage("Answer 2", createMockUsage(0, 100, 5000, 0))),
+			createMessageEntry(createUserMessage("Turn 3")),
+			createMessageEntry(createAssistantMessage("Answer 3", createMockUsage(0, 100, 9000, 0))),
+		];
+		const preparation = prepareCompaction(entries, {
+			...DEFAULT_COMPACTION_SETTINGS,
+			keepRecentTokens: 1000,
+			remoteEnabled: false,
+			remoteEndpoint: "https://compaction.example.test/summarize",
+		});
+		expect(preparation).toBeDefined();
+		if (!preparation) {
+			throw new Error("Expected compaction preparation");
+		}
+
+		const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response(JSON.stringify({ summary: "remote summary" }), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			}),
+		);
+		const completeSpy = completeSimpleMock
+			.mockResolvedValueOnce(createAssistantMessage("Local history summary"))
+			.mockResolvedValueOnce(createAssistantMessage("Local turn summary"))
+			.mockResolvedValueOnce(createAssistantMessage("Local short summary"));
+
+		const result = await compact(preparation, model, "test-api-key");
+
+		expect(fetchSpy).not.toHaveBeenCalled();
+		expect(completeSpy).toHaveBeenCalledTimes(3);
+		expect(result.summary).toContain("Local history summary");
+		expect(result.shortSummary).toBe("Local short summary");
+	});
+
+	it("preserves prior compaction items and encrypted reasoning for OpenAI remote compaction", async () => {
+		const model = getBundledModel("openai", "gpt-5.1");
+		if (!model) {
+			throw new Error("Expected openai/gpt-5.1 model to exist");
+		}
+
+		const oldUser = createMessageEntry(createUserMessage("Older turn"));
+		const oldAssistant = createMessageEntry(createAssistantMessage("Older answer"));
+		const previousCompaction = createCompactionEntry("Previous summary", oldAssistant.id);
+		previousCompaction.preserveData = {
+			openaiRemoteCompaction: {
+				replacementHistory: [
+					{ type: "message", role: "user", content: [{ type: "input_text", text: "Previous preserved user" }] },
+					{ type: "compaction", encrypted_content: "prior_encrypted" },
+				],
+				compactionItem: { type: "compaction", encrypted_content: "prior_encrypted" },
+			},
+		};
+
+		const entries: SessionEntry[] = [
+			oldUser,
+			oldAssistant,
+			previousCompaction,
+			createMessageEntry(createUserMessage("Turn 1")),
+			createMessageEntry(
+				createOpenAiAssistantMessage(
+					"Answer 1",
+					model,
+					createMockUsage(0, 100, 4000, 0),
+					"encrypted_reasoning_turn_1",
+				),
+			),
+			createMessageEntry(createUserMessage("Turn 2")),
+			createMessageEntry(
+				createOpenAiAssistantMessage(
+					"Answer 2",
+					model,
+					createMockUsage(0, 100, 9000, 0),
+					"encrypted_reasoning_turn_2",
+				),
+			),
+		];
+
+		const preparation = prepareCompaction(entries, {
+			...DEFAULT_COMPACTION_SETTINGS,
+			keepRecentTokens: 1000,
+			remoteEnabled: true,
+		});
+		expect(preparation).toBeDefined();
+		if (!preparation) {
+			throw new Error("Expected compaction preparation");
+		}
+
+		const remoteOutput = [
+			{ type: "message", role: "user", content: [{ type: "input_text", text: "Compacted retained user" }] },
+			{ type: "compaction", encrypted_content: "new_encrypted" },
+		];
+		const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response(JSON.stringify({ output: remoteOutput }), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			}),
+		);
+		completeSimpleMock
+			.mockResolvedValueOnce(createAssistantMessage("History summary"))
+			.mockResolvedValueOnce(createAssistantMessage("Turn prefix summary"))
+			.mockResolvedValueOnce(createAssistantMessage("Short summary"));
+
+		const result = await compact(preparation, model, "test-api-key");
+		const requestBody = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body)) as {
+			input: Array<Record<string, unknown>>;
+		};
+
+		expect(fetchSpy).toHaveBeenCalledTimes(1);
+		expect(requestBody.input[0]).toEqual({
+			type: "message",
+			role: "user",
+			content: [{ type: "input_text", text: "Previous preserved user" }],
+		});
+		expect(requestBody.input[1]).toEqual({ type: "compaction", encrypted_content: "prior_encrypted" });
+		expect(
+			requestBody.input.some(
+				item => item.type === "reasoning" && item.encrypted_content === "encrypted_reasoning_turn_1",
+			),
+		).toBe(true);
+		expect(result.summary).toContain("History summary");
+		expect(result.preserveData).toEqual({
+			openaiRemoteCompaction: {
+				replacementHistory: remoteOutput,
+				compactionItem: { type: "compaction", encrypted_content: "new_encrypted" },
+			},
+		});
+	});
+	it("prefers persisted assistant native history snapshots for OpenAI remote compaction", async () => {
+		const model = getBundledModel("openai", "gpt-5.1");
+		if (!model) throw new Error("Expected openai/gpt-5.1 model to exist");
+
+		const assistantHistory = [
+			{ type: "message", role: "user", content: [{ type: "input_text", text: "Canonical user" }] },
+			{ type: "message", role: "assistant", content: [{ type: "output_text", text: "Canonical assistant" }] },
+		];
+		const entries: SessionEntry[] = [
+			createMessageEntry(createUserMessage("generic user that should be replaced")),
+			createMessageEntry(
+				createOpenAiAssistantMessage(
+					"generic assistant that should be replaced",
+					model,
+					createMockUsage(0, 100, 9000, 0),
+					"encrypted_reasoning_turn_1",
+					{ type: "openaiResponsesHistory", items: assistantHistory },
+				),
+			),
+			createMessageEntry(createUserMessage("follow-up user")),
+		];
+		const preparation = prepareCompaction(entries, {
+			...DEFAULT_COMPACTION_SETTINGS,
+			keepRecentTokens: 1,
+			remoteEnabled: true,
+		});
+		if (!preparation) throw new Error("Expected compaction preparation");
+
+		const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response(JSON.stringify({ output: [{ type: "compaction", encrypted_content: "new_encrypted" }] }), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			}),
+		);
+		completeSimpleMock.mockResolvedValue(createAssistantMessage("Short summary"));
+
+		await compact(preparation, model, "test-api-key");
+		const requestBody = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body)) as {
+			input: Array<Record<string, unknown>>;
+		};
+
+		expect(requestBody.input).toEqual([
+			...assistantHistory,
+			{ type: "message", role: "user", content: [{ type: "input_text", text: "follow-up user" }] },
+		]);
+	});
+
+	it("uses the ChatGPT Codex compact endpoint for openai-codex models", async () => {
+		const baseModel = getBundledModel("openai", "gpt-5.1");
+		if (!baseModel) throw new Error("Expected openai/gpt-5.1 model to exist");
+
+		const model: Model = {
+			...baseModel,
+			api: "openai-codex-responses",
+			provider: "openai-codex",
+			baseUrl: "https://chatgpt.com/backend-api",
+		};
+
+		const entries: SessionEntry[] = [
+			createMessageEntry(createUserMessage("Turn 1")),
+			createMessageEntry(createOpenAiAssistantMessage("Answer 1", model, createMockUsage(0, 100, 9000, 0))),
+		];
+		const preparation = prepareCompaction(entries, {
+			...DEFAULT_COMPACTION_SETTINGS,
+			keepRecentTokens: 1,
+			remoteEnabled: true,
+		});
+		if (!preparation) throw new Error("Expected compaction preparation");
+
+		const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response(JSON.stringify({ output: [{ type: "compaction", encrypted_content: "new_encrypted" }] }), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			}),
+		);
+		completeSimpleMock.mockResolvedValue(createAssistantMessage("Short summary"));
+
+		await compact(preparation, model, "test-api-key");
+
+		expect(fetchSpy).toHaveBeenCalledTimes(1);
+		expect(fetchSpy.mock.calls[0]?.[0]).toBe("https://chatgpt.com/backend-api/codex/responses/compact");
+	});
+
+	it("filters remote compact output and uses explicit remote instructions", async () => {
+		const model = getBundledModel("openai", "gpt-5.1");
+		if (!model) throw new Error("Expected openai/gpt-5.1 model to exist");
+
+		const entries: SessionEntry[] = [
+			createMessageEntry(createUserMessage("Turn 1")),
+			createMessageEntry(createOpenAiAssistantMessage("Answer 1", model, createMockUsage(0, 100, 9000, 0))),
+		];
+		const preparation = prepareCompaction(entries, {
+			...DEFAULT_COMPACTION_SETTINGS,
+			keepRecentTokens: 1,
+			remoteEnabled: true,
+		});
+		if (!preparation) throw new Error("Expected compaction preparation");
+
+		const remoteOutput = [
+			{ type: "message", role: "developer", content: [{ type: "input_text", text: "stale developer" }] },
+			{
+				type: "message",
+				role: "user",
+				content: [{ type: "input_text", text: "<system-reminder>wrapped</system-reminder>" }],
+			},
+			{ type: "message", role: "user", content: [{ type: "input_text", text: "Real preserved user" }] },
+			{ type: "reasoning", encrypted_content: "secret" },
+			{ type: "function_call_output", call_id: "call_1", output: "ignored" },
+			{ type: "message", role: "assistant", content: [{ type: "output_text", text: "Kept assistant" }] },
+			{ type: "compaction", encrypted_content: "new_encrypted" },
+		];
+		const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response(JSON.stringify({ output: remoteOutput }), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			}),
+		);
+		completeSimpleMock.mockResolvedValue(createAssistantMessage("Short summary"));
+
+		const result = await compact(preparation, model, "test-api-key", undefined, undefined, {
+			remoteInstructions: "BASE INSTRUCTIONS",
+		});
+		const requestBody = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body)) as {
+			instructions: string;
+		};
+
+		expect(requestBody.instructions).toBe("BASE INSTRUCTIONS");
+		expect(result.preserveData).toEqual({
+			openaiRemoteCompaction: {
+				replacementHistory: [
+					{ type: "message", role: "user", content: [{ type: "input_text", text: "Real preserved user" }] },
+					{ type: "message", role: "assistant", content: [{ type: "output_text", text: "Kept assistant" }] },
+					{ type: "compaction", encrypted_content: "new_encrypted" },
+				],
+				compactionItem: { type: "compaction", encrypted_content: "new_encrypted" },
+			},
+		});
+	});
+
+	it("clears stale OpenAI remote preserve data when local compaction runs", async () => {
+		const model = getBundledModel("anthropic", "claude-sonnet-4-5");
+		if (!model) throw new Error("Expected anthropic/claude-sonnet-4-5 model to exist");
+
+		const oldUser = createMessageEntry(createUserMessage("Older turn"));
+		const oldAssistant = createMessageEntry(createAssistantMessage("Older answer"));
+		const previousCompaction = createCompactionEntry("Previous summary", oldAssistant.id);
+		previousCompaction.preserveData = {
+			otherState: "keep-me",
+			openaiRemoteCompaction: {
+				replacementHistory: [{ type: "compaction", encrypted_content: "stale_encrypted" }],
+				compactionItem: { type: "compaction", encrypted_content: "stale_encrypted" },
+			},
+		};
+
+		const entries: SessionEntry[] = [
+			oldUser,
+			oldAssistant,
+			previousCompaction,
+			createMessageEntry(createUserMessage("Turn 1")),
+			createMessageEntry(createAssistantMessage("Answer 1", createMockUsage(0, 100, 4000, 0))),
+			createMessageEntry(createUserMessage("Turn 2")),
+			createMessageEntry(createAssistantMessage("Answer 2", createMockUsage(0, 100, 9000, 0))),
+		];
+
+		const preparation = prepareCompaction(entries, {
+			...DEFAULT_COMPACTION_SETTINGS,
+			keepRecentTokens: 1000,
+			remoteEnabled: true,
+		});
+		if (!preparation) throw new Error("Expected compaction preparation");
+
+		completeSimpleMock
+			.mockResolvedValueOnce(createAssistantMessage("History summary"))
+			.mockResolvedValueOnce(createAssistantMessage("Turn prefix summary"))
+			.mockResolvedValueOnce(createAssistantMessage("Short summary"));
+
+		const result = await compact(preparation, model, "test-api-key");
+
+		expect(result.preserveData).toEqual({ otherState: "keep-me" });
 	});
 });
 

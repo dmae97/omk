@@ -1,18 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import type { UsageCache, UsageFetchContext, UsageReport } from "../src/usage";
+import type { UsageFetchContext } from "../src/usage";
 import { claudeUsageProvider } from "../src/usage/claude";
-
-function createMemoryCache(): UsageCache {
-	const entries = new Map<string, { value: UsageReport | null; expiresAt: number }>();
-	return {
-		get(key) {
-			return entries.get(key);
-		},
-		set(key, entry) {
-			entries.set(key, entry);
-		},
-	};
-}
 
 function getHeaderCaseInsensitive(
 	headers: Headers | Record<string, string | ReadonlyArray<string>> | string[][] | undefined,
@@ -64,9 +52,7 @@ describe("claude usage request headers", () => {
 		}) as unknown as typeof fetch;
 
 		const ctx: UsageFetchContext = {
-			cache: createMemoryCache(),
 			fetch: fetchMock,
-			now: () => now,
 		};
 
 		const report = await claudeUsageProvider.fetchUsage(
@@ -99,5 +85,30 @@ describe("claude usage request headers", () => {
 		expect(betaTokens).toContain("interleaved-thinking-2025-05-14");
 		expect(betaTokens).toContain("context-management-2025-06-27");
 		expect(betaTokens).toContain("prompt-caching-scope-2026-01-05");
+	});
+
+	it("does not invent reset timestamps when Claude omits them", async () => {
+		const fetchMock = (async () => {
+			return new Response(
+				JSON.stringify({
+					five_hour: { utilization: 42 },
+				}),
+				{ status: 200, headers: { "Content-Type": "application/json" } },
+			);
+		}) as unknown as typeof fetch;
+
+		const report = await claudeUsageProvider.fetchUsage(
+			{
+				provider: "anthropic",
+				credential: {
+					type: "oauth",
+					accessToken: "oat-test-access-token",
+					expiresAt: Date.now() + 60_000,
+				},
+			},
+			{ fetch: fetchMock },
+		);
+
+		expect(report?.limits[0]?.window?.resetsAt).toBeUndefined();
 	});
 });

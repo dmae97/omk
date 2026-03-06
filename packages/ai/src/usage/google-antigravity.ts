@@ -32,7 +32,6 @@ interface AntigravityUsageResponse {
 
 const DEFAULT_ENDPOINT = "https://daily-cloudcode-pa.googleapis.com";
 const FETCH_AVAILABLE_MODELS_PATH = "/v1internal:fetchAvailableModels";
-const DEFAULT_CACHE_TTL_MS = 60_000;
 
 function clampFraction(value: number | undefined): number | undefined {
 	if (value === undefined || !Number.isFinite(value)) return undefined;
@@ -48,7 +47,7 @@ function getUsageStatus(remainingFraction: number | undefined): UsageStatus | un
 	return "ok";
 }
 
-function parseWindow(info: AntigravityQuotaInfo, nowMs: number): UsageWindow | undefined {
+function parseWindow(info: AntigravityQuotaInfo): UsageWindow | undefined {
 	if (!info.resetTime) return undefined;
 	const resetAt = Date.parse(info.resetTime);
 	if (!Number.isFinite(resetAt)) return undefined;
@@ -56,7 +55,6 @@ function parseWindow(info: AntigravityQuotaInfo, nowMs: number): UsageWindow | u
 		id: info.windowId ?? "default",
 		label: info.windowLabel ?? "Default",
 		resetsAt: resetAt,
-		resetInMs: Math.max(0, resetAt - nowMs),
 	};
 }
 
@@ -103,16 +101,9 @@ function normalizeQuotaInfos(info: AntigravityModelInfo): AntigravityQuotaInfo[]
 	return results;
 }
 
-function buildCacheKey(params: UsageFetchParams): string {
-	const credential = params.credential;
-	const accountPart = credential.accountId ?? credential.email ?? "unknown";
-	const projectPart = credential.projectId ?? "unknown";
-	return `usage:${params.provider}:${accountPart}:${projectPart}`;
-}
-
 async function resolveAccessToken(params: UsageFetchParams, ctx: UsageFetchContext): Promise<string | undefined> {
 	const { credential } = params;
-	if (credential.accessToken && (!credential.expiresAt || credential.expiresAt > ctx.now() + 60_000)) {
+	if (credential.accessToken && (!credential.expiresAt || credential.expiresAt > Date.now() + 60_000)) {
 		return credential.accessToken;
 	}
 	if (!credential.refreshToken || !credential.projectId) return undefined;
@@ -129,12 +120,7 @@ async function fetchAntigravityUsage(params: UsageFetchParams, ctx: UsageFetchCo
 	const credential = params.credential;
 	if (!credential.projectId) return null;
 
-	const cacheKey = buildCacheKey(params);
-	const cached = await ctx.cache.get(cacheKey);
-	const nowMs = ctx.now();
-	if (cached && cached.expiresAt > nowMs) {
-		return cached.value;
-	}
+	const nowMs = Date.now();
 
 	const accessToken = await resolveAccessToken(params, ctx);
 	if (!accessToken) return null;
@@ -168,7 +154,7 @@ async function fetchAntigravityUsage(params: UsageFetchParams, ctx: UsageFetchCo
 		const quotaInfos = normalizeQuotaInfos(modelInfo);
 		for (const quotaInfo of quotaInfos) {
 			const amount = buildAmount(quotaInfo);
-			const window = parseWindow(quotaInfo, nowMs);
+			const window = parseWindow(quotaInfo);
 			if (window?.resetsAt) {
 				earliestReset = earliestReset ? Math.min(earliestReset, window.resetsAt) : window.resetsAt;
 			}
@@ -204,10 +190,6 @@ async function fetchAntigravityUsage(params: UsageFetchParams, ctx: UsageFetchCo
 		raw: data,
 	};
 
-	const expiresAt = earliestReset
-		? Math.min(earliestReset, nowMs + DEFAULT_CACHE_TTL_MS)
-		: nowMs + DEFAULT_CACHE_TTL_MS;
-	await ctx.cache.set(cacheKey, { value: report, expiresAt });
 	return report;
 }
 
