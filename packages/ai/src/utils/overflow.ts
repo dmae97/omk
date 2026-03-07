@@ -115,7 +115,7 @@ export function isContextOverflow(message: AssistantMessage, contextWindow?: num
 
 	// Case 2: Usage-based overflow (silent or provider-specific)
 	if (contextWindow) {
-		const inputTokens = message.usage.input + message.usage.cacheRead;
+		const inputTokens = message.usage.input + message.usage.cacheRead + message.usage.cacheWrite;
 		if (inputTokens > contextWindow) {
 			return true;
 		}
