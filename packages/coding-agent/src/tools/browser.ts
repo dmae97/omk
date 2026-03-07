@@ -517,15 +517,24 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 				}
 			: DEFAULT_VIEWPORT;
 		const puppeteer = await loadPuppeteer();
+		const launchArgs = [
+			"--no-sandbox",
+			"--disable-setuid-sandbox",
+			"--disable-blink-features=AutomationControlled",
+			`--window-size=${initialViewport.width},${initialViewport.height}`,
+		];
+		const proxy = process.env.PUPPETEER_PROXY;
+		if (proxy) {
+			launchArgs.push(`--proxy-server=${proxy}`);
+		}
+		const ignoreCert = process.env.PUPPETEER_PROXY_IGNORE_CERT_ERRORS?.toLowerCase();
+		if (ignoreCert === "true" || ignoreCert === "1" || ignoreCert === "yes" || ignoreCert === "on") {
+			launchArgs.push("--ignore-certificate-errors");
+		}
 		this.#browser = await puppeteer.launch({
 			headless: this.#currentHeadless,
 			defaultViewport: this.#currentHeadless ? initialViewport : null,
-			args: [
-				"--no-sandbox",
-				"--disable-setuid-sandbox",
-				"--disable-blink-features=AutomationControlled",
-				`--window-size=${initialViewport.width},${initialViewport.height}`,
-			],
+			args: launchArgs,
 			ignoreDefaultArgs: [...STEALTH_IGNORE_DEFAULT_ARGS],
 		});
 		this.#page = await this.#browser.newPage();
