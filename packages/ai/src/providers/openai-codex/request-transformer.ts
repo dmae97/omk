@@ -22,7 +22,7 @@ export interface InputItem {
 	call_id?: string | null;
 	name?: string;
 	output?: unknown;
-	arguments?: string;
+	arguments?: unknown;
 }
 
 export interface RequestBody {
