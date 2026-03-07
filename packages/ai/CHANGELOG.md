@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.9.3] - 2026-03-07
 ### Breaking Changes
 
 - Changed `reasoning` parameter from `ThinkingLevel | undefined` to `Effort | undefined` in `SimpleStreamOptions`; 'off' is no longer valid (omit the field instead)

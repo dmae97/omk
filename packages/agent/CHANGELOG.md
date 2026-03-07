@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.9.3] - 2026-03-07
+
 ### Added
 
 - Exported `ThinkingLevel` selector constants and types for configuring agent reasoning behavior

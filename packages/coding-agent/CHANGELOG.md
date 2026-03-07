@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.9.3] - 2026-03-07
+
 ### Breaking Changes
 
 - Changed `ThinkingLevel` type to be imported from `@oh-my-pi/pi-agent-core` instead of `@oh-my-pi/pi-ai`
