@@ -227,7 +227,8 @@ function getPythonModeFromEnv(): PythonToolMode | null {
 export async function createTools(session: ToolSession, toolNames?: string[]): Promise<Tool[]> {
 	const includeSubmitResult = session.requireSubmitResultTool === true;
 	const enableLsp = session.enableLsp ?? true;
-	const requestedTools = toolNames && toolNames.length > 0 ? [...new Set(toolNames)] : undefined;
+	const requestedTools =
+		toolNames && toolNames.length > 0 ? [...new Set(toolNames.map(name => name.toLowerCase()))] : undefined;
 	if (requestedTools && !requestedTools.includes("exit_plan_mode")) {
 		requestedTools.push("exit_plan_mode");
 	}

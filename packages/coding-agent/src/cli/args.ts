@@ -108,7 +108,10 @@ export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "
 		} else if (arg === "--no-pty") {
 			result.noPty = true;
 		} else if (arg === "--tools" && i + 1 < args.length) {
-			const toolNames = args[++i].split(",").map(s => s.trim());
+			const toolNames = args[++i]
+				.split(",")
+				.map(s => s.trim().toLowerCase())
+				.filter(Boolean);
 			const validTools: string[] = [];
 			for (const name of toolNames) {
 				if (name in BUILTIN_TOOLS) {

@@ -132,7 +132,6 @@ describe("Input component", () => {
 		setKittyProtocolActive(false);
 	});
 
-
 	it("never renders a line wider than the terminal width (wide chars)", () => {
 		const input = new Input();
 		input.focused = true;

@@ -98,6 +98,14 @@ describe("createTools", () => {
 		expect(names).toEqual(["read", "write", "exit_plan_mode"]);
 	});
 
+	it("lowercases requested tool subset", async () => {
+		const session = createTestSession();
+		const tools = await createTools(session, ["Read", "Write"]);
+		const names = tools.map(t => t.name);
+
+		expect(names).toEqual(["read", "write", "exit_plan_mode"]);
+	});
+
 	it("includes hidden tools when explicitly requested", async () => {
 		const session = createTestSession();
 		const tools = await createTools(session, ["report_finding"]);

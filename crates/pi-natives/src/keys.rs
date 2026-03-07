@@ -1302,7 +1302,6 @@ fn parse_optional_digits(bytes: &[u8], idx: usize, end: usize) -> (Option<u32>, 
 	parse_digits(bytes, idx, end).map_or((None, idx), |(v, i)| (Some(v), i))
 }
 
-
 #[cfg(test)]
 mod tests {
 	use super::*;

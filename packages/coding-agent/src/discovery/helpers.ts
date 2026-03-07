@@ -206,7 +206,7 @@ export function parseAgentFields(frontmatter: Record<string, unknown>): ParsedAg
 		return null;
 	}
 
-	let tools = parseArrayOrCSV(frontmatter.tools);
+	let tools = parseArrayOrCSV(frontmatter.tools)?.map(tool => tool.toLowerCase());
 
 	// Subagents with explicit tool lists always need submit_result
 	if (tools && !tools.includes("submit_result")) {

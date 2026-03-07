@@ -1251,9 +1251,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	};
 
 	const toolNamesFromRegistry = Array.from(toolRegistry.keys());
-	const requestedToolNames = options.toolNames ?? toolNamesFromRegistry;
+	const requestedToolNames = options.toolNames?.map(name => name.toLowerCase()) ?? toolNamesFromRegistry;
 	const normalizedRequested = requestedToolNames.filter(name => toolRegistry.has(name));
-	const includeExitPlanMode = options.toolNames?.includes("exit_plan_mode") ?? false;
+	const includeExitPlanMode = requestedToolNames.includes("exit_plan_mode");
 	const initialToolNames = includeExitPlanMode
 		? normalizedRequested
 		: normalizedRequested.filter(name => name !== "exit_plan_mode");

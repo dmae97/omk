@@ -60,7 +60,6 @@ describe("parseKey", () => {
 		setKittyProtocolActive(false);
 	});
 
-
 	it("should prefer codepoint for symbol keys when base layout differs", () => {
 		setKittyProtocolActive(true);
 		const dvorakCtrlSlash = "\x1b[47::91;5u";

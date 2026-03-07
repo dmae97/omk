@@ -56,4 +56,14 @@ describe("parseAgentFields", () => {
 
 		expect(fields?.thinkingLevel).toBe(Effort.High);
 	});
+
+	test("lowercases tool names", () => {
+		const fields = parseAgentFields({
+			name: "reviewer",
+			description: "desc",
+			tools: ["Read", "Grep"],
+		});
+
+		expect(fields?.tools).toEqual(["read", "grep", "submit_result"]);
+	});
 });

@@ -200,6 +200,11 @@ describe("parseArgs", () => {
 			expect(result.noTools).toBe(true);
 			expect(result.tools).toEqual(["read", "bash"]);
 		});
+
+		test("lowercases tool names passed to --tools", () => {
+			const result = parseArgs(["--tools", "Read,Grep"]);
+			expect(result.tools).toEqual(["read", "grep"]);
+		});
 	});
 
 	describe("--no-lsp flag", () => {
