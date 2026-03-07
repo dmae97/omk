@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { CURSOR_MARKER } from "@oh-my-pi/pi-tui";
 import { Input } from "@oh-my-pi/pi-tui/components/input";
+import { setKittyProtocolActive } from "@oh-my-pi/pi-tui/keys";
 import { visibleWidth } from "@oh-my-pi/pi-tui/utils";
 
 function renderedWidth(input: Input, width: number): number {
@@ -117,6 +118,20 @@ describe("Input component", () => {
 			expect(input.getValue()).toBe("¿Cómo estás? ¡Muy |bien!");
 		}
 	});
+
+	it("does not delete twice when Kitty sends backspace press and release", () => {
+		setKittyProtocolActive(true);
+		const input = setupAtEnd("ab");
+
+		input.handleInput("\x1b[127u");
+		expect(input.getValue()).toBe("a");
+
+		input.handleInput("\x1b[127;1:3u");
+		expect(input.getValue()).toBe("a");
+
+		setKittyProtocolActive(false);
+	});
+
 
 	it("never renders a line wider than the terminal width (wide chars)", () => {
 		const input = new Input();

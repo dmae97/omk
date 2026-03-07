@@ -460,6 +460,9 @@ fn matches_key_inner(bytes: &[u8], key_id: &str, kitty_protocol_active: bool) ->
 		let Some(p) = kitty_parsed.as_ref() else {
 			return false;
 		};
+		if p.event_type == Some(3) {
+			return false;
+		}
 		let actual_mod = p.modifier & !LOCK_MASK;
 		let expected_mod = m & !LOCK_MASK;
 		if actual_mod != expected_mod {
@@ -871,6 +874,9 @@ fn parse_key_inner(bytes: &[u8], kitty_protocol_active: bool) -> Option<Cow<'sta
 	// Try Kitty protocol sequences (including enhanced CSI-u with optional text
 	// field)
 	if let Some(parsed) = parse_kitty_sequence(bytes) {
+		if parsed.event_type == Some(3) {
+			return None;
+		}
 		return format_kitty_key(&parsed);
 	}
 
@@ -1294,4 +1300,24 @@ fn parse_optional_digits(bytes: &[u8], idx: usize, end: usize) -> (Option<u32>, 
 		return (None, idx);
 	}
 	parse_digits(bytes, idx, end).map_or((None, idx), |(v, i)| (Some(v), i))
+}
+
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn matches_key_ignores_kitty_release_events() {
+		assert!(matches_key_inner(b"\x1b[127u", "backspace", true));
+		assert!(matches_key_inner(b"\x1b[127;1:2u", "backspace", true));
+		assert!(!matches_key_inner(b"\x1b[127;1:3u", "backspace", true));
+	}
+
+	#[test]
+	fn parse_key_ignores_kitty_release_events() {
+		assert_eq!(parse_key_inner(b"\x1b[127u", true).as_deref(), Some("backspace"));
+		assert_eq!(parse_key_inner(b"\x1b[127;1:2u", true).as_deref(), Some("backspace"));
+		assert_eq!(parse_key_inner(b"\x1b[127;1:3u", true).as_deref(), None);
+	}
 }
