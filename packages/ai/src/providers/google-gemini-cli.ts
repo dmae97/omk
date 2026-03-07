@@ -68,7 +68,13 @@ const GEMINI_CLI_USER_AGENT = process.env.PI_AI_GEMINI_CLI_USER_AGENT || "google
 const ANTIGRAVITY_USER_AGENT = (() => {
 	const DEFAULT_ANTIGRAVITY_VERSION = "1.104.0";
 	const version = process.env.PI_AI_ANTIGRAVITY_VERSION || DEFAULT_ANTIGRAVITY_VERSION;
-	return `antigravity/${version} darwin/arm64`;
+	// Map Node.js platform/arch to Antigravity's expected format.
+	// Verified against Antigravity source: _qn() and wqn() in main.js.
+	// process.platform: win32→windows, others pass through (darwin, linux)
+	// process.arch:     x64→amd64, ia32→386, others pass through (arm64)
+	const os = process.platform === "win32" ? "windows" : process.platform;
+	const arch = process.arch === "x64" ? "amd64" : process.arch === "ia32" ? "386" : process.arch;
+	return `antigravity/${version} ${os}/${arch}`;
 })();
 
 const GEMINI_CLI_HEADERS = Object.freeze({
@@ -77,19 +83,16 @@ const GEMINI_CLI_HEADERS = Object.freeze({
 	"Client-Metadata": "ideType=IDE_UNSPECIFIED,platform=PLATFORM_UNSPECIFIED,pluginType=GEMINI",
 });
 
-// Antigravity auth headers (project discovery/onboarding) — matches CLIProxyAPI antigravity auth module.
-// Same User-Agent as Gemini CLI, but different X-Goog-Api-Client.
+// Antigravity auth headers (project discovery/onboarding).
+// Verified from binary: kae.w() and kae.y() send only Content-Type + User-Agent.
+// X-Goog-Api-Client and Client-Metadata are NOT sent by the real client — product
+// identification (ideType, ideName, ideVersion) goes in the protobuf request body.
 const ANTIGRAVITY_AUTH_HEADERS = Object.freeze({
-	"User-Agent": GEMINI_CLI_USER_AGENT,
-	"X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1",
-	"Client-Metadata": JSON.stringify({
-		ideType: "IDE_UNSPECIFIED",
-		platform: "PLATFORM_UNSPECIFIED",
-		pluginType: "GEMINI",
-	}),
+	"User-Agent": ANTIGRAVITY_USER_AGENT,
 });
 
-// Antigravity executor headers (streaming/generation) — only User-Agent per CLIProxyAPI executor.
+// Antigravity executor headers (streaming/generation).
+// Same header set as auth calls — only User-Agent per binary analysis.
 const ANTIGRAVITY_STREAMING_HEADERS = Object.freeze({
 	"User-Agent": ANTIGRAVITY_USER_AGENT,
 });
@@ -367,8 +370,14 @@ async function refreshGeminiCliCredentialsIfNeeded(
 			expiresAt: refreshed.expires,
 		};
 	} catch (error) {
+		const reason = error instanceof Error ? error.message : String(error);
+		// Permanent auth failure (revoked/invalid token) — re-authentication required.
+		// Google returns 400 invalid_grant when a token is revoked or expired server-side.
+		if (/invalid_grant|invalid_token|token.*revoked|account.*disabled/i.test(reason)) {
+			throw new Error(`OAuth token has been revoked or invalidated. Use /login to re-authenticate. (${reason})`);
+		}
+		// Transient failure (network, 5xx) — fall back to existing token if not yet expired.
 		if (credentials.expiresAt !== undefined && Date.now() >= credentials.expiresAt) {
-			const reason = error instanceof Error ? error.message : String(error);
 			throw new Error(`OAuth token refresh failed before request: ${reason}`);
 		}
 		return credentials;
