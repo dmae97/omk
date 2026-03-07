@@ -31,6 +31,7 @@ import { zaiUsageProvider } from "./usage/zai";
 import { getOAuthApiKey, getOAuthProvider, refreshOAuthToken } from "./utils/oauth";
 // Re-export login functions so consumers of AuthStorage.login() have access
 // (these are used inside the login() switch-case)
+import { loginAlibabaCodingPlan } from "./utils/oauth/alibaba-coding-plan";
 import { loginAnthropic } from "./utils/oauth/anthropic";
 import { loginCerebras } from "./utils/oauth/cerebras";
 import { loginCloudflareAiGateway } from "./utils/oauth/cloudflare-ai-gateway";
@@ -792,6 +793,11 @@ export class AuthStorage {
 					onManualCodeInput: ctrl.onManualCodeInput ?? manualCodeInput,
 				});
 				break;
+			case "alibaba-coding-plan": {
+				const apiKey = await loginAlibabaCodingPlan(ctrl);
+				await saveApiKeyCredential(apiKey);
+				return;
+			}
 			case "github-copilot":
 				credentials = await loginGitHubCopilot({
 					onAuth: (url, instructions) => ctrl.onAuth({ url, instructions }),

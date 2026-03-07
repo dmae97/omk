@@ -1069,6 +1069,7 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAICompat 
 
 	const isZai = provider === "zai" || baseUrl.includes("api.z.ai");
 	const isOpenRouterKimi = provider === "openrouter" && model.id.includes("moonshotai/kimi");
+	const isAlibaba = provider === "alibaba-coding-plan" || baseUrl.includes("dashscope");
 
 	const isNonStandard =
 		provider === "cerebras" ||
@@ -1079,6 +1080,7 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAICompat 
 		baseUrl.includes("mistral.ai") ||
 		baseUrl.includes("chutes.ai") ||
 		baseUrl.includes("deepseek.com") ||
+		isAlibaba ||
 		isZai ||
 		provider === "opencode-zen" ||
 		provider === "opencode-go" ||
@@ -1101,7 +1103,7 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAICompat 
 		requiresAssistantAfterToolResult: false, // Mistral no longer requires this as of Dec 2024
 		requiresThinkingAsText: isMistral,
 		requiresMistralToolIds: isMistral,
-		thinkingFormat: isZai ? "zai" : "openai",
+		thinkingFormat: isZai ? "zai" : isAlibaba ? "qwen" : "openai",
 		reasoningContentField: "reasoning_content",
 		requiresReasoningContentForToolCalls: isOpenRouterKimi,
 		requiresAssistantContentForToolCalls: isOpenRouterKimi,

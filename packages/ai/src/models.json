@@ -1808,6 +1808,162 @@
 			}
 		}
 	},
+	"alibaba-coding-plan": {
+		"qwen3.5-plus": {
+			"id": "qwen3.5-plus",
+			"name": "Qwen 3.5 Plus",
+			"api": "openai-completions",
+			"provider": "alibaba-coding-plan",
+			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 1000000,
+			"maxTokens": 65536
+		},
+		"qwen3-max-2026-01-23": {
+			"id": "qwen3-max-2026-01-23",
+			"name": "Qwen 3 Max",
+			"api": "openai-completions",
+			"provider": "alibaba-coding-plan",
+			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 262144,
+			"maxTokens": 65536
+		},
+		"qwen3-coder-next": {
+			"id": "qwen3-coder-next",
+			"name": "Qwen 3 Coder Next",
+			"api": "openai-completions",
+			"provider": "alibaba-coding-plan",
+			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 262144,
+			"maxTokens": 65536
+		},
+		"qwen3-coder-plus": {
+			"id": "qwen3-coder-plus",
+			"name": "Qwen 3 Coder Plus",
+			"api": "openai-completions",
+			"provider": "alibaba-coding-plan",
+			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 1048576,
+			"maxTokens": 65536
+		},
+		"glm-5": {
+			"id": "glm-5",
+			"name": "GLM 5",
+			"api": "openai-completions",
+			"provider": "alibaba-coding-plan",
+			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
+			"reasoning": true,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 202752,
+			"maxTokens": 16384
+		},
+		"glm-4.7": {
+			"id": "glm-4.7",
+			"name": "GLM 4.7",
+			"api": "openai-completions",
+			"provider": "alibaba-coding-plan",
+			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
+			"reasoning": true,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 202752,
+			"maxTokens": 16384
+		},
+		"kimi-k2.5": {
+			"id": "kimi-k2.5",
+			"name": "Kimi K2.5",
+			"api": "openai-completions",
+			"provider": "alibaba-coding-plan",
+			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 262144,
+			"maxTokens": 32768
+		},
+		"MiniMax-M2.5": {
+			"id": "MiniMax-M2.5",
+			"name": "MiniMax M2.5",
+			"api": "openai-completions",
+			"provider": "alibaba-coding-plan",
+			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
+			"reasoning": true,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 204800,
+			"maxTokens": 32768
+		}
+	},
 	"anthropic": {
 		"claude-3-5-sonnet-20240620": {
 			"id": "claude-3-5-sonnet-20240620",

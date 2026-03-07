@@ -61,6 +61,7 @@ function isFoundryEnabled(): boolean {
 }
 
 const serviceProviderMap: Record<string, KeyResolver> = {
+	"alibaba-coding-plan": "ALIBABA_CODING_PLAN_API_KEY",
 	openai: "OPENAI_API_KEY",
 	google: "GEMINI_API_KEY",
 	groq: "GROQ_API_KEY",
