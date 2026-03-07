@@ -17,7 +17,6 @@ describe("Kagi web search error handling", () => {
 		const providerMessage =
 			"Kagi Search API is in beta. Please contact support@kagi.com to enable API access for your account.";
 
-		// @ts-expect-error test mock does not implement fetch.preconnect
 		vi.spyOn(globalThis, "fetch").mockResolvedValue(
 			new Response(JSON.stringify({ error: [{ code: 401, msg: providerMessage }] }), {
 				status: 401,
@@ -36,14 +35,12 @@ describe("Kagi web search error handling", () => {
 	});
 
 	it("falls back to plain text for non-JSON error bodies", async () => {
-		// @ts-expect-error test mock does not implement fetch.preconnect
 		vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("upstream unavailable", { status: 503 }));
 
 		await expect(searchWithKagi("plain text error")).rejects.toThrow("Kagi API error (503): upstream unavailable");
 	});
 
 	it("preserves successful search parsing", async () => {
-		// @ts-expect-error test mock does not implement fetch.preconnect
 		vi.spyOn(globalThis, "fetch").mockResolvedValue(
 			new Response(
 				JSON.stringify({
