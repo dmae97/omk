@@ -504,6 +504,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 			let websocketStreamRetries = 0;
 			let providerRetryAttempt = 0;
 			let sawTerminalEvent = false;
+			let canSafelyReplayWebsocketOverSse = true;
 			while (true) {
 				try {
 					for await (const rawEvent of eventStream) {
@@ -674,6 +675,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 									name: item.name,
 									arguments: parseStreamingJson(item.arguments || "{}"),
 								};
+								canSafelyReplayWebsocketOverSse = false;
 								stream.push({ type: "toolcall_end", contentIndex: blockIndex(), toolCall, partial: output });
 							}
 						} else if (eventType === "response.created") {
@@ -729,47 +731,71 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 
 					break;
 				} catch (error) {
-					if (
+					const canReplayWebsocketFailureOverSse =
 						usingWebsocket &&
 						websocketState &&
 						isCodexWebSocketRetryableStreamError(error) &&
-						output.content.length === 0 &&
-						!options?.signal?.aborted
-					) {
+						canSafelyReplayWebsocketOverSse &&
+						!sawTerminalEvent &&
+						!options?.signal?.aborted;
+					if (canReplayWebsocketFailureOverSse) {
+						const state = websocketState!;
 						const streamError = error instanceof Error ? error : new Error(String(error));
+						const replayingBufferedOutputOverSse = output.content.length > 0;
 						const isFatal = isCodexWebSocketFatalError(streamError);
-						const activateFallback = isFatal || websocketStreamRetries >= getCodexWebSocketRetryBudget();
-						recordCodexWebSocketFailure(websocketState, activateFallback);
+						const activateFallback =
+							replayingBufferedOutputOverSse ||
+							isFatal ||
+							websocketStreamRetries >= getCodexWebSocketRetryBudget();
+						recordCodexWebSocketFailure(state, activateFallback);
 						logCodexDebug("codex websocket stream fallback", {
 							error: streamError.message,
 							retry: websocketStreamRetries,
 							retryBudget: getCodexWebSocketRetryBudget(),
 							activated: activateFallback,
 							fatal: isFatal,
+							replayedBufferedOutput: replayingBufferedOutputOverSse,
 						});
 						if (!activateFallback) {
 							websocketStreamRetries += 1;
 							await abortableSleep(getCodexWebSocketRetryDelayMs(websocketStreamRetries), options?.signal);
-							const websocketRequest = buildCodexWebSocketRequest(transformedBody, websocketState);
+							const websocketRequest = buildCodexWebSocketRequest(transformedBody, state);
 							const websocketHeaders = createCodexHeaders(
 								requestHeaders,
 								accountId,
 								apiKey,
 								options?.sessionId,
 								"websocket",
-								websocketState,
+								state,
 							);
 							requestBodyForState = cloneRequestBody(transformedBody);
 							eventStream = await openCodexWebSocketEventStream(
 								toWebSocketUrl(url),
 								websocketHeaders,
 								websocketRequest,
-								websocketState,
+								state,
 								options?.signal,
 							);
 							usingWebsocket = true;
-							websocketState.lastTransport = "websocket";
+							state.lastTransport = "websocket";
 							continue;
+						}
+						if (replayingBufferedOutputOverSse) {
+							canSafelyReplayWebsocketOverSse = true;
+							currentItem = null;
+							currentBlock = null;
+							output.content.length = 0;
+							nativeOutputItems.length = 0;
+							output.usage = {
+								input: 0,
+								output: 0,
+								cacheRead: 0,
+								cacheWrite: 0,
+								totalTokens: 0,
+								cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+							};
+							output.stopReason = "stop";
+							firstTokenTime = undefined;
 						}
 						eventStream = await openCodexSseEventStream(
 							url,
@@ -778,11 +804,11 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 							apiKey,
 							options?.sessionId,
 							transformedBody,
-							websocketState,
+							state,
 							options?.signal,
 						);
 						usingWebsocket = false;
-						websocketState.lastTransport = "sse";
+						state.lastTransport = "sse";
 						requestBodyForState = cloneRequestBody(transformedBody);
 						continue;
 					}

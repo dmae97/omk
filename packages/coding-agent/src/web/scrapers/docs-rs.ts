@@ -500,7 +500,6 @@ function collectExplicitTraitImplNames(implIds: number[], index: Record<string, 
 	return names;
 }
 
-
 function renderSingleItem(item: RustdocItem, index: Record<string, RustdocItem>, crate_: RustdocCrate): string {
 	let md = "";
 	const decl = renderItemDecl(item);
@@ -545,18 +544,14 @@ function renderSingleItem(item: RustdocItem, index: Record<string, RustdocItem>,
 		}
 
 		const methods = collectInherentMethodLines(impls, index);
-		if (methods.length) md += `## Methods
-
-${methods.join("\n")}
-
-`;
+		if (methods.length) {
+			md += `## Methods\n\n${methods.join("\n")}\n\n`;
+		}
 
 		const traitImpls = collectExplicitTraitImplNames(impls, index);
-		if (traitImpls.length) md += `## Trait Implementations
-
-${traitImpls.map(t => `- ${t}`).join("\n")}
-
-`;
+		if (traitImpls.length) {
+			md += `## Trait Implementations\n\n${traitImpls.map(t => `- ${t}`).join("\n")}\n\n`;
+		}
 	}
 
 	// For enums, show variants
