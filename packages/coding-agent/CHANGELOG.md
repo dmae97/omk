@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Moved llms.txt endpoint discovery to fallback strategy when rendered page content is low quality, prioritizing page-specific content over site-wide files
+- Enhanced llms.txt endpoint detection to scope candidates to the requested URL path, searching section-specific files before site-wide ones
 
 ## [13.9.6] - 2026-03-08
 
