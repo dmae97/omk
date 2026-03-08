@@ -3,6 +3,7 @@ import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import { getBundledModel } from "@oh-my-pi/pi-ai/models";
 import type { AssistantMessage, Model, Usage } from "@oh-my-pi/pi-ai/types";
+import { hookFetch } from "@oh-my-pi/pi-utils";
 
 const completeSimpleMock = vi.fn();
 
@@ -318,12 +319,14 @@ describe("remote compaction setting", () => {
 			throw new Error("Expected compaction preparation");
 		}
 
-		const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-			new Response(JSON.stringify({ summary: "remote summary" }), {
-				status: 200,
-				headers: { "Content-Type": "application/json" },
-			}),
+		const fetchSpy = vi.fn(
+			() =>
+				new Response(JSON.stringify({ summary: "remote summary" }), {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				}),
 		);
+		using _hook = hookFetch(fetchSpy);
 		const completeSpy = completeSimpleMock
 			.mockResolvedValueOnce(createAssistantMessage("Local history summary"))
 			.mockResolvedValueOnce(createAssistantMessage("Local turn summary"))
@@ -394,12 +397,14 @@ describe("remote compaction setting", () => {
 			{ type: "message", role: "user", content: [{ type: "input_text", text: "Compacted retained user" }] },
 			{ type: "compaction", encrypted_content: "new_encrypted" },
 		];
-		const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-			new Response(JSON.stringify({ output: remoteOutput }), {
-				status: 200,
-				headers: { "Content-Type": "application/json" },
-			}),
+		const fetchSpy = vi.fn(
+			() =>
+				new Response(JSON.stringify({ output: remoteOutput }), {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				}),
 		);
+		using _hook = hookFetch(fetchSpy);
 		completeSimpleMock
 			.mockResolvedValueOnce(createAssistantMessage("History summary"))
 			.mockResolvedValueOnce(createAssistantMessage("Turn prefix summary"))
@@ -458,12 +463,14 @@ describe("remote compaction setting", () => {
 		});
 		if (!preparation) throw new Error("Expected compaction preparation");
 
-		const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-			new Response(JSON.stringify({ output: [{ type: "compaction", encrypted_content: "new_encrypted" }] }), {
-				status: 200,
-				headers: { "Content-Type": "application/json" },
-			}),
+		const fetchSpy = vi.fn(
+			() =>
+				new Response(JSON.stringify({ output: [{ type: "compaction", encrypted_content: "new_encrypted" }] }), {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				}),
 		);
+		using _hook = hookFetch(fetchSpy);
 		completeSimpleMock.mockResolvedValue(createAssistantMessage("Short summary"));
 
 		await compact(preparation, model, "test-api-key");
@@ -499,12 +506,14 @@ describe("remote compaction setting", () => {
 		});
 		if (!preparation) throw new Error("Expected compaction preparation");
 
-		const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-			new Response(JSON.stringify({ output: [{ type: "compaction", encrypted_content: "new_encrypted" }] }), {
-				status: 200,
-				headers: { "Content-Type": "application/json" },
-			}),
+		const fetchSpy = vi.fn(
+			() =>
+				new Response(JSON.stringify({ output: [{ type: "compaction", encrypted_content: "new_encrypted" }] }), {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				}),
 		);
+		using _hook = hookFetch(fetchSpy);
 		completeSimpleMock.mockResolvedValue(createAssistantMessage("Short summary"));
 
 		await compact(preparation, model, "test-api-key");
@@ -541,12 +550,14 @@ describe("remote compaction setting", () => {
 			{ type: "message", role: "assistant", content: [{ type: "output_text", text: "Kept assistant" }] },
 			{ type: "compaction", encrypted_content: "new_encrypted" },
 		];
-		const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-			new Response(JSON.stringify({ output: remoteOutput }), {
-				status: 200,
-				headers: { "Content-Type": "application/json" },
-			}),
+		const fetchSpy = vi.fn(
+			() =>
+				new Response(JSON.stringify({ output: remoteOutput }), {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				}),
 		);
+		using _hook = hookFetch(fetchSpy);
 		completeSimpleMock.mockResolvedValue(createAssistantMessage("Short summary"));
 
 		const result = await compact(preparation, model, "test-api-key", undefined, undefined, {

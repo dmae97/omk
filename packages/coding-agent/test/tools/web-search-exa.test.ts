@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
+import { hookFetch } from "@oh-my-pi/pi-utils";
 import { runSearchQuery } from "../../src/web/search";
 import {
 	buildExaRequestBody,
@@ -228,9 +229,8 @@ describe("searchExa", () => {
 		delete process.env.EXA_API_KEY;
 	});
 
-	function mockFetch(responseBody: unknown, status = 200) {
-		// @ts-expect-error - test mock doesn't need fetch.preconnect
-		vi.spyOn(globalThis, "fetch").mockImplementation(async (_url: string | URL | Request, init?: RequestInit) => {
+	function mockFetch(responseBody: unknown, status = 200): Disposable {
+		return hookFetch((_url, init) => {
 			if (init?.body) {
 				capturedRequestBody = JSON.parse(init.body as string);
 			}
@@ -242,7 +242,7 @@ describe("searchExa", () => {
 	}
 
 	it("populates answer from per-result summaries", async () => {
-		mockFetch(makeMockExaResponse());
+		using _hook = mockFetch(makeMockExaResponse());
 		const result = await searchExa({ query: "test query" });
 		expect(result.provider).toBe("exa");
 		expect(result.answer).toBeDefined();
@@ -253,7 +253,7 @@ describe("searchExa", () => {
 	});
 
 	it("returns answer=undefined when no summaries are present", async () => {
-		mockFetch(
+		using _hook = mockFetch(
 			makeMockExaResponse({ results: [{ title: "No Summary", url: "https://nosummary.com", text: "some text" }] }),
 		);
 		const result = await searchExa({ query: "no answer query" });
@@ -263,28 +263,28 @@ describe("searchExa", () => {
 	});
 
 	it("returns answer=undefined when results array is empty", async () => {
-		mockFetch(makeMockExaResponse({ results: [] }));
+		using _hook = mockFetch(makeMockExaResponse({ results: [] }));
 		const result = await searchExa({ query: "empty" });
 		expect(result.answer).toBeUndefined();
 		expect(result.sources).toHaveLength(0);
 	});
 
 	it("returns answer=undefined when results is missing from response", async () => {
-		mockFetch({ requestId: "req-empty" });
+		using _hook = mockFetch({ requestId: "req-empty" });
 		const result = await searchExa({ query: "nothing" });
 		expect(result.answer).toBeUndefined();
 		expect(result.sources).toHaveLength(0);
 	});
 
 	it("sends contents.summary in request body", async () => {
-		mockFetch(makeMockExaResponse());
+		using _hook = mockFetch(makeMockExaResponse());
 		await searchExa({ query: "check body" });
 		expect(capturedRequestBody).toBeDefined();
 		expect(capturedRequestBody!.contents).toEqual({ summary: { query: "check body" } });
 	});
 
 	it("sends correct full request shape", async () => {
-		mockFetch(makeMockExaResponse());
+		using _hook = mockFetch(makeMockExaResponse());
 		await searchExa({ query: "shape test", num_results: 5, type: "neural" });
 		expect(capturedRequestBody).toEqual({
 			query: "shape test",
@@ -295,7 +295,7 @@ describe("searchExa", () => {
 	});
 
 	it("prefers summary over text for snippet field", async () => {
-		mockFetch(
+		using _hook = mockFetch(
 			makeMockExaResponse({
 				results: [{ title: "Has Both", url: "https://both.com", text: "full text here", summary: "summary here" }],
 			}),
@@ -305,7 +305,7 @@ describe("searchExa", () => {
 	});
 
 	it("falls back to text when summary is null", async () => {
-		mockFetch(
+		using _hook = mockFetch(
 			makeMockExaResponse({
 				results: [{ title: "Text Only", url: "https://text.com", text: "fallback text", summary: null }],
 			}),
@@ -315,7 +315,7 @@ describe("searchExa", () => {
 	});
 
 	it("falls back to highlights when both summary and text are null", async () => {
-		mockFetch(
+		using _hook = mockFetch(
 			makeMockExaResponse({
 				results: [
 					{
@@ -333,7 +333,7 @@ describe("searchExa", () => {
 	});
 
 	it("skips results without url", async () => {
-		mockFetch(
+		using _hook = mockFetch(
 			makeMockExaResponse({
 				results: [
 					{ title: "No URL", url: null, summary: "orphan" },
@@ -347,7 +347,7 @@ describe("searchExa", () => {
 	});
 
 	it("falls back to text when summary is empty string (not just null)", async () => {
-		mockFetch(
+		using _hook = mockFetch(
 			makeMockExaResponse({
 				results: [{ title: "Empty Summary", url: "https://empty.com", text: "real text", summary: "" }],
 			}),
@@ -357,7 +357,7 @@ describe("searchExa", () => {
 	});
 
 	it("does not include url-less results in synthesized answer", async () => {
-		mockFetch(
+		using _hook = mockFetch(
 			makeMockExaResponse({
 				results: [
 					{ title: "No URL", url: null, summary: "ghost summary" },
@@ -373,13 +373,13 @@ describe("searchExa", () => {
 
 	it("uses Exa MCP when API key is missing", async () => {
 		delete process.env.EXA_API_KEY;
-		// @ts-expect-error - test mock doesn't need fetch.preconnect
-		const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+		const fetchSpy = vi.fn(async () => {
 			return new Response(JSON.stringify({ jsonrpc: "2.0", id: "mcp-1", result: makeMockExaResponse() }), {
 				status: 200,
 				headers: { "Content-Type": "application/json" },
 			});
 		});
+		using _hook = hookFetch(fetchSpy);
 
 		const result = await searchExa({ query: "no key" });
 		expect(result.provider).toBe("exa");
@@ -393,8 +393,7 @@ describe("searchExa", () => {
 
 	it("accepts MCP structuredContent search payloads when API key is missing", async () => {
 		delete process.env.EXA_API_KEY;
-		// @ts-expect-error - test mock doesn't need fetch.preconnect
-		vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+		using _hook = hookFetch(async () => {
 			return new Response(
 				JSON.stringify({
 					jsonrpc: "2.0",
@@ -414,8 +413,7 @@ describe("searchExa", () => {
 	it("accepts MCP text content JSON payloads when API key is missing", async () => {
 		delete process.env.EXA_API_KEY;
 		const payload = makeMockExaResponse();
-		// @ts-expect-error - test mock doesn't need fetch.preconnect
-		const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+		const fetchSpy = vi.fn(async () => {
 			return new Response(
 				JSON.stringify({
 					jsonrpc: "2.0",
@@ -427,6 +425,7 @@ describe("searchExa", () => {
 				{ status: 200, headers: { "Content-Type": "application/json" } },
 			);
 		});
+		using _hook = hookFetch(fetchSpy);
 
 		const result = await searchExa({ query: "content payload" });
 		expect(result.provider).toBe("exa");
@@ -450,8 +449,7 @@ describe("searchExa", () => {
 			"URL: https://plain-beta.com",
 			"Text: Beta snippet",
 		].join("\n");
-		// @ts-expect-error - test mock doesn't need fetch.preconnect
-		const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+		const fetchSpy = vi.fn(async () => {
 			return new Response(
 				JSON.stringify({
 					jsonrpc: "2.0",
@@ -461,6 +459,7 @@ describe("searchExa", () => {
 				{ status: 200, headers: { "Content-Type": "application/json" } },
 			);
 		});
+		using _hook = hookFetch(fetchSpy);
 
 		const result = await searchExa({ query: "plain text content payload" });
 		expect(result.provider).toBe("exa");
@@ -494,8 +493,7 @@ describe("searchExa", () => {
 			"URL: https://crlf-beta.com",
 			"Text: Second result",
 		].join("\r\n");
-		// @ts-expect-error - test mock doesn't need fetch.preconnect
-		vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+		using _hook = hookFetch(async () => {
 			return new Response(
 				JSON.stringify({
 					jsonrpc: "2.0",
@@ -526,8 +524,7 @@ describe("searchExa", () => {
 			"URL: https://plain-beta.com",
 			"Text: Beta snippet",
 		].join("\n");
-		// @ts-expect-error - test mock doesn't need fetch.preconnect
-		vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+		using _hook = hookFetch(async () => {
 			return new Response(
 				JSON.stringify({
 					jsonrpc: "2.0",
@@ -556,8 +553,7 @@ describe("searchExa", () => {
 			"URL: https://result-two.com",
 			"Text: Second plain-text result",
 		].join("\n");
-		// @ts-expect-error - test mock doesn't need fetch.preconnect
-		vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+		using _hook = hookFetch(async () => {
 			return new Response(
 				JSON.stringify({
 					jsonrpc: "2.0",
@@ -576,8 +572,7 @@ describe("searchExa", () => {
 
 	it("runSearchQuery with provider=exa succeeds without EXA_API_KEY for MCP structuredContent", async () => {
 		delete process.env.EXA_API_KEY;
-		// @ts-expect-error - test mock doesn't need fetch.preconnect
-		vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+		using _hook = hookFetch(async () => {
 			return new Response(
 				JSON.stringify({
 					jsonrpc: "2.0",
@@ -596,8 +591,7 @@ describe("searchExa", () => {
 
 	it("throws clear error when MCP content payload is not parseable JSON", async () => {
 		delete process.env.EXA_API_KEY;
-		// @ts-expect-error - test mock doesn't need fetch.preconnect
-		vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+		using _hook = hookFetch(async () => {
 			return new Response(
 				JSON.stringify({
 					jsonrpc: "2.0",
@@ -616,7 +610,7 @@ describe("searchExa", () => {
 	});
 
 	it("throws SearchProviderError on non-ok HTTP response", async () => {
-		mockFetch("Forbidden", 403);
+		using _hook = mockFetch("Forbidden", 403);
 		await expect(searchExa({ query: "forbidden" })).rejects.toThrow("Exa API error (403)");
 	});
 });

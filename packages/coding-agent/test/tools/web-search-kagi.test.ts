@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
+import { hookFetch } from "@oh-my-pi/pi-utils";
 import { searchWithKagi } from "../../src/web/kagi";
 import { searchKagi } from "../../src/web/search/providers/kagi";
 import { SearchProviderError } from "../../src/web/search/types";
@@ -17,11 +18,12 @@ describe("Kagi web search error handling", () => {
 		const providerMessage =
 			"Kagi Search API is in beta. Please contact support@kagi.com to enable API access for your account.";
 
-		vi.spyOn(globalThis, "fetch").mockResolvedValue(
-			new Response(JSON.stringify({ error: [{ code: 401, msg: providerMessage }] }), {
-				status: 401,
-				headers: { "Content-Type": "application/json" },
-			}),
+		using _hook = hookFetch(
+			() =>
+				new Response(JSON.stringify({ error: [{ code: 401, msg: providerMessage }] }), {
+					status: 401,
+					headers: { "Content-Type": "application/json" },
+				}),
 		);
 
 		try {
@@ -35,29 +37,30 @@ describe("Kagi web search error handling", () => {
 	});
 
 	it("falls back to plain text for non-JSON error bodies", async () => {
-		vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("upstream unavailable", { status: 503 }));
+		using _hook = hookFetch(() => new Response("upstream unavailable", { status: 503 }));
 
 		await expect(searchWithKagi("plain text error")).rejects.toThrow("Kagi API error (503): upstream unavailable");
 	});
 
 	it("preserves successful search parsing", async () => {
-		vi.spyOn(globalThis, "fetch").mockResolvedValue(
-			new Response(
-				JSON.stringify({
-					meta: { id: "req-kagi-success" },
-					data: [
-						{
-							t: 0,
-							url: "https://example.com/article",
-							title: "Example Article",
-							snippet: "Example snippet",
-							published: "2025-01-01T00:00:00Z",
-						},
-						{ t: 1, list: ["What is Kagi Search API beta access?"] },
-					],
-				}),
-				{ status: 200, headers: { "Content-Type": "application/json" } },
-			),
+		using _hook = hookFetch(
+			() =>
+				new Response(
+					JSON.stringify({
+						meta: { id: "req-kagi-success" },
+						data: [
+							{
+								t: 0,
+								url: "https://example.com/article",
+								title: "Example Article",
+								snippet: "Example snippet",
+								published: "2025-01-01T00:00:00Z",
+							},
+							{ t: 1, list: ["What is Kagi Search API beta access?"] },
+						],
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				),
 		);
 
 		await expect(searchWithKagi("success case")).resolves.toEqual({

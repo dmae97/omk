@@ -12,7 +12,7 @@ import type { LoadPageResult } from "@oh-my-pi/pi-coding-agent/web/scrapers/type
 import * as scrapers from "@oh-my-pi/pi-coding-agent/web/scrapers/types";
 import * as scraperUtils from "@oh-my-pi/pi-coding-agent/web/scrapers/utils";
 import * as natives from "@oh-my-pi/pi-natives";
-import { ptree, Snowflake } from "@oh-my-pi/pi-utils";
+import { hookFetch, ptree, Snowflake } from "@oh-my-pi/pi-utils";
 
 describe("fetch tool Kagi summarization toggle", () => {
 	let testDir: string;
@@ -73,7 +73,7 @@ describe("fetch tool Kagi summarization toggle", () => {
 		const loadPageSpy = mockLoadPage();
 		const summarizeSpy = vi.spyOn(kagi, "summarizeUrlWithKagi").mockResolvedValue("x".repeat(150));
 		vi.spyOn(toolsManager, "ensureTool").mockResolvedValue(undefined);
-		vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("blocked", { status: 500, statusText: "Blocked" }));
+		using _hook = hookFetch(() => new Response("blocked", { status: 500, statusText: "Blocked" }));
 
 		const result = await tool.execute("fetch-1", { url: "https://example.com" });
 
@@ -88,7 +88,7 @@ describe("fetch tool Kagi summarization toggle", () => {
 		const loadPageSpy = mockLoadPage();
 		const summarizeSpy = vi.spyOn(kagi, "summarizeUrlWithKagi").mockResolvedValue("x".repeat(150));
 		vi.spyOn(toolsManager, "ensureTool").mockResolvedValue(undefined);
-		vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("blocked", { status: 500, statusText: "Blocked" }));
+		using _hook = hookFetch(() => new Response("blocked", { status: 500, statusText: "Blocked" }));
 
 		const result = await tool.execute("fetch-2", { url: "https://example.com" });
 
@@ -425,9 +425,7 @@ describe("fetch tool Kagi summarization toggle", () => {
 					content: "",
 				};
 			});
-			vi.spyOn(globalThis, "fetch").mockResolvedValue(
-				new Response("blocked", { status: 500, statusText: "Blocked" }),
-			);
+			using _hook = hookFetch(() => new Response("blocked", { status: 500, statusText: "Blocked" }));
 			vi.spyOn(toolsManager, "ensureTool").mockResolvedValue(undefined);
 			vi.spyOn(natives, "htmlToMarkdown").mockResolvedValue(renderedMarkdown);
 
@@ -513,9 +511,7 @@ describe("fetch tool Kagi summarization toggle", () => {
 					content: "",
 				};
 			});
-			vi.spyOn(globalThis, "fetch").mockResolvedValue(
-				new Response("blocked", { status: 500, statusText: "Blocked" }),
-			);
+			using _hook = hookFetch(() => new Response("blocked", { status: 500, statusText: "Blocked" }));
 			vi.spyOn(toolsManager, "ensureTool").mockResolvedValue("/usr/bin/trafilatura");
 
 			const result = await tool.execute("fetch-section-llms", { url: pageUrl });
