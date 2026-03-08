@@ -21,6 +21,7 @@ import { handleDevTo } from "./devto";
 import { handleDiscogs } from "./discogs";
 import { handleDiscourse } from "./discourse";
 import { handleDockerHub } from "./dockerhub";
+import { handleDocsRs } from "./docs-rs";
 import { handleFdroid } from "./fdroid";
 import { handleFirefoxAddons } from "./firefox-addons";
 import { handleFlathub } from "./flathub";
@@ -84,6 +85,7 @@ export type { RenderResult, SpecialHandler } from "./types";
 export {
 	fetchGitHubApi,
 	handleArtifactHub,
+	handleDocsRs,
 	handleArxiv,
 	handleAur,
 	handleBiorxiv,
@@ -185,6 +187,7 @@ export const specialHandlers: SpecialHandler[] = [
 	handleStackOverflow,
 	handleDevTo,
 	handleMDN,
+	handleDocsRs,
 	handleReadTheDocs,
 	handleSearchcode,
 	handleSourcegraph,

@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added docs.rs scraper for extracting Rust crate documentation from rustdoc JSON, including support for modules, functions, structs, traits, enums, and other Rust items with caching
 
 ## [13.9.7] - 2026-03-08
 
