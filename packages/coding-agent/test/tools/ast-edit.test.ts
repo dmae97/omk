@@ -115,4 +115,57 @@ describe("ast_edit tool schema", () => {
 			await fs.rm(tempDir, { recursive: true, force: true });
 		}
 	});
+
+	it("combines globbing from path and glob parameters", async () => {
+		const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "ast-edit-glob-"));
+		try {
+			const packagesDir = path.join(tempDir, "packages");
+			const sourceDir = path.join(packagesDir, "pkg-123", "src");
+			const nestedDir = path.join(sourceDir, "nested");
+			await fs.mkdir(nestedDir, { recursive: true });
+			await Bun.write(path.join(sourceDir, "root.ts"), "legacyWrap(rootValue, rootArg)\n");
+			await Bun.write(path.join(nestedDir, "child.ts"), "legacyWrap(childValue, childArg)\n");
+			await Bun.write(path.join(sourceDir, "ignore.js"), "legacyWrap(ignoreValue, ignoreArg)\n");
+			await Bun.write(path.join(tempDir, "outside.ts"), "legacyWrap(outsideValue, outsideArg)\n");
+			const pendingActionStore = new PendingActionStore();
+
+			const tools = await createTools(createTestSession(tempDir, { pendingActionStore }));
+			const tool = tools.find(entry => entry.name === "ast_edit");
+			expect(tool).toBeDefined();
+
+			const previewResult = await tool!.execute("ast-edit-glob", {
+				ops: [{ pat: "legacyWrap($A, $B)", out: "modernWrap($A, $B)" }],
+				lang: "typescript",
+				path: `${packagesDir}/pkg-*/src`,
+				glob: "**/*.ts",
+			});
+
+			const text = previewResult.content.find(content => content.type === "text")?.text ?? "";
+			const details = previewResult.details as { totalReplacements?: number; fileReplacements?: Array<{ path: string; count: number }> } | undefined;
+
+			expect(text).toContain("## └─ root.ts (1 replacement)");
+			expect(text).toContain("## └─ child.ts (1 replacement)");
+			expect(text).not.toContain("ignore.js");
+			expect(text).not.toContain("outside.ts");
+			expect(details?.totalReplacements).toBe(2);
+			expect(details?.fileReplacements).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({ path: "pkg-123/src/root.ts", count: 1 }),
+					expect.objectContaining({ path: "pkg-123/src/nested/child.ts", count: 1 }),
+				]),
+			);
+
+			const pending = pendingActionStore.peek();
+			expect(pending).not.toBeNull();
+			if (!pending) throw new Error("Expected pending action to be registered");
+			await pending.apply("apply previewed AST edit with combined globs");
+
+			expect(await Bun.file(path.join(sourceDir, "root.ts")).text()).toContain("modernWrap(rootValue, rootArg)");
+			expect(await Bun.file(path.join(nestedDir, "child.ts")).text()).toContain("modernWrap(childValue, childArg)");
+			expect(await Bun.file(path.join(sourceDir, "ignore.js")).text()).toContain("legacyWrap(ignoreValue, ignoreArg)");
+			expect(await Bun.file(path.join(tempDir, "outside.ts")).text()).toContain("legacyWrap(outsideValue, outsideArg)");
+		} finally {
+			await fs.rm(tempDir, { recursive: true, force: true });
+		}
+	});
 });

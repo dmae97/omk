@@ -14,7 +14,7 @@ import { Ellipsis, Hasher, type RenderCache, renderStatusLine, renderTreeList, t
 import { resolveFileDisplayMode } from "../utils/file-display-mode";
 import type { ToolSession } from ".";
 import type { OutputMeta } from "./output-meta";
-import { hasGlobPathChars, parseSearchPath, resolveToCwd } from "./path-utils";
+import { combineSearchGlobs, hasGlobPathChars, parseSearchPath, resolveToCwd } from "./path-utils";
 import {
 	dedupeParseErrors,
 	formatCount,
@@ -31,6 +31,7 @@ const astGrepSchema = Type.Object({
 	patterns: Type.Array(Type.String(), { minItems: 1, description: "AST patterns to match" }),
 	lang: Type.Optional(Type.String({ description: "Language override" })),
 	path: Type.Optional(Type.String({ description: "File, directory, or glob pattern to search (default: cwd)" })),
+	glob: Type.Optional(Type.String({ description: "Optional glob filter relative to path" })),
 	selector: Type.Optional(Type.String({ description: "Optional selector for contextual pattern mode" })),
 	limit: Type.Optional(Type.Number({ description: "Max matches (default: 50)" })),
 	offset: Type.Optional(Type.Number({ description: "Skip first N matches (default: 0)" })),
@@ -88,7 +89,7 @@ export class AstGrepTool implements AgentTool<typeof astGrepSchema, AstGrepToolD
 			}
 
 			let searchPath: string | undefined;
-			let globFilter: string | undefined;
+			let globFilter = params.glob?.trim() || undefined;
 			const rawPath = params.path?.trim();
 			if (rawPath) {
 				const internalRouter = this.session.internalRouter;
@@ -104,7 +105,7 @@ export class AstGrepTool implements AgentTool<typeof astGrepSchema, AstGrepToolD
 				} else {
 					const parsedPath = parseSearchPath(rawPath);
 					searchPath = resolveToCwd(parsedPath.basePath, this.session.cwd);
-					globFilter = parsedPath.glob;
+					globFilter = combineSearchGlobs(parsedPath.glob, globFilter);
 				}
 			}
 

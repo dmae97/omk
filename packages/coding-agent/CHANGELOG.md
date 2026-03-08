@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `glob` parameter to `ast_grep` and `ast_edit` tools for additional glob filtering relative to the `path` parameter
+- Added `combineSearchGlobs` utility function to merge glob patterns from `path` and `glob` parameters
+
+### Changed
+
+- Updated `grep` tool to combine glob patterns from `path` and `glob` parameters instead of throwing an error when both are provided
 
 ## [13.9.4] - 2026-03-07
 ### Added

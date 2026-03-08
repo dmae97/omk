@@ -128,6 +128,16 @@ export function parseSearchPath(filePath: string): ParsedSearchPath {
 	};
 }
 
+export function combineSearchGlobs(prefixGlob?: string, suffixGlob?: string): string | undefined {
+	if (!prefixGlob) return suffixGlob;
+	if (!suffixGlob) return prefixGlob;
+
+	const normalizedPrefix = prefixGlob.replace(/\/+$/, "");
+	const normalizedSuffix = suffixGlob.replace(/^\/+/, "");
+
+	return `${normalizedPrefix}/${normalizedSuffix}`;
+}
+
 export function resolveReadPath(filePath: string, cwd: string): string {
 	const resolved = resolveToCwd(filePath, cwd);
 	const shellEscapedVariant = tryShellEscapedPath(resolved);

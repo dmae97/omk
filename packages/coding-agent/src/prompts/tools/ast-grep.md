@@ -2,8 +2,8 @@ Performs structural code search using AST matching via native ast-grep.
 
 <instruction>
 - Use this when syntax shape matters more than raw text (calls, declarations, specific language constructs)
-- Prefer a precise `path` scope to keep results targeted and deterministic (`path` accepts files, directories, or glob patterns)
-- Default to language-scoped search in mixed repositories: pair `path` glob + explicit `lang` to avoid parse-noise from non-source files
+- Prefer a precise `path` scope to keep results targeted and deterministic (`path` accepts files, directories, or glob patterns; use `glob` for an additional filter relative to `path`)
+- Default to language-scoped search in mixed repositories: pair `path` + `glob` + explicit `lang` to avoid parse-noise from non-source files
 - `patterns` is required and must include at least one non-empty AST pattern; `lang` is optional (`lang` is inferred per file extension when omitted)
 - Multiple patterns run in one native pass; results are merged and then `offset`/`limit` are applied to the combined match set
 - Use `selector` only for contextual pattern mode; otherwise provide direct patterns

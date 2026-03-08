@@ -2,8 +2,8 @@ Performs structural AST-aware rewrites via native ast-grep.
 
 <instruction>
 - Use for codemods and structural rewrites where plain text replace is unsafe
-- Narrow scope with `path` before replacing (`path` accepts files, directories, or glob patterns)
-- Default to language-scoped rewrites in mixed repositories: set `lang` and keep `path` narrow
+- Narrow scope with `path` before replacing (`path` accepts files, directories, or glob patterns; use `glob` for an additional filter relative to `path`)
+- Default to language-scoped rewrites in mixed repositories: set `lang` and keep `path`/`glob` narrow
 - Treat parse issues as a scoping signal: tighten `path`/`lang` before retrying
 - Metavariables captured in each rewrite pattern (`$A`, `$$$ARGS`) are substituted into that entry's rewrite template
 - Each matched rewrite is a 1:1 structural substitution; you cannot split one capture into multiple nodes or merge multiple captures into one node

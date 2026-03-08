@@ -14,7 +14,7 @@ import { Ellipsis, Hasher, type RenderCache, renderStatusLine, renderTreeList, t
 import { resolveFileDisplayMode } from "../utils/file-display-mode";
 import type { ToolSession } from ".";
 import type { OutputMeta } from "./output-meta";
-import { hasGlobPathChars, parseSearchPath, resolveToCwd } from "./path-utils";
+import { combineSearchGlobs, hasGlobPathChars, parseSearchPath, resolveToCwd } from "./path-utils";
 import {
 	dedupeParseErrors,
 	formatCount,
@@ -38,6 +38,7 @@ const astEditSchema = Type.Object({
 	}),
 	lang: Type.Optional(Type.String({ description: "Language override" })),
 	path: Type.Optional(Type.String({ description: "File, directory, or glob pattern to rewrite (default: cwd)" })),
+	glob: Type.Optional(Type.String({ description: "Optional glob filter relative to path" })),
 	selector: Type.Optional(Type.String({ description: "Optional selector for contextual pattern mode" })),
 	limit: Type.Optional(Type.Number({ description: "Max total replacements" })),
 });
@@ -98,7 +99,7 @@ export class AstEditTool implements AgentTool<typeof astEditSchema, AstEditToolD
 			const maxFiles = parseInt(process.env.PI_MAX_AST_FILES ?? "", 10) || 1000;
 
 			let searchPath: string | undefined;
-			let globFilter: string | undefined;
+			let globFilter = params.glob?.trim() || undefined;
 			const rawPath = params.path?.trim();
 			if (rawPath) {
 				const internalRouter = this.session.internalRouter;
@@ -114,7 +115,7 @@ export class AstEditTool implements AgentTool<typeof astEditSchema, AstEditToolD
 				} else {
 					const parsedPath = parseSearchPath(rawPath);
 					searchPath = resolveToCwd(parsedPath.basePath, this.session.cwd);
-					globFilter = parsedPath.glob;
+					globFilter = combineSearchGlobs(parsedPath.glob, globFilter);
 				}
 			}
 

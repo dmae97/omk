@@ -16,7 +16,7 @@ import { Ellipsis, Hasher, type RenderCache, renderStatusLine, renderTreeList, t
 import { resolveFileDisplayMode } from "../utils/file-display-mode";
 import type { ToolSession } from ".";
 import { formatFullOutputReference, type OutputMeta } from "./output-meta";
-import { hasGlobPathChars, parseSearchPath, resolveToCwd } from "./path-utils";
+import { combineSearchGlobs, hasGlobPathChars, parseSearchPath, resolveToCwd } from "./path-utils";
 import { formatCount, formatEmptyMessage, formatErrorMessage, PREVIEW_LIMITS } from "./render-utils";
 import { ToolError } from "./tool-errors";
 import { toolResult } from "./tool-result";
@@ -125,12 +125,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 					const parsedPath = parseSearchPath(rawPath);
 					searchPath = resolveToCwd(parsedPath.basePath, this.session.cwd);
 					if (parsedPath.glob) {
-						if (globFilter) {
-							throw new ToolError(
-								"When path already includes glob characters, omit the separate glob parameter",
-							);
-						}
-						globFilter = parsedPath.glob;
+						globFilter = combineSearchGlobs(parsedPath.glob, globFilter);
 					}
 				}
 			} else {
