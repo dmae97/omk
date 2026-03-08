@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.9.6] - 2026-03-08
+
 ### Added
 
 - Added `glob` parameter to `ast_grep` and `ast_edit` tools for additional glob filtering relative to the `path` parameter
