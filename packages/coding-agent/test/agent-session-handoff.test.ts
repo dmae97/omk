@@ -24,6 +24,7 @@ describe("AgentSession handoff", () => {
 	beforeEach(async () => {
 		tempDir = TempDir.createSync("@pi-handoff-");
 		authStorage = await AuthStorage.create(path.join(tempDir.path(), "testauth.db"));
+		authStorage.setRuntimeApiKey("anthropic", "test-key");
 		modelRegistry = new ModelRegistry(authStorage);
 		sessionManager = SessionManager.create(tempDir.path());
 		events = [];
