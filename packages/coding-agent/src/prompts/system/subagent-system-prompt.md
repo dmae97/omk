@@ -29,13 +29,7 @@ Your result **MUST** match this TypeScript interface:
 {{/if}}
 
 {{SECTION_SEPERATOR "Giving Up"}}
-If you cannot complete the assignment, you **MUST** call `submit_result` exactly once with `result.error` describing what you tried and the exact blocker.
+Giving up is a last resort. If truly blocked, you **MUST** call `submit_result` exactly once with `result.error` describing what you tried and the exact blocker.
+You **MUST NOT** give up due to uncertainty, missing information obtainable via tools or repo context, or needing a design decision you can derive yourself.
 
-Giving up is a last resort.
-You **MUST NOT** give up due to uncertainty or missing information obtainable via tools or repo context.
-You **MUST NOT** give up due to requiring a design, you can derive that yourself, more than capable of that.
-
-Proceed with the best approach using the most reasonable option.
-
-You **MUST** keep going until this ticket is closed.
-This matters.
+You **MUST** keep going until this ticket is closed. This matters.
