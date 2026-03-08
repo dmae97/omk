@@ -362,8 +362,8 @@ export class AuthStorage {
 		}
 	}
 
-	#resolveOAuthDedupeIdentifiers(provider: string, credential: OAuthCredential): string[] {
-		return resolveCredentialIdentifiers(provider, credential);
+	#resolveOAuthDedupeIdentityKey(provider: string, credential: OAuthCredential): string | null {
+		return resolveCredentialIdentityKey(provider, credential);
 	}
 
 	#dedupeOAuthCredentials(provider: string, credentials: AuthCredential[]): AuthCredential[] {
@@ -375,17 +375,15 @@ export class AuthStorage {
 				deduped.push(credential);
 				continue;
 			}
-			const identifiers = this.#resolveOAuthDedupeIdentifiers(provider, credential);
-			if (identifiers.length === 0) {
+			const identityKey = this.#resolveOAuthDedupeIdentityKey(provider, credential);
+			if (!identityKey) {
 				deduped.push(credential);
 				continue;
 			}
-			if (identifiers.some(identifier => seen.has(identifier))) {
+			if (seen.has(identityKey)) {
 				continue;
 			}
-			for (const identifier of identifiers) {
-				seen.add(identifier);
-			}
+			seen.add(identityKey);
 			deduped.push(credential);
 		}
 		return deduped.reverse();
@@ -402,18 +400,16 @@ export class AuthStorage {
 				kept.push(entry);
 				continue;
 			}
-			const identifiers = this.#resolveOAuthDedupeIdentifiers(provider, credential);
-			if (identifiers.length === 0) {
+			const identityKey = this.#resolveOAuthDedupeIdentityKey(provider, credential);
+			if (!identityKey) {
 				kept.push(entry);
 				continue;
 			}
-			if (identifiers.some(identifier => seen.has(identifier))) {
+			if (seen.has(identityKey)) {
 				removed.push(entry);
 				continue;
 			}
-			for (const identifier of identifiers) {
-				seen.add(identifier);
-			}
+			seen.add(identityKey);
 			kept.push(entry);
 		}
 		if (removed.length > 0) {
@@ -1880,15 +1876,38 @@ type AuthRow = {
 	credential_type: string;
 	data: string;
 	disabled_cause: string | null;
+	identity_key: string | null;
 };
 
-function serializeCredential(
-	credential: AuthCredential,
-): { credentialType: AuthCredential["type"]; data: string } | null {
+type SerializedCredentialRecord = {
+	credentialType: AuthCredential["type"];
+	data: string;
+	identityKey: string | null;
+};
+
+const AUTH_SCHEMA_VERSION = 3;
+
+function normalizeStoredAccountId(accountId: string | null | undefined): string | null {
+	const normalized = accountId?.trim();
+	return normalized && normalized.length > 0 ? normalized : null;
+}
+
+function normalizeStoredEmail(email: string | null | undefined): string | null {
+	const normalized = email?.trim().toLowerCase();
+	return normalized && normalized.length > 0 ? normalized : null;
+}
+
+function normalizeStoredIdentityKey(identityKey: string | null | undefined): string | null {
+	const normalized = identityKey?.trim();
+	return normalized && normalized.length > 0 ? normalized : null;
+}
+
+function serializeCredential(credential: AuthCredential): SerializedCredentialRecord | null {
 	if (credential.type === "api_key") {
 		return {
 			credentialType: "api_key",
 			data: JSON.stringify({ key: credential.key }),
+			identityKey: null,
 		};
 	}
 	if (credential.type === "oauth") {
@@ -1896,6 +1915,7 @@ function serializeCredential(
 		return {
 			credentialType: "oauth",
 			data: JSON.stringify(rest),
+			identityKey: resolveCredentialIdentityKey("", credential),
 		};
 	}
 	return null;
@@ -1932,23 +1952,31 @@ function toStoredAuthCredential(row: AuthRow, credential: AuthCredential): Store
 	return { id: row.id, provider: row.provider, credential, disabledCause: row.disabled_cause };
 }
 
-/** Returns normalized identifiers used to match and deduplicate credentials. */
-function resolveCredentialIdentifiers(provider: string, credential: AuthCredential): string[] {
-	if (credential.type === "api_key") return [`api_key:${credential.key}`];
-	const identifiers = extractOAuthCredentialIdentifiers(credential);
-	if (provider !== "openai-codex") return identifiers;
+function resolveProviderCredentialIdentityKey(_provider: string, identifiers: string[]): string | null {
+	const accountIdentifier = identifiers.find(identifier => identifier.startsWith("account:"));
+	if (accountIdentifier) return accountIdentifier;
+	const emailIdentifier = identifiers.find(identifier => identifier.startsWith("email:"));
+	if (emailIdentifier) return emailIdentifier;
+	return null;
+}
 
-	const accountIdentifiers = identifiers.filter(identifier => identifier.startsWith("account:"));
-	if (accountIdentifiers.length > 0) return accountIdentifiers;
+function resolveCredentialIdentityKey(provider: string, credential: AuthCredential): string | null {
+	if (credential.type === "api_key") return null;
+	return resolveProviderCredentialIdentityKey(provider, extractOAuthCredentialIdentifiers(credential));
+}
 
-	return identifiers.filter(identifier => identifier.startsWith("email:"));
+function resolveRowCredentialIdentityKey(provider: string, row: AuthRow): string | null {
+	const identityKey = normalizeStoredIdentityKey(row.identity_key);
+	if (identityKey) return identityKey;
+	const credential = deserializeCredential(row);
+	return credential?.type === "oauth" ? resolveCredentialIdentityKey(provider, credential) : null;
 }
 
 function extractOAuthCredentialIdentifiers(credential: OAuthCredential): string[] {
 	const identifiers = new Set<string>();
-	const accountId = credential.accountId?.trim();
+	const accountId = normalizeStoredAccountId(credential.accountId);
 	if (accountId) identifiers.add(`account:${accountId}`);
-	const email = credential.email?.trim().toLowerCase();
+	const email = normalizeStoredEmail(credential.email);
 	if (email) identifiers.add(`email:${email}`);
 	const accessIdentifiers = extractOAuthTokenIdentifiers(credential.access) ?? [];
 	for (const identifier of accessIdentifiers) {
@@ -1970,22 +1998,21 @@ function extractOAuthTokenIdentifiers(token: string | undefined): string[] | und
 			new TextDecoder("utf-8").decode(Uint8Array.fromBase64(parts[1], { alphabet: "base64url" })),
 		) as Record<string, unknown>;
 		const identifiers = new Set<string>();
-		const directEmail = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : undefined;
+		const directEmail = normalizeStoredEmail(typeof payload.email === "string" ? payload.email : undefined);
 		if (directEmail) identifiers.add(`email:${directEmail}`);
 		const openAiProfile = payload["https://api.openai.com/profile"];
 		if (typeof openAiProfile === "object" && openAiProfile !== null && !Array.isArray(openAiProfile)) {
-			const claimEmail = (openAiProfile as Record<string, unknown>).email;
-			if (typeof claimEmail === "string") {
-				const normalizedClaimEmail = claimEmail.trim().toLowerCase();
-				if (normalizedClaimEmail) identifiers.add(`email:${normalizedClaimEmail}`);
-			}
+			const claimEmail = normalizeStoredEmail(
+				(openAiProfile as Record<string, unknown>).email as string | undefined,
+			);
+			if (claimEmail) identifiers.add(`email:${claimEmail}`);
 		}
 		const openAiAuth = payload["https://api.openai.com/auth"];
 		const authClaims =
 			typeof openAiAuth === "object" && openAiAuth !== null && !Array.isArray(openAiAuth)
 				? (openAiAuth as Record<string, unknown>)
 				: undefined;
-		const accountId =
+		const accountId = normalizeStoredAccountId(
 			typeof payload.account_id === "string"
 				? payload.account_id
 				: typeof payload.accountId === "string"
@@ -1996,9 +2023,9 @@ function extractOAuthTokenIdentifiers(token: string | undefined): string[] | und
 							? payload.sub
 							: typeof authClaims?.chatgpt_account_id === "string"
 								? authClaims.chatgpt_account_id
-								: undefined;
-		const trimmedAccountId = accountId?.trim();
-		if (trimmedAccountId) identifiers.add(`account:${trimmedAccountId}`);
+								: undefined,
+		);
+		if (accountId) identifiers.add(`account:${accountId}`);
 		return identifiers.size > 0 ? [...identifiers] : undefined;
 	} catch {
 		return undefined;
@@ -2036,19 +2063,19 @@ export class AuthCredentialStore {
 		this.#initializeSchema();
 
 		this.#listActiveStmt = this.#db.prepare(
-			"SELECT id, provider, credential_type, data, disabled_cause FROM auth_credentials WHERE disabled_cause IS NULL ORDER BY id ASC",
+			"SELECT id, provider, credential_type, data, disabled_cause, identity_key FROM auth_credentials WHERE disabled_cause IS NULL ORDER BY id ASC",
 		);
 		this.#listActiveByProviderStmt = this.#db.prepare(
-			"SELECT id, provider, credential_type, data, disabled_cause FROM auth_credentials WHERE provider = ? AND disabled_cause IS NULL ORDER BY id ASC",
+			"SELECT id, provider, credential_type, data, disabled_cause, identity_key FROM auth_credentials WHERE provider = ? AND disabled_cause IS NULL ORDER BY id ASC",
 		);
 		this.#listDisabledByProviderStmt = this.#db.prepare(
-			"SELECT id, provider, credential_type, data, disabled_cause FROM auth_credentials WHERE provider = ? AND disabled_cause IS NOT NULL ORDER BY id ASC",
+			"SELECT id, provider, credential_type, data, disabled_cause, identity_key FROM auth_credentials WHERE provider = ? AND disabled_cause IS NOT NULL ORDER BY id ASC",
 		);
 		this.#insertStmt = this.#db.prepare(
-			"INSERT INTO auth_credentials (provider, credential_type, data) VALUES (?, ?, ?) RETURNING id",
+			"INSERT INTO auth_credentials (provider, credential_type, data, identity_key) VALUES (?, ?, ?, ?) RETURNING id",
 		);
 		this.#updateStmt = this.#db.prepare(
-			"UPDATE auth_credentials SET credential_type = ?, data = ?, updated_at = unixepoch() WHERE id = ?",
+			"UPDATE auth_credentials SET credential_type = ?, data = ?, identity_key = ?, updated_at = unixepoch() WHERE id = ?",
 		);
 		this.#deleteStmt = this.#db.prepare(
 			"UPDATE auth_credentials SET disabled_cause = ?, updated_at = unixepoch() WHERE id = ?",
@@ -2086,41 +2113,169 @@ export class AuthCredentialStore {
 
 	#initializeSchema(): void {
 		this.#db.exec(`
-PRAGMA journal_mode=WAL;
-PRAGMA synchronous=NORMAL;
-PRAGMA busy_timeout=5000;
-
-CREATE TABLE IF NOT EXISTS auth_credentials (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	provider TEXT NOT NULL,
-	credential_type TEXT NOT NULL,
-	data TEXT NOT NULL,
-	disabled_cause TEXT DEFAULT NULL,
-	created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-	updated_at INTEGER NOT NULL DEFAULT (unixepoch())
-);
-CREATE INDEX IF NOT EXISTS idx_auth_provider ON auth_credentials(provider);
-
-CREATE TABLE IF NOT EXISTS cache (
-	key TEXT PRIMARY KEY,
-	value TEXT NOT NULL,
-	expires_at INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(expires_at);
+			PRAGMA journal_mode=WAL;
+			PRAGMA synchronous=NORMAL;
+			PRAGMA busy_timeout=5000;
+			CREATE TABLE IF NOT EXISTS auth_schema_version (
+				id INTEGER PRIMARY KEY CHECK (id = 1),
+				version INTEGER NOT NULL
+			);
+			CREATE TABLE IF NOT EXISTS cache (
+				key TEXT PRIMARY KEY,
+				value TEXT NOT NULL,
+				expires_at INTEGER NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(expires_at);
 		`);
 
-		const cols = this.#db.prepare("PRAGMA table_info(auth_credentials)").all() as Array<{ name?: string }>;
-		const hasDisabledCause = cols.some(c => c.name === "disabled_cause");
-		const hasDisabled = cols.some(c => c.name === "disabled");
-		if (!hasDisabledCause) {
-			this.#db.exec("ALTER TABLE auth_credentials ADD COLUMN disabled_cause TEXT DEFAULT NULL");
+		if (!this.#authCredentialsTableExists()) {
+			this.#createAuthCredentialsTable();
+			this.#writeAuthSchemaVersion(AUTH_SCHEMA_VERSION);
+			return;
 		}
-		if (hasDisabled) {
+
+		const schemaVersion = this.#readAuthSchemaVersion() ?? this.#inferAuthSchemaVersion();
+		if (schemaVersion > AUTH_SCHEMA_VERSION) {
+			logger.warn("AuthCredentialStore schema version mismatch", {
+				current: schemaVersion,
+				expected: AUTH_SCHEMA_VERSION,
+			});
+		} else if (schemaVersion < AUTH_SCHEMA_VERSION) {
+			this.#migrateAuthSchema(schemaVersion);
+		}
+
+		this.#createAuthCredentialIndexes();
+		this.#backfillCredentialIdentityKeys();
+		this.#writeAuthSchemaVersion(AUTH_SCHEMA_VERSION);
+	}
+
+	#authCredentialsTableExists(): boolean {
+		const row = this.#db
+			.prepare("SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'auth_credentials'")
+			.get() as { present?: number } | undefined;
+		return row?.present === 1;
+	}
+
+	#readAuthSchemaVersion(): number | null {
+		const row = this.#db.prepare("SELECT version FROM auth_schema_version WHERE id = 1").get() as
+			| { version?: number }
+			| undefined;
+		return typeof row?.version === "number" ? row.version : null;
+	}
+
+	#writeAuthSchemaVersion(version: number): void {
+		this.#db.prepare("INSERT OR REPLACE INTO auth_schema_version(id, version) VALUES (1, ?)").run(version);
+	}
+
+	#inferAuthSchemaVersion(): number {
+		const cols = this.#db.prepare("PRAGMA table_info(auth_credentials)").all() as Array<{ name?: string }>;
+		const hasDisabledCause = cols.some(column => column.name === "disabled_cause");
+		const hasIdentityKey = cols.some(column => column.name === "identity_key");
+		const hasAccountId = cols.some(column => column.name === "account_id");
+		const hasEmail = cols.some(column => column.name === "email");
+		if (hasIdentityKey) return 3;
+		if (hasAccountId || hasEmail) return 2;
+		if (hasDisabledCause) return 1;
+		return 0;
+	}
+
+	#createAuthCredentialsTable(): void {
+		this.#db.exec(`
+			CREATE TABLE IF NOT EXISTS auth_credentials (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				provider TEXT NOT NULL,
+				credential_type TEXT NOT NULL,
+				data TEXT NOT NULL,
+				disabled_cause TEXT DEFAULT NULL,
+				identity_key TEXT DEFAULT NULL,
+				created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+				updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+			);
+		`);
+		this.#createAuthCredentialIndexes();
+	}
+
+	#createAuthCredentialIndexes(): void {
+		this.#db.exec(`
+			CREATE INDEX IF NOT EXISTS idx_auth_provider ON auth_credentials(provider);
+			CREATE INDEX IF NOT EXISTS idx_auth_provider_identity ON auth_credentials(provider, identity_key) WHERE identity_key IS NOT NULL;
+		`);
+	}
+
+	#migrateAuthSchema(fromVersion: number): void {
+		if (fromVersion < 1) {
+			this.#migrateAuthSchemaV0ToV1();
+		}
+		if (fromVersion < 3) {
+			this.#migrateAuthSchemaV1OrV2ToV3();
+		}
+	}
+
+	#migrateAuthSchemaV0ToV1(): void {
+		const migrate = this.#db.transaction(() => {
+			this.#db.exec("ALTER TABLE auth_credentials RENAME TO auth_credentials_v0");
 			this.#db.exec(`
-				UPDATE auth_credentials
-				SET disabled_cause = COALESCE(disabled_cause, 'disabled')
-				WHERE disabled = 1 AND disabled_cause IS NULL
+				CREATE TABLE auth_credentials (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					provider TEXT NOT NULL,
+					credential_type TEXT NOT NULL,
+					data TEXT NOT NULL,
+					disabled_cause TEXT DEFAULT NULL,
+					created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+					updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+				);
 			`);
+			this.#db.exec(`
+				INSERT INTO auth_credentials (id, provider, credential_type, data, disabled_cause, created_at, updated_at)
+				SELECT
+					id,
+					provider,
+					credential_type,
+					data,
+					CASE WHEN disabled = 1 THEN 'disabled' ELSE NULL END,
+					created_at,
+					updated_at
+				FROM auth_credentials_v0
+			`);
+			this.#db.exec("DROP TABLE auth_credentials_v0");
+		});
+		migrate();
+	}
+
+	#migrateAuthSchemaV1OrV2ToV3(): void {
+		const migrate = this.#db.transaction(() => {
+			this.#db.exec("ALTER TABLE auth_credentials RENAME TO auth_credentials_legacy");
+			this.#createAuthCredentialsTable();
+			this.#db.exec(`
+				INSERT INTO auth_credentials (id, provider, credential_type, data, disabled_cause, identity_key, created_at, updated_at)
+				SELECT
+					id,
+					provider,
+					credential_type,
+					data,
+					disabled_cause,
+					NULL,
+					created_at,
+					updated_at
+				FROM auth_credentials_legacy
+			`);
+			this.#db.exec("DROP TABLE auth_credentials_legacy");
+		});
+		migrate();
+	}
+
+	#backfillCredentialIdentityKeys(): void {
+		const rows = this.#db
+			.prepare(
+				"SELECT id, provider, credential_type, data, disabled_cause, identity_key FROM auth_credentials WHERE identity_key IS NULL ORDER BY id ASC",
+			)
+			.all() as AuthRow[];
+		if (rows.length === 0) return;
+
+		const updateIdentity = this.#db.prepare("UPDATE auth_credentials SET identity_key = ? WHERE id = ?");
+		for (const row of rows) {
+			const identityKey = resolveRowCredentialIdentityKey(row.provider, row);
+			updateIdentity.run(identityKey, row.id);
 		}
 	}
 
@@ -2144,12 +2299,10 @@ CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(expires_at);
 	replaceAuthCredentialsForProvider(provider: string, credentials: AuthCredential[]): StoredAuthCredential[] {
 		const replace = this.#db.transaction((providerName: string, items: AuthCredential[]) => {
 			const existingRows = this.#listActiveByProviderStmt.all(providerName) as AuthRow[];
-			const existing: Array<{ id: number; credential: AuthCredential; identifiers: string[] }> = [];
-			for (const row of existingRows) {
-				const credential = deserializeCredential(row);
-				if (!credential) continue;
-				existing.push({ id: row.id, credential, identifiers: resolveCredentialIdentifiers(providerName, credential) });
-			}
+			const existing = existingRows.map(row => ({
+				id: row.id,
+				identityKey: resolveRowCredentialIdentityKey(providerName, row),
+			}));
 
 			const result: StoredAuthCredential[] = [];
 			const matchedExistingIds = new Set<number>();
@@ -2157,21 +2310,21 @@ CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(expires_at);
 			for (const credential of items) {
 				const serialized = serializeCredential(credential);
 				if (!serialized) continue;
-				const identifiers = resolveCredentialIdentifiers(providerName, credential);
-				const identifierSet = identifiers.length > 0 ? new Set(identifiers) : null;
-				const match = identifierSet
-					? existing.find(
-						entry => !matchedExistingIds.has(entry.id) && entry.identifiers.some(identifier => identifierSet.has(identifier)),
-					  )
+				const identityKey = resolveCredentialIdentityKey(providerName, credential);
+				const match = identityKey
+					? existing.find(entry => !matchedExistingIds.has(entry.id) && entry.identityKey === identityKey)
 					: null;
 				if (match) {
 					matchedExistingIds.add(match.id);
-					this.#updateStmt.run(serialized.credentialType, serialized.data, match.id);
+					this.#updateStmt.run(serialized.credentialType, serialized.data, serialized.identityKey, match.id);
 					result.push({ id: match.id, provider: providerName, credential, disabledCause: null });
 				} else {
-					const row = this.#insertStmt.get(providerName, serialized.credentialType, serialized.data) as
-						| { id?: number }
-						| undefined;
+					const row = this.#insertStmt.get(
+						providerName,
+						serialized.credentialType,
+						serialized.data,
+						serialized.identityKey,
+					) as { id?: number } | undefined;
 					if (row?.id) {
 						result.push({ id: row.id, provider: providerName, credential, disabledCause: null });
 					}
@@ -2199,23 +2352,17 @@ CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(expires_at);
 	 */
 	#purgeSupersededDisabledRows(provider: string, activeRows: StoredAuthCredential[]): void {
 		try {
-			const activeIdentifiers = new Set<string>();
+			const activeIdentityKeys = new Set<string>();
 			for (const row of activeRows) {
-				for (const identifier of resolveCredentialIdentifiers(provider, row.credential)) {
-					activeIdentifiers.add(identifier);
-				}
+				const identityKey = resolveCredentialIdentityKey(provider, row.credential);
+				if (identityKey) activeIdentityKeys.add(identityKey);
 			}
-			if (activeIdentifiers.size === 0) return;
+			if (activeIdentityKeys.size === 0) return;
 
 			const disabledRows = this.#listDisabledByProviderStmt.all(provider) as AuthRow[];
 			for (const row of disabledRows) {
-				const credential = deserializeCredential(row);
-				if (!credential) {
-					this.#hardDeleteStmt.run(row.id);
-					continue;
-				}
-				const identifiers = resolveCredentialIdentifiers(provider, credential);
-				if (identifiers.some(identifier => activeIdentifiers.has(identifier))) {
+				const identityKey = resolveRowCredentialIdentityKey(provider, row);
+				if (identityKey && activeIdentityKeys.has(identityKey)) {
 					this.#hardDeleteStmt.run(row.id);
 				}
 			}
@@ -2228,7 +2375,7 @@ CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(expires_at);
 		const serialized = serializeCredential(credential);
 		if (!serialized) return;
 		try {
-			this.#updateStmt.run(serialized.credentialType, serialized.data, id);
+			this.#updateStmt.run(serialized.credentialType, serialized.data, serialized.identityKey, id);
 			const providerRow = this.#db.prepare("SELECT provider FROM auth_credentials WHERE id = ?").get(id) as
 				| { provider?: string }
 				| undefined;

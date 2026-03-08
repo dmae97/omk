@@ -62,6 +62,20 @@ function readDisabledCauses(dbPath: string, provider: string): string[] {
 	}
 }
 
+function readStoredIdentityRows(
+	dbPath: string,
+	provider: string,
+): Array<{ identity_key: string | null; disabled_cause: string | null }> {
+	const db = new Database(dbPath, { readonly: true });
+	try {
+		return db
+			.prepare("SELECT identity_key, disabled_cause FROM auth_credentials WHERE provider = ? ORDER BY id ASC")
+			.all(provider) as Array<{ identity_key: string | null; disabled_cause: string | null }>;
+	} finally {
+		db.close();
+	}
+}
+
 describe("AuthStorage openai-codex email dedupe", () => {
 	let tempDir = "";
 	let dbPath = "";
@@ -129,16 +143,15 @@ describe("AuthStorage openai-codex email dedupe", () => {
 	});
 
 	it("does not soft-disable a different codex account just because the email matches", async () => {
-		if (!authStorage || !store || !dbPath) throw new Error("test setup failed");
+		if (!store || !dbPath) throw new Error("test setup failed");
 
-		await authStorage.set(
-			"openai-codex",
+		store.replaceAuthCredentialsForProvider("openai-codex", [
 			createJwtOnlyCredential({ suffix: "first", accountId: "account-a", email: "shared.user@example.com" }),
-		);
-		await authStorage.set(
-			"openai-codex",
+		]);
+		store.replaceAuthCredentialsForProvider("openai-codex", [
+			createJwtOnlyCredential({ suffix: "first", accountId: "account-a", email: "shared.user@example.com" }),
 			createJwtOnlyCredential({ suffix: "second", accountId: "account-b", email: "shared.user@example.com" }),
-		);
+		]);
 
 		expect(countCredentialRows(dbPath, "openai-codex")).toBe(2);
 		const credentials = store.listAuthCredentials("openai-codex");
@@ -224,7 +237,55 @@ describe("AuthStorage openai-codex email dedupe", () => {
 		expect(readDisabledCauses(dbPath, "openai-codex")).toEqual([disabledCause]);
 	});
 
-	it("backfills a default disabled cause when migrating legacy disabled rows", async () => {
+	it("backfills identity_key when migrating v1 auth schema", async () => {
+		if (!tempDir) throw new Error("test setup failed");
+
+		const legacyDbPath = path.join(tempDir, "legacy-v1-agent.db");
+		const legacyDb = new Database(legacyDbPath);
+		legacyDb.exec(`
+			CREATE TABLE auth_schema_version (
+				id INTEGER PRIMARY KEY CHECK (id = 1),
+				version INTEGER NOT NULL
+			);
+			INSERT INTO auth_schema_version(id, version) VALUES (1, 1);
+			CREATE TABLE auth_credentials (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				provider TEXT NOT NULL,
+				credential_type TEXT NOT NULL,
+				data TEXT NOT NULL,
+				disabled_cause TEXT DEFAULT NULL,
+				created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+				updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+			);
+		`);
+		legacyDb
+			.prepare("INSERT INTO auth_credentials (provider, credential_type, data, disabled_cause) VALUES (?, ?, ?, ?)")
+			.run(
+				"openai-codex",
+				"oauth",
+				JSON.stringify(
+					createCredential({
+						suffix: "legacy-v1",
+						accountId: "legacy-v1-account",
+						email: "legacy-v1@example.com",
+					}),
+				),
+				null,
+			);
+		legacyDb.close();
+
+		const migratedStore = await AuthCredentialStore.open(legacyDbPath);
+		try {
+			expect(migratedStore.listAuthCredentials("openai-codex")).toHaveLength(1);
+			expect(readStoredIdentityRows(legacyDbPath, "openai-codex")).toEqual([
+				{ identity_key: "account:legacy-v1-account", disabled_cause: null },
+			]);
+		} finally {
+			migratedStore.close();
+		}
+	});
+
+	it("backfills disabled cause and identity_key when migrating legacy disabled rows", async () => {
 		if (!tempDir) throw new Error("test setup failed");
 
 		const legacyDbPath = path.join(tempDir, "legacy-agent.db");
@@ -255,7 +316,9 @@ describe("AuthStorage openai-codex email dedupe", () => {
 		const migratedStore = await AuthCredentialStore.open(legacyDbPath);
 		try {
 			expect(migratedStore.listAuthCredentials("openai-codex")).toHaveLength(0);
-			expect(readDisabledCauses(legacyDbPath, "openai-codex")).toEqual(["disabled"]);
+			expect(readStoredIdentityRows(legacyDbPath, "openai-codex")).toEqual([
+				{ identity_key: "account:legacy-account", disabled_cause: "disabled" },
+			]);
 		} finally {
 			migratedStore.close();
 		}
