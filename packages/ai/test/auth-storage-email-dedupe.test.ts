@@ -86,7 +86,7 @@ describe("AuthStorage openai-codex email dedupe", () => {
 		}
 	});
 
-	it("keeps both openai-codex credentials when accountId matches but emails differ", async () => {
+	it("dedupes openai-codex credentials when accountId matches but emails differ", async () => {
 		if (!authStorage || !store) throw new Error("test setup failed");
 
 		await authStorage.set("openai-codex", [
@@ -95,11 +95,16 @@ describe("AuthStorage openai-codex email dedupe", () => {
 		]);
 
 		const credentials = store.listAuthCredentials("openai-codex");
-		expect(credentials).toHaveLength(2);
+		expect(credentials).toHaveLength(1);
+		const [remaining] = credentials;
+		expect(remaining?.credential.type).toBe("oauth");
+		if (!remaining || remaining.credential.type !== "oauth") throw new Error("expected oauth credential");
+		expect(remaining.credential.accountId).toBe("shared-team");
+		expect(remaining.credential.email).toBe("second.user@example.com");
 	});
 
-	it("dedupes openai-codex credentials when email matches", async () => {
-		if (!authStorage || !store) throw new Error("test setup failed");
+	it("keeps both openai-codex credentials when email matches but accountId differs", async () => {
+		if (!authStorage || !store || !dbPath) throw new Error("test setup failed");
 
 		await authStorage.set("openai-codex", [
 			createCredential({ suffix: "first", accountId: "account-a", email: "shared.user@example.com" }),
@@ -107,15 +112,11 @@ describe("AuthStorage openai-codex email dedupe", () => {
 		]);
 
 		const credentials = store.listAuthCredentials("openai-codex");
-		expect(credentials).toHaveLength(1);
-		const [remaining] = credentials;
-		expect(remaining?.credential.type).toBe("oauth");
-		if (!remaining || remaining.credential.type !== "oauth") throw new Error("expected oauth credential");
-		expect(remaining.credential.email).toBe("shared.user@example.com");
-		expect(remaining.credential.accountId).toBe("account-b");
+		expect(credentials).toHaveLength(2);
+		expect(readDisabledCauses(dbPath, "openai-codex")).toEqual([]);
 	});
 
-	it("dedupes openai-codex credentials when matching email exists only in JWT profile claim", async () => {
+	it("keeps both openai-codex credentials when matching email exists only in JWT profile claim but accountId differs", async () => {
 		if (!authStorage || !store) throw new Error("test setup failed");
 
 		await authStorage.set("openai-codex", [
@@ -124,14 +125,10 @@ describe("AuthStorage openai-codex email dedupe", () => {
 		]);
 
 		const credentials = store.listAuthCredentials("openai-codex");
-		expect(credentials).toHaveLength(1);
-		const [remaining] = credentials;
-		expect(remaining?.credential.type).toBe("oauth");
-		if (!remaining || remaining.credential.type !== "oauth") throw new Error("expected oauth credential");
-		expect(remaining.credential.accountId).toBe("account-b");
+		expect(credentials).toHaveLength(2);
 	});
 
-	it("hard deletes disabled codex rows once a replacement with the same email becomes active", async () => {
+	it("does not soft-disable a different codex account just because the email matches", async () => {
 		if (!authStorage || !store || !dbPath) throw new Error("test setup failed");
 
 		await authStorage.set(
@@ -143,21 +140,40 @@ describe("AuthStorage openai-codex email dedupe", () => {
 			createJwtOnlyCredential({ suffix: "second", accountId: "account-b", email: "shared.user@example.com" }),
 		);
 
+		expect(countCredentialRows(dbPath, "openai-codex")).toBe(2);
+		const credentials = store.listAuthCredentials("openai-codex");
+		expect(credentials).toHaveLength(2);
+		expect(readDisabledCauses(dbPath, "openai-codex")).toEqual([]);
+	});
+
+	it("hard deletes disabled codex rows once a replacement for the same account becomes active", async () => {
+		if (!authStorage || !store || !dbPath) throw new Error("test setup failed");
+
+		await authStorage.set(
+			"openai-codex",
+			createCredential({ suffix: "first", accountId: "account-a", email: "first.user@example.com" }),
+		);
+		await authStorage.set(
+			"openai-codex",
+			createCredential({ suffix: "second", accountId: "account-a", email: "second.user@example.com" }),
+		);
+
 		expect(countCredentialRows(dbPath, "openai-codex")).toBe(1);
 		const credentials = store.listAuthCredentials("openai-codex");
 		expect(credentials).toHaveLength(1);
 		const [remaining] = credentials;
 		expect(remaining?.credential.type).toBe("oauth");
 		if (!remaining || remaining.credential.type !== "oauth") throw new Error("expected oauth credential");
-		expect(remaining.credential.accountId).toBe("account-b");
+		expect(remaining.credential.accountId).toBe("account-a");
+		expect(remaining.credential.email).toBe("second.user@example.com");
 	});
 
-	it("prunes existing JWT-only codex duplicates on reload", async () => {
+	it("prunes existing JWT-only codex duplicates on reload when accountId matches", async () => {
 		if (!store) throw new Error("test setup failed");
 
 		store.replaceAuthCredentialsForProvider("openai-codex", [
-			createJwtOnlyCredential({ suffix: "first", accountId: "account-a", email: "shared.user@example.com" }),
-			createJwtOnlyCredential({ suffix: "second", accountId: "account-b", email: "shared.user@example.com" }),
+			createJwtOnlyCredential({ suffix: "first", accountId: "account-a", email: "first.user@example.com" }),
+			createJwtOnlyCredential({ suffix: "second", accountId: "account-a", email: "second.user@example.com" }),
 		]);
 
 		const reloaded = new AuthStorage(store);
@@ -168,10 +184,10 @@ describe("AuthStorage openai-codex email dedupe", () => {
 		const [remaining] = credentials;
 		expect(remaining?.credential.type).toBe("oauth");
 		if (!remaining || remaining.credential.type !== "oauth") throw new Error("expected oauth credential");
-		expect(remaining.credential.accountId).toBe("account-b");
+		expect(remaining.credential.accountId).toBe("account-a");
 	});
 
-	it("keeps both openai-codex credentials after reload when accountId matches but emails differ", async () => {
+	it("dedupes openai-codex credentials after reload when accountId matches even if emails differ", async () => {
 		if (!store) throw new Error("test setup failed");
 
 		store.replaceAuthCredentialsForProvider("openai-codex", [
@@ -183,7 +199,12 @@ describe("AuthStorage openai-codex email dedupe", () => {
 		await reloaded.reload();
 
 		const credentials = store.listAuthCredentials("openai-codex");
-		expect(credentials).toHaveLength(2);
+		expect(credentials).toHaveLength(1);
+		const [remaining] = credentials;
+		expect(remaining?.credential.type).toBe("oauth");
+		if (!remaining || remaining.credential.type !== "oauth") throw new Error("expected oauth credential");
+		expect(remaining.credential.accountId).toBe("shared-team");
+		expect(remaining.credential.email).toBe("second.user@example.com");
 	});
 
 	it("stores the disable cause when a credential is soft-disabled", async () => {

@@ -184,6 +184,8 @@ export class EventController {
 							continue;
 						}
 
+						// Preserve the raw partial JSON for renderers that need to surface fields before the JSON object closes.
+						// Bash uses this to show inline env assignments during streaming instead of popping them in at completion.
 						const renderArgs =
 							"partialJson" in content
 								? { ...content.arguments, __partialJson: content.partialJson }

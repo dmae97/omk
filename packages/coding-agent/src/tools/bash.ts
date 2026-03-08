@@ -194,6 +194,9 @@ function extractPartialBashEnv(partialJson: string | undefined): Record<string, 
 }
 
 function getBashEnvForDisplay(args: BashRenderArgs): Record<string, string> | undefined {
+	// During streaming, partial-json parsing often does not surface env values until the object closes.
+	// Recover them from the raw JSON buffer so the pending bash preview can show `NAME="..." cmd` immediately,
+	// instead of rendering only the command and making the env assignment appear at the very end.
 	const partialEnv = extractPartialBashEnv(args.__partialJson);
 	if (partialEnv && args.env) return { ...partialEnv, ...args.env };
 	return args.env ?? partialEnv;

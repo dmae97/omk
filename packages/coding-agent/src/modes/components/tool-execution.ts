@@ -561,6 +561,8 @@ export class ToolExecutionComponent extends Container {
 		};
 
 		if (this.#toolName === "bash") {
+			// Bash needs render context even before a result exists. The renderer uses the pending-call args
+			// plus this context to keep the inline command preview visible while tool-call JSON is still streaming.
 			if (this.#result) {
 				// Pass raw output and expanded state - renderer handles width-aware truncation
 				const output = this.#getTextOutput().trimEnd();

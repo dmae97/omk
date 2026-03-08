@@ -414,6 +414,16 @@ Sanitization applies to **every** code path that renders text to the TUI, includ
 
 A common mistake is sanitizing the happy path but forgetting error paths. If a message includes file content, it needs `replaceTabs()`.
 
+### Streaming tool previews
+
+Streaming tool-call previews can have **multiple render paths**. If you add preview-only fields or depend on partially streamed arguments, update every path — not just the final renderer.
+
+For the bash tool specifically:
+- The pending preview may need raw `partialJson`, not just parsed `arguments`. Parsed tool-call args can lag until a JSON object closes, which makes inline env assignments appear only at the end.
+- Preserve any preview-only fields (for example `__partialJson`) when tool-call args flow through `event-controller.ts`, transcript rebuilds in `ui-helpers.ts`, and merged call/result rendering in `tool-execution.ts`. Missing one path causes inconsistent previews.
+- `ToolExecutionComponent.#buildRenderContext()` for bash must work even before a result exists. The bash renderer uses call args plus render context to show the command preview while streaming, not only after output arrives.
+- When changing bash preview formatting, verify both live streaming and rebuilt transcript paths. A fix in one path does not automatically fix the other.
+
 ## Commands
 
 | Command        | Description                      |

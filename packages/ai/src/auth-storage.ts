@@ -362,76 +362,8 @@ export class AuthStorage {
 		}
 	}
 
-	#getOAuthIdentifiers(credential: OAuthCredential): string[] {
-		const identifiers = new Set<string>();
-		const accountId = credential.accountId?.trim();
-		if (accountId) identifiers.add(`account:${accountId}`);
-		const email = credential.email?.trim().toLowerCase();
-		if (email) identifiers.add(`email:${email}`);
-		const tokenIdentifiers = this.#getOAuthIdentifiersFromToken(credential.access) ?? [];
-		for (const identifier of tokenIdentifiers) {
-			identifiers.add(identifier);
-		}
-		const refreshIdentifiers = this.#getOAuthIdentifiersFromToken(credential.refresh) ?? [];
-		for (const identifier of refreshIdentifiers) {
-			identifiers.add(identifier);
-		}
-		return [...identifiers];
-	}
-
-	#getOAuthIdentifiersFromToken(token: string | undefined): string[] | undefined {
-		if (!token) return undefined;
-		const parts = token.split(".");
-		if (parts.length !== 3) return undefined;
-		const payloadRaw = parts[1];
-		const decoder = new TextDecoder("utf-8");
-		try {
-			const payload = JSON.parse(
-				decoder.decode(Uint8Array.fromBase64(payloadRaw, { alphabet: "base64url" })),
-			) as Record<string, unknown>;
-			if (!payload || typeof payload !== "object") return undefined;
-			const openAiAuth =
-				typeof payload["https://api.openai.com/auth"] === "object" &&
-				payload["https://api.openai.com/auth"] !== null
-					? (payload["https://api.openai.com/auth"] as Record<string, unknown>)
-					: undefined;
-			const openAiProfile =
-				typeof payload["https://api.openai.com/profile"] === "object" &&
-				payload["https://api.openai.com/profile"] !== null
-					? (payload["https://api.openai.com/profile"] as Record<string, unknown>)
-					: undefined;
-			const identifiers: string[] = [];
-			const email =
-				typeof payload.email === "string"
-					? payload.email.trim().toLowerCase()
-					: typeof openAiProfile?.email === "string"
-						? openAiProfile.email.trim().toLowerCase()
-						: undefined;
-			if (email) identifiers.push(`email:${email}`);
-			const accountId =
-				typeof payload.account_id === "string"
-					? payload.account_id
-					: typeof payload.accountId === "string"
-						? payload.accountId
-						: typeof payload.user_id === "string"
-							? payload.user_id
-							: typeof payload.sub === "string"
-								? payload.sub
-								: typeof openAiAuth?.chatgpt_account_id === "string"
-									? openAiAuth.chatgpt_account_id
-									: undefined;
-			const trimmedAccountId = accountId?.trim();
-			if (trimmedAccountId) identifiers.push(`account:${trimmedAccountId}`);
-			return identifiers.length > 0 ? identifiers : undefined;
-		} catch {
-			return undefined;
-		}
-	}
-
 	#resolveOAuthDedupeIdentifiers(provider: string, credential: OAuthCredential): string[] {
-		const identifiers = this.#getOAuthIdentifiers(credential);
-		if (provider !== "openai-codex") return identifiers;
-		return identifiers.filter(identifier => identifier.startsWith("email:"));
+		return resolveCredentialIdentifiers(provider, credential);
 	}
 
 	#dedupeOAuthCredentials(provider: string, credentials: AuthCredential[]): AuthCredential[] {
@@ -2000,44 +1932,77 @@ function toStoredAuthCredential(row: AuthRow, credential: AuthCredential): Store
 	return { id: row.id, provider: row.provider, credential, disabledCause: row.disabled_cause };
 }
 
-/** Returns a stable identity string for matching credentials across replace operations. */
-function credentialIdentity(credential: AuthCredential): string | null {
-	if (credential.type === "api_key") return `api_key:${credential.key}`;
-	if (credential.type === "oauth") {
-		if (credential.accountId) return `account:${credential.accountId}`;
-		const [email] = extractCredentialEmails(credential);
-		if (email) return `email:${email}`;
-	}
-	return null;
+/** Returns normalized identifiers used to match and deduplicate credentials. */
+function resolveCredentialIdentifiers(provider: string, credential: AuthCredential): string[] {
+	if (credential.type === "api_key") return [`api_key:${credential.key}`];
+	const identifiers = extractOAuthCredentialIdentifiers(credential);
+	if (provider !== "openai-codex") return identifiers;
+
+	const accountIdentifiers = identifiers.filter(identifier => identifier.startsWith("account:"));
+	if (accountIdentifiers.length > 0) return accountIdentifiers;
+
+	return identifiers.filter(identifier => identifier.startsWith("email:"));
 }
 
-/** Extracts normalized email identifiers from a credential, including JWT profile claims. */
-function extractCredentialEmails(credential: AuthCredential): string[] {
-	if (credential.type !== "oauth") return [];
-	const emails = new Set<string>();
-	const storedEmail = credential.email?.trim().toLowerCase();
-	if (storedEmail) emails.add(storedEmail);
-	for (const token of [credential.access, credential.refresh]) {
-		if (!token) continue;
-		const parts = token.split(".");
-		if (parts.length !== 3) continue;
-		try {
-			const payload = JSON.parse(
-				new TextDecoder("utf-8").decode(Uint8Array.fromBase64(parts[1], { alphabet: "base64url" })),
-			) as Record<string, unknown>;
-			const directEmail = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : undefined;
-			if (directEmail) emails.add(directEmail);
-			const openAiProfile = payload["https://api.openai.com/profile"];
-			if (typeof openAiProfile === "object" && openAiProfile !== null && !Array.isArray(openAiProfile)) {
-				const claimEmail = (openAiProfile as Record<string, unknown>).email;
-				if (typeof claimEmail === "string") {
-					const normalizedClaimEmail = claimEmail.trim().toLowerCase();
-					if (normalizedClaimEmail) emails.add(normalizedClaimEmail);
-				}
-			}
-		} catch {}
+function extractOAuthCredentialIdentifiers(credential: OAuthCredential): string[] {
+	const identifiers = new Set<string>();
+	const accountId = credential.accountId?.trim();
+	if (accountId) identifiers.add(`account:${accountId}`);
+	const email = credential.email?.trim().toLowerCase();
+	if (email) identifiers.add(`email:${email}`);
+	const accessIdentifiers = extractOAuthTokenIdentifiers(credential.access) ?? [];
+	for (const identifier of accessIdentifiers) {
+		identifiers.add(identifier);
 	}
-	return [...emails];
+	const refreshIdentifiers = extractOAuthTokenIdentifiers(credential.refresh) ?? [];
+	for (const identifier of refreshIdentifiers) {
+		identifiers.add(identifier);
+	}
+	return [...identifiers];
+}
+
+function extractOAuthTokenIdentifiers(token: string | undefined): string[] | undefined {
+	if (!token) return undefined;
+	const parts = token.split(".");
+	if (parts.length !== 3) return undefined;
+	try {
+		const payload = JSON.parse(
+			new TextDecoder("utf-8").decode(Uint8Array.fromBase64(parts[1], { alphabet: "base64url" })),
+		) as Record<string, unknown>;
+		const identifiers = new Set<string>();
+		const directEmail = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : undefined;
+		if (directEmail) identifiers.add(`email:${directEmail}`);
+		const openAiProfile = payload["https://api.openai.com/profile"];
+		if (typeof openAiProfile === "object" && openAiProfile !== null && !Array.isArray(openAiProfile)) {
+			const claimEmail = (openAiProfile as Record<string, unknown>).email;
+			if (typeof claimEmail === "string") {
+				const normalizedClaimEmail = claimEmail.trim().toLowerCase();
+				if (normalizedClaimEmail) identifiers.add(`email:${normalizedClaimEmail}`);
+			}
+		}
+		const openAiAuth = payload["https://api.openai.com/auth"];
+		const authClaims =
+			typeof openAiAuth === "object" && openAiAuth !== null && !Array.isArray(openAiAuth)
+				? (openAiAuth as Record<string, unknown>)
+				: undefined;
+		const accountId =
+			typeof payload.account_id === "string"
+				? payload.account_id
+				: typeof payload.accountId === "string"
+					? payload.accountId
+					: typeof payload.user_id === "string"
+						? payload.user_id
+						: typeof payload.sub === "string"
+							? payload.sub
+							: typeof authClaims?.chatgpt_account_id === "string"
+								? authClaims.chatgpt_account_id
+								: undefined;
+		const trimmedAccountId = accountId?.trim();
+		if (trimmedAccountId) identifiers.add(`account:${trimmedAccountId}`);
+		return identifiers.size > 0 ? [...identifiers] : undefined;
+	} catch {
+		return undefined;
+	}
 }
 
 /**
@@ -2179,11 +2144,11 @@ CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(expires_at);
 	replaceAuthCredentialsForProvider(provider: string, credentials: AuthCredential[]): StoredAuthCredential[] {
 		const replace = this.#db.transaction((providerName: string, items: AuthCredential[]) => {
 			const existingRows = this.#listActiveByProviderStmt.all(providerName) as AuthRow[];
-			const existing: Array<{ id: number; credential: AuthCredential; identity: string | null }> = [];
+			const existing: Array<{ id: number; credential: AuthCredential; identifiers: string[] }> = [];
 			for (const row of existingRows) {
 				const credential = deserializeCredential(row);
 				if (!credential) continue;
-				existing.push({ id: row.id, credential, identity: credentialIdentity(credential) });
+				existing.push({ id: row.id, credential, identifiers: resolveCredentialIdentifiers(providerName, credential) });
 			}
 
 			const result: StoredAuthCredential[] = [];
@@ -2192,9 +2157,12 @@ CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(expires_at);
 			for (const credential of items) {
 				const serialized = serializeCredential(credential);
 				if (!serialized) continue;
-				const identity = credentialIdentity(credential);
-				const match = identity
-					? existing.find(e => e.identity === identity && !matchedExistingIds.has(e.id))
+				const identifiers = resolveCredentialIdentifiers(providerName, credential);
+				const identifierSet = identifiers.length > 0 ? new Set(identifiers) : null;
+				const match = identifierSet
+					? existing.find(
+						entry => !matchedExistingIds.has(entry.id) && entry.identifiers.some(identifier => identifierSet.has(identifier)),
+					  )
 					: null;
 				if (match) {
 					matchedExistingIds.add(match.id);
@@ -2225,19 +2193,19 @@ CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(expires_at);
 	}
 
 	/**
-	 * Hard-deletes disabled rows for a provider when an active row with the same email exists.
+	 * Hard-deletes disabled rows for a provider when an active row with the same identity exists.
 	 * This prevents unbounded accumulation of soft-deleted credentials while preserving
 	 * disabled rows that have no active replacement (safety net for recovery).
 	 */
 	#purgeSupersededDisabledRows(provider: string, activeRows: StoredAuthCredential[]): void {
 		try {
-			const activeEmails = new Set<string>();
+			const activeIdentifiers = new Set<string>();
 			for (const row of activeRows) {
-				for (const email of extractCredentialEmails(row.credential)) {
-					activeEmails.add(email);
+				for (const identifier of resolveCredentialIdentifiers(provider, row.credential)) {
+					activeIdentifiers.add(identifier);
 				}
 			}
-			if (activeEmails.size === 0) return;
+			if (activeIdentifiers.size === 0) return;
 
 			const disabledRows = this.#listDisabledByProviderStmt.all(provider) as AuthRow[];
 			for (const row of disabledRows) {
@@ -2246,8 +2214,8 @@ CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(expires_at);
 					this.#hardDeleteStmt.run(row.id);
 					continue;
 				}
-				const emails = extractCredentialEmails(credential);
-				if (emails.some(email => activeEmails.has(email))) {
+				const identifiers = resolveCredentialIdentifiers(provider, credential);
+				if (identifiers.some(identifier => activeIdentifiers.has(identifier))) {
 					this.#hardDeleteStmt.run(row.id);
 				}
 			}
