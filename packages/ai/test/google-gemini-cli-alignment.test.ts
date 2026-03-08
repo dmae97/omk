@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
+import { hookFetch } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
 import {
 	buildRequest,
@@ -176,22 +177,19 @@ describe("Google Gemini CLI alignment", () => {
 		expect(JSON.stringify(parameters)).not.toContain('"patternProperties"');
 	});
 	describe("retry guardrails", () => {
-		const originalFetch = globalThis.fetch;
-
 		afterEach(() => {
 			vi.restoreAllMocks();
-			globalThis.fetch = originalFetch;
 		});
 
 		it("does not treat explicit HTTP failures as network retry errors", async () => {
 			let fetchCalls = 0;
-			globalThis.fetch = vi.fn(async () => {
+			using _hook = hookFetch(async () => {
 				fetchCalls += 1;
 				return new Response('{"error":{"message":"busy"}}', {
 					status: 503,
 					headers: { "retry-after": "120" },
 				});
-			}) as unknown as typeof fetch;
+			});
 
 			const model = createModel("google-gemini-cli");
 			const stream = streamGoogleGeminiCli(model, createContext(), {

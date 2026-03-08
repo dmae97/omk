@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, mock, vi } from "bun:test";
+import { afterEach, describe, expect, it, vi } from "bun:test";
+import { hookFetch } from "@oh-my-pi/pi-utils";
 import { AgentStorage } from "../../src/session/agent-storage";
 import { searchGemini } from "../../src/web/search/providers/gemini";
 
@@ -10,10 +11,9 @@ const SSE_RESPONSE =
 	'data: {"response":{"candidates":[{"content":{"role":"model","parts":[{"text":"Gemini answer"}]}}],"modelVersion":"gemini-2.5-flash"}}\n\n';
 
 describe("searchGemini tools serialization", () => {
-	const originalFetch = globalThis.fetch;
 	let capturedRequest: CapturedRequest | null = null;
 
-	beforeEach(() => {
+	function mockGeminiFetch() {
 		capturedRequest = null;
 		vi.spyOn(AgentStorage, "open").mockResolvedValue({
 			listAuthCredentials: () => [
@@ -29,8 +29,7 @@ describe("searchGemini tools serialization", () => {
 			],
 			updateAuthCredential: () => undefined,
 		} as unknown as AgentStorage);
-
-		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+		return hookFetch((_url, init) => {
 			capturedRequest = {
 				body: init?.body ? (JSON.parse(init.body as string) as Record<string, unknown>) : null,
 			};
@@ -38,16 +37,16 @@ describe("searchGemini tools serialization", () => {
 				status: 200,
 				headers: { "Content-Type": "text/event-stream" },
 			});
-		}) as unknown as typeof fetch;
-	});
+		});
+	}
 
 	afterEach(() => {
 		vi.restoreAllMocks();
-		globalThis.fetch = originalFetch;
 		capturedRequest = null;
 	});
 
 	it("sends default googleSearch tool when no passthrough payloads are provided", async () => {
+		using _hook = mockGeminiFetch();
 		await searchGemini({ query: "default tools" });
 
 		expect(capturedRequest).not.toBeNull();
@@ -57,6 +56,7 @@ describe("searchGemini tools serialization", () => {
 	});
 
 	it("passes through google_search payload into googleSearch tool", async () => {
+		using _hook = mockGeminiFetch();
 		await searchGemini({
 			query: "google payload",
 			google_search: { dynamicRetrievalConfig: { mode: "MODE_DYNAMIC" } },
@@ -69,6 +69,7 @@ describe("searchGemini tools serialization", () => {
 	});
 
 	it("includes codeExecution and urlContext tools when provided", async () => {
+		using _hook = mockGeminiFetch();
 		await searchGemini({
 			query: "extended tools",
 			code_execution: {},

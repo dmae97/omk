@@ -1,17 +1,12 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { MCPOAuthFlow } from "@oh-my-pi/pi-coding-agent/mcp/oauth-flow";
+import { hookFetch } from "@oh-my-pi/pi-utils";
 
 describe("mcp oauth flow", () => {
-	const originalFetch = globalThis.fetch;
-
-	afterEach(() => {
-		globalThis.fetch = originalFetch;
-	});
-
 	it("uses Codex client name for dynamic client registration", async () => {
 		let registrationPayload: Record<string, unknown> | null = null;
 
-		globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+		using _hook = hookFetch((input, init) => {
 			const url = String(input);
 			if (url === "https://www.figma.com/.well-known/oauth-authorization-server") {
 				return new Response(
@@ -32,7 +27,7 @@ describe("mcp oauth flow", () => {
 			}
 
 			return new Response("not found", { status: 404 });
-		}) as typeof fetch;
+		});
 
 		const flow = new MCPOAuthFlow(
 			{

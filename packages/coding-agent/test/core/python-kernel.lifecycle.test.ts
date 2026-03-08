@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import * as gatewayCoordinator from "@oh-my-pi/pi-coding-agent/ipy/gateway-coordinator";
 import { PythonKernel } from "@oh-my-pi/pi-coding-agent/ipy/kernel";
-import { TempDir } from "@oh-my-pi/pi-utils";
+import { hookFetch, TempDir } from "@oh-my-pi/pi-utils";
 import type { Subprocess } from "bun";
 
 type SpawnOptions = Parameters<typeof Bun.spawn>[1];
@@ -74,7 +74,6 @@ const createFakeProcess = (): Subprocess => {
 };
 
 describe("PythonKernel gateway lifecycle", () => {
-	const originalFetch = globalThis.fetch;
 	const originalWebSocket = globalThis.WebSocket;
 	const originalSpawn = Bun.spawn;
 	const originalSleep = Bun.sleep;
@@ -140,7 +139,6 @@ describe("PythonKernel gateway lifecycle", () => {
 			Bun.env.PI_PYTHON_GATEWAY_TOKEN = originalGatewayToken;
 		}
 
-		globalThis.fetch = originalFetch;
 		globalThis.WebSocket = originalWebSocket;
 
 		Bun.spawn = originalSpawn;
@@ -155,7 +153,7 @@ describe("PythonKernel gateway lifecycle", () => {
 			isShared: true,
 		});
 
-		globalThis.fetch = (async (input: string | URL, init?: RequestInit) => {
+		using _hook = hookFetch((input, init) => {
 			const url = String(input);
 			env.fetchCalls.push({ url, init });
 
@@ -164,7 +162,7 @@ describe("PythonKernel gateway lifecycle", () => {
 			}
 
 			return createResponse({ ok: true }) as unknown as Response;
-		}) as typeof fetch;
+		});
 
 		const kernel = await PythonKernel.start({ cwd: tempDir.path() });
 
@@ -184,14 +182,14 @@ describe("PythonKernel gateway lifecycle", () => {
 			isShared: true,
 		});
 
-		globalThis.fetch = (async (input: string | URL, init?: RequestInit) => {
+		using _hook = hookFetch((input, init) => {
 			const url = String(input);
 			env.fetchCalls.push({ url, init });
 			if (url.endsWith("/api/kernels") && init?.method === "POST") {
 				return createResponse({ ok: false, status: 503, text: "oops" }) as unknown as Response;
 			}
 			return createResponse({ ok: true }) as unknown as Response;
-		}) as typeof fetch;
+		});
 
 		await expect(PythonKernel.start({ cwd: tempDir.path() })).rejects.toThrow(
 			"Failed to create kernel on shared gateway",
@@ -204,7 +202,7 @@ describe("PythonKernel gateway lifecycle", () => {
 			isShared: true,
 		});
 
-		globalThis.fetch = (async (input: string | URL, init?: RequestInit) => {
+		using _hook = hookFetch((input, init) => {
 			const url = String(input);
 			env.fetchCalls.push({ url, init });
 			if (url.endsWith("/api/kernels") && init?.method === "POST") {
@@ -214,7 +212,7 @@ describe("PythonKernel gateway lifecycle", () => {
 				throw new Error("delete failed");
 			}
 			return createResponse({ ok: true }) as unknown as Response;
-		}) as typeof fetch;
+		});
 
 		const kernel = await PythonKernel.start({ cwd: tempDir.path() });
 

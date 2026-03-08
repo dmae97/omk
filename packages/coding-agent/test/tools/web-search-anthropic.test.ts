@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { hookFetch } from "@oh-my-pi/pi-utils";
 import { searchAnthropic } from "../../src/web/search/providers/anthropic";
 
 type CapturedRequest = {
@@ -45,7 +46,6 @@ function getHeaderCaseInsensitive(headers: RequestInit["headers"], name: string)
 }
 
 describe("searchAnthropic headers", () => {
-	const originalFetch = globalThis.fetch;
 	const originalSearchApiKey = process.env.ANTHROPIC_SEARCH_API_KEY;
 	const originalSearchBaseUrl = process.env.ANTHROPIC_SEARCH_BASE_URL;
 	const originalApiKey = process.env.ANTHROPIC_API_KEY;
@@ -61,7 +61,6 @@ describe("searchAnthropic headers", () => {
 	});
 
 	afterEach(() => {
-		globalThis.fetch = originalFetch;
 		capturedRequest = null;
 
 		if (originalSearchApiKey === undefined) {
@@ -89,8 +88,8 @@ describe("searchAnthropic headers", () => {
 		}
 	});
 
-	function mockFetch(responseBody: unknown) {
-		globalThis.fetch = mock(async (url: string | URL | Request, init?: RequestInit) => {
+	function mockFetch(responseBody: unknown): Disposable {
+		return hookFetch((url, init) => {
 			capturedRequest = {
 				url: typeof url === "string" ? url : url.toString(),
 				headers: init?.headers,
@@ -101,12 +100,12 @@ describe("searchAnthropic headers", () => {
 				status: 200,
 				headers: { "Content-Type": "application/json" },
 			});
-		}) as unknown as typeof fetch;
+		});
 	}
 
 	it("includes web-search beta header and sends API key in X-Api-Key mode", async () => {
 		process.env.ANTHROPIC_SEARCH_API_KEY = "sk-ant-api-test";
-		mockFetch(makeAnthropicResponse());
+		using _hook = mockFetch(makeAnthropicResponse());
 
 		await searchAnthropic({ query: "test api key mode" });
 
@@ -120,7 +119,7 @@ describe("searchAnthropic headers", () => {
 
 	it("includes web-search beta header and sends OAuth token in Authorization mode", async () => {
 		process.env.ANTHROPIC_SEARCH_API_KEY = "sk-ant-oat-test";
-		mockFetch(makeAnthropicResponse());
+		using _hook = mockFetch(makeAnthropicResponse());
 
 		await searchAnthropic({ query: "test oauth mode" });
 

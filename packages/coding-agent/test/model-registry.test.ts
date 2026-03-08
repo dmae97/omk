@@ -5,7 +5,7 @@ import * as path from "node:path";
 import { Effort, type OpenAICompat, type ThinkingConfig } from "@oh-my-pi/pi-ai";
 import { kNoAuth, MODEL_ROLES, ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
-import { Snowflake } from "@oh-my-pi/pi-utils";
+import { hookFetch, Snowflake } from "@oh-my-pi/pi-utils";
 
 describe("ModelRegistry", () => {
 	let tempDir: string;
@@ -663,8 +663,7 @@ describe("ModelRegistry", () => {
 	});
 	describe("runtime discovery", () => {
 		test("auto-discovers ollama models without provider config", async () => {
-			const originalFetch = globalThis.fetch;
-			globalThis.fetch = (async (input: string | URL | Request) => {
+			using _hook = hookFetch(input => {
 				const url = String(input);
 				if (url === "http://127.0.0.1:11434/api/tags") {
 					return new Response(JSON.stringify({ models: [{ name: "phi4-mini" }] }), {
@@ -679,18 +678,14 @@ describe("ModelRegistry", () => {
 					});
 				}
 				throw new Error(`Unexpected URL: ${url}`);
-			}) as unknown as typeof fetch;
+			});
 
-			try {
-				const registry = new ModelRegistry(authStorage, modelsJsonPath);
-				await registry.refresh();
-				const ollamaModels = getModelsForProvider(registry, "ollama");
-				expect(ollamaModels.some(m => m.id === "phi4-mini")).toBe(true);
-				expect(registry.getAvailable().some(m => m.provider === "ollama" && m.id === "phi4-mini")).toBe(true);
-				expect(await registry.getApiKey(ollamaModels[0])).toBe(kNoAuth);
-			} finally {
-				globalThis.fetch = originalFetch;
-			}
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			await registry.refresh();
+			const ollamaModels = getModelsForProvider(registry, "ollama");
+			expect(ollamaModels.some(m => m.id === "phi4-mini")).toBe(true);
+			expect(registry.getAvailable().some(m => m.provider === "ollama" && m.id === "phi4-mini")).toBe(true);
+			expect(await registry.getApiKey(ollamaModels[0])).toBe(kNoAuth);
 		});
 
 		test("discovers ollama models at runtime and treats auth:none providers as available", async () => {
@@ -703,8 +698,7 @@ describe("ModelRegistry", () => {
 				},
 			});
 
-			const originalFetch = globalThis.fetch;
-			globalThis.fetch = (async (input: string | URL | Request) => {
+			using _hook = hookFetch(input => {
 				const url = String(input);
 				if (url === "http://127.0.0.1:11434/api/tags") {
 					return new Response(
@@ -721,22 +715,18 @@ describe("ModelRegistry", () => {
 					});
 				}
 				throw new Error(`Unexpected URL: ${url}`);
-			}) as unknown as typeof fetch;
+			});
 
-			try {
-				const registry = new ModelRegistry(authStorage, modelsJsonPath);
-				await registry.refresh();
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			await registry.refresh();
 
-				const ollamaModels = getModelsForProvider(registry, "ollama");
-				expect(ollamaModels.some(m => m.id === "qwen2.5-coder:7b")).toBe(true);
-				expect(ollamaModels.some(m => m.id === "llama3.2:3b")).toBe(true);
+			const ollamaModels = getModelsForProvider(registry, "ollama");
+			expect(ollamaModels.some(m => m.id === "qwen2.5-coder:7b")).toBe(true);
+			expect(ollamaModels.some(m => m.id === "llama3.2:3b")).toBe(true);
 
-				const available = registry.getAvailable().filter(m => m.provider === "ollama");
-				expect(available.length).toBe(2);
-				expect(await registry.getApiKey(available[0])).toBe(kNoAuth);
-			} finally {
-				globalThis.fetch = originalFetch;
-			}
+			const available = registry.getAvailable().filter(m => m.provider === "ollama");
+			expect(available.length).toBe(2);
+			expect(await registry.getApiKey(available[0])).toBe(kNoAuth);
 		});
 
 		test("discovers ollama thinking capabilities from show metadata", async () => {
@@ -749,8 +739,7 @@ describe("ModelRegistry", () => {
 				},
 			});
 
-			const originalFetch = globalThis.fetch;
-			globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+			using _hook = hookFetch((input, init) => {
 				const url = String(input);
 				if (url === "http://127.0.0.1:11434/api/tags") {
 					return new Response(
@@ -776,25 +765,21 @@ describe("ModelRegistry", () => {
 					}
 				}
 				throw new Error(`Unexpected request: ${url}`);
-			}) as unknown as typeof fetch;
+			});
 
-			try {
-				const registry = new ModelRegistry(authStorage, modelsJsonPath);
-				await registry.refresh();
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			await registry.refresh();
 
-				const qwen = registry.find("ollama", "qwen3.5:397b-cloud");
-				expect(qwen?.reasoning).toBe(true);
-				expect(qwen?.thinking).toEqual({
-					mode: "effort",
-					minLevel: Effort.Minimal,
-					maxLevel: Effort.High,
-				});
+			const qwen = registry.find("ollama", "qwen3.5:397b-cloud");
+			expect(qwen?.reasoning).toBe(true);
+			expect(qwen?.thinking).toEqual({
+				mode: "effort",
+				minLevel: Effort.Minimal,
+				maxLevel: Effort.High,
+			});
 
-				const llama = registry.find("ollama", "llama3.2:3b");
-				expect(llama?.reasoning).toBe(false);
-			} finally {
-				globalThis.fetch = originalFetch;
-			}
+			const llama = registry.find("ollama", "llama3.2:3b");
+			expect(llama?.reasoning).toBe(false);
 		});
 
 		test("discovery failure does not fail model registry refresh", async () => {
@@ -807,19 +792,14 @@ describe("ModelRegistry", () => {
 				},
 			});
 
-			const originalFetch = globalThis.fetch;
-			globalThis.fetch = (async () => {
+			using _hook = hookFetch(() => {
 				throw new Error("connection refused");
-			}) as unknown as typeof fetch;
+			});
 
-			try {
-				const registry = new ModelRegistry(authStorage, modelsJsonPath);
-				await registry.refresh();
-				expect(getModelsForProvider(registry, "ollama")).toHaveLength(0);
-				expect(registry.getError()).toBeUndefined();
-			} finally {
-				globalThis.fetch = originalFetch;
-			}
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			await registry.refresh();
+			expect(getModelsForProvider(registry, "ollama")).toHaveLength(0);
+			expect(registry.getError()).toBeUndefined();
 		});
 	});
 });

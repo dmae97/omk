@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
 import { Effort } from "@oh-my-pi/pi-ai";
 import { enrichModelThinking } from "@oh-my-pi/pi-ai/model-thinking";
+import { hookFetch } from "@oh-my-pi/pi-utils";
 import { getBundledModel } from "../src/models";
 import { streamSimple } from "../src/stream";
 import type { Context, Model } from "../src/types";
@@ -44,11 +45,8 @@ function extractThinking(bodyText: string | undefined): GeminiCliThinkingConfig 
 }
 
 describe("google-gemini-cli Gemini 3.x thinking mapping", () => {
-	const originalFetch = globalThis.fetch;
-
 	afterEach(() => {
 		vi.restoreAllMocks();
-		globalThis.fetch = originalFetch;
 	});
 
 	it("includes gemini-3.1-pro-preview in bundled google-gemini-cli models", () => {
@@ -56,10 +54,10 @@ describe("google-gemini-cli Gemini 3.x thinking mapping", () => {
 	});
 	it("uses thinkingLevel for gemini-3.1-pro-preview when the effort is supported", async () => {
 		let requestBody: string | undefined;
-		globalThis.fetch = vi.fn(async (_input, init) => {
+		using _hook = hookFetch((_input, init) => {
 			requestBody = typeof init?.body === "string" ? init.body : undefined;
 			return new Response('{"error":{"message":"bad request"}}', { status: 400 });
-		}) as unknown as typeof fetch;
+		});
 
 		const stream = streamSimple(createModel("gemini-3.1-pro-preview"), context, {
 			apiKey: JSON.stringify({ token: "token", projectId: "proj-123" }),
@@ -74,10 +72,10 @@ describe("google-gemini-cli Gemini 3.x thinking mapping", () => {
 
 	it("rejects unsupported gemini-3.1-pro-preview efforts instead of promoting them", () => {
 		let requestBody: string | undefined;
-		globalThis.fetch = vi.fn(async (_input, init) => {
+		using _hook = hookFetch((_input, init) => {
 			requestBody = typeof init?.body === "string" ? init.body : undefined;
 			return new Response('{"error":{"message":"bad request"}}', { status: 400 });
-		}) as unknown as typeof fetch;
+		});
 
 		expect(() =>
 			streamSimple(createModel("gemini-3.1-pro-preview"), context, {
@@ -90,10 +88,10 @@ describe("google-gemini-cli Gemini 3.x thinking mapping", () => {
 
 	it("uses thinkingLevel for gemini-3.1-flash-preview", async () => {
 		let requestBody: string | undefined;
-		globalThis.fetch = vi.fn(async (_input, init) => {
+		using _hook = hookFetch((_input, init) => {
 			requestBody = typeof init?.body === "string" ? init.body : undefined;
 			return new Response('{"error":{"message":"bad request"}}', { status: 400 });
-		}) as unknown as typeof fetch;
+		});
 
 		const stream = streamSimple(createModel("gemini-3.1-flash-preview"), context, {
 			apiKey: JSON.stringify({ token: "token", projectId: "proj-123" }),
@@ -108,10 +106,10 @@ describe("google-gemini-cli Gemini 3.x thinking mapping", () => {
 
 	it("keeps thinkingBudget for gemini-2.5-pro", async () => {
 		let requestBody: string | undefined;
-		globalThis.fetch = vi.fn(async (_input, init) => {
+		using _hook = hookFetch((_input, init) => {
 			requestBody = typeof init?.body === "string" ? init.body : undefined;
 			return new Response('{"error":{"message":"bad request"}}', { status: 400 });
-		}) as unknown as typeof fetch;
+		});
 
 		const stream = streamSimple(createModel("gemini-2.5-pro"), context, {
 			apiKey: JSON.stringify({ token: "token", projectId: "proj-123" }),

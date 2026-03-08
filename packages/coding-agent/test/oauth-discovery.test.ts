@@ -1,17 +1,12 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import {
 	analyzeAuthError,
 	discoverOAuthEndpoints,
 	extractMcpAuthServerUrl,
 } from "@oh-my-pi/pi-coding-agent/mcp/oauth-discovery";
+import { hookFetch } from "@oh-my-pi/pi-utils";
 
 describe("mcp oauth discovery", () => {
-	const originalFetch = globalThis.fetch;
-
-	afterEach(() => {
-		globalThis.fetch = originalFetch;
-	});
-
 	it("extracts Mcp-Auth-Server from transport error headers", () => {
 		const error = new Error(
 			'HTTP 401: unauthorized [WWW-Authenticate: Bearer resource_metadata="https://mcp.figma.com/.well-known/oauth-protected-resource"; Mcp-Auth-Server: https://www.figma.com]',
@@ -25,7 +20,7 @@ describe("mcp oauth discovery", () => {
 
 	it("discovers oauth endpoints from auth server metadata", async () => {
 		const calls: string[] = [];
-		globalThis.fetch = (async (input: string | URL | Request) => {
+		using _hook = hookFetch(input => {
 			const url = String(input);
 			calls.push(url);
 
@@ -42,7 +37,7 @@ describe("mcp oauth discovery", () => {
 			}
 
 			return new Response("not found", { status: 404 });
-		}) as typeof fetch;
+		});
 
 		const oauth = await discoverOAuthEndpoints("https://mcp.figma.com/mcp", "https://www.figma.com");
 

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { type KernelDisplayOutput, PythonKernel } from "@oh-my-pi/pi-coding-agent/ipy/kernel";
 import { PYTHON_PRELUDE } from "@oh-my-pi/pi-coding-agent/ipy/prelude";
+import { hookFetch } from "@oh-my-pi/pi-utils";
 
 type JupyterMessage = {
 	channel: string;
@@ -146,7 +147,6 @@ class FakeWebSocket {
 
 describe("PythonKernel (external gateway)", () => {
 	const originalEnv = { ...Bun.env };
-	const originalFetch = globalThis.fetch;
 	const originalWebSocket = globalThis.WebSocket;
 
 	beforeEach(() => {
@@ -164,7 +164,6 @@ describe("PythonKernel (external gateway)", () => {
 		for (const [key, value] of Object.entries(originalEnv)) {
 			Bun.env[key] = value;
 		}
-		globalThis.fetch = originalFetch;
 		globalThis.WebSocket = originalWebSocket;
 		FakeWebSocket.lastInstance = null;
 		vi.restoreAllMocks();
@@ -180,7 +179,7 @@ describe("PythonKernel (external gateway)", () => {
 			}
 			return new Response("", { status: 200 });
 		});
-		globalThis.fetch = fetchMock as unknown as typeof fetch;
+		using _hook = hookFetch((input, init) => fetchMock(String(input), init));
 
 		let initSeen = false;
 		let preludeSeen = false;
@@ -309,7 +308,7 @@ describe("PythonKernel (external gateway)", () => {
 			}
 			return new Response("", { status: 200 });
 		});
-		globalThis.fetch = fetchMock as unknown as typeof fetch;
+		using _hook = hookFetch((input, init) => fetchMock(String(input), init));
 
 		let initSeen = false;
 		let preludeSeen = false;
@@ -345,7 +344,7 @@ describe("PythonKernel (external gateway)", () => {
 			}
 			return new Response("", { status: 200 });
 		});
-		globalThis.fetch = fetchMock as unknown as typeof fetch;
+		using _hook = hookFetch((input, init) => fetchMock(String(input), init));
 
 		const docs = [
 			{

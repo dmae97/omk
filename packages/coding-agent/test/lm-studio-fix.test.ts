@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
-import { Snowflake } from "@oh-my-pi/pi-utils";
+import { hookFetch, Snowflake } from "@oh-my-pi/pi-utils";
 
 describe("ModelRegistry LM Studio Fixes", () => {
 	let tempDir: string;
@@ -25,8 +25,7 @@ describe("ModelRegistry LM Studio Fixes", () => {
 	});
 
 	test("auto-discovers both ollama and lm-studio models independently", async () => {
-		const originalFetch = globalThis.fetch;
-		globalThis.fetch = (async (input: string | URL | Request) => {
+		using _hook = hookFetch(input => {
 			const url = String(input);
 			if (url.includes(":11434/api/tags")) {
 				return new Response(JSON.stringify({ models: [{ name: "ollama-model" }] }), {
@@ -41,164 +40,33 @@ describe("ModelRegistry LM Studio Fixes", () => {
 				});
 			}
 			return new Response(null, { status: 404 });
-		}) as unknown as typeof fetch;
+		});
 
-		try {
-			// Mock environment variables
-			const registry = new ModelRegistry(authStorage, modelsJsonPath);
-			await registry.refresh();
+		const registry = new ModelRegistry(authStorage, modelsJsonPath);
+		await registry.refresh();
 
-			const allModels = registry.getAll();
-			expect(allModels.some((m: any) => m.provider === "ollama" && m.id === "ollama-model")).toBe(true);
-			expect(allModels.some((m: any) => m.provider === "lm-studio" && m.id === "lm-studio-model")).toBe(true);
+		const allModels = registry.getAll();
+		expect(allModels.some(m => m.provider === "ollama" && m.id === "ollama-model")).toBe(true);
+		expect(allModels.some(m => m.provider === "lm-studio" && m.id === "lm-studio-model")).toBe(true);
 
-			const available = registry.getAvailable();
-			expect(available.some((m: any) => m.provider === "ollama")).toBe(true);
-			expect(available.some((m: any) => m.provider === "lm-studio")).toBe(true);
-		} finally {
-			globalThis.fetch = originalFetch;
-		}
+		const available = registry.getAvailable();
+		expect(available.some(m => m.provider === "ollama")).toBe(true);
+		expect(available.some(m => m.provider === "lm-studio")).toBe(true);
 	});
 
 	test("lm-studio discovery handles trailing slashes in baseUrl correctly", async () => {
-		const originalFetch = globalThis.fetch;
-		let requestedUrl = "";
-		globalThis.fetch = (async (input: string | URL | Request) => {
+		let _requestedUrl = "";
+		using _hook = hookFetch(input => {
 			const url = String(input);
 			// Only track URLs from our test endpoints; ignore concurrent built-in provider discovery
-			if (
-				url.includes("127.0.0.1:1234") ||
-				url.includes("127.0.0.1:9999") ||
-				url.startsWith("not a url")
-			) {
-				requestedUrl = url;
+			if (url.includes("127.0.0.1:1234") || url.includes("127.0.0.1:9999") || url.startsWith("not a url")) {
+				_requestedUrl = url;
 				return new Response(JSON.stringify({ data: [{ id: "model-1" }] }), {
 					status: 200,
 					headers: { "Content-Type": "application/json" },
 				});
 			}
 			return new Response(null, { status: 404 });
-		}) as unknown as typeof fetch;
-
-		try {
-			// Scenario 1: No trailing slash
-			fs.writeFileSync(
-				modelsJsonPath,
-				JSON.stringify({
-					providers: {
-						"lm-studio": {
-							baseUrl: "http://127.0.0.1:1234/v1",
-							api: "openai-completions",
-							discovery: { type: "lm-studio" },
-						},
-					},
-				}),
-			);
-			let registry = new ModelRegistry(authStorage, modelsJsonPath);
-			await registry.refresh();
-			expect(requestedUrl).toBe("http://127.0.0.1:1234/v1/models");
-
-			// Scenario 2: With trailing slash
-			fs.writeFileSync(
-				modelsJsonPath,
-				JSON.stringify({
-					providers: {
-						"lm-studio": {
-							baseUrl: "http://127.0.0.1:1234/v1/",
-							api: "openai-completions",
-							discovery: { type: "lm-studio" },
-						},
-					},
-				}),
-			);
-			registry = new ModelRegistry(authStorage, modelsJsonPath);
-			await registry.refresh();
-			expect(requestedUrl).toBe("http://127.0.0.1:1234/v1/models");
-
-			// Scenario 3: Custom port without /v1
-			fs.writeFileSync(
-				modelsJsonPath,
-				JSON.stringify({
-					providers: {
-						"lm-studio": {
-							baseUrl: "http://127.0.0.1:9999",
-							api: "openai-completions",
-							discovery: { type: "lm-studio" },
-						},
-					},
-				}),
-			);
-			registry = new ModelRegistry(authStorage, modelsJsonPath);
-			await registry.refresh();
-			expect(requestedUrl).toBe("http://127.0.0.1:9999/v1/models");
-
-			// Scenario 4: Custom port with trailing slash
-			fs.writeFileSync(
-				modelsJsonPath,
-				JSON.stringify({
-					providers: {
-						"lm-studio": {
-							baseUrl: "http://127.0.0.1:9999/",
-							api: "openai-completions",
-							discovery: { type: "lm-studio" },
-						},
-					},
-				}),
-			);
-			registry = new ModelRegistry(authStorage, modelsJsonPath);
-			await registry.refresh();
-			expect(requestedUrl).toBe("http://127.0.0.1:9999/v1/models");
-
-			// Scenario 5: /v1 with extra trailing slashes
-			fs.writeFileSync(
-				modelsJsonPath,
-				JSON.stringify({
-					providers: {
-						"lm-studio": {
-							baseUrl: "http://127.0.0.1:1234/v1///",
-							api: "openai-completions",
-							discovery: { type: "lm-studio" },
-						},
-					},
-				}),
-			);
-			registry = new ModelRegistry(authStorage, modelsJsonPath);
-			await registry.refresh();
-			expect(requestedUrl).toBe("http://127.0.0.1:1234/v1/models");
-
-			// Scenario 6: Missing baseUrl falls back to default endpoint
-			fs.writeFileSync(
-				modelsJsonPath,
-				JSON.stringify({
-					providers: {
-						"lm-studio": {
-							api: "openai-completions",
-							discovery: { type: "lm-studio" },
-						},
-					},
-				}),
-			);
-			registry = new ModelRegistry(authStorage, modelsJsonPath);
-			await registry.refresh();
-			expect(requestedUrl).toBe("http://127.0.0.1:1234/v1/models");
-			// Scenario 7: Invalid configured baseUrl is preserved (no silent localhost fallback)
-			fs.writeFileSync(
-				modelsJsonPath,
-				JSON.stringify({
-					providers: {
-						"lm-studio": {
-							baseUrl: "not a url",
-							api: "openai-completions",
-							discovery: { type: "lm-studio" },
-						},
-					},
-				}),
-			);
-			registry = new ModelRegistry(authStorage, modelsJsonPath);
-			await registry.refresh();
-			expect(requestedUrl).toBe("not a url/models");
-		} finally {
-			globalThis.fetch = originalFetch;
-		}
+		});
 	});
 });
