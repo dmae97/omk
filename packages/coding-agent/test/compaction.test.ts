@@ -320,7 +320,7 @@ describe("remote compaction setting", () => {
 		}
 
 		const fetchSpy = vi.fn(
-			() =>
+			(_input, _init, _next) =>
 				new Response(JSON.stringify({ summary: "remote summary" }), {
 					status: 200,
 					headers: { "Content-Type": "application/json" },
@@ -398,7 +398,7 @@ describe("remote compaction setting", () => {
 			{ type: "compaction", encrypted_content: "new_encrypted" },
 		];
 		const fetchSpy = vi.fn(
-			() =>
+			(_input, _init, _next) =>
 				new Response(JSON.stringify({ output: remoteOutput }), {
 					status: 200,
 					headers: { "Content-Type": "application/json" },
@@ -464,7 +464,7 @@ describe("remote compaction setting", () => {
 		if (!preparation) throw new Error("Expected compaction preparation");
 
 		const fetchSpy = vi.fn(
-			() =>
+			(_input, _init, _next) =>
 				new Response(JSON.stringify({ output: [{ type: "compaction", encrypted_content: "new_encrypted" }] }), {
 					status: 200,
 					headers: { "Content-Type": "application/json" },
@@ -507,7 +507,7 @@ describe("remote compaction setting", () => {
 		if (!preparation) throw new Error("Expected compaction preparation");
 
 		const fetchSpy = vi.fn(
-			() =>
+			(_input, _init, _next) =>
 				new Response(JSON.stringify({ output: [{ type: "compaction", encrypted_content: "new_encrypted" }] }), {
 					status: 200,
 					headers: { "Content-Type": "application/json" },
@@ -551,7 +551,7 @@ describe("remote compaction setting", () => {
 			{ type: "compaction", encrypted_content: "new_encrypted" },
 		];
 		const fetchSpy = vi.fn(
-			() =>
+			(_input, _init, _next) =>
 				new Response(JSON.stringify({ output: remoteOutput }), {
 					status: 200,
 					headers: { "Content-Type": "application/json" },

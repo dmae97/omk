@@ -373,7 +373,7 @@ describe("searchExa", () => {
 
 	it("uses Exa MCP when API key is missing", async () => {
 		delete process.env.EXA_API_KEY;
-		const fetchSpy = vi.fn(async () => {
+		const fetchSpy = vi.fn(async (_input, _init, _next) => {
 			return new Response(JSON.stringify({ jsonrpc: "2.0", id: "mcp-1", result: makeMockExaResponse() }), {
 				status: 200,
 				headers: { "Content-Type": "application/json" },
@@ -413,7 +413,7 @@ describe("searchExa", () => {
 	it("accepts MCP text content JSON payloads when API key is missing", async () => {
 		delete process.env.EXA_API_KEY;
 		const payload = makeMockExaResponse();
-		const fetchSpy = vi.fn(async () => {
+		const fetchSpy = vi.fn(async (_input, _init, _next) => {
 			return new Response(
 				JSON.stringify({
 					jsonrpc: "2.0",
@@ -449,7 +449,7 @@ describe("searchExa", () => {
 			"URL: https://plain-beta.com",
 			"Text: Beta snippet",
 		].join("\n");
-		const fetchSpy = vi.fn(async () => {
+		const fetchSpy = vi.fn(async (_input, _init, _next) => {
 			return new Response(
 				JSON.stringify({
 					jsonrpc: "2.0",
