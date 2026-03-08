@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.9.8] - 2026-03-08
 ### Fixed
 
 - Fixed WebSocket stream fallback logic to safely replay buffered output over SSE when WebSocket fails after partial content has been streamed
