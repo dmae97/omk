@@ -111,8 +111,8 @@ export async function resolveProviderModels<TApi extends Api = Api, TModelsDevPa
 	const dynamicFetchSucceeded = fetchedDynamicModels !== null;
 	const cacheModels = dynamicFetchSucceeded ? [] : normalizeModelList<TApi>(cache?.models ?? []);
 	const dynamicModels = fetchedDynamicModels ?? [];
-	const mergedWithoutDynamic = mergeModelSources(staticModels, modelsDevModels, cacheModels);
-	const models = mergeDynamicModels(mergedWithoutDynamic, dynamicModels);
+	const mergedWithCache = mergeDynamicModels(mergeModelSources(staticModels, modelsDevModels), cacheModels);
+	const models = mergeDynamicModels(mergedWithCache, dynamicModels);
 	const dynamicAuthoritative = !hasDynamicFetcher || dynamicFetchSucceeded || shouldUseFreshCacheAsAuthoritative;
 	if (shouldFetchFromNetwork) {
 		if (dynamicFetchSucceeded) {
@@ -125,7 +125,10 @@ export async function resolveProviderModels<TApi extends Api = Api, TModelsDevPa
 			writeModelCache(
 				options.providerId,
 				now(),
-				mergeModelSources(staticModels, modelsDevModels, latestCache?.models ?? cache?.models ?? []),
+				mergeDynamicModels(
+					mergeModelSources(staticModels, modelsDevModels),
+					normalizeModelList<TApi>(latestCache?.models ?? cache?.models ?? []),
+				),
 				false,
 				dbPath,
 			);

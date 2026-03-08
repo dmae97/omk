@@ -1,4 +1,209 @@
 {
+	"alibaba-coding-plan": {
+		"glm-4.7": {
+			"id": "glm-4.7",
+			"name": "GLM-4.7",
+			"api": "openai-completions",
+			"provider": "alibaba-coding-plan",
+			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
+			"reasoning": true,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 202752,
+			"maxTokens": 16384,
+			"compat": {
+				"supportsDeveloperRole": false
+			},
+			"thinking": {
+				"mode": "effort",
+				"minLevel": "minimal",
+				"maxLevel": "high"
+			}
+		},
+		"glm-5": {
+			"id": "glm-5",
+			"name": "GLM-5",
+			"api": "openai-completions",
+			"provider": "alibaba-coding-plan",
+			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
+			"reasoning": true,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 202752,
+			"maxTokens": 16384,
+			"compat": {
+				"supportsDeveloperRole": false
+			},
+			"thinking": {
+				"mode": "effort",
+				"minLevel": "minimal",
+				"maxLevel": "high"
+			}
+		},
+		"kimi-k2.5": {
+			"id": "kimi-k2.5",
+			"name": "Kimi K2.5",
+			"api": "openai-completions",
+			"provider": "alibaba-coding-plan",
+			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 262144,
+			"maxTokens": 32768,
+			"compat": {
+				"supportsDeveloperRole": false
+			},
+			"thinking": {
+				"mode": "effort",
+				"minLevel": "minimal",
+				"maxLevel": "high"
+			}
+		},
+		"MiniMax-M2.5": {
+			"id": "MiniMax-M2.5",
+			"name": "MiniMax-M2.5",
+			"api": "openai-completions",
+			"provider": "alibaba-coding-plan",
+			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
+			"reasoning": true,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 204800,
+			"maxTokens": 32768,
+			"compat": {
+				"supportsDeveloperRole": false
+			},
+			"thinking": {
+				"mode": "effort",
+				"minLevel": "minimal",
+				"maxLevel": "high"
+			}
+		},
+		"qwen3-coder-next": {
+			"id": "qwen3-coder-next",
+			"name": "Qwen3 Coder Next",
+			"api": "openai-completions",
+			"provider": "alibaba-coding-plan",
+			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 262144,
+			"maxTokens": 65536,
+			"compat": {
+				"supportsDeveloperRole": false
+			}
+		},
+		"qwen3-coder-plus": {
+			"id": "qwen3-coder-plus",
+			"name": "Qwen3 Coder Plus",
+			"api": "openai-completions",
+			"provider": "alibaba-coding-plan",
+			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 1048576,
+			"maxTokens": 65536,
+			"compat": {
+				"supportsDeveloperRole": false
+			}
+		},
+		"qwen3-max-2026-01-23": {
+			"id": "qwen3-max-2026-01-23",
+			"name": "Qwen3 Max",
+			"api": "openai-completions",
+			"provider": "alibaba-coding-plan",
+			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 262144,
+			"maxTokens": 65536,
+			"compat": {
+				"supportsDeveloperRole": false
+			}
+		},
+		"qwen3.5-plus": {
+			"id": "qwen3.5-plus",
+			"name": "Qwen3.5 Plus",
+			"api": "openai-completions",
+			"provider": "alibaba-coding-plan",
+			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 1000000,
+			"maxTokens": 65536,
+			"compat": {
+				"supportsDeveloperRole": false
+			},
+			"thinking": {
+				"mode": "effort",
+				"minLevel": "minimal",
+				"maxLevel": "high"
+			}
+		}
+	},
 	"amazon-bedrock": {
 		"anthropic.claude-3-5-haiku-20241022-v1:0": {
 			"id": "anthropic.claude-3-5-haiku-20241022-v1:0",
@@ -1806,162 +2011,6 @@
 				"minLevel": "minimal",
 				"maxLevel": "high"
 			}
-		}
-	},
-	"alibaba-coding-plan": {
-		"qwen3.5-plus": {
-			"id": "qwen3.5-plus",
-			"name": "Qwen 3.5 Plus",
-			"api": "openai-completions",
-			"provider": "alibaba-coding-plan",
-			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
-			"reasoning": true,
-			"input": [
-				"text",
-				"image"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 1000000,
-			"maxTokens": 65536
-		},
-		"qwen3-max-2026-01-23": {
-			"id": "qwen3-max-2026-01-23",
-			"name": "Qwen 3 Max",
-			"api": "openai-completions",
-			"provider": "alibaba-coding-plan",
-			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 262144,
-			"maxTokens": 65536
-		},
-		"qwen3-coder-next": {
-			"id": "qwen3-coder-next",
-			"name": "Qwen 3 Coder Next",
-			"api": "openai-completions",
-			"provider": "alibaba-coding-plan",
-			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 262144,
-			"maxTokens": 65536
-		},
-		"qwen3-coder-plus": {
-			"id": "qwen3-coder-plus",
-			"name": "Qwen 3 Coder Plus",
-			"api": "openai-completions",
-			"provider": "alibaba-coding-plan",
-			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 1048576,
-			"maxTokens": 65536
-		},
-		"glm-5": {
-			"id": "glm-5",
-			"name": "GLM 5",
-			"api": "openai-completions",
-			"provider": "alibaba-coding-plan",
-			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
-			"reasoning": true,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 202752,
-			"maxTokens": 16384
-		},
-		"glm-4.7": {
-			"id": "glm-4.7",
-			"name": "GLM 4.7",
-			"api": "openai-completions",
-			"provider": "alibaba-coding-plan",
-			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
-			"reasoning": true,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 202752,
-			"maxTokens": 16384
-		},
-		"kimi-k2.5": {
-			"id": "kimi-k2.5",
-			"name": "Kimi K2.5",
-			"api": "openai-completions",
-			"provider": "alibaba-coding-plan",
-			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
-			"reasoning": true,
-			"input": [
-				"text",
-				"image"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 262144,
-			"maxTokens": 32768
-		},
-		"MiniMax-M2.5": {
-			"id": "MiniMax-M2.5",
-			"name": "MiniMax M2.5",
-			"api": "openai-completions",
-			"provider": "alibaba-coding-plan",
-			"baseUrl": "https://coding-intl.dashscope.aliyuncs.com/v1",
-			"reasoning": true,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 204800,
-			"maxTokens": 32768
 		}
 	},
 	"anthropic": {
@@ -3981,6 +4030,120 @@
 			"contextWindow": 272000,
 			"maxTokens": 64000
 		},
+		"gpt-5.4-high": {
+			"id": "gpt-5.4-high",
+			"name": "GPT-5.4 High",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000
+		},
+		"gpt-5.4-high-fast": {
+			"id": "gpt-5.4-high-fast",
+			"name": "GPT-5.4 High Fast",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000
+		},
+		"gpt-5.4-medium": {
+			"id": "gpt-5.4-medium",
+			"name": "GPT-5.4",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000
+		},
+		"gpt-5.4-medium-fast": {
+			"id": "gpt-5.4-medium-fast",
+			"name": "GPT-5.4 Fast",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000
+		},
+		"gpt-5.4-xhigh": {
+			"id": "gpt-5.4-xhigh",
+			"name": "GPT-5.4 Extra High",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000
+		},
+		"gpt-5.4-xhigh-fast": {
+			"id": "gpt-5.4-xhigh-fast",
+			"name": "GPT-5.4 Extra High Fast",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000
+		},
 		"grok-code-fast-1": {
 			"id": "grok-code-fast-1",
 			"name": "Grok Code Fast 1",
@@ -5596,6 +5759,31 @@
 			"thinking": {
 				"mode": "google-level",
 				"minLevel": "low",
+				"maxLevel": "high"
+			}
+		},
+		"gemini-3.1-flash-lite-preview": {
+			"id": "gemini-3.1-flash-lite-preview",
+			"name": "Gemini 3.1 Flash Lite Preview",
+			"api": "google-generative-ai",
+			"provider": "google",
+			"baseUrl": "https://generativelanguage.googleapis.com/v1beta",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0.5,
+				"output": 3,
+				"cacheRead": 0.05,
+				"cacheWrite": 0
+			},
+			"contextWindow": 1048576,
+			"maxTokens": 65536,
+			"thinking": {
+				"mode": "google-level",
+				"minLevel": "minimal",
 				"maxLevel": "high"
 			}
 		},
@@ -8730,13 +8918,14 @@
 		},
 		"google/gemini-3.1-pro-preview": {
 			"id": "google/gemini-3.1-pro-preview",
-			"name": "Google: Gemini 3.1 Pro Preview",
+			"name": "Gemini 3.1 Pro Preview",
 			"api": "openai-completions",
 			"provider": "kilo",
 			"baseUrl": "https://api.kilo.ai/api/gateway",
-			"reasoning": false,
+			"reasoning": true,
 			"input": [
-				"text"
+				"text",
+				"image"
 			],
 			"cost": {
 				"input": 0,
@@ -8744,8 +8933,13 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
+			"contextWindow": 1048000,
+			"maxTokens": 64000,
+			"thinking": {
+				"mode": "effort",
+				"minLevel": "low",
+				"maxLevel": "high"
+			}
 		},
 		"google/gemini-3.1-pro-preview-customtools": {
 			"id": "google/gemini-3.1-pro-preview-customtools",
@@ -9079,7 +9273,7 @@
 		},
 		"kilo/auto": {
 			"id": "kilo/auto",
-			"name": "Kilo: Auto",
+			"name": "Deprecated: Kilo Auto: Frontier",
 			"api": "openai-completions",
 			"provider": "kilo",
 			"baseUrl": "https://api.kilo.ai/api/gateway",
@@ -9098,7 +9292,7 @@
 		},
 		"kilo/auto-free": {
 			"id": "kilo/auto-free",
-			"name": "Kilo: Auto Free",
+			"name": "Deprecated: Kilo Auto: Free",
 			"api": "openai-completions",
 			"provider": "kilo",
 			"baseUrl": "https://api.kilo.ai/api/gateway",
@@ -9117,7 +9311,7 @@
 		},
 		"kilo/auto-small": {
 			"id": "kilo/auto-small",
-			"name": "Kilo: Auto Small",
+			"name": "Deprecated: Kilo Auto: Small",
 			"api": "openai-completions",
 			"provider": "kilo",
 			"baseUrl": "https://api.kilo.ai/api/gateway",
@@ -11398,13 +11592,14 @@
 		},
 		"openai/gpt-5.2-pro": {
 			"id": "openai/gpt-5.2-pro",
-			"name": "OpenAI: GPT-5.2 Pro",
+			"name": "GPT-5.2-Pro",
 			"api": "openai-completions",
 			"provider": "kilo",
 			"baseUrl": "https://api.kilo.ai/api/gateway",
-			"reasoning": false,
+			"reasoning": true,
 			"input": [
-				"text"
+				"text",
+				"image"
 			],
 			"cost": {
 				"input": 0,
@@ -11412,8 +11607,13 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
+			"contextWindow": 400000,
+			"maxTokens": 128000,
+			"thinking": {
+				"mode": "effort",
+				"minLevel": "low",
+				"maxLevel": "xhigh"
+			}
 		},
 		"openai/gpt-5.3-chat": {
 			"id": "openai/gpt-5.3-chat",
@@ -15738,7 +15938,7 @@
 	"mistral": {
 		"codestral-latest": {
 			"id": "codestral-latest",
-			"name": "Codestral",
+			"name": "Codestral (latest)",
 			"api": "openai-completions",
 			"provider": "mistral",
 			"baseUrl": "https://api.mistral.ai/v1",
@@ -15795,7 +15995,7 @@
 		},
 		"devstral-medium-latest": {
 			"id": "devstral-medium-latest",
-			"name": "Devstral 2",
+			"name": "Devstral 2 (latest)",
 			"api": "openai-completions",
 			"provider": "mistral",
 			"baseUrl": "https://api.mistral.ai/v1",
@@ -15872,7 +16072,7 @@
 		},
 		"magistral-medium-latest": {
 			"id": "magistral-medium-latest",
-			"name": "Magistral Medium",
+			"name": "Magistral Medium (latest)",
 			"api": "openai-completions",
 			"provider": "mistral",
 			"baseUrl": "https://api.mistral.ai/v1",
@@ -15920,7 +16120,7 @@
 		},
 		"ministral-3b-latest": {
 			"id": "ministral-3b-latest",
-			"name": "Ministral 3B",
+			"name": "Ministral 3B (latest)",
 			"api": "openai-completions",
 			"provider": "mistral",
 			"baseUrl": "https://api.mistral.ai/v1",
@@ -15939,7 +16139,7 @@
 		},
 		"ministral-8b-latest": {
 			"id": "ministral-8b-latest",
-			"name": "Ministral 8B",
+			"name": "Ministral 8B (latest)",
 			"api": "openai-completions",
 			"provider": "mistral",
 			"baseUrl": "https://api.mistral.ai/v1",
@@ -15997,7 +16197,7 @@
 		},
 		"mistral-large-latest": {
 			"id": "mistral-large-latest",
-			"name": "Mistral Large",
+			"name": "Mistral Large (latest)",
 			"api": "openai-completions",
 			"provider": "mistral",
 			"baseUrl": "https://api.mistral.ai/v1",
@@ -16057,7 +16257,7 @@
 		},
 		"mistral-medium-latest": {
 			"id": "mistral-medium-latest",
-			"name": "Mistral Medium",
+			"name": "Mistral Medium (latest)",
 			"api": "openai-completions",
 			"provider": "mistral",
 			"baseUrl": "https://api.mistral.ai/v1",
@@ -16116,7 +16316,7 @@
 		},
 		"mistral-small-latest": {
 			"id": "mistral-small-latest",
-			"name": "Mistral Small",
+			"name": "Mistral Small (latest)",
 			"api": "openai-completions",
 			"provider": "mistral",
 			"baseUrl": "https://api.mistral.ai/v1",
@@ -16213,7 +16413,7 @@
 		},
 		"pixtral-large-latest": {
 			"id": "pixtral-large-latest",
-			"name": "Pixtral Large",
+			"name": "Pixtral Large (latest)",
 			"api": "openai-completions",
 			"provider": "mistral",
 			"baseUrl": "https://api.mistral.ai/v1",
@@ -20043,7 +20243,7 @@
 		},
 		"google/gemini-3.1-pro-preview": {
 			"id": "google/gemini-3.1-pro-preview",
-			"name": "Google: Gemini 3.1 Pro Preview",
+			"name": "Gemini 3.1 Pro Preview",
 			"api": "openai-completions",
 			"provider": "nanogpt",
 			"baseUrl": "https://nano-gpt.com/api/v1",
@@ -20058,8 +20258,8 @@
 				"cacheRead": 0.19999999999999998,
 				"cacheWrite": 0.375
 			},
-			"contextWindow": 1048576,
-			"maxTokens": 65536,
+			"contextWindow": 1048000,
+			"maxTokens": 64000,
 			"thinking": {
 				"mode": "effort",
 				"minLevel": "low",
@@ -23521,7 +23721,7 @@
 		},
 		"openai/gpt-5.2-pro": {
 			"id": "openai/gpt-5.2-pro",
-			"name": "OpenAI: GPT-5.2 Pro",
+			"name": "GPT-5.2-Pro",
 			"api": "openai-completions",
 			"baseUrl": "https://nano-gpt.com/api/v1",
 			"provider": "nanogpt",
@@ -24664,7 +24864,7 @@
 		},
 		"qwen3-max-2026-01-23": {
 			"id": "qwen3-max-2026-01-23",
-			"name": "qwen3-max-2026-01-23",
+			"name": "Qwen3 Max",
 			"api": "openai-completions",
 			"provider": "nanogpt",
 			"baseUrl": "https://nano-gpt.com/api/v1",
@@ -24678,8 +24878,8 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
+			"contextWindow": 262144,
+			"maxTokens": 65536
 		},
 		"qwen3-vl-235b-a22b-instruct-original": {
 			"id": "qwen3-vl-235b-a22b-instruct-original",
@@ -27615,6 +27815,30 @@
 		"minimaxai/minimax-m2.1": {
 			"id": "minimaxai/minimax-m2.1",
 			"name": "MiniMax-M2.1",
+			"api": "openai-completions",
+			"provider": "nvidia",
+			"baseUrl": "https://integrate.api.nvidia.com/v1",
+			"reasoning": true,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 204800,
+			"maxTokens": 131072,
+			"thinking": {
+				"mode": "effort",
+				"minLevel": "minimal",
+				"maxLevel": "high"
+			}
+		},
+		"minimaxai/minimax-m2.5": {
+			"id": "minimaxai/minimax-m2.5",
+			"name": "MiniMax-M2.5",
 			"api": "openai-completions",
 			"provider": "nvidia",
 			"baseUrl": "https://integrate.api.nvidia.com/v1",
@@ -31762,7 +31986,7 @@
 		},
 		"google/gemini-3.1-pro-preview": {
 			"id": "google/gemini-3.1-pro-preview",
-			"name": "Google: Gemini 3.1 Pro Preview",
+			"name": "Gemini 3.1 Pro Preview",
 			"api": "openai-completions",
 			"provider": "openrouter",
 			"baseUrl": "https://openrouter.ai/api/v1",
@@ -31777,8 +32001,8 @@
 				"cacheRead": 0.19999999999999998,
 				"cacheWrite": 0.375
 			},
-			"contextWindow": 1048576,
-			"maxTokens": 65536,
+			"contextWindow": 1048000,
+			"maxTokens": 64000,
 			"thinking": {
 				"mode": "effort",
 				"minLevel": "low",
@@ -32170,7 +32394,7 @@
 			"cost": {
 				"input": 0.27,
 				"output": 0.95,
-				"cacheRead": 0.0299999997,
+				"cacheRead": 0.0290000007,
 				"cacheWrite": 0
 			},
 			"contextWindow": 204000,
@@ -33747,7 +33971,7 @@
 		},
 		"openai/gpt-5.2-pro": {
 			"id": "openai/gpt-5.2-pro",
-			"name": "OpenAI: GPT-5.2 Pro",
+			"name": "GPT-5.2-Pro",
 			"api": "openai-completions",
 			"baseUrl": "https://openrouter.ai/api/v1",
 			"provider": "openrouter",
@@ -39753,7 +39977,7 @@
 		},
 		"openai/gpt-5.2-pro": {
 			"id": "openai/gpt-5.2-pro",
-			"name": "GPT 5.2 ",
+			"name": "GPT-5.2-Pro",
 			"api": "anthropic-messages",
 			"baseUrl": "https://ai-gateway.vercel.sh",
 			"provider": "vercel-ai-gateway",
@@ -41056,13 +41280,13 @@
 				"text"
 			],
 			"cost": {
-				"input": 0.07,
-				"output": 0.21,
-				"cacheRead": 0,
+				"input": 0.1,
+				"output": 0.3,
+				"cacheRead": 0.01,
 				"cacheWrite": 0
 			},
 			"contextWindow": 256000,
-			"maxTokens": 32000,
+			"maxTokens": 64000,
 			"thinking": {
 				"mode": "budget",
 				"minLevel": "minimal",
@@ -41945,7 +42169,7 @@
 		},
 		"google/gemini-3.1-pro-preview": {
 			"id": "google/gemini-3.1-pro-preview",
-			"name": "Google: Gemini 3.1 Pro Preview",
+			"name": "Gemini 3.1 Pro Preview",
 			"api": "openai-completions",
 			"provider": "zenmux",
 			"baseUrl": "https://zenmux.ai/api/v1",
@@ -41960,8 +42184,8 @@
 				"cacheRead": 0.2,
 				"cacheWrite": 4.5
 			},
-			"contextWindow": 1048576,
-			"maxTokens": 8888,
+			"contextWindow": 1048000,
+			"maxTokens": 64000,
 			"thinking": {
 				"mode": "effort",
 				"minLevel": "low",
@@ -42325,7 +42549,7 @@
 		},
 		"minimax/minimax-m2.5-lightning": {
 			"id": "minimax/minimax-m2.5-lightning",
-			"name": "MiniMax: MiniMax M2.5 highspeed",
+			"name": "MiniMax M2.5 highspeed",
 			"api": "openai-completions",
 			"provider": "zenmux",
 			"baseUrl": "https://zenmux.ai/api/v1",
@@ -42895,7 +43119,7 @@
 		},
 		"openai/gpt-5.2-pro": {
 			"id": "openai/gpt-5.2-pro",
-			"name": "OpenAI: GPT-5.2 Pro",
+			"name": "GPT-5.2-Pro",
 			"api": "openai-completions",
 			"provider": "zenmux",
 			"baseUrl": "https://zenmux.ai/api/v1",
@@ -42911,7 +43135,7 @@
 				"cacheWrite": 0
 			},
 			"contextWindow": 400000,
-			"maxTokens": 8888,
+			"maxTokens": 128000,
 			"thinking": {
 				"mode": "effort",
 				"minLevel": "low",
