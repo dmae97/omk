@@ -77,7 +77,7 @@ function serializeToolArguments(value: unknown): string {
 			if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
 				return JSON.stringify(parsed);
 			}
-		} catch { }
+		} catch {}
 		return "{}";
 	}
 
@@ -1105,7 +1105,7 @@ export function detectCompat(model: Model<"openai-completions">): ResolvedOpenAI
 		requiresAssistantAfterToolResult: false, // Mistral no longer requires this as of Dec 2024
 		requiresThinkingAsText: isMistral,
 		requiresMistralToolIds: isMistral,
-		thinkingFormat: isZai ? "zai" : (isAlibaba || isQwen) ? "qwen" : "openai",
+		thinkingFormat: isZai ? "zai" : isAlibaba || isQwen ? "qwen" : "openai",
 		reasoningContentField: "reasoning_content",
 		requiresReasoningContentForToolCalls: isOpenRouterKimi,
 		requiresAssistantContentForToolCalls: isOpenRouterKimi,
