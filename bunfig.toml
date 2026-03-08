@@ -1,3 +1,5 @@
+telemetry = false
+
 [install]
 linker = "isolated"
 exact = true
@@ -6,3 +8,6 @@ saveTextLockfile = true
 [loader]
 ".md" = "text"
 ".py" = "text"
+
+[run]
+bun = true
