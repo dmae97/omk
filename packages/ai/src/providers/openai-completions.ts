@@ -77,7 +77,7 @@ function serializeToolArguments(value: unknown): string {
 			if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
 				return JSON.stringify(parsed);
 			}
-		} catch {}
+		} catch { }
 		return "{}";
 	}
 
@@ -1063,7 +1063,7 @@ function detectStrictModeSupport(provider: string, baseUrl: string): boolean {
  * Provider takes precedence over URL-based detection since it's explicitly configured.
  * Returns a fully resolved OpenAICompat object with all fields set.
  */
-function detectCompat(model: Model<"openai-completions">): ResolvedOpenAICompat {
+export function detectCompat(model: Model<"openai-completions">): ResolvedOpenAICompat {
 	const provider = model.provider;
 	const baseUrl = model.baseUrl;
 
@@ -1071,6 +1071,7 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAICompat 
 	const isZai = provider === "zai" || baseUrl.includes("api.z.ai");
 	const isOpenRouterKimi = provider === "openrouter" && model.id.includes("moonshotai/kimi");
 	const isAlibaba = provider === "alibaba-coding-plan" || baseUrl.includes("dashscope");
+	const isQwen = model.id.toLowerCase().includes("qwen");
 
 	const isNonStandard =
 		isCerebras ||
@@ -1082,6 +1083,7 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAICompat 
 		baseUrl.includes("deepseek.com") ||
 		isAlibaba ||
 		isZai ||
+		isQwen ||
 		provider === "opencode-zen" ||
 		provider === "opencode-go" ||
 		baseUrl.includes("opencode.ai");
@@ -1103,7 +1105,7 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAICompat 
 		requiresAssistantAfterToolResult: false, // Mistral no longer requires this as of Dec 2024
 		requiresThinkingAsText: isMistral,
 		requiresMistralToolIds: isMistral,
-		thinkingFormat: isZai ? "zai" : isAlibaba ? "qwen" : "openai",
+		thinkingFormat: isZai ? "zai" : (isAlibaba || isQwen) ? "qwen" : "openai",
 		reasoningContentField: "reasoning_content",
 		requiresReasoningContentForToolCalls: isOpenRouterKimi,
 		requiresAssistantContentForToolCalls: isOpenRouterKimi,
