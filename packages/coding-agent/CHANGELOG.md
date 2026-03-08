@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.9.7] - 2026-03-08
+
 ### Added
 
 - Added `skipPostPromptRecoveryWait` option to handoff operations to defer recovery work until after handoff completion
