@@ -478,7 +478,7 @@ export class ToolExecutionComponent extends Container {
 						},
 						this.#renderState,
 						theme,
-						this.#args, // Pass args for tools that need them
+						this.#getCallArgsForRender(),
 					);
 					if (resultComponent) {
 						this.#contentBox.addChild(ensureInvalidate(resultComponent));
@@ -560,10 +560,12 @@ export class ToolExecutionComponent extends Container {
 			return Math.max(1, Math.min(maxSeconds, value));
 		};
 
-		if (this.#toolName === "bash" && this.#result) {
-			// Pass raw output and expanded state - renderer handles width-aware truncation
-			const output = this.#getTextOutput().trimEnd();
-			context.output = output;
+		if (this.#toolName === "bash") {
+			if (this.#result) {
+				// Pass raw output and expanded state - renderer handles width-aware truncation
+				const output = this.#getTextOutput().trimEnd();
+				context.output = output;
+			}
 			context.expanded = this.#expanded;
 			context.previewLines = BASH_DEFAULT_PREVIEW_LINES;
 			context.timeout = normalizeTimeoutSeconds(this.#args?.timeout, 3600);

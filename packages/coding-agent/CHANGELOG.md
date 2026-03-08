@@ -1,6 +1,15 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `env` parameter to bash tool to pass environment variables safely without shell re-parsing, preventing quote and special character bugs with multiline or untrusted values
+- Added support for rendering partial `env` assignments in command preview while tool arguments are still streaming
+- Added `env` support to the bash tool so commands can reference safe shell variables without inline quoting bugs for multiline or quote-heavy values
+
+### Changed
+
+- Changed bash tool to display environment variable assignments in command preview when `env` parameter is used
 
 ## [13.9.8] - 2026-03-08
 ### Added

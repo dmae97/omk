@@ -272,9 +272,13 @@ export class UiHelpers {
 
 					readGroup = null;
 					const tool = this.ctx.session.getToolByName(content.name);
+					const renderArgs =
+						"partialJson" in content
+							? { ...content.arguments, __partialJson: content.partialJson }
+							: content.arguments;
 					const component = new ToolExecutionComponent(
 						content.name,
-						content.arguments,
+						renderArgs,
 						{
 							showImages: settings.get("terminal.showImages"),
 							editFuzzyThreshold: settings.get("edit.fuzzyThreshold"),

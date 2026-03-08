@@ -184,13 +184,17 @@ export class EventController {
 							continue;
 						}
 
+						const renderArgs =
+							"partialJson" in content
+								? { ...content.arguments, __partialJson: content.partialJson }
+								: content.arguments;
 						if (!this.ctx.pendingTools.has(content.id)) {
 							this.#resetReadGroup();
 							this.ctx.chatContainer.addChild(new Text("", 0, 0));
 							const tool = this.ctx.session.getToolByName(content.name);
 							const component = new ToolExecutionComponent(
 								content.name,
-								content.arguments,
+								renderArgs,
 								{
 									showImages: settings.get("terminal.showImages"),
 									editFuzzyThreshold: settings.get("edit.fuzzyThreshold"),
@@ -206,7 +210,7 @@ export class EventController {
 						} else {
 							const component = this.ctx.pendingTools.get(content.id);
 							if (component) {
-								component.updateArgs(content.arguments, content.id);
+								component.updateArgs(renderArgs, content.id);
 							}
 						}
 					}

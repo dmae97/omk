@@ -7,7 +7,6 @@ import { $env, getProjectDir, isEnoent } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import { type BashResult, executeBash } from "../exec/bash-executor";
-import { NON_INTERACTIVE_ENV } from "../exec/non-interactive-env";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import { truncateToVisualLines } from "../modes/components/visual-truncate";
 import type { Theme } from "../modes/theme/theme";
@@ -30,8 +29,16 @@ import { clampTimeout } from "./tool-timeouts";
 
 export const BASH_DEFAULT_PREVIEW_LINES = 10;
 
+const BASH_ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
 const bashSchemaBase = Type.Object({
 	command: Type.String({ description: "Command to execute" }),
+	env: Type.Optional(
+		Type.Record(Type.String({ pattern: BASH_ENV_NAME_PATTERN.source }), Type.String(), {
+			description:
+				"Additional environment variables passed to the command and rendered inline as shell assignments; prefer this for multiline or quote-heavy content",
+		}),
+	),
 	timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (default: 300)" })),
 	cwd: Type.Optional(Type.String({ description: "Working directory (default: cwd)" })),
 	head: Type.Optional(Type.Number({ description: "Return only first N lines of output" })),
@@ -56,6 +63,7 @@ type BashToolSchema = typeof bashSchemaBase | typeof bashSchemaWithAsync;
 
 export interface BashToolInput {
 	command: string;
+	env?: Record<string, string>;
 	timeout?: number;
 	cwd?: string;
 	head?: number;
@@ -81,6 +89,114 @@ function normalizeResultOutput(result: BashResult | BashInteractiveResult): stri
 
 function isInteractiveResult(result: BashResult | BashInteractiveResult): result is BashInteractiveResult {
 	return "timedOut" in result;
+}
+
+function normalizeBashEnv(env: Record<string, string> | undefined): Record<string, string> | undefined {
+	if (!env || Object.keys(env).length === 0) return undefined;
+	const normalized: Record<string, string> = {};
+	for (const [key, value] of Object.entries(env)) {
+		if (!BASH_ENV_NAME_PATTERN.test(key)) {
+			throw new ToolError(`Invalid bash env name: ${key}`);
+		}
+		normalized[key] = value;
+	}
+	return normalized;
+}
+
+function escapeBashEnvValueForDisplay(value: string): string {
+	return value
+		.replaceAll("\\", "\\\\")
+		.replaceAll("\n", "\\n")
+		.replaceAll("\r", "\\r")
+		.replaceAll("\t", "\\t")
+		.replaceAll('"', '\\"')
+		.replaceAll("$", "\\$")
+		.replaceAll("`", "\\`");
+}
+
+function formatBashEnvAssignments(env: Record<string, string> | undefined): string {
+	if (!env || Object.keys(env).length === 0) return "";
+	return Object.entries(env)
+		.sort(([a], [b]) => a.localeCompare(b))
+		.map(([key, value]) => `${key}="${escapeBashEnvValueForDisplay(value)}"`)
+		.join(" ");
+}
+
+function unescapePartialJsonString(value: string): string {
+	let output = "";
+	for (let index = 0; index < value.length; index += 1) {
+		const char = value[index];
+		if (char !== "\\") {
+			output += char;
+			continue;
+		}
+		const next = value[index + 1];
+		if (!next) {
+			output += "\\";
+			break;
+		}
+		index += 1;
+		switch (next) {
+			case '"':
+				output += '"';
+				break;
+			case "\\":
+				output += "\\";
+				break;
+			case "/":
+				output += "/";
+				break;
+			case "b":
+				output += "\b";
+				break;
+			case "f":
+				output += "\f";
+				break;
+			case "n":
+				output += "\n";
+				break;
+			case "r":
+				output += "\r";
+				break;
+			case "t":
+				output += "\t";
+				break;
+			case "u": {
+				const hex = value.slice(index + 1, index + 5);
+				if (/^[0-9a-fA-F]{4}$/u.test(hex)) {
+					output += String.fromCharCode(Number.parseInt(hex, 16));
+					index += 4;
+				} else {
+					output += "\\u";
+				}
+				break;
+			}
+			default:
+				output += next;
+		}
+	}
+	return output;
+}
+
+function extractPartialBashEnv(partialJson: string | undefined): Record<string, string> | undefined {
+	if (!partialJson) return undefined;
+	const envStart = partialJson.search(/"env"\s*:\s*\{/u);
+	if (envStart === -1) return undefined;
+	const objectStart = partialJson.indexOf("{", envStart);
+	if (objectStart === -1) return undefined;
+	const envBody = partialJson.slice(objectStart + 1);
+	const env: Record<string, string> = {};
+	const matcher = /"([A-Za-z_][A-Za-z0-9_]*)"\s*:\s*"((?:\\.|[^"\\])*)(?:"|$)/gu;
+	for (const match of envBody.matchAll(matcher)) {
+		env[match[1]!] = unescapePartialJsonString(match[2]!);
+	}
+	return Object.keys(env).length > 0 ? env : undefined;
+}
+
+function getBashEnvForDisplay(args: BashRenderArgs): Record<string, string> | undefined {
+	const partialEnv = extractPartialBashEnv(args.__partialJson);
+	if (partialEnv && args.env) return { ...partialEnv, ...args.env };
+	return args.env ?? partialEnv;
 }
 /**
  * Bash tool implementation.
@@ -138,6 +254,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 		_toolCallId: string,
 		{
 			command: rawCommand,
+			env: rawEnv,
 			timeout: rawTimeout = 300,
 			cwd,
 			head,
@@ -150,6 +267,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 		ctx?: AgentToolContext,
 	): Promise<AgentToolResult<BashToolDetails>> {
 		let command = rawCommand;
+		const env = normalizeBashEnv(rawEnv);
 
 		// Extract leading `cd <path> && ...` into cwd when the model ignores the cwd parameter.
 		if (!cwd) {
@@ -185,6 +303,20 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 			},
 		};
 		command = await expandInternalUrls(command, { ...internalUrlOptions, ensureLocalParentDirs: true });
+		const resolvedEnv = env
+			? Object.fromEntries(
+					await Promise.all(
+						Object.entries(env).map(async ([key, value]) => [
+							key,
+							await expandInternalUrls(value, {
+								...internalUrlOptions,
+								ensureLocalParentDirs: true,
+								noEscape: true,
+							}),
+						]),
+					),
+				)
+			: undefined;
 
 		// Resolve protocol URLs (skill://, agent://, etc.) in extracted cwd.
 		if (cwd?.includes("://")) {
@@ -228,7 +360,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 							sessionKey: `${this.session.getSessionId?.() ?? ""}:async:${jobId}`,
 							timeout: timeoutMs,
 							signal: runSignal,
-							env: NON_INTERACTIVE_ENV,
+							env: resolvedEnv,
 							artifactPath,
 							artifactId,
 							onChunk: chunk => {
@@ -271,6 +403,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 					cwd: commandCwd,
 					timeoutMs,
 					signal,
+					env: resolvedEnv,
 					artifactPath,
 					artifactId,
 				})
@@ -279,7 +412,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 					sessionKey: this.session.getSessionId?.() ?? undefined,
 					timeout: timeoutMs,
 					signal,
-					env: NON_INTERACTIVE_ENV,
+					env: resolvedEnv,
 					artifactPath,
 					artifactId,
 					onChunk: chunk => {
@@ -322,8 +455,11 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 
 interface BashRenderArgs {
 	command?: string;
+	env?: Record<string, string>;
 	timeout?: number;
 	cwd?: string;
+	__partialJson?: string;
+	[key: string]: unknown;
 }
 
 interface BashRenderContext {
@@ -339,7 +475,7 @@ interface BashRenderContext {
 	timeout?: number;
 }
 
-function formatBashCommand(args: BashRenderArgs, _uiTheme: Theme): string {
+function formatBashCommand(args: BashRenderArgs): string {
 	const command = args.command || "…";
 	const prompt = "$";
 	const cwd = getProjectDir();
@@ -360,12 +496,13 @@ function formatBashCommand(args: BashRenderArgs, _uiTheme: Theme): string {
 		}
 	}
 
-	return displayWorkdir ? `${prompt} cd ${displayWorkdir} && ${command}` : `${prompt} ${command}`;
+	const renderedCommand = [formatBashEnvAssignments(getBashEnvForDisplay(args)), command].filter(Boolean).join(" ");
+	return displayWorkdir ? `${prompt} cd ${displayWorkdir} && ${renderedCommand}` : `${prompt} ${renderedCommand}`;
 }
 
 export const bashToolRenderer = {
 	renderCall(args: BashRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
-		const cmdText = formatBashCommand(args, uiTheme);
+		const cmdText = formatBashCommand(args);
 		const text = renderStatusLine({ icon: "pending", title: "Bash", description: cmdText }, uiTheme);
 		return new Text(text, 0, 0);
 	},
@@ -380,7 +517,7 @@ export const bashToolRenderer = {
 		uiTheme: Theme,
 		args?: BashRenderArgs,
 	): Component {
-		const cmdText = args ? formatBashCommand(args, uiTheme) : undefined;
+		const cmdText = args ? formatBashCommand(args) : undefined;
 		const isError = result.isError === true;
 		const icon = options.isPartial ? "pending" : isError ? "error" : "success";
 		const header = renderStatusLine({ icon, title: "Bash" }, uiTheme);
