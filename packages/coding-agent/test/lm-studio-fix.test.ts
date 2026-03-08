@@ -64,11 +64,20 @@ describe("ModelRegistry LM Studio Fixes", () => {
 		const originalFetch = globalThis.fetch;
 		let requestedUrl = "";
 		globalThis.fetch = (async (input: string | URL | Request) => {
-			requestedUrl = String(input);
-			return new Response(JSON.stringify({ data: [{ id: "model-1" }] }), {
-				status: 200,
-				headers: { "Content-Type": "application/json" },
-			});
+			const url = String(input);
+			// Only track URLs from our test endpoints; ignore concurrent built-in provider discovery
+			if (
+				url.includes("127.0.0.1:1234") ||
+				url.includes("127.0.0.1:9999") ||
+				url.startsWith("not a url")
+			) {
+				requestedUrl = url;
+				return new Response(JSON.stringify({ data: [{ id: "model-1" }] }), {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				});
+			}
+			return new Response(null, { status: 404 });
 		}) as unknown as typeof fetch;
 
 		try {
