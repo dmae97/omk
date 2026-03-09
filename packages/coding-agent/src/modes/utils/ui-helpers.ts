@@ -209,6 +209,7 @@ export class UiHelpers {
 		sessionContext: SessionContext,
 		options: { updateFooter?: boolean; populateHistory?: boolean } = {},
 	): void {
+		this.ctx.optimisticUserMessageSignature = undefined;
 		this.ctx.pendingTools.clear();
 
 		if (options.updateFooter) {
