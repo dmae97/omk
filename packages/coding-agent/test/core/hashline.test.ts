@@ -878,18 +878,29 @@ describe("stripNewLinePrefixes", () => {
 	});
 
 	it("strips hashline prefixes when all non-empty lines carry them", () => {
-		const lines = ["1#AB:foo", "2#CD:bar", "3#EF:baz"];
+		const lines = ["1#WQ:foo", "2#TZ:bar", "3#HX:baz"];
 		expect(stripNewLinePrefixes(lines)).toEqual(["foo", "bar", "baz"]);
 	});
 
 	it("does NOT strip hashline prefixes when any non-empty line is plain content", () => {
-		const lines = ["1#AB:foo", "bar", "3#EF:baz"];
-		expect(stripNewLinePrefixes(lines)).toEqual(["1#AB:foo", "bar", "3#EF:baz"]);
+		const lines = ["1#WQ:foo", "bar", "3#HX:baz"];
+		expect(stripNewLinePrefixes(lines)).toEqual(["1#WQ:foo", "bar", "3#HX:baz"]);
 	});
 
 	it("strips hash-only prefixes when all non-empty lines carry them", () => {
 		const lines = ["#WQ:", "#TZ:{{/*", "#HX:OC deployment container livenessProbe template"];
 		expect(stripNewLinePrefixes(lines)).toEqual(["", "{{/*", "OC deployment container livenessProbe template"]);
+	});
+
+	it("does NOT strip comment lines that look like hashline prefixes (# Word:)", () => {
+		// Regression: HASHLINE_PREFIX_RE was too broad and matched '# Note:', '# TODO:', etc.
+		// A single-line replacement whose content is a comment would have nonEmpty===hashPrefixCount===1,
+		// triggering stripping and eating the '# Note: ' prefix from the written line.
+		expect(stripNewLinePrefixes(["  # Note: Using a fixed version"])).toEqual(["  # Note: Using a fixed version"]);
+		expect(stripNewLinePrefixes(["# TODO: remove this"])).toEqual(["# TODO: remove this"]);
+		expect(stripNewLinePrefixes(["# FIXME: broken"])).toEqual(["# FIXME: broken"]);
+		// Bash/Python/PS1 comment with colon (e.g. setup scripts)
+		expect(stripNewLinePrefixes(["  # step: do thing"])).toEqual(["  # step: do thing"]);
 	});
 
 	it("does NOT strip '+' when line starts with '++'", () => {
@@ -966,5 +977,48 @@ describe("hashlineParseContent", () => {
 		const edits: HashlineEdit[] = [{ op: "replace", pos: makeTag(2, "- [ ] pending"), lines: newContent }];
 		const result = applyHashlineEdits(fileContent, edits);
 		expect(result.lines).toBe("- [x] done\n- [x] done\n- [ ] also pending");
+	});
+
+	it("preserves comment lines starting with '# Word:' through hashlineParseText", () => {
+		// Regression: HASHLINE_PREFIX_RE matched '# Note:', '# TODO:', etc. because the
+		// hash ID segment was [0-9a-zA-Z]{1,16} instead of [ZPMQVRWSNKTXJBYH]{2}.
+		expect(hashlineParseText(["  # Note: Using version 1.24.x"])).toEqual(["  # Note: Using version 1.24.x"]);
+		expect(hashlineParseText(["# TODO: remove this"])).toEqual(["# TODO: remove this"]);
+		expect(hashlineParseText(["# step: install deps"])).toEqual(["# step: install deps"]);
+		expect(hashlineParseText("  # Note: v1.24.x\n  # Requires: CUDA 12")).toEqual([
+			"  # Note: v1.24.x",
+			"  # Requires: CUDA 12",
+		]);
+	});
+
+	it("regression: replacing a comment line preserves '# Note:' prefix in output file", () => {
+		// Before fix: HASHLINE_PREFIX_RE matched '# Note:' as a hashline prefix.
+		// With a single replacement line the strip heuristic fired (nonEmpty===1,
+		// hashPrefixCount===1), eating the comment marker and writing bare text.
+		const fileContent = ["  # cuDNN section", "  # Note: Using version 1.23.0", '  $Version = "1.23.0"'].join("\n");
+		const edits: HashlineEdit[] = [
+			{
+				op: "replace",
+				pos: makeTag(2, "  # Note: Using version 1.23.0"),
+				lines: hashlineParseText(["  # Note: Using version 1.24.x"]),
+			},
+		];
+		const result = applyHashlineEdits(fileContent, edits);
+		expect(result.lines).toBe(
+			["  # cuDNN section", "  # Note: Using version 1.24.x", '  $Version = "1.23.0"'].join("\n"),
+		);
+	});
+
+	it("regression: replacing a TODO comment preserves '# TODO:' prefix", () => {
+		const fileContent = "const x = 1;\n// TODO: old\n# TODO: remove this\nconst y = 2;";
+		const edits: HashlineEdit[] = [
+			{
+				op: "replace",
+				pos: makeTag(3, "# TODO: remove this"),
+				lines: hashlineParseText(["# TODO: remove this -- done"]),
+			},
+		];
+		const result = applyHashlineEdits(fileContent, edits);
+		expect(result.lines).toBe("const x = 1;\n// TODO: old\n# TODO: remove this -- done\nconst y = 2;");
 	});
 });
