@@ -1952,10 +1952,11 @@ function toStoredAuthCredential(row: AuthRow, credential: AuthCredential): Store
 	return { id: row.id, provider: row.provider, credential, disabledCause: row.disabled_cause };
 }
 
-function resolveProviderCredentialIdentityKey(_provider: string, identifiers: string[]): string | null {
+function resolveProviderCredentialIdentityKey(provider: string, identifiers: string[]): string | null {
+	const emailIdentifier = identifiers.find(identifier => identifier.startsWith("email:"));
+	if ((provider === "openai-codex" || provider === "anthropic") && emailIdentifier) return emailIdentifier;
 	const accountIdentifier = identifiers.find(identifier => identifier.startsWith("account:"));
 	if (accountIdentifier) return accountIdentifier;
-	const emailIdentifier = identifiers.find(identifier => identifier.startsWith("email:"));
 	if (emailIdentifier) return emailIdentifier;
 	return null;
 }
