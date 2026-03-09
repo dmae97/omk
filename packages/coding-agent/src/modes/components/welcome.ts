@@ -122,6 +122,7 @@ export class WelcomeComponent implements Component {
 		const rightLines = [
 			` ${theme.bold(theme.fg("accent", "Tips"))}`,
 			` ${theme.fg("dim", "?")}${theme.fg("muted", " for keyboard shortcuts")}`,
+			` ${theme.fg("dim", "#")}${theme.fg("muted", " for prompt actions")}`,
 			` ${theme.fg("dim", "/")}${theme.fg("muted", " for commands")}`,
 			` ${theme.fg("dim", "!")}${theme.fg("muted", " to run bash")}`,
 			` ${theme.fg("dim", "$")}${theme.fg("muted", " to run python")}`,

@@ -789,6 +789,8 @@ export class Editor implements Component, Focusable {
 						if (this.onChange) {
 							this.onChange(this.getText());
 						}
+
+						result.onApplied?.();
 					}
 					return;
 				}
@@ -818,6 +820,7 @@ export class Editor implements Component, Focusable {
 							this.#state.lines = result.lines;
 							this.#state.cursorLine = result.cursorLine;
 							this.#setCursorCol(result.cursorCol);
+							result.onApplied?.();
 						}
 						this.#cancelAutocomplete();
 					}
@@ -844,6 +847,8 @@ export class Editor implements Component, Focusable {
 						if (this.onChange) {
 							this.onChange(this.getText());
 						}
+
+						result.onApplied?.();
 					}
 					return;
 				}
@@ -1132,6 +1137,14 @@ export class Editor implements Component, Focusable {
 		return { line: this.#state.cursorLine, col: this.#state.cursorCol };
 	}
 
+	moveToLineStart(): void {
+		this.#moveToLineStart();
+	}
+
+	moveToLineEnd(): void {
+		this.#moveToLineEnd();
+	}
+
 	setText(text: string): void {
 		this.#historyIndex = -1; // Exit history browsing mode
 		this.#resetKillSequence();
@@ -1200,7 +1213,11 @@ export class Editor implements Component, Focusable {
 					this.#tryTriggerAutocomplete();
 				}
 			}
-			// Also auto-trigger when typing letters/path chars in a slash command context
+			// Auto-trigger for "#" prompt actions anywhere in the current token
+			else if (char === "#") {
+				this.#tryTriggerAutocomplete();
+			}
+			// Also auto-trigger when typing letters/path chars in a completable context
 			else if (/[a-zA-Z0-9.\-_/]/.test(char)) {
 				const currentLine = this.#state.lines[this.#state.cursorLine] || "";
 				const textBeforeCursor = currentLine.slice(0, this.#state.cursorCol);
@@ -1210,6 +1227,10 @@ export class Editor implements Component, Focusable {
 				}
 				// Check if we're in an @ file reference context
 				else if (textBeforeCursor.match(/(?:^|[\s])@[^\s]*$/)) {
+					this.#tryTriggerAutocomplete();
+				}
+				// Check if we're in a # prompt action context
+				else if (textBeforeCursor.match(/#[^\s#]*$/)) {
 					this.#tryTriggerAutocomplete();
 				}
 			}
@@ -1385,6 +1406,10 @@ export class Editor implements Component, Focusable {
 			else if (textBeforeCursor.match(/(?:^|[\s])@[^\s]*$/)) {
 				this.#tryTriggerAutocomplete();
 			}
+			// # prompt action context
+			else if (textBeforeCursor.match(/#[^\s#]*$/)) {
+				this.#tryTriggerAutocomplete();
+			}
 		}
 	}
 
@@ -1520,6 +1545,8 @@ export class Editor implements Component, Focusable {
 			if (textBeforeCursor.trimStart().startsWith("/")) {
 				this.#tryTriggerAutocomplete();
 			} else if (textBeforeCursor.match(/(?:^|[\s])@[^\s]*$/)) {
+				this.#tryTriggerAutocomplete();
+			} else if (textBeforeCursor.match(/#[^\s#]*$/)) {
 				this.#tryTriggerAutocomplete();
 			}
 		}
@@ -1810,6 +1837,10 @@ export class Editor implements Component, Focusable {
 			}
 			// @ file reference context
 			else if (textBeforeCursor.match(/(?:^|[\s])@[^\s]*$/)) {
+				this.#tryTriggerAutocomplete();
+			}
+			// # prompt action context
+			else if (textBeforeCursor.match(/#[^\s#]*$/)) {
 				this.#tryTriggerAutocomplete();
 			}
 		}

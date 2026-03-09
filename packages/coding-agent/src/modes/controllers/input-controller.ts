@@ -1,8 +1,10 @@
 import * as fs from "node:fs/promises";
 import { type AgentMessage, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { copyToClipboard, readImageFromClipboard, sanitizeText } from "@oh-my-pi/pi-natives";
+import type { AutocompleteProvider, SlashCommand } from "@oh-my-pi/pi-tui";
 import { $env } from "@oh-my-pi/pi-utils";
 import { settings } from "../../config/settings";
+import { createPromptActionAutocompleteProvider } from "../../modes/prompt-action-autocomplete";
 import { theme } from "../../modes/theme/theme";
 import type { InteractiveModeContext } from "../../modes/types";
 import type { AgentSessionEvent } from "../../session/agent-session";
@@ -87,7 +89,8 @@ export class InputController {
 		this.ctx.editor.onCtrlG = () => void this.openExternalEditor();
 		this.ctx.editor.onQuestionMark = () => this.ctx.handleHotkeysCommand();
 		this.ctx.editor.onCtrlV = () => this.handleImagePaste();
-		this.ctx.editor.onCopyPrompt = () => this.handleCopyPrompt();
+		const copyPromptKeys = this.ctx.keybindings.getKeys("copyPrompt");
+		this.ctx.editor.onCopyPrompt = copyPromptKeys.includes("alt+shift+c") ? () => this.handleCopyPrompt() : undefined;
 
 		// Wire up extension shortcuts
 		this.registerExtensionShortcuts();
@@ -128,6 +131,13 @@ export class InputController {
 		}
 		for (const key of this.ctx.keybindings.getKeys("toggleSTT")) {
 			this.ctx.editor.setCustomKeyHandler(key, () => void this.ctx.handleSTTToggle());
+		}
+		for (const key of this.ctx.keybindings.getKeys("copyLine")) {
+			this.ctx.editor.setCustomKeyHandler(key, () => this.handleCopyCurrentLine());
+		}
+		for (const key of copyPromptKeys) {
+			if (key === "alt+shift+c") continue;
+			this.ctx.editor.setCustomKeyHandler(key, () => this.handleCopyPrompt());
 		}
 
 		this.ctx.editor.onChange = (text: string) => {
@@ -500,6 +510,36 @@ export class InputController {
 		} catch {
 			this.ctx.showStatus("Failed to read clipboard");
 			return false;
+		}
+	}
+
+	createAutocompleteProvider(commands: SlashCommand[], basePath: string): AutocompleteProvider {
+		return createPromptActionAutocompleteProvider({
+			commands,
+			basePath,
+			keybindings: this.ctx.keybindings,
+			copyCurrentLine: () => this.handleCopyCurrentLine(),
+			copyPrompt: () => this.handleCopyPrompt(),
+			moveCursorToLineStart: () => this.ctx.editor.moveToLineStart(),
+			moveCursorToLineEnd: () => this.ctx.editor.moveToLineEnd(),
+		});
+	}
+
+	/** Copy the current editor line to the system clipboard. */
+	handleCopyCurrentLine(): void {
+		const { line } = this.ctx.editor.getCursor();
+		const text = this.ctx.editor.getLines()[line] || "";
+		if (!text) {
+			this.ctx.showStatus("Nothing to copy");
+			return;
+		}
+		try {
+			copyToClipboard(text);
+			const sanitized = sanitizeText(text);
+			const preview = sanitized.length > 30 ? `${sanitized.slice(0, 30)}...` : sanitized;
+			this.ctx.showStatus(`Copied line: ${preview}`);
+		} catch {
+			this.ctx.showWarning("Failed to copy to clipboard");
 		}
 	}
 

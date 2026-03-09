@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added `#`-triggered prompt action suggestions in the editor, with keybinding hints for line navigation and prompt copy actions
+
 ## [13.9.10] - 2026-03-08
 ### Added
 

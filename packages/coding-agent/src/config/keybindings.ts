@@ -31,6 +31,8 @@ export type AppAction =
 	| "followUp"
 	| "dequeue"
 	| "pasteImage"
+	| "copyLine"
+	| "copyPrompt"
 	| "newSession"
 	| "tree"
 	| "fork"
@@ -70,6 +72,8 @@ export const DEFAULT_APP_KEYBINDINGS: Record<AppAction, KeyId | KeyId[]> = {
 	followUp: "ctrl+enter",
 	dequeue: "alt+up",
 	pasteImage: "ctrl+v",
+	copyLine: "alt+shift+l",
+	copyPrompt: "alt+shift+c",
 	newSession: [],
 	tree: [],
 	fork: [],
@@ -104,6 +108,8 @@ const APP_ACTIONS: AppAction[] = [
 	"followUp",
 	"dequeue",
 	"pasteImage",
+	"copyLine",
+	"copyPrompt",
 	"newSession",
 	"tree",
 	"fork",

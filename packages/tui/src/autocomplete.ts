@@ -188,6 +188,7 @@ export interface AutocompleteProvider {
 		lines: string[];
 		cursorLine: number;
 		cursorCol: number;
+		onApplied?: () => void;
 	};
 
 	/** Get inline hint text to show as dim ghost text after the cursor */
