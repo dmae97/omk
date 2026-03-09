@@ -1,8 +1,8 @@
 import {
-	CombinedAutocompleteProvider,
-	getEditorKeybindings,
 	type AutocompleteItem,
 	type AutocompleteProvider,
+	CombinedAutocompleteProvider,
+	getEditorKeybindings,
 	type SlashCommand,
 } from "@oh-my-pi/pi-tui";
 import { formatKeyHints, type KeybindingsManager } from "../config/keybindings";

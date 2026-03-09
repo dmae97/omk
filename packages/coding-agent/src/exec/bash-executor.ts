@@ -3,6 +3,7 @@
  *
  * Uses brush-core via native bindings for shell execution.
  */
+import * as fs from "node:fs/promises";
 import { Shell } from "@oh-my-pi/pi-natives";
 import { Settings } from "../config/settings";
 import { OutputSink } from "../session/streaming-output";
@@ -39,10 +40,23 @@ const HARD_TIMEOUT_GRACE_MS = 5_000;
 
 const shellSessions = new Map<string, Shell>();
 
+async function resolveShellCwd(cwd: string | undefined): Promise<string | undefined> {
+	if (!cwd) return undefined;
+
+	try {
+		// Brush preserves the working directory string verbatim, so resolve symlinks
+		// up front to keep `pwd` aligned with tools like `git worktree list`.
+		return await fs.realpath(cwd);
+	} catch {
+		return cwd;
+	}
+}
+
 export async function executeBash(command: string, options?: BashExecutorOptions): Promise<BashResult> {
 	const settings = await Settings.init();
 	const { shell, env: shellEnv, prefix } = settings.getShellConfig();
 	const snapshotPath = shell.includes("bash") ? await getOrCreateSnapshot(shell, shellEnv) : null;
+	const commandCwd = await resolveShellCwd(options?.cwd);
 
 	// Apply command prefix if configured
 	const prefixedCommand = prefix ? `${prefix} ${command}` : command;
@@ -97,7 +111,7 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 		const runPromise = shellSession.run(
 			{
 				command: finalCommand,
-				cwd: options?.cwd,
+				cwd: commandCwd,
 				env: options?.env ? { ...NON_INTERACTIVE_ENV, ...options.env } : NON_INTERACTIVE_ENV,
 				timeoutMs: options?.timeout,
 				signal,

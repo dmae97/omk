@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
+import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { TempDir } from "@oh-my-pi/pi-utils";
 
 describe("SessionManager signature persistence", () => {
@@ -33,8 +33,11 @@ describe("SessionManager signature persistence", () => {
 		await session.flush();
 
 		const reloaded = await SessionManager.open(session.getSessionFile()!);
-		const assistant = reloaded.getEntries().find(entry => entry.type === "message" && entry.message.role === "assistant")
-			?.message as AssistantMessage | undefined;
+		const assistant = reloaded
+			.getEntries()
+			.find(entry => entry.type === "message" && entry.message.role === "assistant")?.message as
+			| AssistantMessage
+			| undefined;
 
 		expect(assistant).toBeDefined();
 		expect(assistant?.content[0]).toMatchObject({ type: "thinking", thinking: "reasoning", thinkingSignature: "" });
