@@ -250,9 +250,9 @@ export class ExaProvider extends SearchProvider {
 				return false;
 			}
 		} catch {
-			// Settings not initialized; fall through to credential check
+			// Settings not initialized; fall through to public MCP availability
 		}
-		return !!getEnvApiKey("exa") || !!findApiKey();
+		return true;
 	}
 
 	search(params: SearchParams): Promise<SearchResponse> {

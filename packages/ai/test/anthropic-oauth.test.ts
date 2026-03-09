@@ -210,4 +210,33 @@ describe("anthropic auth resolution", () => {
 			fs.rmSync(tmpDir, { recursive: true, force: true });
 		}
 	});
+
+	it("prefers stored API key over generic env fallback", async () => {
+		const tmpDir = path.join(os.tmpdir(), `pi-ai-auth-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+		fs.mkdirSync(tmpDir, { recursive: true });
+		const dbPath = path.join(tmpDir, "agent.db");
+		const store = await AuthCredentialStore.open(dbPath);
+		try {
+			store.replaceAuthCredentialsForProvider("anthropic", [{ type: "api_key", key: "sk-ant-api-db" }]);
+			await withEnv(
+				{
+					CLAUDE_CODE_USE_FOUNDRY: undefined,
+					ANTHROPIC_FOUNDRY_API_KEY: undefined,
+					ANTHROPIC_API_KEY: "sk-ant-api-env",
+					ANTHROPIC_BASE_URL: "https://anthropic.example.com/",
+					ANTHROPIC_OAUTH_TOKEN: undefined,
+				},
+				async () => {
+					const auth = await findAnthropicAuth(store);
+					expect(auth).not.toBeNull();
+					expect(auth?.apiKey).toBe("sk-ant-api-db");
+					expect(auth?.isOAuth).toBe(false);
+					expect(auth?.baseUrl).toBe("https://anthropic.example.com");
+				},
+			);
+		} finally {
+			store.close();
+			fs.rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
 });
