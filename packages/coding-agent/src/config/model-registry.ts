@@ -568,7 +568,7 @@ export class ModelRegistry {
 		const builtInModels = this.#loadBuiltInModels(overrides, modelOverrides);
 		const combined = this.#mergeCustomModels(builtInModels, customModels);
 
-		this.#models = this.#applyHardcodedModelPolicies(combined);
+		this.#models = combined;
 	}
 
 	/** Load built-in models, applying provider and per-model overrides */
@@ -747,7 +747,7 @@ export class ModelRegistry {
 					: model;
 			}),
 		);
-		this.#models = this.#applyHardcodedModelPolicies(this.#applyModelOverrides(merged, this.#modelOverrides));
+		this.#models = this.#applyModelOverrides(merged, this.#modelOverrides);
 	}
 
 	async #discoverProviderModels(providerConfig: DiscoveryProviderConfig): Promise<Model<Api>[]> {
@@ -1066,16 +1066,6 @@ export class ModelRegistry {
 			return applyModelOverride(model, override);
 		});
 	}
-
-	#applyHardcodedModelPolicies(models: Model<Api>[]): Model<Api>[] {
-		return models.map(model => {
-			if (model.id === "gpt-5.4") {
-				return { ...model, contextWindow: 1_000_000 };
-			}
-			return model;
-		});
-	}
-
 	#parseModels(config: ModelsConfig): Model<Api>[] {
 		const models: Model<Api>[] = [];
 
