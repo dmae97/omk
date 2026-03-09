@@ -897,6 +897,11 @@ async function truncateForPersistence<T>(obj: T, blobStore: BlobStore, key?: str
 
 	if (typeof obj === "string") {
 		if (obj.length > MAX_PERSIST_CHARS) {
+			// Cryptographic signatures must be preserved exactly or cleared entirely — never truncated.
+			// Truncation would produce an invalid signature that the API rejects.
+			if (key === "thinkingSignature" || key === "thoughtSignature" || key === "textSignature") {
+				return "" as T;
+			}
 			const limit = Math.max(0, MAX_PERSIST_CHARS - TRUNCATION_NOTICE.length);
 			return `${truncateString(obj, limit)}${TRUNCATION_NOTICE}` as T;
 		}
