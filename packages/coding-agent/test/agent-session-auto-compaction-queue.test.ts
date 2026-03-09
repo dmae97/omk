@@ -25,8 +25,8 @@ function getRuntimeSignals(): string[] {
 }
 
 /**
- * Regression test: auto-compaction completion should resume the agent loop when
- * there are queued agent-level messages (follow-up/steering/custom).
+	 * Regression test: auto-compaction completion should resume the agent loop when
+	 * there are queued agent-level messages (follow-up/steering/custom).
  */
 describe("AgentSession auto-compaction queue resume", () => {
 	let tempDir: TempDir;
@@ -60,17 +60,17 @@ describe("AgentSession auto-compaction queue resume", () => {
 				"\t\t};",
 				"\t});",
 				'\tpi.on("auto_compaction_start", async (event) => {',
-				`\t\tconst signals = globalThis.${runtimeSignalStoreKey} ?? (globalThis.${runtimeSignalStoreKey} = []);`,
-				'\t\tsignals.push("compaction:start:" + event.reason);',
-				"\t});",
+					`\t\tconst signals = globalThis.${runtimeSignalStoreKey} ?? (globalThis.${runtimeSignalStoreKey} = []);`,
+					'\t\tsignals.push("compaction:start:" + event.reason);',
+					"\t});",
 				'\tpi.on("auto_compaction_end", async (event) => {',
-				`\t\tconst signals = globalThis.${runtimeSignalStoreKey} ?? (globalThis.${runtimeSignalStoreKey} = []);`,
-				'\t\tsignals.push("compaction:end:" + (event.aborted ? "aborted" : "ok"));',
-				"\t});",
+					`\t\tconst signals = globalThis.${runtimeSignalStoreKey} ?? (globalThis.${runtimeSignalStoreKey} = []);`,
+					'\t\tsignals.push("compaction:end:" + (event.aborted ? "aborted" : "ok"));',
+					"\t});",
 				'\tpi.on("todo_reminder", async (event) => {',
-				`\t\tconst signals = globalThis.${runtimeSignalStoreKey} ?? (globalThis.${runtimeSignalStoreKey} = []);`,
-				'\t\tsignals.push("todo:" + event.attempt + "/" + event.maxAttempts);',
-				"\t});",
+					`\t\tconst signals = globalThis.${runtimeSignalStoreKey} ?? (globalThis.${runtimeSignalStoreKey} = []);`,
+					'\t\tsignals.push("todo:" + event.attempt + "/" + event.maxAttempts);',
+					"\t});",
 				"}",
 			].join("\n"),
 		);
@@ -239,4 +239,5 @@ describe("AgentSession auto-compaction queue resume", () => {
 		expect(getRuntimeSignals()).toContain("todo:1/3");
 		expect(continueSpy).toHaveBeenCalledTimes(1);
 	});
+
 });

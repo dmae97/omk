@@ -3726,11 +3726,11 @@ export class AgentSession {
 		let action: "context-full" | "handoff" =
 			compactionSettings.strategy === "handoff" && reason !== "overflow" ? "handoff" : "context-full";
 		await this.#emitSessionEvent({ type: "auto_compaction_start", reason, action });
-		// Properly abort and null existing controller before replacing
-		if (this.#autoCompactionAbortController) {
-			this.#autoCompactionAbortController.abort();
-		}
-		this.#autoCompactionAbortController = new AbortController();
+		// Abort any older auto-compaction before installing this run's controller.
+		this.#autoCompactionAbortController?.abort();
+		const autoCompactionAbortController = new AbortController();
+		this.#autoCompactionAbortController = autoCompactionAbortController;
+		const autoCompactionSignal = autoCompactionAbortController.signal;
 
 		try {
 			if (compactionSettings.strategy === "handoff" && reason !== "overflow") {
@@ -3740,7 +3740,7 @@ export class AgentSession {
 					signal: this.#autoCompactionAbortController.signal,
 				});
 				if (!handoffResult) {
-					const aborted = this.#autoCompactionAbortController.signal.aborted;
+					const aborted = autoCompactionSignal.aborted;
 					if (aborted) {
 						await this.#emitSessionEvent({
 							type: "auto_compaction_end",
@@ -3824,7 +3824,7 @@ export class AgentSession {
 					preparation,
 					branchEntries: pathEntries,
 					customInstructions: undefined,
-					signal: this.#autoCompactionAbortController.signal,
+					signal: autoCompactionSignal,
 				})) as SessionBeforeCompactResult | undefined;
 
 				if (hookResult?.cancel) {
@@ -3889,7 +3889,7 @@ export class AgentSession {
 								candidate,
 								apiKey,
 								undefined,
-								this.#autoCompactionAbortController.signal,
+								autoCompactionSignal,
 								{
 									promptOverride: hookPrompt,
 									extraContext: hookContext,
@@ -3898,7 +3898,7 @@ export class AgentSession {
 							);
 							break;
 						} catch (error) {
-							if (this.#autoCompactionAbortController.signal.aborted) {
+							if (autoCompactionSignal.aborted) {
 								throw error;
 							}
 
@@ -3942,7 +3942,7 @@ export class AgentSession {
 								error: message,
 								model: `${candidate.provider}/${candidate.id}`,
 							});
-							await abortableSleep(delayMs, this.#autoCompactionAbortController.signal);
+							await abortableSleep(delayMs, autoCompactionSignal);
 						}
 					}
 
@@ -3966,7 +3966,7 @@ export class AgentSession {
 				preserveData = { ...(preserveData ?? {}), ...(compactResult.preserveData ?? {}) };
 			}
 
-			if (this.#autoCompactionAbortController.signal.aborted) {
+			if (autoCompactionSignal.aborted) {
 				await this.#emitSessionEvent({
 					type: "auto_compaction_end",
 					action,
@@ -4056,7 +4056,7 @@ export class AgentSession {
 				});
 			}
 		} catch (error) {
-			if (this.#autoCompactionAbortController?.signal.aborted) {
+			if (autoCompactionSignal.aborted) {
 				await this.#emitSessionEvent({
 					type: "auto_compaction_end",
 					action,
@@ -4079,7 +4079,9 @@ export class AgentSession {
 						: `Auto-compaction failed: ${errorMessage}`,
 			});
 		} finally {
-			this.#autoCompactionAbortController = undefined;
+			if (this.#autoCompactionAbortController === autoCompactionAbortController) {
+				this.#autoCompactionAbortController = undefined;
+			}
 		}
 	}
 
