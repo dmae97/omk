@@ -333,6 +333,20 @@ describe("ModelRegistry", () => {
 			expect(anthropicModels.some(m => m.id.includes("claude"))).toBe(true);
 		});
 
+		test("built-in gpt-5.4 keeps bundled context window metadata", () => {
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			expect(registry.find("openai", "gpt-5.4")?.contextWindow).toBe(1_050_000);
+		});
+
+		test("custom gpt-5.4 replacement keeps declared context window", () => {
+			writeModelsJson({
+				openai: providerConfig("https://my-proxy.example.com/v1", [{ id: "gpt-5.4" }], "openai-responses"),
+			});
+
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			expect(registry.find("openai", "gpt-5.4")?.contextWindow).toBe(100000);
+		});
+
 		test("removing custom models from models.json keeps built-in provider models", async () => {
 			writeModelsJson({
 				anthropic: providerConfig("https://proxy.example.com/v1", [{ id: "claude-custom" }]),
