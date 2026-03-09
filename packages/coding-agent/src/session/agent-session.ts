@@ -261,7 +261,6 @@ export interface HandoffResult {
 interface HandoffOptions {
 	autoTriggered?: boolean;
 	signal?: AbortSignal;
-	skipPostPromptRecoveryWait?: boolean;
 }
 
 /** Internal marker for hook messages queued through the agent loop */
@@ -3242,16 +3241,19 @@ export class AgentSession {
 			if (handoffSignal.aborted) {
 				throw new Error("Handoff cancelled");
 			}
-			await this.#promptWithMessage(
-				{
-					role: "developer",
-					content: [{ type: "text", text: handoffPrompt }],
-					attribution: "agent",
-					timestamp: Date.now(),
-				},
-				handoffPrompt,
-				{ skipCompactionCheck: true, skipPostPromptRecoveryWait: options?.skipPostPromptRecoveryWait },
-			);
+			this.#promptInFlightCount++;
+			try {
+				await this.#promptAgentWithIdleRetry([
+					{
+						role: "developer",
+						content: [{ type: "text", text: handoffPrompt }],
+						attribution: "agent",
+						timestamp: Date.now(),
+					},
+				]);
+			} finally {
+				this.#promptInFlightCount = Math.max(0, this.#promptInFlightCount - 1);
+			}
 			await completionPromise;
 
 			if (handoffCancelled || handoffSignal.aborted) {
@@ -3735,7 +3737,6 @@ export class AgentSession {
 				const handoffResult = await this.handoff(handoffFocus, {
 					autoTriggered: true,
 					signal: this.#autoCompactionAbortController.signal,
-					skipPostPromptRecoveryWait: true,
 				});
 				if (!handoffResult) {
 					const aborted = this.#autoCompactionAbortController.signal.aborted;

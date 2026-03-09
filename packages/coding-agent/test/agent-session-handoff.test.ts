@@ -262,7 +262,6 @@ describe("AgentSession handoff", () => {
 		expect(handoffSpy).toHaveBeenCalledWith(expect.stringContaining("Threshold-triggered maintenance"), {
 			autoTriggered: true,
 			signal: expect.anything(),
-			skipPostPromptRecoveryWait: true,
 		});
 		expect(events.filter(event => event.type === "auto_compaction_start")).toHaveLength(1);
 		const endEvents = events.filter(event => event.type === "auto_compaction_end");
