@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.9.16] - 2026-03-10
 ### Added
 
 - Support for `onPayload` callback to replace provider request payloads before sending, enabling request interception and modification

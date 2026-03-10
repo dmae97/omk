@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.9.16] - 2026-03-10
 ### Breaking Changes
 
 - Web search tool no longer accepts `provider` parameter in tool calls; use internal provider resolution instead
