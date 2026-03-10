@@ -1,8 +1,9 @@
 /**
  * macOS appearance detection via native CoreFoundation APIs.
  *
- * - `detectMacOSAppearance()`: synchronous, reads NSUserDefaults directly
- * - `startMacAppearanceObserver()`: long-lived observer via CFDistributedNotificationCenter
+ * This is a fallback capability for terminals whose own dark/light reporting is
+ * unavailable or known-broken. It reports the host macOS appearance, not the
+ * terminal profile colors.
  */
 
 import { native } from "../native";

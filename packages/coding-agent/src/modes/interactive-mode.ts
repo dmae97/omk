@@ -364,9 +364,9 @@ export class InteractiveMode implements InteractiveModeContext {
 			this.ui.requestRender();
 		});
 
-		// Subscribe to terminal Mode 2031 dark/light appearance change notifications.
-		// When the OS or terminal switches between dark and light mode, the terminal
-		// sends a DSR and we re-evaluate which theme to use.
+		// Subscribe to terminal dark/light appearance changes.
+		// The terminal queries background color via OSC 11 at startup and on
+		// Mode 2031 notifications, computing luminance to detect dark/light.
 		this.ui.terminal.onAppearanceChange(mode => {
 			onTerminalAppearanceChange(mode);
 		});

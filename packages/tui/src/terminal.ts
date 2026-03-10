@@ -86,13 +86,13 @@ export interface Terminal {
 	setTitle(title: string): void; // Set terminal window title
 
 	/**
-	 * Register a callback for Mode 2031 dark/light appearance change notifications.
-	 * Supported by Ghostty, Kitty, Contour, VTE (GNOME Terminal), and tmux 3.6+.
-	 * The callback fires when the terminal reports a change; it does NOT fire for the initial query.
+	 * Register a callback for terminal appearance (dark/light) changes.
+	 * Detection uses OSC 11 background color query with Mode 2031 as a change trigger.
+	 * Fires when the detected appearance changes, including the initial detection.
 	 */
 	onAppearanceChange(callback: (appearance: TerminalAppearance) => void): void;
 
-	/** The last appearance reported by the terminal, or undefined if not yet known. */
+	/** The last detected terminal appearance, or undefined if not yet known. */
 	get appearance(): TerminalAppearance | undefined;
 }
 
@@ -113,6 +113,13 @@ export class ProcessTerminal implements Terminal {
 	#windowsVTInputRestore?: () => void;
 	#appearanceCallbacks: Array<(appearance: TerminalAppearance) => void> = [];
 	#appearance: TerminalAppearance | undefined;
+	#osc11Pending = false;
+	#osc11QueryQueued = false;
+	#osc11ResponseBuffer = "";
+	#pendingDa1Sentinels = 0;
+	#osc11PollTimer?: Timer;
+	#mode2031Active = false;
+	#mode2031DebounceTimer?: Timer;
 
 	get kittyProtocolActive(): boolean {
 		return this.#kittyProtocolActive;
@@ -164,12 +171,21 @@ export class ProcessTerminal implements Terminal {
 		// See: https://sw.kovidgoyal.net/kitty/keyboard-protocol/
 		this.#queryAndEnableKittyProtocol();
 
-		// Enable Mode 2031: terminal will send DSR notifications on dark/light appearance changes.
-		// Query current mode with CSI ? 996 n, then subscribe with CSI ? 2031 h.
-		// Supported by Ghostty, Kitty, Contour, VTE/GNOME Terminal, tmux 3.6+.
-		// Unsupported terminals silently ignore these sequences.
-		this.#safeWrite("\x1b[?996n"); // Query current appearance
-		this.#safeWrite("\x1b[?2031h"); // Subscribe to appearance changes
+		// Query terminal background color via OSC 11 for dark/light detection.
+		// Uses DA1 (Primary Device Attributes) as a sentinel: terminals process
+		// sequences in order, so if DA1 arrives before OSC 11 response,
+		// the terminal does not support OSC 11. This avoids indefinite hangs.
+		// Technique used by Neovim, bat, fish, and terminal-colorsaurus.
+		this.#queryBackgroundColor();
+
+		// Subscribe to Mode 2031 appearance change notifications.
+		// When the terminal reports a change, we re-query OSC 11 to get the
+		// actual background color (following Neovim convention) with 100ms debounce.
+		this.#safeWrite("\x1b[?2031h");
+
+		// Start periodic OSC 11 re-query for terminals without Mode 2031
+		// (Warp, Alacritty, WezTerm, iTerm2). Self-disables once Mode 2031 fires.
+		this.#startOsc11Poll();
 	}
 
 	/**
@@ -236,8 +252,15 @@ export class ProcessTerminal implements Terminal {
 		// Kitty protocol response pattern: \x1b[?<flags>u
 		const kittyResponsePattern = /^\x1b\[\?(\d+)u$/;
 
-		// Mode 2031 DSR response pattern: \x1b[?997;{1=dark,2=light}n
+		// Mode 2031 DSR response: \x1b[?997;{1=dark,2=light}n
 		const appearanceDsrPattern = /^\x1b\[\?997;([12])n$/;
+
+		// OSC 11 response: \x1b]11;rgb:RR/GG/BB or rgba:RR/GG/BB, terminated by BEL or ST.
+		const osc11ResponsePattern =
+			/^\x1b\]11;rgba?:([0-9a-fA-F]{1,4})\/([0-9a-fA-F]{1,4})\/([0-9a-fA-F]{1,4})(?:\x07|\x1b\\)$/;
+
+		// DA1 (Primary Device Attributes) response: \x1b[?...c
+		const da1ResponsePattern = /^\x1b\[\?[\d;]*c$/;
 
 		// Forward individual sequences to the input handler
 		this.#stdinBuffer.on("data", (sequence: string) => {
@@ -261,22 +284,42 @@ export class ProcessTerminal implements Terminal {
 				}
 			}
 
-			// Check for Mode 2031 appearance DSR response: CSI ? 997 ; {1,2} n
+			// DA1 response: swallow our sentinel reply regardless of whether OSC 11
+			// already succeeded. Other terminal probes should never see these replies.
+			if (da1ResponsePattern.test(sequence) && this.#pendingDa1Sentinels > 0) {
+				this.#pendingDa1Sentinels--;
+				if (this.#osc11Pending) {
+					this.#finishOsc11Query();
+				}
+				return;
+			}
+
+			// OSC 11 replies can be split if the stdin buffer flushes a partial sequence.
+			// Accumulate fragments until the BEL/ST terminator arrives, then parse once.
+			if (this.#osc11Pending && (this.#osc11ResponseBuffer || sequence.startsWith("\x1b]11;"))) {
+				this.#osc11ResponseBuffer += sequence;
+				const osc11Match = this.#osc11ResponseBuffer.match(osc11ResponsePattern);
+				if (!osc11Match) return;
+				const [, rHex, gHex, bHex] = osc11Match;
+				this.#finishOsc11Query();
+				this.#handleOsc11Response(rHex!, gHex!, bHex!);
+				return;
+			}
+
+			// Mode 2031 change notification: re-query OSC 11 with 100ms debounce
+			// (Neovim convention — coalesces rapid notifications during transitions)
 			const appearanceMatch = sequence.match(appearanceDsrPattern);
 			if (appearanceMatch) {
-				const mode: TerminalAppearance = appearanceMatch[1] === "1" ? "dark" : "light";
-				const changed = mode !== this.#appearance;
-				this.#appearance = mode;
-				if (changed) {
-					for (const cb of this.#appearanceCallbacks) {
-						try {
-							cb(mode);
-						} catch {
-							/* ignore callback errors */
-						}
-					}
+				if (!this.#mode2031Active) {
+					this.#mode2031Active = true;
+					this.#stopOsc11Poll();
 				}
-				return; // Don't forward DSR to TUI
+				if (this.#mode2031DebounceTimer) clearTimeout(this.#mode2031DebounceTimer);
+				this.#mode2031DebounceTimer = setTimeout(() => {
+					this.#mode2031DebounceTimer = undefined;
+					this.#queryBackgroundColor();
+				}, 100);
+				return;
 			}
 			if (this.#inputHandler) {
 				this.#inputHandler(sequence);
@@ -294,6 +337,83 @@ export class ProcessTerminal implements Terminal {
 		this.#stdinDataHandler = (data: string) => {
 			this.#stdinBuffer!.process(data);
 		};
+	}
+
+	/**
+	 * Send OSC 11 background color query followed by DA1 sentinel.
+	 * DA1 avoids indefinite hangs: if DA1 response arrives before OSC 11,
+	 * the terminal does not support OSC 11.
+	 */
+	#queryBackgroundColor(): void {
+		if (this.#dead) return;
+		if (this.#osc11Pending) {
+			this.#osc11QueryQueued = true;
+			return;
+		}
+		this.#startOsc11Query();
+	}
+
+	#startOsc11Query(): void {
+		this.#osc11Pending = true;
+		this.#osc11ResponseBuffer = "";
+		this.#pendingDa1Sentinels++;
+		this.#safeWrite("\x1b]11;?\x07"); // OSC 11 query (BEL terminated)
+		this.#safeWrite("\x1b[c"); // DA1 sentinel
+	}
+
+	#finishOsc11Query(): void {
+		this.#osc11Pending = false;
+		this.#osc11ResponseBuffer = "";
+		if (!this.#osc11QueryQueued || this.#dead) return;
+		this.#osc11QueryQueued = false;
+		this.#startOsc11Query();
+	}
+
+	/**
+	 * Parse an OSC 11 background color response and compute BT.601 luminance.
+	 * Handles 1-, 2-, 3-, and 4-digit XParseColor hex components.
+	 */
+	#handleOsc11Response(rHex: string, gHex: string, bHex: string): void {
+		const normalize = (hex: string): number => {
+			const value = parseInt(hex, 16);
+			if (Number.isNaN(value)) return 0;
+			const max = 16 ** hex.length - 1;
+			return max > 0 ? value / max : 0;
+		};
+		const luminance = 0.299 * normalize(rHex) + 0.587 * normalize(gHex) + 0.114 * normalize(bHex);
+		const mode: TerminalAppearance = luminance < 0.5 ? "dark" : "light";
+		if (mode === this.#appearance) return;
+		this.#appearance = mode;
+		for (const cb of this.#appearanceCallbacks) {
+			try {
+				cb(mode);
+			} catch {
+				/* ignore callback errors */
+			}
+		}
+	}
+
+	/**
+	 * Start periodic OSC 11 re-queries for terminals without Mode 2031 (Warp, Alacritty, WezTerm).
+	 * Self-disables once Mode 2031 fires (push-based is better than polling).
+	 */
+	#startOsc11Poll(): void {
+		this.#stopOsc11Poll();
+		this.#osc11PollTimer = setInterval(() => {
+			if (this.#dead) {
+				this.#stopOsc11Poll();
+				return;
+			}
+			this.#queryBackgroundColor();
+		}, 2_000);
+		this.#osc11PollTimer.unref();
+	}
+
+	#stopOsc11Poll(): void {
+		if (this.#osc11PollTimer) {
+			clearInterval(this.#osc11PollTimer);
+			this.#osc11PollTimer = undefined;
+		}
 	}
 
 	/**
@@ -372,7 +492,17 @@ export class ProcessTerminal implements Terminal {
 
 		// Disable Mode 2031 appearance change notifications
 		this.#safeWrite("\x1b[?2031l");
+		this.#stopOsc11Poll();
+		if (this.#mode2031DebounceTimer) {
+			clearTimeout(this.#mode2031DebounceTimer);
+			this.#mode2031DebounceTimer = undefined;
+		}
 		this.#appearanceCallbacks = [];
+		this.#osc11Pending = false;
+		this.#osc11QueryQueued = false;
+		this.#osc11ResponseBuffer = "";
+		this.#pendingDa1Sentinels = 0;
+		this.#mode2031Active = false;
 
 		// Disable Kitty keyboard protocol if not already done by drainInput()
 		if (this.#kittyProtocolActive) {

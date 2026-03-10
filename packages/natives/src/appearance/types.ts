@@ -16,7 +16,6 @@ declare module "../bindings" {
 		/**
 		 * Detect macOS system appearance via CoreFoundation preferences.
 		 * Returns `"dark"` or `"light"` on macOS, `null` on other platforms.
-		 * Does not shell out — reads NSUserDefaults directly.
 		 */
 		detectMacOSAppearance(): string | null;
 		/**
