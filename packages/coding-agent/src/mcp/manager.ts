@@ -840,12 +840,9 @@ export class MCPManager {
 					// Proactive refresh: 5-minute buffer before expiry
 					// Force refresh: on 401/403 auth errors (revoked tokens, clock skew, missing expires)
 					const REFRESH_BUFFER_MS = 5 * 60_000;
-					const shouldRefresh = forceRefresh || (credential.expires && Date.now() >= credential.expires - REFRESH_BUFFER_MS);
-					if (
-						shouldRefresh &&
-						credential.refresh &&
-						auth.tokenUrl
-					) {
+					const shouldRefresh =
+						forceRefresh || (credential.expires && Date.now() >= credential.expires - REFRESH_BUFFER_MS);
+					if (shouldRefresh && credential.refresh && auth.tokenUrl) {
 						try {
 							const refreshed = await refreshMCPOAuthToken(
 								auth.tokenUrl,

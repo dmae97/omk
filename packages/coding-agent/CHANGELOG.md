@@ -1,9 +1,9 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Exported `submitInteractiveInput()` function for programmatic submission of user input in interactive mode
 - Added proactive OAuth token refresh for MCP server connections with 5-minute expiry buffer
 - Added reactive 401/403 retry with automatic token refresh on HTTP MCP transports
 - Added `refreshMCPOAuthToken()` for standard OAuth 2.0 refresh_token grants

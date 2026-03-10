@@ -26,6 +26,7 @@ import { exportFromFile } from "./export/html";
 import type { ExtensionUIContext } from "./extensibility/extensions/types";
 import { InteractiveMode, runPrintMode, runRpcMode } from "./modes";
 import { initTheme, stopThemeWatcher } from "./modes/theme/theme";
+import type { SubmittedUserInput } from "./modes/types";
 import { type CreateAgentSessionOptions, createAgentSession, discoverAuthStorage } from "./sdk";
 import type { AgentSession } from "./session/agent-session";
 import { resolveResumableSession, type SessionInfo, SessionManager } from "./session/session-manager";
@@ -64,6 +65,29 @@ async function readPipedInput(): Promise<string | undefined> {
 export interface InteractiveModeNotify {
 	kind: "warn" | "error" | "info";
 	message: string;
+}
+
+export async function submitInteractiveInput(
+	mode: Pick<InteractiveMode, "markPendingSubmissionStarted" | "finishPendingSubmission" | "showError">,
+	session: Pick<AgentSession, "prompt">,
+	input: SubmittedUserInput,
+): Promise<void> {
+	if (input.cancelled) {
+		return;
+	}
+
+	try {
+		// Continue shortcuts submit an already-started empty prompt with no optimistic user message.
+		if (!input.started && !mode.markPendingSubmissionStarted(input)) {
+			return;
+		}
+		await session.prompt(input.text, { images: input.images });
+	} catch (error: unknown) {
+		const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+		mode.showError(errorMessage);
+	} finally {
+		mode.finishPendingSubmission(input);
+	}
 }
 
 async function runInteractiveMode(
@@ -126,20 +150,7 @@ async function runInteractiveMode(
 
 	while (true) {
 		const input = await mode.getUserInput();
-		if (input.cancelled) {
-			continue;
-		}
-		try {
-			if (!mode.markPendingSubmissionStarted(input)) {
-				continue;
-			}
-			await session.prompt(input.text, { images: input.images });
-		} catch (error: unknown) {
-			const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-			mode.showError(errorMessage);
-		} finally {
-			mode.finishPendingSubmission(input);
-		}
+		await submitInteractiveInput(mode, session, input);
 	}
 }
 
