@@ -1,7 +1,7 @@
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { Api, Model } from "@oh-my-pi/pi-ai";
 import { MODEL_ROLE_IDS } from "../config/model-registry";
-import { expandRoleAlias, parseModelPattern, resolveModelRoleValue } from "../config/model-resolver";
+import { parseModelPattern, resolveModelRoleValue } from "../config/model-resolver";
 import type { Settings } from "../config/settings";
 import MODEL_PRIO from "../priority.json" with { type: "json" };
 

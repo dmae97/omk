@@ -46,17 +46,16 @@ async function runLegacyCommitCommand(args: CommitCommandArgs): Promise<void> {
 	const modelRegistry = new ModelRegistry(authStorage);
 	await modelRegistry.refresh();
 
-	const { model: primaryModel, apiKey: primaryApiKey, thinkingLevel: primaryThinkingLevel } = await resolvePrimaryModel(
-		args.model,
-		settings,
-		modelRegistry,
-	);
-	const { model: smolModel, apiKey: smolApiKey, thinkingLevel: smolThinkingLevel } = await resolveSmolModel(
-		settings,
-		modelRegistry,
-		primaryModel,
-		primaryApiKey,
-	);
+	const {
+		model: primaryModel,
+		apiKey: primaryApiKey,
+		thinkingLevel: primaryThinkingLevel,
+	} = await resolvePrimaryModel(args.model, settings, modelRegistry);
+	const {
+		model: smolModel,
+		apiKey: smolApiKey,
+		thinkingLevel: smolThinkingLevel,
+	} = await resolveSmolModel(settings, modelRegistry, primaryModel, primaryApiKey);
 
 	const git = new ControlledGit(cwd);
 	let stagedFiles = await git.getStagedFiles();

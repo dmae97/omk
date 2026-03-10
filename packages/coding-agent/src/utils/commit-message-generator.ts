@@ -9,10 +9,10 @@ import { logger } from "@oh-my-pi/pi-utils";
 import type { ModelRegistry } from "../config/model-registry";
 import { resolveModelRoleValue } from "../config/model-resolver";
 import { renderPromptTemplate } from "../config/prompt-templates";
-import { toReasoningEffort } from "../thinking";
 import type { Settings } from "../config/settings";
 import MODEL_PRIO from "../priority.json" with { type: "json" };
 import commitSystemPrompt from "../prompts/system/commit-message-system.md" with { type: "text" };
+import { toReasoningEffort } from "../thinking";
 
 const COMMIT_SYSTEM_PROMPT = renderPromptTemplate(commitSystemPrompt);
 const MAX_DIFF_CHARS = 4000;

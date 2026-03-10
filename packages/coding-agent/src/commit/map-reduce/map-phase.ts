@@ -30,7 +30,13 @@ export interface MapPhaseInput {
 	};
 }
 
-export async function runMapPhase({ model, apiKey, thinkingLevel, files, config }: MapPhaseInput): Promise<FileObservation[]> {
+export async function runMapPhase({
+	model,
+	apiKey,
+	thinkingLevel,
+	files,
+	config,
+}: MapPhaseInput): Promise<FileObservation[]> {
 	const filtered = files.filter(file => !isExcludedFile(file.filename));
 	const systemPrompt = renderPromptTemplate(fileObserverSystemPrompt);
 	const maxFileTokens = config?.maxFileTokens ?? MAX_FILE_TOKENS;
@@ -61,7 +67,13 @@ export async function runMapPhase({ model, apiKey, thinkingLevel, files, config 
 		};
 
 		const response = await withRetry(
-			() => completeSimple(model, request, { apiKey, maxTokens: 400, reasoning: toReasoningEffort(thinkingLevel), signal: AbortSignal.timeout(timeoutMs) }),
+			() =>
+				completeSimple(model, request, {
+					apiKey,
+					maxTokens: 400,
+					reasoning: toReasoningEffort(thinkingLevel),
+					signal: AbortSignal.timeout(timeoutMs),
+				}),
 			maxRetries,
 			retryBackoffMs,
 		);

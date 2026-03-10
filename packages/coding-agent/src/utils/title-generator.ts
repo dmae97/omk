@@ -8,10 +8,10 @@ import { logger } from "@oh-my-pi/pi-utils";
 import type { ModelRegistry } from "../config/model-registry";
 import { resolveModelRoleValue } from "../config/model-resolver";
 import { renderPromptTemplate } from "../config/prompt-templates";
-import { toReasoningEffort } from "../thinking";
 import type { Settings } from "../config/settings";
 import MODEL_PRIO from "../priority.json" with { type: "json" };
 import titleSystemPrompt from "../prompts/system/title-system.md" with { type: "text" };
+import { toReasoningEffort } from "../thinking";
 
 const TITLE_SYSTEM_PROMPT = renderPromptTemplate(titleSystemPrompt);
 
@@ -27,7 +27,9 @@ function getTitleModelCandidates(
 	const candidates: Array<{ model: Model<Api>; thinkingLevel?: ThinkingLevel }> = [];
 	const addCandidate = (model?: Model<Api>, thinkingLevel?: ThinkingLevel): void => {
 		if (!model) return;
-		const exists = candidates.some(candidate => candidate.model.provider === model.provider && candidate.model.id === model.id);
+		const exists = candidates.some(
+			candidate => candidate.model.provider === model.provider && candidate.model.id === model.id,
+		);
 		if (!exists) {
 			candidates.push({ model, thinkingLevel });
 		}
@@ -86,7 +88,10 @@ ${truncatedMessage}
 	for (const candidate of candidates) {
 		const apiKey = await registry.getApiKey(candidate.model, sessionId);
 		if (!apiKey) {
-			logger.debug("title-generator: no API key for model", { provider: candidate.model.provider, id: candidate.model.id });
+			logger.debug("title-generator: no API key for model", {
+				provider: candidate.model.provider,
+				id: candidate.model.id,
+			});
 			continue;
 		}
 
