@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.10.1] - 2026-03-10
 ### Added
 
 - Exported `submitInteractiveInput()` function for programmatic submission of user input in interactive mode
