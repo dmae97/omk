@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, mock, vi } from "bun:test";
 import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
-import { encodeTextSignatureV1 } from "@oh-my-pi/pi-ai/providers/openai-responses-shared";
 import { getBundledModel } from "@oh-my-pi/pi-ai/models";
+import { encodeTextSignatureV1 } from "@oh-my-pi/pi-ai/providers/openai-responses-shared";
 import type { AssistantMessage, Model, ProviderPayload, Usage } from "@oh-my-pi/pi-ai/types";
 import { hookFetch } from "@oh-my-pi/pi-utils";
 
@@ -552,10 +552,7 @@ describe("remote compaction setting", () => {
 			model: model.id,
 		};
 
-		const entries: SessionEntry[] = [
-			createMessageEntry(createUserMessage("Turn 1")),
-			createMessageEntry(assistant),
-		];
+		const entries: SessionEntry[] = [createMessageEntry(createUserMessage("Turn 1")), createMessageEntry(assistant)];
 		const preparation = prepareCompaction(entries, {
 			...DEFAULT_COMPACTION_SETTINGS,
 			keepRecentTokens: 1,
