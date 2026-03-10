@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import {
 	type Api,
 	type AssistantMessageEventStream,
@@ -16,6 +17,7 @@ import {
 	type OAuthLoginCallbacks,
 	openaiCodexModelManagerOptions,
 	PROVIDER_DESCRIPTORS,
+	readModelCache,
 	registerCustomApi,
 	registerOAuthProvider,
 	type SimpleStreamOptions,
@@ -308,14 +310,19 @@ interface DiscoveryProviderConfig {
 	baseUrl?: string;
 	headers?: Record<string, string>;
 	discovery: ProviderDiscovery;
+	optional?: boolean;
 }
 
-/**
- * Serialized representation of ModelRegistry for passing to subagent workers.
- */
-export interface SerializedModelRegistry {
-	models: Model<Api>[];
-	customProviderApiKeys?: Record<string, string>;
+export type ProviderDiscoveryStatus = "idle" | "ok" | "cached" | "unavailable" | "unauthenticated";
+
+export interface ProviderDiscoveryState {
+	provider: string;
+	status: ProviderDiscoveryStatus;
+	optional: boolean;
+	stale: boolean;
+	fetchedAt?: number;
+	models: string[];
+	error?: string;
 }
 
 /** Result of loading custom models from models.json */
@@ -507,6 +514,10 @@ export class ModelRegistry {
 	#configError: ConfigError | undefined = undefined;
 	#modelsConfigFile: ConfigFile<ModelsConfig>;
 	#registeredProviderSources: Set<string> = new Set();
+	#providerDiscoveryStates: Map<string, ProviderDiscoveryState> = new Map();
+	#cacheDbPath?: string;
+	#backgroundRefresh?: Promise<void>;
+	#lastDiscoveryWarnings: Map<string, string> = new Map();
 
 	/**
 	 * @param authStorage - Auth storage for API key resolution
@@ -516,6 +527,7 @@ export class ModelRegistry {
 		modelsPath?: string,
 	) {
 		this.#modelsConfigFile = ModelsConfigFile.relocate(modelsPath);
+		this.#cacheDbPath = modelsPath ? path.join(path.dirname(modelsPath), "models.db") : undefined;
 		// Set up fallback resolver for custom provider API keys
 		this.authStorage.setFallbackResolver(provider => {
 			const keyConfig = this.#customProviderApiKeys.get(provider);
@@ -532,14 +544,42 @@ export class ModelRegistry {
 	 * Reload models from disk (built-in + custom from models.json).
 	 */
 	async refresh(strategy: ModelRefreshStrategy = "online-if-uncached"): Promise<void> {
+		this.#reloadStaticModels();
+		await this.#refreshRuntimeDiscoveries(strategy);
+	}
+
+	refreshInBackground(strategy: ModelRefreshStrategy = "online-if-uncached"): void {
+		if (this.#backgroundRefresh) {
+			return;
+		}
+		const refreshPromise = this.refresh(strategy)
+			.catch(error => {
+				logger.warn("background model refresh failed", {
+					error: error instanceof Error ? error.message : String(error),
+				});
+			})
+			.finally(() => {
+				if (this.#backgroundRefresh === refreshPromise) {
+					this.#backgroundRefresh = undefined;
+				}
+			});
+		this.#backgroundRefresh = refreshPromise;
+	}
+
+	async refreshProvider(providerId: string, strategy: ModelRefreshStrategy = "online"): Promise<void> {
+		this.#reloadStaticModels();
+		await this.#refreshRuntimeDiscoveries(strategy, new Set([providerId]));
+	}
+
+	#reloadStaticModels(): void {
 		this.#modelsConfigFile.invalidate();
 		this.#customProviderApiKeys.clear();
 		this.#keylessProviders.clear();
 		this.#discoverableProviders = [];
 		this.#modelOverrides.clear();
 		this.#configError = undefined;
+		this.#providerDiscoveryStates.clear();
 		this.#loadModels();
-		await this.#refreshRuntimeDiscoveries(strategy);
 	}
 
 	/**
@@ -567,7 +607,8 @@ export class ModelRegistry {
 
 		this.#addImplicitDiscoverableProviders(configuredProviders);
 		const builtInModels = this.#loadBuiltInModels(overrides, modelOverrides);
-		const combined = this.#mergeCustomModels(builtInModels, customModels);
+		const cachedDiscoveries = this.#loadCachedDiscoverableModels();
+		const combined = this.#mergeCustomModels(builtInModels, [...customModels, ...cachedDiscoveries]);
 
 		this.#models = this.#applyHardcodedModelPolicies(combined);
 	}
@@ -614,6 +655,34 @@ export class ModelRegistry {
 		return merged;
 	}
 
+	#loadCachedDiscoverableModels(): Model<Api>[] {
+		const cachedModels: Model<Api>[] = [];
+		for (const providerConfig of this.#discoverableProviders) {
+			const cache = readModelCache<Api>(providerConfig.provider, 24 * 60 * 60 * 1000, Date.now, this.#cacheDbPath);
+			if (!cache) {
+				this.#providerDiscoveryStates.set(providerConfig.provider, {
+					provider: providerConfig.provider,
+					status: "idle",
+					optional: providerConfig.optional ?? false,
+					stale: false,
+					models: [],
+				});
+				continue;
+			}
+			const models = this.#applyProviderModelOverrides(providerConfig.provider, cache.models);
+			cachedModels.push(...models);
+			this.#providerDiscoveryStates.set(providerConfig.provider, {
+				provider: providerConfig.provider,
+				status: "cached",
+				optional: providerConfig.optional ?? false,
+				stale: !cache.fresh || !cache.authoritative,
+				fetchedAt: cache.updatedAt,
+				models: models.map(model => model.id),
+			});
+		}
+		return cachedModels;
+	}
+
 	#addImplicitDiscoverableProviders(configuredProviders: Set<string>): void {
 		if (!configuredProviders.has("ollama")) {
 			this.#discoverableProviders.push({
@@ -621,6 +690,7 @@ export class ModelRegistry {
 				api: "openai-completions",
 				baseUrl: Bun.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434",
 				discovery: { type: "ollama" },
+				optional: true,
 			});
 			this.#keylessProviders.add("ollama");
 		}
@@ -630,6 +700,7 @@ export class ModelRegistry {
 				api: "openai-completions",
 				baseUrl: Bun.env.LM_STUDIO_BASE_URL || "http://127.0.0.1:1234/v1",
 				discovery: { type: "lm-studio" },
+				optional: true,
 			});
 			this.#keylessProviders.add("lm-studio");
 		}
@@ -689,6 +760,7 @@ export class ModelRegistry {
 					baseUrl: providerConfig.baseUrl,
 					headers: providerConfig.headers,
 					discovery: providerConfig.discovery,
+					optional: false,
 				});
 			}
 
@@ -718,16 +790,22 @@ export class ModelRegistry {
 		};
 	}
 
-	async #refreshRuntimeDiscoveries(strategy: ModelRefreshStrategy): Promise<void> {
+	async #refreshRuntimeDiscoveries(
+		strategy: ModelRefreshStrategy,
+		providerFilter?: ReadonlySet<string>,
+	): Promise<void> {
+		const selectedDiscoverableProviders = providerFilter
+			? this.#discoverableProviders.filter(provider => providerFilter.has(provider.provider))
+			: this.#discoverableProviders;
 		const configuredDiscoveriesPromise =
-			this.#discoverableProviders.length === 0
+			selectedDiscoverableProviders.length === 0
 				? Promise.resolve<Model<Api>[]>([])
-				: Promise.all(this.#discoverableProviders.map(provider => this.#discoverProviderModels(provider))).then(
-						results => results.flat(),
-					);
+				: Promise.all(
+						selectedDiscoverableProviders.map(provider => this.#discoverProviderModels(provider, strategy)),
+					).then(results => results.flat());
 		const [configuredDiscovered, builtInDiscovered] = await Promise.all([
 			configuredDiscoveriesPromise,
-			this.#discoverBuiltInProviderModels(strategy),
+			this.#discoverBuiltInProviderModels(strategy, providerFilter),
 		]);
 		const discovered = [...configuredDiscovered, ...builtInDiscovered];
 		if (discovered.length === 0) {
@@ -751,21 +829,100 @@ export class ModelRegistry {
 		this.#models = this.#applyHardcodedModelPolicies(this.#applyModelOverrides(merged, this.#modelOverrides));
 	}
 
-	async #discoverProviderModels(providerConfig: DiscoveryProviderConfig): Promise<Model<Api>[]> {
-		switch (providerConfig.discovery.type) {
-			case "ollama":
-				return this.#discoverOllamaModels(providerConfig);
-			case "lm-studio":
-				return this.#discoverLmStudioModels(providerConfig);
+	async #discoverProviderModels(
+		providerConfig: DiscoveryProviderConfig,
+		strategy: ModelRefreshStrategy,
+	): Promise<Model<Api>[]> {
+		const cached = readModelCache<Api>(providerConfig.provider, 24 * 60 * 60 * 1000, Date.now, this.#cacheDbPath);
+		const requiresAuth = !this.#keylessProviders.has(providerConfig.provider);
+		if (requiresAuth) {
+			const apiKey = await this.#peekApiKeyForProvider(providerConfig.provider);
+			if (!isAuthenticated(apiKey)) {
+				this.#providerDiscoveryStates.set(providerConfig.provider, {
+					provider: providerConfig.provider,
+					status: "unauthenticated",
+					optional: providerConfig.optional ?? false,
+					stale: cached !== null,
+					fetchedAt: cached?.updatedAt,
+					models: cached?.models.map(model => model.id) ?? [],
+				});
+				this.#lastDiscoveryWarnings.delete(providerConfig.provider);
+				return cached?.models ?? [];
+			}
 		}
+
+		let fetchError: string | undefined;
+		const fetchDynamicModels = async (): Promise<readonly Model<Api>[] | null> => {
+			try {
+				const models =
+					providerConfig.discovery.type === "ollama"
+						? await this.#discoverOllamaModels(providerConfig)
+						: await this.#discoverLmStudioModels(providerConfig);
+				this.#lastDiscoveryWarnings.delete(providerConfig.provider);
+				return models;
+			} catch (error) {
+				fetchError = error instanceof Error ? error.message : String(error);
+				return null;
+			}
+		};
+
+		const manager = createModelManager<Api>({
+			providerId: providerConfig.provider,
+			staticModels: [],
+			cacheDbPath: this.#cacheDbPath,
+			cacheTtlMs: 24 * 60 * 60 * 1000,
+			fetchDynamicModels,
+		});
+		const result = await manager.refresh(strategy);
+		const status = fetchError
+			? result.models.length > 0
+				? "cached"
+				: "unavailable"
+			: result.models.length > 0 && strategy !== "offline"
+				? "ok"
+				: cached
+					? "cached"
+					: "idle";
+		this.#providerDiscoveryStates.set(providerConfig.provider, {
+			provider: providerConfig.provider,
+			status,
+			optional: providerConfig.optional ?? false,
+			stale: result.stale || status === "cached",
+			fetchedAt: fetchError ? cached?.updatedAt : Date.now(),
+			models: result.models.map(model => model.id),
+			error: fetchError,
+		});
+		if (fetchError) {
+			this.#warnProviderDiscoveryFailure(providerConfig, fetchError);
+		}
+		return this.#applyProviderModelOverrides(providerConfig.provider, result.models);
 	}
 
-	async #discoverBuiltInProviderModels(strategy: ModelRefreshStrategy): Promise<Model<Api>[]> {
+	#warnProviderDiscoveryFailure(providerConfig: DiscoveryProviderConfig, error: string): void {
+		const previous = this.#lastDiscoveryWarnings.get(providerConfig.provider);
+		if (previous === error) {
+			return;
+		}
+		this.#lastDiscoveryWarnings.set(providerConfig.provider, error);
+		logger.warn("model discovery failed for provider", {
+			provider: providerConfig.provider,
+			url: providerConfig.baseUrl,
+			error,
+		});
+	}
+
+	async #discoverBuiltInProviderModels(
+		strategy: ModelRefreshStrategy,
+		providerFilter?: ReadonlySet<string>,
+	): Promise<Model<Api>[]> {
 		// Skip providers already handled by configured discovery (e.g. user-configured ollama with discovery.type)
 		const configuredDiscoveryProviders = new Set(this.#discoverableProviders.map(p => p.provider));
-		const managerOptions = (await this.#collectBuiltInModelManagerOptions()).filter(
-			opts => !configuredDiscoveryProviders.has(opts.providerId),
-		);
+		const managerOptions = (await this.#collectBuiltInModelManagerOptions()).filter(opts => {
+			if (configuredDiscoveryProviders.has(opts.providerId)) {
+				return false;
+			}
+			return providerFilter ? providerFilter.has(opts.providerId) : true;
+		});
 		if (managerOptions.length === 0) {
 			return [];
 		}
@@ -849,7 +1006,7 @@ export class ModelRegistry {
 		strategy: ModelRefreshStrategy,
 	): Promise<Model<Api>[]> {
 		try {
-			const manager = createModelManager(options);
+			const manager = createModelManager({ ...options, cacheDbPath: this.#cacheDbPath });
 			const result = await manager.refresh(strategy);
 			return result.models.map(model =>
 				model.provider === options.providerId ? model : { ...model, provider: options.providerId },
@@ -874,7 +1031,7 @@ export class ModelRegistry {
 				method: "POST",
 				headers: { ...(headers ?? {}), "Content-Type": "application/json" },
 				body: JSON.stringify({ model: modelId }),
-				signal: AbortSignal.timeout(1500),
+				signal: AbortSignal.timeout(150),
 			});
 			if (!response.ok) {
 				return null;
@@ -911,57 +1068,42 @@ export class ModelRegistry {
 		const endpoint = this.#normalizeOllamaBaseUrl(providerConfig.baseUrl);
 		const tagsUrl = `${endpoint}/api/tags`;
 		const headers = { ...(providerConfig.headers ?? {}) };
-		try {
-			const response = await fetch(tagsUrl, {
-				headers,
-				signal: AbortSignal.timeout(3000),
-			});
-			if (!response.ok) {
-				logger.warn("model discovery failed for provider", {
-					provider: providerConfig.provider,
-					status: response.status,
-					url: tagsUrl,
-				});
-				return [];
-			}
-			const payload = (await response.json()) as { models?: Array<{ name?: string; model?: string }> };
-			const entries = (payload.models ?? []).flatMap(item => {
-				const id = item.model || item.name;
-				return id ? [{ id, name: item.name || id }] : [];
-			});
-			const metadataById = new Map(
-				await Promise.all(
-					entries.map(
-						async entry =>
-							[entry.id, await this.#discoverOllamaModelMetadata(endpoint, entry.id, headers)] as const,
-					),
-				),
-			);
-			const discovered = entries.map(entry => {
-				const metadata = metadataById.get(entry.id);
-				return enrichModelThinking({
-					id: entry.id,
-					name: entry.name,
-					api: providerConfig.api,
-					provider: providerConfig.provider,
-					baseUrl: `${endpoint}/v1`,
-					reasoning: metadata?.reasoning ?? false,
-					input: metadata?.input ?? ["text"],
-					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-					contextWindow: 128000,
-					maxTokens: 8192,
-					headers: providerConfig.headers,
-				});
-			});
-			return this.#applyProviderModelOverrides(providerConfig.provider, discovered);
-		} catch (error) {
-			logger.warn("model discovery failed for provider", {
-				provider: providerConfig.provider,
-				url: tagsUrl,
-				error: error instanceof Error ? error.message : String(error),
-			});
-			return [];
+		const response = await fetch(tagsUrl, {
+			headers,
+			signal: AbortSignal.timeout(250),
+		});
+		if (!response.ok) {
+			throw new Error(`HTTP ${response.status} from ${tagsUrl}`);
 		}
+		const payload = (await response.json()) as { models?: Array<{ name?: string; model?: string }> };
+		const entries = (payload.models ?? []).flatMap(item => {
+			const id = item.model || item.name;
+			return id ? [{ id, name: item.name || id }] : [];
+		});
+		const metadataById = new Map(
+			await Promise.all(
+				entries.map(
+					async entry => [entry.id, await this.#discoverOllamaModelMetadata(endpoint, entry.id, headers)] as const,
+				),
+			),
+		);
+		const discovered = entries.map(entry => {
+			const metadata = metadataById.get(entry.id);
+			return enrichModelThinking({
+				id: entry.id,
+				name: entry.name,
+				api: providerConfig.api,
+				provider: providerConfig.provider,
+				baseUrl: `${endpoint}/v1`,
+				reasoning: metadata?.reasoning ?? false,
+				input: metadata?.input ?? ["text"],
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+				contextWindow: 128000,
+				maxTokens: 8192,
+				headers: providerConfig.headers,
+			});
+		});
+		return this.#applyProviderModelOverrides(providerConfig.provider, discovered);
 	}
 
 	async #discoverLmStudioModels(providerConfig: DiscoveryProviderConfig): Promise<Model<Api>[]> {
@@ -974,55 +1116,41 @@ export class ModelRegistry {
 			headers.Authorization = `Bearer ${apiKey}`;
 		}
 
-		try {
-			const response = await fetch(modelsUrl, {
-				headers,
-				signal: AbortSignal.timeout(3000),
-			});
-			if (!response.ok) {
-				logger.warn("model discovery failed for provider", {
-					provider: providerConfig.provider,
-					status: response.status,
-					url: modelsUrl,
-				});
-				return [];
-			}
-			const payload = (await response.json()) as { data?: Array<{ id: string }> };
-			const models = payload.data ?? [];
-			const discovered: Model<Api>[] = [];
-			for (const item of models) {
-				const id = item.id;
-				if (!id) continue;
-				discovered.push(
-					enrichModelThinking({
-						id,
-						name: id,
-						api: providerConfig.api,
-						provider: providerConfig.provider,
-						baseUrl,
-						reasoning: false,
-						input: ["text"],
-						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-						contextWindow: 128000,
-						maxTokens: 8192,
-						headers,
-						compat: {
-							supportsStore: false,
-							supportsDeveloperRole: false,
-							supportsReasoningEffort: false,
-						},
-					}),
-				);
-			}
-			return this.#applyProviderModelOverrides(providerConfig.provider, discovered);
-		} catch (error) {
-			logger.warn("model discovery failed for provider", {
-				provider: providerConfig.provider,
-				url: modelsUrl,
-				error: error instanceof Error ? error.message : String(error),
-			});
-			return [];
+		const response = await fetch(modelsUrl, {
+			headers,
+			signal: AbortSignal.timeout(250),
+		});
+		if (!response.ok) {
+			throw new Error(`HTTP ${response.status} from ${modelsUrl}`);
 		}
+		const payload = (await response.json()) as { data?: Array<{ id: string }> };
+		const models = payload.data ?? [];
+		const discovered: Model<Api>[] = [];
+		for (const item of models) {
+			const id = item.id;
+			if (!id) continue;
+			discovered.push(
+				enrichModelThinking({
+					id,
+					name: id,
+					api: providerConfig.api,
+					provider: providerConfig.provider,
+					baseUrl,
+					reasoning: false,
+					input: ["text"],
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+					contextWindow: 128000,
+					maxTokens: 8192,
+					headers,
+					compat: {
+						supportsStore: false,
+						supportsDeveloperRole: false,
+						supportsReasoningEffort: false,
+					},
+				}),
+			);
+		}
+		return this.#applyProviderModelOverrides(providerConfig.provider, discovered);
 	}
 
 	#normalizeLmStudioBaseUrl(baseUrl?: string): string {
@@ -1117,6 +1245,14 @@ export class ModelRegistry {
 	 */
 	getAvailable(): Model<Api>[] {
 		return this.#models.filter(m => this.#keylessProviders.has(m.provider) || this.authStorage.hasAuth(m.provider));
+	}
+
+	getDiscoverableProviders(): string[] {
+		return this.#discoverableProviders.map(provider => provider.provider);
+	}
+
+	getProviderDiscoveryState(provider: string): ProviderDiscoveryState | undefined {
+		return this.#providerDiscoveryStates.get(provider);
 	}
 
 	/**

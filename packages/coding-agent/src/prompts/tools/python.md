@@ -6,7 +6,7 @@ Kernel persists across calls and cells; **imports, variables, and functions surv
 - You **SHOULD** use one logical step per cell (imports, define function, test it, use it)
 - You **SHOULD** pass multiple small cells in one call
 - You **SHOULD** define small functions you can reuse and debug individually
-- You **MUST** put explanations in assistant message or cell title, **MUST NOT** put them in code
+- You **MUST** put workflow explanations in assistant message or cell title
 **When something fails:**
 - Errors tell you which cell failed (e.g., "Cell 3 failed")
 - You **SHOULD** resubmit only the fixed cell (or fixed cell + remaining cells)

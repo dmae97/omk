@@ -180,7 +180,7 @@ describe("ModelRegistry", () => {
 			writeRawModelsJson({
 				anthropic: overrideConfig("https://second-proxy.example.com/v1"),
 			});
-			await registry.refresh();
+			await registry.refresh("offline");
 
 			expect(getModelsForProvider(registry, "anthropic")[0].baseUrl).toBe("https://second-proxy.example.com/v1");
 		});
@@ -325,7 +325,7 @@ describe("ModelRegistry", () => {
 			writeModelsJson({
 				anthropic: providerConfig("https://second-proxy.example.com/v1", [{ id: "claude-custom-2" }]),
 			});
-			await registry.refresh();
+			await registry.refresh("offline");
 
 			const anthropicModels = getModelsForProvider(registry, "anthropic");
 			expect(anthropicModels.some(m => m.id === "claude-custom")).toBe(false);
@@ -357,7 +357,7 @@ describe("ModelRegistry", () => {
 
 			// Remove custom models and refresh
 			writeModelsJson({});
-			await registry.refresh();
+			await registry.refresh("offline");
 
 			const anthropicModels = getModelsForProvider(registry, "anthropic");
 			expect(anthropicModels.length).toBeGreaterThan(1);
@@ -610,7 +610,7 @@ describe("ModelRegistry", () => {
 					},
 				},
 			});
-			await registry.refresh();
+			await registry.refresh("offline");
 
 			expect(
 				getModelsForProvider(registry, "openrouter").find(m => m.id === "anthropic/claude-sonnet-4")?.name,
@@ -636,7 +636,7 @@ describe("ModelRegistry", () => {
 
 			// Remove override and refresh
 			writeRawModelsJson({});
-			await registry.refresh();
+			await registry.refresh("offline");
 
 			const restoredName = getModelsForProvider(registry, "openrouter").find(
 				m => m.id === "anthropic/claude-sonnet-4",
@@ -814,6 +814,96 @@ describe("ModelRegistry", () => {
 			await registry.refresh();
 			expect(getModelsForProvider(registry, "ollama")).toHaveLength(0);
 			expect(registry.getError()).toBeUndefined();
+		});
+		test("loads cached local models before live refresh and preserves them on failure", async () => {
+			writeRawModelsJson({
+				ollama: {
+					baseUrl: "http://127.0.0.1:11434/v1",
+					api: "openai-completions",
+					auth: "none",
+					discovery: { type: "ollama" },
+				},
+			});
+
+			{
+				using _hook = hookFetch(input => {
+					const url = String(input);
+					if (url === "http://127.0.0.1:11434/api/tags") {
+						return new Response(JSON.stringify({ models: [{ name: "phi4-mini" }] }), {
+							status: 200,
+							headers: { "Content-Type": "application/json" },
+						});
+					}
+					if (url === "http://127.0.0.1:11434/api/show") {
+						return new Response(JSON.stringify({ capabilities: ["completion"] }), {
+							status: 200,
+							headers: { "Content-Type": "application/json" },
+						});
+					}
+					throw new Error(`Unexpected URL: ${url}`);
+				});
+				const primedRegistry = new ModelRegistry(authStorage, modelsJsonPath);
+				await primedRegistry.refresh();
+			}
+
+			const cachedRegistry = new ModelRegistry(authStorage, modelsJsonPath);
+			expect(getModelsForProvider(cachedRegistry, "ollama").some(model => model.id === "phi4-mini")).toBe(true);
+			expect(cachedRegistry.getProviderDiscoveryState("ollama")?.status).toBe("cached");
+
+			{
+				using _hook = hookFetch(() => {
+					throw new Error("connection refused");
+				});
+				await cachedRegistry.refreshProvider("ollama");
+			}
+
+			expect(getModelsForProvider(cachedRegistry, "ollama").some(model => model.id === "phi4-mini")).toBe(true);
+			const state = cachedRegistry.getProviderDiscoveryState("ollama");
+			expect(state?.status).toBe("cached");
+			expect(state?.error).toContain("connection refused");
+		});
+
+		test("reports unauthenticated discoverable providers without discarding cached models", async () => {
+			writeRawModelsJson({
+				"custom-local": {
+					baseUrl: "http://127.0.0.1:11434/v1",
+					api: "openai-completions",
+					discovery: { type: "ollama" },
+				},
+			});
+			authStorage.setRuntimeApiKey("custom-local", "test-key");
+
+			{
+				using _hook = hookFetch(input => {
+					const url = String(input);
+					if (url === "http://127.0.0.1:11434/api/tags") {
+						return new Response(JSON.stringify({ models: [{ name: "local-coder" }] }), {
+							status: 200,
+							headers: { "Content-Type": "application/json" },
+						});
+					}
+					if (url === "http://127.0.0.1:11434/api/show") {
+						return new Response(JSON.stringify({ capabilities: ["completion"] }), {
+							status: 200,
+							headers: { "Content-Type": "application/json" },
+						});
+					}
+					throw new Error(`Unexpected URL: ${url}`);
+				});
+				const primedRegistry = new ModelRegistry(authStorage, modelsJsonPath);
+				await primedRegistry.refreshProvider("custom-local");
+			}
+
+			authStorage.setRuntimeApiKey("custom-local", "");
+			const cachedRegistry = new ModelRegistry(authStorage, modelsJsonPath);
+			await cachedRegistry.refreshProvider("custom-local");
+
+			expect(getModelsForProvider(cachedRegistry, "custom-local").some(model => model.id === "local-coder")).toBe(
+				true,
+			);
+			const state = cachedRegistry.getProviderDiscoveryState("custom-local");
+			expect(state?.status).toBe("unauthenticated");
+			expect(state?.models).toContain("local-coder");
 		});
 	});
 });

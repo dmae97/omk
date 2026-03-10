@@ -1216,6 +1216,9 @@ fn parse_functional(bytes: &[u8]) -> Option<ParsedKittySequence> {
 
 fn format_kitty_key(parsed: &ParsedKittySequence) -> Option<Cow<'static, str>> {
 	let effective_mod = parsed.modifier & !LOCK_MASK;
+	if effective_mod & !(MOD_SHIFT | MOD_CTRL | MOD_ALT) != 0 {
+		return None;
+	}
 	let effective_codepoint = {
 		let cp = parsed.codepoint;
 		let is_ascii_letter = u8::try_from(cp)
@@ -1229,7 +1232,6 @@ fn format_kitty_key(parsed: &ParsedKittySequence) -> Option<Cow<'static, str>> {
 		}
 	};
 
-	// No modifiers - return static string
 	if effective_mod == 0 {
 		if let Some(text_codepoint) = parsed.text_codepoint
 			&& let Some(key_name) = format_key_name(text_codepoint)
@@ -1355,6 +1357,12 @@ mod tests {
 		assert!(matches_key_inner(b"\x1b[127;1:2u", "backspace", true));
 		assert!(!matches_key_inner(b"\x1b[127;1:3u", "backspace", true));
 	}
+
+	#[test]
+	fn parse_key_ignores_kitty_sequences_with_unsupported_modifiers() {
+		assert_eq!(parse_key_inner(b"\x1b[99;9u", true).as_deref(), None);
+	}
+
 
 	#[test]
 	fn parse_key_ignores_kitty_release_events() {

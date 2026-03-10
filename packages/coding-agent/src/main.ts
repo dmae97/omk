@@ -508,8 +508,6 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	const { authStorage, modelRegistry } = await logger.timeAsync("discoverModels", async () => {
 		const authStorage = await discoverAuthStorage();
 		const modelRegistry = new ModelRegistry(authStorage);
-		const refreshStrategy = parsedArgs.listModels !== undefined ? "online" : "online-if-uncached";
-		await modelRegistry.refresh(refreshStrategy);
 		return { authStorage, modelRegistry };
 	});
 
@@ -519,6 +517,7 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	}
 
 	if (parsedArgs.listModels !== undefined) {
+		await modelRegistry.refresh("online");
 		const searchPattern = typeof parsedArgs.listModels === "string" ? parsedArgs.listModels : undefined;
 		await listModels(modelRegistry, searchPattern);
 		process.exit(0);
@@ -570,6 +569,7 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 
 	// Initialize discovery system with settings for provider persistence
 	logger.time("initializeWithSettings", () => initializeWithSettings(settings));
+	modelRegistry.refreshInBackground();
 
 	// Apply model role overrides from CLI args or env vars (ephemeral, not persisted)
 	const smolModel = parsedArgs.smol ?? $env.PI_SMOL_MODEL;

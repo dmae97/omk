@@ -446,6 +446,22 @@ For the bash tool specifically:
 - NEVER commit unless user asks
 - Do NOT use `tsc` or `npx tsc` - always use `bun check`
 
+## Testing Guidance
+
+When adding or changing tests, test the contract the system exposes — not the easiest internal detail to assert.
+
+- Every new test must defend one concrete, externally observable contract: behavior, output shape, state transition, error mapping, or a regression-prone parsing boundary. If you cannot name the contract, do not add the test.
+- Do not add placeholder tests, tautologies, or assertions that only prove the code executed (`expect(true).toBe(true)`, `not.toThrow()`, non-empty string checks, array length growth checks, or "prompt exists" checks without a stronger semantic assertion).
+- Prefer contract-level tests over implementation-detail tests. Avoid asserting internal helper wiring, field assignment, singleton identity, incidental ordering, prompt boilerplate, or passthrough option forwarding unless another component depends on that exact detail as a documented contract.
+- Do not duplicate coverage across abstraction levels. If an integration or public-surface test already proves the behavior, delete or avoid the narrower unit test that only restates it through mocks or internal plumbing.
+- For lifecycle or stateful code, prefer one test per invariant or transition over several tiny tests that each assert one field from the same transition.
+- For error handling, prefer tests that trigger the real failure path and assert the surfaced error contract over tests that directly instantiate error classes or inspect purely internal metadata.
+- Smoke tests are only acceptable when they detect a failure mode narrower tests would miss. A test that only proves a package boots or a command starts is not enough.
+- Exact strings, ordering, and formatting should only be asserted when downstream code parses or materially depends on the exact bytes. Otherwise assert semantic content instead.
+- If a guarantee is purely compile-time, enforce it with type checks or type-test coverage, not a runtime test disguised as a placeholder.
+- Do not add tests for tiny, low-risk changes unless the change affects a real contract, fixes a regression-prone edge case, or would otherwise be easy to break silently.
+- When trimming or adding tests, prefer focused package-local verification for the changed area so the surviving suite proves the contract it claims to protect.
+
 ## GitHub Issues
 
 When reading issues:

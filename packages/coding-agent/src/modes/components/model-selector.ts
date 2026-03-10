@@ -279,13 +279,15 @@ export class ModelSelectorComponent extends Container {
 				model: scoped.model,
 			}));
 		} else {
-			// Refresh to pick up any changes to models.json
-			await this.#modelRegistry.refresh();
+			// Reload config and cached discovery state without blocking on live provider refresh
+			await this.#modelRegistry.refresh("offline");
 
 			// Check for models.json errors
 			const loadError = this.#modelRegistry.getError();
 			if (loadError) {
 				this.#errorMessage = loadError;
+			} else {
+				this.#errorMessage = undefined;
 			}
 
 			// Load available models (built-in models still work even if models.json failed)
@@ -312,14 +314,28 @@ export class ModelSelectorComponent extends Container {
 	}
 
 	#buildProviderTabs(): void {
-		// Extract unique providers from models
 		const providerSet = new Set<string>();
 		for (const item of this.#allModels) {
 			providerSet.add(item.provider.toUpperCase());
 		}
-		// Sort providers alphabetically
+		for (const provider of this.#modelRegistry.getDiscoverableProviders()) {
+			providerSet.add(provider.toUpperCase());
+		}
 		const sortedProviders = Array.from(providerSet).sort();
 		this.#providers = [ALL_TAB, ...sortedProviders];
+	}
+
+	async #refreshSelectedProvider(): Promise<void> {
+		const activeProvider = this.#getActiveProvider();
+		if (this.#scopedModels.length > 0 || activeProvider === ALL_TAB) {
+			return;
+		}
+		await this.#modelRegistry.refreshProvider(activeProvider.toLowerCase());
+		await this.#loadModels();
+		this.#buildProviderTabs();
+		this.#updateTabBar();
+		this.#applyTabFilter();
+		this.#tui.requestRender();
 	}
 
 	#updateTabBar(): void {
@@ -331,6 +347,11 @@ export class ModelSelectorComponent extends Container {
 			this.#activeTabIndex = index;
 			this.#selectedIndex = 0;
 			this.#applyTabFilter();
+			void this.#refreshSelectedProvider().catch(error => {
+				this.#errorMessage = error instanceof Error ? error.message : String(error);
+				this.#updateList();
+				this.#tui.requestRender();
+			});
 		};
 		this.#tabBar = tabBar;
 		this.#headerContainer.addChild(tabBar);
@@ -375,6 +396,44 @@ export class ModelSelectorComponent extends Container {
 	#applyTabFilter(): void {
 		const query = this.#searchInput.getValue();
 		this.#filterModels(query);
+	}
+
+	#formatDiscoveryAge(fetchedAt: number | undefined): string | undefined {
+		if (!fetchedAt) {
+			return undefined;
+		}
+		const ageMs = Math.max(0, Date.now() - fetchedAt);
+		if (ageMs < 60_000) {
+			return "less than a minute ago";
+		}
+		const ageMinutes = Math.round(ageMs / 60_000);
+		return `${ageMinutes}m ago`;
+	}
+
+	#getProviderEmptyStateMessage(): string | undefined {
+		const activeProvider = this.#getActiveProvider();
+		if (activeProvider === ALL_TAB || this.#searchInput.getValue().trim()) {
+			return undefined;
+		}
+		const state = this.#modelRegistry.getProviderDiscoveryState(activeProvider.toLowerCase());
+		if (!state) {
+			return undefined;
+		}
+		const age = this.#formatDiscoveryAge(state.fetchedAt);
+		switch (state.status) {
+			case "cached":
+				return age
+					? `  Using cached model list from ${age}. Live refresh is still pending.`
+					: "  Using cached model list. Live refresh is still pending.";
+			case "unavailable":
+				return age ? `  Provider unavailable. Using cached model list from ${age}.` : "  Provider unavailable.";
+			case "unauthenticated":
+				return "  Provider requires authentication before models can be discovered.";
+			case "idle":
+				return "  Provider has not been refreshed yet.";
+			case "ok":
+				return "  Provider reported no models.";
+		}
 	}
 
 	#updateList(): void {
@@ -445,7 +504,8 @@ export class ModelSelectorComponent extends Container {
 				this.#listContainer.addChild(new Text(theme.fg("error", line), 0, 0));
 			}
 		} else if (this.#filteredModels.length === 0) {
-			this.#listContainer.addChild(new Text(theme.fg("muted", "  No matching models"), 0, 0));
+			const statusMessage = this.#getProviderEmptyStateMessage();
+			this.#listContainer.addChild(new Text(theme.fg("muted", statusMessage ?? "  No matching models"), 0, 0));
 		} else {
 			const selected = this.#filteredModels[this.#selectedIndex];
 			this.#listContainer.addChild(new Spacer(1));

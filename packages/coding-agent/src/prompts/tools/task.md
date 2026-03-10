@@ -22,7 +22,7 @@ Subagents lack your conversation history. Every decision, file content, and user
 - **MUST NOT** duplicate shared constraints across assignments — put them in `context` once.
 - **MUST NOT** tell tasks to run project-wide build/test/lint. Parallel agents share the working tree; each task edits, stops. Caller verifies after all complete.
 - For large payloads (traces, JSON blobs), write to `local://<path>` and pass the path in context.
-- If scope is unclear, run a **Discovery task** first to enumerate files and callsites, then fan out.
+- Prefer `task` agents that investigate **and** edit in one pass. Only launch a dedicated read-only discovery step when the affected files are genuinely unknown and cannot be inferred from the task description.
 </critical>
 
 <scope>

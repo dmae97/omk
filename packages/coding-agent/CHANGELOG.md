@@ -1,16 +1,41 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
 - Web search tool no longer accepts `provider` parameter in tool calls; use internal provider resolution instead
 - Removed `no_fallback` option from search parameters
 
+### Added
+
+- Added `refreshInBackground()` method to ModelRegistry for non-blocking model discovery
+- Added `refreshProvider()` method to refresh models for a specific provider on demand
+- Added `getDiscoverableProviders()` method to list all configured discoverable providers
+- Added `getProviderDiscoveryState()` method to inspect provider discovery status, cache age, and errors
+- Added provider discovery state tracking with status indicators (idle, ok, cached, unavailable, unauthenticated)
+- Added model caching with 24-hour TTL to preserve discovered models across sessions
+- Added provider-specific empty state messages in model selector showing cache age and discovery status
+- Added live provider refresh when switching provider tabs in model selector
+
 ### Changed
 
+- Changed model discovery to load cached models immediately before attempting live refresh, improving startup performance
+- Changed model selector to refresh offline by default when reloading config, deferring live discovery to background
+- Changed model discovery timeout from 3000ms to 250ms for faster failure detection
+- Changed model discovery error handling to preserve cached models when live refresh fails
+- Changed `refresh()` strategy parameter to support 'offline' mode for config-only reloads
+- Changed main.ts to defer model refresh until needed (--list-models or background refresh)
+- Changed SDK session creation to use background refresh instead of blocking on model discovery
 - Removed `provider` parameter from web search tool schema; provider selection now handled internally
 - Removed `no_fallback` parameter from web search parameters; fallback behavior now automatic based on provider availability
 - Renamed `SearchParams` type to `SearchToolParams` for tool execution; introduced `SearchQueryParams` for CLI queries with optional provider selection
+
+### Fixed
+
+- Fixed model discovery to continue using cached models when provider is temporarily unavailable
+- Fixed unauthenticated provider discovery to preserve cached models instead of discarding them
+- Fixed model selector to show discovery status messages when provider has no models
 
 ## [13.9.15] - 2026-03-10
 ### Added
