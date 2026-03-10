@@ -2085,6 +2085,201 @@ describe("openai-codex streaming", () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
+	it("falls back to SSE when websocket receives malformed JSON before completion", async () => {
+		const tempDir = TempDir.createSync("@pi-codex-stream-");
+		setAgentDir(tempDir.path());
+
+		const payload = Buffer.from(
+			JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acc_test" } }),
+			"utf8",
+		).toBase64();
+		const token = `aaa.${payload}.bbb`;
+		Bun.env.PI_CODEX_WEBSOCKET_RETRY_BUDGET = "0";
+		Bun.env.PI_CODEX_WEBSOCKET_RETRY_DELAY_MS = "1";
+
+		const sse = `${[
+			`data: ${JSON.stringify({ type: "response.output_item.added", item: { type: "message", id: "msg_sse", role: "assistant", status: "in_progress", content: [] } })}`,
+			`data: ${JSON.stringify({ type: "response.content_part.added", part: { type: "output_text", text: "" } })}`,
+			`data: ${JSON.stringify({ type: "response.output_text.delta", delta: "Recovered over SSE" })}`,
+			`data: ${JSON.stringify({ type: "response.output_item.done", item: { type: "message", id: "msg_sse", role: "assistant", status: "completed", content: [{ type: "output_text", text: "Recovered over SSE" }] } })}`,
+			`data: ${JSON.stringify({ type: "response.completed", response: { status: "completed", usage: { input_tokens: 5, output_tokens: 3, total_tokens: 8, input_tokens_details: { cached_tokens: 0 } } } })}`,
+		].join("\n\n")}\n\n`;
+		const fetchMock = vi.fn(async () => new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } }));
+		global.fetch = fetchMock as unknown as typeof fetch;
+
+		type WsListener = (event: Event) => void;
+		class MalformedMessageWebSocket {
+			static readonly CONNECTING = 0;
+			static readonly OPEN = 1;
+			static readonly CLOSING = 2;
+			static readonly CLOSED = 3;
+			readyState = MalformedMessageWebSocket.CONNECTING;
+			#listeners = new Map<string, Set<WsListener>>();
+
+			constructor(_url: string, _options?: { headers?: Record<string, string> }) {
+				setTimeout(() => {
+					this.readyState = MalformedMessageWebSocket.OPEN;
+					this.#emit("open", new Event("open"));
+				}, 0);
+			}
+
+			addEventListener(type: string, listener: unknown): void {
+				if (typeof listener !== "function") return;
+				const listeners = this.#listeners.get(type) ?? new Set<WsListener>();
+				listeners.add(listener as WsListener);
+				this.#listeners.set(type, listeners);
+			}
+
+			removeEventListener(type: string, listener: unknown): void {
+				if (typeof listener !== "function") return;
+				const listeners = this.#listeners.get(type);
+				listeners?.delete(listener as WsListener);
+			}
+
+			send(): void {
+				this.#emit("message", { data: "{" } as unknown as Event);
+			}
+
+			close(): void {
+				this.readyState = MalformedMessageWebSocket.CLOSED;
+			}
+
+			#emit(type: string, event: Event): void {
+				const listeners = this.#listeners.get(type);
+				if (!listeners) return;
+				for (const listener of listeners) {
+					listener(event);
+				}
+			}
+		}
+
+		global.WebSocket = MalformedMessageWebSocket as unknown as typeof WebSocket;
+		const model: Model<"openai-codex-responses"> = {
+			id: "gpt-5.3-codex-spark",
+			name: "GPT-5.3 Codex Spark",
+			api: "openai-codex-responses",
+			provider: "openai-codex",
+			baseUrl: "https://chatgpt.com/backend-api",
+			reasoning: true,
+			preferWebsockets: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 128000,
+			maxTokens: 128000,
+		};
+		const result = await streamOpenAICodexResponses(model, {
+			systemPrompt: "You are a helpful assistant.",
+			messages: [{ role: "user", content: "Say hello", timestamp: Date.now() }],
+		}, { apiKey: token, sessionId: "ws-malformed-json-session", providerSessionState: new Map<string, ProviderSessionState>() }).result();
+
+		expect(result.stopReason).toBe("stop");
+		expect(result.content.find(c => c.type === "text")?.text).toBe("Recovered over SSE");
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+	it("replays over SSE when websocket closes after buffered output without a terminal event", async () => {
+		const tempDir = TempDir.createSync("@pi-codex-stream-");
+		setAgentDir(tempDir.path());
+
+		const payload = Buffer.from(
+			JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acc_test" } }),
+			"utf8",
+		).toBase64();
+		const token = `aaa.${payload}.bbb`;
+		Bun.env.PI_CODEX_WEBSOCKET_RETRY_BUDGET = "0";
+		Bun.env.PI_CODEX_WEBSOCKET_RETRY_DELAY_MS = "1";
+
+		const sse = `${[
+			`data: ${JSON.stringify({ type: "response.output_item.added", item: { type: "message", id: "msg_sse_replay", role: "assistant", status: "in_progress", content: [] } })}`,
+			`data: ${JSON.stringify({ type: "response.content_part.added", part: { type: "output_text", text: "" } })}`,
+			`data: ${JSON.stringify({ type: "response.output_text.delta", delta: "Replay succeeded" })}`,
+			`data: ${JSON.stringify({ type: "response.output_item.done", item: { type: "message", id: "msg_sse_replay", role: "assistant", status: "completed", content: [{ type: "output_text", text: "Replay succeeded" }] } })}`,
+			`data: ${JSON.stringify({ type: "response.completed", response: { status: "completed", usage: { input_tokens: 5, output_tokens: 3, total_tokens: 8, input_tokens_details: { cached_tokens: 0 } } } })}`,
+		].join("\n\n")}\n\n`;
+		const fetchMock = vi.fn(async () => new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } }));
+		global.fetch = fetchMock as unknown as typeof fetch;
+
+		type WsListener = (event: Event) => void;
+		class BufferedCloseWebSocket {
+			static readonly CONNECTING = 0;
+			static readonly OPEN = 1;
+			static readonly CLOSING = 2;
+			static readonly CLOSED = 3;
+			readyState = BufferedCloseWebSocket.CONNECTING;
+			#listeners = new Map<string, Set<WsListener>>();
+
+			constructor(_url: string, _options?: { headers?: Record<string, string> }) {
+				setTimeout(() => {
+					this.readyState = BufferedCloseWebSocket.OPEN;
+					this.#emit("open", new Event("open"));
+				}, 0);
+			}
+
+			addEventListener(type: string, listener: unknown): void {
+				if (typeof listener !== "function") return;
+				const listeners = this.#listeners.get(type) ?? new Set<WsListener>();
+				listeners.add(listener as WsListener);
+				this.#listeners.set(type, listeners);
+			}
+
+			removeEventListener(type: string, listener: unknown): void {
+				if (typeof listener !== "function") return;
+				const listeners = this.#listeners.get(type);
+				listeners?.delete(listener as WsListener);
+			}
+
+			send(): void {
+				this.#emit("message", {
+					data: JSON.stringify({ type: "response.output_item.added", item: { type: "message", id: "msg_ws_partial", role: "assistant", status: "in_progress", content: [] } }),
+				} as unknown as Event);
+				this.#emit("message", {
+					data: JSON.stringify({ type: "response.content_part.added", part: { type: "output_text", text: "" } }),
+				} as unknown as Event);
+				this.#emit("message", {
+					data: JSON.stringify({ type: "response.output_text.delta", delta: "Partial output" }),
+				} as unknown as Event);
+				this.readyState = BufferedCloseWebSocket.CLOSED;
+				this.#emit("close", { code: 1006 } as unknown as Event);
+			}
+
+			close(): void {
+				this.readyState = BufferedCloseWebSocket.CLOSED;
+			}
+
+			#emit(type: string, event: Event): void {
+				const listeners = this.#listeners.get(type);
+				if (!listeners) return;
+				for (const listener of listeners) {
+					listener(event);
+				}
+			}
+		}
+
+		global.WebSocket = BufferedCloseWebSocket as unknown as typeof WebSocket;
+		const model: Model<"openai-codex-responses"> = {
+			id: "gpt-5.3-codex-spark",
+			name: "GPT-5.3 Codex Spark",
+			api: "openai-codex-responses",
+			provider: "openai-codex",
+			baseUrl: "https://chatgpt.com/backend-api",
+			reasoning: true,
+			preferWebsockets: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 128000,
+			maxTokens: 128000,
+		};
+		const result = await streamOpenAICodexResponses(model, {
+			systemPrompt: "You are a helpful assistant.",
+			messages: [{ role: "user", content: "Say hello", timestamp: Date.now() }],
+		}, { apiKey: token, sessionId: "ws-buffered-close-session", providerSessionState: new Map<string, ProviderSessionState>() }).result();
+
+		expect(result.stopReason).toBe("stop");
+		expect(result.content.find(c => c.type === "text")?.text).toBe("Replay succeeded");
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+
 	it("resets append state and stale turn headers when websocket requests diverge", async () => {
 		const tempDir = TempDir.createSync("@pi-codex-stream-");
 		setAgentDir(tempDir.path());

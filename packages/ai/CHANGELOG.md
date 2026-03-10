@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Support for OpenAI Codex Spark model selection with plan-based account prioritization
@@ -8,7 +9,15 @@
 
 ### Changed
 
+- Refactored OpenAI Codex response streaming to improve code organization and maintainability with extracted helper functions and type definitions
+- Enhanced websocket fallback logic to safely replay buffered output over SSE when websocket connections fail mid-stream
+- Improved error recovery for websocket streams by distinguishing between fatal connection errors and retryable stream errors
 - Updated credential ranking strategy to prioritize Pro plan accounts when requesting OpenAI Codex Spark models
+
+### Fixed
+
+- Fixed websocket stream recovery to properly reset output state and clear buffered items when falling back to SSE after partial output
+- Fixed handling of malformed JSON messages in websocket streams to trigger immediate fallback to SSE without retry attempts
 
 ## [13.9.13] - 2026-03-10
 ### Added
