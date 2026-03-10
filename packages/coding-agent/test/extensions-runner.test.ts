@@ -345,6 +345,80 @@ describe("ExtensionRunner", () => {
 		});
 	});
 
+	describe("before_provider_request chaining", () => {
+		it("chains payload replacements across handlers in load order", async () => {
+			const extCode1 = `
+				export default function(pi) {
+					pi.on("before_provider_request", async (event) => {
+						const payload = event.payload as { chain?: string[] };
+						return { ...payload, chain: [...(payload.chain ?? []), "ext1"] };
+					});
+				}
+			`;
+			const extCode2 = `
+				export default function(pi) {
+					pi.on("before_provider_request", async (event) => {
+						const payload = event.payload as { chain?: string[] };
+						return { ...payload, chain: [...(payload.chain ?? []), "ext2"] };
+					});
+				}
+			`;
+			fs.writeFileSync(path.join(extensionsDir, "payload-1.ts"), extCode1);
+			fs.writeFileSync(path.join(extensionsDir, "payload-2.ts"), extCode2);
+
+			const result = await loadTestExtensions();
+			const runner = new ExtensionRunner(
+				result.extensions,
+				result.runtime,
+				tempDir.path(),
+				sessionManager,
+				modelRegistry,
+			);
+
+			const payload = await runner.emitBeforeProviderRequest({ chain: ["base"] });
+			expect(payload).toEqual({ chain: ["base", "ext1", "ext2"] });
+		});
+
+		it("keeps chaining after handler errors", async () => {
+			const extCode1 = `
+				export default function(pi) {
+					pi.on("before_provider_request", async () => {
+						throw new Error("payload failed");
+					});
+				}
+			`;
+			const extCode2 = `
+				export default function(pi) {
+					pi.on("before_provider_request", async (event) => {
+						const payload = event.payload as { preserved?: boolean };
+						return { ...payload, preserved: true };
+					});
+				}
+			`;
+			fs.writeFileSync(path.join(extensionsDir, "payload-error.ts"), extCode1);
+			fs.writeFileSync(path.join(extensionsDir, "payload-ok.ts"), extCode2);
+
+			const result = await loadTestExtensions();
+			const runner = new ExtensionRunner(
+				result.extensions,
+				result.runtime,
+				tempDir.path(),
+				sessionManager,
+				modelRegistry,
+			);
+			const errors: Array<{ extensionPath: string; event: string; error: string }> = [];
+			runner.onError(err => {
+				errors.push(err);
+			});
+
+			const payload = await runner.emitBeforeProviderRequest({ original: true });
+			expect(payload).toEqual({ original: true, preserved: true });
+			expect(errors).toHaveLength(1);
+			expect(errors[0]?.event).toBe("before_provider_request");
+			expect(errors[0]?.error).toContain("payload failed");
+		});
+	});
+
 	describe("tool_result chaining", () => {
 		it("chains content modifications across handlers", async () => {
 			const extCode1 = `

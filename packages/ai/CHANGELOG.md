@@ -1,14 +1,17 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Support for `onPayload` callback to replace provider request payloads before sending, enabling request interception and modification
+- Support for structured text signature metadata with phase information (commentary/final_answer) in OpenAI and Azure OpenAI Responses providers
 - Support for OpenAI Codex Spark model selection with plan-based account prioritization
 - Added `modelId` option to `getApiKey()` to enable model-specific credential ranking
 
 ### Changed
 
+- Enhanced `onPayload` callback signature to accept model parameter and support async payload replacement
+- Improved error messages for `response.failed` events to include detailed error codes, messages, and incomplete reasons
 - Refactored OpenAI Codex response streaming to improve code organization and maintainability with extracted helper functions and type definitions
 - Enhanced websocket fallback logic to safely replay buffered output over SSE when websocket connections fail mid-stream
 - Improved error recovery for websocket streams by distinguishing between fatal connection errors and retryable stream errors

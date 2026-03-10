@@ -25,6 +25,7 @@ import {
 	type StreamFunction,
 	type StreamOptions,
 	type TextContent,
+	type TextSignatureV1,
 	type ThinkingContent,
 	type Tool,
 	type ToolCall,
@@ -63,6 +64,33 @@ function getPromptCacheRetention(baseUrl: string, cacheRetention: CacheRetention
 	}
 	return undefined;
 }
+
+function encodeTextSignatureV1(id: string, phase?: TextSignatureV1["phase"]): string {
+	const payload: TextSignatureV1 = { v: 1, id };
+	if (phase) payload.phase = phase;
+	return JSON.stringify(payload);
+}
+
+function parseTextSignature(
+	signature: string | undefined,
+): { id: string; phase?: TextSignatureV1["phase"] } | undefined {
+	if (!signature) return undefined;
+	if (signature.startsWith("{")) {
+		try {
+			const parsed = JSON.parse(signature) as Partial<TextSignatureV1>;
+			if (parsed.v === 1 && typeof parsed.id === "string") {
+				if (parsed.phase === "commentary" || parsed.phase === "final_answer") {
+					return { id: parsed.id, phase: parsed.phase };
+				}
+				return { id: parsed.id };
+			}
+		} catch {
+			// Fall through to legacy plain-string handling.
+		}
+	}
+	return { id: signature };
+}
+
 
 // OpenAI Responses-specific options
 export interface OpenAIResponsesOptions extends StreamOptions {
@@ -319,7 +347,7 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 								part.type === "output_text" ? (part.text ?? "") : (part.refusal ?? ""),
 							)
 							.join("");
-						currentBlock.textSignature = item.id;
+						currentBlock.textSignature = encodeTextSignatureV1(item.id, item.phase ?? undefined);
 						stream.push({
 							type: "text_end",
 							contentIndex: blockIndex(),
@@ -369,7 +397,14 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 				else if (event.type === "error") {
 					throw new Error(`Error Code ${event.code}: ${event.message}` || "Unknown error");
 				} else if (event.type === "response.failed") {
-					throw new Error("Unknown error");
+					const error = event.response?.error;
+					const details = event.response?.incomplete_details;
+					const msg = error
+						? `${error.code || "unknown"}: ${error.message || "no message"}`
+						: details?.reason
+							? `incomplete: ${details.reason}`
+							: "Unknown error (no error details in response)";
+					throw new Error(msg);
 				}
 			}
 
@@ -676,8 +711,9 @@ function convertConversationMessages(
 					}
 				} else if (block.type === "text") {
 					const textBlock = block as TextContent;
+					const parsedSignature = parseTextSignature(textBlock.textSignature);
 					// OpenAI requires id to be max 64 characters
-					let msgId = textBlock.textSignature;
+					let msgId = parsedSignature?.id;
 					if (!msgId) {
 						msgId = `msg_${msgIndex}`;
 					} else if (msgId.length > 64) {
@@ -689,6 +725,7 @@ function convertConversationMessages(
 						content: [{ type: "output_text", text: textBlock.text.toWellFormed(), annotations: [] }],
 						status: "completed",
 						id: msgId,
+						phase: parsedSignature?.phase,
 					} satisfies ResponseOutputMessage);
 					// Do not submit toolcall blocks if the completion had an error (i.e. abort)
 				} else if (block.type === "toolCall" && msg.stopReason !== "error") {

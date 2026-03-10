@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
 - Web search tool no longer accepts `provider` parameter in tool calls; use internal provider resolution instead
@@ -9,6 +8,8 @@
 
 ### Added
 
+- Added `before_provider_request` extension event to intercept and modify provider request payloads before sending
+- Added `emitBeforeProviderRequest()` method to ExtensionRunner for chaining payload transformations across extensions
 - Added `refreshInBackground()` method to ModelRegistry for non-blocking model discovery
 - Added `refreshProvider()` method to refresh models for a specific provider on demand
 - Added `getDiscoverableProviders()` method to list all configured discoverable providers

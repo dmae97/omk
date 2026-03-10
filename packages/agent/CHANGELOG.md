@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `onPayload` option to `AgentOptions` to inspect or replace provider payloads before they are sent
 
 ## [13.9.3] - 2026-03-07
 

@@ -604,8 +604,11 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 				dynamicHeaders: copilotDynamicHeaders?.headers,
 				isOAuth: options?.isOAuth,
 			});
-			const params = buildParams(model, baseUrl, context, isOAuthToken, options);
-			options?.onPayload?.(params);
+			let params = buildParams(model, baseUrl, context, isOAuthToken, options);
+			const replacementPayload = await options?.onPayload?.(params, model);
+			if (replacementPayload !== undefined) {
+				params = replacementPayload as typeof params;
+			}
 			rawRequestDump = {
 				provider: model.provider,
 				api: output.api,

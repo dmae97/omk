@@ -12,6 +12,7 @@ import {
 	type Model,
 	type ProviderSessionState,
 	type ServiceTier,
+	type SimpleStreamOptions,
 	streamSimple,
 	type TextContent,
 	type ThinkingBudgets,
@@ -106,6 +107,11 @@ export interface AgentOptions {
 	 * Useful for expiring tokens (e.g., GitHub Copilot OAuth).
 	 */
 	getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined;
+
+	/**
+	 * Inspect or replace provider payloads before they are sent.
+	 */
+	onPayload?: SimpleStreamOptions["onPayload"];
 
 	/**
 	 * Custom token budgets for thinking levels (token-based providers only).
@@ -214,6 +220,7 @@ export class Agent {
 	#transformToolCallArguments?: (args: Record<string, unknown>, toolName: string) => Record<string, unknown>;
 	#intentTracing: boolean;
 	#getToolChoice?: () => ToolChoice | undefined;
+	#onPayload?: SimpleStreamOptions["onPayload"];
 
 	/** Buffered Cursor tool results with text length at time of call (for correct ordering) */
 	#cursorToolResultBuffer: CursorToolResultEntry[] = [];
@@ -241,6 +248,7 @@ export class Agent {
 		this.#serviceTier = opts.serviceTier;
 		this.#maxRetryDelayMs = opts.maxRetryDelayMs;
 		this.getApiKey = opts.getApiKey;
+		this.#onPayload = opts.onPayload;
 		this.#getToolContext = opts.getToolContext;
 		this.#cursorExecHandlers = opts.cursorExecHandlers;
 		this.#cursorOnToolResult = opts.cursorOnToolResult;
@@ -719,6 +727,7 @@ export class Agent {
 			toolChoice: options?.toolChoice,
 			convertToLlm: this.#convertToLlm,
 			transformContext: this.#transformContext,
+			onPayload: this.#onPayload,
 			getApiKey: this.getApiKey,
 			getToolContext: this.#getToolContext,
 			cursorExecHandlers: this.#cursorExecHandlers,

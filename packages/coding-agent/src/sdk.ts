@@ -1358,6 +1358,11 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			tools: initialTools,
 		},
 		convertToLlm: convertToLlmFinal,
+		onPayload: extensionRunner
+			? async (payload, _model) => {
+					return extensionRunner.emitBeforeProviderRequest(payload);
+				}
+			: undefined,
 		sessionId: sessionManager.getSessionId(),
 		transformContext: extensionRunner
 			? async messages => {

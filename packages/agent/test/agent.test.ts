@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Agent, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
-import { type AssistantMessage, getBundledModel, type ThinkingBudgets, type Usage } from "@oh-my-pi/pi-ai";
+import { type AssistantMessage, getBundledModel, type SimpleStreamOptions, type ThinkingBudgets, type Usage } from "@oh-my-pi/pi-ai";
 import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
 
 class MockAssistantStream extends AssistantMessageEventStream {}
@@ -255,5 +255,31 @@ describe("Agent", () => {
 		await agent.prompt("hello again");
 		expect(receivedSessionId).toBe("session-def");
 		expect(receivedBudgets).toEqual({ medium: 512 });
+	});
+
+	it("forwards onPayload to streamFn options", async () => {
+		let receivedOnPayload: SimpleStreamOptions["onPayload"] | undefined;
+
+		const agent = new Agent({
+			onPayload: async (payload, model) => ({ payload, provider: model?.provider }),
+			streamFn: (_model, _context, options) => {
+				receivedOnPayload = options?.onPayload;
+				const stream = new MockAssistantStream();
+				queueMicrotask(() => {
+					const message = createAssistantMessage([{ type: "text", text: "ok" }]);
+					stream.push({ type: "done", reason: "stop", message });
+				});
+				return stream;
+			},
+		});
+
+		await agent.prompt("hello");
+		expect(receivedOnPayload).toBeDefined();
+
+		const replacementPayload = await receivedOnPayload?.({ request: true }, getBundledModel("openai", "gpt-4o-mini"));
+		expect(replacementPayload).toEqual({
+			payload: { request: true },
+			provider: "openai",
+		});
 	});
 });

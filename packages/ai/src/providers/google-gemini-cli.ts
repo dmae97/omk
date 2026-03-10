@@ -486,8 +486,11 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 			const baseUrl = model.baseUrl?.trim();
 			const endpoints = baseUrl ? [baseUrl] : isAntigravity ? ANTIGRAVITY_ENDPOINT_FALLBACKS : [DEFAULT_ENDPOINT];
 
-			const requestBody = buildRequest(model, context, projectId, options, isAntigravity);
-			options?.onPayload?.(requestBody);
+			let requestBody = buildRequest(model, context, projectId, options, isAntigravity);
+			const replacementPayload = await options?.onPayload?.(requestBody, model);
+			if (replacementPayload !== undefined) {
+				requestBody = replacementPayload as typeof requestBody;
+			}
 			const headers = isAntigravity ? getAntigravityHeaders() : GEMINI_CLI_HEADERS;
 
 			const requestHeaders = {

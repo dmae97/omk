@@ -213,6 +213,91 @@ describe("OpenAI responses history payload", () => {
 		]);
 	});
 
+	it("preserves assistant message phase when rebuilding fallback replay history", async () => {
+		const context: Context = {
+			messages: [
+				{ role: "user", content: "first user", timestamp: Date.now() },
+				{
+					role: "assistant",
+					content: [
+						{
+							type: "text",
+							text: "Commentary answer",
+							textSignature: JSON.stringify({ v: 1, id: "msg_commentary", phase: "commentary" }),
+						},
+					],
+					api: "openai-responses",
+					provider: "openai",
+					model: "gpt-5-mini",
+					usage: {
+						input: 0,
+						output: 0,
+						cacheRead: 0,
+						cacheWrite: 0,
+						totalTokens: 0,
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+					},
+					stopReason: "stop",
+					timestamp: Date.now(),
+				},
+				{ role: "user", content: "follow-up", timestamp: Date.now() },
+			],
+		};
+		const model = getBundledModel("openai", "gpt-5-mini") as Model<"openai-responses">;
+		const payload = (await captureResponsesPayload(model, context)) as { input?: unknown[] };
+		expect(payload.input).toEqual([
+			{ role: "user", content: [{ type: "input_text", text: "first user" }] },
+			{
+				type: "message",
+				role: "assistant",
+				content: [{ type: "output_text", text: "Commentary answer", annotations: [] }],
+				status: "completed",
+				id: "msg_commentary",
+				phase: "commentary",
+			},
+			{ role: "user", content: [{ type: "input_text", text: "follow-up" }] },
+		]);
+	});
+
+	it("keeps legacy plain-string text signatures when rebuilding fallback replay history", async () => {
+		const context: Context = {
+			messages: [
+				{ role: "user", content: "first user", timestamp: Date.now() },
+				{
+					role: "assistant",
+					content: [{ type: "text", text: "Legacy answer", textSignature: "msg_legacy" }],
+					api: "openai-responses",
+					provider: "openai",
+					model: "gpt-5-mini",
+					usage: {
+						input: 0,
+						output: 0,
+						cacheRead: 0,
+						cacheWrite: 0,
+						totalTokens: 0,
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+					},
+					stopReason: "stop",
+					timestamp: Date.now(),
+				},
+				{ role: "user", content: "follow-up", timestamp: Date.now() },
+			],
+		};
+		const model = getBundledModel("openai", "gpt-5-mini") as Model<"openai-responses">;
+		const payload = (await captureResponsesPayload(model, context)) as { input?: unknown[] };
+		expect(payload.input).toEqual([
+			{ role: "user", content: [{ type: "input_text", text: "first user" }] },
+			{
+				type: "message",
+				role: "assistant",
+				content: [{ type: "output_text", text: "Legacy answer", annotations: [] }],
+				status: "completed",
+				id: "msg_legacy",
+			},
+			{ role: "user", content: [{ type: "input_text", text: "follow-up" }] },
+		]);
+	});
+
 	it("backward compat: old full-snapshot payloads still replace history for legacy same-provider assistant turns", async () => {
 		const fullSnapshotItems = [
 			{ type: "message", role: "user", content: [{ type: "input_text", text: "Canonical user" }] },
