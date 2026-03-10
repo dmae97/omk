@@ -9,6 +9,7 @@ import {
 	moveWordLeft,
 	moveWordRight,
 	padding,
+	replaceTabs,
 	sliceWithWidth,
 	visibleWidth,
 } from "../utils";
@@ -356,8 +357,8 @@ export class Input implements Component, Focusable {
 		this.#lastAction = null;
 		this.#pushUndo();
 
-		// Clean the pasted text - remove newlines and carriage returns
-		const cleanText = pastedText.replace(/\r\n/g, "").replace(/\r/g, "").replace(/\n/g, "");
+		// Clean the pasted text - remove newlines and carriage returns, then normalize tabs.
+		const cleanText = replaceTabs(pastedText.replace(/\r\n/g, "").replace(/\r/g, "").replace(/\n/g, ""));
 
 		// Insert at cursor position
 		this.#value = this.#value.slice(0, this.#cursor) + cleanText + this.#value.slice(this.#cursor);

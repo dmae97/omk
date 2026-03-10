@@ -32,8 +32,8 @@ describe("ExtensionRunner", () => {
 		tempDir.removeSync();
 	});
 
-	const loadTestExtensions = async () => {
-		const result = await discoverAndLoadExtensions([], tempDir.path());
+	const loadTestExtensions = async (configuredPaths: string[] = []) => {
+		const result = await discoverAndLoadExtensions(configuredPaths, tempDir.path());
 		return {
 			...result,
 			extensions: filterUserExtensions(result.extensions),
@@ -198,6 +198,37 @@ describe("ExtensionRunner", () => {
 
 			const missing = runner.getCommand("not-exists");
 			expect(missing).toBeUndefined();
+		});
+
+		it("prefers later-loaded explicit extensions for conflicting commands", async () => {
+			const deployCommand = (description: string) => `
+				export default function(pi) {
+					pi.registerCommand("deploy", {
+						description: "${description}",
+						handler: async () => {},
+					});
+				}
+			`;
+
+			fs.writeFileSync(path.join(extensionsDir, "discovered-deploy.ts"), deployCommand("Discovered deploy"));
+			const explicitExtensionPath = path.join(tempDir.path(), "explicit-deploy.ts");
+			fs.writeFileSync(explicitExtensionPath, deployCommand("Explicit deploy"));
+
+			const result = await loadTestExtensions([explicitExtensionPath]);
+			const runner = new ExtensionRunner(
+				result.extensions,
+				result.runtime,
+				tempDir.path(),
+				sessionManager,
+				modelRegistry,
+			);
+
+			const commands = runner.getRegisteredCommands();
+			expect(commands).toHaveLength(1);
+			expect(commands[0]?.description).toBe("Explicit deploy");
+
+			const command = runner.getCommand("deploy");
+			expect(command?.description).toBe("Explicit deploy");
 		});
 	});
 

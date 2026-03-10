@@ -38,6 +38,7 @@ describe("ModelSelector role badge thinking display", () => {
 
 		const modelRegistry = {
 			getAll: () => [model],
+			getDiscoverableProviders: () => [],
 		} as unknown as ModelRegistry;
 		const ui = {
 			requestRender: vi.fn(),

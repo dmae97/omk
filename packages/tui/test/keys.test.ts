@@ -92,6 +92,12 @@ describe("parseKey", () => {
 		expect(parseKey("\x1b[57400;133u")).toBe("ctrl+end");
 		setKittyProtocolActive(false);
 	});
+
+	it("ignores Kitty sequences with unsupported modifiers", () => {
+		setKittyProtocolActive(true);
+		expect(parseKey("\x1b[99;9u")).toBeUndefined();
+		setKittyProtocolActive(false);
+	});
 });
 
 describe("extractPrintableText", () => {
@@ -101,5 +107,14 @@ describe("extractPrintableText", () => {
 
 	it("does not treat modified NumLock keypad navigation keys as text", () => {
 		expect(extractPrintableText("\x1b[57400;133u")).toBeUndefined();
+	});
+
+	it("ignores unsupported modifiers on Kitty CSI-u text", () => {
+		expect(extractPrintableText("\x1b[99;9u")).toBeUndefined();
+		expect(extractPrintableText("\x1b[97;9;229u")).toBeUndefined();
+	});
+
+	it("preserves Kitty CSI-u text-field decoding for supported modifiers", () => {
+		expect(extractPrintableText("\x1b[97;1;229u")).toBe("å");
 	});
 });

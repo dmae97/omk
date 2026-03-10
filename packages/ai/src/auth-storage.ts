@@ -1595,7 +1595,8 @@ export class AuthStorage {
 				if (leftPlanPriority !== rightPlanPriority) return leftPlanPriority - rightPlanPriority;
 			}
 			if (left.hasPriorityBoost !== right.hasPriorityBoost) return left.hasPriorityBoost ? -1 : 1;
-			if (left.secondaryDrainRate !== right.secondaryDrainRate) return left.secondaryDrainRate - right.secondaryDrainRate;
+			if (left.secondaryDrainRate !== right.secondaryDrainRate)
+				return left.secondaryDrainRate - right.secondaryDrainRate;
 			if (left.secondaryUsed !== right.secondaryUsed) return left.secondaryUsed - right.secondaryUsed;
 			if (left.primaryDrainRate !== right.primaryDrainRate) return left.primaryDrainRate - right.primaryDrainRate;
 			if (left.primaryUsed !== right.primaryUsed) return left.primaryUsed - right.primaryUsed;
@@ -1636,7 +1637,6 @@ export class AuthStorage {
 		// with the most headroom proactively and fall back intelligently when rate-limited.
 		const requiresProModel = requiresOpenAICodexProModel(provider, options?.modelId);
 		const sessionPreferredIsAvailable =
-
 			sessionPreferredIndex !== undefined && !this.#isCredentialBlocked(providerKey, sessionPreferredIndex);
 		const shouldRank = checkUsage && (!sessionPreferredIsAvailable || requiresProModel);
 		const candidates = shouldRank

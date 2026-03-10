@@ -1363,7 +1363,6 @@ mod tests {
 		assert_eq!(parse_key_inner(b"\x1b[99;9u", true).as_deref(), None);
 	}
 
-
 	#[test]
 	fn parse_key_ignores_kitty_release_events() {
 		assert_eq!(parse_key_inner(b"\x1b[127u", true).as_deref(), Some("backspace"));

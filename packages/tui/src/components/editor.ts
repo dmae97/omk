@@ -772,6 +772,7 @@ export class Editor implements Component, Focusable {
 				if (matchesKey(data, "tab")) {
 					const selected = this.#autocompleteList.getSelectedItem();
 					if (selected && this.#autocompleteProvider) {
+						const shouldChainSlashCommandAutocomplete = this.#isSlashCommandNameAutocompleteSelection();
 						const result = this.#autocompleteProvider.applyCompletion(
 							this.#state.lines,
 							this.#state.cursorLine,
@@ -791,6 +792,10 @@ export class Editor implements Component, Focusable {
 						}
 
 						result.onApplied?.();
+
+						if (shouldChainSlashCommandAutocomplete && this.#isCompletedSlashCommandAtCursor()) {
+							void this.#tryTriggerAutocomplete();
+						}
 					}
 					return;
 				}
@@ -2035,6 +2040,26 @@ export class Editor implements Component, Focusable {
 
 		// At start if line is empty, only contains whitespace, or is just "/"
 		return beforeCursor.trim() === "" || beforeCursor.trim() === "/";
+	}
+
+	#isSlashCommandNameAutocompleteSelection(): boolean {
+		if (this.#autocompleteState !== "regular") {
+			return false;
+		}
+
+		const currentLine = this.#state.lines[this.#state.cursorLine] || "";
+		const textBeforeCursor = currentLine.slice(0, this.#state.cursorCol).trimStart();
+		return textBeforeCursor.startsWith("/") && !textBeforeCursor.includes(" ");
+	}
+
+	#isCompletedSlashCommandAtCursor(): boolean {
+		const currentLine = this.#state.lines[this.#state.cursorLine] || "";
+		if (this.#state.cursorCol !== currentLine.length) {
+			return false;
+		}
+
+		const textBeforeCursor = currentLine.slice(0, this.#state.cursorCol).trimStart();
+		return /^\/\S+ $/.test(textBeforeCursor);
 	}
 
 	// Autocomplete methods

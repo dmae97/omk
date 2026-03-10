@@ -104,6 +104,19 @@ export function upsertFileOperations(summary: string, readFiles: string[], modif
 // Message Serialization
 // ============================================================================
 
+/** Maximum characters for a tool result in serialized summaries. */
+const TOOL_RESULT_MAX_CHARS = 2000;
+
+/**
+ * Truncate text to a maximum character length for summarization.
+ * Keeps the beginning and appends a truncation marker.
+ */
+function truncateForSummary(text: string, maxChars: number): string {
+	if (text.length <= maxChars) return text;
+	const truncatedChars = text.length - maxChars;
+	return `${text.slice(0, maxChars)}\n\n[... ${truncatedChars} more characters truncated]`;
+}
+
 /**
  * Serialize LLM messages to text for summarization.
  * This prevents the model from treating it as a conversation to continue.
@@ -156,7 +169,7 @@ export function serializeConversation(messages: Message[]): string {
 				.map(c => c.text)
 				.join("");
 			if (content) {
-				parts.push(`[Tool result]: ${content}`);
+				parts.push(`[Tool result]: ${truncateForSummary(content, TOOL_RESULT_MAX_CHARS)}`);
 			}
 		}
 	}

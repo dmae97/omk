@@ -277,7 +277,9 @@ function decodeKittyPrintable(data: string): string | undefined {
 	const modValue = match[4] ? Number.parseInt(match[4], 10) : 1;
 	const modifier = Number.isFinite(modValue) ? modValue - 1 : 0;
 	const effectiveMod = modifier & ~(64 + 128);
+	const supportedModifierMask = KITTY_MOD_SHIFT | KITTY_MOD_ALT | KITTY_MOD_CTRL;
 
+	if (effectiveMod & ~supportedModifierMask) return undefined;
 	if (effectiveMod & (KITTY_MOD_ALT | KITTY_MOD_CTRL)) return undefined;
 
 	const textField = match[6];

@@ -339,7 +339,7 @@ export class ExtensionRunner {
 	getRegisteredCommands(reserved?: Set<string>): RegisteredCommand[] {
 		this.#commandDiagnostics = [];
 
-		const commands: RegisteredCommand[] = [];
+		const commands = new Map<string, RegisteredCommand>();
 		for (const ext of this.extensions) {
 			for (const command of ext.commands.values()) {
 				if (reserved?.has(command.name)) {
@@ -351,10 +351,10 @@ export class ExtensionRunner {
 					continue;
 				}
 
-				commands.push(command);
+				commands.set(command.name, command);
 			}
 		}
-		return commands;
+		return [...commands.values()];
 	}
 
 	getCommandDiagnostics(): Array<{ type: string; message: string; path: string }> {
@@ -362,8 +362,8 @@ export class ExtensionRunner {
 	}
 
 	getCommand(name: string): RegisteredCommand | undefined {
-		for (const ext of this.extensions) {
-			const command = ext.commands.get(name);
+		for (let index = this.extensions.length - 1; index >= 0; index -= 1) {
+			const command = this.extensions[index]?.commands.get(name);
 			if (command) {
 				return command;
 			}

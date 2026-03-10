@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { stripVTControlCharacters } from "node:util";
+import { CombinedAutocompleteProvider } from "@oh-my-pi/pi-tui/autocomplete";
 import { Editor } from "@oh-my-pi/pi-tui/components/editor";
 import { visibleWidth } from "@oh-my-pi/pi-tui/utils";
 import { defaultEditorTheme } from "./test-themes";
@@ -295,6 +296,74 @@ describe("Editor component", () => {
 			editor.handleInput("@");
 
 			await expect(promise).resolves.toBe("@");
+		});
+
+		it("chains into argument completions after tab-completing slash command names", async () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setAutocompleteProvider(
+				new CombinedAutocompleteProvider(
+					[
+						{
+							name: "model",
+							description: "Select a model",
+							getArgumentCompletions() {
+								return [{ label: "claude-opus", value: "claude-opus" }];
+							},
+						},
+						{ name: "help", description: "Show help" },
+					],
+					"/tmp",
+				),
+			);
+
+			editor.handleInput("/");
+			await Bun.sleep(0);
+			editor.handleInput("m");
+			editor.handleInput("o");
+			editor.handleInput("d");
+			await Bun.sleep(110);
+
+			editor.handleInput("	");
+			await Bun.sleep(0);
+
+			expect(editor.getText()).toBe("/model ");
+			expect(editor.isShowingAutocomplete()).toBe(true);
+
+			editor.handleInput("	");
+
+			expect(editor.getText()).toBe("/model claude-opus");
+			expect(editor.isShowingAutocomplete()).toBe(false);
+		});
+
+		it("does not show argument completions when command has no argument completer", async () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setAutocompleteProvider(
+				new CombinedAutocompleteProvider(
+					[
+						{
+							name: "model",
+							description: "Select a model",
+							getArgumentCompletions() {
+								return [{ label: "claude-opus", value: "claude-opus" }];
+							},
+						},
+						{ name: "help", description: "Show help" },
+					],
+					"/tmp",
+				),
+			);
+
+			editor.handleInput("/");
+			await Bun.sleep(0);
+			editor.handleInput("h");
+			editor.handleInput("e");
+			await Bun.sleep(110);
+
+			editor.handleInput("	");
+			await Bun.sleep(0);
+
+			expect(editor.getText()).toBe("/help ");
+			expect(editor.isShowingAutocomplete()).toBe(false);
 		});
 	});
 

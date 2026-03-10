@@ -32,6 +32,7 @@ export function emergencyTerminalRestore(): void {
 				"\x1b[?2004l" + // Disable bracketed paste
 					"\x1b[?2031l" + // Disable Mode 2031 appearance notifications
 					"\x1b[<u" + // Pop kitty keyboard protocol
+					"\x1b[>4;0m" + // Disable modifyOtherKeys fallback
 					"\x1b[?25h", // Show cursor
 			);
 			if (process.stdin.setRawMode) {
@@ -103,6 +104,8 @@ export class ProcessTerminal implements Terminal {
 	#inputHandler?: (data: string) => void;
 	#resizeHandler?: () => void;
 	#kittyProtocolActive = false;
+	#modifyOtherKeysActive = false;
+	#modifyOtherKeysTimeout?: ReturnType<typeof setTimeout>;
 	#stdinBuffer?: StdinBuffer;
 	#stdinDataHandler?: (data: string) => void;
 	#dead = false;
@@ -242,6 +245,10 @@ export class ProcessTerminal implements Terminal {
 			if (!this.#kittyProtocolActive) {
 				const match = sequence.match(kittyResponsePattern);
 				if (match) {
+					if (this.#modifyOtherKeysTimeout) {
+						clearTimeout(this.#modifyOtherKeysTimeout);
+						this.#modifyOtherKeysTimeout = undefined;
+					}
 					this.#kittyProtocolActive = true;
 					setKittyProtocolActive(true);
 
@@ -302,6 +309,14 @@ export class ProcessTerminal implements Terminal {
 		this.#setupStdinBuffer();
 		process.stdin.on("data", this.#stdinDataHandler!);
 		this.#safeWrite("\x1b[?u");
+		this.#modifyOtherKeysTimeout = setTimeout(() => {
+			this.#modifyOtherKeysTimeout = undefined;
+			if (this.#kittyProtocolActive || this.#modifyOtherKeysActive) {
+				return;
+			}
+			this.#safeWrite("\x1b[>4;2m");
+			this.#modifyOtherKeysActive = true;
+		}, 150);
 	}
 
 	async drainInput(maxMs = 1000, idleMs = 50): Promise<void> {
@@ -311,6 +326,14 @@ export class ProcessTerminal implements Terminal {
 			this.#safeWrite("\x1b[<u");
 			this.#kittyProtocolActive = false;
 			setKittyProtocolActive(false);
+		}
+		if (this.#modifyOtherKeysTimeout) {
+			clearTimeout(this.#modifyOtherKeysTimeout);
+			this.#modifyOtherKeysTimeout = undefined;
+		}
+		if (this.#modifyOtherKeysActive) {
+			this.#safeWrite("\x1b[>4;0m");
+			this.#modifyOtherKeysActive = false;
 		}
 
 		const previousHandler = this.#inputHandler;
@@ -356,6 +379,14 @@ export class ProcessTerminal implements Terminal {
 			this.#safeWrite("\x1b[<u");
 			this.#kittyProtocolActive = false;
 			setKittyProtocolActive(false);
+		}
+		if (this.#modifyOtherKeysTimeout) {
+			clearTimeout(this.#modifyOtherKeysTimeout);
+			this.#modifyOtherKeysTimeout = undefined;
+		}
+		if (this.#modifyOtherKeysActive) {
+			this.#safeWrite("\x1b[>4;0m");
+			this.#modifyOtherKeysActive = false;
 		}
 
 		this.#restoreWindowsVTInput();

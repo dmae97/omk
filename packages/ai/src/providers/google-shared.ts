@@ -45,6 +45,8 @@ export function retainThoughtSignature(existing: string | undefined, incoming: s
 // Thought signatures must be base64 for Google APIs (TYPE_BYTES).
 const base64SignaturePattern = /^[A-Za-z0-9+/]+={0,2}$/;
 
+const SKIP_THOUGHT_SIGNATURE = "skip_thought_signature_validator";
+
 function isValidThoughtSignature(signature: string | undefined): boolean {
 	if (!signature) return false;
 	if (signature.length % 4 !== 0) return false;
@@ -150,22 +152,8 @@ export function convertMessages<T extends GoogleApiType>(model: Model<T>, contex
 					}
 				} else if (block.type === "toolCall") {
 					const thoughtSignature = resolveThoughtSignature(isSameProviderAndModel, block.thoughtSignature);
-					if (isGemini3Model(model.id) && !thoughtSignature) {
-						const params = Object.entries(block.arguments ?? {})
-							.map(([key, value]) => {
-								const valueStr = typeof value === "string" ? value : JSON.stringify(value, null, 2);
-								return `<parameter name="${key}">${valueStr}</parameter>`;
-							})
-							.join("\n");
-
-						parts.push({
-							text: `<call_record tool="${block.name}">
-<critical>Historical context only. You cannot invoke tools this way—use proper function calling.</critical>
-${params}
-</call_record>`.toWellFormed(),
-						});
-						continue;
-					}
+					const effectiveSignature =
+						thoughtSignature || (isGemini3Model(model.id) ? SKIP_THOUGHT_SIGNATURE : undefined);
 
 					const part: Part = {
 						functionCall: {
@@ -177,8 +165,8 @@ ${params}
 					if (model.provider === "google-vertex" && part?.functionCall?.id) {
 						delete part.functionCall.id; // Vertex AI does not support 'id' in functionCall
 					}
-					if (thoughtSignature) {
-						part.thoughtSignature = thoughtSignature;
+					if (effectiveSignature) {
+						part.thoughtSignature = effectiveSignature;
 					}
 					parts.push(part);
 				}

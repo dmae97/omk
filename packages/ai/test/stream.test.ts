@@ -4,7 +4,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { Effort } from "@oh-my-pi/pi-ai";
 import { getBundledModel } from "@oh-my-pi/pi-ai/models";
-import { complete, stream } from "@oh-my-pi/pi-ai/stream";
+import { complete, getEnvApiKey, stream } from "@oh-my-pi/pi-ai/stream";
 import type { Api, Context, ImageContent, Model, OptionsForApi, Tool, ToolResultMessage } from "@oh-my-pi/pi-ai/types";
 import { StringEnum } from "@oh-my-pi/pi-ai/utils/schema";
 import { Type } from "@sinclair/typebox";
@@ -404,12 +404,89 @@ describe("Generate E2E Tests", () => {
 		);
 	});
 
+	describe("google-vertex env auth", () => {
+		it("treats GOOGLE_CLOUD_API_KEY as a configured google-vertex credential", () => {
+			const originalApiKey = Bun.env.GOOGLE_CLOUD_API_KEY;
+			const originalProject = Bun.env.GOOGLE_CLOUD_PROJECT;
+			const originalGcloudProject = Bun.env.GCLOUD_PROJECT;
+			const originalLocation = Bun.env.GOOGLE_CLOUD_LOCATION;
+			const originalApplicationCredentials = Bun.env.GOOGLE_APPLICATION_CREDENTIALS;
+
+			try {
+				Bun.env.GOOGLE_CLOUD_API_KEY = "vertex-test-key";
+				delete Bun.env.GOOGLE_CLOUD_PROJECT;
+				delete Bun.env.GCLOUD_PROJECT;
+				delete Bun.env.GOOGLE_CLOUD_LOCATION;
+				delete Bun.env.GOOGLE_APPLICATION_CREDENTIALS;
+
+				expect(getEnvApiKey("google-vertex")).toBe("vertex-test-key");
+			} finally {
+				if (originalApiKey === undefined) delete Bun.env.GOOGLE_CLOUD_API_KEY;
+				else Bun.env.GOOGLE_CLOUD_API_KEY = originalApiKey;
+				if (originalProject === undefined) delete Bun.env.GOOGLE_CLOUD_PROJECT;
+				else Bun.env.GOOGLE_CLOUD_PROJECT = originalProject;
+				if (originalGcloudProject === undefined) delete Bun.env.GCLOUD_PROJECT;
+				else Bun.env.GCLOUD_PROJECT = originalGcloudProject;
+				if (originalLocation === undefined) delete Bun.env.GOOGLE_CLOUD_LOCATION;
+				else Bun.env.GOOGLE_CLOUD_LOCATION = originalLocation;
+				if (originalApplicationCredentials === undefined) delete Bun.env.GOOGLE_APPLICATION_CREDENTIALS;
+				else Bun.env.GOOGLE_APPLICATION_CREDENTIALS = originalApplicationCredentials;
+			}
+		});
+
+		it("allows explicit Vertex API keys without requiring project or location", async () => {
+			const originalApiKey = Bun.env.GOOGLE_CLOUD_API_KEY;
+			const originalProject = Bun.env.GOOGLE_CLOUD_PROJECT;
+			const originalGcloudProject = Bun.env.GCLOUD_PROJECT;
+			const originalLocation = Bun.env.GOOGLE_CLOUD_LOCATION;
+			const llm = getBundledModel("google-vertex", "gemini-3-flash-preview");
+			const controller = new AbortController();
+			controller.abort();
+
+			try {
+				delete Bun.env.GOOGLE_CLOUD_API_KEY;
+				delete Bun.env.GOOGLE_CLOUD_PROJECT;
+				delete Bun.env.GCLOUD_PROJECT;
+				delete Bun.env.GOOGLE_CLOUD_LOCATION;
+
+				const response = await complete(
+					llm,
+					{ messages: [{ role: "user", content: "Hello", timestamp: Date.now() }] },
+					{ apiKey: "vertex-test-key", signal: controller.signal },
+				);
+
+				expect(response.stopReason).toBe("aborted");
+				expect(response.errorMessage).toBeTruthy();
+				expect(response.errorMessage).not.toContain("Vertex AI requires a project ID");
+				expect(response.errorMessage).not.toContain("Vertex AI requires a location");
+			} finally {
+				if (originalApiKey === undefined) delete Bun.env.GOOGLE_CLOUD_API_KEY;
+				else Bun.env.GOOGLE_CLOUD_API_KEY = originalApiKey;
+				if (originalProject === undefined) delete Bun.env.GOOGLE_CLOUD_PROJECT;
+				else Bun.env.GOOGLE_CLOUD_PROJECT = originalProject;
+				if (originalGcloudProject === undefined) delete Bun.env.GCLOUD_PROJECT;
+				else Bun.env.GCLOUD_PROJECT = originalGcloudProject;
+				if (originalLocation === undefined) delete Bun.env.GOOGLE_CLOUD_LOCATION;
+				else Bun.env.GOOGLE_CLOUD_LOCATION = originalLocation;
+			}
+		});
+	});
+
 	describe("Google Vertex Provider (gemini-3-flash-preview)", () => {
+		const vertexApiKey = Bun.env.GOOGLE_CLOUD_API_KEY;
 		const vertexProject = Bun.env.GOOGLE_CLOUD_PROJECT || Bun.env.GCLOUD_PROJECT;
 		const vertexLocation = Bun.env.GOOGLE_CLOUD_LOCATION;
 		const isVertexConfigured = Boolean(vertexProject && vertexLocation);
 		const vertexOptions = { project: vertexProject, location: vertexLocation } as const;
 		const llm = getBundledModel("google-vertex", "gemini-3-flash-preview");
+
+		it.skipIf(!vertexApiKey)(
+			"should complete basic text generation with Vertex API key",
+			async () => {
+				await basicTextGeneration(llm, { apiKey: vertexApiKey! });
+			},
+			{ retry: 3 },
+		);
 
 		it.skipIf(!isVertexConfigured)(
 			"should complete basic text generation",

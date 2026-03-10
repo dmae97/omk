@@ -57,6 +57,10 @@ interface InlineStyleContext {
 	stylePrefix: string;
 }
 
+type ListToken = Token & { items: Array<{ tokens?: Token[] }>; ordered: boolean; start?: number };
+type TableCellToken = { tokens?: Token[] };
+type TableToken = Token & { header: TableCellToken[]; rows: TableCellToken[][]; raw?: string };
+
 function formatHyperlink(text: string, target: string): string {
 	if (!TERMINAL.hyperlinks || !target) {
 		return text;
@@ -285,14 +289,14 @@ export class Markdown implements Component {
 		};
 	}
 
-	#renderToken(token: Token, width: number, nextTokenType?: string): string[] {
+	#renderToken(token: Token, width: number, nextTokenType?: string, styleContext?: InlineStyleContext): string[] {
 		const lines: string[] = [];
 
 		switch (token.type) {
 			case "heading": {
 				const headingLevel = token.depth;
 				const headingPrefix = `${"#".repeat(headingLevel)} `;
-				const headingText = this.#renderInlineTokens(token.tokens || []);
+				const headingText = this.#renderInlineTokens(token.tokens || [], styleContext);
 				let styledHeading: string;
 				if (headingLevel === 1) {
 					styledHeading = this.#theme.heading(this.#theme.bold(this.#theme.underline(headingText)));
@@ -309,7 +313,7 @@ export class Markdown implements Component {
 			}
 
 			case "paragraph": {
-				const paragraphText = this.#renderInlineTokens(token.tokens || []);
+				const paragraphText = this.#renderInlineTokens(token.tokens || [], styleContext);
 				lines.push(paragraphText);
 				// Don't add spacing if next token is space or list
 				if (nextTokenType && nextTokenType !== "list" && nextTokenType !== "space") {
@@ -357,7 +361,7 @@ export class Markdown implements Component {
 			}
 
 			case "list": {
-				const listLines = this.#renderList(token as any, 0);
+				const listLines = this.#renderList(token as ListToken, 0, styleContext);
 				lines.push(...listLines);
 				// Don't add spacing after lists if a space token follows
 				// (the space token will handle it)
@@ -365,26 +369,48 @@ export class Markdown implements Component {
 			}
 
 			case "table": {
-				const tableLines = this.#renderTable(token as any, width);
+				const tableLines = this.#renderTable(token as TableToken, width, styleContext);
 				lines.push(...tableLines);
 				break;
 			}
 
 			case "blockquote": {
 				const quoteStyle = (text: string) => this.#theme.quote(this.#theme.italic(text));
-				const quoteStyleContext: InlineStyleContext = {
-					applyText: quoteStyle,
-					stylePrefix: this.#getStylePrefix(quoteStyle),
+				const quoteStylePrefix = this.#getStylePrefix(quoteStyle);
+				const applyQuoteStyle = (line: string): string => {
+					if (!quoteStylePrefix) {
+						return quoteStyle(line);
+					}
+
+					const lineWithReappliedStyle = line.replace(/\x1b\[0m/g, `\x1b[0m${quoteStylePrefix}`);
+					return quoteStyle(lineWithReappliedStyle);
 				};
-				const quoteText = this.#renderInlineTokens(token.tokens || [], quoteStyleContext);
-				const quoteLines = quoteText.split("\n");
 
-				// Calculate available width for quote content (subtract border + space = 2 chars)
+				// Blockquotes contain block-level tokens (paragraph, list, code, etc.), so render
+				// children recursively and keep default message styling out of nested content.
+				const quoteInlineStyleContext: InlineStyleContext = {
+					applyText: (text: string) => text,
+					stylePrefix: "",
+				};
 				const quoteContentWidth = Math.max(1, width - 2);
+				const quoteTokens = token.tokens || [];
+				const renderedQuoteLines: string[] = [];
 
-				for (const quoteLine of quoteLines) {
-					// Wrap the styled line, then add border to each wrapped line
-					const wrappedLines = wrapTextWithAnsi(quoteLine, quoteContentWidth);
+				for (let i = 0; i < quoteTokens.length; i++) {
+					const quoteToken = quoteTokens[i];
+					const nextQuoteToken = quoteTokens[i + 1];
+					renderedQuoteLines.push(
+						...this.#renderToken(quoteToken, quoteContentWidth, nextQuoteToken?.type, quoteInlineStyleContext),
+					);
+				}
+
+				while (renderedQuoteLines.length > 0 && renderedQuoteLines[renderedQuoteLines.length - 1] === "") {
+					renderedQuoteLines.pop();
+				}
+
+				for (const quoteLine of renderedQuoteLines) {
+					const styledLine = applyQuoteStyle(quoteLine);
+					const wrappedLines = wrapTextWithAnsi(styledLine, quoteContentWidth);
 					for (const wrappedLine of wrappedLines) {
 						lines.push(this.#theme.quoteBorder(`${this.#theme.symbols.quoteBorder} `) + wrappedLine);
 					}
@@ -514,7 +540,7 @@ export class Markdown implements Component {
 	/**
 	 * Render a list with proper nesting support
 	 */
-	#renderList(token: Token & { items: any[]; ordered: boolean; start?: number }, depth: number): string[] {
+	#renderList(token: ListToken, depth: number, styleContext?: InlineStyleContext): string[] {
 		const lines: string[] = [];
 		const indent = "  ".repeat(depth);
 		// Use the list's start property (defaults to 1 for ordered lists)
@@ -525,7 +551,7 @@ export class Markdown implements Component {
 			const bullet = token.ordered ? `${startNumber + i}. ` : "- ";
 
 			// Process item tokens to handle nested lists
-			const itemLines = this.#renderListItem(item.tokens || [], depth);
+			const itemLines = this.#renderListItem(item.tokens || [], depth, styleContext);
 
 			if (itemLines.length > 0) {
 				// First line - check if it's a nested list
@@ -566,23 +592,25 @@ export class Markdown implements Component {
 	 * Render list item tokens, handling nested lists
 	 * Returns lines WITHOUT the parent indent (renderList will add it)
 	 */
-	#renderListItem(tokens: Token[], parentDepth: number): string[] {
+	#renderListItem(tokens: Token[], parentDepth: number, styleContext?: InlineStyleContext): string[] {
 		const lines: string[] = [];
 
 		for (const token of tokens) {
 			if (token.type === "list") {
 				// Nested list - render with one additional indent level
 				// These lines will have their own indent, so we just add them as-is
-				const nestedLines = this.#renderList(token as any, parentDepth + 1);
+				const nestedLines = this.#renderList(token as ListToken, parentDepth + 1, styleContext);
 				lines.push(...nestedLines);
 			} else if (token.type === "text") {
 				// Text content (may have inline tokens)
 				const text =
-					token.tokens && token.tokens.length > 0 ? this.#renderInlineTokens(token.tokens) : token.text || "";
+					token.tokens && token.tokens.length > 0
+						? this.#renderInlineTokens(token.tokens, styleContext)
+						: token.text || "";
 				lines.push(text);
 			} else if (token.type === "paragraph") {
 				// Paragraph in list item
-				const text = this.#renderInlineTokens(token.tokens || []);
+				const text = this.#renderInlineTokens(token.tokens || [], styleContext);
 				lines.push(text);
 			} else if (token.type === "code") {
 				// Code block in list item
@@ -602,7 +630,7 @@ export class Markdown implements Component {
 				lines.push(this.#theme.codeBlockBorder("```"));
 			} else {
 				// Other token types - try to render as inline
-				const text = this.#renderInlineTokens([token]);
+				const text = this.#renderInlineTokens([token], styleContext);
 				if (text) {
 					lines.push(text);
 				}
@@ -641,7 +669,7 @@ export class Markdown implements Component {
 	 * Render a table with width-aware cell wrapping.
 	 * Cells that don't fit are wrapped to multiple lines.
 	 */
-	#renderTable(token: Token & { header: any[]; rows: any[][]; raw?: string }, availableWidth: number): string[] {
+	#renderTable(token: TableToken, availableWidth: number, styleContext?: InlineStyleContext): string[] {
 		const lines: string[] = [];
 		const numCols = token.header.length;
 
@@ -666,13 +694,13 @@ export class Markdown implements Component {
 		const naturalWidths: number[] = [];
 		const minWordWidths: number[] = [];
 		for (let i = 0; i < numCols; i++) {
-			const headerText = this.#renderInlineTokens(token.header[i].tokens || []);
+			const headerText = this.#renderInlineTokens(token.header[i].tokens || [], styleContext);
 			naturalWidths[i] = visibleWidth(headerText);
 			minWordWidths[i] = Math.max(1, this.#getLongestWordWidth(headerText, maxUnbrokenWordWidth));
 		}
 		for (const row of token.rows) {
 			for (let i = 0; i < row.length; i++) {
-				const cellText = this.#renderInlineTokens(row[i].tokens || []);
+				const cellText = this.#renderInlineTokens(row[i].tokens || [], styleContext);
 				naturalWidths[i] = Math.max(naturalWidths[i] || 0, visibleWidth(cellText));
 				minWordWidths[i] = Math.max(
 					minWordWidths[i] || 1,
@@ -761,7 +789,7 @@ export class Markdown implements Component {
 
 		// Render header with wrapping
 		const headerCellLines: string[][] = token.header.map((cell, i) => {
-			const text = this.#renderInlineTokens(cell.tokens || []);
+			const text = this.#renderInlineTokens(cell.tokens || [], styleContext);
 			return this.#wrapCellText(text, columnWidths[i]);
 		});
 		const headerLineCount = Math.max(...headerCellLines.map(c => c.length));
@@ -784,7 +812,7 @@ export class Markdown implements Component {
 		for (let rowIndex = 0; rowIndex < token.rows.length; rowIndex++) {
 			const row = token.rows[rowIndex];
 			const rowCellLines: string[][] = row.map((cell, i) => {
-				const text = this.#renderInlineTokens(cell.tokens || []);
+				const text = this.#renderInlineTokens(cell.tokens || [], styleContext);
 				return this.#wrapCellText(text, columnWidths[i]);
 			});
 			const rowLineCount = Math.max(...rowCellLines.map(c => c.length));

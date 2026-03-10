@@ -3,6 +3,7 @@ import { CURSOR_MARKER } from "@oh-my-pi/pi-tui";
 import { Input } from "@oh-my-pi/pi-tui/components/input";
 import { setKittyProtocolActive } from "@oh-my-pi/pi-tui/keys";
 import { visibleWidth } from "@oh-my-pi/pi-tui/utils";
+import { getIndentation } from "@oh-my-pi/pi-utils";
 
 function renderedWidth(input: Input, width: number): number {
 	const [line] = input.render(width);
@@ -140,6 +141,19 @@ describe("Input component", () => {
 		expect(input.getValue()).toBe("a8");
 
 		setKittyProtocolActive(false);
+	});
+
+	it("normalizes tabs in buffered bracketed paste using configured indentation", () => {
+		const input = setupAtEnd("");
+
+		input.handleInput("\x1b[200~a\t");
+		expect(input.getValue()).toBe("");
+
+		input.handleInput("b\r\n");
+		expect(input.getValue()).toBe("");
+
+		input.handleInput("c\x1b[201~");
+		expect(input.getValue()).toBe(`a${getIndentation()}bc`);
 	});
 
 	it("never renders a line wider than the terminal width (wide chars)", () => {

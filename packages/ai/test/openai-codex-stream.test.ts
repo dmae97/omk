@@ -2104,7 +2104,9 @@ describe("openai-codex streaming", () => {
 			`data: ${JSON.stringify({ type: "response.output_item.done", item: { type: "message", id: "msg_sse", role: "assistant", status: "completed", content: [{ type: "output_text", text: "Recovered over SSE" }] } })}`,
 			`data: ${JSON.stringify({ type: "response.completed", response: { status: "completed", usage: { input_tokens: 5, output_tokens: 3, total_tokens: 8, input_tokens_details: { cached_tokens: 0 } } } })}`,
 		].join("\n\n")}\n\n`;
-		const fetchMock = vi.fn(async () => new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } }));
+		const fetchMock = vi.fn(
+			async () => new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } }),
+		);
 		global.fetch = fetchMock as unknown as typeof fetch;
 
 		type WsListener = (event: Event) => void;
@@ -2167,10 +2169,18 @@ describe("openai-codex streaming", () => {
 			contextWindow: 128000,
 			maxTokens: 128000,
 		};
-		const result = await streamOpenAICodexResponses(model, {
-			systemPrompt: "You are a helpful assistant.",
-			messages: [{ role: "user", content: "Say hello", timestamp: Date.now() }],
-		}, { apiKey: token, sessionId: "ws-malformed-json-session", providerSessionState: new Map<string, ProviderSessionState>() }).result();
+		const result = await streamOpenAICodexResponses(
+			model,
+			{
+				systemPrompt: "You are a helpful assistant.",
+				messages: [{ role: "user", content: "Say hello", timestamp: Date.now() }],
+			},
+			{
+				apiKey: token,
+				sessionId: "ws-malformed-json-session",
+				providerSessionState: new Map<string, ProviderSessionState>(),
+			},
+		).result();
 
 		expect(result.stopReason).toBe("stop");
 		expect(result.content.find(c => c.type === "text")?.text).toBe("Recovered over SSE");
@@ -2196,7 +2206,9 @@ describe("openai-codex streaming", () => {
 			`data: ${JSON.stringify({ type: "response.output_item.done", item: { type: "message", id: "msg_sse_replay", role: "assistant", status: "completed", content: [{ type: "output_text", text: "Replay succeeded" }] } })}`,
 			`data: ${JSON.stringify({ type: "response.completed", response: { status: "completed", usage: { input_tokens: 5, output_tokens: 3, total_tokens: 8, input_tokens_details: { cached_tokens: 0 } } } })}`,
 		].join("\n\n")}\n\n`;
-		const fetchMock = vi.fn(async () => new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } }));
+		const fetchMock = vi.fn(
+			async () => new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } }),
+		);
 		global.fetch = fetchMock as unknown as typeof fetch;
 
 		type WsListener = (event: Event) => void;
@@ -2230,7 +2242,16 @@ describe("openai-codex streaming", () => {
 
 			send(): void {
 				this.#emit("message", {
-					data: JSON.stringify({ type: "response.output_item.added", item: { type: "message", id: "msg_ws_partial", role: "assistant", status: "in_progress", content: [] } }),
+					data: JSON.stringify({
+						type: "response.output_item.added",
+						item: {
+							type: "message",
+							id: "msg_ws_partial",
+							role: "assistant",
+							status: "in_progress",
+							content: [],
+						},
+					}),
 				} as unknown as Event);
 				this.#emit("message", {
 					data: JSON.stringify({ type: "response.content_part.added", part: { type: "output_text", text: "" } }),
@@ -2269,16 +2290,23 @@ describe("openai-codex streaming", () => {
 			contextWindow: 128000,
 			maxTokens: 128000,
 		};
-		const result = await streamOpenAICodexResponses(model, {
-			systemPrompt: "You are a helpful assistant.",
-			messages: [{ role: "user", content: "Say hello", timestamp: Date.now() }],
-		}, { apiKey: token, sessionId: "ws-buffered-close-session", providerSessionState: new Map<string, ProviderSessionState>() }).result();
+		const result = await streamOpenAICodexResponses(
+			model,
+			{
+				systemPrompt: "You are a helpful assistant.",
+				messages: [{ role: "user", content: "Say hello", timestamp: Date.now() }],
+			},
+			{
+				apiKey: token,
+				sessionId: "ws-buffered-close-session",
+				providerSessionState: new Map<string, ProviderSessionState>(),
+			},
+		).result();
 
 		expect(result.stopReason).toBe("stop");
 		expect(result.content.find(c => c.type === "text")?.text).toBe("Replay succeeded");
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
-
 
 	it("resets append state and stale turn headers when websocket requests diverge", async () => {
 		const tempDir = TempDir.createSync("@pi-codex-stream-");

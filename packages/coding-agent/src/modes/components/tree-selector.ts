@@ -10,6 +10,7 @@ import {
 	TruncatedText,
 	truncateToWidth,
 } from "@oh-my-pi/pi-tui";
+import type { TreeFilterMode } from "../../config/settings-schema";
 import { theme } from "../../modes/theme/theme";
 import type { SessionTreeNode } from "../../session/session-manager";
 import { shortenPath } from "../../tools/render-utils";
@@ -37,7 +38,7 @@ interface FlatNode {
 }
 
 /** Filter mode for tree display */
-type FilterMode = "default" | "no-tools" | "user-only" | "labeled-only" | "all";
+type FilterMode = TreeFilterMode;
 
 /**
  * Tree list component with selection and ASCII art visualization
@@ -52,7 +53,7 @@ class TreeList implements Component {
 	#flatNodes: FlatNode[] = [];
 	#filteredNodes: FlatNode[] = [];
 	#selectedIndex = 0;
-	#filterMode: FilterMode = "default";
+	#filterMode: FilterMode;
 	#searchQuery = "";
 	#toolCallMap: Map<string, ToolCallInfo> = new Map();
 	#multipleRoots = false;
@@ -67,8 +68,10 @@ class TreeList implements Component {
 		tree: SessionTreeNode[],
 		private readonly currentLeafId: string | null,
 		private readonly maxVisibleLines: number,
+		initialFilterMode: FilterMode = "default",
 		initialSelectedId?: string,
 	) {
+		this.#filterMode = initialFilterMode;
 		this.#multipleRoots = tree.length > 1;
 		this.#flatNodes = this.#flattenTree(tree);
 		this.#buildActivePath();
@@ -828,11 +831,12 @@ export class TreeSelectorComponent extends Container {
 		onSelect: (entryId: string) => void,
 		onCancel: () => void,
 		private readonly onLabelChangeCallback?: (entryId: string, label: string | undefined) => void,
+		initialFilterMode: FilterMode = "default",
 	) {
 		super();
 		const maxVisibleLines = Math.max(5, Math.floor(terminalHeight / 2));
 
-		this.#treeList = new TreeList(tree, currentLeafId, maxVisibleLines);
+		this.#treeList = new TreeList(tree, currentLeafId, maxVisibleLines, initialFilterMode);
 		this.#treeList.onSelect = onSelect;
 		this.#treeList.onCancel = onCancel;
 		this.#treeList.onLabelEdit = (entryId, currentLabel) => this.#showLabelInput(entryId, currentLabel);

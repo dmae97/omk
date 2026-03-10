@@ -39,7 +39,7 @@ export async function openInEditor(
 		const [editor, ...editorArgs] = editorCmd.split(" ");
 		const stdio = options?.stdio ?? ["inherit", "inherit", "inherit"];
 
-		const child = spawn(editor, [...editorArgs, tmpFile], { stdio });
+		const child = spawn(editor, [...editorArgs, tmpFile], { stdio, shell: process.platform === "win32" });
 		const exitCode = await new Promise<number>((resolve, reject) => {
 			child.once("exit", (code, signal) => resolve(code ?? (signal ? -1 : 0)));
 			child.once("error", error => reject(error));

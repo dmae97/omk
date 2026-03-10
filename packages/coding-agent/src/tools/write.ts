@@ -152,9 +152,13 @@ function formatMetadataLine(lineCount: number | null, language: string | undefin
 	return uiTheme.fg("dim", `${icon}`);
 }
 
+function normalizeDisplayText(text: string): string {
+	return text.replace(/\r/g, "");
+}
+
 function formatStreamingContent(content: string, uiTheme: Theme): string {
 	if (!content) return "";
-	const lines = content.split("\n");
+	const lines = normalizeDisplayText(content).split("\n");
 	const displayLines = lines.slice(-WRITE_STREAMING_PREVIEW_LINES);
 	const hidden = lines.length - displayLines.length;
 
@@ -171,7 +175,7 @@ function formatStreamingContent(content: string, uiTheme: Theme): string {
 
 function renderContentPreview(content: string, expanded: boolean, uiTheme: Theme): string {
 	if (!content) return "";
-	const lines = content.split("\n");
+	const lines = normalizeDisplayText(content).split("\n");
 	const maxLines = expanded ? lines.length : Math.min(lines.length, WRITE_PREVIEW_LINES);
 	const displayLines = expanded ? lines : lines.slice(-maxLines);
 	const hidden = lines.length - displayLines.length;

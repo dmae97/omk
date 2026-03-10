@@ -242,6 +242,16 @@ export const SETTINGS_SCHEMA = {
 			description: "Action when pressing Escape twice with empty editor",
 		},
 	},
+	treeFilterMode: {
+		type: "enum",
+		values: ["default", "no-tools", "user-only", "labeled-only", "all"] as const,
+		default: "default",
+		ui: {
+			tab: "input",
+			label: "Tree filter mode",
+			description: "Default filter mode when opening the session tree",
+		},
+	},
 	shellPath: { type: "string", default: undefined },
 	collapseChangelog: {
 		type: "boolean",
@@ -1309,6 +1319,9 @@ export type StatusLinePreset = SettingValue<"statusLine.preset">;
 
 /** Status line separator style - derived from schema */
 export type StatusLineSeparatorStyle = SettingValue<"statusLine.separator">;
+
+/** Tree selector filter mode - derived from schema */
+export type TreeFilterMode = SettingValue<"treeFilterMode">;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Typed Group Definitions

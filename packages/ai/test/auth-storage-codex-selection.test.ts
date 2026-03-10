@@ -317,7 +317,6 @@ describe("AuthStorage codex oauth ranking", () => {
 		expect(apiKey).toBe("api-acct-pro");
 	});
 
-
 	test("times out slow usage ranking instead of blocking first account selection", async () => {
 		if (!store) throw new Error("test setup failed");
 

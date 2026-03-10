@@ -93,9 +93,11 @@ const serviceProviderMap: Record<string, KeyResolver> = {
 			? $pickenv("ANTHROPIC_FOUNDRY_API_KEY", "ANTHROPIC_OAUTH_TOKEN", "ANTHROPIC_API_KEY")
 			: $pickenv("ANTHROPIC_OAUTH_TOKEN", "ANTHROPIC_API_KEY"),
 	"gitlab-duo": "GITLAB_TOKEN",
-	// Vertex AI uses Application Default Credentials, not API keys.
-	// Auth is configured via `gcloud auth application-default login`.
+	// Vertex AI supports either GOOGLE_CLOUD_API_KEY or Application Default Credentials.
 	"google-vertex": () => {
+		if ($env.GOOGLE_CLOUD_API_KEY) {
+			return $env.GOOGLE_CLOUD_API_KEY;
+		}
 		const hasCredentials = hasVertexAdcCredentials();
 		const hasProject = !!($env.GOOGLE_CLOUD_PROJECT || $env.GCLOUD_PROJECT);
 		const hasLocation = !!$env.GOOGLE_CLOUD_LOCATION;

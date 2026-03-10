@@ -851,6 +851,50 @@ bar`,
 			// Should have italic from quote styling (\x1b[3m)
 			expect(allOutput.includes("\x1b[3m")).toBeTruthy();
 		});
+		it("should render list content inside blockquotes", () => {
+			const markdown = new Markdown("> 1. bla bla\n>    - nested bullet", 0, 0, defaultMarkdownTheme);
+
+			const lines = markdown.render(80);
+			const plainLines = lines.map(line => line.replace(/\x1b\[[0-9;]*m/g, "").trimEnd());
+			const quotedLines = plainLines.filter(line => line.startsWith("│ "));
+
+			expect(quotedLines.some(line => line.includes("1. bla bla"))).toBeTruthy();
+			expect(quotedLines.some(line => line.includes("- nested bullet"))).toBeTruthy();
+		});
+
+		it("should render table content inside blockquotes", () => {
+			const markdown = new Markdown("> | A | B |\n> | --- | --- |\n> | 1 | 2 |", 0, 0, defaultMarkdownTheme);
+
+			const lines = markdown.render(80);
+			const plainLines = lines.map(line => line.replace(/\x1b\[[0-9;]*m/g, "").trimEnd());
+			const quotedLines = plainLines.filter(line => line.startsWith("│ "));
+			const quotedOutput = quotedLines.join("\n");
+
+			expect(quotedOutput.includes("A")).toBeTruthy();
+			expect(quotedOutput.includes("B")).toBeTruthy();
+			expect(quotedOutput.includes("1")).toBeTruthy();
+			expect(quotedOutput.includes("2")).toBeTruthy();
+			expect(quotedOutput.includes("+---+")).toBeTruthy();
+			expect(quotedOutput.includes("| A")).toBeTruthy();
+		});
+
+		it("should render fenced code blocks inside blockquotes without applying default text color", () => {
+			const markdown = new Markdown("> ```js\n> console.log(1)\n> ```", 0, 0, defaultMarkdownTheme, {
+				color: text => chalk.magenta(text),
+			});
+
+			const lines = markdown.render(80);
+			const plainLines = lines.map(line => line.replace(/\x1b\[[0-9;]*m/g, "").trimEnd());
+			const quotedLines = plainLines.filter(line => line.startsWith("│ "));
+			const output = lines.join("\n");
+			const plainOutput = quotedLines.join("\n");
+
+			expect(plainOutput.includes("```js")).toBeTruthy();
+			expect(plainOutput.includes("console.log(1)")).toBeTruthy();
+			expect(plainOutput.includes("```")).toBeTruthy();
+			expect(output.includes("\x1b[35m")).toBeFalsy();
+			expect(output.includes("\x1b[3m")).toBeTruthy();
+		});
 	});
 
 	const stripTerminalSequences = (line: string): string =>

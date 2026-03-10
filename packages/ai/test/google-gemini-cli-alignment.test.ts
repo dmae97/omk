@@ -176,6 +176,31 @@ describe("Google Gemini CLI alignment", () => {
 		expect(parameters).toBeDefined();
 		expect(JSON.stringify(parameters)).not.toContain('"patternProperties"');
 	});
+	it("adds anthropic-beta for Antigravity Claude reasoning models without relying on id suffix", async () => {
+		let requestHeaders: Headers | undefined;
+		using _hook = hookFetch(async (_url, init) => {
+			requestHeaders = new Headers(init?.headers);
+			return new Response('{"error":{"message":"bad request"}}', { status: 400 });
+		});
+
+		const model: Model<"google-gemini-cli"> = {
+			...createModel("google-antigravity"),
+			id: "claude-sonnet-4-6",
+			name: "Claude Sonnet 4.6",
+			reasoning: true,
+		};
+
+		const result = await streamGoogleGeminiCli(model, createContext(), {
+			apiKey: JSON.stringify({ token: "token", projectId: "proj-123" }),
+		}).result();
+
+		expect(result.stopReason).toBe("error");
+		expect(requestHeaders).toBeDefined();
+		expect(requestHeaders!.get("anthropic-beta")).toBe("interleaved-thinking-2025-05-14");
+		expect(requestHeaders!.get("X-Goog-Api-Client")).toBeNull();
+		expect(requestHeaders!.get("Client-Metadata")).toBeNull();
+	});
+
 	describe("retry guardrails", () => {
 		afterEach(() => {
 			vi.restoreAllMocks();

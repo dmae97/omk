@@ -15,6 +15,8 @@ const COPILOT_HEADERS = {
 	"Copilot-Integration-Id": "vscode-chat",
 } as const;
 
+const INITIAL_POLL_INTERVAL_MULTIPLIER = 1.2;
+const SLOW_DOWN_POLL_INTERVAL_MULTIPLIER = 1.4;
 type DeviceCodeResponse = {
 	device_code: string;
 	user_code: string;
@@ -98,10 +100,10 @@ async function startDeviceFlow(domain: string): Promise<DeviceCodeResponse> {
 		method: "POST",
 		headers: {
 			Accept: "application/json",
-			"Content-Type": "application/json",
+			"Content-Type": "application/x-www-form-urlencoded",
 			"User-Agent": "GitHubCopilotChat/0.35.0",
 		},
-		body: JSON.stringify({
+		body: new URLSearchParams({
 			client_id: CLIENT_ID,
 			scope: "read:user",
 		}),
@@ -136,6 +138,14 @@ async function startDeviceFlow(domain: string): Promise<DeviceCodeResponse> {
 	};
 }
 
+async function sleepForGitHubAccessTokenPoll(ms: number, signal?: AbortSignal): Promise<void> {
+	try {
+		await abortableSleep(ms, signal);
+	} catch {
+		throw new Error("Login cancelled");
+	}
+}
+
 async function pollForGitHubAccessToken(
 	domain: string,
 	deviceCode: string,
@@ -146,20 +156,26 @@ async function pollForGitHubAccessToken(
 	const urls = getUrls(domain);
 	const deadline = Date.now() + expiresIn * 1000;
 	let intervalMs = Math.max(1000, Math.floor(intervalSeconds * 1000));
+	let intervalMultiplier = INITIAL_POLL_INTERVAL_MULTIPLIER;
+	let slowDownResponses = 0;
 
 	while (Date.now() < deadline) {
 		if (signal?.aborted) {
 			throw new Error("Login cancelled");
 		}
 
+		const remainingMs = deadline - Date.now();
+		const waitMs = Math.min(Math.ceil(intervalMs * intervalMultiplier), remainingMs);
+		await sleepForGitHubAccessTokenPoll(waitMs, signal);
+
 		const raw = await fetchJson(urls.accessTokenUrl, {
 			method: "POST",
 			headers: {
 				Accept: "application/json",
-				"Content-Type": "application/json",
+				"Content-Type": "application/x-www-form-urlencoded",
 				"User-Agent": "GitHubCopilotChat/0.35.0",
 			},
-			body: JSON.stringify({
+			body: new URLSearchParams({
 				client_id: CLIENT_ID,
 				device_code: deviceCode,
 				grant_type: "urn:ietf:params:oauth:grant-type:device_code",
@@ -171,34 +187,28 @@ async function pollForGitHubAccessToken(
 		}
 
 		if (raw && typeof raw === "object" && typeof (raw as DeviceTokenErrorResponse).error === "string") {
-			const err = (raw as DeviceTokenErrorResponse).error;
-			if (err === "authorization_pending") {
-				try {
-					await abortableSleep(intervalMs, signal);
-				} catch {
-					throw new Error("Login cancelled");
-				}
+			const { error, error_description: description, interval } = raw as DeviceTokenErrorResponse;
+			if (error === "authorization_pending") {
 				continue;
 			}
 
-			if (err === "slow_down") {
-				intervalMs += 5000;
-				try {
-					await abortableSleep(intervalMs, signal);
-				} catch {
-					throw new Error("Login cancelled");
-				}
+			if (error === "slow_down") {
+				slowDownResponses += 1;
+				intervalMs =
+					typeof interval === "number" && interval > 0 ? interval * 1000 : Math.max(1000, intervalMs + 5000);
+				intervalMultiplier = SLOW_DOWN_POLL_INTERVAL_MULTIPLIER;
 				continue;
 			}
 
-			throw new Error(`Device flow failed: ${err}`);
+			const descriptionSuffix = description ? `: ${description}` : "";
+			throw new Error(`Device flow failed: ${error}${descriptionSuffix}`);
 		}
+	}
 
-		try {
-			await abortableSleep(intervalMs, signal);
-		} catch {
-			throw new Error("Login cancelled");
-		}
+	if (slowDownResponses > 0) {
+		throw new Error(
+			"Device flow timed out after one or more slow_down responses. This is often caused by clock drift in WSL or VM environments. Please sync or restart the VM clock and try again.",
+		);
 	}
 
 	throw new Error("Device flow timed out");

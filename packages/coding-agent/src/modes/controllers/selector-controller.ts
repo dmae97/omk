@@ -578,6 +578,7 @@ export class SelectorController {
 					this.ctx.sessionManager.appendLabelChange(entryId, label);
 					this.ctx.ui.requestRender();
 				},
+				settings.get("treeFilterMode"),
 			);
 			return { component: selector, focus: selector };
 		});
