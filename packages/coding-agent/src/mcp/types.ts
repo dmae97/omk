@@ -49,6 +49,12 @@ export interface MCPAuthConfig {
 	type: "oauth" | "apikey";
 	/** Credential ID for OAuth (references agent.db) */
 	credentialId?: string;
+	/** Token endpoint URL — persisted for proactive token refresh */
+	tokenUrl?: string;
+	/** Client ID — persisted for token refresh */
+	clientId?: string;
+	/** Client secret — persisted for token refresh */
+	clientSecret?: string;
 }
 
 /** Base server config with shared options */

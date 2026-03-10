@@ -1030,6 +1030,9 @@ export class MCPAddWizard extends Container {
 				config.auth = {
 					type: "oauth",
 					credentialId: this.#state.oauthCredentialId,
+					tokenUrl: this.#state.oauthTokenUrl || undefined,
+					clientId: this.#state.oauthClientId || undefined,
+					clientSecret: this.#state.oauthClientSecret || undefined,
 				};
 			}
 
@@ -1054,6 +1057,9 @@ export class MCPAddWizard extends Container {
 			config.auth = {
 				type: "oauth",
 				credentialId: this.#state.oauthCredentialId,
+				tokenUrl: this.#state.oauthTokenUrl || undefined,
+				clientId: this.#state.oauthClientId || undefined,
+				clientSecret: this.#state.oauthClientSecret || undefined,
 			};
 		}
 
@@ -1250,6 +1256,9 @@ export class MCPAddWizard extends Container {
 				config.auth = {
 					type: "oauth",
 					credentialId: this.#state.oauthCredentialId,
+					tokenUrl: this.#state.oauthTokenUrl || undefined,
+					clientId: this.#state.oauthClientId || undefined,
+					clientSecret: this.#state.oauthClientSecret || undefined,
 				};
 			}
 
@@ -1275,6 +1284,9 @@ export class MCPAddWizard extends Container {
 			config.auth = {
 				type: "oauth",
 				credentialId: this.#state.oauthCredentialId,
+				tokenUrl: this.#state.oauthTokenUrl || undefined,
+				clientId: this.#state.oauthClientId || undefined,
+				clientSecret: this.#state.oauthClientSecret || undefined,
 			};
 		}
 

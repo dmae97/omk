@@ -26,6 +26,8 @@ export class HttpTransport implements MCPTransport {
 	onClose?: () => void;
 	onError?: (error: Error) => void;
 	onNotification?: (method: string, params: unknown) => void;
+	/** Called on 401/403 to attempt token refresh. Returns updated headers or null. */
+	onAuthError?: () => Promise<Record<string, string> | null>;
 
 	constructor(private config: MCPHttpServerConfig | MCPSseServerConfig) {}
 
@@ -102,6 +104,27 @@ export class HttpTransport implements MCPTransport {
 		method: string,
 		params?: Record<string, unknown>,
 		options?: MCPRequestOptions,
+	): Promise<T> {
+		try {
+			return await this.#executeRequest<T>(method, params, options);
+		} catch (error) {
+			// Retry once on auth failure if onAuthError is wired
+			if (this.onAuthError && error instanceof Error && /^HTTP (401|403):/.test(error.message)) {
+				const newHeaders = await this.onAuthError();
+				if (newHeaders) {
+					// Persist refreshed headers so subsequent requests use them directly
+					this.config = { ...this.config, headers: newHeaders };
+					return this.#executeRequest<T>(method, params, options);
+				}
+			}
+			throw error;
+		}
+	}
+
+	async #executeRequest<T>(
+		method: string,
+		params: Record<string, unknown> | undefined,
+		options: MCPRequestOptions | undefined,
 	): Promise<T> {
 		if (!this.#connected) {
 			throw new Error("Transport not connected");

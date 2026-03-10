@@ -413,6 +413,9 @@ export class MCPCommandController {
 								auth: {
 									type: "oauth",
 									credentialId,
+									tokenUrl: oauth.tokenUrl,
+									clientId: oauth.clientId ?? finalConfig.oauth?.clientId,
+									clientSecret: undefined,
 								},
 							};
 						} catch (oauthError) {
@@ -1296,7 +1299,9 @@ export class MCPCommandController {
 			}
 
 			const currentAuth = (
-				found.config as MCPServerConfig & { auth?: { type: "oauth" | "apikey"; credentialId?: string } }
+				found.config as MCPServerConfig & {
+					auth?: { type: "oauth" | "apikey"; credentialId?: string; clientSecret?: string };
+				}
 			).auth;
 			if (currentAuth?.type === "oauth") {
 				await this.#removeManagedOAuthCredential(currentAuth.credentialId);
@@ -1321,6 +1326,9 @@ export class MCPCommandController {
 				auth: {
 					type: "oauth",
 					credentialId,
+					tokenUrl: oauth.tokenUrl,
+					clientId: oauth.clientId ?? found.config.oauth?.clientId,
+					clientSecret: currentAuth?.clientSecret,
 				},
 			};
 			await updateMCPServer(found.filePath, name, updated);

@@ -25,9 +25,11 @@ import {
 	unsubscribeFromResources,
 } from "./client";
 import { loadAllMCPConfigs, validateServerConfig } from "./config";
+import { refreshMCPOAuthToken } from "./oauth-flow";
 import type { MCPToolDetails } from "./tool-bridge";
 import { DeferredMCPTool, MCPTool } from "./tool-bridge";
 import type { MCPToolCache } from "./tool-cache";
+import { HttpTransport } from "./transports/http";
 import type {
 	MCPGetPromptResult,
 	MCPPrompt,
@@ -315,6 +317,18 @@ export class MCPManager {
 						this.#pendingConnections.delete(name);
 						this.#connections.set(name, connection);
 					}
+
+					// Wire auth refresh for HTTP transports so 401s trigger token refresh
+					if (connection.transport instanceof HttpTransport && config.auth?.type === "oauth") {
+						connection.transport.onAuthError = async () => {
+							const refreshed = await this.#resolveAuthConfig(config);
+							if (refreshed.type === "http" || refreshed.type === "sse") {
+								return refreshed.headers ?? null;
+							}
+							return null;
+						};
+					}
+
 					return connection;
 				},
 				error => {
@@ -821,8 +835,34 @@ export class MCPManager {
 		if (auth?.type === "oauth" && auth.credentialId && this.#authStorage) {
 			const credentialId = auth.credentialId;
 			try {
-				const credential = this.#authStorage.get(credentialId);
+				let credential = this.#authStorage.get(credentialId);
 				if (credential?.type === "oauth") {
+					// Proactive refresh: 5-minute buffer before expiry
+					const REFRESH_BUFFER_MS = 5 * 60_000;
+					if (
+						credential.expires &&
+						Date.now() >= credential.expires - REFRESH_BUFFER_MS &&
+						credential.refresh &&
+						auth.tokenUrl
+					) {
+						try {
+							const refreshed = await refreshMCPOAuthToken(
+								auth.tokenUrl,
+								credential.refresh,
+								auth.clientId,
+								auth.clientSecret,
+							);
+							const refreshedCredential = { type: "oauth" as const, ...refreshed };
+							await this.#authStorage.set(credentialId, refreshedCredential);
+							credential = refreshedCredential;
+						} catch (refreshError) {
+							logger.warn("MCP OAuth refresh failed, using existing token", {
+								credentialId,
+								error: refreshError,
+							});
+						}
+					}
+
 					if (resolved.type === "http" || resolved.type === "sse") {
 						resolved = {
 							...resolved,

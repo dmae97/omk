@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added proactive OAuth token refresh for MCP server connections with 5-minute expiry buffer
+- Added reactive 401/403 retry with automatic token refresh on HTTP MCP transports
+- Added `refreshMCPOAuthToken()` for standard OAuth 2.0 refresh_token grants
+- Persisted `tokenUrl`, `clientId`, and `clientSecret` in MCP auth config for cross-session token refresh
+
 ## [13.10.0] - 2026-03-10
 ### Fixed
 
