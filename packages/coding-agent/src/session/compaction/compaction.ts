@@ -12,6 +12,7 @@ import {
 	OPENAI_HEADER_VALUES,
 	OPENAI_HEADERS,
 } from "@oh-my-pi/pi-ai/providers/openai-codex/constants";
+import { parseTextSignature } from "@oh-my-pi/pi-ai/providers/openai-responses-shared";
 import { transformMessages } from "@oh-my-pi/pi-ai/providers/transform-messages";
 import {
 	getOpenAIResponsesHistoryItems,
@@ -739,7 +740,8 @@ function buildOpenAiNativeHistory(
 
 				if (block.type === "text") {
 					if (!block.text || block.text.trim().length === 0) continue;
-					let msgId = block.textSignature;
+					const parsedSignature = parseTextSignature(block.textSignature);
+					let msgId = parsedSignature?.id;
 					if (!msgId) {
 						msgId = `msg_${msgIndex}`;
 					} else if (msgId.length > 64) {
@@ -751,6 +753,7 @@ function buildOpenAiNativeHistory(
 						content: [{ type: "output_text", text: block.text.toWellFormed(), annotations: [] }],
 						status: "completed",
 						id: msgId,
+						phase: parsedSignature?.phase,
 					});
 					continue;
 				}
