@@ -14,21 +14,22 @@ import type {
 } from "openai/resources/responses/responses";
 import { calculateCost } from "../models";
 import { getEnvApiKey } from "../stream";
-import type {
-	Api,
-	AssistantMessage,
-	Context,
-	ImageContent,
-	Model,
-	ServiceTier,
-	StopReason,
-	StreamFunction,
-	StreamOptions,
-	TextContent,
-	ThinkingContent,
-	Tool,
-	ToolCall,
-	ToolChoice,
+import {
+	isSpecialServiceTier,
+	type Api,
+	type AssistantMessage,
+	type Context,
+	type ImageContent,
+	type Model,
+	type ServiceTier,
+	type StopReason,
+	type StreamFunction,
+	type StreamOptions,
+	type TextContent,
+	type ThinkingContent,
+	type Tool,
+	type ToolCall,
+	type ToolChoice,
 } from "../types";
 import { normalizeResponsesToolCallId } from "../utils";
 import { AssistantMessageEventStream } from "../utils/event-stream";
@@ -492,7 +493,7 @@ function buildParams(
 	if (options?.repetitionPenalty !== undefined) {
 		params.repetition_penalty = options.repetitionPenalty;
 	}
-	if (options?.serviceTier !== undefined) {
+	if (isSpecialServiceTier(options?.serviceTier)) {
 		params.service_tier = options.serviceTier;
 	}
 

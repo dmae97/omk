@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `isSpecialServiceTier` utility function to validate OpenAI service tier values
 
 ## [13.9.12] - 2026-03-09
 ### Added

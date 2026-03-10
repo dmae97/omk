@@ -11,22 +11,23 @@ import type {
 } from "openai/resources/chat/completions";
 import { calculateCost } from "../models";
 import { getEnvApiKey } from "../stream";
-import type {
-	AssistantMessage,
-	Context,
-	Message,
-	Model,
-	OpenAICompat,
-	ServiceTier,
-	StopReason,
-	StreamFunction,
-	StreamOptions,
-	TextContent,
-	ThinkingContent,
-	Tool,
-	ToolCall,
-	ToolChoice,
-	ToolResultMessage,
+import {
+	isSpecialServiceTier,
+	type AssistantMessage,
+	type Context,
+	type Message,
+	type Model,
+	type OpenAICompat,
+	type ServiceTier,
+	type StopReason,
+	type StreamFunction,
+	type StreamOptions,
+	type TextContent,
+	type ThinkingContent,
+	type Tool,
+	type ToolCall,
+	type ToolChoice,
+	type ToolResultMessage,
 } from "../types";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
@@ -607,7 +608,7 @@ function buildParams(model: Model<"openai-completions">, context: Context, optio
 	if (options?.repetitionPenalty !== undefined) {
 		params.repetition_penalty = options.repetitionPenalty;
 	}
-	if (options?.serviceTier !== undefined) {
+	if (isSpecialServiceTier(options?.serviceTier)) {
 		params.service_tier = options.serviceTier;
 	}
 
