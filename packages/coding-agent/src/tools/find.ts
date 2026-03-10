@@ -129,7 +129,7 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 			// If custom operations provided with glob, use that instead of fd
 			if (this.#customOps?.glob) {
 				if (!(await this.#customOps.exists(searchPath))) {
-					throw new ToolError(`Path not found: ${searchPath}`);
+					throw new ToolError(`Path not found: ${scopePath}`);
 				}
 
 				if (!hasGlob && this.#customOps.stat) {
@@ -194,7 +194,7 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 				searchStat = await fs.promises.stat(searchPath);
 			} catch (err) {
 				if (isEnoent(err)) {
-					throw new ToolError(`Path not found: ${searchPath}`);
+					throw new ToolError(`Path not found: ${scopePath}`);
 				}
 				throw err;
 			}

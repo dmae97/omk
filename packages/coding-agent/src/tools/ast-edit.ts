@@ -145,7 +145,7 @@ export class AstEditTool implements AgentTool<typeof astEditSchema, AstEditToolD
 				const stat = await Bun.file(resolvedSearchPath).stat();
 				isDirectory = stat.isDirectory();
 			} catch {
-				throw new ToolError(`Path not found: ${resolvedSearchPath}`);
+				throw new ToolError(`Path not found: ${scopePath}`);
 			}
 
 			const result = await astEdit({

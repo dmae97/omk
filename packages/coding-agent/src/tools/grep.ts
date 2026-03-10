@@ -158,7 +158,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 				const stat = await Bun.file(searchPath).stat();
 				isDirectory = stat.isDirectory();
 			} catch {
-				throw new ToolError(`Path not found: ${searchPath}`);
+				throw new ToolError(`Path not found: ${scopePath}`);
 			}
 
 			const effectiveOutputMode = "content";
