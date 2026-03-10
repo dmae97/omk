@@ -134,8 +134,19 @@ export class EventController {
 					this.ctx.addMessageToChat(event.message);
 					this.ctx.ui.requestRender();
 				} else if (event.message.role === "user") {
+					const textContent = this.ctx.getUserMessageText(event.message);
+					const imageCount =
+						typeof event.message.content === "string"
+							? 0
+							: event.message.content.filter(content => content.type === "image").length;
+					const signature = `${textContent}\u0000${imageCount}`;
+
 					this.#resetReadGroup();
-					this.ctx.addMessageToChat(event.message);
+					if (this.ctx.optimisticUserMessageSignature !== signature) {
+						this.ctx.addMessageToChat(event.message);
+					}
+					this.ctx.optimisticUserMessageSignature = undefined;
+
 					if (!event.message.synthetic) {
 						this.ctx.editor.setText("");
 						this.ctx.updatePendingMessagesDisplay();

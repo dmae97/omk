@@ -88,6 +88,7 @@ export interface InteractiveModeContext {
 	retryEscapeHandler?: () => void;
 	unsubscribe?: () => void;
 	onInputCallback?: (input: { text: string; images?: ImageContent[] }) => void;
+	optimisticUserMessageSignature: string | undefined;
 	lastSigintTime: number;
 	lastEscapeTime: number;
 	shutdownRequested: boolean;

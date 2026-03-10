@@ -328,6 +328,19 @@ export class InputController {
 				// Include any pending images from clipboard paste
 				const images = inputImages && inputImages.length > 0 ? [...inputImages] : undefined;
 				this.ctx.pendingImages = [];
+
+				// Render user message immediately, then let session events catch up
+				this.ctx.optimisticUserMessageSignature = `${text}\u0000${images?.length ?? 0}`;
+				const optimisticMessage: AgentMessage = {
+					role: "user",
+					content: [{ type: "text", text }, ...(images ?? [])],
+					attribution: "user",
+					timestamp: Date.now(),
+				};
+				this.ctx.addMessageToChat(optimisticMessage);
+				this.ctx.editor.setText("");
+				this.ctx.ui.requestRender();
+
 				this.ctx.onInputCallback({ text, images });
 			}
 			this.ctx.editor.addToHistory(text);
