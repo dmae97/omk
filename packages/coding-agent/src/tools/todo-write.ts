@@ -24,6 +24,7 @@ export interface TodoItem {
 	content: string;
 	status: TodoStatus;
 	notes?: string;
+	details?: string;
 }
 
 export interface TodoPhase {
@@ -49,6 +50,9 @@ const InputTask = Type.Object({
 	content: Type.String({ description: "Task description" }),
 	status: Type.Optional(StatusEnum),
 	notes: Type.Optional(Type.String({ description: "Additional context or notes" })),
+	details: Type.Optional(
+		Type.String({ description: "Implementation details, file paths, and specifics (shown only when active)" }),
+	),
 });
 
 const InputPhase = Type.Object({
@@ -73,6 +77,7 @@ const todoWriteSchema = Type.Object({
 				phase: Type.String({ description: "Phase ID, e.g. phase-1" }),
 				content: Type.String({ description: "Task description" }),
 				notes: Type.Optional(Type.String({ description: "Additional context or notes" })),
+				details: Type.Optional(Type.String({ description: "Implementation details, file paths, and specifics" })),
 			}),
 			Type.Object({
 				op: Type.Literal("update"),
@@ -80,6 +85,7 @@ const todoWriteSchema = Type.Object({
 				status: Type.Optional(StatusEnum),
 				content: Type.Optional(Type.String({ description: "Updated task description" })),
 				notes: Type.Optional(Type.String({ description: "Additional context or notes" })),
+				details: Type.Optional(Type.String({ description: "Updated details" })),
 			}),
 			Type.Object({
 				op: Type.Literal("remove_task"),
@@ -118,14 +124,20 @@ function findTask(phases: TodoPhase[], id: string): TodoItem | undefined {
 }
 
 function buildPhaseFromInput(
-	input: { name: string; tasks?: Array<{ content: string; status?: TodoStatus; notes?: string }> },
+	input: { name: string; tasks?: Array<{ content: string; status?: TodoStatus; notes?: string; details?: string }> },
 	phaseId: string,
 	nextTaskId: number,
 ): { phase: TodoPhase; nextTaskId: number } {
 	const tasks: TodoItem[] = [];
 	let tid = nextTaskId;
 	for (const t of input.tasks ?? []) {
-		tasks.push({ id: `task-${tid++}`, content: t.content, status: t.status ?? "pending", notes: t.notes });
+		tasks.push({
+			id: `task-${tid++}`,
+			content: t.content,
+			status: t.status ?? "pending",
+			notes: t.notes,
+			details: t.details,
+		});
 	}
 	return { phase: { id: phaseId, name: input.name, tasks }, nextTaskId: tid };
 }
@@ -231,6 +243,7 @@ function applyOps(file: TodoFile, ops: TodoWriteParams["ops"]): { file: TodoFile
 					content: op.content,
 					status: "pending",
 					notes: op.notes,
+					details: op.details,
 				});
 				break;
 			}
@@ -244,6 +257,7 @@ function applyOps(file: TodoFile, ops: TodoWriteParams["ops"]): { file: TodoFile
 				if (op.status !== undefined) task.status = op.status;
 				if (op.content !== undefined) task.content = op.content;
 				if (op.notes !== undefined) task.notes = op.notes;
+				if (op.details !== undefined) task.details = op.details;
 				break;
 			}
 
@@ -293,6 +307,11 @@ function formatSummary(phases: TodoPhase[], errors: string[]): string {
 		lines.push(`Remaining items (${remainingTasks.length}):`);
 		for (const task of remainingTasks) {
 			lines.push(`  - ${task.id} ${task.content} [${task.status}] (${task.phase})`);
+			if (task.status === "in_progress" && task.details) {
+				for (const line of task.details.split("\n")) {
+					lines.push(`      ${line}`);
+				}
+			}
 		}
 	}
 	lines.push(
@@ -364,8 +383,12 @@ function formatTodoLine(item: TodoItem, uiTheme: Theme, prefix: string): string 
 	switch (item.status) {
 		case "completed":
 			return uiTheme.fg("success", `${prefix}${checkbox.checked} ${chalk.strikethrough(item.content)}`);
-		case "in_progress":
-			return uiTheme.fg("accent", `${prefix}${checkbox.unchecked} ${item.content}`);
+		case "in_progress": {
+			const main = uiTheme.fg("accent", `${prefix}${checkbox.unchecked} ${item.content}`);
+			if (!item.details) return main;
+			const detailLines = item.details.split("\n").map(l => uiTheme.fg("dim", `${prefix}  ${l}`));
+			return [main, ...detailLines].join("\n");
+		}
 		case "abandoned":
 			return uiTheme.fg("error", `${prefix}${checkbox.unchecked} ${chalk.strikethrough(item.content)}`);
 		default:

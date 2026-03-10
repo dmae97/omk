@@ -1,8 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added `details` field to todo items for storing implementation specifics, file paths, and edge cases (shown only when task is active)
+- Added support for multi-line details in todo items with automatic indentation in interactive and reminder displays
 - Added `todo.eager` setting to automatically create a comprehensive todo list after the first user message
 - Added `buildNamedToolChoice` utility function to build provider-aware tool choice constraints for named tools
 - Support for comma/space-separated path lists in `find`, `grep`, `ast_grep`, and `ast_edit` tools (e.g., `apps/,packages/,phases/` or `apps/ packages/ phases/`)
@@ -10,6 +13,7 @@
 
 ### Changed
 
+- Updated todo item display to show `details` field indented below active tasks in both interactive mode and todo reminder component
 - Modified tool choice resolution to support per-turn tool choice overrides via `consumeNextToolChoiceOverride()`
 - Updated tool documentation to clarify that `path` parameter accepts files, directories, glob patterns, or comma/space-separated path lists
 - Refactored path resolution logic in `find`, `grep`, `ast_grep`, and `ast_edit` tools to use unified multi-path handling

@@ -506,8 +506,12 @@ export class InteractiveMode implements InteractiveModeContext {
 		switch (todo.status) {
 			case "completed":
 				return theme.fg("success", `${prefix}${checkbox.checked} ${chalk.strikethrough(todo.content)}`);
-			case "in_progress":
-				return theme.fg("accent", `${prefix}${checkbox.unchecked} ${todo.content}`);
+			case "in_progress": {
+				const main = theme.fg("accent", `${prefix}${checkbox.unchecked} ${todo.content}`);
+				if (!todo.details) return main;
+				const detailLines = todo.details.split("\n").map(line => theme.fg("dim", `${prefix}  ${line}`));
+				return [main, ...detailLines].join("\n");
+			}
 			case "abandoned":
 				return theme.fg("error", `${prefix}${checkbox.unchecked} ${chalk.strikethrough(todo.content)}`);
 			default:

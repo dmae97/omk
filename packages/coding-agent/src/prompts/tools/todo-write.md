@@ -46,6 +46,11 @@ Create a todo list when:
 - Multiple ops can be batched in one call (e.g., complete current + start next)
 </protocol>
 
+## Task Anatomy
+- `content`: Short label (5-10 words). What is being done, not how.
+- `details`: File paths, implementation steps, edge cases. Shown only when task is active.
+- `notes`: Runtime observations added during execution.
+
 <avoid>
 - Single-step tasks — act directly
 - Conversational or informational requests
@@ -65,11 +70,16 @@ ops: [
 ]
 </example>
 
+<example name="add_task">
+Add a follow-up task with implementation specifics in `details`:
+ops: [{op: "add_task", phase: "Implementation", after: "task-2", task: {content: "Handle retries", details: "Update retry.ts to cap exponential backoff and preserve AbortSignal handling", status: "pending"}}]
+</example>
+
 <example name="initial-setup">
 Replace is for setup only. Prefer add_phase / add_task for incremental additions.
 ops: [{op: "replace", phases: [
   {name: "Investigation", tasks: [{content: "Read source"}, {content: "Map callsites"}]},
-  {name: "Implementation", tasks: [{content: "Apply fix"}, {content: "Run tests"}]}
+  {name: "Implementation", tasks: [{content: "Apply fix", details: "Update parser.ts to handle edge case in line 42"}, {content: "Run tests"}]}
 ]}]
 </example>
 

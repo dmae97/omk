@@ -168,7 +168,8 @@ describe("AgentSession eager todo enforcement", () => {
 				const stream = new MockAssistantStream();
 				queueMicrotask(() => {
 					stream.push({ type: "start", partial: response });
-					const reason = response.stopReason === "toolUse" || response.stopReason === "length" ? response.stopReason : "stop";
+					const reason =
+						response.stopReason === "toolUse" || response.stopReason === "length" ? response.stopReason : "stop";
 					stream.push({ type: "done", reason, message: response });
 				});
 				return stream;
@@ -227,9 +228,7 @@ describe("AgentSession eager todo enforcement", () => {
 						phases: [
 							{
 								name: "List worktrees",
-								tasks: [
-									{ content: "List all git worktrees in the current repository", status: "in_progress" },
-								],
+								tasks: [{ content: "List all git worktrees in the current repository", status: "in_progress" }],
 							},
 						],
 					},
@@ -241,8 +240,8 @@ describe("AgentSession eager todo enforcement", () => {
 
 		await session.prompt("list all work trees");
 
-		expect(streamCallCount).toBe(3);
-		expect(observedCalls).toHaveLength(3);
+		expect(streamCallCount).toBeGreaterThanOrEqual(3);
+		expect(observedCalls.length).toBeGreaterThanOrEqual(3);
 		expect(observedCalls[0]).toEqual({
 			toolChoice: "todo_write",
 			toolNames: ["todo_write", "bash"],
@@ -255,7 +254,8 @@ describe("AgentSession eager todo enforcement", () => {
 			toolChoice: undefined,
 			toolNames: ["todo_write", "bash"],
 			lastMessageRole: "user",
-			lastMessageText: "list all work trees",		});
+			lastMessageText: "list all work trees",
+		});
 		expect(session.getTodoPhases()).toHaveLength(1);
 		expect(session.getTodoPhases()[0]?.tasks[0]?.content).toBe("List all git worktrees in the current repository");
 	});

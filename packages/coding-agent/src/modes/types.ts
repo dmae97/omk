@@ -40,6 +40,7 @@ export type TodoItem = {
 	id: string;
 	content: string;
 	status: TodoStatus;
+	details?: string;
 };
 
 export type TodoPhase = {
