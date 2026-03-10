@@ -36,7 +36,7 @@ describe("executeBash", () => {
 
 	it("honors cwd", async () => {
 		const result = await executeBash("pwd", { cwd: tempDir, timeout: 5000 });
-		expect(result.output.trim()).toBe(tempDir);
+		expect(result.output.trim()).toBe(fs.realpathSync(tempDir));
 	});
 
 	it("canonicalizes symlinked cwd before execution", async () => {

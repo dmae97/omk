@@ -8,11 +8,12 @@ Performs structural code search using AST matching via native ast-grep.
 - Multiple patterns run in one native pass; results are merged and then `offset`/`limit` are applied to the combined match set
 - Use `sel` only for contextual pattern mode; otherwise provide direct patterns
 - In contextual pattern mode, results are returned for the selected node (`sel`), not the outer wrapper used to make the pattern parse
-- For variadic arguments/fields, use `$$$NAME` (not `$$NAME`)
+- For variadic captures (arguments, fields, statement lists), use `$$$NAME` (not `$$NAME`)
 - Patterns must parse as a single valid AST node for the target language; if a bare pattern fails, wrap it in valid context or use `sel`
+- If ast-grep reports `Multiple AST nodes are detected`, your pattern is not a single parseable node; wrap method snippets in valid context (for example `class $_ { … }`) and use `sel` to target the inner node
 - Patterns match AST structure, not text — whitespace/formatting differences are ignored
 - When the same metavariable appears multiple times, all occurrences must match identical code
-- For TypeScript declarations and methods, prefer shapes that tolerate annotations you do not care about, e.g. `async function $NAME($$$ARGS): $_ { $$$BODY }` or `class $_ { method($$$ARGS): $_ { $$$BODY } }` instead of omitting the return type entirely
+- For TypeScript declarations and methods, prefer shapes that tolerate annotations you do not care about, e.g. `async function $NAME($$$ARGS): $_ { $$$BODY }` or `class $_ { method($ARG: $_): $_ { $$$BODY } }` instead of omitting annotations entirely
 - Metavariables must be the sole content of an AST node; partial-text metavariables like `prefix$VAR`, `"hello $NAME"`, or `a $OP b` do NOT work — match the whole node instead
 - `$$$` captures are lazy (non-greedy): they stop when the next element in the pattern can match; place the most specific node after `$$$` to control where capture ends
 - `$_` is a non-capturing wildcard (matches any single node without binding); use it when you need to tolerate a node but don't need its value
@@ -38,6 +39,8 @@ Performs structural code search using AST matching via native ast-grep.
   `{"pat":["foo()"],"sel":"identifier","lang":"typescript","path":"src/utils.ts"}`
 - Match a TypeScript function declaration without caring about its exact return type:
   `{"pat":["async function processItems($$$ARGS): $_ { $$$BODY }"],"sel":"function_declaration","lang":"typescript","path":"src/worker.ts"}`
+- Match a TypeScript method body fragment by wrapping it in parseable context and selecting the method node:
+  `{"pat":["class $_ { async execute($INPUT: $_) { $$$BEFORE; const $PARSED = $_.parse($INPUT); $$$AFTER } }"],"sel":"method_definition","lang":"typescript","path":"src/tools/todo.ts"}`
 - Loosest existence check for a symbol in one file:
   `{"pat":["processItems"],"sel":"identifier","lang":"typescript","path":"src/worker.ts"}`
 </examples>

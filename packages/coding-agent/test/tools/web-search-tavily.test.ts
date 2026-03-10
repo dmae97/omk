@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { hookFetch } from "@oh-my-pi/pi-utils";
+import { AgentStorage } from "../../src/session/agent-storage";
 import { getSearchProvider, resolveProviderChain, SEARCH_PROVIDER_ORDER } from "../../src/web/search/provider";
 import { searchTavily } from "../../src/web/search/providers/tavily";
 import type { SearchProviderError } from "../../src/web/search/types";
@@ -98,6 +99,9 @@ describe("Tavily web search provider", () => {
 
 	it("throws a clear error when Tavily credentials are missing", async () => {
 		delete process.env.TAVILY_API_KEY;
+		vi.spyOn(AgentStorage, "open").mockResolvedValue({
+			listAuthCredentials: () => [],
+		} as unknown as AgentStorage);
 		await expect(searchTavily({ query: "missing creds" })).rejects.toThrow(
 			'Tavily credentials not found. Set TAVILY_API_KEY or store an API key for provider "tavily" in agent.db.',
 		);

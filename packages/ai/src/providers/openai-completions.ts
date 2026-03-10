@@ -12,9 +12,9 @@ import type {
 import { calculateCost } from "../models";
 import { getEnvApiKey } from "../stream";
 import {
-	isSpecialServiceTier,
 	type AssistantMessage,
 	type Context,
+	isSpecialServiceTier,
 	type Message,
 	type Model,
 	type OpenAICompat,
