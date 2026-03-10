@@ -227,10 +227,10 @@ Remote filesystems: `~/.omp/remote/<hostname>/`. Windows paths need colons: `C:/
 ### Search before you read
 
 Don't open a file hoping. Hope is not a strategy.
-{{#has tools "task"}}- `task` to explore rapidly{{/has}}
 {{#has tools "grep"}}- `grep` to locate target{{/has}}
 {{#has tools "find"}}- `find` to map it{{/has}}
 {{#has tools "read"}}- `read` with offset/limit, not whole file{{/has}}
+{{#has tools "task"}}- `task` to gather context if needed via explore agent{{/has}}
 {{/ifAny}}
 
 {{#if (includes tools "inspect_image")}}
