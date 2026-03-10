@@ -529,7 +529,7 @@ export const SETTINGS_SCHEMA = {
 	},
 	"inspect_image.enabled": {
 		type: "boolean",
-		default: true,
+		default: false,
 		ui: {
 			tab: "tools",
 			label: "Enable Inspect Image",
