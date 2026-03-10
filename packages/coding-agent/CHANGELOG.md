@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.10.0] - 2026-03-10
 ### Fixed
 
 - Preserved text signature metadata (id and phase) when building OpenAI native history during session compaction
