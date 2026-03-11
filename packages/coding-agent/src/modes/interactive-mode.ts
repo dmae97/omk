@@ -1048,8 +1048,8 @@ export class InteractiveMode implements InteractiveModeContext {
 		return this.#commandController.handleShareCommand();
 	}
 
-	handleCopyCommand() {
-		return this.#commandController.handleCopyCommand();
+	handleCopyCommand(sub?: string) {
+		return this.#commandController.handleCopyCommand(sub);
 	}
 
 	handleSessionCommand(): Promise<void> {

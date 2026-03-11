@@ -5,6 +5,7 @@ import {
 	getEnvApiKey,
 	getProviderDetails,
 	type ProviderDetails,
+	type ToolCall,
 	type UsageLimit,
 	type UsageReport,
 } from "@oh-my-pi/pi-ai";
@@ -213,16 +214,87 @@ export class CommandController {
 		}
 	}
 
-	handleCopyCommand() {
+	handleCopyCommand(sub?: string) {
+		switch (sub) {
+			case "code":
+				return this.#copyCode();
+			case "all":
+				return this.#copyAllCode();
+			case "cmd":
+				return this.#copyLastCommand();
+			case "last":
+			case undefined:
+				return this.#copyLastMessage();
+			default:
+				this.ctx.showError(`Unknown subcommand: ${sub}. Use code, all, cmd, or last.`);
+		}
+	}
+
+	#copyLastMessage() {
 		const text = this.ctx.session.getLastAssistantText();
 		if (!text) {
 			this.ctx.showError("No agent messages to copy yet.");
 			return;
 		}
+		this.#doCopy(text, "Copied last agent message to clipboard");
+	}
 
+	#copyCode() {
+		const text = this.ctx.session.getLastAssistantText();
+		if (!text) {
+			this.ctx.showError("No agent messages to copy yet.");
+			return;
+		}
+		const matches = [...text.matchAll(/^```[^\n]*\n([\s\S]*?)^```/gm)];
+		const lastMatch = matches.at(-1);
+		if (!lastMatch) {
+			this.ctx.showWarning("No code block found in the last agent message.");
+			return;
+		}
+		this.#doCopy(lastMatch[1].replace(/\n$/, ""), "Copied last code block to clipboard");
+	}
+
+	#copyAllCode() {
+		const text = this.ctx.session.getLastAssistantText();
+		if (!text) {
+			this.ctx.showError("No agent messages to copy yet.");
+			return;
+		}
+		const matches = [...text.matchAll(/^```[^\n]*\n([\s\S]*?)^```/gm)];
+		if (matches.length === 0) {
+			this.ctx.showWarning("No code blocks found in the last agent message.");
+			return;
+		}
+		const combined = matches.map(m => m[1].replace(/\n$/, "")).join("\n\n");
+		this.#doCopy(combined, `Copied ${matches.length} code block${matches.length > 1 ? "s" : ""} to clipboard`);
+	}
+
+	#copyLastCommand() {
+		const messages = this.ctx.session.messages;
+		// Walk backwards to find the last bash/python tool call
+		for (let i = messages.length - 1; i >= 0; i--) {
+			const msg = messages[i];
+			if (msg.role !== "assistant") continue;
+			const toolCalls = msg.content.filter((c): c is ToolCall => c.type === "toolCall");
+			for (let j = toolCalls.length - 1; j >= 0; j--) {
+				const tc = toolCalls[j];
+				if (tc.name === "bash" && typeof tc.arguments.command === "string") {
+					this.#doCopy(tc.arguments.command, "Copied last bash command to clipboard");
+					return;
+				}
+				if (tc.name === "python" && typeof tc.arguments.code === "string") {
+					this.#doCopy(tc.arguments.code, "Copied last python code to clipboard");
+					return;
+				}
+			}
+		}
+		this.ctx.showWarning("No bash or python command found in the conversation.");
+	}
+
+	#doCopy(content: string, label: string) {
 		try {
-			copyToClipboard(text);
-			this.ctx.showStatus("Copied last agent message to clipboard");
+			copyToClipboard(content);
+			this.ctx.showStatus(label);
 		} catch (error) {
 			this.ctx.showError(error instanceof Error ? error.message : String(error));
 		}

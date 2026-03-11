@@ -214,8 +214,16 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 	{
 		name: "copy",
 		description: "Copy last agent message to clipboard",
-		handle: async (_command, runtime) => {
-			await runtime.ctx.handleCopyCommand();
+		subcommands: [
+			{ name: "last", description: "Copy full last agent message" },
+			{ name: "code", description: "Copy last code block" },
+			{ name: "all", description: "Copy all code blocks from last message" },
+			{ name: "cmd", description: "Copy last bash/python command" },
+		],
+		allowArgs: true,
+		handle: async (command, runtime) => {
+			const sub = command.args.trim().toLowerCase() || undefined;
+			await runtime.ctx.handleCopyCommand(sub);
 			runtime.ctx.editor.setText("");
 		},
 	},

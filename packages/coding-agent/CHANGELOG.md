@@ -1,8 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added subcommands to `/copy` command: `code` (copy last code block), `all` (copy all code blocks), `cmd` (copy last bash/python command), and `last` (copy full message)
+- Added support for copying last executed bash or python command via `/copy cmd` subcommand
 - Added `assignment` field to task progress and result objects to track the raw per-task assignment text separately from the full templated task
 - Added `details` field to todo items for storing implementation specifics, file paths, and edge cases (shown only when task is active)
 - Added support for multi-line details in todo items with automatic indentation in interactive and reminder displays
