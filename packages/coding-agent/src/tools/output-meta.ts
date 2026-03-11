@@ -12,6 +12,7 @@ import type {
 	AgentToolUpdateCallback,
 } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, TextContent } from "@oh-my-pi/pi-ai";
+import { formatGroupedDiagnosticMessages } from "../lsp/utils";
 import type { Theme } from "../modes/theme/theme";
 import type { OutputSummary, TruncationResult } from "../session/streaming-output";
 import { formatBytes, wrapBrackets } from "./render-utils";
@@ -386,7 +387,7 @@ export function formatOutputNotice(meta: OutputMeta | undefined): string {
 	let diagnosticsNotice = "";
 	if (meta.diagnostics && meta.diagnostics.messages.length > 0) {
 		const d = meta.diagnostics;
-		diagnosticsNotice = `\n\nLSP Diagnostics (${d.summary}):\n  ${d.messages.join("\n  ")}`;
+		diagnosticsNotice = `\n\nLSP Diagnostics (${d.summary}):\n${formatGroupedDiagnosticMessages(d.messages)}`;
 	}
 
 	const notice = parts.length ? `\n\n[${parts.join(". ")}]` : "";

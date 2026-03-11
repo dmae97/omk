@@ -56,6 +56,7 @@ import {
 	formatDiagnostic,
 	formatDiagnosticsSummary,
 	formatDocumentSymbol,
+	formatGroupedDiagnosticMessages,
 	formatLocation,
 	formatSymbolInformation,
 	formatWorkspaceEdit,
@@ -1082,7 +1083,7 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 
 					const summary = formatDiagnosticsSummary(uniqueDiagnostics);
 					const formatted = uniqueDiagnostics.map(d => formatDiagnostic(d, relPath));
-					const output = `${summary}:\n${formatted.map(f => `  ${f}`).join("\n")}`;
+					const output = `${summary}:\n${formatGroupedDiagnosticMessages(formatted)}`;
 					return {
 						content: [{ type: "text", text: output }],
 						details: { action, serverName: Array.from(allServerNames).join(", "), success: true },
@@ -1094,9 +1095,8 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 				} else {
 					const summary = formatDiagnosticsSummary(uniqueDiagnostics);
 					results.push(`${theme.status.error} ${relPath}: ${summary}`);
-					for (const diag of uniqueDiagnostics) {
-						results.push(`  ${formatDiagnostic(diag, relPath)}`);
-					}
+					const formatted = uniqueDiagnostics.map(d => formatDiagnostic(d, relPath));
+					results.push(formatGroupedDiagnosticMessages(formatted));
 				}
 			}
 

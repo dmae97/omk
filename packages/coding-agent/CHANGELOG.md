@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added subcommands to `/copy` command: `code` (copy last code block), `all` (copy all code blocks), `cmd` (copy last bash/python command), and `last` (copy full message)
@@ -16,6 +15,7 @@
 
 ### Changed
 
+- Improved diagnostic message formatting to group errors by file path with indented details for better readability
 - Modified eager todo prelude to use hidden custom message type instead of visible developer message, preventing duplicate prompt text in session history
 - Updated eager todo prompt to remove dynamic user request injection, simplifying the template and preventing request repetition in displayed messages
 - Modified eager todo enforcement to prepend the todo reminder to the first user turn instead of executing it as a separate synthetic turn, reducing unnecessary prompt calls
