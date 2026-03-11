@@ -123,6 +123,7 @@ export interface ExecutorOptions {
 	worktree?: string;
 	agent: AgentDefinition;
 	task: string;
+	assignment?: string;
 	description?: string;
 	index: number;
 	id: string;
@@ -442,6 +443,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 		cwd,
 		agent,
 		task,
+		assignment,
 		index,
 		id,
 		worktree,
@@ -462,6 +464,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 		agentSource: agent.source,
 		status: "running",
 		task,
+		assignment,
 		description: options.description,
 		lastIntent: undefined,
 		recentTools: [],
@@ -480,6 +483,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 			agent: agent.name,
 			agentSource: agent.source,
 			task,
+			assignment,
 			description: options.description,
 			exitCode: 1,
 			output: "",
@@ -622,6 +626,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 				agent: agent.name,
 				agentSource: agent.source,
 				task,
+				assignment,
 				progress: { ...progress },
 			});
 		}
@@ -711,6 +716,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 				agent: agent.name,
 				agentSource: agent.source,
 				task,
+				assignment,
 				event,
 			});
 		}
@@ -1231,6 +1237,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 		agent: agent.name,
 		agentSource: agent.source,
 		task,
+		assignment,
 		description: options.description,
 		lastIntent: progress.lastIntent,
 		exitCode,

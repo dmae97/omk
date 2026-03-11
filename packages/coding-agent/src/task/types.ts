@@ -136,6 +136,7 @@ export interface AgentProgress {
 	agentSource: AgentSource;
 	status: "pending" | "running" | "completed" | "failed" | "aborted";
 	task: string;
+	assignment?: string;
 	description?: string;
 	lastIntent?: string;
 	currentTool?: string;
@@ -158,6 +159,7 @@ export interface SingleResult {
 	agent: string;
 	agentSource: AgentSource;
 	task: string;
+	assignment?: string;
 	description?: string;
 	lastIntent?: string;
 	exitCode: number;

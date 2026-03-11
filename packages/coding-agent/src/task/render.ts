@@ -374,16 +374,11 @@ function renderTaskSection(
 	maxExpanded = 20,
 ): string[] {
 	const lines: string[] = [];
-	const trimmed = task.trimEnd();
+	const trimmed = task.trim();
 	if (!expanded || !trimmed) return lines;
 
-	// Strip the shared <context>...</context> block — it's the same
-	// across all tasks and just adds noise when expanded.
-	const stripped = trimmed.replace(/<context>[\s\S]*?<\/context>\s*/, "").trimStart();
-	if (!stripped) return lines;
-
 	lines.push(`${continuePrefix}${theme.fg("dim", "Task")}`);
-	const taskLines = stripped.split("\n");
+	const taskLines = trimmed.split("\n");
 	for (const line of taskLines.slice(0, maxExpanded)) {
 		lines.push(`${continuePrefix}  ${theme.fg("dim", truncateToWidth(replaceTabs(line), 70))}`);
 	}
@@ -526,7 +521,7 @@ function renderAgentProgress(
 
 	if (progress.status === "running") {
 		if (!description) {
-			const taskPreview = truncateToWidth(progress.task, 40);
+			const taskPreview = truncateToWidth(progress.assignment ?? progress.task, 40);
 			statusLine += ` ${theme.fg("muted", taskPreview)}`;
 		}
 		if (progress.toolCount > 0) {
@@ -546,7 +541,7 @@ function renderAgentProgress(
 
 	lines.push(statusLine);
 
-	lines.push(...renderTaskSection(progress.task, continuePrefix, expanded, theme));
+	lines.push(...renderTaskSection(progress.assignment ?? progress.task, continuePrefix, expanded, theme));
 
 	// Current tool (if running) or most recent completed tool
 	if (progress.status === "running") {
@@ -781,7 +776,7 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 
 	lines.push(statusLine);
 
-	lines.push(...renderTaskSection(result.task, continuePrefix, expanded, theme));
+	lines.push(...renderTaskSection(result.assignment ?? result.task, continuePrefix, expanded, theme));
 
 	if (aborted && result.abortReason) {
 		lines.push(

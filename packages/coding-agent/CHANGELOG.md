@@ -1,9 +1,9 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added `assignment` field to task progress and result objects to track the raw per-task assignment text separately from the full templated task
 - Added `details` field to todo items for storing implementation specifics, file paths, and edge cases (shown only when task is active)
 - Added support for multi-line details in todo items with automatic indentation in interactive and reminder displays
 - Added `todo.eager` setting to automatically create a comprehensive todo list after the first user message
@@ -13,6 +13,8 @@
 
 ### Changed
 
+- Updated task rendering to display assignment text instead of full task template when available, reducing noise in progress and result displays
+- Modified task section rendering to show trimmed assignment text without stripping context blocks, simplifying the display logic
 - Updated todo item display to show `details` field indented below active tasks in both interactive mode and todo reminder component
 - Modified tool choice resolution to support per-turn tool choice overrides via `consumeNextToolChoiceOverride()`
 - Updated tool documentation to clarify that `path` parameter accepts files, directories, glob patterns, or comma/space-separated path lists

@@ -5,6 +5,8 @@ import type { TaskItem } from "./types";
 interface RenderResult {
 	/** Full task text sent to the subagent */
 	task: string;
+	/** Raw per-task assignment text, without prompt template boilerplate */
+	assignment: string;
 	id: string;
 	description: string;
 }
@@ -20,10 +22,11 @@ export function renderTemplate(context: string | undefined, task: TaskItem): Ren
 	context = context?.trim();
 
 	if (!context || !assignment) {
-		return { task: assignment || context!, id, description };
+		return { task: assignment || context!, assignment: assignment || context!, id, description };
 	}
 	return {
 		task: renderPromptTemplate(subagentUserPromptTemplate, { context, assignment }),
+		assignment,
 		id,
 		description,
 	};
