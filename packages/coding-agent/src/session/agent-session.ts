@@ -1968,7 +1968,14 @@ export class AgentSession {
 		}
 
 		if (!options?.synthetic) {
+			// Capture generation before eager todo enforcement — if the user aborts during
+			// the eager todo's inner prompt, #promptGeneration will have been bumped. Without
+			// this check the outer prompt() would continue and re-send the user message.
+			const generation = this.#promptGeneration;
 			await this.#enforceEagerTodo(expandedText);
+			if (this.#promptGeneration !== generation) {
+				return;
+			}
 		}
 
 		const userContent: (TextContent | ImageContent)[] = [{ type: "text", text: expandedText }];
