@@ -30,6 +30,8 @@ Before choosing the payload, answer these questions in order:
   - `[""]` — blank line
   - `null` or `[]` — delete if replace, no-op if append or prepend
 
+`replace` substitutes **exactly** the `pos..end` range (inclusive). Everything before `pos` and after `end` is preserved untouched. If `lines` contains content that already exists after `end`, those lines **will be duplicated** in the output. Keep `lines` to exactly what belongs inside the consumed range.
+
 Ops are applied bottom-up. Tags **MUST** be referenced from the most recent `read` output.
 </operations>
 
@@ -115,6 +117,21 @@ Blank out a line without removing it:
   }]
 }
 ```
+</example>
+
+<example name="delete a single line from a block">
+Remove just the TODO comment (line 10) from `beta()` without touching anything else:
+```
+{
+  path: "util.ts",
+  edits: [{
+    op: "replace",
+    pos: {{hlineref 10 "\t// TODO: remove after migration"}},
+    lines: null
+  }]
+}
+```
+Do **not** widen the range and re-emit surrounding lines when a single-line delete suffices.
 </example>
 
 <example name="rewrite a block body — shape (a)">
@@ -271,5 +288,6 @@ Good — prepend before the next declaration so the new sibling is anchored on a
 - When changing existing code near a block tail or closing delimiter, default to `replace` over the owned span instead of inserting around the boundary.
 - When adding a sibling declaration, default to `prepend` on the next sibling declaration instead of `append` on the previous block's closing brace.
 - **Block boundaries travel together.** For a block `{ header / body / closer }`, there are exactly two valid replace shapes: (a) replace only the body — `pos`=first body line, `end`=last body line, leave the header and closer untouched; or (b) replace the whole block — `pos`=header, `end`=closer, re-emit all three in `lines`. Never split them: do not set `end` to the closer while omitting it from `lines` (deletes it), and do not emit the closer in `lines` without including it in `end` (duplicates it). This applies to every block terminator: `}`, `continue`, `break`, `return`, `throw`.
+- **`lines` must not extend past `end`.** `lines` replaces exactly `pos..end`. Content after `end` survives. If you include lines in `lines` that exist after `end`, they will appear twice. Either extend `end` to cover all lines you are re-emitting, or remove the extra lines from `lines`.
 - `lines` entries **MUST** be literal file content with indentation copied exactly from the `read` output. If the file uses tabs, use a real tab character.
 </critical>

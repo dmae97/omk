@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added subcommands to `/copy` command: `code` (copy last code block), `all` (copy all code blocks), `cmd` (copy last bash/python command), and `last` (copy full message)
@@ -15,6 +16,7 @@
 
 ### Changed
 
+- Updated hashline tool documentation with explicit guidance on `replace` operation semantics, clarifying that `lines` must not extend past `end` to avoid unintended line duplication
 - Improved diagnostic message formatting to group errors by file path with indented details for better readability
 - Modified eager todo prelude to use hidden custom message type instead of visible developer message, preventing duplicate prompt text in session history
 - Updated eager todo prompt to remove dynamic user request injection, simplifying the template and preventing request repetition in displayed messages
@@ -28,6 +30,8 @@
 
 ### Fixed
 
+- Fixed hashline line normalization to trim trailing whitespace and strip carriage returns instead of removing all whitespace, preserving intentional spacing in code
+- Fixed noop detection in hashline replace operations to check array length equality before comparing lines, preventing false noop classification when single-line replacements expand to multiple lines
 - Fixed path resolution to accept bare directory names without trailing slashes in comma/space-separated path lists (e.g., `apps packages phases`)
 - Per-role `modelRoles` thinking selectors now propagate through commit/title helper model selection, legacy commit analysis, and agentic commit sessions while preserving default thinking inheritance when no role override is configured
 

@@ -33,16 +33,13 @@ const RE_SIGNIFICANT = /[\p{L}\p{N}]/u;
 /**
  * Compute a short hexadecimal hash of a single line.
  *
- * Uses xxHash32 on a whitespace-normalized line, truncated to 2 chars from
+ * Uses xxHash32 on a trailing-whitespace-trimmed, CR-stripped line, truncated to 2 chars from
  * {@link NIBBLE_STR}. For lines containing no alphanumeric characters (only
  * punctuation/symbols/whitespace), the line number is mixed in to reduce hash collisions.
  * The line input should not include a trailing newline.
  */
 export function computeLineHash(idx: number, line: string): string {
-	if (line.endsWith("\r")) {
-		line = line.slice(0, -1);
-	}
-	line = line.replace(/\s+/g, "");
+	line = line.replace(/\r/g, "").trimEnd();
 
 	let seed = 0;
 	if (!RE_SIGNIFICANT.test(line)) {
@@ -626,7 +623,7 @@ export function applyHashlineEdits(
 				if (!edit.end) {
 					const origLines = originalFileLines.slice(edit.pos.line - 1, edit.pos.line);
 					const newLines = edit.lines;
-					if (origLines.every((line, i) => line === newLines[i])) {
+					if (origLines.length === newLines.length && origLines.every((line, i) => line === newLines[i])) {
 						noopEdits.push({
 							editIndex: idx,
 							loc: `${edit.pos.line}#${edit.pos.hash}`,

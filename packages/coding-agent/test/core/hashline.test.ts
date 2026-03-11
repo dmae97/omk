@@ -699,6 +699,15 @@ describe("applyHashlineEdits — multiple edits", () => {
 		expect(result.lines).toBe("one\nTWO_THREE\nfour\nfive\nSIX");
 	});
 
+	it("single-line replace expanding to multiple lines is not a noop", () => {
+		const content = "aaa\n\nccc";
+		const blankHash = computeLineHash(2, "");
+		const edits: HashlineEdit[] = [{ op: "replace", pos: { line: 2, hash: blankHash }, lines: ["", "inserted", ""] }];
+		const result = applyHashlineEdits(content, edits);
+		expect(result.lines).toBe("aaa\n\ninserted\n\nccc");
+		expect(result.firstChangedLine).toBe(2);
+	});
+
 	it("empty edits array is a no-op", () => {
 		const content = "aaa\nbbb";
 		const result = applyHashlineEdits(content, []);
