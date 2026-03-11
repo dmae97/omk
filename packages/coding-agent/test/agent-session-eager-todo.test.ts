@@ -20,6 +20,7 @@ type ObservedPromptCall = {
 	toolChoice: string | undefined;
 	toolNames: string[];
 	messageRoles: AgentMessage["role"][];
+	messageTexts: string[];
 	lastMessageRole: AgentMessage["role"];
 	lastMessageText: string;
 };
@@ -164,6 +165,7 @@ describe("AgentSession eager todo enforcement", () => {
 					toolChoice: getToolChoiceName(options?.toolChoice),
 					toolNames: (context.tools ?? []).map(tool => tool.name),
 					messageRoles: context.messages.map(message => message.role),
+					messageTexts: context.messages.map(message => getMessageText(message)),
 					lastMessageRole: lastMessage.role,
 					lastMessageText: getMessageText(lastMessage),
 				});
@@ -200,21 +202,24 @@ describe("AgentSession eager todo enforcement", () => {
 		tempDir.removeSync();
 	});
 
-	it("prepends the eager todo reminder to the first real user turn", async () => {
+	it("prepends a hidden eager todo reminder without repeating the prompt text", async () => {
 		await session.prompt("list all work trees");
-
-		const dumpText = session.formatSessionAsText();
 
 		expect(observedCalls).toHaveLength(1);
 		expect(observedCalls[0]).toEqual({
 			toolChoice: "todo_write",
 			toolNames: ["todo_write", "bash"],
-			messageRoles: ["developer", "user"],
+			messageRoles: ["user", "user"],
+			messageTexts: [
+				expect.stringContaining("Before doing substantive work on the upcoming user request"),
+				"list all work trees",
+			],
 			lastMessageRole: "user",
 			lastMessageText: "list all work trees",
 		});
-		expect(dumpText).toContain("## Developer");
-		expect(dumpText).toContain("Before doing substantive work on the upcoming user request");
+		expect(observedCalls[0]?.messageTexts.filter(text => text.includes("list all work trees"))).toHaveLength(1);
+		expect(observedCalls[0]?.messageTexts[0]).not.toContain("list all work trees");
+		expect(session.formatSessionAsText()).not.toContain("<user-request>");
 	});
 
 	it("initializes todos once, then continues within the same user turn", async () => {
@@ -242,7 +247,11 @@ describe("AgentSession eager todo enforcement", () => {
 		expect(observedCalls[0]).toEqual({
 			toolChoice: "todo_write",
 			toolNames: ["todo_write", "bash"],
-			messageRoles: ["developer", "user"],
+			messageRoles: ["user", "user"],
+			messageTexts: [
+				expect.stringContaining("Before doing substantive work on the upcoming user request"),
+				"list all work trees",
+			],
 			lastMessageRole: "user",
 			lastMessageText: "list all work trees",
 		});

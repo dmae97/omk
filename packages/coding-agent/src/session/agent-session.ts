@@ -1959,7 +1959,7 @@ export class AgentSession {
 			return;
 		}
 
-		const eagerTodoPrelude = !options?.synthetic ? this.#createEagerTodoPrelude(expandedText) : undefined;
+		const eagerTodoPrelude = !options?.synthetic ? this.#createEagerTodoPrelude() : undefined;
 
 		const userContent: (TextContent | ImageContent)[] = [{ type: "text", text: expandedText }];
 		if (options?.images) {
@@ -3515,7 +3515,7 @@ export class AgentSession {
 		}
 	}
 
-	#createEagerTodoPrelude(userRequest: string): { message: AgentMessage; toolChoice: ToolChoice } | undefined {
+	#createEagerTodoPrelude(): { message: AgentMessage; toolChoice: ToolChoice } | undefined {
 		const eagerTodosEnabled = this.settings.get("todo.eager");
 		const todosEnabled = this.settings.get("todo.enabled");
 		if (!eagerTodosEnabled || !todosEnabled) {
@@ -3545,14 +3545,14 @@ export class AgentSession {
 			return undefined;
 		}
 
-		const eagerTodoReminder = renderPromptTemplate(eagerTodoPrompt, {
-			userRequest,
-		});
+		const eagerTodoReminder = renderPromptTemplate(eagerTodoPrompt);
 
 		return {
 			message: {
-				role: "developer",
-				content: [{ type: "text", text: eagerTodoReminder }],
+				role: "custom",
+				customType: "eager-todo-prelude",
+				content: eagerTodoReminder,
+				display: false,
 				attribution: "agent",
 				timestamp: Date.now(),
 			},

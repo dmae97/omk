@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `assignment` field to task progress and result objects to track the raw per-task assignment text separately from the full templated task
@@ -14,6 +13,8 @@
 
 ### Changed
 
+- Modified eager todo prelude to use hidden custom message type instead of visible developer message, preventing duplicate prompt text in session history
+- Updated eager todo prompt to remove dynamic user request injection, simplifying the template and preventing request repetition in displayed messages
 - Modified eager todo enforcement to prepend the todo reminder to the first user turn instead of executing it as a separate synthetic turn, reducing unnecessary prompt calls
 - Updated task rendering to display assignment text instead of full task template when available, reducing noise in progress and result displays
 - Modified task section rendering to show trimmed assignment text without stripping context blocks, simplifying the display logic
