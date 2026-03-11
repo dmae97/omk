@@ -352,8 +352,6 @@ export class AgentSession {
 	// Todo completion reminder state
 	#todoReminderCount = 0;
 	#todoPhases: TodoPhase[] = [];
-	#eagerTodoInjected = false;
-	#skipNextTodoCompletionReminder = false;
 	#nextToolChoiceOverride: ToolChoice | undefined = undefined;
 
 	// Bash execution state
@@ -805,10 +803,6 @@ export class AgentSession {
 			// Check for incomplete todos only after a final assistant stop, not intermediate tool-use turns.
 			const hasToolCalls = msg.content.some(content => content.type === "toolCall");
 			if (hasToolCalls) {
-				return;
-			}
-			if (this.#skipNextTodoCompletionReminder) {
-				this.#skipNextTodoCompletionReminder = false;
 				return;
 			}
 			if (msg.stopReason !== "error" && msg.stopReason !== "aborted") {
@@ -1368,8 +1362,6 @@ export class AgentSession {
 		if (!this.#extensionRunner) return;
 		if (event.type === "agent_start") {
 			this.#turnIndex = 0;
-			this.#eagerTodoInjected = false;
-			this.#skipNextTodoCompletionReminder = false;
 			this.#nextToolChoiceOverride = undefined;
 			await this.#extensionRunner.emit({ type: "agent_start" });
 		} else if (event.type === "agent_end") {
@@ -1967,16 +1959,7 @@ export class AgentSession {
 			return;
 		}
 
-		if (!options?.synthetic) {
-			// Capture generation before eager todo enforcement — if the user aborts during
-			// the eager todo's inner prompt, #promptGeneration will have been bumped. Without
-			// this check the outer prompt() would continue and re-send the user message.
-			const generation = this.#promptGeneration;
-			await this.#enforceEagerTodo(expandedText);
-			if (this.#promptGeneration !== generation) {
-				return;
-			}
-		}
+		const eagerTodoPrelude = !options?.synthetic ? this.#createEagerTodoPrelude(expandedText) : undefined;
 
 		const userContent: (TextContent | ImageContent)[] = [{ type: "text", text: expandedText }];
 		if (options?.images) {
@@ -1987,7 +1970,20 @@ export class AgentSession {
 			? { role: "developer" as const, content: userContent, attribution: "agent" as const, timestamp: Date.now() }
 			: { role: "user" as const, content: userContent, attribution: "user" as const, timestamp: Date.now() };
 
-		await this.#promptWithMessage(message, expandedText, options);
+		if (eagerTodoPrelude) {
+			this.#nextToolChoiceOverride = eagerTodoPrelude.toolChoice;
+		}
+
+		try {
+			await this.#promptWithMessage(message, expandedText, {
+				...options,
+				prependMessages: eagerTodoPrelude ? [eagerTodoPrelude.message] : undefined,
+			});
+		} finally {
+			if (eagerTodoPrelude) {
+				this.#nextToolChoiceOverride = undefined;
+			}
+		}
 		if (!options?.synthetic) {
 			await this.#enforcePlanModeToolDecision();
 		}
@@ -2030,6 +2026,7 @@ export class AgentSession {
 		message: AgentMessage,
 		expandedText: string,
 		options?: Pick<PromptOptions, "toolChoice" | "images" | "skipCompactionCheck"> & {
+			prependMessages?: AgentMessage[];
 			skipPostPromptRecoveryWait?: boolean;
 		},
 	): Promise<void> {
@@ -2067,7 +2064,7 @@ export class AgentSession {
 				await this.#checkCompaction(lastAssistant, false);
 			}
 
-			// Build messages array (custom messages if any, then user message)
+			// Build messages array (session context, eager todo prelude, then active prompt message)
 			const messages: AgentMessage[] = [];
 			const planReferenceMessage = await this.#buildPlanReferenceMessage?.();
 			if (planReferenceMessage) {
@@ -2076,6 +2073,9 @@ export class AgentSession {
 			const planModeMessage = await this.#buildPlanModeMessage();
 			if (planModeMessage) {
 				messages.push(planModeMessage);
+			}
+			if (options?.prependMessages) {
+				messages.push(...options.prependMessages);
 			}
 
 			messages.push(message);
@@ -3515,30 +3515,25 @@ export class AgentSession {
 		}
 	}
 
-	async #enforceEagerTodo(userRequest: string): Promise<void> {
-		if (this.#eagerTodoInjected) {
-			return;
-		}
+	#createEagerTodoPrelude(userRequest: string): { message: AgentMessage; toolChoice: ToolChoice } | undefined {
 		const eagerTodosEnabled = this.settings.get("todo.eager");
 		const todosEnabled = this.settings.get("todo.enabled");
 		if (!eagerTodosEnabled || !todosEnabled) {
-			return;
+			return undefined;
 		}
-
-		this.#eagerTodoInjected = true;
 
 		if (this.#planModeState?.enabled) {
-			return;
+			return undefined;
 		}
 		if (this.getTodoPhases().length > 0) {
-			return;
+			return undefined;
 		}
 
 		if (!this.#toolRegistry.has("todo_write")) {
 			logger.warn("Eager todo enforcement skipped because todo_write is unavailable", {
 				activeToolNames: this.agent.state.tools.map(tool => tool.name),
 			});
-			return;
+			return undefined;
 		}
 
 		const todoWriteToolChoice = buildNamedToolChoice("todo_write", this.model);
@@ -3547,23 +3542,22 @@ export class AgentSession {
 				modelApi: this.model?.api,
 				modelId: this.model?.id,
 			});
-			return;
+			return undefined;
 		}
 
 		const eagerTodoReminder = renderPromptTemplate(eagerTodoPrompt, {
 			userRequest,
 		});
 
-		this.#nextToolChoiceOverride = todoWriteToolChoice;
-		this.#skipNextTodoCompletionReminder = true;
-		try {
-			await this.prompt(eagerTodoReminder, {
-				synthetic: true,
-				expandPromptTemplates: false,
-			});
-		} finally {
-			this.#nextToolChoiceOverride = undefined;
-		}
+		return {
+			message: {
+				role: "developer",
+				content: [{ type: "text", text: eagerTodoReminder }],
+				attribution: "agent",
+				timestamp: Date.now(),
+			},
+			toolChoice: todoWriteToolChoice,
+		};
 	}
 	/**
 	 * Check if agent stopped with incomplete todos and prompt to continue.

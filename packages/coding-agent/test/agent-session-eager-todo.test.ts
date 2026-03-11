@@ -19,6 +19,7 @@ class MockAssistantStream extends AssistantMessageEventStream {}
 type ObservedPromptCall = {
 	toolChoice: string | undefined;
 	toolNames: string[];
+	messageRoles: AgentMessage["role"][];
 	lastMessageRole: AgentMessage["role"];
 	lastMessageText: string;
 };
@@ -123,6 +124,7 @@ describe("AgentSession eager todo enforcement", () => {
 			"compaction.enabled": false,
 			"todo.enabled": true,
 			"todo.eager": true,
+			"todo.reminders": false,
 		});
 		const sessionManager = SessionManager.inMemory(tempDir.path());
 
@@ -161,6 +163,7 @@ describe("AgentSession eager todo enforcement", () => {
 				observedCalls.push({
 					toolChoice: getToolChoiceName(options?.toolChoice),
 					toolNames: (context.tools ?? []).map(tool => tool.name),
+					messageRoles: context.messages.map(message => message.role),
 					lastMessageRole: lastMessage.role,
 					lastMessageText: getMessageText(lastMessage),
 				});
@@ -197,29 +200,24 @@ describe("AgentSession eager todo enforcement", () => {
 		tempDir.removeSync();
 	});
 
-	it("forces a synthetic todo-only turn before the first real user prompt", async () => {
+	it("prepends the eager todo reminder to the first real user turn", async () => {
 		await session.prompt("list all work trees");
 
 		const dumpText = session.formatSessionAsText();
 
-		expect(observedCalls).toHaveLength(2);
+		expect(observedCalls).toHaveLength(1);
 		expect(observedCalls[0]).toEqual({
 			toolChoice: "todo_write",
 			toolNames: ["todo_write", "bash"],
-			lastMessageRole: "developer",
-			lastMessageText: expect.stringContaining("list all work trees"),
-		});
-		expect(observedCalls[1]).toEqual({
-			toolChoice: undefined,
-			toolNames: ["todo_write", "bash"],
+			messageRoles: ["developer", "user"],
 			lastMessageRole: "user",
 			lastMessageText: "list all work trees",
 		});
 		expect(dumpText).toContain("## Developer");
-		expect(dumpText).toContain("Create a comprehensive phased todo for the upcoming user request now.");
+		expect(dumpText).toContain("Before doing substantive work on the upcoming user request");
 	});
 
-	it("initializes todos once, then continues to the real user turn without looping todo_write", async () => {
+	it("initializes todos once, then continues within the same user turn", async () => {
 		scriptedResponses = [
 			createToolCallAssistantMessage("todo_write", {
 				ops: [
@@ -234,28 +232,23 @@ describe("AgentSession eager todo enforcement", () => {
 					},
 				],
 			}),
-			createAssistantMessage("todo initialized"),
 			createAssistantMessage("real user turn handled"),
 		];
 
 		await session.prompt("list all work trees");
 
-		expect(streamCallCount).toBeGreaterThanOrEqual(3);
-		expect(observedCalls.length).toBeGreaterThanOrEqual(3);
+		expect(streamCallCount).toBe(2);
+		expect(observedCalls).toHaveLength(2);
 		expect(observedCalls[0]).toEqual({
 			toolChoice: "todo_write",
 			toolNames: ["todo_write", "bash"],
-			lastMessageRole: "developer",
-			lastMessageText: expect.stringContaining("list all work trees"),
-		});
-		expect(observedCalls[1]?.lastMessageRole).toBe("toolResult");
-		expect(observedCalls[1]?.toolChoice).toBeUndefined();
-		expect(observedCalls[2]).toEqual({
-			toolChoice: undefined,
-			toolNames: ["todo_write", "bash"],
+			messageRoles: ["developer", "user"],
 			lastMessageRole: "user",
 			lastMessageText: "list all work trees",
 		});
+		expect(observedCalls[1]?.toolChoice).toBeUndefined();
+		expect(observedCalls[1]?.lastMessageRole).toBe("toolResult");
+		expect(observedCalls[1]?.messageRoles.slice(-2)).toEqual(["assistant", "toolResult"]);
 		expect(session.getTodoPhases()).toHaveLength(1);
 		expect(session.getTodoPhases()[0]?.tasks[0]?.content).toBe("List all git worktrees in the current repository");
 	});
