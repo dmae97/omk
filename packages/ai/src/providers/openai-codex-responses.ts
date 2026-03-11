@@ -1067,6 +1067,9 @@ async function recoverCodexStreamError(
 	runtime: CodexStreamRuntime,
 	error: unknown,
 ): Promise<boolean> {
+	if (await tryReconnectCodexWebSocketOnConnectionLimit(context, runtime, error)) {
+		return true;
+	}
 	if (await tryReplayWebsocketFailureOverSse(context, runtime, error)) {
 		return true;
 	}
@@ -1074,6 +1077,55 @@ async function recoverCodexStreamError(
 		return true;
 	}
 	return false;
+}
+
+/**
+ * Handles `websocket_connection_limit_reached` errors by closing the stale connection
+ * and opening a fresh websocket. If content has already been emitted to the caller,
+ * falls back to SSE replay (same as other WS failures) since we cannot safely
+ * continue a partial response on a new connection.
+ */
+async function tryReconnectCodexWebSocketOnConnectionLimit(
+	context: CodexStreamProcessingContext,
+	runtime: CodexStreamRuntime,
+	error: unknown,
+): Promise<boolean> {
+	if (!(error instanceof CodexProviderStreamError) || error.code !== "websocket_connection_limit_reached") {
+		return false;
+	}
+	const websocketState = context.requestContext.websocketState;
+	if (!websocketState || runtime.transport !== "websocket" || context.options?.signal?.aborted) {
+		return false;
+	}
+
+	// Close the stale connection so getOrCreateCodexWebSocketConnection creates a fresh one.
+	websocketState.connection?.close("connection_limit");
+	websocketState.connection = undefined;
+	resetCodexWebSocketAppendState(websocketState);
+
+	logCodexDebug("codex websocket connection limit reached, reconnecting", {
+		hadContent: context.output.content.length > 0,
+		retry: runtime.websocketStreamRetries,
+	});
+
+	if (context.output.content.length > 0) {
+		// Content already emitted to the caller — cannot safely continue on a new WS.
+		// Reset and replay the full request over SSE.
+		runtime.canSafelyReplayWebsocketOverSse = true;
+		runtime.currentItem = null;
+		runtime.currentBlock = null;
+		runtime.nativeOutputItems.length = 0;
+		resetOutputState(context.output);
+		context.firstTokenTime = undefined;
+		recordCodexWebSocketFailure(websocketState, true);
+		await reopenCodexSseRuntimeStream(context, runtime, websocketState);
+		return true;
+	}
+
+	// No content emitted yet — reconnect over websocket.
+	runtime.websocketStreamRetries += 1;
+	await reopenCodexWebSocketRuntimeStream(context, runtime, websocketState);
+	return true;
 }
 
 async function tryReplayWebsocketFailureOverSse(
@@ -2189,11 +2241,13 @@ function getString(value: unknown): string | undefined {
 
 class CodexProviderStreamError extends Error {
 	readonly retryable: boolean;
+	readonly code?: string;
 
-	constructor(message: string, retryable: boolean) {
+	constructor(message: string, retryable: boolean, code?: string) {
 		super(message);
 		this.name = "CodexProviderStreamError";
 		this.retryable = retryable;
+		this.code = code;
 	}
 }
 
@@ -2215,7 +2269,7 @@ function createCodexProviderStreamError(rawEvent: Record<string, unknown>): Code
 		typeof rawEvent.type === "string" && rawEvent.type === "error"
 			? formatCodexErrorEvent(rawEvent, code, message)
 			: (formatCodexFailure(rawEvent) ?? "Codex response failed");
-	return new CodexProviderStreamError(formattedMessage, isRetryableCodexFailureEvent(rawEvent));
+	return new CodexProviderStreamError(formattedMessage, isRetryableCodexFailureEvent(rawEvent), code || undefined);
 }
 
 function isRetryableCodexProviderError(error: unknown): boolean {
