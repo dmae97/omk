@@ -136,7 +136,7 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 				height: finalHeight,
 				wasResized: true,
 				get data() {
-					return best.buffer.toBase64();
+					return Buffer.from(best.buffer).toBase64();
 				},
 			};
 		}
@@ -155,7 +155,7 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 					height: finalHeight,
 					wasResized: true,
 					get data() {
-						return best.buffer.toBase64();
+						return Buffer.from(best.buffer).toBase64();
 					},
 				};
 			}
@@ -183,7 +183,7 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 						height: finalHeight,
 						wasResized: true,
 						get data() {
-							return best.buffer.toBase64();
+							return Buffer.from(best.buffer).toBase64();
 						},
 					};
 				}
@@ -200,7 +200,7 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 			height: finalHeight,
 			wasResized: true,
 			get data() {
-				return best.buffer.toBase64();
+				return Buffer.from(best.buffer).toBase64();
 			},
 		};
 	} catch {

@@ -231,7 +231,7 @@ export async function loadImageInput(options: LoadImageInputOptions): Promise<Lo
 		throw new ImageInputTooLargeError(inputBuffer.byteLength, maxBytes);
 	}
 
-	let outputData = new Uint8Array(inputBuffer).toBase64();
+	let outputData = Buffer.from(inputBuffer).toBase64();
 	let outputMimeType = mimeType;
 	let outputBytes = inputBuffer.byteLength;
 	let dimensionNote: string | undefined;

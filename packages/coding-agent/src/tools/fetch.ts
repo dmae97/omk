@@ -714,7 +714,7 @@ async function renderUrl(url: string, timeout: number, raw: boolean, signal?: Ab
 				}
 
 				const resized = await resizeImage(
-					{ type: "image", data: binary.buffer.toBase64(), mimeType: imageMimeType },
+					{ type: "image", data: Buffer.from(binary.buffer).toBase64(), mimeType: imageMimeType },
 					{ maxBytes: MAX_INLINE_IMAGE_OUTPUT_BYTES },
 				);
 				const isDecodedImage =
