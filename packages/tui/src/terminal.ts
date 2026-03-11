@@ -289,21 +289,39 @@ export class ProcessTerminal implements Terminal {
 			if (da1ResponsePattern.test(sequence) && this.#pendingDa1Sentinels > 0) {
 				this.#pendingDa1Sentinels--;
 				if (this.#osc11Pending) {
-					this.#finishOsc11Query();
+					// DA1 arrived before OSC 11 response: terminal does not support
+					// OSC 11. Clear the pending state without starting a queued query
+					// (queued query is started below, after sentinel is consumed).
+					this.#osc11Pending = false;
+					this.#osc11ResponseBuffer = "";
+				}
+				// Now that this DA1 cycle is complete, start any queued query.
+				if (this.#osc11QueryQueued && !this.#dead) {
+					this.#osc11QueryQueued = false;
+					this.#startOsc11Query();
 				}
 				return;
 			}
 
 			// OSC 11 replies can be split if the stdin buffer flushes a partial sequence.
 			// Accumulate fragments until the BEL/ST terminator arrives, then parse once.
+			// If a new escape sequence arrives (not the ST terminator), abort buffering
+			// and forward it as normal input so user keystrokes are never swallowed.
 			if (this.#osc11Pending && (this.#osc11ResponseBuffer || sequence.startsWith("\x1b]11;"))) {
-				this.#osc11ResponseBuffer += sequence;
-				const osc11Match = this.#osc11ResponseBuffer.match(osc11ResponsePattern);
-				if (!osc11Match) return;
-				const [, rHex, gHex, bHex] = osc11Match;
-				this.#finishOsc11Query();
-				this.#handleOsc11Response(rHex!, gHex!, bHex!);
-				return;
+				if (this.#osc11ResponseBuffer && sequence.startsWith("\x1b") && sequence !== "\x1b\\") {
+					// New escape sequence arrived mid-buffer — not an OSC 11 continuation.
+					this.#osc11ResponseBuffer = "";
+					// Fall through to normal input handling below.
+				} else {
+					this.#osc11ResponseBuffer += sequence;
+					const osc11Match = this.#osc11ResponseBuffer.match(osc11ResponsePattern);
+					if (!osc11Match) return;
+					const [, rHex, gHex, bHex] = osc11Match;
+					this.#osc11Pending = false;
+					this.#osc11ResponseBuffer = "";
+					this.#handleOsc11Response(rHex!, gHex!, bHex!);
+					return;
+				}
 			}
 
 			// Mode 2031 change notification: re-query OSC 11 with 100ms debounce
@@ -346,7 +364,11 @@ export class ProcessTerminal implements Terminal {
 	 */
 	#queryBackgroundColor(): void {
 		if (this.#dead) return;
-		if (this.#osc11Pending) {
+		// Queue if an OSC 11 query is in flight or its DA1 sentinel hasn't been
+		// consumed yet. Starting a new query while a DA1 is outstanding would
+		// increment the sentinel counter, and the old DA1 arrival would then
+		// prematurely clear the new query's pending state.
+		if (this.#osc11Pending || this.#pendingDa1Sentinels > 0) {
 			this.#osc11QueryQueued = true;
 			return;
 		}
@@ -360,15 +382,6 @@ export class ProcessTerminal implements Terminal {
 		this.#safeWrite("\x1b]11;?\x07"); // OSC 11 query (BEL terminated)
 		this.#safeWrite("\x1b[c"); // DA1 sentinel
 	}
-
-	#finishOsc11Query(): void {
-		this.#osc11Pending = false;
-		this.#osc11ResponseBuffer = "";
-		if (!this.#osc11QueryQueued || this.#dead) return;
-		this.#osc11QueryQueued = false;
-		this.#startOsc11Query();
-	}
-
 	/**
 	 * Parse an OSC 11 background color response and compute BT.601 luminance.
 	 * Handles 1-, 2-, 3-, and 4-digit XParseColor hex components.

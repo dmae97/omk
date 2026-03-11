@@ -86,4 +86,26 @@ describe("theme auto-detection", () => {
 		themeModule.stopThemeWatcher();
 		expect(stop).toHaveBeenCalledTimes(1);
 	});
+	it("Zellij fallback stays macOS-only (Linux + Zellij = honor terminal)", async () => {
+		Object.defineProperty(process, "platform", { value: "linux", configurable: true, writable: true });
+		Bun.env.ZELLIJ = "1";
+		const detectSpy = vi.spyOn(nativesModule, "detectMacOSAppearance").mockReturnValue("light");
+
+		themeModule.onTerminalAppearanceChange("dark");
+		await themeModule.initTheme(false, undefined, undefined, "dark", "light");
+
+		expect(themeModule.getCurrentThemeName()).toBe("dark");
+		expect(detectSpy).not.toHaveBeenCalled();
+	});
+
+	it("terminal-reported appearance wins over conflicting COLORFGBG", async () => {
+		Bun.env.COLORFGBG = "15;0";
+		const detectSpy = vi.spyOn(nativesModule, "detectMacOSAppearance").mockReturnValue("light");
+
+		themeModule.onTerminalAppearanceChange("light");
+		await themeModule.initTheme(false, undefined, undefined, "dark", "light");
+
+		expect(themeModule.getCurrentThemeName()).toBe("light");
+		expect(detectSpy).not.toHaveBeenCalled();
+	});
 });
