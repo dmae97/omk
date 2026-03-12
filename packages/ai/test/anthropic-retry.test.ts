@@ -12,6 +12,12 @@ describe("isProviderRetryableError", () => {
 		expect(isProviderRetryableError(new Error("Unexpected end of JSON input"))).toBe(true);
 	});
 
+	it("retries HTTP/2 stream errors (INTERNAL_ERROR)", () => {
+		expect(
+			isProviderRetryableError(new Error("stream error: stream ID 391; INTERNAL_ERROR; received from peer")),
+		).toBe(true);
+	});
+
 	it("does not retry non-transient validation errors", () => {
 		expect(isProviderRetryableError(new Error("Invalid tool schema"))).toBe(false);
 		expect(isProviderRetryableError(new Error("Bad request"))).toBe(false);
