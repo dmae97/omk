@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.11.0] - 2026-03-12
 ### Added
 
 - Added Parallel as a web search provider with support for fast and research modes

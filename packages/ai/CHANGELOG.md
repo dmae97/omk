@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.11.0] - 2026-03-12
 ### Added
 
 - Added support for Parallel AI provider with API key authentication
