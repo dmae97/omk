@@ -1,14 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { hookFetch } from "@oh-my-pi/pi-utils";
+import { _resetSettingsForTest, Settings } from "../../../src/config/settings";
 import * as toolsManager from "../../../src/utils/tools-manager";
 import { handleYouTube } from "../../../src/web/scrapers/youtube";
 
 describe("handleYouTube with Parallel extract", () => {
-	beforeEach(() => {
+	beforeEach(async () => {
+		_resetSettingsForTest();
 		process.env.PARALLEL_API_KEY = "test-parallel-key";
+		await Settings.init({ inMemory: true, overrides: { "providers.parallelFetch": true } });
 	});
 
 	afterEach(() => {
+		_resetSettingsForTest();
 		vi.restoreAllMocks();
 		delete process.env.PARALLEL_API_KEY;
 	});
