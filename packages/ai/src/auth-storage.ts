@@ -2291,6 +2291,9 @@ export class AuthCredentialStore {
 
 	#migrateAuthSchemaV0ToV1(): void {
 		const migrate = this.#db.transaction(() => {
+			const v0Cols = this.#db.prepare("PRAGMA table_info(auth_credentials)").all() as Array<{ name?: string }>;
+			const hasDisabled = v0Cols.some(col => col.name === "disabled");
+
 			this.#db.exec("ALTER TABLE auth_credentials RENAME TO auth_credentials_v0");
 			this.#db.exec(`
 				CREATE TABLE auth_credentials (
@@ -2310,7 +2313,7 @@ export class AuthCredentialStore {
 					provider,
 					credential_type,
 					data,
-					CASE WHEN disabled = 1 THEN 'disabled' ELSE NULL END,
+					${hasDisabled ? "CASE WHEN disabled = 1 THEN 'disabled' ELSE NULL END" : "NULL"},
 					created_at,
 					updated_at
 				FROM auth_credentials_v0
