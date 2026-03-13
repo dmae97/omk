@@ -61,7 +61,7 @@ export function setPreferredSearchProvider(provider: SearchProviderId | "auto"):
 	preferredProvId = provider;
 }
 
-/** Determine which providers are configured (priority: Perplexity → Brave → Jina → Kimi → Anthropic → Gemini → Codex → Z.AI → Exa → Parallel → Kagi → Synthetic) */
+/** Determine which providers are configured  */
 export async function resolveProviderChain(
 	preferredProvider: SearchProviderId | "auto" = preferredProvId,
 ): Promise<SearchProvider[]> {
