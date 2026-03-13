@@ -58,6 +58,15 @@ describe("ExitPlanModeTool", () => {
 		expect(result.details?.finalPlanFilePath).toBe("local://WP_MIGRATION_PLAN.md");
 	});
 
+	it("fails early when the draft plan file was never written", async () => {
+		await fs.rm(path.join(artifactsDir, "local", "PLAN.md"), { force: true });
+		const tool = new ExitPlanModeTool(createSession());
+
+		await expect(tool.execute("call-missing", { title: "WP_MIGRATION_PLAN" })).rejects.toThrow(
+			"Plan file not found at local://PLAN.md. Write the finalized plan to local://PLAN.md before calling exit_plan_mode.",
+		);
+	});
+
 	it("rejects invalid title characters", async () => {
 		const tool = new ExitPlanModeTool(createSession());
 		await expect(tool.execute("call-3", { title: "../bad" })).rejects.toThrow(

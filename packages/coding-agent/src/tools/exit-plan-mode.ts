@@ -77,6 +77,12 @@ export class ExitPlanModeTool implements AgentTool<typeof exitPlanModeSchema, Ex
 			}
 		}
 
+		if (!planExists) {
+			throw new ToolError(
+				`Plan file not found at ${state.planFilePath}. Write the finalized plan to ${state.planFilePath} before calling exit_plan_mode.`,
+			);
+		}
+
 		return {
 			content: [{ type: "text", text: "Plan ready for approval." }],
 			details: {
