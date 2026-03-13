@@ -16,6 +16,7 @@ import type { ToolSession } from "../sdk";
 import {
 	DEFAULT_MAX_BYTES,
 	DEFAULT_MAX_LINES,
+	noTruncResult,
 	type TruncationResult,
 	truncateHead,
 	truncateHeadBytes,
@@ -592,15 +593,13 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			const truncation: TruncationResult = {
 				content: selectedContent,
 				truncated: wasTruncated,
-				truncatedBy: stoppedByByteLimit ? "bytes" : wasTruncated ? "lines" : null,
+				truncatedBy: stoppedByByteLimit ? "bytes" : wasTruncated ? "lines" : undefined,
 				totalLines: totalSelectedLines,
 				totalBytes: totalSelectedBytes,
 				outputLines: collectedLines.length,
 				outputBytes: collectedBytes,
 				lastLinePartial: false,
 				firstLineExceedsLimit,
-				maxLines: DEFAULT_MAX_LINES,
-				maxBytes: DEFAULT_MAX_BYTES,
 			};
 
 			const shouldAddHashLines = displayMode.hashLines;
@@ -687,8 +686,6 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 	async #handleInternalUrl(url: string, offset?: number, limit?: number): Promise<AgentToolResult<ReadToolDetails>> {
 		const internalRouter = this.session.internalRouter!;
 
-		const displayMode = resolveFileDisplayMode(this.session);
-
 		// Check if URL has query extraction (agent:// only)
 		let parsed: URL;
 		try {
@@ -716,7 +713,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			return toolResult(details).text(resource.content).sourceInternal(url).done();
 		}
 
-		// Apply pagination similar to file reading
+		// Apply pagination similar to file reading.
 		const allLines = resource.content.split("\n");
 		const totalLines = allLines.length;
 
@@ -733,9 +730,10 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 				.done();
 		}
 
+		const ignoreLimits = scheme === "skill";
 		let selectedContent: string;
 		let userLimitedLines: number | undefined;
-		if (limit !== undefined) {
+		if (limit !== undefined && !ignoreLimits) {
 			const endLine = Math.min(startLine + limit, allLines.length);
 			selectedContent = allLines.slice(startLine, endLine).join("\n");
 			userLimitedLines = endLine - startLine;
@@ -743,14 +741,9 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			selectedContent = allLines.slice(startLine).join("\n");
 		}
 
-		// Apply truncation
-		const truncation = truncateHead(selectedContent);
-
-		const shouldAddHashLines = displayMode.hashLines;
-		const shouldAddLineNumbers = shouldAddHashLines ? false : displayMode.lineNumbers;
-		const formatText = (text: string, startNum: number): string => {
-			return formatTextWithMode(text, startNum, shouldAddHashLines, shouldAddLineNumbers);
-		};
+		const truncation: TruncationResult = ignoreLimits
+			? noTruncResult(selectedContent)
+			: truncateHead(selectedContent);
 
 		let outputText: string;
 		let truncationInfo:
@@ -762,13 +755,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			const firstLineBytes = Buffer.byteLength(firstLine, "utf-8");
 			const snippet = truncateHeadBytes(firstLine, DEFAULT_MAX_BYTES);
 
-			if (shouldAddHashLines) {
-				outputText = `[Line ${startLineDisplay} is ${formatBytes(
-					firstLineBytes,
-				)}, exceeds ${formatBytes(DEFAULT_MAX_BYTES)} limit. Hashline output requires full lines; cannot compute hashes for a truncated preview.]`;
-			} else {
-				outputText = formatText(snippet.text, startLineDisplay);
-			}
+			outputText = snippet.text;
 			if (snippet.text.length === 0) {
 				outputText = `[Line ${startLineDisplay} is ${formatBytes(
 					firstLineBytes,
@@ -780,7 +767,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 				options: { direction: "head", startLine: startLineDisplay, totalFileLines: totalLines },
 			};
 		} else if (truncation.truncated) {
-			outputText = formatText(truncation.content, startLineDisplay);
+			outputText = truncation.content;
 			details.truncation = truncation;
 			truncationInfo = {
 				result: truncation,
@@ -790,11 +777,11 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			const remaining = allLines.length - (startLine + userLimitedLines);
 			const nextOffset = startLine + userLimitedLines + 1;
 
-			outputText = formatText(truncation.content, startLineDisplay);
+			outputText = truncation.content;
 			outputText += `\n\n[${remaining} more lines in resource. Use offset=${nextOffset} to continue]`;
 			details.truncation = truncation;
 		} else {
-			outputText = formatText(truncation.content, startLineDisplay);
+			outputText = truncation.content;
 		}
 
 		const resultBuilder = toolResult(details).text(outputText).sourceInternal(url);
@@ -924,7 +911,7 @@ export const readToolRenderer = {
 		}
 		if (truncation) {
 			if (fallback?.firstLineExceedsLimit) {
-				let warning = `First line exceeds ${formatBytes(fallback.maxBytes ?? DEFAULT_MAX_BYTES)} limit`;
+				let warning = `First line exceeds ${formatBytes(fallback.outputBytes ?? fallback.totalBytes)} limit`;
 				if (truncation.artifactId) {
 					warning += `. ${formatFullOutputReference(truncation.artifactId)}`;
 				}

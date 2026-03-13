@@ -36,16 +36,14 @@ export interface OutputSinkOptions {
 
 export interface TruncationResult {
 	content: string;
-	truncated: boolean;
-	truncatedBy: "lines" | "bytes" | null;
+	truncated?: boolean;
+	truncatedBy?: "lines" | "bytes";
 	totalLines: number;
 	totalBytes: number;
-	outputLines: number;
-	outputBytes: number;
-	lastLinePartial: boolean;
-	firstLineExceedsLimit: boolean;
-	maxLines: number;
-	maxBytes: number;
+	outputLines?: number;
+	outputBytes?: number;
+	lastLinePartial?: boolean;
+	firstLineExceedsLimit?: boolean;
 }
 
 export interface TruncationOptions {
@@ -206,26 +204,10 @@ export function truncateLine(
 // =============================================================================
 
 /** Shared helper to build a no-truncation result. */
-function noTruncResult(
-	content: string,
-	totalLines: number,
-	totalBytes: number,
-	maxLines: number,
-	maxBytes: number,
-): TruncationResult {
-	return {
-		content,
-		truncated: false,
-		truncatedBy: null,
-		totalLines,
-		totalBytes,
-		outputLines: totalLines,
-		outputBytes: totalBytes,
-		lastLinePartial: false,
-		firstLineExceedsLimit: false,
-		maxLines,
-		maxBytes,
-	};
+export function noTruncResult(content: string, totalLines?: number, totalBytes?: number): TruncationResult {
+	if (totalLines == null) totalLines = countNewlines(content) + 1;
+	if (totalBytes == null) totalBytes = Buffer.byteLength(content, "utf-8");
+	return { content, totalLines, totalBytes };
 }
 
 /**
@@ -244,7 +226,7 @@ export function truncateHead(content: string, options: TruncationOptions = {}): 
 	const totalLines = countNewlines(content) + 1;
 
 	if (totalLines <= maxLines && totalBytes <= maxBytes) {
-		return noTruncResult(content, totalLines, totalBytes, maxLines, maxBytes);
+		return noTruncResult(content, totalLines, totalBytes);
 	}
 
 	let includedLines = 0;
@@ -283,8 +265,6 @@ export function truncateHead(content: string, options: TruncationOptions = {}): 
 					outputBytes: 0,
 					lastLinePartial: false,
 					firstLineExceedsLimit: true,
-					maxLines,
-					maxBytes,
 				};
 			}
 			break;
@@ -307,8 +287,6 @@ export function truncateHead(content: string, options: TruncationOptions = {}): 
 					outputBytes: 0,
 					lastLinePartial: false,
 					firstLineExceedsLimit: true,
-					maxLines,
-					maxBytes,
 				};
 			}
 			break;
@@ -335,8 +313,6 @@ export function truncateHead(content: string, options: TruncationOptions = {}): 
 		outputBytes: bytesUsed,
 		lastLinePartial: false,
 		firstLineExceedsLimit: false,
-		maxLines,
-		maxBytes,
 	};
 }
 
@@ -354,7 +330,7 @@ export function truncateTail(content: string, options: TruncationOptions = {}): 
 	const totalLines = countNewlines(content) + 1;
 
 	if (totalLines <= maxLines && totalBytes <= maxBytes) {
-		return noTruncResult(content, totalLines, totalBytes, maxLines, maxBytes);
+		return noTruncResult(content, totalLines, totalBytes);
 	}
 
 	let includedLines = 0;
@@ -396,8 +372,6 @@ export function truncateTail(content: string, options: TruncationOptions = {}): 
 					outputBytes: tail.bytes,
 					lastLinePartial: true,
 					firstLineExceedsLimit: false,
-					maxLines,
-					maxBytes,
 				};
 			}
 			break;
@@ -420,8 +394,6 @@ export function truncateTail(content: string, options: TruncationOptions = {}): 
 					outputBytes: tail.bytes,
 					lastLinePartial: true,
 					firstLineExceedsLimit: false,
-					maxLines,
-					maxBytes,
 				};
 			}
 			break;
@@ -447,8 +419,6 @@ export function truncateTail(content: string, options: TruncationOptions = {}): 
 		outputBytes: bytesUsed,
 		lastLinePartial: false,
 		firstLineExceedsLimit: false,
-		maxLines,
-		maxBytes,
 	};
 }
 
@@ -693,7 +663,7 @@ export function formatTailTruncationNotice(
 	if (!truncation.truncated) return "";
 
 	const { fullOutputPath, originalContent, suffix = "" } = options;
-	const startLine = truncation.totalLines - truncation.outputLines + 1;
+	const startLine = truncation.totalLines - (truncation.outputLines ?? truncation.totalLines) + 1;
 	const endLine = truncation.totalLines;
 	const fullOutputPart = fullOutputPath ? `. Full output: ${fullOutputPath}` : "";
 
@@ -705,11 +675,9 @@ export function formatTailTruncationNotice(
 			const lastLine = lastNl === -1 ? originalContent : originalContent.substring(lastNl + 1);
 			lastLineSizePart = ` (line is ${formatBytes(Buffer.byteLength(lastLine, "utf-8"))})`;
 		}
-		notice = `[Showing last ${formatBytes(truncation.outputBytes)} of line ${endLine}${lastLineSizePart}${fullOutputPart}${suffix}]`;
-	} else if (truncation.truncatedBy === "lines") {
-		notice = `[Showing lines ${startLine}-${endLine} of ${truncation.totalLines}${fullOutputPart}${suffix}]`;
+		notice = `[Showing last ${formatBytes(truncation.outputBytes ?? truncation.totalBytes)} of line ${endLine}${lastLineSizePart}${fullOutputPart}${suffix}]`;
 	} else {
-		notice = `[Showing lines ${startLine}-${endLine} of ${truncation.totalLines} (${formatBytes(truncation.maxBytes)} limit)${fullOutputPart}${suffix}]`;
+		notice = `[Showing lines ${startLine}-${endLine} of ${truncation.totalLines}${fullOutputPart}${suffix}]`;
 	}
 
 	return `\n\n${notice}`;
@@ -727,13 +695,8 @@ export function formatHeadTruncationNotice(
 
 	const startLineDisplay = options.startLine ?? 1;
 	const totalFileLines = options.totalFileLines ?? truncation.totalLines;
-	const endLineDisplay = startLineDisplay + truncation.outputLines - 1;
+	const endLineDisplay = startLineDisplay + (truncation.outputLines ?? truncation.totalLines) - 1;
 	const nextOffset = endLineDisplay + 1;
-
-	const notice =
-		truncation.truncatedBy === "lines"
-			? `[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines}. Use offset=${nextOffset} to continue]`
-			: `[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines} (${formatBytes(truncation.maxBytes)} limit). Use offset=${nextOffset} to continue]`;
-
+	const notice = `[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines}. Use offset=${nextOffset} to continue]`;
 	return `\n\n${notice}`;
 }

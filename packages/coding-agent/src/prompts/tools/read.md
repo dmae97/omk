@@ -4,10 +4,10 @@ Reads files from local filesystem or internal URLs.
 - Reads up to {{DEFAULT_LIMIT}} lines default
 - Use `offset` and `limit` for large files; max {{DEFAULT_MAX_LINES}} lines per call
 {{#if IS_HASHLINE_MODE}}
-- Text output is CID prefixed: `LINE#ID:content`
+- Filesystem output is CID prefixed: `LINE#ID:content`
 {{else}}
 {{#if IS_LINE_NUMBER_MODE}}
-- Text output is line-number-prefixed
+- Filesystem output is line-number-prefixed
 {{/if}}
 {{/if}}
 - Supports images (PNG, JPG) and PDFs
