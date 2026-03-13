@@ -1370,9 +1370,13 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					await Bun.write(tempFile, resized.buffer);
 					details.screenshotPath = tempFile;
 					// Persist to user-defined location if configured.
-					// Note: screenshotDir containing '~' is NOT expanded — use absolute paths.
-					const screenshotDir = this.session.settings.get("browser.screenshotDir") as string | undefined;
-					const paramPath = params.path as string | undefined;
+					// Expand leading '~' to the home directory for both screenshotDir and params.path.
+					const expandHome = (p: string) => p.startsWith("~/") || p === "~" ? path.join(os.homedir(), p.slice(1)) : p;
+					const screenshotDir = (() => {
+						const v = this.session.settings.get("browser.screenshotDir") as string | undefined;
+						return v ? expandHome(v) : undefined;
+					})();
+					const paramPath = params.path ? expandHome(params.path as string) : undefined;
 					if (paramPath || screenshotDir) {
 						let dest: string;
 						if (paramPath) {
