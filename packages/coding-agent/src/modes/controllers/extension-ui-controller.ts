@@ -160,6 +160,12 @@ export class ExtensionUiController {
 					await options.setup(this.ctx.sessionManager);
 				}
 
+				// Reset and update status line
+				this.ctx.statusLine.invalidate();
+				this.ctx.statusLine.setSessionStartTime(Date.now());
+				this.ctx.updateEditorTopBorder();
+				this.ctx.ui.requestRender();
+
 				// Clear UI state
 				this.ctx.chatContainer.clear();
 				this.ctx.pendingMessagesContainer.clear();
