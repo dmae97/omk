@@ -28,44 +28,45 @@ These are consumed via `getEnvApiKey()` (`packages/ai/src/stream.ts`) unless not
 
 ### Core provider credentials
 
-| Variable | Used for | Required when | Notes / precedence |
-|---|---|---|---|
-| `ANTHROPIC_OAUTH_TOKEN` | Anthropic API auth | Using Anthropic with OAuth token auth | Takes precedence over `ANTHROPIC_API_KEY` for provider auth resolution |
-| `ANTHROPIC_API_KEY` | Anthropic API auth | Using Anthropic without OAuth token | Fallback after `ANTHROPIC_OAUTH_TOKEN` |
-| `ANTHROPIC_FOUNDRY_API_KEY` | Anthropic via Azure Foundry / enterprise gateway | `CLAUDE_CODE_USE_FOUNDRY` enabled | Takes precedence over `ANTHROPIC_OAUTH_TOKEN` and `ANTHROPIC_API_KEY` when Foundry mode is enabled |
-| `OPENAI_API_KEY` | OpenAI auth | Using OpenAI-family providers without explicit apiKey argument | Used by OpenAI Completions/Responses providers |
-| `GEMINI_API_KEY` | Google Gemini auth | Using `google` provider models | Primary key for Gemini provider mapping |
-| `GOOGLE_API_KEY` | Gemini image tool auth fallback | Using `gemini_image` tool without `GEMINI_API_KEY` | Used by coding-agent image tool fallback path |
-| `GROQ_API_KEY` | Groq auth | Using Groq models |  |
-| `CEREBRAS_API_KEY` | Cerebras auth | Using Cerebras models |  |
-| `TOGETHER_API_KEY` | Together auth | Using `together` provider |  |
-| `HUGGINGFACE_HUB_TOKEN` | Hugging Face auth | Using `huggingface` provider | Primary Hugging Face token env var |
-| `HF_TOKEN` | Hugging Face auth | Using `huggingface` provider | Fallback when `HUGGINGFACE_HUB_TOKEN` is unset |
-| `SYNTHETIC_API_KEY` | Synthetic auth | Using Synthetic models |  |
-| `NVIDIA_API_KEY` | NVIDIA auth | Using `nvidia` provider |  |
-| `NANO_GPT_API_KEY` | NanoGPT auth | Using `nanogpt` provider | |
-| `VENICE_API_KEY` | Venice auth | Using `venice` provider |  |
-| `LITELLM_API_KEY` | LiteLLM auth | Using `litellm` provider | OpenAI-compatible LiteLLM proxy key |
-| `LM_STUDIO_API_KEY` | LM Studio auth (optional) | Using `lm-studio` provider with authenticated hosts | Local LM Studio usually runs without auth; any non-empty token works when a key is required |
-| `OLLAMA_API_KEY` | Ollama auth (optional) | Using `ollama` provider with authenticated hosts | Local Ollama usually runs without auth; any non-empty token works when a key is required |
-| `XIAOMI_API_KEY` | Xiaomi MiMo auth | Using `xiaomi` provider |  |
-| `MOONSHOT_API_KEY` | Moonshot auth | Using `moonshot` provider |  |
-| `XAI_API_KEY` | xAI auth | Using xAI models |  |
-| `OPENROUTER_API_KEY` | OpenRouter auth | Using OpenRouter models | Also used by image tool when preferred/auto provider is OpenRouter |
-| `MISTRAL_API_KEY` | Mistral auth | Using Mistral models |  |
-| `ZAI_API_KEY` | z.ai auth | Using z.ai models | Also used by z.ai web search provider |
-| `MINIMAX_API_KEY` | MiniMax auth | Using `minimax` provider |  |
-| `MINIMAX_CODE_API_KEY` | MiniMax Code auth | Using `minimax-code` provider |  |
-| `MINIMAX_CODE_CN_API_KEY` | MiniMax Code CN auth | Using `minimax-code-cn` provider |  |
-| `OPENCODE_API_KEY` | OpenCode auth | Using OpenCode models |  |
-| `QIANFAN_API_KEY` | Qianfan auth | Using `qianfan` provider |  |
-| `QWEN_OAUTH_TOKEN` | Qwen Portal auth | Using `qwen-portal` with OAuth token | Takes precedence over `QWEN_PORTAL_API_KEY` |
-| `QWEN_PORTAL_API_KEY` | Qwen Portal auth | Using `qwen-portal` with API key | Fallback after `QWEN_OAUTH_TOKEN` |
-| `ZENMUX_API_KEY` | ZenMux auth | Using `zenmux` provider | Used for ZenMux OpenAI and Anthropic-compatible routes |
-| `VLLM_API_KEY` | vLLM auth/discovery opt-in | Using `vllm` provider (local OpenAI-compatible servers) | Any non-empty value works for no-auth local servers |
-| `CURSOR_ACCESS_TOKEN` | Cursor provider auth | Using Cursor provider |  |
-| `AI_GATEWAY_API_KEY` | Vercel AI Gateway auth | Using `vercel-ai-gateway` provider |  |
-| `CLOUDFLARE_AI_GATEWAY_API_KEY` | Cloudflare AI Gateway auth | Using `cloudflare-ai-gateway` provider | Base URL must be configured as `https://gateway.ai.cloudflare.com/v1/<account>/<gateway>/anthropic` |
+| Variable                        | Used for | Required when                                                 | Notes / precedence                                                                                  |
+|---------------------------------|---|---------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
+| `ANTHROPIC_OAUTH_TOKEN`         | Anthropic API auth | Using Anthropic with OAuth token auth                         | Takes precedence over `ANTHROPIC_API_KEY` for provider auth resolution                              |
+| `ANTHROPIC_API_KEY`             | Anthropic API auth | Using Anthropic without OAuth token                           | Fallback after `ANTHROPIC_OAUTH_TOKEN`                                                              |
+| `ANTHROPIC_FOUNDRY_API_KEY`     | Anthropic via Azure Foundry / enterprise gateway | `CLAUDE_CODE_USE_FOUNDRY` enabled                             | Takes precedence over `ANTHROPIC_OAUTH_TOKEN` and `ANTHROPIC_API_KEY` when Foundry mode is enabled  |
+| `OPENAI_API_KEY`                | OpenAI auth | Using OpenAI-family providers without explicit apiKey argument | Used by OpenAI Completions/Responses providers                                                      |
+| `GEMINI_API_KEY`                | Google Gemini auth | Using `google` provider models                                | Primary key for Gemini provider mapping                                                             |
+| `GOOGLE_API_KEY`                | Gemini image tool auth fallback | Using `gemini_image` tool without `GEMINI_API_KEY`            | Used by coding-agent image tool fallback path                                                       |
+| `GROQ_API_KEY`                  | Groq auth | Using Groq models                                             |                                                                                                     |
+| `CEREBRAS_API_KEY`              | Cerebras auth | Using Cerebras models                                         |                                                                                                     |
+| `TOGETHER_API_KEY`              | Together auth | Using `together` provider                                     |                                                                                                     |
+| `HUGGINGFACE_HUB_TOKEN`         | Hugging Face auth | Using `huggingface` provider                                  | Primary Hugging Face token env var                                                                  |
+| `HF_TOKEN`                      | Hugging Face auth | Using `huggingface` provider                                  | Fallback when `HUGGINGFACE_HUB_TOKEN` is unset                                                      |
+| `SYNTHETIC_API_KEY`             | Synthetic auth | Using Synthetic models                                        |                                                                                                     |
+| `NVIDIA_API_KEY`                | NVIDIA auth | Using `nvidia` provider                                       |                                                                                                     |
+| `NANO_GPT_API_KEY`              | NanoGPT auth | Using `nanogpt` provider                                      |                                                                                                     |
+| `VENICE_API_KEY`                | Venice auth | Using `venice` provider                                       |                                                                                                     |
+| `LITELLM_API_KEY`               | LiteLLM auth | Using `litellm` provider                                      | OpenAI-compatible LiteLLM proxy key                                                                 |
+| `LM_STUDIO_API_KEY`             | LM Studio auth (optional) | Using `lm-studio` provider with authenticated hosts           | Local LM Studio usually runs without auth; any non-empty token works when a key is required         |
+| `OLLAMA_API_KEY`                | Ollama auth (optional) | Using `ollama` provider with authenticated hosts              | Local Ollama usually runs without auth; any non-empty token works when a key is required            |
+| `LLAMA_CPP_API_KEY`             | Ollama auth (optional) | Using `llama-server` with `--api-key` parameter              | Local llama.cpp usually runs without auth; any non-empty token works when a key is configured       |
+| `XIAOMI_API_KEY`                | Xiaomi MiMo auth | Using `xiaomi` provider                                       |                                                                                                     |
+| `MOONSHOT_API_KEY`              | Moonshot auth | Using `moonshot` provider                                     |                                                                                                     |
+| `XAI_API_KEY`                   | xAI auth | Using xAI models                                              |                                                                                                     |
+| `OPENROUTER_API_KEY`            | OpenRouter auth | Using OpenRouter models                                       | Also used by image tool when preferred/auto provider is OpenRouter                                  |
+| `MISTRAL_API_KEY`               | Mistral auth | Using Mistral models                                          |                                                                                                     |
+| `ZAI_API_KEY`                   | z.ai auth | Using z.ai models                                             | Also used by z.ai web search provider                                                               |
+| `MINIMAX_API_KEY`               | MiniMax auth | Using `minimax` provider                                      |                                                                                                     |
+| `MINIMAX_CODE_API_KEY`          | MiniMax Code auth | Using `minimax-code` provider                                 |                                                                                                     |
+| `MINIMAX_CODE_CN_API_KEY`       | MiniMax Code CN auth | Using `minimax-code-cn` provider                              |                                                                                                     |
+| `OPENCODE_API_KEY`              | OpenCode auth | Using OpenCode models                                         |                                                                                                     |
+| `QIANFAN_API_KEY`               | Qianfan auth | Using `qianfan` provider                                      |                                                                                                     |
+| `QWEN_OAUTH_TOKEN`              | Qwen Portal auth | Using `qwen-portal` with OAuth token                          | Takes precedence over `QWEN_PORTAL_API_KEY`                                                         |
+| `QWEN_PORTAL_API_KEY`           | Qwen Portal auth | Using `qwen-portal` with API key                              | Fallback after `QWEN_OAUTH_TOKEN`                                                                   |
+| `ZENMUX_API_KEY`                | ZenMux auth | Using `zenmux` provider                                       | Used for ZenMux OpenAI and Anthropic-compatible routes                                              |
+| `VLLM_API_KEY`                  | vLLM auth/discovery opt-in | Using `vllm` provider (local OpenAI-compatible servers)       | Any non-empty value works for no-auth local servers                                                 |
+| `CURSOR_ACCESS_TOKEN`           | Cursor provider auth | Using Cursor provider                                         |                                                                                                     |
+| `AI_GATEWAY_API_KEY`            | Vercel AI Gateway auth | Using `vercel-ai-gateway` provider                            |                                                                                                     |
+| `CLOUDFLARE_AI_GATEWAY_API_KEY` | Cloudflare AI Gateway auth | Using `cloudflare-ai-gateway` provider                        | Base URL must be configured as `https://gateway.ai.cloudflare.com/v1/<account>/<gateway>/anthropic` |
 
 ### GitHub/Copilot token chains
 
@@ -241,25 +242,26 @@ Extra conditional behavior:
 
 ## 5) Agent/runtime behavior toggles
 
-| Variable | Default / behavior |
-|---|---|
-| `PI_SMOL_MODEL` | Ephemeral model-role override for `smol` (CLI `--smol` takes precedence) |
-| `PI_SLOW_MODEL` | Ephemeral model-role override for `slow` (CLI `--slow` takes precedence) |
-| `PI_PLAN_MODEL` | Ephemeral model-role override for `plan` (CLI `--plan` takes precedence) |
-| `PI_NO_TITLE` | If set (any non-empty value), disables auto session title generation on first user message |
-| `NULL_PROMPT` | If `true`, system prompt builder returns empty string |
-| `PI_BLOCKED_AGENT` | Blocks a specific subagent type in task tool |
-| `PI_SUBPROCESS_CMD` | Overrides subagent spawn command (`omp` / `omp.cmd` resolution bypass) |
-| `PI_TASK_MAX_OUTPUT_BYTES` | Max captured output bytes per subagent (default `500000`) |
-| `PI_TASK_MAX_OUTPUT_LINES` | Max captured output lines per subagent (default `5000`) |
-| `PI_TIMING` | If `1`, enables startup/tool timing instrumentation logs |
-| `PI_DEBUG_STARTUP` | Enables startup stage debug prints to stderr in multiple startup paths |
-| `PI_PACKAGE_DIR` | Overrides package asset base dir resolution (docs/examples/changelog path lookup) |
-| `PI_DISABLE_LSPMUX` | If `1`, disables lspmux detection/integration and forces direct LSP server spawning |
-| `LM_STUDIO_BASE_URL` | Default implicit LM Studio discovery base URL override (`http://127.0.0.1:1234/v1` if unset) |
-| `OLLAMA_BASE_URL` | Default implicit Ollama discovery base URL override (`http://127.0.0.1:11434` if unset) |
-| `PI_EDIT_VARIANT` | If `hashline`, forces hashline read/grep display mode when edit tool available |
-| `PI_NO_PTY` | If `1`, disables interactive PTY path for bash tool |
+| Variable                   | Default / behavior                                                                           |
+|----------------------------|----------------------------------------------------------------------------------------------|
+| `PI_SMOL_MODEL`            | Ephemeral model-role override for `smol` (CLI `--smol` takes precedence)                     |
+| `PI_SLOW_MODEL`            | Ephemeral model-role override for `slow` (CLI `--slow` takes precedence)                     |
+| `PI_PLAN_MODEL`            | Ephemeral model-role override for `plan` (CLI `--plan` takes precedence)                     |
+| `PI_NO_TITLE`              | If set (any non-empty value), disables auto session title generation on first user message   |
+| `NULL_PROMPT`              | If `true`, system prompt builder returns empty string                                        |
+| `PI_BLOCKED_AGENT`         | Blocks a specific subagent type in task tool                                                 |
+| `PI_SUBPROCESS_CMD`        | Overrides subagent spawn command (`omp` / `omp.cmd` resolution bypass)                       |
+| `PI_TASK_MAX_OUTPUT_BYTES` | Max captured output bytes per subagent (default `500000`)                                    |
+| `PI_TASK_MAX_OUTPUT_LINES` | Max captured output lines per subagent (default `5000`)                                      |
+| `PI_TIMING`                | If `1`, enables startup/tool timing instrumentation logs                                     |
+| `PI_DEBUG_STARTUP`         | Enables startup stage debug prints to stderr in multiple startup paths                       |
+| `PI_PACKAGE_DIR`           | Overrides package asset base dir resolution (docs/examples/changelog path lookup)            |
+| `PI_DISABLE_LSPMUX`        | If `1`, disables lspmux detection/integration and forces direct LSP server spawning          |
+| `LM_STUDIO_BASE_URL`       | Default implicit LM Studio discovery base URL override (`http://127.0.0.1:1234/v1` if unset) |
+| `OLLAMA_BASE_URL`          | Default implicit Ollama discovery base URL override (`http://127.0.0.1:11434` if unset)      |
+| `LLAMA_CPP_BASE_URL`       | Default implicit Llama.cpp discovery base URL override (`http://127.0.0.1:8080` if unset)    |
+| `PI_EDIT_VARIANT`          | If `hashline`, forces hashline read/grep display mode when edit tool available               |
+| `PI_NO_PTY`                | If `1`, disables interactive PTY path for bash tool                                          |
 
 `PI_NO_PTY` is also set internally when CLI `--no-pty` is used.
 

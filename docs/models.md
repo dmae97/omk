@@ -151,6 +151,18 @@ If `ollama` is not explicitly configured, registry adds an implicit discoverable
 
 Runtime discovery calls `GET /api/tags` on Ollama and synthesizes model entries with local defaults.
 
+### Implicit llama.cpp discovery
+
+If `llama.cpp` is not explicitly configured, registry adds an implicit discoverable provider:
+Note: it's using the newer antropic messages api instead of the openai-competions.
+
+- provider: `llama.cpp`
+- api: `openai-responses`
+- base URL: `LLAMA_CPP_BASE_URL` or `http://127.0.0.1:8080`
+- auth mode: keyless (`auth: none` behavior)
+
+Runtime discovery calls `GET models` on llama.cpp and synthesizes model entries with local defaults.
+
 ### Implicit LM Studio discovery
 
 If `lm-studio` is not explicitly configured, registry adds an implicit discoverable provider:
@@ -174,6 +186,13 @@ providers:
     auth: none
     discovery:
       type: ollama
+      
+  llama.cpp:
+    baseUrl: http://127.0.0.1:8080
+    api: openai-responses
+    auth: none
+    discovery:
+      type: llama.cpp
 ```
 
 ### Extension provider registration

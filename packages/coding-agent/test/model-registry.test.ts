@@ -905,5 +905,63 @@ describe("ModelRegistry", () => {
 			expect(state?.status).toBe("unauthenticated");
 			expect(state?.models).toContain("local-coder");
 		});
+		test("llama.cpp discovery honors configured API key", async () => {
+			authStorage.setRuntimeApiKey("llama.cpp", "test-llama-key");
+			using _hook = hookFetch((input, init) => {
+				const url = String(input);
+				if (url === "http://127.0.0.1:8080/models") {
+					const headers = init?.headers as Headers | Record<string, string> | undefined;
+					let authHeader: string | null = null;
+					if (headers instanceof Headers) {
+						authHeader = headers.get("Authorization");
+					} else if (typeof headers === "object") {
+						authHeader = headers.Authorization;
+					}
+					expect(String(authHeader ?? "")).toBe("Bearer test-llama-key");
+					return new Response(JSON.stringify({ data: [{ id: "llama-3.2:3b" }, { id: "mistral:7b" }] }), {
+						status: 200,
+						headers: { "Content-Type": "application/json" },
+					});
+				}
+				throw new Error(`Unexpected URL: ${url}`);
+			});
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			await registry.refresh();
+			const llamaModels = getModelsForProvider(registry, "llama.cpp");
+			expect(llamaModels.some(m => m.id === "llama-3.2:3b")).toBe(true);
+			const apiKey = await registry.getApiKey(llamaModels[0]);
+			expect(apiKey).toBe("test-llama-key");
+			expect(apiKey).not.toBe(kNoAuth);
+		});
+		test("llama.cpp discovery without API key is treated as keyless", async () => {
+			using _hook = hookFetch((input, init) => {
+				const url = String(input);
+				if (url === "http://127.0.0.1:8080/models") {
+					const headers = init?.headers as Headers | Record<string, string> | undefined;
+					let authHeader: string | null = null;
+					if (headers instanceof Headers) {
+						authHeader = headers.get("Authorization");
+					} else if (typeof headers === "object") {
+						authHeader = headers.Authorization;
+					}
+					// When no API key, headers should be empty object or undefined
+					expect(authHeader).toBeUndefined();
+					return new Response(JSON.stringify({ data: [{ id: "llama-3.2:3b" }] }), {
+						status: 200,
+						headers: { "Content-Type": "application/json" },
+					});
+				}
+				throw new Error(`Unexpected URL: ${url}`);
+			});
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			await registry.refresh();
+			const state = registry.getProviderDiscoveryState("llama.cpp");
+			if (state?.status !== "ok") {
+				throw new Error(`Discovery failed with status ${state?.status}: ${state?.error}`);
+			}
+			const llamaModels = getModelsForProvider(registry, "llama.cpp");
+			const apiKey = await registry.getApiKey(llamaModels[0]);
+			expect(apiKey).toBe(kNoAuth);
+		});
 	});
 });

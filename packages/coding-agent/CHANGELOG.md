@@ -4,6 +4,7 @@
 
 ### Added
 
+- Added `llama.cpp` as local provider
 - Added `code_search` tool supporting both Exa and grep.app providers for code snippet and documentation search
 - Added `providers.codeSearch` setting to configure code search provider (exa or grep)
 - Added grep.app integration for public code search with result ranking by context relevance
