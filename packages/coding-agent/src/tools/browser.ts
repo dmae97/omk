@@ -1,5 +1,6 @@
 import * as os from "node:os";
 import * as path from "node:path";
+import * as fs from "node:fs/promises";
 import { Readability } from "@mozilla/readability";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { StringEnum } from "@oh-my-pi/pi-ai";
@@ -1368,6 +1369,24 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					const tempFile = path.join(os.tmpdir(), `omp-sshots-${Snowflake.next()}.png`);
 					await Bun.write(tempFile, resized.buffer);
 					details.screenshotPath = tempFile;
+					// Persist to user-defined location if configured.
+					// Note: screenshotDir containing '~' is NOT expanded — use absolute paths.
+					const screenshotDir = this.session.settings.get("browser.screenshotDir") as string | undefined;
+					const paramPath = params.path as string | undefined;
+					if (paramPath || screenshotDir) {
+						let dest: string;
+						if (paramPath) {
+							dest = path.isAbsolute(paramPath)
+								? paramPath
+								: path.join(screenshotDir ?? process.cwd(), paramPath);
+						} else {
+							const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -1);
+							dest = path.join(screenshotDir!, `screenshot-${ts}.png`);
+						}
+						await fs.mkdir(path.dirname(dest), { recursive: true });
+						await Bun.write(dest, buffer);
+						details.screenshotPath = dest;
+					}
 					details.mimeType = resized.mimeType;
 					details.bytes = resized.buffer.length;
 
