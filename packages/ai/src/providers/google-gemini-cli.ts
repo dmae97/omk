@@ -63,7 +63,17 @@ const ANTIGRAVITY_DAILY_ENDPOINT = "https://daily-cloudcode-pa.googleapis.com";
 const ANTIGRAVITY_SANDBOX_ENDPOINT = "https://daily-cloudcode-pa.sandbox.googleapis.com";
 const ANTIGRAVITY_ENDPOINT_FALLBACKS = [ANTIGRAVITY_DAILY_ENDPOINT, ANTIGRAVITY_SANDBOX_ENDPOINT] as const;
 
-const GEMINI_CLI_USER_AGENT = process.env.PI_AI_GEMINI_CLI_USER_AGENT || "google-api-nodejs-client/9.15.1";
+/**
+ * Build a User-Agent string that identifies as Gemini CLI to unlock higher rate limits.
+ * Uses the same format as the official Gemini CLI:
+ * GeminiCLI/VERSION/MODEL (PLATFORM; ARCH) google-api-nodejs-client/10.5.0
+ */
+export function getGeminiCliUserAgent(modelId = "gemini-3.1-pro-preview"): string {
+	const version = process.env.PI_AI_GEMINI_CLI_VERSION || "0.34.0";
+	const platform = process.platform === "win32" ? "win32" : process.platform;
+	const arch = process.arch === "x64" ? "x64" : process.arch;
+	return `GeminiCLI/${version}/${modelId} (${platform}; ${arch}) google-api-nodejs-client/10.5.0`;
+}
 
 const ANTIGRAVITY_USER_AGENT = (() => {
 	const DEFAULT_ANTIGRAVITY_VERSION = "1.104.0";
@@ -77,11 +87,11 @@ const ANTIGRAVITY_USER_AGENT = (() => {
 	return `antigravity/${version} ${os}/${arch}`;
 })();
 
-const GEMINI_CLI_HEADERS = Object.freeze({
-	"User-Agent": GEMINI_CLI_USER_AGENT,
-	"X-Goog-Api-Client": "gl-node/22.17.0",
-	"Client-Metadata": "ideType=IDE_UNSPECIFIED,platform=PLATFORM_UNSPECIFIED,pluginType=GEMINI",
-});
+const GEMINI_CLI_HEADERS = (modelId?: string) =>
+	Object.freeze({
+		"User-Agent": getGeminiCliUserAgent(modelId),
+		"Client-Metadata": "ideType=IDE_UNSPECIFIED,platform=PLATFORM_UNSPECIFIED,pluginType=GEMINI",
+	});
 
 // Antigravity auth headers (project discovery/onboarding).
 // Verified from binary: kae.w() and kae.y() send only Content-Type + User-Agent.
@@ -98,11 +108,11 @@ const ANTIGRAVITY_STREAMING_HEADERS = Object.freeze({
 });
 
 // Headers for Gemini CLI (prod endpoint)
-export function getGeminiCliHeaders() {
-	return GEMINI_CLI_HEADERS;
+export function getGeminiCliHeaders(modelId?: string) {
+	return GEMINI_CLI_HEADERS(modelId);
 }
-export function getGeminiCliUserAgent() {
-	return GEMINI_CLI_USER_AGENT;
+export function getGeminiCliUserAgentValue(modelId?: string) {
+	return getGeminiCliUserAgent(modelId);
 }
 
 // Headers for Antigravity (sandbox endpoint)
@@ -491,7 +501,7 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 			if (replacementPayload !== undefined) {
 				requestBody = replacementPayload as typeof requestBody;
 			}
-			const headers = isAntigravity ? getAntigravityHeaders() : GEMINI_CLI_HEADERS;
+			const headers = isAntigravity ? getAntigravityHeaders() : getGeminiCliHeaders(model.id);
 
 			const requestHeaders = {
 				Authorization: `Bearer ${accessToken}`,
