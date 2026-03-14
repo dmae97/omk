@@ -106,7 +106,7 @@ class DirResolver {
 		let xdgData: string | undefined;
 		let xdgState: string | undefined;
 		let xdgCache: string | undefined;
-		if (process.platform === "linux" && isDefault) {
+		if ((process.platform === "linux" || process.platform === "darwin") && isDefault) {
 			const resolveIf = (envVar: string) => {
 				const value = process.env[envVar];
 				if (value) {

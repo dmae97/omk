@@ -5,7 +5,7 @@ import * as path from "node:path";
 const APP_NAME = "omp";
 
 export async function initXdg(): Promise<void> {
-	if (process.platform !== "linux") {
+	if (process.platform !== "linux" && process.platform !== "darwin") {
 		console.error("XDG directory setup is only supported on Linux.");
 		process.exit(1);
 	}
