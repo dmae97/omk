@@ -16,7 +16,8 @@ import {
 import { Snowflake } from "@oh-my-pi/pi-utils";
 
 const GLOBAL_KIND = "memory_consolidate_global";
-const GLOBAL_KEY = "global";
+const PROJECT_CWD = "/repo";
+const GLOBAL_KEY = `global:${PROJECT_CWD}`;
 
 describe("memories/storage", () => {
 	let testDir: string;
@@ -73,12 +74,13 @@ describe("memories/storage", () => {
 	test("markGlobalPhase2FailedUnowned recovers lost ownership", () => {
 		const db = openMemoryDb(dbPath);
 		const nowSec = 1_800_000_000;
-		enqueueGlobalWatermark(db, 100, { forceDirtyWhenNotAdvanced: true });
+		enqueueGlobalWatermark(db, 100, PROJECT_CWD, { forceDirtyWhenNotAdvanced: true });
 
 		const claim = tryClaimGlobalPhase2Job(db, {
 			workerId: "test-worker",
 			leaseSeconds: 60,
 			nowSec,
+			cwd: PROJECT_CWD,
 		});
 		expect(claim.kind).toBe("claimed");
 		if (claim.kind !== "claimed") {
@@ -97,6 +99,7 @@ describe("memories/storage", () => {
 			retryDelaySeconds: 120,
 			reason: "strict-fail",
 			nowSec,
+			cwd: PROJECT_CWD,
 		});
 		expect(strict).toBe(false);
 
@@ -104,6 +107,7 @@ describe("memories/storage", () => {
 			retryDelaySeconds: 120,
 			reason: "fallback-fail",
 			nowSec,
+			cwd: PROJECT_CWD,
 		});
 		expect(fallback).toBe(true);
 
@@ -117,12 +121,12 @@ describe("memories/storage", () => {
 
 	test("enqueueGlobalWatermark force-dirties when watermark does not advance", () => {
 		const db = openMemoryDb(dbPath);
-		enqueueGlobalWatermark(db, 100, { forceDirtyWhenNotAdvanced: true });
+		enqueueGlobalWatermark(db, 100, PROJECT_CWD, { forceDirtyWhenNotAdvanced: true });
 		db.prepare(
 			"UPDATE jobs SET status = 'done', input_watermark = 100, last_success_watermark = 100, retry_remaining = 0, retry_at = 999 WHERE kind = ? AND job_key = ?",
 		).run(GLOBAL_KIND, GLOBAL_KEY);
 
-		enqueueGlobalWatermark(db, 80, { forceDirtyWhenNotAdvanced: true });
+		enqueueGlobalWatermark(db, 80, PROJECT_CWD, { forceDirtyWhenNotAdvanced: true });
 		const row = db
 			.prepare(
 				"SELECT input_watermark, last_success_watermark, retry_remaining, retry_at FROM jobs WHERE kind = ? AND job_key = ?",
@@ -153,7 +157,7 @@ describe("memories/storage", () => {
 		db.prepare(
 			"INSERT INTO stage1_outputs (thread_id, source_updated_at, raw_memory, rollout_summary, rollout_slug, generated_at) VALUES (?, ?, ?, ?, ?, ?)",
 		).run("thread-a", 100, "raw", "summary", null, 100);
-		enqueueGlobalWatermark(db, 100, { forceDirtyWhenNotAdvanced: true });
+		enqueueGlobalWatermark(db, 100, PROJECT_CWD, { forceDirtyWhenNotAdvanced: true });
 		db.prepare(
 			"INSERT INTO jobs (kind, job_key, status, retry_remaining, input_watermark, last_success_watermark) VALUES (?, ?, ?, ?, ?, ?)",
 		).run("some_other_job", "x", "pending", 1, 0, 0);
