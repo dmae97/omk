@@ -23,7 +23,7 @@ import {
 	toError,
 } from "@oh-my-pi/pi-utils";
 import { ArtifactManager } from "./artifacts";
-import { type BlobPutResult, BlobStore, externalizeImageData, isBlobRef, resolveImageData } from "./blob-store";
+import { type BlobPutResult, BlobStore, externalizeImageData, externalizeImageDataUrl, isBlobRef, isImageDataUrl, resolveImageData, resolveImageDataUrl } from "./blob-store";
 import {
 	type BashExecutionMessage,
 	type CustomMessage,
@@ -691,35 +691,54 @@ export async function loadEntriesFromFile(
 }
 
 /**
- * Resolve blob references in loaded entries, replacing `blob:sha256:<hash>` data fields
- * with the actual base64 content from the blob store. Mutates entries in place.
+ * Resolve blob references in loaded entries, restoring both session image blocks and persisted
+ * provider image URLs back to the inline data expected by downstream transports. Mutates entries in place.
  */
+function hasImageUrl(value: unknown): value is { image_url: string } {
+	return typeof value === "object" && value !== null && "image_url" in value && typeof value.image_url === "string";
+}
+
+async function resolvePersistedImageUrlRefs(value: unknown, blobStore: BlobStore): Promise<void> {
+	if (Array.isArray(value)) {
+		await Promise.all(value.map(item => resolvePersistedImageUrlRefs(item, blobStore)));
+		return;
+	}
+
+	if (typeof value !== "object" || value === null) return;
+
+	if (hasImageUrl(value) && isBlobRef(value.image_url)) {
+		value.image_url = await resolveImageDataUrl(blobStore, value.image_url);
+	}
+
+	await Promise.all(Object.values(value).map(item => resolvePersistedImageUrlRefs(item, blobStore)));
+}
+
 async function resolveBlobRefsInEntries(entries: FileEntry[], blobStore: BlobStore): Promise<void> {
 	const promises: Promise<void>[] = [];
 
 	for (const entry of entries) {
 		if (entry.type === "session") continue;
 
-		// Resolve image blocks in message content arrays
 		let contentArray: unknown[] | undefined;
-		if (entry.type === "message") {
-			const content = (entry.message as { content?: unknown }).content;
-			if (Array.isArray(content)) contentArray = content;
+		if (entry.type === "message" && "content" in entry.message && Array.isArray(entry.message.content)) {
+			contentArray = entry.message.content;
 		} else if (entry.type === "custom_message" && Array.isArray(entry.content)) {
 			contentArray = entry.content;
 		}
 
-		if (!contentArray) continue;
-
-		for (const block of contentArray) {
-			if (isImageBlock(block) && isBlobRef(block.data)) {
-				promises.push(
-					resolveImageData(blobStore, block.data).then(resolved => {
-						(block as { data: string }).data = resolved;
-					}),
-				);
+		if (contentArray) {
+			for (const block of contentArray) {
+				if (isImageBlock(block) && isBlobRef(block.data)) {
+					promises.push(
+						resolveImageData(blobStore, block.data).then(resolved => {
+							block.data = resolved;
+						}),
+					);
+				}
 			}
 		}
+
+		promises.push(resolvePersistedImageUrlRefs(entry, blobStore));
 	}
 
 	await Promise.all(promises);
@@ -891,19 +910,34 @@ function isImageBlock(value: unknown): value is { type: "image"; data: string; m
 	);
 }
 
-async function truncateForPersistence<T>(obj: T, blobStore: BlobStore, key?: string): Promise<T> {
+async function truncateForPersistence(obj: FileEntry, blobStore: BlobStore, key?: string): Promise<FileEntry>;
+async function truncateForPersistence(obj: string, blobStore: BlobStore, key?: string): Promise<string>;
+async function truncateForPersistence(obj: unknown[], blobStore: BlobStore, key?: string): Promise<unknown[]>;
+async function truncateForPersistence(obj: object, blobStore: BlobStore, key?: string): Promise<object>;
+async function truncateForPersistence(
+	obj: null | undefined,
+	blobStore: BlobStore,
+	key?: string,
+): Promise<null | undefined>;
+async function truncateForPersistence(obj: unknown, blobStore: BlobStore, key?: string): Promise<unknown> {
 	if (obj === null || obj === undefined) return obj;
 
 	if (typeof obj === "string") {
+		if (key === "image_url" && isImageDataUrl(obj)) {
+			return externalizeImageDataUrl(blobStore, obj);
+		}
+
 		if (obj.length > MAX_PERSIST_CHARS) {
 			// Cryptographic signatures must be preserved exactly or cleared entirely — never truncated.
 			// Truncation would produce an invalid signature that the API rejects.
 			if (key === "thinkingSignature" || key === "thoughtSignature" || key === "textSignature") {
-				return "" as T;
+				return "";
 			}
+
 			const limit = Math.max(0, MAX_PERSIST_CHARS - TRUNCATION_NOTICE.length);
-			return `${truncateString(obj, limit)}${TRUNCATION_NOTICE}` as T;
+			return `${truncateString(obj, limit)}${TRUNCATION_NOTICE}`;
 		}
+
 		return obj;
 	}
 
@@ -919,34 +953,49 @@ async function truncateForPersistence<T>(obj: T, blobStore: BlobStore, key?: str
 						return { ...item, data: blobRef };
 					}
 				}
+
 				const newItem = await truncateForPersistence(item, blobStore, key);
 				if (newItem !== item) changed = true;
 				return newItem;
 			}),
 		);
-		return changed ? (result as T) : obj;
+		return changed ? result : obj;
 	}
 
 	if (typeof obj === "object") {
 		let changed = false;
-		const result: Record<string, unknown> = {};
-		for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
-			// Strip transient/redundant properties that shouldn't be persisted
-			// - partialJson: streaming accumulator for tool call JSON parsing
-			// - jsonlEvents: raw subprocess streaming events (already saved to artifact files)
-			if (k === "partialJson" || k === "jsonlEvents") {
-				changed = true;
-				continue;
-			}
-			const newV = await truncateForPersistence(v, blobStore, k);
-			result[k] = newV;
-			if (newV !== v) changed = true;
+		const entries: Array<readonly [string, unknown]> = await Promise.all(
+			Object.entries(obj).flatMap(([childKey, value]) => {
+				// Strip transient/redundant properties that shouldn't be persisted.
+				// - partialJson: streaming accumulator for tool call JSON parsing
+				// - jsonlEvents: raw subprocess streaming events (already saved to artifact files)
+				if (childKey === "partialJson" || childKey === "jsonlEvents") {
+					changed = true;
+					return [];
+				}
+
+				return [
+					(async () => {
+						const newValue = await truncateForPersistence(value, blobStore, childKey);
+						if (newValue !== value) changed = true;
+						return [childKey, newValue] as const;
+					})(),
+				];
+			}),
+		);
+
+		if (!changed) return obj;
+
+		const contentEntry = entries.find(([childKey]) => childKey === "content");
+		const lineCountEntry = entries.find(([childKey]) => childKey === "lineCount");
+		if (contentEntry && typeof contentEntry[1] === "string" && lineCountEntry && typeof lineCountEntry[1] === "number") {
+			const content = contentEntry[1];
+			const updatedEntries = entries.map(([childKey, value]) =>
+				childKey === "lineCount" ? ([childKey, content.split("\n").length] as const) : ([childKey, value] as const),
+			);
+			return Object.fromEntries(updatedEntries);
 		}
-		// Update lineCount if content was truncated (for FileMentionFile)
-		if (changed && "lineCount" in result && "content" in result && typeof result.content === "string") {
-			result.lineCount = result.content.split("\n").length;
-		}
-		return changed ? (result as T) : obj;
+		return Object.fromEntries(entries);
 	}
 
 	return obj;

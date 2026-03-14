@@ -74,6 +74,21 @@ export function parseBlobRef(data: string): string | null {
 	return data.slice(BLOB_PREFIX.length);
 }
 
+/** Identify provider transport image data URLs so persistence can externalize and restore them losslessly. */
+export function isImageDataUrl(data: string): boolean {
+	return data.startsWith("data:image/") && data.includes(";base64,");
+}
+
+/**
+ * Externalize a provider image data URL to the blob store, returning a blob reference.
+ * The full data URL string is preserved so transport-native history can be reconstructed on resume.
+ */
+export async function externalizeImageDataUrl(blobStore: BlobStore, dataUrl: string): Promise<string> {
+	if (isBlobRef(dataUrl)) return dataUrl;
+	const { ref } = await blobStore.put(Buffer.from(dataUrl, "utf8"));
+	return ref;
+}
+
 /**
  * Externalize an image's base64 data to the blob store, returning a blob reference.
  * If the data is already a blob reference, returns it unchanged.
@@ -83,6 +98,23 @@ export async function externalizeImageData(blobStore: BlobStore, base64Data: str
 	const buffer = Buffer.from(base64Data, "base64");
 	const { ref } = await blobStore.put(buffer);
 	return ref;
+}
+
+/**
+ * Resolve an externalized provider image data URL back to its original string.
+ * If the data is not a blob reference, returns it unchanged.
+ * If the blob is missing, logs a warning and returns the reference as-is.
+ */
+export async function resolveImageDataUrl(blobStore: BlobStore, data: string): Promise<string> {
+	const hash = parseBlobRef(data);
+	if (!hash) return data;
+
+	const buffer = await blobStore.get(hash);
+	if (!buffer) {
+		logger.warn("Blob not found for persisted image data URL", { hash });
+		return data;
+	}
+	return buffer.toString("utf8");
 }
 
 /**
