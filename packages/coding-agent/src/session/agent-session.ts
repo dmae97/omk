@@ -593,7 +593,7 @@ export class AgentSession {
 
 					this.#addPendingTtsrInjections(matches);
 
-					if (this.#shouldInterruptForTtsrMatch(matchContext)) {
+					if (this.#shouldInterruptForTtsrMatch(matches, matchContext)) {
 						// Abort the stream immediately — do not gate on extension callbacks
 						this.#ttsrAbortPending = true;
 						this.#ensureTtsrResumePromise();
@@ -1027,18 +1027,17 @@ export class AgentSession {
 		return -1;
 	}
 
-	#shouldInterruptForTtsrMatch(matchContext: TtsrMatchContext): boolean {
-		const mode = this.#ttsrManager?.getSettings().interruptMode ?? "always";
-		if (mode === "never") {
-			return false;
+	#shouldInterruptForTtsrMatch(matches: Rule[], matchContext: TtsrMatchContext): boolean {
+		const globalMode = this.#ttsrManager?.getSettings().interruptMode ?? "always";
+		for (const rule of matches) {
+			const mode = rule.interruptMode ?? globalMode;
+			if (mode === "never") continue;
+			if (mode === "prose-only" && (matchContext.source === "text" || matchContext.source === "thinking"))
+				return true;
+			if (mode === "tool-only" && matchContext.source === "tool") return true;
+			if (mode === "always") return true;
 		}
-		if (mode === "prose-only") {
-			return matchContext.source === "text" || matchContext.source === "thinking";
-		}
-		if (mode === "tool-only") {
-			return matchContext.source === "tool";
-		}
-		return true;
+		return false;
 	}
 
 	#queueDeferredTtsrInjectionIfNeeded(assistantMsg: AssistantMessage): void {

@@ -1,9 +1,9 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added per-rule TTSR interrupt mode override via `interruptMode` field in rule frontmatter to allow fine-grained control over when TTSR interrupts stream processing
 - Added `task` model role to allow configuring a dedicated model for subtask execution via `modelRoles.task` setting
 - Added `moveCursorToMessageEnd` and `moveCursorToMessageStart` prompt actions to navigate to the beginning and end of the entire message
 - Added support for provider-level `compat` configuration to apply OpenAI compatibility settings across all models from a provider
@@ -14,6 +14,7 @@
 
 ### Changed
 
+- Changed TTSR interrupt logic to respect per-rule `interruptMode` settings, falling back to global `ttsr.interruptMode` when rule-level override is not specified
 - Reorganized settings tabs from 12 tabs (display, agent, input, tools, config, services, bash, lsp, ttsr, status) to 8 focused tabs (appearance, model, interaction, context, editing, tools, tasks, providers) for improved discoverability
 - Consolidated status line settings into the Appearance tab instead of a separate Status tab
 - Reorganized sampling parameters (temperature, topP, topK, minP, presencePenalty, repetitionPenalty) into the Model tab

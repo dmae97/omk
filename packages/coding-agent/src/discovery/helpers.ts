@@ -163,6 +163,11 @@ export function buildRuleFromMarkdown(
 	}
 
 	const resolvedName = options?.ruleName ?? name.replace(options?.stripNamePattern ?? /\.(md|mdc)$/, "");
+	const rawMode = frontmatter.interruptMode;
+	const interruptMode: Rule["interruptMode"] =
+		rawMode === "never" || rawMode === "prose-only" || rawMode === "tool-only" || rawMode === "always"
+			? rawMode
+			: undefined;
 	return {
 		name: resolvedName,
 		path: filePath,
@@ -172,6 +177,7 @@ export function buildRuleFromMarkdown(
 		description: typeof frontmatter.description === "string" ? frontmatter.description : undefined,
 		condition,
 		scope,
+		interruptMode,
 		_source: source,
 	};
 }
