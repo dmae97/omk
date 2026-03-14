@@ -38,7 +38,7 @@ describe.skipIf(!HAS_ANTIGRAVITY_AUTH)("Compaction with thinking models (Antigra
 
 	afterEach(async () => {
 		if (session) {
-			session.dispose();
+			await session.dispose();
 		}
 		if (tempDir && fs.existsSync(tempDir)) {
 			fs.rmSync(tempDir, { recursive: true });
@@ -92,7 +92,7 @@ describe.skipIf(!HAS_ANTIGRAVITY_AUTH)("Compaction with thinking models (Antigra
 	}
 
 	it("should compact successfully with claude-opus-4-5-thinking and thinking level high", async () => {
-		createSession("claude-opus-4-5-thinking", Effort.High);
+		await createSession("claude-opus-4-5-thinking", Effort.High);
 
 		// Send a simple prompt
 		await session.prompt("Write down the first 10 prime numbers.");
@@ -119,7 +119,7 @@ describe.skipIf(!HAS_ANTIGRAVITY_AUTH)("Compaction with thinking models (Antigra
 	}, 180000);
 
 	it("should compact successfully with claude-sonnet-4-5 (non-thinking) for comparison", async () => {
-		createSession("claude-sonnet-4-5");
+		await createSession("claude-sonnet-4-5");
 
 		await session.prompt("Write down the first 10 prime numbers.");
 		await session.agent.waitForIdle();
@@ -149,7 +149,7 @@ describe.skipIf(!HAS_ANTHROPIC_AUTH)("Compaction with thinking models (Anthropic
 
 	afterEach(async () => {
 		if (session) {
-			session.dispose();
+			await session.dispose();
 		}
 		if (tempDir && fs.existsSync(tempDir)) {
 			fs.rmSync(tempDir, { recursive: true });
@@ -196,7 +196,7 @@ describe.skipIf(!HAS_ANTHROPIC_AUTH)("Compaction with thinking models (Anthropic
 
 	it("should compact successfully with claude-3-7-sonnet and thinking level high", async () => {
 		const model = getBundledModel("anthropic", "claude-3-7-sonnet-latest")!;
-		createSession(model, Effort.High);
+		await createSession(model, Effort.High);
 
 		// Send a simple prompt
 		await session.prompt("Write down the first 10 prime numbers.");

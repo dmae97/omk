@@ -240,8 +240,20 @@ describe("memories runtime", () => {
 
 		const db = memoryStorage.openMemoryDb(getAgentDbPath(fx.agentDir));
 		memoryStorage.upsertThreads(db, [
-			{ id: "thread-a", updatedAt: 100, rolloutPath: "/tmp/a.jsonl", cwd: fx.session.sessionManager.getCwd(), sourceKind: "cli" },
-			{ id: "thread-b", updatedAt: 200, rolloutPath: "/tmp/b.jsonl", cwd: fx.session.sessionManager.getCwd(), sourceKind: "cli" },
+			{
+				id: "thread-a",
+				updatedAt: 100,
+				rolloutPath: "/tmp/a.jsonl",
+				cwd: fx.session.sessionManager.getCwd(),
+				sourceKind: "cli",
+			},
+			{
+				id: "thread-b",
+				updatedAt: 200,
+				rolloutPath: "/tmp/b.jsonl",
+				cwd: fx.session.sessionManager.getCwd(),
+				sourceKind: "cli",
+			},
 		]);
 		db.prepare(
 			"INSERT INTO stage1_outputs (thread_id, source_updated_at, raw_memory, rollout_summary, rollout_slug, generated_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -249,7 +261,9 @@ describe("memories runtime", () => {
 		db.prepare(
 			"INSERT INTO stage1_outputs (thread_id, source_updated_at, raw_memory, rollout_summary, rollout_slug, generated_at) VALUES (?, ?, ?, ?, ?, ?)",
 		).run("thread-b", 200, "raw-b", "summary-b", "beta", 200);
-		memoryStorage.enqueueGlobalWatermark(db, 200, fx.session.sessionManager.getCwd(), { forceDirtyWhenNotAdvanced: true });
+		memoryStorage.enqueueGlobalWatermark(db, 200, fx.session.sessionManager.getCwd(), {
+			forceDirtyWhenNotAdvanced: true,
+		});
 		memoryStorage.closeMemoryDb(db);
 
 		const memoryRoot = getMemoryRoot(fx.agentDir, fx.session.sessionManager.getCwd());
@@ -282,7 +296,9 @@ describe("memories runtime", () => {
 		await fs.writeFile(path.join(memoryRoot, "skills", "legacy", "SKILL.md"), "legacy skill");
 
 		const db = memoryStorage.openMemoryDb(getAgentDbPath(fx.agentDir));
-		memoryStorage.enqueueGlobalWatermark(db, 300, fx.session.sessionManager.getCwd(), { forceDirtyWhenNotAdvanced: true });
+		memoryStorage.enqueueGlobalWatermark(db, 300, fx.session.sessionManager.getCwd(), {
+			forceDirtyWhenNotAdvanced: true,
+		});
 		memoryStorage.closeMemoryDb(db);
 
 		startMemoryStartupTask({
