@@ -338,7 +338,11 @@ function createClientWithApiKey(model: Model<"google-vertex">, apiKey: string): 
 }
 
 function resolveApiKey(options?: GoogleVertexOptions): string | undefined {
-	return options?.apiKey || $env.GOOGLE_CLOUD_API_KEY;
+	// options.apiKey may contain sentinel values like "<authenticated>" or "N/A"
+	// leaked from the agent loop — only use it if it looks like a real API key.
+	const optKey = options?.apiKey;
+	const realKey = optKey && !optKey.startsWith("<") && optKey !== "N/A" ? optKey : undefined;
+	return realKey || $env.GOOGLE_CLOUD_API_KEY;
 }
 
 function resolveProject(options?: GoogleVertexOptions): string {

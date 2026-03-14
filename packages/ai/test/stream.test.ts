@@ -434,6 +434,48 @@ describe("Generate E2E Tests", () => {
 			}
 		});
 
+		it("ignores sentinel apiKey values like '<authenticated>' passed from agent loop", async () => {
+			const originalProject = Bun.env.GOOGLE_CLOUD_PROJECT;
+			const originalLocation = Bun.env.GOOGLE_CLOUD_LOCATION;
+			const originalApiKey = Bun.env.GOOGLE_CLOUD_API_KEY;
+			const llm = getBundledModel("google-vertex", "gemini-3-flash-preview");
+			const controller = new AbortController();
+			controller.abort();
+
+			// Capture console.debug to detect SDK warnings
+			const debugMessages: string[] = [];
+			const origDebug = console.debug;
+			console.debug = (...args: unknown[]) => {
+				debugMessages.push(args.map(String).join(" "));
+			};
+
+			try {
+				Bun.env.GOOGLE_CLOUD_PROJECT = "test-project";
+				Bun.env.GOOGLE_CLOUD_LOCATION = "us-central1";
+				delete Bun.env.GOOGLE_CLOUD_API_KEY;
+
+				// The agent loop passes "<authenticated>" as apiKey for credential-less providers.
+				// google-vertex should ignore this sentinel and use ADC (project/location) instead.
+				await complete(
+					llm,
+					{ messages: [{ role: "user", content: "Hello", timestamp: Date.now() }] },
+					{ apiKey: "<authenticated>", signal: controller.signal },
+				);
+
+				// Should NOT trigger the SDK warning about API key taking precedence
+				const hasWarning = debugMessages.some(m => m.includes("API key will take precedence"));
+				expect(hasWarning).toBe(false);
+			} finally {
+				console.debug = origDebug;
+				if (originalProject === undefined) delete Bun.env.GOOGLE_CLOUD_PROJECT;
+				else Bun.env.GOOGLE_CLOUD_PROJECT = originalProject;
+				if (originalLocation === undefined) delete Bun.env.GOOGLE_CLOUD_LOCATION;
+				else Bun.env.GOOGLE_CLOUD_LOCATION = originalLocation;
+				if (originalApiKey === undefined) delete Bun.env.GOOGLE_CLOUD_API_KEY;
+				else Bun.env.GOOGLE_CLOUD_API_KEY = originalApiKey;
+			}
+		});
+
 		it("allows explicit Vertex API keys without requiring project or location", async () => {
 			const originalApiKey = Bun.env.GOOGLE_CLOUD_API_KEY;
 			const originalProject = Bun.env.GOOGLE_CLOUD_PROJECT;
