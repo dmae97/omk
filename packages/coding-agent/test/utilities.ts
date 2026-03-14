@@ -113,6 +113,7 @@ export async function createTestSession(options: TestSessionOptions = {}): Promi
 
 	const cleanup = async () => {
 		await session.dispose();
+		authStorage.close();
 		if (tempDir && fs.existsSync(tempDir)) {
 			fs.rmSync(tempDir, { recursive: true });
 		}

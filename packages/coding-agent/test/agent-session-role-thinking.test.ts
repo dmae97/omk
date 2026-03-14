@@ -13,6 +13,7 @@ describe("AgentSession role model thinking behavior", () => {
 	let tempDir: TempDir;
 	let session: AgentSession;
 	let sessionSettings: Settings;
+	const authStorages: AuthStorage[] = [];
 
 	beforeEach(() => {
 		tempDir = TempDir.createSync("@pi-role-thinking-");
@@ -21,6 +22,9 @@ describe("AgentSession role model thinking behavior", () => {
 	afterEach(async () => {
 		if (session) {
 			await session.dispose();
+		}
+		for (const authStorage of authStorages.splice(0)) {
+			authStorage.close();
 		}
 		tempDir.removeSync();
 	});
@@ -47,6 +51,7 @@ describe("AgentSession role model thinking behavior", () => {
 			},
 		});
 		const authStorage = await AuthStorage.create(path.join(tempDir.path(), "testauth.db"));
+		authStorages.push(authStorage);
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
 		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir.path(), "models.yml"));
 
@@ -181,6 +186,7 @@ describe("AgentSession role model thinking behavior", () => {
 			},
 		});
 		const authStorage = await AuthStorage.create(path.join(tempDir.path(), "testauth-non-xhigh.db"));
+		authStorages.push(authStorage);
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
 		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir.path(), "models-non-xhigh.yml"));
 
@@ -210,6 +216,7 @@ describe("AgentSession role model thinking behavior", () => {
 			},
 		});
 		const authStorage = await AuthStorage.create(path.join(tempDir.path(), "testauth-cycle-thinking.db"));
+		authStorages.push(authStorage);
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
 		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir.path(), "models-cycle-thinking.yml"));
 

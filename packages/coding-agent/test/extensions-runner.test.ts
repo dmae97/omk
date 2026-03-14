@@ -18,17 +18,19 @@ describe("ExtensionRunner", () => {
 	let extensionsDir: string;
 	let sessionManager: SessionManager;
 	let modelRegistry: ModelRegistry;
+	let authStorage: AuthStorage;
 
 	beforeEach(async () => {
 		tempDir = TempDir.createSync("@pi-runner-test-");
 		extensionsDir = path.join(getProjectAgentDir(tempDir.path()), "extensions");
 		fs.mkdirSync(extensionsDir, { recursive: true });
 		sessionManager = SessionManager.inMemory();
-		const authStorage = await AuthStorage.create(path.join(tempDir.path(), "testauth.db"));
+		authStorage = await AuthStorage.create(path.join(tempDir.path(), "testauth.db"));
 		modelRegistry = new ModelRegistry(authStorage);
 	});
 
 	afterEach(() => {
+		authStorage.close();
 		tempDir.removeSync();
 	});
 

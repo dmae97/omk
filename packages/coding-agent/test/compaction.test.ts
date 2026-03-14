@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, mock, vi } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, it, mock, vi } from "bun:test";
 import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import { getBundledModel } from "@oh-my-pi/pi-ai/models";
@@ -116,6 +116,10 @@ function resetEntryCounter() {
 // Reset counter before each test to get predictable IDs
 beforeEach(() => {
 	resetEntryCounter();
+});
+
+afterAll(() => {
+	mock.restore();
 });
 
 afterEach(() => {

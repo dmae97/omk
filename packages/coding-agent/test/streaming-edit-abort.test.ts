@@ -79,7 +79,11 @@ function chunkStringRandomly(text: string, seed: number): string[] {
 	return chunks;
 }
 
-async function createSession(tempDir: string, streamFn: Agent["streamFn"], tool: AgentTool): Promise<AgentSession> {
+async function createSession(
+	tempDir: string,
+	streamFn: Agent["streamFn"],
+	tool: AgentTool,
+): Promise<{ session: AgentSession; authStorage: AuthStorage }> {
 	const model = getBundledModel("anthropic", "claude-sonnet-4-5")!;
 	const agent = new Agent({
 		getApiKey: () => "test-key",
@@ -97,12 +101,15 @@ async function createSession(tempDir: string, streamFn: Agent["streamFn"], tool:
 	authStorage.setRuntimeApiKey("anthropic", "test-key");
 	const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "models.yml"));
 
-	return new AgentSession({
-		agent,
-		sessionManager,
-		settings,
-		modelRegistry,
-	});
+	return {
+		session: new AgentSession({
+			agent,
+			sessionManager,
+			settings,
+			modelRegistry,
+		}),
+		authStorage,
+	};
 }
 
 function buildEditTool(): AgentTool {
@@ -215,14 +222,21 @@ describe("streaming edit abort", () => {
 			const chunks = chunkStringRandomly(diff, seed);
 			const abortSignalRef: { current?: AbortSignal } = {};
 			const streamFn = createStreamForDiff("sample.txt", chunks, abortSignalRef);
-			const session = await createSession(tempDir, streamFn, editTool);
+			const { session, authStorage } = await createSession(tempDir, streamFn, editTool);
 
-			await session.prompt("apply patch");
+			try {
+				await session.prompt("apply patch");
 
-			const lastAssistant = lastAssistantMessage(session.state.messages);
-			expect(lastAssistant?.stopReason).not.toBe("aborted");
-			expect(abortSignalRef.current?.aborted ?? false).toBe(false);
-			await session.dispose();
+				const lastAssistant = lastAssistantMessage(session.state.messages);
+				expect(lastAssistant?.stopReason).not.toBe("aborted");
+				expect(abortSignalRef.current?.aborted ?? false).toBe(false);
+			} finally {
+				try {
+					await session.dispose();
+				} finally {
+					authStorage.close();
+				}
+			}
 		}
 	});
 
@@ -234,14 +248,21 @@ describe("streaming edit abort", () => {
 			const chunks = chunkStringRandomly(diff, seed);
 			const abortSignalRef: { current?: AbortSignal } = {};
 			const streamFn = createStreamForDiff("sample.txt", chunks, abortSignalRef);
-			const session = await createSession(tempDir, streamFn, editTool);
+			const { session, authStorage } = await createSession(tempDir, streamFn, editTool);
 
-			await session.prompt("apply patch");
+			try {
+				await session.prompt("apply patch");
 
-			const lastAssistant = lastAssistantMessage(session.state.messages);
-			expect(lastAssistant?.stopReason).toBe("aborted");
-			expect(abortSignalRef.current?.aborted ?? false).toBe(true);
-			await session.dispose();
+				const lastAssistant = lastAssistantMessage(session.state.messages);
+				expect(lastAssistant?.stopReason).toBe("aborted");
+				expect(abortSignalRef.current?.aborted ?? false).toBe(true);
+			} finally {
+				try {
+					await session.dispose();
+				} finally {
+					authStorage.close();
+				}
+			}
 		}
 	});
 });

@@ -40,6 +40,7 @@ describe("AgentSession resolve reminder", () => {
 	let tempDir: string;
 	let pendingActionStore: PendingActionStore;
 	let streamCallCount = 0;
+	let authStorage: AuthStorage | undefined;
 
 	beforeEach(async () => {
 		tempDir = path.join(os.tmpdir(), `pi-resolve-reminder-test-${Snowflake.next()}`);
@@ -52,7 +53,7 @@ describe("AgentSession resolve reminder", () => {
 			throw new Error("Test model not found in registry");
 		}
 
-		const authStorage = await AuthStorage.create(path.join(tempDir, "testauth.db"));
+		authStorage = await AuthStorage.create(path.join(tempDir, "testauth.db"));
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
 		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "models.yml"));
 
@@ -92,6 +93,8 @@ describe("AgentSession resolve reminder", () => {
 
 	afterEach(async () => {
 		await session.dispose();
+		authStorage?.close();
+		authStorage = undefined;
 		if (fs.existsSync(tempDir)) {
 			fs.rmSync(tempDir, { recursive: true, force: true });
 		}

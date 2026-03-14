@@ -25,6 +25,7 @@ describe("ModelRegistry", () => {
 	});
 
 	afterEach(() => {
+		authStorage.close();
 		if (tempDir && fs.existsSync(tempDir)) {
 			fs.rmSync(tempDir, { recursive: true });
 		}

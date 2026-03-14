@@ -16,6 +16,7 @@ import {
 	type Context,
 	isSpecialServiceTier,
 	type Message,
+	type MessageAttribution,
 	type Model,
 	type OpenAICompat,
 	type ServiceTier,
@@ -201,6 +202,7 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 				context,
 				apiKey,
 				options?.headers,
+				options?.initiatorOverride,
 			);
 			const params = buildParams(model, context, options);
 			options?.onPayload?.(params);
@@ -515,7 +517,12 @@ async function createClient(
 	context: Context,
 	apiKey?: string,
 	extraHeaders?: Record<string, string>,
-) {
+	initiatorOverride?: MessageAttribution,
+): Promise<{
+	client: OpenAI;
+	copilotPremiumRequests: number | undefined;
+	baseUrl: string | undefined;
+}> {
 	if (!apiKey) {
 		if (!$env.OPENAI_API_KEY) {
 			throw new Error(
@@ -539,6 +546,7 @@ async function createClient(
 			hasImages,
 			premiumMultiplier: model.premiumMultiplier,
 			headers,
+			initiatorOverride,
 		});
 		Object.assign(headers, copilot.headers);
 		copilotPremiumRequests = copilot.premiumRequests;

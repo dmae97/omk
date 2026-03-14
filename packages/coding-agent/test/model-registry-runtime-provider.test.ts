@@ -34,6 +34,7 @@ describe("ModelRegistry runtime provider registration", () => {
 		for (const sourceId of sourceIds) {
 			unregisterOAuthProviders(sourceId);
 		}
+		authStorage.close();
 		if (tempDir && fs.existsSync(tempDir)) {
 			fs.rmSync(tempDir, { recursive: true, force: true });
 		}

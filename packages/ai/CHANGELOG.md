@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `close()` method to `AuthStorage` for properly closing the underlying credential store
+- Added support for `initiatorOverride` option in OpenAI and Anthropic providers to customize message attribution
+
+### Fixed
+
+- Fixed resource cleanup in `AuthCredentialStore.close()` to properly finalize all prepared statements before closing the database
 
 ## [13.11.1] - 2026-03-13
 

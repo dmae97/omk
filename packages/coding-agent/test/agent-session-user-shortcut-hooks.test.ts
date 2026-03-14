@@ -16,10 +16,11 @@ describe("AgentSession user shortcut hooks", () => {
 	let tempDir: TempDir;
 	let session: AgentSession;
 	let modelRegistry: ModelRegistry;
+	let authStorage: AuthStorage | undefined;
 
 	beforeEach(async () => {
 		tempDir = TempDir.createSync("@pi-user-shortcut-hooks-");
-		const authStorage = await AuthStorage.create(path.join(tempDir.path(), "testauth.db"));
+		authStorage = await AuthStorage.create(path.join(tempDir.path(), "testauth.db"));
 		modelRegistry = new ModelRegistry(authStorage);
 	});
 
@@ -28,6 +29,8 @@ describe("AgentSession user shortcut hooks", () => {
 		if (session) {
 			await session.dispose();
 		}
+		authStorage?.close();
+		authStorage = undefined;
 		tempDir.removeSync();
 	});
 

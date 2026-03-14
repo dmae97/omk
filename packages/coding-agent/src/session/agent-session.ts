@@ -1539,7 +1539,7 @@ export class AgentSession {
 		if (drained === false && deliveryState) {
 			logger.warn("Async job completion deliveries still pending during dispose", { ...deliveryState });
 		}
-		await this.sessionManager.flush();
+		await this.sessionManager.close();
 		for (const state of this.#providerSessionState.values()) {
 			state.close();
 		}

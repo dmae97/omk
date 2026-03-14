@@ -107,6 +107,7 @@ describe("AgentSession eager todo enforcement", () => {
 	let session: AgentSession;
 	let streamCallCount = 0;
 	let scriptedResponses: AssistantMessage[] = [];
+	let authStorage: AuthStorage | undefined;
 	const observedCalls: ObservedPromptCall[] = [];
 
 	beforeEach(async () => {
@@ -118,7 +119,7 @@ describe("AgentSession eager todo enforcement", () => {
 		const model = getBundledModel("anthropic", "claude-sonnet-4-5");
 		if (!model) throw new Error("Expected claude-sonnet-4-5 model to exist");
 
-		const authStorage = await AuthStorage.create(path.join(tempDir.path(), "testauth.db"));
+		authStorage = await AuthStorage.create(path.join(tempDir.path(), "testauth.db"));
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
 		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir.path(), "models.yml"));
 		const settings = Settings.isolated({
@@ -199,6 +200,8 @@ describe("AgentSession eager todo enforcement", () => {
 		if (session) {
 			await session.dispose();
 		}
+		authStorage?.close();
+		authStorage = undefined;
 		tempDir.removeSync();
 	});
 

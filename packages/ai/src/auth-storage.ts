@@ -292,6 +292,7 @@ export class AuthStorage {
 	#fallbackResolver?: (provider: string) => string | undefined;
 	#store: AuthCredentialStore;
 	#configValueResolver: (config: string) => Promise<string | undefined>;
+	#closed = false;
 
 	constructor(store: AuthCredentialStore, options: AuthStorageOptions = {}) {
 		this.#store = store;
@@ -317,6 +318,17 @@ export class AuthStorage {
 	static async create(dbPath: string, options: AuthStorageOptions = {}): Promise<AuthStorage> {
 		const store = await AuthCredentialStore.open(dbPath);
 		return new AuthStorage(store, options);
+	}
+
+	/**
+	 * Close the underlying credential store.
+	 *
+	 * After calling this, the instance must not be reused.
+	 */
+	close(): void {
+		if (this.#closed) return;
+		this.#closed = true;
+		this.#store.close();
 	}
 
 	/**
@@ -2132,6 +2144,7 @@ export class AuthCredentialStore {
 	#getCacheStmt: Statement;
 	#upsertCacheStmt: Statement;
 	#deleteExpiredCacheStmt: Statement;
+	#closed = false;
 
 	constructor(db: Database) {
 		this.#db = db;
@@ -2578,6 +2591,19 @@ export class AuthCredentialStore {
 	}
 
 	close(): void {
+		if (this.#closed) return;
+		this.#closed = true;
+		this.#listActiveStmt.finalize();
+		this.#listActiveByProviderStmt.finalize();
+		this.#listDisabledByProviderStmt.finalize();
+		this.#insertStmt.finalize();
+		this.#updateStmt.finalize();
+		this.#deleteStmt.finalize();
+		this.#deleteByProviderStmt.finalize();
+		this.#hardDeleteStmt.finalize();
+		this.#getCacheStmt.finalize();
+		this.#upsertCacheStmt.finalize();
+		this.#deleteExpiredCacheStmt.finalize();
 		this.#db.close();
 	}
 }

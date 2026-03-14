@@ -30,6 +30,7 @@ const HAS_ANTHROPIC_AUTH = !!e2eApiKey("ANTHROPIC_API_KEY");
 describe.skipIf(!HAS_ANTIGRAVITY_AUTH)("Compaction with thinking models (Antigravity)", () => {
 	let session: AgentSession;
 	let tempDir: string;
+	let authStorage: AuthStorage | undefined;
 
 	beforeEach(() => {
 		tempDir = path.join(os.tmpdir(), `pi-thinking-compaction-test-${Snowflake.next()}`);
@@ -40,6 +41,8 @@ describe.skipIf(!HAS_ANTIGRAVITY_AUTH)("Compaction with thinking models (Antigra
 		if (session) {
 			await session.dispose();
 		}
+		authStorage?.close();
+		authStorage = undefined;
 		if (tempDir && fs.existsSync(tempDir)) {
 			fs.rmSync(tempDir, { recursive: true });
 		}
@@ -76,7 +79,7 @@ describe.skipIf(!HAS_ANTIGRAVITY_AUTH)("Compaction with thinking models (Antigra
 		const sessionManager = SessionManager.inMemory();
 		const settings = Settings.isolated();
 
-		const authStorage = await AuthStorage.create(path.join(tempDir, "testauth.db"));
+		authStorage = await AuthStorage.create(path.join(tempDir, "testauth.db"));
 		const modelRegistry = new ModelRegistry(authStorage);
 
 		session = new AgentSession({
@@ -141,6 +144,7 @@ describe.skipIf(!HAS_ANTIGRAVITY_AUTH)("Compaction with thinking models (Antigra
 describe.skipIf(!HAS_ANTHROPIC_AUTH)("Compaction with thinking models (Anthropic)", () => {
 	let session: AgentSession;
 	let tempDir: string;
+	let authStorage: AuthStorage | undefined;
 
 	beforeEach(() => {
 		tempDir = path.join(os.tmpdir(), `pi-thinking-compaction-anthropic-test-${Snowflake.next()}`);
@@ -151,6 +155,8 @@ describe.skipIf(!HAS_ANTHROPIC_AUTH)("Compaction with thinking models (Anthropic
 		if (session) {
 			await session.dispose();
 		}
+		authStorage?.close();
+		authStorage = undefined;
 		if (tempDir && fs.existsSync(tempDir)) {
 			fs.rmSync(tempDir, { recursive: true });
 		}
@@ -179,7 +185,7 @@ describe.skipIf(!HAS_ANTHROPIC_AUTH)("Compaction with thinking models (Anthropic
 		const sessionManager = SessionManager.inMemory();
 		const settings = Settings.isolated();
 
-		const authStorage = await AuthStorage.create(path.join(tempDir, "testauth.db"));
+		authStorage = await AuthStorage.create(path.join(tempDir, "testauth.db"));
 		const modelRegistry = new ModelRegistry(authStorage);
 
 		session = new AgentSession({

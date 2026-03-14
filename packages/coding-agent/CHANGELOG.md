@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `close()` method to SessionManager for properly closing persistent writers after flushing pending data
+
+### Fixed
+
+- Fixed timeout handling in RpcClient to properly clear timeouts and prevent resource leaks
+- Fixed AgentSession disposal to call SessionManager's `close()` method when available, ensuring proper cleanup of persistent writers
 
 ## [13.11.1] - 2026-03-13
 

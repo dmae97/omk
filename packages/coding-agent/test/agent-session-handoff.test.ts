@@ -86,6 +86,7 @@ describe("AgentSession handoff", () => {
 		if (session) {
 			await session.dispose();
 		}
+		authStorage.close();
 		try {
 			await tempDir.remove();
 		} catch {}

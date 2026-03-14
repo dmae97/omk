@@ -152,16 +152,19 @@ export class RpcClient {
 		});
 
 		// Timeout to prevent hanging forever
-		void Bun.sleep(30000).then(() => {
-			if (!readySettled) {
-				readySettled = true;
-				readyReject(
-					new Error(`Timeout waiting for agent to become ready. Stderr: ${this.#process?.peekStderr() ?? ""}`),
-				);
-			}
+		const readyTimeout = this.#startTimeout(30000, () => {
+			if (readySettled) return;
+			readySettled = true;
+			readyReject(
+				new Error(`Timeout waiting for agent to become ready. Stderr: ${this.#process?.peekStderr() ?? ""}`),
+			);
 		});
 
-		await readyPromise;
+		try {
+			await readyPromise;
+		} finally {
+			clearTimeout(readyTimeout);
+		}
 	}
 
 	/**
@@ -205,6 +208,12 @@ export class RpcClient {
 	 */
 	getStderr(): string {
 		return this.#process?.peekStderr() ?? "";
+	}
+
+	#startTimeout(timeoutMs: number, onTimeout: () => void): NodeJS.Timeout {
+		const timer = setTimeout(onTimeout, timeoutMs);
+		timer.unref();
+		return timer;
 	}
 
 	// =========================================================================
@@ -440,17 +449,17 @@ export class RpcClient {
 			if (event.type === "agent_end") {
 				settled = true;
 				unsubscribe();
+				clearTimeout(timeoutId);
 				resolve();
 			}
 		});
 
-		void (async () => {
-			await Bun.sleep(timeout);
+		const timeoutId = this.#startTimeout(timeout, () => {
 			if (settled) return;
 			settled = true;
 			unsubscribe();
 			reject(new Error(`Timeout waiting for agent to become idle. Stderr: ${this.#process?.peekStderr() ?? ""}`));
-		})();
+		});
 		return promise;
 	}
 
@@ -466,17 +475,17 @@ export class RpcClient {
 			if (event.type === "agent_end") {
 				settled = true;
 				unsubscribe();
+				clearTimeout(timeoutId);
 				resolve(events);
 			}
 		});
 
-		void (async () => {
-			await Bun.sleep(timeout);
+		const timeoutId = this.#startTimeout(timeout, () => {
 			if (settled) return;
 			settled = true;
 			unsubscribe();
 			reject(new Error(`Timeout collecting events. Stderr: ${this.#process?.peekStderr() ?? ""}`));
-		})();
+		});
 		return promise;
 	}
 
@@ -522,25 +531,26 @@ export class RpcClient {
 		const fullCommand = { ...command, id } as RpcCommand;
 		const { promise, resolve, reject } = Promise.withResolvers<RpcResponse>();
 		let settled = false;
-		void (async () => {
-			await Bun.sleep(30000);
+		const timeoutId = this.#startTimeout(30000, () => {
 			if (settled) return;
 			this.#pendingRequests.delete(id);
 			settled = true;
 			reject(
 				new Error(`Timeout waiting for response to ${command.type}. Stderr: ${this.#process?.peekStderr() ?? ""}`),
 			);
-		})();
+		});
 
 		this.#pendingRequests.set(id, {
 			resolve: response => {
 				if (settled) return;
 				settled = true;
+				clearTimeout(timeoutId);
 				resolve(response);
 			},
 			reject: error => {
 				if (settled) return;
 				settled = true;
+				clearTimeout(timeoutId);
 				reject(error);
 			},
 		});
@@ -555,6 +565,7 @@ export class RpcClient {
 				this.#pendingRequests.delete(id);
 				if (settled) return;
 				settled = true;
+				clearTimeout(timeoutId);
 				reject(err);
 			});
 		}

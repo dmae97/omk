@@ -39,12 +39,13 @@ describe("AgentSession before_agent_start attribution fallback", () => {
 	let tempDir: TempDir;
 	let session: AgentSession;
 	let modelRegistry: ModelRegistry;
+	let authStorage: AuthStorage | undefined;
 
 	const injectedText = "before-agent-start injected message";
 
 	beforeEach(async () => {
 		tempDir = TempDir.createSync("@pi-before-agent-start-attribution-");
-		const authStorage = await AuthStorage.create(path.join(tempDir.path(), "testauth.db"));
+		authStorage = await AuthStorage.create(path.join(tempDir.path(), "testauth.db"));
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
 		modelRegistry = new ModelRegistry(authStorage);
 	});
@@ -54,6 +55,8 @@ describe("AgentSession before_agent_start attribution fallback", () => {
 		if (session) {
 			await session.dispose();
 		}
+		authStorage?.close();
+		authStorage = undefined;
 		tempDir.removeSync();
 	});
 

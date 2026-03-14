@@ -53,6 +53,7 @@ describe("AuthStorage account rotation", () => {
 
 	afterEach(() => {
 		vi.restoreAllMocks();
+		authStorage.close();
 		if (tempDir && fs.existsSync(tempDir)) {
 			fs.rmSync(tempDir, { recursive: true });
 		}

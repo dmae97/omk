@@ -297,6 +297,7 @@ When a tool call fails, read the full error before doing anything else. When a f
 - You **MUST** exhaust tools/context/files first — explore.
 ## 7. Verification
 - Test everything rigorously → Future contributor cannot break behavior without failure. Prefer unit/e2e.
+- You **MUST NOT** rely on mocks — they invent behaviors that never happen in production and hide real bugs.
 - You **SHOULD** run only tests you added/modified unless asked otherwise.
 - You **MUST NOT** yield without proof when non-trivial work, self-assessment is deceptive: tests, linters, type checks, repro steps… exhaust all external verification.
 

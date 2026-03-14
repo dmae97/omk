@@ -1706,6 +1706,16 @@ export class SessionManager {
 		if (this.#persistError) throw this.#persistError;
 	}
 
+	/** Close the persistent writer after flushing all pending data. */
+	async close(): Promise<void> {
+		if (!this.#persistWriter) return;
+		await this.#queuePersistTask(async () => {
+			await this.#closePersistWriterInternal();
+			this.#flushed = true;
+		});
+		if (this.#persistError) throw this.#persistError;
+	}
+
 	getCwd(): string {
 		return this.cwd;
 	}

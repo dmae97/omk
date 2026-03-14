@@ -26,6 +26,7 @@ describe("AgentSession context promotion", () => {
 		if (session) {
 			await session.dispose();
 		}
+		authStorage.close();
 		tempDir.removeSync();
 	});
 

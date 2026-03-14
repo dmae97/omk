@@ -45,6 +45,7 @@ function createAssistantMessage(text: string): AssistantMessage {
 describe("AgentSession concurrent prompt guard", () => {
 	let session: AgentSession;
 	let tempDir: string;
+	const authStorages: AuthStorage[] = [];
 
 	beforeEach(() => {
 		tempDir = path.join(os.tmpdir(), `pi-concurrent-test-${Snowflake.next()}`);
@@ -54,6 +55,9 @@ describe("AgentSession concurrent prompt guard", () => {
 	afterEach(async () => {
 		if (session) {
 			await session.dispose();
+		}
+		for (const authStorage of authStorages.splice(0)) {
+			authStorage.close();
 		}
 		if (tempDir && fs.existsSync(tempDir)) {
 			fs.rmSync(tempDir, { recursive: true });
@@ -93,6 +97,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		const sessionManager = SessionManager.inMemory();
 		const settings = Settings.isolated();
 		const authStorage = await AuthStorage.create(path.join(tempDir, "testauth.db"));
+		authStorages.push(authStorage);
 		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "models.yml"));
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
 
@@ -181,6 +186,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		const sessionManager = SessionManager.inMemory();
 		const settings = Settings.isolated();
 		const authStorage = await AuthStorage.create(path.join(tempDir, "testauth.db"));
+		authStorages.push(authStorage);
 		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "models.yml"));
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
 
@@ -205,6 +211,7 @@ describe("AgentSession concurrent prompt guard", () => {
 describe("AgentSession TTSR resume gate", () => {
 	let session: AgentSession;
 	let tempDir: string;
+	const authStorages: AuthStorage[] = [];
 
 	beforeEach(() => {
 		tempDir = path.join(os.tmpdir(), `pi-ttsr-gate-test-${Snowflake.next()}`);
@@ -214,6 +221,9 @@ describe("AgentSession TTSR resume gate", () => {
 	afterEach(async () => {
 		if (session) {
 			await session.dispose();
+		}
+		for (const authStorage of authStorages.splice(0)) {
+			authStorage.close();
 		}
 		if (tempDir && fs.existsSync(tempDir)) {
 			fs.rmSync(tempDir, { recursive: true });
@@ -318,6 +328,7 @@ describe("AgentSession TTSR resume gate", () => {
 		const sessionManager = SessionManager.inMemory();
 		const settings = Settings.isolated();
 		const authStorage = await AuthStorage.create(path.join(tempDir, "testauth-int.db"));
+		authStorages.push(authStorage);
 		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "models.yml"));
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
 
@@ -401,6 +412,7 @@ describe("AgentSession TTSR resume gate", () => {
 		const sessionManager = SessionManager.inMemory();
 		const settings = Settings.isolated();
 		const authStorage = await AuthStorage.create(path.join(tempDir, "testauth-def.db"));
+		authStorages.push(authStorage);
 		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "models.yml"));
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
 
@@ -470,6 +482,7 @@ describe("AgentSession TTSR resume gate", () => {
 		const sessionManager = SessionManager.inMemory();
 		const settings = Settings.isolated();
 		const authStorage = await AuthStorage.create(path.join(tempDir, "testauth-abt.db"));
+		authStorages.push(authStorage);
 		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "models.yml"));
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
 
@@ -604,6 +617,7 @@ describe("AgentSession TTSR resume gate", () => {
 		const sessionManager = SessionManager.inMemory();
 		const settings = Settings.isolated();
 		const authStorage = await AuthStorage.create(path.join(tempDir, "testauth-tool.db"));
+		authStorages.push(authStorage);
 		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "models.yml"));
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
 
@@ -628,6 +642,7 @@ describe("AgentSession TTSR resume gate", () => {
 	});
 	it("prompt() waits for context-promotion continuation to finish", async () => {
 		const authStorage = await AuthStorage.create(path.join(tempDir, "testauth-promo.db"));
+		authStorages.push(authStorage);
 		authStorage.setRuntimeApiKey("openai-codex", "test-key");
 		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "models.yml"));
 

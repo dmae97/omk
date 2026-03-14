@@ -570,6 +570,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 						hasImages: hasCopilotVisionInput(context.messages),
 						premiumMultiplier: model.premiumMultiplier,
 						headers: { ...(model.headers ?? {}), ...(options?.headers ?? {}) },
+						initiatorOverride: options?.initiatorOverride,
 					})
 				: undefined;
 		const output: AssistantMessage = {

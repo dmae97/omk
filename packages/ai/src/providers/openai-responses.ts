@@ -12,6 +12,7 @@ import {
 	type CacheRetention,
 	type Context,
 	isSpecialServiceTier,
+	type MessageAttribution,
 	type Model,
 	type ServiceTier,
 	type StreamFunction,
@@ -117,7 +118,13 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 		try {
 			// Create OpenAI client
 			const apiKey = options?.apiKey || getEnvApiKey(model.provider) || "";
-			const { client, copilotPremiumRequests, baseUrl } = createClient(model, context, apiKey, options?.headers);
+			const { client, copilotPremiumRequests, baseUrl } = createClient(
+				model,
+				context,
+				apiKey,
+				options?.headers,
+				options?.initiatorOverride,
+			);
 			const { params } = buildParams(model, context, options);
 			const requestAbortController = new AbortController();
 			const requestSignal = options?.signal
@@ -190,7 +197,12 @@ function createClient(
 	context: Context,
 	apiKey?: string,
 	extraHeaders?: Record<string, string>,
-) {
+	initiatorOverride?: MessageAttribution,
+): {
+	client: OpenAI;
+	copilotPremiumRequests: number | undefined;
+	baseUrl: string | undefined;
+} {
 	if (!apiKey) {
 		if (!$env.OPENAI_API_KEY) {
 			throw new Error(
@@ -211,6 +223,7 @@ function createClient(
 			hasImages,
 			premiumMultiplier: model.premiumMultiplier,
 			headers,
+			initiatorOverride,
 		});
 		Object.assign(headers, copilot.headers);
 		copilotPremiumRequests = copilot.premiumRequests;

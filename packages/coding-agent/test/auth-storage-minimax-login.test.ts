@@ -18,6 +18,7 @@ describe("AuthStorage MiniMax login", () => {
 
 	afterEach(() => {
 		vi.restoreAllMocks();
+		authStorage.close();
 		if (tempDir && fs.existsSync(tempDir)) {
 			fs.rmSync(tempDir, { recursive: true });
 		}
