@@ -1,6 +1,13 @@
-import { describe, expect, it } from "bun:test";
-import { buildAnthropicClientOptions } from "../src/providers/anthropic";
+import { afterEach, describe, expect, it, vi } from "bun:test";
+import { buildAnthropicClientOptions, streamAnthropic } from "../src/providers/anthropic";
 import type { Model } from "../src/types";
+
+const originalFetch = global.fetch;
+
+afterEach(() => {
+	global.fetch = originalFetch;
+	vi.restoreAllMocks();
+});
 
 const COPILOT_HEADERS = {
 	"User-Agent": "GitHubCopilotChat/0.35.0",
@@ -23,6 +30,17 @@ function makeCopilotClaudeModel(): Model<"anthropic-messages"> {
 		contextWindow: 128000,
 		maxTokens: 16000,
 	};
+}
+
+const testContext = {
+	messages: [{ role: "user", content: "hello", timestamp: Date.now() }],
+} as const;
+
+function getRequestHeader(input: string | URL | Request, init: RequestInit | undefined, headerName: string): string | null {
+	if (input instanceof Request) {
+		return input.headers.get(headerName);
+	}
+	return new Headers(init?.headers).get(headerName);
 }
 
 describe("Anthropic Copilot auth config", () => {
@@ -113,5 +131,28 @@ describe("Anthropic Copilot auth config", () => {
 		});
 
 		expect(result.isOAuthToken).toBe(false);
+	});
+
+	it("forwards initiatorOverride to Copilot message requests", async () => {
+		const requestedInitiators: Array<string | null> = [];
+		global.fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+			requestedInitiators.push(getRequestHeader(input, init, "X-Initiator"));
+			return new Response(
+				JSON.stringify({ error: { type: "authentication_error", message: "Unauthorized" } }),
+				{
+					status: 401,
+					headers: { "Content-Type": "application/json" },
+				},
+			);
+		}) as unknown as typeof fetch;
+
+		const model = makeCopilotClaudeModel();
+		const result = await streamAnthropic(model, testContext, {
+			apiKey: "tid=2;proxy-ep=proxy.enterprise.githubcopilot.com;exp=9999999999",
+			initiatorOverride: "agent",
+		}).result();
+
+		expect(result.stopReason).toBe("error");
+		expect(requestedInitiators[0]).toBe("agent");
 	});
 });

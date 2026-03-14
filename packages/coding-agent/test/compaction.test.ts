@@ -295,6 +295,74 @@ describe("shouldCompact", () => {
 });
 
 describe("remote compaction setting", () => {
+	it("forwards an explicit initiator override to local summarization requests", async () => {
+		const model = getBundledModel("anthropic", "claude-sonnet-4-5");
+		if (!model) throw new Error("Expected anthropic/claude-sonnet-4-5 model to exist");
+
+		const entries: SessionEntry[] = [
+			createMessageEntry(createUserMessage("Turn 1")),
+			createMessageEntry(createAssistantMessage("Answer 1", createMockUsage(0, 100, 2000, 0))),
+			createMessageEntry(createUserMessage("Turn 2")),
+			createMessageEntry(createAssistantMessage("Answer 2", createMockUsage(0, 100, 5000, 0))),
+			createMessageEntry(createUserMessage("Turn 3")),
+			createMessageEntry(createAssistantMessage("Answer 3", createMockUsage(0, 100, 9000, 0))),
+		];
+		const preparation = prepareCompaction(entries, {
+			...DEFAULT_COMPACTION_SETTINGS,
+			keepRecentTokens: 1000,
+			remoteEnabled: false,
+		});
+		if (!preparation) throw new Error("Expected compaction preparation");
+
+		completeSimpleMock
+			.mockResolvedValueOnce(createAssistantMessage("History summary"))
+			.mockResolvedValueOnce(createAssistantMessage("Turn prefix summary"))
+			.mockResolvedValueOnce(createAssistantMessage("Short summary"));
+
+		await compact(preparation, model, "test-api-key", undefined, undefined, {
+			initiatorOverride: "agent",
+		});
+
+		expect(completeSimpleMock).toHaveBeenCalledTimes(3);
+		for (const call of completeSimpleMock.mock.calls) {
+			const options = call[2] as { initiatorOverride?: string } | undefined;
+			expect(options?.initiatorOverride).toBe("agent");
+		}
+	});
+
+	it("leaves local summarization requests unattributed when no override is provided", async () => {
+		const model = getBundledModel("anthropic", "claude-sonnet-4-5");
+		if (!model) throw new Error("Expected anthropic/claude-sonnet-4-5 model to exist");
+
+		const entries: SessionEntry[] = [
+			createMessageEntry(createUserMessage("Turn 1")),
+			createMessageEntry(createAssistantMessage("Answer 1", createMockUsage(0, 100, 2000, 0))),
+			createMessageEntry(createUserMessage("Turn 2")),
+			createMessageEntry(createAssistantMessage("Answer 2", createMockUsage(0, 100, 5000, 0))),
+			createMessageEntry(createUserMessage("Turn 3")),
+			createMessageEntry(createAssistantMessage("Answer 3", createMockUsage(0, 100, 9000, 0))),
+		];
+		const preparation = prepareCompaction(entries, {
+			...DEFAULT_COMPACTION_SETTINGS,
+			keepRecentTokens: 1000,
+			remoteEnabled: false,
+		});
+		if (!preparation) throw new Error("Expected compaction preparation");
+
+		completeSimpleMock
+			.mockResolvedValueOnce(createAssistantMessage("History summary"))
+			.mockResolvedValueOnce(createAssistantMessage("Turn prefix summary"))
+			.mockResolvedValueOnce(createAssistantMessage("Short summary"));
+
+		await compact(preparation, model, "test-api-key");
+
+		expect(completeSimpleMock).toHaveBeenCalledTimes(3);
+		for (const call of completeSimpleMock.mock.calls) {
+			const options = call[2] as { initiatorOverride?: string } | undefined;
+			expect(options?.initiatorOverride).toBeUndefined();
+		}
+	});
+
 	it("uses local summarization when remote compaction is disabled", async () => {
 		const model = getBundledModel("openai", "gpt-4o");
 		if (!model) {

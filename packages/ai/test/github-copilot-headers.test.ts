@@ -249,7 +249,13 @@ describe("buildCopilotDynamicHeaders", () => {
 
 	it("preserves explicit initiator override over inferred value and sets 0 premium requests for agent", () => {
 		const { headers, premiumRequests } = buildCopilotDynamicHeaders({
-			messages: [{ role: "user", content: "what time is it?" }],
+			messages: [
+				{
+					role: "user",
+					content:
+						"<conversation>\nuser: summarize the discarded history\nassistant: keep the latest turn\n</conversation>\n\nProvide a compaction summary.",
+				},
+			],
 			hasImages: false,
 			premiumMultiplier: 3,
 			initiatorOverride: "agent",

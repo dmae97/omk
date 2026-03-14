@@ -180,6 +180,10 @@ export interface StreamOptions {
 	 */
 	headers?: Record<string, string>;
 	/**
+	 * Optional explicit request attribution override for providers that support it.
+	 */
+	initiatorOverride?: MessageAttribution;
+	/**
 	 * Maximum delay in milliseconds to wait for a retry when the server requests a long wait.
 	 * If the server's requested delay exceeds this value, the request fails immediately
 	 * with an error containing the requested delay, allowing higher-level retry logic

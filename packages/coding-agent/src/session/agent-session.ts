@@ -203,8 +203,6 @@ export interface AgentSessionConfig {
 	rebuildSystemPrompt?: (toolNames: string[], tools: Map<string, AgentTool>) => Promise<string>;
 	/** TTSR manager for time-traveling stream rules */
 	ttsrManager?: TtsrManager;
-	/** Force X-Initiator: agent for GitHub Copilot model selections in this session. */
-	forceCopilotAgentInitiator?: boolean;
 	/** Secret obfuscator for deobfuscating streaming edit content */
 	obfuscator?: SecretObfuscator;
 	/** Pending action store for preview/apply workflows */
@@ -394,7 +392,6 @@ export class AgentSession {
 	#convertToLlm: (messages: AgentMessage[]) => Message[] | Promise<Message[]>;
 	#rebuildSystemPrompt: ((toolNames: string[], tools: Map<string, AgentTool>) => Promise<string>) | undefined;
 	#baseSystemPrompt: string;
-	#forceCopilotAgentInitiator = false;
 
 	// TTSR manager for time-traveling stream rules
 	#ttsrManager: TtsrManager | undefined = undefined;
@@ -442,7 +439,6 @@ export class AgentSession {
 		this.#rebuildSystemPrompt = config.rebuildSystemPrompt;
 		this.#baseSystemPrompt = this.agent.state.systemPrompt;
 		this.#ttsrManager = config.ttsrManager;
-		this.#forceCopilotAgentInitiator = config.forceCopilotAgentInitiator ?? false;
 		this.#obfuscator = config.obfuscator;
 		this.agent.providerSessionState = this.#providerSessionState;
 		this.#pendingActionStore = config.pendingActionStore;
@@ -1563,19 +1559,6 @@ export class AgentSession {
 	/** Current model (may be undefined if not yet selected) */
 	get model(): Model | undefined {
 		return this.agent.state.model;
-	}
-
-	#applySessionModelOverrides(model: Model): Model {
-		if (!this.#forceCopilotAgentInitiator || model.provider !== "github-copilot") {
-			return model;
-		}
-		return {
-			...model,
-			headers: {
-				...model.headers,
-				"X-Initiator": "agent",
-			},
-		};
 	}
 
 	/** Current thinking level */
@@ -3722,7 +3705,7 @@ export class AgentSession {
 		if (currentModel) {
 			this.#closeProviderSessionsForModelSwitch(currentModel, model);
 		}
-		this.agent.setModel(this.#applySessionModelOverrides(model));
+		this.agent.setModel(model);
 	}
 
 	#closeCodexProviderSessionsForHistoryRewrite(): void {
@@ -4003,6 +3986,7 @@ export class AgentSession {
 								promptOverride: hookPrompt,
 								extraContext: hookContext,
 								remoteInstructions: this.#baseSystemPrompt,
+								initiatorOverride: "agent",
 							});
 							break;
 						} catch (error) {

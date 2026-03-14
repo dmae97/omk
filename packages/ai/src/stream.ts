@@ -418,6 +418,7 @@ function mapOptionsForApi<TApi extends Api>(
 		apiKey: apiKey || options?.apiKey,
 		cacheRetention: options?.cacheRetention,
 		headers: options?.headers,
+		initiatorOverride: options?.initiatorOverride,
 		maxRetryDelayMs: options?.maxRetryDelayMs,
 		metadata: options?.metadata,
 		sessionId: options?.sessionId,
