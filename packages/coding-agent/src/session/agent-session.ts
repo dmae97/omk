@@ -2905,14 +2905,12 @@ export class AgentSession {
 	 * Cycle to next thinking level.
 	 * @returns New level, or undefined if model doesn't support thinking
 	 */
-	cycleThinkingLevel(): Effort | undefined {
+	cycleThinkingLevel(): ThinkingLevel | undefined {
 		if (!this.model?.reasoning) return undefined;
 
-		const levels = this.getAvailableThinkingLevels();
-		const currentIndex =
-			this.thinkingLevel && this.thinkingLevel !== ThinkingLevel.Off && this.thinkingLevel !== ThinkingLevel.Inherit
-				? levels.indexOf(this.thinkingLevel)
-				: -1;
+		const levels = [ThinkingLevel.Off, ...this.getAvailableThinkingLevels()];
+		const currentLevel = this.thinkingLevel === ThinkingLevel.Inherit ? ThinkingLevel.Off : this.thinkingLevel;
+		const currentIndex = currentLevel ? levels.indexOf(currentLevel) : -1;
 		const nextIndex = (currentIndex + 1) % levels.length;
 		const nextLevel = levels[nextIndex];
 		if (!nextLevel) return undefined;

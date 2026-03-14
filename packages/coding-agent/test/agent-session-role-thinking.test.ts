@@ -196,4 +196,34 @@ describe("AgentSession role model thinking behavior", () => {
 		expect(session.thinkingLevel).toBe(Effort.High);
 		expect(session.getAvailableThinkingLevels()).not.toContain("xhigh");
 	});
+
+	it("cycles through off before returning to effort levels", async () => {
+		const model = getAnthropicModelOrThrow("claude-sonnet-4-5");
+
+		const agent = new Agent({
+			initialState: {
+				model,
+				systemPrompt: "Test",
+				tools: [],
+				messages: [],
+				thinkingLevel: Effort.High,
+			},
+		});
+		const authStorage = await AuthStorage.create(path.join(tempDir.path(), "testauth-cycle-thinking.db"));
+		authStorage.setRuntimeApiKey("anthropic", "test-key");
+		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir.path(), "models-cycle-thinking.yml"));
+
+		sessionSettings = Settings.isolated();
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings: sessionSettings,
+			modelRegistry,
+		});
+
+		expect(session.cycleThinkingLevel()).toBe("off");
+		expect(session.thinkingLevel).toBe("off");
+		expect(session.cycleThinkingLevel()).toBe(Effort.Minimal);
+		expect(session.thinkingLevel).toBe(Effort.Minimal);
+	});
 });
