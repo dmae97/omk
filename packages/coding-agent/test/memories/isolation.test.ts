@@ -26,12 +26,8 @@ describe("memory project isolation", () => {
 			]);
 
 			// Insert stage1 outputs directly (bypassing job machinery)
-			db.run(
-				"INSERT INTO stage1_outputs VALUES ('thread-a', 1000, 'alpha raw memory', 'alpha summary', null, 999)",
-			);
-			db.run(
-				"INSERT INTO stage1_outputs VALUES ('thread-b', 1001, 'beta raw memory', 'beta summary', null, 999)",
-			);
+			db.run("INSERT INTO stage1_outputs VALUES ('thread-a', 1000, 'alpha raw memory', 'alpha summary', null, 999)");
+			db.run("INSERT INTO stage1_outputs VALUES ('thread-b', 1001, 'beta raw memory', 'beta summary', null, 999)");
 
 			const aOutputs = listStage1OutputsForGlobal(db, 100, CWD_A);
 			const bOutputs = listStage1OutputsForGlobal(db, 100, CWD_B);

@@ -5,8 +5,13 @@ import { TempDir } from "@oh-my-pi/pi-utils";
 const compactMock = vi.fn();
 
 mock.module("../src/session/compaction", () => ({
-	calculateContextTokens: (usage: { totalTokens?: number; input: number; output: number; cacheRead: number; cacheWrite: number }) =>
-		usage.totalTokens || usage.input + usage.output + usage.cacheRead + usage.cacheWrite,
+	calculateContextTokens: (usage: {
+		totalTokens?: number;
+		input: number;
+		output: number;
+		cacheRead: number;
+		cacheWrite: number;
+	}) => usage.totalTokens || usage.input + usage.output + usage.cacheRead + usage.cacheWrite,
 	calculatePromptTokens: () => 0,
 	collectEntriesForBranchSummary: () => [],
 	compact: compactMock,
@@ -127,10 +132,13 @@ describe("AgentSession compaction Copilot initiator attribution", async () => {
 		expect(model.headers?.["X-Initiator"]).toBeUndefined();
 	}
 
-	async function triggerAutoCompaction(session: {
-		agent: { emitExternalEvent: (event: unknown) => void };
-		subscribe: (listener: (event: { type: string }) => void) => () => void;
-	}, model: { api: string; provider: string; id: string; contextWindow: number }) {
+	async function triggerAutoCompaction(
+		session: {
+			agent: { emitExternalEvent: (event: unknown) => void };
+			subscribe: (listener: (event: { type: string }) => void) => () => void;
+		},
+		model: { api: string; provider: string; id: string; contextWindow: number },
+	) {
 		const { promise, resolve } = Promise.withResolvers<void>();
 		const unsubscribe = session.subscribe(event => {
 			if (event.type === "auto_compaction_end") {
@@ -169,7 +177,11 @@ describe("AgentSession compaction Copilot initiator attribution", async () => {
 		await session.compact();
 
 		expect(compactMock).toHaveBeenCalledTimes(1);
-		const compactModel = compactMock.mock.calls[0]?.[1] as { provider: string; id: string; headers?: Record<string, string> };
+		const compactModel = compactMock.mock.calls[0]?.[1] as {
+			provider: string;
+			id: string;
+			headers?: Record<string, string>;
+		};
 		const compactOptions = compactMock.mock.calls[0]?.[5] as { initiatorOverride?: string } | undefined;
 		expect(compactModel.provider).toBe("github-copilot");
 		expect(compactModel.id).toBe(model.id);
@@ -183,7 +195,11 @@ describe("AgentSession compaction Copilot initiator attribution", async () => {
 		await triggerAutoCompaction(session, model);
 
 		expect(compactMock).toHaveBeenCalledTimes(1);
-		const compactModel = compactMock.mock.calls[0]?.[1] as { provider: string; id: string; headers?: Record<string, string> };
+		const compactModel = compactMock.mock.calls[0]?.[1] as {
+			provider: string;
+			id: string;
+			headers?: Record<string, string>;
+		};
 		const compactOptions = compactMock.mock.calls[0]?.[5] as { initiatorOverride?: string } | undefined;
 		expect(compactModel.provider).toBe("github-copilot");
 		expect(compactModel.id).toBe(model.id);
@@ -197,7 +213,11 @@ describe("AgentSession compaction Copilot initiator attribution", async () => {
 		await session.compact();
 
 		expect(compactMock).toHaveBeenCalledTimes(1);
-		const compactModel = compactMock.mock.calls[0]?.[1] as { provider: string; id: string; headers?: Record<string, string> };
+		const compactModel = compactMock.mock.calls[0]?.[1] as {
+			provider: string;
+			id: string;
+			headers?: Record<string, string>;
+		};
 		const compactOptions = compactMock.mock.calls[0]?.[5] as { initiatorOverride?: string } | undefined;
 		expect(compactModel.provider).toBe("github-copilot");
 		expect(compactModel.id).toBe(model.id);
@@ -211,7 +231,11 @@ describe("AgentSession compaction Copilot initiator attribution", async () => {
 		await triggerAutoCompaction(session, model);
 
 		expect(compactMock).toHaveBeenCalledTimes(1);
-		const compactModel = compactMock.mock.calls[0]?.[1] as { provider: string; id: string; headers?: Record<string, string> };
+		const compactModel = compactMock.mock.calls[0]?.[1] as {
+			provider: string;
+			id: string;
+			headers?: Record<string, string>;
+		};
 		const compactOptions = compactMock.mock.calls[0]?.[5] as { initiatorOverride?: string } | undefined;
 		expect(compactModel.provider).toBe("github-copilot");
 		expect(compactModel.id).toBe(model.id);

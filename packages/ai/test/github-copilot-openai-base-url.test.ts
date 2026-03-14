@@ -22,7 +22,11 @@ function getRequestUrl(input: string | URL | Request): string {
 	return typeof input === "string" ? input : input.toString();
 }
 
-function getRequestHeader(input: string | URL | Request, init: RequestInit | undefined, headerName: string): string | null {
+function getRequestHeader(
+	input: string | URL | Request,
+	init: RequestInit | undefined,
+	headerName: string,
+): string | null {
 	if (input instanceof Request) {
 		return input.headers.get(headerName);
 	}

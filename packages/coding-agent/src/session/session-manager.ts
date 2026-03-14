@@ -23,7 +23,16 @@ import {
 	toError,
 } from "@oh-my-pi/pi-utils";
 import { ArtifactManager } from "./artifacts";
-import { type BlobPutResult, BlobStore, externalizeImageData, externalizeImageDataUrl, isBlobRef, isImageDataUrl, resolveImageData, resolveImageDataUrl } from "./blob-store";
+import {
+	type BlobPutResult,
+	BlobStore,
+	externalizeImageData,
+	externalizeImageDataUrl,
+	isBlobRef,
+	isImageDataUrl,
+	resolveImageData,
+	resolveImageDataUrl,
+} from "./blob-store";
 import {
 	type BashExecutionMessage,
 	type CustomMessage,
@@ -988,7 +997,12 @@ async function truncateForPersistence(obj: unknown, blobStore: BlobStore, key?: 
 
 		const contentEntry = entries.find(([childKey]) => childKey === "content");
 		const lineCountEntry = entries.find(([childKey]) => childKey === "lineCount");
-		if (contentEntry && typeof contentEntry[1] === "string" && lineCountEntry && typeof lineCountEntry[1] === "number") {
+		if (
+			contentEntry &&
+			typeof contentEntry[1] === "string" &&
+			lineCountEntry &&
+			typeof lineCountEntry[1] === "number"
+		) {
 			const content = contentEntry[1];
 			const updatedEntries = entries.map(([childKey, value]) =>
 				childKey === "lineCount" ? ([childKey, content.split("\n").length] as const) : ([childKey, value] as const),

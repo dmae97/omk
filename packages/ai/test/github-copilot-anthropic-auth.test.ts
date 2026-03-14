@@ -36,7 +36,11 @@ const testContext = {
 	messages: [{ role: "user", content: "hello", timestamp: Date.now() }],
 } as const;
 
-function getRequestHeader(input: string | URL | Request, init: RequestInit | undefined, headerName: string): string | null {
+function getRequestHeader(
+	input: string | URL | Request,
+	init: RequestInit | undefined,
+	headerName: string,
+): string | null {
 	if (input instanceof Request) {
 		return input.headers.get(headerName);
 	}
@@ -137,13 +141,10 @@ describe("Anthropic Copilot auth config", () => {
 		const requestedInitiators: Array<string | null> = [];
 		global.fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
 			requestedInitiators.push(getRequestHeader(input, init, "X-Initiator"));
-			return new Response(
-				JSON.stringify({ error: { type: "authentication_error", message: "Unauthorized" } }),
-				{
-					status: 401,
-					headers: { "Content-Type": "application/json" },
-				},
-			);
+			return new Response(JSON.stringify({ error: { type: "authentication_error", message: "Unauthorized" } }), {
+				status: 401,
+				headers: { "Content-Type": "application/json" },
+			});
 		}) as unknown as typeof fetch;
 
 		const model = makeCopilotClaudeModel();

@@ -288,13 +288,13 @@ async function runPhase1(options: {
 			}
 
 			if (result.kind === "no_output") {
-			markStage1SucceededNoOutput(db, {
-				threadId: claim.threadId,
-				ownershipToken: claim.ownershipToken,
-				sourceUpdatedAt: claim.sourceUpdatedAt,
-				nowSec: unixNow(),
-				cwd: claim.cwd,
-			});
+				markStage1SucceededNoOutput(db, {
+					threadId: claim.threadId,
+					ownershipToken: claim.ownershipToken,
+					sourceUpdatedAt: claim.sourceUpdatedAt,
+					nowSec: unixNow(),
+					cwd: claim.cwd,
+				});
 				stats.succeededNoOutput += 1;
 				return;
 			}

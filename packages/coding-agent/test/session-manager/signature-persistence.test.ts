@@ -1,6 +1,6 @@
+import { describe, expect, it } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { describe, expect, it } from "bun:test";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { SessionManager, type SessionMessageEntry } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { getBlobsDir, TempDir } from "@oh-my-pi/pi-utils";
