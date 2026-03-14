@@ -177,16 +177,14 @@ export type SymbolKey =
 	| "lang.archive"
 	| "lang.binary"
 	// Settings tab icons
-	| "tab.display"
-	| "tab.agent"
-	| "tab.input"
+	| "tab.appearance"
+	| "tab.model"
+	| "tab.interaction"
+	| "tab.context"
+	| "tab.editing"
 	| "tab.tools"
-	| "tab.config"
-	| "tab.services"
-	| "tab.bash"
-	| "tab.lsp"
-	| "tab.ttsr"
-	| "tab.status";
+	| "tab.tasks"
+	| "tab.providers";
 
 type SymbolMap = Record<SymbolKey, string>;
 
@@ -338,16 +336,14 @@ const UNICODE_SYMBOLS: SymbolMap = {
 	"lang.archive": "🗜",
 	"lang.binary": "⚙",
 	// Settings tabs
-	"tab.display": "🎨",
-	"tab.agent": "🤖",
-	"tab.input": "⌨",
+	"tab.appearance": "🎨",
+	"tab.model": "🤖",
+	"tab.interaction": "⌨",
+	"tab.context": "📋",
+	"tab.editing": "💻",
 	"tab.tools": "🔧",
-	"tab.config": "⚙",
-	"tab.services": "🌐",
-	"tab.bash": "💻",
-	"tab.lsp": "📝",
-	"tab.ttsr": "⏱",
-	"tab.status": "📊",
+	"tab.tasks": "📦",
+	"tab.providers": "🌐",
 };
 
 const NERD_SYMBOLS: SymbolMap = {
@@ -591,16 +587,14 @@ const NERD_SYMBOLS: SymbolMap = {
 	"lang.archive": "\u{F187}",
 	"lang.binary": "\u{F019A}",
 	// Settings tab icons
-	"tab.display": "󰃣",
-	"tab.agent": "󰚩",
-	"tab.input": "󰌌",
+	"tab.appearance": "󰃣",
+	"tab.model": "󰚩",
+	"tab.interaction": "󰌌",
+	"tab.context": "󰘸",
+	"tab.editing": "",
 	"tab.tools": "󰠭",
-	"tab.config": "󰒓",
-	"tab.services": "󰖟",
-	"tab.bash": "",
-	"tab.lsp": "󰌌",
-	"tab.ttsr": "󱎫",
-	"tab.status": "󰄪",
+	"tab.tasks": "󰐱",
+	"tab.providers": "󰖟",
 };
 
 const ASCII_SYMBOLS: SymbolMap = {
@@ -750,16 +744,14 @@ const ASCII_SYMBOLS: SymbolMap = {
 	"lang.archive": "zip",
 	"lang.binary": "bin",
 	// Settings tab icons
-	"tab.display": "[D]",
-	"tab.agent": "[A]",
-	"tab.input": "[I]",
+	"tab.appearance": "[A]",
+	"tab.model": "[M]",
+	"tab.interaction": "[I]",
+	"tab.context": "[X]",
+	"tab.editing": "[E]",
 	"tab.tools": "[T]",
-	"tab.config": "[C]",
-	"tab.services": "[S]",
-	"tab.bash": "[B]",
-	"tab.lsp": "[L]",
-	"tab.ttsr": "[R]",
-	"tab.status": "[=]",
+	"tab.tasks": "[K]",
+	"tab.providers": "[P]",
 };
 
 const SYMBOL_PRESETS: Record<SymbolPreset, SymbolMap> = {

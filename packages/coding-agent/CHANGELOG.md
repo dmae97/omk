@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added `task` model role to allow configuring a dedicated model for subtask execution via `modelRoles.task` setting
@@ -12,6 +13,22 @@
 
 ### Changed
 
+- Reorganized settings tabs from 12 tabs (display, agent, input, tools, config, services, bash, lsp, ttsr, status) to 8 focused tabs (appearance, model, interaction, context, editing, tools, tasks, providers) for improved discoverability
+- Consolidated status line settings into the Appearance tab instead of a separate Status tab
+- Reorganized sampling parameters (temperature, topP, topK, minP, presencePenalty, repetitionPenalty) into the Model tab
+- Moved edit tool settings (mode, fuzzyMatch, fuzzyThreshold, streamingAbort) to the Editing tab
+- Moved read tool settings (readLineNumbers, readHashLines, read.defaultLimit) to the Editing tab
+- Moved LSP settings (lsp.enabled, lsp.formatOnWrite, lsp.diagnosticsOnWrite, lsp.diagnosticsOnEdit) to the Editing tab
+- Moved bash interceptor settings to the Editing tab
+- Moved Python settings (python.toolMode, python.kernelMode, python.sharedGateway) to the Editing tab
+- Moved task delegation settings (task.isolation.*, task.eager, task.maxConcurrency, task.maxRecursionDepth) to the Tasks tab
+- Moved skill and command settings to the Tasks tab
+- Moved provider selection settings (providers.webSearch, providers.codeSearch, providers.image, etc.) to the Providers tab
+- Moved Exa settings to the Providers tab
+- Moved secret handling settings to the Providers tab
+- Moved speech-to-text settings to the Interaction tab
+- Moved context promotion, compaction, branch summary, memories, and TTSR settings to the Context tab
+- Updated tab icon symbols across unicode, nerd, and ASCII presets to match new tab structure
 - Changed default agent model from `default` to `pi/task` to enable independent model configuration for subtasks
 - Changed agent model resolution to support single-pattern inheritance fallback, allowing `pi/task` agents to inherit the active session model when the task role is unconfigured
 - Changed system prompt to use ISO 8601 date format (YYYY-MM-DD) instead of locale-specific formatting

@@ -17,45 +17,40 @@ import { THINKING_EFFORTS } from "@oh-my-pi/pi-ai";
 // ═══════════════════════════════════════════════════════════════════════════
 
 export type SettingTab =
-	| "display"
-	| "agent"
-	| "input"
+	| "appearance"
+	| "model"
+	| "interaction"
+	| "context"
+	| "editing"
 	| "tools"
-	| "config"
-	| "services"
-	| "bash"
-	| "lsp"
-	| "ttsr"
-	| "status";
+	| "tasks"
+	| "providers";
 
 /** Tab display metadata - icon is resolved via theme.symbol() */
 export type TabMetadata = { label: string; icon: `tab.${string}` };
 
-/** Ordered list of tabs for UI rendering (status excluded - custom menu) */
+/** Ordered list of tabs for UI rendering */
 export const SETTING_TABS: SettingTab[] = [
-	"display",
-	"agent",
-	"input",
+	"appearance",
+	"model",
+	"interaction",
+	"context",
+	"editing",
 	"tools",
-	"config",
-	"services",
-	"bash",
-	"lsp",
-	"ttsr",
+	"tasks",
+	"providers",
 ];
 
 /** Tab display metadata - icon is a symbol key from theme.ts (tab.*) */
 export const TAB_METADATA: Record<SettingTab, { label: string; icon: `tab.${string}` }> = {
-	display: { label: "Display", icon: "tab.display" },
-	agent: { label: "Agent", icon: "tab.agent" },
-	input: { label: "Input", icon: "tab.input" },
+	appearance: { label: "Appearance", icon: "tab.appearance" },
+	model: { label: "Model", icon: "tab.model" },
+	interaction: { label: "Interaction", icon: "tab.interaction" },
+	context: { label: "Context", icon: "tab.context" },
+	editing: { label: "Editing", icon: "tab.editing" },
 	tools: { label: "Tools", icon: "tab.tools" },
-	config: { label: "Config", icon: "tab.config" },
-	services: { label: "Services", icon: "tab.services" },
-	bash: { label: "Bash", icon: "tab.bash" },
-	lsp: { label: "LSP", icon: "tab.lsp" },
-	ttsr: { label: "TTSR", icon: "tab.ttsr" },
-	status: { label: "Status", icon: "tab.status" },
+	tasks: { label: "Tasks", icon: "tab.tasks" },
+	providers: { label: "Providers", icon: "tab.providers" },
 };
 
 /** Status line segment identifiers */
@@ -140,701 +135,1173 @@ type SettingDef =
 // Schema Definition
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Typed defaults for array/record settings — named constants avoid `as` casts
+// under `as const` while still letting SettingValue infer the correct element type.
+const EMPTY_STRING_ARRAY: string[] = [];
+const EMPTY_STRING_RECORD: Record<string, string> = {};
+
 export const SETTINGS_SCHEMA = {
-	// ─────────────────────────────────────────────────────────────────────────
-	// Top-level settings
-	// ─────────────────────────────────────────────────────────────────────────
+	// ────────────────────────────────────────────────────────────────────────
+	// General settings (no UI)
+	// ────────────────────────────────────────────────────────────────────────
 	lastChangelogVersion: { type: "string", default: undefined },
+
+	shellPath: { type: "string", default: undefined },
+
+	extensions: { type: "array", default: EMPTY_STRING_ARRAY },
+
+	enabledModels: { type: "array", default: EMPTY_STRING_ARRAY },
+
+	disabledProviders: { type: "array", default: EMPTY_STRING_ARRAY },
+
+	disabledExtensions: { type: "array", default: EMPTY_STRING_ARRAY },
+
+	modelRoles: { type: "record", default: EMPTY_STRING_RECORD },
+
+	// ────────────────────────────────────────────────────────────────────────
+	// Appearance
+	// ────────────────────────────────────────────────────────────────────────
+
+	// Theme
 	"theme.dark": {
 		type: "string",
 		default: "titanium",
 		ui: {
-			tab: "display",
-			label: "Dark theme",
+			tab: "appearance",
+			label: "Dark Theme",
 			description: "Theme used when terminal has dark background",
 			submenu: true,
 		},
 	},
+
 	"theme.light": {
 		type: "string",
 		default: "light",
 		ui: {
-			tab: "display",
-			label: "Light theme",
+			tab: "appearance",
+			label: "Light Theme",
 			description: "Theme used when terminal has light background",
 			submenu: true,
 		},
 	},
+
 	symbolPreset: {
 		type: "enum",
 		values: ["unicode", "nerd", "ascii"] as const,
 		default: "unicode",
-		ui: { tab: "display", label: "Symbol preset", description: "Icon/symbol style", submenu: true },
+		ui: { tab: "appearance", label: "Symbol Preset", description: "Icon/symbol style", submenu: true },
 	},
+
 	colorBlindMode: {
 		type: "boolean",
 		default: false,
 		ui: {
-			tab: "display",
-			label: "Color blind mode",
+			tab: "appearance",
+			label: "Color-Blind Mode",
 			description: "Use blue instead of green for diff additions",
 		},
 	},
-	"display.tabWidth": {
-		type: "number",
-		default: 3,
-		ui: {
-			tab: "display",
-			label: "Tab width",
-			description: "Default number of spaces used when rendering tab characters",
-			submenu: true,
-		},
-	},
-	"display.showTokenUsage": {
-		type: "boolean",
-		default: false,
-		ui: {
-			tab: "display",
-			label: "Show token usage",
-			description: "Show per-turn token usage on assistant messages",
-		},
-	},
-	defaultThinkingLevel: {
+
+	// Status line
+	"statusLine.preset": {
 		type: "enum",
-		values: THINKING_EFFORTS,
-		default: "high",
-		ui: {
-			tab: "agent",
-			label: "Thinking level",
-			description: "Reasoning depth for thinking-capable models",
-			submenu: true,
-		},
-	},
-	hideThinkingBlock: {
-		type: "boolean",
-		default: false,
-		ui: { tab: "agent", label: "Hide thinking", description: "Hide thinking blocks in assistant responses" },
-	},
-	steeringMode: {
-		type: "enum",
-		values: ["all", "one-at-a-time"] as const,
-		default: "one-at-a-time",
-		ui: {
-			tab: "agent",
-			label: "Steering mode",
-			description: "How to process queued messages while agent is working",
-		},
-	},
-	followUpMode: {
-		type: "enum",
-		values: ["all", "one-at-a-time"] as const,
-		default: "one-at-a-time",
-		ui: {
-			tab: "agent",
-			label: "Follow-up mode",
-			description: "How to drain follow-up messages after a turn completes",
-		},
-	},
-	interruptMode: {
-		type: "enum",
-		values: ["immediate", "wait"] as const,
-		default: "immediate",
-		ui: { tab: "agent", label: "Interrupt mode", description: "When steering messages interrupt tool execution" },
-	},
-	doubleEscapeAction: {
-		type: "enum",
-		values: ["branch", "tree", "none"] as const,
-		default: "tree",
-		ui: {
-			tab: "input",
-			label: "Double-escape action",
-			description: "Action when pressing Escape twice with empty editor",
-		},
-	},
-	treeFilterMode: {
-		type: "enum",
-		values: ["default", "no-tools", "user-only", "labeled-only", "all"] as const,
+		values: ["default", "minimal", "compact", "full", "nerd", "ascii", "custom"] as const,
 		default: "default",
 		ui: {
-			tab: "input",
-			label: "Tree filter mode",
-			description: "Default filter mode when opening the session tree",
-		},
-	},
-	shellPath: { type: "string", default: undefined },
-	collapseChangelog: {
-		type: "boolean",
-		default: false,
-		ui: { tab: "input", label: "Collapse changelog", description: "Show condensed changelog after updates" },
-	},
-	autocompleteMaxVisible: {
-		type: "number",
-		default: 5,
-		ui: {
-			tab: "input",
-			label: "Autocomplete max items",
-			description: "Max visible items in autocomplete dropdown (3-20)",
+			tab: "appearance",
+			label: "Status Line Preset",
+			description: "Pre-built status line configurations",
 			submenu: true,
 		},
 	},
-	repeatToolDescriptions: {
-		type: "boolean",
-		default: false,
-		ui: {
-			tab: "agent",
-			label: "Repeat tool descriptions",
-			description: "Render full tool descriptions in the system prompt instead of a tool name list",
-		},
-	},
-	readLineNumbers: {
-		type: "boolean",
-		default: false,
-		ui: {
-			tab: "config",
-			label: "Read line numbers",
-			description: "Prepend line numbers to read tool output by default",
-		},
-	},
-	readHashLines: {
-		type: "boolean",
-		default: true,
-		ui: {
-			tab: "config",
-			label: "Read hash lines",
-			description: "Include line hashes in read output for hashline edit mode (LINE#ID:content)",
-		},
-	},
-	"read.defaultLimit": {
-		type: "number",
-		default: 300,
-		ui: {
-			tab: "tools",
-			label: "Read default limit",
-			description: "Default number of lines returned when agent calls read without a limit",
-			submenu: true,
-		},
-	},
-	showHardwareCursor: {
-		type: "boolean",
-		default: true, // will be computed based on platform if undefined
-		ui: { tab: "display", label: "Hardware cursor", description: "Show terminal cursor for IME support" },
-	},
-	clearOnShrink: {
-		type: "boolean",
-		default: false,
-		ui: {
-			tab: "display",
-			label: "Clear on shrink",
-			description: "Clear empty rows when content shrinks (may cause flicker)",
-		},
-	},
-	extensions: { type: "array", default: [] as string[] },
-	enabledModels: { type: "array", default: [] as string[] },
-	disabledProviders: { type: "array", default: [] as string[] },
-	disabledExtensions: { type: "array", default: [] as string[] },
-	modelRoles: { type: "record", default: {} as Record<string, string> },
-	"contextPromotion.enabled": {
-		type: "boolean",
-		default: true,
-		ui: {
-			tab: "agent",
-			label: "Auto-promote context",
-			description: "Promote to a larger-context model on context overflow instead of compacting",
-		},
-	},
 
-	// ─────────────────────────────────────────────────────────────────────────
-	// Secrets settings
-	// ─────────────────────────────────────────────────────────────────────────
-	"secrets.enabled": {
-		type: "boolean",
-		default: false,
-		ui: { tab: "config", label: "Hide secrets", description: "Obfuscate secrets before sending to AI providers" },
-	},
-
-	// ─────────────────────────────────────────────────────────────────────────
-	// Compaction settings
-	// ─────────────────────────────────────────────────────────────────────────
-	"compaction.enabled": {
-		type: "boolean",
-		default: true,
-		ui: {
-			tab: "agent",
-			label: "Auto-compact",
-			description: "Automatically compact context when it gets too large",
-		},
-	},
-	"compaction.strategy": {
+	"statusLine.separator": {
 		type: "enum",
-		values: ["context-full", "handoff", "off"] as const,
-		default: "context-full",
+		values: ["powerline", "powerline-thin", "slash", "pipe", "block", "none", "ascii"] as const,
+		default: "powerline-thin",
 		ui: {
-			tab: "agent",
-			label: "Context-full strategy",
-			description: "Choose in-place context-full maintenance, auto-handoff, or disable auto maintenance (off)",
-			submenu: true,
-		},
-	},
-	"compaction.thresholdPercent": {
-		type: "number",
-		default: -1,
-		ui: {
-			tab: "agent",
-			label: "Context threshold",
-			description: "Percent threshold for context maintenance; set to Default to use legacy reserve-based behavior",
-			submenu: true,
-		},
-	},
-	"compaction.handoffSaveToDisk": {
-		type: "boolean",
-		default: false,
-		ui: {
-			tab: "agent",
-			label: "Save auto-handoff docs",
-			description: "Save generated handoff documents to markdown files for the auto-handoff flow",
-		},
-	},
-	"compaction.reserveTokens": { type: "number", default: 16384 },
-	"compaction.keepRecentTokens": { type: "number", default: 20000 },
-	"compaction.autoContinue": { type: "boolean", default: true },
-	"compaction.remoteEnabled": {
-		type: "boolean",
-		default: true,
-		ui: {
-			tab: "agent",
-			label: "Remote compaction",
-			description: "Use remote compaction endpoints when available instead of local summarization",
-		},
-	},
-	"compaction.remoteEndpoint": { type: "string", default: undefined },
-
-	// ─────────────────────────────────────────────────────────────────────────
-	// Branch summary settings
-	// ─────────────────────────────────────────────────────────────────────────
-	"branchSummary.enabled": {
-		type: "boolean",
-		default: false,
-		ui: { tab: "agent", label: "Branch summaries", description: "Prompt to summarize when leaving a branch" },
-	},
-	"branchSummary.reserveTokens": { type: "number", default: 16384 },
-
-	// ─────────────────────────────────────────────────────────────────────────
-	// Memories settings
-	// ─────────────────────────────────────────────────────────────────────────
-	"memories.enabled": {
-		type: "boolean",
-		default: false,
-		ui: {
-			tab: "agent",
-			label: "Memories",
-			description: "Enable autonomous memory extraction and consolidation",
-		},
-	},
-	"memories.maxRolloutsPerStartup": { type: "number", default: 64 },
-	"memories.maxRolloutAgeDays": { type: "number", default: 30 },
-	"memories.minRolloutIdleHours": { type: "number", default: 12 },
-	"memories.threadScanLimit": { type: "number", default: 300 },
-	"memories.maxRawMemoriesForGlobal": { type: "number", default: 200 },
-	"memories.stage1Concurrency": { type: "number", default: 8 },
-	"memories.stage1LeaseSeconds": { type: "number", default: 120 },
-	"memories.stage1RetryDelaySeconds": { type: "number", default: 120 },
-	"memories.phase2LeaseSeconds": { type: "number", default: 180 },
-	"memories.phase2RetryDelaySeconds": { type: "number", default: 180 },
-	"memories.phase2HeartbeatSeconds": { type: "number", default: 30 },
-	"memories.rolloutPayloadPercent": { type: "number", default: 0.7 },
-	"memories.fallbackTokenLimit": { type: "number", default: 16000 },
-	"memories.summaryInjectionTokenLimit": { type: "number", default: 5000 },
-
-	// ─────────────────────────────────────────────────────────────────────────
-	// Retry settings
-	// ─────────────────────────────────────────────────────────────────────────
-	"retry.enabled": { type: "boolean", default: true },
-	"retry.maxRetries": {
-		type: "number",
-		default: 3,
-		ui: {
-			tab: "agent",
-			label: "Retry max attempts",
-			description: "Maximum retry attempts on API errors",
-			submenu: true,
-		},
-	},
-	"retry.baseDelayMs": { type: "number", default: 2000 },
-
-	// ─────────────────────────────────────────────────────────────────────────
-	// Todo completion settings
-	// ─────────────────────────────────────────────────────────────────────────
-	"todo.reminders": {
-		type: "boolean",
-		default: true,
-		ui: { tab: "agent", label: "Todo reminders", description: "Remind agent to complete todos before stopping" },
-	},
-	"todo.reminders.max": {
-		type: "number",
-		default: 3,
-		ui: {
-			tab: "agent",
-			label: "Todo max reminders",
-			description: "Maximum reminders to complete todos before giving up",
-			submenu: true,
-		},
-	},
-	"todo.eager": {
-		type: "boolean",
-		default: false,
-		ui: {
-			tab: "agent",
-			label: "Eager todos",
-			description: "Automatically create a comprehensive todo list after the first message",
-		},
-	},
-
-	// ─────────────────────────────────────────────────────────────────────────
-	// Optional tools
-	// ─────────────────────────────────────────────────────────────────────────
-	"todo.enabled": {
-		type: "boolean",
-		default: true,
-		ui: { tab: "tools", label: "Enable Todos", description: "Enable the todo_write tool for task tracking" },
-	},
-	"find.enabled": {
-		type: "boolean",
-		default: true,
-		ui: { tab: "tools", label: "Enable Find", description: "Enable the find tool for file searching" },
-	},
-	"grep.enabled": {
-		type: "boolean",
-		default: true,
-		ui: { tab: "tools", label: "Enable Grep", description: "Enable the grep tool for content searching" },
-	},
-	"grep.contextBefore": {
-		type: "number",
-		default: 0,
-		ui: {
-			tab: "tools",
-			label: "Grep context before",
-			description: "Lines of context before each grep match",
-			submenu: true,
-		},
-	},
-	"grep.contextAfter": {
-		type: "number",
-		default: 0,
-		ui: {
-			tab: "tools",
-			label: "Grep context after",
-			description: "Lines of context after each grep match",
-			submenu: true,
-		},
-	},
-	"astGrep.enabled": {
-		type: "boolean",
-		default: true,
-		ui: { tab: "tools", label: "Enable AST Grep", description: "Enable the ast_grep tool for structural AST search" },
-	},
-	"astEdit.enabled": {
-		type: "boolean",
-		default: true,
-		ui: {
-			tab: "tools",
-			label: "Enable AST Edit",
-			description: "Enable the ast_edit tool for structural AST rewrites",
-		},
-	},
-	"renderMermaid.enabled": {
-		type: "boolean",
-		default: false,
-		ui: {
-			tab: "tools",
-			label: "Enable Render Mermaid",
-			description: "Enable the render_mermaid tool for Mermaid-to-ASCII rendering",
-		},
-	},
-	"notebook.enabled": {
-		type: "boolean",
-		default: true,
-		ui: { tab: "tools", label: "Enable Notebook", description: "Enable the notebook tool for notebook editing" },
-	},
-	"inspect_image.enabled": {
-		type: "boolean",
-		default: false,
-		ui: {
-			tab: "tools",
-			label: "Enable Inspect Image",
-			description: "Enable the inspect_image tool, delegating image understanding to a vision-capable model",
-		},
-	},
-	"checkpoint.enabled": {
-		type: "boolean",
-		default: false,
-		ui: {
-			tab: "tools",
-			label: "Enable Checkpoint/Rewind",
-			description: "Enable the checkpoint and rewind tools for context checkpointing",
-		},
-	},
-	"fetch.enabled": {
-		type: "boolean",
-		default: true,
-		ui: { tab: "tools", label: "Enable Fetch", description: "Enable the fetch tool for URL fetching" },
-	},
-	"web_search.enabled": {
-		type: "boolean",
-		default: true,
-		ui: { tab: "tools", label: "Enable Web Search", description: "Enable the web_search tool for web searching" },
-	},
-	"lsp.enabled": {
-		type: "boolean",
-		default: true,
-		ui: { tab: "tools", label: "Enable LSP", description: "Enable the lsp tool for language server protocol" },
-	},
-	"calc.enabled": {
-		type: "boolean",
-		default: false,
-		ui: {
-			tab: "tools",
-			label: "Enable Calculator",
-			description: "Enable the calculator tool for basic calculations",
-		},
-	},
-	"browser.enabled": {
-		type: "boolean",
-		default: true,
-		ui: {
-			tab: "tools",
-			label: "Enable Browser",
-			description: "Enable the browser tool (Ulixee Hero)",
-		},
-	},
-	"browser.headless": {
-		type: "boolean",
-		default: true,
-		ui: {
-			tab: "tools",
-			label: "Browser headless",
-			description: "Launch browser in headless mode (disable to show browser UI)",
-		},
-	},
-	"tools.intentTracing": {
-		type: "boolean",
-		default: true,
-		ui: {
-			tab: "tools",
-			label: "Intent tracing",
-			description: "Ask the agent to describe the intent of each tool call before executing it",
-		},
-	},
-	"tools.maxTimeout": {
-		type: "number",
-		default: 0,
-		ui: {
-			tab: "tools",
-			label: "Max tool timeout",
-			description: "Maximum timeout in seconds the agent can set for any tool (0 = no limit)",
-			submenu: true,
-		},
-	},
-	"async.enabled": {
-		type: "boolean",
-		default: false,
-		ui: {
-			tab: "tools",
-			label: "Async execution",
-			description: "Enable async bash commands and background task execution",
-		},
-	},
-	"async.maxJobs": {
-		type: "number",
-		default: 100,
-		ui: {
-			tab: "tools",
-			label: "Async max jobs",
-			description: "Maximum concurrent background jobs (1-100)",
+			tab: "appearance",
+			label: "Status Line Separator",
+			description: "Style of separators between segments",
 			submenu: true,
 		},
 	},
 
-	// ─────────────────────────────────────────────────────────────────────────
-	// Task tool settings
-	// ─────────────────────────────────────────────────────────────────────────
-	"task.isolation.mode": {
-		type: "enum",
-		values: ["none", "worktree", "fuse-overlay", "fuse-projfs"] as const,
-		default: "none",
-		ui: {
-			tab: "tools",
-			label: "Task isolation",
-			description:
-				"Isolation mode for subagents (none, git worktree, fuse-overlayfs on Unix, or ProjFS on Windows via fuse-projfs; unsupported modes fall back to worktree)",
-			submenu: true,
-		},
-	},
-	"task.isolation.merge": {
-		type: "enum",
-		values: ["patch", "branch"] as const,
-		default: "patch",
-		ui: {
-			tab: "tools",
-			label: "Task isolation merge",
-			description: "How isolated task changes are integrated (patch apply or branch merge)",
-			submenu: true,
-		},
-	},
-	"task.isolation.commits": {
-		type: "enum",
-		values: ["generic", "ai"] as const,
-		default: "generic",
-		ui: {
-			tab: "tools",
-			label: "Task isolation commits",
-			description: "Commit message style for nested repo changes (generic or AI-generated)",
-			submenu: true,
-		},
-	},
-	"task.eager": {
+	"statusLine.showHookStatus": {
 		type: "boolean",
-		default: false,
+		default: true,
 		ui: {
-			tab: "tools",
-			label: "Eager task delegation",
-			description: "Encourage the agent to delegate work to subagents unless changes are trivial",
+			tab: "appearance",
+			label: "Show Hook Status",
+			description: "Display hook status messages below status line",
 		},
 	},
-	"task.maxConcurrency": {
-		type: "number",
-		default: 32,
-		ui: {
-			tab: "tools",
-			label: "Task max concurrency",
-			description: "Concurrent limit for subagents",
-			submenu: true,
-		},
-	},
-	"task.maxRecursionDepth": {
-		type: "number",
-		default: 2,
-		ui: {
-			tab: "tools",
-			label: "Task max recursion depth",
-			description: "How many levels deep subagents can spawn their own subagents",
-			submenu: true,
-		},
-	},
-	"task.disabledAgents": {
-		type: "array",
-		default: [] as string[],
-	},
-	"task.agentModelOverrides": {
-		type: "record",
-		default: {} as Record<string, string>,
-	},
 
-	// ─────────────────────────────────────────────────────────────────────────
-	// Startup settings
-	// ─────────────────────────────────────────────────────────────────────────
-	"startup.quiet": {
-		type: "boolean",
-		default: false,
-		ui: { tab: "input", label: "Startup quiet", description: "Skip welcome screen and startup status messages" },
-	},
+	"statusLine.leftSegments": { type: "array", default: [] as StatusLineSegmentId[] },
 
-	// ─────────────────────────────────────────────────────────────────────────
-	// Notification settings
-	// ─────────────────────────────────────────────────────────────────────────
-	"completion.notify": {
-		type: "enum",
-		values: ["on", "off"] as const,
-		default: "on",
-		ui: { tab: "input", label: "Completion notification", description: "Notify when the agent completes" },
-	},
+	"statusLine.rightSegments": { type: "array", default: [] as StatusLineSegmentId[] },
 
-	// ─────────────────────────────────────────────────────────────────────────
-	// Ask settings
-	// ─────────────────────────────────────────────────────────────────────────
-	"ask.timeout": {
-		type: "number",
-		default: 30,
-		ui: {
-			tab: "input",
-			label: "Ask tool timeout",
-			description: "Auto-select recommended option after timeout (0 to disable)",
-			submenu: true,
-		},
-	},
-	"ask.notify": {
-		type: "enum",
-		values: ["on", "off"] as const,
-		default: "on",
-		ui: { tab: "input", label: "Ask notification", description: "Notify when ask tool is waiting for input" },
-	},
+	"statusLine.segmentOptions": { type: "record", default: {} as Record<string, unknown> },
 
-	// ─────────────────────────────────────────────────────────────────────────
-	// Terminal settings
-	// ─────────────────────────────────────────────────────────────────────────
+	// Images and terminal
 	"terminal.showImages": {
 		type: "boolean",
 		default: true,
 		ui: {
-			tab: "display",
-			label: "Show images",
+			tab: "appearance",
+			label: "Show Inline Images",
 			description: "Render images inline in terminal",
 			condition: "hasImageProtocol",
 		},
 	},
 
-	// ─────────────────────────────────────────────────────────────────────────
-	// Image settings
-	// ─────────────────────────────────────────────────────────────────────────
 	"images.autoResize": {
 		type: "boolean",
 		default: true,
 		ui: {
-			tab: "display",
-			label: "Auto-resize images",
+			tab: "appearance",
+			label: "Auto-Resize Images",
 			description: "Resize large images to 2000x2000 max for better model compatibility",
 		},
 	},
+
 	"images.blockImages": {
 		type: "boolean",
 		default: false,
-		ui: { tab: "display", label: "Block images", description: "Prevent images from being sent to LLM providers" },
+		ui: { tab: "appearance", label: "Block Images", description: "Prevent images from being sent to LLM providers" },
 	},
 
-	// ─────────────────────────────────────────────────────────────────────────
-	// Skills settings
-	// ─────────────────────────────────────────────────────────────────────────
+	// Display rendering
+	"display.tabWidth": {
+		type: "number",
+		default: 3,
+		ui: {
+			tab: "appearance",
+			label: "Tab Width",
+			description: "Default number of spaces used when rendering tab characters",
+			submenu: true,
+		},
+	},
+
+	"display.showTokenUsage": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "appearance",
+			label: "Show Token Usage",
+			description: "Show per-turn token usage on assistant messages",
+		},
+	},
+
+	showHardwareCursor: {
+		type: "boolean",
+		default: true, // will be computed based on platform if undefined
+		ui: { tab: "appearance", label: "Show Hardware Cursor", description: "Show terminal cursor for IME support" },
+	},
+
+	clearOnShrink: {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "appearance",
+			label: "Clear on Shrink",
+			description: "Clear empty rows when content shrinks (may cause flicker)",
+		},
+	},
+
+	// ────────────────────────────────────────────────────────────────────────
+	// Model
+	// ────────────────────────────────────────────────────────────────────────
+
+	// Reasoning and prompts
+	defaultThinkingLevel: {
+		type: "enum",
+		values: THINKING_EFFORTS,
+		default: "high",
+		ui: {
+			tab: "model",
+			label: "Thinking Level",
+			description: "Reasoning depth for thinking-capable models",
+			submenu: true,
+		},
+	},
+
+	hideThinkingBlock: {
+		type: "boolean",
+		default: false,
+		ui: { tab: "model", label: "Hide Thinking Blocks", description: "Hide thinking blocks in assistant responses" },
+	},
+
+	repeatToolDescriptions: {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "model",
+			label: "Repeat Tool Descriptions",
+			description: "Render full tool descriptions in the system prompt instead of a tool name list",
+		},
+	},
+
+	// Sampling
+	temperature: {
+		type: "number",
+		default: -1,
+		ui: {
+			tab: "model",
+			label: "Temperature",
+			description: "Sampling temperature (0 = deterministic, 1 = creative, -1 = provider default)",
+			submenu: true,
+		},
+	},
+
+	topP: {
+		type: "number",
+		default: -1,
+		ui: {
+			tab: "model",
+			label: "Top P",
+			description: "Nucleus sampling cutoff (0-1, -1 = provider default)",
+			submenu: true,
+		},
+	},
+
+	topK: {
+		type: "number",
+		default: -1,
+		ui: {
+			tab: "model",
+			label: "Top K",
+			description: "Sample from top-K tokens (-1 = provider default)",
+			submenu: true,
+		},
+	},
+
+	minP: {
+		type: "number",
+		default: -1,
+		ui: {
+			tab: "model",
+			label: "Min P",
+			description: "Minimum probability threshold (0-1, -1 = provider default)",
+			submenu: true,
+		},
+	},
+
+	presencePenalty: {
+		type: "number",
+		default: -1,
+		ui: {
+			tab: "model",
+			label: "Presence Penalty",
+			description: "Penalty for introducing already-present tokens (-1 = provider default)",
+			submenu: true,
+		},
+	},
+
+	repetitionPenalty: {
+		type: "number",
+		default: -1,
+		ui: {
+			tab: "model",
+			label: "Repetition Penalty",
+			description: "Penalty for repeated tokens (-1 = provider default)",
+			submenu: true,
+		},
+	},
+
+	serviceTier: {
+		type: "enum",
+		values: ["none", "auto", "default", "flex", "scale", "priority"] as const,
+		default: "none",
+		ui: {
+			tab: "model",
+			label: "Service Tier",
+			description: "OpenAI processing priority (none = omit parameter)",
+			submenu: true,
+		},
+	},
+
+	// Retries
+	"retry.enabled": { type: "boolean", default: true },
+
+	"retry.maxRetries": {
+		type: "number",
+		default: 3,
+		ui: {
+			tab: "model",
+			label: "Retry Attempts",
+			description: "Maximum retry attempts on API errors",
+			submenu: true,
+		},
+	},
+
+	"retry.baseDelayMs": { type: "number", default: 2000 },
+
+	// ────────────────────────────────────────────────────────────────────────
+	// Interaction
+	// ────────────────────────────────────────────────────────────────────────
+
+	// Conversation flow
+	steeringMode: {
+		type: "enum",
+		values: ["all", "one-at-a-time"] as const,
+		default: "one-at-a-time",
+		ui: {
+			tab: "interaction",
+			label: "Steering Mode",
+			description: "How to process queued messages while agent is working",
+		},
+	},
+
+	followUpMode: {
+		type: "enum",
+		values: ["all", "one-at-a-time"] as const,
+		default: "one-at-a-time",
+		ui: {
+			tab: "interaction",
+			label: "Follow-Up Mode",
+			description: "How to drain follow-up messages after a turn completes",
+		},
+	},
+
+	interruptMode: {
+		type: "enum",
+		values: ["immediate", "wait"] as const,
+		default: "immediate",
+		ui: {
+			tab: "interaction",
+			label: "Interrupt Mode",
+			description: "When steering messages interrupt tool execution",
+		},
+	},
+
+	// Input and startup
+	doubleEscapeAction: {
+		type: "enum",
+		values: ["branch", "tree", "none"] as const,
+		default: "tree",
+		ui: {
+			tab: "interaction",
+			label: "Double-Escape Action",
+			description: "Action when pressing Escape twice with empty editor",
+		},
+	},
+
+	treeFilterMode: {
+		type: "enum",
+		values: ["default", "no-tools", "user-only", "labeled-only", "all"] as const,
+		default: "default",
+		ui: {
+			tab: "interaction",
+			label: "Session Tree Filter",
+			description: "Default filter mode when opening the session tree",
+		},
+	},
+
+	autocompleteMaxVisible: {
+		type: "number",
+		default: 5,
+		ui: {
+			tab: "interaction",
+			label: "Autocomplete Items",
+			description: "Max visible items in autocomplete dropdown (3-20)",
+			submenu: true,
+		},
+	},
+
+	"startup.quiet": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "interaction",
+			label: "Quiet Startup",
+			description: "Skip welcome screen and startup status messages",
+		},
+	},
+
+	collapseChangelog: {
+		type: "boolean",
+		default: false,
+		ui: { tab: "interaction", label: "Collapse Changelog", description: "Show condensed changelog after updates" },
+	},
+
+	// Notifications
+	"completion.notify": {
+		type: "enum",
+		values: ["on", "off"] as const,
+		default: "on",
+		ui: { tab: "interaction", label: "Completion Notification", description: "Notify when the agent completes" },
+	},
+
+	"ask.timeout": {
+		type: "number",
+		default: 30,
+		ui: {
+			tab: "interaction",
+			label: "Ask Timeout",
+			description: "Auto-select recommended option after timeout (0 to disable)",
+			submenu: true,
+		},
+	},
+
+	"ask.notify": {
+		type: "enum",
+		values: ["on", "off"] as const,
+		default: "on",
+		ui: { tab: "interaction", label: "Ask Notification", description: "Notify when ask tool is waiting for input" },
+	},
+
+	// Speech-to-text
+	"stt.enabled": {
+		type: "boolean",
+		default: false,
+		ui: { tab: "interaction", label: "Speech-to-Text", description: "Enable speech-to-text input via microphone" },
+	},
+
+	"stt.language": {
+		type: "string",
+		default: "en",
+		ui: {
+			tab: "interaction",
+			label: "Speech Language",
+			description: "Language code for transcription (e.g., en, es, fr)",
+			submenu: true,
+		},
+	},
+
+	"stt.modelName": {
+		type: "enum",
+		values: ["tiny", "tiny.en", "base", "base.en", "small", "small.en", "medium", "medium.en", "large"] as const,
+		default: "base.en",
+		ui: {
+			tab: "interaction",
+			label: "Speech Model",
+			description: "Whisper model size (larger = more accurate but slower)",
+			submenu: true,
+		},
+	},
+
+	// ────────────────────────────────────────────────────────────────────────
+	// Context
+	// ────────────────────────────────────────────────────────────────────────
+
+	// Context promotion
+	"contextPromotion.enabled": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "context",
+			label: "Auto-Promote Context",
+			description: "Promote to a larger-context model on context overflow instead of compacting",
+		},
+	},
+
+	// Compaction
+	"compaction.enabled": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "context",
+			label: "Auto-Compact",
+			description: "Automatically compact context when it gets too large",
+		},
+	},
+
+	"compaction.strategy": {
+		type: "enum",
+		values: ["context-full", "handoff", "off"] as const,
+		default: "context-full",
+		ui: {
+			tab: "context",
+			label: "Compaction Strategy",
+			description: "Choose in-place context-full maintenance, auto-handoff, or disable auto maintenance (off)",
+			submenu: true,
+		},
+	},
+
+	"compaction.thresholdPercent": {
+		type: "number",
+		default: -1,
+		ui: {
+			tab: "context",
+			label: "Compaction Threshold",
+			description: "Percent threshold for context maintenance; set to Default to use legacy reserve-based behavior",
+			submenu: true,
+		},
+	},
+
+	"compaction.handoffSaveToDisk": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "context",
+			label: "Save Handoff Docs",
+			description: "Save generated handoff documents to markdown files for the auto-handoff flow",
+		},
+	},
+
+	"compaction.remoteEnabled": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "context",
+			label: "Remote Compaction",
+			description: "Use remote compaction endpoints when available instead of local summarization",
+		},
+	},
+
+	"compaction.reserveTokens": { type: "number", default: 16384 },
+
+	"compaction.keepRecentTokens": { type: "number", default: 20000 },
+
+	"compaction.autoContinue": { type: "boolean", default: true },
+
+	"compaction.remoteEndpoint": { type: "string", default: undefined },
+
+	// Branch summaries
+	"branchSummary.enabled": {
+		type: "boolean",
+		default: false,
+		ui: { tab: "context", label: "Branch Summaries", description: "Prompt to summarize when leaving a branch" },
+	},
+
+	"branchSummary.reserveTokens": { type: "number", default: 16384 },
+
+	// Memories
+	"memories.enabled": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "context",
+			label: "Memories",
+			description: "Enable autonomous memory extraction and consolidation",
+		},
+	},
+
+	"memories.maxRolloutsPerStartup": { type: "number", default: 64 },
+
+	"memories.maxRolloutAgeDays": { type: "number", default: 30 },
+
+	"memories.minRolloutIdleHours": { type: "number", default: 12 },
+
+	"memories.threadScanLimit": { type: "number", default: 300 },
+
+	"memories.maxRawMemoriesForGlobal": { type: "number", default: 200 },
+
+	"memories.stage1Concurrency": { type: "number", default: 8 },
+
+	"memories.stage1LeaseSeconds": { type: "number", default: 120 },
+
+	"memories.stage1RetryDelaySeconds": { type: "number", default: 120 },
+
+	"memories.phase2LeaseSeconds": { type: "number", default: 180 },
+
+	"memories.phase2RetryDelaySeconds": { type: "number", default: 180 },
+
+	"memories.phase2HeartbeatSeconds": { type: "number", default: 30 },
+
+	"memories.rolloutPayloadPercent": { type: "number", default: 0.7 },
+
+	"memories.fallbackTokenLimit": { type: "number", default: 16000 },
+
+	"memories.summaryInjectionTokenLimit": { type: "number", default: 5000 },
+
+	// TTSR
+	"ttsr.enabled": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "context",
+			label: "TTSR",
+			description: "Time Traveling Stream Rules: interrupt agent when output matches patterns",
+		},
+	},
+
+	"ttsr.contextMode": {
+		type: "enum",
+		values: ["discard", "keep"] as const,
+		default: "discard",
+		ui: {
+			tab: "context",
+			label: "TTSR Context Mode",
+			description: "What to do with partial output when TTSR triggers",
+		},
+	},
+
+	"ttsr.interruptMode": {
+		type: "enum",
+		values: ["never", "prose-only", "tool-only", "always"] as const,
+		default: "always",
+		ui: {
+			tab: "context",
+			label: "TTSR Interrupt Mode",
+			description: "When to interrupt mid-stream vs inject warning after completion",
+			submenu: true,
+		},
+	},
+
+	"ttsr.repeatMode": {
+		type: "enum",
+		values: ["once", "after-gap"] as const,
+		default: "once",
+		ui: {
+			tab: "context",
+			label: "TTSR Repeat Mode",
+			description: "How rules can repeat: once per session or after a message gap",
+		},
+	},
+
+	"ttsr.repeatGap": {
+		type: "number",
+		default: 10,
+		ui: {
+			tab: "context",
+			label: "TTSR Repeat Gap",
+			description: "Messages before a rule can trigger again",
+			submenu: true,
+		},
+	},
+
+	// ────────────────────────────────────────────────────────────────────────
+	// Editing
+	// ────────────────────────────────────────────────────────────────────────
+
+	// Edit tool
+	"edit.mode": {
+		type: "enum",
+		values: ["replace", "patch", "hashline"] as const,
+		default: "hashline",
+		ui: {
+			tab: "editing",
+			label: "Edit Mode",
+			description: "Select the edit tool variant (replace, patch, or hashline)",
+		},
+	},
+
+	"edit.fuzzyMatch": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "editing",
+			label: "Fuzzy Match",
+			description: "Accept high-confidence fuzzy matches for whitespace differences",
+		},
+	},
+
+	"edit.fuzzyThreshold": {
+		type: "number",
+		default: 0.95,
+		ui: {
+			tab: "editing",
+			label: "Fuzzy Match Threshold",
+			description: "Similarity threshold for fuzzy matches",
+			submenu: true,
+		},
+	},
+
+	"edit.streamingAbort": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "editing",
+			label: "Abort on Failed Preview",
+			description: "Abort streaming edit tool calls when patch preview fails",
+		},
+	},
+
+	// Read tool
+	readLineNumbers: {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "editing",
+			label: "Line Numbers",
+			description: "Prepend line numbers to read tool output by default",
+		},
+	},
+
+	readHashLines: {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "editing",
+			label: "Hash Lines",
+			description: "Include line hashes in read output for hashline edit mode (LINE#ID:content)",
+		},
+	},
+
+	"read.defaultLimit": {
+		type: "number",
+		default: 300,
+		ui: {
+			tab: "editing",
+			label: "Default Read Limit",
+			description: "Default number of lines returned when agent calls read without a limit",
+			submenu: true,
+		},
+	},
+
+	// LSP
+	"lsp.enabled": {
+		type: "boolean",
+		default: true,
+		ui: { tab: "editing", label: "LSP", description: "Enable the lsp tool for language server protocol" },
+	},
+
+	"lsp.formatOnWrite": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "editing",
+			label: "Format on Write",
+			description: "Automatically format code files using LSP after writing",
+		},
+	},
+
+	"lsp.diagnosticsOnWrite": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "editing",
+			label: "Diagnostics on Write",
+			description: "Return LSP diagnostics after writing code files",
+		},
+	},
+
+	"lsp.diagnosticsOnEdit": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "editing",
+			label: "Diagnostics on Edit",
+			description: "Return LSP diagnostics after editing code files",
+		},
+	},
+
+	// Bash interceptor
+	"bashInterceptor.enabled": {
+		type: "boolean",
+		default: false,
+		ui: { tab: "editing", label: "Bash Interceptor", description: "Block shell commands that have dedicated tools" },
+	},
+
+	"bashInterceptor.simpleLs": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "editing",
+			label: "Intercept `ls`",
+			description: "Intercept bare ls commands (when interceptor is enabled)",
+		},
+	},
+
+	// Python
+	"python.toolMode": {
+		type: "enum",
+		values: ["ipy-only", "bash-only", "both"] as const,
+		default: "both",
+		ui: { tab: "editing", label: "Python Tool Mode", description: "How Python code is executed" },
+	},
+
+	"python.kernelMode": {
+		type: "enum",
+		values: ["session", "per-call"] as const,
+		default: "session",
+		ui: {
+			tab: "editing",
+			label: "Python Kernel Mode",
+			description: "Whether to keep IPython kernel alive across calls",
+		},
+	},
+
+	"python.sharedGateway": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "editing",
+			label: "Shared Python Gateway",
+			description: "Share IPython kernel gateway across pi instances",
+		},
+	},
+
+	// ────────────────────────────────────────────────────────────────────────
+	// Tools
+	// ────────────────────────────────────────────────────────────────────────
+
+	// Todo tool
+	"todo.enabled": {
+		type: "boolean",
+		default: true,
+		ui: { tab: "tools", label: "Todos", description: "Enable the todo_write tool for task tracking" },
+	},
+
+	"todo.reminders": {
+		type: "boolean",
+		default: true,
+		ui: { tab: "tools", label: "Todo Reminders", description: "Remind agent to complete todos before stopping" },
+	},
+
+	"todo.reminders.max": {
+		type: "number",
+		default: 3,
+		ui: {
+			tab: "tools",
+			label: "Todo Reminder Limit",
+			description: "Maximum reminders to complete todos before giving up",
+			submenu: true,
+		},
+	},
+
+	"todo.eager": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "tools",
+			label: "Create Todos Automatically",
+			description: "Automatically create a comprehensive todo list after the first message",
+		},
+	},
+
+	// Search and AST tools
+	"find.enabled": {
+		type: "boolean",
+		default: true,
+		ui: { tab: "tools", label: "Find", description: "Enable the find tool for file searching" },
+	},
+
+	"grep.enabled": {
+		type: "boolean",
+		default: true,
+		ui: { tab: "tools", label: "Grep", description: "Enable the grep tool for content searching" },
+	},
+
+	"grep.contextBefore": {
+		type: "number",
+		default: 0,
+		ui: {
+			tab: "tools",
+			label: "Grep Context Before",
+			description: "Lines of context before each grep match",
+			submenu: true,
+		},
+	},
+
+	"grep.contextAfter": {
+		type: "number",
+		default: 0,
+		ui: {
+			tab: "tools",
+			label: "Grep Context After",
+			description: "Lines of context after each grep match",
+			submenu: true,
+		},
+	},
+
+	"astGrep.enabled": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "tools",
+			label: "AST Grep",
+			description: "Enable the ast_grep tool for structural AST search",
+		},
+	},
+
+	"astEdit.enabled": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "tools",
+			label: "AST Edit",
+			description: "Enable the ast_edit tool for structural AST rewrites",
+		},
+	},
+
+	// Optional tools
+	"notebook.enabled": {
+		type: "boolean",
+		default: true,
+		ui: { tab: "tools", label: "Notebook", description: "Enable the notebook tool for notebook editing" },
+	},
+
+	"renderMermaid.enabled": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "tools",
+			label: "Render Mermaid",
+			description: "Enable the render_mermaid tool for Mermaid-to-ASCII rendering",
+		},
+	},
+
+	"calc.enabled": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "tools",
+			label: "Calculator",
+			description: "Enable the calculator tool for basic calculations",
+		},
+	},
+
+	"inspect_image.enabled": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "tools",
+			label: "Inspect Image",
+			description: "Enable the inspect_image tool, delegating image understanding to a vision-capable model",
+		},
+	},
+
+	"checkpoint.enabled": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "tools",
+			label: "Checkpoint/Rewind",
+			description: "Enable the checkpoint and rewind tools for context checkpointing",
+		},
+	},
+
+	// Fetching and browser
+	"fetch.enabled": {
+		type: "boolean",
+		default: true,
+		ui: { tab: "tools", label: "Fetch", description: "Enable the fetch tool for URL fetching" },
+	},
+
+	"web_search.enabled": {
+		type: "boolean",
+		default: true,
+		ui: { tab: "tools", label: "Web Search", description: "Enable the web_search tool for web searching" },
+	},
+
+	"browser.enabled": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "tools",
+			label: "Browser",
+			description: "Enable the browser tool (Ulixee Hero)",
+		},
+	},
+
+	"browser.headless": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "tools",
+			label: "Headless Browser",
+			description: "Launch browser in headless mode (disable to show browser UI)",
+		},
+	},
+
+	// Tool execution
+	"tools.intentTracing": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "tools",
+			label: "Intent Tracing",
+			description: "Ask the agent to describe the intent of each tool call before executing it",
+		},
+	},
+
+	"tools.maxTimeout": {
+		type: "number",
+		default: 0,
+		ui: {
+			tab: "tools",
+			label: "Max Tool Timeout",
+			description: "Maximum timeout in seconds the agent can set for any tool (0 = no limit)",
+			submenu: true,
+		},
+	},
+
+	// Async jobs
+	"async.enabled": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "tools",
+			label: "Async Execution",
+			description: "Enable async bash commands and background task execution",
+		},
+	},
+
+	"async.maxJobs": {
+		type: "number",
+		default: 100,
+		ui: {
+			tab: "tools",
+			label: "Max Async Jobs",
+			description: "Maximum concurrent background jobs (1-100)",
+			submenu: true,
+		},
+	},
+
+	// MCP
+	"mcp.enableProjectConfig": {
+		type: "boolean",
+		default: true,
+		ui: { tab: "tools", label: "MCP Project Config", description: "Load .mcp.json/mcp.json from project root" },
+	},
+
+	"mcp.notifications": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "tools",
+			label: "MCP Update Injection",
+			description: "Inject MCP resource updates into the agent conversation",
+		},
+	},
+
+	"mcp.notificationDebounceMs": {
+		type: "number",
+		default: 500,
+		ui: {
+			tab: "tools",
+			label: "MCP Notification Debounce",
+			description: "Debounce window for MCP resource update notifications before injecting into conversation",
+		},
+	},
+
+	// ────────────────────────────────────────────────────────────────────────
+	// Tasks
+	// ────────────────────────────────────────────────────────────────────────
+
+	// Delegation
+	"task.isolation.mode": {
+		type: "enum",
+		values: ["none", "worktree", "fuse-overlay", "fuse-projfs"] as const,
+		default: "none",
+		ui: {
+			tab: "tasks",
+			label: "Isolation Mode",
+			description:
+				"Isolation mode for subagents (none, git worktree, fuse-overlayfs on Unix, or ProjFS on Windows via fuse-projfs; unsupported modes fall back to worktree)",
+			submenu: true,
+		},
+	},
+
+	"task.isolation.merge": {
+		type: "enum",
+		values: ["patch", "branch"] as const,
+		default: "patch",
+		ui: {
+			tab: "tasks",
+			label: "Isolation Merge Strategy",
+			description: "How isolated task changes are integrated (patch apply or branch merge)",
+			submenu: true,
+		},
+	},
+
+	"task.isolation.commits": {
+		type: "enum",
+		values: ["generic", "ai"] as const,
+		default: "generic",
+		ui: {
+			tab: "tasks",
+			label: "Isolation Commit Style",
+			description: "Commit message style for nested repo changes (generic or AI-generated)",
+			submenu: true,
+		},
+	},
+
+	"task.eager": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "tasks",
+			label: "Prefer Task Delegation",
+			description: "Encourage the agent to delegate work to subagents unless changes are trivial",
+		},
+	},
+
+	"task.maxConcurrency": {
+		type: "number",
+		default: 32,
+		ui: {
+			tab: "tasks",
+			label: "Max Concurrent Tasks",
+			description: "Concurrent limit for subagents",
+			submenu: true,
+		},
+	},
+
+	"task.maxRecursionDepth": {
+		type: "number",
+		default: 2,
+		ui: {
+			tab: "tasks",
+			label: "Max Task Recursion",
+			description: "How many levels deep subagents can spawn their own subagents",
+			submenu: true,
+		},
+	},
+
+	"task.disabledAgents": {
+		type: "array",
+		default: [] as string[],
+	},
+
+	"task.agentModelOverrides": {
+		type: "record",
+		default: {} as Record<string, string>,
+	},
+
+	// Skills
 	"skills.enabled": { type: "boolean", default: true },
+
 	"skills.enableSkillCommands": {
 		type: "boolean",
 		default: true,
-		ui: { tab: "tools", label: "Skill commands", description: "Register skills as /skill:name commands" },
+		ui: { tab: "tasks", label: "Skill Commands", description: "Register skills as /skill:name commands" },
 	},
+
 	"skills.enableCodexUser": { type: "boolean", default: true },
+
 	"skills.enableClaudeUser": { type: "boolean", default: true },
+
 	"skills.enableClaudeProject": { type: "boolean", default: true },
+
 	"skills.enablePiUser": { type: "boolean", default: true },
+
 	"skills.enablePiProject": { type: "boolean", default: true },
+
 	"skills.customDirectories": { type: "array", default: [] as string[] },
+
 	"skills.ignoredSkills": { type: "array", default: [] as string[] },
+
 	"skills.includeSkills": { type: "array", default: [] as string[] },
 
-	// ─────────────────────────────────────────────────────────────────────────
-	// Commands settings
-	// ─────────────────────────────────────────────────────────────────────────
+	// Commands
 	"commands.enableClaudeUser": {
 		type: "boolean",
 		default: true,
-		ui: { tab: "tools", label: "Claude user commands", description: "Load commands from ~/.claude/commands/" },
+		ui: { tab: "tasks", label: "Claude User Commands", description: "Load commands from ~/.claude/commands/" },
 	},
+
 	"commands.enableClaudeProject": {
 		type: "boolean",
 		default: true,
-		ui: { tab: "tools", label: "Claude project commands", description: "Load commands from .claude/commands/" },
+		ui: { tab: "tasks", label: "Claude Project Commands", description: "Load commands from .claude/commands/" },
 	},
 
-	// ─────────────────────────────────────────────────────────────────────────
-	// Provider settings
-	// ─────────────────────────────────────────────────────────────────────────
+	// ────────────────────────────────────────────────────────────────────────
+	// Providers
+	// ────────────────────────────────────────────────────────────────────────
+
+	// Secret handling
+	"secrets.enabled": {
+		type: "boolean",
+		default: false,
+		ui: { tab: "providers", label: "Hide Secrets", description: "Obfuscate secrets before sending to AI providers" },
+	},
+
+	// Provider selection
 	"providers.webSearch": {
 		type: "enum",
 		values: [
@@ -854,48 +1321,57 @@ export const SETTINGS_SCHEMA = {
 			"parallel",
 		] as const,
 		default: "auto",
-		ui: { tab: "services", label: "Web search provider", description: "Provider for web search tool", submenu: true },
+		ui: {
+			tab: "providers",
+			label: "Web Search Provider",
+			description: "Provider for web search tool",
+			submenu: true,
+		},
 	},
+
 	"providers.codeSearch": {
 		type: "enum",
 		values: ["grep", "exa"] as const,
 		default: "grep",
 		ui: {
-			tab: "services",
-			label: "Code search provider",
+			tab: "providers",
+			label: "Code Search Provider",
 			description: "Provider for code search tool",
 			submenu: true,
 		},
 	},
+
 	"providers.image": {
 		type: "enum",
 		values: ["auto", "gemini", "openrouter"] as const,
 		default: "auto",
 		ui: {
-			tab: "services",
-			label: "Image provider",
+			tab: "providers",
+			label: "Image Provider",
 			description: "Provider for image generation tool",
 			submenu: true,
 		},
 	},
+
 	"providers.kimiApiFormat": {
 		type: "enum",
 		values: ["openai", "anthropic"] as const,
 		default: "anthropic",
 		ui: {
-			tab: "services",
-			label: "Kimi API format",
+			tab: "providers",
+			label: "Kimi API Format",
 			description: "API format for Kimi Code provider",
 			submenu: true,
 		},
 	},
+
 	"providers.openaiWebsockets": {
 		type: "enum",
 		values: ["auto", "off", "on"] as const,
 		default: "auto",
 		ui: {
-			tab: "services",
-			label: "OpenAI websockets",
+			tab: "providers",
+			label: "OpenAI WebSockets",
 			description: "Websocket policy for OpenAI Codex models (auto uses model defaults, on forces, off disables)",
 			submenu: true,
 		},
@@ -905,378 +1381,59 @@ export const SETTINGS_SCHEMA = {
 		type: "boolean",
 		default: true,
 		ui: {
-			tab: "services",
-			label: "Parallel fetch",
+			tab: "providers",
+			label: "Parallel Fetch",
 			description: "Use Parallel extract API for URL fetching when credentials are available",
 		},
 	},
 
-	// ─────────────────────────────────────────────────────────────────────────
-	// Exa settings
-	// ─────────────────────────────────────────────────────────────────────────
+	// Exa
 	"exa.enabled": {
 		type: "boolean",
 		default: true,
-		ui: { tab: "services", label: "Exa enabled", description: "Master toggle for all Exa search tools" },
+		ui: { tab: "providers", label: "Exa", description: "Master toggle for all Exa search tools" },
 	},
+
 	"exa.enableSearch": {
 		type: "boolean",
 		default: true,
-		ui: { tab: "services", label: "Exa search", description: "Basic search, deep search, code search, crawl" },
+		ui: { tab: "providers", label: "Exa Search", description: "Basic search, deep search, code search, crawl" },
 	},
+
 	"exa.enableResearcher": {
 		type: "boolean",
 		default: false,
-		ui: { tab: "services", label: "Exa researcher", description: "AI-powered deep research tasks" },
+		ui: { tab: "providers", label: "Exa Researcher", description: "AI-powered deep research tasks" },
 	},
+
 	"exa.enableWebsets": {
 		type: "boolean",
 		default: false,
-		ui: { tab: "services", label: "Exa websets", description: "Webset management and enrichment tools" },
+		ui: { tab: "providers", label: "Exa Websets", description: "Webset management and enrichment tools" },
 	},
 
-	// ─────────────────────────────────────────────────────────────────────────
-	// Bash interceptor settings
-	// ─────────────────────────────────────────────────────────────────────────
-	"bashInterceptor.enabled": {
-		type: "boolean",
-		default: false,
-		ui: { tab: "bash", label: "Interceptor", description: "Block shell commands that have dedicated tools" },
-	},
-	"bashInterceptor.simpleLs": {
-		type: "boolean",
-		default: true,
-		ui: {
-			tab: "bash",
-			label: "Intercept ls",
-			description: "Intercept bare ls commands (when interceptor is enabled)",
-		},
-	},
-	// bashInterceptor.patterns is complex - handle separately
-
-	// ─────────────────────────────────────────────────────────────────────────
-	// MCP settings
-	// ─────────────────────────────────────────────────────────────────────────
-	"mcp.enableProjectConfig": {
-		type: "boolean",
-		default: true,
-		ui: { tab: "tools", label: "MCP project config", description: "Load .mcp.json/mcp.json from project root" },
-	},
-	"mcp.notifications": {
-		type: "boolean",
-		default: false,
-		ui: {
-			tab: "tools",
-			label: "MCP update injection",
-			description: "Inject MCP resource updates into the agent conversation",
-		},
-	},
-	"mcp.notificationDebounceMs": {
-		type: "number",
-		default: 500,
-		ui: {
-			tab: "tools",
-			label: "MCP notification debounce (ms)",
-			description: "Debounce window for MCP resource update notifications before injecting into conversation",
-		},
-	},
-
-	// ─────────────────────────────────────────────────────────────────────────
-	// LSP settings
-	// ─────────────────────────────────────────────────────────────────────────
-	"lsp.formatOnWrite": {
-		type: "boolean",
-		default: false,
-		ui: {
-			tab: "lsp",
-			label: "Format on write",
-			description: "Automatically format code files using LSP after writing",
-		},
-	},
-	"lsp.diagnosticsOnWrite": {
-		type: "boolean",
-		default: true,
-		ui: { tab: "lsp", label: "Diagnostics on write", description: "Return LSP diagnostics after writing code files" },
-	},
-	"lsp.diagnosticsOnEdit": {
-		type: "boolean",
-		default: false,
-		ui: { tab: "lsp", label: "Diagnostics on edit", description: "Return LSP diagnostics after editing code files" },
-	},
-
-	// ─────────────────────────────────────────────────────────────────────────
-	// Python settings
-	// ─────────────────────────────────────────────────────────────────────────
-	"python.toolMode": {
-		type: "enum",
-		values: ["ipy-only", "bash-only", "both"] as const,
-		default: "both",
-		ui: { tab: "config", label: "Python tool mode", description: "How Python code is executed" },
-	},
-	"python.kernelMode": {
-		type: "enum",
-		values: ["session", "per-call"] as const,
-		default: "session",
-		ui: {
-			tab: "config",
-			label: "Python kernel mode",
-			description: "Whether to keep IPython kernel alive across calls",
-		},
-	},
-	"python.sharedGateway": {
-		type: "boolean",
-		default: true,
-		ui: {
-			tab: "config",
-			label: "Python shared gateway",
-			description: "Share IPython kernel gateway across pi instances",
-		},
-	},
-
-	// ─────────────────────────────────────────────────────────────────────────
-	// STT settings
-	// ─────────────────────────────────────────────────────────────────────────
-	"stt.enabled": {
-		type: "boolean",
-		default: false,
-		ui: { tab: "input", label: "Speech-to-text", description: "Enable speech-to-text input via microphone" },
-	},
-	"stt.language": {
-		type: "string",
-		default: "en",
-		ui: {
-			tab: "input",
-			label: "STT language",
-			description: "Language code for transcription (e.g., en, es, fr)",
-			submenu: true,
-		},
-	},
-	"stt.modelName": {
-		type: "enum",
-		values: ["tiny", "tiny.en", "base", "base.en", "small", "small.en", "medium", "medium.en", "large"] as const,
-		default: "base.en",
-		ui: {
-			tab: "input",
-			label: "STT model",
-			description: "Whisper model size (larger = more accurate but slower)",
-			submenu: true,
-		},
-	},
-
-	// ─────────────────────────────────────────────────────────────────────────
-	// Edit settings
-	// ─────────────────────────────────────────────────────────────────────────
-	"edit.fuzzyMatch": {
-		type: "boolean",
-		default: true,
-		ui: {
-			tab: "config",
-			label: "Edit fuzzy match",
-			description: "Accept high-confidence fuzzy matches for whitespace differences",
-		},
-	},
-	"edit.fuzzyThreshold": {
-		type: "number",
-		default: 0.95,
-		ui: {
-			tab: "config",
-			label: "Edit fuzzy threshold",
-			description: "Similarity threshold for fuzzy matches",
-			submenu: true,
-		},
-	},
-	"edit.mode": {
-		type: "enum",
-		values: ["replace", "patch", "hashline"] as const,
-		default: "hashline",
-		ui: {
-			tab: "config",
-			label: "Edit mode",
-			description: "Select the edit tool variant (replace, patch, or hashline)",
-		},
-	},
-	"edit.streamingAbort": {
-		type: "boolean",
-		default: false,
-		ui: {
-			tab: "config",
-			label: "Edit streaming abort",
-			description: "Abort streaming edit tool calls when patch preview fails",
-		},
-	},
-	// edit.modelVariants is complex - handle separately
-
-	// ─────────────────────────────────────────────────────────────────────────
-	// TTSR settings
-	// ─────────────────────────────────────────────────────────────────────────
-	"ttsr.enabled": {
-		type: "boolean",
-		default: true,
-		ui: {
-			tab: "ttsr",
-			label: "TTSR enabled",
-			description: "Time Traveling Stream Rules: interrupt agent when output matches patterns",
-		},
-	},
-	"ttsr.contextMode": {
-		type: "enum",
-		values: ["discard", "keep"] as const,
-		default: "discard",
-		ui: { tab: "ttsr", label: "TTSR context mode", description: "What to do with partial output when TTSR triggers" },
-	},
-	"ttsr.interruptMode": {
-		type: "enum",
-		values: ["never", "prose-only", "tool-only", "always"] as const,
-		default: "always",
-		ui: {
-			tab: "ttsr",
-			label: "TTSR interrupt mode",
-			description: "When to interrupt mid-stream vs inject warning after completion",
-			submenu: true,
-		},
-	},
-	"ttsr.repeatMode": {
-		type: "enum",
-		values: ["once", "after-gap"] as const,
-		default: "once",
-		ui: {
-			tab: "ttsr",
-			label: "TTSR repeat mode",
-			description: "How rules can repeat: once per session or after a message gap",
-		},
-	},
-	"ttsr.repeatGap": {
-		type: "number",
-		default: 10,
-		ui: {
-			tab: "ttsr",
-			label: "TTSR repeat gap",
-			description: "Messages before a rule can trigger again",
-			submenu: true,
-		},
-	},
-
-	// ─────────────────────────────────────────────────────────────────────────
-	// Commit settings (no UI - advanced)
-	// ─────────────────────────────────────────────────────────────────────────
+	// ────────────────────────────────────────────────────────────────────────
+	// Advanced settings (no UI)
+	// ────────────────────────────────────────────────────────────────────────
 	"commit.mapReduceEnabled": { type: "boolean", default: true },
+
 	"commit.mapReduceMinFiles": { type: "number", default: 4 },
+
 	"commit.mapReduceMaxFileTokens": { type: "number", default: 50000 },
+
 	"commit.mapReduceTimeoutMs": { type: "number", default: 120000 },
+
 	"commit.mapReduceMaxConcurrency": { type: "number", default: 5 },
+
 	"commit.changelogMaxDiffChars": { type: "number", default: 120000 },
 
-	// ─────────────────────────────────────────────────────────────────────────
-	// Thinking budgets (no UI - advanced)
-	// ─────────────────────────────────────────────────────────────────────────
 	"thinkingBudgets.minimal": { type: "number", default: 1024 },
-	"thinkingBudgets.low": { type: "number", default: 2048 },
-	"thinkingBudgets.medium": { type: "number", default: 8192 },
-	"thinkingBudgets.high": { type: "number", default: 16384 },
 
-	// ─────────────────────────────────────────────────────────────────────────
-	// Status line settings
-	// ─────────────────────────────────────────────────────────────────────────
-	"statusLine.preset": {
-		type: "enum",
-		values: ["default", "minimal", "compact", "full", "nerd", "ascii", "custom"] as const,
-		default: "default",
-		ui: { tab: "status", label: "Preset", description: "Pre-built status line configurations", submenu: true },
-	},
-	"statusLine.separator": {
-		type: "enum",
-		values: ["powerline", "powerline-thin", "slash", "pipe", "block", "none", "ascii"] as const,
-		default: "powerline-thin",
-		ui: {
-			tab: "status",
-			label: "Separator style",
-			description: "Style of separators between segments",
-			submenu: true,
-		},
-	},
-	"statusLine.showHookStatus": {
-		type: "boolean",
-		default: true,
-		ui: {
-			tab: "status",
-			label: "Show extension status",
-			description: "Display hook status messages below status line",
-		},
-	},
-	"statusLine.leftSegments": { type: "array", default: [] as StatusLineSegmentId[] },
-	"statusLine.rightSegments": { type: "array", default: [] as StatusLineSegmentId[] },
-	"statusLine.segmentOptions": { type: "record", default: {} as Record<string, unknown> },
-	temperature: {
-		type: "number",
-		default: -1,
-		ui: {
-			tab: "agent",
-			label: "Temperature",
-			description: "Sampling temperature (0 = deterministic, 1 = creative, -1 = provider default)",
-			submenu: true,
-		},
-	},
-	topP: {
-		type: "number",
-		default: -1,
-		ui: {
-			tab: "agent",
-			label: "Top P",
-			description: "Nucleus sampling cutoff (0-1, -1 = provider default)",
-			submenu: true,
-		},
-	},
-	topK: {
-		type: "number",
-		default: -1,
-		ui: {
-			tab: "agent",
-			label: "Top K",
-			description: "Sample from top-K tokens (-1 = provider default)",
-			submenu: true,
-		},
-	},
-	minP: {
-		type: "number",
-		default: -1,
-		ui: {
-			tab: "agent",
-			label: "Min P",
-			description: "Minimum probability threshold (0-1, -1 = provider default)",
-			submenu: true,
-		},
-	},
-	presencePenalty: {
-		type: "number",
-		default: -1,
-		ui: {
-			tab: "agent",
-			label: "Presence penalty",
-			description: "Penalty for introducing already-present tokens (-1 = provider default)",
-			submenu: true,
-		},
-	},
-	repetitionPenalty: {
-		type: "number",
-		default: -1,
-		ui: {
-			tab: "agent",
-			label: "Repetition penalty",
-			description: "Penalty for repeated tokens (-1 = provider default)",
-			submenu: true,
-		},
-	},
-	serviceTier: {
-		type: "enum",
-		values: ["none", "auto", "default", "flex", "scale", "priority"] as const,
-		default: "none",
-		ui: {
-			tab: "agent",
-			label: "Service tier",
-			description: "OpenAI processing priority (none = omit parameter)",
-			submenu: true,
-		},
-	},
+	"thinkingBudgets.low": { type: "number", default: 2048 },
+
+	"thinkingBudgets.medium": { type: "number", default: 8192 },
+
+	"thinkingBudgets.high": { type: "number", default: 16384 },
 } as const;
 
 // ═══════════════════════════════════════════════════════════════════════════

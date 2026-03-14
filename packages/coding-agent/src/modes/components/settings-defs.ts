@@ -419,7 +419,7 @@ export function getAllSettingDefs(): SettingDef[] {
 	if (cachedDefs) return cachedDefs;
 
 	const defs: SettingDef[] = [];
-	for (const tab of [...SETTING_TABS, "status"] as SettingTab[]) {
+	for (const tab of SETTING_TABS) {
 		for (const path of getPathsForTab(tab)) {
 			const def = pathToSettingDef(path);
 			if (def) defs.push(def);

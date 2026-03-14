@@ -256,7 +256,6 @@ describe("Editor component", () => {
 			expect(editor.getCursor()).toEqual({ line: 2, col: 5 });
 		});
 
-
 		it("returns lines as a defensive copy", () => {
 			const editor = new Editor(defaultEditorTheme);
 			editor.setText("a\nb");
