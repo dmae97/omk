@@ -447,22 +447,9 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		skills = prepResult.value.skills;
 	}
 
-	const now = new Date();
-	const date = now.toLocaleDateString("en-CA", {
-		year: "numeric",
-		month: "2-digit",
-		day: "2-digit",
-	});
-	const dateTime = now.toLocaleString("en-US", {
-		weekday: "long",
-		year: "numeric",
-		month: "long",
-		day: "numeric",
-		hour: "2-digit",
-		minute: "2-digit",
-		second: "2-digit",
-		timeZoneName: "short",
-	});
+	const date = new Date().toISOString().slice(0, 10);
+	const dateTime = date;
+	const promptCwd = resolvedCwd.replace(/\\/g, "/");
 
 	// Build tool metadata for system prompt rendering
 	// Priority: explicit list > tools map > defaults
@@ -504,7 +491,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		rules: rules ?? [],
 		date,
 		dateTime,
-		cwd: resolvedCwd,
+		cwd: promptCwd,
 		intentTracing: !!intentField,
 		intentField: intentField ?? "",
 		eagerTasks,

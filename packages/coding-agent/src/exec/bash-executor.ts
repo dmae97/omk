@@ -41,6 +41,7 @@ const HARD_TIMEOUT_GRACE_MS = 5_000;
 const shellSessions = new Map<string, Shell>();
 const brokenShellSessions = new Set<string>();
 
+
 async function resolveShellCwd(cwd: string | undefined): Promise<string | undefined> {
 	if (!cwd) return undefined;
 

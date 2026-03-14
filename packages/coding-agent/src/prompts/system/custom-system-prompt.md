@@ -54,5 +54,5 @@ You **MUST** read `rule://<name>` when working in that domain.
 {{/list}}
 </rules>
 {{/if}}
-Current date and time: {{dateTime}}
+Current date: {{date}}
 Current working directory: {{cwd}}

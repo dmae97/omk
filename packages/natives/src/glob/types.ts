@@ -4,7 +4,7 @@
 
 import type { Cancellable, TsFunc } from "../bindings";
 
-export const enum FileType {
+export enum FileType {
 	/** A regular file. */
 	File = 1,
 	/** A directory. */

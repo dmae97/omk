@@ -135,4 +135,36 @@ describe("CombinedAutocompleteProvider", () => {
 			expect(values.some(value => value.includes("alpha-local.ts"))).toBe(false);
 		});
 	});
+	describe("dot-slash path completion", () => {
+		let baseDir: string;
+
+		beforeEach(() => {
+			baseDir = fs.mkdtempSync(path.join(os.tmpdir(), "autocomplete-dot-slash-test-"));
+		});
+
+		afterEach(() => {
+			fs.rmSync(baseDir, { recursive: true, force: true });
+		});
+
+		it("preserves ./ prefix when completing files", async () => {
+			fs.writeFileSync(path.join(baseDir, "update.sh"), "#!/bin/sh\n");
+			const provider = new CombinedAutocompleteProvider([], baseDir);
+			const line = "./up";
+			const result = await provider.getForceFileSuggestions([line], 0, line.length);
+			expect(result).not.toBeNull();
+			const values = result?.items.map(item => item.value) ?? [];
+			expect(values).toContain("./update.sh");
+		});
+
+		it("preserves ./ prefix when completing directories", async () => {
+			fs.mkdirSync(path.join(baseDir, "src"), { recursive: true });
+			fs.writeFileSync(path.join(baseDir, "src", "index.ts"), "export {};\n");
+			const provider = new CombinedAutocompleteProvider([], baseDir);
+			const line = "./sr";
+			const result = await provider.getForceFileSuggestions([line], 0, line.length);
+			expect(result).not.toBeNull();
+			const values = result?.items.map(item => item.value) ?? [];
+			expect(values).toContain("./src/");
+		});
+	});
 });

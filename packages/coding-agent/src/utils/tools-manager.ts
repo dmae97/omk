@@ -4,7 +4,7 @@ import * as path from "node:path";
 import { APP_NAME, getToolsDir, logger, ptree, TempDir } from "@oh-my-pi/pi-utils";
 
 const TOOLS_DIR = getToolsDir();
-const TOOL_DOWNLOAD_TIMEOUT_MS = 15000;
+const TOOL_DOWNLOAD_TIMEOUT_MS = 120_000;
 const TOOL_METADATA_TIMEOUT_MS = 5000;
 
 interface ToolConfig {

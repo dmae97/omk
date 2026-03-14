@@ -1,14 +1,24 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added support for provider-level `compat` configuration to apply OpenAI compatibility settings across all models from a provider
+- Added `reasoningEffortMap` configuration option to map reasoning effort levels to provider-specific values
+- Added support for `supportsUsageInStreaming`, `requiresToolResultName`, `requiresAssistantAfterToolResult`, `requiresThinkingAsText`, `thinkingFormat`, and `supportsStrictMode` OpenAI compatibility options
 - Added `close()` method to SessionManager for properly closing persistent writers after flushing pending data
 
 ### Changed
 
+- Changed system prompt to use ISO 8601 date format (YYYY-MM-DD) instead of locale-specific formatting
+- Changed system prompt template to use `{{date}}` instead of `{{dateTime}}` for current date display
+- Changed tool download timeout from 15 seconds to 120 seconds to accommodate slower network conditions
+- Changed working directory paths in system prompt to use forward slashes for consistency across platforms
 - Modified bash executor to fall back to one-shot shell execution after a persistent session hard timeout, preventing subsequent commands from hanging
+
+### Removed
+
+- Removed bash executor hard timeout recovery test file (functionality already documented in existing entries)
 
 ### Fixed
 

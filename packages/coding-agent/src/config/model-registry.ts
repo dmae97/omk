@@ -68,13 +68,35 @@ const VercelGatewayRoutingSchema = Type.Object({
 });
 
 // Schema for OpenAI compatibility settings
+const ReasoningEffortMapSchema = Type.Object({
+	minimal: Type.Optional(Type.String()),
+	low: Type.Optional(Type.String()),
+	medium: Type.Optional(Type.String()),
+	high: Type.Optional(Type.String()),
+	xhigh: Type.Optional(Type.String()),
+});
+
 const OpenAICompatSchema = Type.Object({
 	supportsStore: Type.Optional(Type.Boolean()),
 	supportsDeveloperRole: Type.Optional(Type.Boolean()),
 	supportsReasoningEffort: Type.Optional(Type.Boolean()),
+	reasoningEffortMap: Type.Optional(ReasoningEffortMapSchema),
 	maxTokensField: Type.Optional(Type.Union([Type.Literal("max_completion_tokens"), Type.Literal("max_tokens")])),
+	supportsUsageInStreaming: Type.Optional(Type.Boolean()),
+	requiresToolResultName: Type.Optional(Type.Boolean()),
+	requiresAssistantAfterToolResult: Type.Optional(Type.Boolean()),
+	requiresThinkingAsText: Type.Optional(Type.Boolean()),
+	thinkingFormat: Type.Optional(
+		Type.Union([
+			Type.Literal("openai"),
+			Type.Literal("zai"),
+			Type.Literal("qwen"),
+			Type.Literal("qwen-chat-template"),
+		]),
+	),
 	openRouterRouting: Type.Optional(OpenRouterRoutingSchema),
 	vercelGatewayRouting: Type.Optional(VercelGatewayRoutingSchema),
+	supportsStrictMode: Type.Optional(Type.Boolean()),
 });
 
 const EffortSchema = Type.Union([
@@ -180,6 +202,7 @@ const ProviderConfigSchema = Type.Object({
 		]),
 	),
 	headers: Type.Optional(Type.Record(Type.String(), Type.String())),
+	compat: Type.Optional(OpenAICompatSchema),
 	authHeader: Type.Optional(Type.Boolean()),
 	auth: Type.Optional(ProviderAuthSchema),
 	discovery: Type.Optional(ProviderDiscoverySchema),
@@ -212,6 +235,7 @@ interface ProviderValidationConfig {
 	auth?: ProviderAuthMode;
 	oauthConfigured?: boolean;
 	discovery?: ProviderDiscovery;
+	compat?: Model<Api>["compat"];
 	modelOverrides?: Record<string, unknown>;
 	models: ProviderValidationModel[];
 }
@@ -227,9 +251,9 @@ function validateProviderConfiguration(
 	if (models.length === 0) {
 		if (mode === "models-config") {
 			const hasModelOverrides = config.modelOverrides && Object.keys(config.modelOverrides).length > 0;
-			if (!config.baseUrl && !hasModelOverrides && !config.discovery) {
+			if (!config.baseUrl && !config.compat && !hasModelOverrides && !config.discovery) {
 				throw new Error(
-					`Provider ${providerName}: must specify "baseUrl", "modelOverrides", "discovery", or "models".`,
+					`Provider ${providerName}: must specify "baseUrl", "compat", "modelOverrides", "discovery", or "models"`,
 				);
 			}
 		}
@@ -288,6 +312,7 @@ export const ModelsConfigFile = new ConfigFile<ModelsConfig>("models", ModelsCon
 					api: providerConfig.api as Api | undefined,
 					auth: (providerConfig.auth ?? "apiKey") as ProviderAuthMode,
 					discovery: providerConfig.discovery as ProviderDiscovery | undefined,
+					compat: providerConfig.compat,
 					modelOverrides: providerConfig.modelOverrides,
 					models: (providerConfig.models ?? []) as ProviderValidationModel[],
 				},
@@ -297,11 +322,12 @@ export const ModelsConfigFile = new ConfigFile<ModelsConfig>("models", ModelsCon
 	},
 );
 
-/** Provider override config (baseUrl, headers, apiKey) without custom models */
+/** Provider override config (baseUrl, headers, apiKey, compat) without custom models */
 interface ProviderOverride {
 	baseUrl?: string;
 	headers?: Record<string, string>;
 	apiKey?: string;
+	compat?: Model<Api>["compat"];
 }
 
 interface DiscoveryProviderConfig {
@@ -309,6 +335,7 @@ interface DiscoveryProviderConfig {
 	api: Api;
 	baseUrl?: string;
 	headers?: Record<string, string>;
+	compat?: Model<Api>["compat"];
 	discovery: ProviderDiscovery;
 	optional?: boolean;
 }
@@ -397,6 +424,9 @@ function mergeCompat(
 	const base = baseCompat ?? {};
 	const override = overrideCompat;
 	const merged: NonNullable<Model<Api>["compat"]> = { ...base, ...override };
+	if (baseCompat?.reasoningEffortMap || overrideCompat.reasoningEffortMap) {
+		merged.reasoningEffortMap = { ...baseCompat?.reasoningEffortMap, ...overrideCompat.reasoningEffortMap };
+	}
 	if (baseCompat?.openRouterRouting || overrideCompat.openRouterRouting) {
 		merged.openRouterRouting = { ...baseCompat?.openRouterRouting, ...overrideCompat.openRouterRouting };
 	}
@@ -475,6 +505,7 @@ function buildCustomModel(
 	providerHeaders: Record<string, string> | undefined,
 	providerApiKey: string | undefined,
 	authHeader: boolean | undefined,
+	providerCompat: Model<Api>["compat"] | undefined,
 	modelDef: CustomModelDefinitionLike,
 	options: CustomModelBuildOptions,
 ): Model<Api> | undefined {
@@ -496,7 +527,7 @@ function buildCustomModel(
 		contextWindow: modelDef.contextWindow ?? (withDefaults ? 128000 : undefined),
 		maxTokens: modelDef.maxTokens ?? (withDefaults ? 16384 : undefined),
 		headers: mergeCustomModelHeaders(providerHeaders, modelDef.headers, authHeader, providerApiKey),
-		compat: modelDef.compat,
+		compat: mergeCompat(providerCompat, modelDef.compat),
 		contextPromotionTarget: modelDef.contextPromotionTarget,
 		premiumMultiplier: modelDef.premiumMultiplier,
 	} as Model<Api>);
@@ -630,6 +661,7 @@ export class ModelRegistry {
 						...model,
 						baseUrl: providerOverride.baseUrl ?? model.baseUrl,
 						headers: providerOverride.headers ? { ...model.headers, ...providerOverride.headers } : model.headers,
+						compat: mergeCompat(model.compat, providerOverride.compat),
 					};
 				}
 				const modelOverride = perModelOverrides?.get(m.id);
@@ -669,7 +701,10 @@ export class ModelRegistry {
 				});
 				continue;
 			}
-			const models = this.#applyProviderModelOverrides(providerConfig.provider, cache.models);
+			const models = this.#applyProviderModelOverrides(
+				providerConfig.provider,
+				this.#applyProviderCompat(providerConfig.compat, cache.models),
+			);
 			cachedModels.push(...models);
 			this.#providerDiscoveryStates.set(providerConfig.provider, {
 				provider: providerConfig.provider,
@@ -681,6 +716,11 @@ export class ModelRegistry {
 			});
 		}
 		return cachedModels;
+	}
+
+	#applyProviderCompat(compat: Model<Api>["compat"] | undefined, models: Model<Api>[]): Model<Api>[] {
+		if (!compat) return models;
+		return models.map(model => ({ ...model, compat: mergeCompat(model.compat, compat) }));
 	}
 
 	#addImplicitDiscoverableProviders(configuredProviders: Set<string>): void {
@@ -752,12 +792,13 @@ export class ModelRegistry {
 		const configuredProviders = new Set(Object.keys(value.providers));
 
 		for (const [providerName, providerConfig] of Object.entries(value.providers)) {
-			// Always set overrides when baseUrl/headers present
-			if (providerConfig.baseUrl || providerConfig.headers || providerConfig.apiKey) {
+			// Always set overrides when baseUrl/headers/apiKey/compat are present
+			if (providerConfig.baseUrl || providerConfig.headers || providerConfig.apiKey || providerConfig.compat) {
 				overrides.set(providerName, {
 					baseUrl: providerConfig.baseUrl,
 					headers: providerConfig.headers,
 					apiKey: providerConfig.apiKey,
+					compat: providerConfig.compat,
 				});
 			}
 
@@ -772,6 +813,7 @@ export class ModelRegistry {
 					api: providerConfig.api as Api,
 					baseUrl: providerConfig.baseUrl,
 					headers: providerConfig.headers,
+					compat: providerConfig.compat,
 					discovery: providerConfig.discovery,
 					optional: false,
 				});
@@ -906,7 +948,10 @@ export class ModelRegistry {
 		if (discoveryError) {
 			this.#warnProviderDiscoveryFailure(providerConfig, discoveryError);
 		}
-		return this.#applyProviderModelOverrides(providerId, result.models);
+		return this.#applyProviderModelOverrides(
+			providerId,
+			this.#applyProviderCompat(providerConfig.compat, result.models),
+		);
 	}
 
 	#discoverModelsByProviderType(providerConfig: DiscoveryProviderConfig): Promise<Model<Api>[]> {
@@ -1302,6 +1347,7 @@ export class ModelRegistry {
 					providerConfig.headers,
 					providerConfig.apiKey,
 					providerConfig.authHeader,
+					providerConfig.compat,
 					modelDef as CustomModelDefinitionLike,
 					{ useDefaults: true },
 				);
@@ -1463,6 +1509,7 @@ export class ModelRegistry {
 					config.headers,
 					config.apiKey,
 					config.authHeader,
+					config.compat,
 					modelDef as CustomModelDefinitionLike,
 					{ useDefaults: false },
 				);
@@ -1506,6 +1553,7 @@ export interface ProviderConfigInput {
 	api?: Api;
 	streamSimple?: (model: Model<Api>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
 	headers?: Record<string, string>;
+	compat?: Model<Api>["compat"];
 	authHeader?: boolean;
 	oauth?: {
 		name: string;

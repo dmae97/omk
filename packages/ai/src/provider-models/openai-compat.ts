@@ -127,10 +127,15 @@ function buildAnthropicReferenceMap(
 	modelsDevModels: readonly Model<"anthropic-messages">[],
 ): Map<string, Model<"anthropic-messages">> {
 	const merged = new Map<string, Model<"anthropic-messages">>();
-	for (const model of getBundledModels("anthropic") as Model<"anthropic-messages">[]) {
+	for (const model of modelsDevModels) {
 		merged.set(model.id, model);
 	}
-	for (const model of modelsDevModels) {
+	// Anthropic /v1/models does not carry token limits, so bundled metadata stays canonical
+	// for known models while models.dev only fills gaps for newly discovered ids.
+	const bundledModels = getBundledModels("anthropic").filter(
+		(model): model is Model<"anthropic-messages"> => model.api === "anthropic-messages",
+	);
+	for (const model of bundledModels) {
 		merged.set(model.id, model);
 	}
 	return merged;

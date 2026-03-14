@@ -282,19 +282,12 @@ function applyAnthropicCatalogPolicy(model: ApiModel<Api>, parsedModel: Anthropi
 		model.cost.cacheWrite = 6.25;
 	}
 
-	// Bedrock Opus 4.6: upstream cache pricing is incorrect.
+	// Bedrock Opus 4.6: upstream metadata is stale for cache pricing and context.
 	if (model.provider === "amazon-bedrock" && parsedModel.kind === "opus" && semverEqual(parsedModel.version, "4.6")) {
 		model.cost.cacheRead = 0.5;
 		model.cost.cacheWrite = 6.25;
-	}
-
-	// OpenCode variants: Claude Sonnet 4/4.5 listed with 1M context, actual limit is 200K.
-	if (
-		(model.provider === "opencode-zen" || model.provider === "opencode-go") &&
-		parsedModel.kind === "sonnet" &&
-		(semverEqual(parsedModel.version, "4.0") || semverEqual(parsedModel.version, "4.5"))
-	) {
-		model.contextWindow = 200000;
+		model.contextWindow = 1000000;
+		model.maxTokens = 128000;
 	}
 }
 

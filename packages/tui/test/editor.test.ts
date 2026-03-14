@@ -1495,5 +1495,52 @@ describe("Editor component", () => {
 			editor.handleInput("\x1b[B"); // Down to line 1
 			expect(editor.getCursor()).toEqual({ line: 1, col: 15 });
 		});
+		it("expands large pasted content literally in getExpandedText", () => {
+			const editor = new Editor(defaultEditorTheme);
+			const pastedText = [
+				"line 1",
+				"line 2",
+				"line 3",
+				"line 4",
+				"line 5",
+				"line 6",
+				"line 7",
+				"line 8",
+				"line 9",
+				"line 10",
+				"tokens $1 $2 $& $$ $` $' end",
+			].join("\n");
+
+			editor.handleInput(`\x1b[200~${pastedText}\x1b[201~`);
+
+			expect(editor.getText()).toMatch(/\[paste #\d+ \+\d+ lines\]/);
+			expect(editor.getExpandedText()).toBe(pastedText);
+		});
+
+		it("submits large pasted content literally", () => {
+			const editor = new Editor(defaultEditorTheme);
+			const pastedText = [
+				"line 1",
+				"line 2",
+				"line 3",
+				"line 4",
+				"line 5",
+				"line 6",
+				"line 7",
+				"line 8",
+				"line 9",
+				"line 10",
+				"tokens $1 $2 $& $$ $` $' end",
+			].join("\n");
+			let submitted = "";
+			editor.onSubmit = text => {
+				submitted = text;
+			};
+
+			editor.handleInput(`\x1b[200~${pastedText}\x1b[201~`);
+			editor.handleInput("\r");
+
+			expect(submitted).toBe(pastedText);
+		});
 	});
 });

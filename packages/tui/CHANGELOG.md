@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+
+- Fixed autocomplete to preserve `./` prefix when completing relative file and directory paths
+- Fixed paste marker expansion to handle special regex replacement tokens ($1, $2, $&, $$, $`, $') literally in pasted content
 
 ## [13.11.0] - 2026-03-12
 ### Fixed
