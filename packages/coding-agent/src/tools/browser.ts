@@ -526,6 +526,12 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 		const proxy = process.env.PUPPETEER_PROXY;
 		if (proxy) {
 			launchArgs.push(`--proxy-server=${proxy}`);
+			// Chrome (since v72) bypasses proxies for localhost by default. When PUPPETEER_PROXY_BYPASS_LOOPBACK
+			// is true, add <-loopback> so traffic to localhost reaches the proxy (e.g. for mitmdump/auth capture).
+			const bypassLoopback = process.env.PUPPETEER_PROXY_BYPASS_LOOPBACK?.toLowerCase();
+			if (bypassLoopback === "true" || bypassLoopback === "1" || bypassLoopback === "yes" || bypassLoopback === "on") {
+				launchArgs.push("--proxy-bypass-list=<-loopback>");
+			}
 		}
 		const ignoreCert = process.env.PUPPETEER_PROXY_IGNORE_CERT_ERRORS?.toLowerCase();
 		if (ignoreCert === "true" || ignoreCert === "1" || ignoreCert === "yes" || ignoreCert === "on") {
