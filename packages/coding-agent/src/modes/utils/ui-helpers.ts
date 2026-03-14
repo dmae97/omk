@@ -232,6 +232,9 @@ export class UiHelpers {
 				this.ctx.addMessageToChat(message);
 				const lastChild = this.ctx.chatContainer.children[this.ctx.chatContainer.children.length - 1];
 				const assistantComponent = lastChild instanceof AssistantMessageComponent ? lastChild : undefined;
+				if (assistantComponent) {
+					assistantComponent.setUsageInfo(message.usage);
+				}
 				readGroup = null;
 				const hasErrorStop = message.stopReason === "aborted" || message.stopReason === "error";
 				const errorMessage = hasErrorStop

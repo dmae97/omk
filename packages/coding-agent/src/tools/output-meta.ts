@@ -14,7 +14,7 @@ import type {
 import type { ImageContent, TextContent } from "@oh-my-pi/pi-ai";
 import { formatGroupedDiagnosticMessages } from "../lsp/utils";
 import type { Theme } from "../modes/theme/theme";
-import type { OutputSummary, TruncationResult } from "../session/streaming-output";
+import { type OutputSummary, type TruncationResult, truncateTail } from "../session/streaming-output";
 import { formatBytes, wrapBrackets } from "./render-utils";
 import { renderError } from "./tool-errors";
 
@@ -317,7 +317,7 @@ export function outputMeta(): OutputMetaBuilder {
 // =============================================================================
 
 export function formatFullOutputReference(artifactId: string): string {
-	return `Full output: artifact://${artifactId}`;
+	return `Read artifact://${artifactId} for full output`;
 }
 
 export function formatTruncationMetaNotice(truncation: TruncationMeta): string {
@@ -434,6 +434,95 @@ function appendOutputNotice(
 
 const kUnwrappedExecute = Symbol("OutputMeta.UnwrappedExecute");
 
+// =============================================================================
+// Centralized artifact spill for large tool results
+// =============================================================================
+
+/** Text content above this byte threshold gets saved to an artifact. */
+const RESULT_ARTIFACT_THRESHOLD = 50 * 1024; // 50KB
+
+/** When spilling, keep this many bytes of tail in the result sent to the LLM. */
+const RESULT_ARTIFACT_TAIL_BYTES = 20 * 1024; // 20KB
+
+/** When spilling, keep at most this many lines of tail. */
+const RESULT_ARTIFACT_TAIL_LINES = 500;
+
+/**
+ * If the tool result text exceeds RESULT_ARTIFACT_THRESHOLD, save the full
+ * output as a session artifact and replace the content with a tail-truncated
+ * version plus an artifact reference. Skips when the tool already saved its
+ * own artifact (e.g. bash/python via OutputSink).
+ */
+async function spillLargeResultToArtifact(
+	result: AgentToolResult,
+	toolName: string,
+	context: AgentToolContext | undefined,
+): Promise<AgentToolResult> {
+	const sessionManager = context?.sessionManager;
+	if (!sessionManager) return result;
+
+	// Skip if tool already saved an artifact
+	const existingMeta = (result.details as { meta?: OutputMeta } | undefined)?.meta;
+	if (existingMeta?.truncation?.artifactId) return result;
+
+	// Measure total text content
+	const textParts: string[] = [];
+	for (const block of result.content) {
+		if (block.type === "text" && block.text) {
+			textParts.push(block.text);
+		}
+	}
+	if (textParts.length === 0) return result;
+
+	const fullText = textParts.length === 1 ? textParts[0] : textParts.join("\n");
+	const totalBytes = Buffer.byteLength(fullText, "utf-8");
+	if (totalBytes <= RESULT_ARTIFACT_THRESHOLD) return result;
+
+	// Save full output as artifact
+	const artifactId = await sessionManager.saveArtifact(fullText, toolName);
+	if (!artifactId) return result;
+
+	// Truncate to tail
+	const truncated = truncateTail(fullText, {
+		maxBytes: RESULT_ARTIFACT_TAIL_BYTES,
+		maxLines: RESULT_ARTIFACT_TAIL_LINES,
+	});
+
+	// Replace text blocks with single tail-truncated block, keep images
+	const newContent: (TextContent | ImageContent)[] = [];
+	for (const block of result.content) {
+		if (block.type !== "text") {
+			newContent.push(block);
+		}
+	}
+	newContent.push({ type: "text", text: truncated.content });
+
+	// Build truncation meta
+	const outputLines = truncated.outputLines ?? truncated.totalLines;
+	const outputBytes = truncated.outputBytes ?? truncated.totalBytes;
+	const shownStart = truncated.totalLines - outputLines + 1;
+	const truncationMeta: TruncationMeta = {
+		direction: "tail",
+		truncatedBy: truncated.truncatedBy ?? "bytes",
+		totalLines: truncated.totalLines,
+		totalBytes: truncated.totalBytes,
+		outputLines,
+		outputBytes,
+		maxBytes: RESULT_ARTIFACT_TAIL_BYTES,
+		shownRange: { start: shownStart, end: truncated.totalLines },
+		artifactId,
+	};
+
+	const newMeta: OutputMeta = { ...(existingMeta ?? {}), truncation: truncationMeta };
+	const newDetails = { ...(result.details ?? {}), meta: newMeta };
+
+	return { ...result, content: newContent, details: newDetails };
+}
+
+// =============================================================================
+// Tool wrapper
+// =============================================================================
+
 async function wrappedExecute(
 	this: AgentTool & { [kUnwrappedExecute]: AgentToolExecFn },
 	toolCallId: string,
@@ -445,8 +534,12 @@ async function wrappedExecute(
 	const originalExecute = this[kUnwrappedExecute];
 
 	try {
+		let result = await originalExecute.call(this, toolCallId, params, signal, onUpdate, context);
+
+		// Spill large results to artifact, truncate to tail
+		result = await spillLargeResultToArtifact(result, this.name, context);
+
 		// Append notices from meta
-		const result = await originalExecute.call(this, toolCallId, params, signal, onUpdate, context);
 		const meta = (result.details as { meta?: OutputMeta } | undefined)?.meta;
 		if (meta) {
 			return {

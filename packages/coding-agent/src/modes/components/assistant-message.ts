@@ -1,6 +1,7 @@
-import type { AssistantMessage, ImageContent } from "@oh-my-pi/pi-ai";
+import type { AssistantMessage, ImageContent, Usage } from "@oh-my-pi/pi-ai";
 import { Container, Image, ImageProtocol, Markdown, Spacer, TERMINAL, Text } from "@oh-my-pi/pi-tui";
-import { logger } from "@oh-my-pi/pi-utils";
+import { formatNumber, logger } from "@oh-my-pi/pi-utils";
+import { settings } from "../../config/settings";
 import { hasPendingMermaid, prerenderMermaid } from "../../modes/theme/mermaid-cache";
 import { getMarkdownTheme, theme } from "../../modes/theme/theme";
 
@@ -12,6 +13,7 @@ export class AssistantMessageComponent extends Container {
 	#lastMessage?: AssistantMessage;
 	#prerenderInFlight = false;
 	#toolImagesByCallId = new Map<string, ImageContent[]>();
+	#usageInfo?: Usage;
 
 	constructor(
 		message?: AssistantMessage,
@@ -47,6 +49,13 @@ export class AssistantMessageComponent extends Container {
 		} else {
 			this.#toolImagesByCallId.set(toolCallId, validImages);
 		}
+		if (this.#lastMessage) {
+			this.updateContent(this.#lastMessage);
+		}
+	}
+
+	setUsageInfo(usage: Usage): void {
+		this.#usageInfo = usage;
 		if (this.#lastMessage) {
 			this.updateContent(this.#lastMessage);
 		}
@@ -177,6 +186,20 @@ export class AssistantMessageComponent extends Container {
 				this.#contentContainer.addChild(new Spacer(1));
 				this.#contentContainer.addChild(new Text(theme.fg("error", `Error: ${errorMsg}`), 1, 0));
 			}
+		}
+
+		// Token usage metadata
+		if (settings.get("display.showTokenUsage") && this.#usageInfo) {
+			const usage = this.#usageInfo;
+			const totalInput = usage.input + usage.cacheWrite;
+			const parts: string[] = [];
+			parts.push(`${theme.icon.input} ${formatNumber(totalInput)}`);
+			parts.push(`${theme.icon.output} ${formatNumber(usage.output)}`);
+			if (usage.cacheRead > 0) {
+				parts.push(`cache: ${formatNumber(usage.cacheRead)}`);
+			}
+			this.#contentContainer.addChild(new Spacer(1));
+			this.#contentContainer.addChild(new Text(theme.fg("dim", parts.join("  ")), 1, 0));
 		}
 	}
 }

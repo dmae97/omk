@@ -54,6 +54,7 @@
 - Added `buildNamedToolChoice` utility function to build provider-aware tool choice constraints for named tools
 - Support for comma/space-separated path lists in `find`, `grep`, `ast_grep`, and `ast_edit` tools (e.g., `apps/,packages/,phases/` or `apps/ packages/ phases/`)
 - New `resolveMultiSearchPath` and `resolveMultiFindPattern` functions to handle multi-path search inputs with automatic common base path detection
+- Added `display.showTokenUsage` setting to show per-turn token usage (input, output, cache) on assistant messages
 
 ### Changed
 

@@ -190,6 +190,15 @@ export const SETTINGS_SCHEMA = {
 			submenu: true,
 		},
 	},
+	"display.showTokenUsage": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "display",
+			label: "Show token usage",
+			description: "Show per-turn token usage on assistant messages",
+		},
+	},
 	defaultThinkingLevel: {
 		type: "enum",
 		values: THINKING_EFFORTS,
