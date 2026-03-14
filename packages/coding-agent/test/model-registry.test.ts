@@ -557,6 +557,35 @@ describe("ModelRegistry", () => {
 			expect(compat?.openRouterRouting).toEqual({ order: ["anthropic", "together"] });
 		});
 
+		test("model override merges compat.extraBody across provider+model", () => {
+			writeRawModelsJson({
+				openrouter: {
+					compat: {
+						extraBody: {
+							gateway: "default-gateway",
+							controller: "provider-controller",
+						},
+					},
+					modelOverrides: {
+						"anthropic/claude-sonnet-4": {
+							compat: {
+								extraBody: {
+									controller: "model-controller",
+								},
+							},
+						},
+					},
+				},
+			});
+
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			const models = getModelsForProvider(registry, "openrouter");
+			const sonnet = models.find(m => m.id === "anthropic/claude-sonnet-4");
+
+			const compat = sonnet?.compat as OpenAICompat | undefined;
+			expect(compat?.extraBody).toEqual({ gateway: "default-gateway", controller: "model-controller" });
+		});
+
 		test("multiple model overrides on same provider", () => {
 			writeRawModelsJson({
 				openrouter: {

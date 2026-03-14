@@ -9,6 +9,7 @@
 - Added support for provider-level `compat` configuration to apply OpenAI compatibility settings across all models from a provider
 - Added `reasoningEffortMap` configuration option to map reasoning effort levels to provider-specific values
 - Added support for `supportsUsageInStreaming`, `requiresToolResultName`, `requiresAssistantAfterToolResult`, `requiresThinkingAsText`, `thinkingFormat`, and `supportsStrictMode` OpenAI compatibility options
+- Added support for provider-configurable `OpenAICompat.extraBody` to inject request-body fields for custom gateway/proxy routing
 - Added `close()` method to SessionManager for properly closing persistent writers after flushing pending data
 
 ### Changed

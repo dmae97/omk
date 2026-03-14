@@ -205,4 +205,33 @@ describe("openai-completions compatibility", () => {
 		expect(result.stopReason).toBe("stop");
 		expect(result.content[0]).toMatchObject({ type: "text", text: "done" });
 	});
+
+	it("injects compat.extraBody into OpenAI payload", async () => {
+		const model: Model<"openai-completions"> = {
+			...getBundledModel("openai", "gpt-4o-mini"),
+			api: "openai-completions",
+			compat: {
+				extraBody: {
+					gateway: "m1-01",
+					controller: "mlx",
+				},
+			},
+		};
+
+		const { promise, resolve } = Promise.withResolvers<unknown>();
+		global.fetch = createMockFetch(["[DONE]"]);
+		streamOpenAICompletions(model, baseContext(), {
+			apiKey: "test-key",
+			signal: createAbortedSignal(),
+			onPayload: payload => resolve(payload),
+		});
+
+		const payload = await promise;
+		expect(payload).toEqual(
+			expect.objectContaining({
+				gateway: "m1-01",
+				controller: "mlx",
+			}),
+		);
+	});
 });

@@ -6,10 +6,11 @@
 
 - Added support for `qwen-chat-template` thinking format to enable reasoning via `chat_template_kwargs.enable_thinking`
 - Added `reasoningEffortMap` option to `OpenAICompat` for mapping pi-ai reasoning levels to provider-specific `reasoning_effort` values
+- Added `extraBody` to `OpenAICompat` to support provider-specific request body routing fields in OpenAI-completions requests
 - Added support for reading token usage from choice-level `usage` field as fallback when root-level usage is unavailable
 - Added new models: DeepSeek-V3.2 (Bedrock), Llama 3.1 405B Instruct, Magistral Small 1.2, Ministral 3 3B, Mistral Large 3, Pixtral Large (25.02), NVIDIA Nemotron Nano 3 30B, and Qwen3-5-9b
 - Added `close()` method to `AuthStorage` for properly closing the underlying credential store
-- Added support for `initiatorOverride` option in OpenAI and Anthropic providers to customize message attribution
+- Added `initiatorOverride` option in OpenAI and Anthropic providers to customize message attribution
 
 ### Changed
 

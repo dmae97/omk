@@ -87,9 +87,10 @@ function serializeToolArguments(value: unknown): string {
 	return "{}";
 }
 
-type ResolvedOpenAICompat = Required<Omit<OpenAICompat, "openRouterRouting" | "vercelGatewayRouting">> & {
+type ResolvedOpenAICompat = Required<Omit<OpenAICompat, "openRouterRouting" | "vercelGatewayRouting" | "extraBody">> & {
 	openRouterRouting?: OpenAICompat["openRouterRouting"];
 	vercelGatewayRouting?: OpenAICompat["vercelGatewayRouting"];
+	extraBody?: OpenAICompat["extraBody"];
 };
 
 /**
@@ -640,6 +641,10 @@ function buildParams(model: Model<"openai-completions">, context: Context, optio
 			if (routing.order) gatewayOptions.order = routing.order;
 			Reflect.set(params, "providerOptions", { gateway: gatewayOptions });
 		}
+	}
+
+	if (compat.extraBody) {
+		Object.assign(params, compat.extraBody);
 	}
 
 	return params;
@@ -1201,5 +1206,6 @@ function getCompat(model: Model<"openai-completions">): ResolvedOpenAICompat {
 		openRouterRouting: model.compat.openRouterRouting ?? detected.openRouterRouting,
 		vercelGatewayRouting: model.compat.vercelGatewayRouting ?? detected.vercelGatewayRouting,
 		supportsStrictMode: model.compat.supportsStrictMode ?? detected.supportsStrictMode,
+		extraBody: model.compat.extraBody,
 	};
 }

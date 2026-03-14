@@ -458,6 +458,8 @@ export interface OpenAICompat {
 	openRouterRouting?: OpenRouterRouting;
 	/** Vercel AI Gateway routing preferences. Only used when baseUrl points to Vercel AI Gateway. */
 	vercelGatewayRouting?: VercelGatewayRouting;
+	/** Extra fields to include in request body (e.g. gateway routing hints for OpenClaw-style proxies). */
+	extraBody?: Record<string, unknown>;
 	/** Whether the provider supports the `strict` field in tool definitions. Default: auto-detected per provider/baseUrl (conservative for unknown providers). */
 	supportsStrictMode?: boolean;
 }

@@ -97,6 +97,7 @@ const OpenAICompatSchema = Type.Object({
 	),
 	openRouterRouting: Type.Optional(OpenRouterRoutingSchema),
 	vercelGatewayRouting: Type.Optional(VercelGatewayRoutingSchema),
+	extraBody: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
 	supportsStrictMode: Type.Optional(Type.Boolean()),
 });
 
@@ -433,6 +434,9 @@ function mergeCompat(
 	}
 	if (baseCompat?.vercelGatewayRouting || overrideCompat.vercelGatewayRouting) {
 		merged.vercelGatewayRouting = { ...baseCompat?.vercelGatewayRouting, ...overrideCompat.vercelGatewayRouting };
+	}
+	if (baseCompat?.extraBody || overrideCompat.extraBody) {
+		merged.extraBody = { ...baseCompat?.extraBody, ...overrideCompat.extraBody };
 	}
 	return merged;
 }

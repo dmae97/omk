@@ -74,6 +74,9 @@ providers:
             only: [anthropic]
           vercelGatewayRouting:
             order: [anthropic, openai]
+          extraBody:
+            gateway: m1-01
+            controller: mlx
 ```
 
 ### Allowed provider/model `api` values
@@ -136,7 +139,7 @@ Provider defaults vs per-model overrides:
 - Provider `headers` are baseline.
 - Model `headers` override provider header keys.
 - `modelOverrides` can override model metadata (`name`, `reasoning`, `input`, `cost`, `contextWindow`, `maxTokens`, `headers`, `compat`, `contextPromotionTarget`).
-- `compat` is deep-merged for nested routing blocks (`openRouterRouting`, `vercelGatewayRouting`).
+- `compat` is deep-merged for nested routing blocks (`openRouterRouting`, `vercelGatewayRouting`, `extraBody`).
 
 ## Runtime discovery integration
 
