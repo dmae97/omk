@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+
+### Added
+
+- Added `moveToMessageStart()` and `moveToMessageEnd()` methods to move cursor to the beginning and end of the entire message
+
 ### Fixed
 
 - Fixed autocomplete to preserve `./` prefix when completing relative file and directory paths

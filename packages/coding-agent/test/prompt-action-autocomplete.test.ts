@@ -27,6 +27,8 @@ describe("prompt action autocomplete", () => {
 			}),
 			copyCurrentLine: () => {},
 			copyPrompt: () => {},
+			moveCursorToMessageEnd: () => {},
+			moveCursorToMessageStart: () => {},
 			moveCursorToLineStart: () => {},
 			moveCursorToLineEnd: () => {},
 		});
@@ -37,6 +39,8 @@ describe("prompt action autocomplete", () => {
 		expect(suggestions?.items.map(item => item.label)).toEqual([
 			"Copy current line",
 			"Copy whole prompt",
+			"Move cursor to end of message",
+			"Move cursor to beginning of message",
 			"Move cursor to beginning of line",
 			"Move cursor to end of line",
 		]);
@@ -51,32 +55,34 @@ describe("prompt action autocomplete", () => {
 	});
 
 	it("executes selected prompt actions and removes the trigger text", async () => {
-		let promptCopies = 0;
+		let messageEndMoves = 0;
 		const provider = createPromptActionAutocompleteProvider({
 			commands: [],
 			basePath: "/tmp",
 			keybindings: KeybindingsManager.inMemory(),
 			copyCurrentLine: () => {},
-			copyPrompt: () => {
-				promptCopies += 1;
+			copyPrompt: () => {},
+			moveCursorToMessageEnd: () => {
+				messageEndMoves += 1;
 			},
+			moveCursorToMessageStart: () => {},
 			moveCursorToLineStart: () => {},
 			moveCursorToLineEnd: () => {},
 		});
 
-		const suggestions = await provider.getSuggestions(["hello #cop"], 0, 10);
-		const item = suggestions?.items.find(entry => entry.label === "Copy whole prompt");
+		const suggestions = await provider.getSuggestions(["hello #mess"], 0, 11);
+		const item = suggestions?.items.find(entry => entry.label === "Move cursor to end of message");
 		expect(item).toBeDefined();
 		if (!item || !suggestions) {
-			throw new Error("expected copy whole prompt suggestion");
+			throw new Error("expected move cursor to end of message suggestion");
 		}
 
-		const result = provider.applyCompletion(["hello #cop"], 0, 10, item, suggestions.prefix);
+		const result = provider.applyCompletion(["hello #mess"], 0, 11, item, suggestions.prefix);
 		expect(result.lines).toEqual(["hello "]);
 		expect(result.cursorLine).toBe(0);
 		expect(result.cursorCol).toBe(6);
 		result.onApplied?.();
-		expect(promptCopies).toBe(1);
+		expect(messageEndMoves).toBe(1);
 	});
 
 	it("falls back to normal typing for literal hashtags with no matching action", async () => {
@@ -86,6 +92,8 @@ describe("prompt action autocomplete", () => {
 			keybindings: KeybindingsManager.inMemory(),
 			copyCurrentLine: () => {},
 			copyPrompt: () => {},
+			moveCursorToMessageEnd: () => {},
+			moveCursorToMessageStart: () => {},
 			moveCursorToLineStart: () => {},
 			moveCursorToLineEnd: () => {},
 		});

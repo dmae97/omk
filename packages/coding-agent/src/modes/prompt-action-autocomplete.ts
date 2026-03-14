@@ -26,6 +26,8 @@ interface PromptActionAutocompleteOptions {
 	keybindings: KeybindingsManager;
 	copyCurrentLine: () => void;
 	copyPrompt: () => void;
+	moveCursorToMessageEnd: () => void;
+	moveCursorToMessageStart: () => void;
 	moveCursorToLineStart: () => void;
 	moveCursorToLineEnd: () => void;
 }
@@ -68,9 +70,7 @@ function fuzzyScore(query: string, target: string): number {
 }
 
 function isPromptActionItem(item: AutocompleteItem): item is PromptActionAutocompleteItem {
-	return (
-		"actionId" in item && "execute" in item && typeof (item as PromptActionAutocompleteItem).execute === "function"
-	);
+	return "actionId" in item && "execute" in item && typeof item.execute === "function";
 }
 
 function getPromptActionPrefix(textBeforeCursor: string): string | null {
@@ -180,6 +180,20 @@ export function createPromptActionAutocompleteProvider(
 			description: formatKeyHints(options.keybindings.getKeys("copyPrompt")),
 			keywords: ["copy", "prompt", "clipboard", "message"],
 			execute: options.copyPrompt,
+		},
+		{
+			id: "cursor-message-end",
+			label: "Move cursor to end of message",
+			description: "Current message",
+			keywords: ["move", "cursor", "message", "end", "prompt", "last", "bottom"],
+			execute: options.moveCursorToMessageEnd,
+		},
+		{
+			id: "cursor-message-start",
+			label: "Move cursor to beginning of message",
+			description: "Current message",
+			keywords: ["move", "cursor", "message", "start", "beginning", "prompt", "first", "top"],
+			execute: options.moveCursorToMessageStart,
 		},
 		{
 			id: "cursor-line-start",

@@ -245,6 +245,18 @@ describe("Editor component", () => {
 			expect(editor.getCursor()).toEqual({ line: 0, col: 2 });
 		});
 
+		it("moves cursor to message boundaries", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setText("first line\nsecond line\nthird");
+
+			editor.moveToMessageStart();
+			expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
+
+			editor.moveToMessageEnd();
+			expect(editor.getCursor()).toEqual({ line: 2, col: 5 });
+		});
+
+
 		it("returns lines as a defensive copy", () => {
 			const editor = new Editor(defaultEditorTheme);
 			editor.setText("a\nb");

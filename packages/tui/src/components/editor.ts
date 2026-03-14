@@ -1154,6 +1154,14 @@ export class Editor implements Component, Focusable {
 		this.#moveToLineEnd();
 	}
 
+	moveToMessageStart(): void {
+		this.#moveToMessageStart();
+	}
+
+	moveToMessageEnd(): void {
+		this.#moveToMessageEnd();
+	}
+
 	setText(text: string): void {
 		this.#historyIndex = -1; // Exit history browsing mode
 		this.#resetKillSequence();
@@ -1506,6 +1514,19 @@ export class Editor implements Component, Focusable {
 
 	#moveToLineEnd(): void {
 		this.#resetKillSequence();
+		const currentLine = this.#state.lines[this.#state.cursorLine] || "";
+		this.#setCursorCol(currentLine.length);
+	}
+
+	#moveToMessageStart(): void {
+		this.#resetKillSequence();
+		this.#state.cursorLine = 0;
+		this.#setCursorCol(0);
+	}
+
+	#moveToMessageEnd(): void {
+		this.#resetKillSequence();
+		this.#state.cursorLine = this.#state.lines.length - 1;
 		const currentLine = this.#state.lines[this.#state.cursorLine] || "";
 		this.#setCursorCol(currentLine.length);
 	}
