@@ -35,7 +35,12 @@ import { isEnoent } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
 import { getConfigDirs } from "../../config";
 import type { ModelRegistry } from "../../config/model-registry";
-import { formatModelString, isDefaultModelAlias, resolveModelOverride } from "../../config/model-resolver";
+import {
+	formatModelString,
+	resolveAgentModelPatterns,
+	resolveConfiguredModelPatterns,
+	resolveModelOverride,
+} from "../../config/model-resolver";
 import { renderPromptTemplate } from "../../config/prompt-templates";
 import { Settings } from "../../config/settings";
 import agentCreationArchitectPrompt from "../../prompts/system/agent-creation-architect.md" with { type: "text" };
@@ -93,21 +98,8 @@ const SOURCE_LABEL: Record<AgentSource, string> = {
 
 const IDENTIFIER_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+){1,5}$/;
 
-function normalizeModelPatterns(value: string | string[] | undefined): string[] {
-	if (Array.isArray(value)) {
-		return value.map(pattern => pattern.trim()).filter(pattern => pattern.length > 0);
-	}
-	if (typeof value === "string") {
-		const normalized = value.trim();
-		if (normalized.length > 0) {
-			return [normalized];
-		}
-	}
-	return [];
-}
-
 function joinPatterns(patterns: string[]): string {
-	if (patterns.length === 0) return "(session default)";
+	if (patterns.length === 0) return "(session model)";
 	return patterns.join(", ");
 }
 
@@ -398,8 +390,7 @@ export class AgentDashboard extends Container {
 			const activeTabId = this.#tabs[this.#activeTabIndex]?.id ?? "all";
 			const { agents } = await discoverAgents(this.cwd);
 			const disabled = new Set((this.#settingsManager?.get("task.disabledAgents") as string[] | undefined) ?? []);
-			const overrides =
-				(this.#settingsManager?.get("task.agentModelOverrides") as Record<string, string> | undefined) ?? {};
+			const overrides = this.#settingsManager?.get("task.agentModelOverrides") ?? {};
 
 			this.#allAgents = agents
 				.slice()
@@ -622,10 +613,11 @@ export class AgentDashboard extends Container {
 		await modelRegistry.refresh();
 
 		const settings = this.#settingsManager ?? undefined;
-		const modelPatterns = normalizeModelPatterns(
+		const modelPatterns = resolveConfiguredModelPatterns(
 			this.modelContext.activeModelPattern ??
 				this.modelContext.defaultModelPattern ??
 				settings?.getModelRole("default"),
+			settings,
 		);
 		const { model } = resolveModelOverride(modelPatterns, modelRegistry, settings);
 		const fallbackModel = modelRegistry.getAvailable()[0];
@@ -750,26 +742,22 @@ export class AgentDashboard extends Container {
 	}
 
 	#defaultPatternsFor(agent: DashboardAgent): string[] {
-		const explicitAgentPatterns = isDefaultModelAlias(agent.model) ? [] : normalizeModelPatterns(agent.model);
-		if (explicitAgentPatterns.length > 0) {
-			return explicitAgentPatterns;
-		}
-
-		const fallback =
-			this.modelContext.activeModelPattern?.trim() ||
-			this.modelContext.defaultModelPattern?.trim() ||
-			this.#settingsManager?.getModelRole("default")?.trim() ||
-			"";
-		if (!fallback) return [];
-		return normalizeModelPatterns(fallback);
+		return resolveAgentModelPatterns({
+			agentModel: agent.model,
+			settings: this.#settingsManager ?? undefined,
+			activeModelPattern: this.modelContext.activeModelPattern,
+			fallbackModelPattern: this.modelContext.defaultModelPattern,
+		});
 	}
 
 	#effectivePatternsFor(agent: DashboardAgent, draftOverride: string | undefined): string[] {
-		const override = draftOverride?.trim() || "";
-		if (override.length > 0) {
-			return [override];
-		}
-		return this.#defaultPatternsFor(agent);
+		return resolveAgentModelPatterns({
+			settingsOverride: draftOverride,
+			agentModel: agent.model,
+			settings: this.#settingsManager ?? undefined,
+			activeModelPattern: this.modelContext.activeModelPattern,
+			fallbackModelPattern: this.modelContext.defaultModelPattern,
+		});
 	}
 
 	#resolvePatterns(patterns: string[]): ModelResolution | undefined {

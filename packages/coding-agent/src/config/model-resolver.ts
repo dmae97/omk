@@ -318,16 +318,41 @@ export function parseModelPattern(
 const PREFIX_MODEL_ROLE = "pi/";
 const DEFAULT_MODEL_ROLE = "default";
 
-/**
- * Check if a model override value is effectively the default role.
- */
-export function isDefaultModelAlias(value: string | string[] | undefined): boolean {
-	if (!value) return true;
-	if (Array.isArray(value)) return value.every(entry => isDefaultModelAlias(entry));
-	if (value.startsWith(PREFIX_MODEL_ROLE)) {
-		value = value.slice(PREFIX_MODEL_ROLE.length);
+function getModelRoleAlias(value: string): ModelRole | undefined {
+	const normalized = value.trim();
+	if (!normalized.startsWith(PREFIX_MODEL_ROLE)) return undefined;
+
+	const candidate = normalized.slice(PREFIX_MODEL_ROLE.length);
+	for (const role of MODEL_ROLE_IDS) {
+		if (candidate === role) return role;
 	}
-	return value === DEFAULT_MODEL_ROLE;
+	return undefined;
+}
+
+function normalizeModelPatternList(value: string | string[] | undefined): string[] {
+	if (!value) return [];
+	const patterns = Array.isArray(value) ? value : value.split(",");
+	return patterns.map(pattern => pattern.trim()).filter(Boolean);
+}
+
+function isSessionInheritedAgentPattern(value: string): boolean {
+	return value === DEFAULT_MODEL_ROLE || value === `${PREFIX_MODEL_ROLE}${DEFAULT_MODEL_ROLE}` || value === "pi/task";
+}
+
+function resolveConfiguredRolePattern(value: string, settings?: Settings): string | undefined {
+	const normalized = value.trim();
+	if (!normalized) return undefined;
+
+	const lastColonIndex = normalized.lastIndexOf(":");
+	const thinkingLevel =
+		lastColonIndex > PREFIX_MODEL_ROLE.length ? parseThinkingLevel(normalized.slice(lastColonIndex + 1)) : undefined;
+	const aliasCandidate = thinkingLevel ? normalized.slice(0, lastColonIndex) : normalized;
+	const role = getModelRoleAlias(aliasCandidate);
+	if (!role) return normalized;
+
+	const configured = settings?.getModelRole(role)?.trim();
+	if (!configured) return undefined;
+	return thinkingLevel ? `${configured}:${thinkingLevel}` : configured;
 }
 
 /**
@@ -335,11 +360,48 @@ export function isDefaultModelAlias(value: string | string[] | undefined): boole
  */
 export function expandRoleAlias(value: string, settings?: Settings): string {
 	const normalized = value.trim();
-	if (normalized === "default") return settings?.getModelRole("default") ?? value;
-	if (!normalized.startsWith(PREFIX_MODEL_ROLE)) return value;
-	const role = normalized.slice(PREFIX_MODEL_ROLE.length) as ModelRole;
-	if (!MODEL_ROLE_IDS.includes(role)) return value;
-	return settings?.getModelRole(role) ?? value;
+	if (normalized === DEFAULT_MODEL_ROLE) {
+		return settings?.getModelRole("default") ?? value;
+	}
+
+	const resolved = resolveConfiguredRolePattern(value, settings);
+	return resolved ?? value;
+}
+
+export function resolveConfiguredModelPatterns(value: string | string[] | undefined, settings?: Settings): string[] {
+	const patterns = normalizeModelPatternList(value);
+	return patterns.flatMap(pattern => {
+		const resolved = resolveConfiguredRolePattern(pattern, settings);
+		return resolved ? [resolved] : [];
+	});
+}
+
+export interface AgentModelPatternResolutionOptions {
+	settingsOverride?: string | string[];
+	agentModel?: string | string[];
+	settings?: Settings;
+	activeModelPattern?: string;
+	fallbackModelPattern?: string;
+}
+
+export function resolveAgentModelPatterns(options: AgentModelPatternResolutionOptions): string[] {
+	const { settingsOverride, agentModel, settings, activeModelPattern, fallbackModelPattern } = options;
+
+	const overridePatterns = resolveConfiguredModelPatterns(settingsOverride, settings);
+	if (overridePatterns.length > 0) return overridePatterns;
+
+	const normalizedAgentPatterns = normalizeModelPatternList(agentModel);
+	const configuredAgentPatterns = resolveConfiguredModelPatterns(agentModel, settings);
+	const singleAgentPattern = normalizedAgentPatterns.length === 1 ? normalizedAgentPatterns[0] : undefined;
+	const agentInheritsSessionModel = singleAgentPattern ? isSessionInheritedAgentPattern(singleAgentPattern) : false;
+	if (configuredAgentPatterns.length > 0) {
+		if (!agentInheritsSessionModel) return configuredAgentPatterns;
+		if (singleAgentPattern === "pi/task") return configuredAgentPatterns;
+	}
+
+	const fallback =
+		activeModelPattern?.trim() || fallbackModelPattern?.trim() || settings?.getModelRole("default")?.trim() || "";
+	return resolveConfiguredModelPatterns(fallback, settings);
 }
 
 /**
@@ -367,13 +429,14 @@ export function resolveModelRoleValue(
 	}
 
 	const lastColonIndex = normalized.lastIndexOf(":");
-	const hasThinkingSuffix =
-		lastColonIndex > PREFIX_MODEL_ROLE.length && parseThinkingLevel(normalized.slice(lastColonIndex + 1));
-	const aliasCandidate = hasThinkingSuffix ? normalized.slice(0, lastColonIndex) : normalized;
-	const effectivePattern = expandRoleAlias(aliasCandidate, options?.settings);
-	const patternWithSuffix = hasThinkingSuffix
-		? `${effectivePattern}:${normalized.slice(lastColonIndex + 1)}`
-		: effectivePattern;
+	const thinkingSelector =
+		lastColonIndex > PREFIX_MODEL_ROLE.length ? parseThinkingLevel(normalized.slice(lastColonIndex + 1)) : undefined;
+	const aliasCandidate = thinkingSelector ? normalized.slice(0, lastColonIndex) : normalized;
+	const effectivePattern = resolveConfiguredRolePattern(aliasCandidate, options?.settings);
+	if (!effectivePattern) {
+		return { model: undefined, thinkingLevel: undefined, explicitThinkingLevel: false, warning: undefined };
+	}
+	const patternWithSuffix = thinkingSelector ? `${effectivePattern}:${thinkingSelector}` : effectivePattern;
 	const { model, thinkingLevel, warning, explicitThinkingLevel } = parseModelPattern(
 		patternWithSuffix,
 		availableModels,

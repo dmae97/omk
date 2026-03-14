@@ -20,7 +20,7 @@ import type { Usage } from "@oh-my-pi/pi-ai";
 import { $env, Snowflake } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
 import type { ToolSession } from "..";
-import { isDefaultModelAlias } from "../config/model-resolver";
+import { resolveAgentModelPatterns } from "../config/model-resolver";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import type { Theme } from "../modes/theme/theme";
 import planModeSubagentPrompt from "../prompts/system/plan-mode-subagent.md" with { type: "text" };
@@ -507,14 +507,15 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 			: agent;
 
 		// Apply per-agent model override from settings (highest priority)
-		const agentModelOverrides = this.session.settings.get("task.agentModelOverrides") as Record<string, string>;
+		const agentModelOverrides = this.session.settings.get("task.agentModelOverrides");
 		const settingsModelOverride = agentModelOverrides[agentName];
-		const effectiveAgentModel = isDefaultModelAlias(effectiveAgent.model) ? undefined : effectiveAgent.model;
-		const modelOverride =
-			settingsModelOverride ??
-			effectiveAgentModel ??
-			this.session.getActiveModelString?.() ??
-			this.session.getModelString?.();
+		const modelOverride = resolveAgentModelPatterns({
+			settingsOverride: settingsModelOverride,
+			agentModel: effectiveAgent.model,
+			settings: this.session.settings,
+			activeModelPattern: this.session.getActiveModelString?.(),
+			fallbackModelPattern: this.session.getModelString?.(),
+		});
 		const thinkingLevelOverride = effectiveAgent.thinkingLevel;
 
 		// Output schema priority: agent frontmatter > params > inherited from parent session

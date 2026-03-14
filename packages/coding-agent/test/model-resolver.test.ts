@@ -4,6 +4,7 @@ import {
 	expandRoleAlias,
 	parseModelPattern,
 	parseModelString,
+	resolveAgentModelPatterns,
 	resolveCliModel,
 	resolveModelFromString,
 	resolveModelOverride,
@@ -371,6 +372,39 @@ describe("resolveModelRoleValue", () => {
 		expect(result.explicitThinkingLevel).toBe(true);
 	});
 });
+describe("resolveAgentModelPatterns", () => {
+	test("falls back to the active session model when pi/task is unset", () => {
+		const settings = Settings.isolated({
+			modelRoles: { default: "anthropic/claude-sonnet-4-5" },
+		});
+
+		const result = resolveAgentModelPatterns({
+			agentModel: "pi/task",
+			settings,
+			activeModelPattern: "openai/gpt-4o",
+		});
+
+		expect(result).toEqual(["openai/gpt-4o"]);
+	});
+
+	test("uses the configured task role before falling back to the session model", () => {
+		const settings = Settings.isolated({
+			modelRoles: {
+				default: "openai/gpt-4o",
+				task: "anthropic/claude-sonnet-4-5:high",
+			},
+		});
+
+		const result = resolveAgentModelPatterns({
+			agentModel: "pi/task",
+			settings,
+			activeModelPattern: "openai/gpt-4o",
+		});
+
+		expect(result).toEqual(["anthropic/claude-sonnet-4-5:high"]);
+	});
+});
+
 describe("resolveModelFromString", () => {
 	test("falls back to pattern parsing for provider/model:thinking when strict provider+id miss", () => {
 		const resolved = resolveModelFromString("openrouter/qwen/qwen3-coder:exacto:high", allModels);

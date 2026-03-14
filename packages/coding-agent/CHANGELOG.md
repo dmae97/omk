@@ -1,9 +1,9 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added `task` model role to allow configuring a dedicated model for subtask execution via `modelRoles.task` setting
 - Added `moveCursorToMessageEnd` and `moveCursorToMessageStart` prompt actions to navigate to the beginning and end of the entire message
 - Added support for provider-level `compat` configuration to apply OpenAI compatibility settings across all models from a provider
 - Added `reasoningEffortMap` configuration option to map reasoning effort levels to provider-specific values
@@ -12,6 +12,8 @@
 
 ### Changed
 
+- Changed default agent model from `default` to `pi/task` to enable independent model configuration for subtasks
+- Changed agent model resolution to support single-pattern inheritance fallback, allowing `pi/task` agents to inherit the active session model when the task role is unconfigured
 - Changed system prompt to use ISO 8601 date format (YYYY-MM-DD) instead of locale-specific formatting
 - Changed system prompt template to use `{{date}}` instead of `{{dateTime}}` for current date display
 - Changed tool download timeout from 15 seconds to 120 seconds to accommodate slower network conditions

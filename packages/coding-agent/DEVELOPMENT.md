@@ -877,7 +877,7 @@ Key orchestration responsibilities in `TaskTool.execute(...)`:
 - Re-discover available agents on each call with `discoverAgents(this.session.cwd)`.
 - Validate agent existence (`getAgent(...)`), disabled-agent settings (`task.disabledAgents`), and task list integrity (non-empty IDs, case-insensitive duplicate detection).
 - Resolve model/thinking/output schema precedence:
-  - model: `task.agentModelOverrides[agentName]` → agent frontmatter model (if non-default alias) → parent active model
+  - model: `task.agentModelOverrides[agentName]` → resolved agent frontmatter patterns (single inheriting aliases fall back to the parent active model) → parent active model
   - output schema: agent frontmatter `output` → tool params `schema` → parent session schema
 - Prepare shared context (`context.md`) and unique per-task IDs via `AgentOutputManager.allocateBatch(...)`.
 - Execute all tasks with bounded concurrency using `mapWithConcurrencyLimit(...)` from `src/task/parallel.ts`.
