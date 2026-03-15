@@ -1,6 +1,15 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Updated llama.cpp model discovery to read context window from the `/props` endpoint's `default_generation_settings.n_ctx` field instead of using hardcoded 128000 default
+- Updated llama.cpp model discovery to detect vision capabilities from the `/props` endpoint's `modalities.vision` field instead of defaulting to text-only input
+- Changed llama.cpp `maxTokens` calculation to respect discovered context window limits, capping at 8192 or the server's context window, whichever is smaller
+
+### Fixed
+
+- Fixed llama.cpp auto-discovery to read context window and vision support from the native `/props` endpoint instead of relying on hardcoded defaults
 
 ## [13.12.5] - 2026-03-15
 

@@ -372,6 +372,11 @@ type OllamaDiscoveredModelMetadata = {
 	contextWindow?: number;
 };
 
+type LlamaCppDiscoveredServerMetadata = {
+	contextWindow?: number;
+	input?: ("text" | "image")[];
+};
+
 /**
  * Resolve an API key config value to an actual key.
  * Checks environment variable first, then treats as literal.
@@ -414,6 +419,25 @@ function extractOllamaContextWindow(payload: Record<string, unknown>): number | 
 	}
 	const match = parameters.match(/(?:^|\n)\s*num_ctx\s+(\d+)\s*(?:$|\n)/m);
 	return match ? toPositiveNumberOrUndefined(match[1]) : undefined;
+}
+
+function extractLlamaCppContextWindow(payload: Record<string, unknown>): number | undefined {
+	const generationSettings = payload.default_generation_settings;
+	if (isRecord(generationSettings)) {
+		const contextWindow = toPositiveNumberOrUndefined(generationSettings.n_ctx);
+		if (contextWindow !== undefined) {
+			return contextWindow;
+		}
+	}
+	return toPositiveNumberOrUndefined(payload.n_ctx);
+}
+
+function extractLlamaCppInputCapabilities(payload: Record<string, unknown>): ("text" | "image")[] | undefined {
+	const modalities = payload.modalities;
+	if (!isRecord(modalities)) {
+		return undefined;
+	}
+	return modalities.vision === true ? ["text", "image"] : ["text"];
 }
 
 function extractGoogleOAuthToken(value: string | undefined): string | undefined {
@@ -1225,6 +1249,32 @@ export class ModelRegistry {
 		return this.#applyProviderModelOverrides(providerConfig.provider, discovered);
 	}
 
+	async #discoverLlamaCppServerMetadata(
+		baseUrl: string,
+		headers: Record<string, string> | undefined,
+	): Promise<LlamaCppDiscoveredServerMetadata | null> {
+		const propsUrl = `${this.#toLlamaCppNativeBaseUrl(baseUrl)}/props`;
+		try {
+			const response = await fetch(propsUrl, {
+				headers,
+				signal: AbortSignal.timeout(150),
+			});
+			if (!response.ok) {
+				return null;
+			}
+			const payload = (await response.json()) as unknown;
+			if (!isRecord(payload)) {
+				return null;
+			}
+			return {
+				contextWindow: extractLlamaCppContextWindow(payload),
+				input: extractLlamaCppInputCapabilities(payload),
+			};
+		} catch {
+			return null;
+		}
+	}
+
 	async #discoverLlamaCppModels(providerConfig: DiscoveryProviderConfig): Promise<Model<Api>[]> {
 		const baseUrl = this.#normalizeLlamaCppBaseUrl(providerConfig.baseUrl);
 		const modelsUrl = `${baseUrl}/models`;
@@ -1235,10 +1285,13 @@ export class ModelRegistry {
 			headers.Authorization = `Bearer ${apiKey}`;
 		}
 
-		const response = await fetch(modelsUrl, {
-			headers,
-			signal: AbortSignal.timeout(250),
-		});
+		const [response, serverMetadata] = await Promise.all([
+			fetch(modelsUrl, {
+				headers,
+				signal: AbortSignal.timeout(250),
+			}),
+			this.#discoverLlamaCppServerMetadata(baseUrl, headers),
+		]);
 		if (!response.ok) {
 			throw new Error(`HTTP ${response.status} from ${modelsUrl}`);
 		}
@@ -1256,10 +1309,10 @@ export class ModelRegistry {
 					provider: providerConfig.provider,
 					baseUrl,
 					reasoning: false,
-					input: ["text"],
+					input: serverMetadata?.input ?? ["text"],
 					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-					contextWindow: 128000,
-					maxTokens: 8192,
+					contextWindow: serverMetadata?.contextWindow ?? 128000,
+					maxTokens: Math.min(serverMetadata?.contextWindow ?? Number.POSITIVE_INFINITY, 8192),
 					headers,
 					compat: {
 						supportsStore: false,
@@ -1328,6 +1381,18 @@ export class ModelRegistry {
 			return `${parsed.protocol}//${parsed.host}${trimmedPath}`;
 		} catch {
 			return raw;
+		}
+	}
+
+	#toLlamaCppNativeBaseUrl(baseUrl: string): string {
+		try {
+			const parsed = new URL(baseUrl);
+			const trimmedPath = parsed.pathname.replace(/\/+$/g, "");
+			parsed.pathname = trimmedPath.endsWith("/v1") ? trimmedPath.slice(0, -3) || "/" : trimmedPath || "/";
+			const normalized = `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+			return normalized.endsWith("/") ? normalized.slice(0, -1) : normalized;
+		} catch {
+			return baseUrl.endsWith("/v1") ? baseUrl.slice(0, -3) : baseUrl;
 		}
 	}
 

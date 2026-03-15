@@ -1074,6 +1074,20 @@ describe("ModelRegistry", () => {
 						headers: { "Content-Type": "application/json" },
 					});
 				}
+				if (url === "http://127.0.0.1:8080/props") {
+					const headers = init?.headers as Headers | Record<string, string> | undefined;
+					let authHeader: string | null = null;
+					if (headers instanceof Headers) {
+						authHeader = headers.get("Authorization");
+					} else if (typeof headers === "object") {
+						authHeader = headers.Authorization;
+					}
+					expect(String(authHeader ?? "")).toBe("Bearer test-llama-key");
+					return new Response(JSON.stringify({ default_generation_settings: { n_ctx: 262144 } }), {
+						status: 200,
+						headers: { "Content-Type": "application/json" },
+					});
+				}
 				throw new Error(`Unexpected URL: ${url}`);
 			});
 			const registry = new ModelRegistry(authStorage, modelsJsonPath);
@@ -1102,6 +1116,20 @@ describe("ModelRegistry", () => {
 						headers: { "Content-Type": "application/json" },
 					});
 				}
+				if (url === "http://127.0.0.1:8080/props") {
+					const headers = init?.headers as Headers | Record<string, string> | undefined;
+					let authHeader: string | null = null;
+					if (headers instanceof Headers) {
+						authHeader = headers.get("Authorization");
+					} else if (typeof headers === "object") {
+						authHeader = headers.Authorization;
+					}
+					expect(authHeader).toBeUndefined();
+					return new Response(JSON.stringify({ default_generation_settings: { n_ctx: 262144 } }), {
+						status: 200,
+						headers: { "Content-Type": "application/json" },
+					});
+				}
 				throw new Error(`Unexpected URL: ${url}`);
 			});
 			const registry = new ModelRegistry(authStorage, modelsJsonPath);
@@ -1113,6 +1141,41 @@ describe("ModelRegistry", () => {
 			const llamaModels = getModelsForProvider(registry, "llama.cpp");
 			const apiKey = await registry.getApiKey(llamaModels[0]);
 			expect(apiKey).toBe(kNoAuth);
+		});
+		test("llama.cpp discovery reads context window from props n_ctx", async () => {
+			using _hook = hookFetch(input => {
+				const url = String(input);
+				if (url === "http://127.0.0.1:8080/models") {
+					return new Response(JSON.stringify({ data: [{ id: "qwen35-35b-a3b" }] }), {
+						status: 200,
+						headers: { "Content-Type": "application/json" },
+					});
+				}
+				if (url === "http://127.0.0.1:8080/props") {
+					return new Response(
+						JSON.stringify({
+							default_generation_settings: {
+								n_ctx: 262144,
+							},
+							modalities: {
+								vision: true,
+								audio: false,
+							},
+						}),
+						{
+							status: 200,
+							headers: { "Content-Type": "application/json" },
+						},
+					);
+				}
+				throw new Error(`Unexpected URL: ${url}`);
+			});
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			await registry.refresh();
+			const llama = registry.find("llama.cpp", "qwen35-35b-a3b");
+			expect(llama?.contextWindow).toBe(262144);
+			expect(llama?.maxTokens).toBe(8192);
+			expect(llama?.input).toEqual(["text", "image"]);
 		});
 	});
 });
