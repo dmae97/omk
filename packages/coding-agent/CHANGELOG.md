@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.12.5] - 2026-03-15
+
 ### Added
 
 - Automatic discovery of Ollama model context window from model metadata, enabling accurate token limit configuration
