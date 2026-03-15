@@ -23,17 +23,12 @@ function visualizeIndent(text: string, filePath?: string): string {
 	const leftPadding = Math.floor(tabWidth / 2);
 	const rightPadding = Math.max(0, tabWidth - leftPadding - 1);
 	const tabMarker = `${DIM}${" ".repeat(leftPadding)}→${" ".repeat(rightPadding)}${DIM_OFF}`;
-	// Normalize: collapse configured tab-width groups into tab markers, then handle remaining spaces.
-	const normalized = indent.replaceAll("\t", indentation);
 	let visible = "";
-	let pos = 0;
-	while (pos < normalized.length) {
-		if (pos + tabWidth <= normalized.length && normalized.slice(pos, pos + tabWidth) === indentation) {
+	for (const ch of indent) {
+		if (ch === "\t") {
 			visible += tabMarker;
-			pos += tabWidth;
 		} else {
 			visible += `${DIM}·${DIM_OFF}`;
-			pos++;
 		}
 	}
 	return `${visible}${replaceTabs(rest, filePath)}`;
