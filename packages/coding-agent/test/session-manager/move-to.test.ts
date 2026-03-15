@@ -4,9 +4,9 @@ import * as fsp from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import {
-	SessionManager,
 	loadEntriesFromFile,
 	type SessionHeader,
+	SessionManager,
 } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { stripOuterDoubleQuotes } from "@oh-my-pi/pi-coding-agent/tools/path-utils";
 import { getConfigRootDir, setAgentDir } from "@oh-my-pi/pi-utils";
@@ -41,7 +41,7 @@ function getHeader(entries: unknown[]): SessionHeader | undefined {
 
 function hasAssistantEntry(entries: unknown[]): boolean {
 	return entries.some(
-		(e) =>
+		e =>
 			typeof e === "object" &&
 			e !== null &&
 			"type" in e &&

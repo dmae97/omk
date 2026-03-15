@@ -1238,20 +1238,21 @@ fn format_kitty_key(parsed: &ParsedKittySequence) -> Option<Cow<'static, str>> {
 	if effective_mod & !(MOD_SHIFT | MOD_CTRL | MOD_ALT) != 0 {
 		return None;
 	}
-	let effective_codepoint = if let Some(text_codepoint) = keypad_operator_text_codepoint(parsed.codepoint) {
-		text_codepoint
-	} else {
-		let cp = parsed.codepoint;
-		let is_ascii_letter = u8::try_from(cp)
-			.ok()
-			.is_some_and(|b| b.is_ascii_alphabetic());
-		let is_known_symbol = is_symbol_key(cp);
-		if is_ascii_letter || is_known_symbol {
-			cp
+	let effective_codepoint =
+		if let Some(text_codepoint) = keypad_operator_text_codepoint(parsed.codepoint) {
+			text_codepoint
 		} else {
-			parsed.base_layout_key.unwrap_or(cp)
-		}
-	};
+			let cp = parsed.codepoint;
+			let is_ascii_letter = u8::try_from(cp)
+				.ok()
+				.is_some_and(|b| b.is_ascii_alphabetic());
+			let is_known_symbol = is_symbol_key(cp);
+			if is_ascii_letter || is_known_symbol {
+				cp
+			} else {
+				parsed.base_layout_key.unwrap_or(cp)
+			}
+		};
 
 	if effective_mod == 0 {
 		if let Some(text_codepoint) = parsed.text_codepoint

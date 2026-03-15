@@ -1520,9 +1520,7 @@ export class SessionManager {
 		// hadSessionFile: file existed before move → must rewrite to update cwd
 		// hasAssistant: assistant messages in memory but file missing → recreate from memory
 		// Neither true → fresh session, never written → preserve lazy-persist
-		const hasAssistant = this.#fileEntries.some(
-			e => e.type === "message" && e.message.role === "assistant",
-		);
+		const hasAssistant = this.#fileEntries.some(e => e.type === "message" && e.message.role === "assistant");
 		if (this.persist && this.#sessionFile && (hadSessionFile || hasAssistant)) {
 			await this.#rewriteFile();
 		}
