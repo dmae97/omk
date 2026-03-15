@@ -136,6 +136,7 @@ export interface CompactionSettings {
 	enabled: boolean;
 	strategy?: "context-full" | "handoff" | "off";
 	thresholdPercent?: number;
+	thresholdTokens?: number;
 	reserveTokens: number;
 	keepRecentTokens: number;
 	autoContinue?: boolean;
@@ -147,6 +148,7 @@ export const DEFAULT_COMPACTION_SETTINGS: CompactionSettings = {
 	enabled: true,
 	strategy: "context-full",
 	thresholdPercent: -1,
+	thresholdTokens: -1,
 	reserveTokens: 16384,
 	keepRecentTokens: 20000,
 	autoContinue: true,
@@ -218,6 +220,14 @@ export function shouldCompact(contextTokens: number, contextWindow: number, sett
 }
 
 function resolveThresholdTokens(contextWindow: number, settings: CompactionSettings): number {
+	// Fixed token limit takes priority over percentage
+	const thresholdTokens = settings.thresholdTokens;
+	if (typeof thresholdTokens === "number" && Number.isFinite(thresholdTokens) && thresholdTokens > 0) {
+		// Clamp to [1, contextWindow - 1] so there's always room
+		return Math.min(contextWindow - 1, Math.max(1, thresholdTokens));
+	}
+
+	// Percentage-based threshold
 	const thresholdPercent = settings.thresholdPercent;
 	if (typeof thresholdPercent !== "number" || !Number.isFinite(thresholdPercent) || thresholdPercent <= 0) {
 		return contextWindow - effectiveReserveTokens(contextWindow, settings);

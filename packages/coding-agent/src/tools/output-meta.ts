@@ -12,6 +12,7 @@ import type {
 	AgentToolUpdateCallback,
 } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, TextContent } from "@oh-my-pi/pi-ai";
+import { settings } from "../config/settings";
 import { formatGroupedDiagnosticMessages } from "../lsp/utils";
 import type { Theme } from "../modes/theme/theme";
 import { type OutputSummary, type TruncationResult, truncateTail } from "../session/streaming-output";
@@ -438,14 +439,20 @@ const kUnwrappedExecute = Symbol("OutputMeta.UnwrappedExecute");
 // Centralized artifact spill for large tool results
 // =============================================================================
 
-/** Text content above this byte threshold gets saved to an artifact. */
-const RESULT_ARTIFACT_THRESHOLD = 50 * 1024; // 50KB
+/** Artifact spill threshold — tool output above this size is saved as an artifact. */
+function getArtifactSpillThreshold(): number {
+	return settings.get("tools.artifactSpillThreshold") * 1024;
+}
 
 /** When spilling, keep this many bytes of tail in the result sent to the LLM. */
-const RESULT_ARTIFACT_TAIL_BYTES = 20 * 1024; // 20KB
+function getArtifactTailBytes(): number {
+	return settings.get("tools.artifactTailBytes") * 1024;
+}
 
 /** When spilling, keep at most this many lines of tail. */
-const RESULT_ARTIFACT_TAIL_LINES = 500;
+function getArtifactTailLines(): number {
+	return settings.get("tools.artifactTailLines");
+}
 
 /**
  * If the tool result text exceeds RESULT_ARTIFACT_THRESHOLD, save the full
@@ -476,7 +483,7 @@ async function spillLargeResultToArtifact(
 
 	const fullText = textParts.length === 1 ? textParts[0] : textParts.join("\n");
 	const totalBytes = Buffer.byteLength(fullText, "utf-8");
-	if (totalBytes <= RESULT_ARTIFACT_THRESHOLD) return result;
+	if (totalBytes <= getArtifactSpillThreshold()) return result;
 
 	// Save full output as artifact
 	const artifactId = await sessionManager.saveArtifact(fullText, toolName);
@@ -484,8 +491,8 @@ async function spillLargeResultToArtifact(
 
 	// Truncate to tail
 	const truncated = truncateTail(fullText, {
-		maxBytes: RESULT_ARTIFACT_TAIL_BYTES,
-		maxLines: RESULT_ARTIFACT_TAIL_LINES,
+		maxBytes: getArtifactTailBytes(),
+		maxLines: getArtifactTailLines(),
 	});
 
 	// Replace text blocks with single tail-truncated block, keep images
@@ -508,7 +515,7 @@ async function spillLargeResultToArtifact(
 		totalBytes: truncated.totalBytes,
 		outputLines,
 		outputBytes,
-		maxBytes: RESULT_ARTIFACT_TAIL_BYTES,
+		maxBytes: getArtifactTailBytes(),
 		shownRange: { start: shownStart, end: truncated.totalLines },
 		artifactId,
 	};

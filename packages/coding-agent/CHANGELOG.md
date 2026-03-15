@@ -4,6 +4,9 @@
 
 ### Added
 
+- Added `compaction.thresholdTokens` setting as a fixed token limit alternative to percentage-based compaction threshold
+- Added more artifact spill threshold options (1 KB to 1 MB) with size descriptions
+- Added more artifact tail bytes and tail lines options with descriptions
 - Added `toExtensionId` capability method to enable granular disabling of individual capabilities by ID
 - Added support for disabling specific capabilities (skills, tools, hooks, rules, prompts, instructions, slash commands, MCP servers, extension modules, and context files) via `disabledExtensions` setting
 - Added `includeDisabled` and `disabledExtensions` options to `LoadOptions` for capability loading

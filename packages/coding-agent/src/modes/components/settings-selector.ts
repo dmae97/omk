@@ -291,6 +291,9 @@ export class SettingsSelectorComponent extends Container {
 		if (path === "compaction.thresholdPercent" && (rawValue === "-1" || rawValue === "")) {
 			return "default";
 		}
+		if (path === "compaction.thresholdTokens" && (rawValue === "-1" || rawValue === "")) {
+			return "default";
+		}
 		return rawValue;
 	}
 
@@ -392,6 +395,8 @@ export class SettingsSelectorComponent extends Container {
 		// Handle number conversions
 		const currentValue = settings.get(path);
 		if (path === "compaction.thresholdPercent" && value === "default") {
+			settings.set(path, -1 as never);
+		} else if (path === "compaction.thresholdTokens" && value === "default") {
 			settings.set(path, -1 as never);
 		} else if (typeof currentValue === "number") {
 			settings.set(path, Number(value) as never);
