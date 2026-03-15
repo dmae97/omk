@@ -3,7 +3,7 @@ import { type AssistantMessage, Effort } from "@oh-my-pi/pi-ai";
 import { Settings } from "../../src/config/settings";
 import type { LoadExtensionsResult } from "../../src/extensibility/extensions/types";
 import * as sdkModule from "../../src/sdk";
-import type { AgentSession, AgentSessionEvent } from "../../src/session/agent-session";
+import type { AgentSession, AgentSessionEvent, PromptOptions } from "../../src/session/agent-session";
 import type { AuthStorage } from "../../src/session/auth-storage";
 import { runSubprocess, SUBAGENT_WARNING_MISSING_SUBMIT_RESULT } from "../../src/task/executor";
 import type { AgentDefinition } from "../../src/task/types";
@@ -36,6 +36,7 @@ function createAssistantStopMessage(text: string): AssistantMessage {
 function createMockSession(
 	onPrompt: (params: {
 		text: string;
+		options?: PromptOptions;
 		promptIndex: number;
 		emit: (event: AgentSessionEvent) => void;
 		state: { messages: AssistantMessage[] };
@@ -66,9 +67,9 @@ function createMockSession(
 				if (index >= 0) listeners.splice(index, 1);
 			};
 		},
-		prompt: async (text: string) => {
+		prompt: async (text: string, options?: PromptOptions) => {
 			promptIndex += 1;
-			onPrompt({ text, promptIndex, emit, state });
+			onPrompt({ text, options, promptIndex, emit, state });
 		},
 		waitForIdle: async () => {},
 		getLastAssistantMessage: () => state.messages[state.messages.length - 1],
@@ -105,8 +106,10 @@ describe("runSubprocess submit_result reminders", () => {
 
 	it("sends reminder prompt when subagent stops without submit_result", async () => {
 		const prompts: string[] = [];
-		const session = createMockSession(({ text, promptIndex, emit, state }) => {
+		const promptOptions: Array<PromptOptions | undefined> = [];
+		const session = createMockSession(({ text, options, promptIndex, emit, state }) => {
 			prompts.push(text);
+			promptOptions.push(options);
 			if (promptIndex === 1) {
 				const assistant = createAssistantStopMessage("did some work");
 				state.messages.push(assistant);
@@ -133,6 +136,9 @@ describe("runSubprocess submit_result reminders", () => {
 
 		const result = await runSubprocess(baseOptions);
 		expect(prompts.length).toBe(2);
+		expect(promptOptions).toHaveLength(2);
+		expect(promptOptions[0]?.attribution).toBe("agent");
+		expect(promptOptions[1]?.attribution).toBe("agent");
 		expect(prompts[1]).toContain("You stopped without calling submit_result");
 		expect(result.output).toContain('"done": true');
 		expect(result.output.includes("SYSTEM WARNING")).toBe(false);

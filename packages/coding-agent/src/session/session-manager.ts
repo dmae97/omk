@@ -1307,7 +1307,7 @@ export class SessionManager {
 	#fileEntries: FileEntry[] = [];
 	#byId: Map<string, SessionEntry> = new Map();
 	#labelsById: Map<string, string> = new Map();
-	#leafId = null as string | null;
+	#leafId: string | null = null;
 	#usageStatistics = {
 		input: 0,
 		output: 0,
@@ -1316,7 +1316,7 @@ export class SessionManager {
 		premiumRequests: 0,
 		cost: 0,
 	} satisfies UsageStatistics;
-	#persistWriter = undefined as NdjsonFileWriter | undefined;
+	#persistWriter: NdjsonFileWriter | undefined;
 	#persistWriterPath: string | undefined;
 	#persistChain: Promise<void> = Promise.resolve();
 	#persistError: Error | undefined;
@@ -1326,8 +1326,8 @@ export class SessionManager {
 	readonly #blobStore: BlobStore;
 
 	private constructor(
-		private readonly cwd: string,
-		private readonly sessionDir: string,
+		private cwd: string,
+		private sessionDir: string,
 		private readonly persist: boolean,
 		private readonly storage: SessionStorage,
 	) {
@@ -1429,7 +1429,7 @@ export class SessionManager {
 		this.#sessionName = newHeader.title;
 
 		// Replace the header in fileEntries
-		const entries = this.#fileEntries.filter(e => e.type !== "session") as SessionEntry[];
+		const entries = this.#fileEntries.filter((e): e is SessionEntry => e.type !== "session");
 		this.#fileEntries = [newHeader, ...entries];
 
 		// Write the new session file
@@ -1506,9 +1506,9 @@ export class SessionManager {
 			this.#sessionFile = newSessionFile;
 		}
 
-		// Update cwd and sessionDir (controlled mutation of readonly fields)
-		(this as unknown as { cwd: string }).cwd = resolvedCwd;
-		(this as unknown as { sessionDir: string }).sessionDir = newSessionDir;
+		// Update cwd and sessionDir after the move succeeds.
+		this.cwd = resolvedCwd;
+		this.sessionDir = newSessionDir;
 
 		// Update the session header in fileEntries
 		const header = this.#fileEntries.find(e => e.type === "session") as SessionHeader | undefined;

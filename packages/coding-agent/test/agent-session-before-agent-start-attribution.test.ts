@@ -118,6 +118,15 @@ describe("AgentSession before_agent_start attribution fallback", () => {
 			return message.content.some(block => block.type === "text" && block.text === injectedText);
 		});
 	}
+
+	function findPromptMessage(messages: AgentMessage[], text: string): AgentMessage | undefined {
+		return messages.find(message => {
+			if ((message.role !== "user" && message.role !== "developer") || typeof message.content === "string") {
+				return false;
+			}
+			return message.content.some(block => block.type === "text" && block.text === text);
+		});
+	}
 	it("defaults before_agent_start message attribution to user for user prompts", async () => {
 		const { emitBeforeAgentStart } = createSession();
 
@@ -151,6 +160,31 @@ describe("AgentSession before_agent_start attribution fallback", () => {
 		if (!injectedMessage || injectedMessage.role !== "custom") {
 			throw new Error("Expected injected custom message in session state");
 		}
+
+		const llmMessages = convertToLlm(session.messages.filter(message => message.role !== "assistant"));
+		const llmInjected = findBeforeStartInjectionLlm(llmMessages);
+		expect(llmInjected).toBeDefined();
+		if (!llmInjected || llmInjected.role === "assistant") {
+			throw new Error("Expected injected message in converted LLM context");
+		}
+		expect(llmInjected.attribution).toBe("agent");
+		expect(inferCopilotInitiator(llmMessages)).toBe("agent");
+	});
+
+	it("allows user-role prompts to opt into agent attribution", async () => {
+		const { emitBeforeAgentStart } = createSession();
+		const promptText = "delegated task";
+
+		await session.prompt(promptText, { attribution: "agent" });
+
+		expect(emitBeforeAgentStart).toHaveBeenCalledTimes(1);
+		const promptMessage = findPromptMessage(session.messages, promptText);
+		expect(promptMessage).toBeDefined();
+		expect(promptMessage?.role).toBe("user");
+		if (!promptMessage || promptMessage.role !== "user") {
+			throw new Error("Expected delegated prompt to remain a user-role message");
+		}
+		expect(promptMessage.attribution).toBe("agent");
 
 		const llmMessages = convertToLlm(session.messages.filter(message => message.role !== "assistant"));
 		const llmInjected = findBeforeStartInjectionLlm(llmMessages);

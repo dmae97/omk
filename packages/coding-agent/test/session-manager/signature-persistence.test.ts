@@ -28,7 +28,7 @@ function getAssistantMessage(session: SessionManager): AssistantMessage {
 describe("SessionManager signature persistence", () => {
 	it("clears oversized signatures instead of truncating them", async () => {
 		using tempDir = TempDir.createSync("@pi-session-signature-persistence-");
-		const session = SessionManager.create(tempDir.path());
+		const session = SessionManager.create(tempDir.path(), tempDir.path());
 
 		session.appendMessage({ role: "user", content: "continue", timestamp: 1 });
 		session.appendMessage({

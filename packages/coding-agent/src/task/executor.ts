@@ -1078,7 +1078,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 				}
 			});
 
-			await session.prompt(task);
+			await session.prompt(task, { attribution: "agent" });
 			await session.waitForIdle();
 
 			const reminderToolChoice = buildNamedToolChoice("submit_result", session.model);
@@ -1092,7 +1092,10 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 						maxRetries: MAX_SUBMIT_RESULT_RETRIES,
 					});
 
-					await session.prompt(reminder, reminderToolChoice ? { toolChoice: reminderToolChoice } : undefined);
+					await session.prompt(reminder, {
+						attribution: "agent",
+						...(reminderToolChoice ? { toolChoice: reminderToolChoice } : {}),
+					});
 					await session.waitForIdle();
 				} catch (err) {
 					logger.error("Subagent prompt failed", {

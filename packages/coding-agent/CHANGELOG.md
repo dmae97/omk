@@ -4,11 +4,20 @@
 
 ### Added
 
+- Added `attribution` option to `PromptOptions` to explicitly control billing/initiator attribution for prompts
 - Added automatic clearing of completed and abandoned todo tasks after ~1 minute
 
 ### Changed
 
+- Updated `SessionManager.create()` to require both `cwd` and `sessionDir` parameters for explicit session directory control
+- Improved session directory naming for temporary working directories using `-tmp-` prefix instead of legacy `--` format
+- Made `cwd` and `sessionDir` fields mutable in SessionManager to support session relocation without type casting
+- Changed subagent prompts to explicitly set `attribution: "agent"` for accurate billing attribution
 - Strip already-completed tasks when restoring session from branch history
+
+### Fixed
+
+- Fixed automatic migration of legacy session directories to new `-tmp-` prefixed naming scheme for temp-root sessions
 
 ## [13.12.4] - 2026-03-15
 ### Added

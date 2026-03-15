@@ -30,7 +30,7 @@ describe("AgentSession newSession clears todo artifacts", () => {
 		tempDir = path.join(os.tmpdir(), `pi-new-session-todos-test-${Snowflake.next()}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 
-		sessionManager = SessionManager.create(tempDir);
+		sessionManager = SessionManager.create(tempDir, tempDir);
 		const settings = Settings.isolated();
 		authStorage = await AuthStorage.create(path.join(tempDir, "testauth.db"));
 		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "models.yml"));

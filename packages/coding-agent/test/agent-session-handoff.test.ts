@@ -6,7 +6,7 @@ import { getBundledModel } from "@oh-my-pi/pi-ai/models";
 import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
-import type { ExtensionRunner } from "@oh-my-pi/pi-coding-agent/extensibility/extensions";
+import { ExtensionRunner, loadExtensions } from "@oh-my-pi/pi-coding-agent/extensibility/extensions";
 import { AgentSession, type AgentSessionEvent } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
@@ -27,7 +27,7 @@ describe("AgentSession handoff", () => {
 		authStorage = await AuthStorage.create(path.join(tempDir.path(), "testauth.db"));
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
 		modelRegistry = new ModelRegistry(authStorage);
-		sessionManager = SessionManager.create(tempDir.path());
+		sessionManager = SessionManager.create(tempDir.path(), tempDir.path());
 		events = [];
 
 		const model = getBundledModel("anthropic", "claude-sonnet-4-5");
@@ -279,7 +279,7 @@ describe("AgentSession handoff", () => {
 		}
 
 		await session.dispose();
-		sessionManager = SessionManager.create(tempDir.path());
+		sessionManager = SessionManager.create(tempDir.path(), tempDir.path());
 		events = [];
 		let streamCallCount = 0;
 
@@ -441,13 +441,20 @@ describe("AgentSession handoff", () => {
 			throw new Error("Expected model to be set");
 		}
 		await session.dispose();
-		sessionManager = SessionManager.create(tempDir.path());
+		sessionManager = SessionManager.create(tempDir.path(), tempDir.path());
 
-		const emitBeforeAgentStart = vi.fn().mockResolvedValueOnce({ systemPrompt: "Hook override" });
-		const extensionRunner = {
-			emitBeforeAgentStart,
-			emit: vi.fn().mockResolvedValue(undefined),
-		} as unknown as ExtensionRunner;
+		const extensionsResult = await loadExtensions([], tempDir.path());
+		const extensionRunner = new ExtensionRunner(
+			extensionsResult.extensions,
+			extensionsResult.runtime,
+			tempDir.path(),
+			sessionManager,
+			modelRegistry,
+		);
+		const emitBeforeAgentStart = vi.spyOn(extensionRunner, "emitBeforeAgentStart").mockResolvedValueOnce({
+			systemPrompt: "Hook override",
+		});
+		vi.spyOn(extensionRunner, "emit").mockResolvedValue(undefined);
 
 		const observedSystemPrompts: string[] = [];
 		let streamCallCount = 0;

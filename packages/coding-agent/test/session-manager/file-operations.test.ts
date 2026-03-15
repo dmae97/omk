@@ -6,8 +6,9 @@ import {
 	findMostRecentSession,
 	loadEntriesFromFile,
 	resolveResumableSession,
+	SessionManager,
 } from "@oh-my-pi/pi-coding-agent/session/session-manager";
-import { Snowflake } from "@oh-my-pi/pi-utils";
+import { getConfigRootDir, getSessionsDir, Snowflake, setAgentDir } from "@oh-my-pi/pi-utils";
 
 describe("loadEntriesFromFile", () => {
 	let tempDir: string;
@@ -197,5 +198,67 @@ describe("resolveResumableSession", () => {
 
 		expect(match?.scope).toBe("local");
 		expect(match?.session.path).toBe(path.join(sessionDir, "2025-01-01_moved.jsonl"));
+	});
+});
+
+describe("SessionManager temp cwd session dirs", () => {
+	let testAgentDir: string;
+	const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
+	const fallbackAgentDir = path.join(getConfigRootDir(), "agent");
+
+	function expectedTempSessionDirName(tempCwd: string): string {
+		return `-tmp-${path.relative(os.tmpdir(), path.resolve(tempCwd)).replace(/[/\\:]/g, "-")}`;
+	}
+
+	function toLegacyAbsoluteSessionDirName(cwd: string): string {
+		return `--${path
+			.resolve(cwd)
+			.replace(/^[/\\]/, "")
+			.replace(/[/\\:]/g, "-")}--`;
+	}
+
+	beforeEach(() => {
+		testAgentDir = fs.mkdtempSync(path.join(os.tmpdir(), "omp-session-dir-test-"));
+		setAgentDir(testAgentDir);
+	});
+
+	afterEach(() => {
+		if (originalAgentDir) {
+			setAgentDir(originalAgentDir);
+		} else {
+			setAgentDir(fallbackAgentDir);
+			delete process.env.PI_CODING_AGENT_DIR;
+		}
+		fs.rmSync(testAgentDir, { recursive: true, force: true });
+	});
+
+	it("stores temp-root cwd sessions under -tmp-prefixed directories", () => {
+		const tempCwd = path.join(testAgentDir, `temp-cwd-${Snowflake.next()}`);
+		fs.mkdirSync(tempCwd, { recursive: true });
+
+		const session = SessionManager.create(tempCwd);
+		const sessionFile = session.getSessionFile();
+		if (!sessionFile) throw new Error("Expected session file path");
+
+		expect(path.dirname(sessionFile)).toBe(path.join(getSessionsDir(), expectedTempSessionDirName(tempCwd)));
+	});
+
+	it("migrates legacy temp-root absolute session dirs to -tmp prefixes", () => {
+		const tempCwd = path.join(testAgentDir, `legacy-cwd-${Snowflake.next()}`);
+		fs.mkdirSync(tempCwd, { recursive: true });
+
+		const legacyDir = path.join(getSessionsDir(), toLegacyAbsoluteSessionDirName(tempCwd));
+		const markerFile = path.join(legacyDir, "carried.jsonl");
+		fs.mkdirSync(legacyDir, { recursive: true });
+		fs.writeFileSync(markerFile, "marker\n");
+
+		const session = SessionManager.create(tempCwd);
+		const sessionFile = session.getSessionFile();
+		if (!sessionFile) throw new Error("Expected session file path");
+
+		const expectedDir = path.join(getSessionsDir(), expectedTempSessionDirName(tempCwd));
+		expect(fs.existsSync(legacyDir)).toBe(false);
+		expect(path.dirname(sessionFile)).toBe(expectedDir);
+		expect(fs.existsSync(path.join(expectedDir, "carried.jsonl"))).toBe(true);
 	});
 });

@@ -31,6 +31,7 @@ import type {
 	Effort,
 	ImageContent,
 	Message,
+	MessageAttribution,
 	Model,
 	ProviderSessionState,
 	ServiceTier,
@@ -225,6 +226,8 @@ export interface PromptOptions {
 	toolChoice?: ToolChoice;
 	/** Send as developer/system message instead of user. Providers that support it use the developer role; others fall back to user. */
 	synthetic?: boolean;
+	/** Explicit billing/initiator attribution for the prompt. Defaults to user prompts as `user` and synthetic prompts as `agent`. */
+	attribution?: MessageAttribution;
 	/** Skip pre-send compaction checks for this prompt (internal use for maintenance flows). */
 	skipCompactionCheck?: boolean;
 }
@@ -1994,9 +1997,10 @@ export class AgentSession {
 			userContent.push(...options.images);
 		}
 
+		const promptAttribution = options?.attribution ?? (options?.synthetic ? "agent" : "user");
 		const message = options?.synthetic
-			? { role: "developer" as const, content: userContent, attribution: "agent" as const, timestamp: Date.now() }
-			: { role: "user" as const, content: userContent, attribution: "user" as const, timestamp: Date.now() };
+			? { role: "developer" as const, content: userContent, attribution: promptAttribution, timestamp: Date.now() }
+			: { role: "user" as const, content: userContent, attribution: promptAttribution, timestamp: Date.now() };
 
 		if (eagerTodoPrelude) {
 			this.#nextToolChoiceOverride = eagerTodoPrelude.toolChoice;
