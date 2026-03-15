@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -8,9 +8,15 @@ import { initializeWithSettings, loadCapability } from "@oh-my-pi/pi-coding-agen
 
 describe("disabledExtensions runtime filtering", () => {
 	let tempDir = "";
+	let tempHomeDir = "";
+	let originalHome: string | undefined;
 
 	beforeEach(async () => {
 		_resetSettingsForTest();
+		originalHome = process.env.HOME;
+		tempHomeDir = await fs.mkdtemp(path.join(os.tmpdir(), "omp-disabled-ext-home-"));
+		process.env.HOME = tempHomeDir;
+		vi.spyOn(os, "homedir").mockReturnValue(tempHomeDir);
 		tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "omp-disabled-ext-"));
 		await fs.mkdir(path.join(tempDir, ".omp"), { recursive: true });
 		await fs.writeFile(path.join(tempDir, ".omp", "AGENTS.md"), "# project instructions\n");
@@ -27,6 +33,13 @@ describe("disabledExtensions runtime filtering", () => {
 
 	afterEach(async () => {
 		_resetSettingsForTest();
+		vi.restoreAllMocks();
+		if (originalHome === undefined) {
+			delete process.env.HOME;
+		} else {
+			process.env.HOME = originalHome;
+		}
+		await fs.rm(tempHomeDir, { recursive: true, force: true });
 		await fs.rm(tempDir, { recursive: true, force: true });
 	});
 

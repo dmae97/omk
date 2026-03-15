@@ -348,6 +348,44 @@ export function migrateSessionEntries(entries: FileEntry[]): void {
 let sessionDirsMigrated = false;
 
 /**
+ * Merge or rename a legacy session directory into its canonical target.
+ * Best effort: callers decide whether migration failures should surface.
+ */
+function migrateSessionDirPath(oldPath: string, newPath: string): void {
+	const existing = fs.statSync(newPath, { throwIfNoEntry: false });
+	if (existing?.isDirectory()) {
+		for (const file of fs.readdirSync(oldPath)) {
+			const src = path.join(oldPath, file);
+			const dst = path.join(newPath, file);
+			if (!fs.existsSync(dst)) {
+				fs.renameSync(src, dst);
+			}
+		}
+		fs.rmSync(oldPath, { recursive: true, force: true });
+		return;
+	}
+	if (existing) {
+		fs.rmSync(newPath, { recursive: true, force: true });
+	}
+	fs.renameSync(oldPath, newPath);
+}
+
+function encodeLegacyAbsoluteSessionDirName(cwd: string): string {
+	const resolvedCwd = path.resolve(cwd);
+	return `--${resolvedCwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
+}
+
+function pathIsWithin(root: string, candidate: string): boolean {
+	const relative = path.relative(root, candidate);
+	return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function encodeRelativeSessionDirName(prefix: string, root: string, cwd: string): string {
+	const relative = path.relative(root, cwd).replace(/[/\\:]/g, "-");
+	return relative ? `${prefix}-${relative}` : prefix;
+}
+
+/**
  * Migrate old `--<home-encoded>-*--` session dirs to the new `-*` format.
  * Runs once on first access, best-effort.
  */
@@ -378,31 +416,26 @@ function migrateHomeSessionDirs(): void {
 			continue;
 		}
 
-		const newName = `-${remainder}`;
+		const newName = remainder ? `-${remainder}` : "-";
 		const oldPath = path.join(sessionsRoot, entry);
 		const newPath = path.join(sessionsRoot, newName);
 
 		try {
-			const existing = fs.statSync(newPath, { throwIfNoEntry: false });
-			if (existing?.isDirectory()) {
-				// Merge files from old dir into existing new dir
-				for (const file of fs.readdirSync(oldPath)) {
-					const src = path.join(oldPath, file);
-					const dst = path.join(newPath, file);
-					if (!fs.existsSync(dst)) {
-						fs.renameSync(src, dst);
-					}
-				}
-				fs.rmSync(oldPath, { recursive: true, force: true });
-			} else {
-				if (existing) {
-					fs.rmSync(newPath, { recursive: true, force: true });
-				}
-				fs.renameSync(oldPath, newPath);
-			}
+			migrateSessionDirPath(oldPath, newPath);
 		} catch {
 			// Best effort
 		}
+	}
+}
+
+function migrateLegacyAbsoluteSessionDir(cwd: string, sessionDir: string): void {
+	const legacyDir = path.join(getSessionsDir(), encodeLegacyAbsoluteSessionDirName(cwd));
+	if (legacyDir === sessionDir || !fs.existsSync(legacyDir)) return;
+
+	try {
+		migrateSessionDirPath(legacyDir, sessionDir);
+	} catch {
+		// Best effort
 	}
 }
 
@@ -603,23 +636,31 @@ export function buildSessionContext(
 /**
  * Encode a cwd into a safe directory name for session storage.
  * Home-relative paths use single-dash format: `/Users/x/Projects/pi` → `-Projects-pi`
- * Absolute paths use double-dash format: `/tmp/foo` → `--tmp-foo--`
+ * Temp-root paths use `-tmp-` prefixes: `/tmp/foo` → `-tmp-foo`
+ * Other absolute paths keep the legacy double-dash format for compatibility.
  */
 function encodeSessionDirName(cwd: string): string {
-	const home = os.homedir();
-	if (cwd === home || cwd.startsWith(`${home}/`) || cwd.startsWith(`${home}\\`)) {
-		const relative = cwd.slice(home.length).replace(/^[/\\]/, "");
-		return `-${relative.replace(/[/\\:]/g, "-")}`;
+	const resolvedCwd = path.resolve(cwd);
+	const home = path.resolve(os.homedir());
+	if (pathIsWithin(home, resolvedCwd)) {
+		return encodeRelativeSessionDirName("-", home, resolvedCwd);
 	}
-	return `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
+	const tempRoot = path.resolve(os.tmpdir());
+	if (pathIsWithin(tempRoot, resolvedCwd)) {
+		return encodeRelativeSessionDirName("-tmp", tempRoot, resolvedCwd);
+	}
+	return encodeLegacyAbsoluteSessionDirName(resolvedCwd);
 }
+
 /**
  * Compute the default session directory for a cwd.
  * Encodes cwd into a safe directory name under ~/.omp/agent/sessions/.
  */
 function getDefaultSessionDir(cwd: string, storage: SessionStorage): string {
+	const resolvedCwd = path.resolve(cwd);
 	migrateHomeSessionDirs();
-	const sessionDir = path.join(getSessionsDir(), encodeSessionDirName(cwd));
+	const sessionDir = path.join(getSessionsDir(), encodeSessionDirName(resolvedCwd));
+	migrateLegacyAbsoluteSessionDir(resolvedCwd, sessionDir);
 	storage.ensureDirSync(sessionDir);
 	return sessionDir;
 }

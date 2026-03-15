@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `attribution` option to `PromptOptions` to explicitly control billing/initiator attribution for prompts
@@ -9,6 +8,8 @@
 
 ### Changed
 
+- Improved session directory migration to handle legacy absolute paths with double-dash format, automatically relocating them to new canonical locations
+- Enhanced session directory encoding to use `-tmp-` prefix for temporary directories instead of legacy double-dash format for better clarity
 - Updated `SessionManager.create()` to require both `cwd` and `sessionDir` parameters for explicit session directory control
 - Improved session directory naming for temporary working directories using `-tmp-` prefix instead of legacy `--` format
 - Made `cwd` and `sessionDir` fields mutable in SessionManager to support session relocation without type casting
