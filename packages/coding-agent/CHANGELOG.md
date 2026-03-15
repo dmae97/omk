@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.12.2] - 2026-03-15
+
 ### Added
 
 - Added `compaction.thresholdTokens` setting as a fixed token limit alternative to percentage-based compaction threshold
