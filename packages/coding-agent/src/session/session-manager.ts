@@ -1704,7 +1704,6 @@ export class SessionManager {
 
 	/** Flush pending writes to disk. Call before switching sessions or on shutdown. */
 	async flush(): Promise<void> {
-		if (!this.#persistWriter) return;
 		await this.#queuePersistTask(async () => {
 			if (this.#persistWriter) {
 				await this.#persistWriter.flush();
