@@ -627,8 +627,11 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		modelRegistry.refreshInBackground();
 	}
 	const skillsSettings = settings.getGroup("skills") as SkillsSettings;
+	const disabledExtensionIds = settings.get("disabledExtensions") ?? [];
 	const discoveredSkillsPromise =
-		options.skills === undefined ? discoverSkills(cwd, agentDir, skillsSettings) : undefined;
+		options.skills === undefined
+			? discoverSkills(cwd, agentDir, { ...skillsSettings, disabledExtensions: disabledExtensionIds })
+			: undefined;
 
 	// Initialize provider preferences from settings
 	const webSearchProvider = settings.get("providers.webSearch");
@@ -1006,12 +1009,14 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			...(options.additionalExtensionPaths ?? []),
 			...((settings.get("extensions") as string[]) ?? []),
 		];
+		const disabledExtensionIds = settings.get("disabledExtensions") ?? [];
 		extensionsResult = await logger.timeAsync(
 			"discoverAndLoadExtensions",
 			discoverAndLoadExtensions,
 			configuredPaths,
 			cwd,
 			eventBus,
+			disabledExtensionIds,
 		);
 		for (const { path, error } of extensionsResult.errors) {
 			logger.error("Failed to load extension", { path, error });

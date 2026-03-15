@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `disabledExtensions` setting to allow disabling specific extensions and skills by ID
+- Added support for filtering skills by disabled extension IDs with `skill:` prefix
 
 ## [13.12.1] - 2026-03-15
 ### Added

@@ -83,6 +83,7 @@ export async function loadSkills(options: LoadSkillsOptions = {}): Promise<LoadS
 		customDirectories = [],
 		ignoredSkills = [],
 		includeSkills = [],
+		disabledExtensions = [],
 	} = options;
 
 	// Early return if skills are disabled
@@ -123,8 +124,12 @@ export async function loadSkills(options: LoadSkillsOptions = {}): Promise<LoadS
 		return ignoredSkills.some(pattern => new Bun.Glob(pattern).match(name));
 	}
 
+	const disabledSkillNames = new Set(
+		(disabledExtensions ?? []).filter(id => id.startsWith("skill:")).map(id => id.slice(6)),
+	);
 	// Filter skills by source and patterns first
 	const filteredSkills = result.items.filter(capSkill => {
+		if (disabledSkillNames.has(capSkill.name)) return false;
 		if (!isSourceEnabled(capSkill._source)) return false;
 		if (matchesIgnorePatterns(capSkill.name)) return false;
 		if (!matchesIncludePatterns(capSkill.name)) return false;
