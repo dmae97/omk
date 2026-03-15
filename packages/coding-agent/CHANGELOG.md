@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Exposed `settings` instance in `CustomToolContext` for session-specific configuration access
+
+### Changed
+
+- Improved artifact spill configuration to use session settings with schema defaults as fallback
+- Refactored type annotations for better type safety in tool result handling
 
 ## [13.12.2] - 2026-03-15
 

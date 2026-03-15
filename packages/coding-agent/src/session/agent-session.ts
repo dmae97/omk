@@ -191,7 +191,7 @@ export interface AgentSessionConfig {
 	skillWarnings?: SkillWarning[];
 	/** Custom commands (TypeScript slash commands) */
 	customCommands?: LoadedCustomCommand[];
-	skillsSettings?: Required<SkillsSettings>;
+	skillsSettings?: SkillsSettings;
 	/** Model registry for API key resolution and model discovery */
 	modelRegistry: ModelRegistry;
 	/** Tool registry for LSP and settings */
@@ -383,7 +383,7 @@ export class AgentSession {
 	/** MCP prompt commands (updated dynamically when prompts are loaded) */
 	#mcpPromptCommands: LoadedCustomCommand[] = [];
 
-	#skillsSettings: Required<SkillsSettings> | undefined;
+	#skillsSettings: SkillsSettings | undefined;
 
 	// Model registry for API key resolution
 	#modelRegistry: ModelRegistry;
@@ -2518,7 +2518,7 @@ export class AgentSession {
 		return undefined;
 	}
 
-	get skillsSettings(): Required<SkillsSettings> | undefined {
+	get skillsSettings(): SkillsSettings | undefined {
 		return this.#skillsSettings;
 	}
 
