@@ -391,6 +391,8 @@ export async function computeHashlineDiff(
 ): Promise<DiffResult | DiffError> {
 	const { path, edits, move } = input;
 	const absolutePath = resolveToCwd(path, cwd);
+	const movePath = move ? resolveToCwd(move, cwd) : undefined;
+	const isMoveOnly = Boolean(movePath) && movePath !== absolutePath && edits.length === 0;
 
 	try {
 		const file = Bun.file(absolutePath);
@@ -400,6 +402,13 @@ export async function computeHashlineDiff(
 			}
 		} catch {
 			return { error: `File not found: ${path}` };
+		}
+
+		if (movePath === absolutePath) {
+			return { error: "move path is the same as source path" };
+		}
+		if (isMoveOnly) {
+			return { diff: "", firstChangedLine: undefined };
 		}
 
 		let rawContent: string;
@@ -412,7 +421,6 @@ export async function computeHashlineDiff(
 
 		const { text: content } = stripBom(rawContent);
 		const normalizedContent = normalizeToLF(content);
-
 		const result = applyHashlineEdits(normalizedContent, edits);
 		if (normalizedContent === result.lines && !move) {
 			return { error: `No changes would be made to ${path}. The edits produce identical content.` };

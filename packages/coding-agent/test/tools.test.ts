@@ -956,6 +956,37 @@ describe("edit tool CRLF handling", () => {
 		}
 	});
 
+	it("should preserve binary bytes when moving in hashline mode", async () => {
+		const originalEditVariant = Bun.env.PI_EDIT_VARIANT;
+		Bun.env.PI_EDIT_VARIANT = "hashline";
+
+		const hashDir = path.join(os.tmpdir(), `coding-agent-hashline-binary-move-${Snowflake.next()}`);
+		fs.mkdirSync(hashDir, { recursive: true });
+		const sourceFile = path.join(hashDir, "image.bin");
+		const targetFile = path.join(hashDir, "moved", "image.bin");
+		const originalBytes = Buffer.from([0, 255, 13, 10, 137, 80, 78, 71, 0, 1, 2, 3, 127]);
+		fs.writeFileSync(sourceFile, originalBytes);
+
+		try {
+			const session = createTestToolSession(hashDir);
+			const hashlineEditTool = new EditTool(session);
+			const result = await hashlineEditTool.execute("hashline-rename-binary", {
+				path: sourceFile,
+				edits: [],
+				move: targetFile,
+			});
+
+			expect(getTextOutput(result)).toContain("Moved");
+			expect(fs.existsSync(sourceFile)).toBe(false);
+			expect(fs.existsSync(targetFile)).toBe(true);
+			expect(Array.from(fs.readFileSync(targetFile))).toEqual(Array.from(originalBytes));
+		} finally {
+			fs.rmSync(hashDir, { recursive: true, force: true });
+			if (originalEditVariant === undefined) delete Bun.env.PI_EDIT_VARIANT;
+			else Bun.env.PI_EDIT_VARIANT = originalEditVariant;
+		}
+	});
+
 	// TODO: CRLF preservation broken by LSP formatting - fix later
 	it.skip("should preserve UTF-8 BOM after edit", async () => {
 		const testFile = path.join(testDir, "bom-test.txt");

@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Support for move-only operations that preserve exact bytes including binary files
+
+### Fixed
+
+- Fixed handling of file moves when no edits are specified, now correctly preserves binary content
+- Fixed validation to reject move operations where source and destination paths are identical
 
 ## [13.12.0] - 2026-03-14
 

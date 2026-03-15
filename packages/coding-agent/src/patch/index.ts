@@ -9,6 +9,7 @@
  * The mode is determined by the `edit.mode` setting.
  */
 import * as fs from "node:fs/promises";
+import * as nodePath from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { StringEnum } from "@oh-my-pi/pi-ai";
 import { type Static, Type } from "@sinclair/typebox";
@@ -322,10 +323,17 @@ export type EditMode = "replace" | "patch" | "hashline";
 
 export const DEFAULT_EDIT_MODE: EditMode = "hashline";
 
-const EDIT_ID: Record<string, EditMode> = Object.fromEntries(
-	["replace", "patch", "hashline"].map(mode => [mode, mode as EditMode]),
-);
+const EDIT_MODES = ["replace", "patch", "hashline"] as const satisfies readonly EditMode[];
+const EDIT_ID = Object.fromEntries(EDIT_MODES.map(mode => [mode, mode])) satisfies Record<string, EditMode>;
 export const normalizeEditMode = (mode?: string | null): EditMode | undefined => EDIT_ID[mode ?? ""];
+
+function isHashlineParams(params: ReplaceParams | PatchParams | HashlineParams): params is HashlineParams {
+	return "edits" in params;
+}
+
+function isReplaceParams(params: ReplaceParams | PatchParams | HashlineParams): params is ReplaceParams {
+	return "old_text" in params && "new_text" in params;
+}
 
 /**
  * Edit tool implementation.
@@ -454,7 +462,10 @@ export class EditTool implements AgentTool<TInput> {
 		// Hashline mode execution
 		// ─────────────────────────────────────────────────────────────────
 		if (this.mode === "hashline") {
-			const { path, edits, delete: deleteFile, move } = params as HashlineParams;
+			if (!isHashlineParams(params)) {
+				throw new Error("Invalid edit parameters for hashline mode.");
+			}
+			const { path, edits, delete: deleteFile, move } = params;
 
 			enforcePlanModeWrite(this.session, path, { op: deleteFile ? "delete" : "update", move });
 
@@ -464,9 +475,14 @@ export class EditTool implements AgentTool<TInput> {
 
 			const absolutePath = resolvePlanPath(this.session, path);
 			const resolvedMove = move ? resolvePlanPath(this.session, move) : undefined;
+			if (resolvedMove === absolutePath) {
+				throw new Error("move path is the same as source path");
+			}
+			const sourceExists = await fs.exists(absolutePath);
+			const isMoveOnly = Boolean(resolvedMove) && edits.length === 0;
 
 			if (deleteFile) {
-				if (await fs.exists(absolutePath)) {
+				if (sourceExists) {
 					await fs.unlink(absolutePath);
 				}
 				invalidateFsScanAfterDelete(absolutePath);
@@ -480,7 +496,29 @@ export class EditTool implements AgentTool<TInput> {
 				};
 			}
 
-			if (!(await fs.exists(absolutePath))) {
+			if (isMoveOnly && resolvedMove) {
+				if (!sourceExists) {
+					throw new Error(`File not found: ${path}`);
+				}
+				const parentDir = nodePath.dirname(resolvedMove);
+				if (parentDir && parentDir !== ".") {
+					await fs.mkdir(parentDir, { recursive: true });
+				}
+				// Preserve exact bytes for move-only operations, including binary files.
+				await fs.rename(absolutePath, resolvedMove);
+				invalidateFsScanAfterRename(absolutePath, resolvedMove);
+				return {
+					content: [{ type: "text", text: `Moved ${path} to ${move}` }],
+					details: {
+						diff: "",
+						op: "update",
+						move,
+						meta: outputMeta().get(),
+					},
+				};
+			}
+
+			if (!sourceExists) {
 				const lines: string[] = [];
 				for (const edit of edits) {
 					// For file creation, only anchorless appends/prepends are valid
@@ -628,7 +666,10 @@ export class EditTool implements AgentTool<TInput> {
 		// Patch mode execution
 		// ─────────────────────────────────────────────────────────────────
 		if (this.mode === "patch") {
-			const { path, op: rawOp, rename, diff } = params as PatchParams;
+			if (isHashlineParams(params) || isReplaceParams(params)) {
+				throw new Error("Invalid edit parameters for patch mode.");
+			}
+			const { path, op: rawOp, rename, diff } = params;
 
 			// Normalize unrecognized operations to "update"
 			const op: Operation = rawOp === "create" || rawOp === "delete" ? rawOp : "update";
@@ -662,7 +703,10 @@ export class EditTool implements AgentTool<TInput> {
 			const effRename = result.change.newPath ? rename : undefined;
 
 			// Generate diff for display
-			let diffResult = { diff: "", firstChangedLine: undefined as number | undefined };
+			let diffResult: { diff: string; firstChangedLine: number | undefined } = {
+				diff: "",
+				firstChangedLine: undefined,
+			};
 			if (result.change.type === "update" && result.change.oldContent && result.change.newContent) {
 				const normalizedOld = normalizeToLF(stripBom(result.change.oldContent).text);
 				const normalizedNew = normalizeToLF(stripBom(result.change.newContent).text);
@@ -710,7 +754,10 @@ export class EditTool implements AgentTool<TInput> {
 		// ─────────────────────────────────────────────────────────────────
 		// Replace mode execution
 		// ─────────────────────────────────────────────────────────────────
-		const { path, old_text, new_text, all } = params as ReplaceParams;
+		if (!isReplaceParams(params)) {
+			throw new Error("Invalid edit parameters for replace mode.");
+		}
+		const { path, old_text, new_text, all } = params;
 
 		enforcePlanModeWrite(this.session, path);
 
