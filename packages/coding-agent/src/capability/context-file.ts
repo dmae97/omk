@@ -4,6 +4,7 @@
  * System instruction files (CLAUDE.md, AGENTS.md, GEMINI.md, etc.) that provide
  * persistent guidance to the agent.
  */
+import * as path from "node:path";
 import { defineCapability } from ".";
 import type { SourceMeta } from "./types";
 
@@ -33,6 +34,7 @@ export const contextFileCapability = defineCapability<ContextFile>({
 	// Clamp depth >= 0: files inside config subdirectories of an ancestor (e.g. .claude/, .github/)
 	// are same-scope as the ancestor itself.
 	key: file => (file.level === "user" ? "user" : `project:${Math.max(0, file.depth ?? 0)}`),
+	toExtensionId: file => `context-file:${file.level}:${path.basename(file.path)}`,
 	validate: file => {
 		if (!file.path) return "Missing path";
 		if (file.content === undefined) return "Missing content";

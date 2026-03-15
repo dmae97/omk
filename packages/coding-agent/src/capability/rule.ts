@@ -214,6 +214,7 @@ export const ruleCapability = defineCapability<Rule>({
 	displayName: "Rules",
 	description: "Project-specific rules and constraints (Cursor MDC, Windsurf, Cline formats)",
 	key: rule => rule.name,
+	toExtensionId: rule => `rule:${rule.name}`,
 	validate: rule => {
 		if (!rule.name) return "Missing rule name";
 		if (!rule.path) return "Missing rule path";

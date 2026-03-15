@@ -18,6 +18,7 @@ import type { ExecOptions } from "../../exec/exec";
 import { execCommand } from "../../exec/exec";
 import type { CustomMessage } from "../../session/messages";
 import { EventBus } from "../../utils/event-bus";
+import { getAllPluginExtensionPaths } from "../plugins/loader";
 import { resolvePath } from "../utils";
 import type {
 	Extension,
@@ -481,7 +482,10 @@ export async function discoverAndLoadExtensions(
 		addPath(ext.path);
 	}
 
-	// 2. Explicitly configured paths
+	// 2. Discover extension entry points from installed plugins
+	addPaths(await getAllPluginExtensionPaths(cwd));
+
+	// 3. Explicitly configured paths
 	for (const configuredPath of configuredPaths) {
 		const resolved = resolvePath(configuredPath, cwd);
 

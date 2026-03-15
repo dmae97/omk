@@ -68,6 +68,10 @@ export interface LoadOptions {
 	cwd?: string;
 	/** Include items even if they fail validation. Default: false */
 	includeInvalid?: boolean;
+	/** Include items disabled via settings. Default: false */
+	includeDisabled?: boolean;
+	/** Explicit disabled extension IDs to apply instead of settings. */
+	disabledExtensions?: string[];
 }
 
 /**
@@ -122,6 +126,12 @@ export interface Capability<T> {
 	 * Optional validation. Return error message if invalid, undefined if valid.
 	 */
 	validate?(item: T): string | undefined;
+
+	/**
+	 * Optional disabledExtensions ID for this item.
+	 * When present, loadCapability() can hide items disabled via settings.
+	 */
+	toExtensionId?(item: T): string | undefined;
 
 	/** Registered providers, sorted by priority (highest first) */
 	providers: Provider<T>[];

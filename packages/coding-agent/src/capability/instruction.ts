@@ -27,6 +27,7 @@ export const instructionCapability = defineCapability<Instruction>({
 	displayName: "Instructions",
 	description: "File-specific instructions with glob pattern matching (GitHub Copilot format)",
 	key: inst => inst.name,
+	toExtensionId: inst => `instruction:${inst.name}`,
 	validate: inst => {
 		if (!inst.name) return "Missing name";
 		if (!inst.path) return "Missing path";

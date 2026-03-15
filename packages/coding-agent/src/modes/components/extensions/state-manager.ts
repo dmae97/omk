@@ -2,6 +2,7 @@
  * State manager for the Extension Control Center.
  * Handles data loading, tree building, filtering, and toggle persistence.
  */
+import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import type { ContextFile } from "../../../capability/context-file";
 import type { ExtensionModule } from "../../../capability/extension-module";
@@ -96,7 +97,7 @@ export async function loadAllExtensions(cwd?: string, disabledIds?: string[]): P
 		}
 	}
 
-	const loadOpts = cwd ? { cwd } : {};
+	const loadOpts = cwd ? { cwd, includeDisabled: true } : { includeDisabled: true };
 
 	// Load skills
 	try {
@@ -252,7 +253,7 @@ export async function loadAllExtensions(cwd?: string, disabledIds?: string[]): P
 		const contextFiles = await loadCapability<ContextFile>("context-files", loadOpts);
 		for (const file of contextFiles.all) {
 			// Extract filename from path for display
-			const name = file.path.split("/").pop() || file.path;
+			const name = path.basename(file.path);
 			const id = makeExtensionId("context-file", `${file.level}:${name}`);
 			const isDisabled = disabledExtensions.has(id);
 			const isShadowed = (file as { _shadowed?: boolean })._shadowed;

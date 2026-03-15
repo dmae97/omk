@@ -27,6 +27,7 @@ export const slashCommandCapability = defineCapability<SlashCommand>({
 	displayName: "Slash Commands",
 	description: "Custom slash commands defined as markdown files",
 	key: cmd => cmd.name,
+	toExtensionId: cmd => `slash-command:${cmd.name}`,
 	validate: cmd => {
 		if (!cmd.name) return "Missing name";
 		if (!cmd.path) return "Missing path";

@@ -585,6 +585,20 @@ export class PluginManager {
 				}
 			}
 
+			// Check extension entry paths exist if specified
+			if (manifest?.extensions) {
+				for (const extensionPath of manifest.extensions) {
+					const resolvedExtensionPath = path.join(pluginPath, extensionPath);
+					if (!fs.existsSync(resolvedExtensionPath)) {
+						checks.push({
+							name: `plugin:${name}:extension:${extensionPath}`,
+							status: "error",
+							message: `Extension entry "${extensionPath}" not found`,
+						});
+					}
+				}
+			}
+
 			// Check enabled features exist in manifest
 			const runtimeState = config.plugins[name];
 			if (runtimeState?.enabledFeatures && manifest?.features) {

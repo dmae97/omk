@@ -11,6 +11,8 @@ export interface PluginFeature {
 	description?: string;
 	/** Whether this feature is enabled by default */
 	default?: boolean;
+	/** Additional extension entry points provided by this feature */
+	extensions?: string[];
 	/** Additional tool entry points provided by this feature */
 	tools?: string[];
 	/** Additional hook entry points provided by this feature */
@@ -34,6 +36,8 @@ export interface PluginManifest {
 	tools?: string;
 	/** Entry point for base hooks (relative path from package root) */
 	hooks?: string;
+	/** Extension entry points (relative paths from package root) */
+	extensions?: string[];
 	/** Command files (relative paths from package root) */
 	commands?: string[];
 

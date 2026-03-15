@@ -107,6 +107,9 @@ async function loadImpl<T>(
 	const allItems: Array<T & { _source: SourceMeta; _shadowed?: boolean }> = [];
 	const allWarnings: string[] = [];
 	const contributingProviders: string[] = [];
+	const disabledExtensionIds = options.includeDisabled
+		? new Set<string>()
+		: new Set<string>(options.disabledExtensions ?? settings?.get("disabledExtensions") ?? []);
 
 	const results = await Promise.all(
 		providers.map(async provider => {
@@ -136,18 +139,26 @@ async function loadImpl<T>(
 			allWarnings.push(...result.warnings.map(w => `[${provider.displayName}] ${w}`));
 		}
 
-		if (result.items.length > 0) {
-			contributingProviders.push(provider.id);
-
-			for (const item of result.items) {
-				const itemWithSource = item as T & { _source: SourceMeta };
-				if (itemWithSource._source) {
-					itemWithSource._source.providerName = provider.displayName;
-					allItems.push(itemWithSource as T & { _source: SourceMeta; _shadowed?: boolean });
-				} else {
-					allWarnings.push(`[${provider.displayName}] Item missing _source metadata, skipping`);
-				}
+		let contributedItemCount = 0;
+		for (const item of result.items) {
+			const itemWithSource = item as T & { _source: SourceMeta };
+			if (!itemWithSource._source) {
+				allWarnings.push(`[${provider.displayName}] Item missing _source metadata, skipping`);
+				continue;
 			}
+
+			const extensionId = capability.toExtensionId?.(itemWithSource);
+			if (extensionId && disabledExtensionIds.has(extensionId)) {
+				continue;
+			}
+
+			itemWithSource._source.providerName = provider.displayName;
+			allItems.push(itemWithSource as T & { _source: SourceMeta; _shadowed?: boolean });
+			contributedItemCount += 1;
+		}
+
+		if (contributedItemCount > 0) {
+			contributingProviders.push(provider.id);
 		}
 	}
 

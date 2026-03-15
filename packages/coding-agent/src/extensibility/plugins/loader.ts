@@ -1,8 +1,8 @@
 /**
- * Plugin loader - discovers and loads tools/hooks from installed plugins.
+ * Plugin loader - discovers and loads manifest entry points from installed plugins.
  *
- * Reads enabled plugins from the runtime config and loads their tools/hooks
- * based on manifest entries and enabled features.
+ * Reads enabled plugins from the runtime config and loads their
+ * tools/hooks/extensions/commands based on manifest entries and enabled features.
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -122,10 +122,10 @@ export async function getEnabledPlugins(cwd: string): Promise<InstalledPlugin[]>
 // =============================================================================
 
 /**
- * Generic path resolver for plugin manifest entries (tools, hooks, commands).
+ * Generic path resolver for plugin manifest entries (tools, hooks, commands, extensions).
  * Handles both single-string and string[] base entries, plus feature-specific entries.
  */
-function resolvePluginPaths(plugin: InstalledPlugin, key: "tools" | "hooks" | "commands"): string[] {
+function resolvePluginPaths(plugin: InstalledPlugin, key: "tools" | "hooks" | "commands" | "extensions"): string[] {
 	const paths: string[] = [];
 	const manifest = plugin.manifest;
 
@@ -188,6 +188,10 @@ export function resolvePluginCommandPaths(plugin: InstalledPlugin): string[] {
 	return resolvePluginPaths(plugin, "commands");
 }
 
+export function resolvePluginExtensionPaths(plugin: InstalledPlugin): string[] {
+	return resolvePluginPaths(plugin, "extensions");
+}
+
 // =============================================================================
 // Aggregated Discovery
 // =============================================================================
@@ -229,6 +233,20 @@ export async function getAllPluginCommandPaths(cwd: string): Promise<string[]> {
 
 	for (const plugin of plugins) {
 		paths.push(...resolvePluginCommandPaths(plugin));
+	}
+
+	return paths;
+}
+
+/**
+ * Get all extension module paths from all enabled plugins.
+ */
+export async function getAllPluginExtensionPaths(cwd: string): Promise<string[]> {
+	const plugins = await getEnabledPlugins(cwd);
+	const paths: string[] = [];
+
+	for (const plugin of plugins) {
+		paths.push(...resolvePluginExtensionPaths(plugin));
 	}
 
 	return paths;
