@@ -1449,6 +1449,7 @@ export class SessionManager {
 		if (resolvedCwd === this.cwd) return;
 
 		const newSessionDir = getDefaultSessionDir(resolvedCwd, this.storage);
+		let hadSessionFile = false;
 
 		if (this.persist && this.#sessionFile) {
 			// Close the persist writer before moving files
@@ -1461,12 +1462,16 @@ export class SessionManager {
 			const newSessionFile = path.join(newSessionDir, path.basename(oldSessionFile));
 			const oldArtifactDir = oldSessionFile.slice(0, -6); // strip .jsonl
 			const newArtifactDir = newSessionFile.slice(0, -6);
+			hadSessionFile = this.storage.existsSync(oldSessionFile);
 			let movedSessionFile = false;
 			let movedArtifactDir = false;
 
 			try {
-				await fs.promises.rename(oldSessionFile, newSessionFile);
-				movedSessionFile = true;
+				// Guard: session file may not exist yet (no assistant messages persisted)
+				if (hadSessionFile) {
+					await fs.promises.rename(oldSessionFile, newSessionFile);
+					movedSessionFile = true;
+				}
 
 				try {
 					const stat = await fs.promises.stat(oldArtifactDir);
@@ -1511,8 +1516,14 @@ export class SessionManager {
 			header.cwd = resolvedCwd;
 		}
 
-		// Rewrite the session file at its new location with updated header
-		if (this.persist && this.#sessionFile) {
+		// Rewrite the session file at its new location with updated header.
+		// hadSessionFile: file existed before move → must rewrite to update cwd
+		// hasAssistant: assistant messages in memory but file missing → recreate from memory
+		// Neither true → fresh session, never written → preserve lazy-persist
+		const hasAssistant = this.#fileEntries.some(
+			e => e.type === "message" && e.message.role === "assistant",
+		);
+		if (this.persist && this.#sessionFile && (hadSessionFile || hasAssistant)) {
 			await this.#rewriteFile();
 		}
 

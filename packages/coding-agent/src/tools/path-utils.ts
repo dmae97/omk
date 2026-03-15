@@ -111,6 +111,17 @@ export function resolveToCwd(filePath: string, cwd: string): string {
 	return path.resolve(cwd, expanded);
 }
 
+/**
+ * Strip matching surrounding double quotes from a path string.
+ * Common when users paste quoted paths from Windows Explorer or shell copy-paste.
+ * Only double quotes — single quotes are valid POSIX filename characters.
+ * Tradeoff: a POSIX path literally starting AND ending with " would also be unquoted.
+ * Accepted because such names are virtually nonexistent in practice.
+ */
+export function stripOuterDoubleQuotes(input: string): string {
+	return input.startsWith('"') && input.endsWith('"') && input.length > 1 ? input.slice(1, -1) : input;
+}
+
 const GLOB_PATH_CHARS = ["*", "?", "[", "{"] as const;
 
 export function hasGlobPathChars(filePath: string): boolean {

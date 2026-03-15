@@ -27,7 +27,7 @@ import type { InteractiveModeContext } from "../../modes/types";
 import type { AsyncJobSnapshotItem } from "../../session/agent-session";
 import type { AuthStorage } from "../../session/auth-storage";
 import { outputMeta } from "../../tools/output-meta";
-import { resolveToCwd } from "../../tools/path-utils";
+import { resolveToCwd, stripOuterDoubleQuotes } from "../../tools/path-utils";
 import { replaceTabs } from "../../tools/render-utils";
 import { getChangelogPath, parseChangelog } from "../../utils/changelog";
 import { openPath } from "../../utils/open";
@@ -679,8 +679,14 @@ export class CommandController {
 			return;
 		}
 
+		const unquoted = stripOuterDoubleQuotes(targetPath);
+		if (!unquoted) {
+			this.ctx.showError("Usage: /move <path>");
+			return;
+		}
+
 		const cwd = this.ctx.sessionManager.getCwd();
-		const resolvedPath = resolveToCwd(targetPath, cwd);
+		const resolvedPath = resolveToCwd(unquoted, cwd);
 
 		try {
 			const stat = await fs.stat(resolvedPath);
