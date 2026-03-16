@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+
+### Added
+
+- Added overload for `prompt()` method accepting a string input with optional options parameter
+
 ### Fixed
 
 - Fixed stale forced toolChoice being passed to provider after tools are refreshed mid-turn

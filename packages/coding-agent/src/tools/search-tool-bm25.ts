@@ -89,7 +89,13 @@ function getDiscoverableMCPSearchIndexForExecution(session: ToolSession): Discov
 	return buildDiscoverableMCPSearchIndex(session.getDiscoverableMCPTools?.() ?? []);
 }
 
-function supportsMCPToolDiscoveryExecution(session: ToolSession): boolean {
+type MCPDiscoveryExecutionSession = ToolSession & {
+	isMCPDiscoveryEnabled: () => boolean;
+	getSelectedMCPToolNames: () => string[];
+	activateDiscoveredMCPTools: (toolNames: string[]) => Promise<string[]>;
+};
+
+function supportsMCPToolDiscoveryExecution(session: ToolSession): session is MCPDiscoveryExecutionSession {
 	return (
 		typeof session.isMCPDiscoveryEnabled === "function" &&
 		typeof session.getSelectedMCPToolNames === "function" &&

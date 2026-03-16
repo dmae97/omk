@@ -41,7 +41,7 @@ function defaultConvertToLlm(messages: AgentMessage[]): Message[] {
 
 function refreshToolChoiceForActiveTools(
 	toolChoice: ToolChoice | undefined,
-	tools: AgentContext["tools"],
+	tools: AgentContext["tools"] = [],
 ): ToolChoice | undefined {
 	if (!toolChoice || typeof toolChoice === "string") {
 		return toolChoice;
@@ -595,6 +595,7 @@ export class Agent {
 
 	/** Send a prompt with an AgentMessage */
 	async prompt(message: AgentMessage | AgentMessage[], options?: AgentPromptOptions): Promise<void>;
+	async prompt(input: string, options?: AgentPromptOptions): Promise<void>;
 	async prompt(input: string, images?: ImageContent[], options?: AgentPromptOptions): Promise<void>;
 	async prompt(
 		input: string | AgentMessage | AgentMessage[],
