@@ -535,6 +535,7 @@ export class InputController {
 			keybindings: this.ctx.keybindings,
 			copyCurrentLine: () => this.handleCopyCurrentLine(),
 			copyPrompt: () => this.handleCopyPrompt(),
+			undo: prefix => this.ctx.editor.undoPastTransientText(prefix),
 			moveCursorToMessageEnd: () => this.ctx.editor.moveToMessageEnd(),
 			moveCursorToMessageStart: () => this.ctx.editor.moveToMessageStart(),
 			moveCursorToLineStart: () => this.ctx.editor.moveToLineStart(),

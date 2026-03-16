@@ -264,10 +264,7 @@ export class KeybindingsManager {
 	 * Get display string for an action.
 	 */
 	getDisplayString(action: AppAction): string {
-		const keys = this.getKeys(action);
-		if (keys.length === 0) return "";
-		if (keys.length === 1) return keys[0]!;
-		return keys.join("/");
+		return formatKeyHints(this.getKeys(action));
 	}
 
 	/**

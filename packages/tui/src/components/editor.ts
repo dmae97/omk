@@ -1162,6 +1162,58 @@ export class Editor implements Component, Focusable {
 		this.#moveToMessageEnd();
 	}
 
+	/**
+	 * Undo the last meaningful edit while ignoring transient text that is still present at the cursor.
+	 * Used for command-like autocomplete actions whose typed trigger should not count as the edit being undone.
+	 */
+	undoPastTransientText(transientText: string): void {
+		if (transientText.length === 0) {
+			this.#applyUndo();
+			return;
+		}
+
+		const currentLine = this.#state.lines[this.#state.cursorLine] || "";
+		const transientStartCol = this.#state.cursorCol - transientText.length;
+		if (transientStartCol < 0 || currentLine.slice(transientStartCol, this.#state.cursorCol) !== transientText) {
+			this.#applyUndo();
+			return;
+		}
+
+		const beforeTransient = currentLine.slice(0, transientStartCol);
+		const afterTransient = currentLine.slice(this.#state.cursorCol);
+		this.#historyIndex = -1;
+		this.#resetKillSequence();
+		this.#preferredVisualCol = null;
+		this.#state.lines[this.#state.cursorLine] = beforeTransient + afterTransient;
+		this.#setCursorCol(transientStartCol);
+
+		while (true) {
+			const snapshot = this.#undoStack.at(-1);
+			if (
+				!snapshot ||
+				!this.#matchesTransientUndoSnapshot(
+					snapshot,
+					transientText,
+					transientStartCol,
+					beforeTransient,
+					afterTransient,
+				)
+			) {
+				break;
+			}
+			this.#undoStack.pop();
+		}
+
+		if (this.#undoStack.length === 0) {
+			if (this.onChange) {
+				this.onChange(this.getText());
+			}
+			return;
+		}
+
+		this.#applyUndo();
+	}
+
 	setText(text: string): void {
 		this.#historyIndex = -1; // Exit history browsing mode
 		this.#resetKillSequence();
@@ -1576,6 +1628,30 @@ export class Editor implements Component, Focusable {
 				this.#tryTriggerAutocomplete();
 			}
 		}
+	}
+
+	#matchesTransientUndoSnapshot(
+		snapshot: EditorState,
+		transientText: string,
+		transientStartCol: number,
+		beforeTransient: string,
+		afterTransient: string,
+	): boolean {
+		if (snapshot.cursorLine !== this.#state.cursorLine) return false;
+		if (snapshot.lines.length !== this.#state.lines.length) return false;
+
+		const transientLength = snapshot.cursorCol - transientStartCol;
+		if (transientLength < 0 || transientLength >= transientText.length) return false;
+
+		for (let i = 0; i < snapshot.lines.length; i++) {
+			if (i === this.#state.cursorLine) continue;
+			if (snapshot.lines[i] !== this.#state.lines[i]) return false;
+		}
+
+		return (
+			snapshot.lines[snapshot.cursorLine] ===
+			beforeTransient + transientText.slice(0, transientLength) + afterTransient
+		);
 	}
 
 	#recordKill(text: string, direction: "forward" | "backward", accumulate = this.#lastAction === "kill"): void {

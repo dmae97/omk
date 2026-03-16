@@ -12,12 +12,12 @@ interface PromptActionDefinition {
 	label: string;
 	description: string;
 	keywords: string[];
-	execute: () => void;
+	execute: (prefix: string) => void;
 }
 
 interface PromptActionAutocompleteItem extends AutocompleteItem {
 	actionId: string;
-	execute: () => void;
+	execute: (prefix: string) => void;
 }
 
 interface PromptActionAutocompleteOptions {
@@ -26,6 +26,7 @@ interface PromptActionAutocompleteOptions {
 	keybindings: KeybindingsManager;
 	copyCurrentLine: () => void;
 	copyPrompt: () => void;
+	undo: (prefix: string) => void;
 	moveCursorToMessageEnd: () => void;
 	moveCursorToMessageStart: () => void;
 	moveCursorToLineStart: () => void;
@@ -141,6 +142,14 @@ export class PromptActionAutocompleteProvider implements AutocompleteProvider {
 		onApplied?: () => void;
 	} {
 		if (prefix.startsWith("#") && isPromptActionItem(item)) {
+			if (item.actionId === "undo") {
+				return {
+					lines,
+					cursorLine,
+					cursorCol,
+					onApplied: () => item.execute(prefix),
+				};
+			}
 			const currentLine = lines[cursorLine] || "";
 			const beforePrefix = currentLine.slice(0, cursorCol - prefix.length);
 			const afterCursor = currentLine.slice(cursorCol);
@@ -150,7 +159,7 @@ export class PromptActionAutocompleteProvider implements AutocompleteProvider {
 				lines: newLines,
 				cursorLine,
 				cursorCol: beforePrefix.length,
-				onApplied: item.execute,
+				onApplied: () => item.execute(prefix),
 			};
 		}
 
@@ -180,6 +189,13 @@ export function createPromptActionAutocompleteProvider(
 			description: formatKeyHints(options.keybindings.getKeys("copyPrompt")),
 			keywords: ["copy", "prompt", "clipboard", "message"],
 			execute: options.copyPrompt,
+		},
+		{
+			id: "undo",
+			label: "Undo",
+			description: formatKeyHints(editorKeybindings.getKeys("undo")),
+			keywords: ["undo", "revert", "edit", "history"],
+			execute: options.undo,
 		},
 		{
 			id: "cursor-message-end",

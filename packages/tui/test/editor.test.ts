@@ -1334,6 +1334,41 @@ describe("Editor component", () => {
 			expect(editor.getCursor()).toEqual({ line: 0, col: 8 });
 		});
 
+		it("undoes the last paste when a transient #undo trigger is executed", () => {
+			const editor = new Editor(defaultEditorTheme);
+
+			editor.handleInput("\x1b[200~pasted text\x1b[201~");
+			expect(editor.getText()).toBe("pasted text");
+
+			editor.handleInput("#");
+			editor.handleInput("u");
+			editor.handleInput("n");
+			editor.handleInput("d");
+			editor.handleInput("o");
+			expect(editor.getText()).toBe("pasted text#undo");
+
+			editor.undoPastTransientText("#undo");
+
+			expect(editor.getText()).toBe("");
+			expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
+		});
+
+		it("removes a transient undo trigger even when there is no earlier edit to restore", () => {
+			const editor = new Editor(defaultEditorTheme);
+
+			editor.handleInput("#");
+			editor.handleInput("u");
+			editor.handleInput("n");
+			editor.handleInput("d");
+			editor.handleInput("o");
+			expect(editor.getText()).toBe("#undo");
+
+			editor.undoPastTransientText("#undo");
+
+			expect(editor.getText()).toBe("");
+			expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
+		});
+
 		it("handles multiple consecutive up/down movements", () => {
 			const editor = new Editor(defaultEditorTheme);
 
