@@ -106,7 +106,7 @@ describe("SessionManager.moveTo", () => {
 	});
 
 	it("moves session file and updates header cwd (baseline)", async () => {
-		const session = SessionManager.create(cwdA);
+		const session = SessionManager.create(cwdA, SessionManager.getDefaultSessionDir(cwdA));
 		session.appendMessage({ role: "user", content: "hello", timestamp: 1 });
 		session.appendMessage(makeAssistantMessage());
 		await session.flush();
@@ -130,7 +130,7 @@ describe("SessionManager.moveTo", () => {
 	});
 
 	it("succeeds on fresh session without ENOENT, then deferred persistence works", async () => {
-		const session = SessionManager.create(cwdA);
+		const session = SessionManager.create(cwdA, SessionManager.getDefaultSessionDir(cwdA));
 		// No messages — file never written to disk
 		const oldFile = session.getSessionFile()!;
 		expect(fs.existsSync(oldFile)).toBe(false);
@@ -154,7 +154,7 @@ describe("SessionManager.moveTo", () => {
 	});
 
 	it("recreates file from memory when old file is deleted (assistant exists)", async () => {
-		const session = SessionManager.create(cwdA);
+		const session = SessionManager.create(cwdA, SessionManager.getDefaultSessionDir(cwdA));
 		session.appendMessage({ role: "user", content: "hello", timestamp: 1 });
 		session.appendMessage(makeAssistantMessage());
 		await session.flush();
@@ -223,7 +223,7 @@ describe("SessionManager.moveTo", () => {
 	});
 
 	it("moves artifact dir independently when session file does not exist", async () => {
-		const session = SessionManager.create(cwdA);
+		const session = SessionManager.create(cwdA, SessionManager.getDefaultSessionDir(cwdA));
 		// Allocate an artifact — creates dir via ArtifactManager
 		const { path: artifactPath } = await session.allocateArtifactPath("bash");
 		if (!artifactPath) throw new Error("Expected artifact path");

@@ -13,19 +13,19 @@ console.log("In-memory session:", inMemory.sessionFile ?? "(none)");
 
 // New persistent session
 const { session: newSession } = await createAgentSession({
-	sessionManager: SessionManager.create(process.cwd()),
+	sessionManager: SessionManager.create(process.cwd(), SessionManager.getDefaultSessionDir(process.cwd())),
 });
 console.log("New session file:", newSession.sessionFile);
 
 // Continue most recent session (or create new if none)
 const { session: continued, modelFallbackMessage } = await createAgentSession({
-	sessionManager: await SessionManager.continueRecent(process.cwd()),
+	sessionManager: await SessionManager.continueRecent(process.cwd(), SessionManager.getDefaultSessionDir(process.cwd())),
 });
 if (modelFallbackMessage) console.log("Note:", modelFallbackMessage);
 console.log("Continued session:", continued.sessionFile);
 
 // List and open specific session
-const sessions = await SessionManager.list(process.cwd());
+const sessions = await SessionManager.list(SessionManager.getDefaultSessionDir(process.cwd()));
 console.log(`\nFound ${sessions.length} sessions:`);
 for (const info of sessions.slice(0, 3)) {
 	console.log(`  ${info.id.slice(0, 8)}… - "${info.firstMessage.slice(0, 30)}…"`);

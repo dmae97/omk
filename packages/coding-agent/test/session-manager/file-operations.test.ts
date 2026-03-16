@@ -247,7 +247,7 @@ describe("SessionManager temp cwd session dirs", () => {
 			fs.symlinkSync(os.homedir(), homeAlias, "dir");
 
 			const aliasedCwd = path.join(homeAlias, "Projects", path.basename(realProjectDir), "nested");
-			const session = SessionManager.create(aliasedCwd);
+			const session = SessionManager.create(aliasedCwd, SessionManager.getDefaultSessionDir(aliasedCwd));
 			const sessionFile = session.getSessionFile();
 			if (!sessionFile) throw new Error("Expected session file path");
 
@@ -266,7 +266,7 @@ describe("SessionManager temp cwd session dirs", () => {
 		const tempCwd = path.join(testAgentDir, `temp-cwd-${Snowflake.next()}`);
 		fs.mkdirSync(tempCwd, { recursive: true });
 
-		const session = SessionManager.create(tempCwd);
+		const session = SessionManager.create(tempCwd, SessionManager.getDefaultSessionDir(tempCwd));
 		const sessionFile = session.getSessionFile();
 		if (!sessionFile) throw new Error("Expected session file path");
 
@@ -282,7 +282,7 @@ describe("SessionManager temp cwd session dirs", () => {
 		fs.mkdirSync(legacyDir, { recursive: true });
 		fs.writeFileSync(markerFile, "marker\n");
 
-		const session = SessionManager.create(tempCwd);
+		const session = SessionManager.create(tempCwd, SessionManager.getDefaultSessionDir(tempCwd));
 		const sessionFile = session.getSessionFile();
 		if (!sessionFile) throw new Error("Expected session file path");
 

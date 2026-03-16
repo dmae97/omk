@@ -630,7 +630,7 @@ export function buildSessionContext(
  * Classifies cwd by canonical location so symlink/alias paths resolve to the
  * same home-relative or temp-root directory names as their real targets.
  */
-function getDefaultSessionDir(cwd: string, storage: SessionStorage): string {
+function computeDefaultSessionDir(cwd: string, storage: SessionStorage): string {
 	const resolvedCwd = path.resolve(cwd);
 	const canonicalCwd = resolveEquivalentPath(resolvedCwd);
 	const home = resolveEquivalentPath(os.homedir());
@@ -1310,7 +1310,8 @@ export async function resolveResumableSession(
 	sessionDir?: string,
 	storage: SessionStorage = new FileSessionStorage(),
 ): Promise<ResolvedSessionMatch | undefined> {
-	const localSessions = await SessionManager.list(cwd, sessionDir, storage);
+	const localSessionDir = sessionDir ?? SessionManager.getDefaultSessionDir(cwd, storage);
+	const localSessions = await SessionManager.list(localSessionDir, storage);
 	const localMatch = localSessions.find(session => sessionMatchesResumeArg(session, sessionArg));
 	if (localMatch) {
 		return { session: localMatch, scope: "local" };
@@ -1477,7 +1478,7 @@ export class SessionManager {
 		const resolvedCwd = path.resolve(newCwd);
 		if (resolvedCwd === this.cwd) return;
 
-		const newSessionDir = getDefaultSessionDir(resolvedCwd, this.storage);
+		const newSessionDir = computeDefaultSessionDir(resolvedCwd, this.storage);
 		let hadSessionFile = false;
 
 		if (this.persist && this.#sessionFile) {
@@ -2435,13 +2436,20 @@ export class SessionManager {
 	}
 
 	/**
+	 * Resolve the canonical default session directory for a cwd.
+	 * Callers must opt in explicitly instead of silently falling back to the global agent root.
+	 */
+	static getDefaultSessionDir(cwd: string, storage: SessionStorage = new FileSessionStorage()): string {
+		return computeDefaultSessionDir(cwd, storage);
+	}
+
+	/**
 	 * Create a new session.
 	 * @param cwd Working directory (stored in session header)
-	 * @param sessionDir Optional session directory. If omitted, uses default (~/.omp/agent/sessions/<encoded-cwd>/).
+	 * @param sessionDir Explicit session directory for persistence.
 	 */
-	static create(cwd: string, sessionDir?: string, storage: SessionStorage = new FileSessionStorage()): SessionManager {
-		const dir = sessionDir ?? getDefaultSessionDir(cwd, storage);
-		const manager = new SessionManager(cwd, dir, true, storage);
+	static create(cwd: string, sessionDir: string, storage: SessionStorage = new FileSessionStorage()): SessionManager {
+		const manager = new SessionManager(cwd, sessionDir, true, storage);
 		manager.#initNewSession();
 		return manager;
 	}
@@ -2453,11 +2461,10 @@ export class SessionManager {
 	static async forkFrom(
 		sourcePath: string,
 		cwd: string,
-		sessionDir?: string,
+		sessionDir: string,
 		storage: SessionStorage = new FileSessionStorage(),
 	): Promise<SessionManager> {
-		const dir = sessionDir ?? getDefaultSessionDir(cwd, storage);
-		const manager = new SessionManager(cwd, dir, true, storage);
+		const manager = new SessionManager(cwd, sessionDir, true, storage);
 		const forkEntries = structuredClone(await loadEntriesFromFile(sourcePath, storage)) as FileEntry[];
 		migrateToCurrentVersion(forkEntries);
 		await resolveBlobRefsInEntries(forkEntries, manager.#blobStore);
@@ -2497,18 +2504,17 @@ export class SessionManager {
 	/**
 	 * Continue the most recent session, or create new if none.
 	 * @param cwd Working directory
-	 * @param sessionDir Optional session directory. If omitted, uses default (~/.omp/agent/sessions/<encoded-cwd>/).
+	 * @param sessionDir Explicit session directory for persistence.
 	 */
 	static async continueRecent(
 		cwd: string,
-		sessionDir?: string,
+		sessionDir: string,
 		storage: SessionStorage = new FileSessionStorage(),
 	): Promise<SessionManager> {
-		const dir = sessionDir ?? getDefaultSessionDir(cwd, storage);
 		// Prefer terminal-scoped breadcrumb (handles concurrent sessions correctly)
 		const terminalSession = await readTerminalBreadcrumb(cwd);
-		const mostRecent = terminalSession ?? (await findMostRecentSession(dir, storage));
-		const manager = new SessionManager(cwd, dir, true, storage);
+		const mostRecent = terminalSession ?? (await findMostRecentSession(sessionDir, storage));
+		const manager = new SessionManager(cwd, sessionDir, true, storage);
 		if (mostRecent) {
 			await manager.#initSessionFile(mostRecent);
 		} else {
@@ -2528,18 +2534,14 @@ export class SessionManager {
 	}
 
 	/**
-	 * List all sessions.
-	 * @param cwd Working directory (used to compute default session directory)
-	 * @param sessionDir Optional session directory. If omitted, uses default (~/.omp/agent/sessions/<encoded-cwd>/).
+	 * List all sessions in an explicit session directory.
 	 */
 	static async list(
-		cwd: string,
-		sessionDir?: string,
+		sessionDir: string,
 		storage: SessionStorage = new FileSessionStorage(),
 	): Promise<SessionInfo[]> {
-		const dir = sessionDir ?? getDefaultSessionDir(cwd, storage);
 		try {
-			const files = storage.listFilesSync(dir, "*.jsonl");
+			const files = storage.listFilesSync(sessionDir, "*.jsonl");
 			return await collectSessionsFromFiles(files, storage);
 		} catch {
 			return [];
