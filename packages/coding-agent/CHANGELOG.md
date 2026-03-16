@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
 - Changed `SessionManager.create()` to require explicit `sessionDir` parameter instead of optional—callers must now pass `SessionManager.getDefaultSessionDir(cwd)` to use default behavior
@@ -16,6 +17,9 @@
 
 ### Changed
 
+- Made `sessionDir` parameter optional in `SessionManager.create()`, `SessionManager.continueRecent()`, and `SessionManager.forkFrom()`—callers can now omit it to use the default session directory
+- Changed `SessionManager.list()` signature to accept `cwd` as the first parameter instead of requiring an explicit `sessionDir`—callers can now omit `sessionDir` to use the default for the given working directory
+- Updated `SessionManager.getDefaultSessionDir()` to accept optional `agentDir` parameter for computing session directories within a custom agent root
 - Improved status line path display to strip display roots using canonical path resolution, correctly handling symlink aliases to home and Projects directories
 - Improved error messaging in ast_grep when no matches are found with parse errors, now suggests narrowing `path`/`glob` or setting `lang` to resolve mis-scoped queries
 

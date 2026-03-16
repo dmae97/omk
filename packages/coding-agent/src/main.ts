@@ -233,7 +233,6 @@ async function createSessionManager(parsed: Args, cwd: string): Promise<SessionM
 	if (parsed.noSession) {
 		return SessionManager.inMemory();
 	}
-	const defaultSessionDir = parsed.sessionDir ?? SessionManager.getDefaultSessionDir(cwd);
 	if (typeof parsed.resume === "string") {
 		const sessionArg = parsed.resume;
 		if (sessionArg.includes("/") || sessionArg.includes("\\") || sessionArg.endsWith(".jsonl")) {
@@ -251,13 +250,13 @@ async function createSessionManager(parsed: Args, cwd: string): Promise<SessionM
 				if (!shouldFork) {
 					throw new Error(`Session "${sessionArg}" is in another project (${match.session.cwd}).`);
 				}
-				return await SessionManager.forkFrom(match.session.path, cwd, defaultSessionDir);
+				return await SessionManager.forkFrom(match.session.path, cwd, parsed.sessionDir);
 			}
 		}
 		return await SessionManager.open(match.session.path, parsed.sessionDir);
 	}
 	if (parsed.continue) {
-		return await SessionManager.continueRecent(cwd, defaultSessionDir);
+		return await SessionManager.continueRecent(cwd, parsed.sessionDir);
 	}
 	// --resume without value is handled separately (needs picker UI)
 	// If --session-dir provided without --continue/--resume, create new session there
@@ -622,7 +621,7 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	// Handle --resume (no value): show session picker
 	if (parsedArgs.resume === true) {
 		const sessions = await logger.timeAsync("SessionManager.list", () =>
-			SessionManager.list(parsedArgs.sessionDir ?? SessionManager.getDefaultSessionDir(cwd)),
+			SessionManager.list(cwd, parsedArgs.sessionDir),
 		);
 		if (sessions.length === 0) {
 			process.stdout.write(`${chalk.dim("No sessions found")}\n`);
