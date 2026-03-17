@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.12.9] - 2026-03-17
 ### Changed
 
 - Extracted OpenAI compatibility detection and resolution logic into dedicated `openai-completions-compat` module for improved maintainability and reusability
