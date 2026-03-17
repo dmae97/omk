@@ -17,6 +17,8 @@ type HistoryRow = {
 	cwd: string | null;
 };
 
+const SQLITE_NOW_EPOCH = "CAST(strftime('%s','now') AS INTEGER)";
+
 export class HistoryStorage {
 	#db: Database;
 	static #instance?: HistoryStorage;
@@ -45,7 +47,7 @@ PRAGMA busy_timeout=5000;
 CREATE TABLE IF NOT EXISTS history (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	prompt TEXT NOT NULL,
-	created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+	created_at INTEGER NOT NULL DEFAULT (${SQLITE_NOW_EPOCH}),
 	cwd TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_history_created_at ON history(created_at DESC);
@@ -54,8 +56,12 @@ CREATE VIRTUAL TABLE IF NOT EXISTS history_fts USING fts5(prompt, content='histo
 
 CREATE TRIGGER IF NOT EXISTS history_ai AFTER INSERT ON history BEGIN
 	INSERT INTO history_fts(rowid, prompt) VALUES (new.id, new.prompt);
-END;
-`);
+	END;
+	`);
+
+		if (this.#historySchemaUsesUnixEpoch()) {
+			this.#migrateHistorySchema();
+		}
 
 		if (!hasFts) {
 			try {
@@ -133,6 +139,41 @@ END;
 	#ensureDir(dbPath: string): void {
 		const dir = path.dirname(dbPath);
 		fs.mkdirSync(dir, { recursive: true });
+	}
+
+	#historySchemaUsesUnixEpoch(): boolean {
+		const row = this.#db
+			.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'history'")
+			.get() as { sql?: string | null } | undefined;
+		return row?.sql?.includes("unixepoch(") ?? false;
+	}
+
+	#migrateHistorySchema(): void {
+		const migrate = this.#db.transaction(() => {
+			this.#db.exec("ALTER TABLE history RENAME TO history_legacy");
+			this.#db.exec("DROP INDEX IF EXISTS idx_history_created_at");
+			this.#db.exec("DROP TRIGGER IF EXISTS history_ai");
+			this.#db.exec("DROP TABLE IF EXISTS history_fts");
+			this.#db.exec(`
+CREATE TABLE history (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	prompt TEXT NOT NULL,
+	created_at INTEGER NOT NULL DEFAULT (${SQLITE_NOW_EPOCH}),
+	cwd TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_history_created_at ON history(created_at DESC);
+INSERT INTO history (id, prompt, created_at, cwd)
+SELECT id, prompt, created_at, cwd
+FROM history_legacy;
+DROP TABLE history_legacy;
+CREATE VIRTUAL TABLE history_fts USING fts5(prompt, content='history', content_rowid='id');
+CREATE TRIGGER history_ai AFTER INSERT ON history BEGIN
+	INSERT INTO history_fts(rowid, prompt) VALUES (new.id, new.prompt);
+END;
+			`);
+			this.#db.run("INSERT INTO history_fts(history_fts) VALUES('rebuild')");
+		});
+		migrate();
 	}
 
 	#normalizeLimit(limit: number): number {

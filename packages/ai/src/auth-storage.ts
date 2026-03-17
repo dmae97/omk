@@ -1957,7 +1957,8 @@ type SerializedCredentialRecord = {
 	identityKey: string | null;
 };
 
-const AUTH_SCHEMA_VERSION = 3;
+const AUTH_SCHEMA_VERSION = 4;
+const SQLITE_NOW_EPOCH = "CAST(strftime('%s','now') AS INTEGER)";
 
 function normalizeStoredAccountId(accountId: string | null | undefined): string | null {
 	const normalized = accountId?.trim();
@@ -2152,23 +2153,23 @@ export class AuthCredentialStore {
 			"SELECT id, provider, credential_type, data, disabled_cause, identity_key FROM auth_credentials WHERE provider = ? AND disabled_cause IS NOT NULL ORDER BY id ASC",
 		);
 		this.#insertStmt = this.#db.prepare(
-			"INSERT INTO auth_credentials (provider, credential_type, data, identity_key) VALUES (?, ?, ?, ?) RETURNING id",
+			`INSERT INTO auth_credentials (provider, credential_type, data, identity_key, created_at, updated_at) VALUES (?, ?, ?, ?, ${SQLITE_NOW_EPOCH}, ${SQLITE_NOW_EPOCH}) RETURNING id`,
 		);
 		this.#updateStmt = this.#db.prepare(
-			"UPDATE auth_credentials SET credential_type = ?, data = ?, identity_key = ?, updated_at = unixepoch() WHERE id = ?",
+			`UPDATE auth_credentials SET credential_type = ?, data = ?, identity_key = ?, updated_at = ${SQLITE_NOW_EPOCH} WHERE id = ?`,
 		);
 		this.#deleteStmt = this.#db.prepare(
-			"UPDATE auth_credentials SET disabled_cause = ?, updated_at = unixepoch() WHERE id = ?",
+			`UPDATE auth_credentials SET disabled_cause = ?, updated_at = ${SQLITE_NOW_EPOCH} WHERE id = ?`,
 		);
 		this.#deleteByProviderStmt = this.#db.prepare(
-			"UPDATE auth_credentials SET disabled_cause = ?, updated_at = unixepoch() WHERE provider = ? AND disabled_cause IS NULL",
+			`UPDATE auth_credentials SET disabled_cause = ?, updated_at = ${SQLITE_NOW_EPOCH} WHERE provider = ? AND disabled_cause IS NULL`,
 		);
 		this.#hardDeleteStmt = this.#db.prepare("DELETE FROM auth_credentials WHERE id = ?");
-		this.#getCacheStmt = this.#db.prepare("SELECT value FROM cache WHERE key = ? AND expires_at > unixepoch()");
+		this.#getCacheStmt = this.#db.prepare(`SELECT value FROM cache WHERE key = ? AND expires_at > ${SQLITE_NOW_EPOCH}`);
 		this.#upsertCacheStmt = this.#db.prepare(
 			"INSERT INTO cache (key, value, expires_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, expires_at = excluded.expires_at",
 		);
-		this.#deleteExpiredCacheStmt = this.#db.prepare("DELETE FROM cache WHERE expires_at <= unixepoch()");
+		this.#deleteExpiredCacheStmt = this.#db.prepare(`DELETE FROM cache WHERE expires_at <= ${SQLITE_NOW_EPOCH}`);
 	}
 
 	static async open(dbPath: string = getAgentDbPath()): Promise<AuthCredentialStore> {
@@ -2271,8 +2272,8 @@ export class AuthCredentialStore {
 				data TEXT NOT NULL,
 				disabled_cause TEXT DEFAULT NULL,
 				identity_key TEXT DEFAULT NULL,
-				created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-				updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+				created_at INTEGER NOT NULL DEFAULT (${SQLITE_NOW_EPOCH}),
+				updated_at INTEGER NOT NULL DEFAULT (${SQLITE_NOW_EPOCH})
 			);
 		`);
 		this.#createAuthCredentialIndexes();
@@ -2292,6 +2293,9 @@ export class AuthCredentialStore {
 		if (fromVersion < 3) {
 			this.#migrateAuthSchemaV1OrV2ToV3();
 		}
+		if (fromVersion < 4) {
+			this.#migrateAuthSchemaV3ToV4();
+		}
 	}
 
 	#migrateAuthSchemaV0ToV1(): void {
@@ -2307,8 +2311,8 @@ export class AuthCredentialStore {
 					credential_type TEXT NOT NULL,
 					data TEXT NOT NULL,
 					disabled_cause TEXT DEFAULT NULL,
-					created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-					updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+					created_at INTEGER NOT NULL DEFAULT (${SQLITE_NOW_EPOCH}),
+					updated_at INTEGER NOT NULL DEFAULT (${SQLITE_NOW_EPOCH})
 				);
 			`);
 			this.#db.exec(`
@@ -2346,6 +2350,28 @@ export class AuthCredentialStore {
 				FROM auth_credentials_legacy
 			`);
 			this.#db.exec("DROP TABLE auth_credentials_legacy");
+		});
+		migrate();
+	}
+
+	#migrateAuthSchemaV3ToV4(): void {
+		const migrate = this.#db.transaction(() => {
+			this.#db.exec("ALTER TABLE auth_credentials RENAME TO auth_credentials_v3");
+			this.#createAuthCredentialsTable();
+			this.#db.exec(`
+				INSERT INTO auth_credentials (id, provider, credential_type, data, disabled_cause, identity_key, created_at, updated_at)
+				SELECT
+					id,
+					provider,
+					credential_type,
+					data,
+					disabled_cause,
+					identity_key,
+					created_at,
+					updated_at
+				FROM auth_credentials_v3
+			`);
+			this.#db.exec("DROP TABLE auth_credentials_v3");
 		});
 		migrate();
 	}

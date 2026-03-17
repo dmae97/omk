@@ -1,0 +1,75 @@
+import { Database } from "bun:sqlite";
+import { afterEach, it, expect } from "bun:test";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
+import { HistoryStorage } from "../src/session/history-storage";
+
+const LEGACY_TIMESTAMP = 1_700_000_000;
+
+function readTableSql(dbPath: string, tableName: string): string | null {
+	const db = new Database(dbPath, { readonly: true });
+	try {
+		const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as
+			| { sql?: string | null }
+			| undefined;
+		return row?.sql ?? null;
+	} finally {
+		db.close();
+	}
+}
+
+let tempDir = "";
+
+afterEach(async () => {
+	if (tempDir) {
+		await fs.rm(tempDir, { recursive: true, force: true });
+		tempDir = "";
+	}
+});
+
+it("migrates legacy history schema away from unixepoch defaults", async () => {
+	tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "omp-history-storage-legacy-"));
+	const dbPath = path.join(tempDir, "history.db");
+	const legacyDb = new Database(dbPath);
+	legacyDb.exec(`
+		CREATE TABLE history (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			prompt TEXT NOT NULL,
+			created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+			cwd TEXT
+		);
+	`);
+	legacyDb.prepare("INSERT INTO history (prompt, created_at, cwd) VALUES (?, ?, ?)").run(
+		"legacy prompt",
+		LEGACY_TIMESTAMP,
+		"/tmp/legacy",
+	);
+	legacyDb.close();
+
+	const storage = HistoryStorage.open(dbPath);
+	storage.add("new prompt", "/tmp/new");
+	await Bun.sleep(10);
+
+	const db = new Database(dbPath, { readonly: true });
+	try {
+		const prompts = db
+			.prepare("SELECT prompt FROM history ORDER BY id ASC")
+			.all() as Array<{ prompt: string }>;
+		expect(prompts).toEqual([{ prompt: "legacy prompt" }, { prompt: "new prompt" }]);
+		expect(readTableSql(dbPath, "history")).not.toContain("unixepoch(");
+		expect(readTableSql(dbPath, "history")).toContain("strftime('%s','now')");
+		const indexRow = db
+			.prepare("SELECT 1 AS present FROM sqlite_master WHERE type = 'index' AND name = 'idx_history_created_at'")
+			.get() as
+			| { present?: number }
+			| undefined;
+		expect(indexRow?.present).toBe(1);
+		const ftsRow = db.prepare("SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'history_fts'").get() as
+			| { present?: number }
+			| undefined;
+		expect(ftsRow?.present).toBe(1);
+	} finally {
+		db.close();
+	}
+});

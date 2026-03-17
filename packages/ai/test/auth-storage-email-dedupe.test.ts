@@ -5,6 +5,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { AuthCredentialStore, AuthStorage, type OAuthCredential } from "../src/auth-storage";
 
+const LEGACY_TIMESTAMP = 1_700_000_000;
+
 function createCredential(args: { suffix: string; accountId: string; email: string }): OAuthCredential {
 	return {
 		type: "oauth",
@@ -83,6 +85,18 @@ function readAuthSchemaVersion(dbPath: string): number | null {
 			| { version?: number }
 			| undefined;
 		return typeof row?.version === "number" ? row.version : null;
+	} finally {
+		db.close();
+	}
+}
+
+function readTableSql(dbPath: string, tableName: string): string | null {
+	const db = new Database(dbPath, { readonly: true });
+	try {
+		const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as
+			| { sql?: string | null }
+			| undefined;
+		return row?.sql ?? null;
 	} finally {
 		db.close();
 	}
@@ -290,7 +304,7 @@ describe("AuthStorage openai-codex email dedupe", () => {
 			`);
 			legacyDb
 				.prepare(
-					"INSERT INTO auth_credentials (provider, credential_type, data, disabled_cause) VALUES (?, ?, ?, ?)",
+					"INSERT INTO auth_credentials (provider, credential_type, data, disabled_cause, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
 				)
 				.run(
 					"anthropic",
@@ -303,6 +317,8 @@ describe("AuthStorage openai-codex email dedupe", () => {
 						}),
 					),
 					null,
+					LEGACY_TIMESTAMP,
+					LEGACY_TIMESTAMP,
 				);
 			legacyDb.close();
 
@@ -333,6 +349,20 @@ describe("AuthStorage openai-codex email dedupe", () => {
 		expect(readDisabledCauses(dbPath, "openai-codex")).toEqual([disabledCause]);
 	});
 
+	it("creates fresh auth schema without unixepoch defaults", async () => {
+		if (!tempDir) throw new Error("test setup failed");
+
+		const freshDbPath = path.join(tempDir, "fresh-schema-agent.db");
+		const freshStore = await AuthCredentialStore.open(freshDbPath);
+		try {
+			expect(readAuthSchemaVersion(freshDbPath)).toBe(4);
+			expect(readTableSql(freshDbPath, "auth_credentials")).not.toContain("unixepoch(");
+			expect(readTableSql(freshDbPath, "auth_credentials")).toContain("strftime('%s','now')");
+		} finally {
+			freshStore.close();
+		}
+	});
+
 	it("preserves newer auth schema versions instead of downgrading them", async () => {
 		if (!tempDir) throw new Error("test setup failed");
 
@@ -343,7 +373,7 @@ describe("AuthStorage openai-codex email dedupe", () => {
 				id INTEGER PRIMARY KEY CHECK (id = 1),
 				version INTEGER NOT NULL
 			);
-			INSERT INTO auth_schema_version(id, version) VALUES (1, 4);
+			INSERT INTO auth_schema_version(id, version) VALUES (1, 5);
 			CREATE TABLE auth_credentials (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				provider TEXT NOT NULL,
@@ -359,9 +389,59 @@ describe("AuthStorage openai-codex email dedupe", () => {
 
 		const reopenedStore = await AuthCredentialStore.open(futureDbPath);
 		try {
-			expect(readAuthSchemaVersion(futureDbPath)).toBe(4);
+			expect(readAuthSchemaVersion(futureDbPath)).toBe(5);
 		} finally {
 			reopenedStore.close();
+		}
+	});
+
+	it("migrates v3 auth schema away from unixepoch defaults", async () => {
+		if (!tempDir) throw new Error("test setup failed");
+
+		const legacyDbPath = path.join(tempDir, "legacy-v3-agent.db");
+		const legacyDb = new Database(legacyDbPath);
+		legacyDb.exec(`
+			CREATE TABLE auth_schema_version (
+				id INTEGER PRIMARY KEY CHECK (id = 1),
+				version INTEGER NOT NULL
+			);
+			INSERT INTO auth_schema_version(id, version) VALUES (1, 3);
+			CREATE TABLE auth_credentials (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				provider TEXT NOT NULL,
+				credential_type TEXT NOT NULL,
+				data TEXT NOT NULL,
+				disabled_cause TEXT DEFAULT NULL,
+				identity_key TEXT DEFAULT NULL,
+				created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+				updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+			);
+		`);
+		legacyDb
+			.prepare(
+				"INSERT INTO auth_credentials (provider, credential_type, data, disabled_cause, identity_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+			)
+			.run(
+				"openai-codex",
+				"oauth",
+				JSON.stringify(createCredential({ suffix: "legacy-v3", accountId: "legacy-v3-account", email: "legacy-v3@example.com" })),
+				null,
+				"email:legacy-v3@example.com",
+				LEGACY_TIMESTAMP,
+				LEGACY_TIMESTAMP,
+			);
+		legacyDb.close();
+
+		const migratedStore = await AuthCredentialStore.open(legacyDbPath);
+		try {
+			expect(readAuthSchemaVersion(legacyDbPath)).toBe(4);
+			expect(readTableSql(legacyDbPath, "auth_credentials")).not.toContain("unixepoch(");
+			expect(readTableSql(legacyDbPath, "auth_credentials")).toContain("strftime('%s','now')");
+			expect(readStoredIdentityRows(legacyDbPath, "openai-codex")).toEqual([
+				{ identity_key: "email:legacy-v3@example.com", disabled_cause: null },
+			]);
+		} finally {
+			migratedStore.close();
 		}
 	});
 
@@ -387,7 +467,9 @@ describe("AuthStorage openai-codex email dedupe", () => {
 			);
 		`);
 		legacyDb
-			.prepare("INSERT INTO auth_credentials (provider, credential_type, data, disabled_cause) VALUES (?, ?, ?, ?)")
+			.prepare(
+				"INSERT INTO auth_credentials (provider, credential_type, data, disabled_cause, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+			)
 			.run(
 				"openai-codex",
 				"oauth",
@@ -399,6 +481,8 @@ describe("AuthStorage openai-codex email dedupe", () => {
 					}),
 				),
 				null,
+				LEGACY_TIMESTAMP,
+				LEGACY_TIMESTAMP,
 			);
 		legacyDb.close();
 
@@ -429,14 +513,16 @@ describe("AuthStorage openai-codex email dedupe", () => {
 			);
 		`);
 		legacyDb
-			.prepare("INSERT INTO auth_credentials (provider, credential_type, data, disabled) VALUES (?, ?, ?, ?)")
+			.prepare(
+				"INSERT INTO auth_credentials (provider, credential_type, data, disabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+			)
 			.run(
 				"openai-codex",
 				"oauth",
-				JSON.stringify(
-					createCredential({ suffix: "legacy", accountId: "legacy-account", email: "legacy@example.com" }),
-				),
+				JSON.stringify(createCredential({ suffix: "legacy", accountId: "legacy-account", email: "legacy@example.com" })),
 				1,
+				LEGACY_TIMESTAMP,
+				LEGACY_TIMESTAMP,
 			);
 		legacyDb.close();
 
