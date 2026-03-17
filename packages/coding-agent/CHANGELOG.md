@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.12.10] - 2026-03-17
 ### Added
 
 - Added `args` field to ShellResult to capture the executed command
