@@ -31,11 +31,17 @@ export interface MCPServer {
 	auth?: {
 		type: "oauth" | "apikey";
 		credentialId?: string;
+		tokenUrl?: string;
+		clientId?: string;
+		clientSecret?: string;
 	};
-	/** OAuth configuration (clientId, callbackPort) for servers requiring explicit client credentials */
+	/** OAuth configuration (clientId, clientSecret, redirectUri, callbackPort, callbackPath) for servers requiring explicit client credentials */
 	oauth?: {
 		clientId?: string;
+		clientSecret?: string;
+		redirectUri?: string;
 		callbackPort?: number;
+		callbackPath?: string;
 	};
 	/** Transport type */
 	transport?: "stdio" | "sse" | "http";

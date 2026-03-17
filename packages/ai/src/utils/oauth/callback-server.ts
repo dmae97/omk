@@ -19,6 +19,14 @@ const CALLBACK_PATH = "/callback";
 
 export type CallbackResult = { code: string; state: string };
 
+export interface OAuthCallbackFlowOptions {
+	preferredPort: number;
+	callbackPath?: string;
+	callbackHostname?: string;
+	/** Exact redirect URI advertised to the provider; disables port fallback. */
+	redirectUri?: string;
+}
+
 /**
  * Abstract base class for OAuth flows with local callback servers.
  */
@@ -26,13 +34,28 @@ export abstract class OAuthCallbackFlow {
 	ctrl: OAuthController;
 	preferredPort: number;
 	callbackPath: string;
+	callbackHostname: string;
+	redirectUri?: string;
 	#callbackResolve?: (result: CallbackResult) => void;
 	#callbackReject?: (error: string) => void;
 
-	constructor(ctrl: OAuthController, preferredPort: number, callbackPath: string = CALLBACK_PATH) {
+	constructor(
+		ctrl: OAuthController,
+		preferredPortOrOptions: number | OAuthCallbackFlowOptions,
+		callbackPath: string = CALLBACK_PATH,
+	) {
 		this.ctrl = ctrl;
-		this.preferredPort = preferredPort;
-		this.callbackPath = callbackPath;
+		if (typeof preferredPortOrOptions === "number") {
+			this.preferredPort = preferredPortOrOptions;
+			this.callbackPath = callbackPath;
+			this.callbackHostname = DEFAULT_HOSTNAME;
+			return;
+		}
+
+		this.preferredPort = preferredPortOrOptions.preferredPort;
+		this.callbackPath = preferredPortOrOptions.callbackPath ?? CALLBACK_PATH;
+		this.callbackHostname = preferredPortOrOptions.callbackHostname ?? DEFAULT_HOSTNAME;
+		this.redirectUri = preferredPortOrOptions.redirectUri;
 	}
 
 	/**
@@ -95,17 +118,22 @@ export abstract class OAuthCallbackFlow {
 	 * Start callback server, trying preferred port first, falling back to random.
 	 */
 	async #startCallbackServer(expectedState: string): Promise<{ server: Bun.Server<unknown>; redirectUri: string }> {
-		// Try preferred port first
 		try {
-			const redirectUri = `http://${DEFAULT_HOSTNAME}:${this.preferredPort}${this.callbackPath}`;
 			const server = this.#createServer(this.preferredPort, expectedState);
+			if (this.redirectUri) {
+				return { server, redirectUri: this.redirectUri };
+			}
+			const redirectUri = `http://${this.callbackHostname}:${this.preferredPort}${this.callbackPath}`;
 			return { server, redirectUri };
 		} catch {
-			// Port busy or unavailable, try random port
-			const randomPort = 0; // Let OS assign
-			const server = this.#createServer(randomPort, expectedState);
+			if (this.redirectUri) {
+				throw new Error(
+					`OAuth callback port ${this.preferredPort} unavailable; cannot fall back to a random port when oauth.redirectUri is set`,
+				);
+			}
+			const server = this.#createServer(0, expectedState);
 			const actualPort = server.port;
-			const redirectUri = `http://${DEFAULT_HOSTNAME}:${actualPort}${this.callbackPath}`;
+			const redirectUri = `http://${this.callbackHostname}:${actualPort}${this.callbackPath}`;
 			this.ctrl.onProgress?.(`Preferred port ${this.preferredPort} unavailable, using port ${actualPort}`);
 			return { server, redirectUri };
 		}
@@ -116,7 +144,7 @@ export abstract class OAuthCallbackFlow {
 	 */
 	#createServer(port: number, expectedState: string): Bun.Server<unknown> {
 		return Bun.serve({
-			hostname: DEFAULT_HOSTNAME,
+			hostname: this.callbackHostname,
 			port,
 			reusePort: false,
 			fetch: req => this.#handleCallback(req, expectedState),

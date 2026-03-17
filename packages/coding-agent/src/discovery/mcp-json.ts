@@ -34,9 +34,18 @@ interface MCPConfigFile {
 			auth?: {
 				type: "oauth" | "apikey";
 				credentialId?: string;
+				tokenUrl?: string;
+				clientId?: string;
+				clientSecret?: string;
 			};
 			type?: "stdio" | "sse" | "http";
-			oauth?: { clientId?: string; callbackPort?: number };
+			oauth?: {
+				clientId?: string;
+				clientSecret?: string;
+				redirectUri?: string;
+				callbackPort?: number;
+				callbackPath?: string;
+			};
 		}
 	>;
 }
@@ -93,7 +102,8 @@ function transformMCPConfig(config: MCPConfigFile, source: SourceMeta): MCPServe
 			if (server.env) server.env = expandEnvVarsDeep(server.env);
 			if (server.url) server.url = expandEnvVarsDeep(server.url);
 			if (server.headers) server.headers = expandEnvVarsDeep(server.headers);
-
+			if (server.auth) server.auth = expandEnvVarsDeep(server.auth);
+			if (server.oauth) server.oauth = expandEnvVarsDeep(server.oauth);
 			servers.push(server);
 		}
 	}

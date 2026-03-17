@@ -32,7 +32,7 @@ import {
 	searchSmitheryRegistry,
 	toConfigName,
 } from "../../mcp/smithery-registry";
-import type { MCPServerConfig, MCPServerConnection } from "../../mcp/types";
+import type { MCPAuthConfig, MCPServerConfig, MCPServerConnection } from "../../mcp/types";
 import type { OAuthCredential } from "../../session/auth-storage";
 import { shortenPath } from "../../tools/render-utils";
 import { openPath } from "../../utils/open";
@@ -400,13 +400,16 @@ export class MCPCommandController {
 						}
 
 						try {
+							const oauthClientSecret = finalConfig.oauth?.clientSecret ?? "";
 							const credentialId = await this.#handleOAuthFlow(
 								oauth.authorizationUrl,
 								oauth.tokenUrl,
 								oauth.clientId ?? finalConfig.oauth?.clientId ?? "",
-								"",
+								oauthClientSecret,
 								oauth.scopes ?? "",
 								finalConfig.oauth?.callbackPort,
+								finalConfig.oauth?.callbackPath,
+								finalConfig.oauth?.redirectUri,
 							);
 							finalConfig = {
 								...finalConfig,
@@ -415,7 +418,7 @@ export class MCPCommandController {
 									credentialId,
 									tokenUrl: oauth.tokenUrl,
 									clientId: oauth.clientId ?? finalConfig.oauth?.clientId,
-									clientSecret: undefined,
+									clientSecret: finalConfig.oauth?.clientSecret,
 								},
 							};
 						} catch (oauthError) {
@@ -478,6 +481,8 @@ export class MCPCommandController {
 		clientSecret: string,
 		scopes: string,
 		callbackPort?: number,
+		callbackPath?: string,
+		redirectUri?: string,
 	): Promise<string> {
 		const authStorage = this.ctx.session.modelRegistry.authStorage;
 		let parsedAuthUrl: URL;
@@ -493,6 +498,7 @@ export class MCPCommandController {
 		}
 
 		const resolvedClientId = clientId.trim() || parsedAuthUrl.searchParams.get("client_id") || undefined;
+		const resolvedClientSecret = clientSecret.trim() || undefined;
 
 		try {
 			// Create OAuth flow
@@ -501,9 +507,11 @@ export class MCPCommandController {
 					authorizationUrl: authUrl,
 					tokenUrl: tokenUrl,
 					clientId: resolvedClientId,
-					clientSecret: clientSecret || undefined,
+					clientSecret: resolvedClientSecret,
 					scopes: scopes || undefined,
+					redirectUri,
 					callbackPort,
+					callbackPath,
 				},
 				{
 					onAuth: (info: { url: string; instructions?: string }) => {
@@ -653,7 +661,7 @@ export class MCPCommandController {
 	}
 
 	#stripOAuthAuth(config: MCPServerConfig): MCPServerConfig {
-		const next = { ...config } as MCPServerConfig & { auth?: { type: "oauth" | "apikey"; credentialId?: string } };
+		const next = { ...config } as MCPServerConfig & { auth?: MCPAuthConfig };
 		delete next.auth;
 		return next;
 	}
@@ -1261,9 +1269,7 @@ export class MCPCommandController {
 				return;
 			}
 
-			const currentAuth = (
-				found.config as MCPServerConfig & { auth?: { type: "oauth" | "apikey"; credentialId?: string } }
-			).auth;
+			const currentAuth = (found.config as MCPServerConfig & { auth?: MCPAuthConfig }).auth;
 			if (currentAuth?.type === "oauth") {
 				await this.#removeManagedOAuthCredential(currentAuth.credentialId);
 			}
@@ -1298,17 +1304,14 @@ export class MCPCommandController {
 				return;
 			}
 
-			const currentAuth = (
-				found.config as MCPServerConfig & {
-					auth?: { type: "oauth" | "apikey"; credentialId?: string; clientSecret?: string };
-				}
-			).auth;
+			const currentAuth = (found.config as MCPServerConfig & { auth?: MCPAuthConfig }).auth;
 			if (currentAuth?.type === "oauth") {
 				await this.#removeManagedOAuthCredential(currentAuth.credentialId);
 			}
 
 			const baseConfig = this.#stripOAuthAuth(found.config);
 			const oauth = await this.#resolveOAuthEndpointsFromServer(baseConfig);
+			const oauthClientSecret = found.config.oauth?.clientSecret ?? currentAuth?.clientSecret ?? "";
 
 			this.#showMessage(["", theme.fg("muted", `Reauthorizing "${name}"...`), ""].join("\n"));
 
@@ -1316,9 +1319,11 @@ export class MCPCommandController {
 				oauth.authorizationUrl,
 				oauth.tokenUrl,
 				oauth.clientId ?? found.config.oauth?.clientId ?? "",
-				"",
+				oauthClientSecret,
 				oauth.scopes ?? "",
 				found.config.oauth?.callbackPort,
+				found.config.oauth?.callbackPath,
+				found.config.oauth?.redirectUri,
 			);
 
 			const updated: MCPServerConfig = {
@@ -1328,7 +1333,7 @@ export class MCPCommandController {
 					credentialId,
 					tokenUrl: oauth.tokenUrl,
 					clientId: oauth.clientId ?? found.config.oauth?.clientId,
-					clientSecret: currentAuth?.clientSecret,
+					clientSecret: oauthClientSecret || undefined,
 				},
 			};
 			await updateMCPServer(found.filePath, name, updated);

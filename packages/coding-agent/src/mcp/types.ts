@@ -68,7 +68,10 @@ interface MCPServerConfigBase {
 	/** OAuth configuration for servers requiring explicit client credentials */
 	oauth?: {
 		clientId?: string;
+		clientSecret?: string;
+		redirectUri?: string;
 		callbackPort?: number;
+		callbackPath?: string;
 	};
 }
 
