@@ -995,16 +995,6 @@ export const SETTINGS_SCHEMA = {
 		default: false,
 		ui: { tab: "editing", label: "Bash Interceptor", description: "Block shell commands that have dedicated tools" },
 	},
-
-	"bashInterceptor.simpleLs": {
-		type: "boolean",
-		default: true,
-		ui: {
-			tab: "editing",
-			label: "Intercept `ls`",
-			description: "Intercept bare ls commands (when interceptor is enabled)",
-		},
-	},
 	"bashInterceptor.patterns": { type: "array", default: DEFAULT_BASH_INTERCEPTOR_RULES },
 
 	// Python
