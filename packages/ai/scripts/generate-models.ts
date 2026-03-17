@@ -1820,6 +1820,12 @@ async function generateModels() {
 		) {
 			candidate.contextWindow = 1000000;
 		}
+		if (
+			candidate.provider === "google-antigravity" &&
+			(candidate.id === "claude-opus-4-6-thinking" || candidate.id === "claude-sonnet-4-6")
+		) {
+			candidate.contextWindow = 1000000;
+		}
 
 		// OpenCode variants list Claude Sonnet 4/4.5 with 1M context, actual limit is 200K
 		if (
