@@ -156,24 +156,31 @@ Notable source-order differences:
 - `windsurf` appends user `global_rules` first, then project rules.
 - `cline` loads only nearest `.clinerules` source.
 
-## 5. Split into Rulebook vs TTSR buckets
+## 5. Split into Rulebook, Always-Apply, and TTSR buckets
 
 After rule discovery in `createAgentSession` (`sdk.ts`):
 
 1. All discovered rules are scanned.
-2. Rules with `ttsrTrigger` are registered into `TtsrManager`.
+2. Rules with `condition` (frontmatter key; `ttsr_trigger` / `ttsrTrigger` accepted as fallback) are registered into `TtsrManager`.
 3. A separate `rulebookRules` list is built with this predicate:
 
 ```ts
-!rule.ttsrTrigger && !rule.alwaysApply && !!rule.description
+!registeredTtsrRuleNames.has(rule.name) && !rule.alwaysApply && !!rule.description
+```
+
+4. An `alwaysApplyRules` list is built:
+
+```ts
+!registeredTtsrRuleNames.has(rule.name) && rule.alwaysApply === true
 ```
 
 ### Bucket behavior
 
-- **TTSR bucket**: any rule with `ttsrTrigger` (description not required).
-- **Rulebook bucket**: must have description, must not be TTSR, must not be `alwaysApply`.
-- A rule with both `ttsrTrigger` and `description` goes to TTSR only.
-- A rule marked `alwaysApply` is currently excluded from rulebook.
+- **TTSR bucket**: any rule with `condition` (description not required). Takes priority over other buckets.
+- **Always-apply bucket**: `alwaysApply === true`, not TTSR. Full content injected into system prompt. Resolvable via `rule://`.
+- **Rulebook bucket**: must have description, must not be TTSR, must not be `alwaysApply`. Listed in system prompt by name+description; content read on demand via `rule://`.
+- A rule with both `condition` and `alwaysApply` goes to TTSR only (TTSR takes priority).
+- A rule with both `alwaysApply` and `description` goes to always-apply only (not rulebook).
 
 ## 6. How metadata affects runtime surfaces
 
@@ -195,7 +202,8 @@ After rule discovery in `createAgentSession` (`sdk.ts`):
 - Parsed and preserved by providers.
 - Used in UI display (`"always"` trigger label in extensions state manager).
 - Used as an exclusion condition from `rulebookRules`.
-- **Not used to auto-inject content into system prompt in current implementation.**
+- **Full rule content is auto-injected into the system prompt** (before the rulebook rules section).
+- Rule is also addressable via `rule://<name>` for re-reading.
 
 ### `ttsr_trigger`
 
@@ -204,12 +212,14 @@ After rule discovery in `createAgentSession` (`sdk.ts`):
 
 ## 7. System prompt inclusion path
 
-`buildSystemPromptInternal(..., { rules: rulebookRules })` injects rulebook rules into system prompt templates.
+`buildSystemPromptInternal` receives both `rules` (rulebook) and `alwaysApplyRules`.
 
-Templates include:
+Always-apply rules are rendered first, injecting their raw content directly into the prompt.
+
+Rulebook rules are rendered in a `# Rules` section with:
 
 - `Read rule://<name> when working in matching domain`
-- A `<rules>` block with each rule's `name`, `description`, and optional `<glob>` list
+- Each rule's `name`, `description`, and optional `<glob>` list
 
 This is advisory/contextual: prompt text asks the model to read applicable rules, but code does not enforce glob applicability.
 
@@ -218,13 +228,13 @@ This is advisory/contextual: prompt text asks the model to read applicable rules
 `RuleProtocolHandler` is registered with:
 
 ```ts
-new RuleProtocolHandler({ getRules: () => rulebookRules })
+new RuleProtocolHandler({ getRules: () => [...rulebookRules, ...alwaysApplyRules] })
 ```
 
 Implications:
 
-- `rule://<name>` resolves only against **rulebookRules** (not all discovered rules).
-- TTSR-only rules and rules filtered out for missing description/`alwaysApply` are not addressable via `rule://`.
+- `rule://<name>` resolves against both **rulebookRules** and **alwaysApplyRules**.
+- TTSR-only rules and rules with no description and no `alwaysApply` are not addressable via `rule://`.
 - Resolution is exact name match.
 - Unknown names return error listing available rule names.
 - Returned content is raw `rule.content` (frontmatter stripped), content type `text/markdown`.
@@ -233,6 +243,5 @@ Implications:
 
 1. Provider descriptions mention legacy files (`.cursorrules`, `.windsurfrules`), but current loader code paths do not actually read those files.
 2. `globs` metadata is surfaced to prompt/UI but not enforced by rule selection logic.
-3. `alwaysApply` does not force inclusion into system prompt; current behavior excludes such rules from `rulebookRules`.
-4. Rule selection for `rule://` is constrained to prefiltered rulebook rules, not the full discovered set.
-5. Discovery warnings (`loadCapability("rules").warnings`) are produced but `createAgentSession` does not currently surface/log them in this path.
+3. Rule selection for `rule://` includes rulebook and always-apply rules, but not TTSR-only rules.
+4. Discovery warnings (`loadCapability("rules").warnings`) are produced but `createAgentSession` does not currently surface/log them in this path.

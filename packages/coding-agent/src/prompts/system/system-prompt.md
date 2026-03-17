@@ -124,6 +124,12 @@ You **MUST** use the following skills, to save you time, when working in their d
 {{/each}}
 {{/if}}
 
+{{#if alwaysApplyRules.length}}
+{{#each alwaysApplyRules}}
+{{content}}
+{{/each}}
+{{/if}}
+
 {{#if rules.length}}
 # Rules
 Domain-specific rules from past experience. **MUST** read `rule://<name>` when working in their territory.

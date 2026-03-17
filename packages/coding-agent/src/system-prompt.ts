@@ -370,6 +370,8 @@ export interface BuildSystemPromptOptions {
 	mcpDiscoveryServerSummaries?: string[];
 	/** Encourage the agent to delegate via tasks unless changes are trivial. */
 	eagerTasks?: boolean;
+	/** Rules with alwaysApply=true — their full content is injected into the prompt. */
+	alwaysApplyRules?: Array<{ name: string; content: string; path: string }>;
 }
 
 /** Build the system prompt with tools, guidelines, and context */
@@ -389,6 +391,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		contextFiles: providedContextFiles,
 		skills: providedSkills,
 		rules,
+		alwaysApplyRules,
 		intentField,
 		mcpDiscoveryMode = false,
 		mcpDiscoveryServerSummaries = [],
@@ -521,6 +524,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		agentsMdSearch,
 		skills: filteredSkills,
 		rules: rules ?? [],
+		alwaysApplyRules: alwaysApplyRules ?? [],
 		date,
 		dateTime,
 		cwd: promptCwd,

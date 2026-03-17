@@ -40,6 +40,11 @@ If a skill covers your output, you **MUST** read `skill://<name>` before proceed
 {{/list}}
 </skills>
 {{/if}}
+{{#if alwaysApplyRules.length}}
+{{#each alwaysApplyRules}}
+{{content}}
+{{/each}}
+{{/if}}
 {{#if rules.length}}
 Rules are local constraints.
 You **MUST** read `rule://<name>` when working in that domain.
