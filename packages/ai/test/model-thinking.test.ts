@@ -237,6 +237,66 @@ describe("model thinking runtime helpers", () => {
 		expect(clampThinkingLevelForModel(model, Effort.High)).toBeUndefined();
 	});
 
+	it("enables xhigh for openai-completions API (custom models)", () => {
+		const model = createModel({
+			id: "custom-model",
+			api: "openai-completions",
+			provider: "custom",
+		});
+
+		// openai-completions should support xhigh by default
+		expect(model.thinking?.maxLevel).toBe(Effort.XHigh);
+		expect(requireSupportedEffort(model, Effort.XHigh)).toBe(Effort.XHigh);
+	});
+
+	it("does not expose xhigh for binary-thinking openai-compat transports", () => {
+		const model = enrichModelThinking({
+			id: "glm-4.7",
+			name: "GLM-4.7",
+			api: "openai-completions",
+			provider: "zai",
+			baseUrl: "https://api.z.ai/v1",
+			reasoning: true,
+			compat: {
+				thinkingFormat: "zai",
+			},
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 128000,
+			maxTokens: 32000,
+		} satisfies Model<"openai-completions">);
+
+		expect(model.thinking).toEqual({
+			mode: "effort",
+			minLevel: Effort.Minimal,
+			maxLevel: Effort.High,
+		});
+		expect(requireSupportedEffort(model, Effort.High)).toBe(Effort.High);
+		expect(() => requireSupportedEffort(model, Effort.XHigh)).toThrow(
+			/Supported efforts: minimal, low, medium, high/,
+		);
+	});
+
+	it("enables xhigh for openai-responses and openai-codex-responses APIs", () => {
+		const responsesModel = createModel({
+			id: "custom-responses",
+			api: "openai-responses",
+			provider: "custom",
+		});
+
+		const codexModel = createModel({
+			id: "custom-codex",
+			api: "openai-codex-responses",
+			provider: "custom",
+		});
+
+		// Both should support xhigh
+		expect(responsesModel.thinking?.maxLevel).toBe(Effort.XHigh);
+		expect(codexModel.thinking?.maxLevel).toBe(Effort.XHigh);
+		expect(requireSupportedEffort(responsesModel, Effort.XHigh)).toBe(Effort.XHigh);
+		expect(requireSupportedEffort(codexModel, Effort.XHigh)).toBe(Effort.XHigh);
+	});
+
 	it("rejects reasoning models that are missing thinking metadata at runtime", () => {
 		const model = {
 			id: "broken-reasoner",
