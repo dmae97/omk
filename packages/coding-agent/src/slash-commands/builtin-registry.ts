@@ -229,9 +229,21 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 	},
 	{
 		name: "session",
-		description: "Show session info and stats",
-		handle: async (_command, runtime) => {
-			await runtime.ctx.handleSessionCommand();
+		description: "Session management commands",
+		subcommands: [
+			{ name: "info", description: "Show session info and stats" },
+			{ name: "delete", description: "Delete current session and return to selector" },
+		],
+		allowArgs: true,
+		handle: async (command, runtime) => {
+			const sub = command.args.trim().toLowerCase() || "info";
+			if (sub === "delete") {
+				runtime.ctx.editor.setText("");
+				await runtime.ctx.handleSessionDeleteCommand();
+				return;
+			}
+			// Default: show session info
+			void runtime.ctx.handleSessionCommand();
 			runtime.ctx.editor.setText("");
 		},
 	},

@@ -1246,6 +1246,10 @@ export class InteractiveMode implements InteractiveModeContext {
 		return this.#selectorController.handleResumeSession(sessionPath);
 	}
 
+	handleSessionDeleteCommand(): Promise<void> {
+		return this.#selectorController.handleSessionDeleteCommand();
+	}
+
 	showOAuthSelector(mode: "login" | "logout", providerId?: string): Promise<void> {
 		return this.#selectorController.showOAuthSelector(mode, providerId);
 	}

@@ -13,6 +13,7 @@ import { theme } from "../../modes/theme/theme";
 import type { SessionInfo } from "../../session/session-manager";
 import { fuzzyFilter } from "../../utils/fuzzy";
 import { DynamicBorder } from "./dynamic-border";
+import { HookSelectorComponent } from "./hook-selector";
 
 /**
  * Custom session list component with multi-line items and search
@@ -25,6 +26,8 @@ class SessionList implements Component {
 	onCancel?: () => void;
 	onExit: () => void = () => {};
 	#maxVisible: number = 5; // Max sessions visible (each session is 3 lines: msg + metadata + blank)
+
+	onDeleteRequest?: (session: SessionInfo) => void;
 
 	constructor(
 		private readonly allSessions: SessionInfo[],
@@ -57,6 +60,18 @@ class SessionList implements Component {
 			return parts.filter(Boolean).join(" ");
 		});
 		this.#selectedIndex = Math.min(this.#selectedIndex, Math.max(0, this.#filteredSessions.length - 1));
+	}
+
+	removeSession(sessionPath: string): void {
+		const index = this.allSessions.findIndex(s => s.path === sessionPath);
+		if (index === -1) return;
+		this.allSessions.splice(index, 1);
+		// Re-filter to update filteredSessions
+		this.#filterSessions(this.#searchInput.getValue());
+		// Adjust selectedIndex if we deleted the last item or beyond
+		if (this.#selectedIndex >= this.#filteredSessions.length) {
+			this.#selectedIndex = Math.max(0, this.#filteredSessions.length - 1);
+		}
 	}
 
 	invalidate(): void {
@@ -157,64 +172,88 @@ class SessionList implements Component {
 			lines.push(scrollInfo);
 		}
 
+		// Add keybinding hint
+		lines.push("");
+		lines.push(theme.fg("muted", "  [Del to delete, Enter to select, Esc to cancel]"));
+
 		return lines;
 	}
 
 	handleInput(keyData: string): void {
+		// Delete key - request delete confirmation from parent
+		if (matchesKey(keyData, "delete")) {
+			const selected = this.#filteredSessions[this.#selectedIndex];
+			if (selected && this.onDeleteRequest) {
+				this.onDeleteRequest(selected);
+			}
+			return;
+		}
+
 		// Up arrow
 		if (matchesKey(keyData, "up")) {
 			this.#selectedIndex = Math.max(0, this.#selectedIndex - 1);
+			return;
 		}
 		// Down arrow
-		else if (matchesKey(keyData, "down")) {
+		if (matchesKey(keyData, "down")) {
 			this.#selectedIndex = Math.min(this.#filteredSessions.length - 1, this.#selectedIndex + 1);
+			return;
 		}
 		// Page up - jump up by maxVisible items
-		else if (matchesKey(keyData, "pageUp")) {
+		if (matchesKey(keyData, "pageUp")) {
 			this.#selectedIndex = Math.max(0, this.#selectedIndex - this.#maxVisible);
+			return;
 		}
 		// Page down - jump down by maxVisible items
-		else if (matchesKey(keyData, "pageDown")) {
+		if (matchesKey(keyData, "pageDown")) {
 			this.#selectedIndex = Math.min(this.#filteredSessions.length - 1, this.#selectedIndex + this.#maxVisible);
+			return;
 		}
 		// Enter
-		else if (matchesKey(keyData, "enter") || matchesKey(keyData, "return") || keyData === "\n") {
+		if (matchesKey(keyData, "enter") || matchesKey(keyData, "return") || keyData === "\n") {
 			const selected = this.#filteredSessions[this.#selectedIndex];
 			if (selected && this.onSelect) {
 				this.onSelect(selected.path);
 			}
+			return;
 		}
 		// Escape - cancel
-		else if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc")) {
+		if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc")) {
 			if (this.onCancel) {
 				this.onCancel();
 			}
+			return;
 		}
 		// Ctrl+C - exit
-		else if (matchesKey(keyData, "ctrl+c")) {
+		if (matchesKey(keyData, "ctrl+c")) {
 			this.onExit();
+			return;
 		}
 		// Pass everything else to search input
-		else {
-			this.#searchInput.handleInput(keyData);
-			this.#filterSessions(this.#searchInput.getValue());
-		}
+		this.#searchInput.handleInput(keyData);
+		this.#filterSessions(this.#searchInput.getValue());
 	}
 }
 
 /**
- * Component that renders a session selector
+ * Component that renders a session selector with optional confirmation dialog
  */
 export class SessionSelectorComponent extends Container {
 	#sessionList: SessionList;
+	#confirmationDialog: HookSelectorComponent | null = null;
+	#onDelete?: (session: SessionInfo) => Promise<void>;
+	#onRequestRender?: () => void;
 
 	constructor(
 		sessions: SessionInfo[],
 		onSelect: (sessionPath: string) => void,
 		onCancel: () => void,
 		onExit: () => void,
+		onDelete?: (session: SessionInfo) => Promise<void>,
 	) {
 		super();
+
+		this.#onDelete = onDelete;
 
 		// Add header
 		this.addChild(new Spacer(1));
@@ -228,12 +267,58 @@ export class SessionSelectorComponent extends Container {
 		this.#sessionList.onSelect = onSelect;
 		this.#sessionList.onCancel = onCancel;
 		this.#sessionList.onExit = onExit;
-
+		this.#sessionList.onDeleteRequest = (session: SessionInfo) => {
+			this.#showDeleteConfirmation(session);
+		};
 		this.addChild(this.#sessionList);
 
 		// Add bottom border
 		this.addChild(new Spacer(1));
 		this.addChild(new DynamicBorder());
+	}
+
+	setOnRequestRender(callback: () => void): void {
+		this.#onRequestRender = callback;
+	}
+
+	#showDeleteConfirmation(session: SessionInfo): void {
+		const displayName = session.title || session.firstMessage.slice(0, 40) || session.id;
+		this.#confirmationDialog = new HookSelectorComponent(
+			`Delete session?\n${displayName}`,
+			["Yes", "No"],
+			async (option: string) => {
+				if (option === "Yes" && this.#onDelete) {
+					try {
+						await this.#onDelete(session);
+						this.#sessionList.removeSession(session.path);
+					} catch {
+						// Error already shown by caller
+					}
+				}
+				// Close confirmation dialog
+				this.removeChild(this.#confirmationDialog!);
+				this.#confirmationDialog = null;
+				// Request rerender
+				this.#onRequestRender?.();
+			},
+			() => {
+				// Cancel - close confirmation dialog
+				this.removeChild(this.#confirmationDialog!);
+				this.#confirmationDialog = null;
+				// Request rerender
+				this.#onRequestRender?.();
+			},
+		);
+		// Show confirmation dialog
+		this.addChild(this.#confirmationDialog);
+	}
+
+	handleInput(keyData: string): void {
+		if (this.#confirmationDialog) {
+			this.#confirmationDialog.handleInput(keyData);
+		} else {
+			this.#sessionList.handleInput(keyData);
+		}
 	}
 
 	getSessionList(): SessionList {

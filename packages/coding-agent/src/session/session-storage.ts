@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import { isEnoent, toError } from "@oh-my-pi/pi-utils";
 
@@ -183,6 +184,29 @@ export class FileSessionStorage implements SessionStorage {
 
 	openWriter(path: string, options?: { flags?: "a" | "w"; onError?: (err: Error) => void }): SessionStorageWriter {
 		return new FileSessionStorageWriter(path, options);
+	}
+
+	/**
+	 * Delete a session file and its artifacts directory.
+	 * Artifacts are stored in a sibling directory with the same name minus .jsonl extension.
+	 */
+	async deleteSessionWithArtifacts(sessionPath: string): Promise<void> {
+		// Delete the session file itself
+		await this.unlink(sessionPath);
+
+		// Compute artifacts directory: /path/to/session.jsonl -> /path/to/session
+		const artifactsDir = sessionPath.slice(0, -6);
+
+		// Delete artifacts directory if it exists. Missing directories are fine, but
+		// surface real cleanup failures because the session file is already gone.
+		try {
+			await fsp.rm(artifactsDir, { recursive: true, force: true });
+		} catch (err) {
+			const error = toError(err);
+			throw new Error(`Session file deleted but failed to remove artifacts directory ${artifactsDir}: ${error.message}`, {
+				cause: error,
+			});
+		}
 	}
 }
 

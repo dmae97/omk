@@ -17,7 +17,8 @@ import {
 	theme,
 } from "../../modes/theme/theme";
 import type { InteractiveModeContext } from "../../modes/types";
-import { SessionManager } from "../../session/session-manager";
+import { SessionManager, type SessionInfo } from "../../session/session-manager";
+import { FileSessionStorage } from "../../session/session-storage";
 import {
 	isCodeSearchProviderId,
 	isSearchProviderPreference,
@@ -604,34 +605,122 @@ export class SelectorController {
 				() => {
 					void this.ctx.shutdown();
 				},
+				async (session: SessionInfo) => {
+					if (!(await this.#detachActiveSessionBeforeDeletion(session.path))) {
+						return;
+					}
+					const storage = new FileSessionStorage();
+					try {
+						await storage.deleteSessionWithArtifacts(session.path);
+					} catch (err) {
+						const errorMsg = err instanceof Error ? err.message : String(err);
+						this.ctx.showError(`Failed to delete session: ${errorMsg}`);
+						throw err;
+					}
+				},
 			);
-			return { component: selector, focus: selector.getSessionList() };
+			selector.setOnRequestRender(() => this.ctx.ui.requestRender());
+			return { component: selector, focus: selector };
 		});
 	}
 
-	async handleResumeSession(sessionPath: string): Promise<void> {
-		// Stop loading animation
+
+	#clearTransientSessionUi(): void {
 		if (this.ctx.loadingAnimation) {
 			this.ctx.loadingAnimation.stop();
 			this.ctx.loadingAnimation = undefined;
 		}
 		this.ctx.statusContainer.clear();
-
-		// Clear UI state
 		this.ctx.pendingMessagesContainer.clear();
 		this.ctx.compactionQueuedMessages = [];
 		this.ctx.streamingComponent = undefined;
 		this.ctx.streamingMessage = undefined;
 		this.ctx.pendingTools.clear();
+	}
+
+
+	async #detachActiveSessionBeforeDeletion(sessionPath: string): Promise<boolean> {
+		const currentSessionFile = this.ctx.sessionManager.getSessionFile();
+		if (currentSessionFile !== sessionPath) {
+			return true;
+		}
+
+
+		const detached = await this.ctx.session.newSession();
+		if (!detached) {
+			return false;
+		}
+
+
+		this.#clearTransientSessionUi();
+		this.ctx.statusLine.invalidate();
+		this.ctx.statusLine.setSessionStartTime(Date.now());
+		this.ctx.updateEditorTopBorder();
+		this.ctx.renderInitialMessages();
+		await this.ctx.reloadTodos();
+		this.ctx.ui.requestRender();
+		return true;
+	}
+
+
+	async handleResumeSession(sessionPath: string): Promise<void> {
+		this.#clearTransientSessionUi();
+
 
 		// Switch session via AgentSession (emits hook and tool session events)
 		await this.ctx.session.switchSession(sessionPath);
+
 
 		// Clear and re-render the chat
 		this.ctx.chatContainer.clear();
 		this.ctx.renderInitialMessages();
 		await this.ctx.reloadTodos();
 		this.ctx.showStatus("Resumed session");
+	}
+
+
+	async handleSessionDeleteCommand(): Promise<void> {
+		const sessionFile = this.ctx.sessionManager.getSessionFile();
+		if (!sessionFile) {
+			this.ctx.showError("No session file to delete (in-memory session)");
+			return;
+		}
+
+
+		// Check if session file exists (may not exist for brand new sessions)
+		const storage = new FileSessionStorage();
+		const fileExists = await storage.exists(sessionFile);
+		if (!fileExists) {
+			this.ctx.showError("Session has not been saved yet");
+			return;
+		}
+
+
+		const confirmed = await this.ctx.showHookConfirm(
+			"Delete Session",
+			"This will permanently delete the current session.\nYou will be returned to the session selector.",
+		);
+
+
+		if (!confirmed) {
+			this.ctx.showStatus("Delete cancelled");
+			return;
+		}
+
+
+		if (!(await this.#detachActiveSessionBeforeDeletion(sessionFile))) {
+			this.ctx.showStatus("Delete cancelled");
+			return;
+		}
+
+
+		// Delete the session file and artifacts directory
+		await storage.deleteSessionWithArtifacts(sessionFile);
+
+
+		// Show session selector
+		this.ctx.showStatus("Session deleted");
+		await this.showSessionSelector();
 	}
 
 	async #handleOAuthLogin(providerId: string): Promise<void> {

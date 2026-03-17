@@ -1,0 +1,84 @@
+import { afterEach, describe, expect, it, mock, vi } from "bun:test";
+import type { SessionInfo } from "../../../src/session/session-manager";
+
+const themeModulePath = new URL("../../../src/modes/theme/theme.ts", import.meta.url).pathname;
+
+mock.module(themeModulePath, () => ({
+	theme: {
+		fg: (_tone: string, text: string) => text,
+		bold: (text: string) => text,
+		nav: { cursor: ">" },
+		sep: { dot: "·" },
+		boxSharp: { horizontal: "-", vertical: "|" },
+	},
+}));
+
+import { SessionSelectorComponent } from "../../../src/modes/components/session-selector";
+
+afterEach(() => {
+	vi.restoreAllMocks();
+});
+
+function createSession(id: string, title: string): SessionInfo {
+	return {
+		path: `/tmp/${id}.jsonl`,
+		id,
+		cwd: "/tmp",
+		title,
+		created: new Date("2024-01-01T00:00:00Z"),
+		modified: new Date("2024-01-02T00:00:00Z"),
+		messageCount: 1,
+		firstMessage: `${title} first message`,
+		allMessagesText: `${title} first message`,
+	};
+}
+
+function createSelector(onDelete: (session: SessionInfo) => Promise<void>): SessionSelectorComponent {
+	return new SessionSelectorComponent(
+		[createSession("session-a", "Alpha"), createSession("session-b", "Beta")],
+		() => {},
+		() => {},
+		() => {},
+		onDelete,
+	);
+}
+
+function renderText(selector: SessionSelectorComponent): string {
+	return selector.render(120).join("\n");
+}
+
+describe("SessionSelectorComponent delete confirmation", () => {
+	it("keeps the session visible when delete fails after confirmation", async () => {
+		const onDelete = vi.fn(async () => {
+			throw new Error("disk failed");
+		});
+		const selector = createSelector(onDelete);
+
+		selector.handleInput("\x1b[3~");
+		expect(renderText(selector)).toContain("Delete session?");
+		expect(renderText(selector)).toContain("Alpha");
+
+		selector.handleInput("\n");
+		await Bun.sleep(0);
+
+		const rendered = renderText(selector);
+		expect(onDelete).toHaveBeenCalledTimes(1);
+		expect(rendered).toContain("Alpha");
+		expect(rendered).toContain("Beta");
+		expect(rendered).not.toContain("Delete session?");
+	});
+
+	it("removes the session row after a successful delete", async () => {
+		const onDelete = vi.fn(async () => {});
+		const selector = createSelector(onDelete);
+
+		selector.handleInput("\x1b[3~");
+		selector.handleInput("\n");
+		await Bun.sleep(0);
+
+		const rendered = renderText(selector);
+		expect(onDelete).toHaveBeenCalledTimes(1);
+		expect(rendered).not.toContain("Alpha");
+		expect(rendered).toContain("Beta");
+	});
+});

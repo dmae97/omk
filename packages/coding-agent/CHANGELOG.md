@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+- Added `/session delete` command to delete current session with confirmation and return to session selector
+- Added session deletion in session selector via Delete key with confirmation dialog
+
 ### Fixed
 
 - Added `oauth.redirectUri`, `oauth.clientSecret`, and `oauth.callbackPath` support for MCP server OAuth config so providers can use exact registered redirect URIs while preserving local callback listener settings ([#445](https://github.com/can1357/oh-my-pi/issues/445))

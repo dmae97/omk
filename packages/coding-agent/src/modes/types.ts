@@ -195,6 +195,7 @@ export interface InteractiveModeContext {
 	showTreeSelector(): void;
 	showSessionSelector(): void;
 	handleResumeSession(sessionPath: string): Promise<void>;
+	handleSessionDeleteCommand(): Promise<void>;
 	showOAuthSelector(mode: "login" | "logout", providerId?: string): Promise<void>;
 	showHookConfirm(title: string, message: string): Promise<boolean>;
 	showDebugSelector(): void;
