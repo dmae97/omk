@@ -94,56 +94,57 @@ function isAnthropicApiBaseUrl(baseUrl?: string): boolean {
 		return false;
 	}
 }
+
+const sharedHeaders = {
+	"Accept-Encoding": "gzip, deflate, br, zstd",
+	Connection: "keep-alive",
+	"Content-Type": "application/json",
+	"Anthropic-Version": "2023-06-01",
+	"Anthropic-Dangerous-Direct-Browser-Access": "true",
+	"X-App": "cli",
+};
+
 export function buildAnthropicHeaders(options: AnthropicHeaderOptions): Record<string, string> {
 	const oauthToken = options.isOAuth ?? isAnthropicOAuthToken(options.apiKey);
 	const extraBetas = options.extraBetas ?? [];
 	const stream = options.stream ?? false;
 	const betaHeader = buildBetaHeader(claudeCodeBetaDefaults, extraBetas);
 	const acceptHeader = stream ? "text/event-stream" : "application/json";
-	const incomingUserAgent = getHeaderCaseInsensitive(options.modelHeaders, "User-Agent");
-	const userAgent = isClaudeCodeClientUserAgent(incomingUserAgent)
-		? incomingUserAgent
-		: `claude-cli/${claudeCodeVersion} (external, cli)`;
-	const enforcedHeaderKeys = new Set(
-		[
-			...Object.keys(claudeCodeHeaders),
-			"Accept",
-			"Accept-Encoding",
-			"Connection",
-			"Content-Type",
-			"Anthropic-Version",
-			"Anthropic-Dangerous-Direct-Browser-Access",
-			"Anthropic-Beta",
-			"User-Agent",
-			"X-App",
-			"Authorization",
-			"X-Api-Key",
-		].map(key => key.toLowerCase()),
-	);
 	const modelHeaders = Object.fromEntries(
 		Object.entries(options.modelHeaders ?? {}).filter(([key]) => !enforcedHeaderKeys.has(key.toLowerCase())),
 	);
-	const headers: Record<string, string> = {
-		...modelHeaders,
-		...claudeCodeHeaders,
-		Accept: acceptHeader,
-		"Accept-Encoding": "gzip, deflate, br, zstd",
-		Connection: "keep-alive",
-		"Content-Type": "application/json",
-		"Anthropic-Version": "2023-06-01",
-		"Anthropic-Dangerous-Direct-Browser-Access": "true",
-		"Anthropic-Beta": betaHeader,
-		"User-Agent": userAgent,
-		"X-App": "cli",
-	};
 
-	if (oauthToken || !isAnthropicApiBaseUrl(options.baseUrl)) {
-		headers.Authorization = `Bearer ${options.apiKey}`;
+	if (oauthToken) {
+		const incomingUserAgent = getHeaderCaseInsensitive(options.modelHeaders, "User-Agent");
+		const userAgent = isClaudeCodeClientUserAgent(incomingUserAgent)
+			? incomingUserAgent
+			: `claude-cli/${claudeCodeVersion} (external, cli)`;
+		return {
+			...modelHeaders,
+			...claudeCodeHeaders,
+			Accept: acceptHeader,
+			Authorization: `Bearer ${options.apiKey}`,
+			...sharedHeaders,
+			"Anthropic-Beta": betaHeader,
+			"User-Agent": userAgent,
+		};
+	} else if (!isAnthropicApiBaseUrl(options.baseUrl)) {
+		return {
+			...modelHeaders,
+			Accept: acceptHeader,
+			Authorization: `Bearer ${options.apiKey}`,
+			...sharedHeaders,
+			"Anthropic-Beta": betaHeader,
+		};
 	} else {
-		headers["X-Api-Key"] = options.apiKey;
+		return {
+			...modelHeaders,
+			Accept: acceptHeader,
+			...sharedHeaders,
+			"Anthropic-Beta": betaHeader,
+			"X-Api-Key": options.apiKey,
+		};
 	}
-
-	return headers;
 }
 
 type AnthropicCacheControl = { type: "ephemeral"; ttl?: "1h" | "5m" };
@@ -215,6 +216,23 @@ export const claudeCodeHeaders = {
 	"X-Stainless-Os": mapStainlessOs(process.platform),
 	"X-Stainless-Timeout": "600",
 } as const;
+
+const enforcedHeaderKeys = new Set(
+	[
+		...Object.keys(claudeCodeHeaders),
+		"Accept",
+		"Accept-Encoding",
+		"Connection",
+		"Content-Type",
+		"Anthropic-Version",
+		"Anthropic-Dangerous-Direct-Browser-Access",
+		"Anthropic-Beta",
+		"User-Agent",
+		"X-App",
+		"Authorization",
+		"X-Api-Key",
+	].map(key => key.toLowerCase()),
+);
 
 const CLAUDE_BILLING_HEADER_PREFIX = "x-anthropic-billing-header:";
 
