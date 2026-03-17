@@ -267,7 +267,7 @@ export interface ModelCycleResult {
 export interface RoleModelCycleResult {
 	model: Model;
 	thinkingLevel: ThinkingLevel | undefined;
-	role: ModelRole;
+	role: string;
 }
 
 /** Session statistics for /session command */
@@ -3077,7 +3077,7 @@ export class AgentSession {
 	 * Validates API key, saves to session and settings.
 	 * @throws Error if no API key available for the model
 	 */
-	async setModel(model: Model, role: ModelRole = "default"): Promise<void> {
+	async setModel(model: Model, role: string = "default"): Promise<void> {
 		const apiKey = await this.#modelRegistry.getApiKey(model, this.sessionId);
 		if (!apiKey) {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
@@ -3131,7 +3131,7 @@ export class AgentSession {
 	 * @param options - Optional settings: `temporary` to not persist to settings
 	 */
 	async cycleRoleModels(
-		roleOrder: readonly ModelRole[],
+		roleOrder: readonly string[],
 		options?: { temporary?: boolean },
 	): Promise<RoleModelCycleResult | undefined> {
 		const availableModels = this.#modelRegistry.getAvailable();
@@ -3141,7 +3141,7 @@ export class AgentSession {
 		if (!currentModel) return undefined;
 		const matchPreferences = { usageOrder: this.settings.getStorage()?.getModelUsageOrder() };
 		const roleModels: Array<{
-			role: ModelRole;
+			role: string;
 			model: Model;
 			thinkingLevel?: ThinkingLevel;
 			explicitThinkingLevel: boolean;
@@ -4102,7 +4102,7 @@ export class AgentSession {
 		return `${model.provider}/${model.id}`;
 	}
 
-	#formatRoleModelValue(role: ModelRole, model: Model): string {
+	#formatRoleModelValue(role: string, model: Model): string {
 		const modelKey = `${model.provider}/${model.id}`;
 		const existingRoleValue = this.settings.getModelRole(role);
 		if (!existingRoleValue) return modelKey;

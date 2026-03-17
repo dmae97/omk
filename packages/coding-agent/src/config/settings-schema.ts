@@ -135,10 +135,21 @@ type SettingDef =
 // Schema Definition
 // ═══════════════════════════════════════════════════════════════════════════
 
+export interface ModelTagDef {
+	name: string;
+	color?: string;
+}
+
+export interface ModelTagsSettings {
+	[key: string]: ModelTagDef;
+}
+
 // Typed defaults for array/record settings — named constants avoid `as` casts
 // under `as const` while still letting SettingValue infer the correct element type.
 const EMPTY_STRING_ARRAY: string[] = [];
 const EMPTY_STRING_RECORD: Record<string, string> = {};
+const DEFAULT_CYCLE_ORDER: string[] = ["smol", "default", "slow"];
+const EMPTY_MODEL_TAGS_RECORD: ModelTagsSettings = {};
 export const DEFAULT_BASH_INTERCEPTOR_RULES: BashInterceptorRule[] = [
 	{
 		pattern: "^\\s*(cat|head|tail|less|more)\\s+",
@@ -194,6 +205,10 @@ export const SETTINGS_SCHEMA = {
 	disabledExtensions: { type: "array", default: EMPTY_STRING_ARRAY },
 
 	modelRoles: { type: "record", default: EMPTY_STRING_RECORD },
+
+	modelTags: { type: "record", default: EMPTY_MODEL_TAGS_RECORD },
+
+	cycleOrder: { type: "array", default: DEFAULT_CYCLE_ORDER },
 
 	// ────────────────────────────────────────────────────────────────────────
 	// Appearance
@@ -979,6 +994,16 @@ export const SETTINGS_SCHEMA = {
 		type: "boolean",
 		default: false,
 		ui: { tab: "editing", label: "Bash Interceptor", description: "Block shell commands that have dedicated tools" },
+	},
+
+	"bashInterceptor.simpleLs": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "editing",
+			label: "Intercept `ls`",
+			description: "Intercept bare ls commands (when interceptor is enabled)",
+		},
 	},
 	"bashInterceptor.patterns": { type: "array", default: DEFAULT_BASH_INTERCEPTOR_RULES },
 
@@ -1767,6 +1792,8 @@ export interface GroupTypeMap {
 	thinkingBudgets: ThinkingBudgetsSettings;
 	stt: SttSettings;
 	modelRoles: Record<string, string>;
+	modelTags: ModelTagsSettings;
+	cycleOrder: string[];
 }
 
 export type GroupPrefix = keyof GroupTypeMap;

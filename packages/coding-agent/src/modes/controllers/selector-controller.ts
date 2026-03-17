@@ -3,7 +3,7 @@ import { getOAuthProviders, type OAuthProvider } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Input, Loader, Spacer, Text } from "@oh-my-pi/pi-tui";
 import { getAgentDbPath, getProjectDir } from "@oh-my-pi/pi-utils";
-import { MODEL_ROLES } from "../../config/model-registry";
+import { getRoleInfo } from "../../config/model-registry";
 import { settings } from "../../config/settings";
 import { DebugSelectorComponent } from "../../debug";
 import { disableProvider, enableProvider } from "../../discovery";
@@ -406,7 +406,7 @@ export class SelectorController {
 							// Don't call done() - selector stays open for role assignment
 						} else {
 							// Other roles (smol, slow): just update settings, not current model
-							const roleInfo = MODEL_ROLES[role];
+							const roleInfo = getRoleInfo(role, settings);
 							const roleLabel = roleInfo?.name ?? role;
 							this.ctx.showStatus(`${roleLabel} model: ${model.id}`);
 							// Don't call done() - selector stays open

@@ -12,7 +12,8 @@ import {
 	type TUI,
 	visibleWidth,
 } from "@oh-my-pi/pi-tui";
-import { MODEL_ROLE_IDS, MODEL_ROLES, type ModelRegistry, type ModelRole } from "../../config/model-registry";
+import type { ModelRegistry } from "../../config/model-registry";
+import { getRoleInfo, MODEL_ROLE_IDS, MODEL_ROLES } from "../../config/model-registry";
 import { resolveModelRoleValue } from "../../config/model-resolver";
 import type { Settings } from "../../config/settings";
 import { type ThemeColor, theme } from "../../modes/theme/theme";
@@ -43,21 +44,12 @@ interface RoleAssignment {
 	thinkingLevel: ThinkingLevel;
 }
 
-type RoleSelectCallback = (model: Model, role: ModelRole | null, thinkingLevel?: ThinkingLevel) => void;
+type RoleSelectCallback = (model: Model, role: string | null, thinkingLevel?: ThinkingLevel) => void;
 type CancelCallback = () => void;
 interface MenuRoleAction {
 	label: string;
-	role: ModelRole;
+	role: string; // now accepts custom role strings
 }
-
-const MENU_ROLE_ACTIONS: MenuRoleAction[] = MODEL_ROLE_IDS.map(role => {
-	const roleInfo = MODEL_ROLES[role];
-	const roleLabel = roleInfo.tag ? `${roleInfo.tag} (${roleInfo.name})` : roleInfo.name;
-	return {
-		label: `Set as ${roleLabel}`,
-		role,
-	};
-});
 
 const ALL_TAB = "ALL";
 
@@ -77,7 +69,7 @@ export class ModelSelectorComponent extends Container {
 	#allModels: ModelItem[] = [];
 	#filteredModels: ModelItem[] = [];
 	#selectedIndex: number = 0;
-	#roles = {} as Record<ModelRole, RoleAssignment | undefined>;
+	#roles = {} as Record<string, RoleAssignment | undefined>;
 	#settings = null as unknown as Settings;
 	#modelRegistry = null as unknown as ModelRegistry;
 	#onSelectCallback = (() => {}) as RoleSelectCallback;
@@ -87,6 +79,8 @@ export class ModelSelectorComponent extends Container {
 	#scopedModels: ReadonlyArray<ScopedModelItem>;
 	#temporaryOnly: boolean;
 
+	#menuRoleActions: MenuRoleAction[] = [];
+
 	// Tab state
 	#providers: string[] = [ALL_TAB];
 	#activeTabIndex: number = 0;
@@ -95,7 +89,7 @@ export class ModelSelectorComponent extends Container {
 	#isMenuOpen: boolean = false;
 	#menuSelectedIndex: number = 0;
 	#menuStep: "role" | "thinking" = "role";
-	#menuSelectedRole: ModelRole | null = null;
+	#menuSelectedRole: string | null = null;
 
 	constructor(
 		tui: TUI,
@@ -103,7 +97,7 @@ export class ModelSelectorComponent extends Container {
 		settings: Settings,
 		modelRegistry: ModelRegistry,
 		scopedModels: ReadonlyArray<ScopedModelItem>,
-		onSelect: (model: Model, role: ModelRole | null, thinkingLevel?: ThinkingLevel) => void,
+		onSelect: (model: Model, role: string | null, thinkingLevel?: ThinkingLevel) => void,
 		onCancel: () => void,
 		options?: { temporaryOnly?: boolean; initialSearchInput?: string },
 	) {
@@ -117,6 +111,9 @@ export class ModelSelectorComponent extends Container {
 		this.#onCancelCallback = onCancel;
 		this.#temporaryOnly = options?.temporaryOnly ?? false;
 		const initialSearchInput = options?.initialSearchInput;
+
+		// Initialize menu role actions (built-in + custom from settings)
+		this.#buildMenuRoleActions();
 
 		// Load current role assignments from settings
 		this.#loadRoleModels();
@@ -182,6 +179,36 @@ export class ModelSelectorComponent extends Container {
 			// Request re-render after models are loaded
 			this.#tui.requestRender();
 		});
+	}
+
+	#buildMenuRoleActions(): void {
+		const actions: MenuRoleAction[] = [];
+
+		// Add built-in roles
+		for (const role of MODEL_ROLE_IDS) {
+			const roleInfo = MODEL_ROLES[role];
+			const roleLabel = roleInfo.tag ? `${roleInfo.tag} (${roleInfo.name})` : roleInfo.name;
+			actions.push({
+				label: `Set as ${roleLabel}`,
+				role: role as string,
+			});
+		}
+
+		// Add custom roles from settings
+		const customTags = this.#settings.get("modelTags");
+		if (customTags && typeof customTags === "object") {
+			for (const [role, tagDef] of Object.entries(customTags as Record<string, any>)) {
+				if (tagDef && typeof tagDef === "object" && "name" in tagDef) {
+					const roleLabel = tagDef.name;
+					actions.push({
+						label: `Set as ${roleLabel}`,
+						role,
+					});
+				}
+			}
+		}
+
+		this.#menuRoleActions = actions;
 	}
 
 	#loadRoleModels(): void {
@@ -527,11 +554,11 @@ export class ModelSelectorComponent extends Container {
 		return [ThinkingLevel.Inherit, ThinkingLevel.Off, ...getSupportedEfforts(model)];
 	}
 
-	#getCurrentRoleThinkingLevel(role: ModelRole): ThinkingLevel {
+	#getCurrentRoleThinkingLevel(role: string): ThinkingLevel {
 		return this.#roles[role]?.thinkingLevel ?? ThinkingLevel.Inherit;
 	}
 
-	#getThinkingPreselectIndex(role: ModelRole, model: Model): number {
+	#getThinkingPreselectIndex(role: string, model: Model): number {
 		const options = this.#getThinkingLevelsForModel(model);
 		const currentLevel = this.#getCurrentRoleThinkingLevel(role);
 		const foundIndex = options.indexOf(currentLevel);
@@ -569,12 +596,12 @@ export class ModelSelectorComponent extends Container {
 					const label = getThinkingLevelMetadata(thinkingLevel).label;
 					return `${prefix}${label}`;
 				})
-			: MENU_ROLE_ACTIONS.map((action, index) => {
+			: this.#menuRoleActions.map((action, index) => {
 					const prefix = index === this.#menuSelectedIndex ? `  ${theme.nav.cursor} ` : "    ";
 					return `${prefix}${action.label}`;
 				});
 
-		const selectedRoleName = this.#menuSelectedRole ? MODEL_ROLES[this.#menuSelectedRole].name : "";
+		const selectedRoleName = this.#menuSelectedRole ? getRoleInfo(this.#menuSelectedRole, this.#settings).name : "";
 		const headerText =
 			showingThinking && this.#menuSelectedRole
 				? `  Thinking for: ${selectedRoleName} (${selectedModel.id})`
@@ -674,7 +701,7 @@ export class ModelSelectorComponent extends Container {
 		const optionCount =
 			this.#menuStep === "thinking" && this.#menuSelectedRole !== null
 				? this.#getThinkingLevelsForModel(selectedModel.model).length
-				: MENU_ROLE_ACTIONS.length;
+				: this.#menuRoleActions.length;
 		if (optionCount === 0) return;
 
 		if (matchesKey(keyData, "up")) {
@@ -691,7 +718,7 @@ export class ModelSelectorComponent extends Container {
 
 		if (matchesKey(keyData, "enter") || matchesKey(keyData, "return") || keyData === "\n") {
 			if (this.#menuStep === "role") {
-				const action = MENU_ROLE_ACTIONS[this.#menuSelectedIndex];
+				const action = this.#menuRoleActions[this.#menuSelectedIndex];
 				if (!action) return;
 				this.#menuSelectedRole = action.role;
 				this.#menuStep = "thinking";
@@ -712,7 +739,7 @@ export class ModelSelectorComponent extends Container {
 		if (getKeybindings().matches(keyData, "tui.select.cancel")) {
 			if (this.#menuStep === "thinking" && this.#menuSelectedRole !== null) {
 				this.#menuStep = "role";
-				const roleIndex = MENU_ROLE_ACTIONS.findIndex(action => action.role === this.#menuSelectedRole);
+				const roleIndex = this.#menuRoleActions.findIndex(action => action.role === this.#menuSelectedRole);
 				this.#menuSelectedRole = null;
 				this.#menuSelectedIndex = roleIndex >= 0 ? roleIndex : 0;
 				this.#updateMenu();
@@ -728,7 +755,7 @@ export class ModelSelectorComponent extends Container {
 		if (thinkingLevel === ThinkingLevel.Inherit) return modelKey;
 		return `${modelKey}:${thinkingLevel}`;
 	}
-	#handleSelect(model: Model, role: ModelRole | null, thinkingLevel?: ThinkingLevel): void {
+	#handleSelect(model: Model, role: string | null, thinkingLevel?: ThinkingLevel): void {
 		// For temporary role, don't save to settings - just notify caller
 		if (role === null) {
 			this.#onSelectCallback(model, null);

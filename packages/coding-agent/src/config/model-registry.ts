@@ -30,6 +30,7 @@ import { type Static, Type } from "@sinclair/typebox";
 import { type ConfigError, ConfigFile } from "../config";
 import type { ThemeColor } from "../modes/theme/theme";
 import type { AuthStorage, OAuthCredential } from "../session/auth-storage";
+import type { Settings } from "./settings";
 
 export const kNoAuth = "N/A";
 
@@ -56,6 +57,36 @@ export const MODEL_ROLES: Record<ModelRole, ModelRoleInfo> = {
 };
 
 export const MODEL_ROLE_IDS: ModelRole[] = ["default", "smol", "slow", "vision", "plan", "commit", "task"];
+
+/** Alias for ModelRoleInfo - used for both built-in and custom roles */
+export type RoleInfo = ModelRoleInfo;
+
+/**
+ * Get role info for a role name (built-in or custom).
+ * Returns built-in role info if the role is predefined,
+ * otherwise looks up custom role from settings, or returns a fallback.
+ */
+export function getRoleInfo(role: string, settings: Settings): RoleInfo {
+	// Check if it's a built-in role
+	if (role in MODEL_ROLES) {
+		return MODEL_ROLES[role as ModelRole];
+	}
+
+	// Check if it's a custom role in settings
+	const customTags = settings.get("modelTags");
+	if (customTags && typeof customTags === "object" && role in customTags) {
+		const tagDef = (customTags as Record<string, any>)[role];
+		if (tagDef && typeof tagDef === "object") {
+			return {
+				name: tagDef.name || role,
+				color: tagDef.color as ThemeColor | undefined,
+			};
+		}
+	}
+
+	// Fallback for undefined roles
+	return { name: role, color: "muted" };
+}
 
 const OpenRouterRoutingSchema = Type.Object({
 	only: Type.Optional(Type.Array(Type.String())),
