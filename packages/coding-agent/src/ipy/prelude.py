@@ -305,23 +305,40 @@ if "__omp_prelude_loaded__" not in globals():
 
     class ShellResult:
         """Result from shell command execution."""
-        __slots__ = ("stdout", "stderr", "code")
-        def __init__(self, stdout: str, stderr: str, code: int):
+        __slots__ = ("args", "stdout", "stderr", "returncode")
+        def __init__(self, args: str, stdout: str, stderr: str, returncode: int):
+            self.args = args
             self.stdout = stdout
             self.stderr = stderr
-            self.code = code
+            self.returncode = returncode
+
+        @property
+        def code(self) -> int:
+            return self.returncode
+
+        @property
+        def exit_code(self) -> int:
+            return self.returncode
+
+        def check_returncode(self) -> None:
+            if self.returncode != 0:
+                raise subprocess.CalledProcessError(
+                    self.returncode, self.args, output=self.stdout, stderr=self.stderr
+                )
+
         def __repr__(self):
-            if self.code == 0:
+            if self.returncode == 0:
                 return ""
-            return f"exit code {self.code}"
+            return f"exit code {self.returncode}"
+
         def __bool__(self):
-            return self.code == 0
+            return self.returncode == 0
 
     def _make_shell_result(proc: subprocess.CompletedProcess[str], cmd: str) -> ShellResult:
         """Create ShellResult and emit status."""
         output = proc.stdout + proc.stderr if proc.stderr else proc.stdout
         _emit_status("sh", cmd=cmd[:80], code=proc.returncode, output=output[:500])
-        return ShellResult(proc.stdout, proc.stderr, proc.returncode)
+        return ShellResult(cmd, proc.stdout, proc.stderr, proc.returncode)
 
     import signal as _signal
 
@@ -356,7 +373,7 @@ if "__omp_prelude_loaded__" not in globals():
 
     @_category("Shell")
     def run(cmd: str, *, cwd: str | Path | None = None, timeout: int | None = None) -> ShellResult:
-        """Run a shell command."""
+        """Run a shell command. Returns ShellResult with stdout/stderr and returncode/exit_code fields."""
         shell_path = shutil.which("bash") or shutil.which("sh") or "/bin/sh"
         args = [shell_path, "-c", cmd]
         return _run_with_interrupt(args, str(cwd) if cwd else None, timeout, cmd)
