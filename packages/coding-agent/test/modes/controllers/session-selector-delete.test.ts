@@ -33,7 +33,7 @@ function createSession(id: string, title: string): SessionInfo {
 	};
 }
 
-function createSelector(onDelete: (session: SessionInfo) => Promise<void>): SessionSelectorComponent {
+function createSelector(onDelete: (session: SessionInfo) => Promise<boolean>): SessionSelectorComponent {
 	return new SessionSelectorComponent(
 		[createSession("session-a", "Alpha"), createSession("session-b", "Beta")],
 		() => {},
@@ -48,7 +48,7 @@ function renderText(selector: SessionSelectorComponent): string {
 }
 
 describe("SessionSelectorComponent delete confirmation", () => {
-	it("keeps the session visible when delete fails after confirmation", async () => {
+	it("keeps the session visible and shows the error when delete fails after confirmation", async () => {
 		const onDelete = vi.fn(async () => {
 			throw new Error("disk failed");
 		});
@@ -63,13 +63,29 @@ describe("SessionSelectorComponent delete confirmation", () => {
 
 		const rendered = renderText(selector);
 		expect(onDelete).toHaveBeenCalledTimes(1);
+		expect(rendered).toContain("Error: disk failed");
 		expect(rendered).toContain("Alpha");
 		expect(rendered).toContain("Beta");
 		expect(rendered).not.toContain("Delete session?");
 	});
 
+	it("keeps the session visible when delete is canceled upstream", async () => {
+		const onDelete = vi.fn(async () => false);
+		const selector = createSelector(onDelete);
+
+		selector.handleInput("\x1b[3~");
+		selector.handleInput("\n");
+		await Bun.sleep(0);
+
+		const rendered = renderText(selector);
+		expect(onDelete).toHaveBeenCalledTimes(1);
+		expect(rendered).toContain("Alpha");
+		expect(rendered).toContain("Beta");
+		expect(rendered).not.toContain("Error:");
+	});
+
 	it("removes the session row after a successful delete", async () => {
-		const onDelete = vi.fn(async () => {});
+		const onDelete = vi.fn(async () => true);
 		const selector = createSelector(onDelete);
 
 		selector.handleInput("\x1b[3~");

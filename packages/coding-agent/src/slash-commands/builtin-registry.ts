@@ -243,7 +243,7 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 				return;
 			}
 			// Default: show session info
-			void runtime.ctx.handleSessionCommand();
+			await runtime.ctx.handleSessionCommand();
 			runtime.ctx.editor.setText("");
 		},
 	},

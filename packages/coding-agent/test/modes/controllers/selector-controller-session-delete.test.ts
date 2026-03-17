@@ -133,6 +133,10 @@ function createContext(currentSessionFile: string): {
 	};
 }
 
+function renderText(selector: SessionSelectorComponent): string {
+	return selector.render(120).join("\n");
+}
+
 beforeAll(() => {
 	initTheme();
 });
@@ -190,6 +194,36 @@ describe("SelectorController session deletion", () => {
 			"ui.requestRender",
 		]);
 		expect(ctx.sessionManager.getSessionFile()).toBe("/tmp/project/sessions/detached.jsonl");
+	});
+
+	it("shows inline selector errors when session deletion fails after detach", async () => {
+		const activeSession = makeSessionInfo("/tmp/project/sessions/active.jsonl");
+		const { ctx, newSession } = createContext(activeSession.path);
+		vi.spyOn(SessionManager, "list").mockResolvedValue([activeSession]);
+		const deleteSessionWithArtifacts = vi
+			.spyOn(FileSessionStorage.prototype, "deleteSessionWithArtifacts")
+			.mockRejectedValue(new Error("disk failed"));
+		const controller = new SelectorController(ctx);
+
+		await controller.showSessionSelector();
+		const selector = ctx.editorContainer.children[0];
+		if (!(selector instanceof SessionSelectorComponent)) {
+			throw new Error("Expected session selector component");
+		}
+
+		const sessionList = selector.getSessionList() as unknown as {
+			onDeleteRequest?: (session: SessionInfo) => void;
+		};
+		sessionList.onDeleteRequest?.(activeSession);
+		selector.handleInput("\n");
+		await Bun.sleep(0);
+
+		expect(newSession).toHaveBeenCalledTimes(1);
+		expect(deleteSessionWithArtifacts).toHaveBeenCalledWith(activeSession.path);
+		expect(ctx.showError).not.toHaveBeenCalled();
+		expect(ctx.sessionManager.getSessionFile()).toBe("/tmp/project/sessions/detached.jsonl");
+		expect(renderText(selector)).toContain("Error: Failed to delete session: disk failed");
+		expect(renderText(selector)).toContain("Active session");
 	});
 
 	it("creates a fresh session before deleting via slash command and then shows the selector", async () => {

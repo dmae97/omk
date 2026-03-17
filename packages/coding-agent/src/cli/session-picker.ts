@@ -36,13 +36,8 @@ export async function selectSession(sessions: SessionInfo[]): Promise<string | n
 			},
 			async (session: SessionInfo) => {
 				// Delete handler - SessionList will show confirmation internally
-				try {
-					await storage.deleteSessionWithArtifacts(session.path);
-				} catch (err) {
-					const errorMsg = err instanceof Error ? err.message : String(err);
-					console.error(`Failed to delete session: ${errorMsg}`);
-					throw err; // Re-throw so SessionList knows deletion failed
-				}
+				await storage.deleteSessionWithArtifacts(session.path);
+				return true;
 			},
 		);
 		return selector;

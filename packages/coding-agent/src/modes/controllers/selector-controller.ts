@@ -607,15 +607,16 @@ export class SelectorController {
 				},
 				async (session: SessionInfo) => {
 					if (!(await this.#detachActiveSessionBeforeDeletion(session.path))) {
-						return;
+						return false;
 					}
 					const storage = new FileSessionStorage();
 					try {
 						await storage.deleteSessionWithArtifacts(session.path);
+						return true;
 					} catch (err) {
-						const errorMsg = err instanceof Error ? err.message : String(err);
-						this.ctx.showError(`Failed to delete session: ${errorMsg}`);
-						throw err;
+						throw new Error(`Failed to delete session: ${err instanceof Error ? err.message : String(err)}`, {
+							cause: err,
+						});
 					}
 				},
 			);

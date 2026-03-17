@@ -17,14 +17,18 @@ function isLoopbackHostname(hostname: string): boolean {
 }
 
 function resolveRedirectUri(redirectUri: string | undefined): string | undefined {
-	const trimmed = redirectUri?.trim();
+	const configured = redirectUri;
+	const trimmed = configured?.trim();
 	if (!trimmed) return undefined;
+	if (trimmed !== configured) {
+		throw new Error("OAuth redirect URI must not include surrounding whitespace");
+	}
 
-	const parsed = new URL(trimmed);
+	const parsed = new URL(configured);
 	if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
 		throw new Error("OAuth redirect URI must use http or https");
 	}
-	return parsed.toString();
+	return configured;
 }
 
 function parseRedirectUri(redirectUri: string | undefined): URL | undefined {

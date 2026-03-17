@@ -3,21 +3,29 @@ import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/typ
 import { executeBuiltinSlashCommand } from "@oh-my-pi/pi-coding-agent/slash-commands/builtin-registry";
 
 function createRuntimeHarness(options?: {
+	handleSessionCommand?: InteractiveModeContext["handleSessionCommand"];
 	handleSessionDeleteCommand?: InteractiveModeContext["handleSessionDeleteCommand"];
 }) {
 	const setText = vi.fn();
+	const handleSessionCommand =
+		options?.handleSessionCommand ??
+		vi.fn(async () => {
+			return;
+		});
 	const handleSessionDeleteCommand =
 		options?.handleSessionDeleteCommand ??
-		(async () => {
+		vi.fn(async () => {
 			return;
 		});
 
 	return {
 		setText,
+		handleSessionCommand,
 		handleSessionDeleteCommand,
 		runtime: {
 			ctx: {
 				editor: { setText } as unknown as InteractiveModeContext["editor"],
+				handleSessionCommand,
 				handleSessionDeleteCommand,
 			} as InteractiveModeContext,
 			handleBackgroundCommand: () => {},
@@ -25,7 +33,45 @@ function createRuntimeHarness(options?: {
 	};
 }
 
-describe("/session delete slash command", () => {
+describe("/session slash command", () => {
+	it("awaits session info before resolving the default command", async () => {
+		const deferred = Promise.withResolvers<void>();
+		const handleSessionCommand = vi.fn(() => deferred.promise);
+		const harness = createRuntimeHarness({ handleSessionCommand });
+
+		let settled = false;
+		const execution = executeBuiltinSlashCommand("/session", harness.runtime).then(result => {
+			settled = true;
+			return result;
+		});
+
+		await Promise.resolve();
+
+		expect(handleSessionCommand).toHaveBeenCalledTimes(1);
+		expect(harness.handleSessionDeleteCommand).not.toHaveBeenCalled();
+		expect(harness.setText).not.toHaveBeenCalled();
+		expect(settled).toBe(false);
+
+		deferred.resolve();
+
+		expect(await execution).toBe(true);
+		expect(settled).toBe(true);
+		expect(harness.setText).toHaveBeenCalledWith("");
+	});
+
+	it("propagates session info failures through executeBuiltinSlashCommand", async () => {
+		const infoError = new Error("info failed");
+		const handleSessionCommand = vi.fn(async () => {
+			throw infoError;
+		});
+		const harness = createRuntimeHarness({ handleSessionCommand });
+
+		await expect(executeBuiltinSlashCommand("/session info", harness.runtime)).rejects.toBe(infoError);
+		expect(handleSessionCommand).toHaveBeenCalledTimes(1);
+		expect(harness.handleSessionDeleteCommand).not.toHaveBeenCalled();
+		expect(harness.setText).not.toHaveBeenCalled();
+	});
+
 	it("awaits session deletion before resolving the builtin command", async () => {
 		const deferred = Promise.withResolvers<void>();
 		const handleSessionDeleteCommand = vi.fn(() => deferred.promise);

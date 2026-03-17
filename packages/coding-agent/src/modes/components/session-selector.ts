@@ -4,6 +4,7 @@ import {
 	Input,
 	matchesKey,
 	padding,
+	replaceTabs,
 	Spacer,
 	Text,
 	truncateToWidth,
@@ -241,7 +242,8 @@ class SessionList implements Component {
 export class SessionSelectorComponent extends Container {
 	#sessionList: SessionList;
 	#confirmationDialog: HookSelectorComponent | null = null;
-	#onDelete?: (session: SessionInfo) => Promise<void>;
+	#messageContainer: Container;
+	#onDelete?: (session: SessionInfo) => Promise<boolean>;
 	#onRequestRender?: () => void;
 
 	constructor(
@@ -249,19 +251,19 @@ export class SessionSelectorComponent extends Container {
 		onSelect: (sessionPath: string) => void,
 		onCancel: () => void,
 		onExit: () => void,
-		onDelete?: (session: SessionInfo) => Promise<void>,
+		onDelete?: (session: SessionInfo) => Promise<boolean>,
 	) {
 		super();
 
+		this.#messageContainer = new Container();
 		this.#onDelete = onDelete;
-
 		// Add header
 		this.addChild(new Spacer(1));
 		this.addChild(new Text(theme.bold("Resume Session"), 1, 0));
 		this.addChild(new Spacer(1));
 		this.addChild(new DynamicBorder());
 		this.addChild(new Spacer(1));
-
+		this.addChild(this.#messageContainer);
 		// Create session list
 		this.#sessionList = new SessionList(sessions);
 		this.#sessionList.onSelect = onSelect;
@@ -281,6 +283,16 @@ export class SessionSelectorComponent extends Container {
 		this.#onRequestRender = callback;
 	}
 
+	#clearError(): void {
+		this.#messageContainer.clear();
+	}
+
+	#showError(message: string): void {
+		this.#messageContainer.clear();
+		this.#messageContainer.addChild(new Text(theme.fg("error", `Error: ${replaceTabs(message)}`), 1, 0));
+		this.#messageContainer.addChild(new Spacer(1));
+	}
+
 	#showDeleteConfirmation(session: SessionInfo): void {
 		const displayName = session.title || session.firstMessage.slice(0, 40) || session.id;
 		this.#confirmationDialog = new HookSelectorComponent(
@@ -288,11 +300,14 @@ export class SessionSelectorComponent extends Container {
 			["Yes", "No"],
 			async (option: string) => {
 				if (option === "Yes" && this.#onDelete) {
+					this.#clearError();
 					try {
-						await this.#onDelete(session);
-						this.#sessionList.removeSession(session.path);
-					} catch {
-						// Error already shown by caller
+						const deleted = await this.#onDelete(session);
+						if (deleted) {
+							this.#sessionList.removeSession(session.path);
+						}
+					} catch (err) {
+						this.#showError(err instanceof Error ? err.message : String(err));
 					}
 				}
 				// Close confirmation dialog

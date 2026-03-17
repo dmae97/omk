@@ -3,16 +3,9 @@ import { getBundledModel } from "@oh-my-pi/pi-ai";
 import { runCommitAgentSession } from "../src/commit/agentic/agent";
 import * as toolsModule from "../src/commit/agentic/tools";
 import { Settings } from "../src/config/settings";
+import type { CreateAgentSessionResult } from "../src/sdk";
 import * as sdkModule from "../src/sdk";
 import type { PromptOptions } from "../src/session/agent-session";
-
-vi.mock("../src/sdk", () => ({
-	createAgentSession: vi.fn(),
-}));
-
-vi.mock("../src/commit/agentic/tools", () => ({
-	createCommitTools: vi.fn(() => []),
-}));
 
 describe("commit agent prompt attribution", () => {
 	afterEach(() => {
@@ -29,10 +22,8 @@ describe("commit agent prompt attribution", () => {
 			dispose: async () => {},
 		};
 
-		(sdkModule.createAgentSession as unknown as { mockResolvedValue: (value: unknown) => void }).mockResolvedValue({
-			session,
-		});
-		(toolsModule.createCommitTools as unknown as { mockReturnValue: (value: unknown) => void }).mockReturnValue([]);
+		vi.spyOn(sdkModule, "createAgentSession").mockResolvedValue({ session } as unknown as CreateAgentSessionResult);
+		vi.spyOn(toolsModule, "createCommitTools").mockReturnValue([]);
 
 		const model = getBundledModel("anthropic", "claude-sonnet-4-5");
 		if (!model) {

@@ -163,6 +163,59 @@ describe("mcp oauth flow", () => {
 		});
 	});
 
+	it("preserves root redirectUri values without adding a trailing slash", async () => {
+		let observedRedirectUri = "";
+		let tokenRequestBody = "";
+
+		using _hook = hookFetch((input, init) => {
+			const url = String(input);
+			if (url === "https://provider.example/token") {
+				tokenRequestBody = String(init?.body ?? "");
+				return new Response(
+					JSON.stringify({
+						access_token: "access-token",
+						refresh_token: "refresh-token",
+						expires_in: 3600,
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				);
+			}
+
+			throw new Error(`Unexpected fetch: ${url}`);
+		});
+
+		const flow = new MCPOAuthFlow(
+			{
+				authorizationUrl: "https://provider.example/authorize",
+				tokenUrl: "https://provider.example/token",
+				clientId: "client-id",
+				redirectUri: "https://public.example",
+				callbackPort: 14571,
+			},
+			{
+				onAuth: info => {
+					const authUrl = new URL(info.url);
+					observedRedirectUri = authUrl.searchParams.get("redirect_uri") ?? "";
+					const state = authUrl.searchParams.get("state") ?? "";
+					queueMicrotask(() => {
+						void originalFetch(`http://localhost:14571/?code=test-code&state=${state}`);
+					});
+				},
+				signal: AbortSignal.timeout(1_000),
+			},
+		);
+
+		const credentials = await flow.login();
+		const tokenParams = new URLSearchParams(tokenRequestBody);
+
+		expect(observedRedirectUri).toBe("https://public.example");
+		expect(tokenParams.get("redirect_uri")).toBe("https://public.example");
+		expect(credentials).toMatchObject({
+			access: "access-token",
+			refresh: "refresh-token",
+		});
+	});
+
 	it("supports https loopback redirectUri values behind a separate local callback port", async () => {
 		let observedRedirectUri = "";
 		let tokenRequestBody = "";

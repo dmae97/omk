@@ -2,16 +2,12 @@ import { afterEach, describe, expect, it, vi } from "bun:test";
 import { type AssistantMessage, Effort } from "@oh-my-pi/pi-ai";
 import { Settings } from "../../src/config/settings";
 import type { LoadExtensionsResult } from "../../src/extensibility/extensions/types";
+import type { CreateAgentSessionResult } from "../../src/sdk";
 import * as sdkModule from "../../src/sdk";
 import type { AgentSession, AgentSessionEvent, PromptOptions } from "../../src/session/agent-session";
 import type { AuthStorage } from "../../src/session/auth-storage";
 import { runSubprocess, SUBAGENT_WARNING_MISSING_SUBMIT_RESULT } from "../../src/task/executor";
 import type { AgentDefinition } from "../../src/task/types";
-
-vi.mock("../../src/sdk", () => ({
-	createAgentSession: vi.fn(),
-	discoverAuthStorage: vi.fn(async () => ({})),
-}));
 
 function createAssistantStopMessage(text: string): AssistantMessage {
 	return {
@@ -80,6 +76,18 @@ function createMockSession(
 	return session as unknown as AgentSession;
 }
 
+function createSessionResult(session: AgentSession): CreateAgentSessionResult {
+	return {
+		session,
+		extensionsResult: {} as unknown as LoadExtensionsResult,
+		setToolUIContext: () => {},
+	};
+}
+
+function mockCreateAgentSession(session: AgentSession) {
+	return vi.spyOn(sdkModule, "createAgentSession").mockResolvedValue(createSessionResult(session));
+}
+
 describe("runSubprocess submit_result reminders", () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
@@ -128,11 +136,7 @@ describe("runSubprocess submit_result reminders", () => {
 			});
 		});
 
-		(sdkModule.createAgentSession as unknown as { mockResolvedValue: (value: unknown) => void }).mockResolvedValue({
-			session,
-			extensionsResult: {} as unknown as LoadExtensionsResult,
-			setToolUIContext: () => {},
-		});
+		mockCreateAgentSession(session);
 
 		const result = await runSubprocess(baseOptions);
 		expect(prompts.length).toBe(2);
@@ -164,11 +168,7 @@ describe("runSubprocess submit_result reminders", () => {
 			});
 		});
 
-		(sdkModule.createAgentSession as unknown as { mockResolvedValue: (value: unknown) => void }).mockResolvedValue({
-			session,
-			extensionsResult: {} as unknown as LoadExtensionsResult,
-			setToolUIContext: () => {},
-		});
+		mockCreateAgentSession(session);
 
 		const result = await runSubprocess({ ...baseOptions, id: "subagent-2" });
 		expect(result.output).toContain("SYSTEM WARNING: Subagent called submit_result with null data.");
@@ -206,11 +206,7 @@ describe("runSubprocess submit_result reminders", () => {
 			});
 		});
 
-		(sdkModule.createAgentSession as unknown as { mockResolvedValue: (value: unknown) => void }).mockResolvedValue({
-			session,
-			extensionsResult: {} as unknown as LoadExtensionsResult,
-			setToolUIContext: () => {},
-		});
+		mockCreateAgentSession(session);
 
 		const result = await runSubprocess({ ...baseOptions, id: "subagent-err-then-success" });
 		expect(prompts).toHaveLength(2);
@@ -232,11 +228,7 @@ describe("runSubprocess submit_result reminders", () => {
 			});
 		});
 
-		(sdkModule.createAgentSession as unknown as { mockResolvedValue: (value: unknown) => void }).mockResolvedValue({
-			session,
-			extensionsResult: {} as unknown as LoadExtensionsResult,
-			setToolUIContext: () => {},
-		});
+		const createAgentSessionSpy = mockCreateAgentSession(session);
 
 		const modelRegistry = {
 			refresh: async () => {},
@@ -251,11 +243,8 @@ describe("runSubprocess submit_result reminders", () => {
 			modelRegistry,
 		});
 
-		const createAgentSessionMock = sdkModule.createAgentSession as unknown as {
-			mock: { calls: Array<[Record<string, unknown>]> };
-		};
-		expect(createAgentSessionMock.mock.calls).toHaveLength(1);
-		expect(createAgentSessionMock.mock.calls[0]?.[0]?.thinkingLevel).toBe("high");
+		expect(createAgentSessionSpy).toHaveBeenCalledTimes(1);
+		expect(createAgentSessionSpy.mock.calls[0]?.[0]?.thinkingLevel).toBe(Effort.High);
 	});
 
 	it("prefers explicit modelOverride thinking suffix over provided thinking level, including off", async () => {
@@ -269,6 +258,8 @@ describe("runSubprocess submit_result reminders", () => {
 			{ modelOverride: "openai/gpt-4o:low", expectedThinkingLevel: Effort.Low },
 			{ modelOverride: "openai/gpt-4o:off", expectedThinkingLevel: "off" },
 		] as const;
+
+		const createAgentSessionSpy = vi.spyOn(sdkModule, "createAgentSession");
 
 		for (const [index, testCase] of cases.entries()) {
 			const session = createMockSession(({ emit }) => {
@@ -284,13 +275,7 @@ describe("runSubprocess submit_result reminders", () => {
 				});
 			});
 
-			(sdkModule.createAgentSession as unknown as { mockResolvedValue: (value: unknown) => void }).mockResolvedValue(
-				{
-					session,
-					extensionsResult: {} as unknown as LoadExtensionsResult,
-					setToolUIContext: () => {},
-				},
-			);
+			createAgentSessionSpy.mockResolvedValue(createSessionResult(session));
 
 			await runSubprocess({
 				...baseOptions,
@@ -301,12 +286,9 @@ describe("runSubprocess submit_result reminders", () => {
 			});
 		}
 
-		const createAgentSessionMock = sdkModule.createAgentSession as unknown as {
-			mock: { calls: Array<[Record<string, unknown>]> };
-		};
-		expect(createAgentSessionMock.mock.calls).toHaveLength(2);
-		expect(createAgentSessionMock.mock.calls[0]?.[0]?.thinkingLevel).toBe(cases[0].expectedThinkingLevel);
-		expect(createAgentSessionMock.mock.calls[1]?.[0]?.thinkingLevel).toBe(cases[1].expectedThinkingLevel);
+		expect(createAgentSessionSpy).toHaveBeenCalledTimes(2);
+		expect(createAgentSessionSpy.mock.calls[0]?.[0]?.thinkingLevel).toBe(cases[0].expectedThinkingLevel);
+		expect(createAgentSessionSpy.mock.calls[1]?.[0]?.thinkingLevel).toBe(cases[1].expectedThinkingLevel);
 	});
 	it("aborts after 3 reminders when submit_result is never called", async () => {
 		const prompts: string[] = [];
@@ -317,11 +299,7 @@ describe("runSubprocess submit_result reminders", () => {
 			emit({ type: "message_end", message: assistant });
 		});
 
-		(sdkModule.createAgentSession as unknown as { mockResolvedValue: (value: unknown) => void }).mockResolvedValue({
-			session,
-			extensionsResult: {} as unknown as LoadExtensionsResult,
-			setToolUIContext: () => {},
-		});
+		mockCreateAgentSession(session);
 
 		const result = await runSubprocess({
 			...baseOptions,
@@ -354,11 +332,7 @@ describe("runSubprocess submit_result reminders", () => {
 			});
 		});
 
-		(sdkModule.createAgentSession as unknown as { mockResolvedValue: (value: unknown) => void }).mockResolvedValue({
-			session,
-			extensionsResult: {} as unknown as LoadExtensionsResult,
-			setToolUIContext: () => {},
-		});
+		mockCreateAgentSession(session);
 
 		const result = await runSubprocess({ ...baseOptions, id: "subagent-aborted-submit-result" });
 		expect(result.aborted).toBe(true);

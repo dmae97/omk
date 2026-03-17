@@ -277,6 +277,34 @@ describe("model thinking runtime helpers", () => {
 		);
 	});
 
+	it("derives binary-thinking fallback from resolved compat when catalog compat is partial", () => {
+		const model = enrichModelThinking({
+			id: "qwen/qwen3-32b",
+			name: "Qwen 3 32B",
+			api: "openai-completions",
+			provider: "openrouter",
+			baseUrl: "https://openrouter.ai/api/v1",
+			reasoning: true,
+			compat: {
+				supportsToolChoice: true,
+			},
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 128000,
+			maxTokens: 32000,
+		} satisfies Model<"openai-completions">);
+
+		expect(model.thinking).toEqual({
+			mode: "effort",
+			minLevel: Effort.Minimal,
+			maxLevel: Effort.High,
+		});
+		expect(requireSupportedEffort(model, Effort.High)).toBe(Effort.High);
+		expect(() => requireSupportedEffort(model, Effort.XHigh)).toThrow(
+			/Supported efforts: minimal, low, medium, high/,
+		);
+	});
+
 	it("enables xhigh for openai-responses and openai-codex-responses APIs", () => {
 		const responsesModel = createModel({
 			id: "custom-responses",
