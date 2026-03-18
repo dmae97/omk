@@ -9,7 +9,14 @@ import { isEnoent } from "@oh-my-pi/pi-utils";
 import { invalidate as invalidateFsCache } from "../capability/fs";
 
 import { validateServerConfig } from "./config";
-import type { MCPConfigFile, MCPServerConfig } from "./types";
+import { MCP_CONFIG_SCHEMA_URL, type MCPConfigFile, type MCPServerConfig } from "./types";
+
+function withSchema(config: MCPConfigFile): MCPConfigFile {
+	return {
+		$schema: config.$schema ?? MCP_CONFIG_SCHEMA_URL,
+		...config,
+	};
+}
 
 /**
  * Read an MCP config file.
@@ -40,7 +47,7 @@ export async function writeMCPConfigFile(filePath: string, config: MCPConfigFile
 
 	// Write to temp file first (atomic write)
 	const tmpPath = `${filePath}.tmp`;
-	const content = JSON.stringify(config, null, 2);
+	const content = JSON.stringify(withSchema(config), null, 2);
 	await fs.promises.writeFile(tmpPath, content, { encoding: "utf-8", mode: 0o600 });
 
 	// Rename to final path (atomic on most systems)

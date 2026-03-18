@@ -238,9 +238,10 @@ Full Model Context Protocol support with external tool integration:
 - Stdio and HTTP transports for connecting to MCP servers
 - **OAuth support**: Explicit `clientId` and `callbackPort` in MCP server config, manual OAuth callbacks via slash commands
 - **Browser server filtering**: Automatically filters browser-type MCP servers to prevent conflicts with built-in browser tool
+- **Automatic Exa filtering**: Extracts Exa API keys and prefers the native Exa integration
+- **Config schema + setup guide**: [`docs/mcp-config.md`](./docs/mcp-config.md) and [`packages/coding-agent/src/config/mcp-schema.json`](./packages/coding-agent/src/config/mcp-schema.json)
 - Plugin CLI (`omp plugin install/enable/configure/doctor`)
 - Hot-loadable plugins from `~/.omp/plugins/` with npm/bun integration
-- Automatic Exa MCP server filtering with API key extraction
 - `disabledServers` works on both project-level and user-level third-party servers
 
 ### + Web Search & Fetch

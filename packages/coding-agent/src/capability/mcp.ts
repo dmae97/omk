@@ -23,6 +23,8 @@ export interface MCPServer {
 	args?: string[];
 	/** Environment variables */
 	env?: Record<string, string>;
+	/** Working directory for stdio transport */
+	cwd?: string;
 	/** URL (for HTTP/SSE transport) */
 	url?: string;
 	/** HTTP headers (for HTTP transport) */
