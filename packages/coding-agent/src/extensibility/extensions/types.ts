@@ -300,6 +300,10 @@ export interface ToolDefinition<TParams extends TSchema = TSchema, TDetails = un
 	hidden?: boolean;
 	/** If true, tool may stage deferred changes that require explicit resolve/discard. */
 	deferrable?: boolean;
+	/** MCP server name for discovery/search metadata when this tool fronts an MCP server. */
+	mcpServerName?: string;
+	/** Original MCP tool name for discovery/search metadata. */
+	mcpToolName?: string;
 	/** Execute the tool. */
 	execute(
 		toolCallId: string,

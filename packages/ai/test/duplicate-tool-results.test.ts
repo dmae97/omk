@@ -386,7 +386,7 @@ describe("Codex-style Abort Handling", () => {
 		expect(toolResult.content).toEqual([{ type: "text", text: "aborted" }]);
 	});
 
-	it("should skip existing tool results and use synthetic ones for aborted messages", () => {
+	it("should preserve existing tool results for aborted messages when they were already recorded", () => {
 		const toolCallId = "toolu_skip_existing";
 
 		const assistantMessage: AssistantMessage = {
@@ -407,7 +407,6 @@ describe("Codex-style Abort Handling", () => {
 			timestamp: Date.now(),
 		};
 
-		// Existing result with different content (e.g., partial execution)
 		const existingToolResult: ToolResultMessage = {
 			role: "toolResult",
 			toolCallId: toolCallId,
@@ -425,14 +424,12 @@ describe("Codex-style Abort Handling", () => {
 
 		const transformed = transformMessages(messages, model);
 
-		// Should have exactly one tool result with "aborted" content
 		const toolResults = transformed.filter(
 			m => m.role === "toolResult" && (m as ToolResultMessage).toolCallId === toolCallId,
 		) as ToolResultMessage[];
 
 		expect(toolResults.length).toBe(1);
-		// The synthetic one should win, not the existing one
-		expect(toolResults[0].content).toEqual([{ type: "text", text: "aborted" }]);
-		expect(toolResults[0].isError).toBe(true);
+		expect(toolResults[0].content).toEqual([{ type: "text", text: "Partial file content..." }]);
+		expect(toolResults[0].isError).toBe(false);
 	});
 });

@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `mcpServerName` and `mcpToolName` optional properties to custom tools for MCP server discovery and search metadata
 
 ## [13.13.1] - 2026-03-18
 ### Added
