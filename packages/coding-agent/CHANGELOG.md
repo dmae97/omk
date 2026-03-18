@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Automatic deduplication of identical context files by content, keeping the closest (lowest depth) copy when duplicates are discovered
 
 ## [13.13.0] - 2026-03-18
 

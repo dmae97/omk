@@ -16,7 +16,6 @@ import { toReasoningEffort } from "../thinking";
 const TITLE_SYSTEM_PROMPT = renderPromptTemplate(titleSystemPrompt);
 
 const DEFAULT_TERMINAL_TITLE = "π";
-const TERMINAL_TITLE_SEPARATOR = " – ";
 const TERMINAL_TITLE_CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/g;
 
 const MAX_INPUT_CHARS = 2000;
@@ -161,7 +160,7 @@ function getFallbackTerminalTitle(cwd: string | undefined): string | undefined {
 
 export function formatSessionTerminalTitle(sessionName: string | undefined, cwd?: string): string {
 	const label = sanitizeTerminalTitlePart(sessionName) ?? getFallbackTerminalTitle(cwd);
-	return label ? `${label}${TERMINAL_TITLE_SEPARATOR}${DEFAULT_TERMINAL_TITLE}` : DEFAULT_TERMINAL_TITLE;
+	return label ? `${DEFAULT_TERMINAL_TITLE}: ${label}` : DEFAULT_TERMINAL_TITLE;
 }
 
 /**

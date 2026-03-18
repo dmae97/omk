@@ -260,6 +260,18 @@ export interface LoadContextFilesOptions {
 	cwd?: string;
 }
 
+function dedupeExactContextFiles(
+	contextFiles: Array<{ path: string; content: string; depth?: number }>,
+): Array<{ path: string; content: string; depth?: number }> {
+	const lastIndexByContent = new Map<string, number>();
+	for (const [index, file] of contextFiles.entries()) {
+		// Keep the closest matching context entry when content is byte-for-byte identical.
+		lastIndexByContent.set(file.content, index);
+	}
+
+	return contextFiles.filter((file, index) => lastIndexByContent.get(file.content) === index);
+}
+
 /**
  * Load all project context files using the capability API.
  * Returns {path, content, depth} entries for all discovered context files.
@@ -290,7 +302,7 @@ export async function loadProjectContextFiles(
 		return depthB - depthA;
 	});
 
-	return files;
+	return dedupeExactContextFiles(files);
 }
 
 /**
@@ -444,7 +456,9 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 	let resolvedCustomPrompt: string | undefined;
 	let resolvedAppendPrompt: string | undefined;
 	let systemPromptCustomization: string | null = null;
-	let contextFiles: Array<{ path: string; content: string; depth?: number }> = providedContextFiles ?? [];
+	let contextFiles: Array<{ path: string; content: string; depth?: number }> = dedupeExactContextFiles(
+		providedContextFiles ?? [],
+	);
 	let agentsMdSearch: AgentsMdSearch = {
 		scopePath: ".",
 		limit: AGENTS_MD_LIMIT,
@@ -471,7 +485,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		resolvedCustomPrompt = prepResult.value.resolvedCustomPrompt;
 		resolvedAppendPrompt = prepResult.value.resolvedAppendPrompt;
 		systemPromptCustomization = prepResult.value.systemPromptCustomization;
-		contextFiles = prepResult.value.contextFiles;
+		contextFiles = dedupeExactContextFiles(prepResult.value.contextFiles);
 		agentsMdSearch = prepResult.value.agentsMdSearch;
 		skills = prepResult.value.skills;
 	}
