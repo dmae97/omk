@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.13.0] - 2026-03-18
 ### Changed
 
 - Changed tool argument validation to always normalize optional null values before type coercion, ensuring consistent handling of LLM-generated 'null' strings
