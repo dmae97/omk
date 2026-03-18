@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added auto-generated file detection to prevent accidental modification of generated code (protoc, sqlc, buf, swagger, etc.)
+- Added validation in Edit and Write tools to block modifications to files with auto-generated markers or naming patterns
 
 ## [13.12.10] - 2026-03-17
 ### Added
