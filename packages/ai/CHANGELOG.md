@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Changed tool argument validation to always normalize optional null values before type coercion, ensuring consistent handling of LLM-generated 'null' strings
+
+### Fixed
+
+- Fixed tool argument validation to properly handle string 'null' values from LLMs on optional fields by stripping them during normalization
+- Improved type safety of `validateToolCall` and `validateToolArguments` functions by returning properly typed `ToolCall["arguments"]` instead of `any`
 
 ## [13.12.9] - 2026-03-17
 ### Changed

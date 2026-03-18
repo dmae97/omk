@@ -18,7 +18,7 @@ describe("Tool argument coercion", () => {
 			arguments: { timeout: "300" },
 		};
 
-		const result = validateToolArguments(tool, toolCall);
+		const result = validateToolArguments(tool, toolCall) as { timeout: number };
 		expect(result.timeout).toBe(300);
 		expect(typeof result.timeout).toBe("number");
 	});
@@ -37,7 +37,7 @@ describe("Tool argument coercion", () => {
 			arguments: { label: "300" },
 		};
 
-		const result = validateToolArguments(tool, toolCall);
+		const result = validateToolArguments(tool, toolCall) as { label: string };
 		expect(result.label).toBe("300");
 		expect(typeof result.label).toBe("string");
 	});
@@ -56,7 +56,7 @@ describe("Tool argument coercion", () => {
 			arguments: { items: "[1, 2, 3]" },
 		};
 
-		const result = validateToolArguments(tool, toolCall);
+		const result = validateToolArguments(tool, toolCall) as { items: number[] };
 		expect(result.items).toEqual([1, 2, 3]);
 	});
 
@@ -394,5 +394,90 @@ describe("Tool argument coercion", () => {
 		};
 		const result = validateToolArguments(tool, toolCall);
 		expect(result.tick_size).toBeUndefined();
+	});
+	it("strips string 'null' on optional boolean field", () => {
+		const tool: Tool = {
+			name: "edit-tool",
+			description: "",
+			parameters: Type.Object({
+				path: Type.String(),
+				delete: Type.Optional(Type.Boolean()),
+			}),
+		};
+
+		const toolCall: ToolCall = {
+			type: "toolCall",
+			id: "call-edit",
+			name: "edit-tool",
+			arguments: { path: "file.ts", delete: "null" },
+		};
+
+		const result = validateToolArguments(tool, toolCall);
+		expect(result).toEqual({ path: "file.ts" });
+	});
+
+	it("strips string 'null' on optional string field", () => {
+		const tool: Tool = {
+			name: "edit-tool",
+			description: "",
+			parameters: Type.Object({
+				path: Type.String(),
+				move: Type.Optional(Type.String()),
+			}),
+		};
+
+		const toolCall: ToolCall = {
+			type: "toolCall",
+			id: "call-edit",
+			name: "edit-tool",
+			arguments: { path: "file.ts", move: "null" },
+		};
+
+		const result = validateToolArguments(tool, toolCall);
+		expect(result).toEqual({ path: "file.ts" });
+	});
+
+	it("errors on string 'null' for required field", () => {
+		const tool: Tool = {
+			name: "required-tool",
+			description: "",
+			parameters: Type.Object({
+				path: Type.String(),
+			}),
+		};
+
+		const toolCall: ToolCall = {
+			type: "toolCall",
+			id: "call-required",
+			name: "required-tool",
+			arguments: { path: "null" },
+		};
+
+		// Should NOT strip - path is required, so validation should pass
+		// (the string "null" is a valid string)
+		const result = validateToolArguments(tool, toolCall);
+		expect(result).toEqual({ path: "null" });
+	});
+
+	it("strips string 'null' and actual null on multiple optional fields", () => {
+		const tool: Tool = {
+			name: "multi-optional",
+			description: "",
+			parameters: Type.Object({
+				required: Type.String(),
+				optBool: Type.Optional(Type.Boolean()),
+				optString: Type.Optional(Type.String()),
+			}),
+		};
+
+		const toolCall: ToolCall = {
+			type: "toolCall",
+			id: "call-multi",
+			name: "multi-optional",
+			arguments: { required: "value", optBool: "null", optString: null },
+		};
+
+		const result = validateToolArguments(tool, toolCall);
+		expect(result).toEqual({ required: "value" });
 	});
 });

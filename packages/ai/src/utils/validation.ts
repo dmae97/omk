@@ -172,7 +172,14 @@ function tryParseJsonForTypes(value: string, expectedTypes: string[]): { value: 
 
 	try {
 		const parsed = JSON.parse(trimmed) as unknown;
-		// Only accept if the parsed type matches what the schema expects
+		// If the string was "null", we parsed it to actual null.
+		// Accept this even if null isn't in expectedTypes - the LLM meant "no value".
+		// normalizeOptionalNullsForSchema will strip it from optional fields, and
+		// AJV will correctly error on required fields.
+		if (parsed === null && trimmed === "null") {
+			return { value: null, changed: true };
+		}
+		// For non-null values, only accept if the parsed type matches what the schema expects
 		if (matchesExpectedType(parsed, expectedTypes)) {
 			return { value: parsed, changed: true };
 		}
@@ -378,7 +385,9 @@ function normalizeOptionalNullsForSchema(schema: unknown, value: unknown): { val
 		if (!(key in nextValue)) continue;
 		const currentValue = nextValue[key];
 
-		if (currentValue === null && !required.has(key)) {
+		// Strip null and the string "null" from optional fields.
+		// The LLM sometimes outputs string "null" to mean "no value".
+		if ((currentValue === null || currentValue === "null") && !required.has(key)) {
 			if (!changed) {
 				nextValue = { ...nextValue };
 				changed = true;
@@ -386,7 +395,6 @@ function normalizeOptionalNullsForSchema(schema: unknown, value: unknown): { val
 			delete nextValue[key];
 			continue;
 		}
-
 		const normalized = normalizeOptionalNullsForSchema(propertySchema, currentValue);
 		if (!normalized.changed) continue;
 
@@ -482,7 +490,7 @@ const MAX_TYPE_COERCION_PASSES = 5;
  * @returns The validated arguments
  * @throws Error if tool is not found or validation fails
  */
-export function validateToolCall(tools: Tool[], toolCall: ToolCall): any {
+export function validateToolCall(tools: Tool[], toolCall: ToolCall): ToolCall["arguments"] {
 	const tool = tools.find(t => t.name === toolCall.name);
 	if (!tool) {
 		throw new Error(`Tool "${toolCall.name}" not found`);
@@ -497,26 +505,26 @@ export function validateToolCall(tools: Tool[], toolCall: ToolCall): any {
  * @returns The validated arguments
  * @throws Error with formatted message if validation fails
  */
-export function validateToolArguments(tool: Tool, toolCall: ToolCall): any {
+export function validateToolArguments(tool: Tool, toolCall: ToolCall): ToolCall["arguments"] {
 	const originalArgs = toolCall.arguments;
 
 	const validate = compileSchema(tool.parameters);
 
-	// Validate the arguments
-	if (validate(originalArgs)) {
-		return originalArgs;
-	}
-
+	// Always normalize first - strip null and string "null" from optional fields.
+	// This handles LLM outputting string "null" to mean "no value" even when
+	// validation would pass (e.g., optional string field where "null" is a valid string).
 	let normalizedArgs: unknown = originalArgs;
 	let changed = false;
 
-	const optionalNullNormalization = normalizeOptionalNullsForSchema(tool.parameters, normalizedArgs);
-	if (optionalNullNormalization.changed) {
-		normalizedArgs = optionalNullNormalization.value;
+	const initialNormalization = normalizeOptionalNullsForSchema(tool.parameters, normalizedArgs);
+	if (initialNormalization.changed) {
+		normalizedArgs = initialNormalization.value;
 		changed = true;
-		if (validate(normalizedArgs)) {
-			return normalizedArgs;
-		}
+	}
+
+	// Validate after normalization
+	if (validate(normalizedArgs)) {
+		return normalizedArgs as ToolCall["arguments"];
 	}
 
 	for (let pass = 0; pass < MAX_TYPE_COERCION_PASSES; pass += 1) {
@@ -532,7 +540,7 @@ export function validateToolArguments(tool: Tool, toolCall: ToolCall): any {
 		}
 
 		if (validate(normalizedArgs)) {
-			return normalizedArgs;
+			return normalizedArgs as ToolCall["arguments"];
 		}
 	}
 

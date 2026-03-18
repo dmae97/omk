@@ -43,7 +43,7 @@ export function detectOpenAICompat(model: Model<"openai-completions">): Resolved
 
 	const isCerebras = provider === "cerebras" || baseUrl.includes("cerebras.ai");
 	const isZai = provider === "zai" || baseUrl.includes("api.z.ai");
-	const isOpenRouterKimi = provider === "openrouter" && model.id.includes("moonshotai/kimi");
+	const isKimiModel = model.id.includes("moonshotai/kimi");
 	const isAlibaba = provider === "alibaba-coding-plan" || baseUrl.includes("dashscope");
 	const isQwen = model.id.toLowerCase().includes("qwen");
 
@@ -91,8 +91,8 @@ export function detectOpenAICompat(model: Model<"openai-completions">): Resolved
 		requiresMistralToolIds: isMistral,
 		thinkingFormat: isZai ? "zai" : isAlibaba || isQwen ? "qwen" : "openai",
 		reasoningContentField: "reasoning_content",
-		requiresReasoningContentForToolCalls: isOpenRouterKimi,
-		requiresAssistantContentForToolCalls: isOpenRouterKimi,
+		requiresReasoningContentForToolCalls: isKimiModel,
+		requiresAssistantContentForToolCalls: isKimiModel,
 		openRouterRouting: undefined,
 		vercelGatewayRouting: undefined,
 		supportsStrictMode: detectStrictModeSupport(provider, baseUrl),
