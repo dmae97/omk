@@ -32,6 +32,7 @@ import { resolveToCwd, stripOuterDoubleQuotes } from "../../tools/path-utils";
 import { replaceTabs } from "../../tools/render-utils";
 import { getChangelogPath, parseChangelog } from "../../utils/changelog";
 import { openPath } from "../../utils/open";
+import { setSessionTerminalTitle } from "../../utils/title-generator";
 
 export class CommandController {
 	constructor(private readonly ctx: InteractiveModeContext) {}
@@ -574,6 +575,7 @@ export class CommandController {
 			}
 		}
 		await this.ctx.session.newSession();
+		setSessionTerminalTitle(this.ctx.sessionManager.getSessionName(), this.ctx.sessionManager.getCwd());
 
 		this.ctx.statusLine.invalidate();
 		this.ctx.statusLine.setSessionStartTime(Date.now());

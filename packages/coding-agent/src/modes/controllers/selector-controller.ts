@@ -26,6 +26,7 @@ import {
 	setPreferredImageProvider,
 	setPreferredSearchProvider,
 } from "../../tools";
+import { setSessionTerminalTitle } from "../../utils/title-generator";
 import { AgentDashboard } from "../components/agent-dashboard";
 import { AssistantMessageComponent } from "../components/assistant-message";
 import { ExtensionDashboard } from "../components/extensions";
@@ -648,6 +649,7 @@ export class SelectorController {
 		if (!detached) {
 			return false;
 		}
+		setSessionTerminalTitle(this.ctx.sessionManager.getSessionName(), this.ctx.sessionManager.getCwd());
 
 		this.#clearTransientSessionUi();
 		this.ctx.statusLine.invalidate();
@@ -664,6 +666,7 @@ export class SelectorController {
 
 		// Switch session via AgentSession (emits hook and tool session events)
 		await this.ctx.session.switchSession(sessionPath);
+		setSessionTerminalTitle(this.ctx.sessionManager.getSessionName(), this.ctx.sessionManager.getCwd());
 
 		// Clear and re-render the chat
 		this.ctx.chatContainer.clear();

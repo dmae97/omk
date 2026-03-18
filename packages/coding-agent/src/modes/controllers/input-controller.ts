@@ -12,7 +12,7 @@ import { SKILL_PROMPT_MESSAGE_TYPE, type SkillPromptDetails } from "../../sessio
 import { executeBuiltinSlashCommand } from "../../slash-commands/builtin-registry";
 import { getEditorCommand, openInEditor } from "../../utils/external-editor";
 import { resizeImage } from "../../utils/image-resize";
-import { generateSessionTitle, setTerminalTitle } from "../../utils/title-generator";
+import { generateSessionTitle, setSessionTerminalTitle } from "../../utils/title-generator";
 
 interface Expandable {
 	setExpanded(expanded: boolean): void;
@@ -325,7 +325,7 @@ export class InputController {
 					.then(async title => {
 						if (title) {
 							await this.ctx.sessionManager.setSessionName(title);
-							setTerminalTitle(`π: ${title}`);
+							setSessionTerminalTitle(title, this.ctx.sessionManager.getCwd());
 						}
 					})
 					.catch(() => {});

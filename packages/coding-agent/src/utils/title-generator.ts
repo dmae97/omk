@@ -1,6 +1,7 @@
 /**
  * Generate session titles using a smol, fast model.
  */
+import * as path from "node:path";
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { Api, Model } from "@oh-my-pi/pi-ai";
 import { completeSimple } from "@oh-my-pi/pi-ai";
@@ -13,6 +14,10 @@ import titleSystemPrompt from "../prompts/system/title-system.md" with { type: "
 import { toReasoningEffort } from "../thinking";
 
 const TITLE_SYSTEM_PROMPT = renderPromptTemplate(titleSystemPrompt);
+
+const DEFAULT_TERMINAL_TITLE = "π";
+const TERMINAL_TITLE_SEPARATOR = " – ";
+const TERMINAL_TITLE_CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/g;
 
 const MAX_INPUT_CHARS = 2000;
 
@@ -138,9 +143,48 @@ ${truncatedMessage}
 }
 
 /**
- * Set the terminal title using ANSI escape sequences.
+ * Remove control characters so model-generated titles cannot inject terminal escapes.
+ */
+function sanitizeTerminalTitlePart(value: string | undefined): string | undefined {
+	if (!value) return undefined;
+	const sanitized = value.replace(TERMINAL_TITLE_CONTROL_CHARS, "").trim();
+	return sanitized || undefined;
+}
+
+function getFallbackTerminalTitle(cwd: string | undefined): string | undefined {
+	if (!cwd) return undefined;
+	const resolvedCwd = path.resolve(cwd);
+	const baseName = path.basename(resolvedCwd);
+	if (!baseName || baseName === path.parse(resolvedCwd).root) return undefined;
+	return sanitizeTerminalTitlePart(baseName);
+}
+
+export function formatSessionTerminalTitle(sessionName: string | undefined, cwd?: string): string {
+	const label = sanitizeTerminalTitlePart(sessionName) ?? getFallbackTerminalTitle(cwd);
+	return label ? `${label}${TERMINAL_TITLE_SEPARATOR}${DEFAULT_TERMINAL_TITLE}` : DEFAULT_TERMINAL_TITLE;
+}
+
+/**
+ * Set the terminal title using OSC 2. Unsupported terminals ignore it.
  */
 export function setTerminalTitle(title: string): void {
-	// OSC 2 sets the window title
-	process.stdout.write(`]2;${title}`);
+	process.stdout.write(`\x1b]2;${sanitizeTerminalTitlePart(title) ?? DEFAULT_TERMINAL_TITLE}\x07`);
+}
+
+export function setSessionTerminalTitle(sessionName: string | undefined, cwd?: string): void {
+	setTerminalTitle(formatSessionTerminalTitle(sessionName, cwd));
+}
+
+/**
+ * Save the current terminal title on terminals that support xterm window ops.
+ */
+export function pushTerminalTitle(): void {
+	process.stdout.write("\x1b[22;2t");
+}
+
+/**
+ * Restore the previously saved terminal title on terminals that support xterm window ops.
+ */
+export function popTerminalTitle(): void {
+	process.stdout.write("\x1b[23;2t");
 }
