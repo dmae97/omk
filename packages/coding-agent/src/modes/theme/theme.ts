@@ -955,6 +955,74 @@ export type ThemeColor =
 	| "statusLineCost"
 	| "statusLineSubagents";
 
+/** Set of all valid ThemeColor string values for runtime validation */
+const VALID_THEME_COLORS: ReadonlySet<string> = new Set([
+	"accent",
+	"border",
+	"borderAccent",
+	"borderMuted",
+	"success",
+	"error",
+	"warning",
+	"muted",
+	"dim",
+	"text",
+	"thinkingText",
+	"userMessageText",
+	"customMessageText",
+	"customMessageLabel",
+	"toolTitle",
+	"toolOutput",
+	"mdHeading",
+	"mdLink",
+	"mdLinkUrl",
+	"mdCode",
+	"mdCodeBlock",
+	"mdCodeBlockBorder",
+	"mdQuote",
+	"mdQuoteBorder",
+	"mdHr",
+	"mdListBullet",
+	"toolDiffAdded",
+	"toolDiffRemoved",
+	"toolDiffContext",
+	"syntaxComment",
+	"syntaxKeyword",
+	"syntaxFunction",
+	"syntaxVariable",
+	"syntaxString",
+	"syntaxNumber",
+	"syntaxType",
+	"syntaxOperator",
+	"syntaxPunctuation",
+	"thinkingOff",
+	"thinkingMinimal",
+	"thinkingLow",
+	"thinkingMedium",
+	"thinkingHigh",
+	"thinkingXhigh",
+	"bashMode",
+	"pythonMode",
+	"statusLineSep",
+	"statusLineModel",
+	"statusLinePath",
+	"statusLineGitClean",
+	"statusLineGitDirty",
+	"statusLineContext",
+	"statusLineSpend",
+	"statusLineStaged",
+	"statusLineDirty",
+	"statusLineUntracked",
+	"statusLineOutput",
+	"statusLineCost",
+	"statusLineSubagents",
+]);
+
+/** Check if a string is a valid ThemeColor value */
+export function isValidThemeColor(color: string): color is ThemeColor {
+	return VALID_THEME_COLORS.has(color);
+}
+
 export type ThemeBg =
 	| "selectedBg"
 	| "userMessageBg"

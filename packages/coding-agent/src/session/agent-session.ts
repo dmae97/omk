@@ -53,7 +53,7 @@ import {
 import { abortableSleep, getAgentDbPath, isEnoent, logger } from "@oh-my-pi/pi-utils";
 import type { AsyncJob, AsyncJobManager } from "../async";
 import type { Rule } from "../capability/rule";
-import { MODEL_ROLE_IDS, type ModelRegistry, type ModelRole } from "../config/model-registry";
+import { MODEL_ROLE_IDS, type ModelRegistry } from "../config/model-registry";
 import { extractExplicitThinkingSelector, parseModelString, resolveModelRoleValue } from "../config/model-resolver";
 import { expandPromptTemplate, type PromptTemplate, renderPromptTemplate } from "../config/prompt-templates";
 import type { Settings, SkillsSettings } from "../config/settings";
@@ -2021,7 +2021,7 @@ export class AgentSession {
 		);
 	}
 
-	resolveRoleModel(role: ModelRole): Model | undefined {
+	resolveRoleModel(role: string): Model | undefined {
 		return this.#resolveRoleModel(role, this.#modelRegistry.getAvailable(), this.model);
 	}
 
@@ -3171,9 +3171,10 @@ export class AgentSession {
 		if (roleModels.length <= 1) return undefined;
 
 		const lastRole = this.sessionManager.getLastModelChangeRole();
-		let currentIndex = lastRole
-			? roleModels.findIndex(entry => entry.role === lastRole)
-			: roleModels.findIndex(entry => modelsAreEqual(entry.model, currentModel));
+		let currentIndex = lastRole ? roleModels.findIndex(entry => entry.role === lastRole) : -1;
+		if (currentIndex === -1) {
+			currentIndex = roleModels.findIndex(entry => modelsAreEqual(entry.model, currentModel));
+		}
 		if (currentIndex === -1) currentIndex = 0;
 
 		const nextIndex = (currentIndex + 1) % roleModels.length;
@@ -4124,7 +4125,7 @@ export class AgentSession {
 		return availableModels.find(m => m.provider === currentModel.provider && m.id === configuredTarget);
 	}
 
-	#resolveRoleModel(role: ModelRole, availableModels: Model[], currentModel: Model | undefined): Model | undefined {
+	#resolveRoleModel(role: string, availableModels: Model[], currentModel: Model | undefined): Model | undefined {
 		const roleModelStr =
 			role === "default"
 				? (this.settings.getModelRole("default") ??

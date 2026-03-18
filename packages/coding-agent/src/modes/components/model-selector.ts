@@ -190,21 +190,17 @@ export class ModelSelectorComponent extends Container {
 			const roleLabel = roleInfo.tag ? `${roleInfo.tag} (${roleInfo.name})` : roleInfo.name;
 			actions.push({
 				label: `Set as ${roleLabel}`,
-				role: role as string,
+				role,
 			});
 		}
 
 		// Add custom roles from settings
-		const customTags = this.#settings.get("modelTags");
-		if (customTags && typeof customTags === "object") {
-			for (const [role, tagDef] of Object.entries(customTags as Record<string, any>)) {
-				if (tagDef && typeof tagDef === "object" && "name" in tagDef) {
-					const roleLabel = tagDef.name;
-					actions.push({
-						label: `Set as ${roleLabel}`,
-						role,
-					});
-				}
+		for (const [role, tagDef] of Object.entries(this.#settings.get("modelTags"))) {
+			if (tagDef.name) {
+				actions.push({
+					label: `Set as ${tagDef.name}`,
+					role,
+				});
 			}
 		}
 
@@ -227,6 +223,27 @@ export class ModelSelectorComponent extends Container {
 					model,
 					thinkingLevel:
 						explicitThinkingLevel && thinkingLevel !== undefined ? thinkingLevel : ThinkingLevel.Inherit,
+				};
+			}
+		}
+
+		// Load custom roles from modelTags settings
+		for (const [role] of Object.entries(this.#settings.get("modelTags"))) {
+			if (role in MODEL_ROLES) continue;
+			const roleValue = this.#settings.getModelRole(role);
+			if (!roleValue) continue;
+
+			const resolved = resolveModelRoleValue(roleValue, allModels, {
+				settings: this.#settings,
+				matchPreferences,
+			});
+			if (resolved.model) {
+				this.#roles[role] = {
+					model: resolved.model,
+					thinkingLevel:
+						resolved.explicitThinkingLevel && resolved.thinkingLevel !== undefined
+							? resolved.thinkingLevel
+							: ThinkingLevel.Inherit,
 				};
 			}
 		}
@@ -502,6 +519,15 @@ export class ModelSelectorComponent extends Container {
 				if (!tag || !assigned || !modelsAreEqual(assigned.model, item.model)) continue;
 
 				const badge = makeInvertedBadge(tag, color ?? "success");
+				const thinkingLabel = getThinkingLevelMetadata(assigned.thinkingLevel).label;
+				roleBadgeTokens.push(`${badge} ${theme.fg("dim", `(${thinkingLabel})`)}`);
+			}
+			// Custom role badges
+			for (const [role, assigned] of Object.entries(this.#roles)) {
+				if (role in MODEL_ROLES || !assigned || !modelsAreEqual(assigned.model, item.model)) continue;
+				const roleInfo = getRoleInfo(role, this.#settings);
+				const badgeLabel = roleInfo.tag ?? roleInfo.name;
+				const badge = makeInvertedBadge(badgeLabel, roleInfo.color ?? "muted");
 				const thinkingLabel = getThinkingLevelMetadata(assigned.thinkingLevel).label;
 				roleBadgeTokens.push(`${badge} ${theme.fg("dim", `(${thinkingLabel})`)}`);
 			}

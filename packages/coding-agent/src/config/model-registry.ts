@@ -28,7 +28,7 @@ import {
 import { isRecord, logger } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { type ConfigError, ConfigFile } from "../config";
-import type { ThemeColor } from "../modes/theme/theme";
+import { isValidThemeColor, type ThemeColor } from "../modes/theme/theme";
 import type { AuthStorage, OAuthCredential } from "../session/auth-storage";
 import type { Settings } from "./settings";
 
@@ -74,12 +74,12 @@ export function getRoleInfo(role: string, settings: Settings): RoleInfo {
 
 	// Check if it's a custom role in settings
 	const customTags = settings.get("modelTags");
-	if (customTags && typeof customTags === "object" && role in customTags) {
-		const tagDef = (customTags as Record<string, any>)[role];
-		if (tagDef && typeof tagDef === "object") {
+	if (customTags && role in customTags) {
+		const tagDef = customTags[role];
+		if (tagDef) {
 			return {
 				name: tagDef.name || role,
-				color: tagDef.color as ThemeColor | undefined,
+				color: tagDef.color && isValidThemeColor(tagDef.color) ? tagDef.color : undefined,
 			};
 		}
 	}
