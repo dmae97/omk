@@ -1217,6 +1217,16 @@ export const SETTINGS_SCHEMA = {
 		},
 	},
 
+	"mcp.discoveryDefaultServers": {
+		type: "array",
+		default: [] as string[],
+		ui: {
+			tab: "tools",
+			label: "MCP Discovery Default Servers",
+			description: "Keep MCP tools from these servers visible while discovery mode hides other MCP tools",
+		},
+	},
+
 	"mcp.notifications": {
 		type: "boolean",
 		default: false,

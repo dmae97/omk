@@ -124,6 +124,16 @@ export function collectDiscoverableMCPTools(tools: Iterable<AgentTool>): Discove
 	return discoverable;
 }
 
+export function selectDiscoverableMCPToolNamesByServer(
+	tools: Iterable<DiscoverableMCPTool>,
+	serverNames: ReadonlySet<string>,
+): string[] {
+	if (serverNames.size === 0) return [];
+	return Array.from(tools)
+		.filter(tool => tool.serverName !== undefined && serverNames.has(tool.serverName))
+		.map(tool => tool.name);
+}
+
 export function summarizeDiscoverableMCPTools(tools: DiscoverableMCPTool[]): DiscoverableMCPToolSummary {
 	const serverToolCounts = new Map<string, number>();
 	for (const tool of tools) {

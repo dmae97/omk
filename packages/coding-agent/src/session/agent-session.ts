@@ -93,6 +93,7 @@ import {
 	type DiscoverableMCPSearchIndex,
 	type DiscoverableMCPTool,
 	isMCPToolName,
+	selectDiscoverableMCPToolNamesByServer,
 } from "../mcp/discoverable-tool-metadata";
 import { getCurrentThemeName, theme } from "../modes/theme/theme";
 import { normalizeDiff, normalizeToLF, ParseError, previewPatch, stripBom } from "../patch";
@@ -223,6 +224,8 @@ export interface AgentSessionConfig {
 	mcpDiscoveryEnabled?: boolean;
 	/** MCP tool names to activate for the current session when discovery mode is enabled. */
 	initialSelectedMCPToolNames?: string[];
+	/** MCP server names whose tools should seed discovery-mode sessions whenever those servers are connected. */
+	defaultSelectedMCPServerNames?: string[];
 	/** MCP tool names that should seed brand-new sessions created from this AgentSession. */
 	defaultSelectedMCPToolNames?: string[];
 	/** TTSR manager for time-traveling stream rules */
@@ -423,6 +426,7 @@ export class AgentSession {
 	#discoverableMCPTools = new Map<string, DiscoverableMCPTool>();
 	#discoverableMCPSearchIndex: DiscoverableMCPSearchIndex | null = null;
 	#selectedMCPToolNames = new Set<string>();
+	#defaultSelectedMCPServerNames = new Set<string>();
 	#defaultSelectedMCPToolNames = new Set<string>();
 	#sessionDefaultSelectedMCPToolNames = new Map<string, string[]>();
 
@@ -474,6 +478,7 @@ export class AgentSession {
 		this.#mcpDiscoveryEnabled = config.mcpDiscoveryEnabled ?? false;
 		this.#setDiscoverableMCPTools(this.#collectDiscoverableMCPToolsFromRegistry());
 		this.#selectedMCPToolNames = new Set(config.initialSelectedMCPToolNames ?? []);
+		this.#defaultSelectedMCPServerNames = new Set(config.defaultSelectedMCPServerNames ?? []);
 		this.#defaultSelectedMCPToolNames = new Set(config.defaultSelectedMCPToolNames ?? []);
 		this.#pruneSelectedMCPToolNames();
 		const persistedSelectedMCPToolNames = this.sessionManager.buildSessionContext().selectedMCPToolNames;
@@ -486,7 +491,7 @@ export class AgentSession {
 		}
 		this.#rememberSessionDefaultSelectedMCPToolNames(
 			this.sessionManager.getSessionFile(),
-			this.#defaultSelectedMCPToolNames,
+			this.#getConfiguredDefaultSelectedMCPToolNames(),
 		);
 		this.#ttsrManager = config.ttsrManager;
 		this.#obfuscator = config.obfuscator;
@@ -1659,6 +1664,16 @@ export class AgentSession {
 		return Array.from(toolNames).filter(name => this.#discoverableMCPTools.has(name) && this.#toolRegistry.has(name));
 	}
 
+	#getConfiguredDefaultSelectedMCPToolNames(): string[] {
+		return this.#filterSelectableMCPToolNames([
+			...this.#defaultSelectedMCPToolNames,
+			...selectDiscoverableMCPToolNamesByServer(
+				this.#discoverableMCPTools.values(),
+				this.#defaultSelectedMCPServerNames,
+			),
+		]);
+	}
+
 	#pruneSelectedMCPToolNames(): void {
 		this.#selectedMCPToolNames = new Set(this.#filterSelectableMCPToolNames(this.#selectedMCPToolNames));
 	}
@@ -1815,11 +1830,15 @@ export class AgentSession {
 	): Promise<void> {
 		if (!this.#mcpDiscoveryEnabled) return;
 		const nextActiveNonMCPToolNames = this.#getActiveNonMCPToolNames();
-		const fallbackSelectedMCPToolNames = options?.fallbackSelectedMCPToolNames ?? this.#defaultSelectedMCPToolNames;
+		const fallbackSelectedMCPToolNames =
+			options?.fallbackSelectedMCPToolNames ?? this.#getConfiguredDefaultSelectedMCPToolNames();
 		const restoredMCPToolNames = sessionContext.hasPersistedMCPToolSelection
 			? this.#filterSelectableMCPToolNames(sessionContext.selectedMCPToolNames)
 			: this.#filterSelectableMCPToolNames(fallbackSelectedMCPToolNames);
-		this.#rememberSessionDefaultSelectedMCPToolNames(this.sessionFile, restoredMCPToolNames);
+		this.#rememberSessionDefaultSelectedMCPToolNames(
+			this.sessionFile,
+			this.#getConfiguredDefaultSelectedMCPToolNames(),
+		);
 		await this.#applyActiveToolsByName([...nextActiveNonMCPToolNames, ...restoredMCPToolNames], {
 			persistMCPSelection: false,
 		});
@@ -1866,6 +1885,16 @@ export class AgentSession {
 
 		this.#setDiscoverableMCPTools(this.#collectDiscoverableMCPToolsFromRegistry());
 		this.#pruneSelectedMCPToolNames();
+		if (!this.sessionManager.buildSessionContext().hasPersistedMCPToolSelection) {
+			this.#selectedMCPToolNames = new Set([
+				...this.#selectedMCPToolNames,
+				...this.#getConfiguredDefaultSelectedMCPToolNames(),
+			]);
+		}
+		this.#rememberSessionDefaultSelectedMCPToolNames(
+			this.sessionFile,
+			this.#getConfiguredDefaultSelectedMCPToolNames(),
+		);
 
 		const nextActive = [...this.#getActiveNonMCPToolNames(), ...this.getSelectedMCPToolNames()];
 		await this.#applyActiveToolsByName(nextActive, { previousSelectedMCPToolNames });
@@ -2858,7 +2887,10 @@ export class AgentSession {
 				this.sessionManager.appendMCPToolSelection(this.getSelectedMCPToolNames());
 			}
 		}
-		this.#rememberSessionDefaultSelectedMCPToolNames(this.sessionFile, this.#defaultSelectedMCPToolNames);
+		this.#rememberSessionDefaultSelectedMCPToolNames(
+			this.sessionFile,
+			this.#getConfiguredDefaultSelectedMCPToolNames(),
+		);
 
 		this.#todoReminderCount = 0;
 		this.#planReferenceSent = false;

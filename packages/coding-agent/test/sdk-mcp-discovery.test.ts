@@ -93,6 +93,40 @@ describe("createAgentSession MCP discovery prompt gating", () => {
 		expect(session.getSelectedMCPToolNames()).toEqual(["mcp_github_create_issue", "mcp_slack_post_message"]);
 	});
 
+	it("keeps configured discovery default servers visible in discovery mode", async () => {
+		const { session } = await createAgentSession({
+			cwd: tempDir,
+			agentDir: tempDir,
+			sessionManager: SessionManager.inMemory(),
+			settings: Settings.isolated({
+				"mcp.discoveryMode": true,
+				"mcp.discoveryDefaultServers": ["github", "missing"],
+			}),
+			model: getBundledModel("openai", "gpt-4o-mini"),
+			disableExtensionDiscovery: true,
+			skills: [],
+			contextFiles: [],
+			promptTemplates: [],
+			slashCommands: [],
+			enableMCP: false,
+			enableLsp: false,
+			toolNames: ["read", "search_tool_bm25"],
+			customTools: [
+				createMcpCustomTool("mcp_github_create_issue", "github", "create_issue"),
+				createMcpCustomTool("mcp_slack_post_message", "slack", "post_message"),
+			],
+		});
+		try {
+			expect(session.getSelectedMCPToolNames()).toEqual(["mcp_github_create_issue"]);
+			expect(session.getActiveToolNames()).toEqual(
+				expect.arrayContaining(["read", "search_tool_bm25", "mcp_github_create_issue"]),
+			);
+			expect(session.getActiveToolNames()).not.toContain("mcp_slack_post_message");
+		} finally {
+			await session.dispose();
+		}
+	});
+
 	it("builds search_tool_bm25 descriptions from the loaded MCP catalog", async () => {
 		const { session } = await createAgentSession({
 			cwd: tempDir,

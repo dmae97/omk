@@ -68,6 +68,7 @@ import { discoverAndLoadMCPTools, type MCPManager, type MCPToolsLoadResult } fro
 import {
 	collectDiscoverableMCPTools,
 	formatDiscoverableMCPToolServerSummary,
+	selectDiscoverableMCPToolNamesByServer,
 	summarizeDiscoverableMCPTools,
 } from "./mcp/discoverable-tool-metadata";
 import { buildMemoryToolDeveloperInstructions, getMemoryRoot, startMemoryStartupTask } from "./memories";
@@ -1284,15 +1285,26 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const explicitlyRequestedMCPToolNames = options.toolNames
 		? requestedActiveToolNames.filter(name => name.startsWith("mcp_"))
 		: [];
+	const discoveryDefaultServers = new Set(
+		(settings.get("mcp.discoveryDefaultServers") ?? []).map(serverName => serverName.trim()).filter(Boolean),
+	);
+	const discoveryDefaultServerToolNames = mcpDiscoveryEnabled
+		? selectDiscoverableMCPToolNamesByServer(
+				collectDiscoverableMCPTools(toolRegistry.values()),
+				discoveryDefaultServers,
+			)
+		: [];
 	let initialSelectedMCPToolNames: string[] = [];
 	let defaultSelectedMCPToolNames: string[] = [];
 	let initialToolNames = [...requestedActiveToolNames];
 	if (mcpDiscoveryEnabled) {
 		const restoredSelectedMCPToolNames = existingSession.selectedMCPToolNames.filter(name => toolRegistry.has(name));
+		defaultSelectedMCPToolNames = [
+			...new Set([...discoveryDefaultServerToolNames, ...explicitlyRequestedMCPToolNames]),
+		];
 		initialSelectedMCPToolNames = existingSession.hasPersistedMCPToolSelection
 			? restoredSelectedMCPToolNames
-			: [...new Set([...restoredSelectedMCPToolNames, ...explicitlyRequestedMCPToolNames])];
-		defaultSelectedMCPToolNames = [...explicitlyRequestedMCPToolNames];
+			: [...new Set([...restoredSelectedMCPToolNames, ...defaultSelectedMCPToolNames])];
 		initialToolNames = [
 			...new Set([
 				...requestedActiveToolNames.filter(name => !name.startsWith("mcp_")),
@@ -1493,6 +1505,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		mcpDiscoveryEnabled,
 		initialSelectedMCPToolNames,
 		defaultSelectedMCPToolNames,
+		defaultSelectedMCPServerNames: [...discoveryDefaultServers],
 		ttsrManager,
 		obfuscator,
 		asyncJobManager,
