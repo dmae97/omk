@@ -2134,7 +2134,7 @@ function convertMessages(model: Model<"openai-codex-responses">, context: Contex
 					} satisfies ResponseOutputMessage);
 					continue;
 				}
-				if (block.type === "toolCall" && msg.stopReason !== "error") {
+				if (block.type === "toolCall") {
 					const toolCall = block as ToolCall;
 					const normalized = normalizeResponsesToolCallId(toolCall.id);
 					outputItems.push({

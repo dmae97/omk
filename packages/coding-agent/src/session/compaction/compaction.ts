@@ -775,7 +775,7 @@ function buildOpenAiNativeHistory(
 					continue;
 				}
 
-				if (block.type === "toolCall" && assistant.stopReason !== "error") {
+				if (block.type === "toolCall") {
 					const normalized = normalizeResponsesToolCallId(block.id);
 					let itemId: string | undefined = normalized.itemId;
 					if (isDifferentModel && (itemId?.startsWith("fc_") || itemId?.startsWith("fcr_"))) {

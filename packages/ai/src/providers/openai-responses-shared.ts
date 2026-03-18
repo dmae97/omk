@@ -134,7 +134,7 @@ export function convertResponsesAssistantMessage<TApi extends Api>(
 			continue;
 		}
 
-		if (block.type !== "toolCall" || assistantMsg.stopReason === "error") {
+		if (block.type !== "toolCall") {
 			continue;
 		}
 

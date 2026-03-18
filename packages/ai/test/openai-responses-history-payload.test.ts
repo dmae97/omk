@@ -396,4 +396,107 @@ describe("OpenAI responses history payload", () => {
 			{ role: "user", content: [{ type: "input_text", text: "follow-up" }] },
 		]);
 	});
+	it("rebuilds failed tool calls before replaying tool results for openai-responses", async () => {
+		const callId = "call_failed_openai_1";
+		const context: Context = {
+			messages: [
+				{ role: "user", content: "Start", timestamp: Date.now() },
+				{
+					role: "assistant",
+					content: [{ type: "toolCall", id: callId, name: "read", arguments: { path: "README.md" } }],
+					api: "openai-responses",
+					provider: "openai",
+					model: "gpt-5-mini",
+					usage: {
+						input: 0,
+						output: 0,
+						cacheRead: 0,
+						cacheWrite: 0,
+						totalTokens: 0,
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+					},
+					stopReason: "error",
+					errorMessage: "Tool arguments were invalid.",
+					timestamp: Date.now(),
+				},
+				{
+					role: "toolResult",
+					toolCallId: callId,
+					toolName: "read",
+					content: [{ type: "text", text: "Tool execution was aborted." }],
+					isError: true,
+					timestamp: Date.now(),
+				},
+				{ role: "user", content: "Resume", timestamp: Date.now() },
+			],
+		};
+		const model = getBundledModel("openai", "gpt-5-mini") as Model<"openai-responses">;
+		const payload = (await captureResponsesPayload(model, context)) as { input?: unknown[] };
+		const functionCallItem = findResponsesInputItem(payload.input, "function_call");
+		const functionCallOutputItem = findResponsesInputItem(payload.input, "function_call_output");
+
+		expect(functionCallItem).toMatchObject({
+			type: "function_call",
+			call_id: callId,
+			name: "read",
+			arguments: '{"path":"README.md"}',
+		});
+		expect(functionCallOutputItem).toMatchObject({
+			type: "function_call_output",
+			call_id: callId,
+			output: "Tool execution was aborted.",
+		});
+	});
+
+	it("rebuilds failed tool calls before replaying tool results for openai-codex-responses", async () => {
+		const callId = "call_failed_codex_1";
+		const context: Context = {
+			messages: [
+				{ role: "user", content: "Start", timestamp: Date.now() },
+				{
+					role: "assistant",
+					content: [{ type: "toolCall", id: callId, name: "read", arguments: { path: "README.md" } }],
+					api: "openai-codex-responses",
+					provider: "openai-codex",
+					model: "gpt-5.2-codex",
+					usage: {
+						input: 0,
+						output: 0,
+						cacheRead: 0,
+						cacheWrite: 0,
+						totalTokens: 0,
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+					},
+					stopReason: "error",
+					errorMessage: "Tool arguments were invalid.",
+					timestamp: Date.now(),
+				},
+				{
+					role: "toolResult",
+					toolCallId: callId,
+					toolName: "read",
+					content: [{ type: "text", text: "Tool execution was aborted." }],
+					isError: true,
+					timestamp: Date.now(),
+				},
+				{ role: "user", content: "Resume", timestamp: Date.now() },
+			],
+		};
+		const model = getBundledModel("openai-codex", "gpt-5.2-codex") as Model<"openai-codex-responses">;
+		const payload = (await captureCodexPayload(model, context)) as { input?: unknown[] };
+		const functionCallItem = findResponsesInputItem(payload.input, "function_call");
+		const functionCallOutputItem = findResponsesInputItem(payload.input, "function_call_output");
+
+		expect(functionCallItem).toMatchObject({
+			type: "function_call",
+			call_id: callId,
+			name: "read",
+			arguments: '{"path":"README.md"}',
+		});
+		expect(functionCallOutputItem).toMatchObject({
+			type: "function_call_output",
+			call_id: callId,
+			output: "Tool execution was aborted.",
+		});
+	});
 });
