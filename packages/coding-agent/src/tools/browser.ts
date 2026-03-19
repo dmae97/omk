@@ -1,6 +1,6 @@
+import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import * as fs from "node:fs/promises";
 import { Readability } from "@mozilla/readability";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { StringEnum } from "@oh-my-pi/pi-ai";
@@ -22,6 +22,7 @@ import type { ToolSession } from "../sdk";
 import { formatDimensionNote, resizeImage } from "../utils/image-resize";
 import { htmlToBasicMarkdown } from "../web/scrapers/types";
 import type { OutputMeta } from "./output-meta";
+import { expandPath } from "./path-utils";
 import stealthTamperingScript from "./puppeteer/00_stealth_tampering.txt" with { type: "text" };
 import stealthActivityScript from "./puppeteer/01_stealth_activity.txt" with { type: "text" };
 import stealthHairlineScript from "./puppeteer/02_stealth_hairline.txt" with { type: "text" };
@@ -1367,14 +1368,11 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					);
 					const dimensionNote = formatDimensionNote(resized);
 					// Resolve destination: user-defined path > screenshotDir (auto-named) > temp file.
-					// Expand leading '~' to the home directory.
-					const expandHome = (p: string) =>
-						p === "~" || p.startsWith("~/") || p.startsWith("~\\") ? path.join(os.homedir(), p.slice(1)) : p;
 					const screenshotDir = (() => {
 						const v = this.session.settings.get("browser.screenshotDir") as string | undefined;
-						return v ? expandHome(v) : undefined;
+						return v ? expandPath(v) : undefined;
 					})();
-					const paramPath = params.path ? expandHome(params.path as string) : undefined;
+					const paramPath = params.path ? expandPath(params.path as string) : undefined;
 					let dest: string;
 					if (paramPath) {
 						dest = path.isAbsolute(paramPath)
