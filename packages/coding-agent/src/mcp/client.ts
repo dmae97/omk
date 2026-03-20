@@ -3,7 +3,9 @@
  *
  * Handles connection initialization, tool listing, and tool calling.
  */
-import { logger, withTimeout } from "@oh-my-pi/pi-utils";
+import * as path from "node:path";
+import * as url from "node:url";
+import { getProjectDir, logger, withTimeout } from "@oh-my-pi/pi-utils";
 import { createHttpTransport } from "./transports/http";
 import { createStdioTransport } from "./transports/stdio";
 import type {
@@ -45,6 +47,27 @@ const CLIENT_INFO = {
 	name: "omp-coding-agent",
 	version: "1.0.0",
 };
+
+/**
+ * Default handler for standard MCP server-to-client requests.
+ * Handles `ping` and `roots/list`; rejects unknown methods with -32601.
+ * Reads getProjectDir() at call time so the root stays stable even if
+ * the process cwd changes during tool execution.
+ */
+async function defaultRequestHandler(method: string, _params: unknown): Promise<unknown> {
+	switch (method) {
+		case "ping":
+			return {};
+		case "roots/list": {
+			const cwd = getProjectDir();
+			return {
+				roots: [{ uri: url.pathToFileURL(cwd).href, name: path.basename(cwd) }],
+			};
+		}
+		default:
+			throw Object.assign(new Error(`Unsupported server request: ${method}`), { code: -32601 });
+	}
+}
 
 /**
  * Create a transport for the given server config.
@@ -124,9 +147,11 @@ export async function connectToServer(
 		if (options?.onNotification) {
 			transport.onNotification = options.onNotification;
 		}
-		if (options?.onRequest) {
-			transport.onRequest = options.onRequest;
-		}
+
+		// Always handle standard MCP server-to-client requests (ping, roots/list).
+		// The initialize request declares roots capability, so we must respond to
+		// roots/list — even for short-lived test connections.
+		transport.onRequest = options?.onRequest ?? defaultRequestHandler;
 
 		try {
 			const initResult = await initializeConnection(transport, {

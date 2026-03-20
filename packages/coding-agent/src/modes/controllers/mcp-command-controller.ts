@@ -127,6 +127,9 @@ export class MCPCommandController {
 			case "smithery-logout":
 				await this.#handleSmitheryLogout();
 				break;
+			case "reconnect":
+				await this.#handleReconnect(parts[2]);
+				break;
 			case "reload":
 				await this.#handleReload();
 				break;
@@ -159,6 +162,7 @@ export class MCPCommandController {
 			"                        Search Smithery registry and deploy from picker",
 			"  /mcp smithery-login   Login to Smithery and cache API key",
 			"  /mcp smithery-logout  Remove cached Smithery API key",
+			"  /mcp reconnect <name> Reconnect to a specific MCP server",
 			"  /mcp reload           Force reload and rediscover MCP runtime tools",
 			"  /mcp resources        List available resources from connected servers",
 			"  /mcp prompts          List available prompts from connected servers",
@@ -1369,6 +1373,47 @@ export class MCPCommandController {
 			);
 		} catch (error) {
 			this.ctx.showError(`Failed to reload MCP: ${error instanceof Error ? error.message : String(error)}`);
+		}
+	}
+
+	/**
+	 * Handle /mcp reconnect <name> - Reconnect to a specific server.
+	 */
+	async #handleReconnect(name: string | undefined): Promise<void> {
+		if (!name) {
+			this.ctx.showError("Server name required. Usage: /mcp reconnect <name>");
+			return;
+		}
+		if (!this.ctx.mcpManager) {
+			this.ctx.showError("MCP manager not available.");
+			return;
+		}
+
+		this.#showMessage(["", theme.fg("muted", `Reconnecting to "${name}"...`), ""].join("\n"));
+
+		try {
+			const connection = await this.ctx.mcpManager.reconnectServer(name);
+			if (connection) {
+				// refreshMCPTools re-registers tools and preserves the user's prior
+				// MCP tool selection. No need to call activateDiscoveredMCPTools —
+				// that would broaden the selection to all server tools.
+				await this.ctx.session.refreshMCPTools(this.ctx.mcpManager.getTools());
+				const serverTools = this.ctx.mcpManager.getTools().filter(t => t.mcpServerName === name);
+				this.#showMessage(
+					[
+						"\n",
+						theme.fg("success", `\u2713 Reconnected to "${name}"`),
+						`  Tools: ${serverTools.length}`,
+						"\n",
+					].join("\n"),
+				);
+			} else {
+				this.ctx.showError(`Failed to reconnect to "${name}". Check server status and logs.`);
+			}
+		} catch (error) {
+			this.ctx.showError(
+				`Failed to reconnect to "${name}": ${error instanceof Error ? error.message : String(error)}`,
+			);
 		}
 	}
 

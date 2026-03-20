@@ -4,7 +4,7 @@
  * Implements JSON-RPC 2.0 over HTTP POST with optional SSE streaming.
  * Based on MCP spec 2025-03-26.
  */
-import { readSseJson, Snowflake } from "@oh-my-pi/pi-utils";
+import { logger, readSseJson, Snowflake } from "@oh-my-pi/pi-utils";
 import type {
 	JsonRpcError,
 	JsonRpcMessage,
@@ -91,13 +91,16 @@ export class HttpTransport implements MCPTransport {
 			return;
 		}
 
-		// Connection established — read messages in background, reset sseConnection when done
+		// Connection established — read messages in background.
+		// If the stream ends unexpectedly (server restart, network drop),
+		// fire onClose so the manager can trigger reconnection.
 		const signal = this.#sseConnection.signal;
 		void this.#readSSEStream(response.body!, signal).finally(() => {
+			const wasConnected = this.#connected;
 			this.#sseConnection = null;
+			if (wasConnected) this.onClose?.();
 		});
 	}
-
 	async #readSSEStream(body: ReadableStream<Uint8Array>, signal: AbortSignal): Promise<void> {
 		try {
 			for await (const message of readSseJson<JsonRpcMessage>(body, signal)) {
@@ -106,6 +109,7 @@ export class HttpTransport implements MCPTransport {
 			}
 		} catch (error) {
 			if (error instanceof Error && error.name !== "AbortError") {
+				logger.debug("HTTP SSE stream error", { url: this.config.url, error: error.message });
 				this.onError?.(error);
 			}
 		}
@@ -457,6 +461,7 @@ export class HttpTransport implements MCPTransport {
 		}
 
 		this.onClose?.();
+		this.onClose = undefined;
 	}
 }
 
