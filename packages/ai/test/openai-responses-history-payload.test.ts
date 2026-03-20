@@ -24,6 +24,10 @@ const preservedHistoryItems = [
 	{ type: "compaction", encrypted_content: "enc_123" },
 ];
 
+const fallbackHistoryItems = [
+	{ type: "message", role: "user", content: [{ type: "input_text", text: "Recovered user" }] },
+];
+
 const snapshotHistoryItems = [
 	{ type: "message", role: "user", content: [{ type: "input_text", text: "Canonical user" }] },
 	{ type: "message", role: "assistant", content: [{ type: "output_text", text: "Canonical assistant" }] },
@@ -76,7 +80,7 @@ const resumedSameProviderContext: Context = {
 		{
 			role: "user",
 			content: "summary that should be preserved",
-			providerPayload: createOpenAIResponsesHistoryPayload("openai", preservedHistoryItems, false),
+			providerPayload: createOpenAIResponsesHistoryPayload("openai", fallbackHistoryItems, false),
 			timestamp: Date.now(),
 		},
 		{
@@ -92,7 +96,7 @@ const resumedCopilotSameProviderContext: Context = {
 		{
 			role: "user",
 			content: "summary that should be preserved",
-			providerPayload: createOpenAIResponsesHistoryPayload("github-copilot", preservedHistoryItems, false),
+			providerPayload: createOpenAIResponsesHistoryPayload("github-copilot", fallbackHistoryItems, false),
 			timestamp: Date.now(),
 		},
 		{
@@ -103,6 +107,45 @@ const resumedCopilotSameProviderContext: Context = {
 				"gpt-5.4",
 			),
 			content: [{ type: "text", text: "generic assistant that should be rebuilt" }],
+		},
+		{ role: "user", content: "follow-up user", timestamp: Date.now() },
+	],
+};
+
+const resumedSameProviderWithRemoteCompactionPayloadContext: Context = {
+	messages: [
+		{
+			role: "user",
+			content: "summary that should be preserved",
+			providerPayload: createOpenAIResponsesHistoryPayload("openai", preservedHistoryItems, false),
+			timestamp: Date.now(),
+		},
+		{
+			...makeAssistantMessage([], false),
+			content: [{ type: "text", text: "generic assistant that should be preserved" }],
+		},
+		{ role: "user", content: "follow-up user", timestamp: Date.now() },
+	],
+};
+
+const resumedSameProviderWithStaleThinkingContext: Context = {
+	messages: [
+		{
+			role: "user",
+			content: "summary that should be preserved",
+			timestamp: Date.now(),
+		},
+		{
+			...makeAssistantMessage([], false),
+			content: [
+				{
+					type: "thinking",
+					thinking: "",
+					thinkingSignature: JSON.stringify({ type: "reasoning", id: "stale", encrypted_content: "enc_stale" }),
+				},
+				{ type: "text", text: "generic assistant that should be rebuilt" },
+			],
+			providerPayload: createOpenAIResponsesHistoryPayload("openai", [{ type: "reasoning", encrypted_content: "enc_snapshot" }]),
 		},
 		{ role: "user", content: "follow-up user", timestamp: Date.now() },
 	],
@@ -265,6 +308,38 @@ describe("OpenAI responses history payload", () => {
 		expect(containsUserInputText(payload.input, "summary that should be preserved")).toBe(true);
 		expect(containsAssistantOutputText(payload.input, "generic assistant that should be rebuilt")).toBe(true);
 		expect(containsAssistantOutputText(payload.input, "Canonical assistant")).toBe(false);
+	});
+
+	it("does not replay stale thinking signatures when native replay is cold", async () => {
+		const model = getBundledModel("openai", "gpt-5-mini") as Model<"openai-responses">;
+		const providerSessionState = new Map<string, ProviderSessionState>();
+		const payload = (await captureResponsesPayload(model, resumedSameProviderWithStaleThinkingContext, providerSessionState)) as {
+			input?: unknown[];
+		};
+
+		expect(containsEncryptedReasoning(payload.input)).toBe(false);
+		expect(containsUserInputText(payload.input, "summary that should be preserved")).toBe(true);
+		expect(containsAssistantOutputText(payload.input, "generic assistant that should be rebuilt")).toBe(true);
+	});
+
+	it("preserves remote replacement history on cold openai session state", async () => {
+		const model = getBundledModel("openai", "gpt-5-mini") as Model<"openai-responses">;
+		const providerSessionState = new Map<string, ProviderSessionState>();
+		const payload = (await captureResponsesPayload(model, resumedSameProviderWithRemoteCompactionPayloadContext, providerSessionState)) as {
+			input?: unknown[];
+		};
+
+		expect(payload.input).toEqual([
+			...preservedHistoryItems,
+			{
+				type: "message",
+				role: "assistant",
+				content: [{ type: "output_text", text: "generic assistant that should be preserved", annotations: [] }],
+				status: "completed",
+				id: "msg_1",
+			},
+			{ role: "user", content: [{ type: "input_text", text: "follow-up user" }] },
+		]);
 	});
 
 	it("replays native history after the same-provider session state is warmed", async () => {

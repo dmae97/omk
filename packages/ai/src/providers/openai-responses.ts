@@ -413,10 +413,14 @@ function convertConversationMessages(
 	for (const msg of transformedMessages) {
 		if (msg.role === "user" || msg.role === "developer") {
 			const providerPayload = (msg as { providerPayload?: AssistantMessage["providerPayload"] }).providerPayload;
-			const historyItems = shouldReplayNativeHistory
-				? getOpenAIResponsesHistoryItems(providerPayload, model.provider)
-				: undefined;
-			if (historyItems) {
+			const historyItems = getOpenAIResponsesHistoryItems(providerPayload, model.provider);
+			const shouldReplayPayloadItems = shouldReplayNativeHistory
+				|| (historyItems?.some(item => {
+					if (!item || typeof item !== "object") return false;
+					const candidate = item as { type?: unknown };
+					return candidate.type === "compaction" || candidate.type === "compaction_summary";
+				}) ?? false);
+			if (historyItems && shouldReplayPayloadItems) {
 				messages.push(...sanitizeOpenAIResponsesHistoryItemsForReplay(historyItems));
 				knownCallIds = collectKnownCallIds(messages);
 				msgIndex++;
@@ -443,7 +447,7 @@ function convertConversationMessages(
 				continue;
 			}
 
-			const outputItems = convertResponsesAssistantMessage(assistantMsg, model, msgIndex, knownCallIds);
+			const outputItems = convertResponsesAssistantMessage(assistantMsg, model, msgIndex, knownCallIds, shouldReplayNativeHistory);
 			if (outputItems.length === 0) continue;
 			messages.push(...outputItems);
 		} else if (msg.role === "toolResult") {

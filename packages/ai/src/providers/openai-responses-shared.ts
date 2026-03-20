@@ -102,6 +102,7 @@ export function convertResponsesAssistantMessage<TApi extends Api>(
 	model: Model<TApi>,
 	msgIndex: number,
 	knownCallIds: Set<string>,
+	includeThinkingSignatures = true,
 ): ResponseInput {
 	const outputItems: ResponseInput = [];
 	const isDifferentModel =
@@ -109,6 +110,9 @@ export function convertResponsesAssistantMessage<TApi extends Api>(
 
 	for (const block of assistantMsg.content) {
 		if (block.type === "thinking" && assistantMsg.stopReason !== "error") {
+			if (!includeThinkingSignatures) {
+				continue;
+			}
 			if (block.thinkingSignature) {
 				outputItems.push(JSON.parse(block.thinkingSignature) as ResponseReasoningItem);
 			}
