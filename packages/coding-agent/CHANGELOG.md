@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Updated explore agent thinking level from off to med for improved reasoning
+- Simplified explore agent output schema: consolidated file references into single `ref` field with optional line ranges instead of separate `path`, `line_start`, `line_end` fields
+- Removed `code` section from explore agent output (critical code excerpts no longer extracted)
+- Removed `dependencies` section from explore agent output
+- Removed `risks` section from explore agent output
+- Removed `start_here` section from explore agent output
 
 ### Added
 
