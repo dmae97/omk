@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
+import { Effort } from "../src/model-thinking";
 import { githubCopilotModelManagerOptions } from "../src/provider-models/openai-compat";
 
 const originalFetch = global.fetch;
@@ -138,5 +139,37 @@ describe("github copilot model limits mapping", () => {
 		expect(model).toBeDefined();
 		expect(model?.contextWindow).toBe(128_000);
 		expect(model?.maxTokens).toBe(16_000);
+	});
+	it("inherits bundled GPT-5.4 mini reasoning metadata during discovery", async () => {
+		const { models } = await discoverCopilotModels({
+			data: [
+				{
+					id: "gpt-5.4-mini",
+					name: "GPT-5.4 mini",
+					context_length: 400_000,
+					max_completion_tokens: 128_000,
+					capabilities: {
+						limits: {
+							max_context_window_tokens: 400_000,
+							max_prompt_tokens: 272_000,
+							max_output_tokens: 128_000,
+						},
+					},
+				},
+			],
+		});
+
+		const model = models.find(candidate => candidate.id === "gpt-5.4-mini");
+		expect(model).toBeDefined();
+		expect(model?.api).toBe("openai-responses");
+		expect(model?.reasoning).toBe(true);
+		expect(model?.contextWindow).toBe(400_000);
+		expect(model?.maxTokens).toBe(128_000);
+		expect(model?.premiumMultiplier).toBe(0.33);
+		expect(model?.thinking).toEqual({
+			mode: "effort",
+			minLevel: Effort.Low,
+			maxLevel: Effort.XHigh,
+		});
 	});
 });

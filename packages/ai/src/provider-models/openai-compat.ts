@@ -173,13 +173,26 @@ function createBundledReferenceMap<TApi extends Api>(
 	return references;
 }
 
+function shouldReplaceGlobalReference(existing: Model<Api> | undefined, candidate: Model<Api>): boolean {
+	if (!existing) return true;
+	if (candidate.contextWindow !== existing.contextWindow) {
+		return candidate.contextWindow > existing.contextWindow;
+	}
+	if (candidate.maxTokens !== existing.maxTokens) {
+		return candidate.maxTokens > existing.maxTokens;
+	}
+	// When limits tie, prefer OpenAI as the canonical reference so generic OpenAI-family
+	// providers inherit OpenAI pricing/capabilities instead of Copilot-specific metadata.
+	return existing.provider !== "openai" && candidate.provider === "openai";
+}
+
 function createGlobalReferenceMap(): Map<string, Model<Api>> {
 	const references = new Map<string, Model<Api>>();
 	for (const provider of getBundledProviders()) {
 		for (const model of getBundledModels(provider as Parameters<typeof getBundledModels>[0])) {
 			const candidate = model as Model<Api>;
 			const existing = references.get(candidate.id);
-			if (!existing || candidate.contextWindow > existing.contextWindow) {
+			if (shouldReplaceGlobalReference(existing, candidate)) {
 				references.set(candidate.id, candidate);
 			}
 		}

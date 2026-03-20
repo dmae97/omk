@@ -181,6 +181,9 @@ describe("getCopilotPremiumMultiplier", () => {
 			0,
 		);
 		expect(
+			getCopilotPremiumMultiplier(getBundledModel("github-copilot", "gpt-5.4-mini").premiumMultiplier, "paid"),
+		).toBe(0.33);
+		expect(
 			getCopilotPremiumMultiplier(getBundledModel("github-copilot", "grok-code-fast-1").premiumMultiplier, "paid"),
 		).toBe(0.25);
 	});

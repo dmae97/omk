@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added bundled GPT-5.4 mini model metadata for OpenAI, OpenAI Codex, and GitHub Copilot, including low-to-xhigh thinking support and GitHub Copilot premium multiplier metadata
+- Added bundled GPT-5.4 nano model metadata for OpenAI and OpenAI Codex, including low-to-xhigh thinking support
+
+
 ## [13.13.2] - 2026-03-18
 ### Changed
 

@@ -296,6 +296,12 @@ function applyOpenAICatalogPolicy(model: ApiModel<Api>, parsedModel: OpenAIModel
 	// Codex models: 400K figure includes output budget; input window is 272K.
 	if (parsedModel.variant.startsWith("codex") && parsedModel.variant !== "codex-spark") {
 		model.contextWindow = 272000;
+		return;
+	}
+	// GPT-5.4 mini/nano use plain OpenAI IDs on the Codex transport, but Codex still
+	// enforces the lower prompt budget for these variants.
+	if (model.api === "openai-codex-responses" && (model.id === "gpt-5.4-mini" || model.id === "gpt-5.4-nano")) {
+		model.contextWindow = 272000;
 	}
 }
 
