@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import type { MCPReconnect } from "../src/mcp/tool-bridge";
-import { isRetriableConnectionError, MCPTool } from "../src/mcp/tool-bridge";
+import { DeferredMCPTool, isRetriableConnectionError, MCPTool } from "../src/mcp/tool-bridge";
 import type { MCPServerConnection, MCPToolCallResult, MCPTransport } from "../src/mcp/types";
+import { ToolAbortError } from "../src/tools/tool-errors";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -269,5 +270,41 @@ describe("MCPTool.execute retry on connection error", () => {
 
 		expect(result.details?.provider).toBe("orig");
 		expect(result.details?.providerName).toBe("Original");
+	});
+});
+
+describe("reconnect abort propagation", () => {
+	const noop = () => {};
+	const noCtx = {} as Parameters<MCPTool["execute"]>[3];
+	const noDeferredCtx = {} as Parameters<DeferredMCPTool["execute"]>[3];
+
+	it("throws ToolAbortError when MCPTool reconnect is aborted", async () => {
+		const failTransport = mockTransport(async () => {
+			throw new Error("ECONNRESET");
+		});
+		const { promise } = Promise.withResolvers<MCPServerConnection | null>();
+		const reconnect: MCPReconnect = async () => promise;
+
+		const tool = new MCPTool(makeConnection(failTransport), TOOL_DEF, reconnect);
+		const controller = new AbortController();
+		const pending = tool.execute("call-1", {}, noop, noCtx, controller.signal);
+		controller.abort();
+
+		await expect(pending).rejects.toBeInstanceOf(ToolAbortError);
+	});
+
+	it("throws ToolAbortError when DeferredMCPTool reconnect is aborted", async () => {
+		const getConnection = async () => {
+			throw new Error("MCP server not connected");
+		};
+		const { promise } = Promise.withResolvers<MCPServerConnection | null>();
+		const reconnect: MCPReconnect = async () => promise;
+
+		const tool = new DeferredMCPTool("test-server", TOOL_DEF, getConnection, undefined, reconnect);
+		const controller = new AbortController();
+		const pending = tool.execute("call-1", {}, noop, noDeferredCtx, controller.signal);
+		controller.abort();
+
+		await expect(pending).rejects.toBeInstanceOf(ToolAbortError);
 	});
 });

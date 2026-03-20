@@ -1,14 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-### Changed
-
-- Updated explore agent thinking level from off to med for improved reasoning
-- Simplified explore agent output schema: consolidated file references into single `ref` field with optional line ranges instead of separate `path`, `line_start`, `line_end` fields
-- Removed `code` section from explore agent output (critical code excerpts no longer extracted)
-- Removed `dependencies` section from explore agent output
-- Removed `risks` section from explore agent output
-- Removed `start_here` section from explore agent output
 
 ### Added
 
@@ -16,8 +8,20 @@
 - Tool-level reconnect: retriable connection errors (ECONNREFUSED, ECONNRESET, stale session 404/502/503) trigger automatic reconnection and single retry
 - `/mcp reconnect <name>` command for manual server recovery after extended outages
 
+### Changed
+
+- Extended transport reconnect handling to all transport types (not just HTTP/SSE), ensuring stdio and other transports trigger automatic reconnection on connection loss
+- Improved reconnect robustness by aborting retry attempts when MCP server configuration changes during reconnection sequence
+- Updated explore agent thinking level from off to med for improved reasoning
+- Simplified explore agent output schema: consolidated file references into single `ref` field with optional line ranges instead of separate `path`, `line_start`, `line_end` fields
+- Removed `code` section from explore agent output (critical code excerpts no longer extracted)
+- Removed `dependencies` section from explore agent output
+- Removed `risks` section from explore agent output
+- Removed `start_here` section from explore agent output
+
 ### Fixed
 
+- Fixed reconnect retry loop continuing after configuration changes by checking epoch before each reconnection attempt
 - `roots/list` timeout on MCP server initialization: `connectToServer` now always installs a default handler for `ping` and `roots/list`
 - Fixed resumed GitHub Copilot conversations that could fail with `401 input item does not belong to this connection` on the first follow-up after process restart ([#488](https://github.com/can1357/oh-my-pi/issues/488))
 - Fixed STT Alt+H mic cursor rendering to measure the actual microphone glyph width, preventing one-column TUI overflow crashes when the active symbol preset uses a wide icon ([#484](https://github.com/can1357/oh-my-pi/issues/484))

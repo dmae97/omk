@@ -913,10 +913,7 @@ describe("stripNewLinePrefixes", () => {
 
 	it("strips plus hashline prefixes in mixed +/ - change style", () => {
 		const lines = ["-**Storage location TBD:**", "+MW:**Storage location TBD:**"];
-		expect(stripNewLinePrefixes(lines)).toEqual([
-			"-**Storage location TBD:**",
-			"**Storage location TBD:**",
-		]);
+		expect(stripNewLinePrefixes(lines)).toEqual(["-**Storage location TBD:**", "**Storage location TBD:**"]);
 	});
 
 	it("does NOT strip hashline prefixes when any non-empty line is plain content", () => {

@@ -4,8 +4,8 @@
  * Converts MCP tool definitions to CustomTool format for the agent.
  */
 import type { AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
-import { untilAborted } from "@oh-my-pi/pi-utils";
 import { sanitizeSchemaForMCP } from "@oh-my-pi/pi-ai/utils/schema";
+import { untilAborted } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
 import type { SourceMeta } from "../capability/types";
 import type {
@@ -19,7 +19,6 @@ import { ToolAbortError, throwIfAborted } from "../tools/tool-errors";
 import { callTool } from "./client";
 import { renderMCPCall, renderMCPResult } from "./render";
 import type { MCPContent, MCPServerConnection, MCPToolCallParams, MCPToolCallResult, MCPToolDefinition } from "./types";
-
 
 /** Reconnect callback: tears down stale connection, returns new one or null. */
 export type MCPReconnect = () => Promise<MCPServerConnection | null>;
@@ -145,6 +144,14 @@ function rethrowIfAborted(error: unknown, signal?: AbortSignal): void {
 	if (signal?.aborted) throw new ToolAbortError();
 }
 
+async function reconnectWithAbort(reconnect: MCPReconnect, signal?: AbortSignal): Promise<MCPServerConnection | null> {
+	try {
+		return await untilAborted(signal, reconnect);
+	} catch (error) {
+		rethrowIfAborted(error, signal);
+		return null;
+	}
+}
 
 /**
  * Create a unique tool name for an MCP tool.
@@ -255,7 +262,7 @@ export class MCPTool implements CustomTool<TSchema, MCPToolDetails> {
 		} catch (error) {
 			rethrowIfAborted(error, signal);
 			if (this.reconnect && isRetriableConnectionError(error)) {
-				const newConn = await untilAborted(signal, this.reconnect).catch(() => null);
+				const newConn = await reconnectWithAbort(this.reconnect, signal);
 				if (newConn) {
 					// Rebind so subsequent calls on this instance use the fresh connection
 					this.connection = newConn;
@@ -359,7 +366,7 @@ export class DeferredMCPTool implements CustomTool<TSchema, MCPToolDetails> {
 			} catch (callError) {
 				rethrowIfAborted(callError, signal);
 				if (this.reconnect && isRetriableConnectionError(callError)) {
-					const newConn = await untilAborted(signal, this.reconnect).catch(() => null);
+					const newConn = await reconnectWithAbort(this.reconnect, signal);
 					if (newConn) {
 						const retryProvider = newConn._source?.provider ?? provider;
 						const retryProviderName = newConn._source?.providerName ?? providerName;
@@ -386,7 +393,7 @@ export class DeferredMCPTool implements CustomTool<TSchema, MCPToolDetails> {
 			// error ("MCP server not connected") isn't a network error from callTool.
 			rethrowIfAborted(connError, signal);
 			if (this.reconnect) {
-				const newConn = await untilAborted(signal, this.reconnect).catch(() => null);
+				const newConn = await reconnectWithAbort(this.reconnect, signal);
 				if (newConn) {
 					try {
 						const result = await callTool(newConn, this.tool.name, args, { signal });

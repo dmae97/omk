@@ -715,6 +715,14 @@ export class MCPManager {
 		// Retry with backoff — the server may still be starting up.
 		const delays = [500, 1000, 2000, 4000];
 		for (let attempt = 0; attempt <= delays.length; attempt++) {
+			if (this.#epoch !== reconnectEpoch) {
+				logger.debug("MCP reconnect aborted before attempt after configuration changed", {
+					path: `mcp:${name}`,
+					storedEpoch: reconnectEpoch,
+					currentEpoch: this.#epoch,
+				});
+				return null;
+			}
 			try {
 				const connection = await this.#connectAndWireServer(name, config, source, reconnectEpoch);
 				logger.debug("MCP reconnected", { path: `mcp:${name}`, tools: connection.tools?.length ?? 0 });
@@ -778,23 +786,20 @@ export class MCPManager {
 
 		this.#connections.set(name, connection);
 
-		// Wire auth refresh and SSE reconnect for HTTP transports
-		if (connection.transport instanceof HttpTransport) {
-			if (config.auth?.type === "oauth") {
-				connection.transport.onAuthError = async () => {
-					const refreshed = await this.#resolveAuthConfig(config, true);
-					if (refreshed.type === "http" || refreshed.type === "sse") {
-						return refreshed.headers ?? null;
-					}
-					return null;
-				};
-			}
-			connection.transport.onClose = () => {
-				logger.debug("MCP SSE stream lost, triggering reconnect", { path: `mcp:${name}` });
-				void this.reconnectServer(name);
+		// Wire auth refresh for HTTP transports, and reconnect for any transport.
+		if (connection.transport instanceof HttpTransport && config.auth?.type === "oauth") {
+			connection.transport.onAuthError = async () => {
+				const refreshed = await this.#resolveAuthConfig(config, true);
+				if (refreshed.type === "http" || refreshed.type === "sse") {
+					return refreshed.headers ?? null;
+				}
+				return null;
 			};
 		}
-
+		connection.transport.onClose = () => {
+			logger.debug("MCP transport lost, triggering reconnect", { path: `mcp:${name}` });
+			void this.reconnectServer(name);
+		};
 		try {
 			const serverTools = await listTools(connection);
 			const reconnect = () => this.reconnectServer(name);
@@ -805,10 +810,8 @@ export class MCPManager {
 			void this.#loadServerResourcesAndPrompts(name, connection);
 			return connection;
 		} catch (error) {
-			// Clean up the connection to avoid zombie SSE streams
-			if (connection.transport instanceof HttpTransport) {
-				connection.transport.onClose = undefined;
-			}
+			// Clean up the connection to avoid zombie transports
+			connection.transport.onClose = undefined;
 			await connection.transport.close().catch(() => {});
 			this.#connections.delete(name);
 			throw error;
