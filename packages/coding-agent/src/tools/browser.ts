@@ -1383,21 +1383,28 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 						dest = path.join(os.tmpdir(), `omp-sshots-${Snowflake.next()}.png`);
 					}
 					await fs.mkdir(path.dirname(dest), { recursive: true });
-					await Bun.write(dest, paramPath || screenshotDir ? buffer : resized.buffer);
+					// Full-res buffer when saving to a user-defined location; resized (API copy) for temp-only.
+					const saveFullRes = !!(paramPath || screenshotDir);
+					const savedBuffer = saveFullRes ? buffer : resized.buffer;
+					const savedMimeType = saveFullRes ? "image/png" : resized.mimeType;
+					await Bun.write(dest, savedBuffer);
 					details.screenshotPath = dest;
-					details.mimeType = resized.mimeType;
-					details.bytes = resized.buffer.length;
+					details.mimeType = savedMimeType;
+					details.bytes = savedBuffer.length;
 
-					// Show both raw bytes (saved to disk) and compressed bytes (sent to model).
-					const lines = [
-						"Screenshot captured",
-						`Format: ${resized.mimeType} (${(resized.buffer.length / 1024).toFixed(2)} KB)`,
-						`Dimensions: ${resized.width}x${resized.height}`,
-					];
+					const lines = ["Screenshot captured"];
+					if (saveFullRes) {
+						lines.push(`Saved: ${savedMimeType} (${(savedBuffer.length / 1024).toFixed(2)} KB)`);
+						lines.push(
+							`Model: ${resized.mimeType} (${(resized.buffer.length / 1024).toFixed(2)} KB, ${resized.width}x${resized.height})`,
+						);
+					} else {
+						lines.push(`Format: ${resized.mimeType} (${(resized.buffer.length / 1024).toFixed(2)} KB)`);
+						lines.push(`Dimensions: ${resized.width}x${resized.height}`);
+					}
 					if (dimensionNote) {
 						lines.push(dimensionNote);
 					}
-
 					return toolResult(details)
 						.content([
 							{ type: "text", text: lines.join("\n") },
