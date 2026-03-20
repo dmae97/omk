@@ -906,6 +906,19 @@ describe("stripNewLinePrefixes", () => {
 		expect(stripNewLinePrefixes(lines)).toEqual(["foo", "bar", "baz"]);
 	});
 
+	it("strips plus hashline prefixes when all non-empty lines carry them", () => {
+		const lines = ["+WQ:foo", "+TZ:bar", "+HX:baz"];
+		expect(stripNewLinePrefixes(lines)).toEqual(["foo", "bar", "baz"]);
+	});
+
+	it("strips plus hashline prefixes in mixed +/ - change style", () => {
+		const lines = ["-**Storage location TBD:**", "+MW:**Storage location TBD:**"];
+		expect(stripNewLinePrefixes(lines)).toEqual([
+			"-**Storage location TBD:**",
+			"**Storage location TBD:**",
+		]);
+	});
+
 	it("does NOT strip hashline prefixes when any non-empty line is plain content", () => {
 		const lines = ["1#WQ:foo", "bar", "3#HX:baz"];
 		expect(stripNewLinePrefixes(lines)).toEqual(["1#WQ:foo", "bar", "3#HX:baz"]);
