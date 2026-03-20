@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.14.0] - 2026-03-20
+
 ### Added
 
 - Auto-reconnect MCP servers on connection loss with proactive SSE stream monitoring and retry backoff
