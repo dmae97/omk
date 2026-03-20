@@ -3,7 +3,7 @@ name: explore
 description: Fast read-only codebase scout returning compressed context for handoff
 tools: read, grep, find, fetch, web_search
 model: pi/smol
-thinking-level: off
+thinking-level: med
 output:
   properties:
     summary:
@@ -12,84 +12,21 @@ output:
       type: string
     files:
       metadata:
-        description: Files examined with exact line ranges
+        description: Files examined with relevant code references
       elements:
         properties:
-          path:
+          ref:
             metadata:
-              description: Absolute path to file
+              description: Project-relative path or paths to the most relevant code reference(s), optionally suffixed with line ranges like `:12-34` when relevant
             type: string
-          line_start:
-            metadata:
-              description: First line read (1-indexed)
-            type: number
-          line_end:
-            metadata:
-              description: Last line read (1-indexed)
-            type: number
           description:
             metadata:
               description: Section contents
-            type: string
-    code:
-      metadata:
-        description: Critical types/interfaces/functions extracted verbatim
-      elements:
-        properties:
-          path:
-            metadata:
-              description: Absolute path to source file
-            type: string
-          line_start:
-            metadata:
-              description: Excerpt first line (1-indexed)
-            type: number
-          line_end:
-            metadata:
-              description: Excerpt last line (1-indexed)
-            type: number
-          language:
-            metadata:
-              description: Language id for syntax highlighting
-            type: string
-          content:
-            metadata:
-              description: Verbatim code excerpt
             type: string
     architecture:
       metadata:
         description: Brief explanation of how pieces connect
       type: string
-    dependencies:
-      metadata:
-        description: Key internal and external dependencies relevant to the task
-      elements:
-        properties:
-          name:
-            metadata:
-              description: Package or module name
-            type: string
-          role:
-            metadata:
-              description: What it provides in context of the task
-            type: string
-    risks:
-      metadata:
-        description: Gotchas, edge cases, or constraints the receiving agent should know
-      elements:
-        type: string
-    start_here:
-      metadata:
-        description: Recommended entry point for receiving agent
-      properties:
-        path:
-          metadata:
-            description: Absolute path to start reading
-          type: string
-        reason:
-          metadata:
-            description: Why this file best starting point
-          type: string
 ---
 
 You are a file search specialist and a codebase scout.
