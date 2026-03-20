@@ -14,6 +14,7 @@ import {
 	isSpecialServiceTier,
 	type MessageAttribution,
 	type Model,
+	type ProviderSessionState,
 	type ServiceTier,
 	type StreamFunction,
 	type StreamOptions,
@@ -74,6 +75,45 @@ export interface OpenAIResponsesOptions extends StreamOptions {
 	strictResponsesPairing?: boolean;
 }
 
+const OPENAI_RESPONSES_PROVIDER_SESSION_STATE_PREFIX = "openai-responses:";
+
+interface OpenAIResponsesProviderSessionState extends ProviderSessionState {
+	nativeHistoryReplayWarmed: boolean;
+}
+
+function createOpenAIResponsesProviderSessionState(): OpenAIResponsesProviderSessionState {
+	const state: OpenAIResponsesProviderSessionState = {
+		nativeHistoryReplayWarmed: false,
+		close: () => {
+			state.nativeHistoryReplayWarmed = false;
+		},
+	};
+	return state;
+}
+
+function getOpenAIResponsesProviderSessionStateKey(model: Model<"openai-responses">): string {
+	return `${OPENAI_RESPONSES_PROVIDER_SESSION_STATE_PREFIX}${model.provider}`;
+}
+
+function getOpenAIResponsesProviderSessionState(
+	model: Model<"openai-responses">,
+	providerSessionState: Map<string, ProviderSessionState> | undefined,
+): OpenAIResponsesProviderSessionState | undefined {
+	if (!providerSessionState) return undefined;
+	const key = getOpenAIResponsesProviderSessionStateKey(model);
+	const existing = providerSessionState.get(key) as OpenAIResponsesProviderSessionState | undefined;
+	if (existing) return existing;
+	const created = createOpenAIResponsesProviderSessionState();
+	providerSessionState.set(key, created);
+	return created;
+}
+
+function canReplayOpenAIResponsesNativeHistory(
+	providerSessionState: OpenAIResponsesProviderSessionState | undefined,
+): boolean {
+	return providerSessionState?.nativeHistoryReplayWarmed ?? true;
+}
+
 type OpenAIResponsesSamplingParams = ResponseCreateParamsStreaming & {
 	top_p?: number;
 	top_k?: number;
@@ -126,7 +166,8 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 				options?.headers,
 				options?.initiatorOverride,
 			);
-			const { params } = buildParams(model, context, options);
+			const providerSessionState = getOpenAIResponsesProviderSessionState(model, options?.providerSessionState);
+			const { params } = buildParams(model, context, options, providerSessionState);
 			const requestAbortController = new AbortController();
 			const requestSignal = options?.signal
 				? AbortSignal.any([options.signal, requestAbortController.signal])
@@ -174,6 +215,7 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 			}
 
 			output.providerPayload = createOpenAIResponsesHistoryPayload(model.provider, nativeOutputItems);
+			if (providerSessionState) providerSessionState.nativeHistoryReplayWarmed = true;
 
 			output.duration = Date.now() - startTime;
 			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
@@ -246,12 +288,18 @@ function createClient(
 function buildParams(
 	model: Model<"openai-responses">,
 	context: Context,
-	options?: OpenAIResponsesOptions,
+	options: OpenAIResponsesOptions | undefined,
+	providerSessionState: OpenAIResponsesProviderSessionState | undefined,
 ): { conversationMessages: ResponseInput; params: OpenAIResponsesSamplingParams } {
 	const strictResponsesPairing =
 		options?.strictResponsesPairing ??
 		(isAzureOpenAIBaseUrl(model.baseUrl ?? "") || model.provider === "github-copilot");
-	const conversationMessages = convertConversationMessages(model, context, strictResponsesPairing);
+	const conversationMessages = convertConversationMessages(
+		model,
+		context,
+		strictResponsesPairing,
+		providerSessionState,
+	);
 	const messages: ResponseInput = [...conversationMessages];
 
 	if (context.systemPrompt) {
@@ -354,16 +402,20 @@ function convertConversationMessages(
 	model: Model<"openai-responses">,
 	context: Context,
 	strictResponsesPairing: boolean,
+	providerSessionState: OpenAIResponsesProviderSessionState | undefined,
 ): ResponseInput {
 	const messages: ResponseInput = [];
 	let knownCallIds = new Set<string>();
+	const shouldReplayNativeHistory = canReplayOpenAIResponsesNativeHistory(providerSessionState);
 	const transformedMessages = transformMessages(context.messages, model, normalizeResponsesToolCallIdForTransform);
 
 	let msgIndex = 0;
 	for (const msg of transformedMessages) {
 		if (msg.role === "user" || msg.role === "developer") {
 			const providerPayload = (msg as { providerPayload?: AssistantMessage["providerPayload"] }).providerPayload;
-			const historyItems = getOpenAIResponsesHistoryItems(providerPayload, model.provider);
+			const historyItems = shouldReplayNativeHistory
+				? getOpenAIResponsesHistoryItems(providerPayload, model.provider)
+				: undefined;
 			if (historyItems) {
 				messages.push(...sanitizeOpenAIResponsesHistoryItemsForReplay(historyItems));
 				knownCallIds = collectKnownCallIds(messages);
@@ -375,11 +427,9 @@ function convertConversationMessages(
 			messages.push({ role: "user", content });
 		} else if (msg.role === "assistant") {
 			const assistantMsg = msg as AssistantMessage;
-			const providerPayload = getOpenAIResponsesHistoryPayload(
-				assistantMsg.providerPayload,
-				model.provider,
-				assistantMsg.provider,
-			);
+			const providerPayload = shouldReplayNativeHistory
+				? getOpenAIResponsesHistoryPayload(assistantMsg.providerPayload, model.provider, assistantMsg.provider)
+				: undefined;
 			const historyItems = providerPayload?.items;
 			if (historyItems) {
 				const sanitizedHistoryItems = sanitizeOpenAIResponsesHistoryItemsForReplay(historyItems);

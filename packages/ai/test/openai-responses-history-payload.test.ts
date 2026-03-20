@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { getBundledModel } from "@oh-my-pi/pi-ai/models";
 import { streamOpenAICodexResponses } from "@oh-my-pi/pi-ai/providers/openai-codex-responses";
 import { streamOpenAIResponses } from "@oh-my-pi/pi-ai/providers/openai-responses";
-import type { Context, Model } from "@oh-my-pi/pi-ai/types";
+import type { Context, Model, ProviderSessionState } from "@oh-my-pi/pi-ai/types";
 import { createOpenAIResponsesHistoryPayload, truncateResponseItemId } from "../src/utils";
 
 function createAbortedSignal(): AbortSignal {
@@ -71,11 +71,61 @@ const codexToCopilotContext: Context = {
 	],
 };
 
-function captureResponsesPayload(model: Model<"openai-responses">, context: Context): Promise<unknown> {
+const resumedSameProviderContext: Context = {
+	messages: [
+		{
+			role: "user",
+			content: "summary that should be preserved",
+			providerPayload: createOpenAIResponsesHistoryPayload("openai", preservedHistoryItems, false),
+			timestamp: Date.now(),
+		},
+		{
+			...makeAssistantMessage([{ type: "reasoning", encrypted_content: "enc_123" }, ...snapshotHistoryItems]),
+			content: [{ type: "text", text: "generic assistant that should be rebuilt" }],
+		},
+		{ role: "user", content: "follow-up user", timestamp: Date.now() },
+	],
+};
+
+const resumedCopilotSameProviderContext: Context = {
+	messages: [
+		{
+			role: "user",
+			content: "summary that should be preserved",
+			providerPayload: createOpenAIResponsesHistoryPayload("github-copilot", preservedHistoryItems, false),
+			timestamp: Date.now(),
+		},
+		{
+			...makeAssistantMessage(
+				[{ type: "reasoning", encrypted_content: "enc_123" }, ...snapshotHistoryItems],
+				false,
+				"github-copilot",
+				"gpt-5.4",
+			),
+			content: [{ type: "text", text: "generic assistant that should be rebuilt" }],
+		},
+		{ role: "user", content: "follow-up user", timestamp: Date.now() },
+	],
+};
+
+function markResponsesProviderSessionStateWarmed(providerSessionState: Map<string, ProviderSessionState>): void {
+	const state = providerSessionState.values().next().value as
+		| (ProviderSessionState & { nativeHistoryReplayWarmed: boolean })
+		| undefined;
+	if (!state) throw new Error("Expected OpenAI Responses provider session state");
+	state.nativeHistoryReplayWarmed = true;
+}
+
+function captureResponsesPayload(
+	model: Model<"openai-responses">,
+	context: Context,
+	providerSessionState?: Map<string, ProviderSessionState>,
+): Promise<unknown> {
 	const { promise, resolve } = Promise.withResolvers<unknown>();
 	streamOpenAIResponses(model, context, {
 		apiKey: "test-key",
 		signal: createAbortedSignal(),
+		providerSessionState,
 		onPayload: payload => resolve(payload),
 	});
 	return promise;
@@ -114,13 +164,13 @@ const incrementalItems2 = [
 function makeAssistantMessage(
 	items: Record<string, unknown>[],
 	incremental = false,
-	provider: "openai" | "openai-codex" = "openai",
-	model = provider === "openai" ? "gpt-5-mini" : "gpt-5.2-codex",
+	provider: "openai" | "openai-codex" | "github-copilot" = "openai",
+	model = provider === "openai-codex" ? "gpt-5.2-codex" : provider === "github-copilot" ? "gpt-5.4" : "gpt-5-mini",
 ) {
 	return {
 		role: "assistant" as const,
 		content: [{ type: "text" as const, text: "ignored" }],
-		api: provider === "openai" ? ("openai-responses" as const) : ("openai-codex-responses" as const),
+		api: provider === "openai-codex" ? ("openai-codex-responses" as const) : ("openai-responses" as const),
 		provider,
 		model,
 		usage: {
@@ -176,6 +226,19 @@ function findResponsesInputItem(input: unknown[] | undefined, type: string): Rec
 	}) as Record<string, unknown> | undefined;
 }
 
+function containsUserInputText(input: unknown[] | undefined, text: string): boolean {
+	return (input ?? []).some(item => {
+		if (!item || typeof item !== "object") return false;
+		const candidate = item as { role?: unknown; content?: unknown };
+		if (candidate.role !== "user" || !Array.isArray(candidate.content)) return false;
+		return candidate.content.some(part => {
+			if (!part || typeof part !== "object") return false;
+			const content = part as { type?: unknown; text?: unknown };
+			return content.type === "input_text" && content.text === text;
+		});
+	});
+}
+
 describe("OpenAI responses history payload", () => {
 	it("inlines preserved replacement history for openai-responses", async () => {
 		const model = getBundledModel("openai", "gpt-5-mini") as Model<"openai-responses">;
@@ -190,6 +253,50 @@ describe("OpenAI responses history payload", () => {
 			...snapshotHistoryItems,
 			{ role: "user", content: [{ type: "input_text", text: "follow-up user" }] },
 		]);
+	});
+
+	it("falls back to rebuilt history on resumed same-provider sessions with fresh session state", async () => {
+		const model = getBundledModel("openai", "gpt-5-mini") as Model<"openai-responses">;
+		const providerSessionState = new Map<string, ProviderSessionState>();
+		const payload = (await captureResponsesPayload(model, resumedSameProviderContext, providerSessionState)) as {
+			input?: unknown[];
+		};
+		expect(containsEncryptedReasoning(payload.input)).toBe(false);
+		expect(containsUserInputText(payload.input, "summary that should be preserved")).toBe(true);
+		expect(containsAssistantOutputText(payload.input, "generic assistant that should be rebuilt")).toBe(true);
+		expect(containsAssistantOutputText(payload.input, "Canonical assistant")).toBe(false);
+	});
+
+	it("replays native history after the same-provider session state is warmed", async () => {
+		const model = getBundledModel("openai", "gpt-5-mini") as Model<"openai-responses">;
+		const providerSessionState = new Map<string, ProviderSessionState>();
+		await captureResponsesPayload(model, resumedSameProviderContext, providerSessionState);
+		markResponsesProviderSessionStateWarmed(providerSessionState);
+		const payload = (await captureResponsesPayload(model, resumedSameProviderContext, providerSessionState)) as {
+			input?: unknown[];
+		};
+		expect(payload.input).toEqual([
+			{ type: "reasoning", encrypted_content: "enc_123" },
+			...snapshotHistoryItems,
+			{ role: "user", content: [{ type: "input_text", text: "follow-up user" }] },
+		]);
+	});
+
+	it("does not warm GitHub Copilot replay when only OpenAI replay state is warmed", async () => {
+		const openAiModel = getBundledModel("openai", "gpt-5-mini") as Model<"openai-responses">;
+		const copilotModel = getBundledModel("github-copilot", "gpt-5.4") as Model<"openai-responses">;
+		const providerSessionState = new Map<string, ProviderSessionState>();
+		await captureResponsesPayload(openAiModel, resumedSameProviderContext, providerSessionState);
+		markResponsesProviderSessionStateWarmed(providerSessionState);
+		const payload = (await captureResponsesPayload(
+			copilotModel,
+			resumedCopilotSameProviderContext,
+			providerSessionState,
+		)) as { input?: unknown[] };
+		expect(containsEncryptedReasoning(payload.input)).toBe(false);
+		expect(containsUserInputText(payload.input, "summary that should be preserved")).toBe(true);
+		expect(containsAssistantOutputText(payload.input, "generic assistant that should be rebuilt")).toBe(true);
+		expect(containsAssistantOutputText(payload.input, "Canonical assistant")).toBe(false);
 	});
 
 	it("prefers assistant native history snapshots for openai-codex-responses", async () => {
