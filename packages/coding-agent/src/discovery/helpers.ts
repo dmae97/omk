@@ -3,7 +3,7 @@ import * as path from "node:path";
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { FileType, glob } from "@oh-my-pi/pi-natives";
 import { CONFIG_DIR_NAME, getConfigDirName, tryParseJson } from "@oh-my-pi/pi-utils";
-import { readFile } from "../capability/fs";
+import { readDirEntries, readFile } from "../capability/fs";
 import { parseRuleConditionAndScope, type Rule, type RuleFrontmatter } from "../capability/rule";
 import type { Skill, SkillFrontmatter } from "../capability/skill";
 import type { LoadContext, LoadResult, SourceMeta } from "../capability/types";
@@ -529,7 +529,14 @@ export async function discoverExtensionModulePaths(_ctx: LoadContext, dir: strin
 		subdirsWithDeclaredExtensions.add(subdir);
 		const subdirPath = path.join(dir, subdir);
 		for (const extPath of declaredExtensions) {
-			const resolvedExtPath = path.resolve(subdirPath, extPath);
+			let resolvedExtPath = path.resolve(subdirPath, extPath);
+			const entries = await readDirEntries(resolvedExtPath);
+			if (entries.length !== 0) {
+				const pluginFilePath = entries.find(
+					e => e.isFile() && (e.name === "index.ts" || e.name === "index.js"),
+				)?.name;
+				resolvedExtPath = pluginFilePath ? path.join(resolvedExtPath, pluginFilePath) : resolvedExtPath;
+			}
 			const content = await readFile(resolvedExtPath);
 			if (content !== null) {
 				discovered.add(resolvedExtPath);
