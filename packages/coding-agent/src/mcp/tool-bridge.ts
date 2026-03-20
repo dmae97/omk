@@ -4,6 +4,7 @@
  * Converts MCP tool definitions to CustomTool format for the agent.
  */
 import type { AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
+import { untilAborted } from "@oh-my-pi/pi-utils";
 import { sanitizeSchemaForMCP } from "@oh-my-pi/pi-ai/utils/schema";
 import type { TSchema } from "@sinclair/typebox";
 import type { SourceMeta } from "../capability/types";
@@ -17,23 +18,8 @@ import type { Theme } from "../modes/theme/theme";
 import { ToolAbortError, throwIfAborted } from "../tools/tool-errors";
 import { callTool } from "./client";
 import { renderMCPCall, renderMCPResult } from "./render";
-import type { MCPContent, MCPServerConnection, MCPToolCallResult, MCPToolDefinition } from "./types";
+import type { MCPContent, MCPServerConnection, MCPToolCallParams, MCPToolCallResult, MCPToolDefinition } from "./types";
 
-function withAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
-	if (!signal) return promise;
-	if (signal.aborted) {
-		return Promise.reject(signal.reason instanceof Error ? signal.reason : new ToolAbortError());
-	}
-
-	const { promise: wrapped, resolve, reject } = Promise.withResolvers<T>();
-	const onAbort = () => {
-		reject(signal.reason instanceof Error ? signal.reason : new ToolAbortError());
-	};
-
-	signal.addEventListener("abort", onAbort, { once: true });
-	promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
-	return wrapped;
-}
 
 /** Reconnect callback: tears down stale connection, returns new one or null. */
 export type MCPReconnect = () => Promise<MCPServerConnection | null>;
@@ -61,6 +47,15 @@ export function isRetriableConnectionError(error: unknown): boolean {
 	// Stale session (server restarted, old session ID is gone)
 	if (/^http (404|502|503):/.test(msg)) return true;
 	return RETRIABLE_PATTERNS.some(p => msg.includes(p));
+}
+
+type MCPToolArgs = NonNullable<MCPToolCallParams["arguments"]>;
+
+function normalizeToolArgs(value: unknown): MCPToolArgs {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) {
+		return {};
+	}
+	return value as MCPToolArgs;
 }
 
 /** Details included in MCP tool results for rendering */
@@ -150,6 +145,7 @@ function rethrowIfAborted(error: unknown, signal?: AbortSignal): void {
 	if (signal?.aborted) throw new ToolAbortError();
 }
 
+
 /**
  * Create a unique tool name for an MCP tool.
  *
@@ -234,11 +230,11 @@ export class MCPTool implements CustomTool<TSchema, MCPToolDetails> {
 	}
 
 	renderCall(args: unknown, _options: RenderResultOptions, theme: Theme) {
-		return renderMCPCall((args ?? {}) as Record<string, unknown>, theme, this.label);
+		return renderMCPCall(normalizeToolArgs(args), theme, this.label);
 	}
 
 	renderResult(result: CustomToolResult<MCPToolDetails>, options: RenderResultOptions, theme: Theme, args?: unknown) {
-		return renderMCPResult(result, options, theme, (args ?? {}) as Record<string, unknown>);
+		return renderMCPResult(result, options, theme, normalizeToolArgs(args));
 	}
 
 	async execute(
@@ -249,7 +245,7 @@ export class MCPTool implements CustomTool<TSchema, MCPToolDetails> {
 		signal?: AbortSignal,
 	): Promise<CustomToolResult<MCPToolDetails>> {
 		throwIfAborted(signal);
-		const args = params as Record<string, unknown>;
+		const args = normalizeToolArgs(params);
 		const provider = this.connection._source?.provider;
 		const providerName = this.connection._source?.providerName;
 
@@ -259,7 +255,7 @@ export class MCPTool implements CustomTool<TSchema, MCPToolDetails> {
 		} catch (error) {
 			rethrowIfAborted(error, signal);
 			if (this.reconnect && isRetriableConnectionError(error)) {
-				const newConn = await withAbort(this.reconnect(), signal).catch(() => null);
+				const newConn = await untilAborted(signal, this.reconnect).catch(() => null);
 				if (newConn) {
 					// Rebind so subsequent calls on this instance use the fresh connection
 					this.connection = newConn;
@@ -329,11 +325,11 @@ export class DeferredMCPTool implements CustomTool<TSchema, MCPToolDetails> {
 	}
 
 	renderCall(args: unknown, _options: RenderResultOptions, theme: Theme) {
-		return renderMCPCall((args ?? {}) as Record<string, unknown>, theme, this.label);
+		return renderMCPCall(normalizeToolArgs(args), theme, this.label);
 	}
 
 	renderResult(result: CustomToolResult<MCPToolDetails>, options: RenderResultOptions, theme: Theme, args?: unknown) {
-		return renderMCPResult(result, options, theme, (args ?? {}) as Record<string, unknown>);
+		return renderMCPResult(result, options, theme, normalizeToolArgs(args));
 	}
 
 	async execute(
@@ -344,12 +340,12 @@ export class DeferredMCPTool implements CustomTool<TSchema, MCPToolDetails> {
 		signal?: AbortSignal,
 	): Promise<CustomToolResult<MCPToolDetails>> {
 		throwIfAborted(signal);
-		const args = params as Record<string, unknown>;
+		const args = normalizeToolArgs(params);
 		const provider = this.#fallbackProvider;
 		const providerName = this.#fallbackProviderName;
 
 		try {
-			const connection = await withAbort(this.getConnection(), signal);
+			const connection = await untilAborted(signal, () => this.getConnection());
 			throwIfAborted(signal);
 			try {
 				const result = await callTool(connection, this.tool.name, args, { signal });
@@ -363,7 +359,7 @@ export class DeferredMCPTool implements CustomTool<TSchema, MCPToolDetails> {
 			} catch (callError) {
 				rethrowIfAborted(callError, signal);
 				if (this.reconnect && isRetriableConnectionError(callError)) {
-					const newConn = await withAbort(this.reconnect(), signal).catch(() => null);
+					const newConn = await untilAborted(signal, this.reconnect).catch(() => null);
 					if (newConn) {
 						const retryProvider = newConn._source?.provider ?? provider;
 						const retryProviderName = newConn._source?.providerName ?? providerName;
@@ -390,7 +386,7 @@ export class DeferredMCPTool implements CustomTool<TSchema, MCPToolDetails> {
 			// error ("MCP server not connected") isn't a network error from callTool.
 			rethrowIfAborted(connError, signal);
 			if (this.reconnect) {
-				const newConn = await withAbort(this.reconnect(), signal).catch(() => null);
+				const newConn = await untilAborted(signal, this.reconnect).catch(() => null);
 				if (newConn) {
 					try {
 						const result = await callTool(newConn, this.tool.name, args, { signal });
