@@ -1190,20 +1190,6 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	resolved = true;
 	listenerController.abort();
 
-	// Emit lifecycle end event
-	if (options.eventBus) {
-		const lifecycleStatus = done.aborted ? "aborted" : done.exitCode === 0 ? "completed" : "failed";
-		options.eventBus.emit(TASK_SUBAGENT_LIFECYCLE_CHANNEL, {
-			id,
-			agent: agent.name,
-			agentSource: agent.source,
-			description: options.description,
-			status: lifecycleStatus,
-			sessionFile: subtaskSessionFile,
-			index,
-		});
-	}
-
 	if (progressTimeoutId) {
 		clearTimeout(progressTimeoutId);
 		progressTimeoutId = null;
@@ -1266,6 +1252,19 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 		: undefined;
 	progress.status = wasAborted ? "aborted" : exitCode === 0 ? "completed" : "failed";
 	scheduleProgress(true);
+
+	// Emit lifecycle end event after finalization so submit_result status is reflected
+	if (options.eventBus) {
+		options.eventBus.emit(TASK_SUBAGENT_LIFECYCLE_CHANNEL, {
+			id,
+			agent: agent.name,
+			agentSource: agent.source,
+			description: options.description,
+			status: progress.status as "completed" | "failed" | "aborted",
+			sessionFile: subtaskSessionFile,
+			index,
+		});
+	}
 
 	return {
 		index,

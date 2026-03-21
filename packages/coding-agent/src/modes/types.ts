@@ -209,6 +209,7 @@ export interface InteractiveModeContext {
 	showHookConfirm(title: string, message: string): Promise<boolean>;
 	showDebugSelector(): void;
 	showSessionObserver(): void;
+	resetObserverRegistry(): void;
 
 	// Input handling
 	handleCtrlC(): void;

@@ -68,6 +68,12 @@ export class SessionObserverRegistry {
 		return count;
 	}
 
+	/** Clear all tracked sessions (e.g. on session switch). Keeps EventBus subscriptions and listeners. */
+	resetSessions(): void {
+		this.#sessions.clear();
+		this.#notifyListeners();
+	}
+
 	dispose(): void {
 		for (const unsub of this.#eventBusUnsubscribers) unsub();
 		this.#eventBusUnsubscribers = [];

@@ -17,7 +17,7 @@ import type { AssistantMessage, ToolResultMessage } from "@oh-my-pi/pi-ai";
 import { Container, Markdown, matchesKey, type SelectItem, SelectList, Spacer, Text } from "@oh-my-pi/pi-tui";
 import { formatDuration, formatNumber, logger } from "@oh-my-pi/pi-utils";
 import type { KeyId } from "../../config/keybindings";
-import type { FileEntry, SessionMessageEntry } from "../../session/session-manager";
+import type { SessionMessageEntry } from "../../session/session-manager";
 import { parseSessionEntries } from "../../session/session-manager";
 import { replaceTabs, shortenPath, truncateToWidth } from "../../tools/render-utils";
 import type { ObservableSession, SessionObserverRegistry } from "../session-observer-registry";
@@ -41,6 +41,8 @@ export class SessionObserverOverlayComponent extends Container {
 	#viewerContainer: Container;
 	#selectedSessionId?: string;
 	#observeKeys: KeyId[];
+	/** Cached parsed transcript per session file to avoid reparsing on every refresh */
+	#transcriptCache?: { path: string; bytesRead: number; entries: SessionMessageEntry[] };
 
 	constructor(registry: SessionObserverRegistry, onDone: () => void, observeKeys: KeyId[]) {
 		super();
@@ -170,6 +172,37 @@ export class SessionObserverOverlayComponent extends Container {
 		c.addChild(new DynamicBorder());
 	}
 
+	/** Incrementally read and parse the session JSONL, caching already-parsed entries. */
+	#loadTranscript(sessionFile: string): SessionMessageEntry[] | null {
+		// Invalidate cache if session file changed (e.g. switched to different subagent)
+		if (this.#transcriptCache && this.#transcriptCache.path !== sessionFile) {
+			this.#transcriptCache = undefined;
+		}
+
+		const fromByte = this.#transcriptCache?.bytesRead ?? 0;
+		const result = readFileIncremental(sessionFile, fromByte);
+		if (!result) {
+			logger.debug("Session observer: failed to read session file", { path: sessionFile });
+			return this.#transcriptCache?.entries ?? null;
+		}
+
+		if (!this.#transcriptCache) {
+			this.#transcriptCache = { path: sessionFile, bytesRead: 0, entries: [] };
+		}
+
+		// Parse only new bytes
+		if (result.text.length > 0) {
+			const newEntries = parseSessionEntries(result.text);
+			for (const entry of newEntries) {
+				if (entry.type === "message") {
+					this.#transcriptCache.entries.push(entry as SessionMessageEntry);
+				}
+			}
+		}
+		this.#transcriptCache.bytesRead = result.newSize;
+		return this.#transcriptCache.entries;
+	}
+
 	#renderSessionTranscript(session: ObservableSession): void {
 		const c = this.#viewerContainer;
 
@@ -178,26 +211,11 @@ export class SessionObserverOverlayComponent extends Container {
 			return;
 		}
 
-		let entries: FileEntry[];
-		try {
-			const _file = Bun.file(session.sessionFile);
-			// Use synchronous read since we're in a render path
-			const text = readFileSync(session.sessionFile);
-			if (!text) {
-				c.addChild(new Text(theme.fg("dim", "Session file is empty."), 1, 0));
-				return;
-			}
-			entries = parseSessionEntries(text);
-		} catch (err) {
-			const msg = err instanceof Error ? err.message : String(err);
-			logger.debug("Session observer: failed to read session file", { path: session.sessionFile, error: msg });
+		const messageEntries = this.#loadTranscript(session.sessionFile);
+		if (!messageEntries) {
 			c.addChild(new Text(theme.fg("dim", "Unable to read session file."), 1, 0));
 			return;
 		}
-
-		// Filter to message entries and render them
-		const messageEntries = entries.filter((e): e is SessionMessageEntry => e.type === "message");
-
 		if (messageEntries.length === 0) {
 			c.addChild(new Text(theme.fg("dim", "No messages yet."), 1, 0));
 			return;
@@ -416,13 +434,26 @@ export class SessionObserverOverlayComponent extends Container {
 	}
 }
 
-// Sync read for render path — avoid async in component rendering
+// Sync helpers for render path — avoid async in component rendering
 import * as fs from "node:fs";
 
-function readFileSync(filePath: string): string {
+/**
+ * Read new bytes from a file starting at the given byte offset.
+ * Returns the new text and updated file size, or null on error.
+ */
+function readFileIncremental(filePath: string, fromByte: number): { text: string; newSize: number } | null {
 	try {
-		return fs.readFileSync(filePath, "utf-8");
+		const stat = fs.statSync(filePath);
+		if (stat.size <= fromByte) return { text: "", newSize: stat.size };
+		const buf = Buffer.alloc(stat.size - fromByte);
+		const fd = fs.openSync(filePath, "r");
+		try {
+			fs.readSync(fd, buf, 0, buf.length, fromByte);
+		} finally {
+			fs.closeSync(fd);
+		}
+		return { text: buf.toString("utf-8"), newSize: stat.size };
 	} catch {
-		return "";
+		return null;
 	}
 }
