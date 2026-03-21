@@ -1,6 +1,16 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Updated thinking configuration format from `levels` array to `minLevel` and `maxLevel` properties for improved clarity
+- Corrected context window from 400000 to 272000 tokens for GPT-5.4 mini and nano variants on Codex transport
+- Normalized GPT-5.4 variant priority handling to use parsed variant instead of special-casing raw model IDs
+- Added support for `mini` variant in OpenAI model parsing regex
+
+### Fixed
+
+- Fixed inconsistent thinking level configuration across multiple model definitions
 
 ## [13.14.0] - 2026-03-20
 

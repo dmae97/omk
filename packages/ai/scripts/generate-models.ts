@@ -304,9 +304,6 @@ async function generateModels() {
 		}
 	}
 
-	applyGeneratedModelPolicies(allModels);
-	linkSparkPromotionTargets(allModels);
-
 	// Merge previous models.json entries as fallback for any provider/model
 	// not fetched dynamically. This replaces all hardcoded fallback lists —
 	// static-only providers (vertex, gemini-cli), auth-gated providers when
@@ -326,6 +323,8 @@ async function generateModels() {
 
 	allModels = applyGlobalModelsDevFallback(allModels, modelsDevModels);
 	allModels = applyPremiumMultiplierOverrides(allModels);
+	applyGeneratedModelPolicies(allModels);
+	linkSparkPromotionTargets(allModels);
 
 	// Group by provider and sort each provider's models
 	const providers: Record<string, Record<string, Model>> = {};

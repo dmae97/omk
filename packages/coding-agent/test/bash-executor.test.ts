@@ -248,10 +248,15 @@ describe("executeBash", () => {
 		// Truncated output should be within the spill threshold
 		expect(result.outputBytes).toBeLessThanOrEqual(DEFAULT_MAX_BYTES);
 
-		// The tail of the output should contain numbers near the end of the range.
-		// The exact last number may be split across a truncation boundary, so
-		// check for a number within the last 1000 lines.
-		expect(result.output).toContain(String(lineCount - 500));
+		// The tail should still contain numeric values near the end of the range.
+		// BSD `seq` on macOS formats large numbers in scientific notation, so parse
+		// the final lines numerically instead of matching one exact decimal string.
+		const tailValues = result.output
+			.split("\n")
+			.slice(-1000)
+			.map(line => Number(line.trim()))
+			.filter(Number.isFinite);
+		expect(tailValues.some(value => value >= lineCount - 500 && value <= lineCount)).toBe(true);
 
 		// With 64KB read buffer, ~40MB should produce ~600 chunks, not 5M.
 		// Allow generous headroom but ensure it's orders of magnitude below lineCount.

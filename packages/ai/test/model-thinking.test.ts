@@ -207,6 +207,19 @@ describe("generated model policies", () => {
 				contextWindow: 400000,
 				maxTokens: 32000,
 			},
+			{
+				id: "gpt-5.4-mini",
+				name: "GPT-5.4 mini",
+				api: "openai-codex-responses",
+				provider: "openai-codex",
+				baseUrl: "https://example.com",
+				reasoning: true,
+				input: ["text"],
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+				contextWindow: 400000,
+				maxTokens: 32000,
+				priority: 2,
+			},
 		];
 
 		applyGeneratedModelPolicies(models);
@@ -227,6 +240,8 @@ describe("generated model policies", () => {
 		expect(models[1]?.cost.cacheWrite).toBe(6.25);
 		expect(models[1]?.contextWindow).toBe(1000000);
 		expect(models[2]?.contextWindow).toBe(272000);
+		expect(models[3]?.contextWindow).toBe(272000);
+		expect(models[3]?.priority).toBe(1);
 	});
 
 	it("links spark variants to their base models", () => {

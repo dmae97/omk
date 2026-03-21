@@ -40,7 +40,13 @@ type SemVer = {
 
 type GeminiKind = "pro" | "flash";
 type AnthropicKind = "opus" | "sonnet";
-type OpenAIVariant = "base" | "codex" | "codex-max" | "codex-mini" | "codex-spark" | "max" | "nano";
+type OpenAIVariant = "base" | "codex" | "codex-max" | "codex-mini" | "codex-spark" | "mini" | "max" | "nano";
+
+const CODEX_GPT_5_4_PRIORITY_BY_VARIANT: Partial<Record<OpenAIVariant, number>> = {
+	base: 0,
+	mini: 1,
+	nano: 2,
+};
 
 interface GeminiModel {
 	family: "gemini";
@@ -299,9 +305,17 @@ function applyOpenAICatalogPolicy(model: ApiModel<Api>, parsedModel: OpenAIModel
 		return;
 	}
 	// GPT-5.4 mini/nano use plain OpenAI IDs on the Codex transport, but Codex still
-	// enforces the lower prompt budget for these variants.
-	if (model.api === "openai-codex-responses" && (model.id === "gpt-5.4-mini" || model.id === "gpt-5.4-nano")) {
-		model.contextWindow = 272000;
+	// enforces the lower prompt budget for these variants. Codex discovery can also
+	// report inconsistent priorities for the GPT-5.4 family, so normalize by parsed
+	// variant instead of special-casing raw model ids.
+	if (model.api === "openai-codex-responses" && semverEqual(parsedModel.version, "5.4")) {
+		const normalizedPriority = CODEX_GPT_5_4_PRIORITY_BY_VARIANT[parsedModel.variant];
+		if (normalizedPriority !== undefined) {
+			model.priority = normalizedPriority;
+		}
+		if (parsedModel.variant === "mini" || parsedModel.variant === "nano") {
+			model.contextWindow = 272000;
+		}
 	}
 }
 
@@ -489,7 +503,7 @@ function parseAnthropicModel(modelId: string): AnthropicModel | null {
 }
 
 function parseOpenAIModel(modelId: string): OpenAIModel | null {
-	const match = /gpt-(\d+(?:\.\d+){0,2})(?:-(codex-spark|codex-mini|codex-max|codex|max|nano))?\b/.exec(modelId);
+	const match = /gpt-(\d+(?:\.\d+){0,2})(?:-(codex-spark|codex-mini|codex-max|codex|mini|max|nano))?\b/.exec(modelId);
 	if (!match) {
 		return null;
 	}

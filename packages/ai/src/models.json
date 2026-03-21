@@ -3058,14 +3058,9 @@
 			"contextWindow": 1000000,
 			"maxTokens": 64000,
 			"thinking": {
-				"mode": "budget",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high",
-					"xhigh"
-				]
+				"mode": "anthropic-budget-effort",
+				"minLevel": "minimal",
+				"maxLevel": "xhigh"
 			}
 		},
 		"openai/gpt-4": {
@@ -3812,7 +3807,7 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "effort",
@@ -3862,7 +3857,7 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "effort",
@@ -3931,7 +3926,7 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "effort",
@@ -4114,7 +4109,7 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "effort",
@@ -4483,12 +4478,12 @@
 				"Editor-Plugin-Version": "copilot-chat/0.35.0",
 				"Copilot-Integration-Id": "vscode-chat"
 			},
+			"premiumMultiplier": 0.33,
 			"thinking": {
 				"mode": "budget",
 				"minLevel": "minimal",
 				"maxLevel": "xhigh"
-			},
-			"premiumMultiplier": 0.33
+			}
 		},
 		"claude-opus-4.5": {
 			"id": "claude-opus-4.5",
@@ -4546,12 +4541,12 @@
 				"Editor-Plugin-Version": "copilot-chat/0.35.0",
 				"Copilot-Integration-Id": "vscode-chat"
 			},
+			"premiumMultiplier": 3,
 			"thinking": {
 				"mode": "anthropic-adaptive",
 				"minLevel": "minimal",
 				"maxLevel": "xhigh"
-			},
-			"premiumMultiplier": 3
+			}
 		},
 		"claude-sonnet-4": {
 			"id": "claude-sonnet-4",
@@ -5183,12 +5178,12 @@
 				"Editor-Plugin-Version": "copilot-chat/0.35.0",
 				"Copilot-Integration-Id": "vscode-chat"
 			},
+			"premiumMultiplier": 0.33,
 			"thinking": {
 				"mode": "effort",
 				"minLevel": "low",
 				"maxLevel": "xhigh"
-			},
-			"premiumMultiplier": 0.33
+			}
 		},
 		"grok-code-fast-1": {
 			"id": "grok-code-fast-1",
@@ -5219,12 +5214,12 @@
 				"supportsDeveloperRole": false,
 				"supportsReasoningEffort": false
 			},
+			"premiumMultiplier": 0.25,
 			"thinking": {
 				"mode": "effort",
 				"minLevel": "minimal",
 				"maxLevel": "high"
-			},
-			"premiumMultiplier": 0.25
+			}
 		}
 	},
 	"gitlab-duo": {
@@ -5249,13 +5244,8 @@
 			"provider": "gitlab-duo",
 			"thinking": {
 				"mode": "budget",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high",
-					"xhigh"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "xhigh"
 			}
 		},
 		"claude-opus-4-5-20251101": {
@@ -5278,14 +5268,9 @@
 			"maxTokens": 64000,
 			"provider": "gitlab-duo",
 			"thinking": {
-				"mode": "budget",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high",
-					"xhigh"
-				]
+				"mode": "anthropic-budget-effort",
+				"minLevel": "minimal",
+				"maxLevel": "xhigh"
 			}
 		},
 		"claude-sonnet-4-5-20250929": {
@@ -5308,14 +5293,9 @@
 			"maxTokens": 64000,
 			"provider": "gitlab-duo",
 			"thinking": {
-				"mode": "budget",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high",
-					"xhigh"
-				]
+				"mode": "anthropic-budget-effort",
+				"minLevel": "minimal",
+				"maxLevel": "xhigh"
 			}
 		},
 		"duo-chat-gpt-5-1": {
@@ -5584,17 +5564,13 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"provider": "gitlab-duo",
 			"thinking": {
 				"mode": "effort",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"gpt-5-mini-2025-08-07": {
@@ -5618,12 +5594,8 @@
 			"provider": "gitlab-duo",
 			"thinking": {
 				"mode": "effort",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"gpt-5.1-2025-11-13": {
@@ -5647,12 +5619,8 @@
 			"provider": "gitlab-duo",
 			"thinking": {
 				"mode": "effort",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		}
 	},
@@ -6254,12 +6222,8 @@
 			"maxTokens": 64000,
 			"thinking": {
 				"mode": "budget",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"claude-opus-4-6-thinking": {
@@ -6283,13 +6247,8 @@
 			"maxTokens": 64000,
 			"thinking": {
 				"mode": "budget",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high",
-					"xhigh"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"claude-sonnet-4-5": {
@@ -6313,12 +6272,8 @@
 			"maxTokens": 64000,
 			"thinking": {
 				"mode": "budget",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"claude-sonnet-4-5-thinking": {
@@ -6342,12 +6297,8 @@
 			"maxTokens": 64000,
 			"thinking": {
 				"mode": "budget",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"claude-sonnet-4-6": {
@@ -6371,12 +6322,8 @@
 			"maxTokens": 64000,
 			"thinking": {
 				"mode": "budget",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"claude-sonnet-4-6-thinking": {
@@ -6400,12 +6347,8 @@
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "budget",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"gemini-2.5-flash": {
@@ -6429,12 +6372,8 @@
 			"maxTokens": 65536,
 			"thinking": {
 				"mode": "budget",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"gemini-2.5-flash-thinking": {
@@ -6458,12 +6397,8 @@
 			"maxTokens": 65535,
 			"thinking": {
 				"mode": "budget",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"gemini-2.5-pro": {
@@ -6487,12 +6422,8 @@
 			"maxTokens": 65536,
 			"thinking": {
 				"mode": "budget",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"gemini-3-flash": {
@@ -6516,12 +6447,8 @@
 			"maxTokens": 65536,
 			"thinking": {
 				"mode": "google-level",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"gemini-3-pro-high": {
@@ -6545,10 +6472,8 @@
 			"maxTokens": 65535,
 			"thinking": {
 				"mode": "google-level",
-				"levels": [
-					"low",
-					"high"
-				]
+				"minLevel": "low",
+				"maxLevel": "high"
 			}
 		},
 		"gemini-3-pro-low": {
@@ -6572,10 +6497,8 @@
 			"maxTokens": 65535,
 			"thinking": {
 				"mode": "google-level",
-				"levels": [
-					"low",
-					"high"
-				]
+				"minLevel": "low",
+				"maxLevel": "high"
 			}
 		},
 		"gemini-3.1-pro-high": {
@@ -6599,10 +6522,8 @@
 			"maxTokens": 65535,
 			"thinking": {
 				"mode": "google-level",
-				"levels": [
-					"low",
-					"high"
-				]
+				"minLevel": "low",
+				"maxLevel": "high"
 			}
 		},
 		"gemini-3.1-pro-low": {
@@ -6626,10 +6547,8 @@
 			"maxTokens": 65535,
 			"thinking": {
 				"mode": "google-level",
-				"levels": [
-					"low",
-					"high"
-				]
+				"minLevel": "low",
+				"maxLevel": "high"
 			}
 		},
 		"gpt-oss-120b-medium": {
@@ -6652,12 +6571,8 @@
 			"maxTokens": 32768,
 			"thinking": {
 				"mode": "budget",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		}
 	},
@@ -6703,12 +6618,8 @@
 			"maxTokens": 65536,
 			"thinking": {
 				"mode": "budget",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"gemini-2.5-pro": {
@@ -6732,12 +6643,8 @@
 			"maxTokens": 65536,
 			"thinking": {
 				"mode": "budget",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"gemini-3-flash-preview": {
@@ -6761,12 +6668,8 @@
 			"maxTokens": 65536,
 			"thinking": {
 				"mode": "google-level",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"gemini-3-pro-preview": {
@@ -6790,10 +6693,8 @@
 			"maxTokens": 64000,
 			"thinking": {
 				"mode": "google-level",
-				"levels": [
-					"low",
-					"high"
-				]
+				"minLevel": "low",
+				"maxLevel": "high"
 			}
 		},
 		"gemini-3.1-pro-preview": {
@@ -6817,10 +6718,8 @@
 			"maxTokens": 65536,
 			"thinking": {
 				"mode": "google-level",
-				"levels": [
-					"low",
-					"high"
-				]
+				"minLevel": "low",
+				"maxLevel": "high"
 			}
 		}
 	},
@@ -6946,12 +6845,8 @@
 			"maxTokens": 65536,
 			"thinking": {
 				"mode": "budget",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"gemini-2.5-flash-lite": {
@@ -6975,12 +6870,8 @@
 			"maxTokens": 65536,
 			"thinking": {
 				"mode": "budget",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"gemini-2.5-flash-lite-preview-09-2025": {
@@ -7004,12 +6895,8 @@
 			"maxTokens": 65536,
 			"thinking": {
 				"mode": "budget",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"gemini-2.5-pro": {
@@ -7033,12 +6920,8 @@
 			"maxTokens": 65536,
 			"thinking": {
 				"mode": "budget",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"gemini-3-flash-preview": {
@@ -7062,12 +6945,8 @@
 			"maxTokens": 65536,
 			"thinking": {
 				"mode": "google-level",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"gemini-3-pro-preview": {
@@ -7091,10 +6970,8 @@
 			"maxTokens": 64000,
 			"thinking": {
 				"mode": "google-level",
-				"levels": [
-					"low",
-					"high"
-				]
+				"minLevel": "low",
+				"maxLevel": "high"
 			}
 		}
 	},
@@ -7433,12 +7310,8 @@
 			"maxTokens": 8192,
 			"thinking": {
 				"mode": "effort",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "xhigh"
 			}
 		},
 		"deepseek-ai/DeepSeek-V3.1": {
@@ -7499,12 +7372,8 @@
 			"maxTokens": 65536,
 			"thinking": {
 				"mode": "effort",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "xhigh"
 			}
 		}
 	},
@@ -11744,7 +11613,7 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 64000,
 			"thinking": {
 				"mode": "effort",
@@ -11909,7 +11778,7 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "effort",
@@ -11953,7 +11822,7 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 64000,
 			"thinking": {
 				"mode": "effort",
@@ -12022,7 +11891,7 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "effort",
@@ -12091,7 +11960,7 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "effort",
@@ -15551,7 +15420,7 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "effort",
@@ -15620,7 +15489,7 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "effort",
@@ -15645,7 +15514,7 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "effort",
@@ -15670,7 +15539,7 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "effort",
@@ -15720,7 +15589,7 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "effort",
@@ -15745,7 +15614,7 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "effort",
@@ -16183,13 +16052,8 @@
 			"maxTokens": 32000,
 			"thinking": {
 				"mode": "budget",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high",
-					"xhigh"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "xhigh"
 			}
 		},
 		"MiniMax-M2.7": {
@@ -16358,13 +16222,8 @@
 			"maxTokens": 32000,
 			"thinking": {
 				"mode": "budget",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high",
-					"xhigh"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "xhigh"
 			}
 		},
 		"MiniMax-M2.7": {
@@ -16502,12 +16361,8 @@
 			"maxTokens": 32000,
 			"thinking": {
 				"mode": "effort",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"MiniMax-M2.5": {
@@ -16595,12 +16450,8 @@
 			"maxTokens": 32000,
 			"thinking": {
 				"mode": "effort",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"MiniMax-M2.7": {
@@ -16750,12 +16601,8 @@
 			"maxTokens": 32000,
 			"thinking": {
 				"mode": "effort",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"MiniMax-M2.5": {
@@ -16843,12 +16690,8 @@
 			"maxTokens": 32000,
 			"thinking": {
 				"mode": "effort",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "high"
 			}
 		},
 		"MiniMax-M2.7": {
@@ -17431,12 +17274,8 @@
 			"maxTokens": 65536,
 			"thinking": {
 				"mode": "effort",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "xhigh"
 			}
 		}
 	},
@@ -24515,7 +24354,7 @@
 				"cacheRead": 0.125,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 64000,
 			"thinking": {
 				"mode": "effort",
@@ -24698,7 +24537,7 @@
 				"cacheRead": 0.125,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "effort",
@@ -24748,7 +24587,7 @@
 				"cacheRead": 0.024999999999999998,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 64000,
 			"thinking": {
 				"mode": "effort",
@@ -24818,7 +24657,7 @@
 				"cacheRead": 0.175,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "effort",
@@ -24887,7 +24726,7 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "effort",
@@ -29137,7 +28976,7 @@
 			"thinking": {
 				"mode": "effort",
 				"minLevel": "minimal",
-				"maxLevel": "high"
+				"maxLevel": "xhigh"
 			}
 		},
 		"minimaxai/minimax-m2.1": {
@@ -30780,7 +30619,7 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"preferWebsockets": true,
 			"priority": 15,
@@ -30861,7 +30700,7 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"preferWebsockets": true,
 			"priority": 11,
@@ -30888,7 +30727,7 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"preferWebsockets": true,
 			"priority": 10,
@@ -30915,7 +30754,7 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"preferWebsockets": true,
 			"priority": 19,
@@ -30969,7 +30808,7 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"preferWebsockets": true,
 			"priority": 8,
@@ -30996,7 +30835,7 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"preferWebsockets": true,
 			"priority": 5,
@@ -31028,12 +30867,8 @@
 			"contextPromotionTarget": "openai-codex/gpt-5.3-codex",
 			"thinking": {
 				"mode": "effort",
-				"levels": [
-					"low",
-					"medium",
-					"high",
-					"xhigh"
-				]
+				"minLevel": "low",
+				"maxLevel": "xhigh"
 			}
 		},
 		"gpt-5.4": {
@@ -31080,10 +30915,10 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"preferWebsockets": true,
-			"priority": 2,
+			"priority": 1,
 			"thinking": {
 				"mode": "effort",
 				"minLevel": "low",
@@ -31107,7 +30942,7 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"preferWebsockets": true,
 			"priority": 2,
@@ -31139,12 +30974,8 @@
 			"maxTokens": 131072,
 			"thinking": {
 				"mode": "effort",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "xhigh"
 			}
 		},
 		"gpt-5.3-codex-spark": {
@@ -31167,12 +30998,8 @@
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "effort",
-				"levels": [
-					"low",
-					"medium",
-					"high",
-					"xhigh"
-				]
+				"minLevel": "low",
+				"maxLevel": "xhigh"
 			},
 			"contextPromotionTarget": "opencode/gpt-5.3-codex"
 		},
@@ -31197,12 +31024,8 @@
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "effort",
-				"levels": [
-					"low",
-					"medium",
-					"high",
-					"xhigh"
-				]
+				"minLevel": "low",
+				"maxLevel": "xhigh"
 			}
 		},
 		"gpt-5.4-pro": {
@@ -31226,12 +31049,8 @@
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "effort",
-				"levels": [
-					"low",
-					"medium",
-					"high",
-					"xhigh"
-				]
+				"minLevel": "low",
+				"maxLevel": "xhigh"
 			}
 		},
 		"kimi-k2.5-free": {
@@ -31255,12 +31074,8 @@
 			"maxTokens": 262144,
 			"thinking": {
 				"mode": "effort",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "xhigh"
 			}
 		}
 	},
@@ -31679,7 +31494,7 @@
 			"thinking": {
 				"mode": "effort",
 				"minLevel": "minimal",
-				"maxLevel": "high"
+				"maxLevel": "xhigh"
 			}
 		},
 		"glm-4.7": {
@@ -31703,7 +31518,7 @@
 			"thinking": {
 				"mode": "effort",
 				"minLevel": "minimal",
-				"maxLevel": "high"
+				"maxLevel": "xhigh"
 			}
 		},
 		"glm-5": {
@@ -32144,12 +31959,8 @@
 			"maxTokens": 262144,
 			"thinking": {
 				"mode": "effort",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "xhigh"
 			}
 		},
 		"kimi-k2.5": {
@@ -32198,7 +32009,7 @@
 			"thinking": {
 				"mode": "effort",
 				"minLevel": "minimal",
-				"maxLevel": "high"
+				"maxLevel": "xhigh"
 			}
 		},
 		"mimo-v2-omni-free": {
@@ -32271,7 +32082,7 @@
 			"thinking": {
 				"mode": "effort",
 				"minLevel": "minimal",
-				"maxLevel": "high"
+				"maxLevel": "xhigh"
 			}
 		},
 		"minimax-m2.5": {
@@ -35442,7 +35253,7 @@
 				"cacheRead": 0.125,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 64000,
 			"thinking": {
 				"mode": "effort",
@@ -35637,7 +35448,7 @@
 				"cacheRead": 0.125,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "effort",
@@ -35687,7 +35498,7 @@
 				"cacheRead": 0.024999999999999998,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 64000,
 			"thinking": {
 				"mode": "effort",
@@ -35757,7 +35568,7 @@
 				"cacheRead": 0.175,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "effort",
@@ -35826,7 +35637,7 @@
 				"cacheRead": 0.175,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "effort",
@@ -38682,12 +38493,8 @@
 			"maxTokens": 8192,
 			"thinking": {
 				"mode": "effort",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "xhigh"
 			}
 		},
 		"deepseek-ai/DeepSeek-V3.1": {
@@ -38808,12 +38615,8 @@
 			"maxTokens": 32768,
 			"thinking": {
 				"mode": "effort",
-				"levels": [
-					"minimal",
-					"low",
-					"medium",
-					"high"
-				]
+				"minLevel": "minimal",
+				"maxLevel": "xhigh"
 			}
 		},
 		"zai-org/GLM-4.7": {
@@ -42113,7 +41916,7 @@
 				"cacheRead": 0.13,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 64000,
 			"thinking": {
 				"mode": "budget",
@@ -42213,7 +42016,7 @@
 				"cacheRead": 0.13,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "budget",
@@ -42263,7 +42066,7 @@
 				"cacheRead": 0.024999999999999998,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 64000,
 			"thinking": {
 				"mode": "budget",
@@ -42388,7 +42191,7 @@
 				"cacheRead": 0.175,
 				"cacheWrite": 0
 			},
-			"contextWindow": 400000,
+			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"thinking": {
 				"mode": "budget",
