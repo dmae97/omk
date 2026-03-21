@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.14.2] - 2026-03-21
 ### Changed
 
 - Updated thinking configuration format from `levels` array to `minLevel` and `maxLevel` properties for improved clarity
