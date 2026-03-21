@@ -8,6 +8,7 @@ import type { AgentSession, AgentSessionEvent, PromptOptions } from "../../src/s
 import type { AuthStorage } from "../../src/session/auth-storage";
 import { runSubprocess, SUBAGENT_WARNING_MISSING_SUBMIT_RESULT } from "../../src/task/executor";
 import type { AgentDefinition } from "../../src/task/types";
+import { EventBus } from "../../src/utils/event-bus";
 
 function createAssistantStopMessage(text: string): AssistantMessage {
 	return {
@@ -81,6 +82,7 @@ function createSessionResult(session: AgentSession): CreateAgentSessionResult {
 		session,
 		extensionsResult: {} as unknown as LoadExtensionsResult,
 		setToolUIContext: () => {},
+		eventBus: new EventBus(),
 	};
 }
 
