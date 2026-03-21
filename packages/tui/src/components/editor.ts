@@ -732,8 +732,8 @@ export class Editor implements Component, Focusable {
 			return;
 		}
 
-		// Ctrl+- / Ctrl+_ - Undo last edit
-		if (matchesKey(data, "ctrl+-") || matchesKey(data, "ctrl+_")) {
+		// Undo
+		if (kb.matches(data, "undo")) {
 			this.#applyUndo();
 			return;
 		}

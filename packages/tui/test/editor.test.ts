@@ -1,11 +1,16 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { stripVTControlCharacters } from "node:util";
 import { CombinedAutocompleteProvider } from "@oh-my-pi/pi-tui/autocomplete";
 import { Editor } from "@oh-my-pi/pi-tui/components/editor";
 import { visibleWidth } from "@oh-my-pi/pi-tui/utils";
+import { EditorKeybindingsManager, setEditorKeybindings } from "../src/keybindings";
 import { defaultEditorTheme } from "./test-themes";
 
 describe("Editor component", () => {
+	afterEach(() => {
+		setEditorKeybindings(new EditorKeybindingsManager());
+	});
+
 	describe("Prompt history navigation", () => {
 		it("does nothing on Up arrow when history is empty", () => {
 			const editor = new Editor(defaultEditorTheme);
@@ -1332,6 +1337,23 @@ describe("Editor component", () => {
 			editor.handleInput("\x1b[A"); // Up - line 1, col 0
 			editor.handleInput("\x1b[A"); // Up - line 0, col 8 (new sticky from restored position)
 			expect(editor.getCursor()).toEqual({ line: 0, col: 8 });
+		});
+
+		it("uses the configured undo binding", () => {
+			setEditorKeybindings(
+				new EditorKeybindingsManager({
+					undo: "f8",
+				}),
+			);
+
+			const editor = new Editor(defaultEditorTheme);
+
+			editor.handleInput("a");
+			expect(editor.getText()).toBe("a");
+
+			editor.handleInput("\x1b[19~"); // F8
+			expect(editor.getText()).toBe("");
+			expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
 		});
 
 		it("undoes the last paste when a transient #undo trigger is executed", () => {

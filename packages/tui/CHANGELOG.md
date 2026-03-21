@@ -1,6 +1,13 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added Ctrl+_ as an additional default shortcut for undo
+
+### Fixed
+
+- Ensured undo functionality respects user-configured keybindings
 
 ## [13.12.0] - 2026-03-14
 

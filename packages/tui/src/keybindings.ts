@@ -86,7 +86,7 @@ export const DEFAULT_EDITOR_KEYBINDINGS: Required<EditorKeybindingsConfig> = {
 	// Clipboard
 	copy: "ctrl+c",
 	// Kill ring / undo
-	undo: "ctrl+-",
+	undo: ["ctrl+-", "ctrl+_"],
 	yank: "ctrl+y",
 	yankPop: "alt+y",
 };
