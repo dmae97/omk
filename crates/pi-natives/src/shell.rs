@@ -582,7 +582,7 @@ async fn run_shell_command(
 	let mut reader_handle = tokio::spawn({
 		let reader_cancel = reader_cancel.clone();
 		async move {
-			read_output(reader_file, on_chunk, reader_cancel, activity_tx).await;
+			Box::pin(read_output(reader_file, on_chunk, reader_cancel, activity_tx)).await;
 			Result::<()>::Ok(())
 		}
 	});
@@ -790,8 +790,8 @@ async fn read_output(
 	activity: mpsc::Sender<()>,
 ) {
 	const REPLACEMENT: &str = "\u{FFFD}";
-	const BUF: usize = 4096;
-	let mut buf = [0u8; BUF + 4]; // +4 for max UTF-8 char
+	const BUF: usize = 65536;
+	let mut buf = vec![0u8; BUF + 4]; // +4 for max UTF-8 char
 	let mut it = 0;
 
 	let reader = tokio::fs::File::from_std(reader);

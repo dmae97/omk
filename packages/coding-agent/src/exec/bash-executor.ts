@@ -69,11 +69,16 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 		onChunk: options?.onChunk,
 		artifactPath: options?.artifactPath,
 		artifactId: options?.artifactId,
+		// Throttle the streaming preview callback to avoid saturating the
+		// event loop when commands produce massive output (e.g. seq 1 50M).
+		chunkThrottleMs: options?.onChunk ? 50 : 0,
 	});
 
-	let pendingChunks = Promise.resolve();
+	// sink.push() is synchronous — buffer management, counters, and onChunk
+	// all run inline. File writes (artifact path) are handled asynchronously
+	// inside the sink. No promise chain needed.
 	const enqueueChunk = (chunk: string) => {
-		pendingChunks = pendingChunks.then(() => sink.push(chunk)).catch(() => {});
+		sink.push(chunk);
 	};
 
 	if (options?.signal?.aborted) {
@@ -160,8 +165,6 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 			hardTimeoutDeferred.promise.then(() => ({ kind: "hard-timeout" as const })),
 		]);
 
-		await pendingChunks;
-
 		if (winner.kind === "hard-timeout") {
 			if (shellSession) {
 				resetSession = true;
@@ -215,7 +218,6 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 		if (userSignal) {
 			userSignal.removeEventListener("abort", abortHandler);
 		}
-		await pendingChunks;
 		if (resetSession) {
 			shellSessions.delete(sessionKey);
 		}

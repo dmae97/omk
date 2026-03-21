@@ -194,10 +194,11 @@ describe("executeBash", () => {
 				chunks.push(chunk);
 			},
 		});
-		const combined = chunks.join("");
+		// At least one chunk should have been delivered to onChunk
 		expect(chunks.length).toBeGreaterThan(0);
+		const combined = chunks.join("");
 		expect(combined).toContain("line1");
-		expect(combined).toContain("line20");
+		// Final result always has the complete output regardless of chunk throttle
 		expect(result.output).toContain("line1");
 		expect(result.output).toContain("line20");
 	});
@@ -206,22 +207,60 @@ describe("executeBash", () => {
 		if (process.platform === "win32") {
 			return;
 		}
-		let totalBytes = 0;
 		let sawChunk = false;
 		const result = await executeBash("awk 'BEGIN { for (i = 0; i < 100000; i++) printf \"a\" }'", {
 			cwd: tempDir,
 			timeout: 5000,
-			onChunk: chunk => {
+			onChunk: () => {
 				sawChunk = true;
-				totalBytes += Buffer.byteLength(chunk, "utf-8");
 			},
 		});
 		expect(sawChunk).toBe(true);
-		expect(totalBytes).toBe(100000);
 		expect(result.totalBytes).toBe(100000);
 		expect(result.outputBytes).toBeLessThanOrEqual(DEFAULT_MAX_BYTES);
 		expect(result.output).toContain("a");
 	});
+
+	it("handles multi-million line output without freeze or OOM", async () => {
+		if (process.platform === "win32") return;
+
+		// 5 million lines ~= 40MB of output. Before the 64KB read buffer and
+		// direct-push fixes, this would freeze or OOM the process.
+		const lineCount = 5_000_000;
+		let chunkCount = 0;
+		const start = Date.now();
+		const result = await executeBash(`seq 1 ${lineCount}`, {
+			cwd: tempDir,
+			timeout: 30_000,
+			onChunk: () => {
+				chunkCount++;
+			},
+		});
+		const elapsed = Date.now() - start;
+
+		// Should complete, not hang or OOM
+		expect(result.exitCode).toBe(0);
+		expect(result.cancelled).toBe(false);
+
+		// Output summary should reflect all lines
+		expect(result.totalLines).toBeGreaterThanOrEqual(lineCount);
+
+		// Truncated output should be within the spill threshold
+		expect(result.outputBytes).toBeLessThanOrEqual(DEFAULT_MAX_BYTES);
+
+		// The tail of the output should contain numbers near the end of the range.
+		// The exact last number may be split across a truncation boundary, so
+		// check for a number within the last 1000 lines.
+		expect(result.output).toContain(String(lineCount - 500));
+
+		// With 64KB read buffer, ~40MB should produce ~600 chunks, not 5M.
+		// Allow generous headroom but ensure it's orders of magnitude below lineCount.
+		expect(chunkCount).toBeLessThan(lineCount / 100);
+
+		// Should complete in reasonable time (not frozen). On a modern machine
+		// seq 1 5000000 itself takes ~0.5s; with JS overhead allow 20s.
+		expect(elapsed).toBeLessThan(20_000);
+	}, 35_000);
 
 	it("sources snapshot env vars across session commands", async () => {
 		if (process.platform === "win32") {

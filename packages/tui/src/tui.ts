@@ -890,17 +890,6 @@ export class TUI extends Container {
 		return result;
 	}
 
-	#applyLineResets(lines: string[]): string[] {
-		const reset = SEGMENT_RESET;
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
-			if (!TERMINAL.isImageLine(line)) {
-				lines[i] = line + reset;
-			}
-		}
-		return lines;
-	}
-
 	/** Splice overlay content into a base line at a specific column. Single-pass optimized. */
 	#compositeLineAt(
 		baseLine: string,
@@ -1001,10 +990,8 @@ export class TUI extends Container {
 			newLines = this.#compositeOverlays(newLines, width, height);
 		}
 
-		// Extract cursor position before applying line resets (marker must be found first)
+		// Extract cursor position (marker must be found before diff comparison)
 		const cursorPos = this.#extractCursorPosition(newLines, height);
-
-		newLines = this.#applyLineResets(newLines);
 
 		// Width changed - need full re-render (line wrapping changes)
 		const widthChanged = this.#previousWidth !== 0 && this.#previousWidth !== width;
@@ -1014,9 +1001,11 @@ export class TUI extends Container {
 			this.#fullRedrawCount += 1;
 			let buffer = "\x1b[?2026h"; // Begin synchronized output
 			if (clear) buffer += "\x1b[3J\x1b[2J\x1b[H"; // Clear scrollback, screen, and home
+			const reset = SEGMENT_RESET;
 			for (let i = 0; i < newLines.length; i++) {
 				if (i > 0) buffer += "\r\n";
-				buffer += newLines[i];
+				const line = newLines[i];
+				buffer += TERMINAL.isImageLine(line) ? line : line + reset;
 			}
 			buffer += "\x1b[?2026l"; // End synchronized output
 			this.terminal.write(buffer);
@@ -1211,7 +1200,7 @@ export class TUI extends Container {
 				].join("\n");
 				throw new Error(errorMsg);
 			}
-			buffer += line;
+			buffer += isImage ? line : line + SEGMENT_RESET;
 		}
 
 		// Track where cursor ended up after rendering

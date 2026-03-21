@@ -690,7 +690,6 @@ export class CommandController {
 				chunk => {
 					if (this.ctx.bashComponent) {
 						this.ctx.bashComponent.appendOutput(chunk);
-						this.ctx.ui.requestRender();
 					}
 				},
 				{ excludeFromContext },
@@ -732,7 +731,6 @@ export class CommandController {
 				chunk => {
 					if (this.ctx.pythonComponent) {
 						this.ctx.pythonComponent.appendOutput(chunk);
-						this.ctx.ui.requestRender();
 					}
 				},
 				{ excludeFromContext },

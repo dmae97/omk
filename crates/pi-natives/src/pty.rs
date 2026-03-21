@@ -278,8 +278,8 @@ fn run_pty_sync(
 	let (reader_tx, reader_rx) = mpsc::channel::<ReaderEvent>();
 	let reader_thread = std::thread::spawn(move || {
 		const REPLACEMENT: &str = "\u{FFFD}";
-		const BUF: usize = 4096;
-		let mut buf = [0u8; BUF + 4];
+		const BUF: usize = 65536;
+		let mut buf = vec![0u8; BUF + 4];
 		let mut it = 0;
 		loop {
 			match reader.read(&mut buf[it..BUF]) {

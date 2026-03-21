@@ -289,8 +289,8 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 				const executorOptions: PythonExecutorOptions = {
 					...baseExecutorOptions,
 					reset: isFirstCell ? reset : false,
-					onChunk: async chunk => {
-						await outputSink!.push(chunk);
+					onChunk: chunk => {
+						outputSink!.push(chunk);
 					},
 				};
 

@@ -6,13 +6,17 @@ import { sanitizeText } from "@oh-my-pi/pi-natives";
 import { Container, ImageProtocol, Loader, Spacer, TERMINAL, Text, type TUI } from "@oh-my-pi/pi-tui";
 import { getSymbolTheme, theme } from "../../modes/theme/theme";
 import { formatTruncationMetaNotice, type TruncationMeta } from "../../tools/output-meta";
-import { getSixelLineMask, sanitizeWithOptionalSixelPassthrough } from "../../utils/sixel";
+import { getSixelLineMask, isSixelPassthroughEnabled, sanitizeWithOptionalSixelPassthrough } from "../../utils/sixel";
 import { DynamicBorder } from "./dynamic-border";
 import { truncateToVisualLines } from "./visual-truncate";
 
 // Preview line limit when not expanded (matches tool execution behavior)
 const PREVIEW_LINES = 20;
+const STREAMING_LINE_CAP = PREVIEW_LINES * 5;
 const MAX_DISPLAY_LINE_CHARS = 4000;
+// Minimum interval between processing incoming chunks for display (ms).
+// Chunks arriving faster than this are accumulated and processed in one batch.
+const CHUNK_THROTTLE_MS = 50;
 
 export class BashExecutionComponent extends Container {
 	#outputLines: string[] = [];
@@ -21,7 +25,10 @@ export class BashExecutionComponent extends Container {
 	#loader: Loader;
 	#truncation?: TruncationMeta;
 	#expanded = false;
+	#displayDirty = false;
+	#chunkGate = false;
 	#contentContainer: Container;
+	#headerText: Text;
 
 	constructor(
 		private readonly command: string,
@@ -45,8 +52,8 @@ export class BashExecutionComponent extends Container {
 		this.addChild(this.#contentContainer);
 
 		// Command header
-		const header = new Text(theme.fg(colorKey, theme.bold(`$ ${command}`)), 1, 0);
-		this.#contentContainer.addChild(header);
+		this.#headerText = new Text(theme.fg(colorKey, theme.bold(`$ ${command}`)), 1, 0);
+		this.#contentContainer.addChild(this.#headerText);
 
 		// Loader
 		this.#loader = new Loader(
@@ -72,14 +79,22 @@ export class BashExecutionComponent extends Container {
 
 	override invalidate(): void {
 		super.invalidate();
+		this.#displayDirty = false;
 		this.#updateDisplay();
 	}
 
 	appendOutput(chunk: string): void {
-		const clean = sanitizeWithOptionalSixelPassthrough(chunk, sanitizeText);
+		// During high-throughput output (e.g. seq 1 500M), processing every
+		// chunk would saturate the event loop. Instead, accept one chunk per
+		// throttle window and drop the rest — the OutputSink captures everything
+		// for the artifact, and setComplete() replaces with the final output.
+		if (this.#chunkGate) return;
+		this.#chunkGate = true;
+		setTimeout(() => {
+			this.#chunkGate = false;
+		}, CHUNK_THROTTLE_MS);
 
-		// Append to output lines
-		const incomingLines = clean.split("\n");
+		const incomingLines = chunk.split("\n");
 		if (this.#outputLines.length > 0 && incomingLines.length > 0) {
 			const lastIndex = this.#outputLines.length - 1;
 			const mergedLines = [`${this.#outputLines[lastIndex]}${incomingLines[0]}`, ...incomingLines.slice(1)];
@@ -90,7 +105,12 @@ export class BashExecutionComponent extends Container {
 			this.#outputLines.push(...this.#clampLinesPreservingSixel(incomingLines));
 		}
 
-		this.#updateDisplay();
+		// Cap stored lines during streaming to avoid unbounded memory growth
+		if (this.#outputLines.length > STREAMING_LINE_CAP) {
+			this.#outputLines = this.#outputLines.slice(-STREAMING_LINE_CAP);
+		}
+
+		this.#displayDirty = true;
 	}
 
 	setComplete(
@@ -115,6 +135,14 @@ export class BashExecutionComponent extends Container {
 		this.#updateDisplay();
 	}
 
+	override render(width: number): string[] {
+		if (this.#displayDirty) {
+			this.#displayDirty = false;
+			this.#updateDisplay();
+		}
+		return super.render(width);
+	}
+
 	#updateDisplay(): void {
 		const availableLines = this.#outputLines;
 
@@ -122,15 +150,16 @@ export class BashExecutionComponent extends Container {
 		const previewLogicalLines = availableLines.slice(-PREVIEW_LINES);
 		const hiddenLineCount = availableLines.length - previewLogicalLines.length;
 		const sixelLineMask =
-			TERMINAL.imageProtocol === ImageProtocol.Sixel ? getSixelLineMask(availableLines) : undefined;
+			TERMINAL.imageProtocol === ImageProtocol.Sixel && isSixelPassthroughEnabled()
+				? getSixelLineMask(availableLines)
+				: undefined;
 		const hasSixelOutput = sixelLineMask?.some(Boolean) ?? false;
 
 		// Rebuild content container
 		this.#contentContainer.clear();
 
 		// Command header
-		const header = new Text(theme.fg("bashMode", theme.bold(`$ ${this.command}`)), 1, 0);
-		this.#contentContainer.addChild(header);
+		this.#contentContainer.addChild(this.#headerText);
 
 		// Output
 		if (availableLines.length > 0) {

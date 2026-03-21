@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { BashExecutionComponent } from "@oh-my-pi/pi-coding-agent/modes/components/bash-execution";
 import { getThemeByName, setThemeInstance } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import { sanitizeWithOptionalSixelPassthrough } from "@oh-my-pi/pi-coding-agent/utils/sixel";
+import { sanitizeText } from "@oh-my-pi/pi-natives";
 import type { TUI } from "@oh-my-pi/pi-tui";
 
 const SIXEL = "\x1bPqabc\x1b\\";
@@ -66,11 +68,76 @@ describe("BashExecutionComponent SIXEL sanitization", () => {
 		delete Bun.env.PI_FORCE_IMAGE_PROTOCOL;
 		delete Bun.env.PI_ALLOW_SIXEL_PASSTHROUGH;
 
-		const component = new BashExecutionComponent("echo sixel", ui, false);
-		component.appendOutput(SIXEL);
+		// appendOutput receives pre-sanitized chunks from OutputSink.
+		// Simulate that: sanitize before passing to the component.
+		const sanitized = sanitizeWithOptionalSixelPassthrough(SIXEL, sanitizeText);
+		const component = new BashExecutionComponent("test sixel", ui, false);
+		component.appendOutput(sanitized);
 		component.setComplete(0, false);
 
 		expect(component.getOutput()).not.toContain("\x1bPq");
 		expect(component.getOutput()).toBe("");
+	});
+});
+
+describe("BashExecutionComponent streaming throttle", () => {
+	const ui = { requestRender: () => {} } as unknown as TUI;
+
+	beforeEach(async () => {
+		const theme = await getThemeByName("dark");
+		expect(theme).toBeDefined();
+		setThemeInstance(theme!);
+	});
+
+	it("caps stored lines during streaming", () => {
+		const component = new BashExecutionComponent("test", ui, false);
+
+		// Flood with 500 lines in one chunk (exceeds STREAMING_LINE_CAP of 100)
+		const lines = Array.from({ length: 500 }, (_, i) => `line${i}`).join("\n");
+		component.appendOutput(lines);
+
+		// Internal lines should be capped (we can't read #outputLines directly,
+		// but getOutput() returns the joined lines — it should have at most ~100 lines)
+		const output = component.getOutput();
+		const outputLineCount = output.split("\n").length;
+		expect(outputLineCount).toBeLessThanOrEqual(101); // 100 cap + possible partial
+		// Should retain the tail, not the head
+		expect(output).toContain("line499");
+		expect(output).not.toContain("line0\n");
+	});
+
+	it("gate drops rapid chunks", async () => {
+		const component = new BashExecutionComponent("test", ui, false);
+
+		// Send 100 chunks rapidly (all in same tick, before setTimeout fires)
+		for (let i = 0; i < 100; i++) {
+			component.appendOutput(`chunk${i}\n`);
+		}
+
+		// Only the first chunk should have been processed (gate blocks the rest)
+		const output = component.getOutput();
+		expect(output).toContain("chunk0");
+		expect(output).not.toContain("chunk99");
+
+		// After the gate timer expires, the next chunk is accepted
+		await Bun.sleep(60); // CHUNK_THROTTLE_MS is 50
+		component.appendOutput("after_gate\n");
+		expect(component.getOutput()).toContain("after_gate");
+	});
+
+	it("setComplete replaces streaming output with final output", () => {
+		const component = new BashExecutionComponent("test", ui, false);
+
+		// Stream some partial output
+		component.appendOutput("streaming_line\n");
+
+		// Complete with different final output
+		component.setComplete(0, false, { output: "final_line_1\nfinal_line_2" });
+
+		const output = component.getOutput();
+		expect(output).toContain("final_line_1");
+		expect(output).toContain("final_line_2");
+		// Streaming output is replaced, not appended
+		expect(output).not.toContain("streaming_line");
 	});
 });

@@ -32,6 +32,8 @@ export interface OutputSinkOptions {
 	artifactId?: string;
 	spillThreshold?: number;
 	onChunk?: (chunk: string) => void;
+	/** Minimum ms between onChunk calls. 0 = every chunk (default). */
+	chunkThrottleMs?: number;
 }
 
 export interface TruncationResult {
@@ -521,6 +523,7 @@ export class OutputSink {
 	#totalBytes = 0;
 	#sawData = false;
 	#truncated = false;
+	#lastChunkTime = 0;
 
 	#file?: {
 		path: string;
@@ -528,22 +531,46 @@ export class OutputSink {
 		sink: Bun.FileSink;
 	};
 
+	// Queue of chunks waiting for the file sink to be created.
+	#pendingFileWrites?: string[];
+	#fileReady = false;
+
 	readonly #artifactPath?: string;
 	readonly #artifactId?: string;
 	readonly #spillThreshold: number;
 	readonly #onChunk?: (chunk: string) => void;
+	readonly #chunkThrottleMs: number;
 
 	constructor(options?: OutputSinkOptions) {
-		const { artifactPath, artifactId, spillThreshold = DEFAULT_MAX_BYTES, onChunk } = options ?? {};
+		const {
+			artifactPath,
+			artifactId,
+			spillThreshold = DEFAULT_MAX_BYTES,
+			onChunk,
+			chunkThrottleMs = 0,
+		} = options ?? {};
 		this.#artifactPath = artifactPath;
 		this.#artifactId = artifactId;
 		this.#spillThreshold = spillThreshold;
 		this.#onChunk = onChunk;
+		this.#chunkThrottleMs = chunkThrottleMs;
 	}
 
-	async push(chunk: string): Promise<void> {
+	/**
+	 * Push a chunk of output. The buffer management and onChunk callback run
+	 * synchronously. File sink writes are deferred and serialized internally.
+	 */
+	push(chunk: string): void {
 		chunk = sanitizeWithOptionalSixelPassthrough(chunk, sanitizeText);
-		this.#onChunk?.(chunk);
+
+		// Throttled onChunk: only call the callback when enough time has passed.
+		if (this.#onChunk) {
+			const now = Date.now();
+			if (now - this.#lastChunkTime >= this.#chunkThrottleMs) {
+				this.#lastChunkTime = now;
+				this.#onChunk(chunk);
+			}
+		}
 
 		const dataBytes = Buffer.byteLength(chunk, "utf-8");
 		this.#totalBytes += dataBytes;
@@ -556,10 +583,9 @@ export class OutputSink {
 		const threshold = this.#spillThreshold;
 		const willOverflow = this.#bufferBytes + dataBytes > threshold;
 
-		// Write to file if already spilling or about to overflow
-		if (this.#file != null || willOverflow) {
-			const sink = await this.#ensureFileSink();
-			await sink?.write(chunk);
+		// Write to artifact file if configured and past the threshold
+		if (this.#artifactPath && (this.#file != null || willOverflow)) {
+			this.#writeToFile(chunk);
 		}
 
 		if (!willOverflow) {
@@ -589,14 +615,64 @@ export class OutputSink {
 		if (this.#file) this.#truncated = true;
 	}
 
+	/**
+	 * Write a chunk to the artifact file. Handles the async file sink creation
+	 * by queuing writes until the sink is ready, then draining synchronously.
+	 */
+	#writeToFile(chunk: string): void {
+		if (this.#fileReady && this.#file) {
+			// Fast path: file sink exists, write synchronously
+			this.#file.sink.write(chunk);
+			return;
+		}
+		// File sink not yet created — queue this chunk and kick off creation
+		if (!this.#pendingFileWrites) {
+			this.#pendingFileWrites = [chunk];
+			void this.#createFileSink();
+		} else {
+			this.#pendingFileWrites.push(chunk);
+		}
+	}
+
+	async #createFileSink(): Promise<void> {
+		if (!this.#artifactPath || this.#fileReady) return;
+		try {
+			const sink = Bun.file(this.#artifactPath).writer();
+			this.#file = { path: this.#artifactPath, artifactId: this.#artifactId, sink };
+
+			// Flush existing buffer to file BEFORE it gets trimmed further.
+			if (this.#buffer.length > 0) {
+				sink.write(this.#buffer);
+			}
+
+			// Drain any chunks that arrived while the sink was being created
+			if (this.#pendingFileWrites) {
+				for (const pending of this.#pendingFileWrites) {
+					sink.write(pending);
+				}
+				this.#pendingFileWrites = undefined;
+			}
+
+			this.#fileReady = true;
+		} catch {
+			try {
+				await this.#file?.sink?.end();
+			} catch {
+				/* ignore */
+			}
+			this.#file = undefined;
+			this.#pendingFileWrites = undefined;
+		}
+	}
+
 	createInput(): WritableStream<Uint8Array | string> {
 		const dec = new TextDecoder("utf-8", { ignoreBOM: true });
-		const finalize = async () => {
-			await this.push(dec.decode());
+		const finalize = () => {
+			this.push(dec.decode());
 		};
 		return new WritableStream({
-			write: async chunk => {
-				await this.push(typeof chunk === "string" ? chunk : dec.decode(chunk, { stream: true }));
+			write: chunk => {
+				this.push(typeof chunk === "string" ? chunk : dec.decode(chunk, { stream: true }));
 			},
 			close: finalize,
 			abort: finalize,
@@ -619,32 +695,6 @@ export class OutputSink {
 			outputBytes: this.#bufferBytes,
 			artifactId: this.#file?.artifactId,
 		};
-	}
-
-	// -- private ---------------------------------------------------------------
-
-	async #ensureFileSink(): Promise<Bun.FileSink | null> {
-		if (!this.#artifactPath) return null;
-		if (this.#file) return this.#file.sink;
-
-		try {
-			const sink = Bun.file(this.#artifactPath).writer();
-			this.#file = { path: this.#artifactPath, artifactId: this.#artifactId, sink };
-
-			// Flush existing buffer to file BEFORE it gets trimmed further.
-			if (this.#buffer.length > 0) {
-				await sink.write(this.#buffer);
-			}
-			return sink;
-		} catch {
-			try {
-				await this.#file?.sink?.end();
-			} catch {
-				/* ignore */
-			}
-			this.#file = undefined;
-			return null;
-		}
 	}
 }
 

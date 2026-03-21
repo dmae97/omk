@@ -72,9 +72,8 @@ export class PythonExecutionComponent extends Container {
 	}
 
 	appendOutput(chunk: string): void {
-		const clean = sanitizeText(chunk);
-
-		const newLines = clean.split("\n").map(line => this.#clampDisplayLine(line));
+		// Chunk is pre-sanitized by OutputSink.push() — no need to sanitize again.
+		const newLines = chunk.split("\n").map(line => this.#clampDisplayLine(line));
 		if (this.#outputLines.length > 0 && newLines.length > 0) {
 			this.#outputLines[this.#outputLines.length - 1] = this.#clampDisplayLine(
 				`${this.#outputLines[this.#outputLines.length - 1]}${newLines[0]}`,
