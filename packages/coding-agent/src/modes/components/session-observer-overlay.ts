@@ -190,16 +190,23 @@ export class SessionObserverOverlayComponent extends Container {
 			this.#transcriptCache = { path: sessionFile, bytesRead: 0, entries: [] };
 		}
 
-		// Parse only new bytes
+		// Parse only new bytes, but only up to the last complete line.
+		// A partial trailing record (mid-write) must not be consumed —
+		// we leave those bytes for the next refresh.
 		if (result.text.length > 0) {
-			const newEntries = parseSessionEntries(result.text);
-			for (const entry of newEntries) {
-				if (entry.type === "message") {
-					this.#transcriptCache.entries.push(entry as SessionMessageEntry);
+			const lastNewline = result.text.lastIndexOf("\n");
+			if (lastNewline >= 0) {
+				const completeChunk = result.text.slice(0, lastNewline + 1);
+				const newEntries = parseSessionEntries(completeChunk);
+				for (const entry of newEntries) {
+					if (entry.type === "message") {
+						this.#transcriptCache.entries.push(entry as SessionMessageEntry);
+					}
 				}
+				this.#transcriptCache.bytesRead = fromByte + Buffer.byteLength(completeChunk, "utf-8");
 			}
+			// If no newline found, the entire chunk is partial — leave bytesRead unchanged
 		}
-		this.#transcriptCache.bytesRead = result.newSize;
 		return this.#transcriptCache.entries;
 	}
 
