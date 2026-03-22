@@ -3,6 +3,10 @@
 		"enabled": true,
 		"rules": {
 			"recommended": true,
+			"correctness": {
+				"noUnusedImports": "error",
+				"noVoidTypeReturn": "off"
+			},
 			"style": {
 				"noNonNullAssertion": "off",
 				"useConst": "error",
