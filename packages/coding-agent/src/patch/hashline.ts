@@ -18,10 +18,10 @@ export type Anchor = { line: number; hash: string };
 export type HashlineEdit =
 	| { op: "replace_line"; pos: Anchor; lines: string[] }
 	| { op: "replace_range"; pos: Anchor; end: Anchor; lines: string[] }
-	| { op: "append"; pos: Anchor; lines: string[] }
-	| { op: "prepend"; pos: Anchor; lines: string[] }
-	| { op: "append_eof"; lines: string[] }
-	| { op: "prepend_bof"; lines: string[] };
+	| { op: "append_at"; pos: Anchor; lines: string[] }
+	| { op: "prepend_at"; pos: Anchor; lines: string[] }
+	| { op: "append_file"; lines: string[] }
+	| { op: "prepend_file"; lines: string[] };
 
 const NIBBLE_STR = "ZPMQVRWSNKTXJBYH";
 
@@ -517,16 +517,16 @@ export function applyHashlineEdits(
 				}
 				break;
 			}
-			case "append":
-			case "prepend": {
+			case "append_at":
+			case "prepend_at": {
 				if (!validateRef(edit.pos)) continue;
 				if (edit.lines.length === 0) {
 					edit.lines = [""]; // insert an empty line
 				}
 				break;
 			}
-			case "append_eof":
-			case "prepend_bof": {
+			case "append_file":
+			case "prepend_file": {
 				if (edit.lines.length === 0) {
 					edit.lines = [""]; // insert an empty line
 				}
@@ -552,16 +552,16 @@ export function applyHashlineEdits(
 			case "replace_range":
 				lineKey = `r:${edit.pos.line}:${edit.end.line}`;
 				break;
-			case "append":
+			case "append_at":
 				lineKey = `i:${edit.pos.line}`;
 				break;
-			case "prepend":
+			case "prepend_at":
 				lineKey = `ib:${edit.pos.line}`;
 				break;
-			case "append_eof":
+			case "append_file":
 				lineKey = "ieof";
 				break;
-			case "prepend_bof":
+			case "prepend_file":
 				lineKey = "ibef";
 				break;
 		}
@@ -591,19 +591,19 @@ export function applyHashlineEdits(
 				sortLine = edit.end.line;
 				precedence = 0;
 				break;
-			case "append":
+			case "append_at":
 				sortLine = edit.pos.line;
 				precedence = 1;
 				break;
-			case "prepend":
+			case "prepend_at":
 				sortLine = edit.pos.line;
 				precedence = 2;
 				break;
-			case "append_eof":
+			case "append_file":
 				sortLine = fileLines.length + 1;
 				precedence = 1;
 				break;
-			case "prepend_bof":
+			case "prepend_file":
 				sortLine = 0;
 				precedence = 2;
 				break;
@@ -637,7 +637,7 @@ export function applyHashlineEdits(
 				trackFirstChanged(edit.pos.line);
 				break;
 			}
-			case "append": {
+			case "append_at": {
 				const inserted = edit.lines;
 				if (inserted.length === 0) {
 					noopEdits.push({
@@ -651,7 +651,7 @@ export function applyHashlineEdits(
 				trackFirstChanged(edit.pos.line + 1);
 				break;
 			}
-			case "prepend": {
+			case "prepend_at": {
 				const inserted = edit.lines;
 				if (inserted.length === 0) {
 					noopEdits.push({
@@ -665,7 +665,7 @@ export function applyHashlineEdits(
 				trackFirstChanged(edit.pos.line);
 				break;
 			}
-			case "append_eof": {
+			case "append_file": {
 				const inserted = edit.lines;
 				if (inserted.length === 0) {
 					noopEdits.push({ editIndex: idx, loc: "EOF", current: "" });
@@ -680,7 +680,7 @@ export function applyHashlineEdits(
 				}
 				break;
 			}
-			case "prepend_bof": {
+			case "prepend_file": {
 				const inserted = edit.lines;
 				if (inserted.length === 0) {
 					noopEdits.push({ editIndex: idx, loc: "BOF", current: "" });

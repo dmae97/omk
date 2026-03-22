@@ -350,7 +350,7 @@ describe("applyHashlineEdits — delete", () => {
 describe("applyHashlineEdits — append", () => {
 	it("inserts after a line", () => {
 		const content = "aaa\nbbb\nccc";
-		const edits: HashlineEdit[] = [{ op: "append", pos: makeTag(1, "aaa"), lines: ["NEW"] }];
+		const edits: HashlineEdit[] = [{ op: "append_at", pos: makeTag(1, "aaa"), lines: ["NEW"] }];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.lines).toBe("aaa\nNEW\nbbb\nccc");
@@ -359,7 +359,7 @@ describe("applyHashlineEdits — append", () => {
 
 	it("inserts multiple lines", () => {
 		const content = "aaa\nbbb";
-		const edits: HashlineEdit[] = [{ op: "append", pos: makeTag(1, "aaa"), lines: ["x", "y", "z"] }];
+		const edits: HashlineEdit[] = [{ op: "append_at", pos: makeTag(1, "aaa"), lines: ["x", "y", "z"] }];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.lines).toBe("aaa\nx\ny\nz\nbbb");
@@ -367,7 +367,7 @@ describe("applyHashlineEdits — append", () => {
 
 	it("inserts after last line", () => {
 		const content = "aaa\nbbb";
-		const edits: HashlineEdit[] = [{ op: "append", pos: makeTag(2, "bbb"), lines: ["NEW"] }];
+		const edits: HashlineEdit[] = [{ op: "append_at", pos: makeTag(2, "bbb"), lines: ["NEW"] }];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.lines).toBe("aaa\nbbb\nNEW");
@@ -375,7 +375,7 @@ describe("applyHashlineEdits — append", () => {
 
 	it("insert with empty dst inserts an empty line", () => {
 		const content = "aaa\nbbb";
-		const edits: HashlineEdit[] = [{ op: "append", pos: makeTag(1, "aaa"), lines: [] }];
+		const edits: HashlineEdit[] = [{ op: "append_at", pos: makeTag(1, "aaa"), lines: [] }];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.lines).toBe("aaa\n\nbbb");
@@ -384,7 +384,7 @@ describe("applyHashlineEdits — append", () => {
 
 	it("inserts at EOF without anchors", () => {
 		const content = "aaa\nbbb";
-		const edits: HashlineEdit[] = [{ op: "append_eof", lines: ["NEW"] }];
+		const edits: HashlineEdit[] = [{ op: "append_file", lines: ["NEW"] }];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.lines).toBe("aaa\nbbb\nNEW");
@@ -393,7 +393,7 @@ describe("applyHashlineEdits — append", () => {
 
 	it("inserts at EOF into empty file without anchors", () => {
 		const content = "";
-		const edits: HashlineEdit[] = [{ op: "append_eof", lines: ["NEW"] }];
+		const edits: HashlineEdit[] = [{ op: "append_file", lines: ["NEW"] }];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.lines).toBe("NEW");
@@ -402,7 +402,7 @@ describe("applyHashlineEdits — append", () => {
 
 	it("insert at EOF with empty dst inserts a trailing empty line", () => {
 		const content = "aaa\nbbb";
-		const edits: HashlineEdit[] = [{ op: "append_eof", lines: [] }];
+		const edits: HashlineEdit[] = [{ op: "append_file", lines: [] }];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.lines).toBe("aaa\nbbb\n");
@@ -417,7 +417,7 @@ describe("applyHashlineEdits — append", () => {
 describe("applyHashlineEdits — prepend", () => {
 	it("inserts before a line", () => {
 		const content = "aaa\nbbb\nccc";
-		const edits: HashlineEdit[] = [{ op: "prepend", pos: makeTag(2, "bbb"), lines: ["NEW"] }];
+		const edits: HashlineEdit[] = [{ op: "prepend_at", pos: makeTag(2, "bbb"), lines: ["NEW"] }];
 		const result = applyHashlineEdits(content, edits);
 		expect(result.lines).toBe("aaa\nNEW\nbbb\nccc");
 		expect(result.firstChangedLine).toBe(2);
@@ -425,21 +425,21 @@ describe("applyHashlineEdits — prepend", () => {
 
 	it("inserts multiple lines before", () => {
 		const content = "aaa\nbbb";
-		const edits: HashlineEdit[] = [{ op: "prepend", pos: makeTag(2, "bbb"), lines: ["x", "y", "z"] }];
+		const edits: HashlineEdit[] = [{ op: "prepend_at", pos: makeTag(2, "bbb"), lines: ["x", "y", "z"] }];
 		const result = applyHashlineEdits(content, edits);
 		expect(result.lines).toBe("aaa\nx\ny\nz\nbbb");
 	});
 
 	it("inserts before first line", () => {
 		const content = "aaa\nbbb";
-		const edits: HashlineEdit[] = [{ op: "prepend", pos: makeTag(1, "aaa"), lines: ["NEW"] }];
+		const edits: HashlineEdit[] = [{ op: "prepend_at", pos: makeTag(1, "aaa"), lines: ["NEW"] }];
 		const result = applyHashlineEdits(content, edits);
 		expect(result.lines).toBe("NEW\naaa\nbbb");
 	});
 
 	it("prepends at BOF without anchor", () => {
 		const content = "aaa\nbbb";
-		const edits: HashlineEdit[] = [{ op: "prepend_bof", lines: ["NEW"] }];
+		const edits: HashlineEdit[] = [{ op: "prepend_file", lines: ["NEW"] }];
 		const result = applyHashlineEdits(content, edits);
 		expect(result.lines).toBe("NEW\naaa\nbbb");
 		expect(result.firstChangedLine).toBe(1);
@@ -447,7 +447,7 @@ describe("applyHashlineEdits — prepend", () => {
 
 	it("insert with before and empty text inserts an empty line", () => {
 		const content = "aaa\nbbb";
-		const edits: HashlineEdit[] = [{ op: "prepend", pos: makeTag(1, "aaa"), lines: [] }];
+		const edits: HashlineEdit[] = [{ op: "prepend_at", pos: makeTag(1, "aaa"), lines: [] }];
 		const result = applyHashlineEdits(content, edits);
 		expect(result.lines).toBe("\naaa\nbbb");
 		expect(result.firstChangedLine).toBe(1);
@@ -456,8 +456,8 @@ describe("applyHashlineEdits — prepend", () => {
 	it("insert before and insert after at same line produce correct order", () => {
 		const content = "aaa\nbbb\nccc";
 		const edits: HashlineEdit[] = [
-			{ op: "prepend", pos: makeTag(2, "bbb"), lines: ["BEFORE"] },
-			{ op: "append", pos: makeTag(2, "bbb"), lines: ["AFTER"] },
+			{ op: "prepend_at", pos: makeTag(2, "bbb"), lines: ["BEFORE"] },
+			{ op: "append_at", pos: makeTag(2, "bbb"), lines: ["AFTER"] },
 		];
 		const result = applyHashlineEdits(content, edits);
 		expect(result.lines).toBe("aaa\nBEFORE\nbbb\nAFTER\nccc");
@@ -466,7 +466,7 @@ describe("applyHashlineEdits — prepend", () => {
 	it("insert before with set at same line", () => {
 		const content = "aaa\nbbb\nccc";
 		const edits: HashlineEdit[] = [
-			{ op: "prepend", pos: makeTag(2, "bbb"), lines: ["BEFORE"] },
+			{ op: "prepend_at", pos: makeTag(2, "bbb"), lines: ["BEFORE"] },
 			{ op: "replace_line", pos: makeTag(2, "bbb"), lines: ["BBB"] },
 		];
 		const result = applyHashlineEdits(content, edits);
@@ -666,7 +666,7 @@ describe("applyHashlineEdits — multiple edits", () => {
 		const content = "aaa\nbbb\nccc";
 		const edits: HashlineEdit[] = [
 			{ op: "replace_line", pos: makeTag(3, "ccc"), lines: ["CCC"] },
-			{ op: "append", pos: makeTag(1, "aaa"), lines: ["INSERTED"] },
+			{ op: "append_at", pos: makeTag(1, "aaa"), lines: ["INSERTED"] },
 		];
 
 		const result = applyHashlineEdits(content, edits);
@@ -805,10 +805,10 @@ describe("applyHashlineEdits — errors", () => {
 
 	it("accepts append/prepend with empty text by inserting empty lines", () => {
 		const content = "aaa\nbbb";
-		const appendEdits: HashlineEdit[] = [{ op: "append", pos: makeTag(1, "aaa"), lines: [] }];
+		const appendEdits: HashlineEdit[] = [{ op: "append_at", pos: makeTag(1, "aaa"), lines: [] }];
 		expect(applyHashlineEdits(content, appendEdits).lines).toBe("aaa\n\nbbb");
 
-		const prependEdits: HashlineEdit[] = [{ op: "prepend", pos: makeTag(1, "aaa"), lines: [] }];
+		const prependEdits: HashlineEdit[] = [{ op: "prepend_at", pos: makeTag(1, "aaa"), lines: [] }];
 		expect(applyHashlineEdits(content, prependEdits).lines).toBe("\naaa\nbbb");
 	});
 });
