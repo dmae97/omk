@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import type { AgentToolContext } from "@oh-my-pi/pi-agent-core";
 import { DEFAULT_BASH_INTERCEPTOR_RULES, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { EditTool } from "@oh-my-pi/pi-coding-agent/patch";
+import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { BashTool } from "@oh-my-pi/pi-coding-agent/tools/bash";
 import { FindTool } from "@oh-my-pi/pi-coding-agent/tools/find";
@@ -40,6 +42,22 @@ function createTestToolSession(cwd: string, settings: Settings = Settings.isolat
 		},
 		settings,
 	};
+}
+
+function createTestToolContext(toolNames: string[]): AgentToolContext {
+	return {
+		sessionManager: SessionManager.inMemory(),
+		modelRegistry: {
+			find: () => undefined,
+			getAll: () => [],
+			getApiKey: async () => undefined,
+		} as unknown as AgentToolContext["modelRegistry"],
+		model: undefined,
+		isIdle: () => true,
+		hasQueuedMessages: () => false,
+		abort: () => {},
+		toolNames,
+	} as AgentToolContext;
 }
 
 describe("Coding Agent Tools", () => {
@@ -479,7 +497,7 @@ function b() {
 					{ command: "cat test.txt" },
 					undefined,
 					undefined,
-					{ toolNames: ["read"] },
+					createTestToolContext(["read"]),
 				),
 			).rejects.toThrow(/Use the `read` tool instead of cat\/head\/tail/);
 		});
@@ -505,7 +523,7 @@ function b() {
 				{ command: `cat ${allowedFile}` },
 				undefined,
 				undefined,
-				{ toolNames: ["read"] },
+				createTestToolContext(["read"]),
 			);
 
 			expect(getTextOutput(result)).toContain("empty means empty");
@@ -535,7 +553,7 @@ function b() {
 					{ command: "customcmd foo" },
 					undefined,
 					undefined,
-					{ toolNames: ["grep"] },
+					createTestToolContext(["grep"]),
 				),
 			).rejects.toThrow(/Use the `grep` tool for customcmd\./);
 		});
