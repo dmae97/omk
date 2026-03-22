@@ -67,7 +67,7 @@ Options:
   --max-attempts <n>        Max prompt attempts per run (default: 1)
   --no-op-retry-limit <n>   Stop after repeated preventable no-op failures (default: 2)
   --mutation-scope-window <n> Allowed line-distance from mutation target for hashline refs (default: 20)
-  --max-turns <n>           Max turn_start events per attempt before failing (default: 10)
+  --max-turns <n>           Max turn_start events per attempt before failing (default: 24)
   --output <file>           Output file (default: run_<model>_<variant>_<fuzzy>_<threshold>_<timestamp>.md)
   --format <fmt>            Output format: markdown, json (default: markdown)
   --check-fixtures          Validate fixtures and exit
@@ -152,7 +152,7 @@ async function main(): Promise<void> {
 			thinking: { type: "string", default: "low" },
 			runs: { type: "string", default: "1" },
 			timeout: { type: "string", default: "120000" },
-			"max-turns": { type: "string", default: "10" },
+			"max-turns": { type: "string", default: "24" },
 			"task-concurrency": { type: "string", default: "16" },
 			tasks: { type: "string" },
 			fixtures: { type: "string" },
