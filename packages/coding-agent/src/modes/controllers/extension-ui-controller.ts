@@ -253,7 +253,7 @@ export class ExtensionUiController {
 	}
 
 	setHookWidget(key: string, content: unknown): void {
-		this.ctx.statusLine.setHookStatus(key, String(content));
+		this.ctx.statusLine.setHookStatus(key, content === undefined || content === null ? undefined : String(content));
 		this.ctx.ui.requestRender();
 	}
 
