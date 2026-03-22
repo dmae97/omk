@@ -356,7 +356,7 @@ export interface ProviderDiscoveryState {
 
 /** Result of loading custom models from models.json */
 interface CustomModelsResult {
-	models?: Model<Api>[];
+	models?: CustomModelOverlay[];
 	overrides?: Map<string, ProviderOverride>;
 	modelOverrides?: Map<string, Map<string, ModelOverride>>;
 	keylessProviders?: Set<string>;
@@ -551,6 +551,24 @@ interface CustomModelBuildOptions {
 	useDefaults: boolean;
 }
 
+type CustomModelOverlay = {
+	id: string;
+	provider: string;
+	api: Api;
+	baseUrl: string;
+	name?: string;
+	reasoning?: boolean;
+	thinking?: ThinkingConfig;
+	input?: ("text" | "image")[];
+	cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
+	contextWindow?: number;
+	maxTokens?: number;
+	headers?: Record<string, string>;
+	compat?: Model<Api>["compat"];
+	contextPromotionTarget?: string;
+	premiumMultiplier?: number;
+};
+
 function mergeCustomModelHeaders(
 	providerHeaders: Record<string, string> | undefined,
 	modelHeaders: Record<string, string> | undefined,
@@ -567,6 +585,68 @@ function mergeCustomModelHeaders(
 	return headers;
 }
 
+function buildCustomModelOverlay(
+	providerName: string,
+	providerBaseUrl: string,
+	providerApi: Api | undefined,
+	providerHeaders: Record<string, string> | undefined,
+	providerApiKey: string | undefined,
+	authHeader: boolean | undefined,
+	providerCompat: Model<Api>["compat"] | undefined,
+	modelDef: CustomModelDefinitionLike,
+): CustomModelOverlay | undefined {
+	const api = modelDef.api ?? providerApi;
+	if (!api) return undefined;
+	return {
+		id: modelDef.id,
+		provider: providerName,
+		api,
+		baseUrl: modelDef.baseUrl ?? providerBaseUrl,
+		name: modelDef.name,
+		reasoning: modelDef.reasoning,
+		thinking: modelDef.thinking as ThinkingConfig | undefined,
+		input: modelDef.input as ("text" | "image")[] | undefined,
+		cost: modelDef.cost,
+		contextWindow: modelDef.contextWindow,
+		maxTokens: modelDef.maxTokens,
+		headers: mergeCustomModelHeaders(providerHeaders, modelDef.headers, authHeader, providerApiKey),
+		compat: mergeCompat(providerCompat, modelDef.compat),
+		contextPromotionTarget: modelDef.contextPromotionTarget,
+		premiumMultiplier: modelDef.premiumMultiplier,
+	};
+}
+
+function applyStandaloneCustomModelPolicies(model: CustomModelOverlay): CustomModelOverlay {
+	if (model.id !== "gpt-5.4" || model.provider === "github-copilot" || model.contextWindow !== undefined) {
+		return model;
+	}
+	return { ...model, contextWindow: 1_000_000 };
+}
+
+function finalizeCustomModel(model: CustomModelOverlay, options: CustomModelBuildOptions): Model<Api> {
+	const resolvedModel = options.useDefaults ? applyStandaloneCustomModelPolicies(model) : model;
+	const cost =
+		resolvedModel.cost ?? (options.useDefaults ? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } : undefined);
+	const input = resolvedModel.input ?? (options.useDefaults ? ["text"] : undefined);
+	return enrichModelThinking({
+		id: resolvedModel.id,
+		name: resolvedModel.name ?? (options.useDefaults ? resolvedModel.id : undefined),
+		api: resolvedModel.api,
+		provider: resolvedModel.provider,
+		baseUrl: resolvedModel.baseUrl,
+		reasoning: resolvedModel.reasoning ?? (options.useDefaults ? false : undefined),
+		thinking: resolvedModel.thinking,
+		input: input as ("text" | "image")[],
+		cost,
+		contextWindow: resolvedModel.contextWindow ?? (options.useDefaults ? 128000 : undefined),
+		maxTokens: resolvedModel.maxTokens ?? (options.useDefaults ? 16384 : undefined),
+		headers: resolvedModel.headers,
+		compat: resolvedModel.compat,
+		contextPromotionTarget: resolvedModel.contextPromotionTarget,
+		premiumMultiplier: resolvedModel.premiumMultiplier,
+	} as Model<Api>);
+}
+
 function buildCustomModel(
 	providerName: string,
 	providerBaseUrl: string,
@@ -578,28 +658,18 @@ function buildCustomModel(
 	modelDef: CustomModelDefinitionLike,
 	options: CustomModelBuildOptions,
 ): Model<Api> | undefined {
-	const api = modelDef.api ?? providerApi;
-	if (!api) return undefined;
-	const withDefaults = options.useDefaults;
-	const cost = modelDef.cost ?? (withDefaults ? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } : undefined);
-	const input = modelDef.input ?? (withDefaults ? ["text"] : undefined);
-	return enrichModelThinking({
-		id: modelDef.id,
-		name: modelDef.name ?? (withDefaults ? modelDef.id : undefined),
-		api,
-		provider: providerName,
-		baseUrl: modelDef.baseUrl ?? providerBaseUrl,
-		reasoning: modelDef.reasoning ?? (withDefaults ? false : undefined),
-		thinking: modelDef.thinking as ThinkingConfig | undefined,
-		input: input as ("text" | "image")[],
-		cost,
-		contextWindow: modelDef.contextWindow ?? (withDefaults ? 128000 : undefined),
-		maxTokens: modelDef.maxTokens ?? (withDefaults ? 16384 : undefined),
-		headers: mergeCustomModelHeaders(providerHeaders, modelDef.headers, authHeader, providerApiKey),
-		compat: mergeCompat(providerCompat, modelDef.compat),
-		contextPromotionTarget: modelDef.contextPromotionTarget,
-		premiumMultiplier: modelDef.premiumMultiplier,
-	} as Model<Api>);
+	const model = buildCustomModelOverlay(
+		providerName,
+		providerBaseUrl,
+		providerApi,
+		providerHeaders,
+		providerApiKey,
+		authHeader,
+		providerCompat,
+		modelDef,
+	);
+	if (!model) return undefined;
+	return finalizeCustomModel(model, options);
 }
 
 /**
@@ -610,6 +680,8 @@ export class ModelRegistry {
 	#customProviderApiKeys: Map<string, string> = new Map();
 	#keylessProviders: Set<string> = new Set();
 	#discoverableProviders: DiscoveryProviderConfig[] = [];
+	#customModelOverlays: CustomModelOverlay[] = [];
+	#providerOverrides: Map<string, ProviderOverride> = new Map();
 	#modelOverrides: Map<string, Map<string, ModelOverride>> = new Map();
 	#configError: ConfigError | undefined = undefined;
 	#modelsConfigFile: ConfigFile<ModelsConfig>;
@@ -676,6 +748,7 @@ export class ModelRegistry {
 		this.#customProviderApiKeys.clear();
 		this.#keylessProviders.clear();
 		this.#discoverableProviders = [];
+		this.#providerOverrides.clear();
 		this.#modelOverrides.clear();
 		this.#configError = undefined;
 		this.#providerDiscoveryStates.clear();
@@ -703,14 +776,17 @@ export class ModelRegistry {
 		this.#configError = configError;
 		this.#keylessProviders = keylessProviders;
 		this.#discoverableProviders = discoverableProviders;
+		this.#customModelOverlays = customModels;
+		this.#providerOverrides = overrides;
 		this.#modelOverrides = modelOverrides;
 
 		this.#addImplicitDiscoverableProviders(configuredProviders);
-		const builtInModels = this.#loadBuiltInModels(overrides, modelOverrides);
-		const cachedDiscoveries = this.#loadCachedDiscoverableModels();
-		const combined = this.#mergeCustomModels(builtInModels, [...customModels, ...cachedDiscoveries]);
+		const builtInModels = this.#applyHardcodedModelPolicies(this.#loadBuiltInModels(overrides, modelOverrides));
+		const cachedDiscoveries = this.#applyHardcodedModelPolicies(this.#loadCachedDiscoverableModels());
+		const resolvedDefaults = this.#mergeResolvedModels(builtInModels, cachedDiscoveries);
+		const combined = this.#mergeCustomModels(resolvedDefaults, this.#customModelOverlays);
 
-		this.#models = this.#applyHardcodedModelPolicies(combined);
+		this.#models = this.#applyModelOverrides(combined, this.#modelOverrides);
 	}
 
 	/** Load built-in models, applying provider and per-model overrides */
@@ -742,15 +818,50 @@ export class ModelRegistry {
 		});
 	}
 
+	#mergeResolvedModels(baseModels: Model<Api>[], replacementModels: Model<Api>[]): Model<Api>[] {
+		const merged = [...baseModels];
+		for (const replacementModel of replacementModels) {
+			const existingIndex = merged.findIndex(
+				m => m.provider === replacementModel.provider && m.id === replacementModel.id,
+			);
+			if (existingIndex >= 0) {
+				merged[existingIndex] = replacementModel;
+			} else {
+				merged.push(replacementModel);
+			}
+		}
+		return merged;
+	}
+
 	/** Merge custom models with built-in, replacing by provider+id match */
-	#mergeCustomModels(builtInModels: Model<Api>[], customModels: Model<Api>[]): Model<Api>[] {
+	#mergeCustomModels(builtInModels: Model<Api>[], customModels: CustomModelOverlay[]): Model<Api>[] {
 		const merged = [...builtInModels];
 		for (const customModel of customModels) {
 			const existingIndex = merged.findIndex(m => m.provider === customModel.provider && m.id === customModel.id);
 			if (existingIndex >= 0) {
-				merged[existingIndex] = customModel;
+				merged[existingIndex] = enrichModelThinking({
+					...merged[existingIndex],
+					id: customModel.id,
+					provider: customModel.provider,
+					api: customModel.api,
+					baseUrl: customModel.baseUrl,
+					name: customModel.name ?? merged[existingIndex].name,
+					reasoning: customModel.reasoning ?? merged[existingIndex].reasoning,
+					thinking: customModel.thinking ?? merged[existingIndex].thinking,
+					input: customModel.input ?? merged[existingIndex].input,
+					cost: customModel.cost ?? merged[existingIndex].cost,
+					contextWindow: customModel.contextWindow ?? merged[existingIndex].contextWindow,
+					maxTokens: customModel.maxTokens ?? merged[existingIndex].maxTokens,
+					headers: customModel.headers
+						? { ...merged[existingIndex].headers, ...customModel.headers }
+						: merged[existingIndex].headers,
+					compat: mergeCompat(merged[existingIndex].compat, customModel.compat),
+					contextPromotionTarget:
+						customModel.contextPromotionTarget ?? merged[existingIndex].contextPromotionTarget,
+					premiumMultiplier: customModel.premiumMultiplier ?? merged[existingIndex].premiumMultiplier,
+				} as Model<Api>);
 			} else {
-				merged.push(customModel);
+				merged.push(finalizeCustomModel(customModel, { useDefaults: true }));
 			}
 		}
 		return merged;
@@ -935,22 +1046,31 @@ export class ModelRegistry {
 		if (discovered.length === 0) {
 			return;
 		}
-		const merged = this.#mergeCustomModels(
-			this.#models,
+		const discoveredModels = this.#applyHardcodedModelPolicies(
 			discovered.map(model => {
-				const existing =
-					this.find(model.provider, model.id) ??
-					this.#models.find(candidate => candidate.provider === model.provider);
-				return existing
+				const existing = this.find(model.provider, model.id);
+				if (existing) {
+					return {
+						...model,
+						baseUrl: existing.baseUrl,
+						headers: existing.headers ? { ...existing.headers, ...model.headers } : model.headers,
+					};
+				}
+				const providerOverride = this.#providerOverrides.get(model.provider);
+				return providerOverride
 					? {
 							...model,
-							baseUrl: existing.baseUrl,
-							headers: existing.headers ? { ...existing.headers, ...model.headers } : model.headers,
+							baseUrl: providerOverride.baseUrl ?? model.baseUrl,
+							headers: providerOverride.headers
+								? { ...model.headers, ...providerOverride.headers }
+								: model.headers,
 						}
 					: model;
 			}),
 		);
-		this.#models = this.#applyHardcodedModelPolicies(this.#applyModelOverrides(merged, this.#modelOverrides));
+		const resolved = this.#mergeResolvedModels(this.#models, discoveredModels);
+		const combined = this.#mergeCustomModels(resolved, this.#customModelOverlays);
+		this.#models = this.#applyModelOverrides(combined, this.#modelOverrides);
 	}
 
 	async #discoverProviderModels(
@@ -1454,8 +1574,8 @@ export class ModelRegistry {
 		});
 	}
 
-	#parseModels(config: ModelsConfig): Model<Api>[] {
-		const models: Model<Api>[] = [];
+	#parseModels(config: ModelsConfig): CustomModelOverlay[] {
+		const models: CustomModelOverlay[] = [];
 
 		for (const [providerName, providerConfig] of Object.entries(config.providers)) {
 			const modelDefs = providerConfig.models ?? [];
@@ -1464,7 +1584,7 @@ export class ModelRegistry {
 				this.#customProviderApiKeys.set(providerName, providerConfig.apiKey);
 			}
 			for (const modelDef of modelDefs) {
-				const model = buildCustomModel(
+				const model = buildCustomModelOverlay(
 					providerName,
 					providerConfig.baseUrl!,
 					providerConfig.api as Api | undefined,
@@ -1473,7 +1593,6 @@ export class ModelRegistry {
 					providerConfig.authHeader,
 					providerConfig.compat,
 					modelDef as CustomModelDefinitionLike,
-					{ useDefaults: true },
 				);
 				if (!model) continue;
 				models.push(model);
@@ -1635,7 +1754,7 @@ export class ModelRegistry {
 					config.authHeader,
 					config.compat,
 					modelDef as CustomModelDefinitionLike,
-					{ useDefaults: false },
+					{ useDefaults: true },
 				);
 				if (!model) {
 					throw new Error(`Provider ${providerName}, model ${modelDef.id}: no "api" specified.`);

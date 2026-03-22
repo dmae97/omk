@@ -50,7 +50,13 @@ describe("ModelRegistry", () => {
 	/** Create minimal provider config  */
 	function providerConfig(
 		baseUrl: string,
-		models: Array<{ id: string; name?: string; reasoning?: boolean; thinking?: ThinkingConfig }>,
+		models: Array<{
+			id: string;
+			name?: string;
+			reasoning?: boolean;
+			thinking?: ThinkingConfig;
+			contextWindow?: number;
+		}>,
 		api: string = "anthropic-messages",
 	) {
 		return {
@@ -64,7 +70,7 @@ describe("ModelRegistry", () => {
 				thinking: m.thinking,
 				input: ["text"],
 				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-				contextWindow: 100000,
+				contextWindow: m.contextWindow ?? 100000,
 				maxTokens: 8000,
 			})),
 		};
@@ -86,6 +92,19 @@ describe("ModelRegistry", () => {
 	/** Write raw providers config (for mixed override/replacement scenarios) */
 	function writeRawModelsJson(providers: Record<string, unknown>) {
 		fs.writeFileSync(modelsJsonPath, JSON.stringify({ providers }));
+	}
+
+	function mockOpenAiCompatibleModels(url: string, modelIds: string[]) {
+		return hookFetch(input => {
+			const requestUrl = String(input);
+			if (requestUrl === url) {
+				return new Response(JSON.stringify({ data: modelIds.map(id => ({ id })) }), {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				});
+			}
+			throw new Error(`Unexpected URL: ${requestUrl}`);
+		});
 	}
 
 	describe("baseUrl override (no custom models)", () => {
@@ -422,13 +441,221 @@ describe("ModelRegistry", () => {
 			expect(registry.find("openai", "gpt-5.4")?.contextWindow).toBe(1_000_000);
 		});
 
-		test("custom gpt-5.4 replacement also applies the hardcoded context window policy", () => {
-			writeModelsJson({
-				openai: providerConfig("https://my-proxy.example.com/v1", [{ id: "gpt-5.4" }], "openai-responses"),
+		test("custom gpt-5.4 replacement keeps the hardcoded context window when contextWindow is omitted", () => {
+			writeRawModelsJson({
+				openai: {
+					baseUrl: "https://my-proxy.example.com/v1",
+					apiKey: "TEST_KEY",
+					api: "openai-responses",
+					models: [{ id: "gpt-5.4" }],
+				},
 			});
 
 			const registry = new ModelRegistry(authStorage, modelsJsonPath);
-			expect(registry.find("openai", "gpt-5.4")?.contextWindow).toBe(1_000_000);
+			const model = registry.find("openai", "gpt-5.4");
+			expect(model?.contextWindow).toBe(1_000_000);
+			expect(model?.baseUrl).toBe("https://my-proxy.example.com/v1");
+		});
+
+		test("custom-only gpt-5.4 provider keeps the hardcoded context window when contextWindow is omitted", () => {
+			writeRawModelsJson({
+				"my-proxy": {
+					baseUrl: "https://my-proxy.example.com/v1",
+					apiKey: "TEST_KEY",
+					api: "openai-responses",
+					models: [{ id: "gpt-5.4" }],
+				},
+			});
+
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			const model = registry.find("my-proxy", "gpt-5.4");
+			expect(model?.contextWindow).toBe(1_000_000);
+			expect(model?.baseUrl).toBe("https://my-proxy.example.com/v1");
+		});
+
+		test("custom gpt-5.4 replacement preserves its explicit context window", () => {
+			writeModelsJson({
+				openai: providerConfig(
+					"https://my-proxy.example.com/v1",
+					[{ id: "gpt-5.4", contextWindow: 256000 }],
+					"openai-responses",
+				),
+			});
+
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			expect(registry.find("openai", "gpt-5.4")?.contextWindow).toBe(256000);
+		});
+
+		test("modelOverrides can still patch a custom gpt-5.4 replacement", () => {
+			writeRawModelsJson({
+				openai: {
+					baseUrl: "https://my-proxy.example.com/v1",
+					apiKey: "TEST_KEY",
+					api: "openai-responses",
+					models: [
+						{
+							id: "gpt-5.4",
+							name: "gpt-5.4",
+							reasoning: false,
+							input: ["text"],
+							cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+							contextWindow: 256000,
+							maxTokens: 128000,
+						},
+					],
+					modelOverrides: {
+						"gpt-5.4": {
+							contextWindow: 512000,
+						},
+					},
+				},
+			});
+
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			expect(registry.find("openai", "gpt-5.4")?.contextWindow).toBe(512000);
+		});
+
+		test("discoverable bundled replacement survives refresh", async () => {
+			writeModelsJson({
+				openai: providerConfig(
+					"https://my-proxy.example.com/v1",
+					[{ id: "gpt-5.4", name: "Proxy GPT-5.4", contextWindow: 256000 }],
+					"openai-responses",
+				),
+			});
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			expect(registry.find("openai", "gpt-5.4")?.name).toBe("Proxy GPT-5.4");
+			expect(registry.find("openai", "gpt-5.4")?.contextWindow).toBe(256000);
+
+			using _hook = mockOpenAiCompatibleModels("https://my-proxy.example.com/v1/models", ["gpt-5.4"]);
+			await registry.refreshProvider("openai", "online");
+
+			const model = registry.find("openai", "gpt-5.4");
+			expect(model?.name).toBe("Proxy GPT-5.4");
+			expect(model?.contextWindow).toBe(256000);
+			expect(model?.baseUrl).toBe("https://my-proxy.example.com/v1");
+		});
+
+		test("discoverable custom-only gpt-5.4 survives refresh", async () => {
+			writeRawModelsJson({
+				"custom-local": {
+					baseUrl: "http://127.0.0.1:8080",
+					apiKey: "TEST_KEY",
+					api: "openai-responses",
+					discovery: { type: "llama.cpp" },
+					models: [{ id: "gpt-5.4" }],
+				},
+			});
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			expect(registry.find("custom-local", "gpt-5.4")?.contextWindow).toBe(1_000_000);
+
+			using _hook = mockOpenAiCompatibleModels("http://127.0.0.1:8080/models", ["gpt-5.4"]);
+			await registry.refreshProvider("custom-local", "online");
+
+			const model = registry.find("custom-local", "gpt-5.4");
+			expect(model?.contextWindow).toBe(1_000_000);
+			expect(model?.baseUrl).toBe("http://127.0.0.1:8080");
+		});
+
+		test("discoverable custom compat survives refresh", async () => {
+			writeRawModelsJson({
+				openai: {
+					baseUrl: "https://my-proxy.example.com/v1",
+					apiKey: "TEST_KEY",
+					api: "openai-responses",
+					models: [
+						{
+							id: "gpt-5.4",
+							compat: {
+								extraBody: { source: "proxy" },
+							},
+						},
+					],
+				},
+			});
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			expect(registry.find("openai", "gpt-5.4")?.compat?.extraBody).toEqual({ source: "proxy" });
+
+			using _hook = mockOpenAiCompatibleModels("https://my-proxy.example.com/v1/models", ["gpt-5.4"]);
+			await registry.refreshProvider("openai", "online");
+
+			expect(registry.find("openai", "gpt-5.4")?.compat?.extraBody).toEqual({ source: "proxy" });
+		});
+
+		test("modelOverrides still apply after discoverable refresh", async () => {
+			writeRawModelsJson({
+				openai: {
+					baseUrl: "https://my-proxy.example.com/v1",
+					apiKey: "TEST_KEY",
+					api: "openai-responses",
+					models: [
+						{
+							id: "gpt-5.4",
+							contextWindow: 256000,
+						},
+					],
+					modelOverrides: {
+						"gpt-5.4": {
+							contextWindow: 512000,
+						},
+					},
+				},
+			});
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			expect(registry.find("openai", "gpt-5.4")?.contextWindow).toBe(512000);
+
+			using _hook = mockOpenAiCompatibleModels("https://my-proxy.example.com/v1/models", ["gpt-5.4"]);
+			await registry.refreshProvider("openai", "online");
+
+			expect(registry.find("openai", "gpt-5.4")?.contextWindow).toBe(512000);
+		});
+
+		test("newly discovered ids inherit provider fields, not another model's custom fields", async () => {
+			writeRawModelsJson({
+				openai: {
+					baseUrl: "https://provider.example.com/v1",
+					headers: { "X-Provider": "provider" },
+					apiKey: "TEST_KEY",
+					api: "openai-responses",
+					models: [
+						{
+							id: "gpt-5.4",
+							baseUrl: "https://special.example.com/v1",
+							headers: { "X-Model": "special" },
+						},
+					],
+				},
+			});
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			expect(registry.find("openai", "gpt-5.4")?.baseUrl).toBe("https://special.example.com/v1");
+
+			using _hook = mockOpenAiCompatibleModels("https://provider.example.com/v1/models", ["gpt-5.4", "gpt-5.5"]);
+			await registry.refreshProvider("openai", "online");
+
+			const discovered = registry.find("openai", "gpt-5.5");
+			expect(discovered?.baseUrl).toBe("https://provider.example.com/v1");
+			expect(discovered?.headers?.["X-Provider"]).toBe("provider");
+			expect(discovered?.headers?.["X-Model"]).toBeUndefined();
+		});
+
+		test("provider compat overlays preserve bundled model compat", () => {
+			writeRawModelsJson({
+				"minimax-code": {
+					baseUrl: "https://proxy.example.com/v1",
+					apiKey: "TEST_KEY",
+					api: "openai-completions",
+					compat: {
+						extraBody: { source: "proxy" },
+					},
+					models: [{ id: "MiniMax-M2.5" }],
+				},
+			});
+
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			const model = registry.find("minimax-code", "MiniMax-M2.5");
+			expect(model?.compat?.thinkingFormat).toBe("zai");
+			expect(model?.compat?.reasoningContentField).toBe("reasoning_content");
+			expect(model?.compat?.extraBody).toEqual({ source: "proxy" });
 		});
 
 		test("removing custom models from models.json keeps built-in provider models", async () => {
