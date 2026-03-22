@@ -139,6 +139,43 @@ type SettingDef =
 // under `as const` while still letting SettingValue infer the correct element type.
 const EMPTY_STRING_ARRAY: string[] = [];
 const EMPTY_STRING_RECORD: Record<string, string> = {};
+export const DEFAULT_BASH_INTERCEPTOR_RULES: BashInterceptorRule[] = [
+	{
+		pattern: "^\\s*(cat|head|tail|less|more)\\s+",
+		tool: "read",
+		message: "Use the `read` tool instead of cat/head/tail. It provides better context and handles binary files.",
+	},
+	{
+		pattern: "^\\s*(grep|rg|ripgrep|ag|ack)\\s+",
+		tool: "grep",
+		message: "Use the `grep` tool instead of grep/rg. It respects .gitignore and provides structured output.",
+	},
+	{
+		pattern: "^\\s*(find|fd|locate)\\s+.*(-name|-iname|-type|--type|-glob)",
+		tool: "find",
+		message: "Use the `find` tool instead of find/fd. It respects .gitignore and is faster for glob patterns.",
+	},
+	{
+		pattern: "^\\s*sed\\s+(-i|--in-place)",
+		tool: "edit",
+		message: "Use the `edit` tool instead of sed -i. It provides diff preview and fuzzy matching.",
+	},
+	{
+		pattern: "^\\s*perl\\s+.*-[pn]?i",
+		tool: "edit",
+		message: "Use the `edit` tool instead of perl -i. It provides diff preview and fuzzy matching.",
+	},
+	{
+		pattern: "^\\s*awk\\s+.*-i\\s+inplace",
+		tool: "edit",
+		message: "Use the `edit` tool instead of awk -i inplace. It provides diff preview and fuzzy matching.",
+	},
+	{
+		pattern: "^\\s*(echo|printf|cat\\s*<<)\\s+.*[^|]>\\s*\\S",
+		tool: "write",
+		message: "Use the `write` tool instead of echo/cat redirection. It handles encoding and provides confirmation.",
+	},
+];
 
 export const SETTINGS_SCHEMA = {
 	// ────────────────────────────────────────────────────────────────────────
@@ -943,16 +980,7 @@ export const SETTINGS_SCHEMA = {
 		default: false,
 		ui: { tab: "editing", label: "Bash Interceptor", description: "Block shell commands that have dedicated tools" },
 	},
-
-	"bashInterceptor.simpleLs": {
-		type: "boolean",
-		default: true,
-		ui: {
-			tab: "editing",
-			label: "Intercept `ls`",
-			description: "Intercept bare ls commands (when interceptor is enabled)",
-		},
-	},
+	"bashInterceptor.patterns": { type: "array", default: DEFAULT_BASH_INTERCEPTOR_RULES },
 
 	// Python
 	"python.toolMode": {

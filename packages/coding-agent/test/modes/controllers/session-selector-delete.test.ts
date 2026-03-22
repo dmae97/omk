@@ -1,19 +1,11 @@
-import { afterEach, describe, expect, it, mock, vi } from "bun:test";
+import { afterEach, beforeAll, describe, expect, it, vi } from "bun:test";
+import { SessionSelectorComponent } from "../../../src/modes/components/session-selector";
+import { initTheme } from "../../../src/modes/theme/theme";
 import type { SessionInfo } from "../../../src/session/session-manager";
 
-const themeModulePath = new URL("../../../src/modes/theme/theme.ts", import.meta.url).pathname;
-
-mock.module(themeModulePath, () => ({
-	theme: {
-		fg: (_tone: string, text: string) => text,
-		bold: (text: string) => text,
-		nav: { cursor: ">" },
-		sep: { dot: "·" },
-		boxSharp: { horizontal: "-", vertical: "|" },
-	},
-}));
-
-import { SessionSelectorComponent } from "../../../src/modes/components/session-selector";
+beforeAll(() => {
+	initTheme();
+});
 
 afterEach(() => {
 	vi.restoreAllMocks();
