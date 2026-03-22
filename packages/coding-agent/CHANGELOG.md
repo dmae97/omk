@@ -1,6 +1,16 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added ACP (Agent Client Protocol) mode for headless agent operation via `--mode acp`
+- Added support for Agent Client Protocol SDK integration with session management, MCP server configuration, and streaming communication
+- Added `ensureOnDisk()` method to SessionManager to persist sessions immediately for ACP discovery
+
+### Changed
+
+- Changed session collection to include sessions with zero messages, enabling ACP mode to create discoverable sessions immediately
+- Changed session persistence logic to use atomic file rewrite when flushing unflushed sessions to prevent duplication
 
 ## [13.14.0] - 2026-03-20
 

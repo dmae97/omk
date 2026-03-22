@@ -1302,21 +1302,19 @@ async function collectSessionsFromFiles(files: string[], storage: SessionStorage
 					}
 				}
 
-				if (messageCount) {
-					const stats = storage.statSync(file);
-					sessions.push({
-						path: file,
-						id: header.id,
-						cwd: typeof header.cwd === "string" ? header.cwd : "",
-						title: header.title ?? shortSummary,
-						parentSessionPath: (header as SessionHeader).parentSession,
-						created: new Date(header.timestamp),
-						modified: stats.mtime,
-						messageCount,
-						firstMessage: firstMessage || "(no messages)",
-						allMessagesText: allMessages.join(" "),
-					});
-				}
+				const stats = storage.statSync(file);
+				sessions.push({
+					path: file,
+					id: header.id,
+					cwd: typeof header.cwd === "string" ? header.cwd : "",
+					title: header.title ?? shortSummary,
+					parentSessionPath: (header as SessionHeader).parentSession,
+					created: new Date(header.timestamp),
+					modified: stats.mtime,
+					messageCount,
+					firstMessage: firstMessage || "(no messages)",
+					allMessagesText: allMessages.join(" "),
+				});
 			} catch {}
 		}),
 	);
@@ -1782,6 +1780,16 @@ export class SessionManager {
 		return this.persist;
 	}
 
+	/**
+	 * Force-persist all current entries to disk, even when no assistant message exists yet.
+	 * Used by ACP mode where session/new must create a discoverable session immediately.
+	 */
+	async ensureOnDisk(): Promise<void> {
+		if (!this.persist || !this.#sessionFile) return;
+		if (this.#flushed) return;
+		await this.#rewriteFile();
+	}
+
 	/** Flush pending writes to disk. Call before switching sessions or on shutdown. */
 	async flush(): Promise<void> {
 		await this.#queuePersistTask(async () => {
@@ -1917,17 +1925,9 @@ export class SessionManager {
 		}
 
 		if (!this.#flushed) {
-			this.#flushed = true;
-			void this.#queuePersistTask(async () => {
-				const writer = this.#ensurePersistWriter();
-				if (!writer) return;
-				const entries = await Promise.all(
-					this.#fileEntries.map(e => prepareEntryForPersistence(e, this.#blobStore)),
-				);
-				for (const persistedEntry of entries) {
-					await writer.write(persistedEntry);
-				}
-			});
+			// Full flush: rewrite the entire file atomically to avoid
+			// duplicating entries if the file already exists (e.g. from ensureOnDisk).
+			void this.#rewriteFile();
 		} else {
 			void this.#queuePersistTask(async () => {
 				const writer = this.#ensurePersistWriter();

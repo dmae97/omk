@@ -46,6 +46,7 @@ import {
 	calculateRateLimitBackoffMs,
 	getSupportedEfforts,
 	isContextOverflow,
+	isUsageLimitError,
 	modelsAreEqual,
 	parseRateLimitReason,
 } from "@oh-my-pi/pi-ai";
@@ -4476,8 +4477,9 @@ export class AgentSession {
 	// =========================================================================
 
 	/**
-	 * Check if an error is retryable (overloaded, rate limit, server errors).
+	 * Check if an error is retryable (transient errors or usage limits).
 	 * Context overflow errors are NOT retryable (handled by compaction instead).
+	 * Usage-limit errors are retryable because the retry handler performs credential switching.
 	 */
 	#isRetryableError(message: AssistantMessage): boolean {
 		if (message.stopReason !== "error" || !message.errorMessage) return false;
@@ -4487,18 +4489,13 @@ export class AgentSession {
 		if (isContextOverflow(message, contextWindow)) return false;
 
 		const err = message.errorMessage;
-		return this.#isRetryableErrorMessage(err);
+		return this.#isTransientErrorMessage(err) || isUsageLimitError(err);
 	}
 
-	#isRetryableErrorMessage(errorMessage: string): boolean {
-		// Match: overloaded_error, rate limit, usage limit, 429, 500, 502, 503, 504, service unavailable, connection error, fetch failed, retry delay exceeded, stream stall
-		return /overloaded|rate.?limit|usage.?limit|too many requests|429|500|502|503|504|service.?unavailable|server error|internal error|connection.?error|unable to connect|fetch failed|retry delay|stream stall/i.test(
+	#isTransientErrorMessage(errorMessage: string): boolean {
+		return /overloaded|rate.?limit|too many requests|429|500|502|503|504|service.?unavailable|server error|internal error|connection.?error|unable to connect|fetch failed|retry delay|stream stall/i.test(
 			errorMessage,
 		);
-	}
-
-	#isUsageLimitErrorMessage(errorMessage: string): boolean {
-		return /usage.?limit|usage_limit_reached|limit_reached|quota.?exceeded|resource.?exhausted/i.test(errorMessage);
 	}
 
 	#parseRetryAfterMsFromError(errorMessage: string): number | undefined {

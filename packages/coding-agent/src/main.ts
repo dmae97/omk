@@ -24,7 +24,8 @@ import { Settings, settings } from "./config/settings";
 import { initializeWithSettings } from "./discovery";
 import { exportFromFile } from "./export/html";
 import type { ExtensionUIContext } from "./extensibility/extensions/types";
-import { InteractiveMode, runPrintMode, runRpcMode } from "./modes";
+import type { MCPManager } from "./mcp";
+import { InteractiveMode, runAcpMode, runPrintMode, runRpcMode } from "./modes";
 import { initTheme, stopThemeWatcher } from "./modes/theme/theme";
 import type { SubmittedUserInput } from "./modes/types";
 import { type CreateAgentSessionOptions, createAgentSession, discoverAuthStorage } from "./sdk";
@@ -102,7 +103,7 @@ async function runInteractiveMode(
 	initialMessages: string[],
 	setExtensionUIContext: (uiContext: ExtensionUIContext, hasUI: boolean) => void,
 	lspServers: Array<{ name: string; status: "ready" | "error"; fileTypes: string[]; error?: string }> | undefined,
-	mcpManager: import("./mcp").MCPManager | undefined,
+	mcpManager: MCPManager | undefined,
 	initialMessage?: string,
 	initialImages?: ImageContent[],
 ): Promise<void> {
@@ -717,6 +718,8 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 
 	if (mode === "rpc") {
 		await runRpcMode(session);
+	} else if (mode === "acp") {
+		await runAcpMode(session);
 	} else if (isInteractive) {
 		const versionCheckPromise = checkForNewVersion(VERSION).catch(() => undefined);
 		const changelogMarkdown = await getChangelogForDisplay(parsedArgs);
