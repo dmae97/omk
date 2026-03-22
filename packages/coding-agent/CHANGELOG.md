@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added ACP (Agent Client Protocol) mode for headless agent operation via `--mode acp`
@@ -9,16 +10,11 @@
 
 ### Changed
 
-- Updated bash interceptor configuration to use customizable pattern rules instead of individual boolean flags
-- Clarified hashline range replace semantics: `end` parameter is now strictly exclusive (the line it points to survives and is not consumed)
 - Updated ask tool rendering to support markdown formatting in questions and option labels
 - Refactored hook input and selector components to render titles as markdown for richer text formatting
 - Changed session collection to include sessions with zero messages, enabling ACP mode to create discoverable sessions immediately
 - Changed session persistence logic to use atomic file rewrite when flushing unflushed sessions to prevent duplication
-
-### Fixed
-
-- Fixed bash interceptor to apply built-in default rules when no custom patterns are configured
+- Removed hashline edit autocorrection for duplicated boundary lines; escaped-tab autocorrection remains available for leading `\\t` sequences
 
 ## [13.14.0] - 2026-03-20
 

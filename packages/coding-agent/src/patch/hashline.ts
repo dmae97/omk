@@ -15,13 +15,6 @@
 import type { HashMismatch } from "./types";
 
 export type Anchor = { line: number; hash: string };
-/**
- * Edit operation on hashline-addressed content.
- *
- * For range replace: `pos` is inclusive (first consumed line),
- * `end` is **exclusive** (first surviving line after the range).
- * The consumed range is `[pos.line, end.line - 1]`.
- */
 export type HashlineEdit =
 	| { op: "replace"; pos: Anchor; end?: Anchor; lines: string[] }
 	| { op: "append"; pos?: Anchor; lines: string[] }
@@ -477,8 +470,9 @@ function shouldAutocorrect(line: string, otherLine: string): boolean {
 /**
  * Apply an array of hashline edits to file content.
  *
- * For range replace, `end` is **exclusive**: the consumed range is
- * `[pos.line, end.line - 1]` and the line at `end` survives.
+ * Each edit operation identifies target lines directly (`replace`,
+ * `append`, `prepend`). Line references are resolved via {@link parseTag}
+ * and hashes validated before any mutation.
  *
  * Edits are sorted bottom-up (highest effective line first) so earlier
  * splices don't invalidate later line numbers.
@@ -524,10 +518,8 @@ export function applyHashlineEdits(
 					const startValid = validateRef(edit.pos);
 					const endValid = validateRef(edit.end);
 					if (!startValid || !endValid) continue;
-					if (edit.pos.line >= edit.end.line) {
-						throw new Error(
-							`Range start line ${edit.pos.line} must be < end line ${edit.end.line} (end is exclusive)`,
-						);
+					if (edit.pos.line > edit.end.line) {
+						throw new Error(`Range start line ${edit.pos.line} must be <= end line ${edit.end.line}`);
 					}
 				} else {
 					if (!validateRef(edit.pos)) continue;
@@ -605,13 +597,10 @@ export function applyHashlineEdits(
 			case "replace":
 				if (!edit.end) {
 					sortLine = edit.pos.line;
-					precedence = 0;
 				} else {
 					sortLine = edit.end.line;
-					// Range replaces must run after edits anchored on the surviving end line,
-					// so those line-number references still point at the same survivor.
-					precedence = 3;
 				}
+				precedence = 0;
 				break;
 			case "append":
 				sortLine = edit.pos ? edit.pos.line : fileLines.length + 1;
@@ -645,22 +634,19 @@ export function applyHashlineEdits(
 					fileLines.splice(edit.pos.line - 1, 1, ...newLines);
 					trackFirstChanged(edit.pos.line);
 				} else {
-					// end is exclusive: consumed range is [pos.line, end.line - 1]
-					const count = edit.end.line - edit.pos.line;
+					const count = edit.end.line - edit.pos.line + 1;
 					const newLines = [...edit.lines];
-					// The end line itself survives (exclusive). If the model re-emits it
-					// in lines, that's a duplication mistake — auto-correct by popping.
 					const trailingReplacementLine = newLines[newLines.length - 1]?.trimEnd();
-					const nextSurvivingLine = fileLines[edit.end.line - 1]?.trimEnd();
+					const nextSurvivingLine = fileLines[edit.end.line]?.trimEnd();
 					if (
 						shouldAutocorrect(trailingReplacementLine, nextSurvivingLine) &&
-						// Safety: only correct when the last consumed line differs from the duplicate.
-						// If the last consumed line is the same as the surviving end line, it's coincidence.
-						fileLines[edit.end.line - 2]?.trimEnd() !== trailingReplacementLine
+						// Safety: only correct when end-line content differs from the duplicate.
+						// If end already points to the boundary, matching next line is coincidence.
+						fileLines[edit.end.line - 1]?.trimEnd() !== trailingReplacementLine
 					) {
 						newLines.pop();
 						warnings.push(
-							`Auto-corrected range replace ${edit.pos.line}#${edit.pos.hash}..${edit.end.line}#${edit.end.hash}: removed trailing replacement line "${trailingReplacementLine}" that duplicated the surviving end line`,
+							`Auto-corrected range replace ${edit.pos.line}#${edit.pos.hash}-${edit.end.line}#${edit.end.hash}: removed trailing replacement line "${trailingReplacementLine}" that duplicated next surviving line`,
 						);
 					}
 					const leadingReplacementLine = newLines[0]?.trimEnd();
@@ -673,7 +659,7 @@ export function applyHashlineEdits(
 					) {
 						newLines.shift();
 						warnings.push(
-							`Auto-corrected range replace ${edit.pos.line}#${edit.pos.hash}..${edit.end.line}#${edit.end.hash}: removed leading replacement line "${leadingReplacementLine}" that duplicated preceding surviving line`,
+							`Auto-corrected range replace ${edit.pos.line}#${edit.pos.hash}-${edit.end.line}#${edit.end.hash}: removed leading replacement line "${leadingReplacementLine}" that duplicated preceding surviving line`,
 						);
 					}
 					fileLines.splice(edit.pos.line - 1, count, ...newLines);

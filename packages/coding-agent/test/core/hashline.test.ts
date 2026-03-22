@@ -253,19 +253,9 @@ describe("applyHashlineEdits — replace", () => {
 		expect(result.firstChangedLine).toBe(2);
 	});
 
-	it("range replace (shrink) — end is exclusive", () => {
+	it("range replace (shrink)", () => {
 		const content = "aaa\nbbb\nccc\nddd";
-		// end points to "ccc" which survives; only line 2 ("bbb") is consumed
 		const edits: HashlineEdit[] = [{ op: "replace", pos: makeTag(2, "bbb"), end: makeTag(3, "ccc"), lines: ["ONE"] }];
-
-		const result = applyHashlineEdits(content, edits);
-		expect(result.lines).toBe("aaa\nONE\nccc\nddd");
-	});
-
-	it("range replace consuming multiple lines", () => {
-		const content = "aaa\nbbb\nccc\nddd";
-		// end points to "ddd" which survives; lines 2-3 are consumed
-		const edits: HashlineEdit[] = [{ op: "replace", pos: makeTag(2, "bbb"), end: makeTag(4, "ddd"), lines: ["ONE"] }];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.lines).toBe("aaa\nONE\nddd");
@@ -273,35 +263,12 @@ describe("applyHashlineEdits — replace", () => {
 
 	it("range replace (same count)", () => {
 		const content = "aaa\nbbb\nccc\nddd";
-		// Consume lines 2-3, replace with two lines. "ddd" survives.
 		const edits: HashlineEdit[] = [
-			{ op: "replace", pos: makeTag(2, "bbb"), end: makeTag(4, "ddd"), lines: ["XXX", "YYY"] },
+			{ op: "replace", pos: makeTag(2, "bbb"), end: makeTag(3, "ccc"), lines: ["XXX", "YYY"] },
 		];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.lines).toBe("aaa\nXXX\nYYY\nddd");
-		expect(result.firstChangedLine).toBe(2);
-	});
-
-	it("applies prepend at the surviving end boundary before the enclosing range replace", () => {
-		const content = "a\nb\nc\nd";
-		const edits: HashlineEdit[] = [
-			{ op: "replace", pos: makeTag(2, "b"), end: makeTag(4, "d"), lines: ["X"] },
-			{ op: "prepend", pos: makeTag(4, "d"), lines: ["Y"] },
-		];
-		const result = applyHashlineEdits(content, edits);
-		expect(result.lines).toBe("a\nX\nY\nd");
-		expect(result.firstChangedLine).toBe(2);
-	});
-
-	it("applies single-line replace at the surviving end boundary before the enclosing range replace", () => {
-		const content = "a\nb\nc\nd";
-		const edits: HashlineEdit[] = [
-			{ op: "replace", pos: makeTag(2, "b"), end: makeTag(4, "d"), lines: ["X"] },
-			{ op: "replace", pos: makeTag(4, "d"), lines: ["Y"] },
-		];
-		const result = applyHashlineEdits(content, edits);
-		expect(result.lines).toBe("a\nX\nY");
 		expect(result.firstChangedLine).toBe(2);
 	});
 
@@ -338,10 +305,9 @@ describe("applyHashlineEdits — delete", () => {
 		expect(result.firstChangedLine).toBe(2);
 	});
 
-	it("deletes range of lines (end exclusive)", () => {
+	it("deletes range of lines", () => {
 		const content = "aaa\nbbb\nccc\nddd";
-		// end points to "ddd" which survives; lines 2-3 deleted
-		const edits: HashlineEdit[] = [{ op: "replace", pos: makeTag(2, "bbb"), end: makeTag(4, "ddd"), lines: [] }];
+		const edits: HashlineEdit[] = [{ op: "replace", pos: makeTag(2, "bbb"), end: makeTag(3, "ccc"), lines: [] }];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.lines).toBe("aaa\nddd");
@@ -528,12 +494,11 @@ describe("applyHashlineEdits — heuristics", () => {
 
 	it("does not override model whitespace choices in replacement content", () => {
 		const content = ["import { foo } from 'x';", "import { bar } from 'y';", "const x = 1;"].join("\n");
-		// end points to "const x = 1;" (survives); lines 1-2 are consumed
 		const edits: HashlineEdit[] = [
 			{
 				op: "replace",
 				pos: makeTag(1, "import { foo } from 'x';"),
-				end: makeTag(3, "const x = 1;"),
+				end: makeTag(2, "import { bar } from 'y';"),
 				lines: ["import {foo} from 'x';", "import { bar } from 'y';", "// added"],
 			},
 		];
@@ -546,21 +511,21 @@ describe("applyHashlineEdits — heuristics", () => {
 		expect(outLines[3]).toBe("const x = 1;");
 	});
 
-	it("rejects same-line range (pos must be < end)", () => {
+	it("treats same-line ranges as single-line replacements", () => {
 		const content = "aaa\nbbb\nccc";
 		const good = makeTag(2, "bbb");
 		const edits: HashlineEdit[] = [{ op: "replace", pos: good, end: good, lines: ["BBB"] }];
-		expect(() => applyHashlineEdits(content, edits)).toThrow(/must be < end/);
+		const result = applyHashlineEdits(content, edits);
+		expect(result.lines).toBe("aaa\nBBB\nccc");
 	});
 
-	it("auto-corrects when model re-emits the exclusive end line (closing brace)", () => {
+	it("auto-corrects off-by-one range end that duplicates a closing brace", () => {
 		const content = "if (ok) {\n  run();\n}\nafter();";
-		// end points to "}" which should survive. Model accidentally includes it in lines.
 		const edits: HashlineEdit[] = [
 			{
 				op: "replace",
 				pos: makeTag(1, "if (ok) {"),
-				end: makeTag(3, "}"),
+				end: makeTag(2, "  run();"),
 				lines: ["if (ok) {", "  runSafe();", "}"],
 			},
 		];
@@ -571,14 +536,13 @@ describe("applyHashlineEdits — heuristics", () => {
 		expect(result.warnings?.[0]).toContain('"}"');
 	});
 
-	it('auto-corrects when model re-emits the exclusive end line (");" closer)', () => {
+	it('auto-corrects off-by-one range end that duplicates a ");" closer', () => {
 		const content = "doThing(\n  value,\n);\nnext();";
-		// end points to ");" which should survive. Model accidentally includes it.
 		const edits: HashlineEdit[] = [
 			{
 				op: "replace",
 				pos: makeTag(1, "doThing("),
-				end: makeTag(3, ");"),
+				end: makeTag(2, "  value,"),
 				lines: ["doThing(", "  normalize(value),", ");"],
 			},
 		];
@@ -588,14 +552,13 @@ describe("applyHashlineEdits — heuristics", () => {
 		expect(result.warnings?.[0]).toContain('");"');
 	});
 
-	it("auto-corrects when model re-emits the exclusive end line (generic content)", () => {
+	it("auto-corrects duplicated trailing lines when they match the next surviving line", () => {
 		const content = "start\n  oldCall();\nnextCall();\nafter();";
-		// end points to "nextCall();" which should survive. Model includes it in lines.
 		const edits: HashlineEdit[] = [
 			{
 				op: "replace",
 				pos: makeTag(1, "start"),
-				end: makeTag(3, "nextCall();"),
+				end: makeTag(2, "  oldCall();"),
 				lines: ["start", "  newCall();", "nextCall();"],
 			},
 		];
@@ -607,18 +570,15 @@ describe("applyHashlineEdits — heuristics", () => {
 
 	it("auto-corrects off-by-one range start that duplicates a preceding line", () => {
 		const content = "if (x) {\n  oldBody();\n}\nafter();";
-		// pos is body line 2, end is "}" (exclusive, survives).
-		// Model includes "if (x) {" in lines, duplicating preceding line.
 		const edits: HashlineEdit[] = [
 			{
 				op: "replace",
 				pos: makeTag(2, "  oldBody();"),
 				end: makeTag(3, "}"),
-				lines: ["if (x) {", "  newBody();"],
+				lines: ["if (x) {", "  newBody();", "}"],
 			},
 		];
 		const result = applyHashlineEdits(content, edits);
-		// Leading "if (x) {" is popped; "}" survives from exclusive end
 		expect(result.lines).toBe("if (x) {\n  newBody();\n}\nafter();");
 		expect(result.warnings).toHaveLength(1);
 		expect(result.warnings?.[0]).toContain("removed leading replacement line");
@@ -725,12 +685,11 @@ describe("applyHashlineEdits — multiple edits", () => {
 
 	it("applies non-overlapping edits against original anchors when line counts change", () => {
 		const content = "one\ntwo\nthree\nfour\nfive\nsix";
-		// end is exclusive: "four" survives, lines 2-3 are consumed
 		const edits: HashlineEdit[] = [
 			{
 				op: "replace",
 				pos: makeTag(2, "two"),
-				end: makeTag(4, "four"),
+				end: makeTag(3, "three"),
 				lines: ["TWO_THREE"],
 			},
 			{ op: "replace", pos: makeTag(6, "six"), lines: ["SIX"] },
@@ -843,7 +802,7 @@ describe("applyHashlineEdits — errors", () => {
 		expect(() => applyHashlineEdits(content, edits)).toThrow(/does not exist/);
 	});
 
-	it("rejects range with start >= end (exclusive end)", () => {
+	it("rejects range with start > end", () => {
 		const content = "aaa\nbbb\nccc\nddd\neee";
 		const edits: HashlineEdit[] = [{ op: "replace", pos: makeTag(5, "eee"), end: makeTag(2, "bbb"), lines: ["X"] }];
 
