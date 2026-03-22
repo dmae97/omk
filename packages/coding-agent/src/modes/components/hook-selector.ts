@@ -4,8 +4,10 @@
  */
 import {
 	Container,
+	Markdown,
 	matchesKey,
 	padding,
+	renderInlineMarkdown,
 	replaceTabs,
 	Spacer,
 	Text,
@@ -13,7 +15,7 @@ import {
 	truncateToWidth,
 	visibleWidth,
 } from "@oh-my-pi/pi-tui";
-import { theme } from "../../modes/theme/theme";
+import { getMarkdownTheme, theme } from "../../modes/theme/theme";
 import { CountdownTimer } from "./countdown-timer";
 import { DynamicBorder } from "./dynamic-border";
 
@@ -59,7 +61,7 @@ export class HookSelectorComponent extends Container {
 	#outlinedList: OutlinedList | undefined;
 	#onSelectCallback: (option: string) => void;
 	#onCancelCallback: () => void;
-	#titleText: Text;
+	#titleComponent: Markdown;
 	#baseTitle: string;
 	#countdown: CountdownTimer | undefined;
 	#onLeftCallback: (() => void) | undefined;
@@ -85,15 +87,15 @@ export class HookSelectorComponent extends Container {
 		this.addChild(new DynamicBorder());
 		this.addChild(new Spacer(1));
 
-		this.#titleText = new Text(theme.fg("accent", title), 1, 0);
-		this.addChild(this.#titleText);
+		this.#titleComponent = new Markdown(title, 1, 0, getMarkdownTheme(), { color: t => theme.fg("accent", t) });
+		this.addChild(this.#titleComponent);
 		this.addChild(new Spacer(1));
 
 		if (opts?.timeout && opts.timeout > 0 && opts.tui) {
 			this.#countdown = new CountdownTimer(
 				opts.timeout,
 				opts.tui,
-				s => this.#titleText.setText(theme.fg("accent", `${this.#baseTitle} (${s}s)`)),
+				s => this.#titleComponent.setText(`${this.#baseTitle} (${s}s)`),
 				() => {
 					opts?.onTimeout?.();
 					// Auto-select current option on timeout (typically the first/recommended option)
@@ -131,12 +133,14 @@ export class HookSelectorComponent extends Container {
 		);
 		const endIndex = Math.min(startIndex + this.#maxVisible, this.#options.length);
 
+		const mdTheme = getMarkdownTheme();
 		for (let i = startIndex; i < endIndex; i++) {
 			const isSelected = i === this.#selectedIndex;
-			const text = isSelected
-				? theme.fg("accent", `${theme.nav.cursor} `) + theme.fg("accent", this.#options[i])
-				: `  ${theme.fg("text", this.#options[i])}`;
-			lines.push(text);
+			const label = isSelected
+				? renderInlineMarkdown(this.#options[i], mdTheme, t => theme.fg("accent", t))
+				: renderInlineMarkdown(this.#options[i], mdTheme, t => theme.fg("text", t));
+			const prefix = isSelected ? theme.fg("accent", `${theme.nav.cursor} `) : "  ";
+			lines.push(prefix + label);
 		}
 
 		if (startIndex > 0 || endIndex < this.#options.length) {

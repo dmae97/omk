@@ -1,8 +1,8 @@
 /**
  * Simple text input component for hooks.
  */
-import { Container, Input, matchesKey, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
-import { theme } from "../../modes/theme/theme";
+import { Container, Input, Markdown, matchesKey, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
+import { getMarkdownTheme, theme } from "../../modes/theme/theme";
 import { CountdownTimer } from "./countdown-timer";
 import { DynamicBorder } from "./dynamic-border";
 
@@ -16,7 +16,7 @@ export class HookInputComponent extends Container {
 	#input: Input;
 	#onSubmitCallback: (value: string) => void;
 	#onCancelCallback: () => void;
-	#titleText: Text;
+	#titleComponent: Markdown;
 	#baseTitle: string;
 	#countdown: CountdownTimer | undefined;
 
@@ -36,15 +36,15 @@ export class HookInputComponent extends Container {
 		this.addChild(new DynamicBorder());
 		this.addChild(new Spacer(1));
 
-		this.#titleText = new Text(theme.fg("accent", title), 1, 0);
-		this.addChild(this.#titleText);
+		this.#titleComponent = new Markdown(title, 1, 0, getMarkdownTheme(), { color: t => theme.fg("accent", t) });
+		this.addChild(this.#titleComponent);
 		this.addChild(new Spacer(1));
 
 		if (opts?.timeout && opts.timeout > 0 && opts.tui) {
 			this.#countdown = new CountdownTimer(
 				opts.timeout,
 				opts.tui,
-				s => this.#titleText.setText(theme.fg("accent", `${this.#baseTitle} (${s}s)`)),
+				s => this.#titleComponent.setText(`${this.#baseTitle} (${s}s)`),
 				() => {
 					opts.onTimeout?.();
 					this.#onCancelCallback();

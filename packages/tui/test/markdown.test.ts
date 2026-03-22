@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Terminal as XtermTerminalType } from "@xterm/headless";
 import { Chalk } from "chalk";
-import { Markdown } from "../src/components/markdown.js";
+import { Markdown, renderInlineMarkdown } from "../src/components/markdown.js";
 import { type Component, TUI } from "../src/tui.js";
 import { defaultMarkdownTheme } from "./test-themes.js";
 import { VirtualTerminal } from "./virtual-terminal.js";
@@ -18,6 +18,15 @@ function getCellItalic(terminal: VirtualTerminal, row: number, col: number): num
 	expect(cell, `Missing cell at row ${row} col ${col}`).toBeTruthy();
 	return cell!.isItalic();
 }
+
+describe("renderInlineMarkdown", () => {
+	it("preserves ordered list items as visible inline text", () => {
+		const rendered = renderInlineMarkdown("1. Review against a base branch (PR Style)", defaultMarkdownTheme);
+		const plain = rendered.replace(/\x1b\[[0-9;]*m/g, "");
+
+		expect(plain).toBe("1. Review against a base branch (PR Style)");
+	});
+});
 
 describe("Markdown component", () => {
 	describe("Nested lists", () => {

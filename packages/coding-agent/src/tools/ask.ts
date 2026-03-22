@@ -16,13 +16,12 @@
  */
 
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
-import type { Component } from "@oh-my-pi/pi-tui";
-import { TERMINAL, Text } from "@oh-my-pi/pi-tui";
+import { type Component, Container, Markdown, renderInlineMarkdown, TERMINAL, Text } from "@oh-my-pi/pi-tui";
 import { untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
-import { type Theme, theme } from "../modes/theme/theme";
+import { getMarkdownTheme, type Theme, theme } from "../modes/theme/theme";
 import askDescription from "../prompts/tools/ask.md" with { type: "text" };
 import { renderStatusLine } from "../tui";
 import type { ToolSession } from ".";
@@ -574,10 +573,13 @@ interface AskRenderArgs {
 export const askToolRenderer = {
 	renderCall(args: AskRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
 		const label = formatTitle("Ask", uiTheme);
+		const mdTheme = getMarkdownTheme();
+		const accentStyle = { color: (t: string) => uiTheme.fg("accent", t) };
 
 		// Multi-part questions
 		if (args.questions && args.questions.length > 0) {
-			let text = `${label} ${uiTheme.fg("muted", `${args.questions.length} questions`)}`;
+			const container = new Container();
+			container.addChild(new Text(`${label} ${uiTheme.fg("muted", `${args.questions.length} questions`)}`, 0, 0));
 
 			for (let i = 0; i < args.questions.length; i++) {
 				const q = args.questions[i];
@@ -585,25 +587,29 @@ export const askToolRenderer = {
 				const qBranch = isLastQ ? uiTheme.tree.last : uiTheme.tree.branch;
 				const continuation = isLastQ ? " " : uiTheme.tree.vertical;
 
-				// Question line with metadata
 				const meta: string[] = [];
 				if (q.multi) meta.push("multi");
 				if (q.options?.length) meta.push(`options:${q.options.length}`);
 				const metaStr = meta.length > 0 ? uiTheme.fg("dim", ` · ${meta.join(" · ")}`) : "";
 
-				text += `\n ${uiTheme.fg("dim", qBranch)} ${uiTheme.fg("dim", `[${q.id}]`)} ${uiTheme.fg("accent", q.question)}${metaStr}`;
+				container.addChild(
+					new Text(` ${uiTheme.fg("dim", qBranch)} ${uiTheme.fg("dim", `[${q.id}]`)}${metaStr}`, 0, 0),
+				);
+				container.addChild(new Markdown(q.question, 3, 0, mdTheme, accentStyle));
 
-				// Options under question
 				if (q.options?.length) {
+					let optText = "";
 					for (let j = 0; j < q.options.length; j++) {
 						const opt = q.options[j];
 						const isLastOpt = j === q.options.length - 1;
 						const optBranch = isLastOpt ? uiTheme.tree.last : uiTheme.tree.branch;
-						text += `\n ${uiTheme.fg("dim", continuation)}   ${uiTheme.fg("dim", optBranch)} ${uiTheme.fg("dim", uiTheme.checkbox.unchecked)} ${uiTheme.fg("muted", opt.label)}`;
+						const optLabel = renderInlineMarkdown(opt.label, mdTheme, t => uiTheme.fg("muted", t));
+						optText += `\n ${uiTheme.fg("dim", continuation)}   ${uiTheme.fg("dim", optBranch)} ${uiTheme.fg("dim", uiTheme.checkbox.unchecked)} ${optLabel}`;
 					}
+					container.addChild(new Text(optText, 0, 0));
 				}
 			}
-			return new Text(text, 0, 0);
+			return container;
 		}
 
 		// Single question
@@ -611,22 +617,26 @@ export const askToolRenderer = {
 			return new Text(formatErrorMessage("No question provided", uiTheme), 0, 0);
 		}
 
-		let text = `${label} ${uiTheme.fg("accent", args.question)}`;
+		const container = new Container();
 		const meta: string[] = [];
 		if (args.multi) meta.push("multi");
 		if (args.options?.length) meta.push(`options:${args.options.length}`);
-		text += formatMeta(meta, uiTheme);
+		container.addChild(new Text(`${label}${formatMeta(meta, uiTheme)}`, 0, 0));
+		container.addChild(new Markdown(args.question, 1, 0, mdTheme, accentStyle));
 
 		if (args.options?.length) {
+			let optText = "";
 			for (let i = 0; i < args.options.length; i++) {
 				const opt = args.options[i];
 				const isLast = i === args.options.length - 1;
 				const branch = isLast ? uiTheme.tree.last : uiTheme.tree.branch;
-				text += `\n ${uiTheme.fg("dim", branch)} ${uiTheme.fg("dim", uiTheme.checkbox.unchecked)} ${uiTheme.fg("muted", opt.label)}`;
+				const optLabel = renderInlineMarkdown(opt.label, mdTheme, t => uiTheme.fg("muted", t));
+				optText += `\n ${uiTheme.fg("dim", branch)} ${uiTheme.fg("dim", uiTheme.checkbox.unchecked)} ${optLabel}`;
 			}
+			container.addChild(new Text(optText, 0, 0));
 		}
 
-		return new Text(text, 0, 0);
+		return container;
 	},
 
 	renderResult(
@@ -635,6 +645,9 @@ export const askToolRenderer = {
 		uiTheme: Theme,
 	): Component {
 		const { details } = result;
+		const mdTheme = getMarkdownTheme();
+		const accentStyle = { color: (t: string) => uiTheme.fg("accent", t) };
+
 		if (!details) {
 			const txt = result.content[0];
 			const fallback = txt?.type === "text" && txt.text ? txt.text : "";
@@ -655,7 +668,8 @@ export const askToolRenderer = {
 				},
 				uiTheme,
 			);
-			let text = header;
+			const container = new Container();
+			container.addChild(new Text(header, 0, 0));
 
 			for (let i = 0; i < details.results.length; i++) {
 				const r = details.results[i];
@@ -667,22 +681,31 @@ export const askToolRenderer = {
 					? uiTheme.styledSymbol("status.success", "success")
 					: uiTheme.styledSymbol("status.warning", "warning");
 
-				text += `\n ${uiTheme.fg("dim", branch)} ${statusIcon} ${uiTheme.fg("dim", `[${r.id}]`)} ${uiTheme.fg("accent", r.question)}`;
+				container.addChild(
+					new Text(` ${uiTheme.fg("dim", branch)} ${statusIcon} ${uiTheme.fg("dim", `[${r.id}]`)}`, 0, 0),
+				);
+				container.addChild(new Markdown(r.question, 3, 0, mdTheme, accentStyle));
 
+				let answerText = "";
 				if (r.customInput) {
-					text += `\n${continuation}${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.success", "success")} ${uiTheme.fg("toolOutput", r.customInput)}`;
+					answerText = `${continuation}${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.success", "success")} ${uiTheme.fg("toolOutput", r.customInput)}`;
 				} else if (r.selectedOptions.length > 0) {
 					for (let j = 0; j < r.selectedOptions.length; j++) {
 						const isLast = j === r.selectedOptions.length - 1;
 						const optBranch = isLast ? uiTheme.tree.last : uiTheme.tree.branch;
-						text += `\n${continuation}${uiTheme.fg("dim", optBranch)} ${uiTheme.fg("success", uiTheme.checkbox.checked)} ${uiTheme.fg("toolOutput", r.selectedOptions[j])}`;
+						const selectedLabel = renderInlineMarkdown(r.selectedOptions[j], mdTheme, t =>
+							uiTheme.fg("toolOutput", t),
+						);
+						answerText += `\n${continuation}${uiTheme.fg("dim", optBranch)} ${uiTheme.fg("success", uiTheme.checkbox.checked)} ${selectedLabel}`;
 					}
 				} else {
-					text += `\n${continuation}${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.warning", "warning")} ${uiTheme.fg("warning", "Cancelled")}`;
+					answerText = `${continuation}${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.warning", "warning")} ${uiTheme.fg("warning", "Cancelled")}`;
+				}
+				if (answerText) {
+					container.addChild(new Text(answerText, 0, 0));
 				}
 			}
-
-			return new Text(text, 0, 0);
+			return container;
 		}
 
 		// Single question result
@@ -693,25 +716,28 @@ export const askToolRenderer = {
 		}
 
 		const hasSelection = details.customInput || (details.selectedOptions && details.selectedOptions.length > 0);
-		const header = renderStatusLine(
-			{ icon: hasSelection ? "success" : "warning", title: "Ask", description: details.question },
-			uiTheme,
-		);
+		const header = renderStatusLine({ icon: hasSelection ? "success" : "warning", title: "Ask" }, uiTheme);
+		const container = new Container();
+		container.addChild(new Text(header, 0, 0));
+		container.addChild(new Markdown(details.question, 1, 0, mdTheme, accentStyle));
 
-		let text = header;
-
+		let answerText = "";
 		if (details.customInput) {
-			text += `\n ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.success", "success")} ${uiTheme.fg("toolOutput", details.customInput)}`;
+			answerText = ` ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.success", "success")} ${uiTheme.fg("toolOutput", details.customInput)}`;
 		} else if (details.selectedOptions && details.selectedOptions.length > 0) {
 			for (let i = 0; i < details.selectedOptions.length; i++) {
 				const isLast = i === details.selectedOptions.length - 1;
 				const branch = isLast ? uiTheme.tree.last : uiTheme.tree.branch;
-				text += `\n ${uiTheme.fg("dim", branch)} ${uiTheme.fg("success", uiTheme.checkbox.checked)} ${uiTheme.fg("toolOutput", details.selectedOptions[i])}`;
+				const selectedLabel = renderInlineMarkdown(details.selectedOptions[i], mdTheme, t =>
+					uiTheme.fg("toolOutput", t),
+				);
+				answerText += `\n ${uiTheme.fg("dim", branch)} ${uiTheme.fg("success", uiTheme.checkbox.checked)} ${selectedLabel}`;
 			}
 		} else {
-			text += `\n ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.warning", "warning")} ${uiTheme.fg("warning", "Cancelled")}`;
+			answerText = ` ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.warning", "warning")} ${uiTheme.fg("warning", "Cancelled")}`;
 		}
+		container.addChild(new Text(answerText, 0, 0));
 
-		return new Text(text, 0, 0);
+		return container;
 	},
 };

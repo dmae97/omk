@@ -1,4 +1,4 @@
-import { marked, type Token } from "marked";
+import { marked, type Token, type Tokens } from "marked";
 import type { SymbolTheme } from "../symbols";
 import { TERMINAL } from "../terminal-capabilities";
 import type { Component } from "../tui";
@@ -837,4 +837,69 @@ export class Markdown implements Component {
 		lines.push(""); // Add spacing after table
 		return lines;
 	}
+}
+
+/**
+ * Render inline markdown (bold, italic, code, links, strikethrough) to a styled string.
+ * Unlike the full Markdown component, this produces a single line with no block-level elements.
+ */
+export function renderInlineMarkdown(text: string, mdTheme: MarkdownTheme, baseColor?: (t: string) => string): string {
+	const tokens = marked.lexer(text);
+	const applyText = baseColor ?? ((t: string) => t);
+	let result = "";
+	for (const token of tokens) {
+		if (token.type === "paragraph" && token.tokens) {
+			result += renderInlineTokens(token.tokens, mdTheme, applyText);
+		} else if (token.type === "list") {
+			result += token.items
+				.map((item: Tokens.ListItem, index: number) => {
+					const prefix = token.ordered ? `${(token.start || 1) + index}. ` : "• ";
+					const content = item.tokens ? renderInlineTokens(item.tokens, mdTheme, applyText) : applyText(item.text);
+					return `${applyText(prefix)}${content}`;
+				})
+				.join(applyText(" "));
+		} else if ("text" in token && typeof token.text === "string") {
+			result += applyText(token.text);
+		}
+	}
+	return result;
+}
+
+function renderInlineTokens(tokens: Token[], mdTheme: MarkdownTheme, applyText: (t: string) => string): string {
+	let result = "";
+	const styleReset = applyText("");
+	for (const token of tokens) {
+		switch (token.type) {
+			case "text":
+				if (token.tokens && token.tokens.length > 0) {
+					result += renderInlineTokens(token.tokens, mdTheme, applyText);
+				} else {
+					result += applyText(token.text);
+				}
+				break;
+			case "strong":
+				result += mdTheme.bold(renderInlineTokens(token.tokens || [], mdTheme, applyText)) + styleReset;
+				break;
+			case "em":
+				result += mdTheme.italic(renderInlineTokens(token.tokens || [], mdTheme, applyText)) + styleReset;
+				break;
+			case "codespan":
+				result += mdTheme.code(token.text) + styleReset;
+				break;
+			case "del":
+				result += mdTheme.strikethrough(renderInlineTokens(token.tokens || [], mdTheme, applyText)) + styleReset;
+				break;
+			case "link": {
+				const linkText = renderInlineTokens(token.tokens || [], mdTheme, applyText);
+				result += mdTheme.link(mdTheme.underline(linkText)) + styleReset;
+				break;
+			}
+			default:
+				if ("text" in token && typeof token.text === "string") {
+					result += applyText(token.text);
+				}
+				break;
+		}
+	}
+	return result;
 }

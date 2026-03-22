@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added ACP (Agent Client Protocol) mode for headless agent operation via `--mode acp`
@@ -9,6 +10,8 @@
 
 ### Changed
 
+- Updated ask tool rendering to support markdown formatting in questions and option labels
+- Refactored hook input and selector components to render titles as markdown for richer text formatting
 - Changed session collection to include sessions with zero messages, enabling ACP mode to create discoverable sessions immediately
 - Changed session persistence logic to use atomic file rewrite when flushing unflushed sessions to prevent duplication
 
