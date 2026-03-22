@@ -186,6 +186,12 @@ export class SessionObserverOverlayComponent extends Container {
 			return this.#transcriptCache?.entries ?? null;
 		}
 
+		// File shrank (compaction or pruning rewrote it) — invalidate and re-read from scratch
+		if (result.newSize < fromByte) {
+			this.#transcriptCache = undefined;
+			return this.#loadTranscript(sessionFile);
+		}
+
 		if (!this.#transcriptCache) {
 			this.#transcriptCache = { path: sessionFile, bytesRead: 0, entries: [] };
 		}
