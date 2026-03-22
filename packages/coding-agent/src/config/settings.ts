@@ -341,10 +341,7 @@ export class Settings {
 	 * Get bash interceptor rules (typed accessor for complex array config).
 	 */
 	getBashInterceptorRules(): BashInterceptorRule[] {
-		const patterns = (this.#merged.bashInterceptor as { patterns?: unknown[] })?.patterns;
-		if (!Array.isArray(patterns)) return [];
-
-		return patterns.filter((p): p is BashInterceptorRule => typeof p === "object" && p !== null && "pattern" in p);
+		return this.get("bashInterceptor.patterns");
 	}
 
 	/**

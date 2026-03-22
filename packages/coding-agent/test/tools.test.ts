@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
+import { DEFAULT_BASH_INTERCEPTOR_RULES, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { EditTool } from "@oh-my-pi/pi-coding-agent/patch";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { BashTool } from "@oh-my-pi/pi-coding-agent/tools/bash";
@@ -453,6 +453,91 @@ function b() {
 
 			expect(getTextOutput(result)).toContain("test output");
 			expect(result.details).toBeUndefined();
+		});
+
+		it("should expose built-in interceptor defaults truthfully", () => {
+			const defaultSettings = Settings.isolated({ "bashInterceptor.enabled": true });
+			const explicitEmptySettings = Settings.isolated({
+				"bashInterceptor.enabled": true,
+				"bashInterceptor.patterns": [],
+			});
+
+			expect(defaultSettings.get("bashInterceptor.patterns")).toEqual(DEFAULT_BASH_INTERCEPTOR_RULES);
+			expect(defaultSettings.getBashInterceptorRules()).toEqual(DEFAULT_BASH_INTERCEPTOR_RULES);
+			expect(explicitEmptySettings.get("bashInterceptor.patterns")).toEqual([]);
+			expect(explicitEmptySettings.getBashInterceptorRules()).toEqual([]);
+		});
+
+		it("should block built-in interceptor commands when enabled with default patterns", async () => {
+			const interceptedBashTool = wrapToolWithMetaNotice(
+				new BashTool(createTestToolSession(testDir, Settings.isolated({ "bashInterceptor.enabled": true }))),
+			);
+
+			await expect(
+				interceptedBashTool.execute(
+					"test-call-8-intercept-default",
+					{ command: "cat test.txt" },
+					undefined,
+					undefined,
+					{ toolNames: ["read"] },
+				),
+			).rejects.toThrow(/Use the `read` tool instead of cat\/head\/tail/);
+		});
+
+		it("should allow an explicit empty interceptor pattern list", async () => {
+			const allowedFile = path.join(testDir, "allow-empty.txt");
+			fs.writeFileSync(allowedFile, "empty means empty\n");
+
+			const interceptedBashTool = wrapToolWithMetaNotice(
+				new BashTool(
+					createTestToolSession(
+						testDir,
+						Settings.isolated({
+							"bashInterceptor.enabled": true,
+							"bashInterceptor.patterns": [],
+						}),
+					),
+				),
+			);
+
+			const result = await interceptedBashTool.execute(
+				"test-call-8-intercept-empty",
+				{ command: `cat ${allowedFile}` },
+				undefined,
+				undefined,
+				{ toolNames: ["read"] },
+			);
+
+			expect(getTextOutput(result)).toContain("empty means empty");
+		});
+
+		it("should honor custom bash interceptor patterns", async () => {
+			const interceptedBashTool = wrapToolWithMetaNotice(
+				new BashTool(
+					createTestToolSession(
+						testDir,
+						Settings.isolated({
+							"bashInterceptor.enabled": true,
+							"bashInterceptor.patterns": [
+								{
+									pattern: "^\\s*customcmd\\s+",
+									tool: "grep",
+									message: "Use the `grep` tool for customcmd.",
+								},
+							],
+						}),
+					),
+				),
+			);
+			await expect(
+				interceptedBashTool.execute(
+					"test-call-8-intercept-custom",
+					{ command: "customcmd foo" },
+					undefined,
+					undefined,
+					{ toolNames: ["grep"] },
+				),
+			).rejects.toThrow(/Use the `grep` tool for customcmd\./);
 		});
 
 		it("should expose env values without shell re-parsing", async () => {
