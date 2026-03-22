@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
 - Changed hashline edit operation types from `replace` (with optional `end`) to explicit `replace_line` and `replace_range` operations
@@ -9,6 +10,11 @@
 
 ### Added
 
+- Added `defaultInactive` property to `ToolDefinition` to allow tools to be registered but excluded from the initial active set, with extension responsibility for activation/deactivation
+- Added dynamic tool activation/deactivation in autoresearch mode via `setActiveTools()` API
+- Added separate initialization and resume workflows for autoresearch with `command-initialize.md` and `command-resume.md` prompts
+- Added intent dialog to prompt users for autoresearch optimization goals when starting fresh
+- Added automatic detection of existing `autoresearch.md` to resume from previous sessions without re-prompting for intent
 - Added autoresearch extension with autonomous experiment loop capabilities
 - Added `init_experiment` tool to initialize and reset autoresearch sessions with configurable metrics
 - Added `log_experiment` tool to record experiment results with metric parsing and confidence tracking
@@ -30,6 +36,10 @@
 
 ### Changed
 
+- Changed autoresearch command to use intent-based initialization instead of goal parameter, with user input dialog for new sessions
+- Changed autoresearch startup to activate experiment tools (`init_experiment`, `run_experiment`, `log_experiment`) only when autoresearch mode is enabled
+- Changed autoresearch shutdown to deactivate experiment tools when mode is disabled or cleared
+- Changed autoresearch session rehydration to dynamically manage experiment tool activation based on session state
 - Refactored hashline edit validation to enforce stricter anchor requirements per operation type
 - Updated edit application logic to handle explicit file-level operations (`append_eof`, `prepend_bof`) separately from anchor-based operations
 - Changed `setWidget` API to accept `ExtensionWidgetOptions` parameter for placement control
@@ -47,6 +57,7 @@
 
 ### Removed
 
+- Removed `command-start.md` prompt template in favor of separate initialize and resume workflows
 - Removed auto-correction of off-by-one range edits that duplicated closing braces or boundary lines
 - Removed `shouldAutocorrect` function and related boundary line deduplication logic from hashline editor
 - Removed auto-correction of off-by-one range edits that duplicated closing braces or boundary lines

@@ -74,6 +74,7 @@ export function createLogExperimentTool(
 		description:
 			"Log the experiment result, update dashboard state, persist JSONL history, and apply git keep or revert behavior.",
 		parameters: logExperimentSchema,
+		defaultInactive: true,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const workDirError = validateWorkDir(ctx.cwd);
 			if (workDirError) {

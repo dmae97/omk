@@ -307,6 +307,9 @@ export interface ToolDefinition<TParams extends TSchema = TSchema, TDetails = un
 	parameters: TParams;
 	/** If true, tool is excluded unless explicitly listed in --tools or agent's tools field */
 	hidden?: boolean;
+	/** If true, tool is registered but not auto-included in the initial active set.
+	 *  The registering extension is responsible for activating/deactivating it via setActiveTools(). */
+	defaultInactive?: boolean;
 	/** If true, tool may stage deferred changes that require explicit resolve/discard. */
 	deferrable?: boolean;
 	/** MCP server name for discovery/search metadata when this tool fronts an MCP server. */

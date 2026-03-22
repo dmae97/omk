@@ -61,6 +61,7 @@ export function createRunExperimentTool(
 		description:
 			"Run an experiment command with timing, tail capture, structured metric parsing, and optional autoresearch.checks.sh validation.",
 		parameters: runExperimentSchema,
+		defaultInactive: true,
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			const workDirError = validateWorkDir(ctx.cwd);
 			if (workDirError) {

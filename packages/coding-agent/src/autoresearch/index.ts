@@ -3,7 +3,8 @@ import * as path from "node:path";
 import type { AutocompleteItem } from "@oh-my-pi/pi-tui";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import type { ExtensionContext, ExtensionFactory } from "../extensibility/extensions";
-import commandStartTemplate from "./command-start.md" with { type: "text" };
+import commandInitializeTemplate from "./command-initialize.md" with { type: "text" };
+import commandResumeTemplate from "./command-resume.md" with { type: "text" };
 import { createDashboardController } from "./dashboard";
 import { readMaxExperiments, resolveWorkDir, validateWorkDir } from "./helpers";
 import promptTemplate from "./prompt.md" with { type: "text" };
@@ -22,6 +23,7 @@ import type { AutoresearchRuntime } from "./types";
 
 const AUTORESUME_INTERVAL_MS = 5 * 60 * 1000;
 const MAX_AUTORESUME_TURNS = 20;
+const EXPERIMENT_TOOL_NAMES = ["init_experiment", "run_experiment", "log_experiment"];
 
 export const createAutoresearchExtension: ExtensionFactory = api => {
 	const runtimeStore = createRuntimeStore();
@@ -30,7 +32,7 @@ export const createAutoresearchExtension: ExtensionFactory = api => {
 	const getSessionKey = (ctx: ExtensionContext): string => ctx.sessionManager.getSessionId();
 	const getRuntime = (ctx: ExtensionContext): AutoresearchRuntime => runtimeStore.ensure(getSessionKey(ctx));
 
-	const rehydrate = (ctx: ExtensionContext): void => {
+	const rehydrate = async (ctx: ExtensionContext): Promise<void> => {
 		const runtime = getRuntime(ctx);
 		const workDir = resolveWorkDir(ctx.cwd);
 		const reconstructed = reconstructStateFromJsonl(workDir);
@@ -47,6 +49,17 @@ export const createAutoresearchExtension: ExtensionFactory = api => {
 		runtime.lastRunAsi = null;
 		runtime.runningExperiment = null;
 		dashboard.updateWidget(ctx, runtime);
+		const activeTools = api.getActiveTools();
+		const experimentTools = new Set(EXPERIMENT_TOOL_NAMES);
+		const nextActiveTools = runtime.autoresearchMode
+			? [...new Set([...activeTools, ...EXPERIMENT_TOOL_NAMES])]
+			: activeTools.filter(name => !experimentTools.has(name));
+		const toolsChanged =
+			nextActiveTools.length !== activeTools.length ||
+			nextActiveTools.some((name, index) => name !== activeTools[index]);
+		if (toolsChanged) {
+			await api.setActiveTools(nextActiveTools);
+		}
 	};
 
 	const setMode = (
@@ -86,15 +99,13 @@ export const createAutoresearchExtension: ExtensionFactory = api => {
 				return;
 			}
 
-			if (trimmed.length === 0) {
-				ctx.ui.notify("Usage: /autoresearch <goal> | off | clear", "info");
-				return;
-			}
 			if (trimmed === "off") {
 				setMode(ctx, false, runtime.goal, "off");
 				runtime.experimentsThisSession = 0;
 				runtime.autoResumeTurns = 0;
 				dashboard.updateWidget(ctx, runtime);
+				const experimentTools = new Set(EXPERIMENT_TOOL_NAMES);
+				await api.setActiveTools(api.getActiveTools().filter(name => !experimentTools.has(name)));
 				ctx.ui.notify("Autoresearch mode disabled", "info");
 				return;
 			}
@@ -109,19 +120,48 @@ export const createAutoresearchExtension: ExtensionFactory = api => {
 				runtime.goal = null;
 				setMode(ctx, false, null, "clear");
 				dashboard.updateWidget(ctx, runtime);
+				const experimentTools = new Set(EXPERIMENT_TOOL_NAMES);
+				await api.setActiveTools(api.getActiveTools().filter(name => !experimentTools.has(name)));
 				ctx.ui.notify("Autoresearch log cleared", "info");
 				return;
 			}
 
-			setMode(ctx, true, trimmed, "on");
+			const workDir = resolveWorkDir(ctx.cwd);
+			const autoresearchMdPath = path.join(workDir, "autoresearch.md");
+			const hasAutoresearchMd = fs.existsSync(autoresearchMdPath);
+
+			if (hasAutoresearchMd) {
+				setMode(ctx, true, runtime.goal, "on");
+				runtime.experimentsThisSession = 0;
+				runtime.autoResumeTurns = 0;
+				dashboard.updateWidget(ctx, runtime);
+				await api.setActiveTools([...new Set([...api.getActiveTools(), ...EXPERIMENT_TOOL_NAMES])]);
+				api.sendUserMessage(
+					renderPromptTemplate(commandResumeTemplate, {
+						autoresearch_md_path: autoresearchMdPath,
+					}),
+				);
+				return;
+			}
+
+			const intentInput = await ctx.ui.input(
+				"Autoresearch Intent",
+				trimmed || runtime.goal || "what should autoresearch improve?",
+			);
+			if (intentInput === undefined) return;
+
+			const intent = intentInput.trim();
+			if (intent.length === 0) {
+				ctx.ui.notify("Autoresearch intent is required", "info");
+				return;
+			}
+
+			setMode(ctx, true, intent, "on");
 			runtime.experimentsThisSession = 0;
 			runtime.autoResumeTurns = 0;
 			dashboard.updateWidget(ctx, runtime);
-			api.sendUserMessage(
-				renderPromptTemplate(commandStartTemplate, {
-					goal: trimmed,
-				}),
-			);
+			await api.setActiveTools([...new Set([...api.getActiveTools(), ...EXPERIMENT_TOOL_NAMES])]);
+			api.sendUserMessage(renderPromptTemplate(commandInitializeTemplate, { intent }));
 		},
 	});
 

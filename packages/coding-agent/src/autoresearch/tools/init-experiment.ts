@@ -41,6 +41,7 @@ export function createInitExperimentTool(
 		description:
 			"Initialize or reset the autoresearch session for the current optimization target before the first logged run of a segment.",
 		parameters: initExperimentSchema,
+		defaultInactive: true,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const workDirError = validateWorkDir(ctx.cwd);
 			if (workDirError) {
