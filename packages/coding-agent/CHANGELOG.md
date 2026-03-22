@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
 - Renamed hashline edit operation types: `append` → `append_at`, `prepend` → `prepend_at`, `append_eof` → `append_file`, `prepend_bof` → `prepend_file`
@@ -11,6 +10,7 @@
 
 ### Added
 
+- Added boundary duplication warning when replace_range or replace_line operations include a last inserted line that matches the next surviving line, helping detect off-by-one range errors
 - Added git branch isolation for autoresearch sessions via `ensureAutoresearchBranch()` to safely revert failed experiments
 - Added branch status line to autoresearch initialization and resume prompts showing created or reused branch name
 - Added `Files in Scope`, `Off Limits`, and `Constraints` sections to autoresearch.md template for explicit scope definition

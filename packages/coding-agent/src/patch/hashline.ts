@@ -539,6 +539,38 @@ export function applyHashlineEdits(
 	}
 	maybeAutocorrectEscapedTabIndentation(edits, warnings);
 	maybeWarnSuspiciousUnicodeEscapePlaceholder(edits, warnings);
+
+	// Warn when a replace_range/replace_line's last inserted line duplicates the next surviving line.
+	// This catches the common boundary-overreach pattern where the agent includes a closing delimiter
+	// in the replacement but sets `end` to the line before the delimiter, causing duplication.
+	for (const edit of edits) {
+		let endLine: number;
+		switch (edit.op) {
+			case "replace_line":
+				endLine = edit.pos.line;
+				break;
+			case "replace_range":
+				endLine = edit.end.line;
+				break;
+			default:
+				continue;
+		}
+		if (edit.lines.length === 0) continue;
+		const nextSurvivingIdx = endLine; // 0-indexed: endLine (1-indexed) is the next line after `end`
+		if (nextSurvivingIdx >= originalFileLines.length) continue;
+		const nextSurvivingLine = originalFileLines[nextSurvivingIdx];
+		const lastInsertedLine = edit.lines[edit.lines.length - 1];
+		const trimmedNext = nextSurvivingLine.trim();
+		const trimmedLast = lastInsertedLine.trim();
+		// Only warn for non-trivial lines to avoid false positives on blank lines or bare punctuation
+		if (trimmedLast.length > 0 && trimmedLast === trimmedNext) {
+			const tag = formatLineTag(endLine + 1, nextSurvivingLine);
+			warnings.push(
+				`Possible boundary duplication: your last replacement line \`${trimmedLast}\` is identical to the next surviving line ${tag}. ` +
+					`If you meant to replace the entire block, set \`end\` to ${tag} instead.`,
+			);
+		}
+	}
 	// Deduplicate identical edits targeting the same line(s)
 	const seenEditKeys = new Map<string, number>();
 	const dedupIndices = new Set<number>();

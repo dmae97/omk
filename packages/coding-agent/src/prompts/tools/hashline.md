@@ -127,6 +127,7 @@ When adding a sibling declaration, prefer `prepend_at` on the next declaration.
 - `replace_range` requires both `pos` and `end`. All other anchored ops require `pos` only.
 - `append_file` and `prepend_file` do not take anchors.
 - Replace exactly the owned span. If `lines` re-emits content beyond `end`, it will duplicate.
+- **Boundary duplication trap**: when replacing a block, `end` must be the **last line of the block** (e.g. the closing `}`), not the last *content* line before it. Otherwise the closing delimiter survives and your replacement adds a second copy.
 - Do not target shared boundary lines such as `} else {`, `} catch (…) {`, `}),`, or `},{`.
 - For a block, either replace only the body or replace the whole block. Do not split block boundaries.
 - `lines` must be literal file content with matching indentation. If the file uses tabs, use real tabs.
