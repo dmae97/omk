@@ -10,6 +10,8 @@ Collected setup:
 - primary metric: `{{metric_name}}`
 - metric unit: `{{metric_unit}}`
 - direction: `{{direction}}`
+- tradeoff metrics:
+{{{secondary_metrics_block}}}
 - files in scope:
 {{{scope_paths_block}}}
 - off limits:
@@ -21,8 +23,10 @@ Explain briefly what autoresearch will do in this repository, then initialize th
 
 Your first actions:
 - write `autoresearch.md`
-- record the collected benchmark command, primary metric, metric unit, direction, scope, off-limits list, and constraints in `autoresearch.md`
-- optionally write `autoresearch.program.md` when a repo-local playbook would help future resume quality
+- record the collected benchmark command, primary metric, metric unit, direction, tradeoff metrics, scope, off-limits list, and constraints in `autoresearch.md`
+- add a short preflight section in `autoresearch.md` covering prerequisites, one-time setup, and the comparability invariant that must stay fixed across runs
+- explicitly mark the ground-truth evaluator, fixed datasets, and other measurement-critical files as off-limits or hard constraints when they define the benchmark contract
+- write or update `autoresearch.program.md` when you learn durable heuristics, failure patterns, or repo-specific strategy that future resume turns should inherit
 - define the benchmark entrypoint in `autoresearch.sh`
 - optionally add `autoresearch.checks.sh` if correctness or quality needs a hard gate
 - run `init_experiment` with the exact collected benchmark command, metric definition, scope paths, off-limits list, and constraints

@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
 - Changed hashline edit schema from flat `op`/`pos`/`end`/`lines` fields to structured `loc`/`content` format with location-specific objects
@@ -14,6 +13,14 @@
 
 ### Added
 
+- Added prompt for tradeoff metrics during autoresearch setup to collect secondary metrics alongside primary metric
+- Added validation of contract path specifications to reject absolute paths and parent directory references
+- Added stricter benchmark command validation in `isAutoresearchShCommand()` to reject chained commands, pipes, and redirects
+- Added protection against prototype pollution in ASI data and metric cloning by filtering `__proto__`, `constructor`, and `prototype` keys
+- Added `autoResumeArmed` flag to track when autoresearch should automatically resume pending runs
+- Added `lastAutoResumePendingRunNumber` to prevent duplicate auto-resume prompts for the same pending run
+- Added `git clean -X` invocation during failed experiment rollback to remove ignored build artifacts
+- Added validation to reject `init_experiment` when a previous run is still pending and unlogged
 - Added autoresearch contract system for validating benchmark commands, metrics, scope paths, off-limits paths, and constraints with fingerprint tracking to detect configuration drift
 - Added `autoresearch.program.md` support for repo-local playbook overlays that guide session strategy while preserving `autoresearch.md` as source of truth
 - Added pending run artifact tracking and recovery to resume incomplete experiments from `.autoresearch/runs/` directory with run numbers and benchmark logs
@@ -62,6 +69,19 @@
 
 ### Changed
 
+- Changed `isAutoresearchShCommand()` to use proper command-line argument parsing instead of regex, improving accuracy for complex shell invocations
+- Changed autoresearch initialization prompt to display collected tradeoff metrics in the setup summary
+- Changed `command-initialize.md` template to include guidance on preflight requirements, comparability invariants, and marking measurement-critical files as off-limits
+- Changed `command-initialize.md` to instruct users to write or update `autoresearch.program.md` with durable heuristics and repo-specific strategy
+- Changed autoresearch resume guidance to emphasize continuing on the current protected branch rather than switching branches
+- Changed autoresearch prompt to clarify that `autoresearch.md` holds durable conclusions while `autoresearch.ideas.md` is the scratch backlog
+- Changed autoresearch prompt guidance to require stable measurement harness and fixed benchmark inputs unless intentionally starting a new segment
+- Changed autoresearch prompt to recommend keeping equal or near-equal results when they materially simplify implementation
+- Changed `init_experiment` to reset pending run state (checks, duration, ASI, artifact directory) when initializing a new segment
+- Changed `log_experiment` to set `autoResumeArmed` flag after successfully logging a run to enable auto-resume on next agent turn
+- Changed `run_experiment` to set `autoResumeArmed` flag and update dashboard after completing a run
+- Changed auto-resume logic to only prompt when a new pending run exists or when `autoResumeArmed` is explicitly set, preventing duplicate prompts
+- Changed path normalization in contract validation to use `path.posix.normalize()` for consistent path handling
 - Changed autoresearch initialization to collect and validate benchmark command, metric definition, scope paths, off-limits list, and constraints before `init_experiment`
 - Changed `init_experiment` to require exact benchmark command, metric definition, scope, off-limits, and constraints matching collected contract
 - Changed `log_experiment` to record run number, benchmark command, scope paths, off-limits list, constraints, and segment fingerprint with each result
@@ -111,6 +131,9 @@
 
 ### Fixed
 
+- Fixed boundary duplication warnings to always display when replacement lines match the next surviving line, even when auto-correction is disabled
+- Fixed secondary metrics validation to properly reject missing configured metrics and new metrics without force flag
+- Fixed ASI data cloning to prevent prototype pollution attacks by filtering reserved property names
 - Fixed autoresearch resume to detect and recover pending run artifacts that were left unlogged from previous sessions
 - Fixed dashboard overlay to display when running experiment even with zero completed results
 - Fixed tab character rendering in dashboard command display and tool output summaries

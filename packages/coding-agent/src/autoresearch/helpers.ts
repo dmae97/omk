@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { isEnoent } from "@oh-my-pi/pi-utils";
+import { parseCommandArgs } from "../utils/command-args";
 import type {
 	ASIData,
 	ASIValue,
@@ -185,8 +186,36 @@ export function isAutoresearchShCommand(command: string): boolean {
 		previous = normalized;
 		normalized = normalized.replace(/^(?:env|time|nice|nohup)(?:\s+-\S+(?:\s+\d+)?)?\s+/, "");
 	}
+	if (/[;&|<>]/.test(normalized)) {
+		return false;
+	}
 
-	return /^(?:(?:bash|sh)\s+(?:-\w+\s+)*)?(?:\.\/|\/[\w/.-]*\/)?autoresearch\.sh(?:\s|$)/.test(normalized);
+	const tokens = parseCommandArgs(normalized);
+	if (tokens.length === 0) return false;
+
+	let index = 0;
+	if (tokens[index] === "bash" || tokens[index] === "sh") {
+		index += 1;
+		while (index < tokens.length && tokens[index]?.startsWith("-")) {
+			if (tokens[index]?.includes("c")) {
+				return false;
+			}
+			index += 1;
+		}
+	}
+
+	const scriptToken = tokens[index];
+	if (!scriptToken || !/^(?:\.\/|\/[\w/.-]*\/)?autoresearch\.sh$/.test(scriptToken)) {
+		return false;
+	}
+
+	for (const token of tokens.slice(index + 1)) {
+		if (token === "&&" || token === "||" || token === ";" || token === "|" || token === ">" || token === "<") {
+			return false;
+		}
+	}
+
+	return true;
 }
 
 export function isBetter(current: number, best: number, direction: MetricDirection): boolean {
@@ -380,6 +409,7 @@ function cloneNumericMetricMap(value: unknown): NumericMetricMap | null {
 	const metrics = value as { [key: string]: unknown };
 	const clone: NumericMetricMap = {};
 	for (const [key, entryValue] of Object.entries(metrics)) {
+		if (DENIED_KEY_NAMES.has(key)) continue;
 		if (typeof entryValue === "number" && Number.isFinite(entryValue)) {
 			clone[key] = entryValue;
 		}
@@ -392,6 +422,7 @@ function cloneAsiData(value: unknown): ASIData | null {
 	const candidate = value as { [key: string]: unknown };
 	const clone: ASIData = {};
 	for (const [key, entryValue] of Object.entries(candidate)) {
+		if (DENIED_KEY_NAMES.has(key)) continue;
 		const sanitized = clonePendingAsiValue(entryValue);
 		if (sanitized !== undefined) {
 			clone[key] = sanitized;
@@ -415,6 +446,7 @@ function clonePendingAsiValue(value: unknown): ASIValue | undefined {
 		const candidate = value as { [key: string]: unknown };
 		const clone: { [key: string]: ASIValue } = {};
 		for (const [key, entryValue] of Object.entries(candidate)) {
+			if (DENIED_KEY_NAMES.has(key)) continue;
 			const sanitized = clonePendingAsiValue(entryValue);
 			if (sanitized !== undefined) {
 				clone[key] = sanitized;

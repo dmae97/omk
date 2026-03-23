@@ -71,13 +71,17 @@ An unlogged run artifact exists at `{{pending_run_directory}}`.
    - Read the relevant source files.
    - Identify the true bottleneck or quality constraint.
    - Check existing scripts, benchmark harnesses, and config files.
+   - Verify prerequisites, one-time setup, and benchmark inputs before the first run of a segment.
 2. Keep your notes in `autoresearch.md`.
-   - Record the goal, the benchmark command, the primary metric, important secondary metrics, the files in scope, hard constraints, and the running ideas backlog.
+   - Record the goal, the benchmark command, the primary metric, important secondary metrics, the files in scope, hard constraints, preflight requirements, and the benchmark comparability invariant.
    - Update the notes whenever the strategy changes.
+   - Keep durable conclusions in `autoresearch.md`.
+   - Use `autoresearch.ideas.md` for deferred experiment ideas that are promising but not active yet.
 3. Use `autoresearch.sh` as the canonical benchmark entrypoint.
    - If it does not exist yet, create it.
    - Make it print structured metric lines in the form `METRIC name=value`.
    - Use the same workload every run unless you intentionally re-initialize with a new segment.
+   - Keep the measurement harness, evaluator, and fixed benchmark inputs stable unless you intentionally start a new segment and document the change.
 4. Initialize the loop with `init_experiment` before the first logged run of a segment.
 5. Run a baseline first.
    - Establish the baseline metric before attempting optimizations.
@@ -98,7 +102,8 @@ An unlogged run artifact exists at `{{pending_run_directory}}`.
    - Use ASI to capture what you learned, not just what you changed.
 9. Prefer simpler wins.
    - Remove dead ends.
-   - Do not keep complexity that does not move the metric.
+   - Keep equal or near-equal results when they materially simplify the implementation.
+   - Do not keep ugly complexity for tiny gains unless the payoff is clearly worth it.
    - Do not thrash between unrelated ideas without writing down the conclusion.
 10. When confidence is low, confirm.
     - The dashboard confidence score compares the best observed improvement against the observed noise floor.
@@ -116,6 +121,8 @@ Your benchmark script SHOULD:
 - print secondary metrics as additional `METRIC name=value` lines
 - avoid extra randomness when possible
 - use repeated samples and median-style summaries for fast benchmarks
+- preserve the comparability invariant for the current segment
+- keep the ground-truth evaluator and fixed benchmark inputs unchanged unless the segment is explicitly re-initialized
 
 ### Notes file template
 
@@ -182,7 +189,7 @@ Resume from the existing notes:
 - read `autoresearch.md`
 - inspect recent git history
 - inspect `autoresearch.jsonl`
-- continue from the most promising unfinished branch
+- continue from the most promising unfinished direction on the current protected branch
 
 {{else}}
 ### Initial setup
@@ -215,6 +222,6 @@ Treat failing checks as a failed experiment:
 
 `autoresearch.ideas.md` exists at `{{ideas_path}}`.
 
-Use it to keep promising but deferred experiments. Prune stale ideas when they are disproven or superseded.
+Use it to keep promising but deferred experiments. `autoresearch.md` should hold durable conclusions; `autoresearch.ideas.md` is the scratch backlog. Prune stale ideas when they are disproven or superseded.
 
 {{/if}}

@@ -41,7 +41,9 @@ export function createExperimentState(): ExperimentState {
 export function createSessionRuntime(): AutoresearchRuntime {
 	return {
 		autoresearchMode: false,
+		autoResumeArmed: false,
 		dashboardExpanded: false,
+		lastAutoResumePendingRunNumber: null,
 		lastRunChecks: null,
 		lastRunDuration: null,
 		lastRunAsi: null,
@@ -341,6 +343,7 @@ function cloneNumericMetrics(value: unknown): NumericMetricMap {
 	const metrics = value as { [key: string]: unknown };
 	const clone: NumericMetricMap = {};
 	for (const [key, entryValue] of Object.entries(metrics)) {
+		if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
 		if (typeof entryValue === "number" && Number.isFinite(entryValue)) {
 			clone[key] = entryValue;
 		}
@@ -363,7 +366,12 @@ function hydrateMetricDefs(metricNames: string[] | undefined): MetricDef[] {
 
 function cloneAsi(value: unknown): ExperimentResult["asi"] {
 	if (typeof value !== "object" || value === null) return undefined;
-	return structuredClone(value) as ExperimentResult["asi"];
+	const clone: { [key: string]: unknown } = {};
+	for (const [key, entryValue] of Object.entries(value)) {
+		if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
+		clone[key] = structuredClone(entryValue);
+	}
+	return clone as ExperimentResult["asi"];
 }
 
 function parseControlEntry(value: unknown): AutoresearchControlEntryData | null {

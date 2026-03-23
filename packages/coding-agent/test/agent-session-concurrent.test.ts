@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { Agent, AgentBusyError, type AgentMessage, type AgentTool } from "@oh-my-pi/pi-agent-core";
-import { type AssistantMessage, getBundledModel, type ToolCall } from "@oh-my-pi/pi-ai";
+import { Agent, AgentBusyError, type AgentTool } from "@oh-my-pi/pi-agent-core";
+import { type AssistantMessage, getBundledModel, type Message, type ToolCall } from "@oh-my-pi/pi-ai";
 import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
 import type { Rule } from "@oh-my-pi/pi-coding-agent/capability/rule";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
@@ -15,6 +15,7 @@ import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { TtsrManager } from "@oh-my-pi/pi-coding-agent/export/ttsr";
 import { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
+import { convertToLlm } from "@oh-my-pi/pi-coding-agent/session/messages";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { Snowflake } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
@@ -112,6 +113,16 @@ describe("AgentSession concurrent prompt guard", () => {
 		return session;
 	}
 
+	async function waitFor(predicate: () => boolean, timeoutMs = 500): Promise<void> {
+		const deadline = Date.now() + timeoutMs;
+		while (Date.now() < deadline) {
+			if (predicate()) return;
+			await Bun.sleep(10);
+		}
+
+		throw new Error("Timed out waiting for condition");
+	}
+
 	it("should throw when prompt() called while streaming", async () => {
 		await createSession();
 
@@ -167,7 +178,7 @@ describe("AgentSession concurrent prompt guard", () => {
 	it("delivers hidden nextTurn stop reactions through the next LLM call without exposing them in the visible queue", async () => {
 		const model = getBundledModel("anthropic", "claude-sonnet-4-5")!;
 		let firstStream: MockAssistantStream | undefined;
-		const callMessages: AgentMessage[][] = [];
+		const callMessages: Message[][] = [];
 
 		const agent = new Agent({
 			getApiKey: () => "test-key",
@@ -176,6 +187,7 @@ describe("AgentSession concurrent prompt guard", () => {
 				systemPrompt: "Test",
 				tools: [],
 			},
+			convertToLlm,
 			streamFn: (_model, context) => {
 				callMessages.push([...context.messages]);
 				const stream = new MockAssistantStream();
@@ -206,7 +218,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		});
 
 		const firstPrompt = session.prompt("First message");
-		await Bun.sleep(10);
+		await waitFor(() => session.isStreaming && firstStream !== undefined && callMessages.length === 1);
 
 		await session.sendCustomMessage(
 			{
@@ -227,10 +239,15 @@ describe("AgentSession concurrent prompt guard", () => {
 
 		expect(callMessages).toHaveLength(2);
 		expect(
-			callMessages[1]?.some(
-				message =>
-					message.role === "custom" && "customType" in message && message.customType === "autoresearch-resume",
-			),
+			callMessages[1]?.some(message => {
+				if (typeof message.content === "string") {
+					return message.content.includes("Hidden stop reaction");
+				}
+
+				return message.content.some(
+					content => content.type === "text" && content.text.includes("Hidden stop reaction"),
+				);
+			}),
 		).toBe(true);
 	});
 

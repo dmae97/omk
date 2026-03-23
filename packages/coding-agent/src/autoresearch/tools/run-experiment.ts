@@ -303,6 +303,10 @@ export function createRunExperimentTool(
 				runDirectory,
 				runNumber,
 			};
+			runtime.autoResumeArmed = true;
+			runtime.lastAutoResumePendingRunNumber = null;
+			options.dashboard.updateWidget(ctx, runtime);
+			options.dashboard.requestRender();
 
 			await Bun.write(
 				runJsonPath,

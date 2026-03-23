@@ -63,6 +63,16 @@ export function validateAutoresearchContract(contract: AutoresearchContract): st
 	if (contract.scopePaths.length === 0) {
 		errors.push("Files in Scope must contain at least one path in autoresearch.md.");
 	}
+	for (const scopePath of contract.scopePaths) {
+		if (isUnsafeContractPathSpec(scopePath)) {
+			errors.push(`Files in Scope contains an invalid path: ${scopePath}`);
+		}
+	}
+	for (const offLimitsPath of contract.offLimits) {
+		if (isUnsafeContractPathSpec(offLimitsPath)) {
+			errors.push(`Off Limits contains an invalid path: ${offLimitsPath}`);
+		}
+	}
 	return errors;
 }
 
@@ -151,7 +161,7 @@ export function normalizeAutoresearchList(values: readonly string[]): string[] {
 }
 
 export function normalizeContractPathSpec(value: string): string {
-	const normalized = value.trim().replaceAll("\\", "/");
+	const normalized = path.posix.normalize(value.trim().replaceAll("\\", "/"));
 	if (normalized === "." || normalized === "./") return ".";
 	return normalized.replace(/^\.\/+/, "").replace(/\/+$/, "");
 }
@@ -315,4 +325,8 @@ function parseSecondaryMetrics(value: string | undefined): string[] {
 			.map(entry => entry.trim())
 			.filter(Boolean),
 	);
+}
+
+function isUnsafeContractPathSpec(value: string): boolean {
+	return path.posix.isAbsolute(value) || value === ".." || value.startsWith("../");
 }

@@ -245,6 +245,24 @@ describe("autoresearch tools", () => {
 		});
 
 		const runtime = createSessionRuntime();
+		runtime.lastRunChecks = { pass: true, output: "stale", duration: 1 };
+		runtime.lastRunDuration = 1;
+		runtime.lastRunAsi = { hypothesis: "stale" };
+		runtime.lastRunArtifactDir = path.join(dir, ".autoresearch", "runs", "9999");
+		runtime.lastRunNumber = 99;
+		runtime.lastRunSummary = {
+			checksDurationSeconds: 1,
+			checksPass: true,
+			checksTimedOut: false,
+			command: "bash autoresearch.sh",
+			durationSeconds: 1,
+			parsedAsi: { hypothesis: "stale" },
+			parsedMetrics: { runtime_ms: 10 },
+			parsedPrimary: 10,
+			passed: true,
+			runDirectory: path.join(dir, ".autoresearch", "runs", "9999"),
+			runNumber: 99,
+		};
 		const tool = createInitExperimentTool({
 			dashboard: createDashboardStub(),
 			getRuntime: () => runtime,
@@ -291,6 +309,12 @@ describe("autoresearch tools", () => {
 		expect(configEntry.offLimits).toEqual(["src/generated"]);
 		expect(configEntry.constraints).toEqual(["keep behavior stable"]);
 		expect(configEntry.segmentFingerprint).toBe(createFingerprint(dir));
+		expect(runtime.lastRunChecks).toBeNull();
+		expect(runtime.lastRunDuration).toBeNull();
+		expect(runtime.lastRunAsi).toBeNull();
+		expect(runtime.lastRunArtifactDir).toBeNull();
+		expect(runtime.lastRunNumber).toBeNull();
+		expect(runtime.lastRunSummary).toBeNull();
 	});
 
 	it("rejects init_experiment when the passed contract no longer matches autoresearch.md", async () => {
@@ -345,6 +369,53 @@ describe("autoresearch tools", () => {
 		expect(result.content[0]).toEqual({
 			type: "text",
 			text: expect.stringContaining("off_limits do not match autoresearch.md"),
+		});
+		expect(fs.existsSync(path.join(dir, "autoresearch.jsonl"))).toBe(false);
+	});
+
+	it("rejects init_experiment while a previous run is still pending", async () => {
+		const dir = makeTempDir();
+		tempDirs.push(dir);
+		writeAutoresearchWorkspace(dir);
+		await Bun.write(
+			path.join(dir, ".autoresearch", "runs", "0001", "run.json"),
+			JSON.stringify({
+				command: "bash autoresearch.sh",
+				completedAt: new Date().toISOString(),
+				durationSeconds: 1,
+				exitCode: 0,
+				parsedPrimary: 10,
+				runNumber: 1,
+			}),
+		);
+
+		const runtime = createSessionRuntime();
+		const tool = createInitExperimentTool({
+			dashboard: createDashboardStub(),
+			getRuntime: () => runtime,
+			pi: {} as ExtensionAPI,
+		});
+
+		const result = await tool.execute(
+			"init-pending",
+			{
+				name: "Blocked",
+				metric_name: "runtime_ms",
+				metric_unit: "ms",
+				direction: "lower",
+				benchmark_command: "bash autoresearch.sh",
+				scope_paths: ["src"],
+				off_limits: [],
+				constraints: [],
+			},
+			undefined,
+			undefined,
+			createContext(dir),
+		);
+
+		expect(result.content[0]).toEqual({
+			type: "text",
+			text: expect.stringContaining("has not been logged yet"),
 		});
 		expect(fs.existsSync(path.join(dir, "autoresearch.jsonl"))).toBe(false);
 	});
@@ -512,6 +583,8 @@ describe("autoresearch tools", () => {
 		await $`git config user.name Test User`.cwd(dir).quiet();
 		await $`git add .`.cwd(dir).quiet();
 		await $`git commit -m initial`.cwd(dir).quiet();
+		await $`git checkout -b autoresearch/test-force-secondary-accept`.cwd(dir).quiet();
+		await $`git checkout -b autoresearch/test-keep`.cwd(dir).quiet();
 
 		fs.writeFileSync(path.join(dir, "src", "in-scope.ts"), "export const value = 3;\n");
 		fs.writeFileSync(path.join(dir, "autoresearch.program.md"), "# Strategy\n\n- focus on in-scope edits\n");
@@ -618,6 +691,8 @@ describe("autoresearch tools", () => {
 		await $`git config user.name Test User`.cwd(dir).quiet();
 		await $`git add .`.cwd(dir).quiet();
 		await $`git commit -m initial`.cwd(dir).quiet();
+		await $`git checkout -b autoresearch/test-max-iterations-accept`.cwd(dir).quiet();
+		await $`git checkout -b autoresearch/test-force-secondary`.cwd(dir).quiet();
 
 		fs.writeFileSync(path.join(dir, "src", "out-of-scope.ts"), "export const value = 99;\n");
 		await Bun.write(
@@ -707,6 +782,8 @@ describe("autoresearch tools", () => {
 		await $`git config user.name Test User`.cwd(dir).quiet();
 		await $`git add .`.cwd(dir).quiet();
 		await $`git commit -m initial`.cwd(dir).quiet();
+		await $`git checkout -b autoresearch/test-discard-cleanup`.cwd(dir).quiet();
+		await $`git checkout -b autoresearch/test-max-iterations`.cwd(dir).quiet();
 
 		fs.writeFileSync(path.join(dir, "src", "generated", "index.ts"), "export const value = 2;\n");
 		await Bun.write(
@@ -776,6 +853,7 @@ describe("autoresearch tools", () => {
 		await $`git config user.name Test User`.cwd(dir).quiet();
 		await $`git add .`.cwd(dir).quiet();
 		await $`git commit -m initial`.cwd(dir).quiet();
+		await $`git checkout -b autoresearch/test-discard`.cwd(dir).quiet();
 
 		await Bun.write(
 			path.join(dir, ".autoresearch", "runs", "0003", "run.json"),
@@ -859,6 +937,280 @@ describe("autoresearch tools", () => {
 			text: expect.stringContaining("Current best: 8"),
 		});
 		expect(runtime.state.results).toHaveLength(2);
+	});
+
+	it("rejects log_experiment when configured secondary metrics are missing", async () => {
+		const dir = makeTempDir();
+		tempDirs.push(dir);
+		writeAutoresearchWorkspace(dir);
+		await Bun.write(
+			path.join(dir, ".autoresearch", "runs", "0001", "run.json"),
+			JSON.stringify({
+				command: "bash autoresearch.sh",
+				completedAt: new Date().toISOString(),
+				durationSeconds: 1,
+				exitCode: 0,
+				parsedMetrics: { memory_mb: 32, runtime_ms: 9 },
+				parsedPrimary: 9,
+				runNumber: 1,
+			}),
+		);
+
+		const runtime = createSessionRuntime();
+		runtime.state.metricName = "runtime_ms";
+		runtime.state.metricUnit = "ms";
+		runtime.state.secondaryMetrics = [
+			{ name: "memory_mb", unit: "mb" },
+			{ name: "tokens", unit: "" },
+		];
+		runtime.state.segmentFingerprint = createFingerprint(dir);
+		runtime.lastRunSummary = {
+			checksDurationSeconds: 0,
+			checksPass: null,
+			checksTimedOut: false,
+			command: "bash autoresearch.sh",
+			durationSeconds: 1,
+			parsedAsi: null,
+			parsedMetrics: { memory_mb: 32, runtime_ms: 9 },
+			parsedPrimary: 9,
+			passed: true,
+			runDirectory: path.join(dir, ".autoresearch", "runs", "0001"),
+			runNumber: 1,
+		};
+
+		const tool = createLogExperimentTool({
+			dashboard: createDashboardStub(),
+			getRuntime: () => runtime,
+			pi: {} as ExtensionAPI,
+		});
+		const result = await tool.execute(
+			"call-missing-secondary",
+			{
+				commit: "initial",
+				metric: 9,
+				status: "discard",
+				description: "missing tokens metric",
+				metrics: { memory_mb: 32 },
+				asi: {
+					hypothesis: "watch memory only",
+					rollback_reason: "missing required metrics",
+					next_action_hint: "include all configured tradeoff metrics",
+				},
+			},
+			undefined,
+			undefined,
+			createContext(dir),
+		);
+
+		expect(result.content[0]).toEqual({
+			type: "text",
+			text: expect.stringContaining("missing secondary metrics: tokens"),
+		});
+		expect(runtime.state.results).toHaveLength(0);
+	});
+
+	it("rejects new secondary metrics unless force is enabled", async () => {
+		const dir = makeTempDir();
+		tempDirs.push(dir);
+		writeAutoresearchWorkspace(dir);
+		await Bun.write(
+			path.join(dir, ".autoresearch", "runs", "0001", "run.json"),
+			JSON.stringify({
+				command: "bash autoresearch.sh",
+				completedAt: new Date().toISOString(),
+				durationSeconds: 1,
+				exitCode: 0,
+				parsedMetrics: { runtime_ms: 9 },
+				parsedPrimary: 9,
+				runNumber: 1,
+			}),
+		);
+
+		const runtime = createSessionRuntime();
+		runtime.state.metricName = "runtime_ms";
+		runtime.state.metricUnit = "ms";
+		runtime.state.secondaryMetrics = [{ name: "memory_mb", unit: "mb" }];
+		runtime.state.segmentFingerprint = createFingerprint(dir);
+		runtime.lastRunSummary = {
+			checksDurationSeconds: 0,
+			checksPass: null,
+			checksTimedOut: false,
+			command: "bash autoresearch.sh",
+			durationSeconds: 1,
+			parsedAsi: null,
+			parsedMetrics: { runtime_ms: 9 },
+			parsedPrimary: 9,
+			passed: true,
+			runDirectory: path.join(dir, ".autoresearch", "runs", "0001"),
+			runNumber: 1,
+		};
+
+		const tool = createLogExperimentTool({
+			dashboard: createDashboardStub(),
+			getRuntime: () => runtime,
+			pi: {} as ExtensionAPI,
+		});
+		const result = await tool.execute(
+			"call-new-secondary",
+			{
+				commit: "initial",
+				metric: 9,
+				status: "discard",
+				description: "introduce tokens metric",
+				metrics: { memory_mb: 32, tokens: 100 },
+				asi: {
+					hypothesis: "watch an extra tradeoff",
+					rollback_reason: "needs explicit opt-in",
+					next_action_hint: "retry with force if the metric matters",
+				},
+			},
+			undefined,
+			undefined,
+			createContext(dir),
+		);
+
+		expect(result.content[0]).toEqual({
+			type: "text",
+			text: expect.stringContaining("new secondary metrics require force=true: tokens"),
+		});
+		expect(runtime.state.results).toHaveLength(0);
+	});
+
+	it("accepts a new secondary metric when force is enabled", async () => {
+		const dir = makeTempDir();
+		tempDirs.push(dir);
+		writeAutoresearchWorkspace(dir);
+
+		await $`git init`.cwd(dir).quiet();
+		await $`git config user.email test@example.com`.cwd(dir).quiet();
+		await $`git config user.name Test User`.cwd(dir).quiet();
+		await $`git add .`.cwd(dir).quiet();
+		await $`git commit -m initial`.cwd(dir).quiet();
+		await $`git checkout -b autoresearch/test-force-secondary-accept`.cwd(dir).quiet();
+
+		await Bun.write(
+			path.join(dir, ".autoresearch", "runs", "0001", "run.json"),
+			JSON.stringify({
+				command: "bash autoresearch.sh",
+				completedAt: new Date().toISOString(),
+				durationSeconds: 1,
+				exitCode: 0,
+				parsedMetrics: { runtime_ms: 9 },
+				parsedPrimary: 9,
+				runNumber: 1,
+			}),
+		);
+
+		const runtime = createSessionRuntime();
+		runtime.state.metricName = "runtime_ms";
+		runtime.state.metricUnit = "ms";
+		runtime.state.secondaryMetrics = [{ name: "memory_mb", unit: "mb" }];
+		runtime.state.segmentFingerprint = createFingerprint(dir);
+		runtime.lastRunSummary = {
+			checksDurationSeconds: 0,
+			checksPass: null,
+			checksTimedOut: false,
+			command: "bash autoresearch.sh",
+			durationSeconds: 1,
+			parsedAsi: null,
+			parsedMetrics: { runtime_ms: 9 },
+			parsedPrimary: 9,
+			passed: true,
+			runDirectory: path.join(dir, ".autoresearch", "runs", "0001"),
+			runNumber: 1,
+		};
+
+		const tool = createLogExperimentTool({
+			dashboard: createDashboardStub(),
+			getRuntime: () => runtime,
+			pi: createGitApi(),
+		});
+		const result = await tool.execute(
+			"call-force-secondary",
+			{
+				commit: "initial",
+				metric: 9,
+				status: "discard",
+				description: "force extra metric",
+				force: true,
+				metrics: { memory_mb: 32, tokens: 100 },
+				asi: {
+					hypothesis: "capture an extra tradeoff",
+					rollback_reason: "benchmark was flat",
+					next_action_hint: "keep collecting tokens when useful",
+				},
+			},
+			undefined,
+			undefined,
+			createContext(dir),
+		);
+
+		expect(result.content[0]).toEqual({
+			type: "text",
+			text: expect.stringContaining("Logged run #1: discard"),
+		});
+		expect(runtime.state.secondaryMetrics).toContainEqual({ name: "tokens", unit: "" });
+	});
+
+	it("rejects log_experiment at the tool boundary when asi is missing", async () => {
+		const dir = makeTempDir();
+		tempDirs.push(dir);
+		writeAutoresearchWorkspace(dir);
+		await Bun.write(
+			path.join(dir, ".autoresearch", "runs", "0001", "run.json"),
+			JSON.stringify({
+				command: "bash autoresearch.sh",
+				completedAt: new Date().toISOString(),
+				durationSeconds: 1,
+				exitCode: 0,
+				parsedMetrics: { runtime_ms: 9 },
+				parsedPrimary: 9,
+				runNumber: 1,
+			}),
+		);
+
+		const runtime = createSessionRuntime();
+		runtime.state.metricName = "runtime_ms";
+		runtime.state.metricUnit = "ms";
+		runtime.state.segmentFingerprint = createFingerprint(dir);
+		runtime.lastRunSummary = {
+			checksDurationSeconds: 0,
+			checksPass: null,
+			checksTimedOut: false,
+			command: "bash autoresearch.sh",
+			durationSeconds: 1,
+			parsedAsi: null,
+			parsedMetrics: { runtime_ms: 9 },
+			parsedPrimary: 9,
+			passed: true,
+			runDirectory: path.join(dir, ".autoresearch", "runs", "0001"),
+			runNumber: 1,
+		};
+
+		const tool = createLogExperimentTool({
+			dashboard: createDashboardStub(),
+			getRuntime: () => runtime,
+			pi: {} as ExtensionAPI,
+		});
+		const result = await tool.execute(
+			"call-missing-asi",
+			{
+				commit: "initial",
+				metric: 9,
+				status: "keep",
+				description: "missing asi",
+			},
+			undefined,
+			undefined,
+			createContext(dir),
+		);
+
+		expect(result.content[0]).toEqual({
+			type: "text",
+			text: expect.stringContaining("asi is required"),
+		});
+		expect(runtime.state.results).toHaveLength(0);
+		expect(fs.existsSync(path.join(dir, "autoresearch.jsonl"))).toBe(false);
 	});
 
 	it("requires failed benchmarks to be logged as crash", async () => {
@@ -1002,6 +1354,7 @@ describe("autoresearch tools", () => {
 		await $`git config user.name Test User`.cwd(dir).quiet();
 		await $`git add .`.cwd(dir).quiet();
 		await $`git commit -m initial`.cwd(dir).quiet();
+		await $`git checkout -b autoresearch/test-max-iterations-accept`.cwd(dir).quiet();
 
 		await Bun.write(
 			path.join(dir, ".autoresearch", "runs", "0001", "run.json"),
@@ -1164,6 +1517,7 @@ describe("autoresearch tools", () => {
 		await $`git config user.name Test User`.cwd(dir).quiet();
 		await $`git add .`.cwd(dir).quiet();
 		await $`git commit -m initial`.cwd(dir).quiet();
+		await $`git checkout -b autoresearch/test-discard-cleanup`.cwd(dir).quiet();
 
 		fs.mkdirSync(path.join(dir, "tmp-artifact"), { recursive: true });
 		fs.writeFileSync(path.join(dir, "tmp-artifact", "result.txt"), "temporary benchmark output\n");

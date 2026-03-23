@@ -304,6 +304,8 @@ export function createLogExperimentTool(
 			runtime.lastRunArtifactDir = null;
 			runtime.lastRunNumber = null;
 			runtime.lastRunSummary = null;
+			runtime.autoResumeArmed = true;
+			runtime.lastAutoResumePendingRunNumber = null;
 
 			const currentSegmentRuns = currentResults(state.results, state.currentSegment).length;
 			const text = buildLogText(state, experiment, currentSegmentRuns, wallClockSeconds, gitNote);
@@ -364,10 +366,12 @@ function buildSecondaryMetrics(
 ): NumericMetricMap {
 	const merged: NumericMetricMap = {};
 	for (const [name, value] of Object.entries(parsedMetrics ?? {})) {
+		if (name === "__proto__" || name === "constructor" || name === "prototype") continue;
 		if (name === primaryMetricName) continue;
 		merged[name] = value;
 	}
 	for (const [name, value] of Object.entries(cloneMetrics(overrides))) {
+		if (name === "__proto__" || name === "constructor" || name === "prototype") continue;
 		merged[name] = value;
 	}
 	return merged;
@@ -377,6 +381,7 @@ function sanitizeAsi(value: { [key: string]: unknown } | undefined): ASIData | u
 	if (!value) return undefined;
 	const result: ASIData = {};
 	for (const [key, entryValue] of Object.entries(value)) {
+		if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
 		const sanitized = sanitizeAsiValue(entryValue);
 		if (sanitized !== undefined) {
 			result[key] = sanitized;
@@ -398,6 +403,7 @@ function sanitizeAsiValue(value: unknown): ASIData[string] | undefined {
 		const objectValue = value as { [key: string]: unknown };
 		const result: ASIData = {};
 		for (const [key, entryValue] of Object.entries(objectValue)) {
+			if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
 			const sanitized = sanitizeAsiValue(entryValue);
 			if (sanitized !== undefined) {
 				result[key] = sanitized;
@@ -567,6 +573,10 @@ async function revertFailedExperiment(
 		{ cwd: workDir, timeout: 10_000 },
 	);
 	const cleanResult = await options.pi.exec("git", ["clean", "-fd", "--", "."], { cwd: workDir, timeout: 10_000 });
+	const cleanIgnoredResult = await options.pi.exec("git", ["clean", "-fdX", "--", "."], {
+		cwd: workDir,
+		timeout: 10_000,
+	});
 	restoreAutoresearchFiles(preservedFiles);
 	if (restoreResult.code !== 0) {
 		return {
@@ -576,6 +586,11 @@ async function revertFailedExperiment(
 	if (cleanResult.code !== 0) {
 		return {
 			error: `git clean failed: ${mergeStdoutStderr(cleanResult).trim() || `exit ${cleanResult.code}`}`,
+		};
+	}
+	if (cleanIgnoredResult.code !== 0) {
+		return {
+			error: `git clean -X failed: ${mergeStdoutStderr(cleanIgnoredResult).trim() || `exit ${cleanIgnoredResult.code}`}`,
 		};
 	}
 	const dirtyCheckResult = await options.pi.exec(

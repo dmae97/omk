@@ -567,7 +567,7 @@ export function applyHashlineEdits(
 			const tag = formatLineTag(endLine + 1, nextSurvivingLine);
 			warnings.push(
 				`Possible boundary duplication: your last replacement line \`${trimmedLast}\` is identical to the next surviving line ${tag}. ` +
-				`If you meant to replace the entire block, set \`end\` to ${tag} instead.`,
+					`If you meant to replace the entire block, set \`end\` to ${tag} instead.`,
 			);
 		}
 	}

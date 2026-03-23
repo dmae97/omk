@@ -535,7 +535,9 @@ describe("applyHashlineEdits — heuristics", () => {
 		];
 		const result = applyHashlineEdits(content, edits);
 		expect(result.lines).toBe("if (ok) {\n  runSafe();\n}\n}\nafter();");
-		expect(result.warnings).toBeUndefined();
+		expect(result.warnings).toHaveLength(1);
+		expect(result.warnings?.[0]).toContain("Possible boundary duplication");
+		expect(result.warnings?.[0]).toContain("set `end` to 3#RZ");
 	});
 
 	it("preserves duplicated trailing content when replacement re-emits the next line", () => {
@@ -550,7 +552,9 @@ describe("applyHashlineEdits — heuristics", () => {
 		];
 		const result = applyHashlineEdits(content, edits);
 		expect(result.lines).toBe("start\n  newCall();\nnextCall();\nnextCall();\nafter();");
-		expect(result.warnings).toBeUndefined();
+		expect(result.warnings).toHaveLength(1);
+		expect(result.warnings?.[0]).toContain("Possible boundary duplication");
+		expect(result.warnings?.[0]).toContain("set `end` to 3#HR");
 	});
 
 	it("preserves duplicated leading content when replacement re-emits the previous line", () => {

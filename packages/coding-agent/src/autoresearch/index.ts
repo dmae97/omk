@@ -43,6 +43,7 @@ interface AutoresearchSetupInput {
 	metricName: string;
 	metricUnit: string;
 	direction: "lower" | "higher";
+	secondaryMetrics: string[];
 	scopePaths: string[];
 	offLimits: string[];
 	constraints: string[];
@@ -65,6 +66,8 @@ export const createAutoresearchExtension: ExtensionFactory = api => {
 		runtime.state.maxExperiments = readMaxExperiments(ctx.cwd);
 		runtime.goal = control.goal;
 		runtime.autoresearchMode = control.autoresearchMode;
+		runtime.autoResumeArmed = false;
+		runtime.lastAutoResumePendingRunNumber = null;
 		runtime.lastRunSummary = await readPendingRunSummary(workDir, loggedRunNumbers);
 		runtime.lastRunChecks = summaryToChecks(runtime.lastRunSummary);
 		runtime.lastRunDuration = runtime.lastRunSummary?.durationSeconds ?? null;
@@ -94,7 +97,9 @@ export const createAutoresearchExtension: ExtensionFactory = api => {
 	): void => {
 		const runtime = getRuntime(ctx);
 		runtime.autoresearchMode = enabled;
+		runtime.autoResumeArmed = false;
 		runtime.goal = goal;
+		runtime.lastAutoResumePendingRunNumber = null;
 		api.appendEntry("autoresearch-control", goal ? { mode, goal } : { mode });
 	};
 
@@ -251,6 +256,7 @@ export const createAutoresearchExtension: ExtensionFactory = api => {
 			runtime.state.metricName = setup.metricName;
 			runtime.state.metricUnit = setup.metricUnit;
 			runtime.state.bestDirection = setup.direction;
+			runtime.state.secondaryMetrics = setup.secondaryMetrics.map(name => ({ name, unit: "" }));
 			runtime.state.benchmarkCommand = setup.benchmarkCommand;
 			runtime.state.scopePaths = [...setup.scopePaths];
 			runtime.state.offLimits = [...setup.offLimits];
@@ -267,6 +273,13 @@ export const createAutoresearchExtension: ExtensionFactory = api => {
 					metric_name: setup.metricName,
 					metric_unit: setup.metricUnit,
 					direction: setup.direction,
+					has_secondary_metrics: setup.secondaryMetrics.length > 0,
+					secondary_metrics: setup.secondaryMetrics,
+					secondary_metrics_block: formatBulletBlock(
+						setup.secondaryMetrics,
+						value => `  - \`${value}\``,
+						"  - `(none)`",
+					),
 					scope_paths: setup.scopePaths,
 					scope_paths_block: formatBulletBlock(setup.scopePaths, value => `  - \`${value}\``),
 					has_off_limits: setup.offLimits.length > 0,
@@ -315,7 +328,10 @@ export const createAutoresearchExtension: ExtensionFactory = api => {
 		dashboard.updateWidget(ctx, runtime);
 		dashboard.requestRender();
 		if (!runtime.autoresearchMode) return;
-		if (ctx.hasPendingMessages()) return;
+		if (ctx.hasPendingMessages()) {
+			runtime.autoResumeArmed = false;
+			return;
+		}
 		const workDir = resolveWorkDir(ctx.cwd);
 		const pendingRun =
 			runtime.lastRunSummary ??
@@ -324,6 +340,13 @@ export const createAutoresearchExtension: ExtensionFactory = api => {
 		runtime.lastRunChecks = summaryToChecks(pendingRun);
 		runtime.lastRunDuration = pendingRun?.durationSeconds ?? runtime.lastRunDuration;
 		runtime.lastRunAsi = pendingRun?.parsedAsi ?? runtime.lastRunAsi;
+		const shouldResumePendingRun =
+			pendingRun !== null && runtime.lastAutoResumePendingRunNumber !== pendingRun.runNumber;
+		if (!shouldResumePendingRun && !runtime.autoResumeArmed) {
+			return;
+		}
+		runtime.autoResumeArmed = false;
+		runtime.lastAutoResumePendingRunNumber = pendingRun?.runNumber ?? null;
 		const autoresearchMdPath = path.join(workDir, "autoresearch.md");
 		const ideasPath = path.join(workDir, "autoresearch.ideas.md");
 		api.sendMessage(
@@ -459,6 +482,9 @@ async function promptForAutoresearchSetup(
 		return undefined;
 	}
 
+	const secondaryMetricsInput = await ctx.ui.input("Tradeoff Metrics", "");
+	if (secondaryMetricsInput === undefined) return undefined;
+
 	const scopePathsInput = await ctx.ui.input("Files in Scope", "packages/coding-agent/src/autoresearch");
 	if (scopePathsInput === undefined) return undefined;
 	const scopePaths = splitSetupList(scopePathsInput);
@@ -478,6 +504,7 @@ async function promptForAutoresearchSetup(
 		metricName,
 		metricUnit,
 		direction: normalizedDirection,
+		secondaryMetrics: splitSetupList(secondaryMetricsInput),
 		scopePaths,
 		offLimits: splitSetupList(offLimitsInput),
 		constraints: splitSetupList(constraintsInput),

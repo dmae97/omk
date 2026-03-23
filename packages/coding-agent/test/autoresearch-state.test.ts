@@ -297,6 +297,12 @@ describe("autoresearch command guard", () => {
 		expect(isAutoresearchShCommand("echo hi; autoresearch.sh")).toBe(false);
 		expect(isAutoresearchShCommand("bash -lc 'autoresearch.sh'")).toBe(false);
 	});
+
+	it("rejects chained or redirected benchmark commands even when autoresearch.sh comes first", () => {
+		expect(isAutoresearchShCommand("bash autoresearch.sh && touch /tmp/marker")).toBe(false);
+		expect(isAutoresearchShCommand("./autoresearch.sh | tee run.log")).toBe(false);
+		expect(isAutoresearchShCommand("./autoresearch.sh > run.log")).toBe(false);
+	});
 });
 
 interface AutoresearchCommandHarness {
@@ -394,6 +400,9 @@ function createAutoresearchCommandHarness(
 }
 
 interface AutoresearchLifecycleHarness {
+	beforeAgentStartHandler:
+		| ((event: { systemPrompt: string }, ctx: ExtensionContext) => Promise<unknown> | unknown)
+		| undefined;
 	sessionStartHandler: ((event: SessionStartEvent, ctx: ExtensionContext) => Promise<void> | void) | undefined;
 	sessionSwitchHandler: ((event: SessionSwitchEvent, ctx: ExtensionContext) => Promise<void> | void) | undefined;
 	agentEndHandler: ((event: unknown, ctx: ExtensionContext) => Promise<void> | void) | undefined;
@@ -475,6 +484,9 @@ function createAutoresearchLifecycleHarness(options: {
 	} as unknown as ExtensionContext;
 
 	return {
+		beforeAgentStartHandler: handlers.get("before_agent_start") as
+			| ((event: { systemPrompt: string }, ctx: ExtensionContext) => Promise<unknown> | unknown)
+			| undefined,
 		sessionStartHandler: handlers.get("session_start") as
 			| ((event: SessionStartEvent, ctx: ExtensionContext) => Promise<void> | void)
 			| undefined,
@@ -515,6 +527,7 @@ describe("autoresearch command startup", () => {
 				"runtime_ms",
 				"ms",
 				"lower",
+				"memory_mb, rss_mb",
 				"packages/coding-agent/src/autoresearch, packages/coding-agent/test",
 				"packages/coding-agent/src/generated",
 				"preserve output format",
@@ -547,6 +560,7 @@ describe("autoresearch command startup", () => {
 			{ title: "Primary Metric Name", placeholder: "runtime_ms" },
 			{ title: "Metric Unit", placeholder: "ms" },
 			{ title: "Metric Direction", placeholder: "lower" },
+			{ title: "Tradeoff Metrics", placeholder: "" },
 			{ title: "Files in Scope", placeholder: "packages/coding-agent/src/autoresearch" },
 			{ title: "Off Limits", placeholder: "" },
 			{ title: "Constraints", placeholder: "" },
@@ -558,6 +572,8 @@ describe("autoresearch command startup", () => {
 		expect(harness.sentMessages[0]).toContain("primary metric: `runtime_ms`");
 		expect(harness.sentMessages[0]).toContain("metric unit: `ms`");
 		expect(harness.sentMessages[0]).toContain("direction: `lower`");
+		expect(harness.sentMessages[0]).toContain("`memory_mb`");
+		expect(harness.sentMessages[0]).toContain("`rss_mb`");
 		expect(harness.sentMessages[0]).toContain("`packages/coding-agent/src/autoresearch`");
 		expect(harness.sentMessages[0]).toContain("`packages/coding-agent/src/generated`");
 		expect(harness.sentMessages[0]).toContain("preserve output format");
@@ -587,21 +603,17 @@ describe("autoresearch command startup", () => {
 		await harness.command.handler("", harness.ctx);
 
 		expect(harness.inputCalls).toEqual([]);
-		expect(harness.sentMessages).toEqual([
-			[
-				"Resume autoresearch from the attached notes.",
-				"",
-				`@${autoresearchMdPath}`,
-				"",
-				"Using dedicated git branch `autoresearch/existing-20260322`.",
-				"",
-				"Use the notes as the source of truth for the current direction, scope, and constraints.",
-				"- inspect recent git history for context",
-				"- inspect `autoresearch.jsonl` if it exists",
-				"- continue the most promising unfinished branch",
-				"- keep iterating until interrupted or until the configured iteration cap is reached",
-			].join("\n"),
-		]);
+		expect(harness.sentMessages).toHaveLength(1);
+		expect(harness.sentMessages[0]).toContain("Resume autoresearch from the attached notes.");
+		expect(harness.sentMessages[0]).toContain(`@${autoresearchMdPath}`);
+		expect(harness.sentMessages[0]).toContain("Using dedicated git branch `autoresearch/existing-20260322`.");
+		expect(harness.sentMessages[0]).toContain(
+			"Use the notes as the source of truth for the current direction, scope, and constraints.",
+		);
+		expect(harness.sentMessages[0]).toContain("- inspect `autoresearch.jsonl` if it exists");
+		expect(harness.sentMessages[0]).toContain(
+			"- continue the most promising unfinished direction on the current protected branch",
+		);
 	});
 
 	it("includes explicit resume context when the user resumes with additional instructions", async () => {
@@ -642,6 +654,7 @@ describe("autoresearch command startup", () => {
 				"runtime_ms",
 				"ms",
 				"lower",
+				"",
 				"packages/coding-agent/src/autoresearch",
 				"",
 				"",
@@ -741,12 +754,16 @@ describe("autoresearch command startup", () => {
 				"runtime_ms",
 				"ms",
 				"lower",
+				"",
 				"packages/coding-agent/src/autoresearch",
 				"",
 				"",
 			],
 			async (command, args) => {
 				if (command !== "git") return { code: 1, stderr: "unexpected command", stdout: "" };
+				if (args[0] === "rev-parse" && args[1] === "--show-prefix") {
+					return { code: 0, stderr: "", stdout: "" };
+				}
 				if (args[0] === "rev-parse") return { code: 0, stderr: "", stdout: `${dir}\n` };
 				if (args[0] === "branch" && args[1] === "--show-current") {
 					return { code: 0, stderr: "", stdout: "main\n" };
@@ -782,12 +799,16 @@ describe("autoresearch command startup", () => {
 				"runtime_ms",
 				"ms",
 				"lower",
+				"",
 				"packages/coding-agent/src/autoresearch",
 				"",
 				"",
 			],
 			async (command, args) => {
 				if (command !== "git") return { code: 1, stderr: "unexpected command", stdout: "" };
+				if (args[0] === "rev-parse" && args[1] === "--show-prefix") {
+					return { code: 0, stderr: "", stdout: "" };
+				}
 				if (args[0] === "rev-parse") return { code: 0, stderr: "", stdout: `${dir}\n` };
 				if (args[0] === "branch" && args[1] === "--show-current") {
 					return { code: 0, stderr: "", stdout: "main\n" };
@@ -814,6 +835,7 @@ describe("autoresearch command startup", () => {
 				"runtime_ms",
 				"ms",
 				"lower",
+				"",
 				"packages/coding-agent/src/autoresearch",
 				"",
 				"",
@@ -1056,6 +1078,99 @@ describe("autoresearch auto-resume", () => {
 			deliverAs: "nextTurn",
 			triggerTurn: true,
 		});
+	});
+
+	it("does not enqueue another hidden turn after a passive autoresearch turn with no pending run", async () => {
+		const dir = makeTempDir();
+		tempDirs.push(dir);
+		fs.writeFileSync(
+			path.join(dir, "autoresearch.jsonl"),
+			`${JSON.stringify({ type: "config", metricName: "runtime_ms", scopePaths: ["src"] })}\n`,
+		);
+
+		const harness = createAutoresearchLifecycleHarness({
+			activeTools: ["init_experiment", "run_experiment", "log_experiment"],
+			controlEntries: [{ type: "custom", customType: "autoresearch-control", data: { mode: "on", goal: "x" } }],
+			cwd: dir,
+		});
+
+		await harness.sessionStartHandler?.({ type: "session_start" } as SessionStartEvent, harness.ctx);
+		await harness.agentEndHandler?.({}, harness.ctx);
+
+		expect(harness.sentMessages).toEqual([]);
+	});
+
+	it("renders the high-signal prompt sections for playbooks, backlog, recent runs, and pending runs", async () => {
+		const dir = makeTempDir();
+		tempDirs.push(dir);
+		fs.writeFileSync(path.join(dir, "autoresearch.md"), "# Autoresearch\n");
+		fs.writeFileSync(path.join(dir, "autoresearch.program.md"), "# Local Playbook\n");
+		fs.writeFileSync(path.join(dir, "autoresearch.ideas.md"), "- try batching\n");
+		fs.writeFileSync(path.join(dir, "autoresearch.checks.sh"), "#!/usr/bin/env bash\n");
+		fs.writeFileSync(
+			path.join(dir, "autoresearch.jsonl"),
+			[
+				JSON.stringify({
+					type: "config",
+					metricName: "runtime_ms",
+					metricUnit: "ms",
+					scopePaths: ["src"],
+				}),
+				JSON.stringify({
+					run: 1,
+					commit: "aaaaaaa",
+					metric: 10,
+					status: "keep",
+					description: "baseline",
+					timestamp: 1,
+					asi: { hypothesis: "baseline" },
+				}),
+				JSON.stringify({
+					run: 2,
+					commit: "bbbbbbb",
+					metric: 9,
+					status: "discard",
+					description: "too noisy",
+					timestamp: 2,
+					asi: {
+						hypothesis: "raise cache size",
+						rollback_reason: "noise",
+						next_action_hint: "re-test with more samples",
+					},
+				}),
+			].join("\n"),
+		);
+		await Bun.write(
+			path.join(dir, ".autoresearch", "runs", "0003", "run.json"),
+			JSON.stringify({
+				command: "bash autoresearch.sh",
+				completedAt: new Date().toISOString(),
+				durationSeconds: 1,
+				exitCode: 0,
+				parsedPrimary: 8,
+				runNumber: 3,
+			}),
+		);
+
+		const harness = createAutoresearchLifecycleHarness({
+			activeTools: ["init_experiment", "run_experiment", "log_experiment"],
+			controlEntries: [{ type: "custom", customType: "autoresearch-control", data: { mode: "on", goal: "x" } }],
+			cwd: dir,
+		});
+
+		await harness.sessionStartHandler?.({ type: "session_start" } as SessionStartEvent, harness.ctx);
+		const result = await harness.beforeAgentStartHandler?.({ systemPrompt: "BASE" }, harness.ctx);
+		const systemPrompt =
+			typeof result === "object" && result !== null && "systemPrompt" in result
+				? String((result as { systemPrompt: string }).systemPrompt)
+				: "";
+
+		expect(systemPrompt).toContain("### Local Playbook");
+		expect(systemPrompt).toContain("### Current Segment Snapshot");
+		expect(systemPrompt).toContain("### Pending Run");
+		expect(systemPrompt).toContain("### Ideas backlog");
+		expect(systemPrompt).toContain("Recent runs:");
+		expect(systemPrompt).toContain("finish the `log_experiment` step before starting another benchmark");
 	});
 });
 

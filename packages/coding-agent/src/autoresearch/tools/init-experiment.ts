@@ -17,6 +17,7 @@ import {
 	inferMetricUnitFromName,
 	isAutoresearchShCommand,
 	readMaxExperiments,
+	readPendingRunSummary,
 	resolveWorkDir,
 	validateWorkDir,
 } from "../helpers";
@@ -85,6 +86,19 @@ export function createInitExperimentTool(
 			const state = runtime.state;
 			const isReinitializing = state.results.length > 0;
 			const workDir = resolveWorkDir(ctx.cwd);
+			const pendingRun = await readPendingRunSummary(workDir, collectLoggedRunNumbers(state.results));
+			if (pendingRun) {
+				return {
+					content: [
+						{
+							type: "text",
+							text:
+								`Error: run #${pendingRun.runNumber} has not been logged yet. ` +
+								"Call log_experiment before re-initializing the current segment.",
+						},
+					],
+				};
+			}
 			const contractResult = readAutoresearchContract(workDir);
 			const scriptSnapshot = loadAutoresearchScriptSnapshot(workDir);
 			const errors = [...contractResult.errors, ...scriptSnapshot.errors];
@@ -241,6 +255,14 @@ export function createInitExperimentTool(
 			}
 
 			runtime.autoresearchMode = true;
+			runtime.autoResumeArmed = true;
+			runtime.lastAutoResumePendingRunNumber = null;
+			runtime.lastRunChecks = null;
+			runtime.lastRunDuration = null;
+			runtime.lastRunAsi = null;
+			runtime.lastRunArtifactDir = null;
+			runtime.lastRunNumber = null;
+			runtime.lastRunSummary = null;
 			options.dashboard.updateWidget(ctx, runtime);
 			options.dashboard.requestRender();
 
@@ -275,4 +297,14 @@ export function createInitExperimentTool(
 
 function renderInitCall(name: string, theme: Theme): string {
 	return `${theme.fg("toolTitle", theme.bold("init_experiment"))} ${theme.fg("accent", truncateToWidth(replaceTabs(name), 100))}`;
+}
+
+function collectLoggedRunNumbers(results: ExperimentState["results"]): Set<number> {
+	const runNumbers = new Set<number>();
+	for (const result of results) {
+		if (result.runNumber !== null) {
+			runNumbers.add(result.runNumber);
+		}
+	}
+	return runNumbers;
 }

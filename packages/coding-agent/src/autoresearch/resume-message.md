@@ -10,7 +10,7 @@ Continue the autoresearch loop now.
 {{/if}}
 - Continue from the most promising unfinished direction.
 {{#if has_ideas}}
-- Review `autoresearch.ideas.md` for promising next steps and prune stale items.
+- Review `autoresearch.ideas.md` for deferred next steps and prune stale items.
 {{/if}}
 - Keep iterating until interrupted or until the configured iteration cap is reached.
 - Preserve correctness and do not game the benchmark.
