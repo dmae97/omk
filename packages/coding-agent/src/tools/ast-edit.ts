@@ -435,18 +435,6 @@ export const astEditToolRenderer = {
 			group => !group[0]?.startsWith("Safety cap reached") && !group[0]?.startsWith("Parse issues:"),
 		);
 
-		const getCollapsedChangeLimit = (groups: string[][], maxLines: number): number => {
-			if (groups.length === 0) return 0;
-			let usedLines = 0;
-			let count = 0;
-			for (const group of groups) {
-				if (count > 0 && usedLines + group.length > maxLines) break;
-				usedLines += group.length;
-				count += 1;
-				if (usedLines >= maxLines) break;
-			}
-			return count;
-		};
 		const badge = { label: "proposed", color: "warning" as const };
 		const header = renderStatusLine(
 			{ icon: limitReached ? "warning" : "success", title: "AST Edit", description, badge, meta },
@@ -471,14 +459,12 @@ export const astEditToolRenderer = {
 				const { expanded } = options;
 				const key = new Hasher().bool(expanded).u32(width).digest();
 				if (cached?.key === key) return cached.lines;
-				const maxCollapsed = expanded
-					? changeGroups.length
-					: getCollapsedChangeLimit(changeGroups, COLLAPSED_CHANGE_LIMIT);
 				const changeLines = renderTreeList(
 					{
 						items: changeGroups,
 						expanded,
-						maxCollapsed,
+						maxCollapsed: changeGroups.length,
+						maxCollapsedLines: COLLAPSED_CHANGE_LIMIT,
 						itemType: "change",
 						renderItem: group =>
 							group.map(line => {

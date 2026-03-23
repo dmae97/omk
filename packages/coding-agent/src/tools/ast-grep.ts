@@ -402,19 +402,6 @@ export const astGrepToolRenderer = {
 			group => !group[0]?.startsWith("Result limit reached") && !group[0]?.startsWith("Parse issues:"),
 		);
 
-		const getCollapsedMatchLimit = (groups: string[][], maxLines: number): number => {
-			if (groups.length === 0) return 0;
-			let usedLines = 0;
-			let count = 0;
-			for (const group of groups) {
-				if (count > 0 && usedLines + group.length > maxLines) break;
-				usedLines += group.length;
-				count += 1;
-				if (usedLines >= maxLines) break;
-			}
-			return count;
-		};
-
 		const extraLines: string[] = [];
 		if (limitReached) {
 			extraLines.push(uiTheme.fg("warning", "limit reached; narrow path pattern or increase limit"));
@@ -434,14 +421,12 @@ export const astGrepToolRenderer = {
 				const { expanded } = options;
 				const key = new Hasher().bool(expanded).u32(width).digest();
 				if (cached?.key === key) return cached.lines;
-				const maxCollapsed = expanded
-					? matchGroups.length
-					: getCollapsedMatchLimit(matchGroups, COLLAPSED_MATCH_LIMIT);
 				const matchLines = renderTreeList(
 					{
 						items: matchGroups,
 						expanded,
-						maxCollapsed,
+						maxCollapsed: matchGroups.length,
+						maxCollapsedLines: COLLAPSED_MATCH_LIMIT,
 						itemType: "match",
 						renderItem: group =>
 							group.map(line => {

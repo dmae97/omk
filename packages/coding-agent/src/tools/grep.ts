@@ -522,19 +522,6 @@ export const grepToolRenderer = {
 			}
 		}
 
-		const getCollapsedMatchLimit = (groups: string[][], maxLines: number): number => {
-			if (groups.length === 0) return 0;
-			let usedLines = 0;
-			let count = 0;
-			for (const group of groups) {
-				if (count > 0 && usedLines + group.length > maxLines) break;
-				usedLines += group.length;
-				count += 1;
-				if (usedLines >= maxLines) break;
-			}
-			return count;
-		};
-
 		const truncationReasons: string[] = [];
 		if (limits?.matchLimit) truncationReasons.push(`limit ${limits.matchLimit.reached} matches`);
 		if (limits?.resultLimit) truncationReasons.push(`limit ${limits.resultLimit.reached} results`);
@@ -551,14 +538,12 @@ export const grepToolRenderer = {
 				const { expanded } = options;
 				const key = new Hasher().bool(expanded).u32(width).digest();
 				if (cached?.key === key) return cached.lines;
-				const maxCollapsed = expanded
-					? matchGroups.length
-					: getCollapsedMatchLimit(matchGroups, COLLAPSED_TEXT_LIMIT);
 				const matchLines = renderTreeList(
 					{
 						items: matchGroups,
 						expanded,
-						maxCollapsed,
+						maxCollapsed: matchGroups.length,
+						maxCollapsedLines: COLLAPSED_TEXT_LIMIT,
 						itemType: "match",
 						renderItem: group =>
 							group.map(line => {
