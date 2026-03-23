@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.15.0] - 2026-03-23
+
 ### Added
 
 - Added `renderInlineMarkdown()` function to render inline markdown (bold, italic, code, links, strikethrough) to styled strings

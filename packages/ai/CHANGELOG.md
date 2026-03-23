@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.15.0] - 2026-03-23
+
 ### Added
 
 - Added `isUsageLimitError()` to `rate-limit-utils` as a single source of truth for detecting usage/quota limit errors across all providers

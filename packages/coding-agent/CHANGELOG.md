@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.15.0] - 2026-03-23
 ### Breaking Changes
 
 - Changed hashline edit schema from flat `op`/`pos`/`end`/`lines` fields to structured `loc`/`content` format with location-specific objects
