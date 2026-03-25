@@ -141,7 +141,7 @@ describe("TUI terminal-state regressions", () => {
 	});
 
 	describe("resize + viewport behavior", () => {
-		it("clears preexisting shell rows on startup and resize redraw", async () => {
+		it("preserves preexisting shell rows across startup and resize redraws", async () => {
 			const term = new VirtualTerminal(50, 5);
 			term.write("shell-0\r\nshell-1\r\nshell-2\r\nshell-3\r\nshell-4\r\n");
 			await settle(term);
@@ -158,7 +158,9 @@ describe("TUI terminal-state regressions", () => {
 				await settle(term);
 
 				const buffer = term.getScrollBuffer().join("\n");
-				expect(buffer.includes("shell-")).toBeFalsy();
+				expect(buffer.includes("shell-0")).toBeTruthy();
+				expect(buffer.includes("shell-4")).toBeTruthy();
+				expect(visible(term).join("\n").includes("shell-")).toBeFalsy();
 			} finally {
 				tui.stop();
 			}
@@ -607,8 +609,10 @@ describe("TUI terminal-state regressions", () => {
 	});
 
 	describe("scrollback integrity", () => {
-		it("overflow content appears once across buffer without duplicate row IDs", async () => {
+		it("overflowing startup preserves shell scrollback while keeping each row unique across the full buffer", async () => {
 			const term = new VirtualTerminal(32, 5);
+			term.write("shell-0\r\nshell-1\r\nshell-2\r\nshell-3\r\nshell-4\r\n");
+			await settle(term);
 			const tui = new TUI(term);
 			const component = new MutableLinesComponent(rows("line-", 10));
 			tui.addChild(component);
@@ -618,6 +622,10 @@ describe("TUI terminal-state regressions", () => {
 				await settle(term);
 
 				const all = term.getScrollBuffer();
+				const allText = all.join("\n");
+				expect(allText.includes("shell-0")).toBeTruthy();
+				expect(allText.includes("shell-4")).toBeTruthy();
+				expect(visible(term).join("\n").includes("shell-")).toBeFalsy();
 				for (let i = 0; i < 10; i++) {
 					const pattern = new RegExp(`\\bline-${i}\\b`);
 					expect(countMatches(all, pattern), `line-${i} should appear exactly once`).toBe(1);
@@ -662,8 +670,10 @@ describe("TUI terminal-state regressions", () => {
 			}
 		});
 
-		it("retains append history when offscreen header changes during overflow growth", async () => {
+		it("offscreen header changes preserve shell history during overflow growth", async () => {
 			const term = new VirtualTerminal(32, 6);
+			term.write("shell-0\r\nshell-1\r\nshell-2\r\nshell-3\r\nshell-4\r\n");
+			await settle(term);
 			const tui = new TUI(term);
 			const logLines = rows("line-", 6);
 			let tick = 0;
@@ -683,6 +693,9 @@ describe("TUI terminal-state regressions", () => {
 				}
 
 				const scrollback = term.getScrollBuffer();
+				const scrollbackText = scrollback.join("\n");
+				expect(scrollbackText.includes("shell-0")).toBeTruthy();
+				expect(scrollbackText.includes("shell-4")).toBeTruthy();
 				for (let i = 0; i < 70; i++) {
 					expect(countMatches(scrollback, new RegExp(`\\bline-${i}\\b`))).toBe(1);
 				}
@@ -691,6 +704,7 @@ describe("TUI terminal-state regressions", () => {
 				}
 
 				const viewport = visible(term).map(line => line.trim());
+				expect(viewport.join("\n").includes("shell-")).toBeFalsy();
 				expect(viewport.at(-1)).toBe("line-69");
 				for (let i = 1; i < viewport.length; i++) {
 					const prev = Number.parseInt(viewport[i - 1]!.slice(5), 10);
@@ -701,6 +715,41 @@ describe("TUI terminal-state regressions", () => {
 				tui.stop();
 			}
 		});
+		it("large delete fallback preserves shell scrollback without stale rows", async () => {
+			const term = new VirtualTerminal(32, 5);
+			term.write("shell-0\r\nshell-1\r\nshell-2\r\nshell-3\r\nshell-4\r\n");
+			await settle(term);
+			const tui = new TUI(term);
+			tui.setClearOnShrink(false);
+			const component = new MutableLinesComponent(rows("row-", 18));
+			tui.addChild(component);
+
+			try {
+				tui.start();
+				await settle(term);
+
+				component.setLines(rows("row-", 4));
+				tui.requestRender();
+				await settle(term);
+
+				const buffer = term.getScrollBuffer();
+				const bufferText = buffer.join("\n");
+				expect(bufferText.includes("shell-0")).toBeTruthy();
+				expect(bufferText.includes("shell-4")).toBeTruthy();
+				expect(visible(term).join("\n").includes("shell-")).toBeFalsy();
+				expect(visible(term).filter(line => line.trim().length > 0)).toEqual(["row-0", "row-1", "row-2", "row-3"]);
+				const viewportRows = visible(term).filter(line => line.trim().length > 0);
+				for (let i = 0; i < 4; i++) {
+					expect(
+						viewportRows.filter(r => r === `row-${i}`).length,
+						`viewport row-${i} should appear exactly once`,
+					).toBe(1);
+				}
+			} finally {
+				tui.stop();
+			}
+		});
+
 		it("updates visible tail line when appending during overflow", async () => {
 			const term = new VirtualTerminal(32, 5);
 			const tui = new TUI(term);
@@ -727,10 +776,12 @@ describe("TUI terminal-state regressions", () => {
 				tui.stop();
 			}
 		});
-		it("forced full redraws do not duplicate persistent content", async () => {
+		it("forced full redraws preserve shell history without duplicating overflowing content", async () => {
 			const term = new VirtualTerminal(40, 5);
+			term.write("shell-0\r\nshell-1\r\nshell-2\r\nshell-3\r\nshell-4\r\n");
+			await settle(term);
 			const tui = new TUI(term);
-			const component = new MutableLinesComponent(["alpha", "beta", "gamma"]);
+			const component = new MutableLinesComponent(rows("line-", 14));
 			tui.addChild(component);
 
 			try {
@@ -742,10 +793,15 @@ describe("TUI terminal-state regressions", () => {
 					await settle(term);
 				}
 
-				const allText = term.getScrollBuffer().join("\n");
-				expect((allText.match(/alpha/g) ?? []).length).toBe(1);
-				expect((allText.match(/beta/g) ?? []).length).toBe(1);
-				expect((allText.match(/gamma/g) ?? []).length).toBe(1);
+				const all = term.getScrollBuffer();
+				const allText = all.join("\n");
+				expect(allText.includes("shell-0")).toBeTruthy();
+				expect(allText.includes("shell-4")).toBeTruthy();
+				expect(visible(term).join("\n").includes("shell-")).toBeFalsy();
+				for (let i = 0; i < 14; i++) {
+					expect(countMatches(all, new RegExp(`\\bline-${i}\\b`)), `line-${i} should appear exactly once`).toBe(1);
+				}
+				expect(visible(term).at(-1)?.trim()).toBe("line-13");
 			} finally {
 				tui.stop();
 			}

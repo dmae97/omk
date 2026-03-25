@@ -104,7 +104,7 @@ describe("TUI overlays", () => {
 		expect(term.getScrollBuffer().length).toBeLessThan(200);
 	});
 
-	it("clears preexisting terminal scrollback on startup full redraw", async () => {
+	it("preserves preexisting terminal scrollback across startup full redraw", async () => {
 		const term = new VirtualTerminal(40, 4);
 		term.write("shell-0\r\nshell-1\r\nshell-2\r\nshell-3\r\nshell-4\r\n");
 		await term.flush();
@@ -116,13 +116,15 @@ describe("TUI overlays", () => {
 		tui.start();
 		await Bun.sleep(0);
 		await term.flush();
-
 		term.resize(39, 4);
 		await Bun.sleep(0);
 		await term.flush();
 
+		const viewport = term.getViewport().join("\n");
+		expect(viewport.includes("shell-")).toBeFalsy();
 		const scrollback = term.getScrollBuffer().join("\n");
-		expect(scrollback.includes("shell-0")).toBeFalsy();
+		expect(scrollback.includes("shell-0")).toBeTruthy();
+		expect(scrollback.includes("shell-4")).toBeTruthy();
 
 		tui.stop();
 	});
@@ -149,7 +151,7 @@ describe("TUI overlays", () => {
 
 		tui.stop();
 	});
-	it("fully redraws on height increase to avoid stale viewport rows", async () => {
+	it("fully redraws on height increase without wiping shell scrollback", async () => {
 		const term = new VirtualTerminal(40, 4);
 		term.write("shell-0\r\nshell-1\r\nshell-2\r\nshell-3\r\nshell-4\r\n");
 		await term.flush();
@@ -168,6 +170,9 @@ describe("TUI overlays", () => {
 
 		const viewport = term.getViewport().join("\n");
 		expect(viewport.includes("shell-")).toBeFalsy();
+		const scrollback = term.getScrollBuffer().join("\n");
+		expect(scrollback.includes("shell-0")).toBeTruthy();
+		expect(scrollback.includes("shell-4")).toBeTruthy();
 
 		tui.stop();
 	});
@@ -215,7 +220,7 @@ describe("TUI overlays", () => {
 		}
 	});
 
-	it("keeps scrollback on viewport-only resize redraw", async () => {
+	it("keeps shell scrollback on viewport-only resize redraw", async () => {
 		const term = new VirtualTerminal(40, 4);
 		term.write("shell-0\r\nshell-1\r\nshell-2\r\nshell-3\r\n");
 		await term.flush();
@@ -228,8 +233,11 @@ describe("TUI overlays", () => {
 			term.resize(39, 4);
 			await Bun.sleep(0);
 			await term.flush();
+			const viewport = term.getViewport().join("\n");
+			expect(viewport.includes("shell-")).toBeFalsy();
 			const scrollback = term.getScrollBuffer().join("\n");
-			expect(scrollback.includes("shell-0")).toBeFalsy();
+			expect(scrollback.includes("shell-0")).toBeTruthy();
+			expect(scrollback.includes("shell-3")).toBeTruthy();
 		} finally {
 			tui.stop();
 		}

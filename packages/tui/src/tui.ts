@@ -230,6 +230,7 @@ export class TUI extends Container {
 	#maxLinesRendered = 0; // High-water line count used for clear-on-shrink policy
 	#fullRedrawCount = 0;
 	#stopped = false;
+	#forceFullRepaint = false; // One-shot flag: skip diff rendering and use the correct full-repaint mode
 
 	// Overlay stack for modal components rendered on top of base content
 	overlayStack: {
@@ -562,13 +563,7 @@ export class TUI extends Container {
 
 	requestRender(force = false): void {
 		if (force) {
-			this.#previousLines = [];
-			this.#previousWidth = -1; // -1 triggers widthChanged, forcing a full clear
-			this.#previousHeight = -1; // -1 triggers heightChanged, forcing a full clear
-			this.#cursorRow = 0;
-			this.#hardwareCursorRow = 0;
-			this.#viewportTopRow = 0;
-			this.#maxLinesRendered = 0;
+			this.#forceFullRepaint = true;
 		}
 		if (this.#renderRequested) return;
 		this.#renderRequested = true;
@@ -1003,11 +998,28 @@ export class TUI extends Container {
 		const widthChanged = this.#previousWidth !== 0 && this.#previousWidth !== width;
 		const heightChanged = this.#previousHeight !== 0 && this.#previousHeight !== height;
 
-		// Helper to clear scrollback and viewport and render all new lines
-		const fullRender = (clear: boolean): void => {
+		// Consume force flag
+		const forceRepaint = this.#forceFullRepaint;
+		this.#forceFullRepaint = false;
+		const hasPriorFrame = this.#previousLines.length > 0;
+
+		// Common bookkeeping after any full-repaint path
+		const finishFullRepaint = (): void => {
 			this.#fullRedrawCount += 1;
+			this.#cursorRow = Math.max(0, newLines.length - 1);
+			this.#hardwareCursorRow = this.#cursorRow;
+			this.#maxLinesRendered = Math.max(this.#maxLinesRendered, newLines.length);
+			this.#viewportTopRow = Math.max(0, this.#maxLinesRendered - height);
+			this.#positionHardwareCursor(cursorPos, newLines.length);
+			this.#previousLines = newLines;
+			this.#previousWidth = width;
+			this.#previousHeight = height;
+		};
+
+		// First paint: no prior TUI frame exists. Clear visible display (not scrollback),
+		// then write the full logical transcript.
+		const seedTranscript = (): void => {
 			let buffer = "\x1b[?2026h"; // Begin synchronized output
-			if (clear) buffer += "\x1b[2J\x1b[H\x1b[3J"; // Clear screen, home, then clear scrollback
 			const reset = SEGMENT_RESET;
 			for (let i = 0; i < newLines.length; i++) {
 				if (i > 0) buffer += "\r\n";
@@ -1016,58 +1028,94 @@ export class TUI extends Container {
 			}
 			buffer += "\x1b[?2026l"; // End synchronized output
 			this.terminal.write(buffer);
-			this.#cursorRow = Math.max(0, newLines.length - 1);
-			this.#hardwareCursorRow = this.#cursorRow;
-			// Reset max lines when clearing, otherwise track growth
-			if (clear) {
-				this.#maxLinesRendered = newLines.length;
-			} else {
-				this.#maxLinesRendered = Math.max(this.#maxLinesRendered, newLines.length);
+			finishFullRepaint();
+		};
+
+		// Viewport repaint: a prior TUI frame exists. Before overwriting the visible
+		// display, scroll off the rows that are transitioning from viewport to
+		// scrollback (the viewport-shift delta). Then overwrite in-place.
+		const repaintViewport = (): void => {
+			let buffer = "\x1b[?2026h"; // Begin synchronized output
+			// Compute how many rows the viewport shifted since the last render.
+			// These rows were at the top of the old viewport and now belong in scrollback.
+			const oldVpTop = Math.max(0, this.#previousLines.length - this.#previousHeight);
+			const newVpTop = Math.max(0, newLines.length - height);
+			const scrollDelta = Math.max(0, newVpTop - oldVpTop);
+			if (scrollDelta > 0) {
+				// Move cursor to bottom of visible area and emit newlines to scroll
+				const curScreenRow = hardwareCursorRow - prevViewportTop;
+				const usedRows = Math.min(height, this.#maxLinesRendered);
+				const toBottom = usedRows - 1 - curScreenRow;
+				if (toBottom > 0) buffer += `\x1b[${toBottom}B`;
+				buffer += "\r\n".repeat(scrollDelta);
 			}
-			this.#viewportTopRow = Math.max(0, this.#maxLinesRendered - height);
-			this.#positionHardwareCursor(cursorPos, newLines.length);
-			this.#previousLines = newLines;
-			this.#previousWidth = width;
-			this.#previousHeight = height;
+			buffer += "\x1b[H"; // Home cursor
+			const vpTop = newVpTop;
+			const vpLines = newLines.length - vpTop;
+			const reset = SEGMENT_RESET;
+			for (let i = vpTop; i < newLines.length; i++) {
+				if (i > vpTop) buffer += "\r\n";
+				buffer += "\x1b[2K"; // Clear this display row before writing
+				const line = newLines[i];
+				buffer += TERMINAL.isImageLine(line) ? line : line + reset;
+			}
+			// Clear any remaining display rows below the viewport content
+			for (let i = vpLines; i < height; i++) {
+				buffer += "\r\n\x1b[2K";
+			}
+			buffer += "\x1b[?2026l"; // End synchronized output
+			this.terminal.write(buffer);
+			finishFullRepaint();
 		};
 
 		const debugRedraw = process.env.PI_DEBUG_REDRAW === "1";
 		const logRedraw = (reason: string): void => {
 			if (!debugRedraw) return;
 			const logPath = getDebugLogPath();
-			const msg = `[${new Date().toISOString()}] fullRender: ${reason} (prev=${this.#previousLines.length}, new=${newLines.length}, height=${height})\n`;
+			const msg = `[${new Date().toISOString()}] repaint: ${reason} (prev=${this.#previousLines.length}, new=${newLines.length}, height=${height})\n`;
 			fs.appendFileSync(logPath, msg);
 		};
 
-		// First render - just output everything without clearing (assumes clean screen)
-		if (this.#previousLines.length === 0 && !widthChanged && !heightChanged) {
+		// First render — no prior TUI frame, seed the full transcript
+		if (!hasPriorFrame && !widthChanged && !heightChanged) {
 			logRedraw("first render");
-			fullRender(false);
+			seedTranscript();
 			return;
 		}
 
-		// Width changes always need a full re-render because wrapping changes.
+		// Forced full repaint (e.g. requestRender(true)) — use viewport repaint if we
+		// have a prior frame, otherwise seed from scratch
+		if (forceRepaint) {
+			logRedraw("forced repaint");
+			if (hasPriorFrame) repaintViewport();
+			else seedTranscript();
+			return;
+		}
+
+		// Width changed — viewport repaint (line wrapping invalidates all content)
 		if (widthChanged) {
-			logRedraw(`terminal width changed (${this.#previousWidth} -> ${width})`);
-			fullRender(true);
+			logRedraw(`width changed (${this.#previousWidth} -> ${width})`);
+			repaintViewport();
 			return;
 		}
 
-		// Height changes normally need a full re-render to keep the visible viewport aligned,
-		// but Termux changes height when the software keyboard shows or hides.
-		// In that environment, a full redraw causes the entire history to replay on every toggle.
-		if (heightChanged && !isTermuxSession()) {
-			logRedraw(`terminal height changed (${this.#previousHeight} -> ${height})`);
-			fullRender(true);
+		// Height decreased — viewport repaint to realign content.
+		// (Height increases fall through to the dedicated height-increase handler below,
+		// which pushes visible content into scrollback before repainting.)
+		// Termux changes height when the software keyboard shows or hides;
+		// in that environment, a full redraw causes the entire history to replay on every toggle.
+		if (heightChanged && height < this.#previousHeight && !isTermuxSession()) {
+			logRedraw(`terminal height decreased (${this.#previousHeight} -> ${height})`);
+			repaintViewport();
 			return;
 		}
 
-		// Content shrunk below the working area and no overlays - re-render to clear empty rows
+		// Content shrunk below the working area and no overlays — viewport repaint to clear empty rows
 		// (overlays need the padding, so only do this when no overlays are active)
 		// Configurable via setClearOnShrink() or PI_CLEAR_ON_SHRINK=0 env var
 		if (this.#clearOnShrink && newLines.length < this.#maxLinesRendered && this.overlayStack.length === 0) {
 			logRedraw(`clearOnShrink (maxLinesRendered=${this.#maxLinesRendered})`);
-			fullRender(true);
+			repaintViewport();
 			return;
 		}
 
@@ -1095,8 +1143,41 @@ export class TUI extends Container {
 		}
 		const appendStart = appendedLines && firstChanged === this.#previousLines.length && firstChanged > 0;
 
-		// No changes - but still need to update hardware cursor position if it moved
+		// No line-level changes detected
 		if (firstChanged === -1) {
+			// Height increased — the terminal may have pulled scrollback lines into
+			// the visible area. Push visible content into scrollback (so shell history
+			// is preserved), then overwrite the viewport with UI content.
+			if (height > this.#previousHeight && this.#previousHeight > 0) {
+				logRedraw(`height increase (${this.#previousHeight} -> ${height})`);
+				let buffer = "\x1b[?2026h"; // Begin synchronized output
+				// Scroll current visible content into scrollback
+				const curScreenRow = hardwareCursorRow - prevViewportTop;
+				const screenRows = Math.min(height, this.#maxLinesRendered);
+				if (screenRows > 0) {
+					const toBottom = screenRows - 1 - curScreenRow;
+					if (toBottom > 0) buffer += `\x1b[${toBottom}B`;
+					buffer += "\r\n".repeat(screenRows);
+				}
+				buffer += "\x1b[H"; // Home cursor
+				const vpTop = Math.max(0, newLines.length - height);
+				const vpLines = newLines.length - vpTop;
+				const reset = SEGMENT_RESET;
+				for (let i = vpTop; i < newLines.length; i++) {
+					if (i > vpTop) buffer += "\r\n";
+					buffer += "\x1b[2K";
+					const line = newLines[i];
+					buffer += TERMINAL.isImageLine(line) ? line : line + reset;
+				}
+				for (let i = vpLines; i < height; i++) {
+					buffer += "\r\n\x1b[2K";
+				}
+				buffer += "\x1b[?2026l"; // End synchronized output
+				this.terminal.write(buffer);
+				finishFullRepaint();
+				return;
+			}
+			this.#previousHeight = height;
 			this.#positionHardwareCursor(cursorPos, newLines.length);
 			this.#viewportTopRow = Math.max(0, this.#maxLinesRendered - height);
 			return;
@@ -1116,7 +1197,7 @@ export class TUI extends Container {
 				const extraLines = this.#previousLines.length - newLines.length;
 				if (extraLines > height) {
 					logRedraw(`extraLines > height (${extraLines} > ${height})`);
-					fullRender(true);
+					repaintViewport();
 					return;
 				}
 				const clearStartOffset = newLines.length > 0 && extraLines > 0 ? 1 : 0;
@@ -1150,7 +1231,7 @@ export class TUI extends Container {
 		if (firstChanged < previousContentViewportTop) {
 			// First change is above previous viewport - need full re-render
 			logRedraw(`firstChanged < viewportTop (${firstChanged} < ${previousContentViewportTop})`);
-			fullRender(true);
+			repaintViewport();
 			return;
 		}
 
