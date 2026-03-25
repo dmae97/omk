@@ -576,12 +576,18 @@ pub(crate) async fn invoke_command_in_subshell_and_get_output(
         rt.block_on(run_substitution_command(subshell, params, s))
     });
 
-    // Extract output.
-    let output_str = std::io::read_to_string(reader)?;
+    // Read subshell output on a blocking thread to avoid stalling the
+    // async runtime when the pipe stays open (e.g. a hung child process).
+    let output_join_handle = tokio::task::spawn_blocking(move || {
+        std::io::read_to_string(reader)
+    });
 
-    // Now observe the command's completion.
-    let run_result = cmd_join_handle.await?;
-    let cmd_result = run_result?;
+    // Wait for both the output reader and the command to complete.
+    let (output_result, cmd_result) = tokio::join!(output_join_handle, cmd_join_handle);
+    let output_str = output_result
+        .map_err(|e| std::io::Error::other(e))??;
+    let cmd_result = cmd_result
+        .map_err(|e| std::io::Error::other(e))??;
 
     // Store the status.
     *shell.last_exit_status_mut() = cmd_result.exit_code.into();
