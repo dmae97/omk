@@ -1387,8 +1387,8 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.#extensionUiController.hideHookInput();
 	}
 
-	showHookEditor(title: string, prefill?: string): Promise<string | undefined> {
-		return this.#extensionUiController.showHookEditor(title, prefill);
+	showHookEditor(title: string, prefill?: string, dialogOptions?: ExtensionUIDialogOptions): Promise<string | undefined> {
+		return this.#extensionUiController.showHookEditor(title, prefill, dialogOptions);
 	}
 
 	hideHookEditor(): void {

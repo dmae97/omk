@@ -120,7 +120,7 @@ export interface HookUIContext {
 	 * @param prefill - Optional initial text
 	 * @returns Edited text, or undefined if cancelled (Escape)
 	 */
-	editor(title: string, prefill?: string): Promise<string | undefined>;
+	editor(title: string, prefill?: string, options?: { signal?: AbortSignal }): Promise<string | undefined>;
 
 	/**
 	 * Get the current theme for styling text with ANSI codes.

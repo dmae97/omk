@@ -256,7 +256,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			return "";
 		}
 
-		async editor(title: string, prefill?: string): Promise<string | undefined> {
+		async editor(title: string, prefill?: string, _dialogOptions?: ExtensionUIDialogOptions): Promise<string | undefined> {
 			const id = Snowflake.next() as string;
 			const { promise, resolve, reject } = Promise.withResolvers<string | undefined>();
 			this.pendingRequests.set(id, {

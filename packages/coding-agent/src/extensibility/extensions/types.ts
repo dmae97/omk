@@ -152,7 +152,7 @@ export interface ExtensionUIContext {
 	getEditorText(): string;
 
 	/** Show a multi-line editor for text editing. */
-	editor(title: string, prefill?: string): Promise<string | undefined>;
+	editor(title: string, prefill?: string, dialogOptions?: ExtensionUIDialogOptions): Promise<string | undefined>;
 
 	/** Set a custom editor component via factory function, or undefined to restore the default editor. */
 	setEditorComponent(
