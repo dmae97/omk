@@ -225,6 +225,8 @@ export interface AgentSessionConfig {
 	mcpDiscoveryEnabled?: boolean;
 	/** MCP tool names to activate for the current session when discovery mode is enabled. */
 	initialSelectedMCPToolNames?: string[];
+	/** Whether constructor-provided MCP defaults should be persisted immediately. */
+	persistInitialMCPToolSelection?: boolean;
 	/** MCP server names whose tools should seed discovery-mode sessions whenever those servers are connected. */
 	defaultSelectedMCPServerNames?: string[];
 	/** MCP tool names that should seed brand-new sessions created from this AgentSession. */
@@ -485,8 +487,11 @@ export class AgentSession {
 		this.#pruneSelectedMCPToolNames();
 		const persistedSelectedMCPToolNames = this.sessionManager.buildSessionContext().selectedMCPToolNames;
 		const currentSelectedMCPToolNames = this.getSelectedMCPToolNames();
+		const persistInitialMCPToolSelection =
+			config.persistInitialMCPToolSelection ?? this.sessionManager.getBranch().length === 0;
 		if (
 			this.#mcpDiscoveryEnabled &&
+			persistInitialMCPToolSelection &&
 			!this.#selectedMCPToolNamesMatch(persistedSelectedMCPToolNames, currentSelectedMCPToolNames)
 		) {
 			this.sessionManager.appendMCPToolSelection(currentSelectedMCPToolNames);
@@ -5093,21 +5098,18 @@ export class AgentSession {
 		const hasThinkingEntry = this.sessionManager.getBranch().some(entry => entry.type === "thinking_level_change");
 		const hasServiceTierEntry = this.sessionManager.getBranch().some(entry => entry.type === "service_tier_change");
 		const defaultThinkingLevel = this.settings.get("defaultThinkingLevel");
-
-		if (hasThinkingEntry) {
-			this.setThinkingLevel(sessionContext.thinkingLevel as ThinkingLevel | undefined);
-		} else {
-			const effectiveDefaultThinkingLevel = resolveThinkingLevelForModel(this.model, defaultThinkingLevel);
-			this.#thinkingLevel = effectiveDefaultThinkingLevel;
-			this.agent.setThinkingLevel(toReasoningEffort(effectiveDefaultThinkingLevel));
-			this.sessionManager.appendThinkingLevelChange(effectiveDefaultThinkingLevel);
-		}
-
-		if (hasServiceTierEntry) {
-			this.agent.serviceTier = sessionContext.serviceTier;
-		} else {
-			this.sessionManager.appendServiceTierChange(this.serviceTier ?? null);
-		}
+		const configuredServiceTier = this.settings.get("serviceTier");
+		const nextThinkingLevel = resolveThinkingLevelForModel(
+			this.model,
+			hasThinkingEntry ? (sessionContext.thinkingLevel as ThinkingLevel | undefined) : defaultThinkingLevel,
+		);
+		this.#thinkingLevel = nextThinkingLevel;
+		this.agent.setThinkingLevel(toReasoningEffort(nextThinkingLevel));
+		this.agent.serviceTier = hasServiceTierEntry
+			? sessionContext.serviceTier
+			: configuredServiceTier === "none"
+				? undefined
+				: configuredServiceTier;
 
 		this.#reconnectToAgent();
 		return true;

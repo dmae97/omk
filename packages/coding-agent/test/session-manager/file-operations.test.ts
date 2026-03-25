@@ -3,9 +3,11 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import {
+	type FileEntry,
 	findMostRecentSession,
 	loadEntriesFromFile,
 	resolveResumableSession,
+	type SessionHeader,
 	SessionManager,
 } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { getConfigRootDir, getSessionsDir, Snowflake, setAgentDir } from "@oh-my-pi/pi-utils";
@@ -290,5 +292,155 @@ describe("SessionManager temp cwd session dirs", () => {
 		expect(fs.existsSync(legacyDir)).toBe(false);
 		expect(path.dirname(sessionFile)).toBe(expectedDir);
 		expect(fs.existsSync(path.join(expectedDir, "carried.jsonl"))).toBe(true);
+	});
+});
+
+describe("SessionManager legacy session migration persistence", () => {
+	let tempDir: string;
+
+	function makeAssistantMessage() {
+		return {
+			role: "assistant" as const,
+			content: [{ type: "text" as const, text: "legacy reply" }],
+			api: "anthropic-messages" as const,
+			provider: "anthropic" as const,
+			model: "claude-sonnet-4-20250514",
+			usage: {
+				input: 1,
+				output: 1,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 2,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			stopReason: "stop" as const,
+			timestamp: Date.now(),
+		};
+	}
+
+	function getHeader(entries: FileEntry[]): SessionHeader | undefined {
+		return entries.find((entry): entry is SessionHeader => entry.type === "session");
+	}
+
+	beforeEach(() => {
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "omp-session-manager-legacy-"));
+	});
+
+	afterEach(() => {
+		fs.rmSync(tempDir, { recursive: true, force: true });
+	});
+
+	it("keeps legacy migration in memory until later persisted activity rewrites the file", async () => {
+		const sessionFile = path.join(tempDir, "legacy.jsonl");
+		fs.writeFileSync(
+			sessionFile,
+			`${[
+				JSON.stringify({ type: "session", id: "legacy-session", timestamp: "2025-01-01T00:00:00Z", cwd: tempDir }),
+				JSON.stringify({
+					type: "message",
+					timestamp: "2025-01-01T00:00:01Z",
+					message: { role: "user", content: "hello", timestamp: 1 },
+				}),
+				JSON.stringify({
+					type: "message",
+					timestamp: "2025-01-01T00:00:02Z",
+					message: makeAssistantMessage(),
+				}),
+			].join("\n")}\n`,
+		);
+		const initialMtimeMs = fs.statSync(sessionFile).mtimeMs;
+
+		const session = await SessionManager.open(sessionFile, tempDir);
+		const migratedEntries = session.getEntries();
+
+		expect(migratedEntries).toHaveLength(2);
+		for (const entry of migratedEntries) {
+			expect(entry.id).toBeDefined();
+		}
+		expect(migratedEntries[0]?.parentId).toBeNull();
+		expect(migratedEntries[1]?.parentId).toBe(migratedEntries[0]?.id);
+
+		await new Promise(resolve => setTimeout(resolve, 20));
+		await session.flush();
+		expect(fs.statSync(sessionFile).mtimeMs).toBe(initialMtimeMs);
+
+		await new Promise(resolve => setTimeout(resolve, 20));
+		session.appendMessage({ role: "user", content: "follow up", timestamp: Date.now() });
+		await session.flush();
+
+		const persistedEntries = await loadEntriesFromFile(sessionFile);
+		const header = getHeader(persistedEntries);
+		if (!header) throw new Error("Expected session header");
+
+		expect(fs.statSync(sessionFile).mtimeMs).toBeGreaterThan(initialMtimeMs);
+		expect(header.version).toBe(3);
+		expect(persistedEntries).toHaveLength(4);
+		for (const entry of persistedEntries.filter(entry => entry.type !== "session")) {
+			expect(entry.id).toBeDefined();
+		}
+	});
+
+	it("still rewrites immediately when explicitly requested", async () => {
+		const sessionFile = path.join(tempDir, "legacy-rewrite.jsonl");
+		fs.writeFileSync(
+			sessionFile,
+			`${[
+				JSON.stringify({ type: "session", id: "legacy-session", timestamp: "2025-01-01T00:00:00Z", cwd: tempDir }),
+				JSON.stringify({
+					type: "message",
+					timestamp: "2025-01-01T00:00:01Z",
+					message: { role: "user", content: "hello", timestamp: 1 },
+				}),
+			].join("\n")}\n`,
+		);
+		const initialMtimeMs = fs.statSync(sessionFile).mtimeMs;
+
+		const session = await SessionManager.open(sessionFile, tempDir);
+		await new Promise(resolve => setTimeout(resolve, 20));
+		await session.rewriteEntries();
+
+		const persistedEntries = await loadEntriesFromFile(sessionFile);
+		const header = getHeader(persistedEntries);
+		if (!header) throw new Error("Expected session header");
+
+		expect(fs.statSync(sessionFile).mtimeMs).toBeGreaterThan(initialMtimeMs);
+		expect(header.version).toBe(3);
+		expect(persistedEntries).toHaveLength(2);
+		expect(persistedEntries[1]?.type).toBe("message");
+		if (persistedEntries[1]?.type !== "message") throw new Error("Expected message entry");
+		expect(persistedEntries[1].id).toBeDefined();
+		expect(persistedEntries[1].parentId).toBeNull();
+	});
+
+	it("forces a deferred legacy rewrite when ensureOnDisk is requested", async () => {
+		const sessionFile = path.join(tempDir, "legacy-ensure-on-disk.jsonl");
+		fs.writeFileSync(
+			sessionFile,
+			`${[
+				JSON.stringify({ type: "session", id: "legacy-session", timestamp: "2025-01-01T00:00:00Z", cwd: tempDir }),
+				JSON.stringify({
+					type: "message",
+					timestamp: "2025-01-01T00:00:01Z",
+					message: { role: "user", content: "hello", timestamp: 1 },
+				}),
+			].join("\n")}\n`,
+		);
+		const initialMtimeMs = fs.statSync(sessionFile).mtimeMs;
+
+		const session = await SessionManager.open(sessionFile, tempDir);
+		await new Promise(resolve => setTimeout(resolve, 20));
+		await session.ensureOnDisk();
+
+		const persistedEntries = await loadEntriesFromFile(sessionFile);
+		const header = getHeader(persistedEntries);
+		if (!header) throw new Error("Expected session header");
+
+		expect(fs.statSync(sessionFile).mtimeMs).toBeGreaterThan(initialMtimeMs);
+		expect(header.version).toBe(3);
+		expect(persistedEntries).toHaveLength(2);
+		expect(persistedEntries[1]?.type).toBe("message");
+		if (persistedEntries[1]?.type !== "message") throw new Error("Expected message entry");
+		expect(persistedEntries[1].id).toBeDefined();
+		expect(persistedEntries[1].parentId).toBeNull();
 	});
 });
