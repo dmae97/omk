@@ -264,7 +264,7 @@ async function askSingleQuestion(
 				}
 				const customResult = await promptForCustomInput();
 				if (customResult.input === undefined) {
-					return { selectedOptions: Array.from(selected), customInput, timedOut, cancelled: true };
+					break;
 				}
 				customInput = customResult.input;
 				break;

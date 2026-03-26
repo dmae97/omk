@@ -564,6 +564,50 @@ describe("AskTool custom input", () => {
 		expect(renderedText).toContain("alpha");
 		expect(renderedText).toContain("custom detail");
 	});
+
+	it("preserves prior multi-select answers when custom editor is dismissed", async () => {
+		const tool = new AskTool(createSession());
+		let step = 0;
+		const editor = vi.fn(async () => undefined);
+		const context = createContext({
+			select: async (_prompt, options) => {
+				if (step === 0) {
+					step += 1;
+					const alphaOption = options.find(option => option.endsWith("alpha"));
+					if (!alphaOption) throw new Error("Missing alpha option");
+					return alphaOption;
+				}
+				return "Other (type your own)";
+			},
+			editor,
+		});
+
+		const result = await tool.execute(
+			"call-multi-custom-dismiss",
+			{
+				questions: [
+					{
+						id: "multi",
+						question: "Pick answers",
+						options: [{ label: "alpha" }, { label: "beta" }],
+						multi: true,
+					},
+				],
+			},
+			undefined,
+			undefined,
+			context,
+		);
+
+		expect(result.details?.selectedOptions).toEqual(["alpha"]);
+		expect(result.details?.customInput).toBeUndefined();
+		expect(result.content[0]?.type).toBe("text");
+		if (result.content[0]?.type !== "text") {
+			throw new Error("Expected text result");
+		}
+		expect(result.content[0].text).toContain("User selected: alpha");
+		expect(editor).toHaveBeenCalledTimes(1);
+	});
 });
 
 describe("AskTool multiline custom input rendering", () => {
