@@ -1,12 +1,15 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Implemented root path alias: bare `/` in tool inputs now resolves to the session working directory instead of the filesystem root
 - Added `browser.screenshotDir` setting to configure screenshot save directory with path expansion
 
 ### Changed
 
+- Updated screenshot path resolution to use `resolveToCwd` for consistent workspace-relative path handling
 - Updated hook editor hint text to include `ctrl+g external editor` option when using prompt style
 - Refactored question result formatting to consistently include question ID in output
 

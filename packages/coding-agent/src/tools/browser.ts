@@ -22,7 +22,7 @@ import type { ToolSession } from "../sdk";
 import { resizeImage } from "../utils/image-resize";
 import { htmlToBasicMarkdown } from "../web/scrapers/types";
 import type { OutputMeta } from "./output-meta";
-import { expandPath } from "./path-utils";
+import { expandPath, resolveToCwd } from "./path-utils";
 import stealthTamperingScript from "./puppeteer/00_stealth_tampering.txt" with { type: "text" };
 import stealthActivityScript from "./puppeteer/01_stealth_activity.txt" with { type: "text" };
 import stealthHairlineScript from "./puppeteer/02_stealth_hairline.txt" with { type: "text" };
@@ -1372,10 +1372,10 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 						const v = this.session.settings.get("browser.screenshotDir") as string | undefined;
 						return v ? expandPath(v) : undefined;
 					})();
-					const paramPath = params.path ? expandPath(params.path as string) : undefined;
+					const paramPath = params.path ? resolveToCwd(params.path as string, this.session.cwd) : undefined;
 					let dest: string;
 					if (paramPath) {
-						dest = path.isAbsolute(paramPath) ? paramPath : path.join(process.cwd(), paramPath);
+						dest = paramPath;
 					} else if (screenshotDir) {
 						const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -1);
 						dest = path.join(screenshotDir, `screenshot-${ts}.png`);

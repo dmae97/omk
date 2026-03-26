@@ -102,9 +102,16 @@ export function expandPath(filePath: string): string {
 /**
  * Resolve a path relative to the given cwd.
  * Handles ~ expansion and absolute paths.
+ *
+ * A bare root slash is treated as a workspace-root alias for tool inputs. Users
+ * often pass `/` to mean “search from here”, and letting tools escape to the
+ * filesystem root is almost never what they intended.
  */
 export function resolveToCwd(filePath: string, cwd: string): string {
 	const expanded = expandPath(filePath);
+	if (/^\/+$/.test(expanded)) {
+		return cwd;
+	}
 	if (path.isAbsolute(expanded)) {
 		return expanded;
 	}
