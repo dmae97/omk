@@ -41,6 +41,30 @@ function countMatches(lines: string[], pattern: RegExp): number {
 	return count;
 }
 
+function longestBlankRun(lines: string[]): number {
+	let longest = 0;
+	let current = 0;
+	for (const line of lines) {
+		if (line.trim().length === 0) {
+			current += 1;
+			longest = Math.max(longest, current);
+		} else {
+			current = 0;
+		}
+	}
+	return longest;
+}
+
+/** Count blank lines at the end of the buffer (after the last content line). */
+function trailingBlanks(lines: string[]): number {
+	let count = 0;
+	for (let i = lines.length - 1; i >= 0; i--) {
+		if (lines[i].trim().length === 0) count++;
+		else break;
+	}
+	return count;
+}
+
 describe("TUI terminal-state regressions", () => {
 	describe("cursor + differential stability", () => {
 		it("keeps stable output across repeated no-op renders", async () => {
@@ -868,6 +892,227 @@ describe("TUI terminal-state regressions", () => {
 			} finally {
 				tui.stop();
 			}
+		});
+	});
+
+	describe("exit gap regression", () => {
+		it("stop after tall content does not leave a large blank gap below content", async () => {
+			const term = new VirtualTerminal(40, 10);
+			const tui = new TUI(term);
+			const component = new MutableLinesComponent(rows("line-", 60));
+			tui.addChild(component);
+
+			tui.start();
+			await settle(term);
+			expect(visible(term).at(-1)?.trim()).toBe("line-59");
+
+			tui.stop();
+			await settle(term);
+
+			// After exit, the viewport should still show content with at most
+			// 1-2 trailing blank rows (for the shell prompt boundary).
+			const viewport = visible(term);
+			const contentLines = viewport.filter(l => l.trim().length > 0);
+			expect(contentLines.length).toBeGreaterThanOrEqual(8);
+			expect(trailingBlanks(viewport)).toBeLessThanOrEqual(2);
+		});
+
+		it("stop after overflowing content with shell history does not add blank rows", async () => {
+			const term = new VirtualTerminal(40, 8);
+			term.write("shell-0\r\nshell-1\r\nshell-2\r\nshell-3\r\n");
+			await settle(term);
+
+			const tui = new TUI(term);
+			const component = new MutableLinesComponent(rows("line-", 30));
+			tui.addChild(component);
+
+			tui.start();
+			await settle(term);
+
+			tui.stop();
+			await settle(term);
+
+			const scrollback = term.getScrollBuffer();
+			// Shell history should survive
+			expect(scrollback.join("\n").includes("shell-0")).toBeTruthy();
+			// After stop, the viewport should have content, not a big blank gap
+			const viewport = visible(term);
+			expect(trailingBlanks(viewport)).toBeLessThanOrEqual(2);
+		});
+
+		it("stop after shrink does not push content off screen", async () => {
+			const term = new VirtualTerminal(40, 10);
+			const tui = new TUI(term);
+			const component = new MutableLinesComponent(rows("line-", 40));
+			tui.addChild(component);
+
+			tui.start();
+			await settle(term);
+
+			// Shrink content dramatically
+			component.setLines(["New session started"]);
+			tui.requestRender(true);
+			await settle(term);
+
+			tui.stop();
+			await settle(term);
+
+			// After exit, the viewport should still show the shrunken content
+			const viewport = visible(term);
+			expect(viewport[0]?.trim()).toBe("New session started");
+			// Content should not be scrolled off by exit
+			expect(viewport.filter(l => l.trim().length > 0).length).toBeGreaterThanOrEqual(1);
+		});
+	});
+
+	describe("content shrink regression", () => {
+		it("shrink from tall to tiny anchors prompt near content, not at terminal bottom", async () => {
+			const term = new VirtualTerminal(40, 20);
+			const tui = new TUI(term);
+			const component = new MutableLinesComponent(rows("line-", 80));
+			tui.addChild(component);
+
+			try {
+				tui.start();
+				await settle(term);
+
+				// Simulate /new: content collapses to just a few lines
+				component.setLines(["New session started", "prompt>"]);
+				tui.requestRender(true);
+				await settle(term);
+
+				const viewport = visible(term);
+				// Content should be at the top of the viewport, not at the bottom
+				expect(viewport[0]?.trim()).toBe("New session started");
+				expect(viewport[1]?.trim()).toBe("prompt>");
+				// The rest should be blank - no long blank run ABOVE the content
+				for (let i = 2; i < 20; i++) {
+					expect(viewport[i]?.trim()).toBe("");
+				}
+			} finally {
+				tui.stop();
+			}
+		});
+
+		it("repeated shrink cycles do not accumulate blank lines", async () => {
+			const term = new VirtualTerminal(40, 12);
+			const tui = new TUI(term);
+			const component = new MutableLinesComponent(rows("line-", 50));
+			tui.addChild(component);
+
+			try {
+				tui.start();
+				await settle(term);
+
+				for (let cycle = 0; cycle < 5; cycle++) {
+					// Shrink to tiny
+					component.setLines([`session-${cycle}`]);
+					tui.requestRender(true);
+					await settle(term);
+
+					// Grow back to overflowing
+					component.setLines(rows("line-", 50));
+					tui.requestRender();
+					await settle(term);
+				}
+
+				// After cycles, viewport should show the tail of content
+				const viewport = visible(term);
+				expect(viewport.at(-1)?.trim()).toBe("line-49");
+
+				const scrollback = term.getScrollBuffer();
+				// No giant blank run from accumulated drift
+				expect(longestBlankRun(scrollback)).toBeLessThan(15);
+			} finally {
+				tui.stop();
+			}
+		});
+	});
+
+	describe("overlay dismiss cursor recovery", () => {
+		it("overlay dismiss restores viewport without gap below content", async () => {
+			const term = new VirtualTerminal(40, 12);
+			const tui = new TUI(term);
+			const component = new MutableLinesComponent(rows("base-", 8));
+			tui.addChild(component);
+
+			try {
+				tui.start();
+				await settle(term);
+
+				// Show overlay taller than remaining viewport space
+				const overlay = new MutableLinesComponent(rows("over-", 6));
+				const handle = tui.showOverlay(overlay, { anchor: "center" });
+				await settle(term);
+
+				// Dismiss overlay
+				handle.hide();
+				await settle(term);
+
+				// After dismiss, viewport should show base content without gaps
+				const viewport = visible(term);
+				expect(viewport[0]?.trim()).toBe("base-0");
+				expect(viewport[7]?.trim()).toBe("base-7");
+				// No content rows should be pushed below the viewport
+				for (let i = 8; i < 12; i++) {
+					expect(viewport[i]?.trim()).toBe("");
+				}
+			} finally {
+				tui.stop();
+			}
+		});
+
+		it("repeated overlay show/hide does not drift the cursor", async () => {
+			const term = new VirtualTerminal(40, 10);
+			const tui = new TUI(term);
+			const component = new MutableLinesComponent(rows("base-", 10));
+			tui.addChild(component);
+
+			try {
+				tui.start();
+				await settle(term);
+				const baseViewport = visible(term);
+
+				for (let i = 0; i < 10; i++) {
+					const handle = tui.showOverlay(new MutableLinesComponent([`overlay-${i}`]), {
+						anchor: "center",
+					});
+					await settle(term);
+					handle.hide();
+					await settle(term);
+				}
+
+				// After 10 show/hide cycles, viewport must match the original base
+				expect(visible(term)).toEqual(baseViewport);
+			} finally {
+				tui.stop();
+			}
+		});
+
+		it("stop after overlay dismissal does not create scrollback gap", async () => {
+			const term = new VirtualTerminal(40, 10);
+			const tui = new TUI(term);
+			const component = new MutableLinesComponent(rows("base-", 30));
+			tui.addChild(component);
+
+			tui.start();
+			await settle(term);
+
+			const handle = tui.showOverlay(new MutableLinesComponent(rows("over-", 5)), {
+				anchor: "center",
+			});
+			await settle(term);
+
+			handle.hide();
+			await settle(term);
+
+			tui.stop();
+			await settle(term);
+
+			// After stop, viewport should still have content
+			const viewport = visible(term);
+			expect(trailingBlanks(viewport)).toBeLessThanOrEqual(2);
+			expect(viewport.filter(l => l.trim().length > 0).length).toBeGreaterThanOrEqual(8);
 		});
 	});
 });

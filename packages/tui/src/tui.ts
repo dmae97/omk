@@ -545,18 +545,26 @@ export class TUI extends Container {
 	stop(): void {
 		this.#clearSixelProbeState();
 		this.#stopped = true;
-		// Move cursor to the end of the content to prevent overwriting/artifacts on exit
+		// Move cursor just past the visible content so the shell prompt
+		// appears right below the TUI output without a blank gap.
 		if (this.#previousLines.length > 0) {
-			const targetRow = this.#previousLines.length; // Line after the last content
-			const lineDiff = targetRow - this.#hardwareCursorRow;
-			if (lineDiff > 0) {
-				this.terminal.write(`\x1b[${lineDiff}B`);
-			} else if (lineDiff < 0) {
-				this.terminal.write(`\x1b[${-lineDiff}A`);
+			const height = this.terminal.rows;
+			// How many content rows are visible in the current viewport
+			const visibleContentRows = Math.min(this.#previousLines.length, height);
+			// Screen row of the last visible content line
+			const lastContentScreenRow = visibleContentRows - 1;
+			// Screen row where the hardware cursor currently sits
+			const cursorScreenRow = this.#hardwareCursorRow - this.#viewportTopRow;
+			// Move to the row just after the last visible content
+			const targetScreenRow = lastContentScreenRow + 1;
+			const screenDelta = targetScreenRow - cursorScreenRow;
+			if (screenDelta > 0) {
+				this.terminal.write(`\x1b[${screenDelta}B`);
+			} else if (screenDelta < 0) {
+				this.terminal.write(`\x1b[${-screenDelta}A`);
 			}
 			this.terminal.write("\r\n");
 		}
-
 		this.terminal.showCursor();
 		this.terminal.stop();
 	}
@@ -1008,7 +1016,7 @@ export class TUI extends Container {
 			this.#fullRedrawCount += 1;
 			this.#cursorRow = Math.max(0, newLines.length - 1);
 			this.#hardwareCursorRow = this.#cursorRow;
-			this.#maxLinesRendered = Math.max(this.#maxLinesRendered, newLines.length);
+			this.#maxLinesRendered = newLines.length;
 			this.#viewportTopRow = Math.max(0, this.#maxLinesRendered - height);
 			this.#positionHardwareCursor(cursorPos, newLines.length);
 			this.#previousLines = newLines;
@@ -1020,9 +1028,15 @@ export class TUI extends Container {
 		// then write the full logical transcript.
 		const seedTranscript = (): void => {
 			let buffer = "\x1b[?2026h"; // Begin synchronized output
+			// Push existing viewport content into scrollback by scrolling it off.
+			// Move to the last screen row, then emit newlines to scroll everything up.
+			buffer += `\x1b[${height};1H`; // Move to last row
+			buffer += "\n".repeat(height); // Scroll all visible lines into scrollback
+			buffer += "\x1b[H"; // Home cursor
 			const reset = SEGMENT_RESET;
 			for (let i = 0; i < newLines.length; i++) {
 				if (i > 0) buffer += "\r\n";
+				buffer += "\x1b[2K"; // Clear this display row before writing
 				const line = newLines[i];
 				buffer += TERMINAL.isImageLine(line) ? line : line + reset;
 			}
@@ -1059,9 +1073,16 @@ export class TUI extends Container {
 				const line = newLines[i];
 				buffer += TERMINAL.isImageLine(line) ? line : line + reset;
 			}
-			// Clear any remaining display rows below the viewport content
-			for (let i = vpLines; i < height; i++) {
-				buffer += "\r\n\x1b[2K";
+			// Clear any remaining display rows below the viewport content.
+			// Use erase-to-end instead of \r\n loops to avoid moving the cursor
+			// past the content area — cursor drift here would desync stop().
+			if (vpLines < height) {
+				if (vpLines > 0) {
+					buffer += "\r\n\x1b[J"; // Move to col 0 on next line, erase to end of display
+					buffer += "\x1b[1A"; // Move cursor back to last content row
+				} else {
+					buffer += "\x1b[J"; // No content lines; erase entire viewport from home
+				}
 			}
 			buffer += "\x1b[?2026l"; // End synchronized output
 			this.terminal.write(buffer);
@@ -1169,8 +1190,15 @@ export class TUI extends Container {
 					const line = newLines[i];
 					buffer += TERMINAL.isImageLine(line) ? line : line + reset;
 				}
-				for (let i = vpLines; i < height; i++) {
-					buffer += "\r\n\x1b[2K";
+				// Clear any remaining display rows below viewport content.
+				// Use erase-to-end to avoid moving the cursor past content area.
+				if (vpLines < height) {
+					if (vpLines > 0) {
+						buffer += "\r\n\x1b[J";
+						buffer += "\x1b[1A";
+					} else {
+						buffer += "\x1b[J";
+					}
 				}
 				buffer += "\x1b[?2026l"; // End synchronized output
 				this.terminal.write(buffer);

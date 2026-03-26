@@ -469,4 +469,106 @@ describe("TUI overlays", () => {
 			tui.stop();
 		}
 	});
+
+	it("exit after startup scrollback seeding does not leave long blank run", async () => {
+		const term = new VirtualTerminal(40, 6);
+		term.write("shell-0\r\nshell-1\r\nshell-2\r\nshell-3\r\nshell-4\r\n");
+		await term.flush();
+
+		const tui = new TUI(term);
+		const component = new MutableContentComponent(buildRows(20));
+		tui.addChild(component);
+
+		tui.start();
+		await Bun.sleep(0);
+		await term.flush();
+
+		tui.stop();
+		await term.flush();
+
+		const scrollback = term.getScrollBuffer();
+		// Shell history should survive
+		expect(scrollback.join("\n").includes("shell-0")).toBeTruthy();
+		// No large blank gap from exit — viewport should still have content
+		const viewport = term.getViewport().map(l => l.trimEnd());
+		const contentLines = viewport.filter(l => l.trim().length > 0);
+		expect(contentLines.length).toBeGreaterThanOrEqual(4);
+	});
+
+	it("shrink after preexisting shell history does not flood viewport with blanks", async () => {
+		const term = new VirtualTerminal(40, 8);
+		term.write("shell-0\r\nshell-1\r\nshell-2\r\n");
+		await term.flush();
+
+		const tui = new TUI(term);
+		const component = new MutableContentComponent(buildRows(40));
+		tui.addChild(component);
+
+		try {
+			tui.start();
+			await Bun.sleep(0);
+			await term.flush();
+
+			// Shrink to tiny content (like /new)
+			component.setLines(["New session"]);
+			tui.requestRender(true);
+			await Bun.sleep(0);
+			await term.flush();
+
+			const viewport = term.getViewport().map(l => l.trimEnd());
+			// Content should be at the top, not at the bottom
+			expect(viewport[0]?.trim()).toBe("New session");
+			for (let i = 1; i < 8; i++) {
+				expect(viewport[i]?.trim()).toBe("");
+			}
+
+			// Scrollback should not have a big blank gap
+			const scrollback = term.getScrollBuffer();
+			expect(longestBlankRun(scrollback)).toBeLessThan(10);
+		} finally {
+			tui.stop();
+		}
+	});
+
+	it("overlay dismissal after historical scrollback does not create gap", async () => {
+		const term = new VirtualTerminal(40, 8);
+		term.write("shell-0\r\nshell-1\r\nshell-2\r\n");
+		await term.flush();
+
+		const tui = new TUI(term);
+		const component = new MutableContentComponent(buildRows(20));
+		tui.addChild(component);
+
+		try {
+			tui.start();
+			await Bun.sleep(0);
+			await term.flush();
+
+			// Show overlay
+			const handle = tui.showOverlay(new LineComponent("over-", 4), { anchor: "center" });
+			await Bun.sleep(0);
+			await term.flush();
+
+			// Dismiss
+			handle.hide();
+			await Bun.sleep(0);
+			await term.flush();
+
+			// Viewport should show the tail of base content
+			const viewport = term.getViewport().map(l => l.trimEnd());
+			expect(viewport.at(-1)?.trim()).toBe("row-19");
+			// No large blank run
+			expect(longestBlankRun(viewport)).toBeLessThan(2);
+
+			tui.stop();
+			await term.flush();
+
+			// Stop after overlay dismissal should not create gap
+			const afterStopViewport = term.getViewport().map(l => l.trimEnd());
+			const contentLines = afterStopViewport.filter(l => l.trim().length > 0);
+			expect(contentLines.length).toBeGreaterThanOrEqual(5);
+		} finally {
+			if (!tui.fullRedraws) tui.stop();
+		}
+	});
 });
