@@ -1,12 +1,14 @@
 import * as fs from "node:fs/promises";
+import type { ImageContent } from "@oh-my-pi/pi-ai";
 import { formatBytes } from "@oh-my-pi/pi-utils";
 import { resolveReadPath } from "../tools/path-utils";
+import { convertToPng } from "./image-convert";
 import { formatDimensionNote, resizeImage } from "./image-resize";
 import { detectSupportedImageMimeTypeFromFile } from "./mime";
 
 export const MAX_IMAGE_INPUT_BYTES = 20 * 1024 * 1024;
 const MAX_IMAGE_METADATA_HEADER_BYTES = 256 * 1024;
-
+export const SUPPORTED_INPUT_IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 export interface ImageMetadata {
 	mimeType: string;
 	bytes: number;
@@ -23,6 +25,14 @@ export interface LoadedImageInput {
 	textNote: string;
 	dimensionNote?: string;
 	bytes: number;
+}
+
+export async function ensureSupportedImageInput(image: ImageContent): Promise<ImageContent | null> {
+	if (SUPPORTED_INPUT_IMAGE_MIME_TYPES.has(image.mimeType)) {
+		return image;
+	}
+	const converted = await convertToPng(image.data, image.mimeType);
+	return converted ? { type: "image", data: converted.data, mimeType: converted.mimeType } : null;
 }
 
 export interface ReadImageMetadataOptions {

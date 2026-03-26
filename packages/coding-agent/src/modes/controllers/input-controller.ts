@@ -11,6 +11,7 @@ import type { AgentSessionEvent } from "../../session/agent-session";
 import { SKILL_PROMPT_MESSAGE_TYPE, type SkillPromptDetails } from "../../session/messages";
 import { executeBuiltinSlashCommand } from "../../slash-commands/builtin-registry";
 import { getEditorCommand, openInEditor } from "../../utils/external-editor";
+import { ensureSupportedImageInput } from "../../utils/image-input";
 import { resizeImage } from "../../utils/image-resize";
 import { generateSessionTitle, setSessionTerminalTitle } from "../../utils/title-generator";
 
@@ -498,17 +499,25 @@ export class InputController {
 			const image = await readImageFromClipboard();
 			if (image) {
 				const base64Data = image.data.toBase64();
-				let imageData = { data: base64Data, mimeType: image.mimeType };
+				let imageData = await ensureSupportedImageInput({
+					type: "image",
+					data: base64Data,
+					mimeType: image.mimeType,
+				});
+				if (!imageData) {
+					this.ctx.showStatus(`Unsupported clipboard image format: ${image.mimeType}`);
+					return false;
+				}
 				if (settings.get("images.autoResize")) {
 					try {
 						const resized = await resizeImage({
 							type: "image",
-							data: base64Data,
-							mimeType: image.mimeType,
+							data: imageData.data,
+							mimeType: imageData.mimeType,
 						});
-						imageData = { data: resized.data, mimeType: resized.mimeType };
+						imageData = { type: "image", data: resized.data, mimeType: resized.mimeType };
 					} catch {
-						imageData = { data: base64Data, mimeType: image.mimeType };
+						// Keep the normalized image when resize fails.
 					}
 				}
 
