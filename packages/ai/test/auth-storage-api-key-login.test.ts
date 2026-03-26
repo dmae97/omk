@@ -1,22 +1,11 @@
 import { Database } from "bun:sqlite";
-import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 
-vi.mock("../src/utils/oauth/kagi", () => ({
-	loginKagi: vi.fn(),
-}));
-
 import { AuthCredentialStore, AuthStorage } from "../src/auth-storage";
-import { loginKagi } from "../src/utils/oauth/kagi";
-
-type MockedApiKeyLogin = {
-	mockReset(): void;
-	mockResolvedValueOnce(value: string): MockedApiKeyLogin;
-};
-
-const mockedLoginKagi = loginKagi as typeof loginKagi & MockedApiKeyLogin;
+import * as kagiModule from "../src/utils/oauth/kagi";
 
 function countCredentialRows(dbPath: string, provider: string): number {
 	const db = new Database(dbPath, { readonly: true });
@@ -35,13 +24,14 @@ describe("AuthStorage api-key login replacement", () => {
 	let dbPath = "";
 	let store: AuthCredentialStore | null = null;
 	let authStorage: AuthStorage | null = null;
+	let loginKagiSpy: Mock<typeof kagiModule.loginKagi>;
 
 	beforeEach(async () => {
 		tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "pi-ai-auth-api-key-login-"));
 		dbPath = path.join(tempDir, "agent.db");
 		store = await AuthCredentialStore.open(dbPath);
 		authStorage = new AuthStorage(store);
-		mockedLoginKagi.mockReset();
+		loginKagiSpy = vi.spyOn(kagiModule, "loginKagi");
 	});
 
 	afterEach(async () => {
@@ -59,7 +49,7 @@ describe("AuthStorage api-key login replacement", () => {
 	it("reuses the stored api-key row when re-login returns the same key", async () => {
 		if (!store || !authStorage || !dbPath) throw new Error("test setup failed");
 
-		mockedLoginKagi.mockResolvedValueOnce("same-kagi-key").mockResolvedValueOnce("same-kagi-key");
+		loginKagiSpy.mockResolvedValueOnce("same-kagi-key").mockResolvedValueOnce("same-kagi-key");
 
 		const controller = {
 			onAuth: () => {},
