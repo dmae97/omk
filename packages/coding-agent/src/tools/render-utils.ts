@@ -527,6 +527,10 @@ export function shortenPath(filePath: string, homeDir?: string): string {
 	return filePath;
 }
 
+export function formatSavedScreenshotLine(mimeType: string, byteLength: number, filePath: string): string {
+	return `Saved: ${mimeType} (${(byteLength / 1024).toFixed(2)} KB) to ${shortenPath(filePath)}`;
+}
+
 export function wrapBrackets(text: string, theme: Theme): string {
 	return `${theme.format.bracketLeft}${text}${theme.format.bracketRight}`;
 }

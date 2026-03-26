@@ -23,6 +23,7 @@ import { formatDimensionNote, resizeImage } from "../utils/image-resize";
 import { htmlToBasicMarkdown } from "../web/scrapers/types";
 import type { OutputMeta } from "./output-meta";
 import { expandPath } from "./path-utils";
+import { formatSavedScreenshotLine } from "./render-utils";
 import stealthTamperingScript from "./puppeteer/00_stealth_tampering.txt" with { type: "text" };
 import stealthActivityScript from "./puppeteer/01_stealth_activity.txt" with { type: "text" };
 import stealthHairlineScript from "./puppeteer/02_stealth_hairline.txt" with { type: "text" };
@@ -1394,7 +1395,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 
 					const lines = ["Screenshot captured"];
 					if (saveFullRes) {
-						lines.push(`Saved: ${savedMimeType} (${(savedBuffer.length / 1024).toFixed(2)} KB)`);
+						lines.push(formatSavedScreenshotLine(savedMimeType, savedBuffer.length, dest));
 						lines.push(
 							`Model: ${resized.mimeType} (${(resized.buffer.length / 1024).toFixed(2)} KB, ${resized.width}x${resized.height})`,
 						);
