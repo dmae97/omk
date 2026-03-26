@@ -231,6 +231,7 @@ export class TUI extends Container {
 	#fullRedrawCount = 0;
 	#stopped = false;
 	#forceFullRepaint = false; // One-shot flag: skip diff rendering and use the correct full-repaint mode
+	#terminalStateTrusted = false; // stop() and shell output can desync the real terminal from our cached frame
 
 	// Overlay stack for modal components rendered on top of base content
 	overlayStack: {
@@ -568,6 +569,7 @@ export class TUI extends Container {
 			}
 			this.terminal.write("\r\n");
 		}
+		this.#terminalStateTrusted = false;
 		this.terminal.showCursor();
 		this.terminal.stop();
 	}
@@ -1012,7 +1014,7 @@ export class TUI extends Container {
 		// Consume force flag
 		const forceRepaint = this.#forceFullRepaint;
 		this.#forceFullRepaint = false;
-		const hasPriorFrame = this.#previousLines.length > 0;
+		const hasPriorFrame = this.#terminalStateTrusted && this.#previousLines.length > 0;
 
 		// Common bookkeeping after any full-repaint path
 		const finishFullRepaint = (): void => {
@@ -1025,6 +1027,7 @@ export class TUI extends Container {
 			this.#previousLines = newLines;
 			this.#previousWidth = width;
 			this.#previousHeight = height;
+			this.#terminalStateTrusted = true;
 		};
 
 		// First paint: no prior TUI frame exists. Clear visible display (not scrollback),
@@ -1227,6 +1230,7 @@ export class TUI extends Container {
 			this.#previousHeight = height;
 			this.#positionHardwareCursor(cursorPos, newLines.length);
 			this.#viewportTopRow = Math.max(0, this.#maxLinesRendered - height);
+			this.#terminalStateTrusted = true;
 			return;
 		}
 
@@ -1269,6 +1273,7 @@ export class TUI extends Container {
 			this.#previousWidth = width;
 			this.#previousHeight = height;
 			this.#viewportTopRow = Math.max(0, this.#maxLinesRendered - height);
+			this.#terminalStateTrusted = true;
 			return;
 		}
 
@@ -1417,6 +1422,7 @@ export class TUI extends Container {
 		this.#previousLines = newLines;
 		this.#previousWidth = width;
 		this.#previousHeight = height;
+		this.#terminalStateTrusted = true;
 	}
 
 	/**

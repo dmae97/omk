@@ -151,6 +151,37 @@ describe("TUI overlays", () => {
 
 		tui.stop();
 	});
+	it("preserves shell output written while stopped across restart forced redraw", async () => {
+		const term = new VirtualTerminal(40, 4);
+		const tui = new TUI(term);
+		tui.addChild(new MutableContentComponent(["ui-0", "ui-1", "ui-2", "ui-3", "ui-4", "ui-5"]));
+
+		tui.start();
+		await Bun.sleep(0);
+		await term.flush();
+
+		tui.stop();
+		await term.flush();
+		term.write("shell-a\r\nshell-b\r\n");
+		await term.flush();
+		expect(term.getViewport().join("\n").includes("shell-")).toBeTruthy();
+
+		tui.start();
+		await Bun.sleep(0);
+		await term.flush();
+
+		const viewport = term.getViewport().join("\n");
+		expect(viewport.includes("ui-2")).toBeTruthy();
+		expect(viewport.includes("ui-5")).toBeTruthy();
+		expect(viewport.includes("shell-")).toBeFalsy();
+
+		const scrollback = term.getScrollBuffer().join("\n");
+		expect(scrollback.includes("shell-a")).toBeTruthy();
+		expect(scrollback.includes("shell-b")).toBeTruthy();
+
+		tui.stop();
+	});
+
 	it("fully redraws on height increase without wiping shell scrollback", async () => {
 		const term = new VirtualTerminal(40, 4);
 		term.write("shell-0\r\nshell-1\r\nshell-2\r\nshell-3\r\nshell-4\r\n");
