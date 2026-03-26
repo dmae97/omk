@@ -6,7 +6,7 @@
  * Returns synthesized answers with web search sources.
  */
 import * as os from "node:os";
-import { getAgentDbPath, readSseJson } from "@oh-my-pi/pi-utils";
+import { $env, getAgentDbPath, readSseJson } from "@oh-my-pi/pi-utils";
 import packageJson from "../../../../package.json" with { type: "json" };
 import { AgentStorage } from "../../../session/agent-storage";
 import type { SearchResponse, SearchSource } from "../../../web/search/types";
@@ -20,6 +20,11 @@ const DEFAULT_MODEL = "gpt-5-codex-mini";
 const JWT_CLAIM_PATH = "https://api.openai.com/auth";
 const DEFAULT_INSTRUCTIONS =
 	"You are a helpful assistant with web search capabilities. Search the web to answer the user's question accurately and cite your sources.";
+
+function getModel(): string {
+	const configuredModel = $env.PI_CODEX_WEB_SEARCH_MODEL?.trim();
+	return configuredModel ? configuredModel : DEFAULT_MODEL;
+}
 
 export interface CodexSearchParams {
 	signal?: AbortSignal;
@@ -188,8 +193,10 @@ async function callCodexSearch(
 	const url = `${CODEX_BASE_URL}${CODEX_RESPONSES_PATH}`;
 	const headers = buildCodexHeaders(auth.accessToken, auth.accountId);
 
+	const requestedModel = getModel();
+
 	const body: Record<string, unknown> = {
-		model: DEFAULT_MODEL,
+		model: requestedModel,
 		stream: true,
 		store: false,
 		input: [
@@ -226,7 +233,7 @@ async function callCodexSearch(
 	// Parse SSE stream
 	const answerParts: string[] = [];
 	const sources: SearchSource[] = [];
-	let model = DEFAULT_MODEL;
+	let model = requestedModel;
 	let requestId = "";
 	let usage: { inputTokens: number; outputTokens: number; totalTokens: number } | undefined;
 
