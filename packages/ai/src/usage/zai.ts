@@ -16,7 +16,7 @@ const MODEL_USAGE_PATH = "/api/monitor/usage/model-usage";
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 function normalizeZaiBaseUrl(baseUrl?: string): string {
-	if (!baseUrl || !baseUrl.trim()) return DEFAULT_ENDPOINT;
+	if (!baseUrl?.trim()) return DEFAULT_ENDPOINT;
 	try {
 		return new URL(baseUrl.trim()).origin;
 	} catch {

@@ -660,7 +660,7 @@ export class MCPCommandController {
 	}
 
 	async #removeManagedOAuthCredential(credentialId: string | undefined): Promise<void> {
-		if (!credentialId || !credentialId.startsWith("mcp_oauth_")) return;
+		if (!credentialId?.startsWith("mcp_oauth_")) return;
 		await this.ctx.session.modelRegistry.authStorage.remove(credentialId);
 	}
 

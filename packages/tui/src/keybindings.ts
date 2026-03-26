@@ -228,7 +228,7 @@ export class KeybindingsManager {
 
 		// Handle shifted symbol keys (e.g., shift+- produces _ on US layout)
 		const parsed = parseKey(data);
-		if (!parsed || !parsed.startsWith("shift+")) return false;
+		if (!parsed?.startsWith("shift+")) return false;
 		const keyName = parsed.slice("shift+".length);
 		if (!SHIFTED_SYMBOL_KEYS.has(keyName)) return false;
 		return keys.includes(keyName as KeyId);

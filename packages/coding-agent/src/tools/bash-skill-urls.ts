@@ -131,7 +131,7 @@ async function resolveInternalUrlToPath(
 		return resolvedLocalPath;
 	}
 
-	if (!internalRouter || !internalRouter.canHandle(url)) {
+	if (!internalRouter?.canHandle(url)) {
 		throw new ToolError(
 			`Cannot resolve ${scheme}:// URL in bash command: ${url}\n` +
 				"Internal URL router is unavailable for this protocol in the current session.",

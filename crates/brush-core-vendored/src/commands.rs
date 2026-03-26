@@ -567,7 +567,7 @@ pub(crate) async fn invoke_command_in_subshell_and_get_output(
 	// Wait for both the output reader and the command to complete.
 	let (output_result, cmd_result) = tokio::join!(output_join_handle, cmd_join_handle);
 	let output_str = output_result.map_err(io::Error::other)??;
-	let cmd_result = cmd_result.map_err(io::Error::other)?;
+	let cmd_result = cmd_result.map_err(io::Error::other)??;
 
 	// Store the status.
 	*shell.last_exit_status_mut() = cmd_result.exit_code.into();

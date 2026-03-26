@@ -28,7 +28,7 @@ const CLAUDE_HEADERS = {
 } as const;
 
 function normalizeClaudeBaseUrl(baseUrl?: string): string {
-	if (!baseUrl || !baseUrl.trim()) return DEFAULT_ENDPOINT;
+	if (!baseUrl?.trim()) return DEFAULT_ENDPOINT;
 	const trimmed = baseUrl.trim().replace(/\/+$/, "");
 	const lower = trimmed.toLowerCase();
 	if (lower.endsWith("/api/oauth")) return trimmed;

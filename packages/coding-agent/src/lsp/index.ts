@@ -1363,7 +1363,7 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 						signal,
 					)) as Hover | null;
 
-					if (!result || !result.contents) {
+					if (!result?.contents) {
 						output = "No hover information";
 					} else {
 						output = extractHoverText(result.contents);

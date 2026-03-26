@@ -22,7 +22,7 @@ export interface AuthDetectionResult {
 
 function parseMcpAuthServerUrl(errorMessage: string): string | undefined {
 	const match = errorMessage.match(/Mcp-Auth-Server:\s*([^;\]\s]+)/i);
-	if (!match || !match[1]) return undefined;
+	if (!match?.[1]) return undefined;
 
 	try {
 		return new URL(match[1]).toString();

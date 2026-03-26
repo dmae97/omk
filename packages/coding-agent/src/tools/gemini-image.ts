@@ -287,7 +287,7 @@ async function loadImageFromUrl(imageUrl: string, signal?: AbortSignal): Promise
 		throw new Error(`Image download failed (${response.status}): ${rawText}`);
 	}
 	const contentType = response.headers.get("content-type")?.split(";")[0];
-	if (!contentType || !contentType.startsWith("image/")) {
+	if (!contentType?.startsWith("image/")) {
 		throw new Error(`Unsupported image type from URL: ${imageUrl}`);
 	}
 	const buffer = await response.bytes();

@@ -564,7 +564,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 		if (this.#page && !this.#page.isClosed()) {
 			return this.#page;
 		}
-		if (!this.#browser || !this.#browser.isConnected()) {
+		if (!this.#browser?.isConnected()) {
 			return this.#resetBrowser(params);
 		}
 		this.#page = await this.#browser.newPage();

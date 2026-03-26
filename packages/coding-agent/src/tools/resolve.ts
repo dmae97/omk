@@ -54,7 +54,7 @@ export class ResolveTool implements AgentTool<typeof resolveSchema, ResolveToolD
 	): Promise<AgentToolResult<ResolveToolDetails>> {
 		return untilAborted(signal, async () => {
 			const store = this.session.pendingActionStore;
-			if (!store || !store.hasPending) {
+			if (!store?.hasPending) {
 				throw new ToolError("No pending action to resolve. Nothing to apply or discard.");
 			}
 
