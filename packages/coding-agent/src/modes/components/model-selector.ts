@@ -13,7 +13,7 @@ import {
 	visibleWidth,
 } from "@oh-my-pi/pi-tui";
 import type { ModelRegistry } from "../../config/model-registry";
-import { getRoleInfo, MODEL_ROLE_IDS, MODEL_ROLES } from "../../config/model-registry";
+import { getKnownRoleIds, getRoleInfo, MODEL_ROLE_IDS, MODEL_ROLES } from "../../config/model-registry";
 import { resolveModelRoleValue } from "../../config/model-resolver";
 import type { Settings } from "../../config/settings";
 import { type ThemeColor, theme } from "../../modes/theme/theme";
@@ -182,54 +182,20 @@ export class ModelSelectorComponent extends Container {
 	}
 
 	#buildMenuRoleActions(): void {
-		const actions: MenuRoleAction[] = [];
-
-		// Add built-in roles
-		for (const role of MODEL_ROLE_IDS) {
-			const roleInfo = MODEL_ROLES[role];
+		this.#menuRoleActions = getKnownRoleIds(this.#settings).map(role => {
+			const roleInfo = getRoleInfo(role, this.#settings);
 			const roleLabel = roleInfo.tag ? `${roleInfo.tag} (${roleInfo.name})` : roleInfo.name;
-			actions.push({
+			return {
 				label: `Set as ${roleLabel}`,
 				role,
-			});
-		}
-
-		// Add custom roles from settings
-		for (const [role, tagDef] of Object.entries(this.#settings.get("modelTags"))) {
-			if (tagDef.name) {
-				actions.push({
-					label: `Set as ${tagDef.name}`,
-					role,
-				});
-			}
-		}
-
-		this.#menuRoleActions = actions;
+			};
+		});
 	}
 
 	#loadRoleModels(): void {
 		const allModels = this.#modelRegistry.getAll();
 		const matchPreferences = { usageOrder: this.#settings.getStorage()?.getModelUsageOrder() };
-		for (const role of MODEL_ROLE_IDS) {
-			const roleValue = this.#settings.getModelRole(role);
-			if (!roleValue) continue;
-
-			const { model, thinkingLevel, explicitThinkingLevel } = resolveModelRoleValue(roleValue, allModels, {
-				settings: this.#settings,
-				matchPreferences,
-			});
-			if (model) {
-				this.#roles[role] = {
-					model,
-					thinkingLevel:
-						explicitThinkingLevel && thinkingLevel !== undefined ? thinkingLevel : ThinkingLevel.Inherit,
-				};
-			}
-		}
-
-		// Load custom roles from modelTags settings
-		for (const [role] of Object.entries(this.#settings.get("modelTags"))) {
-			if (role in MODEL_ROLES) continue;
+		for (const role of getKnownRoleIds(this.#settings)) {
 			const roleValue = this.#settings.getModelRole(role);
 			if (!roleValue) continue;
 
@@ -514,7 +480,7 @@ export class ModelSelectorComponent extends Container {
 			// Build role badges (inverted: color as background, black text)
 			const roleBadgeTokens: string[] = [];
 			for (const role of MODEL_ROLE_IDS) {
-				const { tag, color } = MODEL_ROLES[role];
+				const { tag, color } = getRoleInfo(role, this.#settings);
 				const assigned = this.#roles[role];
 				if (!tag || !assigned || !modelsAreEqual(assigned.model, item.model)) continue;
 

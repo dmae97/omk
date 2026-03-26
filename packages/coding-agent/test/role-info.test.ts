@@ -50,18 +50,17 @@ describe("getRoleInfo", () => {
 		});
 	});
 
-	test("custom role does not override built-in roles", () => {
+	test("configured metadata overrides built-in role info while keeping built-in defaults", () => {
 		const settings = Settings.isolated({
 			modelTags: {
 				smol: { name: "My Smol", color: "success" },
 			},
 		});
 
-		// Built-in 'smol' always returns built-in info, ignoring custom tag
 		expect(getRoleInfo("smol", settings)).toEqual({
-			name: "Fast",
-			color: "warning",
 			tag: "SMOL",
+			name: "My Smol",
+			color: "success",
 		});
 	});
 });

@@ -62,29 +62,48 @@ export const MODEL_ROLE_IDS: ModelRole[] = ["default", "smol", "slow", "vision",
 export type RoleInfo = ModelRoleInfo;
 
 /**
+ * Return the canonical set of known roles for selector/carousel UI.
+ *
+ * Built-ins always come first. Configured cycle order, model assignments, and
+ * tag metadata can introduce additional custom roles without requiring duplicate
+ * entries across settings.
+ */
+export function getKnownRoleIds(settings: Settings): string[] {
+	// Avoid MODEL_ROLE_IDS here: this helper is reached during selector initialization,
+	// and model-registry participates in import cycles while the module is still evaluating.
+	const roles = ["default", "smol", "slow", "vision", "plan", "commit", "task"];
+	const seen = new Set<string>(roles);
+	const addRole = (role: string) => {
+		if (seen.has(role)) return;
+		seen.add(role);
+		roles.push(role);
+	};
+
+	for (const role of settings.get("cycleOrder")) addRole(role);
+	for (const role of Object.keys(settings.getModelRoles())) addRole(role);
+	for (const role of Object.keys(settings.get("modelTags"))) addRole(role);
+
+	return roles;
+}
+
+/**
  * Get role info for a role name (built-in or custom).
- * Returns built-in role info if the role is predefined,
- * otherwise looks up custom role from settings, or returns a fallback.
+ * Configured metadata overrides built-in defaults when present.
  */
 export function getRoleInfo(role: string, settings: Settings): RoleInfo {
-	// Check if it's a built-in role
-	if (role in MODEL_ROLES) {
-		return MODEL_ROLES[role as ModelRole];
+	const builtIn = role in MODEL_ROLES ? MODEL_ROLES[role as ModelRole] : undefined;
+	const configured = settings.get("modelTags")[role];
+
+	if (configured) {
+		return {
+			tag: builtIn?.tag,
+			name: configured.name || builtIn?.name || role,
+			color: configured.color && isValidThemeColor(configured.color) ? configured.color : builtIn?.color,
+		};
 	}
 
-	// Check if it's a custom role in settings
-	const customTags = settings.get("modelTags");
-	if (customTags && role in customTags) {
-		const tagDef = customTags[role];
-		if (tagDef) {
-			return {
-				name: tagDef.name || role,
-				color: tagDef.color && isValidThemeColor(tagDef.color) ? tagDef.color : undefined,
-			};
-		}
-	}
+	if (builtIn) return builtIn;
 
-	// Fallback for undefined roles
 	return { name: role, color: "muted" };
 }
 
