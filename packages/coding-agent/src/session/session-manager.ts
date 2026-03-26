@@ -1384,6 +1384,7 @@ export class SessionManager {
 	#byId: Map<string, SessionEntry> = new Map();
 	#labelsById: Map<string, string> = new Map();
 	#leafId: string | null = null;
+	#transientModeOverride: { mode: string; data?: Record<string, unknown> } | undefined;
 	#usageStatistics = {
 		input: 0,
 		output: 0,
@@ -2032,6 +2033,14 @@ export class SessionManager {
 		return entry.id;
 	}
 
+	setTransientModeOverride(mode: string, data?: Record<string, unknown>): void {
+		this.#transientModeOverride = { mode, data };
+	}
+
+	clearTransientModeOverride(): void {
+		this.#transientModeOverride = undefined;
+	}
+
 	/**
 	 * Append a model change as child of current leaf, then advance leaf. Returns entry id.
 	 * @param model Model in "provider/modelId" format
@@ -2297,7 +2306,16 @@ export class SessionManager {
 	 * Uses tree traversal from current leaf.
 	 */
 	buildSessionContext(): SessionContext {
-		return buildSessionContext(this.getEntries(), this.#leafId, this.#byId);
+		const context = buildSessionContext(this.getEntries(), this.#leafId, this.#byId);
+		if (!this.#transientModeOverride) {
+			return context;
+		}
+
+		return {
+			...context,
+			mode: this.#transientModeOverride.mode,
+			modeData: this.#transientModeOverride.data,
+		};
 	}
 
 	/**

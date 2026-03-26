@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it, vi } from "bun:test";
 import { CommandController } from "@oh-my-pi/pi-coding-agent/modes/controllers/command-controller";
 import { initTheme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/types";
+import type { SessionContext } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { type Component, Spacer, Text } from "@oh-my-pi/pi-tui";
 
 const setSessionTerminalTitleMock = vi.fn();
@@ -46,6 +47,7 @@ type TestContext = InteractiveModeContext & {
 	sessionManager: {
 		getSessionName: () => string;
 		getCwd: () => string;
+		buildSessionContext: () => SessionContext;
 	};
 	reloadTodos: () => Promise<void>;
 	updateEditorTopBorder: () => void;
@@ -72,6 +74,8 @@ function createContext(options?: {
 	canStartNewSessionResult?: boolean;
 	newSessionResult?: boolean;
 	isStreaming?: boolean;
+	isCompacting?: boolean;
+	initialSessionMode?: string;
 }): { ctx: TestContext; calls: string[] } {
 	const calls: string[] = [];
 	const chatContainer = createTrackedContainer("chatContainer", calls, [new Text("stale chat", 0, 0)]);
@@ -125,12 +129,15 @@ function createContext(options?: {
 				return options?.newSessionResult ?? true;
 			}),
 			isStreaming: options?.isStreaming ?? false,
-			isCompacting: false,
-			abortCompaction: vi.fn(),
+			isCompacting: options?.isCompacting ?? false,
+			abortCompaction: vi.fn(() => {
+				calls.push("session.abortCompaction");
+			}),
 		},
 		sessionManager: {
 			getSessionName: vi.fn(() => "Fresh session"),
 			getCwd: vi.fn(() => "/tmp/project"),
+			buildSessionContext: vi.fn(() => ({ mode: options?.initialSessionMode ?? "none" }) as SessionContext),
 		},
 		reloadTodos: vi.fn(async () => {
 			calls.push("reloadTodos");
@@ -261,6 +268,63 @@ describe("CommandController /new command", () => {
 			"chatContainer.addChild",
 			"ui.requestRender",
 		]);
+	});
+
+	it("clearCommand rolls back temporary pre-switch teardown when new session approval is denied", async () => {
+		const { ctx, calls } = createContext({ canStartNewSessionResult: false, initialSessionMode: "plan" });
+		const hookState = { mode: "plan" as "plan" | "none" };
+		const controller = new CommandController(ctx);
+
+		ctx.sessionManager.buildSessionContext = vi.fn(() => ({ mode: hookState.mode }) as SessionContext);
+		ctx.session.canStartNewSession = vi.fn(async () => {
+			calls.push(`session.canStartNewSession:${ctx.sessionManager.buildSessionContext().mode}`);
+			return false;
+		});
+
+		const rollbackBeforeSwitchCheck = vi.fn(() => {
+			hookState.mode = "plan";
+			calls.push(`rollbackBeforeSwitchCheck:${hookState.mode}`);
+		});
+		const beforeSwitchCheck = vi.fn(() => {
+			hookState.mode = "none";
+			calls.push(`prepareBeforeSwitchCheck:${hookState.mode}`);
+			return rollbackBeforeSwitchCheck;
+		});
+		const beforeSwitch = vi.fn(() => {
+			calls.push("beforeSwitch");
+		});
+
+		const result = await controller.handleClearCommand({
+			beforeSwitchCheck,
+			beforeSwitch,
+		});
+
+		expect(result).toBe(false);
+		expect(beforeSwitchCheck).toHaveBeenCalledTimes(1);
+		expect(rollbackBeforeSwitchCheck).toHaveBeenCalledTimes(1);
+		expect(beforeSwitch).not.toHaveBeenCalled();
+		expect(ctx.session.newSession).not.toHaveBeenCalled();
+		expect(hookState.mode).toBe("plan");
+		expect(calls).toEqual([
+			"prepareBeforeSwitchCheck:none",
+			"session.canStartNewSession:none",
+			"rollbackBeforeSwitchCheck:plan",
+			"chatContainer.addChild",
+			"chatContainer.addChild",
+			"ui.requestRender",
+		]);
+	});
+
+	it("clearCommand does not abort compaction when new session approval is denied", async () => {
+		const { ctx } = createContext({ canStartNewSessionResult: false, isCompacting: true });
+		const controller = new CommandController(ctx);
+
+		const result = await controller.handleClearCommand();
+
+		expect(result).toBe(false);
+		expect(ctx.session.canStartNewSession).toHaveBeenCalledTimes(1);
+		expect(ctx.session.abortCompaction).not.toHaveBeenCalled();
+		expect(ctx.session.newSession).not.toHaveBeenCalled();
 	});
 
 	it("clearCommand adds a new session started message after clearing chat", async () => {

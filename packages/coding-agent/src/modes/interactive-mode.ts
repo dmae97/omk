@@ -60,7 +60,14 @@ import {
 	onThemeChange,
 	theme,
 } from "./theme/theme";
-import type { CompactionQueuedMessage, InteractiveModeContext, SubmittedUserInput, TodoItem, TodoPhase } from "./types";
+import type {
+	ClearCommandOptions,
+	CompactionQueuedMessage,
+	InteractiveModeContext,
+	SubmittedUserInput,
+	TodoItem,
+	TodoPhase,
+} from "./types";
 import { UiHelpers } from "./utils/ui-helpers";
 
 const EDITOR_MAX_HEIGHT_MIN = 6;
@@ -749,7 +756,14 @@ export class InteractiveMode implements InteractiveModeContext {
 	): Promise<void> {
 		const previousTools = this.#planModePreviousTools ?? this.session.getActiveToolNames();
 		const didCreateFreshSession = await this.handleClearCommand({
+			beforeSwitchCheck: () => {
+				this.sessionManager.setTransientModeOverride("none");
+				return () => {
+					this.sessionManager.clearTransientModeOverride();
+				};
+			},
 			beforeSwitch: async () => {
+				this.sessionManager.clearTransientModeOverride();
 				await renameApprovedPlanFile({
 					planFilePath: options.planFilePath,
 					finalPlanFilePath: options.finalPlanFilePath,
@@ -1088,8 +1102,9 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.#commandController.handleHotkeysCommand();
 	}
 
-	async handleClearCommand(options?: { beforeSwitch?: () => Promise<void> | void }): Promise<boolean> {
+	async handleClearCommand(options?: ClearCommandOptions): Promise<boolean> {
 		return this.#commandController.handleClearCommand({
+			beforeSwitchCheck: options?.beforeSwitchCheck,
 			beforeSwitch: async () => {
 				await options?.beforeSwitch?.();
 				this.#btwController.dispose();
