@@ -176,6 +176,34 @@ describe("TUI overlays", () => {
 
 		tui.stop();
 	});
+	it("fully redraws on height increase when content changes in the same tick", async () => {
+		const term = new VirtualTerminal(40, 4);
+		term.write("shell-0\r\nshell-1\r\nshell-2\r\nshell-3\r\nshell-4\r\nshell-5\r\n");
+		await term.flush();
+
+		const tui = new TUI(term);
+		const component = new MutableContentComponent(["ui-0", "ui-1", "ui-2", "ui-3"]);
+		tui.addChild(component);
+
+		tui.start();
+		await Bun.sleep(0);
+		await term.flush();
+
+		component.setLines(["ui-0", "ui-1", "ui-2", "ui-3*"]);
+		term.resize(40, 8);
+		await Bun.sleep(0);
+		await term.flush();
+
+		const viewport = term.getViewport().join("\n");
+		expect(viewport.includes("shell-")).toBeFalsy();
+		expect(viewport.includes("ui-3*")).toBeTruthy();
+		const scrollback = term.getScrollBuffer().join("\n");
+		expect(scrollback.includes("shell-0")).toBeTruthy();
+		expect(scrollback.includes("shell-5")).toBeTruthy();
+
+		tui.stop();
+	});
+
 	it("renders viewport-only on resize when content size is stable", async () => {
 		const term = new VirtualTerminal(60, 8);
 		const tui = new TUI(term);

@@ -1097,6 +1097,42 @@ export class TUI extends Container {
 			fs.appendFileSync(logPath, msg);
 		};
 
+		const repaintAfterHeightIncrease = (): void => {
+			logRedraw(`height increase (${this.#previousHeight} -> ${height})`);
+			let buffer = "\x1b[?2026h"; // Begin synchronized output
+			// Scroll current visible content into scrollback
+			const curScreenRow = hardwareCursorRow - prevViewportTop;
+			const screenRows = Math.min(height, this.#maxLinesRendered);
+			if (screenRows > 0) {
+				const toBottom = screenRows - 1 - curScreenRow;
+				if (toBottom > 0) buffer += `\x1b[${toBottom}B`;
+				buffer += "\r\n".repeat(screenRows);
+			}
+			buffer += "\x1b[H"; // Home cursor
+			const vpTop = Math.max(0, newLines.length - height);
+			const vpLines = newLines.length - vpTop;
+			const reset = SEGMENT_RESET;
+			for (let i = vpTop; i < newLines.length; i++) {
+				if (i > vpTop) buffer += "\r\n";
+				buffer += "\x1b[2K";
+				const line = newLines[i];
+				buffer += TERMINAL.isImageLine(line) ? line : line + reset;
+			}
+			// Clear any remaining display rows below viewport content.
+			// Use erase-to-end to avoid moving the cursor past content area.
+			if (vpLines < height) {
+				if (vpLines > 0) {
+					buffer += "\r\n\x1b[J";
+					buffer += "\x1b[1A";
+				} else {
+					buffer += "\x1b[J";
+				}
+			}
+			buffer += "\x1b[?2026l"; // End synchronized output
+			this.terminal.write(buffer);
+			finishFullRepaint();
+		};
+
 		// First render — no prior TUI frame, seed the full transcript
 		if (!hasPriorFrame && !widthChanged && !heightChanged) {
 			logRedraw("first render");
@@ -1121,8 +1157,7 @@ export class TUI extends Container {
 		}
 
 		// Height decreased — viewport repaint to realign content.
-		// (Height increases fall through to the dedicated height-increase handler below,
-		// which pushes visible content into scrollback before repainting.)
+		// (Height increases use dedicated repaint paths elsewhere in this method.)
 		// Termux changes height when the software keyboard shows or hides;
 		// in that environment, a full redraw causes the entire history to replay on every toggle.
 		if (heightChanged && height < this.#previousHeight && !isTermuxSession()) {
@@ -1164,45 +1199,26 @@ export class TUI extends Container {
 		}
 		const appendStart = appendedLines && firstChanged === this.#previousLines.length && firstChanged > 0;
 
+		// When the terminal grows and the UI still does not fill the new viewport,
+		// newly revealed rows can contain shell history. If content also changed in the
+		// same tick, diff rendering would only touch the changed range and leave those
+		// revealed rows visible. Repaint the viewport from scratch before diffing.
+		if (
+			heightChanged &&
+			height > this.#previousHeight &&
+			this.#previousHeight > 0 &&
+			newLines.length < height &&
+			firstChanged !== -1 &&
+			!isTermuxSession()
+		) {
+			repaintAfterHeightIncrease();
+			return;
+		}
+
 		// No line-level changes detected
 		if (firstChanged === -1) {
-			// Height increased — the terminal may have pulled scrollback lines into
-			// the visible area. Push visible content into scrollback (so shell history
-			// is preserved), then overwrite the viewport with UI content.
 			if (height > this.#previousHeight && this.#previousHeight > 0) {
-				logRedraw(`height increase (${this.#previousHeight} -> ${height})`);
-				let buffer = "\x1b[?2026h"; // Begin synchronized output
-				// Scroll current visible content into scrollback
-				const curScreenRow = hardwareCursorRow - prevViewportTop;
-				const screenRows = Math.min(height, this.#maxLinesRendered);
-				if (screenRows > 0) {
-					const toBottom = screenRows - 1 - curScreenRow;
-					if (toBottom > 0) buffer += `\x1b[${toBottom}B`;
-					buffer += "\r\n".repeat(screenRows);
-				}
-				buffer += "\x1b[H"; // Home cursor
-				const vpTop = Math.max(0, newLines.length - height);
-				const vpLines = newLines.length - vpTop;
-				const reset = SEGMENT_RESET;
-				for (let i = vpTop; i < newLines.length; i++) {
-					if (i > vpTop) buffer += "\r\n";
-					buffer += "\x1b[2K";
-					const line = newLines[i];
-					buffer += TERMINAL.isImageLine(line) ? line : line + reset;
-				}
-				// Clear any remaining display rows below viewport content.
-				// Use erase-to-end to avoid moving the cursor past content area.
-				if (vpLines < height) {
-					if (vpLines > 0) {
-						buffer += "\r\n\x1b[J";
-						buffer += "\x1b[1A";
-					} else {
-						buffer += "\x1b[J";
-					}
-				}
-				buffer += "\x1b[?2026l"; // End synchronized output
-				this.terminal.write(buffer);
-				finishFullRepaint();
+				repaintAfterHeightIncrease();
 				return;
 			}
 			this.#previousHeight = height;
