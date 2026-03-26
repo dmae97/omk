@@ -1,9 +1,9 @@
 import { beforeAll, describe, expect, test, vi } from "bun:test";
-import { getBundledModel } from "@oh-my-pi/pi-ai";
+import { getBundledModel, type Model } from "@oh-my-pi/pi-ai";
 import type { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { ModelSelectorComponent } from "@oh-my-pi/pi-coding-agent/modes/components/model-selector";
-import { initTheme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import { setThemeInstance } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { TUI } from "@oh-my-pi/pi-tui";
 
 function normalizeRenderedText(text: string): string {
@@ -17,9 +17,38 @@ function normalizeRenderedText(text: string): string {
 	);
 }
 
+function createSelector(model: Model, settings: Settings): ModelSelectorComponent {
+	const modelRegistry = {
+		getAll: () => [model],
+		getDiscoverableProviders: () => [],
+	} as unknown as ModelRegistry;
+	const ui = {
+		requestRender: vi.fn(),
+	} as unknown as TUI;
+
+	return new ModelSelectorComponent(
+		ui,
+		model,
+		settings,
+		modelRegistry,
+		[{ model, thinkingLevel: "off" }],
+		() => {},
+		() => {},
+	);
+}
+
 describe("ModelSelector role badge thinking display", () => {
 	beforeAll(() => {
-		initTheme();
+		setThemeInstance(
+			{
+				fg: (_color: string, text: string) => text,
+				bg: (_color: string, text: string) => text,
+				bold: (text: string) => text,
+				getFgAnsi: () => "\x1b[38;5;1m",
+				nav: { cursor: ">" },
+				boxSharp: { horizontal: "-" },
+			} as never,
+		);
 	});
 
 	test("renders per-role thinking labels with inherit mode to avoid badge ambiguity", async () => {
@@ -36,23 +65,7 @@ describe("ModelSelector role badge thinking display", () => {
 			},
 		});
 
-		const modelRegistry = {
-			getAll: () => [model],
-			getDiscoverableProviders: () => [],
-		} as unknown as ModelRegistry;
-		const ui = {
-			requestRender: vi.fn(),
-		} as unknown as TUI;
-
-		const selector = new ModelSelectorComponent(
-			ui,
-			model,
-			settings,
-			modelRegistry,
-			[{ model, thinkingLevel: "off" }],
-			() => {},
-			() => {},
-		);
+		const selector = createSelector(model, settings);
 
 		await Bun.sleep(0);
 
@@ -71,5 +84,34 @@ describe("ModelSelector role badge thinking display", () => {
 		expect(menuRendered).toContain("Set as SLOW (Thinking)");
 		expect(menuRendered).toContain("Set as PLAN (Architect)");
 		expect(menuRendered).toContain("Set as COMMIT (Commit)");
+	});
+
+	test("shows custom roles from cycleOrder/modelRoles and honors built-in metadata overrides", async () => {
+		const model = getBundledModel("anthropic", "claude-sonnet-4-5");
+		if (!model) throw new Error("Expected bundled model anthropic/claude-sonnet-4-5");
+
+		const settings = Settings.isolated({
+			cycleOrder: ["smol", "custom-fast", "default"],
+			modelRoles: {
+				default: `${model.provider}/${model.id}`,
+				"custom-fast": `${model.provider}/${model.id}:low`,
+				smol: `${model.provider}/${model.id}`,
+			},
+			modelTags: {
+				smol: { name: "Quick", color: "error" },
+			},
+		});
+
+		const selector = createSelector(model, settings);
+		await Bun.sleep(0);
+
+		const rendered = normalizeRenderedText(selector.render(220).join("\n"));
+		expect(rendered).toContain("custom-fast (low)");
+		expect(rendered).toContain("SMOL (inherit)");
+
+		selector.handleInput("\n");
+		const menuRendered = normalizeRenderedText(selector.render(220).join("\n"));
+		expect(menuRendered).toContain("Set as custom-fast");
+		expect(menuRendered).toContain("Set as SMOL (Quick)");
 	});
 });

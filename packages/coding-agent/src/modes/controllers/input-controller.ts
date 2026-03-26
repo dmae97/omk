@@ -608,8 +608,8 @@ export class InputController {
 
 	async cycleRoleModel(options?: { temporary?: boolean }): Promise<void> {
 		try {
-			const roleOrder = ["smol", "default", "slow"] as const;
-			const result = await this.ctx.session.cycleRoleModels(roleOrder, options);
+			const cycleOrder = settings.get("cycleOrder");
+			const result = await this.ctx.session.cycleRoleModels(cycleOrder, options);
 			if (!result) {
 				this.ctx.showStatus("Only one role model available");
 				return;
@@ -625,7 +625,7 @@ export class InputController {
 					: "";
 			const tempLabel = options?.temporary ? " (temporary)" : "";
 			const cycleSeparator = theme.fg("dim", " > ");
-			const cycleLabel = roleOrder
+			const cycleLabel = cycleOrder
 				.map(role => {
 					if (role === result.role) {
 						return theme.bold(theme.fg("accent", role));

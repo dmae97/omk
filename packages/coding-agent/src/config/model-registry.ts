@@ -28,8 +28,9 @@ import {
 import { isRecord, logger } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { type ConfigError, ConfigFile } from "../config";
-import type { ThemeColor } from "../modes/theme/theme";
+import { isValidThemeColor, type ThemeColor } from "../modes/theme/theme";
 import type { AuthStorage, OAuthCredential } from "../session/auth-storage";
+import type { Settings } from "./settings";
 
 export const kNoAuth = "N/A";
 
@@ -56,6 +57,55 @@ export const MODEL_ROLES: Record<ModelRole, ModelRoleInfo> = {
 };
 
 export const MODEL_ROLE_IDS: ModelRole[] = ["default", "smol", "slow", "vision", "plan", "commit", "task"];
+
+/** Alias for ModelRoleInfo - used for both built-in and custom roles */
+export type RoleInfo = ModelRoleInfo;
+
+/**
+ * Return the canonical set of known roles for selector/carousel UI.
+ *
+ * Built-ins always come first. Configured cycle order, model assignments, and
+ * tag metadata can introduce additional custom roles without requiring duplicate
+ * entries across settings.
+ */
+export function getKnownRoleIds(settings: Settings): string[] {
+	// Avoid MODEL_ROLE_IDS here: this helper is reached during selector initialization,
+	// and model-registry participates in import cycles while the module is still evaluating.
+	const roles = ["default", "smol", "slow", "vision", "plan", "commit", "task"];
+	const seen = new Set<string>(roles);
+	const addRole = (role: string) => {
+		if (seen.has(role)) return;
+		seen.add(role);
+		roles.push(role);
+	};
+
+	for (const role of settings.get("cycleOrder")) addRole(role);
+	for (const role of Object.keys(settings.getModelRoles())) addRole(role);
+	for (const role of Object.keys(settings.get("modelTags"))) addRole(role);
+
+	return roles;
+}
+
+/**
+ * Get role info for a role name (built-in or custom).
+ * Configured metadata overrides built-in defaults when present.
+ */
+export function getRoleInfo(role: string, settings: Settings): RoleInfo {
+	const builtIn = role in MODEL_ROLES ? MODEL_ROLES[role as ModelRole] : undefined;
+	const configured = settings.get("modelTags")[role];
+
+	if (configured) {
+		return {
+			tag: builtIn?.tag,
+			name: configured.name || builtIn?.name || role,
+			color: configured.color && isValidThemeColor(configured.color) ? configured.color : builtIn?.color,
+		};
+	}
+
+	if (builtIn) return builtIn;
+
+	return { name: role, color: "muted" };
+}
 
 const OpenRouterRoutingSchema = Type.Object({
 	only: Type.Optional(Type.Array(Type.String())),
