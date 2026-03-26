@@ -6,6 +6,10 @@ const stubTheme = {
 	tree: { branch: "├", last: "└", vertical: "│", horizontal: "─", hook: "╰" },
 } as Parameters<typeof renderTreeList>[1];
 
+function expectWithinBudget(lines: string[], budget: number) {
+	expect(lines.length).toBeLessThanOrEqual(budget);
+}
+
 describe("renderTreeList maxCollapsedLines", () => {
 	it("skips oversized first item instead of rendering broken fragments", () => {
 		const largeGroup = Array.from({ length: 15 }, (_, i) => `line-${i}`);
@@ -22,13 +26,12 @@ describe("renderTreeList maxCollapsedLines", () => {
 			stubTheme,
 		);
 
-		const contentLines = collapsed.filter(l => !l.includes("more match"));
-		expect(contentLines.length).toBeLessThanOrEqual(6);
-		const summaryLine = collapsed.find(l => l.includes("more match"));
-		expect(summaryLine).toBeDefined();
+		expectWithinBudget(collapsed, 6);
+		expect(collapsed).toHaveLength(1);
+		expect(collapsed[0]).toContain("2 more matches");
 	});
 
-	it("fits items within budget and skips those that exceed it", () => {
+	it("counts the summary row inside the collapsed line budget", () => {
 		const items = [["a", "b"], ["c", "d", "e"], ["f"]];
 
 		const collapsed = renderTreeList(
@@ -42,12 +45,11 @@ describe("renderTreeList maxCollapsedLines", () => {
 			stubTheme,
 		);
 
-		const contentLines = collapsed.filter(l => !l.includes("more match"));
-		expect(contentLines.length).toBeLessThanOrEqual(4);
-		expect(contentLines.length).toBe(2);
-		const summaryLine = collapsed.find(l => l.includes("more match"));
-		expect(summaryLine).toBeDefined();
-		expect(summaryLine).toContain("2");
+		expectWithinBudget(collapsed, 4);
+		expect(collapsed).toHaveLength(3);
+		expect(collapsed[0]).toContain("a");
+		expect(collapsed[1]).toContain("b");
+		expect(collapsed[2]).toContain("2 more matches");
 	});
 
 	it("does not cap lines in expanded mode", () => {
@@ -86,9 +88,9 @@ describe("renderTreeList maxCollapsedLines", () => {
 			stubTheme,
 		);
 
-		const summaryLine = collapsed.find(l => l.includes("more change"));
-		expect(summaryLine).toBeDefined();
-		expect(summaryLine).toContain("2");
+		expectWithinBudget(collapsed, 4);
+		expect(collapsed).toHaveLength(4);
+		expect(collapsed.at(-1)).toContain("2 more changes");
 	});
 
 	it("renders all items when total lines fit within budget", () => {
@@ -116,18 +118,19 @@ describe("renderTreeList maxCollapsedLines", () => {
 			{
 				items,
 				expanded: false,
-				maxCollapsedLines: 1,
+				maxCollapsedLines: 2,
 				itemType: "item",
 				renderItem: group => group,
 			},
 			stubTheme,
 		);
 
-		expect(collapsed.length).toBe(2);
+		expectWithinBudget(collapsed, 2);
+		expect(collapsed).toHaveLength(2);
 		expect(collapsed[0]).toContain("├");
 		expect(collapsed[0]).toContain("a");
 		expect(collapsed[1]).toContain("└");
-		expect(collapsed[1]).toContain("more item");
+		expect(collapsed[1]).toContain("1 more item");
 	});
 
 	it("uses last tree branch when no summary follows", () => {
@@ -149,7 +152,7 @@ describe("renderTreeList maxCollapsedLines", () => {
 		expect(collapsed.some(l => l.includes("more"))).toBe(false);
 	});
 
-	it("budget=0 shows only summary line", () => {
+	it("budget=0 renders nothing instead of exceeding the limit", () => {
 		const items = [["a"], ["b"]];
 
 		const collapsed = renderTreeList(
@@ -163,8 +166,7 @@ describe("renderTreeList maxCollapsedLines", () => {
 			stubTheme,
 		);
 
-		expect(collapsed.length).toBe(1);
-		expect(collapsed[0]).toContain("2 more items");
+		expect(collapsed).toHaveLength(0);
 	});
 
 	it("budget exactly matching total lines shows no summary", () => {
@@ -218,10 +220,8 @@ describe("renderTreeList maxCollapsedLines", () => {
 			stubTheme,
 		);
 
-		const contentLines = collapsed.filter(l => !l.includes("more item"));
-		expect(contentLines.length).toBe(2);
-		const summaryLine = collapsed.find(l => l.includes("more item"));
-		expect(summaryLine).toBeDefined();
-		expect(summaryLine).toContain("2");
+		expectWithinBudget(collapsed, 100);
+		expect(collapsed).toHaveLength(3);
+		expect(collapsed[2]).toContain("2 more items");
 	});
 });

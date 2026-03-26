@@ -457,6 +457,7 @@ export const grepToolRenderer = {
 							items: lines,
 							expanded,
 							maxCollapsed: COLLAPSED_TEXT_LIMIT,
+							maxCollapsedLines: COLLAPSED_TEXT_LIMIT,
 							itemType: "item",
 							renderItem: line => uiTheme.fg("toolOutput", line),
 						},
@@ -538,12 +539,13 @@ export const grepToolRenderer = {
 				const { expanded } = options;
 				const key = new Hasher().bool(expanded).u32(width).digest();
 				if (cached?.key === key) return cached.lines;
+				const collapsedMatchLineBudget = Math.max(COLLAPSED_TEXT_LIMIT - extraLines.length, 0);
 				const matchLines = renderTreeList(
 					{
 						items: matchGroups,
 						expanded,
 						maxCollapsed: matchGroups.length,
-						maxCollapsedLines: COLLAPSED_TEXT_LIMIT,
+						maxCollapsedLines: collapsedMatchLineBudget,
 						itemType: "match",
 						renderItem: group =>
 							group.map(line => {

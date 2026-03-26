@@ -11,8 +11,8 @@ export interface TreeListOptions<T> {
 	expanded?: boolean;
 	maxCollapsed?: number;
 	/** Strict total-line budget for collapsed mode. When set (and not expanded),
-	 *  rendering stops as soon as emitting the next item would exceed this many
-	 *  lines, even within the first item. */
+	 *  rendered item lines plus the trailing summary line must fit within this budget.
+	 */
 	maxCollapsedLines?: number;
 	itemType?: string;
 	renderItem: (item: T, context: TreeContext) => string | string[];
@@ -23,11 +23,12 @@ export function renderTreeList<T>(options: TreeListOptions<T>, theme: Theme): st
 	const maxItems = expanded ? items.length : Math.min(items.length, maxCollapsed);
 	const linesBudget = !expanded && maxCollapsedLines !== undefined ? maxCollapsedLines : Infinity;
 
-	// Pass 1: determine how many items fit within both the item count and line budget.
+	// Pass 1: determine how many items fit within both the item count and total line budget,
+	// including the trailing summary row when one is needed.
 	let fittingCount = maxItems;
+	let fittedLineCount = 0;
 	if (linesBudget !== Infinity) {
 		fittingCount = 0;
-		let totalLines = 0;
 		for (let i = 0; i < maxItems; i++) {
 			const rendered = renderItem(items[i], {
 				index: i,
@@ -38,14 +39,16 @@ export function renderTreeList<T>(options: TreeListOptions<T>, theme: Theme): st
 				continuePrefix: "",
 			});
 			const count = Array.isArray(rendered) ? rendered.length : rendered ? 1 : 0;
-			if (count > 0 && totalLines + count > linesBudget) break;
-			totalLines += count;
+			const remainingAfter = items.length - (i + 1);
+			const reservedSummaryLines = remainingAfter > 0 ? 1 : 0;
+			if (fittedLineCount + count + reservedSummaryLines > linesBudget) break;
+			fittedLineCount += count;
 			fittingCount = i + 1;
 		}
 	}
 
 	const remaining = items.length - fittingCount;
-	const hasSummary = !expanded && remaining > 0;
+	const hasSummary = !expanded && remaining > 0 && (linesBudget === Infinity || fittedLineCount < linesBudget);
 
 	// Pass 2: render items with correct isLast and prefixes.
 	const lines: string[] = [];
