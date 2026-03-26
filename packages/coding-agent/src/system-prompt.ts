@@ -11,11 +11,53 @@ import { $ } from "bun";
 import { contextFileCapability } from "./capability/context-file";
 import { systemPromptCapability } from "./capability/system-prompt";
 import { renderPromptTemplate } from "./config/prompt-templates";
+import { formatPromptContent } from "./utils/prompt-format";
 import type { SkillsSettings } from "./config/settings";
 import { type ContextFile, loadCapability, type SystemPrompt as SystemPromptFile } from "./discovery";
 import { loadSkills, type Skill } from "./extensibility/skills";
 import customSystemPromptTemplate from "./prompts/system/custom-system-prompt.md" with { type: "text" };
 import systemPromptTemplate from "./prompts/system/system-prompt.md" with { type: "text" };
+
+interface AlwaysApplyRule {
+	name: string;
+	content: string;
+	path: string;
+}
+
+function normalizePromptBlock(content: string): string {
+	return formatPromptContent(content, { renderPhase: "post-render" }).trim();
+}
+
+function splitComparablePromptBlocks(content: string | null | undefined): string[] {
+	const normalized = firstNonEmpty(content);
+	if (!normalized) return [];
+
+	return normalizePromptBlock(normalized)
+		.split(/\n{2,}/)
+		.map(block => block.trim())
+		.filter(block => block.length > 0);
+}
+
+function promptSourceContainsRule(source: string | null | undefined, ruleContent: string): boolean {
+	const sourceBlocks = splitComparablePromptBlocks(source);
+	const ruleBlocks = splitComparablePromptBlocks(ruleContent);
+	if (sourceBlocks.length === 0 || ruleBlocks.length === 0 || ruleBlocks.length > sourceBlocks.length) return false;
+
+	for (let start = 0; start <= sourceBlocks.length - ruleBlocks.length; start += 1) {
+		if (ruleBlocks.every((block, offset) => sourceBlocks[start + offset] === block)) return true;
+	}
+
+	return false;
+}
+
+function dedupeAlwaysApplyRules(
+	alwaysApplyRules: AlwaysApplyRule[] | undefined,
+	promptSources: Array<string | null | undefined>,
+): AlwaysApplyRule[] {
+	if (!alwaysApplyRules || alwaysApplyRules.length === 0) return [];
+
+	return alwaysApplyRules.filter(rule => !promptSources.some(source => promptSourceContainsRule(source, rule.content)));
+}
 
 function firstNonEmpty(...values: (string | undefined | null)[]): string | null {
 	for (const value of values) {
@@ -371,7 +413,7 @@ export interface BuildSystemPromptOptions {
 	/** Encourage the agent to delegate via tasks unless changes are trivial. */
 	eagerTasks?: boolean;
 	/** Rules with alwaysApply=true — their full content is injected into the prompt. */
-	alwaysApplyRules?: Array<{ name: string; content: string; path: string }>;
+	alwaysApplyRules?: AlwaysApplyRule[];
 }
 
 /** Build the system prompt with tools, guidelines, and context */
@@ -511,6 +553,11 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 	const hasRead = tools?.has("read");
 	const filteredSkills = hasRead ? skills : [];
 
+	const promptSources = resolvedCustomPrompt
+		? [systemPromptCustomization, resolvedCustomPrompt, resolvedAppendPrompt]
+		: [resolvedAppendPrompt];
+	const injectedAlwaysApplyRules = dedupeAlwaysApplyRules(alwaysApplyRules, promptSources);
+
 	const environment = await logger.timeAsync("getEnvironmentInfo", getEnvironmentInfo);
 	const data = {
 		systemPromptCustomization: systemPromptCustomization ?? "",
@@ -524,7 +571,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		agentsMdSearch,
 		skills: filteredSkills,
 		rules: rules ?? [],
-		alwaysApplyRules: alwaysApplyRules ?? [],
+		alwaysApplyRules: injectedAlwaysApplyRules,
 		date,
 		dateTime,
 		cwd: promptCwd,

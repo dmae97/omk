@@ -1,7 +1,18 @@
 import { describe, expect, test } from "bun:test";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
 import * as path from "node:path";
 import { renderPromptTemplate, type TemplateContext } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
+import { buildSystemPrompt } from "@oh-my-pi/pi-coding-agent/system-prompt";
 import Handlebars from "handlebars";
+
+const baseGitContext = {
+	isRepo: true,
+	currentBranch: "feature/tests",
+	mainBranch: "main",
+	status: "M packages/coding-agent/src/prompts/system/custom-system-prompt.md",
+	commits: "abc123 Fix tests",
+};
 
 const systemPromptsDir = path.resolve(import.meta.dir, "../src/prompts/system");
 
@@ -24,13 +35,7 @@ const baseRenderContext: TemplateContext = {
 	editToolName: "edit",
 	environment: [{ label: "OS", value: "Darwin" }],
 	finalPlanFilePath: "local://PLAN_FINAL.md",
-	git: {
-		isRepo: true,
-		currentBranch: "feature/tests",
-		mainBranch: "main",
-		status: "M packages/coding-agent/src/prompts/system/custom-system-prompt.md",
-		commits: "abc123 Fix tests",
-	},
+	git: baseGitContext,
 	intentField: "_i",
 	intentTracing: true,
 	iterative: true,
@@ -67,6 +72,20 @@ async function loadSystemPromptTemplates(): Promise<Map<string, string>> {
 	return templates;
 }
 
+function countOccurrences(text: string, needle: string): number {
+	if (!needle) return 0;
+	return text.split(needle).length - 1;
+}
+
+async function withTempDir(run: (dir: string) => Promise<void>): Promise<void> {
+	const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pi-system-prompt-"));
+	try {
+		await run(dir);
+	} finally {
+		await fs.rm(dir, { recursive: true, force: true });
+	}
+}
+
 describe("system Handlebars prompt templates", () => {
 	test("parses and compiles every system template", async () => {
 		const templates = await loadSystemPromptTemplates();
@@ -85,7 +104,7 @@ describe("system Handlebars prompt templates", () => {
 		const both = renderPromptTemplate(template, {
 			...baseRenderContext,
 			contextFiles: [{ path: "a.txt", content: "A" }],
-			git: { ...((baseRenderContext.git as Record<string, unknown>) ?? {}), isRepo: true },
+			git: { ...baseGitContext, isRepo: true },
 		});
 		expect(both).toContain("<project>");
 		expect(both).toContain("## Context");
@@ -160,5 +179,55 @@ describe("system Handlebars prompt templates", () => {
 		expect(rendered).toContain("Discoverable MCP servers in this session: github (2 tools), slack (1 tool).");
 		expect(rendered).not.toContain("Example discoverable MCP tools:");
 		expect(rendered).toContain("call `search_tool_bm25` before concluding no such tool exists");
+	});
+
+	test("buildSystemPrompt deduplicates always-apply rules already present in SYSTEM.md", async () => {
+		const duplicateRule = ["Use static imports.", "", "Do not use dynamic loading."].join("\n");
+		const distinctRule = "Validate inputs at boundaries.";
+
+		await withTempDir(async dir => {
+			const configDir = path.join(dir, ".agent");
+			await fs.mkdir(configDir, { recursive: true });
+			await fs.writeFile(path.join(configDir, "SYSTEM.md"), ["Project instructions", "", duplicateRule, "", "Trailing note"].join("\n"));
+
+			const prompt = await buildSystemPrompt({
+				cwd: dir,
+				contextFiles: [],
+				skills: [],
+				rules: [],
+				toolNames: ["read"],
+				customPrompt: "Custom prompt body",
+				alwaysApplyRules: [
+					{ name: "no-dynamic-loading", content: duplicateRule, path: "/tmp/no-dynamic-loading.md" },
+					{ name: "validate-boundaries", content: distinctRule, path: "/tmp/validate-boundaries.md" },
+				],
+			});
+
+			expect(countOccurrences(prompt, "Use static imports.")).toBe(1);
+			expect(countOccurrences(prompt, "Do not use dynamic loading.")).toBe(1);
+			expect(countOccurrences(prompt, distinctRule)).toBe(1);
+		});
+	});
+
+	test("buildSystemPrompt deduplicates always-apply rules already present in customPrompt", async () => {
+		const duplicateRule = ["Keep functions small.", "", "Extract shared helpers on the second use."].join("\n");
+		const distinctRule = "Surface failures explicitly to callers.";
+
+		const prompt = await buildSystemPrompt({
+			cwd: os.tmpdir(),
+			contextFiles: [],
+			skills: [],
+			rules: [],
+			toolNames: ["read"],
+			customPrompt: ["Custom guidance", "", duplicateRule, "", "More custom guidance"].join("\n"),
+			alwaysApplyRules: [
+				{ name: "small-functions", content: duplicateRule, path: "/tmp/small-functions.md" },
+				{ name: "truthful-failures", content: distinctRule, path: "/tmp/truthful-failures.md" },
+			],
+		});
+
+		expect(countOccurrences(prompt, "Keep functions small.")).toBe(1);
+		expect(countOccurrences(prompt, "Extract shared helpers on the second use.")).toBe(1);
+		expect(countOccurrences(prompt, distinctRule)).toBe(1);
 	});
 });
