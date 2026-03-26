@@ -1,3 +1,4 @@
+import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { Readability } from "@mozilla/readability";
@@ -21,6 +22,8 @@ import type { ToolSession } from "../sdk";
 import { formatDimensionNote, resizeImage } from "../utils/image-resize";
 import { htmlToBasicMarkdown } from "../web/scrapers/types";
 import type { OutputMeta } from "./output-meta";
+import { expandPath } from "./path-utils";
+import { formatSavedScreenshotLine } from "./render-utils";
 import stealthTamperingScript from "./puppeteer/00_stealth_tampering.txt" with { type: "text" };
 import stealthActivityScript from "./puppeteer/01_stealth_activity.txt" with { type: "text" };
 import stealthHairlineScript from "./puppeteer/02_stealth_hairline.txt" with { type: "text" };
@@ -1365,22 +1368,44 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 						{ maxBytes: 0.75 * 1024 * 1024 },
 					);
 					const dimensionNote = formatDimensionNote(resized);
-					const tempFile = path.join(os.tmpdir(), `omp-sshots-${Snowflake.next()}.png`);
-					await Bun.write(tempFile, resized.buffer);
-					details.screenshotPath = tempFile;
-					details.mimeType = resized.mimeType;
-					details.bytes = resized.buffer.length;
+					// Resolve destination: user-defined path > screenshotDir (auto-named) > temp file.
+					const screenshotDir = (() => {
+						const v = this.session.settings.get("browser.screenshotDir") as string | undefined;
+						return v ? expandPath(v) : undefined;
+					})();
+					const paramPath = params.path ? expandPath(params.path as string) : undefined;
+					let dest: string;
+					if (paramPath) {
+						dest = path.isAbsolute(paramPath) ? paramPath : path.join(process.cwd(), paramPath);
+					} else if (screenshotDir) {
+						const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -1);
+						dest = path.join(screenshotDir, `screenshot-${ts}.png`);
+					} else {
+						dest = path.join(os.tmpdir(), `omp-sshots-${Snowflake.next()}.png`);
+					}
+					await fs.mkdir(path.dirname(dest), { recursive: true });
+					// Full-res buffer when saving to a user-defined location; resized (API copy) for temp-only.
+					const saveFullRes = !!(paramPath || screenshotDir);
+					const savedBuffer = saveFullRes ? buffer : resized.buffer;
+					const savedMimeType = saveFullRes ? "image/png" : resized.mimeType;
+					await Bun.write(dest, savedBuffer);
+					details.screenshotPath = dest;
+					details.mimeType = savedMimeType;
+					details.bytes = savedBuffer.length;
 
-					// Show both raw bytes (saved to disk) and compressed bytes (sent to model).
-					const lines = [
-						"Screenshot captured",
-						`Format: ${resized.mimeType} (${(resized.buffer.length / 1024).toFixed(2)} KB)`,
-						`Dimensions: ${resized.width}x${resized.height}`,
-					];
+					const lines = ["Screenshot captured"];
+					if (saveFullRes) {
+						lines.push(formatSavedScreenshotLine(savedMimeType, savedBuffer.length, dest));
+						lines.push(
+							`Model: ${resized.mimeType} (${(resized.buffer.length / 1024).toFixed(2)} KB, ${resized.width}x${resized.height})`,
+						);
+					} else {
+						lines.push(`Format: ${resized.mimeType} (${(resized.buffer.length / 1024).toFixed(2)} KB)`);
+						lines.push(`Dimensions: ${resized.width}x${resized.height}`);
+					}
 					if (dimensionNote) {
 						lines.push(dimensionNote);
 					}
-
 					return toolResult(details)
 						.content([
 							{ type: "text", text: lines.join("\n") },

@@ -2,6 +2,7 @@ import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { Effort } from "@oh-my-pi/pi-ai";
 import {
 	Container,
+	Input,
 	matchesKey,
 	type SelectItem,
 	SelectList,
@@ -31,6 +32,52 @@ import { getPreset } from "./status-line/presets";
 /**
  * A submenu component for selecting from a list of options.
  */
+/**
+ * Submenu component for free-text string settings.
+ * Mirrors the ConfigInputSubmenu pattern from plugin-settings.ts.
+ */
+class TextInputSubmenu extends Container {
+	#input: Input;
+
+	constructor(
+		label: string,
+		description: string,
+		currentValue: string,
+		private readonly onSubmit: (value: string) => void,
+		private readonly onCancel: () => void,
+	) {
+		super();
+
+		this.addChild(new Text(theme.bold(theme.fg("accent", label)), 0, 0));
+		if (description) {
+			this.addChild(new Spacer(1));
+			this.addChild(new Text(theme.fg("muted", description), 0, 0));
+		}
+		this.addChild(new Spacer(1));
+
+		this.#input = new Input();
+		if (currentValue) {
+			this.#input.setValue(currentValue);
+			// Move cursor to end of pre-filled value (ctrl+e = cursorLineEnd).
+			this.#input.handleInput("\x05");
+		}
+		this.#input.onSubmit = value => {
+			this.onSubmit(value); // empty string clears the setting
+		};
+		this.addChild(this.#input);
+		this.addChild(new Spacer(1));
+		this.addChild(new Text(theme.fg("dim", "  Enter to save · Esc to cancel · Clear field to unset"), 0, 0));
+	}
+
+	handleInput(data: string): void {
+		if (data === "\x1b" || data === "\x1b\x1b") {
+			this.onCancel();
+			return;
+		}
+		this.#input.handleInput(data);
+	}
+}
+
 class SelectSubmenu extends Container {
 	#selectList: SelectList;
 	#previewText: Text | null = null;
@@ -180,6 +227,7 @@ export class SettingsSelectorComponent extends Container {
 	#statusPreviewContainer: Container | null = null;
 	#statusPreviewText: Text | null = null;
 	#currentTabId: SettingTab | "plugins" = "appearance";
+	#textInputActive = false;
 
 	constructor(
 		private readonly context: SettingsRuntimeContext,
@@ -276,6 +324,15 @@ export class SettingsSelectorComponent extends Container {
 					description: def.description,
 					currentValue: this.#getSubmenuCurrentValue(def.path, currentValue),
 					submenu: (cv, done) => this.#createSubmenu(def, cv, done),
+				};
+
+			case "text":
+				return {
+					id: def.path,
+					label: def.label,
+					description: def.description,
+					currentValue: (currentValue as string) ?? "",
+					submenu: (cv, done) => this.#createTextInput(def, cv, done),
 				};
 		}
 	}
@@ -386,6 +443,34 @@ export class SettingsSelectorComponent extends Container {
 			},
 			onPreview,
 			getPreview,
+		);
+	}
+
+	/**
+	 * Create a text input submenu for a plain string setting.
+	 */
+	#createTextInput(
+		def: SettingDef & { type: "text" },
+		currentValue: string,
+		done: (value?: string) => void,
+	): Container {
+		this.#textInputActive = true;
+		const wrappedDone = (value?: string) => {
+			this.#textInputActive = false;
+			done(value);
+		};
+		return new TextInputSubmenu(
+			def.label,
+			def.description,
+			currentValue,
+			value => {
+				// Empty string clears the setting; undefined-typed string settings
+				// store "" which the browser.ts expandPath ignores (no-op fallback).
+				this.#setSettingValue(def.path, value);
+				this.callbacks.onChange(def.path, value);
+				wrappedDone(value);
+			},
+			() => wrappedDone(),
 		);
 	}
 
@@ -510,12 +595,14 @@ export class SettingsSelectorComponent extends Container {
 	}
 
 	handleInput(data: string): void {
-		// Handle tab switching first (tab, shift+tab, or left/right arrows)
+		// Handle tab switching — but NOT when a text input is active, since
+		// arrow keys must reach the cursor and Tab must not switch tabs.
 		if (
-			matchesKey(data, "tab") ||
-			matchesKey(data, "shift+tab") ||
-			matchesKey(data, "left") ||
-			matchesKey(data, "right")
+			!this.#textInputActive &&
+			(matchesKey(data, "tab") ||
+				matchesKey(data, "shift+tab") ||
+				matchesKey(data, "left") ||
+				matchesKey(data, "right"))
 		) {
 			this.#tabBar.handleInput(data);
 			return;

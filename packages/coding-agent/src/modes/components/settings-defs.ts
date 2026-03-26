@@ -51,7 +51,11 @@ export interface SubmenuSettingDef extends BaseSettingDef {
 	onPreviewCancel?: (originalValue: string) => void;
 }
 
-export type SettingDef = BooleanSettingDef | EnumSettingDef | SubmenuSettingDef;
+export interface TextInputSettingDef extends BaseSettingDef {
+	type: "text";
+}
+
+export type SettingDef = BooleanSettingDef | EnumSettingDef | SubmenuSettingDef | TextInputSettingDef;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Condition Functions
@@ -463,6 +467,11 @@ function pathToSettingDef(path: SettingPath): SettingDef | null {
 		}
 		// For theme etc, options will be injected at runtime
 		return createSubmenuSettingDef(base, []);
+	}
+
+	// Plain string setting — free-text input field
+	if (schemaType === "string") {
+		return { ...base, type: "text" };
 	}
 
 	return null;
