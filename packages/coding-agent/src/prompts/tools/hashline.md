@@ -2,8 +2,6 @@ Applies precise file edits using `LINE#ID` anchors from `read` output.
 
 Read the file first. Copy anchors exactly from the latest `read` output. In one `edit` call, batch all edits for one file. After any successful edit, re-read before editing that file again.
 
-This matters: your output is checked against the real file state. Invalid anchors, duplicated boundary lines, or semantically equivalent rewrites will fail.
-
 <operations>
 **Top level**
 - `path` — file path
@@ -61,6 +59,24 @@ Replace only the catch body. Do not target the shared boundary line `} catch (er
 ```
 </example>
 
+<example name="replace whole block including closing brace">
+Replace the entire body of `alpha`, including its closing `}`. `end` **MUST** be {{hlineref 7 "}"}} because `content` includes `}`.
+```
+{
+  path: "util.ts",
+  edits: [{
+    loc: { block: { pos: {{hlineref 6 "\tlog();"}}, end: {{hlineref 7 "}"}} } },
+    content: [
+      "\tvalidate();",
+      "\tlog();",
+      "}"
+    ]
+  }]
+}
+```
+**Wrong**: using `end: {{hlineref 6 "\tlog();"}}` with the same content — line 7 (`}`) survives the replacement AND content emits `}`, producing two closing braces.
+</example>
+
 <example name="replace one line">
 ```
 {
@@ -108,9 +124,8 @@ When adding a sibling declaration, prefer `prepend` on the next declaration.
 - Make the minimum exact edit. Do not rewrite nearby code unless the consumed range requires it.
 - Use anchors exactly as `N#ID` from the latest `read` output.
 - `block` requires both `pos` and `end`. Other anchored ops require one anchor.
-- Replace exactly the owned span. If `content` re-emits content beyond `end`, it will duplicate.
-- **Boundary duplication trap**: when replacing a block, `end` must be the **last line of the block** (e.g. the closing `}`), not the last *content* line before it. Otherwise the closing delimiter survives and your replacement adds a second copy.
-- Do not target shared boundary lines such as `} else {`, `} catch (…) {`, `}),`, or `},{`.
+- When your replacement `content` ends with a closing delimiter (`}`, `*/`, `)`, `]`), verify `end` includes the original line carrying that delimiter. If `end` stops one line too early, the original delimiter survives and your content adds a second copy.
+- **Self-check**: compare the last line of `content` with the line immediately after `end` in the file. If they match (e.g., both are `}`), extend `end` to include that line.
 - For a block, either replace only the body or replace the whole block. Do not split block boundaries.
 - `content` must be literal file content with matching indentation. If the file uses tabs, use real tabs.
 - Do not use this tool to reformat or clean up unrelated code.

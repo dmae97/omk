@@ -822,7 +822,7 @@
 		},
 		"global.anthropic.claude-haiku-4-5-20251001-v1:0": {
 			"id": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
-			"name": "Claude Haiku 4.5 (Global)",
+			"name": "Claude Haiku 4.5",
 			"api": "bedrock-converse-stream",
 			"provider": "amazon-bedrock",
 			"baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
@@ -947,7 +947,7 @@
 		},
 		"global.anthropic.claude-sonnet-4-6": {
 			"id": "global.anthropic.claude-sonnet-4-6",
-			"name": "Claude Sonnet 4.6",
+			"name": "Claude Sonnet 4.6 (Global)",
 			"api": "bedrock-converse-stream",
 			"provider": "amazon-bedrock",
 			"baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
@@ -1801,7 +1801,7 @@
 		},
 		"us.anthropic.claude-opus-4-1-20250805-v1:0": {
 			"id": "us.anthropic.claude-opus-4-1-20250805-v1:0",
-			"name": "Claude Opus 4.1",
+			"name": "Claude Opus 4.1 (US)",
 			"api": "bedrock-converse-stream",
 			"provider": "amazon-bedrock",
 			"baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
@@ -25896,6 +25896,31 @@
 			"contextWindow": 222222,
 			"maxTokens": 8888
 		},
+		"qwen/qwen3.5-9b": {
+			"id": "qwen/qwen3.5-9b",
+			"name": "Qwen: Qwen3.5-9B",
+			"api": "openai-completions",
+			"provider": "nanogpt",
+			"baseUrl": "https://nano-gpt.com/api/v1",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0.049999999999999996,
+				"output": 0.15,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 256000,
+			"maxTokens": 65536,
+			"thinking": {
+				"mode": "effort",
+				"minLevel": "minimal",
+				"maxLevel": "high"
+			}
+		},
 		"qwen/qwen3.5-plus": {
 			"id": "qwen/qwen3.5-plus",
 			"name": "Qwen3.5 Plus",
@@ -37505,8 +37530,8 @@
 				"image"
 			],
 			"cost": {
-				"input": 0.19999999999999998,
-				"output": 0.19999999999999998,
+				"input": 0.09999999999999999,
+				"output": 0.09999999999999999,
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},

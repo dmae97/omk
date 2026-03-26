@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Implemented root path alias: bare `/` in tool inputs now resolves to the session working directory instead of the filesystem root
@@ -9,6 +8,7 @@
 
 ### Changed
 
+- Improved hashline tool documentation with clearer guidance on block boundary handling and closing delimiter duplication prevention
 - Updated screenshot path resolution to use `resolveToCwd` for consistent workspace-relative path handling
 - Updated hook editor hint text to include `ctrl+g external editor` option when using prompt style
 - Refactored question result formatting to consistently include question ID in output
