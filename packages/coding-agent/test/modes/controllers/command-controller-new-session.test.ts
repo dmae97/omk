@@ -19,9 +19,7 @@ type TestContainer = {
 type TestContext = InteractiveModeContext & {
 	chatContainer: TestContainer;
 	pendingMessagesContainer: TestContainer;
-	statusContainer: {
-		clear: () => void;
-	};
+	statusContainer: TestContainer;
 	pendingTools: {
 		clear: () => void;
 	};
@@ -39,7 +37,9 @@ type TestContext = InteractiveModeContext & {
 		terminal: { columns: number; rows: number };
 	};
 	session: {
-		newSession: () => Promise<boolean>;
+		canStartNewSession: () => Promise<boolean>;
+		newSession: (...args: unknown[]) => Promise<boolean>;
+		isStreaming: boolean;
 		isCompacting: boolean;
 		abortCompaction: () => void;
 	};
@@ -67,12 +67,18 @@ function createTrackedContainer(name: string, calls: string[], initialChildren: 
 	return container;
 }
 
-function createContext(options?: { withLoadingAnimation?: boolean }): { ctx: TestContext; calls: string[] } {
+function createContext(options?: {
+	withLoadingAnimation?: boolean;
+	canStartNewSessionResult?: boolean;
+	newSessionResult?: boolean;
+	isStreaming?: boolean;
+}): { ctx: TestContext; calls: string[] } {
 	const calls: string[] = [];
 	const chatContainer = createTrackedContainer("chatContainer", calls, [new Text("stale chat", 0, 0)]);
 	const pendingMessagesContainer = createTrackedContainer("pendingMessagesContainer", calls, [
 		new Text("pending", 0, 0),
 	]);
+	const statusContainer = createTrackedContainer("statusContainer", calls, [new Text("streaming status", 0, 0)]);
 	const loadingAnimation =
 		options?.withLoadingAnimation === false
 			? undefined
@@ -85,11 +91,7 @@ function createContext(options?: { withLoadingAnimation?: boolean }): { ctx: Tes
 	const ctx = {
 		chatContainer,
 		pendingMessagesContainer,
-		statusContainer: {
-			clear: vi.fn(() => {
-				calls.push("statusContainer.clear");
-			}),
-		},
+		statusContainer,
 		pendingTools: {
 			clear: vi.fn(() => {
 				calls.push("pendingTools.clear");
@@ -114,10 +116,15 @@ function createContext(options?: { withLoadingAnimation?: boolean }): { ctx: Tes
 			terminal: { columns: 120, rows: 40 },
 		},
 		session: {
+			canStartNewSession: vi.fn(async () => {
+				calls.push("session.canStartNewSession");
+				return options?.canStartNewSessionResult ?? true;
+			}),
 			newSession: vi.fn(async () => {
 				calls.push("session.newSession");
-				return true;
+				return options?.newSessionResult ?? true;
 			}),
+			isStreaming: options?.isStreaming ?? false,
 			isCompacting: false,
 			abortCompaction: vi.fn(),
 		},
@@ -150,12 +157,15 @@ describe("CommandController /new command", () => {
 		});
 		const controller = new CommandController(ctx);
 
-		await controller.handleClearCommand();
+		const result = await controller.handleClearCommand();
+		expect(result).toBe(true);
 
+		expect(ctx.session.canStartNewSession).toHaveBeenCalledTimes(1);
 		expect(ctx.session.newSession).toHaveBeenCalledTimes(1);
 		expect(ctx.session.abortCompaction).not.toHaveBeenCalled();
 		expect(ctx.chatContainer.clear).toHaveBeenCalledTimes(1);
 		expect(ctx.pendingMessagesContainer.clear).toHaveBeenCalledTimes(1);
+		expect(ctx.statusContainer.clear).toHaveBeenCalledTimes(1);
 		expect(ctx.pendingTools.clear).toHaveBeenCalledTimes(1);
 		expect(loadingAnimation?.stop).toHaveBeenCalledTimes(1);
 		expect(ctx.loadingAnimation).toBeUndefined();
@@ -167,23 +177,22 @@ describe("CommandController /new command", () => {
 		expect(ctx.reloadTodos).toHaveBeenCalledTimes(1);
 		expect(ctx.ui.requestRender).toHaveBeenCalledTimes(2);
 		expect(setSessionTerminalTitleMock).toHaveBeenCalledWith("Fresh session", "/tmp/project");
-		expect(calls).toEqual([
-			"loadingAnimation.stop",
-			"statusContainer.clear",
-			"session.newSession",
-			"setSessionTerminalTitle",
-			"statusLine.invalidate",
-			"statusLine.setSessionStartTime",
-			"updateEditorTopBorder",
-			"ui.requestRender",
-			"chatContainer.clear",
-			"pendingMessagesContainer.clear",
-			"pendingTools.clear",
-			"chatContainer.addChild",
-			"chatContainer.addChild",
-			"reloadTodos",
-			"ui.requestRender",
-		]);
+		expect(calls).toEqual(
+			expect.arrayContaining([
+				"session.canStartNewSession",
+				"session.newSession",
+				"loadingAnimation.stop",
+				"statusContainer.clear",
+				"setSessionTerminalTitle",
+				"statusLine.invalidate",
+				"statusLine.setSessionStartTime",
+				"updateEditorTopBorder",
+				"chatContainer.clear",
+				"pendingMessagesContainer.clear",
+				"pendingTools.clear",
+				"reloadTodos",
+			]),
+		);
 	});
 
 	it("clearCommand without loadingAnimation does not throw", async () => {
@@ -191,11 +200,67 @@ describe("CommandController /new command", () => {
 		const { ctx, calls } = createContext({ withLoadingAnimation: false });
 		const controller = new CommandController(ctx);
 
-		await expect(controller.handleClearCommand()).resolves.toBeUndefined();
+		await expect(controller.handleClearCommand()).resolves.toBe(true);
 
 		expect(ctx.loadingAnimation).toBeUndefined();
 		expect(calls).not.toContain("loadingAnimation.stop");
 		expect(ctx.ui.requestRender).toHaveBeenCalledTimes(2);
+	});
+
+	it("clearCommand keeps the current streaming session UI when newSession is cancelled", async () => {
+		setSessionTerminalTitleMock.mockReset();
+		const { ctx, calls } = createContext({ canStartNewSessionResult: false, isStreaming: true });
+		expect(ctx.session.isStreaming).toBe(true);
+		const loadingAnimation = ctx.loadingAnimation;
+		const controller = new CommandController(ctx);
+
+		const result = await controller.handleClearCommand();
+		expect(result).toBe(false);
+		expect(ctx.session.canStartNewSession).toHaveBeenCalledTimes(1);
+		expect(ctx.session.newSession).not.toHaveBeenCalled();
+		expect(setSessionTerminalTitleMock).not.toHaveBeenCalled();
+		expect(ctx.statusLine.invalidate).not.toHaveBeenCalled();
+		expect(ctx.statusLine.setSessionStartTime).not.toHaveBeenCalled();
+		expect(ctx.updateEditorTopBorder).not.toHaveBeenCalled();
+		expect(ctx.ui.requestRender).toHaveBeenCalledTimes(1);
+		expect(ctx.chatContainer.clear).not.toHaveBeenCalled();
+		expect(ctx.pendingMessagesContainer.clear).not.toHaveBeenCalled();
+		expect(ctx.statusContainer.clear).not.toHaveBeenCalled();
+		expect(ctx.pendingTools.clear).not.toHaveBeenCalled();
+		expect(ctx.reloadTodos).not.toHaveBeenCalled();
+		expect(loadingAnimation?.stop).not.toHaveBeenCalled();
+		expect(ctx.loadingAnimation).toBe(loadingAnimation);
+		expect(ctx.chatContainer.children).toHaveLength(3);
+		const existingMessage = ctx.chatContainer.children[0];
+		const spacer = ctx.chatContainer.children[1];
+		const errorMessage = ctx.chatContainer.children[2];
+		if (!(existingMessage instanceof Text)) {
+			throw new Error("Expected stale chat to remain visible");
+		}
+		if (!(spacer instanceof Spacer)) {
+			throw new Error("Expected spacer before cancellation message");
+		}
+		if (!(errorMessage instanceof Text)) {
+			throw new Error("Expected cancellation error message");
+		}
+		expect(existingMessage.render(120).join("\n")).toContain("stale chat");
+		expect(errorMessage.render(120).join("\n")).toContain("Error: New session cancelled");
+		expect(ctx.pendingMessagesContainer.children).toHaveLength(1);
+		expect(ctx.statusContainer.children).toHaveLength(1);
+		const existingStatus = ctx.statusContainer.children[0];
+		if (!(existingStatus instanceof Text)) {
+			throw new Error("Expected current status to remain visible");
+		}
+		expect(existingStatus.render(120).join("\n")).toContain("streaming status");
+		expect(ctx.compactionQueuedMessages as unknown).toEqual(["queued"]);
+		expect(ctx.streamingComponent as unknown).toEqual({ active: true });
+		expect(ctx.streamingMessage as unknown).toEqual({ active: true });
+		expect(calls).toEqual([
+			"session.canStartNewSession",
+			"chatContainer.addChild",
+			"chatContainer.addChild",
+			"ui.requestRender",
+		]);
 	});
 
 	it("clearCommand adds a new session started message after clearing chat", async () => {

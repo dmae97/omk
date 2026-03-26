@@ -5,6 +5,7 @@ import { SelectorController } from "@oh-my-pi/pi-coding-agent/modes/controllers/
 import { initTheme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/types";
 import type { SessionMessageEntry, SessionTreeNode } from "@oh-my-pi/pi-coding-agent/session/session-manager";
+import { type Component, Spacer, Text } from "@oh-my-pi/pi-tui";
 
 interface TestEditorContainer {
 	children: unknown[];
@@ -19,6 +20,12 @@ interface TestEditor {
 }
 
 type TestContext = InteractiveModeContext & {
+	chatContainer: {
+		children: Component[];
+		addChild(child: Component): void;
+	};
+	lastStatusSpacer: Spacer | undefined;
+	lastStatusText: Text | undefined;
 	editor: TestEditor;
 	editorContainer: TestEditorContainer;
 };
@@ -53,6 +60,13 @@ function createContext(tree: SessionTreeNode[], leafId: string | null) {
 			return [];
 		},
 	};
+	const chatContainer = {
+		children: [] as Component[],
+		addChild(child: Component) {
+			this.children.push(child);
+			calls.push("chatContainer.addChild");
+		},
+	};
 	const editorContainer: TestEditorContainer = {
 		children: [],
 		clear() {
@@ -72,9 +86,19 @@ function createContext(tree: SessionTreeNode[], leafId: string | null) {
 	});
 	const showStatus = vi.fn((message: string) => {
 		calls.push(`showStatus:${message}`);
+		const spacer = new Spacer(1);
+		const text = new Text(message, 1, 0);
+		chatContainer.addChild(spacer);
+		chatContainer.addChild(text);
+		ctx.lastStatusSpacer = spacer;
+		ctx.lastStatusText = text;
+		requestRender();
 	});
 
 	const ctx = {
+		chatContainer,
+		lastStatusSpacer: undefined,
+		lastStatusText: undefined,
 		editor,
 		editorContainer,
 		ui: {
@@ -128,12 +152,23 @@ describe("SelectorController tree selector", () => {
 
 		expect(showStatus).toHaveBeenCalledWith("No entries in session");
 		expect(ctx.editorContainer.children).toEqual([]);
+		expect(ctx.chatContainer.children).toHaveLength(2);
+		const statusMessage = ctx.chatContainer.children[1];
+		if (!(statusMessage instanceof Text)) {
+			throw new Error("Expected empty-tree status message");
+		}
+		expect(statusMessage.render(120).join("\n")).toContain("No entries in session");
 		expect(setFocus).not.toHaveBeenCalled();
-		expect(requestRender).not.toHaveBeenCalled();
-		expect(calls).toEqual(["showStatus:No entries in session"]);
+		expect(requestRender).toHaveBeenCalledTimes(1);
+		expect(calls).toEqual([
+			"showStatus:No entries in session",
+			"chatContainer.addChild",
+			"chatContainer.addChild",
+			"ui.requestRender",
+		]);
 	});
 
-	it("selecting the current leaf runs done() and restores the editor without an extra render", () => {
+	it("selecting the current leaf runs done() and restores the editor before the status render", () => {
 		const tree = [createTreeNode("entry-1", null, "hello")];
 		const { ctx, calls, editor, setFocus, requestRender, showStatus } = createContext(tree, "entry-1");
 		const controller = new SelectorController(ctx);
@@ -149,7 +184,13 @@ describe("SelectorController tree selector", () => {
 		expect(ctx.editorContainer.children).toEqual([editor]);
 		expect(setFocus).toHaveBeenLastCalledWith(editor);
 		expect(showStatus).toHaveBeenCalledWith("Already at this point");
-		expect(requestRender).toHaveBeenCalledTimes(1);
+		expect(ctx.chatContainer.children).toHaveLength(2);
+		const statusMessage = ctx.chatContainer.children[1];
+		if (!(statusMessage instanceof Text)) {
+			throw new Error("Expected current-leaf status message");
+		}
+		expect(statusMessage.render(120).join("\n")).toContain("Already at this point");
+		expect(requestRender).toHaveBeenCalledTimes(2);
 		expect(calls).toEqual([
 			"editorContainer.clear",
 			"editorContainer.addChild",
@@ -159,6 +200,9 @@ describe("SelectorController tree selector", () => {
 			"editorContainer.addChild",
 			"ui.setFocus.editor",
 			"showStatus:Already at this point",
+			"chatContainer.addChild",
+			"chatContainer.addChild",
+			"ui.requestRender",
 		]);
 	});
 });

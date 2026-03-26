@@ -549,14 +549,17 @@ export class TUI extends Container {
 		// appears right below the TUI output without a blank gap.
 		if (this.#previousLines.length > 0) {
 			const height = this.terminal.rows;
-			// How many content rows are visible in the current viewport
-			const visibleContentRows = Math.min(this.#previousLines.length, height);
+			// How many content rows are actually visible in the current viewport.
+			// After shrink paths, viewportTopRow can still point below historical content,
+			// so total previous line count overstates what is on screen.
+			const visibleContentRows = Math.max(0, Math.min(this.#previousLines.length - this.#viewportTopRow, height));
 			// Screen row of the last visible content line
 			const lastContentScreenRow = visibleContentRows - 1;
 			// Screen row where the hardware cursor currently sits
 			const cursorScreenRow = this.#hardwareCursorRow - this.#viewportTopRow;
-			// Move to the row just after the last visible content
-			const targetScreenRow = lastContentScreenRow + 1;
+			// Move to the last visible content row, then print a newline so the shell prompt lands
+			// immediately below the rendered viewport content without an extra blank row.
+			const targetScreenRow = Math.max(0, lastContentScreenRow);
 			const screenDelta = targetScreenRow - cursorScreenRow;
 			if (screenDelta > 0) {
 				this.terminal.write(`\x1b[${screenDelta}B`);
@@ -1217,7 +1220,7 @@ export class TUI extends Container {
 
 		// No line-level changes detected
 		if (firstChanged === -1) {
-			if (height > this.#previousHeight && this.#previousHeight > 0) {
+			if (height > this.#previousHeight && this.#previousHeight > 0 && !isTermuxSession()) {
 				repaintAfterHeightIncrease();
 				return;
 			}
