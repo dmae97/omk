@@ -221,7 +221,7 @@ describe("HookEditorComponent prompt-style mode", () => {
 		expect(lines[4]?.startsWith("> ")).toBe(true);
 		expect(rendered).toContain(" enter submit  esc cancel");
 		expect(rendered).not.toContain("shift+enter newline");
-		expect(rendered).not.toContain("ctrl+g external editor");
+		expect(rendered).toContain("ctrl+g external editor");
 	});
 
 	it("keeps the prompt gutter visible after typing in prompt-style mode", () => {
