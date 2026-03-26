@@ -190,6 +190,36 @@ describe("TUI terminal-state regressions", () => {
 			}
 		});
 
+		it("Termux no-op height increase does not replay overflowing viewport rows into scrollback", async () => {
+			const previousTermuxVersion = process.env.TERMUX_VERSION;
+			process.env.TERMUX_VERSION = "1";
+			const term = new VirtualTerminal(40, 4);
+			const tui = new TUI(term);
+			const component = new MutableLinesComponent(rows("ui-", 12));
+			tui.addChild(component);
+
+			try {
+				tui.start();
+				await settle(term);
+				expect(countMatches(term.getScrollBuffer(), /\bui-6\b/)).toBe(1);
+				expect(countMatches(term.getScrollBuffer(), /\bui-11\b/)).toBe(1);
+
+				term.resize(40, 6);
+				await settle(term);
+
+				expect(countMatches(term.getScrollBuffer(), /\bui-6\b/)).toBe(1);
+				expect(countMatches(term.getScrollBuffer(), /\bui-7\b/)).toBe(1);
+				expect(countMatches(term.getScrollBuffer(), /\bui-8\b/)).toBe(1);
+				expect(countMatches(term.getScrollBuffer(), /\bui-9\b/)).toBe(1);
+				expect(countMatches(term.getScrollBuffer(), /\bui-10\b/)).toBe(1);
+				expect(countMatches(term.getScrollBuffer(), /\bui-11\b/)).toBe(1);
+			} finally {
+				if (previousTermuxVersion === undefined) delete process.env.TERMUX_VERSION;
+				else process.env.TERMUX_VERSION = previousTermuxVersion;
+				tui.stop();
+			}
+		});
+
 		it("resizing width truncates visible lines without ghost wrap rows", async () => {
 			const term = new VirtualTerminal(30, 6);
 			const tui = new TUI(term);
@@ -1086,6 +1116,35 @@ describe("TUI terminal-state regressions", () => {
 				expect(visible(term)).toEqual(baseViewport);
 			} finally {
 				tui.stop();
+			}
+		});
+
+		it("stop after content shrink moves the prompt to the visible content boundary", async () => {
+			const term = new VirtualTerminal(40, 10);
+			const tui = new TUI(term);
+			const component = new MutableLinesComponent(rows("base-", 30));
+			tui.addChild(component);
+
+			try {
+				tui.start();
+				await settle(term);
+
+				component.setLines(rows("base-", 4));
+				tui.requestRender();
+				await settle(term);
+
+				tui.stop();
+				await settle(term);
+
+				const viewport = visible(term);
+				expect(viewport[0]?.trim()).toBe("base-0");
+				expect(viewport[3]?.trim()).toBe("base-3");
+				const active = (term as unknown as { xterm: { buffer: { active: { cursorY: number; baseY: number } } } })
+					.xterm.buffer.active;
+				expect(active.baseY).toBe(30);
+				expect(active.cursorY).toBe(4);
+			} finally {
+				// stop() already ran in the main flow; keep finally for symmetry if the test fails early
 			}
 		});
 

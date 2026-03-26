@@ -561,20 +561,38 @@ export class CommandController {
 		this.ctx.showError("Usage: /memory <view|clear|reset|enqueue|rebuild>");
 	}
 
-	async handleClearCommand(): Promise<void> {
-		if (this.ctx.loadingAnimation) {
-			this.ctx.loadingAnimation.stop();
-			this.ctx.loadingAnimation = undefined;
-		}
-		this.ctx.statusContainer.clear();
-
+	async handleClearCommand(options?: { beforeSwitch?: () => Promise<void> | void }): Promise<boolean> {
 		if (this.ctx.session.isCompacting) {
 			this.ctx.session.abortCompaction();
 			while (this.ctx.session.isCompacting) {
 				await Bun.sleep(10);
 			}
 		}
-		await this.ctx.session.newSession();
+
+		const switchApproved = await this.ctx.session.canStartNewSession();
+		if (!switchApproved) {
+			this.ctx.chatContainer.addChild(new Spacer(1));
+			this.ctx.chatContainer.addChild(new Text(theme.fg("error", "Error: New session cancelled"), 1, 0));
+			this.ctx.ui.requestRender();
+			return false;
+		}
+
+		await options?.beforeSwitch?.();
+
+		if (this.ctx.loadingAnimation) {
+			this.ctx.loadingAnimation.stop();
+			this.ctx.loadingAnimation = undefined;
+		}
+		this.ctx.statusContainer.clear();
+
+		const success = await this.ctx.session.newSession(undefined, { skipBeforeSwitchCheck: true });
+		if (!success) {
+			this.ctx.chatContainer.addChild(new Spacer(1));
+			this.ctx.chatContainer.addChild(new Text(theme.fg("error", "Error: New session cancelled"), 1, 0));
+			this.ctx.ui.requestRender();
+			return false;
+		}
+
 		setSessionTerminalTitle(this.ctx.sessionManager.getSessionName(), this.ctx.sessionManager.getCwd());
 
 		this.ctx.statusLine.invalidate();
@@ -595,6 +613,7 @@ export class CommandController {
 		);
 		await this.ctx.reloadTodos();
 		this.ctx.ui.requestRender();
+		return true;
 	}
 
 	async handleForkCommand(): Promise<void> {

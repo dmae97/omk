@@ -177,7 +177,7 @@ export interface InteractiveModeContext {
 	handleHotkeysCommand(): void;
 	handleDumpCommand(): void;
 	handleDebugTranscriptCommand(): Promise<void>;
-	handleClearCommand(): Promise<void>;
+	handleClearCommand(options?: { beforeSwitch?: () => Promise<void> | void }): Promise<boolean>;
 	handleForkCommand(): Promise<void>;
 	handleBashCommand(command: string, excludeFromContext?: boolean): Promise<void>;
 	handlePythonCommand(code: string, excludeFromContext?: boolean): Promise<void>;
