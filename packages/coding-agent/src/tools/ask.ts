@@ -354,14 +354,15 @@ async function askSingleQuestion(
 }
 
 function formatQuestionResult(result: QuestionResult): string {
-	const parts: string[] = [];
-	if (result.selectedOptions.length > 0) {
-		parts.push(result.multi ? `[${result.selectedOptions.join(", ")}]` : result.selectedOptions[0]!);
-	}
 	if (result.customInput !== undefined) {
-		parts.push(`"${result.customInput}"`);
+		return `${result.id}: "${result.customInput}"`;
 	}
-	return parts.length > 0 ? `${result.id}: ${parts.join(", ")}` : `${result.id}: (cancelled)`;
+	if (result.selectedOptions.length > 0) {
+		return result.multi
+			? `${result.id}: [${result.selectedOptions.join(", ")}]`
+			: `${result.id}: ${result.selectedOptions[0]}`;
+	}
+	return `${result.id}: (cancelled)`;
 }
 
 // =============================================================================

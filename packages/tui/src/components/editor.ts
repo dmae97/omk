@@ -281,7 +281,6 @@ interface LayoutLine {
 	text: string;
 	hasCursor: boolean;
 	cursorPos?: number;
-	isLogicalLineStart: boolean;
 }
 
 export interface EditorTheme {
@@ -1232,7 +1231,6 @@ export class Editor implements Component, Focusable {
 				text: "",
 				hasCursor: true,
 				cursorPos: 0,
-				isLogicalLineStart: true,
 			});
 			return layoutLines;
 		}
@@ -1250,13 +1248,11 @@ export class Editor implements Component, Focusable {
 						text: line,
 						hasCursor: true,
 						cursorPos: this.#state.cursorCol,
-						isLogicalLineStart: true,
 					});
 				} else {
 					layoutLines.push({
 						text: line,
 						hasCursor: false,
-						isLogicalLineStart: true,
 					});
 				}
 			} else {
@@ -1300,13 +1296,11 @@ export class Editor implements Component, Focusable {
 							text: chunk.text,
 							hasCursor: true,
 							cursorPos: adjustedCursorPos,
-							isLogicalLineStart: chunkIndex === 0,
 						});
 					} else {
 						layoutLines.push({
 							text: chunk.text,
 							hasCursor: false,
-							isLogicalLineStart: chunkIndex === 0,
 						});
 					}
 				}

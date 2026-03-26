@@ -62,7 +62,7 @@ export class HookEditorComponent extends Container {
 
 		// Hint
 		const hint = this.#promptStyle
-			? "enter submit  esc cancel"
+			? "enter submit  esc cancel  ctrl+g external editor"
 			: "ctrl+enter submit  esc cancel  ctrl+g external editor";
 		this.addChild(new Text(theme.fg("dim", hint), 1, 0));
 

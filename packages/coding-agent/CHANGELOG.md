@@ -1,10 +1,14 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `browser.screenshotDir` setting to configure screenshot save directory with path expansion
+
+### Changed
+
+- Updated hook editor hint text to include `ctrl+g external editor` option when using prompt style
+- Refactored question result formatting to consistently include question ID in output
 
 ## [13.15.3] - 2026-03-26
 

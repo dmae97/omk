@@ -69,9 +69,7 @@ export type RoleInfo = ModelRoleInfo;
  * entries across settings.
  */
 export function getKnownRoleIds(settings: Settings): string[] {
-	// Avoid MODEL_ROLE_IDS here: this helper is reached during selector initialization,
-	// and model-registry participates in import cycles while the module is still evaluating.
-	const roles = ["default", "smol", "slow", "vision", "plan", "commit", "task"];
+	const roles = [...MODEL_ROLE_IDS] as string[];
 	const seen = new Set<string>(roles);
 	const addRole = (role: string) => {
 		if (seen.has(role)) return;
@@ -832,7 +830,7 @@ export class ModelRegistry {
 		this.#modelOverrides = modelOverrides;
 
 		this.#addImplicitDiscoverableProviders(configuredProviders);
-		const builtInModels = this.#applyHardcodedModelPolicies(this.#loadBuiltInModels(overrides, modelOverrides));
+		const builtInModels = this.#applyHardcodedModelPolicies(this.#loadBuiltInModels(overrides));
 		const cachedDiscoveries = this.#applyHardcodedModelPolicies(this.#loadCachedDiscoverableModels());
 		const resolvedDefaults = this.#mergeResolvedModels(builtInModels, cachedDiscoveries);
 		const combined = this.#mergeCustomModels(resolvedDefaults, this.#customModelOverlays);
@@ -840,31 +838,21 @@ export class ModelRegistry {
 		this.#models = this.#applyModelOverrides(combined, this.#modelOverrides);
 	}
 
-	/** Load built-in models, applying provider and per-model overrides */
-	#loadBuiltInModels(
-		overrides: Map<string, ProviderOverride>,
-		modelOverrides: Map<string, Map<string, ModelOverride>>,
-	): Model<Api>[] {
+	/** Load built-in models, applying provider-level overrides only.
+	 *  Per-model overrides are applied later by #applyModelOverrides. */
+	#loadBuiltInModels(overrides: Map<string, ProviderOverride>): Model<Api>[] {
 		return getBundledProviders().flatMap(provider => {
 			const models = getBundledModels(provider as Parameters<typeof getBundledModels>[0]) as Model<Api>[];
 			const providerOverride = overrides.get(provider);
-			const perModelOverrides = modelOverrides.get(provider);
 
 			return models.map(m => {
-				let model = m;
-				if (providerOverride) {
-					model = {
-						...model,
-						baseUrl: providerOverride.baseUrl ?? model.baseUrl,
-						headers: providerOverride.headers ? { ...model.headers, ...providerOverride.headers } : model.headers,
-						compat: mergeCompat(model.compat, providerOverride.compat),
-					};
-				}
-				const modelOverride = perModelOverrides?.get(m.id);
-				if (modelOverride) {
-					model = applyModelOverride(model, modelOverride);
-				}
-				return model;
+				if (!providerOverride) return m;
+				return {
+					...m,
+					baseUrl: providerOverride.baseUrl ?? m.baseUrl,
+					headers: providerOverride.headers ? { ...m.headers, ...providerOverride.headers } : m.headers,
+					compat: mergeCompat(m.compat, providerOverride.compat),
+				};
 			});
 		});
 	}
