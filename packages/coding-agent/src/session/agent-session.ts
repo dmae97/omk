@@ -2944,26 +2944,6 @@ export class AgentSession {
 		this.#promptInFlightCount = 0;
 	}
 
-	async #canSwitchSession(options: {
-		reason: "new" | "fork" | "resume";
-		targetSessionFile?: string;
-	}): Promise<boolean> {
-		if (!this.#extensionRunner?.hasHandlers("session_before_switch")) {
-			return true;
-		}
-		const result = (await this.#extensionRunner.emit({
-			type: "session_before_switch",
-			reason: options.reason,
-			targetSessionFile: options.targetSessionFile,
-		})) as SessionBeforeSwitchResult | undefined;
-
-		return !result?.cancel;
-	}
-
-	async canStartNewSession(): Promise<boolean> {
-		return this.#canSwitchSession({ reason: "new" });
-	}
-
 	/**
 	 * Start a new session, optionally with initial messages and parent tracking.
 	 * Clears all messages and starts a new session.
@@ -2971,7 +2951,7 @@ export class AgentSession {
 	 * @param options - Optional initial messages and parent session path
 	 * @returns true if completed, false if cancelled by hook
 	 */
-	async newSession(options?: NewSessionOptions, internal?: { skipBeforeSwitchCheck?: boolean }): Promise<boolean> {
+	async newSession(options?: NewSessionOptions): Promise<boolean> {
 		const previousSessionFile = this.sessionFile;
 		const nextDiscoverySessionToolNames = this.#mcpDiscoveryEnabled
 			? [
@@ -2980,8 +2960,16 @@ export class AgentSession {
 				]
 			: undefined;
 
-		if (!internal?.skipBeforeSwitchCheck && !(await this.#canSwitchSession({ reason: "new" }))) {
-			return false;
+		// Emit session_before_switch event with reason "new" (can be cancelled)
+		if (this.#extensionRunner?.hasHandlers("session_before_switch")) {
+			const result = (await this.#extensionRunner.emit({
+				type: "session_before_switch",
+				reason: "new",
+			})) as SessionBeforeSwitchResult | undefined;
+
+			if (result?.cancel) {
+				return false;
+			}
 		}
 
 		this.#disconnectFromAgent();
@@ -3044,8 +3032,16 @@ export class AgentSession {
 	async fork(): Promise<boolean> {
 		const previousSessionFile = this.sessionFile;
 
-		if (!(await this.#canSwitchSession({ reason: "fork" }))) {
-			return false;
+		// Emit session_before_switch event with reason "fork" (can be cancelled)
+		if (this.#extensionRunner?.hasHandlers("session_before_switch")) {
+			const result = (await this.#extensionRunner.emit({
+				type: "session_before_switch",
+				reason: "fork",
+			})) as SessionBeforeSwitchResult | undefined;
+
+			if (result?.cancel) {
+				return false;
+			}
 		}
 
 		// Flush current session to ensure all entries are written
@@ -5209,8 +5205,17 @@ export class AgentSession {
 		const switchingToDifferentSession = previousSessionFile
 			? path.resolve(previousSessionFile) !== path.resolve(sessionPath)
 			: true;
-		if (!(await this.#canSwitchSession({ reason: "resume", targetSessionFile: sessionPath }))) {
-			return false;
+		// Emit session_before_switch event (can be cancelled)
+		if (this.#extensionRunner?.hasHandlers("session_before_switch")) {
+			const result = (await this.#extensionRunner.emit({
+				type: "session_before_switch",
+				reason: "resume",
+				targetSessionFile: sessionPath,
+			})) as SessionBeforeSwitchResult | undefined;
+
+			if (result?.cancel) {
+				return false;
+			}
 		}
 
 		this.#disconnectFromAgent();

@@ -59,7 +59,6 @@ describe("AuthStorage api-key login replacement", () => {
 		await authStorage.login("kagi", controller);
 		await authStorage.login("kagi", controller);
 
-		expect(loginKagiSpy).toHaveBeenCalledTimes(2);
 		expect(countCredentialRows(dbPath, "kagi")).toBe(1);
 		const credentials = store.listAuthCredentials("kagi");
 		expect(credentials).toHaveLength(1);

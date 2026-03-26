@@ -54,14 +54,6 @@ export type TodoPhase = {
 	tasks: TodoItem[];
 };
 
-export type ClearCommandRollback = () => Promise<void> | void;
-export type ClearCommandCheck = () => Promise<ClearCommandRollback | undefined> | ClearCommandRollback | undefined;
-
-export interface ClearCommandOptions {
-	beforeSwitchCheck?: ClearCommandCheck;
-	beforeSwitch?: () => Promise<void> | void;
-}
-
 export interface InteractiveModeContext {
 	// UI access
 	ui: TUI;
@@ -185,7 +177,7 @@ export interface InteractiveModeContext {
 	handleHotkeysCommand(): void;
 	handleDumpCommand(): void;
 	handleDebugTranscriptCommand(): Promise<void>;
-	handleClearCommand(options?: ClearCommandOptions): Promise<boolean>;
+	handleClearCommand(): Promise<void>;
 	handleForkCommand(): Promise<void>;
 	handleBashCommand(command: string, excludeFromContext?: boolean): Promise<void>;
 	handlePythonCommand(code: string, excludeFromContext?: boolean): Promise<void>;
