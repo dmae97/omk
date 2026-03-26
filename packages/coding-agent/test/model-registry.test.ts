@@ -322,6 +322,25 @@ describe("ModelRegistry", () => {
 			expect(sonnetModels[0].baseUrl).toBe("https://my-proxy.example.com/v1");
 		});
 
+		test("custom same-id replacement does not keep bundled headers", () => {
+			writeRawModelsJson({
+				"github-copilot": {
+					baseUrl: "https://proxy.example.com/v1",
+					headers: { "X-Proxy": "proxy" },
+					apiKey: "TEST_KEY",
+					api: "openai-completions",
+					models: [{ id: "gpt-4o" }],
+				},
+			});
+
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			const model = registry.find("github-copilot", "gpt-4o");
+
+			expect(model?.headers).toEqual({ "X-Proxy": "proxy" });
+			expect(model?.headers?.["User-Agent"]).toBeUndefined();
+			expect(model?.headers?.["Editor-Version"]).toBeUndefined();
+		});
+
 		test("custom provider with same name as built-in does not affect other built-in providers", () => {
 			writeModelsJson({
 				anthropic: providerConfig("https://my-proxy.example.com/v1", [{ id: "claude-custom" }]),
@@ -638,7 +657,7 @@ describe("ModelRegistry", () => {
 			expect(discovered?.headers?.["X-Model"]).toBeUndefined();
 		});
 
-		test("provider compat overlays preserve bundled model compat", () => {
+		test("same-id replacement uses configured compat without bundled compat leak", () => {
 			writeRawModelsJson({
 				"minimax-code": {
 					baseUrl: "https://proxy.example.com/v1",
@@ -653,8 +672,8 @@ describe("ModelRegistry", () => {
 
 			const registry = new ModelRegistry(authStorage, modelsJsonPath);
 			const model = registry.find("minimax-code", "MiniMax-M2.5");
-			expect(model?.compat?.thinkingFormat).toBe("zai");
-			expect(model?.compat?.reasoningContentField).toBe("reasoning_content");
+			expect(model?.compat?.thinkingFormat).toBeUndefined();
+			expect(model?.compat?.reasoningContentField).toBeUndefined();
 			expect(model?.compat?.extraBody).toEqual({ source: "proxy" });
 		});
 

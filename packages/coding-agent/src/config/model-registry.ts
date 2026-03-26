@@ -839,26 +839,27 @@ export class ModelRegistry {
 		for (const customModel of customModels) {
 			const existingIndex = merged.findIndex(m => m.provider === customModel.provider && m.id === customModel.id);
 			if (existingIndex >= 0) {
+				const existingModel = merged[existingIndex];
 				merged[existingIndex] = enrichModelThinking({
-					...merged[existingIndex],
+					...existingModel,
 					id: customModel.id,
 					provider: customModel.provider,
 					api: customModel.api,
 					baseUrl: customModel.baseUrl,
-					name: customModel.name ?? merged[existingIndex].name,
-					reasoning: customModel.reasoning ?? merged[existingIndex].reasoning,
-					thinking: customModel.thinking ?? merged[existingIndex].thinking,
-					input: customModel.input ?? merged[existingIndex].input,
-					cost: customModel.cost ?? merged[existingIndex].cost,
-					contextWindow: customModel.contextWindow ?? merged[existingIndex].contextWindow,
-					maxTokens: customModel.maxTokens ?? merged[existingIndex].maxTokens,
-					headers: customModel.headers
-						? { ...merged[existingIndex].headers, ...customModel.headers }
-						: merged[existingIndex].headers,
-					compat: mergeCompat(merged[existingIndex].compat, customModel.compat),
-					contextPromotionTarget:
-						customModel.contextPromotionTarget ?? merged[existingIndex].contextPromotionTarget,
-					premiumMultiplier: customModel.premiumMultiplier ?? merged[existingIndex].premiumMultiplier,
+					name: customModel.name ?? existingModel.name,
+					reasoning: customModel.reasoning ?? existingModel.reasoning,
+					thinking: customModel.thinking ?? existingModel.thinking,
+					input: customModel.input ?? existingModel.input,
+					cost: customModel.cost ?? existingModel.cost,
+					contextWindow: customModel.contextWindow ?? existingModel.contextWindow,
+					maxTokens: customModel.maxTokens ?? existingModel.maxTokens,
+					// Same-id custom definitions replace bundled transport behavior. Provider-level
+					// headers/compat were already folded into customModel during parsing; do not
+					// re-merge bundled transport metadata here.
+					headers: customModel.headers,
+					compat: customModel.compat,
+					contextPromotionTarget: customModel.contextPromotionTarget ?? existingModel.contextPromotionTarget,
+					premiumMultiplier: customModel.premiumMultiplier ?? existingModel.premiumMultiplier,
 				} as Model<Api>);
 			} else {
 				merged.push(finalizeCustomModel(customModel, { useDefaults: true }));
