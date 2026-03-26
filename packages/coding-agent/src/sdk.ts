@@ -796,6 +796,12 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		}),
 	);
 
+	// collect alwaysApply rules — full content injected into system prompt
+	const alwaysApplyRules = rulesResult.items.filter((rule: Rule) => {
+		if (registeredTtsrRuleNames.has(rule.name)) return false;
+		return rule.alwaysApply === true;
+	});
+
 	const contextFiles = await logger.timeAsync(
 		"discoverContextFiles",
 		async () => options.contextFiles ?? (await discoverContextFiles(cwd, agentDir)),
@@ -930,7 +936,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	);
 	internalRouter.register(
 		new RuleProtocolHandler({
-			getRules: () => rulebookRules,
+			getRules: () => [...rulebookRules, ...alwaysApplyRules],
 		}),
 	);
 	internalRouter.register(new PiProtocolHandler());
@@ -1252,6 +1258,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			tools: promptTools,
 			toolNames,
 			rules: rulebookRules,
+			alwaysApplyRules,
 			skillsSettings: settings.getGroup("skills"),
 			appendSystemPrompt: appendPrompt,
 			repeatToolDescriptions,
@@ -1272,6 +1279,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				tools: promptTools,
 				toolNames,
 				rules: rulebookRules,
+				alwaysApplyRules,
 				skillsSettings: settings.getGroup("skills"),
 				customPrompt: options.systemPrompt,
 				appendSystemPrompt: appendPrompt,
