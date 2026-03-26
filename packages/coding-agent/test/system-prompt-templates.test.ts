@@ -188,7 +188,10 @@ describe("system Handlebars prompt templates", () => {
 		await withTempDir(async dir => {
 			const configDir = path.join(dir, ".agent");
 			await fs.mkdir(configDir, { recursive: true });
-			await fs.writeFile(path.join(configDir, "SYSTEM.md"), ["Project instructions", "", duplicateRule, "", "Trailing note"].join("\n"));
+			await fs.writeFile(
+				path.join(configDir, "SYSTEM.md"),
+				["Project instructions", "", duplicateRule, "", "Trailing note"].join("\n"),
+			);
 
 			const prompt = await buildSystemPrompt({
 				cwd: dir,

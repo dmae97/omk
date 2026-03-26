@@ -1030,9 +1030,11 @@ export class TUI extends Container {
 			this.#terminalStateTrusted = true;
 		};
 
-		const previousVisibleRows = Math.max(0, Math.min(this.#previousHeight, this.#previousLines.length - prevViewportTop));
+		const previousVisibleRows = Math.max(
+			0,
+			Math.min(this.#previousHeight, this.#previousLines.length - prevViewportTop),
+		);
 		const seedScrollRows = previousVisibleRows > 0 ? previousVisibleRows : height;
-
 
 		// First paint: no prior trusted TUI frame exists. Preserve whatever is currently
 		// visible by scrolling only the rows we know are occupied; otherwise fall back to

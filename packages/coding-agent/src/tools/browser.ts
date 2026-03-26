@@ -23,7 +23,6 @@ import { formatDimensionNote, resizeImage } from "../utils/image-resize";
 import { htmlToBasicMarkdown } from "../web/scrapers/types";
 import type { OutputMeta } from "./output-meta";
 import { expandPath } from "./path-utils";
-import { formatSavedScreenshotLine } from "./render-utils";
 import stealthTamperingScript from "./puppeteer/00_stealth_tampering.txt" with { type: "text" };
 import stealthActivityScript from "./puppeteer/01_stealth_activity.txt" with { type: "text" };
 import stealthHairlineScript from "./puppeteer/02_stealth_hairline.txt" with { type: "text" };
@@ -38,6 +37,7 @@ import stealthPluginsScript from "./puppeteer/10_stealth_plugins.txt" with { typ
 import stealthHardwareScript from "./puppeteer/11_stealth_hardware.txt" with { type: "text" };
 import stealthCodecsScript from "./puppeteer/12_stealth_codecs.txt" with { type: "text" };
 import stealthWorkerScript from "./puppeteer/13_stealth_worker.txt" with { type: "text" };
+import { formatSavedScreenshotLine } from "./render-utils";
 import { ToolAbortError, ToolError, throwIfAborted } from "./tool-errors";
 import { toolResult } from "./tool-result";
 import { clampTimeout } from "./tool-timeouts";

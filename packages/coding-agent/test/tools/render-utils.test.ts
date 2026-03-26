@@ -1,7 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import * as os from "node:os";
 import * as path from "node:path";
-import { dedupeParseErrors, formatParseErrors, formatSavedScreenshotLine } from "@oh-my-pi/pi-coding-agent/tools/render-utils";
+import {
+	dedupeParseErrors,
+	formatParseErrors,
+	formatSavedScreenshotLine,
+} from "@oh-my-pi/pi-coding-agent/tools/render-utils";
 
 describe("parse error formatting", () => {
 	it("deduplicates parse errors while preserving order", () => {

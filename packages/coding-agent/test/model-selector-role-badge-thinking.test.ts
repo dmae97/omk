@@ -39,16 +39,14 @@ function createSelector(model: Model, settings: Settings): ModelSelectorComponen
 
 describe("ModelSelector role badge thinking display", () => {
 	beforeAll(() => {
-		setThemeInstance(
-			{
-				fg: (_color: string, text: string) => text,
-				bg: (_color: string, text: string) => text,
-				bold: (text: string) => text,
-				getFgAnsi: () => "\x1b[38;5;1m",
-				nav: { cursor: ">" },
-				boxSharp: { horizontal: "-" },
-			} as never,
-		);
+		setThemeInstance({
+			fg: (_color: string, text: string) => text,
+			bg: (_color: string, text: string) => text,
+			bold: (text: string) => text,
+			getFgAnsi: () => "\x1b[38;5;1m",
+			nav: { cursor: ">" },
+			boxSharp: { horizontal: "-" },
+		} as never);
 	});
 
 	test("renders per-role thinking labels with inherit mode to avoid badge ambiguity", async () => {

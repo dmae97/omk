@@ -11,12 +11,12 @@ import { $ } from "bun";
 import { contextFileCapability } from "./capability/context-file";
 import { systemPromptCapability } from "./capability/system-prompt";
 import { renderPromptTemplate } from "./config/prompt-templates";
-import { formatPromptContent } from "./utils/prompt-format";
 import type { SkillsSettings } from "./config/settings";
 import { type ContextFile, loadCapability, type SystemPrompt as SystemPromptFile } from "./discovery";
 import { loadSkills, type Skill } from "./extensibility/skills";
 import customSystemPromptTemplate from "./prompts/system/custom-system-prompt.md" with { type: "text" };
 import systemPromptTemplate from "./prompts/system/system-prompt.md" with { type: "text" };
+import { formatPromptContent } from "./utils/prompt-format";
 
 interface AlwaysApplyRule {
 	name: string;
@@ -56,7 +56,9 @@ function dedupeAlwaysApplyRules(
 ): AlwaysApplyRule[] {
 	if (!alwaysApplyRules || alwaysApplyRules.length === 0) return [];
 
-	return alwaysApplyRules.filter(rule => !promptSources.some(source => promptSourceContainsRule(source, rule.content)));
+	return alwaysApplyRules.filter(
+		rule => !promptSources.some(source => promptSourceContainsRule(source, rule.content)),
+	);
 }
 
 function firstNonEmpty(...values: (string | undefined | null)[]): string | null {

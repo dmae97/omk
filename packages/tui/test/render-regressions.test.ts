@@ -66,7 +66,8 @@ function trailingBlanks(lines: string[]): number {
 }
 
 function activeBuffer(term: VirtualTerminal): { baseY: number; cursorY: number } {
-	return (term as unknown as { xterm: { buffer: { active: { baseY: number; cursorY: number } } } }).xterm.buffer.active;
+	return (term as unknown as { xterm: { buffer: { active: { baseY: number; cursorY: number } } } }).xterm.buffer
+		.active;
 }
 
 describe("TUI terminal-state regressions", () => {
