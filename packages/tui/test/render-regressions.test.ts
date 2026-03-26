@@ -65,6 +65,10 @@ function trailingBlanks(lines: string[]): number {
 	return count;
 }
 
+function activeBuffer(term: VirtualTerminal): { baseY: number; cursorY: number } {
+	return (term as unknown as { xterm: { buffer: { active: { baseY: number; cursorY: number } } } }).xterm.buffer.active;
+}
+
 describe("TUI terminal-state regressions", () => {
 	describe("cursor + differential stability", () => {
 		it("keeps stable output across repeated no-op renders", async () => {
@@ -216,6 +220,31 @@ describe("TUI terminal-state regressions", () => {
 			} finally {
 				if (previousTermuxVersion === undefined) delete process.env.TERMUX_VERSION;
 				else process.env.TERMUX_VERSION = previousTermuxVersion;
+				tui.stop();
+			}
+		});
+
+		it("height increase after content shrink scrolls only the visible rows", async () => {
+			const term = new VirtualTerminal(40, 10);
+			const tui = new TUI(term);
+			const component = new MutableLinesComponent(rows("ui-", 30));
+			tui.addChild(component);
+
+			try {
+				tui.start();
+				await settle(term);
+
+				component.setLines(rows("ui-", 3));
+				tui.requestRender();
+				await settle(term);
+
+				const beforeBaseY = activeBuffer(term).baseY;
+				term.resize(40, 12);
+				await settle(term);
+
+				expect(activeBuffer(term).baseY).toBe(beforeBaseY);
+				expect(visible(term).slice(0, 3)).toEqual(["ui-0", "ui-1", "ui-2"]);
+			} finally {
 				tui.stop();
 			}
 		});
@@ -1145,6 +1174,34 @@ describe("TUI terminal-state regressions", () => {
 				expect(active.cursorY).toBe(4);
 			} finally {
 				// stop() already ran in the main flow; keep finally for symmetry if the test fails early
+			}
+		});
+
+		it("restart after content shrink preserves history without seeding blank scrollback", async () => {
+			const term = new VirtualTerminal(40, 10);
+			const tui = new TUI(term);
+			const component = new MutableLinesComponent(rows("base-", 30));
+			tui.addChild(component);
+
+			try {
+				tui.start();
+				await settle(term);
+
+				component.setLines(rows("base-", 3));
+				tui.requestRender();
+				await settle(term);
+
+				tui.stop();
+				await settle(term);
+
+				const beforeBaseY = activeBuffer(term).baseY;
+				tui.start();
+				await settle(term);
+
+				expect(activeBuffer(term).baseY).toBe(beforeBaseY);
+				expect(visible(term).slice(0, 3)).toEqual(["base-0", "base-1", "base-2"]);
+			} finally {
+				tui.stop();
 			}
 		});
 

@@ -1030,14 +1030,21 @@ export class TUI extends Container {
 			this.#terminalStateTrusted = true;
 		};
 
-		// First paint: no prior TUI frame exists. Clear visible display (not scrollback),
-		// then write the full logical transcript.
+		const previousVisibleRows = Math.max(0, Math.min(this.#previousHeight, this.#previousLines.length - prevViewportTop));
+		const seedScrollRows = previousVisibleRows > 0 ? previousVisibleRows : height;
+
+
+		// First paint: no prior trusted TUI frame exists. Preserve whatever is currently
+		// visible by scrolling only the rows we know are occupied; otherwise fall back to
+		// the full viewport for the initial shell->TUI takeover path.
 		const seedTranscript = (): void => {
 			let buffer = "\x1b[?2026h"; // Begin synchronized output
-			// Push existing viewport content into scrollback by scrolling it off.
-			// Move to the last screen row, then emit newlines to scroll everything up.
-			buffer += `\x1b[${height};1H`; // Move to last row
-			buffer += "\n".repeat(height); // Scroll all visible lines into scrollback
+			if (seedScrollRows > 0) {
+				// Push existing viewport content into scrollback by scrolling it off.
+				// Move to the last occupied screen row, then emit newlines for exactly those rows.
+				buffer += `\x1b[${seedScrollRows};1H`;
+				buffer += "\n".repeat(seedScrollRows);
+			}
 			buffer += "\x1b[H"; // Home cursor
 			const reset = SEGMENT_RESET;
 			for (let i = 0; i < newLines.length; i++) {
@@ -1062,9 +1069,9 @@ export class TUI extends Container {
 			const newVpTop = Math.max(0, newLines.length - height);
 			const scrollDelta = Math.max(0, newVpTop - oldVpTop);
 			if (scrollDelta > 0) {
-				// Move cursor to bottom of visible area and emit newlines to scroll
+				// Move cursor to the last row that is actually occupied on screen before scrolling.
 				const curScreenRow = hardwareCursorRow - prevViewportTop;
-				const usedRows = Math.min(height, this.#maxLinesRendered);
+				const usedRows = previousVisibleRows;
 				const toBottom = usedRows - 1 - curScreenRow;
 				if (toBottom > 0) buffer += `\x1b[${toBottom}B`;
 				buffer += "\r\n".repeat(scrollDelta);
@@ -1106,9 +1113,9 @@ export class TUI extends Container {
 		const repaintAfterHeightIncrease = (): void => {
 			logRedraw(`height increase (${this.#previousHeight} -> ${height})`);
 			let buffer = "\x1b[?2026h"; // Begin synchronized output
-			// Scroll current visible content into scrollback
+			// Scroll only the rows that are actually visible now.
 			const curScreenRow = hardwareCursorRow - prevViewportTop;
-			const screenRows = Math.min(height, this.#maxLinesRendered);
+			const screenRows = previousVisibleRows;
 			if (screenRows > 0) {
 				const toBottom = screenRows - 1 - curScreenRow;
 				if (toBottom > 0) buffer += `\x1b[${toBottom}B`;
