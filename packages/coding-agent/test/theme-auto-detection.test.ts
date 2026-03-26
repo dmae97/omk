@@ -6,11 +6,44 @@ const originalPlatform = process.platform;
 const originalColorfgbg = Bun.env.COLORFGBG;
 const originalZellij = Bun.env.ZELLIJ;
 
+type ThemeTestGlobals = {
+	platform?: NodeJS.Platform;
+	colorfgbg?: string;
+	zellij?: string;
+};
+
+const withThemeTestGlobals = (globals: ThemeTestGlobals = {}) => {
+	Object.defineProperty(process, "platform", {
+		value: globals.platform ?? "darwin",
+		configurable: true,
+		writable: true,
+	});
+
+	if (globals.colorfgbg === undefined) delete Bun.env.COLORFGBG;
+	else Bun.env.COLORFGBG = globals.colorfgbg;
+
+	if (globals.zellij === undefined) delete Bun.env.ZELLIJ;
+	else Bun.env.ZELLIJ = globals.zellij;
+
+	return {
+		[Symbol.dispose]() {
+			themeModule.stopThemeWatcher();
+			Object.defineProperty(process, "platform", {
+				value: originalPlatform,
+				configurable: true,
+				writable: true,
+			});
+			if (originalColorfgbg === undefined) delete Bun.env.COLORFGBG;
+			else Bun.env.COLORFGBG = originalColorfgbg;
+			if (originalZellij === undefined) delete Bun.env.ZELLIJ;
+			else Bun.env.ZELLIJ = originalZellij;
+			vi.restoreAllMocks();
+		},
+	};
+};
+
 describe("theme auto-detection", () => {
 	beforeEach(async () => {
-		Object.defineProperty(process, "platform", { value: "darwin", configurable: true, writable: true });
-		delete Bun.env.COLORFGBG;
-		delete Bun.env.ZELLIJ;
 		themeModule.stopThemeWatcher();
 		const darkTheme = await themeModule.getThemeByName("dark");
 		if (!darkTheme) {
@@ -22,21 +55,11 @@ describe("theme auto-detection", () => {
 
 	afterEach(() => {
 		themeModule.stopThemeWatcher();
-		Object.defineProperty(process, "platform", {
-			value: originalPlatform,
-			configurable: true,
-			writable: true,
-		});
-		if (originalColorfgbg === undefined) delete Bun.env.COLORFGBG;
-		else Bun.env.COLORFGBG = originalColorfgbg;
-		if (originalZellij === undefined) delete Bun.env.ZELLIJ;
-		else Bun.env.ZELLIJ = originalZellij;
 		vi.restoreAllMocks();
 	});
 
 	it("prefers COLORFGBG before macOS fallback inside Zellij", async () => {
-		Bun.env.ZELLIJ = "1";
-		Bun.env.COLORFGBG = "15;0";
+		using _globals = withThemeTestGlobals({ zellij: "1", colorfgbg: "15;0" });
 		const detectSpy = vi.spyOn(nativesModule, "detectMacOSAppearance").mockReturnValue("light");
 
 		await themeModule.initTheme(false, undefined, undefined, "dark", "light");
@@ -46,6 +69,7 @@ describe("theme auto-detection", () => {
 	});
 
 	it("keeps honoring terminal-reported appearance outside fallback mode", async () => {
+		using _globals = withThemeTestGlobals();
 		const detectSpy = vi.spyOn(nativesModule, "detectMacOSAppearance").mockReturnValue("light");
 		const observerSpy = vi.spyOn(nativesModule, "startMacAppearanceObserver");
 
@@ -58,7 +82,7 @@ describe("theme auto-detection", () => {
 	});
 
 	it("updates auto theme from the native fallback observer in Zellij", async () => {
-		Bun.env.ZELLIJ = "1";
+		using _globals = withThemeTestGlobals({ zellij: "1" });
 		const stop = vi.fn();
 		let onAppearanceChange: ((appearance: "dark" | "light") => void) | undefined;
 		vi.spyOn(nativesModule, "detectMacOSAppearance").mockReturnValue("light");
@@ -81,8 +105,7 @@ describe("theme auto-detection", () => {
 		expect(stop).toHaveBeenCalledTimes(1);
 	});
 	it("Zellij fallback stays macOS-only (Linux + Zellij = honor terminal)", async () => {
-		Object.defineProperty(process, "platform", { value: "linux", configurable: true, writable: true });
-		Bun.env.ZELLIJ = "1";
+		using _globals = withThemeTestGlobals({ platform: "linux", zellij: "1" });
 		const detectSpy = vi.spyOn(nativesModule, "detectMacOSAppearance").mockReturnValue("light");
 
 		themeModule.onTerminalAppearanceChange("dark");
@@ -93,7 +116,7 @@ describe("theme auto-detection", () => {
 	});
 
 	it("terminal-reported appearance wins over conflicting COLORFGBG", async () => {
-		Bun.env.COLORFGBG = "15;0";
+		using _globals = withThemeTestGlobals({ colorfgbg: "15;0" });
 		const detectSpy = vi.spyOn(nativesModule, "detectMacOSAppearance").mockReturnValue("light");
 
 		themeModule.onTerminalAppearanceChange("light");

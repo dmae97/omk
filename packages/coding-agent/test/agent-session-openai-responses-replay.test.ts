@@ -1,4 +1,4 @@
-import { afterAll, afterEach, describe, expect, it, mock, vi } from "bun:test";
+import { afterEach, describe, expect, it, vi } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -13,44 +13,6 @@ import {
 	type SessionMessageEntry,
 } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { Snowflake } from "@oh-my-pi/pi-utils";
-
-const nativeModuleStub = new Proxy(
-	{
-		FileType: { File: "file", Directory: "directory" },
-		ImageFormat: { Png: "png", PNG: "png", Jpeg: "jpeg", JPEG: "jpeg", WebP: "webp", WEBP: "webp" },
-		SamplingFilter: { Lanczos3: "lanczos3" },
-		Shell: class {},
-		PtySession: class {},
-		PhotonImage: class {},
-		executeShell: vi.fn(() => ({ exitCode: 0, stdout: "", stderr: "" })),
-		getWorkProfile: vi.fn(() => ({ isInsideWorktree: false })),
-		sanitizeText: vi.fn((text: string) => text),
-		wrapTextWithAnsi: vi.fn((text: string) => text),
-		copyToClipboard: vi.fn(async () => undefined),
-		readImageFromClipboard: vi.fn(async () => undefined),
-		glob: vi.fn(() => []),
-		grep: vi.fn(() => ({ matches: [], totalMatches: 0, filesWithMatches: 0, filesSearched: 0 })),
-		highlightCode: vi.fn((text: string) => text),
-		supportsLanguage: vi.fn(() => false),
-		projfsOverlayProbe: vi.fn(async () => false),
-		projfsOverlayStart: vi.fn(async () => undefined),
-		projfsOverlayStop: vi.fn(async () => undefined),
-		astEdit: vi.fn(() => ({ changes: [], totalReplacements: 0 })),
-		astGrep: vi.fn(() => ({ matches: [], totalMatches: 0 })),
-		htmlToMarkdown: vi.fn((value: string) => value),
-		invalidateFsScanCache: vi.fn(),
-	},
-	{
-		get(target, property) {
-			if (property in target) {
-				return target[property as keyof typeof target];
-			}
-			return vi.fn();
-		},
-	},
-);
-
-mock.module("@oh-my-pi/pi-natives", () => nativeModuleStub);
 
 function createUsage(): Usage {
 	return {
@@ -236,10 +198,6 @@ async function createSessionHarness(
 
 	return { session, authStorage };
 }
-
-afterAll(() => {
-	mock.restore();
-});
 
 describe("AgentSession OpenAI Responses replay boundaries", () => {
 	const sessions: AgentSession[] = [];

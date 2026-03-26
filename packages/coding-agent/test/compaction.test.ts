@@ -1,16 +1,11 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it, mock, vi } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
+import * as ai from "@oh-my-pi/pi-ai";
 import { getBundledModel } from "@oh-my-pi/pi-ai/models";
 import { encodeTextSignatureV1 } from "@oh-my-pi/pi-ai/providers/openai-responses-shared";
 import type { AssistantMessage, Model, ProviderPayload, Usage } from "@oh-my-pi/pi-ai/types";
 import { hookFetch } from "@oh-my-pi/pi-utils";
-
-const completeSimpleMock = vi.fn();
-
-mock.module("@oh-my-pi/pi-ai", () => ({
-	completeSimple: completeSimpleMock,
-}));
 
 import {
 	type CompactionSettings,
@@ -118,12 +113,7 @@ beforeEach(() => {
 	resetEntryCounter();
 });
 
-afterAll(() => {
-	mock.restore();
-});
-
 afterEach(() => {
-	completeSimpleMock.mockReset();
 	vi.restoreAllMocks();
 });
 
@@ -318,7 +308,8 @@ describe("remote compaction setting", () => {
 		});
 		if (!preparation) throw new Error("Expected compaction preparation");
 
-		completeSimpleMock
+		const completeSimpleSpy = vi.spyOn(ai, "completeSimple");
+		completeSimpleSpy
 			.mockResolvedValueOnce(createAssistantMessage("History summary"))
 			.mockResolvedValueOnce(createAssistantMessage("Turn prefix summary"))
 			.mockResolvedValueOnce(createAssistantMessage("Short summary"));
@@ -327,8 +318,8 @@ describe("remote compaction setting", () => {
 			initiatorOverride: "agent",
 		});
 
-		expect(completeSimpleMock).toHaveBeenCalledTimes(3);
-		for (const call of completeSimpleMock.mock.calls) {
+		expect(completeSimpleSpy).toHaveBeenCalledTimes(3);
+		for (const call of completeSimpleSpy.mock.calls) {
 			const options = call[2] as { initiatorOverride?: string } | undefined;
 			expect(options?.initiatorOverride).toBe("agent");
 		}
@@ -353,15 +344,16 @@ describe("remote compaction setting", () => {
 		});
 		if (!preparation) throw new Error("Expected compaction preparation");
 
-		completeSimpleMock
+		const completeSimpleSpy = vi.spyOn(ai, "completeSimple");
+		completeSimpleSpy
 			.mockResolvedValueOnce(createAssistantMessage("History summary"))
 			.mockResolvedValueOnce(createAssistantMessage("Turn prefix summary"))
 			.mockResolvedValueOnce(createAssistantMessage("Short summary"));
 
 		await compact(preparation, model, "test-api-key");
 
-		expect(completeSimpleMock).toHaveBeenCalledTimes(3);
-		for (const call of completeSimpleMock.mock.calls) {
+		expect(completeSimpleSpy).toHaveBeenCalledTimes(3);
+		for (const call of completeSimpleSpy.mock.calls) {
 			const options = call[2] as { initiatorOverride?: string } | undefined;
 			expect(options?.initiatorOverride).toBeUndefined();
 		}
@@ -400,7 +392,8 @@ describe("remote compaction setting", () => {
 				}),
 		);
 		using _hook = hookFetch(fetchSpy);
-		const completeSpy = completeSimpleMock
+		const completeSpy = vi
+			.spyOn(ai, "completeSimple")
 			.mockResolvedValueOnce(createAssistantMessage("Local history summary"))
 			.mockResolvedValueOnce(createAssistantMessage("Local turn summary"))
 			.mockResolvedValueOnce(createAssistantMessage("Local short summary"));
@@ -479,7 +472,8 @@ describe("remote compaction setting", () => {
 				}),
 		);
 		using _hook = hookFetch(fetchSpy);
-		completeSimpleMock
+		const completeSimpleSpy = vi.spyOn(ai, "completeSimple");
+		completeSimpleSpy
 			.mockResolvedValueOnce(createAssistantMessage("History summary"))
 			.mockResolvedValueOnce(createAssistantMessage("Turn prefix summary"))
 			.mockResolvedValueOnce(createAssistantMessage("Short summary"));
@@ -546,7 +540,7 @@ describe("remote compaction setting", () => {
 				}),
 		);
 		using _hook = hookFetch(fetchSpy);
-		completeSimpleMock.mockResolvedValue(createAssistantMessage("Short summary"));
+		vi.spyOn(ai, "completeSimple").mockResolvedValue(createAssistantMessage("Short summary"));
 
 		await compact(preparation, model, "test-api-key");
 		const requestBody = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body)) as {
@@ -589,7 +583,7 @@ describe("remote compaction setting", () => {
 				}),
 		);
 		using _hook = hookFetch(fetchSpy);
-		completeSimpleMock.mockResolvedValue(createAssistantMessage("Short summary"));
+		vi.spyOn(ai, "completeSimple").mockResolvedValue(createAssistantMessage("Short summary"));
 
 		await compact(preparation, model, "test-api-key");
 
@@ -640,7 +634,7 @@ describe("remote compaction setting", () => {
 				}),
 		);
 		using _hook = hookFetch(fetchSpy);
-		completeSimpleMock.mockResolvedValue(createAssistantMessage("Short summary"));
+		vi.spyOn(ai, "completeSimple").mockResolvedValue(createAssistantMessage("Short summary"));
 
 		await compact(preparation, model, "test-api-key");
 		const requestBody = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body)) as {
@@ -692,7 +686,7 @@ describe("remote compaction setting", () => {
 				}),
 		);
 		using _hook = hookFetch(fetchSpy);
-		completeSimpleMock.mockResolvedValue(createAssistantMessage("Short summary"));
+		vi.spyOn(ai, "completeSimple").mockResolvedValue(createAssistantMessage("Short summary"));
 
 		const result = await compact(preparation, model, "test-api-key", undefined, undefined, {
 			remoteInstructions: "BASE INSTRUCTIONS",
@@ -747,7 +741,8 @@ describe("remote compaction setting", () => {
 		});
 		if (!preparation) throw new Error("Expected compaction preparation");
 
-		completeSimpleMock
+		const completeSimpleSpy = vi.spyOn(ai, "completeSimple");
+		completeSimpleSpy
 			.mockResolvedValueOnce(createAssistantMessage("History summary"))
 			.mockResolvedValueOnce(createAssistantMessage("Turn prefix summary"))
 			.mockResolvedValueOnce(createAssistantMessage("Short summary"));

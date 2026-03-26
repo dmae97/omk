@@ -4,7 +4,11 @@ import { PythonKernel } from "@oh-my-pi/pi-coding-agent/ipy/kernel";
 import { hookFetch, TempDir } from "@oh-my-pi/pi-utils";
 import type { Subprocess } from "bun";
 
-type SpawnOptions = Parameters<typeof Bun.spawn>[1];
+type SpawnOptions = Bun.SpawnOptions.SpawnOptions<
+	Bun.SpawnOptions.Writable,
+	Bun.SpawnOptions.Readable,
+	Bun.SpawnOptions.Readable
+>;
 
 type FetchCall = { url: string; init?: RequestInit };
 
@@ -75,16 +79,45 @@ const createFakeProcess = (): Subprocess => {
 
 describe("PythonKernel gateway lifecycle", () => {
 	const originalWebSocket = globalThis.WebSocket;
-	const originalSpawn = Bun.spawn;
-	const originalSleep = Bun.sleep;
-	const originalWhich = Bun.which;
-	const originalExecute = PythonKernel.prototype.execute;
 	const originalGatewayUrl = Bun.env.PI_PYTHON_GATEWAY_URL;
 	const originalGatewayToken = Bun.env.PI_PYTHON_GATEWAY_TOKEN;
 	const originalBunEnv = Bun.env.BUN_ENV;
 
 	let tempDir: TempDir;
 	let env: MockEnvironment;
+
+	const stubKernelRuntime = () => {
+		function mockSpawn(options: SpawnOptions & { cmd: string[] }): Subprocess;
+		function mockSpawn(cmd: string[], options?: SpawnOptions): Subprocess;
+		function mockSpawn(first: string[] | (SpawnOptions & { cmd: string[] }), second?: SpawnOptions): Subprocess {
+			if (Array.isArray(first)) {
+				env.spawnCalls.push({ cmd: first, options: second ?? {} });
+			} else {
+				const { cmd, ...options } = first;
+				env.spawnCalls.push({ cmd, options });
+			}
+			return createFakeProcess();
+		}
+
+		const spawnSpy = vi.spyOn(Bun, "spawn").mockImplementation(mockSpawn);
+		const sleepSpy = vi.spyOn(Bun, "sleep").mockImplementation(async () => undefined);
+		const whichSpy = vi.spyOn(Bun, "which").mockImplementation(() => "/usr/bin/python");
+		const executeSpy = vi.spyOn(PythonKernel.prototype, "execute").mockResolvedValue({
+			status: "ok",
+			cancelled: false,
+			timedOut: false,
+			stdinRequested: false,
+		});
+
+		return {
+			[Symbol.dispose]() {
+				spawnSpy.mockRestore();
+				sleepSpy.mockRestore();
+				whichSpy.mockRestore();
+				executeSpy.mockRestore();
+			},
+		};
+	};
 
 	beforeEach(() => {
 		tempDir = TempDir.createSync("@omp-python-kernel-");
@@ -96,26 +129,6 @@ describe("PythonKernel gateway lifecycle", () => {
 
 		FakeWebSocket.instances = [];
 		globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
-
-		Bun.spawn = ((cmd: string[] | string, options?: SpawnOptions) => {
-			const normalized = Array.isArray(cmd) ? cmd : [cmd];
-			env.spawnCalls.push({ cmd: normalized, options: options ?? {} });
-			return createFakeProcess();
-		}) as typeof Bun.spawn;
-
-		Bun.sleep = (async () => undefined) as typeof Bun.sleep;
-
-		Bun.which = (() => "/usr/bin/python") as typeof Bun.which;
-
-		Object.defineProperty(PythonKernel.prototype, "execute", {
-			value: (async () => ({
-				status: "ok",
-				cancelled: false,
-				timedOut: false,
-				stdinRequested: false,
-			})) as typeof PythonKernel.prototype.execute,
-			configurable: true,
-		});
 	});
 
 	afterEach(() => {
@@ -140,14 +153,11 @@ describe("PythonKernel gateway lifecycle", () => {
 		}
 
 		globalThis.WebSocket = originalWebSocket;
-
-		Bun.spawn = originalSpawn;
-		Bun.sleep = originalSleep;
-		Bun.which = originalWhich;
-		Object.defineProperty(PythonKernel.prototype, "execute", { value: originalExecute, configurable: true });
+		vi.restoreAllMocks();
 	});
 
 	it("starts shared gateway, interrupts, and shuts down", async () => {
+		using _runtime = stubKernelRuntime();
 		vi.spyOn(gatewayCoordinator, "acquireSharedGateway").mockResolvedValue({
 			url: "http://127.0.0.1:9999",
 			isShared: true,
@@ -177,6 +187,7 @@ describe("PythonKernel gateway lifecycle", () => {
 	});
 
 	it("throws when shared gateway kernel creation never succeeds", async () => {
+		using _runtime = stubKernelRuntime();
 		vi.spyOn(gatewayCoordinator, "acquireSharedGateway").mockResolvedValue({
 			url: "http://127.0.0.1:9999",
 			isShared: true,
@@ -197,6 +208,7 @@ describe("PythonKernel gateway lifecycle", () => {
 	});
 
 	it("does not throw when shutdown API fails", async () => {
+		using _runtime = stubKernelRuntime();
 		vi.spyOn(gatewayCoordinator, "acquireSharedGateway").mockResolvedValue({
 			url: "http://127.0.0.1:9999",
 			isShared: true,

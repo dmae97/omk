@@ -1,13 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, mock, vi } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import * as fs from "node:fs";
 import * as fsp from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-
-mock.module("@oh-my-pi/pi-utils", () => ({
-	isEnoent: (err: unknown) => typeof err === "object" && err !== null && "code" in err && err.code === "ENOENT",
-	toError: (err: unknown) => (err instanceof Error ? err : new Error(String(err))),
-}));
 
 describe("FileSessionStorage.deleteSessionWithArtifacts", () => {
 	let tempDir: string;

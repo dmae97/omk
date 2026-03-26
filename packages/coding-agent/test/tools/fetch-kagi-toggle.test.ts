@@ -12,6 +12,15 @@ import * as scraperUtils from "@oh-my-pi/pi-coding-agent/web/scrapers/utils";
 import * as natives from "@oh-my-pi/pi-natives";
 import { hookFetch, ptree, Snowflake } from "@oh-my-pi/pi-utils";
 
+const withMissingSystemPython = () => {
+	const whichSpy = vi.spyOn(Bun, "which").mockImplementation(() => null);
+	return {
+		[Symbol.dispose]() {
+			whichSpy.mockRestore();
+		},
+	};
+};
+
 describe("fetch tool", () => {
 	let testDir: string;
 
@@ -325,41 +334,19 @@ describe("fetch tool", () => {
 		const pageUrl = "https://bun.com/reference/bun/UnixSocketOptions";
 		const pageHtml = "<html><body><main><h1>UnixSocketOptions</h1><p>Page-specific docs.</p></main></body></html>";
 		const renderedMarkdown = `# UnixSocketOptions\n\n${"Page-specific API docs. ".repeat(8)}`;
-		const originalWhich = Bun.which;
+		using _missingSystemPython = withMissingSystemPython();
+		const loadPageSpy = vi.spyOn(scrapers, "loadPage").mockImplementation(async (requestedUrl: string) => {
+			if (requestedUrl === pageUrl) {
+				return {
+					ok: true,
+					status: 200,
+					contentType: "text/html",
+					finalUrl: pageUrl,
+					content: pageHtml,
+				};
+			}
 
-		Bun.which = (() => null) as typeof Bun.which;
-		try {
-			const loadPageSpy = vi.spyOn(scrapers, "loadPage").mockImplementation(async (requestedUrl: string) => {
-				if (requestedUrl === pageUrl) {
-					return {
-						ok: true,
-						status: 200,
-						contentType: "text/html",
-						finalUrl: pageUrl,
-						content: pageHtml,
-					};
-				}
-
-				if (requestedUrl === `${pageUrl}.md`) {
-					return {
-						ok: false,
-						status: 404,
-						contentType: "text/plain",
-						finalUrl: requestedUrl,
-						content: "",
-					};
-				}
-
-				if (requestedUrl === "https://bun.com/llms.txt") {
-					return {
-						ok: true,
-						status: 200,
-						contentType: "text/plain",
-						finalUrl: requestedUrl,
-						content: `# Bun\n\n${"Site-wide overview. ".repeat(12)}`,
-					};
-				}
-
+			if (requestedUrl === `${pageUrl}.md`) {
 				return {
 					ok: false,
 					status: 404,
@@ -367,24 +354,40 @@ describe("fetch tool", () => {
 					finalUrl: requestedUrl,
 					content: "",
 				};
-			});
-			using _hook = hookFetch(() => new Response("blocked", { status: 500, statusText: "Blocked" }));
-			vi.spyOn(toolsManager, "ensureTool").mockResolvedValue(undefined);
-			vi.spyOn(natives, "htmlToMarkdown").mockResolvedValue(renderedMarkdown);
+			}
 
-			const result = await tool.execute("fetch-deep-page", { url: pageUrl });
-			const requestedUrls = loadPageSpy.mock.calls.map(([requestedUrl]) => requestedUrl);
-			const textBlock = result.content.find(content => content.type === "text");
+			if (requestedUrl === "https://bun.com/llms.txt") {
+				return {
+					ok: true,
+					status: 200,
+					contentType: "text/plain",
+					finalUrl: requestedUrl,
+					content: `# Bun\n\n${"Site-wide overview. ".repeat(12)}`,
+				};
+			}
 
-			expect(result.details?.method).toBe("native");
-			expect(textBlock?.type).toBe("text");
-			expect(textBlock?.text).toContain("UnixSocketOptions");
-			expect(requestedUrls).not.toContain("https://bun.com/.well-known/llms.txt");
-			expect(requestedUrls).not.toContain("https://bun.com/llms.txt");
-			expect(requestedUrls).not.toContain("https://bun.com/llms.md");
-		} finally {
-			Bun.which = originalWhich;
-		}
+			return {
+				ok: false,
+				status: 404,
+				contentType: "text/plain",
+				finalUrl: requestedUrl,
+				content: "",
+			};
+		});
+		using _hook = hookFetch(() => new Response("blocked", { status: 500, statusText: "Blocked" }));
+		vi.spyOn(toolsManager, "ensureTool").mockResolvedValue(undefined);
+		vi.spyOn(natives, "htmlToMarkdown").mockResolvedValue(renderedMarkdown);
+
+		const result = await tool.execute("fetch-deep-page", { url: pageUrl });
+		const requestedUrls = loadPageSpy.mock.calls.map(([requestedUrl]) => requestedUrl);
+		const textBlock = result.content.find(content => content.type === "text");
+
+		expect(result.details?.method).toBe("native");
+		expect(textBlock?.type).toBe("text");
+		expect(textBlock?.text).toContain("UnixSocketOptions");
+		expect(requestedUrls).not.toContain("https://bun.com/.well-known/llms.txt");
+		expect(requestedUrls).not.toContain("https://bun.com/llms.txt");
+		expect(requestedUrls).not.toContain("https://bun.com/llms.md");
 	});
 
 	it("uses section-scoped llms.txt fallback without requesting the site-wide file", async () => {
@@ -393,59 +396,27 @@ describe("fetch tool", () => {
 		const pageUrl = "https://example.com/docs/reference/widget";
 		const pageHtml = "<html><body><nav>Docs</nav><main><h1>Widget</h1></main></body></html>";
 		const lowQualityRender = `${"Please enable JavaScript to view this page.\n".repeat(6)}${"navigation\n".repeat(4)}`;
-		const originalWhich = Bun.which;
-		const execSpy = vi.spyOn(ptree, "exec").mockResolvedValue({ ok: true, stdout: lowQualityRender } as never);
+		using _missingSystemPython = withMissingSystemPython();
+		const _execSpy = vi.spyOn(ptree, "exec").mockResolvedValue({ ok: true, stdout: lowQualityRender } as never);
+		const loadPageSpy = vi.spyOn(scrapers, "loadPage").mockImplementation(async (requestedUrl: string) => {
+			if (requestedUrl === pageUrl) {
+				return {
+					ok: true,
+					status: 200,
+					contentType: "text/html",
+					finalUrl: pageUrl,
+					content: pageHtml,
+				};
+			}
 
-		Bun.which = (() => null) as typeof Bun.which;
-		try {
-			const loadPageSpy = vi.spyOn(scrapers, "loadPage").mockImplementation(async (requestedUrl: string) => {
-				if (requestedUrl === pageUrl) {
-					return {
-						ok: true,
-						status: 200,
-						contentType: "text/html",
-						finalUrl: pageUrl,
-						content: pageHtml,
-					};
-				}
-
-				if (
-					[
-						`${pageUrl}.md`,
-						"https://example.com/docs/reference/llms.txt",
-						"https://example.com/docs/reference/llms.md",
-						"https://example.com/docs/llms.md",
-					].includes(requestedUrl)
-				) {
-					return {
-						ok: false,
-						status: 404,
-						contentType: "text/plain",
-						finalUrl: requestedUrl,
-						content: "",
-					};
-				}
-
-				if (requestedUrl === "https://example.com/docs/llms.txt") {
-					return {
-						ok: true,
-						status: 200,
-						contentType: "text/plain",
-						finalUrl: requestedUrl,
-						content: `# Example Docs\n\n${"Section-scoped fallback. ".repeat(10)}`,
-					};
-				}
-
-				if (requestedUrl === "https://example.com/llms.txt") {
-					return {
-						ok: true,
-						status: 200,
-						contentType: "text/plain",
-						finalUrl: requestedUrl,
-						content: `# Example\n\n${"Site-wide fallback. ".repeat(10)}`,
-					};
-				}
-
+			if (
+				[
+					`${pageUrl}.md`,
+					"https://example.com/docs/reference/llms.txt",
+					"https://example.com/docs/reference/llms.md",
+					"https://example.com/docs/llms.md",
+				].includes(requestedUrl)
+			) {
 				return {
 					ok: false,
 					status: 404,
@@ -453,26 +424,51 @@ describe("fetch tool", () => {
 					finalUrl: requestedUrl,
 					content: "",
 				};
-			});
-			using _hook = hookFetch(() => new Response("blocked", { status: 500, statusText: "Blocked" }));
-			vi.spyOn(toolsManager, "ensureTool").mockResolvedValue("/usr/bin/trafilatura");
+			}
 
-			const result = await tool.execute("fetch-section-llms", { url: pageUrl });
-			const requestedUrls = loadPageSpy.mock.calls.map(([requestedUrl]) => requestedUrl);
-			const textBlock = result.content.find(content => content.type === "text");
+			if (requestedUrl === "https://example.com/docs/llms.txt") {
+				return {
+					ok: true,
+					status: 200,
+					contentType: "text/plain",
+					finalUrl: requestedUrl,
+					content: `# Example Docs\n\n${"Section-scoped fallback. ".repeat(10)}`,
+				};
+			}
 
-			expect(result.details?.method).toBe("llms.txt");
-			expect(result.details?.notes).toContain("Used llms.txt fallback: https://example.com/docs/llms.txt");
-			expect(textBlock?.type).toBe("text");
-			expect(textBlock?.text).toContain("Section-scoped fallback");
-			expect(requestedUrls).toContain("https://example.com/docs/llms.txt");
-			expect(requestedUrls).not.toContain("https://example.com/.well-known/llms.txt");
-			expect(requestedUrls).not.toContain("https://example.com/llms.txt");
-			expect(requestedUrls).not.toContain("https://example.com/llms.md");
-		} finally {
-			Bun.which = originalWhich;
-			execSpy.mockRestore();
-		}
+			if (requestedUrl === "https://example.com/llms.txt") {
+				return {
+					ok: true,
+					status: 200,
+					contentType: "text/plain",
+					finalUrl: requestedUrl,
+					content: `# Example\n\n${"Site-wide fallback. ".repeat(10)}`,
+				};
+			}
+
+			return {
+				ok: false,
+				status: 404,
+				contentType: "text/plain",
+				finalUrl: requestedUrl,
+				content: "",
+			};
+		});
+		using _hook = hookFetch(() => new Response("blocked", { status: 500, statusText: "Blocked" }));
+		vi.spyOn(toolsManager, "ensureTool").mockResolvedValue("/usr/bin/trafilatura");
+
+		const result = await tool.execute("fetch-section-llms", { url: pageUrl });
+		const requestedUrls = loadPageSpy.mock.calls.map(([requestedUrl]) => requestedUrl);
+		const textBlock = result.content.find(content => content.type === "text");
+
+		expect(result.details?.method).toBe("llms.txt");
+		expect(result.details?.notes).toContain("Used llms.txt fallback: https://example.com/docs/llms.txt");
+		expect(textBlock?.type).toBe("text");
+		expect(textBlock?.text).toContain("Section-scoped fallback");
+		expect(requestedUrls).toContain("https://example.com/docs/llms.txt");
+		expect(requestedUrls).not.toContain("https://example.com/.well-known/llms.txt");
+		expect(requestedUrls).not.toContain("https://example.com/llms.txt");
+		expect(requestedUrls).not.toContain("https://example.com/llms.md");
 	});
 	it("prefers Parallel extract before other HTML renderers when configured", async () => {
 		process.env.PARALLEL_API_KEY = "test-parallel-key";
