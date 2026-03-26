@@ -23,7 +23,7 @@ import { BorderedLoader } from "../../modes/components/bordered-loader";
 import { DynamicBorder } from "../../modes/components/dynamic-border";
 import { PythonExecutionComponent } from "../../modes/components/python-execution";
 import { getMarkdownTheme, getSymbolTheme, theme } from "../../modes/theme/theme";
-import type { InteractiveModeContext } from "../../modes/types";
+import type { ClearCommandOptions, ClearCommandRollback, InteractiveModeContext } from "../../modes/types";
 import { buildHotkeysMarkdown } from "../../modes/utils/hotkeys-markdown";
 import type { AsyncJobSnapshotItem } from "../../session/agent-session";
 import type { AuthStorage } from "../../session/auth-storage";
@@ -561,40 +561,68 @@ export class CommandController {
 		this.ctx.showError("Usage: /memory <view|clear|reset|enqueue|rebuild>");
 	}
 
-	async handleClearCommand(): Promise<void> {
-		if (this.ctx.loadingAnimation) {
-			this.ctx.loadingAnimation.stop();
-			this.ctx.loadingAnimation = undefined;
-		}
-		this.ctx.statusContainer.clear();
+	async handleClearCommand(options?: ClearCommandOptions): Promise<boolean> {
+		let rollbackBeforeSwitchCheck: ClearCommandRollback | undefined;
+		try {
+			rollbackBeforeSwitchCheck = await options?.beforeSwitchCheck?.();
 
-		if (this.ctx.session.isCompacting) {
-			this.ctx.session.abortCompaction();
-			while (this.ctx.session.isCompacting) {
-				await Bun.sleep(10);
+			const switchApproved = await this.ctx.session.canStartNewSession();
+			if (!switchApproved) {
+				await rollbackBeforeSwitchCheck?.();
+				this.ctx.chatContainer.addChild(new Spacer(1));
+				this.ctx.chatContainer.addChild(new Text(theme.fg("error", "Error: New session cancelled"), 1, 0));
+				this.ctx.ui.requestRender();
+				return false;
 			}
+
+			rollbackBeforeSwitchCheck = undefined;
+			if (this.ctx.session.isCompacting) {
+				this.ctx.session.abortCompaction();
+				while (this.ctx.session.isCompacting) {
+					await Bun.sleep(10);
+				}
+			}
+			await options?.beforeSwitch?.();
+
+			if (this.ctx.loadingAnimation) {
+				this.ctx.loadingAnimation.stop();
+				this.ctx.loadingAnimation = undefined;
+			}
+			this.ctx.statusContainer.clear();
+
+			const success = await this.ctx.session.newSession(undefined, { skipBeforeSwitchCheck: true });
+			if (!success) {
+				this.ctx.chatContainer.addChild(new Spacer(1));
+				this.ctx.chatContainer.addChild(new Text(theme.fg("error", "Error: New session cancelled"), 1, 0));
+				this.ctx.ui.requestRender();
+				return false;
+			}
+
+			setSessionTerminalTitle(this.ctx.sessionManager.getSessionName(), this.ctx.sessionManager.getCwd());
+
+			this.ctx.statusLine.invalidate();
+			this.ctx.statusLine.setSessionStartTime(Date.now());
+			this.ctx.updateEditorTopBorder();
+			this.ctx.ui.requestRender();
+
+			this.ctx.chatContainer.clear();
+			this.ctx.pendingMessagesContainer.clear();
+			this.ctx.compactionQueuedMessages = [];
+			this.ctx.streamingComponent = undefined;
+			this.ctx.streamingMessage = undefined;
+			this.ctx.pendingTools.clear();
+
+			this.ctx.chatContainer.addChild(new Spacer(1));
+			this.ctx.chatContainer.addChild(
+				new Text(`${theme.fg("accent", `${theme.status.success} New session started`)}`, 1, 1),
+			);
+			await this.ctx.reloadTodos();
+			this.ctx.ui.requestRender();
+			return true;
+		} catch (error) {
+			await rollbackBeforeSwitchCheck?.();
+			throw error;
 		}
-		await this.ctx.session.newSession();
-		setSessionTerminalTitle(this.ctx.sessionManager.getSessionName(), this.ctx.sessionManager.getCwd());
-
-		this.ctx.statusLine.invalidate();
-		this.ctx.statusLine.setSessionStartTime(Date.now());
-		this.ctx.updateEditorTopBorder();
-		this.ctx.ui.requestRender();
-
-		this.ctx.chatContainer.clear();
-		this.ctx.pendingMessagesContainer.clear();
-		this.ctx.compactionQueuedMessages = [];
-		this.ctx.streamingComponent = undefined;
-		this.ctx.streamingMessage = undefined;
-		this.ctx.pendingTools.clear();
-
-		this.ctx.chatContainer.addChild(new Spacer(1));
-		this.ctx.chatContainer.addChild(
-			new Text(`${theme.fg("accent", `${theme.status.success} New session started`)}`, 1, 1),
-		);
-		await this.ctx.reloadTodos();
-		this.ctx.ui.requestRender();
 	}
 
 	async handleForkCommand(): Promise<void> {

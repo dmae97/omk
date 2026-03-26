@@ -60,7 +60,14 @@ import {
 	onThemeChange,
 	theme,
 } from "./theme/theme";
-import type { CompactionQueuedMessage, InteractiveModeContext, SubmittedUserInput, TodoItem, TodoPhase } from "./types";
+import type {
+	ClearCommandOptions,
+	CompactionQueuedMessage,
+	InteractiveModeContext,
+	SubmittedUserInput,
+	TodoItem,
+	TodoPhase,
+} from "./types";
 import { UiHelpers } from "./utils/ui-helpers";
 
 const EDITOR_MAX_HEIGHT_MIN = 6;
@@ -696,7 +703,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		}
 
 		const previousTools = this.#planModePreviousTools;
-		if (previousTools && previousTools.length > 0) {
+		if (previousTools) {
 			await this.session.setActiveToolsByName(previousTools);
 		}
 		if (this.#planModePreviousModel) {
@@ -747,15 +754,29 @@ export class InteractiveMode implements InteractiveModeContext {
 		planContent: string,
 		options: { planFilePath: string; finalPlanFilePath: string },
 	): Promise<void> {
-		await renameApprovedPlanFile({
-			planFilePath: options.planFilePath,
-			finalPlanFilePath: options.finalPlanFilePath,
-			getArtifactsDir: () => this.sessionManager.getArtifactsDir(),
-			getSessionId: () => this.sessionManager.getSessionId(),
-		});
 		const previousTools = this.#planModePreviousTools ?? this.session.getActiveToolNames();
-		await this.#exitPlanMode({ silent: true, paused: false });
-		await this.handleClearCommand();
+		const didCreateFreshSession = await this.handleClearCommand({
+			beforeSwitchCheck: () => {
+				this.sessionManager.setTransientModeOverride("none");
+				return () => {
+					this.sessionManager.clearTransientModeOverride();
+				};
+			},
+			beforeSwitch: async () => {
+				this.sessionManager.clearTransientModeOverride();
+				await renameApprovedPlanFile({
+					planFilePath: options.planFilePath,
+					finalPlanFilePath: options.finalPlanFilePath,
+					getArtifactsDir: () => this.sessionManager.getArtifactsDir(),
+					getSessionId: () => this.sessionManager.getSessionId(),
+				});
+				await this.#exitPlanMode({ silent: true, paused: false });
+			},
+		});
+		if (!didCreateFreshSession) {
+			return;
+		}
+		await this.session.setActiveToolsByName(previousTools);
 		// The new session has a fresh local:// root — persist the approved plan there
 		// so `local://<title>.md` resolves correctly in the execution session.
 		const newLocalPath = resolveLocalUrlToPath(options.finalPlanFilePath, {
@@ -763,9 +784,6 @@ export class InteractiveMode implements InteractiveModeContext {
 			getSessionId: () => this.sessionManager.getSessionId(),
 		});
 		await Bun.write(newLocalPath, planContent);
-		if (previousTools.length > 0) {
-			await this.session.setActiveToolsByName(previousTools);
-		}
 		this.session.setPlanReferencePath(options.finalPlanFilePath);
 		this.session.markPlanReferenceSent();
 		const prompt = renderPromptTemplate(planModeApprovedPrompt, {
@@ -1084,10 +1102,15 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.#commandController.handleHotkeysCommand();
 	}
 
-	handleClearCommand(): Promise<void> {
-		this.#btwController.dispose();
-		this.#extensionUiController.clearExtensionTerminalInputListeners();
-		return this.#commandController.handleClearCommand();
+	async handleClearCommand(options?: ClearCommandOptions): Promise<boolean> {
+		return this.#commandController.handleClearCommand({
+			beforeSwitchCheck: options?.beforeSwitchCheck,
+			beforeSwitch: async () => {
+				await options?.beforeSwitch?.();
+				this.#btwController.dispose();
+				this.#extensionUiController.clearExtensionTerminalInputListeners();
+			},
+		});
 	}
 
 	handleForkCommand(): Promise<void> {
