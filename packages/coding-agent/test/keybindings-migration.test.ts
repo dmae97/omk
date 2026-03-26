@@ -25,6 +25,7 @@ describe("KeybindingsManager.create", () => {
 					fork: "ctrl+f",
 					selectConfirm: "enter",
 					cursorUp: "ctrl+p",
+					selectModelTemporary: "alt+y",
 				},
 				null,
 				2,
@@ -38,11 +39,14 @@ describe("KeybindingsManager.create", () => {
 			expect(manager.getKeys("app.session.fork")).toEqual(["ctrl+f"]);
 			expect(manager.getKeys("tui.select.confirm")).toEqual(["enter"]);
 			expect(manager.getKeys("tui.editor.cursorUp")).toEqual(["ctrl+p"]);
+			expect(manager.getKeys("app.model.selectTemporary")).toEqual(["alt+y"]);
 			expect(writtenConfig).toEqual({
+				"app.model.selectTemporary": "alt+y",
 				"app.session.fork": "ctrl+f",
 				"tui.editor.cursorUp": "ctrl+p",
 				"tui.select.confirm": "enter",
 			});
+			expect(writtenConfig).not.toHaveProperty("selectModelTemporary");
 		} finally {
 			await fs.rm(agentDir, { recursive: true, force: true });
 		}

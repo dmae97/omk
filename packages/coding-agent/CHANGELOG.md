@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added configurable `app.model.selectTemporary` keybinding for temporary model selection.
+
 ## [13.15.0] - 2026-03-23
 ### Breaking Changes
 

@@ -25,6 +25,7 @@ interface AppKeybindings {
 	"app.model.cycleForward": true;
 	"app.model.cycleBackward": true;
 	"app.model.select": true;
+	"app.model.selectTemporary": true;
 	"app.tools.expand": true;
 	"app.editor.external": true;
 	"app.message.followUp": true;
@@ -94,6 +95,10 @@ export const KEYBINDINGS = {
 	"app.model.select": {
 		defaultKeys: "ctrl+l",
 		description: "Select model",
+	},
+	"app.model.selectTemporary": {
+		defaultKeys: "alt+p",
+		description: "Select temporary model for current session",
 	},
 	"app.tools.expand": {
 		defaultKeys: "ctrl+o",
@@ -194,6 +199,7 @@ const KEYBINDING_NAME_MIGRATIONS = {
 	cycleModelForward: "app.model.cycleForward",
 	cycleModelBackward: "app.model.cycleBackward",
 	selectModel: "app.model.select",
+	selectModelTemporary: "app.model.selectTemporary",
 	togglePlanMode: "app.plan.toggle",
 	historySearch: "app.history.search",
 	expandTools: "app.tools.expand",
