@@ -61,6 +61,13 @@ function dedupeAlwaysApplyRules(
 	);
 }
 
+function dedupePromptSource(source: string | null | undefined, otherSources: Array<string | null | undefined>): string {
+	const resolvedSource = firstNonEmpty(source);
+	if (!resolvedSource) return "";
+
+	return otherSources.some(otherSource => promptSourceContainsRule(otherSource, resolvedSource)) ? "" : resolvedSource;
+}
+
 function firstNonEmpty(...values: (string | undefined | null)[]): string | null {
 	for (const value of values) {
 		const trimmed = value?.trim();
@@ -566,15 +573,16 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 	const hasRead = tools?.has("read");
 	const filteredSkills = hasRead ? skills : [];
 
-	const promptSources = resolvedCustomPrompt
-		? [systemPromptCustomization, resolvedCustomPrompt, resolvedAppendPrompt]
-		: [resolvedAppendPrompt];
+	const effectiveSystemPromptCustomization = dedupePromptSource(systemPromptCustomization, [
+		resolvedCustomPrompt,
+		resolvedAppendPrompt,
+	]);
+	const promptSources = [effectiveSystemPromptCustomization, resolvedCustomPrompt, resolvedAppendPrompt];
 	const injectedAlwaysApplyRules = dedupeAlwaysApplyRules(alwaysApplyRules, promptSources);
 
 	const environment = await logger.timeAsync("getEnvironmentInfo", getEnvironmentInfo);
 	const data = {
-		// Explicit custom prompts replace discovered SYSTEM.md content rather than layering it twice.
-		systemPromptCustomization: resolvedCustomPrompt ? "" : (systemPromptCustomization ?? ""),
+		systemPromptCustomization: effectiveSystemPromptCustomization,
 		customPrompt: resolvedCustomPrompt,
 		appendPrompt: resolvedAppendPrompt ?? "",
 		tools: toolNames,

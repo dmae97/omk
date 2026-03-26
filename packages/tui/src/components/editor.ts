@@ -12,6 +12,7 @@ import {
 	moveWordLeft,
 	moveWordRight,
 	padding,
+	replaceTabs,
 	sliceByColumn,
 	truncateToWidth,
 	visibleWidth,
@@ -24,10 +25,7 @@ const SLASH_COMMAND_SELECT_LIST_LAYOUT: SelectListLayoutOptions = {
 };
 
 function sanitizeLoadedText(text: string): string {
-	return text
-		.replace(/\r\n/g, "\n")
-		.replace(/\r/g, "\n")
-		.replace(/\t/g, "    ")
+	return replaceTabs(text.replace(/\r\n/g, "\n").replace(/\r/g, "\n"))
 		.split("")
 		.filter(char => char === "\n" || char.charCodeAt(0) >= 32)
 		.join("");

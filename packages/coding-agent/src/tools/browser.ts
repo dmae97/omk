@@ -19,7 +19,7 @@ import type {
 import { renderPromptTemplate } from "../config/prompt-templates";
 import browserDescription from "../prompts/tools/browser.md" with { type: "text" };
 import type { ToolSession } from "../sdk";
-import { formatDimensionNote, resizeImage } from "../utils/image-resize";
+import { resizeImage } from "../utils/image-resize";
 import { htmlToBasicMarkdown } from "../web/scrapers/types";
 import type { OutputMeta } from "./output-meta";
 import { expandPath } from "./path-utils";
@@ -37,7 +37,7 @@ import stealthPluginsScript from "./puppeteer/10_stealth_plugins.txt" with { typ
 import stealthHardwareScript from "./puppeteer/11_stealth_hardware.txt" with { type: "text" };
 import stealthCodecsScript from "./puppeteer/12_stealth_codecs.txt" with { type: "text" };
 import stealthWorkerScript from "./puppeteer/13_stealth_worker.txt" with { type: "text" };
-import { formatSavedScreenshotLine } from "./render-utils";
+import { formatScreenshot } from "./render-utils";
 import { ToolAbortError, ToolError, throwIfAborted } from "./tool-errors";
 import { toolResult } from "./tool-result";
 import { clampTimeout } from "./tool-timeouts";
@@ -1367,7 +1367,6 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 						{ type: "image", data: buffer.toBase64(), mimeType: "image/png" },
 						{ maxBytes: 0.75 * 1024 * 1024 },
 					);
-					const dimensionNote = formatDimensionNote(resized);
 					// Resolve destination: user-defined path > screenshotDir (auto-named) > temp file.
 					const screenshotDir = (() => {
 						const v = this.session.settings.get("browser.screenshotDir") as string | undefined;
@@ -1393,19 +1392,13 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					details.mimeType = savedMimeType;
 					details.bytes = savedBuffer.length;
 
-					const lines = ["Screenshot captured"];
-					if (saveFullRes) {
-						lines.push(formatSavedScreenshotLine(savedMimeType, savedBuffer.length, dest));
-						lines.push(
-							`Model: ${resized.mimeType} (${(resized.buffer.length / 1024).toFixed(2)} KB, ${resized.width}x${resized.height})`,
-						);
-					} else {
-						lines.push(`Format: ${resized.mimeType} (${(resized.buffer.length / 1024).toFixed(2)} KB)`);
-						lines.push(`Dimensions: ${resized.width}x${resized.height}`);
-					}
-					if (dimensionNote) {
-						lines.push(dimensionNote);
-					}
+					const lines = formatScreenshot({
+						saveFullRes,
+						savedMimeType,
+						savedByteLength: savedBuffer.length,
+						dest,
+						resized,
+					});
 					return toolResult(details)
 						.content([
 							{ type: "text", text: lines.join("\n") },

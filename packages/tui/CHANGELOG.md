@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Updated tab replacement in editor text sanitization to respect configured tab width setting
 
 ## [13.15.0] - 2026-03-23
 

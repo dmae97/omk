@@ -4,6 +4,7 @@ import { CURSOR_MARKER } from "@oh-my-pi/pi-tui";
 import { CombinedAutocompleteProvider } from "@oh-my-pi/pi-tui/autocomplete";
 import { Editor } from "@oh-my-pi/pi-tui/components/editor";
 import { visibleWidth } from "@oh-my-pi/pi-tui/utils";
+import { setDefaultTabWidth } from "@oh-my-pi/pi-utils";
 import { KeybindingsManager, setKeybindings, TUI_KEYBINDINGS } from "../src/keybindings";
 import { defaultEditorTheme } from "./test-themes";
 
@@ -501,6 +502,18 @@ describe("Editor component", () => {
 
 			const text = editor.getText();
 			expect(text).toBe("Hällö Wörld! 😀 äöüÄÖÜß");
+		});
+
+		it("uses the configured tab width when loading text programmatically", () => {
+			const editor = new Editor(defaultEditorTheme);
+
+			try {
+				setDefaultTabWidth(5);
+				editor.setText("foo\tbar");
+				expect(editor.getText()).toBe("foo     bar");
+			} finally {
+				setDefaultTabWidth(3);
+			}
 		});
 
 		it("strips control characters from programmatically loaded text before render", () => {
