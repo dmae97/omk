@@ -194,7 +194,15 @@ export type RpcExtensionUIRequest =
 			placeholder?: string;
 			timeout?: number;
 	  }
-	| { type: "extension_ui_request"; id: string; method: "editor"; title: string; prefill?: string }
+	| {
+			type: "extension_ui_request";
+			id: string;
+			method: "editor";
+			title: string;
+			prefill?: string;
+			promptStyle?: boolean;
+	  }
+	| { type: "extension_ui_request"; id: string; method: "cancel"; targetId: string }
 	| {
 			type: "extension_ui_request";
 			id: string;

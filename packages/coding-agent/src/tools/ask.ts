@@ -147,9 +147,11 @@ interface UIContext {
 			helpText?: string;
 		},
 	): Promise<string | undefined>;
-	input(
-		prompt: string,
-		options_?: { signal?: AbortSignal; timeout?: number; onTimeout?: () => void },
+	editor(
+		title: string,
+		prefill?: string,
+		dialogOptions?: { signal?: AbortSignal },
+		editorOptions?: { promptStyle?: boolean },
 	): Promise<string | undefined>;
 }
 
@@ -207,15 +209,11 @@ async function askSingleQuestion(
 		return { choice, timedOut: timeoutTriggered, navigation: navigationAction };
 	};
 
-	const promptForInput = async (): Promise<{ input: string | undefined; timedOut: boolean }> => {
-		let inputTimedOut = false;
-		const onTimeout = () => {
-			inputTimedOut = true;
-		};
-		const input = signal
-			? await untilAborted(signal, () => ui.input("Enter your response:", { signal, timeout, onTimeout }))
-			: await ui.input("Enter your response:", { signal, timeout, onTimeout });
-		return { input, timedOut: inputTimedOut };
+	const promptForCustomInput = async (): Promise<{ input: string | undefined }> => {
+		const dialogOptions = signal ? { signal } : undefined;
+		const showCustomInput = () => ui.editor("Enter your response:", undefined, dialogOptions, { promptStyle: true });
+		const input = signal ? await untilAborted(signal, showCustomInput) : await showCustomInput();
+		return { input };
 	};
 
 	const promptWithProgress = navigation?.progressText ? `${question} (${navigation.progressText})` : question;
@@ -264,9 +262,11 @@ async function askSingleQuestion(
 					timedOut = true;
 					break;
 				}
-				const inputResult = await promptForInput();
-				if (inputResult.input) customInput = inputResult.input;
-				if (inputResult.timedOut) timedOut = true;
+				const customResult = await promptForCustomInput();
+				if (customResult.input === undefined) {
+					break;
+				}
+				customInput = customResult.input;
 				break;
 			}
 
@@ -306,7 +306,7 @@ async function askSingleQuestion(
 		if (previouslySelected) {
 			const selectedIndex = optionLabels.indexOf(previouslySelected);
 			if (selectedIndex >= 0) initialIndex = selectedIndex;
-		} else if (customInput) {
+		} else if (customInput !== undefined) {
 			initialIndex = displayLabels.length;
 		}
 		if (initialIndex !== undefined) {
@@ -330,11 +330,13 @@ async function askSingleQuestion(
 			}
 		} else if (choice === OTHER_OPTION) {
 			if (!selectTimedOut) {
-				const inputResult = await promptForInput();
-				if (inputResult.input) customInput = inputResult.input;
-				if (inputResult.timedOut) timedOut = true;
+				const customResult = await promptForCustomInput();
+				if (customResult.input !== undefined) {
+					customInput = customResult.input;
+					selectedOptions = [];
+				}
+				// If editor was dismissed (undefined), keep prior selectedOptions/customInput intact
 			}
-			selectedOptions = [];
 		} else {
 			selectedOptions = [stripRecommendedSuffix(choice)];
 			customInput = undefined;
@@ -344,7 +346,7 @@ async function askSingleQuestion(
 		}
 	}
 
-	if (timedOut && selectedOptions.length === 0 && !customInput) {
+	if (timedOut && selectedOptions.length === 0 && customInput === undefined) {
 		selectedOptions = getAutoSelectionOnTimeout(optionLabels, recommended);
 	}
 
@@ -352,15 +354,14 @@ async function askSingleQuestion(
 }
 
 function formatQuestionResult(result: QuestionResult): string {
-	if (result.customInput) {
-		return `${result.id}: "${result.customInput}"`;
-	}
+	const parts: string[] = [];
 	if (result.selectedOptions.length > 0) {
-		return result.multi
-			? `${result.id}: [${result.selectedOptions.join(", ")}]`
-			: `${result.id}: ${result.selectedOptions[0]}`;
+		parts.push(result.multi ? `[${result.selectedOptions.join(", ")}]` : result.selectedOptions[0]!);
 	}
-	return `${result.id}: (cancelled)`;
+	if (result.customInput !== undefined) {
+		parts.push(`"${result.customInput}"`);
+	}
+	return parts.length > 0 ? `${result.id}: ${parts.join(", ")}` : `${result.id}: (cancelled)`;
 }
 
 // =============================================================================
@@ -415,7 +416,8 @@ export class AskTool implements AgentTool<typeof askSchema, AskToolDetails> {
 		const extensionUi = context.ui;
 		const ui: UIContext = {
 			select: (prompt, options, dialogOptions) => extensionUi.select(prompt, options, dialogOptions),
-			input: (prompt, dialogOptions) => extensionUi.input(prompt, undefined, dialogOptions),
+			editor: (title, prefill, dialogOptions, editorOptions) =>
+				extensionUi.editor(title, prefill, dialogOptions, editorOptions),
 		};
 
 		// Determine timeout based on settings and plan mode
@@ -467,7 +469,7 @@ export class AskTool implements AgentTool<typeof askSchema, AskToolDetails> {
 			const [q] = params.questions;
 			const { optionLabels, selectedOptions, customInput, cancelled, timedOut } = await askQuestion(q);
 
-			if (!timedOut && (cancelled || (selectedOptions.length === 0 && !customInput))) {
+			if (!timedOut && (cancelled || (selectedOptions.length === 0 && customInput === undefined))) {
 				context.abort();
 				throw new ToolAbortError("Ask tool was cancelled by the user");
 			}
@@ -479,16 +481,23 @@ export class AskTool implements AgentTool<typeof askSchema, AskToolDetails> {
 				customInput,
 			};
 
-			let responseText: string;
-			if (customInput) {
-				responseText = `User provided custom input: ${customInput}`;
-			} else if (selectedOptions.length > 0) {
-				responseText = q.multi
-					? `User selected: ${selectedOptions.join(", ")}`
-					: `User selected: ${selectedOptions[0]}`;
-			} else {
-				responseText = "User cancelled the selection";
+			const responseParts: string[] = [];
+			if (selectedOptions.length > 0) {
+				responseParts.push(
+					q.multi ? `User selected: ${selectedOptions.join(", ")}` : `User selected: ${selectedOptions[0]}`,
+				);
 			}
+			if (customInput !== undefined) {
+				responseParts.push(
+					customInput.includes("\n")
+						? `User provided custom input:\n${customInput
+								.split("\n")
+								.map(line => `  ${line}`)
+								.join("\n")}`
+						: `User provided custom input: ${customInput}`,
+				);
+			}
+			const responseText = responseParts.length > 0 ? responseParts.join("\n") : "User cancelled the selection";
 
 			return { content: [{ type: "text" as const, text: responseText }], details };
 		}
@@ -568,6 +577,25 @@ interface AskRenderArgs {
 		options: Array<{ label: string }>;
 		multi?: boolean;
 	}>;
+}
+
+/** Render custom input as a single block with continuation lines (not one entry per line) */
+function renderCustomInput(
+	uiTheme: Theme,
+	prefix: string,
+	customInput: string,
+	isLastEntry: boolean,
+	includeLeadingNewline = true,
+): string {
+	const lines = customInput.split("\n");
+	const branch = isLastEntry ? uiTheme.tree.last : uiTheme.tree.branch;
+	const firstLine = lines[0] ?? "";
+	let text = `${includeLeadingNewline ? "\n" : ""}${prefix}${uiTheme.fg("dim", branch)} ${uiTheme.styledSymbol("status.success", "success")} ${uiTheme.fg("toolOutput", firstLine)}`;
+	const continuationIndent = isLastEntry ? "   " : `${uiTheme.fg("dim", uiTheme.tree.vertical)}  `;
+	for (let i = 1; i < lines.length; i++) {
+		text += `\n${prefix}${continuationIndent}   ${uiTheme.fg("toolOutput", lines[i])}`;
+	}
+	return text;
 }
 
 export const askToolRenderer = {
@@ -658,7 +686,7 @@ export const askToolRenderer = {
 		// Multi-part results
 		if (details.results && details.results.length > 0) {
 			const hasAnySelection = details.results.some(
-				r => r.customInput || (r.selectedOptions && r.selectedOptions.length > 0),
+				r => r.customInput !== undefined || (r.selectedOptions && r.selectedOptions.length > 0),
 			);
 			const header = renderStatusLine(
 				{
@@ -676,7 +704,7 @@ export const askToolRenderer = {
 				const isLastQuestion = i === details.results.length - 1;
 				const branch = isLastQuestion ? uiTheme.tree.last : uiTheme.tree.branch;
 				const continuation = isLastQuestion ? "   " : `${uiTheme.fg("dim", uiTheme.tree.vertical)}  `;
-				const hasSelection = r.customInput || r.selectedOptions.length > 0;
+				const hasSelection = r.customInput !== undefined || r.selectedOptions.length > 0;
 				const statusIcon = hasSelection
 					? uiTheme.styledSymbol("status.success", "success")
 					: uiTheme.styledSymbol("status.warning", "warning");
@@ -686,23 +714,30 @@ export const askToolRenderer = {
 				);
 				container.addChild(new Markdown(r.question, 3, 0, mdTheme, accentStyle));
 
-				let answerText = "";
-				if (r.customInput) {
-					answerText = `${continuation}${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.success", "success")} ${uiTheme.fg("toolOutput", r.customInput)}`;
-				} else if (r.selectedOptions.length > 0) {
-					for (let j = 0; j < r.selectedOptions.length; j++) {
-						const isLast = j === r.selectedOptions.length - 1;
-						const optBranch = isLast ? uiTheme.tree.last : uiTheme.tree.branch;
-						const selectedLabel = renderInlineMarkdown(r.selectedOptions[j], mdTheme, t =>
-							uiTheme.fg("toolOutput", t),
-						);
-						answerText += `\n${continuation}${uiTheme.fg("dim", optBranch)} ${uiTheme.fg("success", uiTheme.checkbox.checked)} ${selectedLabel}`;
-					}
-				} else {
-					answerText = `${continuation}${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.warning", "warning")} ${uiTheme.fg("warning", "Cancelled")}`;
+				const answerLines: string[] = [];
+				for (let j = 0; j < r.selectedOptions.length; j++) {
+					const isLast = j === r.selectedOptions.length - 1 && r.customInput === undefined;
+					const optBranch = isLast ? uiTheme.tree.last : uiTheme.tree.branch;
+					const selectedLabel = renderInlineMarkdown(r.selectedOptions[j], mdTheme, t =>
+						uiTheme.fg("toolOutput", t),
+					);
+					answerLines.push(
+						`${continuation}${uiTheme.fg("dim", optBranch)} ${uiTheme.fg("success", uiTheme.checkbox.checked)} ${selectedLabel}`,
+					);
 				}
-				if (answerText) {
-					container.addChild(new Text(answerText, 0, 0));
+				if (answerLines.length > 0) {
+					container.addChild(new Text(answerLines.join("\n"), 0, 0));
+				}
+				if (r.customInput !== undefined) {
+					container.addChild(new Text(renderCustomInput(uiTheme, continuation, r.customInput, true, false), 0, 0));
+				} else if (r.selectedOptions.length === 0) {
+					container.addChild(
+						new Text(
+							`${continuation}${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.warning", "warning")} ${uiTheme.fg("warning", "Cancelled")}`,
+							0,
+							0,
+						),
+					);
 				}
 			}
 			return container;
@@ -715,28 +750,40 @@ export const askToolRenderer = {
 			return new Text(fallback, 0, 0);
 		}
 
-		const hasSelection = details.customInput || (details.selectedOptions && details.selectedOptions.length > 0);
+		const hasSelection =
+			details.customInput !== undefined || (details.selectedOptions && details.selectedOptions.length > 0);
 		const header = renderStatusLine({ icon: hasSelection ? "success" : "warning", title: "Ask" }, uiTheme);
 		const container = new Container();
 		container.addChild(new Text(header, 0, 0));
 		container.addChild(new Markdown(details.question, 1, 0, mdTheme, accentStyle));
 
-		let answerText = "";
-		if (details.customInput) {
-			answerText = ` ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.success", "success")} ${uiTheme.fg("toolOutput", details.customInput)}`;
-		} else if (details.selectedOptions && details.selectedOptions.length > 0) {
+		const answerLines: string[] = [];
+		if (details.selectedOptions && details.selectedOptions.length > 0) {
 			for (let i = 0; i < details.selectedOptions.length; i++) {
-				const isLast = i === details.selectedOptions.length - 1;
+				const isLast = i === details.selectedOptions.length - 1 && details.customInput === undefined;
 				const branch = isLast ? uiTheme.tree.last : uiTheme.tree.branch;
 				const selectedLabel = renderInlineMarkdown(details.selectedOptions[i], mdTheme, t =>
 					uiTheme.fg("toolOutput", t),
 				);
-				answerText += `\n ${uiTheme.fg("dim", branch)} ${uiTheme.fg("success", uiTheme.checkbox.checked)} ${selectedLabel}`;
+				answerLines.push(
+					` ${uiTheme.fg("dim", branch)} ${uiTheme.fg("success", uiTheme.checkbox.checked)} ${selectedLabel}`,
+				);
 			}
-		} else {
-			answerText = ` ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.warning", "warning")} ${uiTheme.fg("warning", "Cancelled")}`;
 		}
-		container.addChild(new Text(answerText, 0, 0));
+		if (answerLines.length > 0) {
+			container.addChild(new Text(answerLines.join("\n"), 0, 0));
+		}
+		if (details.customInput !== undefined) {
+			container.addChild(new Text(renderCustomInput(uiTheme, " ", details.customInput, true, false), 0, 0));
+		} else if (!details.selectedOptions || details.selectedOptions.length === 0) {
+			container.addChild(
+				new Text(
+					` ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.warning", "warning")} ${uiTheme.fg("warning", "Cancelled")}`,
+					0,
+					0,
+				),
+			);
+		}
 
 		return container;
 	},

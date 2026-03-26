@@ -243,7 +243,12 @@ export interface InteractiveModeContext {
 	hideHookSelector(): void;
 	showHookInput(title: string, placeholder?: string): Promise<string | undefined>;
 	hideHookInput(): void;
-	showHookEditor(title: string, prefill?: string): Promise<string | undefined>;
+	showHookEditor(
+		title: string,
+		prefill?: string,
+		dialogOptions?: ExtensionUIDialogOptions,
+		editorOptions?: { promptStyle?: boolean },
+	): Promise<string | undefined>;
 	hideHookEditor(): void;
 	showHookNotify(message: string, type?: "info" | "warning" | "error"): void;
 	showHookCustom<T>(

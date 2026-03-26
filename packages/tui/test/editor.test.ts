@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { stripVTControlCharacters } from "node:util";
+import { CURSOR_MARKER } from "@oh-my-pi/pi-tui";
 import { CombinedAutocompleteProvider } from "@oh-my-pi/pi-tui/autocomplete";
 import { Editor } from "@oh-my-pi/pi-tui/components/editor";
 import { visibleWidth } from "@oh-my-pi/pi-tui/utils";
@@ -502,6 +503,16 @@ describe("Editor component", () => {
 			expect(text).toBe("Hällö Wörld! 😀 äöüÄÖÜß");
 		});
 
+		it("strips control characters from programmatically loaded text before render", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setText("start\x1b[31mred\x1b[0m\u0007end");
+
+			expect(editor.getText()).toBe("start[31mred[0mend");
+			expect(editor.getText()).not.toContain("\x1b");
+			expect(editor.getText()).not.toContain("\u0007");
+			expect(editor.render(80).join("\n")).not.toContain("\x1b[31m");
+		});
+
 		it("moves cursor to document start on Ctrl+A and inserts at the beginning", () => {
 			const editor = new Editor(defaultEditorTheme);
 
@@ -707,6 +718,379 @@ describe("Editor component", () => {
 				contentLines = lines.slice(1);
 				expect(contentLines.length).toBe(2);
 			}
+		});
+
+		it("keeps a persistent prompt gutter visible after typing in borderless mode", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setBorderVisible(false);
+			editor.setPromptGutter("> ");
+			editor.setUseTerminalCursor(true);
+
+			for (const char of "hello") {
+				editor.handleInput(char);
+			}
+
+			const [line] = editor.render(20);
+			expect(stripVTControlCharacters(line!).startsWith("> hello")).toBeTrue();
+			expect(visibleWidth(line!)).toBeLessThanOrEqual(20);
+		});
+
+		it("pads wrapped borderless lines to the prompt gutter width", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setBorderVisible(false);
+			editor.setPromptGutter("> ");
+			editor.setUseTerminalCursor(true);
+			editor.setText("abcdefghij");
+
+			const lines = editor.render(10).map(line => stripVTControlCharacters(line));
+			expect(lines).toHaveLength(2);
+			expect(lines[0]).toBe("> abcdefgh");
+			expect(lines[1]).toBe("  ij      ");
+		});
+
+		it("keeps the prompt gutter visible when it consumes the full borderless width", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setBorderVisible(false);
+			editor.setPromptGutter("> ");
+
+			let lines = editor.render(1).map(line => stripVTControlCharacters(line));
+			expect(lines).toEqual([">"]);
+			expect(lines.every(line => visibleWidth(line) <= 1)).toBeTrue();
+
+			lines = editor.render(2).map(line => stripVTControlCharacters(line));
+			expect(lines).toEqual([`>${defaultEditorTheme.symbols.inputCursor}`]);
+			expect(lines.every(line => visibleWidth(line) <= 2)).toBeTrue();
+
+			editor.handleInput("a");
+
+			lines = editor.render(2).map(line => stripVTControlCharacters(line));
+			expect(lines).toEqual([`>${defaultEditorTheme.symbols.inputCursor}`]);
+			expect(lines.every(line => visibleWidth(line) <= 2)).toBeTrue();
+		});
+
+		it("keeps cursor-following movement stable when the prompt gutter consumes the full borderless width", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setBorderVisible(false);
+			editor.setPromptGutter("> ");
+			editor.setMaxHeight(2);
+			editor.focused = true;
+			editor.setText("a\nb\nc");
+
+			let lines = editor.render(2);
+			expect(lines).toHaveLength(2);
+			expect(lines[0]).toBe("> ");
+			expect(lines[1]).toBe(` \x1b[5m${defaultEditorTheme.symbols.inputCursor}\x1b[0m${CURSOR_MARKER}`);
+
+			editor.handleInput("\x1b[A");
+
+			expect(editor.getCursor()).toEqual({ line: 1, col: 1 });
+			lines = editor.render(2);
+			expect(lines).toEqual([`>\x1b[5m${defaultEditorTheme.symbols.inputCursor}\x1b[0m${CURSOR_MARKER}`, "  "]);
+		});
+
+		it("keeps the prompt gutter visible at the borderless width limit", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setBorderVisible(false);
+			editor.setPromptGutter("> ");
+			editor.focused = true;
+			const width = 20;
+
+			for (let i = 0; i < width - 2; i++) {
+				editor.handleInput("a");
+			}
+
+			const [line] = editor.render(width);
+			expect(stripVTControlCharacters(line!).startsWith("> ")).toBeTrue();
+			expect(line).toContain(`\x1b[7ma\x1b[0m${CURSOR_MARKER}`);
+			expect(visibleWidth(line!.replaceAll(CURSOR_MARKER, ""))).toBeLessThanOrEqual(width);
+		});
+
+		it("keeps the prompt gutter visible on the first rendered row after scrolling", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setBorderVisible(false);
+			editor.setPromptGutter("> ");
+			editor.setMaxHeight(3);
+			editor.setText("l0\nl1\nl2\nl3");
+
+			const lines = editor.render(10).map(line => stripVTControlCharacters(line));
+			expect(lines).toHaveLength(3);
+			expect(lines[0]?.startsWith("> l1")).toBeTrue();
+			expect(lines.slice(1).every(line => line.startsWith("  "))).toBeTrue();
+			expect(lines.every(line => visibleWidth(line) <= 10)).toBeTrue();
+		});
+
+		it("keeps the prompt gutter visible when scrolling starts on a wrapped continuation chunk", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setBorderVisible(false);
+			editor.setPromptGutter("> ");
+			editor.setUseTerminalCursor(true);
+			editor.setMaxHeight(2);
+			editor.setText("abcdefghijklmno\nz");
+
+			const lines = editor.render(10).map(line => stripVTControlCharacters(line));
+			expect(lines).toHaveLength(2);
+			expect(lines[0]).toBe("> ijklmno ");
+			expect(lines[1]).toBe("  z       ");
+			expect(lines.every(line => visibleWidth(line) <= 10)).toBeTrue();
+		});
+
+		it("does not overflow width in borderless mode when the cursor reaches the line edge", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setBorderVisible(false);
+			const width = 20;
+
+			for (let i = 0; i < width; i++) {
+				editor.handleInput("a");
+			}
+
+			const lines = editor.render(width);
+			expect(lines).toHaveLength(1);
+			expect(visibleWidth(lines[0]!)).toBeLessThanOrEqual(width);
+		});
+
+		it("clamps the terminal cursor marker inside a full-width borderless row", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setBorderVisible(false);
+			editor.setUseTerminalCursor(true);
+			editor.focused = true;
+			const width = 3;
+			editor.setText("abc");
+
+			const [line] = editor.render(width);
+			const [beforeMarker] = line!.split(CURSOR_MARKER);
+
+			expect(line).toContain(CURSOR_MARKER);
+			expect(stripVTControlCharacters(line!.replaceAll(CURSOR_MARKER, ""))).toBe("abc");
+			expect(visibleWidth(beforeMarker!)).toBe(width - 1);
+			expect(visibleWidth(line!.replaceAll(CURSOR_MARKER, ""))).toBe(width);
+		});
+
+		it("clamps the terminal cursor marker inside a full-width borderless prompt-gutter row", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setBorderVisible(false);
+			editor.setPromptGutter("> ");
+			editor.setUseTerminalCursor(true);
+			editor.focused = true;
+			const width = 5;
+			editor.setText("abc");
+
+			const [line] = editor.render(width);
+			const [beforeMarker] = line!.split(CURSOR_MARKER);
+
+			expect(line).toContain(CURSOR_MARKER);
+			expect(stripVTControlCharacters(line!.replaceAll(CURSOR_MARKER, ""))).toBe("> abc");
+			expect(visibleWidth(beforeMarker!)).toBe(width - 1);
+			expect(visibleWidth(line!.replaceAll(CURSOR_MARKER, ""))).toBe(width);
+		});
+
+		it("does not overflow prompt-gutter wraps when a wide grapheme lands in a 1-column content area", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setBorderVisible(false);
+			editor.setPromptGutter("> ");
+			const width = 3;
+			editor.setText("好a");
+
+			const lines = editor.render(width).map(line => stripVTControlCharacters(line.replaceAll(CURSOR_MARKER, "")));
+
+			expect(lines).toEqual([">  ", "  a"]);
+			expect(lines.every(line => visibleWidth(line) <= width)).toBeTrue();
+		});
+
+		it("clamps terminal-cursor rows when a wide grapheme lands in a 1-column prompt-gutter content area", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setBorderVisible(false);
+			editor.setPromptGutter("> ");
+			editor.setUseTerminalCursor(true);
+			editor.focused = true;
+			const width = 3;
+			editor.setText("好");
+
+			const [line] = editor.render(width);
+
+			expect(line).toContain(CURSOR_MARKER);
+			expect(stripVTControlCharacters(line!.replaceAll(CURSOR_MARKER, ""))).toBe(">  ");
+			expect(visibleWidth(line!.replaceAll(CURSOR_MARKER, ""))).toBeLessThanOrEqual(width);
+		});
+
+		it("keeps a visible cursor marker when a focused borderless line is full width", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setBorderVisible(false);
+			editor.focused = true;
+			const width = 20;
+
+			for (let i = 0; i < width; i++) {
+				editor.handleInput("a");
+			}
+
+			const [line] = editor.render(width);
+			expect(line).toContain(`\x1b[7ma\x1b[0m${CURSOR_MARKER}`);
+			expect(visibleWidth(line.replaceAll(CURSOR_MARKER, ""))).toBeLessThanOrEqual(width);
+		});
+
+		it("preserves cursorOverride at the borderless width limit", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setBorderVisible(false);
+			editor.cursorOverride = "\x1b[35m~\x1b[0m";
+			editor.cursorOverrideWidth = 1;
+			editor.focused = true;
+			const width = 20;
+
+			for (let i = 0; i < width; i++) {
+				editor.handleInput("a");
+			}
+
+			const [line] = editor.render(width);
+			expect(line).toContain(`${editor.cursorOverride}${CURSOR_MARKER}`);
+			expect(visibleWidth(line.replaceAll(CURSOR_MARKER, ""))).toBeLessThanOrEqual(width);
+		});
+
+		it("keeps the cursor marker at the full width when cursorOverride replaces a wide trailing glyph", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setBorderVisible(false);
+			editor.cursorOverride = "\x1b[35m~\x1b[0m";
+			editor.cursorOverrideWidth = 1;
+			editor.focused = true;
+			const width = 20;
+
+			editor.setText("aaaaaaaaaaaaaaaaaa✅");
+
+			const [line] = editor.render(width);
+			const beforeMarker = line.split(CURSOR_MARKER)[0];
+			expect(line).toContain(`${editor.cursorOverride}${CURSOR_MARKER}`);
+			expect(visibleWidth(beforeMarker!)).toBe(width);
+			expect(visibleWidth(line.replaceAll(CURSOR_MARKER, ""))).toBeLessThanOrEqual(width);
+		});
+
+		it("preserves visible trailing text when a wide cursorOverride cannot fit on a narrow borderless line", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setBorderVisible(false);
+			editor.cursorOverride = "好";
+			editor.cursorOverrideWidth = 2;
+			editor.focused = true;
+			const width = 1;
+			editor.setText("a");
+
+			const [line] = editor.render(width);
+
+			expect(line).toContain(CURSOR_MARKER);
+			expect(stripVTControlCharacters(line.replaceAll(CURSOR_MARKER, ""))).toBe("a");
+			expect(visibleWidth(line.replaceAll(CURSOR_MARKER, ""))).toBeLessThanOrEqual(width);
+		});
+
+		it("keeps a visible fake cursor when the prompt gutter consumes the full borderless width", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setBorderVisible(false);
+			editor.setPromptGutter("> ");
+			editor.focused = true;
+
+			const [line] = editor.render(2);
+
+			expect(stripVTControlCharacters(line!.replaceAll(CURSOR_MARKER, ""))).toBe(
+				`>${defaultEditorTheme.symbols.inputCursor}`,
+			);
+			expect(line).toContain(CURSOR_MARKER);
+			expect(visibleWidth(line!.replaceAll(CURSOR_MARKER, ""))).toBeLessThanOrEqual(2);
+		});
+
+		it("renders a fitting cursorOverride after the prompt glyph in a zero-content prompt gutter row", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setBorderVisible(false);
+			editor.setPromptGutter("> ");
+			editor.cursorOverride = "\x1b[35m~\x1b[0m";
+			editor.cursorOverrideWidth = 1;
+			editor.focused = true;
+			const width = 2;
+
+			const [line] = editor.render(width);
+
+			expect(stripVTControlCharacters(line!.replaceAll(CURSOR_MARKER, ""))).toBe(">~");
+			expect(line).toContain(`${editor.cursorOverride}${CURSOR_MARKER}`);
+			expect(visibleWidth(line!.replaceAll(CURSOR_MARKER, ""))).toBeLessThanOrEqual(width);
+		});
+
+		it("highlights the only visible prompt-gutter cell when the zero-content prompt gutter truncates to one visible cell", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setBorderVisible(false);
+			editor.setPromptGutter("> ");
+			const width = 1;
+
+			const [baselineLine] = editor.render(width);
+			const visibleCell = stripVTControlCharacters(baselineLine!);
+			editor.focused = true;
+
+			const [line] = editor.render(width);
+
+			expect(line).toBe(`\x1b[7m${visibleCell}\x1b[0m${CURSOR_MARKER}`);
+			expect(stripVTControlCharacters(line!.replaceAll(CURSOR_MARKER, ""))).toBe(visibleCell);
+			expect(visibleWidth(line!.replaceAll(CURSOR_MARKER, ""))).toBeLessThanOrEqual(width);
+		});
+
+		it("preserves the prompt glyph when a wide cursorOverride hits the zero-content prompt gutter", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setBorderVisible(false);
+			editor.setPromptGutter("> ");
+			editor.cursorOverride = "好";
+			editor.cursorOverrideWidth = 2;
+			editor.focused = true;
+			const width = 2;
+
+			const [line] = editor.render(width);
+
+			expect(stripVTControlCharacters(line!.replaceAll(CURSOR_MARKER, ""))).toBe(
+				`>${defaultEditorTheme.symbols.inputCursor}`,
+			);
+			expect(line).toContain(CURSOR_MARKER);
+			expect(stripVTControlCharacters(line!)).not.toContain("好");
+			expect(visibleWidth(line!.replaceAll(CURSOR_MARKER, ""))).toBeLessThanOrEqual(width);
+		});
+
+		it("falls back to a visible cursor when a wide cursorOverride cannot fit on an empty narrow borderless line", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setBorderVisible(false);
+			editor.cursorOverride = "好";
+			editor.cursorOverrideWidth = 2;
+			editor.focused = true;
+			const width = 1;
+
+			const [line] = editor.render(width);
+
+			expect(stripVTControlCharacters(line!.replaceAll(CURSOR_MARKER, ""))).toBe(
+				defaultEditorTheme.symbols.inputCursor,
+			);
+			expect(line).toContain(CURSOR_MARKER);
+			expect(visibleWidth(line!.replaceAll(CURSOR_MARKER, ""))).toBeLessThanOrEqual(width);
+		});
+
+		it("falls back to the built-in cursor when a wide trailing grapheme cannot fit on a narrow borderless line", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setBorderVisible(false);
+			editor.focused = true;
+			const width = 1;
+			editor.setText("好");
+
+			const [line] = editor.render(width);
+
+			expect(stripVTControlCharacters(line!.replaceAll(CURSOR_MARKER, ""))).toBe(
+				defaultEditorTheme.symbols.inputCursor,
+			);
+			expect(line).toContain(CURSOR_MARKER);
+			expect(stripVTControlCharacters(line!)).not.toContain("好");
+			expect(visibleWidth(line!.replaceAll(CURSOR_MARKER, ""))).toBeLessThanOrEqual(width);
+		});
+
+		it("uses the full width in borderless mode when horizontal padding is zero", () => {
+			const editor = new Editor(defaultEditorTheme);
+			editor.setBorderVisible(false);
+			editor.setPaddingX(0);
+			const width = 20;
+
+			for (let i = 0; i < width; i++) {
+				editor.handleInput("a");
+			}
+
+			const lines = editor.render(width);
+			expect(lines).toHaveLength(1);
+			expect(visibleWidth(lines[0]!)).toBeLessThanOrEqual(width);
 		});
 
 		it("does not exceed terminal width with emoji at wrap boundary", () => {

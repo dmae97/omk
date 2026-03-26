@@ -1,6 +1,10 @@
 /**
- * Multi-line editor component for hooks.
+ * Multi-line editor component for hooks and ask custom input.
  * Supports Ctrl+G for external editor.
+ *
+ * Two modes:
+ * - Default (hook): Enter inserts newline, Ctrl+Enter submits, bordered popup
+ * - Prompt-style (ask): Enter submits, Shift+Enter inserts newline, legacy ask chrome
  */
 import { Container, Editor, matchesKey, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
 import { getEditorTheme, theme } from "../../modes/theme/theme";
@@ -8,11 +12,17 @@ import { matchesAppInterrupt } from "../../modes/utils/keybinding-matchers";
 import { getEditorCommand, openInEditor } from "../../utils/external-editor";
 import { DynamicBorder } from "./dynamic-border";
 
+export interface HookEditorOptions {
+	/** When true, use prompt-style keybindings with the legacy ask prompt chrome. */
+	promptStyle?: boolean;
+}
+
 export class HookEditorComponent extends Container {
 	#editor: Editor;
 	#onSubmitCallback: (value: string) => void;
 	#onCancelCallback: () => void;
 	#tui: TUI;
+	#promptStyle: boolean;
 
 	constructor(
 		tui: TUI,
@@ -20,23 +30,29 @@ export class HookEditorComponent extends Container {
 		prefill: string | undefined,
 		onSubmit: (value: string) => void,
 		onCancel: () => void,
+		options?: HookEditorOptions,
 	) {
 		super();
 
 		this.#tui = tui;
 		this.#onSubmitCallback = onSubmit;
 		this.#onCancelCallback = onCancel;
+		this.#promptStyle = options?.promptStyle ?? false;
 
-		// Add top border
 		this.addChild(new DynamicBorder());
 		this.addChild(new Spacer(1));
 
-		// Add title
+		// Title
 		this.addChild(new Text(theme.fg("accent", title), 1, 0));
 		this.addChild(new Spacer(1));
 
-		// Create editor
+		// Editor
 		this.#editor = new Editor(getEditorTheme());
+		if (this.#promptStyle) {
+			this.#editor.setBorderVisible(false);
+			this.#editor.setPromptGutter("> ");
+			this.#editor.disableSubmit = true;
+		}
 		if (prefill) {
 			this.#editor.setText(prefill);
 		}
@@ -44,17 +60,50 @@ export class HookEditorComponent extends Container {
 
 		this.addChild(new Spacer(1));
 
-		// Add hint
-		const hint = "ctrl+enter submit  esc cancel  ctrl+g external editor";
+		// Hint
+		const hint = this.#promptStyle
+			? "enter submit  esc cancel"
+			: "ctrl+enter submit  esc cancel  ctrl+g external editor";
 		this.addChild(new Text(theme.fg("dim", hint), 1, 0));
 
 		this.addChild(new Spacer(1));
-
-		// Add bottom border
 		this.addChild(new DynamicBorder());
 	}
 
 	handleInput(keyData: string): void {
+		if (this.#promptStyle) {
+			this.#handlePromptStyleInput(keyData);
+		} else {
+			this.#handleHookStyleInput(keyData);
+		}
+	}
+
+	/** Prompt-style: raw Enter submits; Editor owns newline-producing sequences. */
+	#handlePromptStyleInput(keyData: string): void {
+		// Prompt-style keeps Escape as an explicit cancel key and also honors app.interrupt remaps.
+		if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc") || matchesAppInterrupt(keyData)) {
+			this.#onCancelCallback();
+			return;
+		}
+
+		// Ctrl+G for external editor
+		if (matchesKey(keyData, "ctrl+g")) {
+			void this.#openExternalEditor();
+			return;
+		}
+
+		// Submit on any plain Enter encoding, including terminals that report unmodified Enter as LF.
+		if (matchesKey(keyData, "enter") || matchesKey(keyData, "return")) {
+			this.#onSubmitCallback(this.#editor.getText());
+			return;
+		}
+
+		// Let Editor handle modified newline-producing variants (Shift+Enter, Ctrl+Enter, Alt+Enter, etc.)
+		this.#editor.handleInput(keyData);
+	}
+
+	/** Hook-style: Enter=newline, Ctrl+Enter=submit (original behavior) */
+	#handleHookStyleInput(keyData: string): void {
 		// Ctrl+Enter to submit
 		if (keyData === "\x1b[13;5u" || keyData === "\x1b[27;5;13~") {
 			this.#onSubmitCallback(this.#editor.getText());

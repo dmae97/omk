@@ -50,7 +50,8 @@ export class ExtensionUiController {
 				this.ctx.editor.handleInput(`\x1b[200~${text}\x1b[201~`);
 			},
 			getEditorText: () => this.ctx.editor.getText(),
-			editor: (title, prefill) => this.showHookEditor(title, prefill),
+			editor: (title, prefill, dialogOptions, editorOptions) =>
+				this.showHookEditor(title, prefill, dialogOptions, editorOptions),
 			get theme() {
 				return theme;
 			},
@@ -783,26 +784,53 @@ export class ExtensionUiController {
 	/**
 	 * Show a multi-line editor for hooks (with Ctrl+G support).
 	 */
-	showHookEditor(title: string, prefill?: string): Promise<string | undefined> {
+	showHookEditor(
+		title: string,
+		prefill?: string,
+		dialogOptions?: ExtensionUIDialogOptions,
+		editorOptions?: { promptStyle?: boolean },
+	): Promise<string | undefined> {
 		const { promise, resolve } = Promise.withResolvers<string | undefined>();
+		let settled = false;
+		const onAbort = () => {
+			this.hideHookEditor();
+			if (!settled) {
+				settled = true;
+				resolve(undefined);
+			}
+		};
+		const finish = (value: string | undefined) => {
+			if (settled) return;
+			settled = true;
+			dialogOptions?.signal?.removeEventListener("abort", onAbort);
+			resolve(value);
+		};
 		this.ctx.hookEditor = new HookEditorComponent(
 			this.ctx.ui,
 			title,
 			prefill,
 			value => {
 				this.hideHookEditor();
-				resolve(value);
+				finish(value);
 			},
 			() => {
 				this.hideHookEditor();
-				resolve(undefined);
+				finish(undefined);
 			},
+			editorOptions,
 		);
 
 		this.ctx.editorContainer.clear();
 		this.ctx.editorContainer.addChild(this.ctx.hookEditor);
 		this.ctx.ui.setFocus(this.ctx.hookEditor);
 		this.ctx.ui.requestRender();
+		if (dialogOptions?.signal) {
+			if (dialogOptions.signal.aborted) {
+				onAbort();
+			} else {
+				dialogOptions.signal.addEventListener("abort", onAbort, { once: true });
+			}
+		}
 		return promise;
 	}
 
