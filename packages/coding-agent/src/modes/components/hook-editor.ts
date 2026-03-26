@@ -80,8 +80,8 @@ export class HookEditorComponent extends Container {
 
 	/** Prompt-style: raw Enter submits; Editor owns newline-producing sequences. */
 	#handlePromptStyleInput(keyData: string): void {
-		// Escape to cancel
-		if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc")) {
+		// Prompt-style keeps Escape as an explicit cancel key and also honors app.interrupt remaps.
+		if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc") || matchesAppInterrupt(keyData)) {
 			this.#onCancelCallback();
 			return;
 		}

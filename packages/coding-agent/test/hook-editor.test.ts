@@ -1,9 +1,10 @@
-import { beforeAll, describe, expect, it, vi } from "bun:test";
+import { afterEach, beforeAll, describe, expect, it, vi } from "bun:test";
+import { KeybindingsManager } from "@oh-my-pi/pi-coding-agent/config/keybindings";
 import { HookEditorComponent } from "@oh-my-pi/pi-coding-agent/modes/components/hook-editor";
 import { ExtensionUiController } from "@oh-my-pi/pi-coding-agent/modes/controllers/extension-ui-controller";
 import { getThemeByName, setThemeInstance } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/types";
-import type { TUI } from "@oh-my-pi/pi-tui";
+import { setKeybindings, type TUI } from "@oh-my-pi/pi-tui";
 
 beforeAll(async () => {
 	const theme = await getThemeByName("dark");
@@ -11,6 +12,11 @@ beforeAll(async () => {
 		throw new Error("Failed to load dark theme for tests");
 	}
 	setThemeInstance(theme);
+});
+
+afterEach(() => {
+	setKeybindings(KeybindingsManager.inMemory());
+	vi.restoreAllMocks();
 });
 
 function createTui(): TUI {
@@ -256,6 +262,24 @@ describe("HookEditorComponent prompt-style mode", () => {
 		});
 
 		component.handleInput("\x1b");
+
+		expect(onCancel).toHaveBeenCalledTimes(1);
+		expect(onSubmit).not.toHaveBeenCalled();
+	});
+
+	it("cancels on app.interrupt in prompt-style mode even when remapped", () => {
+		setKeybindings(
+			KeybindingsManager.inMemory({
+				"app.interrupt": "ctrl+c",
+			}),
+		);
+		const onSubmit = vi.fn();
+		const onCancel = vi.fn();
+		const component = new HookEditorComponent(createTui(), "Prompt", "draft", onSubmit, onCancel, {
+			promptStyle: true,
+		});
+
+		component.handleInput("\x03");
 
 		expect(onCancel).toHaveBeenCalledTimes(1);
 		expect(onSubmit).not.toHaveBeenCalled();
