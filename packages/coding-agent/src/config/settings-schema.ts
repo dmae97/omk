@@ -353,6 +353,12 @@ export const SETTINGS_SCHEMA = {
 		ui: { tab: "appearance", label: "Block Images", description: "Prevent images from being sent to LLM providers" },
 	},
 
+	"tui.maxInlineImageColumns": {
+		type: "number",
+		default: 100,
+		description: "Maximum width in terminal columns for inline images (default 100). Set to 0 for unlimited (bounded only by terminal width).",
+	},
+
 	// Display rendering
 	"display.tabWidth": {
 		type: "number",

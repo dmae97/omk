@@ -51,7 +51,8 @@ export class Image implements Component {
 			return this.#cachedLines;
 		}
 
-		const maxWidth = Math.min(width - 2, this.#options.maxWidthCells ?? 60);
+		const cap = this.#options.maxWidthCells;
+		const maxWidth = (cap != null && cap > 0) ? Math.min(width - 2, cap) : width - 2;
 
 		let lines: string[];
 

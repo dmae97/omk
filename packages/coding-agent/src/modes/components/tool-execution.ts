@@ -14,6 +14,7 @@ import {
 	type TUI,
 } from "@oh-my-pi/pi-tui";
 import { getProjectDir, logger } from "@oh-my-pi/pi-utils";
+import { settings } from "../../config/settings";
 import type { Theme } from "../../modes/theme/theme";
 import { theme } from "../../modes/theme/theme";
 import { computeEditDiff, computeHashlineDiff, computePatchDiff, type DiffError, type DiffResult } from "../../patch";
@@ -530,7 +531,7 @@ export class ToolExecutionComponent extends Container {
 						imageData,
 						imageMimeType,
 						{ fallbackColor: (s: string) => theme.fg("toolOutput", s) },
-						{ maxWidthCells: 60 },
+						{ maxWidthCells: settings.get("tui.maxInlineImageColumns") },
 					);
 					this.#imageComponents.push(imageComponent);
 					this.addChild(imageComponent);

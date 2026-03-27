@@ -76,7 +76,7 @@ export class AssistantMessageComponent extends Container {
 						image.data,
 						image.mimeType,
 						{ fallbackColor: (text: string) => theme.fg("toolOutput", text) },
-						{ maxWidthCells: 60 },
+						{ maxWidthCells: settings.get("tui.maxInlineImageColumns") },
 					),
 				);
 				continue;
