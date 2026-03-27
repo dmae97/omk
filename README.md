@@ -280,6 +280,7 @@ Headless browser automation with 14 stealth scripts to evade bot detection:
 - **Selector flexibility**: CSS, `aria/`, `text/`, `xpath/`, `pierce/` query handlers for Shadow DOM piercing
 - **Reader mode**: `extract_readable` action uses Mozilla Readability for clean article extraction
 - **Headless/visible toggle**: Switch modes at runtime via `/browser` command or `browser.headless` setting
+- **NixOS support**: Automatically detects NixOS (`/etc/NIXOS`) and resolves a system Chromium (`chromium` on PATH, `~/.nix-profile/bin/chromium`, or `/run/current-system/sw/bin/chromium`) since Puppeteer's bundled binary cannot run on a non-FHS system
 
 ### + Cursor Provider
 
