@@ -12,7 +12,11 @@ use fff::{FileItem, FilePicker, FuzzySearchOptions, PaginationArgs, QueryParser}
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
-use crate::{fs_cache, search_db::SearchDb, task};
+use crate::{
+	fs_cache,
+	search_db::{SearchDb, wait_for_picker_scan},
+	task,
+};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Public types
@@ -195,9 +199,10 @@ fn search_stateful_files(
 	query: &str,
 	limit: usize,
 	db: &SearchDb,
+	ct: &task::CancelToken,
 ) -> Result<(Vec<RankedMatch>, u32)> {
 	let shared_picker = db.get_or_init_picker(root)?;
-	FilePicker::wait_for_scan(&shared_picker);
+	wait_for_picker_scan(&shared_picker, ct)?;
 	let guard = shared_picker
 		.read()
 		.map_err(|_| Error::from_reason("shared picker lock poisoned"))?;
@@ -250,7 +255,7 @@ fn run_fff_search(
 		&& include_hidden
 		&& respect_gitignore
 	{
-		let (mut file_matches, file_total) = search_stateful_files(root, query, limit, db)?;
+		let (mut file_matches, file_total) = search_stateful_files(root, query, limit, db, ct)?;
 		let (dir_matches, dir_total) =
 			search_stateless_entries(root, entries, query, limit, false, true, None, ct)?;
 		file_matches.extend(dir_matches);

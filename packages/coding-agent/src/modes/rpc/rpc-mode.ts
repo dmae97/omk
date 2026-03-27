@@ -404,6 +404,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			// ExtensionContextActions
 			{
 				getModel: () => session.agent.state.model,
+				getSearchDb: () => session.searchDb,
 				isIdle: () => !session.isStreaming,
 				abort: () => session.abort(),
 				hasPendingMessages: () => session.queuedMessageCount > 0,

@@ -832,6 +832,7 @@ export class AcpAgent implements Agent {
 			},
 			{
 				getModel: () => this.#session.model,
+				getSearchDb: () => this.#session.searchDb,
 				isIdle: () => !this.#session.isStreaming,
 				abort: () => {
 					void this.#session.abort();

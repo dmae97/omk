@@ -123,6 +123,7 @@ export class ExtensionUiController {
 		};
 		const contextActions: ExtensionContextActions = {
 			getModel: () => this.ctx.session.model,
+			getSearchDb: () => this.ctx.session.searchDb,
 			isIdle: () => !this.ctx.session.isStreaming,
 			abort: () => this.ctx.session.abort(),
 			hasPendingMessages: () => this.ctx.session.queuedMessageCount > 0,
@@ -384,6 +385,7 @@ export class ExtensionUiController {
 		};
 		const contextActions: ExtensionContextActions = {
 			getModel: () => this.ctx.session.model,
+			getSearchDb: () => this.ctx.session.searchDb,
 			isIdle: () => !this.ctx.session.isStreaming,
 			abort: () => this.ctx.session.abort(),
 			hasPendingMessages: () => this.ctx.session.queuedMessageCount > 0,
@@ -581,6 +583,7 @@ export class ExtensionUiController {
 						sessionManager: this.ctx.session.sessionManager,
 						modelRegistry: this.ctx.session.modelRegistry,
 						model: this.ctx.session.model,
+						searchDb: this.ctx.session.searchDb,
 						isIdle: () => !this.ctx.session.isStreaming,
 						hasPendingMessages: () => this.ctx.session.queuedMessageCount > 0,
 						hasQueuedMessages: () => this.ctx.session.queuedMessageCount > 0,

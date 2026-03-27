@@ -140,6 +140,8 @@ export interface CreateAgentSessionOptions {
 	authStorage?: AuthStorage;
 	/** Model registry. Default: discoverModels(authStorage, agentDir) */
 	modelRegistry?: ModelRegistry;
+	/** Shared native search DB for grep/glob/fuzzyFind-backed workflows. */
+	searchDb?: SearchDb;
 
 	/** Model to use. Default: from settings, else first available */
 	model?: Model;
@@ -390,6 +392,7 @@ function createCustomToolContext(ctx: ExtensionContext): CustomToolContext {
 		sessionManager: ctx.sessionManager,
 		modelRegistry: ctx.modelRegistry,
 		model: ctx.model,
+		searchDb: ctx.searchDb,
 		isIdle: ctx.isIdle,
 		hasQueuedMessages: ctx.hasPendingMessages,
 		abort: ctx.abort,
@@ -871,7 +874,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			})
 		: undefined;
 
-	const searchDb = new SearchDb(getSearchDbDir(agentDir));
+	const searchDb = options.searchDb ?? new SearchDb(getSearchDbDir(agentDir));
 	const pendingActionStore = new PendingActionStore();
 	const toolSession: ToolSession = {
 		cwd,
@@ -1184,6 +1187,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			sessionManager,
 			modelRegistry,
 			model: agent?.state.model,
+			searchDb,
 			isIdle: () => !session?.isStreaming,
 			hasQueuedMessages: () => (session?.queuedMessageCount ?? 0) > 0,
 			abort: () => session?.abort(),
@@ -1550,6 +1554,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		obfuscator,
 		asyncJobManager,
 		pendingActionStore,
+		searchDb,
 	});
 
 	if (model?.api === "openai-codex-responses") {

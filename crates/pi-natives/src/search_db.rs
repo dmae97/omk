@@ -3,12 +3,19 @@
 //! This owns search-side shared state that should outlive individual native
 //! calls: frecency tracking plus a per-root cache of `fff` file pickers.
 
-use std::{collections::HashMap, path::Path, sync::Arc};
+use std::{
+	collections::HashMap,
+	path::Path,
+	sync::{Arc, atomic::Ordering},
+	time::Duration,
+};
 
 use fff::{FFFMode, FileItem, FilePicker, FrecencyTracker, SharedFrecency, SharedPicker};
 use napi::{Error, bindgen_prelude::Result};
 use napi_derive::napi;
 use parking_lot::Mutex;
+
+use crate::task;
 
 struct SearchDbInner {
 	path:            String,
@@ -105,4 +112,24 @@ impl SearchDb {
 		};
 		let _ = item.update_frecency_scores(tracker, FFFMode::Ai);
 	}
+}
+
+pub fn wait_for_picker_scan(shared_picker: &SharedPicker, ct: &task::CancelToken) -> Result<()> {
+	let signal = {
+		let guard = shared_picker
+			.read()
+			.map_err(|_| Error::from_reason("shared picker lock poisoned"))?;
+		let Some(picker) = guard.as_ref() else {
+			return Ok(());
+		};
+		picker.scan_signal()
+	};
+
+	while signal.load(Ordering::Acquire) {
+		ct.heartbeat()?;
+		std::thread::sleep(Duration::from_millis(10));
+	}
+
+	ct.heartbeat()?;
+	Ok(())
 }

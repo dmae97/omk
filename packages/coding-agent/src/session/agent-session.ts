@@ -50,6 +50,7 @@ import {
 	modelsAreEqual,
 	parseRateLimitReason,
 } from "@oh-my-pi/pi-ai";
+import type { SearchDb } from "@oh-my-pi/pi-natives";
 import { abortableSleep, getAgentDbPath, isEnoent, logger } from "@oh-my-pi/pi-utils";
 import type { AsyncJob, AsyncJobManager } from "../async";
 import type { Rule } from "../capability/rule";
@@ -237,6 +238,8 @@ export interface AgentSessionConfig {
 	obfuscator?: SecretObfuscator;
 	/** Pending action store for preview/apply workflows */
 	pendingActionStore?: PendingActionStore;
+	/** Shared native search DB for grep/glob/fuzzyFind-backed workflows. */
+	searchDb?: SearchDb;
 }
 
 /** Options for AgentSession.prompt() */
@@ -348,6 +351,7 @@ export class AgentSession {
 	readonly agent: Agent;
 	readonly sessionManager: SessionManager;
 	readonly settings: Settings;
+	readonly searchDb: SearchDb | undefined;
 
 	#asyncJobManager: AsyncJobManager | undefined = undefined;
 	#scopedModels: Array<{ model: Model; thinkingLevel?: ThinkingLevel }>;
@@ -462,6 +466,7 @@ export class AgentSession {
 		this.agent = config.agent;
 		this.sessionManager = config.sessionManager;
 		this.settings = config.settings;
+		this.searchDb = config.searchDb;
 		this.#asyncJobManager = config.asyncJobManager;
 		this.#scopedModels = config.scopedModels ?? [];
 		this.#thinkingLevel = config.thinkingLevel;
@@ -1888,6 +1893,7 @@ export class AgentSession {
 			sessionManager: this.sessionManager,
 			modelRegistry: this.#modelRegistry,
 			model: this.model,
+			searchDb: this.searchDb,
 			isIdle: () => !this.isStreaming,
 			hasQueuedMessages: () => this.queuedMessageCount > 0,
 			abort: () => {

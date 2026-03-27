@@ -28,7 +28,11 @@ use napi_derive::napi;
 use rayon::prelude::*;
 use smallvec::SmallVec;
 
-use crate::{fs_cache, glob_util, search_db::SearchDb, task};
+use crate::{
+	fs_cache, glob_util,
+	search_db::{SearchDb, wait_for_picker_scan},
+	task,
+};
 
 const MAX_FILE_BYTES: u64 = 4 * 1024 * 1024;
 
@@ -793,16 +797,13 @@ fn collect_files_from_picker(
 	include_hidden: bool,
 	ct: &task::CancelToken,
 ) -> Result<Vec<FileEntry>> {
-	use fff::FilePicker;
-
 	let shared_picker = db.get_or_init_picker(root)?;
 	ct.heartbeat()?;
 	// Wait for the background scan to finish.  On repeated calls this is a
 	// no-op (the signal is already cleared).  On first call it blocks until
 	// the initial directory walk completes, which is equivalent in latency
 	// to a fresh fs_cache::force_rescan but is then never repeated.
-	FilePicker::wait_for_scan(&shared_picker);
-	ct.heartbeat()?;
+	wait_for_picker_scan(&shared_picker, ct)?;
 
 	let guard = shared_picker
 		.read()
