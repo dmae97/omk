@@ -24,6 +24,8 @@ export interface PythonExecutorOptions {
 	cwd?: string;
 	/** Timeout in milliseconds */
 	timeoutMs?: number;
+	/** Absolute wall-clock deadline in milliseconds since epoch */
+	deadlineMs?: number;
 	/** Callback for streaming output chunks (already sanitized) */
 	onChunk?: (chunk: string) => Promise<void> | void;
 	/** AbortSignal for cancellation */
@@ -85,6 +87,151 @@ interface KernelSession {
 const kernelSessions = new Map<string, KernelSession>();
 let cachedPreludeDocs: PreludeHelper[] | null = null;
 let cleanupTimer: NodeJS.Timeout | null = null;
+
+interface KernelSessionExecutionOptions {
+	useSharedGateway?: boolean;
+	sessionFile?: string;
+	signal?: AbortSignal;
+	deadlineMs?: number;
+}
+
+class PythonExecutionCancelledError extends Error {
+	readonly timedOut: boolean;
+
+	constructor(timedOut: boolean) {
+		super(timedOut ? "Command timed out" : "Command aborted");
+		this.name = timedOut ? "TimeoutError" : "AbortError";
+		this.timedOut = timedOut;
+	}
+}
+
+function getExecutionDeadlineMs(options?: Pick<PythonExecutorOptions, "deadlineMs" | "timeoutMs">): number | undefined {
+	if (options?.deadlineMs !== undefined) return options.deadlineMs;
+	if (options?.timeoutMs === undefined) return undefined;
+	return Date.now() + options.timeoutMs;
+}
+
+function getRemainingTimeoutMs(deadlineMs?: number): number | undefined {
+	if (deadlineMs === undefined) return undefined;
+	return deadlineMs - Date.now();
+}
+
+function requireRemainingTimeoutMs(deadlineMs?: number): number | undefined {
+	const remainingMs = getRemainingTimeoutMs(deadlineMs);
+	if (remainingMs === undefined) return undefined;
+	if (remainingMs <= 0) {
+		throw new PythonExecutionCancelledError(true);
+	}
+	return remainingMs;
+}
+
+function isCancellationError(error: unknown): boolean {
+	return (
+		error instanceof PythonExecutionCancelledError ||
+		(error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError")) ||
+		(error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError"))
+	);
+}
+
+function isTimedOutCancellation(error: unknown, signal?: AbortSignal): boolean {
+	if (error instanceof PythonExecutionCancelledError) return error.timedOut;
+	if (error instanceof DOMException) return error.name === "TimeoutError";
+	if (error instanceof Error && error.name === "TimeoutError") return true;
+	const reason = signal?.reason;
+	if (reason instanceof DOMException) return reason.name === "TimeoutError";
+	return reason instanceof Error ? reason.name === "TimeoutError" : false;
+}
+
+async function waitForQueueTurn(
+	queue: Promise<void>,
+	options: Pick<KernelSessionExecutionOptions, "signal" | "deadlineMs">,
+): Promise<void> {
+	if (options.signal?.aborted) {
+		throw new PythonExecutionCancelledError(isTimedOutCancellation(options.signal.reason, options.signal));
+	}
+
+	const remainingMs = getRemainingTimeoutMs(options.deadlineMs);
+	if (remainingMs !== undefined && remainingMs <= 0) {
+		throw new PythonExecutionCancelledError(true);
+	}
+
+	if (!options.signal && remainingMs === undefined) {
+		await queue;
+		return;
+	}
+
+	await new Promise<void>((resolve, reject) => {
+		const cleanups: Array<() => void> = [];
+		const finish = (callback: () => void) => {
+			while (cleanups.length > 0) {
+				cleanups.pop()?.();
+			}
+			callback();
+		};
+
+		const onAbort = () => {
+			finish(() =>
+				reject(new PythonExecutionCancelledError(isTimedOutCancellation(options.signal?.reason, options.signal))),
+			);
+		};
+
+		if (options.signal) {
+			options.signal.addEventListener("abort", onAbort, { once: true });
+			cleanups.push(() => options.signal?.removeEventListener("abort", onAbort));
+		}
+
+		if (remainingMs !== undefined) {
+			const timeout = setTimeout(() => {
+				finish(() => reject(new PythonExecutionCancelledError(true)));
+			}, remainingMs);
+			timeout.unref();
+			cleanups.push(() => clearTimeout(timeout));
+		}
+
+		queue.then(
+			() => finish(resolve),
+			error => finish(() => reject(error)),
+		);
+	});
+}
+
+function formatTimeoutAnnotation(timeoutMs?: number): string | undefined {
+	if (timeoutMs === undefined) return "Command timed out";
+	const secs = Math.max(1, Math.round(timeoutMs / 1000));
+	return `Command timed out after ${secs} seconds`;
+}
+
+function createCancelledPythonResult(timedOut: boolean, timeoutMs?: number): PythonResult {
+	const output = timedOut ? (formatTimeoutAnnotation(timeoutMs) ?? "Command timed out") : "";
+	const outputBytes = Buffer.byteLength(output, "utf-8");
+	const outputLines = output.length > 0 ? 1 : 0;
+	return {
+		output,
+		exitCode: undefined,
+		cancelled: true,
+		truncated: false,
+		totalLines: outputLines,
+		totalBytes: outputBytes,
+		outputLines,
+		outputBytes,
+		displayOutputs: [],
+		stdinRequested: false,
+	};
+}
+
+function buildKernelStartOptions(
+	cwd: string,
+	env: Record<string, string> | undefined,
+	options: KernelSessionExecutionOptions,
+) {
+	return {
+		cwd,
+		env,
+		useSharedGateway: options.useSharedGateway,
+		signal: options.signal,
+		deadlineMs: options.deadlineMs,
+	};
+}
 
 interface PreludeCacheSource {
 	path: string;
@@ -247,13 +394,10 @@ export async function warmPythonEnvironment(
 	const resolvedSessionId = sessionId ?? `session:${cwd}`;
 	try {
 		const docs = await logger.timeAsync("warmPython:withKernelSession", () =>
-			withKernelSession(
-				resolvedSessionId,
-				cwd,
-				async kernel => kernel.introspectPrelude(),
+			withKernelSession(resolvedSessionId, cwd, async kernel => kernel.introspectPrelude(), {
 				useSharedGateway,
 				sessionFile,
-			),
+			}),
 		);
 		cachedPreludeDocs = docs;
 		if (!isTestEnv && docs.length > 0) {
@@ -306,21 +450,22 @@ async function recoverFromResourceExhaustion(): Promise<void> {
 async function createKernelSession(
 	sessionId: string,
 	cwd: string,
-	useSharedGateway?: boolean,
-	sessionFile?: string,
+	options: KernelSessionExecutionOptions = {},
 	isRetry?: boolean,
 ): Promise<KernelSession> {
-	const env: Record<string, string> | undefined = sessionFile ? { PI_SESSION_FILE: sessionFile } : undefined;
+	requireRemainingTimeoutMs(options.deadlineMs);
+	const env: Record<string, string> | undefined = options.sessionFile
+		? { PI_SESSION_FILE: options.sessionFile }
+		: undefined;
+	const startOptions = buildKernelStartOptions(cwd, env, options);
 
 	let kernel: PythonKernel;
 	try {
-		kernel = await logger.timeAsync("createKernelSession:PythonKernel.start", () =>
-			PythonKernel.start({ cwd, useSharedGateway, env }),
-		);
+		kernel = await logger.timeAsync("createKernelSession:PythonKernel.start", () => PythonKernel.start(startOptions));
 	} catch (err) {
 		if (!isRetry && isResourceExhaustionError(err)) {
 			await recoverFromResourceExhaustion();
-			return createKernelSession(sessionId, cwd, useSharedGateway, sessionFile, true);
+			return createKernelSession(sessionId, cwd, options, true);
 		}
 		throw err;
 	}
@@ -347,20 +492,23 @@ async function createKernelSession(
 async function restartKernelSession(
 	session: KernelSession,
 	cwd: string,
-	useSharedGateway?: boolean,
-	sessionFile?: string,
+	options: KernelSessionExecutionOptions = {},
 ): Promise<void> {
 	session.restartCount += 1;
 	if (session.restartCount > 1) {
 		throw new Error("Python kernel restarted too many times in this session");
 	}
+	requireRemainingTimeoutMs(options.deadlineMs);
 	try {
 		await session.kernel.shutdown();
 	} catch (err) {
 		logger.warn("Failed to shutdown crashed kernel", { error: err instanceof Error ? err.message : String(err) });
 	}
-	const env: Record<string, string> | undefined = sessionFile ? { PI_SESSION_FILE: sessionFile } : undefined;
-	const kernel = await PythonKernel.start({ cwd, useSharedGateway, env });
+	const env: Record<string, string> | undefined = options.sessionFile
+		? { PI_SESSION_FILE: options.sessionFile }
+		: undefined;
+	const startOptions = buildKernelStartOptions(cwd, env, options);
+	const kernel = await PythonKernel.start(startOptions);
 	session.kernel = kernel;
 	session.dead = false;
 	session.lastUsedAt = Date.now();
@@ -382,23 +530,18 @@ async function withKernelSession<T>(
 	sessionId: string,
 	cwd: string,
 	handler: (kernel: PythonKernel) => Promise<T>,
-	useSharedGateway?: boolean,
-	sessionFile?: string,
+	options: KernelSessionExecutionOptions = {},
 ): Promise<T> {
 	let session = kernelSessions.get(sessionId);
 	if (!session) {
-		// Evict oldest session if at capacity
 		if (kernelSessions.size >= MAX_KERNEL_SESSIONS) {
 			await evictOldestSession();
 		}
-		session = await logger.timeAsync(
-			"kernel:createKernelSession",
-			createKernelSession,
-			sessionId,
-			cwd,
-			useSharedGateway,
-			sessionFile,
-		);
+		requireRemainingTimeoutMs(options.deadlineMs);
+		if (options.signal?.aborted) {
+			throw new PythonExecutionCancelledError(isTimedOutCancellation(options.signal.reason, options.signal));
+		}
+		session = await logger.timeAsync("kernel:createKernelSession", createKernelSession, sessionId, cwd, options);
 		kernelSessions.set(sessionId, session);
 		startCleanupTimer();
 	}
@@ -406,14 +549,7 @@ async function withKernelSession<T>(
 	const run = async (): Promise<T> => {
 		session!.lastUsedAt = Date.now();
 		if (session!.dead || !session!.kernel.isAlive()) {
-			await logger.timeAsync(
-				"kernel:restartKernelSession",
-				restartKernelSession,
-				session!,
-				cwd,
-				useSharedGateway,
-				sessionFile,
-			);
+			await logger.timeAsync("kernel:restartKernelSession", restartKernelSession, session!, cwd, options);
 		}
 		try {
 			const result = await logger.timeAsync("kernel:withSession:handler", handler, session!.kernel);
@@ -423,26 +559,34 @@ async function withKernelSession<T>(
 			if (!session!.dead && session!.kernel.isAlive()) {
 				throw err;
 			}
-			await logger.timeAsync(
-				"kernel:restartKernelSession",
-				restartKernelSession,
-				session!,
-				cwd,
-				useSharedGateway,
-				sessionFile,
-			);
+			await logger.timeAsync("kernel:restartKernelSession", restartKernelSession, session!, cwd, options);
 			const result = await logger.timeAsync("kernel:postRestart:handler", handler, session!.kernel);
 			session!.restartCount = 0;
 			return result;
 		}
 	};
 
-	const task = session.queue.then(run, run);
-	session.queue = task.then(
-		() => undefined,
-		() => undefined,
-	);
-	return task;
+	const queue = session.queue;
+	let releaseTurn: (() => void) | undefined;
+	const turn = new Promise<void>(resolve => {
+		releaseTurn = resolve;
+	});
+	session.queue = queue
+		.then(
+			() => turn,
+			() => turn,
+		)
+		.then(
+			() => undefined,
+			() => undefined,
+		);
+
+	try {
+		await waitForQueueTurn(queue, options);
+		return await run();
+	} finally {
+		releaseTurn?.();
+	}
 }
 
 async function executeWithKernel(
@@ -456,19 +600,20 @@ async function executeWithKernel(
 		artifactId: options?.artifactId,
 	});
 	const displayOutputs: KernelDisplayOutput[] = [];
+	const deadlineMs = getExecutionDeadlineMs(options);
+	let executionTimeoutMs: number | undefined;
 
 	try {
+		executionTimeoutMs = requireRemainingTimeoutMs(deadlineMs);
 		const result = await kernel.execute(code, {
 			signal: options?.signal,
-			timeoutMs: options?.timeoutMs,
+			timeoutMs: executionTimeoutMs,
 			onChunk: text => sink.push(text),
 			onDisplay: output => void displayOutputs.push(output),
 		});
 
 		if (result.cancelled) {
-			const secs = options?.timeoutMs ? Math.round(options.timeoutMs / 1000) : undefined;
-			const annotation =
-				result.timedOut && secs !== undefined ? `Command timed out after ${secs} seconds` : undefined;
+			const annotation = result.timedOut ? formatTimeoutAnnotation(executionTimeoutMs) : undefined;
 			return {
 				exitCode: undefined,
 				cancelled: true,
@@ -497,6 +642,16 @@ async function executeWithKernel(
 			...(await sink.dump()),
 		};
 	} catch (err) {
+		if (isCancellationError(err) || options?.signal?.aborted) {
+			const timedOut = isTimedOutCancellation(err, options?.signal);
+			return {
+				exitCode: undefined,
+				cancelled: true,
+				displayOutputs,
+				stdinRequested: false,
+				...(await sink.dump(timedOut ? formatTimeoutAnnotation(executionTimeoutMs) : undefined)),
+			};
+		}
 		const error = err instanceof Error ? err : new Error(String(err));
 		logger.error("Python execution failed", { error: error.message });
 		throw error;
@@ -513,34 +668,54 @@ export async function executePythonWithKernel(
 
 export async function executePython(code: string, options?: PythonExecutorOptions): Promise<PythonResult> {
 	const cwd = options?.cwd ?? getProjectDir();
-	await ensureKernelAvailable(cwd);
+	const deadlineMs = getExecutionDeadlineMs(options);
+	const executionOptions: PythonExecutorOptions = {
+		...(options ?? {}),
+		deadlineMs,
+	};
 
-	const kernelMode = options?.kernelMode ?? "session";
-	const useSharedGateway = options?.useSharedGateway;
-	const sessionFile = options?.sessionFile;
-
-	if (kernelMode === "per-call") {
-		const env: Record<string, string> | undefined = sessionFile ? { PI_SESSION_FILE: sessionFile } : undefined;
-		const kernel = await PythonKernel.start({ cwd, useSharedGateway, env });
-		try {
-			return await executeWithKernel(kernel, code, options);
-		} finally {
-			await kernel.shutdown();
+	try {
+		requireRemainingTimeoutMs(deadlineMs);
+		if (executionOptions.signal?.aborted) {
+			throw new PythonExecutionCancelledError(
+				isTimedOutCancellation(executionOptions.signal.reason, executionOptions.signal),
+			);
 		}
-	}
 
-	const sessionId = options?.sessionId ?? `session:${cwd}`;
-	if (options?.reset) {
-		const existing = kernelSessions.get(sessionId);
-		if (existing) {
-			await disposeKernelSession(existing);
+		await ensureKernelAvailable(cwd);
+
+		const kernelMode = executionOptions.kernelMode ?? "session";
+		const sessionFile = executionOptions.sessionFile;
+
+		if (kernelMode === "per-call") {
+			const env: Record<string, string> | undefined = sessionFile ? { PI_SESSION_FILE: sessionFile } : undefined;
+			requireRemainingTimeoutMs(deadlineMs);
+			const startOptions = buildKernelStartOptions(cwd, env, executionOptions);
+			const kernel = await PythonKernel.start(startOptions);
+			try {
+				return await executeWithKernel(kernel, code, executionOptions);
+			} finally {
+				await kernel.shutdown();
+			}
 		}
+
+		const sessionId = executionOptions.sessionId ?? `session:${cwd}`;
+		if (executionOptions.reset) {
+			const existing = kernelSessions.get(sessionId);
+			if (existing) {
+				await disposeKernelSession(existing);
+			}
+		}
+		return await withKernelSession(
+			sessionId,
+			cwd,
+			async kernel => executeWithKernel(kernel, code, executionOptions),
+			executionOptions,
+		);
+	} catch (err) {
+		if (isCancellationError(err) || executionOptions.signal?.aborted) {
+			return createCancelledPythonResult(isTimedOutCancellation(err, executionOptions.signal));
+		}
+		throw err;
 	}
-	return await withKernelSession(
-		sessionId,
-		cwd,
-		async kernel => executeWithKernel(kernel, code, options),
-		useSharedGateway,
-		sessionFile,
-	);
 }

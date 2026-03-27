@@ -239,5 +239,6 @@ describe("AgentSession auto-compaction queue resume", () => {
 
 		expect(getRuntimeSignals()).toContain("todo:1/3");
 		expect(continueSpy).toHaveBeenCalledTimes(1);
+		await session.waitForIdle();
 	});
 });

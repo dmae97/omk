@@ -180,7 +180,8 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 		// Clamp to reasonable range: 1s - 600s (10 min)
 		const timeoutSec = clampTimeout("python", rawTimeout);
 		const timeoutMs = timeoutSec * 1000;
-		const timeoutSignal = AbortSignal.timeout(timeoutMs);
+		const deadlineMs = Date.now() + timeoutMs;
+		const timeoutSignal = AbortSignal.timeout(Math.max(0, deadlineMs - Date.now()));
 		const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
 		let outputSink: OutputSink | undefined;
 		let outputSummary: OutputSummary | undefined;
@@ -267,7 +268,7 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 			const sessionId = sessionFile ? `session:${sessionFile}:cwd:${commandCwd}` : `cwd:${commandCwd}`;
 			const baseExecutorOptions: Omit<PythonExecutorOptions, "reset"> = {
 				cwd: commandCwd,
-				timeoutMs,
+				deadlineMs,
 				signal: combinedSignal,
 				sessionId,
 				kernelMode: this.session.settings.get("python.kernelMode"),

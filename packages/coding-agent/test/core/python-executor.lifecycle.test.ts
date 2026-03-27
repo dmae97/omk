@@ -9,9 +9,9 @@ import {
 Bun.env.PI_PYTHON_SKIP_CHECK = "1";
 
 class FakeKernel {
-	private result: KernelExecuteResult;
-	private onExecute?: (options?: KernelExecuteOptions) => void;
-	private alive: boolean;
+	#result: KernelExecuteResult;
+	#onExecute?: (options?: KernelExecuteOptions) => void;
+	#alive: boolean;
 	readonly executeCalls: string[] = [];
 	shutdownCalls = 0;
 
@@ -19,28 +19,28 @@ class FakeKernel {
 		result: KernelExecuteResult,
 		options: { alive?: boolean; onExecute?: (options?: KernelExecuteOptions) => void } = {},
 	) {
-		this.result = result;
-		this.onExecute = options.onExecute;
-		this.alive = options.alive ?? true;
+		this.#result = result;
+		this.#onExecute = options.onExecute;
+		this.#alive = options.alive ?? true;
 	}
 
 	isAlive(): boolean {
-		return this.alive;
+		return this.#alive;
 	}
 
 	async execute(code: string, options?: KernelExecuteOptions): Promise<KernelExecuteResult> {
 		this.executeCalls.push(code);
-		this.onExecute?.(options);
-		return this.result;
+		this.#onExecute?.(options);
+		return this.#result;
 	}
 
 	async shutdown(): Promise<void> {
 		this.shutdownCalls += 1;
-		this.alive = false;
+		this.#alive = false;
 	}
 
 	async ping(): Promise<boolean> {
-		return this.alive;
+		return this.#alive;
 	}
 }
 
@@ -113,6 +113,51 @@ describe("executePython session lifecycle", () => {
 		expect(startCount).toBe(2);
 		expect(firstKernel.shutdownCalls).toBe(1);
 		expect(secondKernel.executeCalls).toEqual(["print('two')"]);
+	});
+
+	it("cancels queued session execution before it reaches the kernel", async () => {
+		const firstStarted = Promise.withResolvers<void>();
+		const releaseFirst = Promise.withResolvers<void>();
+		const kernel = new FakeKernel(okResult);
+		kernel.execute = async (code, options) => {
+			kernel.executeCalls.push(code);
+			if (kernel.executeCalls.length === 1) {
+				options?.onChunk?.("first\n");
+				firstStarted.resolve();
+				await releaseFirst.promise;
+			}
+			return okResult;
+		};
+		let startCount = 0;
+
+		PythonKernel.start = async () => {
+			startCount += 1;
+			return kernel as unknown as PythonKernel;
+		};
+
+		const firstPromise = executePython("print('one')", { sessionId: "session-queue" });
+		await firstStarted.promise;
+
+		const abortController = new AbortController();
+		const secondPromise = executePython("print('two')", {
+			sessionId: "session-queue",
+			signal: abortController.signal,
+		});
+		abortController.abort(Object.assign(new Error("queue wait cancelled"), { name: "AbortError" }));
+
+		const second = await secondPromise;
+		expect(second.cancelled).toBe(true);
+		expect(second.exitCode).toBeUndefined();
+		expect(second.output).toBe("");
+		expect(kernel.executeCalls).toEqual(["print('one')"]);
+
+		releaseFirst.resolve();
+		const first = await firstPromise;
+
+		expect(first.cancelled).toBe(false);
+		expect(first.output).toContain("first");
+		expect(startCount).toBe(1);
+		expect(kernel.executeCalls).toEqual(["print('one')"]);
 	});
 
 	it("uses per-call kernels when configured", async () => {

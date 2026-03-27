@@ -49,9 +49,12 @@ describe("python tool execution", () => {
 			"print('hi')",
 			expect.objectContaining({
 				cwd: tempDir.path(),
-				timeoutMs: 5000,
+				deadlineMs: expect.any(Number),
+				signal: expect.any(AbortSignal),
+				sessionFile: `${tempDir.path()}/session-file.jsonl`,
 				sessionId: `session:${tempDir.path()}/session-file.jsonl:cwd:${tempDir.path()}`,
 				kernelMode: "per-call",
+				useSharedGateway: true,
 				reset: true,
 			}),
 		);
