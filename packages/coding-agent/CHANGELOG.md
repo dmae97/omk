@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.16.0] - 2026-03-27
 ### Added
 
 - Implemented root path alias: bare `/` in tool inputs now resolves to the session working directory instead of the filesystem root
