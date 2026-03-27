@@ -109,8 +109,6 @@ function resolveSystemChromium(): string | undefined {
 	return undefined;
 }
 
-const DEFAULT_TIMEOUT_SECONDS = 30;
-const MAX_TIMEOUT_SECONDS = 120;
 const DEFAULT_VIEWPORT = { width: 1365, height: 768, deviceScaleFactor: 1.25 };
 const STEALTH_IGNORE_DEFAULT_ARGS = [
 	"--disable-extensions",
