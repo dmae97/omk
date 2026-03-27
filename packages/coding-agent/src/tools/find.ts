@@ -261,6 +261,7 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 							gitignore: useGitignore,
 						},
 						onMatch,
+						this.session.searchDb,
 					),
 				);
 

@@ -26,12 +26,17 @@ clap = { version = "4", features = ["derive"] }
 os_pipe = "1"
 portable-pty = "0.9"
 grep-regex = "0.1"
-grep-searcher = "0.1"
+fff-grep = "0.4"
+fff = { package = "fff-search", version = "0.4.2", default-features = false, features = [
+   "zlob",
+] }
 grep-matcher = "0.1"
 globset = "0.4"
 ignore = "0.4"
 rayon = "1.10"
-ast-grep-core = { version = "0.39", default-features = false, features = ["tree-sitter"] }
+ast-grep-core = { version = "0.39", default-features = false, features = [
+   "tree-sitter",
+] }
 tree-sitter = "0.25"
 tree-sitter-bash = "0.25"
 tree-sitter-c = "0.24"
@@ -95,6 +100,7 @@ smallvec = { version = "1.15.1", features = [
    "specialization",
    "const_new",
 ] }
+memmap2 = "0.9"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

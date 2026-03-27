@@ -1,4 +1,4 @@
-Searches files using powerful regex matching built on ripgrep.
+Searches files using powerful regex matching.
 
 <instruction>
 - Supports full regex syntax (e.g., `log.*Error`, `function\\s+\\w+`); literal braces need escaping (`interface\\{\\}` for `interface{}` in Go)

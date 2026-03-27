@@ -3,7 +3,9 @@
  */
 
 import * as path from "node:path";
+
 import { native } from "../native";
+import type { SearchDb } from "../search-db";
 import type { GlobMatch, GlobOptions, GlobResult } from "./types";
 
 export type { GlobMatch, GlobOptions, GlobResult } from "./types";
@@ -13,7 +15,11 @@ export { FileType } from "./types";
  * Find files matching a glob pattern.
  * Respects .gitignore by default.
  */
-export async function glob(options: GlobOptions, onMatch?: (match: GlobMatch) => void): Promise<GlobResult> {
+export async function glob(
+	options: GlobOptions,
+	onMatch?: (match: GlobMatch) => void,
+	db?: SearchDb,
+): Promise<GlobResult> {
 	const searchPath = path.resolve(options.path);
 	const pattern = options.pattern || "*";
 	// napi-rs ThreadsafeFunction passes (error, value) - skip callback on error
@@ -29,6 +35,7 @@ export async function glob(options: GlobOptions, onMatch?: (match: GlobMatch) =>
 			recursive: options.recursive ?? true,
 		},
 		cb,
+		db,
 	);
 }
 

@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- Support for optional SearchDb parameter in CombinedAutocompleteProvider constructor for improved fuzzy search performance
+- Fuzzy matching filter for autocomplete suggestions to improve relevance of results
+
+### Changed
+
+- Fuzzy discovery now applies fuzzy matching filter to results for improved relevance of autocomplete suggestions
+- Autocomplete fuzzy discovery now accepts optional SearchDb instance for faster searches
+
 ## [13.16.0] - 2026-03-27
 ### Changed
 

@@ -3,6 +3,7 @@
  */
 
 import type { Cancellable, TsFunc } from "../bindings";
+import type { SearchDb } from "../search-db";
 
 export enum FileType {
 	/** A regular file. */
@@ -62,7 +63,7 @@ declare module "../bindings" {
 		 * @param options Search options that control globbing and filters.
 		 * @param onMatch Optional callback for streaming matches as they are found.
 		 */
-		glob(options: GlobOptions, onMatch?: TsFunc<GlobMatch>): Promise<GlobResult>;
+		glob(options: GlobOptions, onMatch?: TsFunc<GlobMatch>, db?: SearchDb): Promise<GlobResult>;
 		/** Invalidate the filesystem scan cache for the given path (or all caches if omitted). */
 		invalidateFsScanCache(path?: string): void;
 	}

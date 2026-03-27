@@ -10,6 +10,7 @@ export * from "./keys";
 export * from "./projfs";
 export * from "./ps";
 export * from "./pty";
+export * from "./search-db";
 export * from "./shell";
 export * from "./text";
 export * from "./work";

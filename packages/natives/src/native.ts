@@ -261,6 +261,7 @@ function validateNative(bindings: NativeBindings, source: string): void {
 	checkFn("matchesKittySequence");
 	checkFn("executeShell");
 	checkFn("PtySession");
+	checkFn("SearchDb");
 	checkFn("Shell");
 	checkFn("parseKey");
 	checkFn("matchesLegacySequence");

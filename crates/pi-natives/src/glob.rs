@@ -234,6 +234,7 @@ pub fn glob(
 	#[napi(ts_arg_type = "((match: GlobMatch) => void) | undefined | null")] on_match: Option<
 		ThreadsafeFunction<GlobMatch>,
 	>,
+	_db: Option<&crate::search_db::SearchDb>,
 ) -> task::Async<GlobResult> {
 	let GlobOptions {
 		pattern,

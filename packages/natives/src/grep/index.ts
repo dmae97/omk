@@ -3,6 +3,7 @@
  */
 
 import { native } from "../native";
+import type { SearchDb } from "../search-db";
 import type {
 	ContextLine,
 	FuzzyFindMatch,
@@ -32,10 +33,14 @@ export type {
 /**
  * Search files for a regex pattern with optional streaming callback.
  */
-export async function grep(options: GrepOptions, onMatch?: (match: GrepMatch) => void): Promise<GrepResult> {
+export async function grep(
+	options: GrepOptions,
+	onMatch?: (match: GrepMatch) => void,
+	db?: SearchDb,
+): Promise<GrepResult> {
 	// napi-rs ThreadsafeFunction passes (error, value) - skip callback on error
 	const cb = onMatch ? (err: Error | null, m: GrepMatch) => !err && onMatch(m) : undefined;
-	return native.grep(options, cb);
+	return native.grep(options, cb, db);
 }
 
 /**
@@ -67,6 +72,6 @@ export function hasMatch(
  * Searches for files and directories whose paths contain the query substring
  * (case-insensitive). Respects .gitignore by default.
  */
-export async function fuzzyFind(options: FuzzyFindOptions): Promise<FuzzyFindResult> {
-	return native.fuzzyFind(options);
+export async function fuzzyFind(options: FuzzyFindOptions, db?: SearchDb): Promise<FuzzyFindResult> {
+	return native.fuzzyFind(options, db);
 }

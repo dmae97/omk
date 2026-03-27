@@ -169,23 +169,27 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 			// Run grep
 			let result: GrepResult;
 			try {
-				result = await grep({
-					pattern: normalizedPattern,
-					path: searchPath,
-					glob: globFilter,
-					type: type?.trim() || undefined,
-					ignoreCase,
-					multiline: effectiveMultiline,
-					hidden: true,
-					gitignore: useGitignore,
-					cache: false,
-					maxCount: internalLimit,
-					offset: normalizedOffset > 0 ? normalizedOffset : undefined,
-					contextBefore: normalizedContextBefore,
-					contextAfter: normalizedContextAfter,
-					maxColumns: DEFAULT_MAX_COLUMN,
-					mode: effectiveOutputMode,
-				});
+				result = await grep(
+					{
+						pattern: normalizedPattern,
+						path: searchPath,
+						glob: globFilter,
+						type: type?.trim() || undefined,
+						ignoreCase,
+						multiline: effectiveMultiline,
+						hidden: true,
+						gitignore: useGitignore,
+						cache: false,
+						maxCount: internalLimit,
+						offset: normalizedOffset > 0 ? normalizedOffset : undefined,
+						contextBefore: normalizedContextBefore,
+						contextAfter: normalizedContextAfter,
+						maxColumns: DEFAULT_MAX_COLUMN,
+						mode: effectiveOutputMode,
+					},
+					undefined,
+					this.session.searchDb,
+				);
 			} catch (err) {
 				if (err instanceof Error && err.message.startsWith("regex parse error")) {
 					throw new ToolError(err.message);

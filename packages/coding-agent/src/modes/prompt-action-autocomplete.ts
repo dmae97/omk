@@ -1,3 +1,4 @@
+import type { SearchDb } from "@oh-my-pi/pi-natives";
 import {
 	type AutocompleteItem,
 	type AutocompleteProvider,
@@ -23,6 +24,7 @@ interface PromptActionAutocompleteItem extends AutocompleteItem {
 interface PromptActionAutocompleteOptions {
 	commands: SlashCommand[];
 	basePath: string;
+	searchDb?: SearchDb;
 	keybindings: KeybindingsManager;
 	copyCurrentLine: () => void;
 	copyPrompt: () => void;
@@ -90,8 +92,8 @@ export class PromptActionAutocompleteProvider implements AutocompleteProvider {
 	#baseProvider: CombinedAutocompleteProvider;
 	#actions: PromptActionDefinition[];
 
-	constructor(commands: SlashCommand[], basePath: string, actions: PromptActionDefinition[]) {
-		this.#baseProvider = new CombinedAutocompleteProvider(commands, basePath);
+	constructor(commands: SlashCommand[], basePath: string, actions: PromptActionDefinition[], searchDb?: SearchDb) {
+		this.#baseProvider = new CombinedAutocompleteProvider(commands, basePath, searchDb);
 		this.#actions = actions;
 	}
 
@@ -227,5 +229,5 @@ export function createPromptActionAutocompleteProvider(
 		},
 	];
 
-	return new PromptActionAutocompleteProvider(options.commands, options.basePath, actions);
+	return new PromptActionAutocompleteProvider(options.commands, options.basePath, actions, options.searchDb);
 }

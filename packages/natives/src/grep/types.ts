@@ -3,6 +3,7 @@
  */
 
 import type { Cancellable, TsFunc } from "../bindings";
+import type { SearchDb } from "../search-db";
 
 /** Options for searching files. */
 export interface GrepOptions extends Cancellable {
@@ -171,9 +172,9 @@ export interface FuzzyFindResult {
 declare module "../bindings" {
 	interface NativeBindings {
 		/** Fuzzy file path search for autocomplete. */
-		fuzzyFind(options: FuzzyFindOptions): Promise<FuzzyFindResult>;
+		fuzzyFind(options: FuzzyFindOptions, db?: SearchDb): Promise<FuzzyFindResult>;
 		/** Search files for a regex pattern. */
-		grep(options: GrepOptions, onMatch?: TsFunc<GrepMatch>): Promise<GrepResult>;
+		grep(options: GrepOptions, onMatch?: TsFunc<GrepMatch>, db?: SearchDb): Promise<GrepResult>;
 		/** Search in-memory content for a regex pattern. */
 		search(content: string | Uint8Array, options: SearchOptions): SearchResult;
 		/** Quick check if content matches a pattern. */

@@ -1,4 +1,4 @@
-//! Ripgrep-backed search exported via N-API.
+//! Search engine exported via N-API.
 //!
 //! Provides two layers:
 //! - `search()` for in-memory content search.
@@ -10,16 +10,15 @@
 use std::{
 	borrow::Cow,
 	fs::File,
-	io::{self, Cursor, Read},
+	io,
+	ops::Range,
 	path::{Path, PathBuf},
 };
 
+use fff_grep::{Searcher, SearcherBuilder, Sink, SinkMatch};
 use globset::GlobSet;
 use grep_matcher::Matcher;
 use grep_regex::RegexMatcherBuilder;
-use grep_searcher::{
-	BinaryDetection, Searcher, SearcherBuilder, Sink, SinkContext, SinkContextKind, SinkMatch,
-};
 use napi::{
 	JsString,
 	bindgen_prelude::*,
@@ -29,7 +28,7 @@ use napi_derive::napi;
 use rayon::prelude::*;
 use smallvec::SmallVec;
 
-use crate::{fs_cache, glob_util, task};
+use crate::{fs_cache, glob_util, search_db::SearchDb, task};
 
 const MAX_FILE_BYTES: u64 = 4 * 1024 * 1024;
 
@@ -224,6 +223,10 @@ impl TypeFilter {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Internal match collection
+// ---------------------------------------------------------------------------
+
 struct MatchCollector {
 	matches:         Vec<CollectedMatch>,
 	match_count:     u64,
@@ -232,9 +235,10 @@ struct MatchCollector {
 	offset:          u64,
 	skipped:         u64,
 	limit_reached:   bool,
-	context_before:  SmallVec<[ContextLine; 8]>,
 	max_columns:     Option<usize>,
 	collect_matches: bool,
+	before_count:    usize,
+	after_count:     usize,
 }
 
 struct CollectedMatch {
@@ -253,8 +257,9 @@ struct SearchResultInternal {
 }
 
 struct FileEntry {
-	path:          PathBuf,
-	relative_path: String,
+	path:                  PathBuf,
+	relative_path:         String,
+	prefer_text_fast_path: bool,
 }
 
 struct FileSearchResult {
@@ -263,12 +268,28 @@ struct FileSearchResult {
 	match_count:   u64,
 }
 
+enum FileBytes {
+	Mapped(memmap2::Mmap),
+	Owned(Vec<u8>),
+}
+
+impl FileBytes {
+	fn as_slice(&self) -> &[u8] {
+		match self {
+			Self::Mapped(mapped) => mapped.as_ref(),
+			Self::Owned(bytes) => bytes.as_slice(),
+		}
+	}
+}
+
 impl MatchCollector {
-	fn new(
+	const fn new(
 		max_count: Option<u64>,
 		offset: u64,
 		max_columns: Option<usize>,
 		collect_matches: bool,
+		before_count: usize,
+		after_count: usize,
 	) -> Self {
 		Self {
 			matches: Vec::new(),
@@ -278,23 +299,53 @@ impl MatchCollector {
 			offset,
 			skipped: 0,
 			limit_reached: false,
-			context_before: SmallVec::new(),
 			max_columns,
 			collect_matches,
+			before_count,
+			after_count,
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+fn truncate_line(line: &str, max_columns: Option<usize>) -> (String, bool) {
+	match max_columns {
+		Some(max) if line.len() > max => {
+			let cut = max.saturating_sub(3);
+			let boundary = line.floor_char_boundary(cut);
+			(format!("{}...", &line[..boundary]), true)
+		},
+		_ => (line.to_string(), false),
+	}
+}
+
+const KNOWN_TEXT_EXTENSIONS: &[&str] = &[
+	"js", "jsx", "mjs", "cjs", "ts", "tsx", "mts", "cts", "json", "jsonc", "json5", "yaml", "yml",
+	"toml", "md", "markdown", "mdx", "py", "pyi", "rs", "go", "java", "kt", "kts", "c", "h", "cpp",
+	"cc", "cxx", "hpp", "hxx", "hh", "cs", "csx", "php", "phtml", "rb", "rake", "gemspec", "sh",
+	"bash", "zsh", "fish", "html", "htm", "css", "scss", "sass", "less", "xml",
+];
+
+fn is_known_text_extension(ext: &str) -> bool {
+	KNOWN_TEXT_EXTENSIONS
+		.iter()
+		.any(|&e| ext.eq_ignore_ascii_case(e))
+}
+
+fn is_known_text_path(path: &Path) -> bool {
+	let file_name = path
+		.file_name()
+		.and_then(|name| name.to_str())
+		.unwrap_or("");
+	if file_name.eq_ignore_ascii_case("dockerfile") || file_name.eq_ignore_ascii_case("makefile") {
+		return true;
 	}
 
-	fn truncate_line(&self, line: &str) -> (String, bool) {
-		match self.max_columns {
-			Some(max) if line.len() > max => {
-				let cut = max.saturating_sub(3);
-				let boundary = line.floor_char_boundary(cut);
-				let truncated = format!("{}...", &line[..boundary]);
-				(truncated, true)
-			},
-			_ => (line.to_string(), false),
-		}
-	}
+	let ext = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
+	!ext.is_empty() && is_known_text_extension(ext)
 }
 
 fn bytes_to_trimmed_string(bytes: &[u8]) -> String {
@@ -303,6 +354,85 @@ fn bytes_to_trimmed_string(bytes: &[u8]) -> String {
 		Err(_) => String::from_utf8_lossy(bytes).trim_end().to_string(),
 	}
 }
+
+/// Extract context lines before and after a match from the searched buffer.
+///
+/// `match_range` is the byte range of the matched line(s) within `buffer`.
+/// `match_line_number` is the 1-indexed line number of the first matched line.
+fn extract_context_lines(
+	buffer: &[u8],
+	match_range: Range<usize>,
+	before: usize,
+	after: usize,
+	match_line_number: u64,
+	max_columns: Option<usize>,
+) -> (SmallVec<[ContextLine; 8]>, SmallVec<[ContextLine; 8]>) {
+	let mut before_lines = SmallVec::new();
+	let mut after_lines = SmallVec::new();
+
+	// --- Before context ---
+	if before > 0 && match_range.start > 0 {
+		let mut end = match_range.start;
+		let mut line_num = match_line_number;
+
+		for _ in 0..before {
+			if end == 0 || line_num == 0 {
+				break;
+			}
+			// Skip trailing newline of the previous line
+			let content_end = if buffer[end - 1] == b'\n' {
+				end - 1
+			} else {
+				end
+			};
+			// Find start of this line (search backward for newline)
+			let start = match buffer[..content_end].iter().rposition(|&b| b == b'\n') {
+				Some(pos) => pos + 1,
+				None => 0,
+			};
+			line_num -= 1;
+			let raw = bytes_to_trimmed_string(&buffer[start..content_end]);
+			let (line, _) = truncate_line(&raw, max_columns);
+			before_lines.push(ContextLine { line_number: crate::utils::clamp_u32(line_num), line });
+			end = start;
+		}
+		before_lines.reverse();
+	}
+
+	// --- After context ---
+	if after > 0 && match_range.end < buffer.len() {
+		// Count newlines in match bytes to find the first after-context line number.
+		// Line-oriented search includes trailing \n, so newline count equals line
+		// count. If the match lacks a trailing \n (last line of file),
+		// match_range.end == buffer.len() and this branch is skipped entirely.
+		#[allow(clippy::naive_bytecount, reason = "match spans 1-2 lines; not worth a dependency")]
+		let newlines = buffer[match_range.clone()]
+			.iter()
+			.filter(|&&b| b == b'\n')
+			.count() as u64;
+		let mut start = match_range.end;
+		for line_num in (match_line_number + newlines)..(match_line_number + newlines + after as u64)
+		{
+			if start >= buffer.len() {
+				break;
+			}
+			let end = match buffer[start..].iter().position(|&b| b == b'\n') {
+				Some(pos) => start + pos,
+				None => buffer.len(),
+			};
+			let raw = bytes_to_trimmed_string(&buffer[start..end]);
+			let (line, _) = truncate_line(&raw, max_columns);
+			after_lines.push(ContextLine { line_number: crate::utils::clamp_u32(line_num), line });
+			start = end + 1;
+		}
+	}
+
+	(before_lines, after_lines)
+}
+
+// ---------------------------------------------------------------------------
+// Sink implementation for fff-grep
+// ---------------------------------------------------------------------------
 
 impl Sink for MatchCollector {
 	type Error = io::Error;
@@ -314,37 +444,44 @@ impl Sink for MatchCollector {
 	) -> std::result::Result<bool, Self::Error> {
 		self.match_count += 1;
 
-		// If we already hit the limit, stop now (after-context for previous match was
-		// collected).
 		if self.limit_reached {
 			return Ok(false);
 		}
 
 		if self.skipped < self.offset {
 			self.skipped += 1;
-			self.context_before.clear();
 			return Ok(true);
 		}
 
 		if self.collect_matches {
 			let raw_line = bytes_to_trimmed_string(mat.bytes());
-			let (line, truncated) = self.truncate_line(&raw_line);
+			let (line, truncated) = truncate_line(&raw_line, self.max_columns);
 			let line_number = mat.line_number().unwrap_or(0);
+
+			let (context_before, context_after) = if self.before_count > 0 || self.after_count > 0 {
+				extract_context_lines(
+					mat.buffer(),
+					mat.bytes_range_in_buffer(),
+					self.before_count,
+					self.after_count,
+					line_number,
+					self.max_columns,
+				)
+			} else {
+				(SmallVec::new(), SmallVec::new())
+			};
 
 			self.matches.push(CollectedMatch {
 				line_number,
 				line,
-				context_before: std::mem::take(&mut self.context_before),
-				context_after: SmallVec::new(),
+				context_before,
+				context_after,
 				truncated,
 			});
-		} else {
-			self.context_before.clear();
 		}
 
 		self.collected_count += 1;
 
-		// Mark limit reached but don't stop yet - allow after-context to be collected.
 		if let Some(max) = self.max_count
 			&& self.collected_count >= max
 		{
@@ -353,39 +490,11 @@ impl Sink for MatchCollector {
 
 		Ok(true)
 	}
-
-	fn context(
-		&mut self,
-		_searcher: &Searcher,
-		ctx: &SinkContext<'_>,
-	) -> std::result::Result<bool, Self::Error> {
-		if !self.collect_matches {
-			return Ok(true);
-		}
-
-		let raw_line = bytes_to_trimmed_string(ctx.bytes());
-		let (line, _) = self.truncate_line(&raw_line);
-		let line_number = ctx.line_number().unwrap_or(0);
-
-		match ctx.kind() {
-			SinkContextKind::Before => {
-				self
-					.context_before
-					.push(ContextLine { line_number: crate::utils::clamp_u32(line_number), line });
-			},
-			SinkContextKind::After => {
-				if let Some(last_match) = self.matches.last_mut() {
-					last_match
-						.context_after
-						.push(ContextLine { line_number: crate::utils::clamp_u32(line_number), line });
-				}
-			},
-			SinkContextKind::Other => {},
-		}
-
-		Ok(true)
-	}
 }
+
+// ---------------------------------------------------------------------------
+// Option resolution
+// ---------------------------------------------------------------------------
 
 fn parse_output_mode(mode: Option<&str>) -> OutputMode {
 	match mode {
@@ -474,14 +583,9 @@ fn resolve_context(
 	}
 }
 
-fn build_searcher(before_context: u32, after_context: u32) -> Searcher {
-	SearcherBuilder::new()
-		.binary_detection(BinaryDetection::quit(b'\x00'))
-		.line_number(true)
-		.before_context(before_context as usize)
-		.after_context(after_context as usize)
-		.build()
-}
+// ---------------------------------------------------------------------------
+// Search engine
+// ---------------------------------------------------------------------------
 
 #[derive(Clone, Copy)]
 struct SearchParams {
@@ -491,41 +595,33 @@ struct SearchParams {
 	mode:           OutputMode,
 	max_count:      Option<u64>,
 	offset:         u64,
+	multiline:      bool,
 }
 
 fn run_search(
+	searcher: &Searcher,
 	matcher: &grep_regex::RegexMatcher,
 	content: &[u8],
 	params: SearchParams,
 ) -> io::Result<SearchResultInternal> {
-	run_search_reader(matcher, Cursor::new(content), params)
-}
+	let collect_matches = params.mode == OutputMode::Content;
+	let (before, after) = if collect_matches {
+		(params.context_before as usize, params.context_after as usize)
+	} else {
+		(0, 0)
+	};
 
-/// Stream-based search that reads directly from a `Read` without buffering.
-fn run_search_reader<R: Read>(
-	matcher: &grep_regex::RegexMatcher,
-	reader: R,
-	params: SearchParams,
-) -> io::Result<SearchResultInternal> {
-	let mut searcher = build_searcher(
-		if params.mode == OutputMode::Content {
-			params.context_before
-		} else {
-			0
-		},
-		if params.mode == OutputMode::Content {
-			params.context_after
-		} else {
-			0
-		},
-	);
 	let mut collector = MatchCollector::new(
 		params.max_count,
 		params.offset,
 		params.max_columns.map(|v| v as usize),
-		params.mode == OutputMode::Content,
+		collect_matches,
+		before,
+		after,
 	);
-	searcher.search_reader(matcher, reader, &mut collector)?;
+
+	searcher.search_slice(matcher, content, &mut collector)?;
+
 	Ok(SearchResultInternal {
 		matches:       collector.matches,
 		match_count:   collector.match_count,
@@ -533,6 +629,54 @@ fn run_search_reader<R: Read>(
 		limit_reached: collector.limit_reached,
 	})
 }
+
+fn build_searcher(multiline: bool) -> Searcher {
+	SearcherBuilder::new()
+		.line_number(true)
+		.multi_line(multiline)
+		.build()
+}
+
+/// Read file bytes, returning `None` for oversized or binary files.
+fn read_file_bytes(path: &Path, prefer_text_fast_path: bool) -> io::Result<Option<FileBytes>> {
+	let file = File::open(path)?;
+	let metadata = file.metadata()?;
+	if metadata.len() > MAX_FILE_BYTES {
+		return Ok(None);
+	}
+
+	if metadata.len() == 0 {
+		return Ok(Some(FileBytes::Owned(Vec::new())));
+	}
+
+	let bytes = match unsafe {
+		// SAFETY: The mapping is read-only and tied to the opened file handle.
+		// We do not mutate through this view; the map is dropped immediately
+		// after search for each file.
+		memmap2::Mmap::map(&file)
+	} {
+		Ok(mapped) => FileBytes::Mapped(mapped),
+		Err(_) => FileBytes::Owned(std::fs::read(path)?),
+	};
+
+	// For known text-like source/config paths in picker-backed searches, use a
+	// small binary probe (first 512 bytes). Unknown file kinds keep the strict
+	// full-buffer NUL scan.
+	if prefer_text_fast_path && is_known_text_path(path) {
+		let slice = bytes.as_slice();
+		let probe_len = slice.len().min(512);
+		if slice[..probe_len].contains(&0) {
+			return Ok(None);
+		}
+	} else if bytes.as_slice().contains(&0) {
+		return Ok(None);
+	}
+	Ok(Some(bytes))
+}
+
+// ---------------------------------------------------------------------------
+// Result conversion
+// ---------------------------------------------------------------------------
 
 fn to_public_match(matched: CollectedMatch) -> Match {
 	let context_before = if matched.context_before.is_empty() {
@@ -622,10 +766,78 @@ fn collect_files(
 		{
 			continue;
 		}
-		entries.push(FileEntry { path, relative_path: entry.path.clone() });
+		entries.push(FileEntry {
+			path,
+			relative_path: entry.path.clone(),
+			prefer_text_fast_path: false,
+		});
 	}
 	entries
 }
+
+/// Returns true if any path component starts with `.` (hidden file/dir).
+fn has_hidden_component(path: &str) -> bool {
+	path.split('/').any(|c| c.starts_with('.'))
+}
+
+/// Collect files from the `SearchDb` picker, applying glob and type filters.
+///
+/// Used in place of `collect_files` when a live picker index is available.
+/// The picker already respects gitignore; hidden-file filtering is applied
+/// here when `include_hidden` is false.
+fn collect_files_from_picker(
+	root: &Path,
+	db: &SearchDb,
+	glob_set: Option<&GlobSet>,
+	type_filter: Option<&TypeFilter>,
+	include_hidden: bool,
+	ct: &task::CancelToken,
+) -> Result<Vec<FileEntry>> {
+	use fff::FilePicker;
+
+	let shared_picker = db.get_or_init_picker(root)?;
+	ct.heartbeat()?;
+	// Wait for the background scan to finish.  On repeated calls this is a
+	// no-op (the signal is already cleared).  On first call it blocks until
+	// the initial directory walk completes, which is equivalent in latency
+	// to a fresh fs_cache::force_rescan but is then never repeated.
+	FilePicker::wait_for_scan(&shared_picker);
+	ct.heartbeat()?;
+
+	let guard = shared_picker
+		.read()
+		.map_err(|_| Error::from_reason("shared picker lock poisoned"))?;
+	let Some(picker) = guard.as_ref() else {
+		return Ok(Vec::new());
+	};
+
+	let mut entries = Vec::new();
+	for file in picker.get_files() {
+		if !include_hidden && has_hidden_component(&file.relative_path) {
+			continue;
+		}
+		if let Some(glob_set) = glob_set
+			&& !glob_set.is_match(Path::new(&file.relative_path))
+		{
+			continue;
+		}
+		let path = root.join(&file.relative_path);
+		if let Some(filter) = type_filter
+			&& !matches_type_filter(&path, filter)
+		{
+			continue;
+		}
+		entries.push(FileEntry {
+			path,
+			relative_path: file.relative_path.clone(),
+			prefer_text_fast_path: true,
+		});
+	}
+	Ok(entries)
+}
+// ---------------------------------------------------------------------------
+// Regex brace sanitization
+// ---------------------------------------------------------------------------
 
 /// Check if `bytes[start]` (which must be `b'{'`) begins a valid repetition
 /// quantifier: `{N}`, `{N,}`, or `{N,M}` where N and M are decimal digits.
@@ -697,7 +909,12 @@ fn sanitize_braces(pattern: &str) -> Cow<'_, str> {
 		if bytes[i] == b'\\' && i + 1 < len {
 			result.push('\\');
 			i += 1;
-			let ch = pattern[i..].chars().next().unwrap();
+			// The next character is the escaped literal; push it regardless.
+			// Safety: index is in bounds (checked above).
+			let ch = pattern[i..]
+				.chars()
+				.next()
+				.expect("non-empty slice has a char");
 			result.push(ch);
 			i += ch.len_utf8();
 			if matches!(ch, 'p' | 'P' | 'x' | 'u') && i < len && bytes[i] == b'{' {
@@ -731,7 +948,10 @@ fn sanitize_braces(pattern: &str) -> Cow<'_, str> {
 			continue;
 		}
 
-		let ch = pattern[i..].chars().next().unwrap();
+		let ch = pattern[i..]
+			.chars()
+			.next()
+			.expect("non-empty slice has a char");
 		result.push(ch);
 		i += ch.len_utf8();
 	}
@@ -772,6 +992,7 @@ mod tests {
 		assert_eq!(sanitize_braces("a{2,4}").as_ref(), "a{2,4}");
 	}
 }
+
 fn build_matcher(
 	pattern: &str,
 	ignore_case: bool,
@@ -785,28 +1006,31 @@ fn build_matcher(
 		.map_err(|err| Error::from_reason(format!("Regex error: {err}")))
 }
 
+// ---------------------------------------------------------------------------
+// File / directory search orchestration
+// ---------------------------------------------------------------------------
+
 fn run_parallel_search(
 	entries: &[FileEntry],
 	matcher: &grep_regex::RegexMatcher,
-	context_before: u32,
-	context_after: u32,
-	max_columns: Option<u32>,
-	mode: OutputMode,
+	params: SearchParams,
 ) -> Vec<FileSearchResult> {
-	let params =
-		SearchParams { context_before, context_after, max_columns, mode, max_count: None, offset: 0 };
+	let file_params = SearchParams { max_count: None, offset: 0, ..params };
 	let mut results: Vec<FileSearchResult> = entries
 		.par_iter()
-		.filter_map(|entry| {
-			let file = File::open(&entry.path).ok()?;
-			let reader = file.take(MAX_FILE_BYTES);
-			let search = run_search_reader(matcher, reader, params).ok()?;
-			Some(FileSearchResult {
-				relative_path: entry.relative_path.clone(),
-				matches:       search.matches,
-				match_count:   search.match_count,
-			})
-		})
+		.map_init(
+			|| build_searcher(file_params.multiline),
+			|searcher, entry| {
+				let bytes = read_file_bytes(&entry.path, entry.prefer_text_fast_path).ok()??;
+				let search = run_search(searcher, matcher, bytes.as_slice(), file_params).ok()?;
+				Some(FileSearchResult {
+					relative_path: entry.relative_path.clone(),
+					matches:       search.matches,
+					match_count:   search.match_count,
+				})
+			},
+		)
+		.filter_map(std::convert::identity)
 		.collect();
 
 	results.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
@@ -819,6 +1043,7 @@ fn run_sequential_search(
 	params: SearchParams,
 ) -> (Vec<GrepMatch>, u64, u32, u32, bool) {
 	let SearchParams { mode, max_count, offset, .. } = params;
+	let searcher = build_searcher(params.multiline);
 	let mut matches = Vec::new();
 	let mut total_matches = 0u64;
 	let mut collected = 0u64;
@@ -840,15 +1065,13 @@ fn run_sequential_search(
 			break;
 		}
 
-		// Open file and search directly - no intermediate buffer, no precheck scan
-		let Ok(file) = File::open(&entry.path) else {
+		let Ok(Some(bytes)) = read_file_bytes(&entry.path, entry.prefer_text_fast_path) else {
 			continue;
 		};
 		files_searched = files_searched.saturating_add(1);
-		let reader = file.take(MAX_FILE_BYTES);
 
 		let file_params = SearchParams { max_count: remaining, offset: file_offset, ..params };
-		let Ok(search) = run_search_reader(matcher, reader, file_params) else {
+		let Ok(search) = run_search(&searcher, matcher, bytes.as_slice(), file_params) else {
 			continue;
 		};
 
@@ -887,6 +1110,10 @@ fn run_sequential_search(
 	(matches, total_matches, files_with_matches, files_searched, limit_reached)
 }
 
+// ---------------------------------------------------------------------------
+// Sync entry points
+// ---------------------------------------------------------------------------
+
 fn search_sync(content: &[u8], options: SearchOptions) -> SearchResult {
 	let ignore_case = options.ignore_case.unwrap_or(false);
 	let multiline = options.multiline.unwrap_or(false);
@@ -901,10 +1128,18 @@ fn search_sync(content: &[u8], options: SearchOptions) -> SearchResult {
 	let max_columns = options.max_columns;
 	let max_count = options.max_count.map(u64::from);
 	let offset = options.offset.unwrap_or(0) as u64;
-	let params =
-		SearchParams { context_before, context_after, max_columns, mode, max_count, offset };
+	let params = SearchParams {
+		context_before,
+		context_after,
+		max_columns,
+		mode,
+		max_count,
+		offset,
+		multiline,
+	};
+	let searcher = build_searcher(multiline);
 
-	let result = match run_search(&matcher, content, params) {
+	let result = match run_search(&searcher, &matcher, content, params) {
 		Ok(result) => result,
 		Err(err) => return empty_search_result(Some(err.to_string())),
 	};
@@ -919,6 +1154,7 @@ fn search_sync(content: &[u8], options: SearchOptions) -> SearchResult {
 
 fn grep_sync(
 	options: GrepConfig,
+	db: Option<SearchDb>,
 	on_match: Option<&ThreadsafeFunction<GrepMatch>>,
 	ct: task::CancelToken,
 ) -> Result<GrepResult> {
@@ -946,6 +1182,17 @@ fn grep_sync(
 	let glob_set = glob_util::try_compile_glob(options.glob.as_deref(), true)?;
 	let type_filter = resolve_type_filter(options.type_filter.as_deref());
 
+	let params = SearchParams {
+		context_before,
+		context_after,
+		max_columns,
+		mode: output_mode,
+		max_count,
+		offset,
+		multiline,
+	};
+	let searcher = build_searcher(multiline);
+
 	if metadata.is_file() {
 		if let Some(filter) = type_filter.as_ref()
 			&& !matches_type_filter(&search_path, filter)
@@ -959,7 +1206,7 @@ fn grep_sync(
 			});
 		}
 
-		let Ok(file) = File::open(&search_path) else {
+		let Ok(Some(bytes)) = read_file_bytes(&search_path, false) else {
 			return Ok(GrepResult {
 				matches:            Vec::new(),
 				total_matches:      0,
@@ -968,17 +1215,8 @@ fn grep_sync(
 				limit_reached:      None,
 			});
 		};
-		let reader = file.take(MAX_FILE_BYTES);
 
-		let params = SearchParams {
-			context_before,
-			context_after,
-			max_columns,
-			mode: output_mode,
-			max_count,
-			offset,
-		};
-		let search = run_search_reader(&matcher, reader, params)
+		let search = run_search(&searcher, &matcher, bytes.as_slice(), params)
 			.map_err(|err| Error::from_reason(format!("Search failed: {err}")))?;
 
 		if search.match_count == 0 {
@@ -1024,7 +1262,22 @@ fn grep_sync(
 		});
 	}
 
-	let entries = if use_cache {
+	// Use the live picker index when db is provided and gitignore is respected.
+	// The picker scans with hidden=true, so it covers both hidden and non-hidden
+	// requests.  When gitignore is disabled the picker's index would miss files
+	// that the picker excluded via gitignore, so we fall back to fs_cache.
+	let entries = if let Some(db) = &db
+		&& use_gitignore
+	{
+		collect_files_from_picker(
+			&search_path,
+			db,
+			glob_set.as_ref(),
+			type_filter.as_ref(),
+			include_hidden,
+			&ct,
+		)?
+	} else if use_cache {
 		let scan = fs_cache::get_or_scan(&search_path, include_hidden, use_gitignore, &ct)?;
 		let mut entries =
 			collect_files(&search_path, &scan.entries, glob_set.as_ref(), type_filter.as_ref());
@@ -1052,14 +1305,7 @@ fn grep_sync(
 
 	let allow_parallel = max_count.is_none() && offset == 0;
 	if allow_parallel {
-		let results = run_parallel_search(
-			&entries,
-			&matcher,
-			context_before,
-			context_after,
-			max_columns,
-			output_mode,
-		);
+		let results = run_parallel_search(&entries, &matcher, params);
 		let mut matches = Vec::new();
 		let mut total_matches = 0u64;
 		let mut files_with_matches = 0u32;
@@ -1110,14 +1356,7 @@ fn grep_sync(
 	}
 
 	let (matches, total_matches, files_with_matches, files_searched, limit_reached) =
-		run_sequential_search(&entries, &matcher, SearchParams {
-			context_before,
-			context_after,
-			max_columns,
-			mode: output_mode,
-			max_count,
-			offset,
-		});
+		run_sequential_search(&entries, &matcher, params);
 
 	// Fire callbacks for sequential search results
 	if let Some(callback) = on_match {
@@ -1134,6 +1373,10 @@ fn grep_sync(
 		limit_reached: if limit_reached { Some(true) } else { None },
 	})
 }
+
+// ---------------------------------------------------------------------------
+// N-API exports
+// ---------------------------------------------------------------------------
 
 /// Search content for a pattern (one-shot, compiles pattern each time).
 /// For repeated searches with the same pattern, use [`grep`] with file filters.
@@ -1218,6 +1461,7 @@ pub fn grep(
 	#[napi(ts_arg_type = "((match: GrepMatch) => void) | undefined | null")] on_match: Option<
 		ThreadsafeFunction<GrepMatch>,
 	>,
+	db: Option<&crate::search_db::SearchDb>,
 ) -> task::Async<GrepResult> {
 	let GrepOptions {
 		pattern,
@@ -1258,7 +1502,7 @@ pub fn grep(
 		max_columns,
 		mode,
 	};
-
+	let db = db.cloned();
 	let ct = task::CancelToken::new(timeout_ms, signal);
-	task::blocking("grep", ct, move |ct| grep_sync(config, on_match.as_ref(), ct))
+	task::blocking("grep", ct, move |ct| grep_sync(config, db, on_match.as_ref(), ct))
 }

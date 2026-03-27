@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- Exported `SearchDb` class from main package entry point for direct instantiation
+- Added `SearchDb` class for stateful shared search database instances to improve performance across multiple search operations
+- Added optional `db` parameter to `grep()`, `glob()`, and `fuzzyFind()` functions to enable database-backed searching
+
+### Changed
+
+- Updated `grep()`, `glob()`, and `fuzzyFind()` function signatures to accept optional `db` parameter for database-backed searching
+
 ## [13.12.0] - 2026-03-14
 ### Breaking Changes
 

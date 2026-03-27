@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added `searchDb` parameter to `PromptActionAutocompleteProvider` constructor for native search database integration in autocomplete workflows
+- Added `searchDb` parameter to enable native search database integration for grep and find operations
+- Exported `SearchDb` type from tools module for type-safe search database usage
+
+### Changed
+
+- Updated grep tool to accept and utilize `searchDb` parameter for improved search performance
+- Updated find tool to pass `searchDb` parameter to underlying search operations
+- Updated grep tool description to remove ripgrep-specific implementation detail
+
 ## [13.16.0] - 2026-03-27
 ### Added
 

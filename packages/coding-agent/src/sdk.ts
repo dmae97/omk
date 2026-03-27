@@ -9,8 +9,17 @@ import {
 import type { Message, Model } from "@oh-my-pi/pi-ai";
 
 import { prewarmOpenAICodexResponses } from "@oh-my-pi/pi-ai/providers/openai-codex-responses";
+import { SearchDb } from "@oh-my-pi/pi-natives";
 import type { Component } from "@oh-my-pi/pi-tui";
-import { $env, getAgentDbPath, getAgentDir, getProjectDir, logger, postmortem } from "@oh-my-pi/pi-utils";
+import {
+	$env,
+	getAgentDbPath,
+	getAgentDir,
+	getProjectDir,
+	getSearchDbDir,
+	logger,
+	postmortem,
+} from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
 import { AsyncJobManager } from "./async";
 import { createAutoresearchExtension } from "./autoresearch";
@@ -862,6 +871,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			})
 		: undefined;
 
+	const searchDb = new SearchDb(getSearchDbDir(agentDir));
 	const pendingActionStore = new PendingActionStore();
 	const toolSession: ToolSession = {
 		cwd,
@@ -911,6 +921,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		modelRegistry,
 		asyncJobManager,
 		pendingActionStore,
+		searchDb,
 	};
 
 	// Initialize internal URL router for internal protocols (agent://, artifact://, memory://, skill://, rule://, mcp://, local://)
