@@ -2,7 +2,7 @@ Finds files using fast pattern matching that works with any codebase size.
 
 <instruction>
 - Pattern includes the search path: `src/**/*.ts`, `lib/*.json`, `**/*.md`
-- You may provide comma/space-separated path lists, for example `apps/,packages/,phases/` or `apps/ packages/ phases/`; each item is searched and results are merged
+- You may provide comma-separated path lists, for example `apps/,packages/,phases/`
 - Simple patterns like `*.ts` automatically search recursively from cwd
 - Includes hidden files by default (use `hidden: false` to exclude)
 - You **SHOULD** perform multiple searches in parallel when potentially useful
