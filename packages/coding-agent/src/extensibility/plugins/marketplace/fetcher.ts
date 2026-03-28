@@ -129,7 +129,7 @@ export function parseMarketplaceCatalog(content: string, filePath: string): Mark
 		const entry = plugins[i];
 		assertField(typeof entry === "object" && entry !== null && !Array.isArray(entry), `plugins[${i}]`, filePath);
 		const p = entry as Record<string, unknown>;
-		assertField(typeof p.name === "string", `plugins[${i}].name`, filePath);
+		assertField(typeof p.name === "string" && isValidNameSegment(p.name), `plugins[${i}].name`, filePath);
 		// source can be a string path or a typed object (github/url/git-subdir/npm)
 		// all typed objects carry a "source" discriminant string field
 		assertField(
@@ -259,7 +259,7 @@ async function cloneAndReadCatalog(url: string, cacheDir: string): Promise<Fetch
 		throw err;
 	}
 
-	let catalog: ReturnType<typeof parseMarketplaceCatalog>;
+	let catalog: MarketplaceCatalog;
 	try {
 		catalog = parseMarketplaceCatalog(content, catalogPath);
 	} catch (err) {

@@ -72,10 +72,18 @@ export async function cachePlugin(
 	// Ensure cache directory exists before writing into it
 	await fs.mkdir(cacheDir, { recursive: true });
 
-	// Remove stale/partial cache entry before re-copying
-	await fs.rm(targetPath, { recursive: true, force: true });
-
-	await fs.cp(sourcePath, targetPath, { recursive: true });
+	// Copy to a staging directory first, then atomically rename into place.
+	// This prevents destroying an active install if fs.cp fails mid-copy.
+	const stagingPath = `${targetPath}.staging-${Date.now()}`;
+	try {
+		await fs.cp(sourcePath, stagingPath, { recursive: true });
+		await fs.rm(targetPath, { recursive: true, force: true });
+		await fs.rename(stagingPath, targetPath);
+	} catch (err) {
+		// Clean up staging dir on any failure; leave existing targetPath intact
+		await fs.rm(stagingPath, { recursive: true, force: true }).catch(() => {});
+		throw err;
+	}
 
 	return targetPath;
 }
