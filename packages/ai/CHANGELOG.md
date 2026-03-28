@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.16.4] - 2026-03-28
 ### Added
 
 - Added support for Groq Compound and Compound Mini models with extended context window (131K tokens) and configurable thinking levels

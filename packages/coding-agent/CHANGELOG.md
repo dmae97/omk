@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.16.4] - 2026-03-28
 ### Changed
 
 - Renamed hashline helper functions from `hlineref`/`hlinefull` to `href`/`hline` for brevity
