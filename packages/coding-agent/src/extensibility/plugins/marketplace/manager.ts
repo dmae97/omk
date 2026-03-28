@@ -251,14 +251,17 @@ export class MarketplaceManager {
 			await writeInstalledPluginsRegistry(this.#opts.installedRegistryPath, prunedReg);
 		}
 
-		// 6. Build and register the entry
+		// 6. Build and register the entry, preserving enabled state from previous install
 		const now = new Date().toISOString();
+		// Carry over enabled flag from existing entry — a disabled plugin must stay disabled after upgrade
+		const wasDisabled = existing?.some(e => e.enabled === false);
 		const installedEntry: InstalledPluginEntry = {
 			scope: "user",
 			installPath: cachePath,
 			version,
 			installedAt: now,
 			lastUpdated: now,
+			...(wasDisabled ? { enabled: false } : {}),
 		};
 
 		const freshInstReg = await readInstalledPluginsRegistry(this.#opts.installedRegistryPath);

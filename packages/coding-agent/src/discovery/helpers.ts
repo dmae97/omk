@@ -765,6 +765,10 @@ export async function listClaudePluginRoots(home: string): Promise<{ roots: Clau
 export function clearClaudePluginRootsCache(): void {
 	pluginRootsCache.clear();
 	preloadedPluginRoots = [...injectedPluginDirRoots];
+	// Re-warm preloaded roots asynchronously so sync LSP config reads stay valid
+	if (lastPreloadHome) {
+		void preloadPluginRoots(lastPreloadHome);
+	}
 }
 
 // ── Preloaded plugin roots (for sync consumers like LSP config) ─────────────
@@ -773,6 +777,7 @@ export function clearClaudePluginRootsCache(): void {
 
 let preloadedPluginRoots: ClaudePluginRoot[] = [];
 let injectedPluginDirRoots: ClaudePluginRoot[] = [];
+let lastPreloadHome: string | undefined;
 
 /**
  * Populate the module-level plugin roots cache for sync consumers.
@@ -780,6 +785,7 @@ let injectedPluginDirRoots: ClaudePluginRoot[] = [];
  * but before any LSP config is read.
  */
 export async function preloadPluginRoots(home: string): Promise<void> {
+	lastPreloadHome = home;
 	const { roots } = await listClaudePluginRoots(home);
 	preloadedPluginRoots = roots;
 }
