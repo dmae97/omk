@@ -187,12 +187,9 @@ const locSchema = Type.Union(
 		Type.Object({ append: Type.String({ description: "anchor" }) }),
 		Type.Object({ prepend: Type.String({ description: "anchor" }) }),
 		Type.Object({
-			line: Type.String({ description: "anchor" }),
-		}),
-		Type.Object({
-			block: Type.Object({
-				pos: Type.String({ description: "anchor" }),
-				end: Type.String({ description: "limit position" }),
+			range: Type.Object({
+				pos: Type.String({ description: "first line to edit (inclusive)" }),
+				end: Type.String({ description: "last line to edit (inclusive)" }),
 			}),
 		}),
 	],
@@ -231,8 +228,7 @@ export type HashlineParams = Static<typeof hashlineEditParamsSchema>;
  * loc can be:
  *   - "append" / "prepend" — file-level insert
  *   - { append: anchor } / { prepend: anchor } — insert relative to anchor
- *   - { replace_line: anchor } — replace one line
- *   - { replace_block: { pos, end } } — replace inclusive range
+ *   - { range: { pos, end } } — replace inclusive range
  */
 function resolveEditAnchors(edits: HashlineToolEdit[]): HashlineEdit[] {
 	const result: HashlineEdit[] = [];
@@ -253,17 +249,13 @@ function resolveEditAnchors(edits: HashlineToolEdit[]): HashlineEdit[] {
 				const anchor = tryParseTag(loc.prepend);
 				if (!anchor) throw new Error("prepend requires a valid anchor.");
 				result.push({ op: "prepend_at", pos: anchor, lines });
-			} else if ("line" in loc) {
-				const anchor = tryParseTag(loc.line);
-				if (!anchor) throw new Error("line requires a valid anchor.");
-				result.push({ op: "replace_line", pos: anchor, lines });
-			} else if ("block" in loc) {
-				const posAnchor = tryParseTag(loc.block.pos);
-				const endAnchor = tryParseTag(loc.block.end);
-				if (!posAnchor || !endAnchor) throw new Error("block requires valid pos and end anchors.");
+			} else if ("range" in loc) {
+				const posAnchor = tryParseTag(loc.range.pos);
+				const endAnchor = tryParseTag(loc.range.end);
+				if (!posAnchor || !endAnchor) throw new Error("range requires valid pos and end anchors.");
 				result.push({ op: "replace_range", pos: posAnchor, end: endAnchor, lines });
 			} else {
-				throw new Error("Unknown loc shape. Expected append, prepend, line, or block.");
+				throw new Error("Unknown loc shape. Expected append, prepend, or range.");
 			}
 		} else {
 			throw new Error(`Invalid loc value: ${JSON.stringify(loc)}`);

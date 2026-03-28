@@ -258,19 +258,19 @@ function formatHashlineRef(lineNum: unknown, content: unknown): { num: number; t
 }
 
 /**
- * {{hlineref lineNum "content"}} — compute a real hashline ref for prompt examples.
+ * {{href lineNum "content"}} — compute a real hashline ref for prompt examples.
  * Returns `"lineNum#hash"` using the actual hash algorithm.
  */
-handlebars.registerHelper("hlineref", (lineNum: unknown, content: unknown): string => {
+handlebars.registerHelper("href", (lineNum: unknown, content: unknown): string => {
 	const { ref } = formatHashlineRef(lineNum, content);
 	return JSON.stringify(ref);
 });
 
 /**
- * {{hlinefull lineNum "content"}} — format a full read-style line with prefix.
+ * {{hline lineNum "content"}} — format a full read-style line with prefix.
  * Returns `"lineNum#hash:content"`.
  */
-handlebars.registerHelper("hlinefull", (lineNum: unknown, content: unknown): string => {
+handlebars.registerHelper("hline", (lineNum: unknown, content: unknown): string => {
 	const { ref, text } = formatHashlineRef(lineNum, content);
 	return `${ref}:${text}`;
 });

@@ -1,6 +1,24 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added support for Groq Compound and Compound Mini models with extended context window (131K tokens) and configurable thinking levels
+- Added support for OpenAI GPT-OSS-Safeguard-20B model with reasoning capabilities across multiple providers
+- Added support for Kwaipilot KAT-Coder-Pro V2 model across Kilo, NanoGPT, and OpenRouter providers
+- Added support for GLM-5.1 model with extended context window (200K tokens) and max output of 131K tokens
+- Added support for Qwen3.5-27B-Musica-v1 model
+- Added support for zai-org/glm-5.1 model with reasoning capabilities
+- Added support for Sapiens AI Agnes-1.5-Lite model with multimodal input (text and image) and reasoning
+- Added support for Venice openai-gpt-54-mini model
+
+### Changed
+
+- Updated Qwen QwQ 32B max tokens from 16,384 to 40,960 across multiple providers
+- Updated OpenAI GPT-OSS-Safeguard-20B model name to 'Safety GPT OSS 20B' and enabled reasoning capabilities
+- Updated OpenAI GPT-OSS-Safeguard-20B context window from 222,222 to 131,072 tokens and max tokens from 8,888 to 65,536
+- Updated OpenRouter Qwen QwQ 32B pricing: input from 0.2 to 0.19, output from 1.17 to 1.15, cache read from 0.1 to 0.095
+- Updated OpenRouter Claude 3.5 Sonnet pricing: input from 0.45 to 0.42, cache read from 0.225 to 0.21
 
 ## [13.16.3] - 2026-03-28
 ### Changed

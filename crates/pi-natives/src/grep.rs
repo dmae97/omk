@@ -647,20 +647,40 @@ fn read_file_bytes(path: &Path, prefer_text_fast_path: bool) -> io::Result<Optio
 	let metadata = file.metadata()?;
 	if metadata.len() > MAX_FILE_BYTES {
 		return Ok(None);
-	}
-
-	if metadata.len() == 0 {
+	} else if metadata.len() == 0 {
 		return Ok(Some(FileBytes::Owned(Vec::new())));
 	}
 
-	let bytes = match unsafe {
+	let mapping = unsafe {
 		// SAFETY: The mapping is read-only and tied to the opened file handle.
 		// We do not mutate through this view; the map is dropped immediately
 		// after search for each file.
 		memmap2::Mmap::map(&file)
-	} {
-		Ok(mapped) => FileBytes::Mapped(mapped),
-		Err(_) => FileBytes::Owned(std::fs::read(path)?),
+	};
+
+	let bytes = if let Ok(mapped) = mapping {
+		FileBytes::Mapped(mapped)
+	} else {
+		// Resolve symlinks: if the path is a symlink, follow it and check the target.
+		// Reject FIFOs, sockets, block/char devices, and other non-regular-file types.
+		let file_type = metadata.file_type();
+		if file_type.is_symlink() {
+			// Follow the symlink and check the target's file type.
+			let target_metadata = std::fs::metadata(path)?;
+			if !target_metadata.is_file() {
+				return Err(io::Error::new(
+					io::ErrorKind::InvalidInput,
+					format!("not a regular file: {}", path.display()),
+				));
+			}
+		} else if !file_type.is_file() {
+			return Err(io::Error::new(
+				io::ErrorKind::InvalidInput,
+				format!("not a regular file: {}", path.display()),
+			));
+		}
+
+		FileBytes::Owned(std::fs::read(path)?)
 	};
 
 	// For known text-like source/config paths in picker-backed searches, use a

@@ -164,9 +164,8 @@ function formatStreamingHashlineEdits(edits: Partial<HashlineToolEdit>[], uiThem
 			return { srcLabel: `• ${loc} (file-level)`, dst: contentLines };
 		}
 		if (typeof loc === "object" && loc) {
-			if ("block" in loc && typeof loc.block === "object" && loc.block) {
-				const rb = loc.block as { pos?: string; end?: string };
-				return { srcLabel: `• block ${rb.pos ?? "?"}…${rb.end ?? "?"}`, dst: contentLines };
+			if ("range" in loc && typeof loc.range === "object" && loc.range) {
+				return { srcLabel: `• range ${loc.range.pos ?? "?"}…${loc.range.end ?? "?"}`, dst: contentLines };
 			}
 			if ("line" in loc) {
 				return { srcLabel: `• line ${(loc as { line: string }).line}`, dst: contentLines };
