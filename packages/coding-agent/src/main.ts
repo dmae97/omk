@@ -23,6 +23,7 @@ import { ModelRegistry, ModelsConfigFile } from "./config/model-registry";
 import { resolveCliModel, resolveModelRoleValue, resolveModelScope, type ScopedModel } from "./config/model-resolver";
 import { Settings, settings } from "./config/settings";
 import { initializeWithSettings } from "./discovery";
+import { injectPluginDirRoots, preloadPluginRoots } from "./discovery/helpers";
 import { exportFromFile } from "./export/html";
 import type { ExtensionUIContext } from "./extensibility/extensions/types";
 import type { MCPManager } from "./mcp";
@@ -637,6 +638,14 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 			return;
 		}
 		sessionManager = await SessionManager.open(selectedPath);
+	}
+
+	// Wire --plugin-dir and preload plugin roots for sync consumers (LSP config)
+	const home = os.homedir();
+	if (parsedArgs.pluginDirs && parsedArgs.pluginDirs.length > 0) {
+		await logger.timeAsync("injectPluginDirRoots", () => injectPluginDirRoots(home, parsedArgs.pluginDirs!));
+	} else {
+		await logger.timeAsync("preloadPluginRoots", () => preloadPluginRoots(home));
 	}
 
 	const { options: sessionOptions } = await logger.timeAsync("buildSessionOptions", () =>

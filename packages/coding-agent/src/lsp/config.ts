@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { isRecord, logger } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
 import { getConfigDirPaths } from "../config";
+import { getPreloadedPluginRoots } from "../discovery/helpers";
 import { BiomeClient } from "./clients/biome-client";
 import { SwiftLintClient } from "./clients/swiftlint-client";
 import DEFAULTS from "./defaults.json" with { type: "json" };
@@ -245,6 +246,14 @@ function getConfigPaths(cwd: string): string[] {
 	for (const dir of userDirs) {
 		for (const filename of filenames) {
 			paths.push(path.join(dir, filename));
+		}
+	}
+
+	// Plugin LSP configs (from marketplace/--plugin-dir roots)
+	const pluginRoots = getPreloadedPluginRoots();
+	for (const root of pluginRoots) {
+		for (const filename of ["lsp.json", ".lsp.json"]) {
+			paths.push(path.join(root.path, filename));
 		}
 	}
 

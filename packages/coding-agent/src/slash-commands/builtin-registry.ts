@@ -1,6 +1,20 @@
+import * as os from "node:os";
+import * as path from "node:path";
+
 import { getOAuthProviders } from "@oh-my-pi/pi-ai";
+import { getConfigDirName } from "@oh-my-pi/pi-utils";
+import { invalidate as invalidateFsCache } from "../capability/fs";
 import type { SettingPath, SettingValue } from "../config/settings";
 import { settings } from "../config/settings";
+import { clearClaudePluginRootsCache } from "../discovery/helpers.js";
+import { PluginManager } from "../extensibility/plugins";
+import {
+	getInstalledPluginsRegistryPath,
+	getMarketplacesCacheDir,
+	getMarketplacesRegistryPath,
+	getPluginsCacheDir,
+	MarketplaceManager,
+} from "../extensibility/plugins/marketplace";
 import type { InteractiveModeContext } from "../modes/types";
 
 function refreshStatusLine(ctx: InteractiveModeContext): void {
@@ -542,6 +556,244 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 		name: "exit",
 		description: "Exit the application",
 		handle: shutdownHandler,
+	},
+	{
+		name: "marketplace",
+		description: "Manage marketplace plugin sources and installed plugins",
+		subcommands: [
+			{ name: "add", description: "Add a marketplace source", usage: "<source>" },
+			{ name: "remove", description: "Remove a marketplace source", usage: "<name>" },
+			{ name: "update", description: "Update marketplace catalog(s)", usage: "[name]" },
+			{ name: "list", description: "List configured marketplaces" },
+			{ name: "discover", description: "Browse available plugins", usage: "[marketplace]" },
+			{
+				name: "install",
+				description: "Install a plugin (interactive browser if no args)",
+				usage: "[--force] [name@marketplace]",
+			},
+			{ name: "uninstall", description: "Uninstall a plugin (selector if no args)", usage: "[name@marketplace]" },
+			{ name: "installed", description: "List installed marketplace plugins" },
+		],
+		allowArgs: true,
+		handle: async (command, runtime) => {
+			runtime.ctx.editor.setText("");
+			const args = command.args.trim().split(/\s+/);
+			const sub = args[0] || "install";
+			const rest = args.slice(1).join(" ").trim();
+
+			// /marketplace (no args) or /marketplace install (no args) → interactive browser
+			if ((sub === "install" && !rest) || (!args[0] && !command.args.trim())) {
+				runtime.ctx.showPluginSelector("install");
+				return;
+			}
+
+			const mgr = new MarketplaceManager({
+				marketplacesRegistryPath: getMarketplacesRegistryPath(),
+				installedRegistryPath: getInstalledPluginsRegistryPath(),
+				marketplacesCacheDir: getMarketplacesCacheDir(),
+				pluginsCacheDir: getPluginsCacheDir(),
+				clearPluginRootsCache: () => {
+					const home = os.homedir();
+					invalidateFsCache(path.join(home, ".claude", "plugins", "installed_plugins.json"));
+					invalidateFsCache(path.join(home, getConfigDirName(), "plugins", "installed_plugins.json"));
+					clearClaudePluginRootsCache();
+				},
+			});
+
+			try {
+				switch (sub) {
+					case "add": {
+						if (!rest) {
+							runtime.ctx.showStatus("Usage: /marketplace add <source>");
+							return;
+						}
+						const entry = await mgr.addMarketplace(rest);
+						runtime.ctx.showStatus(`Added marketplace: ${entry.name}`);
+						break;
+					}
+					case "remove":
+					case "rm": {
+						if (!rest) {
+							runtime.ctx.showStatus("Usage: /marketplace remove <name>");
+							return;
+						}
+						await mgr.removeMarketplace(rest);
+						runtime.ctx.showStatus(`Removed marketplace: ${rest}`);
+						break;
+					}
+					case "update": {
+						if (rest) {
+							await mgr.updateMarketplace(rest);
+							runtime.ctx.showStatus(`Updated marketplace: ${rest}`);
+						} else {
+							const results = await mgr.updateAllMarketplaces();
+							runtime.ctx.showStatus(`Updated ${results.length} marketplace(s)`);
+						}
+						break;
+					}
+					case "discover": {
+						const plugins = await mgr.listAvailablePlugins(rest || undefined);
+						if (plugins.length === 0) {
+							runtime.ctx.showStatus("No plugins available");
+						} else {
+							const lines = plugins.map(
+								p =>
+									`  ${p.name}${p.version ? `@${p.version}` : ""}${p.description ? ` - ${p.description}` : ""}`,
+							);
+							runtime.ctx.showStatus(`Available plugins:\n${lines.join("\n")}`);
+						}
+						break;
+					}
+					case "install": {
+						// Parse: /marketplace install [--force] name@marketplace
+						const force = rest.startsWith("--force ");
+						const installSpec = force ? rest.slice("--force ".length).trim() : rest;
+						if (!installSpec?.includes("@")) {
+							runtime.ctx.showStatus("Usage: /marketplace install [--force] <name@marketplace>");
+							return;
+						}
+						const atIdx = installSpec.lastIndexOf("@");
+						const name = installSpec.slice(0, atIdx);
+						const marketplace = installSpec.slice(atIdx + 1);
+						await mgr.installPlugin(name, marketplace, { force });
+						runtime.ctx.showStatus(`Installed ${name} from ${marketplace}`);
+						break;
+					}
+					case "uninstall": {
+						if (!rest) {
+							// No args → open interactive uninstall selector
+							runtime.ctx.showPluginSelector("uninstall");
+							return;
+						}
+						await mgr.uninstallPlugin(rest);
+						runtime.ctx.showStatus(`Uninstalled ${rest}`);
+						break;
+					}
+					case "installed": {
+						const installed = await mgr.listInstalledPlugins();
+						if (installed.length === 0) {
+							runtime.ctx.showStatus("No marketplace plugins installed");
+						} else {
+							const lines = installed.map(p => `  ${p.id} (${p.entries.length} entry)`);
+							runtime.ctx.showStatus(`Installed plugins:\n${lines.join("\n")}`);
+						}
+						break;
+					}
+					default: {
+						// Default to list marketplaces
+						const marketplaces = await mgr.listMarketplaces();
+						if (marketplaces.length === 0) {
+							runtime.ctx.showStatus("No marketplaces configured. Use /marketplace add <source>");
+						} else {
+							const lines = marketplaces.map(m => `  ${m.name}  ${m.sourceUri}`);
+							runtime.ctx.showStatus(`Marketplaces:\n${lines.join("\n")}`);
+						}
+						break;
+					}
+				}
+			} catch (err) {
+				runtime.ctx.showStatus(`Marketplace error: ${err}`);
+			}
+		},
+	},
+	{
+		name: "plugins",
+		description: "View and manage installed plugins",
+		subcommands: [
+			{ name: "list", description: "List all installed plugins (npm + marketplace)" },
+			{ name: "enable", description: "Enable a marketplace plugin", usage: "<name@marketplace>" },
+			{ name: "disable", description: "Disable a marketplace plugin", usage: "<name@marketplace>" },
+		],
+		allowArgs: true,
+		handle: async (command, runtime) => {
+			runtime.ctx.editor.setText("");
+			const args = command.args.trim().split(/\s+/);
+			const sub = args[0] || "list";
+			const rest = args.slice(1).join(" ").trim();
+
+			try {
+				const mgr = new MarketplaceManager({
+					marketplacesRegistryPath: getMarketplacesRegistryPath(),
+					installedRegistryPath: getInstalledPluginsRegistryPath(),
+					marketplacesCacheDir: getMarketplacesCacheDir(),
+					pluginsCacheDir: getPluginsCacheDir(),
+					clearPluginRootsCache: () => {
+						const home = os.homedir();
+						invalidateFsCache(path.join(home, ".claude", "plugins", "installed_plugins.json"));
+						invalidateFsCache(path.join(home, getConfigDirName(), "plugins", "installed_plugins.json"));
+						clearClaudePluginRootsCache();
+					},
+				});
+
+				switch (sub) {
+					case "enable": {
+						if (!rest) {
+							runtime.ctx.showStatus("Usage: /plugins enable <name@marketplace>");
+							return;
+						}
+						await mgr.setPluginEnabled(rest, true);
+						runtime.ctx.showStatus(`Enabled ${rest}`);
+						break;
+					}
+					case "disable": {
+						if (!rest) {
+							runtime.ctx.showStatus("Usage: /plugins disable <name@marketplace>");
+							return;
+						}
+						await mgr.setPluginEnabled(rest, false);
+						runtime.ctx.showStatus(`Disabled ${rest}`);
+						break;
+					}
+					default: {
+						const lines: string[] = [];
+
+						const npm = new PluginManager();
+						const npmPlugins = await npm.list();
+						if (npmPlugins.length > 0) {
+							lines.push("npm plugins:");
+							for (const p of npmPlugins) {
+								const status = p.enabled === false ? " (disabled)" : "";
+								lines.push(`  ${p.name}@${p.version}${status}`);
+							}
+						}
+
+						const mktPlugins = await mgr.listInstalledPlugins();
+						if (mktPlugins.length > 0) {
+							if (lines.length > 0) lines.push("");
+							lines.push("marketplace plugins:");
+							for (const p of mktPlugins) {
+								const entry = p.entries[0];
+								const status = entry?.enabled === false ? " (disabled)" : "";
+								lines.push(`  ${p.id} v${entry?.version ?? "?"}${status}`);
+							}
+						}
+
+						if (lines.length === 0) {
+							runtime.ctx.showStatus("No plugins installed");
+						} else {
+							runtime.ctx.showStatus(lines.join("\n"));
+						}
+						break;
+					}
+				}
+			} catch (err) {
+				runtime.ctx.showStatus(`Plugin error: ${err}`);
+			}
+		},
+	},
+	{
+		name: "reload-plugins",
+		description: "Reload all plugins (skills, commands, hooks, tools, agents, MCP)",
+		handle: (_command, runtime) => {
+			// Invalidate the fs content cache for both registry files so
+			// listClaudePluginRoots re-reads from disk on next access.
+			const home = os.homedir();
+			invalidateFsCache(path.join(home, ".claude", "plugins", "installed_plugins.json"));
+			invalidateFsCache(path.join(home, getConfigDirName(), "plugins", "installed_plugins.json"));
+			clearClaudePluginRootsCache();
+			runtime.ctx.showStatus("Plugin cache cleared. Plugins will reload on next capability refresh.");
+			runtime.ctx.editor.setText("");
+		},
 	},
 	{
 		name: "quit",

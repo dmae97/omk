@@ -9,6 +9,7 @@ import type { Skill, SkillFrontmatter } from "../capability/skill";
 import type { LoadContext, LoadResult, SourceMeta } from "../capability/types";
 import { parseThinkingLevel } from "../thinking";
 import { parseFrontmatter } from "../utils/frontmatter";
+import { buildPluginDirRoot } from "./plugin-dir-roots";
 
 /**
  * Standard paths for each config source.
@@ -652,53 +653,93 @@ export async function listClaudePluginRoots(home: string): Promise<{ roots: Clau
 	const roots: ClaudePluginRoot[] = [];
 	const warnings: string[] = [];
 
+	// ── Claude Code registry ──────────────────────────────────────────────────
 	const registryPath = path.join(home, ".claude", "plugins", "installed_plugins.json");
 	const content = await readFile(registryPath);
 
-	if (!content) {
-		// No registry file - not an error, just no plugins
-		const result = { roots, warnings };
-		pluginRootsCache.set(home, result);
-		return result;
-	}
+	if (content) {
+		const registry = parseClaudePluginsRegistry(content);
+		if (!registry) {
+			warnings.push(`Failed to parse Claude Code plugin registry: ${registryPath}`);
+		} else {
+			for (const [pluginId, entries] of Object.entries(registry.plugins)) {
+				if (!Array.isArray(entries) || entries.length === 0) continue;
 
-	const registry = parseClaudePluginsRegistry(content);
-	if (!registry) {
-		warnings.push(`Failed to parse Claude Code plugin registry: ${registryPath}`);
-		const result = { roots, warnings };
-		pluginRootsCache.set(home, result);
-		return result;
-	}
+				// Parse plugin ID format: "plugin-name@marketplace"
+				const atIndex = pluginId.lastIndexOf("@");
+				if (atIndex === -1) {
+					warnings.push(`Invalid plugin ID format (missing @marketplace): ${pluginId}`);
+					continue;
+				}
 
-	for (const [pluginId, entries] of Object.entries(registry.plugins)) {
-		if (!Array.isArray(entries) || entries.length === 0) continue;
+				const pluginName = pluginId.slice(0, atIndex);
+				const marketplace = pluginId.slice(atIndex + 1);
 
-		// Parse plugin ID format: "plugin-name@marketplace"
-		const atIndex = pluginId.lastIndexOf("@");
-		if (atIndex === -1) {
-			warnings.push(`Invalid plugin ID format (missing @marketplace): ${pluginId}`);
-			continue;
-		}
+				// Process all valid entries, not just the first one.
+				// This handles plugins with multiple installs (different scopes/versions).
+				for (const entry of entries) {
+					if (!entry.installPath || typeof entry.installPath !== "string") {
+						warnings.push(`Plugin ${pluginId} entry has no installPath`);
+						continue;
+					}
 
-		const pluginName = pluginId.slice(0, atIndex);
-		const marketplace = pluginId.slice(atIndex + 1);
-
-		// Process all valid entries, not just the first one.
-		// This handles plugins with multiple installs (different scopes/versions).
-		for (const entry of entries) {
-			if (!entry.installPath || typeof entry.installPath !== "string") {
-				warnings.push(`Plugin ${pluginId} entry has no installPath`);
-				continue;
+					roots.push({
+						id: pluginId,
+						marketplace,
+						plugin: pluginName,
+						version: entry.version || "unknown",
+						path: entry.installPath,
+						scope: entry.scope || "user",
+					});
+				}
 			}
+		}
+	}
 
-			roots.push({
-				id: pluginId,
-				marketplace,
-				plugin: pluginName,
-				version: entry.version || "unknown",
-				path: entry.installPath,
-				scope: entry.scope || "user",
-			});
+	// ── OMP installed plugins registry ───────────────────────────────────────
+	// OMP registry is authoritative: its entries replace Claude's entries for the same plugin ID.
+	// Path derived from `home` (not os.homedir()) so test isolation works when home is overridden.
+	const ompRegistryPath = path.join(home, getConfigDirName(), "plugins", "installed_plugins.json");
+	const ompContent = await readFile(ompRegistryPath);
+	if (ompContent) {
+		const ompRegistry = parseClaudePluginsRegistry(ompContent);
+		if (ompRegistry) {
+			for (const [pluginId, entries] of Object.entries(ompRegistry.plugins)) {
+				if (!Array.isArray(entries) || entries.length === 0) continue;
+
+				const atIndex = pluginId.lastIndexOf("@");
+				if (atIndex === -1) {
+					warnings.push(`Invalid plugin ID format (missing @marketplace): ${pluginId}`);
+					continue;
+				}
+				const pluginName = pluginId.slice(0, atIndex);
+				const marketplace = pluginId.slice(atIndex + 1);
+
+				// OMP is authoritative: drop all Claude-sourced entries for this plugin ID
+				const filtered = roots.filter(r => r.id !== pluginId);
+				roots.length = 0;
+				roots.push(...filtered);
+
+				for (const entry of entries) {
+					if (!entry.installPath || typeof entry.installPath !== "string") {
+						warnings.push(`Plugin ${pluginId} entry has no installPath`);
+						continue;
+					}
+					// Deduplicate by installPath within same ID
+					if (roots.some(r => r.id === pluginId && r.path === entry.installPath)) continue;
+
+					roots.push({
+						id: pluginId,
+						marketplace,
+						plugin: pluginName,
+						version: entry.version || "unknown",
+						path: entry.installPath,
+						scope: entry.scope || "user",
+					});
+				}
+			}
+		} else {
+			warnings.push(`Failed to parse OMP plugin registry: ${ompRegistryPath}`);
 		}
 	}
 
@@ -712,4 +753,70 @@ export async function listClaudePluginRoots(home: string): Promise<{ roots: Clau
  */
 export function clearClaudePluginRootsCache(): void {
 	pluginRootsCache.clear();
+	preloadedPluginRoots = [];
+}
+
+// ── Preloaded plugin roots (for sync consumers like LSP config) ─────────────
+// Populated at startup by preloadPluginRoots(). Read synchronously by
+// getPreloadedPluginRoots(). Safe degradation: empty array if not warmed.
+
+let preloadedPluginRoots: ClaudePluginRoot[] = [];
+
+/**
+ * Populate the module-level plugin roots cache for sync consumers.
+ * Call during session initialization, after dir resolution completes
+ * but before any LSP config is read.
+ */
+export async function preloadPluginRoots(home: string): Promise<void> {
+	const { roots } = await listClaudePluginRoots(home);
+	preloadedPluginRoots = roots;
+}
+
+/**
+ * Get pre-loaded plugin roots synchronously.
+ * Returns empty array if preloadPluginRoots() hasn't been called.
+ */
+export function getPreloadedPluginRoots(): readonly ClaudePluginRoot[] {
+	return preloadedPluginRoots;
+}
+
+// ── --plugin-dir injection ──────────────────────────────────────────────────
+
+/**
+ * Inject synthetic plugin roots from --plugin-dir paths.
+ * These are prepended to the cache with highest precedence (before OMP/Claude entries).
+ * Must be called before any listClaudePluginRoots() access.
+ */
+export async function injectPluginDirRoots(home: string, dirs: string[]): Promise<void> {
+	// Ensure the base cache is populated first
+	const { roots, warnings } = await listClaudePluginRoots(home);
+
+	const injected: ClaudePluginRoot[] = [];
+	for (const dir of dirs) {
+		const resolved = path.resolve(dir);
+		// Read plugin name from manifest
+		let pluginName = path.basename(resolved);
+		try {
+			const manifestPath = path.join(resolved, ".claude-plugin", "plugin.json");
+			const content = await Bun.file(manifestPath).text();
+			const manifest = JSON.parse(content);
+			if (typeof manifest.name === "string" && manifest.name) {
+				pluginName = manifest.name;
+			}
+		} catch {
+			// No manifest or invalid — use directory name
+		}
+
+		injected.push(buildPluginDirRoot(resolved, pluginName));
+	}
+
+	// --plugin-dir roots have highest precedence: prepend them,
+	// removing any existing entries with the same plugin ID.
+	const injectedIds = new Set(injected.map(r => r.id));
+	const filtered = roots.filter(r => !injectedIds.has(r.id));
+	const merged = [...injected, ...filtered];
+
+	// Replace the cache entry
+	pluginRootsCache.set(home, { roots: merged, warnings });
+	preloadedPluginRoots = merged;
 }

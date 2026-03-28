@@ -40,19 +40,29 @@ export function resolveSkillUrlToPath(url: string, skills: readonly Skill[]): st
 		throw new ToolError(`Invalid skill:// URL: ${url}`);
 	}
 
-	const skillName = parsed[1];
-	if (!skillName) {
+	let rawSkillSegment = parsed[1];
+	if (!rawSkillSegment) {
 		throw new ToolError(`skill:// URL requires a skill name: ${url}`);
 	}
+	// Decode percent-encoded colons (%3A) used for namespaced skill names
+	try {
+		rawSkillSegment = decodeURIComponent(rawSkillSegment);
+	} catch {
+		// Leave as-is if decoding fails
+	}
 
-	const rawPath = parsed[2] ?? "";
-	const skill = skills.find(s => s.name === skillName);
+	// Resolve skill name by longest-prefix match against registered skills.
+	// This handles namespaced skills ("plugin:skill") where the URI may also
+	// carry a colon-delimited suffix (e.g., ":1-5" line range).
+	const { skill, suffix } = matchSkillName(rawSkillSegment, skills);
 	if (!skill) {
 		const available = skills.map(s => s.name);
 		const availableStr = available.length > 0 ? available.join(", ") : "none";
-		throw new ToolError(`Unknown skill: ${skillName}. Available: ${availableStr}`);
+		throw new ToolError(`Unknown skill: ${rawSkillSegment}. Available: ${availableStr}`);
 	}
 
+	// Combine any colon suffix (line range like ":1-5") with the path segment
+	const rawPath = (parsed[2] ?? "") + (suffix ? `/${suffix}` : "");
 	const hasRelativePath = rawPath !== "" && rawPath !== "/";
 
 	if (!hasRelativePath) {
@@ -80,6 +90,39 @@ export function resolveSkillUrlToPath(url: string, skills: readonly Skill[]): st
 	}
 
 	return resolvedPath;
+}
+
+/**
+ * Match a raw skill segment against registered skills using longest-prefix match.
+ * Handles colons in both skill names (namespacing) and suffixes (line ranges).
+ *
+ * For "superpowers:brainstorming:1-5" with skill "superpowers:brainstorming":
+ *   -> skill = superpowers:brainstorming, suffix = "1-5"
+ * For "brainstorming" with skill "brainstorming":
+ *   -> skill = brainstorming, suffix = undefined
+ */
+function matchSkillName(
+	rawSegment: string,
+	skills: readonly Skill[],
+): { skill: Skill | undefined; suffix: string | undefined } {
+	// Exact match first (most common case)
+	const exact = skills.find(s => s.name === rawSegment);
+	if (exact) return { skill: exact, suffix: undefined };
+
+	// Try stripping colon-delimited suffixes from the right
+	let candidate = rawSegment;
+	while (true) {
+		const lastColon = candidate.lastIndexOf(":");
+		if (lastColon <= 0) break;
+		candidate = candidate.slice(0, lastColon);
+		const match = skills.find(s => s.name === candidate);
+		if (match) {
+			const suffix = rawSegment.slice(lastColon + 1);
+			return { skill: match, suffix };
+		}
+	}
+
+	return { skill: undefined, suffix: undefined };
 }
 
 function extractScheme(url: string): SupportedInternalScheme | undefined {

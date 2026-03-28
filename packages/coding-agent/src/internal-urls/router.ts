@@ -1,6 +1,7 @@
 /**
  * Internal URL router for internal protocols (agent://, artifact://, memory://, skill://, rule://, mcp://, pi://, local://).
  */
+import { parseInternalUrl } from "./parse";
 import type { InternalResource, InternalUrl, ProtocolHandler } from "./types";
 
 /**
@@ -37,24 +38,7 @@ export class InternalUrlRouter {
 	 * @throws Error if scheme is not registered or resolution fails
 	 */
 	async resolve(input: string): Promise<InternalResource> {
-		let parsed: URL;
-		try {
-			parsed = new URL(input);
-		} catch {
-			throw new Error(`Invalid URL: ${input}`);
-		}
-
-		const hostMatch = input.match(/^([a-z][a-z0-9+.-]*):\/\/([^/?#]*)/i);
-		let rawHost = hostMatch ? hostMatch[2] : parsed.hostname;
-		try {
-			rawHost = decodeURIComponent(rawHost);
-		} catch {
-			// Leave rawHost as-is if decoding fails.
-		}
-		(parsed as InternalUrl).rawHost = rawHost;
-		const pathMatch = input.match(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*(\/[^?#]*)?/i);
-		(parsed as InternalUrl).rawPathname = pathMatch?.[1] ?? parsed.pathname;
-
+		const parsed = parseInternalUrl(input);
 		const scheme = parsed.protocol.replace(/:$/, "").toLowerCase();
 		const handler = this.#handlers.get(scheme);
 

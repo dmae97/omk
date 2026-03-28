@@ -10,6 +10,30 @@
 
 - Fixed MCP tools from newly added servers not being activated after `/mcp add` — `refreshMCPTools` preserves prior MCP tool selections, so brand-new servers had their tools registered in the registry but never passed to the agent; tools are now explicitly activated on successful connection
 
+### Added
+
+- Added marketplace plugin system: registry types, ID helpers, atomic read/write for `marketplaces.json` and `installed_plugins.json` (Claude Code-compatible format)
+- Added `MarketplaceManager` orchestrator for marketplace and plugin lifecycle (add/remove/update marketplaces, install/uninstall/enable plugins)
+- Added marketplace fetcher with source classification (GitHub, git, URL, local) and catalog validation
+- Added plugin source resolver with `pathIsWithin` containment checks and versioned cache manager
+- Added CLI commands: `omp plugin marketplace add|remove|update|list`, `omp plugin discover [marketplace]`
+- Added `classifyInstallTarget()` to distinguish `name@marketplace` from npm install targets
+- Extended `listClaudePluginRoots()` to read OMP's installed plugins registry alongside Claude Code's, with OMP as authoritative for duplicate plugin IDs
+- Added `--plugin-dir <path>` repeatable CLI flag for loading plugins from local directories
+- Added `/reload-plugins` slash command that invalidates fs content cache and plugin roots cache
+- Added `printPluginHelp()` entries for marketplace and discover commands
+- Added MCP server loading from marketplace plugin `.mcp.json` files with `${CLAUDE_PLUGIN_ROOT}` variable substitution
+- Added skill and command namespacing for marketplace plugins (`plugin-name:skill-name`)
+- Added LSP config loading from marketplace plugin roots via `getPreloadedPluginRoots()`
+- Wired `--plugin-dir` runtime injection into plugin roots at session startup with highest precedence
+- Added git (GitHub, SSH, HTTPS) and HTTP URL marketplace source fetching
+- Added `/marketplace` TUI slash command with subcommands: add, remove, update, list, discover, install, uninstall, installed
+- Added `/plugins` TUI slash command to view all installed plugins (npm + marketplace) and enable/disable marketplace plugins
+
+### Fixed
+
+- Fixed `skill://` URI resolver to handle namespaced skills via longest-prefix matching against registered skill names
+
 ## [13.16.5] - 2026-03-29
 
 ### Fixed

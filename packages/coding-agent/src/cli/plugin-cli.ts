@@ -7,6 +7,13 @@
 import { APP_NAME } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
 import { PluginManager, parseSettingValue, validateSetting } from "../extensibility/plugins";
+import {
+	getInstalledPluginsRegistryPath,
+	getMarketplacesCacheDir,
+	getMarketplacesRegistryPath,
+	getPluginsCacheDir,
+	MarketplaceManager,
+} from "../extensibility/plugins/marketplace/index.js";
 import { theme } from "../modes/theme/theme";
 
 // =============================================================================
@@ -22,7 +29,9 @@ export type PluginAction =
 	| "features"
 	| "config"
 	| "enable"
-	| "disable";
+	| "disable"
+	| "marketplace"
+	| "discover";
 
 export interface PluginCommandArgs {
 	action: PluginAction;
@@ -53,6 +62,8 @@ const VALID_ACTIONS: PluginAction[] = [
 	"config",
 	"enable",
 	"disable",
+	"marketplace",
+	"discover",
 ];
 
 /**
@@ -108,6 +119,8 @@ export function parsePluginArgs(args: string[]): PluginCommandArgs | undefined {
 	return result;
 }
 
+export { classifyInstallTarget } from "./classify-install-target.js";
+
 // =============================================================================
 // Command Handlers
 // =============================================================================
@@ -146,6 +159,127 @@ export async function runPluginCommand(cmd: PluginCommandArgs): Promise<void> {
 		case "disable":
 			await handleDisable(manager, cmd.args, cmd.flags);
 			break;
+		case "marketplace":
+			await handleMarketplace(cmd.args, cmd.flags);
+			break;
+		case "discover":
+			await handleDiscover(cmd.args, cmd.flags);
+			break;
+	}
+}
+
+// =============================================================================
+// Marketplace Handlers
+// =============================================================================
+
+function makeMarketplaceManager(): MarketplaceManager {
+	return new MarketplaceManager({
+		marketplacesRegistryPath: getMarketplacesRegistryPath(),
+		installedRegistryPath: getInstalledPluginsRegistryPath(),
+		marketplacesCacheDir: getMarketplacesCacheDir(),
+		pluginsCacheDir: getPluginsCacheDir(),
+	});
+}
+
+async function handleMarketplace(args: string[], _flags: PluginCommandArgs["flags"]): Promise<void> {
+	const subcommand = args[0] ?? "list";
+	const manager = makeMarketplaceManager();
+
+	switch (subcommand) {
+		case "add": {
+			const source = args[1];
+			if (!source) {
+				console.error(chalk.red(`Usage: ${APP_NAME} plugin marketplace add <source>`));
+				process.exit(1);
+			}
+			try {
+				await manager.addMarketplace(source);
+				console.log(chalk.green(`${theme.status.success} Added marketplace: ${source}`));
+			} catch (err) {
+				console.error(chalk.red(`${theme.status.error} Failed to add marketplace: ${err}`));
+				process.exit(1);
+			}
+			break;
+		}
+		case "remove":
+		case "rm": {
+			const name = args[1];
+			if (!name) {
+				console.error(chalk.red(`Usage: ${APP_NAME} plugin marketplace remove <name>`));
+				process.exit(1);
+			}
+			try {
+				await manager.removeMarketplace(name);
+				console.log(chalk.green(`${theme.status.success} Removed marketplace: ${name}`));
+			} catch (err) {
+				console.error(chalk.red(`${theme.status.error} Failed to remove marketplace: ${err}`));
+				process.exit(1);
+			}
+			break;
+		}
+		case "update": {
+			try {
+				const name = args[1];
+				if (name) {
+					await manager.updateMarketplace(name);
+					console.log(chalk.green(`${theme.status.success} Updated marketplace: ${name}`));
+				} else {
+					const results = await manager.updateAllMarketplaces();
+					console.log(chalk.green(`${theme.status.success} Updated ${results.length} marketplace(s)`));
+				}
+			} catch (err) {
+				console.error(chalk.red(`${theme.status.error} Failed to update marketplace: ${err}`));
+				process.exit(1);
+			}
+			break;
+		}
+		default: {
+			if (subcommand !== "list") {
+				console.error(chalk.red(`Unknown marketplace subcommand: ${subcommand}`));
+				console.error(chalk.dim("Valid subcommands: add, remove, update, list"));
+				process.exit(1);
+			}
+			try {
+				const marketplaces = await manager.listMarketplaces();
+				if (marketplaces.length === 0) {
+					console.log(chalk.dim("No marketplaces configured"));
+					console.log(chalk.dim(`\nAdd one with: ${APP_NAME} plugin marketplace add <source>`));
+					return;
+				}
+				console.log(chalk.bold("Configured Marketplaces:\n"));
+				for (const mp of marketplaces) {
+					console.log(`  ${chalk.cyan(mp.name)}  ${chalk.dim(mp.sourceUri)}`);
+				}
+			} catch (err) {
+				console.error(chalk.red(`${theme.status.error} Failed to list marketplaces: ${err}`));
+				process.exit(1);
+			}
+			break;
+		}
+	}
+}
+
+async function handleDiscover(args: string[], _flags: PluginCommandArgs["flags"]): Promise<void> {
+	const marketplace = args[0];
+	const manager = makeMarketplaceManager();
+	try {
+		const plugins = await manager.listAvailablePlugins(marketplace);
+
+		if (plugins.length === 0) {
+			console.log(chalk.dim(marketplace ? `No plugins found in ${marketplace}` : "No plugins available"));
+			return;
+		}
+
+		console.log(chalk.bold(`Available Plugins${marketplace ? ` (${marketplace})` : ""}:\n`));
+		for (const plugin of plugins) {
+			console.log(`  ${chalk.cyan(plugin.name)}${plugin.version ? `@${plugin.version}` : ""}`);
+			if (plugin.description) {
+				console.log(chalk.dim(`    ${plugin.description}`));
+			}
+		}
+	} catch (err) {
+		console.error(chalk.red(`${theme.status.error} Failed to discover plugins: ${err}`));
+		process.exit(1);
 	}
 }
 
@@ -630,6 +764,8 @@ ${chalk.bold("Commands:")}
   config <cmd> <pkg> [key] [val] Manage plugin settings
   enable <pkg>                   Enable a disabled plugin
   disable <pkg>                  Disable plugin without uninstalling
+  marketplace <cmd>            Manage marketplace sources (add, remove, update, list)
+  discover [marketplace]        Browse available marketplace plugins
 
 ${chalk.bold("Feature Syntax:")}
   pkg                Install with default features

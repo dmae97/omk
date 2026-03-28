@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { isEnoent } from "@oh-my-pi/pi-utils";
+import { parseInternalUrl } from "./parse";
 import { validateRelativePath } from "./skill-protocol";
 import type { InternalResource, InternalUrl, ProtocolHandler } from "./types";
 
@@ -11,25 +12,7 @@ export interface LocalProtocolOptions {
 }
 
 function parseLocalUrl(input: string): InternalUrl {
-	let parsed: URL;
-	try {
-		parsed = new URL(input);
-	} catch {
-		throw new Error(`Invalid URL: ${input}`);
-	}
-
-	const hostMatch = input.match(/^([a-z][a-z0-9+.-]*):\/\/([^/?#]*)/i);
-	let rawHost = hostMatch ? hostMatch[2] : parsed.hostname;
-	try {
-		rawHost = decodeURIComponent(rawHost);
-	} catch {
-		// Leave rawHost as-is if decoding fails.
-	}
-	(parsed as InternalUrl).rawHost = rawHost;
-
-	const pathMatch = input.match(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*(\/[^?#]*)?/i);
-	(parsed as InternalUrl).rawPathname = pathMatch?.[1] ?? parsed.pathname;
-	return parsed as InternalUrl;
+	return parseInternalUrl(input);
 }
 
 function ensureWithinRoot(targetPath: string, rootPath: string): void {

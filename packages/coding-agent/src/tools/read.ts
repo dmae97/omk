@@ -9,6 +9,8 @@ import { getRemoteDir, ptree, untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
+import { parseInternalUrl } from "../internal-urls/parse";
+import type { InternalUrl } from "../internal-urls/types";
 import { getLanguageFromPath, type Theme } from "../modes/theme/theme";
 import { computeLineHash } from "../patch/hashline";
 import readDescription from "../prompts/tools/read.md" with { type: "text" };
@@ -686,18 +688,22 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 	async #handleInternalUrl(url: string, offset?: number, limit?: number): Promise<AgentToolResult<ReadToolDetails>> {
 		const internalRouter = this.session.internalRouter!;
 
-		// Check if URL has query extraction (agent:// only)
-		let parsed: URL;
+		// Check if URL has query extraction (agent:// only).
+		// Use parseInternalUrl which handles colons in host (namespaced skills).
+		let parsed: InternalUrl;
 		try {
-			parsed = new URL(url);
-		} catch {
-			throw new ToolError(`Invalid URL: ${url}`);
+			parsed = parseInternalUrl(url);
+		} catch (e) {
+			throw new ToolError(e instanceof Error ? e.message : String(e));
 		}
 		const scheme = parsed.protocol.replace(/:$/, "").toLowerCase();
-		const hasPathExtraction = parsed.pathname && parsed.pathname !== "/" && parsed.pathname !== "";
-		const queryParam = parsed.searchParams.get("q");
-		const hasQueryExtraction = scheme === "agent" && queryParam !== null && queryParam !== "";
-		const hasExtraction = scheme === "agent" && (hasPathExtraction || hasQueryExtraction);
+		let hasExtraction = false;
+		if (scheme === "agent") {
+			const hasPathExtraction = parsed.pathname && parsed.pathname !== "/" && parsed.pathname !== "";
+			const queryParam = parsed.searchParams.get("q");
+			const hasQueryExtraction = queryParam !== null && queryParam !== "";
+			hasExtraction = hasPathExtraction || hasQueryExtraction;
+		}
 
 		// Reject offset/limit with query extraction
 		if (hasExtraction && (offset !== undefined || limit !== undefined)) {
