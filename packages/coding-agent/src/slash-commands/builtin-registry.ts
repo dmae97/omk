@@ -800,14 +800,15 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 	{
 		name: "reload-plugins",
 		description: "Reload all plugins (skills, commands, hooks, tools, agents, MCP)",
-		handle: (_command, runtime) => {
+		handle: async (_command, runtime) => {
 			// Invalidate the fs content cache for both registry files so
 			// listClaudePluginRoots re-reads from disk on next access.
 			const home = os.homedir();
 			invalidateFsCache(path.join(home, ".claude", "plugins", "installed_plugins.json"));
 			invalidateFsCache(path.join(home, getConfigDirName(), "plugins", "installed_plugins.json"));
 			clearClaudePluginRootsCache();
-			runtime.ctx.showStatus("Plugin cache cleared. Plugins will reload on next capability refresh.");
+			await runtime.ctx.refreshSlashCommandState();
+			runtime.ctx.showStatus("Plugins reloaded.");
 			runtime.ctx.editor.setText("");
 		},
 	},

@@ -141,6 +141,10 @@ export function parseMarketplaceCatalog(content: string, filePath: string): Mark
 			`plugins[${i}].source`,
 			filePath,
 		);
+		// String sources must be relative paths starting with "./"
+		if (typeof p.source === "string") {
+			assertField((p.source as string).startsWith("./"), `plugins[${i}].source (must start with "./")`, filePath);
+		}
 		// Validate required fields for typed source variants
 		if (typeof p.source === "object" && p.source !== null) {
 			const src = p.source as Record<string, unknown>;
