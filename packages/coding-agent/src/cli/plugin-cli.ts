@@ -382,10 +382,28 @@ async function handleUninstall(manager: PluginManager, packages: string[], flags
 		process.exit(1);
 	}
 
+	// Build known marketplace set for classification
+	const mktMgr = makeMarketplaceManager();
+	const knownMarketplaces = new Set((await mktMgr.listMarketplaces()).map(m => m.name));
+
 	for (const name of packages) {
+		const target = classifyInstallTarget(name, knownMarketplaces);
+
+		if (target.type === "marketplace") {
+			try {
+				const pluginId = `${target.name}@${target.marketplace}`;
+				await mktMgr.uninstallPlugin(pluginId);
+				console.log(chalk.green(`${theme.status.success} Uninstalled ${pluginId}`));
+			} catch (err) {
+				console.error(chalk.red(`${theme.status.error} Failed to uninstall ${name}: ${err}`));
+				process.exit(1);
+			}
+			continue;
+		}
+
+		// npm path
 		try {
 			await manager.uninstall(name);
-
 			if (flags.json) {
 				console.log(JSON.stringify({ uninstalled: name }));
 			} else {
@@ -399,44 +417,53 @@ async function handleUninstall(manager: PluginManager, packages: string[], flags
 }
 
 async function handleList(manager: PluginManager, flags: { json?: boolean }): Promise<void> {
-	const plugins = await manager.list();
+	const npmPlugins = await manager.list();
+	const mktMgr = makeMarketplaceManager();
+	const mktPlugins = await mktMgr.listInstalledPlugins();
 
 	if (flags.json) {
-		console.log(JSON.stringify(plugins, null, 2));
+		console.log(JSON.stringify({ npm: npmPlugins, marketplace: mktPlugins }, null, 2));
 		return;
 	}
 
-	if (plugins.length === 0) {
+	if (npmPlugins.length === 0 && mktPlugins.length === 0) {
 		console.log(chalk.dim("No plugins installed"));
 		console.log(chalk.dim(`\nInstall plugins with: ${APP_NAME} plugin install <package>`));
 		return;
 	}
 
-	console.log(chalk.bold("Installed Plugins:\n"));
-
-	for (const plugin of plugins) {
-		const status = plugin.enabled ? chalk.green(theme.status.enabled) : chalk.dim(theme.status.disabled);
-		const nameVersion = `${plugin.name}@${plugin.version}`;
-		console.log(`${status} ${nameVersion}`);
-
-		if (plugin.manifest.description) {
-			console.log(chalk.dim(`  ${plugin.manifest.description}`));
-		}
-
-		if (plugin.enabledFeatures && plugin.enabledFeatures.length > 0) {
-			console.log(chalk.dim(`  Features: ${plugin.enabledFeatures.join(", ")}`));
-		}
-
-		// Show available features if manifest has them
-		if (plugin.manifest.features) {
-			const availableFeatures = Object.keys(plugin.manifest.features);
-			if (availableFeatures.length > 0) {
-				const enabledSet = new Set(plugin.enabledFeatures ?? []);
-				const featureDisplay = availableFeatures
-					.map(f => (enabledSet.has(f) ? chalk.green(f) : chalk.dim(f)))
-					.join(", ");
-				console.log(chalk.dim(`  Available: [${featureDisplay}]`));
+	if (npmPlugins.length > 0) {
+		console.log(chalk.bold("npm Plugins:\n"));
+		for (const plugin of npmPlugins) {
+			const status = plugin.enabled ? chalk.green(theme.status.enabled) : chalk.dim(theme.status.disabled);
+			const nameVersion = `${plugin.name}@${plugin.version}`;
+			console.log(`${status} ${nameVersion}`);
+			if (plugin.manifest.description) {
+				console.log(chalk.dim(`  ${plugin.manifest.description}`));
 			}
+			if (plugin.enabledFeatures && plugin.enabledFeatures.length > 0) {
+				console.log(chalk.dim(`  Features: ${plugin.enabledFeatures.join(", ")}`));
+			}
+			if (plugin.manifest.features) {
+				const availableFeatures = Object.keys(plugin.manifest.features);
+				if (availableFeatures.length > 0) {
+					const enabledSet = new Set(plugin.enabledFeatures ?? []);
+					const featureDisplay = availableFeatures
+						.map(f => (enabledSet.has(f) ? chalk.green(f) : chalk.dim(f)))
+						.join(", ");
+					console.log(chalk.dim(`  Available: [${featureDisplay}]`));
+				}
+			}
+		}
+	}
+
+	if (mktPlugins.length > 0) {
+		if (npmPlugins.length > 0) console.log();
+		console.log(chalk.bold("Marketplace Plugins:\n"));
+		for (const plugin of mktPlugins) {
+			const entry = plugin.entries[0];
+			const version = entry?.version ?? "unknown";
+			console.log(`  ${plugin.id} (${version})`);
 		}
 	}
 }
