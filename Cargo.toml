@@ -13,10 +13,6 @@ repository = "https://github.com/can1357/oh-my-pi"
 [patch.crates-io]
 brush-core = { path = "crates/brush-core-vendored" }
 brush-builtins = { path = "crates/brush-builtins-vendored" }
-
-[workspace.dependencies]
-rustc-hash = "=2.1.1"
-
 [profile.release]
 opt-level = 3
 lto = "fat"
