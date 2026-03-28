@@ -50,7 +50,13 @@ const GITHUB_SHORTHAND_RE = /^[a-z0-9-]+\/[a-z0-9._-]+$/i;
 export function classifySource(source: string): MarketplaceSourceType {
 	// Rule 1: HTTP(S) URLs — .json suffix → url, everything else → git
 	if (source.startsWith("https://") || source.startsWith("http://")) {
-		return source.endsWith(".json") ? "url" : "git";
+		try {
+			const { pathname } = new URL(source);
+			return pathname.endsWith(".json") ? "url" : "git";
+		} catch {
+			// Malformed URL — treat as git
+			return "git";
+		}
 	}
 
 	// Rule 2: SCP-style SSH git URLs

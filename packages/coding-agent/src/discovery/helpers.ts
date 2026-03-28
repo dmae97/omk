@@ -746,6 +746,14 @@ export async function listClaudePluginRoots(home: string): Promise<{ roots: Clau
 		}
 	}
 
+	// Merge --plugin-dir roots (highest precedence) on every fresh load
+	if (injectedPluginDirRoots.length > 0) {
+		const injectedIds = new Set(injectedPluginDirRoots.map(r => r.id));
+		const filtered = roots.filter(r => !injectedIds.has(r.id));
+		roots.length = 0;
+		roots.push(...injectedPluginDirRoots, ...filtered);
+	}
+
 	const result = { roots, warnings };
 	pluginRootsCache.set(home, result);
 	return result;
@@ -756,7 +764,7 @@ export async function listClaudePluginRoots(home: string): Promise<{ roots: Clau
  */
 export function clearClaudePluginRootsCache(): void {
 	pluginRootsCache.clear();
-	preloadedPluginRoots = [];
+	preloadedPluginRoots = [...injectedPluginDirRoots];
 }
 
 // ── Preloaded plugin roots (for sync consumers like LSP config) ─────────────
@@ -764,6 +772,7 @@ export function clearClaudePluginRootsCache(): void {
 // getPreloadedPluginRoots(). Safe degradation: empty array if not warmed.
 
 let preloadedPluginRoots: ClaudePluginRoot[] = [];
+let injectedPluginDirRoots: ClaudePluginRoot[] = [];
 
 /**
  * Populate the module-level plugin roots cache for sync consumers.
@@ -815,6 +824,8 @@ export async function injectPluginDirRoots(home: string, dirs: string[]): Promis
 
 	// --plugin-dir roots have highest precedence: prepend them,
 	// removing any existing entries with the same plugin ID.
+	injectedPluginDirRoots = injected;
+
 	const injectedIds = new Set(injected.map(r => r.id));
 	const filtered = roots.filter(r => !injectedIds.has(r.id));
 	const merged = [...injected, ...filtered];

@@ -200,17 +200,8 @@ export class MarketplaceManager {
 		// 3. Check if already installed
 		const instReg = await readInstalledPluginsRegistry(this.#opts.installedRegistryPath);
 		const existing = getInstalledPlugin(instReg, pluginId);
-		if (existing && existing.length > 0) {
-			if (!force) {
-				throw new Error(`Plugin "${pluginId}" is already installed. Use force option to reinstall.`);
-			}
-			// Remove all cached entries for this plugin (there may be multiple versions)
-			for (const entry of existing) {
-				await fs.rm(entry.installPath, { recursive: true, force: true });
-			}
-			const prunedReg = removeInstalledPlugin(instReg, pluginId);
-			await writeInstalledPluginsRegistry(this.#opts.installedRegistryPath, prunedReg);
-			this.#opts.clearPluginRootsCache?.();
+		if (existing && existing.length > 0 && !force) {
+			throw new Error(`Plugin "${pluginId}" is already installed. Use force option to reinstall.`);
 		}
 
 		// 4. Resolve source path.
@@ -243,6 +234,21 @@ export class MarketplaceManager {
 			if (tempCloneRoot) {
 				await fs.rm(tempCloneRoot, { recursive: true, force: true }).catch(() => {});
 			}
+		}
+
+		// Only now clean up old entries — new cache succeeded, so it is safe to remove old ones.
+		if (existing && existing.length > 0) {
+			for (const entry of existing) {
+				// Skip if the new cache resolved to the same path (same version reinstall).
+				if (entry.installPath !== cachePath) {
+					await fs.rm(entry.installPath, { recursive: true, force: true });
+				}
+			}
+			const prunedReg = removeInstalledPlugin(
+				await readInstalledPluginsRegistry(this.#opts.installedRegistryPath),
+				pluginId,
+			);
+			await writeInstalledPluginsRegistry(this.#opts.installedRegistryPath, prunedReg);
 		}
 
 		// 6. Build and register the entry
