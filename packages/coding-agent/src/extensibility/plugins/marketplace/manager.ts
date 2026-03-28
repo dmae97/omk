@@ -112,6 +112,15 @@ export class MarketplaceManager {
 
 		const { catalog } = await fetchMarketplace(existing.sourceUri, this.#opts.marketplacesCacheDir);
 
+		// Guard against upstream catalog silently renaming itself — the registry
+		// entry is keyed by name, so a drift would corrupt the entry on next read.
+		if (catalog.name !== name) {
+			throw new Error(
+				`Marketplace catalog name changed from "${name}" to "${catalog.name}". ` +
+					`Remove and re-add the marketplace to update.`,
+			);
+		}
+
 		// Overwrite cached catalog
 		await Bun.write(existing.catalogPath, `${JSON.stringify(catalog, null, 2)}\n`);
 

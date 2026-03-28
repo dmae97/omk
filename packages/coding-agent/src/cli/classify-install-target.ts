@@ -8,6 +8,23 @@
  *     Otherwise it's an npm spec (e.g. `pkg@1.2.3`).
  *  3. No `@` -> npm.
  */
+// Common npm dist-tags that should never be interpreted as marketplace names
+const NPM_DIST_TAGS = new Set([
+	"latest",
+	"next",
+	"beta",
+	"alpha",
+	"canary",
+	"rc",
+	"dev",
+	"stable",
+	"nightly",
+	"experimental",
+]);
+
+// Semver-like: starts with digit, or contains version range prefixes
+const LOOKS_LIKE_VERSION = /^[\d~^>=<]/;
+
 export function classifyInstallTarget(
 	spec: string,
 	knownMarketplaces: Set<string>,
@@ -18,6 +35,10 @@ export function classifyInstallTarget(
 	const atIdx = spec.lastIndexOf("@");
 	if (atIdx > 0) {
 		const rhs = spec.slice(atIdx + 1);
+		// Dist-tags and version specifiers are never marketplace names.
+		if (NPM_DIST_TAGS.has(rhs) || LOOKS_LIKE_VERSION.test(rhs)) {
+			return { type: "npm", spec };
+		}
 		if (knownMarketplaces.has(rhs)) {
 			return { type: "marketplace", name: spec.slice(0, atIdx), marketplace: rhs };
 		}

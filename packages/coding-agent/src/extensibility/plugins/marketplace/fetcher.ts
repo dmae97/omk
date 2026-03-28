@@ -141,6 +141,25 @@ export function parseMarketplaceCatalog(content: string, filePath: string): Mark
 			`plugins[${i}].source`,
 			filePath,
 		);
+		// Validate required fields for typed source variants
+		if (typeof p.source === "object" && p.source !== null) {
+			const src = p.source as Record<string, unknown>;
+			const variant = src.source as string;
+			if (variant === "github") {
+				assertField(typeof src.repo === "string" && src.repo.length > 0, `plugins[${i}].source.repo`, filePath);
+			} else if (variant === "url" || variant === "git-subdir") {
+				assertField(typeof src.url === "string" && src.url.length > 0, `plugins[${i}].source.url`, filePath);
+				if (variant === "git-subdir") {
+					assertField(typeof src.path === "string" && src.path.length > 0, `plugins[${i}].source.path`, filePath);
+				}
+			} else if (variant === "npm") {
+				assertField(
+					typeof src.package === "string" && src.package.length > 0,
+					`plugins[${i}].source.package`,
+					filePath,
+				);
+			}
+		}
 	}
 
 	// Extra fields are preserved — cast through unknown for type safety
