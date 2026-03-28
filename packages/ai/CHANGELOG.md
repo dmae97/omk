@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.16.3] - 2026-03-28
 ### Changed
 
 - Modified OAuth credential saving to preserve unrelated identities instead of replacing all credentials for a provider
