@@ -10,7 +10,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import { isEnoent, logger, pathIsWithin } from "@oh-my-pi/pi-utils";
+import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 
 import { cachePlugin } from "./cache";
 import { classifySource, fetchMarketplace, parseMarketplaceCatalog } from "./fetcher";
@@ -60,6 +60,10 @@ export class MarketplaceManager {
 	async addMarketplace(source: string): Promise<MarketplaceRegistryEntry> {
 		const { catalog } = await fetchMarketplace(source, this.#opts.marketplacesCacheDir);
 		const sourceType = classifySource(source);
+		const normalizedSource =
+			sourceType === "local"
+				? path.resolve(source.startsWith("~/") ? path.join(os.homedir(), source.slice(2)) : source)
+				: source;
 
 		const catalogPath = path.join(this.#opts.marketplacesCacheDir, catalog.name, "marketplace.json");
 
@@ -70,7 +74,7 @@ export class MarketplaceManager {
 		const entry: MarketplaceRegistryEntry = {
 			name: catalog.name,
 			sourceType,
-			sourceUri: source,
+			sourceUri: normalizedSource,
 			catalogPath,
 			addedAt: now,
 			updatedAt: now,
@@ -222,12 +226,11 @@ export class MarketplaceManager {
 		// sourceUri. For local sources, use path.resolve of sourceUri; for others use the cache dir.
 		const marketplaceClonePath = this.#resolveMarketplaceRoot(mktEntry);
 
-		const sourcePath = await resolvePluginSource(pluginEntry, {
+		const { dir: sourcePath, tempCloneRoot } = await resolvePluginSource(pluginEntry, {
 			marketplaceClonePath,
 			catalogMetadata: catalog.metadata,
 			tmpDir: os.tmpdir(),
 		});
-		const isTemp = pathIsWithin(os.tmpdir(), sourcePath);
 
 		// 5. Determine version: catalog entry > plugin manifest > git SHA > fallback
 		let version!: string;
@@ -237,11 +240,8 @@ export class MarketplaceManager {
 			cachePath = await cachePlugin(sourcePath, this.#opts.pluginsCacheDir, marketplace, name, version);
 		} finally {
 			// Clean up temp clone dirs created by resolvePluginSource; leave user-supplied local dirs alone
-			if (isTemp) {
-				// For git-subdir, sourcePath may be a subdir of the temp clone — clean the whole clone root.
-				const rel = path.relative(os.tmpdir(), sourcePath);
-				const tempRoot = path.join(os.tmpdir(), rel.split(path.sep)[0]);
-				await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
+			if (tempCloneRoot) {
+				await fs.rm(tempCloneRoot, { recursive: true, force: true }).catch(() => {});
 			}
 		}
 

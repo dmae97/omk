@@ -31,7 +31,8 @@ describe("resolvePluginSource", () => {
 			marketplaceClonePath: FIXTURE_DIR,
 			tmpDir,
 		});
-		expect(resolved).toBe(path.resolve(FIXTURE_DIR, "plugins/hello-plugin"));
+		expect(resolved.dir).toBe(path.resolve(FIXTURE_DIR, "plugins/hello-plugin"));
+		expect(resolved.tempCloneRoot).toBeUndefined();
 	});
 
 	it("throws when source string would escape marketplace root", async () => {
@@ -61,7 +62,8 @@ describe("resolvePluginSource", () => {
 			catalogMetadata: { pluginRoot: "plugins" },
 			tmpDir,
 		});
-		expect(resolved).toBe(path.resolve(FIXTURE_DIR, "plugins/hello-plugin"));
+		expect(resolved.dir).toBe(path.resolve(FIXTURE_DIR, "plugins/hello-plugin"));
+		expect(resolved.tempCloneRoot).toBeUndefined();
 	});
 
 	// Network-dependent: object sources attempt real git clones

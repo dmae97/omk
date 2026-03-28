@@ -594,6 +594,7 @@ export interface ClaudePluginEntry {
 	installedAt: string;
 	lastUpdated: string;
 	gitCommitSha?: string;
+	enabled?: boolean;
 }
 
 /**
@@ -682,6 +683,7 @@ export async function listClaudePluginRoots(home: string): Promise<{ roots: Clau
 						warnings.push(`Plugin ${pluginId} entry has no installPath`);
 						continue;
 					}
+					if (entry.enabled === false) continue;
 
 					roots.push({
 						id: pluginId,
@@ -725,6 +727,7 @@ export async function listClaudePluginRoots(home: string): Promise<{ roots: Clau
 						warnings.push(`Plugin ${pluginId} entry has no installPath`);
 						continue;
 					}
+					if (entry.enabled === false) continue;
 					// Deduplicate by installPath within same ID
 					if (roots.some(r => r.id === pluginId && r.path === entry.installPath)) continue;
 

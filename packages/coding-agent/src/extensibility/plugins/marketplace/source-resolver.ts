@@ -32,7 +32,10 @@ export interface ResolveContext {
  *
  * The resolved path is verified to exist on disk.
  */
-export async function resolvePluginSource(entry: MarketplacePluginEntry, context: ResolveContext): Promise<string> {
+export async function resolvePluginSource(
+	entry: MarketplacePluginEntry,
+	context: ResolveContext,
+): Promise<{ dir: string; tempCloneRoot?: string }> {
 	const { source } = entry;
 
 	if (typeof source === "string") {
@@ -44,7 +47,10 @@ export async function resolvePluginSource(entry: MarketplacePluginEntry, context
 
 // ── Relative string source ("./plugins/foo") ────────────────────────
 
-async function resolveRelativeSource(source: string, context: ResolveContext): Promise<string> {
+async function resolveRelativeSource(
+	source: string,
+	context: ResolveContext,
+): Promise<{ dir: string; tempCloneRoot?: string }> {
 	if (!source.startsWith("./")) {
 		throw new Error(`Relative plugin source paths must start with "./" — got: "${source}"`);
 	}
@@ -67,19 +73,22 @@ async function resolveRelativeSource(source: string, context: ResolveContext): P
 	}
 
 	await verifyDirExists(resolved, `Plugin source directory does not exist: "${resolved}"`);
-	return resolved;
+	return { dir: resolved };
 }
 
 // ── Object source variants ──────────────────────────────────────────
 
-async function resolveObjectSource(source: Exclude<PluginSource, string>, context: ResolveContext): Promise<string> {
+async function resolveObjectSource(
+	source: Exclude<PluginSource, string>,
+	context: ResolveContext,
+): Promise<{ dir: string; tempCloneRoot?: string }> {
 	switch (source.source) {
 		case "url": {
 			// { source: "url", url: "https://github.com/owner/repo.git" }
 			// Despite the name, this is typically a git clone URL
 			const targetDir = path.join(context.tmpDir, `plugin-${crypto.randomUUID()}`);
 			await cloneGitRepo(source.url, targetDir, { ref: source.ref, sha: source.sha });
-			return targetDir;
+			return { dir: targetDir, tempCloneRoot: targetDir };
 		}
 
 		case "github": {
@@ -87,7 +96,7 @@ async function resolveObjectSource(source: Exclude<PluginSource, string>, contex
 			const url = `https://github.com/${source.repo}.git`;
 			const targetDir = path.join(context.tmpDir, `plugin-${crypto.randomUUID()}`);
 			await cloneGitRepo(url, targetDir, { ref: source.ref, sha: source.sha });
-			return targetDir;
+			return { dir: targetDir, tempCloneRoot: targetDir };
 		}
 
 		case "git-subdir": {
@@ -105,7 +114,7 @@ async function resolveObjectSource(source: Exclude<PluginSource, string>, contex
 				throw new Error(`git-subdir path "${source.path}" escapes the cloned repository`);
 			}
 			await verifyDirExists(subdirPath, `git-subdir path "${source.path}" does not exist in cloned repository`);
-			return subdirPath;
+			return { dir: subdirPath, tempCloneRoot: cloneDir };
 		}
 
 		case "npm":
