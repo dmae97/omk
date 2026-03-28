@@ -382,18 +382,17 @@ async function handleUninstall(manager: PluginManager, packages: string[], flags
 		process.exit(1);
 	}
 
-	// Build known marketplace set for classification
+	// For uninstall, check the installed plugins registry directly.
+	// This works even if the marketplace entry was later removed from marketplaces.json.
 	const mktMgr = makeMarketplaceManager();
-	const knownMarketplaces = new Set((await mktMgr.listMarketplaces()).map(m => m.name));
+	const installedPlugins = new Set((await mktMgr.listInstalledPlugins()).map(p => p.id));
 
 	for (const name of packages) {
-		const target = classifyInstallTarget(name, knownMarketplaces);
-
-		if (target.type === "marketplace") {
+		if (installedPlugins.has(name)) {
+			// Exact match against installed marketplace plugin IDs (name@marketplace)
 			try {
-				const pluginId = `${target.name}@${target.marketplace}`;
-				await mktMgr.uninstallPlugin(pluginId);
-				console.log(chalk.green(`${theme.status.success} Uninstalled ${pluginId}`));
+				await mktMgr.uninstallPlugin(name);
+				console.log(chalk.green(`${theme.status.success} Uninstalled ${name}`));
 			} catch (err) {
 				console.error(chalk.red(`${theme.status.error} Failed to uninstall ${name}: ${err}`));
 				process.exit(1);
