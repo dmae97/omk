@@ -31,7 +31,8 @@ export type PluginAction =
 	| "enable"
 	| "disable"
 	| "marketplace"
-	| "discover";
+	| "discover"
+	| "upgrade";
 
 export interface PluginCommandArgs {
 	action: PluginAction;
@@ -64,6 +65,7 @@ const VALID_ACTIONS: PluginAction[] = [
 	"disable",
 	"marketplace",
 	"discover",
+	"upgrade",
 ];
 
 /**
@@ -164,6 +166,9 @@ export async function runPluginCommand(cmd: PluginCommandArgs): Promise<void> {
 			break;
 		case "discover":
 			await handleDiscover(cmd.args, cmd.flags);
+			break;
+		case "upgrade":
+			await handleUpgrade(cmd.args, cmd.flags);
 			break;
 	}
 }
@@ -279,6 +284,29 @@ async function handleDiscover(args: string[], _flags: PluginCommandArgs["flags"]
 		}
 	} catch (err) {
 		console.error(chalk.red(`${theme.status.error} Failed to discover plugins: ${err}`));
+		process.exit(1);
+	}
+}
+
+async function handleUpgrade(args: string[], _flags: PluginCommandArgs["flags"]): Promise<void> {
+	const manager = makeMarketplaceManager();
+	const pluginId = args[0];
+	try {
+		if (pluginId) {
+			const result = await manager.upgradePlugin(pluginId);
+			console.log(chalk.green(`Upgraded ${pluginId} to ${result.version}`));
+		} else {
+			const results = await manager.upgradeAllPlugins();
+			if (results.length === 0) {
+				console.log("All marketplace plugins are up to date.");
+			} else {
+				for (const r of results) {
+					console.log(chalk.green(`  ${r.pluginId}: ${r.from} -> ${r.to}`));
+				}
+			}
+		}
+	} catch (err) {
+		console.error(chalk.red(`Failed to upgrade: ${err}`));
 		process.exit(1);
 	}
 }

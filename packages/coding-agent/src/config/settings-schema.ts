@@ -198,6 +198,18 @@ export const SETTINGS_SCHEMA = {
 
 	extensions: { type: "array", default: EMPTY_STRING_ARRAY },
 
+	"marketplace.autoUpdate": {
+		type: "enum",
+		values: ["off", "notify", "auto"] as const,
+		default: "notify",
+		ui: {
+			tab: "tools",
+			label: "Marketplace Auto-Update",
+			description: "Check for plugin updates on startup (off/notify/auto)",
+			submenu: true,
+		},
+	},
+
 	enabledModels: { type: "array", default: EMPTY_STRING_ARRAY },
 
 	disabledProviders: { type: "array", default: EMPTY_STRING_ARRAY },

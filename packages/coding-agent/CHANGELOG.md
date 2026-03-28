@@ -12,6 +12,11 @@
 
 ### Added
 
+- Added `marketplace.autoUpdate` setting (`off`/`notify`/`auto`, default `notify`) for automatic plugin update checking on startup
+- Added background marketplace catalog refresh on startup when catalogs are stale (>24h)
+- Added `/marketplace upgrade [name@marketplace]` slash command to upgrade outdated plugins
+- Added `omp plugin upgrade [name@marketplace]` CLI command for plugin upgrades
+- Added `checkForUpdates()`, `upgradePlugin()`, `upgradeAllPlugins()`, and `refreshStaleMarketplaces()` to MarketplaceManager
 - Added marketplace plugin system: registry types, ID helpers, atomic read/write for `marketplaces.json` and `installed_plugins.json` (Claude Code-compatible format)
 - Added `MarketplaceManager` orchestrator for marketplace and plugin lifecycle (add/remove/update marketplaces, install/uninstall/enable plugins)
 - Added marketplace fetcher with source classification (GitHub, git, URL, local) and catalog validation

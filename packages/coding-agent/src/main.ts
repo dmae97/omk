@@ -11,8 +11,9 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { createInterface } from "node:readline/promises";
 import type { ImageContent } from "@oh-my-pi/pi-ai";
-import { $env, getProjectDir, logger, postmortem, setProjectDir, VERSION } from "@oh-my-pi/pi-utils";
+import { $env, getConfigDirName, getProjectDir, logger, postmortem, setProjectDir, VERSION } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
+import { invalidate as invalidateFsCache } from "./capability/fs";
 import type { Args } from "./cli/args";
 import { processFileArguments } from "./cli/file-processor";
 import { buildInitialMessage } from "./cli/initial-message";
@@ -23,9 +24,16 @@ import { ModelRegistry, ModelsConfigFile } from "./config/model-registry";
 import { resolveCliModel, resolveModelRoleValue, resolveModelScope, type ScopedModel } from "./config/model-resolver";
 import { Settings, settings } from "./config/settings";
 import { initializeWithSettings } from "./discovery";
-import { injectPluginDirRoots, preloadPluginRoots } from "./discovery/helpers";
+import { clearClaudePluginRootsCache, injectPluginDirRoots, preloadPluginRoots } from "./discovery/helpers";
 import { exportFromFile } from "./export/html";
 import type { ExtensionUIContext } from "./extensibility/extensions/types";
+import {
+	getInstalledPluginsRegistryPath,
+	getMarketplacesCacheDir,
+	getMarketplacesRegistryPath,
+	getPluginsCacheDir,
+	MarketplaceManager,
+} from "./extensibility/plugins/marketplace";
 import type { MCPManager } from "./mcp";
 import { InteractiveMode, runAcpMode, runPrintMode, runRpcMode } from "./modes";
 import { initTheme, stopThemeWatcher } from "./modes/theme/theme";
@@ -646,6 +654,38 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 		await logger.timeAsync("injectPluginDirRoots", () => injectPluginDirRoots(home, parsedArgs.pluginDirs!));
 	} else {
 		await logger.timeAsync("preloadPluginRoots", () => preloadPluginRoots(home));
+	}
+
+	// Background marketplace auto-update — never blocks startup.
+	const autoUpdate = settings.get("marketplace.autoUpdate");
+	if (autoUpdate !== "off") {
+		void (async () => {
+			try {
+				const mgr = new MarketplaceManager({
+					marketplacesRegistryPath: getMarketplacesRegistryPath(),
+					installedRegistryPath: getInstalledPluginsRegistryPath(),
+					marketplacesCacheDir: getMarketplacesCacheDir(),
+					pluginsCacheDir: getPluginsCacheDir(),
+					clearPluginRootsCache: () => {
+						const h = os.homedir();
+						invalidateFsCache(path.join(h, ".claude", "plugins", "installed_plugins.json"));
+						invalidateFsCache(path.join(h, getConfigDirName(), "plugins", "installed_plugins.json"));
+						clearClaudePluginRootsCache();
+					},
+				});
+				await mgr.refreshStaleMarketplaces();
+				const updates = await mgr.checkForUpdates();
+				if (updates.length === 0) return;
+				if (autoUpdate === "auto") {
+					await mgr.upgradeAllPlugins();
+					logger.debug(`Auto-upgraded ${updates.length} marketplace plugin(s)`);
+				} else {
+					logger.debug(`${updates.length} marketplace plugin update(s) available \u2014 /marketplace upgrade`);
+				}
+			} catch {
+				// Silently ignore — network failure, corrupt data, offline.
+			}
+		})();
 	}
 
 	const { options: sessionOptions } = await logger.timeAsync("buildSessionOptions", () =>

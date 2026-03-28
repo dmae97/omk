@@ -573,6 +573,7 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 			},
 			{ name: "uninstall", description: "Uninstall a plugin (selector if no args)", usage: "[name@marketplace]" },
 			{ name: "installed", description: "List installed marketplace plugins" },
+			{ name: "upgrade", description: "Upgrade outdated plugins", usage: "[name@marketplace]" },
 		],
 		allowArgs: true,
 		handle: async (command, runtime) => {
@@ -676,6 +677,21 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 						} else {
 							const lines = installed.map(p => `  ${p.id} (${p.entries.length} entry)`);
 							runtime.ctx.showStatus(`Installed plugins:\n${lines.join("\n")}`);
+						}
+						break;
+					}
+					case "upgrade": {
+						if (rest) {
+							const result = await mgr.upgradePlugin(rest);
+							runtime.ctx.showStatus(`Upgraded ${rest} to ${result.version}`);
+						} else {
+							const results = await mgr.upgradeAllPlugins();
+							if (results.length === 0) {
+								runtime.ctx.showStatus("All marketplace plugins are up to date");
+							} else {
+								const lines = results.map(r => `  ${r.pluginId}: ${r.from} -> ${r.to}`);
+								runtime.ctx.showStatus(`Upgraded ${results.length} plugin(s):\n${lines.join("\n")}`);
+							}
 						}
 						break;
 					}

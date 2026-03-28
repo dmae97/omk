@@ -262,4 +262,173 @@ describe("MarketplaceManager", () => {
 		// No catalog version, but fixture's .claude-plugin/plugin.json has version "1.0.0"
 		expect(instEntry.version).toBe("1.0.0");
 	});
+	// ── auto-update ──────────────────────────────────────────────────────────
+
+	describe("auto-update", () => {
+		// Read catalogPath from the (single) registered marketplace.
+		async function getCatalogPath(): Promise<string> {
+			const list = await ctx.manager.listMarketplaces();
+			return list[0].catalogPath;
+		}
+
+		// Overwrite the version field on the first plugin entry in the cached catalog.
+		async function bumpCatalogVersion(newVersion: string): Promise<void> {
+			const catalogPath = await getCatalogPath();
+			const content = await Bun.file(catalogPath).text();
+			const catalog = JSON.parse(content) as { plugins: Array<Record<string, unknown>> };
+			catalog.plugins[0] = { ...catalog.plugins[0], version: newVersion };
+			await Bun.write(catalogPath, `${JSON.stringify(catalog, null, 2)}\n`);
+		}
+
+		// Directly patch updatedAt in the marketplaces registry file.
+		function setMarketplaceUpdatedAt(iso: string): void {
+			const regPath = path.join(ctx.tmpDir, "marketplaces.json");
+			const reg = JSON.parse(fs.readFileSync(regPath, "utf-8")) as {
+				version: number;
+				marketplaces: Array<{ updatedAt: string }>;
+			};
+			reg.marketplaces[0].updatedAt = iso;
+			fs.writeFileSync(regPath, JSON.stringify(reg, null, 2));
+		}
+
+		it("checkForUpdates returns outdated plugins", async () => {
+			await ctx.manager.addMarketplace(FIXTURE_DIR);
+			await ctx.manager.installPlugin("hello-plugin", "test-marketplace");
+			await bumpCatalogVersion("2.0.0");
+
+			const updates = await ctx.manager.checkForUpdates();
+
+			expect(updates).toHaveLength(1);
+			expect(updates[0]).toEqual({
+				pluginId: "hello-plugin@test-marketplace",
+				from: "1.0.0",
+				to: "2.0.0",
+			});
+		});
+
+		it("checkForUpdates returns empty when up to date", async () => {
+			await ctx.manager.addMarketplace(FIXTURE_DIR);
+			await ctx.manager.installPlugin("hello-plugin", "test-marketplace");
+			// Catalog and installed version are both 1.0.0 — nothing to report.
+
+			const updates = await ctx.manager.checkForUpdates();
+			expect(updates).toEqual([]);
+		});
+
+		it("checkForUpdates skips plugins with no catalog version", async () => {
+			await ctx.manager.addMarketplace(FIXTURE_DIR);
+			await ctx.manager.installPlugin("hello-plugin", "test-marketplace");
+
+			// Strip the version field from the cached catalog entry.
+			const catalogPath = await getCatalogPath();
+			const content = await Bun.file(catalogPath).text();
+			const catalog = JSON.parse(content) as { plugins: Array<Record<string, unknown>> };
+			delete catalog.plugins[0].version;
+			await Bun.write(catalogPath, `${JSON.stringify(catalog, null, 2)}\n`);
+
+			const updates = await ctx.manager.checkForUpdates();
+			expect(updates).toEqual([]);
+		});
+
+		it("checkForUpdates handles missing catalog gracefully", async () => {
+			await ctx.manager.addMarketplace(FIXTURE_DIR);
+			await ctx.manager.installPlugin("hello-plugin", "test-marketplace");
+
+			// Delete the cached catalog file; checkForUpdates must skip rather than throw.
+			const catalogPath = await getCatalogPath();
+			fs.unlinkSync(catalogPath);
+
+			const updates = await ctx.manager.checkForUpdates();
+			expect(updates).toEqual([]);
+		});
+
+		it("upgradePlugin updates the installed version", async () => {
+			await ctx.manager.addMarketplace(FIXTURE_DIR);
+			await ctx.manager.installPlugin("hello-plugin", "test-marketplace");
+			await bumpCatalogVersion("2.0.0");
+
+			const entry = await ctx.manager.upgradePlugin("hello-plugin@test-marketplace");
+			expect(entry.version).toBe("2.0.0");
+
+			// Confirm the registry reflects the new version.
+			const installed = await ctx.manager.listInstalledPlugins();
+			expect(installed).toHaveLength(1);
+			expect(installed[0].entries[0].version).toBe("2.0.0");
+		});
+
+		it("upgradePlugin rejects invalid plugin ID", async () => {
+			await expect(ctx.manager.upgradePlugin("no-at-sign")).rejects.toThrow(/Invalid plugin ID/);
+		});
+
+		it("upgradeAllPlugins upgrades outdated plugins and returns results", async () => {
+			await ctx.manager.addMarketplace(FIXTURE_DIR);
+			await ctx.manager.installPlugin("hello-plugin", "test-marketplace");
+
+			// Inject a second plugin that has no catalog entry — checkForUpdates will skip it,
+			// proving upgradeAllPlugins only acts on genuinely outdated plugins.
+			const instRegPath = path.join(ctx.tmpDir, "installed_plugins.json");
+			const reg = JSON.parse(fs.readFileSync(instRegPath, "utf-8")) as {
+				version: number;
+				plugins: Record<string, unknown[]>;
+			};
+			const now = new Date().toISOString();
+			reg.plugins["phantom-plugin@test-marketplace"] = [
+				{ scope: "user", installPath: "/nonexistent", version: "1.0.0", installedAt: now, lastUpdated: now },
+			];
+			fs.writeFileSync(instRegPath, JSON.stringify(reg, null, 2));
+
+			// Only hello-plugin gets a version bump in the catalog.
+			await bumpCatalogVersion("2.0.0");
+
+			const results = await ctx.manager.upgradeAllPlugins();
+
+			expect(results).toHaveLength(1);
+			expect(results[0]).toEqual({
+				pluginId: "hello-plugin@test-marketplace",
+				from: "1.0.0",
+				to: "2.0.0",
+			});
+		});
+
+		it("upgradeAllPlugins returns empty array when all plugins are up to date", async () => {
+			await ctx.manager.addMarketplace(FIXTURE_DIR);
+			await ctx.manager.installPlugin("hello-plugin", "test-marketplace");
+			// No catalog modification — installed and catalog both at 1.0.0.
+
+			const results = await ctx.manager.upgradeAllPlugins();
+			expect(results).toEqual([]);
+		});
+
+		it("refreshStaleMarketplaces skips fresh marketplaces", async () => {
+			await ctx.manager.addMarketplace(FIXTURE_DIR);
+			// updatedAt is just now — not past the 24-hour threshold.
+			await bumpCatalogVersion("2.0.0");
+
+			await ctx.manager.refreshStaleMarketplaces();
+
+			// Catalog should remain at 2.0.0 — the marketplace was not re-fetched.
+			const catalogPath = await getCatalogPath();
+			const content = await Bun.file(catalogPath).text();
+			const catalog = JSON.parse(content) as { plugins: Array<{ version?: string }> };
+			expect(catalog.plugins[0].version).toBe("2.0.0");
+		});
+
+		it("refreshStaleMarketplaces re-fetches stale marketplaces", async () => {
+			await ctx.manager.addMarketplace(FIXTURE_DIR);
+			// Tamper with catalog to simulate drift from the real source.
+			await bumpCatalogVersion("2.0.0");
+
+			// Force updatedAt to 25 hours ago — past the 24-hour staleness threshold.
+			const staleDate = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+			setMarketplaceUpdatedAt(staleDate);
+
+			await ctx.manager.refreshStaleMarketplaces();
+
+			// updateMarketplace re-fetches from FIXTURE_DIR which has version 1.0.0.
+			const catalogPath = await getCatalogPath();
+			const content = await Bun.file(catalogPath).text();
+			const catalog = JSON.parse(content) as { plugins: Array<{ version?: string }> };
+			expect(catalog.plugins[0].version).toBe("1.0.0");
+		});
+	});
 });

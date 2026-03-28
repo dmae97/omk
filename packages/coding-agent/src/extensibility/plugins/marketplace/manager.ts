@@ -352,6 +352,92 @@ export class MarketplaceManager {
 		logger.debug("Plugin enabled state changed", { pluginId, enabled });
 	}
 
+	// ── Update / upgrade ─────────────────────────────────────────────────────
+
+	// Refresh marketplace catalogs that haven't been updated in more than 24 h.
+	// Per-marketplace failures are silently swallowed — offline is fine.
+	async refreshStaleMarketplaces(): Promise<void> {
+		const reg = await readMarketplacesRegistry(this.#opts.marketplacesRegistryPath);
+		const staleMs = 24 * 60 * 60 * 1000;
+		for (const entry of reg.marketplaces) {
+			if (Date.now() - Date.parse(entry.updatedAt) >= staleMs) {
+				try {
+					await this.updateMarketplace(entry.name);
+				} catch {
+					// Network or parse failure — leave stale, try next time.
+				}
+			}
+		}
+	}
+
+	// Compare installed plugin versions against their catalog entries.
+	// Returns only plugins where the catalog declares a newer semver version.
+	// Catalog entries without a version field are skipped.
+	async checkForUpdates(): Promise<Array<{ pluginId: string; from: string; to: string }>> {
+		const instReg = await readInstalledPluginsRegistry(this.#opts.installedRegistryPath);
+		const mktReg = await readMarketplacesRegistry(this.#opts.marketplacesRegistryPath);
+		const updates: Array<{ pluginId: string; from: string; to: string }> = [];
+
+		for (const [pluginId, entries] of Object.entries(instReg.plugins)) {
+			const parsed = parsePluginId(pluginId);
+			if (!parsed) continue;
+			const installed = entries[0];
+			if (!installed) continue;
+
+			const mktEntry = mktReg.marketplaces.find(m => m.name === parsed.marketplace);
+			if (!mktEntry) continue;
+
+			let catalogVersion: string | undefined;
+			try {
+				const catalog = await this.#readCatalog(mktEntry);
+				catalogVersion = catalog.plugins.find(p => p.name === parsed.name)?.version;
+			} catch {
+				continue;
+			}
+
+			if (!catalogVersion || catalogVersion === installed.version) continue;
+
+			// Treat newer semver as an update; fall back to inequality for non-semver tags.
+			let isNewer: boolean;
+			try {
+				isNewer = Bun.semver.order(catalogVersion, installed.version) > 0;
+			} catch {
+				isNewer = catalogVersion !== installed.version;
+			}
+
+			if (isNewer) {
+				updates.push({ pluginId, from: installed.version, to: catalogVersion });
+			}
+		}
+
+		return updates;
+	}
+
+	// Re-install a specific plugin at the latest catalog version (force-overwrites).
+	async upgradePlugin(pluginId: string): Promise<InstalledPluginEntry> {
+		const parsed = parsePluginId(pluginId);
+		if (!parsed) {
+			throw new Error(`Invalid plugin ID: "${pluginId}". Expected "name@marketplace".`);
+		}
+		return this.installPlugin(parsed.name, parsed.marketplace, { force: true });
+	}
+
+	// Upgrade every plugin that checkForUpdates reports as outdated.
+	// Per-plugin failures are skipped — partial success is returned.
+	async upgradeAllPlugins(): Promise<Array<{ pluginId: string; from: string; to: string }>> {
+		const updates = await this.checkForUpdates();
+		const results: Array<{ pluginId: string; from: string; to: string }> = [];
+		for (const update of updates) {
+			try {
+				await this.upgradePlugin(update.pluginId);
+				results.push(update);
+			} catch {
+				// Skip this plugin; partial upgrades are better than none.
+			}
+		}
+		return results;
+	}
+
 	// ── Private helpers ───────────────────────────────────────────────────────
 
 	async #readCatalog(entry: MarketplaceRegistryEntry): Promise<MarketplaceCatalog> {
