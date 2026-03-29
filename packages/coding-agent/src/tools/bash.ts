@@ -222,6 +222,8 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 			asyncEnabled: this.#asyncEnabled,
 			hasAstGrep: this.session.settings.get("astGrep.enabled"),
 			hasAstEdit: this.session.settings.get("astEdit.enabled"),
+			hasGrep: this.session.settings.get("grep.enabled"),
+			hasFind: this.session.settings.get("find.enabled"),
 		});
 	}
 
