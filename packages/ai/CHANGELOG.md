@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+
+- Fixed normalizeAnthropicBaseUrl returning empty string instead of undefined when baseUrl is empty
 
 ## [13.16.4] - 2026-03-28
 ### Added

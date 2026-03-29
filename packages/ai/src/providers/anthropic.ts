@@ -53,7 +53,7 @@ export type AnthropicHeaderOptions = {
 export function normalizeAnthropicBaseUrl(baseUrl?: string): string | undefined {
 	const trimmed = baseUrl?.trim();
 	if (!trimmed) {
-		return trimmed;
+		return undefined;
 	}
 	const withoutTrailingSlashes = trimmed.replace(/\/+$/, "");
 	return withoutTrailingSlashes.endsWith("/v1") ? withoutTrailingSlashes.slice(0, -3) : withoutTrailingSlashes;
