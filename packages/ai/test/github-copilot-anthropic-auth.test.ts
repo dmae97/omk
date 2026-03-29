@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
 import { buildAnthropicClientOptions, streamAnthropic } from "../src/providers/anthropic";
 import type { Context, Model } from "../src/types";
+import { buildAnthropicUrl } from "../src/utils/anthropic-auth";
 
 const originalFetch = global.fetch;
 
@@ -135,6 +136,33 @@ describe("Anthropic Copilot auth config", () => {
 		});
 
 		expect(result.isOAuthToken).toBe(false);
+	});
+
+	it("normalizes trailing /v1 in anthropic base URLs", () => {
+		const model = {
+			...makeCopilotClaudeModel(),
+			provider: "custom-proxy",
+			baseUrl: "http://127.0.0.1:8317/v1",
+		};
+		const result = buildAnthropicClientOptions({
+			model,
+			apiKey: "test-key",
+			extraBetas: [],
+			stream: true,
+			dynamicHeaders: {},
+		});
+
+		expect(result.baseURL).toBe("http://127.0.0.1:8317");
+	});
+
+	it("builds anthropic auth URLs from the normalized service root", () => {
+		const url = buildAnthropicUrl({
+			apiKey: "test-key",
+			baseUrl: "http://127.0.0.1:8317/v1",
+			isOAuth: false,
+		});
+
+		expect(url).toBe("http://127.0.0.1:8317/v1/messages?beta=true");
 	});
 
 	it("forwards initiatorOverride to Copilot message requests", async () => {

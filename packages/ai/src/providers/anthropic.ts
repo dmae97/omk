@@ -50,6 +50,15 @@ export type AnthropicHeaderOptions = {
 	modelHeaders?: Record<string, string>;
 };
 
+export function normalizeAnthropicBaseUrl(baseUrl?: string): string | undefined {
+	const trimmed = baseUrl?.trim();
+	if (!trimmed) {
+		return trimmed;
+	}
+	const withoutTrailingSlashes = trimmed.replace(/\/+$/, "");
+	return withoutTrailingSlashes.endsWith("/v1") ? withoutTrailingSlashes.slice(0, -3) : withoutTrailingSlashes;
+}
+
 // Build deduplicated beta header string
 export function buildBetaHeader(baseBetas: string[], extraBetas: string[]): string {
 	const seen = new Set<string>();
@@ -421,25 +430,20 @@ function isFoundryEnabled(): boolean {
 	return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
 }
 
-function normalizeBaseUrl(baseUrl: string | undefined): string | undefined {
-	const trimmed = baseUrl?.trim();
-	return trimmed ? trimmed.replace(/\/+$/, "") : undefined;
-}
-
 function resolveAnthropicBaseUrl(model: Model<"anthropic-messages">, apiKey?: string): string | undefined {
 	if (model.provider === "github-copilot") {
-		return normalizeBaseUrl(resolveGitHubCopilotBaseUrl(model.baseUrl, apiKey) ?? model.baseUrl);
+		return normalizeAnthropicBaseUrl(resolveGitHubCopilotBaseUrl(model.baseUrl, apiKey) ?? model.baseUrl);
 	}
 	if (model.provider === "anthropic" && isFoundryEnabled()) {
-		const foundryBaseUrl = normalizeBaseUrl($env.FOUNDRY_BASE_URL);
+		const foundryBaseUrl = normalizeAnthropicBaseUrl($env.FOUNDRY_BASE_URL);
 		if (foundryBaseUrl) {
 			return foundryBaseUrl;
 		}
 	}
 	if (model.provider === "anthropic") {
-		return normalizeBaseUrl(model.baseUrl) ?? "https://api.anthropic.com";
+		return normalizeAnthropicBaseUrl(model.baseUrl) ?? "https://api.anthropic.com";
 	}
-	return normalizeBaseUrl(model.baseUrl);
+	return normalizeAnthropicBaseUrl(model.baseUrl);
 }
 
 function parseAnthropicCustomHeaders(rawHeaders: string | undefined): Record<string, string> | undefined {
@@ -699,7 +703,11 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 									index: event.index,
 								};
 								output.content.push(block);
-								stream.push({ type: "text_start", contentIndex: output.content.length - 1, partial: output });
+								stream.push({
+									type: "text_start",
+									contentIndex: output.content.length - 1,
+									partial: output,
+								});
 							} else if (event.content_block.type === "thinking") {
 								const block: Block = {
 									type: "thinking",
@@ -1343,7 +1351,10 @@ function buildParams(
 		if (typeof options.toolChoice === "string") {
 			params.tool_choice = { type: options.toolChoice };
 		} else if (isOAuthToken && options.toolChoice.name) {
-			params.tool_choice = { ...options.toolChoice, name: applyClaudeToolPrefix(options.toolChoice.name) };
+			params.tool_choice = {
+				...options.toolChoice,
+				name: applyClaudeToolPrefix(options.toolChoice.name),
+			};
 		} else {
 			params.tool_choice = options.toolChoice;
 		}
