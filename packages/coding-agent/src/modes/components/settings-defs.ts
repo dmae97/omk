@@ -117,6 +117,15 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "5", label: "5 retries" },
 		{ value: "10", label: "10 retries" },
 	],
+	// Retry fallback revert policy
+	"retry.fallbackRevertPolicy": [
+		{
+			value: "cooldown-expiry",
+			label: "Cooldown expiry",
+			description: "Return to the primary model after its suppression window ends",
+		},
+		{ value: "never", label: "Never", description: "Stay on the fallback model until manually changed" },
+	],
 	// Task max concurrency
 	"task.maxConcurrency": [
 		{ value: "0", label: "Unlimited" },

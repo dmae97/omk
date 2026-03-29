@@ -28,6 +28,7 @@ import {
 import { isRecord, logger } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { type ConfigError, ConfigFile } from "../config";
+import { parseModelString } from "../config/model-resolver";
 import { isValidThemeColor, type ThemeColor } from "../modes/theme/theme";
 import type { AuthStorage, OAuthCredential } from "../session/auth-storage";
 import type { Settings } from "./settings";
@@ -721,6 +722,14 @@ function buildCustomModel(
 	return finalizeCustomModel(model, options);
 }
 
+function normalizeSuppressedSelector(selector: string): string {
+	const trimmed = selector.trim();
+	if (!trimmed) return trimmed;
+	const parsed = parseModelString(trimmed);
+	if (!parsed) return trimmed;
+	return `${parsed.provider}/${parsed.id}`;
+}
+
 /**
  * Model registry - loads and manages models, resolves API keys via AuthStorage.
  */
@@ -737,6 +746,7 @@ export class ModelRegistry {
 	#registeredProviderSources: Set<string> = new Set();
 	#providerDiscoveryStates: Map<string, ProviderDiscoveryState> = new Map();
 	#cacheDbPath?: string;
+	#suppressedSelectors: Map<string, number> = new Map();
 	#backgroundRefresh?: Promise<void>;
 	#lastDiscoveryWarnings: Map<string, string> = new Map();
 
@@ -766,6 +776,7 @@ export class ModelRegistry {
 	 */
 	async refresh(strategy: ModelRefreshStrategy = "online-if-uncached"): Promise<void> {
 		this.#reloadStaticModels();
+		this.#suppressedSelectors.clear();
 		await this.#refreshRuntimeDiscoveries(strategy);
 	}
 
@@ -789,6 +800,11 @@ export class ModelRegistry {
 
 	async refreshProvider(providerId: string, strategy: ModelRefreshStrategy = "online"): Promise<void> {
 		this.#reloadStaticModels();
+		for (const selector of this.#suppressedSelectors.keys()) {
+			if (selector.startsWith(`${providerId}/`)) {
+				this.#suppressedSelectors.delete(selector);
+			}
+		}
 		await this.#refreshRuntimeDiscoveries(strategy, new Set([providerId]));
 	}
 
@@ -1824,6 +1840,27 @@ export class ModelRegistry {
 				};
 			});
 		}
+	}
+
+	/**
+	 * Suppress a specific model selector (e.g., "provider/id") until a specific timestamp.
+	 */
+	suppressSelector(selector: string, untilMs: number): void {
+		this.#suppressedSelectors.set(normalizeSuppressedSelector(selector), untilMs);
+	}
+
+	/**
+	 * Check if a model selector is currently suppressed due to rate limits.
+	 */
+	isSelectorSuppressed(selector: string): boolean {
+		const normalizedSelector = normalizeSuppressedSelector(selector);
+		const suppressedUntil = this.#suppressedSelectors.get(normalizedSelector);
+		if (!suppressedUntil) return false;
+		if (suppressedUntil <= Date.now()) {
+			this.#suppressedSelectors.delete(normalizedSelector);
+			return false;
+		}
+		return true;
 	}
 }
 

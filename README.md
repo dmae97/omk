@@ -885,16 +885,33 @@ theme:
   dark: titanium
   light: light
 
+enabledModels:
+  - "anthropic/*"
+  - "*gpt*"
+  - "gemini-2.5-pro:high"
+
 modelRoles:
   default: anthropic/claude-sonnet-4-20250514
   plan: anthropic/claude-opus-4-1:high
   smol: anthropic/claude-sonnet-4-20250514
 defaultThinkingLevel: high
-enabledModels:
-  - anthropic/*
-  - "*gpt*"
-  - gemini-2.5-pro:high
 
+retry:
+  enabled: true
+  # Number of retries before giving up on rate limits/server errors
+  maxRetries: 3
+  # Wait this long as a base (exponentially backed off) unless the API provides a retry-after-ms
+  baseDelayMs: 2000
+  # Configure role-specific model fallback chains
+  fallbackChains:
+    default:
+      - "openai/gpt-4o-mini"
+      - "openai/gpt-4o"
+    plan:
+      - "anthropic/claude-sonnet-4-6:high"
+      - "openai/o3:high"
+  # Whether to revert to the primary model when a fallback's cooldown expires
+  fallbackRevertPolicy: cooldown-expiry
 steeringMode: one-at-a-time
 followUpMode: one-at-a-time
 interruptMode: immediate
@@ -914,10 +931,6 @@ compaction:
 skills:
   enabled: true
 
-retry:
-  enabled: true
-  maxRetries: 3
-  baseDelayMs: 2000
 
 terminal:
   showImages: true

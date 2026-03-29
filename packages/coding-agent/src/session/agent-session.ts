@@ -55,7 +55,12 @@ import { abortableSleep, getAgentDbPath, isEnoent, logger } from "@oh-my-pi/pi-u
 import type { AsyncJob, AsyncJobManager } from "../async";
 import type { Rule } from "../capability/rule";
 import { MODEL_ROLE_IDS, type ModelRegistry } from "../config/model-registry";
-import { extractExplicitThinkingSelector, parseModelString, resolveModelRoleValue } from "../config/model-resolver";
+import {
+	extractExplicitThinkingSelector,
+	formatModelString,
+	parseModelString,
+	resolveModelRoleValue,
+} from "../config/model-resolver";
 import { expandPromptTemplate, type PromptTemplate, renderPromptTemplate } from "../config/prompt-templates";
 import type { Settings, SkillsSettings } from "../config/settings";
 import { type BashResult, executeBash as executeBashCommand } from "../exec/bash-executor";
@@ -170,6 +175,8 @@ export type AgentSessionEvent =
 	  }
 	| { type: "auto_retry_start"; attempt: number; maxAttempts: number; delayMs: number; errorMessage: string }
 	| { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string }
+	| { type: "retry_fallback_applied"; from: string; to: string; role: string }
+	| { type: "retry_fallback_succeeded"; model: string; role: string }
 	| { type: "ttsr_triggered"; rules: Rule[] }
 	| { type: "todo_reminder"; todos: TodoItem[]; attempt: number; maxAttempts: number }
 	| { type: "todo_auto_clear" };
@@ -315,6 +322,46 @@ interface HandoffOptions {
 
 const AUTO_HANDOFF_THRESHOLD_FOCUS = renderPromptTemplate(autoHandoffThresholdFocusPrompt);
 
+type RetryFallbackChains = Record<string, string[]>;
+
+type RetryFallbackRevertPolicy = "never" | "cooldown-expiry";
+
+interface RetryFallbackSelector {
+	raw: string;
+	provider: string;
+	id: string;
+	thinkingLevel: ThinkingLevel | undefined;
+}
+
+interface ActiveRetryFallbackState {
+	role: string;
+	originalSelector: string;
+	originalThinkingLevel: ThinkingLevel | undefined;
+	lastAppliedFallbackThinkingLevel: ThinkingLevel | undefined;
+}
+
+function parseRetryFallbackSelector(selector: string): RetryFallbackSelector | undefined {
+	const trimmed = selector.trim();
+	if (!trimmed) return undefined;
+	const parsed = parseModelString(trimmed);
+	if (!parsed) return undefined;
+	return {
+		raw: trimmed,
+		provider: parsed.provider,
+		id: parsed.id,
+		thinkingLevel: parsed.thinkingLevel,
+	};
+}
+
+function formatRetryFallbackSelector(model: Model, thinkingLevel: ThinkingLevel | undefined): string {
+	const selector = formatModelString(model);
+	return thinkingLevel ? `${selector}:${thinkingLevel}` : selector;
+}
+
+function formatRetryFallbackBaseSelector(selector: RetryFallbackSelector): string {
+	return `${selector.provider}/${selector.id}`;
+}
+
 const noOpUIContext: ExtensionUIContext = {
 	select: async (_title, _options, _dialogOptions) => undefined,
 	confirm: async (_title, _message, _dialogOptions) => false,
@@ -352,6 +399,7 @@ export class AgentSession {
 	readonly sessionManager: SessionManager;
 	readonly settings: Settings;
 	readonly searchDb: SearchDb | undefined;
+	readonly configWarnings: string[] = [];
 
 	#asyncJobManager: AsyncJobManager | undefined = undefined;
 	#scopedModels: Array<{ model: Model; thinkingLevel?: ThinkingLevel }>;
@@ -391,7 +439,7 @@ export class AgentSession {
 	#retryAttempt = 0;
 	#retryPromise: Promise<void> | undefined = undefined;
 	#retryResolve: (() => void) | undefined = undefined;
-
+	#activeRetryFallback: ActiveRetryFallbackState | undefined = undefined;
 	// Todo completion reminder state
 	#todoReminderCount = 0;
 	#todoPhases: TodoPhase[] = [];
@@ -478,6 +526,7 @@ export class AgentSession {
 		this.#customCommands = config.customCommands ?? [];
 		this.#skillsSettings = config.skillsSettings;
 		this.#modelRegistry = config.modelRegistry;
+		this.#validateRetryFallbackChains();
 		this.#toolRegistry = config.toolRegistry ?? new Map();
 		this.#transformContext = config.transformContext ?? (messages => messages);
 		this.#onPayload = config.onPayload;
@@ -787,6 +836,13 @@ export class AgentSession {
 					assistantMsg.stopReason !== "aborted" &&
 					this.#retryAttempt > 0
 				) {
+					if (this.#activeRetryFallback && this.model) {
+						await this.#emitSessionEvent({
+							type: "retry_fallback_succeeded",
+							model: formatRetryFallbackSelector(this.model, this.thinkingLevel),
+							role: this.#activeRetryFallback.role,
+						});
+					}
 					await this.#emitSessionEvent({
 						type: "auto_retry_end",
 						success: true,
@@ -985,6 +1041,7 @@ export class AgentSession {
 					return;
 				}
 				try {
+					await this.#maybeRestoreRetryFallbackPrimary();
 					await this.agent.continue();
 				} catch {
 					options?.onError?.();
@@ -2288,6 +2345,8 @@ export class AgentSession {
 			// Reset todo reminder count on new user prompt
 			this.#todoReminderCount = 0;
 
+			await this.#maybeRestoreRetryFallbackPrimary();
+
 			// Validate model
 			if (!this.model) {
 				throw new Error(
@@ -3108,6 +3167,7 @@ export class AgentSession {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
 		}
 
+		this.#clearActiveRetryFallback();
 		this.#setModelWithProviderSessionReset(model);
 		this.sessionManager.appendModelChange(`${model.provider}/${model.id}`, role);
 		this.settings.setModelRole(role, this.#formatRoleModelValue(role, model));
@@ -3128,6 +3188,7 @@ export class AgentSession {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
 		}
 
+		this.#clearActiveRetryFallback();
 		this.#setModelWithProviderSessionReset(model);
 		this.sessionManager.appendModelChange(`${model.provider}/${model.id}`, "temporary");
 		this.settings.getStorage()?.recordModelUsage(`${model.provider}/${model.id}`);
@@ -3253,6 +3314,7 @@ export class AgentSession {
 		const next = scopedModels[nextIndex];
 
 		// Apply model
+		this.#clearActiveRetryFallback();
 		this.#setModelWithProviderSessionReset(next.model);
 		this.sessionManager.appendModelChange(`${next.model.provider}/${next.model.id}`);
 		this.settings.setModelRole("default", this.#formatRoleModelValue("default", next.model));
@@ -3281,11 +3343,11 @@ export class AgentSession {
 			throw new Error(`No API key for ${nextModel.provider}/${nextModel.id}`);
 		}
 
+		this.#clearActiveRetryFallback();
 		this.#setModelWithProviderSessionReset(nextModel);
 		this.sessionManager.appendModelChange(`${nextModel.provider}/${nextModel.id}`);
 		this.settings.setModelRole("default", this.#formatRoleModelValue("default", nextModel));
 		this.settings.getStorage()?.recordModelUsage(`${nextModel.provider}/${nextModel.id}`);
-
 		// Re-apply the current thinking level for the newly selected model
 		this.setThinkingLevel(this.thinkingLevel);
 
@@ -4768,6 +4830,217 @@ export class AgentSession {
 		);
 	}
 
+	#getRetryFallbackChains(): RetryFallbackChains {
+		const configuredChains = this.settings.get("retry.fallbackChains");
+		if (!configuredChains || typeof configuredChains !== "object") return {};
+		return configuredChains as RetryFallbackChains;
+	}
+
+	#validateRetryFallbackChains(): void {
+		const configuredChains = this.settings.get("retry.fallbackChains");
+		if (configuredChains === undefined) return;
+		if (!configuredChains || typeof configuredChains !== "object" || Array.isArray(configuredChains)) {
+			const msg = "retry.fallbackChains must be a mapping of role names to selector arrays.";
+			logger.warn(msg);
+			this.configWarnings.push(msg);
+			return;
+		}
+
+		for (const [role, chain] of Object.entries(configuredChains)) {
+			if (!Array.isArray(chain)) {
+				const msg = `Fallback chain for role '${role}' must be an array of selector strings.`;
+				logger.warn(msg);
+				this.configWarnings.push(msg);
+				continue;
+			}
+			for (const selectorStr of chain) {
+				if (typeof selectorStr !== "string") {
+					const msg = `Fallback chain for role '${role}' contains a non-string selector.`;
+					logger.warn(msg);
+					this.configWarnings.push(msg);
+					continue;
+				}
+				const parsed = parseRetryFallbackSelector(selectorStr);
+				if (!parsed) {
+					const msg = `Invalid fallback selector format in role '${role}': ${selectorStr}`;
+					logger.warn(msg);
+					this.configWarnings.push(msg);
+					continue;
+				}
+				const exists = this.#modelRegistry.find(parsed.provider, parsed.id);
+				if (!exists) {
+					const msg = `Fallback chain for role '${role}' references unknown model: ${selectorStr}`;
+					logger.warn(msg);
+					this.configWarnings.push(msg);
+				}
+			}
+		}
+	}
+
+	#getRetryFallbackRevertPolicy(): RetryFallbackRevertPolicy {
+		return this.settings.get("retry.fallbackRevertPolicy") === "never" ? "never" : "cooldown-expiry";
+	}
+
+	#getRetryFallbackPrimarySelector(role: string): RetryFallbackSelector | undefined {
+		const configuredSelector = this.settings.getModelRole(role);
+		return configuredSelector ? parseRetryFallbackSelector(configuredSelector) : undefined;
+	}
+
+	#clearActiveRetryFallback(): void {
+		this.#activeRetryFallback = undefined;
+	}
+
+	#isRetryFallbackSelectorSuppressed(selector: RetryFallbackSelector): boolean {
+		return this.#modelRegistry.isSelectorSuppressed(selector.raw);
+	}
+
+	#noteRetryFallbackCooldown(currentSelector: string, retryAfterMs: number | undefined, errorMessage: string): void {
+		let cooldownMs = retryAfterMs;
+		if (!cooldownMs || cooldownMs <= 0) {
+			const reason = parseRateLimitReason(errorMessage);
+			cooldownMs = reason === "UNKNOWN" ? 5 * 60 * 1000 : calculateRateLimitBackoffMs(reason);
+		}
+		this.#modelRegistry.suppressSelector(currentSelector, Date.now() + cooldownMs);
+	}
+
+	#resolveRetryFallbackRole(currentSelector: string): string | undefined {
+		const parsedCurrent = parseRetryFallbackSelector(currentSelector);
+		if (!parsedCurrent) return undefined;
+		const currentBaseSelector = formatRetryFallbackBaseSelector(parsedCurrent);
+		for (const role of Object.keys(this.#getRetryFallbackChains())) {
+			const primarySelector = this.#getRetryFallbackPrimarySelector(role);
+			if (!primarySelector) continue;
+			if (primarySelector.raw === currentSelector) return role;
+			if (formatRetryFallbackBaseSelector(primarySelector) === currentBaseSelector) return role;
+		}
+		return undefined;
+	}
+
+	#getRetryFallbackEffectiveChain(role: string): RetryFallbackSelector[] {
+		const primarySelector = this.#getRetryFallbackPrimarySelector(role);
+		if (!primarySelector) return [];
+		const chain = [primarySelector];
+		const seen = new Set<string>([primarySelector.raw]);
+		for (const selector of this.#getRetryFallbackChains()[role] ?? []) {
+			const parsed = parseRetryFallbackSelector(selector);
+			if (!parsed || seen.has(parsed.raw)) continue;
+			seen.add(parsed.raw);
+			chain.push(parsed);
+		}
+		return chain;
+	}
+
+	#findRetryFallbackCandidates(role: string, currentSelector: string): RetryFallbackSelector[] {
+		const chain = this.#getRetryFallbackEffectiveChain(role);
+		if (chain.length <= 1) return [];
+		const parsedCurrent = parseRetryFallbackSelector(currentSelector);
+		const currentBaseSelector = parsedCurrent ? formatRetryFallbackBaseSelector(parsedCurrent) : undefined;
+		const exactIndex = chain.findIndex(selector => selector.raw === currentSelector);
+		if (exactIndex >= 0) return chain.slice(exactIndex + 1);
+		const baseIndex = currentBaseSelector
+			? chain.findIndex(selector => formatRetryFallbackBaseSelector(selector) === currentBaseSelector)
+			: -1;
+		if (baseIndex >= 0) return chain.slice(baseIndex + 1);
+		return chain.slice(1);
+	}
+
+	async #applyRetryFallbackCandidate(
+		role: string,
+		selector: RetryFallbackSelector,
+		currentSelector: string,
+	): Promise<void> {
+		const candidate = this.#modelRegistry.find(selector.provider, selector.id);
+		if (!candidate) {
+			throw new Error(`Retry fallback model not found: ${selector.raw}`);
+		}
+		const apiKey = await this.#modelRegistry.getApiKey(candidate, this.sessionId);
+		if (!apiKey) {
+			throw new Error(`No API key for retry fallback ${selector.raw}`);
+		}
+
+		const currentThinkingLevel = this.thinkingLevel;
+		const nextThinkingLevel = selector.thinkingLevel ?? currentThinkingLevel;
+
+		this.#setModelWithProviderSessionReset(candidate);
+		this.sessionManager.appendModelChange(`${candidate.provider}/${candidate.id}`, "temporary");
+		this.settings.getStorage()?.recordModelUsage(`${candidate.provider}/${candidate.id}`);
+		this.setThinkingLevel(nextThinkingLevel);
+		if (!this.#activeRetryFallback) {
+			this.#activeRetryFallback = {
+				role,
+				originalSelector: currentSelector,
+				originalThinkingLevel: currentThinkingLevel,
+				lastAppliedFallbackThinkingLevel: nextThinkingLevel,
+			};
+		} else {
+			this.#activeRetryFallback.lastAppliedFallbackThinkingLevel = nextThinkingLevel;
+		}
+		await this.#emitSessionEvent({
+			type: "retry_fallback_applied",
+			from: currentSelector,
+			to: selector.raw,
+			role,
+		});
+	}
+
+	async #tryRetryModelFallback(currentSelector: string): Promise<boolean> {
+		const role = this.#activeRetryFallback?.role ?? this.#resolveRetryFallbackRole(currentSelector);
+		if (!role) return false;
+
+		for (const selector of this.#findRetryFallbackCandidates(role, currentSelector)) {
+			if (this.#isRetryFallbackSelectorSuppressed(selector)) continue;
+			const candidate = this.#modelRegistry.find(selector.provider, selector.id);
+			if (!candidate) continue;
+			const apiKey = await this.#modelRegistry.getApiKey(candidate, this.sessionId);
+			if (!apiKey) continue;
+			await this.#applyRetryFallbackCandidate(role, selector, currentSelector);
+			return true;
+		}
+
+		return false;
+	}
+
+	async #maybeRestoreRetryFallbackPrimary(): Promise<void> {
+		if (!this.#activeRetryFallback) return;
+		if (this.#getRetryFallbackRevertPolicy() !== "cooldown-expiry") return;
+
+		const {
+			originalSelector: originalSelectorRaw,
+			originalThinkingLevel,
+			lastAppliedFallbackThinkingLevel,
+		} = this.#activeRetryFallback;
+		const originalSelector = parseRetryFallbackSelector(originalSelectorRaw);
+		if (!originalSelector) {
+			this.#clearActiveRetryFallback();
+			return;
+		}
+
+		const currentModel = this.model;
+		if (!currentModel) return;
+		const currentSelector = formatRetryFallbackSelector(currentModel, this.thinkingLevel);
+		if (currentSelector === originalSelector.raw) {
+			if (!this.#isRetryFallbackSelectorSuppressed(originalSelector)) {
+				this.#clearActiveRetryFallback();
+			}
+			return;
+		}
+		if (this.#isRetryFallbackSelectorSuppressed(originalSelector)) return;
+
+		const primaryModel = this.#modelRegistry.find(originalSelector.provider, originalSelector.id);
+		if (!primaryModel) return;
+		const apiKey = await this.#modelRegistry.getApiKey(primaryModel, this.sessionId);
+		if (!apiKey) return;
+
+		const currentThinkingLevel = this.thinkingLevel;
+		const thinkingToApply =
+			currentThinkingLevel === lastAppliedFallbackThinkingLevel ? originalThinkingLevel : currentThinkingLevel;
+		this.#setModelWithProviderSessionReset(primaryModel);
+		this.sessionManager.appendModelChange(`${primaryModel.provider}/${primaryModel.id}`, "temporary");
+		this.settings.getStorage()?.recordModelUsage(`${primaryModel.provider}/${primaryModel.id}`);
+		this.setThinkingLevel(thinkingToApply);
+		this.#clearActiveRetryFallback();
+	}
+
 	#parseRetryAfterMsFromError(errorMessage: string): number | undefined {
 		const now = Date.now();
 		const retryAfterMsMatch = /retry-after-ms\s*[:=]\s*(\d+)/i.exec(errorMessage);
@@ -4847,12 +5120,13 @@ export class AgentSession {
 		}
 
 		const errorMessage = message.errorMessage || "Unknown error";
+		const parsedRetryAfterMs = this.#parseRetryAfterMsFromError(errorMessage);
 		let delayMs = retrySettings.baseDelayMs * 2 ** (this.#retryAttempt - 1);
+		let switchedCredential = false;
+		let switchedModel = false;
 
 		if (this.model && isUsageLimitError(errorMessage)) {
-			const retryAfterMs =
-				this.#parseRetryAfterMsFromError(errorMessage) ??
-				calculateRateLimitBackoffMs(parseRateLimitReason(errorMessage));
+			const retryAfterMs = parsedRetryAfterMs ?? calculateRateLimitBackoffMs(parseRateLimitReason(errorMessage));
 			const switched = await this.#modelRegistry.authStorage.markUsageLimitReached(
 				this.model.provider,
 				this.sessionId,
@@ -4862,10 +5136,22 @@ export class AgentSession {
 				},
 			);
 			if (switched) {
+				switchedCredential = true;
 				delayMs = 0;
 			} else if (retryAfterMs > delayMs) {
 				// No more accounts to switch to — wait out the backoff
 				delayMs = retryAfterMs;
+			}
+		}
+
+		const currentSelector = this.model ? formatRetryFallbackSelector(this.model, this.thinkingLevel) : undefined;
+		if (!switchedCredential && currentSelector) {
+			this.#noteRetryFallbackCooldown(currentSelector, parsedRetryAfterMs, errorMessage);
+			switchedModel = await this.#tryRetryModelFallback(currentSelector);
+			if (switchedModel) {
+				delayMs = 0;
+			} else if (parsedRetryAfterMs && parsedRetryAfterMs > delayMs) {
+				delayMs = parsedRetryAfterMs;
 			}
 		}
 

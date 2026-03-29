@@ -534,6 +534,16 @@ export class EventController {
 				break;
 			}
 
+			case "retry_fallback_applied": {
+				this.ctx.showWarning(`Fallback: ${event.from} -> ${event.to}`);
+				break;
+			}
+
+			case "retry_fallback_succeeded": {
+				this.ctx.showStatus(`Fallback succeeded on ${event.model}`);
+				break;
+			}
+
 			case "ttsr_triggered": {
 				const component = new TtsrNotificationComponent(event.rules);
 				component.setExpanded(this.ctx.toolOutputExpanded);

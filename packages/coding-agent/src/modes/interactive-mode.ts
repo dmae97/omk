@@ -306,6 +306,11 @@ export class InteractiveMode implements InteractiveModeContext {
 
 		const startupQuiet = settings.get("startup.quiet");
 
+		for (const warning of this.session.configWarnings) {
+			this.ui.addChild(new Text(theme.fg("warning", `Warning: ${warning}`), 1, 0));
+			this.ui.addChild(new Spacer(1));
+		}
+
 		if (!startupQuiet) {
 			// Add welcome header
 			const welcome = new WelcomeComponent(this.#version, modelName, providerName, recentSessions, lspServerInfo);
