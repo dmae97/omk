@@ -1,6 +1,16 @@
 # Changelog
 
 ## [Unreleased]
+
+### Added
+
+- Added Gemma 3 27B model support for Google Generative AI
+
+### Changed
+
+- Updated Kwaipilot KAT-Coder-Pro V2 model display name and pricing information
+- Updated Kwaipilot KAT-Coder-Pro V2 context window from 222,222 to 256,000 tokens and max tokens from 8,888 to 80,000
+
 ### Fixed
 
 - Fixed normalizeAnthropicBaseUrl returning empty string instead of undefined when baseUrl is empty

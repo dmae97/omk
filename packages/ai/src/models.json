@@ -6270,6 +6270,26 @@
 				"minLevel": "minimal",
 				"maxLevel": "high"
 			}
+		},
+		"gemma-3-27b-it": {
+			"id": "gemma-3-27b-it",
+			"name": "Gemma 3 27B",
+			"api": "google-generative-ai",
+			"provider": "google",
+			"baseUrl": "https://generativelanguage.googleapis.com/v1beta",
+			"reasoning": false,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 131072,
+			"maxTokens": 8192
 		}
 	},
 	"google-antigravity": {
@@ -22027,7 +22047,7 @@
 		},
 		"kwaipilot/kat-coder-pro-v2": {
 			"id": "kwaipilot/kat-coder-pro-v2",
-			"name": "kwaipilot/kat-coder-pro-v2",
+			"name": "Kwaipilot: KAT-Coder-Pro V2",
 			"api": "openai-completions",
 			"provider": "nanogpt",
 			"baseUrl": "https://nano-gpt.com/api/v1",
@@ -22036,13 +22056,13 @@
 				"text"
 			],
 			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
+				"input": 0.3,
+				"output": 1.2,
+				"cacheRead": 0.06,
 				"cacheWrite": 0
 			},
-			"contextWindow": 222222,
-			"maxTokens": 8888
+			"contextWindow": 256000,
+			"maxTokens": 80000
 		},
 		"LatitudeGames/Wayfarer-Large-70B-Llama-3.3": {
 			"id": "LatitudeGames/Wayfarer-Large-70B-Llama-3.3",
