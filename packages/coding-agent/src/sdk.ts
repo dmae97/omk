@@ -106,14 +106,12 @@ import {
 	GrepTool,
 	getSearchTools,
 	HIDDEN_TOOLS,
-	isCodeSearchProviderId,
 	isSearchProviderPreference,
 	loadSshTool,
 	PythonTool,
 	ReadTool,
 	ResolveTool,
 	renderSearchToolBm25Description,
-	setPreferredCodeSearchProvider,
 	setPreferredImageProvider,
 	setPreferredSearchProvider,
 	type Tool,
@@ -665,11 +663,6 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const webSearchProvider = settings.get("providers.webSearch");
 	if (typeof webSearchProvider === "string" && isSearchProviderPreference(webSearchProvider)) {
 		setPreferredSearchProvider(webSearchProvider);
-	}
-
-	const codeSearchProvider = settings.get("providers.codeSearch");
-	if (typeof codeSearchProvider === "string" && isCodeSearchProviderId(codeSearchProvider)) {
-		setPreferredCodeSearchProvider(codeSearchProvider);
 	}
 
 	const imageProvider = settings.get("providers.image");

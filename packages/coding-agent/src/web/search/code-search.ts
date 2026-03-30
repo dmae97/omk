@@ -11,7 +11,6 @@ import {
 	replaceTabs,
 	truncateToWidth,
 } from "../../tools/render-utils";
-import { decodeHtmlEntities } from "../scrapers/types";
 import type { CodeSearchProviderId } from "./types";
 
 export interface CodeSearchToolParams {
@@ -42,25 +41,6 @@ export interface CodeSearchRenderDetails {
 	provider: CodeSearchProviderId;
 }
 
-interface GrepApiHit {
-	repo: string;
-	branch: string;
-	path: string;
-	contentSnippet?: string;
-	totalMatches?: string;
-}
-
-interface GrepApiResponse {
-	totalResults?: number;
-	hits: GrepApiHit[];
-}
-
-let preferredCodeSearchProvider: CodeSearchProviderId = "grep";
-
-export function setPreferredCodeSearchProvider(provider: CodeSearchProviderId): void {
-	preferredCodeSearchProvider = provider;
-}
-
 function stringifyExaCodeResponse(payload: unknown): string {
 	if (typeof payload === "string") return payload;
 	if (typeof payload === "number" || typeof payload === "boolean") return String(payload);
@@ -88,161 +68,6 @@ function normalizeExaCodeSearchResponse(
 				snippet: snippet.length > 0 ? snippet : undefined,
 			},
 		],
-	};
-}
-
-function getStringProperty(value: object, key: string): string | undefined {
-	const candidate = Reflect.get(value, key);
-	return typeof candidate === "string" ? candidate : undefined;
-}
-
-function getNumberProperty(value: object, key: string): number | undefined {
-	const candidate = Reflect.get(value, key);
-	return typeof candidate === "number" && Number.isFinite(candidate) ? candidate : undefined;
-}
-
-function getObjectProperty(value: object, key: string): object | undefined {
-	const candidate = Reflect.get(value, key);
-	return typeof candidate === "object" && candidate !== null ? candidate : undefined;
-}
-
-function getArrayProperty(value: object, key: string): unknown[] | undefined {
-	const candidate = Reflect.get(value, key);
-	return Array.isArray(candidate) ? candidate : undefined;
-}
-
-function stripHtmlTags(value: string): string {
-	return value
-		.replace(/<br\s*\/?>/gi, "")
-		.replace(/<\/?mark>/gi, "")
-		.replace(/<span[^>]*>/gi, "")
-		.replace(/<\/span>/gi, "")
-		.replace(/<[^>]+>/g, "");
-}
-
-function formatGrepSnippet(snippetHtml: string | undefined): string | undefined {
-	if (!snippetHtml) return undefined;
-
-	const rowPattern = /<tr[^>]*data-line="(\d+)"[^>]*>[\s\S]*?<pre>([\s\S]*?)<\/pre>[\s\S]*?<\/tr>/gi;
-	const lines: string[] = [];
-
-	for (const match of snippetHtml.matchAll(rowPattern)) {
-		const lineNumber = match[1];
-		const rawCode = match[2] ?? "";
-		const text = decodeHtmlEntities(stripHtmlTags(rawCode)).trimEnd();
-		if (text.length === 0) continue;
-		lines.push(`${lineNumber}: ${text}`);
-	}
-
-	if (lines.length > 0) {
-		return lines.join("\n");
-	}
-
-	const plainText = decodeHtmlEntities(stripHtmlTags(snippetHtml)).replace(/\s+\n/g, "\n").trim();
-	return plainText.length > 0 ? plainText : undefined;
-}
-
-function parseGrepApiResponse(payload: unknown): GrepApiResponse | null {
-	if (typeof payload !== "object" || payload === null) return null;
-
-	const hitsObject = getObjectProperty(payload, "hits");
-	if (!hitsObject) return null;
-
-	const hitValues = getArrayProperty(hitsObject, "hits") ?? [];
-	const hits: GrepApiHit[] = [];
-	for (const item of hitValues) {
-		if (typeof item !== "object" || item === null) continue;
-		const repo = getStringProperty(item, "repo");
-		const branch = getStringProperty(item, "branch");
-		const path = getStringProperty(item, "path");
-		if (!repo || !branch || !path) continue;
-
-		const content = getObjectProperty(item, "content");
-		hits.push({
-			repo,
-			branch,
-			path,
-			contentSnippet: content ? getStringProperty(content, "snippet") : undefined,
-			totalMatches: getStringProperty(item, "total_matches"),
-		});
-	}
-	if (hitValues.length > 0 && hits.length === 0) return null;
-
-	return {
-		totalResults: getNumberProperty(hitsObject, "total"),
-		hits,
-	};
-}
-
-function buildGrepQuery(params: CodeSearchToolParams): string {
-	return params.query.trim();
-}
-
-function tokenizeCodeContext(codeContext: string | undefined): string[] {
-	if (!codeContext) return [];
-	return codeContext
-		.toLowerCase()
-		.split(/[^a-z0-9_./:-]+/i)
-		.filter(token => token.length >= 2);
-}
-
-function scoreGrepHit(hit: GrepApiHit, contextTokens: string[]): number {
-	if (contextTokens.length === 0) return 0;
-	const snippet = formatGrepSnippet(hit.contentSnippet)?.toLowerCase() ?? "";
-	const repo = hit.repo.toLowerCase();
-	const path = hit.path.toLowerCase();
-
-	let score = 0;
-	for (const token of contextTokens) {
-		if (repo.includes(token)) score += 4;
-		if (path.includes(token)) score += 3;
-		if (snippet.includes(token)) score += 2;
-	}
-
-	return score;
-}
-
-export async function searchCodeWithGrep(params: CodeSearchToolParams): Promise<CodeSearchResponse> {
-	const query = buildGrepQuery(params);
-	const url = new URL("https://grep.app/api/search");
-	url.searchParams.set("q", query);
-
-	const response = await fetch(url, {
-		headers: {
-			Accept: "application/json",
-			Referer: `https://grep.app/search?q=${encodeURIComponent(query)}`,
-		},
-	});
-
-	if (!response.ok) {
-		const message = await response.text();
-		throw new Error(`grep.app API error (${response.status}): ${message}`);
-	}
-
-	const payload: unknown = await response.json();
-	const parsed = parseGrepApiResponse(payload);
-	if (!parsed) {
-		throw new Error("grep.app returned an unexpected response shape.");
-	}
-
-	const contextTokens = tokenizeCodeContext(params.code_context);
-	const rankedHits = [...parsed.hits].sort(
-		(left, right) => scoreGrepHit(right, contextTokens) - scoreGrepHit(left, contextTokens),
-	);
-
-	return {
-		provider: "grep",
-		query,
-		totalResults: parsed.totalResults,
-		sources: rankedHits.map(hit => ({
-			title: `${hit.repo}/${hit.path}`,
-			url: `https://github.com/${hit.repo}/blob/${hit.branch}/${hit.path}`,
-			repository: hit.repo,
-			path: hit.path,
-			branch: hit.branch,
-			snippet: formatGrepSnippet(hit.contentSnippet),
-			totalMatches: hit.totalMatches,
-		})),
 	};
 }
 
@@ -290,8 +115,7 @@ export async function executeCodeSearch(
 	params: CodeSearchToolParams,
 ): Promise<CustomToolResult<CodeSearchRenderDetails>> {
 	try {
-		const response =
-			preferredCodeSearchProvider === "grep" ? await searchCodeWithGrep(params) : await searchCodeWithExa(params);
+		const response = await searchCodeWithExa(params);
 
 		return {
 			content: [{ type: "text", text: formatCodeSearchForLlm(response) }],
@@ -301,7 +125,7 @@ export async function executeCodeSearch(
 		const message = error instanceof Error ? error.message : String(error);
 		return {
 			content: [{ type: "text", text: `Error: ${message}` }],
-			details: { provider: preferredCodeSearchProvider, error: message },
+			details: { provider: "exa", error: message },
 		};
 	}
 }
@@ -312,7 +136,6 @@ export function renderCodeSearchCall(
 	theme: Theme,
 ): Component {
 	let text = `${theme.fg("toolTitle", "Code Search")} ${theme.fg("accent", truncateToWidth(args.query, 80))}`;
-	text += ` ${theme.fg("muted", `provider:${preferredCodeSearchProvider}`)}`;
 	if (args.code_context) {
 		text += ` ${theme.fg("dim", truncateToWidth(args.code_context, 40))}`;
 	}

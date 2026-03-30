@@ -312,10 +312,6 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "synthetic", label: "Synthetic", description: "Requires SYNTHETIC_API_KEY" },
 		{ value: "parallel", label: "Parallel", description: "Requires PARALLEL_API_KEY" },
 	],
-	"providers.codeSearch": [
-		{ value: "exa", label: "Exa", description: "Uses Exa public MCP code search" },
-		{ value: "grep", label: "grep.app", description: "Uses Vercel grep.app public code search" },
-	],
 	"providers.image": [
 		{ value: "auto", label: "Auto", description: "Priority: OpenRouter > Gemini" },
 		{ value: "gemini", label: "Gemini", description: "Requires GEMINI_API_KEY" },

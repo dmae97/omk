@@ -1490,19 +1490,6 @@ export const SETTINGS_SCHEMA = {
 			submenu: true,
 		},
 	},
-
-	"providers.codeSearch": {
-		type: "enum",
-		values: ["grep", "exa"] as const,
-		default: "grep",
-		ui: {
-			tab: "providers",
-			label: "Code Search Provider",
-			description: "Provider for code search tool",
-			submenu: true,
-		},
-	},
-
 	"providers.image": {
 		type: "enum",
 		values: ["auto", "gemini", "openrouter"] as const,

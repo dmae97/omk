@@ -19,13 +19,7 @@ import {
 import type { InteractiveModeContext } from "../../modes/types";
 import { type SessionInfo, SessionManager } from "../../session/session-manager";
 import { FileSessionStorage } from "../../session/session-storage";
-import {
-	isCodeSearchProviderId,
-	isSearchProviderPreference,
-	setPreferredCodeSearchProvider,
-	setPreferredImageProvider,
-	setPreferredSearchProvider,
-} from "../../tools";
+import { isSearchProviderPreference, setPreferredImageProvider, setPreferredSearchProvider } from "../../tools";
 import { setSessionTerminalTitle } from "../../utils/title-generator";
 import { AgentDashboard } from "../components/agent-dashboard";
 import { AssistantMessageComponent } from "../components/assistant-message";
@@ -353,11 +347,6 @@ export class SelectorController {
 			case "providers.webSearch":
 				if (typeof value === "string" && isSearchProviderPreference(value)) {
 					setPreferredSearchProvider(value);
-				}
-				break;
-			case "providers.codeSearch":
-				if (typeof value === "string" && isCodeSearchProviderId(value)) {
-					setPreferredCodeSearchProvider(value);
 				}
 				break;
 			case "providers.image":

@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Removed
+
+- Removed grep.app code search provider support; code search now uses Exa exclusively
+- Removed `providers.codeSearch` setting and related configuration options
 
 ### Fixed
 

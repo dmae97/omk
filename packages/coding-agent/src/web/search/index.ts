@@ -4,7 +4,7 @@
  * Single tool supporting Anthropic, Perplexity, Exa, Brave, Jina, Kimi, Gemini, Codex, Tavily, Kagi, Z.AI, and Synthetic
  * providers with provider-specific parameters exposed conditionally.
  *
- * Code search is also supported via the code_search tool, supports Exa and grep.app.
+ * Code search is also supported via the code_search tool.
  */
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { StringEnum } from "@oh-my-pi/pi-ai";
@@ -292,7 +292,6 @@ export function getSearchTools(): CustomTool<any, any>[] {
 	return [webSearchCustomTool, codeSearchTool];
 }
 
-export { setPreferredCodeSearchProvider } from "./code-search";
 export { getSearchProvider, setPreferredSearchProvider } from "./provider";
 export type { SearchProviderId as SearchProvider, SearchResponse } from "./types";
-export { isCodeSearchProviderId, isSearchProviderPreference } from "./types";
+export { isSearchProviderPreference } from "./types";
