@@ -12,6 +12,7 @@ import type {
 	CursorExecHandlerResult,
 	CursorExecHandlers,
 	CursorMcpCall,
+	CursorShellStreamCallbacks,
 	CursorToolResultHandler,
 	ImageContent,
 	Message,
@@ -51,8 +52,10 @@ import {
 	DiagnosticsRejectedSchema,
 	DiagnosticsResultSchema,
 	DiagnosticsSuccessSchema,
+	ExecClientControlMessageSchema,
 	type ExecClientMessage,
 	ExecClientMessageSchema,
+	ExecClientStreamCloseSchema,
 	type ExecServerMessage,
 	FetchErrorSchema,
 	FetchResultSchema,
@@ -397,6 +400,8 @@ export const streamCursor: StreamFunction<"cursor-agent"> = (
 				conversationStateCache.set(conversationId, checkpoint);
 			};
 
+			let resolveH2: (() => void) | undefined;
+
 			h2Request.on("data", (chunk: Buffer) => {
 				pendingBuffer = Buffer.concat([pendingBuffer, chunk]);
 
@@ -419,6 +424,9 @@ export const streamCursor: StreamFunction<"cursor-agent"> = (
 
 					try {
 						const serverMessage = fromBinary(AgentServerMessageSchema, messageBytes);
+						const isTurnEnded =
+							serverMessage.message.case === "interactionUpdate" &&
+							serverMessage.message.value.message?.case === "turnEnded";
 						void handleServerMessage(
 							serverMessage,
 							output,
@@ -434,6 +442,14 @@ export const streamCursor: StreamFunction<"cursor-agent"> = (
 						).catch(error => {
 							log("error", "handleServerMessage", { error: String(error) });
 						});
+
+						// Resolve only on explicit turnEnded. stopReason defaults to "stop"
+						// and is not a reliable signal for stream completion.
+						if (isTurnEnded && resolveH2) {
+							const r = resolveH2;
+							resolveH2 = undefined;
+							r();
+						}
 					} catch (e) {
 						log("error", "parseServerMessage", { error: String(e) });
 					}
@@ -456,6 +472,8 @@ export const streamCursor: StreamFunction<"cursor-agent"> = (
 			heartbeatTimer = setInterval(sendHeartbeat, 5000);
 
 			await new Promise<void>((resolve, reject) => {
+				resolveH2 = resolve;
+
 				h2Request!.on("trailers", trailers => {
 					const status = trailers["grpc-status"];
 					const msg = trailers["grpc-message"];
@@ -465,6 +483,7 @@ export const streamCursor: StreamFunction<"cursor-agent"> = (
 				});
 
 				h2Request!.on("end", () => {
+					resolveH2 = undefined;
 					if (endStreamError) {
 						reject(endStreamError);
 						return;
@@ -662,32 +681,87 @@ async function handleShellStreamArgs(
 	execHandlers: CursorExecHandlers | undefined,
 	onToolResult: CursorToolResultHandler | undefined,
 ): Promise<void> {
-	const { execResult } = await resolveExecHandler(
-		args as any,
-		execHandlers?.shell?.bind(execHandlers),
-		onToolResult,
-		toolResult => buildShellResultFromToolResult(args as any, toolResult),
-		reason => buildShellRejectedResult((args as any).command, (args as any).workingDirectory, reason),
-		error => buildShellFailureResult((args as any).command, (args as any).workingDirectory, error),
-	);
+	const normalizedWorkingDirectory = args.workingDirectory || process.cwd();
+	const normalizedArgs: ShellArgs = { ...args, workingDirectory: normalizedWorkingDirectory };
+	const startTs = Date.now();
+	log("shellStream", "start", {
+		command: (args as any).command,
+		workingDirectory: normalizedWorkingDirectory,
+		execId: execMsg.execId,
+		hasExecHandlers: !!execHandlers,
+		hasShell: !!execHandlers?.shell,
+		hasShellStream: !!execHandlers?.shellStream,
+	});
 
 	sendShellStreamEvent(h2Request, execMsg, { case: "start", value: create(ShellStreamStartSchema, {}) });
 
+	const streamCallbacks: CursorShellStreamCallbacks = {
+		onStdout(data: string) {
+			sendShellStreamEvent(h2Request, execMsg, {
+				case: "stdout",
+				value: create(ShellStreamStdoutSchema, { data }),
+			});
+		},
+		onStderr(data: string) {
+			sendShellStreamEvent(h2Request, execMsg, {
+				case: "stderr",
+				value: create(ShellStreamStderrSchema, { data }),
+			});
+		},
+	};
+
+	// Prefer the streaming handler — it forwards output chunks in real time.
+	// Falls back to the batch shell handler otherwise.
+	const streamHandler = execHandlers?.shellStream?.bind(execHandlers);
+	const batchHandler = execHandlers?.shell?.bind(execHandlers);
+	const handler = streamHandler ? (shellArgs: ShellArgs) => streamHandler(shellArgs, streamCallbacks) : batchHandler;
+
+	const { execResult } = await resolveExecHandler(
+		args as any,
+		handler as typeof batchHandler,
+		onToolResult,
+		toolResult => buildShellResultFromToolResult(normalizedArgs as any, toolResult),
+		reason =>
+			buildShellRejectedResult((normalizedArgs as any).command, (normalizedArgs as any).workingDirectory, reason),
+		error =>
+			buildShellFailureResult((normalizedArgs as any).command, (normalizedArgs as any).workingDirectory, error),
+	);
+
+	// When using the batch handler (no shellStream), send buffered stdout/stderr
+	// after execution completes. With shellStream these were already sent in real time.
+	const sendBufferedOutput = !streamHandler;
+	sendShellStreamExitFromResult(h2Request, execMsg, execResult, sendBufferedOutput);
+	// Cursor can keep the turn pending when it receives only stream deltas.
+	// Send the final structured shellResult as completion acknowledgement.
+	sendExecClientMessage(h2Request, execMsg, "shellResult", execResult);
+	sendExecClientStreamClose(h2Request, execMsg);
+
+	log("shellStream", "done", { elapsed: Date.now() - startTs });
+}
+
+function sendShellStreamExitFromResult(
+	h2Request: http2.ClientHttp2Stream,
+	execMsg: ExecServerMessage,
+	execResult: { result: { case?: string; value?: any } },
+	sendBufferedOutput: boolean,
+): void {
 	const result = execResult.result;
 	switch (result.case) {
 		case "success": {
 			const value = result.value;
-			if (value.stdout) {
-				sendShellStreamEvent(h2Request, execMsg, {
-					case: "stdout",
-					value: create(ShellStreamStdoutSchema, { data: value.stdout }),
-				});
-			}
-			if (value.stderr) {
-				sendShellStreamEvent(h2Request, execMsg, {
-					case: "stderr",
-					value: create(ShellStreamStderrSchema, { data: value.stderr }),
-				});
+			if (sendBufferedOutput) {
+				if (value.stdout) {
+					sendShellStreamEvent(h2Request, execMsg, {
+						case: "stdout",
+						value: create(ShellStreamStdoutSchema, { data: value.stdout }),
+					});
+				}
+				if (value.stderr) {
+					sendShellStreamEvent(h2Request, execMsg, {
+						case: "stderr",
+						value: create(ShellStreamStderrSchema, { data: value.stderr }),
+					});
+				}
 			}
 			sendShellStreamEvent(h2Request, execMsg, {
 				case: "exit",
@@ -701,17 +775,19 @@ async function handleShellStreamArgs(
 		}
 		case "failure": {
 			const value = result.value;
-			if (value.stdout) {
-				sendShellStreamEvent(h2Request, execMsg, {
-					case: "stdout",
-					value: create(ShellStreamStdoutSchema, { data: value.stdout }),
-				});
-			}
-			if (value.stderr) {
-				sendShellStreamEvent(h2Request, execMsg, {
-					case: "stderr",
-					value: create(ShellStreamStderrSchema, { data: value.stderr }),
-				});
+			if (sendBufferedOutput) {
+				if (value.stdout) {
+					sendShellStreamEvent(h2Request, execMsg, {
+						case: "stdout",
+						value: create(ShellStreamStdoutSchema, { data: value.stdout }),
+					});
+				}
+				if (value.stderr) {
+					sendShellStreamEvent(h2Request, execMsg, {
+						case: "stderr",
+						value: create(ShellStreamStderrSchema, { data: value.stderr }),
+					});
+				}
 			}
 			sendShellStreamEvent(h2Request, execMsg, {
 				case: "exit",
@@ -779,6 +855,7 @@ async function handleExecServerMessage(
 	requestContextTools: McpToolDefinition[],
 ): Promise<void> {
 	const execCase = execMsg.message.case;
+	log("exec", "dispatch", { execCase, execId: execMsg.execId, hasHandlers: !!execHandlers });
 	if (execCase === "requestContextArgs") {
 		const requestContext = create(RequestContextSchema, {
 			rules: [],
@@ -884,13 +961,14 @@ async function handleExecServerMessage(
 		}
 		case "shellArgs": {
 			const args = execMsg.message.value;
+			const normalizedArgs: ShellArgs = { ...args, workingDirectory: args.workingDirectory || process.cwd() };
 			const { execResult } = await resolveExecHandler(
 				args,
 				execHandlers?.shell?.bind(execHandlers),
 				onToolResult,
-				toolResult => buildShellResultFromToolResult(args, toolResult),
-				reason => buildShellRejectedResult(args.command, args.workingDirectory, reason),
-				error => buildShellFailureResult(args.command, args.workingDirectory, error),
+				toolResult => buildShellResultFromToolResult(normalizedArgs, toolResult),
+				reason => buildShellRejectedResult(normalizedArgs.command, normalizedArgs.workingDirectory, reason),
+				error => buildShellFailureResult(normalizedArgs.command, normalizedArgs.workingDirectory, error),
 			);
 			sendExecClientMessage(h2Request, execMsg, "shellResult", execResult);
 			return;
@@ -989,8 +1067,19 @@ async function handleExecServerMessage(
 			sendExecClientMessage(h2Request, execMsg, "computerUseResult", execResult);
 			return;
 		}
-		default:
+		default: {
 			log("warn", "unhandledExecMessage", { execCase });
+			// Send a bare ExecClientMessage (id + execId only, no typed result) so the
+			// server gets an acknowledgement and doesn't hang waiting forever.
+			const ack = create(ExecClientMessageSchema, {
+				id: execMsg.id,
+				execId: execMsg.execId,
+			});
+			const clientMessage = create(AgentClientMessageSchema, {
+				message: { case: "execClientMessage", value: ack },
+			});
+			h2Request.write(frameConnectMessage(toBinary(AgentClientMessageSchema, clientMessage)));
+		}
 	}
 }
 
@@ -1017,6 +1106,23 @@ function sendExecClientMessage<T>(
 	h2Request.write(frameConnectMessage(responseBytes));
 
 	log("execClientMessage", messageCase, value);
+}
+
+function sendExecClientStreamClose(h2Request: http2.ClientHttp2Stream, execMsg: ExecServerMessage): void {
+	const closeMessage = create(ExecClientControlMessageSchema, {
+		message: {
+			case: "streamClose",
+			value: create(ExecClientStreamCloseSchema, {
+				id: execMsg.id,
+			}),
+		},
+	});
+	const clientMessage = create(AgentClientMessageSchema, {
+		message: { case: "execClientControlMessage", value: closeMessage },
+	});
+	const responseBytes = toBinary(AgentClientMessageSchema, clientMessage);
+	h2Request.write(frameConnectMessage(responseBytes));
+	log("execClientControl", "streamClose", { id: execMsg.id, execId: execMsg.execId });
 }
 
 /** Exported for tests: verifies handler is invoked with correct `this` when passed as bound. */

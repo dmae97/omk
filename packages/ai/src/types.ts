@@ -380,6 +380,11 @@ export interface CursorMcpCall {
 	rawArgs: Record<string, Uint8Array>;
 }
 
+export interface CursorShellStreamCallbacks {
+	onStdout(data: string): void;
+	onStderr(data: string): void;
+}
+
 export interface CursorExecHandlers {
 	read?: (args: ReadArgs) => Promise<CursorExecHandlerResult<ReadResult>>;
 	ls?: (args: LsArgs) => Promise<CursorExecHandlerResult<LsResult>>;
@@ -387,6 +392,10 @@ export interface CursorExecHandlers {
 	write?: (args: WriteArgs) => Promise<CursorExecHandlerResult<WriteResult>>;
 	delete?: (args: DeleteArgs) => Promise<CursorExecHandlerResult<DeleteResult>>;
 	shell?: (args: ShellArgs) => Promise<CursorExecHandlerResult<ShellResult>>;
+	shellStream?: (
+		args: ShellArgs,
+		callbacks: CursorShellStreamCallbacks,
+	) => Promise<CursorExecHandlerResult<ShellResult>>;
 	diagnostics?: (args: DiagnosticsArgs) => Promise<CursorExecHandlerResult<DiagnosticsResult>>;
 	mcp?: (call: CursorMcpCall) => Promise<CursorExecHandlerResult<McpResult>>;
 	onToolResult?: CursorToolResultHandler;

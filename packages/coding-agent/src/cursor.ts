@@ -7,7 +7,12 @@ import type {
 	AgentToolResult,
 	AgentToolUpdateCallback,
 } from "@oh-my-pi/pi-agent-core";
-import type { CursorMcpCall, CursorExecHandlers as ICursorExecHandlers, ToolResultMessage } from "@oh-my-pi/pi-ai";
+import type {
+	CursorMcpCall,
+	CursorShellStreamCallbacks,
+	CursorExecHandlers as ICursorExecHandlers,
+	ToolResultMessage,
+} from "@oh-my-pi/pi-ai";
 import { resolveToCwd } from "./tools/path-utils";
 
 interface CursorExecBridgeOptions {
@@ -202,6 +207,66 @@ export class CursorExecHandlers implements ICursorExecHandlers {
 			timeout: timeoutSeconds,
 		});
 		return toolResultMessage;
+	}
+
+	async shellStream(
+		args: Parameters<NonNullable<ICursorExecHandlers["shellStream"]>>[0],
+		callbacks: CursorShellStreamCallbacks,
+	) {
+		const toolCallId = decodeToolCallId(args.toolCallId);
+		const toolName = "bash";
+		const tool = this.options.tools.get(toolName);
+		if (!tool) {
+			const result = buildToolErrorResult(`Tool "${toolName}" not available`);
+			return createToolResultMessage(toolCallId, toolName, result, true);
+		}
+
+		const timeoutSeconds = args.timeout && args.timeout > 0 ? args.timeout : undefined;
+		const toolArgs: Record<string, unknown> = {
+			command: args.command,
+			cwd: args.workingDirectory || undefined,
+			timeout: timeoutSeconds,
+		};
+
+		this.options.emitEvent?.({ type: "tool_execution_start", toolCallId, toolName, args: toolArgs });
+
+		let result: AgentToolResult<unknown>;
+		let isError = false;
+
+		// Track previously streamed text so we only forward deltas.
+		let streamedLen = 0;
+		const onUpdate: AgentToolUpdateCallback<unknown> = partialResult => {
+			this.options.emitEvent?.({
+				type: "tool_execution_update",
+				toolCallId,
+				toolName,
+				args: toolArgs,
+				partialResult,
+			});
+			const text = partialResult.content.map(c => (c.type === "text" ? c.text : "")).join("");
+			if (text.length > streamedLen) {
+				callbacks.onStdout(text.slice(streamedLen));
+				streamedLen = text.length;
+			}
+		};
+
+		try {
+			result = await tool.execute(toolCallId, toolArgs, undefined, onUpdate, this.options.getToolContext?.());
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			result = buildToolErrorResult(message);
+			isError = true;
+		}
+
+		// onUpdate may not fire for every chunk — flush any remaining output
+		// from the final result that wasn't already streamed.
+		const finalText = result.content.map(c => (c.type === "text" ? c.text : "")).join("");
+		if (finalText.length > streamedLen) {
+			callbacks.onStdout(finalText.slice(streamedLen));
+		}
+
+		this.options.emitEvent?.({ type: "tool_execution_end", toolCallId, toolName, result, isError });
+		return createToolResultMessage(toolCallId, toolName, result, isError);
 	}
 
 	async diagnostics(args: Parameters<NonNullable<ICursorExecHandlers["diagnostics"]>>[0]) {
