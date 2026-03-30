@@ -793,6 +793,20 @@ export class MCPCommandController {
 				}
 			}
 
+			// refreshMCPTools preserves the prior MCP tool selection, so tools from
+			// brand-new servers are registered in the registry but never activated.
+			// Explicitly activate the newly added server's tools now.
+			if (isConnected && this.ctx.mcpManager) {
+				const serverTools = this.ctx.mcpManager.getTools().filter(t => t.mcpServerName === name);
+				if (serverTools.length > 0) {
+					const currentActive = this.ctx.session.getActiveToolNames();
+					const toActivate = serverTools.map(t => t.name).filter(n => this.ctx.session.getToolByName(n));
+					if (toActivate.length > 0) {
+						await this.ctx.session.setActiveToolsByName([...new Set([...currentActive, ...toActivate])]);
+					}
+				}
+			}
+
 			// Show success message
 			const scopeLabel = scope === "user" ? "user" : "project";
 			const lines = ["", theme.fg("success", `✓ Added server "${name}" to ${scopeLabel} config`), ""];
