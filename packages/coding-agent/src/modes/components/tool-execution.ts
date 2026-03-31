@@ -14,7 +14,6 @@ import {
 	type TUI,
 } from "@oh-my-pi/pi-tui";
 import { getProjectDir, logger } from "@oh-my-pi/pi-utils";
-import { settings } from "../../config/settings";
 import type { Theme } from "../../modes/theme/theme";
 import { theme } from "../../modes/theme/theme";
 import { computeEditDiff, computeHashlineDiff, computePatchDiff, type DiffError, type DiffResult } from "../../patch";
@@ -31,7 +30,7 @@ import {
 	stripInternalArgs,
 } from "../../tools/json-tree";
 import { PYTHON_DEFAULT_PREVIEW_LINES } from "../../tools/python";
-import { formatExpandHint, replaceTabs, truncateToWidth } from "../../tools/render-utils";
+import { formatExpandHint, replaceTabs, resolveImageOptions, truncateToWidth } from "../../tools/render-utils";
 import { toolRenderers } from "../../tools/renderers";
 import { renderStatusLine } from "../../tui";
 import { convertToPng } from "../../utils/image-convert";
@@ -531,7 +530,7 @@ export class ToolExecutionComponent extends Container {
 						imageData,
 						imageMimeType,
 						{ fallbackColor: (s: string) => theme.fg("toolOutput", s) },
-						{ maxWidthCells: settings.get("tui.maxInlineImageColumns") },
+						resolveImageOptions(),
 					);
 					this.#imageComponents.push(imageComponent);
 					this.addChild(imageComponent);
