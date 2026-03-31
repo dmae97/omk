@@ -455,17 +455,18 @@ export class SelectorController {
 				return {
 					plugin: { name: pluginName, version: entry?.version, description: undefined as string | undefined },
 					marketplace: mkt,
+					scope: p.scope,
 				};
 			});
 			this.showSelector(done => {
 				const selector = new PluginSelectorComponent(marketplaces.length, items, new Set(), {
-					onSelect: async (name, marketplace) => {
+					onSelect: async (name, marketplace, scope) => {
 						done();
 						const pluginId = `${name}@${marketplace}`;
 						this.ctx.showStatus(`Uninstalling ${pluginId}...`);
 						this.ctx.ui.requestRender();
 						try {
-							await mgr.uninstallPlugin(pluginId);
+							await mgr.uninstallPlugin(pluginId, scope);
 							this.ctx.showStatus(`Uninstalled ${pluginId}`);
 						} catch (err) {
 							this.ctx.showStatus(`Uninstall failed: ${err}`);

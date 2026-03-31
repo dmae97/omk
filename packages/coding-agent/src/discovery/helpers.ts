@@ -696,12 +696,18 @@ export async function resolveActiveProjectRegistryPath(cwd: string): Promise<str
  * Use this when the caller accepts an explicit --scope project so that installing into a freshly
  * bootstrapped directory (no .omp/ or .git/ yet) works: writeInstalledPluginsRegistry auto-creates
  * the directory tree on first write.
+ *
+ * Returns undefined when cwd is os.homedir() — that path is already the user registry and must
+ * never alias as the project registry.
  */
-export async function resolveOrDefaultProjectRegistryPath(cwd: string): Promise<string> {
-	return (
-		(await resolveActiveProjectRegistryPath(cwd)) ??
-		path.join(cwd, getConfigDirName(), "plugins", "installed_plugins.json")
-	);
+export async function resolveOrDefaultProjectRegistryPath(cwd: string): Promise<string | undefined> {
+	const resolved = await resolveActiveProjectRegistryPath(cwd);
+	if (resolved) return resolved;
+	// Home directory must not be treated as a project root: the fallback path would alias
+	// getInstalledPluginsRegistryPath(), causing MarketplaceManager to load the same file
+	// as both user and project registry and producing duplicates / disambiguation errors.
+	if (path.resolve(cwd) === os.homedir()) return undefined;
+	return path.join(cwd, getConfigDirName(), "plugins", "installed_plugins.json");
 }
 
 const pluginRootsCache = new Map<string, { roots: ClaudePluginRoot[]; warnings: string[] }>();

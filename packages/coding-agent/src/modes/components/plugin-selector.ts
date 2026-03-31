@@ -9,13 +9,15 @@ import { getSelectListTheme } from "../theme/theme";
 import { DynamicBorder } from "./dynamic-border";
 
 export interface PluginSelectorCallbacks {
-	onSelect: (pluginName: string, marketplace: string) => void;
+	onSelect: (pluginName: string, marketplace: string, scope?: "user" | "project") => void;
 	onCancel: () => void;
 }
 
 export interface PluginItem {
 	plugin: { name: string; version?: string; description?: string };
 	marketplace: string;
+	/** Scope of this entry. When set, appended to the label and forwarded to onSelect. */
+	scope?: "user" | "project";
 }
 
 export class PluginSelectorComponent extends Container {
@@ -29,15 +31,18 @@ export class PluginSelectorComponent extends Container {
 	) {
 		super();
 
-		const items: SelectItem[] = plugins.map(({ plugin, marketplace }) => {
-			const id = `${plugin.name}@${marketplace}`;
-			const installed = installedIds.has(id);
+		const items: SelectItem[] = plugins.map(({ plugin, marketplace, scope }) => {
+			// Encode scope into the value so onSelect can recover it without a parallel Map.
+			// Format: "name@marketplace" or "name@marketplace#scope"
+			const id = scope ? `${plugin.name}@${marketplace}#${scope}` : `${plugin.name}@${marketplace}`;
+			const installed = installedIds.has(`${plugin.name}@${marketplace}`);
 			const version = plugin.version ? `@${plugin.version}` : "";
 			const status = installed ? " [installed]" : "";
+			const scopeTag = scope ? ` [${scope}]` : "";
 
 			return {
 				value: id,
-				label: `${plugin.name}${version}${status}`,
+				label: `${plugin.name}${version}${status}${scopeTag}`,
 				description: plugin.description,
 				hint: marketplace,
 			};
@@ -60,9 +65,9 @@ export class PluginSelectorComponent extends Container {
 
 		this.#selectList.onSelect = item => {
 			if (item.value === "__empty__") return;
-			const [name, marketplace] = splitPluginId(item.value);
+			const [name, marketplace, scope] = splitPluginId(item.value);
 			if (name && marketplace) {
-				callbacks.onSelect(name, marketplace);
+				callbacks.onSelect(name, marketplace, scope);
 			}
 		};
 
@@ -79,8 +84,12 @@ export class PluginSelectorComponent extends Container {
 	}
 }
 
-function splitPluginId(id: string): [string, string] | [null, null] {
-	const atIdx = id.lastIndexOf("@");
-	if (atIdx <= 0) return [null, null];
-	return [id.slice(0, atIdx), id.slice(atIdx + 1)];
+function splitPluginId(id: string): [string, string, "user" | "project" | undefined] | [null, null, null] {
+	// value format: "name@marketplace" or "name@marketplace#scope"
+	const hashIdx = id.indexOf("#");
+	const base = hashIdx >= 0 ? id.slice(0, hashIdx) : id;
+	const scope = hashIdx >= 0 ? (id.slice(hashIdx + 1) as "user" | "project") : undefined;
+	const atIdx = base.lastIndexOf("@");
+	if (atIdx <= 0) return [null, null, null];
+	return [base.slice(0, atIdx), base.slice(atIdx + 1), scope];
 }
