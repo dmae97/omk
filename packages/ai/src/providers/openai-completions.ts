@@ -31,7 +31,13 @@ import {
 } from "../types";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
-import { createFirstEventWatchdog, getOpenAIStreamIdleTimeoutMs, getStreamFirstEventTimeoutMs, iterateWithIdleTimeout, markFirstStreamEvent } from "../utils/idle-iterator";
+import {
+	createFirstEventWatchdog,
+	getOpenAIStreamIdleTimeoutMs,
+	getStreamFirstEventTimeoutMs,
+	iterateWithIdleTimeout,
+	markFirstStreamEvent,
+} from "../utils/idle-iterator";
 import { parseStreamingJson } from "../utils/json-parse";
 import { getKimiCommonHeaders } from "../utils/oauth/kimi";
 import { adaptSchemaForStrict, NO_STRICT } from "../utils/schema";
@@ -193,9 +199,8 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 				? AbortSignal.any([options.signal, requestAbortController.signal])
 				: requestAbortController.signal;
 			const idleTimeoutMs = getOpenAIStreamIdleTimeoutMs();
-			const firstEventWatchdog = createFirstEventWatchdog(
-				getStreamFirstEventTimeoutMs(idleTimeoutMs),
-				() => requestAbortController.abort(),
+			const firstEventWatchdog = createFirstEventWatchdog(getStreamFirstEventTimeoutMs(idleTimeoutMs), () =>
+				requestAbortController.abort(),
 			);
 			const { client, copilotPremiumRequests, baseUrl } = await createClient(
 				model,
@@ -223,7 +228,7 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 			let currentBlock: OpenAIStreamBlock | undefined;
 			const blockIndex = (block: OpenAIStreamBlock | undefined): number => {
 				if (!block) return Math.max(0, output.content.length - 1);
-				return output.content.findIndex(contentBlock => contentBlock === block);
+				return output.content.indexOf(block);
 			};
 			const finishCurrentBlock = (block: OpenAIStreamBlock | undefined): void => {
 				if (!block) return;
@@ -241,7 +246,11 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 				delete (block as { partialArgs?: string }).partialArgs;
 				stream.push({ type: "toolcall_end", contentIndex, toolCall: block, partial: output });
 			};
-			const appendText = (message: AssistantMessage, eventStream: AssistantMessageEventStream, text: string): void => {
+			const appendText = (
+				message: AssistantMessage,
+				eventStream: AssistantMessageEventStream,
+				text: string,
+			): void => {
 				if (!currentBlock || currentBlock.type !== "text") {
 					finishCurrentBlock(currentBlock);
 					currentBlock = { type: "text", text: "" };
@@ -256,16 +265,28 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 					partial: message,
 				});
 			};
-			const appendThinking = (message: AssistantMessage, eventStream: AssistantMessageEventStream, thinking: string): void => {
-				if (!currentBlock || currentBlock.type !== "thinking") {
+			const appendThinking = (
+				message: AssistantMessage,
+				eventStream: AssistantMessageEventStream,
+				thinking: string,
+				signature?: string,
+			): void => {
+				if (
+					!currentBlock ||
+					currentBlock.type !== "thinking" ||
+					(signature !== undefined && currentBlock.thinkingSignature !== signature)
+				) {
 					finishCurrentBlock(currentBlock);
-					currentBlock = { type: "thinking", thinking: "" };
+					currentBlock = { type: "thinking", thinking: "", thinkingSignature: signature };
 					message.content.push(currentBlock);
 					eventStream.push({
 						type: "thinking_start",
 						contentIndex: blockIndex(currentBlock),
 						partial: message,
 					});
+				}
+				if (signature !== undefined && !currentBlock.thinkingSignature) {
+					currentBlock.thinkingSignature = signature;
 				}
 				currentBlock.thinking += thinking;
 				eventStream.push({
@@ -283,10 +304,10 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 				if (!firstTokenTime) firstTokenTime = Date.now();
 				appendText(output, stream, text);
 			};
-			const appendThinkingDelta = (thinking: string) => {
+			const appendThinkingDelta = (thinking: string, signature?: string) => {
 				if (!thinking) return;
 				if (!firstTokenTime) firstTokenTime = Date.now();
-				appendThinking(output, stream, thinking);
+				appendThinking(output, stream, thinking, signature);
 			};
 
 			const flushTaggedTextBuffer = () => {
@@ -323,14 +344,11 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 				}
 			};
 
-			for await (const chunk of iterateWithIdleTimeout(
-				markFirstStreamEvent(openaiStream, firstEventWatchdog),
-				{
-					idleTimeoutMs,
-					errorMessage: "OpenAI completions stream stalled while waiting for the next event",
-					onIdle: () => requestAbortController.abort(),
-				},
-			)) {
+			for await (const chunk of iterateWithIdleTimeout(markFirstStreamEvent(openaiStream, firstEventWatchdog), {
+				idleTimeoutMs,
+				errorMessage: "OpenAI completions stream stalled while waiting for the next event",
+				onIdle: () => requestAbortController.abort(),
+			})) {
 				if (!chunk || typeof chunk !== "object") continue;
 
 				// OpenAI documents ChatCompletionChunk.id as the unique chat completion identifier,
@@ -395,7 +413,7 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 
 					if (foundReasoningField) {
 						const delta = (choice.delta as any)[foundReasoningField];
-						appendThinkingDelta(delta);
+						appendThinkingDelta(delta, foundReasoningField);
 					}
 
 					if (choice?.delta?.tool_calls) {
@@ -414,7 +432,11 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 									partialArgs: "",
 								};
 								output.content.push(currentBlock);
-								stream.push({ type: "toolcall_start", contentIndex: blockIndex(currentBlock), partial: output });
+								stream.push({
+									type: "toolcall_start",
+									contentIndex: blockIndex(currentBlock),
+									partial: output,
+								});
 							}
 
 							if (currentBlock.type === "toolCall") {

@@ -1,10 +1,16 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added `thinkingSignature` field to thinking content blocks to preserve the original reasoning field name (e.g., `reasoning_text`, `reasoning_content`) for accurate follow-up requests
 - Added first-event timeout detection for streaming responses to abort stuck requests before user-visible content arrives
 - Added `PI_STREAM_FIRST_EVENT_TIMEOUT_MS` environment variable to configure first-event timeout (defaults to 15 seconds or idle timeout, whichever is lower)
+
+### Changed
+
+- Changed thinking block handling to track and distinguish between different reasoning field types, enabling proper field name preservation across multiple turns
 
 ### Fixed
 
