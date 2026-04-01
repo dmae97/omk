@@ -25,6 +25,7 @@ target/
 *~
 
 # OS
+*.tmp
 .DS_Store
 
 # Logs & profiling

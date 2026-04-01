@@ -199,7 +199,7 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 				options?.headers,
 				options?.initiatorOverride,
 			);
-			const params = buildParams(model, context, options);
+			const params = buildParams(model, context, options, baseUrl);
 			options?.onPayload?.(params);
 			rawRequestDump = {
 				provider: model.provider,
@@ -554,8 +554,13 @@ async function createClient(
 	};
 }
 
-function buildParams(model: Model<"openai-completions">, context: Context, options?: OpenAICompletionsOptions) {
-	const compat = getCompat(model);
+function buildParams(
+	model: Model<"openai-completions">,
+	context: Context,
+	options: OpenAICompletionsOptions | undefined,
+	resolvedBaseUrl?: string,
+) {
+	const compat = getCompat(model, resolvedBaseUrl);
 	const messages = convertMessages(model, context, compat);
 	maybeAddOpenRouterAnthropicCacheControl(model, messages);
 
@@ -1118,7 +1123,9 @@ export function detectCompat(model: Model<"openai-completions">): ResolvedOpenAI
 /**
  * Get resolved compatibility settings for a model.
  * Uses explicit model.compat if provided, otherwise auto-detects from provider/URL.
+ * @param model - The model configuration
+ * @param resolvedBaseUrl - Optional resolved base URL (e.g., after GitHub Copilot proxy-ep resolution).
  */
-function getCompat(model: Model<"openai-completions">): ResolvedOpenAICompat {
-	return resolveOpenAICompat(model);
+function getCompat(model: Model<"openai-completions">, resolvedBaseUrl?: string): ResolvedOpenAICompat {
+	return resolveOpenAICompat(model, resolvedBaseUrl);
 }

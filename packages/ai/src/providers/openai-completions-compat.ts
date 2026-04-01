@@ -36,10 +36,14 @@ function detectStrictModeSupport(provider: string, baseUrl: string): boolean {
 /**
  * Detect compatibility settings from provider and baseUrl for known providers.
  * Provider takes precedence over URL-based detection since it's explicitly configured.
+ * @param model - The model configuration
+ * @param resolvedBaseUrl - Optional resolved base URL (e.g., after GitHub Copilot proxy-ep resolution).
+ *                           If provided, this takes precedence over model.baseUrl for URL-based checks.
  */
-export function detectOpenAICompat(model: Model<"openai-completions">): ResolvedOpenAICompat {
+export function detectOpenAICompat(model: Model<"openai-completions">, resolvedBaseUrl?: string): ResolvedOpenAICompat {
 	const provider = model.provider;
-	const baseUrl = model.baseUrl;
+	// Use resolvedBaseUrl if provided (e.g., after GitHub Copilot proxy-ep resolution)
+	const baseUrl = resolvedBaseUrl ?? model.baseUrl;
 
 	const isCerebras = provider === "cerebras" || baseUrl.includes("cerebras.ai");
 	const isZai = provider === "zai" || baseUrl.includes("api.z.ai");
@@ -109,9 +113,15 @@ export function detectOpenAICompat(model: Model<"openai-completions">): Resolved
 /**
  * Resolve compatibility settings by layering explicit model.compat overrides onto
  * the detected defaults. This is the canonical compat view for both metadata and transport.
+ * @param model - The model configuration
+ * @param resolvedBaseUrl - Optional resolved base URL (e.g., after GitHub Copilot proxy-ep resolution).
+ *                           If provided, this takes precedence over model.baseUrl for URL-based checks.
  */
-export function resolveOpenAICompat(model: Model<"openai-completions">): ResolvedOpenAICompat {
-	const detected = detectOpenAICompat(model);
+export function resolveOpenAICompat(
+	model: Model<"openai-completions">,
+	resolvedBaseUrl?: string,
+): ResolvedOpenAICompat {
+	const detected = detectOpenAICompat(model, resolvedBaseUrl);
 	if (!model.compat) {
 		return detected;
 	}

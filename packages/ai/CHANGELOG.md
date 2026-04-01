@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+### Fixed
+- Fixed `omp commit` failing with HTTP 400 errors when using reasoning-enabled models on OpenAI-compatible endpoints that don't support the `developer` role (e.g., GitHub Copilot, custom proxies). Now falls back to `system` role when `developer` is unsupported.
 ## [13.17.0] - 2026-03-30
 
 ### Changed
