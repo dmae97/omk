@@ -560,13 +560,14 @@ pub(crate) async fn invoke_command_in_subshell_and_get_output(
 		rt.block_on(run_substitution_command(subshell, params, s))
 	});
 
-	// Read subshell output on a blocking thread to avoid stalling the
-	// async runtime when the pipe stays open (e.g. a hung child process).
-	let output_join_handle = tokio::task::spawn_blocking(move || io::read_to_string(reader));
+	// Read subshell output without pinning a Tokio blocking worker for the
+	// lifetime of the pipe. Detached descendants can keep the pipe open long
+	// after the direct child exits.
+	let output_future = read_pipe_to_string(reader);
 
 	// Wait for both the output reader and the command to complete.
-	let (output_result, cmd_result) = tokio::join!(output_join_handle, cmd_join_handle);
-	let output_str = output_result.map_err(io::Error::other)??;
+	let (output_result, cmd_result) = tokio::join!(output_future, cmd_join_handle);
+	let output_str = output_result?;
 	let cmd_result = cmd_result.map_err(io::Error::other)??;
 
 	// Store the status.
@@ -600,6 +601,60 @@ async fn run_substitution_command(
 	shell
 		.run_parsed_result(parse_result, &source_info, &params)
 		.await
+}
+
+#[cfg(unix)]
+async fn read_pipe_to_string(reader: io::PipeReader) -> io::Result<String> {
+	let reader = register_nonblocking_pipe(reader)?;
+	let mut output = Vec::new();
+	let mut buf = [0u8; 8192];
+
+	loop {
+		let mut readiness = reader.readable().await?;
+		let n = match readiness.try_io(|inner| read_nonblocking(inner.get_ref(), &mut buf)) {
+			Ok(Ok(0)) => break,
+			Ok(Ok(n)) => n,
+			Ok(Err(err)) if err.kind() == io::ErrorKind::Interrupted => continue,
+			Ok(Err(err)) => return Err(err),
+			Err(_would_block) => continue,
+		};
+		output.extend_from_slice(&buf[..n]);
+	}
+
+	String::from_utf8(output).map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
+}
+
+#[cfg(not(unix))]
+async fn read_pipe_to_string(reader: io::PipeReader) -> io::Result<String> {
+	tokio::task::spawn_blocking(move || io::read_to_string(reader))
+		.await
+		.map_err(io::Error::other)?
+}
+
+#[cfg(unix)]
+fn register_nonblocking_pipe(
+	reader: io::PipeReader,
+) -> io::Result<tokio::io::unix::AsyncFd<io::PipeReader>> {
+	set_nonblocking(&reader)?;
+	tokio::io::unix::AsyncFd::new(reader)
+}
+
+#[cfg(unix)]
+fn set_nonblocking<T: std::os::fd::AsFd>(file: &T) -> io::Result<()> {
+	let flags = nix::fcntl::fcntl(file, nix::fcntl::FcntlArg::F_GETFL).map_err(io::Error::from)?;
+	let flags = nix::fcntl::OFlag::from_bits_truncate(flags);
+	if flags.contains(nix::fcntl::OFlag::O_NONBLOCK) {
+		return Ok(());
+	}
+
+	nix::fcntl::fcntl(file, nix::fcntl::FcntlArg::F_SETFL(flags | nix::fcntl::OFlag::O_NONBLOCK))
+		.map_err(io::Error::from)?;
+	Ok(())
+}
+
+#[cfg(unix)]
+fn read_nonblocking<T: std::os::fd::AsFd>(file: &T, buf: &mut [u8]) -> io::Result<usize> {
+	nix::unistd::read(file, buf).map_err(io::Error::from)
 }
 
 // Detects a subshell command that consists solely of a single input redirection

@@ -32,7 +32,6 @@ use brush_core::{
 	ProcessGroupPolicy, Shell as BrushShell, ShellValue, ShellVariable, builtins,
 	env::EnvironmentScope,
 	openfiles::{self, OpenFile, OpenFiles},
-	sys, traps,
 };
 use clap::Parser;
 use napi::{
@@ -45,12 +44,16 @@ use napi::{
 	},
 };
 use napi_derive::napi;
+#[cfg(not(unix))]
 use tokio::io::AsyncReadExt as _;
 use tokio_util::sync::CancellationToken;
 #[cfg(windows)]
 use windows::configure_windows_path;
 
 use crate::task;
+
+const TERM_SIGNAL: i32 = 15;
+const KILL_SIGNAL: i32 = 9;
 
 struct ShellSessionCore {
 	shell: BrushShell,
@@ -662,26 +665,38 @@ fn terminate_background_jobs(shell: &BrushShell) {
 	if shell.jobs.jobs.is_empty() {
 		return;
 	}
-	let Ok(signal) = "TERM".parse::<traps::TrapSignal>() else {
-		return;
-	};
 	let mut pgids = Vec::new();
+	let mut pids = Vec::new();
 	for job in &shell.jobs.jobs {
-		if let Some(pid) = job.process_group_id().or_else(|| job.representative_pid()) {
-			let _ = sys::signal::kill_process(pid, signal);
-			pgids.push(pid);
+		if let Some(pgid) = job.process_group_id()
+			&& !pgids.contains(&pgid)
+		{
+			pgids.push(pgid);
+		}
+		if let Some(pid) = job.representative_pid()
+			&& !pids.contains(&pid)
+		{
+			pids.push(pid);
 		}
 	}
-	if pgids.is_empty() {
+	if pgids.is_empty() && pids.is_empty() {
 		return;
 	}
+
+	for &pgid in &pgids {
+		let _ = crate::ps::kill_process_group(pgid, TERM_SIGNAL);
+	}
+	for &pid in &pids {
+		let _ = crate::ps::kill_tree(pid, TERM_SIGNAL);
+	}
+
 	tokio::spawn(async move {
 		time::sleep(Duration::from_millis(500)).await;
-		let Ok(signal) = "KILL".parse::<traps::TrapSignal>() else {
-			return;
-		};
 		for pid in pgids {
-			let _ = sys::signal::kill_process(pid, signal);
+			let _ = crate::ps::kill_process_group(pid, KILL_SIGNAL);
+		}
+		for pid in pids {
+			let _ = crate::ps::kill_tree(pid, KILL_SIGNAL);
 		}
 	});
 }
@@ -691,26 +706,26 @@ fn terminate_background_jobs(shell: &BrushShell) {
 	if shell.jobs.jobs.is_empty() {
 		return;
 	}
-	let Ok(signal) = "TERM".parse::<traps::TrapSignal>() else {
-		return;
-	};
 	let mut pids = Vec::new();
 	for job in &shell.jobs.jobs {
-		if let Some(pid) = job.process_group_id().or_else(|| job.representative_pid()) {
-			let _ = sys::signal::kill_process(pid, signal);
+		if let Some(pid) = job.representative_pid()
+			&& !pids.contains(&pid)
+		{
 			pids.push(pid);
 		}
 	}
 	if pids.is_empty() {
 		return;
 	}
+
+	for &pid in &pids {
+		let _ = crate::ps::kill_tree(pid, TERM_SIGNAL);
+	}
+
 	tokio::spawn(async move {
 		time::sleep(Duration::from_millis(500)).await;
-		let Ok(signal) = "KILL".parse::<traps::TrapSignal>() else {
-			return;
-		};
 		for pid in pids {
-			let _ = sys::signal::kill_process(pid, signal);
+			let _ = crate::ps::kill_tree(pid, KILL_SIGNAL);
 		}
 	});
 }
@@ -794,20 +809,47 @@ async fn read_output(
 	let mut buf = vec![0u8; BUF + 4]; // +4 for max UTF-8 char
 	let mut it = 0;
 
+	#[cfg(unix)]
+	let reader = match register_nonblocking_pipe(reader) {
+		Ok(reader) => reader,
+		Err(_) => return,
+	};
+	#[cfg(not(unix))]
 	let reader = tokio::fs::File::from_std(reader);
+	#[cfg(not(unix))]
 	tokio::pin!(reader);
 
 	loop {
-		let read_future = reader.read(&mut buf[it..BUF]);
-		tokio::pin!(read_future);
-		let n = match tokio::select! {
-			res = &mut read_future => res,
-			() = cancel_token.cancelled() => break,
-		} {
-			Ok(0) => break, // EOF
-			Ok(n) => n,
-			Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
-			Err(_) => break,
+		#[cfg(unix)]
+		let n = {
+			let mut readiness = match tokio::select! {
+				ready = reader.readable() => ready,
+				() = cancel_token.cancelled() => break,
+			} {
+				Ok(readiness) => readiness,
+				Err(_) => break,
+			};
+			match readiness.try_io(|inner| read_nonblocking(inner.get_ref(), &mut buf[it..BUF])) {
+				Ok(Ok(0)) => break,
+				Ok(Ok(n)) => n,
+				Ok(Err(e)) if e.kind() == io::ErrorKind::Interrupted => continue,
+				Ok(Err(_)) => break,
+				Err(_would_block) => continue,
+			}
+		};
+		#[cfg(not(unix))]
+		let n = {
+			let read_future = reader.read(&mut buf[it..BUF]);
+			tokio::pin!(read_future);
+			match tokio::select! {
+				res = &mut read_future => res,
+				() = cancel_token.cancelled() => break,
+			} {
+				Ok(0) => break, // EOF
+				Ok(n) => n,
+				Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+				Err(_) => break,
+			}
 		};
 		if n > 0 {
 			let _ = activity.try_send(());
@@ -863,6 +905,46 @@ async fn read_output(
 		if !chunk.invalid().is_empty() {
 			emit_chunk(REPLACEMENT, on_chunk.as_ref());
 		}
+	}
+}
+
+#[cfg(unix)]
+fn register_nonblocking_pipe(reader: fs::File) -> io::Result<tokio::io::unix::AsyncFd<fs::File>> {
+	set_nonblocking(&reader)?;
+	tokio::io::unix::AsyncFd::new(reader)
+}
+
+#[cfg(unix)]
+fn set_nonblocking<T: std::os::fd::AsRawFd>(file: &T) -> io::Result<()> {
+	let fd = file.as_raw_fd();
+	// SAFETY: `fd` is owned by `file` and remains valid for the duration of
+	// these `fcntl` calls.
+	let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+	if flags < 0 {
+		return Err(io::Error::last_os_error());
+	}
+	if flags & libc::O_NONBLOCK != 0 {
+		return Ok(());
+	}
+
+	// SAFETY: `fd` remains valid here and we are only toggling `O_NONBLOCK`.
+	let result = unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) };
+	if result < 0 {
+		Err(io::Error::last_os_error())
+	} else {
+		Ok(())
+	}
+}
+
+#[cfg(unix)]
+fn read_nonblocking<T: std::os::fd::AsRawFd>(file: &T, buf: &mut [u8]) -> io::Result<usize> {
+	// SAFETY: `buf` is writable for `buf.len()` bytes, and the raw fd obtained
+	// from `file` stays valid for the duration of the syscall.
+	let read = unsafe { libc::read(file.as_raw_fd(), buf.as_mut_ptr().cast(), buf.len()) };
+	if read < 0 {
+		Err(io::Error::last_os_error())
+	} else {
+		Ok(read as usize)
 	}
 }
 
@@ -1070,5 +1152,22 @@ mod tests {
 			.await
 			.expect("cancel token should be signalled");
 		assert!(matches!(reason, task::AbortReason::Signal));
+	}
+
+	#[cfg(unix)]
+	#[tokio::test]
+	async fn read_output_stops_when_cancelled_before_pipe_eof() {
+		let (reader, _writer) = pipe_to_files("test").expect("test pipe should be created");
+		let cancel = CancellationToken::new();
+		let (activity_tx, _activity_rx) = mpsc::channel(1);
+		let handle = tokio::spawn(read_output(reader, None, cancel.clone(), activity_tx));
+
+		time::sleep(Duration::from_millis(10)).await;
+		cancel.cancel();
+
+		time::timeout(Duration::from_millis(100), handle)
+			.await
+			.expect("reader task should stop after cancellation")
+			.expect("reader task should not panic");
 	}
 }

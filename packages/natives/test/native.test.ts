@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import {
+	executeShell,
 	FileType,
 	fuzzyFind,
 	type GlobMatch,
@@ -383,6 +384,29 @@ describe("pi-natives", () => {
 					session.kill();
 				} catch {}
 			}
+		});
+	});
+
+	describe("shell", () => {
+		it("should time out background workloads without leaving delayed writers behind", async () => {
+			if (process.platform === "win32") {
+				return;
+			}
+
+			const markerPath = path.join(testDir, "shell-timeout-marker.txt");
+			const markerEscaped = markerPath.replace(/'/g, "'\\''");
+			await fs.rm(markerPath, { force: true });
+
+			const result = await executeShell({
+				command: `{ sleep 2; echo done > '${markerEscaped}'; } & sleep 10`,
+				cwd: testDir,
+				timeoutMs: 100,
+			});
+
+			expect(result.timedOut).toBe(true);
+
+			await Bun.sleep(3000);
+			expect(await Bun.file(markerPath).exists()).toBe(false);
 		});
 	});
 	describe("htmlToMarkdown", () => {
