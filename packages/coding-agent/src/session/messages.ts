@@ -219,21 +219,25 @@ export function sanitizeRehydratedOpenAIResponsesAssistantMessage(message: Assis
 		return message;
 	}
 
-	let didSanitize = false;
+	let didSanitizeContent = false;
 	const sanitizedContent = message.content.map(block => {
 		if (block.type !== "thinking" || block.thinkingSignature === undefined) {
 			return block;
 		}
 
-		didSanitize = true;
+		didSanitizeContent = true;
 		return { ...block, thinkingSignature: undefined };
 	});
 
-	if (!didSanitize) {
-		return message;
-	}
-
-	return { ...message, content: sanitizedContent };
+	// Strip the assistant-side native replay payload entirely.
+	// After rehydration it belongs to a previous live provider connection and
+	// replaying it on a warmed session causes 401 rejections from GitHub Copilot.
+	// User/developer payloads are preserved separately by the caller.
+	return {
+		...message,
+		...(didSanitizeContent ? { content: sanitizedContent } : {}),
+		providerPayload: undefined,
+	};
 }
 
 /** Convert CustomMessageEntry to AgentMessage format */

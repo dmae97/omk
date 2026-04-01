@@ -184,7 +184,9 @@ describe("SessionManager signature persistence", () => {
 		const reloaded = await SessionManager.open(sessionFile);
 		const assistant = getAssistantMessage(reloaded);
 
-		expect(assistant.providerPayload).toEqual(providerPayload);
+		// After rehydration, assistant providerPayload must be stripped to prevent
+		// stale native history replay on warmed sessions.
+		expect(assistant.providerPayload).toBeUndefined();
 		expect(assistant.content[0]).toMatchObject({
 			type: "thinking",
 			thinking: "reasoning",
