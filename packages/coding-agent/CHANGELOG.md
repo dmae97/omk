@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added dedicated `gh-renderer.ts` module for rich terminal rendering of GitHub Actions workflow runs with live status snapshots and job details
@@ -34,6 +33,7 @@
 
 ### Changed
 
+- Enhanced `gh_run_watch` tool call rendering to display animated spinner status and target description (run ID, branch, or current HEAD) with improved visual hierarchy
 - Enhanced `gh_pr_view` tool to include inline review comments alongside pull request reviews for improved discussion context
 - Improved `gh_run_watch` tool output rendering with dedicated visual component for streaming run snapshots and job status updates
 

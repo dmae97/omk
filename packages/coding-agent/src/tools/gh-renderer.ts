@@ -11,6 +11,7 @@ import type {
 } from "./gh";
 import {
 	formatExpandHint,
+	formatStatusIcon,
 	PREVIEW_LIMITS,
 	replaceTabs,
 	type ToolUIColor,
@@ -245,25 +246,39 @@ function renderFallbackText(
 }
 
 export const ghRunWatchToolRenderer = {
-	renderCall(args: GhRunWatchRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
-		const description =
-			typeof args.run === "string" && args.run.trim().length > 0
-				? `run ${args.run.trim()}`
-				: typeof args.branch === "string" && args.branch.trim().length > 0
-					? args.branch.trim()
-					: "";
-		return new Text(
-			renderStatusLine(
-				{
-					icon: "pending",
-					title: "GitHub Run Watch",
-					description: description || "current HEAD",
-				},
-				uiTheme,
-			),
-			0,
-			0,
-		);
+	renderCall(args: GhRunWatchRenderArgs, options: RenderResultOptions, uiTheme: Theme): Component {
+		const lines: string[] = [];
+
+		// Header with spinner: "⠋ GitHub Run Watch"
+		const icon =
+			options.spinnerFrame !== undefined
+				? formatStatusIcon("running", uiTheme, options.spinnerFrame)
+				: formatStatusIcon("pending", uiTheme);
+
+		// Build a target description that mirrors the result view style
+		const runId = typeof args.run === "string" && args.run.trim().length > 0 ? args.run.trim() : undefined;
+		const branch = typeof args.branch === "string" && args.branch.trim().length > 0 ? args.branch.trim() : undefined;
+
+		if (runId) {
+			// "⠋ GitHub Run Watch  run #12345"
+			const title = uiTheme.fg("accent", "GitHub Run Watch");
+			const meta = uiTheme.fg("muted", `#${runId}`);
+			lines.push(`${icon} ${title}  ${meta}`);
+		} else if (branch) {
+			// "⠋ GitHub Run Watch  feature-branch"
+			const title = uiTheme.fg("accent", "GitHub Run Watch");
+			const meta = uiTheme.fg("text", branch);
+			lines.push(`${icon} ${title}  ${meta}`);
+		} else {
+			// "⠋ GitHub Run Watch  current HEAD"
+			const title = uiTheme.fg("accent", "GitHub Run Watch");
+			const meta = uiTheme.fg("muted", "current HEAD");
+			lines.push(`${icon} ${title}  ${meta}`);
+		}
+
+		lines.push(uiTheme.fg("dim", "  waiting for workflow data..."));
+
+		return new Text(lines.join("\n"), 0, 0);
 	},
 
 	renderResult(
