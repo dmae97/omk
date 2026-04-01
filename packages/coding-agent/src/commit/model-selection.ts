@@ -1,7 +1,7 @@
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { Api, Model } from "@oh-my-pi/pi-ai";
 import { MODEL_ROLE_IDS } from "../config/model-registry";
-import { parseModelPattern, resolveModelRoleValue } from "../config/model-resolver";
+import { parseModelPattern, resolveModelRoleValue, resolveRoleSelection } from "../config/model-resolver";
 import type { Settings } from "../config/settings";
 import MODEL_PRIO from "../priority.json" with { type: "json" };
 
@@ -9,24 +9,6 @@ export interface ResolvedCommitModel {
 	model: Model<Api>;
 	apiKey: string;
 	thinkingLevel?: ThinkingLevel;
-}
-
-function resolveRoleSelection(
-	roles: readonly string[],
-	settings: Settings,
-	availableModels: Model<Api>[],
-): { model: Model<Api>; thinkingLevel?: ThinkingLevel } | undefined {
-	const matchPreferences = { usageOrder: settings.getStorage()?.getModelUsageOrder() };
-	for (const role of roles) {
-		const resolved = resolveModelRoleValue(settings.getModelRole(role), availableModels, {
-			settings,
-			matchPreferences,
-		});
-		if (resolved.model) {
-			return { model: resolved.model, thinkingLevel: resolved.thinkingLevel };
-		}
-	}
-	return undefined;
 }
 
 export async function resolvePrimaryModel(

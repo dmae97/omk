@@ -313,7 +313,7 @@ Create images directly from the agent:
 
 Modern terminal interface with smart session management:
 
-- **Auto session titles**: Sessions automatically titled based on first message using smol model
+- **Auto session titles**: Sessions automatically titled based on first message using commit model, fallback to smol
 - **Welcome screen**: Logo, tips, recent sessions with selection
 - **Powerline footer**: Model, cwd, git branch/status, token usage, context %
 - **LSP status**: Shows which language servers are active and ready
@@ -507,6 +507,7 @@ return config
 | Qwen Portal (`qwen-portal`)                     | `QWEN_OAUTH_TOKEN` or `QWEN_PORTAL_API_KEY`  |
 | vLLM (`vllm`)                                   | `VLLM_API_KEY`                               |
 | Cloudflare AI Gateway (`cloudflare-ai-gateway`) | `CLOUDFLARE_AI_GATEWAY_API_KEY`              |
+| Vercel AI Gateway (`vercel-ai-gateway`)         | `AI_GATEWAY_API_KEY`                         |
 | Qianfan (`qianfan`)                             | `QIANFAN_API_KEY`                            |
 
 See [Environment Variables](docs/environment-variables.md) for the full list.
@@ -544,6 +545,7 @@ Use `/login` with supported providers:
 - MiniMax Coding Plan (International / China)
 - Qwen Portal (`qwen-portal`)
 - Cloudflare AI Gateway (`cloudflare-ai-gateway`)
+- Vercel AI Gateway (`vercel-ai-gateway`)
 
 For `ollama`, API key is optional. Leave it unset for local no-auth instances, or set `OLLAMA_API_KEY` for authenticated hosts.
 For `llama.cpp`, API key is optional. Leave it unset for local no-auth instances, or set `LLAMA_CPP_API_KEY` for authenticated hosts.
@@ -1238,8 +1240,6 @@ Use `--tools <list>` to restrict available built-in tools.
 | `todo_write`     | Phased task tracking with progress management                  |
 | `fetch`          | Fetch and extract URL content                                  |
 | `web_search`     | Multi-provider web search                                      |
-| `deep_search`    | AI-powered deep research with synthesized results (Exa)        |
-| `code_search`    | Search code snippets and technical documentation (Exa)         |
 | `write`          | Create/overwrite files                                         |
 | `generate_image` | Generate or edit images using Gemini image models              |
 

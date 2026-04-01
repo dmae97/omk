@@ -8,6 +8,9 @@ pub fn language_bash() -> TSLanguage {
 pub fn language_c() -> TSLanguage {
 	tree_sitter_c::LANGUAGE.into()
 }
+pub fn language_clojure() -> TSLanguage {
+	tree_sitter_clojure::LANGUAGE.into()
+}
 pub fn language_cpp() -> TSLanguage {
 	tree_sitter_cpp::LANGUAGE.into()
 }

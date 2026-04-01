@@ -31,7 +31,7 @@ import { type ConfigError, ConfigFile } from "../config";
 import { parseModelString } from "../config/model-resolver";
 import { isValidThemeColor, type ThemeColor } from "../modes/theme/theme";
 import type { AuthStorage, OAuthCredential } from "../session/auth-storage";
-import type { Settings } from "./settings";
+import { type Settings, settings } from "./settings";
 
 export const kNoAuth = "N/A";
 
@@ -728,6 +728,14 @@ function normalizeSuppressedSelector(selector: string): string {
 	const parsed = parseModelString(trimmed);
 	if (!parsed) return trimmed;
 	return `${parsed.provider}/${parsed.id}`;
+}
+
+function getDisabledProviderIdsFromSettings(): Set<string> {
+	try {
+		return new Set(settings.get("disabledProviders"));
+	} catch {
+		return new Set();
+	}
 }
 
 /**
@@ -1670,11 +1678,19 @@ export class ModelRegistry {
 	 * This is a fast check that doesn't refresh OAuth tokens.
 	 */
 	getAvailable(): Model<Api>[] {
-		return this.#models.filter(m => this.#keylessProviders.has(m.provider) || this.authStorage.hasAuth(m.provider));
+		const disabledProviders = getDisabledProviderIdsFromSettings();
+		return this.#models.filter(
+			m =>
+				!disabledProviders.has(m.provider) &&
+				(this.#keylessProviders.has(m.provider) || this.authStorage.hasAuth(m.provider)),
+		);
 	}
 
 	getDiscoverableProviders(): string[] {
-		return this.#discoverableProviders.map(provider => provider.provider);
+		const disabledProviders = getDisabledProviderIdsFromSettings();
+		return this.#discoverableProviders
+			.filter(provider => !disabledProviders.has(provider.provider))
+			.map(provider => provider.provider);
 	}
 
 	getProviderDiscoveryState(provider: string): ProviderDiscoveryState | undefined {

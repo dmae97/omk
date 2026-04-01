@@ -63,6 +63,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
+          cache-workspace-crates: true
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3"
@@ -120,6 +121,8 @@ jobs:
         with:
           toolchain: nightly-2026-03-27
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-workspace-crates: true
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.15.2
@@ -156,6 +159,8 @@ jobs:
         with:
           toolchain: nightly-2026-03-27
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-workspace-crates: true
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.15.2
@@ -252,7 +257,7 @@ jobs:
         env:
           NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          for pkg in packages/*/; do
+          for pkg in packages/utils packages/ai packages/natives packages/tui packages/stats packages/agent packages/coding-agent; do
             pkg_name=$(basename "$pkg")
             # Skip private packages
             if jq -e '.private == true' "$pkg/package.json" > /dev/null 2>&1; then

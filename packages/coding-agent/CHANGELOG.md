@@ -8,6 +8,16 @@
 - `--scope user|project` flag added to `/marketplace uninstall`, `/marketplace upgrade`, `/plugins enable`, and `/plugins disable` to disambiguate when a plugin is installed in both scopes
 - `omp plugin upgrade --scope project` with no plugin ID warns that `--scope` is ignored for bulk upgrades
 
+## [13.17.1] - 2026-04-01
+### Removed
+
+- Removed `code_search` tool for code snippet and documentation search
+
+### Fixed
+
+- Fixed edit tool diff rendering to wrap long diff lines with continuation gutters instead of truncating them at terminal width ([#578](https://github.com/can1357/oh-my-pi/issues/578))
+- Fixed `--list-models` and `/model` provider filtering to hide models from disabled providers ([#588](https://github.com/can1357/oh-my-pi/issues/588))
+- Fixed edit tool diffstats to use diff-specific add/remove theme colors instead of success/error status colors ([#589](https://github.com/can1357/oh-my-pi/issues/589))
 ## [13.17.0] - 2026-03-30
 
 ### Added

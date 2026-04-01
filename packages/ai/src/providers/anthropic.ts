@@ -33,6 +33,7 @@ import type {
 import { isAnthropicOAuthToken, normalizeToolCallId, resolveCacheRetention } from "../utils";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
+import { getStreamFirstEventTimeoutMs, iterateWithIdleTimeout } from "../utils/idle-iterator";
 import { parseStreamingJson } from "../utils/json-parse";
 import {
 	buildCopilotDynamicHeaders,
@@ -572,9 +573,9 @@ function isTransientStreamParseError(error: unknown): boolean {
 
 export function isProviderRetryableError(error: unknown): boolean {
 	if (!(error instanceof Error)) return false;
-	const msg = error.message;
+	const msg = error.message.toLowerCase();
 	return (
-		/rate.?limit|too many requests|overloaded|service.?unavailable|internal_error|stream error.*received from peer|1302/i.test(
+		/rate.?limit|too many requests|overloaded|service.?unavailable|internal_error|stream error.*received from peer|1302|timed?\s*out while waiting for the first event|timeout waiting for first/i.test(
 			msg,
 		) || isTransientStreamParseError(error)
 	);
@@ -674,13 +675,22 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 			let providerRetryAttempt = 0;
 			let started = false;
 			do {
-				const anthropicStream = client.messages.stream({ ...params, stream: true }, { signal: options?.signal });
+				const requestAbortController = new AbortController();
+				const requestSignal = options?.signal
+					? AbortSignal.any([options.signal, requestAbortController.signal])
+					: requestAbortController.signal;
+				const anthropicStream = client.messages.stream({ ...params, stream: true }, { signal: requestSignal });
 				if (copilotDynamicHeaders && output.usage.premiumRequests === undefined) {
 					output.usage.premiumRequests = copilotDynamicHeaders.premiumRequests;
 				}
 
 				try {
-					for await (const event of anthropicStream) {
+					for await (const event of iterateWithIdleTimeout(anthropicStream, {
+						firstItemTimeoutMs: getStreamFirstEventTimeoutMs(),
+						errorMessage: "Anthropic stream stalled while waiting for the next event",
+						firstItemErrorMessage: "Anthropic stream timed out while waiting for the first event",
+						onFirstItemTimeout: () => requestAbortController.abort(),
+					})) {
 						started = true;
 						if (event.type === "message_start") {
 							output.responseId = event.message.id;
