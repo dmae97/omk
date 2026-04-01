@@ -16,7 +16,7 @@ const CHECK_BYTE_COUNT = 1024;
 const HEADER_LINE_LIMIT = 40;
 
 const KNOWN_GENERATOR_PATTERN =
-	"(?:protoc(?:-gen-[\\w-]+)?|sqlc|buf|swagger(?:-codegen)?|openapi(?:-generator)?|grpc-gateway|mockery|stringer|easyjson|deepcopy-gen|defaulter-gen|conversion-gen|client-gen|lister-gen|informer-gen|kysely-codegen)";
+	"(?:protoc(?:-gen-[\\w-]+)?|sqlc|buf|swagger(?:-codegen)?|openapi(?:-generator)?|grpc-gateway|mockery|stringer|easyjson|deepcopy-gen|defaulter-gen|conversion-gen|client-gen|lister-gen|informer-gen|kysely-codegen|napi-rs)";
 
 /**
  * Strong marker patterns for generated-file headers.
