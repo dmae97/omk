@@ -45,7 +45,10 @@ export default class Plugin extends Command {
 		enable: Flags.string({ description: "Enable a feature" }),
 		disable: Flags.string({ description: "Disable a feature" }),
 		set: Flags.string({ description: "Set plugin config (key=value)" }),
-		scope: Flags.string({ description: 'Install scope: "user" (default) or "project"' }),
+		scope: Flags.string({
+			description: 'Install scope: "user" (default) or "project"',
+			options: ["user", "project"],
+		}),
 	};
 
 	async run(): Promise<void> {
