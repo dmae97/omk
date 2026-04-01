@@ -1,10 +1,16 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added support for reading files from `.tar`, `.tar.gz`, `.tgz`, and `.zip` archives using virtual subpaths like `archive.ext:path/to/file`
+- Added ability to list archive contents and navigate subdirectories within supported archive formats
+- Added archive-aware `read` support for `.tar`, `.tar.gz`, `.tgz`, and `.zip`, including virtual subpaths like `archive.ext:path/to/file`
 - Added `/tools` slash command to show the tools currently visible to the agent in the interactive session
+
+### Changed
+
+- Updated `read` tool documentation to reflect archive support and usage patterns
 
 ## [13.17.2] - 2026-04-01
 ### Added

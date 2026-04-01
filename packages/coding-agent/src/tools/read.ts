@@ -1,5 +1,5 @@
 import * as fs from "node:fs/promises";
-import path from "node:path";
+import * as path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, TextContent } from "@oh-my-pi/pi-ai";
 import { glob } from "@oh-my-pi/pi-natives";
@@ -26,6 +26,7 @@ import {
 import { renderCodeCell, renderStatusLine } from "../tui";
 import { CachedOutputBlock } from "../tui/output-block";
 import { resolveFileDisplayMode } from "../utils/file-display-mode";
+import { ArchiveReader, openArchive, parseArchivePathCandidates } from "./archive-reader";
 import {
 	ImageInputTooLargeError,
 	loadImageInput,
@@ -340,6 +341,25 @@ async function convertWithMarkitdown(
 	return { content: "", ok: false, error: result.stderr.trim() || "Conversion failed" };
 }
 
+function decodeUtf8Text(bytes: Uint8Array): string | null {
+	for (const byte of bytes) {
+		if (byte === 0) return null;
+	}
+
+	try {
+		return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+	} catch {
+		return null;
+	}
+}
+
+function prependSuffixResolutionNotice(text: string, suffixResolution?: { from: string; to: string }): string {
+	if (!suffixResolution) return text;
+
+	const notice = `[Path '${suffixResolution.from}' not found; resolved to '${suffixResolution.to}' via suffix match]`;
+	return text ? `${notice}\n${text}` : notice;
+}
+
 const readSchema = Type.Object({
 	path: Type.String({ description: "Path to the file to read (relative or absolute)" }),
 	offset: Type.Optional(Type.Number({ description: "Line number to start reading from (1-indexed)" })),
@@ -357,6 +377,12 @@ export interface ReadToolDetails {
 }
 
 type ReadParams = ReadToolInput;
+
+interface ResolvedArchiveReadPath {
+	absolutePath: string;
+	archiveSubPath: string;
+	suffixResolution?: { from: string; to: string };
+}
 
 /**
  * Read tool implementation.
@@ -392,6 +418,246 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		});
 	}
 
+	async #resolveArchiveReadPath(readPath: string, signal?: AbortSignal): Promise<ResolvedArchiveReadPath | null> {
+		const candidates = parseArchivePathCandidates(readPath);
+		for (const candidate of candidates) {
+			let absolutePath = resolveReadPath(candidate.archivePath, this.session.cwd);
+			let suffixResolution: { from: string; to: string } | undefined;
+
+			try {
+				const stat = await Bun.file(absolutePath).stat();
+				if (stat.isDirectory()) continue;
+				return {
+					absolutePath,
+					archiveSubPath: candidate.archivePath === readPath ? "" : candidate.subPath,
+					suffixResolution,
+				};
+			} catch (error) {
+				if (!isNotFoundError(error) || isRemoteMountPath(absolutePath)) continue;
+
+				const suffixMatch = await findUniqueSuffixMatch(candidate.archivePath, this.session.cwd, signal);
+				if (!suffixMatch) continue;
+
+				try {
+					const retryStat = await Bun.file(suffixMatch.absolutePath).stat();
+					if (retryStat.isDirectory()) continue;
+
+					absolutePath = suffixMatch.absolutePath;
+					suffixResolution = { from: candidate.archivePath, to: suffixMatch.displayPath };
+					return {
+						absolutePath,
+						archiveSubPath: candidate.archivePath === readPath ? "" : candidate.subPath,
+						suffixResolution,
+					};
+				} catch (retryError) {
+					if (!isNotFoundError(retryError)) {
+						throw retryError;
+					}
+				}
+			}
+		}
+
+		return null;
+	}
+
+	#buildInMemoryTextResult(
+		text: string,
+		offset: number | undefined,
+		limit: number | undefined,
+		options: {
+			details?: ReadToolDetails;
+			sourcePath?: string;
+			sourceInternal?: string;
+			entityLabel: string;
+		},
+	): AgentToolResult<ReadToolDetails> {
+		const displayMode = resolveFileDisplayMode(this.session);
+		const details = options.details ?? {};
+		const allLines = text.split("\n");
+		const totalLines = allLines.length;
+		const startLine = offset ? Math.max(0, offset - 1) : 0;
+		const startLineDisplay = startLine + 1;
+
+		const resultBuilder = toolResult(details);
+		if (options.sourcePath) {
+			resultBuilder.sourcePath(options.sourcePath);
+		}
+		if (options.sourceInternal) {
+			resultBuilder.sourceInternal(options.sourceInternal);
+		}
+
+		if (startLine >= allLines.length) {
+			const suggestion =
+				allLines.length === 0
+					? `The ${options.entityLabel} is empty.`
+					: `Use offset=1 to read from the start, or offset=${allLines.length} to read the last line.`;
+			return resultBuilder
+				.text(`Offset ${offset} is beyond end of ${options.entityLabel} (${allLines.length} lines total). ${suggestion}`)
+				.done();
+		}
+
+		const endLine = limit !== undefined ? Math.min(startLine + limit, allLines.length) : allLines.length;
+		const selectedContent = allLines.slice(startLine, endLine).join("\n");
+		const userLimitedLines = limit !== undefined ? endLine - startLine : undefined;
+		const truncation = truncateHead(selectedContent);
+
+		const shouldAddHashLines = displayMode.hashLines;
+		const shouldAddLineNumbers = shouldAddHashLines ? false : displayMode.lineNumbers;
+		const formatText = (content: string, startNum: number): string =>
+			formatTextWithMode(content, startNum, shouldAddHashLines, shouldAddLineNumbers);
+
+		let outputText: string;
+		let truncationInfo:
+			| { result: TruncationResult; options: { direction: "head"; startLine?: number; totalFileLines?: number } }
+			| undefined;
+
+		if (truncation.firstLineExceedsLimit) {
+			const firstLine = allLines[startLine] ?? "";
+			const firstLineBytes = Buffer.byteLength(firstLine, "utf-8");
+			const snippet = truncateHeadBytes(firstLine, DEFAULT_MAX_BYTES);
+
+			if (shouldAddHashLines) {
+				outputText = `[Line ${startLineDisplay} is ${formatBytes(
+					firstLineBytes,
+				)}, exceeds ${formatBytes(DEFAULT_MAX_BYTES)} limit. Hashline output requires full lines; cannot compute hashes for a truncated preview.]`;
+			} else {
+				outputText = formatText(snippet.text, startLineDisplay);
+			}
+
+			if (snippet.text.length === 0) {
+				outputText = `[Line ${startLineDisplay} is ${formatBytes(
+					firstLineBytes,
+				)}, exceeds ${formatBytes(DEFAULT_MAX_BYTES)} limit. Unable to display a valid UTF-8 snippet.]`;
+			}
+
+			details.truncation = truncation;
+			truncationInfo = {
+				result: truncation,
+				options: { direction: "head", startLine: startLineDisplay, totalFileLines: totalLines },
+			};
+		} else if (truncation.truncated) {
+			outputText = formatText(truncation.content, startLineDisplay);
+			details.truncation = truncation;
+			truncationInfo = {
+				result: truncation,
+				options: { direction: "head", startLine: startLineDisplay, totalFileLines: totalLines },
+			};
+		} else if (userLimitedLines !== undefined && startLine + userLimitedLines < allLines.length) {
+			const remaining = allLines.length - (startLine + userLimitedLines);
+			const nextOffset = startLine + userLimitedLines + 1;
+
+			outputText = formatText(selectedContent, startLineDisplay);
+			outputText += `\n\n[${remaining} more lines in ${options.entityLabel}. Use offset=${nextOffset} to continue]`;
+		} else {
+			outputText = formatText(truncation.content, startLineDisplay);
+		}
+
+		resultBuilder.text(outputText);
+		if (truncationInfo) {
+			resultBuilder.truncation(truncationInfo.result, truncationInfo.options);
+		}
+		return resultBuilder.done();
+	}
+
+	async #readArchiveDirectory(
+		archive: ArchiveReader,
+		archivePath: string,
+		subPath: string,
+		limit: number | undefined,
+		details: ReadToolDetails,
+		signal?: AbortSignal,
+	): Promise<AgentToolResult<ReadToolDetails>> {
+		const DEFAULT_LIMIT = 500;
+		const effectiveLimit = limit ?? DEFAULT_LIMIT;
+		const entries = archive.listDirectory(subPath);
+
+		const listLimit = applyListLimit(entries, { limit: effectiveLimit });
+		const limitedEntries = listLimit.items;
+		const limitMeta = listLimit.meta;
+
+		const results: string[] = [];
+		for (const entry of limitedEntries) {
+			throwIfAborted(signal);
+			if (entry.isDirectory) {
+				results.push(`${entry.name}/`);
+				continue;
+			}
+
+			const sizeSuffix = entry.size > 0 ? ` (${formatBytes(entry.size)})` : "";
+			results.push(`${entry.name}${sizeSuffix}`);
+		}
+
+		const output = results.length > 0 ? results.join("\n") : "(empty archive directory)";
+		const text = prependSuffixResolutionNotice(output, details.suffixResolution);
+		const truncation = truncateHead(text, { maxLines: Number.MAX_SAFE_INTEGER });
+		const directoryDetails: ReadToolDetails = { ...details, isDirectory: true };
+		const resultBuilder = toolResult<ReadToolDetails>(directoryDetails).text(truncation.content);
+		resultBuilder.sourcePath(archivePath).limits({ resultLimit: limitMeta.resultLimit?.reached });
+		if (truncation.truncated) {
+			directoryDetails.truncation = truncation;
+			resultBuilder.truncation(truncation, { direction: "head" });
+		}
+		return resultBuilder.done();
+	}
+
+	async #readArchive(
+		readPath: string,
+		offset: number | undefined,
+		limit: number | undefined,
+		resolvedArchivePath: ResolvedArchiveReadPath,
+		signal?: AbortSignal,
+	): Promise<AgentToolResult<ReadToolDetails>> {
+		throwIfAborted(signal);
+		const archive = await openArchive(resolvedArchivePath.absolutePath);
+		throwIfAborted(signal);
+
+		const details: ReadToolDetails = {
+			resolvedPath: resolvedArchivePath.absolutePath,
+			suffixResolution: resolvedArchivePath.suffixResolution,
+		};
+
+		const node = archive.getNode(resolvedArchivePath.archiveSubPath);
+		if (!node) {
+			throw new ToolError(`Path '${readPath}' not found inside archive`);
+		}
+
+		if (node.isDirectory) {
+			return this.#readArchiveDirectory(
+				archive,
+				resolvedArchivePath.absolutePath,
+				resolvedArchivePath.archiveSubPath,
+				limit,
+				details,
+				signal,
+			);
+		}
+
+		const entry = await archive.readFile(resolvedArchivePath.archiveSubPath);
+		const text = decodeUtf8Text(entry.bytes);
+		if (text === null) {
+			return toolResult<ReadToolDetails>(details)
+				.text(
+					prependSuffixResolutionNotice(
+						`[Cannot read binary archive entry '${entry.path}' (${formatBytes(entry.size)})]`,
+						resolvedArchivePath.suffixResolution,
+					),
+				)
+				.sourcePath(resolvedArchivePath.absolutePath)
+				.done();
+		}
+
+		const result = this.#buildInMemoryTextResult(text, offset, limit, {
+			details,
+			sourcePath: resolvedArchivePath.absolutePath,
+			entityLabel: "archive entry",
+		});
+		const firstText = result.content.find((content): content is TextContent => content.type === "text");
+		if (firstText) {
+			firstText.text = prependSuffixResolutionNotice(firstText.text, resolvedArchivePath.suffixResolution);
+		}
+		return result;
+	}
+
 	async execute(
 		_toolCallId: string,
 		params: ReadParams,
@@ -407,6 +673,11 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		const internalRouter = this.session.internalRouter;
 		if (internalRouter?.canHandle(readPath)) {
 			return this.#handleInternalUrl(readPath, offset, limit);
+		}
+
+		const archivePath = await this.#resolveArchiveReadPath(readPath, signal);
+		if (archivePath) {
+			return this.#readArchive(readPath, offset, limit, archivePath, signal);
 		}
 
 		let absolutePath = resolveReadPath(readPath, this.session.cwd);
