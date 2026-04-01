@@ -10,7 +10,7 @@
  * 5. Compact markdown tables (remove padding)
  * 6. Collapse 2+ blank lines to single blank line
  * 7. Trim trailing whitespace (preserve indentation)
- * 8. No trailing newline at EOF
+ * 8. Trailing newline at EOF (disk only; runtime omits it)
  * 9. Bold RFC 2119 keywords (MUST, SHOULD, MAY, etc.) in prompt content
  */
 import { Glob } from "bun";
@@ -44,11 +44,11 @@ async function main() {
 		const original = await Bun.file(fullPath).text();
 		const formatted = formatPromptContent(original, PROMPT_FORMAT_OPTIONS);
 
-		if (original !== formatted) {
+		if (original !== `${formatted}\n`) {
 			if (check) {
 				console.log(`Would format: ${fullPath}`);
 			} else {
-				await Bun.write(fullPath, formatted);
+				await Bun.write(fullPath, `${formatted}\n`);
 				console.log(`Formatted: ${fullPath}`);
 			}
 			changed++;

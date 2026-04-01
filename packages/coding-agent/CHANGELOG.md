@@ -1,8 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added dedicated `gh-renderer.ts` module for rich terminal rendering of GitHub Actions workflow runs with live status snapshots and job details
 - Added `gh_pr_checkout` tool to check out GitHub pull requests into dedicated git worktrees with contributor push metadata
 - Added `gh_pr_push` tool to push checked-out pull request branches back to their source branches
 - Added `gh_repo_view` tool to read GitHub repository metadata using the local GitHub CLI
@@ -30,11 +32,20 @@
 - Added opt-in `gh_run_watch` to fast-fail GitHub Actions runs, stream job status snapshots, and return tailed logs for failed jobs
 - Added bundled `/green` command to generate the iterative “fix CI until green” prompt, with final tag instructions included only when `HEAD` already has a tag
 
+### Changed
+
+- Enhanced `gh_pr_view` tool to include inline review comments alongside pull request reviews for improved discussion context
+- Improved `gh_run_watch` tool output rendering with dedicated visual component for streaming run snapshots and job status updates
+
 ### Fixed
 
+- Fixed prompt file formatting to include trailing newlines at EOF for consistency across all prompt markdown files
 - Fixed `gh_pr_diff` to preserve raw patch content instead of normalizing tabs and whitespace
-- Fixed `gh_pr_view` to include pull request reviews alongside issue-style comments for discussion context
-- Fixed `gh_run_watch` and bundled `/green` to watch the workflow runs for the current `HEAD` commit instead of whichever branch run was newest
+- Fixed `gh_pr_view` to include inline review comments alongside pull request reviews and issue-style comments for discussion context
+- Fixed `gh_run_watch` to resolve explicit branch watches against the selected branch head instead of local `HEAD`
+- Fixed `gh_run_watch` to hide repo and polling internals from the tool schema and save full failed-job logs as session artifacts alongside the inline tailed output
+- Fixed `gh_*` tool outputs to spill full large results to artifacts instead of pre-truncating the head with unusable `offset=` guidance
+- Fixed bundled `/green` to watch the workflow runs for the current `HEAD` commit instead of whichever branch run was newest
 - Fixed OpenAI Responses session rehydration to strip stale assistant replay payloads before resumed requests ([#594](https://github.com/can1357/oh-my-pi/pull/594) by [@daandden](https://github.com/daandden))
 - Fixed inline image rendering to cap image height and preserve multiplexer scrollback during terminal resizes ([#587](https://github.com/can1357/oh-my-pi/pull/587) by [@smileynet](https://github.com/smileynet))
 

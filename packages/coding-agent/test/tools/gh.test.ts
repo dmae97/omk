@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import type { AgentToolContext } from "@oh-my-pi/pi-agent-core";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
+import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import {
 	GhIssueViewTool,
@@ -14,17 +16,50 @@ import {
 	GhRunWatchTool,
 	GhSearchIssuesTool,
 	GhSearchPrsTool,
+	type GhToolDetails,
 } from "@oh-my-pi/pi-coding-agent/tools/gh";
 import * as ghCli from "@oh-my-pi/pi-coding-agent/tools/gh-cli";
+import { wrapToolWithMetaNotice } from "@oh-my-pi/pi-coding-agent/tools/output-meta";
 
-function createSession(cwd: string = "/tmp/test"): ToolSession {
+function createSession(
+	cwd: string = "/tmp/test",
+	settings: Settings = Settings.isolated({ "github.enabled": true }),
+	artifactsDir?: string,
+): ToolSession {
+	let nextArtifactId = 0;
 	return {
 		cwd,
 		hasUI: false,
 		getSessionFile: () => null,
+		getArtifactsDir: () => artifactsDir ?? null,
+		allocateOutputArtifact: artifactsDir
+			? async toolType => {
+					const artifactId = String(nextArtifactId++);
+					return {
+						id: artifactId,
+						path: path.join(artifactsDir, `${artifactId}-${toolType}.md`),
+					};
+				}
+			: undefined,
 		getSessionSpawns: () => null,
-		settings: Settings.isolated({ "github.enabled": true }),
+		settings,
 	};
+}
+
+function createToolContext(settings: Settings): AgentToolContext {
+	return {
+		sessionManager: SessionManager.inMemory(),
+		settings,
+		modelRegistry: {
+			find: () => undefined,
+			getAll: () => [],
+			getApiKey: async () => undefined,
+		} as unknown as AgentToolContext["modelRegistry"],
+		model: undefined,
+		isIdle: () => true,
+		hasQueuedMessages: () => false,
+		abort: () => {},
+	} as AgentToolContext;
 }
 
 function getCurrentHeadSha(): string {
@@ -107,6 +142,7 @@ async function createPrFixture(): Promise<{
 
 describe("GitHub CLI tools", () => {
 	afterEach(() => {
+		vi.useRealTimers();
 		vi.restoreAllMocks();
 	});
 
@@ -182,33 +218,50 @@ describe("GitHub CLI tools", () => {
 		expect(text).not.toContain("Hidden comment");
 	});
 
-	it("includes pull request reviews in the discussion context", async () => {
-		vi.spyOn(ghCli, "runGhJson").mockResolvedValue({
-			number: 12,
-			title: "Improve PR context",
-			state: "OPEN",
-			author: { login: "octocat" },
-			body: "PR body",
-			baseRefName: "main",
-			headRefName: "feature/pr-reviews",
-			isDraft: false,
-			mergeStateStatus: "CLEAN",
-			reviewDecision: "CHANGES_REQUESTED",
-			createdAt: "2026-04-01T09:00:00Z",
-			updatedAt: "2026-04-01T10:00:00Z",
-			url: "https://github.com/cli/cli/pull/12",
-			labels: [{ name: "bug" }],
-			files: [{ path: "src/file.ts", additions: 3, deletions: 1, changeType: "MODIFIED" }],
-			reviews: [
-				{
-					author: { login: "reviewer" },
-					body: "Please add coverage for this path.",
-					state: "CHANGES_REQUESTED",
-					submittedAt: "2026-04-01T11:00:00Z",
-					commit: { oid: "abcdef1234567890" },
-				},
-			],
-			comments: [],
+	it("includes pull request reviews and inline review comments in the discussion context", async () => {
+		vi.spyOn(ghCli, "runGhJson").mockImplementation(async (_cwd, args) => {
+			if (args.includes("/repos/cli/cli/pulls/12/comments")) {
+				return [
+					{
+						id: 501,
+						body: "Please rename this helper.",
+						path: "src/file.ts",
+						line: 17,
+						side: "RIGHT",
+						user: { login: "inline-reviewer" },
+						created_at: "2026-04-01T11:30:00Z",
+						html_url: "https://github.com/cli/cli/pull/12#discussion_r1",
+					},
+				] as never;
+			}
+
+			return {
+				number: 12,
+				title: "Improve PR context",
+				state: "OPEN",
+				author: { login: "octocat" },
+				body: "PR body",
+				baseRefName: "main",
+				headRefName: "feature/pr-reviews",
+				isDraft: false,
+				mergeStateStatus: "CLEAN",
+				reviewDecision: "CHANGES_REQUESTED",
+				createdAt: "2026-04-01T09:00:00Z",
+				updatedAt: "2026-04-01T10:00:00Z",
+				url: "https://github.com/cli/cli/pull/12",
+				labels: [{ name: "bug" }],
+				files: [{ path: "src/file.ts", additions: 3, deletions: 1, changeType: "MODIFIED" }],
+				reviews: [
+					{
+						author: { login: "reviewer" },
+						body: "Please add coverage for this path.",
+						state: "CHANGES_REQUESTED",
+						submittedAt: "2026-04-01T11:00:00Z",
+						commit: { oid: "abcdef1234567890" },
+					},
+				],
+				comments: [],
+			} as never;
 		});
 
 		const tool = new GhPrViewTool(createSession());
@@ -219,6 +272,10 @@ describe("GitHub CLI tools", () => {
 		expect(text).toContain("### @reviewer - 2026-04-01T11:00:00Z [CHANGES_REQUESTED]");
 		expect(text).toContain("Commit: abcdef123456");
 		expect(text).toContain("Please add coverage for this path.");
+		expect(text).toContain("## Review Comments (1)");
+		expect(text).toContain("### @inline-reviewer · 2026-04-01T11:30:00Z");
+		expect(text).toContain("Location: src/file.ts:17");
+		expect(text).toContain("Please rename this helper.");
 	});
 
 	it("formats pull request search results", async () => {
@@ -292,6 +349,101 @@ describe("GitHub CLI tools", () => {
 		expect(text).toContain("diff --git a/Makefile b/Makefile");
 		expect(text).toContain("+\tgo test ./... ");
 		expect(text).not.toContain("+    go test ./... ");
+	});
+
+	it("lets wrapped GitHub diff output spill to an artifact tail instead of head-truncating", async () => {
+		const diffOutput = Array.from({ length: 400 }, (_, index) => `diff line ${index + 1}`).join("\n");
+		vi.spyOn(ghCli, "runGhText").mockResolvedValue(diffOutput);
+
+		const settings = Settings.isolated({
+			"github.enabled": true,
+			"tools.artifactSpillThreshold": 1,
+			"tools.artifactTailBytes": 1,
+			"tools.artifactTailLines": 20,
+		});
+		const tool = wrapToolWithMetaNotice(new GhPrDiffTool(createSession("/tmp/test", settings)));
+		const result = await tool.execute(
+			"pr-diff",
+			{ pr: "7", repo: "owner/repo" },
+			undefined,
+			undefined,
+			createToolContext(settings),
+		);
+		const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+
+		expect(text).toContain("diff line 400");
+		expect(text).not.toContain("diff line 1");
+		expect(text).toContain("Read artifact://");
+		expect(text).not.toContain("Use offset=");
+		expect(result.details?.meta?.truncation?.direction).toBe("tail");
+	});
+
+	it("resolves an explicit branch head before watching workflow runs", async () => {
+		const branchHeadSha = "1234567890abcdef1234567890abcdef12345678";
+		vi.spyOn(ghCli, "runGhText").mockResolvedValue("owner/repo");
+		const jsonSpy = vi.spyOn(ghCli, "runGhJson").mockImplementation(async (_cwd, args) => {
+			if (args.includes("/repos/owner/repo/branches/release%2F1.0")) {
+				return {
+					commit: {
+						sha: branchHeadSha,
+					},
+				} as never;
+			}
+
+			const endpoint = args.find(arg => arg.startsWith("/repos/owner/repo/actions"));
+			if (endpoint === "/repos/owner/repo/actions/runs/91/jobs") {
+				return {
+					total_count: 1,
+					jobs: [
+						{
+							id: 301,
+							name: "test",
+							status: "completed",
+							conclusion: "success",
+						},
+					],
+				} as never;
+			}
+
+			if (endpoint === "/repos/owner/repo/actions/runs") {
+				return {
+					workflow_runs: [
+						{
+							id: 91,
+							name: "CI",
+							display_title: "release build",
+							status: "completed",
+							conclusion: "success",
+							head_branch: "release/1.0",
+							head_sha: branchHeadSha,
+							created_at: "2026-04-01T09:00:00Z",
+							updated_at: "2026-04-01T09:10:00Z",
+							html_url: "https://github.com/owner/repo/actions/runs/91",
+						},
+					],
+				} as never;
+			}
+
+			throw new Error(`Unexpected gh json call: ${args.join(" ")}`);
+		});
+
+		const tool = new GhRunWatchTool(createSession());
+		vi.useFakeTimers();
+		const resultPromise = tool.execute("run-watch", {
+			branch: "release/1.0",
+		});
+		await Promise.resolve();
+		vi.advanceTimersByTime(3000);
+		const result = await resultPromise;
+		const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+		const runListCall = jsonSpy.mock.calls.find(([, args]) => args.includes("/repos/owner/repo/actions/runs"));
+
+		expect(jsonSpy.mock.calls.some(([, args]) => args.includes("/repos/owner/repo/branches/release%2F1.0"))).toBe(
+			true,
+		);
+		expect(runListCall?.[1]).toContain(`head_sha=${branchHeadSha}`);
+		expect(text).toContain(`Commit: ${branchHeadSha}`);
+		expect(text).toContain("All workflow runs for this commit passed.");
 	});
 
 	it("checks out a pull request into a worktree and configures contributor push metadata", async () => {
@@ -434,18 +586,19 @@ describe("GitHub CLI tools", () => {
 		});
 
 		const updates: string[] = [];
+		let latestUpdateDetails: GhToolDetails | undefined;
 		const tool = new GhRunWatchTool(createSession("/work/pi"));
-		const result = await tool.execute(
-			"run-watch",
-			{ repo: "owner/repo", branch: "main", interval: 0.001 },
-			undefined,
-			update => {
-				const block = update.content[0];
-				if (block?.type === "text") {
-					updates.push(block.text);
-				}
-			},
-		);
+		vi.useFakeTimers();
+		const resultPromise = tool.execute("run-watch", {}, undefined, update => {
+			const block = update.content[0];
+			if (block?.type === "text") {
+				updates.push(block.text);
+			}
+			latestUpdateDetails = update.details;
+		});
+		await Promise.resolve();
+		vi.advanceTimersByTime(3000);
+		const result = await resultPromise;
 		const text = result.content[0]?.type === "text" ? result.content[0].text : "";
 		const runListCalls = jsonSpy.mock.calls.filter(([, args]) => args.includes("/repos/owner/repo/actions/runs"));
 
@@ -453,14 +606,30 @@ describe("GitHub CLI tools", () => {
 		expect(updates.some(update => update.includes(`# Watching GitHub Actions for ${headSha.slice(0, 12)}`))).toBe(
 			true,
 		);
-		expect(updates.some(update => update.includes("Waiting 0.001s to ensure no additional runs appear"))).toBe(true);
+		expect(
+			updates.some(update => update.includes("Waiting 3s to ensure no additional runs appear for this commit.")),
+		).toBe(true);
 		expect(text).toContain(`# GitHub Actions for ${headSha.slice(0, 12)}`);
 		expect(text).toContain("Repository: owner/repo");
 		expect(text).toContain(`Commit: ${headSha}`);
 		expect(text).toContain("All workflow runs for this commit passed.");
+		expect(latestUpdateDetails?.watch?.mode).toBe("commit");
+		expect(latestUpdateDetails?.watch?.state).toBe("watching");
+		expect(latestUpdateDetails?.watch?.runs?.[0]?.jobs.map(job => job.durationSeconds)).toEqual([180, 600]);
+		expect(result.details?.watch?.state).toBe("completed");
+		expect(result.details?.watch?.runs?.[0]?.workflowName).toBe("CI");
 	});
 
-	it("tails failed job logs when a watched run fails", async () => {
+	it("removes repo, interval, and grace from the gh_run_watch schema", () => {
+		const tool = new GhRunWatchTool(createSession());
+		const properties = tool.parameters.properties as Record<string, unknown>;
+		expect(properties.repo).toBeUndefined();
+		expect(properties.interval).toBeUndefined();
+		expect(properties.grace).toBeUndefined();
+	});
+
+	it("tails failed job logs inline and saves the full failed-job logs as an artifact", async () => {
+		const artifactsDir = await fs.mkdtemp(path.join(os.tmpdir(), "gh-run-watch-artifacts-"));
 		vi.spyOn(ghCli, "runGhJson")
 			.mockResolvedValueOnce({
 				id: 77,
@@ -502,21 +671,42 @@ describe("GitHub CLI tools", () => {
 			stderr: "",
 		});
 
-		const tool = new GhRunWatchTool(createSession());
-		const result = await tool.execute("run-watch", {
-			run: "https://github.com/owner/repo/actions/runs/77",
-			grace: 0,
-			tail: 3,
-		});
-		const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+		try {
+			const tool = new GhRunWatchTool(
+				createSession("/tmp/test", Settings.isolated({ "github.enabled": true }), artifactsDir),
+			);
+			const result = await tool.execute("run-watch", {
+				run: "https://github.com/owner/repo/actions/runs/77",
+				tail: 3,
+			});
+			const text = result.content[0]?.type === "text" ? result.content[0].text : "";
 
-		expect(text).toContain("# GitHub Actions Run #77");
-		expect(text).toContain("Repository: owner/repo");
-		expect(text).toContain("### test [failure]");
-		expect(text).toContain("delta");
-		expect(text).toContain("epsilon");
-		expect(text).toContain("zeta");
-		expect(text).not.toContain("alpha");
-		expect(text).toContain("Run failed.");
+			expect(text).toContain("# GitHub Actions Run #77");
+			expect(text).toContain("Repository: owner/repo");
+			expect(text).toContain("### test [failure]");
+			expect(text).toContain("delta");
+			expect(text).toContain("epsilon");
+			expect(text).toContain("zeta");
+			expect(text).not.toContain("alpha");
+			expect(text).toContain("Run failed.");
+			expect(text).toContain("Full failed-job logs: artifact://0");
+			expect(result.details?.artifactId).toBe("0");
+			expect(result.details?.watch?.mode).toBe("run");
+			expect(result.details?.watch?.state).toBe("completed");
+			expect(result.details?.watch?.failedLogs?.[0]?.jobName).toBe("test");
+			expect(result.details?.watch?.failedLogs?.[0]?.tail).toContain("zeta");
+
+			const artifactText = await Bun.file(path.join(artifactsDir, "0-gh_run_watch.md")).text();
+			expect(artifactText).toContain("# GitHub Actions Run #77");
+			expect(artifactText).toContain("Full log:");
+			expect(artifactText).toContain("alpha");
+			expect(artifactText).toContain("beta");
+			expect(artifactText).toContain("gamma");
+			expect(artifactText).toContain("delta");
+			expect(artifactText).toContain("epsilon");
+			expect(artifactText).toContain("zeta");
+		} finally {
+			await fs.rm(artifactsDir, { recursive: true, force: true });
+		}
 	});
 });

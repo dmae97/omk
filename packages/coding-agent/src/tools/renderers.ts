@@ -17,6 +17,7 @@ import { bashToolRenderer } from "./bash";
 import { calculatorToolRenderer } from "./calculator";
 import { fetchToolRenderer } from "./fetch";
 import { findToolRenderer } from "./find";
+import { ghRunWatchToolRenderer } from "./gh-renderer";
 import { grepToolRenderer } from "./grep";
 import { inspectImageToolRenderer } from "./inspect-image-renderer";
 import { notebookToolRenderer } from "./notebook";
@@ -61,6 +62,7 @@ export const toolRenderers: Record<string, ToolRenderer> = {
 	task: taskToolRenderer as ToolRenderer,
 	todo_write: todoWriteToolRenderer as ToolRenderer,
 	fetch: fetchToolRenderer as ToolRenderer,
+	gh_run_watch: ghRunWatchToolRenderer as ToolRenderer,
 	web_search: webSearchToolRenderer as ToolRenderer,
 	write: writeToolRenderer as ToolRenderer,
 };

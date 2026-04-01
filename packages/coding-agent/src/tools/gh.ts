@@ -14,7 +14,6 @@ import ghRepoViewDescription from "../prompts/tools/gh-repo-view.md" with { type
 import ghRunWatchDescription from "../prompts/tools/gh-run-watch.md" with { type: "text" };
 import ghSearchIssuesDescription from "../prompts/tools/gh-search-issues.md" with { type: "text" };
 import ghSearchPrsDescription from "../prompts/tools/gh-search-prs.md" with { type: "text" };
-import { truncateHead } from "../session/streaming-output";
 import type { ToolSession } from ".";
 import { isGhAvailable, runGhCommand, runGhJson, runGhText } from "./gh-cli";
 import type { OutputMeta } from "./output-meta";
@@ -74,7 +73,6 @@ const GH_PR_FIELDS = [
 	"labels",
 	"mergeStateStatus",
 	"number",
-	"reviews",
 	"reviewDecision",
 	"state",
 	"title",
@@ -130,7 +128,9 @@ const RUN_WATCH_INTERVAL_DEFAULT = 3;
 const RUN_WATCH_GRACE_DEFAULT = 5;
 const RUN_WATCH_TAIL_DEFAULT = 15;
 const RUN_WATCH_TAIL_MAX = 200;
+const REVIEW_COMMENTS_PAGE_SIZE = 100;
 const RUN_JOBS_PAGE_SIZE = 100;
+const PR_URL_PATTERN = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)(?:\/.*)?$/;
 const RUN_URL_PATTERN = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/actions\/runs\/(\d+)(?:\/.*)?$/;
 const RUN_SUCCESS_CONCLUSIONS = new Set(["success", "neutral", "skipped"]);
 const RUN_FAILURE_CONCLUSIONS = new Set(["failure", "timed_out", "cancelled", "action_required", "startup_failure"]);
@@ -235,24 +235,9 @@ const ghRunWatchSchema = Type.Object({
 				"GitHub Actions run ID or full run URL. Omitting this watches the workflow runs for the current HEAD commit on the selected branch.",
 		}),
 	),
-	repo: Type.Optional(
-		Type.String({
-			description:
-				"Repository in OWNER/REPO format. Defaults to the current GitHub repository context or the run URL.",
-		}),
-	),
 	branch: Type.Optional(
 		Type.String({
 			description: "Branch to inspect when omitting `run`. Defaults to the current checked-out git branch.",
-		}),
-	),
-	interval: Type.Optional(
-		Type.Number({ description: "Polling interval in seconds while the run is still active (default: 3)." }),
-	),
-	grace: Type.Optional(
-		Type.Number({
-			description:
-				"Extra seconds to wait after the first detected failure before fetching logs, to capture concurrent failures (default: 5).",
 		}),
 	),
 	tail: Type.Optional(
@@ -272,6 +257,7 @@ type GhRunWatchInput = Static<typeof ghRunWatchSchema>;
 
 export interface GhToolDetails {
 	meta?: OutputMeta;
+	artifactId?: string;
 	repo?: string;
 	branch?: string;
 	worktreePath?: string;
@@ -283,6 +269,50 @@ export interface GhToolDetails {
 	status?: string;
 	conclusion?: string;
 	failedJobs?: string[];
+	watch?: GhRunWatchViewDetails;
+}
+
+export interface GhRunWatchJobDetails {
+	id: number;
+	name: string;
+	status?: string;
+	conclusion?: string;
+	durationSeconds?: number;
+	url?: string;
+}
+
+export interface GhRunWatchRunDetails {
+	id: number;
+	workflowName?: string;
+	displayTitle?: string;
+	status?: string;
+	conclusion?: string;
+	branch?: string;
+	headSha?: string;
+	url?: string;
+	jobs: GhRunWatchJobDetails[];
+}
+
+export interface GhRunWatchFailedLogDetails {
+	runId: number;
+	workflowName?: string;
+	jobName: string;
+	conclusion?: string;
+	tail?: string;
+	available: boolean;
+}
+
+export interface GhRunWatchViewDetails {
+	mode: "run" | "commit";
+	state: "watching" | "completed";
+	repo: string;
+	branch?: string;
+	headSha?: string;
+	pollCount?: number;
+	note?: string;
+	run?: GhRunWatchRunDetails;
+	runs?: GhRunWatchRunDetails[];
+	failedLogs?: GhRunWatchFailedLogDetails[];
 }
 
 interface GhUser {
@@ -366,6 +396,7 @@ interface GhPrViewData extends GhIssueViewData {
 	isDraft?: boolean;
 	maintainerCanModify?: boolean;
 	mergeStateStatus?: string;
+	reviewComments?: GhPrReviewComment[];
 	reviews?: GhPrReview[];
 	reviewDecision?: string;
 }
@@ -393,6 +424,38 @@ interface GhPrReview {
 	commit?: GhPrReviewCommit | null;
 	state?: string | null;
 	submittedAt?: string | null;
+}
+
+interface GhPrReviewCommentApi {
+	body?: string | null;
+	created_at?: string | null;
+	html_url?: string | null;
+	id?: number;
+	in_reply_to_id?: number | null;
+	line?: number | null;
+	original_line?: number | null;
+	path?: string | null;
+	side?: string | null;
+	user?: GhUser | null;
+}
+
+interface GhPrReviewComment {
+	author?: GhUser | null;
+	body?: string | null;
+	createdAt?: string;
+	id: number;
+	inReplyToId?: number;
+	line?: number;
+	originalLine?: number;
+	path?: string;
+	side?: string;
+	url?: string;
+}
+
+interface GhBranchApiResponse {
+	commit?: {
+		sha?: string | null;
+	} | null;
 }
 
 interface GhSearchRepository {
@@ -475,6 +538,7 @@ interface GhRunSnapshot {
 interface GhFailedJobLog {
 	run: GhRunSnapshot;
 	job: GhRunJobSnapshot;
+	full?: string;
 	tail?: string;
 	available: boolean;
 }
@@ -522,30 +586,6 @@ function resolveSearchLimit(value: number | undefined): number {
 	}
 
 	return Math.min(Math.floor(value), SEARCH_LIMIT_MAX);
-}
-
-function resolvePositiveSeconds(value: number | undefined, label: string, defaultValue: number): number {
-	if (value === undefined) {
-		return defaultValue;
-	}
-
-	if (!Number.isFinite(value) || value <= 0) {
-		throw new ToolError(`${label} must be a positive number`);
-	}
-
-	return value;
-}
-
-function resolveNonNegativeSeconds(value: number | undefined, label: string, defaultValue: number): number {
-	if (value === undefined) {
-		return defaultValue;
-	}
-
-	if (!Number.isFinite(value) || value < 0) {
-		throw new ToolError(`${label} must be zero or a positive number`);
-	}
-
-	return value;
 }
 
 function resolveTailLimit(value: number | undefined): number {
@@ -942,6 +982,42 @@ function parseRunReference(value: string | undefined): GhRunReference {
 	};
 }
 
+function parsePullRequestUrl(value: string | undefined): { repo?: string; prNumber?: number } {
+	const normalized = normalizeOptionalString(value);
+	if (!normalized) {
+		return {};
+	}
+
+	const match = normalized.match(PR_URL_PATTERN);
+	if (!match) {
+		return {};
+	}
+
+	return {
+		repo: match[1],
+		prNumber: Number(match[2]),
+	};
+}
+
+function normalizePrReviewComment(comment: GhPrReviewCommentApi): GhPrReviewComment | null {
+	if (typeof comment.id !== "number") {
+		return null;
+	}
+
+	return {
+		author: comment.user ?? null,
+		body: comment.body,
+		createdAt: normalizeOptionalString(comment.created_at),
+		id: comment.id,
+		inReplyToId: typeof comment.in_reply_to_id === "number" ? comment.in_reply_to_id : undefined,
+		line: typeof comment.line === "number" ? comment.line : undefined,
+		originalLine: typeof comment.original_line === "number" ? comment.original_line : undefined,
+		path: normalizeOptionalString(comment.path),
+		side: normalizeOptionalString(comment.side),
+		url: normalizeOptionalString(comment.html_url),
+	};
+}
+
 function normalizeRunJob(job: GhActionsJobApi): GhRunJobSnapshot | null {
 	if (typeof job.id !== "number") {
 		return null;
@@ -1036,6 +1112,61 @@ function formatJobState(job: GhRunJobSnapshot): string {
 	return job.conclusion ?? job.status ?? "unknown";
 }
 
+function parseTimestampMs(value: string | undefined): number | undefined {
+	if (!value) {
+		return undefined;
+	}
+
+	const timestamp = Date.parse(value);
+	return Number.isNaN(timestamp) ? undefined : timestamp;
+}
+
+function getJobDurationSeconds(job: GhRunJobSnapshot, observedAtMs: number): number | undefined {
+	const startedAtMs = parseTimestampMs(job.startedAt);
+	if (startedAtMs === undefined) {
+		return undefined;
+	}
+
+	const completedAtMs = parseTimestampMs(job.completedAt) ?? observedAtMs;
+	return Math.max(0, Math.floor((completedAtMs - startedAtMs) / 1000));
+}
+
+function buildRunWatchJobDetails(job: GhRunJobSnapshot, observedAtMs: number): GhRunWatchJobDetails {
+	return {
+		id: job.id,
+		name: job.name,
+		status: job.status,
+		conclusion: job.conclusion,
+		durationSeconds: getJobDurationSeconds(job, observedAtMs),
+		url: job.url,
+	};
+}
+
+function buildRunWatchRunDetails(run: GhRunSnapshot, observedAtMs: number): GhRunWatchRunDetails {
+	return {
+		id: run.id,
+		workflowName: run.workflowName,
+		displayTitle: run.displayTitle,
+		status: run.status,
+		conclusion: run.conclusion,
+		branch: run.branch,
+		headSha: run.headSha,
+		url: run.url,
+		jobs: run.jobs.map(job => buildRunWatchJobDetails(job, observedAtMs)),
+	};
+}
+
+function buildFailedLogDetails(failedJobLogs: GhFailedJobLog[]): GhRunWatchFailedLogDetails[] {
+	return failedJobLogs.map(entry => ({
+		runId: entry.run.id,
+		workflowName: entry.run.workflowName,
+		jobName: entry.job.name,
+		conclusion: entry.job.conclusion,
+		tail: entry.tail,
+		available: entry.available,
+	}));
+}
+
 function renderJobsSection(jobs: GhRunJobSnapshot[]): string[] {
 	if (jobs.length === 0) {
 		return ["## Jobs", "", "No jobs reported yet."];
@@ -1058,7 +1189,10 @@ function renderJobsSection(jobs: GhRunJobSnapshot[]): string[] {
 	return lines;
 }
 
-function renderFailedJobLogs(failedJobLogs: GhFailedJobLog[], tail: number): string[] {
+function renderFailedJobLogs(
+	failedJobLogs: GhFailedJobLog[],
+	options: { mode: "tail"; tail: number } | { mode: "full" },
+): string[] {
 	if (failedJobLogs.length === 0) {
 		return [];
 	}
@@ -1078,13 +1212,14 @@ function renderFailedJobLogs(failedJobLogs: GhFailedJobLog[], tail: number): str
 			pushLine(lines, "URL", entry.job.url);
 		}
 		lines.push("");
-		if (entry.available && entry.tail) {
-			lines.push(`Last ${tail} log lines:`);
+		const logText = options.mode === "full" ? entry.full : entry.tail;
+		if (entry.available && logText) {
+			lines.push(options.mode === "full" ? "Full log:" : `Last ${options.tail} log lines:`);
 			lines.push("```text");
-			lines.push(entry.tail);
+			lines.push(logText);
 			lines.push("```");
 		} else {
-			lines.push("Log tail unavailable.");
+			lines.push(options.mode === "full" ? "Full log unavailable." : "Log tail unavailable.");
 		}
 		lines.push("");
 	}
@@ -1145,7 +1280,13 @@ function formatRunWatchSnapshot(
 	return lines.join("\n").trim();
 }
 
-function formatRunWatchResult(repo: string, run: GhRunSnapshot, failedJobLogs: GhFailedJobLog[], tail: number): string {
+function formatRunWatchResult(
+	repo: string,
+	run: GhRunSnapshot,
+	failedJobLogs: GhFailedJobLog[],
+	tail: number,
+	options?: { mode?: "tail" | "full" },
+): string {
 	const failedJobs = run.jobs.filter(isFailedJob);
 	const lines: string[] = [`# GitHub Actions Run #${run.id}`, ""];
 	pushLine(lines, "Repository", repo);
@@ -1162,7 +1303,9 @@ function formatRunWatchResult(repo: string, run: GhRunSnapshot, failedJobLogs: G
 
 	if (failedJobs.length > 0) {
 		lines.push("");
-		lines.push(...renderFailedJobLogs(failedJobLogs, tail));
+		lines.push(
+			...renderFailedJobLogs(failedJobLogs, options?.mode === "full" ? { mode: "full" } : { mode: "tail", tail }),
+		);
 		lines.push("Run failed.");
 	} else if (getRunOutcome(run.conclusion) === "success") {
 		lines.push("");
@@ -1220,6 +1363,7 @@ function formatCommitRunWatchResult(
 	runs: GhRunSnapshot[],
 	failedJobLogs: GhFailedJobLog[],
 	tail: number,
+	options?: { mode?: "tail" | "full" },
 ): string {
 	const outcome = getRunCollectionOutcome(runs);
 	const lines: string[] = [`# GitHub Actions for ${formatShortSha(headSha) ?? headSha}`, ""];
@@ -1235,7 +1379,9 @@ function formatCommitRunWatchResult(
 
 	if (failedJobLogs.length > 0) {
 		lines.push("");
-		lines.push(...renderFailedJobLogs(failedJobLogs, tail));
+		lines.push(
+			...renderFailedJobLogs(failedJobLogs, options?.mode === "full" ? { mode: "full" } : { mode: "tail", tail }),
+		);
 		lines.push("Workflow runs for this commit failed.");
 	} else if (outcome === "success") {
 		lines.push("");
@@ -1261,6 +1407,33 @@ function buildGhDetails(repo: string, run: GhRunSnapshot): GhToolDetails {
 	};
 }
 
+function buildRunWatchDetails(
+	repo: string,
+	run: GhRunSnapshot,
+	options?: {
+		state?: GhRunWatchViewDetails["state"];
+		pollCount?: number;
+		note?: string;
+		failedJobLogs?: GhFailedJobLog[];
+	},
+): GhToolDetails {
+	const observedAtMs = Date.now();
+	return {
+		...buildGhDetails(repo, run),
+		watch: {
+			mode: "run",
+			state: options?.state ?? "completed",
+			repo,
+			branch: run.branch,
+			headSha: run.headSha,
+			pollCount: options?.pollCount,
+			note: options?.note,
+			run: buildRunWatchRunDetails(run, observedAtMs),
+			failedLogs: buildFailedLogDetails(options?.failedJobLogs ?? []),
+		},
+	};
+}
+
 function buildGhRunCollectionDetails(
 	repo: string,
 	headSha: string,
@@ -1278,6 +1451,35 @@ function buildGhRunCollectionDetails(
 		failedJobs: runs.flatMap(run =>
 			run.jobs.filter(isFailedJob).map(job => `${run.workflowName ?? `run ${run.id}`}: ${job.name}`),
 		),
+	};
+}
+
+function buildCommitRunWatchDetails(
+	repo: string,
+	headSha: string,
+	branch: string | undefined,
+	runs: GhRunSnapshot[],
+	options?: {
+		state?: GhRunWatchViewDetails["state"];
+		pollCount?: number;
+		note?: string;
+		failedJobLogs?: GhFailedJobLog[];
+	},
+): GhToolDetails {
+	const observedAtMs = Date.now();
+	return {
+		...buildGhRunCollectionDetails(repo, headSha, branch, runs),
+		watch: {
+			mode: "commit",
+			state: options?.state ?? "completed",
+			repo,
+			branch,
+			headSha,
+			pollCount: options?.pollCount,
+			note: options?.note,
+			runs: runs.map(run => buildRunWatchRunDetails(run, observedAtMs)),
+			failedLogs: buildFailedLogDetails(options?.failedJobLogs ?? []),
+		},
 	};
 }
 
@@ -1339,6 +1541,21 @@ async function resolveGitHubRepo(
 
 	const resolved = await runGhText(cwd, ["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"], signal);
 	return requireNonEmpty(resolved, "repo");
+}
+
+async function resolveGitHubBranchHead(
+	cwd: string,
+	repo: string,
+	branch: string,
+	signal?: AbortSignal,
+): Promise<string> {
+	const response = await runGhJson<GhBranchApiResponse>(
+		cwd,
+		["api", "--method", "GET", `/repos/${repo}/branches/${encodeURIComponent(branch)}`],
+		signal,
+		{ repoProvided: true },
+	);
+	return requireNonEmpty(response.commit?.sha, `head SHA for branch ${branch}`);
 }
 
 async function fetchRunsForCommit(
@@ -1419,6 +1636,47 @@ async function fetchRunJobs(
 	return jobs;
 }
 
+async function fetchPrReviewComments(
+	cwd: string,
+	repo: string,
+	prNumber: number,
+	signal?: AbortSignal,
+): Promise<GhPrReviewComment[]> {
+	const reviewComments: GhPrReviewComment[] = [];
+	let page = 1;
+
+	while (true) {
+		const response = await runGhJson<GhPrReviewCommentApi[]>(
+			cwd,
+			[
+				"api",
+				"--method",
+				"GET",
+				`/repos/${repo}/pulls/${prNumber}/comments`,
+				"-F",
+				`per_page=${REVIEW_COMMENTS_PAGE_SIZE}`,
+				"-F",
+				`page=${page}`,
+			],
+			signal,
+			{ repoProvided: true },
+		);
+
+		const pageComments = response
+			.map(comment => normalizePrReviewComment(comment))
+			.filter((comment): comment is GhPrReviewComment => comment !== null);
+		reviewComments.push(...pageComments);
+
+		if (pageComments.length < REVIEW_COMMENTS_PAGE_SIZE) {
+			break;
+		}
+
+		page += 1;
+	}
+
+	return reviewComments;
+}
+
 async function fetchRunSnapshot(
 	cwd: string,
 	repo: string,
@@ -1455,12 +1713,14 @@ async function fetchFailedJobLogs(
 	return Promise.all(
 		failedJobs.map(async entry => {
 			const result = await runGhCommand(cwd, ["api", `/repos/${repo}/actions/jobs/${entry.job.id}/logs`], signal);
-			const logTail = result.exitCode === 0 ? tailLogLines(result.stdout, tail) : undefined;
+			const fullLog = result.exitCode === 0 ? normalizeBlock(result.stdout) : undefined;
+			const logTail = fullLog ? tailLogLines(fullLog, tail) : undefined;
 			return {
 				run: entry.run,
 				job: entry.job,
+				full: fullLog,
 				tail: logTail,
-				available: Boolean(logTail),
+				available: Boolean(fullLog),
 			};
 		}),
 	);
@@ -1519,6 +1779,38 @@ function formatReviewsSection(reviews: GhPrReview[] | undefined): string[] {
 		}
 		lines.push("");
 		lines.push(normalizeText(review.body) || "No review body.");
+		lines.push("");
+	}
+
+	return lines;
+}
+
+function formatReviewCommentLocation(comment: GhPrReviewComment): string | undefined {
+	if (!comment.path) {
+		return undefined;
+	}
+
+	const line = comment.line ?? comment.originalLine;
+	return line === undefined ? comment.path : `${comment.path}:${line}`;
+}
+
+function formatReviewCommentsSection(comments: GhPrReviewComment[] | undefined): string[] {
+	if (!comments || comments.length === 0) {
+		return [];
+	}
+
+	const lines: string[] = [`## Review Comments (${comments.length})`, ""];
+	for (const comment of comments) {
+		const author = formatAuthor(comment.author) ?? "unknown";
+		const createdAt = comment.createdAt ? ` · ${comment.createdAt}` : "";
+		lines.push(`### ${author}${createdAt}`);
+		lines.push("");
+		pushLine(lines, "Location", formatReviewCommentLocation(comment));
+		pushLine(lines, "Side", comment.side);
+		pushLine(lines, "Reply to", comment.inReplyToId);
+		pushLine(lines, "URL", comment.url);
+		lines.push("");
+		lines.push(normalizeText(comment.body) || "No review comment body.");
 		lines.push("");
 	}
 
@@ -1633,6 +1925,14 @@ function formatPrView(data: GhPrViewData, input: GhPrViewInput): string {
 		}
 	}
 
+	if ((input.comments ?? true) && data.reviewComments) {
+		const reviewCommentsSection = formatReviewCommentsSection(data.reviewComments);
+		if (reviewCommentsSection.length > 0) {
+			lines.push("");
+			lines.push(...reviewCommentsSection);
+		}
+	}
+
 	if ((input.comments ?? true) && data.comments) {
 		const commentSection = formatCommentsSection(data.comments);
 		if (commentSection.length > 0) {
@@ -1727,14 +2027,35 @@ function formatSearchResults(
 	return lines.join("\n").trim();
 }
 
-function buildTextResult(text: string, sourceUrl?: string, details?: GhToolDetails): AgentToolResult<GhToolDetails> {
-	const truncation = truncateHead(text);
-	const builder = toolResult<GhToolDetails>(details).text(truncation.content);
+async function saveArtifactText(session: ToolSession, toolType: string, text: string): Promise<string | undefined> {
+	const { path: artifactPath, id: artifactId } = (await session.allocateOutputArtifact?.(toolType)) ?? {};
+	if (!artifactPath || !artifactId) {
+		return undefined;
+	}
+
+	await Bun.write(artifactPath, text);
+	return artifactId;
+}
+
+function appendArtifactReference(text: string, artifactId: string | undefined, label: string): string {
+	if (!artifactId) {
+		return text;
+	}
+
+	return `${text}\n\n${label}: artifact://${artifactId}`;
+}
+
+function buildTextResult(
+	text: string,
+	sourceUrl?: string,
+	details?: GhToolDetails,
+	options?: { artifactId?: string; artifactLabel?: string },
+): AgentToolResult<GhToolDetails> {
+	const builder = toolResult<GhToolDetails>(details).text(
+		appendArtifactReference(text, options?.artifactId, options?.artifactLabel ?? "Saved artifact"),
+	);
 	if (sourceUrl) {
 		builder.sourceUrl(sourceUrl);
-	}
-	if (truncation.truncated) {
-		builder.truncation(truncation, { direction: "head" });
 	}
 	return builder.done();
 }
@@ -1846,6 +2167,10 @@ export class GhPrViewTool implements AgentTool<typeof ghPrViewSchema, GhToolDeta
 			args.push("--json", (includeComments ? GH_PR_FIELDS : GH_PR_FIELDS_NO_COMMENTS).join(","));
 
 			const data = await runGhJson<GhPrViewData>(this.session.cwd, args, signal, { repoProvided: Boolean(repo) });
+			const resolvedRepo = repo ?? parsePullRequestUrl(data.url).repo;
+			if (includeComments && resolvedRepo && typeof data.number === "number") {
+				data.reviewComments = await fetchPrReviewComments(this.session.cwd, resolvedRepo, data.number, signal);
+			}
 			return buildTextResult(formatPrView(data, { pr, repo, comments: includeComments }), data.url);
 		});
 	}
@@ -2206,12 +2531,11 @@ export class GhRunWatchTool implements AgentTool<typeof ghRunWatchSchema, GhTool
 		_context?: AgentToolContext,
 	): Promise<AgentToolResult<GhToolDetails>> {
 		return untilAborted(signal, async () => {
-			const repoInput = normalizeOptionalString(params.repo);
 			const branchInput = normalizeOptionalString(params.branch);
 			const runReference = parseRunReference(params.run);
-			const repo = await resolveGitHubRepo(this.session.cwd, repoInput, runReference.repo, signal);
-			const intervalSeconds = resolvePositiveSeconds(params.interval, "interval", RUN_WATCH_INTERVAL_DEFAULT);
-			const graceSeconds = resolveNonNegativeSeconds(params.grace, "grace", RUN_WATCH_GRACE_DEFAULT);
+			const repo = await resolveGitHubRepo(this.session.cwd, undefined, runReference.repo, signal);
+			const intervalSeconds = RUN_WATCH_INTERVAL_DEFAULT;
+			const graceSeconds = RUN_WATCH_GRACE_DEFAULT;
 			const tail = resolveTailLimit(params.tail);
 			if (runReference.runId !== undefined) {
 				const runId = runReference.runId;
@@ -2222,7 +2546,10 @@ export class GhRunWatchTool implements AgentTool<typeof ghRunWatchSchema, GhTool
 					pollCount += 1;
 
 					let run = await fetchRunSnapshot(this.session.cwd, repo, runId, signal);
-					const details = buildGhDetails(repo, run);
+					const details = buildRunWatchDetails(repo, run, {
+						state: "watching",
+						pollCount,
+					});
 					onUpdate?.({
 						content: [{ type: "text", text: formatRunWatchSnapshot(repo, run, pollCount) }],
 						details,
@@ -2233,25 +2560,24 @@ export class GhRunWatchTool implements AgentTool<typeof ghRunWatchSchema, GhTool
 
 					if (failedJobs.length > 0) {
 						if (!runCompleted && graceSeconds > 0) {
+							const note = `Failure detected. Waiting ${graceSeconds}s to capture concurrent failures before fetching logs.`;
 							onUpdate?.({
 								content: [
 									{
 										type: "text",
-										text: formatRunWatchSnapshot(
-											repo,
-											run,
-											pollCount,
-											`Failure detected. Waiting ${graceSeconds}s to capture concurrent failures before fetching logs.`,
-										),
+										text: formatRunWatchSnapshot(repo, run, pollCount, note),
 									},
 								],
-								details,
+								details: buildRunWatchDetails(repo, run, {
+									state: "watching",
+									pollCount,
+									note,
+								}),
 							});
 							await abortableSleep(graceSeconds * 1000, signal);
 							run = await fetchRunSnapshot(this.session.cwd, repo, runId, signal);
 						}
 
-						const finalDetails = buildGhDetails(repo, run);
 						const failedJobLogs = await fetchFailedJobLogs(
 							this.session.cwd,
 							repo,
@@ -2259,11 +2585,27 @@ export class GhRunWatchTool implements AgentTool<typeof ghRunWatchSchema, GhTool
 							tail,
 							signal,
 						);
-						return buildTextResult(formatRunWatchResult(repo, run, failedJobLogs, tail), run.url, finalDetails);
+						const finalDetails = buildRunWatchDetails(repo, run, {
+							state: "completed",
+							failedJobLogs,
+						});
+						const artifactId = await saveArtifactText(
+							this.session,
+							this.name,
+							formatRunWatchResult(repo, run, failedJobLogs, tail, { mode: "full" }),
+						);
+						return buildTextResult(
+							formatRunWatchResult(repo, run, failedJobLogs, tail),
+							run.url,
+							{ ...finalDetails, artifactId },
+							{ artifactId, artifactLabel: "Full failed-job logs" },
+						);
 					}
 
 					if (runCompleted) {
-						const finalDetails = buildGhDetails(repo, run);
+						const finalDetails = buildRunWatchDetails(repo, run, {
+							state: "completed",
+						});
 						return buildTextResult(formatRunWatchResult(repo, run, [], tail), run.url, finalDetails);
 					}
 
@@ -2271,17 +2613,10 @@ export class GhRunWatchTool implements AgentTool<typeof ghRunWatchSchema, GhTool
 				}
 			}
 
-			if (repoInput) {
-				const currentRepo = await resolveGitHubRepo(this.session.cwd, undefined, undefined, signal);
-				if (currentRepo !== repo) {
-					throw new ToolError(
-						"Watching without `run` requires the current checkout to match `repo`. Pass a run ID or run the tool inside that repository.",
-					);
-				}
-			}
-
 			const branch = branchInput ?? (await resolveCurrentGitBranch(this.session.cwd, signal));
-			const headSha = await resolveCurrentGitHead(this.session.cwd, signal);
+			const headSha = branchInput
+				? await resolveGitHubBranchHead(this.session.cwd, repo, branch, signal)
+				: await resolveCurrentGitHead(this.session.cwd, signal);
 			let pollCount = 0;
 			let settledSuccessSignature: string | undefined;
 
@@ -2290,7 +2625,10 @@ export class GhRunWatchTool implements AgentTool<typeof ghRunWatchSchema, GhTool
 				pollCount += 1;
 
 				let runs = await fetchRunsForCommit(this.session.cwd, repo, headSha, branch, signal);
-				const details = buildGhRunCollectionDetails(repo, headSha, branch, runs);
+				const details = buildCommitRunWatchDetails(repo, headSha, branch, runs, {
+					state: "watching",
+					pollCount,
+				});
 				onUpdate?.({
 					content: [{ type: "text", text: formatCommitRunWatchSnapshot(repo, headSha, branch, runs, pollCount) }],
 					details,
@@ -2299,27 +2637,24 @@ export class GhRunWatchTool implements AgentTool<typeof ghRunWatchSchema, GhTool
 				const outcome = getRunCollectionOutcome(runs);
 				if (outcome === "failure") {
 					if (graceSeconds > 0) {
+						const note = `Failure detected. Waiting ${graceSeconds}s to capture concurrent failures before fetching logs.`;
 						onUpdate?.({
 							content: [
 								{
 									type: "text",
-									text: formatCommitRunWatchSnapshot(
-										repo,
-										headSha,
-										branch,
-										runs,
-										pollCount,
-										`Failure detected. Waiting ${graceSeconds}s to capture concurrent failures before fetching logs.`,
-									),
+									text: formatCommitRunWatchSnapshot(repo, headSha, branch, runs, pollCount, note),
 								},
 							],
-							details,
+							details: buildCommitRunWatchDetails(repo, headSha, branch, runs, {
+								state: "watching",
+								pollCount,
+								note,
+							}),
 						});
 						await abortableSleep(graceSeconds * 1000, signal);
 						runs = await fetchRunsForCommit(this.session.cwd, repo, headSha, branch, signal);
 					}
 
-					const finalDetails = buildGhRunCollectionDetails(repo, headSha, branch, runs);
 					const failedJobLogs = await fetchFailedJobLogs(
 						this.session.cwd,
 						repo,
@@ -2327,17 +2662,29 @@ export class GhRunWatchTool implements AgentTool<typeof ghRunWatchSchema, GhTool
 						tail,
 						signal,
 					);
+					const finalDetails = buildCommitRunWatchDetails(repo, headSha, branch, runs, {
+						state: "completed",
+						failedJobLogs,
+					});
+					const artifactId = await saveArtifactText(
+						this.session,
+						this.name,
+						formatCommitRunWatchResult(repo, headSha, branch, runs, failedJobLogs, tail, { mode: "full" }),
+					);
 					return buildTextResult(
 						formatCommitRunWatchResult(repo, headSha, branch, runs, failedJobLogs, tail),
 						undefined,
-						finalDetails,
+						{ ...finalDetails, artifactId },
+						{ artifactId, artifactLabel: "Full failed-job logs" },
 					);
 				}
 
 				if (outcome === "success") {
 					const signature = getRunCollectionSignature(runs);
 					if (signature === settledSuccessSignature) {
-						const finalDetails = buildGhRunCollectionDetails(repo, headSha, branch, runs);
+						const finalDetails = buildCommitRunWatchDetails(repo, headSha, branch, runs, {
+							state: "completed",
+						});
 						return buildTextResult(
 							formatCommitRunWatchResult(repo, headSha, branch, runs, [], tail),
 							undefined,
@@ -2346,21 +2693,19 @@ export class GhRunWatchTool implements AgentTool<typeof ghRunWatchSchema, GhTool
 					}
 
 					settledSuccessSignature = signature;
+					const note = `All known workflow runs completed successfully. Waiting ${intervalSeconds}s to ensure no additional runs appear for this commit.`;
 					onUpdate?.({
 						content: [
 							{
 								type: "text",
-								text: formatCommitRunWatchSnapshot(
-									repo,
-									headSha,
-									branch,
-									runs,
-									pollCount,
-									`All known workflow runs completed successfully. Waiting ${intervalSeconds}s to ensure no additional runs appear for this commit.`,
-								),
+								text: formatCommitRunWatchSnapshot(repo, headSha, branch, runs, pollCount, note),
 							},
 						],
-						details,
+						details: buildCommitRunWatchDetails(repo, headSha, branch, runs, {
+							state: "watching",
+							pollCount,
+							note,
+						}),
 					});
 					await abortableSleep(intervalSeconds * 1000, signal);
 					continue;
