@@ -40,6 +40,7 @@ ast-grep-core = { version = "0.39", default-features = false, features = [
 tree-sitter = "0.25"
 tree-sitter-bash = "0.25"
 tree-sitter-c = "0.24"
+tree-sitter-clojure = "0.1"
 tree-sitter-c-sharp = "0.23"
 tree-sitter-cpp = "0.23"
 tree-sitter-css = "0.25"
