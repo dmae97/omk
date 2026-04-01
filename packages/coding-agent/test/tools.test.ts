@@ -582,6 +582,64 @@ describe("Coding Agent Tools", () => {
 			expect(fs.existsSync(expectedPath)).toBe(true);
 			expect(fs.readFileSync(expectedPath, "utf-8")).toBe(content);
 		});
+
+		it("should write to an existing archive entry", async () => {
+			const archivePath = path.join(testDir, "write-existing.zip");
+			fs.writeFileSync(
+				archivePath,
+				createZipArchive([
+					{ path: "pkg/README.md", content: "# Original\n" },
+					{ path: "pkg/src/index.ts", content: "export const archiveValue = 1;\n" },
+				]),
+			);
+
+			const content = "# Updated\nLine 2\n";
+			const result = await writeTool.execute("test-call-archive-write-existing", {
+				path: `${archivePath}:pkg/README.md`,
+				content,
+			});
+
+			expect(getTextOutput(result)).toContain(
+				`Successfully wrote ${content.length} bytes to ${archivePath}:pkg/README.md`,
+			);
+
+			const archive = new Bun.Archive(await Bun.file(archivePath).bytes());
+			const files = await archive.files();
+			expect(await files.get("pkg/README.md")?.text()).toBe(content);
+			expect(await files.get("pkg/src/index.ts")?.text()).toBe("export const archiveValue = 1;\n");
+		});
+
+		it("should create a new archive when writing to an archive subpath", async () => {
+			const archivePath = path.join(testDir, "nested", "created.tar.gz");
+			const content = "created inside archive\n";
+
+			const result = await writeTool.execute("test-call-archive-write-create", {
+				path: `${archivePath}:pkg/new.txt`,
+				content,
+			});
+
+			expect(getTextOutput(result)).toContain(
+				`Successfully wrote ${content.length} bytes to ${archivePath}:pkg/new.txt`,
+			);
+			expect(fs.existsSync(archivePath)).toBe(true);
+
+			const archive = new Bun.Archive(await Bun.file(archivePath).bytes());
+			const files = await archive.files();
+			expect(await files.get("pkg/new.txt")?.text()).toBe(content);
+		});
+
+		it("should treat a plain archive filename as a regular file write", async () => {
+			const archivePath = path.join(testDir, "literal.zip");
+			const content = "plain file contents\n";
+
+			const result = await writeTool.execute("test-call-archive-plain-file", {
+				path: archivePath,
+				content,
+			});
+
+			expect(getTextOutput(result)).toContain(`Successfully wrote ${content.length} bytes to ${archivePath}`);
+			expect(fs.readFileSync(archivePath, "utf-8")).toBe(content);
+		});
 	});
 
 	describe("edit tool", () => {

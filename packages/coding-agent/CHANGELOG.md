@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Support for writing to archive entries in `.tar`, `.tar.gz`, `.tgz`, and `.zip` files using `archive.ext:path/inside/archive` syntax
+- Ability to create new archives when writing to archive subpaths that don't yet exist
 
 ## [13.17.3] - 2026-04-01
 
