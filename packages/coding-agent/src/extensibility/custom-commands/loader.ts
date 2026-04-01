@@ -11,6 +11,7 @@ import { getAgentDir, getProjectDir, isEnoent, logger } from "@oh-my-pi/pi-utils
 import * as typebox from "@sinclair/typebox";
 import { getConfigDirs } from "../../config";
 import { execCommand } from "../../exec/exec";
+import { GreenCommand } from "./bundled/ci-green";
 import { ReviewCommand } from "./bundled/review";
 import type {
 	CustomCommand,
@@ -148,6 +149,12 @@ function loadBundledCommands(sharedApi: CustomCommandAPI): LoadedCustomCommand[]
 	const bundled: LoadedCustomCommand[] = [];
 
 	// Add bundled commands here
+	bundled.push({
+		path: "bundled:green",
+		resolvedPath: "bundled:green",
+		command: new GreenCommand(sharedApi),
+		source: "bundled",
+	});
 	bundled.push({
 		path: "bundled:review",
 		resolvedPath: "bundled:review",

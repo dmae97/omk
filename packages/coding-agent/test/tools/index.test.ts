@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, vi } from "bun:test";
 import { type SettingPath, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { createTools, HIDDEN_TOOLS, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 
@@ -43,6 +43,10 @@ function createDiscoverySessionHooks(): Partial<ToolSession> {
 }
 
 describe("createTools", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
 	it("creates all builtin tools by default", async () => {
 		const session = createTestSession();
 		const tools = await createTools(session);
@@ -175,6 +179,39 @@ describe("createTools", () => {
 		const names = tools.map(t => t.name);
 
 		expect(names).toContain("render_mermaid");
+	});
+
+	it("excludes GitHub CLI tools by default", async () => {
+		const session = createTestSession();
+		const tools = await createTools(session);
+		const names = tools.map(t => t.name);
+
+		expect(names).not.toContain("gh_repo_view");
+		expect(names).not.toContain("gh_issue_view");
+		expect(names).not.toContain("gh_pr_view");
+		expect(names).not.toContain("gh_pr_diff");
+		expect(names).not.toContain("gh_run_watch");
+		expect(names).not.toContain("gh_search_issues");
+		expect(names).not.toContain("gh_search_prs");
+	});
+
+	it("includes GitHub CLI tools when enabled and gh is available", async () => {
+		vi.spyOn(Bun, "which").mockImplementation(command => (command === "gh" ? "/usr/bin/gh" : null));
+		const session = createTestSession({
+			settings: createSettingsWithOverrides({
+				"github.enabled": true,
+			}),
+		});
+		const tools = await createTools(session);
+		const names = tools.map(t => t.name);
+
+		expect(names).toContain("gh_repo_view");
+		expect(names).toContain("gh_issue_view");
+		expect(names).toContain("gh_pr_view");
+		expect(names).toContain("gh_pr_diff");
+		expect(names).toContain("gh_run_watch");
+		expect(names).toContain("gh_search_issues");
+		expect(names).toContain("gh_search_prs");
 	});
 
 	it("excludes inspect_image tool by default", async () => {

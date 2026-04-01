@@ -1210,6 +1210,16 @@ export const SETTINGS_SCHEMA = {
 		ui: { tab: "tools", label: "Fetch", description: "Enable the fetch tool for URL fetching" },
 	},
 
+	"github.enabled": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "tools",
+			label: "GitHub CLI",
+			description: "Enable read-only gh_* tools for GitHub repository, issue, pull request, diff, and search access",
+		},
+	},
+
 	"web_search.enabled": {
 		type: "boolean",
 		default: true,

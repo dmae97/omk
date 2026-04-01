@@ -4,15 +4,39 @@
 
 ### Added
 
+- Added `gh_repo_view` tool to read GitHub repository metadata using the local GitHub CLI
+- Added `gh_issue_view` tool to read GitHub issues with optional comment context
+- Added `gh_pr_view` tool to read GitHub pull requests with optional comment context
+- Added `gh_pr_diff` tool to read GitHub pull request diffs with optional file filtering
+- Added `gh_search_issues` tool to search GitHub issues with repository scoping
+- Added `gh_search_prs` tool to search GitHub pull requests with repository scoping
+- Added `gh_run_watch` tool to watch GitHub Actions workflow runs, fast-fail on job failures, and stream tailed logs for failed jobs
+- Added `github.enabled` setting to enable read-only `gh_*` GitHub CLI tools for repository, issue, pull request, diff, and search workflows
+- Added bundled `/green` command to generate iterative CI fix prompts with optional tag instructions when HEAD is tagged
+- Added `github.enabled` setting to enable read-only `gh_*` GitHub CLI tools for repository, issue, pull request, diff, and search workflows
+- Added `gh_repo_view` tool to read GitHub repository metadata using the local GitHub CLI
+- Added `gh_issue_view` tool to read GitHub issues with optional comment context
+- Added `gh_pr_view` tool to read GitHub pull requests with optional comment context
+- Added `gh_pr_diff` tool to read GitHub pull request diffs with optional file filtering
+- Added `gh_search_issues` tool to search GitHub issues with repository scoping
+- Added `gh_search_prs` tool to search GitHub pull requests with repository scoping
+- Added `gh_run_watch` tool to watch GitHub Actions workflow runs, fast-fail on job failures, and stream tailed logs for failed jobs
+- Added bundled `/green` command to generate iterative CI fix prompts with optional tag instructions when HEAD is tagged
 - Project-scoped marketplace plugin installs: `omp plugin install --scope project name@marketplace` and `/marketplace install --scope project name@marketplace` install plugins into the nearest `.omp/` or `.git`-rooted project directory instead of the user directory ([#581](https://github.com/can1357/oh-my-pi/issues/581))
 - `--scope user|project` flag added to `/marketplace uninstall`, `/marketplace upgrade`, `/plugins enable`, and `/plugins disable` to disambiguate when a plugin is installed in both scopes
 - `omp plugin upgrade --scope project` with no plugin ID warns that `--scope` is ignored for bulk upgrades
+- Added opt-in `gh_*` GitHub CLI tools behind the `github.enabled` setting for repository, issue, pull request, diff, and search workflows
+- Added opt-in `gh_run_watch` to fast-fail GitHub Actions runs, stream job status snapshots, and return tailed logs for failed jobs
+- Added bundled `/green` command to generate the iterative “fix CI until green” prompt, with final tag instructions included only when `HEAD` already has a tag
 
 ### Fixed
 
+- Fixed `gh_pr_diff` to preserve raw patch content instead of normalizing tabs and whitespace
+- Fixed `gh_pr_view` to include pull request reviews alongside issue-style comments for discussion context
+- Fixed `gh_run_watch` and bundled `/green` to watch the workflow runs for the current `HEAD` commit instead of whichever branch run was newest
 - Fixed OpenAI Responses session rehydration to strip stale assistant replay payloads before resumed requests ([#594](https://github.com/can1357/oh-my-pi/pull/594) by [@daandden](https://github.com/daandden))
-
 - Fixed inline image rendering to cap image height and preserve multiplexer scrollback during terminal resizes ([#587](https://github.com/can1357/oh-my-pi/pull/587) by [@smileynet](https://github.com/smileynet))
+
 ## [13.17.1] - 2026-04-01
 ### Removed
 
