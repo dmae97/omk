@@ -1,6 +1,15 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added first-event timeout detection for streaming responses to abort stuck requests before user-visible content arrives
+- Added `PI_STREAM_FIRST_EVENT_TIMEOUT_MS` environment variable to configure first-event timeout (defaults to 15 seconds or idle timeout, whichever is lower)
+
+### Fixed
+
+- Fixed Anthropic stream timeout errors to be properly retried by recognizing first-event timeout messages
+- Fixed stream stall detection to distinguish between first-event timeouts and idle timeouts, enabling faster recovery for stuck connections
 
 ### Added
 

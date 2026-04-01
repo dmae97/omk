@@ -20,7 +20,7 @@ import {
 } from "../types";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
-import { getOpenAIStreamIdleTimeoutMs, iterateWithIdleTimeout } from "../utils/idle-iterator";
+import { createFirstEventWatchdog, getOpenAIStreamIdleTimeoutMs, getStreamFirstEventTimeoutMs, iterateWithIdleTimeout, markFirstStreamEvent } from "../utils/idle-iterator";
 import { mapToOpenAIResponsesToolChoice } from "../utils/tool-choice";
 import { supportsDeveloperRole } from "./openai-responses";
 import {
@@ -120,6 +120,11 @@ export const streamAzureOpenAIResponses: StreamFunction<"azure-openai-responses"
 			const requestSignal = options?.signal
 				? AbortSignal.any([options.signal, requestAbortController.signal])
 				: requestAbortController.signal;
+			const idleTimeoutMs = getOpenAIStreamIdleTimeoutMs();
+			const firstEventWatchdog = createFirstEventWatchdog(
+				getStreamFirstEventTimeoutMs(idleTimeoutMs),
+				() => requestAbortController.abort(),
+			);
 			options?.onPayload?.(params);
 			rawRequestDump = {
 				provider: model.provider,
@@ -133,11 +138,14 @@ export const streamAzureOpenAIResponses: StreamFunction<"azure-openai-responses"
 			stream.push({ type: "start", partial: output });
 
 			await processResponsesStream(
-				iterateWithIdleTimeout(openaiStream, {
-					idleTimeoutMs: getOpenAIStreamIdleTimeoutMs(),
-					errorMessage: "Azure OpenAI responses stream stalled while waiting for the next event",
-					onIdle: () => requestAbortController.abort(),
-				}),
+				iterateWithIdleTimeout(
+					markFirstStreamEvent(openaiStream, firstEventWatchdog),
+					{
+						idleTimeoutMs,
+						errorMessage: "Azure OpenAI responses stream stalled while waiting for the next event",
+						onIdle: () => requestAbortController.abort(),
+					},
+				),
 				output,
 				stream,
 				model,

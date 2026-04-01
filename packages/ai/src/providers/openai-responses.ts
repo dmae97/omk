@@ -30,7 +30,7 @@ import {
 } from "../utils";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
-import { getOpenAIStreamIdleTimeoutMs, iterateWithIdleTimeout } from "../utils/idle-iterator";
+import { createFirstEventWatchdog, getOpenAIStreamIdleTimeoutMs, getStreamFirstEventTimeoutMs, iterateWithIdleTimeout, markFirstStreamEvent } from "../utils/idle-iterator";
 import { adaptSchemaForStrict, NO_STRICT } from "../utils/schema";
 import { mapToOpenAIResponsesToolChoice } from "../utils/tool-choice";
 import {
@@ -172,6 +172,11 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 			const requestSignal = options?.signal
 				? AbortSignal.any([options.signal, requestAbortController.signal])
 				: requestAbortController.signal;
+			const idleTimeoutMs = getOpenAIStreamIdleTimeoutMs();
+			const firstEventWatchdog = createFirstEventWatchdog(
+				getStreamFirstEventTimeoutMs(idleTimeoutMs),
+				() => requestAbortController.abort(),
+			);
 			options?.onPayload?.(params);
 			rawRequestDump = {
 				provider: model.provider,
@@ -187,11 +192,14 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 
 			const nativeOutputItems: Array<Record<string, unknown>> = [];
 			await processResponsesStream(
-				iterateWithIdleTimeout(openaiStream, {
-					idleTimeoutMs: getOpenAIStreamIdleTimeoutMs(),
-					errorMessage: "OpenAI responses stream stalled while waiting for the next event",
-					onIdle: () => requestAbortController.abort(),
-				}),
+				iterateWithIdleTimeout(
+					markFirstStreamEvent(openaiStream, firstEventWatchdog),
+					{
+						idleTimeoutMs,
+						errorMessage: "OpenAI responses stream stalled while waiting for the next event",
+						onIdle: () => requestAbortController.abort(),
+					},
+				),
 				output,
 				stream,
 				model,
