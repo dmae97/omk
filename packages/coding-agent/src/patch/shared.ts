@@ -21,7 +21,7 @@ import {
 	shortenPath,
 	truncateDiffByHunk,
 } from "../tools/render-utils";
-import { Ellipsis, Hasher, type RenderCache, renderStatusLine, truncateToWidth } from "../tui";
+import { Hasher, type RenderCache, renderStatusLine, truncateToWidth } from "../tui";
 import type { HashlineToolEdit } from "./index";
 import type { DiffError, DiffResult, Operation } from "./types";
 
@@ -242,7 +242,9 @@ function wrapEditRendererLine(line: string, width: number): string[] {
 	const continuationPrefix = `${" ".repeat(Math.max(0, prefixWidth - 1))}|`;
 	const wrappedContent = wrapTextWithAnsi(content, contentWidth);
 
-	return wrappedContent.map((segment, index) => `${startAnsi}${index === 0 ? prefix : continuationPrefix}${segment}\x1b[39m`);
+	return wrappedContent.map(
+		(segment, index) => `${startAnsi}${index === 0 ? prefix : continuationPrefix}${segment}\x1b[39m`,
+	);
 }
 
 export const editToolRenderer = {
@@ -379,7 +381,8 @@ export const editToolRenderer = {
 					);
 				}
 
-				const lines = width > 0 ? text.split("\n").flatMap(line => wrapEditRendererLine(line, width)) : text.split("\n");
+				const lines =
+					width > 0 ? text.split("\n").flatMap(line => wrapEditRendererLine(line, width)) : text.split("\n");
 				cached = { key, lines };
 				return lines;
 			},

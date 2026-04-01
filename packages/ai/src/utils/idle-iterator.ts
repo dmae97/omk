@@ -26,7 +26,10 @@ export function getOpenAIStreamIdleTimeoutMs(): number | undefined {
  * Set `PI_STREAM_FIRST_EVENT_TIMEOUT_MS=0` to disable the watchdog.
  */
 export function getStreamFirstEventTimeoutMs(idleTimeoutMs?: number): number | undefined {
-	const fallback = Math.min(DEFAULT_STREAM_FIRST_EVENT_TIMEOUT_MS, idleTimeoutMs ?? DEFAULT_STREAM_FIRST_EVENT_TIMEOUT_MS);
+	const fallback = Math.min(
+		DEFAULT_STREAM_FIRST_EVENT_TIMEOUT_MS,
+		idleTimeoutMs ?? DEFAULT_STREAM_FIRST_EVENT_TIMEOUT_MS,
+	);
 	return normalizeIdleTimeoutMs($env.PI_STREAM_FIRST_EVENT_TIMEOUT_MS, fallback);
 }
 
@@ -39,10 +42,7 @@ export interface FirstEventWatchdog {
  * Starts a watchdog that aborts a request if no first stream event arrives in time.
  * Call `markFirstEventReceived()` as soon as the first event is observed.
  */
-export function createFirstEventWatchdog(
-	timeoutMs: number | undefined,
-	onTimeout: () => void,
-): FirstEventWatchdog {
+export function createFirstEventWatchdog(timeoutMs: number | undefined, onTimeout: () => void): FirstEventWatchdog {
 	let timer: NodeJS.Timeout | undefined;
 	if (timeoutMs !== undefined && timeoutMs > 0) {
 		timer = setTimeout(() => {
@@ -105,7 +105,10 @@ export async function* iterateWithIdleTimeout<T>(
 	options: IdleTimeoutIteratorOptions,
 ): AsyncGenerator<T> {
 	const firstItemTimeoutMs = options.firstItemTimeoutMs ?? options.idleTimeoutMs;
-	if ((firstItemTimeoutMs === undefined || firstItemTimeoutMs <= 0) && (options.idleTimeoutMs === undefined || options.idleTimeoutMs <= 0)) {
+	if (
+		(firstItemTimeoutMs === undefined || firstItemTimeoutMs <= 0) &&
+		(options.idleTimeoutMs === undefined || options.idleTimeoutMs <= 0)
+	) {
 		for await (const item of iterable) {
 			yield item;
 		}
@@ -152,7 +155,9 @@ export async function* iterateWithIdleTimeout<T>(
 				if (returnPromise) {
 					void returnPromise.catch(() => {});
 				}
-				throw new Error(sawFirstItem ? options.errorMessage : (options.firstItemErrorMessage ?? options.errorMessage));
+				throw new Error(
+					sawFirstItem ? options.errorMessage : (options.firstItemErrorMessage ?? options.errorMessage),
+				);
 			}
 			if (outcome.kind === "error") {
 				throw outcome.error;

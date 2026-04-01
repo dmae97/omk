@@ -19,7 +19,9 @@ describe("isProviderRetryableError", () => {
 	});
 
 	it("retries first-event timeout errors", () => {
-		expect(isProviderRetryableError(new Error("Anthropic stream timed out while waiting for the first event"))).toBe(true);
+		expect(isProviderRetryableError(new Error("Anthropic stream timed out while waiting for the first event"))).toBe(
+			true,
+		);
 	});
 
 	it("does not retry non-transient validation errors", () => {

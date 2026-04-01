@@ -100,9 +100,9 @@ describe("anthropic first-event timeout retries", () => {
 		vi.spyOn(Messages.prototype, "stream").mockImplementation((_body, requestOptions) => {
 			attempt += 1;
 			const signal = (requestOptions as { signal?: AbortSignal } | undefined)?.signal;
-			return (attempt === 1
-				? createHangingAnthropicStream(signal)
-				: createSuccessfulAnthropicStream("retry recovered")) as never;
+			return (
+				attempt === 1 ? createHangingAnthropicStream(signal) : createSuccessfulAnthropicStream("retry recovered")
+			) as never;
 		});
 
 		const result = await streamAnthropic(model, context, { apiKey: "sk-ant-test" }).result();

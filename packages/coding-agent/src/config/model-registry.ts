@@ -31,7 +31,7 @@ import { type ConfigError, ConfigFile } from "../config";
 import { parseModelString } from "../config/model-resolver";
 import { isValidThemeColor, type ThemeColor } from "../modes/theme/theme";
 import type { AuthStorage, OAuthCredential } from "../session/auth-storage";
-import { settings, type Settings } from "./settings";
+import { type Settings, settings } from "./settings";
 
 export const kNoAuth = "N/A";
 

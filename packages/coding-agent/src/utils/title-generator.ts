@@ -28,7 +28,6 @@ function getTitleModel(
 	const availableModels = registry.getAvailable();
 	if (availableModels.length === 0) return undefined;
 
-	const matchPreferences = { usageOrder: settings.getStorage()?.getModelUsageOrder() };
 	const titleModel = resolveRoleSelection(["commit", "smol"], settings, availableModels);
 	if (titleModel) {
 		return { model: titleModel.model, thinkingLevel: titleModel.thinkingLevel };
