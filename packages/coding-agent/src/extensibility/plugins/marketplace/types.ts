@@ -161,8 +161,7 @@ export interface InstalledPluginsRegistry {
 }
 
 export interface InstalledPluginEntry {
-	/** v1 is user-only — always "user". */
-	scope: "user";
+	scope: "user" | "project";
 	/** Absolute path to cached plugin directory. */
 	installPath: string;
 	version: string;
@@ -174,4 +173,19 @@ export interface InstalledPluginEntry {
 	gitCommitSha?: string;
 	/** OMP extension — not in Claude Code's type. CLI/UI concern only in v1. */
 	enabled?: boolean;
+}
+
+/**
+ * A merged view of an installed plugin, combining entries from both the user and
+ * project registries. Returned by MarketplaceManager.listInstalledPlugins().
+ *
+ * `shadowedBy` is set on user-scoped summaries when the same plugin ID also exists
+ * in the project registry — the project entry takes precedence for capability loading.
+ */
+export interface InstalledPluginSummary {
+	id: string;
+	scope: "user" | "project";
+	entries: InstalledPluginEntry[];
+	/** Set when a user-scoped plugin is overridden by a project-scoped install. */
+	shadowedBy?: "project";
 }

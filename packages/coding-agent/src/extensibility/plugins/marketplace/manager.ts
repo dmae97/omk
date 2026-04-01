@@ -17,6 +17,7 @@ import { classifySource, fetchMarketplace, parseMarketplaceCatalog, promoteClone
 import {
 	addInstalledPlugin,
 	addMarketplaceEntry,
+	collectReferencedPaths,
 	getInstalledPlugin,
 	getMarketplaceEntry,
 	readInstalledPluginsRegistry,
@@ -29,6 +30,8 @@ import {
 import { resolvePluginSource } from "./source-resolver";
 import type {
 	InstalledPluginEntry,
+	InstalledPluginSummary,
+	InstalledPluginsRegistry,
 	MarketplaceCatalog,
 	MarketplacePluginEntry,
 	MarketplaceRegistryEntry,
@@ -40,10 +43,18 @@ import { buildPluginId, parsePluginId } from "./types";
 export interface MarketplaceManagerOptions {
 	marketplacesRegistryPath: string;
 	installedRegistryPath: string;
+	/**
+	 * Path to the project-scoped installed_plugins.json.
+	 * Required when installPlugin / uninstallPlugin is called with scope: "project".
+	 * Resolved by resolveActiveProjectRegistryPath(cwd) in callers.
+	 */
+	projectInstalledRegistryPath?: string;
 	marketplacesCacheDir: string;
 	pluginsCacheDir: string;
-	/** Injected for testing; production callers pass clearClaudePluginRootsCache. */
-	clearPluginRootsCache?: () => void;
+	/** Injected for testing; production callers pass clearClaudePluginRootsCache.
+	 *  Receives any additional file paths that should also be invalidated from the fs cache.
+	 */
+	clearPluginRootsCache?: (extraPaths?: readonly string[]) => void;
 }
 
 // ── Manager ──────────────────────────────────────────────────────────────────
@@ -53,6 +64,14 @@ export class MarketplaceManager {
 
 	constructor(options: MarketplaceManagerOptions) {
 		this.#opts = options;
+	}
+
+	// Invalidate fs caches for all registry paths the manager writes, then clear plugin roots.
+	#clearCache(): void {
+		const extra = this.#opts.projectInstalledRegistryPath
+			? ([this.#opts.projectInstalledRegistryPath] as readonly string[])
+			: undefined;
+		this.#opts.clearPluginRootsCache?.(extra);
 	}
 
 	// ── Marketplace lifecycle ─────────────────────────────────────────────────
@@ -208,9 +227,11 @@ export class MarketplaceManager {
 	async installPlugin(
 		name: string,
 		marketplace: string,
-		options?: { force?: boolean },
+		options?: { force?: boolean; scope?: "user" | "project" },
 	): Promise<InstalledPluginEntry> {
 		const force = options?.force ?? false;
+		const scope = options?.scope ?? "user";
+		const registryPath = this.#registryPath(scope);
 
 		// 1. Find marketplace entry
 		const mktReg = await readMarketplacesRegistry(this.#opts.marketplacesRegistryPath);
@@ -229,7 +250,7 @@ export class MarketplaceManager {
 		const pluginId = buildPluginId(name, marketplace);
 
 		// 3. Check if already installed
-		const instReg = await readInstalledPluginsRegistry(this.#opts.installedRegistryPath);
+		const instReg = await readInstalledPluginsRegistry(registryPath);
 		const existing = getInstalledPlugin(instReg, pluginId);
 		if (existing && existing.length > 0 && !force) {
 			throw new Error(`Plugin "${pluginId}" is already installed. Use force option to reinstall.`);
@@ -278,17 +299,24 @@ export class MarketplaceManager {
 
 		// Only now clean up old entries — new cache succeeded, so it is safe to remove old ones.
 		if (existing && existing.length > 0) {
+			// Remove from scope-appropriate registry first, then cross-check refs before disk deletion.
+			const prunedReg = removeInstalledPlugin(await readInstalledPluginsRegistry(registryPath), pluginId);
+			await writeInstalledPluginsRegistry(registryPath, prunedReg);
+
+			// Read both registries AFTER removal — only delete paths no longer referenced by either.
+			const [userReg, projectReg] = await Promise.all([
+				readInstalledPluginsRegistry(this.#opts.installedRegistryPath),
+				this.#opts.projectInstalledRegistryPath
+					? readInstalledPluginsRegistry(this.#opts.projectInstalledRegistryPath)
+					: Promise.resolve({ version: 2 as const, plugins: {} as Record<string, InstalledPluginEntry[]> }),
+			]);
+			const referenced = collectReferencedPaths(userReg, projectReg);
+
 			for (const entry of existing) {
-				// Skip if the new cache resolved to the same path (same version reinstall).
-				if (entry.installPath !== cachePath) {
+				if (entry.installPath !== cachePath && !referenced.has(entry.installPath)) {
 					await fs.rm(entry.installPath, { recursive: true, force: true });
 				}
 			}
-			const prunedReg = removeInstalledPlugin(
-				await readInstalledPluginsRegistry(this.#opts.installedRegistryPath),
-				pluginId,
-			);
-			await writeInstalledPluginsRegistry(this.#opts.installedRegistryPath, prunedReg);
 		}
 
 		// 6. Build and register the entry, preserving enabled state from previous install
@@ -296,7 +324,7 @@ export class MarketplaceManager {
 		// Carry over enabled flag from existing entry — a disabled plugin must stay disabled after upgrade
 		const wasDisabled = existing?.some(e => e.enabled === false);
 		const installedEntry: InstalledPluginEntry = {
-			scope: "user",
+			scope,
 			installPath: cachePath,
 			version,
 			installedAt: now,
@@ -304,11 +332,11 @@ export class MarketplaceManager {
 			...(wasDisabled ? { enabled: false } : {}),
 		};
 
-		const freshInstReg = await readInstalledPluginsRegistry(this.#opts.installedRegistryPath);
+		const freshInstReg = await readInstalledPluginsRegistry(registryPath);
 		const newInstReg = addInstalledPlugin(freshInstReg, pluginId, installedEntry);
-		await writeInstalledPluginsRegistry(this.#opts.installedRegistryPath, newInstReg);
+		await writeInstalledPluginsRegistry(registryPath, newInstReg);
 
-		this.#opts.clearPluginRootsCache?.();
+		this.#clearCache();
 
 		logger.debug("Plugin installed", { pluginId, version, cachePath });
 		return installedEntry;
@@ -348,44 +376,140 @@ export class MarketplaceManager {
 		return "0.0.0";
 	}
 
-	async uninstallPlugin(pluginId: string): Promise<void> {
+	async uninstallPlugin(pluginId: string, scope?: "user" | "project"): Promise<void> {
 		const parsed = parsePluginId(pluginId);
 		if (!parsed) {
 			throw new Error(`Invalid plugin ID format: "${pluginId}". Expected "name@marketplace".`);
 		}
 
-		const reg = await readInstalledPluginsRegistry(this.#opts.installedRegistryPath);
-		const entries = getInstalledPlugin(reg, pluginId);
-		if (!entries || entries.length === 0) {
+		const { userEntries, projectEntries, userReg, projectReg } = await this.#findInBothRegistries(pluginId);
+
+		const inUser = userEntries && userEntries.length > 0;
+		const inProject = projectEntries && projectEntries.length > 0;
+
+		if (!inUser && !inProject) {
 			throw new Error(`Plugin "${pluginId}" is not installed`);
 		}
 
-		// Remove all install paths from disk
-		for (const entry of entries) {
-			await fs.rm(entry.installPath, { recursive: true, force: true });
+		// Disambiguation: if installed in both scopes and no explicit scope, require one.
+		let targetScope: "user" | "project";
+		if (inUser && inProject) {
+			if (!scope) {
+				throw new Error(
+					`Plugin "${pluginId}" is installed in both user and project scope. Use --scope user or --scope project to specify which to remove.`,
+				);
+			}
+			targetScope = scope;
+		} else if (inProject) {
+			if (scope === "user") {
+				throw new Error(`Plugin "${pluginId}" is not installed in user scope`);
+			}
+			targetScope = "project";
+		} else {
+			if (scope === "project") {
+				throw new Error(`Plugin "${pluginId}" is not installed in project scope`);
+			}
+			targetScope = "user";
 		}
 
-		const updated = removeInstalledPlugin(reg, pluginId);
-		await writeInstalledPluginsRegistry(this.#opts.installedRegistryPath, updated);
+		const targetEntries = targetScope === "project" ? projectEntries! : userEntries!;
+		const targetReg = targetScope === "project" ? projectReg : userReg;
+		const registryPath = this.#registryPath(targetScope);
 
-		this.#opts.clearPluginRootsCache?.();
+		const updatedReg = removeInstalledPlugin(targetReg, pluginId);
+		await writeInstalledPluginsRegistry(registryPath, updatedReg);
 
-		logger.debug("Plugin uninstalled", { pluginId });
+		// Read both registries AFTER removal — only delete paths no longer referenced by either.
+		const [freshUserReg, freshProjectReg] = await Promise.all([
+			readInstalledPluginsRegistry(this.#opts.installedRegistryPath),
+			this.#opts.projectInstalledRegistryPath
+				? readInstalledPluginsRegistry(this.#opts.projectInstalledRegistryPath)
+				: Promise.resolve({ version: 2 as const, plugins: {} as Record<string, InstalledPluginEntry[]> }),
+		]);
+		const referenced = collectReferencedPaths(freshUserReg, freshProjectReg);
+
+		for (const entry of targetEntries) {
+			if (!referenced.has(entry.installPath)) {
+				await fs.rm(entry.installPath, { recursive: true, force: true });
+			}
+		}
+
+		this.#clearCache();
+
+		logger.debug("Plugin uninstalled", { pluginId, scope: targetScope });
 	}
 
 	// ── Plugin state ──────────────────────────────────────────────────────────
 
-	async listInstalledPlugins(): Promise<Array<{ id: string; entries: InstalledPluginEntry[] }>> {
-		const reg = await readInstalledPluginsRegistry(this.#opts.installedRegistryPath);
-		return Object.entries(reg.plugins).map(([id, entries]) => ({ id, entries }));
+	async listInstalledPlugins(): Promise<InstalledPluginSummary[]> {
+		const userReg = await readInstalledPluginsRegistry(this.#opts.installedRegistryPath);
+		const projectReg = this.#opts.projectInstalledRegistryPath
+			? await readInstalledPluginsRegistry(this.#opts.projectInstalledRegistryPath)
+			: null;
+
+		// Only enabled project installs shadow user installs — a disabled project copy leaves
+		// the user entry as the active one and must not be reported as shadowed.
+		const activeProjectIds = new Set(
+			projectReg
+				? Object.entries(projectReg.plugins)
+						.filter(([, entries]) => entries.length > 0 && entries[0].enabled !== false)
+						.map(([id]) => id)
+				: [],
+		);
+		const results: InstalledPluginSummary[] = [];
+
+		// Project entries first
+		if (projectReg) {
+			for (const [id, entries] of Object.entries(projectReg.plugins)) {
+				results.push({ id, scope: "project", entries });
+			}
+		}
+		// User entries (shadow-marked if overridden by project)
+		for (const [id, entries] of Object.entries(userReg.plugins)) {
+			results.push({
+				id,
+				scope: "user",
+				entries,
+				...(activeProjectIds.has(id) ? { shadowedBy: "project" as const } : {}),
+			});
+		}
+		return results;
 	}
 
-	async setPluginEnabled(pluginId: string, enabled: boolean): Promise<void> {
-		const reg = await readInstalledPluginsRegistry(this.#opts.installedRegistryPath);
-		const entries = getInstalledPlugin(reg, pluginId);
-		if (!entries || entries.length === 0) {
+	async setPluginEnabled(pluginId: string, enabled: boolean, scope?: "user" | "project"): Promise<void> {
+		const { userEntries, projectEntries, userReg, projectReg } = await this.#findInBothRegistries(pluginId);
+
+		const inUser = userEntries && userEntries.length > 0;
+		const inProject = projectEntries && projectEntries.length > 0;
+
+		if (!inUser && !inProject) {
 			throw new Error(`Plugin "${pluginId}" is not installed`);
 		}
+
+		// Disambiguation: if installed in both scopes and no explicit scope, require one.
+		let targetScope: "user" | "project";
+		if (inUser && inProject) {
+			if (!scope) {
+				throw new Error(
+					`Plugin "${pluginId}" is installed in both user and project scope. Use --scope user or --scope project to specify which to modify.`,
+				);
+			}
+			targetScope = scope;
+		} else if (inProject) {
+			if (scope === "user") {
+				throw new Error(`Plugin "${pluginId}" is not installed in user scope`);
+			}
+			targetScope = "project";
+		} else {
+			if (scope === "project") {
+				throw new Error(`Plugin "${pluginId}" is not installed in project scope`);
+			}
+			targetScope = "user";
+		}
+
+		const reg = targetScope === "project" ? projectReg : userReg;
+		const entries = targetScope === "project" ? projectEntries! : userEntries!;
+		const registryPath = this.#registryPath(targetScope);
 
 		const updated = {
 			...reg,
@@ -394,11 +518,11 @@ export class MarketplaceManager {
 				[pluginId]: entries.map(e => ({ ...e, enabled })),
 			},
 		};
-		await writeInstalledPluginsRegistry(this.#opts.installedRegistryPath, updated);
+		await writeInstalledPluginsRegistry(registryPath, updated);
 
-		this.#opts.clearPluginRootsCache?.();
+		this.#clearCache();
 
-		logger.debug("Plugin enabled state changed", { pluginId, enabled });
+		logger.debug("Plugin enabled state changed", { pluginId, enabled, scope: targetScope });
 	}
 
 	// ── Update / upgrade ─────────────────────────────────────────────────────
@@ -420,42 +544,51 @@ export class MarketplaceManager {
 	}
 
 	// Compare installed plugin versions against their catalog entries.
-	// Returns only plugins where the catalog declares a newer semver version.
+	// Returns one entry per (pluginId, scope) pair where the catalog declares a newer version.
 	// Catalog entries without a version field are skipped.
-	async checkForUpdates(): Promise<Array<{ pluginId: string; from: string; to: string }>> {
-		const instReg = await readInstalledPluginsRegistry(this.#opts.installedRegistryPath);
+	async checkForUpdates(): Promise<Array<{ pluginId: string; scope: "user" | "project"; from: string; to: string }>> {
 		const mktReg = await readMarketplacesRegistry(this.#opts.marketplacesRegistryPath);
-		const updates: Array<{ pluginId: string; from: string; to: string }> = [];
+		const updates: Array<{ pluginId: string; scope: "user" | "project"; from: string; to: string }> = [];
 
-		for (const [pluginId, entries] of Object.entries(instReg.plugins)) {
-			const parsed = parsePluginId(pluginId);
-			if (!parsed) continue;
-			const installed = entries[0];
-			if (!installed) continue;
+		// Keyed by (path, scope) so each scope is checked independently.
+		// A plugin current in user scope but stale in project scope must still appear.
+		const registryEntries: Array<[string, "user" | "project"]> = [[this.#opts.installedRegistryPath, "user"]];
+		if (this.#opts.projectInstalledRegistryPath) {
+			registryEntries.push([this.#opts.projectInstalledRegistryPath, "project"]);
+		}
 
-			const mktEntry = mktReg.marketplaces.find(m => m.name === parsed.marketplace);
-			if (!mktEntry) continue;
+		for (const [regPath, scope] of registryEntries) {
+			const instReg = await readInstalledPluginsRegistry(regPath);
+			for (const [pluginId, entries] of Object.entries(instReg.plugins)) {
+				const parsed = parsePluginId(pluginId);
+				if (!parsed) continue;
+				const installed = entries[0];
+				if (!installed) continue;
 
-			let catalogVersion: string | undefined;
-			try {
-				const catalog = await this.#readCatalog(mktEntry);
-				catalogVersion = catalog.plugins.find(p => p.name === parsed.name)?.version;
-			} catch {
-				continue;
-			}
+				const mktEntry = mktReg.marketplaces.find(m => m.name === parsed.marketplace);
+				if (!mktEntry) continue;
 
-			if (!catalogVersion || catalogVersion === installed.version) continue;
+				let catalogVersion: string | undefined;
+				try {
+					const catalog = await this.#readCatalog(mktEntry);
+					catalogVersion = catalog.plugins.find(p => p.name === parsed.name)?.version;
+				} catch {
+					continue;
+				}
 
-			// Treat newer semver as an update; fall back to inequality for non-semver tags.
-			let isNewer: boolean;
-			try {
-				isNewer = Bun.semver.order(catalogVersion, installed.version) > 0;
-			} catch {
-				isNewer = catalogVersion !== installed.version;
-			}
+				if (!catalogVersion || catalogVersion === installed.version) continue;
 
-			if (isNewer) {
-				updates.push({ pluginId, from: installed.version, to: catalogVersion });
+				// Treat newer semver as an update; fall back to inequality for non-semver tags.
+				let isNewer: boolean;
+				try {
+					isNewer = Bun.semver.order(catalogVersion, installed.version) > 0;
+				} catch {
+					isNewer = catalogVersion !== installed.version;
+				}
+
+				if (isNewer) {
+					updates.push({ pluginId, scope, from: installed.version, to: catalogVersion });
+				}
 			}
 		}
 
@@ -463,31 +596,121 @@ export class MarketplaceManager {
 	}
 
 	// Re-install a specific plugin at the latest catalog version (force-overwrites).
-	async upgradePlugin(pluginId: string): Promise<InstalledPluginEntry> {
+	async upgradePlugin(pluginId: string, scope?: "user" | "project"): Promise<InstalledPluginEntry> {
 		const parsed = parsePluginId(pluginId);
 		if (!parsed) {
 			throw new Error(`Invalid plugin ID: "${pluginId}". Expected "name@marketplace".`);
 		}
-		return this.installPlugin(parsed.name, parsed.marketplace, { force: true });
+
+		const { userEntries, projectEntries } = await this.#findInBothRegistries(pluginId);
+
+		const inUser = userEntries && userEntries.length > 0;
+		const inProject = projectEntries && projectEntries.length > 0;
+
+		if (!inUser && !inProject) {
+			throw new Error(`Plugin "${pluginId}" is not installed`);
+		}
+
+		let resolvedScope: "user" | "project";
+		if (inUser && inProject) {
+			if (!scope) {
+				throw new Error(
+					`Plugin "${pluginId}" is installed in both user and project scope. Use --scope user or --scope project to specify which to upgrade.`,
+				);
+			}
+			resolvedScope = scope;
+		} else if (inProject) {
+			if (scope === "user") throw new Error(`Plugin "${pluginId}" is not installed in user scope`);
+			resolvedScope = "project";
+		} else {
+			if (scope === "project") throw new Error(`Plugin "${pluginId}" is not installed in project scope`);
+			resolvedScope = "user";
+		}
+
+		return this.installPlugin(parsed.name, parsed.marketplace, { force: true, scope: resolvedScope });
 	}
 
-	// Upgrade every plugin that checkForUpdates reports as outdated.
-	// Per-plugin failures are skipped — partial success is returned.
-	async upgradeAllPlugins(): Promise<Array<{ pluginId: string; from: string; to: string }>> {
+	// Upgrade a plugin across all scopes where it is installed.
+	// Returns one entry per scope upgraded (0–2 entries).
+	async upgradePluginAcrossScopes(pluginId: string): Promise<InstalledPluginEntry[]> {
+		const parsed = parsePluginId(pluginId);
+		if (!parsed) {
+			throw new Error(`Invalid plugin ID: "${pluginId}". Expected "name@marketplace".`);
+		}
+
+		const { userEntries, projectEntries } = await this.#findInBothRegistries(pluginId);
+
+		const inUser = userEntries && userEntries.length > 0;
+		const inProject = projectEntries && projectEntries.length > 0;
+
+		if (!inUser && !inProject) {
+			throw new Error(`Plugin "${pluginId}" is not installed`);
+		}
+
+		const results: InstalledPluginEntry[] = [];
+
+		if (inProject) {
+			const entry = await this.installPlugin(parsed.name, parsed.marketplace, { force: true, scope: "project" });
+			results.push(entry);
+		}
+		if (inUser) {
+			const entry = await this.installPlugin(parsed.name, parsed.marketplace, { force: true, scope: "user" });
+			results.push(entry);
+		}
+
+		return results;
+	}
+
+	// Upgrade every (pluginId, scope) pair that checkForUpdates reports as outdated.
+	// Only stale scopes are touched; a current user install is not re-installed when only
+	// the project scope is stale. Per-entry failures are skipped — partial success is returned.
+	async upgradeAllPlugins(): Promise<
+		Array<{ pluginId: string; scope: "user" | "project"; from: string; to: string }>
+	> {
 		const updates = await this.checkForUpdates();
-		const results: Array<{ pluginId: string; from: string; to: string }> = [];
+		const results: Array<{ pluginId: string; scope: "user" | "project"; from: string; to: string }> = [];
 		for (const update of updates) {
 			try {
-				await this.upgradePlugin(update.pluginId);
-				results.push(update);
+				const entry = await this.upgradePlugin(update.pluginId, update.scope);
+				results.push({ pluginId: update.pluginId, scope: update.scope, from: update.from, to: entry.version });
 			} catch {
-				// Skip this plugin; partial upgrades are better than none.
+				// Skip this entry; partial upgrades are better than none.
 			}
 		}
 		return results;
 	}
 
 	// ── Private helpers ───────────────────────────────────────────────────────
+
+	#registryPath(scope: "user" | "project"): string {
+		if (scope === "project") {
+			if (!this.#opts.projectInstalledRegistryPath) {
+				throw new Error("project-scoped install requires running inside a project directory");
+			}
+			return this.#opts.projectInstalledRegistryPath;
+		}
+		return this.#opts.installedRegistryPath;
+	}
+
+	async #findInBothRegistries(pluginId: string): Promise<{
+		userEntries: InstalledPluginEntry[] | undefined;
+		projectEntries: InstalledPluginEntry[] | undefined;
+		userReg: InstalledPluginsRegistry;
+		projectReg: InstalledPluginsRegistry;
+	}> {
+		const [userReg, projectReg] = await Promise.all([
+			readInstalledPluginsRegistry(this.#opts.installedRegistryPath),
+			this.#opts.projectInstalledRegistryPath
+				? readInstalledPluginsRegistry(this.#opts.projectInstalledRegistryPath)
+				: Promise.resolve({ version: 2 as const, plugins: {} as Record<string, InstalledPluginEntry[]> }),
+		]);
+		return {
+			userEntries: getInstalledPlugin(userReg, pluginId),
+			projectEntries: getInstalledPlugin(projectReg, pluginId),
+			userReg,
+			projectReg,
+		};
+	}
 
 	async #readCatalog(entry: MarketplaceRegistryEntry): Promise<MarketplaceCatalog> {
 		try {
