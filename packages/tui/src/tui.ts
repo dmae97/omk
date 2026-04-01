@@ -112,6 +112,9 @@ function isTermuxSession(): boolean {
 	return Boolean(process.env.TERMUX_VERSION);
 }
 
+/** Detect terminal multiplexers where scrollback clearing and height-change redraws are hostile. */
+const isMultiplexer = Boolean(Bun.env.TMUX || Bun.env.STY || Bun.env.ZELLIJ);
+
 /**
  * Options for overlay positioning and sizing.
  * Values can be absolute numbers or percentage strings (e.g., "50%").
@@ -1007,7 +1010,8 @@ export class TUI extends Container {
 		const fullRender = (clear: boolean): void => {
 			this.#fullRedrawCount += 1;
 			let buffer = "\x1b[?2026h"; // Begin synchronized output
-			if (clear) buffer += "\x1b[2J\x1b[H\x1b[3J"; // Clear screen, home, then clear scrollback
+			// Skip clearing scrollback (3J) in multiplexers — users actively navigate scrollback history
+			if (clear) buffer += isMultiplexer ? "\x1b[2J\x1b[H" : "\x1b[2J\x1b[H\x1b[3J";
 			const reset = SEGMENT_RESET;
 			for (let i = 0; i < newLines.length; i++) {
 				if (i > 0) buffer += "\r\n";
@@ -1056,7 +1060,7 @@ export class TUI extends Container {
 		// Height changes normally need a full re-render to keep the visible viewport aligned,
 		// but Termux changes height when the software keyboard shows or hides.
 		// In that environment, a full redraw causes the entire history to replay on every toggle.
-		if (heightChanged && !isTermuxSession()) {
+		if (heightChanged && !isTermuxSession() && !isMultiplexer) {
 			logRedraw(`terminal height changed (${this.#previousHeight} -> ${height})`);
 			fullRender(true);
 			return;
