@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.17.1] - 2026-04-01
 ### Removed
 
 - Removed `code_search` tool for code snippet and documentation search

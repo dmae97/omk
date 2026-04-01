@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.17.1] - 2026-04-01
+
 ### Added
 
 - Added `thinkingSignature` field to thinking content blocks to preserve the original reasoning field name (e.g., `reasoning_text`, `reasoning_content`) for accurate follow-up requests
