@@ -5,6 +5,10 @@
 
 - Removed `code_search` tool for code snippet and documentation search
 
+### Fixed
+
+- Fixed edit tool diffstats to use diff-specific add/remove theme colors instead of success/error status colors ([#589](https://github.com/can1357/oh-my-pi/issues/589))
+
 
 ## [13.17.0] - 2026-03-30
 
