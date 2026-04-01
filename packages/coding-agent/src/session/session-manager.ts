@@ -1409,6 +1409,10 @@ export class SessionManager {
 	#persistErrorReported = false;
 	#artifactManager: ArtifactManager | null = null;
 	#artifactManagerSessionFile: string | null = null;
+	// In-memory artifact fallback for non-persistent sessions (persist=false).
+	// Keyed by sequential numeric ID string; mirrors the file-based ArtifactManager ID scheme.
+	#inMemoryArtifacts: Map<string, string> | null = null;
+	#inMemoryArtifactCounter = 0;
 	readonly #blobStore: BlobStore;
 
 	private constructor(
@@ -1675,6 +1679,8 @@ export class SessionManager {
 		this.#flushed = false;
 		this.#needsFullRewriteOnNextPersist = false;
 		this.#usageStatistics = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, premiumRequests: 0, cost: 0 };
+		this.#inMemoryArtifacts = null;
+		this.#inMemoryArtifactCounter = 0;
 
 		if (this.persist) {
 			const fileTimestamp = timestamp.replace(/[:.]/g, "-");
@@ -1920,12 +1926,16 @@ export class SessionManager {
 
 	/**
 	 * Save artifact content under the current session and return artifact ID.
-	 * Returns undefined when the session is not persisted.
+	 * Returns an artifact ID for all sessions (file-backed for persistent, in-memory fallback otherwise).
 	 */
 	async saveArtifact(content: string, toolType: string): Promise<string | undefined> {
 		const manager = this.#getOrCreateArtifactManager();
-		if (!manager) return undefined;
-		return manager.save(content, toolType);
+		if (manager) return manager.save(content, toolType);
+		// Non-persistent session: store in memory so spill truncation can proceed.
+		if (!this.#inMemoryArtifacts) this.#inMemoryArtifacts = new Map();
+		const id = String(this.#inMemoryArtifactCounter++);
+		this.#inMemoryArtifacts.set(id, content);
+		return id;
 	}
 
 	/**

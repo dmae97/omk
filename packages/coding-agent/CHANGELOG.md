@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added dedicated `gh-renderer.ts` module for rich terminal rendering of GitHub Actions workflow runs with live status snapshots and job details
@@ -39,6 +40,7 @@
 
 ### Fixed
 
+- Fixed artifact storage for non-persistent sessions to use in-memory fallback instead of returning undefined, enabling proper spill truncation for all session types
 - Fixed prompt file formatting to include trailing newlines at EOF for consistency across all prompt markdown files
 - Fixed `gh_pr_diff` to preserve raw patch content instead of normalizing tabs and whitespace
 - Fixed `gh_pr_view` to include inline review comments alongside pull request reviews and issue-style comments for discussion context
