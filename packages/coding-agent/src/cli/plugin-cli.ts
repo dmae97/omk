@@ -4,8 +4,9 @@
  * Handles `omp plugin <command>` subcommands for plugin lifecycle management.
  */
 
-import { APP_NAME } from "@oh-my-pi/pi-utils";
+import { APP_NAME, getProjectDir } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
+import { resolveOrDefaultProjectRegistryPath } from "../discovery/helpers";
 import { PluginManager, parseSettingValue, validateSetting } from "../extensibility/plugins";
 import {
 	getInstalledPluginsRegistryPath,
@@ -46,6 +47,7 @@ export interface PluginCommandArgs {
 		enable?: string;
 		disable?: string;
 		set?: string;
+		scope?: "user" | "project";
 	};
 }
 
@@ -113,6 +115,18 @@ export function parsePluginArgs(args: string[]): PluginCommandArgs | undefined {
 			result.flags.disable = args[++i];
 		} else if (arg === "--set" && i + 1 < args.length) {
 			result.flags.set = args[++i];
+		} else if (arg === "--scope" && i + 1 < args.length && !args[i + 1].startsWith("-")) {
+			const s = args[++i];
+			if (s === "user" || s === "project") {
+				result.flags.scope = s;
+			} else {
+				console.error(chalk.red(`Invalid --scope value: "${s}". Must be "user" or "project".`));
+				process.exit(1);
+			}
+		} else if (arg === "--scope") {
+			// --scope with no value following
+			console.error(chalk.red(`--scope requires a value: "user" or "project".`));
+			process.exit(1);
 		} else if (!arg.startsWith("-")) {
 			result.args.push(arg);
 		}
@@ -179,10 +193,11 @@ export async function runPluginCommand(cmd: PluginCommandArgs): Promise<void> {
 // Marketplace Handlers
 // =============================================================================
 
-function makeMarketplaceManager(): MarketplaceManager {
+async function makeMarketplaceManager(): Promise<MarketplaceManager> {
 	return new MarketplaceManager({
 		marketplacesRegistryPath: getMarketplacesRegistryPath(),
 		installedRegistryPath: getInstalledPluginsRegistryPath(),
+		projectInstalledRegistryPath: await resolveOrDefaultProjectRegistryPath(getProjectDir()),
 		marketplacesCacheDir: getMarketplacesCacheDir(),
 		pluginsCacheDir: getPluginsCacheDir(),
 	});
@@ -190,7 +205,7 @@ function makeMarketplaceManager(): MarketplaceManager {
 
 async function handleMarketplace(args: string[], _flags: PluginCommandArgs["flags"]): Promise<void> {
 	const subcommand = args[0] ?? "list";
-	const manager = makeMarketplaceManager();
+	const manager = await makeMarketplaceManager();
 
 	switch (subcommand) {
 		case "add": {
@@ -268,7 +283,7 @@ async function handleMarketplace(args: string[], _flags: PluginCommandArgs["flag
 
 async function handleDiscover(args: string[], _flags: PluginCommandArgs["flags"]): Promise<void> {
 	const marketplace = args[0];
-	const manager = makeMarketplaceManager();
+	const manager = await makeMarketplaceManager();
 	try {
 		const plugins = await manager.listAvailablePlugins(marketplace);
 
@@ -290,20 +305,34 @@ async function handleDiscover(args: string[], _flags: PluginCommandArgs["flags"]
 	}
 }
 
-async function handleUpgrade(args: string[], _flags: PluginCommandArgs["flags"]): Promise<void> {
-	const manager = makeMarketplaceManager();
+async function handleUpgrade(args: string[], flags: PluginCommandArgs["flags"]): Promise<void> {
+	const manager = await makeMarketplaceManager();
 	const pluginId = args[0];
 	try {
 		if (pluginId) {
-			const result = await manager.upgradePlugin(pluginId);
-			console.log(chalk.green(`Upgraded ${pluginId} to ${result.version}`));
+			if (flags.scope) {
+				const result = await manager.upgradePlugin(pluginId, flags.scope);
+				console.log(chalk.green(`Upgraded ${pluginId} (${flags.scope}) to ${result.version}`));
+			} else {
+				const entries = await manager.upgradePluginAcrossScopes(pluginId);
+				for (const entry of entries) {
+					console.log(chalk.green(`Upgraded ${pluginId} (${entry.scope}) to ${entry.version}`));
+				}
+			}
 		} else {
+			if (flags.scope) {
+				console.error(
+					chalk.yellow(
+						`Warning: --scope is ignored when upgrading all plugins. Use 'omp plugin upgrade <id> --scope ${flags.scope}' to target a specific plugin and scope.`,
+					),
+				);
+			}
 			const results = await manager.upgradeAllPlugins();
 			if (results.length === 0) {
 				console.log("All marketplace plugins are up to date.");
 			} else {
 				for (const r of results) {
-					console.log(chalk.green(`  ${r.pluginId}: ${r.from} -> ${r.to}`));
+					console.log(chalk.green(`  ${r.pluginId} (${r.scope}): ${r.from} -> ${r.to}`));
 				}
 			}
 		}
@@ -316,7 +345,7 @@ async function handleUpgrade(args: string[], _flags: PluginCommandArgs["flags"])
 async function handleInstall(
 	manager: PluginManager,
 	packages: string[],
-	flags: { json?: boolean; force?: boolean; dryRun?: boolean },
+	flags: { json?: boolean; force?: boolean; dryRun?: boolean; scope?: "user" | "project" },
 ): Promise<void> {
 	if (packages.length === 0) {
 		console.error(chalk.red(`Usage: ${APP_NAME} plugin install <package[@version]>[features] ...`));
@@ -327,7 +356,7 @@ async function handleInstall(
 	}
 
 	// Build known marketplace set for classification
-	const mktMgr = makeMarketplaceManager();
+	const mktMgr = await makeMarketplaceManager();
 	const knownMarketplaces = new Set((await mktMgr.listMarketplaces()).map(m => m.name));
 
 	for (const spec of packages) {
@@ -337,6 +366,7 @@ async function handleInstall(
 			try {
 				const entry = await mktMgr.installPlugin(target.name, target.marketplace, {
 					force: flags.force,
+					scope: flags.scope,
 				});
 				console.log(
 					chalk.green(
@@ -348,6 +378,15 @@ async function handleInstall(
 				process.exit(1);
 			}
 			continue;
+		}
+
+		// --scope only applies to marketplace installs; warn when it would be silently no-op'd for npm.
+		if (flags.scope) {
+			console.error(
+				chalk.yellow(
+					`Warning: --scope is only supported for marketplace installs (name@marketplace). Ignoring for ${spec}.`,
+				),
+			);
 		}
 
 		// npm path
@@ -376,7 +415,11 @@ async function handleInstall(
 	}
 }
 
-async function handleUninstall(manager: PluginManager, packages: string[], flags: { json?: boolean }): Promise<void> {
+async function handleUninstall(
+	manager: PluginManager,
+	packages: string[],
+	flags: { json?: boolean; scope?: "user" | "project" },
+): Promise<void> {
 	if (packages.length === 0) {
 		console.error(chalk.red(`Usage: ${APP_NAME} plugin uninstall <package> ...`));
 		process.exit(1);
@@ -384,14 +427,14 @@ async function handleUninstall(manager: PluginManager, packages: string[], flags
 
 	// For uninstall, check the installed plugins registry directly.
 	// This works even if the marketplace entry was later removed from marketplaces.json.
-	const mktMgr = makeMarketplaceManager();
+	const mktMgr = await makeMarketplaceManager();
 	const installedPlugins = new Set((await mktMgr.listInstalledPlugins()).map(p => p.id));
 
 	for (const name of packages) {
 		if (installedPlugins.has(name)) {
 			// Exact match against installed marketplace plugin IDs (name@marketplace)
 			try {
-				await mktMgr.uninstallPlugin(name);
+				await mktMgr.uninstallPlugin(name, flags.scope);
 				console.log(chalk.green(`${theme.status.success} Uninstalled ${name}`));
 			} catch (err) {
 				console.error(chalk.red(`${theme.status.error} Failed to uninstall ${name}: ${err}`));
@@ -417,7 +460,7 @@ async function handleUninstall(manager: PluginManager, packages: string[], flags
 
 async function handleList(manager: PluginManager, flags: { json?: boolean }): Promise<void> {
 	const npmPlugins = await manager.list();
-	const mktMgr = makeMarketplaceManager();
+	const mktMgr = await makeMarketplaceManager();
 	const mktPlugins = await mktMgr.listInstalledPlugins();
 
 	if (flags.json) {
@@ -462,7 +505,9 @@ async function handleList(manager: PluginManager, flags: { json?: boolean }): Pr
 		for (const plugin of mktPlugins) {
 			const entry = plugin.entries[0];
 			const version = entry?.version ?? "unknown";
-			console.log(`  ${plugin.id} (${version})`);
+			const shadowLabel = plugin.shadowedBy ? chalk.dim(" [shadowed]") : "";
+			const scopeLabel = chalk.dim(` (${plugin.scope})`);
+			console.log(`  ${plugin.id} (${version})${scopeLabel}${shadowLabel}`);
 		}
 	}
 }
@@ -781,16 +826,37 @@ async function handleConfigValidate(manager: PluginManager, flags: { json?: bool
 	}
 }
 
-async function handleEnable(manager: PluginManager, plugins: string[], flags: { json?: boolean }): Promise<void> {
+async function handleEnable(
+	manager: PluginManager,
+	plugins: string[],
+	flags: { json?: boolean; scope?: "user" | "project" },
+): Promise<void> {
 	if (plugins.length === 0) {
 		console.error(chalk.red(`Usage: ${APP_NAME} plugin enable <plugin> ...`));
 		process.exit(1);
 	}
 
+	const mktMgr = await makeMarketplaceManager();
+	const installedPlugins = new Set((await mktMgr.listInstalledPlugins()).map(p => p.id));
+
 	for (const name of plugins) {
+		if (installedPlugins.has(name)) {
+			try {
+				await mktMgr.setPluginEnabled(name, true, flags.scope);
+				if (flags.json) {
+					console.log(JSON.stringify({ enabled: name }));
+				} else {
+					console.log(chalk.green(`${theme.status.success} Enabled ${name}`));
+				}
+			} catch (err) {
+				console.error(chalk.red(`${theme.status.error} Failed to enable ${name}: ${err}`));
+				process.exit(1);
+			}
+			continue;
+		}
+
 		try {
 			await manager.setEnabled(name, true);
-
 			if (flags.json) {
 				console.log(JSON.stringify({ enabled: name }));
 			} else {
@@ -803,16 +869,37 @@ async function handleEnable(manager: PluginManager, plugins: string[], flags: { 
 	}
 }
 
-async function handleDisable(manager: PluginManager, plugins: string[], flags: { json?: boolean }): Promise<void> {
+async function handleDisable(
+	manager: PluginManager,
+	plugins: string[],
+	flags: { json?: boolean; scope?: "user" | "project" },
+): Promise<void> {
 	if (plugins.length === 0) {
 		console.error(chalk.red(`Usage: ${APP_NAME} plugin disable <plugin> ...`));
 		process.exit(1);
 	}
 
+	const mktMgr = await makeMarketplaceManager();
+	const installedPlugins = new Set((await mktMgr.listInstalledPlugins()).map(p => p.id));
+
 	for (const name of plugins) {
+		if (installedPlugins.has(name)) {
+			try {
+				await mktMgr.setPluginEnabled(name, false, flags.scope);
+				if (flags.json) {
+					console.log(JSON.stringify({ disabled: name }));
+				} else {
+					console.log(chalk.green(`${theme.status.success} Disabled ${name}`));
+				}
+			} catch (err) {
+				console.error(chalk.red(`${theme.status.error} Failed to disable ${name}: ${err}`));
+				process.exit(1);
+			}
+			continue;
+		}
+
 		try {
 			await manager.setEnabled(name, false);
-
 			if (flags.json) {
 				console.log(JSON.stringify({ disabled: name }));
 			} else {
@@ -859,11 +946,12 @@ ${chalk.bold("Config Subcommands:")}
   config validate                Validate all plugin settings
 
 ${chalk.bold("Options:")}
-  --json       Output as JSON
-  --fix        Attempt automatic fixes (doctor)
-  --force      Overwrite without prompting (install)
-  --dry-run    Preview changes without applying (install)
-  -l, --local  Use project-local overrides
+  --json           Output as JSON
+  --fix            Attempt automatic fixes (doctor)
+  --force          Overwrite without prompting (install)
+  --scope <scope>  Install scope: user (default) or project (install name@marketplace)
+  --dry-run        Preview changes without applying (install)
+  -l, --local      Use project-local overrides
 
 ${chalk.bold("Examples:")}
   ${APP_NAME} plugin install @oh-my-pi/exa[search]
@@ -871,5 +959,6 @@ ${chalk.bold("Examples:")}
   ${APP_NAME} plugin features my-plugin --enable search,web
   ${APP_NAME} plugin config set my-plugin apiKey sk-xxx
   ${APP_NAME} plugin doctor --fix
+  ${APP_NAME} plugin install --scope project name@marketplace
 `);
 }

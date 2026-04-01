@@ -179,3 +179,18 @@ export function removeInstalledPlugin(reg: InstalledPluginsRegistry, id: string)
 export function getInstalledPlugin(reg: InstalledPluginsRegistry, id: string): InstalledPluginEntry[] | undefined {
 	return reg.plugins[id];
 }
+
+/**
+ * Collect all installPath values referenced by any of the provided registries.
+ * Use this before deleting a cached plugin directory to verify it is not still
+ * referenced by another scope's registry.
+ */
+export function collectReferencedPaths(...registries: InstalledPluginsRegistry[]): Set<string> {
+	return new Set(
+		registries.flatMap(r =>
+			Object.values(r.plugins)
+				.flat()
+				.map(e => e.installPath),
+		),
+	);
+}

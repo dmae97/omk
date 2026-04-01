@@ -24,7 +24,12 @@ import { ModelRegistry, ModelsConfigFile } from "./config/model-registry";
 import { resolveCliModel, resolveModelRoleValue, resolveModelScope, type ScopedModel } from "./config/model-resolver";
 import { Settings, settings } from "./config/settings";
 import { initializeWithSettings } from "./discovery";
-import { clearClaudePluginRootsCache, injectPluginDirRoots, preloadPluginRoots } from "./discovery/helpers";
+import {
+	clearClaudePluginRootsCache,
+	injectPluginDirRoots,
+	preloadPluginRoots,
+	resolveActiveProjectRegistryPath,
+} from "./discovery/helpers";
 import { exportFromFile } from "./export/html";
 import type { ExtensionUIContext } from "./extensibility/extensions/types";
 import {
@@ -652,9 +657,11 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	// Wire --plugin-dir and preload plugin roots for sync consumers (LSP config)
 	const home = os.homedir();
 	if (parsedArgs.pluginDirs && parsedArgs.pluginDirs.length > 0) {
-		await logger.timeAsync("injectPluginDirRoots", () => injectPluginDirRoots(home, parsedArgs.pluginDirs!));
+		await logger.timeAsync("injectPluginDirRoots", () =>
+			injectPluginDirRoots(home, parsedArgs.pluginDirs!, getProjectDir()),
+		);
 	} else {
-		await logger.timeAsync("preloadPluginRoots", () => preloadPluginRoots(home));
+		await logger.timeAsync("preloadPluginRoots", () => preloadPluginRoots(home, getProjectDir()));
 	}
 
 	// Background marketplace auto-update — never blocks startup.
@@ -665,12 +672,14 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 				const mgr = new MarketplaceManager({
 					marketplacesRegistryPath: getMarketplacesRegistryPath(),
 					installedRegistryPath: getInstalledPluginsRegistryPath(),
+					projectInstalledRegistryPath: (await resolveActiveProjectRegistryPath(getProjectDir())) ?? undefined,
 					marketplacesCacheDir: getMarketplacesCacheDir(),
 					pluginsCacheDir: getPluginsCacheDir(),
-					clearPluginRootsCache: () => {
+					clearPluginRootsCache: (extraPaths?: readonly string[]) => {
 						const h = os.homedir();
 						invalidateFsCache(path.join(h, ".claude", "plugins", "installed_plugins.json"));
 						invalidateFsCache(path.join(h, getConfigDirName(), "plugins", "installed_plugins.json"));
+						for (const p of extraPaths ?? []) invalidateFsCache(p);
 						clearClaudePluginRootsCache();
 					},
 				});

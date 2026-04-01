@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- Project-scoped marketplace plugin installs: `omp plugin install --scope project name@marketplace` and `/marketplace install --scope project name@marketplace` install plugins into the nearest `.omp/` or `.git`-rooted project directory instead of the user directory ([#581](https://github.com/can1357/oh-my-pi/issues/581))
+- `--scope user|project` flag added to `/marketplace uninstall`, `/marketplace upgrade`, `/plugins enable`, and `/plugins disable` to disambiguate when a plugin is installed in both scopes
+- `omp plugin upgrade --scope project` with no plugin ID warns that `--scope` is ignored for bulk upgrades
+
+### Fixed
+
+- Fixed OpenAI Responses session rehydration to strip stale assistant replay payloads before resumed requests ([#594](https://github.com/can1357/oh-my-pi/pull/594) by [@daandden](https://github.com/daandden))
+
+- Fixed inline image rendering to cap image height and preserve multiplexer scrollback during terminal resizes ([#587](https://github.com/can1357/oh-my-pi/pull/587) by [@smileynet](https://github.com/smileynet))
 ## [13.17.1] - 2026-04-01
 ### Removed
 
@@ -12,8 +23,6 @@
 - Fixed edit tool diff rendering to wrap long diff lines with continuation gutters instead of truncating them at terminal width ([#578](https://github.com/can1357/oh-my-pi/issues/578))
 - Fixed `--list-models` and `/model` provider filtering to hide models from disabled providers ([#588](https://github.com/can1357/oh-my-pi/issues/588))
 - Fixed edit tool diffstats to use diff-specific add/remove theme colors instead of success/error status colors ([#589](https://github.com/can1357/oh-my-pi/issues/589))
-
-
 ## [13.17.0] - 2026-03-30
 
 ### Added

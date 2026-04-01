@@ -1240,7 +1240,6 @@ Use `--tools <list>` to restrict available built-in tools.
 | `todo_write`     | Phased task tracking with progress management                  |
 | `fetch`          | Fetch and extract URL content                                  |
 | `web_search`     | Multi-provider web search                                      |
-| `deep_search`    | AI-powered deep research with synthesized results (Exa)        |
 | `write`          | Create/overwrite files                                         |
 | `generate_image` | Generate or edit images using Gemini image models              |
 
