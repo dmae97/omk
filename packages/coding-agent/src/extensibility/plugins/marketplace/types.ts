@@ -11,7 +11,7 @@
 
 // ── Plugin ID helpers ────────────────────────────────────────────────
 
-const NAME_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
+const NAME_RE = /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/;
 const MAX_NAME_LENGTH = 64;
 const MAX_ID_LENGTH = 128;
 
