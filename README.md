@@ -1241,7 +1241,6 @@ Use `--tools <list>` to restrict available built-in tools.
 | `fetch`          | Fetch and extract URL content                                  |
 | `web_search`     | Multi-provider web search                                      |
 | `deep_search`    | AI-powered deep research with synthesized results (Exa)        |
-| `code_search`    | Search code snippets and technical documentation (Exa)         |
 | `write`          | Create/overwrite files                                         |
 | `generate_image` | Generate or edit images using Gemini image models              |
 

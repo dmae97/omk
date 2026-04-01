@@ -20,8 +20,6 @@ export type SearchProviderId =
 	| "kagi"
 	| "synthetic";
 
-export type CodeSearchProviderId = "exa";
-
 export function isSearchProviderId(value: string): value is SearchProviderId {
 	return [
 		"exa",
