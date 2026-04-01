@@ -7,7 +7,7 @@ import type { Api, Model } from "@oh-my-pi/pi-ai";
 import { completeSimple } from "@oh-my-pi/pi-ai";
 import { logger } from "@oh-my-pi/pi-utils";
 import type { ModelRegistry } from "../config/model-registry";
-import { resolveModelRoleValue } from "../config/model-resolver";
+import { resolveRoleSelection } from "../config/model-resolver";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import type { Settings } from "../config/settings";
 import titleSystemPrompt from "../prompts/system/title-system.md" with { type: "text" };
@@ -29,12 +29,9 @@ function getTitleModel(
 	if (availableModels.length === 0) return undefined;
 
 	const matchPreferences = { usageOrder: settings.getStorage()?.getModelUsageOrder() };
-	const configuredSmol = resolveModelRoleValue(settings.getModelRole("smol"), availableModels, {
-		settings,
-		matchPreferences,
-	});
-	if (configuredSmol.model) {
-		return { model: configuredSmol.model, thinkingLevel: configuredSmol.thinkingLevel };
+	const titleModel = resolveRoleSelection(["commit", "smol"], settings, availableModels);
+	if (titleModel) {
+		return { model: titleModel.model, thinkingLevel: titleModel.thinkingLevel };
 	}
 
 	if (currentModel) {

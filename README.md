@@ -313,7 +313,7 @@ Create images directly from the agent:
 
 Modern terminal interface with smart session management:
 
-- **Auto session titles**: Sessions automatically titled based on first message using smol model
+- **Auto session titles**: Sessions automatically titled based on first message using commit model, fallback to smol
 - **Welcome screen**: Logo, tips, recent sessions with selection
 - **Powerline footer**: Model, cwd, git branch/status, token usage, context %
 - **LSP status**: Shows which language servers are active and ready
