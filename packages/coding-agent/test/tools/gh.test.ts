@@ -64,7 +64,7 @@ function createToolContext(settings: Settings): AgentToolContext {
 
 function getCurrentHeadSha(): string {
 	const result = Bun.spawnSync(["git", "rev-parse", "HEAD"], {
-		cwd: "/work/pi",
+		cwd: import.meta.dir,
 		stdout: "pipe",
 		stderr: "pipe",
 	});
@@ -587,7 +587,7 @@ describe("GitHub CLI tools", () => {
 
 		const updates: string[] = [];
 		let latestUpdateDetails: GhToolDetails | undefined;
-		const tool = new GhRunWatchTool(createSession("/work/pi"));
+		const tool = new GhRunWatchTool(createSession(import.meta.dir));
 		vi.useFakeTimers();
 		const resultPromise = tool.execute("run-watch", {}, undefined, update => {
 			const block = update.content[0];

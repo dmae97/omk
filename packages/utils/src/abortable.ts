@@ -12,9 +12,15 @@ export class AbortError extends Error {
 
 /**
  * Sleep for a given number of milliseconds, respecting abort signal.
+ *
+ * Uses setTimeout (not Bun.sleep) so that vitest fake timers can intercept it in tests.
  */
-export async function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
-	return untilAborted(signal, () => Bun.sleep(ms));
+export function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+	return untilAborted(signal, () => {
+		const { promise, resolve } = Promise.withResolvers<void>();
+		setTimeout(resolve, ms);
+		return promise;
+	});
 }
 
 /**
