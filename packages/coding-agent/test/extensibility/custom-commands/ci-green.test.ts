@@ -31,8 +31,8 @@ describe("GreenCommand", () => {
 
 		const result = await command.execute([], {} as HookCommandContext);
 
-		expect(result).toContain("Your goal is to make my CI green.");
-		expect(result).toContain("Use `gh_run_watch` with no arguments if that tool is available.");
+		expect(result).toContain("Keep going until the current branch CI is green.");
+		expect(result).toContain("Prefer `gh_run_watch` with no arguments if that tool is available.");
 		expect(result).toContain(
 			"Use the workflow runs for the current HEAD commit as the source of truth after each push.",
 		);
