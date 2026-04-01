@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.17.6] - 2026-04-01
+
 ### Fixed
 
 - Fixed Anthropic first-event timeouts to exclude stream connection setup from the watchdog, preserve timeout-specific retry classification after local aborts, and reset retry state cleanly between attempts
