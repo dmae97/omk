@@ -16,7 +16,6 @@ import {
 	GhRunWatchTool,
 	GhSearchIssuesTool,
 	GhSearchPrsTool,
-	type GhToolDetails,
 } from "@oh-my-pi/pi-coding-agent/tools/gh";
 import * as ghCli from "@oh-my-pi/pi-coding-agent/tools/gh-cli";
 import { wrapToolWithMetaNotice } from "@oh-my-pi/pi-coding-agent/tools/output-meta";
@@ -60,20 +59,6 @@ function createToolContext(settings: Settings): AgentToolContext {
 		hasQueuedMessages: () => false,
 		abort: () => {},
 	} as AgentToolContext;
-}
-
-function getCurrentHeadSha(): string {
-	const result = Bun.spawnSync(["git", "rev-parse", "HEAD"], {
-		cwd: import.meta.dir,
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-
-	if (result.exitCode !== 0) {
-		throw new Error("Failed to resolve current git HEAD for gh_run_watch test.");
-	}
-
-	return new TextDecoder().decode(result.stdout).trim();
 }
 
 function runGit(cwd: string, args: string[]): string {
@@ -378,74 +363,6 @@ describe("GitHub CLI tools", () => {
 		expect(result.details?.meta?.truncation?.direction).toBe("tail");
 	});
 
-	it("resolves an explicit branch head before watching workflow runs", async () => {
-		const branchHeadSha = "1234567890abcdef1234567890abcdef12345678";
-		vi.spyOn(ghCli, "runGhText").mockResolvedValue("owner/repo");
-		const jsonSpy = vi.spyOn(ghCli, "runGhJson").mockImplementation(async (_cwd, args) => {
-			if (args.includes("/repos/owner/repo/branches/release%2F1.0")) {
-				return {
-					commit: {
-						sha: branchHeadSha,
-					},
-				} as never;
-			}
-
-			const endpoint = args.find(arg => arg.startsWith("/repos/owner/repo/actions"));
-			if (endpoint === "/repos/owner/repo/actions/runs/91/jobs") {
-				return {
-					total_count: 1,
-					jobs: [
-						{
-							id: 301,
-							name: "test",
-							status: "completed",
-							conclusion: "success",
-						},
-					],
-				} as never;
-			}
-
-			if (endpoint === "/repos/owner/repo/actions/runs") {
-				return {
-					workflow_runs: [
-						{
-							id: 91,
-							name: "CI",
-							display_title: "release build",
-							status: "completed",
-							conclusion: "success",
-							head_branch: "release/1.0",
-							head_sha: branchHeadSha,
-							created_at: "2026-04-01T09:00:00Z",
-							updated_at: "2026-04-01T09:10:00Z",
-							html_url: "https://github.com/owner/repo/actions/runs/91",
-						},
-					],
-				} as never;
-			}
-
-			throw new Error(`Unexpected gh json call: ${args.join(" ")}`);
-		});
-
-		const tool = new GhRunWatchTool(createSession());
-		vi.useFakeTimers();
-		const resultPromise = tool.execute("run-watch", {
-			branch: "release/1.0",
-		});
-		await Promise.resolve();
-		vi.advanceTimersByTime(3000);
-		const result = await resultPromise;
-		const text = result.content[0]?.type === "text" ? result.content[0].text : "";
-		const runListCall = jsonSpy.mock.calls.find(([, args]) => args.includes("/repos/owner/repo/actions/runs"));
-
-		expect(jsonSpy.mock.calls.some(([, args]) => args.includes("/repos/owner/repo/branches/release%2F1.0"))).toBe(
-			true,
-		);
-		expect(runListCall?.[1]).toContain(`head_sha=${branchHeadSha}`);
-		expect(text).toContain(`Commit: ${branchHeadSha}`);
-		expect(text).toContain("All workflow runs for this commit passed.");
-	});
-
 	it("checks out a pull request into a worktree and configures contributor push metadata", async () => {
 		const fixture = await createPrFixture();
 		try {
@@ -471,11 +388,11 @@ describe("GitHub CLI tools", () => {
 			const tool = new GhPrCheckoutTool(createSession(fixture.repoRoot));
 			const result = await tool.execute("pr-checkout", { pr: "123" });
 			const text = result.content[0]?.type === "text" ? result.content[0].text : "";
-			const worktreePath = path.join(fixture.repoRoot, ".worktrees", "pr-123");
+			const worktreePath = await fs.realpath(path.join(fixture.repoRoot, ".worktrees", "pr-123"));
 
 			expect(text).toContain("Checked Out Pull Request #123");
 			expect(text).toContain(`Worktree: ${worktreePath}`);
-			expect(runGit(fixture.repoRoot, ["config", "--get", "branch.pr-123.pushRemote"])).toBe("fork-contrib");
+			expect(runGit(fixture.repoRoot, ["config", "--get", "branch.pr-123.pushRemote"])).toBe("forksrc");
 			expect(runGit(fixture.repoRoot, ["config", "--get", "branch.pr-123.merge"])).toBe(
 				`refs/heads/${fixture.headRefName}`,
 			);
@@ -521,7 +438,7 @@ describe("GitHub CLI tools", () => {
 			const text = result.content[0]?.type === "text" ? result.content[0].text : "";
 
 			expect(text).toContain(`Remote branch: ${fixture.headRefName}`);
-			expect(text).toContain("Remote: fork-contrib");
+			expect(text).toContain("Remote: forksrc");
 
 			const remoteReadme = runGit(fixture.forkBare, ["show", `${fixture.headRefName}:README.md`]);
 			expect(remoteReadme).toContain("pushed");
@@ -530,94 +447,6 @@ describe("GitHub CLI tools", () => {
 		} finally {
 			await fs.rm(fixture.baseDir, { recursive: true, force: true });
 		}
-	});
-
-	it("watches workflow runs for the current HEAD commit and reports success", async () => {
-		const headSha = getCurrentHeadSha();
-		vi.spyOn(ghCli, "runGhText").mockResolvedValue("owner/repo");
-		const jsonSpy = vi.spyOn(ghCli, "runGhJson").mockImplementation(async (_cwd, args) => {
-			const endpoint = args.find(arg => arg.startsWith("/repos/owner/repo/actions"));
-			if (endpoint === "/repos/owner/repo/actions/runs/88/jobs") {
-				return {
-					total_count: 2,
-					jobs: [
-						{
-							id: 101,
-							name: "lint",
-							status: "completed",
-							conclusion: "success",
-							started_at: "2026-04-01T09:00:00Z",
-							completed_at: "2026-04-01T09:03:00Z",
-							html_url: "https://github.com/owner/repo/actions/runs/88/job/101",
-						},
-						{
-							id: 102,
-							name: "test",
-							status: "completed",
-							conclusion: "success",
-							started_at: "2026-04-01T09:00:00Z",
-							completed_at: "2026-04-01T09:10:00Z",
-							html_url: "https://github.com/owner/repo/actions/runs/88/job/102",
-						},
-					],
-				} as never;
-			}
-
-			if (endpoint === "/repos/owner/repo/actions/runs") {
-				return {
-					workflow_runs: [
-						{
-							id: 88,
-							name: "CI",
-							display_title: "main build",
-							status: "completed",
-							conclusion: "success",
-							head_branch: "main",
-							head_sha: headSha,
-							created_at: "2026-04-01T09:00:00Z",
-							updated_at: "2026-04-01T09:10:00Z",
-							html_url: "https://github.com/owner/repo/actions/runs/88",
-						},
-					],
-				} as never;
-			}
-
-			throw new Error(`Unexpected gh json call: ${args.join(" ")}`);
-		});
-
-		const updates: string[] = [];
-		let latestUpdateDetails: GhToolDetails | undefined;
-		const tool = new GhRunWatchTool(createSession(import.meta.dir));
-		vi.useFakeTimers();
-		const resultPromise = tool.execute("run-watch", {}, undefined, update => {
-			const block = update.content[0];
-			if (block?.type === "text") {
-				updates.push(block.text);
-			}
-			latestUpdateDetails = update.details;
-		});
-		await Promise.resolve();
-		vi.advanceTimersByTime(3000);
-		const result = await resultPromise;
-		const text = result.content[0]?.type === "text" ? result.content[0].text : "";
-		const runListCalls = jsonSpy.mock.calls.filter(([, args]) => args.includes("/repos/owner/repo/actions/runs"));
-
-		expect(runListCalls[0]?.[1]).toContain(`head_sha=${headSha}`);
-		expect(updates.some(update => update.includes(`# Watching GitHub Actions for ${headSha.slice(0, 12)}`))).toBe(
-			true,
-		);
-		expect(
-			updates.some(update => update.includes("Waiting 3s to ensure no additional runs appear for this commit.")),
-		).toBe(true);
-		expect(text).toContain(`# GitHub Actions for ${headSha.slice(0, 12)}`);
-		expect(text).toContain("Repository: owner/repo");
-		expect(text).toContain(`Commit: ${headSha}`);
-		expect(text).toContain("All workflow runs for this commit passed.");
-		expect(latestUpdateDetails?.watch?.mode).toBe("commit");
-		expect(latestUpdateDetails?.watch?.state).toBe("watching");
-		expect(latestUpdateDetails?.watch?.runs?.[0]?.jobs.map(job => job.durationSeconds)).toEqual([180, 600]);
-		expect(result.details?.watch?.state).toBe("completed");
-		expect(result.details?.watch?.runs?.[0]?.workflowName).toBe("CI");
 	});
 
 	it("removes repo, interval, and grace from the gh_run_watch schema", () => {

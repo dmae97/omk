@@ -810,7 +810,9 @@ async fn read_output(
 	let mut it = 0;
 
 	#[cfg(unix)]
-	let Ok(reader) = register_nonblocking_pipe(reader) else { return };
+	let Ok(reader) = register_nonblocking_pipe(reader) else {
+		return;
+	};
 	#[cfg(not(unix))]
 	let reader = tokio::fs::File::from_std(reader);
 	#[cfg(not(unix))]
@@ -822,7 +824,9 @@ async fn read_output(
 			let Ok(mut readiness) = (tokio::select! {
 				ready = reader.readable() => ready,
 				() = cancel_token.cancelled() => break,
-			}) else { break };
+			}) else {
+				break;
+			};
 			match readiness.try_io(|inner| read_nonblocking(inner.get_ref(), &mut buf[it..BUF])) {
 				Ok(Ok(0)) => break,
 				Ok(Ok(n)) => n,
