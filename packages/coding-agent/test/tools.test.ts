@@ -3,7 +3,6 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as zlib from "node:zlib";
-import { unzipSync } from "fflate";
 import type { AgentToolContext } from "@oh-my-pi/pi-agent-core";
 import { DEFAULT_BASH_INTERCEPTOR_RULES, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { EditTool } from "@oh-my-pi/pi-coding-agent/patch";
@@ -17,6 +16,7 @@ import { ReadTool } from "@oh-my-pi/pi-coding-agent/tools/read";
 import { WriteTool } from "@oh-my-pi/pi-coding-agent/tools/write";
 import * as markitUtils from "@oh-my-pi/pi-coding-agent/utils/markit";
 import { Snowflake } from "@oh-my-pi/pi-utils";
+import { unzipSync } from "fflate";
 
 // Helper to extract text from content blocks
 function getTextOutput(result: any): string {
