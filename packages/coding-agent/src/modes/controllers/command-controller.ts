@@ -26,6 +26,7 @@ import { PythonExecutionComponent } from "../../modes/components/python-executio
 import { getMarkdownTheme, getSymbolTheme, theme } from "../../modes/theme/theme";
 import type { InteractiveModeContext } from "../../modes/types";
 import { buildHotkeysMarkdown } from "../../modes/utils/hotkeys-markdown";
+import { buildToolsMarkdown } from "../../modes/utils/tools-markdown";
 import type { AsyncJobSnapshotItem } from "../../session/agent-session";
 import type { AuthStorage } from "../../session/auth-storage";
 import { outputMeta } from "../../tools/output-meta";
@@ -34,6 +35,16 @@ import { replaceTabs } from "../../tools/render-utils";
 import { getChangelogPath, parseChangelog } from "../../utils/changelog";
 import { openPath } from "../../utils/open";
 import { setSessionTerminalTitle } from "../../utils/title-generator";
+
+function showMarkdownPanel(ctx: InteractiveModeContext, title: string, markdown: string): void {
+	ctx.chatContainer.addChild(new Spacer(1));
+	ctx.chatContainer.addChild(new DynamicBorder());
+	ctx.chatContainer.addChild(new Text(theme.bold(theme.fg("accent", title)), 1, 0));
+	ctx.chatContainer.addChild(new Spacer(1));
+	ctx.chatContainer.addChild(new Markdown(markdown.trim(), 1, 1, getMarkdownTheme()));
+	ctx.chatContainer.addChild(new DynamicBorder());
+	ctx.ui.requestRender();
+}
 
 export class CommandController {
 	constructor(private readonly ctx: InteractiveModeContext) {}
@@ -508,13 +519,12 @@ export class CommandController {
 
 	handleHotkeysCommand(): void {
 		const hotkeys = buildHotkeysMarkdown({ keybindings: this.ctx.keybindings });
-		this.ctx.chatContainer.addChild(new Spacer(1));
-		this.ctx.chatContainer.addChild(new DynamicBorder());
-		this.ctx.chatContainer.addChild(new Text(theme.bold(theme.fg("accent", "Keyboard Shortcuts")), 1, 0));
-		this.ctx.chatContainer.addChild(new Spacer(1));
-		this.ctx.chatContainer.addChild(new Markdown(hotkeys.trim(), 1, 1, getMarkdownTheme()));
-		this.ctx.chatContainer.addChild(new DynamicBorder());
-		this.ctx.ui.requestRender();
+		showMarkdownPanel(this.ctx, "Keyboard Shortcuts", hotkeys);
+	}
+
+	handleToolsCommand(): void {
+		const tools = buildToolsMarkdown({ tools: this.ctx.session.agent.state.tools });
+		showMarkdownPanel(this.ctx, "Available Tools", tools);
 	}
 
 	async handleMemoryCommand(text: string): Promise<void> {

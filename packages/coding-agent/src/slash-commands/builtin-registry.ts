@@ -302,6 +302,14 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 		},
 	},
 	{
+		name: "tools",
+		description: "Show tools currently visible to the agent",
+		handle: (_command, runtime) => {
+			runtime.ctx.handleToolsCommand();
+			runtime.ctx.editor.setText("");
+		},
+	},
+	{
 		name: "extensions",
 		aliases: ["status"],
 		description: "Open Extension Control Center dashboard",

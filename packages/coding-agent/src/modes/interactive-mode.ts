@@ -1089,6 +1089,10 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.#commandController.handleHotkeysCommand();
 	}
 
+	handleToolsCommand(): void {
+		this.#commandController.handleToolsCommand();
+	}
+
 	handleClearCommand(): Promise<void> {
 		this.#btwController.dispose();
 		this.#extensionUiController.clearExtensionTerminalInputListeners();

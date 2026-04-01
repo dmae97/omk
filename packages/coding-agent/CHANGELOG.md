@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added `/tools` slash command to show the tools currently visible to the agent in the interactive session
+
 ## [13.17.2] - 2026-04-01
 ### Added
 
