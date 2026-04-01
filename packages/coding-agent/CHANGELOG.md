@@ -2,10 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- Project-scoped marketplace plugin installs: `omp plugin install --scope project name@marketplace` and `/marketplace install --scope project name@marketplace` install plugins into the nearest `.omp/` or `.git`-rooted project directory instead of the user directory ([#581](https://github.com/can1357/oh-my-pi/issues/581))
+- `--scope user|project` flag added to `/marketplace uninstall`, `/marketplace upgrade`, `/plugins enable`, and `/plugins disable` to disambiguate when a plugin is installed in both scopes
+- `omp plugin upgrade --scope project` with no plugin ID warns that `--scope` is ignored for bulk upgrades
+
 ### Fixed
 
 - Fixed inline image rendering to cap image height and preserve multiplexer scrollback during terminal resizes ([#587](https://github.com/can1357/oh-my-pi/pull/587) by [@smileynet](https://github.com/smileynet))
-
 ## [13.17.1] - 2026-04-01
 ### Removed
 

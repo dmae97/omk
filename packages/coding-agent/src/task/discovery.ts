@@ -88,7 +88,7 @@ export async function discoverAgents(cwd: string, home: string = os.homedir()): 
 	}
 
 	// Load agents from Claude Code marketplace plugins
-	const { roots: pluginRoots } = await listClaudePluginRoots(home);
+	const { roots: pluginRoots } = await listClaudePluginRoots(home, resolvedCwd);
 	const sortedPluginRoots = [...pluginRoots].sort((a, b) => {
 		if (a.scope === b.scope) return 0;
 		return a.scope === "project" ? -1 : 1;

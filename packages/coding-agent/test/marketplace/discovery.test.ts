@@ -181,6 +181,24 @@ describe("OMP registry round-trip", () => {
 		expect(readBack.plugins[id2]?.[0]?.version).toBe("2.0.0");
 	});
 
+	it("reads back scope:project entry — scope is preserved through registry round-trip", async () => {
+		const id = buildPluginId("proj-plugin", "test-marketplace");
+		const entry: InstalledPluginEntry = {
+			scope: "project",
+			installPath: path.join(os.tmpdir(), "fake-project-plugin"),
+			version: "1.0.0",
+			installedAt: "2025-01-15T10:30:00.000Z",
+			lastUpdated: "2025-01-15T10:30:00.000Z",
+		};
+
+		let reg = await readInstalledPluginsRegistry(ompRegistryPath);
+		reg = addInstalledPlugin(reg, id, entry);
+		await writeInstalledPluginsRegistry(ompRegistryPath, reg);
+
+		const readBack = await readInstalledPluginsRegistry(ompRegistryPath);
+		expect(readBack.plugins[id]?.[0]?.scope).toBe("project");
+	});
+
 	it("missing file returns empty registry (not an error)", async () => {
 		// listClaudePluginRoots treats absent file as empty, not a failure.
 		// readInstalledPluginsRegistry must match this behaviour.
