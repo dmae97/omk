@@ -4,6 +4,7 @@ import { formatNumber, logger } from "@oh-my-pi/pi-utils";
 import { settings } from "../../config/settings";
 import { hasPendingMermaid, prerenderMermaid } from "../../modes/theme/mermaid-cache";
 import { getMarkdownTheme, theme } from "../../modes/theme/theme";
+import { resolveImageOptions } from "../../tools/render-utils";
 
 /**
  * Component that renders a complete assistant message
@@ -76,7 +77,7 @@ export class AssistantMessageComponent extends Container {
 						image.data,
 						image.mimeType,
 						{ fallbackColor: (text: string) => theme.fg("toolOutput", text) },
-						{ maxWidthCells: settings.get("tui.maxInlineImageColumns") },
+						resolveImageOptions(),
 					),
 				);
 				continue;
