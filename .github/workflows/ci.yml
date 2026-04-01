@@ -237,7 +237,7 @@ jobs:
             TARGET="$3"
             OUTFILE="$4"
             TARGET_PLATFORM="$PLATFORM" TARGET_ARCH="$ARCH" bun --cwd=packages/natives run embed:native
-            bun build --compile $DEFINES --target="$TARGET" "$ENTRYPOINT" --outfile "$OUTFILE"
+            bun build --compile $DEFINES --external mupdf --target="$TARGET" "$ENTRYPOINT" --outfile "$OUTFILE"
           }
           build_binary darwin arm64 bun-darwin-arm64 packages/coding-agent/binaries/omp-darwin-arm64
           build_binary darwin x64 bun-darwin-x64 packages/coding-agent/binaries/omp-darwin-x64
