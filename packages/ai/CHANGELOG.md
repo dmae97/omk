@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.17.5] - 2026-04-01
 ### Changed
 
 - Increased default first-event timeout from 15s to 45s to better accommodate longer request setup times

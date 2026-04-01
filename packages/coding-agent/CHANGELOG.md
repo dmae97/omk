@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.17.5] - 2026-04-01
 ### Added
 
 - Added support for writing to ZIP archives using fflate library for cross-platform compatibility
