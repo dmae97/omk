@@ -120,7 +120,9 @@ function findRuntimeAssistant(session: AgentSession, text: string): AssistantMes
 }
 
 function expectAssistantReplayMetadataSanitized(message: AssistantMessage): void {
-	expect(message.providerPayload).toEqual(createStaleAssistantHistoryPayload(message.provider));
+	// After rehydration, assistant Responses-family providerPayload must be stripped
+	// to prevent stale native history replay on warmed sessions.
+	expect(message.providerPayload).toBeUndefined();
 
 	const thinkingBlock = message.content.find(block => block.type === "thinking");
 	if (!thinkingBlock || thinkingBlock.type !== "thinking") {
