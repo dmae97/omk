@@ -18,6 +18,7 @@ import {
 	type Tool,
 	type ToolChoice,
 } from "../types";
+import { createAbortSourceTracker } from "../utils/abort";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
 import {
@@ -39,6 +40,8 @@ import {
 import { transformMessages } from "./transform-messages";
 
 const DEFAULT_AZURE_API_VERSION = "v1";
+const AZURE_OPENAI_RESPONSES_FIRST_EVENT_TIMEOUT_MESSAGE =
+	"Azure OpenAI responses stream timed out while waiting for the first event";
 
 function parseDeploymentNameMap(value: string | undefined): Map<string, string> {
 	const map = new Map<string, string>();
@@ -115,6 +118,9 @@ export const streamAzureOpenAIResponses: StreamFunction<"azure-openai-responses"
 			timestamp: Date.now(),
 		};
 		let rawRequestDump: RawHttpRequestDump | undefined;
+		const abortTracker = createAbortSourceTracker(options?.signal);
+		const firstEventTimeoutAbortError = new Error(AZURE_OPENAI_RESPONSES_FIRST_EVENT_TIMEOUT_MESSAGE);
+		const { requestAbortController, requestSignal } = abortTracker;
 
 		try {
 			// Create Azure OpenAI client
@@ -122,13 +128,9 @@ export const streamAzureOpenAIResponses: StreamFunction<"azure-openai-responses"
 			const client = createClient(model, apiKey, options);
 			const { baseUrl } = resolveAzureConfig(model, options);
 			const params = buildParams(model, context, options, deploymentName, baseUrl);
-			const requestAbortController = new AbortController();
-			const requestSignal = options?.signal
-				? AbortSignal.any([options.signal, requestAbortController.signal])
-				: requestAbortController.signal;
 			const idleTimeoutMs = getOpenAIStreamIdleTimeoutMs();
 			const firstEventWatchdog = createFirstEventWatchdog(getStreamFirstEventTimeoutMs(idleTimeoutMs), () =>
-				requestAbortController.abort(),
+				abortTracker.abortLocally(firstEventTimeoutAbortError),
 			);
 			options?.onPayload?.(params);
 			rawRequestDump = {
@@ -158,7 +160,11 @@ export const streamAzureOpenAIResponses: StreamFunction<"azure-openai-responses"
 				},
 			);
 
-			if (options?.signal?.aborted) {
+			const firstEventTimeoutError = abortTracker.getLocalAbortReason();
+			if (firstEventTimeoutError) {
+				throw firstEventTimeoutError;
+			}
+			if (abortTracker.wasCallerAbort()) {
 				throw new Error("Request was aborted");
 			}
 
@@ -172,8 +178,9 @@ export const streamAzureOpenAIResponses: StreamFunction<"azure-openai-responses"
 			stream.end();
 		} catch (error) {
 			for (const block of output.content) delete (block as { index?: number }).index;
-			output.stopReason = options?.signal?.aborted ? "aborted" : "error";
-			output.errorMessage = await finalizeErrorMessage(error, rawRequestDump);
+			const firstEventTimeoutError = abortTracker.getLocalAbortReason();
+			output.stopReason = abortTracker.wasCallerAbort() ? "aborted" : "error";
+			output.errorMessage = firstEventTimeoutError?.message ?? (await finalizeErrorMessage(error, rawRequestDump));
 			output.duration = Date.now() - startTime;
 			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "error", reason: output.stopReason, error: output });

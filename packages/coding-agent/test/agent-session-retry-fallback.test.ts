@@ -45,6 +45,34 @@ async function _waitFor(predicate: () => boolean, timeoutMs = 1000): Promise<voi
 	throw new Error("Timed out waiting for condition");
 }
 
+type AutoRetryStartEvent = Extract<AgentSessionEvent, { type: "auto_retry_start" }>;
+type AutoRetryEndEvent = Extract<AgentSessionEvent, { type: "auto_retry_end" }>;
+
+function trackRetryEvents(session: AgentSession): {
+	retryStartEvents: AutoRetryStartEvent[];
+	retryEndEvents: AutoRetryEndEvent[];
+} {
+	const retryStartEvents: AutoRetryStartEvent[] = [];
+	const retryEndEvents: AutoRetryEndEvent[] = [];
+	session.subscribe(event => {
+		if (event.type === "auto_retry_start") {
+			retryStartEvents.push(event);
+		}
+		if (event.type === "auto_retry_end") {
+			retryEndEvents.push(event);
+		}
+	});
+	return { retryStartEvents, retryEndEvents };
+}
+
+function getLastAssistantMessage(session: AgentSession): AssistantMessage {
+	const lastMessage = session.messages.at(-1);
+	if (!lastMessage || lastMessage.role !== "assistant") {
+		throw new Error("Expected final assistant message");
+	}
+	return lastMessage;
+}
+
 describe("AgentSession retry fallback", () => {
 	let tempDir: TempDir;
 	let authStorage: AuthStorage;
@@ -198,6 +226,144 @@ describe("AgentSession retry fallback", () => {
 				role: "default",
 			},
 		]);
+	});
+
+	it("auto-retries preserved OpenAI first-event timeout errors", async () => {
+		const model = getBundledModel("openai", "gpt-4o-mini");
+		if (!model) {
+			throw new Error("Expected bundled OpenAI test model to exist");
+		}
+
+		const timeoutMessage = "OpenAI responses stream timed out while waiting for the first event";
+		const requestedModels: string[] = [];
+		let attemptCount = 0;
+
+		const agent = new Agent({
+			getApiKey: provider => `${provider}-test-key`,
+			initialState: {
+				model,
+				systemPrompt: "Test",
+				tools: [],
+				messages: [],
+			},
+			streamFn: requestedModel => {
+				requestedModels.push(`${requestedModel.provider}/${requestedModel.id}`);
+				const stream = new MockAssistantStream();
+				queueMicrotask(() => {
+					attemptCount += 1;
+					if (attemptCount === 1) {
+						const message = createAssistantMessage(requestedModel, {
+							stopReason: "error",
+							errorMessage: timeoutMessage,
+						});
+						stream.push({ type: "start", partial: message });
+						stream.push({ type: "error", reason: "error", error: message });
+						return;
+					}
+					if (attemptCount === 2) {
+						const message = createAssistantMessage(requestedModel, {
+							text: "Recovered after OpenAI timeout",
+							stopReason: "stop",
+						});
+						stream.push({
+							type: "start",
+							partial: createAssistantMessage(requestedModel, { text: "", stopReason: "stop" }),
+						});
+						stream.push({ type: "done", reason: "stop", message });
+						return;
+					}
+					throw new Error(`Unexpected retry attempt in timeout test: ${attemptCount}`);
+				});
+				return stream;
+			},
+		});
+
+		const settings = Settings.isolated({
+			"compaction.enabled": false,
+			"retry.baseDelayMs": 5,
+			"retry.maxRetries": 1,
+		});
+		settings.setModelRole("default", `${model.provider}/${model.id}`);
+
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings,
+			modelRegistry,
+		});
+		const { retryStartEvents, retryEndEvents } = trackRetryEvents(session);
+
+		await session.prompt("Retry preserved OpenAI timeout");
+		await session.waitForIdle();
+
+		expect(requestedModels).toEqual([`${model.provider}/${model.id}`, `${model.provider}/${model.id}`]);
+		expect(retryStartEvents).toHaveLength(1);
+		expect(retryStartEvents[0]).toMatchObject({
+			attempt: 1,
+			maxAttempts: 1,
+			errorMessage: timeoutMessage,
+		});
+		expect(retryEndEvents).toHaveLength(1);
+		expect(retryEndEvents[0]).toMatchObject({ success: true, attempt: 1 });
+		const lastAssistant = getLastAssistantMessage(session);
+		expect(lastAssistant.stopReason).toBe("stop");
+		expect(lastAssistant.content).toContainEqual({ type: "text", text: "Recovered after OpenAI timeout" });
+	});
+
+	it("does not auto-retry generic Request was aborted. errors", async () => {
+		const model = getBundledModel("openai", "gpt-4o-mini");
+		if (!model) {
+			throw new Error("Expected bundled OpenAI test model to exist");
+		}
+
+		const requestedModels: string[] = [];
+		const agent = new Agent({
+			getApiKey: provider => `${provider}-test-key`,
+			initialState: {
+				model,
+				systemPrompt: "Test",
+				tools: [],
+				messages: [],
+			},
+			streamFn: requestedModel => {
+				requestedModels.push(`${requestedModel.provider}/${requestedModel.id}`);
+				const stream = new MockAssistantStream();
+				queueMicrotask(() => {
+					const message = createAssistantMessage(requestedModel, {
+						stopReason: "error",
+						errorMessage: "Request was aborted.",
+					});
+					stream.push({ type: "start", partial: message });
+					stream.push({ type: "error", reason: "error", error: message });
+				});
+				return stream;
+			},
+		});
+
+		const settings = Settings.isolated({
+			"compaction.enabled": false,
+			"retry.baseDelayMs": 5,
+			"retry.maxRetries": 1,
+		});
+		settings.setModelRole("default", `${model.provider}/${model.id}`);
+
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings,
+			modelRegistry,
+		});
+		const { retryStartEvents, retryEndEvents } = trackRetryEvents(session);
+
+		await session.prompt("Do not retry generic abort text");
+		await session.waitForIdle();
+
+		expect(requestedModels).toEqual([`${model.provider}/${model.id}`]);
+		expect(retryStartEvents).toHaveLength(0);
+		expect(retryEndEvents).toHaveLength(0);
+		const lastAssistant = getLastAssistantMessage(session);
+		expect(lastAssistant.stopReason).toBe("error");
+		expect(lastAssistant.errorMessage).toBe("Request was aborted.");
 	});
 
 	it("suppresses cooled selectors and lazily reverts to the role primary after cooldown expiry", async () => {

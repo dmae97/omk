@@ -29,6 +29,7 @@ import {
 	type ToolChoice,
 	type ToolResultMessage,
 } from "../types";
+import { createAbortSourceTracker } from "../utils/abort";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
 import {
@@ -162,6 +163,9 @@ function getTrailingPartialTag(text: string, tags: readonly string[]): string {
 	return text.slice(-maxLength);
 }
 
+const OPENAI_COMPLETIONS_FIRST_EVENT_TIMEOUT_MESSAGE =
+	"OpenAI completions stream timed out while waiting for the first event";
+
 export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 	model: Model<"openai-completions">,
 	context: Context,
@@ -191,16 +195,15 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 			timestamp: Date.now(),
 		};
 		let rawRequestDump: RawHttpRequestDump | undefined;
+		const abortTracker = createAbortSourceTracker(options?.signal);
+		const firstEventTimeoutAbortError = new Error(OPENAI_COMPLETIONS_FIRST_EVENT_TIMEOUT_MESSAGE);
+		const { requestAbortController, requestSignal } = abortTracker;
 
 		try {
 			const apiKey = options?.apiKey || getEnvApiKey(model.provider) || "";
-			const requestAbortController = new AbortController();
-			const requestSignal = options?.signal
-				? AbortSignal.any([options.signal, requestAbortController.signal])
-				: requestAbortController.signal;
 			const idleTimeoutMs = getOpenAIStreamIdleTimeoutMs();
 			const firstEventWatchdog = createFirstEventWatchdog(getStreamFirstEventTimeoutMs(idleTimeoutMs), () =>
-				requestAbortController.abort(),
+				abortTracker.abortLocally(firstEventTimeoutAbortError),
 			);
 			const { client, copilotPremiumRequests, baseUrl } = await createClient(
 				model,
@@ -485,7 +488,11 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 
 			finishCurrentBlock(currentBlock);
 
-			if (options?.signal?.aborted) {
+			const firstEventTimeoutError = abortTracker.getLocalAbortReason();
+			if (firstEventTimeoutError) {
+				throw firstEventTimeoutError;
+			}
+			if (abortTracker.wasCallerAbort()) {
 				throw new Error("Request was aborted");
 			}
 
@@ -502,8 +509,9 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 			stream.end();
 		} catch (error) {
 			for (const block of output.content) delete (block as any).index;
-			output.stopReason = options?.signal?.aborted ? "aborted" : "error";
-			output.errorMessage = await finalizeErrorMessage(error, rawRequestDump);
+			const firstEventTimeoutError = abortTracker.getLocalAbortReason();
+			output.stopReason = abortTracker.wasCallerAbort() ? "aborted" : "error";
+			output.errorMessage = firstEventTimeoutError?.message ?? (await finalizeErrorMessage(error, rawRequestDump));
 			// Some providers via OpenRouter include extra details here.
 			const rawMetadata = (error as { error?: { metadata?: { raw?: string } } })?.error?.metadata?.raw;
 			if (rawMetadata) output.errorMessage += `\n${rawMetadata}`;

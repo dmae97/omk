@@ -28,6 +28,7 @@ import {
 	resolveCacheRetention,
 	sanitizeOpenAIResponsesHistoryItemsForReplay,
 } from "../utils";
+import { createAbortSourceTracker } from "../utils/abort";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
 import {
@@ -82,6 +83,8 @@ export interface OpenAIResponsesOptions extends StreamOptions {
 }
 
 const OPENAI_RESPONSES_PROVIDER_SESSION_STATE_PREFIX = "openai-responses:";
+const OPENAI_RESPONSES_FIRST_EVENT_TIMEOUT_MESSAGE =
+	"OpenAI responses stream timed out while waiting for the first event";
 
 interface OpenAIResponsesProviderSessionState extends ProviderSessionState {
 	nativeHistoryReplayWarmed: boolean;
@@ -161,6 +164,9 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 			timestamp: Date.now(),
 		};
 		let rawRequestDump: RawHttpRequestDump | undefined;
+		const abortTracker = createAbortSourceTracker(options?.signal);
+		const firstEventTimeoutAbortError = new Error(OPENAI_RESPONSES_FIRST_EVENT_TIMEOUT_MESSAGE);
+		const { requestAbortController, requestSignal } = abortTracker;
 
 		try {
 			// Create OpenAI client
@@ -174,13 +180,9 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 			);
 			const providerSessionState = getOpenAIResponsesProviderSessionState(model, options?.providerSessionState);
 			const { params } = buildParams(model, context, options, providerSessionState, baseUrl);
-			const requestAbortController = new AbortController();
-			const requestSignal = options?.signal
-				? AbortSignal.any([options.signal, requestAbortController.signal])
-				: requestAbortController.signal;
 			const idleTimeoutMs = getOpenAIStreamIdleTimeoutMs();
 			const firstEventWatchdog = createFirstEventWatchdog(getStreamFirstEventTimeoutMs(idleTimeoutMs), () =>
-				requestAbortController.abort(),
+				abortTracker.abortLocally(firstEventTimeoutAbortError),
 			);
 			options?.onPayload?.(params);
 			rawRequestDump = {
@@ -216,7 +218,11 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 			);
 			if (copilotPremiumRequests !== undefined) output.usage.premiumRequests = copilotPremiumRequests;
 
-			if (options?.signal?.aborted) {
+			const firstEventTimeoutError = abortTracker.getLocalAbortReason();
+			if (firstEventTimeoutError) {
+				throw firstEventTimeoutError;
+			}
+			if (abortTracker.wasCallerAbort()) {
 				throw new Error("Request was aborted");
 			}
 
@@ -233,8 +239,9 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 			stream.end();
 		} catch (error) {
 			for (const block of output.content) delete (block as { index?: number }).index;
-			output.stopReason = options?.signal?.aborted ? "aborted" : "error";
-			output.errorMessage = await finalizeErrorMessage(error, rawRequestDump);
+			const firstEventTimeoutError = abortTracker.getLocalAbortReason();
+			output.stopReason = abortTracker.wasCallerAbort() ? "aborted" : "error";
+			output.errorMessage = firstEventTimeoutError?.message ?? (await finalizeErrorMessage(error, rawRequestDump));
 			output.duration = Date.now() - startTime;
 			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "error", reason: output.stopReason, error: output });
