@@ -1,6 +1,17 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added support for writing to ZIP archives using fflate library for cross-platform compatibility
+
+### Changed
+
+- Modified archive writing to detect and handle ZIP files separately from Bun archives
+
+### Removed
+
+- Removed GhPrPushTool test case
 
 ## [13.17.4] - 2026-04-01
 ### Added

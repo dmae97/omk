@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as zlib from "node:zlib";
+import { unzipSync } from "fflate";
 import type { AgentToolContext } from "@oh-my-pi/pi-agent-core";
 import { DEFAULT_BASH_INTERCEPTOR_RULES, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { EditTool } from "@oh-my-pi/pi-coding-agent/patch";
@@ -603,10 +604,9 @@ describe("Coding Agent Tools", () => {
 				`Successfully wrote ${content.length} bytes to ${archivePath}:pkg/README.md`,
 			);
 
-			const archive = new Bun.Archive(await Bun.file(archivePath).bytes());
-			const files = await archive.files();
-			expect(await files.get("pkg/README.md")?.text()).toBe(content);
-			expect(await files.get("pkg/src/index.ts")?.text()).toBe("export const archiveValue = 1;\n");
+			const unzipped = unzipSync(new Uint8Array(fs.readFileSync(archivePath)));
+			expect(new TextDecoder().decode(unzipped["pkg/README.md"])).toBe(content);
+			expect(new TextDecoder().decode(unzipped["pkg/src/index.ts"])).toBe("export const archiveValue = 1;\n");
 		});
 
 		it("should create a new archive when writing to an archive subpath", async () => {

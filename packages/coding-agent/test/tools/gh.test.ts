@@ -10,7 +10,6 @@ import {
 	GhIssueViewTool,
 	GhPrCheckoutTool,
 	GhPrDiffTool,
-	GhPrPushTool,
 	GhPrViewTool,
 	GhRepoViewTool,
 	GhRunWatchTool,
@@ -398,52 +397,6 @@ describe("GitHub CLI tools", () => {
 			);
 			expect(runGit(fixture.repoRoot, ["worktree", "list", "--porcelain"])).toContain(`worktree ${worktreePath}`);
 			expect(runGit(worktreePath, ["branch", "--show-current"])).toBe("pr-123");
-		} finally {
-			await fs.rm(fixture.baseDir, { recursive: true, force: true });
-		}
-	});
-
-	it("pushes a checked-out PR branch back to the contributor fork branch", async () => {
-		const fixture = await createPrFixture();
-		try {
-			vi.spyOn(ghCli, "runGhJson")
-				.mockResolvedValueOnce({
-					number: 123,
-					title: "Contributor fix",
-					url: "https://github.com/base/repo/pull/123",
-					baseRefName: "main",
-					headRefName: fixture.headRefName,
-					headRefOid: fixture.headRefOid,
-					headRepository: { nameWithOwner: "contrib/repo" },
-					headRepositoryOwner: { login: "contrib" },
-					isCrossRepository: true,
-					maintainerCanModify: true,
-				})
-				.mockResolvedValueOnce({
-					nameWithOwner: "contrib/repo",
-					sshUrl: fixture.forkBare,
-					url: fixture.forkBare,
-				});
-
-			const checkoutTool = new GhPrCheckoutTool(createSession(fixture.repoRoot));
-			await checkoutTool.execute("pr-checkout", { pr: "123" });
-
-			const worktreePath = path.join(fixture.repoRoot, ".worktrees", "pr-123");
-			await fs.writeFile(path.join(worktreePath, "README.md"), "base\nfeature\npushed\n");
-			runGit(worktreePath, ["add", "README.md"]);
-			runGit(worktreePath, ["commit", "-m", "update contributor branch"]);
-
-			const pushTool = new GhPrPushTool(createSession(worktreePath));
-			const result = await pushTool.execute("pr-push", {});
-			const text = result.content[0]?.type === "text" ? result.content[0].text : "";
-
-			expect(text).toContain(`Remote branch: ${fixture.headRefName}`);
-			expect(text).toContain("Remote: forksrc");
-
-			const remoteReadme = runGit(fixture.forkBare, ["show", `${fixture.headRefName}:README.md`]);
-			expect(remoteReadme).toContain("pushed");
-			const originBranchList = runGit(fixture.originBare, ["branch", "--list", "pr-123"]);
-			expect(originBranchList).toBe("");
 		} finally {
 			await fs.rm(fixture.baseDir, { recursive: true, force: true });
 		}

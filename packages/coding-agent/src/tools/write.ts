@@ -11,6 +11,7 @@ import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { isEnoent, untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
+import { unzipSync, zipSync } from "fflate";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import { createLspWritethrough, type FileDiagnosticsResult, type WritethroughCallback, writethroughNoop } from "../lsp";
@@ -194,38 +195,65 @@ export class WriteTool implements AgentTool<typeof writeSchema, WriteToolDetails
 		content: string,
 		resolvedArchivePath: ResolvedArchiveWritePath,
 	): Promise<AgentToolResult<WriteToolDetails>> {
-		const archiveEntries: Record<string, string | File> = {};
-		if (resolvedArchivePath.exists) {
-			let archive: Bun.Archive;
-			try {
-				archive = new Bun.Archive(await Bun.file(resolvedArchivePath.absolutePath).bytes());
-			} catch (error) {
-				throw new ToolError(error instanceof Error ? error.message : String(error));
-			}
-
-			let files: Map<string, File>;
-			try {
-				files = await archive.files();
-			} catch (error) {
-				throw new ToolError(error instanceof Error ? error.message : String(error));
-			}
-
-			for (const [entryPath, file] of files) {
-				archiveEntries[entryPath.replace(/\\/g, "/")] = file;
-			}
-		}
-
-		archiveEntries[resolvedArchivePath.archiveSubPath] = content;
+		const isZip = resolvedArchivePath.absolutePath.toLowerCase().endsWith(".zip");
 
 		const parentDir = path.dirname(resolvedArchivePath.absolutePath);
 		if (parentDir && parentDir !== ".") {
 			await fs.mkdir(parentDir, { recursive: true });
 		}
 
-		try {
-			await Bun.Archive.write(resolvedArchivePath.absolutePath, archiveEntries);
-		} catch (error) {
-			throw new ToolError(error instanceof Error ? error.message : String(error));
+		if (isZip) {
+			const zipEntries: Record<string, Uint8Array> = {};
+
+			if (resolvedArchivePath.exists) {
+				try {
+					const bytes = await Bun.file(resolvedArchivePath.absolutePath).bytes();
+					const existing = unzipSync(new Uint8Array(bytes));
+					for (const [entryPath, data] of Object.entries(existing)) {
+						zipEntries[entryPath.replace(/\\/g, "/")] = data;
+					}
+				} catch (error) {
+					throw new ToolError(error instanceof Error ? error.message : String(error));
+				}
+			}
+
+			zipEntries[resolvedArchivePath.archiveSubPath] = new TextEncoder().encode(content);
+
+			try {
+				const zipBuffer = zipSync(zipEntries);
+				await Bun.write(resolvedArchivePath.absolutePath, zipBuffer);
+			} catch (error) {
+				throw new ToolError(error instanceof Error ? error.message : String(error));
+			}
+		} else {
+			const archiveEntries: Record<string, string | File> = {};
+			if (resolvedArchivePath.exists) {
+				let archive: Bun.Archive;
+				try {
+					archive = new Bun.Archive(await Bun.file(resolvedArchivePath.absolutePath).bytes());
+				} catch (error) {
+					throw new ToolError(error instanceof Error ? error.message : String(error));
+				}
+
+				let files: Map<string, File>;
+				try {
+					files = await archive.files();
+				} catch (error) {
+					throw new ToolError(error instanceof Error ? error.message : String(error));
+				}
+
+				for (const [entryPath, file] of files) {
+					archiveEntries[entryPath.replace(/\\/g, "/")] = file;
+				}
+			}
+
+			archiveEntries[resolvedArchivePath.archiveSubPath] = content;
+
+			try {
+				await Bun.Archive.write(resolvedArchivePath.absolutePath, archiveEntries);
+			} catch (error) {
+				throw new ToolError(error instanceof Error ? error.message : String(error));
+			}
 		}
 
 		invalidateFsScanAfterWrite(resolvedArchivePath.absolutePath);
