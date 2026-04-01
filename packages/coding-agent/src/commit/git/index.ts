@@ -189,12 +189,11 @@ function extractFileHeader(diff: string): string {
 	return headerLines.join("\n");
 }
 
-function joinPatch(parts: string[]): string {
-	return parts
+export function joinPatch(parts: string[]): string {
+	return `${parts
 		.map(part => (part.endsWith("\n") ? part : `${part}\n`))
 		.join("\n")
-		.trimEnd()
-		.concat("\n");
+		.replace(/\n+$/, "")}\n`;
 }
 
 function selectHunks(file: FileHunks, selector: HunkSelection["hunks"]): FileHunks["hunks"] {

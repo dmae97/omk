@@ -34,7 +34,8 @@
 		"generate-models": "bun --cwd=packages/ai scripts/generate-models.ts",
 		"generate-docs-index": "bun --cwd=packages/coding-agent run generate-docs-index",
 		"generate-template": "bun --cwd=packages/coding-agent run generate-template",
-		"sync-exports": "bun scripts/sync-exports.ts"
+		"sync-exports": "bun scripts/sync-exports.ts",
+		"check-spoofed-versions": "bun scripts/check-spoofed-versions.ts"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4",

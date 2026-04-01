@@ -131,6 +131,7 @@ impl_lang_expando!(Zig, language_zig, 'µ');
 // ── Stub languages ($ accepted in grammar) ──────────────────────────────
 
 impl_lang!(Bash, language_bash);
+impl_lang!(Clojure, language_clojure);
 impl_lang!(Java, language_java);
 impl_lang!(JavaScript, language_javascript);
 impl_lang!(Json, language_json);
@@ -252,6 +253,7 @@ pub enum SupportLang {
 	C,
 	Cpp,
 	CSharp,
+	Clojure,
 	Css,
 	Diff,
 	Elixir,
@@ -292,9 +294,10 @@ impl SupportLang {
 	pub const fn all_langs() -> &'static [Self] {
 		use SupportLang::*;
 		&[
-			Bash, C, Cpp, CSharp, Css, Diff, Elixir, Go, Haskell, Hcl, Html, Java, JavaScript, Json,
-			Julia, Kotlin, Lua, Make, Markdown, Nix, ObjC, Odin, Php, Python, Regex, Ruby, Rust,
-			Scala, Solidity, Starlark, Swift, Toml, Tsx, TypeScript, Verilog, Xml, Yaml, Zig,
+			Bash, C, Cpp, CSharp, Clojure, Css, Diff, Elixir, Go, Haskell, Hcl, Html, Java,
+			JavaScript, Json, Julia, Kotlin, Lua, Make, Markdown, Nix, ObjC, Odin, Php, Python, Regex,
+			Ruby, Rust, Scala, Solidity, Starlark, Swift, Toml, Tsx, TypeScript, Verilog, Xml, Yaml,
+			Zig,
 		]
 	}
 
@@ -306,6 +309,7 @@ impl SupportLang {
 			Self::C => "c",
 			Self::Cpp => "cpp",
 			Self::CSharp => "csharp",
+			Self::Clojure => "clojure",
 			Self::Css => "css",
 			Self::Diff => "diff",
 			Self::Elixir => "elixir",
@@ -360,6 +364,7 @@ macro_rules! execute_lang_method {
 			S::C => C.$method($($pname,)*),
 			S::Cpp => Cpp.$method($($pname,)*),
 			S::CSharp => CSharp.$method($($pname,)*),
+			S::Clojure => Clojure.$method($($pname,)*),
 			S::Css => Css.$method($($pname,)*),
 			S::Diff => Diff.$method($($pname,)*),
 			S::Elixir => Elixir.$method($($pname,)*),
@@ -456,6 +461,7 @@ const fn extensions(lang: SupportLang) -> &'static [&'static str] {
 		C => &["c", "h"],
 		Cpp => &["cc", "hpp", "cpp", "c++", "hh", "cxx", "cu", "ino"],
 		CSharp => &["cs"],
+		Clojure => &["clj", "cljs", "cljc", "edn"],
 		Css => &["css", "scss"],
 		Diff => &["diff", "patch"],
 		Elixir => &["ex", "exs"],

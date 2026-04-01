@@ -41,6 +41,7 @@ export type OAuthProvider =
 	| "tavily"
 	| "together"
 	| "venice"
+	| "vercel-ai-gateway"
 	| "vllm"
 	| "xiaomi"
 	| "zenmux"

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { getBundledModel } from "../src/models";
-import { convertMessages, streamOpenAICompletions } from "../src/providers/openai-completions";
+import { convertMessages, detectCompat, streamOpenAICompletions } from "../src/providers/openai-completions";
 import type { AssistantMessage, Context, Model, OpenAICompat } from "../src/types";
 
 const originalFetch = global.fetch;
@@ -234,5 +234,49 @@ describe("openai-completions compatibility", () => {
 				controller: "mlx",
 			}),
 		);
+	});
+
+	it("preserves the streamed reasoning field name for follow-up requests", async () => {
+		const model: Model<"openai-completions"> = {
+			...getBundledModel("openai", "gpt-4o-mini"),
+			api: "openai-completions",
+		};
+		global.fetch = createMockFetch([
+			{
+				id: "chatcmpl-reasoning-text",
+				object: "chat.completion.chunk",
+				created: 0,
+				model: model.id,
+				choices: [
+					{
+						index: 0,
+						delta: { reasoning_text: "inspect tool output" },
+					},
+				],
+			},
+			{
+				id: "chatcmpl-reasoning-text",
+				object: "chat.completion.chunk",
+				created: 0,
+				model: model.id,
+				choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+			},
+			"[DONE]",
+		]);
+
+		const result = await streamOpenAICompletions(model, baseContext(), { apiKey: "test-key" }).result();
+		expect(result.content).toContainEqual({
+			type: "thinking",
+			thinking: "inspect tool output",
+			thinkingSignature: "reasoning_text",
+		});
+
+		const messages = convertMessages(model, { messages: [result] }, detectCompat(model));
+		const assistant = messages.find(message => message.role === "assistant");
+		expect(assistant).toBeDefined();
+		const assistantObject = toObject(assistant);
+		expect(assistantObject).toBeDefined();
+		expect(assistantObject ? Reflect.get(assistantObject, "reasoning_text") : undefined).toBe("inspect tool output");
+		expect(assistantObject ? Reflect.get(assistantObject, "reasoning_content") : undefined).toBeUndefined();
 	});
 });

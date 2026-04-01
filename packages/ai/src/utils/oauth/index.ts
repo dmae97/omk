@@ -113,6 +113,8 @@ export { loginTogether } from "./together";
 export * from "./types";
 // Venice (API key)
 export { loginVenice } from "./venice";
+// Vercel AI Gateway (API key)
+export { loginVercelAiGateway } from "./vercel-ai-gateway";
 // vLLM (API key)
 export { loginVllm } from "./vllm";
 // Xiaomi MiMo (API key)
@@ -303,6 +305,11 @@ const builtInOAuthProviders: OAuthProviderInfo[] = [
 		name: "Cloudflare AI Gateway",
 		available: true,
 	},
+	{
+		id: "vercel-ai-gateway",
+		name: "Vercel AI Gateway",
+		available: true,
+	},
 ];
 
 const customOAuthProviders = new Map<string, OAuthProviderInterface>();
@@ -400,6 +407,7 @@ export async function refreshOAuthToken(
 		case "moonshot":
 		case "kagi":
 		case "cloudflare-ai-gateway":
+		case "vercel-ai-gateway":
 		case "qwen-portal":
 		case "zenmux":
 		case "vllm":

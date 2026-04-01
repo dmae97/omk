@@ -62,6 +62,7 @@ import { loginTavily } from "./utils/oauth/tavily";
 import { loginTogether } from "./utils/oauth/together";
 import type { OAuthController, OAuthCredentials, OAuthProvider, OAuthProviderId } from "./utils/oauth/types";
 import { loginVenice } from "./utils/oauth/venice";
+import { loginVercelAiGateway } from "./utils/oauth/vercel-ai-gateway";
 import { loginVllm } from "./utils/oauth/vllm";
 import { loginXiaomi } from "./utils/oauth/xiaomi";
 import { loginZai } from "./utils/oauth/zai";
@@ -900,6 +901,11 @@ export class AuthStorage {
 			}
 			case "cloudflare-ai-gateway": {
 				const apiKey = await loginCloudflareAiGateway(ctrl);
+				await saveApiKeyCredential(apiKey);
+				return;
+			}
+			case "vercel-ai-gateway": {
+				const apiKey = await loginVercelAiGateway(ctrl);
 				await saveApiKeyCredential(apiKey);
 				return;
 			}

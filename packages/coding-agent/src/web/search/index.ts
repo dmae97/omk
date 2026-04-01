@@ -4,7 +4,6 @@
  * Single tool supporting Anthropic, Perplexity, Exa, Brave, Jina, Kimi, Gemini, Codex, Tavily, Kagi, Z.AI, and Synthetic
  * providers with provider-specific parameters exposed conditionally.
  *
- * Code search is also supported via the code_search tool.
  */
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { StringEnum } from "@oh-my-pi/pi-ai";
@@ -13,17 +12,9 @@ import { renderPromptTemplate } from "../../config/prompt-templates";
 import type { CustomTool, CustomToolContext, RenderResultOptions } from "../../extensibility/custom-tools/types";
 import type { Theme } from "../../modes/theme/theme";
 import webSearchSystemPrompt from "../../prompts/system/web-search.md" with { type: "text" };
-import codeSearchDescription from "../../prompts/tools/code-search.md" with { type: "text" };
 import webSearchDescription from "../../prompts/tools/web-search.md" with { type: "text" };
 import type { ToolSession } from "../../tools";
 import { formatAge } from "../../tools/render-utils";
-import {
-	type CodeSearchRenderDetails,
-	type CodeSearchToolParams,
-	executeCodeSearch,
-	renderCodeSearchCall,
-	renderCodeSearchResult,
-} from "./code-search";
 import { getSearchProvider, resolveProviderChain, type SearchProvider } from "./provider";
 import { renderSearchCall, renderSearchResult, type SearchRenderDetails } from "./render";
 import type { SearchProviderId, SearchResponse } from "./types";
@@ -262,34 +253,8 @@ export const webSearchCustomTool: CustomTool<typeof webSearchSchema, SearchRende
 	},
 };
 
-/** Schema for code context search */
-const codeSearchParameters = Type.Object({
-	query: Type.String({ description: "Grep-style code search query; use exact tokens or short quoted phrases" }),
-	code_context: Type.Optional(Type.String({ description: "Optional disambiguation tokens only, not a sentence" })),
-});
-
-/** Code context search - optimized for code snippets and documentation */
-export const codeSearchTool: CustomTool<typeof codeSearchParameters, CodeSearchRenderDetails> = {
-	name: "code_search",
-	label: "Code Search",
-	description: renderPromptTemplate(codeSearchDescription),
-	parameters: codeSearchParameters,
-
-	async execute(_toolCallId, params, _onUpdate, _ctx, _signal) {
-		return executeCodeSearch(params);
-	},
-
-	renderCall(args: CodeSearchToolParams, options: RenderResultOptions, theme: Theme) {
-		return renderCodeSearchCall(args, options, theme);
-	},
-
-	renderResult(result, options, theme) {
-		return renderCodeSearchResult(result, options, theme);
-	},
-};
-
 export function getSearchTools(): CustomTool<any, any>[] {
-	return [webSearchCustomTool, codeSearchTool];
+	return [webSearchCustomTool];
 }
 
 export { getSearchProvider, setPreferredSearchProvider } from "./provider";

@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+## [13.17.1] - 2026-04-01
+
+### Added
+
+- Added `thinkingSignature` field to thinking content blocks to preserve the original reasoning field name (e.g., `reasoning_text`, `reasoning_content`) for accurate follow-up requests
+- Added first-event timeout detection for streaming responses to abort stuck requests before user-visible content arrives
+- Added `PI_STREAM_FIRST_EVENT_TIMEOUT_MS` environment variable to configure first-event timeout (defaults to 15 seconds or idle timeout, whichever is lower)
+
+### Changed
+
+- Changed thinking block handling to track and distinguish between different reasoning field types, enabling proper field name preservation across multiple turns
+
+### Fixed
+
+- Fixed Anthropic stream timeout errors to be properly retried by recognizing first-event timeout messages
+- Fixed stream stall detection to distinguish between first-event timeouts and idle timeouts, enabling faster recovery for stuck connections
+
+### Added
+
+- Added Vercel AI Gateway to `/login` providers for interactive API key setup
+
+### Fixed
+- Fixed `omp commit` failing with HTTP 400 errors when using reasoning-enabled models on OpenAI-compatible endpoints that don't support the `developer` role (e.g., GitHub Copilot, custom proxies). Now falls back to `system` role when `developer` is unsupported.
+
 ## [13.17.0] - 2026-03-30
 
 ### Changed

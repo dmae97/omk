@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { Effort, type OpenAICompat, type ThinkingConfig } from "@oh-my-pi/pi-ai";
 import { kNoAuth, MODEL_ROLES, ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
+import { _resetSettingsForTest, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { hookFetch, Snowflake } from "@oh-my-pi/pi-utils";
 
@@ -18,6 +19,7 @@ describe("ModelRegistry", () => {
 	});
 
 	beforeEach(async () => {
+		_resetSettingsForTest();
 		tempDir = path.join(os.tmpdir(), `pi-test-model-registry-${Snowflake.next()}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 		modelsJsonPath = path.join(tempDir, "models.json");
@@ -25,6 +27,7 @@ describe("ModelRegistry", () => {
 	});
 
 	afterEach(() => {
+		_resetSettingsForTest();
 		authStorage.close();
 		if (tempDir && fs.existsSync(tempDir)) {
 			fs.rmSync(tempDir, { recursive: true });
@@ -1032,6 +1035,38 @@ describe("ModelRegistry", () => {
 			const secondApiKey = await registry.getApiKey(model);
 			expect(secondApiKey).toContain("proxy.enterprise.githubcopilot.com");
 			expect(model.baseUrl).toBe(initialBaseUrl);
+		});
+	});
+
+	describe("disabled provider filtering", () => {
+		test("getAvailable and getDiscoverableProviders exclude disabled providers from settings", async () => {
+			writeRawModelsJson({
+				ollama: {
+					baseUrl: "http://127.0.0.1:11434/v1",
+					api: "openai-completions",
+					auth: "none",
+					discovery: { type: "ollama" },
+				},
+			});
+			await authStorage.set("github-copilot", [
+				{
+					type: "oauth",
+					access: "tid=1;proxy-ep=proxy.individual.githubcopilot.com;exp=9999999999",
+					refresh: "refresh-individual",
+					expires: Date.now() + 60_000,
+				},
+			]);
+			await Settings.init({
+				inMemory: true,
+				overrides: {
+					disabledProviders: ["github-copilot", "ollama"],
+				},
+			});
+
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+
+			expect(registry.getAvailable().some(model => model.provider === "github-copilot")).toBe(false);
+			expect(registry.getDiscoverableProviders()).not.toContain("ollama");
 		});
 	});
 	describe("runtime discovery", () => {

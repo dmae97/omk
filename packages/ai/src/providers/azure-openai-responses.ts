@@ -20,8 +20,15 @@ import {
 } from "../types";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
-import { getOpenAIStreamIdleTimeoutMs, iterateWithIdleTimeout } from "../utils/idle-iterator";
+import {
+	createFirstEventWatchdog,
+	getOpenAIStreamIdleTimeoutMs,
+	getStreamFirstEventTimeoutMs,
+	iterateWithIdleTimeout,
+	markFirstStreamEvent,
+} from "../utils/idle-iterator";
 import { mapToOpenAIResponsesToolChoice } from "../utils/tool-choice";
+import { supportsDeveloperRole } from "./openai-responses";
 import {
 	appendResponsesToolResultMessages,
 	convertResponsesAssistantMessage,
@@ -113,26 +120,31 @@ export const streamAzureOpenAIResponses: StreamFunction<"azure-openai-responses"
 			// Create Azure OpenAI client
 			const apiKey = options?.apiKey || getEnvApiKey(model.provider) || "";
 			const client = createClient(model, apiKey, options);
-			const params = buildParams(model, context, options, deploymentName);
+			const { baseUrl } = resolveAzureConfig(model, options);
+			const params = buildParams(model, context, options, deploymentName, baseUrl);
 			const requestAbortController = new AbortController();
 			const requestSignal = options?.signal
 				? AbortSignal.any([options.signal, requestAbortController.signal])
 				: requestAbortController.signal;
+			const idleTimeoutMs = getOpenAIStreamIdleTimeoutMs();
+			const firstEventWatchdog = createFirstEventWatchdog(getStreamFirstEventTimeoutMs(idleTimeoutMs), () =>
+				requestAbortController.abort(),
+			);
 			options?.onPayload?.(params);
 			rawRequestDump = {
 				provider: model.provider,
 				api: output.api,
 				model: model.id,
 				method: "POST",
-				url: `${resolveAzureConfig(model, options).baseUrl}/responses`,
+				url: `${baseUrl}/responses`,
 				body: params,
 			};
 			const openaiStream = await client.responses.create(params, { signal: requestSignal });
 			stream.push({ type: "start", partial: output });
 
 			await processResponsesStream(
-				iterateWithIdleTimeout(openaiStream, {
-					idleTimeoutMs: getOpenAIStreamIdleTimeoutMs(),
+				iterateWithIdleTimeout(markFirstStreamEvent(openaiStream, firstEventWatchdog), {
+					idleTimeoutMs,
 					errorMessage: "Azure OpenAI responses stream stalled while waiting for the next event",
 					onIdle: () => requestAbortController.abort(),
 				}),
@@ -245,8 +257,9 @@ function buildParams(
 	context: Context,
 	options: AzureOpenAIResponsesOptions | undefined,
 	deploymentName: string,
+	resolvedBaseUrl?: string,
 ) {
-	const messages = convertMessages(model, context, true);
+	const messages = convertMessages(model, context, true, resolvedBaseUrl);
 
 	const params: AzureOpenAIResponsesSamplingParams = {
 		model: deploymentName,
@@ -323,13 +336,14 @@ function convertMessages(
 	model: Model<"azure-openai-responses">,
 	context: Context,
 	strictResponsesPairing: boolean,
+	resolvedBaseUrl?: string,
 ): ResponseInput {
 	const messages: ResponseInput = [];
 	const transformedMessages = transformMessages(context.messages, model, normalizeResponsesToolCallIdForTransform);
 	const knownCallIds = new Set<string>();
 
 	if (context.systemPrompt) {
-		const role = model.reasoning ? "developer" : "system";
+		const role = model.reasoning && supportsDeveloperRole(resolvedBaseUrl ?? model) ? "developer" : "system";
 		messages.push({
 			role,
 			content: context.systemPrompt.toWellFormed(),

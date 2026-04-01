@@ -30,7 +30,13 @@ import {
 } from "../utils";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
-import { getOpenAIStreamIdleTimeoutMs, iterateWithIdleTimeout } from "../utils/idle-iterator";
+import {
+	createFirstEventWatchdog,
+	getOpenAIStreamIdleTimeoutMs,
+	getStreamFirstEventTimeoutMs,
+	iterateWithIdleTimeout,
+	markFirstStreamEvent,
+} from "../utils/idle-iterator";
 import { adaptSchemaForStrict, NO_STRICT } from "../utils/schema";
 import { mapToOpenAIResponsesToolChoice } from "../utils/tool-choice";
 import {
@@ -167,11 +173,15 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 				options?.initiatorOverride,
 			);
 			const providerSessionState = getOpenAIResponsesProviderSessionState(model, options?.providerSessionState);
-			const { params } = buildParams(model, context, options, providerSessionState);
+			const { params } = buildParams(model, context, options, providerSessionState, baseUrl);
 			const requestAbortController = new AbortController();
 			const requestSignal = options?.signal
 				? AbortSignal.any([options.signal, requestAbortController.signal])
 				: requestAbortController.signal;
+			const idleTimeoutMs = getOpenAIStreamIdleTimeoutMs();
+			const firstEventWatchdog = createFirstEventWatchdog(getStreamFirstEventTimeoutMs(idleTimeoutMs), () =>
+				requestAbortController.abort(),
+			);
 			options?.onPayload?.(params);
 			rawRequestDump = {
 				provider: model.provider,
@@ -187,8 +197,8 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 
 			const nativeOutputItems: Array<Record<string, unknown>> = [];
 			await processResponsesStream(
-				iterateWithIdleTimeout(openaiStream, {
-					idleTimeoutMs: getOpenAIStreamIdleTimeoutMs(),
+				iterateWithIdleTimeout(markFirstStreamEvent(openaiStream, firstEventWatchdog), {
+					idleTimeoutMs,
 					errorMessage: "OpenAI responses stream stalled while waiting for the next event",
 					onIdle: () => requestAbortController.abort(),
 				}),
@@ -290,6 +300,7 @@ function buildParams(
 	context: Context,
 	options: OpenAIResponsesOptions | undefined,
 	providerSessionState: OpenAIResponsesProviderSessionState | undefined,
+	resolvedBaseUrl?: string,
 ): { conversationMessages: ResponseInput; params: OpenAIResponsesSamplingParams } {
 	const strictResponsesPairing =
 		options?.strictResponsesPairing ??
@@ -303,7 +314,7 @@ function buildParams(
 	const messages: ResponseInput = [...conversationMessages];
 
 	if (context.systemPrompt) {
-		const role = model.reasoning ? "developer" : "system";
+		const role = model.reasoning && supportsDeveloperRole(resolvedBaseUrl ?? model) ? "developer" : "system";
 		messages.unshift({
 			role,
 			content: context.systemPrompt.toWellFormed(),
@@ -395,6 +406,19 @@ function supportsStrictMode(model: Model<"openai-responses">): boolean {
 		baseUrl.includes("api.openai.com") ||
 		baseUrl.includes(".openai.azure.com") ||
 		baseUrl.includes("models.inference.ai.azure.com")
+	);
+}
+
+export function supportsDeveloperRole(modelOrBaseUrl: Pick<Model, "provider" | "baseUrl"> | string): boolean {
+	const baseUrl =
+		typeof modelOrBaseUrl === "string" ? modelOrBaseUrl.toLowerCase() : (modelOrBaseUrl.baseUrl ?? "").toLowerCase();
+	return (
+		baseUrl.includes("api.openai.com") ||
+		baseUrl.includes(".openai.azure.com") ||
+		baseUrl.includes("azure.com/openai") ||
+		baseUrl.includes("models.inference.ai.azure.com") ||
+		baseUrl.includes("githubcopilot.com") ||
+		baseUrl.includes("copilot-api.")
 	);
 }
 

@@ -536,6 +536,7 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	}
 
 	if (parsedArgs.listModels !== undefined) {
+		await logger.timeAsync("settings:init:list-models", () => Settings.init({ cwd: getProjectDir() }));
 		await modelRegistry.refresh("online");
 		const searchPattern = typeof parsedArgs.listModels === "string" ? parsedArgs.listModels : undefined;
 		await listModels(modelRegistry, searchPattern);

@@ -18,6 +18,12 @@ describe("isProviderRetryableError", () => {
 		).toBe(true);
 	});
 
+	it("retries first-event timeout errors", () => {
+		expect(isProviderRetryableError(new Error("Anthropic stream timed out while waiting for the first event"))).toBe(
+			true,
+		);
+	});
+
 	it("does not retry non-transient validation errors", () => {
 		expect(isProviderRetryableError(new Error("Invalid tool schema"))).toBe(false);
 		expect(isProviderRetryableError(new Error("Bad request"))).toBe(false);

@@ -588,6 +588,27 @@ export function resolveModelOverride(
 }
 
 /**
+ * Resolve a list of role patterns to the first matching model.
+ */
+export function resolveRoleSelection(
+	roles: readonly string[],
+	settings: Settings,
+	availableModels: Model<Api>[],
+): { model: Model<Api>; thinkingLevel?: ThinkingLevel } | undefined {
+	const matchPreferences = { usageOrder: settings.getStorage()?.getModelUsageOrder() };
+	for (const role of roles) {
+		const resolved = resolveModelRoleValue(settings.getModelRole(role), availableModels, {
+			settings,
+			matchPreferences,
+		});
+		if (resolved.model) {
+			return { model: resolved.model, thinkingLevel: resolved.thinkingLevel };
+		}
+	}
+	return undefined;
+}
+
+/**
  * Resolve model patterns to actual Model objects with optional thinking levels
  * Format: "pattern:level" where :level is optional
  * For each pattern, finds all matching models and picks the best version:

@@ -3,7 +3,7 @@
  */
 import type { ToolCallContext } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
-import { Text } from "@oh-my-pi/pi-tui";
+import { Text, visibleWidth, wrapTextWithAnsi } from "@oh-my-pi/pi-tui";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import type { FileDiagnosticsResult } from "../lsp";
 import { renderDiff as renderDiffColored } from "../modes/components/diff";
@@ -21,7 +21,7 @@ import {
 	shortenPath,
 	truncateDiffByHunk,
 } from "../tools/render-utils";
-import { Ellipsis, Hasher, type RenderCache, renderStatusLine, truncateToWidth } from "../tui";
+import { Hasher, type RenderCache, renderStatusLine, truncateToWidth } from "../tui";
 import type { HashlineToolEdit } from "./index";
 import type { DiffError, DiffResult, Operation } from "./types";
 
@@ -222,6 +222,31 @@ function renderDiffSection(
 	return text;
 }
 
+function wrapEditRendererLine(line: string, width: number): string[] {
+	if (width <= 0) return [line];
+	if (line.length === 0) return [""];
+
+	const startAnsi = line.match(/^((?:\x1b\[[0-9;]*m)*)/)?.[1] ?? "";
+	const bodyWithReset = line.slice(startAnsi.length);
+	const body = bodyWithReset.endsWith("\x1b[39m") ? bodyWithReset.slice(0, -"\x1b[39m".length) : bodyWithReset;
+	const diffMatch = /^([+\-\s])(\s*\d+)\|(.*)$/s.exec(body);
+
+	if (!diffMatch) {
+		return wrapTextWithAnsi(line, width);
+	}
+
+	const [, marker, lineNum, content] = diffMatch;
+	const prefix = `${marker}${lineNum}|`;
+	const prefixWidth = visibleWidth(prefix);
+	const contentWidth = Math.max(1, width - prefixWidth);
+	const continuationPrefix = `${" ".repeat(Math.max(0, prefixWidth - 1))}|`;
+	const wrappedContent = wrapTextWithAnsi(content, contentWidth);
+
+	return wrappedContent.map(
+		(segment, index) => `${startAnsi}${index === 0 ? prefix : continuationPrefix}${segment}\x1b[39m`,
+	);
+}
+
 export const editToolRenderer = {
 	mergeCallAndResult: true,
 
@@ -357,7 +382,7 @@ export const editToolRenderer = {
 				}
 
 				const lines =
-					width > 0 ? text.split("\n").map(line => truncateToWidth(line, width, Ellipsis.Omit)) : text.split("\n");
+					width > 0 ? text.split("\n").flatMap(line => wrapEditRendererLine(line, width)) : text.split("\n");
 				cached = { key, lines };
 				return lines;
 			},
