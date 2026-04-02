@@ -124,6 +124,29 @@ async function createPrFixture(): Promise<{
 	};
 }
 
+async function createGitRepoFixture(): Promise<{
+	baseDir: string;
+	repoRoot: string;
+	headSha: string;
+}> {
+	const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), "gh-run-watch-repo-"));
+	const repoRoot = path.join(baseDir, "repo");
+
+	await fs.mkdir(repoRoot, { recursive: true });
+	runGit(baseDir, ["init", "-b", "main", repoRoot]);
+	runGit(repoRoot, ["config", "user.name", "Test User"]);
+	runGit(repoRoot, ["config", "user.email", "test@example.com"]);
+	await fs.writeFile(path.join(repoRoot, "README.md"), "watch me\n");
+	runGit(repoRoot, ["add", "README.md"]);
+	runGit(repoRoot, ["commit", "-m", "initial commit"]);
+
+	return {
+		baseDir,
+		repoRoot,
+		headSha: runGit(repoRoot, ["rev-parse", "HEAD"]),
+	};
+}
+
 describe("GitHub CLI tools", () => {
 	afterEach(() => {
 		vi.useRealTimers();
@@ -489,6 +512,255 @@ describe("GitHub CLI tools", () => {
 			expect(artifactText).toContain("zeta");
 		} finally {
 			await fs.rm(artifactsDir, { recursive: true, force: true });
+		}
+	});
+
+	it("fast-fails commit watch after the grace window once any job fails", async () => {
+		vi.useFakeTimers();
+
+		const fixture = await createGitRepoFixture();
+		const repo = "owner/repo";
+		const runId = 88;
+		const updates: string[] = [];
+		const runListResponses = [
+			{
+				total_count: 1,
+				workflow_runs: [
+					{
+						id: runId,
+						name: "CI",
+						display_title: "main checks",
+						status: "in_progress",
+						conclusion: null,
+						head_branch: "main",
+						head_sha: fixture.headSha,
+						created_at: "2026-04-01T08:00:00Z",
+						updated_at: "2026-04-01T08:01:00Z",
+						html_url: `https://github.com/${repo}/actions/runs/${runId}`,
+					},
+				],
+			},
+			{
+				total_count: 1,
+				workflow_runs: [
+					{
+						id: runId,
+						name: "CI",
+						display_title: "main checks",
+						status: "in_progress",
+						conclusion: null,
+						head_branch: "main",
+						head_sha: fixture.headSha,
+						created_at: "2026-04-01T08:00:00Z",
+						updated_at: "2026-04-01T08:02:00Z",
+						html_url: `https://github.com/${repo}/actions/runs/${runId}`,
+					},
+				],
+			},
+			{
+				total_count: 1,
+				workflow_runs: [
+					{
+						id: runId,
+						name: "CI",
+						display_title: "main checks",
+						status: "in_progress",
+						conclusion: null,
+						head_branch: "main",
+						head_sha: fixture.headSha,
+						created_at: "2026-04-01T08:00:00Z",
+						updated_at: "2026-04-01T08:03:00Z",
+						html_url: `https://github.com/${repo}/actions/runs/${runId}`,
+					},
+				],
+			},
+		];
+		const jobResponses = [
+			{
+				total_count: 3,
+				jobs: [
+					{
+						id: 301,
+						name: "build",
+						status: "completed",
+						conclusion: "success",
+						started_at: "2026-04-01T08:00:00Z",
+						completed_at: "2026-04-01T08:01:00Z",
+						html_url: `https://github.com/${repo}/actions/runs/${runId}/job/301`,
+					},
+					{
+						id: 302,
+						name: "test",
+						status: "in_progress",
+						conclusion: null,
+						started_at: "2026-04-01T08:00:00Z",
+						completed_at: null,
+						html_url: `https://github.com/${repo}/actions/runs/${runId}/job/302`,
+					},
+					{
+						id: 303,
+						name: "lint",
+						status: "queued",
+						conclusion: null,
+						started_at: null,
+						completed_at: null,
+						html_url: `https://github.com/${repo}/actions/runs/${runId}/job/303`,
+					},
+				],
+			},
+			{
+				total_count: 3,
+				jobs: [
+					{
+						id: 301,
+						name: "build",
+						status: "completed",
+						conclusion: "success",
+						started_at: "2026-04-01T08:00:00Z",
+						completed_at: "2026-04-01T08:01:00Z",
+						html_url: `https://github.com/${repo}/actions/runs/${runId}/job/301`,
+					},
+					{
+						id: 302,
+						name: "test",
+						status: "completed",
+						conclusion: "failure",
+						started_at: "2026-04-01T08:00:00Z",
+						completed_at: "2026-04-01T08:02:00Z",
+						html_url: `https://github.com/${repo}/actions/runs/${runId}/job/302`,
+					},
+					{
+						id: 303,
+						name: "lint",
+						status: "in_progress",
+						conclusion: null,
+						started_at: "2026-04-01T08:01:30Z",
+						completed_at: null,
+						html_url: `https://github.com/${repo}/actions/runs/${runId}/job/303`,
+					},
+				],
+			},
+			{
+				total_count: 3,
+				jobs: [
+					{
+						id: 301,
+						name: "build",
+						status: "completed",
+						conclusion: "success",
+						started_at: "2026-04-01T08:00:00Z",
+						completed_at: "2026-04-01T08:01:00Z",
+						html_url: `https://github.com/${repo}/actions/runs/${runId}/job/301`,
+					},
+					{
+						id: 302,
+						name: "test",
+						status: "completed",
+						conclusion: "failure",
+						started_at: "2026-04-01T08:00:00Z",
+						completed_at: "2026-04-01T08:02:00Z",
+						html_url: `https://github.com/${repo}/actions/runs/${runId}/job/302`,
+					},
+					{
+						id: 303,
+						name: "lint",
+						status: "completed",
+						conclusion: "failure",
+						started_at: "2026-04-01T08:01:30Z",
+						completed_at: "2026-04-01T08:03:00Z",
+						html_url: `https://github.com/${repo}/actions/runs/${runId}/job/303`,
+					},
+				],
+			},
+		];
+
+		vi.spyOn(ghCli, "runGhText").mockImplementation(async (_cwd, args) => {
+			if (args.join(" ") === "repo view --json nameWithOwner -q .nameWithOwner") {
+				return repo;
+			}
+			throw new Error(`Unexpected runGhText args: ${args.join(" ")}`);
+		});
+		const runGhJsonSpy = vi.spyOn(ghCli, "runGhJson").mockImplementation(async (_cwd, args) => {
+			const endpoint = args[3];
+			if (args[0] === "api" && endpoint === `/repos/${repo}/actions/runs`) {
+				const response = runListResponses.shift();
+				if (!response) {
+					throw new Error("No more run list responses available");
+				}
+				return response as never;
+			}
+
+			if (args[0] === "api" && endpoint === `/repos/${repo}/actions/runs/${runId}/jobs`) {
+				const response = jobResponses.shift();
+				if (!response) {
+					throw new Error("No more job responses available");
+				}
+				return response as never;
+			}
+
+			throw new Error(`Unexpected runGhJson args: ${args.join(" ")}`);
+		});
+		vi.spyOn(ghCli, "runGhCommand").mockImplementation(async (_cwd, args) => {
+			if (args[1] === `/repos/${repo}/actions/jobs/302/logs`) {
+				return {
+					exitCode: 0,
+					stdout: "setup\ncompile\nassertion failed\ntrace line",
+					stderr: "",
+				};
+			}
+
+			if (args[1] === `/repos/${repo}/actions/jobs/303/logs`) {
+				return {
+					exitCode: 0,
+					stdout: "prepare\nlint\nstyle failure\nsecond failure",
+					stderr: "",
+				};
+			}
+
+			throw new Error(`Unexpected runGhCommand args: ${args.join(" ")}`);
+		});
+
+		try {
+			const tool = new GhRunWatchTool(createSession(fixture.repoRoot));
+			const resultPromise = tool.execute("run-watch", { tail: 2 }, undefined, update => {
+				const text = update.content[0];
+				if (text?.type === "text") {
+					updates.push(text.text);
+				}
+			});
+
+			await vi.advanceTimersByTimeAsync(8000);
+			const settled = await Promise.race([
+				resultPromise.then(result => ({ done: true as const, result })),
+				Promise.resolve({ done: false as const }),
+			]);
+
+			expect(settled.done).toBe(true);
+			if (!settled.done) {
+				return;
+			}
+
+			const text = settled.result.content[0]?.type === "text" ? settled.result.content[0].text : "";
+			expect(text).toContain(`# GitHub Actions for ${fixture.headSha.slice(0, 12)}`);
+			expect(text).toContain(`Commit: ${fixture.headSha}`);
+			expect(text).toContain("Status: in_progress");
+			expect(text).toContain("### test [failure]");
+			expect(text).toContain("assertion failed");
+			expect(text).toContain("trace line");
+			expect(text).toContain("### lint [failure]");
+			expect(text).toContain("style failure");
+			expect(text).toContain("second failure");
+			expect(text).toContain("Workflow runs for this commit failed.");
+			expect(
+				updates.some(text =>
+					text.includes("Failure detected. Waiting 5s to capture concurrent failures before fetching logs."),
+				),
+			).toBe(true);
+			expect(runGhJsonSpy.mock.calls.filter(([, args]) => args[3] === `/repos/${repo}/actions/runs`)).toHaveLength(
+				3,
+			);
+		} finally {
+			await fs.rm(fixture.baseDir, { recursive: true, force: true });
 		}
 	});
 });

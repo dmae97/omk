@@ -1085,6 +1085,10 @@ function getRunCollectionOutcome(runs: GhRunSnapshot[]): "success" | "failure" |
 
 	let pending = false;
 	for (const run of runs) {
+		if (run.jobs.some(isFailedJob)) {
+			return "failure";
+		}
+
 		const outcome = getRunSnapshotOutcome(run);
 		if (outcome === "failure") {
 			return "failure";
