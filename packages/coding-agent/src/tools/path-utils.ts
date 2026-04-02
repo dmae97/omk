@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import * as url from "node:url";
 
 const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;
 const NARROW_NO_BREAK_SPACE = "\u202F";
@@ -82,6 +83,16 @@ function normalizeAtPrefix(filePath: string): string {
 	return filePath;
 }
 
+function stripFileUrl(filePath: string): string {
+	if (!filePath.toLowerCase().startsWith("file://")) return filePath;
+
+	try {
+		return url.fileURLToPath(filePath);
+	} catch {
+		return filePath;
+	}
+}
+
 export function expandTilde(filePath: string, home?: string): string {
 	const h = home ?? os.homedir();
 	if (filePath === "~") return h;
@@ -95,7 +106,7 @@ export function expandTilde(filePath: string, home?: string): string {
 }
 
 export function expandPath(filePath: string): string {
-	const normalized = normalizeUnicodeSpaces(normalizeAtPrefix(filePath));
+	const normalized = stripFileUrl(normalizeUnicodeSpaces(normalizeAtPrefix(filePath)));
 	return expandTilde(normalized);
 }
 

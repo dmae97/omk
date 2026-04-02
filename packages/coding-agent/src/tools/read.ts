@@ -35,9 +35,17 @@ import {
 import { convertFileWithMarkit } from "../utils/markit";
 import { detectSupportedImageMimeTypeFromFile } from "../utils/mime";
 import { type ArchiveReader, openArchive, parseArchivePathCandidates } from "./archive-reader";
+import {
+	executeReadUrl,
+	isReadableUrlPath,
+	loadReadUrlCacheEntry,
+	type ReadUrlToolDetails,
+	renderReadUrlCall,
+	renderReadUrlResult,
+} from "./fetch";
 import { applyListLimit } from "./list-limit";
 import { formatFullOutputReference, formatStyledTruncationWarning, type OutputMeta } from "./output-meta";
-import { resolveReadPath } from "./path-utils";
+import { expandPath, resolveReadPath } from "./path-utils";
 import { formatAge, formatBytes, shortenPath, wrapBrackets } from "./render-utils";
 import { ToolAbortError, ToolError, throwIfAborted } from "./tool-errors";
 import { toolResult } from "./tool-result";
@@ -345,18 +353,26 @@ function prependSuffixResolutionNotice(text: string, suffixResolution?: { from: 
 }
 
 const readSchema = Type.Object({
-	path: Type.String({ description: "Path to the file to read (relative or absolute)" }),
-	offset: Type.Optional(Type.Number({ description: "Line number to start reading from (1-indexed)" })),
-	limit: Type.Optional(Type.Number({ description: "Maximum number of lines to read" })),
+	path: Type.String({ description: "Path or URL to read" }),
+	offset: Type.Optional(Type.Number({ description: "Line number to start from (1-indexed)" })),
+	limit: Type.Optional(Type.Number({ description: "Maximum number of lines" })),
+	timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (default: 20)" })),
+	raw: Type.Optional(Type.Boolean({ description: "If set, returns raw content without transformations" })),
 });
 
 export type ReadToolInput = Static<typeof readSchema>;
 
 export interface ReadToolDetails {
+	kind?: "file" | "url";
 	truncation?: TruncationResult;
 	isDirectory?: boolean;
 	resolvedPath?: string;
 	suffixResolution?: { from: string; to: string };
+	url?: string;
+	finalUrl?: string;
+	contentType?: string;
+	method?: string;
+	notes?: string[];
 	meta?: OutputMeta;
 }
 
@@ -451,6 +467,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		options: {
 			details?: ReadToolDetails;
 			sourcePath?: string;
+			sourceUrl?: string;
 			sourceInternal?: string;
 			entityLabel: string;
 		},
@@ -465,6 +482,9 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		const resultBuilder = toolResult(details);
 		if (options.sourcePath) {
 			resultBuilder.sourcePath(options.sourcePath);
+		}
+		if (options.sourceUrl) {
+			resultBuilder.sourceUrl(options.sourceUrl);
 		}
 		if (options.sourceInternal) {
 			resultBuilder.sourceInternal(options.sourceInternal);
@@ -651,14 +671,34 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		_onUpdate?: AgentToolUpdateCallback<ReadToolDetails>,
 		_toolContext?: AgentToolContext,
 	): Promise<AgentToolResult<ReadToolDetails>> {
-		const { path: readPath, offset, limit } = params;
-
+		let { path: readPath, offset, limit, timeout, raw } = params;
 		const displayMode = resolveFileDisplayMode(this.session);
+		if (readPath.startsWith("file://")) {
+			readPath = expandPath(readPath);
+		}
 
 		// Handle internal URLs (agent://, artifact://, memory://, skill://, rule://, local://, mcp://)
 		const internalRouter = this.session.internalRouter;
 		if (internalRouter?.canHandle(readPath)) {
 			return this.#handleInternalUrl(readPath, offset, limit);
+		}
+
+		if (isReadableUrlPath(readPath)) {
+			if (!this.session.settings.get("fetch.enabled")) {
+				throw new ToolError("URL reads are disabled by settings.");
+			}
+			if (offset !== undefined || limit !== undefined) {
+				const cached = await loadReadUrlCacheEntry(this.session, { path: readPath, timeout, raw }, signal, {
+					ensureArtifact: true,
+					preferCached: true,
+				});
+				return this.#buildInMemoryTextResult(cached.output, offset, limit, {
+					details: { ...cached.details },
+					sourceUrl: cached.details.finalUrl,
+					entityLabel: "URL output",
+				});
+			}
+			return executeReadUrl(this.session, { path: readPath, timeout, raw }, signal);
 		}
 
 		const archivePath = await this.#resolveArchiveReadPath(readPath, signal);
@@ -1128,10 +1168,16 @@ interface ReadRenderArgs {
 	file_path?: string;
 	offset?: number;
 	limit?: number;
+	timeout?: number;
+	raw?: boolean;
 }
 
 export const readToolRenderer = {
 	renderCall(args: ReadRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
+		if (isReadableUrlPath(args.file_path || args.path || "")) {
+			return renderReadUrlCall(args, _options, uiTheme);
+		}
+
 		const rawPath = args.file_path || args.path || "";
 		const filePath = shortenPath(rawPath);
 		const offset = args.offset;
@@ -1154,6 +1200,15 @@ export const readToolRenderer = {
 		uiTheme: Theme,
 		args?: ReadRenderArgs,
 	): Component {
+		const urlDetails = result.details as ReadUrlToolDetails | undefined;
+		if (urlDetails?.kind === "url" || isReadableUrlPath(args?.file_path || args?.path || "")) {
+			return renderReadUrlResult(
+				result as { content: Array<{ type: string; text?: string }>; details?: ReadUrlToolDetails },
+				_options,
+				uiTheme,
+			);
+		}
+
 		const details = result.details;
 		const contentText = result.content?.find(c => c.type === "text")?.text ?? "";
 		const imageContent = result.content?.find(c => c.type === "image");

@@ -64,9 +64,9 @@ describe("createTools", () => {
 		expect(names).toContain("notebook");
 		expect(names).toContain("task");
 		expect(names).toContain("todo_write");
-		expect(names).toContain("fetch");
 		expect(names).toContain("web_search");
 		expect(names).toContain("exit_plan_mode");
+		expect(names).not.toContain("fetch");
 	});
 
 	it("includes bash and python when python mode is both", async () => {

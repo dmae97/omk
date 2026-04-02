@@ -26,7 +26,6 @@ import { CalculatorTool } from "./calculator";
 import { CancelJobTool } from "./cancel-job";
 import { type CheckpointState, CheckpointTool, RewindTool } from "./checkpoint";
 import { ExitPlanModeTool } from "./exit-plan-mode";
-import { FetchTool } from "./fetch";
 import { FindTool } from "./find";
 import {
 	GhIssueViewTool,
@@ -73,7 +72,6 @@ export * from "./calculator";
 export * from "./cancel-job";
 export * from "./checkpoint";
 export * from "./exit-plan-mode";
-export * from "./fetch";
 export * from "./find";
 export * from "./gemini-image";
 export * from "./gh";
@@ -219,7 +217,6 @@ export const BUILTIN_TOOLS: Record<string, ToolFactory> = {
 	cancel_job: CancelJobTool.createIf,
 	await: AwaitTool.createIf,
 	todo_write: s => new TodoWriteTool(s),
-	fetch: s => new FetchTool(s),
 	web_search: s => new SearchTool(s),
 	search_tool_bm25: SearchToolBm25Tool.createIf,
 	write: s => new WriteTool(s),
@@ -358,7 +355,6 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 		if (name === "render_mermaid") return session.settings.get("renderMermaid.enabled");
 		if (name === "notebook") return session.settings.get("notebook.enabled");
 		if (name === "inspect_image") return session.settings.get("inspect_image.enabled");
-		if (name === "fetch") return session.settings.get("fetch.enabled");
 		if (name === "web_search") return session.settings.get("web_search.enabled");
 		if (name === "search_tool_bm25") return session.settings.get("mcp.discoveryMode");
 		if (name === "lsp") return session.settings.get("lsp.enabled");

@@ -15,7 +15,6 @@ import { astEditToolRenderer } from "./ast-edit";
 import { astGrepToolRenderer } from "./ast-grep";
 import { bashToolRenderer } from "./bash";
 import { calculatorToolRenderer } from "./calculator";
-import { fetchToolRenderer } from "./fetch";
 import { findToolRenderer } from "./find";
 import { ghRunWatchToolRenderer } from "./gh-renderer";
 import { grepToolRenderer } from "./grep";
@@ -61,7 +60,6 @@ export const toolRenderers: Record<string, ToolRenderer> = {
 	ssh: sshToolRenderer as ToolRenderer,
 	task: taskToolRenderer as ToolRenderer,
 	todo_write: todoWriteToolRenderer as ToolRenderer,
-	fetch: fetchToolRenderer as ToolRenderer,
 	gh_run_watch: ghRunWatchToolRenderer as ToolRenderer,
 	web_search: webSearchToolRenderer as ToolRenderer,
 	write: writeToolRenderer as ToolRenderer,

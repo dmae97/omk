@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import * as url from "node:url";
 import * as zlib from "node:zlib";
 import type { AgentToolContext } from "@oh-my-pi/pi-agent-core";
 import { DEFAULT_BASH_INTERCEPTOR_RULES, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
@@ -299,6 +300,16 @@ describe("Coding Agent Tools", () => {
 			const testFile = path.join(testDir, "nonexistent.txt");
 
 			await expect(readTool.execute("test-call-2", { path: testFile })).rejects.toThrow(/ENOENT|not found/i);
+		});
+
+		it("should read local files passed as file:// URLs", async () => {
+			const testFile = path.join(testDir, "file-url.txt");
+			fs.writeFileSync(testFile, "Hello from file URL");
+
+			const result = await readTool.execute("test-call-file-url", { path: url.pathToFileURL(testFile).href });
+			const output = getTextOutput(result);
+
+			expect(output).toContain("Hello from file URL");
 		});
 
 		it("should truncate files exceeding line limit", async () => {

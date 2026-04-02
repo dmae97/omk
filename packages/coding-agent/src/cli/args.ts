@@ -262,7 +262,6 @@ ${chalk.bold("Available Tools (default-enabled unless noted):")}
   browser       - Browser automation (Puppeteer)
   task          - Launch sub-agents for parallel tasks
   todo_write    - Manage todo/task lists
-  fetch         - Fetch and process URLs
   web_search    - Search the web
   ask           - Ask user questions (interactive mode only)
 

@@ -1,6 +1,26 @@
 # Changelog
 
 ## [Unreleased]
+### Breaking Changes
+
+- Removed standalone `fetch` tool; URL fetching is now integrated into the `read` tool
+
+### Added
+
+- Added URL reading capability to `read` tool with support for web pages, GitHub issues, Stack Overflow, Wikipedia, Reddit, NPM, arXiv, technical blogs, RSS/Atom feeds, and JSON endpoints
+- Added `offset` and `limit` parameter support for paginating cached URL fetch results
+- Added URL caching mechanism to avoid redundant network requests when reading the same URL multiple times
+
+### Changed
+
+- Renamed `fetch.enabled` setting to `Read URLs` with updated description to reflect integration with read tool
+- Updated `read` tool to accept `timeout` and `raw` parameters for URL handling
+- Updated `read` tool to support `file://` URLs for local file paths
+- Removed `fetch` tool from agent tool lists (explore, librarian, oracle, plan, reviewer agents)
+
+### Fixed
+
+- Fixed `read` tool to properly handle `file://` URL scheme by converting to filesystem paths
 
 ## [13.17.5] - 2026-04-01
 ### Added

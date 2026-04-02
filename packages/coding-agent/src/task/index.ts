@@ -496,7 +496,7 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 		}
 
 		const planModeState = this.session.getPlanModeState?.();
-		const planModeTools = ["read", "grep", "find", "ls", "lsp", "fetch", "web_search"];
+		const planModeTools = ["read", "grep", "find", "ls", "lsp", "web_search"];
 		const effectiveAgent: typeof agent = planModeState?.enabled
 			? {
 					...agent,

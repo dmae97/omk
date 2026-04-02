@@ -1,7 +1,7 @@
 /**
  * Types for the internal URL routing system.
  *
- * Internal URLs (agent://, artifact://, memory://, skill://, rule://, mcp://, pi://, local://) are resolved by tools like fetch and read,
+ * Internal URLs (agent://, artifact://, memory://, skill://, rule://, mcp://, pi://, local://) are resolved by tools like read,
  * providing access to agent outputs and server resources without exposing filesystem paths.
  */
 

@@ -75,7 +75,7 @@ export class ArtifactManager {
 	/**
 	 * Allocate a new artifact path and ID without writing content.
 	 *
-	 * @param toolType Tool name for file extension (e.g., "bash", "fetch")
+	 * @param toolType Tool name for file extension (e.g., "bash", "read")
 	 */
 	async allocatePath(toolType: string): Promise<{ id: string; path: string }> {
 		await this.#ensureDir();
@@ -88,7 +88,7 @@ export class ArtifactManager {
 	 * Save content as an artifact and return the artifact ID.
 	 *
 	 * @param content Full content to save
-	 * @param toolType Tool name for file extension (e.g., "bash", "fetch")
+	 * @param toolType Tool name for file extension (e.g., "bash", "read")
 	 * @returns Artifact ID (numeric string)
 	 */
 	async save(content: string, toolType: string): Promise<string> {

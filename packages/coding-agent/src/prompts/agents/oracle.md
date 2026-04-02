@@ -1,7 +1,7 @@
 ---
 name: oracle
 description: Deep reasoning advisor for debugging dead ends, architecture decisions, and second opinions. Read-only.
-tools: read, grep, find, bash, lsp, fetch, web_search, ast_grep
+tools: read, grep, find, bash, lsp, web_search, ast_grep
 spawns: explore
 model: pi/slow
 thinking-level: high

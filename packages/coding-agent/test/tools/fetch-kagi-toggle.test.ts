@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { type SettingPath, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
-import { FetchTool } from "@oh-my-pi/pi-coding-agent/tools/fetch";
+import { ReadTool } from "@oh-my-pi/pi-coding-agent/tools/read";
 import * as imageResize from "@oh-my-pi/pi-coding-agent/utils/image-resize";
 import * as toolsManager from "@oh-my-pi/pi-coding-agent/utils/tools-manager";
 import * as scrapers from "@oh-my-pi/pi-coding-agent/web/scrapers/types";
@@ -21,7 +21,7 @@ const withMissingSystemPython = () => {
 	};
 };
 
-describe("fetch tool", () => {
+describe("read tool URL handling", () => {
 	let testDir: string;
 
 	beforeEach(() => {
@@ -37,11 +37,21 @@ describe("fetch tool", () => {
 
 	const createSession = (overrides: Partial<Record<SettingPath, unknown>> = {}): ToolSession => {
 		const sessionFile = path.join(testDir, "session.jsonl");
+		const artifactsDir = sessionFile.slice(0, -6);
+		let nextArtifactId = 0;
 		return {
 			cwd: testDir,
 			hasUI: false,
 			getSessionFile: () => sessionFile,
+			getArtifactsDir: () => artifactsDir,
 			getSessionSpawns: () => null,
+			allocateOutputArtifact: async toolType => {
+				const id = String(nextArtifactId++);
+				return {
+					id,
+					path: path.join(artifactsDir, `${id}.${toolType}.log`),
+				};
+			},
 			settings: Settings.isolated({
 				"fetch.enabled": true,
 				...overrides,
@@ -51,7 +61,7 @@ describe("fetch tool", () => {
 
 	it("returns an image content block when fetching image URLs", async () => {
 		const session = createSession();
-		const tool = new FetchTool(session);
+		const tool = new ReadTool(session);
 		const imageBytes = new Uint8Array([137, 80, 78, 71]);
 		vi.spyOn(scrapers, "loadPage").mockResolvedValue({
 			ok: true,
@@ -82,7 +92,7 @@ describe("fetch tool", () => {
 			},
 		});
 
-		const result = await tool.execute("fetch-image", { url: "https://example.com/image.png" });
+		const result = await tool.execute("fetch-image", { path: "https://example.com/image.png" });
 		const imageBlock = result.content.find(
 			(content): content is { type: "image"; data: string; mimeType: string } => content.type === "image",
 		);
@@ -95,7 +105,7 @@ describe("fetch tool", () => {
 
 	it("resizes fetched images before emitting image content blocks", async () => {
 		const session = createSession();
-		const tool = new FetchTool(session);
+		const tool = new ReadTool(session);
 		const resizeSpy = vi.spyOn(imageResize, "resizeImage").mockResolvedValue({
 			buffer: new Uint8Array([1, 2, 3]),
 			mimeType: "image/jpeg",
@@ -125,7 +135,7 @@ describe("fetch tool", () => {
 			error: "markit unavailable",
 		});
 
-		const result = await tool.execute("fetch-image-resized", { url: "https://example.com/image.png" });
+		const result = await tool.execute("fetch-image-resized", { path: "https://example.com/image.png" });
 		const imageBlock = result.content.find(
 			(content): content is { type: "image"; data: string; mimeType: string } => content.type === "image",
 		);
@@ -141,7 +151,7 @@ describe("fetch tool", () => {
 
 	it("keeps markit extracted text for image responses", async () => {
 		const session = createSession();
-		const tool = new FetchTool(session);
+		const tool = new ReadTool(session);
 		const extractedText = "Converted image text content that is definitely longer than fifty characters.";
 		vi.spyOn(imageResize, "resizeImage").mockResolvedValue({
 			buffer: new Uint8Array([1, 2, 3]),
@@ -171,7 +181,7 @@ describe("fetch tool", () => {
 			content: extractedText,
 		});
 
-		const result = await tool.execute("fetch-image-with-ocr", { url: "https://example.com/image.png" });
+		const result = await tool.execute("fetch-image-with-ocr", { path: "https://example.com/image.png" });
 		const textBlock = result.content.find(content => content.type === "text");
 		const imageBlock = result.content.find(
 			(content): content is { type: "image"; data: string; mimeType: string } => content.type === "image",
@@ -185,7 +195,7 @@ describe("fetch tool", () => {
 	});
 	it("falls back to text-only output for unsupported image MIME types", async () => {
 		const session = createSession();
-		const tool = new FetchTool(session);
+		const tool = new ReadTool(session);
 		const fetchBinarySpy = vi.spyOn(scraperUtils, "fetchBinary");
 		vi.spyOn(scrapers, "loadPage").mockResolvedValue({
 			ok: true,
@@ -195,7 +205,7 @@ describe("fetch tool", () => {
 			content: "<svg></svg>",
 		});
 
-		const result = await tool.execute("fetch-image-unsupported", { url: "https://example.com/image.svg" });
+		const result = await tool.execute("fetch-image-unsupported", { path: "https://example.com/image.svg" });
 		const imageBlock = result.content.find(content => content.type === "image");
 		const textBlock = result.content.find(content => content.type === "text");
 
@@ -208,7 +218,7 @@ describe("fetch tool", () => {
 
 	it("uses binary conversion fallback for unsupported image MIME when extension is convertible", async () => {
 		const session = createSession();
-		const tool = new FetchTool(session);
+		const tool = new ReadTool(session);
 		const convertedText = "Converted image text from markit fallback with sufficient length to pass threshold.";
 		const fetchBinarySpy = vi.spyOn(scraperUtils, "fetchBinary").mockResolvedValue({
 			ok: true,
@@ -226,7 +236,7 @@ describe("fetch tool", () => {
 			content: "\u0000\u0001garbage",
 		});
 
-		const result = await tool.execute("fetch-image-jpg-fallback", { url: "https://example.com/image.jpg" });
+		const result = await tool.execute("fetch-image-jpg-fallback", { path: "https://example.com/image.jpg" });
 		const imageBlock = result.content.find(content => content.type === "image");
 		const textBlock = result.content.find(content => content.type === "text");
 
@@ -241,7 +251,7 @@ describe("fetch tool", () => {
 
 	it("does not treat text/html at .png paths as inline images", async () => {
 		const session = createSession();
-		const tool = new FetchTool(session);
+		const tool = new ReadTool(session);
 		vi.spyOn(scraperUtils, "fetchBinary").mockResolvedValue({ ok: false, error: "not an image" });
 		vi.spyOn(scrapers, "loadPage").mockResolvedValue({
 			ok: true,
@@ -251,7 +261,7 @@ describe("fetch tool", () => {
 			content: "<html><body>not really an image</body></html>",
 		});
 
-		const result = await tool.execute("fetch-html-png-path", { url: "https://example.com/foo.png", raw: true });
+		const result = await tool.execute("fetch-html-png-path", { path: "https://example.com/foo.png", raw: true });
 		const imageBlock = result.content.find(content => content.type === "image");
 		const textBlock = result.content.find(content => content.type === "text");
 
@@ -263,7 +273,7 @@ describe("fetch tool", () => {
 
 	it("falls back to textual output when inline image refetch fails", async () => {
 		const session = createSession();
-		const tool = new FetchTool(session);
+		const tool = new ReadTool(session);
 		const convertSpy = vi.spyOn(scraperUtils, "convertWithMarkit");
 		vi.spyOn(scrapers, "loadPage").mockResolvedValue({
 			ok: true,
@@ -276,7 +286,7 @@ describe("fetch tool", () => {
 			.spyOn(scraperUtils, "fetchBinary")
 			.mockResolvedValue({ ok: false, error: "upstream blocked" });
 
-		const result = await tool.execute("fetch-image-refetch-failed", { url: "https://example.com/transient.png" });
+		const result = await tool.execute("fetch-image-refetch-failed", { path: "https://example.com/transient.png" });
 		const imageBlock = result.content.find(content => content.type === "image");
 		const textBlock = result.content.find(content => content.type === "text");
 
@@ -289,7 +299,7 @@ describe("fetch tool", () => {
 	});
 	it("falls back to text-only output when image payload bytes are invalid", async () => {
 		const session = createSession();
-		const tool = new FetchTool(session);
+		const tool = new ReadTool(session);
 		vi.spyOn(scrapers, "loadPage").mockResolvedValue({
 			ok: true,
 			status: 200,
@@ -319,7 +329,7 @@ describe("fetch tool", () => {
 			},
 		});
 
-		const result = await tool.execute("fetch-broken-image", { url: "https://example.com/broken.png" });
+		const result = await tool.execute("fetch-broken-image", { path: "https://example.com/broken.png" });
 		const imageBlock = result.content.find(content => content.type === "image");
 		const textBlock = result.content.find(content => content.type === "text");
 
@@ -330,7 +340,7 @@ describe("fetch tool", () => {
 	});
 	it("prefers rendered page content over site-wide llms.txt for deep pages", async () => {
 		const session = createSession();
-		const tool = new FetchTool(session);
+		const tool = new ReadTool(session);
 		const pageUrl = "https://bun.com/reference/bun/UnixSocketOptions";
 		const pageHtml = "<html><body><main><h1>UnixSocketOptions</h1><p>Page-specific docs.</p></main></body></html>";
 		const renderedMarkdown = `# UnixSocketOptions\n\n${"Page-specific API docs. ".repeat(8)}`;
@@ -378,7 +388,7 @@ describe("fetch tool", () => {
 		vi.spyOn(toolsManager, "ensureTool").mockResolvedValue(undefined);
 		vi.spyOn(natives, "htmlToMarkdown").mockResolvedValue(renderedMarkdown);
 
-		const result = await tool.execute("fetch-deep-page", { url: pageUrl });
+		const result = await tool.execute("fetch-deep-page", { path: pageUrl });
 		const requestedUrls = loadPageSpy.mock.calls.map(([requestedUrl]) => requestedUrl);
 		const textBlock = result.content.find(content => content.type === "text");
 
@@ -392,7 +402,7 @@ describe("fetch tool", () => {
 
 	it("uses section-scoped llms.txt fallback without requesting the site-wide file", async () => {
 		const session = createSession();
-		const tool = new FetchTool(session);
+		const tool = new ReadTool(session);
 		const pageUrl = "https://example.com/docs/reference/widget";
 		const pageHtml = "<html><body><nav>Docs</nav><main><h1>Widget</h1></main></body></html>";
 		const lowQualityRender = `${"Please enable JavaScript to view this page.\n".repeat(6)}${"navigation\n".repeat(4)}`;
@@ -457,7 +467,7 @@ describe("fetch tool", () => {
 		using _hook = hookFetch(() => new Response("blocked", { status: 500, statusText: "Blocked" }));
 		vi.spyOn(toolsManager, "ensureTool").mockResolvedValue("/usr/bin/trafilatura");
 
-		const result = await tool.execute("fetch-section-llms", { url: pageUrl });
+		const result = await tool.execute("fetch-section-llms", { path: pageUrl });
 		const requestedUrls = loadPageSpy.mock.calls.map(([requestedUrl]) => requestedUrl);
 		const textBlock = result.content.find(content => content.type === "text");
 
@@ -473,7 +483,7 @@ describe("fetch tool", () => {
 	it("prefers Parallel extract before other HTML renderers when configured", async () => {
 		process.env.PARALLEL_API_KEY = "test-parallel-key";
 		const session = createSession();
-		const tool = new FetchTool(session);
+		const tool = new ReadTool(session);
 		const pageUrl = "https://example.com/parallel-page";
 		const pageHtml = "<html><body><main><h1>Parallel Page</h1></main></body></html>";
 		const ensureToolSpy = vi.spyOn(toolsManager, "ensureTool");
@@ -536,7 +546,7 @@ describe("fetch tool", () => {
 			return new Response("blocked", { status: 500, statusText: "Blocked" });
 		});
 
-		const result = await tool.execute("fetch-parallel-html", { url: pageUrl });
+		const result = await tool.execute("fetch-parallel-html", { path: pageUrl });
 		const textBlock = result.content.find(content => content.type === "text");
 
 		expect(result.details?.method).toBe("parallel");
@@ -544,5 +554,64 @@ describe("fetch tool", () => {
 		expect(textBlock?.text).toContain("Parallel-rendered content");
 		expect(ensureToolSpy).not.toHaveBeenCalled();
 		expect(htmlToMarkdownSpy).not.toHaveBeenCalled();
+	});
+
+	it("reuses cached output for repeated plain URL reads", async () => {
+		const session = createSession();
+		const tool = new ReadTool(session);
+		const pageUrl = "https://example.com/repeated-read-cache";
+		const loadPageSpy = vi.spyOn(scrapers, "loadPage").mockResolvedValue({
+			ok: true,
+			status: 200,
+			contentType: "text/plain",
+			finalUrl: pageUrl,
+			content: "Cached line 1\nCached line 2",
+		});
+
+		const firstResult = await tool.execute("fetch-cache-first", { path: pageUrl });
+		const secondResult = await tool.execute("fetch-cache-second", { path: pageUrl });
+		const firstText = firstResult.content.find(content => content.type === "text");
+		const secondText = secondResult.content.find(content => content.type === "text");
+
+		expect(firstText?.type).toBe("text");
+		expect(firstText?.text).toContain("Cached line 1");
+		expect(secondText?.type).toBe("text");
+		expect(secondText?.text).toContain("Cached line 1");
+		expect(loadPageSpy).toHaveBeenCalledTimes(1);
+	});
+
+	it("supports offset and limit for URL reads using cached output", async () => {
+		const session = createSession();
+		const tool = new ReadTool(session);
+		const pageUrl = "https://example.com/offset-test";
+		const loadPageSpy = vi.spyOn(scrapers, "loadPage").mockResolvedValue({
+			ok: true,
+			status: 200,
+			contentType: "text/plain",
+			finalUrl: pageUrl,
+			content: "Line 1\nLine 2\nLine 3\nLine 4",
+		});
+
+		const firstResult = await tool.execute("fetch-offset-prime", { path: pageUrl });
+		const firstText = firstResult.content.find(content => content.type === "text");
+		expect(firstText?.type).toBe("text");
+		expect(firstText?.text).toContain("Line 1");
+		expect(loadPageSpy).toHaveBeenCalledTimes(1);
+
+		loadPageSpy.mockClear();
+		loadPageSpy.mockRejectedValue(new Error("network should not be hit"));
+
+		const pagedResult = await tool.execute("fetch-offset-page", {
+			path: pageUrl,
+			offset: 7,
+			limit: 2,
+		});
+		const pagedText = pagedResult.content.find(content => content.type === "text");
+		expect(pagedText?.type).toBe("text");
+		expect(pagedText?.text).toContain("Line 1");
+		expect(pagedText?.text).toContain("Line 2");
+		expect(pagedText?.text).not.toContain("Line 3");
+		expect(loadPageSpy).not.toHaveBeenCalled();
+		expect(fs.readdirSync(path.join(testDir, "session")).some(file => file.endsWith(".read.log"))).toBe(true);
 	});
 });

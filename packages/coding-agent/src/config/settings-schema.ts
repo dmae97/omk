@@ -1207,7 +1207,7 @@ export const SETTINGS_SCHEMA = {
 	"fetch.enabled": {
 		type: "boolean",
 		default: true,
-		ui: { tab: "tools", label: "Fetch", description: "Enable the fetch tool for URL fetching" },
+		ui: { tab: "tools", label: "Read URLs", description: "Allow the read tool to fetch and process URLs" },
 	},
 
 	"github.enabled": {
