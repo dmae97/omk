@@ -470,6 +470,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			sourceUrl?: string;
 			sourceInternal?: string;
 			entityLabel: string;
+			ignoreResultLimits?: boolean;
 		},
 	): AgentToolResult<ReadToolDetails> {
 		const displayMode = resolveFileDisplayMode(this.session);
@@ -478,6 +479,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		const totalLines = allLines.length;
 		const startLine = offset ? Math.max(0, offset - 1) : 0;
 		const startLineDisplay = startLine + 1;
+		const ignoreResultLimits = options.ignoreResultLimits ?? false;
 
 		const resultBuilder = toolResult(details);
 		if (options.sourcePath) {
@@ -502,10 +504,11 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 				.done();
 		}
 
-		const endLine = limit !== undefined ? Math.min(startLine + limit, allLines.length) : allLines.length;
+		const endLine =
+			limit !== undefined && !ignoreResultLimits ? Math.min(startLine + limit, allLines.length) : allLines.length;
 		const selectedContent = allLines.slice(startLine, endLine).join("\n");
-		const userLimitedLines = limit !== undefined ? endLine - startLine : undefined;
-		const truncation = truncateHead(selectedContent);
+		const userLimitedLines = limit !== undefined && !ignoreResultLimits ? endLine - startLine : undefined;
+		const truncation = ignoreResultLimits ? noTruncResult(selectedContent) : truncateHead(selectedContent);
 
 		const shouldAddHashLines = displayMode.hashLines;
 		const shouldAddLineNumbers = shouldAddHashLines ? false : displayMode.lineNumbers;
@@ -1011,82 +1014,13 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			return toolResult(details).text(resource.content).sourceInternal(url).done();
 		}
 
-		// Apply pagination similar to file reading.
-		const allLines = resource.content.split("\n");
-		const totalLines = allLines.length;
-
-		const startLine = offset ? Math.max(0, offset - 1) : 0;
-		const startLineDisplay = startLine + 1;
-
-		if (startLine >= allLines.length) {
-			const suggestion =
-				allLines.length === 0
-					? "The resource is empty."
-					: `Use offset=1 to read from the start, or offset=${allLines.length} to read the last line.`;
-			return toolResult<ReadToolDetails>(details)
-				.text(`Offset ${offset} is beyond end of resource (${allLines.length} lines total). ${suggestion}`)
-				.done();
-		}
-
-		const ignoreLimits = scheme === "skill";
-		let selectedContent: string;
-		let userLimitedLines: number | undefined;
-		if (limit !== undefined && !ignoreLimits) {
-			const endLine = Math.min(startLine + limit, allLines.length);
-			selectedContent = allLines.slice(startLine, endLine).join("\n");
-			userLimitedLines = endLine - startLine;
-		} else {
-			selectedContent = allLines.slice(startLine).join("\n");
-		}
-
-		const truncation: TruncationResult = ignoreLimits
-			? noTruncResult(selectedContent)
-			: truncateHead(selectedContent);
-
-		let outputText: string;
-		let truncationInfo:
-			| { result: TruncationResult; options: { direction: "head"; startLine?: number; totalFileLines?: number } }
-			| undefined;
-
-		if (truncation.firstLineExceedsLimit) {
-			const firstLine = allLines[startLine] ?? "";
-			const firstLineBytes = Buffer.byteLength(firstLine, "utf-8");
-			const snippet = truncateHeadBytes(firstLine, DEFAULT_MAX_BYTES);
-
-			outputText = snippet.text;
-			if (snippet.text.length === 0) {
-				outputText = `[Line ${startLineDisplay} is ${formatBytes(
-					firstLineBytes,
-				)}, exceeds ${formatBytes(DEFAULT_MAX_BYTES)} limit. Unable to display a valid UTF-8 snippet.]`;
-			}
-			details.truncation = truncation;
-			truncationInfo = {
-				result: truncation,
-				options: { direction: "head", startLine: startLineDisplay, totalFileLines: totalLines },
-			};
-		} else if (truncation.truncated) {
-			outputText = truncation.content;
-			details.truncation = truncation;
-			truncationInfo = {
-				result: truncation,
-				options: { direction: "head", startLine: startLineDisplay, totalFileLines: totalLines },
-			};
-		} else if (userLimitedLines !== undefined && startLine + userLimitedLines < allLines.length) {
-			const remaining = allLines.length - (startLine + userLimitedLines);
-			const nextOffset = startLine + userLimitedLines + 1;
-
-			outputText = truncation.content;
-			outputText += `\n\n[${remaining} more lines in resource. Use offset=${nextOffset} to continue]`;
-			details.truncation = truncation;
-		} else {
-			outputText = truncation.content;
-		}
-
-		const resultBuilder = toolResult(details).text(outputText).sourceInternal(url);
-		if (truncationInfo) {
-			resultBuilder.truncation(truncationInfo.result, truncationInfo.options);
-		}
-		return resultBuilder.done();
+		return this.#buildInMemoryTextResult(resource.content, offset, limit, {
+			details,
+			sourcePath: resource.sourcePath,
+			sourceInternal: url,
+			entityLabel: "resource",
+			ignoreResultLimits: scheme === "skill",
+		});
 	}
 
 	/** Read directory contents as a formatted listing */
