@@ -9,6 +9,7 @@ import {
 	parseNumstat,
 } from "../commit/git/diff";
 import type { FileDiff, FileHunks, NumstatEntry } from "../commit/types";
+import { ToolAbortError, ToolError, throwIfAborted } from "../tools/tool-errors";
 
 // ════════════════════════════════════════════════════════════════════════════
 // Types
@@ -1274,3 +1275,103 @@ export const repo = {
 async function resolveHead(cwd: string): Promise<GitHeadState | null> {
 	return head.resolve(cwd);
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// API: github (GitHub CLI)
+// ════════════════════════════════════════════════════════════════════════════
+
+export interface GhCommandResult {
+	exitCode: number;
+	stdout: string;
+	stderr: string;
+}
+
+export interface GhCommandOptions {
+	repoProvided?: boolean;
+	trimOutput?: boolean;
+}
+
+function formatGhFailure(args: readonly string[], stdout: string, stderr: string, options?: GhCommandOptions): string {
+	const message = (stderr || stdout).trim();
+	if (message.includes("gh auth login") || message.includes("not logged into any GitHub hosts")) {
+		return "GitHub CLI is not authenticated. Run `gh auth login`.";
+	}
+	if (
+		!options?.repoProvided &&
+		(message.includes("not a git repository") ||
+			message.includes("no git remotes found") ||
+			message.includes("unable to determine current repository"))
+	) {
+		return "GitHub repository context is unavailable. Pass `repo` explicitly or run the tool inside a GitHub checkout.";
+	}
+	if (message.length > 0) return message;
+	return `GitHub CLI command failed: gh ${args.join(" ")}`;
+}
+
+export const github = {
+	/** Check if `gh` CLI is installed. */
+	available(): boolean {
+		return Boolean(Bun.which("gh"));
+	},
+
+	/** Run a raw `gh` CLI command. Does not throw on non-zero exit. */
+	async run(cwd: string, args: string[], signal?: AbortSignal, options?: GhCommandOptions): Promise<GhCommandResult> {
+		throwIfAborted(signal);
+		if (!Bun.which("gh")) {
+			throw new ToolError("GitHub CLI (gh) is not installed. Install it from https://cli.github.com/.");
+		}
+		try {
+			const child = Bun.spawn(["gh", ...args], {
+				cwd,
+				stdin: "ignore",
+				stdout: "pipe",
+				stderr: "pipe",
+				windowsHide: true,
+				signal,
+			});
+			if (!child.stdout || !child.stderr) {
+				throw new ToolError("Failed to capture GitHub CLI output.");
+			}
+			const [stdout, stderr, exitCode] = await Promise.all([
+				new Response(child.stdout).text(),
+				new Response(child.stderr).text(),
+				child.exited,
+			]);
+			throwIfAborted(signal);
+			const trim = options?.trimOutput !== false;
+			return {
+				exitCode: exitCode ?? 0,
+				stdout: trim ? stdout.trim() : stdout,
+				stderr: trim ? stderr.trim() : stderr,
+			};
+		} catch (error) {
+			if (signal?.aborted) throw new ToolAbortError();
+			throw error;
+		}
+	},
+
+	/** Run `gh` and parse stdout as JSON. Throws on non-zero exit or invalid JSON. */
+	async json<T>(cwd: string, args: string[], signal?: AbortSignal, options?: GhCommandOptions): Promise<T> {
+		const result = await github.run(cwd, args, signal, options);
+		if (result.exitCode !== 0) {
+			throw new ToolError(formatGhFailure(args, result.stdout, result.stderr, options));
+		}
+		if (!result.stdout) {
+			throw new ToolError("GitHub CLI returned empty output.");
+		}
+		try {
+			return JSON.parse(result.stdout) as T;
+		} catch {
+			throw new ToolError("GitHub CLI returned invalid JSON output.");
+		}
+	},
+
+	/** Run `gh` and return stdout as text. Throws on non-zero exit. */
+	async text(cwd: string, args: string[], signal?: AbortSignal, options?: GhCommandOptions): Promise<string> {
+		const result = await github.run(cwd, args, signal, options);
+		if (result.exitCode !== 0) {
+			throw new ToolError(formatGhFailure(args, result.stdout, result.stderr, options));
+		}
+		return result.stdout;
+	},
+};

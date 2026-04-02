@@ -15,7 +15,6 @@ import ghSearchIssuesDescription from "../prompts/tools/gh-search-issues.md" wit
 import ghSearchPrsDescription from "../prompts/tools/gh-search-prs.md" with { type: "text" };
 import * as git from "../utils/git";
 import type { ToolSession } from ".";
-import { isGhAvailable, runGhCommand, runGhJson, runGhText } from "./gh-cli";
 import type { OutputMeta } from "./output-meta";
 import { ToolError, throwIfAborted } from "./tool-errors";
 import { toolResult } from "./tool-result";
@@ -723,7 +722,7 @@ async function ensurePrRemote(
 	}
 
 	const headRepository = requireNonEmpty(data.headRepository?.nameWithOwner, "head repository");
-	const repoSummary = await runGhJson<GhRepoViewData>(
+	const repoSummary = await git.github.json<GhRepoViewData>(
 		repoRoot,
 		["repo", "view", headRepository, "--json", GH_REPO_CLONE_FIELDS.join(",")],
 		signal,
@@ -1370,7 +1369,11 @@ async function resolveGitHubRepo(
 		return runRepo;
 	}
 
-	const resolved = await runGhText(cwd, ["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"], signal);
+	const resolved = await git.github.text(
+		cwd,
+		["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"],
+		signal,
+	);
 	return requireNonEmpty(resolved, "repo");
 }
 
@@ -1380,7 +1383,7 @@ async function resolveGitHubBranchHead(
 	branch: string,
 	signal?: AbortSignal,
 ): Promise<string> {
-	const response = await runGhJson<GhBranchApiResponse>(
+	const response = await git.github.json<GhBranchApiResponse>(
 		cwd,
 		["api", "--method", "GET", `/repos/${repo}/branches/${encodeURIComponent(branch)}`],
 		signal,
@@ -1396,7 +1399,7 @@ async function fetchRunsForCommit(
 	branch: string | undefined,
 	signal?: AbortSignal,
 ): Promise<GhRunSnapshot[]> {
-	const response = await runGhJson<GhActionsRunListResponse>(
+	const response = await git.github.json<GhActionsRunListResponse>(
 		cwd,
 		[
 			"api",
@@ -1433,7 +1436,7 @@ async function fetchRunJobs(
 	let page = 1;
 
 	while (true) {
-		const response = await runGhJson<GhActionsJobsResponse>(
+		const response = await git.github.json<GhActionsJobsResponse>(
 			cwd,
 			[
 				"api",
@@ -1477,7 +1480,7 @@ async function fetchPrReviewComments(
 	let page = 1;
 
 	while (true) {
-		const response = await runGhJson<GhPrReviewCommentApi[]>(
+		const response = await git.github.json<GhPrReviewCommentApi[]>(
 			cwd,
 			[
 				"api",
@@ -1515,9 +1518,14 @@ async function fetchRunSnapshot(
 	signal?: AbortSignal,
 ): Promise<GhRunSnapshot> {
 	const [run, jobs] = await Promise.all([
-		runGhJson<GhActionsRunApi>(cwd, ["api", "--method", "GET", `/repos/${repo}/actions/runs/${runId}`], signal, {
-			repoProvided: true,
-		}),
+		git.github.json<GhActionsRunApi>(
+			cwd,
+			["api", "--method", "GET", `/repos/${repo}/actions/runs/${runId}`],
+			signal,
+			{
+				repoProvided: true,
+			},
+		),
 		fetchRunJobs(cwd, repo, runId, signal),
 	]);
 
@@ -1543,7 +1551,7 @@ async function fetchFailedJobLogs(
 ): Promise<GhFailedJobLog[]> {
 	return Promise.all(
 		failedJobs.map(async entry => {
-			const result = await runGhCommand(cwd, ["api", `/repos/${repo}/actions/jobs/${entry.job.id}/logs`], signal);
+			const result = await git.github.run(cwd, ["api", `/repos/${repo}/actions/jobs/${entry.job.id}/logs`], signal);
 			const fullLog = result.exitCode === 0 ? normalizeBlock(result.stdout) : undefined;
 			const logTail = fullLog ? tailLogLines(fullLog, tail) : undefined;
 			return {
@@ -1901,7 +1909,7 @@ export class GhRepoViewTool implements AgentTool<typeof ghRepoViewSchema, GhTool
 	constructor(private readonly session: ToolSession) {}
 
 	static createIf(session: ToolSession): GhRepoViewTool | null {
-		if (!isGhAvailable()) return null;
+		if (!git.github.available()) return null;
 		return new GhRepoViewTool(session);
 	}
 
@@ -1924,7 +1932,9 @@ export class GhRepoViewTool implements AgentTool<typeof ghRepoViewSchema, GhTool
 			}
 			args.push("--json", GH_REPO_FIELDS.join(","));
 
-			const data = await runGhJson<GhRepoViewData>(this.session.cwd, args, signal, { repoProvided: Boolean(repo) });
+			const data = await git.github.json<GhRepoViewData>(this.session.cwd, args, signal, {
+				repoProvided: Boolean(repo),
+			});
 			return buildTextResult(formatRepoView(data, { repo, branch }), data.url);
 		});
 	}
@@ -1940,7 +1950,7 @@ export class GhIssueViewTool implements AgentTool<typeof ghIssueViewSchema, GhTo
 	constructor(private readonly session: ToolSession) {}
 
 	static createIf(session: ToolSession): GhIssueViewTool | null {
-		if (!isGhAvailable()) return null;
+		if (!git.github.available()) return null;
 		return new GhIssueViewTool(session);
 	}
 
@@ -1959,7 +1969,9 @@ export class GhIssueViewTool implements AgentTool<typeof ghIssueViewSchema, GhTo
 			appendRepoFlag(args, repo, issue);
 			args.push("--json", (includeComments ? GH_ISSUE_FIELDS : GH_ISSUE_FIELDS_NO_COMMENTS).join(","));
 
-			const data = await runGhJson<GhIssueViewData>(this.session.cwd, args, signal, { repoProvided: Boolean(repo) });
+			const data = await git.github.json<GhIssueViewData>(this.session.cwd, args, signal, {
+				repoProvided: Boolean(repo),
+			});
 			return buildTextResult(formatIssueView(data, { issue, repo, comments: includeComments }), data.url);
 		});
 	}
@@ -1975,7 +1987,7 @@ export class GhPrViewTool implements AgentTool<typeof ghPrViewSchema, GhToolDeta
 	constructor(private readonly session: ToolSession) {}
 
 	static createIf(session: ToolSession): GhPrViewTool | null {
-		if (!isGhAvailable()) return null;
+		if (!git.github.available()) return null;
 		return new GhPrViewTool(session);
 	}
 
@@ -1997,7 +2009,9 @@ export class GhPrViewTool implements AgentTool<typeof ghPrViewSchema, GhToolDeta
 			appendRepoFlag(args, repo, pr);
 			args.push("--json", (includeComments ? GH_PR_FIELDS : GH_PR_FIELDS_NO_COMMENTS).join(","));
 
-			const data = await runGhJson<GhPrViewData>(this.session.cwd, args, signal, { repoProvided: Boolean(repo) });
+			const data = await git.github.json<GhPrViewData>(this.session.cwd, args, signal, {
+				repoProvided: Boolean(repo),
+			});
 			const resolvedRepo = repo ?? parsePullRequestUrl(data.url).repo;
 			if (includeComments && resolvedRepo && typeof data.number === "number") {
 				data.reviewComments = await fetchPrReviewComments(this.session.cwd, resolvedRepo, data.number, signal);
@@ -2017,7 +2031,7 @@ export class GhPrDiffTool implements AgentTool<typeof ghPrDiffSchema, GhToolDeta
 	constructor(private readonly session: ToolSession) {}
 
 	static createIf(session: ToolSession): GhPrDiffTool | null {
-		if (!isGhAvailable()) return null;
+		if (!git.github.available()) return null;
 		return new GhPrDiffTool(session);
 	}
 
@@ -2045,7 +2059,7 @@ export class GhPrDiffTool implements AgentTool<typeof ghPrDiffSchema, GhToolDeta
 				args.push("--exclude", normalizedPattern);
 			}
 
-			const output = await runGhText(this.session.cwd, args, signal, {
+			const output = await git.github.text(this.session.cwd, args, signal, {
 				repoProvided: Boolean(repo),
 				trimOutput: false,
 			});
@@ -2066,7 +2080,7 @@ export class GhPrCheckoutTool implements AgentTool<typeof ghPrCheckoutSchema, Gh
 	constructor(private readonly session: ToolSession) {}
 
 	static createIf(session: ToolSession): GhPrCheckoutTool | null {
-		if (!isGhAvailable()) return null;
+		if (!git.github.available()) return null;
 		return new GhPrCheckoutTool(session);
 	}
 
@@ -2090,7 +2104,7 @@ export class GhPrCheckoutTool implements AgentTool<typeof ghPrCheckoutSchema, Gh
 			appendRepoFlag(args, repo, pr);
 			args.push("--json", GH_PR_CHECKOUT_FIELDS.join(","));
 
-			const data = await runGhJson<GhPrViewData>(this.session.cwd, args, signal, {
+			const data = await git.github.json<GhPrViewData>(this.session.cwd, args, signal, {
 				repoProvided: Boolean(repo),
 			});
 			const prNumber = data.number;
@@ -2196,7 +2210,7 @@ export class GhPrPushTool implements AgentTool<typeof ghPrPushSchema, GhToolDeta
 	constructor(private readonly session: ToolSession) {}
 
 	static createIf(session: ToolSession): GhPrPushTool | null {
-		if (!isGhAvailable()) return null;
+		if (!git.github.available()) return null;
 		return new GhPrPushTool(session);
 	}
 
@@ -2257,7 +2271,7 @@ export class GhSearchIssuesTool implements AgentTool<typeof ghSearchIssuesSchema
 	constructor(private readonly session: ToolSession) {}
 
 	static createIf(session: ToolSession): GhSearchIssuesTool | null {
-		if (!isGhAvailable()) return null;
+		if (!git.github.available()) return null;
 		return new GhSearchIssuesTool(session);
 	}
 
@@ -2274,7 +2288,7 @@ export class GhSearchIssuesTool implements AgentTool<typeof ghSearchIssuesSchema
 			const limit = resolveSearchLimit(params.limit);
 			const args = buildGhSearchArgs("issues", query, limit, repo);
 
-			const items = await runGhJson<GhSearchResult[]>(this.session.cwd, args, signal, {
+			const items = await git.github.json<GhSearchResult[]>(this.session.cwd, args, signal, {
 				repoProvided: Boolean(repo),
 			});
 			return buildTextResult(formatSearchResults("issues", query, repo, items));
@@ -2292,7 +2306,7 @@ export class GhSearchPrsTool implements AgentTool<typeof ghSearchPrsSchema, GhTo
 	constructor(private readonly session: ToolSession) {}
 
 	static createIf(session: ToolSession): GhSearchPrsTool | null {
-		if (!isGhAvailable()) return null;
+		if (!git.github.available()) return null;
 		return new GhSearchPrsTool(session);
 	}
 
@@ -2309,7 +2323,7 @@ export class GhSearchPrsTool implements AgentTool<typeof ghSearchPrsSchema, GhTo
 			const limit = resolveSearchLimit(params.limit);
 			const args = buildGhSearchArgs("prs", query, limit, repo);
 
-			const items = await runGhJson<GhSearchResult[]>(this.session.cwd, args, signal, {
+			const items = await git.github.json<GhSearchResult[]>(this.session.cwd, args, signal, {
 				repoProvided: Boolean(repo),
 			});
 			return buildTextResult(formatSearchResults("pull requests", query, repo, items));
@@ -2327,7 +2341,7 @@ export class GhRunWatchTool implements AgentTool<typeof ghRunWatchSchema, GhTool
 	constructor(private readonly session: ToolSession) {}
 
 	static createIf(session: ToolSession): GhRunWatchTool | null {
-		if (!isGhAvailable()) return null;
+		if (!git.github.available()) return null;
 		return new GhRunWatchTool(session);
 	}
 

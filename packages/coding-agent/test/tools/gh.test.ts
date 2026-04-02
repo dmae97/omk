@@ -16,8 +16,8 @@ import {
 	GhSearchIssuesTool,
 	GhSearchPrsTool,
 } from "@oh-my-pi/pi-coding-agent/tools/gh";
-import * as ghCli from "@oh-my-pi/pi-coding-agent/tools/gh-cli";
 import { wrapToolWithMetaNotice } from "@oh-my-pi/pi-coding-agent/tools/output-meta";
+import * as git from "@oh-my-pi/pi-coding-agent/utils/git";
 
 function createSession(
 	cwd: string = "/tmp/test",
@@ -154,7 +154,7 @@ describe("GitHub CLI tools", () => {
 	});
 
 	it("formats repository metadata into readable text", async () => {
-		vi.spyOn(ghCli, "runGhJson").mockResolvedValue({
+		vi.spyOn(git.github, "json").mockResolvedValue({
 			nameWithOwner: "cli/cli",
 			description: "GitHub CLI",
 			url: "https://github.com/cli/cli",
@@ -183,7 +183,7 @@ describe("GitHub CLI tools", () => {
 	});
 
 	it("formats issue comments and omits minimized ones", async () => {
-		vi.spyOn(ghCli, "runGhJson").mockResolvedValue({
+		vi.spyOn(git.github, "json").mockResolvedValue({
 			number: 42,
 			title: "Example issue",
 			state: "OPEN",
@@ -226,7 +226,7 @@ describe("GitHub CLI tools", () => {
 	});
 
 	it("includes pull request reviews and inline review comments in the discussion context", async () => {
-		vi.spyOn(ghCli, "runGhJson").mockImplementation(async (_cwd, args) => {
+		vi.spyOn(git.github, "json").mockImplementation(async (_cwd, args) => {
 			if (args.includes("/repos/cli/cli/pulls/12/comments")) {
 				return [
 					{
@@ -286,7 +286,7 @@ describe("GitHub CLI tools", () => {
 	});
 
 	it("formats pull request search results", async () => {
-		vi.spyOn(ghCli, "runGhJson").mockResolvedValue([
+		vi.spyOn(git.github, "json").mockResolvedValue([
 			{
 				number: 101,
 				title: "Add feature",
@@ -324,7 +324,7 @@ describe("GitHub CLI tools", () => {
 	});
 
 	it("passes leading-dash search queries after -- so gh does not parse them as flags", async () => {
-		const runGhJsonSpy = vi.spyOn(ghCli, "runGhJson").mockResolvedValue([]);
+		const runGhJsonSpy = vi.spyOn(git.github, "json").mockResolvedValue([]);
 
 		const issuesTool = new GhSearchIssuesTool(createSession());
 		await issuesTool.execute("search-issues", { query: "-label:bug", repo: "owner/repo", limit: 1 });
@@ -346,7 +346,7 @@ describe("GitHub CLI tools", () => {
 	});
 
 	it("returns diff output under a stable heading without rewriting patch content", async () => {
-		vi.spyOn(ghCli, "runGhText").mockResolvedValue("diff --git a/Makefile b/Makefile\n+\tgo test ./... \n");
+		vi.spyOn(git.github, "text").mockResolvedValue("diff --git a/Makefile b/Makefile\n+\tgo test ./... \n");
 
 		const tool = new GhPrDiffTool(createSession());
 		const result = await tool.execute("pr-diff", { pr: "7", repo: "owner/repo" });
@@ -360,7 +360,7 @@ describe("GitHub CLI tools", () => {
 
 	it("lets wrapped GitHub diff output spill to an artifact tail instead of head-truncating", async () => {
 		const diffOutput = Array.from({ length: 400 }, (_, index) => `diff line ${index + 1}`).join("\n");
-		vi.spyOn(ghCli, "runGhText").mockResolvedValue(diffOutput);
+		vi.spyOn(git.github, "text").mockResolvedValue(diffOutput);
 
 		const settings = Settings.isolated({
 			"github.enabled": true,
@@ -388,7 +388,7 @@ describe("GitHub CLI tools", () => {
 	it("checks out a pull request into a worktree and configures contributor push metadata", async () => {
 		const fixture = await createPrFixture();
 		try {
-			vi.spyOn(ghCli, "runGhJson")
+			vi.spyOn(git.github, "json")
 				.mockResolvedValueOnce({
 					number: 123,
 					title: "Contributor fix",
@@ -435,7 +435,7 @@ describe("GitHub CLI tools", () => {
 
 	it("tails failed job logs inline and saves the full failed-job logs as an artifact", async () => {
 		const artifactsDir = await fs.mkdtemp(path.join(os.tmpdir(), "gh-run-watch-artifacts-"));
-		vi.spyOn(ghCli, "runGhJson")
+		vi.spyOn(git.github, "json")
 			.mockResolvedValueOnce({
 				id: 77,
 				name: "CI",
@@ -470,7 +470,7 @@ describe("GitHub CLI tools", () => {
 					},
 				],
 			});
-		vi.spyOn(ghCli, "runGhCommand").mockResolvedValue({
+		vi.spyOn(git.github, "run").mockResolvedValue({
 			exitCode: 0,
 			stdout: "alpha\nbeta\ngamma\ndelta\nepsilon\nzeta",
 			stderr: "",
@@ -674,13 +674,13 @@ describe("GitHub CLI tools", () => {
 			},
 		];
 
-		vi.spyOn(ghCli, "runGhText").mockImplementation(async (_cwd, args) => {
+		vi.spyOn(git.github, "text").mockImplementation(async (_cwd, args) => {
 			if (args.join(" ") === "repo view --json nameWithOwner -q .nameWithOwner") {
 				return repo;
 			}
 			throw new Error(`Unexpected runGhText args: ${args.join(" ")}`);
 		});
-		const runGhJsonSpy = vi.spyOn(ghCli, "runGhJson").mockImplementation(async (_cwd, args) => {
+		const runGhJsonSpy = vi.spyOn(git.github, "json").mockImplementation(async (_cwd, args) => {
 			const endpoint = args[3];
 			if (args[0] === "api" && endpoint === `/repos/${repo}/actions/runs`) {
 				const response = runListResponses.shift();
@@ -700,7 +700,7 @@ describe("GitHub CLI tools", () => {
 
 			throw new Error(`Unexpected runGhJson args: ${args.join(" ")}`);
 		});
-		vi.spyOn(ghCli, "runGhCommand").mockImplementation(async (_cwd, args) => {
+		vi.spyOn(git.github, "run").mockImplementation(async (_cwd, args) => {
 			if (args[1] === `/repos/${repo}/actions/jobs/302/logs`) {
 				return {
 					exitCode: 0,

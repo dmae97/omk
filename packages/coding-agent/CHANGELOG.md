@@ -1,8 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added GitHub CLI utilities to git module (`utils/git.github`) with `available()`, `run()`, `json()`, and `text()` methods for GitHub CLI operations
 - Exported git utilities from main package entry point for use by extensions
 - Added comprehensive git utility module (`utils/git`) with organized namespaces for common git operations (branch, commit, diff, log, patch, ref, stage, status, head, repository)
 
@@ -17,6 +19,7 @@
 
 ### Removed
 
+- Removed `gh-cli.ts` module; GitHub CLI functionality now available via `utils/git.github`
 - Removed `ControlledGit` class and associated git wrapper infrastructure from `commit/git` module
 - Removed `mergeStdoutStderr` helper function from autoresearch git utilities
 - Removed `findGitHeadPathAsync` and `findGitHeadPathSync` from modes/shared module (replaced by git utilities)
