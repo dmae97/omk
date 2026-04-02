@@ -19,3 +19,12 @@ export function matchesAppInterrupt(data: string): boolean {
 export function matchesSelectCancel(data: string): boolean {
 	return getKeybindings().matches(data, "tui.select.cancel");
 }
+
+export function matchesAppExternalEditor(data: string): boolean {
+	const keybindings = getKeybindings();
+	const externalEditorKeys = keybindings.getKeys("app.editor.external");
+	if (externalEditorKeys.length > 0) {
+		return keybindings.matches(data, "app.editor.external");
+	}
+	return matchesKey(data, "ctrl+g");
+}

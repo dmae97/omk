@@ -16,7 +16,7 @@ import {
 	visibleWidth,
 } from "@oh-my-pi/pi-tui";
 import { getMarkdownTheme, theme } from "../../modes/theme/theme";
-import { matchesSelectCancel } from "../../modes/utils/keybinding-matchers";
+import { matchesAppExternalEditor, matchesSelectCancel } from "../../modes/utils/keybinding-matchers";
 import { CountdownTimer } from "./countdown-timer";
 import { DynamicBorder } from "./dynamic-border";
 
@@ -29,6 +29,7 @@ export interface HookSelectorOptions {
 	maxVisible?: number;
 	onLeft?: () => void;
 	onRight?: () => void;
+	onExternalEditor?: () => void;
 	helpText?: string;
 }
 
@@ -67,6 +68,7 @@ export class HookSelectorComponent extends Container {
 	#countdown: CountdownTimer | undefined;
 	#onLeftCallback: (() => void) | undefined;
 	#onRightCallback: (() => void) | undefined;
+	#onExternalEditorCallback: (() => void) | undefined;
 	constructor(
 		title: string,
 		options: string[],
@@ -84,6 +86,7 @@ export class HookSelectorComponent extends Container {
 		this.#baseTitle = title;
 		this.#onLeftCallback = opts?.onLeft;
 		this.#onRightCallback = opts?.onRight;
+		this.#onExternalEditorCallback = opts?.onExternalEditor;
 
 		this.addChild(new DynamicBorder());
 		this.addChild(new Spacer(1));
@@ -174,6 +177,8 @@ export class HookSelectorComponent extends Container {
 			this.#onLeftCallback?.();
 		} else if (matchesKey(keyData, "right")) {
 			this.#onRightCallback?.();
+		} else if (this.#onExternalEditorCallback && matchesAppExternalEditor(keyData)) {
+			this.#onExternalEditorCallback();
 		} else if (matchesSelectCancel(keyData)) {
 			this.#onCancelCallback();
 		}

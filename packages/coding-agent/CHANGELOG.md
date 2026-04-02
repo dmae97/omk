@@ -1,15 +1,21 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added `onExternalEditor` callback to extension UI dialog options for handling external editor shortcut in select dialogs
+- Added external editor shortcut support in plan review selector, allowing users to open and edit the plan in their configured editor
+- Added `matchesAppExternalEditor` keybinding matcher to detect external editor shortcut (Ctrl+G or configured binding)
+- Added `trimTrailingNewline` option to `openInEditor` function to preserve trailing newlines when editing files
 - Added GitHub CLI utilities to git module (`utils/git.github`) with `available()`, `run()`, `json()`, and `text()` methods for GitHub CLI operations
 - Exported git utilities from main package entry point for use by extensions
 - Added comprehensive git utility module (`utils/git`) with organized namespaces for common git operations (branch, commit, diff, log, patch, ref, stage, status, head, repository)
 
 ### Changed
 
+- Updated hook editor and hook selector components to use `matchesAppExternalEditor` matcher for consistent external editor keybinding detection
+- Modified plan review flow to read the latest plan content from disk before approval, allowing changes made in external editor to be reflected
+- Enhanced plan review help text to dynamically display the configured external editor keybinding
 - Refactored git operations to use centralized utility module instead of `ControlledGit` class throughout codebase
 - Replaced `ControlledGit` dependency injection pattern with direct `cwd` parameter in commit agent tools
 - Migrated git HEAD resolution in footer and status-line components to use new synchronous and asynchronous utilities
@@ -28,6 +34,7 @@
 ### Fixed
 
 - Fixed `read` output for file-backed internal URLs like `local://...` to include hashline prefixes in hashline edit mode, preserving usable line refs for follow-up edits
+- Fixed the plan review selector to support the external editor shortcut for opening and updating the current plan from the approval screen
 
 ## [13.18.0] - 2026-04-02
 ### Breaking Changes

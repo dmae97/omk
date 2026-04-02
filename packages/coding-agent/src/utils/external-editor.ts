@@ -17,6 +17,8 @@ export interface OpenInEditorOptions {
 	extension?: string;
 	/** Custom stdio configuration (default: all "inherit"). */
 	stdio?: [number | "inherit", number | "inherit", number | "inherit"];
+	/** Keep the file's trailing newline instead of trimming it from the returned text. */
+	trimTrailingNewline?: boolean;
 }
 
 /**
@@ -40,13 +42,17 @@ export async function openInEditor(
 		const stdio = options?.stdio ?? ["inherit", "inherit", "inherit"];
 
 		const child = spawn(editor, [...editorArgs, tmpFile], { stdio, shell: process.platform === "win32" });
-		const exitCode = await new Promise<number>((resolve, reject) => {
-			child.once("exit", (code, signal) => resolve(code ?? (signal ? -1 : 0)));
-			child.once("error", error => reject(error));
-		});
+		const { promise, reject, resolve } = Promise.withResolvers<number>();
+		child.once("exit", (code, signal) => resolve(code ?? (signal ? -1 : 0)));
+		child.once("error", error => reject(error));
+		const exitCode = await promise;
 
 		if (exitCode === 0) {
-			return (await Bun.file(tmpFile).text()).replace(/\n$/, "");
+			const text = await Bun.file(tmpFile).text();
+			if (options?.trimTrailingNewline === false) {
+				return text;
+			}
+			return text.replace(/\n$/, "");
 		}
 		return null;
 	} finally {

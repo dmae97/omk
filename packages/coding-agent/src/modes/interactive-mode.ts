@@ -2,6 +2,7 @@
  * Interactive mode for the coding agent.
  * Handles TUI rendering and user interaction, delegating business logic to AgentSession.
  */
+import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { type Agent, type AgentMessage, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { AssistantMessage, ImageContent, Message, Model, UsageReport } from "@oh-my-pi/pi-ai";
@@ -29,6 +30,7 @@ import type { SessionContext, SessionManager } from "../session/session-manager"
 import { getRecentSessions } from "../session/session-manager";
 import { STTController, type SttState } from "../stt";
 import type { ExitPlanModeDetails } from "../tools";
+import { getEditorCommand, openInEditor } from "../utils/external-editor";
 import { popTerminalTitle, pushTerminalTitle, setSessionTerminalTitle } from "../utils/title-generator";
 import type { AssistantMessageComponent } from "./components/assistant-message";
 import type { BashExecutionComponent } from "./components/bash-execution";
@@ -154,6 +156,7 @@ export class InteractiveMode implements InteractiveModeContext {
 	#planModePreviousModel: Model | undefined;
 	#pendingModelSwitch: Model | undefined;
 	#planModeHasEntered = false;
+	#planReviewContainer: Container | undefined;
 	readonly lspServers:
 		| Array<{ name: string; status: "ready" | "error"; fileTypes: string[]; error?: string }>
 		| undefined = undefined;
@@ -739,13 +742,95 @@ export class InteractiveMode implements InteractiveModeContext {
 	}
 
 	#renderPlanPreview(planContent: string): void {
-		this.chatContainer.addChild(new Spacer(1));
-		this.chatContainer.addChild(new DynamicBorder());
-		this.chatContainer.addChild(new Text(theme.bold(theme.fg("accent", "Plan Review")), 1, 1));
-		this.chatContainer.addChild(new Spacer(1));
-		this.chatContainer.addChild(new Markdown(planContent, 1, 1, getMarkdownTheme()));
-		this.chatContainer.addChild(new DynamicBorder());
+		if (!this.#planReviewContainer) {
+			this.#planReviewContainer = new Container();
+			this.chatContainer.addChild(this.#planReviewContainer);
+		}
+		this.#planReviewContainer.clear();
+		this.#planReviewContainer.addChild(new Spacer(1));
+		this.#planReviewContainer.addChild(new DynamicBorder());
+		this.#planReviewContainer.addChild(new Text(theme.bold(theme.fg("accent", "Plan Review")), 1, 1));
+		this.#planReviewContainer.addChild(new Spacer(1));
+		this.#planReviewContainer.addChild(new Markdown(planContent, 1, 1, getMarkdownTheme()));
+		this.#planReviewContainer.addChild(new DynamicBorder());
 		this.ui.requestRender();
+	}
+
+	#getEditorTerminalPath(): string | null {
+		if (process.platform === "win32") {
+			return null;
+		}
+		return "/dev/tty";
+	}
+
+	async #openEditorTerminalHandle(): Promise<fs.FileHandle | null> {
+		const terminalPath = this.#getEditorTerminalPath();
+		if (!terminalPath) {
+			return null;
+		}
+		try {
+			return await fs.open(terminalPath, "r+");
+		} catch {
+			return null;
+		}
+	}
+
+	#getPlanReviewHelpText(): string {
+		const externalEditorKey = this.keybindings.getDisplayString("app.editor.external");
+		if (!externalEditorKey) {
+			return "up/down navigate  enter select  esc cancel";
+		}
+		return `up/down navigate  enter select  ${externalEditorKey.toLowerCase()} open in editor  esc cancel`;
+	}
+
+	async #openPlanInExternalEditor(planFilePath: string): Promise<void> {
+		const editorCmd = getEditorCommand();
+		if (!editorCmd) {
+			this.showWarning("No editor configured. Set $VISUAL or $EDITOR environment variable.");
+			return;
+		}
+
+		const resolvedPath = this.#resolvePlanFilePath(planFilePath);
+		let currentText: string;
+		try {
+			currentText = await Bun.file(resolvedPath).text();
+		} catch (error) {
+			if (isEnoent(error)) {
+				this.showError(`Plan file not found at ${planFilePath}`);
+				return;
+			}
+			this.showWarning(`Failed to open external editor: ${error instanceof Error ? error.message : String(error)}`);
+			return;
+		}
+
+		let ttyHandle: fs.FileHandle | null = null;
+		try {
+			ttyHandle = await this.#openEditorTerminalHandle();
+			this.ui.stop();
+
+			const stdio: [number | "inherit", number | "inherit", number | "inherit"] = ttyHandle
+				? [ttyHandle.fd, ttyHandle.fd, ttyHandle.fd]
+				: ["inherit", "inherit", "inherit"];
+
+			const result = await openInEditor(editorCmd, currentText, {
+				extension: path.extname(resolvedPath) || ".md",
+				stdio,
+				trimTrailingNewline: false,
+			});
+			if (result !== null) {
+				await Bun.write(resolvedPath, result);
+				this.#renderPlanPreview(result);
+				this.showStatus("Plan updated in external editor.");
+			}
+		} catch (error) {
+			this.showWarning(`Failed to open external editor: ${error instanceof Error ? error.message : String(error)}`);
+		} finally {
+			if (ttyHandle) {
+				await ttyHandle.close();
+			}
+			this.ui.start();
+			this.ui.requestRender(true);
+		}
 	}
 
 	async #approvePlan(
@@ -817,16 +902,24 @@ export class InteractiveMode implements InteractiveModeContext {
 		}
 
 		this.#renderPlanPreview(planContent);
-		const choice = await this.showHookSelector("Plan mode - next step", [
-			"Approve and execute",
-			"Refine plan",
-			"Stay in plan mode",
-		]);
+		const choice = await this.showHookSelector(
+			"Plan mode - next step",
+			["Approve and execute", "Refine plan", "Stay in plan mode"],
+			{
+				helpText: this.#getPlanReviewHelpText(),
+				onExternalEditor: () => void this.#openPlanInExternalEditor(planFilePath),
+			},
+		);
 
 		if (choice === "Approve and execute") {
 			const finalPlanFilePath = details.finalPlanFilePath || planFilePath;
 			try {
-				await this.#approvePlan(planContent, { planFilePath, finalPlanFilePath });
+				const latestPlanContent = await this.#readPlanFile(planFilePath);
+				if (!latestPlanContent) {
+					this.showError(`Plan file not found at ${planFilePath}`);
+					return;
+				}
+				await this.#approvePlan(latestPlanContent, { planFilePath, finalPlanFilePath });
 			} catch (error) {
 				this.showError(
 					`Failed to finalize approved plan: ${error instanceof Error ? error.message : String(error)}`,
@@ -1096,6 +1189,7 @@ export class InteractiveMode implements InteractiveModeContext {
 	handleClearCommand(): Promise<void> {
 		this.#btwController.dispose();
 		this.#extensionUiController.clearExtensionTerminalInputListeners();
+		this.#planReviewContainer = undefined;
 		return this.#commandController.handleClearCommand();
 	}
 
