@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.18.0] - 2026-04-02
 ### Breaking Changes
 
 - Removed standalone `fetch` tool; URL fetching is now integrated into the `read` tool
