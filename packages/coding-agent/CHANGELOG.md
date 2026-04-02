@@ -48,6 +48,7 @@
 
 - Fixed `read` output for file-backed internal URLs like `local://...` to include hashline prefixes in hashline edit mode, preserving usable line refs for follow-up edits
 - Fixed the plan review selector to support the external editor shortcut for opening and updating the current plan from the approval screen
+- Fixed status line dropping git branch name when path is long by shrinking the path segment before dropping other segments
 
 ## [13.18.0] - 2026-04-02
 ### Breaking Changes
