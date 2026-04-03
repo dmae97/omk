@@ -59,6 +59,7 @@ import {
 	extractExplicitThinkingSelector,
 	formatModelString,
 	parseModelString,
+	type ResolvedModelRoleValue,
 	resolveModelRoleValue,
 } from "../config/model-resolver";
 import { expandPromptTemplate, type PromptTemplate, renderPromptTemplate } from "../config/prompt-templates";
@@ -2103,7 +2104,16 @@ export class AgentSession {
 	}
 
 	resolveRoleModel(role: string): Model | undefined {
-		return this.#resolveRoleModel(role, this.#modelRegistry.getAvailable(), this.model);
+		return this.#resolveRoleModelFull(role, this.#modelRegistry.getAvailable(), this.model).model;
+	}
+
+	/**
+	 * Resolve a role to its model AND thinking level.
+	 * Unlike resolveRoleModel(), this preserves the thinking level suffix
+	 * from role configuration (e.g., "anthropic/claude-sonnet-4-5:xhigh").
+	 */
+	resolveRoleModelWithThinking(role: string): ResolvedModelRoleValue {
+		return this.#resolveRoleModelFull(role, this.#modelRegistry.getAvailable(), this.model);
 	}
 
 	get promptTemplates(): ReadonlyArray<PromptTemplate> {
@@ -3182,7 +3192,7 @@ export class AgentSession {
 	 * Validates API key, saves to session log but NOT to settings.
 	 * @throws Error if no API key available for the model
 	 */
-	async setModelTemporary(model: Model): Promise<void> {
+	async setModelTemporary(model: Model, thinkingLevel?: ThinkingLevel): Promise<void> {
 		const apiKey = await this.#modelRegistry.getApiKey(model, this.sessionId);
 		if (!apiKey) {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
@@ -3193,8 +3203,8 @@ export class AgentSession {
 		this.sessionManager.appendModelChange(`${model.provider}/${model.id}`, "temporary");
 		this.settings.getStorage()?.recordModelUsage(`${model.provider}/${model.id}`);
 
-		// Re-apply the current thinking level for the newly selected model
-		this.setThinkingLevel(this.thinkingLevel);
+		// Apply explicit thinking level, or re-clamp current level to new model's capabilities
+		this.setThinkingLevel(thinkingLevel ?? this.thinkingLevel);
 	}
 
 	/**
@@ -3267,13 +3277,12 @@ export class AgentSession {
 		const next = roleModels[nextIndex];
 
 		if (options?.temporary) {
-			await this.setModelTemporary(next.model);
+			await this.setModelTemporary(next.model, next.explicitThinkingLevel ? next.thinkingLevel : undefined);
 		} else {
 			await this.setModel(next.model, next.role);
-		}
-
-		if (next.explicitThinkingLevel && next.thinkingLevel !== undefined) {
-			this.setThinkingLevel(next.thinkingLevel);
+			if (next.explicitThinkingLevel && next.thinkingLevel !== undefined) {
+				this.setThinkingLevel(next.thinkingLevel);
+			}
 		}
 
 		return { model: next.model, thinkingLevel: this.thinkingLevel, role: next.role };
@@ -4364,19 +4373,25 @@ export class AgentSession {
 		return availableModels.find(m => m.provider === currentModel.provider && m.id === configuredTarget);
 	}
 
-	#resolveRoleModel(role: string, availableModels: Model[], currentModel: Model | undefined): Model | undefined {
+	#resolveRoleModelFull(
+		role: string,
+		availableModels: Model[],
+		currentModel: Model | undefined,
+	): ResolvedModelRoleValue {
 		const roleModelStr =
 			role === "default"
 				? (this.settings.getModelRole("default") ??
 					(currentModel ? `${currentModel.provider}/${currentModel.id}` : undefined))
 				: this.settings.getModelRole(role);
 
-		if (!roleModelStr) return undefined;
+		if (!roleModelStr) {
+			return { model: undefined, thinkingLevel: undefined, explicitThinkingLevel: false, warning: undefined };
+		}
 
 		return resolveModelRoleValue(roleModelStr, availableModels, {
 			settings: this.settings,
 			matchPreferences: { usageOrder: this.settings.getStorage()?.getModelUsageOrder() },
-		}).model;
+		});
 	}
 
 	#getCompactionModelCandidates(availableModels: Model[]): Model[] {
@@ -4393,7 +4408,7 @@ export class AgentSession {
 
 		const currentModel = this.model;
 		for (const role of MODEL_ROLE_IDS) {
-			addCandidate(this.#resolveRoleModel(role, availableModels, currentModel));
+			addCandidate(this.#resolveRoleModelFull(role, availableModels, currentModel).model);
 		}
 
 		const sortedByContext = [...availableModels].sort((a, b) => b.contextWindow - a.contextWindow);
