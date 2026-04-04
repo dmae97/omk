@@ -4422,7 +4422,8 @@ export class AgentSession {
 		deferred = false,
 	): Promise<void> {
 		const compactionSettings = this.settings.getGroup("compaction");
-		if (reason !== "idle" && (!compactionSettings.enabled || compactionSettings.strategy === "off")) return;
+		if (compactionSettings.strategy === "off") return;
+		if (reason !== "idle" && !compactionSettings.enabled) return;
 		const generation = this.#promptGeneration;
 		if (!deferred && reason !== "overflow" && reason !== "idle" && compactionSettings.strategy === "handoff") {
 			this.#schedulePostPromptTask(
