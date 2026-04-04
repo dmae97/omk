@@ -4,6 +4,8 @@
 
 ### Added
 
+
+- Added idle auto-compaction settings and scheduling so sessions can compact after inactive turns without auto-continuing.
 - Added `onExternalEditor` callback to extension UI dialog options for handling external editor shortcut in select dialogs
 - Added external editor shortcut support in plan review selector, allowing users to open and edit the plan in their configured editor
 - Added `matchesAppExternalEditor` keybinding matcher to detect external editor shortcut (Ctrl+G or configured binding)
