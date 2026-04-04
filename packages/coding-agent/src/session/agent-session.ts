@@ -162,7 +162,7 @@ import { getLatestCompactionEntry } from "./session-manager";
 /** Session-specific events that extend the core AgentEvent */
 export type AgentSessionEvent =
 	| AgentEvent
-	| { type: "auto_compaction_start"; reason: "threshold" | "overflow"; action: "context-full" | "handoff" }
+	| { type: "auto_compaction_start"; reason: "threshold" | "overflow" | "idle"; action: "context-full" | "handoff" }
 	| {
 			type: "auto_compaction_end";
 			action: "context-full" | "handoff";
@@ -3646,6 +3646,12 @@ export class AgentSession {
 		this.#handoffAbortController?.abort();
 	}
 
+	/** Trigger idle compaction through the auto-compaction flow (with UI events). */
+	async runIdleCompaction(): Promise<void> {
+		if (this.isStreaming || this.isCompacting) return;
+		await this.#runAutoCompaction("idle", false, true);
+	}
+
 	/**
 	 * Cancel in-progress branch summarization.
 	 */
@@ -4410,11 +4416,15 @@ export class AgentSession {
 	/**
 	 * Internal: Run auto-compaction with events.
 	 */
-	async #runAutoCompaction(reason: "overflow" | "threshold", willRetry: boolean, deferred = false): Promise<void> {
+	async #runAutoCompaction(
+		reason: "overflow" | "threshold" | "idle",
+		willRetry: boolean,
+		deferred = false,
+	): Promise<void> {
 		const compactionSettings = this.settings.getGroup("compaction");
-		if (!compactionSettings.enabled || compactionSettings.strategy === "off") return;
+		if (reason !== "idle" && (!compactionSettings.enabled || compactionSettings.strategy === "off")) return;
 		const generation = this.#promptGeneration;
-		if (!deferred && reason !== "overflow" && compactionSettings.strategy === "handoff") {
+		if (!deferred && reason !== "overflow" && reason !== "idle" && compactionSettings.strategy === "handoff") {
 			this.#schedulePostPromptTask(
 				async signal => {
 					await Promise.resolve();
@@ -4717,7 +4727,7 @@ export class AgentSession {
 			};
 			await this.#emitSessionEvent({ type: "auto_compaction_end", action, result, aborted: false, willRetry });
 
-			if (!willRetry && compactionSettings.autoContinue !== false) {
+			if (!willRetry && reason !== "idle" && compactionSettings.autoContinue !== false) {
 				const continuePrompt = async () => {
 					await this.#promptWithMessage(
 						{

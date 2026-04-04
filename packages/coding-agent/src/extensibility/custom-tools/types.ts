@@ -94,7 +94,7 @@ export type CustomToolSessionEvent =
 	  }
 	| {
 			reason: "auto_compaction_start";
-			trigger: "threshold" | "overflow";
+			trigger: "threshold" | "overflow" | "idle";
 			action: "context-full" | "handoff";
 	  }
 	| {

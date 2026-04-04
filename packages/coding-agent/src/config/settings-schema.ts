@@ -797,6 +797,40 @@ export const SETTINGS_SCHEMA = {
 
 	"compaction.remoteEndpoint": { type: "string", default: undefined },
 
+	// Idle compaction
+	"compaction.idleEnabled": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "context",
+			label: "Idle Compaction",
+			description: "Compact context while idle when token count exceeds threshold",
+		},
+	},
+
+	"compaction.idleThresholdTokens": {
+		type: "enum",
+		values: [100000, 200000, 300000, 400000, 500000, 600000, 700000, 800000, 900000] as const,
+		default: 200000,
+		ui: {
+			tab: "context",
+			label: "Idle Compaction Threshold",
+			description: "Token count above which idle compaction triggers",
+			submenu: true,
+		},
+	},
+
+	"compaction.idleTimeoutSeconds": {
+		type: "enum",
+		values: [60, 120, 300, 600, 1800, 3600] as const,
+		default: 300,
+		ui: {
+			tab: "context",
+			label: "Idle Compaction Delay",
+			description: "Seconds to wait while idle before compacting",
+			submenu: true,
+		},
+	},
 	// Branch summaries
 	"branchSummary.enabled": {
 		type: "boolean",
@@ -1711,6 +1745,9 @@ export interface CompactionSettings {
 	autoContinue: boolean;
 	remoteEnabled: boolean;
 	remoteEndpoint: string | undefined;
+	idleEnabled: boolean;
+	idleThresholdTokens: number;
+	idleTimeoutSeconds: number;
 }
 
 export interface ContextPromotionSettings {

@@ -3,6 +3,7 @@
 ## [Unreleased]
 ### Added
 
+- Added idle auto-compaction settings and scheduling so sessions can compact after inactive turns without auto-continuing.
 - Added `edit.manageImports` setting to enable/disable post-edit import and include management
 - Added import/include management for TypeScript, JavaScript, Python, Rust, Go, and C/C++ in edit operations
 - Added `imports` parameter to patch, hashline, and replace edit operations to declare imports/includes needed after code changes

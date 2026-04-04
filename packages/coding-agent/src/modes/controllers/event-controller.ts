@@ -1,5 +1,5 @@
 import { INTENT_FIELD } from "@oh-my-pi/pi-agent-core";
-import type { ImageContent } from "@oh-my-pi/pi-ai";
+import type { AssistantMessage, ImageContent } from "@oh-my-pi/pi-ai";
 import { Loader, TERMINAL, Text } from "@oh-my-pi/pi-tui";
 import { settings } from "../../config/settings";
 import { AssistantMessageComponent } from "../../modes/components/assistant-message";
@@ -10,6 +10,7 @@ import { TtsrNotificationComponent } from "../../modes/components/ttsr-notificat
 import { getSymbolTheme, theme } from "../../modes/theme/theme";
 import type { InteractiveModeContext, TodoPhase } from "../../modes/types";
 import type { AgentSessionEvent } from "../../session/agent-session";
+import { calculatePromptTokens } from "../../session/compaction/compaction";
 import type { ExitPlanModeDetails } from "../../tools";
 
 export class EventController {
@@ -21,6 +22,7 @@ export class EventController {
 	#readToolCallArgs = new Map<string, Record<string, unknown>>();
 	#readToolCallAssistantComponents = new Map<string, AssistantMessageComponent>();
 	#lastAssistantComponent: AssistantMessageComponent | undefined = undefined;
+	#idleCompactionTimer?: NodeJS.Timeout;
 	constructor(private ctx: InteractiveModeContext) {}
 
 	#resetReadGroup(): void {
@@ -107,6 +109,7 @@ export class EventController {
 					this.ctx.retryLoader = undefined;
 					this.ctx.statusContainer.clear();
 				}
+				this.#cancelIdleCompaction();
 				this.ctx.ensureLoadingAnimation();
 				this.ctx.ui.requestRender();
 				break;
@@ -434,16 +437,19 @@ export class EventController {
 				this.#readToolCallAssistantComponents.clear();
 				this.#lastAssistantComponent = undefined;
 				this.ctx.ui.requestRender();
+				this.#scheduleIdleCompaction();
 				this.sendCompletionNotification();
 				break;
 
 			case "auto_compaction_start": {
+				this.#cancelIdleCompaction();
 				this.ctx.autoCompactionEscapeHandler = this.ctx.editor.onEscape;
 				this.ctx.editor.onEscape = () => {
 					this.ctx.session.abortCompaction();
 				};
 				this.ctx.statusContainer.clear();
-				const reasonText = event.reason === "overflow" ? "Context overflow detected, " : "";
+				const reasonText =
+					event.reason === "overflow" ? "Context overflow detected, " : event.reason === "idle" ? "Idle " : "";
 				const actionLabel = event.action === "handoff" ? "Auto-handoff" : "Auto context-full maintenance";
 				this.ctx.autoCompactionLoader = new Loader(
 					this.ctx.ui,
@@ -458,6 +464,7 @@ export class EventController {
 			}
 
 			case "auto_compaction_end": {
+				this.#cancelIdleCompaction();
 				if (this.ctx.autoCompactionEscapeHandler) {
 					this.ctx.editor.onEscape = this.ctx.autoCompactionEscapeHandler;
 					this.ctx.autoCompactionEscapeHandler = undefined;
@@ -563,6 +570,49 @@ export class EventController {
 				await this.ctx.reloadTodos();
 				break;
 		}
+	}
+
+	#cancelIdleCompaction(): void {
+		if (this.#idleCompactionTimer) {
+			clearTimeout(this.#idleCompactionTimer);
+			this.#idleCompactionTimer = undefined;
+		}
+	}
+
+	#scheduleIdleCompaction(): void {
+		this.#cancelIdleCompaction();
+		// Don't schedule while compaction/handoff is already running — the agent_end from a
+		// handoff agent turn still has the old session's bloated token counts, and scheduling
+		// here would fire after the session resets, trying to handoff an empty session.
+		if (this.ctx.session.isCompacting) return;
+
+		const idleSettings = settings.getGroup("compaction");
+		if (!idleSettings.idleEnabled) return;
+
+		// Only if input is empty
+		if (this.ctx.editor.getText().trim()) return;
+
+		// Check token count against idle threshold
+		const messages = this.ctx.session.agent.state.messages;
+		const lastAssistant = messages
+			.slice()
+			.reverse()
+			.find((m): m is AssistantMessage => m.role === "assistant" && m.stopReason !== "aborted");
+		if (!lastAssistant?.usage) return;
+
+		const contextTokens = calculatePromptTokens(lastAssistant.usage);
+		const threshold = idleSettings.idleThresholdTokens;
+		if (threshold <= 0 || contextTokens < threshold) return;
+
+		const timeoutMs = Math.max(60, Math.min(3600, idleSettings.idleTimeoutSeconds)) * 1000;
+		this.#idleCompactionTimer = setTimeout(() => {
+			this.#idleCompactionTimer = undefined;
+			// Re-check conditions before firing
+			if (this.ctx.session.isStreaming) return;
+			if (this.ctx.session.isCompacting) return;
+			if (this.ctx.editor.getText().trim()) return;
+			void this.ctx.session.runIdleCompaction();
+		}, timeoutMs);
 	}
 
 	sendCompletionNotification(): void {
