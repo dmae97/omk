@@ -361,7 +361,8 @@ function createAutoresearchCommandHarness(
 				args.push("--", ...options.pathspecs);
 			}
 			const result = await runGitMock(args);
-			if (result.code !== 0) throw new Error(result.stderr || result.stdout || `git status exited with code ${result.code}`);
+			if (result.code !== 0)
+				throw new Error(result.stderr || result.stdout || `git status exited with code ${result.code}`);
 			return result.stdout;
 		},
 		{ parse: git.status.parse, summary: git.status.summary },
