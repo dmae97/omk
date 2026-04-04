@@ -273,6 +273,10 @@ async function createSessionManager(parsed: Args, cwd: string): Promise<SessionM
 	if (parsed.sessionDir) {
 		return SessionManager.create(cwd, parsed.sessionDir);
 	}
+	// Auto-resume: behave like --continue if the setting is enabled
+	if (settings.get("autoResume")) {
+		return await SessionManager.continueRecent(cwd, parsed.sessionDir);
+	}
 	// Default case (new session) returns undefined, SDK will create one
 	return undefined;
 }
