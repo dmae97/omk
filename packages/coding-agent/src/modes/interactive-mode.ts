@@ -945,9 +945,13 @@ export class InteractiveMode implements InteractiveModeContext {
 			return;
 		}
 		if (choice === "Refine plan") {
-			const refinement = await this.showHookInput("What should be refined?");
+			const refinement = (await this.showHookInput("What should be refined?"))?.trim();
 			if (refinement) {
-				this.editor.setText(refinement);
+				if (this.onInputCallback) {
+					this.onInputCallback(this.startPendingSubmission({ text: refinement }));
+				} else {
+					this.editor.setText(refinement);
+				}
 			}
 		}
 	}
