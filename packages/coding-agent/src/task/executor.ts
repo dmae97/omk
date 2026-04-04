@@ -38,6 +38,7 @@ import {
 	type ReviewFinding,
 	type SingleResult,
 	TASK_SUBAGENT_EVENT_CHANNEL,
+	TASK_SUBAGENT_LIFECYCLE_CHANNEL,
 	TASK_SUBAGENT_PROGRESS_CHANNEL,
 } from "./types";
 
@@ -630,6 +631,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 				task,
 				assignment,
 				progress: { ...progress },
+				sessionFile: subtaskSessionFile,
 			});
 		}
 		lastProgressEmitMs = Date.now();
@@ -983,6 +985,19 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 
 			activeSession = session;
 
+			// Emit lifecycle start event
+			if (options.eventBus) {
+				options.eventBus.emit(TASK_SUBAGENT_LIFECYCLE_CHANNEL, {
+					id,
+					agent: agent.name,
+					agentSource: agent.source,
+					description: options.description,
+					status: "started",
+					sessionFile: subtaskSessionFile,
+					index,
+				});
+			}
+
 			const subagentToolNames = session.getActiveToolNames();
 			const parentOwnedToolNames = new Set(["todo_write"]);
 			const filteredSubagentTools = subagentToolNames.filter(name => !parentOwnedToolNames.has(name));
@@ -1237,6 +1252,19 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 		: undefined;
 	progress.status = wasAborted ? "aborted" : exitCode === 0 ? "completed" : "failed";
 	scheduleProgress(true);
+
+	// Emit lifecycle end event after finalization so submit_result status is reflected
+	if (options.eventBus) {
+		options.eventBus.emit(TASK_SUBAGENT_LIFECYCLE_CHANNEL, {
+			id,
+			agent: agent.name,
+			agentSource: agent.source,
+			description: options.description,
+			status: progress.status as "completed" | "failed" | "aborted",
+			sessionFile: subtaskSessionFile,
+			index,
+		});
+	}
 
 	return {
 		index,

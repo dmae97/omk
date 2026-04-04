@@ -87,7 +87,7 @@ describe("github copilot model limits mapping", () => {
 
 		const model = models.find(candidate => candidate.id === "gemini-2.5-pro");
 		expect(model).toBeDefined();
-		expect(model?.contextWindow).toBe(128_000);
+		expect(model?.contextWindow).toBe(1_048_576);
 		expect(model?.maxTokens).toBe(64_000);
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
@@ -137,7 +137,7 @@ describe("github copilot model limits mapping", () => {
 
 		const model = models.find(candidate => candidate.id === "claude-opus-4.6");
 		expect(model).toBeDefined();
-		expect(model?.contextWindow).toBe(128_000);
+		expect(model?.contextWindow).toBe(200_000);
 		expect(model?.maxTokens).toBe(16_000);
 	});
 	it("inherits bundled GPT-5.4 mini reasoning metadata during discovery", async () => {

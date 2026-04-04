@@ -2177,12 +2177,13 @@ export class GhPrCheckoutTool implements AgentTool<typeof ghPrCheckoutSchema, Gh
 				await fs.mkdir(path.dirname(finalWorktreePath), { recursive: true });
 				await git.worktree.add(repoRoot, finalWorktreePath, localBranch, { signal });
 			}
+			const resolvedWorktreePath = await fs.realpath(finalWorktreePath);
 
 			return buildTextResult(
 				formatPrCheckoutResult({
 					data,
 					localBranch,
-					worktreePath: finalWorktreePath,
+					worktreePath: resolvedWorktreePath,
 					remoteName: remote.name,
 					remoteUrl: remote.url,
 					reused: Boolean(existingWorktree),
@@ -2191,7 +2192,7 @@ export class GhPrCheckoutTool implements AgentTool<typeof ghPrCheckoutSchema, Gh
 				{
 					repo: repo ?? data.headRepository?.nameWithOwner,
 					branch: localBranch,
-					worktreePath: finalWorktreePath,
+					worktreePath: resolvedWorktreePath,
 					remote: remote.name,
 					remoteBranch: headRefName,
 				},

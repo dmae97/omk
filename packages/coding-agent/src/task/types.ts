@@ -31,6 +31,31 @@ export const TASK_SUBAGENT_EVENT_CHANNEL = "task:subagent:event";
 /** EventBus channel for aggregated subagent progress */
 export const TASK_SUBAGENT_PROGRESS_CHANNEL = "task:subagent:progress";
 
+/** EventBus channel for subagent lifecycle (start/end) */
+export const TASK_SUBAGENT_LIFECYCLE_CHANNEL = "task:subagent:lifecycle";
+
+/** Payload emitted on TASK_SUBAGENT_PROGRESS_CHANNEL */
+export interface SubagentProgressPayload {
+	index: number;
+	agent: string;
+	agentSource: AgentSource;
+	task: string;
+	assignment?: string;
+	progress: AgentProgress;
+	sessionFile?: string;
+}
+
+/** Payload emitted on TASK_SUBAGENT_LIFECYCLE_CHANNEL */
+export interface SubagentLifecyclePayload {
+	id: string;
+	agent: string;
+	agentSource: AgentSource;
+	description?: string;
+	status: "started" | "completed" | "failed" | "aborted";
+	sessionFile?: string;
+	index: number;
+}
+
 /** Single task item for parallel execution */
 export const taskItemSchema = Type.Object({
 	id: Type.String({

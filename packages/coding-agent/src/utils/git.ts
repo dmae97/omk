@@ -1111,6 +1111,26 @@ export const cherryPick = Object.assign(
 );
 
 // ════════════════════════════════════════════════════════════════════════════
+// API: stash
+// ════════════════════════════════════════════════════════════════════════════
+
+export const stash = {
+	/** Stash working tree + index changes. Returns true if something was stashed. */
+	async push(cwd: string, message?: string): Promise<boolean> {
+		ensureAvailable();
+		const args = ["stash", "push", "--include-untracked"];
+		if (message) args.push("-m", message);
+		const result = await runCommand(cwd, args);
+		// git stash push exits 0 whether or not it stashed; check output
+		return result.exitCode === 0 && !result.stdout.includes("No local changes to save");
+	},
+	/** Pop the most recent stash entry. */
+	async pop(cwd: string): Promise<void> {
+		await runEffect(cwd, ["stash", "pop"]);
+	},
+};
+
+// ════════════════════════════════════════════════════════════════════════════
 // API: clone, restore, clean
 // ════════════════════════════════════════════════════════════════════════════
 

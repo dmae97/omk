@@ -289,6 +289,13 @@ function applyAnthropicCatalogPolicy(model: ApiModel<Api>, parsedModel: Anthropi
 		model.cost.cacheWrite = 6.25;
 	}
 
+	// GitHub Copilot Opus 4.6: discovery currently reports a stale 144K prompt window,
+	// but the model supports a 1M context window. Keep the bundled catalog truthful
+	// until Copilot fixes the upstream metadata.
+	if (model.provider === "github-copilot" && parsedModel.kind === "opus" && semverEqual(parsedModel.version, "4.6")) {
+		model.contextWindow = 1000000;
+	}
+
 	// Bedrock Opus 4.6: upstream metadata is stale for cache pricing and context.
 	if (model.provider === "amazon-bedrock" && parsedModel.kind === "opus" && semverEqual(parsedModel.version, "4.6")) {
 		model.cost.cacheRead = 0.5;
