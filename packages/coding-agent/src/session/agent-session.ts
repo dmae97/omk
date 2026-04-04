@@ -668,6 +668,18 @@ export class AgentSession {
 			}
 		}
 
+		// Deobfuscate assistant message text for display — the LLM echoes back obfuscated
+		// placeholders, but the user should see real values. convertToLlm re-obfuscates on next turn.
+		if (event.type === "message_end" && event.message.role === "assistant" && this.#obfuscator) {
+			for (const block of event.message.content) {
+				if (block.type === "text") {
+					block.text = this.#obfuscator.deobfuscate(block.text);
+				} else if (block.type === "thinking" && "thinking" in block) {
+					block.thinking = this.#obfuscator.deobfuscate(block.thinking);
+				}
+			}
+		}
+
 		await this.#emitSessionEvent(event);
 
 		if (event.type === "turn_start") {

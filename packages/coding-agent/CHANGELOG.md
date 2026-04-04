@@ -23,6 +23,7 @@
 
 ### Changed
 
+- Changed secret placeholders to deterministic hash-style redaction tokens and deobfuscated assistant output for local display.
 - Updated edit tool prompts to document import management feature when enabled
 - Modified edit tool schemas to conditionally include `imports` parameter based on `edit.manageImports` setting
 - Enhanced patch, hashline, and replace tool documentation with import management examples and guidance
