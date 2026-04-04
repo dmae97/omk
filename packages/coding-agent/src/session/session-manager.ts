@@ -1390,6 +1390,7 @@ export class SessionManager {
 	#sessionFile: string | undefined;
 	#flushed: boolean = false;
 	#needsFullRewriteOnNextPersist: boolean = false;
+	#ensuredOnDisk: boolean = false;
 	#fileEntries: FileEntry[] = [];
 	#byId: Map<string, SessionEntry> = new Map();
 	#labelsById: Map<string, string> = new Map();
@@ -1496,12 +1497,14 @@ export class SessionManager {
 
 			this.#buildIndex();
 			this.#flushed = true;
+			this.#ensuredOnDisk = true;
 		} else {
 			const explicitPath = this.#sessionFile;
 			this.#newSessionSync();
 			this.#sessionFile = explicitPath; // preserve explicit path from --session flag
 			await this.#rewriteFile();
 			this.#flushed = true;
+			this.#ensuredOnDisk = true;
 			return;
 		}
 	}
@@ -1509,7 +1512,9 @@ export class SessionManager {
 	/** Start a new session. Closes any existing writer first. */
 	async newSession(options?: NewSessionOptions): Promise<string | undefined> {
 		await this.#closePersistWriter();
-		return this.#newSessionSync(options);
+		const result = this.#newSessionSync(options);
+		await this.ensureOnDisk();
+		return result;
 	}
 
 	/**
@@ -1678,6 +1683,7 @@ export class SessionManager {
 		this.#leafId = null;
 		this.#flushed = false;
 		this.#needsFullRewriteOnNextPersist = false;
+		this.#ensuredOnDisk = false;
 		this.#usageStatistics = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, premiumRequests: 0, cost: 0 };
 		this.#inMemoryArtifacts = null;
 		this.#inMemoryArtifactCounter = 0;
@@ -1839,6 +1845,7 @@ export class SessionManager {
 		if (!this.persist || !this.#sessionFile) return;
 		if (this.#flushed && !this.#needsFullRewriteOnNextPersist) return;
 		await this.#rewriteFile();
+		this.#ensuredOnDisk = true;
 	}
 
 	/** Flush pending writes to disk. Call before switching sessions or on shutdown. */
@@ -1972,11 +1979,16 @@ export class SessionManager {
 		if (!this.persist || !this.#sessionFile) return;
 		if (this.#persistError) throw this.#persistError;
 
-		const hasAssistant = this.#fileEntries.some(e => e.type === "message" && e.message.role === "assistant");
-		if (!hasAssistant) {
-			// Mark as not flushed so when assistant arrives, all entries get written.
-			this.#flushed = false;
-			return;
+		// Normally we wait for the first assistant message before persisting to avoid
+		// creating files for sessions that never produce output. Once ensureOnDisk() has
+		// been called, the session is already on disk and every entry must be flushed.
+		if (!this.#ensuredOnDisk) {
+			const hasAssistant = this.#fileEntries.some(e => e.type === "message" && e.message.role === "assistant");
+			if (!hasAssistant) {
+				// Mark as not flushed so when assistant arrives, all entries get written.
+				this.#flushed = false;
+				return;
+			}
 		}
 
 		if (this.#needsFullRewriteOnNextPersist || !this.#flushed) {

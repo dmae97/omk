@@ -194,6 +194,15 @@ export const SETTINGS_SCHEMA = {
 	// ────────────────────────────────────────────────────────────────────────
 	lastChangelogVersion: { type: "string", default: undefined },
 
+	autoResume: {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "interaction",
+			label: "Auto Resume",
+			description: "Automatically resume the most recent session in the current directory",
+		},
+	},
 	shellPath: { type: "string", default: undefined },
 
 	extensions: { type: "array", default: EMPTY_STRING_ARRAY },
