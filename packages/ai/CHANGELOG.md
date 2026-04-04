@@ -1,7 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Added
 
+- Added environment-based credential fallback for the OpenAI Codex provider.
 ## [13.17.6] - 2026-04-01
 
 ### Fixed
