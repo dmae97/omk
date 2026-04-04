@@ -208,6 +208,8 @@ export interface InteractiveModeContext {
 	showOAuthSelector(mode: "login" | "logout", providerId?: string): Promise<void>;
 	showHookConfirm(title: string, message: string): Promise<boolean>;
 	showDebugSelector(): void;
+	showSessionObserver(): void;
+	resetObserverRegistry(): void;
 
 	// Input handling
 	handleCtrlC(): void;

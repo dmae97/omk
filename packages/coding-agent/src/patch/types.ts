@@ -175,26 +175,6 @@ export interface ApplyPatchOptions {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Import Management Types
-// ═══════════════════════════════════════════════════════════════════════════
-
-/** Structured import request supplied alongside an edit operation. */
-export interface ImportSpec {
-	/** Module/crate/package path or header name */
-	from: string;
-	/** Named imports; TS type imports use a `type ` prefix */
-	imports?: string[];
-	/** Default import name (TS/JS) */
-	default?: string;
-	/** Namespace import name (TS/JS) */
-	namespace?: string;
-	/** Import alias (Go/Python) */
-	alias?: string;
-	/** Whether a C/C++ include is a system include */
-	system?: boolean;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
 // Diff Generation Types
 // ═══════════════════════════════════════════════════════════════════════════
 

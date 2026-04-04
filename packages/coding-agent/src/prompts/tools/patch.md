@@ -14,12 +14,6 @@ Patches files given diff hunks. Primary tool for existing-file edits.
 **Context Lines:**
 Use enough ` `-prefixed lines to make match unique (usually 2–8)
 When editing structured blocks (nested braces, tags, indented regions), include opening and closing lines so edit stays inside block
-{{#if editManageImportsEnabled}}
-**Imports:**
-- `imports` is **OPTIONAL**. Use it when the edit adds code that now requires new imports/includes.
-- Each entry starts with `from` and **MAY** include named `imports`, `default`, `namespace`, `alias`, or `system`, depending on language.
-- Import management runs after the main edit, so the diff should focus on the code change and `imports` should describe declarations to merge or add.
-{{/if}}
 </instruction>
 
 <parameters>
@@ -29,22 +23,13 @@ type T =
    // - Each hunk begins with "@@" (anchor optional).
    // - Each hunk body only has lines starting with ' ' | '+' | '-'.
    // - Each hunk includes at least one change (+ or -).
-  | { path: string, op: "update", diff: string{{#if editManageImportsEnabled}}, imports?: ImportSpec[]{{/if}} }
+   | { path: string, op: "update", diff: string }
    // Diff is full file content, no prefixes.
-  | { path: string, op: "create", diff: string{{#if editManageImportsEnabled}}, imports?: ImportSpec[]{{/if}} }
+   | { path: string, op: "create", diff: string }
    // No diff for delete.
    | { path: string, op: "delete" }
-{{#if editManageImportsEnabled}}
-
-type ImportSpec = {
-  from: string;
-  imports?: string[];
-  default?: string;
-  namespace?: string;
-  alias?: string;
-  system?: boolean;
-}
-{{/if}}
+   // New path for update+move.
+   | { path: string, op: "update", rename: string, diff: string }
 ```
 </parameters>
 
@@ -64,50 +49,24 @@ Returns success/failure; on failure, error message indicates:
 - **NEVER** use edit to fix indentation, whitespace, or reformat code. Formatting is a single command run once at the end (`bun fmt`, `cargo fmt`, `prettier —write`, etc.)—not N individual edits. If you see inconsistent indentation after an edit, leave it; the formatter will fix all of it in one pass.
 </critical>
 
-{{#if editManageImportsEnabled}}
-<example name="update">
-```json
-{
-  "path": "src/app.ts",
-  "op": "update",
-  "diff": "@@ function run() {\n function run() {\n-\treturn value;\n+\treturn format(value);\n }\n",
-  "imports": [
-    {
-      "from": "./format",
-      "imports": ["format"]
-    }
-  ]
-}
-```
-`imports` are merged after the diff applies, so existing imports are reused when possible and only missing declarations are added.
+<example name="create">
+edit {"path":"hello.txt","op":"create","diff":"Hello\n"}
 </example>
 
-<example name="typescript-mixed-import">
-```json
-{
-  "path": "src/app.ts",
-  "op": "update",
-  "diff": "@@\n ...\n",
-  "imports": [
-    {
-      "from": "react",
-      "default": "React",
-      "imports": [
-        "useMemo",
-        "type FC",
-        "useState"
-      ]
-    }
-  ]
-}
-```
-Use only supported fields: `from`, optional `imports`, `default`, `namespace`, `alias`, and `system`.
+<example name="update">
+edit {"path":"src/app.py","op":"update","diff":"@@ def greet():\n def greet():\n-print('Hi')\n+print('Hello')\n"}
 </example>
-{{/if}}
+
+<example name="rename">
+edit {"path":"src/app.py","op":"update","rename":"src/main.py","diff":"@@\n …\n"}
+</example>
+
+<example name="delete">
+edit {"path":"obsolete.txt","op":"delete"}
+</example>
 
 <avoid>
-{{#if editManageImportsEnabled}}
-- Do not duplicate imports already present in the file; describe the desired imports once and let merge logic dedupe.
-- Do not rely on `imports` to perform unrelated code edits; it only manages import/include declarations after the main edit.
-{{/if}}
+- Generic anchors: `import`, `export`, `describe`, `function`, `const`
+- Repeating same addition in multiple hunks (duplicate blocks)
+- Full-file overwrites for minor changes (acceptable for major restructures or short files)
 </avoid>

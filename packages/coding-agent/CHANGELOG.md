@@ -1,18 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
-- Added `edit.manageImports` setting to enable/disable post-edit import and include management
-- Added import/include management for TypeScript, JavaScript, Python, Rust, Go, and C/C++ in edit operations
-- Added `imports` parameter to patch, hashline, and replace edit operations to declare imports/includes needed after code changes
-- Added `ImportSpec` type to specify structured import requests with support for named imports, default imports, namespace imports, aliases, and system includes
-- Added comprehensive import handler modules for each supported language with deduplication and grouping logic
-- Added `edit.manageImports` setting to enable/disable post-edit import and include management
-- Added import/include management for TypeScript, JavaScript, Python, Rust, Go, and C/C++ in edit operations
-- Added `imports` parameter to patch, hashline, and replace edit operations to declare imports/includes needed after code changes
-- Added `ImportSpec` type to specify structured import requests with support for named imports, default imports, namespace imports, aliases, and system includes
-- Added comprehensive import handler modules for each supported language with deduplication and grouping logic
 - Added `onExternalEditor` callback to extension UI dialog options for handling external editor shortcut in select dialogs
 - Added external editor shortcut support in plan review selector, allowing users to open and edit the plan in their configured editor
 - Added `matchesAppExternalEditor` keybinding matcher to detect external editor shortcut (Ctrl+G or configured binding)
@@ -23,9 +14,6 @@
 
 ### Changed
 
-- Updated edit tool prompts to document import management feature when enabled
-- Modified edit tool schemas to conditionally include `imports` parameter based on `edit.manageImports` setting
-- Enhanced patch, hashline, and replace tool documentation with import management examples and guidance
 - Updated hook editor and hook selector components to use `matchesAppExternalEditor` matcher for consistent external editor keybinding detection
 - Modified plan review flow to read the latest plan content from disk before approval, allowing changes made in external editor to be reflected
 - Enhanced plan review help text to dynamically display the configured external editor keybinding
@@ -47,6 +35,7 @@
 ### Fixed
 
 - Fixed web search source rendering to truncate long title, metadata, and URL lines before they overflow the UI.
+- Fixed PR checkout tool to resolve symlinks in worktree paths, ensuring consistent path references in results and metadata
 - Fixed `read` output for file-backed internal URLs like `local://...` to include hashline prefixes in hashline edit mode, preserving usable line refs for follow-up edits
 - Fixed the plan review selector to support the external editor shortcut for opening and updating the current plan from the approval screen
 
@@ -402,6 +391,9 @@
 
 - Fixed resumed and session-switched GitHub Copilot/OpenAI Responses conversations replaying stale assistant native history from older saved sessions by sanitizing persisted assistant replay metadata on rehydration and resetting provider session state across live session boundaries ([#505](https://github.com/can1357/oh-my-pi/issues/505))
 
+### Added
+
+- Session observer overlay (`Ctrl+S`): view running subagent sessions with a picker and read-only transcript showing thinking, text, tool calls, and results
 ## [13.14.0] - 2026-03-20
 
 ### Added

@@ -958,16 +958,6 @@ export const SETTINGS_SCHEMA = {
 		},
 	},
 
-	"edit.manageImports": {
-		type: "boolean",
-		default: false,
-		ui: {
-			tab: "editing",
-			label: "Manage Imports After Edit",
-			description: "Expose post-edit import/include management for the edit tool",
-		},
-	},
-
 	readLineNumbers: {
 		type: "boolean",
 		default: false,

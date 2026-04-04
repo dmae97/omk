@@ -109,8 +109,21 @@ export { loadBundledAgents as BUNDLED_AGENTS } from "./agents";
 export { discoverCommands, expandCommand, getCommand } from "./commands";
 export { discoverAgents, getAgent } from "./discovery";
 export { AgentOutputManager } from "./output-manager";
-export type { AgentDefinition, AgentProgress, SingleResult, TaskParams, TaskToolDetails } from "./types";
-export { taskSchema } from "./types";
+export type {
+	AgentDefinition,
+	AgentProgress,
+	SingleResult,
+	SubagentLifecyclePayload,
+	SubagentProgressPayload,
+	TaskParams,
+	TaskToolDetails,
+} from "./types";
+export {
+	TASK_SUBAGENT_EVENT_CHANNEL,
+	TASK_SUBAGENT_LIFECYCLE_CHANNEL,
+	TASK_SUBAGENT_PROGRESS_CHANNEL,
+	taskSchema,
+} from "./types";
 
 /**
  * Render the tool description from a cached agent list and current settings.
@@ -766,7 +779,7 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 						contextFile: contextFilePath,
 						enableLsp: false,
 						signal,
-						eventBus: undefined,
+						eventBus: this.session.eventBus,
 						onProgress: progress => {
 							progressMap.set(index, {
 								...structuredClone(progress),
@@ -820,7 +833,7 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 						contextFile: contextFilePath,
 						enableLsp: false,
 						signal,
-						eventBus: undefined,
+						eventBus: this.session.eventBus,
 						onProgress: progress => {
 							progressMap.set(index, {
 								...structuredClone(progress),

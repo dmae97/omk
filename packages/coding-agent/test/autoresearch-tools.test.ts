@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, vi } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -16,7 +16,11 @@ import { createLogExperimentTool } from "../src/autoresearch/tools/log-experimen
 import { createRunExperimentTool } from "../src/autoresearch/tools/run-experiment";
 import type { RunDetails } from "../src/autoresearch/types";
 import type { ExtensionAPI, ExtensionContext } from "../src/extensibility/extensions";
+import * as git from "../src/utils/git";
 
+afterEach(() => {
+	vi.restoreAllMocks();
+});
 function makeTempDir(): string {
 	const dir = path.join(os.tmpdir(), `pi-autoresearch-tools-${Snowflake.next()}`);
 	fs.mkdirSync(dir, { recursive: true });
@@ -1469,15 +1473,10 @@ describe("autoresearch tools", () => {
 			runNumber: 1,
 		};
 
-		const api = {
-			exec: async (command: string, args: string[]) => {
-				if (command !== "git") return { code: 1, stderr: "unexpected", stdout: "" };
-				if (args[0] === "status") {
-					return { code: 0, stderr: "", stdout: "R  src/generated/index.ts\0src/index.ts\0" };
-				}
-				return { code: 1, stderr: `unexpected git args: ${args.join(" ")}`, stdout: "" };
-			},
-		} as unknown as ExtensionAPI;
+		vi.spyOn(git, "status").mockResolvedValue("R  src/generated/index.ts\0src/index.ts\0");
+		vi.spyOn(git.show, "prefix").mockResolvedValue("");
+
+		const api = {} as ExtensionAPI;
 
 		const tool = createLogExperimentTool({
 			dashboard: createDashboardStub(),
