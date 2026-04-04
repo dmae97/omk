@@ -65,7 +65,7 @@ describe("EditTool import management integration", () => {
 		const filePath = path.join(tempDir, "main.go");
 		fs.writeFileSync(filePath, ["package main", "", "func main() {", '\tprintln("old")', "}", ""].join("\n"));
 
-		const tool = new EditTool(createTestToolSession(tempDir));
+		const tool = new EditTool(createTestToolSession(tempDir, Settings.isolated({ "edit.manageImports": true })));
 		const result = await tool.execute("replace-go-imports", {
 			path: filePath,
 			old_text: 'println("old")',
