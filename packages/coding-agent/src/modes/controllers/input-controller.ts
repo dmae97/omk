@@ -158,6 +158,9 @@ export class InputController {
 		for (const key of this.ctx.keybindings.getKeys("app.clipboard.copyLine")) {
 			this.ctx.editor.setCustomKeyHandler(key, () => this.handleCopyCurrentLine());
 		}
+		for (const key of this.ctx.keybindings.getKeys("app.session.observe")) {
+			this.ctx.editor.setCustomKeyHandler(key, () => this.ctx.showSessionObserver());
+		}
 
 		this.ctx.editor.onChange = (text: string) => {
 			const wasBashMode = this.ctx.isBashMode;

@@ -1519,9 +1519,9 @@ export function githubCopilotModelManagerOptions(config?: GithubCopilotModelMana
 						const contextWindow = toPositiveNumber(
 							entry.context_length,
 							toPositiveNumber(
-								copilotLimits.maxPromptTokens,
+								copilotLimits.maxContextWindowTokens,
 								toPositiveNumber(
-									copilotLimits.maxContextWindowTokens,
+									copilotLimits.maxPromptTokens,
 									reference?.contextWindow ?? defaults.contextWindow,
 								),
 							),

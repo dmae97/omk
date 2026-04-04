@@ -586,6 +586,7 @@ export class CommandController {
 			}
 		}
 		await this.ctx.session.newSession();
+		this.ctx.resetObserverRegistry();
 		setSessionTerminalTitle(this.ctx.sessionManager.getSessionName(), this.ctx.sessionManager.getCwd());
 
 		this.ctx.statusLine.invalidate();

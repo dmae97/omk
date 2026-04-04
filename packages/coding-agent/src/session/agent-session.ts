@@ -59,6 +59,7 @@ import {
 	extractExplicitThinkingSelector,
 	formatModelString,
 	parseModelString,
+	type ResolvedModelRoleValue,
 	resolveModelRoleValue,
 } from "../config/model-resolver";
 import { expandPromptTemplate, type PromptTemplate, renderPromptTemplate } from "../config/prompt-templates";
@@ -162,7 +163,7 @@ import { getLatestCompactionEntry } from "./session-manager";
 /** Session-specific events that extend the core AgentEvent */
 export type AgentSessionEvent =
 	| AgentEvent
-	| { type: "auto_compaction_start"; reason: "threshold" | "overflow"; action: "context-full" | "handoff" }
+	| { type: "auto_compaction_start"; reason: "threshold" | "overflow" | "idle"; action: "context-full" | "handoff" }
 	| {
 			type: "auto_compaction_end";
 			action: "context-full" | "handoff";
@@ -668,7 +669,22 @@ export class AgentSession {
 			}
 		}
 
-		await this.#emitSessionEvent(event);
+		// Deobfuscate assistant message content for display emission — the LLM echoes back
+		// obfuscated placeholders, but listeners (TUI, extensions, exporters) must see real
+		// values. The original event.message stays obfuscated so the persistence path below
+		// writes `#HASH#` tokens to the session file; convertToLlm re-obfuscates outbound
+		// traffic on the next turn. Walks text, thinking, and toolCall arguments/intent.
+		let displayEvent: AgentEvent = event;
+		const obfuscator = this.#obfuscator;
+		if (obfuscator && event.type === "message_end" && event.message.role === "assistant") {
+			const message = event.message;
+			const deobfuscatedContent = obfuscator.deobfuscateObject(message.content);
+			if (deobfuscatedContent !== message.content) {
+				displayEvent = { ...event, message: { ...message, content: deobfuscatedContent } };
+			}
+		}
+
+		await this.#emitSessionEvent(displayEvent);
 
 		if (event.type === "turn_start") {
 			this.#resetStreamingEditState();
@@ -2103,7 +2119,16 @@ export class AgentSession {
 	}
 
 	resolveRoleModel(role: string): Model | undefined {
-		return this.#resolveRoleModel(role, this.#modelRegistry.getAvailable(), this.model);
+		return this.#resolveRoleModelFull(role, this.#modelRegistry.getAvailable(), this.model).model;
+	}
+
+	/**
+	 * Resolve a role to its model AND thinking level.
+	 * Unlike resolveRoleModel(), this preserves the thinking level suffix
+	 * from role configuration (e.g., "anthropic/claude-sonnet-4-5:xhigh").
+	 */
+	resolveRoleModelWithThinking(role: string): ResolvedModelRoleValue {
+		return this.#resolveRoleModelFull(role, this.#modelRegistry.getAvailable(), this.model);
 	}
 
 	get promptTemplates(): ReadonlyArray<PromptTemplate> {
@@ -3182,7 +3207,7 @@ export class AgentSession {
 	 * Validates API key, saves to session log but NOT to settings.
 	 * @throws Error if no API key available for the model
 	 */
-	async setModelTemporary(model: Model): Promise<void> {
+	async setModelTemporary(model: Model, thinkingLevel?: ThinkingLevel): Promise<void> {
 		const apiKey = await this.#modelRegistry.getApiKey(model, this.sessionId);
 		if (!apiKey) {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
@@ -3193,8 +3218,8 @@ export class AgentSession {
 		this.sessionManager.appendModelChange(`${model.provider}/${model.id}`, "temporary");
 		this.settings.getStorage()?.recordModelUsage(`${model.provider}/${model.id}`);
 
-		// Re-apply the current thinking level for the newly selected model
-		this.setThinkingLevel(this.thinkingLevel);
+		// Apply explicit thinking level, or re-clamp current level to new model's capabilities
+		this.setThinkingLevel(thinkingLevel ?? this.thinkingLevel);
 	}
 
 	/**
@@ -3267,13 +3292,12 @@ export class AgentSession {
 		const next = roleModels[nextIndex];
 
 		if (options?.temporary) {
-			await this.setModelTemporary(next.model);
+			await this.setModelTemporary(next.model, next.explicitThinkingLevel ? next.thinkingLevel : undefined);
 		} else {
 			await this.setModel(next.model, next.role);
-		}
-
-		if (next.explicitThinkingLevel && next.thinkingLevel !== undefined) {
-			this.setThinkingLevel(next.thinkingLevel);
+			if (next.explicitThinkingLevel && next.thinkingLevel !== undefined) {
+				this.setThinkingLevel(next.thinkingLevel);
+			}
 		}
 
 		return { model: next.model, thinkingLevel: this.thinkingLevel, role: next.role };
@@ -3644,6 +3668,12 @@ export class AgentSession {
 		this.#compactionAbortController?.abort();
 		this.#autoCompactionAbortController?.abort();
 		this.#handoffAbortController?.abort();
+	}
+
+	/** Trigger idle compaction through the auto-compaction flow (with UI events). */
+	async runIdleCompaction(): Promise<void> {
+		if (this.isStreaming || this.isCompacting) return;
+		await this.#runAutoCompaction("idle", false, true);
 	}
 
 	/**
@@ -4364,19 +4394,25 @@ export class AgentSession {
 		return availableModels.find(m => m.provider === currentModel.provider && m.id === configuredTarget);
 	}
 
-	#resolveRoleModel(role: string, availableModels: Model[], currentModel: Model | undefined): Model | undefined {
+	#resolveRoleModelFull(
+		role: string,
+		availableModels: Model[],
+		currentModel: Model | undefined,
+	): ResolvedModelRoleValue {
 		const roleModelStr =
 			role === "default"
 				? (this.settings.getModelRole("default") ??
 					(currentModel ? `${currentModel.provider}/${currentModel.id}` : undefined))
 				: this.settings.getModelRole(role);
 
-		if (!roleModelStr) return undefined;
+		if (!roleModelStr) {
+			return { model: undefined, thinkingLevel: undefined, explicitThinkingLevel: false, warning: undefined };
+		}
 
 		return resolveModelRoleValue(roleModelStr, availableModels, {
 			settings: this.settings,
 			matchPreferences: { usageOrder: this.settings.getStorage()?.getModelUsageOrder() },
-		}).model;
+		});
 	}
 
 	#getCompactionModelCandidates(availableModels: Model[]): Model[] {
@@ -4393,7 +4429,7 @@ export class AgentSession {
 
 		const currentModel = this.model;
 		for (const role of MODEL_ROLE_IDS) {
-			addCandidate(this.#resolveRoleModel(role, availableModels, currentModel));
+			addCandidate(this.#resolveRoleModelFull(role, availableModels, currentModel).model);
 		}
 
 		const sortedByContext = [...availableModels].sort((a, b) => b.contextWindow - a.contextWindow);
@@ -4410,11 +4446,16 @@ export class AgentSession {
 	/**
 	 * Internal: Run auto-compaction with events.
 	 */
-	async #runAutoCompaction(reason: "overflow" | "threshold", willRetry: boolean, deferred = false): Promise<void> {
+	async #runAutoCompaction(
+		reason: "overflow" | "threshold" | "idle",
+		willRetry: boolean,
+		deferred = false,
+	): Promise<void> {
 		const compactionSettings = this.settings.getGroup("compaction");
-		if (!compactionSettings.enabled || compactionSettings.strategy === "off") return;
+		if (compactionSettings.strategy === "off") return;
+		if (reason !== "idle" && !compactionSettings.enabled) return;
 		const generation = this.#promptGeneration;
-		if (!deferred && reason !== "overflow" && compactionSettings.strategy === "handoff") {
+		if (!deferred && reason !== "overflow" && reason !== "idle" && compactionSettings.strategy === "handoff") {
 			this.#schedulePostPromptTask(
 				async signal => {
 					await Promise.resolve();
@@ -4717,7 +4758,7 @@ export class AgentSession {
 			};
 			await this.#emitSessionEvent({ type: "auto_compaction_end", action, result, aborted: false, willRetry });
 
-			if (!willRetry && compactionSettings.autoContinue !== false) {
+			if (!willRetry && reason !== "idle" && compactionSettings.autoContinue !== false) {
 				const continuePrompt = async () => {
 					await this.#promptWithMessage(
 						{

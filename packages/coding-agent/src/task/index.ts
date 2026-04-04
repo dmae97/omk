@@ -109,8 +109,21 @@ export { loadBundledAgents as BUNDLED_AGENTS } from "./agents";
 export { discoverCommands, expandCommand, getCommand } from "./commands";
 export { discoverAgents, getAgent } from "./discovery";
 export { AgentOutputManager } from "./output-manager";
-export type { AgentDefinition, AgentProgress, SingleResult, TaskParams, TaskToolDetails } from "./types";
-export { taskSchema } from "./types";
+export type {
+	AgentDefinition,
+	AgentProgress,
+	SingleResult,
+	SubagentLifecyclePayload,
+	SubagentProgressPayload,
+	TaskParams,
+	TaskToolDetails,
+} from "./types";
+export {
+	TASK_SUBAGENT_EVENT_CHANNEL,
+	TASK_SUBAGENT_LIFECYCLE_CHANNEL,
+	TASK_SUBAGENT_PROGRESS_CHANNEL,
+	taskSchema,
+} from "./types";
 
 /**
  * Render the tool description from a cached agent list and current settings.
@@ -766,7 +779,7 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 						contextFile: contextFilePath,
 						enableLsp: false,
 						signal,
-						eventBus: undefined,
+						eventBus: this.session.eventBus,
 						onProgress: progress => {
 							progressMap.set(index, {
 								...structuredClone(progress),
@@ -820,7 +833,7 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 						contextFile: contextFilePath,
 						enableLsp: false,
 						signal,
-						eventBus: undefined,
+						eventBus: this.session.eventBus,
 						onProgress: progress => {
 							progressMap.set(index, {
 								...structuredClone(progress),
@@ -978,82 +991,90 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 			let changesApplied: boolean | null = null;
 			let mergedBranchesForNestedPatches: Set<string> | null = null;
 			if (isIsolated && repoRoot) {
-				if (mergeMode === "branch") {
-					// Branch mode: merge task branches sequentially
-					const branchEntries = results
-						.filter(r => r.branchName && r.exitCode === 0 && !r.aborted)
-						.map(r => ({ branchName: r.branchName!, taskId: r.id, description: r.description }));
+				try {
+					if (mergeMode === "branch") {
+						// Branch mode: merge task branches sequentially
+						const branchEntries = results
+							.filter(r => r.branchName && r.exitCode === 0 && !r.aborted)
+							.map(r => ({ branchName: r.branchName!, taskId: r.id, description: r.description }));
 
-					if (branchEntries.length === 0) {
-						changesApplied = true;
-					} else {
-						const mergeResult = await mergeTaskBranches(repoRoot, branchEntries);
-						mergedBranchesForNestedPatches = new Set(mergeResult.merged);
-						changesApplied = mergeResult.failed.length === 0;
-
-						if (changesApplied) {
-							mergeSummary = `\n\nMerged ${mergeResult.merged.length} branch${mergeResult.merged.length === 1 ? "" : "es"}: ${mergeResult.merged.join(", ")}`;
-						} else {
-							const mergedPart =
-								mergeResult.merged.length > 0 ? `Merged: ${mergeResult.merged.join(", ")}.\n` : "";
-							const failedPart = `Failed: ${mergeResult.failed.join(", ")}.`;
-							const conflictPart = mergeResult.conflict ? `\nConflict: ${mergeResult.conflict}` : "";
-							mergeSummary = `\n\n<system-notification>Branch merge failed. ${mergedPart}${failedPart}${conflictPart}\nUnmerged branches remain for manual resolution.</system-notification>`;
-						}
-					}
-
-					// Clean up merged branches (keep failed ones for manual resolution)
-					const allBranches = branchEntries.map(b => b.branchName);
-					if (changesApplied) {
-						await cleanupTaskBranches(repoRoot, allBranches);
-					}
-				} else {
-					// Patch mode: combine and apply patches
-					const patchesInOrder = results.map(result => result.patchPath).filter(Boolean) as string[];
-					const missingPatch = results.some(result => !result.patchPath);
-					if (missingPatch) {
-						changesApplied = false;
-					} else {
-						const patchStats = await Promise.all(
-							patchesInOrder.map(async patchPath => ({
-								patchPath,
-								size: (await fs.stat(patchPath)).size,
-							})),
-						);
-						const nonEmptyPatches = patchStats.filter(patch => patch.size > 0).map(patch => patch.patchPath);
-						if (nonEmptyPatches.length === 0) {
+						if (branchEntries.length === 0) {
 							changesApplied = true;
 						} else {
-							const patchTexts = await Promise.all(
-								nonEmptyPatches.map(async patchPath => Bun.file(patchPath).text()),
+							const mergeResult = await mergeTaskBranches(repoRoot, branchEntries);
+							mergedBranchesForNestedPatches = new Set(mergeResult.merged);
+							changesApplied = mergeResult.failed.length === 0;
+
+							if (changesApplied) {
+								mergeSummary = `\n\nMerged ${mergeResult.merged.length} branch${mergeResult.merged.length === 1 ? "" : "es"}: ${mergeResult.merged.join(", ")}`;
+							} else {
+								const mergedPart =
+									mergeResult.merged.length > 0 ? `Merged: ${mergeResult.merged.join(", ")}.\n` : "";
+								const failedPart = `Failed: ${mergeResult.failed.join(", ")}.`;
+								const conflictPart = mergeResult.conflict ? `\nConflict: ${mergeResult.conflict}` : "";
+								mergeSummary = `\n\n<system-notification>Branch merge failed. ${mergedPart}${failedPart}${conflictPart}\nUnmerged branches remain for manual resolution.</system-notification>`;
+							}
+						}
+
+						// Clean up merged branches (keep failed ones for manual resolution)
+						const allBranches = branchEntries.map(b => b.branchName);
+						if (changesApplied) {
+							await cleanupTaskBranches(repoRoot, allBranches);
+						}
+					} else {
+						// Patch mode: combine and apply patches
+						const patchesInOrder = results.map(result => result.patchPath).filter(Boolean) as string[];
+						const missingPatch = results.some(result => !result.patchPath);
+						if (missingPatch) {
+							changesApplied = false;
+						} else {
+							const patchStats = await Promise.all(
+								patchesInOrder.map(async patchPath => ({
+									patchPath,
+									size: (await fs.stat(patchPath)).size,
+								})),
 							);
-							const combinedPatch = patchTexts.map(text => (text.endsWith("\n") ? text : `${text}\n`)).join("");
-							if (!combinedPatch.trim()) {
+							const nonEmptyPatches = patchStats.filter(patch => patch.size > 0).map(patch => patch.patchPath);
+							if (nonEmptyPatches.length === 0) {
 								changesApplied = true;
 							} else {
-								changesApplied = await git.patch.canApplyText(repoRoot, combinedPatch);
-								if (changesApplied) {
-									try {
-										await git.patch.applyText(repoRoot, combinedPatch);
-									} catch {
-										changesApplied = false;
+								const patchTexts = await Promise.all(
+									nonEmptyPatches.map(async patchPath => Bun.file(patchPath).text()),
+								);
+								const combinedPatch = patchTexts
+									.map(text => (text.endsWith("\n") ? text : `${text}\n`))
+									.join("");
+								if (!combinedPatch.trim()) {
+									changesApplied = true;
+								} else {
+									changesApplied = await git.patch.canApplyText(repoRoot, combinedPatch);
+									if (changesApplied) {
+										try {
+											await git.patch.applyText(repoRoot, combinedPatch);
+										} catch {
+											changesApplied = false;
+										}
 									}
 								}
 							}
 						}
-					}
 
-					if (changesApplied) {
-						mergeSummary = "\n\nApplied patches: yes";
-					} else {
-						const notification =
-							"<system-notification>Patches were not applied and must be handled manually.</system-notification>";
-						const patchList =
-							patchPaths.length > 0
-								? `\n\nPatch artifacts:\n${patchPaths.map(patch => `- ${patch}`).join("\n")}`
-								: "";
-						mergeSummary = `\n\n${notification}${patchList}`;
+						if (changesApplied) {
+							mergeSummary = "\n\nApplied patches: yes";
+						} else {
+							const notification =
+								"<system-notification>Patches were not applied and must be handled manually.</system-notification>";
+							const patchList =
+								patchPaths.length > 0
+									? `\n\nPatch artifacts:\n${patchPaths.map(patch => `- ${patch}`).join("\n")}`
+									: "";
+							mergeSummary = `\n\n${notification}${patchList}`;
+						}
 					}
+				} catch (mergeErr) {
+					const msg = mergeErr instanceof Error ? mergeErr.message : String(mergeErr);
+					changesApplied = false;
+					mergeSummary = `\n\n<system-notification>Merge phase failed: ${msg}\nTask outputs are preserved but changes were not applied.</system-notification>`;
 				}
 			}
 

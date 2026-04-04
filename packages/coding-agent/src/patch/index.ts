@@ -44,11 +44,10 @@ import {
 	type HashlineEdit,
 	parseTag,
 } from "./hashline";
-// Internal imports
-import { applyImports } from "./imports";
 import { detectLineEnding, normalizeToLF, restoreLineEndings, stripBom } from "./normalize";
 import { type EditToolDetails, getLspBatchRequest } from "./shared";
-import type { FileSystem, ImportSpec, Operation, PatchInput } from "./types";
+// Internal imports
+import type { FileSystem, Operation, PatchInput } from "./types";
 import { EditMatchError } from "./types";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -64,7 +63,6 @@ export * from "./diff";
 export * from "./fuzzy";
 // Hashline
 export * from "./hashline";
-export * from "./imports";
 // Normalization
 export * from "./normalize";
 // Parsing
@@ -78,44 +76,14 @@ export * from "./types";
 // Schemas
 // ═══════════════════════════════════════════════════════════════════════════
 
-const importSpecSchema = Type.Object(
-	{
-		from: Type.String({ description: "Module/crate/package path" }),
-		imports: Type.Optional(
-			Type.Array(Type.String(), {
-				description: "Named imports. Prefix TS type imports with `type ` (for example `type FC`)",
-			}),
-		),
-		default: Type.Optional(Type.String({ description: "Default import name (TS/JS)" })),
-		namespace: Type.Optional(Type.String({ description: "Namespace import name (TS/JS)" })),
-		alias: Type.Optional(Type.String({ description: "Import alias (Go/Python)" })),
-		system: Type.Optional(Type.Boolean({ description: "System include for C/C++ headers" })),
-	},
-	{ additionalProperties: false },
-);
-
-const replaceEditSchemaBase = Type.Object({
+const replaceEditSchema = Type.Object({
 	path: Type.String({ description: "File path (relative or absolute)" }),
 	old_text: Type.String({ description: "Text to find (fuzzy whitespace matching enabled)" }),
 	new_text: Type.String({ description: "Replacement text" }),
 	all: Type.Optional(Type.Boolean({ description: "Replace all occurrences (default: unique match required)" })),
 });
 
-const replaceEditSchemaWithImports = Type.Object(
-	{
-		...replaceEditSchemaBase.properties,
-		imports: Type.Optional(
-			Type.Array(importSpecSchema, { description: "Imports to add or merge into the file after editing" }),
-		),
-	},
-	{ additionalProperties: false },
-);
-
-function buildReplaceEditSchema(importsEnabled: boolean) {
-	return importsEnabled ? replaceEditSchemaWithImports : replaceEditSchemaBase;
-}
-
-const patchEditSchemaBase = Type.Object({
+const patchEditSchema = Type.Object({
 	path: Type.String({ description: "File path" }),
 	op: Type.Optional(
 		StringEnum(["create", "delete", "update"], {
@@ -126,22 +94,8 @@ const patchEditSchemaBase = Type.Object({
 	diff: Type.Optional(Type.String({ description: "Diff hunks (update) or full content (create)" })),
 });
 
-const patchEditSchemaWithImports = Type.Object(
-	{
-		...patchEditSchemaBase.properties,
-		imports: Type.Optional(
-			Type.Array(importSpecSchema, { description: "Imports to add or merge into the file after editing" }),
-		),
-	},
-	{ additionalProperties: false },
-);
-
-function buildPatchEditSchema(importsEnabled: boolean) {
-	return importsEnabled ? patchEditSchemaWithImports : patchEditSchemaBase;
-}
-
-export type ReplaceParams = Static<typeof replaceEditSchemaWithImports>;
-export type PatchParams = Static<typeof patchEditSchemaWithImports>;
+export type ReplaceParams = Static<typeof replaceEditSchema>;
+export type PatchParams = Static<typeof patchEditSchema>;
 
 /**
  * Pattern matching hashline display format prefixes: `LINE#ID:CONTENT`, `#ID:CONTENT`, and `+ID:CONTENT`.
@@ -250,7 +204,7 @@ const hashlineEditSchema = Type.Object(
 	{ additionalProperties: false },
 );
 
-const hashlineEditParamsSchemaBase = Type.Object(
+const hashlineEditParamsSchema = Type.Object(
 	{
 		path: Type.String({ description: "path" }),
 		edits: Type.Array(hashlineEditSchema, { description: "edits over $path" }),
@@ -260,22 +214,8 @@ const hashlineEditParamsSchemaBase = Type.Object(
 	{ additionalProperties: false },
 );
 
-const hashlineEditParamsSchemaWithImports = Type.Object(
-	{
-		...hashlineEditParamsSchemaBase.properties,
-		imports: Type.Optional(
-			Type.Array(importSpecSchema, { description: "Imports to add or merge into the file after editing" }),
-		),
-	},
-	{ additionalProperties: false },
-);
-
-function buildHashlineEditParamsSchema(importsEnabled: boolean) {
-	return importsEnabled ? hashlineEditParamsSchemaWithImports : hashlineEditParamsSchemaBase;
-}
-
 export type HashlineToolEdit = Static<typeof hashlineEditSchema>;
-export type HashlineParams = Static<typeof hashlineEditParamsSchemaWithImports>;
+export type HashlineParams = Static<typeof hashlineEditParamsSchema>;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Resilient anchor resolution
@@ -417,31 +357,11 @@ function mergeDiagnosticsWithWarnings(
 	};
 }
 
-function applyRequestedImports(
-	filePath: string,
-	content: string,
-	imports: ImportSpec[] | undefined,
-	importsEnabled: boolean,
-): { content: string; warnings: string[] } {
-	if (!importsEnabled || !imports || imports.length === 0) {
-		return { content, warnings: [] };
-	}
-
-	const result = applyImports(filePath, content, imports);
-	return { content: result.content, warnings: result.warnings };
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
 // Tool Class
 // ═══════════════════════════════════════════════════════════════════════════
 
-type TInput =
-	| typeof replaceEditSchemaBase
-	| typeof replaceEditSchemaWithImports
-	| typeof patchEditSchemaBase
-	| typeof patchEditSchemaWithImports
-	| typeof hashlineEditParamsSchemaBase
-	| typeof hashlineEditParamsSchemaWithImports;
+type TInput = typeof replaceEditSchema | typeof patchEditSchema | typeof hashlineEditParamsSchema;
 
 export type EditMode = "replace" | "patch" | "hashline";
 
@@ -459,15 +379,6 @@ function isReplaceParams(params: ReplaceParams | PatchParams | HashlineParams): 
 	return "old_text" in params && "new_text" in params;
 }
 
-function getRequestedImports(params: ReplaceParams | PatchParams | HashlineParams): ImportSpec[] | undefined {
-	if (!("imports" in params)) {
-		return undefined;
-	}
-
-	const { imports } = params as { imports?: unknown };
-	return Array.isArray(imports) ? (imports as ImportSpec[]) : undefined;
-}
-
 /**
  * Edit tool implementation.
  *
@@ -482,12 +393,8 @@ export class EditTool implements AgentTool<TInput> {
 
 	readonly #allowFuzzy: boolean;
 	readonly #fuzzyThreshold: number;
-	readonly #manageImports: boolean;
 	readonly #writethrough: WritethroughCallback;
 	readonly #editMode?: EditMode | null;
-	readonly #replaceSchema: TInput;
-	readonly #patchSchema: TInput;
-	readonly #hashlineSchema: TInput;
 
 	constructor(private readonly session: ToolSession) {
 		const {
@@ -530,10 +437,6 @@ export class EditTool implements AgentTool<TInput> {
 				}
 				break;
 		}
-		this.#manageImports = session.settings.get("edit.manageImports");
-		this.#replaceSchema = buildReplaceEditSchema(this.#manageImports);
-		this.#patchSchema = buildPatchEditSchema(this.#manageImports);
-		this.#hashlineSchema = buildHashlineEditParamsSchema(this.#manageImports);
 
 		const enableLsp = session.enableLsp ?? true;
 		const enableDiagnostics = enableLsp && session.settings.get("lsp.diagnosticsOnEdit");
@@ -566,14 +469,13 @@ export class EditTool implements AgentTool<TInput> {
 	 * Dynamic description based on current edit mode (which depends on current model).
 	 */
 	get description(): string {
-		const promptContext = { editManageImportsEnabled: this.#manageImports };
 		switch (this.mode) {
 			case "patch":
-				return renderPromptTemplate(patchDescription, promptContext);
+				return renderPromptTemplate(patchDescription);
 			case "hashline":
-				return renderPromptTemplate(hashlineDescription, promptContext);
+				return renderPromptTemplate(hashlineDescription);
 			default:
-				return renderPromptTemplate(replaceDescription, promptContext);
+				return renderPromptTemplate(replaceDescription);
 		}
 	}
 
@@ -583,11 +485,11 @@ export class EditTool implements AgentTool<TInput> {
 	get parameters(): TInput {
 		switch (this.mode) {
 			case "patch":
-				return this.#patchSchema;
+				return patchEditSchema;
 			case "hashline":
-				return this.#hashlineSchema;
+				return hashlineEditParamsSchema;
 			default:
-				return this.#replaceSchema;
+				return replaceEditSchema;
 		}
 	}
 
@@ -608,7 +510,6 @@ export class EditTool implements AgentTool<TInput> {
 				throw new Error("Invalid edit parameters for hashline mode.");
 			}
 			const { path, edits, delete: deleteFile, move } = params;
-			const imports = getRequestedImports(params);
 
 			enforcePlanModeWrite(this.session, path, { op: deleteFile ? "delete" : "update", move });
 
@@ -673,13 +574,9 @@ export class EditTool implements AgentTool<TInput> {
 						throw new Error(`File not found: ${path}`);
 					}
 				}
-				const createdResult = applyRequestedImports(move ?? path, lines.join("\n"), imports, this.#manageImports);
-				await fs.writeFile(absolutePath, createdResult.content);
-				const warningsBlock = createdResult.warnings.length
-					? `\n\nWarnings:\n${createdResult.warnings.join("\n")}`
-					: "";
+				await fs.writeFile(absolutePath, lines.join("\n"));
 				return {
-					content: [{ type: "text", text: `Created ${path}${warningsBlock}` }],
+					content: [{ type: "text", text: `Created ${path}` }],
 					details: {
 						diff: "",
 						op: "create",
@@ -701,11 +598,10 @@ export class EditTool implements AgentTool<TInput> {
 			const anchorResult = applyHashlineEdits(normalizedText, anchorEdits);
 			normalizedText = anchorResult.lines;
 
-			const importResult = applyRequestedImports(move ?? path, normalizedText, imports, this.#manageImports);
 			const result = {
-				text: importResult.content,
+				text: normalizedText,
 				firstChangedLine: anchorResult.firstChangedLine,
-				warnings: [...(anchorResult.warnings ?? []), ...importResult.warnings],
+				warnings: anchorResult.warnings,
 				noopEdits: anchorResult.noopEdits,
 			};
 			if (originalNormalized === result.text && !move) {
@@ -815,7 +711,6 @@ export class EditTool implements AgentTool<TInput> {
 				throw new Error("Invalid edit parameters for patch mode.");
 			}
 			const { path, op: rawOp, rename, diff } = params;
-			const imports = getRequestedImports(params);
 
 			// Normalize unrecognized operations to "update"
 			const op: Operation = rawOp === "create" || rawOp === "delete" ? rawOp : "update";
@@ -841,36 +736,6 @@ export class EditTool implements AgentTool<TInput> {
 				fuzzyThreshold: this.#fuzzyThreshold,
 				allowFuzzy: this.#allowFuzzy,
 			});
-			const writePath = result.change.newPath ?? resolvedPath;
-			let importDiagnostics: FileDiagnosticsResult | undefined;
-			const importWarnings: string[] = [];
-			if (
-				imports &&
-				imports.length > 0 &&
-				result.change.type !== "delete" &&
-				result.change.newContent !== undefined
-			) {
-				const importResult = applyRequestedImports(
-					result.change.newPath ?? path,
-					result.change.newContent,
-					imports,
-					this.#manageImports,
-				);
-				importWarnings.push(...importResult.warnings);
-				if (importResult.content !== result.change.newContent) {
-					result.change.newContent = importResult.content;
-					importDiagnostics = await this.#writethrough(
-						writePath,
-						result.change.newContent,
-						signal,
-						Bun.file(writePath),
-						batchRequest,
-					);
-				} else {
-					result.change.newContent = importResult.content;
-				}
-			}
-
 			if (resolvedRename) {
 				invalidateFsScanAfterRename(resolvedPath, resolvedRename);
 			} else if (result.change.type === "delete") {
@@ -904,12 +769,12 @@ export class EditTool implements AgentTool<TInput> {
 					break;
 			}
 
-			let diagnostics = importDiagnostics ?? fs.getDiagnostics();
+			let diagnostics = fs.getDiagnostics();
 			if (op === "delete" && batchRequest?.flush) {
 				const flushedDiagnostics = await flushLspWritethroughBatch(batchRequest.id, this.session.cwd, signal);
 				diagnostics ??= flushedDiagnostics;
 			}
-			const patchWarnings = [...(result.warnings ?? []), ...importWarnings];
+			const patchWarnings = result.warnings ?? [];
 			const mergedDiagnostics = mergeDiagnosticsWithWarnings(diagnostics, patchWarnings);
 
 			const meta = outputMeta()
@@ -936,7 +801,6 @@ export class EditTool implements AgentTool<TInput> {
 			throw new Error("Invalid edit parameters for replace mode.");
 		}
 		const { path, old_text, new_text, all } = params;
-		const imports = getRequestedImports(params);
 
 		enforcePlanModeWrite(this.session, path);
 
@@ -996,8 +860,7 @@ export class EditTool implements AgentTool<TInput> {
 			);
 		}
 
-		const importResult = applyRequestedImports(path, result.content, imports, this.#manageImports);
-		const finalContent = bom + restoreLineEndings(importResult.content, originalEnding);
+		const finalContent = bom + restoreLineEndings(result.content, originalEnding);
 		const diagnostics = await this.#writethrough(
 			absolutePath,
 			finalContent,
@@ -1006,8 +869,7 @@ export class EditTool implements AgentTool<TInput> {
 			batchRequest,
 		);
 		invalidateFsScanAfterWrite(absolutePath);
-		const diffResult = generateDiffString(normalizedContent, importResult.content);
-		const mergedDiagnostics = mergeDiagnosticsWithWarnings(diagnostics, importResult.warnings);
+		const diffResult = generateDiffString(normalizedContent, result.content);
 
 		const resultText =
 			result.count > 1
@@ -1015,17 +877,12 @@ export class EditTool implements AgentTool<TInput> {
 				: `Successfully replaced text in ${path}.`;
 
 		const meta = outputMeta()
-			.diagnostics(mergedDiagnostics?.summary ?? "", mergedDiagnostics?.messages ?? [])
+			.diagnostics(diagnostics?.summary ?? "", diagnostics?.messages ?? [])
 			.get();
 
 		return {
 			content: [{ type: "text", text: resultText }],
-			details: {
-				diff: diffResult.diff,
-				firstChangedLine: diffResult.firstChangedLine,
-				diagnostics: mergedDiagnostics,
-				meta,
-			},
+			details: { diff: diffResult.diff, firstChangedLine: diffResult.firstChangedLine, diagnostics, meta },
 		};
 	}
 }

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, vi } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -17,7 +17,11 @@ import type {
 	SessionSwitchEvent,
 	ToolCallEvent,
 } from "../src/extensibility/extensions";
+import * as git from "../src/utils/git";
 
+afterEach(() => {
+	vi.restoreAllMocks();
+});
 function makeTempDir(): string {
 	const dir = path.join(os.tmpdir(), `pi-autoresearch-test-${Snowflake.next()}`);
 	fs.mkdirSync(dir, { recursive: true });
@@ -325,6 +329,55 @@ function createAutoresearchCommandHarness(
 	const notifications: Array<{ message: string; type: "info" | "warning" | "error" | undefined }> = [];
 	let command: RegisteredCommand | undefined;
 	const inputQueue = typeof inputResult === "string" || inputResult === undefined ? [inputResult] : [...inputResult];
+
+	const runGitMock = async (args: string[]) => {
+		execCalls.push({ args: [...args], command: "git" });
+		if (execImpl) {
+			return execImpl("git", args);
+		}
+		return { code: 0, stderr: "", stdout: "" };
+	};
+
+	vi.spyOn(git.repo, "root").mockImplementation(async () => {
+		const result = await runGitMock(["rev-parse", "--show-toplevel"]);
+		if (result.code !== 0) return null;
+		const repoRoot = result.stdout.trim();
+		return repoRoot.length > 0 ? repoRoot : null;
+	});
+	vi.spyOn(git.show, "prefix").mockImplementation(async () => {
+		const result = await runGitMock(["rev-parse", "--show-prefix"]);
+		return result.code === 0 ? result.stdout.trim() : "";
+	});
+	vi.spyOn(git.branch, "current").mockImplementation(async () => {
+		const result = await runGitMock(["branch", "--show-current"]);
+		if (result.code !== 0) return null;
+		const branch = result.stdout.trim();
+		return branch.length > 0 ? branch : null;
+	});
+	const mockStatus = Object.assign(
+		async (_cwd: string, options?: Parameters<typeof git.status>[1]) => {
+			const args = ["status", "--porcelain=v1", "--untracked-files=all", "-z"];
+			if (options?.pathspecs?.length) {
+				args.push("--", ...options.pathspecs);
+			}
+			const result = await runGitMock(args);
+			if (result.code !== 0)
+				throw new Error(result.stderr || result.stdout || `git status exited with code ${result.code}`);
+			return result.stdout;
+		},
+		{ parse: git.status.parse, summary: git.status.summary },
+	);
+	vi.spyOn(git, "status").mockImplementation(mockStatus);
+	vi.spyOn(git.ref, "exists").mockImplementation(async (_workDir, refName) => {
+		const result = await runGitMock(["show-ref", "--verify", "--quiet", refName]);
+		return result.code === 0;
+	});
+	vi.spyOn(git.branch, "checkoutNew").mockImplementation(async (_workDir, branchName) => {
+		const result = await runGitMock(["checkout", "-b", branchName]);
+		if (result.code !== 0) {
+			throw new Error(result.stderr || result.stdout || `git checkout exited with code ${result.code}`);
+		}
+	});
 
 	const api = {
 		appendEntry(_customType: string, _data?: unknown): void {},

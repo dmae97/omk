@@ -229,6 +229,8 @@ export interface CreateAgentSessionResult {
 	modelFallbackMessage?: string;
 	/** LSP servers that were warmed up at startup */
 	lspServers?: Array<{ name: string; status: "ready" | "error"; fileTypes: string[]; error?: string }>;
+	/** Shared event bus for tool/extension communication */
+	eventBus: EventBus;
 }
 
 // Re-exports
@@ -1276,6 +1278,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			mcpDiscoveryMode: hasDiscoverableMCPTools,
 			mcpDiscoveryServerSummaries: discoverableMCPSummary.servers.map(formatDiscoverableMCPToolServerSummary),
 			eagerTasks,
+			secretsEnabled: settings.get("secrets.enabled"),
 		});
 
 		if (options.systemPrompt === undefined) {
@@ -1298,6 +1301,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				mcpDiscoveryMode: hasDiscoverableMCPTools,
 				mcpDiscoveryServerSummaries: discoverableMCPSummary.servers.map(formatDiscoverableMCPToolServerSummary),
 				eagerTasks,
+				secretsEnabled: settings.get("secrets.enabled"),
 			});
 		}
 		return options.systemPrompt(defaultPrompt);
@@ -1639,5 +1643,6 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		mcpManager,
 		modelFallbackMessage,
 		lspServers,
+		eventBus,
 	};
 }

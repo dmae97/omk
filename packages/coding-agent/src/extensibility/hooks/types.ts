@@ -394,7 +394,7 @@ export interface TurnEndEvent {
 /** Event data for auto_compaction_start event. */
 export interface AutoCompactionStartEvent {
 	type: "auto_compaction_start";
-	reason: "threshold" | "overflow";
+	reason: "threshold" | "overflow" | "idle";
 	action: "context-full" | "handoff";
 }
 

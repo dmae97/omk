@@ -432,6 +432,8 @@ export interface BuildSystemPromptOptions {
 	eagerTasks?: boolean;
 	/** Rules with alwaysApply=true — their full content is injected into the prompt. */
 	alwaysApplyRules?: AlwaysApplyRule[];
+	/** Whether secret obfuscation is active. When true, explains the redaction format in the prompt. */
+	secretsEnabled?: boolean;
 }
 
 /** Build the system prompt with tools, guidelines, and context */
@@ -456,6 +458,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		mcpDiscoveryMode = false,
 		mcpDiscoveryServerSummaries = [],
 		eagerTasks = false,
+		secretsEnabled = false,
 	} = options;
 	const resolvedCwd = cwd ?? getProjectDir();
 
@@ -603,6 +606,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		hasMCPDiscoveryServers: mcpDiscoveryServerSummaries.length > 0,
 		mcpDiscoveryServerSummaries,
 		eagerTasks,
+		secretsEnabled,
 	};
 	return renderPromptTemplate(resolvedCustomPrompt ? customSystemPromptTemplate : systemPromptTemplate, data);
 }

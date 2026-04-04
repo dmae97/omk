@@ -8,16 +8,6 @@ Read the file first. Copy anchors exactly from the latest `read` output. In one 
 - `move` — optional rename target
 - `delete` — optional whole-file delete
 - `edits` — array of `{ loc, content }` entries
-{{#if editManageImportsEnabled}}
-- `imports` — **OPTIONAL** import/include declarations to merge after the main edit
-**Import entry**
-- `from` — **REQUIRED** module/crate/package/header source
-- `imports` — **OPTIONAL** named imports
-- `default` — **OPTIONAL** default import name
-- `namespace` — **OPTIONAL** namespace import name
-- `alias` — **OPTIONAL** import alias where supported
-- `system` — **OPTIONAL** system-include flag for C/C++
-{{/if}}
 
 **Edit entry**: `{ loc, content }`
 - `loc` — where to apply the edit (see below)
@@ -27,11 +17,7 @@ Read the file first. Copy anchors exactly from the latest `read` output. In one 
 - `"append"` / `"prepend"` — insert at end/start of file
 - `{ append: "N#ID" }` / `{ prepend: "N#ID" }` — insert after/before anchored line
 - `{ range: { pos: "N#ID", end: "N#ID" } }` — replace inclusive range of lines `pos..end` with new content
-
-{{#if editManageImportsEnabled}}
-`imports` are merged after the main edit is applied. Use them when inserted or replaced code now depends on new imports/includes.
-{{/if}}
-</operations>
+  </operations>
 
 <examples>
 All examples below reference the same file:
@@ -56,28 +42,6 @@ All examples below reference the same file:
 {{hline 18 "}"}}
 ```
 
-{{#if editManageImportsEnabled}}
-<example name="replace a block body">
-Replace only the catch body. Do not target the shared boundary line `} catch (err) {`.
-```
-{
-  path: "a.ts",
-  edits: [{
-    loc: { range: { pos: {{href 15 "\t\tconsole.error(err);"}}, end: {{href 16 "\t\treturn null;"}} } },
-    content: [
-      "\t\tif (isEnoent(err)) return null;",
-      "\t\tthrow err;"
-    ]
-  }],
-  imports: [{
-    from: "./errors",
-    imports: ["isEnoent"]
-  }]
-}
-```
-`imports` are merged after the anchored edit, so existing declarations are reused before new ones are inserted.
-</example>
-{{else}}
 <example name="replace a block body">
 Replace only the catch body. Do not target the shared boundary line `} catch (err) {`.
 ```
@@ -93,7 +57,6 @@ Replace only the catch body. Do not target the shared boundary line `} catch (er
 }
 ```
 </example>
-{{/if}}
 
 <example name="replace whole block including closing brace">
 Replace the entire body of `alpha`, including its closing `}`. `end` **MUST** be {{href 7 "}"}} because `content` includes `}`.
@@ -165,4 +128,4 @@ When adding a sibling declaration, prefer `prepend` on the next declaration.
 - For a range, either replace only the body or replace the whole range. Do not split range boundaries.
 - `content` must be literal file content with matching indentation. If the file uses tabs, use real tabs.
 - You **MUST NOT** use this tool to reformat or clean up unrelated code. **ALWAYS** use project-specific tooling like linters or code formatters which are much more efficient and reliable.
-</critical>
+  </critical>
