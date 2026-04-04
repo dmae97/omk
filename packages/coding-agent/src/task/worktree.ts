@@ -519,6 +519,8 @@ export async function mergeTaskBranches(
 	// Without this, cherry-pick refuses to run when uncommitted changes exist.
 	const didStash = await git.stash.push(repoRoot, "omp-task-merge");
 
+	let conflictResult: MergeBranchResult | undefined;
+
 	try {
 		for (const { branchName } of branches) {
 			try {
@@ -536,28 +538,38 @@ export async function mergeTaskBranches(
 							? err.message
 							: String(err);
 				failed.push(branchName);
-				return {
+				conflictResult = {
 					merged,
 					failed: [...failed, ...branches.slice(merged.length + failed.length).map(b => b.branchName)],
 					conflict: `${branchName}: ${stderr}`,
 				};
+				break;
 			}
 
 			merged.push(branchName);
 		}
-
-		return { merged, failed };
 	} finally {
 		if (didStash) {
 			try {
 				await git.stash.pop(repoRoot);
 			} catch {
-				// Pop can fail if cherry-picked changes conflict with stashed changes.
-				// The stash entry is preserved — the user can resolve manually.
+				// Stash-pop conflicts mean the replayed changes clash with the user's
+				// uncommitted edits. Treat this as a merge failure so the caller preserves
+				// recovery branches instead of reporting success and deleting them.
 				logger.warn("Failed to restore stashed changes after task merge; stash entry preserved");
+				if (!conflictResult) {
+					conflictResult = {
+						merged,
+						failed: merged,
+						conflict:
+							"stash pop: cherry-picked changes conflict with uncommitted edits. Run `git stash pop` and resolve manually.",
+					};
+				}
 			}
 		}
 	}
+
+	return conflictResult ?? { merged, failed };
 }
 
 /** Clean up temporary task branches. */
