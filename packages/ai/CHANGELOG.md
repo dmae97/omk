@@ -1,43 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-### Added
-
-- Added support for Qwen3.6 Plus model via Alibaba Coding Plan provider
-- Added Gemma 4 26B and 31B models with reasoning capabilities via Google provider
-- Added ByteDance Seed Dola 2.0 Pro free tier model via Kilo provider
-- Added Gemma 4 26B and 31B models via Kilo provider
-- Added Arcee AI Trinity Large Thinking model via NanoGPT provider
-- Added GLM 4.7 Flash Heretic model via NanoGPT provider
-- Added Gemma 4 26B and 31B models via NanoGPT provider
-- Added Qwen3.6 Plus free tier model via Kilo provider
-- Added Gemma 4 31B model via NVIDIA provider
-- Added MiMo V2 Omni and Pro models with reasoning capabilities via OpenCode Go provider
-- Added Qwen3.6 Plus free tier model via OpenRouter provider
-- Added Gemma 4 26B and 31B models via OpenRouter provider
-- Added Arcee Trinity Large Thinking model via Venice provider
-- Added Gemma 4 26B and 31B models via Venice provider
-- Added GLM 5V Turbo model via Z.ai provider
-- Added Qwen3.6 Plus model via Zenmux provider
-- Added GLM 5V Turbo model via Zenmux provider
-
-### Changed
-
-- Updated GitHub Copilot Opus 4.6 context window from 144K to 1M tokens to reflect actual model capabilities
-- Updated GLM 5V Turbo model to support reasoning and image input across multiple providers
-- Updated xAI Grok 4.20 to support reasoning and image input with updated pricing
-- Updated MiniMax M2.5 API from Anthropic Messages to OpenAI Completions
-- Updated MiniMax M2.5 thinking mode from budget to effort
-- Updated Trinity Large Thinking model pricing and max tokens
-- Updated Claude 3.5 Sonnet context window from 1M to 204.8K tokens
-- Updated Trinity Large Thinking max tokens from 80K to 262K
-- Updated Claude 3.5 Sonnet max tokens from 65536 to 65535
-- Updated Arcee Trinity Large Thinking pricing on OpenRouter
-- Updated Claude 3.5 Sonnet pricing on OpenRouter
-- Updated KAT-Coder-Pro-V2 model name and max tokens from 8888 to 80000
-- Updated Deepseek R1 context window from 128K to 163.84K tokens
-- Updated Kimi K2 context window from 128K to 32.768K tokens
-- Updated GLM 5V Turbo context window and max tokens across providers
 
 ### Fixed
 
@@ -45,6 +8,7 @@
 - Fixed Gemini 2.5 Pro context window detection in GitHub Copilot model limits test
 - Fixed Claude Opus 4.6 context window detection in GitHub Copilot model limits test
 
+- Added environment-based credential fallback for the OpenAI Codex provider.
 ## [13.17.6] - 2026-04-01
 
 ### Fixed
