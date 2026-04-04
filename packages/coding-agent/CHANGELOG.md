@@ -34,6 +34,7 @@
 
 ### Fixed
 
+- Fixed isolated task merge-back to preserve task outputs on merge failure and stash dirty worktrees before cherry-pick.
 - Fixed web search source rendering to truncate long title, metadata, and URL lines before they overflow the UI.
 - Fixed PR checkout tool to resolve symlinks in worktree paths, ensuring consistent path references in results and metadata
 - Fixed `read` output for file-backed internal URLs like `local://...` to include hashline prefixes in hashline edit mode, preserving usable line refs for follow-up edits
