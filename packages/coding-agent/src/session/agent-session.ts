@@ -1055,6 +1055,29 @@ export class AgentSession {
 		);
 	}
 
+	#scheduleAutoContinuePrompt(generation: number): void {
+		const continuePrompt = async () => {
+			await this.#promptWithMessage(
+				{
+					role: "developer",
+					content: [{ type: "text", text: "Continue if you have next steps." }],
+					attribution: "agent",
+					timestamp: Date.now(),
+				},
+				"Continue if you have next steps.",
+				{ skipPostPromptRecoveryWait: true },
+			);
+		};
+		this.#schedulePostPromptTask(
+			async signal => {
+				await Promise.resolve();
+				if (signal.aborted) return;
+				await continuePrompt();
+			},
+			{ generation },
+		);
+	}
+
 	#cancelPostPromptTasks(): void {
 		this.#postPromptTasksAbortController.abort();
 		this.#postPromptTasksAbortController = new AbortController();
@@ -4467,6 +4490,9 @@ export class AgentSession {
 						aborted: false,
 						willRetry: false,
 					});
+					if (compactionSettings.autoContinue !== false) {
+						this.#scheduleAutoContinuePrompt(generation);
+					}
 					return;
 				}
 			}
@@ -4718,26 +4744,7 @@ export class AgentSession {
 			await this.#emitSessionEvent({ type: "auto_compaction_end", action, result, aborted: false, willRetry });
 
 			if (!willRetry && compactionSettings.autoContinue !== false) {
-				const continuePrompt = async () => {
-					await this.#promptWithMessage(
-						{
-							role: "developer",
-							content: [{ type: "text", text: "Continue if you have next steps." }],
-							attribution: "agent",
-							timestamp: Date.now(),
-						},
-						"Continue if you have next steps.",
-						{ skipPostPromptRecoveryWait: true },
-					);
-				};
-				this.#schedulePostPromptTask(
-					async signal => {
-						await Promise.resolve();
-						if (signal.aborted) return;
-						await continuePrompt();
-					},
-					{ generation },
-				);
+				this.#scheduleAutoContinuePrompt(generation);
 			}
 
 			if (willRetry) {
