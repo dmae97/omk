@@ -13,6 +13,7 @@ import type {
 	CursorExecHandlers as ICursorExecHandlers,
 	ToolResultMessage,
 } from "@oh-my-pi/pi-ai";
+import { sanitizeText } from "@oh-my-pi/pi-natives";
 import { resolveToCwd } from "./tools/path-utils";
 
 interface CursorExecBridgeOptions {
@@ -260,7 +261,7 @@ export class CursorExecHandlers implements ICursorExecHandlers {
 
 		// onUpdate may not fire for every chunk — flush any remaining output
 		// from the final result that wasn't already streamed.
-		const finalText = result.content.map(c => (c.type === "text" ? c.text : "")).join("");
+		const finalText = result.content.map(c => (c.type === "text" ? sanitizeText(c.text) : "")).join("");
 		if (finalText.length > streamedLen) {
 			callbacks.onStdout(finalText.slice(streamedLen));
 		}
