@@ -3,11 +3,11 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { getCrashLogPath, getDebugLogPath } from "@oh-my-pi/pi-utils";
+import { getDebugLogPath } from "@oh-my-pi/pi-utils";
 import { isKeyRelease, matchesKey } from "./keys";
 import type { Terminal } from "./terminal";
 import { ImageProtocol, setCellDimensions, setTerminalImageProtocol, TERMINAL } from "./terminal-capabilities";
-import { extractSegments, sliceByColumn, sliceWithWidth, visibleWidth } from "./utils";
+import { extractSegments, sliceByColumn, sliceWithWidth, truncateToWidth, visibleWidth } from "./utils";
 
 const SEGMENT_RESET = "\x1b[0m";
 
@@ -1193,36 +1193,12 @@ export class TUI extends Container {
 			if (i > firstChanged) buffer += "\r\n";
 			buffer += "\x1b[2K"; // Clear current line
 			const line = newLines[i];
+			let truncatedLine = line;
 			const isImage = TERMINAL.isImageLine(line);
 			if (!isImage && visibleWidth(line) > width) {
-				// Log all lines to crash file for debugging
-				const crashLogPath = getCrashLogPath();
-				const crashData = [
-					`Crash at ${new Date().toISOString()}`,
-					`Terminal width: ${width}`,
-					`Line ${i} visible width: ${visibleWidth(line)}`,
-					"",
-					"=== All rendered lines ===",
-					...newLines.map((l, idx) => `[${idx}] (w=${visibleWidth(l)}) ${l}`),
-					"",
-				].join("\n");
-				fs.mkdirSync(path.dirname(crashLogPath), { recursive: true });
-				fs.writeFileSync(crashLogPath, crashData);
-
-				// Clean up terminal state before throwing
-				this.stop();
-
-				const errorMsg = [
-					`Rendered line ${i} exceeds terminal width (${visibleWidth(line)} > ${width}).`,
-					"",
-					"This is likely caused by a custom TUI component not truncating its output.",
-					"Use visibleWidth() to measure and truncateToWidth() to truncate lines.",
-					"",
-					`Debug log written to: ${crashLogPath}`,
-				].join("\n");
-				throw new Error(errorMsg);
+				truncatedLine = truncateToWidth(line, width);
 			}
-			buffer += isImage ? line : line + SEGMENT_RESET;
+			buffer += isImage ? truncatedLine : truncatedLine + SEGMENT_RESET;
 		}
 
 		// Track where cursor ended up after rendering
