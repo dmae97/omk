@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.19.0] - 2026-04-05
 ### Added
 
 - Added idle auto-compaction settings and scheduling so sessions can compact after inactive turns without auto-continuing.

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.19.0] - 2026-04-05
+
 ### Fixed
 
 - Fixed GitHub Copilot model context window detection by correcting fallback priority for maxContextWindowTokens and maxPromptTokens
