@@ -66,12 +66,16 @@ async function executeTool(
 
 	const onUpdate: AgentToolUpdateCallback<unknown> | undefined = options.emitEvent
 		? partialResult => {
+				const sanitizedResult: AgentToolResult<unknown> = {
+					content: partialResult.content.map(c => (c.type === "text" ? { ...c, text: sanitizeText(c.text) } : c)),
+					details: partialResult.details,
+				};
 				options.emitEvent?.({
 					type: "tool_execution_update",
 					toolCallId,
 					toolName,
 					args,
-					partialResult,
+					partialResult: sanitizedResult,
 				});
 			}
 		: undefined;
@@ -90,9 +94,13 @@ async function executeTool(
 		isError = true;
 	}
 
-	options.emitEvent?.({ type: "tool_execution_end", toolCallId, toolName, result, isError });
+	const sanitizedFinalResult: AgentToolResult<unknown> = {
+		content: result.content.map(c => (c.type === "text" ? { ...c, text: sanitizeText(c.text) } : c)),
+		details: result.details,
+	};
+	options.emitEvent?.({ type: "tool_execution_end", toolCallId, toolName, result: sanitizedFinalResult, isError });
 
-	return createToolResultMessage(toolCallId, toolName, result, isError);
+	return createToolResultMessage(toolCallId, toolName, sanitizedFinalResult, isError);
 }
 
 async function executeDelete(options: CursorExecBridgeOptions, pathArg: string, toolCallId: string) {
