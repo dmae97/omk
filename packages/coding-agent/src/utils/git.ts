@@ -1115,18 +1115,21 @@ export const cherryPick = Object.assign(
 // ════════════════════════════════════════════════════════════════════════════
 
 export const stash = {
-	/** Stash working tree + index changes. Returns true if something was stashed. */
+	/** Stash working tree + index changes. Returns true when git created a new stash entry. */
 	async push(cwd: string, message?: string): Promise<boolean> {
 		ensureAvailable();
+		const previousStash = await ref.resolve(cwd, "refs/stash");
 		const args = ["stash", "push", "--include-untracked"];
 		if (message) args.push("-m", message);
-		const result = await runCommand(cwd, args);
-		// git stash push exits 0 whether or not it stashed; check output
-		return result.exitCode === 0 && !result.stdout.includes("No local changes to save");
+		await runEffect(cwd, args);
+		const nextStash = await ref.resolve(cwd, "refs/stash");
+		return nextStash !== null && nextStash !== previousStash;
 	},
-	/** Pop the most recent stash entry. */
-	async pop(cwd: string): Promise<void> {
-		await runEffect(cwd, ["stash", "pop"]);
+	/** Pop the most recent stash entry, optionally restoring its staged state. */
+	async pop(cwd: string, options?: { index?: boolean }): Promise<void> {
+		const args = ["stash", "pop"];
+		if (options?.index) args.push("--index");
+		await runEffect(cwd, args);
 	},
 };
 

@@ -551,7 +551,7 @@ export async function mergeTaskBranches(
 	} finally {
 		if (didStash) {
 			try {
-				await git.stash.pop(repoRoot);
+				await git.stash.pop(repoRoot, { index: true });
 			} catch {
 				// Stash-pop conflicts mean the replayed changes clash with the user's
 				// uncommitted edits. Treat this as a merge failure so the caller preserves

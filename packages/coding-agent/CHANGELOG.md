@@ -1,9 +1,7 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
-
 
 - Added idle auto-compaction settings and scheduling so sessions can compact after inactive turns without auto-continuing.
 - Added `onExternalEditor` callback to extension UI dialog options for handling external editor shortcut in select dialogs
@@ -16,6 +14,9 @@
 
 ### Changed
 
+- Changed idle compaction settings (`compaction.idleThresholdTokens` and `compaction.idleTimeoutSeconds`) from enum to numeric type for flexible configuration
+- Modified secret obfuscation to deobfuscate restored session messages for local display while keeping outbound LLM messages obfuscated
+- Updated stash pop operation to preserve staged changes with `--index` flag when restoring after task branch merges
 - Changed secret placeholders to deterministic hash-style redaction tokens and deobfuscated assistant output for local display.
 - Updated hook editor and hook selector components to use `matchesAppExternalEditor` matcher for consistent external editor keybinding detection
 - Modified plan review flow to read the latest plan content from disk before approval, allowing changes made in external editor to be reflected
@@ -37,6 +38,9 @@
 
 ### Fixed
 
+- Fixed idle compaction timer to properly cancel when event controller is disposed, preventing memory leaks
+- Fixed session resumption to preserve the last non-empty session when starting a fresh session
+- Fixed stash detection to use git ref resolution instead of output parsing for reliable stash state tracking
 - Fixed isolated task merge-back to preserve task outputs on merge failure and stash dirty worktrees before cherry-pick.
 - Fixed web search source rendering to truncate long title, metadata, and URL lines before they overflow the UI.
 - Fixed PR checkout tool to resolve symlinks in worktree paths, ensuring consistent path references in results and metadata

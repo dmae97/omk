@@ -115,7 +115,7 @@ import planModeToolDecisionReminderPrompt from "../prompts/system/plan-mode-tool
 	type: "text",
 };
 import ttsrInterruptTemplate from "../prompts/system/ttsr-interrupt.md" with { type: "text" };
-import type { SecretObfuscator } from "../secrets/obfuscator";
+import { deobfuscateSessionContext, type SecretObfuscator } from "../secrets/obfuscator";
 import { resolveThinkingLevelForModel, toReasoningEffort } from "../thinking";
 import type { CheckpointState } from "../tools/checkpoint";
 import { outputMeta } from "../tools/output-meta";
@@ -540,7 +540,7 @@ export class AgentSession {
 		this.#defaultSelectedMCPServerNames = new Set(config.defaultSelectedMCPServerNames ?? []);
 		this.#defaultSelectedMCPToolNames = new Set(config.defaultSelectedMCPToolNames ?? []);
 		this.#pruneSelectedMCPToolNames();
-		const persistedSelectedMCPToolNames = this.sessionManager.buildSessionContext().selectedMCPToolNames;
+		const persistedSelectedMCPToolNames = this.buildDisplaySessionContext().selectedMCPToolNames;
 		const currentSelectedMCPToolNames = this.getSelectedMCPToolNames();
 		const persistInitialMCPToolSelection =
 			config.persistInitialMCPToolSelection ?? this.sessionManager.getBranch().length === 0;
@@ -1984,7 +1984,7 @@ export class AgentSession {
 
 		this.#setDiscoverableMCPTools(this.#collectDiscoverableMCPToolsFromRegistry());
 		this.#pruneSelectedMCPToolNames();
-		if (!this.sessionManager.buildSessionContext().hasPersistedMCPToolSelection) {
+		if (!this.buildDisplaySessionContext().hasPersistedMCPToolSelection) {
 			this.#selectedMCPToolNames = new Set([
 				...this.#selectedMCPToolNames,
 				...this.#getConfiguredDefaultSelectedMCPToolNames(),
@@ -2007,6 +2007,10 @@ export class AgentSession {
 	/** All messages including custom types like BashExecutionMessage */
 	get messages(): AgentMessage[] {
 		return this.agent.state.messages;
+	}
+
+	buildDisplaySessionContext(): SessionContext {
+		return deobfuscateSessionContext(this.sessionManager.buildSessionContext(), this.#obfuscator);
 	}
 
 	/** Convert session messages using the same pre-LLM pipeline as the active session. */
@@ -3497,7 +3501,7 @@ export class AgentSession {
 		}
 
 		await this.sessionManager.rewriteEntries();
-		const sessionContext = this.sessionManager.buildSessionContext();
+		const sessionContext = this.buildDisplaySessionContext();
 		this.agent.replaceMessages(sessionContext.messages);
 		this.#syncTodoPhasesFromBranch();
 		this.#closeCodexProviderSessionsForHistoryRewrite();
@@ -3623,7 +3627,7 @@ export class AgentSession {
 				preserveData,
 			);
 			const newEntries = this.sessionManager.getEntries();
-			const sessionContext = this.sessionManager.buildSessionContext();
+			const sessionContext = this.buildDisplaySessionContext();
 			this.agent.replaceMessages(sessionContext.messages);
 			this.#syncTodoPhasesFromBranch();
 			this.#closeCodexProviderSessionsForHistoryRewrite();
@@ -3844,7 +3848,7 @@ export class AgentSession {
 			}
 
 			// Rebuild agent messages from session
-			const sessionContext = this.sessionManager.buildSessionContext();
+			const sessionContext = this.buildDisplaySessionContext();
 			this.agent.replaceMessages(sessionContext.messages);
 			this.#syncTodoPhasesFromBranch();
 
@@ -4730,7 +4734,7 @@ export class AgentSession {
 				preserveData,
 			);
 			const newEntries = this.sessionManager.getEntries();
-			const sessionContext = this.sessionManager.buildSessionContext();
+			const sessionContext = this.buildDisplaySessionContext();
 			this.agent.replaceMessages(sessionContext.messages);
 			this.#syncTodoPhasesFromBranch();
 			this.#closeCodexProviderSessionsForHistoryRewrite();
@@ -5557,7 +5561,7 @@ export class AgentSession {
 		// Flush pending writes before switching so restore snapshots reflect committed state.
 		await this.sessionManager.flush();
 		const previousSessionState = this.sessionManager.captureState();
-		const previousSessionContext = this.sessionManager.buildSessionContext();
+		const previousSessionContext = this.buildDisplaySessionContext();
 		// switchSession replaces these arrays wholesale during load/rollback, so retaining
 		// the existing message objects is sufficient and avoids structured-clone failures for
 		// extension/custom metadata that is valid to persist but not cloneable.
@@ -5586,7 +5590,7 @@ export class AgentSession {
 			await this.sessionManager.setSessionFile(sessionPath);
 			this.agent.sessionId = this.sessionManager.getSessionId();
 
-			const sessionContext = this.sessionManager.buildSessionContext();
+			const sessionContext = this.buildDisplaySessionContext();
 			const didReloadConversationChange =
 				!switchingToDifferentSession &&
 				this.#didSessionMessagesChange(previousSessionContext.messages, sessionContext.messages);
@@ -5752,7 +5756,7 @@ export class AgentSession {
 		this.agent.sessionId = this.sessionManager.getSessionId();
 
 		// Reload messages from entries (works for both file and in-memory mode)
-		const sessionContext = this.sessionManager.buildSessionContext();
+		const sessionContext = this.buildDisplaySessionContext();
 
 		await this.#restoreMCPSelectionsForSessionContext(sessionContext);
 
@@ -5923,7 +5927,7 @@ export class AgentSession {
 		}
 
 		// Update agent state
-		const sessionContext = this.sessionManager.buildSessionContext();
+		const sessionContext = this.buildDisplaySessionContext();
 		await this.#restoreMCPSelectionsForSessionContext(sessionContext);
 		this.agent.replaceMessages(sessionContext.messages);
 		this.#syncTodoPhasesFromBranch();

@@ -818,8 +818,7 @@ export const SETTINGS_SCHEMA = {
 	},
 
 	"compaction.idleThresholdTokens": {
-		type: "enum",
-		values: [100000, 200000, 300000, 400000, 500000, 600000, 700000, 800000, 900000] as const,
+		type: "number",
 		default: 200000,
 		ui: {
 			tab: "context",
@@ -830,8 +829,7 @@ export const SETTINGS_SCHEMA = {
 	},
 
 	"compaction.idleTimeoutSeconds": {
-		type: "enum",
-		values: [60, 120, 300, 600, 1800, 3600] as const,
+		type: "number",
 		default: 300,
 		ui: {
 			tab: "context",

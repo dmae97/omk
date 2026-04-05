@@ -289,7 +289,7 @@ async function createSessionManager(parsed: Args, cwd: string): Promise<SessionM
 	// overriding them with CLI defaults.
 	if (settings.get("autoResume")) {
 		const manager = await SessionManager.continueRecent(cwd, parsed.sessionDir);
-		if (manager.getEntries().some(e => e.type === "message")) {
+		if (manager.getEntries().length > 0) {
 			parsed.continue = true;
 		}
 		return manager;

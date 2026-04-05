@@ -1512,9 +1512,7 @@ export class SessionManager {
 	/** Start a new session. Closes any existing writer first. */
 	async newSession(options?: NewSessionOptions): Promise<string | undefined> {
 		await this.#closePersistWriter();
-		const result = this.#newSessionSync(options);
-		await this.ensureOnDisk();
-		return result;
+		return this.#newSessionSync(options);
 	}
 
 	/**

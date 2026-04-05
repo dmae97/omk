@@ -25,6 +25,10 @@ export class EventController {
 	#idleCompactionTimer?: NodeJS.Timeout;
 	constructor(private ctx: InteractiveModeContext) {}
 
+	dispose(): void {
+		this.#cancelIdleCompaction();
+	}
+
 	#resetReadGroup(): void {
 		this.#lastReadGroup = undefined;
 	}
@@ -607,6 +611,7 @@ export class EventController {
 			if (this.#currentContextTokens() < threshold) return;
 			void this.ctx.session.runIdleCompaction();
 		}, timeoutMs);
+		this.#idleCompactionTimer.unref?.();
 	}
 
 	#currentContextTokens(): number {

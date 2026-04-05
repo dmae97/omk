@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
 import { Effort } from "../src/model-thinking";
+import { getBundledModel } from "../src/models";
 import { githubCopilotModelManagerOptions } from "../src/provider-models/openai-compat";
 
 const originalFetch = global.fetch;
@@ -87,7 +88,7 @@ describe("github copilot model limits mapping", () => {
 
 		const model = models.find(candidate => candidate.id === "gemini-2.5-pro");
 		expect(model).toBeDefined();
-		expect(model?.contextWindow).toBe(1_048_576);
+		expect(model?.contextWindow).toBe(128_000);
 		expect(model?.maxTokens).toBe(64_000);
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
@@ -137,8 +138,15 @@ describe("github copilot model limits mapping", () => {
 
 		const model = models.find(candidate => candidate.id === "claude-opus-4.6");
 		expect(model).toBeDefined();
-		expect(model?.contextWindow).toBe(200_000);
+		expect(model?.contextWindow).toBe(128_000);
 		expect(model?.maxTokens).toBe(16_000);
+	});
+
+	it("keeps bundled Claude Opus 4.6 Copilot prompt budget truthful offline", () => {
+		const model = getBundledModel("github-copilot", "claude-opus-4.6");
+
+		expect(model.contextWindow).toBe(128_000);
+		expect(model.maxTokens).toBe(64_000);
 	});
 	it("inherits bundled GPT-5.4 mini reasoning metadata during discovery", async () => {
 		const { models } = await discoverCopilotModels({
