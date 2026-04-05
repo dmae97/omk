@@ -7,6 +7,7 @@
 - Fixed GitHub Copilot model context window detection by correcting fallback priority for maxContextWindowTokens and maxPromptTokens
 - Fixed Gemini 2.5 Pro context window detection in GitHub Copilot model limits test
 - Fixed Claude Opus 4.6 context window detection in GitHub Copilot model limits test
+- Fixed Anthropic streaming to suppress transient SDK console errors for malformed SSE keep-alive frames so the TUI only shows surfaced provider errors
 
 - Added environment-based credential fallback for the OpenAI Codex provider.
 ## [13.17.6] - 2026-04-01

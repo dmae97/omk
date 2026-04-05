@@ -415,6 +415,7 @@ export type AnthropicClientOptionsResult = {
 	maxRetries: number;
 	dangerouslyAllowBrowser: boolean;
 	defaultHeaders: Record<string, string>;
+	logLevel: AnthropicSdkClientOptions["logLevel"];
 	fetchOptions?: AnthropicSdkClientOptions["fetchOptions"];
 };
 
@@ -556,6 +557,10 @@ function mergeHeaders(...headerSources: (Record<string, string> | undefined)[]):
 	}
 	return merged;
 }
+
+// The Anthropic SDK logs malformed SSE frames directly before rethrowing them.
+// We surface the resulting provider error ourselves, so keep the SDK quiet.
+const ANTHROPIC_SDK_LOG_LEVEL = "off" as const;
 
 const PROVIDER_MAX_RETRIES = 3;
 const PROVIDER_BASE_DELAY_MS = 2000;
@@ -1024,6 +1029,7 @@ export function buildAnthropicClientOptions(args: AnthropicClientOptionsArgs): A
 			maxRetries: 5,
 			dangerouslyAllowBrowser: true,
 			defaultHeaders,
+			logLevel: ANTHROPIC_SDK_LOG_LEVEL,
 			...(tlsFetchOptions ? { fetchOptions: tlsFetchOptions } : {}),
 		};
 	}
@@ -1050,6 +1056,7 @@ export function buildAnthropicClientOptions(args: AnthropicClientOptionsArgs): A
 		maxRetries: 5,
 		dangerouslyAllowBrowser: true,
 		defaultHeaders,
+		logLevel: ANTHROPIC_SDK_LOG_LEVEL,
 		...(tlsFetchOptions ? { fetchOptions: tlsFetchOptions } : {}),
 	};
 }
