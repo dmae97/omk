@@ -1209,7 +1209,7 @@ export class TUI extends Container {
 					fs.appendFileSync(debugLogPath, debugData);
 				} catch {
 					// Ignore write errors - truncation should still work
-					}
+				}
 				truncatedLine = truncateToWidth(line, width);
 			}
 			buffer += isImage ? truncatedLine : truncatedLine + SEGMENT_RESET;
