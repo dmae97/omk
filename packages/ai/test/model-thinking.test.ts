@@ -244,6 +244,25 @@ describe("generated model policies", () => {
 		expect(models[3]?.priority).toBe(1);
 	});
 
+	it("does not special-case Copilot Opus 4.6 generated limits", () => {
+		const models: Model<Api>[] = [
+			{
+				...createModel({
+					id: "claude-opus-4.6",
+					api: "anthropic-messages",
+					provider: "github-copilot",
+				}),
+				contextWindow: 168000,
+				maxTokens: 32000,
+			},
+		];
+
+		applyGeneratedModelPolicies(models);
+
+		expect(models[0]?.contextWindow).toBe(168000);
+		expect(models[0]?.maxTokens).toBe(32000);
+	});
+
 	it("links spark variants to their base models", () => {
 		const models = [
 			createModel({

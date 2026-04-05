@@ -157,11 +157,23 @@ describe("github copilot model limits mapping", () => {
 		expect(model?.maxTokens).toBe(16_000);
 	});
 
-	it("keeps bundled Claude Opus 4.6 Copilot 1M context window truthful offline", () => {
-		const model = getBundledModel("github-copilot", "claude-opus-4.6");
-
-		expect(model.contextWindow).toBe(1_000_000);
-		expect(model.maxTokens).toBe(64_000);
+	it("keeps bundled Copilot fallback limits truthful offline", () => {
+		expect(getBundledModel("github-copilot", "claude-opus-4.6")).toMatchObject({
+			contextWindow: 168_000,
+			maxTokens: 32_000,
+		});
+		expect(getBundledModel("github-copilot", "gpt-5.2")).toMatchObject({
+			contextWindow: 272_000,
+			maxTokens: 128_000,
+		});
+		expect(getBundledModel("github-copilot", "gpt-5.4-mini")).toMatchObject({
+			contextWindow: 272_000,
+			maxTokens: 128_000,
+		});
+		expect(getBundledModel("github-copilot", "grok-code-fast-1")).toMatchObject({
+			contextWindow: 192_000,
+			maxTokens: 64_000,
+		});
 	});
 	it("inherits bundled GPT-5.4 mini reasoning metadata during discovery", async () => {
 		const { models } = await discoverCopilotModels({
