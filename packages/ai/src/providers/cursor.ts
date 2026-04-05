@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import http2 from "node:http2";
 import { create, fromBinary, fromJson, type JsonValue, toBinary, toJson } from "@bufbuild/protobuf";
 import { ValueSchema } from "@bufbuild/protobuf/wkt";
+import { sanitizeText } from "@oh-my-pi/pi-natives";
 import { $env } from "@oh-my-pi/pi-utils";
 import { calculateCost } from "../models";
 import type {
@@ -699,13 +700,13 @@ async function handleShellStreamArgs(
 		onStdout(data: string) {
 			sendShellStreamEvent(h2Request, execMsg, {
 				case: "stdout",
-				value: create(ShellStreamStdoutSchema, { data }),
+				value: create(ShellStreamStdoutSchema, { data: sanitizeText(data) }),
 			});
 		},
 		onStderr(data: string) {
 			sendShellStreamEvent(h2Request, execMsg, {
 				case: "stderr",
-				value: create(ShellStreamStderrSchema, { data }),
+				value: create(ShellStreamStderrSchema, { data: sanitizeText(data) }),
 			});
 		},
 	};
@@ -753,13 +754,13 @@ function sendShellStreamExitFromResult(
 				if (value.stdout) {
 					sendShellStreamEvent(h2Request, execMsg, {
 						case: "stdout",
-						value: create(ShellStreamStdoutSchema, { data: value.stdout }),
+						value: create(ShellStreamStdoutSchema, { data: sanitizeText(value.stdout) }),
 					});
 				}
 				if (value.stderr) {
 					sendShellStreamEvent(h2Request, execMsg, {
 						case: "stderr",
-						value: create(ShellStreamStderrSchema, { data: value.stderr }),
+						value: create(ShellStreamStderrSchema, { data: sanitizeText(value.stderr) }),
 					});
 				}
 			}
@@ -779,13 +780,13 @@ function sendShellStreamExitFromResult(
 				if (value.stdout) {
 					sendShellStreamEvent(h2Request, execMsg, {
 						case: "stdout",
-						value: create(ShellStreamStdoutSchema, { data: value.stdout }),
+						value: create(ShellStreamStdoutSchema, { data: sanitizeText(value.stdout) }),
 					});
 				}
 				if (value.stderr) {
 					sendShellStreamEvent(h2Request, execMsg, {
 						case: "stderr",
-						value: create(ShellStreamStderrSchema, { data: value.stderr }),
+						value: create(ShellStreamStderrSchema, { data: sanitizeText(value.stderr) }),
 					});
 				}
 			}
