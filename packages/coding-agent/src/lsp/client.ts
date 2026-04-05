@@ -3,11 +3,11 @@ import { ToolAbortError, throwIfAborted } from "../tools/tool-errors";
 import { applyWorkspaceEdit } from "./edits";
 import { getLspmuxCommand, isLspmuxSupported } from "./lspmux";
 import type {
-	Diagnostic,
 	LspClient,
 	LspJsonRpcNotification,
 	LspJsonRpcRequest,
 	LspJsonRpcResponse,
+	PublishDiagnosticsParams,
 	ServerConfig,
 	WorkspaceEdit,
 } from "./types";
@@ -130,7 +130,7 @@ const CLIENT_CAPABILITIES = {
 		},
 		publishDiagnostics: {
 			relatedInformation: true,
-			versionSupport: false,
+			versionSupport: true,
 			tagSupport: { valueSet: [1, 2] },
 			codeDescriptionSupport: true,
 			dataSupport: true,
@@ -261,8 +261,11 @@ async function startMessageReader(client: LspClient): Promise<void> {
 				} else if ("method" in message) {
 					// Server notification
 					if (message.method === "textDocument/publishDiagnostics" && message.params) {
-						const params = message.params as { uri: string; diagnostics: Diagnostic[] };
-						client.diagnostics.set(params.uri, params.diagnostics);
+						const params = message.params as PublishDiagnosticsParams;
+						client.diagnostics.set(params.uri, {
+							diagnostics: params.diagnostics,
+							version: params.version ?? null,
+						});
 						client.diagnosticsVersion += 1;
 					}
 				}

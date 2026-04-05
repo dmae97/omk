@@ -40,6 +40,7 @@ import {
 	type LspParams,
 	type LspToolDetails,
 	lspSchema,
+	type PublishedDiagnostics,
 	type ServerConfig,
 	type SymbolInformation,
 	type TextEdit,
@@ -312,22 +313,59 @@ async function reloadServer(client: LspClient, serverName: string, signal?: Abor
 	return output;
 }
 
+interface WaitForDiagnosticsOptions {
+	timeoutMs?: number;
+	signal?: AbortSignal;
+	minVersion?: number;
+	expectedDocumentVersion?: number;
+	allowUnversioned?: boolean;
+}
+
+function getAcceptedDiagnostics(
+	publishedDiagnostics: PublishedDiagnostics | undefined,
+	expectedDocumentVersion?: number,
+	allowUnversioned = true,
+): Diagnostic[] | undefined {
+	if (!publishedDiagnostics) {
+		return undefined;
+	}
+	if (expectedDocumentVersion === undefined) {
+		return publishedDiagnostics.diagnostics;
+	}
+	if (publishedDiagnostics.version === expectedDocumentVersion) {
+		return publishedDiagnostics.diagnostics;
+	}
+	if (allowUnversioned && publishedDiagnostics.version == null) {
+		return publishedDiagnostics.diagnostics;
+	}
+	return undefined;
+}
+
 async function waitForDiagnostics(
 	client: LspClient,
 	uri: string,
-	timeoutMs = 3000,
-	signal?: AbortSignal,
-	minVersion?: number,
+	options: WaitForDiagnosticsOptions = {},
 ): Promise<Diagnostic[]> {
+	const { timeoutMs = 3000, signal, minVersion, expectedDocumentVersion, allowUnversioned = true } = options;
 	const start = Date.now();
 	while (Date.now() - start < timeoutMs) {
 		throwIfAborted(signal);
-		const diagnostics = client.diagnostics.get(uri);
 		const versionOk = minVersion === undefined || client.diagnosticsVersion > minVersion;
-		if (diagnostics !== undefined && versionOk) return diagnostics;
+		const diagnostics = getAcceptedDiagnostics(
+			client.diagnostics.get(uri),
+			expectedDocumentVersion,
+			allowUnversioned,
+		);
+		if (diagnostics !== undefined && versionOk) {
+			return diagnostics;
+		}
 		await Bun.sleep(100);
 	}
-	return client.diagnostics.get(uri) ?? [];
+	const versionOk = minVersion === undefined || client.diagnosticsVersion > minVersion;
+	if (!versionOk) {
+		return [];
+	}
+	return getAcceptedDiagnostics(client.diagnostics.get(uri), expectedDocumentVersion, allowUnversioned) ?? [];
 }
 
 /** Project type detection result */
@@ -426,8 +464,14 @@ export interface FileDiagnosticsResult {
 	formatter?: FileFormatResult;
 }
 
-/** Captured diagnostic versions per server (before sync) */
-type DiagnosticVersions = Map<string, number>;
+type ServerVersionMap = Map<string, number>;
+
+interface GetDiagnosticsForFileOptions {
+	signal?: AbortSignal;
+	minVersions?: ServerVersionMap;
+	expectedDocumentVersions?: ServerVersionMap;
+	allowUnversionedLspDiagnostics?: boolean;
+}
 
 /**
  * Capture current diagnostic versions for all LSP servers.
@@ -436,13 +480,32 @@ type DiagnosticVersions = Map<string, number>;
 async function captureDiagnosticVersions(
 	cwd: string,
 	servers: Array<[string, ServerConfig]>,
-): Promise<DiagnosticVersions> {
+): Promise<ServerVersionMap> {
 	const versions = new Map<string, number>();
 	await Promise.allSettled(
 		servers.map(async ([serverName, serverConfig]) => {
 			if (serverConfig.createClient) return;
 			const client = await getOrCreateClient(serverConfig, cwd);
 			versions.set(serverName, client.diagnosticsVersion);
+		}),
+	);
+	return versions;
+}
+
+async function captureOpenFileVersions(
+	absolutePath: string,
+	cwd: string,
+	servers: Array<[string, ServerConfig]>,
+): Promise<ServerVersionMap> {
+	const uri = fileToUri(absolutePath);
+	const versions = new Map<string, number>();
+	await Promise.allSettled(
+		servers.map(async ([serverName, serverConfig]) => {
+			const client = await getOrCreateClient(serverConfig, cwd);
+			const version = client.openFiles.get(uri)?.version;
+			if (version !== undefined) {
+				versions.set(serverName, version);
+			}
 		}),
 	);
 	return versions;
@@ -461,9 +524,9 @@ async function getDiagnosticsForFile(
 	absolutePath: string,
 	cwd: string,
 	servers: Array<[string, ServerConfig]>,
-	signal?: AbortSignal,
-	minVersions?: DiagnosticVersions,
+	options: GetDiagnosticsForFileOptions = {},
 ): Promise<FileDiagnosticsResult | undefined> {
+	const { signal, minVersions, expectedDocumentVersions, allowUnversionedLspDiagnostics = true } = options;
 	if (servers.length === 0) {
 		return undefined;
 	}
@@ -489,7 +552,14 @@ async function getDiagnosticsForFile(
 			throwIfAborted(signal);
 			// Content already synced + didSave sent, wait for fresh diagnostics
 			const minVersion = minVersions?.get(serverName);
-			const diagnostics = await waitForDiagnostics(client, uri, 3000, signal, minVersion);
+			const expectedDocumentVersion = expectedDocumentVersions?.get(serverName);
+			const diagnostics = await waitForDiagnostics(client, uri, {
+				timeoutMs: 3000,
+				signal,
+				minVersion,
+				expectedDocumentVersion,
+				allowUnversioned: allowUnversionedLspDiagnostics,
+			});
 			return { serverName, diagnostics };
 		}),
 	);
@@ -794,6 +864,7 @@ async function runLspWritethrough(
 
 	// Capture diagnostic versions BEFORE syncing to detect stale diagnostics
 	const minVersions = enableDiagnostics ? await captureDiagnosticVersions(cwd, servers) : undefined;
+	let expectedDocumentVersions: ServerVersionMap | undefined;
 
 	let formatter: FileFormatResult | undefined;
 	let diagnostics: FileDiagnosticsResult | undefined;
@@ -835,12 +906,21 @@ async function runLspWritethrough(
 				await getWritePromise();
 			}
 
+			if (enableDiagnostics) {
+				expectedDocumentVersions = await captureOpenFileVersions(dst, cwd, lspServers);
+			}
+
 			// 5. Notify saved to LSP servers
 			await notifyFileSaved(dst, cwd, lspServers, operationSignal);
 
 			// 6. Get diagnostics from all servers (wait for fresh results)
 			if (enableDiagnostics) {
-				diagnostics = await getDiagnosticsForFile(dst, cwd, servers, operationSignal, minVersions);
+				diagnostics = await getDiagnosticsForFile(dst, cwd, servers, {
+					signal: operationSignal,
+					minVersions,
+					expectedDocumentVersions,
+					allowUnversionedLspDiagnostics: false,
+				});
 			}
 		});
 	} catch {
@@ -1044,13 +1124,13 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 						const client = await getOrCreateClient(serverConfig, this.session.cwd);
 						const minVersion = client.diagnosticsVersion;
 						await refreshFile(client, resolved, signal);
-						const diagnostics = await waitForDiagnostics(
-							client,
-							uri,
-							diagnosticsWaitTimeoutMs,
+						const expectedDocumentVersion = client.openFiles.get(uri)?.version;
+						const diagnostics = await waitForDiagnostics(client, uri, {
+							timeoutMs: diagnosticsWaitTimeoutMs,
 							signal,
 							minVersion,
-						);
+							expectedDocumentVersion,
+						});
 						allDiagnostics.push(...diagnostics);
 					} catch (err) {
 						if (err instanceof ToolAbortError || signal?.aborted) {
@@ -1372,7 +1452,7 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 				}
 
 				case "code_actions": {
-					const diagnostics = client.diagnostics.get(uri) ?? [];
+					const diagnostics = client.diagnostics.get(uri)?.diagnostics ?? [];
 					const context: CodeActionContext = {
 						diagnostics,
 						only: !apply && query ? [query] : undefined,

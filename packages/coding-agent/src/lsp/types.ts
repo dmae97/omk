@@ -93,6 +93,17 @@ export interface Diagnostic {
 	data?: unknown;
 }
 
+export interface PublishedDiagnostics {
+	diagnostics: Diagnostic[];
+	version: number | null;
+}
+
+export interface PublishDiagnosticsParams {
+	uri: string;
+	diagnostics: Diagnostic[];
+	version?: number | null;
+}
+
 // =============================================================================
 // Text Edits
 // =============================================================================
@@ -392,7 +403,7 @@ export interface LspClient {
 	config: ServerConfig;
 	proc: ptree.ChildProcess<"pipe">;
 	requestId: number;
-	diagnostics: Map<string, Diagnostic[]>;
+	diagnostics: Map<string, PublishedDiagnostics>;
 	diagnosticsVersion: number;
 	openFiles: Map<string, OpenFile>;
 	pendingRequests: Map<number, PendingRequest>;

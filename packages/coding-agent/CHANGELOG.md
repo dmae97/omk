@@ -1,6 +1,16 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Support for LSP diagnostic versioning to track document versions and suppress stale diagnostics
+- Options parameter to `waitForDiagnostics` for controlling diagnostic freshness validation with `expectedDocumentVersion` and `allowUnversioned` flags
+
+### Changed
+
+- Enabled `versionSupport` in LSP client capabilities to receive diagnostic version information from servers
+- Diagnostics storage now tracks both diagnostics and their associated document version for freshness validation
+- Updated `getDiagnosticsForFile` to accept options object instead of positional parameters for better extensibility
 
 ## [13.19.0] - 2026-04-05
 ### Added
