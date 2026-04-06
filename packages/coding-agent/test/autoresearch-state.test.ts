@@ -567,72 +567,106 @@ describe("autoresearch command startup", () => {
 		}
 	});
 
-	it("asks for intent and sends an initialization prompt when no autoresearch.md exists", async () => {
+	it("enables autoresearch with notify and no agent turn when no autoresearch.md and no slash args", async () => {
 		const dir = makeTempDir();
 		tempDirs.push(dir);
 		let currentBranch = "main";
 		const branches = new Set<string>();
-		const harness = createAutoresearchCommandHarness(
-			dir,
-			[
-				"reduce edit benchmark runtime variance",
-				"bash autoresearch.sh --quick",
-				"runtime_ms",
-				"ms",
-				"lower",
-				"memory_mb, rss_mb",
-				"packages/coding-agent/src/autoresearch, packages/coding-agent/test",
-				"packages/coding-agent/src/generated",
-				"preserve output format",
-			],
-			async (command, args) => {
-				if (command !== "git") return { code: 1, stderr: "unexpected command", stdout: "" };
-				if (args[0] === "rev-parse") return { code: 0, stderr: "", stdout: `${dir}\n` };
-				if (args[0] === "branch" && args[1] === "--show-current") {
-					return { code: 0, stderr: "", stdout: `${currentBranch}\n` };
-				}
-				if (args[0] === "status") return { code: 0, stderr: "", stdout: "" };
-				if (args[0] === "show-ref") {
-					const branchName = args[args.length - 1]?.replace("refs/heads/", "") ?? "";
-					return { code: branches.has(branchName) ? 0 : 1, stderr: "", stdout: "" };
-				}
-				if (args[0] === "checkout" && args[1] === "-b") {
-					currentBranch = args[2] ?? currentBranch;
-					branches.add(currentBranch);
-					return { code: 0, stderr: "", stdout: "" };
-				}
-				return { code: 1, stderr: `unexpected git args: ${args.join(" ")}`, stdout: "" };
-			},
-		);
+		const harness = createAutoresearchCommandHarness(dir, [], async (command, args) => {
+			if (command !== "git") return { code: 1, stderr: "unexpected command", stdout: "" };
+			if (args[0] === "rev-parse") return { code: 0, stderr: "", stdout: `${dir}\n` };
+			if (args[0] === "branch" && args[1] === "--show-current") {
+				return { code: 0, stderr: "", stdout: `${currentBranch}\n` };
+			}
+			if (args[0] === "status") return { code: 0, stderr: "", stdout: "" };
+			if (args[0] === "show-ref") {
+				const branchName = args[args.length - 1]?.replace("refs/heads/", "") ?? "";
+				return { code: branches.has(branchName) ? 0 : 1, stderr: "", stdout: "" };
+			}
+			if (args[0] === "checkout" && args[1] === "-b") {
+				currentBranch = args[2] ?? currentBranch;
+				branches.add(currentBranch);
+				return { code: 0, stderr: "", stdout: "" };
+			}
+			return { code: 1, stderr: `unexpected git args: ${args.join(" ")}`, stdout: "" };
+		});
 
 		await harness.command.handler("", harness.ctx);
 
-		expect(harness.inputCalls).toEqual([
-			{ title: "Autoresearch Intent", placeholder: "what should autoresearch improve?" },
-			{ title: "Benchmark Command", placeholder: "bash autoresearch.sh" },
-			{ title: "Primary Metric Name", placeholder: "runtime_ms" },
-			{ title: "Metric Unit", placeholder: "ms" },
-			{ title: "Metric Direction", placeholder: "lower" },
-			{ title: "Tradeoff Metrics", placeholder: "" },
-			{ title: "Files in Scope", placeholder: "packages/coding-agent/src/autoresearch" },
-			{ title: "Off Limits", placeholder: "" },
-			{ title: "Constraints", placeholder: "" },
+		expect(harness.inputCalls).toEqual([]);
+		expect(harness.sentMessages).toEqual([]);
+		expect(harness.notifications).toEqual([
+			{
+				message: "Autoresearch enabled—describe what to optimize in your next message.",
+				type: "info",
+			},
 		]);
-		expect(harness.sentMessages).toHaveLength(1);
-		expect(harness.sentMessages[0]).toContain("Set up autoresearch for this intent:");
-		expect(harness.sentMessages[0]).toContain("reduce edit benchmark runtime variance");
-		expect(harness.sentMessages[0]).toContain("benchmark command: `bash autoresearch.sh --quick`");
-		expect(harness.sentMessages[0]).toContain("primary metric: `runtime_ms`");
-		expect(harness.sentMessages[0]).toContain("metric unit: `ms`");
-		expect(harness.sentMessages[0]).toContain("direction: `lower`");
-		expect(harness.sentMessages[0]).toContain("`memory_mb`");
-		expect(harness.sentMessages[0]).toContain("`rss_mb`");
-		expect(harness.sentMessages[0]).toContain("`packages/coding-agent/src/autoresearch`");
-		expect(harness.sentMessages[0]).toContain("`packages/coding-agent/src/generated`");
-		expect(harness.sentMessages[0]).toContain("preserve output format");
-		expect(harness.sentMessages[0]).toContain("Created and checked out dedicated git branch");
-		expect(harness.sentMessages[0]).toContain("Explain briefly what autoresearch will do in this repository");
-		expect(harness.sentMessages[0]).toContain("- files in scope:");
+		const checkoutCall = harness.execCalls.find(call => call.command === "git" && call.args[0] === "checkout");
+		expect(checkoutCall?.args[2]).toMatch(/^autoresearch\/session-\d{8}$/);
+	});
+
+	it("toggles autoresearch off when bare command is sent while mode is already enabled", async () => {
+		const dir = makeTempDir();
+		tempDirs.push(dir);
+		let currentBranch = "main";
+		const branches = new Set<string>();
+		const harness = createAutoresearchCommandHarness(dir, [], async (command, args) => {
+			if (command !== "git") return { code: 1, stderr: "unexpected command", stdout: "" };
+			if (args[0] === "rev-parse") return { code: 0, stderr: "", stdout: `${dir}\n` };
+			if (args[0] === "branch" && args[1] === "--show-current") {
+				return { code: 0, stderr: "", stdout: `${currentBranch}\n` };
+			}
+			if (args[0] === "status") return { code: 0, stderr: "", stdout: "" };
+			if (args[0] === "show-ref") {
+				const branchName = args[args.length - 1]?.replace("refs/heads/", "") ?? "";
+				return { code: branches.has(branchName) ? 0 : 1, stderr: "", stdout: "" };
+			}
+			if (args[0] === "checkout" && args[1] === "-b") {
+				currentBranch = args[2] ?? currentBranch;
+				branches.add(currentBranch);
+				return { code: 0, stderr: "", stdout: "" };
+			}
+			return { code: 1, stderr: `unexpected git args: ${args.join(" ")}`, stdout: "" };
+		});
+
+		await harness.command.handler("", harness.ctx);
+		await harness.command.handler("", harness.ctx);
+
+		expect(harness.sentMessages).toEqual([]);
+		expect(harness.notifications.filter(n => n.type === "info").map(n => n.message)).toEqual([
+			"Autoresearch enabled—describe what to optimize in your next message.",
+			"Autoresearch mode disabled",
+		]);
+	});
+
+	it("submits slash args as the raw user message when no autoresearch.md exists", async () => {
+		const dir = makeTempDir();
+		tempDirs.push(dir);
+		let currentBranch = "main";
+		const branches = new Set<string>();
+		const harness = createAutoresearchCommandHarness(dir, [], async (command, args) => {
+			if (command !== "git") return { code: 1, stderr: "unexpected command", stdout: "" };
+			if (args[0] === "rev-parse") return { code: 0, stderr: "", stdout: `${dir}\n` };
+			if (args[0] === "branch" && args[1] === "--show-current") {
+				return { code: 0, stderr: "", stdout: `${currentBranch}\n` };
+			}
+			if (args[0] === "status") return { code: 0, stderr: "", stdout: "" };
+			if (args[0] === "show-ref") {
+				const branchName = args[args.length - 1]?.replace("refs/heads/", "") ?? "";
+				return { code: branches.has(branchName) ? 0 : 1, stderr: "", stdout: "" };
+			}
+			if (args[0] === "checkout" && args[1] === "-b") {
+				currentBranch = args[2] ?? currentBranch;
+				branches.add(currentBranch);
+				return { code: 0, stderr: "", stdout: "" };
+			}
+			return { code: 1, stderr: `unexpected git args: ${args.join(" ")}`, stdout: "" };
+		});
+
+		await harness.command.handler("reduce edit benchmark runtime variance", harness.ctx);
+
+		expect(harness.inputCalls).toEqual([]);
+		expect(harness.sentMessages).toEqual(["reduce edit benchmark runtime variance"]);
 		expect(harness.notifications).toEqual([]);
 		const checkoutCall = harness.execCalls.find(call => call.command === "git" && call.args[0] === "checkout");
 		expect(checkoutCall?.args[2]).toMatch(/^autoresearch\/reduce-edit-benchmark-runtime-variance-\d{8}$/);
@@ -699,47 +733,29 @@ describe("autoresearch command startup", () => {
 		fs.writeFileSync(path.join(dir, "autoresearch.md"), "# Autoresearch\n\nOld notes\n");
 		let currentBranch = "main";
 		const branches = new Set<string>();
-		const harness = createAutoresearchCommandHarness(
-			dir,
-			[
-				"focus on memory regressions next",
-				"bash autoresearch.sh",
-				"runtime_ms",
-				"ms",
-				"lower",
-				"",
-				"packages/coding-agent/src/autoresearch",
-				"",
-				"",
-			],
-			async (command, args) => {
-				if (command !== "git") return { code: 1, stderr: "unexpected command", stdout: "" };
-				if (args[0] === "rev-parse") return { code: 0, stderr: "", stdout: `${dir}\n` };
-				if (args[0] === "branch" && args[1] === "--show-current") {
-					return { code: 0, stderr: "", stdout: `${currentBranch}\n` };
-				}
-				if (args[0] === "status") return { code: 0, stderr: "", stdout: "" };
-				if (args[0] === "show-ref") {
-					const branchName = args[args.length - 1]?.replace("refs/heads/", "") ?? "";
-					return { code: branches.has(branchName) ? 0 : 1, stderr: "", stdout: "" };
-				}
-				if (args[0] === "checkout" && args[1] === "-b") {
-					currentBranch = args[2] ?? currentBranch;
-					branches.add(currentBranch);
-					return { code: 0, stderr: "", stdout: "" };
-				}
-				return { code: 1, stderr: `unexpected git args: ${args.join(" ")}`, stdout: "" };
-			},
-		);
+		const harness = createAutoresearchCommandHarness(dir, [], async (command, args) => {
+			if (command !== "git") return { code: 1, stderr: "unexpected command", stdout: "" };
+			if (args[0] === "rev-parse") return { code: 0, stderr: "", stdout: `${dir}\n` };
+			if (args[0] === "branch" && args[1] === "--show-current") {
+				return { code: 0, stderr: "", stdout: `${currentBranch}\n` };
+			}
+			if (args[0] === "status") return { code: 0, stderr: "", stdout: "" };
+			if (args[0] === "show-ref") {
+				const branchName = args[args.length - 1]?.replace("refs/heads/", "") ?? "";
+				return { code: branches.has(branchName) ? 0 : 1, stderr: "", stdout: "" };
+			}
+			if (args[0] === "checkout" && args[1] === "-b") {
+				currentBranch = args[2] ?? currentBranch;
+				branches.add(currentBranch);
+				return { code: 0, stderr: "", stdout: "" };
+			}
+			return { code: 1, stderr: `unexpected git args: ${args.join(" ")}`, stdout: "" };
+		});
 
 		await harness.command.handler("focus on memory regressions next", harness.ctx);
 
-		expect(harness.inputCalls[0]).toEqual({
-			title: "Autoresearch Intent",
-			placeholder: "focus on memory regressions next",
-		});
-		expect(harness.sentMessages).toHaveLength(1);
-		expect(harness.sentMessages[0]).toContain("Set up autoresearch for this intent:");
+		expect(harness.inputCalls).toEqual([]);
+		expect(harness.sentMessages).toEqual(["focus on memory regressions next"]);
 		expect(harness.sentMessages[0]).not.toContain("Resume autoresearch from the attached notes.");
 	});
 
@@ -752,7 +768,7 @@ describe("autoresearch command startup", () => {
 			if (command !== "git") return { code: 1, stderr: "unexpected command", stdout: "" };
 			if (args[0] === "rev-parse") return { code: 0, stderr: "", stdout: `${dir}\n` };
 			if (args[0] === "status") {
-				return { code: 0, stderr: "", stdout: " M packages/coding-agent/src/sdk.ts\0" };
+				return { code: 0, stderr: "", stdout: " M packages/coding-agent/src/sdk.ts\n" };
 			}
 			if (args[0] === "branch" && args[1] === "--show-current") {
 				return { code: 0, stderr: "", stdout: "autoresearch/existing-20260322\n" };
@@ -772,61 +788,54 @@ describe("autoresearch command startup", () => {
 		]);
 	});
 
-	it("does not start autoresearch when the intent dialog returns blank input", async () => {
+	it("uses slash arguments as intent without validating benchmark command shape", async () => {
 		const dir = makeTempDir();
 		tempDirs.push(dir);
-		const harness = createAutoresearchCommandHarness(dir, "   ");
+		let currentBranch = "main";
+		const branches = new Set<string>();
+		const harness = createAutoresearchCommandHarness(dir, [], async (command, args) => {
+			if (command !== "git") return { code: 1, stderr: "unexpected command", stdout: "" };
+			if (args[0] === "rev-parse") return { code: 0, stderr: "", stdout: `${dir}\n` };
+			if (args[0] === "branch" && args[1] === "--show-current") {
+				return { code: 0, stderr: "", stdout: `${currentBranch}\n` };
+			}
+			if (args[0] === "status") return { code: 0, stderr: "", stdout: "" };
+			if (args[0] === "show-ref") {
+				const branchName = args[args.length - 1]?.replace("refs/heads/", "") ?? "";
+				return { code: branches.has(branchName) ? 0 : 1, stderr: "", stdout: "" };
+			}
+			if (args[0] === "checkout" && args[1] === "-b") {
+				currentBranch = args[2] ?? currentBranch;
+				branches.add(currentBranch);
+				return { code: 0, stderr: "", stdout: "" };
+			}
+			return { code: 1, stderr: `unexpected git args: ${args.join(" ")}`, stdout: "" };
+		});
 
-		await harness.command.handler("", harness.ctx);
+		await harness.command.handler("pnpm test", harness.ctx);
 
-		expect(harness.sentMessages).toEqual([]);
-		expect(harness.notifications).toEqual([{ message: "Autoresearch intent is required", type: "info" }]);
-	});
-
-	it("rejects non-canonical benchmark commands during setup", async () => {
-		const dir = makeTempDir();
-		tempDirs.push(dir);
-		const harness = createAutoresearchCommandHarness(dir, ["speed things up", "pnpm test"]);
-
-		await harness.command.handler("", harness.ctx);
-
-		expect(harness.sentMessages).toEqual([]);
-		expect(harness.notifications).toEqual([
-			{ message: "Benchmark command must invoke `autoresearch.sh` directly", type: "info" },
-		]);
+		expect(harness.inputCalls).toEqual([]);
+		expect(harness.sentMessages).toEqual(["pnpm test"]);
+		expect(harness.notifications).toEqual([]);
 	});
 
 	it("refuses to start when non-autoresearch files are dirty on a non-autoresearch branch", async () => {
 		const dir = makeTempDir();
 		tempDirs.push(dir);
-		const harness = createAutoresearchCommandHarness(
-			dir,
-			[
-				"reduce edit benchmark runtime variance",
-				"bash autoresearch.sh",
-				"runtime_ms",
-				"ms",
-				"lower",
-				"",
-				"packages/coding-agent/src/autoresearch",
-				"",
-				"",
-			],
-			async (command, args) => {
-				if (command !== "git") return { code: 1, stderr: "unexpected command", stdout: "" };
-				if (args[0] === "rev-parse" && args[1] === "--show-prefix") {
-					return { code: 0, stderr: "", stdout: "" };
-				}
-				if (args[0] === "rev-parse") return { code: 0, stderr: "", stdout: `${dir}\n` };
-				if (args[0] === "branch" && args[1] === "--show-current") {
-					return { code: 0, stderr: "", stdout: "main\n" };
-				}
-				if (args[0] === "status") {
-					return { code: 0, stderr: "", stdout: " M packages/coding-agent/src/sdk.ts\n" };
-				}
-				return { code: 1, stderr: `unexpected git args: ${args.join(" ")}`, stdout: "" };
-			},
-		);
+		const harness = createAutoresearchCommandHarness(dir, [], async (command, args) => {
+			if (command !== "git") return { code: 1, stderr: "unexpected command", stdout: "" };
+			if (args[0] === "rev-parse" && args[1] === "--show-prefix") {
+				return { code: 0, stderr: "", stdout: "" };
+			}
+			if (args[0] === "rev-parse") return { code: 0, stderr: "", stdout: `${dir}\n` };
+			if (args[0] === "branch" && args[1] === "--show-current") {
+				return { code: 0, stderr: "", stdout: "main\n" };
+			}
+			if (args[0] === "status") {
+				return { code: 0, stderr: "", stdout: " M packages/coding-agent/src/sdk.ts\n" };
+			}
+			return { code: 1, stderr: `unexpected git args: ${args.join(" ")}`, stdout: "" };
+		});
 
 		await harness.command.handler("", harness.ctx);
 
@@ -844,67 +853,44 @@ describe("autoresearch command startup", () => {
 		const dir = makeTempDir();
 		tempDirs.push(dir);
 
-		const localStateHarness = createAutoresearchCommandHarness(
-			dir,
-			[
-				"reduce edit benchmark runtime variance",
-				"bash autoresearch.sh",
-				"runtime_ms",
-				"ms",
-				"lower",
-				"",
-				"packages/coding-agent/src/autoresearch",
-				"",
-				"",
-			],
-			async (command, args) => {
-				if (command !== "git") return { code: 1, stderr: "unexpected command", stdout: "" };
-				if (args[0] === "rev-parse" && args[1] === "--show-prefix") {
-					return { code: 0, stderr: "", stdout: "" };
-				}
-				if (args[0] === "rev-parse") return { code: 0, stderr: "", stdout: `${dir}\n` };
-				if (args[0] === "branch" && args[1] === "--show-current") {
-					return { code: 0, stderr: "", stdout: "main\n" };
-				}
-				if (args[0] === "status") {
-					return { code: 0, stderr: "", stdout: "?? autoresearch.jsonl\n?? .autoresearch/runs/0001/run.json\n" };
-				}
-				if (args[0] === "show-ref") return { code: 1, stderr: "", stdout: "" };
-				if (args[0] === "checkout" && args[1] === "-b") return { code: 0, stderr: "", stdout: "" };
-				return { code: 1, stderr: `unexpected git args: ${args.join(" ")}`, stdout: "" };
-			},
-		);
+		const localStateHarness = createAutoresearchCommandHarness(dir, [], async (command, args) => {
+			if (command !== "git") return { code: 1, stderr: "unexpected command", stdout: "" };
+			if (args[0] === "rev-parse" && args[1] === "--show-prefix") {
+				return { code: 0, stderr: "", stdout: "" };
+			}
+			if (args[0] === "rev-parse") return { code: 0, stderr: "", stdout: `${dir}\n` };
+			if (args[0] === "branch" && args[1] === "--show-current") {
+				return { code: 0, stderr: "", stdout: "main\n" };
+			}
+			if (args[0] === "status") {
+				return { code: 0, stderr: "", stdout: "?? autoresearch.jsonl\n?? .autoresearch/runs/0001/run.json\n" };
+			}
+			if (args[0] === "show-ref") return { code: 1, stderr: "", stdout: "" };
+			if (args[0] === "checkout" && args[1] === "-b") return { code: 0, stderr: "", stdout: "" };
+			return { code: 1, stderr: `unexpected git args: ${args.join(" ")}`, stdout: "" };
+		});
 
 		await localStateHarness.command.handler("", localStateHarness.ctx);
 
-		expect(localStateHarness.sentMessages).toHaveLength(1);
-		expect(localStateHarness.notifications).toEqual([]);
-
-		const dirtyControlHarness = createAutoresearchCommandHarness(
-			dir,
-			[
-				"reduce edit benchmark runtime variance",
-				"bash autoresearch.sh",
-				"runtime_ms",
-				"ms",
-				"lower",
-				"",
-				"packages/coding-agent/src/autoresearch",
-				"",
-				"",
-			],
-			async (command, args) => {
-				if (command !== "git") return { code: 1, stderr: "unexpected command", stdout: "" };
-				if (args[0] === "rev-parse") return { code: 0, stderr: "", stdout: `${dir}\n` };
-				if (args[0] === "branch" && args[1] === "--show-current") {
-					return { code: 0, stderr: "", stdout: "main\n" };
-				}
-				if (args[0] === "status") {
-					return { code: 0, stderr: "", stdout: " M autoresearch.md\n" };
-				}
-				return { code: 1, stderr: `unexpected git args: ${args.join(" ")}`, stdout: "" };
+		expect(localStateHarness.sentMessages).toEqual([]);
+		expect(localStateHarness.notifications).toEqual([
+			{
+				message: "Autoresearch enabled—describe what to optimize in your next message.",
+				type: "info",
 			},
-		);
+		]);
+
+		const dirtyControlHarness = createAutoresearchCommandHarness(dir, [], async (command, args) => {
+			if (command !== "git") return { code: 1, stderr: "unexpected command", stdout: "" };
+			if (args[0] === "rev-parse") return { code: 0, stderr: "", stdout: `${dir}\n` };
+			if (args[0] === "branch" && args[1] === "--show-current") {
+				return { code: 0, stderr: "", stdout: "main\n" };
+			}
+			if (args[0] === "status") {
+				return { code: 0, stderr: "", stdout: " M autoresearch.md\n" };
+			}
+			return { code: 1, stderr: `unexpected git args: ${args.join(" ")}`, stdout: "" };
+		});
 
 		await dirtyControlHarness.command.handler("", dirtyControlHarness.ctx);
 
@@ -1018,37 +1004,6 @@ describe("autoresearch tool-call guard", () => {
 		expect(blocked).toEqual({
 			block: true,
 			reason: expect.stringContaining("explicit target path"),
-		});
-	});
-
-	it("blocks mutating bash commands during autoresearch", async () => {
-		const dir = makeTempDir();
-		tempDirs.push(dir);
-		fs.writeFileSync(
-			path.join(dir, "autoresearch.jsonl"),
-			`${JSON.stringify({ type: "config", scopePaths: ["src"] })}\n`,
-		);
-
-		const harness = createAutoresearchLifecycleHarness({
-			activeTools: [],
-			controlEntries: [{ type: "custom", customType: "autoresearch-control", data: { mode: "on" } }],
-			cwd: dir,
-		});
-
-		await harness.sessionStartHandler?.({ type: "session_start" } as SessionStartEvent, harness.ctx);
-
-		const blocked = await harness.toolCallHandler?.(
-			{
-				type: "tool_call",
-				toolCallId: "call-bash",
-				toolName: "bash",
-				input: { command: "rm -rf src/generated" },
-			} as ToolCallEvent,
-			harness.ctx,
-		);
-		expect(blocked).toEqual({
-			block: true,
-			reason: expect.stringContaining("read-only shell inspection"),
 		});
 	});
 

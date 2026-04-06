@@ -8,7 +8,6 @@ import type { ToolDefinition } from "../../extensibility/extensions";
 import type { Theme } from "../../modes/theme/theme";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, truncateTail } from "../../session/streaming-output";
 import { replaceTabs, shortenPath, truncateToWidth } from "../../tools/render-utils";
-import { getAutoresearchFingerprintMismatchError } from "../contract";
 import {
 	EXPERIMENT_MAX_BYTES,
 	EXPERIMENT_MAX_LINES,
@@ -38,6 +37,12 @@ const runExperimentSchema = Type.Object({
 	checks_timeout_seconds: Type.Optional(
 		Type.Number({
 			description: "Timeout in seconds for autoresearch.checks.sh. Defaults to 300.",
+		}),
+	),
+	force: Type.Optional(
+		Type.Boolean({
+			description:
+				"When true, allow a command that differs from the segment benchmark command and skip the rule that autoresearch.sh must be invoked directly when that script exists.",
 		}),
 	),
 });
@@ -87,14 +92,9 @@ export function createRunExperimentTool(
 			const workDir = resolveWorkDir(ctx.cwd);
 			const checksPath = path.join(workDir, "autoresearch.checks.sh");
 			const autoresearchScriptPath = path.join(workDir, "autoresearch.sh");
-			const fingerprintError = getAutoresearchFingerprintMismatchError(state.segmentFingerprint, workDir);
-			if (fingerprintError) {
-				return {
-					content: [{ type: "text", text: `Error: ${fingerprintError}` }],
-				};
-			}
 
-			if (state.benchmarkCommand && params.command.trim() !== state.benchmarkCommand) {
+			const forceCommand = params.force === true;
+			if (!forceCommand && state.benchmarkCommand && params.command.trim() !== state.benchmarkCommand) {
 				return {
 					content: [
 						{
@@ -107,7 +107,7 @@ export function createRunExperimentTool(
 				};
 			}
 
-			if (fs.existsSync(autoresearchScriptPath) && !isAutoresearchShCommand(params.command)) {
+			if (!forceCommand && fs.existsSync(autoresearchScriptPath) && !isAutoresearchShCommand(params.command)) {
 				return {
 					content: [
 						{
@@ -337,8 +337,28 @@ export function createRunExperimentTool(
 				),
 			);
 
+			const commandWarnings: string[] = [];
+			if (forceCommand) {
+				if (state.benchmarkCommand && params.command.trim() !== state.benchmarkCommand) {
+					commandWarnings.push(
+						`Warning: command override (force=true). Segment benchmark is ${state.benchmarkCommand}; ran ${params.command}.`,
+					);
+				}
+				if (fs.existsSync(autoresearchScriptPath) && !isAutoresearchShCommand(params.command)) {
+					commandWarnings.push(
+						"Warning: autoresearch.sh exists but the command was not a direct autoresearch.sh invocation (force=true).",
+					);
+				}
+			}
+			const warningPrefix = commandWarnings.length > 0 ? `${commandWarnings.join("\n")}\n\n` : "";
+
 			return {
-				content: [{ type: "text", text: buildRunText(resultDetails, llmTruncation.content, state.bestMetric) }],
+				content: [
+					{
+						type: "text",
+						text: warningPrefix + buildRunText(resultDetails, llmTruncation.content, state.bestMetric),
+					},
+				],
 				details: resultDetails,
 			};
 		},

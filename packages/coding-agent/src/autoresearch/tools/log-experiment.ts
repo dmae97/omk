@@ -8,7 +8,8 @@ import type { ToolDefinition } from "../../extensibility/extensions";
 import type { Theme } from "../../modes/theme/theme";
 import { replaceTabs, truncateToWidth } from "../../tools/render-utils";
 import * as git from "../../utils/git";
-import { getAutoresearchFingerprintMismatchError, pathMatchesContractPath } from "../contract";
+import { applyAutoresearchContractToExperimentState } from "../apply-contract-to-state";
+import { loadAutoresearchScriptSnapshot, pathMatchesContractPath, readAutoresearchContract } from "../contract";
 import { getCurrentAutoresearchBranch, parseWorkDirDirtyPaths } from "../git";
 import {
 	AUTORESEARCH_COMMITTABLE_FILES,
@@ -16,6 +17,7 @@ import {
 	inferMetricUnitFromName,
 	isAutoresearchCommittableFile,
 	isAutoresearchLocalStatePath,
+	isAutoresearchShCommand,
 	isBetter,
 	mergeAsi,
 	readPendingRunSummary,
@@ -61,7 +63,8 @@ const logExperimentSchema = Type.Object({
 	),
 	force: Type.Optional(
 		Type.Boolean({
-			description: "Allow introducing new secondary metrics.",
+			description:
+				"When true: allow new secondary metric names, skip ASI field requirements, and allow keeping a run whose primary metric regressed versus the best kept run in this segment.",
 		}),
 	),
 	asi: Type.Optional(
@@ -102,10 +105,26 @@ export function createLogExperimentTool(
 			const runtime = options.getRuntime(ctx);
 			const state = runtime.state;
 			const workDir = resolveWorkDir(ctx.cwd);
-			const fingerprintError = getAutoresearchFingerprintMismatchError(state.segmentFingerprint, workDir);
-			if (fingerprintError) {
+
+			const contractResult = readAutoresearchContract(workDir);
+			const scriptSnapshot = loadAutoresearchScriptSnapshot(workDir);
+			const contractErrors = [...contractResult.errors, ...scriptSnapshot.errors];
+			if (contractErrors.length > 0) {
 				return {
-					content: [{ type: "text", text: `Error: ${fingerprintError}` }],
+					content: [{ type: "text", text: `Error: ${contractErrors.join(" ")}` }],
+				};
+			}
+			const benchmarkForSync = contractResult.contract.benchmark;
+			if (benchmarkForSync.command && !isAutoresearchShCommand(benchmarkForSync.command)) {
+				return {
+					content: [
+						{
+							type: "text",
+							text:
+								"Error: Benchmark.command in autoresearch.md must invoke `autoresearch.sh` directly before logging. " +
+								"Fix autoresearch.md or move the workload into autoresearch.sh.",
+						},
+					],
 				};
 			}
 
@@ -116,6 +135,9 @@ export function createLogExperimentTool(
 					content: [{ type: "text", text: "Error: no unlogged run is available. Run run_experiment first." }],
 				};
 			}
+
+			applyAutoresearchContractToExperimentState(contractResult.contract, state);
+			const logPreamble = "Refreshed session fields from autoresearch.md before logging (benchmark, scope, constraints).\n\n";
 			runtime.lastRunSummary = pendingRun;
 			runtime.lastRunAsi = pendingRun.parsedAsi;
 			runtime.lastRunChecks =
@@ -170,8 +192,9 @@ export function createLogExperimentTool(
 				};
 			}
 
+			const forceLoose = params.force === true;
 			const secondaryMetrics = buildSecondaryMetrics(params.metrics, pendingRun.parsedMetrics, state.metricName);
-			const validationError = validateSecondaryMetrics(state, secondaryMetrics, params.force ?? false);
+			const validationError = validateSecondaryMetrics(state, secondaryMetrics, forceLoose);
 			if (validationError) {
 				return {
 					content: [{ type: "text", text: `Error: ${validationError}` }],
@@ -179,11 +202,13 @@ export function createLogExperimentTool(
 			}
 
 			const mergedAsi = mergeAsi(runtime.lastRunAsi, sanitizeAsi(params.asi));
-			const asiValidationError = validateAsiRequirements(mergedAsi, params.status);
-			if (asiValidationError) {
-				return {
-					content: [{ type: "text", text: `Error: ${asiValidationError}` }],
-				};
+			if (!forceLoose) {
+				const asiValidationError = validateAsiRequirements(mergedAsi, params.status);
+				if (asiValidationError) {
+					return {
+						content: [{ type: "text", text: `Error: ${asiValidationError}` }],
+					};
+				}
 			}
 
 			let keepScopeValidation: { committablePaths: string[] } | undefined;
@@ -196,6 +221,7 @@ export function createLogExperimentTool(
 				}
 				const currentBestMetric = findBestKeptMetric(state.results, state.currentSegment, state.bestDirection);
 				if (
+					!forceLoose &&
 					currentBestMetric !== null &&
 					params.metric !== currentBestMetric &&
 					!isBetter(params.metric, currentBestMetric, state.bestDirection)
@@ -309,7 +335,7 @@ export function createLogExperimentTool(
 			runtime.lastAutoResumePendingRunNumber = null;
 
 			const currentSegmentRuns = currentResults(state.results, state.currentSegment).length;
-			const text = buildLogText(state, experiment, currentSegmentRuns, wallClockSeconds, gitNote);
+			const text = logPreamble + buildLogText(state, experiment, currentSegmentRuns, wallClockSeconds, gitNote);
 			if (state.maxExperiments !== null && currentSegmentRuns >= state.maxExperiments) {
 				runtime.autoresearchMode = false;
 				options.pi.appendEntry(

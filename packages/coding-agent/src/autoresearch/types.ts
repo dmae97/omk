@@ -64,7 +64,6 @@ export interface ExperimentState {
 	scopePaths: string[];
 	offLimits: string[];
 	constraints: string[];
-	segmentFingerprint: string | null;
 }
 
 export interface RunExperimentProgressDetails {
@@ -165,7 +164,6 @@ export interface AutoresearchJsonConfigEntry {
 	scopePaths?: string[];
 	offLimits?: string[];
 	constraints?: string[];
-	segmentFingerprint?: string;
 }
 
 export interface AutoresearchJsonRunEntry {

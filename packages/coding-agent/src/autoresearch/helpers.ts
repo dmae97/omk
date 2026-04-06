@@ -269,6 +269,46 @@ export async function readPendingRunSummary(
 	return null;
 }
 
+export async function abandonUnloggedAutoresearchRuns(
+	workDir: string,
+	loggedRunNumbers: ReadonlySet<number>,
+): Promise<number> {
+	const runsDir = path.join(workDir, ".autoresearch", "runs");
+	let entries: fs.Dirent[];
+	try {
+		entries = await fs.promises.readdir(runsDir, { withFileTypes: true });
+	} catch (error) {
+		if (isEnoent(error)) return 0;
+		throw error;
+	}
+
+	let abandoned = 0;
+	const stamp = new Date().toISOString();
+	for (const entry of entries) {
+		if (!entry.isDirectory()) continue;
+		const directoryName = entry.name;
+		const runDirectory = path.join(runsDir, directoryName);
+		const runJsonPath = path.join(runDirectory, "run.json");
+		let parsed: unknown;
+		try {
+			parsed = await Bun.file(runJsonPath).json();
+		} catch (error) {
+			if (isEnoent(error)) continue;
+			throw error;
+		}
+
+		const pending = parsePendingRunSummary(parsed, runDirectory, directoryName, loggedRunNumbers);
+		if (!pending) continue;
+
+		const existing =
+			typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
+		await Bun.write(runJsonPath, JSON.stringify({ ...existing, abandonedAt: stamp }, null, 2));
+		abandoned += 1;
+	}
+
+	return abandoned;
+}
+
 export function readConfig(cwd: string): AutoresearchConfig {
 	const configPath = path.join(cwd, "autoresearch.config.json");
 	try {
@@ -326,6 +366,7 @@ function parsePendingRunSummary(
 ): PendingRunSummary | null {
 	if (typeof value !== "object" || value === null) return null;
 	const candidate = value as {
+		abandonedAt?: unknown;
 		checks?: { durationSeconds?: unknown; passed?: unknown; timedOut?: unknown };
 		completedAt?: unknown;
 		command?: unknown;
@@ -340,6 +381,9 @@ function parsePendingRunSummary(
 		timedOut?: unknown;
 	};
 	if (candidate.loggedAt !== undefined || candidate.status !== undefined) {
+		return null;
+	}
+	if (typeof candidate.abandonedAt === "string" && candidate.abandonedAt.trim().length > 0) {
 		return null;
 	}
 
