@@ -4490,7 +4490,7 @@ export class AgentSession {
 						aborted: false,
 						willRetry: false,
 					});
-					if (compactionSettings.autoContinue !== false) {
+					if (!autoCompactionSignal.aborted && compactionSettings.autoContinue !== false) {
 						this.#scheduleAutoContinuePrompt(generation);
 					}
 					return;
