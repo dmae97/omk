@@ -67,7 +67,7 @@ An unlogged run artifact exists at `{{pending_run_directory}}`.
 
 - `init_experiment` — initialize or reset the experiment session for the current optimization target.
 - `run_experiment` — run a benchmark or experiment command with timing, output capture, structured metric parsing, and optional backpressure checks.
-- `log_experiment` — record the result, update the dashboard, persist JSONL history, auto-commit kept experiments, and auto-revert discarded or failed experiments.
+- `log_experiment` — record the result, update the dashboard, persist JSONL history, auto-commit kept experiments, and revert only run-modified files for discarded or failed experiments (pre-existing uncommitted changes are preserved).
 
 ### Operating protocol
 
@@ -98,7 +98,7 @@ An unlogged run artifact exists at `{{pending_run_directory}}`.
    - Interpret the result honestly.
    - Call `log_experiment` after every run (it refreshes benchmark/scope fields from `autoresearch.md` before logging so keep validation matches the file on disk).
    - Use `run_experiment` with `force: true` only when you must override the segment benchmark command or skip the direct-`autoresearch.sh` rule.
-   - On `log_experiment`, `force: true` also relaxes ASI requirements and allows keeping a primary-metric regression versus the best kept run in the segment; prefer normal logging when possible.
+   - On `log_experiment`, `force: true` relaxes ASI requirements and allows keeping a primary-metric regression; prefer normal logging when possible.
 7. Keep the primary metric as the decision maker.
    - `keep` when the primary metric improves.
    - `discard` when it regresses or stays flat.

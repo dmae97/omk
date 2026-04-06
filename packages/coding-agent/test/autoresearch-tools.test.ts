@@ -160,6 +160,9 @@ describe("autoresearch tools", () => {
 			checksScript: ["#!/usr/bin/env bash", "set -euo pipefail", "echo checks ok"].join("\n"),
 		});
 
+		vi.spyOn(git, "status").mockResolvedValue("");
+		vi.spyOn(git.show, "prefix").mockResolvedValue("");
+
 		const runtime = createSessionRuntime();
 		runtime.state.metricName = "runtime_ms";
 		runtime.state.metricUnit = "ms";
@@ -253,6 +256,7 @@ describe("autoresearch tools", () => {
 			parsedMetrics: { runtime_ms: 10 },
 			parsedPrimary: 10,
 			passed: true,
+			preRunDirtyPaths: [],
 			runDirectory: path.join(dir, ".autoresearch", "runs", "9999"),
 			runNumber: 99,
 		};
@@ -448,6 +452,9 @@ describe("autoresearch tools", () => {
 			checksScript: ["#!/usr/bin/env bash", "set -euo pipefail", "sleep 2", "echo done"].join("\n"),
 		});
 
+		vi.spyOn(git, "status").mockResolvedValue("");
+		vi.spyOn(git.show, "prefix").mockResolvedValue("");
+
 		const runtime = createSessionRuntime();
 		runtime.state.metricName = "runtime_ms";
 		runtime.state.metricUnit = "ms";
@@ -477,6 +484,9 @@ describe("autoresearch tools", () => {
 				"\n",
 			),
 		});
+
+		vi.spyOn(git, "status").mockResolvedValue("");
+		vi.spyOn(git.show, "prefix").mockResolvedValue("");
 
 		const runtime = createSessionRuntime();
 		runtime.state.metricName = "runtime_ms";
@@ -571,6 +581,7 @@ describe("autoresearch tools", () => {
 			parsedMetrics: { runtime_ms: 9 },
 			parsedPrimary: 9,
 			passed: true,
+			preRunDirtyPaths: [],
 			runDirectory,
 			runNumber: 1,
 		};
@@ -670,6 +681,7 @@ describe("autoresearch tools", () => {
 			parsedMetrics: { runtime_ms: 9 },
 			parsedPrimary: 9,
 			passed: true,
+			preRunDirtyPaths: [],
 			runDirectory: path.join(dir, ".autoresearch", "runs", "0001"),
 			runNumber: 1,
 		};
@@ -761,6 +773,7 @@ describe("autoresearch tools", () => {
 			parsedMetrics: { runtime_ms: 9 },
 			parsedPrimary: 9,
 			passed: true,
+			preRunDirtyPaths: [],
 			runDirectory: path.join(dir, ".autoresearch", "runs", "0001"),
 			runNumber: 1,
 		};
@@ -856,6 +869,7 @@ describe("autoresearch tools", () => {
 			parsedMetrics: { runtime_ms: 9 },
 			parsedPrimary: 9,
 			passed: true,
+			preRunDirtyPaths: [],
 			runDirectory: path.join(dir, ".autoresearch", "runs", "0003"),
 			runNumber: 3,
 		};
@@ -886,7 +900,7 @@ describe("autoresearch tools", () => {
 		expect(runtime.state.results).toHaveLength(2);
 	});
 
-	it("rejects log_experiment when configured secondary metrics are missing", async () => {
+	it("accepts log_experiment when configured secondary metrics are missing (secondary metrics are informational)", async () => {
 		const dir = makeTempDir();
 		tempDirs.push(dir);
 		writeAutoresearchWorkspace(dir, {
@@ -940,9 +954,14 @@ describe("autoresearch tools", () => {
 			parsedMetrics: { memory_mb: 32, runtime_ms: 9 },
 			parsedPrimary: 9,
 			passed: true,
+			preRunDirtyPaths: [],
 			runDirectory: path.join(dir, ".autoresearch", "runs", "0001"),
 			runNumber: 1,
 		};
+
+		vi.spyOn(git.branch, "current").mockResolvedValue("autoresearch/test-missing-secondary");
+		vi.spyOn(git, "status").mockResolvedValue("");
+		vi.spyOn(git.show, "prefix").mockResolvedValue("");
 
 		const tool = createLogExperimentTool({
 			dashboard: createDashboardStub(),
@@ -970,12 +989,12 @@ describe("autoresearch tools", () => {
 
 		expect(result.content[0]).toEqual({
 			type: "text",
-			text: expect.stringContaining("missing secondary metrics: tokens"),
+			text: expect.stringContaining("Logged run #1: discard"),
 		});
-		expect(runtime.state.results).toHaveLength(0);
+		expect(runtime.state.results).toHaveLength(1);
 	});
 
-	it("rejects new secondary metrics unless force is enabled", async () => {
+	it("accepts new secondary metrics without force (secondary metrics are informational)", async () => {
 		const dir = makeTempDir();
 		tempDirs.push(dir);
 		writeAutoresearchWorkspace(dir, {
@@ -1030,6 +1049,7 @@ describe("autoresearch tools", () => {
 			parsedMetrics: { runtime_ms: 9 },
 			parsedPrimary: 9,
 			passed: true,
+			preRunDirtyPaths: [],
 			runDirectory: path.join(dir, ".autoresearch", "runs", "0001"),
 			runNumber: 1,
 		};
@@ -1060,12 +1080,12 @@ describe("autoresearch tools", () => {
 
 		expect(result.content[0]).toEqual({
 			type: "text",
-			text: expect.stringContaining("new secondary metrics require force=true: tokens"),
+			text: expect.stringContaining("Logged run #1: discard"),
 		});
-		expect(runtime.state.results).toHaveLength(0);
+		expect(runtime.state.results).toHaveLength(1);
 	});
 
-	it("accepts a new secondary metric when force is enabled", async () => {
+	it("accepts a new secondary metric without force (secondary metrics are informational)", async () => {
 		const dir = makeTempDir();
 		tempDirs.push(dir);
 		writeAutoresearchWorkspace(dir);
@@ -1104,6 +1124,7 @@ describe("autoresearch tools", () => {
 			parsedMetrics: { runtime_ms: 9 },
 			parsedPrimary: 9,
 			passed: true,
+			preRunDirtyPaths: [],
 			runDirectory: path.join(dir, ".autoresearch", "runs", "0001"),
 			runNumber: 1,
 		};
@@ -1119,8 +1140,7 @@ describe("autoresearch tools", () => {
 				commit: "initial",
 				metric: 9,
 				status: "discard",
-				description: "force extra metric",
-				force: true,
+				description: "extra metric without force",
 				metrics: { memory_mb: 32, tokens: 100 },
 				asi: {
 					hypothesis: "capture an extra tradeoff",
@@ -1170,6 +1190,7 @@ describe("autoresearch tools", () => {
 			parsedMetrics: { runtime_ms: 9 },
 			parsedPrimary: 9,
 			passed: true,
+			preRunDirtyPaths: [],
 			runDirectory: path.join(dir, ".autoresearch", "runs", "0001"),
 			runNumber: 1,
 		};
@@ -1229,6 +1250,7 @@ describe("autoresearch tools", () => {
 			parsedMetrics: null,
 			parsedPrimary: null,
 			passed: false,
+			preRunDirtyPaths: [],
 			runDirectory: path.join(dir, ".autoresearch", "runs", "0001"),
 			runNumber: 1,
 		};
@@ -1294,6 +1316,7 @@ describe("autoresearch tools", () => {
 			parsedMetrics: null,
 			parsedPrimary: 10,
 			passed: false,
+			preRunDirtyPaths: [],
 			runDirectory: path.join(dir, ".autoresearch", "runs", "0001"),
 			runNumber: 1,
 		};
@@ -1371,6 +1394,7 @@ describe("autoresearch tools", () => {
 			parsedMetrics: { runtime_ms: 9 },
 			parsedPrimary: 9,
 			passed: true,
+			preRunDirtyPaths: [],
 			runDirectory: path.join(dir, ".autoresearch", "runs", "0001"),
 			runNumber: 1,
 		};
@@ -1448,6 +1472,7 @@ describe("autoresearch tools", () => {
 			parsedMetrics: { runtime_ms: 9 },
 			parsedPrimary: 9,
 			passed: true,
+			preRunDirtyPaths: [],
 			runDirectory: path.join(dir, ".autoresearch", "runs", "0001"),
 			runNumber: 1,
 		};
@@ -1483,12 +1508,13 @@ describe("autoresearch tools", () => {
 		expect(runtime.state.results).toHaveLength(0);
 	});
 
-	it("removes ignored experiment artifacts on discard while preserving autoresearch control files", async () => {
+	it("reverts run-modified files on discard while preserving autoresearch control files", async () => {
 		const dir = makeTempDir();
 		tempDirs.push(dir);
 		writeAutoresearchWorkspace(dir);
-		fs.writeFileSync(path.join(dir, ".gitignore"), "tmp-artifact/\n");
 		fs.writeFileSync(path.join(dir, "autoresearch.program.md"), "# Strategy\n");
+		fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+		fs.writeFileSync(path.join(dir, "src", "main.ts"), "export const value = 1;\n");
 
 		await $`git init`.cwd(dir).quiet();
 		await $`git config user.email test@example.com`.cwd(dir).quiet();
@@ -1497,8 +1523,9 @@ describe("autoresearch tools", () => {
 		await $`git commit -m initial`.cwd(dir).quiet();
 		await $`git checkout -b autoresearch/test-discard-cleanup`.cwd(dir).quiet();
 
-		fs.mkdirSync(path.join(dir, "tmp-artifact"), { recursive: true });
-		fs.writeFileSync(path.join(dir, "tmp-artifact", "result.txt"), "temporary benchmark output\n");
+		// Modify a tracked file and create an untracked file (simulating run-produced changes)
+		fs.writeFileSync(path.join(dir, "src", "main.ts"), "export const value = 99;\n");
+		fs.writeFileSync(path.join(dir, "src", "new-file.ts"), "export const extra = true;\n");
 		await Bun.write(
 			path.join(dir, ".autoresearch", "runs", "0001", "run.json"),
 			JSON.stringify({
@@ -1524,6 +1551,7 @@ describe("autoresearch tools", () => {
 			parsedMetrics: { runtime_ms: 10 },
 			parsedPrimary: 10,
 			passed: true,
+			preRunDirtyPaths: [],
 			runDirectory: path.join(dir, ".autoresearch", "runs", "0001"),
 			runNumber: 1,
 		};
@@ -1542,7 +1570,7 @@ describe("autoresearch tools", () => {
 				description: "Discard noisy run",
 				asi: {
 					hypothesis: "investigate cache behavior",
-					rollback_reason: "ignored artifact should be cleaned",
+					rollback_reason: "changes did not help",
 					next_action_hint: "try a cleaner setup",
 				},
 			},
@@ -1555,7 +1583,11 @@ describe("autoresearch tools", () => {
 			type: "text",
 			text: expect.stringContaining("Logged run #1: discard"),
 		});
-		expect(fs.existsSync(path.join(dir, "tmp-artifact"))).toBe(false);
+		// Tracked file should be reverted to its committed state
+		expect(fs.readFileSync(path.join(dir, "src", "main.ts"), "utf8")).toBe("export const value = 1;\n");
+		// Untracked file should be removed
+		expect(fs.existsSync(path.join(dir, "src", "new-file.ts"))).toBe(false);
+		// Autoresearch control files should be preserved
 		expect(fs.existsSync(path.join(dir, "autoresearch.md"))).toBe(true);
 		expect(fs.existsSync(path.join(dir, "autoresearch.program.md"))).toBe(true);
 	});
@@ -1722,6 +1754,9 @@ describe("autoresearch tools", () => {
 			benchmarkScript: ["#!/usr/bin/env bash", "set -euo pipefail", "echo METRIC runtime_ms=42"].join("\n"),
 		});
 
+		vi.spyOn(git, "status").mockResolvedValue("");
+		vi.spyOn(git.show, "prefix").mockResolvedValue("");
+
 		const runtime = createSessionRuntime();
 		runtime.state.metricName = "runtime_ms";
 		runtime.state.metricUnit = "ms";
@@ -1784,6 +1819,7 @@ describe("autoresearch tools", () => {
 			parsedMetrics: { runtime_ms: 9 },
 			parsedPrimary: 9,
 			passed: true,
+			preRunDirtyPaths: [],
 			runDirectory: path.join(dir, ".autoresearch", "runs", "0001"),
 			runNumber: 1,
 		};
@@ -1874,6 +1910,7 @@ describe("autoresearch tools", () => {
 			parsedMetrics: { runtime_ms: 9 },
 			parsedPrimary: 9,
 			passed: true,
+			preRunDirtyPaths: [],
 			runDirectory: path.join(dir, ".autoresearch", "runs", "0003"),
 			runNumber: 3,
 		};
@@ -1941,6 +1978,7 @@ describe("autoresearch tools", () => {
 			parsedMetrics: { runtime_ms: 9 },
 			parsedPrimary: 9,
 			passed: true,
+			preRunDirtyPaths: [],
 			runDirectory: path.join(dir, ".autoresearch", "runs", "0001"),
 			runNumber: 1,
 		};

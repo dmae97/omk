@@ -95,6 +95,7 @@ export interface RunDetails {
 	parsedAsi: ASIData | null;
 	metricName: string;
 	metricUnit: string;
+	preRunDirtyPaths: string[];
 	truncation?: TruncationResult;
 	fullOutputPath?: string;
 }
@@ -121,6 +122,7 @@ export interface PendingRunSummary {
 	parsedMetrics: NumericMetricMap | null;
 	parsedPrimary: number | null;
 	passed: boolean;
+	preRunDirtyPaths: string[];
 	runDirectory: string;
 	runNumber: number;
 }

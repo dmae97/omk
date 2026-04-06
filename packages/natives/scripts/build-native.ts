@@ -136,18 +136,24 @@ async function installBinary(src: string, dest: string): Promise<void> {
 	}
 }
 
+const isCI = Boolean(Bun.env.CI);
+const useLocalProfile = !isDev && !isCI && !isCrossCompile;
+const profile = isDev ? "dev" : useLocalProfile ? "local" : "release";
+
 const cargoArgs = ["build"];
-if (!isDev) cargoArgs.push("--release");
+if (profile !== "dev") cargoArgs.push("--profile", profile);
 if (crossTarget) cargoArgs.push("--target", crossTarget);
 
-console.log(`Building pi-natives for ${targetPlatform}-${targetArch}${variantSuffix}${isDev ? " (debug)" : ""}…`);
+const profileLabel = isDev ? " (debug)" : useLocalProfile ? " (local)" : "";
+console.log(`Building pi-natives for ${targetPlatform}-${targetArch}${variantSuffix}${profileLabel}…`);
 const buildResult = await $`cargo ${cargoArgs}`.cwd(rustDir).nothrow();
 if (buildResult.exitCode !== 0) {
 	const stderr = buildResult.stderr?.toString("utf-8") ?? "";
 	throw new Error(`cargo build --release failed${stderr ? `:\n${stderr}` : ""}`);
 }
 
-const profile = isDev ? "debug" : "release";
+// Cargo outputs "local" profile artifacts into the "local" directory
+const profileDir = isDev ? "debug" : useLocalProfile ? "local" : "release";
 const targetRoots = [
 	Bun.env.CARGO_TARGET_DIR ? path.resolve(Bun.env.CARGO_TARGET_DIR) : undefined,
 	path.join(repoRoot, "target"),
@@ -156,9 +162,9 @@ const targetRoots = [
 
 const profileDirs = targetRoots.flatMap(root => {
 	if (crossTarget) {
-		return [path.join(root, crossTarget, profile), path.join(root, profile)];
+		return [path.join(root, crossTarget, profileDir), path.join(root, profileDir)];
 	}
-	return [path.join(root, profile)];
+	return [path.join(root, profileDir)];
 });
 
 const libraryNames = ["libpi_natives.so", "libpi_natives.dylib", "pi_natives.dll", "libpi_natives.dll"];

@@ -40,6 +40,12 @@ const initExperimentSchema = Type.Object({
 				"When true, mark all completed but unlogged run artifacts as abandoned so initialization can proceed without logging them first.",
 		}),
 	),
+	new_segment: Type.Optional(
+		Type.Boolean({
+			description:
+				"When true, force a new segment even when the contract fields have not changed. Without this, re-initialization with matching contract is a no-op.",
+		}),
+	),
 	metric_name: Type.Optional(
 		Type.String({
 			description: "Primary metric name shown in the dashboard. Required when from_autoresearch_md is false.",
@@ -119,14 +125,17 @@ export function createInitExperimentTool(
 
 			const pendingRun = await readPendingRunSummary(workDir, loggedRunNumbers);
 			if (pendingRun) {
+				const metricInfo = pendingRun.parsedPrimary !== null ? `, metric=${pendingRun.parsedPrimary}` : "";
+				const passedInfo = pendingRun.passed ? "passed" : "failed";
 				return {
 					content: [
 						{
 							type: "text",
 							text:
 								abandonSummary +
-								`Error: run #${pendingRun.runNumber} has not been logged yet. ` +
-								"Call log_experiment before re-initializing the current segment, or pass abandon_unlogged_runs=true.",
+								`Error: run #${pendingRun.runNumber} has not been logged yet.\n` +
+								`Pending: command="${pendingRun.command}"${metricInfo}, ${passedInfo}\n` +
+								"Call log_experiment before re-initializing, or pass abandon_unlogged_runs=true.",
 						},
 					],
 				};
@@ -265,6 +274,37 @@ export function createInitExperimentTool(
 									`Expected: ${contractResult.contract.constraints.join(", ") || "(empty)"}`,
 							},
 						],
+					};
+				}
+			}
+
+			// Check if contract matches current state — if so, re-init is a no-op
+			if (isReinitializing && params.new_segment !== true) {
+				const contract = contractResult.contract;
+				const bm = contract.benchmark;
+				const contractMatches =
+					(bm.primaryMetric ?? "metric") === state.metricName &&
+					bm.metricUnit === state.metricUnit &&
+					(bm.direction ?? "lower") === state.bestDirection &&
+					(bm.command ?? null) === state.benchmarkCommand &&
+					contractPathListsEqual(contract.scopePaths, state.scopePaths) &&
+					contractPathListsEqual(contract.offLimits, state.offLimits) &&
+					contractListsEqual(contract.constraints, state.constraints);
+				if (contractMatches) {
+					runtime.autoresearchMode = true;
+					runtime.autoResumeArmed = true;
+					options.dashboard.updateWidget(ctx, runtime);
+					options.dashboard.requestRender();
+					return {
+						content: [
+							{
+								type: "text",
+								text:
+									abandonSummary +
+									`Experiment session already initialized with matching contract. Continuing segment ${state.currentSegment}.`,
+							},
+						],
+						details: { state: cloneExperimentState(state) },
 					};
 				}
 			}

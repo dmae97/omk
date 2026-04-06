@@ -1,24 +1,27 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added `new_segment` option to `init_experiment` to force a new segment even when contract fields match, enabling re-initialization with unchanged parameters
+- Added `skip_restore` option to `log_experiment` to preserve working tree state when discarding or failing experiments, useful when runs did not modify tracked files
+- Added tracking of pre-run dirty paths to distinguish run-produced changes from pre-existing uncommitted changes
 - Autoresearch `init_experiment` options `from_autoresearch_md` (load contract from `autoresearch.md` with only `name`) and `abandon_unlogged_runs` (stamp pending run artifacts abandoned)
 - Autoresearch `run_experiment` option `force` to override benchmark command equality and the direct-`autoresearch.sh` invocation rule (with warnings when used)
 - `abandonUnloggedAutoresearchRuns` helper and `abandonedAt` run metadata so abandoned artifacts are ignored as pending runs
-
-### Changed
-
-- Autoresearch `log_experiment` refreshes benchmark/scope/constraints from `autoresearch.md` after resolving a pending run (so keep validation matches disk); success output includes a short refresh notice
-- Autoresearch `log_experiment` `force` also skips ASI requirements and allows keeping a primary-metric regression versus the best kept run in the segment
-
-### Added
-
 - Support for LSP diagnostic versioning to track document versions and suppress stale diagnostics
 - Options parameter to `waitForDiagnostics` for controlling diagnostic freshness validation with `expectedDocumentVersion` and `allowUnversioned` flags
 
 ### Changed
 
+- Changed `log_experiment` revert behavior to only restore run-modified files instead of reverting entire working tree, preserving pre-existing uncommitted changes
+- Changed `init_experiment` error message for pending unlogged runs to include command, metric, and pass/fail status for better context
+- Changed `init_experiment` to detect when contract fields match current state and skip re-initialization (no-op) unless `new_segment=true`
+- Changed secondary metrics handling to be informational only—missing or new secondary metrics no longer require `force=true` flag
+- Updated prompt documentation to clarify that `log_experiment` reverts only run-modified files and preserves pre-existing changes
+- Autoresearch `log_experiment` refreshes benchmark/scope/constraints from `autoresearch.md` after resolving a pending run (so keep validation matches disk); success output includes a short refresh notice
+- Autoresearch `log_experiment` `force` also skips ASI requirements and allows keeping a primary-metric regression versus the best kept run in the segment
 - `/autoresearch` with no `autoresearch.md` matches `/plan`-style flow: bare command enables mode and waits for the next composer message when off, or disables when already on; non-empty slash args are submitted as the user message only; setup protocol lives in the autoresearch system prompt (`command-initialize.md` removed)
 - Enabled `versionSupport` in LSP client capabilities to receive diagnostic version information from servers
 - Diagnostics storage now tracks both diagnostics and their associated document version for freshness validation
@@ -26,13 +29,15 @@
 - Redesigned chunk-mode `read` output to use a single recursive chunk rendering rule with `$XXXX` checksum suffixes and inline large-chunk previews
 - Normalized copied `#chunk_path$XXXX` selectors across chunk-mode `read` and `edit` inputs so pasted chunk headers resolve without manual cleanup
 
-### Fixed
-- `/autoresearch` with no arguments toggles off when mode is already on (same idea as `/plan`), and slash-argument completion no longer offers `off`/`clear` on an empty prefix so Tab after the command does not auto-insert a subcommand.
-- Fixed chunk-mode edit/read edge cases around zero-width gap splices, stale batch diagnostics, grouped Go receiver rendering, rendered line-count headers, and parse rejection location details.
-
 ### Removed
 
 - Autoresearch segment fingerprint hashing and `segmentFingerprint` on experiment state / `autoresearch.jsonl` config lines
+
+### Fixed
+
+- Fixed `log_experiment` to correctly identify and revert only files modified by the run, leaving pre-existing uncommitted changes intact
+- `/autoresearch` with no arguments toggles off when mode is already on (same idea as `/plan`), and slash-argument completion no longer offers `off`/`clear` on an empty prefix so Tab after the command does not auto-insert a subcommand.
+- Fixed chunk-mode edit/read edge cases around zero-width gap splices, stale batch diagnostics, grouped Go receiver rendering, rendered line-count headers, and parse rejection location details.
 
 ## [13.19.0] - 2026-04-05
 ### Added

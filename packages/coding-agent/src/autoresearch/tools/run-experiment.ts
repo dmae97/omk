@@ -8,6 +8,8 @@ import type { ToolDefinition } from "../../extensibility/extensions";
 import type { Theme } from "../../modes/theme/theme";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, truncateTail } from "../../session/streaming-output";
 import { replaceTabs, shortenPath, truncateToWidth } from "../../tools/render-utils";
+import * as git from "../../utils/git";
+import { parseWorkDirDirtyPaths } from "../git";
 import {
 	EXPERIMENT_MAX_BYTES,
 	EXPERIMENT_MAX_LINES,
@@ -15,6 +17,7 @@ import {
 	formatNum,
 	getAutoresearchRunDirectory,
 	getNextAutoresearchRunNumber,
+	isAutoresearchLocalStatePath,
 	isAutoresearchShCommand,
 	killTree,
 	parseAsiLines,
@@ -156,6 +159,17 @@ export function createRunExperimentTool(
 			const checksLogPath = path.join(runDirectory, "checks.log");
 			const runJsonPath = path.join(runDirectory, "run.json");
 			await fs.promises.mkdir(runDirectory, { recursive: true });
+
+			const preRunStatus = await git.status(workDir, {
+				porcelainV1: true,
+				untrackedFiles: "all",
+				z: true,
+			});
+			const workDirPrefix = await git.show.prefix(workDir);
+			const preRunDirtyPaths = parseWorkDirDirtyPaths(preRunStatus, workDirPrefix).filter(
+				p => !isAutoresearchLocalStatePath(p),
+			);
+
 			runtime.lastRunChecks = null;
 			runtime.lastRunDuration = null;
 			runtime.lastRunAsi = null;
@@ -171,6 +185,7 @@ export function createRunExperimentTool(
 						benchmarkLogPath,
 						checksLogPath,
 						command: params.command,
+						preRunDirtyPaths,
 						startedAt: new Date().toISOString(),
 					},
 					null,
@@ -287,6 +302,7 @@ export function createRunExperimentTool(
 				parsedAsi,
 				metricName: state.metricName,
 				metricUnit: state.metricUnit,
+				preRunDirtyPaths,
 				truncation: llmTruncation.truncated ? llmTruncation : undefined,
 				fullOutputPath: execution.logPath,
 			};
@@ -300,6 +316,7 @@ export function createRunExperimentTool(
 				parsedMetrics,
 				parsedPrimary,
 				passed: resultDetails.passed,
+				preRunDirtyPaths,
 				runDirectory,
 				runNumber,
 			};
@@ -329,6 +346,7 @@ export function createRunExperimentTool(
 						parsedMetrics,
 						parsedPrimary,
 						parsedAsi,
+						preRunDirtyPaths,
 						truncation: resultDetails.truncation,
 						fullOutputPath: resultDetails.fullOutputPath,
 					},

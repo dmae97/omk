@@ -375,6 +375,7 @@ function parsePendingRunSummary(
 		parsedAsi?: unknown;
 		parsedMetrics?: unknown;
 		parsedPrimary?: unknown;
+		preRunDirtyPaths?: unknown;
 		runNumber?: unknown;
 		status?: unknown;
 		timedOut?: unknown;
@@ -432,6 +433,10 @@ function parsePendingRunSummary(
 			: null;
 	const checksTimedOut = candidate.checks?.timedOut === true;
 
+	const preRunDirtyPaths = Array.isArray(candidate.preRunDirtyPaths)
+		? candidate.preRunDirtyPaths.filter((item): item is string => typeof item === "string")
+		: [];
+
 	return {
 		checksDurationSeconds,
 		checksPass,
@@ -442,6 +447,7 @@ function parsePendingRunSummary(
 		parsedMetrics,
 		parsedPrimary,
 		passed: exitCode === 0 && !timedOut && checksPass !== false,
+		preRunDirtyPaths,
 		runDirectory,
 		runNumber,
 	};
