@@ -9,11 +9,11 @@ type ChunkLookup<'a> = HashMap<&'a str, &'a ChunkNode>;
 
 env_uint! {
 	 // Configured full display threshold.
-	 static FULL_DISPLAY_THRESHOLD: usize = "PI_CHUNK_FULL_DISPLAY_THRESHOLD" or 40 => [1, usize::MAX];
+	 static FULL_DISPLAY_THRESHOLD: usize = "PI_CHUNK_FULL_DISPLAY_THRESHOLD" or 80 => [1, usize::MAX];
 	 // Configured preview head lines.
-	 static PREVIEW_HEAD_LINES: usize = "PI_CHUNK_PREVIEW_HEAD_LINES" or 10 => [1, usize::MAX];
+	 static PREVIEW_HEAD_LINES: usize = "PI_CHUNK_PREVIEW_HEAD_LINES" or 12 => [1, usize::MAX];
 	 // Configured preview tail lines.
-	 static PREVIEW_TAIL_LINES: usize = "PI_CHUNK_PREVIEW_TAIL_LINES" or 5 => [1, usize::MAX];
+	 static PREVIEW_TAIL_LINES: usize = "PI_CHUNK_PREVIEW_TAIL_LINES" or 4 => [1, usize::MAX];
 }
 
 pub fn line_to_containing_chunk_path(tree: &ChunkTree, line: u32) -> Option<String> {

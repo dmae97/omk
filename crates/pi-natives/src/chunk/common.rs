@@ -16,7 +16,7 @@ env_uint! {
 	// Configured max chunk lines.
 	pub static MAX_CHUNK_LINES: usize = "PI_CHUNK_MAX_LINES" or 25 => [1, usize::MAX];
 	// Configured min recurse savings.
-	pub static MIN_RECURSE_SAVINGS: usize = "PI_CHUNK_MIN_SAVINGS" or 5 => [1, usize::MAX];
+	pub static MIN_RECURSE_SAVINGS: usize = "PI_CHUNK_MIN_SAVINGS" or 4 => [1, usize::MAX];
 }
 
 // ── Internal types ───────────────────────────────────────────────────────
