@@ -72,6 +72,8 @@ pub struct RenderChunkTreeParams {
 	pub render_children_only: bool,
 	#[napi(js_name = "omitChecksum")]
 	pub omit_checksum:        bool,
+	#[napi(js_name = "anchorStyle")]
+	pub anchor_style:         Option<String>,
 	#[napi(js_name = "showLeafPreview")]
 	pub show_leaf_preview:    bool,
 	#[napi(js_name = "tabReplacement")]

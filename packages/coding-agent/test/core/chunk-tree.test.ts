@@ -714,7 +714,7 @@ describe("formatChunkedRead", () => {
 			language: "typescript",
 		});
 
-		expect(result.text).toMatch(new RegExp(`with-tail\\.ts  ·  ${totalLines}ln`));
+		expect(result.text).toMatch(new RegExp(`with-tail\\.ts·${totalLines}L`));
 	});
 
 	test("leaf read shows absolute file lines and raw source indentation", async () => {
@@ -955,7 +955,7 @@ describe("grouped Go receiver chunk headers", () => {
 			language: "go",
 		});
 
-		expect(result.text).toContain("server.go:type_Server  ·  6ln");
+		expect(result.text).toContain("server.go:type_Server·6ln");
 		expect(result.text).toContain(".fn_Start#");
 		expect(result.text).toContain(".fn_Stop#");
 	});

@@ -1,5 +1,6 @@
 import * as path from "node:path";
 import {
+	type ChunkAnchorStyle,
 	type ChunkNode,
 	type ChunkTree,
 	lineToContainingChunkPath,
@@ -7,9 +8,24 @@ import {
 	renderChunkTree,
 	resolveChunkPath,
 } from "@oh-my-pi/pi-natives";
+import { $env } from "@oh-my-pi/pi-utils";
+import type { Settings } from "../config/settings";
+import { generateUnifiedDiffString } from "../patch/diff";
 import { HASHLINE_NIBBLE_ALPHABET } from "../patch/hashline";
 import { normalizeToLF, stripBom } from "../patch/normalize";
 import { stripNewLinePrefixes } from "../patch/prefix-stripping";
+
+export function resolveAnchorStyle(settings: Settings) {
+	switch (Bun.env.PI_ANCHOR_STYLE) {
+		case "full":
+			return "full";
+		case "kind":
+			return "kind";
+		case "bare":
+			return "bare";
+	}
+	return settings.get("read.anchorstyle");
+}
 
 const readEnvInt = (name: string, defaultValue: number): number => {
 	const v = Bun.env[name];
@@ -117,10 +133,8 @@ type ParsedChunkReadPath = {
  * `PI_CHUNI_VALIDATE` — when `0`, chunk edit tool skips the validation of the edited
  */
 export function chunkValidateEnabled(): boolean {
-	const v = Bun.env.PI_CHUNK_VALIDATE;
-	if (v === undefined || v === "" || v === "1") return true;
-	if (v === "0") return false;
-	throw new Error(`Invalid PI_CHUNK_VALIDATE: expected "0" or "1" (default: 1), got ${JSON.stringify(v)}`);
+	const v = $env.PI_CHUNK_VALIDATE;
+	return v === undefined || v === "" || v === "1";
 }
 
 function normalizeChunkSource(text: string): string {
@@ -331,8 +345,8 @@ function computeInsertIndent(state: MutableChunkState, anchor: ChunkNode, inside
 // Content prefix stripping
 // ---------------------------------------------------------------------------
 
-/** Chunk gutter: code rows `…<digits> |` / `…<digits> │` (space optional); meta rows dropped when pasted. */
-const CHUNK_GUTTER_CODE_ROW_RE = /^[\t ]*(\d+)\s*[|│]\s*(.*)$/;
+/** Chunk gutter: code rows `…<digits> |` / `…<digits> |` (space optional); meta rows dropped when pasted. */
+const CHUNK_GUTTER_CODE_ROW_RE = /^[\t ]*(\d+)\s*[|]\s*(.*)$/;
 
 function stripContentPrefixes(content: string): string {
 	const lines = content.split("\n");
@@ -374,6 +388,159 @@ function fileLanguageTag(filePath: string, language?: string): string | undefine
 
 function normalizeLanguage(language: string | undefined): string {
 	return language?.trim().toLowerCase() || "";
+}
+
+export type EditAnchorStyle = ChunkAnchorStyle;
+
+const DEFAULT_ANCHOR_STYLE: EditAnchorStyle = "full";
+const UNIFIED_HUNK_HEADER_RE = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@$/;
+
+type UnifiedDiffHunk = {
+	header: string;
+	lines: string[];
+	newStart: number;
+	newChangedLines: number[];
+};
+
+function normalizeAnchorStyle(style: EditAnchorStyle | undefined): EditAnchorStyle {
+	return style ?? DEFAULT_ANCHOR_STYLE;
+}
+
+function formatAnchorName(name: string, style: EditAnchorStyle, omitChecksum: boolean): string {
+	if (omitChecksum || style === "full") {
+		return name;
+	}
+	if (style === "bare") {
+		return "";
+	}
+	const underscoreIndex = name.indexOf("_");
+	return underscoreIndex === -1 ? name : name.slice(0, underscoreIndex + 1);
+}
+
+function formatAnchorTag(
+	chunk: Pick<ChunkNode, "name" | "checksum">,
+	depth: number,
+	style: EditAnchorStyle,
+	omitChecksum = false,
+): string {
+	const prefix = depth === 0 ? ":" : ".";
+	const checksum = omitChecksum ? "" : `#${chunk.checksum}`;
+	return `[${prefix}${formatAnchorName(chunk.name, style, omitChecksum)}${checksum}]`;
+}
+
+function formatRootAnchor(title: string, checksum: string): string {
+	return `${title}·#${checksum}`;
+}
+
+function parseUnifiedDiffHunks(diff: string): UnifiedDiffHunk[] {
+	const lines = diff.split("\n");
+	const hunks: UnifiedDiffHunk[] = [];
+	let current: UnifiedDiffHunk | undefined;
+	let newLine = 0;
+
+	for (const line of lines) {
+		const match = line.match(UNIFIED_HUNK_HEADER_RE);
+		if (match) {
+			if (current) {
+				hunks.push(current);
+			}
+			newLine = Number.parseInt(match[3]!, 10);
+			current = {
+				header: line,
+				lines: [],
+				newStart: newLine,
+				newChangedLines: [],
+			};
+			continue;
+		}
+		if (!current) {
+			continue;
+		}
+		current.lines.push(line);
+		if (line.startsWith("+")) {
+			current.newChangedLines.push(newLine);
+			newLine++;
+			continue;
+		}
+		if (line.startsWith(" ")) {
+			newLine++;
+		}
+	}
+
+	if (current) {
+		hunks.push(current);
+	}
+	return hunks;
+}
+
+function commonChunkPath(paths: string[]): string {
+	if (paths.length === 0) {
+		return "";
+	}
+	const parts = paths.map(candidate => (candidate.length === 0 ? [] : candidate.split(".")));
+	const shared: string[] = [];
+	for (let index = 0; ; index++) {
+		const value = parts[0]?.[index];
+		if (!value || parts.some(part => part[index] !== value)) {
+			return shared.join(".");
+		}
+		shared.push(value);
+	}
+}
+
+function getChunkPathTrail(chunkPath: string): string[] {
+	if (chunkPath.length === 0) {
+		return [];
+	}
+	const parts = chunkPath.split(".");
+	return parts.map((_, index) => parts.slice(0, index + 1).join("."));
+}
+
+function fallbackHunkLines(tree: ChunkTree, newStart: number): number[] {
+	if (tree.lineCount === 0) {
+		return [];
+	}
+	return [...new Set([newStart, newStart - 1].map(line => Math.min(Math.max(line, 1), tree.lineCount)))];
+}
+
+function resolveHunkChunkPath(tree: ChunkTree, hunk: UnifiedDiffHunk): string {
+	const lines = hunk.newChangedLines.length > 0 ? hunk.newChangedLines : fallbackHunkLines(tree, hunk.newStart);
+	return commonChunkPath(lines.map(line => lineToContainingChunkPath(tree, line) ?? ""));
+}
+
+function renderChangedHunks(params: {
+	tree: ChunkTree;
+	displayPath: string;
+	diff: string;
+	anchorStyle?: EditAnchorStyle;
+}): string {
+	const root = getChunk(params.tree, "");
+	if (!root) {
+		throw new Error("Chunk tree is missing the root chunk");
+	}
+	const style = normalizeAnchorStyle(params.anchorStyle);
+	const hunks = parseUnifiedDiffHunks(params.diff);
+	if (hunks.length === 0) {
+		return formatRootAnchor(params.displayPath, root.checksum);
+	}
+	return hunks
+		.map(hunk => {
+			const trailPaths = getChunkPathTrail(resolveHunkChunkPath(params.tree, hunk));
+			const blockLines = [formatRootAnchor(params.displayPath, root.checksum)];
+			for (const [index, chunkPath] of trailPaths.entries()) {
+				const chunk = getChunk(params.tree, chunkPath);
+				if (!chunk) {
+					continue;
+				}
+				blockLines.push(`${"  ".repeat(index + 1)}${formatAnchorTag(chunk, index, style)}`);
+			}
+			const diffIndent = "  ".repeat(trailPaths.length + 1);
+			for (const line of [hunk.header, ...hunk.lines]) {
+				blockLines.push(`${diffIndent}${line}`);
+			}
+			return blockLines.join("\n");
+		})
+		.join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -436,10 +603,11 @@ export async function formatChunkedRead(params: {
 	language?: string;
 	/** Suppress #checksum suffix in headers (e.g. when the edit tool is unavailable). */
 	omitChecksum?: boolean;
+	anchorStyle?: EditAnchorStyle;
 	/** Absolute file line range (`read` `sel` with a chunk path). Clipped to the chunk span. */
 	absoluteLineRange?: { startLine: number; endLine?: number };
 }): Promise<{ text: string; resolvedPath?: string; chunk?: ChunkReadTarget }> {
-	const { filePath, readPath, cwd, language, omitChecksum = false, absoluteLineRange } = params;
+	const { filePath, readPath, cwd, language, omitChecksum = false, anchorStyle, absoluteLineRange } = params;
 	const normalizedLanguage = normalizeLanguage(language);
 	const { selector } = parseChunkReadPath(readPath);
 	const visibleRange = parseVisibleLineRange(selector);
@@ -477,6 +645,7 @@ export async function formatChunkedRead(params: {
 			visibleRange: clampedRange,
 			renderChildrenOnly: true,
 			omitChecksum,
+			anchorStyle,
 			showLeafPreview: true,
 			tabReplacement: "    ",
 		});
@@ -497,6 +666,7 @@ export async function formatChunkedRead(params: {
 				checksum: root.checksum,
 				renderChildrenOnly: true,
 				omitChecksum,
+				anchorStyle,
 				showLeafPreview: true,
 				tabReplacement: "    ",
 			}),
@@ -538,6 +708,7 @@ export async function formatChunkedRead(params: {
 				visibleRange: { startLine: iLow, endLine: iHigh },
 				renderChildrenOnly: false,
 				omitChecksum,
+				anchorStyle,
 				showLeafPreview: true,
 				tabReplacement: "    ",
 			}),
@@ -556,6 +727,7 @@ export async function formatChunkedRead(params: {
 			checksum: chunk.checksum,
 			renderChildrenOnly: false,
 			omitChecksum,
+			anchorStyle,
 			showLeafPreview: true,
 			tabReplacement: "    ",
 		}),
@@ -1259,6 +1431,7 @@ export function applyChunkEdits(params: {
 	operations: ChunkEditOperation[];
 	defaultSelector?: string;
 	defaultCrc?: string;
+	anchorStyle?: EditAnchorStyle;
 }): ChunkEditResult {
 	const normalizedLanguage = normalizeLanguage(params.language);
 	const originalText = normalizeChunkSource(params.source);
@@ -1523,29 +1696,33 @@ export function applyChunkEdits(params: {
 	if (!parseValid) {
 		warnings.push(`Edit introduced ${state.tree.parseErrors - initialParseErrors} new parse error(s).`);
 	}
-
 	const displayPath = displayPathForFile(params.filePath, params.cwd);
-	const root = getChunk(state.tree, "");
-	if (!root) {
-		throw new Error("Chunk tree is missing the root chunk");
-	}
-	const responseText = renderChunkTree({
-		tree: state.tree,
-		chunkPath: root.path,
-		source: maskChunkDisplaySource(state.source, normalizedLanguage),
-		title: displayPath,
-		languageTag: fileLanguageTag(params.filePath, normalizedLanguage),
-		checksum: root.checksum,
-		renderChildrenOnly: true,
-		omitChecksum: false,
-		showLeafPreview: true,
-		tabReplacement: "    ",
-	});
+	const changed = originalText !== state.source;
+	const responseText = changed
+		? renderChangedHunks({
+				tree: state.tree,
+				displayPath,
+				diff: generateUnifiedDiffString(originalText, state.source).diff,
+				anchorStyle: params.anchorStyle,
+			})
+		: renderChunkTree({
+				tree: state.tree,
+				chunkPath: "",
+				source: maskChunkDisplaySource(state.source, normalizedLanguage),
+				title: displayPath,
+				languageTag: fileLanguageTag(params.filePath, normalizedLanguage),
+				checksum: state.tree.checksum,
+				renderChildrenOnly: true,
+				omitChecksum: false,
+				anchorStyle: params.anchorStyle,
+				showLeafPreview: true,
+				tabReplacement: "    ",
+			});
 	return {
 		diffSourceBefore: originalText,
 		diffSourceAfter: state.source,
 		responseText,
-		changed: originalText !== state.source,
+		changed,
 		parseValid,
 		touchedPaths,
 		warnings,

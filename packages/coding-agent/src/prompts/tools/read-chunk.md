@@ -16,7 +16,7 @@ Reads files using syntax-aware chunks.
 |`L50` or `L50-L120`|Absolute file line range|
 |`raw`|Read full raw file content (no chunk rendering)|
 
-Each anchor line shows `<:name#CCCC>` or `<.name#CCCC>` — `#CCCC` is the edit checksum. Copy it when editing with `chunk-edit`.
+Each anchor line shows `[:name#CCCC]` or `[.name#CCCC]` — `#CCCC` is the edit checksum. Copy it when editing with `chunk-edit`.
 
 If `path:chunk` and `sel` are both provided, `sel` wins. Missing chunk paths return `[Chunk not found]`.
 
@@ -27,21 +27,19 @@ Code rows use **absolute file line numbers** in the gutter. `chunk-edit` `line`/
 `read(path="src/math.ts")`
 
 ```text
-   │ src/math.ts  ·  120ln  ·  ts  ·  #A744
-   │
-
- 5 │ export function sum(values: readonly number[]): number {
-   │ <:sum#3286>
- 6 │   return values.reduce((total, value) => total + value, 0);
- 7 │ }
-
-10 │ export class Calculator {
-   │ <:Calculator#5D36>
-11 │   multiply(left: number, right: number): number {
-   │   <.multiply#B592>
-12 │     return left * right;
-13 │   }
-14 │ }
+  | src/math.ts·120L·ts·#A744
+  |
+ 5| export function sum(values: readonly number[]): number {
+  | [:sum#3286]
+ 6|   return values.reduce((total, value) => total + value, 0);
+ 7| }
+10| export class Calculator {
+  | [:Calculator#5D36]
+11|   multiply(left: number, right: number): number {
+  |   [.multiply#B592]
+12|     return left * right;
+13|   }
+14| }
 ```
 
 ## Language Support

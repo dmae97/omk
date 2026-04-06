@@ -37,7 +37,13 @@ import {
 import { convertFileWithMarkit } from "../utils/markit";
 import { detectSupportedImageMimeTypeFromFile } from "../utils/mime";
 import { type ArchiveReader, openArchive, parseArchivePathCandidates } from "./archive-reader";
-import { type ChunkReadTarget, formatChunkedRead, parseChunkReadPath, parseChunkSelector } from "./chunk-tree";
+import {
+	type ChunkReadTarget,
+	formatChunkedRead,
+	parseChunkReadPath,
+	parseChunkSelector,
+	resolveAnchorStyle,
+} from "./chunk-tree";
 import {
 	executeReadUrl,
 	isReadableUrlPath,
@@ -844,6 +850,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 				cwd: this.session.cwd,
 				language,
 				omitChecksum: !hasEditTool,
+				anchorStyle: resolveAnchorStyle(this.session.settings),
 				absoluteLineRange,
 			});
 			let text = chunkResult.text;
@@ -956,6 +963,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 					cwd: this.session.cwd,
 					language: getLanguageFromPath(absolutePath),
 					omitChecksum: !(this.session.hasEditTool ?? true),
+					anchorStyle: resolveAnchorStyle(this.session.settings),
 				});
 				let text = chunkResult.text;
 				if (suffixResolution) {

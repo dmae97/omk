@@ -27,30 +27,26 @@ Successful edit responses include the updated chunk tree with checksums. Do not 
 - Chunk paths are fully qualified: `class_Server.fn_start`, not bare `fn_start`
 - Batch ops observe earlier edits. If op 1 changes checksum/span/path, op 2 must use post-op-1 values.
 - `replace`/`delete` include leading comments/attributes attached to the chunk.
-</operations>
+  </operations>
 
 <examples>
 All examples reference this `read` output:
 ```
-   │ server.ts  ·  40L  ·  ts  ·  #VSKB
-   │
-
- 5 │ class Server {
-   │ <:class_Server#XKQZ>
-
-12 │   start(): void {
-   │   <.fn_start#HTST>
-13 │     log("booting on " + this.port);
-14 │     for (let i = 0; i < MAX_RETRIES; i++) {
-15 │       this.tryBind();
-16 │     }
-17 │   }
-
-19 │   private tryBind(): boolean {
-   │   <.fn_tryBind#VNWR>
-20 │     // TODO: add backoff
-21 │     return bind(this.port);
-22 │   }
+  | server.ts·40L·ts·#VSKB
+ 5| class Server {
+  | [:class_Server#XKQZ]
+12|   start(): void {
+  |   [.fn_start#HTST]
+13|     log("booting on " + this.port);
+14|     for (let i = 0; i < MAX_RETRIES; i++) {
+15|       this.tryBind();
+16|     }
+17|   }
+19|   private tryBind(): boolean {
+  |   [.fn_tryBind#VNWR]
+20|     // TODO: add backoff
+21|     return bind(this.port);
+22|   }
 ```
 
 <example name="replace a method">

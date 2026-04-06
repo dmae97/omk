@@ -1,7 +1,7 @@
 import { native } from "../native";
 import type { ChunkNode, ChunkTree, RenderChunkTreeParams } from "./types";
 
-export type { ChunkNode, ChunkTree, RenderChunkTreeParams, VisibleLineRange } from "./types";
+export type { ChunkAnchorStyle, ChunkNode, ChunkTree, RenderChunkTreeParams, VisibleLineRange } from "./types";
 
 export function parseChunkTree(source: string, language: string): ChunkTree {
 	return native.parseChunkTree(source, language);

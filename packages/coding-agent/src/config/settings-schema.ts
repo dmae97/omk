@@ -1050,6 +1050,18 @@ export const SETTINGS_SCHEMA = {
 		},
 	},
 
+	"read.anchorstyle": {
+		type: "enum",
+		values: ["full", "kind", "bare"],
+		default: "full",
+		ui: {
+			tab: "editing",
+			label: "Anchor Style",
+			description: "Render chunk anchors with full names, kind prefixes, or checksum-only tags",
+			submenu: true,
+		},
+	},
+
 	// LSP
 	"lsp.enabled": {
 		type: "boolean",

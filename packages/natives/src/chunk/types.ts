@@ -32,6 +32,8 @@ export interface VisibleLineRange {
 	endLine: number;
 }
 
+export type ChunkAnchorStyle = "full" | "kind" | "bare";
+
 export interface RenderChunkTreeParams {
 	tree: ChunkTree;
 	chunkPath?: string;
@@ -42,6 +44,7 @@ export interface RenderChunkTreeParams {
 	visibleRange?: VisibleLineRange;
 	renderChildrenOnly: boolean;
 	omitChecksum: boolean;
+	anchorStyle?: ChunkAnchorStyle;
 	showLeafPreview: boolean;
 	tabReplacement?: string;
 }

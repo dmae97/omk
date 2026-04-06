@@ -30,6 +30,7 @@ pub fn render_chunk_tree(params: &RenderChunkTreeParams) -> String {
 	let preview_head_lines = *PREVIEW_HEAD_LINES;
 	let preview_tail_lines = *PREVIEW_TAIL_LINES;
 	let tab_replacement = params.tab_replacement.as_deref().unwrap_or("    ");
+	let anchor_style = params.anchor_style.as_deref().unwrap_or("full");
 	let num_width = compute_num_width(
 		&params.tree,
 		chunk,
@@ -65,6 +66,7 @@ pub fn render_chunk_tree(params: &RenderChunkTreeParams) -> String {
 		num_width,
 		visible_range: params.visible_range.as_ref(),
 		omit_checksum: params.omit_checksum,
+		anchor_style,
 		show_leaf_preview: params.show_leaf_preview,
 		last_was_blank_meta: false,
 		full_display_threshold,
@@ -76,7 +78,7 @@ pub fn render_chunk_tree(params: &RenderChunkTreeParams) -> String {
 	push_line(
 		&mut ctx.out,
 		format!(
-			"{} │ {}",
+			"{}| {}",
 			" ".repeat(num_width),
 			format_header_meta(
 				params.title.as_str(),
@@ -312,14 +314,27 @@ fn build_leaf_entries(
 	entries
 }
 
-fn format_anchor_tag(chunk: &ChunkNode, depth: usize, omit_checksum: bool) -> String {
+fn format_anchor_name(name: &str, style: &str, omit_checksum: bool) -> String {
+	if omit_checksum || style == "full" {
+		return name.to_string();
+	}
+	if style == "bare" {
+		return String::new();
+	}
+	name
+		.find('_')
+		.map_or_else(|| name.to_string(), |index| name[..=index].to_string())
+}
+
+fn format_anchor_tag(chunk: &ChunkNode, depth: usize, style: &str, omit_checksum: bool) -> String {
 	let prefix = if depth == 0 { ':' } else { '.' };
 	let checksum = if omit_checksum {
 		String::new()
 	} else {
 		format!("#{}", chunk.checksum)
 	};
-	format!("<{}{}{}>", prefix, chunk.name, checksum)
+	let name = format_anchor_name(chunk.name.as_str(), style, omit_checksum);
+	format!("[{prefix}{name}{checksum}]")
 }
 
 fn format_header_meta(
@@ -333,9 +348,9 @@ fn format_header_meta(
 	let checksum_part = if omit_checksum {
 		String::new()
 	} else {
-		format!("  ·  #{checksum}")
+		format!("·#{checksum}")
 	};
-	format!("{title}  ·  {line_count}ln  ·  {language}{checksum_part}")
+	format!("{title}·{line_count}L·{language}{checksum_part}")
 }
 
 fn should_render_gap_line(
@@ -516,6 +531,7 @@ struct RenderCtx<'a> {
 	num_width:              usize,
 	visible_range:          Option<&'a VisibleLineRange>,
 	omit_checksum:          bool,
+	anchor_style:           &'a str,
 	show_leaf_preview:      bool,
 	last_was_blank_meta:    bool,
 	full_display_threshold: usize,
@@ -535,20 +551,20 @@ fn push_blank_meta(ctx: &mut RenderCtx<'_>) {
 	if ctx.last_was_blank_meta {
 		return;
 	}
-	push_line(&mut ctx.out, format!("{} │", " ".repeat(ctx.num_width)));
+	push_line(&mut ctx.out, format!("{}|", " ".repeat(ctx.num_width)));
 	ctx.last_was_blank_meta = true;
 }
 
 fn push_meta(ctx: &mut RenderCtx<'_>, body: String) {
 	ctx.last_was_blank_meta = false;
-	push_line(&mut ctx.out, format!("{} │ {}", " ".repeat(ctx.num_width), body));
+	push_line(&mut ctx.out, format!("{}| {}", " ".repeat(ctx.num_width), body));
 }
 
 fn push_code(ctx: &mut RenderCtx<'_>, abs_line: u32, source_text: &str) {
 	ctx.last_was_blank_meta = false;
 	push_line(
 		&mut ctx.out,
-		format!("{} │ {}", abs_line.to_string().pad_start(ctx.num_width, ' '), source_text),
+		format!("{}| {}", abs_line.to_string().pad_start(ctx.num_width, ' '), source_text),
 	);
 }
 
@@ -621,7 +637,11 @@ fn emit_chunk_subtree(
 		let anchor_indent = chunk_body_anchor_indent(ctx.source_lines, chunk);
 		push_meta(
 			ctx,
-			format!("{}{}", anchor_indent, format_anchor_tag(chunk, depth, ctx.omit_checksum)),
+			format!(
+				"{}{}",
+				anchor_indent,
+				format_anchor_tag(chunk, depth, ctx.anchor_style, ctx.omit_checksum)
+			),
 		);
 	}
 	if !has_kids {
