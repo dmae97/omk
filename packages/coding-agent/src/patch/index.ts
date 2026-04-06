@@ -535,8 +535,11 @@ export class EditTool implements AgentTool<TInput> {
 
 			const normalizedOperations: ChunkEditOperation[] = [];
 
-			const assertChecksum = (op: string, crc: string | undefined, sel: string | undefined): string => {
+			const assertChecksum = (op: string, crc: string | undefined, sel: string | undefined): string | undefined => {
 				if (crc) return crc.toUpperCase();
+				// When no explicit sel is given, the default selector/crc from
+				// the path will be applied downstream by applyChunkEdits.
+				if (!sel && defaultCrc) return undefined;
 				if (sel && chunkTree) {
 					const resolved = resolveChunkPath(chunkTree, sel);
 					if (resolved) {

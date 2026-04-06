@@ -444,7 +444,7 @@ describe("chunk mode tools", () => {
 					},
 				],
 			}),
-		).rejects.toThrow(/Invalid splice range L5-L2/);
+		).rejects.toThrow(/Invalid line range L5-L2/);
 
 		expect(await Bun.file(filePath).text()).toBe(originalSource);
 	});

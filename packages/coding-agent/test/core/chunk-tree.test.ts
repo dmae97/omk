@@ -1048,7 +1048,7 @@ describe("zero-width splice (line insertion)", () => {
 					content: "noop();",
 				},
 			]),
-		).toThrow(/Invalid zero-width splice L20-L19/);
+		).toThrow(/Invalid zero-width insert L20-L19/);
 	});
 	test("zero-width splice after the chunk preserves the separator gap", () => {
 		const source = `class Worker {\n\trun(): void {\n\t\twork();\n\t}\n\n\tstop(): void {\n\t\tcleanup();\n\t}\n}\n`;
@@ -1250,7 +1250,7 @@ describe("splice", () => {
 					content: "replacement",
 				},
 			]),
-		).toThrow(/Invalid splice range L4-L2/);
+		).toThrow(/Invalid line range L4-L2/);
 	});
 
 	test("splice rejects line 0 before edit application", () => {
@@ -1265,7 +1265,7 @@ describe("splice", () => {
 					content: "replacement",
 				},
 			]),
-		).toThrow(/Splice beg 0 is invalid/);
+		).toThrow(/Line 0 is invalid/);
 	});
 
 	test("splice with out-of-range lines throws", () => {

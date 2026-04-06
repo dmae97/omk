@@ -1361,7 +1361,29 @@ export function applyChunkEdits(params: {
 						const rangeStart = lineStartOffset(offsets, absBeg, state.source);
 						const rangeEnd = lineEndOffset(offsets, absEnd, state.source);
 						const replacedRange = state.source.slice(rangeStart, rangeEnd);
-						const targetIndent = detectCommonIndent(replacedRange).prefix;
+						// For zero-width inserts the replaced range is empty; derive
+						// indent from the two neighboring lines, picking the deeper
+						// indent so body-level insertions stay at body depth even when
+						// one neighbor is a boundary line (opening/closing brace).
+						let targetIndent: string;
+						if (isZeroWidthInsert(absBeg, absEnd)) {
+							const indA = detectCommonIndent(
+								state.source.slice(
+									lineStartOffset(offsets, absEnd, state.source),
+									lineEndOffset(offsets, absEnd, state.source),
+								),
+							).prefix;
+							const bLine = Math.min(absBeg, state.tree.lineCount);
+							const indB = detectCommonIndent(
+								state.source.slice(
+									lineStartOffset(offsets, bLine, state.source),
+									lineEndOffset(offsets, bLine, state.source),
+								),
+							).prefix;
+							targetIndent = indA.length >= indB.length ? indA : indB;
+						} else {
+							targetIndent = detectCommonIndent(replacedRange).prefix;
+						}
 						let replacement = normalizeInsertedContent(operation.content, targetIndent);
 						if (replacement.length > 0 && !replacement.endsWith("\n") && absEnd < state.tree.lineCount) {
 							replacement += "\n";
