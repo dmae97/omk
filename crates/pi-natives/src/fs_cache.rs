@@ -22,7 +22,7 @@ use ignore::WalkBuilder;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
-use crate::task;
+use crate::{env_uint, task};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Public types (re-exported by glob for backward compatibility)
@@ -57,36 +57,25 @@ pub struct GlobMatch {
 // Cache policy
 // ═══════════════════════════════════════════════════════════════════════════
 
-const DEFAULT_CACHE_TTL_MS: u64 = 1_000;
-const DEFAULT_EMPTY_RECHECK_MS: u64 = 200;
-const DEFAULT_MAX_CACHE_ENTRIES: usize = 16;
-
-fn env_u64(name: &str, default: u64) -> u64 {
-	std::env::var(name)
-		.ok()
-		.and_then(|v| v.parse().ok())
-		.unwrap_or(default)
+env_uint! {
+	// Configured cache TTL in milliseconds.
+	static CACHE_TTL_MS: u64 = "FS_SCAN_CACHE_TTL_MS" or 1_000 => [0, u64::MAX];
+	// Configured empty-result recheck threshold in milliseconds.
+	static EMPTY_RECHECK_MS: u64 = "FS_SCAN_EMPTY_RECHECK_MS" or 200 => [0, u64::MAX];
+	// Configured maximum number of cache entries.
+	static MAX_CACHE_ENTRIES: usize = "FS_SCAN_CACHE_MAX_ENTRIES" or 16 => [0, usize::MAX];
 }
 
-fn env_usize(name: &str, default: usize) -> usize {
-	std::env::var(name)
-		.ok()
-		.and_then(|v| v.parse().ok())
-		.unwrap_or(default)
-}
-
-/// Configured cache TTL in milliseconds.
 pub fn cache_ttl_ms() -> u64 {
-	env_u64("FS_SCAN_CACHE_TTL_MS", DEFAULT_CACHE_TTL_MS)
+	*CACHE_TTL_MS
 }
 
-/// Configured empty-result recheck threshold in milliseconds.
 pub fn empty_recheck_ms() -> u64 {
-	env_u64("FS_SCAN_EMPTY_RECHECK_MS", DEFAULT_EMPTY_RECHECK_MS)
+	*EMPTY_RECHECK_MS
 }
 
-fn max_cache_entries() -> usize {
-	env_usize("FS_SCAN_CACHE_MAX_ENTRIES", DEFAULT_MAX_CACHE_ENTRIES)
+pub fn max_cache_entries() -> usize {
+	*MAX_CACHE_ENTRIES
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -117,8 +106,7 @@ pub struct ScanResult {
 }
 
 fn evict_oldest() {
-	let max = max_cache_entries();
-	if FS_CACHE.len() > max
+	if FS_CACHE.len() > *MAX_CACHE_ENTRIES
 		&& let Some(oldest_key) = FS_CACHE
 			.iter()
 			.min_by_key(|entry| entry.value().created_at)
@@ -295,7 +283,7 @@ pub fn get_or_scan(
 	use_gitignore: bool,
 	ct: &task::CancelToken,
 ) -> Result<ScanResult> {
-	let ttl = cache_ttl_ms();
+	let ttl = *CACHE_TTL_MS;
 	if ttl == 0 {
 		// Caching disabled – always scan fresh.
 		let entries = collect_entries(root, include_hidden, use_gitignore, ct)?;

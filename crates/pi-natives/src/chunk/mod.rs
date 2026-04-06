@@ -299,7 +299,10 @@ fn build_chunk(
 	let should_recurse = !candidate.error
 		&& recurse.is_some()
 		&& !should_collapse
-		&& (candidate.force_recurse || line_count > *LEAF_THRESHOLD || recurse_parse_errors > 0);
+		&& (candidate.force_recurse
+			|| recurse_parse_errors > 0
+			|| (line_count > *LEAF_THRESHOLD
+				&& recursion_narrows_scope(line_count, &child_candidates)));
 	let children = if should_recurse {
 		child_candidates
 			.into_iter()
@@ -519,6 +522,22 @@ fn assign_unique_names(mut candidates: Vec<RawChunkCandidate<'_>>) -> Vec<RawChu
 }
 
 // ── Collapse heuristics ──────────────────────────────────────────────────
+
+/// Returns `true` when splitting a parent into children actually provides
+/// meaningful scope narrowing. Recursion is only worthwhile if addressing
+/// the largest child saves at least `PI_CHUNK_MIN_SAVINGS` lines compared
+/// to addressing the parent directly.
+fn recursion_narrows_scope(parent_lines: usize, children: &[RawChunkCandidate<'_>]) -> bool {
+	if children.is_empty() {
+		return false;
+	}
+	let max_child_lines = children
+		.iter()
+		.map(|c| line_span(c.range_start_line, c.range_end_line))
+		.max()
+		.unwrap_or(0);
+	parent_lines.saturating_sub(max_child_lines) >= *MIN_RECURSE_SAVINGS
+}
 
 fn should_collapse_trivial_children(
 	parent: &RawChunkCandidate<'_>,

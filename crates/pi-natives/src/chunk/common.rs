@@ -4,27 +4,20 @@
 //! [`RawChunkCandidate`] values. They are also used by the default (shared)
 //! classification in [`super::defaults`].
 
-use std::sync::LazyLock;
-
 use tree_sitter::Node;
 
 use super::types::ChunkNode;
+use crate::env_uint;
 
 // ── Configuration (environment overrides) ────────────────────────────────
-//
-// - `PI_CHUNK_LEAF_THRESHOLD` – default `15`
-// - `PI_CHUNK_MAX_LINES`       – default `25`
-
-fn env_usize(name: &str, default: usize) -> usize {
-	std::env::var(name)
-		.ok()
-		.and_then(|v| v.parse().ok())
-		.unwrap_or(default)
+env_uint! {
+	// Configured leaf threshold.
+	pub static LEAF_THRESHOLD: usize = "PI_CHUNK_LEAF_THRESHOLD" or 15 => [1, usize::MAX];
+	// Configured max chunk lines.
+	pub static MAX_CHUNK_LINES: usize = "PI_CHUNK_MAX_LINES" or 25 => [1, usize::MAX];
+	// Configured min recurse savings.
+	pub static MIN_RECURSE_SAVINGS: usize = "PI_CHUNK_MIN_SAVINGS" or 5 => [1, usize::MAX];
 }
-
-pub static LEAF_THRESHOLD: LazyLock<usize> =
-	LazyLock::new(|| env_usize("PI_CHUNK_LEAF_THRESHOLD", 15));
-pub static MAX_CHUNK_LINES: LazyLock<usize> = LazyLock::new(|| env_usize("PI_CHUNK_MAX_LINES", 25));
 
 // ── Internal types ───────────────────────────────────────────────────────
 

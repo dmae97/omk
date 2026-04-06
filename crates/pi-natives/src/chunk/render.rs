@@ -1,17 +1,20 @@
 use std::collections::HashMap;
 
-use crate::chunk::types::{ChunkNode, ChunkTree, RenderChunkTreeParams, VisibleLineRange};
+use crate::{
+	chunk::types::{ChunkNode, ChunkTree, RenderChunkTreeParams, VisibleLineRange},
+	env_uint,
+};
 
 type ChunkLookup<'a> = HashMap<&'a str, &'a ChunkNode>;
 
-use std::sync::LazyLock;
-
-pub static DEFAULT_FULL_DISPLAY_THRESHOLD: LazyLock<usize> =
-	LazyLock::new(|| read_env_usize("PI_CHUNK_FULL_DISPLAY_THRESHOLD", 80));
-pub static DEFAULT_PREVIEW_HEAD_LINES: LazyLock<usize> =
-	LazyLock::new(|| read_env_usize("PI_CHUNK_PREVIEW_HEAD_LINES", 20));
-pub static DEFAULT_PREVIEW_TAIL_LINES: LazyLock<usize> =
-	LazyLock::new(|| read_env_usize("PI_CHUNK_PREVIEW_TAIL_LINES", 8));
+env_uint! {
+	// Configured full display threshold.
+	static FULL_DISPLAY_THRESHOLD: usize = "PI_CHUNK_FULL_DISPLAY_THRESHOLD" or 80 => [1, usize::MAX];
+	// Configured preview head lines.
+	static PREVIEW_HEAD_LINES: usize = "PI_CHUNK_PREVIEW_HEAD_LINES" or 20 => [1, usize::MAX];
+	// Configured preview tail lines.
+	static PREVIEW_TAIL_LINES: usize = "PI_CHUNK_PREVIEW_TAIL_LINES" or 8 => [1, usize::MAX];
+}
 
 pub fn line_to_containing_chunk_path(tree: &ChunkTree, line: u32) -> Option<String> {
 	line_to_containing_chunk(tree, line).map(|chunk| chunk.path.clone())
@@ -23,9 +26,9 @@ pub fn render_chunk_tree(params: &RenderChunkTreeParams) -> String {
 		return String::new();
 	};
 	let source_lines: Vec<&str> = params.source.split('\n').collect();
-	let full_display_threshold = *DEFAULT_FULL_DISPLAY_THRESHOLD;
-	let preview_head_lines = *DEFAULT_PREVIEW_HEAD_LINES;
-	let preview_tail_lines = *DEFAULT_PREVIEW_TAIL_LINES;
+	let full_display_threshold = *FULL_DISPLAY_THRESHOLD;
+	let preview_head_lines = *PREVIEW_HEAD_LINES;
+	let preview_tail_lines = *PREVIEW_TAIL_LINES;
 	let tab_replacement = params.tab_replacement.as_deref().unwrap_or("    ");
 	let num_width = compute_num_width(
 		&params.tree,
@@ -115,14 +118,6 @@ pub fn render_chunk_tree(params: &RenderChunkTreeParams) -> String {
 		between_top_level_definitions: false,
 	});
 	ctx.out
-}
-
-fn read_env_usize(name: &str, default_value: usize) -> usize {
-	std::env::var(name)
-		.ok()
-		.and_then(|value| value.parse::<usize>().ok())
-		.filter(|value| *value > 0)
-		.unwrap_or(default_value)
 }
 
 fn build_lookup(tree: &ChunkTree) -> ChunkLookup<'_> {

@@ -48,6 +48,26 @@ pub fn classify_root_default<'tree>(node: Node<'tree>, source: &str) -> RawChunk
 			group_candidate(node, "stmts", source)
 		},
 
+		// ── Control flow (top-level scripts) ──
+		"if_statement"
+		| "unless"
+		| "guard_statement"
+		| "switch_statement"
+		| "switch_expression"
+		| "case_statement"
+		| "expression_switch_statement"
+		| "type_switch_statement"
+		| "select_statement"
+		| "try_statement"
+		| "try_block"
+		| "for_statement"
+		| "for_in_statement"
+		| "for_of_statement"
+		| "foreach_statement"
+		| "while_statement"
+		| "do_statement"
+		| "with_statement" => classify_function_default(node, source),
+
 		// ── Containers / namespaces / modules ──
 		"class_declaration"
 		| "class_definition"
@@ -241,8 +261,11 @@ pub fn classify_function_default<'tree>(
 	node: Node<'tree>,
 	source: &str,
 ) -> RawChunkCandidate<'tree> {
+	let fn_recurse = || recurse_body(node, ChunkContext::FunctionBody);
 	match node.kind() {
-		"if_statement" | "unless" | "guard_statement" => positional_candidate(node, "if", source),
+		"if_statement" | "unless" | "guard_statement" => {
+			make_candidate(node, "if".to_string(), NameStyle::Named, None, fn_recurse(), false, source)
+		},
 		"switch_statement"
 		| "switch_expression"
 		| "case_statement"
@@ -251,29 +274,61 @@ pub fn classify_function_default<'tree>(
 		| "type_switch_statement"
 		| "select_statement"
 		| "receive_statement"
-		| "yul_switch_statement" => positional_candidate(node, "switch", source),
+		| "yul_switch_statement" => make_candidate(
+			node,
+			"switch".to_string(),
+			NameStyle::Named,
+			None,
+			fn_recurse(),
+			false,
+			source,
+		),
 		"try_statement" | "try_block" | "catch_clause" | "finally_clause" | "assembly_statement" => {
-			positional_candidate(node, "try", source)
+			make_candidate(
+				node,
+				"try".to_string(),
+				NameStyle::Named,
+				None,
+				fn_recurse(),
+				false,
+				source,
+			)
 		},
 		"for_statement" | "for_in_statement" | "for_of_statement" => {
-			if looks_like_python_statement(node, source) {
-				positional_candidate(node, "loop", source)
+			let name = if looks_like_python_statement(node, source) {
+				"loop".to_string()
 			} else {
-				positional_candidate(node, "for", source)
-			}
+				sanitize_node_kind(node.kind())
+			};
+			make_candidate(node, name, NameStyle::Named, None, fn_recurse(), false, source)
 		},
 		"while_statement" => {
-			if looks_like_python_statement(node, source) {
-				positional_candidate(node, "loop", source)
+			let name = if looks_like_python_statement(node, source) {
+				"loop"
 			} else {
-				positional_candidate(node, "while", source)
-			}
+				"while"
+			};
+			make_candidate(node, name.to_string(), NameStyle::Named, None, fn_recurse(), false, source)
 		},
 		"do_statement" | "with_statement" | "do_block" | "subshell" | "async_block"
-		| "unsafe_block" | "const_block" | "block_expression" => {
-			positional_candidate(node, "block", source)
-		},
-		"foreach_statement" => positional_candidate(node, "for", source),
+		| "unsafe_block" | "const_block" | "block_expression" => make_candidate(
+			node,
+			"block".to_string(),
+			NameStyle::Named,
+			None,
+			fn_recurse(),
+			false,
+			source,
+		),
+		"foreach_statement" => make_candidate(
+			node,
+			"for".to_string(),
+			NameStyle::Named,
+			None,
+			fn_recurse(),
+			false,
+			source,
+		),
 		"defer_statement" | "go_statement" | "send_statement" => {
 			group_candidate(node, "stmts", source)
 		},
