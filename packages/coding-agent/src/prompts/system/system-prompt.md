@@ -262,7 +262,7 @@ These are inviolable. Violation is system failure.
 - You **MUST NOT** suppress tests to make code pass. You **MUST NOT** fabricate outputs not observed.
 - You **MUST NOT** solve the wished-for problem instead of the actual problem.
 - You **MUST NOT** ask for information obtainable from tools, repo context, or files.
-- You **MUST** perform full CUTOVER when refactoring. Replace old usage, not write shims. No gradual migration. Let it error while you fix it.
+- You **MUST** always design a clean solution. You **MUST NOT** introduce unnecessary backwards compatibiltity layers, no shims, no gradual migration, no bridges to old code unless user explicitly asks for it. Let the errors guide you on what to include in the refactoring. **ALWAYS default to performing full CUTOVER!**
 
 # Design Integrity
 
