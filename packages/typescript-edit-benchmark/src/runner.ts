@@ -1761,22 +1761,30 @@ function diffTokenStats(
 	return { input, output, total };
 }
 
+function isGhostRun(r: TaskRunResult): boolean {
+	return (
+		!r.success && r.tokens.total === 0 && r.toolCalls.read === 0 && r.toolCalls.edit === 0 && r.toolCalls.write === 0
+	);
+}
+
 function summarizeTaskRuns(task: EditTask, runs: TaskRunResult[]): TaskResult {
 	const orderedRuns = runs.slice().sort((a, b) => a.runIndex - b.runIndex);
-	const n = orderedRuns.length;
+	const _n = orderedRuns.length;
+	const nonGhostRuns = orderedRuns.filter(r => !isGhostRun(r));
+	const effective = nonGhostRuns.length;
 	const successfulRuns = orderedRuns.filter(r => r.success).length;
-	const successRate = n > 0 ? successfulRuns / n : 0;
+	const successRate = effective > 0 ? successfulRuns / effective : 0;
 
 	const avgTokens: TokenStats =
-		n > 0
+		effective > 0
 			? {
-					input: Math.round(orderedRuns.reduce((sum, r) => sum + r.tokens.input, 0) / n),
-					output: Math.round(orderedRuns.reduce((sum, r) => sum + r.tokens.output, 0) / n),
-					total: Math.round(orderedRuns.reduce((sum, r) => sum + r.tokens.total, 0) / n),
+					input: Math.round(nonGhostRuns.reduce((sum, r) => sum + r.tokens.input, 0) / effective),
+					output: Math.round(nonGhostRuns.reduce((sum, r) => sum + r.tokens.output, 0) / effective),
+					total: Math.round(nonGhostRuns.reduce((sum, r) => sum + r.tokens.total, 0) / effective),
 				}
 			: { input: 0, output: 0, total: 0 };
 
-	const avgDuration = n > 0 ? Math.round(orderedRuns.reduce((sum, r) => sum + r.duration, 0) / n) : 0;
+	const avgDuration = effective > 0 ? Math.round(nonGhostRuns.reduce((sum, r) => sum + r.duration, 0) / effective) : 0;
 	const indentScores = orderedRuns
 		.map(run => run.indentScore)
 		.filter((score): score is number => typeof score === "number");
@@ -1784,16 +1792,16 @@ function summarizeTaskRuns(task: EditTask, runs: TaskRunResult[]): TaskResult {
 		indentScores.length > 0 ? indentScores.reduce((sum, score) => sum + score, 0) / indentScores.length : 0;
 
 	const avgToolCalls: ToolCallStats =
-		n > 0
+		effective > 0
 			? {
-					read: orderedRuns.reduce((sum, r) => sum + r.toolCalls.read, 0) / n,
-					edit: orderedRuns.reduce((sum, r) => sum + r.toolCalls.edit, 0) / n,
-					write: orderedRuns.reduce((sum, r) => sum + r.toolCalls.write, 0) / n,
-					editSuccesses: orderedRuns.reduce((sum, r) => sum + r.toolCalls.editSuccesses, 0) / n,
-					editFailures: orderedRuns.reduce((sum, r) => sum + r.toolCalls.editFailures, 0) / n,
-					editWarnings: orderedRuns.reduce((sum, r) => sum + r.toolCalls.editWarnings, 0) / n,
-					editAutocorrects: orderedRuns.reduce((sum, r) => sum + r.toolCalls.editAutocorrects, 0) / n,
-					totalInputChars: orderedRuns.reduce((sum, r) => sum + r.toolCalls.totalInputChars, 0) / n,
+					read: nonGhostRuns.reduce((sum, r) => sum + r.toolCalls.read, 0) / effective,
+					edit: nonGhostRuns.reduce((sum, r) => sum + r.toolCalls.edit, 0) / effective,
+					write: nonGhostRuns.reduce((sum, r) => sum + r.toolCalls.write, 0) / effective,
+					editSuccesses: nonGhostRuns.reduce((sum, r) => sum + r.toolCalls.editSuccesses, 0) / effective,
+					editFailures: nonGhostRuns.reduce((sum, r) => sum + r.toolCalls.editFailures, 0) / effective,
+					editWarnings: nonGhostRuns.reduce((sum, r) => sum + r.toolCalls.editWarnings, 0) / effective,
+					editAutocorrects: nonGhostRuns.reduce((sum, r) => sum + r.toolCalls.editAutocorrects, 0) / effective,
+					totalInputChars: nonGhostRuns.reduce((sum, r) => sum + r.toolCalls.totalInputChars, 0) / effective,
 				}
 			: {
 					read: 0,
@@ -1806,11 +1814,11 @@ function summarizeTaskRuns(task: EditTask, runs: TaskRunResult[]): TaskResult {
 					totalInputChars: 0,
 				};
 
-	const totalEditAttempts = orderedRuns.reduce((sum, r) => sum + r.toolCalls.edit, 0);
-	const totalEditSuccesses = orderedRuns.reduce((sum, r) => sum + r.toolCalls.editSuccesses, 0);
+	const totalEditAttempts = nonGhostRuns.reduce((sum, r) => sum + r.toolCalls.edit, 0);
+	const totalEditSuccesses = nonGhostRuns.reduce((sum, r) => sum + r.toolCalls.editSuccesses, 0);
 	const editSuccessRate = totalEditAttempts > 0 ? totalEditSuccesses / totalEditAttempts : 1;
-	const autocorrectFreeSuccesses = orderedRuns.filter(run => run.success && run.editAutocorrectCount === 0).length;
-	const autocorrectFreeSuccessRate = n > 0 ? autocorrectFreeSuccesses / n : 0;
+	const autocorrectFreeSuccesses = nonGhostRuns.filter(run => run.success && run.editAutocorrectCount === 0).length;
+	const autocorrectFreeSuccessRate = effective > 0 ? autocorrectFreeSuccesses / effective : 0;
 
 	return {
 		id: task.id,
@@ -1950,52 +1958,52 @@ export async function runBenchmark(
 
 	const allRuns = taskResults.flatMap(t => t.runs);
 	const totalRuns = allRuns.length;
+	const ghostRuns = allRuns.filter(r => isGhostRun(r)).length;
+	const effectiveRuns = totalRuns - ghostRuns;
+	const nonGhostRuns = allRuns.filter(r => !isGhostRun(r));
 	const successfulRuns = allRuns.filter(r => r.success).length;
 
 	const totalTokens: TokenStats = {
-		input: allRuns.reduce((sum, r) => sum + r.tokens.input, 0),
-		output: allRuns.reduce((sum, r) => sum + r.tokens.output, 0),
-		total: allRuns.reduce((sum, r) => sum + r.tokens.total, 0),
+		input: nonGhostRuns.reduce((sum, r) => sum + r.tokens.input, 0),
+		output: nonGhostRuns.reduce((sum, r) => sum + r.tokens.output, 0),
+		total: nonGhostRuns.reduce((sum, r) => sum + r.tokens.total, 0),
 	};
 
-	const totalDuration = allRuns.reduce((sum, r) => sum + r.duration, 0);
-	const indentScores = allRuns
+	const totalDuration = nonGhostRuns.reduce((sum, r) => sum + r.duration, 0);
+	const indentScores = nonGhostRuns
 		.map(run => run.indentScore)
 		.filter((score): score is number => typeof score === "number");
 	const avgIndentScore =
 		indentScores.length > 0 ? indentScores.reduce((sum, score) => sum + score, 0) / indentScores.length : 0;
 
 	const totalToolCalls: ToolCallStats = {
-		read: allRuns.reduce((sum, r) => sum + r.toolCalls.read, 0),
-		edit: allRuns.reduce((sum, r) => sum + r.toolCalls.edit, 0),
-		write: allRuns.reduce((sum, r) => sum + r.toolCalls.write, 0),
-		editSuccesses: allRuns.reduce((sum, r) => sum + r.toolCalls.editSuccesses, 0),
-		editFailures: allRuns.reduce((sum, r) => sum + r.toolCalls.editFailures, 0),
-		editWarnings: allRuns.reduce((sum, r) => sum + r.toolCalls.editWarnings, 0),
-		editAutocorrects: allRuns.reduce((sum, r) => sum + r.toolCalls.editAutocorrects, 0),
-		totalInputChars: allRuns.reduce((sum, r) => sum + r.toolCalls.totalInputChars, 0),
+		read: nonGhostRuns.reduce((sum, r) => sum + r.toolCalls.read, 0),
+		edit: nonGhostRuns.reduce((sum, r) => sum + r.toolCalls.edit, 0),
+		write: nonGhostRuns.reduce((sum, r) => sum + r.toolCalls.write, 0),
+		editSuccesses: nonGhostRuns.reduce((sum, r) => sum + r.toolCalls.editSuccesses, 0),
+		editFailures: nonGhostRuns.reduce((sum, r) => sum + r.toolCalls.editFailures, 0),
+		editWarnings: nonGhostRuns.reduce((sum, r) => sum + r.toolCalls.editWarnings, 0),
+		editAutocorrects: nonGhostRuns.reduce((sum, r) => sum + r.toolCalls.editAutocorrects, 0),
+		totalInputChars: nonGhostRuns.reduce((sum, r) => sum + r.toolCalls.totalInputChars, 0),
 	};
 
 	const editSuccessRate = totalToolCalls.edit > 0 ? totalToolCalls.editSuccesses / totalToolCalls.edit : 1;
-	const autocorrectFreeSuccessfulRuns = allRuns.filter(run => run.success && run.editAutocorrectCount === 0).length;
-	const autocorrectedRuns = allRuns.filter(run => run.editAutocorrectCount > 0).length;
+	const autocorrectFreeSuccessfulRuns = nonGhostRuns.filter(
+		run => run.success && run.editAutocorrectCount === 0,
+	).length;
+	const autocorrectedRuns = nonGhostRuns.filter(run => run.editAutocorrectCount > 0).length;
 	const editAutocorrectRate =
 		totalToolCalls.editSuccesses > 0 ? totalToolCalls.editAutocorrects / totalToolCalls.editSuccesses : 0;
-	const timeoutRuns = allRuns.filter(
+	const timeoutRuns = nonGhostRuns.filter(
 		r => r.error?.includes("Timeout") || r.error?.includes("Timeout exhausted"),
 	).length;
-	const totalTimeoutRetries = allRuns.reduce((sum, r) => sum + (r.retryStats?.timeoutRetries ?? 0), 0);
-	const totalZeroToolRetries = allRuns.reduce((sum, r) => sum + (r.retryStats?.zeroToolRetries ?? 0), 0);
-	const totalProviderFailureRetries = allRuns.reduce((sum, r) => sum + (r.retryStats?.providerFailureRetries ?? 0), 0);
-	const ghostRuns = allRuns.filter(
-		r =>
-			!r.success &&
-			r.tokens.total === 0 &&
-			r.toolCalls.read === 0 &&
-			r.toolCalls.edit === 0 &&
-			r.toolCalls.write === 0,
-	).length;
-	const runsWithMutationIntent = allRuns.filter(r => typeof r.mutationIntentMatched === "boolean");
+	const totalTimeoutRetries = nonGhostRuns.reduce((sum, r) => sum + (r.retryStats?.timeoutRetries ?? 0), 0);
+	const totalZeroToolRetries = nonGhostRuns.reduce((sum, r) => sum + (r.retryStats?.zeroToolRetries ?? 0), 0);
+	const totalProviderFailureRetries = nonGhostRuns.reduce(
+		(sum, r) => sum + (r.retryStats?.providerFailureRetries ?? 0),
+		0,
+	);
+	const runsWithMutationIntent = nonGhostRuns.filter(r => typeof r.mutationIntentMatched === "boolean");
 	const mutationIntentMatchRate =
 		runsWithMutationIntent.length > 0
 			? runsWithMutationIntent.filter(r => r.mutationIntentMatched).length / runsWithMutationIntent.length
@@ -2021,36 +2029,37 @@ export async function runBenchmark(
 				)
 			: undefined;
 
+	const denom = effectiveRuns || 1;
 	const summary: BenchmarkSummary = {
 		totalTasks: tasks.length,
-		totalRuns,
+		totalRuns: effectiveRuns,
 		successfulRuns,
-		overallSuccessRate: successfulRuns / totalRuns,
+		overallSuccessRate: successfulRuns / denom,
 		tasksWithAllPassing: taskResults.filter(t => t.successRate === 1).length,
 		tasksWithAnyFailing: taskResults.filter(t => t.successRate < 1).length,
 		totalTokens,
 		avgTokensPerRun: {
-			input: Math.round(totalTokens.input / totalRuns),
-			output: Math.round(totalTokens.output / totalRuns),
-			total: Math.round(totalTokens.total / totalRuns),
+			input: Math.round(totalTokens.input / denom),
+			output: Math.round(totalTokens.output / denom),
+			total: Math.round(totalTokens.total / denom),
 		},
 		totalDuration,
-		avgDurationPerRun: Math.round(totalDuration / totalRuns),
+		avgDurationPerRun: Math.round(totalDuration / denom),
 		avgIndentScore,
 		totalToolCalls,
 		avgToolCallsPerRun: {
-			read: totalToolCalls.read / totalRuns,
-			edit: totalToolCalls.edit / totalRuns,
-			write: totalToolCalls.write / totalRuns,
-			editSuccesses: totalToolCalls.editSuccesses / totalRuns,
-			editFailures: totalToolCalls.editFailures / totalRuns,
-			editWarnings: totalToolCalls.editWarnings / totalRuns,
-			editAutocorrects: totalToolCalls.editAutocorrects / totalRuns,
-			totalInputChars: totalToolCalls.totalInputChars / totalRuns,
+			read: totalToolCalls.read / denom,
+			edit: totalToolCalls.edit / denom,
+			write: totalToolCalls.write / denom,
+			editSuccesses: totalToolCalls.editSuccesses / denom,
+			editFailures: totalToolCalls.editFailures / denom,
+			editWarnings: totalToolCalls.editWarnings / denom,
+			editAutocorrects: totalToolCalls.editAutocorrects / denom,
+			totalInputChars: totalToolCalls.totalInputChars / denom,
 		},
 		editSuccessRate,
 		autocorrectFreeSuccessfulRuns,
-		autocorrectFreeSuccessRate: autocorrectFreeSuccessfulRuns / totalRuns,
+		autocorrectFreeSuccessRate: autocorrectFreeSuccessfulRuns / denom,
 		autocorrectedRuns,
 		editAutocorrectRate,
 		timeoutRuns,

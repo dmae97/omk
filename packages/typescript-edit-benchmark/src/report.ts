@@ -62,11 +62,19 @@ export function generateReport(result: BenchmarkResult): string {
 	const { config, tasks, summary } = result;
 	const runsPerTask = config.runsPerTask;
 	const allRuns = tasks.flatMap(task => task.runs);
-	const verifiedRuns = allRuns.filter(run => run.verificationPassed).length;
-	const editToolRuns = allRuns.filter(run => run.patchApplied).length;
-	const successRuns = allRuns.filter(run => run.success).length;
-	const totalEditAttempts = allRuns.reduce((sum, run) => sum + run.toolCalls.edit, 0);
-	const totalEditFailures = allRuns.reduce((sum, run) => sum + run.toolCalls.editFailures, 0);
+	const nonGhostRuns = allRuns.filter(
+		run =>
+			run.success ||
+			run.tokens.total > 0 ||
+			run.toolCalls.read > 0 ||
+			run.toolCalls.edit > 0 ||
+			run.toolCalls.write > 0,
+	);
+	const verifiedRuns = nonGhostRuns.filter(run => run.verificationPassed).length;
+	const editToolRuns = nonGhostRuns.filter(run => run.patchApplied).length;
+	const successRuns = nonGhostRuns.filter(run => run.success).length;
+	const totalEditAttempts = nonGhostRuns.reduce((sum, run) => sum + run.toolCalls.edit, 0);
+	const totalEditFailures = nonGhostRuns.reduce((sum, run) => sum + run.toolCalls.editFailures, 0);
 
 	const lines: string[] = [];
 
