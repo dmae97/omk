@@ -4868,6 +4868,17 @@ export class AgentSession {
 	}
 
 	#isTransientErrorMessage(errorMessage: string): boolean {
+		return (
+			this.#isTransientEnvelopeErrorMessage(errorMessage) || this.#isTransientTransportErrorMessage(errorMessage)
+		);
+	}
+
+	#isTransientEnvelopeErrorMessage(errorMessage: string): boolean {
+		// Match Anthropic stream-envelope failures that indicate a broken stream before any content starts.
+		return /anthropic stream envelope error:/i.test(errorMessage) && /before message_start/i.test(errorMessage);
+	}
+
+	#isTransientTransportErrorMessage(errorMessage: string): boolean {
 		// Match: overloaded_error, provider returned error, rate limit, 429, 500, 502, 503, 504,
 		// service unavailable, network/connection errors, fetch failed, terminated, retry delay exceeded
 		return /overloaded|provider.?returned.?error|rate.?limit|too many requests|429|500|502|503|504|service.?unavailable|server.?error|internal.?error|network.?error|connection.?error|connection.?refused|other side closed|fetch failed|upstream.?connect|reset before headers|socket hang up|timed? out|timeout|terminated|retry delay|stream stall/i.test(

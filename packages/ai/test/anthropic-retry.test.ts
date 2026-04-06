@@ -7,9 +7,23 @@ describe("isProviderRetryableError", () => {
 		expect(isProviderRetryableError(new Error("error 1302 from upstream"))).toBe(true);
 	});
 
-	it("retries transient stream envelope parse errors", () => {
+	it("retries transient stream parse errors and pre-content envelope failures", () => {
 		expect(isProviderRetryableError(new Error("JSON Parse error: Unterminated string"))).toBe(true);
 		expect(isProviderRetryableError(new Error("Unexpected end of JSON input"))).toBe(true);
+		expect(
+			isProviderRetryableError(
+				new Error("Anthropic stream envelope error: received content_block_start before message_start"),
+			),
+		).toBe(true);
+		expect(isProviderRetryableError(new Error("Anthropic stream envelope error: stream ended before message_start"))).toBe(
+			true,
+		);
+	});
+
+	it("does not classify post-content envelope failures as provider-retryable", () => {
+		expect(
+			isProviderRetryableError(new Error("Anthropic stream envelope error: stream ended before terminal stop signal")),
+		).toBe(false);
 	});
 
 	it("retries HTTP/2 stream errors (INTERNAL_ERROR)", () => {

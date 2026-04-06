@@ -578,13 +578,34 @@ function isTransientStreamParseError(error: unknown): boolean {
 	return /json parse error|unterminated string|unexpected end of json input/i.test(error.message);
 }
 
+const ANTHROPIC_STREAM_ENVELOPE_ERROR_PREFIX = "Anthropic stream envelope error:";
+
+function createAnthropicStreamEnvelopeError(message: string): Error {
+	return new Error(`${ANTHROPIC_STREAM_ENVELOPE_ERROR_PREFIX} ${message}`);
+}
+
+function isTransientStreamEnvelopeError(error: unknown): boolean {
+	if (!(error instanceof Error)) return false;
+	return (
+		error.message.includes(ANTHROPIC_STREAM_ENVELOPE_ERROR_PREFIX) ||
+		/stream event order|before message_start|before terminal stop signal/i.test(error.message)
+	);
+}
+
+function isProviderRetryableStreamEnvelopeError(error: unknown): boolean {
+	if (!(error instanceof Error)) return false;
+	return /stream event order|before message_start/i.test(error.message);
+}
+
 export function isProviderRetryableError(error: unknown): boolean {
 	if (!(error instanceof Error)) return false;
 	const msg = error.message.toLowerCase();
 	return (
 		/rate.?limit|too many requests|overloaded|service.?unavailable|internal_error|stream error.*received from peer|1302|timed?\s*out while waiting for the first event|timeout waiting for first/i.test(
 			msg,
-		) || isTransientStreamParseError(error)
+		) ||
+		isTransientStreamParseError(error) ||
+		isProviderRetryableStreamEnvelopeError(error)
 	);
 }
 
@@ -683,41 +704,54 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 			const blocks = output.content as Block[];
 			stream.push({ type: "start", partial: output });
 			// Retry loop for transient errors from the stream.
-			// Rate-limit/overload: only before content starts (safe to restart).
-			// Truncated JSON: also after content starts (partial response is unusable).
+			// Provider-level transport/rate-limit failures: only before any streamed content starts.
+			// Malformed envelopes/JSON: only before replay-unsafe text/tool events are visible on this stream.
 			let providerRetryAttempt = 0;
-			let started = false;
-			do {
+			while (true) {
 				activeAbortTracker = createAbortSourceTracker(options?.signal);
 				const firstEventTimeoutAbortError = new Error(
 					"Anthropic stream timed out while waiting for the first event",
 				);
 				const { requestSignal } = activeAbortTracker;
-				const anthropicStream = client.messages.stream({ ...params, stream: true }, { signal: requestSignal });
+				const anthropicRequest = client.messages.create({ ...params, stream: true }, { signal: requestSignal });
+				let streamedReplayUnsafeContent = false;
 
 				try {
-					await anthropicStream.withResponse();
+					const { data: anthropicStream } = await anthropicRequest.withResponse();
 					const firstEventWatchdog = createFirstEventWatchdog(getStreamFirstEventTimeoutMs(), () =>
 						activeAbortTracker.abortLocally(firstEventTimeoutAbortError),
 					);
+					let sawEvent = false;
+					let sawMessageStart = false;
+					let sawTerminalEnvelope = false;
 
 					for await (const event of markFirstStreamEvent(anthropicStream, firstEventWatchdog)) {
-						started = true;
+						sawEvent = true;
+
 						if (event.type === "message_start") {
+							if (sawMessageStart) {
+								continue;
+							}
+							sawMessageStart = true;
 							output.responseId = event.message.id;
-							// Capture initial token usage from message_start event
-							// This ensures we have input token counts even if the stream is aborted early
 							output.usage.input = event.message.usage.input_tokens || 0;
 							output.usage.output = event.message.usage.output_tokens || 0;
 							output.usage.cacheRead = event.message.usage.cache_read_input_tokens || 0;
 							output.usage.cacheWrite = event.message.usage.cache_creation_input_tokens || 0;
-							// Anthropic doesn't provide total_tokens, compute from components
 							output.usage.totalTokens =
 								output.usage.input + output.usage.output + output.usage.cacheRead + output.usage.cacheWrite;
 							calculateCost(model, output.usage);
-						} else if (event.type === "content_block_start") {
+							continue;
+						}
+
+						if (!sawMessageStart) {
+							throw createAnthropicStreamEnvelopeError(`received ${event.type} before message_start`);
+						}
+
+						if (event.type === "content_block_start") {
 							if (!firstTokenTime) firstTokenTime = Date.now();
 							if (event.content_block.type === "text") {
+								streamedReplayUnsafeContent = true;
 								const block: Block = {
 									type: "text",
 									text: "",
@@ -750,6 +784,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 								};
 								output.content.push(block);
 							} else if (event.content_block.type === "tool_use") {
+								streamedReplayUnsafeContent = true;
 								const block: Block = {
 									type: "toolCall",
 									id: event.content_block.id,
@@ -846,9 +881,8 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 						} else if (event.type === "message_delta") {
 							if (event.delta.stop_reason) {
 								output.stopReason = mapStopReason(event.delta.stop_reason);
+								sawTerminalEnvelope = true;
 							}
-							// Only update usage fields if present (not null).
-							// Preserves input_tokens from message_start when proxies omit it in message_delta.
 							if (event.usage.input_tokens != null) {
 								output.usage.input = event.usage.input_tokens;
 							}
@@ -861,10 +895,11 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 							if (event.usage.cache_creation_input_tokens != null) {
 								output.usage.cacheWrite = event.usage.cache_creation_input_tokens;
 							}
-							// Anthropic doesn't provide total_tokens, compute from components
 							output.usage.totalTokens =
 								output.usage.input + output.usage.output + output.usage.cacheRead + output.usage.cacheWrite;
 							calculateCost(model, output.usage);
+						} else if (event.type === "message_stop") {
+							sawTerminalEnvelope = true;
 						}
 					}
 
@@ -875,29 +910,34 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 					if (activeAbortTracker.wasCallerAbort()) {
 						throw new Error("Request was aborted");
 					}
+					if (!sawEvent || !sawMessageStart) {
+						throw createAnthropicStreamEnvelopeError("stream ended before message_start");
+					}
+					if (!sawTerminalEnvelope) {
+						throw createAnthropicStreamEnvelopeError("stream ended before terminal stop signal");
+					}
 
 					if (output.stopReason === "aborted" || output.stopReason === "error") {
 						throw new Error("An unknown error occurred");
 					}
-					break; // Stream completed successfully
+					break;
 				} catch (streamError) {
 					const streamFailure = activeAbortTracker.getLocalAbortReason() ?? streamError;
-					// Transient stream parse errors (truncated JSON) are retryable even after content
-					// has started streaming, since the partial response is unusable anyway.
-					// Rate-limit/overload errors are only retried before content starts.
-					const isTransient = isTransientStreamParseError(streamFailure);
+					const isTransientEnvelopeFailure =
+						isTransientStreamParseError(streamFailure) || isTransientStreamEnvelopeError(streamFailure);
+					const canRetryTransientEnvelopeFailure =
+						isTransientEnvelopeFailure && !streamedReplayUnsafeContent;
+					const canRetryProviderFailure = firstTokenTime === undefined && isProviderRetryableError(streamFailure);
 					if (
 						activeAbortTracker.wasCallerAbort() ||
 						providerRetryAttempt >= PROVIDER_MAX_RETRIES ||
-						(!isTransient && firstTokenTime !== undefined) ||
-						(!isTransient && !isProviderRetryableError(streamFailure))
+						(!canRetryTransientEnvelopeFailure && !canRetryProviderFailure)
 					) {
 						throw streamFailure;
 					}
 					providerRetryAttempt++;
 					const delayMs = PROVIDER_BASE_DELAY_MS * 2 ** (providerRetryAttempt - 1);
 					await abortableSleep(delayMs, options?.signal);
-					// Reset output state for clean retry
 					output.content.length = 0;
 					output.responseId = undefined;
 					output.errorMessage = undefined;
@@ -905,16 +945,18 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 					output.usage = createEmptyUsage(copilotDynamicHeaders?.premiumRequests);
 					output.stopReason = "stop";
 					firstTokenTime = undefined;
-					started = false;
 				}
-			} while (!started);
+			}
 
 			output.duration = Date.now() - startTime;
 			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "done", reason: output.stopReason, message: output });
 			stream.end();
 		} catch (error) {
-			for (const block of output.content) delete (block as { index?: number }).index;
+			for (const block of output.content) {
+				delete (block as { index?: number }).index;
+				delete (block as { partialJson?: string }).partialJson;
+			}
 			const firstEventTimeoutError = activeAbortTracker.getLocalAbortReason();
 			output.stopReason = activeAbortTracker.wasCallerAbort() ? "aborted" : "error";
 			output.errorMessage = firstEventTimeoutError?.message ?? (await finalizeErrorMessage(error, rawRequestDump));
