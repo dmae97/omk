@@ -241,11 +241,11 @@ describe("chunk mode tools", () => {
 			filePath,
 			operations: [
 				{
-					op: "splice",
+					op: "replace",
 					sel: chunkPath,
 					crc: checksum,
-					beg: 63,
-					end: 63,
+					line: 63,
+					endLine: 63,
 					content: "return err.message.toUpperCase() + total;",
 				},
 			],
@@ -257,17 +257,17 @@ describe("chunk mode tools", () => {
 			crc: checksum,
 			operations: [
 				{
-					splice: {
-						beg: 63,
-						end: 63,
+					replace: {
+						line: 63,
+						end_line: 63,
 						content: "return err.message.toUpperCase() + total;",
 					},
 				},
 				{
-					splice: {
+					replace: {
 						crc: checksum2,
-						beg: 3,
-						end: 3,
+						line: 3,
+						end_line: 3,
 						content: "let total = 1;",
 					},
 				},
@@ -338,11 +338,11 @@ describe("chunk mode tools", () => {
 			filePath,
 			operations: [
 				{
-					op: "splice",
+					op: "replace",
 					sel: chunkPath,
 					crc: checksum,
-					beg: 4,
-					end: 3,
+					line: 4,
+					endLine: 3,
 					content: "const end = Date.now();",
 				},
 			],
@@ -354,20 +354,20 @@ describe("chunk mode tools", () => {
 			path: filePath,
 			operations: [
 				{
-					splice: {
+					replace: {
 						sel: chunkPath,
 						crc: checksum,
-						beg: 4,
-						end: 3,
+						line: 4,
+						end_line: 3,
 						content: "const end = Date.now();",
 					},
 				},
 				{
-					splice: {
+					replace: {
 						sel: chunkPath,
 						crc: checksum2,
-						beg: 3,
-						end: 2,
+						line: 3,
+						end_line: 2,
 						content: "const start = Date.now();",
 					},
 				},
@@ -434,11 +434,11 @@ describe("chunk mode tools", () => {
 				path: filePath,
 				operations: [
 					{
-						splice: {
+						replace: {
 							sel: "class_Server.fn_handleError",
 							crc: checksum,
-							beg: 5,
-							end: 2,
+							line: 5,
+							end_line: 2,
 							content: "    let total = 1;",
 						},
 					},
@@ -525,18 +525,18 @@ describe("chunk mode tools", () => {
 						},
 					},
 					{
-						splice: {
+						replace: {
 							sel: "class_Server.fn_handleError",
 							crc: checksum,
-							beg: 63,
-							end: 63,
+							line: 63,
+							end_line: 63,
 							content: "    return err.message.toUpperCase();",
 						},
 					},
 				],
 			}),
 		).rejects.toThrow(
-			/Edit operation 2\/2 failed \(splice on "class_Server\.fn_handleError"\): Chunk "class_Server\.fn_handleError" was changed by an earlier batch operation/,
+			/Edit operation 2\/2 failed \(replace on "class_Server\.fn_handleError"\): Chunk "class_Server\.fn_handleError" was changed by an earlier batch operation/,
 		);
 
 		expect(await Bun.file(filePath).text()).toBe(originalSource);
@@ -554,11 +554,11 @@ describe("chunk mode tools", () => {
 				path: filePath,
 				operations: [
 					{
-						splice: {
+						replace: {
 							sel: "class_Server.fn_handleError",
 							// no crc!
-							beg: 3,
-							end: 3,
+							line: 3,
+							end_line: 3,
 							content: "    let total = 1;",
 						},
 					} as never,

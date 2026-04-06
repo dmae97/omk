@@ -37,13 +37,7 @@ import {
 import { convertFileWithMarkit } from "../utils/markit";
 import { detectSupportedImageMimeTypeFromFile } from "../utils/mime";
 import { type ArchiveReader, openArchive, parseArchivePathCandidates } from "./archive-reader";
-import {
-	type ChunkReadTarget,
-	chunkSplicesEnabled,
-	formatChunkedRead,
-	parseChunkReadPath,
-	parseChunkSelector,
-} from "./chunk-tree";
+import { type ChunkReadTarget, formatChunkedRead, parseChunkReadPath, parseChunkSelector } from "./chunk-tree";
 import {
 	executeReadUrl,
 	isReadableUrlPath,
@@ -457,7 +451,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		this.#inspectImageEnabled = session.settings.get("inspect_image.enabled");
 		this.description =
 			resolveEditMode(session) === "chunk"
-				? renderPromptTemplate(readChunkDescription, { chunkSplices: chunkSplicesEnabled() })
+				? renderPromptTemplate(readChunkDescription)
 				: renderPromptTemplate(readDescription, {
 						DEFAULT_LIMIT: String(this.#defaultLimit),
 						DEFAULT_MAX_LINES: String(DEFAULT_MAX_LINES),

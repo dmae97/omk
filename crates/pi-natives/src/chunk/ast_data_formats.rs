@@ -14,6 +14,14 @@ impl LangClassifier for DataFormatsClassifier {
 	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 		classify_data_node(node, source, false)
 	}
+
+	fn classify_function<'t>(
+		&self,
+		_node: Node<'t>,
+		_source: &str,
+	) -> Option<RawChunkCandidate<'t>> {
+		None
+	}
 }
 
 fn classify_data_node<'t>(
@@ -88,13 +96,15 @@ fn classify_data_node<'t>(
 	}
 }
 
-/// Extract key from a JSON `pair` node: unquote and sanitize.
+/// Extract key from a `pair` node (JSON or TOML).
+/// JSON pairs have a `"key"` field; TOML pairs have no field names, so we fall
+/// back to looking for the first `bare_key`, `quoted_key`, or `dotted_key`
+/// child.
 fn extract_pair_key(node: Node<'_>, source: &str) -> Option<String> {
-	node.child_by_field_name("key").and_then(|key| {
-		sanitize_identifier(
-			unquote_text(node_text(source, key.start_byte(), key.end_byte())).as_str(),
-		)
-	})
+	let key = node
+		.child_by_field_name("key")
+		.or_else(|| child_by_kind(node, &["bare_key", "quoted_key", "dotted_key"]))?;
+	sanitize_identifier(unquote_text(node_text(source, key.start_byte(), key.end_byte())).as_str())
 }
 
 /// Extract key from a YAML `block_mapping_pair` or `flow_pair` node.

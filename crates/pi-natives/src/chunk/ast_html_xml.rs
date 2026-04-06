@@ -56,4 +56,12 @@ impl LangClassifier for HtmlXmlClassifier {
 	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 		classify_element(node, source)
 	}
+
+	fn classify_function<'t>(
+		&self,
+		_node: Node<'t>,
+		_source: &str,
+	) -> Option<RawChunkCandidate<'t>> {
+		None
+	}
 }

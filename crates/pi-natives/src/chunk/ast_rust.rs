@@ -8,18 +8,148 @@ pub struct RustClassifier;
 
 impl LangClassifier for RustClassifier {
 	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
+		Some(match node.kind() {
+			// ── Imports ──
+			"use_declaration" | "extern_crate_declaration" => group_candidate(node, "imports", source),
+
+			// ── Functions ──
+			"function_item" | "function_definition" => named_candidate(
+				node,
+				"fn",
+				source,
+				recurse_body(node, ChunkContext::FunctionBody)
+					.or_else(|| recurse_into(node, ChunkContext::FunctionBody, &["body"], &["block"])),
+			),
+
+			// ── Containers ──
+			"struct_item" => container_candidate(node, "struct", source, recurse_class(node)),
+			"enum_item" => container_candidate(node, "enum", source, recurse_enum(node)),
+			"trait_item" => container_candidate(node, "trait", source, recurse_class(node)),
+			"mod_item" | "foreign_block" => {
+				container_candidate(node, "mod", source, recurse_class(node))
+			},
 			"impl_item" => {
 				let name = extract_impl_name(node, source).unwrap_or_else(|| "anonymous".to_string());
-				Some(make_container_chunk(
+				make_container_chunk(
 					node,
 					format!("impl_{name}"),
 					source,
 					recurse_into(node, ChunkContext::ClassBody, &["body"], &["declaration_list"]),
-				))
+				)
 			},
-			_ => None,
-		}
+
+			// ── Types ──
+			"type_item" => named_candidate(node, "type", source, recurse_class(node)),
+
+			// ── Macros ──
+			"macro_definition" | "macro_rule" => {
+				named_candidate(node, "macro", source, recurse_body(node, ChunkContext::FunctionBody))
+			},
+
+			// ── Statics / consts ──
+			"static_item" | "const_item" => group_candidate(node, "decls", source),
+
+			// ── Attributes ──
+			"inner_attribute_item" => group_candidate(node, "attrs", source),
+
+			// ── Variables ──
+			"let_declaration" => match extract_identifier(node, source) {
+				Some(name) => make_named_chunk(node, format!("var_{name}"), source, None),
+				None => group_candidate(node, "decls", source),
+			},
+
+			// ── Expression statements ──
+			"expression_statement" => group_candidate(node, "stmts", source),
+
+			_ => return None,
+		})
+	}
+
+	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
+		Some(match node.kind() {
+			// ── Methods ──
+			"function_item" | "function_definition" => {
+				let name = extract_identifier(node, source).unwrap_or_else(|| "anonymous".to_string());
+				make_named_chunk(
+					node,
+					format!("fn_{name}"),
+					source,
+					recurse_body(node, ChunkContext::FunctionBody),
+				)
+			},
+
+			// ── Types ──
+			"type_item" | "type_alias" => named_candidate(node, "type", source, None),
+
+			// ── Fields ──
+			"field_declaration" => match extract_identifier(node, source) {
+				Some(name) => make_named_chunk(node, format!("field_{name}"), source, None),
+				None => group_candidate(node, "fields", source),
+			},
+
+			// ── Enum variants ──
+			"enum_variant" => match extract_identifier(node, source) {
+				Some(name) => make_named_chunk(node, format!("variant_{name}"), source, None),
+				None => group_candidate(node, "variants", source),
+			},
+
+			// ── Consts / macros in class body ──
+			"const_item" | "macro_invocation" => group_candidate(node, "fields", source),
+
+			// ── Attributes (absorbed by the framework, but handle explicitly) ──
+			"attribute_item" => return None, // absorbed by is_absorbable_attr
+
+			_ => return None,
+		})
+	}
+
+	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
+		let fn_recurse = || recurse_body(node, ChunkContext::FunctionBody);
+		Some(match node.kind() {
+			// ── Control flow ──
+			"if_expression" => make_candidate(
+				node,
+				"if".to_string(),
+				NameStyle::Named,
+				None,
+				fn_recurse(),
+				false,
+				source,
+			),
+			"match_expression" => positional_candidate(node, "match", source),
+			"loop_expression" | "while_expression" | "for_expression" => {
+				positional_candidate(node, "loop", source)
+			},
+
+			// ── Blocks ──
+			"unsafe_block" | "async_block" | "const_block" | "block_expression" => make_candidate(
+				node,
+				"block".to_string(),
+				NameStyle::Named,
+				None,
+				fn_recurse(),
+				false,
+				source,
+			),
+
+			// ── Variables ──
+			"let_declaration" => {
+				let span = line_span(node.start_position().row + 1, node.end_position().row + 1);
+				if span > 1 {
+					match extract_identifier(node, source) {
+						Some(name) => make_named_chunk(node, format!("var_{name}"), source, None),
+						None => group_candidate(node, "let", source),
+					}
+				} else {
+					group_candidate(node, "let", source)
+				}
+			},
+
+			// ── Expression statements ──
+			"expression_statement" => group_candidate(node, "stmts", source),
+
+			_ => return None,
+		})
 	}
 }
 

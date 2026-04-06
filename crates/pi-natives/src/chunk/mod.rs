@@ -1734,6 +1734,91 @@ struct Config {
 	}
 
 	#[test]
+	fn ruby_class_methods_chunked() {
+		let source = r#"module PaymentProcessing
+  class Money
+    include Comparable
+
+    attr_reader :amount, :currency
+
+    def initialize(amount, currency = :usd)
+      @amount = amount
+      @currency = currency
+    end
+
+    def self.zero(currency = :usd)
+      new(0, currency)
+    end
+
+    def to_s
+      "$#{amount}"
+    end
+
+    private
+
+    def validate!
+      raise "Invalid" if amount < 0
+    end
+  end
+end
+"#;
+		let tree = build_chunk_tree(source, "ruby").expect("tree should build");
+		assert_eq!(tree.root_children, vec!["mod_PaymentProcessing"]);
+		let module = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "mod_PaymentProcessing")
+			.expect("mod_PaymentProcessing");
+		assert_eq!(module.kind, "branch");
+		assert!(
+			module
+				.children
+				.iter()
+				.any(|c| c == "mod_PaymentProcessing.class_Money"),
+			"expected class_Money inside module, got {:?}",
+			module.children
+		);
+		let class = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "mod_PaymentProcessing.class_Money")
+			.expect("class_Money");
+		assert_eq!(class.kind, "branch");
+		assert!(
+			class
+				.children
+				.iter()
+				.any(|c| c == "mod_PaymentProcessing.class_Money.constructor"),
+			"expected constructor in class children: {:?}",
+			class.children
+		);
+		assert!(
+			class
+				.children
+				.iter()
+				.any(|c| c == "mod_PaymentProcessing.class_Money.fn_zero"),
+			"expected fn_zero in class children: {:?}",
+			class.children
+		);
+		assert!(
+			class
+				.children
+				.iter()
+				.any(|c| c == "mod_PaymentProcessing.class_Money.fn_to_s"),
+			"expected fn_to_s in class children: {:?}",
+			class.children
+		);
+		assert!(
+			class
+				.children
+				.iter()
+				.any(|c| c == "mod_PaymentProcessing.class_Money.fn_validate"),
+			"expected fn_validate in class children: {:?}",
+			class.children
+		);
+	}
+
+	#[test]
 	fn keeps_mixed_enum_children_addressable() {
 		let source = r"enum Message {
 	    Ok,

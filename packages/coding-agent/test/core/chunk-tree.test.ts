@@ -425,7 +425,7 @@ describe("edit safety invariants", () => {
 		};
 	}
 
-	for (const operation of ["replace", "delete", "splice"] as const) {
+	for (const operation of ["replace", "delete", "line-scoped replace"] as const) {
 		test(`rejects stale checksum for ${operation} with current and provided checksums in the error`, () => {
 			const { source, staleChecksum, currentChecksum } = buildStaleRunFixture();
 
@@ -449,11 +449,11 @@ describe("edit safety invariants", () => {
 				return edit(
 					[
 						{
-							op: "splice",
+							op: "replace",
 							sel: runChunkPath,
 							crc: staleChecksum,
-							beg: 7,
-							end: 7,
+							line: 7,
+							endLine: 7,
 							content: '\t\tconsole.log("again");',
 						},
 					],
@@ -511,19 +511,19 @@ describe("edit safety invariants", () => {
 		expect(() =>
 			edit([
 				{
-					op: "splice",
+					op: "replace",
 					sel: runChunkPath,
 					crc: checksum,
-					beg: 6,
-					end: 6,
+					line: 6,
+					endLine: 6,
 					content: '\trun(task = "default"): void {',
 				},
 				{
-					op: "splice",
+					op: "replace",
 					sel: runChunkPath,
 					crc: checksum,
-					beg: 7,
-					end: 7,
+					line: 7,
+					endLine: 7,
 					content: "\t\tconsole.log(task);",
 				},
 			]),
@@ -535,30 +535,30 @@ describe("edit safety invariants", () => {
 		// Batch splices are applied bottom-up by absolute file line (higher line first).
 		const afterFirst = edit([
 			{
-				op: "splice",
+				op: "replace",
 				sel: runChunkPath,
 				crc: checksum,
-				beg: 7,
-				end: 7,
+				line: 7,
+				endLine: 7,
 				content: "\t\tconsole.log(task);",
 			},
 		]).diffSourceAfter;
 		const checksum2 = getChecksum(afterFirst, runChunkPath);
 		const result = edit([
 			{
-				op: "splice",
+				op: "replace",
 				sel: runChunkPath,
 				crc: checksum,
-				beg: 7,
-				end: 7,
+				line: 7,
+				endLine: 7,
 				content: "\t\tconsole.log(task);",
 			},
 			{
-				op: "splice",
+				op: "replace",
 				sel: runChunkPath,
 				crc: checksum2,
-				beg: 6,
-				end: 6,
+				line: 6,
+				endLine: 6,
 				content: '\trun(task = "default"): void {',
 			},
 		]);
@@ -589,11 +589,11 @@ describe("edit safety invariants", () => {
 		const before = getChecksum(testSource, "class_Worker.constructor");
 		const after = edit([
 			{
-				op: "splice",
+				op: "replace",
 				sel: runChunkPath,
 				crc: getChecksum(testSource, runChunkPath),
-				beg: 7,
-				end: 7,
+				line: 7,
+				endLine: 7,
 				content: '\t\tconsole.log("nearby");',
 			},
 		]).diffSourceAfter;
@@ -714,7 +714,7 @@ describe("formatChunkedRead", () => {
 			language: "typescript",
 		});
 
-		expect(result.text).toMatch(new RegExp(`with-tail\\.ts  ·  ${totalLines} lines`));
+		expect(result.text).toMatch(new RegExp(`with-tail\\.ts  ·  ${totalLines}ln`));
 	});
 
 	test("leaf read shows absolute file lines and raw source indentation", async () => {
@@ -955,7 +955,7 @@ describe("grouped Go receiver chunk headers", () => {
 			language: "go",
 		});
 
-		expect(result.text).toContain("server.go:type_Server  ·  6 lines");
+		expect(result.text).toContain("server.go:type_Server  ·  6ln");
 		expect(result.text).toContain(".fn_Start#");
 		expect(result.text).toContain(".fn_Stop#");
 	});
@@ -1010,10 +1010,10 @@ describe("zero-width splice (line insertion)", () => {
 		const ac = { sel: "class_Worker.fn_run", crc: getChecksum(testSource, "class_Worker.fn_run") };
 		const result = edit([
 			{
-				op: "splice",
+				op: "replace",
 				...ac,
-				beg: 7,
-				end: 6,
+				line: 7,
+				endLine: 6,
 				content: "if (!this.name) return;",
 			},
 		]);
@@ -1025,10 +1025,10 @@ describe("zero-width splice (line insertion)", () => {
 		const ac = { sel: "class_Worker.fn_run", crc: getChecksum(testSource, "class_Worker.fn_run") };
 		const result = edit([
 			{
-				op: "splice",
+				op: "replace",
 				...ac,
-				beg: 8,
-				end: 7,
+				line: 8,
+				endLine: 7,
 				content: "trackRun();",
 			},
 		]);
@@ -1041,10 +1041,10 @@ describe("zero-width splice (line insertion)", () => {
 		expect(() =>
 			edit([
 				{
-					op: "splice",
+					op: "replace",
 					...ac,
-					beg: 20,
-					end: 19,
+					line: 20,
+					endLine: 19,
 					content: "noop();",
 				},
 			]),
@@ -1056,11 +1056,11 @@ describe("zero-width splice (line insertion)", () => {
 		const inserted = edit(
 			[
 				{
-					op: "splice",
+					op: "replace",
 					sel: "class_Worker.fn_run",
 					crc: checksum,
-					beg: 5,
-					end: 4,
+					line: 5,
+					endLine: 4,
 					content: "// inserted",
 				},
 			],
@@ -1126,11 +1126,11 @@ describe("blank-line cleanup", () => {
 		const result = edit(
 			[
 				{
-					op: "splice",
+					op: "replace",
 					sel: "class_Worker.fn_restart",
 					crc: checksum,
-					beg: 6,
-					end: 6,
+					line: 6,
+					endLine: 6,
 					content: "",
 				},
 			],
@@ -1187,10 +1187,10 @@ describe("splice", () => {
 		// fn_run spans file lines 6-8; line 7 is console.log
 		const result = edit([
 			{
-				op: "splice",
+				op: "replace",
 				...ac,
-				beg: 7,
-				end: 7,
+				line: 7,
+				endLine: 7,
 				content: '\t\tconsole.log("updated");',
 			},
 		]);
@@ -1209,11 +1209,11 @@ describe("splice", () => {
 			filePath: "/tmp/widget.rs",
 			operations: [
 				{
-					op: "splice",
+					op: "replace",
 					sel: "impl_Widget.fn_old",
 					crc: checksum,
-					beg: 3,
-					end: 4,
+					line: 3,
+					endLine: 4,
 					content: "    false\n}",
 				},
 			],
@@ -1227,11 +1227,11 @@ describe("splice", () => {
 		expect(() =>
 			edit([
 				{
-					op: "splice",
+					op: "replace",
 					sel: "class_Worker.fn_run",
 					crc: "ZZZZ",
-					beg: 7,
-					end: 7,
+					line: 7,
+					endLine: 7,
 					content: "replacement",
 				},
 			]),
@@ -1243,10 +1243,10 @@ describe("splice", () => {
 		expect(() =>
 			edit([
 				{
-					op: "splice",
+					op: "replace",
 					...ac,
-					beg: 4,
-					end: 2,
+					line: 4,
+					endLine: 2,
 					content: "replacement",
 				},
 			]),
@@ -1258,10 +1258,10 @@ describe("splice", () => {
 		expect(() =>
 			edit([
 				{
-					op: "splice",
+					op: "replace",
 					...ac,
-					beg: 0,
-					end: 1,
+					line: 0,
+					endLine: 1,
 					content: "replacement",
 				},
 			]),
@@ -1274,10 +1274,10 @@ describe("splice", () => {
 		expect(() =>
 			edit([
 				{
-					op: "splice",
+					op: "replace",
 					...ac,
-					beg: 1,
-					end: 5,
+					line: 1,
+					endLine: 5,
 					content: "replacement",
 				},
 			]),

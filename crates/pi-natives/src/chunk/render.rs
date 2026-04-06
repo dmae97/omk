@@ -8,12 +8,12 @@ use crate::{
 type ChunkLookup<'a> = HashMap<&'a str, &'a ChunkNode>;
 
 env_uint! {
-	// Configured full display threshold.
-	static FULL_DISPLAY_THRESHOLD: usize = "PI_CHUNK_FULL_DISPLAY_THRESHOLD" or 80 => [1, usize::MAX];
-	// Configured preview head lines.
-	static PREVIEW_HEAD_LINES: usize = "PI_CHUNK_PREVIEW_HEAD_LINES" or 20 => [1, usize::MAX];
-	// Configured preview tail lines.
-	static PREVIEW_TAIL_LINES: usize = "PI_CHUNK_PREVIEW_TAIL_LINES" or 8 => [1, usize::MAX];
+	 // Configured full display threshold.
+	 static FULL_DISPLAY_THRESHOLD: usize = "PI_CHUNK_FULL_DISPLAY_THRESHOLD" or 40 => [1, usize::MAX];
+	 // Configured preview head lines.
+	 static PREVIEW_HEAD_LINES: usize = "PI_CHUNK_PREVIEW_HEAD_LINES" or 10 => [1, usize::MAX];
+	 // Configured preview tail lines.
+	 static PREVIEW_TAIL_LINES: usize = "PI_CHUNK_PREVIEW_TAIL_LINES" or 5 => [1, usize::MAX];
 }
 
 pub fn line_to_containing_chunk_path(tree: &ChunkTree, line: u32) -> Option<String> {
@@ -330,13 +330,12 @@ fn format_header_meta(
 	omit_checksum: bool,
 ) -> String {
 	let language = language_tag.unwrap_or("text");
-	let line_label = if line_count == 1 { "line" } else { "lines" };
 	let checksum_part = if omit_checksum {
 		String::new()
 	} else {
 		format!("  ·  #{checksum}")
 	};
-	format!("{title}  ·  {line_count} {line_label}  ·  {language}{checksum_part}")
+	format!("{title}  ·  {line_count}ln  ·  {language}{checksum_part}")
 }
 
 fn should_render_gap_line(
@@ -591,18 +590,7 @@ fn emit_leaf_body(ctx: &mut RenderCtx<'_>, _chunk: &ChunkNode, span: VisibleSpan
 		match entry {
 			LeafEntry::Line { abs_line, text } => push_code(ctx, abs_line, &text),
 			LeafEntry::Ellipsis { count, start_abs, end_abs } => {
-				push_meta(
-					ctx,
-					format!(
-						"⋮ {} {} ({}–{}) — sel=L{}-L{} to expand ⋮",
-						count,
-						if count == 1 { "line" } else { "lines" },
-						start_abs,
-						end_abs,
-						start_abs,
-						end_abs,
-					),
-				);
+				push_meta(ctx, format!("sel=L{start_abs}-L{end_abs} to expand ({count} lines)"));
 			},
 		}
 	}

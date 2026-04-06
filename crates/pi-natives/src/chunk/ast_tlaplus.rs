@@ -12,7 +12,7 @@ use super::{
 	common::{
 		ChunkContext, RawChunkCandidate, RecurseSpec, child_by_kind, extract_identifier,
 		group_candidate, make_container_chunk, make_container_chunk_from, make_named_chunk,
-		recurse_self, sanitize_identifier,
+		positional_candidate, recurse_self, sanitize_identifier,
 	},
 	types::ChunkNode,
 };
@@ -74,6 +74,19 @@ impl LangClassifier for TlaplusClassifier {
 				recurse_child(node, "pcal_algorithm_body", ChunkContext::ClassBody),
 			)),
 			"pcal_var_decls" => Some(group_candidate(node, "decls", source)),
+			_ => None,
+		}
+	}
+
+	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
+		match node.kind() {
+			// PlusCal control flow
+			"pcal_if" => Some(positional_candidate(node, "if", source)),
+			"pcal_while" => Some(positional_candidate(node, "loop", source)),
+			"pcal_either" => Some(positional_candidate(node, "either", source)),
+			"pcal_with" => Some(positional_candidate(node, "with", source)),
+			// PlusCal assignments
+			"pcal_assign" => Some(group_candidate(node, "stmts", source)),
 			_ => None,
 		}
 	}

@@ -77,6 +77,14 @@ impl LangClassifier for MarkupClassifier {
 			_ => None,
 		}
 	}
+
+	fn classify_function<'t>(
+		&self,
+		_node: Node<'t>,
+		_source: &str,
+	) -> Option<RawChunkCandidate<'t>> {
+		None
+	}
 }
 
 /// Extract heading text from a Markdown `section` node's `atx_heading` or

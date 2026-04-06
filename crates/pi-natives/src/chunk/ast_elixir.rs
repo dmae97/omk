@@ -89,6 +89,8 @@ fn call_name(node: Node<'_>, source: &str) -> Option<String> {
 	// The first named child after the target is typically `arguments`.
 	// For `def run(x)`, arguments contains a `call` node whose target is `run`.
 	// For `defmodule App`, arguments contains an `alias` node with text `App`.
+	// For `def run(x) when is_integer(x)`, arguments contains a `binary_operator`
+	// with the call on the left and the guard on the right.
 	// Extract the meaningful name, not the full text with parameters.
 	named_children(node).into_iter().skip(1).find_map(|child| {
 		if child.kind() == "do_block" {
@@ -100,6 +102,16 @@ fn call_name(node: Node<'_>, source: &str) -> Option<String> {
 				if arg.kind() == "call" {
 					// `def run(x)` → arguments has call(target=run), extract target name
 					call_target(arg, source).and_then(|t| sanitize_identifier(&t))
+				} else if arg.kind() == "binary_operator" {
+					// `def run(x) when guard` → binary_operator(left=call, right=guard)
+					// Extract name from the left side (the actual function call).
+					arg.child_by_field_name("left").and_then(|left| {
+						if left.kind() == "call" {
+							call_target(left, source).and_then(|t| sanitize_identifier(&t))
+						} else {
+							sanitize_identifier(node_text(source, left.start_byte(), left.end_byte()))
+						}
+					})
 				} else {
 					// `defmodule App` → arguments has alias("App")
 					sanitize_identifier(node_text(source, arg.start_byte(), arg.end_byte()))
@@ -130,5 +142,12 @@ impl LangClassifier for ElixirClassifier {
 			"call" => Some(classify_call(node, source, false)),
 			_ => None,
 		}
+	}
+
+	fn is_trivia(&self, kind: &str) -> bool {
+		// `@doc`, `@spec`, `@impl`, `@type`, `@moduledoc`, etc. are all
+		// `unary_operator` nodes in the Elixir grammar (operator `@`).
+		// Treat them as trivia so they get absorbed into the next chunk.
+		kind == "unary_operator"
 	}
 }

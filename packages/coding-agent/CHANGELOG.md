@@ -14,6 +14,15 @@
 
 ### Changed
 
+- Renamed chunk edit line-range parameters from `beg`/`end` to `line`/`end_line` for consistency with documentation
+- Unified `splice` and `replace` operations into a single `replace` operation with optional `line`/`end_line` parameters for line-scoped edits
+- Updated `replace` operation to support optional `line` and `end_line` parameters, with `end_line` defaulting to `line` when omitted for single-line replacements
+- Removed `splice` operation from chunk edit schema; use `replace` with `line`/`end_line` parameters instead
+- Simplified chunk edit prompt documentation to consolidate operation guidance and remove splice-specific examples
+- Renamed chunk edit line-range parameters from `beg`/`end` to `line`/`end_line` for clarity and consistency with documentation
+- Updated `replace` operation to support optional `line` and `end_line` parameters for line-scoped edits, with `end_line` defaulting to `line` when omitted for single-line replacements
+- Simplified chunk edit prompt documentation to consolidate `replace` and `splice` operations into a single `replace` operation with optional line-range parameters
+- Added backward compatibility mapping to accept legacy `beg`/`end` and `end_line` field names in chunk edit operations
 - Changed chunk edit operation format from flat `{ "op": "splice", ... }` to keyed `{ "splice": { ... } }` format for improved clarity and schema validation
 - Updated chunk edit schema to use discriminated union types with operation-specific field requirements (insert ops no longer require CRC, mutation ops require CRC)
 - Improved chunk selector sanitization to strip filename prefixes and normalize checksums to uppercase, handling model output variations
@@ -33,6 +42,7 @@
 
 ### Removed
 
+- Removed `PI_CHUNK_SPLICES` environment variable and `chunkSplicesEnabled()` function; splice operations are no longer conditionally available
 - Autoresearch segment fingerprint hashing and `segmentFingerprint` on experiment state / `autoresearch.jsonl` config lines
 
 ### Fixed

@@ -64,6 +64,8 @@ fn classify_css_node<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandida
 			source,
 			Some(recurse_self(node, ChunkContext::ClassBody)),
 		)),
+		// Top-level or nested property declarations.
+		"declaration" => Some(group_candidate(node, "fields", source)),
 		_ => None,
 	}
 }
@@ -75,6 +77,14 @@ impl LangClassifier for CssClassifier {
 
 	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 		classify_css_node(node, source)
+	}
+
+	fn classify_function<'t>(
+		&self,
+		_node: Node<'t>,
+		_source: &str,
+	) -> Option<RawChunkCandidate<'t>> {
+		None
 	}
 
 	fn is_root_wrapper(&self, kind: &str) -> bool {

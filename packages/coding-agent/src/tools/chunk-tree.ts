@@ -81,9 +81,8 @@ export type ChunkEditOperation =
 	| { op: "prepend_child"; sel?: string; crc?: string; content: string }
 	| { op: "append_sibling"; sel?: string; crc?: string; content: string }
 	| { op: "prepend_sibling"; sel?: string; crc?: string; content: string }
-	| { op: "replace"; sel?: string; crc?: string; content: string; beg?: number; end?: number }
-	| { op: "delete"; sel?: string; crc?: string }
-	| { op: "splice"; sel?: string; crc?: string; beg: number; end: number; content: string };
+	| { op: "replace"; sel?: string; crc?: string; content: string; line?: number; endLine?: number }
+	| { op: "delete"; sel?: string; crc?: string };
 
 export type ChunkEditResult = {
 	diffSourceBefore: string;
@@ -113,17 +112,6 @@ type ParsedChunkReadPath = {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * `PI_CHUNK_SPLICES` — when `0`, chunk edit tool omits the `splice` operation from the schema
- * and prompts. Default `1` (splices enabled). Other values throw at startup when the schema loads.
- */
-export function chunkSplicesEnabled(): boolean {
-	const v = Bun.env.PI_CHUNK_SPLICES;
-	if (v === undefined || v === "" || v === "1") return true;
-	if (v === "0") return false;
-	throw new Error(`Invalid PI_CHUNK_SPLICES: expected "0" or "1" (default: 1), got ${JSON.stringify(v)}`);
-}
 
 /**
  * `PI_CHUNI_VALIDATE` — when `0`, chunk edit tool skips the validation of the edited
@@ -795,98 +783,64 @@ function validateBatchCrc(params: { chunk: ChunkNode; crc: string | undefined; r
 	validateCrc(chunk, crc);
 }
 
-function validateSpliceRange(anchor: ChunkNode, beg: number, end: number): void {
+/**
+ * Validate that line/endLine fall within the anchor chunk's span.
+ * Supports three modes:
+ * - line <= endLine: replace lines line–endLine (inclusive)
+ * - line = endLine + 1: zero-width insert between endLine and line
+ * - single-line (endLine === line): replace just that line
+ */
+function validateLineRange(anchor: ChunkNode, line: number, endLine: number): void {
 	const cStart = anchor.startLine;
 	const cEnd = anchor.endLine;
 	const chunkName = operation_name(anchor);
-	if (beg < 1) {
+	if (line < 1) {
 		throw new Error(
-			`Splice beg ${beg} is invalid for ${chunkName}; beg and end are absolute file line numbers (1-indexed). This chunk spans file lines ${cStart}-${cEnd}.`,
+			`Line ${line} is invalid for ${chunkName}; line and end_line are absolute file line numbers (1-indexed). This chunk spans file lines ${cStart}-${cEnd}.`,
 		);
 	}
-	if (end < 0) {
-		throw new Error(`Invalid splice range L${beg}-L${end} for ${chunkName}: end cannot be negative.`);
+	if (endLine < 0) {
+		throw new Error(`Invalid line range L${line}-L${endLine} for ${chunkName}: end_line cannot be negative.`);
 	}
-	if (beg > end + 1) {
+	if (line > endLine + 1) {
 		throw new Error(
-			`Invalid splice range L${beg}-L${end} for ${chunkName}: use beg ≤ end to replace lines, or beg = end + 1 for a zero-width insertion in the gap after file line end (before file line beg).`,
+			`Invalid line range L${line}-L${endLine} for ${chunkName}: use line \u2264 end_line to replace lines, or line = end_line + 1 for zero-width insertion.`,
 		);
 	}
-	if (beg <= end) {
-		if (beg < cStart || end > cEnd) {
+	if (line <= endLine) {
+		if (line < cStart || endLine > cEnd) {
 			throw new Error(
-				`Splice range L${beg}-L${end} is outside ${chunkName} (chunk spans file lines ${cStart}-${cEnd}). Use absolute line numbers from read output.`,
+				`Line range L${line}-L${endLine} is outside ${chunkName} (chunk spans file lines ${cStart}-${cEnd}). Use absolute line numbers from read output.`,
 			);
 		}
 		return;
 	}
-	// beg === end + 1: zero-width insertion between file line `end` and file line `beg`
-	const beforeChunk = end === cStart - 1 && beg === cStart;
-	const insideGap = cStart <= end && end < cEnd && beg === end + 1;
-	const afterChunk = end === cEnd && beg === cEnd + 1;
+	// line === endLine + 1: zero-width insertion
+	const beforeChunk = endLine === cStart - 1 && line === cStart;
+	const insideGap = cStart <= endLine && endLine < cEnd && line === endLine + 1;
+	const afterChunk = endLine === cEnd && line === cEnd + 1;
 	if (beforeChunk || insideGap || afterChunk) {
 		return;
 	}
 	throw new Error(
-		`Invalid zero-width splice L${beg}-L${end} for ${chunkName} (chunk spans file lines ${cStart}-${cEnd}). ` +
-			`Use end = ${cStart - 1}, beg = ${cStart} to insert before the first chunk line; ` +
-			`end = k, beg = k + 1 with ${cStart} ≤ k < ${cEnd} between interior lines; ` +
-			`end = ${cEnd}, beg = ${cEnd + 1} to insert after the last chunk line.`,
+		`Invalid zero-width insert L${line}-L${endLine} for ${chunkName} (chunk spans file lines ${cStart}-${cEnd}). ` +
+			`Use end_line = ${cStart - 1}, line = ${cStart} to insert before the first chunk line; ` +
+			`end_line = k, line = k + 1 with ${cStart} \u2264 k < ${cEnd} between interior lines; ` +
+			`end_line = ${cEnd}, line = ${cEnd + 1} to insert after the last chunk line.`,
 	);
 }
 
-function isZeroWidthSplice(beg: number, end: number): boolean {
-	return beg === end + 1;
+function isZeroWidthInsert(line: number, endLine: number): boolean {
+	return line === endLine + 1;
 }
 
-/** Absolute file line `absEnd` is the line after which the gap starts; before-chunk uses absEnd === cStart − 1. */
-function zeroWidthSpliceSortKey(anchor: ChunkNode, absEnd: number, absBeg: number): number {
+/** Sort key for zero-width inserts: higher endLine runs first (bottom-up) so line numbers stay stable. */
+function zeroWidthInsertSortKey(anchor: ChunkNode, endLine: number, line: number): number {
 	const cStart = anchor.startLine;
-	if (absEnd === cStart - 1 && absBeg === cStart) {
+	if (endLine === cStart - 1 && line === cStart) {
 		return cStart;
 	}
-	return absEnd;
-}
-
-function zeroWidthInsertionOffset(state: MutableChunkState, anchor: ChunkNode, absEnd: number): number {
-	const offsets = lineOffsets(state.source);
-	if (absEnd === anchor.startLine - 1) {
-		return lineStartOffset(offsets, anchor.startLine, state.source);
-	}
-	return lineEndOffset(offsets, absEnd, state.source);
-}
-
-function zeroWidthInsertionIndent(state: MutableChunkState, anchor: ChunkNode, absBeg: number, absEnd: number): string {
-	const offsets = lineOffsets(state.source);
-	const sliceFileLine = (absLine: number): string => {
-		if (absLine < 1 || absLine > state.tree.lineCount) {
-			return "";
-		}
-		return state.source.slice(
-			lineStartOffset(offsets, absLine, state.source),
-			lineEndOffset(offsets, absLine, state.source),
-		);
-	};
-	if (absEnd === anchor.startLine - 1) {
-		return detectCommonIndent(sliceFileLine(anchor.startLine)).prefix;
-	}
-	const iEnd = detectCommonIndent(sliceFileLine(absEnd)).prefix;
-	if (absBeg > state.tree.lineCount) {
-		return iEnd;
-	}
-	const iBeg = detectCommonIndent(sliceFileLine(absBeg)).prefix;
-	return iEnd.length >= iBeg.length ? iEnd : iBeg;
-}
-
-function normalizeZeroWidthInsertionContent(state: MutableChunkState, offset: number, content: string): string {
-	const trimmed = content.replace(/^\n+/, "").replace(/\n+$/, "");
-	if (trimmed.length === 0) return content;
-
-	const prevChar = offset > 0 ? state.source[offset - 1] : "";
-	const nextChar = offset < state.source.length ? state.source[offset] : "";
-	const prefix = prevChar !== "" && prevChar !== "\n" ? "\n" : "";
-	const suffix = nextChar !== "" && !trimmed.endsWith("\n") ? "\n" : "";
-	return `${prefix}${trimmed}${suffix}`;
+	return endLine;
 }
 
 type ScheduledChunkEditOperation = {
@@ -1290,6 +1244,13 @@ function getInsertionPointForPosition(
 	}
 }
 
+/** True when the replace op targets specific lines (not a whole-chunk replace). */
+function isLineScoped(
+	op: ChunkEditOperation,
+): op is { op: "replace"; sel?: string; crc?: string; line: number; endLine?: number; content: string } {
+	return op.op === "replace" && op.line != null;
+}
+
 export function applyChunkEdits(params: {
 	source: string;
 	language?: string;
@@ -1318,48 +1279,50 @@ export function applyChunkEdits(params: {
 
 	for (const scheduled of scheduledOps) {
 		const operation = scheduled.operation;
-		if (operation.op === "splice") {
+		if (isLineScoped(operation)) {
 			const anchor = scheduled.initialChunk;
 			if (!anchor) {
 				throw new Error(`Chunk tree is missing an anchor for ${describeScheduledOperation(scheduled)}`);
 			}
-			validateSpliceRange(anchor, operation.beg, operation.end);
+			const absEnd = operation.endLine ?? operation.line;
+			validateLineRange(anchor, operation.line, absEnd);
 		}
 	}
 
-	const spliceSortKey = (scheduled: ScheduledChunkEditOperation): number => {
+	const lineScopedSortKey = (scheduled: ScheduledChunkEditOperation): number => {
 		const operation = scheduled.operation;
-		if (operation.op !== "splice") {
+		if (!isLineScoped(operation)) {
 			return 0;
 		}
 		const anchor = scheduled.initialChunk;
 		if (!anchor) {
 			return 0;
 		}
-		if (isZeroWidthSplice(operation.beg, operation.end)) {
-			return zeroWidthSpliceSortKey(anchor, operation.end, operation.beg);
+		const absEnd = operation.endLine ?? operation.line;
+		if (isZeroWidthInsert(operation.line, absEnd)) {
+			return zeroWidthInsertSortKey(anchor, absEnd, operation.line);
 		}
-		return operation.beg;
+		return operation.line;
 	};
 	const executionOps: ScheduledChunkEditOperation[] = [];
 	for (let index = 0; index < scheduledOps.length; index++) {
 		const scheduled = scheduledOps[index]!;
-		if (scheduled.operation.op !== "splice") {
+		if (!isLineScoped(scheduled.operation)) {
 			executionOps.push(scheduled);
 			continue;
 		}
 
-		const spliceBlock: ScheduledChunkEditOperation[] = [scheduled];
-		while (index + 1 < scheduledOps.length && scheduledOps[index + 1]!.operation.op === "splice") {
+		const lineScopedBlock: ScheduledChunkEditOperation[] = [scheduled];
+		while (index + 1 < scheduledOps.length && isLineScoped(scheduledOps[index + 1]!.operation)) {
 			index++;
-			spliceBlock.push(scheduledOps[index]!);
+			lineScopedBlock.push(scheduledOps[index]!);
 		}
-		spliceBlock.sort((a, b) => {
-			const lineDiff = spliceSortKey(b) - spliceSortKey(a);
+		lineScopedBlock.sort((a, b) => {
+			const lineDiff = lineScopedSortKey(b) - lineScopedSortKey(a);
 			if (lineDiff !== 0) return lineDiff;
 			return a.originalIndex - b.originalIndex;
 		});
-		executionOps.push(...spliceBlock);
+		executionOps.push(...lineScopedBlock);
 	}
 
 	const currentDefaultSelector = initialDefaultSelector;
@@ -1388,12 +1351,13 @@ export function applyChunkEdits(params: {
 					const { chunk: anchor, crc: resolvedCrc } = resolveAnchorWithCrc(state, anchorSelector, crc, warnings);
 					validateBatchCrc({ chunk: anchor, crc: resolvedCrc, required: requiresChecksum });
 
-					// When beg/end are provided, replace only those lines (line-scoped replace).
-					if (operation.beg != null && operation.end != null) {
-						validateSpliceRange(anchor, operation.beg, operation.end);
+					// When line is provided, replace only those lines (line-scoped replace).
+					// endLine defaults to line when omitted (single-line edit).
+					if (operation.line != null) {
+						const absEnd = operation.endLine ?? operation.line;
+						validateLineRange(anchor, operation.line, absEnd);
 						const offsets = lineOffsets(state.source);
-						const absBeg = operation.beg;
-						const absEnd = operation.end;
+						const absBeg = operation.line;
 						const rangeStart = lineStartOffset(offsets, absBeg, state.source);
 						const rangeEnd = lineEndOffset(offsets, absEnd, state.source);
 						const replacedRange = state.source.slice(rangeStart, rangeEnd);
@@ -1411,7 +1375,7 @@ export function applyChunkEdits(params: {
 						break;
 					}
 
-					// Whole-chunk replace (no beg/end).
+					// Whole-chunk replace (no line/endLine).
 					const targetIndent = (anchor.indentChar || "\t").repeat(anchor.indent);
 					let replacement = normalizeInsertedContent(operation.content, targetIndent);
 					if (replacement.length > 0 && !replacement.endsWith("\n") && anchor.endLine < state.tree.lineCount) {
@@ -1492,7 +1456,7 @@ export function applyChunkEdits(params: {
 							});
 						if (commentOnly && anchor.path === "" && anchor.children.includes("file_preamble")) {
 							throw new Error(
-								"Comment-only prepend_child on root is not allowed when the file has a file_preamble chunk. Use replace or splice on the file_preamble chunk instead.",
+								"Comment-only prepend_child on root is not allowed when the file has a file_preamble chunk. Use replace on the file_preamble chunk instead.",
 							);
 						}
 						if (commentOnly && anchor.children.length > 0) {
@@ -1502,43 +1466,6 @@ export function applyChunkEdits(params: {
 						}
 					}
 					state.source = insertAtOffset(state.source, insertion.offset, replacement);
-					touchedPaths.push(anchor.path);
-					if (operation.sel === undefined) clearDefaultCrc();
-					break;
-				}
-				case "splice": {
-					const anchorSelector = operation.sel ?? currentDefaultSelector;
-					const crc = operation.crc ?? (operation.sel === undefined ? currentDefaultCrc : undefined);
-					const requiresChecksum = operation.sel !== undefined || Boolean(currentDefaultCrc);
-					ensureBatchOperationTargetCurrent(state, scheduled, crc, touchedPaths);
-					const { chunk: anchor, crc: resolvedCrc } = resolveAnchorWithCrc(state, anchorSelector, crc, warnings);
-					validateBatchCrc({ chunk: anchor, crc: resolvedCrc, required: requiresChecksum });
-					validateSpliceRange(anchor, operation.beg, operation.end);
-					const offsets = lineOffsets(state.source);
-					if (isZeroWidthSplice(operation.beg, operation.end)) {
-						const offset = zeroWidthInsertionOffset(state, anchor, operation.end);
-						const targetIndent = zeroWidthInsertionIndent(state, anchor, operation.beg, operation.end);
-						let replacement = normalizeInsertedContent(operation.content, targetIndent);
-						replacement = normalizeZeroWidthInsertionContent(state, offset, replacement);
-						state.source = insertAtOffset(state.source, offset, replacement);
-						touchedPaths.push(anchor.path);
-						if (operation.sel === undefined) clearDefaultCrc();
-						break;
-					}
-					const absBeg = operation.beg;
-					const absEnd = operation.end;
-					const rangeStart = lineStartOffset(offsets, absBeg, state.source);
-					const rangeEnd = lineEndOffset(offsets, absEnd, state.source);
-					const replacedRange = state.source.slice(rangeStart, rangeEnd);
-					const targetIndent = detectCommonIndent(replacedRange).prefix;
-					let replacement = normalizeInsertedContent(operation.content, targetIndent);
-					if (replacement.length > 0 && !replacement.endsWith("\n") && absEnd < state.tree.lineCount) {
-						replacement += "\n";
-					}
-					state.source = replaceRangeByLines(state.source, absBeg, absEnd, replacement);
-					if (replacement.length === 0) {
-						state.source = cleanupBlankLineArtifactsAtOffset(state.source, rangeStart);
-					}
 					touchedPaths.push(anchor.path);
 					if (operation.sel === undefined) clearDefaultCrc();
 					break;

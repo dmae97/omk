@@ -80,6 +80,23 @@ impl LangClassifier for NixHclClassifier {
 					Some(group_candidate(node, "hunks", source))
 				}
 			},
+			// Nix expressions
+			"function_expression" | "let_expression" => {
+				Some(named_candidate(node, "expr", source, recurse_value_container(node)))
+			},
+			// Nix inherit
+			"inherit" => Some(group_candidate(node, "imports", source)),
+			// Variable/assignment declarations
+			"variable_declaration" | "assignment" => Some(group_candidate(node, "decls", source)),
+			// HCL top-level block types
+			"provider" | "resource" | "data" | "locals" | "variable" | "output" | "module" => {
+				Some(container_candidate(
+					node,
+					sanitize_node_kind(node.kind()).as_str(),
+					source,
+					recurse_into(node, ChunkContext::ClassBody, &[], &["body"]),
+				))
+			},
 			_ => None,
 		}
 	}
@@ -106,6 +123,15 @@ impl LangClassifier for NixHclClassifier {
 					recurse_value_container(node),
 				))
 			},
+			_ => None,
+		}
+	}
+
+	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
+		match node.kind() {
+			// Nix control flow
+			"if_expression" => Some(positional_candidate(node, "if", source)),
+			"let_expression" => Some(positional_candidate(node, "block", source)),
 			_ => None,
 		}
 	}
