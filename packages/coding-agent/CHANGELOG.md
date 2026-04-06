@@ -1,8 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added `read.prosechunks` setting to enable chunk rendering for prose files (markdown, text, log, asciidoc, restructuredtext) in chunk edit mode
+- Added `read.explorechunks` setting to show chunk tree without checksums for read-only agents like explore
 - Added `new_segment` option to `init_experiment` to force a new segment even when contract fields match, enabling re-initialization with unchanged parameters
 - Added `skip_restore` option to `log_experiment` to preserve working tree state when discarding or failing experiments, useful when runs did not modify tracked files
 - Added tracking of pre-run dirty paths to distinguish run-produced changes from pre-existing uncommitted changes

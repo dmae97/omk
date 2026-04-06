@@ -53,6 +53,12 @@ import { formatAge, formatBytes, shortenPath, wrapBrackets } from "./render-util
 import { ToolAbortError, ToolError, throwIfAborted } from "./tool-errors";
 import { toolResult } from "./tool-result";
 
+const PROSE_LANGUAGES = new Set(["markdown", "text", "log", "asciidoc", "restructuredtext"]);
+
+function isProseLanguage(language: string | undefined): boolean {
+	return language !== undefined && PROSE_LANGUAGES.has(language);
+}
+
 // Document types converted to markdown via markit.
 const CONVERTIBLE_EXTENSIONS = new Set([
 	".pdf",
@@ -811,8 +817,12 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 
 		const mimeType = await detectSupportedImageMimeTypeFromFile(absolutePath);
 		const ext = path.extname(absolutePath).toLowerCase();
+		const hasEditTool = this.session.hasEditTool ?? true;
+		const language = getLanguageFromPath(absolutePath);
+		const skipChunksForExplore = !hasEditTool && !this.session.settings.get("read.explorechunks");
+		const skipChunksForProse = isProseLanguage(language) && !this.session.settings.get("read.prosechunks");
 
-		if (chunkMode && parsed.kind !== "raw") {
+		if (chunkMode && parsed.kind !== "raw" && !skipChunksForExplore && !skipChunksForProse) {
 			const absoluteLineRange =
 				pathChunkSelector && parsed.kind === "lines"
 					? { startLine: parsed.startLine, endLine: parsed.endLine }
@@ -832,8 +842,8 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 				filePath: absolutePath,
 				readPath: chunkReadPath,
 				cwd: this.session.cwd,
-				language: getLanguageFromPath(absolutePath),
-				omitChecksum: !(this.session.hasEditTool ?? true),
+				language,
+				omitChecksum: !hasEditTool,
 				absoluteLineRange,
 			});
 			let text = chunkResult.text;

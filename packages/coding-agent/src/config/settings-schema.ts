@@ -1030,6 +1030,26 @@ export const SETTINGS_SCHEMA = {
 		},
 	},
 
+	"read.prosechunks": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "editing",
+			label: "Prose Chunks",
+			description: "Enable chunk rendering for prose files in chunk edit mode",
+		},
+	},
+
+	"read.explorechunks": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "editing",
+			label: "Explore Chunks",
+			description: "Show chunk tree without checksums for read-only agents like explore",
+		},
+	},
+
 	// LSP
 	"lsp.enabled": {
 		type: "boolean",
