@@ -544,6 +544,12 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 					autoCompactionEnabled: session.autoCompactionEnabled,
 					messageCount: session.messages.length,
 					queuedMessageCount: session.queuedMessageCount,
+					systemPrompt: session.systemPrompt,
+					dumpTools: session.agent.state.tools.map(tool => ({
+						name: tool.name,
+						description: tool.description,
+						parameters: tool.parameters,
+					})),
 				};
 				return success(id, "get_state", state);
 			}

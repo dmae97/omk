@@ -82,6 +82,9 @@ export interface RpcSessionState {
 	autoCompactionEnabled: boolean;
 	messageCount: number;
 	queuedMessageCount: number;
+	/** For session dump / export (plain-text parity with /dump). */
+	systemPrompt?: string;
+	dumpTools?: Array<{ name: string; description: string; parameters: unknown }>;
 }
 
 // ============================================================================
