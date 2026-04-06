@@ -27,6 +27,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 pub mod appearance;
 pub mod ast;
+pub mod chunk;
 pub mod clipboard;
 pub mod fff;
 pub mod fs_cache;

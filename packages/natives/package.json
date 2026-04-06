@@ -84,6 +84,14 @@
 			"types": "./src/clipboard/*.ts",
 			"import": "./src/clipboard/*.ts"
 		},
+		"./chunk": {
+			"types": "./src/chunk/index.ts",
+			"import": "./src/chunk/index.ts"
+		},
+		"./chunk/*": {
+			"types": "./src/chunk/*.ts",
+			"import": "./src/chunk/*.ts"
+		},
 		"./glob": {
 			"types": "./src/glob/index.ts",
 			"import": "./src/glob/index.ts"

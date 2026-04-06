@@ -1,5 +1,6 @@
 export * from "./appearance";
 export * from "./ast";
+export * from "./chunk";
 export * from "./clipboard";
 export * from "./glob";
 export * from "./grep";

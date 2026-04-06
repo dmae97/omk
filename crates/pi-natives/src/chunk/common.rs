@@ -1,0 +1,848 @@
+//! Shared helpers for chunk classification.
+//!
+//! These are the building blocks that per-language classifiers use to construct
+//! [`RawChunkCandidate`] values. They are also used by the default (shared)
+//! classification in [`super::defaults`].
+
+use std::sync::LazyLock;
+
+use tree_sitter::Node;
+
+use super::types::ChunkNode;
+
+// ── Configuration (environment overrides) ────────────────────────────────
+//
+// - `PI_CHUNK_LEAF_THRESHOLD` – default `15`
+// - `PI_CHUNK_MAX_LINES`       – default `25`
+
+fn env_usize(name: &str, default: usize) -> usize {
+	std::env::var(name)
+		.ok()
+		.and_then(|v| v.parse().ok())
+		.unwrap_or(default)
+}
+
+pub static LEAF_THRESHOLD: LazyLock<usize> =
+	LazyLock::new(|| env_usize("PI_CHUNK_LEAF_THRESHOLD", 15));
+pub static MAX_CHUNK_LINES: LazyLock<usize> = LazyLock::new(|| env_usize("PI_CHUNK_MAX_LINES", 25));
+
+// ── Internal types ───────────────────────────────────────────────────────
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChunkContext {
+	Root,
+	ClassBody,
+	FunctionBody,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NameStyle {
+	Named,
+	Group,
+	Error,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct RecurseSpec<'tree> {
+	pub node:    Node<'tree>,
+	pub context: ChunkContext,
+}
+
+#[derive(Clone, Debug)]
+pub struct RawChunkCandidate<'tree> {
+	pub base_name:           String,
+	pub name_style:          NameStyle,
+	pub range_start_byte:    usize,
+	pub range_end_byte:      usize,
+	/// Start byte for `chunk_checksum`; stays at the primary node's start while
+	/// `range_start_byte` may be extended backward to include leading
+	/// attributes/comments.
+	pub checksum_start_byte: usize,
+	pub range_start_line:    usize,
+	pub range_end_line:      usize,
+	pub signature:           Option<String>,
+	pub error:               bool,
+	pub groupable:           bool,
+	pub has_leading_comment: bool,
+	pub force_recurse:       bool,
+	pub recurse:             Option<RecurseSpec<'tree>>,
+}
+
+#[derive(Default)]
+pub struct ChunkAccumulator {
+	pub chunks: Vec<ChunkNode>,
+}
+
+// ── Candidate constructors ───────────────────────────────────────────────
+
+pub fn make_candidate<'tree>(
+	node: Node<'tree>,
+	base_name: String,
+	name_style: NameStyle,
+	signature: Option<String>,
+	recurse: Option<RecurseSpec<'tree>>,
+	force_recurse: bool,
+	source: &str,
+) -> RawChunkCandidate<'tree> {
+	let start = node.start_position();
+	let end = node.end_position();
+	let base_name = canonical_chunk_name(node, base_name.as_str(), source);
+	let summary = summary_for_node(node, base_name.as_str(), signature.as_deref(), source);
+	let start_byte = node.start_byte();
+	RawChunkCandidate {
+		base_name,
+		name_style,
+		range_start_byte: start_byte,
+		range_end_byte: node.end_byte(),
+		checksum_start_byte: start_byte,
+		range_start_line: start.row + 1,
+		range_end_line: end.row + 1,
+		signature: summary,
+		error: name_style == NameStyle::Error,
+		groupable: matches!(name_style, NameStyle::Group),
+		has_leading_comment: false,
+		force_recurse,
+		recurse,
+	}
+}
+
+pub fn group_candidate<'tree>(
+	node: Node<'tree>,
+	base_name: &str,
+	source: &str,
+) -> RawChunkCandidate<'tree> {
+	make_candidate(node, base_name.to_string(), NameStyle::Group, None, None, false, source)
+}
+
+pub fn positional_candidate<'tree>(
+	node: Node<'tree>,
+	base_name: &str,
+	source: &str,
+) -> RawChunkCandidate<'tree> {
+	make_candidate(node, base_name.to_string(), NameStyle::Named, None, None, false, source)
+}
+
+pub fn named_candidate<'tree>(
+	node: Node<'tree>,
+	prefix: &str,
+	source: &str,
+	recurse: Option<RecurseSpec<'tree>>,
+) -> RawChunkCandidate<'tree> {
+	make_named_chunk(node, prefixed_name(prefix, node, source), source, recurse)
+}
+
+pub fn container_candidate<'tree>(
+	node: Node<'tree>,
+	prefix: &str,
+	source: &str,
+	recurse: Option<RecurseSpec<'tree>>,
+) -> RawChunkCandidate<'tree> {
+	make_container_chunk(node, prefixed_name(prefix, node, source), source, recurse)
+}
+
+pub fn make_named_chunk<'tree>(
+	node: Node<'tree>,
+	name: String,
+	source: &str,
+	recurse: Option<RecurseSpec<'tree>>,
+) -> RawChunkCandidate<'tree> {
+	make_candidate(
+		node,
+		name,
+		NameStyle::Named,
+		signature_for_node(node, source),
+		recurse,
+		false,
+		source,
+	)
+}
+
+pub fn make_named_chunk_from<'tree>(
+	range_node: Node<'tree>,
+	signature_node: Node<'tree>,
+	name: String,
+	source: &str,
+	recurse: Option<RecurseSpec<'tree>>,
+) -> RawChunkCandidate<'tree> {
+	make_candidate(
+		range_node,
+		name,
+		NameStyle::Named,
+		signature_for_node(signature_node, source),
+		recurse,
+		false,
+		source,
+	)
+}
+
+pub fn make_container_chunk<'tree>(
+	node: Node<'tree>,
+	name: String,
+	source: &str,
+	recurse: Option<RecurseSpec<'tree>>,
+) -> RawChunkCandidate<'tree> {
+	make_candidate(
+		node,
+		name,
+		NameStyle::Named,
+		signature_for_node(node, source),
+		recurse,
+		true,
+		source,
+	)
+}
+
+pub fn make_container_chunk_from<'tree>(
+	range_node: Node<'tree>,
+	signature_node: Node<'tree>,
+	name: String,
+	source: &str,
+	recurse: Option<RecurseSpec<'tree>>,
+) -> RawChunkCandidate<'tree> {
+	make_candidate(
+		range_node,
+		name,
+		NameStyle::Named,
+		signature_for_node(signature_node, source),
+		recurse,
+		true,
+		source,
+	)
+}
+
+/// Derive a "`prefix_identifier`" name from a node.
+pub fn prefixed_name(prefix: &str, node: Node<'_>, source: &str) -> String {
+	let identifier = extract_identifier(node, source).unwrap_or_else(|| "anonymous".to_string());
+	format!("{prefix}_{identifier}")
+}
+
+// ── Inferred / catch-all candidates ──────────────────────────────────────
+
+/// Derive a semantic name from a node's kind and/or identifier.
+pub fn infer_named_candidate<'tree>(node: Node<'tree>, source: &str) -> RawChunkCandidate<'tree> {
+	let kind_prefix = sanitize_node_kind(node.kind());
+	let name = match extract_identifier(node, source) {
+		Some(id) => format!("{kind_prefix}_{id}"),
+		None => kind_prefix,
+	};
+	make_named_chunk(node, name, source, None)
+}
+
+// ── Tree navigation helpers ──────────────────────────────────────────────
+
+pub fn named_children(node: Node<'_>) -> Vec<Node<'_>> {
+	let mut children = Vec::new();
+	for index in 0..node.named_child_count() {
+		if let Some(child) = node.named_child(index) {
+			children.push(child);
+		}
+	}
+	children
+}
+
+pub fn child_by_kind<'tree>(node: Node<'tree>, kinds: &[&str]) -> Option<Node<'tree>> {
+	named_children(node)
+		.into_iter()
+		.find(|child| kinds.iter().any(|kind| child.kind() == *kind))
+}
+
+pub fn child_by_field_or_kind<'tree>(
+	node: Node<'tree>,
+	fields: &[&str],
+	kinds: &[&str],
+) -> Option<Node<'tree>> {
+	for field in fields {
+		if let Some(child) = node.child_by_field_name(field) {
+			return Some(child);
+		}
+	}
+	child_by_kind(node, kinds)
+}
+
+// ── Recurse helpers ──────────────────────────────────────────────────────
+
+pub fn recurse_into<'tree>(
+	node: Node<'tree>,
+	context: ChunkContext,
+	fields: &[&str],
+	kinds: &[&str],
+) -> Option<RecurseSpec<'tree>> {
+	child_by_field_or_kind(node, fields, kinds).map(|child| RecurseSpec { node: child, context })
+}
+
+pub const fn recurse_self(node: Node<'_>, context: ChunkContext) -> RecurseSpec<'_> {
+	RecurseSpec { node, context }
+}
+
+pub fn recurse_body(node: Node<'_>, context: ChunkContext) -> Option<RecurseSpec<'_>> {
+	recurse_into(node, context, &["body"], &[
+		"statement_block",
+		"compound_statement",
+		"function_body",
+		"constructor_body",
+		"do_block",
+		"do_group",
+		"block",
+		"body_statement",
+		"statements",
+		"recipe",
+		"yul_block",
+	])
+}
+
+pub fn recurse_class(node: Node<'_>) -> Option<RecurseSpec<'_>> {
+	recurse_into(node, ChunkContext::ClassBody, &["body"], &[
+		"class_body",
+		"interface_body",
+		"enum_body",
+		"protocol_body",
+		"declaration_list",
+		"implementation_definition",
+		"contract_body",
+		"struct_body",
+		"keyframe_block_list",
+		"block",
+		"body_statement",
+		"body",
+		"enum_class_body",
+	])
+}
+
+pub fn recurse_interface(node: Node<'_>) -> Option<RecurseSpec<'_>> {
+	recurse_into(node, ChunkContext::ClassBody, &["body"], &[
+		"object_type",
+		"interface_body",
+		"protocol_body",
+		"contract_body",
+		"struct_body",
+		"block",
+		"body",
+	])
+}
+
+pub fn recurse_enum(node: Node<'_>) -> Option<RecurseSpec<'_>> {
+	recurse_into(node, ChunkContext::ClassBody, &["body"], &[
+		"enum_body",
+		"block",
+		"body",
+		"struct_body",
+	])
+}
+
+pub fn recurse_value_container(node: Node<'_>) -> Option<RecurseSpec<'_>> {
+	named_children(node)
+		.into_iter()
+		.find(|child| {
+			matches!(
+				child.kind(),
+				"object"
+					| "array" | "inline_table"
+					| "table" | "table_array_element"
+					| "block_mapping"
+					| "block_sequence"
+					| "flow_mapping"
+					| "flow_sequence"
+					| "block" | "attrset_expression"
+					| "let_expression"
+					| "function_expression"
+					| "body" | "binding_set"
+			)
+		})
+		.map(|child| RecurseSpec { node: child, context: ChunkContext::ClassBody })
+}
+
+// ── Identifier extraction ────────────────────────────────────────────────
+
+pub fn extract_identifier(node: Node<'_>, source: &str) -> Option<String> {
+	if node.kind() == "constructor" {
+		return Some("constructor".to_string());
+	}
+
+	let field_name = node.child_by_field_name("name").or_else(|| {
+		child_by_kind(node, &[
+			"identifier",
+			"property_identifier",
+			"private_property_identifier",
+			"type_identifier",
+			"field_identifier",
+			"simple_identifier",
+			"word",
+			"symbol",
+			"bare_key",
+			"quoted_key",
+			"dotted_key",
+		])
+	});
+	if let Some(name_node) = field_name {
+		return sanitize_identifier(node_text(source, name_node.start_byte(), name_node.end_byte()));
+	}
+
+	named_children(node)
+		.into_iter()
+		.find(|child| {
+			matches!(
+				child.kind(),
+				"identifier"
+					| "property_identifier"
+					| "private_property_identifier"
+					| "type_identifier"
+					| "field_identifier"
+					| "simple_identifier"
+					| "word" | "symbol"
+					| "bare_key"
+					| "quoted_key"
+					| "dotted_key"
+			)
+		})
+		.and_then(|child| {
+			sanitize_identifier(node_text(source, child.start_byte(), child.end_byte()))
+		})
+}
+
+/// Extract the name of a single-declarator binding like `const FOO = ...`.
+pub fn extract_single_declarator_name(node: Node<'_>, source: &str) -> Option<String> {
+	let declarators: Vec<Node<'_>> = named_children(node)
+		.into_iter()
+		.filter(|c| c.kind() == "variable_declarator")
+		.collect();
+	if declarators.len() != 1 {
+		return None;
+	}
+	extract_identifier(declarators[0], source)
+}
+
+// ── Text helpers ─────────────────────────────────────────────────────────
+
+pub fn node_text(source: &str, start_byte: usize, end_byte: usize) -> &str {
+	source.get(start_byte..end_byte).unwrap_or("")
+}
+
+pub fn sanitize_identifier(text: &str) -> Option<String> {
+	let mut out = String::new();
+	let mut previous_was_underscore = false;
+
+	for ch in text.chars() {
+		if ch.is_alphanumeric() || ch == '_' || ch == '$' {
+			out.push(ch);
+			previous_was_underscore = false;
+			continue;
+		}
+
+		if !previous_was_underscore {
+			out.push('_');
+			previous_was_underscore = true;
+		}
+	}
+
+	let sanitized = out.trim_matches('_').to_string();
+	if sanitized.is_empty() {
+		None
+	} else {
+		Some(sanitized)
+	}
+}
+
+pub fn unquote_text(text: &str) -> String {
+	text.trim().trim_matches('"').trim_matches('\'').to_string()
+}
+
+pub fn sanitize_node_kind(kind: &str) -> String {
+	let stripped = kind
+		.replace("_statement", "")
+		.replace("_declaration", "")
+		.replace("_definition", "")
+		.replace("_item", "")
+		.replace("_expression", "_expr");
+	if stripped.is_empty() {
+		kind.to_string()
+	} else {
+		stripped
+	}
+}
+
+pub fn normalized_header(source: &str, start_byte: usize, end_byte: usize) -> String {
+	let slice = node_text(source, start_byte, end_byte);
+	let mut header = String::new();
+
+	for line in slice.lines().take(4) {
+		let trimmed = line.trim();
+		if trimmed.is_empty() {
+			continue;
+		}
+		if !header.is_empty() {
+			header.push(' ');
+		}
+		header.push_str(trimmed);
+		if trimmed.contains('{') || trimmed.ends_with(';') {
+			break;
+		}
+	}
+
+	collapse_whitespace(header.as_str())
+}
+
+pub fn collapse_whitespace(text: &str) -> String {
+	let mut out = String::new();
+	let mut pending_space = false;
+	for ch in text.chars() {
+		if ch.is_whitespace() {
+			pending_space = true;
+			continue;
+		}
+		if pending_space && !out.is_empty() {
+			out.push(' ');
+		}
+		out.push(ch);
+		pending_space = false;
+	}
+	out
+}
+
+// ── Signature helpers ────────────────────────────────────────────────────
+
+/// Kinds that represent "body" blocks — the signature is everything before
+/// them.
+pub const BODY_KINDS: &[&str] = &[
+	"statement_block",
+	"compound_statement",
+	"function_body",
+	"constructor_body",
+	"do_block",
+	"do_group",
+	"block",
+	"body_statement",
+	"statements",
+	"recipe",
+	"yul_block",
+	"class_body",
+	"interface_body",
+	"enum_body",
+	"protocol_body",
+	"declaration_list",
+	"implementation_definition",
+	"contract_body",
+	"struct_body",
+	"keyframe_block_list",
+	"body",
+	"enum_class_body",
+	"object_type",
+	"field_declaration_list",
+	"method_spec_list",
+];
+
+pub fn signature_for_node(node: Node<'_>, source: &str) -> Option<String> {
+	let body_child = node
+		.child_by_field_name("body")
+		.filter(|c| c.start_byte() > node.start_byte())
+		.or_else(|| {
+			named_children(node)
+				.into_iter()
+				.find(|c| BODY_KINDS.contains(&c.kind()))
+		});
+
+	let raw = if let Some(body) = body_child {
+		node_text(source, node.start_byte(), body.start_byte())
+	} else {
+		node_text(source, node.start_byte(), node.end_byte())
+	};
+
+	let sig = collapse_whitespace(raw.trim());
+	let sig = sig
+		.trim_end_matches('{')
+		.trim_end_matches(':')
+		.trim_end_matches(';')
+		.trim();
+	if sig.is_empty() {
+		None
+	} else {
+		Some(sig.to_string())
+	}
+}
+
+// ── Summary / canonical naming ───────────────────────────────────────────
+
+fn is_function_like_kind(kind: &str) -> bool {
+	matches!(
+		kind,
+		"function_declaration"
+			| "function_definition"
+			| "function_item"
+			| "procedure_declaration"
+			| "overloaded_procedure_declaration"
+			| "function_definition_header"
+			| "test_declaration"
+			| "method_definition"
+			| "method_signature"
+			| "abstract_method_signature"
+			| "method_declaration"
+			| "protocol_function_declaration"
+			| "method"
+			| "singleton_method"
+	)
+}
+
+fn is_variable_decl_kind(kind: &str) -> bool {
+	matches!(
+		kind,
+		"lexical_declaration"
+			| "variable_declaration"
+			| "const_declaration"
+			| "var_declaration"
+			| "let_declaration"
+			| "short_var_declaration"
+	)
+}
+
+fn canonical_chunk_name(node: Node<'_>, base_name: &str, source: &str) -> String {
+	if is_function_like_kind(node.kind())
+		&& !base_name.starts_with("fn_")
+		&& base_name != "constructor"
+		&& let Some(name) = extract_identifier(node, source)
+	{
+		return format!("fn_{name}");
+	}
+	if is_variable_decl_kind(node.kind())
+		&& !base_name.starts_with("var_")
+		&& !base_name.starts_with("fn_")
+		&& !base_name.starts_with("class_")
+		&& let Some(name) = extract_single_declarator_name(node, source)
+	{
+		return format!("var_{name}");
+	}
+	if (base_name == "expression" || base_name == "expr")
+		&& let Some(name) = extract_identifier(node, source)
+	{
+		return format!("expr_{name}");
+	}
+	if base_name == "return"
+		&& let Some(name) = extract_identifier(node, source)
+	{
+		return format!("ret_{name}");
+	}
+	base_name.to_string()
+}
+
+fn normalize_summary_text(summary: &str) -> Option<String> {
+	let summary = collapse_whitespace(summary.trim())
+		.trim_end_matches('{')
+		.trim_end_matches(':')
+		.trim_end_matches(';')
+		.trim()
+		.to_string();
+	if summary.is_empty() {
+		None
+	} else {
+		Some(summary)
+	}
+}
+
+fn summarize_function_node(canonical_name: &str, raw_signature: &str) -> String {
+	let name = canonical_name.strip_prefix("fn_").unwrap_or(canonical_name);
+	let tail = function_signature(raw_signature)
+		.or_else(|| python_function_signature(raw_signature))
+		.or_else(|| rust_function_signature(raw_signature))
+		.unwrap_or_else(|| raw_signature.to_string());
+	let tail = tail.replacen("): ", ") → ", 1);
+	format!("fn {name}{tail}")
+}
+
+fn summarize_variable_node(node: Node<'_>, canonical_name: &str, source: &str) -> Option<String> {
+	let header = normalized_header(source, node.start_byte(), node.end_byte());
+	let keyword = header.split_whitespace().next()?;
+	let name = canonical_name
+		.strip_prefix("var_")
+		.unwrap_or(canonical_name);
+	Some(format!("{keyword} {name}"))
+}
+
+fn summarize_statement_node(node: Node<'_>, source: &str) -> Option<String> {
+	normalize_summary_text(normalized_header(source, node.start_byte(), node.end_byte()).as_str())
+}
+
+pub fn summary_for_node(
+	node: Node<'_>,
+	canonical_name: &str,
+	raw_signature: Option<&str>,
+	source: &str,
+) -> Option<String> {
+	if canonical_name == "imports" {
+		return Some("imports".to_string());
+	}
+	if canonical_name.starts_with("fn_")
+		&& let Some(signature) = raw_signature
+	{
+		return Some(summarize_function_node(canonical_name, signature));
+	}
+	if canonical_name.starts_with("var_") {
+		return summarize_variable_node(node, canonical_name, source);
+	}
+	if matches!(
+		node.kind(),
+		"for_statement"
+			| "for_in_statement"
+			| "for_of_statement"
+			| "if_statement"
+			| "return_statement"
+			| "expression_statement"
+			| "call_expression"
+			| "call"
+			| "function_call"
+	) {
+		return summarize_statement_node(node, source);
+	}
+	raw_signature
+		.and_then(normalize_summary_text)
+		.or_else(|| summarize_statement_node(node, source))
+}
+
+fn function_signature(header: &str) -> Option<String> {
+	let start = header.find('(')?;
+	let end = header.rfind('{').unwrap_or(header.len());
+	let signature = header.get(start..end)?.trim().trim_end_matches(';').trim();
+	if signature.is_empty() {
+		None
+	} else {
+		Some(signature.to_string())
+	}
+}
+
+fn python_function_signature(header: &str) -> Option<String> {
+	let start = header.find('(')?;
+	let end = header.rfind(':').unwrap_or(header.len());
+	let signature = header.get(start..end)?.trim();
+	if signature.is_empty() {
+		None
+	} else {
+		Some(signature.to_string())
+	}
+}
+
+fn rust_function_signature(header: &str) -> Option<String> {
+	let start = header.find('(')?;
+	let end = header.rfind('{').unwrap_or(header.len());
+	let mut sig = header.get(start..end)?.trim();
+	if let Some(idx) = sig.find(" where ") {
+		sig = sig.get(..idx)?.trim();
+	}
+	if sig.is_empty() {
+		None
+	} else {
+		Some(sig.to_string())
+	}
+}
+
+// ── Trivia and attribute detection ───────────────────────────────────────
+
+pub fn is_trivia(kind: &str) -> bool {
+	matches!(
+		kind,
+		"comment"
+			| "decorator"
+			| "line_comment"
+			| "block_comment"
+			| "start_tag"
+			| "end_tag"
+			| "comment_statement"
+			| "element_node_start"
+			| "element_node_end"
+			| "element_node_void"
+			| "block_statement_start"
+			| "block_statement_end"
+			| "xml_decl"
+			| "else_directive"
+			| "elsif_directive"
+	)
+}
+
+pub fn is_absorbable_attribute(kind: &str) -> bool {
+	matches!(kind, "attribute_item" | "inner_attribute_item")
+}
+
+// ── Other helpers ────────────────────────────────────────────────────────
+
+pub fn looks_like_python_statement(node: Node<'_>, source: &str) -> bool {
+	let header = normalized_header(source, node.start_byte(), node.end_byte());
+	header.contains(':') && !header.contains('{')
+}
+
+pub fn detect_indent(source: &str, start_byte: usize) -> (u32, String) {
+	let line_start = source.as_bytes()[..start_byte]
+		.iter()
+		.rposition(|&b| b == b'\n')
+		.map_or(0, |pos| pos + 1);
+	let line_prefix = &source[line_start..start_byte];
+	let mut cols = 0u32;
+	let mut ch = String::new();
+	for byte in line_prefix.bytes() {
+		match byte {
+			b'\t' => {
+				cols += 1;
+				if ch.is_empty() {
+					ch = "\t".to_string();
+				}
+			},
+			b' ' => {
+				cols += 1;
+				if ch.is_empty() {
+					ch = " ".to_string();
+				}
+			},
+			_ => break,
+		}
+	}
+	(cols, ch)
+}
+
+pub fn is_root_wrapper_kind(kind: &str) -> bool {
+	matches!(
+		kind,
+		"body"
+			| "block_node"
+			| "flow_node"
+			| "object"
+			| "array"
+			| "binding_set"
+			| "block_mapping"
+			| "flow_mapping"
+			| "block_sequence"
+			| "flow_sequence"
+			| "program"
+			| "source"
+			| "source_code"
+			| "source_file"
+			| "template"
+			| "document"
+			| "config_file"
+			| "module"
+			| "makefile"
+			| "stylesheet"
+			| "translation_unit"
+			| "compilation_unit"
+	)
+}
+
+pub const fn line_span(start_line: usize, end_line: usize) -> usize {
+	end_line.saturating_sub(start_line) + 1
+}
+
+pub fn total_line_count(source: &str) -> usize {
+	if source.is_empty() {
+		0
+	} else {
+		source.bytes().filter(|byte| *byte == b'\n').count() + 1
+	}
+}
+
+pub fn first_scalar_child(node: Node<'_>) -> Option<Node<'_>> {
+	named_children(node).into_iter().find(|child| {
+		!matches!(
+			child.kind(),
+			"block_node"
+				| "flow_node"
+				| "block_mapping"
+				| "flow_mapping"
+				| "block_sequence"
+				| "flow_sequence"
+		)
+	})
+}

@@ -23,7 +23,10 @@ export type HashlineEdit =
 	| { op: "append_file"; lines: string[] }
 	| { op: "prepend_file"; lines: string[] };
 
-const NIBBLE_STR = "ZPMQVRWSNKTXJBYH";
+/** 16-char nibble alphabet (no digits); shared with chunk checksum suffixes. */
+export const HASHLINE_NIBBLE_ALPHABET = "ZPMQVRWSNKTXJBYH";
+
+const NIBBLE_STR = HASHLINE_NIBBLE_ALPHABET;
 
 const DICT = Array.from({ length: 256 }, (_, i) => {
 	const h = i >>> 4;
