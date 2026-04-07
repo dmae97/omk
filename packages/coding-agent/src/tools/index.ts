@@ -12,6 +12,7 @@ import { LspTool } from "../lsp";
 import type { DiscoverableMCPSearchIndex, DiscoverableMCPTool } from "../mcp/discoverable-tool-metadata";
 import { EditTool } from "../patch";
 import type { PlanModeState } from "../plan-mode/state";
+import type { CustomMessage } from "../session/messages";
 import { TaskTool } from "../task";
 import type { AgentOutputManager } from "../task/output-manager";
 import type { EventBus } from "../utils/event-bus";
@@ -25,6 +26,7 @@ import { BrowserTool } from "./browser";
 import { CalculatorTool } from "./calculator";
 import { CancelJobTool } from "./cancel-job";
 import { type CheckpointState, CheckpointTool, RewindTool } from "./checkpoint";
+import { DebugTool } from "./debug";
 import { ExitPlanModeTool } from "./exit-plan-mode";
 import { FindTool } from "./find";
 import {
@@ -71,6 +73,7 @@ export * from "./browser";
 export * from "./calculator";
 export * from "./cancel-job";
 export * from "./checkpoint";
+export * from "./debug";
 export * from "./exit-plan-mode";
 export * from "./find";
 export * from "./gemini-image";
@@ -191,6 +194,7 @@ export const BUILTIN_TOOLS: Record<string, ToolFactory> = {
 	render_mermaid: s => new RenderMermaidTool(s),
 	ask: AskTool.createIf,
 	bash: s => new BashTool(s),
+	debug: DebugTool.createIf,
 	python: s => new PythonTool(s),
 	calc: s => new CalculatorTool(s),
 	ssh: loadSshTool,
@@ -343,9 +347,10 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 	}
 	const allTools: Record<string, ToolFactory> = { ...BUILTIN_TOOLS, ...HIDDEN_TOOLS };
 	const isToolAllowed = (name: string) => {
-		if (name === "lsp") return enableLsp;
+		if (name === "lsp") return enableLsp && session.settings.get("lsp.enabled");
 		if (name === "bash") return allowBash;
 		if (name === "python") return allowPython;
+		if (name === "debug") return session.settings.get("debug.enabled");
 		if (name === "todo_write") return !includeSubmitResult && session.settings.get("todo.enabled");
 		if (name === "find") return session.settings.get("find.enabled");
 		if (name === "grep") return session.settings.get("grep.enabled");
@@ -357,7 +362,6 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 		if (name === "inspect_image") return session.settings.get("inspect_image.enabled");
 		if (name === "web_search") return session.settings.get("web_search.enabled");
 		if (name === "search_tool_bm25") return session.settings.get("mcp.discoveryMode");
-		if (name === "lsp") return session.settings.get("lsp.enabled");
 		if (name === "calc") return session.settings.get("calc.enabled");
 		if (name === "browser") return session.settings.get("browser.enabled");
 		if (name === "checkpoint" || name === "rewind") return session.settings.get("checkpoint.enabled");

@@ -1246,6 +1246,16 @@ export const SETTINGS_SCHEMA = {
 		},
 	},
 
+	"debug.enabled": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "tools",
+			label: "Debug",
+			description: "Enable the debug tool for DAP-based debugging",
+		},
+	},
+
 	"calc.enabled": {
 		type: "boolean",
 		default: false,

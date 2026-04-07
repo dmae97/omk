@@ -1,9 +1,12 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Debug tool with DAP (Debug Adapter Protocol) support for launching and attaching debuggers, setting breakpoints, stepping through execution, inspecting threads/stack/variables, and evaluating expressions
+- Debug adapter configuration for gdb, lldb-dap, debugpy, and dlv with language/file-type matching and root marker detection
+- Debug session management with support for source and function breakpoints, conditional breakpoints, stack trace inspection, scope/variable exploration, and program output capture
+- `debug.enabled` setting to control debug tool availability
 - Chunk read formatting: `anchorStyle` (full / kind / bare), `read.anchorstyle` setting, and `chunked` flag on file display mode
 - `read.prosechunks` and `read.explorechunks` settings for prose chunk trees and checksum-free explore trees
 - Handlebars helpers `anchor` and `sel` (with template `anchorStyle` context) for chunk examples in prompts
