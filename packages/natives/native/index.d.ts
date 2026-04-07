@@ -78,6 +78,20 @@ export declare class MacAppearanceObserver {
   stop(): void
 }
 
+/**
+ * Long-lived macOS power assertion.
+ *
+ * On macOS this acquires an `IOKit` assertion that prevents idle sleep until
+ * the handle is stopped or dropped. On other platforms it is a no-op handle so
+ * the caller can keep one cross-platform code path.
+ */
+export declare class MacOSPowerAssertion {
+  /** Acquire a macOS power assertion. */
+  static start(options?: MacOSPowerAssertionOptions | undefined | null): MacOSPowerAssertion
+  /** Release the power assertion early. */
+  stop(): void
+}
+
 /** Image container for native interop. */
 export declare class PhotonImage {
   /**
@@ -941,6 +955,14 @@ export declare enum MacOSAppearance {
   Dark = 'dark',
   /** Light color scheme. */
   Light = 'light'
+}
+
+/** Options for starting a macOS power assertion. */
+export interface MacOSPowerAssertionOptions {
+  /** Human-readable reason shown in macOS power diagnostics. */
+  reason?: string
+  /** Keep the display awake in addition to preventing idle system sleep. */
+  display?: boolean
 }
 
 /** A single match in the content. */

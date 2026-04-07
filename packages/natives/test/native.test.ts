@@ -12,6 +12,7 @@ import {
 	grep,
 	htmlToMarkdown,
 	invalidateFsScanCache,
+	MacOSPowerAssertion,
 	PtySession,
 	sanitizeText,
 	truncateToWidth,
@@ -475,6 +476,13 @@ describe("pi-natives", () => {
 		it("should strip OSC sequences", () => {
 			const input = "\x1b]0;title\x07hello";
 			expect(sanitizeText(input)).toBe("hello");
+		});
+		describe("MacOSPowerAssertion", () => {
+			it("should create a stoppable power assertion handle", () => {
+				const assertion = MacOSPowerAssertion.start({ reason: "pi-natives test" });
+				assertion.stop();
+				assertion.stop();
+			});
 		});
 	});
 });

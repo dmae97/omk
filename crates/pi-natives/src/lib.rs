@@ -40,6 +40,9 @@ pub mod image;
 pub mod indent;
 pub mod keys;
 pub mod language;
+
+pub mod power;
+
 pub mod prof;
 pub mod projfs_overlay;
 pub mod ps;

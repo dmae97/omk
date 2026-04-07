@@ -22,6 +22,7 @@
 
 ### Changed
 
+- Agent sessions now hold a macOS power assertion for their lifetime so the host stays awake during active coding-agent runs
 - Updated chunk edit prompt documentation to use ellipsis (…) instead of ellipsis (...) for consistency in operation examples
 - Modified chunk path parsing to preserve raw selector strings and extract CRC separately, enabling accurate chunk reference round-tripping in read/edit workflows
 - Changed chunk edit behavior to auto-accept stale CRC checksums for subsequent operations on the same chunk within a batch, improving usability when applying multiple edits to the same target

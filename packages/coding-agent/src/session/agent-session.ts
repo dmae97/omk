@@ -49,7 +49,7 @@ import {
 	modelsAreEqual,
 	parseRateLimitReason,
 } from "@oh-my-pi/pi-ai";
-import type { SearchDb } from "@oh-my-pi/pi-natives";
+import { MacOSPowerAssertion, type SearchDb } from "@oh-my-pi/pi-natives";
 import { abortableSleep, getAgentDbPath, isEnoent, logger } from "@oh-my-pi/pi-utils";
 import type { AsyncJob, AsyncJobManager } from "../async";
 import type { Rule } from "../capability/rule";
@@ -396,6 +396,9 @@ export class AgentSession {
 	readonly sessionManager: SessionManager;
 	readonly settings: Settings;
 	readonly searchDb: SearchDb | undefined;
+
+	#powerAssertion: MacOSPowerAssertion | undefined;
+
 	readonly configWarnings: string[] = [];
 
 	#asyncJobManager: AsyncJobManager | undefined = undefined;
@@ -507,11 +510,36 @@ export class AgentSession {
 	#promptGeneration = 0;
 	#providerSessionState = new Map<string, ProviderSessionState>();
 
+	#startPowerAssertion(): void {
+		if (process.platform !== "darwin") {
+			return;
+		}
+		try {
+			this.#powerAssertion = MacOSPowerAssertion.start({ reason: "Oh My Pi agent session" });
+		} catch (error) {
+			logger.warn("Failed to acquire macOS power assertion", { error: String(error) });
+		}
+	}
+
+	#stopPowerAssertion(): void {
+		const assertion = this.#powerAssertion;
+		this.#powerAssertion = undefined;
+		if (!assertion) {
+			return;
+		}
+		try {
+			assertion.stop();
+		} catch (error) {
+			logger.warn("Failed to release macOS power assertion", { error: String(error) });
+		}
+	}
+
 	constructor(config: AgentSessionConfig) {
 		this.agent = config.agent;
 		this.sessionManager = config.sessionManager;
 		this.settings = config.settings;
 		this.searchDb = config.searchDb;
+		this.#startPowerAssertion();
 		this.#asyncJobManager = config.asyncJobManager;
 		this.#scopedModels = config.scopedModels ?? [];
 		this.#thinkingLevel = config.thinkingLevel;
@@ -1673,6 +1701,7 @@ export class AgentSession {
 		if (drained === false && deliveryState) {
 			logger.warn("Async job completion deliveries still pending during dispose", { ...deliveryState });
 		}
+		this.#stopPowerAssertion();
 		await this.sessionManager.close();
 		this.#closeAllProviderSessions("dispose");
 		this.#unsubscribePendingActionPush?.();

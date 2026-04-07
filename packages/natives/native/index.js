@@ -177,7 +177,7 @@ function loadNative() {
 			const bindings = logger.time(`native:loadNative:require:${path.basename(candidate)}`, () =>
 				require_(candidate),
 			);
-			validateNative(bindings, candidate);
+			validateNative(bindings, candidate); 
 			if (process.env.PI_DEV) {
 				console.log(`Loaded native addon from ${candidate}`);
 			}
@@ -265,6 +265,7 @@ function validateNative(bindings, source) {
 	checkFn("astEdit");
 	checkFn("detectMacOSAppearance");
 	checkFn("MacAppearanceObserver");
+	checkFn("MacOSPowerAssertion");
 	checkFn("projfsOverlayProbe");
 	checkFn("projfsOverlayStart");
 	checkFn("projfsOverlayStop");

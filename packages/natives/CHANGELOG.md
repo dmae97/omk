@@ -12,6 +12,7 @@
 - Generated native module bindings in `native/index.js` and `native/index.d.ts` from napi-rs build output
 - Added `gen-enums.ts` script to extract and export runtime enum values from TypeScript const enums
 - Added `embedded-addon.js` for managing embedded native addon variants and metadata
+- Added `MacOSPowerAssertion` for session-scoped macOS idle-sleep prevention without shelling out
 
 ### Changed
 

@@ -1384,31 +1384,37 @@ impl Config {
 
 	#[test]
 	fn nix_chunk_tree_exposes_attr_bindings() {
-	  let source = r#"{
+		let source = r#"{
 	        hello = "world";
 	        nested = {
 	          value = 1;
 	        };
 	      }
 	    "#;
-	  let tree = build_chunk_tree(source, "nix").expect("tree should build");
-	  let attrset = tree
-	    .chunks
-	    .iter()
-	    .find(|chunk| chunk.path == "attrset_expr")
-	    .expect("attrset_expr chunk");
-	  assert!(!tree.fallback, "nix should use tree-sitter chunking");
-	  assert!(!attrset.leaf, "top-level attrset should recurse into bindings");
-	  assert!(
-	    attrset.children.iter().any(|child| child == "attrset_expr.attr_hello"),
-	    "expected attr_hello child, got {:?}",
-	    attrset.children
-	  );
-	  assert!(
-	    attrset.children.iter().any(|child| child == "attrset_expr.attr_nested"),
-	    "expected attr_nested child, got {:?}",
-	    attrset.children
-	  );
+		let tree = build_chunk_tree(source, "nix").expect("tree should build");
+		let attrset = tree
+			.chunks
+			.iter()
+			.find(|chunk| chunk.path == "attrset_expr")
+			.expect("attrset_expr chunk");
+		assert!(!tree.fallback, "nix should use tree-sitter chunking");
+		assert!(!attrset.leaf, "top-level attrset should recurse into bindings");
+		assert!(
+			attrset
+				.children
+				.iter()
+				.any(|child| child == "attrset_expr.attr_hello"),
+			"expected attr_hello child, got {:?}",
+			attrset.children
+		);
+		assert!(
+			attrset
+				.children
+				.iter()
+				.any(|child| child == "attrset_expr.attr_nested"),
+			"expected attr_nested child, got {:?}",
+			attrset.children
+		);
 	}
 
 	#[test]
