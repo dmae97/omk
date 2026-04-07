@@ -3,90 +3,41 @@
 ## [Unreleased]
 ### Added
 
-- Added `anchorStyle` parameter to chunk read formatting to control chunk path display format (full, kind, or bare)
-- Added `{{anchor}}`, `{{anchor}}`, and `{{sel}}` Handlebars helpers for flexible chunk anchor rendering in prompts
-- Added `chunked` property to file display mode to indicate chunk-mode rendering
-- Added chunk-path-prefixed output format for grep in chunk mode: `path:selector>LINE|content`
-- Added `lru-cache` dependency for caching support
-- Added `read.prosechunks` setting to enable chunk rendering for prose files (markdown, text, log, asciidoc, restructuredtext) in chunk edit mode
-- Added `read.explorechunks` setting to show chunk tree without checksums for read-only agents like explore
-- Added `new_segment` option to `init_experiment` to force a new segment even when contract fields match, enabling re-initialization with unchanged parameters
-- Added `skip_restore` option to `log_experiment` to preserve working tree state when discarding or failing experiments, useful when runs did not modify tracked files
-- Added tracking of pre-run dirty paths to distinguish run-produced changes from pre-existing uncommitted changes
-- Autoresearch `init_experiment` options `from_autoresearch_md` (load contract from `autoresearch.md` with only `name`) and `abandon_unlogged_runs` (stamp pending run artifacts abandoned)
-- Autoresearch `run_experiment` option `force` to override benchmark command equality and the direct-`autoresearch.sh` invocation rule (with warnings when used)
-- `abandonUnloggedAutoresearchRuns` helper and `abandonedAt` run metadata so abandoned artifacts are ignored as pending runs
-- Support for LSP diagnostic versioning to track document versions and suppress stale diagnostics
-- Options parameter to `waitForDiagnostics` for controlling diagnostic freshness validation with `expectedDocumentVersion` and `allowUnversioned` flags
+- Chunk read formatting: `anchorStyle` (full / kind / bare), `read.anchorstyle` setting, and `chunked` flag on file display mode
+- `read.prosechunks` and `read.explorechunks` settings for prose chunk trees and checksum-free explore trees
+- Handlebars helpers `anchor` and `sel` (with template `anchorStyle` context) for chunk examples in prompts
+- Chunk-mode grep lines as `path:selector>LINE|content`; unified grep tool template behind `IS_CHUNK_MODE`
+- `lru-cache` for chunk tree caching
+- Chunk-mode `read` output: recursive rendering with `$XXXX` checksum suffixes, inline large-chunk previews, and normalized `#path$XXXX` selectors between read and edit
+- Autoresearch: `init_experiment` options `new_segment`, `from_autoresearch_md`, `abandon_unlogged_runs`; `log_experiment` options `skip_restore` and broader `force`; `run_experiment` `force` (with warnings); pre-run dirty-path tracking; `abandonUnloggedAutoresearchRuns` and `abandonedAt` on runs
+- LSP: diagnostic versioning (`versionSupport`, stored document version per diagnostic set), and `waitForDiagnostics` / `getDiagnosticsForFile` options (`expectedDocumentVersion`, `allowUnversioned`)
 
 ### Changed
 
-- Simplified chunk edit schema to use explicit `op` field (replace, delete, append, prepend, after, before) instead of separate boolean flags for improved clarity
-- Updated chunk edit prompt documentation to consolidate operation guidance with streamlined rules, ops reference table, and simplified examples
-- Refactored chunk edit preview formatting to use `op` field and `anchor` parameter for sibling-relative inserts (after/before operations)
-- Renamed chunk edit parameter from `after`/`before` field names to use `anchor` field for specifying named children in sibling-relative insert operations
-- Simplified chunk read and edit prompt documentation to reduce verbosity and focus on essential guidance
-- Refactored chunk edit schema to use explicit `op` field (replace, delete, append, prepend, after, before) instead of boolean flags for improved clarity and consistency
-- Updated chunk edit prompt documentation to simplify operation guidance with consolidated rules, ops reference, and streamlined examples
-- Changed chunk edit preview formatting to use `op` field and `anchor` parameter for sibling-relative inserts (after/before operations)
-- Renamed chunk edit parameter from `after`/`before` field names to use `anchor` field for specifying named children in sibling-relative insert operations
-- Updated streaming edit preview to display chunk edits alongside hashline edits with operation-specific formatting
-- Improved chunk edit preview labels to show operation type (delete, append, prepend, insert, replace) with target and line ranges
-- Simplified chunk read path parsing to extract only the selector string without redundant CRC field
-- Agent sessions now hold a macOS power assertion for their lifetime so the host stays awake during active coding-agent runs
-- Updated chunk edit prompt documentation to use ellipsis (…) instead of ellipsis (...) for consistency in operation examples
-- Modified chunk path parsing to preserve raw selector strings and extract CRC separately, enabling accurate chunk reference round-tripping in read/edit workflows
-- Changed chunk edit behavior to auto-accept stale CRC checksums for subsequent operations on the same chunk within a batch, improving usability when applying multiple edits to the same target
-- Moved `copyToClipboard` and `readImageFromClipboard` functions to new `utils/clipboard.ts` module with improved OSC 52 support and Termux compatibility
-- Updated grep output mode to use `GrepOutputMode` enum from pi-natives instead of string literals
-- Changed macOS appearance observer to use `MacAppearanceObserver.start()` class method with error-first callback signature
-- Updated `detectMacOSAppearance()` to return `MacAppearanceObserver` enum values instead of strings
-- Refactored shell command callbacks to use error-first signature `(err, chunk)` for consistency with native APIs
-- Updated chunk edit prompt documentation to use Handlebars helpers for chunk path and anchor rendering
-- Changed `getDiagnosticsForFile` callback signature to error-first pattern `(err, chunk)` in bash executor and find tool
-- Unified grep tool description to use single template with `IS_CHUNK_MODE` flag instead of separate chunk-specific template
-- Renamed chunk edit line-range parameters from `beg`/`end` to `line`/`end_line` for consistency with documentation
-- Unified `splice` and `replace` operations into a single `replace` operation with optional `line`/`end_line` parameters for line-scoped edits
-- Updated `replace` operation to support optional `line` and `end_line` parameters, with `end_line` defaulting to `line` when omitted for single-line replacements
-- Removed `splice` operation from chunk edit schema; use `replace` with `line`/`end_line` parameters instead
-- Simplified chunk edit prompt documentation to consolidate operation guidance and remove splice-specific examples
-- Renamed chunk edit line-range parameters from `beg`/`end` to `line`/`end_line` for clarity and consistency with documentation
-- Updated `replace` operation to support optional `line` and `end_line` parameters for line-scoped edits, with `end_line` defaulting to `line` when omitted for single-line replacements
-- Simplified chunk edit prompt documentation to consolidate `replace` and `splice` operations into a single `replace` operation with optional line-range parameters
-- Added backward compatibility mapping to accept legacy `beg`/`end` and `end_line` field names in chunk edit operations
-- Changed chunk edit operation format from flat `{ "op": "splice", ... }` to keyed `{ "splice": { ... } }` format for improved clarity and schema validation
-- Updated chunk edit schema to use discriminated union types with operation-specific field requirements (insert ops no longer require CRC, mutation ops require CRC)
-- Improved chunk selector sanitization to strip filename prefixes and normalize checksums to uppercase, handling model output variations
-- Changed `log_experiment` revert behavior to only restore run-modified files instead of reverting entire working tree, preserving pre-existing uncommitted changes
-- Changed `init_experiment` error message for pending unlogged runs to include command, metric, and pass/fail status for better context
-- Changed `init_experiment` to detect when contract fields match current state and skip re-initialization (no-op) unless `new_segment=true`
-- Changed secondary metrics handling to be informational only—missing or new secondary metrics no longer require `force=true` flag
-- Updated prompt documentation to clarify that `log_experiment` reverts only run-modified files and preserves pre-existing changes
-- Autoresearch `log_experiment` refreshes benchmark/scope/constraints from `autoresearch.md` after resolving a pending run (so keep validation matches disk); success output includes a short refresh notice
-- Autoresearch `log_experiment` `force` also skips ASI requirements and allows keeping a primary-metric regression versus the best kept run in the segment
-- `/autoresearch` with no `autoresearch.md` matches `/plan`-style flow: bare command enables mode and waits for the next composer message when off, or disables when already on; non-empty slash args are submitted as the user message only; setup protocol lives in the autoresearch system prompt (`command-initialize.md` removed)
-- Enabled `versionSupport` in LSP client capabilities to receive diagnostic version information from servers
-- Diagnostics storage now tracks both diagnostics and their associated document version for freshness validation
-- Updated `getDiagnosticsForFile` to accept options object instead of positional parameters for better extensibility
-- Redesigned chunk-mode `read` output to use a single recursive chunk rendering rule with `$XXXX` checksum suffixes and inline large-chunk previews
-- Normalized copied `#chunk_path$XXXX` selectors across chunk-mode `read` and `edit` inputs so pasted chunk headers resolve without manual cleanup
+- Chunk edit schema and tool contract: explicit `op` (`replace`, `delete`, `append`, `prepend`, `after`, `before`); sibling inserts use `anchor` instead of separate after/before target fields; `replace` supports optional `line` / `end_line` for line-scoped edits (former splice-style behavior); insert ops omit CRC where appropriate, mutations require checksum on target
+- Chunk path handling: parse selector and CRC separately, sanitize selectors (strip filename prefixes, uppercase checksums), accept embedded `#CRC` on targets, auto-accept stale CRC for later ops in the same batch on the same chunk
+- Chunk UX: streaming and final edit previews show chunk edits next to hashline edits with op-specific labels; prompt docs shortened with rules table, `…` in examples, and helper-based path/anchor samples
+- `log_experiment` only reverts files modified by the run; prompts and errors document that pre-existing dirty files are preserved; richer pending-run error context; `init_experiment` no-ops when the contract matches unless `new_segment`; secondary metrics informational only (no `force` for drift)
+- Autoresearch: `log_experiment` reloads benchmark/scope/constraints from `autoresearch.md` after resolving a pending run; `/autoresearch` without `autoresearch.md` follows `/plan`-style toggle and message flow; setup moved into autoresearch system prompt (removed `command-initialize.md`)
+- Native/shell alignment: `GrepOutputMode` from pi-natives; shell and `getDiagnosticsForFile` callbacks use error-first `(err, chunk)`; `getDiagnosticsForFile` takes an options object
+- Clipboard: `copyToClipboard` / `readImageFromClipboard` live in `utils/clipboard.ts` (OSC 52 and Termux)
+- macOS: session-wide power assertion while the agent runs; `MacAppearanceObserver.start()` with error-first callback; `detectMacOSAppearance()` returns enum values
 
 ### Removed
 
-- Removed `grep-chunk.md` prompt template; grep now uses unified template with chunk-mode conditional
-- Removed `startMacAppearanceObserver` function export; use `MacAppearanceObserver.start()` instead
-- Removed `copyToClipboard` export from pi-natives; use local clipboard utility instead
-- Removed `PI_CHUNK_SPLICES` environment variable and `chunkSplicesEnabled()` function; splice operations are no longer conditionally available
-- Autoresearch segment fingerprint hashing and `segmentFingerprint` on experiment state / `autoresearch.jsonl` config lines
+- `grep-chunk.md` (folded into unified grep template)
+- `startMacAppearanceObserver` export (use `MacAppearanceObserver.start()`)
+- `copyToClipboard` export from pi-natives
+- `PI_CHUNK_SPLICES` env and `chunkSplicesEnabled()`
+- Autoresearch `segmentFingerprint` and related config hashing
 
 ### Fixed
 
-- Fixed `log_experiment` to correctly identify run-modified files by removing pre-run dirty path filtering, ensuring all uncommitted changes are properly validated
-- Fixed chunk edit operations to extract and use embedded CRC checksums when models write selectors like `fn_foo#ABCD` instead of separate `sel` and `crc` fields
-- Fixed shell command error handling to properly check for errors before processing chunks in bash executor and config resolution
-- Fixed `log_experiment` to correctly identify and revert only files modified by the run, leaving pre-existing uncommitted changes intact
-- `/autoresearch` with no arguments toggles off when mode is already on (same idea as `/plan`), and slash-argument completion no longer offers `off`/`clear` on an empty prefix so Tab after the command does not auto-insert a subcommand.
-- Fixed chunk-mode edit/read edge cases around zero-width gap splices, stale batch diagnostics, grouped Go receiver rendering, rendered line-count headers, and parse rejection location details.
+- `log_experiment` validates and reverts run-scoped file changes without clobbering unrelated dirty worktree state
+- Chunk edit targets that embed CRC in the selector (e.g. `fn_foo#ABCD`) parse correctly
+- Shell paths check errors before consuming chunk output (bash executor, config resolution)
+- `/autoresearch` toggles like `/plan` when empty; slash completion no longer suggests `off`/`clear` on an empty prefix after the command
+- Chunk-mode read/edit edge cases (zero-width gap replaces, stale batch diagnostics, grouped Go receivers, line-count headers, parse error locations)
 
 ## [13.19.0] - 2026-04-05
 
