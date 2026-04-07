@@ -23,7 +23,9 @@ const context: Context = {
 };
 
 type MockAnthropicEvent = Record<string, unknown>;
-type MockAnthropicStream = AsyncIterable<MockAnthropicEvent> & {
+type MockAnthropicStream = AsyncIterable<MockAnthropicEvent>;
+
+type MockAnthropicRequest = {
 	withResponse(): Promise<{
 		data: MockAnthropicStream;
 		response: Response;
@@ -116,23 +118,13 @@ function createAnthropicMockStream({
 	signal: AbortSignal | undefined;
 	connectDelayMs?: number;
 	events?: MockAnthropicEvent[];
-}): MockAnthropicStream {
+}): MockAnthropicRequest {
 	const response = new Response(null, {
 		status: 200,
 		headers: { "request-id": "req_mock" },
 	});
 
 	const stream: MockAnthropicStream = {
-		async withResponse() {
-			if (connectDelayMs > 0) {
-				await waitForDelayOrAbort(connectDelayMs, signal);
-			}
-			return {
-				data: stream,
-				response,
-				request_id: response.headers.get("request-id"),
-			};
-		},
 		async *[Symbol.asyncIterator]() {
 			if (!events) {
 				await waitForAbortAndThrowAbortError(signal);
@@ -144,7 +136,18 @@ function createAnthropicMockStream({
 		},
 	};
 
-	return stream;
+	return {
+		async withResponse() {
+			if (connectDelayMs > 0) {
+				await waitForDelayOrAbort(connectDelayMs, signal);
+			}
+			return {
+				data: stream,
+				response,
+				request_id: response.headers.get("request-id"),
+			};
+		},
+	};
 }
 
 afterEach(() => {
@@ -161,7 +164,7 @@ describe("anthropic first-event timeout retries", () => {
 		Bun.env.PI_STREAM_FIRST_EVENT_TIMEOUT_MS = "20";
 		let attempt = 0;
 
-		vi.spyOn(Messages.prototype, "stream").mockImplementation((_body, requestOptions) => {
+		vi.spyOn(Messages.prototype, "create").mockImplementation((_body, requestOptions) => {
 			attempt += 1;
 			const signal = (requestOptions as { signal?: AbortSignal } | undefined)?.signal;
 			return createAnthropicMockStream({
@@ -181,7 +184,7 @@ describe("anthropic first-event timeout retries", () => {
 	it("does not arm the Anthropic first-event watchdog before the stream connects", async () => {
 		Bun.env.PI_STREAM_FIRST_EVENT_TIMEOUT_MS = "20";
 
-		vi.spyOn(Messages.prototype, "stream").mockImplementation((_body, requestOptions) => {
+		vi.spyOn(Messages.prototype, "create").mockImplementation((_body, requestOptions) => {
 			const signal = (requestOptions as { signal?: AbortSignal } | undefined)?.signal;
 			return createAnthropicMockStream({
 				signal,
@@ -200,7 +203,7 @@ describe("anthropic first-event timeout retries", () => {
 		Bun.env.PI_STREAM_FIRST_EVENT_TIMEOUT_MS = "50";
 		let attempt = 0;
 
-		vi.spyOn(Messages.prototype, "stream").mockImplementation((_body, requestOptions) => {
+		vi.spyOn(Messages.prototype, "create").mockImplementation((_body, requestOptions) => {
 			attempt += 1;
 			const signal = (requestOptions as { signal?: AbortSignal } | undefined)?.signal;
 			return createAnthropicMockStream({ signal }) as never;
