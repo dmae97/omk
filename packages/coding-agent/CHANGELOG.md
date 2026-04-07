@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `anchorStyle` parameter to chunk read formatting to control chunk path display format (full, kind, or bare)
@@ -66,6 +65,7 @@
 
 ### Fixed
 
+- Fixed chunk edit operations to extract and use embedded CRC checksums when models write selectors like `fn_foo#ABCD` instead of separate `sel` and `crc` fields
 - Fixed shell command error handling to properly check for errors before processing chunks in bash executor and config resolution
 - Fixed `log_experiment` to correctly identify and revert only files modified by the run, leaving pre-existing uncommitted changes intact
 - `/autoresearch` with no arguments toggles off when mode is already on (same idea as `/plan`), and slash-argument completion no longer offers `off`/`clear` on an empty prefix so Tab after the command does not auto-insert a subcommand.

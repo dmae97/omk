@@ -836,7 +836,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 					? { startLine: parsed.startLine, endLine: parsed.endLine }
 					: undefined;
 			// sel= wins over path:chunk when both are provided (explicit param > embedded path).
-			const effectiveSelector = sel ? selectorInput : pathChunkSelector ?? selectorInput;
+			const effectiveSelector = sel ? selectorInput : (pathChunkSelector ?? selectorInput);
 			const chunkReadPath =
 				parsed.kind === "chunk" || (pathChunkSelector && !sel)
 					? effectiveSelector

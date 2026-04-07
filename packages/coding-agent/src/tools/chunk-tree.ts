@@ -106,14 +106,21 @@ function chunkReadPathSeparatorIndex(readPath: string): number {
 	return readPath.indexOf(":");
 }
 
-export function parseChunkSelector(selector: string | undefined): { selector?: string } {
+export function parseChunkSelector(selector: string | undefined): { selector?: string; crc?: string } {
 	if (!selector || selector.length === 0) {
 		return {};
 	}
 	const match = CHECKSUM_SUFFIX_RE.exec(selector);
 	if (!match) return { selector };
 	const normalizedSelector = match[1] ?? "";
-	return normalizedSelector.length > 0 ? { selector: normalizedSelector } : { selector };
+	const crc = match[2]?.toUpperCase();
+	// If the CRC was stripped from the path (e.g. "fn_foo#ABCD" → "fn_foo"),
+	// return both. If the path part is empty, the input was just a bare CRC
+	// token — keep the original as the selector.
+	if (normalizedSelector.length > 0) {
+		return { selector: normalizedSelector, crc };
+	}
+	return { selector };
 }
 
 export function parseChunkReadPath(readPath: string): ParsedChunkReadPath {

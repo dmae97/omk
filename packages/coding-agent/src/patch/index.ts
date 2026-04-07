@@ -34,6 +34,7 @@ import {
 	type ChunkEditOperation,
 	getChunkInfoForFile,
 	parseChunkReadPath,
+	parseChunkSelector,
 	resolveAnchorStyle,
 } from "../tools/chunk-tree";
 import {
@@ -568,19 +569,31 @@ export class EditTool implements AgentTool<TInput> {
 						case "prepend_child":
 						case "append_sibling":
 						case "prepend_sibling": {
-							const { content, sel } = details as unknown as Static<typeof pInsertDetails>;
+							const { content, sel: rawSel } = details as unknown as Static<typeof pInsertDetails>;
 							if (!content) {
-								throw new Error(`Content required for ${op} on ${sel ?? "root"}`);
+								throw new Error(`Content required for ${op} on ${rawSel ?? "root"}`);
 							}
+							// Strip any #CRC suffix models sometimes embed in the sel field.
+							const sel = parseChunkSelector(rawSel).selector ?? rawSel;
 							normalizedOperations.push({ op, sel, content: flattenContent(content) });
 							break;
 						}
 						case "replace": {
-							const { content, sel, crc, line, end_line } = details as unknown as Static<typeof pReplaceDetails>;
+							const {
+								content,
+								sel: rawSel,
+								crc: rawCrc,
+								line,
+								end_line,
+							} = details as unknown as Static<typeof pReplaceDetails>;
+							// Models sometimes write sel="fn_foo#CRC" instead of sel="fn_foo" + crc="CRC".
+							// Strip the embedded CRC from sel and use it as a fallback when crc is absent.
+							const { selector: sel, crc: embeddedCrc } = parseChunkSelector(rawSel);
+							const crc = rawCrc ?? embeddedCrc;
 							normalizedOperations.push({
 								op: "replace",
-								sel,
-								crc: await assertChecksum(op, crc, sel),
+								sel: sel ?? rawSel,
+								crc: await assertChecksum(op, crc, sel ?? rawSel),
 								content: flattenContent(content),
 								line,
 								endLine: end_line,
@@ -588,8 +601,14 @@ export class EditTool implements AgentTool<TInput> {
 							break;
 						}
 						case "delete": {
-							const { sel, crc } = details as unknown as Static<typeof pDeleteDetails>;
-							normalizedOperations.push({ op: "delete", sel, crc: await assertChecksum(op, crc, sel) });
+							const { sel: rawSel, crc: rawCrc } = details as unknown as Static<typeof pDeleteDetails>;
+							const { selector: sel, crc: embeddedCrc } = parseChunkSelector(rawSel);
+							const crc = rawCrc ?? embeddedCrc;
+							normalizedOperations.push({
+								op: "delete",
+								sel: sel ?? rawSel,
+								crc: await assertChecksum(op, crc, sel ?? rawSel),
+							});
 							break;
 						}
 					}
