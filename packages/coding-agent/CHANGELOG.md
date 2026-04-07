@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Chunk read formatting: `anchorStyle` (full / kind / bare), `read.anchorstyle` setting, and `chunked` flag on file display mode
@@ -14,6 +15,9 @@
 
 ### Changed
 
+- Chunk read output now displays fully-qualified anchor paths (e.g., `[class_Worker.fn_run#CRC]`) instead of bare names, making targets unambiguous for edits
+- Chunk edit tool documentation clarified: `target` must be the fully-qualified path with `#CRC` suffix; added guidance to run `read(path="file", sel="?")` for canonical target listings when anchor style is unclear
+- Chunk read tool documentation updated: `sel` parameter now documents the `?` selector for canonical target listings, and clarifies that default output shows full paths
 - Chunk edit schema and tool contract: explicit `op` (`replace`, `delete`, `append`, `prepend`, `after`, `before`); sibling inserts use `anchor` instead of separate after/before target fields; `replace` supports optional `line` / `end_line` for line-scoped edits (former splice-style behavior); insert ops omit CRC where appropriate, mutations require checksum on target
 - Chunk path handling: parse selector and CRC separately, sanitize selectors (strip filename prefixes, uppercase checksums), accept embedded `#CRC` on targets, auto-accept stale CRC for later ops in the same batch on the same chunk
 - Chunk UX: streaming and final edit previews show chunk edits next to hashline edits with op-specific labels; prompt docs shortened with rules table, `…` in examples, and helper-based path/anchor samples
@@ -34,6 +38,8 @@
 
 ### Fixed
 
+- Chunk edit error messages now consistently report checksum mismatches with the format `did not match checksum "XXXX"` instead of variable phrasing
+- Chunk selector validation for edits now rejects non-canonical selectors (suffix-only like `fn_run` or prefix-stripped like `run`), requiring fully-qualified paths to prevent ambiguity
 - Plan review previews now re-append at the chat tail on refresh, keeping them adjacent to the active selector instead of updating off-screen
 - `log_experiment` validates and reverts run-scoped file changes without clobbering unrelated dirty worktree state
 - Chunk edit targets that embed CRC in the selector (e.g. `fn_foo#ABCD`) parse correctly

@@ -124,7 +124,7 @@ describe("applyChunkEdits", () => {
 					content: "replacement",
 				},
 			]),
-		).toThrow(/mismatch/i);
+		).toThrow(/did not match checksum/);
 	});
 
 	test("append_child on branch inserts after existing members", () => {
@@ -427,7 +427,7 @@ describe("edit safety invariants", () => {
 
 	for (const operation of ["replace", "delete", "line-scoped replace"] as const) {
 		test(`rejects stale checksum for ${operation} with current and provided checksums in the error`, () => {
-			const { source, staleChecksum, currentChecksum } = buildStaleRunFixture();
+			const { source, staleChecksum } = buildStaleRunFixture();
 
 			const invoke = () => {
 				if (operation === "replace") {
@@ -461,7 +461,7 @@ describe("edit safety invariants", () => {
 				);
 			};
 
-			expect(invoke).toThrow(new RegExp(`expected "${currentChecksum}", got "${staleChecksum}"`));
+			expect(invoke).toThrow(new RegExp(`did not match checksum "${staleChecksum}"`));
 		});
 	}
 
@@ -582,7 +582,7 @@ describe("edit safety invariants", () => {
 					crc: "ZZZZ",
 				},
 			]),
-		).toThrow(/Edit operation 2\/2 failed.*Checksum mismatch/s);
+		).toThrow(/Edit operation 2\/2 failed.*did not match checksum/s);
 	});
 
 	test("keeps untouched sibling checksums stable after a nearby edit", () => {
@@ -696,7 +696,7 @@ describe("formatChunkedRead", () => {
 
 		expect(result.text).toContain("worker.ts·");
 		expect(result.text).toContain("[class_Worker#");
-		expect(result.text).toContain("[fn_run#");
+		expect(result.text).toContain("[class_Worker.fn_run#");
 		expect(result.text).not.toContain("ck:");
 		expect(result.text).not.toContain("[branch");
 	});
@@ -730,6 +730,7 @@ describe("formatChunkedRead", () => {
 		});
 
 		expect(result.text).toContain("worker.ts:class_Worker.fn_run·");
+		expect(result.text).toContain("[class_Worker.fn_run#");
 		expect(result.text).toContain("run(): void {");
 		expect(result.text).toContain("6| ");
 		expect(result.text).toContain("run(): void {");
@@ -840,8 +841,8 @@ describe("addressable member rendering", () => {
 		});
 
 		expect(result.text).toContain("[enum_LogLevel#");
-		expect(result.text).toContain("[variant_Debug#");
-		expect(result.text).toContain("[variant_Error#");
+		expect(result.text).toContain("[enum_LogLevel.variant_Debug#");
+		expect(result.text).toContain("[enum_LogLevel.variant_Error#");
 	});
 
 	test("renders a single-method Go interface inline on the parent chunk", async () => {
@@ -880,9 +881,9 @@ describe("addressable member rendering", () => {
 		});
 
 		expect(result.text).toContain("[type_Server#");
-		expect(result.text).toContain("[field_Addr#");
-		expect(result.text).toContain("[fn_Start#");
-		expect(result.text).toContain("[fn_Stop#");
+		expect(result.text).toContain("[type_Server.field_Addr#");
+		expect(result.text).toContain("[type_Server.fn_Start#");
+		expect(result.text).toContain("[type_Server.fn_Stop#");
 	});
 
 	test("line range filter shows receiver methods under a type even when the range skips the type header", async () => {
@@ -901,8 +902,8 @@ describe("addressable member rendering", () => {
 		});
 
 		expect(result.text).toContain("L7-L8");
-		expect(result.text).toContain("[fn_Start#");
-		expect(result.text).toContain("[fn_Stop#");
+		expect(result.text).toContain("[type_Server.fn_Start#");
+		expect(result.text).toContain("[type_Server.fn_Stop#");
 	});
 
 	test("renders trivial TypeScript enum variants as addressable children", async () => {
@@ -918,8 +919,8 @@ describe("addressable member rendering", () => {
 		});
 
 		expect(result.text).toContain("[enum_Status#");
-		expect(result.text).toContain("[variant_Idle#");
-		expect(result.text).toContain("[variant_Busy#");
+		expect(result.text).toContain("[enum_Status.variant_Idle#");
+		expect(result.text).toContain("[enum_Status.variant_Busy#");
 	});
 
 	test("keeps non-trivial containers expanded", () => {
@@ -955,8 +956,8 @@ describe("grouped Go receiver chunk headers", () => {
 		});
 
 		expect(result.text).toContain("server.go:type_Server·6L");
-		expect(result.text).toContain("[fn_Start#");
-		expect(result.text).toContain("[fn_Stop#");
+		expect(result.text).toContain("[type_Server.fn_Start#");
+		expect(result.text).toContain("[type_Server.fn_Stop#");
 	});
 });
 
@@ -1103,7 +1104,7 @@ describe("Go receiver render ownership", () => {
 
 		expect(result.responseText).toContain("func DefaultServer() *Server");
 		expect(result.responseText).toContain("[fn_DefaultServer#");
-		expect(result.responseText).toContain("[fn_Start#");
+		expect(result.responseText).toContain("[type_Server.fn_Start#");
 	});
 });
 
@@ -1234,7 +1235,7 @@ describe("splice", () => {
 					content: "replacement",
 				},
 			]),
-		).toThrow(/mismatch/i);
+		).toThrow(/did not match checksum/);
 	});
 
 	test("splice rejects reversed ranges that are not zero-width gaps", () => {
@@ -1303,51 +1304,31 @@ describe("prepend_child warnings", () => {
 	});
 });
 
-describe("chunk selector auto-resolution", () => {
-	test("warns on suffix auto-resolution", () => {
-		const result = edit([
-			{
-				op: "replace",
-				sel: "fn_run",
-				crc: getChecksum(testSource, "class_Worker.fn_run"),
-				content: "run(): void {\n\tconsole.log(this.name);\n}",
-			},
-		]);
-		expect(
-			result.warnings.some(w => w.includes('Auto-resolved chunk selector "fn_run" to "class_Worker.fn_run"')),
-		).toBe(true);
-	});
-
-	test("warns on prefix auto-resolution", () => {
-		const result = edit([
-			{
-				op: "replace",
-				sel: "run",
-				crc: getChecksum(testSource, "class_Worker.fn_run"),
-				content: "run(): void {\n\tconsole.log(this.name);\n}",
-			},
-		]);
-		expect(result.warnings.some(w => w.includes('Auto-resolved chunk selector "run" to "class_Worker.fn_run"'))).toBe(
-			true,
-		);
-	});
-
-	test("errors on ambiguous suffix matches", () => {
-		// Source with two identically-named nested chunks under different parents
-		const source = `class Foo {\n\trun(): void {}\n}\nclass Bar {\n\trun(): void {}\n}\n`;
+describe("chunk selector validation for edits", () => {
+	test("rejects suffix-only edit selectors", () => {
 		expect(() =>
-			applyEdit({
-				source,
-				language: "typescript",
-				operations: [
-					{
-						op: "delete",
-						sel: "fn_run",
-						crc: getChecksum(source, "class_Foo.fn_run"),
-					},
-				],
-			}),
-		).toThrow(/Ambiguous chunk selector "fn_run" matches 2 chunks/);
+			edit([
+				{
+					op: "replace",
+					sel: "fn_run",
+					crc: getChecksum(testSource, "class_Worker.fn_run"),
+					content: `run(): void {\n\tconsole.log(this.name);\n}`,
+				},
+			]),
+		).toThrow(/Chunk path not found: "fn_run"/);
+	});
+
+	test("rejects prefix-stripped edit selectors", () => {
+		expect(() =>
+			edit([
+				{
+					op: "replace",
+					sel: "run",
+					crc: getChecksum(testSource, "class_Worker.fn_run"),
+					content: `run(): void {\n\tconsole.log(this.name);\n}`,
+				},
+			]),
+		).toThrow(/Chunk path not found: "run"/);
 	});
 });
 
@@ -1394,7 +1375,7 @@ describe("tlaplus chunk rendering", () => {
 			language: "tlaplus",
 		});
 
-		expect(result.text).toContain("[translation_12#");
+		expect(result.text).toContain("[mod_Spec.translation_12#");
 		expect(result.text).toContain("\\* [translation hidden]");
 		expect(result.text).not.toContain("Next == pc' = pc");
 	});
@@ -1415,7 +1396,7 @@ describe("tlaplus chunk rendering", () => {
 		});
 
 		expect(result.diffSourceAfter).toContain("Start == x = 0");
-		expect(result.responseText).toContain("[translation_12#");
+		expect(result.responseText).toContain("[mod_Spec.translation_12#");
 		expect(result.responseText).toContain("\\* [translation hidden]");
 		expect(result.responseText).not.toContain("Next == pc' = pc");
 	});

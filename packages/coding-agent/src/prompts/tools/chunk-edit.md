@@ -1,8 +1,9 @@
-Edits files via syntax-aware chunks. Run `read(path="file.ts")` first — it returns chunks with anchors `[name#CRC]` where `#CRC` is a 4-char hex checksum. Copy the full chunk path AND `#CRC` verbatim into `target`.
+Edits files via syntax-aware chunks. Run `read(path="file.ts")` first — the default read output shows anchors like `[full.chunk.path#CRC]`, where `#CRC` is a 4-char hex checksum. Copy that exact `full.chunk.path#CRC` into `target`.
 
 <rules>
 - **MUST** `read` first. NEVER invent chunk names or CRCs — copy them from the latest read output or edit response.
 - `target` **MUST** be the **fully-qualified** path (e.g. `class_X.fn_y.if_2`, not `if_2`), ending with `#CRC` for replace/delete.
+- If the exact path is unclear, or your anchor style omits full paths, run `read(path="file", sel="?")` and copy a canonical target from that listing.
 - Prefer `line`/`end_line` (absolute file line numbers from the read gutter) for small fixes over whole-chunk replace.
 - `content` must include the destination block's inner indentation.
 - Successful edits return refreshed anchors — use them for follow-ups, don't re-read just for new CRCs.
@@ -16,7 +17,7 @@ Edits files via syntax-aware chunks. Run `read(path="file.ts")` first — it ret
 |`append` / `prepend`|`target`, `content`|insert as last/first child of target|
 |`after` / `before`|`target`, `anchor` (child name), `content`|insert at sibling position|
 
-For file-root edits, `target` is the file CRC alone (e.g. `"#VSKB"`).
+For file-root edits, `target` is the file header CRC alone (e.g. `"#VSKB"`).
 </ops>
 
 <example>

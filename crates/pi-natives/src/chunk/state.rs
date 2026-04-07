@@ -378,14 +378,20 @@ impl ChunkState {
 		}
 
 		let mut warnings = Vec::new();
-		let Ok(resolved) =
-			resolve_chunk_with_crc(self.inner(), selector.as_deref(), crc.as_deref(), &mut warnings)
-		else {
-			let sel = selector.unwrap_or_default();
-			return Ok(ReadResult {
-				text:  format!("{}:{}\n\n[Chunk not found]", params.display_path, sel),
-				chunk: Some(ChunkReadTarget { status: ChunkReadStatus::NotFound, selector: sel }),
-			});
+		let resolved = match resolve_chunk_with_crc(
+			self.inner(),
+			selector.as_deref(),
+			crc.as_deref(),
+			&mut warnings,
+		) {
+			Ok(resolved) => resolved,
+			Err(err) => {
+				let sel = selector.unwrap_or_default();
+				return Ok(ReadResult {
+					text:  format!("{}:{}\n\n{}", params.display_path, sel, err),
+					chunk: Some(ChunkReadTarget { status: ChunkReadStatus::NotFound, selector: sel }),
+				});
+			},
 		};
 		let chunk = resolved.chunk;
 

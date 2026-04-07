@@ -110,8 +110,8 @@ describe("chunk mode tools", () => {
 
 		expect(text).toContain("[Notice: chunk view scoped to requested lines L2-L4; non-overlapping lines omitted.]");
 		expect(text).toContain("server.ts·");
-		expect(text).toContain("[fn_handleError#");
-		expect(text).toContain("[var_total#");
+		expect(text).toContain("[class_Server.fn_handleError#");
+		expect(text).toContain("[class_Server.fn_handleError.var_total#");
 		expect(text).toContain("3|");
 		expect(text).toContain("4|");
 		expect(text).not.toContain("⋯");
@@ -127,9 +127,9 @@ describe("chunk mode tools", () => {
 
 		expect(text).toContain("[Notice: chunk view scoped to requested lines L2-L4; non-overlapping lines omitted.]");
 		expect(text).toContain("server.ts·");
-		expect(text).toContain("[fn_handleError#");
-		expect(text).toContain("[var_total#");
-		expect(text).toContain("[var_total#");
+		expect(text).toContain("[class_Server.fn_handleError#");
+		expect(text).toContain("[class_Server.fn_handleError.var_total#");
+		expect(text).toContain("[class_Server.fn_handleError.var_total#");
 		expect(text).toContain("3|");
 	});
 
@@ -372,7 +372,7 @@ describe("chunk mode tools", () => {
 			path: `${filePath}:class_Server.fn_missing`,
 		});
 
-		expect(getText(result)).toContain("[Chunk not found]");
+		expect(getText(result)).toContain("Chunk path not found");
 		expect(result.details?.chunk).toEqual({
 			status: ChunkReadStatus.NotFound,
 			selector: "class_Server.fn_missing",
@@ -498,7 +498,7 @@ describe("chunk mode tools", () => {
 		expect(await Bun.file(filePath).text()).toBe(originalSource);
 	});
 
-	it("auto-resolves chunk selectors with missing name prefixes", async () => {
+	it("rejects non-canonical edit selectors", async () => {
 		const filePath = path.join(tmpDir, "server.ts");
 		const originalSource = buildLargeTypescriptFixture();
 		await Bun.write(filePath, originalSource);
@@ -506,13 +506,100 @@ describe("chunk mode tools", () => {
 		const editTool = new EditTool(session);
 		const checksum = getChunkChecksum(originalSource, "typescript", "fn_main");
 
-		// Use bare "main" instead of "fn_main"
-		const _result = await editTool.execute("chunk-edit-prefix-resolve", {
+		await expect(
+			editTool.execute("chunk-edit-prefix-resolve", {
+				path: filePath,
+				edits: [{ target: `main#${checksum}`, content: 'function main(): void {\n  console.log("started");\n}\n' }],
+			}),
+		).rejects.toThrow(/Chunk path not found: "main"/);
+		expect(await Bun.file(filePath).text()).toBe(originalSource);
+	});
+
+	it("resolves root-only checksum targets to the file root", async () => {
+		const filePath = path.join(tmpDir, "CONTRIBUTING.md");
+		const source = `# Contributing to uLua
+
+## Building and Testing
+
+Use just.
+
+## Code Style
+
+Use clang-format.
+`;
+		await Bun.write(filePath, source);
+		const session = createSession(tmpDir);
+		const editTool = new EditTool(session);
+		const language = getLanguageFromPath(filePath);
+		if (!language) {
+			throw new Error("expected markdown language");
+		}
+		const state = ChunkState.parse(source, language);
+		const root = state.root();
+		if (!root) {
+			throw new Error("expected root chunk");
+		}
+		expect(state.chunks().filter(chunk => chunk.checksum === root.checksum).length).toBeGreaterThan(1);
+
+		const _result = await editTool.execute("chunk-edit-root-checksum", {
 			path: filePath,
-			edits: [{ target: `main#${checksum}`, content: 'function main(): void {\n  console.log("started");\n}\n' }],
+			edits: [{ target: `#${root.checksum}`, line: 1, end_line: 1, content: "# Updated guide" }],
 		});
+
 		const updatedSource = await Bun.file(filePath).text();
-		expect(updatedSource).toContain('console.log("started")');
-		expect(updatedSource).not.toContain('console.log("boot")');
+		expect(updatedSource.startsWith("# Updated guide\n")).toBe(true);
+		expect(updatedSource).toContain("## Building and Testing");
+	});
+
+	it("preserves sibling headings when replacing a whole markdown section", async () => {
+		const filePath = path.join(tmpDir, "CONTRIBUTING.md");
+		const source = [
+			"# Contributing to uLua",
+			"",
+			"## Building and Testing",
+			"",
+			"```bash",
+			"cmake -S . -B build",
+			"```",
+			"",
+			"## Code Style",
+			"",
+			"- Follow .clang-format.",
+			"",
+			"## Commit Messages",
+			"",
+			"- Use imperative mood.",
+			"",
+		].join("\n");
+		await Bun.write(filePath, source);
+		const session = createSession(tmpDir);
+		const editTool = new EditTool(session);
+		const language = getLanguageFromPath(filePath);
+		if (!language) {
+			throw new Error("expected markdown language");
+		}
+		const state = ChunkState.parse(source, language);
+		const building = state
+			.chunks()
+			.find(chunk => chunk.path === "section_Contributing_to_uLua.section_Building_and_Testing");
+		if (!building) {
+			throw new Error("expected section_Building_and_Testing chunk");
+		}
+
+		await editTool.execute("chunk-edit-section-replace", {
+			path: filePath,
+			edits: [
+				{
+					target: `${building.path}#${building.checksum}`,
+					content: "## Building and Testing\n\nUse `just verify` instead. It wraps cmake and ctest.\n",
+				},
+			],
+		});
+
+		const updatedSource = await Bun.file(filePath).text();
+		expect(updatedSource).toContain("## Code Style");
+		expect(updatedSource).toContain("## Commit Messages");
+		expect(updatedSource).toContain("Use `just verify`");
+		expect(updatedSource).not.toContain("cmake -S . -B build");
 	});
 });

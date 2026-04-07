@@ -8,7 +8,6 @@ const rustDir = path.join(repoRoot, "crates/pi-natives");
 const nativeDir = path.join(import.meta.dir, "../native");
 const packageJsonPath = path.join(import.meta.dir, "../package.json");
 
-const isDev = process.argv.includes("--dev");
 const crossTarget = Bun.env.CROSS_TARGET;
 const targetPlatform = Bun.env.TARGET_PLATFORM || process.platform;
 const targetArch = Bun.env.TARGET_ARCH || process.arch;
@@ -173,7 +172,7 @@ async function resolveBuiltAddonPath(canonicalFilename: string): Promise<string>
 }
 
 const isCI = Boolean(Bun.env.CI);
-const useLocalProfile = !isDev && !isCI && !isCrossCompile;
+const useLocalProfile = !isCI && !isCrossCompile;
 
 // Build napi args
 const napiArgs = [
@@ -190,9 +189,7 @@ const napiArgs = [
 	nativeDir,
 ];
 
-if (isDev) {
-	// napi build defaults to debug, no flag needed
-} else if (useLocalProfile) {
+if (useLocalProfile) {
 	napiArgs.push("--profile", "local");
 } else {
 	napiArgs.push("--release");
@@ -200,7 +197,7 @@ if (isDev) {
 
 if (crossTarget) napiArgs.push("--target", crossTarget);
 
-const profileLabel = isDev ? " (debug)" : useLocalProfile ? " (local)" : "";
+const profileLabel = useLocalProfile ? " (local)" : "";
 const canonicalAddonFilename = `pi_natives.${targetPlatform}-${targetArch}${variantSuffix}.node`;
 const canonicalAddonPath = path.join(nativeDir, canonicalAddonFilename);
 

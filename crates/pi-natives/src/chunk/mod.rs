@@ -1729,6 +1729,30 @@ func (s *Server) GetAddress() string {
 	}
 
 	#[test]
+	fn read_renders_full_chunk_paths_in_full_anchor_style() {
+		let source = "class Worker {
+    run(): void {
+        work();
+    }
+}
+";
+		let state = ChunkState::parse(source.to_string(), "typescript".to_string())
+			.expect("state should parse");
+		let result = state
+			.render_read(ReadRenderParams {
+				read_path:           "sample.ts".to_string(),
+				display_path:        "sample.ts".to_string(),
+				language_tag:        Some("ts".to_string()),
+				omit_checksum:       false,
+				anchor_style:        Some(ChunkAnchorStyle::Full),
+				absolute_line_range: None,
+				tab_replacement:     Some("    ".to_string()),
+			})
+			.expect("root read should succeed");
+		assert!(result.text.contains("[class_Worker.fn_run#"), "{}", result.text);
+	}
+
+	#[test]
 	fn read_missing_chunk_returns_error_with_suggestions() {
 		let filler = (0..60)
 			.map(|index| format!("    const value{index} = {index};"))
@@ -1740,7 +1764,7 @@ func (s *Server) GetAddress() string {
 			 try {{\n        work();\n    }} catch (error) {{\n        throw error;\n    }}\n}}\n"
 		);
 		let state = ChunkState::parse(source, "typescript".to_string()).expect("state should parse");
-		let error = state
+		let result = state
 			.render_read(ReadRenderParams {
 				read_path:           "sample.ts:fn_loadSkills.try_2".to_string(),
 				display_path:        "sample.ts".to_string(),
@@ -1750,12 +1774,15 @@ func (s *Server) GetAddress() string {
 				absolute_line_range: None,
 				tab_replacement:     Some("    ".to_string()),
 			})
-			.err()
-			.expect("missing chunk should surface as an error");
-		let message = error.to_string();
-		assert!(message.contains("Chunk path not found: \"fn_loadSkills.try_2\""), "{message}");
-		assert!(message.contains("Direct children of \"fn_loadSkills\""), "{message}");
-		assert!(message.contains("fn_loadSkills.try"), "{message}");
+			.expect("render_read should succeed");
+
+		let chunk = result.chunk.expect("should have a chunk target");
+		assert_eq!(chunk.status, super::types::ChunkReadStatus::NotFound);
+
+		let text = &result.text;
+		assert!(text.contains("Chunk path not found: \"fn_loadSkills.try_2\""), "{text}");
+		assert!(text.contains("Direct children of \"fn_loadSkills\""), "{text}");
+		assert!(text.contains("fn_loadSkills.try"), "{text}");
 	}
 
 	#[test]
@@ -2086,6 +2113,84 @@ end
 				.any(|child| child == "mod_App.fn_boot"),
 			"expected fn_boot inside namespace, got {:?}",
 			module.children
+		);
+	}
+
+	#[test]
+	fn adjacent_markdown_sections_do_not_overlap() {
+		let source = "# Top\n\n## A\n\na body\n\n## B\n\nb body\n\n## C\n\nc body\n";
+		let tree = build_chunk_tree(source, "markdown").expect("markdown tree");
+
+		let a = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "section_Top.section_A")
+			.expect("section_A");
+		let b = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "section_Top.section_B")
+			.expect("section_B");
+		let c = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "section_Top.section_C")
+			.expect("section_C");
+
+		assert!(
+			a.end_line < b.start_line,
+			"section_A ({}-{}) must not overlap section_B ({}-{})",
+			a.start_line,
+			a.end_line,
+			b.start_line,
+			b.end_line,
+		);
+		assert!(
+			b.end_line < c.start_line,
+			"section_B ({}-{}) must not overlap section_C ({}-{})",
+			b.start_line,
+			b.end_line,
+			c.start_line,
+			c.end_line,
+		);
+	}
+
+	#[test]
+	fn adjacent_toml_tables_do_not_overlap() {
+		let source = "[package]\nname = \"x\"\n\n[deps]\na = 1\n\n[tool]\nb = 2\n";
+		let tree = build_chunk_tree(source, "toml").expect("toml tree");
+
+		let package = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "table_package")
+			.expect("table_package");
+		let deps = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "table_deps")
+			.expect("table_deps");
+		let tool = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "table_tool")
+			.expect("table_tool");
+
+		assert!(
+			package.end_line < deps.start_line,
+			"table_package ({}-{}) must not overlap table_deps ({}-{})",
+			package.start_line,
+			package.end_line,
+			deps.start_line,
+			deps.end_line,
+		);
+		assert!(
+			deps.end_line < tool.start_line,
+			"table_deps ({}-{}) must not overlap table_tool ({}-{})",
+			deps.start_line,
+			deps.end_line,
+			tool.start_line,
+			tool.end_line,
 		);
 	}
 }

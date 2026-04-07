@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
 - Moved package entry point from `src/index.ts` to `native/index.js` — consumers must update imports to use the new native module path
@@ -17,6 +16,7 @@
 
 ### Changed
 
+- Simplified native build pipeline by removing `--dev` flag support; debug builds no longer available through npm scripts
 - Updated native module loader to check `XDG_DATA_HOME` environment variable for native addon location before falling back to `~/.omp/natives`
 - Removed native binding validation function that checked for required exports at load time
 - Refactored build pipeline to use napi-rs generated bindings instead of hand-written TypeScript wrappers
@@ -25,6 +25,7 @@
 
 ### Removed
 
+- Removed `dev:native` npm script — use `build:native` for all build scenarios
 - Removed inline pi-utils helpers and dependency on `@oh-my-pi/pi-utils` from native module loader
 - Removed `logger.time()` wrapper calls from native module loading
 - Removed all TypeScript wrapper modules from `src/` directory (appearance, ast, chunk, clipboard, glob, grep, highlight, html, image, keys, projfs, ps, pty, shell, text, work)

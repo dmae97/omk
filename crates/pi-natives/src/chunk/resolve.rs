@@ -75,6 +75,14 @@ pub fn resolve_chunk_selector<'a>(
 	resolve_chunk_selector_impl(state, cleaned_selector.as_deref(), cleaned_crc.as_deref(), warnings)
 }
 
+pub fn resolve_exact_chunk_selector<'a>(
+	state: &'a ChunkStateInner,
+	selector: Option<&str>,
+) -> Result<&'a ChunkNode, String> {
+	let (cleaned_selector, cleaned_crc) = split_selector_and_crc(selector, None);
+	resolve_chunk_selector_exact_impl(state, cleaned_selector.as_deref(), cleaned_crc.as_deref())
+}
+
 pub fn resolve_chunk_with_crc<'a>(
 	state: &'a ChunkStateInner,
 	selector: Option<&str>,
@@ -91,6 +99,35 @@ pub fn resolve_chunk_with_crc<'a>(
 	}
 
 	let chunk = resolve_chunk_selector_impl(state, cleaned_selector.as_deref(), None, warnings)?;
+	Ok(ResolvedChunk { chunk, crc: cleaned_crc })
+}
+
+pub fn resolve_exact_chunk_with_crc<'a>(
+	state: &'a ChunkStateInner,
+	selector: Option<&str>,
+	crc: Option<&str>,
+) -> Result<ResolvedChunk<'a>, String> {
+	let (cleaned_selector, cleaned_crc) = split_selector_and_crc(selector, crc);
+
+	if cleaned_selector.is_none() {
+		let chunk = root_chunk(state)?;
+		if let Some(cleaned_crc) = cleaned_crc.as_deref() {
+			if chunk.checksum != cleaned_crc {
+				return Err(format!(
+					"Root checksum \"{cleaned_crc}\" did not match the current file root. Re-read the \
+					 file and copy the root checksum from the header line."
+				));
+			}
+			return Ok(ResolvedChunk { chunk, crc: Some(cleaned_crc.to_owned()) });
+		}
+		return Ok(ResolvedChunk { chunk, crc: None });
+	}
+
+	let chunk = resolve_chunk_selector_exact_impl(
+		state,
+		cleaned_selector.as_deref(),
+		cleaned_crc.as_deref(),
+	)?;
 	Ok(ResolvedChunk { chunk, crc: cleaned_crc })
 }
 
@@ -122,6 +159,12 @@ pub fn resolve_chunk_by_checksum<'a>(
 	}
 }
 
+fn root_chunk(state: &ChunkStateInner) -> Result<&ChunkNode, String> {
+	state
+		.chunk("")
+		.ok_or_else(|| "Chunk tree is missing the root chunk".to_owned())
+}
+
 fn resolve_chunk_selector_impl<'a>(
 	state: &'a ChunkStateInner,
 	selector: Option<&str>,
@@ -129,9 +172,7 @@ fn resolve_chunk_selector_impl<'a>(
 	warnings: &mut Vec<String>,
 ) -> Result<&'a ChunkNode, String> {
 	let Some(cleaned) = selector else {
-		return state
-			.chunk("")
-			.ok_or_else(|| "Chunk tree is missing the root chunk".to_owned());
+		return root_chunk(state);
 	};
 
 	if let Some(chunk) = state.chunk(cleaned) {
@@ -202,6 +243,22 @@ fn resolve_chunk_selector_impl<'a>(
 	}
 
 	Err(build_not_found_error(state.tree(), cleaned))
+}
+
+fn resolve_chunk_selector_exact_impl<'a>(
+	state: &'a ChunkStateInner,
+	selector: Option<&str>,
+	crc: Option<&str>,
+) -> Result<&'a ChunkNode, String> {
+	let Some(cleaned) = selector else {
+		return root_chunk(state);
+	};
+
+	let Some(chunk) = state.chunk(cleaned) else {
+		return Err(build_not_found_error(state.tree(), cleaned));
+	};
+
+	match_crc_filter(cleaned, vec![chunk], crc)
 }
 
 fn match_crc_filter<'a>(

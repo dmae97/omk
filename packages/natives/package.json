@@ -30,7 +30,6 @@
 	"types": "./native/index.d.ts",
 	"scripts": {
 		"build:native": "bun scripts/build-native.ts",
-		"dev:native": "bun scripts/build-native.ts --dev",
 		"embed:native": "bun scripts/embed-native.ts",
 		"check": "biome check . && tsgo -p tsconfig.json",
 		"fix": "biome check --write --unsafe .",

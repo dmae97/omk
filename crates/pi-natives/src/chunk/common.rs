@@ -68,6 +68,24 @@ pub struct ChunkAccumulator {
 
 // ── Candidate constructors ───────────────────────────────────────────────
 
+/// Convert a tree-sitter `end_position` into a 1-indexed line number.
+///
+/// Tree-sitter byte ranges are half-open, so `end_position` points to the byte
+/// immediately *after* the last byte of the node. When that byte lands at
+/// column 0 of a new row, the node's last byte actually sits on the previous
+/// row and the 1-indexed last line is exactly `end.row` — not `end.row + 1`.
+/// This matters for grammars whose container nodes terminate on the start of
+/// the next sibling (tree-sitter-markdown sections, tree-sitter-toml tables,
+/// etc.): the naive `end.row + 1` would claim the sibling's heading line and
+/// make `replace_range_by_lines` clobber it.
+const fn end_row_as_line(start: tree_sitter::Point, end: tree_sitter::Point) -> usize {
+	if end.column == 0 && end.row > start.row {
+		end.row
+	} else {
+		end.row + 1
+	}
+}
+
 pub fn make_candidate<'tree>(
 	node: Node<'tree>,
 	base_name: String,
@@ -89,7 +107,7 @@ pub fn make_candidate<'tree>(
 		range_end_byte: node.end_byte(),
 		checksum_start_byte: start_byte,
 		range_start_line: start.row + 1,
-		range_end_line: end.row + 1,
+		range_end_line: end_row_as_line(start, end),
 		signature: summary,
 		error: name_style == NameStyle::Error,
 		groupable: matches!(name_style, NameStyle::Group),

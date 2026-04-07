@@ -236,6 +236,16 @@ fn chunk_body_anchor_indent(
 		.map_or(String::new(), |line| leading_whitespace(line).replace('\t', tab_replacement))
 }
 
+const fn chunk_anchor_label(chunk: &ChunkNode, style: ChunkAnchorStyle) -> &str {
+	match style {
+		ChunkAnchorStyle::Full | ChunkAnchorStyle::FullOmit => chunk.path.as_str(),
+		ChunkAnchorStyle::Kind
+		| ChunkAnchorStyle::KindOmit
+		| ChunkAnchorStyle::Bare
+		| ChunkAnchorStyle::None => chunk.name.as_str(),
+	}
+}
+
 #[derive(Clone, Copy)]
 struct VisibleSpan {
 	start: u32,
@@ -619,7 +629,8 @@ fn emit_chunk_subtree(
 	if !chunk.path.is_empty() {
 		let anchor_indent = chunk_body_anchor_indent(ctx.source_lines, chunk, ctx.tab_replacement);
 		let style = ctx.anchor_style.with_omit_checksum(ctx.omit_checksum);
-		push_meta(ctx, style.render(&anchor_indent, chunk.name.as_str(), chunk.checksum.as_str()));
+		let anchor_label = chunk_anchor_label(chunk, style);
+		push_meta(ctx, style.render(&anchor_indent, anchor_label, chunk.checksum.as_str()));
 	}
 	if !has_kids {
 		if ctx.show_leaf_preview
@@ -657,10 +668,8 @@ fn emit_chunk_subtree(
 		if !chunk.path.is_empty() && chunk.line_count > 1 {
 			let anchor_indent = chunk_body_anchor_indent(ctx.source_lines, chunk, ctx.tab_replacement);
 			let style = ctx.anchor_style.with_omit_checksum(ctx.omit_checksum);
-			push_meta(
-				ctx,
-				style.render_close(&anchor_indent, chunk.name.as_str(), chunk.checksum.as_str()),
-			);
+			let anchor_label = chunk_anchor_label(chunk, style);
+			push_meta(ctx, style.render_close(&anchor_indent, anchor_label, chunk.checksum.as_str()));
 		}
 		return;
 	}

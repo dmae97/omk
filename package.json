@@ -23,7 +23,6 @@
 		"fix:ts": "biome check --write --unsafe . && bun --cwd=packages/coding-agent run format-prompts && bun --cwd=packages/coding-agent run generate-docs-index",
 		"fix:rs": "cargo fmt --all && cargo clippy --fix --allow-dirty --all-targets --no-deps --allow-staged --broken-code --allow-no-vcs",
 		"build:native": "bun --cwd=packages/natives run build:native",
-		"dev:native": "bun --cwd=packages/natives run dev:native",
 		"bench:gen-fixtures": "bun --cwd=packages/typescript-edit-benchmark run src/generate.ts --typescript-dir /tmp/typescript-source --count-per-type 8",
 		"bench:edit": "bun --cwd=packages/typescript-edit-benchmark run start",
 		"prepublishOnly": "bun run check",
