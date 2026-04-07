@@ -262,7 +262,10 @@ fn apply_replace(
 	});
 	let requires_checksum = operation.sel.is_some() || default_crc.is_some();
 	let batch_auto_accepted = ensure_batch_operation_target_current(scheduled, crc, touched_paths);
-	let resolved = resolve_chunk_with_crc(state, anchor_selector, crc, warnings)?;
+	// When auto-accepted, strip CRC so resolution finds by path only (CRC is stale
+	// from pre-batch).
+	let resolve_crc = if batch_auto_accepted { None } else { crc };
+	let resolved = resolve_chunk_with_crc(state, anchor_selector, resolve_crc, warnings)?;
 	if !batch_auto_accepted {
 		validate_batch_crc(resolved.chunk, resolved.crc.as_deref(), requires_checksum)?;
 	}
@@ -355,7 +358,8 @@ fn apply_delete(
 	});
 	let requires_checksum = operation.sel.is_some() || default_crc.is_some();
 	let batch_auto_accepted = ensure_batch_operation_target_current(scheduled, crc, touched_paths);
-	let resolved = resolve_chunk_with_crc(state, anchor_selector, crc, warnings)?;
+	let resolve_crc = if batch_auto_accepted { None } else { crc };
+	let resolved = resolve_chunk_with_crc(state, anchor_selector, resolve_crc, warnings)?;
 	if !batch_auto_accepted {
 		validate_batch_crc(resolved.chunk, resolved.crc.as_deref(), requires_checksum)?;
 	}
@@ -389,7 +393,8 @@ fn apply_insert(
 		}
 	});
 	let batch_auto_accepted = ensure_batch_operation_target_current(scheduled, crc, touched_paths);
-	let resolved = resolve_chunk_with_crc(state, anchor_selector, crc, warnings)?;
+	let resolve_crc = if batch_auto_accepted { None } else { crc };
+	let resolved = resolve_chunk_with_crc(state, anchor_selector, resolve_crc, warnings)?;
 	if !batch_auto_accepted {
 		validate_batch_crc(resolved.chunk, resolved.crc.as_deref(), resolved.crc.is_some())?;
 	}

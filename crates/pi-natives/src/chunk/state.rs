@@ -326,19 +326,20 @@ impl ChunkState {
 				});
 			}
 
-			let notice = if visible_range.start_line == visible_range.end_line {
-				format!("{}:L{}", params.display_path, visible_range.start_line)
-			} else {
-				format!(
-					"{}:L{}-L{}",
-					params.display_path, visible_range.start_line, visible_range.end_line
-				)
+			let clamped_range = VisibleLineRange {
+				start_line: visible_range.start_line,
+				end_line:   visible_range.end_line.min(self.inner.tree().line_count),
 			};
+			let notice = format!(
+				"[Notice: chunk view scoped to requested lines L{}-L{}; non-overlapping lines \
+				 omitted.]",
+				clamped_range.start_line, clamped_range.end_line
+			);
 			let text = self.render(RenderParams {
 				chunk_path:           Some(root.path.clone()),
 				title:                params.display_path.clone(),
 				language_tag:         params.language_tag.clone(),
-				visible_range:        Some(visible_range),
+				visible_range:        Some(clamped_range),
 				render_children_only: true,
 				omit_checksum:        params.omit_checksum,
 				anchor_style:         params.anchor_style,
@@ -377,9 +378,15 @@ impl ChunkState {
 		}
 
 		let mut warnings = Vec::new();
-		let resolved =
+		let Ok(resolved) =
 			resolve_chunk_with_crc(self.inner(), selector.as_deref(), crc.as_deref(), &mut warnings)
-				.map_err(Error::from_reason)?;
+		else {
+			let sel = selector.unwrap_or_default();
+			return Ok(ReadResult {
+				text:  format!("{}:{}\n\n[Chunk not found]", params.display_path, sel),
+				chunk: Some(ChunkReadTarget { status: ChunkReadStatus::NotFound, selector: sel }),
+			});
+		};
 		let chunk = resolved.chunk;
 
 		if let Some(absolute_line_range) = params.absolute_line_range {

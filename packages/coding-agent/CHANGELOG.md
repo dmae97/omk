@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `anchorStyle` parameter to chunk read formatting to control chunk path display format (full, kind, or bare)
@@ -22,6 +21,9 @@
 
 ### Changed
 
+- Updated streaming edit preview to display chunk edits alongside hashline edits with operation-specific formatting
+- Improved chunk edit preview labels to show operation type (delete, append, prepend, insert, replace) with target and line ranges
+- Simplified chunk read path parsing to extract only the selector string without redundant CRC field
 - Agent sessions now hold a macOS power assertion for their lifetime so the host stays awake during active coding-agent runs
 - Updated chunk edit prompt documentation to use ellipsis (…) instead of ellipsis (...) for consistency in operation examples
 - Modified chunk path parsing to preserve raw selector strings and extract CRC separately, enabling accurate chunk reference round-tripping in read/edit workflows

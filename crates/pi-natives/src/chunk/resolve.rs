@@ -90,12 +90,7 @@ pub fn resolve_chunk_with_crc<'a>(
 		return Ok(ResolvedChunk { chunk, crc: Some(cleaned_crc) });
 	}
 
-	let chunk = resolve_chunk_selector_impl(
-		state,
-		cleaned_selector.as_deref(),
-		cleaned_crc.as_deref(),
-		warnings,
-	)?;
+	let chunk = resolve_chunk_selector_impl(state, cleaned_selector.as_deref(), None, warnings)?;
 	Ok(ResolvedChunk { chunk, crc: cleaned_crc })
 }
 

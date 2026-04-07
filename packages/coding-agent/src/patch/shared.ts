@@ -22,7 +22,7 @@ import {
 	truncateDiffByHunk,
 } from "../tools/render-utils";
 import { Hasher, type RenderCache, renderStatusLine, truncateToWidth } from "../tui";
-import type { HashlineToolEdit } from "./index";
+import type { ChunkToolEdit, HashlineToolEdit } from "./index";
 import type { DiffError, DiffResult, Operation } from "./types";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -83,8 +83,8 @@ interface EditRenderArgs {
 	 * Computed preview diff (used when tool args don't include a diff, e.g. hashline mode).
 	 */
 	previewDiff?: string;
-	// Hashline mode fields
-	edits?: Partial<HashlineToolEdit>[];
+	// Hashline / chunk mode fields
+	edits?: Partial<HashlineToolEdit | ChunkToolEdit>[];
 }
 
 /** Extended context for edit tool rendering */
@@ -117,18 +117,24 @@ function formatStreamingDiff(diff: string, rawPath: string, uiTheme: Theme, labe
 	return text;
 }
 
-function formatStreamingHashlineEdits(edits: Partial<HashlineToolEdit>[], uiTheme: Theme): string {
+function formatStreamingHashlineEdits(edits: Partial<HashlineToolEdit | ChunkToolEdit>[], uiTheme: Theme): string {
 	const MAX_EDITS = 4;
 	const MAX_DST_LINES = 8;
 	let text = "\n\n";
-	text += uiTheme.fg("dim", `[${edits.length} hashline edit${edits.length === 1 ? "" : "s"}]`);
+
+	// Detect whether these are chunk edits (target field) or hashline edits (loc field)
+	const isChunk = edits.length > 0 && "target" in edits[0];
+	const label = isChunk ? "chunk edit" : "hashline edit";
+	text += uiTheme.fg("dim", `[${edits.length} ${label}${edits.length === 1 ? "" : "s"}]`);
 	text += "\n";
 	let shownEdits = 0;
 	let shownDstLines = 0;
 	for (const edit of edits) {
 		shownEdits++;
 		if (shownEdits > MAX_EDITS) break;
-		const formatted = formatHashlineEdit(edit);
+		const formatted = isChunk
+			? formatChunkEdit(edit as Partial<ChunkToolEdit>)
+			: formatHashlineEdit(edit as Partial<HashlineToolEdit>);
 		text += uiTheme.fg("toolOutput", truncateToWidth(replaceTabs(formatted.srcLabel), 120));
 		text += "\n";
 		if (formatted.dst === "") {
@@ -145,39 +151,74 @@ function formatStreamingHashlineEdits(edits: Partial<HashlineToolEdit>[], uiThem
 		if (shownDstLines > MAX_DST_LINES) break;
 	}
 	if (edits.length > MAX_EDITS) {
-		text += uiTheme.fg("dim", `… (${edits.length - MAX_EDITS} more edits)`);
+		text += uiTheme.fg("dim", `\u2026 (${edits.length - MAX_EDITS} more edits)`);
 	}
 	if (shownDstLines > MAX_DST_LINES) {
-		text += uiTheme.fg("dim", `\n… (${shownDstLines - MAX_DST_LINES} more dst lines)`);
+		text += uiTheme.fg("dim", `\n\u2026 (${shownDstLines - MAX_DST_LINES} more dst lines)`);
 	}
 
 	return text.trimEnd();
+
 	function formatHashlineEdit(edit: Partial<HashlineToolEdit>): { srcLabel: string; dst: string } {
 		if (typeof edit !== "object" || !edit) {
-			return { srcLabel: "• (incomplete edit)", dst: "" };
+			return { srcLabel: "\u2022 (incomplete edit)", dst: "" };
 		}
 
 		const contentLines = Array.isArray(edit.content) ? (edit.content as string[]).join("\n") : "";
 		const loc = edit.loc;
 
 		if (loc === "append" || loc === "prepend") {
-			return { srcLabel: `• ${loc} (file-level)`, dst: contentLines };
+			return { srcLabel: `\u2022 ${loc} (file-level)`, dst: contentLines };
 		}
 		if (typeof loc === "object" && loc) {
 			if ("range" in loc && typeof loc.range === "object" && loc.range) {
-				return { srcLabel: `• range ${loc.range.pos ?? "?"}…${loc.range.end ?? "?"}`, dst: contentLines };
+				return { srcLabel: `\u2022 range ${loc.range.pos ?? "?"}\u2026${loc.range.end ?? "?"}`, dst: contentLines };
 			}
 			if ("line" in loc) {
-				return { srcLabel: `• line ${(loc as { line: string }).line}`, dst: contentLines };
+				return { srcLabel: `\u2022 line ${(loc as { line: string }).line}`, dst: contentLines };
 			}
 			if ("append" in loc) {
-				return { srcLabel: `• append ${(loc as { append: string }).append}`, dst: contentLines };
+				return { srcLabel: `\u2022 append ${(loc as { append: string }).append}`, dst: contentLines };
 			}
 			if ("prepend" in loc) {
-				return { srcLabel: `• prepend ${(loc as { prepend: string }).prepend}`, dst: contentLines };
+				return { srcLabel: `\u2022 prepend ${(loc as { prepend: string }).prepend}`, dst: contentLines };
 			}
 		}
-		return { srcLabel: "• (unknown edit)", dst: contentLines };
+		return { srcLabel: "\u2022 (unknown edit)", dst: contentLines };
+	}
+
+	function formatChunkEdit(edit: Partial<ChunkToolEdit>): { srcLabel: string; dst: string } {
+		if (typeof edit !== "object" || !edit) {
+			return { srcLabel: "\u2022 (incomplete edit)", dst: "" };
+		}
+
+		const contentLines = Array.isArray(edit.content)
+			? (edit.content as string[]).join("\n")
+			: typeof edit.content === "string"
+				? edit.content
+				: "";
+		const target = edit.target ?? "?";
+
+		if (edit.delete) {
+			return { srcLabel: `\u2022 delete ${target}`, dst: "" };
+		}
+		if (edit.append) {
+			return { srcLabel: `\u2022 append child ${target}`, dst: contentLines };
+		}
+		if (edit.prepend) {
+			return { srcLabel: `\u2022 prepend child ${target}`, dst: contentLines };
+		}
+		if (edit.after) {
+			return { srcLabel: `\u2022 insert after ${target}.${edit.after}`, dst: contentLines };
+		}
+		if (edit.before) {
+			return { srcLabel: `\u2022 insert before ${target}.${edit.before}`, dst: contentLines };
+		}
+		if (edit.line != null) {
+			const range = edit.end_line != null ? `${edit.line}\u2026${edit.end_line}` : `${edit.line}`;
+			return { srcLabel: `\u2022 replace ${target} L${range}`, dst: contentLines };
+		}
+		return { srcLabel: `\u2022 replace ${target}`, dst: contentLines };
 	}
 }
 function formatMetadataLine(lineCount: number | null, language: string | undefined, uiTheme: Theme): string {
