@@ -126,8 +126,8 @@ All examples reference this `read` output:
 - **MUST** include a `#CRC` suffix in `target` for every replace or delete edit.
 - **MUST** use updated chunk output from the edit response for follow-up edits.
 - **MUST** use the smallest correct target; do not rewrite siblings unnecessarily.
-- **MUST NOT** invent chunk paths. Copy them from `read` output including `fn_*` prefixes. Nesting uses `.`.
+- **MUST** use the **fully qualified** chunk path. Copy the complete path shown in read output — e.g. `fn_handleTerraform.try.if_2`, never just `if_2`. Short/leaf names are ambiguous.
 - For line-scoped replace edits, use file line numbers from the `read` gutter.
-- Do NOT batch multiple line-scoped replace edits on the same chunk. Combine them into one wider range or use separate calls.
+- Multiple line-scoped edits on the same chunk in one batch are fine — the engine auto-updates the checksum between operations.
 </critical>
 </output>

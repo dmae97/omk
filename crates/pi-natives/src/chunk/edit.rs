@@ -261,9 +261,12 @@ fn apply_replace(
 		}
 	});
 	let requires_checksum = operation.sel.is_some() || default_crc.is_some();
-	ensure_batch_operation_target_current(state, scheduled, crc, touched_paths)?;
+	let batch_auto_accepted =
+		ensure_batch_operation_target_current(scheduled, crc, touched_paths)?;
 	let resolved = resolve_chunk_with_crc(state, anchor_selector, crc, warnings)?;
-	validate_batch_crc(resolved.chunk, resolved.crc.as_deref(), requires_checksum)?;
+	if !batch_auto_accepted {
+		validate_batch_crc(resolved.chunk, resolved.crc.as_deref(), requires_checksum)?;
+	}
 	let anchor = resolved.chunk.clone();
 
 	if let Some(line) = operation.line {
@@ -352,9 +355,12 @@ fn apply_delete(
 		}
 	});
 	let requires_checksum = operation.sel.is_some() || default_crc.is_some();
-	ensure_batch_operation_target_current(state, scheduled, crc, touched_paths)?;
+	let batch_auto_accepted =
+		ensure_batch_operation_target_current(scheduled, crc, touched_paths)?;
 	let resolved = resolve_chunk_with_crc(state, anchor_selector, crc, warnings)?;
-	validate_batch_crc(resolved.chunk, resolved.crc.as_deref(), requires_checksum)?;
+	if !batch_auto_accepted {
+		validate_batch_crc(resolved.chunk, resolved.crc.as_deref(), requires_checksum)?;
+	}
 	let anchor = resolved.chunk.clone();
 
 	let offsets = line_offsets(&state.source);
@@ -384,9 +390,12 @@ fn apply_insert(
 			None
 		}
 	});
-	ensure_batch_operation_target_current(state, scheduled, crc, touched_paths)?;
+	let batch_auto_accepted =
+		ensure_batch_operation_target_current(scheduled, crc, touched_paths)?;
 	let resolved = resolve_chunk_with_crc(state, anchor_selector, crc, warnings)?;
-	validate_batch_crc(resolved.chunk, resolved.crc.as_deref(), resolved.crc.is_some())?;
+	if !batch_auto_accepted {
+		validate_batch_crc(resolved.chunk, resolved.crc.as_deref(), resolved.crc.is_some())?;
+	}
 	let anchor = resolved.chunk.clone();
 
 	let pos = match operation.op {
@@ -601,45 +610,29 @@ fn touches_chunk_path(touched_paths: &[String], selector: &str) -> bool {
 	})
 }
 
+/// Returns `Ok(true)` when the CRC was auto-accepted (chunk was touched by an
+/// earlier batch op and the model supplied the pre-batch CRC). The caller should
+/// skip CRC validation in that case.
 fn ensure_batch_operation_target_current(
-	state: &ChunkStateInner,
 	scheduled: &ScheduledEditOperation,
 	crc: Option<&str>,
 	touched_paths: &[String],
-) -> Result<(), String> {
+) -> Result<bool, String> {
 	let Some(selector) = scheduled.requested_selector.as_deref() else {
-		return Ok(());
+		return Ok(false);
 	};
 	let Some(initial_chunk) = scheduled.initial_chunk.as_ref() else {
-		return Ok(());
+		return Ok(false);
 	};
 	let Some(cleaned_crc) = sanitize_crc(crc) else {
-		return Ok(());
+		return Ok(false);
 	};
 	if !touches_chunk_path(touched_paths, selector) || cleaned_crc != initial_chunk.checksum {
-		return Ok(());
+		return Ok(false);
 	}
-
-	let mut warnings = Vec::new();
-	let current_chunk =
-		resolve_chunk_selector(state, Some(selector), &mut warnings).map_err(|_| {
-			format!(
-				"Chunk path \"{selector}\" was changed by an earlier batch operation. Re-read after \
-				 the earlier edit and retry with the updated selector and checksum."
-			)
-		})?;
-	if current_chunk.checksum != initial_chunk.checksum {
-		return Err(format!(
-			"Chunk \"{selector}\" was changed by an earlier batch operation: checksum \"{}\" is \
-			 stale; current checksum is \"{}\" and the current file span is {}-{}. Later operations \
-			 in the same batch must use the post-edit checksum and updated line span.",
-			initial_chunk.checksum,
-			current_chunk.checksum,
-			current_chunk.start_line,
-			current_chunk.end_line
-		));
-	}
-	Ok(())
+	// The chunk was touched by an earlier operation in this batch, and the model
+	// supplied the pre-batch CRC (which is all it could know). Auto-accept.
+	Ok(true)
 }
 
 fn describe_scheduled_operation(scheduled: &ScheduledEditOperation) -> String {
