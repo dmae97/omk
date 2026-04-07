@@ -8,7 +8,7 @@ Successful edit responses include the updated chunk tree with checksums. Do not 
 
 <operations>
 **Choosing the right edit shape:**
-- To rewrite an entire chunk → `{ "target": "chunk#CRC", "content": "..." }`
+- To rewrite an entire chunk → `{ "target": "chunk#CRC", "content": "…" }`
 - To fix a single line → add `"line": 13`
 - To fix a contiguous range → add `"line": 13, "end_line": 17`
 - To delete a chunk → `{ "target": "chunk#CRC", "delete": true }`
@@ -17,15 +17,14 @@ Successful edit responses include the updated chunk tree with checksums. Do not 
 
 |shape|effect|
 |---|---|
-|`{ "target": "chunk#CRC", "content": "..." }`|replace the target chunk|
-|`{ "target": "chunk#CRC", "line": 13, "content": "..." }`|replace one line within the target chunk|
-|`{ "target": "chunk#CRC", "line": 13, "end_line": 17, "content": "..." }`|replace an inclusive line range within the target chunk|
+|`{ "target": "chunk#CRC", "content": "…" }`|replace the target chunk|
+|`{ "target": "chunk#CRC", "line": 13, "content": "…" }`|replace one line within the target chunk|
+|`{ "target": "chunk#CRC", "line": 13, "end_line": 17, "content": "…" }`|replace an inclusive line range within the target chunk|
 |`{ "target": "chunk#CRC", "delete": true }`|delete the target chunk|
-|`{ "target": "chunk", "append": true, "content": "..." }`|append as last child of the target chunk|
-|`{ "target": "chunk", "prepend": true, "content": "..." }`|prepend as first child of the target chunk|
-|`{ "target": "parent", "after": "child", "content": "..." }`|insert after the named child within `parent`|
-|`{ "target": "parent", "before": "child", "content": "..." }`|insert before the named child within `parent`|
-
+|`{ "target": "chunk", "append": true, "content": "…" }`|append as last child of the target chunk|
+|`{ "target": "chunk", "prepend": true, "content": "…" }`|prepend as first child of the target chunk|
+|`{ "target": "parent", "after": "child", "content": "…" }`|insert after the named child within `parent`|
+|`{ "target": "parent", "before": "child", "content": "…" }`|insert before the named child within `parent`|
 - `line`/`end_line` are **absolute file line numbers** from the `read` gutter. `line` alone = single line. `line` + `end_line` = inclusive range. `line` with `end_line` = `line`-1 = zero-width insert.
 - `path` is always just the file path. Do not embed `:chunk` selectors in `path`.
 - `target` is the chunk path, optionally followed by `#CRC` copied from the anchor. Example: `"class_Server.fn_start#HTST"`.

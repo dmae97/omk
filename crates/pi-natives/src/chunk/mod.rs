@@ -764,7 +764,11 @@ pub(crate) fn rename_chunk_subtree(
 mod tests {
 	use std::fmt::Write as _;
 
-	use super::{build_chunk_tree, line_to_chunk_path, resolve_chunk_lang};
+	use super::{
+		build_chunk_tree, line_to_chunk_path, resolve_chunk_lang,
+		state::ChunkState,
+		types::{ChunkAnchorStyle, ReadRenderParams},
+	};
 	use crate::language::SupportLang;
 
 	fn assert_supported_sample(language: &str, source: &str) {
@@ -1139,15 +1143,15 @@ function main(): void {{
 	#[test]
 	fn small_interfaces_collapse() {
 		let source = r"interface Config {
-	name: string;
-	getValue(): number;
+    name: string;
+    getValue(): number;
 }";
 		let tree = build_chunk_tree(source, "typescript").expect("tree should build");
 		let iface = tree
 			.chunks
 			.iter()
-			.find(|c| c.path == "iface_Config")
-			.expect("iface_Config");
+			.find(|c| c.path == "interface_Config")
+			.expect("interface_Config");
 		assert!(iface.leaf);
 		assert!(iface.children.is_empty());
 	}
@@ -1379,6 +1383,35 @@ impl Config {
 	}
 
 	#[test]
+	fn nix_chunk_tree_exposes_attr_bindings() {
+	  let source = r#"{
+	        hello = "world";
+	        nested = {
+	          value = 1;
+	        };
+	      }
+	    "#;
+	  let tree = build_chunk_tree(source, "nix").expect("tree should build");
+	  let attrset = tree
+	    .chunks
+	    .iter()
+	    .find(|chunk| chunk.path == "attrset_expr")
+	    .expect("attrset_expr chunk");
+	  assert!(!tree.fallback, "nix should use tree-sitter chunking");
+	  assert!(!attrset.leaf, "top-level attrset should recurse into bindings");
+	  assert!(
+	    attrset.children.iter().any(|child| child == "attrset_expr.attr_hello"),
+	    "expected attr_hello child, got {:?}",
+	    attrset.children
+	  );
+	  assert!(
+	    attrset.children.iter().any(|child| child == "attrset_expr.attr_nested"),
+	    "expected attr_nested child, got {:?}",
+	    attrset.children
+	  );
+	}
+
+	#[test]
 	fn go_receiver_methods_attach_to_receiver_type() {
 		let source = r"package main
 
@@ -1595,6 +1628,176 @@ func (s *Server) GetAddress() string {
 			.expect("type_Handler");
 		assert!(iface.leaf);
 		assert!(iface.children.is_empty(), "single-line interface methods should render inline");
+	}
+
+	#[test]
+	fn typescript_interfaces_use_interface_prefix() {
+		let source = r"interface Settings {
+    enabled: boolean;
+}
+";
+		let tree = build_chunk_tree(source, "typescript").expect("tree should build");
+		assert!(
+			tree
+				.chunks
+				.iter()
+				.any(|chunk| chunk.path == "interface_Settings"),
+			"expected interface_Settings in {:?}",
+			tree
+				.chunks
+				.iter()
+				.map(|chunk| chunk.path.as_str())
+				.collect::<Vec<_>>()
+		);
+		assert!(
+			!tree
+				.chunks
+				.iter()
+				.any(|chunk| chunk.path == "iface_Settings"),
+			"legacy iface_ prefix should not remain addressable"
+		);
+	}
+
+	#[test]
+	fn read_resolves_partial_selectors_and_bare_checksums() {
+		let filler = (0..60)
+			.map(|index| format!("    const value{index} = {index};"))
+			.collect::<Vec<_>>()
+			.join("\n");
+		let source = format!(
+			"function handleTerraform() {{\n{filler}\n    try {{\n        if (ready) {{\n            \
+			 work();\n        }}\n    }} catch (error) {{\n        throw error;\n    }}\n}}\n"
+		);
+		let state = ChunkState::parse(source, "typescript".to_string()).expect("state should parse");
+		let chunk = state
+			.chunks()
+			.into_iter()
+			.find(|candidate| candidate.path == "fn_handleTerraform.try")
+			.expect("try chunk path should exist");
+		let selectors = vec![
+			format!("sample.ts:{}", "fn_handleTerraform.try"),
+			format!("sample.ts:{}", "handleTerraform.try"),
+			format!("sample.ts:{}", "try"),
+			format!("sample.ts:try#{}", chunk.checksum),
+			format!("sample.ts:#{}", chunk.checksum),
+			format!("sample.ts:{}", chunk.checksum),
+		];
+		for selector in selectors {
+			let result = state
+				.render_read(ReadRenderParams {
+					read_path:           selector.clone(),
+					display_path:        "sample.ts".to_string(),
+					language_tag:        Some("ts".to_string()),
+					omit_checksum:       false,
+					anchor_style:        Some(ChunkAnchorStyle::Full),
+					absolute_line_range: None,
+					tab_replacement:     Some("    ".to_string()),
+				})
+				.unwrap_or_else(|err| panic!("selector {selector} should resolve: {err}"));
+			let resolved = result
+				.chunk
+				.expect("selector read should resolve a chunk target");
+			assert_eq!(resolved.selector, "fn_handleTerraform.try");
+		}
+	}
+
+	#[test]
+	fn read_lists_chunks_for_question_selector() {
+		let source = "function run() {\n    return 1;\n}\n";
+		let state = ChunkState::parse(source.to_string(), "typescript".to_string())
+			.expect("state should parse");
+		let result = state
+			.render_read(ReadRenderParams {
+				read_path:           "sample.ts:?".to_string(),
+				display_path:        "sample.ts".to_string(),
+				language_tag:        Some("ts".to_string()),
+				omit_checksum:       false,
+				anchor_style:        Some(ChunkAnchorStyle::Full),
+				absolute_line_range: None,
+				tab_replacement:     Some("    ".to_string()),
+			})
+			.expect("listing should succeed");
+		assert!(result.text.contains("sample.ts chunks:"));
+		assert!(result.text.contains("fn_run#"));
+		assert!(!result.text.contains("return 1"));
+	}
+
+	#[test]
+	fn read_missing_chunk_returns_error_with_suggestions() {
+		let filler = (0..60)
+			.map(|index| format!("    const value{index} = {index};"))
+			.collect::<Vec<_>>()
+			.join("\n");
+		let source = format!(
+			"function loadSkills() {{\n{filler}\n    try {{\n        work();\n    }} catch (error) \
+			 {{\n        throw error;\n    }}\n}}\n\nfunction handleTerraform() {{\n{filler}\n    \
+			 try {{\n        work();\n    }} catch (error) {{\n        throw error;\n    }}\n}}\n"
+		);
+		let state = ChunkState::parse(source, "typescript".to_string()).expect("state should parse");
+		let error = state
+			.render_read(ReadRenderParams {
+				read_path:           "sample.ts:fn_loadSkills.try_2".to_string(),
+				display_path:        "sample.ts".to_string(),
+				language_tag:        Some("ts".to_string()),
+				omit_checksum:       false,
+				anchor_style:        Some(ChunkAnchorStyle::Full),
+				absolute_line_range: None,
+				tab_replacement:     Some("    ".to_string()),
+			})
+			.err()
+			.expect("missing chunk should surface as an error");
+		let message = error.to_string();
+		assert!(message.contains("Chunk path not found: \"fn_loadSkills.try_2\""), "{message}");
+		assert!(message.contains("Direct children of \"fn_loadSkills\""), "{message}");
+		assert!(message.contains("fn_loadSkills.try"), "{message}");
+	}
+
+	#[test]
+	fn go_struct_checksum_ignores_method_body_changes() {
+		let before = r"package main
+
+type Server struct {
+    Addr string
+}
+
+func (s *Server) Start() string {
+    return s.Addr
+}
+";
+		let after = r#"package main
+
+type Server struct {
+    Addr string
+}
+
+func (s *Server) Start() string {
+    return s.Addr + ":80"
+}
+"#;
+		let before_tree = build_chunk_tree(before, "go").expect("before tree should build");
+		let after_tree = build_chunk_tree(after, "go").expect("after tree should build");
+		let before_struct = before_tree
+			.chunks
+			.iter()
+			.find(|chunk| chunk.path == "type_Server")
+			.expect("before struct chunk");
+		let after_struct = after_tree
+			.chunks
+			.iter()
+			.find(|chunk| chunk.path == "type_Server")
+			.expect("after struct chunk");
+		let before_method = before_tree
+			.chunks
+			.iter()
+			.find(|chunk| chunk.path == "type_Server.fn_Start")
+			.expect("before method chunk");
+		let after_method = after_tree
+			.chunks
+			.iter()
+			.find(|chunk| chunk.path == "type_Server.fn_Start")
+			.expect("after method chunk");
+		assert_eq!(before_struct.checksum, after_struct.checksum);
+		assert_ne!(before_method.checksum, after_method.checksum);
 	}
 
 	#[test]

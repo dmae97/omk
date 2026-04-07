@@ -42,89 +42,109 @@ fn extract_nix_binding_name(node: Node<'_>, source: &str) -> Option<String> {
 	})
 }
 
+fn recurse_nix_attrset(node: Node<'_>) -> Option<RecurseSpec<'_>> {
+	recurse_into(node, ChunkContext::ClassBody, &[], &["binding_set"])
+}
+
+fn recurse_nix_binding_value(node: Node<'_>) -> Option<RecurseSpec<'_>> {
+    let expression = node.child_by_field_name("expression")?;
+    if matches!(
+        expression.kind(),
+        "attrset_expression" | "let_attrset_expression" | "rec_attrset_expression"
+    ) {
+        return recurse_nix_attrset(expression);
+    }
+    recurse_value_container(node)
+}
+
+fn classify_nix_binding<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
+    let name = extract_nix_binding_name(node, source).unwrap_or_else(|| "anonymous".to_string());
+    let chunk_name = format!("attr_{name}");
+    let expression = node.child_by_field_name("expression");
+    if let Some(expression) = expression
+        && matches!(
+            expression.kind(),
+            "attrset_expression" | "let_attrset_expression" | "rec_attrset_expression"
+        )
+    {
+        return make_container_chunk(node, chunk_name, source, recurse_nix_attrset(expression));
+    }
+    make_named_chunk(node, chunk_name, source, recurse_nix_binding_value(node))
+}
+
 impl LangClassifier for NixHclClassifier {
 	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
-			// Nix top-level attribute set entries
-			"attribute" => {
-				let name = child_by_kind(node, &["identifier"])
-					.and_then(|c| sanitize_identifier(node_text(source, c.start_byte(), c.end_byte())))
-					.unwrap_or_else(|| "anonymous".to_string());
-				Some(make_named_chunk(
-					node,
-					format!("attr_{name}"),
-					source,
-					recurse_value_container(node),
-				))
-			},
-			"binding" => {
-				let name =
-					extract_nix_binding_name(node, source).unwrap_or_else(|| "anonymous".to_string());
-				Some(make_named_chunk(
-					node,
-					format!("binding_{name}"),
-					source,
-					recurse_value_container(node),
-				))
-			},
-			// HCL top-level block, or diff hunk fallback
-			"block" => {
-				if let Some(name) = extract_hcl_block_name(node, source) {
-					Some(make_container_chunk(
-						node,
-						format!("block_{name}"),
-						source,
-						recurse_into(node, ChunkContext::ClassBody, &[], &["body"]),
-					))
-				} else {
-					Some(group_candidate(node, "hunks", source))
-				}
-			},
-			// Nix expressions
-			"function_expression" | "let_expression" => {
-				Some(named_candidate(node, "expr", source, recurse_value_container(node)))
-			},
-			// Nix inherit
-			"inherit" => Some(group_candidate(node, "imports", source)),
-			// Variable/assignment declarations
-			"variable_declaration" | "assignment" => Some(group_candidate(node, "decls", source)),
-			// HCL top-level block types
-			"provider" | "resource" | "data" | "locals" | "variable" | "output" | "module" => {
-				Some(container_candidate(
-					node,
-					sanitize_node_kind(node.kind()).as_str(),
-					source,
-					recurse_into(node, ChunkContext::ClassBody, &[], &["body"]),
-				))
-			},
-			_ => None,
-		}
+	    match node.kind() {
+	        // Nix top-level attrsets should recurse into their binding_set so the file exposes
+	        // structural attr chunks instead of a single opaque attrset_expr leaf.
+	        "attrset_expression" | "let_attrset_expression" | "rec_attrset_expression" => {
+	            Some(make_container_chunk(
+	                node,
+	                sanitize_node_kind(node.kind()),
+	                source,
+	                recurse_nix_attrset(node),
+	            ))
+	        },
+	        // Older tree-sitter-nix revisions used `attribute`; current grammars expose `binding`.
+	        "attribute" | "binding" => Some(classify_nix_binding(node, source)),
+	        // HCL top-level block, or diff hunk fallback
+	        "block" => {
+	            if let Some(name) = extract_hcl_block_name(node, source) {
+	                Some(make_container_chunk(
+	                    node,
+	                    format!("block_{name}"),
+	                    source,
+	                    recurse_into(node, ChunkContext::ClassBody, &[], &["body"]),
+	                ))
+	            } else {
+	                Some(group_candidate(node, "hunks", source))
+	            }
+	        },
+	        // Nix expressions
+	        "function_expression" | "let_expression" => {
+	            Some(named_candidate(node, "expr", source, recurse_value_container(node)))
+	        },
+	        // Nix inherit
+	        "inherit" => Some(group_candidate(node, "imports", source)),
+	        // Variable/assignment declarations
+	        "variable_declaration" | "assignment" => Some(group_candidate(node, "decls", source)),
+	        // HCL top-level block types
+	        "provider" | "resource" | "data" | "locals" | "variable" | "output" | "module" => {
+	            Some(container_candidate(
+	                node,
+	                sanitize_node_kind(node.kind()).as_str(),
+	                source,
+	                recurse_into(node, ChunkContext::ClassBody, &[], &["body"]),
+	            ))
+	        },
+	        _ => None,
+	    }
 	}
 
 	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
-			// Nested HCL block — only promote if it has an identifiable block name
-			"block" => extract_hcl_block_name(node, source).map(|name| {
-				make_container_chunk(
-					node,
-					format!("block_{name}"),
-					source,
-					recurse_into(node, ChunkContext::ClassBody, &[], &["body"]),
-				)
-			}),
-			// Nested Nix binding
-			"binding" => {
-				let name =
-					extract_nix_binding_name(node, source).unwrap_or_else(|| "anonymous".to_string());
-				Some(make_named_chunk(
-					node,
-					format!("binding_{name}"),
-					source,
-					recurse_value_container(node),
-				))
-			},
-			_ => None,
-		}
+	    match node.kind() {
+	        // Nested HCL block — only promote if it has an identifiable block name
+	        "block" => extract_hcl_block_name(node, source).map(|name| {
+	            make_container_chunk(
+	                node,
+	                format!("block_{name}"),
+	                source,
+	                recurse_into(node, ChunkContext::ClassBody, &[], &["body"]),
+	            )
+	        }),
+	        // Nested Nix attrset values recurse into their binding_set just like top-level ones.
+	        "attrset_expression" | "let_attrset_expression" | "rec_attrset_expression" => {
+	            Some(make_container_chunk(
+	                node,
+	                sanitize_node_kind(node.kind()),
+	                source,
+	                recurse_nix_attrset(node),
+	            ))
+	        },
+	        // Nested Nix binding
+	        "binding" => Some(classify_nix_binding(node, source)),
+	        _ => None,
+	    }
 	}
 
 	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {

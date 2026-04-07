@@ -447,7 +447,7 @@ describe("chunk mode tools", () => {
 		expect(await Bun.file(filePath).text()).toBe(originalSource);
 	});
 
-	it("reports stale mixed batches against the listed splice operation", async () => {
+	it("auto-accepts stale CRC in mixed batches on the same chunk", async () => {
 		const filePath = path.join(tmpDir, "server.ts");
 		const originalSource = buildLargeTypescriptFixture();
 		await Bun.write(filePath, originalSource);
@@ -455,27 +455,24 @@ describe("chunk mode tools", () => {
 		const editTool = new EditTool(session);
 		const checksum = getChunkChecksum(originalSource, "typescript", "class_Server.fn_handleError");
 
-		await expect(
-			editTool.execute("chunk-edit-stale-mixed-batch", {
-				path: filePath,
-				edits: [
-					{
-						target: `class_Server.fn_handleError#${checksum}`,
-						content: "  private handleError(err: Error): string {\n    return err.message;\n  }",
-					},
-					{
-						target: `class_Server.fn_handleError#${checksum}`,
-						line: 63,
-						end_line: 63,
-						content: "    return err.message.toUpperCase();",
-					},
-				],
-			}),
-		).rejects.toThrow(
-			/Edit operation 2\/2 failed \(replace on "class_Server\.fn_handleError"\): Chunk "class_Server\.fn_handleError" was changed by an earlier batch operation/,
-		);
+		const _result = await editTool.execute("chunk-edit-stale-mixed-batch", {
+			path: filePath,
+			edits: [
+				{
+					target: `class_Server.fn_handleError#${checksum}`,
+					content: "  private handleError(err: Error): string {\n    return err.message;\n  }",
+				},
+				{
+					target: `class_Server.fn_handleError#${checksum}`,
+					line: 3,
+					end_line: 3,
+					content: "    return err.message.toUpperCase();",
+				},
+			],
+		});
 
-		expect(await Bun.file(filePath).text()).toBe(originalSource);
+		const updatedSource = await Bun.file(filePath).text();
+		expect(updatedSource).toContain("toUpperCase");
 	});
 
 	it("rejects missing CRC", async () => {

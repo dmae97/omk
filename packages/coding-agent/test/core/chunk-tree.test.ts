@@ -465,24 +465,24 @@ describe("edit safety invariants", () => {
 		});
 	}
 
-	test("rejects a second same-path replace in one batch when the checksum stays stale", () => {
+	test("auto-accepts stale CRC for a second same-path replace in one batch", () => {
 		const checksum = getChecksum(testSource, runChunkPath);
-		expect(() =>
-			edit([
-				{
-					op: "replace",
-					sel: runChunkPath,
-					crc: checksum,
-					content: '\trun(): void {\n\t\tconsole.log("first");\n\t}',
-				},
-				{
-					op: "replace",
-					sel: runChunkPath,
-					crc: checksum,
-					content: '\trun(): void {\n\t\tconsole.log("second");\n\t}',
-				},
-			]),
-		).toThrow(/changed by an earlier batch operation/);
+		const result = edit([
+			{
+				op: "replace",
+				sel: runChunkPath,
+				crc: checksum,
+				content: '\trun(): void {\n\t\tconsole.log("first");\n\t}',
+			},
+			{
+				op: "replace",
+				sel: runChunkPath,
+				crc: checksum,
+				content: '\trun(): void {\n\t\tconsole.log("second");\n\t}',
+			},
+		]);
+		expect(result.diffSourceAfter).toContain('console.log("second")');
+		expect(result.diffSourceAfter).not.toContain('console.log("first")');
 	});
 
 	test("applies two same-path replaces in one batch when the second checksum matches the post-first state", () => {
@@ -506,28 +506,28 @@ describe("edit safety invariants", () => {
 		expect(result.diffSourceAfter).not.toContain('console.log("first")');
 	});
 
-	test("rejects a second same-path splice in one batch when the checksum stays stale", () => {
+	test("auto-accepts stale CRC for a second same-path splice in one batch", () => {
 		const checksum = getChecksum(testSource, runChunkPath);
-		expect(() =>
-			edit([
-				{
-					op: "replace",
-					sel: runChunkPath,
-					crc: checksum,
-					line: 6,
-					endLine: 6,
-					content: '\trun(task = "default"): void {',
-				},
-				{
-					op: "replace",
-					sel: runChunkPath,
-					crc: checksum,
-					line: 7,
-					endLine: 7,
-					content: "\t\tconsole.log(task);",
-				},
-			]),
-		).toThrow(/changed by an earlier batch operation/);
+		const result = edit([
+			{
+				op: "replace",
+				sel: runChunkPath,
+				crc: checksum,
+				line: 6,
+				endLine: 6,
+				content: '\trun(task = "default"): void {',
+			},
+			{
+				op: "replace",
+				sel: runChunkPath,
+				crc: checksum,
+				line: 7,
+				endLine: 7,
+				content: "\t\tconsole.log(task);",
+			},
+		]);
+		expect(result.diffSourceAfter).toContain('run(task = "default")');
+		expect(result.diffSourceAfter).toContain("console.log(task)");
 	});
 
 	test("applies two same-path splices in one batch when the second checksum matches the post-first state", () => {
