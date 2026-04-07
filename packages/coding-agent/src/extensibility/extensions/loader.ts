@@ -6,7 +6,6 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Model, TextContent } from "@oh-my-pi/pi-ai";
-import * as piCodingAgent from "@oh-my-pi/pi-coding-agent";
 import type { KeyId } from "@oh-my-pi/pi-tui";
 import { hasFsCode, isEacces, isEnoent, logger } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
@@ -18,6 +17,7 @@ import type { ExecOptions } from "../../exec/exec";
 import { execCommand } from "../../exec/exec";
 import type { CustomMessage } from "../../session/messages";
 import { EventBus } from "../../utils/event-bus";
+import { getPiRef, initPiRef } from "../pi-ref";
 import { getAllPluginExtensionPaths } from "../plugins/loader";
 import { resolvePath } from "../utils";
 import type {
@@ -102,7 +102,7 @@ export class ExtensionRuntime implements IExtensionRuntime {
 class ConcreteExtensionAPI implements ExtensionAPI, IExtensionRuntime {
 	readonly logger = logger;
 	readonly typebox = TypeBox;
-	readonly pi = piCodingAgent;
+	readonly pi = getPiRef();
 	readonly flagValues = new Map<string, boolean | string>();
 	readonly pendingProviderRegistrations: Array<{
 		name: string;
@@ -285,6 +285,7 @@ export async function loadExtensionFromFactory(
 	runtime: IExtensionRuntime,
 	name = "<inline>",
 ): Promise<Extension> {
+	await initPiRef();
 	const extension = createExtension(name, name);
 	const api = new ConcreteExtensionAPI(extension, runtime, cwd, eventBus);
 	await factory(api);
@@ -295,6 +296,7 @@ export async function loadExtensionFromFactory(
  * Load extensions from paths.
  */
 export async function loadExtensions(paths: string[], cwd: string, eventBus?: EventBus): Promise<LoadExtensionsResult> {
+	await initPiRef();
 	const extensions: Extension[] = [];
 	const errors: Array<{ path: string; error: string }> = [];
 	const resolvedEventBus = eventBus ?? new EventBus();
@@ -453,6 +455,7 @@ export async function discoverAndLoadExtensions(
 	eventBus?: EventBus,
 	disabledExtensionIds: string[] = [],
 ): Promise<LoadExtensionsResult> {
+	await initPiRef();
 	const allPaths: string[] = [];
 	const seen = new Set<string>();
 	const disabled = new Set(disabledExtensionIds);

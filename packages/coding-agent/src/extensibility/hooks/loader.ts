@@ -2,7 +2,6 @@
  * Hook loader - loads TypeScript hook modules using native Bun import.
  */
 import * as path from "node:path";
-import * as piCodingAgent from "@oh-my-pi/pi-coding-agent";
 import { logger } from "@oh-my-pi/pi-utils";
 import * as typebox from "@sinclair/typebox";
 import { hookCapability } from "../../capability/hook";
@@ -10,6 +9,7 @@ import type { Hook } from "../../discovery";
 import { loadCapability } from "../../discovery";
 import type { HookMessage } from "../../session/messages";
 import type { SessionManager } from "../../session/session-manager";
+import { getPiRef, initPiRef } from "../pi-ref";
 import { resolvePath } from "../utils";
 import { execCommand } from "./runner";
 import type { ExecOptions, HookAPI, HookFactory, HookMessageRenderer, RegisteredCommand } from "./types";
@@ -137,7 +137,7 @@ function createHookAPI(
 		},
 		logger,
 		typebox,
-		pi: piCodingAgent,
+		pi: getPiRef(),
 	} as HookAPI;
 
 	return {
@@ -202,6 +202,7 @@ async function loadHook(hookPath: string, cwd: string): Promise<{ hook: LoadedHo
  * @param cwd - Current working directory for resolving relative paths
  */
 export async function loadHooks(paths: string[], cwd: string): Promise<LoadHooksResult> {
+	await initPiRef();
 	const hooks: LoadedHook[] = [];
 	const errors: Array<{ path: string; error: string }> = [];
 
@@ -231,6 +232,7 @@ export async function loadHooks(paths: string[], cwd: string): Promise<LoadHooks
  * Plus any explicitly configured paths from settings.
  */
 export async function discoverAndLoadHooks(configuredPaths: string[], cwd: string): Promise<LoadHooksResult> {
+	await initPiRef();
 	const allPaths: string[] = [];
 	const seen = new Set<string>();
 

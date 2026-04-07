@@ -59,6 +59,7 @@ import {
 	type ToolDefinition,
 	wrapRegisteredTools,
 } from "./extensibility/extensions";
+import { initPiRef } from "./extensibility/pi-ref";
 import { loadSkills as loadSkillsInternal, type Skill, type SkillWarning } from "./extensibility/skills";
 import { type FileSlashCommand, loadSlashCommands as loadSlashCommandsInternal } from "./extensibility/slash-commands";
 import {
@@ -347,6 +348,7 @@ export async function discoverSlashCommands(cwd?: string): Promise<FileSlashComm
  * Discover custom commands (TypeScript slash commands) from cwd and agentDir.
  */
 export async function discoverCustomTSCommands(cwd?: string, agentDir?: string): Promise<CustomCommandsLoadResult> {
+	await initPiRef();
 	const resolvedCwd = cwd ?? getProjectDir();
 	const resolvedAgentDir = agentDir ?? getDefaultAgentDir();
 
@@ -638,6 +640,7 @@ function buildMCPPromptCommands(manager: MCPManager): LoadedCustomCommand[] {
  * ```
  */
 export async function createAgentSession(options: CreateAgentSessionOptions = {}): Promise<CreateAgentSessionResult> {
+	await initPiRef();
 	const cwd = options.cwd ?? getProjectDir();
 	const agentDir = options.agentDir ?? getDefaultAgentDir();
 	const eventBus = options.eventBus ?? new EventBus();
