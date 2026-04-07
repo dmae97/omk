@@ -102,49 +102,30 @@ const patchEditSchema = Type.Object({
 	diff: Type.Optional(Type.String({ description: "Diff hunks (update) or full content (create)" })),
 });
 
-const pTarget = {
-	target: Type.String({ description: "Chunk selector path with optional #CRC suffix copied from read output" }),
-} as const;
+const CHUNK_OP_VALUES = ["replace", "delete", "append", "prepend", "after", "before"] as const;
 
-const pContent = {
-	content: Type.Optional(
-		Type.Union([Type.String(), Type.Array(Type.String())], { description: "Replacement content" }),
-	),
-} as const;
-
-const pDelete = {
-	delete: Type.Optional(Type.Boolean({ description: "Delete the target chunk when true" })),
-} as const;
-
-const pPosition = {
-	append: Type.Optional(Type.Boolean({ description: "Insert content as the last child of target" })),
-	prepend: Type.Optional(Type.Boolean({ description: "Insert content as the first child of target" })),
-	after: Type.Optional(Type.String({ description: "Insert content after this named child within target" })),
-	before: Type.Optional(Type.String({ description: "Insert content before this named child within target" })),
-} as const;
-
-const pRangesOpt = {
-	line: Type.Optional(
-		Type.Integer({
+const chunkToolEditSchema = Type.Object({
+	target: Type.String({
+		description:
+			"Chunk path from read output, with #CRC suffix for replace/delete (e.g. 'class_X.fn_y#A14F'). Use parent path without #CRC for insert ops.",
+	}),
+	op: Type.Optional(
+		StringEnum(CHUNK_OP_VALUES, {
 			description:
-				"Start line for line-scoped replace (1-indexed file line from read gutter). Omit for whole-chunk replace.",
+				"Edit op (default: replace). 'delete' removes target. 'append'/'prepend' insert as last/first child. 'after'/'before' insert at sibling position; require 'anchor'.",
 		}),
 	),
-	end_line: Type.Optional(
-		Type.Integer({ description: "End line for line-scoped replace. Omit for single-line edit." }),
+	content: Type.Optional(
+		Type.String({ description: "New content (required for replace/append/prepend/after/before)." }),
 	),
-} as const;
-
-const chunkToolEditSchema = Type.Object(
-	{
-		...pTarget,
-		...pContent,
-		...pDelete,
-		...pPosition,
-		...pRangesOpt,
-	},
-	{ additionalProperties: false },
-);
+	line: Type.Optional(
+		Type.Integer({ description: "Absolute file line for line-scoped replace (omit for whole-chunk replace)." }),
+	),
+	end_line: Type.Optional(Type.Integer({ description: "End line (inclusive) for replacing a line range." })),
+	anchor: Type.Optional(
+		Type.String({ description: "Named child to insert relative to (required for op=after/before)." }),
+	),
+});
 
 const chunkEditParamsSchema = Type.Object(
 	{
@@ -584,75 +565,75 @@ export class EditTool implements AgentTool<TInput> {
 
 			for (const edit of edits) {
 				const { selector, crc } = parseChunkTarget(edit.target);
+				const op = edit.op ?? "replace";
 				const hasContent = edit.content !== undefined;
-				const positionModes =
-					Number(Boolean(edit.append)) +
-					Number(Boolean(edit.prepend)) +
-					Number(edit.after !== undefined) +
-					Number(edit.before !== undefined);
+				const content = flattenContent(edit.content);
 
-				if (positionModes > 1) {
-					throw new Error(`Edit target ${describeChunkTarget(selector)} must choose only one insertion mode.`);
-				}
+				switch (op) {
+					case "delete": {
+						if (hasContent || edit.line !== undefined || edit.end_line !== undefined) {
+							throw new Error(
+								`Delete edit on ${describeChunkTarget(selector)} cannot include content or line ranges.`,
+							);
+						}
+						normalizedOperations.push({
+							op: "delete",
+							sel: selector,
+							crc: await assertChecksum("delete", crc, selector),
+						});
+						break;
+					}
 
-				if (edit.delete) {
-					if (hasContent || edit.line !== undefined || edit.end_line !== undefined || positionModes > 0) {
-						throw new Error(
-							`Delete edit on ${describeChunkTarget(selector)} cannot include content, line ranges, or insert positions.`,
-						);
-					}
-					normalizedOperations.push({
-						op: "delete",
-						sel: selector,
-						crc: await assertChecksum("delete", crc, selector),
-					});
-					continue;
-				}
-
-				if (positionModes > 0) {
-					if (edit.line !== undefined || edit.end_line !== undefined) {
-						throw new Error(`Insert edit on ${describeChunkTarget(selector)} cannot include line ranges.`);
-					}
-					if (!hasContent) {
-						throw new Error(`Content required for insert edit on ${describeChunkTarget(selector)}.`);
-					}
-					const content = flattenContent(edit.content);
-					if (edit.append) {
+					case "append": {
+						if (!hasContent) throw new Error(`Content required for append on ${describeChunkTarget(selector)}.`);
 						normalizedOperations.push({ op: "append_child", sel: selector, content });
-						continue;
+						break;
 					}
-					if (edit.prepend) {
+					case "prepend": {
+						if (!hasContent) throw new Error(`Content required for prepend on ${describeChunkTarget(selector)}.`);
 						normalizedOperations.push({ op: "prepend_child", sel: selector, content });
-						continue;
+						break;
 					}
-					if (edit.after !== undefined) {
+
+					case "after": {
+						if (!hasContent)
+							throw new Error(`Content required for after-insert on ${describeChunkTarget(selector)}.`);
+						if (!edit.anchor)
+							throw new Error(`'anchor' required for op=after on ${describeChunkTarget(selector)}.`);
 						normalizedOperations.push({
 							op: "append_sibling",
-							sel: joinChunkPath(selector, edit.after),
+							sel: joinChunkPath(selector, edit.anchor),
 							content,
 						});
-						continue;
+						break;
 					}
-					normalizedOperations.push({
-						op: "prepend_sibling",
-						sel: joinChunkPath(selector, edit.before ?? ""),
-						content,
-					});
-					continue;
+					case "before": {
+						if (!hasContent)
+							throw new Error(`Content required for before-insert on ${describeChunkTarget(selector)}.`);
+						if (!edit.anchor)
+							throw new Error(`'anchor' required for op=before on ${describeChunkTarget(selector)}.`);
+						normalizedOperations.push({
+							op: "prepend_sibling",
+							sel: joinChunkPath(selector, edit.anchor),
+							content,
+						});
+						break;
+					}
+					default: {
+						if (!hasContent) {
+							throw new Error(`Content required for replace edit on ${describeChunkTarget(selector)}.`);
+						}
+						normalizedOperations.push({
+							op: "replace",
+							sel: selector,
+							crc: await assertChecksum("replace", crc, selector),
+							content,
+							line: edit.line,
+							endLine: edit.end_line,
+						});
+						break;
+					}
 				}
-
-				if (!hasContent) {
-					throw new Error(`Content required for replace edit on ${describeChunkTarget(selector)}.`);
-				}
-
-				normalizedOperations.push({
-					op: "replace",
-					sel: selector,
-					crc: await assertChecksum("replace", crc, selector),
-					content: flattenContent(edit.content),
-					line: edit.line,
-					endLine: edit.end_line,
-				});
 			}
 
 			const chunkResult = applyChunkEdits({

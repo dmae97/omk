@@ -1,132 +1,37 @@
-Edits files by addressing syntax-aware chunks from `read` output.
+Edits files via syntax-aware chunks. Run `read(path="file.ts")` first — it returns chunks with anchors `[name#CRC]` where `#CRC` is a 4-char hex checksum. Copy the full chunk path AND `#CRC` verbatim into `target`.
 
-Read the file first with `read(path="file.ts")`. Copy `target` directly from the latest chunk anchors. The `#CRC` suffix in `target` is the chunk checksum.
+<rules>
+- **MUST** `read` first. NEVER invent chunk names or CRCs — copy them from the latest read output or edit response.
+- `target` **MUST** be the **fully-qualified** path (e.g. `class_X.fn_y.if_2`, not `if_2`), ending with `#CRC` for replace/delete.
+- Prefer `line`/`end_line` (absolute file line numbers from the read gutter) for small fixes over whole-chunk replace.
+- `content` must include the destination block's inner indentation.
+- Successful edits return refreshed anchors — use them for follow-ups, don't re-read just for new CRCs.
+</rules>
 
-Successful edit responses include the updated chunk tree with checksums. Do not re-read just to refresh checksums unless the file changed externally.
+<ops>
+|op|fields|effect|
+|---|---|---|
+|`replace` (default)|`target#CRC`, `content`, opt. `line`/`end_line`|rewrite chunk or a line range within it|
+|`delete`|`target#CRC`|remove chunk|
+|`append` / `prepend`|`target`, `content`|insert as last/first child of target|
+|`after` / `before`|`target`, `anchor` (child name), `content`|insert at sibling position|
 
-**Checksum scope:** Each chunk has its own CRC over its source span. Editing non-overlapping lines elsewhere does not change unrelated chunks' checksums.
+For file-root edits, `target` is the file CRC alone (e.g. `"#VSKB"`).
+</ops>
 
-<operations>
-**Choosing the right edit shape:**
-- To rewrite an entire chunk → `{ "target": "chunk#CRC", "content": "…" }`
-- To fix a single line → add `"line": 13`
-- To fix a contiguous range → add `"line": 13, "end_line": 17`
-- To delete a chunk → `{ "target": "chunk#CRC", "delete": true }`
-- To append/prepend inside a container → add `"append": true` or `"prepend": true`
-- To insert relative to a named child → use `"after": "child_name"` or `"before": "child_name"` on the parent target
-
-|shape|effect|
-|---|---|
-|`{ "target": "chunk#CRC", "content": "…" }`|replace the target chunk|
-|`{ "target": "chunk#CRC", "line": 13, "content": "…" }`|replace one line within the target chunk|
-|`{ "target": "chunk#CRC", "line": 13, "end_line": 17, "content": "…" }`|replace an inclusive line range within the target chunk|
-|`{ "target": "chunk#CRC", "delete": true }`|delete the target chunk|
-|`{ "target": "chunk", "append": true, "content": "…" }`|append as last child of the target chunk|
-|`{ "target": "chunk", "prepend": true, "content": "…" }`|prepend as first child of the target chunk|
-|`{ "target": "parent", "after": "child", "content": "…" }`|insert after the named child within `parent`|
-|`{ "target": "parent", "before": "child", "content": "…" }`|insert before the named child within `parent`|
-- `line`/`end_line` are **absolute file line numbers** from the `read` gutter. `line` alone = single line. `line` + `end_line` = inclusive range. `line` with `end_line` = `line`-1 = zero-width insert.
-- `path` is always just the file path. Do not embed `:chunk` selectors in `path`.
-- `target` is the chunk path, optionally followed by `#CRC` copied from the anchor. Example: `"class_Server.fn_start#HTST"`.
-- Insert edits usually omit the checksum because they do not rewrite the target chunk itself.
-- For file-root replace/delete, use the file header checksum as `"target": "#VSKB"`.
-- Content must already include the intended inner indentation for the destination block.
-- Batch edits observe earlier edits. If edit 1 changes checksum/span/path, edit 2 must use the post-edit anchor values.
-- `replace`/`delete` include leading comments/attributes attached to the chunk.
-</operations>
-
-<examples>
-All examples reference this `read` output:
+<example>
+Given read output:
 ```
   | server.ts·40L·ts·#VSKB
- 5| class Server {
-  | {{anchor "class_Server" "XKQZ"}}
 12|   start(): void {
   |   {{anchor "fn_start" "HTST"}}
 13|     log("booting on " + this.port);
-14|     for (let i = 0; i < MAX_RETRIES; i++) {
-15|       this.tryBind();
-16|     }
-17|   }
-19|   private tryBind(): boolean {
-  |   {{anchor "fn_tryBind" "VNWR"}}
-20|     // TODO: add backoff
-21|     return bind(this.port);
-22|   }
+14|     this.tryBind();
+15|   }
 ```
 
-<example name="replace a method">
-```
-"path": "server.ts",
-"edits": [
-  {
-    "target": "{{sel "class_Server.fn_start"}}#HTST",
-    "content": "start(): void {\n  log(\"starting\");\n  this.tryBind();\n}"
-  }
-]
+Fix the typo on line 13:
+```json
+{"path":"server.ts","edits":[{"target":"{{sel "class_Server.fn_start"}}#HTST","line":13,"content":"    warn(\"booting on \" + this.port);"}]}
 ```
 </example>
-
-<example name="replace a single line">
-```
-"path": "server.ts",
-"edits": [
-  {
-    "target": "{{sel "class_Server.fn_start"}}#HTST",
-    "line": 13,
-    "content": " warn(\"booting on \" + this.port);"
-  }
-]
-```
-</example>
-
-<example name="delete a chunk">
-```
-"path": "server.ts",
-"edits": [
-  {
-    "target": "{{sel "class_Server.fn_tryBind"}}#VNWR",
-    "delete": true
-  }
-]
-```
-</example>
-
-<example name="append a child method">
-```
-"path": "server.ts",
-"edits": [
-  {
-    "target": "{{sel "class_Server"}}",
-    "append": true,
-    "content": "status(): string {\n  return \"ok\";\n}"
-  }
-]
-```
-</example>
-
-<example name="insert after a named child">
-```
-"path": "server.ts",
-"edits": [
-  {
-    "target": "{{sel "class_Server"}}",
-    "after": "fn_start",
-    "content": "reset(): void {\n  this.port = 0;\n}"
-  }
-]
-```
-</example>
-</examples>
-
-<critical>
-- **MUST** include `path` in every edit call.
-- **MUST** read the latest chunk output before editing.
-- **MUST** include a `#CRC` suffix in `target` for every replace or delete edit.
-- **MUST** use updated chunk output from the edit response for follow-up edits.
-- **MUST** use the smallest correct target; do not rewrite siblings unnecessarily.
-- **MUST** use the **fully qualified** chunk path. Copy the complete path shown in read output — e.g. `fn_handleTerraform.try.if_2`, never just `if_2`. Short/leaf names are ambiguous.
-- For line-scoped replace edits, use file line numbers from the `read` gutter.
-- Multiple line-scoped edits on the same chunk in one batch are fine — the engine auto-updates the checksum between operations.
-</critical>
-</output>

@@ -198,27 +198,27 @@ function formatStreamingHashlineEdits(edits: Partial<HashlineToolEdit | ChunkToo
 				? edit.content
 				: "";
 		const target = edit.target ?? "?";
+		const op = edit.op ?? "replace";
 
-		if (edit.delete) {
-			return { srcLabel: `\u2022 delete ${target}`, dst: "" };
+		switch (op) {
+			case "delete":
+				return { srcLabel: `\u2022 delete ${target}`, dst: "" };
+			case "append":
+				return { srcLabel: `\u2022 append child ${target}`, dst: contentLines };
+			case "prepend":
+				return { srcLabel: `\u2022 prepend child ${target}`, dst: contentLines };
+			case "after":
+				return { srcLabel: `\u2022 insert after ${target}/${edit.anchor ?? "?"}`, dst: contentLines };
+			case "before":
+				return { srcLabel: `\u2022 insert before ${target}/${edit.anchor ?? "?"}`, dst: contentLines };
+			default: {
+				if (edit.line != null) {
+					const range = edit.end_line != null ? `${edit.line}\u2026${edit.end_line}` : `${edit.line}`;
+					return { srcLabel: `\u2022 replace ${target} L${range}`, dst: contentLines };
+				}
+				return { srcLabel: `\u2022 replace ${target}`, dst: contentLines };
+			}
 		}
-		if (edit.append) {
-			return { srcLabel: `\u2022 append child ${target}`, dst: contentLines };
-		}
-		if (edit.prepend) {
-			return { srcLabel: `\u2022 prepend child ${target}`, dst: contentLines };
-		}
-		if (edit.after) {
-			return { srcLabel: `\u2022 insert after ${target}.${edit.after}`, dst: contentLines };
-		}
-		if (edit.before) {
-			return { srcLabel: `\u2022 insert before ${target}.${edit.before}`, dst: contentLines };
-		}
-		if (edit.line != null) {
-			const range = edit.end_line != null ? `${edit.line}\u2026${edit.end_line}` : `${edit.line}`;
-			return { srcLabel: `\u2022 replace ${target} L${range}`, dst: contentLines };
-		}
-		return { srcLabel: `\u2022 replace ${target}`, dst: contentLines };
 	}
 }
 function formatMetadataLine(lineCount: number | null, language: string | undefined, uiTheme: Theme): string {

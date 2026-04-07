@@ -1,55 +1,16 @@
 Reads files using syntax-aware chunks.
 
 <instruction>
-## Parameters
-- `path` -- file path or URL; may include `:selector` suffix as an alternative to `sel`
-- `sel` -- optional selector (see table below)
-- `timeout` -- seconds, for URLs only
+- `path` — file path or URL; may include `:selector` suffix
+- `sel` — optional selector: `class_Foo`, `class_Foo.fn_bar`, `L50`, `L50-L120`, or `raw`
+- `timeout` — seconds, for URLs only
 
-## Selectors
+Each anchor `[name#CCCC]` in the output is a chunk ID. Copy `name#CCCC` into the edit tool's `target` field.
+Line numbers in the gutter are absolute — use them for `line`/`end_line` in edits.
 
-|Input|Behavior|
-|---|---|
-|_(omitted)_|Render the file root chunk|
-|`class_Foo`|Read a chunk by path|
-|`class_Foo.fn_bar`|Read a nested chunk path|
-|`L50` or `L50-L120`|Absolute file line range|
-|`raw`|Read full raw file content (no chunk rendering)|
-
-Each anchor line shows `[name#CCCC]` — `#CCCC` is the edit checksum. Copy it when editing with `chunk-edit`.
-
-If `path:chunk` and `sel` are both provided, `sel` wins. Missing chunk paths return `[Chunk not found]`.
-
-Code rows use **absolute file line numbers** in the gutter. `chunk-edit` `line`/`end_line` use those same numbers.
-
-## Examples
-
-`read(path="src/math.ts")`
-
-```text
-  | src/math.ts·120L·ts·#A744
-  |
- 5| export function sum(values: readonly number[]): number {
-  | {{anchor "fn_sum" "3286"}}
- 6|   return values.reduce((total, value) => total + value, 0);
- 7| }
-10| export class Calculator {
-  | {{anchor "class_Calculator" "5D36"}}
-11|   multiply(left: number, right: number): number {
-  |   {{anchor "fn_multiply" "B592"}}
-12|     return left * right;
-13|   }
-14| }
-```
-
-## Language Support
-
-Chunk trees: JavaScript, TypeScript, TSX, Python, Rust, Go. Others use blank-line fallback.
+Chunk trees: JS, TS, TSX, Python, Rust, Go. Others use blank-line fallback.
 </instruction>
 
 <critical>
-- **MUST** use `read` instead of shell commands for file reading.
-- **MUST** copy the current checksum before editing a chunk with `chunk-edit`.
-- **MUST NOT** assume chunk names; always read the current output first.
+- **MUST** `read` before editing — never invent chunk names or CRCs.
 </critical>
-</output>

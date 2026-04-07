@@ -296,7 +296,7 @@ describe("chunk mode tools", () => {
 
 		await editTool.execute("chunk-edit-string-content", {
 			path: filePath,
-			edits: [{ target: "class_Server", append: true, content: 'status(): string {\n  return "ok";\n}\n' }],
+			edits: [{ target: "class_Server", op: "append", content: 'status(): string {\n  return "ok";\n}\n' }],
 		} as never);
 
 		const updatedSource = await Bun.file(filePath).text();
@@ -415,8 +415,8 @@ describe("chunk mode tools", () => {
 			editTool.execute("chunk-edit-batch-rollback", {
 				path: filePath,
 				edits: [
-					{ target: "class_Server", append: true, content: '  status(): string {\n    return "ok";\n  }' },
-					{ target: "class_Server.fn_handleError#ZZZZ", delete: true },
+					{ target: "class_Server", op: "append", content: '  status(): string {\n    return "ok";\n  }' },
+					{ target: "class_Server.fn_handleError#ZZZZ", op: "delete" },
 				],
 			}),
 		).rejects.toThrow(/No changes were saved/);
@@ -491,7 +491,7 @@ describe("chunk mode tools", () => {
 						line: 3,
 						end_line: 3,
 						content: "    let total = 1;",
-					} as never,
+					},
 				],
 			}),
 		).rejects.toThrow(/Checksum required/);

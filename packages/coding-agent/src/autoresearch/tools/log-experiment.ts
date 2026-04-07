@@ -209,7 +209,7 @@ export function createLogExperimentTool(
 			const preRunDirtyPaths = pendingRun.preRunDirtyPaths;
 			let keepScopeValidation: { committablePaths: string[] } | undefined;
 			if (params.status === "keep") {
-				const scopeValidation = await validateKeepPaths(options, workDir, state, preRunDirtyPaths);
+				const scopeValidation = await validateKeepPaths(options, workDir, state);
 				if (typeof scopeValidation === "string") {
 					return {
 						content: [{ type: "text", text: `Error: ${scopeValidation}` }],
@@ -605,7 +605,6 @@ async function validateKeepPaths(
 	options: AutoresearchToolFactoryOptions,
 	workDir: string,
 	state: ExperimentState,
-	preRunDirtyPaths: string[],
 ): Promise<{ committablePaths: string[] } | string> {
 	if (state.scopePaths.length === 0) {
 		return "Files in Scope is empty for the current segment. Re-run init_experiment after fixing autoresearch.md.";
@@ -624,7 +623,6 @@ async function validateKeepPaths(
 	}
 
 	const workDirPrefix = await readGitWorkDirPrefix(options, workDir);
-	const preRunSet = new Set(preRunDirtyPaths);
 	const committablePaths: string[] = [];
 	for (const entry of parseWorkDirDirtyPathsWithStatus(statusText, workDirPrefix)) {
 		if (isAutoresearchLocalStatePath(entry.path)) {
@@ -632,10 +630,6 @@ async function validateKeepPaths(
 		}
 		if (isAutoresearchCommittableFile(entry.path)) {
 			committablePaths.push(entry.path);
-			continue;
-		}
-		// Skip files that were already dirty before the run
-		if (preRunSet.has(entry.path)) {
 			continue;
 		}
 		if (state.offLimits.some(spec => pathMatchesContractPath(entry.path, spec))) {

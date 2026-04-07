@@ -21,6 +21,15 @@
 
 ### Changed
 
+- Simplified chunk edit schema to use explicit `op` field (replace, delete, append, prepend, after, before) instead of separate boolean flags for improved clarity
+- Updated chunk edit prompt documentation to consolidate operation guidance with streamlined rules, ops reference table, and simplified examples
+- Refactored chunk edit preview formatting to use `op` field and `anchor` parameter for sibling-relative inserts (after/before operations)
+- Renamed chunk edit parameter from `after`/`before` field names to use `anchor` field for specifying named children in sibling-relative insert operations
+- Simplified chunk read and edit prompt documentation to reduce verbosity and focus on essential guidance
+- Refactored chunk edit schema to use explicit `op` field (replace, delete, append, prepend, after, before) instead of boolean flags for improved clarity and consistency
+- Updated chunk edit prompt documentation to simplify operation guidance with consolidated rules, ops reference, and streamlined examples
+- Changed chunk edit preview formatting to use `op` field and `anchor` parameter for sibling-relative inserts (after/before operations)
+- Renamed chunk edit parameter from `after`/`before` field names to use `anchor` field for specifying named children in sibling-relative insert operations
 - Updated streaming edit preview to display chunk edits alongside hashline edits with operation-specific formatting
 - Improved chunk edit preview labels to show operation type (delete, append, prepend, insert, replace) with target and line ranges
 - Simplified chunk read path parsing to extract only the selector string without redundant CRC field
@@ -72,6 +81,7 @@
 
 ### Fixed
 
+- Fixed `log_experiment` to correctly identify run-modified files by removing pre-run dirty path filtering, ensuring all uncommitted changes are properly validated
 - Fixed chunk edit operations to extract and use embedded CRC checksums when models write selectors like `fn_foo#ABCD` instead of separate `sel` and `crc` fields
 - Fixed shell command error handling to properly check for errors before processing chunks in bash executor and config resolution
 - Fixed `log_experiment` to correctly identify and revert only files modified by the run, leaving pre-existing uncommitted changes intact

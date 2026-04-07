@@ -621,6 +621,101 @@ describe("autoresearch tools", () => {
 		expect(runJson.status).toBe("keep");
 	});
 
+	it("commits in-scope changes when those paths were already dirty before the run", async () => {
+		const dir = makeTempDir();
+		tempDirs.push(dir);
+		writeAutoresearchWorkspace(dir, {
+			contract: [
+				"# Autoresearch",
+				"",
+				"## Benchmark",
+				"- command: bash autoresearch.sh",
+				"- primary metric: runtime_ms",
+				"- metric unit: ms",
+				"- direction: lower",
+				"",
+				"## Files in Scope",
+				"- src/in-scope.ts",
+				"",
+				"## Off Limits",
+				"",
+				"## Constraints",
+				"- keep behavior stable",
+				"",
+			].join("\n"),
+		});
+		fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+		fs.writeFileSync(path.join(dir, "src", "in-scope.ts"), "export const value = 1;\n");
+
+		await $`git init`.cwd(dir).quiet();
+		await $`git config user.email test@example.com`.cwd(dir).quiet();
+		await $`git config user.name Test User`.cwd(dir).quiet();
+		await $`git add .`.cwd(dir).quiet();
+		await $`git commit -m initial`.cwd(dir).quiet();
+		await $`git checkout -b autoresearch/test-keep-prerun-dirty`.cwd(dir).quiet();
+
+		fs.writeFileSync(path.join(dir, "src", "in-scope.ts"), "export const value = 3;\n");
+		fs.writeFileSync(path.join(dir, "autoresearch.program.md"), "# Strategy\n\n- focus on in-scope edits\n");
+		await Bun.write(
+			path.join(dir, ".autoresearch", "runs", "0001", "run.json"),
+			JSON.stringify({
+				command: "bash autoresearch.sh",
+				exitCode: 0,
+				parsedMetrics: { runtime_ms: 9 },
+				parsedPrimary: 9,
+				runNumber: 1,
+			}),
+		);
+
+		const runtime = createSessionRuntime();
+		runtime.state.metricName = "runtime_ms";
+		runtime.state.metricUnit = "ms";
+		runtime.state.scopePaths = ["src/in-scope.ts"];
+		runtime.state.constraints = ["keep behavior stable"];
+		const runDirectory = path.join(dir, ".autoresearch", "runs", "0001");
+		runtime.lastRunArtifactDir = runDirectory;
+		runtime.lastRunNumber = 1;
+		runtime.lastRunDuration = 1.2;
+		runtime.lastRunSummary = {
+			checksDurationSeconds: 0,
+			checksPass: null,
+			checksTimedOut: false,
+			command: "bash autoresearch.sh",
+			durationSeconds: 1.2,
+			parsedAsi: null,
+			parsedMetrics: { runtime_ms: 9 },
+			parsedPrimary: 9,
+			passed: true,
+			preRunDirtyPaths: ["src/in-scope.ts"],
+			runDirectory,
+			runNumber: 1,
+		};
+
+		const tool = createLogExperimentTool({
+			dashboard: createDashboardStub(),
+			getRuntime: () => runtime,
+			pi: createGitApi(),
+		});
+		const result = await tool.execute(
+			"call-keep-prerun-dirty",
+			{
+				commit: "initial",
+				metric: 9,
+				status: "keep",
+				description: "Improve in scope after prior WIP",
+				asi: { hypothesis: "refine further" },
+			},
+			undefined,
+			undefined,
+			createContext(dir),
+		);
+
+		expect(firstTextBlockText(result.content)).toContain("Logged run #1: keep");
+		const committedPaths = await $`git show --name-only --pretty=format: HEAD`.cwd(dir).text();
+		expect(committedPaths).toContain("src/in-scope.ts");
+		expect(committedPaths).toContain("autoresearch.program.md");
+	});
+
 	it("rejects keep when an out-of-scope file is dirty", async () => {
 		const dir = makeTempDir();
 		tempDirs.push(dir);
