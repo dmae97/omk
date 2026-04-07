@@ -191,6 +191,7 @@ impl MacOSPowerAssertion {
 
 	/// Release the power assertion early.
 	#[napi]
+	#[allow(clippy::missing_const_for_fn, reason = "not const on macOS")]
 	pub fn stop(&mut self) -> napi::Result<()> {
 		#[cfg(target_os = "macos")]
 		if let Some(inner) = &mut self.inner {
