@@ -137,6 +137,41 @@ async function installBinary(src: string, dest: string): Promise<void> {
 	}
 }
 
+async function resolveBuiltAddonPath(canonicalFilename: string): Promise<string> {
+	const canonicalFilenames = new Set([
+		`pi_natives.${targetPlatform}-${targetArch}.node`,
+		`pi_natives.${targetPlatform}-${targetArch}-modern.node`,
+		`pi_natives.${targetPlatform}-${targetArch}-baseline.node`,
+	]);
+	const entries = await fs.readdir(nativeDir);
+
+	if (entries.includes(canonicalFilename)) {
+		return path.join(nativeDir, canonicalFilename);
+	}
+
+	const generatedCandidates = entries.filter(entry => {
+		if (!entry.startsWith(`pi_natives.${targetPlatform}-${targetArch}`) || !entry.endsWith(".node")) {
+			return false;
+		}
+		return !canonicalFilenames.has(entry);
+	});
+
+	if (generatedCandidates.length === 1) {
+		return path.join(nativeDir, generatedCandidates[0]);
+	}
+
+	if (generatedCandidates.length === 0) {
+		throw new Error(
+			`napi build succeeded but did not emit a native addon for ${targetPlatform}-${targetArch}. Expected ${canonicalFilename} or an environment-tagged variant in ${nativeDir}.`,
+		);
+	}
+
+	const formattedCandidates = generatedCandidates.map(candidate => `  - ${candidate}`).join("\n");
+	throw new Error(
+		`napi build emitted multiple unrecognized native addons for ${targetPlatform}-${targetArch}:\n${formattedCandidates}`,
+	);
+}
+
 const isCI = Boolean(Bun.env.CI);
 const useLocalProfile = !isDev && !isCI && !isCrossCompile;
 
@@ -166,6 +201,9 @@ if (isDev) {
 if (crossTarget) napiArgs.push("--target", crossTarget);
 
 const profileLabel = isDev ? " (debug)" : useLocalProfile ? " (local)" : "";
+const canonicalAddonFilename = `pi_natives.${targetPlatform}-${targetArch}${variantSuffix}.node`;
+const canonicalAddonPath = path.join(nativeDir, canonicalAddonFilename);
+
 console.log(`Building pi-natives for ${targetPlatform}-${targetArch}${variantSuffix}${profileLabel}…`);
 
 await fs.mkdir(nativeDir, { recursive: true });
@@ -185,22 +223,11 @@ if (buildResult.exitCode !== 0) {
 	throw new Error(`napi build failed${stderr ? `:\n${stderr}` : ""}`);
 }
 
-// napi build produces pi_natives.<platform>-<arch>.node — rename with variant suffix if needed
-if (variantSuffix) {
-	const napiFilename = `pi_natives.${targetPlatform}-${targetArch}.node`;
-	const taggedFilename = `pi_natives.${targetPlatform}-${targetArch}${variantSuffix}.node`;
-	const napiPath = path.join(nativeDir, napiFilename);
-	const taggedPath = path.join(nativeDir, taggedFilename);
-
-	try {
-		await fs.stat(napiPath);
-		console.log(`Renaming: ${napiFilename} → ${taggedFilename}`);
-		await installBinary(napiPath, taggedPath);
-		await fs.unlink(napiPath).catch(() => {});
-	} catch (err) {
-		if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-		// Already named correctly or handled by napi
-	}
+const builtAddonPath = await resolveBuiltAddonPath(canonicalAddonFilename);
+if (builtAddonPath !== canonicalAddonPath) {
+	console.log(`Normalizing native addon filename: ${path.basename(builtAddonPath)} → ${canonicalAddonFilename}`);
+	await installBinary(builtAddonPath, canonicalAddonPath);
+	await fs.unlink(builtAddonPath).catch(() => {});
 }
 
 // Generate runtime enum exports from const enums in index.d.ts
