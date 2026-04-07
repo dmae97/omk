@@ -204,16 +204,14 @@ describe("chunk mode tools", () => {
 		expect(checksum).toBeDefined();
 
 		const editResult = await editTool.execute("chunk-edit", {
-			path: `${filePath}:class_Server.fn_handleError`,
-			crc: checksum,
-			operations: [
+			path: filePath,
+			edits: [
 				{
-					replace: {
-						content: `  private handleError(err: Error): string {
+					target: `class_Server.fn_handleError#${checksum}`,
+					content: `  private handleError(err: Error): string {
     return \`normalized:\${err.message}\`;
   }
 `,
-					},
 				},
 			],
 		} as never);
@@ -253,24 +251,15 @@ describe("chunk mode tools", () => {
 		const checksum2 = getChunkChecksum(afterFirst, "typescript", chunkPath);
 
 		await editTool.execute("chunk-edit-default-selector-batch", {
-			path: `${filePath}:${chunkPath}`,
-			crc: checksum,
-			operations: [
+			path: filePath,
+			edits: [
 				{
-					replace: {
-						line: 63,
-						end_line: 63,
-						content: "return err.message.toUpperCase() + total;",
-					},
+					target: `${chunkPath}#${checksum}`,
+					line: 63,
+					end_line: 63,
+					content: "return err.message.toUpperCase() + total;",
 				},
-				{
-					replace: {
-						crc: checksum2,
-						line: 3,
-						end_line: 3,
-						content: "let total = 1;",
-					},
-				},
+				{ target: `${chunkPath}#${checksum2}`, line: 3, end_line: 3, content: "let total = 1;" },
 			],
 		} as never);
 
@@ -307,14 +296,7 @@ describe("chunk mode tools", () => {
 
 		await editTool.execute("chunk-edit-string-content", {
 			path: filePath,
-			operations: [
-				{
-					append_child: {
-						sel: "class_Server",
-						content: 'status(): string {\n  return "ok";\n}\n',
-					},
-				},
-			],
+			edits: [{ target: "class_Server", append: true, content: 'status(): string {\n  return "ok";\n}\n' }],
 		} as never);
 
 		const updatedSource = await Bun.file(filePath).text();
@@ -352,25 +334,9 @@ describe("chunk mode tools", () => {
 		// Zero-width splices at larger `end` run first (bottom-up) so line numbers stay stable.
 		await editTool.execute("chunk-edit-insert-lines", {
 			path: filePath,
-			operations: [
-				{
-					replace: {
-						sel: chunkPath,
-						crc: checksum,
-						line: 4,
-						end_line: 3,
-						content: "const end = Date.now();",
-					},
-				},
-				{
-					replace: {
-						sel: chunkPath,
-						crc: checksum2,
-						line: 3,
-						end_line: 2,
-						content: "const start = Date.now();",
-					},
-				},
+			edits: [
+				{ target: `${chunkPath}#${checksum}`, line: 4, end_line: 3, content: "const end = Date.now();" },
+				{ target: `${chunkPath}#${checksum2}`, line: 3, end_line: 2, content: "const start = Date.now();" },
 			],
 		} as never);
 
@@ -390,15 +356,7 @@ describe("chunk mode tools", () => {
 
 		await editTool.execute("chunk-edit-empty-replace-delete", {
 			path: filePath,
-			operations: [
-				{
-					replace: {
-						sel: "fn_main",
-						crc: checksum,
-						content: "",
-					},
-				},
-			],
+			edits: [{ target: `fn_main#${checksum}`, content: "" }],
 		});
 
 		const updatedSource = await Bun.file(filePath).text();
@@ -432,15 +390,12 @@ describe("chunk mode tools", () => {
 		await expect(
 			editTool.execute("chunk-edit-invalid-splice-range", {
 				path: filePath,
-				operations: [
+				edits: [
 					{
-						replace: {
-							sel: "class_Server.fn_handleError",
-							crc: checksum,
-							line: 5,
-							end_line: 2,
-							content: "    let total = 1;",
-						},
+						target: `class_Server.fn_handleError#${checksum}`,
+						line: 5,
+						end_line: 2,
+						content: "    let total = 1;",
 					},
 				],
 			}),
@@ -459,19 +414,9 @@ describe("chunk mode tools", () => {
 		await expect(
 			editTool.execute("chunk-edit-batch-rollback", {
 				path: filePath,
-				operations: [
-					{
-						append_child: {
-							sel: "class_Server",
-							content: '  status(): string {\n    return "ok";\n  }',
-						},
-					},
-					{
-						delete: {
-							sel: "class_Server.fn_handleError",
-							crc: "ZZZZ",
-						},
-					},
+				edits: [
+					{ target: "class_Server", append: true, content: '  status(): string {\n    return "ok";\n  }' },
+					{ target: "class_Server.fn_handleError#ZZZZ", delete: true },
 				],
 			}),
 		).rejects.toThrow(/No changes were saved/);
@@ -490,13 +435,10 @@ describe("chunk mode tools", () => {
 		await expect(
 			editTool.execute("chunk-edit-parse-reject", {
 				path: filePath,
-				operations: [
+				edits: [
 					{
-						replace: {
-							sel: "class_Server.fn_handleError",
-							crc: checksum,
-							content: "  private handleError(err: Error): string {\n    if (err) {\n",
-						},
+						target: `class_Server.fn_handleError#${checksum}`,
+						content: "  private handleError(err: Error): string {\n    if (err) {\n",
 					},
 				],
 			}),
@@ -516,22 +458,16 @@ describe("chunk mode tools", () => {
 		await expect(
 			editTool.execute("chunk-edit-stale-mixed-batch", {
 				path: filePath,
-				operations: [
+				edits: [
 					{
-						replace: {
-							sel: "class_Server.fn_handleError",
-							crc: checksum,
-							content: "  private handleError(err: Error): string {\n    return err.message;\n  }",
-						},
+						target: `class_Server.fn_handleError#${checksum}`,
+						content: "  private handleError(err: Error): string {\n    return err.message;\n  }",
 					},
 					{
-						replace: {
-							sel: "class_Server.fn_handleError",
-							crc: checksum,
-							line: 63,
-							end_line: 63,
-							content: "    return err.message.toUpperCase();",
-						},
+						target: `class_Server.fn_handleError#${checksum}`,
+						line: 63,
+						end_line: 63,
+						content: "    return err.message.toUpperCase();",
 					},
 				],
 			}),
@@ -552,15 +488,12 @@ describe("chunk mode tools", () => {
 		await expect(
 			editTool.execute("chunk-edit-strong-crc", {
 				path: filePath,
-				operations: [
+				edits: [
 					{
-						replace: {
-							sel: "class_Server.fn_handleError",
-							// no crc!
-							line: 3,
-							end_line: 3,
-							content: "    let total = 1;",
-						},
+						target: "class_Server.fn_handleError",
+						line: 3,
+						end_line: 3,
+						content: "    let total = 1;",
 					} as never,
 				],
 			}),
@@ -579,15 +512,7 @@ describe("chunk mode tools", () => {
 		// Use bare "main" instead of "fn_main"
 		const _result = await editTool.execute("chunk-edit-prefix-resolve", {
 			path: filePath,
-			operations: [
-				{
-					replace: {
-						sel: "main",
-						crc: checksum,
-						content: 'function main(): void {\n  console.log("started");\n}\n',
-					},
-				},
-			],
+			edits: [{ target: `main#${checksum}`, content: 'function main(): void {\n  console.log("started");\n}\n' }],
 		});
 		const updatedSource = await Bun.file(filePath).text();
 		expect(updatedSource).toContain('console.log("started")');

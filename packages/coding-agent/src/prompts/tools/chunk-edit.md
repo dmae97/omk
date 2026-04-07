@@ -1,33 +1,40 @@
 Edits files by addressing syntax-aware chunks from `read` output.
 
-Read the file first with `read(path="file.ts")`. Use chunk paths exactly as shown by the latest `read` result. For `replace` and `delete`, supply the chunk checksum separately as `crc`.
+Read the file first with `read(path="file.ts")`. Copy `target` directly from the latest chunk anchors. The `#CRC` suffix in `target` is the chunk checksum.
 
 Successful edit responses include the updated chunk tree with checksums. Do not re-read just to refresh checksums unless the file changed externally.
 
 **Checksum scope:** Each chunk has its own CRC over its source span. Editing non-overlapping lines elsewhere does not change unrelated chunks' checksums.
 
 <operations>
-**Choosing the right operation:**
-- To fix a single line → `replace` with just `line`=that line number
-- To fix a contiguous range → `replace` with `line`=first line, `end_line`=last line
-- To rewrite an entire function/method → `replace` without `line`/`end_line`
-- To insert new code → `replace` with `line`=insertion line, `end_line`=`line`-1 (zero-width: inserts without removing)
+**Choosing the right edit shape:**
+- To rewrite an entire chunk → `{ "target": "chunk#CRC", "content": "..." }`
+- To fix a single line → add `"line": 13`
+- To fix a contiguous range → add `"line": 13, "end_line": 17`
+- To delete a chunk → `{ "target": "chunk#CRC", "delete": true }`
+- To append/prepend inside a container → add `"append": true` or `"prepend": true`
+- To insert relative to a named child → use `"after": "child_name"` or `"before": "child_name"` on the parent target
 
-|operation|format|effect|
-|---|---|---|
-|`replace`|`{ "replace": { "sel": "…", "crc": "…", "content": "…" } }`|without `line`/`end_line`: rewrite entire chunk. With `line`: replace that line. With `line`+`end_line`: replace that range|
-|`delete`|`{ "delete": { "sel": "…", "crc": "…" } }`|remove entire chunk|
-|`append_child`|`{ "append_child": { "sel": "…", "content": "…" } }`|insert as last child|
-|`prepend_child`|`{ "prepend_child": { "sel": "…", "content": "…" } }`|insert as first child|
-|`append_sibling`|`{ "append_sibling": { "sel": "…", "content": "…" } }`|insert after chunk|
-|`prepend_sibling`|`{ "prepend_sibling": { "sel": "…", "content": "…" } }`|insert before chunk|
-- `line`/`end_line` are **absolute file line numbers** from `read` gutter. `line` alone = single line. `line` + `end_line` = inclusive range. `line` with `end_line` = `line`-1 = zero-width insert.
-- `path="file.ts:chunk_path"` sets default `sel`; top-level `crc` sets default checksum
-- Content must be with project-specific indentation followed, as if it was going to be inserted as an indented block.
-- Chunk paths are fully qualified: `{{sel "class_Server.fn_start"}}`, not bare `fn_start`
-- Batch ops observe earlier edits. If op 1 changes checksum/span/path, op 2 must use post-op-1 values.
+|shape|effect|
+|---|---|
+|`{ "target": "chunk#CRC", "content": "..." }`|replace the target chunk|
+|`{ "target": "chunk#CRC", "line": 13, "content": "..." }`|replace one line within the target chunk|
+|`{ "target": "chunk#CRC", "line": 13, "end_line": 17, "content": "..." }`|replace an inclusive line range within the target chunk|
+|`{ "target": "chunk#CRC", "delete": true }`|delete the target chunk|
+|`{ "target": "chunk", "append": true, "content": "..." }`|append as last child of the target chunk|
+|`{ "target": "chunk", "prepend": true, "content": "..." }`|prepend as first child of the target chunk|
+|`{ "target": "parent", "after": "child", "content": "..." }`|insert after the named child within `parent`|
+|`{ "target": "parent", "before": "child", "content": "..." }`|insert before the named child within `parent`|
+
+- `line`/`end_line` are **absolute file line numbers** from the `read` gutter. `line` alone = single line. `line` + `end_line` = inclusive range. `line` with `end_line` = `line`-1 = zero-width insert.
+- `path` is always just the file path. Do not embed `:chunk` selectors in `path`.
+- `target` is the chunk path, optionally followed by `#CRC` copied from the anchor. Example: `"class_Server.fn_start#HTST"`.
+- Insert edits usually omit the checksum because they do not rewrite the target chunk itself.
+- For file-root replace/delete, use the file header checksum as `"target": "#VSKB"`.
+- Content must already include the intended inner indentation for the destination block.
+- Batch edits observe earlier edits. If edit 1 changes checksum/span/path, edit 2 must use the post-edit anchor values.
 - `replace`/`delete` include leading comments/attributes attached to the chunk.
-  </operations>
+</operations>
 
 <examples>
 All examples reference this `read` output:
@@ -52,13 +59,10 @@ All examples reference this `read` output:
 <example name="replace a method">
 ```
 "path": "server.ts",
-"operations": [
+"edits": [
   {
-    "replace": {
-      "sel": "{{sel "class_Server.fn_start"}}",
-      "crc": "HTST",
-      "content": "start(): void {\n  log(\"starting\");\n  this.tryBind();\n}"
-    }
+    "target": "{{sel "class_Server.fn_start"}}#HTST",
+    "content": "start(): void {\n  log(\"starting\");\n  this.tryBind();\n}"
   }
 ]
 ```
@@ -67,14 +71,11 @@ All examples reference this `read` output:
 <example name="replace a single line">
 ```
 "path": "server.ts",
-"operations": [
+"edits": [
   {
-    "replace": {
-      "sel": "{{sel "class_Server.fn_start"}}",
-      "crc": "HTST",
-      "line": 13,
-      "content": " warn(\"booting on \" + this.port);"
-    }
+    "target": "{{sel "class_Server.fn_start"}}#HTST",
+    "line": 13,
+    "content": " warn(\"booting on \" + this.port);"
   }
 ]
 ```
@@ -83,12 +84,36 @@ All examples reference this `read` output:
 <example name="delete a chunk">
 ```
 "path": "server.ts",
-"operations": [
+"edits": [
   {
-    "delete": {
-      "sel": "{{sel "class_Server.fn_tryBind"}}",
-      "crc": "VNWR"
-    }
+    "target": "{{sel "class_Server.fn_tryBind"}}#VNWR",
+    "delete": true
+  }
+]
+```
+</example>
+
+<example name="append a child method">
+```
+"path": "server.ts",
+"edits": [
+  {
+    "target": "{{sel "class_Server"}}",
+    "append": true,
+    "content": "status(): string {\n  return \"ok\";\n}"
+  }
+]
+```
+</example>
+
+<example name="insert after a named child">
+```
+"path": "server.ts",
+"edits": [
+  {
+    "target": "{{sel "class_Server"}}",
+    "after": "fn_start",
+    "content": "reset(): void {\n  this.port = 0;\n}"
   }
 ]
 ```
@@ -97,12 +122,12 @@ All examples reference this `read` output:
 
 <critical>
 - **MUST** include `path` in every edit call.
-- **MUST** read latest chunk output before editing.
-- **MUST** provide `crc` for `replace` and `delete`.
-- **MUST** use updated chunk output from edit response for follow-up edits.
-- **MUST** use smallest correct chunk; do not rewrite siblings unnecessarily.
-- **MUST NOT** invent chunk paths. Copy from `read` output including `fn_*` prefixes. Nesting uses `.`.
-- For line-scoped `replace`, use file line numbers from `read` gutter.
-- Do NOT batch multiple line-scoped `replace` operations on the same chunk. Combine into a wider `line`/`end_line` range or use separate calls.
+- **MUST** read the latest chunk output before editing.
+- **MUST** include a `#CRC` suffix in `target` for every replace or delete edit.
+- **MUST** use updated chunk output from the edit response for follow-up edits.
+- **MUST** use the smallest correct target; do not rewrite siblings unnecessarily.
+- **MUST NOT** invent chunk paths. Copy them from `read` output including `fn_*` prefixes. Nesting uses `.`.
+- For line-scoped replace edits, use file line numbers from the `read` gutter.
+- Do NOT batch multiple line-scoped replace edits on the same chunk. Combine them into one wider range or use separate calls.
 </critical>
 </output>
