@@ -261,8 +261,7 @@ fn apply_replace(
 		}
 	});
 	let requires_checksum = operation.sel.is_some() || default_crc.is_some();
-	let batch_auto_accepted =
-		ensure_batch_operation_target_current(scheduled, crc, touched_paths)?;
+	let batch_auto_accepted = ensure_batch_operation_target_current(scheduled, crc, touched_paths);
 	let resolved = resolve_chunk_with_crc(state, anchor_selector, crc, warnings)?;
 	if !batch_auto_accepted {
 		validate_batch_crc(resolved.chunk, resolved.crc.as_deref(), requires_checksum)?;
@@ -355,8 +354,7 @@ fn apply_delete(
 		}
 	});
 	let requires_checksum = operation.sel.is_some() || default_crc.is_some();
-	let batch_auto_accepted =
-		ensure_batch_operation_target_current(scheduled, crc, touched_paths)?;
+	let batch_auto_accepted = ensure_batch_operation_target_current(scheduled, crc, touched_paths);
 	let resolved = resolve_chunk_with_crc(state, anchor_selector, crc, warnings)?;
 	if !batch_auto_accepted {
 		validate_batch_crc(resolved.chunk, resolved.crc.as_deref(), requires_checksum)?;
@@ -390,8 +388,7 @@ fn apply_insert(
 			None
 		}
 	});
-	let batch_auto_accepted =
-		ensure_batch_operation_target_current(scheduled, crc, touched_paths)?;
+	let batch_auto_accepted = ensure_batch_operation_target_current(scheduled, crc, touched_paths);
 	let resolved = resolve_chunk_with_crc(state, anchor_selector, crc, warnings)?;
 	if !batch_auto_accepted {
 		validate_batch_crc(resolved.chunk, resolved.crc.as_deref(), resolved.crc.is_some())?;
@@ -610,29 +607,29 @@ fn touches_chunk_path(touched_paths: &[String], selector: &str) -> bool {
 	})
 }
 
-/// Returns `Ok(true)` when the CRC was auto-accepted (chunk was touched by an
-/// earlier batch op and the model supplied the pre-batch CRC). The caller should
-/// skip CRC validation in that case.
+/// Returns `true` when the CRC was auto-accepted (chunk was touched by an
+/// earlier batch op and the model supplied the pre-batch CRC). The caller
+/// should skip CRC validation in that case.
 fn ensure_batch_operation_target_current(
 	scheduled: &ScheduledEditOperation,
 	crc: Option<&str>,
 	touched_paths: &[String],
-) -> Result<bool, String> {
+) -> bool {
 	let Some(selector) = scheduled.requested_selector.as_deref() else {
-		return Ok(false);
+		return false;
 	};
 	let Some(initial_chunk) = scheduled.initial_chunk.as_ref() else {
-		return Ok(false);
+		return false;
 	};
 	let Some(cleaned_crc) = sanitize_crc(crc) else {
-		return Ok(false);
+		return false;
 	};
 	if !touches_chunk_path(touched_paths, selector) || cleaned_crc != initial_chunk.checksum {
-		return Ok(false);
+		return false;
 	}
 	// The chunk was touched by an earlier operation in this batch, and the model
 	// supplied the pre-batch CRC (which is all it could know). Auto-accept.
-	Ok(true)
+	true
 }
 
 fn describe_scheduled_operation(scheduled: &ScheduledEditOperation) -> String {
@@ -652,13 +649,13 @@ fn normalize_inserted_content(
 ) -> String {
 	let mut normalized = normalize_chunk_source(content);
 	normalized = strip_content_prefixes(&normalized);
-	if !target_indent.is_empty() {
-		normalized = reindent_inserted_block(&normalized, target_indent, file_indent_step);
-	} else {
+	if target_indent.is_empty() {
 		// Even at indent level 0, normalize the content's indent character
 		// to match the file's convention (e.g. LLM sends spaces for a tab file).
 		normalized =
 			normalize_leading_whitespace_char(&normalized, file_indent_char, file_indent_step);
+	} else {
+		normalized = reindent_inserted_block(&normalized, target_indent, file_indent_step);
 	}
 	normalized
 }

@@ -7,19 +7,19 @@ use napi::{Error, Result};
 use napi_derive::napi;
 use regex::Regex;
 
-use super::build_chunk_tree;
+use super::{
+	build_chunk_tree,
+	resolve::{resolve_chunk_selector, resolve_chunk_with_crc, split_selector_and_crc},
+};
 use crate::chunk::types::{
 	ChunkInfo, ChunkNode, ChunkReadStatus, ChunkReadTarget, ChunkTree, EditParams, EditResult,
 	ReadRenderParams, ReadResult, RenderParams, VisibleLineRange,
 };
 
-const CHECKSUM_SUFFIX_RE: &str = r"^(.*?)(?:\s+)?#([0-9A-Fa-f]{4})$";
 const LINE_RANGE_SELECTOR_RE: &str = r"^L(\d+)(?:-L?(\d+))?$";
 const TLAPLUS_BEGIN_TRANSLATION_RE: &str = r"^\s*\\\*\s*BEGIN TRANSLATION\s*$";
 const TLAPLUS_END_TRANSLATION_RE: &str = r"^\s*\\\*\s*END TRANSLATION\s*$";
 
-static CHECKSUM_SUFFIX_REGEX: LazyLock<Regex> =
-	LazyLock::new(|| Regex::new(CHECKSUM_SUFFIX_RE).expect("checksum selector regex must compile"));
 static LINE_RANGE_SELECTOR_REGEX: LazyLock<Regex> =
 	LazyLock::new(|| Regex::new(LINE_RANGE_SELECTOR_RE).expect("line range regex must compile"));
 static TLAPLUS_BEGIN_TRANSLATION_REGEX: LazyLock<Regex> = LazyLock::new(|| {
@@ -35,6 +35,9 @@ pub struct ChunkStateInner {
 	pub(crate) language: String,
 	pub(crate) tree:     ChunkTree,
 	lookup:              HashMap<String, usize>,
+	checksum_lookup:     HashMap<String, Vec<usize>>,
+	leaf_lookup:         HashMap<String, Vec<usize>>,
+	suffix_lookup:       HashMap<String, Vec<usize>>,
 }
 
 impl ChunkStateInner {
@@ -45,13 +48,34 @@ impl ChunkStateInner {
 	}
 
 	pub(crate) fn new(source: String, language: String, tree: ChunkTree) -> Self {
-		let lookup = tree
-			.chunks
-			.iter()
-			.enumerate()
-			.map(|(index, chunk)| (chunk.path.clone(), index))
-			.collect();
-		Self { source, language, tree, lookup }
+		let mut lookup = HashMap::new();
+		let mut checksum_lookup = HashMap::new();
+		let mut leaf_lookup = HashMap::new();
+		let mut suffix_lookup = HashMap::new();
+		for (index, chunk) in tree.chunks.iter().enumerate() {
+			lookup.insert(chunk.path.clone(), index);
+			checksum_lookup
+				.entry(chunk.checksum.clone())
+				.or_insert_with(Vec::new)
+				.push(index);
+			if chunk.path.is_empty() {
+				continue;
+			}
+			if let Some(leaf) = chunk.path.rsplit('.').next() {
+				leaf_lookup
+					.entry(leaf.to_string())
+					.or_insert_with(Vec::new)
+					.push(index);
+			}
+			let segments = chunk.path.split('.').collect::<Vec<_>>();
+			for start in 1..segments.len() {
+				suffix_lookup
+					.entry(segments[start..].join("."))
+					.or_insert_with(Vec::new)
+					.push(index);
+			}
+		}
+		Self { source, language, tree, lookup, checksum_lookup, leaf_lookup, suffix_lookup }
 	}
 
 	pub(crate) const fn source(&self) -> &str {
@@ -77,8 +101,38 @@ impl ChunkStateInner {
 			.and_then(|index| self.tree.chunks.get(*index))
 	}
 
-	pub(crate) fn chunk_info(&self, path: &str) -> Option<ChunkInfo> {
-		self.chunk(path).map(chunk_info)
+	pub(crate) fn chunk_by_index(&self, index: usize) -> Option<&ChunkNode> {
+		self.tree.chunks.get(index)
+	}
+
+	pub(crate) fn chunks_by_checksum(&self, checksum: &str) -> Vec<&ChunkNode> {
+		self
+			.checksum_lookup
+			.get(checksum)
+			.into_iter()
+			.flatten()
+			.filter_map(|index| self.chunk_by_index(*index))
+			.collect()
+	}
+
+	pub(crate) fn chunks_by_leaf(&self, leaf: &str) -> Vec<&ChunkNode> {
+		self
+			.leaf_lookup
+			.get(leaf)
+			.into_iter()
+			.flatten()
+			.filter_map(|index| self.chunk_by_index(*index))
+			.collect()
+	}
+
+	pub(crate) fn chunks_by_suffix(&self, suffix: &str) -> Vec<&ChunkNode> {
+		self
+			.suffix_lookup
+			.get(suffix)
+			.into_iter()
+			.flatten()
+			.filter_map(|index| self.chunk_by_index(*index))
+			.collect()
 	}
 
 	pub(crate) fn chunks(&self) -> impl Iterator<Item = &ChunkNode> {
@@ -193,7 +247,10 @@ impl ChunkState {
 	/// Look up [`ChunkInfo`] for a chunk selector path.
 	#[napi(js_name = "chunk")]
 	pub fn chunk_info_for_path(&self, chunk_path: String) -> Option<ChunkInfo> {
-		self.inner.chunk_info(chunk_path.as_str())
+		let mut warnings = Vec::new();
+		resolve_chunk_selector(self.inner(), Some(chunk_path.as_str()), &mut warnings)
+			.ok()
+			.map(chunk_info)
 	}
 
 	/// Every chunk node as a [`ChunkInfo`] list.
@@ -206,16 +263,19 @@ impl ChunkState {
 	/// the path is missing.
 	#[napi]
 	pub fn children(&self, chunk_path: Option<String>) -> Result<Vec<ChunkInfo>> {
-		let parent_path = chunk_path.unwrap_or_default();
-		if self.inner.chunk(parent_path.as_str()).is_none() {
-			return Err(Error::from_reason(format!(
-				"Chunk path not found: \"{parent_path}\". Re-read the file to see the full chunk tree \
-				 with paths and checksums."
-			)));
-		}
+		let parent = if let Some(chunk_path) = chunk_path {
+			let mut warnings = Vec::new();
+			resolve_chunk_selector(self.inner(), Some(chunk_path.as_str()), &mut warnings)
+				.map_err(Error::from_reason)?
+		} else {
+			self
+				.inner
+				.root()
+				.ok_or_else(|| Error::from_reason("Chunk tree is missing the root chunk".to_string()))?
+		};
 		Ok(self
 			.inner
-			.child_chunks(parent_path.as_str())
+			.child_chunks(parent.path.as_str())
 			.into_iter()
 			.map(chunk_info)
 			.collect())
@@ -237,7 +297,7 @@ impl ChunkState {
 	/// errors.
 	#[napi(js_name = "renderRead")]
 	pub fn render_read(&self, params: ReadRenderParams) -> Result<ReadResult> {
-		let ParsedChunkReadPath { selector } = parse_chunk_read_path(params.read_path.as_str());
+		let ParsedChunkReadPath { selector, crc } = parse_chunk_read_path(params.read_path.as_str());
 		let visible_range = selector.as_deref().and_then(parse_visible_line_range);
 		let Some(root) = self.inner.root() else {
 			return Ok(ReadResult {
@@ -258,29 +318,27 @@ impl ChunkState {
 				};
 				return Ok(ReadResult {
 					text:  format!(
-						"Line {} is beyond end of file ({} lines total). {}",
+						"Line {} is beyond end of file ({} lines total). {suggestion}",
 						visible_range.start_line,
 						self.inner.tree().line_count,
-						suggestion,
 					),
 					chunk: None,
 				});
 			}
 
-			let clamped_range = VisibleLineRange {
-				start_line: visible_range.start_line,
-				end_line:   visible_range.end_line.min(self.inner.tree().line_count),
+			let notice = if visible_range.start_line == visible_range.end_line {
+				format!("{}:L{}", params.display_path, visible_range.start_line)
+			} else {
+				format!(
+					"{}:L{}-L{}",
+					params.display_path, visible_range.start_line, visible_range.end_line
+				)
 			};
-			let notice = format!(
-				"[Notice: chunk view scoped to requested lines L{}-L{}; non-overlapping lines \
-				 omitted.]",
-				clamped_range.start_line, clamped_range.end_line
-			);
 			let text = self.render(RenderParams {
 				chunk_path:           Some(root.path.clone()),
 				title:                params.display_path.clone(),
 				language_tag:         params.language_tag.clone(),
-				visible_range:        Some(clamped_range),
+				visible_range:        Some(visible_range),
 				render_children_only: true,
 				omit_checksum:        params.omit_checksum,
 				anchor_style:         params.anchor_style,
@@ -290,7 +348,7 @@ impl ChunkState {
 			return Ok(ReadResult { text: format!("{notice}\n\n{text}"), chunk: None });
 		}
 
-		if selector.as_deref().is_none_or(str::is_empty) {
+		if selector.as_deref().is_none_or(str::is_empty) && crc.is_none() {
 			return Ok(ReadResult {
 				text:  self.render(RenderParams {
 					chunk_path:           Some(root.path.clone()),
@@ -307,13 +365,22 @@ impl ChunkState {
 			});
 		}
 
-		let selector = selector.unwrap_or_default();
-		let Some(chunk) = self.inner.chunk(selector.as_str()) else {
-			return Ok(ReadResult {
-				text:  format!("{}:{}\n\n[Chunk not found]", params.display_path, selector),
-				chunk: Some(ChunkReadTarget { status: ChunkReadStatus::NotFound, selector }),
-			});
-		};
+		if selector.as_deref() == Some("?") {
+			let mut lines = vec![format!("{} chunks:", params.display_path)];
+			for chunk in self.inner.chunks().filter(|chunk| !chunk.path.is_empty()) {
+				lines.push(format!(
+					"  {}#{}  L{}-L{}",
+					chunk.path, chunk.checksum, chunk.start_line, chunk.end_line
+				));
+			}
+			return Ok(ReadResult { text: lines.join("\n"), chunk: None });
+		}
+
+		let mut warnings = Vec::new();
+		let resolved =
+			resolve_chunk_with_crc(self.inner(), selector.as_deref(), crc.as_deref(), &mut warnings)
+				.map_err(Error::from_reason)?;
+		let chunk = resolved.chunk;
 
 		if let Some(absolute_line_range) = params.absolute_line_range {
 			let req_start = absolute_line_range.start_line;
@@ -328,9 +395,8 @@ impl ChunkState {
 				};
 				return Ok(ReadResult {
 					text:  format!(
-						"Requested lines {requested} do not overlap chunk \"{}\" (file lines {}-{}). \
-						 Use sel=L{}-L{} to read this chunk.",
-						chunk.path, chunk.start_line, chunk.end_line, chunk.start_line, chunk.end_line
+						"Requested range {requested} does not overlap {}:{} (lines {}-{}).",
+						params.display_path, chunk.path, chunk.start_line, chunk.end_line
 					),
 					chunk: Some(ChunkReadTarget {
 						status:   ChunkReadStatus::Ok,
@@ -338,23 +404,6 @@ impl ChunkState {
 					}),
 				});
 			}
-			return Ok(ReadResult {
-				text:  self.render(RenderParams {
-					chunk_path:           Some(chunk.path.clone()),
-					title:                format!("{}:{}", params.display_path, chunk.path),
-					language_tag:         params.language_tag.clone(),
-					visible_range:        Some(VisibleLineRange { start_line: low, end_line: high }),
-					render_children_only: false,
-					omit_checksum:        params.omit_checksum,
-					anchor_style:         params.anchor_style,
-					show_leaf_preview:    true,
-					tab_replacement:      params.tab_replacement,
-				}),
-				chunk: Some(ChunkReadTarget {
-					status:   ChunkReadStatus::Ok,
-					selector: chunk.path.clone(),
-				}),
-			});
 		}
 
 		Ok(ReadResult {
@@ -405,6 +454,7 @@ impl ChunkState {
 #[derive(Clone)]
 struct ParsedChunkReadPath {
 	selector: Option<String>,
+	crc:      Option<String>,
 }
 
 fn normalize_language(language: &str) -> String {
@@ -422,23 +472,6 @@ fn chunk_info(chunk: &ChunkNode) -> ChunkInfo {
 	}
 }
 
-fn sanitize_chunk_selector(selector: Option<&str>) -> Option<String> {
-	let mut selector = selector?.trim().to_string();
-	if selector.is_empty() || selector == "null" || selector == "undefined" {
-		return None;
-	}
-	if let Some(colon_index) = chunk_read_path_separator_index(selector.as_str()) {
-		selector = selector[(colon_index + 1)..].to_string();
-	}
-	if let Some(captures) = CHECKSUM_SUFFIX_REGEX.captures(selector.as_str())
-		&& let Some(prefix) = captures.get(1)
-	{
-		selector = prefix.as_str().to_string();
-	}
-	let selector = selector.trim().to_string();
-	(!selector.is_empty()).then_some(selector)
-}
-
 fn chunk_read_path_separator_index(read_path: &str) -> Option<usize> {
 	if read_path.len() >= 3 {
 		let bytes = read_path.as_bytes();
@@ -450,9 +483,10 @@ fn chunk_read_path_separator_index(read_path: &str) -> Option<usize> {
 }
 
 fn parse_chunk_read_path(read_path: &str) -> ParsedChunkReadPath {
-	let selector = chunk_read_path_separator_index(read_path)
-		.and_then(|index| sanitize_chunk_selector(Some(&read_path[(index + 1)..])));
-	ParsedChunkReadPath { selector }
+	let (selector, crc) = chunk_read_path_separator_index(read_path)
+		.map(|index| split_selector_and_crc(Some(&read_path[(index + 1)..]), None))
+		.unwrap_or_default();
+	ParsedChunkReadPath { selector, crc }
 }
 
 fn parse_visible_line_range(selector: &str) -> Option<VisibleLineRange> {

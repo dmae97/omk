@@ -62,6 +62,7 @@ export type ChunkEditResult = {
 export type ParsedChunkReadPath = {
 	filePath: string;
 	selector?: string;
+	crc?: string;
 };
 
 type ChunkCacheEntry = {
@@ -128,9 +129,12 @@ export function parseChunkReadPath(readPath: string): ParsedChunkReadPath {
 	if (colonIndex === -1) {
 		return { filePath: readPath };
 	}
+	const rawSelector = readPath.slice(colonIndex + 1) || undefined;
+	const parsedSelector = parseChunkSelector(rawSelector);
 	return {
 		filePath: readPath.slice(0, colonIndex),
-		selector: parseChunkSelector(readPath.slice(colonIndex + 1) || undefined).selector,
+		selector: rawSelector,
+		crc: parsedSelector.crc,
 	};
 }
 

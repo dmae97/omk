@@ -771,6 +771,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		const pathSelectorParsed = chunkMode ? parseSel(parsedReadPath.selector) : { kind: "none" as const };
 		const pathChunkSelector = pathSelectorParsed.kind === "chunk" ? pathSelectorParsed.selector : undefined;
 		const selectorInput = sel ?? parsedReadPath.selector;
+		const rawSelectorInput = sel ?? parsedReadPath.selector;
 		const parsed = parseSel(selectorInput);
 
 		const archivePath = await this.#resolveArchiveReadPath(localReadPath, signal);
@@ -837,10 +838,11 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 					: undefined;
 			// sel= wins over path:chunk when both are provided (explicit param > embedded path).
 			const effectiveSelector = sel ? selectorInput : (pathChunkSelector ?? selectorInput);
+			const rawEffectiveSelector = sel ? selectorInput : (rawSelectorInput ?? effectiveSelector);
 			const chunkReadPath =
 				parsed.kind === "chunk" || (pathChunkSelector && !sel)
-					? effectiveSelector
-						? `${localReadPath}:${effectiveSelector}`
+					? rawEffectiveSelector
+						? `${localReadPath}:${rawEffectiveSelector}`
 						: localReadPath
 					: parsed.kind === "lines"
 						? parsed.endLine !== undefined

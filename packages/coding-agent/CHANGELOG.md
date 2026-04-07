@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added `anchorStyle` parameter to chunk read formatting to control chunk path display format (full, kind, or bare)
@@ -21,6 +22,9 @@
 
 ### Changed
 
+- Updated chunk edit prompt documentation to use ellipsis (…) instead of ellipsis (...) for consistency in operation examples
+- Modified chunk path parsing to preserve raw selector strings and extract CRC separately, enabling accurate chunk reference round-tripping in read/edit workflows
+- Changed chunk edit behavior to auto-accept stale CRC checksums for subsequent operations on the same chunk within a batch, improving usability when applying multiple edits to the same target
 - Moved `copyToClipboard` and `readImageFromClipboard` functions to new `utils/clipboard.ts` module with improved OSC 52 support and Termux compatibility
 - Updated grep output mode to use `GrepOutputMode` enum from pi-natives instead of string literals
 - Changed macOS appearance observer to use `MacAppearanceObserver.start()` class method with error-first callback signature

@@ -43,7 +43,7 @@ impl LangClassifier for JsTsClassifier {
 				Some(container_candidate(node, "class", source, recurse_class(node)))
 			},
 			"interface_declaration" => {
-				Some(container_candidate(node, "iface", source, recurse_interface(node)))
+				Some(container_candidate(node, "interface", source, recurse_interface(node)))
 			},
 			"enum_declaration" => Some(container_candidate(node, "enum", source, recurse_enum(node))),
 			"internal_module" => {
@@ -281,7 +281,7 @@ fn classify_export_statement<'t>(node: Node<'t>, source: &str) -> RawChunkCandid
 				make_container_chunk_from(
 					node,
 					child,
-					prefixed_name("iface", child, source),
+					prefixed_name("interface", child, source),
 					source,
 					recurse,
 				)
