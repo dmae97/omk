@@ -541,6 +541,52 @@ describe("Tool argument coercion", () => {
 		expect(result.edits).toEqual([{ target: "fn_bar#1234", content: "return 1}" }]);
 	});
 
+	it("heals stringified array with literal backslash-n between tokens", () => {
+		const tool: Tool = {
+			name: "heal-esc-1",
+			description: "",
+			parameters: Type.Object({
+				edits: Type.Array(Type.Object({ target: Type.String(), content: Type.String() })),
+			}),
+		};
+
+		// LLM emits literal \n between the closing } and ]
+		const toolCall: ToolCall = {
+			type: "toolCall",
+			id: "call-heal-esc-1",
+			name: "heal-esc-1",
+			arguments: {
+				edits: '[{"target": "fn_foo#ABCD@inner", "content": "return 1;\\n"}\\n]',
+			},
+		};
+
+		const result = validateToolArguments(tool, toolCall);
+		expect(result.edits).toEqual([{ target: "fn_foo#ABCD@inner", content: "return 1;\n" }]);
+	});
+
+	it("heals stringified array with trailing junk after balanced container", () => {
+		const tool: Tool = {
+			name: "heal-trail-1",
+			description: "",
+			parameters: Type.Object({
+				edits: Type.Array(Type.Object({ target: Type.String(), op: Type.String() })),
+			}),
+		};
+
+		// LLM appends \n</invoke> after the valid JSON
+		const toolCall: ToolCall = {
+			type: "toolCall",
+			id: "call-heal-trail-1",
+			name: "heal-trail-1",
+			arguments: {
+				edits: '[{"target": "fn_foo", "op": "replace"}]\n</invoke>',
+			},
+		};
+
+		const result = validateToolArguments(tool, toolCall);
+		expect(result.edits).toEqual([{ target: "fn_foo", op: "replace" }]);
+	});
+
 	it("does not heal deeply broken JSON strings", () => {
 		const tool: Tool = {
 			name: "heal-3",

@@ -128,14 +128,67 @@ function tryParseLeadingJsonContainer(value: string): unknown | undefined {
 		depth -= 1;
 		if (depth !== 0) continue;
 
+		const prefix = value.slice(0, index + 1);
 		try {
-			return JSON.parse(value.slice(0, index + 1)) as unknown;
+			return JSON.parse(prefix) as unknown;
 		} catch {
-			return undefined;
+			// LLMs sometimes emit literal `\n` or `\t` between JSON tokens
+			// (e.g. `[{...}\n]`). Convert these to real whitespace and retry.
+			const cleaned = cleanLiteralEscapes(prefix);
+			if (cleaned !== prefix) {
+				try {
+					return JSON.parse(cleaned) as unknown;
+				} catch {}
+			}
+			// Also try single-char healing on the extracted prefix.
+			return tryHealMalformedJson(prefix);
 		}
 	}
 
 	return undefined;
+}
+
+/**
+ * Replace literal `\n`, `\t`, `\r` sequences that appear OUTSIDE of JSON
+ * strings with actual whitespace.  LLMs sometimes produce these when they
+ * confuse the tool-call encoding with the content encoding.
+ */
+function cleanLiteralEscapes(value: string): string {
+	let result = "";
+	let inString = false;
+	let i = 0;
+	while (i < value.length) {
+		const ch = value[i];
+		if (inString) {
+			if (ch === "\\" && i + 1 < value.length) {
+				result += ch + value[i + 1];
+				i += 2;
+				continue;
+			}
+			if (ch === '"') inString = false;
+			result += ch;
+			i += 1;
+			continue;
+		}
+		if (ch === '"') {
+			inString = true;
+			result += ch;
+			i += 1;
+			continue;
+		}
+		// Outside a string: replace literal \n, \t, \r with whitespace
+		if (ch === "\\" && i + 1 < value.length) {
+			const next = value[i + 1];
+			if (next === "n" || next === "t" || next === "r") {
+				result += " ";
+				i += 2;
+				continue;
+			}
+		}
+		result += ch;
+		i += 1;
+	}
+	return result;
 }
 
 /** Maximum single-character edits to attempt when healing malformed JSON. */
