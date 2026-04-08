@@ -4,7 +4,7 @@ import * as path from "node:path";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { resetPreludeDocsCache, warmPythonEnvironment } from "@oh-my-pi/pi-coding-agent/ipy/executor";
 import { getPythonToolDescription, PythonTool } from "@oh-my-pi/pi-coding-agent/tools/python";
-import { getProjectDir } from "@oh-my-pi/pi-utils";
+import { $which, getProjectDir } from "@oh-my-pi/pi-utils";
 
 const resolvePythonPath = (): string | null => {
 	const venvPath = Bun.env.VIRTUAL_ENV;
@@ -19,7 +19,7 @@ const resolvePythonPath = (): string | null => {
 			return pythonCandidate;
 		}
 	}
-	return Bun.which("python") ?? Bun.which("python3");
+	return $which("python") ?? $which("python3");
 };
 
 const pythonPath = resolvePythonPath();

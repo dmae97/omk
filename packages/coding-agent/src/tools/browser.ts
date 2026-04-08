@@ -4,7 +4,7 @@ import * as path from "node:path";
 import { Readability } from "@mozilla/readability";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { StringEnum } from "@oh-my-pi/pi-ai";
-import { getPuppeteerDir, logger, Snowflake, untilAborted } from "@oh-my-pi/pi-utils";
+import { $which, getPuppeteerDir, logger, Snowflake, untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { type HTMLElement, parseHTML } from "linkedom";
 import type {
@@ -88,8 +88,8 @@ function resolveSystemChromium(): string | undefined {
 		return undefined;
 	}
 	const candidates = [
-		Bun.which("chromium"),
-		Bun.which("chromium-browser"),
+		$which("chromium"),
+		$which("chromium-browser"),
 		path.join(os.homedir(), ".nix-profile/bin/chromium"),
 		"/run/current-system/sw/bin/chromium",
 	];

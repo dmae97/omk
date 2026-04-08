@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { isEnoent, Snowflake } from "@oh-my-pi/pi-utils";
+import { $which, isEnoent, Snowflake } from "@oh-my-pi/pi-utils";
 import {
 	parseDiffHunks as parseCommitDiffHunks,
 	parseFileDiffs,
@@ -162,7 +162,7 @@ function normalizeStdin(input: CommandOptions["stdin"]): "ignore" | Uint8Array {
 }
 
 function ensureAvailable(): void {
-	if (!Bun.which("git")) {
+	if (!$which("git")) {
 		throw new Error("git is not installed.");
 	}
 }
@@ -1334,13 +1334,13 @@ function formatGhFailure(args: readonly string[], stdout: string, stderr: string
 export const github = {
 	/** Check if `gh` CLI is installed. */
 	available(): boolean {
-		return Boolean(Bun.which("gh"));
+		return Boolean($which("gh"));
 	},
 
 	/** Run a raw `gh` CLI command. Does not throw on non-zero exit. */
 	async run(cwd: string, args: string[], signal?: AbortSignal, options?: GhCommandOptions): Promise<GhCommandResult> {
 		throwIfAborted(signal);
-		if (!Bun.which("gh")) {
+		if (!$which("gh")) {
 			throw new ToolError("GitHub CLI (gh) is not installed. Install it from https://cli.github.com/.");
 		}
 		try {

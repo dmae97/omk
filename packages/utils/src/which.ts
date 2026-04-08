@@ -19,16 +19,35 @@ const MACOS_TOOL_PATHS = [
 // Map: cache key -> resolved binary path or null (not found)
 const toolCache = new Map<string | bigint, string | null>();
 
+/**
+ * Cache policy for which lookups.
+ */
+export const enum WhichCachePolicy {
+	/**
+	 * Use cached result if available.
+	 */
+	Cached = 0,
+	/**
+	 * Bypass cache and perform a new lookup.
+	 */
+	Bypass,
+	/**
+	 * Always update cache.
+	 */
+	Fresh,
+	/**
+	 * Read-only, serves from cache if present, but doesn't write.
+	 */
+	ReadOnly,
+}
+
 // Extension: additional cache policy for tool path lookup
 export interface WhichOptions extends Bun.WhichOptions {
-	/** Controls cache usage.
-	 *
-	 * - "none": disables cache, always perform a new lookup
-	 * - "fresh": always update cache (default)
-	 * - "ro": read-only, serves from cache if present, but doesn't write
-	 * - "cached": prefers cache if present, otherwise lookup and populate
+	/**
+	 * Cache policy for the lookup.
+	 * Defaults to `WhichCachePolicy.Fresh`.
 	 */
-	cache?: "none" | "fresh" | "ro" | "cached";
+	cache?: WhichCachePolicy;
 }
 
 // Darwin-specific "which" shim: consult extra Xcode locations, then fallback to xcrun
@@ -73,19 +92,19 @@ function cacheKey(command: string, options?: Bun.WhichOptions): string | bigint 
  * @returns Filesystem path if found, else null
  */
 export function $which(command: string, options?: WhichOptions): string | null {
-	const cachePolicy = options?.cache ?? "fresh";
+	const cachePolicy = options?.cache ?? WhichCachePolicy.Cached;
 	let key: string | bigint | undefined;
 
-	if (cachePolicy !== "none") {
+	if (cachePolicy !== WhichCachePolicy.Bypass) {
 		key = cacheKey(command, options);
-		if (cachePolicy !== "fresh") {
+		if (cachePolicy !== WhichCachePolicy.Fresh) {
 			const cached = toolCache.get(key);
 			if (cached !== undefined) return cached;
 		}
 	}
 
 	const result = whichFresh(command, options);
-	if (key != null && cachePolicy !== "ro") {
+	if (key != null && cachePolicy !== WhichCachePolicy.ReadOnly) {
 		toolCache.set(key, result);
 	}
 	return result;

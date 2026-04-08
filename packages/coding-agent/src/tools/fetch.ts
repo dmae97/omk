@@ -4,7 +4,7 @@ import type { AgentToolResult } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, TextContent } from "@oh-my-pi/pi-ai";
 import { htmlToMarkdown } from "@oh-my-pi/pi-natives";
 import { type Component, Text } from "@oh-my-pi/pi-tui";
-import { ptree, truncate } from "@oh-my-pi/pi-utils";
+import { $which, ptree, truncate } from "@oh-my-pi/pi-utils";
 import { parseHTML } from "linkedom";
 import type { Settings } from "../config/settings";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
@@ -94,7 +94,7 @@ const MAX_INLINE_IMAGE_OUTPUT_BYTES = 0.75 * 1024 * 1024;
  * Check if a command exists (cross-platform)
  */
 function hasCommand(cmd: string): boolean {
-	return Boolean(Bun.which(cmd));
+	return Boolean($which(cmd));
 }
 
 /**

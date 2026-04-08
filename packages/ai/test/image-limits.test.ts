@@ -74,6 +74,7 @@ import * as path from "node:path";
 import { getBundledModel } from "@oh-my-pi/pi-ai/models";
 import { complete } from "@oh-my-pi/pi-ai/stream";
 import type { Api, Context, ImageContent, Model, OptionsForApi, UserMessage } from "@oh-my-pi/pi-ai/types";
+import { $which } from "@oh-my-pi/pi-utils";
 import { e2eApiKey } from "./oauth";
 
 const TEMP_DIR = path.join(import.meta.dir, ".temp-images");
@@ -261,7 +262,7 @@ describe("Image Limits E2E Tests", () => {
 	let smallImage: string; // 100x100 for count tests
 
 	beforeAll(async () => {
-		if (!Bun.which("magick")) return;
+		if (!$which("magick")) return;
 		// Create temp directory
 		fs.mkdirSync(TEMP_DIR, { recursive: true });
 

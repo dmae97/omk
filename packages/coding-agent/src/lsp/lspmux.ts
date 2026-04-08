@@ -1,6 +1,6 @@
 import * as os from "node:os";
 import * as path from "node:path";
-import { $env, logger } from "@oh-my-pi/pi-utils";
+import { $env, $which, logger } from "@oh-my-pi/pi-utils";
 import { TOML } from "bun";
 
 /**
@@ -141,7 +141,7 @@ export async function detectLspmux(): Promise<LspmuxState> {
 		return cachedState;
 	}
 
-	const binaryPath = Bun.which("lspmux");
+	const binaryPath = $which("lspmux");
 	if (!binaryPath) {
 		cachedState = { available: false, running: false, binaryPath: null, config: null };
 		cacheTimestamp = now;
