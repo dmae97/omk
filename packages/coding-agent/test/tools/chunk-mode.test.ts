@@ -251,8 +251,7 @@ describe("chunk mode tools", () => {
 			operations: [
 				{
 					op: "replace",
-					sel: chunkPath,
-					crc: checksum,
+					sel: `${chunkPath}#${checksum}`,
 					content: buildHandleErrorMethod({ returnLine: "    return err.message.toUpperCase() + total;" }),
 				},
 			],

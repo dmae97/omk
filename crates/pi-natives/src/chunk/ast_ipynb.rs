@@ -406,8 +406,8 @@ pub fn build_notebook_tree_from_virtual(
 		start_byte:          0,
 		end_byte:            virtual_source.len() as u32,
 		checksum_start_byte: 0,
-		body_start_byte:     None,
-		body_end_byte:       None,
+		prologue_end_byte:   None,
+		epilogue_start_byte: None,
 		checksum:            root_checksum.clone(),
 		error:               false,
 		indent:              0,
@@ -471,11 +471,11 @@ pub fn build_notebook_tree_from_virtual(
 					checksum_start_byte: sub_chunk
 						.checksum_start_byte
 						.saturating_add(region.content_start as u32),
-					body_start_byte:     sub_chunk
-						.body_start_byte
+					prologue_end_byte:   sub_chunk
+						.prologue_end_byte
 						.map(|b| b.saturating_add(region.content_start as u32)),
-					body_end_byte:       sub_chunk
-						.body_end_byte
+					epilogue_start_byte: sub_chunk
+						.epilogue_start_byte
 						.map(|b| b.saturating_add(region.content_start as u32)),
 					checksum:            sub_chunk.checksum,
 					error:               sub_chunk.error,
@@ -518,8 +518,8 @@ pub fn build_notebook_tree_from_virtual(
 			start_byte:          region.marker_start as u32,
 			end_byte:            region.content_end as u32,
 			checksum_start_byte: region.content_start as u32,
-			body_start_byte:     Some(region.content_start as u32),
-			body_end_byte:       Some(region.content_end as u32),
+			prologue_end_byte:   Some(region.content_start as u32),
+			epilogue_start_byte: Some(region.content_end as u32),
 			checksum:            cell_checksum,
 			error:               false,
 			indent:              0,

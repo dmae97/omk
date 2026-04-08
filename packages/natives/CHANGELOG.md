@@ -1,15 +1,20 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
+- Replaced `ChunkEditOp` enum values — `AppendChild`, `PrependChild`, `AppendSibling`, `PrependSibling`, and `ReplaceBody` are now `Before`, `After`, `Prepend`, and `Append` with updated semantics for region-scoped operations
+- Removed `ReplaceBody` operation — use `Replace` with `region: ChunkRegion.Body` to replace only chunk body content
 - Moved package entry point from `src/index.ts` to `native/index.js` — consumers must update imports to use the new native module path
 - Removed TypeScript source files from `src/` directory — all APIs now exported from auto-generated `native/index.js` with types in `native/index.d.ts`
 - Changed enum exports to runtime objects — `const enum` values are now available at runtime via generated enum exports in `native/index.js`
 
 ### Added
 
+- Added `ChunkRegion` enum with `Container`, `Prologue`, `Body`, and `Epilogue` values for targeting specific regions within chunks
+- Added `region` parameter to `EditOperation` to specify which chunk region to target (defaults to `Container`)
+- Added `UnsupportedRegion` status to `ChunkReadStatus` enum to indicate when a chunk does not support the requested region
+- Added `normalizeIndent` parameter to `RenderParams` and `ReadRenderParams` to normalize displayed indentation to canonical tabs
 - Added `ReplaceBody` chunk edit operation to replace only the inner body of a chunk while preserving signature and closing delimiter
 - Added `ChunkFocusMode` enum with `Expanded`, `Collapsed`, and `Container` modes for controlling chunk participation in focus-scoped render passes
 - Added `FocusedPath` interface to pair paths with focus modes for the N-API boundary
@@ -21,6 +26,7 @@
 
 ### Changed
 
+- Updated `ChunkEditOp` documentation to reflect region-scoped semantics — operations now target specific regions rather than chunk structure positions
 - Changed `ChunkEditOp.Replace` documentation to clarify substring replacement via `find` parameter instead of line-based replacement
 - Changed `EditOperation` interface to use `find` parameter for scoped find/replace operations instead of `line` and `endLine` parameters
 - Changed `EditParams` documentation to remove mention of scheduling reordering for line-scoped groups

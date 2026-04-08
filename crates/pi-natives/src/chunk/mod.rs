@@ -136,8 +136,8 @@ pub(crate) fn build_chunk_tree(source: &str, language: &str) -> Result<ChunkTree
 		start_byte:          0,
 		end_byte:            source.len() as u32,
 		checksum_start_byte: 0,
-		body_start_byte:     None,
-		body_end_byte:       None,
+		prologue_end_byte:   None,
+		epilogue_start_byte: None,
 		checksum:            root_checksum.clone(),
 		error:               false,
 		indent:              0,
@@ -213,8 +213,8 @@ fn build_blank_line_tree(
 		start_byte:          0,
 		end_byte:            source.len() as u32,
 		checksum_start_byte: 0,
-		body_start_byte:     None,
-		body_end_byte:       None,
+		prologue_end_byte:   None,
+		epilogue_start_byte: None,
 		checksum:            checksum.clone(),
 		error:               false,
 		indent:              0,
@@ -261,8 +261,8 @@ fn build_blank_line_tree(
 			start_byte:          start_byte as u32,
 			end_byte:            end_byte as u32,
 			checksum_start_byte: start_byte as u32,
-			body_start_byte:     None,
-			body_end_byte:       None,
+			prologue_end_byte:   None,
+			epilogue_start_byte: None,
 			checksum:            chunk_checksum(
 				source
 					.as_bytes()
@@ -318,7 +318,9 @@ fn build_chunk(
 			.unwrap_or_default(),
 	);
 	let recurse = candidate.recurse;
-	let body_range = recurse.map(|r| (r.node.start_byte() as u32, r.node.end_byte() as u32));
+	let region_boundaries = recurse.map(|recurse| {
+		compute_body_inner_boundaries(source, recurse.node.start_byte(), recurse.node.end_byte())
+	});
 	let child_candidates = recurse
 		.map(|recurse| {
 			collect_children_for_context(recurse.node, recurse.context, source, classifier)
@@ -360,8 +362,8 @@ fn build_chunk(
 		start_byte: candidate.range_start_byte as u32,
 		end_byte: candidate.range_end_byte as u32,
 		checksum_start_byte: candidate.checksum_start_byte as u32,
-		body_start_byte: body_range.map(|(s, _)| s),
-		body_end_byte: body_range.map(|(_, e)| e),
+		prologue_end_byte: region_boundaries.map(|(start, _)| start as u32),
+		epilogue_start_byte: region_boundaries.map(|(_, end)| end as u32),
 		checksum,
 		error: candidate.error,
 		indent,
@@ -742,8 +744,8 @@ fn insert_preamble_chunk(
 		start_byte,
 		end_byte,
 		checksum_start_byte: start_byte,
-		body_start_byte: None,
-		body_end_byte: None,
+		prologue_end_byte: None,
+		epilogue_start_byte: None,
 		checksum,
 		error: false,
 		indent: 0,
@@ -1590,12 +1592,16 @@ impl Config {
 					anchor_style:        Some(ChunkAnchorStyle::Full),
 					absolute_line_range: None,
 					tab_replacement:     Some("    ".to_string()),
+					normalize_indent:    Some(true),
 				})
 				.unwrap_or_else(|err| panic!("selector {selector} should resolve: {err}"));
 			let resolved = result
 				.chunk
 				.expect("selector read should resolve a chunk target");
-			assert_eq!(resolved.selector, "fn_handleTerraform.try");
+			assert_eq!(
+				resolved.selector,
+				format!("fn_handleTerraform.try#{}@container", chunk.checksum)
+			);
 		}
 	}
 
@@ -1613,10 +1619,16 @@ impl Config {
 				anchor_style:        Some(ChunkAnchorStyle::Full),
 				absolute_line_range: None,
 				tab_replacement:     Some("    ".to_string()),
+				normalize_indent:    Some(true),
 			})
 			.expect("listing should succeed");
 		assert!(result.text.contains("sample.ts chunks:"));
 		assert!(result.text.contains("fn_run#"));
+		assert!(
+			result
+				.text
+				.contains("regions: container, prologue, body, epilogue")
+		);
 		assert!(!result.text.contains("return 1"));
 	}
 
@@ -1639,6 +1651,7 @@ impl Config {
 				anchor_style:        Some(ChunkAnchorStyle::Full),
 				absolute_line_range: None,
 				tab_replacement:     Some("    ".to_string()),
+				normalize_indent:    Some(true),
 			})
 			.expect("root read should succeed");
 		assert!(result.text.contains("[class_Worker.fn_run#"), "{}", result.text);
@@ -1665,6 +1678,7 @@ impl Config {
 				anchor_style:        Some(ChunkAnchorStyle::Full),
 				absolute_line_range: None,
 				tab_replacement:     Some("    ".to_string()),
+				normalize_indent:    Some(true),
 			})
 			.expect("render_read should succeed");
 
@@ -1675,6 +1689,30 @@ impl Config {
 		assert!(text.contains("Chunk path not found: \"fn_loadSkills.try_2\""), "{text}");
 		assert!(text.contains("Direct children of \"fn_loadSkills\""), "{text}");
 		assert!(text.contains("fn_loadSkills.try"), "{text}");
+	}
+
+	#[test]
+	fn read_reports_unsupported_region_distinctly() {
+		let source = "function run() {\n    return 1;\n}\n";
+		let state = ChunkState::parse(source.to_string(), "typescript".to_string())
+			.expect("state should parse");
+		let result = state
+			.render_read(ReadRenderParams {
+				read_path:           "sample.ts:fn_run@unknown".to_string(),
+				display_path:        "sample.ts".to_string(),
+				language_tag:        Some("ts".to_string()),
+				omit_checksum:       false,
+				anchor_style:        Some(ChunkAnchorStyle::Full),
+				absolute_line_range: None,
+				tab_replacement:     Some("    ".to_string()),
+				normalize_indent:    Some(true),
+			})
+			.expect("render_read should succeed");
+
+		let read_target = result.chunk.expect("should include read target");
+		assert_eq!(read_target.status, super::types::ChunkReadStatus::UnsupportedRegion);
+		assert_eq!(read_target.selector, "sample.ts:fn_run@unknown");
+		assert!(result.text.contains("Unknown chunk region"), "{}", result.text);
 	}
 
 	#[test]

@@ -22,8 +22,12 @@ pub struct ChunkNode {
 	/// such as doc comments or attributes.
 	pub checksum_start_byte: u32,
 
-	pub body_start_byte: Option<u32>,
-	pub body_end_byte:   Option<u32>,
+	/// End byte of the prologue region. `None` means the chunk only exposes
+	/// `@container`.
+	pub prologue_end_byte:   Option<u32>,
+	/// Start byte of the epilogue region. `None` means the chunk only exposes
+	/// `@container`.
+	pub epilogue_start_byte: Option<u32>,
 
 	pub checksum:    String,
 	pub error:       bool,
@@ -77,34 +81,57 @@ pub enum ChunkReadStatus {
 	/// No chunk matched the requested selector.
 	#[napi(value = "not_found")]
 	NotFound,
+	/// Chunk matched but does not support the requested region.
+	#[napi(value = "unsupported_region")]
+	UnsupportedRegion,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[napi(string_enum)]
+pub enum ChunkRegion {
+	#[napi(value = "container")]
+	Container,
+	#[napi(value = "prologue")]
+	Prologue,
+	#[napi(value = "body")]
+	Body,
+	#[napi(value = "epilogue")]
+	Epilogue,
+}
+
+impl ChunkRegion {
+	pub const fn as_str(self) -> &'static str {
+		match self {
+			Self::Container => "container",
+			Self::Prologue => "prologue",
+			Self::Body => "body",
+			Self::Epilogue => "epilogue",
+		}
+	}
 }
 
 /// Structural edit to apply relative to a chunk anchor.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[napi(string_enum)]
 pub enum ChunkEditOp {
-	/// Replace the chunk body, or a substring via `find`.
+	/// Replace the targeted region, or a substring via `find`.
 	#[napi(value = "replace")]
 	Replace,
-	/// Remove the chunk's source range.
+	/// Remove the targeted region.
 	#[napi(value = "delete")]
 	Delete,
-	/// Insert `content` as the last child of the target chunk.
-	#[napi(value = "append_child")]
-	AppendChild,
-	/// Insert `content` as the first child of the target chunk.
-	#[napi(value = "prepend_child")]
-	PrependChild,
-	/// Insert `content` after the target chunk's source range.
-	#[napi(value = "append_sibling")]
-	AppendSibling,
-	/// Insert `content` before the target chunk's source range.
-	#[napi(value = "prepend_sibling")]
-	PrependSibling,
-	/// Replace only the inner body of the chunk, preserving signature and
-	/// closing delimiter.
-	#[napi(value = "replace_body")]
-	ReplaceBody,
+	/// Insert `content` before the targeted region span.
+	#[napi(value = "before")]
+	Before,
+	/// Insert `content` after the targeted region span.
+	#[napi(value = "after")]
+	After,
+	/// Insert `content` at the start inside the targeted region.
+	#[napi(value = "prepend")]
+	Prepend,
+	/// Insert `content` at the end inside the targeted region.
+	#[napi(value = "append")]
+	Append,
 }
 
 impl ChunkEditOp {
@@ -112,11 +139,10 @@ impl ChunkEditOp {
 		match self {
 			Self::Replace => "replace",
 			Self::Delete => "delete",
-			Self::AppendChild => "append_child",
-			Self::PrependChild => "prepend_child",
-			Self::AppendSibling => "append_sibling",
-			Self::PrependSibling => "prepend_sibling",
-			Self::ReplaceBody => "replace_body",
+			Self::Before => "before",
+			Self::After => "after",
+			Self::Prepend => "prepend",
+			Self::Append => "append",
 		}
 	}
 }
@@ -267,6 +293,9 @@ pub struct RenderParams {
 	/// Replace tab characters in displayed previews (e.g. two spaces).
 	#[napi(js_name = "tabReplacement")]
 	pub tab_replacement:      Option<String>,
+	/// When true, normalize displayed indentation to canonical tabs.
+	#[napi(js_name = "normalizeIndent")]
+	pub normalize_indent:     Option<bool>,
 
 	/// When set, restrict rendering to these chunks with their specified focus
 	/// modes. Everything not in this list is skipped.
@@ -300,6 +329,9 @@ pub struct ReadRenderParams {
 	/// Replace tabs in embedded previews.
 	#[napi(js_name = "tabReplacement")]
 	pub tab_replacement:     Option<String>,
+	/// When true, normalize displayed indentation to canonical tabs.
+	#[napi(js_name = "normalizeIndent")]
+	pub normalize_indent:    Option<bool>,
 }
 
 /// Rendered chunk text plus optional resolution metadata for the read request.
@@ -325,6 +357,8 @@ pub struct EditOperation {
 	/// Optional checksum anchor; falls back to `EditParams.defaultCrc` when
 	/// omitted.
 	pub crc:     Option<String>,
+	/// Region to target. When omitted, defaults to `@container`.
+	pub region:  Option<ChunkRegion>,
 	/// Replacement or inserted text (meaning depends on `op`).
 	pub content: Option<String>,
 	/// For scoped find/replace: literal substring to locate inside the target

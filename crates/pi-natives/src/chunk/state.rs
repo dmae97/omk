@@ -9,11 +9,15 @@ use regex::Regex;
 
 use super::{
 	build_chunk_tree,
-	resolve::{resolve_chunk_selector, resolve_chunk_with_crc, split_selector_and_crc},
+	indent::{detect_file_indent_char, detect_file_indent_step, normalize_to_tabs},
+	resolve::{
+		chunk_region_range, chunk_supports_region, format_region_ref, resolve_chunk_selector,
+		resolve_chunk_with_crc, split_selector_crc_and_region,
+	},
 };
 use crate::chunk::types::{
-	ChunkInfo, ChunkNode, ChunkReadStatus, ChunkReadTarget, ChunkTree, EditParams, EditResult,
-	ReadRenderParams, ReadResult, RenderParams, VisibleLineRange,
+	ChunkInfo, ChunkNode, ChunkReadStatus, ChunkReadTarget, ChunkRegion, ChunkTree, EditParams,
+	EditResult, ReadRenderParams, ReadResult, RenderParams, VisibleLineRange,
 };
 
 const LINE_RANGE_SELECTOR_RE: &str = r"^L(\d+)(?:-L?(\d+))?$";
@@ -321,7 +325,19 @@ impl ChunkState {
 	/// errors.
 	#[napi(js_name = "renderRead")]
 	pub fn render_read(&self, params: ReadRenderParams) -> Result<ReadResult> {
-		let ParsedChunkReadPath { selector, crc } = parse_chunk_read_path(params.read_path.as_str());
+		let ParsedChunkReadPath { selector, crc, region } =
+			match parse_chunk_read_path(params.read_path.as_str()) {
+				Ok(parsed) => parsed,
+				Err(err) => {
+					return Ok(ReadResult {
+						text:  format!("{}\n\n{}", params.display_path, err),
+						chunk: Some(ChunkReadTarget {
+							status:   ChunkReadStatus::UnsupportedRegion,
+							selector: params.read_path.clone(),
+						}),
+					});
+				},
+			};
 		let visible_range = selector.as_deref().and_then(parse_visible_line_range);
 		let Some(root) = self.inner.root() else {
 			return Ok(ReadResult {
@@ -369,12 +385,16 @@ impl ChunkState {
 				anchor_style:         params.anchor_style,
 				show_leaf_preview:    true,
 				tab_replacement:      params.tab_replacement,
+				normalize_indent:     params.normalize_indent,
 				focused_paths:        None,
 			});
 			return Ok(ReadResult { text: format!("{notice}\n\n{text}"), chunk: None });
 		}
 
-		if selector.as_deref().is_none_or(str::is_empty) && crc.is_none() {
+		if selector.as_deref().is_none_or(str::is_empty)
+			&& crc.is_none()
+			&& region == ChunkRegion::Container
+		{
 			return Ok(ReadResult {
 				text:  self.render(RenderParams {
 					chunk_path:           Some(root.path.clone()),
@@ -386,6 +406,7 @@ impl ChunkState {
 					anchor_style:         params.anchor_style,
 					show_leaf_preview:    true,
 					tab_replacement:      params.tab_replacement,
+					normalize_indent:     params.normalize_indent,
 					focused_paths:        None,
 				}),
 				chunk: None,
@@ -395,9 +416,14 @@ impl ChunkState {
 		if selector.as_deref() == Some("?") {
 			let mut lines = vec![format!("{} chunks:", params.display_path)];
 			for chunk in self.inner.chunks().filter(|chunk| !chunk.path.is_empty()) {
+				let supported_regions = if chunk_supports_region(chunk, ChunkRegion::Body) {
+					"container, prologue, body, epilogue"
+				} else {
+					"container"
+				};
 				lines.push(format!(
-					"  {}#{}  L{}-L{}",
-					chunk.path, chunk.checksum, chunk.start_line, chunk.end_line
+					"  {}#{}  L{}-L{}  regions: {}",
+					chunk.path, chunk.checksum, chunk.start_line, chunk.end_line, supported_regions
 				));
 			}
 			return Ok(ReadResult { text: lines.join("\n"), chunk: None });
@@ -420,6 +446,23 @@ impl ChunkState {
 			},
 		};
 		let chunk = resolved.chunk;
+		let selector_ref = format_region_ref(chunk, resolved.region);
+
+		if !chunk_supports_region(chunk, resolved.region) {
+			return Ok(ReadResult {
+				text:  format!(
+					"{}:{}\n\nChunk \"{}\" does not support @{}.",
+					params.display_path,
+					chunk.path,
+					chunk.path,
+					resolved.region.as_str(),
+				),
+				chunk: Some(ChunkReadTarget {
+					status:   ChunkReadStatus::UnsupportedRegion,
+					selector: selector_ref,
+				}),
+			});
+		}
 
 		if let Some(absolute_line_range) = params.absolute_line_range {
 			let req_start = absolute_line_range.start_line;
@@ -439,16 +482,65 @@ impl ChunkState {
 					),
 					chunk: Some(ChunkReadTarget {
 						status:   ChunkReadStatus::Ok,
-						selector: chunk.path.clone(),
+						selector: selector_ref,
 					}),
 				});
 			}
 		}
 
+		if resolved.region != ChunkRegion::Container {
+			let masked_source = mask_chunk_display_source(self.inner.source(), self.inner.language());
+			let (start, end) = match chunk_region_range(chunk, resolved.region) {
+				Ok(range) => range,
+				Err(err) => {
+					return Ok(ReadResult {
+						text:  format!("{}\n\n{}", params.display_path, err),
+						chunk: Some(ChunkReadTarget {
+							status:   ChunkReadStatus::UnsupportedRegion,
+							selector: selector_ref,
+						}),
+					});
+				},
+			};
+			let tab_replacement = params.tab_replacement.as_deref().unwrap_or("    ");
+			let normalize_indent = params.normalize_indent.unwrap_or(false).then(|| {
+				(
+					detect_file_indent_char(self.inner.source(), self.inner.tree()),
+					detect_file_indent_step(self.inner.tree()) as usize,
+				)
+			});
+			let region_text = masked_source
+				.get(start..end)
+				.unwrap_or_default()
+				.split('\n')
+				.map(|line| match normalize_indent {
+					Some((indent_char, indent_step)) => {
+						normalize_to_tabs(line, indent_char, indent_step)
+					},
+					None => line.replace('\t', tab_replacement),
+				})
+				.collect::<Vec<_>>()
+				.join("\n");
+			let text = if region_text.is_empty() {
+				format!("{selector_ref}\n\n[Empty @{} region]", resolved.region.as_str())
+			} else {
+				format!("{selector_ref}\n\n{region_text}")
+			};
+			return Ok(ReadResult {
+				text,
+				chunk: Some(ChunkReadTarget { status: ChunkReadStatus::Ok, selector: selector_ref }),
+			});
+		}
+
 		Ok(ReadResult {
 			text:  self.render(RenderParams {
 				chunk_path:           Some(chunk.path.clone()),
-				title:                format!("{}:{}", params.display_path, chunk.path),
+				title:                format!(
+					"{}:{}@{}",
+					params.display_path,
+					chunk.path,
+					resolved.region.as_str()
+				),
 				language_tag:         params.language_tag.clone(),
 				visible_range:        None,
 				render_children_only: false,
@@ -456,12 +548,10 @@ impl ChunkState {
 				anchor_style:         params.anchor_style,
 				show_leaf_preview:    true,
 				tab_replacement:      params.tab_replacement,
+				normalize_indent:     params.normalize_indent,
 				focused_paths:        None,
 			}),
-			chunk: Some(ChunkReadTarget {
-				status:   ChunkReadStatus::Ok,
-				selector: chunk.path.clone(),
-			}),
+			chunk: Some(ChunkReadTarget { status: ChunkReadStatus::Ok, selector: selector_ref }),
 		})
 	}
 
@@ -495,6 +585,7 @@ impl ChunkState {
 struct ParsedChunkReadPath {
 	selector: Option<String>,
 	crc:      Option<String>,
+	region:   ChunkRegion,
 }
 
 fn normalize_language(language: &str) -> String {
@@ -522,11 +613,11 @@ fn chunk_read_path_separator_index(read_path: &str) -> Option<usize> {
 	read_path.find(':')
 }
 
-fn parse_chunk_read_path(read_path: &str) -> ParsedChunkReadPath {
-	let (selector, crc) = chunk_read_path_separator_index(read_path)
-		.map(|index| split_selector_and_crc(Some(&read_path[(index + 1)..]), None))
-		.unwrap_or_default();
-	ParsedChunkReadPath { selector, crc }
+fn parse_chunk_read_path(read_path: &str) -> std::result::Result<ParsedChunkReadPath, String> {
+	let raw_selector =
+		chunk_read_path_separator_index(read_path).map(|index| &read_path[(index + 1)..]);
+	let (selector, crc, region) = split_selector_crc_and_region(raw_selector, None, None)?;
+	Ok(ParsedChunkReadPath { selector, crc, region })
 }
 
 fn parse_visible_line_range(selector: &str) -> Option<VisibleLineRange> {

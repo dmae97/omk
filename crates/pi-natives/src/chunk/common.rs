@@ -270,6 +270,62 @@ pub fn child_by_field_or_kind<'tree>(
 	child_by_kind(node, kinds)
 }
 
+pub fn compute_body_inner_boundaries(
+	source: &str,
+	body_start: usize,
+	body_end: usize,
+) -> (usize, usize) {
+	let bounded_start = body_start.min(source.len());
+	let bounded_end = body_end.min(source.len()).max(bounded_start);
+	let slice = &source[bounded_start..bounded_end];
+
+	let Some((first_non_ws_rel, first_non_ws)) = slice
+		.char_indices()
+		.find(|(_, ch)| !matches!(ch, ' ' | '\t' | '\n' | '\r'))
+	else {
+		return (bounded_start, bounded_end);
+	};
+	let Some((last_non_ws_rel, last_non_ws)) = slice
+		.char_indices()
+		.rev()
+		.find(|(_, ch)| !matches!(ch, ' ' | '\t' | '\n' | '\r'))
+	else {
+		return (bounded_start, bounded_end);
+	};
+
+	let has_delimiters = matches!((first_non_ws, last_non_ws), ('{', '}') | ('(', ')') | ('[', ']'));
+	if !has_delimiters {
+		let line_start = source[..bounded_start].rfind('\n').map_or(0, |pos| pos + 1);
+		let leading_indent = &source[line_start..bounded_start];
+		if !leading_indent.is_empty() && leading_indent.chars().all(|ch| matches!(ch, ' ' | '\t')) {
+			let mut inner_end = bounded_end;
+			let trailing = &source[bounded_end..];
+			if let Some(rel_newline) = trailing.find('\n') {
+				if trailing[..rel_newline]
+					.chars()
+					.all(|ch| matches!(ch, ' ' | '\t' | '\r'))
+				{
+					inner_end = bounded_end + rel_newline + 1;
+				}
+			} else if trailing.chars().all(|ch| matches!(ch, ' ' | '\t' | '\r')) {
+				inner_end = source.len();
+			}
+			return (line_start, inner_end);
+		}
+		return (bounded_start, bounded_end);
+	}
+
+	let mut inner_start = bounded_start + first_non_ws_rel + first_non_ws.len_utf8();
+	if source[inner_start..].starts_with("\r\n") {
+		inner_start += 2;
+	} else if source[inner_start..].starts_with('\n') {
+		inner_start += 1;
+	}
+
+	let inner_end = bounded_start + last_non_ws_rel;
+	(inner_start.min(bounded_end), inner_end.max(inner_start).min(bounded_end))
+}
+
 // ── Recurse helpers ──────────────────────────────────────────────────────
 
 pub fn recurse_into<'tree>(
@@ -858,4 +914,38 @@ pub fn first_scalar_child(node: Node<'_>) -> Option<Node<'_>> {
 				| "flow_sequence"
 		)
 	})
+}
+
+#[cfg(test)]
+mod tests {
+	use super::compute_body_inner_boundaries;
+
+	#[test]
+	fn compute_body_inner_boundaries_handles_brace_and_indent_bodies() {
+		let ts = "function main() {\n\treturn 1;\n}\n";
+		let ts_start = ts.find('{').expect("open brace");
+		let ts_end = ts.rfind('}').expect("close brace") + 1;
+		let (ts_inner_start, ts_inner_end) = compute_body_inner_boundaries(ts, ts_start, ts_end);
+		assert_eq!(&ts[ts_inner_start..ts_inner_end], "\treturn 1;\n");
+
+		let rust = "fn main() {\n    println!(\"hi\");\n}\n";
+		let rust_start = rust.find('{').expect("open brace");
+		let rust_end = rust.rfind('}').expect("close brace") + 1;
+		let (rust_inner_start, rust_inner_end) =
+			compute_body_inner_boundaries(rust, rust_start, rust_end);
+		assert_eq!(&rust[rust_inner_start..rust_inner_end], "    println!(\"hi\");\n");
+
+		let go = "func main() {\n\treturn\n}\n";
+		let go_start = go.find('{').expect("open brace");
+		let go_end = go.rfind('}').expect("close brace") + 1;
+		let (go_inner_start, go_inner_end) = compute_body_inner_boundaries(go, go_start, go_end);
+		assert_eq!(&go[go_inner_start..go_inner_end], "\treturn\n");
+
+		let py = "def main():\n    return 1\n";
+		let py_body_start = py.find("    return 1").expect("body start");
+		let py_body_end = py_body_start + "    return 1".len();
+		let (py_inner_start, py_inner_end) =
+			compute_body_inner_boundaries(py, py_body_start, py_body_end);
+		assert_eq!(&py[py_inner_start..py_inner_end], "    return 1");
+	}
 }

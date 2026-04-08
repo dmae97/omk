@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+### Breaking Changes
+
+- Simplified chunk edit operations: removed `append_child`, `prepend_child`, `append_sibling`, `prepend_sibling`, and `replace_body` ops in favor of unified `replace`, `before`, `after`, `prepend`, and `append` with region targeting (`@container`, `@prologue`, `@body`, `@epilogue`)
+- Chunk edit `target` format changed: now accepts `selector#CRC@region` for mutations and `selector@region` for insertions; removed separate `crc` and `anchor` fields from edit operations
+- Removed checksum requirement from insert operations (`before`, `after`, `prepend`, `append`); only `replace` requires `#CRC` suffix
 
 ### Added
 
@@ -25,6 +30,12 @@
 
 ### Changed
 
+- Chunk edit tool documentation restructured: replaced operation-specific examples with region-based guidance and canonical indentation rules
+- Chunk read documentation updated: selectors now support region syntax (e.g., `class_Foo.fn_bar#ABCD@body`) and canonical target listings show supported regions per chunk
+- Chunk edit schema simplified: `target` description now documents region format; `op` and `content` descriptions clarified for region-aware operations
+- Chunk edit streaming previews updated: labels now reflect region-aware operations (e.g., `append` instead of `append child`, `insert after` without anchor reference)
+- Removed CRC parsing from `parseChunkSelector()` and `parseChunkReadPath()`: selectors no longer extract embedded checksums
+- Chunk edit normalization simplified: no longer requires async checksum resolution or context-dependent operation mapping
 - RPC mode now automatically disables session title generation by default; hosts can opt in with `PI_RPC_EMIT_TITLE=1` environment variable to receive title updates
 - RPC mode now resets workflow-altering `todo.*`, `task.*`, and `async.*` settings to built-in defaults instead of inheriting user overrides
 - RPC mode now disables automatic session title generation by default and suppresses `setTitle` extension UI requests unless hosts opt in with `PI_RPC_EMIT_TITLE=1`
@@ -61,6 +72,7 @@
 
 ### Fixed
 
+- Chunk read output now correctly preserves embedded CRC in selectors (e.g., `class_Foo.fn_bar#ZZPM`) instead of stripping them during path parsing
 - Chunk edit error messages now consistently report checksum mismatches with format `Checksum mismatch` instead of variable phrasing
 - Chunk-mode read output now correctly displays scoped response trees showing only touched chunks and adjacent siblings, preventing unrelated distant chunks from appearing in responses
 - DAP stopped event handling no longer blocks the message reader, preventing potential deadlocks during rapid event sequences

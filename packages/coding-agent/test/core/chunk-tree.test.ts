@@ -31,7 +31,7 @@ describe("parseChunkReadPath", () => {
 	test("path with chunk checksum suffix normalizes selector", () => {
 		expect(parseChunkReadPath("file.ts:class_Foo.fn_bar#ZZPM")).toEqual({
 			filePath: "file.ts",
-			selector: "class_Foo.fn_bar",
+			selector: "class_Foo.fn_bar#ZZPM",
 		});
 	});
 
@@ -97,9 +97,31 @@ function getChecksum(source: string, chunkPath: string, language = "typescript")
 	return chunk.checksum;
 }
 
+function targetWithChecksum(
+	chunkPath: string,
+	checksum: string,
+	region: "container" | "prologue" | "body" | "epilogue" = "container",
+): string {
+	return `${chunkPath}#${checksum}${region === "container" ? "" : `@${region}`}`;
+}
+
+function currentTarget(
+	source: string,
+	chunkPath: string,
+	language = "typescript",
+	region: "container" | "prologue" | "body" | "epilogue" = "container",
+): string {
+	return targetWithChecksum(chunkPath, getChecksum(source, chunkPath, language), region);
+}
+
+function bodyTarget(chunkPath: string): string {
+	return `${chunkPath}@body`;
+}
+
 describe("applyChunkEdits", () => {
 	test("replace accepts a copied chunk header with checksum suffix", () => {
-		const ac = { sel: "class_Worker.fn_run", crc: getChecksum(testSource, "class_Worker.fn_run") };
+		const originalChecksum = getChecksum(testSource, "class_Worker.fn_run");
+		const ac = { sel: targetWithChecksum("class_Worker.fn_run", originalChecksum) };
 		const result = edit([
 			{
 				op: "replace",
@@ -111,7 +133,7 @@ describe("applyChunkEdits", () => {
 		expect(result.diffSourceAfter).toContain("stop()");
 		expect(result.diffSourceAfter).not.toContain("run()");
 		const newChecksum = getChecksum(result.diffSourceAfter, "class_Worker.fn_stop");
-		expect(newChecksum).not.toBe(ac.crc);
+		expect(newChecksum).not.toBe(originalChecksum);
 	});
 
 	test("replace with wrong checksum throws with mismatch", () => {
@@ -119,19 +141,18 @@ describe("applyChunkEdits", () => {
 			edit([
 				{
 					op: "replace",
-					sel: "class_Worker.fn_run",
-					crc: "ZZZZ",
+					sel: targetWithChecksum("class_Worker.fn_run", "ZZZZ"),
 					content: "replacement",
 				},
 			]),
 		).toThrow(/Checksum mismatch/);
 	});
 
-	test("append_child on branch inserts after existing members", () => {
+	test("append on a class body inserts after existing members", () => {
 		const result = edit([
 			{
-				op: "append_child",
-				sel: "class_Worker",
+				op: "append",
+				sel: bodyTarget("class_Worker"),
 				content: `\tstatus(): string {\n\t\treturn "active";\n\t}`,
 			},
 		]);
@@ -144,12 +165,12 @@ describe("applyChunkEdits", () => {
 		expect(after).toContain("class Worker");
 	});
 
-	test("append_child on an empty container inserts inside the container", () => {
+	test("append on an empty container body inserts inside the container", () => {
 		const result = edit(
 			[
 				{
-					op: "append_child",
-					sel: "class_Empty",
+					op: "append",
+					sel: bodyTarget("class_Empty"),
 					content: "method(): void {}\n",
 				},
 			],
@@ -163,7 +184,7 @@ describe("applyChunkEdits", () => {
 	});
 
 	test("replace with empty content removes the target chunk", () => {
-		const ac = { sel: "class_Worker.fn_run", crc: getChecksum(testSource, "class_Worker.fn_run") };
+		const ac = { sel: currentTarget(testSource, "class_Worker.fn_run") };
 		const result = edit([{ op: "replace", ...ac, content: "" }]);
 
 		expect(result.diffSourceAfter).not.toContain("run()");
@@ -177,8 +198,7 @@ describe("applyChunkEdits", () => {
 			[
 				{
 					op: "replace",
-					sel: "class_Worker.fn_restart",
-					crc: checksum,
+					sel: targetWithChecksum("class_Worker.fn_restart", checksum),
 					content: `\trestart(): void {\n\t\tshutdown();\n\t}`,
 				},
 			],
@@ -197,8 +217,7 @@ describe("applyChunkEdits", () => {
 			[
 				{
 					op: "replace",
-					sel: "class_Worker.fn_restart",
-					crc: checksum,
+					sel: targetWithChecksum("class_Worker.fn_restart", checksum),
 					content: `\t/** updated restart note */\n\trestart(): void {\n\t\tshutdown();\n\t}`,
 				},
 			],
@@ -221,14 +240,12 @@ describe("applyChunkEdits", () => {
 			operations: [
 				{
 					op: "replace",
-					sel: "class_Worker.constructor",
-					crc: ctorCrc,
+					sel: targetWithChecksum("class_Worker.constructor", ctorCrc),
 					content: `\tconstructor(name: string) {\n\t\tthis.name = name.trim();\n\t}`,
 				},
 				{
 					op: "replace",
-					sel: "class_Worker.fn_run",
-					crc: runCrc,
+					sel: targetWithChecksum("class_Worker.fn_run", runCrc),
 					content: `\trun(): void {\n\t\tconsole.log(this.name + "!");\n\t}`,
 				},
 			],
@@ -239,11 +256,11 @@ describe("applyChunkEdits", () => {
 		expect(result.diffSourceAfter).toMatch(/this\.name\s*\+\s*"!"/);
 	});
 
-	test("prepend_child on branch inserts before existing members", () => {
+	test("prepend on a class body inserts before existing members", () => {
 		const result = edit([
 			{
-				op: "prepend_child",
-				sel: "class_Worker",
+				op: "prepend",
+				sel: bodyTarget("class_Worker"),
 				content: `\tid = 0;`,
 			},
 		]);
@@ -258,7 +275,7 @@ describe("applyChunkEdits", () => {
 });
 
 describe("insertion boundaries", () => {
-	test("keeps prepend_child separated from the first existing TypeScript class member", () => {
+	test("keeps prepend separated from the first existing TypeScript class member", () => {
 		const source = `class Box<T> {\n  value(): T {\n    return this.current;\n  }\n}\n`;
 		const result = applyEdit({
 			source,
@@ -266,8 +283,8 @@ describe("insertion boundaries", () => {
 			filePath: "/tmp/box.ts",
 			operations: [
 				{
-					op: "prepend_child",
-					sel: "class_Box",
+					op: "prepend",
+					sel: bodyTarget("class_Box"),
 					content: `  items(): T[] {\n    return [];\n  }`,
 				},
 			],
@@ -277,7 +294,7 @@ describe("insertion boundaries", () => {
 		expect(result.diffSourceAfter).not.toContain("}\n  value(): T {");
 	});
 
-	test("keeps prepend_child separated from the first existing Rust impl member", () => {
+	test("keeps prepend separated from the first existing Rust impl member", () => {
 		const source = `impl Widget {\n    fn old(&self) -> bool {\n        true\n    }\n}\n`;
 		const result = applyEdit({
 			source,
@@ -285,8 +302,8 @@ describe("insertion boundaries", () => {
 			filePath: "/tmp/widget.rs",
 			operations: [
 				{
-					op: "prepend_child",
-					sel: "impl_Widget",
+					op: "prepend",
+					sel: bodyTarget("impl_Widget"),
 					content: `    fn build(&self) -> bool {\n        false\n    }`,
 				},
 			],
@@ -296,7 +313,7 @@ describe("insertion boundaries", () => {
 		expect(result.diffSourceAfter).not.toContain("}\n    fn old(&self) -> bool {");
 	});
 
-	test("keeps prepend_sibling separated before a Go top-level function", () => {
+	test("keeps before separated before a Go top-level function", () => {
 		const source = `package main\n\nfunc format() {}\n`;
 		const result = applyEdit({
 			source,
@@ -304,7 +321,7 @@ describe("insertion boundaries", () => {
 			filePath: "/tmp/format.go",
 			operations: [
 				{
-					op: "prepend_sibling",
+					op: "before",
 					sel: "fn_format",
 					content: "func formatLog() {}",
 				},
@@ -315,7 +332,7 @@ describe("insertion boundaries", () => {
 		expect(result.diffSourceAfter).not.toContain("func formatLog() {}\nfunc format() {}");
 	});
 
-	test("keeps append_sibling separated from the next Go top-level function", () => {
+	test("keeps after separated from the next Go top-level function", () => {
 		const source = `package main\n\nfunc first() {}\nfunc second() {}\n`;
 		const result = applyEdit({
 			source,
@@ -323,7 +340,7 @@ describe("insertion boundaries", () => {
 			filePath: "/tmp/functions.go",
 			operations: [
 				{
-					op: "append_sibling",
+					op: "after",
 					sel: "fn_first",
 					content: "func middle() {}",
 				},
@@ -334,7 +351,7 @@ describe("insertion boundaries", () => {
 		expect(result.diffSourceAfter).not.toContain("func middle() {}\nfunc second() {}");
 	});
 
-	test("append_child on a Go receiver type inserts after the last receiver method", () => {
+	test("append on a Go receiver type container inserts after the last receiver method", () => {
 		const source = `package main\n\ntype Server struct {}\n\nfunc (s *Server) Start() {}\nfunc (s *Server) Stop() {}\n`;
 		const result = applyEdit({
 			source,
@@ -342,8 +359,8 @@ describe("insertion boundaries", () => {
 			filePath: "/tmp/server.go",
 			operations: [
 				{
-					op: "append_child",
-					sel: "type_Server",
+					op: "append",
+					sel: "type_Server@container",
 					content: "func (s *Server) Restart() {}",
 				},
 			],
@@ -355,24 +372,21 @@ describe("insertion boundaries", () => {
 		expect(result.diffSourceAfter).not.toContain("type Server struct {\nfunc (s *Server) Restart() {}");
 	});
 
-	test("append_child on Go type_Server with struct fields still inserts file-scope func at column 0", () => {
+	test("append on Go type_Server container with struct fields still inserts file-scope func at column 0", () => {
 		const source = `package main
 
 type Server struct {
     Addr string
 }
 `;
-		const crc = ChunkState.parse(source, "go").chunk("type_Server")?.checksum;
-		expect(crc).toBeDefined();
 		const result = applyEdit({
 			source,
 			language: "go",
 			filePath: "/tmp/server.go",
 			operations: [
 				{
-					op: "append_child",
-					sel: "type_Server",
-					crc,
+					op: "append",
+					sel: "type_Server@container",
 					content: "func (s *Server) Ping() {}",
 				},
 			],
@@ -383,24 +397,21 @@ type Server struct {
 		expect(result.diffSourceAfter).not.toMatch(/Addr string\n[ \t]+func \(s \*Server\) Ping/);
 	});
 
-	test("append_child on Go type_Server keeps receiver method body indentation relative to column 0", () => {
+	test("append on Go type_Server container keeps receiver method body indentation relative to column 0", () => {
 		const source = `package main
 
 	type Server struct {
 	    Addr string
 	}
 	`;
-		const crc = ChunkState.parse(source, "go").chunk("type_Server")?.checksum;
-		expect(crc).toBeDefined();
 		const result = applyEdit({
 			source,
 			language: "go",
 			filePath: "/tmp/server.go",
 			operations: [
 				{
-					op: "append_child",
-					sel: "type_Server",
-					crc,
+					op: "append",
+					sel: "type_Server@container",
 					content: "func (s *Server) LogCount() int {\n\ts.mu.Lock()\n\tdefer s.mu.Unlock()\n\treturn 0\n}",
 				},
 			],
@@ -412,11 +423,11 @@ type Server struct {
 		);
 		expect(result.diffSourceAfter).not.toContain("\n\tfunc (s *Server) LogCount() int {");
 	});
-	test("keeps append_child separated from the closing delimiter when adding the last child", () => {
+	test("keeps append separated from the closing delimiter when adding the last child", () => {
 		const result = edit([
 			{
-				op: "append_child",
-				sel: "class_Worker",
+				op: "append",
+				sel: bodyTarget("class_Worker"),
 				content: '\tstatus(): string {\n\t\treturn "active";\n\t}',
 			},
 		]);
@@ -438,7 +449,7 @@ type Server struct {
 			source,
 			language: "rust",
 			filePath: "/tmp/impl.rs",
-			operations: [{ op: "replace", sel: "impl_S.fn_b", crc, content: "" }],
+			operations: [{ op: "replace", sel: targetWithChecksum("impl_S.fn_b", crc), content: "" }],
 		});
 
 		expect(result.diffSourceAfter).toBe("impl S {\n    fn a() {}\n\n}\n");
@@ -453,8 +464,7 @@ describe("edit safety invariants", () => {
 		const source = edit([
 			{
 				op: "replace",
-				sel: runChunkPath,
-				crc: staleChecksum,
+				sel: targetWithChecksum(runChunkPath, staleChecksum),
 				content: '\trun(): void {\n\t\tconsole.log("updated");\n\t}',
 			},
 		]).diffSourceAfter;
@@ -475,15 +485,14 @@ describe("edit safety invariants", () => {
 						[
 							{
 								op: "replace",
-								sel: runChunkPath,
-								crc: staleChecksum,
+								sel: targetWithChecksum(runChunkPath, staleChecksum),
 								content: '\trun(): void {\n\t\tconsole.log("again");\n\t}',
 							},
 						],
 						source,
 					);
 				}
-				return edit([{ op: "replace", sel: runChunkPath, crc: staleChecksum, content: "" }], source);
+				return edit([{ op: "replace", sel: targetWithChecksum(runChunkPath, staleChecksum), content: "" }], source);
 			};
 
 			expect(invoke).toThrow(new RegExp(`got "${staleChecksum}"`));
@@ -495,14 +504,12 @@ describe("edit safety invariants", () => {
 		const result = edit([
 			{
 				op: "replace",
-				sel: runChunkPath,
-				crc: checksum,
+				sel: targetWithChecksum(runChunkPath, checksum),
 				content: '\trun(): void {\n\t\tconsole.log("first");\n\t}',
 			},
 			{
 				op: "replace",
-				sel: runChunkPath,
-				crc: checksum,
+				sel: targetWithChecksum(runChunkPath, checksum),
 				content: '\trun(): void {\n\t\tconsole.log("second");\n\t}',
 			},
 		]);
@@ -514,15 +521,14 @@ describe("edit safety invariants", () => {
 		const checksum = getChecksum(testSource, runChunkPath);
 		const firstContent = '\trun(): void {\n\t\tconsole.log("first");\n\t}';
 		const afterFirst = edit([
-			{ op: "replace", sel: runChunkPath, crc: checksum, content: firstContent },
+			{ op: "replace", sel: targetWithChecksum(runChunkPath, checksum), content: firstContent },
 		]).diffSourceAfter;
 		const checksum2 = getChecksum(afterFirst, runChunkPath);
 		const result = edit([
-			{ op: "replace", sel: runChunkPath, crc: checksum, content: firstContent },
+			{ op: "replace", sel: targetWithChecksum(runChunkPath, checksum), content: firstContent },
 			{
 				op: "replace",
-				sel: runChunkPath,
-				crc: checksum2,
+				sel: targetWithChecksum(runChunkPath, checksum2),
 				content: '\trun(): void {\n\t\tconsole.log("second");\n\t}',
 			},
 		]);
@@ -536,14 +542,12 @@ describe("edit safety invariants", () => {
 		const result = edit([
 			{
 				op: "replace",
-				sel: runChunkPath,
-				crc: checksum,
+				sel: targetWithChecksum(runChunkPath, checksum),
 				content: '\trun(task = "default"): void {\n\t\tconsole.log(this.name);\n\t}',
 			},
 			{
 				op: "replace",
-				sel: runChunkPath,
-				crc: checksum,
+				sel: targetWithChecksum(runChunkPath, checksum),
 				content: '\trun(task = "default"): void {\n\t\tconsole.log(task);\n\t}',
 			},
 		]);
@@ -556,8 +560,7 @@ describe("edit safety invariants", () => {
 		const afterFirst = edit([
 			{
 				op: "replace",
-				sel: runChunkPath,
-				crc: checksum,
+				sel: targetWithChecksum(runChunkPath, checksum),
 				content: "\trun(): void {\n\t\tconsole.log(task);\n\t}",
 			},
 		]).diffSourceAfter;
@@ -565,14 +568,12 @@ describe("edit safety invariants", () => {
 		const result = edit([
 			{
 				op: "replace",
-				sel: runChunkPath,
-				crc: checksum,
+				sel: targetWithChecksum(runChunkPath, checksum),
 				content: "\trun(): void {\n\t\tconsole.log(task);\n\t}",
 			},
 			{
 				op: "replace",
-				sel: runChunkPath,
-				crc: checksum2,
+				sel: targetWithChecksum(runChunkPath, checksum2),
 				content: '\trun(task = "default"): void {\n\t\tconsole.log(task);\n\t}',
 			},
 		]);
@@ -586,14 +587,13 @@ describe("edit safety invariants", () => {
 		expect(() =>
 			edit([
 				{
-					op: "append_child",
-					sel: "class_Worker",
+					op: "append",
+					sel: bodyTarget("class_Worker"),
 					content: '\tstatus(): string {\n\t\treturn "active";\n\t}',
 				},
 				{
 					op: "replace",
-					sel: "class_Worker.fn_run",
-					crc: "ZZZZ",
+					sel: targetWithChecksum("class_Worker.fn_run", "ZZZZ"),
 					content: "",
 				},
 			]),
@@ -605,8 +605,7 @@ describe("edit safety invariants", () => {
 		const after = edit([
 			{
 				op: "replace",
-				sel: runChunkPath,
-				crc: getChecksum(testSource, runChunkPath),
+				sel: currentTarget(testSource, runChunkPath),
 				content: '\trun(): void {\n\t\tconsole.log("nearby");\n\t}',
 			},
 		]).diffSourceAfter;
@@ -621,8 +620,7 @@ describe("edit safety invariants", () => {
 			[
 				{
 					op: "replace",
-					sel: runChunkPath,
-					crc: checksum,
+					sel: targetWithChecksum(runChunkPath, checksum),
 					content: '\trun(): void {\n\t\tconsole.log("updated");\n\t}',
 				},
 			],
@@ -640,7 +638,7 @@ describe("edit safety invariants", () => {
 
 describe("content prefix stripping", () => {
 	test("line-number prefixes are stripped from replacement content", () => {
-		const ac = { sel: "class_Worker.fn_run", crc: getChecksum(testSource, "class_Worker.fn_run") };
+		const ac = { sel: currentTarget(testSource, "class_Worker.fn_run") };
 		const result = edit([
 			{
 				op: "replace",
@@ -654,7 +652,7 @@ describe("content prefix stripping", () => {
 	});
 
 	test("hashline prefixes are stripped from replacement content", () => {
-		const ac = { sel: "class_Worker.fn_run", crc: getChecksum(testSource, "class_Worker.fn_run") };
+		const ac = { sel: currentTarget(testSource, "class_Worker.fn_run") };
 		const result = edit([
 			{
 				op: "replace",
@@ -679,7 +677,7 @@ describe("chunk path resolution errors", () => {
 				filePath: "/tmp/worker.ts",
 				operations: [
 					{
-						op: "prepend_sibling",
+						op: "before",
 						sel: "class_Worker.fn_ghost",
 						content: "\tghost(): void {}",
 					},
@@ -772,10 +770,10 @@ describe("formatChunkedRead", () => {
 });
 
 describe("leaf insert indentation", () => {
-	test("prepend_sibling on a nested method uses the method's indent level", () => {
+	test("before on a nested method uses the method's indent level", () => {
 		const result = edit([
 			{
-				op: "prepend_sibling",
+				op: "before",
 				sel: "class_Worker.fn_run",
 				content: "validate(): boolean {\n\treturn true;\n}",
 			},
@@ -789,10 +787,10 @@ describe("leaf insert indentation", () => {
 		expect(validatePos).toBeLessThan(runPos);
 	});
 
-	test("append_sibling on a nested method uses the method's indent level", () => {
+	test("after on a nested method uses the method's indent level", () => {
 		const result = edit([
 			{
-				op: "append_sibling",
+				op: "after",
 				sel: "class_Worker.fn_run",
 				content: 'stop(): void {\n\tconsole.log("stopped");\n}',
 			},
@@ -808,7 +806,7 @@ describe("leaf insert indentation", () => {
 
 describe("replace last child formatting", () => {
 	test("replacing last method does not merge with closing brace", () => {
-		const ac = { sel: "class_Worker.fn_run", crc: getChecksum(testSource, "class_Worker.fn_run") };
+		const ac = { sel: currentTarget(testSource, "class_Worker.fn_run") };
 		const result = edit([
 			{
 				op: "replace",
@@ -824,7 +822,7 @@ describe("replace last child formatting", () => {
 	});
 
 	test("replace dedents uniformly over-indented content so the chunk column is not applied twice", () => {
-		const ac = { sel: "class_Worker.fn_run", crc: getChecksum(testSource, "class_Worker.fn_run") };
+		const ac = { sel: currentTarget(testSource, "class_Worker.fn_run") };
 		const result = edit([
 			{
 				op: "replace",
@@ -978,7 +976,7 @@ describe("addressable member editing", () => {
 	const enumSource = `enum Status {\n  Idle = "idle",\n  Busy = "busy",\n}\n`;
 
 	test("replace accepts full-source edits on the parent enum container", () => {
-		const ac = { sel: "enum_Status", crc: getChecksum(enumSource, "enum_Status") };
+		const ac = { sel: currentTarget(enumSource, "enum_Status") };
 		const result = edit(
 			[
 				{
@@ -994,11 +992,11 @@ describe("addressable member editing", () => {
 		expect(result.diffSourceAfter).not.toContain('Busy = "busy"');
 	});
 
-	test("append_sibling inserts beside an individually addressable enum variant", () => {
+	test("after inserts beside an individually addressable enum variant", () => {
 		const result = edit(
 			[
 				{
-					op: "append_sibling",
+					op: "after",
 					sel: "enum_Status.variant_Idle",
 					content: 'Paused = "paused",',
 				},
@@ -1010,7 +1008,7 @@ describe("addressable member editing", () => {
 	});
 
 	test("replace with empty content removes an individually addressable enum variant", () => {
-		const busy = { sel: "enum_Status.variant_Busy", crc: getChecksum(enumSource, "enum_Status.variant_Busy") };
+		const busy = { sel: currentTarget(enumSource, "enum_Status.variant_Busy") };
 		const result = edit([{ op: "replace", ...busy, content: "" }], enumSource);
 
 		expect(result.diffSourceAfter).toContain('Idle = "idle"');
@@ -1027,7 +1025,7 @@ describe("Go receiver render ownership", () => {
 			filePath: "/tmp/server.go",
 			operations: [
 				{
-					op: "prepend_sibling",
+					op: "before",
 					sel: "type_Server.fn_Start",
 					content: "func DefaultServer() *Server {\n    return &Server{}\n}",
 				},
@@ -1059,8 +1057,7 @@ describe("blank-line cleanup", () => {
 			[
 				{
 					op: "replace",
-					sel: "class_Worker.fn_restart",
-					crc: checksum,
+					sel: targetWithChecksum("class_Worker.fn_restart", checksum),
 					content: "",
 				},
 			],
@@ -1076,22 +1073,17 @@ describe("blank-line cleanup", () => {
 // splice
 // ═══════════════════════════════════════════════════════════════════════════
 
-describe("prepend_child warnings", () => {
-	test("warns when comment-only prepend_child may merge into the next chunk", () => {
+describe("prepend warnings", () => {
+	test("warns when comment-only body prepend may merge into the next chunk", () => {
 		const source = `package main\n\nimport "fmt"\n`;
-		const state = ChunkState.parse(source, "go");
-		const root = state.root();
-		if (!root) {
-			throw new Error("expected root chunk");
-		}
 		const result = applyChunkEdits({
 			source,
 			language: "go",
 			cwd: "/",
 			filePath: "main.go",
-			operations: [{ op: "prepend_child", sel: "", crc: root.checksum, content: "// AUTO-GENERATED\n" }],
+			operations: [{ op: "prepend", sel: "@body", content: "// AUTO-GENERATED\n" }],
 		});
-		expect(result.warnings.some(w => w.includes("Comment-only prepend_child"))).toBe(true);
+		expect(result.warnings.some(w => w.includes("Comment-only @body.prepend"))).toBe(true);
 	});
 });
 
@@ -1100,8 +1092,7 @@ describe("chunk selector auto-resolution", () => {
 		const result = edit([
 			{
 				op: "replace",
-				sel: "fn_run",
-				crc: getChecksum(testSource, "class_Worker.fn_run"),
+				sel: targetWithChecksum("fn_run", getChecksum(testSource, "class_Worker.fn_run")),
 				content: "run(): void {\n\tconsole.log(this.name);\n}",
 			},
 		]);
@@ -1114,8 +1105,7 @@ describe("chunk selector auto-resolution", () => {
 		const result = edit([
 			{
 				op: "replace",
-				sel: "run",
-				crc: getChecksum(testSource, "class_Worker.fn_run"),
+				sel: targetWithChecksum("run", getChecksum(testSource, "class_Worker.fn_run")),
 				content: "run(): void {\n\tconsole.log(this.name);\n}",
 			},
 		]);
@@ -1133,8 +1123,7 @@ describe("chunk selector auto-resolution", () => {
 				operations: [
 					{
 						op: "replace",
-						sel: "fn_run",
-						crc: getChecksum(source, "class_Foo.fn_run"),
+						sel: targetWithChecksum("fn_run", getChecksum(source, "class_Foo.fn_run")),
 						content: "",
 					},
 				],
@@ -1143,8 +1132,8 @@ describe("chunk selector auto-resolution", () => {
 	});
 });
 
-describe("prepend_child preamble guard", () => {
-	test("errors when comment-only prepend_child targets root with preamble", () => {
+describe("prepend preamble guard", () => {
+	test("errors when comment-only body prepend targets root with preamble", () => {
 		// JS source with a leading comment block that becomes preamble
 		const source = `/**\n * License header\n */\nconst x = 1;\n`;
 		const state = ChunkState.parse(source, "javascript");
@@ -1153,17 +1142,15 @@ describe("prepend_child preamble guard", () => {
 			// Skip if parser doesn't produce preamble for this source
 			return;
 		}
-		const root = state.root();
-		if (!root) throw new Error("expected root chunk");
 		expect(() =>
 			applyChunkEdits({
 				source,
 				language: "javascript",
 				cwd: "/",
 				filePath: "index.js",
-				operations: [{ op: "prepend_child", sel: "", crc: root.checksum, content: "// AUTO-GENERATED\n" }],
+				operations: [{ op: "prepend", sel: "@body", content: "// AUTO-GENERATED\n" }],
 			}),
-		).toThrow(/Comment-only prepend_child on root is not allowed when the file has a preamble/);
+		).toThrow(/Comment-only @body.prepend on root is not allowed when the file has a preamble/);
 	});
 });
 
@@ -1203,7 +1190,13 @@ describe("tlaplus chunk rendering", () => {
 			language: "tlaplus",
 			cwd: "/tmp",
 			filePath: "/tmp/Spec.tla",
-			operations: [{ op: "replace", sel: initChunk.path, crc: initChunk.checksum, content: "Start == x = 0" }],
+			operations: [
+				{
+					op: "replace",
+					sel: targetWithChecksum(initChunk.path, initChunk.checksum),
+					content: "Start == x = 0",
+				},
+			],
 		});
 
 		expect(result.diffSourceAfter).toContain("Start == x = 0");

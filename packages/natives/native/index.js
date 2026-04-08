@@ -244,11 +244,10 @@ exports.ChunkAnchorStyle = {
 exports.ChunkEditOp = {
   Replace: 'replace',
   Delete: 'delete',
-  AppendChild: 'append_child',
-  PrependChild: 'prepend_child',
-  AppendSibling: 'append_sibling',
-  PrependSibling: 'prepend_sibling',
-  ReplaceBody: 'replace_body',
+  Before: 'before',
+  After: 'after',
+  Prepend: 'prepend',
+  Append: 'append',
 };
 exports.ChunkFocusMode = {
   Expanded: 'expanded',
@@ -258,6 +257,13 @@ exports.ChunkFocusMode = {
 exports.ChunkReadStatus = {
   Ok: 'ok',
   NotFound: 'not_found',
+  UnsupportedRegion: 'unsupported_region',
+};
+exports.ChunkRegion = {
+  Container: 'container',
+  Prologue: 'prologue',
+  Body: 'body',
+  Epilogue: 'epilogue',
 };
 exports.Ellipsis = {
   Unicode: 0,

@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as nodePath from "node:path";
 import type { AgentToolResult } from "@oh-my-pi/pi-agent-core";
-import { StringEnum } from "@oh-my-pi/pi-ai";
+import { StringEnum } from "@oh-my-pi/pi-coding-agent";
 import {
 	ChunkAnchorStyle,
 	ChunkEditOp,
@@ -29,12 +29,11 @@ import type { EditToolDetails, LspBatchRequest } from "../renderer";
 export type { ChunkReadTarget };
 
 export type ChunkEditOperation =
-	| { op: "append_child"; sel?: string; crc?: string; content: string }
-	| { op: "prepend_child"; sel?: string; crc?: string; content: string }
-	| { op: "append_sibling"; sel?: string; crc?: string; content: string }
-	| { op: "prepend_sibling"; sel?: string; crc?: string; content: string }
-	| { op: "replace"; sel?: string; crc?: string; content: string }
-	| { op: "replace_body"; sel?: string; crc?: string; content: string };
+	| { op: "replace"; sel?: string; content: string }
+	| { op: "before"; sel?: string; content: string }
+	| { op: "after"; sel?: string; content: string }
+	| { op: "prepend"; sel?: string; content: string }
+	| { op: "append"; sel?: string; content: string };
 
 type ChunkEditResult = {
 	diffSourceBefore: string;
@@ -49,7 +48,6 @@ type ChunkEditResult = {
 export type ParsedChunkReadPath = {
 	filePath: string;
 	selector?: string;
-	crc?: string;
 };
 
 type ChunkCacheEntry = {
@@ -86,12 +84,13 @@ const chunkStateCache = new LRUCache<string, ChunkCacheEntry>({
 	max: readEnvInt("PI_CHUNK_CACHE_MAX_ENTRIES", 200),
 });
 
-const HASHLINE_NIBBLE_ALPHABET = "ZPMQVRWSNKTXJBYH";
-const CHECKSUM_SUFFIX_RE = new RegExp(`^(.*?)(?:\\s+)?#([${HASHLINE_NIBBLE_ALPHABET}]{4})$`, "i");
-
 export function invalidateChunkCache(filePath: string): void {
 	chunkStateCache.delete(filePath);
 }
+
+type ParsedChunkTarget = {
+	selector: string;
+};
 
 type ChunkSourceContext = {
 	resolvedPath: string;
@@ -122,19 +121,7 @@ function fileLanguageTag(filePath: string, language?: string): string | undefine
 }
 
 function resolveChunkTarget(target: string): ParsedChunkTarget {
-	const parsed = parseChunkSelector(target);
-	return {
-		selector: parsed.selector ?? target,
-		crc: parsed.crc,
-	};
-}
-
-function resolveChunkSiblingSelector(params: { selector: string; anchor: string | undefined; op: string }): string {
-	const { selector, anchor, op } = params;
-	if (!anchor) {
-		throw new Error(`'anchor' required for op=${op} on ${describeChunkTarget(selector)}.`);
-	}
-	return joinChunkPath(selector, anchor);
+	return { selector: target };
 }
 
 async function resolveChunkSourceContext(session: ToolSession, path: string): Promise<ChunkSourceContext> {
@@ -185,16 +172,9 @@ function chunkReadPathSeparatorIndex(readPath: string): number {
 	return readPath.indexOf(":");
 }
 
-export function parseChunkSelector(selector: string | undefined): { selector?: string; crc?: string } {
+export function parseChunkSelector(selector: string | undefined): { selector?: string } {
 	if (!selector || selector.length === 0) {
 		return {};
-	}
-	const match = CHECKSUM_SUFFIX_RE.exec(selector);
-	if (!match) return { selector };
-	const normalizedSelector = match[1] ?? "";
-	const crc = match[2]?.toUpperCase();
-	if (normalizedSelector.length > 0) {
-		return { selector: normalizedSelector, crc };
 	}
 	return { selector };
 }
@@ -208,7 +188,6 @@ export function parseChunkReadPath(readPath: string): ParsedChunkReadPath {
 	return {
 		filePath: readPath.slice(0, colonIndex),
 		selector: parsedSelector.selector,
-		crc: parsedSelector.crc,
 	};
 }
 
@@ -254,6 +233,7 @@ export async function formatChunkedRead(params: {
 			? { startLine: absoluteLineRange.startLine, endLine: absoluteLineRange.endLine ?? absoluteLineRange.startLine }
 			: undefined,
 		tabReplacement: "    ",
+		normalizeIndent: true,
 	});
 	return { text: result.text, resolvedPath: filePath, chunk: result.chunk };
 }
@@ -276,24 +256,16 @@ function toNativeEditOperation(operation: ChunkEditOperation): NativeEditOperati
 			return {
 				op: ChunkEditOp.Replace,
 				sel: operation.sel,
-				crc: operation.crc,
 				content: operation.content,
 			};
-		case "append_child":
-			return { op: ChunkEditOp.AppendChild, sel: operation.sel, crc: operation.crc, content: operation.content };
-		case "prepend_child":
-			return { op: ChunkEditOp.PrependChild, sel: operation.sel, crc: operation.crc, content: operation.content };
-		case "append_sibling":
-			return { op: ChunkEditOp.AppendSibling, sel: operation.sel, crc: operation.crc, content: operation.content };
-		case "prepend_sibling":
-			return { op: ChunkEditOp.PrependSibling, sel: operation.sel, crc: operation.crc, content: operation.content };
-		case "replace_body":
-			return {
-				op: ChunkEditOp.ReplaceBody,
-				sel: operation.sel,
-				crc: operation.crc,
-				content: operation.content,
-			};
+		case "before":
+			return { op: ChunkEditOp.Before, sel: operation.sel, content: operation.content };
+		case "after":
+			return { op: ChunkEditOp.After, sel: operation.sel, content: operation.content };
+		case "prepend":
+			return { op: ChunkEditOp.Prepend, sel: operation.sel, content: operation.content };
+		case "append":
+			return { op: ChunkEditOp.Append, sel: operation.sel, content: operation.content };
 		default: {
 			const exhaustive: never = operation;
 			return exhaustive;
@@ -339,39 +311,18 @@ export function missingChunkReadTarget(selector: string): ChunkReadTarget {
 	return { status: ChunkReadStatus.NotFound, selector };
 }
 
-const CHUNK_OP_VALUES = [
-	"replace",
-	"replace_body",
-	"append",
-	"prepend",
-	"after",
-	"before",
-	"append_child",
-	"prepend_child",
-	"append_sibling",
-	"prepend_sibling",
-] as const;
+const CHUNK_OP_VALUES = ["replace", "after", "before", "prepend", "append"] as const;
 
 export const chunkToolEditSchema = Type.Object({
 	target: Type.String({
 		description:
-			"Chunk path from read output, with #CRC suffix for mutations (e.g. 'class_X.fn_y#A14F'). Use parent path without #CRC for insert ops.",
+			"Chunk selector. Format: 'path@region' for insertions, 'path#CRC@region' for replace. @region defaults to @container. Valid regions: container, prologue, body, epilogue.",
 	}),
-	op: Type.Optional(
-		StringEnum(CHUNK_OP_VALUES, {
-			description:
-				"Edit op (default: replace). Use replace with empty content to remove a chunk. 'append'/'prepend' insert as last/first child. 'after'/'before' insert at sibling position; require 'anchor'.",
-		}),
-	),
+	op: Type.Optional(StringEnum(CHUNK_OP_VALUES)),
 	content: Type.String({
-		description:
-			'New content: required for append/prepend/after/before. For replace, use the full chunk body from read output, or "" to remove the chunk.',
+		description: "New content. Use \\t for indentation. Do NOT include the chunk's base padding.",
 	}),
-	anchor: Type.Optional(
-		Type.String({ description: "Named child to insert relative to (required for op=after/before)." }),
-	),
 });
-
 export const chunkEditParamsSchema = Type.Object(
 	{
 		path: Type.String({ description: "File path" }),
@@ -385,17 +336,6 @@ export const chunkEditParamsSchema = Type.Object(
 
 export type ChunkToolEdit = Static<typeof chunkToolEditSchema>;
 export type ChunkParams = Static<typeof chunkEditParamsSchema>;
-
-type ParsedChunkTarget = {
-	selector: string;
-	crc?: string;
-};
-
-type ChunkExecutionContext = {
-	resolvedPath: string;
-	sourceExists: boolean;
-	chunkLanguage: string | undefined;
-};
 
 interface ExecuteChunkModeOptions {
 	session: ToolSession;
@@ -423,99 +363,21 @@ function parseChunkTarget(target: string): ParsedChunkTarget {
 	return resolveChunkTarget(target);
 }
 
-function joinChunkPath(parent: string, child: string): string {
-	if (child.length === 0) {
-		throw new Error("Sibling name cannot be empty.");
-	}
-	if (parent.length === 0 || child.startsWith(`${parent}.`)) {
-		return child;
-	}
-	return `${parent}.${child}`;
-}
-
-function describeChunkTarget(selector: string): string {
-	return selector.length > 0 ? `"${selector}"` : "root";
-}
-
-async function resolveRequiredChunkChecksum(params: {
-	op: string;
-	crc: string | undefined;
-	selector: string;
-	context: ChunkExecutionContext;
-}): Promise<string> {
-	const { op, crc, selector, context } = params;
-	if (crc) return crc.toUpperCase();
-
-	if (selector.length > 0 && context.sourceExists) {
-		const resolved = await getChunkInfoForFile(context.resolvedPath, context.chunkLanguage, selector);
-		if (resolved) {
-			throw new Error(
-				`Checksum required for ${op} on ${describeChunkTarget(selector)}. ` +
-					`Re-read the chunk to get its checksum, then pass target: "${selector}#${resolved.checksum}".`,
-			);
-		}
-		throw new Error(`Chunk not found: "${selector}". Re-read the file to see available chunk paths.`);
-	}
-
-	throw new Error(
-		`Checksum required for ${op} on ${describeChunkTarget(selector)}. ` +
-			"Re-read the file first, then pass target with a #XXXX checksum suffix copied from the read output.",
-	);
-}
-
-async function normalizeChunkEditOperation(
-	edit: ChunkToolEdit,
-	context: ChunkExecutionContext,
-): Promise<ChunkEditOperation> {
-	const { selector, crc } = parseChunkTarget(edit.target);
+function normalizeChunkEditOperation(edit: ChunkToolEdit): ChunkEditOperation {
+	const { selector } = parseChunkTarget(edit.target);
 	const op = edit.op ?? "replace";
 	const content = edit.content;
-
-	switch (op) {
-		case "append":
-		case "append_child":
-			return { op: "append_child", sel: selector, content };
-		case "prepend":
-		case "prepend_child":
-			return { op: "prepend_child", sel: selector, content };
-		case "after":
-		case "append_sibling":
-			return {
-				op: "append_sibling",
-				sel: resolveChunkSiblingSelector({ selector, anchor: edit.anchor, op }),
-				content,
-			};
-		case "before":
-		case "prepend_sibling":
-			return {
-				op: "prepend_sibling",
-				sel: resolveChunkSiblingSelector({ selector, anchor: edit.anchor, op }),
-				content,
-			};
-		case "replace_body":
-			return {
-				op: "replace_body",
-				sel: selector,
-				crc: await resolveRequiredChunkChecksum({ op: "replace_body", crc, selector, context }),
-				content,
-			};
-		default:
-			return {
-				op: "replace",
-				sel: selector,
-				crc: await resolveRequiredChunkChecksum({ op: "replace", crc, selector, context }),
-				content,
-			};
-	}
+	return {
+		op,
+		sel: selector,
+		content,
+	};
 }
 
-async function normalizeChunkEditOperations(
-	edits: ChunkToolEdit[],
-	context: ChunkExecutionContext,
-): Promise<ChunkEditOperation[]> {
+function normalizeChunkEditOperations(edits: ChunkToolEdit[]): ChunkEditOperation[] {
 	const operations: ChunkEditOperation[] = [];
 	for (const edit of edits) {
-		operations.push(await normalizeChunkEditOperation(edit, context));
+		operations.push(normalizeChunkEditOperation(edit));
 	}
 	return operations;
 }
@@ -582,11 +444,7 @@ export async function executeChunkMode(
 	if (parentDir && parentDir !== ".") {
 		await fs.mkdir(parentDir, { recursive: true });
 	}
-	const normalizedOperations = await normalizeChunkEditOperations(edits, {
-		resolvedPath,
-		sourceExists,
-		chunkLanguage,
-	});
+	const normalizedOperations = normalizeChunkEditOperations(edits);
 
 	const chunkResult = applyChunkEdits({
 		source: rawContent,

@@ -74,6 +74,50 @@ pub fn count_indent_columns(whitespace: &str, space_step: usize) -> usize {
 		.sum()
 }
 
+pub fn normalize_to_tabs(line: &str, indent_char: char, indent_step: usize) -> String {
+	if indent_char == '\t' {
+		return line.to_owned();
+	}
+
+	let whitespace = leading_whitespace(line);
+	if whitespace.is_empty() {
+		return line.to_owned();
+	}
+
+	let step = indent_step.max(1);
+	let total_columns = count_indent_columns(whitespace, step);
+	let tabs = total_columns / step;
+	let remainder = total_columns % step;
+	format!("{}{}{}", "\t".repeat(tabs), " ".repeat(remainder), &line[whitespace.len()..])
+}
+
+pub fn denormalize_from_tabs(
+	line: &str,
+	file_indent_char: char,
+	file_indent_step: usize,
+) -> String {
+	if file_indent_char != ' ' && file_indent_char != '\t' {
+		return line.to_owned();
+	}
+
+	let whitespace = leading_whitespace(line);
+	if whitespace.is_empty() {
+		return line.to_owned();
+	}
+
+	let step = file_indent_step.max(1);
+	let mut converted = String::with_capacity(whitespace.len() * step.max(1));
+	for ch in whitespace.chars() {
+		match ch {
+			'\t' if file_indent_char == '\t' => converted.push('\t'),
+			'\t' => converted.push_str(&file_indent_char.to_string().repeat(step)),
+			' ' => converted.push(' '),
+			_ => converted.push(ch),
+		}
+	}
+	format!("{converted}{}", &line[whitespace.len()..])
+}
+
 pub fn normalize_target_indent(target_indent: &str, sample_text: &str) -> String {
 	if target_indent.is_empty() {
 		return String::new();
@@ -481,8 +525,8 @@ mod tests {
 			start_byte: 0,
 			end_byte: 0,
 			checksum_start_byte: 0,
-			body_start_byte: None,
-			body_end_byte: None,
+			prologue_end_byte: None,
+			epilogue_start_byte: None,
 			checksum: "ABCD".to_owned(),
 			error: false,
 			indent,
@@ -504,6 +548,27 @@ mod tests {
 			normalize_leading_whitespace_char(input, ' ', Some(4)),
 			"      alpha\n        beta"
 		);
+	}
+
+	#[test]
+	fn canonical_indent_round_trips_common_profiles() {
+		let cases = [
+			("    value()", ' ', 4, "\tvalue()", "    value()"),
+			("      value()", ' ', 3, "\t\tvalue()", "      value()"),
+			("  value()", ' ', 2, "\tvalue()", "  value()"),
+			("\tvalue()", '\t', 4, "\tvalue()", "\tvalue()"),
+			(" \t  value()", ' ', 4, "\t   value()", "       value()"),
+		];
+
+		for (input, indent_char, indent_step, canonical, restored) in cases {
+			let normalized = normalize_to_tabs(input, indent_char, indent_step);
+			assert_eq!(normalized, canonical, "unexpected canonical indent for {input:?}");
+			assert_eq!(
+				denormalize_from_tabs(&normalized, indent_char, indent_step),
+				restored,
+				"unexpected restored indent for {input:?}"
+			);
+		}
 	}
 
 	#[test]

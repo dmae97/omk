@@ -2,7 +2,7 @@ use std::{cmp::Ordering, collections::BTreeSet};
 
 use crate::chunk::{
 	state::ChunkStateInner,
-	types::{ChunkNode, ChunkTree},
+	types::{ChunkNode, ChunkRegion, ChunkTree},
 };
 
 const CHUNK_NAME_PREFIXES: &[&str] =
@@ -10,26 +10,106 @@ const CHUNK_NAME_PREFIXES: &[&str] =
 const CHECKSUM_ALPHABET: &str = "ZPMQVRWSNKTXJBYH";
 
 pub struct ResolvedChunk<'a> {
-	pub chunk: &'a ChunkNode,
-	pub crc:   Option<String>,
+	pub chunk:  &'a ChunkNode,
+	pub crc:    Option<String>,
+	pub region: ChunkRegion,
+}
+
+fn parse_region_name(value: &str) -> Option<ChunkRegion> {
+	match value.trim() {
+		"container" => Some(ChunkRegion::Container),
+		"prologue" => Some(ChunkRegion::Prologue),
+		"body" => Some(ChunkRegion::Body),
+		"epilogue" => Some(ChunkRegion::Epilogue),
+		_ => None,
+	}
+}
+
+pub fn split_region_suffix(selector: &str) -> (&str, Option<ChunkRegion>) {
+	let Some((prefix, suffix)) = selector.rsplit_once('@') else {
+		return (selector, None);
+	};
+	let Some(region) = parse_region_name(suffix.trim()) else {
+		return (selector, None);
+	};
+	(prefix.trim_end(), Some(region))
+}
+
+pub fn split_selector_crc_and_region(
+	selector: Option<&str>,
+	crc: Option<&str>,
+	region: Option<ChunkRegion>,
+) -> Result<(Option<String>, Option<String>, ChunkRegion), String> {
+	let mut raw = selector
+		.map(str::trim)
+		.filter(|value| !matches!(*value, "" | "null" | "undefined"))
+		.unwrap_or_default()
+		.to_owned();
+	if let Some(index) = chunk_read_path_separator_index(&raw) {
+		raw = raw[index + 1..].to_owned();
+	}
+
+	let (without_region, parsed_region) = if raw.is_empty() {
+		(raw.as_str(), None)
+	} else {
+		let (prefix, parsed_region) = split_region_suffix(raw.as_str());
+		if parsed_region.is_some() {
+			(prefix, parsed_region)
+		} else if let Some((_, suffix)) = raw.rsplit_once('@') {
+			return Err(format!(
+				"Unknown chunk region \"{}\". Valid regions: container, prologue, body, epilogue.",
+				suffix.trim()
+			));
+		} else {
+			(raw.as_str(), None)
+		}
+	};
+
+	let mut selector_part = without_region.trim();
+	let embedded_crc = if let Some((prefix, suffix)) = selector_part.rsplit_once('#') {
+		if is_checksum_token(suffix.trim()) {
+			selector_part = prefix.trim_end();
+			sanitize_crc(Some(suffix))
+		} else {
+			None
+		}
+	} else if let Some(suffix) = selector_part.strip_prefix('#') {
+		if is_checksum_token(suffix.trim()) {
+			selector_part = "";
+			sanitize_crc(Some(suffix))
+		} else {
+			None
+		}
+	} else if is_checksum_token(selector_part) {
+		let cleaned = sanitize_crc(Some(selector_part));
+		selector_part = "";
+		cleaned
+	} else {
+		None
+	};
+
+	let cleaned_selector = if selector_part.is_empty() {
+		None
+	} else {
+		Some(selector_part.to_owned())
+	};
+	let cleaned_crc = sanitize_crc(crc).or(embedded_crc);
+	let region = region.or(parsed_region).unwrap_or(ChunkRegion::Container);
+
+	if let Some(cleaned_selector) = cleaned_selector.as_deref()
+		&& cleaned_crc.is_some()
+		&& looks_like_file_target(cleaned_selector)
+	{
+		return Ok((None, cleaned_crc, region));
+	}
+
+	Ok((cleaned_selector, cleaned_crc, region))
 }
 
 pub fn sanitize_chunk_selector(selector: Option<&str>) -> Option<String> {
-	let mut value = selector?.trim().to_owned();
-	if matches!(value.as_str(), "null" | "undefined") {
-		return None;
-	}
-
-	if let Some(index) = chunk_read_path_separator_index(&value) {
-		value = value[index + 1..].to_owned();
-	}
-
-	let value = strip_trailing_checksum(&value).trim();
-	if value.is_empty() {
-		None
-	} else {
-		Some(value.to_owned())
-	}
+	split_selector_crc_and_region(selector, None, None)
+		.ok()
+		.and_then(|(cleaned_selector, ..)| cleaned_selector)
 }
 
 pub fn sanitize_crc(crc: Option<&str>) -> Option<String> {
@@ -41,44 +121,12 @@ pub fn sanitize_crc(crc: Option<&str>) -> Option<String> {
 	}
 }
 
-pub fn split_selector_and_crc(
-	selector: Option<&str>,
-	crc: Option<&str>,
-) -> (Option<String>, Option<String>) {
-	let cleaned_selector = sanitize_chunk_selector(selector);
-	let selector_crc = selector.and_then(extract_crc_token);
-	let cleaned_crc = sanitize_crc(crc).or(selector_crc);
-
-	if cleaned_selector.is_none()
-		&& let Some(selector) = selector
-		&& let Some(raw) = selector_after_read_path(selector)
-		&& let Some(raw_crc) = raw
-			.strip_prefix('#')
-			.or_else(|| is_checksum_token(raw).then_some(raw))
-	{
-		return (None, sanitize_crc(Some(raw_crc)).or(cleaned_crc));
-	}
-
-	if let Some(cleaned_selector) = cleaned_selector.as_deref()
-		&& cleaned_crc.is_some()
-		&& looks_like_file_target(cleaned_selector)
-	{
-		return (None, cleaned_crc);
-	}
-
-	if cleaned_selector.is_some() {
-		(cleaned_selector, cleaned_crc)
-	} else {
-		(None, cleaned_crc)
-	}
-}
-
 pub fn resolve_chunk_selector<'a>(
 	state: &'a ChunkStateInner,
 	selector: Option<&str>,
 	warnings: &mut Vec<String>,
 ) -> Result<&'a ChunkNode, String> {
-	let (cleaned_selector, cleaned_crc) = split_selector_and_crc(selector, None);
+	let (cleaned_selector, cleaned_crc, _) = split_selector_crc_and_region(selector, None, None)?;
 	resolve_chunk_selector_impl(state, cleaned_selector.as_deref(), cleaned_crc.as_deref(), warnings)
 }
 
@@ -88,17 +136,18 @@ pub fn resolve_chunk_with_crc<'a>(
 	crc: Option<&str>,
 	warnings: &mut Vec<String>,
 ) -> Result<ResolvedChunk<'a>, String> {
-	let (cleaned_selector, cleaned_crc) = split_selector_and_crc(selector, crc);
+	let (cleaned_selector, cleaned_crc, region) =
+		split_selector_crc_and_region(selector, crc, None)?;
 
 	if cleaned_selector.is_none()
 		&& let Some(cleaned_crc) = cleaned_crc.clone()
 	{
 		let chunk = resolve_chunk_by_checksum(state, &cleaned_crc)?;
-		return Ok(ResolvedChunk { chunk, crc: Some(cleaned_crc) });
+		return Ok(ResolvedChunk { chunk, crc: Some(cleaned_crc), region });
 	}
 
 	let chunk = resolve_chunk_selector_impl(state, cleaned_selector.as_deref(), None, warnings)?;
-	Ok(ResolvedChunk { chunk, crc: cleaned_crc })
+	Ok(ResolvedChunk { chunk, crc: cleaned_crc, region })
 }
 
 pub fn resolve_chunk_by_checksum<'a>(
@@ -129,6 +178,54 @@ fn root_chunk(state: &ChunkStateInner) -> Result<&ChunkNode, String> {
 	state
 		.chunk("")
 		.ok_or_else(|| "Chunk tree is missing the root chunk".to_owned())
+}
+
+pub const fn chunk_supports_region(chunk: &ChunkNode, region: ChunkRegion) -> bool {
+	match region {
+		ChunkRegion::Container => true,
+		ChunkRegion::Prologue | ChunkRegion::Body | ChunkRegion::Epilogue => {
+			chunk.prologue_end_byte.is_some() && chunk.epilogue_start_byte.is_some()
+		},
+	}
+}
+
+pub fn chunk_region_range(
+	chunk: &ChunkNode,
+	region: ChunkRegion,
+) -> Result<(usize, usize), String> {
+	match region {
+		ChunkRegion::Container => Ok((chunk.start_byte as usize, chunk.end_byte as usize)),
+		ChunkRegion::Prologue => Ok((
+			chunk.start_byte as usize,
+			chunk
+				.prologue_end_byte
+				.ok_or_else(|| format!("Chunk \"{}\" does not support @prologue.", chunk.path))?
+				as usize,
+		)),
+		ChunkRegion::Body => Ok((
+			chunk
+				.prologue_end_byte
+				.ok_or_else(|| format!("Chunk \"{}\" does not support @body.", chunk.path))? as usize,
+			chunk
+				.epilogue_start_byte
+				.ok_or_else(|| format!("Chunk \"{}\" does not support @body.", chunk.path))? as usize,
+		)),
+		ChunkRegion::Epilogue => Ok((
+			chunk
+				.epilogue_start_byte
+				.ok_or_else(|| format!("Chunk \"{}\" does not support @epilogue.", chunk.path))?
+				as usize,
+			chunk.end_byte as usize,
+		)),
+	}
+}
+
+pub fn format_region_ref(chunk: &ChunkNode, region: ChunkRegion) -> String {
+	if chunk.path.is_empty() {
+		format!("<root>#{}@{}", chunk.checksum, region.as_str())
+	} else {
+		format!("{}#{}@{}", chunk.path, chunk.checksum, region.as_str())
+	}
 }
 
 fn resolve_chunk_selector_impl<'a>(
@@ -537,33 +634,6 @@ fn is_line_number_selector(selector: &str) -> bool {
 	!end.is_empty() && end.chars().all(|ch| ch.is_ascii_digit())
 }
 
-fn strip_trailing_checksum(value: &str) -> &str {
-	let Some((prefix, suffix)) = value.rsplit_once('#') else {
-		return value;
-	};
-	if is_checksum_token(suffix) {
-		prefix
-	} else {
-		value
-	}
-}
-
-fn extract_crc_token(value: &str) -> Option<String> {
-	let raw = selector_after_read_path(value)?;
-	let token = raw
-		.rsplit_once('#')
-		.map(|(_, suffix)| suffix)
-		.or_else(|| raw.strip_prefix('#'))
-		.or_else(|| is_checksum_token(raw).then_some(raw))?;
-	sanitize_crc(Some(token))
-}
-
-fn selector_after_read_path(value: &str) -> Option<&str> {
-	chunk_read_path_separator_index(value)
-		.map(|index| &value[index + 1..])
-		.or(Some(value))
-}
-
 fn is_checksum_token(value: &str) -> bool {
 	value.len() == 4
 		&& value
@@ -615,8 +685,8 @@ mod tests {
 			start_byte:          0,
 			end_byte:            0,
 			checksum_start_byte: 0,
-			body_start_byte:     None,
-			body_end_byte:       None,
+			prologue_end_byte:   None,
+			epilogue_start_byte: None,
 			checksum:            checksum.to_owned(),
 			error:               false,
 			indent:              0,

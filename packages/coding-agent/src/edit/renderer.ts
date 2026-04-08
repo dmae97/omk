@@ -231,17 +231,13 @@ function formatChunkStreamingEdit(edit: Partial<ChunkToolEdit>): FormattedStream
 
 	switch (op) {
 		case "append":
-		case "append_child":
-			return { srcLabel: `\u2022 append child ${target}`, dst: contentLines };
+			return { srcLabel: `\u2022 append ${target}`, dst: contentLines };
 		case "prepend":
-		case "prepend_child":
-			return { srcLabel: `\u2022 prepend child ${target}`, dst: contentLines };
+			return { srcLabel: `\u2022 prepend ${target}`, dst: contentLines };
 		case "after":
-		case "append_sibling":
-			return { srcLabel: `\u2022 insert after ${target}/${edit.anchor ?? "?"}`, dst: contentLines };
+			return { srcLabel: `\u2022 insert after ${target}`, dst: contentLines };
 		case "before":
-		case "prepend_sibling":
-			return { srcLabel: `\u2022 insert before ${target}/${edit.anchor ?? "?"}`, dst: contentLines };
+			return { srcLabel: `\u2022 insert before ${target}`, dst: contentLines };
 		default:
 			return {
 				srcLabel: contentLines.length === 0 ? `\u2022 remove ${target}` : `\u2022 replace ${target}`,

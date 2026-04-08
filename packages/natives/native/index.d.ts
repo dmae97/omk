@@ -381,23 +381,18 @@ export declare enum ChunkAnchorStyle {
 
 /** Structural edit to apply relative to a chunk anchor. */
 export declare enum ChunkEditOp {
-  /** Replace the chunk body, or a substring via `find`. */
+  /** Replace the targeted region, or a substring via `find`. */
   Replace = 'replace',
-  /** Remove the chunk's source range. */
+  /** Remove the targeted region. */
   Delete = 'delete',
-  /** Insert `content` as the last child of the target chunk. */
-  AppendChild = 'append_child',
-  /** Insert `content` as the first child of the target chunk. */
-  PrependChild = 'prepend_child',
-  /** Insert `content` after the target chunk's source range. */
-  AppendSibling = 'append_sibling',
-  /** Insert `content` before the target chunk's source range. */
-  PrependSibling = 'prepend_sibling',
-  /**
-   * Replace only the inner body of the chunk, preserving signature and
-   * closing delimiter.
-   */
-  ReplaceBody = 'replace_body'
+  /** Insert `content` before the targeted region span. */
+  Before = 'before',
+  /** Insert `content` after the targeted region span. */
+  After = 'after',
+  /** Insert `content` at the start inside the targeted region. */
+  Prepend = 'prepend',
+  /** Insert `content` at the end inside the targeted region. */
+  Append = 'append'
 }
 
 /** How a chunk participates in a focus-scoped render pass. */
@@ -434,7 +429,9 @@ export declare enum ChunkReadStatus {
   /** Selector matched a chunk and content was produced. */
   Ok = 'ok',
   /** No chunk matched the requested selector. */
-  NotFound = 'not_found'
+  NotFound = 'not_found',
+  /** Chunk matched but does not support the requested region. */
+  UnsupportedRegion = 'unsupported_region'
 }
 
 /** Outcome of resolving which chunk was read for a `renderRead`-style request. */
@@ -443,6 +440,13 @@ export interface ChunkReadTarget {
   status: ChunkReadStatus
   /** Sanitized selector string that was applied. */
   selector: string
+}
+
+export declare enum ChunkRegion {
+  Container = 'container',
+  Prologue = 'prologue',
+  Body = 'body',
+  Epilogue = 'epilogue'
 }
 
 /** Clipboard image payload encoded as PNG bytes. */
@@ -495,6 +499,8 @@ export interface EditOperation {
    * omitted.
    */
   crc?: string
+  /** Region to target. When omitted, defaults to `@container`. */
+  region?: ChunkRegion
   /** Replacement or inserted text (meaning depends on `op`). */
   content?: string
   /**
@@ -1134,6 +1140,8 @@ export interface ReadRenderParams {
   absoluteLineRange?: VisibleLineRange
   /** Replace tabs in embedded previews. */
   tabReplacement?: string
+  /** When true, normalize displayed indentation to canonical tabs. */
+  normalizeIndent?: boolean
 }
 
 /** Rendered chunk text plus optional resolution metadata for the read request. */
@@ -1167,6 +1175,8 @@ export interface RenderParams {
   showLeafPreview: boolean
   /** Replace tab characters in displayed previews (e.g. two spaces). */
   tabReplacement?: string
+  /** When true, normalize displayed indentation to canonical tabs. */
+  normalizeIndent?: boolean
   /**
    * When set, restrict rendering to these chunks with their specified focus
    * modes. Everything not in this list is skipped.

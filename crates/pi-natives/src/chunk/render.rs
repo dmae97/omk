@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
 	chunk::{
+		indent::{detect_file_indent_char, detect_file_indent_step, normalize_to_tabs},
 		state::{ChunkStateInner, mask_chunk_display_source},
 		types::{
 			ChunkAnchorStyle, ChunkFocusMode, ChunkNode, ChunkTree, RenderParams, VisibleLineRange,
@@ -27,6 +28,17 @@ env_uint! {
 	 static PREVIEW_TAIL_LINES: usize = "PI_CHUNK_PREVIEW_TAIL_LINES" or 4 => [1, usize::MAX];
 }
 
+fn normalize_rendered_line(
+	line: &str,
+	normalize_indent: Option<(char, usize)>,
+	tab_replacement: &str,
+) -> String {
+	match normalize_indent {
+		Some((indent_char, indent_step)) => normalize_to_tabs(line, indent_char, indent_step),
+		None => line.replace('\t', tab_replacement),
+	}
+}
+
 pub fn render_state(state: &ChunkStateInner, params: &RenderParams) -> String {
 	let tree = state.tree();
 	let lookup = build_lookup(tree);
@@ -43,6 +55,9 @@ pub fn render_state(state: &ChunkStateInner, params: &RenderParams) -> String {
 	let preview_head_lines = *PREVIEW_HEAD_LINES;
 	let preview_tail_lines = *PREVIEW_TAIL_LINES;
 	let tab_replacement = params.tab_replacement.as_deref().unwrap_or("    ");
+	let normalize_indent = params.normalize_indent.unwrap_or(false).then(|| {
+		(detect_file_indent_char(state.source(), tree), detect_file_indent_step(tree) as usize)
+	});
 	let anchor_style = params.anchor_style.unwrap_or_default();
 	let focus: Option<HashMap<&str, ChunkFocusMode>> = params
 		.focused_paths
@@ -57,6 +72,7 @@ pub fn render_state(state: &ChunkStateInner, params: &RenderParams) -> String {
 		params.show_leaf_preview,
 		&source_lines,
 		tab_replacement,
+		normalize_indent,
 		full_display_threshold,
 		preview_head_lines,
 		preview_tail_lines,
@@ -70,6 +86,7 @@ pub fn render_state(state: &ChunkStateInner, params: &RenderParams) -> String {
 		params.show_leaf_preview,
 		&source_lines,
 		tab_replacement,
+		normalize_indent,
 		full_display_threshold,
 		preview_head_lines,
 		preview_tail_lines,
@@ -90,6 +107,7 @@ pub fn render_state(state: &ChunkStateInner, params: &RenderParams) -> String {
 		preview_head_lines,
 		preview_tail_lines,
 		tab_replacement,
+		normalize_indent,
 		focus,
 		inline_hunks: HashMap::new(),
 	};
@@ -247,10 +265,14 @@ fn chunk_body_anchor_indent(
 	source_lines: &[&str],
 	chunk: &ChunkNode,
 	tab_replacement: &str,
+	normalize_indent: Option<(char, usize)>,
 ) -> String {
 	source_lines
 		.get(chunk.start_line.saturating_sub(1) as usize)
-		.map_or(String::new(), |line| leading_whitespace(line).replace('\t', tab_replacement))
+		.map_or(String::new(), |line| {
+			leading_whitespace(&normalize_rendered_line(line, normalize_indent, tab_replacement))
+				.to_owned()
+		})
 }
 
 const fn chunk_anchor_label(chunk: &ChunkNode, style: ChunkAnchorStyle) -> &str {
@@ -299,6 +321,7 @@ fn build_leaf_entries(
 	source_lines: &[&str],
 	span: VisibleSpan,
 	tab_replacement: &str,
+	normalize_indent: Option<(char, usize)>,
 	full_display_threshold: usize,
 	preview_head_lines: usize,
 	preview_tail_lines: usize,
@@ -311,7 +334,9 @@ fn build_leaf_entries(
 			abs_line: line,
 			text:     source_lines
 				.get(line.saturating_sub(1) as usize)
-				.map_or(String::new(), |text| text.replace('\t', tab_replacement)),
+				.map_or(String::new(), |text| {
+					normalize_rendered_line(text, normalize_indent, tab_replacement)
+				}),
 		})
 		.collect::<Vec<_>>();
 
@@ -393,6 +418,7 @@ fn for_each_rendered_source_line(
 	show_leaf_preview: bool,
 	source_lines: &[&str],
 	tab_replacement: &str,
+	normalize_indent: Option<(char, usize)>,
 	full_display_threshold: usize,
 	preview_head_lines: usize,
 	preview_tail_lines: usize,
@@ -415,6 +441,7 @@ fn for_each_rendered_source_line(
 				source_lines,
 				span,
 				tab_replacement,
+				normalize_indent,
 				full_display_threshold,
 				preview_head_lines,
 				preview_tail_lines,
@@ -448,6 +475,7 @@ fn for_each_rendered_source_line(
 				show_leaf_preview,
 				source_lines,
 				tab_replacement,
+				normalize_indent,
 				full_display_threshold,
 				preview_head_lines,
 				preview_tail_lines,
@@ -474,6 +502,7 @@ fn for_each_rendered_source_line(
 			show_leaf_preview,
 			source_lines,
 			tab_replacement,
+			normalize_indent,
 			full_display_threshold,
 			preview_head_lines,
 			preview_tail_lines,
@@ -491,6 +520,7 @@ fn compute_rendered_line_count(
 	show_leaf_preview: bool,
 	source_lines: &[&str],
 	tab_replacement: &str,
+	normalize_indent: Option<(char, usize)>,
 	full_display_threshold: usize,
 	preview_head_lines: usize,
 	preview_tail_lines: usize,
@@ -523,6 +553,7 @@ fn compute_rendered_line_count(
 		show_leaf_preview,
 		source_lines,
 		tab_replacement,
+		normalize_indent,
 		full_display_threshold,
 		preview_head_lines,
 		preview_tail_lines,
@@ -548,6 +579,7 @@ struct RenderCtx<'a> {
 	preview_head_lines:     usize,
 	preview_tail_lines:     usize,
 	tab_replacement:        &'a str,
+	normalize_indent:       Option<(char, usize)>,
 	focus:                  Option<HashMap<&'a str, ChunkFocusMode>>,
 	inline_hunks:           HashMap<String, Vec<InlineHunk>>,
 }
@@ -601,7 +633,9 @@ fn emit_line_gap(ctx: &mut RenderCtx<'_>, from: u32, to: u32) {
 		let text = ctx
 			.source_lines
 			.get(line.saturating_sub(1) as usize)
-			.map_or(String::new(), |text| text.replace('\t', ctx.tab_replacement));
+			.map_or(String::new(), |text| {
+				normalize_rendered_line(text, ctx.normalize_indent, ctx.tab_replacement)
+			});
 		push_code(ctx, line, &text);
 	}
 }
@@ -611,6 +645,7 @@ fn emit_leaf_body(ctx: &mut RenderCtx<'_>, _chunk: &ChunkNode, span: VisibleSpan
 		ctx.source_lines,
 		span,
 		ctx.tab_replacement,
+		ctx.normalize_indent,
 		ctx.full_display_threshold,
 		ctx.preview_head_lines,
 		ctx.preview_tail_lines,
@@ -657,8 +692,12 @@ fn emit_chunk_subtree(
 				if options.between_top_level_definitions && depth == 0 && !options.is_first_top_level {
 					push_blank_meta(ctx);
 				}
-				let anchor_indent =
-					chunk_body_anchor_indent(ctx.source_lines, chunk, ctx.tab_replacement);
+				let anchor_indent = chunk_body_anchor_indent(
+					ctx.source_lines,
+					chunk,
+					ctx.tab_replacement,
+					ctx.normalize_indent,
+				);
 				let style = ctx.anchor_style.with_omit_checksum(ctx.omit_checksum);
 				let anchor_label = chunk_anchor_label(chunk, style);
 				push_meta(ctx, style.render(&anchor_indent, anchor_label, chunk.checksum.as_str()));
@@ -683,7 +722,12 @@ fn emit_chunk_subtree(
 		push_blank_meta(ctx);
 	}
 	if !chunk.path.is_empty() {
-		let anchor_indent = chunk_body_anchor_indent(ctx.source_lines, chunk, ctx.tab_replacement);
+		let anchor_indent = chunk_body_anchor_indent(
+			ctx.source_lines,
+			chunk,
+			ctx.tab_replacement,
+			ctx.normalize_indent,
+		);
 		let style = ctx.anchor_style.with_omit_checksum(ctx.omit_checksum);
 		let anchor_label = chunk_anchor_label(chunk, style);
 		push_meta(ctx, style.render(&anchor_indent, anchor_label, chunk.checksum.as_str()));
@@ -732,7 +776,12 @@ fn emit_chunk_subtree(
 		}
 		// Closing tag for chunks with children
 		if !chunk.path.is_empty() {
-			let anchor_indent = chunk_body_anchor_indent(ctx.source_lines, chunk, ctx.tab_replacement);
+			let anchor_indent = chunk_body_anchor_indent(
+				ctx.source_lines,
+				chunk,
+				ctx.tab_replacement,
+				ctx.normalize_indent,
+			);
 			let style = ctx.anchor_style.with_omit_checksum(ctx.omit_checksum);
 			let anchor_label = chunk_anchor_label(chunk, style);
 			push_meta(ctx, style.render_close(&anchor_indent, anchor_label, chunk.checksum.as_str()));
@@ -756,6 +805,7 @@ fn compute_num_width(
 	show_leaf_preview: bool,
 	source_lines: &[&str],
 	tab_replacement: &str,
+	normalize_indent: Option<(char, usize)>,
 	full_display_threshold: usize,
 	preview_head_lines: usize,
 	preview_tail_lines: usize,
@@ -782,6 +832,7 @@ fn compute_num_width(
 		show_leaf_preview,
 		source_lines,
 		tab_replacement,
+		normalize_indent,
 		full_display_threshold,
 		preview_head_lines,
 		preview_tail_lines,
@@ -827,13 +878,17 @@ pub fn hunk_indent_for_chunk(
 	chunk_path: &str,
 	source: &str,
 	tab_replacement: &str,
+	normalize_indent: Option<(char, usize)>,
 ) -> String {
 	let source_lines: Vec<&str> = source.split('\n').collect();
 	let Some(chunk) = lookup.get(chunk_path) else {
 		return String::new();
 	};
-	let base = chunk_body_anchor_indent(&source_lines, chunk, tab_replacement);
-	format!("{base}{tab_replacement}")
+	let base = chunk_body_anchor_indent(&source_lines, chunk, tab_replacement, normalize_indent);
+	match normalize_indent {
+		Some(_) => format!("{base}\t"),
+		None => format!("{base}{tab_replacement}"),
+	}
 }
 
 /// Render a chunk tree with diff hunks inlined into their owning chunk blocks.
@@ -857,6 +912,9 @@ pub fn render_state_with_hunks(
 	let preview_head_lines = *PREVIEW_HEAD_LINES;
 	let preview_tail_lines = *PREVIEW_TAIL_LINES;
 	let tab_replacement = params.tab_replacement.as_deref().unwrap_or("    ");
+	let normalize_indent = params.normalize_indent.unwrap_or(false).then(|| {
+		(detect_file_indent_char(state.source(), tree), detect_file_indent_step(tree) as usize)
+	});
 	let anchor_style = params.anchor_style.unwrap_or_default();
 	let focus: Option<HashMap<&str, ChunkFocusMode>> = params
 		.focused_paths
@@ -871,6 +929,7 @@ pub fn render_state_with_hunks(
 		params.show_leaf_preview,
 		&source_lines,
 		tab_replacement,
+		normalize_indent,
 		full_display_threshold,
 		preview_head_lines,
 		preview_tail_lines,
@@ -884,6 +943,7 @@ pub fn render_state_with_hunks(
 		params.show_leaf_preview,
 		&source_lines,
 		tab_replacement,
+		normalize_indent,
 		full_display_threshold,
 		preview_head_lines,
 		preview_tail_lines,
@@ -904,6 +964,7 @@ pub fn render_state_with_hunks(
 		preview_head_lines,
 		preview_tail_lines,
 		tab_replacement,
+		normalize_indent,
 		focus,
 		inline_hunks,
 	};
