@@ -71,20 +71,31 @@ import {
 export type { LspServerStatus } from "./client";
 export type { LspToolDetails } from "./types";
 
+export interface LspStartupServerInfo {
+	name: string;
+	status: "connecting" | "ready" | "error";
+	fileTypes: string[];
+	error?: string;
+}
+
 /** Result from warming up LSP servers */
 export interface LspWarmupResult {
-	servers: Array<{
-		name: string;
-		status: "ready" | "error";
-		fileTypes: string[];
-		error?: string;
-	}>;
+	servers: Array<LspStartupServerInfo & { status: "ready" | "error" }>;
 }
 
 /** Options for warming up LSP servers */
 export interface LspWarmupOptions {
 	/** Called when starting to connect to servers */
 	onConnecting?: (serverNames: string[]) => void;
+}
+
+export function discoverStartupLspServers(cwd: string): LspStartupServerInfo[] {
+	const config = loadConfig(cwd);
+	return getLspServers(config).map(([name, serverConfig]) => ({
+		name,
+		status: "connecting",
+		fileTypes: serverConfig.fileTypes,
+	}));
 }
 
 /**

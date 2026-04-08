@@ -1,7 +1,7 @@
 import { $env } from "@oh-my-pi/pi-utils";
 
-const DEFAULT_OPENAI_STREAM_IDLE_TIMEOUT_MS = 45_000;
-const DEFAULT_STREAM_FIRST_EVENT_TIMEOUT_MS = 45_000;
+const DEFAULT_OPENAI_STREAM_IDLE_TIMEOUT_MS = 60_000;
+const DEFAULT_STREAM_FIRST_EVENT_TIMEOUT_MS = 60_000;
 
 function normalizeIdleTimeoutMs(value: string | undefined, fallback: number): number | undefined {
 	if (value === undefined) return fallback;

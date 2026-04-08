@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
 - Simplified chunk edit operations: removed `append_child`, `prepend_child`, `append_sibling`, `prepend_sibling`, and `replace_body` ops in favor of unified `replace`, `before`, `after`, `prepend`, and `append` with region targeting (`@container`, `@prologue`, `@body`, `@epilogue`)
@@ -10,6 +9,10 @@
 
 ### Added
 
+- LSP server discovery at startup via `discoverStartupLspServers()` to detect configured language servers without blocking initialization
+- LSP startup event channel (`lsp:startup`) for asynchronous server warmup notifications with completion or failure status
+- `LspStartupServerInfo` type for tracking LSP server status including connecting, ready, and error states
+- LSP server status display in `/info` command showing connecting, ready, and error states with color-coded indicators
 - Multi-session support in ACP mode: agents can now manage multiple concurrent sessions with independent state, models, and configurations
 - Session forking in ACP mode: `unstable_forkSession` creates a new session from an existing one's history
 - Session resumption in ACP mode: `unstable_resumeSession` reloads a previously saved session
@@ -66,6 +69,10 @@
 
 ### Changed
 
+- LSP server warmup now runs asynchronously in the background instead of blocking session creation, allowing faster startup
+- LSP servers returned from `createAgentSession()` now include `connecting` status during initial warmup phase
+- Interactive mode now subscribes to LSP startup events and displays status updates and error messages to the user
+- LSP server status in `/info` command now distinguishes between connecting (yellow), ready (green), and error (red) states
 - ACP agent now manages multiple sessions instead of a single session; session lifecycle and configuration are now per-session
 - ACP session creation now uses a factory function to support creating new sessions for different working directories
 - ACP event mapping now accepts optional `getMessageId` callback for stable message ID assignment to assistant chunks

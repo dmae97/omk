@@ -47,6 +47,7 @@ import { type CreateAgentSessionOptions, createAgentSession, discoverAuthStorage
 import type { AgentSession } from "./session/agent-session";
 import { resolveResumableSession, type SessionInfo, SessionManager } from "./session/session-manager";
 import { resolvePromptInput } from "./system-prompt";
+import type { LspStartupServerInfo } from "./tools";
 import { getChangelogPath, getNewEntries, parseChangelog } from "./utils/changelog";
 import type { EventBus } from "./utils/event-bus";
 
@@ -141,7 +142,7 @@ async function runInteractiveMode(
 	versionCheckPromise: Promise<string | undefined>,
 	initialMessages: string[],
 	setExtensionUIContext: (uiContext: ExtensionUIContext, hasUI: boolean) => void,
-	lspServers: Array<{ name: string; status: "ready" | "error"; fileTypes: string[]; error?: string }> | undefined,
+	lspServers: LspStartupServerInfo[] | undefined,
 	mcpManager: MCPManager | undefined,
 	eventBus?: EventBus,
 	initialMessage?: string,

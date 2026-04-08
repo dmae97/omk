@@ -72,6 +72,7 @@ import {
 	SkillProtocolHandler,
 } from "./internal-urls";
 import { disposeAllKernelSessions } from "./ipy/executor";
+import { LSP_STARTUP_EVENT_CHANNEL, type LspStartupEvent } from "./lsp/startup-events";
 import { discoverAndLoadMCPTools, type MCPManager, type MCPToolsLoadResult } from "./mcp";
 import {
 	collectDiscoverableMCPTools,
@@ -105,12 +106,14 @@ import {
 	BashTool,
 	BUILTIN_TOOLS,
 	createTools,
+	discoverStartupLspServers,
 	EditTool,
 	FindTool,
 	GrepTool,
 	getSearchTools,
 	HIDDEN_TOOLS,
 	isSearchProviderPreference,
+	type LspStartupServerInfo,
 	loadSshTool,
 	PythonTool,
 	ReadTool,
@@ -231,8 +234,8 @@ export interface CreateAgentSessionResult {
 	mcpManager?: MCPManager;
 	/** Warning if session was restored with a different model than saved */
 	modelFallbackMessage?: string;
-	/** LSP servers that were warmed up at startup */
-	lspServers?: Array<{ name: string; status: "ready" | "error"; fileTypes: string[]; error?: string }>;
+	/** LSP servers detected for startup; warmup may continue in the background */
+	lspServers?: LspStartupServerInfo[];
 	/** Shared event bus for tool/extension communication */
 	eventBus: EventBus;
 }
@@ -1583,20 +1586,41 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		}
 	}
 
-	// Warm up LSP servers (connects to detected servers)
+	// Start LSP warmup in the background so startup does not block on language server initialization.
 	let lspServers: CreateAgentSessionResult["lspServers"];
 	if (enableLsp && settings.get("lsp.diagnosticsOnWrite")) {
-		try {
-			const result = await logger.timeAsync("warmupLspServers", warmupLspServers, cwd, {
-				onConnecting: serverNames => {
-					if (options.hasUI && serverNames.length > 0) {
-						process.stderr.write(chalk.gray(`Starting LSP servers: ${serverNames.join(", ")}…\n`));
+		lspServers = discoverStartupLspServers(cwd);
+		if (lspServers.length > 0) {
+			void (async () => {
+				try {
+					const result = await logger.timeAsync("warmupLspServers", warmupLspServers, cwd);
+					const serversByName = new Map(result.servers.map(server => [server.name, server] as const));
+					for (const server of lspServers ?? []) {
+						const next = serversByName.get(server.name);
+						if (!next) continue;
+						server.status = next.status;
+						server.fileTypes = next.fileTypes;
+						server.error = next.error;
 					}
-				},
-			});
-			lspServers = result.servers;
-		} catch (error) {
-			logger.warn("LSP server warmup failed", { cwd, error: String(error) });
+					const event: LspStartupEvent = {
+						type: "completed",
+						servers: result.servers,
+					};
+					eventBus.emit(LSP_STARTUP_EVENT_CHANNEL, event);
+				} catch (error) {
+					const errorMessage = error instanceof Error ? error.message : String(error);
+					logger.warn("LSP server warmup failed", { cwd, error: errorMessage });
+					for (const server of lspServers ?? []) {
+						server.status = "error";
+						server.error = errorMessage;
+					}
+					const event: LspStartupEvent = {
+						type: "failed",
+						error: errorMessage,
+					};
+					eventBus.emit(LSP_STARTUP_EVENT_CHANNEL, event);
+				}
+			})();
 		}
 	}
 

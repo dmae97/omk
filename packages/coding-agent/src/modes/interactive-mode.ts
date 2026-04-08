@@ -28,6 +28,7 @@ import type {
 import type { CompactOptions } from "../extensibility/extensions/types";
 import { BUILTIN_SLASH_COMMANDS, loadSlashCommands } from "../extensibility/slash-commands";
 import { resolveLocalUrlToPath } from "../internal-urls";
+import { LSP_STARTUP_EVENT_CHANNEL, type LspStartupEvent } from "../lsp/startup-events";
 import { renameApprovedPlanFile } from "../plan-mode/approved-plan";
 import planModeApprovedPrompt from "../prompts/system/plan-mode-approved.md" with { type: "text" };
 import type { AgentSession, AgentSessionEvent } from "../session/agent-session";
@@ -35,7 +36,7 @@ import { HistoryStorage } from "../session/history-storage";
 import type { SessionContext, SessionManager } from "../session/session-manager";
 import { getRecentSessions } from "../session/session-manager";
 import { STTController, type SttState } from "../stt";
-import type { ExitPlanModeDetails } from "../tools";
+import type { ExitPlanModeDetails, LspStartupServerInfo } from "../tools";
 import type { EventBus } from "../utils/event-bus";
 import { getEditorCommand, openInEditor } from "../utils/external-editor";
 import { popTerminalTitle, pushTerminalTitle, setSessionTerminalTitle } from "../utils/title-generator";
@@ -165,9 +166,7 @@ export class InteractiveMode implements InteractiveModeContext {
 	#pendingModelSwitch: { model: Model; thinkingLevel?: ThinkingLevel } | undefined;
 	#planModeHasEntered = false;
 	#planReviewContainer: Container | undefined;
-	readonly lspServers:
-		| Array<{ name: string; status: "ready" | "error"; fileTypes: string[]; error?: string }>
-		| undefined = undefined;
+	readonly lspServers: LspStartupServerInfo[] | undefined = undefined;
 	mcpManager?: import("../mcp").MCPManager;
 	readonly #toolUiContextSetter: (uiContext: ExtensionUIContext, hasUI: boolean) => void;
 
@@ -186,15 +185,14 @@ export class InteractiveMode implements InteractiveModeContext {
 	#resizeHandler?: () => void;
 	#observerRegistry: SessionObserverRegistry;
 	#eventBus?: EventBus;
+	#eventBusUnsubscribers: Array<() => void> = [];
 
 	constructor(
 		session: AgentSession,
 		version: string,
 		changelogMarkdown: string | undefined = undefined,
 		setToolUIContext: (uiContext: ExtensionUIContext, hasUI: boolean) => void = () => {},
-		lspServers:
-			| Array<{ name: string; status: "ready" | "error"; fileTypes: string[]; error?: string }>
-			| undefined = undefined,
+		lspServers: LspStartupServerInfo[] | undefined = undefined,
 		mcpManager?: import("../mcp").MCPManager,
 		eventBus?: EventBus,
 	) {
@@ -209,6 +207,13 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.lspServers = lspServers;
 		this.mcpManager = mcpManager;
 		this.#eventBus = eventBus;
+		if (eventBus) {
+			this.#eventBusUnsubscribers.push(
+				eventBus.on(LSP_STARTUP_EVENT_CHANNEL, data => {
+					this.#handleLspStartupEvent(data as LspStartupEvent);
+				}),
+			);
+		}
 
 		this.ui = new TUI(new ProcessTerminal(), settings.get("showHardwareCursor"));
 		this.ui.setClearOnShrink(settings.get("clearOnShrink"));
@@ -991,6 +996,10 @@ export class InteractiveMode implements InteractiveModeContext {
 		}
 		this.#extensionUiController.clearExtensionTerminalInputListeners();
 		this.#extensionUiController.clearHookWidgets();
+		for (const unsubscribe of this.#eventBusUnsubscribers) {
+			unsubscribe();
+		}
+		this.#eventBusUnsubscribers = [];
 		this.#observerRegistry.dispose();
 		this.#eventController.dispose();
 		this.statusLine.dispose();
@@ -1087,6 +1096,32 @@ export class InteractiveMode implements InteractiveModeContext {
 
 	showWarning(message: string): void {
 		this.#uiHelpers.showWarning(message);
+	}
+
+	#handleLspStartupEvent(event: LspStartupEvent): void {
+		if (event.type === "failed") {
+			this.showWarning(`LSP startup failed: ${event.error}. It will retry lazily on write.`);
+			return;
+		}
+
+		const readyServers = event.servers.filter(server => server.status === "ready").map(server => server.name);
+		const failedServers = event.servers.filter(server => server.status === "error");
+
+		if (readyServers.length > 0) {
+			this.showStatus(`LSP ready: ${readyServers.join(", ")}`);
+		}
+
+		if (failedServers.length === 1) {
+			const failedServer = failedServers[0];
+			const detail = failedServer.error ? `: ${failedServer.error}` : "";
+			this.showWarning(`LSP startup failed for ${failedServer.name}${detail}. It will retry lazily on write.`);
+			return;
+		}
+
+		if (failedServers.length > 1) {
+			const failedNames = failedServers.map(server => server.name).join(", ");
+			this.showWarning(`LSP startup failed for ${failedNames}. It will retry lazily on write.`);
+		}
 	}
 
 	ensureLoadingAnimation(): void {
