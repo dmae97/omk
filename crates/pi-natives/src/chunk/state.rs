@@ -411,13 +411,39 @@ impl ChunkState {
 		}
 
 		if selector.as_deref() == Some("?") {
-			let mut lines = vec![format!("{} chunks:", params.display_path)];
-			for chunk in self.inner.chunks().filter(|chunk| !chunk.path.is_empty()) {
-				lines.push(format!(
-					"  {}#{}  L{}-L{}",
-					chunk.path, chunk.checksum, chunk.start_line, chunk.end_line,
-				));
+			let mut lines = vec![format!("{} chunks (dot-joined paths):", params.display_path)];
+			fn emit_children(
+				state: &ChunkStateInner,
+				children: &[String],
+				prefix: &str,
+				depth: usize,
+				lines: &mut Vec<String>,
+			) {
+				let count = children.len();
+				for (index, child_path) in children.iter().enumerate() {
+					let Some(child) = state.chunk(child_path) else {
+						continue;
+					};
+					let is_last = index + 1 == count;
+					let connector = if is_last { "└── " } else { "├── " };
+					let leaf = child.path.rsplit('.').next().unwrap_or(&child.path);
+					let dot = if depth > 0 { "." } else { "" };
+					lines.push(format!(
+						"{prefix}{connector}{dot}{leaf}#{}  L{}-L{}",
+						child.checksum, child.start_line, child.end_line,
+					));
+					let continuation = if is_last { "    " } else { "│   " };
+					if let Some(sig) = child.signature.as_deref() {
+						lines.push(format!("{prefix}{continuation}  {sig}"));
+					}
+					if !child.children.is_empty() {
+						let next_prefix = format!("{prefix}{continuation}");
+						emit_children(state, &child.children, &next_prefix, depth + 1, lines);
+					}
+				}
 			}
+			let root_children = &self.inner.tree().root_children;
+			emit_children(&self.inner, root_children, "", 0, &mut lines);
 			return Ok(ReadResult { text: lines.join("\n"), chunk: None });
 		}
 
