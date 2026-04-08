@@ -1185,33 +1185,40 @@ fn compute_insert_spacing(
 	is_prepend_or_append: bool,
 ) -> InsertSpacing {
 	let has_interior_content = container_has_interior_content(state, anchor);
+	let markdown_block_spacing = state.language == "markdown";
 	match pos {
 		InsertPosition::FirstChild => {
-			let spaced = children_want_blank_line_spacing(state, anchor);
+			let spaced = markdown_block_spacing || children_want_blank_line_spacing(state, anchor);
 			InsertSpacing {
 				blank_line_before: false,
 				blank_line_after:  spaced && (!anchor.children.is_empty() || has_interior_content),
 			}
 		},
 		InsertPosition::LastChild => {
-			let spaced = children_want_blank_line_spacing(state, anchor);
+			let spaced = markdown_block_spacing || children_want_blank_line_spacing(state, anchor);
 			InsertSpacing {
 				blank_line_before: spaced && (!anchor.children.is_empty() || has_interior_content),
-				blank_line_after:  false,
+				blank_line_after:  markdown_block_spacing && has_sibling_after(state, anchor),
 			}
 		},
-		InsertPosition::Before => InsertSpacing {
-			blank_line_before: has_sibling_before(state, anchor) && is_spaced_sibling(state, anchor),
-			// When the op is `prepend` (container.prepend), omit the trailing
-			// blank line so the content stays adjacent to the chunk and gets
-			// absorbed as leading trivia on tree rebuild.
-			blank_line_after:  !is_prepend_or_append && is_spaced_sibling(state, anchor),
+		InsertPosition::Before => {
+			let spaced = markdown_block_spacing || is_spaced_sibling(state, anchor);
+			InsertSpacing {
+				blank_line_before: has_sibling_before(state, anchor) && spaced,
+				// When the op is `prepend` (container.prepend), omit the trailing
+				// blank line so the content stays adjacent to the chunk and gets
+				// absorbed as leading trivia on tree rebuild.
+				blank_line_after:  !is_prepend_or_append && spaced,
+			}
 		},
-		InsertPosition::After => InsertSpacing {
-			// When the op is `append` (container.append), omit the leading
-			// blank line so the content stays adjacent to the chunk.
-			blank_line_before: !is_prepend_or_append && is_spaced_sibling(state, anchor),
-			blank_line_after:  has_sibling_after(state, anchor) && is_spaced_sibling(state, anchor),
+		InsertPosition::After => {
+			let spaced = markdown_block_spacing || is_spaced_sibling(state, anchor);
+			InsertSpacing {
+				// When the op is `append` (container.append), omit the leading
+				// blank line so the content stays adjacent to the chunk.
+				blank_line_before: !is_prepend_or_append && spaced,
+				blank_line_after:  has_sibling_after(state, anchor) && spaced,
+			}
 		},
 	}
 }
@@ -2661,6 +2668,60 @@ mod tests {
 		assert!(
 			result.diff_after.contains("- new 2\n\n## Next"),
 			"blank line between list and heading should be preserved: {:?}",
+			result.diff_after
+		);
+	}
+
+	#[test]
+	fn markdown_after_preserves_blank_line_before_next_section() {
+		let source = "# Title\n\n## Alpha\n\nalpha body\n\n## Beta\n\nbeta body\n";
+		let state = state_for(source, "markdown");
+		let section = state
+			.inner()
+			.chunk("section_Title.section_Alpha")
+			.expect("alpha section");
+
+		let result = apply_single_edit(&state, "test.md", EditOperation {
+			op:      ChunkEditOp::After,
+			sel:     Some(format!("{}#{}", section.path, section.checksum)),
+			crc:     None,
+			region:  None,
+			content: Some("## Inserted\n\ninserted body\n".to_owned()),
+			find:    None,
+		});
+
+		assert!(
+			result
+				.diff_after
+				.contains("## Inserted\n\ninserted body\n\n## Beta"),
+			"blank line between inserted section and next heading should be preserved: {:?}",
+			result.diff_after
+		);
+	}
+
+	#[test]
+	fn markdown_body_append_preserves_blank_line_before_next_section() {
+		let source = "# Title\n\n## Alpha\n\nalpha body\n\n## Beta\n\nbeta body\n";
+		let state = state_for(source, "markdown");
+		let section = state
+			.inner()
+			.chunk("section_Title.section_Alpha")
+			.expect("alpha section");
+
+		let result = apply_single_edit(&state, "test.md", EditOperation {
+			op:      ChunkEditOp::Append,
+			sel:     Some(format!("{}#{}@body", section.path, section.checksum)),
+			crc:     None,
+			region:  None,
+			content: Some("\nextra paragraph\n".to_owned()),
+			find:    None,
+		});
+
+		assert!(
+			result
+				.diff_after
+				.contains("alpha body\n\n    extra paragraph\n\n## Beta"),
+			"blank line between appended body content and next heading should be preserved: {:?}",
 			result.diff_after
 		);
 	}
