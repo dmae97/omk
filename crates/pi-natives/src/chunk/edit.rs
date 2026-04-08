@@ -34,19 +34,6 @@ enum InsertPosition {
 }
 
 #[derive(Clone, Copy)]
-enum LeadingTriviaFamily {
-	SlashLineComment,
-	BlockComment,
-	HashComment,
-	DashDashComment,
-	SemicolonComment,
-	PercentComment,
-	AtAttribute,
-	RustAttribute,
-	BracketAttribute,
-}
-
-#[derive(Clone, Copy)]
 struct InsertSpacing {
 	blank_line_before: bool,
 	blank_line_after:  bool,
@@ -391,7 +378,6 @@ fn apply_replace(
 	let mut replacement =
 		normalize_inserted_content(content, &target_indent, Some(file_indent_step), file_indent_char);
 	if target.region.is_none() {
-		replacement = preserve_attached_leading_trivia(state, &anchor, &replacement);
 		if !replacement.is_empty()
 			&& !replacement.ends_with('\n')
 			&& anchor.end_line < state.tree.line_count
@@ -729,101 +715,6 @@ fn normalize_inserted_content(
 		normalized = reindent_inserted_block(&normalized, target_indent, file_indent_step);
 	}
 	normalized
-}
-
-fn preserve_attached_leading_trivia(
-	state: &ChunkStateInner,
-	anchor: &ChunkNode,
-	replacement: &str,
-) -> String {
-	if replacement.is_empty() {
-		return replacement.to_owned();
-	}
-
-	let trivia_start = anchor.start_byte as usize;
-	let trivia_end = anchor.checksum_start_byte as usize;
-	if trivia_end <= trivia_start {
-		return replacement.to_owned();
-	}
-
-	let line_start = state.source[..trivia_start]
-		.rfind('\n')
-		.map_or(0, |pos| pos + 1);
-	let line_prefix = &state.source[line_start..trivia_start];
-	let mut leading_trivia =
-		if !line_prefix.is_empty() && line_prefix.chars().all(|ch| matches!(ch, ' ' | '\t')) {
-			format!("{line_prefix}{}", &state.source[trivia_start..trivia_end])
-		} else {
-			state.source[trivia_start..trivia_end].to_owned()
-		};
-	if let Some(last_newline) = leading_trivia.rfind('\n')
-		&& leading_trivia[last_newline + 1..]
-			.chars()
-			.all(|ch| matches!(ch, ' ' | '\t' | '\r'))
-	{
-		leading_trivia.truncate(last_newline + 1);
-	}
-	if leading_trivia.trim().is_empty()
-		|| replacement.starts_with(&leading_trivia)
-		|| replacement_supplies_leading_trivia(&leading_trivia, replacement)
-	{
-		return replacement.to_owned();
-	}
-
-	let mut combined = String::with_capacity(leading_trivia.len() + replacement.len());
-	combined.push_str(&leading_trivia);
-	combined.push_str(replacement);
-	combined
-}
-
-fn replacement_supplies_leading_trivia(leading_trivia: &str, replacement: &str) -> bool {
-	let Some(family) = detect_leading_trivia_family(leading_trivia) else {
-		return false;
-	};
-	let Some(first_non_empty_line) = replacement.lines().find(|line| !line.trim().is_empty()) else {
-		return false;
-	};
-	matches_leading_trivia_family(family, first_non_empty_line.trim_start())
-}
-
-fn detect_leading_trivia_family(text: &str) -> Option<LeadingTriviaFamily> {
-	let first_non_empty_line = text.lines().find(|line| !line.trim().is_empty())?;
-	let trimmed = first_non_empty_line.trim_start();
-	if trimmed.starts_with("//") {
-		Some(LeadingTriviaFamily::SlashLineComment)
-	} else if trimmed.starts_with("/*") || trimmed.starts_with('*') {
-		Some(LeadingTriviaFamily::BlockComment)
-	} else if trimmed.starts_with("#[") {
-		Some(LeadingTriviaFamily::RustAttribute)
-	} else if trimmed.starts_with('@') {
-		Some(LeadingTriviaFamily::AtAttribute)
-	} else if trimmed.starts_with('[') && trimmed.ends_with(']') {
-		Some(LeadingTriviaFamily::BracketAttribute)
-	} else if trimmed.starts_with("--") {
-		Some(LeadingTriviaFamily::DashDashComment)
-	} else if trimmed.starts_with(';') {
-		Some(LeadingTriviaFamily::SemicolonComment)
-	} else if trimmed.starts_with('%') {
-		Some(LeadingTriviaFamily::PercentComment)
-	} else if trimmed.starts_with('#') {
-		Some(LeadingTriviaFamily::HashComment)
-	} else {
-		None
-	}
-}
-
-fn matches_leading_trivia_family(family: LeadingTriviaFamily, line: &str) -> bool {
-	match family {
-		LeadingTriviaFamily::SlashLineComment => line.starts_with("//"),
-		LeadingTriviaFamily::BlockComment => line.starts_with("/*") || line.starts_with('*'),
-		LeadingTriviaFamily::HashComment => line.starts_with('#') && !line.starts_with("#["),
-		LeadingTriviaFamily::DashDashComment => line.starts_with("--"),
-		LeadingTriviaFamily::SemicolonComment => line.starts_with(';'),
-		LeadingTriviaFamily::PercentComment => line.starts_with('%'),
-		LeadingTriviaFamily::AtAttribute => line.starts_with('@'),
-		LeadingTriviaFamily::RustAttribute => line.starts_with("#["),
-		LeadingTriviaFamily::BracketAttribute => line.starts_with('[') && line.ends_with(']'),
-	}
 }
 
 fn line_offsets(text: &str) -> Vec<usize> {
@@ -1707,6 +1598,36 @@ mod tests {
 			"expected no tab-indented body, got {:?}",
 			result.diff_after
 		);
+	}
+
+	#[test]
+	fn whole_chunk_replace_does_not_duplicate_attributes() {
+		let source = "#[napi]\nfn close() {\n    old();\n}\n";
+		let state = state_for(source, "rust");
+		let chunk = state.inner().chunk("fn_close").expect("fn_close");
+		// The chunk range should include the #[napi] attribute.
+		assert_eq!(chunk.start_line, 1, "chunk should start at the attribute line");
+
+		let result = apply_single_edit(
+			&state,
+			"test.rs",
+			EditOperation {
+				op:      ChunkEditOp::Replace,
+				sel:     Some("fn_close".to_owned()),
+				crc:     Some(chunk.checksum.clone()),
+				region:  None,
+				content: Some("/// doc\n#[napi]\nfn close() {\n    new();\n}".to_owned()),
+				find:    None,
+			},
+		);
+
+		let occurrences = result.diff_after.matches("#[napi]").count();
+		assert_eq!(
+			occurrences, 1,
+			"expected exactly one #[napi] attribute, got {occurrences}. Full text:\n{}",
+			result.diff_after
+		);
+		assert!(result.diff_after.contains("new()"), "replacement body should be present");
 	}
 
 	#[test]
