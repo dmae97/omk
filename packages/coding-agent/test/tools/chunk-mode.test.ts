@@ -579,4 +579,16 @@ describe("chunk mode tools", () => {
 		expect(text).toContain("def greet(name):");
 		expect(text).toContain("# Results");
 	});
+	it("renders missing edit selectors with a tree of available children", async () => {
+		const filePath = path.join(tmpDir, "server.ts");
+		await Bun.write(filePath, buildLargeTypescriptFixture());
+		const editTool = new EditTool(createSession(tmpDir));
+
+		await expect(
+			editTool.execute("chunk-edit-missing-selector", {
+				path: filePath,
+				edits: [{ sel: "class_Server.fn_missing", op: "before", content: "  noop(): void {}" }],
+			}),
+		).rejects.toThrow(/Direct children of "class_Server":\n└── \.fn_handleError#[A-Z]{4}\s+L\d+-L\d+/);
+	});
 });

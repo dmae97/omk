@@ -11,8 +11,8 @@ use super::{
 	build_chunk_tree,
 	indent::{detect_file_indent_char, detect_file_indent_step, normalize_to_tabs},
 	resolve::{
-		ParsedSelector, chunk_region_range, format_region_ref, resolve_chunk_selector,
-		resolve_chunk_with_crc, split_selector_crc_and_region,
+		ParsedSelector, chunk_region_range, format_region_ref, format_selector_tree,
+		resolve_chunk_selector, resolve_chunk_with_crc, split_selector_crc_and_region,
 	},
 };
 use crate::chunk::types::{
@@ -412,38 +412,7 @@ impl ChunkState {
 
 		if selector.as_deref() == Some("?") {
 			let mut lines = vec![format!("{} chunks (dot-joined paths):", params.display_path)];
-			fn emit_children(
-				state: &ChunkStateInner,
-				children: &[String],
-				prefix: &str,
-				depth: usize,
-				lines: &mut Vec<String>,
-			) {
-				let count = children.len();
-				for (index, child_path) in children.iter().enumerate() {
-					let Some(child) = state.chunk(child_path) else {
-						continue;
-					};
-					let is_last = index + 1 == count;
-					let connector = if is_last { "└── " } else { "├── " };
-					let leaf = child.path.rsplit('.').next().unwrap_or(&child.path);
-					let dot = if depth > 0 { "." } else { "" };
-					lines.push(format!(
-						"{prefix}{connector}{dot}{leaf}#{}  L{}-L{}",
-						child.checksum, child.start_line, child.end_line,
-					));
-					let continuation = if is_last { "    " } else { "│   " };
-					if let Some(sig) = child.signature.as_deref() {
-						lines.push(format!("{prefix}{continuation}  {sig}"));
-					}
-					if !child.children.is_empty() {
-						let next_prefix = format!("{prefix}{continuation}");
-						emit_children(state, &child.children, &next_prefix, depth + 1, lines);
-					}
-				}
-			}
-			let root_children = &self.inner.tree().root_children;
-			emit_children(&self.inner, root_children, "", 0, &mut lines);
+			lines.extend(format_selector_tree(self.inner.tree(), &self.inner.tree().root_children, false));
 			return Ok(ReadResult { text: lines.join("\n"), chunk: None });
 		}
 

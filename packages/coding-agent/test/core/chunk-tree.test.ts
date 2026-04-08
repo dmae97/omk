@@ -645,7 +645,7 @@ describe("content prefix stripping", () => {
 });
 
 describe("chunk path resolution errors", () => {
-	test("unknown leaf under an existing parent lists every direct child path", () => {
+	test("unknown leaf under an existing parent lists direct children as a tree", () => {
 		let message = "";
 		try {
 			applyEdit({
@@ -663,9 +663,9 @@ describe("chunk path resolution errors", () => {
 		} catch (err) {
 			message = (err as Error).message;
 		}
-		expect(message).toContain('Direct children of "class_Worker"');
-		expect(message).toContain("class_Worker.constructor");
-		expect(message).toContain("class_Worker.fn_run");
+		expect(message).toContain('Direct children of "class_Worker":');
+		expect(message).toMatch(/├── \.constructor#[A-Z]{4}\s+L\d+-L\d+/);
+		expect(message).toMatch(/└── \.fn_run#[A-Z]{4}\s+L\d+-L\d+/);
 	});
 });
 

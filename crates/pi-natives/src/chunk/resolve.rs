@@ -462,15 +462,6 @@ fn kind_path_matches(candidate: &ChunkNode, kind_segments: &[&str]) -> bool {
 			})
 }
 
-/// Format a chunk path with its CRC suffix, e.g. `fn_start#ABCD`.
-fn format_chunk_ref(tree: &ChunkTree, path: &str) -> String {
-	if let Some(chunk) = find_chunk_by_path(tree, path) {
-		format!("{}#{}", path, chunk.checksum)
-	} else {
-		path.to_owned()
-	}
-}
-
 /// Format a `ChunkNode` as `path#CRC`.
 fn format_node_ref(chunk: &ChunkNode) -> String {
 	if chunk.path.is_empty() {
@@ -480,24 +471,60 @@ fn format_node_ref(chunk: &ChunkNode) -> String {
 	}
 }
 
+pub fn format_selector_tree(
+	tree: &ChunkTree,
+	children: &[String],
+	leading_dot_on_first_level: bool,
+) -> Vec<String> {
+	fn emit_children(
+		tree: &ChunkTree,
+		children: &[String],
+		prefix: &str,
+		depth: usize,
+		leading_dot_on_first_level: bool,
+		lines: &mut Vec<String>,
+	) {
+		let count = children.len();
+		for (index, child_path) in children.iter().enumerate() {
+			let Some(child) = find_chunk_by_path(tree, child_path) else {
+				continue;
+			};
+			let is_last = index + 1 == count;
+			let connector = if is_last { "└── " } else { "├── " };
+			let leaf = child.path.rsplit('.').next().unwrap_or(child.path.as_str());
+			let dot = if depth > 0 || leading_dot_on_first_level { "." } else { "" };
+			lines.push(format!(
+				"{prefix}{connector}{dot}{leaf}#{}  L{}-L{}",
+				child.checksum, child.start_line, child.end_line,
+			));
+			let continuation = if is_last { "    " } else { "│   " };
+			if let Some(signature) = child.signature.as_deref() {
+				lines.push(format!("{prefix}{continuation}  {signature}"));
+			}
+			if !child.children.is_empty() {
+				let next_prefix = format!("{prefix}{continuation}");
+				emit_children(tree, &child.children, next_prefix.as_str(), depth + 1, false, lines);
+			}
+		}
+	}
+
+	let mut lines = Vec::new();
+	emit_children(tree, children, "", 0, leading_dot_on_first_level, &mut lines);
+	lines
+}
+
 fn build_not_found_error(tree: &ChunkTree, cleaned: &str) -> String {
 	let (direct_children_parent, direct_children, matched_empty_prefix) =
 		matching_prefix_context(tree, cleaned);
-	let available_paths = tree
-		.chunks
-		.iter()
-		.filter(|chunk| !chunk.path.is_empty() && !chunk.path.contains('.'))
-		.map(format_node_ref)
-		.collect::<Vec<_>>();
 	let similarity = suggest_chunk_paths(tree, cleaned, 8);
 
 	let hint = if let Some(parent) = direct_children_parent {
-		let children_with_crc = direct_children
-			.iter()
-			.map(|child| format_chunk_ref(tree, child))
-			.collect::<Vec<_>>()
-			.join(", ");
-		format!(" Direct children of \"{parent}\": {children_with_crc}.")
+		let tree_lines = format_selector_tree(tree, &direct_children, true);
+		if tree_lines.is_empty() {
+			format!(" Direct children of \"{parent}\": none.")
+		} else {
+			format!(" Direct children of \"{parent}\":\n{}", tree_lines.join("\n"))
+		}
 	} else if let Some(prefix) = matched_empty_prefix {
 		if similarity.is_empty() {
 			format!(" The prefix \"{prefix}\" exists but has no child chunks.")
@@ -509,16 +536,26 @@ fn build_not_found_error(tree: &ChunkTree, cleaned: &str) -> String {
 		}
 	} else if !similarity.is_empty() {
 		format!(" Similar paths: {}.", similarity.join(", "))
-	} else if !available_paths.is_empty() {
-		format!(" Available top-level chunks: {}.", available_paths.join(", "))
 	} else {
-		" Re-read the file to see available chunk paths.".to_owned()
+		let tree_lines = format_selector_tree(tree, &tree.root_children, false);
+		if tree_lines.is_empty() {
+			" Re-read the file to see available chunk paths.".to_owned()
+		} else {
+			format!(" Available top-level chunks:\n{}", tree_lines.join("\n"))
+		}
 	};
 
-	format!(
-		"Chunk path not found: \"{cleaned}\".{hint} Re-read the file to see the full chunk tree \
-		 with paths and checksums."
-	)
+	if hint.contains('\n') {
+		format!(
+			"Chunk path not found: \"{cleaned}\".{hint}\nRe-read the file to see the full chunk tree \
+			 with paths and checksums."
+		)
+	} else {
+		format!(
+			"Chunk path not found: \"{cleaned}\".{hint} Re-read the file to see the full chunk \
+			 tree with paths and checksums."
+		)
+	}
 }
 
 fn matching_prefix_context(
