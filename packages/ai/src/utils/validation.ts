@@ -138,6 +138,53 @@ function tryParseLeadingJsonContainer(value: string): unknown | undefined {
 	return undefined;
 }
 
+/** Maximum single-character edits to attempt when healing malformed JSON. */
+const MAX_HEAL_DISTANCE = 3;
+const BRACKET_CHARS = ["[", "]", "{", "}"] as const;
+
+/**
+ * Attempts to heal near-valid JSON by applying single-character edits near the
+ * end of the string. LLMs (especially smaller ones) sometimes produce JSON with
+ * a single misplaced, extra, or wrong bracket at the end — e.g. `"}]"` becomes
+ * `"]}"` or gets an extra `}` appended. This function tries:
+ *   1. Removing a single character from the last few positions
+ *   2. Replacing a single character in the last few positions with each bracket type
+ *
+ * Returns the parsed value on success, undefined on failure.
+ */
+function tryHealMalformedJson(value: string): unknown | undefined {
+	// Verify it actually fails to parse
+	try {
+		return JSON.parse(value) as unknown;
+	} catch {}
+
+	// Only attempt edits within the last few characters — the error is always
+	// a bracket issue at the tail for the class of LLM mistakes this targets.
+	const tailStart = Math.max(0, value.length - (MAX_HEAL_DISTANCE * 2 + 1));
+
+	// Strategy 1: remove a single character from the tail
+	for (let i = tailStart; i < value.length; i += 1) {
+		const candidate = value.slice(0, i) + value.slice(i + 1);
+		try {
+			return JSON.parse(candidate) as unknown;
+		} catch {}
+	}
+
+	// Strategy 2: replace a single character in the tail with each bracket type
+	for (let i = tailStart; i < value.length; i += 1) {
+		const original = value[i];
+		for (const replacement of BRACKET_CHARS) {
+			if (replacement === original) continue;
+			const candidate = value.slice(0, i) + replacement + value.slice(i + 1);
+			try {
+				return JSON.parse(candidate) as unknown;
+			} catch {}
+		}
+	}
+
+	return undefined;
+}
+
 /**
  * Attempts to parse a string as JSON if it looks like a JSON literal and
  * the parsed result matches one of the expected types.
@@ -185,9 +232,15 @@ function tryParseJsonForTypes(value: string, expectedTypes: string[]): { value: 
 		}
 	} catch {
 		if (looksJsonObject || looksJsonArray) {
-			const parsed = tryParseLeadingJsonContainer(trimmed);
-			if (parsed !== undefined && matchesExpectedType(parsed, expectedTypes)) {
-				return { value: parsed, changed: true };
+			// Try extracting a valid JSON prefix (handles trailing junk after balanced container)
+			const leading = tryParseLeadingJsonContainer(trimmed);
+			if (leading !== undefined && matchesExpectedType(leading, expectedTypes)) {
+				return { value: leading, changed: true };
+			}
+			// Try healing single-character bracket errors near the end of the string
+			const healed = tryHealMalformedJson(trimmed);
+			if (healed !== undefined && matchesExpectedType(healed, expectedTypes)) {
+				return { value: healed, changed: true };
 			}
 		}
 		return { value, changed: false };

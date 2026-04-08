@@ -1,9 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
 - Removed `coerceNullStrings` function and its automatic null-string coercion behavior from JSON parsing
+
+### Added
+
+- Added automatic healing of malformed JSON with single-character bracket errors at the end of strings, improving LLM tool argument parsing robustness
 
 ## [13.19.0] - 2026-04-05
 

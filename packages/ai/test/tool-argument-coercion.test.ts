@@ -480,4 +480,86 @@ describe("Tool argument coercion", () => {
 		const result = validateToolArguments(tool, toolCall);
 		expect(result).toEqual({ required: "value" });
 	});
+
+	it("heals stringified array with extra bracket at end", () => {
+		const tool: Tool = {
+			name: "heal-1",
+			description: "",
+			parameters: Type.Object({
+				path: Type.String(),
+				edits: Type.Array(
+					Type.Object({
+						target: Type.String(),
+						content: Type.String(),
+					}),
+				),
+			}),
+		};
+
+		// Model wrote "]}]" at the end instead of "}]" -- extra ] between " and }
+		const toolCall: ToolCall = {
+			type: "toolCall",
+			id: "call-heal-1",
+			name: "heal-1",
+			arguments: {
+				path: "foo.ts",
+				edits: '[{"target": "fn_foo#ABCD", "content": "code}"}]}]',
+			},
+		};
+
+		const result = validateToolArguments(tool, toolCall);
+		expect(result.edits).toEqual([{ target: "fn_foo#ABCD", content: "code}" }]);
+	});
+
+	it("heals stringified array with wrong bracket type at end", () => {
+		const tool: Tool = {
+			name: "heal-2",
+			description: "",
+			parameters: Type.Object({
+				path: Type.String(),
+				edits: Type.Array(
+					Type.Object({
+						target: Type.String(),
+						content: Type.String(),
+					}),
+				),
+			}),
+		};
+
+		// Model wrote "}}" at the end instead of "}]" -- wrong bracket type
+		const toolCall: ToolCall = {
+			type: "toolCall",
+			id: "call-heal-2",
+			name: "heal-2",
+			arguments: {
+				path: "bar.ts",
+				edits: '[{"target": "fn_bar#1234", "content": "return 1}"}}',
+			},
+		};
+
+		const result = validateToolArguments(tool, toolCall);
+		expect(result.edits).toEqual([{ target: "fn_bar#1234", content: "return 1}" }]);
+	});
+
+	it("does not heal deeply broken JSON strings", () => {
+		const tool: Tool = {
+			name: "heal-3",
+			description: "",
+			parameters: Type.Object({
+				edits: Type.Array(Type.Object({ target: Type.String() })),
+			}),
+		};
+
+		// Structural error deep in the middle -- should NOT be healed
+		const toolCall: ToolCall = {
+			type: "toolCall",
+			id: "call-heal-3",
+			name: "heal-3",
+			arguments: {
+				edits: '[{"target": invalid json here}]',
+			},
+		};
+
+		expect(() => validateToolArguments(tool, toolCall)).toThrow("Validation failed");
+	});
 });
