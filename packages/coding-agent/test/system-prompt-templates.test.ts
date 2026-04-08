@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { renderPromptTemplate, type TemplateContext } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
 import { buildSystemPrompt } from "@oh-my-pi/pi-coding-agent/system-prompt";
+import { prompt } from "@oh-my-pi/pi-utils";
 import Handlebars from "handlebars";
 
 const baseGitContext = {
@@ -16,7 +16,7 @@ const baseGitContext = {
 
 const systemPromptsDir = path.resolve(import.meta.dir, "../src/prompts/system");
 
-const baseRenderContext: TemplateContext = {
+const baseRenderContext: prompt.TemplateContext = {
 	TASK_TOOL_NAME: "task",
 	ARGUMENTS: "alpha beta",
 	agent: "You are a delegated worker",
@@ -101,7 +101,7 @@ describe("system Handlebars prompt templates", () => {
 		const templatePath = path.join(systemPromptsDir, "custom-system-prompt.md");
 		const template = await Bun.file(templatePath).text();
 
-		const both = renderPromptTemplate(template, {
+		const both = prompt.render(template, {
 			...baseRenderContext,
 			contextFiles: [{ path: "a.txt", content: "A" }],
 			git: { ...baseGitContext, isRepo: true },
@@ -110,7 +110,7 @@ describe("system Handlebars prompt templates", () => {
 		expect(both).toContain("## Context");
 		expect(both).toContain("## Version Control");
 
-		const contextOnly = renderPromptTemplate(template, {
+		const contextOnly = prompt.render(template, {
 			...baseRenderContext,
 			contextFiles: [{ path: "a.txt", content: "A" }],
 			git: { isRepo: false },
@@ -119,7 +119,7 @@ describe("system Handlebars prompt templates", () => {
 		expect(contextOnly).toContain("## Context");
 		expect(contextOnly).not.toContain("## Version Control");
 
-		const gitOnly = renderPromptTemplate(template, {
+		const gitOnly = prompt.render(template, {
 			...baseRenderContext,
 			contextFiles: [],
 			git: {
@@ -134,7 +134,7 @@ describe("system Handlebars prompt templates", () => {
 		expect(gitOnly).not.toContain("## Context");
 		expect(gitOnly).toContain("## Version Control");
 
-		const neither = renderPromptTemplate(template, {
+		const neither = prompt.render(template, {
 			...baseRenderContext,
 			contextFiles: [],
 			git: { isRepo: false },
@@ -149,7 +149,7 @@ describe("system Handlebars prompt templates", () => {
 		const template = await Bun.file(templatePath).text();
 
 		const baseTools = baseRenderContext.tools as string[];
-		const withInspectImage = renderPromptTemplate(template, {
+		const withInspectImage = prompt.render(template, {
 			...baseRenderContext,
 			tools: [...baseTools, "inspect_image"],
 		});
@@ -157,7 +157,7 @@ describe("system Handlebars prompt templates", () => {
 		expect(withInspectImage).toContain("**MUST** use `inspect_image` over `read`");
 		expect(withInspectImage).toContain("Write a specific `question` for `inspect_image`");
 
-		const withoutInspectImage = renderPromptTemplate(template, {
+		const withoutInspectImage = prompt.render(template, {
 			...baseRenderContext,
 			tools: baseTools.filter((tool: string) => tool !== "inspect_image"),
 		});
@@ -168,7 +168,7 @@ describe("system Handlebars prompt templates", () => {
 		const templatePath = path.join(systemPromptsDir, "system-prompt.md");
 		const template = await Bun.file(templatePath).text();
 
-		const rendered = renderPromptTemplate(template, {
+		const rendered = prompt.render(template, {
 			...baseRenderContext,
 			mcpDiscoveryMode: true,
 			hasMCPDiscoveryServers: true,

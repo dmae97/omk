@@ -3,13 +3,13 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { FileType, glob } from "@oh-my-pi/pi-natives";
-import { CONFIG_DIR_NAME, getConfigDirName, getProjectDir, tryParseJson } from "@oh-my-pi/pi-utils";
+import { CONFIG_DIR_NAME, getConfigDirName, getProjectDir, parseFrontmatter, tryParseJson } from "@oh-my-pi/pi-utils";
 import { readDirEntries, readFile } from "../capability/fs";
 import { parseRuleConditionAndScope, type Rule, type RuleFrontmatter } from "../capability/rule";
 import type { Skill, SkillFrontmatter } from "../capability/skill";
 import type { LoadContext, LoadResult, SourceMeta } from "../capability/types";
 import { parseThinkingLevel } from "../thinking";
-import { parseFrontmatter } from "../utils/frontmatter";
+
 import { buildPluginDirRoot } from "./plugin-dir-roots";
 
 /**

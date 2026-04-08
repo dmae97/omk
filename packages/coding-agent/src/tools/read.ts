@@ -5,9 +5,8 @@ import type { ImageContent, TextContent } from "@oh-my-pi/pi-ai";
 import { glob } from "@oh-my-pi/pi-natives";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
-import { getRemoteDir, untilAborted } from "@oh-my-pi/pi-utils";
+import { getRemoteDir, prompt, untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
-import { renderPromptTemplate } from "../config/prompt-templates";
 import {
 	type ChunkReadTarget,
 	formatChunkedRead,
@@ -452,10 +451,10 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		this.#inspectImageEnabled = session.settings.get("inspect_image.enabled");
 		this.description =
 			resolveEditMode(session) === "chunk"
-				? renderPromptTemplate(readChunkDescription, {
+				? prompt.render(readChunkDescription, {
 						anchorStyle: resolveAnchorStyle(session.settings),
 					})
-				: renderPromptTemplate(readDescription, {
+				: prompt.render(readDescription, {
 						DEFAULT_LIMIT: String(this.#defaultLimit),
 						DEFAULT_MAX_LINES: String(DEFAULT_MAX_LINES),
 						IS_HASHLINE_MODE: displayMode.hashLines,

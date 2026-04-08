@@ -1,9 +1,8 @@
 import * as fs from "node:fs";
 import path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
-import { logger, once, untilAborted } from "@oh-my-pi/pi-utils";
+import { logger, once, prompt, untilAborted } from "@oh-my-pi/pi-utils";
 import type { BunFile } from "bun";
-import { renderPromptTemplate } from "../config/prompt-templates";
 import { type Theme, theme } from "../modes/theme/theme";
 import lspDescription from "../prompts/tools/lsp.md" with { type: "text" };
 import type { ToolSession } from "../tools";
@@ -1088,7 +1087,7 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 	readonly inline = true;
 
 	constructor(private readonly session: ToolSession) {
-		this.description = renderPromptTemplate(lspDescription);
+		this.description = prompt.render(lspDescription);
 	}
 
 	static createIf(session: ToolSession): LspTool | null {

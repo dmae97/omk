@@ -7,7 +7,7 @@
  * User directory: ~/.codex
  */
 import * as path from "node:path";
-import { logger } from "@oh-my-pi/pi-utils";
+import { logger, parseFrontmatter } from "@oh-my-pi/pi-utils";
 import { registerProvider } from "../capability";
 import type { ContextFile } from "../capability/context-file";
 import { contextFileCapability } from "../capability/context-file";
@@ -28,7 +28,7 @@ import { slashCommandCapability } from "../capability/slash-command";
 import type { CustomTool } from "../capability/tool";
 import { toolCapability } from "../capability/tool";
 import type { LoadContext, LoadResult, SourceMeta } from "../capability/types";
-import { parseFrontmatter } from "../utils/frontmatter";
+
 import {
 	createSourceMeta,
 	discoverExtensionModulePaths,

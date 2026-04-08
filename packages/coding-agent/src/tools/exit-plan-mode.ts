@@ -1,8 +1,7 @@
 import * as fs from "node:fs/promises";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
-import { isEnoent } from "@oh-my-pi/pi-utils";
+import { isEnoent, prompt } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
-import { renderPromptTemplate } from "../config/prompt-templates";
 import exitPlanModeDescription from "../prompts/tools/exit-plan-mode.md" with { type: "text" };
 import type { ToolSession } from ".";
 import { resolvePlanPath } from "./plan-mode-guard";
@@ -49,7 +48,7 @@ export class ExitPlanModeTool implements AgentTool<typeof exitPlanModeSchema, Ex
 	readonly concurrency = "exclusive";
 
 	constructor(private readonly session: ToolSession) {
-		this.description = renderPromptTemplate(exitPlanModeDescription);
+		this.description = prompt.render(exitPlanModeDescription);
 	}
 
 	async execute(

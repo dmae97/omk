@@ -7,8 +7,8 @@
  */
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { StringEnum } from "@oh-my-pi/pi-ai";
+import { prompt } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
-import { renderPromptTemplate } from "../../config/prompt-templates";
 import type { CustomTool, CustomToolContext, RenderResultOptions } from "../../extensibility/custom-tools/types";
 import type { Theme } from "../../modes/theme/theme";
 import webSearchSystemPrompt from "../../prompts/system/web-search.md" with { type: "text" };
@@ -213,7 +213,7 @@ export class SearchTool implements AgentTool<typeof webSearchSchema, SearchRende
 	readonly strict = true;
 
 	constructor(_session: ToolSession) {
-		this.description = renderPromptTemplate(webSearchDescription);
+		this.description = prompt.render(webSearchDescription);
 	}
 
 	async execute(
@@ -231,7 +231,7 @@ export class SearchTool implements AgentTool<typeof webSearchSchema, SearchRende
 export const webSearchCustomTool: CustomTool<typeof webSearchSchema, SearchRenderDetails> = {
 	name: "web_search",
 	label: "Web Search",
-	description: renderPromptTemplate(webSearchDescription),
+	description: prompt.render(webSearchDescription),
 	parameters: webSearchSchema,
 
 	async execute(

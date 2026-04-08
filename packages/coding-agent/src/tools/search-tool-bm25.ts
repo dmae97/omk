@@ -1,7 +1,7 @@
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { type Component, Text } from "@oh-my-pi/pi-tui";
+import { prompt } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
-import { renderPromptTemplate } from "../config/prompt-templates";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import {
 	buildDiscoverableMCPSearchIndex,
@@ -105,7 +105,7 @@ function supportsMCPToolDiscoveryExecution(session: ToolSession): session is MCP
 
 export function renderSearchToolBm25Description(discoverableTools: DiscoverableMCPTool[] = []): string {
 	const summary = summarizeDiscoverableMCPTools(discoverableTools);
-	return renderPromptTemplate(searchToolBm25Description, {
+	return prompt.render(searchToolBm25Description, {
 		discoverableMCPToolCount: summary.toolCount,
 		discoverableMCPServerSummaries: summary.servers.map(formatDiscoverableMCPToolServerSummary),
 		hasDiscoverableMCPServers: summary.servers.length > 0,

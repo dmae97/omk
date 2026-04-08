@@ -1,5 +1,6 @@
-import { logger, truncate } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
+import { truncate } from "./format";
+import * as logger from "./logger";
 
 function stripHtmlComments(content: string): string {
 	return content.replace(/<!--[\s\S]*?-->/g, "");

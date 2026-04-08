@@ -11,7 +11,7 @@
  * rich context for the orchestrating agent to distribute work across
  * multiple reviewer agents based on diff weight and locality.
  */
-import { renderPromptTemplate } from "../../../../config/prompt-templates";
+import { prompt } from "@oh-my-pi/pi-utils";
 import type { CustomCommand, CustomCommandAPI } from "../../../../extensibility/custom-commands/types";
 import type { HookCommandContext } from "../../../../extensibility/hooks/types";
 import reviewRequestTemplate from "../../../../prompts/review-request.md" with { type: "text" };
@@ -209,7 +209,7 @@ function buildReviewPrompt(mode: string, stats: DiffStats, rawDiff: string): str
 		hunksPreview: skipDiff ? getDiffPreview(f.hunks, linesPerFile) : "",
 	}));
 
-	return renderPromptTemplate(reviewRequestTemplate, {
+	return prompt.render(reviewRequestTemplate, {
 		mode,
 		files: filesWithExt,
 		excluded: stats.excluded,

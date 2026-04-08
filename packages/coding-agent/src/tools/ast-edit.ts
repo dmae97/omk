@@ -3,9 +3,8 @@ import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallb
 import { type AstReplaceChange, astEdit } from "@oh-my-pi/pi-natives";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
-import { untilAborted } from "@oh-my-pi/pi-utils";
+import { prompt, untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
-import { renderPromptTemplate } from "../config/prompt-templates";
 import { computeLineHash } from "../edit/modes/hashline";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import type { Theme } from "../modes/theme/theme";
@@ -71,7 +70,7 @@ export class AstEditTool implements AgentTool<typeof astEditSchema, AstEditToolD
 	readonly strict = true;
 	readonly deferrable = true;
 	constructor(private readonly session: ToolSession) {
-		this.description = renderPromptTemplate(astEditDescription);
+		this.description = prompt.render(astEditDescription);
 	}
 
 	async execute(

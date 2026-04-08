@@ -9,10 +9,9 @@ import type {
 } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
-import { isEnoent, untilAborted } from "@oh-my-pi/pi-utils";
+import { isEnoent, prompt, untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { unzipSync, zipSync } from "fflate";
-import { renderPromptTemplate } from "../config/prompt-templates";
 import { stripHashlinePrefixes } from "../edit";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import { createLspWritethrough, type FileDiagnosticsResult, type WritethroughCallback, writethroughNoop } from "../lsp";
@@ -149,7 +148,7 @@ export class WriteTool implements AgentTool<typeof writeSchema, WriteToolDetails
 		this.#writethrough = enableLsp
 			? createLspWritethrough(session.cwd, { enableFormat, enableDiagnostics })
 			: writethroughNoop;
-		this.description = renderPromptTemplate(writeDescription);
+		this.description = prompt.render(writeDescription);
 	}
 
 	async #resolveArchiveWritePath(writePath: string): Promise<ResolvedArchiveWritePath | null> {

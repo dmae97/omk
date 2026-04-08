@@ -4,9 +4,8 @@ import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallb
 import type { ImageContent } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Markdown, Text } from "@oh-my-pi/pi-tui";
-import { getProjectDir } from "@oh-my-pi/pi-utils";
+import { getProjectDir, prompt } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
-import { renderPromptTemplate } from "../config/prompt-templates";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import { executePython, getPreludeDocs, type PythonExecutorOptions } from "../ipy/executor";
 import type { PreludeHelper, PythonStatusEvent } from "../ipy/kernel";
@@ -136,7 +135,7 @@ function renderJsonTree(value: unknown, theme: Theme, expanded: boolean, maxDept
 export function getPythonToolDescription(): string {
 	const helpers = getPreludeDocs();
 	const categories = groupPreludeHelpers(helpers);
-	return renderPromptTemplate(pythonDescription, { categories });
+	return prompt.render(pythonDescription, { categories });
 }
 
 export interface PythonToolOptions {

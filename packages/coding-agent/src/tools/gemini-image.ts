@@ -1,10 +1,9 @@
 import * as os from "node:os";
 import * as path from "node:path";
 import { getAntigravityHeaders, getEnvApiKey, StringEnum } from "@oh-my-pi/pi-ai";
-import { $env, isEnoent, ptree, readSseJson, Snowflake, untilAborted } from "@oh-my-pi/pi-utils";
+import { $env, isEnoent, prompt, ptree, readSseJson, Snowflake, untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import type { ModelRegistry } from "../config/model-registry";
-import { renderPromptTemplate } from "../config/prompt-templates";
 import type { CustomTool } from "../extensibility/custom-tools/types";
 import geminiImageDescription from "../prompts/tools/gemini-image.md" with { type: "text" };
 import { detectSupportedImageMimeTypeFromFile } from "../utils/mime";
@@ -599,7 +598,7 @@ async function parseAntigravitySseForImage(response: Response, signal?: AbortSig
 export const geminiImageTool: CustomTool<typeof geminiImageSchema, GeminiImageToolDetails> = {
 	name: "generate_image",
 	label: "GenerateImage",
-	description: renderPromptTemplate(geminiImageDescription),
+	description: prompt.render(geminiImageDescription),
 	parameters: geminiImageSchema,
 	async execute(_toolCallId, params, _onUpdate, ctx, signal) {
 		return untilAborted(signal, async () => {

@@ -1,5 +1,5 @@
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
-import { renderPromptTemplate } from "../config/prompt-templates";
+import { prompt } from "@oh-my-pi/pi-utils";
 import {
 	createLspWritethrough,
 	type FileDiagnosticsResult,
@@ -194,7 +194,7 @@ export class EditTool implements AgentTool<TInput> {
 		return {
 			chunk: {
 				description: (session: ToolSession) =>
-					renderPromptTemplate(chunkEditDescription, {
+					prompt.render(chunkEditDescription, {
 						anchorStyle: resolveAnchorStyle(session.settings),
 					}),
 				parameters: chunkEditParamsSchema,
@@ -212,7 +212,7 @@ export class EditTool implements AgentTool<TInput> {
 				},
 			},
 			patch: {
-				description: () => renderPromptTemplate(patchDescription),
+				description: () => prompt.render(patchDescription),
 				parameters: patchEditSchema,
 				invalidParamsMessage: "Invalid edit parameters for patch mode.",
 				validate: isPatchParams,
@@ -230,7 +230,7 @@ export class EditTool implements AgentTool<TInput> {
 				},
 			},
 			hashline: {
-				description: () => renderPromptTemplate(hashlineDescription),
+				description: () => prompt.render(hashlineDescription),
 				parameters: hashlineEditParamsSchema,
 				invalidParamsMessage: "Invalid edit parameters for hashline mode.",
 				validate: isHashlineParams,
@@ -246,7 +246,7 @@ export class EditTool implements AgentTool<TInput> {
 				},
 			},
 			replace: {
-				description: () => renderPromptTemplate(replaceDescription),
+				description: () => prompt.render(replaceDescription),
 				parameters: replaceEditSchema,
 				invalidParamsMessage: "Invalid edit parameters for replace mode.",
 				validate: isReplaceParams,

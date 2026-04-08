@@ -50,7 +50,7 @@ import {
 	parseRateLimitReason,
 } from "@oh-my-pi/pi-ai";
 import { killTree, MacOSPowerAssertion, type SearchDb } from "@oh-my-pi/pi-natives";
-import { abortableSleep, getAgentDbPath, isEnoent, logger, setNativeKillTree } from "@oh-my-pi/pi-utils";
+import { abortableSleep, getAgentDbPath, isEnoent, logger, prompt, setNativeKillTree } from "@oh-my-pi/pi-utils";
 import type { AsyncJob, AsyncJobManager } from "../async";
 import type { Rule } from "../capability/rule";
 import { MODEL_ROLE_IDS, type ModelRegistry } from "../config/model-registry";
@@ -61,7 +61,7 @@ import {
 	type ResolvedModelRoleValue,
 	resolveModelRoleValue,
 } from "../config/model-resolver";
-import { expandPromptTemplate, type PromptTemplate, renderPromptTemplate } from "../config/prompt-templates";
+import { expandPromptTemplate, type PromptTemplate } from "../config/prompt-templates";
 import type { Settings, SkillsSettings } from "../config/settings";
 import { normalizeDiff, normalizeToLF, ParseError, previewPatch, stripBom } from "../edit";
 import { type BashResult, executeBash as executeBashCommand } from "../exec/bash-executor";
@@ -317,7 +317,7 @@ interface HandoffOptions {
 
 /** Standard thinking levels */
 
-const AUTO_HANDOFF_THRESHOLD_FOCUS = renderPromptTemplate(autoHandoffThresholdFocusPrompt);
+const AUTO_HANDOFF_THRESHOLD_FOCUS = prompt.render(autoHandoffThresholdFocusPrompt);
 
 type RetryFallbackChains = Record<string, string[]>;
 
@@ -1139,7 +1139,7 @@ export class AgentSession {
 		if (this.#pendingTtsrInjections.length === 0) return undefined;
 		const rules = this.#pendingTtsrInjections;
 		const content = rules
-			.map(r => renderPromptTemplate(ttsrInterruptTemplate, { name: r.name, path: r.path, content: r.content }))
+			.map(r => prompt.render(ttsrInterruptTemplate, { name: r.name, path: r.path, content: r.content }))
 			.join("\n\n");
 		this.#pendingTtsrInjections = [];
 		return { content, rules };
@@ -2210,7 +2210,7 @@ export class AgentSession {
 			throw error;
 		}
 
-		const content = renderPromptTemplate(planModeReferencePrompt, {
+		const content = prompt.render(planModeReferencePrompt, {
 			planFilePath,
 			planContent,
 		});
@@ -2247,7 +2247,7 @@ export class AgentSession {
 				: sessionPlanUrl;
 
 		const planExists = fs.existsSync(resolvedPlanPath);
-		const content = renderPromptTemplate(planModeActivePrompt, {
+		const content = prompt.render(planModeActivePrompt, {
 			planFilePath: displayPlanPath,
 			planExists,
 			askToolName: "ask",
@@ -3773,7 +3773,7 @@ export class AgentSession {
 		}
 
 		// Build the handoff prompt
-		const handoffPrompt = renderPromptTemplate(handoffDocumentPrompt, {
+		const handoffPrompt = prompt.render(handoffDocumentPrompt, {
 			additionalFocus: customInstructions,
 		});
 
@@ -4041,7 +4041,7 @@ export class AgentSession {
 			return;
 		}
 
-		const reminder = renderPromptTemplate(planModeToolDecisionReminderPrompt, {
+		const reminder = prompt.render(planModeToolDecisionReminderPrompt, {
 			askToolName: "ask",
 			exitToolName: "exit_plan_mode",
 		});
@@ -4088,7 +4088,7 @@ export class AgentSession {
 			return undefined;
 		}
 
-		const eagerTodoReminder = renderPromptTemplate(eagerTodoPrompt);
+		const eagerTodoReminder = prompt.render(eagerTodoPrompt);
 
 		return {
 			message: {

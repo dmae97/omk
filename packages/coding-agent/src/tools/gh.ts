@@ -1,9 +1,8 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
-import { abortableSleep, isEnoent, untilAborted } from "@oh-my-pi/pi-utils";
+import { abortableSleep, isEnoent, prompt, untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
-import { renderPromptTemplate } from "../config/prompt-templates";
 import ghIssueViewDescription from "../prompts/tools/gh-issue-view.md" with { type: "text" };
 import ghPrCheckoutDescription from "../prompts/tools/gh-pr-checkout.md" with { type: "text" };
 import ghPrDiffDescription from "../prompts/tools/gh-pr-diff.md" with { type: "text" };
@@ -1902,7 +1901,7 @@ function buildTextResult(
 export class GhRepoViewTool implements AgentTool<typeof ghRepoViewSchema, GhToolDetails> {
 	readonly name = "gh_repo_view";
 	readonly label = "GitHub Repo";
-	readonly description = renderPromptTemplate(ghRepoViewDescription);
+	readonly description = prompt.render(ghRepoViewDescription);
 	readonly parameters = ghRepoViewSchema;
 	readonly strict = true;
 
@@ -1943,7 +1942,7 @@ export class GhRepoViewTool implements AgentTool<typeof ghRepoViewSchema, GhTool
 export class GhIssueViewTool implements AgentTool<typeof ghIssueViewSchema, GhToolDetails> {
 	readonly name = "gh_issue_view";
 	readonly label = "GitHub Issue";
-	readonly description = renderPromptTemplate(ghIssueViewDescription);
+	readonly description = prompt.render(ghIssueViewDescription);
 	readonly parameters = ghIssueViewSchema;
 	readonly strict = true;
 
@@ -1980,7 +1979,7 @@ export class GhIssueViewTool implements AgentTool<typeof ghIssueViewSchema, GhTo
 export class GhPrViewTool implements AgentTool<typeof ghPrViewSchema, GhToolDetails> {
 	readonly name = "gh_pr_view";
 	readonly label = "GitHub PR";
-	readonly description = renderPromptTemplate(ghPrViewDescription);
+	readonly description = prompt.render(ghPrViewDescription);
 	readonly parameters = ghPrViewSchema;
 	readonly strict = true;
 
@@ -2024,7 +2023,7 @@ export class GhPrViewTool implements AgentTool<typeof ghPrViewSchema, GhToolDeta
 export class GhPrDiffTool implements AgentTool<typeof ghPrDiffSchema, GhToolDetails> {
 	readonly name = "gh_pr_diff";
 	readonly label = "GitHub PR Diff";
-	readonly description = renderPromptTemplate(ghPrDiffDescription);
+	readonly description = prompt.render(ghPrDiffDescription);
 	readonly parameters = ghPrDiffSchema;
 	readonly strict = true;
 
@@ -2073,7 +2072,7 @@ export class GhPrDiffTool implements AgentTool<typeof ghPrDiffSchema, GhToolDeta
 export class GhPrCheckoutTool implements AgentTool<typeof ghPrCheckoutSchema, GhToolDetails> {
 	readonly name = "gh_pr_checkout";
 	readonly label = "GitHub PR Checkout";
-	readonly description = renderPromptTemplate(ghPrCheckoutDescription);
+	readonly description = prompt.render(ghPrCheckoutDescription);
 	readonly parameters = ghPrCheckoutSchema;
 	readonly strict = true;
 
@@ -2204,7 +2203,7 @@ export class GhPrCheckoutTool implements AgentTool<typeof ghPrCheckoutSchema, Gh
 export class GhPrPushTool implements AgentTool<typeof ghPrPushSchema, GhToolDetails> {
 	readonly name = "gh_pr_push";
 	readonly label = "GitHub PR Push";
-	readonly description = renderPromptTemplate(ghPrPushDescription);
+	readonly description = prompt.render(ghPrPushDescription);
 	readonly parameters = ghPrPushSchema;
 	readonly strict = true;
 
@@ -2265,7 +2264,7 @@ export class GhPrPushTool implements AgentTool<typeof ghPrPushSchema, GhToolDeta
 export class GhSearchIssuesTool implements AgentTool<typeof ghSearchIssuesSchema, GhToolDetails> {
 	readonly name = "gh_search_issues";
 	readonly label = "GitHub Issue Search";
-	readonly description = renderPromptTemplate(ghSearchIssuesDescription);
+	readonly description = prompt.render(ghSearchIssuesDescription);
 	readonly parameters = ghSearchIssuesSchema;
 	readonly strict = true;
 
@@ -2300,7 +2299,7 @@ export class GhSearchIssuesTool implements AgentTool<typeof ghSearchIssuesSchema
 export class GhSearchPrsTool implements AgentTool<typeof ghSearchPrsSchema, GhToolDetails> {
 	readonly name = "gh_search_prs";
 	readonly label = "GitHub PR Search";
-	readonly description = renderPromptTemplate(ghSearchPrsDescription);
+	readonly description = prompt.render(ghSearchPrsDescription);
 	readonly parameters = ghSearchPrsSchema;
 	readonly strict = true;
 
@@ -2335,7 +2334,7 @@ export class GhSearchPrsTool implements AgentTool<typeof ghSearchPrsSchema, GhTo
 export class GhRunWatchTool implements AgentTool<typeof ghRunWatchSchema, GhToolDetails> {
 	readonly name = "gh_run_watch";
 	readonly label = "GitHub Run Watch";
-	readonly description = renderPromptTemplate(ghRunWatchDescription);
+	readonly description = prompt.render(ghRunWatchDescription);
 	readonly parameters = ghRunWatchSchema;
 	readonly strict = true;
 

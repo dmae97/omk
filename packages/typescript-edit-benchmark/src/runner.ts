@@ -10,8 +10,8 @@ import * as path from "node:path";
 import type { AgentMessage, ResolvedThinkingLevel, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { Model } from "@oh-my-pi/pi-ai";
 
-import { computeLineHash, formatSessionDumpText, RpcClient, renderPromptTemplate } from "@oh-my-pi/pi-coding-agent";
-import { Snowflake } from "@oh-my-pi/pi-utils";
+import { computeLineHash, formatSessionDumpText, RpcClient } from "@oh-my-pi/pi-coding-agent";
+import { prompt, Snowflake } from "@oh-my-pi/pi-utils";
 import { diffLines } from "diff";
 import { formatDirectory } from "./formatter";
 import { discoverSharedInfra, InProcessClient, type SharedInfra } from "./in-process-client";
@@ -612,21 +612,21 @@ type BenchmarkPromptDelivery = {
 };
 
 function buildBenchmarkSystemPrompt(params: { multiFile: boolean; config: BenchmarkConfig }): string {
-	return renderPromptTemplate(benchmarkSystemPrompt, {
+	return prompt.render(benchmarkSystemPrompt, {
 		multiFile: params.multiFile,
 		instructions: buildInstructions(params.config),
 	});
 }
 
 function buildInitialBenchmarkPrompt(params: { taskPrompt: string; guidedContext?: string | null }): string {
-	return renderPromptTemplate(benchmarkTaskPrompt, {
+	return prompt.render(benchmarkTaskPrompt, {
 		task_prompt: params.taskPrompt,
 		guided_context: params.guidedContext ?? undefined,
 	});
 }
 
 function buildRetryBenchmarkPrompt(params: { retryContext: string; guidedContext?: string | null }): string {
-	return renderPromptTemplate(benchmarkRetryPrompt, {
+	return prompt.render(benchmarkRetryPrompt, {
 		retry_context: params.retryContext,
 		guided_context: params.guidedContext ?? undefined,
 	});

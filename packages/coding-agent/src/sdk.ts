@@ -19,6 +19,7 @@ import {
 	getSearchDbDir,
 	logger,
 	postmortem,
+	prompt,
 } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
 import { AsyncJobManager } from "./async";
@@ -27,11 +28,7 @@ import { loadCapability } from "./capability";
 import { type Rule, ruleCapability } from "./capability/rule";
 import { ModelRegistry } from "./config/model-registry";
 import { formatModelString, parseModelPattern, parseModelString, resolveModelRoleValue } from "./config/model-resolver";
-import {
-	loadPromptTemplates as loadPromptTemplatesInternal,
-	type PromptTemplate,
-	renderPromptTemplate,
-} from "./config/prompt-templates";
+import { loadPromptTemplates as loadPromptTemplatesInternal, type PromptTemplate } from "./config/prompt-templates";
 import { Settings, type SkillsSettings } from "./config/settings";
 import { CursorExecHandlers } from "./cursor";
 import "./discovery";
@@ -872,7 +869,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				onJobComplete: async (jobId, result, job) => {
 					if (!session) return;
 					const formattedResult = await formatAsyncResultForFollowUp(result);
-					const message = renderPromptTemplate(asyncResultTemplate, { jobId, result: formattedResult });
+					const message = prompt.render(asyncResultTemplate, { jobId, result: formattedResult });
 					const durationMs = job ? Math.max(0, Date.now() - job.startTime) : undefined;
 					await session.sendCustomMessage(
 						{

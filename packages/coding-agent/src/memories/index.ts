@@ -4,10 +4,9 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import { completeSimple, Effort, type Model } from "@oh-my-pi/pi-ai";
-import { getAgentDbPath, getMemoriesDir, logger, parseJsonlLenient } from "@oh-my-pi/pi-utils";
+import { getAgentDbPath, getMemoriesDir, logger, parseJsonlLenient, prompt } from "@oh-my-pi/pi-utils";
 import type { ModelRegistry } from "../config/model-registry";
 import { parseModelString } from "../config/model-resolver";
-import { renderPromptTemplate } from "../config/prompt-templates";
 import type { Settings } from "../config/settings";
 import consolidationTemplate from "../prompts/memories/consolidation.md" with { type: "text" };
 import readPathTemplate from "../prompts/memories/read-path.md" with { type: "text" };
@@ -166,7 +165,7 @@ export async function buildMemoryToolDeveloperInstructions(
 	const truncated = truncateByApproxTokens(summary, cfg.summaryInjectionTokenLimit);
 	if (!truncated.trim()) return undefined;
 
-	return renderPromptTemplate(readPathTemplate, {
+	return prompt.render(readPathTemplate, {
 		memory_summary: truncated,
 	});
 }
@@ -585,7 +584,7 @@ async function runStage1Job(options: {
 		const serializedItems = JSON.stringify(persisted);
 		const budgetTokens = Math.floor(modelMaxTokens * config.rolloutPayloadPercent);
 		const truncatedItems = truncateByApproxTokens(serializedItems, budgetTokens);
-		const inputPrompt = renderPromptTemplate(stageOneInputTemplate, {
+		const inputPrompt = prompt.render(stageOneInputTemplate, {
 			thread_id: claim.threadId,
 			response_items_json: truncatedItems,
 		});
@@ -716,7 +715,7 @@ async function runConsolidationModel(options: { memoryRoot: string; model: Model
 	const { memoryRoot, model, apiKey } = options;
 	const rawMemories = await Bun.file(path.join(memoryRoot, "raw_memories.md")).text();
 	const rolloutSummaries = await readRolloutSummaries(memoryRoot);
-	const input = renderPromptTemplate(consolidationTemplate, {
+	const input = prompt.render(consolidationTemplate, {
 		raw_memories: truncateByApproxTokens(rawMemories, 20_000),
 		rollout_summaries: truncateByApproxTokens(rolloutSummaries, 12_000),
 	});

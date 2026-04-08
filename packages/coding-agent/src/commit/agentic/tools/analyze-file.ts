@@ -1,9 +1,9 @@
+import { prompt } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
 import analyzeFilePrompt from "../../../commit/agentic/prompts/analyze-file.md" with { type: "text" };
 import type { CommitAgentState } from "../../../commit/agentic/state";
 import type { NumstatEntry } from "../../../commit/types";
 import type { ModelRegistry } from "../../../config/model-registry";
-import { renderPromptTemplate } from "../../../config/prompt-templates";
 import type { Settings } from "../../../config/settings";
 import type { CustomTool, CustomToolContext } from "../../../extensibility/custom-tools/types";
 import type { AuthStorage } from "../../../session/auth-storage";
@@ -66,7 +66,7 @@ export function createAnalyzeFileTool(options: {
 			const numstat = options.state.overview?.numstat ?? [];
 			const tasks = params.files.map((file, index) => {
 				const relatedFiles = formatRelatedFiles(params.files, file, numstat);
-				const prompt = renderPromptTemplate(analyzeFilePrompt, {
+				const assignment = prompt.render(analyzeFilePrompt, {
 					file,
 					goal: params.goal,
 					related_files: relatedFiles,
@@ -74,7 +74,7 @@ export function createAnalyzeFileTool(options: {
 				return {
 					id: `AnalyzeFile${index + 1}`,
 					description: `Analyze ${file}`,
-					assignment: prompt,
+					assignment,
 				};
 			});
 			const taskParams: TaskParams = {

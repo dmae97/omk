@@ -17,10 +17,9 @@ import * as os from "node:os";
 import path from "node:path";
 import type { AgentTool, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Usage } from "@oh-my-pi/pi-ai";
-import { $env, Snowflake } from "@oh-my-pi/pi-utils";
+import { $env, prompt, Snowflake } from "@oh-my-pi/pi-utils";
 import type { ToolSession } from "..";
 import { resolveAgentModelPatterns } from "../config/model-resolver";
-import { renderPromptTemplate } from "../config/prompt-templates";
 import type { Theme } from "../modes/theme/theme";
 import planModeSubagentPrompt from "../prompts/system/plan-mode-subagent.md" with { type: "text" };
 import taskDescriptionTemplate from "../prompts/tools/task.md" with { type: "text" };
@@ -136,7 +135,7 @@ function renderDescription(
 	disabledAgents: string[],
 ): string {
 	const filteredAgents = disabledAgents.length > 0 ? agents.filter(a => !disabledAgents.includes(a.name)) : agents;
-	return renderPromptTemplate(taskDescriptionTemplate, {
+	return prompt.render(taskDescriptionTemplate, {
 		agents: filteredAgents,
 		MAX_CONCURRENCY: maxConcurrency,
 		isolationEnabled,
@@ -1157,7 +1156,7 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 
 			const outputIds = results.filter(r => !r.aborted || r.output.trim()).map(r => `agent://${r.id}`);
 			const backendSummaryPrefix = isolationBackendWarning ? `\n\n${isolationBackendWarning}` : "";
-			const summary = renderPromptTemplate(taskSummaryTemplate, {
+			const summary = prompt.render(taskSummaryTemplate, {
 				successCount,
 				totalCount: results.length,
 				cancelledCount,

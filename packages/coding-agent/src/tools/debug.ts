@@ -7,8 +7,8 @@ import type {
 } from "@oh-my-pi/pi-agent-core";
 import { StringEnum } from "@oh-my-pi/pi-ai";
 import { type Component, Text } from "@oh-my-pi/pi-tui";
+import { prompt } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
-import { renderPromptTemplate } from "../config/prompt-templates";
 import {
 	type DapBreakpointRecord,
 	type DapCapabilities,
@@ -612,7 +612,7 @@ export class DebugTool implements AgentTool<typeof debugSchema, DebugToolDetails
 	readonly concurrency = "exclusive";
 
 	constructor(private readonly session: ToolSession) {
-		this.description = renderPromptTemplate(debugDescription);
+		this.description = prompt.render(debugDescription);
 	}
 
 	static createIf(session: ToolSession): DebugTool | null {

@@ -28,6 +28,7 @@
 	},
 	"dependencies": {
 		"beautiful-mermaid": "^1.1",
+		"handlebars": "^4.7.9",
 		"winston": "^3.19",
 		"winston-daily-rotate-file": "^5.0"
 	},

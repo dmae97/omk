@@ -1,10 +1,10 @@
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
+import { prompt } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import type { SSHHost } from "../capability/ssh";
 import { sshCapability } from "../capability/ssh";
-import { renderPromptTemplate } from "../config/prompt-templates";
 import { loadCapability } from "../discovery";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import type { Theme } from "../modes/theme/theme";
@@ -59,7 +59,7 @@ async function formatHostEntry(host: SSHHost): Promise<string> {
 }
 
 async function formatDescription(hosts: SSHHost[]): Promise<string> {
-	const baseDescription = renderPromptTemplate(sshDescriptionBase);
+	const baseDescription = prompt.render(sshDescriptionBase);
 	if (hosts.length === 0) {
 		return baseDescription;
 	}

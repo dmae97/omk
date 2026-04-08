@@ -1,4 +1,4 @@
-import { renderPromptTemplate } from "../config/prompt-templates";
+import { prompt } from "@oh-my-pi/pi-utils";
 import subagentUserPromptTemplate from "../prompts/system/subagent-user-prompt.md" with { type: "text" };
 import type { TaskItem } from "./types";
 
@@ -25,7 +25,7 @@ export function renderTemplate(context: string | undefined, task: TaskItem): Ren
 		return { task: assignment || context!, assignment: assignment || context!, id, description };
 	}
 	return {
-		task: renderPromptTemplate(subagentUserPromptTemplate, { context, assignment }),
+		task: prompt.render(subagentUserPromptTemplate, { context, assignment }),
 		assignment,
 		id,
 		description,

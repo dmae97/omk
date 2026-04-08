@@ -6,12 +6,12 @@
 import path from "node:path";
 import type { AgentEvent, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { SearchDb } from "@oh-my-pi/pi-natives";
-import { logger, untilAborted } from "@oh-my-pi/pi-utils";
+import { logger, prompt, untilAborted } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
 import Ajv, { type ValidateFunction } from "ajv";
 import { ModelRegistry } from "../config/model-registry";
 import { resolveModelOverride } from "../config/model-resolver";
-import { type PromptTemplate, renderPromptTemplate } from "../config/prompt-templates";
+import type { PromptTemplate } from "../config/prompt-templates";
 import { Settings } from "../config/settings";
 import { SETTINGS_SCHEMA, type SettingPath } from "../config/settings-schema";
 import type { CustomTool } from "../extensibility/custom-tools/types";
@@ -965,7 +965,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 				skills: options.skills,
 				promptTemplates: options.promptTemplates,
 				systemPrompt: defaultPrompt =>
-					renderPromptTemplate(subagentSystemPromptTemplate, {
+					prompt.render(subagentSystemPromptTemplate, {
 						base: defaultPrompt,
 						agent: agent.systemPrompt,
 						worktree: worktree ?? "",
@@ -1106,7 +1106,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 			while (!submitResultCalled && retryCount < MAX_SUBMIT_RESULT_RETRIES && !abortSignal.aborted) {
 				try {
 					retryCount++;
-					const reminder = renderPromptTemplate(submitReminderTemplate, {
+					const reminder = prompt.render(submitReminderTemplate, {
 						retryCount,
 						maxRetries: MAX_SUBMIT_RESULT_RETRIES,
 					});

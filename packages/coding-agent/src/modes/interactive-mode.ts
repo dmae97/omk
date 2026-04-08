@@ -15,10 +15,9 @@ import {
 } from "@oh-my-pi/pi-ai";
 import type { Component, SlashCommand } from "@oh-my-pi/pi-tui";
 import { Container, Loader, Markdown, ProcessTerminal, Spacer, Text, TUI, visibleWidth } from "@oh-my-pi/pi-tui";
-import { APP_NAME, getProjectDir, hsvToRgb, isEnoent, logger, postmortem } from "@oh-my-pi/pi-utils";
+import { APP_NAME, getProjectDir, hsvToRgb, isEnoent, logger, postmortem, prompt } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
 import { KeybindingsManager } from "../config/keybindings";
-import { renderPromptTemplate } from "../config/prompt-templates";
 import { type Settings, settings } from "../config/settings";
 import type {
 	ExtensionUIContext,
@@ -899,11 +898,11 @@ export class InteractiveMode implements InteractiveModeContext {
 		}
 		this.session.setPlanReferencePath(options.finalPlanFilePath);
 		this.session.markPlanReferenceSent();
-		const prompt = renderPromptTemplate(planModeApprovedPrompt, {
+		const planModePrompt = prompt.render(planModeApprovedPrompt, {
 			planContent,
 			finalPlanFilePath: options.finalPlanFilePath,
 		});
-		await this.session.prompt(prompt, { synthetic: true });
+		await this.session.prompt(planModePrompt, { synthetic: true });
 	}
 
 	async handlePlanModeCommand(initialPrompt?: string): Promise<void> {

@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AutocompleteItem } from "@oh-my-pi/pi-tui";
-import { renderPromptTemplate } from "../config/prompt-templates";
+import { prompt } from "@oh-my-pi/pi-utils";
 import type { ExtensionContext, ExtensionFactory } from "../extensibility/extensions";
 import commandResumeTemplate from "./command-resume.md" with { type: "text" };
 import { pathMatchesContractPath } from "./contract";
@@ -214,7 +214,7 @@ export const createAutoresearchExtension: ExtensionFactory = api => {
 				dashboard.updateWidget(ctx, runtime);
 				await api.setActiveTools([...new Set([...api.getActiveTools(), ...EXPERIMENT_TOOL_NAMES])]);
 				api.sendUserMessage(
-					renderPromptTemplate(commandResumeTemplate, {
+					prompt.render(commandResumeTemplate, {
 						autoresearch_md_path: autoresearchMdPath,
 						branch_status_line: branchResult.created
 							? `Created and checked out dedicated git branch \`${branchResult.branchName}\` before resuming.`
@@ -303,7 +303,7 @@ export const createAutoresearchExtension: ExtensionFactory = api => {
 		api.sendMessage(
 			{
 				customType: "autoresearch-resume",
-				content: renderPromptTemplate(resumeMessageTemplate, {
+				content: prompt.render(resumeMessageTemplate, {
 					autoresearch_md_path: autoresearchMdPath,
 					has_ideas: fs.existsSync(ideasPath),
 					has_pending_run: Boolean(pendingRun),
@@ -347,7 +347,7 @@ export const createAutoresearchExtension: ExtensionFactory = api => {
 		});
 		const hasAutoresearchMd = fs.existsSync(autoresearchMdPath);
 		return {
-			systemPrompt: renderPromptTemplate(promptTemplate, {
+			systemPrompt: prompt.render(promptTemplate, {
 				base_system_prompt: event.systemPrompt,
 				has_goal: goal.trim().length > 0,
 				goal,
