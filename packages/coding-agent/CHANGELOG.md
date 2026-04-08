@@ -1,15 +1,17 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added support for embedded URL selectors (`:raw` and `:L#-L#` line ranges) in read command paths
+- Added `parseReadUrlTarget` function to parse and validate URL read targets with line range support
 - Added `decl` region to chunk selector for targeting declarations without leading trivia
 - Exported `hooks` subpath for extensibility API access
 - Added `build` script for compiling binary artifacts
 
 ### Changed
 
+- Updated read CLI to delegate URL inputs through the read tool pipeline instead of treating them as local file paths
 - Updated chunk edit documentation to clarify region semantics and emphasize using the narrowest region for edits
 - Improved chunk selector guidance with visual diagram showing region boundaries
 - Renamed `build:binary` script to `build`

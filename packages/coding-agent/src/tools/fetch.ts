@@ -23,7 +23,7 @@ import { convertWithMarkit, fetchBinary } from "../web/scrapers/utils";
 import { applyListLimit } from "./list-limit";
 import { formatStyledArtifactReference, type OutputMeta } from "./output-meta";
 import { formatExpandHint, getDomain } from "./render-utils";
-import { ToolAbortError } from "./tool-errors";
+import { ToolAbortError, ToolError } from "./tool-errors";
 import { toolResult } from "./tool-result";
 import { clampTimeout } from "./tool-timeouts";
 
@@ -135,6 +135,70 @@ function normalizeUrl(url: string): string {
 
 export function isReadableUrlPath(value: string): boolean {
 	return /^https?:\/\//i.test(value) || /^www\./i.test(value);
+}
+
+const URL_LINE_RANGE_RE = /^L(\d+)(?:-L?(\d+))?$/i;
+
+export interface ParsedReadUrlTarget {
+	path: string;
+	raw: boolean;
+	offset?: number;
+	limit?: number;
+}
+
+export function parseReadUrlTarget(readPath: string, sel?: string): ParsedReadUrlTarget | null {
+	const embedded = sel ? undefined : tryExtractEmbeddedUrlSelector(readPath);
+	const urlPath = embedded?.path ?? readPath;
+	if (!isReadableUrlPath(urlPath)) {
+		return null;
+	}
+
+	const selector = sel ?? embedded?.sel;
+	const raw = selector === "raw";
+	const lineMatch = selector ? URL_LINE_RANGE_RE.exec(selector) : null;
+	if (lineMatch) {
+		const startLine = Number.parseInt(lineMatch[1]!, 10);
+		if (startLine < 1) {
+			throw new ToolError("L0 is invalid; lines are 1-indexed. Use sel=L1.");
+		}
+		const endLine = lineMatch[2] ? Number.parseInt(lineMatch[2], 10) : undefined;
+		if (endLine !== undefined && endLine < startLine) {
+			throw new ToolError(`Invalid range L${startLine}-L${endLine}: end must be >= start.`);
+		}
+		return {
+			path: urlPath,
+			raw: false,
+			offset: startLine,
+			limit: endLine !== undefined ? endLine - startLine + 1 : undefined,
+		};
+	}
+
+	return { path: urlPath, raw };
+}
+
+function tryExtractEmbeddedUrlSelector(readPath: string): { path: string; sel?: string } | null {
+	const lastColonIndex = readPath.lastIndexOf(":");
+	if (lastColonIndex <= 0) {
+		return null;
+	}
+
+	const candidateSelector = readPath.slice(lastColonIndex + 1);
+	const isEmbeddedSelector = candidateSelector === "raw" || URL_LINE_RANGE_RE.test(candidateSelector);
+	if (!isEmbeddedSelector) {
+		return null;
+	}
+
+	const basePath = readPath.slice(0, lastColonIndex);
+	if (!isReadableUrlPath(basePath)) {
+		return null;
+	}
+
+	try {
+		new URL(basePath.startsWith("http://") || basePath.startsWith("https://") ? basePath : `https://${basePath}`);
+		return { path: basePath, sel: candidateSelector };
+	} catch {
+		return null;
+	}
 }
 
 /**

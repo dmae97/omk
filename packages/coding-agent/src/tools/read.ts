@@ -37,10 +37,12 @@ import { resolveFileDisplayMode } from "../utils/file-display-mode";
 import { ImageInputTooLargeError, loadImageInput, MAX_IMAGE_INPUT_BYTES } from "../utils/image-loading";
 import { convertFileWithMarkit } from "../utils/markit";
 import { type ArchiveReader, openArchive, parseArchivePathCandidates } from "./archive-reader";
+
 import {
 	executeReadUrl,
 	isReadableUrlPath,
 	loadReadUrlCacheEntry,
+	parseReadUrlTarget,
 	type ReadUrlToolDetails,
 	renderReadUrlCall,
 	renderReadUrlResult,
@@ -727,25 +729,28 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			return this.#handleInternalUrl(readPath, offset, limit);
 		}
 
-		if (isReadableUrlPath(readPath)) {
-			const parsed = parseSel(sel);
+		const parsedUrlTarget = parseReadUrlTarget(readPath, sel);
+		if (parsedUrlTarget) {
 			if (!this.session.settings.get("fetch.enabled")) {
 				throw new ToolError("URL reads are disabled by settings.");
 			}
-			const raw = parsed.kind === "raw";
-			const { offset, limit } = selToOffsetLimit(parsed);
-			if (offset !== undefined || limit !== undefined) {
-				const cached = await loadReadUrlCacheEntry(this.session, { path: readPath, timeout, raw }, signal, {
-					ensureArtifact: true,
-					preferCached: true,
-				});
-				return this.#buildInMemoryTextResult(cached.output, offset, limit, {
+			if (parsedUrlTarget.offset !== undefined || parsedUrlTarget.limit !== undefined) {
+				const cached = await loadReadUrlCacheEntry(
+					this.session,
+					{ path: parsedUrlTarget.path, timeout, raw: parsedUrlTarget.raw },
+					signal,
+					{
+						ensureArtifact: true,
+						preferCached: true,
+					},
+				);
+				return this.#buildInMemoryTextResult(cached.output, parsedUrlTarget.offset, parsedUrlTarget.limit, {
 					details: { ...cached.details },
 					sourceUrl: cached.details.finalUrl,
 					entityLabel: "URL output",
 				});
 			}
-			return executeReadUrl(this.session, { path: readPath, timeout, raw }, signal);
+			return executeReadUrl(this.session, { path: parsedUrlTarget.path, timeout, raw: parsedUrlTarget.raw }, signal);
 		}
 
 		const parsedReadPath = chunkMode ? parseChunkReadPath(readPath) : { filePath: readPath };
@@ -858,7 +863,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		}
 
 		// Read the file based on type
-		let content: (TextContent | ImageContent)[];
+		let content: Array<TextContent | ImageContent>;
 		let details: ReadToolDetails = {};
 		let sourcePath: string | undefined;
 		let truncationInfo:
@@ -967,11 +972,13 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			// Raw text or line-range mode
 			const { offset, limit } = selToOffsetLimit(parsed);
 			const startLine = offset ? Math.max(0, offset - 1) : 0;
-			const startLineDisplay = startLine + 1; // For display (1-indexed)
+			const startLineDisplay = startLine + 1;
 
-			const effectiveLimit = limit ?? this.#defaultLimit;
+			const DEFAULT_LIMIT = this.#defaultLimit;
+			const effectiveLimit = limit ?? DEFAULT_LIMIT;
 			const maxLinesToCollect = Math.min(effectiveLimit, DEFAULT_MAX_LINES);
 			const selectedLineLimit = effectiveLimit;
+
 			const streamResult = await streamLinesFromFile(
 				absolutePath,
 				startLine,
