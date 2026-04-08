@@ -822,10 +822,32 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 		process.exit(1);
 	}
 
+	const extensionFlagValues = session.extensionRunner?.getFlagValues() ?? new Map<string, boolean | string>();
+	const createAcpSession = async (cwd: string) => {
+		const nextSettings = await session.settings.cloneForCwd(cwd);
+		const nextSessionManager = SessionManager.create(cwd, parsedArgs.sessionDir);
+		const { session: nextSession } = await createAgentSession({
+			...sessionOptions,
+			cwd,
+			sessionManager: nextSessionManager,
+			settings: nextSettings,
+			authStorage,
+			modelRegistry,
+			searchDb: session.searchDb,
+			hasUI: false,
+		});
+		if (nextSession.extensionRunner) {
+			for (const [flagName, value] of extensionFlagValues) {
+				nextSession.extensionRunner.setFlagValue(flagName, value);
+			}
+		}
+		return nextSession;
+	};
+
 	if (mode === "rpc") {
 		await runRpcMode(session);
 	} else if (mode === "acp") {
-		await runAcpMode(session);
+		await runAcpMode(session, createAcpSession);
 	} else if (isInteractive) {
 		const versionCheckPromise = checkForNewVersion(VERSION).catch(() => undefined);
 		const changelogMarkdown = await getChangelogForDisplay(parsedArgs);

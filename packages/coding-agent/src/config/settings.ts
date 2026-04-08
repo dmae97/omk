@@ -269,6 +269,21 @@ export class Settings {
 		}
 	}
 
+	async cloneForCwd(cwd: string): Promise<Settings> {
+		const cloned = new Settings({
+			cwd,
+			agentDir: this.#agentDir,
+			inMemory: !this.#persist,
+		});
+		cloned.#storage = this.#storage;
+		cloned.#global = structuredClone(this.#global);
+		cloned.#project = this.#persist ? await cloned.#loadProjectSettings() : structuredClone(this.#project);
+		cloned.#overrides = structuredClone(this.#overrides);
+		cloned.#rebuildMerged();
+		cloned.#fireAllHooks();
+		return cloned;
+	}
+
 	// ─────────────────────────────────────────────────────────────────────────
 	// Accessors
 	// ─────────────────────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
 - Simplified chunk edit operations: removed `append_child`, `prepend_child`, `append_sibling`, `prepend_sibling`, and `replace_body` ops in favor of unified `replace`, `before`, `after`, `prepend`, and `append` with region targeting (`@container`, `@prologue`, `@body`, `@epilogue`)
@@ -9,6 +10,16 @@
 
 ### Added
 
+- Multi-session support in ACP mode: agents can now manage multiple concurrent sessions with independent state, models, and configurations
+- Session forking in ACP mode: `unstable_forkSession` creates a new session from an existing one's history
+- Session resumption in ACP mode: `unstable_resumeSession` reloads a previously saved session
+- Session closure in ACP mode: `unstable_closeSession` cleanly shuts down a session and releases resources
+- Model state reporting in ACP mode: `SessionModelState` with available models and current selection in session responses
+- Direct model setting in ACP mode: `unstable_setSessionModel` RPC command for changing the active model
+- Turn-level usage tracking in ACP mode: prompt responses now include `usage` with input/output/cached token counts
+- Message ID tracking in ACP mode: stable message IDs for assistant chunks enabling client-side message correlation
+- Settings cloning: `Settings.cloneForCwd()` method to create isolated settings instances for different working directories
+- Extension flag value retrieval: `ExtensionRunner.getFlagValues()` to inspect current flag state
 - Exported autoresearch module and submodules via `./autoresearch` and `./autoresearch/*` package paths
 - Exported autoresearch tools via `./autoresearch/tools/*` package path
 - Exported CLI commands via `./cli/commands/*` package path
@@ -55,6 +66,10 @@
 
 ### Changed
 
+- ACP agent now manages multiple sessions instead of a single session; session lifecycle and configuration are now per-session
+- ACP session creation now uses a factory function to support creating new sessions for different working directories
+- ACP event mapping now accepts optional `getMessageId` callback for stable message ID assignment to assistant chunks
+- ACP session initialization now registers connection cleanup handlers to dispose all sessions on disconnect
 - Reorganized package.json exports: moved `./edit` exports before `./plan-mode` for better logical grouping
 - Notebook conversion logic now checks for raw read mode or non-chunk mode before converting via markit, allowing chunk-mode reads of `.ipynb` files to use chunk parsing instead of conversion
 - Go receiver methods now render as top-level siblings instead of nested under their receiver type in chunk read output
@@ -109,6 +124,7 @@
 
 ### Fixed
 
+- ACP session cleanup now properly cancels in-flight prompts and disposes resources when sessions are closed or connection aborts
 - Removed unused `_createErrorToolResult` helper function from RPC host-tools module
 - Fixed Go receiver method indentation in append operations to preserve relative indentation from the anchor chunk
 - Fixed Go type chunk line counts to report only the type body lines instead of including grouped receiver methods

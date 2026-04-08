@@ -262,6 +262,10 @@ export class ExtensionRunner {
 		return allFlags;
 	}
 
+	getFlagValues(): Map<string, boolean | string> {
+		return new Map(this.runtime.flagValues);
+	}
+
 	setFlagValue(name: string, value: boolean | string): void {
 		this.runtime.flagValues.set(name, value);
 	}
