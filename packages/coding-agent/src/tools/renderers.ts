@@ -4,7 +4,7 @@
  * These provide rich visualization for tool calls and results in the TUI.
  */
 import type { Component } from "@oh-my-pi/pi-tui";
-import { editToolRenderer } from "../edit";
+import { editToolRenderer } from "../edit/renderer";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import { lspToolRenderer } from "../lsp/render";
 import type { Theme } from "../modes/theme/theme";

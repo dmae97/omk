@@ -9,7 +9,7 @@ import {
 	parseFrontmatter,
 	prompt,
 } from "@oh-my-pi/pi-utils";
-import { computeLineHash } from "../edit/modes/hashline";
+import { computeLineHash } from "../edit/line-hash";
 import { jtdToTypeScript } from "../tools/jtd-to-typescript";
 import { parseCommandArgs, substituteArgs } from "../utils/command-args";
 

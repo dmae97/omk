@@ -30,6 +30,7 @@ import { outputMeta } from "../../tools/output-meta";
 import { resolveToCwd } from "../../tools/path-utils";
 import { enforcePlanModeWrite, resolvePlanPath } from "../../tools/plan-mode-guard";
 import { generateDiffString } from "../diff";
+import { computeLineHash, formatLineHash } from "../line-hash";
 import { detectLineEnding, normalizeToLF, restoreLineEndings, stripBom } from "../normalize";
 import type { EditToolDetails, LspBatchRequest } from "../renderer";
 
@@ -47,69 +48,6 @@ export type HashlineEdit =
 	| { op: "prepend_at"; pos: Anchor; lines: string[] }
 	| { op: "append_file"; lines: string[] }
 	| { op: "prepend_file"; lines: string[] };
-
-/** 16-char nibble alphabet (no digits); shared with chunk checksum suffixes. */
-export const HASHLINE_NIBBLE_ALPHABET = "ZPMQVRWSNKTXJBYH";
-
-const NIBBLE_STR = HASHLINE_NIBBLE_ALPHABET;
-
-const DICT = Array.from({ length: 256 }, (_, i) => {
-	const h = i >>> 4;
-	const l = i & 0x0f;
-	return `${NIBBLE_STR[h]}${NIBBLE_STR[l]}`;
-});
-
-const RE_SIGNIFICANT = /[\p{L}\p{N}]/u;
-
-/**
- * Compute a short hexadecimal hash of a single line.
- *
- * Uses xxHash32 on a trailing-whitespace-trimmed, CR-stripped line, truncated to 2 chars from
- * {@link NIBBLE_STR}. For lines containing no alphanumeric characters (only
- * punctuation/symbols/whitespace), the line number is mixed in to reduce hash collisions.
- * The line input should not include a trailing newline.
- */
-export function computeLineHash(idx: number, line: string): string {
-	line = line.replace(/\r/g, "").trimEnd();
-
-	let seed = 0;
-	if (!RE_SIGNIFICANT.test(line)) {
-		seed = idx;
-	}
-	return DICT[Bun.hash.xxHash32(line, seed) & 0xff];
-}
-
-/**
- * Formats a tag given the line number and text.
- */
-export function formatLineTag(line: number, lines: string): string {
-	return `${line}#${computeLineHash(line, lines)}`;
-}
-
-/**
- * Format file text with hashline prefixes for display.
- *
- * Each line becomes `LINENUM#HASH:TEXT` where LINENUM is 1-indexed.
- *
- * @param text - Raw file text string
- * @param startLine - First line number (1-indexed, defaults to 1)
- * @returns Formatted string with one hashline-prefixed line per input line
- *
- * @example
- * ```
- * formatHashLines("function hi() {\n  return;\n}")
- * // "1#HH:function hi() {\n2#HH:  return;\n3#HH:}"
- * ```
- */
-export function formatHashLines(text: string, startLine = 1): string {
-	const lines = text.split("\n");
-	return lines
-		.map((line, i) => {
-			const num = startLine + i;
-			return `${formatLineTag(num, line)}:${line}`;
-		})
-		.join("\n");
-}
 
 const HASHLINE_PREFIX_RE = /^\s*(?:>>>|>>)?\s*(?:\+?\s*(?:\d+\s*#\s*|#\s*)|\+)\s*[ZPMQVRWSNKTXJBYH]{2}:/;
 const HASHLINE_PREFIX_PLUS_RE = /^\s*(?:>>>|>>)?\s*\+\s*(?:\d+\s*#\s*|#\s*)?[ZPMQVRWSNKTXJBYH]{2}:/;
@@ -376,7 +314,7 @@ function createHashlineChunkEmitter(
 }
 
 function formatHashlineStreamLine(lineNumber: number, line: string): string {
-	return `${formatLineTag(lineNumber, line)}:${line}`;
+	return `${formatLineHash(lineNumber, line)}:${line}`;
 }
 
 function isReadableStream(value: unknown): value is ReadableStream<Uint8Array> {
@@ -693,7 +631,7 @@ function collectBoundaryDuplicationWarning(edit: HashlineEdit, originalFileLines
 	const trimmedNext = nextSurvivingLine.trim();
 	const trimmedLast = lastInsertedLine.trim();
 	if (trimmedLast.length > 0 && trimmedLast === trimmedNext) {
-		const tag = formatLineTag(endLine + 1, nextSurvivingLine);
+		const tag = formatLineHash(endLine + 1, nextSurvivingLine);
 		warnings.push(
 			`Possible boundary duplication: your last replacement line \`${trimmedLast}\` is identical to the next surviving line ${tag}. ` +
 				`If you meant to replace the entire block, set \`end\` to ${tag} instead.`,

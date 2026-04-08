@@ -7,6 +7,7 @@ import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { getRemoteDir, prompt, untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
+import { computeLineHash } from "../edit/line-hash";
 import {
 	type ChunkReadTarget,
 	formatChunkedRead,
@@ -14,7 +15,6 @@ import {
 	parseChunkSelector,
 	resolveAnchorStyle,
 } from "../edit/modes/chunk";
-import { computeLineHash } from "../edit/modes/hashline";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import { parseInternalUrl } from "../internal-urls/parse";
 import type { InternalUrl } from "../internal-urls/types";
