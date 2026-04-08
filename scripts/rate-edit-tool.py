@@ -27,7 +27,10 @@ sys.path.insert(0, str(REPO_ROOT / "python/omp-rpc/src"))
 
 from omp_rpc import (  # noqa: E402
     AgentEndEvent,
+    AutoRetryEndEvent,
+    AutoRetryStartEvent,
     ExtensionUiRequest,
+    MessageEndEvent,
     MessageUpdateEvent,
     RpcClient,
     RpcError,
@@ -478,8 +481,7 @@ PYTHON_FIXTURE = textwrap.dedent(
 
 
     class Server:
-        '''Small indentation-sensitive server surface for edit tests.'''
-
+        # Small indentation-sensitive server surface for edit tests.
         def __init__(self, config: Config) -> None:
             self._config = config
             self._history: list[str] = []
@@ -902,8 +904,8 @@ class ProgressPrinter:
             self._refresh_locked()
 
     def note_tool_end(self, model: str, tool_name: str, is_error: bool | None) -> None:
-        activity = f"{tool_name} failed" if is_error else f"{tool_name} done"
-        self._mutate_model(model, last_activity=activity)
+        if is_error:
+            self._mutate_model(model, last_activity=f"{tool_name} failed")
 
     def note_todo_reminder(self, model: str, todos: tuple[TodoItem, ...]) -> None:
         with self._lock:
@@ -913,7 +915,6 @@ class ProgressPrinter:
             progress.todo_completed, progress.todo_total, progress.todo_current = summarize_todo_state(
                 progress.todo_order, progress.todo_items
             )
-            progress.last_activity = "todo reminder"
             self._refresh_locked()
 
     def note_todo_auto_clear(self, model: str) -> None:
@@ -921,7 +922,6 @@ class ProgressPrinter:
             progress = self._states[model]
             progress.todo_completed = progress.todo_total
             progress.todo_current = None
-            progress.last_activity = "todos cleared"
             self._refresh_locked()
 
     def note_thinking(self, model: str, delta: str, total_chars: int) -> None:
@@ -1131,36 +1131,80 @@ class ModelRunRecorder:
         self.todo_total = 0
         self.todo_current: str | None = None
         self.review_sections: list[str] = []
+        self.agent_ended = False
+        self.auto_retry_active = False
+        self.auto_retry_delay_ms = 0
+        self.last_event_at = time.monotonic()
         self._consumed_assistant_messages = 0
         self._event_lock = threading.Lock()
 
+    def _touch(self) -> None:
+        self.last_event_at = time.monotonic()
+
     def record_notification(self, notification: RpcNotification) -> None:
+        self._touch()
         self._append_jsonl(serialize_notification(notification))
 
     def record_ui(self, request: ExtensionUiRequest) -> None:
+        self._touch()
         if request.method in {"notify", "setStatus", "setTitle", "set_editor_text"}:
             return
         if request.method == "setWidget" and request.widget_key == "autoresearch":
             return
 
     def record_turn_start(self, _event: TurnStartEvent) -> None:
+        self._touch()
         self.turns += 1
         self.printer.mark_turn_start(self.model, self.turns)
 
     def record_turn_end(self, _event: TurnEndEvent) -> None:
+        self._touch()
         self.printer.mark_turn_end(self.model, self.turns)
 
     def record_tool_execution_start(self, event: ToolExecutionStartEvent) -> None:
+        self._touch()
         self.tool_calls += 1
         self.printer.note_tool_start(self.model, event.tool_name, event.intent, self.tool_calls, event.args)
 
     def record_tool_execution_update(self, _event: ToolExecutionUpdateEvent) -> None:
+        self._touch()
         return
 
     def record_tool_execution_end(self, event: ToolExecutionEndEvent) -> None:
+        self._touch()
         self.printer.note_tool_end(self.model, event.tool_name, event.is_error)
 
+    def record_auto_retry_start(self, event: AutoRetryStartEvent) -> None:
+        self._touch()
+        self.auto_retry_active = True
+        self.auto_retry_delay_ms = event.delay_ms
+
+    def record_auto_retry_end(self, _event: AutoRetryEndEvent) -> None:
+        self._touch()
+        self.auto_retry_active = False
+        self.auto_retry_delay_ms = 0
+
+    def record_message_end(self, event: MessageEndEvent) -> None:
+        self._touch()
+        message = event.message
+        if not isinstance(message, dict) or message.get("role") != "assistant":
+            return
+        text = assistant_text(message)
+        if not isinstance(text, str) or not text.strip():
+            return
+        self.review_sections.append(text.strip())
+        self._consumed_assistant_messages += 1
+
+        token_input, token_output, token_total = extract_usage_tokens(message)
+        if token_total is not None and (self.token_total is None or token_total >= self.token_total):
+            self.token_input = token_input
+            self.token_output = token_output
+            self.token_total = token_total
+            self.printer.note_usage(self.model, token_input, token_output, token_total)
+
     def record_agent_end(self, event: AgentEndEvent) -> None:
+        self._touch()
+        self.agent_ended = True
         assistant_count = 0
         for message in event.messages:
             if not isinstance(message, dict) or message.get("role") != "assistant":
@@ -1182,7 +1226,17 @@ class ModelRunRecorder:
                 break
 
     def record_message_update(self, event: MessageUpdateEvent) -> None:
+        self._touch()
         assistant_event = event.assistant_message_event
+        partial = assistant_event.get("partial")
+        if isinstance(partial, dict):
+            token_input, token_output, token_total = extract_usage_tokens(partial)
+            if token_total is not None and (self.token_total is None or token_total >= self.token_total):
+                self.token_input = token_input
+                self.token_output = token_output
+                self.token_total = token_total
+                self.printer.note_usage(self.model, token_input, token_output, token_total)
+
         delta_type = assistant_event.get("type")
         delta = assistant_event.get("delta")
         if not isinstance(delta, str):
@@ -1195,6 +1249,7 @@ class ModelRunRecorder:
             self.printer.note_text(self.model, delta, self.text_chars)
 
     def record_todo_reminder(self, event: TodoReminderEvent) -> None:
+        self._touch()
         self.todo_completed = sum(1 for task in event.todos if task.status == "completed")
         self.todo_total = len(event.todos)
         in_progress = next((task.content for task in event.todos if task.status == "in_progress"), None)
@@ -1203,6 +1258,7 @@ class ModelRunRecorder:
         self.printer.note_todo_reminder(self.model, event.todos)
 
     def record_todo_auto_clear(self, _event: TodoAutoClearEvent) -> None:
+        self._touch()
         self.todo_completed = self.todo_total
         self.todo_current = None
         self.printer.note_todo_auto_clear(self.model)
@@ -1218,10 +1274,20 @@ class ModelRunRecorder:
             return ""
         return "\n\n-----------\n\n".join(self.review_sections)
 
+    def is_effectively_complete(self, *, quiet_seconds: float) -> bool:
+        return (
+            len(self.review_sections) > 0
+            and self.todo_total > 0
+            and self.todo_completed >= self.todo_total
+            and not self.auto_retry_active
+            and (time.monotonic() - self.last_event_at) >= quiet_seconds
+        )
+
     def _append_jsonl(self, payload: dict[str, Any]) -> None:
         with self._event_lock:
             with self.jsonl_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(payload) + "\n")
+
 
 
 def run_model_sync(
@@ -1271,8 +1337,11 @@ def run_model_sync(
             client.on_tool_execution_start(recorder.record_tool_execution_start)
             client.on_tool_execution_update(recorder.record_tool_execution_update)
             client.on_tool_execution_end(recorder.record_tool_execution_end)
+            client.on_auto_retry_start(recorder.record_auto_retry_start)
+            client.on_auto_retry_end(recorder.record_auto_retry_end)
             client.on_agent_end(recorder.record_agent_end)
             client.on_message_update(recorder.record_message_update)
+            client.on_message_end(recorder.record_message_end)
             client.on_todo_reminder(recorder.record_todo_reminder)
             client.on_todo_auto_clear(recorder.record_todo_auto_clear)
             client.on_ui_request(recorder.record_ui)
@@ -1281,14 +1350,43 @@ def run_model_sync(
             printer.mark_ready(model)
             client.set_todos(TODOS)
             printer.seed_todos(model, TODOS)
+
+            deadline = time.monotonic() + timeout
+
+            def wait_for_settle() -> None:
+                last_timeout: RpcError | None = None
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        if last_timeout is not None:
+                            raise last_timeout
+                        raise RpcError("Timed out waiting for agent to settle")
+
+                    try:
+                        client.wait_for_idle(timeout=min(remaining, 60.0))
+                        if recorder.auto_retry_active:
+                            time.sleep(min(max(recorder.auto_retry_delay_ms / 1000.0, 0.2), 2.0))
+                            continue
+                        if recorder.agent_ended:
+                            return
+                        if recorder.is_effectively_complete(quiet_seconds=2.0):
+                            return
+                        time.sleep(0.2)
+                    except RpcError as error:
+                        if "Timed out waiting for agent_end" not in str(error):
+                            raise
+                        last_timeout = error
+                        if recorder.is_effectively_complete(quiet_seconds=2.0):
+                            return
+
             printer.mark_prompt_submitted(model)
             client.prompt(PROMPT)
-            client.wait_for_idle(timeout=timeout)
+            wait_for_settle()
             review_markdown = recorder.build_review_markdown()
             if not review_markdown.strip():
                 printer.mark_prompt_submitted(model)
                 client.prompt(FINAL_REVIEW_PROMPT)
-                client.wait_for_idle(timeout=timeout)
+                wait_for_settle()
                 review_markdown = recorder.build_review_markdown()
             if not review_markdown.strip():
                 raise RpcError("Agent completed without final review text after retry")
@@ -1296,7 +1394,7 @@ def run_model_sync(
             stats = client.get_session_stats()
             todo_phases = client.get_todos()
             recorder.sync_final_todos(todo_phases)
-            if recorder.token_total is None:
+            if (recorder.token_total is None or recorder.token_total <= 0) and stats.tokens.total > 0:
                 recorder.token_input = stats.tokens.input
                 recorder.token_output = stats.tokens.output
                 recorder.token_total = stats.tokens.total
@@ -1340,7 +1438,6 @@ def run_model_sync(
         error=error_message,
         session_state=session_state,
     )
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run OpenRouter fixture evaluations through omp RPC mode.")
