@@ -1,3 +1,4 @@
+import { structuredCloneJSON } from "@oh-my-pi/pi-utils";
 import Ajv from "ajv";
 import addFormats from "ajv-formats";
 import type { Tool, ToolCall } from "../types";
@@ -384,17 +385,6 @@ function setValueAtPointer(root: unknown, pointer: string, value: unknown): unkn
 	return root;
 }
 
-/**
- * Deep clones a JSON-serializable value.
- * Uses structuredClone when available (faster), falls back to JSON round-trip.
- */
-function cloneJsonValue<T>(value: T): T {
-	if (typeof structuredClone === "function") {
-		return structuredClone(value);
-	}
-	return JSON.parse(JSON.stringify(value)) as T;
-}
-
 function normalizeOptionalNullsForSchema(schema: unknown, value: unknown): { value: unknown; changed: boolean } {
 	if (value === null || value === undefined) return { value, changed: false };
 	if (schema === null || typeof schema !== "object") return { value, changed: false };
@@ -554,7 +544,7 @@ function coerceArgsFromErrors(
 
 		// Clone on first modification (copy-on-write)
 		if (!changed) {
-			nextArgs = cloneJsonValue(nextArgs);
+			nextArgs = structuredCloneJSON(nextArgs);
 			changed = true;
 		}
 		nextArgs = setValueAtPointer(nextArgs, instancePath, result.value);

@@ -1,3 +1,4 @@
+import { structuredCloneJSON } from "@oh-my-pi/pi-utils";
 import type OpenAI from "openai";
 import type {
 	ResponseFunctionToolCall,
@@ -356,7 +357,7 @@ export async function processResponsesStream<TApi extends Api>(
 				currentBlock.arguments = parseStreamingJson(currentBlock.partialJson);
 			}
 		} else if (event.type === "response.output_item.done") {
-			const item = event.item;
+			const item = structuredCloneJSON(event.item);
 			options?.onOutputItemDone?.(item);
 			if (item.type === "reasoning" && currentBlock?.type === "thinking") {
 				currentBlock.thinking = item.summary?.map(part => part.text).join("\n\n") || "";

@@ -1,9 +1,10 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Changed
 
+- Optimized context emission by skipping message cloning when no extensions have context handlers
+- Improved message cloning resilience by falling back to shallow array clone when structured cloning fails due to non-cloneable objects
 - Made `assertEditableFileContent` synchronous instead of async for improved performance in streaming edit checks
 - Enhanced streaming edit abort detection to check for auto-generated files as soon as the file path is available, rather than waiting for the full diff
 - Improved file prefix reading in session storage to use `peekFile` utility from @oh-my-pi/pi-utils for better efficiency

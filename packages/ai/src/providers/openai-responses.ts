@@ -1,4 +1,4 @@
-import { $env } from "@oh-my-pi/pi-utils";
+import { $env, structuredCloneJSON } from "@oh-my-pi/pi-utils";
 import OpenAI from "openai";
 import type {
 	Tool as OpenAITool,
@@ -212,7 +212,7 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 						if (!firstTokenTime) firstTokenTime = Date.now();
 					},
 					onOutputItemDone: item => {
-						nativeOutputItems.push(structuredClone(item as unknown as Record<string, unknown>));
+						nativeOutputItems.push(structuredCloneJSON<unknown>(item) as unknown as Record<string, unknown>);
 					},
 				},
 			);

@@ -1,5 +1,5 @@
 import * as os from "node:os";
-import { $env, abortableSleep, asRecord, logger, readSseJson } from "@oh-my-pi/pi-utils";
+import { $env, abortableSleep, asRecord, logger, readSseJson, structuredCloneJSON } from "@oh-my-pi/pi-utils";
 import type OpenAI from "openai";
 import type {
 	ResponseFunctionToolCall,
@@ -586,7 +586,7 @@ async function openCodexWebSocketTransport(
 		"websocket",
 		websocketState,
 	);
-	const requestBodyForState = cloneRequestBody(requestContext.transformedBody);
+	const requestBodyForState = structuredCloneJSON(requestContext.transformedBody);
 	logCodexDebug("codex websocket request", {
 		url: toWebSocketUrl(requestContext.url),
 		model: requestContext.transformedBody.model,
@@ -631,7 +631,7 @@ async function openCodexSseTransport(
 			requestSetup.requestSignal,
 		),
 	);
-	return { eventStream, requestBodyForState: cloneRequestBody(body), transport: "sse" };
+	return { eventStream, requestBodyForState: structuredCloneJSON(body), transport: "sse" };
 }
 
 async function reopenCodexWebSocketRuntimeStream(
@@ -956,9 +956,8 @@ function handleOutputItemDone(
 	rawEvent: Record<string, unknown>,
 	blockIndex: () => number,
 ): void {
-	const item = rawEvent.item as CodexEventItem;
-	const rawItem = item as unknown as Record<string, unknown>;
-	runtime.nativeOutputItems.push(structuredClone(rawItem));
+	const item = structuredCloneJSON(rawEvent.item) as CodexEventItem;
+	runtime.nativeOutputItems.push(item as unknown as Record<string, unknown>);
 
 	if (item.type === "reasoning" && runtime.currentBlock?.type === "thinking") {
 		runtime.currentBlock.thinking = item.summary?.map(summary => summary.text).join("\n\n") || "";
@@ -1052,7 +1051,7 @@ function handleResponseCompleted(
 
 	const state = runtime.websocketState;
 	if (runtime.transport === "websocket" && state) {
-		state.lastRequest = cloneRequestBody(runtime.requestBodyForState);
+		state.lastRequest = structuredCloneJSON(runtime.requestBodyForState);
 		if (typeof response?.id === "string" && response.id.length > 0) {
 			state.lastResponseId = response.id;
 		}
@@ -1393,10 +1392,6 @@ export async function prewarmOpenAICodexResponses(
 	logger.time("prewarmCodex:establishWs");
 	await getOrCreateCodexWebSocketConnection(state, toWebSocketUrl(url), headers, options?.signal);
 	state.prewarmed = true;
-}
-
-function cloneRequestBody(body: RequestBody): RequestBody {
-	return JSON.parse(JSON.stringify(body)) as RequestBody;
 }
 
 function getCodexWebSocketSessionKey(

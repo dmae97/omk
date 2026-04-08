@@ -699,7 +699,26 @@ export class ExtensionRunner {
 
 	async emitContext(messages: AgentMessage[]): Promise<AgentMessage[]> {
 		const ctx = this.createContext();
-		let currentMessages = structuredClone(messages);
+
+		// Check if any extensions actually have context handlers before cloning
+		let hasContextHandlers = false;
+		for (const ext of this.extensions) {
+			if (ext.handlers.get("context")?.length) {
+				hasContextHandlers = true;
+				break;
+			}
+		}
+		if (!hasContextHandlers) return messages;
+
+		let currentMessages: AgentMessage[];
+		try {
+			currentMessages = structuredClone(messages);
+		} catch {
+			// Messages may contain non-cloneable objects (e.g. in ToolResultMessage.details
+			// or ProviderPayload). Fall back to a shallow array clone — extensions should
+			// return new message arrays rather than mutating in place.
+			currentMessages = [...messages];
+		}
 
 		for (const ext of this.extensions) {
 			const handlers = ext.handlers.get("context");
