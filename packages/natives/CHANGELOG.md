@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [14.0.0] - 2026-04-08
+
 ### Breaking Changes
 
 - Changed `ChunkRegion.Inner` enum value to `ChunkRegion.Body` to align with region semantics

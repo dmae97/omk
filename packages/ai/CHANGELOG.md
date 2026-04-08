@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [14.0.0] - 2026-04-08
 ### Breaking Changes
 
 - Removed `coerceNullStrings` function and its automatic null-string coercion behavior from JSON parsing
