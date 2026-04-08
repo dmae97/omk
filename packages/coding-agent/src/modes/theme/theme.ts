@@ -1148,9 +1148,14 @@ const langMap: Record<string, SymbolKey> = {
 	sh: "lang.shell",
 	zsh: "lang.shell",
 	fish: "lang.shell",
+	powershell: "lang.shell",
+	just: "lang.shell",
 	shell: "lang.shell",
 	html: "lang.html",
 	htm: "lang.html",
+	astro: "lang.html",
+	vue: "lang.html",
+	svelte: "lang.html",
 	css: "lang.css",
 	scss: "lang.css",
 	sass: "lang.css",
@@ -2317,6 +2322,11 @@ export function getLanguageFromPath(filePath: string): string | undefined {
 	) {
 		return "conf";
 	}
+	if (baseName === "dockerfile" || baseName.startsWith("dockerfile.") || baseName === "containerfile") {
+		return "dockerfile";
+	}
+	if (baseName === "justfile") return "just";
+	if (baseName === "cmakelists.txt") return "cmake";
 
 	const ext = filePath.split(".").pop()?.toLowerCase();
 	if (!ext) return undefined;
@@ -2369,15 +2379,20 @@ export function getLanguageFromPath(filePath: string): string | undefined {
 		tool: "bash",
 		fish: "fish",
 		ps1: "powershell",
+		psm1: "powershell",
 		sql: "sql",
 		html: "html",
 		htm: "html",
 		xhtml: "html",
+		astro: "astro",
+		vue: "vue",
+		svelte: "svelte",
 		css: "css",
 		scss: "scss",
 		sass: "sass",
 		less: "less",
 		json: "json",
+		ipynb: "ipynb",
 		hbs: "handlebars",
 		hsb: "handlebars",
 		handlebars: "handlebars",
@@ -2395,12 +2410,16 @@ export function getLanguageFromPath(filePath: string): string | undefined {
 		diff: "diff",
 		patch: "diff",
 		dockerfile: "dockerfile",
+		containerfile: "dockerfile",
 		makefile: "make",
+		justfile: "just",
 		mk: "make",
 		mak: "make",
 		cmake: "cmake",
 		lua: "lua",
 		jl: "julia",
+		pl: "perl",
+		pm: "perl",
 		perl: "perl",
 		r: "r",
 		scala: "scala",

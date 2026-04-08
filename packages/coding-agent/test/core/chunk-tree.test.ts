@@ -3,7 +3,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { ChunkState } from "@oh-my-pi/pi-natives";
-import { applyChunkEdits, formatChunkedRead, parseChunkReadPath } from "../../src/tools/chunk-tree";
+import { applyChunkEdits, formatChunkedRead, parseChunkReadPath } from "../../src/edit/modes/chunk";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // parseChunkReadPath
@@ -124,7 +124,7 @@ describe("applyChunkEdits", () => {
 					content: "replacement",
 				},
 			]),
-		).toThrow(/did not match checksum/);
+		).toThrow(/Checksum mismatch/);
 	});
 
 	test("append_child on branch inserts after existing members", () => {
@@ -162,12 +162,52 @@ describe("applyChunkEdits", () => {
 		expect(result.diffSourceAfter).not.toEndWith("}\nmethod(): void {}\n");
 	});
 
-	test("delete removes the target chunk", () => {
+	test("replace with empty content removes the target chunk", () => {
 		const ac = { sel: "class_Worker.fn_run", crc: getChecksum(testSource, "class_Worker.fn_run") };
-		const result = edit([{ op: "delete", ...ac }]);
+		const result = edit([{ op: "replace", ...ac, content: "" }]);
 
 		expect(result.diffSourceAfter).not.toContain("run()");
 		expect(result.diffSourceAfter).toContain("constructor");
+	});
+
+	test("replace preserves attached doc comments when replacement starts at the declaration", () => {
+		const source = `class Worker {\n\t/** restart note */\n\trestart(): void {\n\t\tboot();\n\t}\n}\n`;
+		const checksum = getChecksum(source, "class_Worker.fn_restart");
+		const result = edit(
+			[
+				{
+					op: "replace",
+					sel: "class_Worker.fn_restart",
+					crc: checksum,
+					content: `\trestart(): void {\n\t\tshutdown();\n\t}`,
+				},
+			],
+			source,
+		);
+
+		expect(result.diffSourceAfter).toContain("\t/** restart note */\n\trestart(): void {");
+		expect(result.diffSourceAfter).toContain("\t\tshutdown();");
+		expect(result.diffSourceAfter).not.toContain("\t\tboot();");
+	});
+
+	test("replace does not duplicate attached doc comments when replacement includes a new one", () => {
+		const source = `class Worker {\n\t/** restart note */\n\trestart(): void {\n\t\tboot();\n\t}\n}\n`;
+		const checksum = getChecksum(source, "class_Worker.fn_restart");
+		const result = edit(
+			[
+				{
+					op: "replace",
+					sel: "class_Worker.fn_restart",
+					crc: checksum,
+					content: `\t/** updated restart note */\n\trestart(): void {\n\t\tshutdown();\n\t}`,
+				},
+			],
+			source,
+		);
+
+		expect(result.diffSourceAfter).toContain("\t/** updated restart note */\n\trestart(): void {");
+		expect(result.diffSourceAfter).not.toContain("/** restart note */");
+		expect(result.diffSourceAfter.match(/updated restart note/g)).toHaveLength(1);
 	});
 
 	test("sibling chunk crc from before the batch still validates after an unrelated sibling is replaced first", () => {
@@ -385,7 +425,7 @@ type Server struct {
 		expect(result.diffSourceAfter).not.toContain("\t}\n\tstatus(): string {");
 	});
 
-	test("delete of last impl method collapses extra whitespace-only lines before the closing brace", () => {
+	test("replace with empty content on last impl method collapses extra whitespace-only lines before the closing brace", () => {
 		const source = `impl S {
     fn a() {}
 
@@ -398,7 +438,7 @@ type Server struct {
 			source,
 			language: "rust",
 			filePath: "/tmp/impl.rs",
-			operations: [{ op: "delete", sel: "impl_S.fn_b", crc }],
+			operations: [{ op: "replace", sel: "impl_S.fn_b", crc, content: "" }],
 		});
 
 		expect(result.diffSourceAfter).toBe("impl S {\n    fn a() {}\n\n}\n");
@@ -425,7 +465,7 @@ describe("edit safety invariants", () => {
 		};
 	}
 
-	for (const operation of ["replace", "delete", "line-scoped replace"] as const) {
+	for (const operation of ["replace", "replace_empty"] as const) {
 		test(`rejects stale checksum for ${operation} with current and provided checksums in the error`, () => {
 			const { source, staleChecksum } = buildStaleRunFixture();
 
@@ -443,25 +483,10 @@ describe("edit safety invariants", () => {
 						source,
 					);
 				}
-				if (operation === "delete") {
-					return edit([{ op: "delete", sel: runChunkPath, crc: staleChecksum }], source);
-				}
-				return edit(
-					[
-						{
-							op: "replace",
-							sel: runChunkPath,
-							crc: staleChecksum,
-							line: 7,
-							endLine: 7,
-							content: '\t\tconsole.log("again");',
-						},
-					],
-					source,
-				);
+				return edit([{ op: "replace", sel: runChunkPath, crc: staleChecksum, content: "" }], source);
 			};
 
-			expect(invoke).toThrow(new RegExp(`did not match checksum "${staleChecksum}"`));
+			expect(invoke).toThrow(new RegExp(`got "${staleChecksum}"`));
 		});
 	}
 
@@ -506,41 +531,34 @@ describe("edit safety invariants", () => {
 		expect(result.diffSourceAfter).not.toContain('console.log("first")');
 	});
 
-	test("auto-accepts stale CRC for a second same-path splice in one batch", () => {
+	test("auto-accepts stale CRC when a second whole-chunk replace refines the same method", () => {
 		const checksum = getChecksum(testSource, runChunkPath);
 		const result = edit([
 			{
 				op: "replace",
 				sel: runChunkPath,
 				crc: checksum,
-				line: 6,
-				endLine: 6,
-				content: '\trun(task = "default"): void {',
+				content: '\trun(task = "default"): void {\n\t\tconsole.log(this.name);\n\t}',
 			},
 			{
 				op: "replace",
 				sel: runChunkPath,
 				crc: checksum,
-				line: 7,
-				endLine: 7,
-				content: "\t\tconsole.log(task);",
+				content: '\trun(task = "default"): void {\n\t\tconsole.log(task);\n\t}',
 			},
 		]);
 		expect(result.diffSourceAfter).toContain('run(task = "default")');
 		expect(result.diffSourceAfter).toContain("console.log(task)");
 	});
 
-	test("applies two same-path splices in one batch when the second checksum matches the post-first state", () => {
+	test("second whole-chunk replace uses post-first checksum when refining signature and body", () => {
 		const checksum = getChecksum(testSource, runChunkPath);
-		// Batch splices are applied bottom-up by absolute file line (higher line first).
 		const afterFirst = edit([
 			{
 				op: "replace",
 				sel: runChunkPath,
 				crc: checksum,
-				line: 7,
-				endLine: 7,
-				content: "\t\tconsole.log(task);",
+				content: "\trun(): void {\n\t\tconsole.log(task);\n\t}",
 			},
 		]).diffSourceAfter;
 		const checksum2 = getChecksum(afterFirst, runChunkPath);
@@ -549,22 +567,18 @@ describe("edit safety invariants", () => {
 				op: "replace",
 				sel: runChunkPath,
 				crc: checksum,
-				line: 7,
-				endLine: 7,
-				content: "\t\tconsole.log(task);",
+				content: "\trun(): void {\n\t\tconsole.log(task);\n\t}",
 			},
 			{
 				op: "replace",
 				sel: runChunkPath,
 				crc: checksum2,
-				line: 6,
-				endLine: 6,
-				content: '\trun(task = "default"): void {',
+				content: '\trun(task = "default"): void {\n\t\tconsole.log(task);\n\t}',
 			},
 		]);
 
 		expect(result.diffSourceAfter).toContain('run(task = "default"): void {');
-		expect(result.diffSourceAfter).toContain("\t\tconsole.log(task);");
+		expect(result.diffSourceAfter).toContain("\t\tconsole.log(task)");
 		expect(result.diffSourceAfter).not.toContain("console.log(this.name)");
 	});
 
@@ -577,12 +591,13 @@ describe("edit safety invariants", () => {
 					content: '\tstatus(): string {\n\t\treturn "active";\n\t}',
 				},
 				{
-					op: "delete",
+					op: "replace",
 					sel: "class_Worker.fn_run",
 					crc: "ZZZZ",
+					content: "",
 				},
 			]),
-		).toThrow(/Edit operation 2\/2 failed.*did not match checksum/s);
+		).toThrow(/Edit operation 2\/2 failed.*Checksum mismatch/s);
 	});
 
 	test("keeps untouched sibling checksums stable after a nearby edit", () => {
@@ -592,9 +607,7 @@ describe("edit safety invariants", () => {
 				op: "replace",
 				sel: runChunkPath,
 				crc: getChecksum(testSource, runChunkPath),
-				line: 7,
-				endLine: 7,
-				content: '\t\tconsole.log("nearby");',
+				content: '\trun(): void {\n\t\tconsole.log("nearby");\n\t}',
 			},
 		]).diffSourceAfter;
 
@@ -996,93 +1009,12 @@ describe("addressable member editing", () => {
 		expect(result.diffSourceAfter).toContain('  Idle = "idle",\n\n  Paused = "paused",\n\n  Busy = "busy",');
 	});
 
-	test("delete removes an individually addressable enum variant", () => {
+	test("replace with empty content removes an individually addressable enum variant", () => {
 		const busy = { sel: "enum_Status.variant_Busy", crc: getChecksum(enumSource, "enum_Status.variant_Busy") };
-		const result = edit([{ op: "delete", ...busy }], enumSource);
+		const result = edit([{ op: "replace", ...busy, content: "" }], enumSource);
 
 		expect(result.diffSourceAfter).toContain('Idle = "idle"');
 		expect(result.diffSourceAfter).not.toContain('Busy = "busy"');
-	});
-});
-
-describe("zero-width splice (line insertion)", () => {
-	test("zero-width splice inserts before an absolute file line inside the chunk", () => {
-		const ac = { sel: "class_Worker.fn_run", crc: getChecksum(testSource, "class_Worker.fn_run") };
-		const result = edit([
-			{
-				op: "replace",
-				...ac,
-				line: 7,
-				endLine: 6,
-				content: "if (!this.name) return;",
-			},
-		]);
-
-		expect(result.diffSourceAfter).toContain("\t\tif (!this.name) return;\n\t\tconsole.log(this.name);");
-	});
-
-	test("zero-width splice inserts after an absolute file line inside the chunk", () => {
-		const ac = { sel: "class_Worker.fn_run", crc: getChecksum(testSource, "class_Worker.fn_run") };
-		const result = edit([
-			{
-				op: "replace",
-				...ac,
-				line: 8,
-				endLine: 7,
-				content: "trackRun();",
-			},
-		]);
-
-		expect(result.diffSourceAfter).toContain("\t\tconsole.log(this.name);\n\t\ttrackRun();\n\t}");
-	});
-
-	test("zero-width splice rejects gaps outside the chunk", () => {
-		const ac = { sel: "class_Worker.fn_run", crc: getChecksum(testSource, "class_Worker.fn_run") };
-		expect(() =>
-			edit([
-				{
-					op: "replace",
-					...ac,
-					line: 20,
-					endLine: 19,
-					content: "noop();",
-				},
-			]),
-		).toThrow(/Invalid zero-width insert L20-L19/);
-	});
-	test("zero-width splice after the chunk preserves the separator gap", () => {
-		const source = `class Worker {\n\trun(): void {\n\t\twork();\n\t}\n\n\tstop(): void {\n\t\tcleanup();\n\t}\n}\n`;
-		const checksum = getChecksum(source, "class_Worker.fn_run");
-		const inserted = edit(
-			[
-				{
-					op: "replace",
-					sel: "class_Worker.fn_run",
-					crc: checksum,
-					line: 5,
-					endLine: 4,
-					content: "// inserted",
-				},
-			],
-			source,
-		);
-
-		expect(inserted.diffSourceAfter).toContain("\t}\n\t// inserted\n\n\tstop(): void {");
-
-		const stopChecksum = getChecksum(inserted.diffSourceAfter, "class_Worker.fn_stop");
-		const replaced = edit(
-			[
-				{
-					op: "replace",
-					sel: "class_Worker.fn_stop",
-					crc: stopChecksum,
-					content: "\tstop(): void {\n\t\tshutdown();\n\t}",
-				},
-			],
-			inserted.diffSourceAfter,
-		);
-
-		expect(replaced.diffSourceAfter).toContain("\t// inserted\n\n\tstop(): void {");
 	});
 });
 
@@ -1121,26 +1053,6 @@ describe("blank-line cleanup", () => {
 }
 `;
 
-	test("splice deletion collapses triple newlines at the edit seam", () => {
-		const checksum = getChecksum(commentedSource, "class_Worker.fn_restart");
-		const result = edit(
-			[
-				{
-					op: "replace",
-					sel: "class_Worker.fn_restart",
-					crc: checksum,
-					line: 6,
-					endLine: 6,
-					content: "",
-				},
-			],
-			commentedSource,
-		);
-
-		expect(result.diffSourceAfter).toContain("\t}\n\n\trestart(): void {");
-		expect(result.diffSourceAfter).not.toContain("\t}\n\n\n\trestart(): void {");
-	});
-
 	test("replace with empty content collapses triple newlines at the edit seam", () => {
 		const checksum = getChecksum(commentedSource, "class_Worker.fn_restart");
 		const result = edit(
@@ -1158,132 +1070,11 @@ describe("blank-line cleanup", () => {
 		expect(result.diffSourceAfter).toContain("\t}\n\n}");
 		expect(result.diffSourceAfter).not.toContain("\t}\n\n\n}");
 	});
-
-	test("delete collapses triple newlines at the edit seam", () => {
-		const checksum = getChecksum(commentedSource, "class_Worker.fn_restart");
-		const result = edit(
-			[
-				{
-					op: "delete",
-					sel: "class_Worker.fn_restart",
-					crc: checksum,
-				},
-			],
-			commentedSource,
-		);
-
-		expect(result.diffSourceAfter).toContain("\t}\n\n}");
-		expect(result.diffSourceAfter).not.toContain("\t}\n\n\n}");
-	});
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // splice
 // ═══════════════════════════════════════════════════════════════════════════
-
-describe("splice", () => {
-	test("replaces a line subrange within a chunk using absolute file lines", () => {
-		const ac = { sel: "class_Worker.fn_run", crc: getChecksum(testSource, "class_Worker.fn_run") };
-		// fn_run spans file lines 6-8; line 7 is console.log
-		const result = edit([
-			{
-				op: "replace",
-				...ac,
-				line: 7,
-				endLine: 7,
-				content: '\t\tconsole.log("updated");',
-			},
-		]);
-
-		expect(result.diffSourceAfter).toContain('"updated"');
-		expect(result.diffSourceAfter).not.toContain("console.log(this.name)");
-		expect(result.diffSourceAfter).toContain("run(): void {");
-	});
-
-	test("splice reindents zero-indented content against the replaced range", () => {
-		const source = `impl Widget {\n    fn old(&self) -> bool {\n        true\n    }\n}\n`;
-		const checksum = getChecksum(source, "impl_Widget.fn_old", "rust");
-		const result = applyEdit({
-			source,
-			language: "rust",
-			filePath: "/tmp/widget.rs",
-			operations: [
-				{
-					op: "replace",
-					sel: "impl_Widget.fn_old",
-					crc: checksum,
-					line: 3,
-					endLine: 4,
-					content: "    false\n}",
-				},
-			],
-		});
-
-		expect(result.diffSourceAfter).toContain("    fn old(&self) -> bool {\n        false\n    }\n");
-		expect(result.diffSourceAfter).not.toContain("            false");
-	});
-
-	test("splice with wrong checksum throws", () => {
-		expect(() =>
-			edit([
-				{
-					op: "replace",
-					sel: "class_Worker.fn_run",
-					crc: "ZZZZ",
-					line: 7,
-					endLine: 7,
-					content: "replacement",
-				},
-			]),
-		).toThrow(/did not match checksum/);
-	});
-
-	test("splice rejects reversed ranges that are not zero-width gaps", () => {
-		const ac = { sel: "class_Worker.fn_run", crc: getChecksum(testSource, "class_Worker.fn_run") };
-		expect(() =>
-			edit([
-				{
-					op: "replace",
-					...ac,
-					line: 4,
-					endLine: 2,
-					content: "replacement",
-				},
-			]),
-		).toThrow(/Invalid line range L4-L2/);
-	});
-
-	test("splice rejects line 0 before edit application", () => {
-		const ac = { sel: "class_Worker.fn_run", crc: getChecksum(testSource, "class_Worker.fn_run") };
-		expect(() =>
-			edit([
-				{
-					op: "replace",
-					...ac,
-					line: 0,
-					endLine: 1,
-					content: "replacement",
-				},
-			]),
-		).toThrow(/Line 0 is invalid/);
-	});
-
-	test("splice with out-of-range lines throws", () => {
-		const ac = { sel: "class_Worker.fn_run", crc: getChecksum(testSource, "class_Worker.fn_run") };
-		// fn_run spans file lines 6-8; L1-L5 does not overlap
-		expect(() =>
-			edit([
-				{
-					op: "replace",
-					...ac,
-					line: 1,
-					endLine: 5,
-					content: "replacement",
-				},
-			]),
-		).toThrow(/outside/i);
-	});
-});
 
 describe("prepend_child warnings", () => {
 	test("warns when comment-only prepend_child may merge into the next chunk", () => {
@@ -1304,31 +1095,51 @@ describe("prepend_child warnings", () => {
 	});
 });
 
-describe("chunk selector validation for edits", () => {
-	test("rejects suffix-only edit selectors", () => {
-		expect(() =>
-			edit([
-				{
-					op: "replace",
-					sel: "fn_run",
-					crc: getChecksum(testSource, "class_Worker.fn_run"),
-					content: `run(): void {\n\tconsole.log(this.name);\n}`,
-				},
-			]),
-		).toThrow(/Chunk path not found: "fn_run"/);
+describe("chunk selector auto-resolution", () => {
+	test("warns on suffix auto-resolution", () => {
+		const result = edit([
+			{
+				op: "replace",
+				sel: "fn_run",
+				crc: getChecksum(testSource, "class_Worker.fn_run"),
+				content: "run(): void {\n\tconsole.log(this.name);\n}",
+			},
+		]);
+		expect(
+			result.warnings.some(w => w.includes('Auto-resolved chunk selector "fn_run" to "class_Worker.fn_run"')),
+		).toBe(true);
 	});
 
-	test("rejects prefix-stripped edit selectors", () => {
+	test("warns on prefix auto-resolution", () => {
+		const result = edit([
+			{
+				op: "replace",
+				sel: "run",
+				crc: getChecksum(testSource, "class_Worker.fn_run"),
+				content: "run(): void {\n\tconsole.log(this.name);\n}",
+			},
+		]);
+		expect(result.warnings.some(w => w.includes('Auto-resolved chunk selector "run" to "class_Worker.fn_run"'))).toBe(
+			true,
+		);
+	});
+
+	test("errors on ambiguous suffix matches", () => {
+		const source = `class Foo {\n\trun(): void {}\n}\nclass Bar {\n\trun(): void {}\n}\n`;
 		expect(() =>
-			edit([
-				{
-					op: "replace",
-					sel: "run",
-					crc: getChecksum(testSource, "class_Worker.fn_run"),
-					content: `run(): void {\n\tconsole.log(this.name);\n}`,
-				},
-			]),
-		).toThrow(/Chunk path not found: "run"/);
+			applyEdit({
+				source,
+				language: "typescript",
+				operations: [
+					{
+						op: "replace",
+						sel: "fn_run",
+						crc: getChecksum(source, "class_Foo.fn_run"),
+						content: "",
+					},
+				],
+			}),
+		).toThrow(/Ambiguous chunk selector "fn_run" matches 2 chunks/);
 	});
 });
 
@@ -1396,8 +1207,10 @@ describe("tlaplus chunk rendering", () => {
 		});
 
 		expect(result.diffSourceAfter).toContain("Start == x = 0");
-		expect(result.responseText).toContain("[mod_Spec.translation_12#");
-		expect(result.responseText).toContain("\\* [translation hidden]");
+		// The scoped response tree includes the touched chunk and adjacent siblings,
+		// but not distant ones like translation_12. The translation content must
+		// still be hidden from any chunk that IS visible.
+		expect(result.responseText).toContain("[mod_Spec.operator_Start#");
 		expect(result.responseText).not.toContain("Next == pc' = pc");
 	});
 });

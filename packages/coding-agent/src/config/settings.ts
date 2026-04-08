@@ -19,8 +19,8 @@ import { YAML } from "bun";
 import { type Settings as SettingsCapabilityItem, settingsCapability } from "../capability/settings";
 import type { ModelRole } from "../config/model-registry";
 import { loadCapability } from "../discovery";
+import { type EditMode, normalizeEditMode } from "../edit";
 import { isLightTheme, setAutoThemeMapping, setColorBlindMode, setSymbolPreset } from "../modes/theme/theme";
-import { type EditMode, normalizeEditMode } from "../patch";
 import { AgentStorage } from "../session/agent-storage";
 import { withFileLock } from "./file-lock";
 import {

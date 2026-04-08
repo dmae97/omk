@@ -6,7 +6,7 @@ import * as url from "node:url";
 import * as zlib from "node:zlib";
 import type { AgentToolContext } from "@oh-my-pi/pi-agent-core";
 import { DEFAULT_BASH_INTERCEPTOR_RULES, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
-import { EditTool } from "@oh-my-pi/pi-coding-agent/patch";
+import { EditTool } from "@oh-my-pi/pi-coding-agent/edit";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { BashTool } from "@oh-my-pi/pi-coding-agent/tools/bash";

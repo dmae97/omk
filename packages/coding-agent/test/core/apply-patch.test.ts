@@ -9,7 +9,7 @@ import {
 	type PatchInput,
 	parseDiffHunks,
 	seekSequence,
-} from "@oh-my-pi/pi-coding-agent/patch";
+} from "@oh-my-pi/pi-coding-agent/edit";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Legacy parser for test fixtures (*** Begin Patch format)

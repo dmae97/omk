@@ -359,13 +359,17 @@
 			"types": "./src/modes/utils/*.ts",
 			"import": "./src/modes/utils/*.ts"
 		},
-		"./patch": {
-			"types": "./src/patch/index.ts",
-			"import": "./src/patch/index.ts"
+		"./edit": {
+			"types": "./src/edit/index.ts",
+			"import": "./src/edit/index.ts"
 		},
-		"./patch/*": {
-			"types": "./src/patch/*.ts",
-			"import": "./src/patch/*.ts"
+		"./edit/*": {
+			"types": "./src/edit/*.ts",
+			"import": "./src/edit/*.ts"
+		},
+		"./edit/modes/*": {
+			"types": "./src/edit/modes/*.ts",
+			"import": "./src/edit/modes/*.ts"
 		},
 		"./plan-mode/*": {
 			"types": "./src/plan-mode/*.ts",

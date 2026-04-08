@@ -381,7 +381,7 @@ export declare enum ChunkAnchorStyle {
 
 /** Structural edit to apply relative to a chunk anchor. */
 export declare enum ChunkEditOp {
-  /** Replace the chunk body, or a line range when `line`/`endLine` are set. */
+  /** Replace the chunk body, or a substring via `find`. */
   Replace = 'replace',
   /** Remove the chunk's source range. */
   Delete = 'delete',
@@ -392,7 +392,25 @@ export declare enum ChunkEditOp {
   /** Insert `content` after the target chunk's source range. */
   AppendSibling = 'append_sibling',
   /** Insert `content` before the target chunk's source range. */
-  PrependSibling = 'prepend_sibling'
+  PrependSibling = 'prepend_sibling',
+  /**
+   * Replace only the inner body of the chunk, preserving signature and
+   * closing delimiter.
+   */
+  ReplaceBody = 'replace_body'
+}
+
+/** How a chunk participates in a focus-scoped render pass. */
+export declare enum ChunkFocusMode {
+  /** Emit full content and recurse normally. */
+  Expanded = 'expanded',
+  /** Emit just the opening anchor; do not recurse or emit body. */
+  Collapsed = 'collapsed',
+  /**
+   * Emit opening + closing anchors; recurse into focused children only.
+   * Interior gap lines between children are suppressed.
+   */
+  Container = 'container'
 }
 
 /** Summary of a single chunk node for tool output and navigation. */
@@ -479,18 +497,16 @@ export interface EditOperation {
   crc?: string
   /** Replacement or inserted text (meaning depends on `op`). */
   content?: string
-  /** For line-scoped `replace`, 1-based start line inside the target chunk. */
-  line?: number
   /**
-   * For line-scoped `replace`, 1-based end line inside the chunk (defaults to
-   * `line`).
+   * For scoped find/replace: literal substring to locate inside the target
+   * chunk. Must match exactly once. Pairs with `content` as the replacement.
    */
-  endLine?: number
+  find?: string
 }
 
 /** Arguments for applying a batch of chunk edits to a file. */
 export interface EditParams {
-  /** Edits to apply in order (scheduling may reorder line-scoped groups). */
+  /** Edits to apply in order. */
   operations: Array<EditOperation>
   /** Default chunk selector when an `EditOperation` omits `sel`. */
   defaultSelector?: string
@@ -585,6 +601,12 @@ export declare enum FileType {
   Dir = 2,
   /** Symbolic link. */
   Symlink = 3
+}
+
+/** Path + focus mode pair for the N-API boundary (`HashMap` doesn't cross FFI). */
+export interface FocusedPath {
+  path: string
+  mode: ChunkFocusMode
 }
 
 /**
@@ -1145,6 +1167,11 @@ export interface RenderParams {
   showLeafPreview: boolean
   /** Replace tab characters in displayed previews (e.g. two spaces). */
   tabReplacement?: string
+  /**
+   * When set, restrict rendering to these chunks with their specified focus
+   * modes. Everything not in this list is skipped.
+   */
+  focusedPaths?: Array<FocusedPath>
 }
 
 /** Sampling filter for resize operations. */

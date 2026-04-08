@@ -7,16 +7,16 @@ import { Text } from "@oh-my-pi/pi-tui";
 import { untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "../config/prompt-templates";
+import { formatChunkedGrepLine } from "../edit/modes/chunk";
+import { computeLineHash } from "../edit/modes/hashline";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import { getLanguageFromPath, type Theme } from "../modes/theme/theme";
-import { computeLineHash } from "../patch/hashline";
 import grepDescription from "../prompts/tools/grep.md" with { type: "text" };
 import { DEFAULT_MAX_COLUMN, type TruncationResult, truncateHead } from "../session/streaming-output";
 import { Ellipsis, Hasher, type RenderCache, renderStatusLine, renderTreeList, truncateToWidth } from "../tui";
 import { resolveEditMode } from "../utils/edit-mode";
 import { resolveFileDisplayMode } from "../utils/file-display-mode";
 import type { ToolSession } from ".";
-import { formatChunkedGrepLine } from "./chunk-tree";
 import { formatFullOutputReference, type OutputMeta } from "./output-meta";
 import {
 	combineSearchGlobs,

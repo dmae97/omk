@@ -3,15 +3,15 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { _resetSettingsForTest, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
+import { EditTool } from "@oh-my-pi/pi-coding-agent/edit";
+import { HASHLINE_NIBBLE_ALPHABET } from "@oh-my-pi/pi-coding-agent/edit/modes/hashline";
 import { getLanguageFromPath } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
-import { EditTool } from "@oh-my-pi/pi-coding-agent/patch";
-import { HASHLINE_NIBBLE_ALPHABET } from "@oh-my-pi/pi-coding-agent/patch/hashline";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { GrepTool } from "@oh-my-pi/pi-coding-agent/tools/grep";
 import { ReadTool } from "@oh-my-pi/pi-coding-agent/tools/read";
 import { resolveFileDisplayMode } from "@oh-my-pi/pi-coding-agent/utils/file-display-mode";
 import { ChunkReadStatus, ChunkState } from "@oh-my-pi/pi-natives";
-import { applyChunkEdits } from "../../src/tools/chunk-tree";
+import { applyChunkEdits } from "../../src/edit/modes/chunk";
 
 function getText(result: { content: Array<{ type: string; text?: string }> }): string {
 	return result.content
@@ -41,6 +41,17 @@ function getChunkChecksum(source: string, language: string, chunkPath: string): 
 function buildLargeTypescriptFixture(): string {
 	const body = Array.from({ length: 60 }, (_, index) => `      total += ${index};`).join("\n");
 	return `class Server {\n  private handleError(err: Error): string {\n    let total = 0;\n${body}\n    return err.message + total;\n  }\n}\n\nfunction main(): void {\n  console.log("boot");\n}\n`;
+}
+
+function buildHandleErrorMethod(options: { totalInitLine?: string; returnLine?: string } = {}): string {
+	const body = Array.from({ length: 60 }, (_, index) => `      total += ${index};`).join("\n");
+	const totalInit = options.totalInitLine ?? "    let total = 0;";
+	const ret = options.returnLine ?? "    return err.message + total;";
+	return `  private handleError(err: Error): string {
+${totalInit}
+${body}
+${ret}
+  }`;
 }
 
 describe("chunk mode tools", () => {
@@ -242,9 +253,7 @@ describe("chunk mode tools", () => {
 					op: "replace",
 					sel: chunkPath,
 					crc: checksum,
-					line: 63,
-					endLine: 63,
-					content: "return err.message.toUpperCase() + total;",
+					content: buildHandleErrorMethod({ returnLine: "    return err.message.toUpperCase() + total;" }),
 				},
 			],
 		}).diffSourceAfter;
@@ -255,11 +264,15 @@ describe("chunk mode tools", () => {
 			edits: [
 				{
 					target: `${chunkPath}#${checksum}`,
-					line: 63,
-					end_line: 63,
-					content: "return err.message.toUpperCase() + total;",
+					content: buildHandleErrorMethod({ returnLine: "    return err.message.toUpperCase() + total;" }),
 				},
-				{ target: `${chunkPath}#${checksum2}`, line: 3, end_line: 3, content: "let total = 1;" },
+				{
+					target: `${chunkPath}#${checksum2}`,
+					content: buildHandleErrorMethod({
+						totalInitLine: "    let total = 1;",
+						returnLine: "    return err.message.toUpperCase() + total;",
+					}),
+				},
 			],
 		} as never);
 
@@ -304,48 +317,6 @@ describe("chunk mode tools", () => {
 		expect(updatedSource).toContain('return "ok";');
 	});
 
-	it("supports explicit absolute-line zero-width splices", async () => {
-		const filePath = path.join(tmpDir, "server.ts");
-		const originalSource = buildLargeTypescriptFixture();
-		await Bun.write(filePath, originalSource);
-		const session = createSession(tmpDir);
-		const editTool = new EditTool(session);
-		const chunkPath = "class_Server.fn_handleError";
-		const fileText = await Bun.file(filePath).text();
-		const checksum = getChunkChecksum(fileText, "typescript", chunkPath);
-		const afterInsertAfter = applyChunkEdits({
-			source: fileText,
-			language: "typescript",
-			cwd: tmpDir,
-			filePath,
-			operations: [
-				{
-					op: "replace",
-					sel: chunkPath,
-					crc: checksum,
-					line: 4,
-					endLine: 3,
-					content: "const end = Date.now();",
-				},
-			],
-		}).diffSourceAfter;
-		const checksum2 = getChunkChecksum(afterInsertAfter, "typescript", chunkPath);
-
-		// Zero-width splices at larger `end` run first (bottom-up) so line numbers stay stable.
-		await editTool.execute("chunk-edit-insert-lines", {
-			path: filePath,
-			edits: [
-				{ target: `${chunkPath}#${checksum}`, line: 4, end_line: 3, content: "const end = Date.now();" },
-				{ target: `${chunkPath}#${checksum2}`, line: 3, end_line: 2, content: "const start = Date.now();" },
-			],
-		} as never);
-
-		const updatedSource = await Bun.file(filePath).text();
-		expect(updatedSource).toContain("    const start = Date.now();");
-		expect(updatedSource).toContain("    const end = Date.now();");
-		expect(updatedSource).toContain("    let total = 0;");
-	});
-
 	it("treats empty replace content as delete", async () => {
 		const filePath = path.join(tmpDir, "server.ts");
 		const originalSource = buildLargeTypescriptFixture();
@@ -379,31 +350,6 @@ describe("chunk mode tools", () => {
 		});
 	});
 
-	it("rejects reversed splice ranges without changing the file", async () => {
-		const filePath = path.join(tmpDir, "server.ts");
-		const originalSource = buildLargeTypescriptFixture();
-		await Bun.write(filePath, originalSource);
-		const session = createSession(tmpDir);
-		const editTool = new EditTool(session);
-		const checksum = getChunkChecksum(originalSource, "typescript", "class_Server.fn_handleError");
-
-		await expect(
-			editTool.execute("chunk-edit-invalid-splice-range", {
-				path: filePath,
-				edits: [
-					{
-						target: `class_Server.fn_handleError#${checksum}`,
-						line: 5,
-						end_line: 2,
-						content: "    let total = 1;",
-					},
-				],
-			}),
-		).rejects.toThrow(/Invalid line range L5-L2/);
-
-		expect(await Bun.file(filePath).text()).toBe(originalSource);
-	});
-
 	it("rolls back mixed-validity batches without changing the file", async () => {
 		const filePath = path.join(tmpDir, "server.ts");
 		const originalSource = buildLargeTypescriptFixture();
@@ -416,7 +362,7 @@ describe("chunk mode tools", () => {
 				path: filePath,
 				edits: [
 					{ target: "class_Server", op: "append", content: '  status(): string {\n    return "ok";\n  }' },
-					{ target: "class_Server.fn_handleError#ZZZZ", op: "delete" },
+					{ target: "class_Server.fn_handleError#ZZZZ", content: "" },
 				],
 			}),
 		).rejects.toThrow(/No changes were saved/);
@@ -442,7 +388,7 @@ describe("chunk mode tools", () => {
 					},
 				],
 			}),
-		).rejects.toThrow(/Parse errors:[\s\S]*L\d+:C\d+/i);
+		).rejects.toThrow(/Parse errors:[\s\S]*L\d+-L\d+.*parse error introduced/i);
 
 		expect(await Bun.file(filePath).text()).toBe(originalSource);
 	});
@@ -464,9 +410,7 @@ describe("chunk mode tools", () => {
 				},
 				{
 					target: `class_Server.fn_handleError#${checksum}`,
-					line: 3,
-					end_line: 3,
-					content: "    return err.message.toUpperCase();",
+					content: "  private handleError(err: Error): string {\n    return err.message.toUpperCase();\n  }",
 				},
 			],
 		});
@@ -488,9 +432,7 @@ describe("chunk mode tools", () => {
 				edits: [
 					{
 						target: "class_Server.fn_handleError",
-						line: 3,
-						end_line: 3,
-						content: "    let total = 1;",
+						content: buildHandleErrorMethod({ totalInitLine: "    let total = 1;" }),
 					},
 				],
 			}),
@@ -498,7 +440,7 @@ describe("chunk mode tools", () => {
 		expect(await Bun.file(filePath).text()).toBe(originalSource);
 	});
 
-	it("rejects non-canonical edit selectors", async () => {
+	it("auto-resolves chunk selectors with missing name prefixes", async () => {
 		const filePath = path.join(tmpDir, "server.ts");
 		const originalSource = buildLargeTypescriptFixture();
 		await Bun.write(filePath, originalSource);
@@ -506,49 +448,14 @@ describe("chunk mode tools", () => {
 		const editTool = new EditTool(session);
 		const checksum = getChunkChecksum(originalSource, "typescript", "fn_main");
 
-		await expect(
-			editTool.execute("chunk-edit-prefix-resolve", {
-				path: filePath,
-				edits: [{ target: `main#${checksum}`, content: 'function main(): void {\n  console.log("started");\n}\n' }],
-			}),
-		).rejects.toThrow(/Chunk path not found: "main"/);
-		expect(await Bun.file(filePath).text()).toBe(originalSource);
-	});
-
-	it("resolves root-only checksum targets to the file root", async () => {
-		const filePath = path.join(tmpDir, "CONTRIBUTING.md");
-		const source = `# Contributing to uLua
-
-## Building and Testing
-
-Use just.
-
-## Code Style
-
-Use clang-format.
-`;
-		await Bun.write(filePath, source);
-		const session = createSession(tmpDir);
-		const editTool = new EditTool(session);
-		const language = getLanguageFromPath(filePath);
-		if (!language) {
-			throw new Error("expected markdown language");
-		}
-		const state = ChunkState.parse(source, language);
-		const root = state.root();
-		if (!root) {
-			throw new Error("expected root chunk");
-		}
-		expect(state.chunks().filter(chunk => chunk.checksum === root.checksum).length).toBeGreaterThan(1);
-
-		const _result = await editTool.execute("chunk-edit-root-checksum", {
+		// Use bare "main" instead of "fn_main"
+		const _result = await editTool.execute("chunk-edit-prefix-resolve", {
 			path: filePath,
-			edits: [{ target: `#${root.checksum}`, line: 1, end_line: 1, content: "# Updated guide" }],
+			edits: [{ target: `main#${checksum}`, content: 'function main(): void {\n  console.log("started");\n}\n' }],
 		});
-
 		const updatedSource = await Bun.file(filePath).text();
-		expect(updatedSource.startsWith("# Updated guide\n")).toBe(true);
-		expect(updatedSource).toContain("## Building and Testing");
+		expect(updatedSource).toContain('console.log("started")');
+		expect(updatedSource).not.toContain('console.log("boot")');
 	});
 
 	it("preserves sibling headings when replacing a whole markdown section", async () => {
@@ -601,5 +508,56 @@ Use clang-format.
 		expect(updatedSource).toContain("## Commit Messages");
 		expect(updatedSource).toContain("Use `just verify`");
 		expect(updatedSource).not.toContain("cmake -S . -B build");
+	});
+
+	it("reads a Jupyter notebook as cell-based chunks in chunk mode", async () => {
+		const filePath = path.join(tmpDir, "analysis.ipynb");
+		const notebook = JSON.stringify(
+			{
+				cells: [
+					{
+						cell_type: "code",
+						source: ["def greet(name):\n", "    return f'Hello {name}'\n"],
+						metadata: {},
+						outputs: [],
+						execution_count: 1,
+					},
+					{
+						cell_type: "markdown",
+						source: ["# Results\n", "Below are the results.\n"],
+						metadata: {},
+					},
+					{
+						cell_type: "code",
+						source: ["class Model:\n", "    def train(self):\n", "        pass\n"],
+						metadata: {},
+						outputs: [],
+						execution_count: null,
+					},
+				],
+				metadata: { kernelspec: { language: "python" } },
+				nbformat: 4,
+				nbformat_minor: 5,
+			},
+			null,
+			" ",
+		);
+		await Bun.write(filePath, notebook);
+
+		// Read the notebook in chunk mode
+		const readTool = new ReadTool(createSession(tmpDir));
+		const result = await readTool.execute("read-ipynb", { path: filePath });
+		const text = getText(result);
+
+		// Should show cell-level anchors
+		expect(text).toContain("cell_1");
+		expect(text).toContain("cell_2");
+		expect(text).toContain("cell_3");
+		// Should show sub-chunks within code cells
+		expect(text).toContain("cell_1.fn_greet");
+		expect(text).toContain("cell_3.class_Model");
+		// Should show cell content
+		expect(text).toContain("def greet(name):");
+		expect(text).toContain("# Results");
 	});
 });

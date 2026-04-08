@@ -6,21 +6,33 @@ use crate::chunk::state::ChunkState;
 
 #[derive(Clone)]
 pub struct ChunkNode {
-	pub path:        String,
-	pub name:        String,
-	pub leaf:        bool,
-	pub parent_path: Option<String>,
-	pub children:    Vec<String>,
-	pub signature:   Option<String>,
-	pub start_line:  u32,
-	pub end_line:    u32,
-	pub line_count:  u32,
-	pub start_byte:  u32,
-	pub end_byte:    u32,
+	pub path:                String,
+	pub name:                String,
+	pub leaf:                bool,
+	pub parent_path:         Option<String>,
+	pub children:            Vec<String>,
+	pub signature:           Option<String>,
+	pub start_line:          u32,
+	pub end_line:            u32,
+	pub line_count:          u32,
+	pub start_byte:          u32,
+	pub end_byte:            u32,
+	/// Start byte of the semantic declaration used for checksums. This can be
+	/// later than `start_byte` when the chunk absorbs attached leading trivia
+	/// such as doc comments or attributes.
+	pub checksum_start_byte: u32,
+
+	pub body_start_byte: Option<u32>,
+	pub body_end_byte:   Option<u32>,
+
 	pub checksum:    String,
 	pub error:       bool,
 	pub indent:      u32,
 	pub indent_char: String,
+	/// True for group-candidate chunks (e.g. `stmts`, `imports`, `decls`) that
+	/// represent an ordered list of similar items. Append/prepend is valid on
+	/// these even when they are leaf nodes.
+	pub group:       bool,
 }
 
 #[derive(Clone)]
@@ -71,7 +83,7 @@ pub enum ChunkReadStatus {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[napi(string_enum)]
 pub enum ChunkEditOp {
-	/// Replace the chunk body, or a line range when `line`/`endLine` are set.
+	/// Replace the chunk body, or a substring via `find`.
 	#[napi(value = "replace")]
 	Replace,
 	/// Remove the chunk's source range.
@@ -89,6 +101,10 @@ pub enum ChunkEditOp {
 	/// Insert `content` before the target chunk's source range.
 	#[napi(value = "prepend_sibling")]
 	PrependSibling,
+	/// Replace only the inner body of the chunk, preserving signature and
+	/// closing delimiter.
+	#[napi(value = "replace_body")]
+	ReplaceBody,
 }
 
 impl ChunkEditOp {
@@ -100,6 +116,7 @@ impl ChunkEditOp {
 			Self::PrependChild => "prepend_child",
 			Self::AppendSibling => "append_sibling",
 			Self::PrependSibling => "prepend_sibling",
+			Self::ReplaceBody => "replace_body",
 		}
 	}
 }
@@ -195,6 +212,30 @@ impl ChunkAnchorStyle {
 	}
 }
 
+/// How a chunk participates in a focus-scoped render pass.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[napi(string_enum)]
+pub enum ChunkFocusMode {
+	/// Emit full content and recurse normally.
+	#[napi(value = "expanded")]
+	Expanded,
+	/// Emit just the opening anchor; do not recurse or emit body.
+	#[napi(value = "collapsed")]
+	Collapsed,
+	/// Emit opening + closing anchors; recurse into focused children only.
+	/// Interior gap lines between children are suppressed.
+	#[napi(value = "container")]
+	Container,
+}
+
+/// Path + focus mode pair for the N-API boundary (`HashMap` doesn't cross FFI).
+#[derive(Clone, Debug)]
+#[napi(object)]
+pub struct FocusedPath {
+	pub path: String,
+	pub mode: ChunkFocusMode,
+}
+
 /// Options for `ChunkState.render`: which subtree to show and how anchors
 /// appear.
 #[derive(Clone)]
@@ -226,6 +267,11 @@ pub struct RenderParams {
 	/// Replace tab characters in displayed previews (e.g. two spaces).
 	#[napi(js_name = "tabReplacement")]
 	pub tab_replacement:      Option<String>,
+
+	/// When set, restrict rendering to these chunks with their specified focus
+	/// modes. Everything not in this list is skipped.
+	#[napi(js_name = "focusedPaths")]
+	pub focused_paths: Option<Vec<FocusedPath>>,
 }
 
 /// Options for `ChunkState.renderRead`: selector path, display path, and
@@ -272,28 +318,25 @@ pub struct ReadResult {
 #[napi(object)]
 pub struct EditOperation {
 	/// Edit kind (replace, delete, insert relative to anchor).
-	pub op:       ChunkEditOp,
+	pub op:      ChunkEditOp,
 	/// Chunk selector path; falls back to `EditParams.defaultSelector` when
 	/// omitted.
-	pub sel:      Option<String>,
+	pub sel:     Option<String>,
 	/// Optional checksum anchor; falls back to `EditParams.defaultCrc` when
 	/// omitted.
-	pub crc:      Option<String>,
+	pub crc:     Option<String>,
 	/// Replacement or inserted text (meaning depends on `op`).
-	pub content:  Option<String>,
-	/// For line-scoped `replace`, 1-based start line inside the target chunk.
-	pub line:     Option<u32>,
-	/// For line-scoped `replace`, 1-based end line inside the chunk (defaults to
-	/// `line`).
-	#[napi(js_name = "endLine")]
-	pub end_line: Option<u32>,
+	pub content: Option<String>,
+	/// For scoped find/replace: literal substring to locate inside the target
+	/// chunk. Must match exactly once. Pairs with `content` as the replacement.
+	pub find:    Option<String>,
 }
 
 /// Arguments for applying a batch of chunk edits to a file.
 #[derive(Clone)]
 #[napi(object)]
 pub struct EditParams {
-	/// Edits to apply in order (scheduling may reorder line-scoped groups).
+	/// Edits to apply in order.
 	pub operations:       Vec<EditOperation>,
 	/// Default chunk selector when an `EditOperation` omits `sel`.
 	#[napi(js_name = "defaultSelector")]

@@ -4,10 +4,10 @@
  * These provide rich visualization for tool calls and results in the TUI.
  */
 import type { Component } from "@oh-my-pi/pi-tui";
+import { editToolRenderer } from "../edit";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import { lspToolRenderer } from "../lsp/render";
 import type { Theme } from "../modes/theme/theme";
-import { editToolRenderer } from "../patch";
 import { taskToolRenderer } from "../task/render";
 import { webSearchToolRenderer } from "../web/search/render";
 import { askToolRenderer } from "./ask";

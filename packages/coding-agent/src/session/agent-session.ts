@@ -63,6 +63,7 @@ import {
 } from "../config/model-resolver";
 import { expandPromptTemplate, type PromptTemplate, renderPromptTemplate } from "../config/prompt-templates";
 import type { Settings, SkillsSettings } from "../config/settings";
+import { normalizeDiff, normalizeToLF, ParseError, previewPatch, stripBom } from "../edit";
 import { type BashResult, executeBash as executeBashCommand } from "../exec/bash-executor";
 import { exportSessionToHtml } from "../export/html";
 import type { TtsrManager, TtsrMatchContext } from "../export/ttsr";
@@ -103,7 +104,6 @@ import {
 	selectDiscoverableMCPToolNamesByServer,
 } from "../mcp/discoverable-tool-metadata";
 import { getCurrentThemeName, theme } from "../modes/theme/theme";
-import { normalizeDiff, normalizeToLF, ParseError, previewPatch, stripBom } from "../patch";
 import type { PlanModeState } from "../plan-mode/state";
 import autoHandoffThresholdFocusPrompt from "../prompts/system/auto-handoff-threshold-focus.md" with { type: "text" };
 import eagerTodoPrompt from "../prompts/system/eager-todo.md" with { type: "text" };
@@ -2705,6 +2705,10 @@ export class AgentSession {
 			attribution: "user",
 			timestamp: Date.now(),
 		});
+	}
+
+	queueDeferredMessage(message: CustomMessage): void {
+		this.#queueHiddenNextTurnMessage(message, true);
 	}
 
 	#queueHiddenNextTurnMessage(message: CustomMessage, triggerTurn: boolean): void {

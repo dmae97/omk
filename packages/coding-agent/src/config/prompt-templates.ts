@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { type ChunkAnchorStyle, formatAnchor } from "@oh-my-pi/pi-natives";
 import { getProjectDir, getProjectPromptsDir, getPromptsDir, logger } from "@oh-my-pi/pi-utils";
 import Handlebars from "handlebars";
-import { computeLineHash } from "../patch/hashline";
+import { computeLineHash } from "../edit/modes/hashline";
 import { jtdToTypeScript } from "../tools/jtd-to-typescript";
 import { parseCommandArgs, substituteArgs } from "../utils/command-args";
 import { parseFrontmatter } from "../utils/frontmatter";

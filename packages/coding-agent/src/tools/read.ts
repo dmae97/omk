@@ -8,11 +8,18 @@ import { Text } from "@oh-my-pi/pi-tui";
 import { getRemoteDir, untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "../config/prompt-templates";
+import {
+	type ChunkReadTarget,
+	formatChunkedRead,
+	parseChunkReadPath,
+	parseChunkSelector,
+	resolveAnchorStyle,
+} from "../edit/modes/chunk";
+import { computeLineHash } from "../edit/modes/hashline";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import { parseInternalUrl } from "../internal-urls/parse";
 import type { InternalUrl } from "../internal-urls/types";
 import { getLanguageFromPath, type Theme } from "../modes/theme/theme";
-import { computeLineHash } from "../patch/hashline";
 import readDescription from "../prompts/tools/read.md" with { type: "text" };
 import readChunkDescription from "../prompts/tools/read-chunk.md" with { type: "text" };
 import type { ToolSession } from "../sdk";
@@ -38,13 +45,6 @@ import { convertFileWithMarkit } from "../utils/markit";
 import { detectSupportedImageMimeTypeFromFile } from "../utils/mime";
 import { type ArchiveReader, openArchive, parseArchivePathCandidates } from "./archive-reader";
 import {
-	type ChunkReadTarget,
-	formatChunkedRead,
-	parseChunkReadPath,
-	parseChunkSelector,
-	resolveAnchorStyle,
-} from "./chunk-tree";
-import {
 	executeReadUrl,
 	isReadableUrlPath,
 	loadReadUrlCacheEntry,
@@ -66,18 +66,7 @@ function isProseLanguage(language: string | undefined): boolean {
 }
 
 // Document types converted to markdown via markit.
-const CONVERTIBLE_EXTENSIONS = new Set([
-	".pdf",
-	".doc",
-	".docx",
-	".ppt",
-	".pptx",
-	".xls",
-	".xlsx",
-	".rtf",
-	".epub",
-	".ipynb",
-]);
+const CONVERTIBLE_EXTENSIONS = new Set([".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx", ".rtf", ".epub"]);
 
 // Remote mount path prefix (sshfs mounts) - skip fuzzy matching to avoid hangs
 const REMOTE_MOUNT_PREFIX = getRemoteDir() + path.sep;

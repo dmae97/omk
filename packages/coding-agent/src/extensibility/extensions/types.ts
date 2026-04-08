@@ -28,11 +28,11 @@ import type { Static, TSchema } from "@sinclair/typebox";
 import type { Rule } from "../../capability/rule";
 import type { KeybindingsManager } from "../../config/keybindings";
 import type { ModelRegistry } from "../../config/model-registry";
+import type { EditToolDetails } from "../../edit";
 import type { BashResult } from "../../exec/bash-executor";
 import type { ExecOptions, ExecResult } from "../../exec/exec";
 import type { PythonResult } from "../../ipy/executor";
 import type { Theme } from "../../modes/theme/theme";
-import type { EditToolDetails } from "../../patch";
 import type { CompactionPreparation, CompactionResult } from "../../session/compaction";
 import type { CustomMessage } from "../../session/messages";
 import type {

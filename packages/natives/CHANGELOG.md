@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
 - Moved package entry point from `src/index.ts` to `native/index.js` — consumers must update imports to use the new native module path
@@ -9,6 +10,10 @@
 
 ### Added
 
+- Added `ReplaceBody` chunk edit operation to replace only the inner body of a chunk while preserving signature and closing delimiter
+- Added `ChunkFocusMode` enum with `Expanded`, `Collapsed`, and `Container` modes for controlling chunk participation in focus-scoped render passes
+- Added `FocusedPath` interface to pair paths with focus modes for the N-API boundary
+- Added `focusedPaths` parameter to `RenderParams` to restrict rendering to specified chunks with their focus modes
 - Generated native module bindings in `native/index.js` and `native/index.d.ts` from napi-rs build output
 - Added `gen-enums.ts` script to extract and export runtime enum values from TypeScript const enums
 - Added `embedded-addon.js` for managing embedded native addon variants and metadata
@@ -16,6 +21,9 @@
 
 ### Changed
 
+- Changed `ChunkEditOp.Replace` documentation to clarify substring replacement via `find` parameter instead of line-based replacement
+- Changed `EditOperation` interface to use `find` parameter for scoped find/replace operations instead of `line` and `endLine` parameters
+- Changed `EditParams` documentation to remove mention of scheduling reordering for line-scoped groups
 - Simplified native build pipeline by removing `--dev` flag support; debug builds no longer available through npm scripts
 - Updated native module loader to check `XDG_DATA_HOME` environment variable for native addon location before falling back to `~/.omp/natives`
 - Removed native binding validation function that checked for required exports at load time

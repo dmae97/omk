@@ -16,6 +16,7 @@ export type * from "./config/prompt-templates";
 export * from "./config/prompt-templates";
 export type { RetrySettings, SkillsSettings } from "./config/settings";
 export { Settings, settings } from "./config/settings";
+export * from "./edit/modes/hashline";
 // Custom commands
 export type * from "./extensibility/custom-commands/types";
 export type * from "./extensibility/custom-tools";
@@ -37,7 +38,6 @@ export * from "./modes";
 export * from "./modes/components";
 // Theme utilities for custom tools
 export * from "./modes/theme/theme";
-export * from "./patch/hashline";
 // SDK for programmatic usage
 export * from "./sdk";
 export * from "./session/agent-session";

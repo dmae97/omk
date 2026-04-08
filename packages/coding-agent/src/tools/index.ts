@@ -4,13 +4,13 @@ import { $env, logger } from "@oh-my-pi/pi-utils";
 import type { AsyncJobManager } from "../async";
 import type { PromptTemplate } from "../config/prompt-templates";
 import type { Settings } from "../config/settings";
+import { EditTool } from "../edit";
 import type { Skill } from "../extensibility/skills";
 import type { InternalUrlRouter } from "../internal-urls";
 import { getPreludeDocs, warmPythonEnvironment } from "../ipy/executor";
 import { checkPythonKernelAvailability } from "../ipy/kernel";
 import { LspTool } from "../lsp";
 import type { DiscoverableMCPSearchIndex, DiscoverableMCPTool } from "../mcp/discoverable-tool-metadata";
-import { EditTool } from "../patch";
 import type { PlanModeState } from "../plan-mode/state";
 import type { CustomMessage } from "../session/messages";
 import { TaskTool } from "../task";
@@ -57,10 +57,10 @@ import { WriteTool } from "./write";
 
 // Exa MCP tools (22 tools)
 
+export * from "../edit";
 export * from "../exa";
 export type * from "../exa/types";
 export * from "../lsp";
-export * from "../patch";
 export * from "../session/streaming-output";
 export * from "../task";
 export * from "../web/search";
@@ -184,6 +184,9 @@ export interface ToolSession {
 	getCheckpointState?: () => CheckpointState | undefined;
 	/** Set or clear active checkpoint state. */
 	setCheckpointState?: (state: CheckpointState | null) => void;
+
+	/** Queue a hidden message to be injected at the next agent turn. */
+	queueDeferredMessage?(message: CustomMessage): void;
 }
 
 type ToolFactory = (session: ToolSession) => Tool | null | Promise<Tool | null>;

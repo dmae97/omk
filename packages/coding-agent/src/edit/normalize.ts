@@ -70,12 +70,16 @@ export function getLeadingWhitespace(line: string): string {
 	return line.slice(0, countLeadingWhitespace(line));
 }
 
+function isNonEmptyLine(line: string): boolean {
+	return line.trim().length > 0;
+}
+
 /** Compute minimum indentation of non-empty lines */
 export function minIndent(text: string): number {
 	const lines = text.split("\n");
 	let min = Infinity;
 	for (const line of lines) {
-		if (line.trim().length > 0) {
+		if (isNonEmptyLine(line)) {
 			min = Math.min(min, countLeadingWhitespace(line));
 		}
 	}
@@ -107,9 +111,7 @@ function gcd(a: number, b: number): number {
 
 interface IndentProfile {
 	lines: string[];
-	indentStrings: string[];
 	indentCounts: number[];
-	min: number;
 	char: " " | "\t" | undefined;
 	spaceOnly: boolean;
 	tabOnly: boolean;
@@ -120,9 +122,7 @@ interface IndentProfile {
 
 function buildIndentProfile(text: string): IndentProfile {
 	const lines = text.split("\n");
-	const indentStrings: string[] = [];
 	const indentCounts: number[] = [];
-	let min = Infinity;
 	let char: " " | "\t" | undefined;
 	let spaceOnly = true;
 	let tabOnly = true;
@@ -131,12 +131,10 @@ function buildIndentProfile(text: string): IndentProfile {
 	let unit = 0;
 
 	for (const line of lines) {
-		if (line.trim().length === 0) continue;
+		if (!isNonEmptyLine(line)) continue;
 		nonEmptyCount++;
 		const indent = getLeadingWhitespace(line);
-		indentStrings.push(indent);
 		indentCounts.push(indent.length);
-		min = Math.min(min, indent.length);
 		if (indent.includes(" ")) {
 			tabOnly = false;
 		}
@@ -156,10 +154,6 @@ function buildIndentProfile(text: string): IndentProfile {
 		}
 	}
 
-	if (min === Infinity) {
-		min = 0;
-	}
-
 	if (spaceOnly && nonEmptyCount > 0) {
 		let current = 0;
 		for (const count of indentCounts) {
@@ -175,9 +169,7 @@ function buildIndentProfile(text: string): IndentProfile {
 
 	return {
 		lines,
-		indentStrings,
 		indentCounts,
-		min,
 		char,
 		spaceOnly,
 		tabOnly,
@@ -246,6 +238,87 @@ export function normalizeForFuzzy(line: string): string {
 		.replace(/[ \t]+/g, " ");
 }
 
+function isIndentationOnlyRewrite(oldText: string, newText: string): boolean {
+	const oldLines = oldText.split("\n");
+	const newLines = newText.split("\n");
+	if (oldLines.length !== newLines.length) {
+		return false;
+	}
+	for (let i = 0; i < oldLines.length; i++) {
+		if (oldLines[i].trim() !== newLines[i].trim()) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function maybeConvertTabIndentation(
+	oldProfile: IndentProfile,
+	actualProfile: IndentProfile,
+	newProfile: IndentProfile,
+	newText: string,
+): string | undefined {
+	if (!actualProfile.spaceOnly || !oldProfile.tabOnly || !newProfile.tabOnly || actualProfile.unit <= 0) {
+		return undefined;
+	}
+
+	const lineCount = Math.min(oldProfile.lines.length, actualProfile.lines.length);
+	for (let i = 0; i < lineCount; i++) {
+		const oldLine = oldProfile.lines[i];
+		const actualLine = actualProfile.lines[i];
+		if (!isNonEmptyLine(oldLine) || !isNonEmptyLine(actualLine)) continue;
+		const oldIndent = getLeadingWhitespace(oldLine);
+		if (oldIndent.length === 0) continue;
+		const actualIndent = getLeadingWhitespace(actualLine);
+		if (actualIndent.length !== oldIndent.length * actualProfile.unit) {
+			return undefined;
+		}
+	}
+
+	return convertLeadingTabsToSpaces(newText, actualProfile.unit);
+}
+
+function computeUniformIndentDelta(oldProfile: IndentProfile, actualProfile: IndentProfile): number | undefined {
+	const lineCount = Math.min(oldProfile.lines.length, actualProfile.lines.length);
+	const deltas: number[] = [];
+	for (let i = 0; i < lineCount; i++) {
+		const oldLine = oldProfile.lines[i];
+		const actualLine = actualProfile.lines[i];
+		if (!isNonEmptyLine(oldLine) || !isNonEmptyLine(actualLine)) continue;
+		deltas.push(countLeadingWhitespace(actualLine) - countLeadingWhitespace(oldLine));
+	}
+
+	if (deltas.length === 0) {
+		return undefined;
+	}
+
+	const delta = deltas[0];
+	return deltas.every(value => value === delta) ? delta : undefined;
+}
+
+function applyIndentDelta(text: string, delta: number, indentChar: string): string {
+	const adjusted = text.split("\n").map(line => {
+		if (!isNonEmptyLine(line)) {
+			return line;
+		}
+		if (delta > 0) {
+			return indentChar.repeat(delta) + line;
+		}
+		const toRemove = Math.min(-delta, countLeadingWhitespace(line));
+		return line.slice(toRemove);
+	});
+
+	return adjusted.join("\n");
+}
+
+function hasNonEmptyIndentProfiles(...profiles: IndentProfile[]): boolean {
+	return profiles.every(profile => profile.nonEmptyCount > 0);
+}
+
+function hasMixedIndentation(...profiles: IndentProfile[]): boolean {
+	return profiles.some(profile => profile.mixed);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Indentation Adjustment
 // ═══════════════════════════════════════════════════════════════════════════
@@ -264,73 +337,32 @@ export function adjustIndentation(oldText: string, actualText: string, newText: 
 	}
 
 	// If the patch is purely an indentation change (same trimmed content), apply exactly as specified
-	const oldLines = oldText.split("\n");
-	const newLines = newText.split("\n");
-	if (oldLines.length === newLines.length) {
-		let indentationOnly = true;
-		for (let i = 0; i < oldLines.length; i++) {
-			if (oldLines[i].trim() !== newLines[i].trim()) {
-				indentationOnly = false;
-				break;
-			}
-		}
-		if (indentationOnly) {
-			return newText;
-		}
+	if (isIndentationOnlyRewrite(oldText, newText)) {
+		return newText;
 	}
 
 	const oldProfile = buildIndentProfile(oldText);
 	const actualProfile = buildIndentProfile(actualText);
 	const newProfile = buildIndentProfile(newText);
 
-	if (newProfile.nonEmptyCount === 0 || oldProfile.nonEmptyCount === 0 || actualProfile.nonEmptyCount === 0) {
+	if (!hasNonEmptyIndentProfiles(oldProfile, actualProfile, newProfile)) {
 		return newText;
 	}
 
-	if (oldProfile.mixed || actualProfile.mixed || newProfile.mixed) {
+	if (hasMixedIndentation(oldProfile, actualProfile, newProfile)) {
 		return newText;
 	}
 
 	if (oldProfile.char && actualProfile.char && oldProfile.char !== actualProfile.char) {
-		if (actualProfile.spaceOnly && oldProfile.tabOnly && newProfile.tabOnly && actualProfile.unit > 0) {
-			let consistent = true;
-			const lineCount = Math.min(oldProfile.lines.length, actualProfile.lines.length);
-			for (let i = 0; i < lineCount; i++) {
-				const oldLine = oldProfile.lines[i];
-				const actualLine = actualProfile.lines[i];
-				if (oldLine.trim().length === 0 || actualLine.trim().length === 0) continue;
-				const oldIndent = getLeadingWhitespace(oldLine);
-				const actualIndent = getLeadingWhitespace(actualLine);
-				if (oldIndent.length === 0) continue;
-				if (actualIndent.length !== oldIndent.length * actualProfile.unit) {
-					consistent = false;
-					break;
-				}
-			}
-			return consistent ? convertLeadingTabsToSpaces(newText, actualProfile.unit) : newText;
+		const converted = maybeConvertTabIndentation(oldProfile, actualProfile, newProfile, newText);
+		if (converted !== undefined) {
+			return converted;
 		}
 		return newText;
 	}
 
-	const lineCount = Math.min(oldProfile.lines.length, actualProfile.lines.length);
-	const deltas: number[] = [];
-	for (let i = 0; i < lineCount; i++) {
-		const oldLine = oldProfile.lines[i];
-		const actualLine = actualProfile.lines[i];
-		if (oldLine.trim().length === 0 || actualLine.trim().length === 0) continue;
-		deltas.push(countLeadingWhitespace(actualLine) - countLeadingWhitespace(oldLine));
-	}
-
-	if (deltas.length === 0) {
-		return newText;
-	}
-
-	const delta = deltas[0];
-	if (!deltas.every(value => value === delta)) {
-		return newText;
-	}
-
-	if (delta === 0) {
+	const delta = computeUniformIndentDelta(oldProfile, actualProfile);
+	if (delta === undefined || delta === 0) {
 		return newText;
 	}
 
@@ -339,16 +371,5 @@ export function adjustIndentation(oldText: string, actualText: string, newText: 
 	}
 
 	const indentChar = actualProfile.char ?? oldProfile.char ?? detectIndentChar(actualText);
-	const adjusted = newText.split("\n").map(line => {
-		if (line.trim().length === 0) {
-			return line;
-		}
-		if (delta > 0) {
-			return indentChar.repeat(delta) + line;
-		}
-		const toRemove = Math.min(-delta, countLeadingWhitespace(line));
-		return line.slice(toRemove);
-	});
-
-	return adjusted.join("\n");
+	return applyIndentDelta(newText, delta, indentChar);
 }

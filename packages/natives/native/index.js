@@ -248,6 +248,12 @@ exports.ChunkEditOp = {
   PrependChild: 'prepend_child',
   AppendSibling: 'append_sibling',
   PrependSibling: 'prepend_sibling',
+  ReplaceBody: 'replace_body',
+};
+exports.ChunkFocusMode = {
+  Expanded: 'expanded',
+  Collapsed: 'collapsed',
+  Container: 'container',
 };
 exports.ChunkReadStatus = {
   Ok: 'ok',

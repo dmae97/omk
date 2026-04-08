@@ -9,7 +9,7 @@ import * as fs from "node:fs/promises";
 import path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import { glob } from "@oh-my-pi/pi-natives";
-import { formatHashLines } from "../patch/hashline";
+import { formatHashLines } from "../edit/modes/hashline";
 import type { FileMentionMessage } from "../session/messages";
 import {
 	DEFAULT_MAX_BYTES,

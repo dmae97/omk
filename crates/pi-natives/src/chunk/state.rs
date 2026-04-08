@@ -34,6 +34,7 @@ pub struct ChunkStateInner {
 	pub(crate) source:   String,
 	pub(crate) language: String,
 	pub(crate) tree:     ChunkTree,
+	pub(crate) notebook: Option<crate::chunk::ast_ipynb::SharedNotebookContext>,
 	lookup:              HashMap<String, usize>,
 	checksum_lookup:     HashMap<String, Vec<usize>>,
 	leaf_lookup:         HashMap<String, Vec<usize>>,
@@ -43,6 +44,20 @@ pub struct ChunkStateInner {
 impl ChunkStateInner {
 	pub(crate) fn parse(source: String, language: String) -> Result<Self> {
 		let normalized_language = normalize_language(language.as_str());
+		if normalized_language == "ipynb" {
+			let parsed =
+				crate::chunk::ast_ipynb::parse_notebook(&source).map_err(napi::Error::from_reason)?;
+			let kernel_lang = parsed.context.kernel_language.clone();
+			let tree = crate::chunk::ast_ipynb::build_notebook_tree_from_virtual(
+				parsed.virtual_source.as_str(),
+				kernel_lang.as_str(),
+			)
+			.map_err(napi::Error::from_reason)?;
+			let ctx = std::sync::Arc::new(parsed.context);
+			let mut inner = Self::new(parsed.virtual_source, normalized_language, tree);
+			inner.notebook = Some(ctx);
+			return Ok(inner);
+		}
 		let tree = build_chunk_tree(source.as_str(), normalized_language.as_str())?;
 		Ok(Self::new(source, normalized_language, tree))
 	}
@@ -75,7 +90,16 @@ impl ChunkStateInner {
 					.push(index);
 			}
 		}
-		Self { source, language, tree, lookup, checksum_lookup, leaf_lookup, suffix_lookup }
+		Self {
+			source,
+			language,
+			tree,
+			notebook: None,
+			lookup,
+			checksum_lookup,
+			leaf_lookup,
+			suffix_lookup,
+		}
 	}
 
 	pub(crate) const fn source(&self) -> &str {
@@ -345,6 +369,7 @@ impl ChunkState {
 				anchor_style:         params.anchor_style,
 				show_leaf_preview:    true,
 				tab_replacement:      params.tab_replacement,
+				focused_paths:        None,
 			});
 			return Ok(ReadResult { text: format!("{notice}\n\n{text}"), chunk: None });
 		}
@@ -361,6 +386,7 @@ impl ChunkState {
 					anchor_style:         params.anchor_style,
 					show_leaf_preview:    true,
 					tab_replacement:      params.tab_replacement,
+					focused_paths:        None,
 				}),
 				chunk: None,
 			});
@@ -430,6 +456,7 @@ impl ChunkState {
 				anchor_style:         params.anchor_style,
 				show_leaf_preview:    true,
 				tab_replacement:      params.tab_replacement,
+				focused_paths:        None,
 			}),
 			chunk: Some(ChunkReadTarget {
 				status:   ChunkReadStatus::Ok,

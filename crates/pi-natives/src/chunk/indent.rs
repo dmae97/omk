@@ -3,38 +3,6 @@ use crate::chunk::types::ChunkTree;
 const DEFAULT_SPACE_INDENT_STEP: usize = 4;
 const MAX_REASONABLE_INDENT_STEP: usize = 8;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CommonIndent {
-	pub prefix: String,
-	pub count:  usize,
-}
-
-pub fn detect_common_indent(text: &str) -> CommonIndent {
-	let mut min_count = usize::MAX;
-	let mut detected_char = None;
-
-	for line in text.split('\n') {
-		if line.trim().is_empty() {
-			continue;
-		}
-		let whitespace = leading_whitespace(line);
-		if whitespace.is_empty() {
-			return CommonIndent { prefix: String::new(), count: 0 };
-		}
-		if whitespace.len() < min_count {
-			min_count = whitespace.len();
-			detected_char = whitespace.chars().next();
-		}
-	}
-
-	if min_count == usize::MAX {
-		return CommonIndent { prefix: String::new(), count: 0 };
-	}
-
-	let ch = detected_char.unwrap_or(' ');
-	CommonIndent { prefix: ch.to_string().repeat(min_count), count: min_count }
-}
-
 pub fn dedent_python_style(text: &str) -> String {
 	let mut margin: Option<&str> = None;
 	for line in text.split('\n') {
@@ -512,10 +480,14 @@ mod tests {
 			line_count: 1,
 			start_byte: 0,
 			end_byte: 0,
+			checksum_start_byte: 0,
+			body_start_byte: None,
+			body_end_byte: None,
 			checksum: "ABCD".to_owned(),
 			error: false,
 			indent,
 			indent_char: indent_char.to_owned(),
+			group: false,
 		}
 	}
 

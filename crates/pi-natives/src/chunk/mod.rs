@@ -19,24 +19,40 @@ pub(crate) mod state;
 pub mod types;
 
 // Per-language classifiers
+mod ast_astro;
 mod ast_bash_make_diff;
 mod ast_c_cpp_objc;
 mod ast_clojure;
+mod ast_cmake;
 mod ast_csharp_java;
 mod ast_css;
 mod ast_data_formats;
+mod ast_dockerfile;
 mod ast_elixir;
+mod ast_erlang;
 mod ast_go;
+mod ast_graphql;
 mod ast_haskell_scala;
 mod ast_html_xml;
+mod ast_ini;
+pub(crate) mod ast_ipynb;
 mod ast_js_ts;
+mod ast_just;
 mod ast_markup;
 mod ast_misc;
 mod ast_nix_hcl;
+mod ast_ocaml;
+mod ast_perl;
+mod ast_powershell;
+mod ast_proto;
 mod ast_python;
+mod ast_r;
 mod ast_ruby_lua;
 mod ast_rust;
+mod ast_sql;
+mod ast_svelte;
 mod ast_tlaplus;
+mod ast_vue;
 
 use std::collections::HashMap;
 
@@ -79,6 +95,15 @@ pub(crate) fn build_chunk_tree(source: &str, language: &str) -> Result<ChunkTree
 	let total_lines = total_line_count(source);
 	let root_checksum = chunk_checksum(source.as_bytes());
 
+	// Notebooks (`.ipynb`) are parsed by `ChunkStateInner::parse`, which
+	// converts the JSON file to a *virtual source* and then re-enters
+	// `build_chunk_tree` with the `ipynb` language tag. When we arrive here
+	// with that tag, `source` is the virtual concatenated cell text and the
+	// per-cell sub-trees are built via `ast_ipynb`.
+	if normalized_language == "ipynb" {
+		return ast_ipynb::build_notebook_tree_from_virtual(source, "python")
+			.map_err(Error::from_reason);
+	}
 	let Some(chunk_lang) = resolve_chunk_lang(normalized_language.as_str()) else {
 		return Ok(build_blank_line_tree(source, language.to_string(), total_lines, root_checksum));
 	};
@@ -99,21 +124,25 @@ pub(crate) fn build_chunk_tree(source: &str, language: &str) -> Result<ChunkTree
 	insert_preamble_chunk(source, &mut acc.chunks, &mut root_children);
 
 	acc.chunks.insert(0, ChunkNode {
-		path:        String::new(),
-		name:        "root".to_string(),
-		leaf:        false,
-		parent_path: None,
-		children:    root_children.clone(),
-		signature:   None,
-		start_line:  u32::from(total_lines != 0),
-		end_line:    total_lines as u32,
-		line_count:  total_lines as u32,
-		start_byte:  0,
-		end_byte:    source.len() as u32,
-		checksum:    root_checksum.clone(),
-		error:       false,
-		indent:      0,
-		indent_char: String::new(),
+		path:                String::new(),
+		name:                "root".to_string(),
+		leaf:                false,
+		parent_path:         None,
+		children:            root_children.clone(),
+		signature:           None,
+		start_line:          u32::from(total_lines != 0),
+		end_line:            total_lines as u32,
+		line_count:          total_lines as u32,
+		start_byte:          0,
+		end_byte:            source.len() as u32,
+		checksum_start_byte: 0,
+		body_start_byte:     None,
+		body_end_byte:       None,
+		checksum:            root_checksum.clone(),
+		error:               false,
+		indent:              0,
+		indent_char:         String::new(),
+		group:               false,
 	});
 
 	Ok(ChunkTree {
@@ -172,21 +201,25 @@ fn build_blank_line_tree(
 	checksum: String,
 ) -> ChunkTree {
 	let mut chunks = vec![ChunkNode {
-		path:        String::new(),
-		name:        "root".to_string(),
-		leaf:        false,
-		parent_path: None,
-		children:    Vec::new(),
-		signature:   None,
-		start_line:  u32::from(total_lines != 0),
-		end_line:    total_lines as u32,
-		line_count:  total_lines as u32,
-		start_byte:  0,
-		end_byte:    source.len() as u32,
-		checksum:    checksum.clone(),
-		error:       false,
-		indent:      0,
-		indent_char: String::new(),
+		path:                String::new(),
+		name:                "root".to_string(),
+		leaf:                false,
+		parent_path:         None,
+		children:            Vec::new(),
+		signature:           None,
+		start_line:          u32::from(total_lines != 0),
+		end_line:            total_lines as u32,
+		line_count:          total_lines as u32,
+		start_byte:          0,
+		end_byte:            source.len() as u32,
+		checksum_start_byte: 0,
+		body_start_byte:     None,
+		body_end_byte:       None,
+		checksum:            checksum.clone(),
+		error:               false,
+		indent:              0,
+		indent_char:         String::new(),
+		group:               false,
 	}];
 	let line_starts = line_start_offsets(source);
 	let mut root_children = Vec::new();
@@ -216,26 +249,30 @@ fn build_blank_line_tree(
 		let end_byte = line_end_offset(source, &line_starts, end_line);
 		root_children.push(name.clone());
 		chunks.push(ChunkNode {
-			path:        name.clone(),
-			name:        name.clone(),
-			leaf:        true,
-			parent_path: Some(String::new()),
-			children:    Vec::new(),
-			signature:   None,
-			start_line:  (start_line + 1) as u32,
-			end_line:    (end_line + 1) as u32,
-			line_count:  (end_line - start_line + 1) as u32,
-			start_byte:  start_byte as u32,
-			end_byte:    end_byte as u32,
-			checksum:    chunk_checksum(
+			path:                name.clone(),
+			name:                name.clone(),
+			leaf:                true,
+			parent_path:         Some(String::new()),
+			children:            Vec::new(),
+			signature:           None,
+			start_line:          (start_line + 1) as u32,
+			end_line:            (end_line + 1) as u32,
+			line_count:          (end_line - start_line + 1) as u32,
+			start_byte:          start_byte as u32,
+			end_byte:            end_byte as u32,
+			checksum_start_byte: start_byte as u32,
+			body_start_byte:     None,
+			body_end_byte:       None,
+			checksum:            chunk_checksum(
 				source
 					.as_bytes()
 					.get(start_byte..end_byte)
 					.unwrap_or_default(),
 			),
-			error:       false,
-			indent:      0,
-			indent_char: String::new(),
+			error:               false,
+			indent:              0,
+			indent_char:         String::new(),
+			group:               false,
 		});
 		start_line = end_line + 1;
 	}
@@ -281,6 +318,7 @@ fn build_chunk(
 			.unwrap_or_default(),
 	);
 	let recurse = candidate.recurse;
+	let body_range = recurse.map(|r| (r.node.start_byte() as u32, r.node.end_byte() as u32));
 	let child_candidates = recurse
 		.map(|recurse| {
 			collect_children_for_context(recurse.node, recurse.context, source, classifier)
@@ -321,10 +359,14 @@ fn build_chunk(
 		line_count: line_count as u32,
 		start_byte: candidate.range_start_byte as u32,
 		end_byte: candidate.range_end_byte as u32,
+		checksum_start_byte: candidate.checksum_start_byte as u32,
+		body_start_byte: body_range.map(|(s, _)| s),
+		body_end_byte: body_range.map(|(_, e)| e),
 		checksum,
 		error: candidate.error,
 		indent,
 		indent_char,
+		group: candidate.groupable,
 	});
 	path
 }
@@ -608,7 +650,7 @@ fn infer_fallback_block_name(first_line: &str, seen: &mut HashMap<String, usize>
 	}
 }
 
-fn line_start_offsets(source: &str) -> Vec<usize> {
+pub(crate) fn line_start_offsets(source: &str) -> Vec<usize> {
 	let mut starts = vec![0usize];
 	for (index, byte) in source.bytes().enumerate() {
 		if byte == b'\n' {
@@ -699,63 +741,17 @@ fn insert_preamble_chunk(
 		line_count,
 		start_byte,
 		end_byte,
+		checksum_start_byte: start_byte,
+		body_start_byte: None,
+		body_end_byte: None,
 		checksum,
 		error: false,
 		indent: 0,
 		indent_char: String::new(),
+		group: false,
 	};
 	chunks.push(preamble);
 	root_children.insert(0, "preamble".to_string());
-}
-
-pub(crate) fn sort_chunk_children_by_position(chunks: &mut [ChunkNode]) {
-	let positions = chunks
-		.iter()
-		.map(|chunk| (chunk.path.clone(), (chunk.start_line, chunk.end_line)))
-		.collect::<HashMap<_, _>>();
-	for chunk in chunks.iter_mut() {
-		chunk.children.sort_by(|left, right| {
-			let left_pos = positions.get(left).copied().unwrap_or((u32::MAX, u32::MAX));
-			let right_pos = positions
-				.get(right)
-				.copied()
-				.unwrap_or((u32::MAX, u32::MAX));
-			left_pos.cmp(&right_pos).then_with(|| left.cmp(right))
-		});
-	}
-}
-
-pub(crate) fn rename_chunk_subtree(
-	chunks: &mut [ChunkNode],
-	old_prefix: &str,
-	new_prefix: &str,
-	new_parent_path: &str,
-) {
-	let old_child_prefix = format!("{old_prefix}.");
-	for chunk in chunks.iter_mut() {
-		if chunk.path == old_prefix {
-			chunk.path = new_prefix.to_string();
-			chunk.parent_path = Some(new_parent_path.to_string());
-		} else if let Some(rest) = chunk.path.strip_prefix(old_child_prefix.as_str()) {
-			chunk.path = format!("{new_prefix}.{rest}");
-		}
-
-		if let Some(parent_path) = chunk.parent_path.as_mut() {
-			if parent_path == old_prefix {
-				*parent_path = new_prefix.to_string();
-			} else if let Some(rest) = parent_path.strip_prefix(old_child_prefix.as_str()) {
-				*parent_path = format!("{new_prefix}.{rest}");
-			}
-		}
-
-		for child_path in &mut chunk.children {
-			if child_path == old_prefix {
-				*child_path = new_prefix.to_string();
-			} else if let Some(rest) = child_path.strip_prefix(old_child_prefix.as_str()) {
-				*child_path = format!("{new_prefix}.{rest}");
-			}
-		}
-	}
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────
@@ -806,22 +802,29 @@ mod tests {
 	#[test]
 	fn builds_structural_tree_for_each_supported_language() {
 		let cases = [
+			("astro", "---\nconst title = \"Hello\";\n---\n<Layout><h1>{title}</h1><script>console.log(title)</script></Layout>\n"),
 			("bash", "build() { echo ok; }\n"),
 			("c", "#include <stdio.h>\nint main(void) { return 0; }\n"),
+			("cmake", "cmake_minimum_required(VERSION 3.28)\nproject(App)\nfunction(run_it NAME)\n  message(STATUS ${NAME})\nendfunction()\n"),
 			("cpp", "#include <vector>\nclass App {};\nint main() { return 0; }\n"),
 			("csharp", "using System;\nclass App { void Run() {} }\n"),
 			("clojure", "(ns demo.core)\n(defn greet [x] x)\n"),
 			("css", "@import \"a.css\";\n.app { color: red; }\n"),
 			("diff", "@@ -1,1 +1,1 @@\n-a\n+b\n"),
+			("dockerfile", "FROM alpine AS base\nARG PORT=3000\nRUN echo hi\nCMD [\"sh\", \"-c\", \"echo ok\"]\n"),
 			("elixir", "defmodule App do\n  def run(x) do\n    x\n  end\nend\n"),
+			("erlang", "-module(app).\n-export([run/1]).\nrun(X) ->\n    case X of\n        ok -> ok;\n        _ -> error\n    end.\n"),
 			("go", "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"ok\") }\n"),
+			("graphql", "type Query { hello: String }\nquery AppQuery { hello }\n"),
 			("handlebars", "{{#if ready}}<div class=\"ok\">{{name}}</div>{{/if}}\n"),
 			("haskell", "module App where\nimport Data.List\nmain = putStrLn \"ok\"\n"),
 			("hcl", "locals { foo = 1 }\n"),
 			("html", "<div><span>ok</span></div>\n"),
+			("ini", "[app]\nname=demo\nport=3000\n"),
 			("java", "import java.util.*;\nclass App { void run() {} }\n"),
 			("javascript", "import x from \"x\";\nexport function run() {}\n"),
 			("json", "{\"name\":\"app\",\"scripts\":{\"start\":\"bun\"}}\n"),
+			("just", "set shell := [\"bash\", \"-cu\"]\nrun name:\n    echo {{name}}\n"),
 			("julia", "module App\nfunction run(x)\n  x\nend\nend\n"),
 			("kotlin", "package app\nclass App { fun run() {} }\n"),
 			("lua", "local function run(x) return x end\n"),
@@ -832,25 +835,32 @@ mod tests {
 				"objc",
 				"#import <Foundation/Foundation.h>\n@interface App : NSObject\n- (void)run;\n@end\n",
 			),
+			("ocaml", "open Printf\nlet run x = x + 1\nmodule App = struct let value = 1 end\n"),
 			("odin", "package main\nmain :: proc() {}\n"),
+			("perl", "package App;\nuse strict;\nsub run { return 1; }\n"),
 			("php", "<?php\nclass App { function run() {} }\n"),
+			("powershell", "param([string]$Name)\nfunction Invoke-App { Write-Host $Name }\nInvoke-App\n"),
+			("protobuf", "syntax = \"proto3\";\nmessage App { string name = 1; }\nservice Api { rpc Run (App) returns (App); }\n"),
 			("python", "class App:\n    def run(self):\n        return 1\n"),
+			("r", "run <- function(x) { x + 1 }\nvalue <- run(1)\n"),
 			("regex", "[a-z]+"),
 			("ruby", "module App\n  class User\n    def run\n    end\n  end\nend\n"),
 			("rust", "use std::fmt;\nfn main() {}\n"),
 			("scala", "package demo\nobject App { def run(): Unit = {} }\n"),
 			("solidity", "pragma solidity ^0.8.0;\ncontract App { function run() public {} }\n"),
+			("sql", "create table app(id int primary key);\nselect * from app;\n"),
 			("starlark", "def build(ctx):\n    pass\n"),
+			("svelte", "<script>let count = 0;</script>\n{#if count}<p>{count}</p>{/if}\n"),
 			("swift", "import Foundation\nclass App { func run() {} }\n"),
 			("toml", "[package]\nname = \"app\"\n"),
 			(
 				"tlaplus",
-				"---- MODULE Spec ----\nVARIABLE x\n\n(* --algorithm Demo\nvariables x = 0;\nbegin\n  \
-				 Inc:\n    x := x + 1;\nend algorithm; *)\n====\n",
+				"---- MODULE Spec ----\nVARIABLE x\n\n(* --algorithm Demo\nvariables x = 0;\nbegin\n  Inc:\n    x := x + 1;\nend algorithm; *)\n====\n",
 			),
 			("tsx", "export function App() { return <div />; }\n"),
 			("typescript", "export function run(): void {}\n"),
 			("verilog", "module app; endmodule\n"),
+			("vue", "<template><div>{{ msg }}</div></template>\n<script setup>const msg = 'hi'</script>\n"),
 			("xml", "<root><item /></root>\n"),
 			("yaml", "apiVersion: v1\nmetadata:\n  name: app\n"),
 			("zig", "const std = @import(\"std\");\npub fn main() void {}\n"),
@@ -1418,124 +1428,6 @@ impl Config {
 	}
 
 	#[test]
-	fn go_receiver_methods_attach_to_receiver_type() {
-		let source = r"package main
-
-	type Server struct {
-		Addr string
-	}
-
-	func (s *Server) Start() {
-		println(s.Addr)
-	}
-
-	func (s Server) Stop() {}
-	";
-		let tree = build_chunk_tree(source, "go").expect("tree should build");
-		assert!(
-			tree
-				.root_children
-				.iter()
-				.any(|child| child == "type_Server"),
-			"expected type_Server in root children: {:?}",
-			tree.root_children
-		);
-		assert!(
-			!tree
-				.root_children
-				.iter()
-				.any(|child| child == "fn_Start" || child == "fn_Stop"),
-			"receiver methods should not remain at root: {:?}",
-			tree.root_children
-		);
-		let server = tree
-			.chunks
-			.iter()
-			.find(|c| c.path == "type_Server")
-			.expect("type_Server");
-		assert!(!server.leaf);
-		assert!(
-			server
-				.children
-				.iter()
-				.any(|child| child == "type_Server.field_Addr"),
-			"expected type_Server.field_Addr in children: {:?}",
-			server.children
-		);
-		assert!(
-			server
-				.children
-				.iter()
-				.any(|child| child == "type_Server.fn_Start"),
-			"expected type_Server.fn_Start in children: {:?}",
-			server.children
-		);
-		assert!(
-			server
-				.children
-				.iter()
-				.any(|child| child == "type_Server.fn_Stop"),
-			"expected type_Server.fn_Stop in children: {:?}",
-			server.children
-		);
-		let line_path = line_to_chunk_path(&tree, 7).expect("method line should resolve");
-		assert_eq!(line_path, "type_Server.fn_Start");
-	}
-
-	#[test]
-	fn go_new_constructor_attaches_to_type_and_orders_by_line() {
-		let source = r"package main
-
-type Server struct {
-	Addr string
-}
-
-func NewServer() *Server {
-	return &Server{}
-}
-
-func (s *Server) GetAddress() string {
-	return s.Addr
-}
-";
-		let tree = build_chunk_tree(source, "go").expect("tree should build");
-		assert!(
-			!tree.root_children.iter().any(|c| c == "fn_NewServer"),
-			"constructor should not stay at root: {:?}",
-			tree.root_children
-		);
-		let server = tree
-			.chunks
-			.iter()
-			.find(|c| c.path == "type_Server")
-			.expect("type_Server");
-		assert!(
-			server
-				.children
-				.iter()
-				.any(|c| c == "type_Server.fn_NewServer"),
-			"expected type_Server.fn_NewServer in {:?}",
-			server.children
-		);
-		let new_server = tree
-			.chunks
-			.iter()
-			.find(|c| c.path == "type_Server.fn_NewServer")
-			.expect("fn_NewServer chunk");
-		let get_addr = tree
-			.chunks
-			.iter()
-			.find(|c| c.path == "type_Server.fn_GetAddress")
-			.expect("fn_GetAddress chunk");
-		assert!(
-			new_server.start_line < get_addr.start_line,
-			"constructor line should sort before receiver method: new={} get={}",
-			new_server.start_line,
-			get_addr.start_line
-		);
-	}
-
-	#[test]
 	fn preamble_chunk_covers_leading_lines_before_first_item() {
 		let source = "// header\n// second\n\nfn main() {}\n";
 		let tree = build_chunk_tree(source, "rust").expect("tree should build");
@@ -1822,12 +1714,12 @@ func (s *Server) Start() string {
 		let before_method = before_tree
 			.chunks
 			.iter()
-			.find(|chunk| chunk.path == "type_Server.fn_Start")
+			.find(|chunk| chunk.path == "fn_Start")
 			.expect("before method chunk");
 		let after_method = after_tree
 			.chunks
 			.iter()
-			.find(|chunk| chunk.path == "type_Server.fn_Start")
+			.find(|chunk| chunk.path == "fn_Start")
 			.expect("after method chunk");
 		assert_eq!(before_struct.checksum, after_struct.checksum);
 		assert_ne!(before_method.checksum, after_method.checksum);

@@ -5,8 +5,8 @@
  */
 import * as path from "node:path";
 import chalk from "chalk";
+import { formatChunkedRead, resolveAnchorStyle } from "../edit/modes/chunk";
 import { getLanguageFromPath } from "../modes/theme/theme";
-import { formatChunkedRead, resolveAnchorStyle } from "../tools/chunk-tree";
 
 export interface ReadCommandArgs {
 	path: string;

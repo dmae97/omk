@@ -3,12 +3,20 @@ use std::collections::HashMap;
 use crate::{
 	chunk::{
 		state::{ChunkStateInner, mask_chunk_display_source},
-		types::{ChunkAnchorStyle, ChunkNode, ChunkTree, RenderParams, VisibleLineRange},
+		types::{
+			ChunkAnchorStyle, ChunkFocusMode, ChunkNode, ChunkTree, RenderParams, VisibleLineRange,
+		},
 	},
 	env_uint,
 };
 
 type ChunkLookup<'a> = HashMap<&'a str, &'a ChunkNode>;
+
+/// A pre-formatted diff hunk ready for inline display inside a chunk block.
+pub struct InlineHunk {
+	/// Fully indented lines (header + diff lines) ready to push as meta lines.
+	pub lines: Vec<String>,
+}
 
 env_uint! {
 	 // Configured full display threshold.
@@ -36,6 +44,10 @@ pub fn render_state(state: &ChunkStateInner, params: &RenderParams) -> String {
 	let preview_tail_lines = *PREVIEW_TAIL_LINES;
 	let tab_replacement = params.tab_replacement.as_deref().unwrap_or("    ");
 	let anchor_style = params.anchor_style.unwrap_or_default();
+	let focus: Option<HashMap<&str, ChunkFocusMode>> = params
+		.focused_paths
+		.as_ref()
+		.map(|paths| paths.iter().map(|fp| (fp.path.as_str(), fp.mode)).collect());
 	let num_width = compute_num_width(
 		tree,
 		chunk,
@@ -78,6 +90,8 @@ pub fn render_state(state: &ChunkStateInner, params: &RenderParams) -> String {
 		preview_head_lines,
 		preview_tail_lines,
 		tab_replacement,
+		focus,
+		inline_hunks: HashMap::new(),
 	};
 
 	push_line(
@@ -97,8 +111,9 @@ pub fn render_state(state: &ChunkStateInner, params: &RenderParams) -> String {
 	push_blank_meta(&mut ctx);
 
 	if params.render_children_only {
+		let focus_ref = ctx.focus.as_ref();
 		let children =
-			visible_children_for_chunk(tree, chunk, &lookup, params.visible_range.as_ref());
+			visible_children_for_chunk(tree, chunk, &lookup, params.visible_range.as_ref(), focus_ref);
 		for (index, child) in children.iter().enumerate() {
 			emit_chunk_subtree(&mut ctx, child, 0, ChunkSubtreeOptions {
 				is_first_top_level:            index == 0,
@@ -108,7 +123,7 @@ pub fn render_state(state: &ChunkStateInner, params: &RenderParams) -> String {
 		return ctx.out;
 	}
 
-	if chunk.children.is_empty() {
+	if chunk.children.is_empty() && ctx.focus.is_none() {
 		if params.show_leaf_preview
 			&& intersect_visible_span(chunk, params.visible_range.as_ref()).is_some()
 		{
@@ -202,6 +217,7 @@ fn visible_children_for_chunk<'a>(
 	chunk: &'a ChunkNode,
 	lookup: &ChunkLookup<'a>,
 	visible_range: Option<&VisibleLineRange>,
+	focus: Option<&HashMap<&str, ChunkFocusMode>>,
 ) -> Vec<&'a ChunkNode> {
 	let mut children = chunk
 		.children
@@ -212,6 +228,7 @@ fn visible_children_for_chunk<'a>(
 				chunk_or_descendant_intersects_line_range(tree, child, lookup, range)
 			})
 		})
+		.filter(|child| focus.is_none_or(|map| map.contains_key(child.path.as_str())))
 		.collect::<Vec<_>>();
 	children.sort_unstable_by_key(|child| child.start_line);
 	children
@@ -355,7 +372,7 @@ fn should_render_gap_line(
 	if chunk.path.is_empty() {
 		return true;
 	}
-	let children = visible_children_for_chunk(tree, chunk, lookup, None);
+	let children = visible_children_for_chunk(tree, chunk, lookup, None, None);
 	let has_out_of_span_child = children
 		.iter()
 		.any(|child| child.start_line < chunk.start_line || child.end_line > chunk.end_line);
@@ -381,7 +398,7 @@ fn for_each_rendered_source_line(
 	preview_tail_lines: usize,
 	visit: &mut impl FnMut(u32),
 ) {
-	let children = visible_children_for_chunk(tree, chunk, lookup, visible_range);
+	let children = visible_children_for_chunk(tree, chunk, lookup, visible_range, None);
 	let span = intersect_visible_span(chunk, visible_range);
 	let has_kids = !children.is_empty();
 
@@ -490,7 +507,7 @@ fn compute_rendered_line_count(
 			chunk.line_count as usize
 		};
 	}
-	let children = visible_children_for_chunk(tree, chunk, lookup, visible_range);
+	let children = visible_children_for_chunk(tree, chunk, lookup, visible_range, None);
 	let has_out_of_span_child = children
 		.iter()
 		.any(|child| child.start_line < chunk.start_line || child.end_line > chunk.end_line);
@@ -531,6 +548,8 @@ struct RenderCtx<'a> {
 	preview_head_lines:     usize,
 	preview_tail_lines:     usize,
 	tab_replacement:        &'a str,
+	focus:                  Option<HashMap<&'a str, ChunkFocusMode>>,
+	inline_hunks:           HashMap<String, Vec<InlineHunk>>,
 }
 
 fn push_line(out: &mut String, line: String) {
@@ -605,6 +624,17 @@ fn emit_leaf_body(ctx: &mut RenderCtx<'_>, _chunk: &ChunkNode, span: VisibleSpan
 	}
 }
 
+/// Emit any inline diff hunks mapped to the given chunk path.
+fn emit_inline_hunks_for(ctx: &mut RenderCtx<'_>, chunk_path: &str) {
+	let lines: Vec<String> = match ctx.inline_hunks.get(chunk_path) {
+		Some(hunks) => hunks.iter().flat_map(|h| h.lines.iter().cloned()).collect(),
+		None => return,
+	};
+	for line in lines {
+		push_meta(ctx, line);
+	}
+}
+
 struct ChunkSubtreeOptions {
 	is_first_top_level:            bool,
 	between_top_level_definitions: bool,
@@ -616,7 +646,33 @@ fn emit_chunk_subtree(
 	depth: usize,
 	options: ChunkSubtreeOptions,
 ) {
-	let children = visible_children_for_chunk(ctx.tree, chunk, ctx.lookup, ctx.visible_range);
+	// Focus mode gate: skip unfocused chunks, collapse siblings, pass through
+	// containers and expanded.
+	if let Some(focus_map) = ctx.focus.as_ref()
+		&& !chunk.path.is_empty()
+	{
+		match focus_map.get(chunk.path.as_str()) {
+			None => return,
+			Some(ChunkFocusMode::Collapsed) => {
+				if options.between_top_level_definitions && depth == 0 && !options.is_first_top_level {
+					push_blank_meta(ctx);
+				}
+				let anchor_indent =
+					chunk_body_anchor_indent(ctx.source_lines, chunk, ctx.tab_replacement);
+				let style = ctx.anchor_style.with_omit_checksum(ctx.omit_checksum);
+				let anchor_label = chunk_anchor_label(chunk, style);
+				push_meta(ctx, style.render(&anchor_indent, anchor_label, chunk.checksum.as_str()));
+				return;
+			},
+			Some(ChunkFocusMode::Container | ChunkFocusMode::Expanded) => {
+				// fall through to normal rendering
+			},
+		}
+	}
+
+	let focus_ref = ctx.focus.as_ref();
+	let children =
+		visible_children_for_chunk(ctx.tree, chunk, ctx.lookup, ctx.visible_range, focus_ref);
 	let span = intersect_visible_span(chunk, ctx.visible_range);
 	let has_kids = !children.is_empty();
 
@@ -638,15 +694,21 @@ fn emit_chunk_subtree(
 		{
 			emit_leaf_body(ctx, chunk, span);
 		}
-		// Closing tag for single-line leaves is omitted (only multi-line chunks get
-		// them)
 		return;
 	}
+
+	let is_container = ctx
+		.focus
+		.as_ref()
+		.and_then(|f| f.get(chunk.path.as_str()))
+		.copied()
+		== Some(ChunkFocusMode::Container);
+
 	if let Some(span) = span {
 		let mut cursor = chunk.start_line;
 		for child in children {
 			let gap_end = child.start_line.saturating_sub(1);
-			if gap_end >= cursor {
+			if gap_end >= cursor && !is_container {
 				for line in cursor..=gap_end {
 					if line_in_file_scope(line, ctx.visible_range)
 						&& should_render_gap_line(ctx.tree, chunk, ctx.lookup, line)
@@ -661,11 +723,15 @@ fn emit_chunk_subtree(
 			});
 			cursor = cursor.max(child.end_line.saturating_add(1));
 		}
-		if cursor <= span.end {
+		if cursor <= span.end && !is_container {
 			emit_line_gap(ctx, cursor, span.end);
 		}
-		// Closing tag for multi-line chunks with children
-		if !chunk.path.is_empty() && chunk.line_count > 1 {
+		// Emit inline diff hunks before the closing tag.
+		if !chunk.path.is_empty() {
+			emit_inline_hunks_for(ctx, &chunk.path);
+		}
+		// Closing tag for chunks with children
+		if !chunk.path.is_empty() {
 			let anchor_indent = chunk_body_anchor_indent(ctx.source_lines, chunk, ctx.tab_replacement);
 			let style = ctx.anchor_style.with_omit_checksum(ctx.omit_checksum);
 			let anchor_label = chunk_anchor_label(chunk, style);
@@ -700,7 +766,7 @@ fn compute_num_width(
 	if render_children_only {
 		return tree.line_count.to_string().len().max(1);
 	}
-	let children = visible_children_for_chunk(tree, chunk, lookup, visible_range);
+	let children = visible_children_for_chunk(tree, chunk, lookup, visible_range, None);
 	let has_out_of_span_child = children
 		.iter()
 		.any(|child| child.start_line < chunk.start_line || child.end_line > chunk.end_line);
@@ -724,4 +790,170 @@ fn compute_num_width(
 		},
 	);
 	max_line.to_string().len().max(1)
+}
+
+/// Find the chunk that should own a diff hunk for inline display.
+///
+/// Walks from the deepest chunk containing `line` upward until it finds a
+/// chunk with children (which will have a closing tag in the tree output).
+/// Returns the chunk path, or `None` for file-root orphans.
+pub fn find_hunk_owner_chunk<'a>(
+	tree: &'a ChunkTree,
+	lookup: &ChunkLookup<'a>,
+	line: u32,
+) -> Option<&'a str> {
+	let deepest = line_to_containing_chunk(tree, line)?;
+	// If the deepest chunk has children, it gets a closing tag — use it.
+	if !deepest.children.is_empty() {
+		return Some(&deepest.path);
+	}
+	// Leaf: promote to parent (which has children and a closing tag).
+	if let Some(parent_path) = deepest.parent_path.as_deref()
+		&& let Some(parent) = lookup.get(parent_path)
+		&& !parent.path.is_empty()
+	{
+		return Some(&parent.path);
+	}
+	// Root-level leaf — no parent with a closing tag.
+	None
+}
+
+/// Compute the indentation string for inline hunks placed inside a chunk.
+///
+/// Uses the chunk's own body anchor indent plus one additional level, which
+/// aligns hunks at the same depth as the chunk's child anchors.
+pub fn hunk_indent_for_chunk(
+	lookup: &ChunkLookup<'_>,
+	chunk_path: &str,
+	source: &str,
+	tab_replacement: &str,
+) -> String {
+	let source_lines: Vec<&str> = source.split('\n').collect();
+	let Some(chunk) = lookup.get(chunk_path) else {
+		return String::new();
+	};
+	let base = chunk_body_anchor_indent(&source_lines, chunk, tab_replacement);
+	format!("{base}{tab_replacement}")
+}
+
+/// Render a chunk tree with diff hunks inlined into their owning chunk blocks.
+pub fn render_state_with_hunks(
+	state: &ChunkStateInner,
+	params: &RenderParams,
+	inline_hunks: HashMap<String, Vec<InlineHunk>>,
+) -> String {
+	let tree = state.tree();
+	let lookup = build_lookup(tree);
+	let chunk_path = params
+		.chunk_path
+		.as_deref()
+		.unwrap_or(tree.root_path.as_str());
+	let Some(chunk) = get_chunk(&lookup, chunk_path) else {
+		return String::new();
+	};
+	let masked_source = mask_chunk_display_source(state.source(), state.language());
+	let source_lines = masked_source.split('\n').collect::<Vec<_>>();
+	let full_display_threshold = *FULL_DISPLAY_THRESHOLD;
+	let preview_head_lines = *PREVIEW_HEAD_LINES;
+	let preview_tail_lines = *PREVIEW_TAIL_LINES;
+	let tab_replacement = params.tab_replacement.as_deref().unwrap_or("    ");
+	let anchor_style = params.anchor_style.unwrap_or_default();
+	let focus: Option<HashMap<&str, ChunkFocusMode>> = params
+		.focused_paths
+		.as_ref()
+		.map(|paths| paths.iter().map(|fp| (fp.path.as_str(), fp.mode)).collect());
+	let num_width = compute_num_width(
+		tree,
+		chunk,
+		&lookup,
+		params.visible_range.as_ref(),
+		params.render_children_only,
+		params.show_leaf_preview,
+		&source_lines,
+		tab_replacement,
+		full_display_threshold,
+		preview_head_lines,
+		preview_tail_lines,
+	);
+	let rendered_line_count = compute_rendered_line_count(
+		tree,
+		chunk,
+		&lookup,
+		params.visible_range.as_ref(),
+		params.render_children_only,
+		params.show_leaf_preview,
+		&source_lines,
+		tab_replacement,
+		full_display_threshold,
+		preview_head_lines,
+		preview_tail_lines,
+	);
+
+	let mut ctx = RenderCtx {
+		out: String::new(),
+		tree,
+		lookup: &lookup,
+		source_lines: &source_lines,
+		num_width,
+		visible_range: params.visible_range.as_ref(),
+		omit_checksum: params.omit_checksum,
+		anchor_style,
+		show_leaf_preview: params.show_leaf_preview,
+		last_was_blank_meta: false,
+		full_display_threshold,
+		preview_head_lines,
+		preview_tail_lines,
+		tab_replacement,
+		focus,
+		inline_hunks,
+	};
+
+	push_line(
+		&mut ctx.out,
+		format!(
+			"{}| {}",
+			" ".repeat(num_width),
+			format_header_meta(
+				params.title.as_str(),
+				rendered_line_count,
+				params.language_tag.as_deref(),
+				chunk.checksum.as_str(),
+				params.omit_checksum,
+			)
+		),
+	);
+	push_blank_meta(&mut ctx);
+
+	if params.render_children_only {
+		let focus_ref = ctx.focus.as_ref();
+		let children =
+			visible_children_for_chunk(tree, chunk, &lookup, params.visible_range.as_ref(), focus_ref);
+		for (index, child) in children.iter().enumerate() {
+			emit_chunk_subtree(&mut ctx, child, 0, ChunkSubtreeOptions {
+				is_first_top_level:            index == 0,
+				between_top_level_definitions: true,
+			});
+		}
+		// Emit any hunks mapped to the root (empty path).
+		emit_inline_hunks_for(&mut ctx, "");
+		return ctx.out;
+	}
+
+	if chunk.children.is_empty() && ctx.focus.is_none() {
+		if params.show_leaf_preview
+			&& intersect_visible_span(chunk, params.visible_range.as_ref()).is_some()
+		{
+			emit_chunk_subtree(&mut ctx, chunk, 0, ChunkSubtreeOptions {
+				is_first_top_level:            true,
+				between_top_level_definitions: false,
+			});
+		}
+		return ctx.out;
+	}
+
+	emit_chunk_subtree(&mut ctx, chunk, 0, ChunkSubtreeOptions {
+		is_first_top_level:            true,
+		between_top_level_definitions: false,
+	});
+	ctx.out
 }

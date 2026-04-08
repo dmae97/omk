@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Deferred diagnostics support in LSP writethrough: `onDeferredDiagnostics` callback and `deferredSignal` in `WritethroughOptions` allow callers to receive diagnostics that arrive after the main 5-second timeout
@@ -24,6 +23,9 @@
 
 ### Changed
 
+- Reorganized edit tool implementation from `patch/` to `edit/` directory structure with dedicated mode subdirectories (`edit/modes/chunk.ts`, `edit/modes/hashline.ts`, `edit/modes/patch.ts`, `edit/modes/replace.ts`)
+- Updated package.json exports to use `./edit` path instead of `./patch` for edit tool and related utilities
+- Chunk edit tool documentation simplified: removed line-based edit examples, clarified `target` format with full path and CRC suffix, added guidance for `replace_body` operation to preserve declarations
 - LSP diagnostics timeout reduced from 10 seconds to 5 seconds for faster feedback; slow diagnostics now fetch in background via deferred mechanism
 - Diagnostics action error messaging clarified: requires `file` parameter or `*` for workspace scope; improved guidance in error responses
 - Workspace symbols and reload actions now accept `*` to operate across all configured servers instead of requiring a file path
@@ -54,6 +56,8 @@
 
 ### Fixed
 
+- Chunk edit error messages now consistently report checksum mismatches with format `Checksum mismatch` instead of variable phrasing
+- Chunk-mode read output now correctly displays scoped response trees showing only touched chunks and adjacent siblings, preventing unrelated distant chunks from appearing in responses
 - DAP stopped event handling no longer blocks the message reader, preventing potential deadlocks during rapid event sequences
 - Chunk-mode whole-chunk replaces now preserve attached leading comments and docblocks when replacement content starts at the declaration, preventing accidental comment loss during agent edits
 - Chunk edit error messages now consistently report checksum mismatches with the format `did not match checksum "XXXX"` instead of variable phrasing

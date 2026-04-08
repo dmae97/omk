@@ -1,5 +1,5 @@
 /**
- * Shared utilities for edit tool TUI rendering.
+ * Edit tool renderer and LSP batching helpers.
  */
 import type { ToolCallContext } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
@@ -22,8 +22,10 @@ import {
 	truncateDiffByHunk,
 } from "../tools/render-utils";
 import { Hasher, type RenderCache, renderStatusLine, truncateToWidth } from "../tui";
-import type { ChunkToolEdit, HashlineToolEdit } from "./index";
-import type { DiffError, DiffResult, Operation } from "./types";
+import type { DiffError, DiffResult } from "./diff";
+import type { ChunkToolEdit } from "./modes/chunk";
+import type { HashlineToolEdit } from "./modes/hashline";
+import type { Operation } from "./modes/patch";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LSP Batching
@@ -31,7 +33,12 @@ import type { DiffError, DiffResult, Operation } from "./types";
 
 const LSP_BATCH_TOOLS = new Set(["edit", "write"]);
 
-export function getLspBatchRequest(toolCall: ToolCallContext | undefined): { id: string; flush: boolean } | undefined {
+export interface LspBatchRequest {
+	id: string;
+	flush: boolean;
+}
+
+export function getLspBatchRequest(toolCall: ToolCallContext | undefined): LspBatchRequest | undefined {
 	if (!toolCall) {
 		return undefined;
 	}
@@ -96,10 +103,67 @@ export interface EditRenderContext {
 }
 
 const EDIT_STREAMING_PREVIEW_LINES = 12;
+const CALL_TEXT_PREVIEW_LINES = 6;
+const CALL_TEXT_PREVIEW_WIDTH = 80;
+const STREAMING_EDIT_PREVIEW_WIDTH = 120;
+const STREAMING_EDIT_PREVIEW_LIMIT = 4;
+const STREAMING_EDIT_PREVIEW_DST_LINE_LIMIT = 8;
+
+interface FormattedStreamingEdit {
+	srcLabel: string;
+	dst: string;
+}
 
 function countLines(text: string): number {
 	if (!text) return 0;
 	return text.split("\n").length;
+}
+
+function getOperationTitle(op: Operation | undefined): string {
+	return op === "create" ? "Create" : op === "delete" ? "Delete" : "Edit";
+}
+
+function formatEditPathDisplay(
+	rawPath: string,
+	uiTheme: Theme,
+	options?: { rename?: string; firstChangedLine?: number },
+): string {
+	let pathDisplay = rawPath ? uiTheme.fg("accent", shortenPath(rawPath)) : uiTheme.fg("toolOutput", "…");
+
+	if (options?.firstChangedLine) {
+		pathDisplay += uiTheme.fg("warning", `:${options.firstChangedLine}`);
+	}
+
+	if (options?.rename) {
+		pathDisplay += ` ${uiTheme.fg("dim", "→")} ${uiTheme.fg("accent", shortenPath(options.rename))}`;
+	}
+
+	return pathDisplay;
+}
+
+function formatEditDescription(
+	rawPath: string,
+	uiTheme: Theme,
+	options?: { rename?: string; firstChangedLine?: number },
+): { language: string; description: string } {
+	const language = getLanguageFromPath(rawPath) ?? "text";
+	const icon = uiTheme.fg("muted", uiTheme.getLangIcon(language));
+	return {
+		language,
+		description: `${icon} ${formatEditPathDisplay(rawPath, uiTheme, options)}`,
+	};
+}
+
+function renderPlainTextPreview(text: string, uiTheme: Theme): string {
+	const previewLines = text.split("\n");
+	let preview = "\n\n";
+	for (const line of previewLines.slice(0, CALL_TEXT_PREVIEW_LINES)) {
+		preview += `${uiTheme.fg("toolOutput", truncateToWidth(replaceTabs(line), CALL_TEXT_PREVIEW_WIDTH))}\n`;
+	}
+	if (previewLines.length > CALL_TEXT_PREVIEW_LINES) {
+		preview += uiTheme.fg("dim", `… ${previewLines.length - CALL_TEXT_PREVIEW_LINES} more lines`);
+	}
+	return preview.trimEnd();
 }
 
 function formatStreamingDiff(diff: string, rawPath: string, uiTheme: Theme, label = "streaming"): string {
@@ -117,116 +181,140 @@ function formatStreamingDiff(diff: string, rawPath: string, uiTheme: Theme, labe
 	return text;
 }
 
+function isChunkStreamingEdit(edit: Partial<HashlineToolEdit | ChunkToolEdit>): edit is Partial<ChunkToolEdit> {
+	return "target" in edit;
+}
+
+function getStreamingEditContent(content: unknown): string {
+	if (Array.isArray(content)) {
+		return content.join("\n");
+	}
+	return typeof content === "string" ? content : "";
+}
+
+function formatHashlineStreamingEdit(edit: Partial<HashlineToolEdit>): FormattedStreamingEdit {
+	if (typeof edit !== "object" || !edit) {
+		return { srcLabel: "\u2022 (incomplete edit)", dst: "" };
+	}
+
+	const contentLines = getStreamingEditContent(edit.content);
+	const loc = edit.loc;
+
+	if (loc === "append" || loc === "prepend") {
+		return { srcLabel: `\u2022 ${loc} (file-level)`, dst: contentLines };
+	}
+	if (typeof loc === "object" && loc) {
+		if ("range" in loc && typeof loc.range === "object" && loc.range) {
+			return { srcLabel: `\u2022 range ${loc.range.pos ?? "?"}\u2026${loc.range.end ?? "?"}`, dst: contentLines };
+		}
+		if ("line" in loc) {
+			return { srcLabel: `\u2022 line ${(loc as { line: string }).line}`, dst: contentLines };
+		}
+		if ("append" in loc) {
+			return { srcLabel: `\u2022 append ${(loc as { append: string }).append}`, dst: contentLines };
+		}
+		if ("prepend" in loc) {
+			return { srcLabel: `\u2022 prepend ${(loc as { prepend: string }).prepend}`, dst: contentLines };
+		}
+	}
+	return { srcLabel: "\u2022 (unknown edit)", dst: contentLines };
+}
+
+function formatChunkStreamingEdit(edit: Partial<ChunkToolEdit>): FormattedStreamingEdit {
+	if (typeof edit !== "object" || !edit) {
+		return { srcLabel: "\u2022 (incomplete edit)", dst: "" };
+	}
+
+	const contentLines = getStreamingEditContent(edit.content);
+	const target = edit.target ?? "?";
+	const op = edit.op ?? "replace";
+
+	switch (op) {
+		case "append":
+		case "append_child":
+			return { srcLabel: `\u2022 append child ${target}`, dst: contentLines };
+		case "prepend":
+		case "prepend_child":
+			return { srcLabel: `\u2022 prepend child ${target}`, dst: contentLines };
+		case "after":
+		case "append_sibling":
+			return { srcLabel: `\u2022 insert after ${target}/${edit.anchor ?? "?"}`, dst: contentLines };
+		case "before":
+		case "prepend_sibling":
+			return { srcLabel: `\u2022 insert before ${target}/${edit.anchor ?? "?"}`, dst: contentLines };
+		default:
+			return {
+				srcLabel: contentLines.length === 0 ? `\u2022 remove ${target}` : `\u2022 replace ${target}`,
+				dst: contentLines,
+			};
+	}
+}
+
 function formatStreamingHashlineEdits(edits: Partial<HashlineToolEdit | ChunkToolEdit>[], uiTheme: Theme): string {
-	const MAX_EDITS = 4;
-	const MAX_DST_LINES = 8;
 	let text = "\n\n";
 
 	// Detect whether these are chunk edits (target field) or hashline edits (loc field)
-	const isChunk = edits.length > 0 && "target" in edits[0];
+	const isChunk = edits.length > 0 && isChunkStreamingEdit(edits[0]);
 	const label = isChunk ? "chunk edit" : "hashline edit";
+	const formatEdit = isChunk ? formatChunkStreamingEdit : formatHashlineStreamingEdit;
 	text += uiTheme.fg("dim", `[${edits.length} ${label}${edits.length === 1 ? "" : "s"}]`);
 	text += "\n";
 	let shownEdits = 0;
 	let shownDstLines = 0;
 	for (const edit of edits) {
 		shownEdits++;
-		if (shownEdits > MAX_EDITS) break;
-		const formatted = isChunk
-			? formatChunkEdit(edit as Partial<ChunkToolEdit>)
-			: formatHashlineEdit(edit as Partial<HashlineToolEdit>);
-		text += uiTheme.fg("toolOutput", truncateToWidth(replaceTabs(formatted.srcLabel), 120));
+		if (shownEdits > STREAMING_EDIT_PREVIEW_LIMIT) break;
+		const formatted = formatEdit(edit as never);
+		text += uiTheme.fg("toolOutput", truncateToWidth(replaceTabs(formatted.srcLabel), STREAMING_EDIT_PREVIEW_WIDTH));
 		text += "\n";
 		if (formatted.dst === "") {
-			text += uiTheme.fg("dim", truncateToWidth("  (delete)", 120));
+			text += uiTheme.fg("dim", truncateToWidth("  (delete)", STREAMING_EDIT_PREVIEW_WIDTH));
 			text += "\n";
 			continue;
 		}
 		for (const dstLine of formatted.dst.split("\n")) {
 			shownDstLines++;
-			if (shownDstLines > MAX_DST_LINES) break;
-			text += uiTheme.fg("toolOutput", truncateToWidth(replaceTabs(`+ ${dstLine}`), 120));
+			if (shownDstLines > STREAMING_EDIT_PREVIEW_DST_LINE_LIMIT) break;
+			text += uiTheme.fg("toolOutput", truncateToWidth(replaceTabs(`+ ${dstLine}`), STREAMING_EDIT_PREVIEW_WIDTH));
 			text += "\n";
 		}
-		if (shownDstLines > MAX_DST_LINES) break;
+		if (shownDstLines > STREAMING_EDIT_PREVIEW_DST_LINE_LIMIT) break;
 	}
-	if (edits.length > MAX_EDITS) {
-		text += uiTheme.fg("dim", `\u2026 (${edits.length - MAX_EDITS} more edits)`);
+	if (edits.length > STREAMING_EDIT_PREVIEW_LIMIT) {
+		text += uiTheme.fg("dim", `\u2026 (${edits.length - STREAMING_EDIT_PREVIEW_LIMIT} more edits)`);
 	}
-	if (shownDstLines > MAX_DST_LINES) {
-		text += uiTheme.fg("dim", `\n\u2026 (${shownDstLines - MAX_DST_LINES} more dst lines)`);
+	if (shownDstLines > STREAMING_EDIT_PREVIEW_DST_LINE_LIMIT) {
+		text += uiTheme.fg("dim", `\n\u2026 (${shownDstLines - STREAMING_EDIT_PREVIEW_DST_LINE_LIMIT} more dst lines)`);
 	}
 
 	return text.trimEnd();
-
-	function formatHashlineEdit(edit: Partial<HashlineToolEdit>): { srcLabel: string; dst: string } {
-		if (typeof edit !== "object" || !edit) {
-			return { srcLabel: "\u2022 (incomplete edit)", dst: "" };
-		}
-
-		const contentLines = Array.isArray(edit.content) ? (edit.content as string[]).join("\n") : "";
-		const loc = edit.loc;
-
-		if (loc === "append" || loc === "prepend") {
-			return { srcLabel: `\u2022 ${loc} (file-level)`, dst: contentLines };
-		}
-		if (typeof loc === "object" && loc) {
-			if ("range" in loc && typeof loc.range === "object" && loc.range) {
-				return { srcLabel: `\u2022 range ${loc.range.pos ?? "?"}\u2026${loc.range.end ?? "?"}`, dst: contentLines };
-			}
-			if ("line" in loc) {
-				return { srcLabel: `\u2022 line ${(loc as { line: string }).line}`, dst: contentLines };
-			}
-			if ("append" in loc) {
-				return { srcLabel: `\u2022 append ${(loc as { append: string }).append}`, dst: contentLines };
-			}
-			if ("prepend" in loc) {
-				return { srcLabel: `\u2022 prepend ${(loc as { prepend: string }).prepend}`, dst: contentLines };
-			}
-		}
-		return { srcLabel: "\u2022 (unknown edit)", dst: contentLines };
-	}
-
-	function formatChunkEdit(edit: Partial<ChunkToolEdit>): { srcLabel: string; dst: string } {
-		if (typeof edit !== "object" || !edit) {
-			return { srcLabel: "\u2022 (incomplete edit)", dst: "" };
-		}
-
-		const contentLines = Array.isArray(edit.content)
-			? (edit.content as string[]).join("\n")
-			: typeof edit.content === "string"
-				? edit.content
-				: "";
-		const target = edit.target ?? "?";
-		const op = edit.op ?? "replace";
-
-		switch (op) {
-			case "delete":
-				return { srcLabel: `\u2022 delete ${target}`, dst: "" };
-			case "append":
-				return { srcLabel: `\u2022 append child ${target}`, dst: contentLines };
-			case "prepend":
-				return { srcLabel: `\u2022 prepend child ${target}`, dst: contentLines };
-			case "after":
-				return { srcLabel: `\u2022 insert after ${target}/${edit.anchor ?? "?"}`, dst: contentLines };
-			case "before":
-				return { srcLabel: `\u2022 insert before ${target}/${edit.anchor ?? "?"}`, dst: contentLines };
-			default: {
-				if (edit.line != null) {
-					const range = edit.end_line != null ? `${edit.line}\u2026${edit.end_line}` : `${edit.line}`;
-					return { srcLabel: `\u2022 replace ${target} L${range}`, dst: contentLines };
-				}
-				return { srcLabel: `\u2022 replace ${target}`, dst: contentLines };
-			}
-		}
-	}
 }
+
 function formatMetadataLine(lineCount: number | null, language: string | undefined, uiTheme: Theme): string {
 	const icon = uiTheme.getLangIcon(language);
 	if (lineCount !== null) {
 		return uiTheme.fg("dim", `${icon} ${lineCount} lines`);
 	}
 	return uiTheme.fg("dim", `${icon}`);
+}
+
+function getCallPreview(args: EditRenderArgs, rawPath: string, uiTheme: Theme): string {
+	if (args.previewDiff) {
+		return formatStreamingDiff(args.previewDiff, rawPath, uiTheme, "preview");
+	}
+	if (args.diff && args.op) {
+		return formatStreamingDiff(args.diff, rawPath, uiTheme);
+	}
+	if (args.edits && args.edits.length > 0) {
+		return formatStreamingHashlineEdits(args.edits, uiTheme);
+	}
+	if (args.diff) {
+		return renderPlainTextPreview(args.diff, uiTheme);
+	}
+	if (args.newText || args.patch) {
+		return renderPlainTextPreview(args.newText ?? args.patch ?? "", uiTheme);
+	}
+	return "";
 }
 
 function renderDiffSection(
@@ -293,50 +381,11 @@ export const editToolRenderer = {
 
 	renderCall(args: EditRenderArgs, options: RenderResultOptions, uiTheme: Theme): Component {
 		const rawPath = args.file_path || args.path || "";
-		const filePath = shortenPath(rawPath);
-		const editLanguage = getLanguageFromPath(rawPath) ?? "text";
-		const editIcon = uiTheme.fg("muted", uiTheme.getLangIcon(editLanguage));
-		let pathDisplay = filePath ? uiTheme.fg("accent", filePath) : uiTheme.fg("toolOutput", "…");
-
-		// Add arrow for move/rename operations
-		if (args.rename) {
-			pathDisplay += ` ${uiTheme.fg("dim", "→")} ${uiTheme.fg("accent", shortenPath(args.rename))}`;
-		}
-
-		// Show operation type for patch mode
-		const opTitle = args.op === "create" ? "Create" : args.op === "delete" ? "Delete" : "Edit";
+		const { description } = formatEditDescription(rawPath, uiTheme, { rename: args.rename });
 		const spinner =
 			options?.spinnerFrame !== undefined ? formatStatusIcon("running", uiTheme, options.spinnerFrame) : "";
-		let text = `${formatTitle(opTitle, uiTheme)} ${spinner ? `${spinner} ` : ""}${editIcon} ${pathDisplay}`;
-
-		// Show streaming preview of diff/content
-		if (args.previewDiff) {
-			text += formatStreamingDiff(args.previewDiff, rawPath, uiTheme, "preview");
-		} else if (args.diff && args.op) {
-			text += formatStreamingDiff(args.diff, rawPath, uiTheme);
-		} else if (args.edits && args.edits.length > 0) {
-			text += formatStreamingHashlineEdits(args.edits, uiTheme);
-		} else if (args.diff) {
-			const previewLines = args.diff.split("\n");
-			const maxLines = 6;
-			text += "\n\n";
-			for (const line of previewLines.slice(0, maxLines)) {
-				text += `${uiTheme.fg("toolOutput", truncateToWidth(replaceTabs(line), 80))}\n`;
-			}
-			if (previewLines.length > maxLines) {
-				text += uiTheme.fg("dim", `… ${previewLines.length - maxLines} more lines`);
-			}
-		} else if (args.newText || args.patch) {
-			const previewLines = (args.newText ?? args.patch ?? "").split("\n");
-			const maxLines = 6;
-			text += "\n\n";
-			for (const line of previewLines.slice(0, maxLines)) {
-				text += `${uiTheme.fg("toolOutput", truncateToWidth(replaceTabs(line), 80))}\n`;
-			}
-			if (previewLines.length > maxLines) {
-				text += uiTheme.fg("dim", `… ${previewLines.length - maxLines} more lines`);
-			}
-		}
+		let text = `${formatTitle(getOperationTitle(args.op), uiTheme)} ${spinner ? `${spinner} ` : ""}${description}`;
+		text += getCallPreview(args, rawPath, uiTheme);
 
 		return new Text(text, 0, 0);
 	},
@@ -348,18 +397,14 @@ export const editToolRenderer = {
 		args?: EditRenderArgs,
 	): Component {
 		const rawPath = args?.file_path || args?.path || "";
-		const filePath = shortenPath(rawPath);
-		const editLanguage = getLanguageFromPath(rawPath) ?? "text";
-		const editIcon = uiTheme.fg("muted", uiTheme.getLangIcon(editLanguage));
-
 		const op = args?.op || result.details?.op;
 		const rename = args?.rename || result.details?.move;
-		const opTitle = op === "create" ? "Create" : op === "delete" ? "Delete" : "Edit";
+		const { language } = formatEditDescription(rawPath, uiTheme, { rename });
 
 		// Pre-compute metadata line (static across renders)
 		const metadataLine =
 			op !== "delete"
-				? `\n${formatMetadataLine(countLines(args?.newText ?? args?.oldText ?? args?.diff ?? args?.patch ?? ""), editLanguage, uiTheme)}`
+				? `\n${formatMetadataLine(countLines(args?.newText ?? args?.oldText ?? args?.diff ?? args?.patch ?? ""), language, uiTheme)}`
 				: "";
 
 		// Pre-compute error text (static)
@@ -375,26 +420,17 @@ export const editToolRenderer = {
 				const key = new Hasher().bool(expanded).u32(width).digest();
 				if (cached?.key === key) return cached.lines;
 
-				// Build path display with line number
-				let pathDisplay = filePath ? uiTheme.fg("accent", filePath) : uiTheme.fg("toolOutput", "…");
 				const firstChangedLine =
 					(editDiffPreview && "firstChangedLine" in editDiffPreview
 						? editDiffPreview.firstChangedLine
 						: undefined) || (result.details && !result.isError ? result.details.firstChangedLine : undefined);
-				if (firstChangedLine) {
-					pathDisplay += uiTheme.fg("warning", `:${firstChangedLine}`);
-				}
-
-				// Add arrow for rename operations
-				if (rename) {
-					pathDisplay += ` ${uiTheme.fg("dim", "→")} ${uiTheme.fg("accent", shortenPath(rename))}`;
-				}
+				const { description } = formatEditDescription(rawPath, uiTheme, { rename, firstChangedLine });
 
 				const header = renderStatusLine(
 					{
 						icon: result.isError ? "error" : "success",
-						title: opTitle,
-						description: `${editIcon} ${pathDisplay}`,
+						title: getOperationTitle(op),
+						description,
 					},
 					uiTheme,
 				);
