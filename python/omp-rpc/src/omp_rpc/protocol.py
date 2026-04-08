@@ -702,7 +702,7 @@ def image_from_path(path: str | Path, mime_type: str | None = None) -> ImageCont
     }
 
 
-def message_text(message: AgentMessage) -> str | None:
+def message_text(message: AgentMessage, *, include_thinking: bool = False) -> str | None:
     role = message.get("role")
     if role not in {"user", "developer", "assistant", "toolResult", "custom", "hookMessage"}:
         return None
@@ -720,15 +720,23 @@ def message_text(message: AgentMessage) -> str | None:
         block_type = block.get("type")
         if block_type == "text" and isinstance(block.get("text"), str):
             fragments.append(cast(str, block["text"]))
-        elif block_type == "thinking" and isinstance(block.get("thinking"), str):
+        elif include_thinking and block_type == "thinking" and isinstance(block.get("thinking"), str):
             fragments.append(cast(str, block["thinking"]))
     return "".join(fragments) or None
 
 
-def assistant_text(message: AgentMessage) -> str | None:
+def message_text_with_thinking(message: AgentMessage) -> str | None:
+    return message_text(message, include_thinking=True)
+
+
+def assistant_text(message: AgentMessage, *, include_thinking: bool = False) -> str | None:
     if message.get("role") != "assistant":
         return None
-    return message_text(message)
+    return message_text(message, include_thinking=include_thinking)
+
+
+def assistant_text_with_thinking(message: AgentMessage) -> str | None:
+    return assistant_text(message, include_thinking=True)
 
 
 def parse_model_info(payload: JsonObject | None) -> ModelInfo | None:

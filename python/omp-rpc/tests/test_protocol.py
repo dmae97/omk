@@ -8,6 +8,7 @@ from omp_rpc import (
     SessionState,
     TodoReminderEvent,
     assistant_text,
+    assistant_text_with_thinking,
     parse_notification,
     parse_session_state,
 )
@@ -156,6 +157,18 @@ class ProtocolParsingTests(unittest.TestCase):
         self.assertIsInstance(notification, TodoReminderEvent)
         self.assertEqual(notification.todos[0].content, "Map tools")
         self.assertEqual(notification.todos[0].status, "pending")
+
+    def test_assistant_text_excludes_thinking_by_default(self) -> None:
+        message = {
+            "role": "assistant",
+            "content": [
+                {"type": "thinking", "thinking": "internal"},
+                {"type": "text", "text": "visible"},
+            ],
+        }
+
+        self.assertEqual(assistant_text(message), "visible")
+        self.assertEqual(assistant_text_with_thinking(message), "internalvisible")
 
 
 if __name__ == "__main__":

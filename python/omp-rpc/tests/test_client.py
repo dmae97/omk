@@ -4,7 +4,7 @@ import sys
 import textwrap
 import unittest
 
-from omp_rpc import RpcClient
+from omp_rpc import RpcClient, RpcCommandError, RpcError
 
 
 FAKE_SERVER = textwrap.dedent(
@@ -201,14 +201,106 @@ FAKE_SERVER = textwrap.dedent(
     """
 )
 
+IDLESS_ERROR_SERVER = textwrap.dedent(
+    """
+    import json
+    import sys
+
+    print(json.dumps({"type": "ready"}), flush=True)
+
+    for raw_line in sys.stdin:
+        raw_line = raw_line.strip()
+        if not raw_line:
+            continue
+
+        command = json.loads(raw_line)
+        print(
+            json.dumps(
+                {
+                    "type": "response",
+                    "command": command["type"],
+                    "success": False,
+                    "error": f"unsupported: {command['type']}",
+                }
+            ),
+            flush=True,
+        )
+    """
+)
+
+LATE_PROMPT_FAILURE_SERVER = textwrap.dedent(
+    """
+    import json
+    import sys
+
+    print(json.dumps({"type": "ready"}), flush=True)
+
+    for raw_line in sys.stdin:
+        raw_line = raw_line.strip()
+        if not raw_line:
+            continue
+
+        command = json.loads(raw_line)
+        request_id = command.get("id")
+        if command["type"] == "prompt":
+            print(
+                json.dumps(
+                    {
+                        "id": request_id,
+                        "type": "response",
+                        "command": "prompt",
+                        "success": True,
+                    }
+                ),
+                flush=True,
+            )
+            print(
+                json.dumps(
+                    {
+                        "id": request_id,
+                        "type": "response",
+                        "command": "prompt",
+                        "success": False,
+                        "error": "late failure",
+                    }
+                ),
+                flush=True,
+            )
+        else:
+            print(
+                json.dumps(
+                    {
+                        "id": request_id,
+                        "type": "response",
+                        "command": command["type"],
+                        "success": True,
+                    }
+                ),
+                flush=True,
+            )
+    """
+)
+
+STDERR_SERVER = textwrap.dedent(
+    """
+    import json
+    import sys
+
+    sys.stderr.write("first\\n")
+    sys.stderr.flush()
+    sys.stderr.write("second\\n")
+    sys.stderr.flush()
+    print(json.dumps({"type": "ready"}), flush=True)
+
+    for _ in sys.stdin:
+        pass
+    """
+)
+
 
 class RpcClientTests(unittest.TestCase):
-    def make_client(self) -> RpcClient:
-        return RpcClient(
-            command=[sys.executable, "-u", "-c", FAKE_SERVER],
-            startup_timeout=2.0,
-            request_timeout=2.0,
-        )
+    def make_client(self, server: str = FAKE_SERVER, **kwargs: object) -> RpcClient:
+        return RpcClient(command=[sys.executable, "-u", "-c", server], startup_timeout=2.0, request_timeout=2.0, **kwargs)
 
     def test_command_builder_supports_common_rpc_options(self) -> None:
         client = RpcClient(
@@ -318,6 +410,72 @@ class RpcClientTests(unittest.TestCase):
 
             state = client.get_state()
             self.assertEqual(state.todo_phases[0].tasks[1].content, "Exercise edits")
+
+    def test_id_less_error_responses_are_correlated(self) -> None:
+        with self.make_client(server=IDLESS_ERROR_SERVER) as client:
+            with self.assertRaises(RpcCommandError) as ctx:
+                client.request_raw("unknown")
+
+        self.assertEqual(ctx.exception.command, "unknown")
+        self.assertEqual(ctx.exception.error, "unsupported: unknown")
+
+    def test_prompt_and_wait_raises_for_late_prompt_failure(self) -> None:
+        protocol_errors: list[str] = []
+        client = self.make_client(server=LATE_PROMPT_FAILURE_SERVER)
+        client.on_protocol_error(lambda error: protocol_errors.append(str(error)))
+
+        try:
+            client.start()
+            with self.assertRaises(RpcCommandError) as ctx:
+                client.prompt_and_wait("say hello", timeout=2.0)
+        finally:
+            client.stop()
+
+        self.assertEqual(ctx.exception.command, "prompt")
+        self.assertEqual(ctx.exception.error, "late failure")
+        self.assertEqual(len(protocol_errors), 1)
+        self.assertIn("late failure", protocol_errors[0])
+        self.assertEqual(len(client.protocol_errors), 1)
+
+    def test_listener_exceptions_are_reported_without_stopping_client(self) -> None:
+        listener_errors: list[tuple[str, str | None, str]] = []
+        client = self.make_client()
+        client.on_notification(
+            lambda notification: (_ for _ in ()).throw(RuntimeError("boom"))
+            if notification.type == "turn_start"
+            else None
+        )
+        client.on_listener_error(
+            lambda event: listener_errors.append((event.listener_kind, event.source_type, str(event.error)))
+        )
+
+        try:
+            client.start()
+            turn = client.prompt_and_wait("say hello", timeout=2.0)
+        finally:
+            client.stop()
+
+        self.assertEqual(turn.require_assistant_text(), "pong")
+        self.assertEqual(listener_errors, [("notification", "turn_start", "boom")])
+        self.assertEqual(len(client.listener_errors), 1)
+        self.assertEqual(client.listener_errors[0].listener_kind, "notification")
+
+    def test_stderr_history_is_bounded(self) -> None:
+        client = self.make_client(server=STDERR_SERVER, max_stderr_chunks=1)
+
+        try:
+            client.start()
+        finally:
+            client.stop()
+
+        self.assertEqual(client.stderr, "second\n")
+
+    def test_event_history_limit_reports_overflow(self) -> None:
+        with self.make_client(max_event_history=2) as client:
+            with self.assertRaises(RpcError) as ctx:
+                client.prompt_and_wait("say hello", timeout=2.0)
+
+        self.assertIn("max_event_history", str(ctx.exception))
 
 
 if __name__ == "__main__":

@@ -125,6 +125,46 @@ That helper ignores passive UI notifications (`notify`, `setStatus`, `setWidget`
 `setTitle`, `set_editor_text`), answers `confirm` with `False`, and cancels
 `select`/`input`/`editor` requests unless you provide explicit values.
 
+## Error Handling and Retained History
+
+The client now surfaces more of the transport edge cases that the wire protocol
+allows:
+
+- id-less `parse` and unknown-command failures are correlated back to the
+  waiting request when they can be matched unambiguously
+- late `prompt` / `abort_and_prompt` scheduling failures cause
+  `prompt_and_wait()` and `wait_for_idle()` to raise instead of timing out
+- unmatched background error responses are exposed through
+  `client.protocol_errors` and `client.on_protocol_error(...)`
+- listener exceptions no longer kill the stdout reader thread; they are exposed
+  through `client.listener_errors` and `client.on_listener_error(...)`
+
+For long-lived hosts, retained event and stderr history is bounded by default:
+
+```python
+from omp_rpc import RpcClient
+
+with RpcClient(max_event_history=20_000, max_stderr_chunks=256) as client:
+    ...
+```
+
+If a single prompt streams more events than `max_event_history` allows,
+`prompt_and_wait()` raises a clear error so hosts can increase the limit instead
+of silently losing earlier events.
+
+## Text Helpers
+
+`assistant_text()` and `message_text()` now return visible text blocks only.
+If a host explicitly needs reasoning text too, use the `*_with_thinking`
+helpers:
+
+```python
+from omp_rpc import assistant_text, assistant_text_with_thinking
+
+visible = assistant_text(message)
+full = assistant_text_with_thinking(message)
+```
+
 ## Protocol Reference
 
 The canonical wire protocol still lives in the repo at
