@@ -1,8 +1,12 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Deferred diagnostics support in LSP writethrough: `onDeferredDiagnostics` callback and `deferredSignal` in `WritethroughOptions` allow callers to receive diagnostics that arrive after the main 5-second timeout
+- Language detection for `.pm` (Perl modules), `.astro` (Astro framework), and special filenames `containerfile` and `justfile`
+- Workspace-scoped diagnostics and reload actions via `*` file parameter; `diagnostics` action now supports `*` for workspace-wide diagnostics across all configured servers
 - Socket-mode DAP adapter support for debuggers like dlv that communicate via network sockets instead of stdio; Linux uses unix domain sockets, macOS/other platforms use TCP with client-addr dialing
 - Improved extensionless binary debugging: native debuggers (gdb, lldb-dap) and adapters with root markers are now preferred over unrelated adapters like debugpy
 - Debug tool with DAP (Debug Adapter Protocol) support for launching and attaching debuggers, setting breakpoints, stepping through execution, inspecting threads/stack/variables, and evaluating expressions
@@ -20,6 +24,9 @@
 
 ### Changed
 
+- LSP diagnostics timeout reduced from 10 seconds to 5 seconds for faster feedback; slow diagnostics now fetch in background via deferred mechanism
+- Diagnostics action error messaging clarified: requires `file` parameter or `*` for workspace scope; improved guidance in error responses
+- Workspace symbols and reload actions now accept `*` to operate across all configured servers instead of requiring a file path
 - DAP session initialization now subscribes to stop events before launching/attaching to avoid missing stopOnEntry events
 - Stack frame fetching moved outside the event dispatch loop to prevent deadlocks and improve responsiveness
 - Evaluate requests now default to the top stopped frame when frameId is not explicitly provided
