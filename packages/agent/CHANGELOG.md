@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `onAssistantMessageEvent` callback option to inspect assistant streaming events before they are emitted, enabling abort decisions before buffered events continue flowing
+- Added `setAssistantMessageEventInterceptor()` method to dynamically set or update the assistant message event interceptor
 
 ## [13.13.0] - 2026-03-18
 

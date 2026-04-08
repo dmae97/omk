@@ -116,12 +116,14 @@ import planModeToolDecisionReminderPrompt from "../prompts/system/plan-mode-tool
 import ttsrInterruptTemplate from "../prompts/system/ttsr-interrupt.md" with { type: "text" };
 import { deobfuscateSessionContext, type SecretObfuscator } from "../secrets/obfuscator";
 import { resolveThinkingLevelForModel, toReasoningEffort } from "../thinking";
+import { assertEditableFile } from "../tools/auto-generated-guard";
 import type { CheckpointState } from "../tools/checkpoint";
 import { outputMeta } from "../tools/output-meta";
 import { resolveToCwd } from "../tools/path-utils";
 import type { PendingActionStore } from "../tools/pending-action";
 import { isAutoQaEnabled } from "../tools/report-tool-issue";
 import { getLatestTodoPhasesFromEntries, type TodoItem, type TodoPhase } from "../tools/todo-write";
+import { ToolError } from "../tools/tool-errors";
 import { clampTimeout } from "../tools/tool-timeouts";
 import { parseCommandArgs } from "../utils/command-args";
 import { resolveFileDisplayMode } from "../utils/file-display-mode";
@@ -503,6 +505,9 @@ export class AgentSession {
 
 	#streamingEditAbortTriggered = false;
 	#streamingEditCheckedLineCounts = new Map<string, number>();
+
+	#streamingEditPrecheckedToolCallIds = new Set<string>();
+
 	#streamingEditFileCache = new Map<string, string>();
 	#promptInFlightCount = 0;
 	#obfuscator: SecretObfuscator | undefined;
@@ -585,6 +590,15 @@ export class AgentSession {
 		);
 		this.#ttsrManager = config.ttsrManager;
 		this.#obfuscator = config.obfuscator;
+		this.agent.setAssistantMessageEventInterceptor((message, assistantMessageEvent) => {
+			const event: AgentEvent = {
+				type: "message_update",
+				message,
+				assistantMessageEvent,
+			};
+			this.#preCacheStreamingEditFile(event);
+			this.#maybeAbortStreamingEdit(event);
+		});
 		this.agent.providerSessionState = this.#providerSessionState;
 		this.#pendingActionStore = config.pendingActionStore;
 		this.#unsubscribePendingActionPush = this.#pendingActionStore?.subscribePush(action => {
@@ -822,8 +836,13 @@ export class AgentSession {
 			}
 		}
 
-		if (event.type === "message_update" && event.assistantMessageEvent.type === "toolcall_start") {
-			this.#preCacheStreamingEditFile(event);
+		if (
+			event.type === "message_update" &&
+			(event.assistantMessageEvent.type === "toolcall_start" ||
+				event.assistantMessageEvent.type === "toolcall_delta" ||
+				event.assistantMessageEvent.type === "toolcall_end")
+		) {
+			void this.#preCacheStreamingEditFile(event);
 		}
 
 		if (
@@ -1354,31 +1373,101 @@ export class AgentSession {
 	#resetStreamingEditState(): void {
 		this.#streamingEditAbortTriggered = false;
 		this.#streamingEditCheckedLineCounts.clear();
+		this.#streamingEditPrecheckedToolCallIds.clear();
 		this.#streamingEditFileCache.clear();
 	}
 
-	async #preCacheStreamingEditFile(event: AgentEvent): Promise<void> {
-		if (!this.settings.get("edit.streamingAbort")) return;
-		if (event.type !== "message_update") return;
-		const assistantEvent = event.assistantMessageEvent;
-		if (assistantEvent.type !== "toolcall_start") return;
-		if (event.message.role !== "assistant") return;
+	#getStreamingEditToolCall(event: AgentEvent):
+		| {
+				toolCall: ToolCall;
+				path: string;
+				resolvedPath: string;
+				diff?: string;
+				op?: string;
+				rename?: string;
+		  }
+		| undefined {
+		if (event.type !== "message_update") return undefined;
+		if (event.message.role !== "assistant") return undefined;
 
-		const contentIndex = assistantEvent.contentIndex;
+		const contentIndex = event.assistantMessageEvent.contentIndex ?? 0;
 		const messageContent = event.message.content;
-		if (!Array.isArray(messageContent) || contentIndex >= messageContent.length) return;
+		if (!Array.isArray(messageContent) || contentIndex < 0 || contentIndex >= messageContent.length) {
+			return undefined;
+		}
+
 		const toolCall = messageContent[contentIndex] as ToolCall;
-		if (toolCall.name !== "edit") return;
+		if (toolCall.name !== "edit") return undefined;
 
 		const args = toolCall.arguments;
-		if (!args || typeof args !== "object" || Array.isArray(args)) return;
-		if ("old_text" in args || "new_text" in args) return;
+		if (!args || typeof args !== "object" || Array.isArray(args)) return undefined;
+		if ("old_text" in args || "new_text" in args) return undefined;
 
 		const path = typeof args.path === "string" ? args.path : undefined;
-		if (!path) return;
+		if (!path) return undefined;
 
-		const resolvedPath = resolveToCwd(path, this.sessionManager.getCwd());
-		this.#ensureFileCache(resolvedPath);
+		return {
+			toolCall,
+			path,
+			resolvedPath: resolveToCwd(path, this.sessionManager.getCwd()),
+			diff: typeof args.diff === "string" ? args.diff : undefined,
+			op: typeof args.op === "string" ? args.op : undefined,
+			rename: typeof args.rename === "string" ? args.rename : undefined,
+		};
+	}
+
+	#lastStreamingEditToolCallId: string | undefined;
+	#abortStreamingEditForAutoGeneratedPath(toolCall: ToolCall, path: string, resolvedPath: string): void {
+		if (this.#lastStreamingEditToolCallId === toolCall.id) return;
+		this.#lastStreamingEditToolCallId = toolCall.id;
+		void assertEditableFile(resolvedPath, path).catch(err => {
+			// peekFile and other I/O can reject with ENOENT, etc. Only ToolError means
+			// auto-generated detection; other failures are left for the edit tool.
+			if (!(err instanceof ToolError)) return;
+			if (this.#lastStreamingEditToolCallId !== toolCall.id) return;
+
+			if (!this.#streamingEditAbortTriggered) {
+				this.#streamingEditAbortTriggered = true;
+				logger.warn("Streaming edit aborted due to auto-generated file guard", {
+					toolCallId: toolCall.id,
+					path,
+				});
+				this.agent.abort();
+			}
+		});
+	}
+
+	#preCacheStreamingEditFile(event: AgentEvent): void {
+		if (!this.settings.get("edit.streamingAbort")) return;
+		if (this.#streamingEditAbortTriggered) return;
+		if (event.type !== "message_update") return;
+
+		const assistantEvent = event.assistantMessageEvent;
+		if (
+			assistantEvent.type !== "toolcall_start" &&
+			assistantEvent.type !== "toolcall_delta" &&
+			assistantEvent.type !== "toolcall_end"
+		) {
+			return;
+		}
+
+		const streamingEdit = this.#getStreamingEditToolCall(event);
+		if (!streamingEdit) return;
+
+		const shouldCheckAutoGenerated =
+			!streamingEdit.toolCall.id || !this.#streamingEditPrecheckedToolCallIds.has(streamingEdit.toolCall.id);
+		if (shouldCheckAutoGenerated) {
+			if (streamingEdit.toolCall.id) {
+				this.#streamingEditPrecheckedToolCallIds.add(streamingEdit.toolCall.id);
+			}
+			this.#abortStreamingEditForAutoGeneratedPath(
+				streamingEdit.toolCall,
+				streamingEdit.path,
+				streamingEdit.resolvedPath,
+			);
+		}
+
+		this.#ensureFileCache(streamingEdit.resolvedPath);
 	}
 
 	#ensureFileCache(resolvedPath: string): void {
@@ -1403,24 +1492,15 @@ export class AgentSession {
 		if (!this.settings.get("edit.streamingAbort")) return;
 		if (this.#streamingEditAbortTriggered) return;
 		if (event.type !== "message_update") return;
+
 		const assistantEvent = event.assistantMessageEvent;
 		if (assistantEvent.type !== "toolcall_end" && assistantEvent.type !== "toolcall_delta") return;
-		if (event.message.role !== "assistant") return;
 
-		const contentIndex = assistantEvent.contentIndex;
-		const messageContent = event.message.content;
-		if (!Array.isArray(messageContent) || contentIndex >= messageContent.length) return;
-		const toolCall = messageContent[contentIndex] as ToolCall;
-		if (toolCall.name !== "edit" || !toolCall.id) return;
+		const streamingEdit = this.#getStreamingEditToolCall(event);
+		if (!streamingEdit?.toolCall.id) return;
 
-		const args = toolCall.arguments;
-		if (!args || typeof args !== "object" || Array.isArray(args)) return;
-		if ("old_text" in args || "new_text" in args) return;
-
-		const path = typeof args.path === "string" ? args.path : undefined;
-		const diff = typeof args.diff === "string" ? args.diff : undefined;
-		const op = typeof args.op === "string" ? args.op : undefined;
-		if (!path || !diff) return;
+		const { toolCall, path, resolvedPath, diff, op, rename } = streamingEdit;
+		if (!diff) return;
 		if (op && op !== "update") return;
 
 		if (!diff.includes("\n")) return;
@@ -1443,13 +1523,10 @@ export class AgentSession {
 		if (lastChecked !== undefined && lineCount <= lastChecked) return;
 		this.#streamingEditCheckedLineCounts.set(toolCall.id, lineCount);
 
-		const rename = typeof args.rename === "string" ? args.rename : undefined;
-
 		const removedLines = lines
 			.filter(line => line.startsWith("-") && !line.startsWith("--- "))
 			.map(line => line.slice(1));
 		if (removedLines.length > 0) {
-			const resolvedPath = resolveToCwd(path, this.sessionManager.getCwd());
 			let cachedContent = this.#streamingEditFileCache.get(resolvedPath);
 			if (cachedContent === undefined) {
 				this.#ensureFileCache(resolvedPath);

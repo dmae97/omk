@@ -1,7 +1,9 @@
 import * as fs from "node:fs";
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
-import { isEnoent, toError } from "@oh-my-pi/pi-utils";
+import { isEnoent, peekFile, toError } from "@oh-my-pi/pi-utils";
+
+const utf8Decoder = new TextDecoder("utf-8");
 
 export interface SessionStorageStat {
 	size: number;
@@ -163,7 +165,7 @@ export class FileSessionStorage implements SessionStorage {
 	}
 
 	async readTextPrefix(path: string, maxBytes: number): Promise<string> {
-		return Bun.file(path).slice(0, maxBytes).text();
+		return peekFile(path, maxBytes, header => utf8Decoder.decode(header));
 	}
 
 	async writeText(path: string, content: string): Promise<void> {

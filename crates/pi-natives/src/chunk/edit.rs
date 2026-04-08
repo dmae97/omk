@@ -1608,18 +1608,14 @@ mod tests {
 		// The chunk range should include the #[napi] attribute.
 		assert_eq!(chunk.start_line, 1, "chunk should start at the attribute line");
 
-		let result = apply_single_edit(
-			&state,
-			"test.rs",
-			EditOperation {
-				op:      ChunkEditOp::Replace,
-				sel:     Some("fn_close".to_owned()),
-				crc:     Some(chunk.checksum.clone()),
-				region:  None,
-				content: Some("/// doc\n#[napi]\nfn close() {\n    new();\n}".to_owned()),
-				find:    None,
-			},
-		);
+		let result = apply_single_edit(&state, "test.rs", EditOperation {
+			op:      ChunkEditOp::Replace,
+			sel:     Some("fn_close".to_owned()),
+			crc:     Some(chunk.checksum.clone()),
+			region:  None,
+			content: Some("/// doc\n#[napi]\nfn close() {\n    new();\n}".to_owned()),
+			find:    None,
+		});
 
 		let occurrences = result.diff_after.matches("#[napi]").count();
 		assert_eq!(

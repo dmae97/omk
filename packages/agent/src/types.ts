@@ -1,4 +1,5 @@
 import type {
+	AssistantMessage,
 	AssistantMessageEvent,
 	AssistantMessageEventStream,
 	Effort,
@@ -27,8 +28,8 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 
 	/**
 	 * When to interrupt tool execution for steering messages.
-	 * - "immediate": check after each tool call (default)
-	 * - "wait": defer steering until the current turn completes
+	 * - "immediate" = check after each tool call (default)
+	 * - "wait" = defer steering until the current turn completes
 	 */
 	interruptMode?: "immediate" | "wait";
 
@@ -125,12 +126,19 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 * Use for deobfuscating secrets or rewriting arguments.
 	 */
 	transformToolCallArguments?: (args: Record<string, unknown>, toolName: string) => Record<string, unknown>;
+
 	/**
 	 * Enable intent tracing for tool calls.
 	 * When enabled, the harness injects an `_i: string` field into tool schemas sent to the model,
 	 * then strips `_i` from arguments before executing tools.
 	 */
 	intentTracing?: boolean;
+
+	/**
+	 * Inspect assistant streaming events before they are published to the outer agent event stream.
+	 * Callers may abort synchronously to stop consuming buffered provider events.
+	 */
+	onAssistantMessageEvent?: (message: AssistantMessage, event: AssistantMessageEvent) => void;
 
 	/**
 	 * Dynamic tool choice override, resolved per LLM call.

@@ -391,6 +391,10 @@ async function streamAssistantResponse(
 				if (partialMessage) {
 					partialMessage = event.partial;
 					context.messages[context.messages.length - 1] = partialMessage;
+					config.onAssistantMessageEvent?.(partialMessage, event);
+					if (signal?.aborted) {
+						continue;
+					}
 					stream.push({
 						type: "message_update",
 						assistantMessageEvent: event,
