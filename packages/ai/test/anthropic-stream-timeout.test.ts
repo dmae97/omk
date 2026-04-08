@@ -1,9 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
 import { Messages } from "@anthropic-ai/sdk/resources/messages/messages";
+import * as idleIterator from "../src/utils/idle-iterator";
 import { streamAnthropic } from "../src/providers/anthropic";
 import type { Context, Model } from "../src/types";
-
-const originalFirstEventTimeout = Bun.env.PI_STREAM_FIRST_EVENT_TIMEOUT_MS;
 
 const model: Model<"anthropic-messages"> = {
 	id: "claude-sonnet-4-5",
@@ -152,16 +151,11 @@ function createAnthropicMockStream({
 
 afterEach(() => {
 	vi.restoreAllMocks();
-	if (originalFirstEventTimeout === undefined) {
-		delete Bun.env.PI_STREAM_FIRST_EVENT_TIMEOUT_MS;
-	} else {
-		Bun.env.PI_STREAM_FIRST_EVENT_TIMEOUT_MS = originalFirstEventTimeout;
-	}
 });
 
 describe("anthropic first-event timeout retries", () => {
 	it("retries when the provider never sends the first stream event", async () => {
-		Bun.env.PI_STREAM_FIRST_EVENT_TIMEOUT_MS = "20";
+		vi.spyOn(idleIterator, "getStreamFirstEventTimeoutMs").mockReturnValue(20);
 		let attempt = 0;
 
 		vi.spyOn(Messages.prototype, "create").mockImplementation((_body, requestOptions) => {
@@ -182,7 +176,7 @@ describe("anthropic first-event timeout retries", () => {
 	});
 
 	it("does not arm the Anthropic first-event watchdog before the stream connects", async () => {
-		Bun.env.PI_STREAM_FIRST_EVENT_TIMEOUT_MS = "20";
+		vi.spyOn(idleIterator, "getStreamFirstEventTimeoutMs").mockReturnValue(20);
 
 		vi.spyOn(Messages.prototype, "create").mockImplementation((_body, requestOptions) => {
 			const signal = (requestOptions as { signal?: AbortSignal } | undefined)?.signal;
@@ -200,7 +194,7 @@ describe("anthropic first-event timeout retries", () => {
 	});
 
 	it("keeps caller aborts as aborted instead of retrying them as first-event timeouts", async () => {
-		Bun.env.PI_STREAM_FIRST_EVENT_TIMEOUT_MS = "50";
+		vi.spyOn(idleIterator, "getStreamFirstEventTimeoutMs").mockReturnValue(50);
 		let attempt = 0;
 
 		vi.spyOn(Messages.prototype, "create").mockImplementation((_body, requestOptions) => {

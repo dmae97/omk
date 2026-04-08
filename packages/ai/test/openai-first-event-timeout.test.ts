@@ -1,12 +1,12 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, vi } from "bun:test";
 import { getBundledModel } from "../src/models";
 import { streamAzureOpenAIResponses } from "../src/providers/azure-openai-responses";
 import { streamOpenAICompletions } from "../src/providers/openai-completions";
 import { streamOpenAIResponses } from "../src/providers/openai-responses";
 import type { Context, Model, TextContent } from "../src/types";
+import * as idleIterator from "../src/utils/idle-iterator";
 
 const originalFetch = global.fetch;
-const originalFirstEventTimeout = Bun.env.PI_STREAM_FIRST_EVENT_TIMEOUT_MS;
 
 const openAIResponsesModel = getBundledModel("openai", "gpt-5-mini") as Model<"openai-responses">;
 const openAICompletionsModel = {
@@ -187,7 +187,7 @@ async function expectFirstEventTimeout(
 	run: () => Promise<{ stopReason: string; errorMessage?: string }>,
 	expectedMessage: string,
 ): Promise<void> {
-	Bun.env.PI_STREAM_FIRST_EVENT_TIMEOUT_MS = "20";
+	vi.spyOn(idleIterator, "getStreamFirstEventTimeoutMs").mockReturnValue(20);
 	global.fetch = createHangingFetch();
 
 	const result = await run();
@@ -200,7 +200,7 @@ async function expectCallerAbort(
 	run: (signal: AbortSignal) => Promise<{ stopReason: string; errorMessage?: string }>,
 	unexpectedMessage: string,
 ): Promise<void> {
-	Bun.env.PI_STREAM_FIRST_EVENT_TIMEOUT_MS = "50";
+	vi.spyOn(idleIterator, "getStreamFirstEventTimeoutMs").mockReturnValue(50);
 	global.fetch = createHangingFetch();
 	const controller = new AbortController();
 	setTimeout(() => controller.abort(), 5);
@@ -222,7 +222,7 @@ async function expectDelayedRequestSetupSucceeds(
 	run: () => Promise<{ stopReason: string; content: unknown[] }>,
 	responseFactory: () => Response,
 ): Promise<void> {
-	Bun.env.PI_STREAM_FIRST_EVENT_TIMEOUT_MS = "20";
+	vi.spyOn(idleIterator, "getStreamFirstEventTimeoutMs").mockReturnValue(20);
 	global.fetch = createDelayedFetch(30, responseFactory);
 
 	const result = await run();
@@ -233,11 +233,7 @@ async function expectDelayedRequestSetupSucceeds(
 
 afterEach(() => {
 	global.fetch = originalFetch;
-	if (originalFirstEventTimeout === undefined) {
-		delete Bun.env.PI_STREAM_FIRST_EVENT_TIMEOUT_MS;
-	} else {
-		Bun.env.PI_STREAM_FIRST_EVENT_TIMEOUT_MS = originalFirstEventTimeout;
-	}
+	vi.restoreAllMocks();
 });
 
 describe("OpenAI-family first-event timeouts", () => {
