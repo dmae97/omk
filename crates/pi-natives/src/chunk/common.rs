@@ -6,7 +6,10 @@
 
 use tree_sitter::Node;
 
-use super::types::ChunkNode;
+use super::{
+	kind::{ChunkKind, SummaryStyle},
+	types::ChunkNode,
+};
 use crate::env_uint;
 
 // ── Configuration (environment overrides) ────────────────────────────────
@@ -18,6 +21,12 @@ env_uint! {
 	// Configured min recurse savings.
 	pub static MIN_RECURSE_SAVINGS: usize = "PI_CHUNK_MIN_SAVINGS" or 4 => [1, usize::MAX];
 }
+
+/// Always recurse into named (non-group) chunks when children exist,
+/// regardless of the leaf threshold. Disabled via `PI_CHUNK_ALWAYS_RECURSE=0`.
+pub static ALWAYS_RECURSE: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+	std::env::var("PI_CHUNK_ALWAYS_RECURSE").map_or(true, |v| !matches!(v.as_str(), "0" | "false"))
+});
 
 // ── Internal types ───────────────────────────────────────────────────────
 
@@ -43,7 +52,8 @@ pub struct RecurseSpec<'tree> {
 
 #[derive(Clone, Debug)]
 pub struct RawChunkCandidate<'tree> {
-	pub base_name:           String,
+	pub identifier:          Option<String>,
+	pub kind:                ChunkKind,
 	pub name_style:          NameStyle,
 	pub range_start_byte:    usize,
 	pub range_end_byte:      usize,
@@ -88,20 +98,21 @@ const fn end_row_as_line(start: tree_sitter::Point, end: tree_sitter::Point) -> 
 
 pub fn make_candidate<'tree>(
 	node: Node<'tree>,
-	base_name: String,
+	kind: ChunkKind,
+	identifier: impl Into<Option<String>>,
 	name_style: NameStyle,
 	signature: Option<String>,
 	recurse: Option<RecurseSpec<'tree>>,
-	force_recurse: bool,
 	source: &str,
 ) -> RawChunkCandidate<'tree> {
+	let identifier = identifier.into();
 	let start = node.start_position();
 	let end = node.end_position();
-	let base_name = canonical_chunk_name(node, base_name.as_str(), source);
-	let summary = summary_for_node(node, base_name.as_str(), signature.as_deref(), source);
+	let summary = summary_for_node(node, kind, identifier.as_deref(), signature.as_deref(), source);
 	let start_byte = node.start_byte();
 	RawChunkCandidate {
-		base_name,
+		identifier,
+		kind,
 		name_style,
 		range_start_byte: start_byte,
 		range_end_byte: node.end_byte(),
@@ -109,96 +120,99 @@ pub fn make_candidate<'tree>(
 		range_start_line: start.row + 1,
 		range_end_line: end_row_as_line(start, end),
 		signature: summary,
-		error: name_style == NameStyle::Error,
-		groupable: matches!(name_style, NameStyle::Group),
+		error: kind == ChunkKind::Error,
+		groupable: kind.traits().groupable,
 		has_leading_comment: false,
-		force_recurse,
+		force_recurse: kind.traits().container,
 		recurse,
 	}
 }
 
 pub fn group_candidate<'tree>(
 	node: Node<'tree>,
-	base_name: &str,
+	kind: ChunkKind,
 	source: &str,
 ) -> RawChunkCandidate<'tree> {
-	make_candidate(node, base_name.to_string(), NameStyle::Group, None, None, false, source)
+	make_candidate(node, kind, None, NameStyle::Group, None, None, source)
 }
 
 pub fn positional_candidate<'tree>(
 	node: Node<'tree>,
-	base_name: &str,
+	kind: ChunkKind,
 	source: &str,
 ) -> RawChunkCandidate<'tree> {
-	make_candidate(node, base_name.to_string(), NameStyle::Named, None, None, false, source)
+	make_candidate(node, kind, None, NameStyle::Named, None, None, source)
 }
 
 pub fn named_candidate<'tree>(
 	node: Node<'tree>,
-	prefix: &str,
+	kind: ChunkKind,
 	source: &str,
 	recurse: Option<RecurseSpec<'tree>>,
 ) -> RawChunkCandidate<'tree> {
-	make_named_chunk(node, prefixed_name(prefix, node, source), source, recurse)
+	make_kind_chunk(node, kind, extract_identifier(node, source), source, recurse)
 }
 
 pub fn container_candidate<'tree>(
 	node: Node<'tree>,
-	prefix: &str,
+	kind: ChunkKind,
 	source: &str,
 	recurse: Option<RecurseSpec<'tree>>,
 ) -> RawChunkCandidate<'tree> {
-	make_container_chunk(node, prefixed_name(prefix, node, source), source, recurse)
+	make_kind_chunk(node, kind, extract_identifier(node, source), source, recurse)
 }
 
-pub fn make_named_chunk<'tree>(
+pub fn make_kind_chunk<'tree>(
 	node: Node<'tree>,
-	name: String,
+	kind: ChunkKind,
+	identifier: Option<String>,
 	source: &str,
 	recurse: Option<RecurseSpec<'tree>>,
 ) -> RawChunkCandidate<'tree> {
 	make_candidate(
 		node,
-		name,
+		kind,
+		identifier,
 		NameStyle::Named,
 		signature_for_node(node, source),
 		recurse,
-		false,
 		source,
 	)
 }
 
-pub fn make_named_chunk_from<'tree>(
+pub fn make_kind_chunk_from<'tree>(
 	range_node: Node<'tree>,
 	signature_node: Node<'tree>,
-	name: String,
+	kind: ChunkKind,
+	identifier: Option<String>,
 	source: &str,
 	recurse: Option<RecurseSpec<'tree>>,
 ) -> RawChunkCandidate<'tree> {
 	make_candidate(
 		range_node,
-		name,
+		kind,
+		identifier,
 		NameStyle::Named,
 		signature_for_node(signature_node, source),
 		recurse,
-		false,
 		source,
 	)
 }
 
 pub fn make_container_chunk<'tree>(
 	node: Node<'tree>,
-	name: String,
+	kind: ChunkKind,
+	identifier: Option<String>,
 	source: &str,
 	recurse: Option<RecurseSpec<'tree>>,
 ) -> RawChunkCandidate<'tree> {
 	make_candidate(
 		node,
-		name,
+		kind,
+		identifier,
 		NameStyle::Named,
 		signature_for_node(node, source),
 		recurse,
-		true,
 		source,
 	)
 }
@@ -206,17 +220,18 @@ pub fn make_container_chunk<'tree>(
 pub fn make_container_chunk_from<'tree>(
 	range_node: Node<'tree>,
 	signature_node: Node<'tree>,
-	name: String,
+	kind: ChunkKind,
+	identifier: Option<String>,
 	source: &str,
 	recurse: Option<RecurseSpec<'tree>>,
 ) -> RawChunkCandidate<'tree> {
 	make_candidate(
 		range_node,
-		name,
+		kind,
+		identifier,
 		NameStyle::Named,
 		signature_for_node(signature_node, source),
 		recurse,
-		true,
 		source,
 	)
 }
@@ -231,12 +246,9 @@ pub fn prefixed_name(prefix: &str, node: Node<'_>, source: &str) -> String {
 
 /// Derive a semantic name from a node's kind and/or identifier.
 pub fn infer_named_candidate<'tree>(node: Node<'tree>, source: &str) -> RawChunkCandidate<'tree> {
-	let kind_prefix = sanitize_node_kind(node.kind());
-	let name = match extract_identifier(node, source) {
-		Some(id) => format!("{kind_prefix}_{id}"),
-		None => kind_prefix,
-	};
-	make_named_chunk(node, name, source, None)
+	let kind_name = sanitize_node_kind(node.kind());
+	let kind = ChunkKind::from_sanitized_kind(kind_name.as_str());
+	make_kind_chunk(node, kind, extract_identifier(node, source), source, None)
 }
 
 // ── Tree navigation helpers ──────────────────────────────────────────────
@@ -634,67 +646,6 @@ pub fn signature_for_node(node: Node<'_>, source: &str) -> Option<String> {
 
 // ── Summary / canonical naming ───────────────────────────────────────────
 
-fn is_function_like_kind(kind: &str) -> bool {
-	matches!(
-		kind,
-		"function_declaration"
-			| "function_definition"
-			| "function_item"
-			| "procedure_declaration"
-			| "overloaded_procedure_declaration"
-			| "function_definition_header"
-			| "test_declaration"
-			| "method_definition"
-			| "method_signature"
-			| "abstract_method_signature"
-			| "method_declaration"
-			| "protocol_function_declaration"
-			| "method"
-			| "singleton_method"
-	)
-}
-
-fn is_variable_decl_kind(kind: &str) -> bool {
-	matches!(
-		kind,
-		"lexical_declaration"
-			| "variable_declaration"
-			| "const_declaration"
-			| "var_declaration"
-			| "let_declaration"
-			| "short_var_declaration"
-	)
-}
-
-fn canonical_chunk_name(node: Node<'_>, base_name: &str, source: &str) -> String {
-	if is_function_like_kind(node.kind())
-		&& !base_name.starts_with("fn_")
-		&& base_name != "constructor"
-		&& let Some(name) = extract_identifier(node, source)
-	{
-		return format!("fn_{name}");
-	}
-	if is_variable_decl_kind(node.kind())
-		&& !base_name.starts_with("var_")
-		&& !base_name.starts_with("fn_")
-		&& !base_name.starts_with("class_")
-		&& let Some(name) = extract_single_declarator_name(node, source)
-	{
-		return format!("var_{name}");
-	}
-	if (base_name == "expression" || base_name == "expr")
-		&& let Some(name) = extract_identifier(node, source)
-	{
-		return format!("expr_{name}");
-	}
-	if base_name == "return"
-		&& let Some(name) = extract_identifier(node, source)
-	{
-		return format!("ret_{name}");
-	}
-	base_name.to_string()
-}
-
 fn normalize_summary_text(summary: &str) -> Option<String> {
 	let summary = collapse_whitespace(summary.trim())
 		.trim_end_matches('{')
@@ -709,22 +660,29 @@ fn normalize_summary_text(summary: &str) -> Option<String> {
 	}
 }
 
-fn summarize_function_node(canonical_name: &str, raw_signature: &str) -> String {
-	let name = canonical_name.strip_prefix("fn_").unwrap_or(canonical_name);
+fn summarize_function_node(
+	kind: ChunkKind,
+	identifier: Option<&str>,
+	raw_signature: &str,
+) -> String {
+	let name = identifier.unwrap_or_else(|| kind.prefix());
 	let tail = function_signature(raw_signature)
 		.or_else(|| python_function_signature(raw_signature))
 		.or_else(|| rust_function_signature(raw_signature))
 		.unwrap_or_else(|| raw_signature.to_string());
 	let tail = tail.replacen("): ", ") → ", 1);
-	format!("fn {name}{tail}")
+	format!("{} {name}{tail}", kind.prefix())
 }
 
-fn summarize_variable_node(node: Node<'_>, canonical_name: &str, source: &str) -> Option<String> {
+fn summarize_variable_node(
+	node: Node<'_>,
+	kind: ChunkKind,
+	identifier: Option<&str>,
+	source: &str,
+) -> Option<String> {
 	let header = normalized_header(source, node.start_byte(), node.end_byte());
 	let keyword = header.split_whitespace().next()?;
-	let name = canonical_name
-		.strip_prefix("var_")
-		.unwrap_or(canonical_name);
+	let name = identifier.unwrap_or_else(|| kind.prefix());
 	Some(format!("{keyword} {name}"))
 }
 
@@ -734,20 +692,22 @@ fn summarize_statement_node(node: Node<'_>, source: &str) -> Option<String> {
 
 pub fn summary_for_node(
 	node: Node<'_>,
-	canonical_name: &str,
+	kind: ChunkKind,
+	identifier: Option<&str>,
 	raw_signature: Option<&str>,
 	source: &str,
 ) -> Option<String> {
-	if canonical_name == "imports" {
-		return Some("imports".to_string());
-	}
-	if canonical_name.starts_with("fn_")
-		&& let Some(signature) = raw_signature
-	{
-		return Some(summarize_function_node(canonical_name, signature));
-	}
-	if canonical_name.starts_with("var_") {
-		return summarize_variable_node(node, canonical_name, source);
+	match kind.traits().summary {
+		SummaryStyle::Imports => return Some("imports".to_string()),
+		SummaryStyle::Function => {
+			if let Some(signature) = raw_signature {
+				return Some(summarize_function_node(kind, identifier, signature));
+			}
+		},
+		SummaryStyle::Variable => {
+			return summarize_variable_node(node, kind, identifier, source);
+		},
+		SummaryStyle::Default => {},
 	}
 	if matches!(
 		node.kind(),

@@ -2,7 +2,7 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*, defaults::classify_var_decl};
+use super::{classify::LangClassifier, common::*, defaults::classify_var_decl, kind::ChunkKind};
 
 pub struct CCppClassifier;
 
@@ -94,30 +94,27 @@ fn extract_c_field_name(node: Node<'_>, source: &str) -> Option<String> {
 	extract_c_declarator_name(decl, source)
 }
 
-/// Build a prefixed name for a C/C++ function node using declarator traversal.
-fn c_prefixed_fn_name(prefix: &str, node: Node<'_>, source: &str) -> String {
-	let identifier =
-		extract_c_function_name(node, source).unwrap_or_else(|| "anonymous".to_string());
-	format!("{prefix}_{identifier}")
-}
-
 impl LangClassifier for CCppClassifier {
 	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 		match node.kind() {
 			// ── Imports ──
 			"include_directive" | "preproc_include" | "using_directive" | "using_statement"
-			| "import_declaration" | "module_import" => Some(group_candidate(node, "imports", source)),
+			| "import_declaration" | "module_import" => {
+				Some(group_candidate(node, ChunkKind::Imports, source))
+			},
 
 			// ── Functions ──
-			"function_definition" | "function_declaration" => Some(make_named_chunk(
+			"function_definition" | "function_declaration" => Some(make_kind_chunk(
 				node,
-				c_prefixed_fn_name("fn", node, source),
+				ChunkKind::Function,
+				extract_c_function_name(node, source),
 				source,
 				recurse_body(node, ChunkContext::FunctionBody),
 			)),
-			"constructor_definition" => Some(make_named_chunk(
+			"constructor_definition" => Some(make_kind_chunk(
 				node,
-				"constructor".to_string(),
+				ChunkKind::Constructor,
+				None,
 				source,
 				recurse_body(node, ChunkContext::FunctionBody),
 			)),
@@ -144,47 +141,50 @@ impl LangClassifier for CCppClassifier {
 						candidate.checksum_start_byte = node.start_byte();
 						Some(candidate)
 					},
-					None => Some(named_candidate(
+					None => Some(make_candidate(
 						node,
-						"template",
-						source,
+						ChunkKind::Template,
+						None,
+						NameStyle::Named,
+						signature_for_node(node, source),
 						recurse_body(node, ChunkContext::FunctionBody),
+						source,
 					)),
 				}
 			},
 
 			// ── Containers ──
 			"class_specifier" | "class_declaration" | "class_interface" | "class_implementation" => {
-				Some(container_candidate(node, "class", source, recurse_class(node)))
+				Some(container_candidate(node, ChunkKind::Class, source, recurse_class(node)))
 			},
 			"struct_specifier" | "struct_declaration" => {
-				Some(container_candidate(node, "struct", source, recurse_class(node)))
+				Some(container_candidate(node, ChunkKind::Struct, source, recurse_class(node)))
 			},
 			"enum_specifier" | "enum_declaration" => {
-				Some(container_candidate(node, "enum", source, recurse_enum(node)))
+				Some(container_candidate(node, ChunkKind::Enum, source, recurse_enum(node)))
 			},
 			"namespace_definition" => {
-				Some(container_candidate(node, "mod", source, recurse_class(node)))
+				Some(container_candidate(node, ChunkKind::Module, source, recurse_class(node)))
 			},
 			"union_declaration" => {
-				Some(container_candidate(node, "union", source, recurse_class(node)))
+				Some(container_candidate(node, ChunkKind::Union, source, recurse_class(node)))
 			},
 
 			// ── Types ──
 			"type_alias_declaration" | "user_defined_type_definition" => {
-				Some(named_candidate(node, "type", source, recurse_class(node)))
+				Some(named_candidate(node, ChunkKind::Type, source, recurse_class(node)))
 			},
 
 			// ── Variables / assignments ──
 			"variable_declaration" => Some(classify_var_decl(node, source)),
 			"assignment_statement" | "property_declaration" => {
-				Some(group_candidate(node, "decls", source))
+				Some(group_candidate(node, ChunkKind::Declarations, source))
 			},
 
 			// ── Macros ──
 			"macro_definition" => Some(named_candidate(
 				node,
-				"macro",
+				ChunkKind::Macro,
 				source,
 				recurse_body(node, ChunkContext::FunctionBody),
 			)),
@@ -194,7 +194,7 @@ impl LangClassifier for CCppClassifier {
 			| "do_statement" | "try_block" => Some(classify_function_c(node, source)),
 
 			// ── Statements ──
-			"expression_statement" => Some(group_candidate(node, "stmts", source)),
+			"expression_statement" => Some(group_candidate(node, ChunkKind::Statements, source)),
 
 			_ => None,
 		}
@@ -208,16 +208,18 @@ impl LangClassifier for CCppClassifier {
 					.or_else(|| extract_identifier(node, source))
 					.unwrap_or_else(|| "anonymous".to_string());
 				if name == "constructor" {
-					Some(make_named_chunk(
+					Some(make_kind_chunk(
 						node,
-						"constructor".to_string(),
+						ChunkKind::Constructor,
+						None,
 						source,
 						recurse_body(node, ChunkContext::FunctionBody),
 					))
 				} else {
-					Some(make_named_chunk(
+					Some(make_kind_chunk(
 						node,
-						format!("fn_{name}"),
+						ChunkKind::Function,
+						Some(name),
 						source,
 						recurse_body(node, ChunkContext::FunctionBody),
 					))
@@ -225,40 +227,41 @@ impl LangClassifier for CCppClassifier {
 			},
 
 			// ── Constructors ──
-			"constructor_definition" | "constructor_declaration" => Some(make_named_chunk(
+			"constructor_definition" | "constructor_declaration" => Some(make_kind_chunk(
 				node,
-				"constructor".to_string(),
+				ChunkKind::Constructor,
+				None,
 				source,
 				recurse_body(node, ChunkContext::FunctionBody),
 			)),
 
 			// ── Fields ──
 			"field_declaration" => Some(match extract_c_field_name(node, source) {
-				Some(name) => make_named_chunk(node, format!("field_{name}"), source, None),
-				None => group_candidate(node, "fields", source),
+				Some(name) => make_kind_chunk(node, ChunkKind::Field, Some(name), source, None),
+				None => group_candidate(node, ChunkKind::Fields, source),
 			}),
 
 			// ── Enum variants ──
 			"enum_constant" => Some(match extract_identifier(node, source) {
-				Some(name) => make_named_chunk(node, format!("variant_{name}"), source, None),
-				None => group_candidate(node, "variants", source),
+				Some(name) => make_kind_chunk(node, ChunkKind::Variant, Some(name), source, None),
+				None => group_candidate(node, ChunkKind::Variants, source),
 			}),
 
 			// ── Nested containers ──
 			"class_specifier" | "class_declaration" | "class_interface" | "class_implementation" => {
-				Some(container_candidate(node, "class", source, recurse_class(node)))
+				Some(container_candidate(node, ChunkKind::Class, source, recurse_class(node)))
 			},
 			"struct_specifier" | "struct_declaration" => {
-				Some(container_candidate(node, "struct", source, recurse_class(node)))
+				Some(container_candidate(node, ChunkKind::Struct, source, recurse_class(node)))
 			},
 			"enum_specifier" | "enum_declaration" => {
-				Some(container_candidate(node, "enum", source, recurse_enum(node)))
+				Some(container_candidate(node, ChunkKind::Enum, source, recurse_enum(node)))
 			},
 			"union_declaration" => {
-				Some(container_candidate(node, "union", source, recurse_class(node)))
+				Some(container_candidate(node, ChunkKind::Union, source, recurse_class(node)))
 			},
 			"namespace_definition" => {
-				Some(container_candidate(node, "mod", source, recurse_class(node)))
+				Some(container_candidate(node, ChunkKind::Module, source, recurse_class(node)))
 			},
 
 			// ── Templates (class body) ──
@@ -281,17 +284,20 @@ impl LangClassifier for CCppClassifier {
 						candidate.checksum_start_byte = node.start_byte();
 						Some(candidate)
 					},
-					None => Some(named_candidate(
+					None => Some(make_candidate(
 						node,
-						"template",
-						source,
+						ChunkKind::Template,
+						None,
+						NameStyle::Named,
+						signature_for_node(node, source),
 						recurse_body(node, ChunkContext::FunctionBody),
+						source,
 					)),
 				}
 			},
 
 			// ── Types ──
-			"type_alias_declaration" => Some(named_candidate(node, "type", source, None)),
+			"type_alias_declaration" => Some(named_candidate(node, ChunkKind::Type, source, None)),
 
 			_ => None,
 		}
@@ -306,68 +312,39 @@ fn classify_function_c<'tree>(node: Node<'tree>, source: &str) -> RawChunkCandid
 	let fn_recurse = || recurse_body(node, ChunkContext::FunctionBody);
 	match node.kind() {
 		"if_statement" => {
-			make_candidate(node, "if".to_string(), NameStyle::Named, None, fn_recurse(), false, source)
+			make_candidate(node, ChunkKind::If, None, NameStyle::Named, None, fn_recurse(), source)
 		},
-		"switch_statement" => make_candidate(
-			node,
-			"switch".to_string(),
-			NameStyle::Named,
-			None,
-			fn_recurse(),
-			false,
-			source,
-		),
-		"try_block" | "catch_clause" | "finally_clause" => make_candidate(
-			node,
-			"try".to_string(),
-			NameStyle::Named,
-			None,
-			fn_recurse(),
-			false,
-			source,
-		),
-		"for_statement" => make_candidate(
-			node,
-			"for".to_string(),
-			NameStyle::Named,
-			None,
-			fn_recurse(),
-			false,
-			source,
-		),
-		"while_statement" => make_candidate(
-			node,
-			"while".to_string(),
-			NameStyle::Named,
-			None,
-			fn_recurse(),
-			false,
-			source,
-		),
-		"do_statement" => make_candidate(
-			node,
-			"block".to_string(),
-			NameStyle::Named,
-			None,
-			fn_recurse(),
-			false,
-			source,
-		),
+		"switch_statement" => {
+			make_candidate(node, ChunkKind::Switch, None, NameStyle::Named, None, fn_recurse(), source)
+		},
+		"try_block" | "catch_clause" | "finally_clause" => {
+			make_candidate(node, ChunkKind::Try, None, NameStyle::Named, None, fn_recurse(), source)
+		},
+		"for_statement" => {
+			make_candidate(node, ChunkKind::For, None, NameStyle::Named, None, fn_recurse(), source)
+		},
+		"while_statement" => {
+			make_candidate(node, ChunkKind::While, None, NameStyle::Named, None, fn_recurse(), source)
+		},
+		"do_statement" => {
+			make_candidate(node, ChunkKind::Block, None, NameStyle::Named, None, fn_recurse(), source)
+		},
 		"variable_declaration" => {
 			let span = line_span(node.start_position().row + 1, node.end_position().row + 1);
 			if span > 1 {
 				if let Some(name) = extract_single_declarator_name(node, source) {
-					make_named_chunk(node, format!("var_{name}"), source, None)
+					make_kind_chunk(node, ChunkKind::Variable, Some(name), source, None)
 				} else {
-					group_candidate(node, "variable", source)
+					group_candidate(node, ChunkKind::Variable, source)
 				}
 			} else {
-				group_candidate(node, "variable", source)
+				group_candidate(node, ChunkKind::Variable, source)
 			}
 		},
 		_ => {
 			let kind_name = sanitize_node_kind(node.kind());
-			group_candidate(node, &kind_name, source)
+			let kind = ChunkKind::from_sanitized_kind(kind_name.as_str());
+			group_candidate(node, kind, source)
 		},
 	}
 }

@@ -1390,7 +1390,7 @@ fn grep_sync(
 	let use_gitignore = options.gitignore.unwrap_or(true);
 	let use_cache = options.cache.unwrap_or(false);
 	let glob_set = glob_util::try_compile_glob(options.glob.as_deref(), true)?;
-	let type_filter = resolve_type_filter(options.r#type.as_deref());
+	let type_filter = resolve_type_filter(options.type_filter.as_deref());
 
 	let params = SearchParams {
 		context_before,

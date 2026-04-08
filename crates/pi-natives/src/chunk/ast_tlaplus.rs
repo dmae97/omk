@@ -11,9 +11,10 @@ use super::{
 	classify::LangClassifier,
 	common::{
 		ChunkContext, RawChunkCandidate, RecurseSpec, child_by_kind, extract_identifier,
-		group_candidate, make_container_chunk, make_container_chunk_from, make_named_chunk,
+		group_candidate, make_container_chunk, make_container_chunk_from, make_kind_chunk,
 		positional_candidate, recurse_self, sanitize_identifier,
 	},
+	kind::ChunkKind,
 	types::ChunkNode,
 };
 
@@ -24,25 +25,32 @@ impl LangClassifier for TlaplusClassifier {
 		match node.kind() {
 			"module" => Some(make_container_chunk(
 				node,
-				prefixed(node, "mod", source),
+				ChunkKind::Module,
+				tla_identifier(node, source),
 				source,
 				Some(recurse_self(node, ChunkContext::Root)),
 			)),
 			"variable_declaration" | "constant_declaration" | "recursive_declaration" => {
-				Some(group_candidate(node, "decls", source))
+				Some(group_candidate(node, ChunkKind::Declarations, source))
 			},
-			"operator_definition" => {
-				Some(make_named_chunk(node, prefixed(node, "operator", source), source, None))
-			},
+			"operator_definition" => Some(make_kind_chunk(
+				node,
+				ChunkKind::Operator,
+				tla_identifier(node, source),
+				source,
+				None,
+			)),
 			"module_definition" => Some(make_container_chunk(
 				node,
-				prefixed(node, "mod", source),
+				ChunkKind::Module,
+				tla_identifier(node, source),
 				source,
 				Some(recurse_self(node, ChunkContext::Root)),
 			)),
 			"pcal_algorithm" => Some(make_container_chunk(
 				node,
-				prefixed(node, "algo", source),
+				ChunkKind::Algo,
+				tla_identifier(node, source),
 				source,
 				recurse_child(node, "pcal_algorithm_body", ChunkContext::ClassBody),
 			)),
@@ -50,7 +58,8 @@ impl LangClassifier for TlaplusClassifier {
 				make_container_chunk_from(
 					node,
 					algorithm,
-					prefixed(algorithm, "algo", source),
+					ChunkKind::Algo,
+					tla_identifier(algorithm, source),
 					source,
 					recurse_child(algorithm, "pcal_algorithm_body", ChunkContext::ClassBody),
 				)
@@ -63,17 +72,19 @@ impl LangClassifier for TlaplusClassifier {
 		match node.kind() {
 			"pcal_procedure" => Some(make_container_chunk(
 				node,
-				prefixed(node, "proc", source),
+				ChunkKind::Proc,
+				tla_identifier(node, source),
 				source,
 				recurse_child(node, "pcal_algorithm_body", ChunkContext::ClassBody),
 			)),
 			"pcal_process" => Some(make_container_chunk(
 				node,
-				prefixed(node, "process", source),
+				ChunkKind::Process,
+				tla_identifier(node, source),
 				source,
 				recurse_child(node, "pcal_algorithm_body", ChunkContext::ClassBody),
 			)),
-			"pcal_var_decls" => Some(group_candidate(node, "decls", source)),
+			"pcal_var_decls" => Some(group_candidate(node, ChunkKind::Declarations, source)),
 			_ => None,
 		}
 	}
@@ -81,12 +92,12 @@ impl LangClassifier for TlaplusClassifier {
 	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 		match node.kind() {
 			// PlusCal control flow
-			"pcal_if" => Some(positional_candidate(node, "if", source)),
-			"pcal_while" => Some(positional_candidate(node, "loop", source)),
-			"pcal_either" => Some(positional_candidate(node, "either", source)),
-			"pcal_with" => Some(positional_candidate(node, "with", source)),
+			"pcal_if" => Some(positional_candidate(node, ChunkKind::If, source)),
+			"pcal_while" => Some(positional_candidate(node, ChunkKind::Loop, source)),
+			"pcal_either" => Some(positional_candidate(node, ChunkKind::Either, source)),
+			"pcal_with" => Some(positional_candidate(node, ChunkKind::With, source)),
 			// PlusCal assignments
-			"pcal_assign" => Some(group_candidate(node, "stmts", source)),
+			"pcal_assign" => Some(group_candidate(node, ChunkKind::Statements, source)),
 			_ => None,
 		}
 	}
@@ -108,11 +119,10 @@ impl LangClassifier for TlaplusClassifier {
 		parent: &RawChunkCandidate<'_>,
 		_children: &[RawChunkCandidate<'_>],
 	) -> bool {
-		let name = parent.base_name.as_str();
-		name.starts_with("mod_")
-			|| name.starts_with("algo_")
-			|| name.starts_with("proc_")
-			|| name.starts_with("process_")
+		matches!(
+			parent.kind,
+			ChunkKind::Module | ChunkKind::Algo | ChunkKind::Proc | ChunkKind::Process
+		)
 	}
 
 	fn post_process(
@@ -174,14 +184,11 @@ impl LangClassifier for TlaplusClassifier {
 	}
 }
 
-fn prefixed(node: Node<'_>, prefix: &str, source: &str) -> String {
-	let name = extract_identifier(node, source)
-		.or_else(|| {
-			child_by_kind(node, &["identifier"])
-				.and_then(|child| sanitize_identifier(child.utf8_text(source.as_bytes()).ok()?))
-		})
-		.unwrap_or_else(|| "anonymous".to_string());
-	format!("{prefix}_{name}")
+fn tla_identifier(node: Node<'_>, source: &str) -> Option<String> {
+	extract_identifier(node, source).or_else(|| {
+		child_by_kind(node, &["identifier"])
+			.and_then(|child| sanitize_identifier(child.utf8_text(source.as_bytes()).ok()?))
+	})
 }
 
 fn recurse_child<'tree>(
@@ -255,7 +262,8 @@ fn translation_chunk(
 	let checksum = super::chunk_checksum(&source.as_bytes()[start_byte as usize..end_byte as usize]);
 	ChunkNode {
 		path,
-		name: format!("translation_{}", range.start_line),
+		identifier: Some(range.start_line.to_string()),
+		kind: ChunkKind::Translation,
 		leaf: true,
 		parent_path,
 		children: Vec::new(),
@@ -299,10 +307,6 @@ fn byte_range_for_lines(source: &str, start_line: u32, end_line: u32) -> (u32, u
 		}
 		if byte == b'\n' {
 			current_line += 1;
-			if current_line > end_line {
-				end_byte = byte_index + 1;
-				break;
-			}
 		}
 	}
 

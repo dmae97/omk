@@ -2,7 +2,7 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*};
+use super::{classify::LangClassifier, common::*, kind::ChunkKind};
 
 pub struct PythonClassifier;
 
@@ -11,16 +11,17 @@ impl LangClassifier for PythonClassifier {
 		match node.kind() {
 			// ── Imports ──
 			"import_statement" | "import_from_statement" => {
-				Some(group_candidate(node, "imports", source))
+				Some(group_candidate(node, ChunkKind::Imports, source))
 			},
 
 			// ── Variables / assignments ──
-			"assignment" => Some(group_candidate(node, "decls", source)),
+			"assignment" => Some(group_candidate(node, ChunkKind::Declarations, source)),
 
 			// ── Functions ──
-			"function_definition" => Some(make_named_chunk(
+			"function_definition" => Some(make_kind_chunk(
 				node,
-				prefixed_name("fn", node, source),
+				ChunkKind::Function,
+				extract_identifier(node, source),
 				source,
 				recurse_into(node, ChunkContext::FunctionBody, &["body"], &["block"]),
 			)),
@@ -28,7 +29,8 @@ impl LangClassifier for PythonClassifier {
 			// ── Containers ──
 			"class_definition" => Some(make_container_chunk(
 				node,
-				prefixed_name("class", node, source),
+				ChunkKind::Class,
+				extract_identifier(node, source),
 				source,
 				recurse_into(node, ChunkContext::ClassBody, &["body"], &["block"]),
 			)),
@@ -39,7 +41,7 @@ impl LangClassifier for PythonClassifier {
 
 			// ── Statements ──
 			"expression_statement" | "global_statement" => {
-				Some(group_candidate(node, "stmts", source))
+				Some(group_candidate(node, ChunkKind::Statements, source))
 			},
 
 			// ── Decorated ──
@@ -54,14 +56,20 @@ impl LangClassifier for PythonClassifier {
 			// ── Methods ──
 			"function_definition" => {
 				let name = extract_identifier(node, source).unwrap_or_else(|| "anonymous".to_string());
-				let chunk_name = if name == "__init__" || name == "__new__" {
-					"constructor".to_string()
+				let kind = if name == "__init__" || name == "__new__" {
+					ChunkKind::Constructor
 				} else {
-					format!("fn_{name}")
+					ChunkKind::Function
 				};
-				Some(make_named_chunk(
+				let identifier = if kind == ChunkKind::Constructor {
+					None
+				} else {
+					Some(name)
+				};
+				Some(make_kind_chunk(
 					node,
-					chunk_name,
+					kind,
+					identifier,
 					source,
 					recurse_into(node, ChunkContext::FunctionBody, &["body"], &["block"]),
 				))
@@ -75,14 +83,20 @@ impl LangClassifier for PythonClassifier {
 				if let Some(child) = inner {
 					let name =
 						extract_identifier(child, source).unwrap_or_else(|| "anonymous".to_string());
-					let chunk_name = if name == "__init__" || name == "__new__" {
-						"constructor".to_string()
+					let kind = if name == "__init__" || name == "__new__" {
+						ChunkKind::Constructor
 					} else {
-						format!("fn_{name}")
+						ChunkKind::Function
 					};
-					Some(make_named_chunk(
+					let identifier = if kind == ChunkKind::Constructor {
+						None
+					} else {
+						Some(name)
+					};
+					Some(make_kind_chunk(
 						node,
-						chunk_name,
+						kind,
+						identifier,
 						source,
 						recurse_into(child, ChunkContext::FunctionBody, &["body"], &["block"]),
 					))
@@ -92,10 +106,12 @@ impl LangClassifier for PythonClassifier {
 			},
 
 			// ── Fields ──
-			"expression_statement" | "assignment" => Some(group_candidate(node, "fields", source)),
+			"expression_statement" | "assignment" => {
+				Some(group_candidate(node, ChunkKind::Fields, source))
+			},
 
 			// ── Type aliases ──
-			"type_alias_statement" => Some(named_candidate(node, "type", source, None)),
+			"type_alias_statement" => Some(named_candidate(node, ChunkKind::Type, source, None)),
 
 			_ => None,
 		}
@@ -106,48 +122,50 @@ impl LangClassifier for PythonClassifier {
 			// ── Control flow ──
 			"if_statement" => Some(make_candidate(
 				node,
-				"if".to_string(),
+				ChunkKind::If,
+				None,
 				NameStyle::Named,
 				None,
 				recurse_body(node, ChunkContext::FunctionBody),
-				false,
 				source,
 			)),
 			"for_statement" | "while_statement" => Some(make_candidate(
 				node,
-				"loop".to_string(),
+				ChunkKind::Loop,
+				None,
 				NameStyle::Named,
 				None,
 				recurse_body(node, ChunkContext::FunctionBody),
-				false,
 				source,
 			)),
 			"try_statement" => Some(make_candidate(
 				node,
-				"try".to_string(),
+				ChunkKind::Try,
+				None,
 				NameStyle::Named,
 				None,
 				recurse_body(node, ChunkContext::FunctionBody),
-				false,
 				source,
 			)),
 			"with_statement" => Some(make_candidate(
 				node,
-				"block".to_string(),
+				ChunkKind::Block,
+				None,
 				NameStyle::Named,
 				None,
 				recurse_body(node, ChunkContext::FunctionBody),
-				false,
 				source,
 			)),
 
 			// ── Positional ──
-			"elif_clause" => Some(positional_candidate(node, "elif", source)),
-			"except_clause" => Some(positional_candidate(node, "except", source)),
-			"match_statement" => Some(positional_candidate(node, "match", source)),
+			"elif_clause" => Some(positional_candidate(node, ChunkKind::Elif, source)),
+			"except_clause" => Some(positional_candidate(node, ChunkKind::Except, source)),
+			"match_statement" => Some(positional_candidate(node, ChunkKind::Match, source)),
 
 			// ── Variables ──
-			"expression_statement" | "assignment" => Some(group_candidate(node, "stmts", source)),
+			"expression_statement" | "assignment" => {
+				Some(group_candidate(node, ChunkKind::Statements, source))
+			},
 
 			_ => None,
 		}
@@ -160,36 +178,18 @@ fn classify_function_python<'t>(node: Node<'t>, source: &str) -> RawChunkCandida
 	let fn_recurse = || recurse_body(node, ChunkContext::FunctionBody);
 	match node.kind() {
 		"if_statement" => {
-			make_candidate(node, "if".to_string(), NameStyle::Named, None, fn_recurse(), false, source)
+			make_candidate(node, ChunkKind::If, None, NameStyle::Named, None, fn_recurse(), source)
 		},
-		"for_statement" | "while_statement" => make_candidate(
-			node,
-			"loop".to_string(),
-			NameStyle::Named,
-			None,
-			fn_recurse(),
-			false,
-			source,
-		),
-		"try_statement" => make_candidate(
-			node,
-			"try".to_string(),
-			NameStyle::Named,
-			None,
-			fn_recurse(),
-			false,
-			source,
-		),
-		"with_statement" => make_candidate(
-			node,
-			"block".to_string(),
-			NameStyle::Named,
-			None,
-			fn_recurse(),
-			false,
-			source,
-		),
-		_ => group_candidate(node, "stmts", source),
+		"for_statement" | "while_statement" => {
+			make_candidate(node, ChunkKind::Loop, None, NameStyle::Named, None, fn_recurse(), source)
+		},
+		"try_statement" => {
+			make_candidate(node, ChunkKind::Try, None, NameStyle::Named, None, fn_recurse(), source)
+		},
+		"with_statement" => {
+			make_candidate(node, ChunkKind::Block, None, NameStyle::Named, None, fn_recurse(), source)
+		},
+		_ => group_candidate(node, ChunkKind::Statements, source),
 	}
 }
 
@@ -200,16 +200,18 @@ fn classify_decorated<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t>
 	match inner {
 		Some(child) if child.kind() == "class_definition" => make_container_chunk(
 			node,
-			prefixed_name("class", child, source),
+			ChunkKind::Class,
+			extract_identifier(child, source),
 			source,
 			recurse_into(child, ChunkContext::ClassBody, &["body"], &["block"]),
 		),
-		Some(child) if child.kind() == "function_definition" => make_named_chunk(
+		Some(child) if child.kind() == "function_definition" => make_kind_chunk(
 			node,
-			prefixed_name("fn", child, source),
+			ChunkKind::Function,
+			extract_identifier(child, source),
 			source,
 			recurse_into(child, ChunkContext::FunctionBody, &["body"], &["block"]),
 		),
-		_ => positional_candidate(node, "block", source),
+		_ => positional_candidate(node, ChunkKind::Block, source),
 	}
 }

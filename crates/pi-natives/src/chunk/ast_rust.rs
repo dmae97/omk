@@ -2,7 +2,7 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*};
+use super::{classify::LangClassifier, common::*, kind::ChunkKind};
 
 pub struct RustClassifier;
 
@@ -10,56 +10,62 @@ impl LangClassifier for RustClassifier {
 	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 		Some(match node.kind() {
 			// ── Imports ──
-			"use_declaration" | "extern_crate_declaration" => group_candidate(node, "imports", source),
+			"use_declaration" | "extern_crate_declaration" => {
+				group_candidate(node, ChunkKind::Imports, source)
+			},
 
 			// ── Functions ──
 			"function_item" | "function_definition" => named_candidate(
 				node,
-				"fn",
+				ChunkKind::Function,
 				source,
 				recurse_body(node, ChunkContext::FunctionBody)
 					.or_else(|| recurse_into(node, ChunkContext::FunctionBody, &["body"], &["block"])),
 			),
 
 			// ── Containers ──
-			"struct_item" => container_candidate(node, "struct", source, recurse_class(node)),
-			"enum_item" => container_candidate(node, "enum", source, recurse_enum(node)),
-			"trait_item" => container_candidate(node, "trait", source, recurse_class(node)),
+			"struct_item" => container_candidate(node, ChunkKind::Struct, source, recurse_class(node)),
+			"enum_item" => container_candidate(node, ChunkKind::Enum, source, recurse_enum(node)),
+			"trait_item" => container_candidate(node, ChunkKind::Trait, source, recurse_class(node)),
 			"mod_item" | "foreign_block" => {
-				container_candidate(node, "mod", source, recurse_class(node))
+				container_candidate(node, ChunkKind::Module, source, recurse_class(node))
 			},
 			"impl_item" => {
 				let name = extract_impl_name(node, source).unwrap_or_else(|| "anonymous".to_string());
 				make_container_chunk(
 					node,
-					format!("impl_{name}"),
+					ChunkKind::Impl,
+					Some(name),
 					source,
 					recurse_into(node, ChunkContext::ClassBody, &["body"], &["declaration_list"]),
 				)
 			},
 
 			// ── Types ──
-			"type_item" => named_candidate(node, "type", source, recurse_class(node)),
+			"type_item" => named_candidate(node, ChunkKind::Type, source, recurse_class(node)),
 
 			// ── Macros ──
-			"macro_definition" | "macro_rule" => {
-				named_candidate(node, "macro", source, recurse_body(node, ChunkContext::FunctionBody))
-			},
+			"macro_definition" | "macro_rule" => named_candidate(
+				node,
+				ChunkKind::Macro,
+				source,
+				recurse_body(node, ChunkContext::FunctionBody),
+			),
 
 			// ── Statics / consts ──
-			"static_item" | "const_item" => group_candidate(node, "decls", source),
+			"static_item" | "const_item" => group_candidate(node, ChunkKind::Declarations, source),
 
 			// ── Attributes ──
-			"inner_attribute_item" => group_candidate(node, "attrs", source),
+			"inner_attribute_item" => group_candidate(node, ChunkKind::Attrs, source),
 
 			// ── Variables ──
 			"let_declaration" => match extract_identifier(node, source) {
-				Some(name) => make_named_chunk(node, format!("var_{name}"), source, None),
-				None => group_candidate(node, "decls", source),
+				Some(name) => make_kind_chunk(node, ChunkKind::Variable, Some(name), source, None),
+				None => group_candidate(node, ChunkKind::Declarations, source),
 			},
 
 			// ── Expression statements ──
-			"expression_statement" => group_candidate(node, "stmts", source),
+			"expression_statement" => group_candidate(node, ChunkKind::Statements, source),
 
 			_ => return None,
 		})
@@ -70,34 +76,35 @@ impl LangClassifier for RustClassifier {
 			// ── Methods ──
 			"function_item" | "function_definition" => {
 				let name = extract_identifier(node, source).unwrap_or_else(|| "anonymous".to_string());
-				make_named_chunk(
+				make_kind_chunk(
 					node,
-					format!("fn_{name}"),
+					ChunkKind::Function,
+					Some(name),
 					source,
 					recurse_body(node, ChunkContext::FunctionBody),
 				)
 			},
 
 			// ── Types ──
-			"type_item" | "type_alias" => named_candidate(node, "type", source, None),
+			"type_item" | "type_alias" => named_candidate(node, ChunkKind::Type, source, None),
 
 			// ── Fields ──
 			"field_declaration" => match extract_identifier(node, source) {
-				Some(name) => make_named_chunk(node, format!("field_{name}"), source, None),
-				None => group_candidate(node, "fields", source),
+				Some(name) => make_kind_chunk(node, ChunkKind::Field, Some(name), source, None),
+				None => group_candidate(node, ChunkKind::Fields, source),
 			},
 
 			// ── Enum variants ──
 			"enum_variant" => match extract_identifier(node, source) {
-				Some(name) => make_named_chunk(node, format!("variant_{name}"), source, None),
-				None => group_candidate(node, "variants", source),
+				Some(name) => make_kind_chunk(node, ChunkKind::Variant, Some(name), source, None),
+				None => group_candidate(node, ChunkKind::Variants, source),
 			},
 
 			// ── Consts / macros in class body ──
-			"const_item" | "macro_invocation" => group_candidate(node, "fields", source),
+			"const_item" | "macro_invocation" => group_candidate(node, ChunkKind::Fields, source),
 
 			// ── Attributes (absorbed by the framework, but handle explicitly) ──
-			"attribute_item" => return None, // absorbed by is_absorbable_attr
+			"attribute_item" => return None,
 
 			_ => return None,
 		})
@@ -107,28 +114,22 @@ impl LangClassifier for RustClassifier {
 		let fn_recurse = || recurse_body(node, ChunkContext::FunctionBody);
 		Some(match node.kind() {
 			// ── Control flow ──
-			"if_expression" => make_candidate(
-				node,
-				"if".to_string(),
-				NameStyle::Named,
-				None,
-				fn_recurse(),
-				false,
-				source,
-			),
-			"match_expression" => positional_candidate(node, "match", source),
+			"if_expression" => {
+				make_candidate(node, ChunkKind::If, None, NameStyle::Named, None, fn_recurse(), source)
+			},
+			"match_expression" => positional_candidate(node, ChunkKind::Match, source),
 			"loop_expression" | "while_expression" | "for_expression" => {
-				positional_candidate(node, "loop", source)
+				positional_candidate(node, ChunkKind::Loop, source)
 			},
 
 			// ── Blocks ──
 			"unsafe_block" | "async_block" | "const_block" | "block_expression" => make_candidate(
 				node,
-				"block".to_string(),
+				ChunkKind::Block,
+				None,
 				NameStyle::Named,
 				None,
 				fn_recurse(),
-				false,
 				source,
 			),
 
@@ -137,16 +138,18 @@ impl LangClassifier for RustClassifier {
 				let span = line_span(node.start_position().row + 1, node.end_position().row + 1);
 				if span > 1 {
 					match extract_identifier(node, source) {
-						Some(name) => make_named_chunk(node, format!("var_{name}"), source, None),
-						None => group_candidate(node, "let", source),
+						Some(name) => {
+							make_kind_chunk(node, ChunkKind::Variable, Some(name), source, None)
+						},
+						None => group_candidate(node, ChunkKind::Let, source),
 					}
 				} else {
-					group_candidate(node, "let", source)
+					group_candidate(node, ChunkKind::Let, source)
 				}
 			},
 
 			// ── Expression statements ──
-			"expression_statement" => group_candidate(node, "stmts", source),
+			"expression_statement" => group_candidate(node, ChunkKind::Statements, source),
 
 			_ => return None,
 		})

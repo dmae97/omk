@@ -5,8 +5,6 @@ use crate::chunk::{
 	types::{ChunkNode, ChunkRegion, ChunkTree},
 };
 
-const CHUNK_NAME_PREFIXES: &[&str] =
-	&["fn_", "var_", "class_", "stmts_", "type_", "interface_", "enum_", "const_"];
 const CHECKSUM_ALPHABET: &str = "ZPMQVRWSNKTXJBYH";
 
 pub struct ResolvedChunk<'a> {
@@ -196,39 +194,15 @@ fn root_chunk(state: &ChunkStateInner) -> Result<&ChunkNode, String> {
 		.ok_or_else(|| "Chunk tree is missing the root chunk".to_owned())
 }
 
-pub const fn chunk_supports_region(chunk: &ChunkNode, region: ChunkRegion) -> bool {
+pub fn chunk_region_range(chunk: &ChunkNode, region: ChunkRegion) -> (usize, usize) {
+	let start = chunk.start_byte as usize;
+	let end = chunk.end_byte as usize;
+	let pro_end = chunk.prologue_end_byte.map_or(start, |b| b as usize);
+	let epi_start = chunk.epilogue_start_byte.map_or(end, |b| b as usize);
 	match region {
-		ChunkRegion::Head | ChunkRegion::Inner | ChunkRegion::Tail => {
-			chunk.prologue_end_byte.is_some() && chunk.epilogue_start_byte.is_some()
-		},
-	}
-}
-
-pub fn chunk_region_range(
-	chunk: &ChunkNode,
-	region: ChunkRegion,
-) -> Result<(usize, usize), String> {
-	match region {
-		ChunkRegion::Head => Ok((
-			chunk.start_byte as usize,
-			chunk
-				.prologue_end_byte
-				.ok_or_else(|| format!("Chunk \"{}\" does not support @head.", chunk.path))? as usize,
-		)),
-		ChunkRegion::Inner => Ok((
-			chunk
-				.prologue_end_byte
-				.ok_or_else(|| format!("Chunk \"{}\" does not support @inner.", chunk.path))? as usize,
-			chunk
-				.epilogue_start_byte
-				.ok_or_else(|| format!("Chunk \"{}\" does not support @inner.", chunk.path))? as usize,
-		)),
-		ChunkRegion::Tail => Ok((
-			chunk
-				.epilogue_start_byte
-				.ok_or_else(|| format!("Chunk \"{}\" does not support @tail.", chunk.path))? as usize,
-			chunk.end_byte as usize,
-		)),
+		ChunkRegion::Head => (start, pro_end),
+		ChunkRegion::Inner => (pro_end, epi_start),
+		ChunkRegion::Tail => (epi_start, end),
 	}
 }
 
@@ -289,12 +263,14 @@ fn resolve_chunk_selector_impl<'a>(
 	}
 
 	if !cleaned.contains('.') {
-		let prefixed = CHUNK_NAME_PREFIXES
-			.iter()
-			.map(|prefix| format!("{prefix}{cleaned}"))
-			.collect::<Vec<_>>();
-		let prefixed_matches =
-			collect_unique_matches(prefixed.iter().flat_map(|name| state.chunks_by_leaf(name)));
+		let prefixed_matches = collect_unique_matches(state.tree.chunks.iter().filter(|chunk| {
+			if chunk.path.is_empty() {
+				return false;
+			}
+			let leaf = chunk.path.rsplit('.').next().unwrap_or(chunk.path.as_str());
+			let expected = chunk.kind.path_segment(Some(cleaned));
+			leaf == expected || leaf == cleaned
+		}));
 		if !prefixed_matches.is_empty() {
 			return resolve_matches(
 				prefixed_matches,
@@ -472,15 +448,10 @@ fn kind_path_matches(candidate: &ChunkNode, kind_segments: &[&str]) -> bool {
 			.zip(path_segments)
 			.all(|(kind, segment)| {
 				segment == *kind
-					|| segment.starts_with(&format!("{kind}_"))
-					|| strip_known_chunk_prefix(segment) == Some(*kind)
+					|| segment
+						.split_once('_')
+						.is_some_and(|(prefix, identifier)| prefix == *kind || identifier == *kind)
 			})
-}
-
-fn strip_known_chunk_prefix(segment: &str) -> Option<&str> {
-	CHUNK_NAME_PREFIXES
-		.iter()
-		.find_map(|prefix| segment.strip_prefix(prefix))
 }
 
 /// Format a chunk path with its CRC suffix, e.g. `fn_start#ABCD`.
@@ -678,6 +649,7 @@ fn chunk_read_path_separator_index(value: &str) -> Option<usize> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::chunk::kind::ChunkKind;
 
 	fn chunk(
 		path: &str,
@@ -685,26 +657,36 @@ mod tests {
 		parent_path: Option<&str>,
 		children: Vec<&str>,
 	) -> ChunkNode {
+		let leaf = path.rsplit('.').next().unwrap_or(path);
+		let kind = match leaf.split_once('_').map_or(leaf, |(prefix, _)| prefix) {
+			"fn" => ChunkKind::Function,
+			"class" => ChunkKind::Class,
+			"try" => ChunkKind::Try,
+			_ => ChunkKind::Chunk,
+		};
 		ChunkNode {
-			path:                path.to_owned(),
-			name:                path.rsplit('.').next().unwrap_or(path).to_owned(),
-			leaf:                children.is_empty(),
-			parent_path:         parent_path.map(str::to_owned),
-			children:            children.into_iter().map(str::to_owned).collect(),
-			signature:           None,
-			start_line:          1,
-			end_line:            1,
-			line_count:          1,
-			start_byte:          0,
-			end_byte:            0,
+			path: path.to_owned(),
+			identifier: leaf
+				.split_once('_')
+				.and_then(|(_, identifier)| (!identifier.is_empty()).then_some(identifier.to_owned())),
+			kind,
+			leaf: children.is_empty(),
+			parent_path: parent_path.map(str::to_owned),
+			children: children.into_iter().map(str::to_owned).collect(),
+			signature: None,
+			start_line: 1,
+			end_line: 1,
+			line_count: 1,
+			start_byte: 0,
+			end_byte: 0,
 			checksum_start_byte: 0,
-			prologue_end_byte:   None,
+			prologue_end_byte: None,
 			epilogue_start_byte: None,
-			checksum:            checksum.to_owned(),
-			error:               false,
-			indent:              0,
-			indent_char:         " ".to_owned(),
-			group:               false,
+			checksum: checksum.to_owned(),
+			error: false,
+			indent: 0,
+			indent_char: " ".to_owned(),
+			group: false,
 		}
 	}
 

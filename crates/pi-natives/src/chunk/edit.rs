@@ -5,9 +5,10 @@ use crate::chunk::{
 		denormalize_from_tabs, detect_file_indent_char, detect_file_indent_step,
 		normalize_leading_whitespace_char, reindent_inserted_block, strip_content_prefixes,
 	},
+	kind::ChunkKind,
 	resolve::{
-		ParsedSelector, chunk_region_range, chunk_supports_region, resolve_chunk_selector,
-		resolve_chunk_with_crc, sanitize_chunk_selector, sanitize_crc, split_selector_crc_and_region,
+		ParsedSelector, chunk_region_range, resolve_chunk_selector, resolve_chunk_with_crc,
+		sanitize_chunk_selector, sanitize_crc, split_selector_crc_and_region,
 	},
 	state::{ChunkState, ChunkStateInner},
 	types::{
@@ -309,11 +310,6 @@ fn resolve_edit_target(
 		validate_batch_crc(resolved.chunk, resolved.crc.as_deref(), requires_checksum)?;
 	}
 	let chunk = resolved.chunk.clone();
-	if let Some(r) = region
-		&& !chunk_supports_region(&chunk, r)
-	{
-		return Err(format!("Chunk \"{}\" does not support @{}.", chunk.path, r.as_str()));
-	}
 	Ok(ResolvedEditTarget { chunk, region })
 }
 
@@ -341,7 +337,7 @@ fn apply_replace(
 	let anchor = target.chunk;
 	let (region_start, region_end) = match target.region {
 		None => (anchor.start_byte as usize, anchor.end_byte as usize),
-		Some(r) => chunk_region_range(&anchor, r)?,
+		Some(r) => chunk_region_range(&anchor, r),
 	};
 
 	// Scoped find/replace: locate a literal substring inside the chunk and replace
@@ -461,7 +457,7 @@ fn apply_delete(
 	let anchor = target.chunk;
 
 	if let Some(r) = target.region {
-		let (range_start, range_end) = chunk_region_range(&anchor, r)?;
+		let (range_start, range_end) = chunk_region_range(&anchor, r);
 		state.source = replace_byte_range(&state.source, range_start, range_end, "");
 	} else {
 		let offsets = line_offsets(&state.source);
@@ -934,11 +930,12 @@ fn chunk_slice(text: &str, chunk: &ChunkNode) -> String {
 		.join("\n")
 }
 
-fn is_container_like_chunk(chunk: &ChunkNode) -> bool {
+const fn is_container_like_chunk(chunk: &ChunkNode) -> bool {
+	let traits = chunk.kind.traits();
 	!chunk.leaf
-		|| ["class_", "type_", "interface_", "enum_", "struct_", "impl_", "trait_", "mod_"]
-			.iter()
-			.any(|prefix| chunk.name.starts_with(prefix))
+		|| traits.container
+		|| traits.has_addressable_members
+		|| traits.always_preserve_children
 }
 
 fn go_receiver_belongs_to_type(source: &str, chunk: &ChunkNode, type_name: &str) -> bool {
@@ -952,11 +949,14 @@ fn go_receiver_belongs_to_type(source: &str, chunk: &ChunkNode, type_name: &str)
 }
 
 fn owned_container_end_line(state: &ChunkStateInner, anchor: &ChunkNode) -> u32 {
-	if state.language != "go" || !anchor.path.starts_with("type_") {
+	if state.language != "go" || anchor.kind != ChunkKind::Type {
 		return anchor.end_line;
 	}
 
-	let type_name = anchor.path.trim_start_matches("type_");
+	let type_name = anchor
+		.identifier
+		.as_deref()
+		.unwrap_or_else(|| anchor.kind.prefix());
 	let mut owned_end_line = anchor.end_line;
 	let mut top_level_chunks = state
 		.tree
@@ -977,7 +977,7 @@ fn owned_container_end_line(state: &ChunkStateInner, anchor: &ChunkNode) -> u32 
 		if chunk.start_line < owned_end_line {
 			continue;
 		}
-		if chunk.name.starts_with("fn_")
+		if chunk.kind == ChunkKind::Function
 			&& go_receiver_belongs_to_type(&state.source, chunk, type_name)
 		{
 			owned_end_line = chunk.end_line;
@@ -1018,7 +1018,7 @@ fn body_insertion_point(
 	at_end: bool,
 	file_indent_char: char,
 	file_indent_step: usize,
-) -> Result<InsertionPoint, String> {
+) -> InsertionPoint {
 	let offsets = line_offsets(&state.source);
 	let indent = compute_insert_indent(state, anchor, true, file_indent_char, file_indent_step);
 	if at_end {
@@ -1034,13 +1034,13 @@ fn body_insertion_point(
 			} else {
 				last_child.indent_char.repeat(last_child.indent as usize)
 			};
-			return Ok(InsertionPoint {
+			return InsertionPoint {
 				offset: line_end_offset(&offsets, last_child.end_line, &state.source),
 				indent: child_indent,
-			});
+			};
 		}
-		let (_, body_end) = chunk_region_range(anchor, ChunkRegion::Inner)?;
-		return Ok(InsertionPoint { offset: body_end, indent });
+		let (_, body_end) = chunk_region_range(anchor, ChunkRegion::Inner);
+		return InsertionPoint { offset: body_end, indent };
 	}
 
 	if let Some(first_child_path) = anchor.children.first()
@@ -1050,13 +1050,13 @@ fn body_insertion_point(
 			.iter()
 			.find(|chunk| &chunk.path == first_child_path)
 	{
-		return Ok(InsertionPoint {
+		return InsertionPoint {
 			offset: line_start_offset(&offsets, first_child.start_line, &state.source),
 			indent,
-		});
+		};
 	}
-	let (body_start, _) = chunk_region_range(anchor, ChunkRegion::Inner)?;
-	Ok(InsertionPoint { offset: body_start, indent })
+	let (body_start, _) = chunk_region_range(anchor, ChunkRegion::Inner);
+	InsertionPoint { offset: body_start, indent }
 }
 
 fn resolve_insertion_point(
@@ -1080,13 +1080,13 @@ fn resolve_insertion_point(
 		// Inner first-child position
 		(Some(ChunkRegion::Inner), ChunkEditOp::Before | ChunkEditOp::Prepend)
 		| (Some(ChunkRegion::Head), ChunkEditOp::After | ChunkEditOp::Append) => Ok((
-			body_insertion_point(state, anchor, false, file_indent_char, file_indent_step)?,
+			body_insertion_point(state, anchor, false, file_indent_char, file_indent_step),
 			InsertPosition::FirstChild,
 		)),
 		// Inner last-child position
 		(Some(ChunkRegion::Inner), ChunkEditOp::After | ChunkEditOp::Append)
 		| (Some(ChunkRegion::Tail), ChunkEditOp::Before | ChunkEditOp::Prepend) => Ok((
-			body_insertion_point(state, anchor, true, file_indent_char, file_indent_step)?,
+			body_insertion_point(state, anchor, true, file_indent_char, file_indent_step),
 			InsertPosition::LastChild,
 		)),
 		(_, ChunkEditOp::Replace | ChunkEditOp::Delete) => {
@@ -1207,33 +1207,20 @@ fn container_has_interior_content(state: &ChunkStateInner, anchor: &ChunkNode) -
 /// children (methods) want blank line spacing. Containers whose children are
 /// all packed declarations (struct fields, enum variants) are tightly packed.
 fn children_want_blank_line_spacing(state: &ChunkStateInner, anchor: &ChunkNode) -> bool {
-	// Root children are always top-level declarations, separated by blank lines.
 	if anchor.path.is_empty() {
 		return true;
 	}
-	// If the container has no chunk children, fall back to spaced (preserves
-	// existing behavior for containers with interior content but no parsed
-	// children).
 	if anchor.children.is_empty() {
 		return true;
 	}
-	// Packed children are declarations that belong tightly together without
-	// blank line separators: struct fields, enum variants, etc.
 	let all_packed = anchor.children.iter().all(|child_path| {
 		state
 			.tree
 			.chunks
 			.iter()
-			.any(|c| c.path == *child_path && is_packed_child(&c.name))
+			.any(|c| c.path == *child_path && c.kind.traits().packed)
 	});
 	!all_packed
-}
-
-/// Returns true if a chunk name indicates a packed (tightly-spaced) child.
-/// These are declarations like struct fields and enum variants that don't
-/// need blank line separators between them.
-fn is_packed_child(name: &str) -> bool {
-	name.starts_with("field_") || name.starts_with("variant_")
 }
 
 /// Returns true if sibling insertions around `anchor` should have blank line
@@ -2088,7 +2075,12 @@ mod tests {
 			.tree
 			.chunks
 			.iter()
-			.find(|c| c.name.starts_with("stmts"))
+			.find(|c| {
+				c.path
+					.rsplit('.')
+					.next()
+					.is_some_and(|leaf| leaf.starts_with("stmts"))
+			})
 			.expect("stmts chunk should exist");
 		assert!(stmts.group, "stmts chunk should be marked as group");
 
@@ -2419,7 +2411,59 @@ mod tests {
 
 		assert_eq!(
 			result.diff_after, "class Server {\n    start() {\n        return 42;\n    }\n}\n",
-			"nested body replace should produce correct 2-level indent"
+			"4-space: nested body replace should produce correct 2-level indent"
+		);
+	}
+
+	#[test]
+	fn nested_body_replace_preserves_correct_indentation_2space() {
+		// 2-space file: method body at 2 levels of indent.
+		let source = "class Server {\n  start() {\n    work();\n  }\n}\n";
+		let state = state_for(source, "typescript");
+		let chunk = state
+			.inner()
+			.chunk("class_Server.fn_start")
+			.expect("fn_start");
+
+		let result = apply_single_edit(&state, "test.ts", EditOperation {
+			op:      ChunkEditOp::Replace,
+			sel:     Some(format!("class_Server.fn_start#{}@inner", chunk.checksum)),
+			crc:     None,
+			region:  None,
+			content: Some("\treturn 42;\n".to_owned()),
+			find:    None,
+		});
+
+		assert_eq!(
+			result.diff_after, "class Server {\n  start() {\n    return 42;\n  }\n}\n",
+			"2-space: nested body replace should produce correct 2-level indent"
+		);
+	}
+
+	#[test]
+	fn nested_body_replace_with_excess_tabs_corrected() {
+		// Agent accidentally includes base padding (2 tabs instead of 1).
+		// Correction mechanism should strip common indent and produce correct output.
+		let source = "class Server {\n  start() {\n    work();\n  }\n}\n";
+		let state = state_for(source, "typescript");
+		let chunk = state
+			.inner()
+			.chunk("class_Server.fn_start")
+			.expect("fn_start");
+
+		let result = apply_single_edit(&state, "test.ts", EditOperation {
+			op:      ChunkEditOp::Replace,
+			sel:     Some(format!("class_Server.fn_start#{}@inner", chunk.checksum)),
+			crc:     None,
+			region:  None,
+			content: Some("\t\tif (x) {\n\t\t\ty();\n\t\t}\n".to_owned()),
+			find:    None,
+		});
+
+		assert_eq!(
+			result.diff_after,
+			"class Server {\n  start() {\n    if (x) {\n      y();\n    }\n  }\n}\n",
+			"2-space: excess tabs should be corrected via dedent"
 		);
 	}
 
@@ -2492,7 +2536,12 @@ mod tests {
 			.tree
 			.chunks
 			.iter()
-			.find(|c| c.name.starts_with("list"))
+			.find(|c| {
+				c.path
+					.rsplit('.')
+					.next()
+					.is_some_and(|leaf| leaf.starts_with("list"))
+			})
 			.expect("list chunk");
 
 		let result = apply_single_edit(&state, "test.md", EditOperation {

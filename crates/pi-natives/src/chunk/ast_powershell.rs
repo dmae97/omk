@@ -2,29 +2,32 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*};
+use super::{classify::LangClassifier, common::*, kind::ChunkKind};
 
 pub struct PowershellClassifier;
 
 impl LangClassifier for PowershellClassifier {
 	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 		Some(match node.kind() {
-			"param_block" => group_candidate(node, "params", source),
+			"param_block" => group_candidate(node, ChunkKind::Parameters, source),
 			"statement_list" => make_container_chunk(
 				node,
-				"body".to_string(),
+				ChunkKind::Body,
+				None,
 				source,
 				Some(recurse_self(node, ChunkContext::Root)),
 			),
 			"class_statement" => make_container_chunk(
 				node,
-				format!("class_{}", powershell_name(node, source)?),
+				ChunkKind::Class,
+				Some(powershell_name(node, source)?),
 				source,
 				Some(recurse_self(node, ChunkContext::ClassBody)),
 			),
-			"function_statement" => make_named_chunk(
+			"function_statement" => make_container_chunk(
 				node,
-				format!("fn_{}", powershell_name(node, source)?),
+				ChunkKind::Function,
+				Some(powershell_name(node, source)?),
 				source,
 				Some(recurse_self(node, ChunkContext::FunctionBody)),
 			),
@@ -32,7 +35,7 @@ impl LangClassifier for PowershellClassifier {
 			"switch_statement" | "if_statement" | "foreach_statement" => {
 				return self.classify_function(node, source);
 			},
-			"flow_control_statement" => group_candidate(node, "stmts", source),
+			"flow_control_statement" => group_candidate(node, ChunkKind::Statements, source),
 			_ => return None,
 		})
 	}
@@ -40,8 +43,8 @@ impl LangClassifier for PowershellClassifier {
 	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 		Some(match node.kind() {
 			"class_property_definition" => match powershell_name(node, source) {
-				Some(name) => make_named_chunk(node, format!("field_{name}"), source, None),
-				None => group_candidate(node, "fields", source),
+				Some(name) => make_kind_chunk(node, ChunkKind::Field, Some(name), source, None),
+				None => group_candidate(node, ChunkKind::Fields, source),
 			},
 			"class_method_definition" => classify_class_method(node, source)?,
 			_ => return None,
@@ -50,51 +53,60 @@ impl LangClassifier for PowershellClassifier {
 
 	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 		Some(match node.kind() {
-			"class_method_parameter_list" | "param_block" => group_candidate(node, "params", source),
+			"class_method_parameter_list" | "param_block" => {
+				group_candidate(node, ChunkKind::Parameters, source)
+			},
 			"script_block" => make_container_chunk(
 				node,
-				block_name_for_parent(node).to_string(),
+				block_kind_for_parent(node),
+				None,
 				source,
 				Some(recurse_self(node, ChunkContext::FunctionBody)),
 			),
 			"script_block_body" | "statement_block" => make_container_chunk(
 				node,
-				"block".to_string(),
+				ChunkKind::Block,
+				None,
 				source,
 				recurse_into(node, ChunkContext::FunctionBody, &[], &["statement_list"]),
 			),
 			"pipeline" => classify_powershell_pipeline(node, source),
-			"if_statement" => make_named_chunk(
+			"if_statement" => make_container_chunk(
 				node,
-				"if".to_string(),
+				ChunkKind::If,
+				None,
 				source,
 				recurse_into(node, ChunkContext::FunctionBody, &[], &["statement_block"]),
 			),
-			"foreach_statement" => make_named_chunk(
+			"foreach_statement" => make_container_chunk(
 				node,
-				"loop".to_string(),
+				ChunkKind::Loop,
+				None,
 				source,
 				recurse_into(node, ChunkContext::FunctionBody, &[], &["statement_block"]),
 			),
-			"switch_statement" => make_named_chunk(
+			"switch_statement" => make_container_chunk(
 				node,
-				"switch".to_string(),
+				ChunkKind::Switch,
+				None,
 				source,
 				recurse_into(node, ChunkContext::FunctionBody, &[], &["switch_body"]),
 			),
 			"switch_clauses" => make_container_chunk(
 				node,
-				"cases".to_string(),
+				ChunkKind::Cases,
+				None,
 				source,
 				Some(recurse_self(node, ChunkContext::FunctionBody)),
 			),
-			"switch_clause" => make_named_chunk(
+			"switch_clause" => make_container_chunk(
 				node,
-				"case".to_string(),
+				ChunkKind::Case,
+				None,
 				source,
 				recurse_into(node, ChunkContext::FunctionBody, &[], &["statement_block"]),
 			),
-			"flow_control_statement" => group_candidate(node, "stmts", source),
+			"flow_control_statement" => group_candidate(node, ChunkKind::Statements, source),
 			_ => return None,
 		})
 	}
@@ -107,15 +119,16 @@ impl LangClassifier for PowershellClassifier {
 fn classify_class_method<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 	let name = powershell_name(node, source)?;
 	let class_name = powershell_name(node.parent()?, source)?;
-	let chunk_name = if name == "new" || name == class_name {
-		"constructor".to_string()
+	let (kind, identifier) = if name == "new" || name == class_name {
+		(ChunkKind::Constructor, None)
 	} else {
-		format!("fn_{name}")
+		(ChunkKind::Function, Some(name))
 	};
 
-	Some(make_named_chunk(
+	Some(make_container_chunk(
 		node,
-		chunk_name,
+		kind,
+		identifier,
 		source,
 		Some(recurse_self(node, ChunkContext::FunctionBody)),
 	))
@@ -125,23 +138,24 @@ fn classify_powershell_pipeline<'t>(node: Node<'t>, source: &str) -> RawChunkCan
 	if let Some(command_name) = powershell_command_name(node, source)
 		&& matches!(command_name.as_str(), "using" | "using-module" | "Import-Module")
 	{
-		return group_candidate(node, "imports", source);
+		return group_candidate(node, ChunkKind::Imports, source);
 	}
 
 	if let Some((name, script_block)) = assigned_script_block(node, source) {
 		return make_container_chunk_from(
 			node,
 			node,
-			format!("block_{name}"),
+			ChunkKind::Block,
+			Some(name),
 			source,
 			Some(recurse_self(script_block, ChunkContext::FunctionBody)),
 		);
 	}
 
 	if child_by_kind(node, &["assignment_expression"]).is_some() {
-		group_candidate(node, "decls", source)
+		group_candidate(node, ChunkKind::Declarations, source)
 	} else {
-		group_candidate(node, "stmts", source)
+		group_candidate(node, ChunkKind::Statements, source)
 	}
 }
 
@@ -170,10 +184,10 @@ fn find_script_block(node: Node<'_>) -> Option<Node<'_>> {
 	None
 }
 
-fn block_name_for_parent(node: Node<'_>) -> &'static str {
+fn block_kind_for_parent(node: Node<'_>) -> ChunkKind {
 	match node.parent().map(|parent| parent.kind()) {
-		Some("function_statement" | "class_method_definition") => "body",
-		_ => "block",
+		Some("function_statement" | "class_method_definition") => ChunkKind::Body,
+		_ => ChunkKind::Block,
 	}
 }
 

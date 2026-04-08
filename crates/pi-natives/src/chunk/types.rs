@@ -7,7 +7,7 @@ use crate::chunk::{kind::ChunkKind, state::ChunkState};
 #[derive(Clone)]
 pub struct ChunkNode {
 	pub path:                String,
-	pub name:                String,
+	pub identifier:          Option<String>,
 	pub kind:                ChunkKind,
 	pub leaf:                bool,
 	pub parent_path:         Option<String>,
@@ -58,8 +58,8 @@ pub struct ChunkTree {
 pub struct ChunkInfo {
 	/// Chunk selector path within the tree.
 	pub path:       String,
-	/// Short display name for the chunk (e.g. symbol or region label).
-	pub name:       String,
+	/// Bare chunk identifier (without kind prefix), if available.
+	pub identifier: Option<String>,
 	/// Stable checksum anchor for this chunk.
 	pub checksum:   String,
 	/// 1-based start line in the source file (inclusive).

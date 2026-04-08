@@ -2,7 +2,7 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*};
+use super::{classify::LangClassifier, common::*, kind::ChunkKind};
 
 pub struct OcamlClassifier;
 
@@ -13,22 +13,24 @@ impl LangClassifier for OcamlClassifier {
 
 	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 		match node.kind() {
-			"method_definition" => Some(make_named_chunk(
+			"method_definition" => Some(make_kind_chunk(
 				node,
-				format!("fn_{}", ocaml_named_text(node, source, &["method_name"])?),
+				ChunkKind::Function,
+				ocaml_named_text(node, source, &["method_name"]),
 				source,
 				ocaml_method_recurse(node),
 			)),
-			"method_specification" => Some(make_named_chunk(
+			"method_specification" => Some(make_kind_chunk(
 				node,
-				format!("fn_{}", ocaml_named_text(node, source, &["method_name"])?),
+				ChunkKind::Function,
+				ocaml_named_text(node, source, &["method_name"]),
 				source,
 				None,
 			)),
 			"instance_variable_definition" => {
 				Some(match ocaml_named_text(node, source, &["instance_variable_name"]) {
-					Some(name) => make_named_chunk(node, format!("field_{name}"), source, None),
-					None => group_candidate(node, "fields", source),
+					Some(name) => make_kind_chunk(node, ChunkKind::Field, Some(name), source, None),
+					None => group_candidate(node, ChunkKind::Fields, source),
 				})
 			},
 			_ => classify_ocaml_item(node, source),
@@ -37,23 +39,32 @@ impl LangClassifier for OcamlClassifier {
 
 	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 		match node.kind() {
-			"function_expression" | "match_expression" => Some(make_named_chunk(
+			"function_expression" | "match_expression" => Some(make_candidate(
 				node,
-				"match".to_string(),
-				source,
+				ChunkKind::Match,
+				None,
+				NameStyle::Named,
+				signature_for_node(node, source),
 				Some(recurse_self(node, ChunkContext::FunctionBody)),
+				source,
 			)),
-			"match_case" => Some(make_named_chunk(
+			"match_case" => Some(make_candidate(
 				node,
-				"case".to_string(),
-				source,
+				ChunkKind::Case,
+				None,
+				NameStyle::Named,
+				signature_for_node(node, source),
 				Some(recurse_self(node, ChunkContext::FunctionBody)),
+				source,
 			)),
-			"let_expression" => Some(make_named_chunk(
+			"let_expression" => Some(make_candidate(
 				node,
-				"let".to_string(),
-				source,
+				ChunkKind::Let,
+				None,
+				NameStyle::Named,
+				signature_for_node(node, source),
 				Some(recurse_self(node, ChunkContext::FunctionBody)),
+				source,
 			)),
 			_ => classify_ocaml_item(node, source),
 		}
@@ -62,47 +73,60 @@ impl LangClassifier for OcamlClassifier {
 
 fn classify_ocaml_item<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 	Some(match node.kind() {
-		"open_module" => group_candidate(node, "imports", source),
+		"open_module" => group_candidate(node, ChunkKind::Imports, source),
 		"module_definition" => make_container_chunk(
 			node,
-			format!("mod_{}", ocaml_named_text(node, source, &["module_name"])?),
+			ChunkKind::Module,
+			ocaml_named_text(node, source, &["module_name"]),
 			source,
 			ocaml_module_recurse(node),
 		),
-		"module_type_definition" => make_container_chunk(
+		"module_type_definition" => make_candidate(
 			node,
+			ChunkKind::Interface,
 			format!("modtype_{}", ocaml_named_text(node, source, &["module_type_name"])?),
-			source,
+			NameStyle::Named,
+			signature_for_node(node, source),
 			ocaml_module_type_recurse(node),
+			source,
 		),
 		"class_definition" => make_container_chunk(
 			node,
-			format!("class_{}", ocaml_named_text(node, source, &["class_name"])?),
+			ChunkKind::Class,
+			ocaml_named_text(node, source, &["class_name"]),
 			source,
 			ocaml_class_recurse(node),
 		),
-		"class_type_definition" => make_container_chunk(
+		"class_type_definition" => make_candidate(
 			node,
+			ChunkKind::Iface,
 			format!("classtype_{}", ocaml_named_text(node, source, &["class_type_name"])?),
-			source,
+			NameStyle::Named,
+			signature_for_node(node, source),
 			ocaml_class_type_recurse(node),
+			source,
 		),
-		"type_definition" => make_named_chunk(
+		"type_definition" => make_kind_chunk(
 			node,
-			format!("type_{}", ocaml_named_text(node, source, &["type_constructor"])?),
+			ChunkKind::Type,
+			ocaml_named_text(node, source, &["type_constructor"]),
 			source,
 			None,
 		),
-		"exception_definition" => make_named_chunk(
+		"exception_definition" => make_candidate(
 			node,
+			ChunkKind::Constructor,
 			format!("exception_{}", ocaml_named_text(node, source, &["constructor_name"])?),
-			source,
+			NameStyle::Named,
+			signature_for_node(node, source),
 			None,
+			source,
 		),
 		"value_definition" => classify_ocaml_value_definition(node, source)?,
-		"value_specification" => make_named_chunk(
+		"value_specification" => make_kind_chunk(
 			node,
-			format!("val_{}", ocaml_named_text(node, source, &["value_name"])?),
+			ChunkKind::Val,
+			ocaml_named_text(node, source, &["value_name"]),
 			source,
 			None,
 		),
@@ -117,9 +141,9 @@ fn classify_ocaml_value_definition<'t>(
 	let name = ocaml_named_text(node, source, &["value_name"])?;
 	let recurse = ocaml_value_recurse(node);
 	if ocaml_value_definition_is_function(node) {
-		Some(make_named_chunk(node, format!("fn_{name}"), source, recurse))
+		Some(make_kind_chunk(node, ChunkKind::Function, Some(name), source, recurse))
 	} else {
-		Some(make_named_chunk(node, format!("val_{name}"), source, recurse))
+		Some(make_kind_chunk(node, ChunkKind::Val, Some(name), source, recurse))
 	}
 }
 

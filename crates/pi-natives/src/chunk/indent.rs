@@ -509,7 +509,7 @@ fn hashline_prefix_len(line: &str) -> Option<usize> {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::chunk::types::ChunkNode;
+	use crate::chunk::{kind::ChunkKind, types::ChunkNode};
 
 	fn chunk(
 		path: &str,
@@ -518,9 +518,18 @@ mod tests {
 		indent: u32,
 		indent_char: &str,
 	) -> ChunkNode {
+		let kind = match path.split_once('_').map_or(path, |(prefix, _)| prefix) {
+			"fn" => ChunkKind::Function,
+			"class" => ChunkKind::Class,
+			"stmts" => ChunkKind::Statements,
+			_ => ChunkKind::Chunk,
+		};
 		ChunkNode {
 			path: path.to_owned(),
-			name: path.to_owned(),
+			identifier: path
+				.split_once('_')
+				.and_then(|(_, identifier)| (!identifier.is_empty()).then_some(identifier.to_owned())),
+			kind,
 			leaf: children.is_empty(),
 			parent_path: parent_path.map(str::to_owned),
 			children: children.iter().map(|child| (*child).to_owned()).collect(),

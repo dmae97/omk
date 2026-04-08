@@ -2,7 +2,7 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*};
+use super::{classify::LangClassifier, common::*, kind::ChunkKind};
 
 pub struct ClojureClassifier;
 
@@ -25,35 +25,29 @@ fn form_name(node: Node<'_>, source: &str) -> Option<String> {
 	})
 }
 
-/// Build a prefixed name from a Clojure form, falling back to "anonymous".
-fn form_prefixed_name(node: Node<'_>, prefix: &str, source: &str) -> String {
-	let name = form_name(node, source).unwrap_or_else(|| "anonymous".to_string());
-	format!("{prefix}_{name}")
-}
-
 /// Classify a `list_lit` Clojure form based on its head symbol.
 fn classify_form<'t>(node: Node<'t>, source: &str, at_root: bool) -> RawChunkCandidate<'t> {
 	let Some(head) = form_head(node, source) else {
-		return positional_candidate(node, "form", source);
+		return positional_candidate(node, ChunkKind::Form, source);
 	};
 	match head.as_str() {
 		"ns" | "require" | "use" | "import" | "refer-clojure" => {
-			group_candidate(node, "imports", source)
+			group_candidate(node, ChunkKind::Imports, source)
 		},
 		"defn" | "defn-" | "defmacro" | "defmulti" | "defmethod" => {
-			make_named_chunk(node, form_prefixed_name(node, "fn", source), source, None)
+			make_kind_chunk(node, ChunkKind::Function, form_name(node, source), source, None)
 		},
 		"def" | "defonce" => {
-			make_named_chunk(node, form_prefixed_name(node, "decl", source), source, None)
+			make_kind_chunk(node, ChunkKind::Decl, form_name(node, source), source, None)
 		},
 		"defprotocol" => {
-			make_container_chunk(node, form_prefixed_name(node, "proto", source), source, None)
+			make_container_chunk(node, ChunkKind::Proto, form_name(node, source), source, None)
 		},
 		"deftype" | "defrecord" | "extend-type" | "extend-protocol" => {
-			make_container_chunk(node, form_prefixed_name(node, "type", source), source, None)
+			make_container_chunk(node, ChunkKind::Type, form_name(node, source), source, None)
 		},
-		_ if at_root => positional_candidate(node, "form", source),
-		_ => group_candidate(node, "block", source),
+		_ if at_root => positional_candidate(node, ChunkKind::Form, source),
+		_ => group_candidate(node, ChunkKind::Block, source),
 	}
 }
 

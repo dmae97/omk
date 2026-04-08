@@ -2,7 +2,7 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*};
+use super::{classify::LangClassifier, common::*, kind::ChunkKind};
 
 pub struct NixHclClassifier;
 
@@ -59,16 +59,21 @@ fn recurse_nix_binding_value(node: Node<'_>) -> Option<RecurseSpec<'_>> {
 
 fn classify_nix_binding<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
 	let name = extract_nix_binding_name(node, source).unwrap_or_else(|| "anonymous".to_string());
-	let chunk_name = format!("attr_{name}");
 	let expression = node.child_by_field_name("expression");
 	if let Some(expression) = expression
 		&& matches!(
 			expression.kind(),
 			"attrset_expression" | "let_attrset_expression" | "rec_attrset_expression"
 		) {
-		return make_container_chunk(node, chunk_name, source, recurse_nix_attrset(expression));
+		return make_container_chunk(
+			node,
+			ChunkKind::Attr,
+			Some(name),
+			source,
+			recurse_nix_attrset(expression),
+		);
 	}
-	make_named_chunk(node, chunk_name, source, recurse_nix_binding_value(node))
+	make_kind_chunk(node, ChunkKind::Attr, Some(name), source, recurse_nix_binding_value(node))
 }
 
 impl LangClassifier for NixHclClassifier {
@@ -77,11 +82,14 @@ impl LangClassifier for NixHclClassifier {
 			// Nix top-level attrsets should recurse into their binding_set so the file exposes
 			// structural attr chunks instead of a single opaque attrset_expr leaf.
 			"attrset_expression" | "let_attrset_expression" | "rec_attrset_expression" => {
-				Some(make_container_chunk(
+				Some(make_candidate(
 					node,
-					sanitize_node_kind(node.kind()),
-					source,
+					ChunkKind::Attrs,
+					None,
+					NameStyle::Named,
+					signature_for_node(node, source),
 					recurse_nix_attrset(node),
+					source,
 				))
 			},
 			// Older tree-sitter-nix revisions used `attribute`; current grammars expose `binding`.
@@ -91,29 +99,44 @@ impl LangClassifier for NixHclClassifier {
 				if let Some(name) = extract_hcl_block_name(node, source) {
 					Some(make_container_chunk(
 						node,
-						format!("block_{name}"),
+						ChunkKind::Block,
+						Some(name),
 						source,
 						recurse_into(node, ChunkContext::ClassBody, &[], &["body"]),
 					))
 				} else {
-					Some(group_candidate(node, "hunks", source))
+					Some(group_candidate(node, ChunkKind::Hunks, source))
 				}
 			},
 			// Nix expressions
-			"function_expression" | "let_expression" => {
-				Some(named_candidate(node, "expr", source, recurse_value_container(node)))
-			},
+			"function_expression" | "let_expression" => Some(named_candidate(
+				node,
+				ChunkKind::Expression,
+				source,
+				recurse_value_container(node),
+			)),
 			// Nix inherit
-			"inherit" => Some(group_candidate(node, "imports", source)),
+			"inherit" => Some(group_candidate(node, ChunkKind::Imports, source)),
 			// Variable/assignment declarations
-			"variable_declaration" | "assignment" => Some(group_candidate(node, "decls", source)),
+			"variable_declaration" | "assignment" => {
+				Some(group_candidate(node, ChunkKind::Declarations, source))
+			},
 			// HCL top-level block types
 			"provider" | "resource" | "data" | "locals" | "variable" | "output" | "module" => {
-				Some(container_candidate(
+				let kind = match node.kind() {
+					"locals" => ChunkKind::BlockLocals,
+					"variable" => ChunkKind::Variable,
+					"module" => ChunkKind::Module,
+					_ => ChunkKind::Block,
+				};
+				Some(make_candidate(
 					node,
-					sanitize_node_kind(node.kind()).as_str(),
-					source,
+					kind,
+					prefixed_name(sanitize_node_kind(node.kind()).as_str(), node, source),
+					NameStyle::Named,
+					signature_for_node(node, source),
 					recurse_into(node, ChunkContext::ClassBody, &[], &["body"]),
+					source,
 				))
 			},
 			_ => None,
@@ -126,18 +149,22 @@ impl LangClassifier for NixHclClassifier {
 			"block" => extract_hcl_block_name(node, source).map(|name| {
 				make_container_chunk(
 					node,
-					format!("block_{name}"),
+					ChunkKind::Block,
+					Some(name),
 					source,
 					recurse_into(node, ChunkContext::ClassBody, &[], &["body"]),
 				)
 			}),
 			// Nested Nix attrset values recurse into their binding_set just like top-level ones.
 			"attrset_expression" | "let_attrset_expression" | "rec_attrset_expression" => {
-				Some(make_container_chunk(
+				Some(make_candidate(
 					node,
-					sanitize_node_kind(node.kind()),
-					source,
+					ChunkKind::Attrs,
+					None,
+					NameStyle::Named,
+					signature_for_node(node, source),
 					recurse_nix_attrset(node),
+					source,
 				))
 			},
 			// Nested Nix binding
@@ -149,8 +176,8 @@ impl LangClassifier for NixHclClassifier {
 	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 		match node.kind() {
 			// Nix control flow
-			"if_expression" => Some(positional_candidate(node, "if", source)),
-			"let_expression" => Some(positional_candidate(node, "block", source)),
+			"if_expression" => Some(positional_candidate(node, ChunkKind::If, source)),
+			"let_expression" => Some(positional_candidate(node, ChunkKind::Block, source)),
 			_ => None,
 		}
 	}

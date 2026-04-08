@@ -2,7 +2,7 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*};
+use super::{classify::LangClassifier, common::*, kind::ChunkKind};
 
 pub struct PerlClassifier;
 
@@ -25,30 +25,22 @@ fn classify_perl_node<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandid
 
 	Some(match node.kind() {
 		"package_statement" => {
-			make_named_chunk(node, format!("mod_{}", perl_name(node, source)?), source, None)
+			make_kind_chunk(node, ChunkKind::Module, Some(perl_name(node, source)?), source, None)
 		},
-		"use_statement" => group_candidate(node, "imports", source),
-		"subroutine_declaration_statement" => {
-			make_named_chunk(node, format!("fn_{}", perl_name(node, source)?), source, body_recurse())
+		"use_statement" => group_candidate(node, ChunkKind::Imports, source),
+		"subroutine_declaration_statement" => make_kind_chunk(
+			node,
+			ChunkKind::Function,
+			Some(perl_name(node, source)?),
+			source,
+			body_recurse(),
+		),
+		"conditional_statement" => {
+			make_candidate(node, ChunkKind::If, None, NameStyle::Named, None, body_recurse(), source)
 		},
-		"conditional_statement" => make_candidate(
-			node,
-			"if".to_string(),
-			NameStyle::Named,
-			None,
-			body_recurse(),
-			false,
-			source,
-		),
-		"for_statement" | "loop_statement" => make_candidate(
-			node,
-			"loop".to_string(),
-			NameStyle::Named,
-			None,
-			body_recurse(),
-			false,
-			source,
-		),
+		"for_statement" | "loop_statement" => {
+			make_candidate(node, ChunkKind::Loop, None, NameStyle::Named, None, body_recurse(), source)
+		},
 		"expression_statement" => classify_perl_statement(node, source),
 		_ => return None,
 	})
@@ -56,9 +48,9 @@ fn classify_perl_node<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandid
 
 fn classify_perl_statement<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
 	if perl_declares_variable(node) {
-		group_candidate(node, "decls", source)
+		group_candidate(node, ChunkKind::Declarations, source)
 	} else {
-		group_candidate(node, "stmts", source)
+		group_candidate(node, ChunkKind::Statements, source)
 	}
 }
 

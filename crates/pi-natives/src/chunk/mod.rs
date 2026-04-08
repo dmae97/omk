@@ -18,6 +18,8 @@ pub(crate) mod resolve;
 pub(crate) mod state;
 pub mod types;
 
+pub mod kind;
+
 // Per-language classifiers
 mod ast_astro;
 mod ast_bash_make_diff;
@@ -65,6 +67,7 @@ use xxhash_rust::xxh64::xxh64;
 use self::{
 	classify::{LangClassifier, classifier_for},
 	common::*,
+	kind::ChunkKind,
 };
 pub use self::{
 	state::ChunkState,
@@ -76,8 +79,8 @@ use crate::{chunk::types::ChunkAnchorStyle, language::SupportLang};
 
 /// Format one chunk anchor string for a node at `depth` using `style` and
 /// optional checksum omission.
-#[napi(js_name = "formatAnchor")]
-pub fn format_anchor_napi(
+#[napi]
+pub fn format_anchor(
 	name: String,
 	checksum: String,
 	style: ChunkAnchorStyle,
@@ -125,7 +128,8 @@ pub(crate) fn build_chunk_tree(source: &str, language: &str) -> Result<ChunkTree
 
 	acc.chunks.insert(0, ChunkNode {
 		path:                String::new(),
-		name:                "root".to_string(),
+		identifier:          None,
+		kind:                ChunkKind::Root,
 		leaf:                false,
 		parent_path:         None,
 		children:            root_children.clone(),
@@ -202,7 +206,8 @@ fn build_blank_line_tree(
 ) -> ChunkTree {
 	let mut chunks = vec![ChunkNode {
 		path:                String::new(),
-		name:                "root".to_string(),
+		identifier:          None,
+		kind:                ChunkKind::Root,
 		leaf:                false,
 		parent_path:         None,
 		children:            Vec::new(),
@@ -250,7 +255,8 @@ fn build_blank_line_tree(
 		root_children.push(name.clone());
 		chunks.push(ChunkNode {
 			path:                name.clone(),
-			name:                name.clone(),
+			identifier:          Some(name.clone()),
+			kind:                ChunkKind::Chunk,
 			leaf:                true,
 			parent_path:         Some(String::new()),
 			children:            Vec::new(),
@@ -302,10 +308,11 @@ fn build_chunk(
 	acc: &mut ChunkAccumulator,
 	classifier: &dyn classify::LangClassifier,
 ) -> String {
+	let segment = candidate.kind.path_segment(candidate.identifier.as_deref());
 	let path = if parent_path.is_empty() {
-		candidate.base_name.clone()
+		segment
 	} else {
-		format!("{parent_path}.{}", candidate.base_name)
+		format!("{parent_path}.{segment}")
 	};
 	let line_count = candidate
 		.range_end_line
@@ -331,10 +338,12 @@ fn build_chunk(
 		&& recurse.is_some()
 		&& recurse_parse_errors == 0
 		&& should_collapse_trivial_children(&candidate, &child_candidates);
+	let always_recurse = *ALWAYS_RECURSE && !candidate.groupable && !child_candidates.is_empty();
 	let should_recurse = !candidate.error
 		&& recurse.is_some()
 		&& !should_collapse
 		&& (candidate.force_recurse
+			|| always_recurse
 			|| recurse_parse_errors > 0
 			|| (line_count > *LEAF_THRESHOLD
 				&& recursion_narrows_scope(line_count, &child_candidates)));
@@ -351,7 +360,8 @@ fn build_chunk(
 	let (indent, indent_char) = detect_indent(source, candidate.range_start_byte);
 	acc.chunks.push(ChunkNode {
 		path: path.clone(),
-		name: candidate.base_name,
+		identifier: candidate.identifier,
+		kind: candidate.kind,
 		leaf,
 		parent_path: Some(parent_path.to_string()),
 		children,
@@ -432,15 +442,7 @@ fn classify_node<'tree>(
 	classifier: &dyn LangClassifier,
 ) -> RawChunkCandidate<'tree> {
 	if node.is_error() || node.kind() == "ERROR" {
-		return make_candidate(
-			node,
-			"<error>".to_string(),
-			NameStyle::Error,
-			None,
-			None,
-			false,
-			source,
-		);
+		return make_candidate(node, ChunkKind::Error, None, NameStyle::Error, None, None, source);
 	}
 
 	// Try language-specific classifier first, then fall back to defaults.
@@ -499,7 +501,8 @@ fn group_candidates(candidates: Vec<RawChunkCandidate<'_>>) -> Vec<RawChunkCandi
 			let next_line_count = line_span(candidate.range_start_line, candidate.range_end_line);
 			let can_merge = last.groupable
 				&& candidate.groupable
-				&& last.base_name == candidate.base_name
+				&& last.kind == candidate.kind
+				&& last.identifier == candidate.identifier
 				&& !candidate.has_leading_comment
 				&& candidate.range_start_line <= last.range_end_line + 1
 				&& last_line_count + next_line_count <= *MAX_CHUNK_LINES;
@@ -518,36 +521,44 @@ fn group_candidates(candidates: Vec<RawChunkCandidate<'_>>) -> Vec<RawChunkCandi
 fn assign_unique_names(mut candidates: Vec<RawChunkCandidate<'_>>) -> Vec<RawChunkCandidate<'_>> {
 	let mut totals = HashMap::<String, usize>::new();
 	for candidate in &candidates {
-		*totals.entry(candidate.base_name.clone()).or_insert(0) += 1;
+		let key = candidate.kind.path_segment(candidate.identifier.as_deref());
+		*totals.entry(key).or_insert(0) += 1;
 	}
 	let mut seen = HashMap::<String, usize>::new();
 
 	for candidate in &mut candidates {
-		let count = seen.entry(candidate.base_name.clone()).or_insert(0);
+		let key = candidate.kind.path_segment(candidate.identifier.as_deref());
+		let count = seen.entry(key.clone()).or_insert(0);
 		*count += 1;
 		let occurrence = *count;
-		let total = *totals.get(candidate.base_name.as_str()).unwrap_or(&1);
+		let total = *totals.get(key.as_str()).unwrap_or(&1);
 
-		candidate.base_name = match candidate.name_style {
+		candidate.identifier = match candidate.name_style {
 			NameStyle::Error => {
 				if total > 1 {
-					format!("error_{occurrence}")
+					Some(occurrence.to_string())
 				} else {
-					"error".to_string()
+					None
 				}
 			},
 			NameStyle::Named => {
 				if total > 1 {
-					format!("{}_{}", candidate.base_name, occurrence)
+					match candidate.identifier.as_deref() {
+						Some(identifier) => Some(format!("{identifier}_{occurrence}")),
+						None => Some(occurrence.to_string()),
+					}
 				} else {
-					candidate.base_name.clone()
+					candidate.identifier.clone()
 				}
 			},
 			NameStyle::Group => {
 				if total == 1 || occurrence == 1 {
-					candidate.base_name.clone()
+					candidate.identifier.clone()
 				} else {
-					format!("{}_{}", candidate.base_name, occurrence)
+					match candidate.identifier.as_deref() {
+						Some(identifier) => Some(format!("{identifier}_{occurrence}")),
+						None => Some(occurrence.to_string()),
+					}
 				}
 			},
 		};
@@ -582,19 +593,11 @@ fn should_collapse_trivial_children(
 		return false;
 	}
 
-	let has_addressable_leaf_members = children.iter().all(|child| {
-		child.base_name.starts_with("field_") || child.base_name.starts_with("variant_")
-	});
-	if has_addressable_leaf_members
-		&& (parent.base_name.starts_with("struct_")
-			|| parent.base_name.starts_with("enum_")
-			|| parent.base_name.starts_with("type_"))
-	{
+	let has_addressable_leaf_members = children.iter().all(|child| child.kind.traits().packed);
+	if has_addressable_leaf_members && parent.kind.traits().has_addressable_members {
 		return false;
 	}
-	// Trait and interface members should always be addressable so that
-	// individual method signatures can be edited.
-	if parent.base_name.starts_with("trait_") || parent.base_name.starts_with("interface_") {
+	if parent.kind.traits().always_preserve_children {
 		return false;
 	}
 
@@ -738,7 +741,8 @@ fn insert_preamble_chunk(
 	);
 	let preamble = ChunkNode {
 		path: "preamble".to_string(),
-		name: "preamble".to_string(),
+		identifier: None,
+		kind: ChunkKind::Preamble,
 		leaf: true,
 		parent_path: Some(String::new()),
 		children: Vec::new(),
@@ -772,7 +776,7 @@ mod tests {
 		state::ChunkState,
 		types::{ChunkAnchorStyle, ReadRenderParams},
 	};
-	use crate::language::SupportLang;
+	use crate::{chunk::ChunkKind, language::SupportLang};
 
 	fn assert_supported_sample(language: &str, source: &str) {
 		let tree = build_chunk_tree(source, language)
@@ -1044,7 +1048,12 @@ function main(): void {{
 
 		let tree = build_chunk_tree(source, "typescript").expect("tree should build");
 		assert!(tree.parse_errors > 0);
-		assert!(tree.chunks.iter().any(|chunk| chunk.name == "error"));
+		assert!(
+			tree
+				.chunks
+				.iter()
+				.any(|chunk| chunk.kind == ChunkKind::Error && chunk.identifier.is_none())
+		);
 	}
 
 	#[test]
@@ -1411,15 +1420,15 @@ impl Config {
 		let attrset = tree
 			.chunks
 			.iter()
-			.find(|chunk| chunk.path == "attrset_expr")
-			.expect("attrset_expr chunk");
+			.find(|chunk| chunk.path == "attrs")
+			.expect("attrs chunk");
 		assert!(!tree.fallback, "nix should use tree-sitter chunking");
 		assert!(!attrset.leaf, "top-level attrset should recurse into bindings");
 		assert!(
 			attrset
 				.children
 				.iter()
-				.any(|child| child == "attrset_expr.attr_hello"),
+				.any(|child| child == "attrs.attr_hello"),
 			"expected attr_hello child, got {:?}",
 			attrset.children
 		);
@@ -1427,7 +1436,7 @@ impl Config {
 			attrset
 				.children
 				.iter()
-				.any(|child| child == "attrset_expr.attr_nested"),
+				.any(|child| child == "attrs.attr_nested"),
 			"expected attr_nested child, got {:?}",
 			attrset.children
 		);
@@ -1624,7 +1633,7 @@ impl Config {
 			.expect("listing should succeed");
 		assert!(result.text.contains("sample.ts chunks:"));
 		assert!(result.text.contains("fn_run#"));
-		assert!(result.text.contains("regions: outer, head, inner, tail"));
+		// Region listing removed — all chunks accept all regions now.
 		assert!(!result.text.contains("return 1"));
 	}
 

@@ -2,7 +2,7 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*};
+use super::{classify::LangClassifier, common::*, kind::ChunkKind};
 
 pub struct DataFormatsClassifier;
 
@@ -33,65 +33,89 @@ fn classify_data_node<'t>(
 		// Key-value pairs (JSON pairs, YAML mappings)
 		"pair" => {
 			let name = extract_pair_key(node, source).unwrap_or_else(|| "anonymous".to_string());
-			Some(make_named_chunk(node, format!("key_{name}"), source, recurse_value_container(node)))
+			Some(make_kind_chunk(
+				node,
+				ChunkKind::Key,
+				Some(name),
+				source,
+				recurse_value_container(node),
+			))
 		},
 		"block_mapping_pair" | "flow_pair" => {
 			let name = extract_yaml_key(node, source).unwrap_or_else(|| "anonymous".to_string());
-			Some(make_named_chunk(node, format!("key_{name}"), source, recurse_value_container(node)))
+			Some(make_kind_chunk(
+				node,
+				ChunkKind::Key,
+				Some(name),
+				source,
+				recurse_value_container(node),
+			))
 		},
 		// TOML tables
 		"table" => Some(container_candidate(
 			node,
-			"table",
+			ChunkKind::Table,
 			source,
 			Some(recurse_self(node, ChunkContext::ClassBody)),
 		)),
-		// TOML array tables [[...]]
-		"table_array_element" => Some(container_candidate(
+		// TOML array tables
+		"table_array_element" => Some(make_candidate(
 			node,
-			"table_array",
-			source,
+			ChunkKind::Table,
+			"table_array".to_string(),
+			NameStyle::Named,
+			signature_for_node(node, source),
 			Some(recurse_self(node, ChunkContext::ClassBody)),
+			source,
 		)),
 		// TOML inline tables
 		"inline_table" => Some(make_container_chunk(
 			node,
-			"table".to_string(),
+			ChunkKind::Table,
+			None,
 			source,
 			Some(recurse_self(node, ChunkContext::ClassBody)),
 		)),
 		// JSON objects
 		"object" => Some(make_container_chunk(
 			node,
-			"object".to_string(),
+			ChunkKind::Object,
+			None,
 			source,
 			Some(recurse_self(node, ChunkContext::ClassBody)),
 		)),
 		// JSON arrays
 		"array" => Some(make_container_chunk(
 			node,
-			"array".to_string(),
+			ChunkKind::Array,
+			None,
 			source,
 			Some(recurse_self(node, ChunkContext::ClassBody)),
 		)),
 		// YAML block/flow mappings
 		"block_mapping" | "flow_mapping" => Some(make_container_chunk(
 			node,
-			"map".to_string(),
+			ChunkKind::Map,
+			None,
 			source,
 			Some(recurse_self(node, ChunkContext::ClassBody)),
 		)),
 		// YAML block/flow sequences
 		"block_sequence" | "flow_sequence" => Some(make_container_chunk(
 			node,
-			"list".to_string(),
+			ChunkKind::List,
+			None,
 			source,
 			Some(recurse_self(node, ChunkContext::ClassBody)),
 		)),
 		// YAML sequence items (only when nested, not at root level)
-		"block_sequence_item" if !is_root => Some(positional_candidate(node, "item", source)),
+		"block_sequence_item" if !is_root => {
+			Some(positional_candidate(node, ChunkKind::Item, source))
+		},
 		// Nix-style attributes that appear in data contexts
-		"attribute" => Some(named_candidate(node, "attr", source, recurse_value_container(node))),
+		"attribute" => {
+			Some(named_candidate(node, ChunkKind::Attr, source, recurse_value_container(node)))
+		},
 		_ => None,
 	}
 }

@@ -2,7 +2,7 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*};
+use super::{classify::LangClassifier, common::*, kind::ChunkKind};
 
 pub struct CssClassifier;
 
@@ -29,7 +29,8 @@ fn classify_rule_set<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> 
 	let name = extract_css_selector(node, source).unwrap_or_else(|| "anonymous".to_string());
 	make_container_chunk(
 		node,
-		format!("rule_{name}"),
+		ChunkKind::Rule,
+		Some(name),
 		source,
 		recurse_into(node, ChunkContext::ClassBody, &[], &["block"]),
 	)
@@ -39,10 +40,10 @@ fn classify_rule_set<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> 
 /// named container.
 fn classify_at_rule<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
 	let name = extract_css_selector(node, source).unwrap_or_else(|| "rule".to_string());
-	// keyframes_statement uses `keyframe_block_list` as body; others use `block`
 	make_container_chunk(
 		node,
-		format!("at_{name}"),
+		ChunkKind::At,
+		Some(name),
 		source,
 		recurse_into(node, ChunkContext::ClassBody, &[], &["block", "keyframe_block_list"]),
 	)
@@ -53,19 +54,16 @@ fn classify_at_rule<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
 fn classify_css_node<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 	match node.kind() {
 		"rule_set" => Some(classify_rule_set(node, source)),
-		// tree-sitter-css emits specific `*_statement` kinds for known at-rules
-		// and generic `at_rule` for unknown ones (e.g. @font-face).
 		"at_rule" | "media_statement" | "keyframes_statement" | "supports_statement" => {
 			Some(classify_at_rule(node, source))
 		},
 		"keyframe_block" => Some(named_candidate(
 			node,
-			"frame",
+			ChunkKind::Frame,
 			source,
 			Some(recurse_self(node, ChunkContext::ClassBody)),
 		)),
-		// Top-level or nested property declarations.
-		"declaration" => Some(group_candidate(node, "fields", source)),
+		"declaration" => Some(group_candidate(node, ChunkKind::Fields, source)),
 		_ => None,
 	}
 }

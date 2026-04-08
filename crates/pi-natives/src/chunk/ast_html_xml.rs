@@ -2,7 +2,7 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*};
+use super::{classify::LangClassifier, common::*, kind::ChunkKind};
 
 pub struct HtmlXmlClassifier;
 
@@ -20,12 +20,13 @@ fn classify_element<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidat
 			let recurse_target = child_by_kind(node, &["content"]).unwrap_or(node);
 			Some(make_container_chunk(
 				node,
-				format!("tag_{tag_name}"),
+				ChunkKind::Tag,
+				Some(tag_name),
 				source,
 				Some(recurse_self(recurse_target, ChunkContext::ClassBody)),
 			))
 		},
-		"text_node" => Some(group_candidate(node, "text", source)),
+		"text_node" => Some(group_candidate(node, ChunkKind::Text, source)),
 		_ => None,
 	}
 }

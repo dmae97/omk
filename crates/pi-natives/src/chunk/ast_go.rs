@@ -1,6 +1,6 @@
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*};
+use super::{classify::LangClassifier, common::*, kind::ChunkKind};
 
 pub struct GoClassifier;
 
@@ -8,26 +8,28 @@ impl LangClassifier for GoClassifier {
 	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 		match node.kind() {
 			// ── Imports / package ──
-			"import_declaration" | "package_clause" => Some(group_candidate(node, "imports", source)),
+			"import_declaration" | "package_clause" => {
+				Some(group_candidate(node, ChunkKind::Imports, source))
+			},
 
 			// ── Variables ──
 			"const_declaration" | "var_declaration" | "short_var_declaration" => {
 				Some(match extract_identifier(node, source) {
-					Some(name) => make_named_chunk(node, format!("var_{name}"), source, None),
-					None => group_candidate(node, "decls", source),
+					Some(name) => make_kind_chunk(node, ChunkKind::Variable, Some(name), source, None),
+					None => group_candidate(node, ChunkKind::Declarations, source),
 				})
 			},
 
 			// ── Functions ──
 			"function_declaration" => Some(named_candidate(
 				node,
-				"fn",
+				ChunkKind::Function,
 				source,
 				recurse_body(node, ChunkContext::FunctionBody),
 			)),
 			"method_declaration" => Some(named_candidate(
 				node,
-				"fn",
+				ChunkKind::Function,
 				source,
 				recurse_body(node, ChunkContext::FunctionBody),
 			)),
@@ -45,7 +47,7 @@ impl LangClassifier for GoClassifier {
 
 			// ── Statements ──
 			"expression_statement" | "go_statement" | "defer_statement" | "send_statement" => {
-				Some(group_candidate(node, "stmts", source))
+				Some(group_candidate(node, ChunkKind::Statements, source))
 			},
 
 			_ => None,
@@ -55,17 +57,17 @@ impl LangClassifier for GoClassifier {
 	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 		match node.kind() {
 			// ── Methods ──
-			"method_spec" => Some(named_candidate(node, "meth", source, None)),
+			"method_spec" => Some(named_candidate(node, ChunkKind::Method, source, None)),
 
 			// ── Fields ──
 			"field_declaration" | "embedded_field" => Some(match extract_identifier(node, source) {
-				Some(name) => make_named_chunk(node, format!("field_{name}"), source, None),
-				None => group_candidate(node, "fields", source),
+				Some(name) => make_kind_chunk(node, ChunkKind::Field, Some(name), source, None),
+				None => group_candidate(node, ChunkKind::Fields, source),
 			}),
 
 			// ── Field / method lists ──
-			"field_declaration_list" => Some(group_candidate(node, "fields", source)),
-			"method_spec_list" => Some(group_candidate(node, "methods", source)),
+			"field_declaration_list" => Some(group_candidate(node, ChunkKind::Fields, source)),
+			"method_spec_list" => Some(group_candidate(node, ChunkKind::Methods, source)),
 
 			_ => None,
 		}
@@ -76,48 +78,48 @@ impl LangClassifier for GoClassifier {
 			// ── Control flow ──
 			"if_statement" => Some(make_candidate(
 				node,
-				"if".to_string(),
+				ChunkKind::If,
+				None,
 				NameStyle::Named,
 				None,
 				recurse_body(node, ChunkContext::FunctionBody),
-				false,
 				source,
 			)),
 			"switch_statement" | "expression_switch_statement" | "type_switch_statement" => {
 				Some(make_candidate(
 					node,
-					"switch".to_string(),
+					ChunkKind::Switch,
+					None,
 					NameStyle::Named,
 					None,
 					recurse_body(node, ChunkContext::FunctionBody),
-					false,
 					source,
 				))
 			},
 			"select_statement" => Some(make_candidate(
 				node,
-				"switch".to_string(),
+				ChunkKind::Switch,
+				None,
 				NameStyle::Named,
 				None,
 				recurse_body(node, ChunkContext::FunctionBody),
-				false,
 				source,
 			)),
 
 			// ── Loops ──
 			"for_statement" => Some(make_candidate(
 				node,
-				"for".to_string(),
+				ChunkKind::For,
+				None,
 				NameStyle::Named,
 				None,
 				recurse_body(node, ChunkContext::FunctionBody),
-				false,
 				source,
 			)),
 
 			// ── Blocks ──
 			"go_statement" | "defer_statement" | "send_statement" => {
-				Some(group_candidate(node, "stmts", source))
+				Some(group_candidate(node, ChunkKind::Statements, source))
 			},
 
 			// ── Variables ──
@@ -125,14 +127,12 @@ impl LangClassifier for GoClassifier {
 				let span = line_span(node.start_position().row + 1, node.end_position().row + 1);
 				Some(if span > 1 {
 					if let Some(name) = extract_identifier(node, source) {
-						make_named_chunk(node, format!("var_{name}"), source, None)
+						make_kind_chunk(node, ChunkKind::Variable, Some(name), source, None)
 					} else {
-						let kind_name = sanitize_node_kind(node.kind());
-						group_candidate(node, &kind_name, source)
+						group_from_sanitized(node, source)
 					}
 				} else {
-					let kind_name = sanitize_node_kind(node.kind());
-					group_candidate(node, &kind_name, source)
+					group_from_sanitized(node, source)
 				})
 			},
 
@@ -147,30 +147,18 @@ fn classify_function_go<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'
 	let fn_recurse = || recurse_body(node, ChunkContext::FunctionBody);
 	match node.kind() {
 		"if_statement" => {
-			make_candidate(node, "if".to_string(), NameStyle::Named, None, fn_recurse(), false, source)
+			make_candidate(node, ChunkKind::If, None, NameStyle::Named, None, fn_recurse(), source)
 		},
 		"switch_statement"
 		| "expression_switch_statement"
 		| "type_switch_statement"
-		| "select_statement" => make_candidate(
-			node,
-			"switch".to_string(),
-			NameStyle::Named,
-			None,
-			fn_recurse(),
-			false,
-			source,
-		),
-		"for_statement" => make_candidate(
-			node,
-			"for".to_string(),
-			NameStyle::Named,
-			None,
-			fn_recurse(),
-			false,
-			source,
-		),
-		_ => group_candidate(node, "stmts", source),
+		| "select_statement" => {
+			make_candidate(node, ChunkKind::Switch, None, NameStyle::Named, None, fn_recurse(), source)
+		},
+		"for_statement" => {
+			make_candidate(node, ChunkKind::For, None, NameStyle::Named, None, fn_recurse(), source)
+		},
+		_ => group_candidate(node, ChunkKind::Statements, source),
 	}
 }
 
@@ -192,15 +180,22 @@ fn classify_type_decl<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t>
 			return make_container_chunk_from(
 				node,
 				spec,
-				format!("type_{name}"),
+				ChunkKind::Type,
+				Some(name),
 				source,
 				Some(recurse),
 			);
 		}
-		return make_named_chunk_from(node, spec, format!("type_{name}"), source, None);
+		return make_kind_chunk_from(node, spec, ChunkKind::Type, Some(name), source, None);
 	}
 
-	group_candidate(node, "decls", source)
+	group_candidate(node, ChunkKind::Declarations, source)
+}
+
+fn group_from_sanitized<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
+	let kind_name = sanitize_node_kind(node.kind());
+	let kind = ChunkKind::from_sanitized_kind(kind_name.as_str());
+	make_candidate(node, kind, kind_name, NameStyle::Group, None, None, source)
 }
 
 /// For a `type_spec`, find a `struct_type` or `interface_type` child and return

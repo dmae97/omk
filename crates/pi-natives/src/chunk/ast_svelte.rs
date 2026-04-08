@@ -2,7 +2,7 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*};
+use super::{classify::LangClassifier, common::*, kind::ChunkKind};
 
 pub struct SvelteClassifier;
 
@@ -35,15 +35,15 @@ fn classify_svelte_node<'t>(
 		"snippet_statement" => Some(classify_snippet_statement(node, source)),
 		"if_statement" => Some(classify_if_statement(node, source)),
 		"else_if_statement" => Some(classify_else_if_statement(node, source)),
-		"else_statement" => Some(make_block_chunk(node, "else", source)),
+		"else_statement" => Some(classify_else_statement(node, source)),
 		"each_statement" => Some(classify_each_statement(node, source)),
 		"await_statement" => Some(classify_await_statement(node, source)),
 		"then_statement" => Some(classify_then_statement(node, source)),
 		"catch_statement" => Some(classify_catch_statement(node, source)),
 		"render_expr" => Some(classify_render_expr(node, source)),
-		"html_interpolation" => Some(group_candidate(node, "html", source)),
-		"interpolation" => Some(group_candidate(node, "interpolation", source)),
-		"expression" => Some(group_candidate(node, "expr", source)),
+		"html_interpolation" => Some(group_candidate(node, ChunkKind::Html, source)),
+		"interpolation" => Some(group_candidate(node, ChunkKind::Interpolation, source)),
+		"expression" => Some(group_candidate(node, ChunkKind::Expression, source)),
 		"element" if include_plain_elements || element_has_structure(node) => {
 			classify_element(node, source)
 		},
@@ -52,103 +52,145 @@ fn classify_svelte_node<'t>(
 }
 
 fn classify_script_element<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
-	let name = if has_attribute(node, "module", source)
+	let kind = if has_attribute(node, "module", source)
 		|| attribute_value(node, "context", source).as_deref() == Some("module")
 	{
-		"script_module".to_string()
+		ChunkKind::ScriptModule
 	} else {
-		"script".to_string()
+		ChunkKind::Script
 	};
 
 	// The grammar exposes script contents as a single `raw_text` child, so the
 	// element boundary is the most truthful chunk.
-	make_named_chunk(node, name, source, None)
+	positional_candidate(node, kind, source)
 }
 
 fn classify_style_element<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
-	let name = if has_attribute(node, "scoped", source) {
-		"style_scoped".to_string()
+	let kind = if has_attribute(node, "scoped", source) {
+		ChunkKind::StyleScoped
 	} else {
-		"style".to_string()
+		ChunkKind::Style
 	};
-	make_named_chunk(node, name, source, None)
+	positional_candidate(node, kind, source)
 }
 
 fn classify_snippet_statement<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
-	let name = child_by_kind(node, &["snippet_start_expr"])
+	let identifier = child_by_kind(node, &["snippet_start_expr"])
 		.and_then(|start| child_by_kind(start, &["snippet_name"]))
-		.and_then(|name| sanitize_identifier(node_text(source, name.start_byte(), name.end_byte())))
-		.map_or_else(|| "snippet".to_string(), |name| format!("snippet_{name}"));
-	make_block_chunk(node, &name, source)
-}
-
-fn classify_if_statement<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
-	let name = block_expr_name(node, source, "if_start_expr", &["raw_text_expr"], "if");
-	make_block_chunk(node, &name, source)
-}
-
-fn classify_else_if_statement<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
-	let name = block_expr_name(node, source, "else_if_expr", &["raw_text_expr"], "else_if");
-	make_block_chunk(node, &name, source)
-}
-
-fn classify_each_statement<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
-	let name = block_expr_name(node, source, "each_start_expr", &["raw_text_each"], "each");
-	make_block_chunk(node, &name, source)
-}
-
-fn classify_await_statement<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
-	let name = block_expr_name(node, source, "await_start_expr", &["raw_text_expr"], "await");
-	make_block_chunk(node, &name, source)
-}
-
-fn classify_then_statement<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
-	let name = block_expr_name(node, source, "then_expr", &["raw_text_expr"], "then");
-	make_block_chunk(node, &name, source)
-}
-
-fn classify_catch_statement<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
-	let name = block_expr_name(node, source, "catch_expr", &["raw_text_expr"], "catch");
-	make_block_chunk(node, &name, source)
-}
-
-fn classify_render_expr<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
-	let name = child_by_kind(node, &["snippet_name"])
-		.and_then(|name| sanitize_identifier(node_text(source, name.start_byte(), name.end_byte())))
-		.map_or_else(|| "render".to_string(), |name| format!("render_{name}"));
-	make_named_chunk(node, name, source, None)
-}
-
-fn classify_element<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-	let tag_name = extract_markup_tag_name(node, source)?;
-	Some(make_container_chunk(
+		.and_then(|name| sanitize_identifier(node_text(source, name.start_byte(), name.end_byte())));
+	force_container(make_container_chunk(
 		node,
-		format!("tag_{tag_name}"),
+		ChunkKind::Snippet,
+		identifier,
 		source,
 		Some(recurse_self(node, ChunkContext::ClassBody)),
 	))
 }
 
-fn make_block_chunk<'t>(node: Node<'t>, name: &str, source: &str) -> RawChunkCandidate<'t> {
-	make_container_chunk(
+fn classify_if_statement<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
+	let identifier = block_expr_identifier(node, source, "if_start_expr", &["raw_text_expr"]);
+	force_container(make_container_chunk(
 		node,
-		name.to_string(),
+		ChunkKind::If,
+		identifier,
 		source,
 		Some(recurse_self(node, ChunkContext::ClassBody)),
-	)
+	))
 }
 
-fn block_expr_name(
+fn classify_else_if_statement<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
+	let identifier = block_expr_identifier(node, source, "else_if_expr", &["raw_text_expr"])
+		.map_or_else(|| "if".to_string(), |expr| format!("if_{expr}"));
+	make_named_container_chunk(node, ChunkKind::Else, identifier, source)
+}
+
+fn classify_else_statement<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
+	force_container(make_container_chunk(
+		node,
+		ChunkKind::Else,
+		None,
+		source,
+		Some(recurse_self(node, ChunkContext::ClassBody)),
+	))
+}
+
+fn classify_each_statement<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
+	let expr = block_expr_identifier(node, source, "each_start_expr", &["raw_text_each"]);
+	let id = expr.map_or_else(|| "each".to_string(), |expr| format!("each_{expr}"));
+	make_named_container_chunk(node, ChunkKind::Loop, id, source)
+}
+
+fn classify_await_statement<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
+	let expr = block_expr_identifier(node, source, "await_start_expr", &["raw_text_expr"]);
+	let id = expr.map_or_else(|| "await".to_string(), |expr| format!("await_{expr}"));
+	make_named_container_chunk(node, ChunkKind::With, id, source)
+}
+
+fn classify_then_statement<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
+	let expr = block_expr_identifier(node, source, "then_expr", &["raw_text_expr"]);
+	let id = expr.map_or_else(|| "then".to_string(), |expr| format!("then_{expr}"));
+	make_named_container_chunk(node, ChunkKind::After, id, source)
+}
+
+fn classify_catch_statement<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
+	let identifier = block_expr_identifier(node, source, "catch_expr", &["raw_text_expr"]);
+	force_container(make_container_chunk(
+		node,
+		ChunkKind::Catch,
+		identifier,
+		source,
+		Some(recurse_self(node, ChunkContext::ClassBody)),
+	))
+}
+
+fn classify_render_expr<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
+	let identifier = child_by_kind(node, &["snippet_name"])
+		.and_then(|name| sanitize_identifier(node_text(source, name.start_byte(), name.end_byte())));
+	make_kind_chunk(node, ChunkKind::Render, identifier, source, None)
+}
+
+fn classify_element<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
+	let tag_name = extract_markup_tag_name(node, source)?;
+	Some(force_container(make_container_chunk(
+		node,
+		ChunkKind::Tag,
+		Some(tag_name),
+		source,
+		Some(recurse_self(node, ChunkContext::ClassBody)),
+	)))
+}
+
+fn make_named_container_chunk<'t>(
+	node: Node<'t>,
+	kind: ChunkKind,
+	identifier: impl Into<Option<String>>,
+	source: &str,
+) -> RawChunkCandidate<'t> {
+	force_container(make_candidate(
+		node,
+		kind,
+		identifier,
+		NameStyle::Named,
+		signature_for_node(node, source),
+		Some(recurse_self(node, ChunkContext::ClassBody)),
+		source,
+	))
+}
+
+const fn force_container(mut candidate: RawChunkCandidate<'_>) -> RawChunkCandidate<'_> {
+	candidate.force_recurse = true;
+	candidate
+}
+
+fn block_expr_identifier(
 	node: Node<'_>,
 	source: &str,
 	header_kind: &str,
 	expr_kinds: &[&str],
-	prefix: &str,
-) -> String {
+) -> Option<String> {
 	child_by_kind(node, &[header_kind])
 		.and_then(|header| child_by_kind(header, expr_kinds))
 		.and_then(|expr| sanitize_identifier(node_text(source, expr.start_byte(), expr.end_byte())))
-		.map_or_else(|| prefix.to_string(), |expr| format!("{prefix}_{expr}"))
 }
 
 fn element_has_structure(node: Node<'_>) -> bool {

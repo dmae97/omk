@@ -2,7 +2,7 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*};
+use super::{classify::LangClassifier, common::*, kind::ChunkKind};
 
 pub struct DockerfileClassifier;
 
@@ -53,7 +53,15 @@ fn classify_command_instruction<'t>(node: Node<'t>, source: &str) -> Option<RawC
 		_ => return None,
 	};
 
-	Some(make_container_chunk(node, chunk_name.to_string(), source, recurse_command(node)))
+	Some(make_candidate(
+		node,
+		ChunkKind::Cmd,
+		chunk_name.to_string(),
+		NameStyle::Named,
+		signature_for_node(node, source),
+		recurse_command(node),
+		source,
+	))
 }
 
 impl LangClassifier for DockerfileClassifier {
@@ -61,36 +69,37 @@ impl LangClassifier for DockerfileClassifier {
 		match node.kind() {
 			"from_instruction" => {
 				let name = extract_stage_name(node, source).unwrap_or_else(|| "anonymous".to_string());
-				Some(make_named_chunk(node, format!("stage_{name}"), source, None))
+				Some(make_kind_chunk(node, ChunkKind::Stage, Some(name), source, None))
 			},
 			"arg_instruction" => {
 				let name = extract_arg_name(node, source).unwrap_or_else(|| "anonymous".to_string());
-				Some(make_named_chunk(node, format!("arg_{name}"), source, None))
+				Some(make_kind_chunk(node, ChunkKind::Arg, Some(name), source, None))
 			},
 			"env_instruction" => {
 				let name = extract_pair_key(node, "env_pair", source)
 					.unwrap_or_else(|| "anonymous".to_string());
-				Some(make_named_chunk(node, format!("env_{name}"), source, None))
+				Some(make_kind_chunk(node, ChunkKind::Env, Some(name), source, None))
 			},
 			"label_instruction" => {
 				let name = extract_pair_key(node, "label_pair", source)
 					.unwrap_or_else(|| "anonymous".to_string());
-				Some(make_named_chunk(node, format!("label_{name}"), source, None))
+				Some(make_kind_chunk(node, ChunkKind::Label, Some(name), source, None))
 			},
 			"run_instruction" | "cmd_instruction" | "entrypoint_instruction" => {
 				classify_command_instruction(node, source)
 			},
 			"healthcheck_instruction" => Some(make_container_chunk(
 				node,
-				"healthcheck".to_string(),
+				ChunkKind::Healthcheck,
+				None,
 				source,
 				recurse_into(node, ChunkContext::FunctionBody, &[], &["cmd_instruction"]),
 			)),
-			"copy_instruction" => Some(group_candidate(node, "copy", source)),
-			"add_instruction" => Some(group_candidate(node, "add", source)),
-			"workdir_instruction" => Some(group_candidate(node, "workdir", source)),
-			"expose_instruction" => Some(group_candidate(node, "expose", source)),
-			"user_instruction" => Some(group_candidate(node, "user", source)),
+			"copy_instruction" => Some(group_candidate(node, ChunkKind::Copy, source)),
+			"add_instruction" => Some(group_candidate(node, ChunkKind::Add, source)),
+			"workdir_instruction" => Some(group_candidate(node, ChunkKind::Workdir, source)),
+			"expose_instruction" => Some(group_candidate(node, ChunkKind::Expose, source)),
+			"user_instruction" => Some(group_candidate(node, ChunkKind::User, source)),
 			_ => None,
 		}
 	}
@@ -102,8 +111,8 @@ impl LangClassifier for DockerfileClassifier {
 	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 		match node.kind() {
 			"cmd_instruction" => classify_command_instruction(node, source),
-			"shell_command" => Some(group_candidate(node, "shell", source)),
-			"json_string_array" => Some(group_candidate(node, "argv", source)),
+			"shell_command" => Some(group_candidate(node, ChunkKind::Shell, source)),
+			"json_string_array" => Some(group_candidate(node, ChunkKind::Argv, source)),
 			_ => None,
 		}
 	}

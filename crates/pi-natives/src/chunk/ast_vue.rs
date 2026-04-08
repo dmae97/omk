@@ -2,7 +2,7 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*};
+use super::{classify::LangClassifier, common::*, kind::ChunkKind};
 
 pub struct VueClassifier;
 
@@ -43,59 +43,58 @@ fn classify_nested_node<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCand
 		"start_tag" => classify_start_tag(node, source),
 		"directive_attribute" => Some(classify_directive_attribute(node, source)),
 		"attribute" => Some(classify_attribute(node, source)),
-		"interpolation" => Some(make_named_chunk(node, "expr".to_string(), source, None)),
-		"text" => Some(group_candidate(node, "text", source)),
-		"raw_text" => Some(group_candidate(node, "text", source)),
+		"interpolation" => Some(make_kind_chunk(node, ChunkKind::Expression, None, source, None)),
+		"text" => Some(group_candidate(node, ChunkKind::Text, source)),
+		"raw_text" => Some(group_candidate(node, ChunkKind::Text, source)),
 		_ => None,
 	}
 }
 
 fn classify_template_element<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
-	let name = extract_slot_name(node, source)
-		.map_or_else(|| "template".to_string(), |slot_name| format!("slot_{slot_name}"));
-	make_container_chunk(node, name, source, Some(recurse_self(node, ChunkContext::ClassBody)))
+	let recurse = Some(recurse_self(node, ChunkContext::ClassBody));
+	if let Some(slot_name) = extract_slot_name(node, source) {
+		force_container(make_container_chunk(node, ChunkKind::Slot, Some(slot_name), source, recurse))
+	} else {
+		force_container(make_container_chunk(node, ChunkKind::Template, None, source, recurse))
+	}
 }
 
 fn classify_script_element<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
-	let name = if has_attribute(node, "setup", source) {
-		"script_setup".to_string()
+	let kind = if has_attribute(node, "setup", source) {
+		ChunkKind::ScriptSetup
 	} else if attribute_value(node, "context", source).as_deref() == Some("module") {
-		"script_module".to_string()
+		ChunkKind::ScriptModule
 	} else {
-		"script".to_string()
+		ChunkKind::Script
 	};
 	// tree-sitter-vue exposes script bodies as `raw_text`, not injected JS/TS.
-	make_named_chunk(node, name, source, None)
+	positional_candidate(node, kind, source)
 }
 
 fn classify_style_element<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
-	let name = if has_attribute(node, "scoped", source) {
-		"style_scoped".to_string()
+	let kind = if has_attribute(node, "scoped", source) {
+		ChunkKind::StyleScoped
 	} else {
-		"style".to_string()
+		ChunkKind::Style
 	};
 	// Styles are likewise exposed as `raw_text`, so preserve only the SFC block.
-	make_named_chunk(node, name, source, None)
+	positional_candidate(node, kind, source)
 }
 
 fn classify_custom_block<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
 	let tag_name = extract_markup_tag_name(node, source).unwrap_or_else(|| "anonymous".to_string());
-	make_container_chunk(
-		node,
-		format!("custom_{tag_name}"),
-		source,
-		Some(recurse_self(node, ChunkContext::ClassBody)),
-	)
+	make_named_container_chunk(node, ChunkKind::Custom, tag_name, source)
 }
 
 fn classify_element<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 	let tag_name = extract_markup_tag_name(node, source)?;
-	Some(make_container_chunk(
+	Some(force_container(make_container_chunk(
 		node,
-		format!("tag_{tag_name}"),
+		ChunkKind::Tag,
+		Some(tag_name),
 		source,
 		Some(recurse_self(node, ChunkContext::ClassBody)),
-	))
+	)))
 }
 
 fn classify_start_tag<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
@@ -108,19 +107,14 @@ fn classify_start_tag<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandid
 	let tag_name = child_by_kind(node, &["tag_name"])
 		.and_then(|tag| sanitize_identifier(node_text(source, tag.start_byte(), tag.end_byte())))
 		.unwrap_or_else(|| "anonymous".to_string());
-	Some(make_container_chunk(
-		node,
-		format!("attrs_{tag_name}"),
-		source,
-		Some(recurse_self(node, ChunkContext::ClassBody)),
-	))
+	Some(make_named_container_chunk(node, ChunkKind::Attrs, tag_name, source))
 }
 
 fn classify_attribute<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
 	let name = child_by_kind(node, &["attribute_name"])
 		.and_then(|name| sanitize_identifier(node_text(source, name.start_byte(), name.end_byte())))
 		.unwrap_or_else(|| "attr".to_string());
-	make_named_chunk(node, format!("attr_{name}"), source, None)
+	make_kind_chunk(node, ChunkKind::Attr, Some(name), source, None)
 }
 
 fn classify_directive_attribute<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
@@ -131,16 +125,75 @@ fn classify_directive_attribute<'t>(node: Node<'t>, source: &str) -> RawChunkCan
 		.filter(|mods| !mods.is_empty())
 		.map(|mods| format!("_{mods}"))
 		.unwrap_or_default();
-	let chunk_name = if raw.starts_with('@') {
-		format!("on_{directive_name}{modifier_suffix}")
+	if raw.starts_with('@') {
+		make_named_leaf_chunk(
+			node,
+			ChunkKind::Directive,
+			format!("on_{directive_name}{modifier_suffix}"),
+			source,
+		)
 	} else if raw.starts_with(':') {
-		format!("bind_{directive_name}{modifier_suffix}")
+		make_named_leaf_chunk(
+			node,
+			ChunkKind::Directive,
+			format!("bind_{directive_name}{modifier_suffix}"),
+			source,
+		)
 	} else if raw.starts_with('#') {
-		format!("slot_{directive_name}{modifier_suffix}")
+		make_kind_chunk(
+			node,
+			ChunkKind::Slot,
+			Some(format!("{directive_name}{modifier_suffix}")),
+			source,
+			None,
+		)
 	} else {
-		format!("dir_{directive_name}{modifier_suffix}")
-	};
-	make_named_chunk(node, chunk_name, source, None)
+		make_named_leaf_chunk(
+			node,
+			ChunkKind::Directive,
+			format!("dir_{directive_name}{modifier_suffix}"),
+			source,
+		)
+	}
+}
+
+fn make_named_leaf_chunk<'t>(
+	node: Node<'t>,
+	kind: ChunkKind,
+	identifier: impl Into<Option<String>>,
+	source: &str,
+) -> RawChunkCandidate<'t> {
+	make_candidate(
+		node,
+		kind,
+		identifier,
+		NameStyle::Named,
+		signature_for_node(node, source),
+		None,
+		source,
+	)
+}
+
+fn make_named_container_chunk<'t>(
+	node: Node<'t>,
+	kind: ChunkKind,
+	identifier: impl Into<Option<String>>,
+	source: &str,
+) -> RawChunkCandidate<'t> {
+	force_container(make_candidate(
+		node,
+		kind,
+		identifier,
+		NameStyle::Named,
+		signature_for_node(node, source),
+		Some(recurse_self(node, ChunkContext::ClassBody)),
+		source,
+	))
+}
+
+const fn force_container(mut candidate: RawChunkCandidate<'_>) -> RawChunkCandidate<'_> {
+	candidate.force_recurse = true;
+	candidate
 }
 
 fn extract_markup_tag_name(node: Node<'_>, source: &str) -> Option<String> {

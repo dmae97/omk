@@ -6,40 +6,32 @@
 
 use tree_sitter::Node;
 
-use super::common::*;
-
-// ── Root-level default ──────────────────────────────────────────────────
+use super::{common::*, kind::ChunkKind};
 
 pub fn classify_root_default<'tree>(node: Node<'tree>, source: &str) -> RawChunkCandidate<'tree> {
 	infer_named_candidate(node, source)
 }
 
-// ── Class-level default ─────────────────────────────────────────────────
-
 pub fn classify_class_default<'tree>(node: Node<'tree>, source: &str) -> RawChunkCandidate<'tree> {
 	infer_named_candidate(node, source)
 }
-
-// ── Function-level default ──────────────────────────────────────────────
 
 pub fn classify_function_default<'tree>(
 	node: Node<'tree>,
 	source: &str,
 ) -> RawChunkCandidate<'tree> {
 	let kind_name = sanitize_node_kind(node.kind());
-	group_candidate(node, &kind_name, source)
+	group_candidate(node, ChunkKind::from_sanitized_kind(kind_name.as_str()), source)
 }
-
-// ── Variable declaration classification (shared) ────────────────────────
 
 pub fn classify_var_decl<'tree>(node: Node<'tree>, source: &str) -> RawChunkCandidate<'tree> {
 	if let Some(candidate) = promote_assigned_expression(node, node, source) {
 		return candidate;
 	}
 	if let Some(name) = extract_single_declarator_name(node, source) {
-		return make_named_chunk(node, format!("var_{name}"), source, None);
+		return make_kind_chunk(node, ChunkKind::Variable, Some(name), source, None);
 	}
-	group_candidate(node, "decls", source)
+	group_candidate(node, ChunkKind::Declarations, source)
 }
 
 pub fn promote_assigned_expression<'tree>(
@@ -62,14 +54,22 @@ pub fn promote_assigned_expression<'tree>(
 	match value.kind() {
 		"arrow_function" | "function_expression" | "function" => {
 			let recurse = recurse_body(value, ChunkContext::FunctionBody);
-			Some(make_named_chunk_from(range_node, value, format!("fn_{name}"), source, recurse))
+			Some(make_kind_chunk_from(
+				range_node,
+				value,
+				ChunkKind::Function,
+				Some(name),
+				source,
+				recurse,
+			))
 		},
 		"class" | "class_expression" => {
 			let recurse = recurse_class(value);
 			Some(make_container_chunk_from(
 				range_node,
 				value,
-				format!("class_{name}"),
+				ChunkKind::Class,
+				Some(name),
 				source,
 				recurse,
 			))

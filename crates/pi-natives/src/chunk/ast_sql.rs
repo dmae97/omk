@@ -2,7 +2,7 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*};
+use super::{classify::LangClassifier, common::*, kind::ChunkKind};
 
 pub struct SqlClassifier;
 
@@ -40,9 +40,10 @@ fn classify_sql_statement_root<'t>(node: Node<'t>, source: &str) -> Option<RawCh
 	}
 
 	if children.iter().any(|child| is_sql_query_kind(child.kind())) {
-		return Some(make_container_chunk(
+		return Some(make_named_sql_chunk(
 			node,
-			"query".to_string(),
+			ChunkKind::Query,
+			None,
 			source,
 			Some(recurse_self(node, ChunkContext::FunctionBody)),
 		));
@@ -57,29 +58,26 @@ fn classify_sql_root_node<'t>(
 	source: &str,
 ) -> Option<RawChunkCandidate<'t>> {
 	Some(match node.kind() {
-		"create_schema" => make_named_chunk_from(
+		"create_schema" => make_kind_chunk_from(
 			range_node,
 			node,
-			format!(
-				"schema_{}",
-				extract_sql_identifier(node, source).unwrap_or_else(|| "anonymous".to_string())
-			),
+			ChunkKind::Schema,
+			extract_sql_identifier(node, source),
 			source,
 			None,
 		),
 		"create_table" => make_container_chunk_from(
 			range_node,
 			node,
-			format!(
-				"table_{}",
-				extract_sql_object_name(node, source).unwrap_or_else(|| "anonymous".to_string())
-			),
+			ChunkKind::Table,
+			extract_sql_object_name(node, source),
 			source,
 			recurse_into(node, ChunkContext::ClassBody, &[], &["column_definitions"]),
 		),
-		"create_view" => make_container_chunk_from(
+		"create_view" => make_named_sql_chunk_from(
 			range_node,
 			node,
+			ChunkKind::Query,
 			format!(
 				"view_{}",
 				extract_sql_object_name(node, source).unwrap_or_else(|| "anonymous".to_string())
@@ -87,9 +85,10 @@ fn classify_sql_root_node<'t>(
 			source,
 			recurse_into(node, ChunkContext::FunctionBody, &[], &["create_query"]),
 		),
-		"create_materialized_view" => make_container_chunk_from(
+		"create_materialized_view" => make_named_sql_chunk_from(
 			range_node,
 			node,
+			ChunkKind::Query,
 			format!(
 				"matview_{}",
 				extract_sql_object_name(node, source).unwrap_or_else(|| "anonymous".to_string())
@@ -100,16 +99,15 @@ fn classify_sql_root_node<'t>(
 		"create_function" => make_container_chunk_from(
 			range_node,
 			node,
-			format!(
-				"fn_{}",
-				extract_sql_object_name(node, source).unwrap_or_else(|| "anonymous".to_string())
-			),
+			ChunkKind::Function,
+			extract_sql_object_name(node, source),
 			source,
 			recurse_sql_function_query(node),
 		),
-		"create_trigger" => make_named_chunk_from(
+		"create_trigger" => make_named_sql_chunk_from(
 			range_node,
 			node,
+			ChunkKind::Function,
 			format!(
 				"trigger_{}",
 				extract_sql_object_name(node, source).unwrap_or_else(|| "anonymous".to_string())
@@ -117,9 +115,10 @@ fn classify_sql_root_node<'t>(
 			source,
 			None,
 		),
-		"create_index" => make_named_chunk_from(
+		"create_index" => make_named_sql_chunk_from(
 			range_node,
 			node,
+			ChunkKind::Key,
 			format!(
 				"index_{}",
 				extract_sql_identifier(node, source).unwrap_or_else(|| "anonymous".to_string())
@@ -133,24 +132,19 @@ fn classify_sql_root_node<'t>(
 
 fn classify_sql_class<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 	Some(match node.kind() {
-		"column_definition" => make_named_chunk(
-			node,
-			format!(
-				"field_{}",
-				extract_sql_identifier(node, source).unwrap_or_else(|| "anonymous".to_string())
-			),
-			source,
-			None,
-		),
+		"column_definition" => {
+			make_kind_chunk(node, ChunkKind::Field, extract_sql_identifier(node, source), source, None)
+		},
 		_ => return None,
 	})
 }
 
 fn classify_sql_function<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 	if node.kind() == "statement" {
-		return Some(make_container_chunk(
+		return Some(make_named_sql_chunk(
 			node,
-			"query".to_string(),
+			ChunkKind::Query,
+			None,
 			source,
 			Some(recurse_self(node, ChunkContext::FunctionBody)),
 		));
@@ -161,10 +155,11 @@ fn classify_sql_function<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCan
 
 fn classify_sql_query_node<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 	Some(match node.kind() {
-		"insert" => group_candidate(node, "stmts", source),
-		"keyword_with" => group_candidate(node, "with", source),
-		"cte" => make_container_chunk(
+		"insert" => group_candidate(node, ChunkKind::Statements, source),
+		"keyword_with" => group_candidate(node, ChunkKind::With, source),
+		"cte" => make_named_sql_chunk(
 			node,
+			ChunkKind::With,
 			format!(
 				"cte_{}",
 				extract_sql_identifier(node, source).unwrap_or_else(|| "anonymous".to_string())
@@ -172,20 +167,58 @@ fn classify_sql_query_node<'t>(node: Node<'t>, source: &str) -> Option<RawChunkC
 			source,
 			recurse_into(node, ChunkContext::FunctionBody, &[], &["statement"]),
 		),
-		"select" => positional_candidate(node, "select", source),
-		"from" => make_container_chunk(
+		"select" => positional_candidate(node, ChunkKind::Select, source),
+		"from" => make_named_sql_chunk(
 			node,
+			ChunkKind::Query,
 			"from".to_string(),
 			source,
 			Some(recurse_self(node, ChunkContext::FunctionBody)),
 		),
-		"relation" => group_candidate(node, "relations", source),
-		"join" => positional_candidate(node, "join", source),
-		"where" => positional_candidate(node, "where", source),
-		"group_by" => positional_candidate(node, "group_by", source),
-		"order_by" => positional_candidate(node, "order_by", source),
+		"relation" => group_candidate(node, ChunkKind::Relations, source),
+		"join" => positional_candidate(node, ChunkKind::Join, source),
+		"where" => positional_candidate(node, ChunkKind::Where, source),
+		"group_by" => positional_candidate(node, ChunkKind::GroupBy, source),
+		"order_by" => positional_candidate(node, ChunkKind::OrderBy, source),
 		_ => return None,
 	})
+}
+
+fn make_named_sql_chunk<'t>(
+	node: Node<'t>,
+	kind: ChunkKind,
+	identifier: impl Into<Option<String>>,
+	source: &str,
+	recurse: Option<RecurseSpec<'t>>,
+) -> RawChunkCandidate<'t> {
+	make_candidate(
+		node,
+		kind,
+		identifier,
+		NameStyle::Named,
+		signature_for_node(node, source),
+		recurse,
+		source,
+	)
+}
+
+fn make_named_sql_chunk_from<'t>(
+	range_node: Node<'t>,
+	signature_node: Node<'t>,
+	kind: ChunkKind,
+	identifier: impl Into<Option<String>>,
+	source: &str,
+	recurse: Option<RecurseSpec<'t>>,
+) -> RawChunkCandidate<'t> {
+	make_candidate(
+		range_node,
+		kind,
+		identifier,
+		NameStyle::Named,
+		signature_for_node(signature_node, source),
+		recurse,
+		source,
+	)
 }
 
 fn recurse_sql_function_query(node: Node<'_>) -> Option<RecurseSpec<'_>> {

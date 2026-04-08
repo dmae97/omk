@@ -2,7 +2,7 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*};
+use super::{classify::LangClassifier, common::*, kind::ChunkKind};
 
 pub struct ElixirClassifier;
 
@@ -21,44 +21,49 @@ fn classify_call<'t>(node: Node<'t>, source: &str, at_root: bool) -> RawChunkCan
 	match target.as_str() {
 		"defmodule" => make_container_chunk(
 			node,
-			format!("mod_{}", name()),
+			ChunkKind::Module,
+			Some(name()),
 			source,
 			recurse_body(node, ChunkContext::ClassBody),
 		),
 		"defprotocol" => make_container_chunk(
 			node,
-			format!("proto_{}", name()),
+			ChunkKind::Proto,
+			Some(name()),
 			source,
 			recurse_body(node, ChunkContext::ClassBody),
 		),
 		"defimpl" => make_container_chunk(
 			node,
-			format!("impl_{}", name()),
+			ChunkKind::Impl,
+			Some(name()),
 			source,
 			recurse_body(node, ChunkContext::ClassBody),
 		),
 		"def" | "defp" | "defdelegate" | "defguard" | "defguardp" | "defn" | "defnp" => {
-			make_named_chunk(
+			make_kind_chunk(
 				node,
-				format!("fn_{}", name()),
+				ChunkKind::Function,
+				Some(name()),
 				source,
 				recurse_body(node, ChunkContext::FunctionBody),
 			)
 		},
-		"defmacro" | "defmacrop" => make_named_chunk(
+		"defmacro" | "defmacrop" => make_kind_chunk(
 			node,
-			format!("macro_{}", name()),
+			ChunkKind::Macro,
+			Some(name()),
 			source,
 			recurse_body(node, ChunkContext::FunctionBody),
 		),
-		"alias" | "import" | "require" | "use" => group_candidate(node, "imports", source),
-		"defstruct" | "defexception" => group_candidate(node, "decls", source),
-		"if" | "unless" => positional_candidate(node, "if", source),
-		"case" | "cond" | "receive" => positional_candidate(node, "switch", source),
-		"for" => positional_candidate(node, "for", source),
-		"try" | "with" => positional_candidate(node, "block", source),
-		_ if at_root => group_candidate(node, "stmts", source),
-		_ => group_candidate(node, "block", source),
+		"alias" | "import" | "require" | "use" => group_candidate(node, ChunkKind::Imports, source),
+		"defstruct" | "defexception" => group_candidate(node, ChunkKind::Declarations, source),
+		"if" | "unless" => positional_candidate(node, ChunkKind::If, source),
+		"case" | "cond" | "receive" => positional_candidate(node, ChunkKind::Switch, source),
+		"for" => positional_candidate(node, ChunkKind::For, source),
+		"try" | "with" => positional_candidate(node, ChunkKind::Block, source),
+		_ if at_root => group_candidate(node, ChunkKind::Statements, source),
+		_ => group_candidate(node, ChunkKind::Block, source),
 	}
 }
 

@@ -7,7 +7,7 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*};
+use super::{classify::LangClassifier, common::*, kind::ChunkKind};
 
 pub struct IniClassifier;
 
@@ -25,20 +25,25 @@ fn classify_ini_root<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandida
 	Some(match node.kind() {
 		"section" => make_container_chunk(
 			node,
-			format!("section_{}", ini_name(node, source)?),
+			ChunkKind::Section,
+			Some(ini_name(node, source)?),
 			source,
 			Some(recurse_self(node, ChunkContext::ClassBody)),
 		),
 		// INI permits settings before any section header; keep them as first-class
 		// chunks instead of forcing them under a synthetic container.
-		"setting" => make_named_chunk(node, format!("key_{}", ini_name(node, source)?), source, None),
+		"setting" => {
+			make_kind_chunk(node, ChunkKind::Key, Some(ini_name(node, source)?), source, None)
+		},
 		_ => return None,
 	})
 }
 
 fn classify_ini_class<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 	Some(match node.kind() {
-		"setting" => make_named_chunk(node, format!("key_{}", ini_name(node, source)?), source, None),
+		"setting" => {
+			make_kind_chunk(node, ChunkKind::Key, Some(ini_name(node, source)?), source, None)
+		},
 		_ => return None,
 	})
 }

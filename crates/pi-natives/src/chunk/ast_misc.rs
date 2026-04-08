@@ -6,9 +6,22 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*, defaults::classify_var_decl};
+use super::{classify::LangClassifier, common::*, defaults::classify_var_decl, kind::ChunkKind};
 
 pub struct MiscClassifier;
+
+fn sanitized_group_candidate<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
+	let sanitized = sanitize_node_kind(node.kind());
+	let kind = ChunkKind::from_sanitized_kind(sanitized.as_str());
+	// For unknown kinds that fall back to `Chunk`, preserve the original
+	// tree-sitter kind as the identifier so the path stays informative.
+	let identifier = if kind == ChunkKind::Chunk {
+		Some(sanitized)
+	} else {
+		None
+	};
+	make_candidate(node, kind, identifier, NameStyle::Group, None, None, source)
+}
 
 impl LangClassifier for MiscClassifier {
 	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
@@ -37,21 +50,21 @@ impl LangClassifier for MiscClassifier {
 			| "import_list"
 			| "import_header"
 			| "package_header"
-			| "package_declaration" => group_candidate(node, "imports", source),
+			| "package_declaration" => group_candidate(node, ChunkKind::Imports, source),
 
 			// ── Variables / assignments ──
 			"lexical_declaration" | "variable_declaration" => classify_var_decl(node, source),
 			"const_declaration" | "var_declaration" => match extract_identifier(node, source) {
-				Some(name) => make_named_chunk(node, format!("var_{name}"), source, None),
-				None => group_candidate(node, "decls", source),
+				Some(name) => make_kind_chunk(node, ChunkKind::Variable, Some(name), source, None),
+				None => group_candidate(node, ChunkKind::Declarations, source),
 			},
 			"assignment" | "property_declaration" | "state_variable_declaration" => {
-				group_candidate(node, "decls", source)
+				group_candidate(node, ChunkKind::Declarations, source)
 			},
 
 			// ── Statements ──
 			"expression_statement" | "global_statement" | "command" | "pipeline" | "function_call" => {
-				group_candidate(node, "stmts", source)
+				group_candidate(node, ChunkKind::Statements, source)
 			},
 
 			// ── Functions ──
@@ -59,61 +72,74 @@ impl LangClassifier for MiscClassifier {
 			| "function_definition"
 			| "procedure_declaration"
 			| "overloaded_procedure_declaration"
-			| "test_declaration" => named_candidate(node, "fn", source, fn_recurse()),
-			"method_declaration" => {
-				named_candidate(node, "meth", source, recurse_body(node, ChunkContext::FunctionBody))
-			},
+			| "test_declaration" => named_candidate(node, ChunkKind::Function, source, fn_recurse()),
+			"method_declaration" => named_candidate(
+				node,
+				ChunkKind::Method,
+				source,
+				recurse_body(node, ChunkContext::FunctionBody),
+			),
 			"constructor_definition"
 			| "constructor_declaration"
 			| "secondary_constructor"
 			| "init_declaration"
-			| "fallback_receive_definition" => make_named_chunk(
+			| "fallback_receive_definition" => make_kind_chunk(
 				node,
-				"constructor".to_string(),
+				ChunkKind::Constructor,
+				None,
 				source,
 				recurse_body(node, ChunkContext::FunctionBody),
 			),
 
 			// ── Containers ──
 			"class_declaration" | "class_definition" => {
-				container_candidate(node, "class", source, recurse_class(node))
+				container_candidate(node, ChunkKind::Class, source, recurse_class(node))
 			},
 			"interface_declaration" | "protocol_declaration" => {
-				container_candidate(node, "iface", source, recurse_interface(node))
+				container_candidate(node, ChunkKind::Iface, source, recurse_interface(node))
 			},
 			"struct_declaration" | "object_declaration" => {
-				container_candidate(node, "struct", source, recurse_class(node))
+				container_candidate(node, ChunkKind::Struct, source, recurse_class(node))
 			},
 			"enum_declaration" | "enum_definition" => {
-				container_candidate(node, "enum", source, recurse_enum(node))
+				container_candidate(node, ChunkKind::Enum, source, recurse_enum(node))
 			},
 			"trait_definition" | "class" => {
-				container_candidate(node, "trait", source, recurse_class(node))
+				container_candidate(node, ChunkKind::Trait, source, recurse_class(node))
 			},
 			"contract_declaration" | "library_declaration" | "trait_declaration" => {
-				container_candidate(node, "contract", source, recurse_class(node))
+				container_candidate(node, ChunkKind::Contract, source, recurse_class(node))
 			},
 			"namespace_declaration"
 			| "namespace_definition"
 			| "module_definition"
-			| "extension_definition" => container_candidate(node, "mod", source, module_recurse()),
+			| "extension_definition" => {
+				container_candidate(node, ChunkKind::Module, source, module_recurse())
+			},
 
 			// ── Types / aliases ──
 			"type_alias_declaration" | "const_type_declaration" | "opaque_declaration" => {
-				named_candidate(node, "type", source, recurse_class(node))
+				named_candidate(node, ChunkKind::Type, source, recurse_class(node))
 			},
 
 			// ── Macros ──
-			"macro_definition" | "modifier_definition" => {
-				named_candidate(node, "macro", source, recurse_body(node, ChunkContext::FunctionBody))
-			},
+			"macro_definition" | "modifier_definition" => named_candidate(
+				node,
+				ChunkKind::Macro,
+				source,
+				recurse_body(node, ChunkContext::FunctionBody),
+			),
 
 			// ── Systems (Verilog etc.) ──
 			"covergroup_declaration" | "checker_declaration" => {
-				container_candidate(node, "group", source, recurse_class(node))
+				container_candidate(node, ChunkKind::Group, source, recurse_class(node))
 			},
-			"module_declaration" => container_candidate(node, "mod", source, recurse_class(node)),
-			"union_declaration" => container_candidate(node, "union", source, recurse_class(node)),
+			"module_declaration" => {
+				container_candidate(node, ChunkKind::Module, source, recurse_class(node))
+			},
+			"union_declaration" => {
+				container_candidate(node, ChunkKind::Union, source, recurse_class(node))
+			},
 
 			// ── Control flow at top level → delegate to function-level ──
 			"if_statement"
@@ -145,9 +171,10 @@ impl LangClassifier for MiscClassifier {
 			"constructor"
 			| "constructor_declaration"
 			| "secondary_constructor"
-			| "init_declaration" => make_named_chunk(
+			| "init_declaration" => make_kind_chunk(
 				node,
-				"constructor".to_string(),
+				ChunkKind::Constructor,
+				None,
 				source,
 				recurse_body(node, ChunkContext::FunctionBody),
 			),
@@ -166,16 +193,18 @@ impl LangClassifier for MiscClassifier {
 			| "singleton_method" => {
 				let name = extract_identifier(node, source).unwrap_or_else(|| "anonymous".to_string());
 				if name == "constructor" {
-					make_named_chunk(
+					make_kind_chunk(
 						node,
-						"constructor".to_string(),
+						ChunkKind::Constructor,
+						None,
 						source,
 						recurse_body(node, ChunkContext::FunctionBody),
 					)
 				} else {
-					make_named_chunk(
+					make_kind_chunk(
 						node,
-						format!("fn_{name}"),
+						ChunkKind::Function,
+						Some(name),
 						source,
 						recurse_body(node, ChunkContext::FunctionBody),
 					)
@@ -193,8 +222,8 @@ impl LangClassifier for MiscClassifier {
 			| "const_declaration"
 			| "constant_declaration"
 			| "event_field_declaration" => match extract_identifier(node, source) {
-				Some(name) => make_named_chunk(node, format!("field_{name}"), source, None),
-				None => group_candidate(node, "fields", source),
+				Some(name) => make_kind_chunk(node, ChunkKind::Field, Some(name), source, None),
+				None => group_candidate(node, ChunkKind::Fields, source),
 			},
 
 			// ── Enum variants ──
@@ -203,27 +232,27 @@ impl LangClassifier for MiscClassifier {
 			| "enum_constant"
 			| "enum_entry"
 			| "enum_variant" => match extract_identifier(node, source) {
-				Some(name) => make_named_chunk(node, format!("variant_{name}"), source, None),
-				None => group_candidate(node, "variants", source),
+				Some(name) => make_kind_chunk(node, ChunkKind::Variant, Some(name), source, None),
+				None => group_candidate(node, ChunkKind::Variants, source),
 			},
 
 			// ── Other fields ──
 			"field_declaration" | "embedded_field" | "container_field" | "binding" => {
 				match extract_identifier(node, source) {
-					Some(name) => make_named_chunk(node, format!("field_{name}"), source, None),
-					None => group_candidate(node, "fields", source),
+					Some(name) => make_kind_chunk(node, ChunkKind::Field, Some(name), source, None),
+					None => group_candidate(node, ChunkKind::Fields, source),
 				}
 			},
 
 			// ── Method specs ──
-			"method_spec" => named_candidate(node, "meth", source, None),
+			"method_spec" => named_candidate(node, ChunkKind::Method, source, None),
 
 			// ── Field / method lists ──
-			"field_declaration_list" => group_candidate(node, "fields", source),
-			"method_spec_list" => group_candidate(node, "methods", source),
+			"field_declaration_list" => group_candidate(node, ChunkKind::Fields, source),
+			"method_spec_list" => group_candidate(node, ChunkKind::Methods, source),
 
 			// ── Static initializer ──
-			"class_static_block" => make_named_chunk(node, "static_init".to_string(), source, None),
+			"class_static_block" => make_kind_chunk(node, ChunkKind::StaticInit, None, source, None),
 
 			// ── Decorated definitions ──
 			"decorated_definition" => {
@@ -233,7 +262,7 @@ impl LangClassifier for MiscClassifier {
 				if let Some(child) = inner {
 					let name =
 						extract_identifier(child, source).unwrap_or_else(|| "anonymous".to_string());
-					make_named_chunk(node, format!("fn_{name}"), source, {
+					make_kind_chunk(node, ChunkKind::Function, Some(name), source, {
 						let context = ChunkContext::FunctionBody;
 						recurse_into(child, context, &["body"], &["block"])
 					})
@@ -248,15 +277,15 @@ impl LangClassifier for MiscClassifier {
 			| "attribute"
 			| "pair"
 			| "block_mapping_pair"
-			| "flow_pair" => group_candidate(node, "fields", source),
+			| "flow_pair" => group_candidate(node, ChunkKind::Fields, source),
 
 			// ── Types inside classes ──
 			"type_item" | "type_alias_declaration" | "type_alias" => {
-				named_candidate(node, "type", source, None)
+				named_candidate(node, ChunkKind::Type, source, None)
 			},
 
 			// ── Const / macro inside classes ──
-			"const_item" | "macro_invocation" => group_candidate(node, "fields", source),
+			"const_item" | "macro_invocation" => group_candidate(node, ChunkKind::Fields, source),
 
 			_ => return None,
 		})
@@ -266,15 +295,9 @@ impl LangClassifier for MiscClassifier {
 		let fn_recurse = || recurse_body(node, ChunkContext::FunctionBody);
 		Some(match node.kind() {
 			// ── Control flow: conditionals ──
-			"if_statement" | "unless" | "guard_statement" => make_candidate(
-				node,
-				"if".to_string(),
-				NameStyle::Named,
-				None,
-				fn_recurse(),
-				false,
-				source,
-			),
+			"if_statement" | "unless" | "guard_statement" => {
+				make_candidate(node, ChunkKind::If, None, NameStyle::Named, None, fn_recurse(), source)
+			},
 
 			// ── Control flow: switches ──
 			"switch_statement"
@@ -287,87 +310,72 @@ impl LangClassifier for MiscClassifier {
 			| "receive_statement"
 			| "yul_switch_statement" => make_candidate(
 				node,
-				"switch".to_string(),
+				ChunkKind::Switch,
+				None,
 				NameStyle::Named,
 				None,
 				fn_recurse(),
-				false,
 				source,
 			),
 
 			// ── Control flow: try/catch ──
 			"try_statement" | "try_block" | "catch_clause" | "finally_clause"
-			| "assembly_statement" => make_candidate(
-				node,
-				"try".to_string(),
-				NameStyle::Named,
-				None,
-				fn_recurse(),
-				false,
-				source,
-			),
+			| "assembly_statement" => {
+				make_candidate(node, ChunkKind::Try, None, NameStyle::Named, None, fn_recurse(), source)
+			},
 
 			// ── Loops: for variants (with Python-like check) ──
 			"for_statement" | "for_in_statement" | "for_of_statement" => {
-				let name = if looks_like_python_statement(node, source) {
-					"loop".to_string()
+				let kind = if looks_like_python_statement(node, source) {
+					ChunkKind::Loop
 				} else {
-					sanitize_node_kind(node.kind())
+					match node.kind() {
+						"for_statement" => ChunkKind::For,
+						"for_in_statement" => ChunkKind::ForIn,
+						"for_of_statement" => ChunkKind::ForOf,
+						_ => unreachable!(),
+					}
 				};
-				make_candidate(node, name, NameStyle::Named, None, fn_recurse(), false, source)
+				make_candidate(node, kind, None, NameStyle::Named, None, fn_recurse(), source)
 			},
 
 			// ── Loops: while ──
 			"while_statement" => {
-				let name = if looks_like_python_statement(node, source) {
-					"loop"
+				let kind = if looks_like_python_statement(node, source) {
+					ChunkKind::Loop
 				} else {
-					"while"
+					ChunkKind::While
 				};
-				make_candidate(
-					node,
-					name.to_string(),
-					NameStyle::Named,
-					None,
-					fn_recurse(),
-					false,
-					source,
-				)
+				make_candidate(node, kind, None, NameStyle::Named, None, fn_recurse(), source)
 			},
 
 			// ── Blocks ──
 			"do_statement" | "with_statement" | "do_block" | "subshell" | "async_block"
 			| "unsafe_block" | "const_block" | "block_expression" => make_candidate(
 				node,
-				"block".to_string(),
+				ChunkKind::Block,
+				None,
 				NameStyle::Named,
 				None,
 				fn_recurse(),
-				false,
 				source,
 			),
 
 			// ── Loops: foreach ──
-			"foreach_statement" => make_candidate(
-				node,
-				"for".to_string(),
-				NameStyle::Named,
-				None,
-				fn_recurse(),
-				false,
-				source,
-			),
+			"foreach_statement" => {
+				make_candidate(node, ChunkKind::For, None, NameStyle::Named, None, fn_recurse(), source)
+			},
 
 			// ── Statements ──
 			"defer_statement" | "go_statement" | "send_statement" => {
-				group_candidate(node, "stmts", source)
+				group_candidate(node, ChunkKind::Statements, source)
 			},
 
 			// ── Positional candidates ──
-			"elif_clause" => positional_candidate(node, "elif", source),
-			"except_clause" => positional_candidate(node, "except", source),
-			"when_statement" => positional_candidate(node, "when", source),
-			"match_expression" | "match_block" => positional_candidate(node, "match", source),
+			"elif_clause" => positional_candidate(node, ChunkKind::Elif, source),
+			"except_clause" => positional_candidate(node, ChunkKind::Except, source),
+			"when_statement" => positional_candidate(node, ChunkKind::When, source),
+			"match_expression" | "match_block" => positional_candidate(node, ChunkKind::Match, source),
 
 			// ── Loops / misc expressions ──
 			"loop_expression"
@@ -378,7 +386,7 @@ impl LangClassifier for MiscClassifier {
 			| "nosuspend_statement"
 			| "suspend_statement"
 			| "yul_if_statement"
-			| "yul_for_statement" => positional_candidate(node, "loop", source),
+			| "yul_for_statement" => positional_candidate(node, ChunkKind::Loop, source),
 
 			// ── Variable declarations ──
 			"lexical_declaration"
@@ -390,14 +398,12 @@ impl LangClassifier for MiscClassifier {
 				let span = line_span(node.start_position().row + 1, node.end_position().row + 1);
 				if span > 1 {
 					if let Some(name) = extract_single_declarator_name(node, source) {
-						make_named_chunk(node, format!("var_{name}"), source, None)
+						make_kind_chunk(node, ChunkKind::Variable, Some(name), source, None)
 					} else {
-						let kind_name = sanitize_node_kind(node.kind());
-						group_candidate(node, &kind_name, source)
+						sanitized_group_candidate(node, source)
 					}
 				} else {
-					let kind_name = sanitize_node_kind(node.kind());
-					group_candidate(node, &kind_name, source)
+					sanitized_group_candidate(node, source)
 				}
 			},
 

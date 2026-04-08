@@ -412,8 +412,8 @@ export declare enum ChunkFocusMode {
 export interface ChunkInfo {
   /** Chunk selector path within the tree. */
   path: string
-  /** Short display name for the chunk (e.g. symbol or region label). */
-  name: string
+  /** Bare chunk identifier (without kind prefix), if available. */
+  identifier?: string
   /** Stable checksum anchor for this chunk. */
   checksum: string
   /** 1-based start line in the source file (inclusive). */

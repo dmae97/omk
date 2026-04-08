@@ -2,7 +2,7 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*};
+use super::{classify::LangClassifier, common::*, kind::ChunkKind};
 
 pub struct ShellBuildClassifier;
 
@@ -29,7 +29,8 @@ impl LangClassifier for ShellBuildClassifier {
 					Self::extract_rule_target(node, source).unwrap_or_else(|| "anonymous".to_string());
 				Some(make_container_chunk(
 					node,
-					format!("rule_{name}"),
+					ChunkKind::Rule,
+					Some(name),
 					source,
 					recurse_into(node, ChunkContext::ClassBody, &[], &["recipe"]),
 				))
@@ -37,30 +38,32 @@ impl LangClassifier for ShellBuildClassifier {
 			"variable_assignment" | "shell_assignment" => {
 				let name =
 					Self::extract_var_name(node, source).unwrap_or_else(|| "anonymous".to_string());
-				Some(make_named_chunk(node, format!("var_{name}"), source, None))
+				Some(make_kind_chunk(node, ChunkKind::Variable, Some(name), source, None))
 			},
 			"define_directive" => {
 				let name =
 					Self::extract_var_name(node, source).unwrap_or_else(|| "anonymous".to_string());
-				Some(make_named_chunk(node, format!("define_{name}"), source, None))
+				Some(make_kind_chunk(node, ChunkKind::Define, Some(name), source, None))
 			},
-			"conditional" => Some(positional_candidate(node, "if", source)),
+			"conditional" => Some(positional_candidate(node, ChunkKind::If, source)),
 			// Bash commands and pipelines
-			"command" | "pipeline" => Some(group_candidate(node, "stmts", source)),
+			"command" | "pipeline" => Some(group_candidate(node, ChunkKind::Statements, source)),
 			// Bash control flow
-			"if_statement" => Some(positional_candidate(node, "if", source)),
-			"case_statement" => Some(positional_candidate(node, "switch", source)),
-			"while_statement" | "for_statement" => Some(positional_candidate(node, "loop", source)),
+			"if_statement" => Some(positional_candidate(node, ChunkKind::If, source)),
+			"case_statement" => Some(positional_candidate(node, ChunkKind::Switch, source)),
+			"while_statement" | "for_statement" => {
+				Some(positional_candidate(node, ChunkKind::Loop, source))
+			},
 			// Bash function definition
 			"function_definition" => Some(named_candidate(
 				node,
-				"fn",
+				ChunkKind::Function,
 				source,
 				recurse_body(node, ChunkContext::FunctionBody),
 			)),
 			// Diff nodes
-			"hunks" => Some(group_candidate(node, "hunks", source)),
-			"file_change" => Some(named_candidate(node, "file", source, None)),
+			"hunks" => Some(group_candidate(node, ChunkKind::Hunks, source)),
+			"file_change" => Some(named_candidate(node, ChunkKind::File, source, None)),
 			_ => None,
 		}
 	}
@@ -71,11 +74,13 @@ impl LangClassifier for ShellBuildClassifier {
 
 	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 		match node.kind() {
-			"if_statement" => Some(positional_candidate(node, "if", source)),
-			"case_statement" => Some(positional_candidate(node, "switch", source)),
-			"while_statement" | "for_statement" => Some(positional_candidate(node, "loop", source)),
-			"command" | "pipeline" => Some(group_candidate(node, "stmts", source)),
-			"subshell" => Some(positional_candidate(node, "block", source)),
+			"if_statement" => Some(positional_candidate(node, ChunkKind::If, source)),
+			"case_statement" => Some(positional_candidate(node, ChunkKind::Switch, source)),
+			"while_statement" | "for_statement" => {
+				Some(positional_candidate(node, ChunkKind::Loop, source))
+			},
+			"command" | "pipeline" => Some(group_candidate(node, ChunkKind::Statements, source)),
+			"subshell" => Some(positional_candidate(node, ChunkKind::Block, source)),
 			_ => None,
 		}
 	}

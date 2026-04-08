@@ -11,8 +11,8 @@ use super::{
 	build_chunk_tree,
 	indent::{detect_file_indent_char, detect_file_indent_step, normalize_to_tabs},
 	resolve::{
-		ParsedSelector, chunk_region_range, chunk_supports_region, format_region_ref,
-		resolve_chunk_selector, resolve_chunk_with_crc, split_selector_crc_and_region,
+		ParsedSelector, chunk_region_range, format_region_ref, resolve_chunk_selector,
+		resolve_chunk_with_crc, split_selector_crc_and_region,
 	},
 };
 use crate::chunk::types::{
@@ -273,8 +273,8 @@ impl ChunkState {
 	}
 
 	/// Look up [`ChunkInfo`] for a chunk selector path.
-	#[napi(js_name = "chunk")]
-	pub fn chunk_info_for_path(&self, chunk_path: String) -> Option<ChunkInfo> {
+	#[napi]
+	pub fn chunk(&self, chunk_path: String) -> Option<ChunkInfo> {
 		let mut warnings = Vec::new();
 		resolve_chunk_selector(self.inner(), Some(chunk_path.as_str()), &mut warnings)
 			.ok()
@@ -413,14 +413,9 @@ impl ChunkState {
 		if selector.as_deref() == Some("?") {
 			let mut lines = vec![format!("{} chunks:", params.display_path)];
 			for chunk in self.inner.chunks().filter(|chunk| !chunk.path.is_empty()) {
-				let supported_regions = if chunk_supports_region(chunk, ChunkRegion::Inner) {
-					"outer, head, inner, tail"
-				} else {
-					"outer"
-				};
 				lines.push(format!(
-					"  {}#{}  L{}-L{}  regions: {}",
-					chunk.path, chunk.checksum, chunk.start_line, chunk.end_line, supported_regions
+					"  {}#{}  L{}-L{}",
+					chunk.path, chunk.checksum, chunk.start_line, chunk.end_line,
 				));
 			}
 			return Ok(ReadResult { text: lines.join("\n"), chunk: None });
@@ -448,24 +443,6 @@ impl ChunkState {
 		// selector and loses the region suffix.
 		let selector_ref = format_region_ref(chunk, region);
 
-		if let Some(r) = region
-			&& !chunk_supports_region(chunk, r)
-		{
-			return Ok(ReadResult {
-				text:  format!(
-					"{}:{}\n\nChunk \"{}\" does not support @{}.",
-					params.display_path,
-					chunk.path,
-					chunk.path,
-					r.as_str(),
-				),
-				chunk: Some(ChunkReadTarget {
-					status:   ChunkReadStatus::UnsupportedRegion,
-					selector: selector_ref,
-				}),
-			});
-		}
-
 		if let Some(absolute_line_range) = params.absolute_line_range {
 			let req_start = absolute_line_range.start_line;
 			let req_end = absolute_line_range.end_line;
@@ -492,18 +469,7 @@ impl ChunkState {
 
 		if let Some(target_region) = region {
 			let masked_source = mask_chunk_display_source(self.inner.source(), self.inner.language());
-			let (start, end) = match chunk_region_range(chunk, target_region) {
-				Ok(range) => range,
-				Err(err) => {
-					return Ok(ReadResult {
-						text:  format!("{}\n\n{}", params.display_path, err),
-						chunk: Some(ChunkReadTarget {
-							status:   ChunkReadStatus::UnsupportedRegion,
-							selector: selector_ref,
-						}),
-					});
-				},
-			};
+			let (start, end) = chunk_region_range(chunk, target_region);
 			let tab_replacement = params.tab_replacement.as_deref().unwrap_or("    ");
 			let normalize_indent = params.normalize_indent.unwrap_or(false).then(|| {
 				(
@@ -598,7 +564,7 @@ fn normalize_language(language: &str) -> String {
 fn chunk_info(chunk: &ChunkNode) -> ChunkInfo {
 	ChunkInfo {
 		path:       chunk.path.clone(),
-		name:       chunk.name.clone(),
+		identifier: chunk.identifier.clone(),
 		checksum:   chunk.checksum.clone(),
 		start_line: chunk.start_line,
 		end_line:   chunk.end_line,

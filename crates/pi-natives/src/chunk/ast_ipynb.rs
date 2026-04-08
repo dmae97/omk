@@ -26,7 +26,9 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 
 use crate::chunk::{
-	build_chunk_tree, chunk_checksum, line_start_offsets,
+	build_chunk_tree, chunk_checksum,
+	kind::ChunkKind,
+	line_start_offsets,
 	types::{ChunkNode, ChunkTree},
 };
 
@@ -395,7 +397,8 @@ pub fn build_notebook_tree_from_virtual(
 	let mut chunks: Vec<ChunkNode> = Vec::with_capacity(1 + regions.len() * 2);
 	chunks.push(ChunkNode {
 		path:                String::new(),
-		name:                "root".to_string(),
+		identifier:          None,
+		kind:                ChunkKind::Root,
 		leaf:                false,
 		parent_path:         None,
 		children:            Vec::new(),
@@ -437,7 +440,6 @@ pub fn build_notebook_tree_from_virtual(
 		if body_has_content {
 			let sub_tree = build_chunk_tree(body, cell_language_str.as_str())
 				.map_err(|err| format!("Failed to parse cell_{} body: {err}", region.cell_num))?;
-			// sub_tree.chunks[0] is the sub-root; skip it.
 			for sub_chunk in sub_tree.chunks.into_iter().skip(1) {
 				let translated_path = format!("{}.{}", cell_path, sub_chunk.path);
 				let translated_parent = match sub_chunk.parent_path.as_deref() {
@@ -458,7 +460,8 @@ pub fn build_notebook_tree_from_virtual(
 				let line_shift = region.content_line.saturating_sub(1);
 				chunks.push(ChunkNode {
 					path:                translated_path.clone(),
-					name:                sub_chunk.name,
+					identifier:          sub_chunk.identifier,
+					kind:                sub_chunk.kind,
 					leaf:                sub_chunk.leaf,
 					parent_path:         translated_parent,
 					children:            translated_children,
@@ -484,13 +487,11 @@ pub fn build_notebook_tree_from_virtual(
 					group:               false,
 				});
 			}
-			// Collect direct children (those whose parent_path equals cell_path).
 			for sub_path in sub_tree.root_children {
 				cell_children_paths.push(format!("{cell_path}.{sub_path}"));
 			}
 		}
 
-		// Cell parent chunk: spans from the marker line through the body.
 		let cell_line_count = {
 			let body_lines = if body_has_content {
 				if body.ends_with('\n') {
@@ -501,13 +502,14 @@ pub fn build_notebook_tree_from_virtual(
 			} else {
 				0
 			};
-			1 + body_lines as u32 // +1 for the marker line
+			1 + body_lines as u32
 		};
 		let cell_end_line = region.marker_line + cell_line_count.saturating_sub(1);
 		let cell_leaf = cell_children_paths.is_empty();
 		chunks.push(ChunkNode {
 			path:                cell_path.clone(),
-			name:                cell_path.clone(),
+			identifier:          Some(cell_path.clone()),
+			kind:                ChunkKind::Cell,
 			leaf:                cell_leaf,
 			parent_path:         Some(String::new()),
 			children:            cell_children_paths,

@@ -2,7 +2,7 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*};
+use super::{classify::LangClassifier, common::*, kind::ChunkKind};
 
 pub struct RubyLuaClassifier;
 
@@ -20,38 +20,46 @@ impl LangClassifier for RubyLuaClassifier {
 				let target = extract_identifier(node, source);
 				match target.as_deref() {
 					Some("require" | "require_relative" | "load" | "autoload") => {
-						group_candidate(node, "imports", source)
+						group_candidate(node, ChunkKind::Imports, source)
 					},
-					_ => group_candidate(node, "stmts", source),
+					_ => group_candidate(node, ChunkKind::Statements, source),
 				}
 			},
 
 			// ── Functions ──
-			"function_definition" => {
-				named_candidate(node, "fn", source, recurse_body(node, ChunkContext::FunctionBody))
-			},
-			"method" | "singleton_method" => {
-				named_candidate(node, "fn", source, recurse_body(node, ChunkContext::FunctionBody))
-			},
+			"function_definition" => named_candidate(
+				node,
+				ChunkKind::Function,
+				source,
+				recurse_body(node, ChunkContext::FunctionBody),
+			),
+			"method" | "singleton_method" => named_candidate(
+				node,
+				ChunkKind::Function,
+				source,
+				recurse_body(node, ChunkContext::FunctionBody),
+			),
 
 			// ── Containers ──
-			"class" => container_candidate(node, "class", source, recurse_class(node)),
-			"module" => container_candidate(node, "mod", source, recurse_class(node)),
+			"class" => container_candidate(node, ChunkKind::Class, source, recurse_class(node)),
+			"module" => container_candidate(node, ChunkKind::Module, source, recurse_class(node)),
 
 			// ── Control flow (top-level scripts) ──
 			"if_statement" | "unless" | "while_statement" | "for_statement" => {
 				return Some(
 					self
 						.classify_function(node, source)
-						.unwrap_or_else(|| group_candidate(node, "stmts", source)),
+						.unwrap_or_else(|| group_candidate(node, ChunkKind::Statements, source)),
 				);
 			},
 
 			// ── Assignments ──
-			"assignment" => group_candidate(node, "decls", source),
+			"assignment" => group_candidate(node, ChunkKind::Declarations, source),
 
 			// ── Statements ──
-			"expression_statement" | "function_call" => group_candidate(node, "stmts", source),
+			"expression_statement" | "function_call" => {
+				group_candidate(node, ChunkKind::Statements, source)
+			},
 
 			_ => return None,
 		})
@@ -63,16 +71,18 @@ impl LangClassifier for RubyLuaClassifier {
 			"method" | "singleton_method" => {
 				let name = extract_identifier(node, source).unwrap_or_else(|| "anonymous".to_string());
 				if name == "initialize" {
-					make_named_chunk(
+					make_kind_chunk(
 						node,
-						"constructor".to_string(),
+						ChunkKind::Constructor,
+						None,
 						source,
 						recurse_body(node, ChunkContext::FunctionBody),
 					)
 				} else {
-					make_named_chunk(
+					make_kind_chunk(
 						node,
-						format!("fn_{name}"),
+						ChunkKind::Function,
+						Some(name),
 						source,
 						recurse_body(node, ChunkContext::FunctionBody),
 					)
@@ -80,14 +90,14 @@ impl LangClassifier for RubyLuaClassifier {
 			},
 
 			// ── Nested containers ──
-			"class" => container_candidate(node, "class", source, recurse_class(node)),
-			"module" => container_candidate(node, "mod", source, recurse_class(node)),
+			"class" => container_candidate(node, ChunkKind::Class, source, recurse_class(node)),
+			"module" => container_candidate(node, ChunkKind::Module, source, recurse_class(node)),
 
 			// ── Fields / constants ──
-			"assignment" => group_candidate(node, "fields", source),
+			"assignment" => group_candidate(node, ChunkKind::Fields, source),
 
 			// ── Calls (include, attr_reader, etc.) and bare identifiers (private) ──
-			"call" | "command" | "identifier" => group_candidate(node, "stmts", source),
+			"call" | "command" | "identifier" => group_candidate(node, ChunkKind::Statements, source),
 
 			_ => return None,
 		})
@@ -97,36 +107,30 @@ impl LangClassifier for RubyLuaClassifier {
 		let fn_recurse = || recurse_body(node, ChunkContext::FunctionBody);
 		Some(match node.kind() {
 			// ── Control flow ──
-			"if_statement" | "unless" => make_candidate(
-				node,
-				"if".to_string(),
-				NameStyle::Named,
-				None,
-				fn_recurse(),
-				false,
-				source,
-			),
+			"if_statement" | "unless" => {
+				make_candidate(node, ChunkKind::If, None, NameStyle::Named, None, fn_recurse(), source)
+			},
 			"case_statement" | "case_match" => make_candidate(
 				node,
-				"switch".to_string(),
+				ChunkKind::Switch,
+				None,
 				NameStyle::Named,
 				None,
 				fn_recurse(),
-				false,
 				source,
 			),
 			"while_statement" | "for_statement" => make_candidate(
 				node,
-				"loop".to_string(),
+				ChunkKind::Loop,
+				None,
 				NameStyle::Named,
 				None,
 				fn_recurse(),
-				false,
 				source,
 			),
 
 			// ── Variables ──
-			"assignment" => group_candidate(node, "stmts", source),
+			"assignment" => group_candidate(node, ChunkKind::Statements, source),
 
 			_ => return None,
 		})

@@ -2,7 +2,7 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*};
+use super::{classify::LangClassifier, common::*, kind::ChunkKind};
 
 pub struct CMakeClassifier;
 
@@ -47,7 +47,8 @@ fn classify_definition<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandi
 			let name = nth_argument_name(header, 0, source).unwrap_or_else(|| "anonymous".to_string());
 			Some(make_container_chunk(
 				node,
-				format!("fn_{name}"),
+				ChunkKind::Function,
+				Some(name),
 				source,
 				recurse_into(node, ChunkContext::FunctionBody, &[], &["body"]),
 			))
@@ -57,20 +58,23 @@ fn classify_definition<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandi
 			let name = nth_argument_name(header, 0, source).unwrap_or_else(|| "anonymous".to_string());
 			Some(make_container_chunk(
 				node,
-				format!("macro_{name}"),
+				ChunkKind::Macro,
+				Some(name),
 				source,
 				recurse_into(node, ChunkContext::FunctionBody, &[], &["body"]),
 			))
 		},
 		"if_condition" => Some(make_container_chunk(
 			node,
-			"if".to_string(),
+			ChunkKind::If,
+			None,
 			source,
 			Some(recurse_self(node, ChunkContext::FunctionBody)),
 		)),
 		"foreach_loop" | "while_loop" => Some(make_container_chunk(
 			node,
-			"loop".to_string(),
+			ChunkKind::Loop,
+			None,
 			source,
 			recurse_into(node, ChunkContext::FunctionBody, &[], &["body"]),
 		)),
@@ -85,37 +89,38 @@ fn classify_command<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidat
 
 	let command = command_name(node, source)?;
 	Some(match command.as_str() {
-		"cmake_minimum_required" => make_named_chunk(node, "version_gate".to_string(), source, None),
+		"cmake_minimum_required" => make_kind_chunk(node, ChunkKind::VersionGate, None, source, None),
 		"project" => {
 			let name = nth_argument_name(node, 0, source).unwrap_or_else(|| "anonymous".to_string());
-			make_named_chunk(node, format!("project_{name}"), source, None)
+			make_kind_chunk(node, ChunkKind::Project, Some(name), source, None)
 		},
-		"include" | "find_package" => group_candidate(node, "imports", source),
+		"include" | "find_package" => group_candidate(node, ChunkKind::Imports, source),
 		"option" => {
 			let name = nth_argument_name(node, 0, source).unwrap_or_else(|| "anonymous".to_string());
-			make_named_chunk(node, format!("option_{name}"), source, None)
+			make_kind_chunk(node, ChunkKind::Option, Some(name), source, None)
 		},
 		"set" => {
 			let name = nth_argument_name(node, 0, source).unwrap_or_else(|| "anonymous".to_string());
-			make_named_chunk(node, format!("var_{name}"), source, None)
+			make_kind_chunk(node, ChunkKind::Variable, Some(name), source, None)
 		},
 		"add_library" | "add_executable" | "add_custom_target" => {
 			let name = nth_argument_name(node, 0, source).unwrap_or_else(|| "anonymous".to_string());
-			make_named_chunk(node, format!("target_{name}"), source, None)
+			make_kind_chunk(node, ChunkKind::Target, Some(name), source, None)
 		},
-		"install" | "export" => group_candidate(node, "install", source),
-		other => group_candidate(node, &format!("cmd_{other}"), source),
+		"install" | "export" => group_candidate(node, ChunkKind::Install, source),
+		other => make_kind_chunk(node, ChunkKind::Cmd, Some(other.to_string()), source, None),
 	})
 }
 
 fn classify_if_child<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 	match node.kind() {
-		"if_command" => Some(group_candidate(node, "cond", source)),
-		"elseif_command" => Some(positional_candidate(node, "elif", source)),
-		"else_command" => Some(positional_candidate(node, "else", source)),
+		"if_command" => Some(group_candidate(node, ChunkKind::Cond, source)),
+		"elseif_command" => Some(positional_candidate(node, ChunkKind::Elif, source)),
+		"else_command" => Some(positional_candidate(node, ChunkKind::Else, source)),
 		"body" => Some(make_container_chunk(
 			node,
-			"block".to_string(),
+			ChunkKind::Block,
+			None,
 			source,
 			Some(recurse_self(node, ChunkContext::FunctionBody)),
 		)),

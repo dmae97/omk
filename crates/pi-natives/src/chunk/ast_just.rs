@@ -2,7 +2,7 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*};
+use super::{classify::LangClassifier, common::*, kind::ChunkKind};
 
 pub struct JustClassifier;
 
@@ -42,17 +42,18 @@ fn classify_just_root_node<'t>(node: Node<'t>, source: &str) -> Option<RawChunkC
 	Some(match node.kind() {
 		"setting" => {
 			let name = extract_setting_name(node, source).unwrap_or_else(|| "anonymous".to_string());
-			make_named_chunk(node, format!("setting_{name}"), source, None)
+			make_kind_chunk(node, ChunkKind::Setting, Some(name), source, None)
 		},
 		"alias" => {
 			let name = extract_alias_name(node, source).unwrap_or_else(|| "anonymous".to_string());
-			make_named_chunk(node, format!("alias_{name}"), source, None)
+			make_kind_chunk(node, ChunkKind::Alias, Some(name), source, None)
 		},
 		"recipe" => {
 			let name = extract_recipe_name(node, source).unwrap_or_else(|| "anonymous".to_string());
 			make_container_chunk(
 				node,
-				format!("recipe_{name}"),
+				ChunkKind::Recipe,
+				Some(name),
 				source,
 				recurse_into(node, ChunkContext::FunctionBody, &[], &["recipe_body"]),
 			)
@@ -65,8 +66,8 @@ fn classify_just_body_node<'t>(node: Node<'t>, source: &str) -> Option<RawChunkC
 	Some(match node.kind() {
 		// Just recipe bodies are line-oriented; tree-sitter exposes shell lines as
 		// `recipe_line` leaves rather than a nested shell AST.
-		"recipe_line" => group_candidate(node, "cmd", source),
-		"shebang" => make_named_chunk(node, "shebang".to_string(), source, None),
+		"recipe_line" => group_candidate(node, ChunkKind::Cmd, source),
+		"shebang" => make_kind_chunk(node, ChunkKind::Shebang, None, source, None),
 		_ => return None,
 	})
 }

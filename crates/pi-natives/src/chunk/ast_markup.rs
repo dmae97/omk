@@ -2,36 +2,38 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*};
+use super::{classify::LangClassifier, common::*, kind::ChunkKind};
 
 pub struct MarkupClassifier;
 
 impl MarkupClassifier {
 	fn classify_section<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
 		let name = extract_markdown_heading(node, source).unwrap_or_else(|| "anonymous".to_string());
-		make_container_chunk(
+		force_container(make_container_chunk(
 			node,
-			format!("section_{name}"),
+			ChunkKind::Section,
+			Some(name),
 			source,
 			Some(recurse_self(node, ChunkContext::ClassBody)),
-		)
+		))
 	}
 
 	fn classify_block_statement<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
 		let name =
 			extract_glimmer_block_name(node, source).unwrap_or_else(|| "anonymous".to_string());
-		make_container_chunk(
+		force_container(make_container_chunk(
 			node,
-			format!("block_{name}"),
+			ChunkKind::Block,
+			Some(name),
 			source,
 			Some(recurse_self(node, ChunkContext::ClassBody)),
-		)
+		))
 	}
 
 	fn classify_mustache_statement<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
 		let name =
 			extract_glimmer_mustache_name(node, source).unwrap_or_else(|| "anonymous".to_string());
-		make_named_chunk(node, format!("mustache_{name}"), source, None)
+		make_kind_chunk(node, ChunkKind::Mustache, Some(name), source, None)
 	}
 
 	/// Classify HTML-like element nodes that appear inside handlebars blocks.
@@ -40,14 +42,15 @@ impl MarkupClassifier {
 			"element" | "script_element" | "style_element" | "element_node" => {
 				let name =
 					extract_element_tag_name(node, source).unwrap_or_else(|| "anonymous".to_string());
-				Some(make_container_chunk(
+				Some(force_container(make_container_chunk(
 					node,
-					format!("tag_{name}"),
+					ChunkKind::Tag,
+					Some(name),
 					source,
 					Some(recurse_self(node, ChunkContext::ClassBody)),
-				))
+				)))
 			},
-			"text_node" => Some(group_candidate(node, "text", source)),
+			"text_node" => Some(group_candidate(node, ChunkKind::Text, source)),
 			_ => None,
 		}
 	}
@@ -85,6 +88,11 @@ impl LangClassifier for MarkupClassifier {
 	) -> Option<RawChunkCandidate<'t>> {
 		None
 	}
+}
+
+const fn force_container(mut candidate: RawChunkCandidate<'_>) -> RawChunkCandidate<'_> {
+	candidate.force_recurse = true;
+	candidate
 }
 
 /// Extract heading text from a Markdown `section` node's `atx_heading` or

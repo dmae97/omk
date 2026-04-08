@@ -275,13 +275,13 @@ fn chunk_body_anchor_indent(
 		})
 }
 
-const fn chunk_anchor_label(chunk: &ChunkNode, style: ChunkAnchorStyle) -> &str {
+fn chunk_anchor_label(chunk: &ChunkNode, style: ChunkAnchorStyle) -> String {
 	match style {
-		ChunkAnchorStyle::Full | ChunkAnchorStyle::FullOmit => chunk.path.as_str(),
+		ChunkAnchorStyle::Full | ChunkAnchorStyle::FullOmit => chunk.path.clone(),
 		ChunkAnchorStyle::Kind
 		| ChunkAnchorStyle::KindOmit
 		| ChunkAnchorStyle::Bare
-		| ChunkAnchorStyle::None => chunk.name.as_str(),
+		| ChunkAnchorStyle::None => chunk.kind.path_segment(chunk.identifier.as_deref()),
 	}
 }
 
@@ -700,7 +700,10 @@ fn emit_chunk_subtree(
 				);
 				let style = ctx.anchor_style.with_omit_checksum(ctx.omit_checksum);
 				let anchor_label = chunk_anchor_label(chunk, style);
-				push_meta(ctx, style.render(&anchor_indent, anchor_label, chunk.checksum.as_str()));
+				push_meta(
+					ctx,
+					style.render(&anchor_indent, anchor_label.as_str(), chunk.checksum.as_str()),
+				);
 				return;
 			},
 			Some(ChunkFocusMode::Container | ChunkFocusMode::Expanded) => {
@@ -730,7 +733,7 @@ fn emit_chunk_subtree(
 		);
 		let style = ctx.anchor_style.with_omit_checksum(ctx.omit_checksum);
 		let anchor_label = chunk_anchor_label(chunk, style);
-		push_meta(ctx, style.render(&anchor_indent, anchor_label, chunk.checksum.as_str()));
+		push_meta(ctx, style.render(&anchor_indent, anchor_label.as_str(), chunk.checksum.as_str()));
 	}
 	if !has_kids {
 		if ctx.show_leaf_preview
@@ -784,7 +787,10 @@ fn emit_chunk_subtree(
 			);
 			let style = ctx.anchor_style.with_omit_checksum(ctx.omit_checksum);
 			let anchor_label = chunk_anchor_label(chunk, style);
-			push_meta(ctx, style.render_close(&anchor_indent, anchor_label, chunk.checksum.as_str()));
+			push_meta(
+				ctx,
+				style.render_close(&anchor_indent, anchor_label.as_str(), chunk.checksum.as_str()),
+			);
 		}
 		return;
 	}
