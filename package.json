@@ -47,5 +47,9 @@
 	},
 	"lint-staged": {
 		"*.{js,ts,jsx,tsx,json,jsonc,css}": "biome check --write --no-errors-on-unmatched"
+	},
+	"dependencies": {
+		"typescript": "6.0.2",
+		"typescript-language-server": "5.1.3"
 	}
 }
