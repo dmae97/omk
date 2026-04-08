@@ -5,7 +5,7 @@ Edits files via syntax-aware chunks. Run `read(path="file.ts")` first. The edit 
 - `sel` format:
   - insertions: `chunk` or `chunk@region`
   - replacements: `chunk#CRC` or `chunk#CRC@region`
-- Without a `@region` it defaults to the entire chunk. Valid regions: `head`, `body`, `tail`.
+- Without a `@region` it defaults to the entire chunk. Valid regions: `head`, `body`, `tail`. Prefer the innermost chunk and narrowest region that covers your change — e.g. use `@body` when only the body is changing.
 - If the exact chunk path is unclear, run `read(path="file", sel="?")` and copy a selector from that listing.
 - Use `\t` for indentation in `content`. Write content at indent-level 0 — the tool re-indents it to match the chunk's position in the file. For example, to replace `@body` of a method, write the body starting at column 0:
   ```
@@ -106,6 +106,8 @@ function makeCounter(start: number): Counter {
   return c;
 }
 ~~~
+
+> **Tip:** Prefer the narrowest edit that covers your change. If only the body is changing, use `@body` instead of replacing the whole chunk — this avoids accidentally dropping or duplicating surrounding attributes, decorators, and doc comments.
 
 **Replace a method body** (`@body`):
 ~~~json
