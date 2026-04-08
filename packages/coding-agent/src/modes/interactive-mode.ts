@@ -50,7 +50,7 @@ import type { HookSelectorComponent } from "./components/hook-selector";
 import type { PythonExecutionComponent } from "./components/python-execution";
 import { StatusLineComponent } from "./components/status-line";
 import type { ToolExecutionHandle } from "./components/tool-execution";
-import { WelcomeComponent } from "./components/welcome";
+import { WelcomeComponent, type LspServerInfo as WelcomeLspServerInfo } from "./components/welcome";
 import { BtwController } from "./controllers/btw-controller";
 import { CommandController } from "./controllers/command-controller";
 import { EventController } from "./controllers/event-controller";
@@ -186,6 +186,7 @@ export class InteractiveMode implements InteractiveModeContext {
 	#observerRegistry: SessionObserverRegistry;
 	#eventBus?: EventBus;
 	#eventBusUnsubscribers: Array<() => void> = [];
+	#welcomeComponent?: WelcomeComponent;
 
 	constructor(
 		session: AgentSession,
@@ -320,15 +321,8 @@ export class InteractiveMode implements InteractiveModeContext {
 			),
 		);
 
-		// Convert LSP servers to welcome format
-		const lspServerInfo =
-			this.lspServers?.map(s => ({
-				name: s.name,
-				status: s.status as "ready" | "error" | "connecting",
-				fileTypes: s.fileTypes,
-			})) ?? [];
-
 		const startupQuiet = settings.get("startup.quiet");
+		this.#welcomeComponent = undefined;
 
 		for (const warning of this.session.configWarnings) {
 			this.ui.addChild(new Text(theme.fg("warning", `Warning: ${warning}`), 1, 0));
@@ -337,11 +331,17 @@ export class InteractiveMode implements InteractiveModeContext {
 
 		if (!startupQuiet) {
 			// Add welcome header
-			const welcome = new WelcomeComponent(this.#version, modelName, providerName, recentSessions, lspServerInfo);
+			this.#welcomeComponent = new WelcomeComponent(
+				this.#version,
+				modelName,
+				providerName,
+				recentSessions,
+				this.#getWelcomeLspServers(),
+			);
 
 			// Setup UI layout
 			this.ui.addChild(new Spacer(1));
-			this.ui.addChild(welcome);
+			this.ui.addChild(this.#welcomeComponent);
 			this.ui.addChild(new Spacer(1));
 
 			// Add changelog if provided
@@ -1102,17 +1102,14 @@ export class InteractiveMode implements InteractiveModeContext {
 	}
 
 	#handleLspStartupEvent(event: LspStartupEvent): void {
+		this.#updateWelcomeLspServers();
+
 		if (event.type === "failed") {
 			this.showWarning(`LSP startup failed: ${event.error}. It will retry lazily on write.`);
 			return;
 		}
 
-		const readyServers = event.servers.filter(server => server.status === "ready").map(server => server.name);
 		const failedServers = event.servers.filter(server => server.status === "error");
-
-		if (readyServers.length > 0) {
-			this.showStatus(`LSP ready: ${readyServers.join(", ")}`);
-		}
 
 		if (failedServers.length === 1) {
 			const failedServer = failedServers[0];
@@ -1125,6 +1122,25 @@ export class InteractiveMode implements InteractiveModeContext {
 			const failedNames = failedServers.map(server => server.name).join(", ");
 			this.showWarning(`LSP startup failed for ${failedNames}. It will retry lazily on write.`);
 		}
+	}
+
+	#getWelcomeLspServers(): WelcomeLspServerInfo[] {
+		return (
+			this.lspServers?.map(server => ({
+				name: server.name,
+				status: server.status,
+				fileTypes: server.fileTypes,
+			})) ?? []
+		);
+	}
+
+	#updateWelcomeLspServers(): void {
+		if (!this.#welcomeComponent) {
+			return;
+		}
+
+		this.#welcomeComponent.setLspServers(this.#getWelcomeLspServers());
+		this.ui.requestRender();
 	}
 
 	ensureLoadingAnimation(): void {

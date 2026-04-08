@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
 - Simplified chunk edit operations: removed `append_child`, `prepend_child`, `append_sibling`, `prepend_sibling`, and `replace_body` ops in favor of unified `replace`, `before`, `after`, `prepend`, and `append` with region targeting (`@container`, `@prologue`, `@body`, `@epilogue`)
@@ -69,6 +70,7 @@
 
 ### Changed
 
+- LSP server connecting status in welcome banner now uses muted pending symbol instead of warning symbol for clearer visual distinction
 - Codex websocket prewarm now runs asynchronously in the background instead of blocking session creation, allowing faster startup
 - Codex websocket status updates now display in interactive mode when prewarm completes or fails
 - LSP server warmup now runs asynchronously in the background instead of blocking session creation, allowing faster startup
@@ -78,6 +80,22 @@
 - ACP agent now manages multiple sessions instead of a single session; session lifecycle and configuration are now per-session
 - ACP session creation now uses a factory function to support creating new sessions for different working directories
 - ACP event mapping now accepts optional `getMessageId` callback for stable message ID assignment to assistant chunks
+
+### Removed
+
+- Deleted `src/utils/prompt-format.ts` module; prompt formatting logic moved to `pi-utils`
+- Deleted `src/utils/frontmatter.ts` module; frontmatter parsing logic moved to `pi-utils`
+- Removed `waitForChildProcess` utility (child process termination now handled by native `killTree` from pi-natives)
+- `grep-chunk.md` (folded into unified grep template)
+- `startMacAppearanceObserver` export (use `MacAppearanceObserver.start()`)
+- `copyToClipboard` export from pi-natives
+- `PI_CHUNK_SPLICES` env and `chunkSplicesEnabled()`
+- Autoresearch `segmentFingerprint` and related config hashing
+
+### Fixed
+
+- Welcome banner LSP server status now updates in real-time when background startup warmup completes, eliminating stale connecting status displays
+- Welcome banner LSP startup rows now re-render when background warmup finishes, use the pending status symbol while servers are still connecting, and no longer add a redundant `LSP ready` status line on successful startup
 - ACP session initialization now registers connection cleanup handlers to dispose all sessions on disconnect
 - Reorganized package.json exports: moved `./edit` exports before `./plan-mode` for better logical grouping
 - Notebook conversion logic now checks for raw read mode or non-chunk mode before converting via markit, allowing chunk-mode reads of `.ipynb` files to use chunk parsing instead of conversion
@@ -119,20 +137,6 @@
 - Native/shell alignment: `GrepOutputMode` from pi-natives; shell and `getDiagnosticsForFile` callbacks use error-first `(err, chunk)`; `getDiagnosticsForFile` takes an options object
 - Clipboard: `copyToClipboard` / `readImageFromClipboard` live in `utils/clipboard.ts` (OSC 52 and Termux)
 - macOS: session-wide power assertion while the agent runs; `MacAppearanceObserver.start()` with error-first callback; `detectMacOSAppearance()` returns enum values
-
-### Removed
-
-- Deleted `src/utils/prompt-format.ts` module; prompt formatting logic moved to `pi-utils`
-- Deleted `src/utils/frontmatter.ts` module; frontmatter parsing logic moved to `pi-utils`
-- Removed `waitForChildProcess` utility (child process termination now handled by native `killTree` from pi-natives)
-- `grep-chunk.md` (folded into unified grep template)
-- `startMacAppearanceObserver` export (use `MacAppearanceObserver.start()`)
-- `copyToClipboard` export from pi-natives
-- `PI_CHUNK_SPLICES` env and `chunkSplicesEnabled()`
-- Autoresearch `segmentFingerprint` and related config hashing
-
-### Fixed
-
 - ACP session cleanup now properly cancels in-flight prompts and disposes resources when sessions are closed or connection aborts
 - Removed unused `_createErrorToolResult` helper function from RPC host-tools module
 - Fixed Go receiver method indentation in append operations to preserve relative indentation from the anchor chunk
