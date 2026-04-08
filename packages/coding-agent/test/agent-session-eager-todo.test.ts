@@ -264,4 +264,32 @@ describe("AgentSession eager todo enforcement", () => {
 		expect(session.getTodoPhases()).toHaveLength(1);
 		expect(session.getTodoPhases()[0]?.tasks[0]?.content).toBe("List all git worktrees in the current repository");
 	});
+
+	it("skips eager todo enforcement for prompts ending with a question mark", async () => {
+		await session.prompt("list all work trees?");
+
+		expect(observedCalls).toHaveLength(1);
+		expect(observedCalls[0]).toEqual({
+			toolChoice: undefined,
+			toolNames: ["todo_write", "bash"],
+			messageRoles: ["user"],
+			messageTexts: ["list all work trees?"],
+			lastMessageRole: "user",
+			lastMessageText: "list all work trees?",
+		});
+	});
+
+	it("skips eager todo enforcement for prompts ending with an exclamation mark", async () => {
+		await session.prompt("list all work trees!");
+
+		expect(observedCalls).toHaveLength(1);
+		expect(observedCalls[0]).toEqual({
+			toolChoice: undefined,
+			toolNames: ["todo_write", "bash"],
+			messageRoles: ["user"],
+			messageTexts: ["list all work trees!"],
+			lastMessageRole: "user",
+			lastMessageText: "list all work trees!",
+		});
+	});
 });

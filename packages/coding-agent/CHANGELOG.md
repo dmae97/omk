@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Debug tool with DAP (Debug Adapter Protocol) support for launching and attaching debuggers, setting breakpoints, stepping through execution, inspecting threads/stack/variables, and evaluating expressions
@@ -18,6 +19,7 @@
 
 ### Changed
 
+- Eager todo enforcement now skips prompts ending with question marks or exclamation marks, treating them as queries or commands rather than statements requiring task planning
 - Chunk read output now displays fully-qualified anchor paths (e.g., `[class_Worker.fn_run#CRC]`) instead of bare names, making targets unambiguous for edits
 - Chunk edit tool documentation clarified: `target` must be the fully-qualified path with `#CRC` suffix; added guidance to run `read(path="file", sel="?")` for canonical target listings when anchor style is unclear
 - Chunk read tool documentation updated: `sel` parameter now documents the `?` selector for canonical target listings, and clarifies that default output shows full paths
