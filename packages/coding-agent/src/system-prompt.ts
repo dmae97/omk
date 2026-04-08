@@ -265,14 +265,16 @@ async function saveGpuCache(info: GpuCache): Promise<void> {
 }
 
 async function getCachedGpu(): Promise<string | undefined> {
-	const cached = await logger.timeAsync("getCachedGpu:loadGpuCache", loadGpuCache);
+	const cached = await logger.time("getCachedGpu:loadGpuCache", loadGpuCache);
 	if (cached) return cached.gpu;
-	const gpu = await logger.timeAsync("getCachedGpu:getGpuModel", getGpuModel);
-	if (gpu) await logger.timeAsync("getCachedGpu:saveGpuCache", saveGpuCache, { gpu });
+	const gpu = await logger.time("getCachedGpu:getGpuModel", getGpuModel);
+	if (gpu) {
+		await logger.time("getCachedGpu:saveGpuCache", saveGpuCache, { gpu });
+	}
 	return gpu ?? undefined;
 }
 async function getEnvironmentInfo(): Promise<Array<{ label: string; value: string }>> {
-	const gpu = await logger.timeAsync("getEnvironmentInfo:getCachedGpu", getCachedGpu);
+	const gpu = await getCachedGpu();
 	const cpus = os.cpus();
 	const entries: Array<{ label: string; value: string | undefined }> = [
 		{ label: "OS", value: `${os.platform()} ${os.release()}` },
@@ -461,13 +463,13 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 	const resolvedCwd = cwd ?? getProjectDir();
 
 	const prepPromise = (() => {
-		const systemPromptCustomizationPromise = logger.timeAsync("loadSystemPromptFiles", loadSystemPromptFiles, {
+		const systemPromptCustomizationPromise = logger.time("loadSystemPromptFiles", loadSystemPromptFiles, {
 			cwd: resolvedCwd,
 		});
 		const contextFilesPromise = providedContextFiles
 			? Promise.resolve(providedContextFiles)
-			: logger.timeAsync("loadProjectContextFiles", loadProjectContextFiles, { cwd: resolvedCwd });
-		const agentsMdSearchPromise = logger.timeAsync("buildAgentsMdSearch", buildAgentsMdSearch, resolvedCwd);
+			: logger.time("loadProjectContextFiles", loadProjectContextFiles, { cwd: resolvedCwd });
+		const agentsMdSearchPromise = logger.time("buildAgentsMdSearch", buildAgentsMdSearch, resolvedCwd);
 		const skillsPromise: Promise<Skill[]> =
 			providedSkills !== undefined
 				? Promise.resolve(providedSkills)
@@ -581,7 +583,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 	const promptSources = [effectiveSystemPromptCustomization, resolvedCustomPrompt, resolvedAppendPrompt];
 	const injectedAlwaysApplyRules = dedupeAlwaysApplyRules(alwaysApplyRules, promptSources);
 
-	const environment = await logger.timeAsync("getEnvironmentInfo", getEnvironmentInfo);
+	const environment = await logger.time("getEnvironmentInfo", getEnvironmentInfo);
 	const data = {
 		systemPromptCustomization: effectiveSystemPromptCustomization,
 		customPrompt: resolvedCustomPrompt,

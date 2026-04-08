@@ -289,11 +289,7 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 	const isTestEnv = Bun.env.BUN_ENV === "test" || Bun.env.NODE_ENV === "test";
 	const skipPythonWarm = isTestEnv || $env.PI_PYTHON_SKIP_CHECK === "1";
 	if (shouldCheckPython) {
-		const availability = await logger.timeAsync(
-			"createTools:pythonCheck",
-			checkPythonKernelAvailability,
-			session.cwd,
-		);
+		const availability = await logger.time("createTools:pythonCheck", checkPythonKernelAvailability, session.cwd);
 		pythonAvailable = availability.ok;
 		if (!availability.ok) {
 			logger.warn("Python kernel unavailable, falling back to bash", {
@@ -303,7 +299,7 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 			const sessionFile = session.getSessionFile?.() ?? undefined;
 			const warmSessionId = sessionFile ? `session:${sessionFile}:cwd:${session.cwd}` : `cwd:${session.cwd}`;
 			try {
-				await logger.timeAsync(
+				await logger.time(
 					"createTools:warmPython",
 					warmPythonEnvironment,
 					session.cwd,
@@ -391,7 +387,7 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 
 	const baseResults = await Promise.all(
 		baseEntries.map(async ([name, factory]) => {
-			const tool = await logger.timeAsync(`createTools:${name}`, factory, session);
+			const tool = await logger.time(`createTools:${name}`, factory, session);
 			return tool ? wrapToolWithMetaNotice(tool) : null;
 		}),
 	);
@@ -403,7 +399,7 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 	if (tools.some(tool => tool.name === "resolve")) {
 		return tools;
 	}
-	const resolveTool = await logger.timeAsync("createTools:resolve", HIDDEN_TOOLS.resolve, session);
+	const resolveTool = await logger.time("createTools:resolve", HIDDEN_TOOLS.resolve, session);
 	if (resolveTool) {
 		tools.push(wrapToolWithMetaNotice(resolveTool));
 	}

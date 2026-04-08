@@ -649,17 +649,12 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	registerPythonCleanup();
 
 	// Use provided or create AuthStorage and ModelRegistry
-	const { authStorage, modelRegistry } = await logger.timeAsync("discoverModels", async () => {
-		const authStorage = options.authStorage ?? (await discoverAuthStorage(agentDir));
-		const modelRegistry = options.modelRegistry ?? new ModelRegistry(authStorage);
-		return { authStorage, modelRegistry };
-	});
+	const authStorage = options.authStorage ?? (await logger.time("discoverModels", discoverAuthStorage, agentDir));
+	const modelRegistry = options.modelRegistry ?? new ModelRegistry(authStorage);
 
-	const settings = await logger.timeAsync(
-		"settings",
-		async () => options.settings ?? (await Settings.init({ cwd, agentDir })),
-	);
-	logger.time("initializeWithSettings", initializeWithSettings, settings);
+	const settings = options.settings ?? (await logger.time("settings", Settings.init, { cwd, agentDir }));
+	logger.time("initializeWithSettings");
+	initializeWithSettings(settings);
 	if (!options.modelRegistry) {
 		modelRegistry.refreshInBackground();
 	}
@@ -706,7 +701,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	// reflect actual loaded secrets, not just the setting toggle.
 	let obfuscator: SecretObfuscator | undefined;
 	if (settings.get("secrets.enabled")) {
-		const fileEntries = await logger.timeAsync("loadSecrets", loadSecrets, cwd, agentDir);
+		const fileEntries = await logger.time("loadSecrets", loadSecrets, cwd, agentDir);
 		const envEntries = collectEnvSecrets();
 		const allEntries = [...envEntries, ...fileEntries];
 		if (allEntries.length > 0) {
@@ -716,10 +711,10 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const secretsEnabled = obfuscator?.hasSecrets() === true;
 
 	// Check if session has existing data to restore
-	const existingSession = logger.time("loadSession", () =>
+	const existingSession = logger.time("loadSessionContext", () =>
 		deobfuscateSessionContext(sessionManager.buildSessionContext(), obfuscator),
 	);
-	const existingBranch = sessionManager.getBranch();
+	const existingBranch = logger.time("getSessionBranch", () => sessionManager.getBranch());
 	const hasExistingSession = existingBranch.length > 0;
 	const hasThinkingEntry = existingBranch.some(entry => entry.type === "thinking_level_change");
 	const hasServiceTierEntry = existingBranch.some(entry => entry.type === "service_tier_change");
@@ -728,34 +723,41 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const modelMatchPreferences = {
 		usageOrder: settings.getStorage()?.getModelUsageOrder(),
 	};
-	const defaultRoleSpec = resolveModelRoleValue(settings.getModelRole("default"), modelRegistry.getAvailable(), {
-		settings,
-		matchPreferences: modelMatchPreferences,
-	});
+	const defaultRoleSpec = logger.time("resolveDefaultModelRole", () =>
+		resolveModelRoleValue(settings.getModelRole("default"), modelRegistry.getAvailable(), {
+			settings,
+			matchPreferences: modelMatchPreferences,
+		}),
+	);
 	let model = options.model;
 	let modelFallbackMessage: string | undefined;
 	// If session has data, try to restore model from it.
 	// Skip restore when an explicit model was requested.
 	const defaultModelStr = existingSession.models.default;
 	if (!hasExplicitModel && !model && hasExistingSession && defaultModelStr) {
-		const parsedModel = parseModelString(defaultModelStr);
-		if (parsedModel) {
-			const restoredModel = modelRegistry.find(parsedModel.provider, parsedModel.id);
-			if (restoredModel && (await hasModelApiKey(restoredModel))) {
-				model = restoredModel;
+		await logger.time("restoreSessionModel", async () => {
+			const parsedModel = parseModelString(defaultModelStr);
+			if (parsedModel) {
+				const restoredModel = modelRegistry.find(parsedModel.provider, parsedModel.id);
+				if (restoredModel && (await hasModelApiKey(restoredModel))) {
+					model = restoredModel;
+				}
 			}
-		}
-		if (!model) {
-			modelFallbackMessage = `Could not restore model ${defaultModelStr}`;
-		}
+			if (!model) {
+				modelFallbackMessage = `Could not restore model ${defaultModelStr}`;
+			}
+		});
 	}
 
 	// If still no model, try settings default.
 	// Skip settings fallback when an explicit model was requested.
 	if (!hasExplicitModel && !model && defaultRoleSpec.model) {
-		if (await hasModelApiKey(defaultRoleSpec.model)) {
-			model = defaultRoleSpec.model;
-		}
+		const settingsDefaultModel = defaultRoleSpec.model;
+		logger.time("resolveSettingsDefaultModel", () => {
+			// defaultRoleSpec.model already comes from modelRegistry.getAvailable(),
+			// so re-validating auth here just repeats the expensive lookup path.
+			model = settingsDefaultModel;
+		});
 	}
 
 	const taskDepth = options.taskDepth ?? 0;
@@ -776,7 +778,10 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		thinkingLevel = settings.get("defaultThinkingLevel");
 	}
 	if (model) {
-		thinkingLevel = resolveThinkingLevelForModel(model, thinkingLevel);
+		const resolvedModel = model;
+		thinkingLevel = logger.time("resolveThinkingLevelForModel", () =>
+			resolveThinkingLevelForModel(resolvedModel, thinkingLevel),
+		);
 	}
 
 	let skills: Skill[];
@@ -785,55 +790,44 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		skills = options.skills;
 		skillWarnings = [];
 	} else {
-		const discovered = await logger.timeAsync("discoverSkills", async () =>
-			discoveredSkillsPromise ? await discoveredSkillsPromise : { skills: [], warnings: [] },
+		const discovered = await logger.time(
+			"discoverSkills",
+			() => discoveredSkillsPromise ?? Promise.resolve({ skills: [], warnings: [] }),
 		);
 		skills = discovered.skills;
 		skillWarnings = discovered.warnings;
 	}
 
-	// Discover rules
-	const { ttsrManager, rulesResult, registeredTtsrRuleNames } = await logger.timeAsync(
-		"discoverTtsrRules",
-		async () => {
-			const ttsrSettings = settings.getGroup("ttsr");
-			const ttsrManager = new TtsrManager(ttsrSettings);
-			const rulesResult =
-				options.rules !== undefined
-					? { items: options.rules, warnings: undefined }
-					: await loadCapability<Rule>(ruleCapability.id, { cwd });
-			const registeredTtsrRuleNames = new Set<string>();
-			for (const rule of rulesResult.items) {
-				if (rule.condition && rule.condition.length > 0) {
-					if (ttsrManager.addRule(rule)) {
-						registeredTtsrRuleNames.add(rule.name);
-					}
-				}
+	// Discover rules and bucket them in one pass to avoid repeated scans over large rule sets.
+	const { ttsrManager, rulebookRules, alwaysApplyRules } = await logger.time("discoverTtsrRules", async () => {
+		const ttsrSettings = settings.getGroup("ttsr");
+		const ttsrManager = new TtsrManager(ttsrSettings);
+		const rulesResult =
+			options.rules !== undefined
+				? { items: options.rules, warnings: undefined }
+				: await loadCapability<Rule>(ruleCapability.id, { cwd });
+		const rulebookRules: Rule[] = [];
+		const alwaysApplyRules: Rule[] = [];
+		for (const rule of rulesResult.items) {
+			const isTtsrRule = rule.condition && rule.condition.length > 0 ? ttsrManager.addRule(rule) : false;
+			if (isTtsrRule) {
+				continue;
 			}
-			if (existingSession.injectedTtsrRules.length > 0) {
-				ttsrManager.restoreInjected(existingSession.injectedTtsrRules);
+			if (rule.alwaysApply === true) {
+				alwaysApplyRules.push(rule);
+				continue;
 			}
-			return { ttsrManager, rulesResult, registeredTtsrRuleNames };
-		},
-	);
-
-	// Filter rules for the rulebook (non-TTSR, non-alwaysApply, with descriptions)
-	const rulebookRules = logger.time("filterRulebookRules", () =>
-		rulesResult.items.filter((rule: Rule) => {
-			if (registeredTtsrRuleNames.has(rule.name)) return false;
-			if (rule.alwaysApply) return false;
-			if (!rule.description) return false;
-			return true;
-		}),
-	);
-
-	// collect alwaysApply rules — full content injected into system prompt
-	const alwaysApplyRules = rulesResult.items.filter((rule: Rule) => {
-		if (registeredTtsrRuleNames.has(rule.name)) return false;
-		return rule.alwaysApply === true;
+			if (rule.description) {
+				rulebookRules.push(rule);
+			}
+		}
+		if (existingSession.injectedTtsrRules.length > 0) {
+			ttsrManager.restoreInjected(existingSession.injectedTtsrRules);
+		}
+		return { ttsrManager, rulebookRules, alwaysApplyRules };
 	});
 
-	const contextFiles = await logger.timeAsync(
+	const contextFiles = await logger.time(
 		"discoverContextFiles",
 		async () => options.contextFiles ?? (await discoverContextFiles(cwd, agentDir)),
 	);
@@ -983,29 +977,27 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	);
 
 	// Create built-in tools (already wrapped with meta notice formatting)
-	const builtinTools = await logger.timeAsync("createAllTools", () => createTools(toolSession, options.toolNames));
+	const builtinTools = await logger.time("createAllTools", createTools, toolSession, options.toolNames);
 
 	// Discover MCP tools from .mcp.json files
 	let mcpManager: MCPManager | undefined;
 	const enableMCP = options.enableMCP ?? true;
 	const customTools: CustomTool[] = [];
 	if (enableMCP) {
-		const mcpResult = await logger.timeAsync("discoverAndLoadMCPTools", () =>
-			discoverAndLoadMCPTools(cwd, {
-				onConnecting: serverNames => {
-					if (options.hasUI && serverNames.length > 0) {
-						process.stderr.write(`${chalk.gray(`Connecting to MCP servers: ${serverNames.join(", ")}…`)}\n`);
-					}
-				},
-				enableProjectConfig: settings.get("mcp.enableProjectConfig") ?? true,
-				// Always filter Exa - we have native integration
-				filterExa: true,
-				// Filter browser MCP servers when builtin browser tool is active
-				filterBrowser: settings.get("browser.enabled") ?? false,
-				cacheStorage: settings.getStorage(),
-				authStorage,
-			}),
-		);
+		const mcpResult = await logger.time("discoverAndLoadMCPTools", discoverAndLoadMCPTools, cwd, {
+			onConnecting: serverNames => {
+				if (options.hasUI && serverNames.length > 0) {
+					process.stderr.write(`${chalk.gray(`Connecting to MCP servers: ${serverNames.join(", ")}…`)}\n`);
+				}
+			},
+			enableProjectConfig: settings.get("mcp.enableProjectConfig") ?? true,
+			// Always filter Exa - we have native integration
+			filterExa: true,
+			// Filter browser MCP servers when builtin browser tool is active
+			filterBrowser: settings.get("browser.enabled") ?? false,
+			cacheStorage: settings.getStorage(),
+			authStorage,
+		});
 		mcpManager = mcpResult.manager;
 		toolSession.mcpManager = mcpManager;
 
@@ -1029,7 +1021,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	}
 
 	// Add Gemini image tools if GEMINI_API_KEY (or GOOGLE_API_KEY) is available
-	const geminiImageTools = await logger.timeAsync("getGeminiImageTools", getGeminiImageTools);
+	const geminiImageTools = await logger.time("getGeminiImageTools", getGeminiImageTools);
 	if (geminiImageTools.length > 0) {
 		customTools.push(...(geminiImageTools as unknown as CustomTool[]));
 	}
@@ -1041,7 +1033,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 	// Discover and load custom tools from .omp/tools/, .claude/tools/, etc.
 	const builtInToolNames = builtinTools.map(t => t.name);
-	const discoveredCustomTools = await logger.timeAsync(
+	const discoveredCustomTools = await logger.time(
 		"discoverAndLoadCustomTools",
 		discoverAndLoadCustomTools,
 		[],
@@ -1066,7 +1058,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	let extensionsResult: LoadExtensionsResult;
 	if (options.disableExtensionDiscovery) {
 		const configuredPaths = options.additionalExtensionPaths ?? [];
-		extensionsResult = await logger.timeAsync("loadExtensions", loadExtensions, configuredPaths, cwd, eventBus);
+		extensionsResult = await logger.time("loadExtensions", loadExtensions, configuredPaths, cwd, eventBus);
 		for (const { path, error } of extensionsResult.errors) {
 			logger.error("Failed to load extension", { path, error });
 		}
@@ -1076,7 +1068,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		// Merge CLI extension paths with settings extension paths
 		const configuredPaths = [...(options.additionalExtensionPaths ?? []), ...(settings.get("extensions") ?? [])];
 		const disabledExtensionIds = settings.get("disabledExtensions") ?? [];
-		extensionsResult = await logger.timeAsync(
+		extensionsResult = await logger.time(
 			"discoverAndLoadExtensions",
 			discoverAndLoadExtensions,
 			configuredPaths,
@@ -1157,7 +1149,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	// Discover custom commands (TypeScript slash commands)
 	const customCommandsResult: CustomCommandsLoadResult = options.disableExtensionDiscovery
 		? { commands: [], errors: [] }
-		: await logger.timeAsync("discoverCustomCommands", loadCustomCommandsInternal, { cwd, agentDir });
+		: await logger.time("discoverCustomCommands", loadCustomCommandsInternal, { cwd, agentDir });
 	if (!options.disableExtensionDiscovery) {
 		for (const { path, error } of customCommandsResult.errors) {
 			logger.error("Failed to load custom command", { path, error });
@@ -1240,7 +1232,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	if (!hasDeferrableTools) {
 		toolRegistry.delete("resolve");
 	} else if (!toolRegistry.has("resolve")) {
-		const resolveTool = await logger.timeAsync("createTools:resolve:session", HIDDEN_TOOLS.resolve, toolSession);
+		const resolveTool = await logger.time("createTools:resolve:session", HIDDEN_TOOLS.resolve, toolSession);
 		if (resolveTool) {
 			toolRegistry.set(resolveTool.name, wrapToolWithMetaNotice(resolveTool));
 		}
@@ -1390,20 +1382,14 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		}
 	}
 
-	const systemPrompt = await logger.timeAsync(
-		"buildSystemPrompt",
-		rebuildSystemPrompt,
-		initialToolNames,
-		toolRegistry,
-	);
+	const systemPrompt = await logger.time("buildSystemPrompt", rebuildSystemPrompt, initialToolNames, toolRegistry);
 
 	const promptTemplates =
-		options.promptTemplates ??
-		(await logger.timeAsync("discoverPromptTemplates", discoverPromptTemplates, cwd, agentDir));
+		options.promptTemplates ?? (await logger.time("discoverPromptTemplates", discoverPromptTemplates, cwd, agentDir));
 	toolSession.promptTemplates = promptTemplates;
 
 	const slashCommands =
-		options.slashCommands ?? (await logger.timeAsync("discoverSlashCommands", discoverSlashCommands, cwd));
+		options.slashCommands ?? (await logger.time("discoverSlashCommands", discoverSlashCommands, cwd));
 
 	// Create convertToLlm wrapper that filters images if blockImages is enabled (defense-in-depth)
 	const convertToLlmWithBlockImages = (messages: AgentMessage[]): Message[] => {
@@ -1624,13 +1610,15 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		}
 	}
 
-	startMemoryStartupTask({
-		session,
-		settings,
-		modelRegistry,
-		agentDir,
-		taskDepth,
-	});
+	logger.time("startMemoryStartupTask", () =>
+		startMemoryStartupTask({
+			session,
+			settings,
+			modelRegistry,
+			agentDir,
+			taskDepth,
+		}),
+	);
 
 	// Wire MCP manager callbacks to session for reactive tool updates
 	if (mcpManager) {
@@ -1670,6 +1658,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		});
 	}
 
+	logger.time("createAgentSession:return");
 	return {
 		session,
 		extensionsResult,

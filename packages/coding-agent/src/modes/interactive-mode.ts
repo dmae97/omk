@@ -294,13 +294,16 @@ export class InteractiveMode implements InteractiveModeContext {
 	async init(): Promise<void> {
 		if (this.isInitialized) return;
 
-		this.keybindings = logger.time("InteractiveMode.init:keybindings", () => KeybindingsManager.create());
+		logger.time("InteractiveMode.init:keybindings");
+		this.keybindings = KeybindingsManager.create();
 
 		// Register session manager flush for signal handlers (SIGINT, SIGTERM, SIGHUP)
 		this.#cleanupUnsubscribe = postmortem.register("session-manager-flush", () => this.sessionManager.flush());
 
-		await logger.timeAsync("InteractiveMode.init:slashCommands", () =>
-			this.refreshSlashCommandState(getProjectDir()),
+		await logger.time(
+			"InteractiveMode.init:slashCommands",
+			this.refreshSlashCommandState.bind(this),
+			getProjectDir(),
 		);
 
 		// Get current model info for welcome screen
@@ -308,7 +311,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		const providerName = this.session.model?.provider ?? "Unknown";
 
 		// Get recent sessions
-		const recentSessions = await logger.timeAsync("InteractiveMode.init:recentSessions", () =>
+		const recentSessions = await logger.time("InteractiveMode.init:recentSessions", () =>
 			getRecentSessions(this.sessionManager.getSessionDir()).then(sessions =>
 				sessions.map(s => ({
 					name: s.name,

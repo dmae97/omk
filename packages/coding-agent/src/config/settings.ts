@@ -62,15 +62,6 @@ export interface SettingsOptions {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Parse a dotted path into segments.
- * "compaction.enabled" → ["compaction", "enabled"]
- * "theme.dark" → ["theme", "dark"]
- */
-function parsePath(path: string): string[] {
-	return path.split(".");
-}
-
-/**
  * Get a nested value from an object by path segments.
  */
 function getByPath(obj: RawSettings, segments: string[]): unknown {
@@ -137,7 +128,7 @@ export class Settings {
 
 		if (options.overrides) {
 			for (const [key, value] of Object.entries(options.overrides)) {
-				setByPath(this.#overrides, parsePath(key), value);
+				setByPath(this.#overrides, key.split("."), value);
 			}
 		}
 	}
@@ -200,7 +191,7 @@ export class Settings {
 	 * Returns the merged value from global + project + overrides, or the default.
 	 */
 	get<P extends SettingPath>(path: P): SettingValue<P> {
-		const segments = parsePath(path);
+		const segments = path.split(".");
 		const value = getByPath(this.#merged, segments);
 		if (value !== undefined) {
 			return value as SettingValue<P>;
@@ -215,7 +206,7 @@ export class Settings {
 	 */
 	set<P extends SettingPath>(path: P, value: SettingValue<P>): void {
 		const prev = this.get(path);
-		const segments = parsePath(path);
+		const segments = path.split(".");
 		setByPath(this.#global, segments, value);
 		this.#modified.add(path);
 		this.#rebuildMerged();
@@ -232,7 +223,7 @@ export class Settings {
 	 * Apply runtime overrides (not persisted).
 	 */
 	override<P extends SettingPath>(path: P, value: SettingValue<P>): void {
-		const segments = parsePath(path);
+		const segments = path.split(".");
 		setByPath(this.#overrides, segments, value);
 		this.#rebuildMerged();
 	}
@@ -241,7 +232,7 @@ export class Settings {
 	 * Clear a runtime override.
 	 */
 	clearOverride(path: SettingPath): void {
-		const segments = parsePath(path);
+		const segments = path.split(".");
 		let current = this.#overrides;
 		for (let i = 0; i < segments.length - 1; i++) {
 			const segment = segments[i];
@@ -570,7 +561,7 @@ export class Settings {
 
 				// Apply only our modified paths
 				for (const modPath of modifiedPaths) {
-					const segments = parsePath(modPath);
+					const segments = modPath.split(".");
 					const value = getByPath(this.#global, segments);
 					setByPath(current, segments, value);
 				}

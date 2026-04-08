@@ -172,7 +172,7 @@ export class SecretObfuscator {
 
 	/** Deobfuscate obfuscate-mode placeholders back to original secrets. Replace-mode is NOT reversed. */
 	deobfuscate(text: string): string {
-		if (!this.#hasAny) return text;
+		if (!this.#hasAny || !text.includes("#")) return text;
 		return text.replace(PLACEHOLDER_RE, match => {
 			return this.#deobfuscateMap.get(match) ?? match;
 		});

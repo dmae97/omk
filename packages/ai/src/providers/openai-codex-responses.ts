@@ -1381,6 +1381,7 @@ export async function prewarmOpenAICodexResponses(
 	if (!sessionKey || !providerSessionState) return;
 	const state = getCodexWebSocketSessionState(sessionKey, providerSessionState);
 	if (!shouldUseCodexWebSocket(model, state, options?.preferWebsockets)) return;
+	logger.time("prewarmCodex:createHeaders");
 	const headers = createCodexHeaders(
 		{ ...(model.headers ?? {}), ...(options?.headers ?? {}) },
 		accountId,
@@ -1389,6 +1390,7 @@ export async function prewarmOpenAICodexResponses(
 		"websocket",
 		state,
 	);
+	logger.time("prewarmCodex:establishWs");
 	await getOrCreateCodexWebSocketConnection(state, toWebSocketUrl(url), headers, options?.signal);
 	state.prewarmed = true;
 }
@@ -1626,6 +1628,7 @@ class CodexWebSocketConnection {
 	async connect(signal?: AbortSignal): Promise<void> {
 		if (this.isOpen()) return;
 		if (this.#connectPromise) {
+			logger.time("codexWs:awaitSharedHandshake");
 			await this.#connectPromise;
 			return;
 		}
@@ -1717,6 +1720,7 @@ class CodexWebSocketConnection {
 			}
 		});
 
+		logger.time("codexWs:awaitTcpHandshake");
 		try {
 			await promise;
 		} finally {
@@ -1830,6 +1834,7 @@ async function getOrCreateCodexWebSocketConnection(
 	const headerRecord = headersToRecord(headers);
 	if (state.connection?.isOpen()) {
 		if (state.connection.matchesAuth(headerRecord)) {
+			logger.time("codexWs:reuseOpenSocket");
 			return state.connection;
 		}
 		state.connection.close("token-refresh");
@@ -1837,6 +1842,7 @@ async function getOrCreateCodexWebSocketConnection(
 	}
 	state.connection?.close("reconnect");
 	resetCodexWebSocketAppendState(state);
+	logger.time("codexWs:newSocket");
 	state.connection = new CodexWebSocketConnection(url, headerRecord, {
 		idleTimeoutMs: getCodexWebSocketIdleTimeoutMs(),
 		firstEventTimeoutMs: getCodexWebSocketFirstEventTimeoutMs(),
