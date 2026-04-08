@@ -218,7 +218,8 @@ describe("chunk mode tools", () => {
 			path: filePath,
 			edits: [
 				{
-					target: `class_Server.fn_handleError#${checksum}`,
+					sel: `class_Server.fn_handleError#${checksum}`,
+					op: "replace",
 					content: `  private handleError(err: Error): string {
     return \`normalized:\${err.message}\`;
   }
@@ -262,11 +263,13 @@ describe("chunk mode tools", () => {
 			path: filePath,
 			edits: [
 				{
-					target: `${chunkPath}#${checksum}`,
+					sel: `${chunkPath}#${checksum}`,
+					op: "replace",
 					content: buildHandleErrorMethod({ returnLine: "    return err.message.toUpperCase() + total;" }),
 				},
 				{
-					target: `${chunkPath}#${checksum2}`,
+					sel: `${chunkPath}#${checksum2}`,
+					op: "replace",
 					content: buildHandleErrorMethod({
 						totalInitLine: "    let total = 1;",
 						returnLine: "    return err.message.toUpperCase() + total;",
@@ -310,7 +313,7 @@ describe("chunk mode tools", () => {
 			path: filePath,
 			edits: [
 				{
-					target: "class_Server@inner",
+					sel: "class_Server@body",
 					op: "append",
 					content: 'status(): string {\n  return "ok";\n}\n',
 				},
@@ -332,7 +335,7 @@ describe("chunk mode tools", () => {
 
 		await editTool.execute("chunk-edit-empty-replace-delete", {
 			path: filePath,
-			edits: [{ target: `fn_main#${checksum}`, content: "" }],
+			edits: [{ sel: `fn_main#${checksum}`, op: "replace", content: "" }],
 		});
 
 		const updatedSource = await Bun.file(filePath).text();
@@ -366,8 +369,8 @@ describe("chunk mode tools", () => {
 			editTool.execute("chunk-edit-batch-rollback", {
 				path: filePath,
 				edits: [
-					{ target: "class_Server", op: "append", content: '  status(): string {\n    return "ok";\n  }' },
-					{ target: "class_Server.fn_handleError#ZZZZ", content: "" },
+					{ sel: "class_Server", op: "append", content: '  status(): string {\n    return "ok";\n  }' },
+					{ sel: "class_Server.fn_handleError#ZZZZ", op: "replace", content: "" },
 				],
 			}),
 		).rejects.toThrow(/No changes were saved/);
@@ -388,7 +391,8 @@ describe("chunk mode tools", () => {
 				path: filePath,
 				edits: [
 					{
-						target: `class_Server.fn_handleError#${checksum}`,
+						sel: `class_Server.fn_handleError#${checksum}`,
+						op: "replace",
 						content: "  private handleError(err: Error): string {\n    if (err) {\n",
 					},
 				],
@@ -410,11 +414,13 @@ describe("chunk mode tools", () => {
 			path: filePath,
 			edits: [
 				{
-					target: `class_Server.fn_handleError#${checksum}`,
+					sel: `class_Server.fn_handleError#${checksum}`,
+					op: "replace",
 					content: "  private handleError(err: Error): string {\n    return err.message;\n  }",
 				},
 				{
-					target: `class_Server.fn_handleError#${checksum}`,
+					sel: `class_Server.fn_handleError#${checksum}`,
+					op: "replace",
 					content: "  private handleError(err: Error): string {\n    return err.message.toUpperCase();\n  }",
 				},
 			],
@@ -436,7 +442,8 @@ describe("chunk mode tools", () => {
 				path: filePath,
 				edits: [
 					{
-						target: "class_Server.fn_handleError",
+						sel: "class_Server.fn_handleError",
+						op: "replace",
 						content: buildHandleErrorMethod({ totalInitLine: "    let total = 1;" }),
 					},
 				],
@@ -456,7 +463,13 @@ describe("chunk mode tools", () => {
 		// Use bare "main" instead of "fn_main"
 		const _result = await editTool.execute("chunk-edit-prefix-resolve", {
 			path: filePath,
-			edits: [{ target: `main#${checksum}`, content: 'function main(): void {\n  console.log("started");\n}\n' }],
+			edits: [
+				{
+					sel: `main#${checksum}`,
+					op: "replace",
+					content: 'function main(): void {\n  console.log("started");\n}\n',
+				},
+			],
 		});
 		const updatedSource = await Bun.file(filePath).text();
 		expect(updatedSource).toContain('console.log("started")');
@@ -502,7 +515,8 @@ describe("chunk mode tools", () => {
 			path: filePath,
 			edits: [
 				{
-					target: `${building.path}#${building.checksum}`,
+					sel: `${building.path}#${building.checksum}`,
+					op: "replace",
 					content: "## Building and Testing\n\nUse `just verify` instead. It wraps cmake and ctest.\n",
 				},
 			],

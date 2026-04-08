@@ -2205,7 +2205,7 @@ export class AuthCredentialStore {
 	}
 
 	#initializeSchema(): void {
-		this.#db.exec(`
+		this.#db.run(`
 			PRAGMA journal_mode=WAL;
 			PRAGMA synchronous=NORMAL;
 			PRAGMA busy_timeout=5000;
@@ -2276,7 +2276,7 @@ export class AuthCredentialStore {
 	}
 
 	#createAuthCredentialsTable(): void {
-		this.#db.exec(`
+		this.#db.run(`
 			CREATE TABLE IF NOT EXISTS auth_credentials (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				provider TEXT NOT NULL,
@@ -2292,7 +2292,7 @@ export class AuthCredentialStore {
 	}
 
 	#createAuthCredentialIndexes(): void {
-		this.#db.exec(`
+		this.#db.run(`
 			CREATE INDEX IF NOT EXISTS idx_auth_provider ON auth_credentials(provider);
 			CREATE INDEX IF NOT EXISTS idx_auth_provider_identity ON auth_credentials(provider, identity_key) WHERE identity_key IS NOT NULL;
 		`);
@@ -2315,8 +2315,8 @@ export class AuthCredentialStore {
 			const v0Cols = this.#db.prepare("PRAGMA table_info(auth_credentials)").all() as Array<{ name?: string }>;
 			const hasDisabled = v0Cols.some(col => col.name === "disabled");
 
-			this.#db.exec("ALTER TABLE auth_credentials RENAME TO auth_credentials_v0");
-			this.#db.exec(`
+			this.#db.run("ALTER TABLE auth_credentials RENAME TO auth_credentials_v0");
+			this.#db.run(`
 				CREATE TABLE auth_credentials (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
 					provider TEXT NOT NULL,
@@ -2327,7 +2327,7 @@ export class AuthCredentialStore {
 					updated_at INTEGER NOT NULL DEFAULT (${SQLITE_NOW_EPOCH})
 				);
 			`);
-			this.#db.exec(`
+			this.#db.run(`
 				INSERT INTO auth_credentials (id, provider, credential_type, data, disabled_cause, created_at, updated_at)
 				SELECT
 					id,
@@ -2339,16 +2339,16 @@ export class AuthCredentialStore {
 					updated_at
 				FROM auth_credentials_v0
 			`);
-			this.#db.exec("DROP TABLE auth_credentials_v0");
+			this.#db.run("DROP TABLE auth_credentials_v0");
 		});
 		migrate();
 	}
 
 	#migrateAuthSchemaV1OrV2ToV3(): void {
 		const migrate = this.#db.transaction(() => {
-			this.#db.exec("ALTER TABLE auth_credentials RENAME TO auth_credentials_legacy");
+			this.#db.run("ALTER TABLE auth_credentials RENAME TO auth_credentials_legacy");
 			this.#createAuthCredentialsTable();
-			this.#db.exec(`
+			this.#db.run(`
 				INSERT INTO auth_credentials (id, provider, credential_type, data, disabled_cause, identity_key, created_at, updated_at)
 				SELECT
 					id,
@@ -2361,16 +2361,16 @@ export class AuthCredentialStore {
 					updated_at
 				FROM auth_credentials_legacy
 			`);
-			this.#db.exec("DROP TABLE auth_credentials_legacy");
+			this.#db.run("DROP TABLE auth_credentials_legacy");
 		});
 		migrate();
 	}
 
 	#migrateAuthSchemaV3ToV4(): void {
 		const migrate = this.#db.transaction(() => {
-			this.#db.exec("ALTER TABLE auth_credentials RENAME TO auth_credentials_v3");
+			this.#db.run("ALTER TABLE auth_credentials RENAME TO auth_credentials_v3");
 			this.#createAuthCredentialsTable();
-			this.#db.exec(`
+			this.#db.run(`
 				INSERT INTO auth_credentials (id, provider, credential_type, data, disabled_cause, identity_key, created_at, updated_at)
 				SELECT
 					id,
@@ -2383,7 +2383,7 @@ export class AuthCredentialStore {
 					updated_at
 				FROM auth_credentials_v3
 			`);
-			this.#db.exec("DROP TABLE auth_credentials_v3");
+			this.#db.run("DROP TABLE auth_credentials_v3");
 		});
 		migrate();
 	}

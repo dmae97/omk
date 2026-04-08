@@ -162,12 +162,14 @@ impl LangClassifier for PythonClassifier {
 			"except_clause" => Some(positional_candidate(node, ChunkKind::Except, source)),
 			"match_statement" => Some(positional_candidate(node, ChunkKind::Match, source)),
 
-			// ── Variables ──
-			"expression_statement" | "assignment" => {
-				Some(group_candidate(node, ChunkKind::Statements, source))
-			},
-
-			_ => None,
+			// ── Variables / simple statements ──
+			// Catch `expression_statement`, `assignment`, `return_statement`,
+			// `raise_statement`, `pass_statement`, `break_statement`,
+			// `continue_statement`, `delete_statement`, `assert_statement`,
+			// `nonlocal_statement`, `global_statement`, `type_alias_statement`,
+			// and any other leaf statements so they merge into the parent
+			// function body instead of becoming standalone addressable chunks.
+			_ => Some(group_candidate(node, ChunkKind::Statements, source)),
 		}
 	}
 }

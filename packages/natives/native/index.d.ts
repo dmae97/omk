@@ -444,7 +444,7 @@ export interface ChunkReadTarget {
 
 export declare enum ChunkRegion {
   Head = 'head',
-  Inner = 'inner',
+  Body = 'body',
   Tail = 'tail'
 }
 

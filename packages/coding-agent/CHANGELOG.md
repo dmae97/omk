@@ -9,8 +9,8 @@
 
 ### Added
 
-- Auto QA tool (`report_tool_issue`) for automated tracking of unexpected tool behavior; enabled via `PI_AUTO_QA=1` environment variable or `pi.autoqa` setting
-- `pi.autoqa` setting to enable automated tool issue reporting for all agents
+- Auto QA tool (`report_tool_issue`) for automated tracking of unexpected tool behavior; enabled via `PI_AUTO_QA=1` environment variable or `dev.autoqa` setting
+- `dev.autoqa` setting to enable automated tool issue reporting for all agents
 - System prompt guidance when `report_tool_issue` tool is available, encouraging agents to report tool behavior discrepancies
 - LSP server discovery at startup via `discoverStartupLspServers()` to detect configured language servers without blocking initialization
 - LSP startup event channel (`lsp:startup`) for asynchronous server warmup notifications with completion or failure status
@@ -72,6 +72,18 @@
 
 ### Changed
 
+- Chunk edit tool schema: renamed `target` parameter to `sel` for consistency with read tool terminology
+- Chunk edit tool: `op` parameter is now required (previously optional with `replace` default)
+- Chunk edit documentation: updated all region references from `@inner` to `@body` for clearer semantics
+- Chunk edit documentation: expanded with comprehensive real-world examples showing full read output, operation effects, and indentation rules
+- Chunk edit documentation: simplified indentation guidance to write content at indent-level 0 with automatic re-indentation by the tool
+- Chunk edit documentation: clarified that `@region` only works on container chunks, not leaf chunks
+- Chunk edit documentation: emphasized that CRCs change after every edit and must be refreshed from latest responses
+- Read chunk tool documentation: updated selector examples to use `@body` instead of `@inner`
+- Chunk edit region terminology updated: `@inner` renamed to `@body` for clearer semantics in container chunks
+- Chunk edit documentation restructured with comprehensive examples showing full read output, operation effects, and indentation rules
+- Chunk edit indentation guidance simplified: content should be written at indent-level 0 and the tool automatically applies correct base indentation
+- Chunk edit examples expanded with realistic TypeScript code samples demonstrating replace, insert, prepend, append, and delete operations
 - Python tool description now dynamically reflects prelude documentation availability instead of static text
 - Python tool now automatically warms the environment on first execution if prelude helpers are unavailable, ensuring documentation is loaded before use
 - Tool creation now auto-injects `report_tool_issue` when auto QA is enabled, regardless of requested tool list
@@ -102,6 +114,8 @@
 
 ### Fixed
 
+- Chunk edit parameter validation: corrected detection of chunk edit operations to check for `sel` field instead of `target`
+- Chunk edit streaming previews: updated to reference `sel` parameter instead of `target`
 - Python prelude introspection now respects execution timeout and signal options, preventing hangs during environment warmup
 - Welcome banner LSP server status now updates in real-time when background startup warmup completes, eliminating stale connecting status displays
 - Welcome banner LSP startup rows now re-render when background warmup finishes, use the pending status symbol while servers are still connecting, and no longer add a redundant `LSP ready` status line on successful startup

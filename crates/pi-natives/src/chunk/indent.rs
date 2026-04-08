@@ -201,8 +201,7 @@ pub fn reindent_inserted_block(
 	target_indent: &str,
 	file_indent_step: Option<usize>,
 ) -> String {
-	let lines = content.split('\n').collect::<Vec<_>>();
-	if lines.is_empty() {
+	if content.is_empty() {
 		return String::new();
 	}
 

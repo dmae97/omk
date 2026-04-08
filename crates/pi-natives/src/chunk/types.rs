@@ -90,8 +90,8 @@ pub enum ChunkReadStatus {
 pub enum ChunkRegion {
 	#[napi(value = "head")]
 	Head,
-	#[napi(value = "inner")]
-	Inner,
+	#[napi(value = "body")]
+	Body,
 	#[napi(value = "tail")]
 	Tail,
 }
@@ -100,7 +100,7 @@ impl ChunkRegion {
 	pub const fn as_str(self) -> &'static str {
 		match self {
 			Self::Head => "head",
-			Self::Inner => "inner",
+			Self::Body => "body",
 			Self::Tail => "tail",
 		}
 	}

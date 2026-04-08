@@ -14,18 +14,15 @@ pub struct ResolvedChunk<'a> {
 
 fn parse_region_name(value: &str) -> Option<ChunkRegion> {
 	match value.trim() {
-		"head" | "prologue" => Some(ChunkRegion::Head),
-		"inner" | "body" => Some(ChunkRegion::Inner),
-		"tail" | "epilogue" => Some(ChunkRegion::Tail),
+		"head" => Some(ChunkRegion::Head),
+		"body" => Some(ChunkRegion::Body),
+		"tail" => Some(ChunkRegion::Tail),
 		_ => None,
 	}
 }
 
 fn is_known_region_name(value: &str) -> bool {
-	matches!(
-		value.trim(),
-		"outer" | "container" | "head" | "prologue" | "inner" | "body" | "tail" | "epilogue"
-	)
+	matches!(value.trim(), "head" | "body" | "tail")
 }
 
 /// Split a trailing `@region` suffix from a selector. Returns the selector
@@ -69,7 +66,7 @@ pub fn split_selector_crc_and_region(
 			(prefix, parsed_region)
 		} else if let Some((_, suffix)) = raw.rsplit_once('@') {
 			return Err(format!(
-				"Unknown chunk region \"{}\". Valid regions: head, inner, tail (or omit for the full \
+				"Unknown chunk region \"{}\". Valid regions: head, body, tail (or omit for the full \
 				 chunk).",
 				suffix.trim()
 			));
@@ -201,7 +198,7 @@ pub fn chunk_region_range(chunk: &ChunkNode, region: ChunkRegion) -> (usize, usi
 	let epi_start = chunk.epilogue_start_byte.map_or(end, |b| b as usize);
 	match region {
 		ChunkRegion::Head => (start, pro_end),
-		ChunkRegion::Inner => (pro_end, epi_start),
+		ChunkRegion::Body => (pro_end, epi_start),
 		ChunkRegion::Tail => (epi_start, end),
 	}
 }
@@ -226,20 +223,12 @@ fn resolve_chunk_selector_impl<'a>(
 	};
 
 	if is_line_number_selector(cleaned) {
-		if let Some(line) = parse_line_number(cleaned) {
-			if let Some(chunk_path) =
-				crate::chunk::line_to_chunk_path(state.tree(), line)
-			{
-				warnings.push(format!(
-					"Auto-resolved line target \"{cleaned}\" to chunk \"{chunk_path}\"."
-				));
-				return resolve_chunk_selector_impl(
-					state,
-					Some(&chunk_path),
-					crc,
-					warnings,
-				);
-			}
+		if let Some(line) = parse_line_number(cleaned)
+			&& let Some(chunk_path) = crate::chunk::line_to_chunk_path(state.tree(), line)
+		{
+			warnings
+				.push(format!("Auto-resolved line target \"{cleaned}\" to chunk \"{chunk_path}\"."));
+			return resolve_chunk_selector_impl(state, Some(&chunk_path), crc, warnings);
 		}
 		return Err(format!(
 			"Line target \"{cleaned}\" does not fall inside any chunk. Use chunk paths like \

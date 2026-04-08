@@ -97,11 +97,7 @@ function getChecksum(source: string, chunkPath: string, language = "typescript")
 	return chunk.checksum;
 }
 
-function targetWithChecksum(
-	chunkPath: string,
-	checksum: string,
-	region?: "head" | "inner" | "tail",
-): string {
+function targetWithChecksum(chunkPath: string, checksum: string, region?: "head" | "body" | "tail"): string {
 	return `${chunkPath}#${checksum}${region ? `@${region}` : ""}`;
 }
 
@@ -109,13 +105,13 @@ function currentTarget(
 	source: string,
 	chunkPath: string,
 	language = "typescript",
-	region?: "head" | "inner" | "tail",
+	region?: "head" | "body" | "tail",
 ): string {
 	return targetWithChecksum(chunkPath, getChecksum(source, chunkPath, language), region);
 }
 
 function bodyTarget(chunkPath: string): string {
-	return `${chunkPath}@inner`;
+	return `${chunkPath}@body`;
 }
 
 describe("applyChunkEdits", () => {
@@ -1084,9 +1080,9 @@ describe("prepend warnings", () => {
 			language: "go",
 			cwd: "/",
 			filePath: "main.go",
-			operations: [{ op: "prepend", sel: "@inner", content: "// AUTO-GENERATED\n" }],
+			operations: [{ op: "prepend", sel: "@body", content: "// AUTO-GENERATED\n" }],
 		});
-		expect(result.warnings.some(w => w.includes("Comment-only @inner.prepend"))).toBe(true);
+		expect(result.warnings.some(w => w.includes("Comment-only @body.prepend"))).toBe(true);
 	});
 });
 
@@ -1147,9 +1143,9 @@ describe("prepend preamble guard", () => {
 				language: "javascript",
 				cwd: "/",
 				filePath: "index.js",
-				operations: [{ op: "prepend", sel: "@inner", content: "// AUTO-GENERATED\n" }],
+				operations: [{ op: "prepend", sel: "@body", content: "// AUTO-GENERATED\n" }],
 			}),
-		).toThrow(/Comment-only @inner.prepend on root is not allowed when the file has a preamble/);
+		).toThrow(/Comment-only @body.prepend on root is not allowed when the file has a preamble/);
 	});
 });
 

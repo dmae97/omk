@@ -39,7 +39,7 @@ export class HistoryStorage {
 
 		const hasFts = this.#db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='history_fts'").get();
 
-		this.#db.exec(`
+		this.#db.run(`
 PRAGMA journal_mode=WAL;
 PRAGMA synchronous=NORMAL;
 PRAGMA busy_timeout=5000;
@@ -150,11 +150,11 @@ CREATE TRIGGER IF NOT EXISTS history_ai AFTER INSERT ON history BEGIN
 
 	#migrateHistorySchema(): void {
 		const migrate = this.#db.transaction(() => {
-			this.#db.exec("ALTER TABLE history RENAME TO history_legacy");
-			this.#db.exec("DROP INDEX IF EXISTS idx_history_created_at");
-			this.#db.exec("DROP TRIGGER IF EXISTS history_ai");
-			this.#db.exec("DROP TABLE IF EXISTS history_fts");
-			this.#db.exec(`
+			this.#db.run("ALTER TABLE history RENAME TO history_legacy");
+			this.#db.run("DROP INDEX IF EXISTS idx_history_created_at");
+			this.#db.run("DROP TRIGGER IF EXISTS history_ai");
+			this.#db.run("DROP TABLE IF EXISTS history_fts");
+			this.#db.run(`
 CREATE TABLE history (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	prompt TEXT NOT NULL,

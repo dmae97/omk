@@ -58,6 +58,7 @@ mod ast_vue;
 
 use std::collections::HashMap;
 
+
 use ast_grep_core::tree_sitter::LanguageExt;
 use napi::{Error, Result};
 use napi_derive::napi;
@@ -1727,7 +1728,7 @@ impl Config {
 			.expect("state should parse");
 		let result = state
 			.render_read(ReadRenderParams {
-				read_path:           "sample.ts:fn_run@inner".to_string(),
+				read_path:           "sample.ts:fn_run@body".to_string(),
 				display_path:        "sample.ts".to_string(),
 				language_tag:        Some("ts".to_string()),
 				omit_checksum:       false,
@@ -2204,4 +2205,65 @@ end
 			tool.end_line,
 		);
 	}
+
+	#[test]
+	fn python_property_no_orphan_return_chunk() {
+		// Build a function large enough to trigger recursion (> LEAF_THRESHOLD)
+		// with multiple control-flow children that narrow scope enough to trigger
+		// recursion, plus a `return` statement that must NOT become a standalone
+		// chunk.
+		let mut body = String::new();
+		body.push_str("class Server:\n");
+		body.push_str("    @property\n");
+		body.push_str("    def address(self) -> str:\n");
+		body.push_str("        if self._host:\n");
+		for i in 0..20 {
+			let _ = writeln!(body, "            x{i} = {i}");
+		}
+		body.push_str("        if self._port:\n");
+		for i in 0..20 {
+			let _ = writeln!(body, "            y{i} = {i}");
+		}
+		body.push_str("        return f\"{{self._host}}:{{self._port}}\"\n");
+		let source = body;
+		let tree = build_chunk_tree(source.as_str(), "python").expect("tree should build");
+
+		// Dump all chunk paths for debugging
+		for chunk in &tree.chunks {
+			eprintln!(
+				"chunk: path={:?} kind={:?} leaf={} lines={}-{}",
+				chunk.path, chunk.kind, chunk.leaf, chunk.start_line, chunk.end_line
+			);
+		}
+
+		// The function body should recurse (it's large enough) but the return
+		// statement should NOT become a standalone addressable chunk.
+		let fn_chunk = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "class_Server.fn_address")
+			.expect("fn_address should exist");
+
+		let orphan_ret = tree.chunks.iter().find(|c| c.path.contains("ret"));
+		assert!(
+			orphan_ret.is_none(),
+			"return statement inside property method should not be a separate chunk, found: {:?}",
+			orphan_ret.map(|c| (&c.path, &c.kind))
+		);
+
+		// Verify the function actually recursed (has children)
+		assert!(
+			!fn_chunk.leaf,
+			"fn_address should recurse into children for this test to be meaningful"
+		);
+	}
+
+	#[test]
+	
+
+	#[test]
+	
+
+	#[test]
+	
 }

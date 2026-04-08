@@ -182,7 +182,7 @@ function formatStreamingDiff(diff: string, rawPath: string, uiTheme: Theme, labe
 }
 
 function isChunkStreamingEdit(edit: Partial<HashlineToolEdit | ChunkToolEdit>): edit is Partial<ChunkToolEdit> {
-	return "target" in edit;
+	return "sel" in edit;
 }
 
 function getStreamingEditContent(content: unknown): string {
@@ -226,7 +226,7 @@ function formatChunkStreamingEdit(edit: Partial<ChunkToolEdit>): FormattedStream
 	}
 
 	const contentLines = getStreamingEditContent(edit.content);
-	const target = edit.target ?? "?";
+	const target = edit.sel ?? "?";
 	const op = edit.op ?? "replace";
 
 	switch (op) {

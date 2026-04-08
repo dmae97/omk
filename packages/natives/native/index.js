@@ -259,7 +259,7 @@ exports.ChunkReadStatus = {
 };
 exports.ChunkRegion = {
   Head: 'head',
-  Inner: 'inner',
+  Body: 'body',
   Tail: 'tail',
 };
 exports.Ellipsis = {

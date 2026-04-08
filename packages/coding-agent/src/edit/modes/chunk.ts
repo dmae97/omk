@@ -120,10 +120,6 @@ function fileLanguageTag(filePath: string, language?: string): string | undefine
 	return ext.length > 0 ? ext : undefined;
 }
 
-function resolveChunkTarget(target: string): ParsedChunkTarget {
-	return { selector: target };
-}
-
 async function resolveChunkSourceContext(session: ToolSession, path: string): Promise<ChunkSourceContext> {
 	const resolvedPath = resolvePlanPath(session, path);
 	const sourceFile = Bun.file(resolvedPath);
@@ -314,11 +310,11 @@ export function missingChunkReadTarget(selector: string): ChunkReadTarget {
 const CHUNK_OP_VALUES = ["replace", "after", "before", "prepend", "append"] as const;
 
 export const chunkToolEditSchema = Type.Object({
-	target: Type.String({
+	op: StringEnum(CHUNK_OP_VALUES),
+	sel: Type.String({
 		description:
-			"Chunk selector. Format: 'path@region' for insertions, 'path#CRC@region' for replace. Omit @region to target the full chunk. Valid regions: head, inner, tail.",
+			"Chunk selector. Format: 'path@region' for insertions, 'path#CRC@region' for replace. Omit @region to target the full chunk. Valid regions: head, body, tail.",
 	}),
-	op: Type.Optional(StringEnum(CHUNK_OP_VALUES)),
 	content: Type.String({
 		description: "New content. Use \\t for indentation. Do NOT include the chunk's base padding.",
 	}),
@@ -355,31 +351,12 @@ export function isChunkParams(params: unknown): params is ChunkParams {
 		params.edits.length > 0 &&
 		typeof params.edits[0] === "object" &&
 		params.edits[0] !== null &&
-		"target" in params.edits[0]
+		"sel" in params.edits[0]
 	);
 }
 
-function parseChunkTarget(target: string): ParsedChunkTarget {
-	return resolveChunkTarget(target);
-}
-
-function normalizeChunkEditOperation(edit: ChunkToolEdit): ChunkEditOperation {
-	const { selector } = parseChunkTarget(edit.target);
-	const op = edit.op ?? "replace";
-	const content = edit.content;
-	return {
-		op,
-		sel: selector,
-		content,
-	};
-}
-
 function normalizeChunkEditOperations(edits: ChunkToolEdit[]): ChunkEditOperation[] {
-	const operations: ChunkEditOperation[] = [];
-	for (const edit of edits) {
-		operations.push(normalizeChunkEditOperation(edit));
-	}
-	return operations;
+	return edits as ChunkEditOperation[];
 }
 
 async function writeChunkResult(params: {

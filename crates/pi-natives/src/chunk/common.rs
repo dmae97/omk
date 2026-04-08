@@ -25,7 +25,7 @@ env_uint! {
 /// Always recurse into named (non-group) chunks when children exist,
 /// regardless of the leaf threshold. Enabled via `PI_CHUNK_ALWAYS_RECURSE=1`.
 pub static ALWAYS_RECURSE: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
-	std::env::var("PI_CHUNK_ALWAYS_RECURSE").map_or(false, |v| !matches!(v.as_str(), "0" | "false"))
+	std::env::var("PI_CHUNK_ALWAYS_RECURSE").is_ok_and(|v| !matches!(v.as_str(), "0" | "false"))
 });
 
 /// Suppress `[/chunk#CRC]` closing tags in rendered output.

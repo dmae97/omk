@@ -1,8 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
+- Changed `ChunkRegion.Inner` enum value to `ChunkRegion.Body` to align with region semantics
 - Changed `ChunkRegion` enum values from `Container`, `Prologue`, `Body`, `Epilogue` to `Head`, `Inner`, `Tail` with updated semantics for region targeting
 - Replaced `ChunkEditOp` enum values — `AppendChild`, `PrependChild`, `AppendSibling`, `PrependSibling`, and `ReplaceBody` are now `Before`, `After`, `Prepend`, and `Append` with updated semantics for region-scoped operations
 - Removed `ReplaceBody` operation — use `Replace` with `region: ChunkRegion.Body` to replace only chunk body content

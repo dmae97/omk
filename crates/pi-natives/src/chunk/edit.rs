@@ -305,11 +305,15 @@ fn resolve_edit_target(
 	};
 	let resolved =
 		resolve_chunk_with_crc(state, cleaned_selector.as_deref(), resolve_crc, warnings)?;
-	let region = operation.region.or(parsed_region);
+	let mut region = operation.region.or(parsed_region);
 	if !batch_auto_accepted {
 		validate_batch_crc(resolved.chunk, resolved.crc.as_deref(), requires_checksum)?;
 	}
 	let chunk = resolved.chunk.clone();
+	if chunk.prologue_end_byte.is_none() || chunk.epilogue_start_byte.is_none() {
+		region = None;
+	}
+
 	Ok(ResolvedEditTarget { chunk, region })
 }
 
@@ -500,8 +504,12 @@ fn apply_insert(
 		file_indent_char,
 		file_indent_step,
 	)?;
-	let is_prepend_or_append = matches!(operation.op, ChunkEditOp::Prepend | ChunkEditOp::Append);
-	let spacing = compute_insert_spacing(state, &anchor, pos, is_prepend_or_append);
+	let suppress_chunk_adjacency =
+		matches!(operation.op, ChunkEditOp::Prepend | ChunkEditOp::Append)
+			&& !(matches!(operation.op, ChunkEditOp::Append)
+				&& pos == InsertPosition::After
+				&& owned_container_end_line(state, &anchor) > anchor.end_line);
+	let spacing = compute_insert_spacing(state, &anchor, pos, suppress_chunk_adjacency);
 	let content = operation.content.as_deref().unwrap_or_default();
 	let mut replacement = normalize_inserted_content(
 		content,
@@ -528,14 +536,14 @@ fn apply_insert(
 			&& anchor.children.iter().any(|child| child == "preamble")
 		{
 			return Err(
-				"Comment-only @inner.prepend on root is not allowed when the file has a preamble \
+				"Comment-only @body.prepend on root is not allowed when the file has a preamble \
 				 chunk. Use replace on the preamble chunk instead."
 					.to_owned(),
 			);
 		}
 		if comment_only && !anchor.children.is_empty() {
 			warnings.push(
-				"Comment-only @inner.prepend can merge into the following chunk's first line; it is \
+				"Comment-only @body.prepend can merge into the following chunk's first line; it is \
 				 not a separate named chunk."
 					.to_owned(),
 			);
@@ -602,7 +610,7 @@ fn validate_crc(chunk: &ChunkNode, crc: Option<&str>) -> Result<(), String> {
 		format!(
 			"Checksum required for {}. Re-read the chunk to get the current checksum, then include \
 			 it in the selector. Hint: use target \"{}\" for container replacement, or append \
-			 another region such as @inner.",
+			 another region such as @body.",
 			chunk_path_opt(chunk),
 			selector
 		)
@@ -693,7 +701,7 @@ fn target_indent_for_region(
 		None | Some(ChunkRegion::Head | ChunkRegion::Tail) => {
 			anchor.indent_char.repeat(anchor.indent as usize)
 		},
-		Some(ChunkRegion::Inner) => {
+		Some(ChunkRegion::Body) => {
 			compute_insert_indent(state, anchor, true, file_indent_char, file_indent_step)
 		},
 	}
@@ -1039,7 +1047,7 @@ fn body_insertion_point(
 				indent: child_indent,
 			};
 		}
-		let (_, body_end) = chunk_region_range(anchor, ChunkRegion::Inner);
+		let (_, body_end) = chunk_region_range(anchor, ChunkRegion::Body);
 		return InsertionPoint { offset: body_end, indent };
 	}
 
@@ -1055,7 +1063,7 @@ fn body_insertion_point(
 			indent,
 		};
 	}
-	let (body_start, _) = chunk_region_range(anchor, ChunkRegion::Inner);
+	let (body_start, _) = chunk_region_range(anchor, ChunkRegion::Body);
 	InsertionPoint { offset: body_start, indent }
 }
 
@@ -1078,13 +1086,13 @@ fn resolve_insertion_point(
 			Ok((after_chunk_insertion_point(state, anchor), InsertPosition::After))
 		},
 		// Inner first-child position
-		(Some(ChunkRegion::Inner), ChunkEditOp::Before | ChunkEditOp::Prepend)
+		(Some(ChunkRegion::Body), ChunkEditOp::Before | ChunkEditOp::Prepend)
 		| (Some(ChunkRegion::Head), ChunkEditOp::After | ChunkEditOp::Append) => Ok((
 			body_insertion_point(state, anchor, false, file_indent_char, file_indent_step),
 			InsertPosition::FirstChild,
 		)),
 		// Inner last-child position
-		(Some(ChunkRegion::Inner), ChunkEditOp::After | ChunkEditOp::Append)
+		(Some(ChunkRegion::Body), ChunkEditOp::After | ChunkEditOp::Append)
 		| (Some(ChunkRegion::Tail), ChunkEditOp::Before | ChunkEditOp::Prepend) => Ok((
 			body_insertion_point(state, anchor, true, file_indent_char, file_indent_step),
 			InsertPosition::LastChild,
@@ -1828,7 +1836,10 @@ mod tests {
 
 		let result = result.expect("line-number selector should auto-resolve");
 		assert!(
-			result.warnings.iter().any(|w| w.contains("Auto-resolved line target")),
+			result
+				.warnings
+				.iter()
+				.any(|w| w.contains("Auto-resolved line target")),
 			"should warn about auto-resolution: {:?}",
 			result.warnings
 		);
@@ -2143,7 +2154,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "test.ts", EditOperation {
 			op:      ChunkEditOp::Replace,
-			sel:     Some(format!("fn_main#{}@inner", chunk.checksum)),
+			sel:     Some(format!("fn_main#{}@body", chunk.checksum)),
 			crc:     None,
 			region:  None,
 			content: Some("\treturn next();\n".to_owned()),
@@ -2161,7 +2172,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "test.rs", EditOperation {
 			op:      ChunkEditOp::Replace,
-			sel:     Some(format!("fn_main#{}@inner", chunk.checksum)),
+			sel:     Some(format!("fn_main#{}@body", chunk.checksum)),
 			crc:     None,
 			region:  None,
 			content: Some("\tprintln!(\"new\");\n".to_owned()),
@@ -2179,7 +2190,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "test.go", EditOperation {
 			op:      ChunkEditOp::Replace,
-			sel:     Some(format!("fn_main#{}@inner", chunk.checksum)),
+			sel:     Some(format!("fn_main#{}@body", chunk.checksum)),
 			crc:     None,
 			region:  None,
 			content: Some("\treturn\n".to_owned()),
@@ -2197,7 +2208,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "test.py", EditOperation {
 			op:      ChunkEditOp::Replace,
-			sel:     Some(format!("fn_run#{}@inner", chunk.checksum)),
+			sel:     Some(format!("fn_run#{}@body", chunk.checksum)),
 			crc:     None,
 			region:  None,
 			content: Some("\treturn 2\n".to_owned()),
@@ -2243,7 +2254,7 @@ mod tests {
 		let body_state = state_for(source, "go");
 		let body_result = apply_single_edit(&body_state, "test.go", EditOperation {
 			op:      ChunkEditOp::Append,
-			sel:     Some("type_Server@inner".to_owned()),
+			sel:     Some("type_Server@body".to_owned()),
 			crc:     None,
 			region:  None,
 			content: Some("\tPort int\n".to_owned()),
@@ -2294,6 +2305,30 @@ mod tests {
 					.diff_after
 					.find("func (s *Server) Stop()")
 					.expect("stop")
+		);
+	}
+
+	#[test]
+	fn go_type_container_append_after_receiver_methods_preserves_sibling_spacing() {
+		let source = "package main\n\ntype Server struct {}\n\nfunc (s *Server) Start() {}\nfunc (s \
+		              *Server) Stop() {}\n";
+		let state = state_for(source, "go");
+
+		let result = apply_single_edit(&state, "test.go", EditOperation {
+			op:      ChunkEditOp::Append,
+			sel:     Some("type_Server".to_owned()),
+			crc:     None,
+			region:  None,
+			content: Some("func (s *Server) Restart() {}".to_owned()),
+			find:    None,
+		});
+
+		assert!(
+			result
+				.diff_after
+				.contains("func (s *Server) Stop() {}\n\nfunc (s *Server) Restart() {}"),
+			"{}",
+			result.diff_after
 		);
 	}
 
@@ -2437,7 +2472,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "test.ts", EditOperation {
 			op:      ChunkEditOp::Replace,
-			sel:     Some(format!("class_Server.fn_start#{}@inner", chunk.checksum)),
+			sel:     Some(format!("class_Server.fn_start#{}@body", chunk.checksum)),
 			crc:     None,
 			region:  None,
 			content: Some("\treturn 42;\n".to_owned()),
@@ -2462,7 +2497,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "test.ts", EditOperation {
 			op:      ChunkEditOp::Replace,
-			sel:     Some(format!("class_Server.fn_start#{}@inner", chunk.checksum)),
+			sel:     Some(format!("class_Server.fn_start#{}@body", chunk.checksum)),
 			crc:     None,
 			region:  None,
 			content: Some("\treturn 42;\n".to_owned()),
@@ -2488,7 +2523,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "test.ts", EditOperation {
 			op:      ChunkEditOp::Replace,
-			sel:     Some(format!("class_Server.fn_start#{}@inner", chunk.checksum)),
+			sel:     Some(format!("class_Server.fn_start#{}@body", chunk.checksum)),
 			crc:     None,
 			region:  None,
 			content: Some("\t\tif (x) {\n\t\t\ty();\n\t\t}\n".to_owned()),
@@ -2504,14 +2539,14 @@ mod tests {
 
 	#[test]
 	fn body_append_inserts_inside_class() {
-		// Appending to @inner of a class should insert inside the body,
+		// Appending to @body of a class should insert inside the body,
 		// not after the closing brace.
 		let source = "class Foo {\n    bar() {\n        return 1;\n    }\n}\n";
 		let state = state_for(source, "typescript");
 
 		let result = apply_single_edit(&state, "test.ts", EditOperation {
 			op:      ChunkEditOp::Append,
-			sel:     Some("class_Foo@inner".to_owned()),
+			sel:     Some("class_Foo@body".to_owned()),
 			crc:     None,
 			region:  None,
 			content: Some("baz() {\n\treturn 2;\n}\n".to_owned()),
@@ -2535,14 +2570,14 @@ mod tests {
 
 	#[test]
 	fn body_prepend_inserts_after_opening_brace() {
-		// Prepending to @inner of an enum should insert after the opening brace,
+		// Prepending to @body of an enum should insert after the opening brace,
 		// not before doc comments.
 		let source = "/** My enum. */\nenum Color {\n    Red,\n    Green,\n    Blue,\n}\n";
 		let state = state_for(source, "typescript");
 
 		let result = apply_single_edit(&state, "test.ts", EditOperation {
 			op:      ChunkEditOp::Prepend,
-			sel:     Some("enum_Color@inner".to_owned()),
+			sel:     Some("enum_Color@body".to_owned()),
 			crc:     None,
 			region:  None,
 			content: Some("White,\n".to_owned()),
@@ -2620,7 +2655,8 @@ mod tests {
 
 	#[test]
 	fn python_body_append_preserves_indentation() {
-		let source = "class Server:\n    def __init__(self):\n        self.x = 1\n\n    def start(self):\n        pass\n";
+		let source = "class Server:\n    def __init__(self):\n        self.x = 1\n\n    def \
+		              start(self):\n        pass\n";
 		let state = state_for(source, "python");
 
 		let result = apply_single_edit(&state, "test.py", EditOperation {
@@ -2635,9 +2671,166 @@ mod tests {
 		// The appended method should be at 4-space indent (class member level),
 		// with its body at 8-space indent.
 		assert!(
-			result.diff_after.contains("    def stop(self):\n        pass"),
+			result
+				.diff_after
+				.contains("    def stop(self):\n        pass"),
 			"appended method should have correct Python indentation: {}",
 			result.diff_after
 		);
 	}
+
+	#[test]
+	fn body_region_on_leaf_without_delimiters_falls_back_to_full_chunk() {
+		let source = "enum LogLevel {\n    Debug,\n    Info,\n    Warn,\n    Fatal,\n}\n";
+		let state = state_for(source, "rust");
+		let chunk = state
+			.inner()
+			.chunk("enum_LogLevel.variant_Info")
+			.expect("variant_Info should exist");
+		assert!(chunk.prologue_end_byte.is_none(), "leaf variant should not have prologue_end_byte");
+
+		for region_name in ["body", "head", "tail"] {
+			let sel = format!("enum_LogLevel.variant_Info#{}@{}", chunk.checksum, region_name);
+			let result = apply_edits(&state, &EditParams {
+				operations:       vec![EditOperation {
+					op:      ChunkEditOp::Replace,
+					sel:     Some(sel),
+					crc:     None,
+					region:  None,
+					content: Some("Error,".to_owned()),
+					find:    None,
+				}],
+				default_selector: None,
+				default_crc:      None,
+				anchor_style:     None,
+				cwd:              ".".to_owned(),
+				file_path:        "test.rs".to_owned(),
+			})
+			.expect("leaf region should fall back to full chunk");
+
+			assert!(
+				result.diff_after.contains("Debug,\n    Error,\n    Warn,"),
+				"@{region_name} should replace the full leaf chunk, got: {}",
+				result.diff_after
+			);
+		}
+	}
+	#[test]
+	fn rust_impl_method_head_replace_no_body_duplication() {
+		let source = concat!(
+			"struct Server {
+",
+			"    running: bool,
+",
+			"}
+",
+			"
+",
+			"impl Server {
+",
+			"    /// Starts the server.
+",
+			"    pub fn start(&mut self) {
+",
+			"        self.running = true;
+",
+			"        println!(\"started\");
+",
+			"    }
+",
+			"}
+",
+		);
+		let state = state_for(source, "rust");
+		let chunk = state
+			.inner()
+			.chunk("impl_Server.fn_start")
+			.expect("impl_Server.fn_start should exist");
+		assert!(
+			chunk.prologue_end_byte.is_some(),
+			"fn_start should have prologue_end_byte, got: start_byte={}, end_byte={}, prologue_end_byte={:?}, epilogue_start_byte={:?}",
+			chunk.start_byte, chunk.end_byte, chunk.prologue_end_byte, chunk.epilogue_start_byte,
+		);
+
+		let result = apply_single_edit(&state, "test.rs", EditOperation {
+			op:      ChunkEditOp::Replace,
+			sel:     Some(format!("impl_Server.fn_start#{}@head", chunk.checksum)),
+			crc:     None,
+			region:  None,
+			content: Some("    /// Initializes and starts the server.
+    pub fn start(&mut self) {".to_owned()),
+			find:    None,
+		});
+
+		let body_count = result.diff_after.matches("self.running = true;").count();
+		assert_eq!(
+			body_count, 1,
+			"body should appear exactly once after @head replace, got {} occurrences in:
+{}",
+			body_count, result.diff_after
+		);
+		assert!(
+			result.diff_after.contains("/// Initializes and starts the server."),
+			"new doc comment should be in output:
+{}", result.diff_after
+		);
+		assert!(
+			!result.diff_after.contains("/// Starts the server."),
+			"old doc comment should be removed:
+{}", result.diff_after
+		);
+	}
+
+	#[test]
+	fn typescript_class_method_head_replace_no_body_duplication() {
+		let source = concat!(
+			"class Server {
+",
+			"    /** Starts the server. */
+",
+			"    start() {
+",
+			"        this.running = true;
+",
+			"        console.log(\"started\");
+",
+			"    }
+",
+			"}
+",
+		);
+		let state = state_for(source, "typescript");
+		let chunk = state
+			.inner()
+			.chunk("class_Server.fn_start")
+			.expect("class_Server.fn_start should exist");
+		assert!(
+			chunk.prologue_end_byte.is_some(),
+			"fn_start should have prologue_end_byte"
+		);
+
+		let result = apply_single_edit(&state, "test.ts", EditOperation {
+			op:      ChunkEditOp::Replace,
+			sel:     Some(format!("class_Server.fn_start#{}@head", chunk.checksum)),
+			crc:     None,
+			region:  None,
+			content: Some("    /** Initializes the server. */
+    start() {".to_owned()),
+			find:    None,
+		});
+
+		let body_count = result.diff_after.matches("this.running = true;").count();
+		assert_eq!(
+			body_count, 1,
+			"body should appear exactly once after @head replace, got {} occurrences in:
+{}",
+			body_count, result.diff_after
+		);
+		assert!(
+			result.diff_after.contains("/** Initializes the server. */"),
+			"new doc comment should be in output:
+{}", result.diff_after
+		);
+	}
+
 }
