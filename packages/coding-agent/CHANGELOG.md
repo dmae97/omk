@@ -69,6 +69,8 @@
 
 ### Changed
 
+- Codex websocket prewarm now runs asynchronously in the background instead of blocking session creation, allowing faster startup
+- Codex websocket status updates now display in interactive mode when prewarm completes or fails
 - LSP server warmup now runs asynchronously in the background instead of blocking session creation, allowing faster startup
 - LSP servers returned from `createAgentSession()` now include `connecting` status during initial warmup phase
 - Interactive mode now subscribes to LSP startup events and displays status updates and error messages to the user
@@ -1837,7 +1839,7 @@
 
 - Changed custom UI hook cleanup to conditionally restore editor state only when not using overlay mode
 - Extracted environment variable configuration for non-interactive bash execution into reusable `NO_PAGER_ENV` constant
-- Replaced custom timing instrumentation with logger.timeAsync() and logger.time() from pi-utils for consistent startup profiling
+- Replaced custom timing instrumentation with logger.time() and logger.time() from pi-utils for consistent startup profiling
 - Removed PI_DEBUG_STARTUP environment variable in favor of logger.debug() for conditional debug output
 - Consolidated timing calls throughout initialization pipeline to use unified logger-based timing system
 

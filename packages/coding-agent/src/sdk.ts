@@ -7,8 +7,10 @@ import {
 	type ThinkingLevel,
 } from "@oh-my-pi/pi-agent-core";
 import type { Message, Model } from "@oh-my-pi/pi-ai";
-
-import { prewarmOpenAICodexResponses } from "@oh-my-pi/pi-ai/providers/openai-codex-responses";
+import {
+	getOpenAICodexTransportDetails,
+	prewarmOpenAICodexResponses,
+} from "@oh-my-pi/pi-ai/providers/openai-codex-responses";
 import { SearchDb } from "@oh-my-pi/pi-natives";
 import type { Component } from "@oh-my-pi/pi-tui";
 import {
@@ -1556,19 +1558,33 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	});
 
 	if (model?.api === "openai-codex-responses") {
-		try {
-			await logger.timeAsync("prewarmCodexWebsocket", prewarmOpenAICodexResponses, model, {
-				apiKey: await modelRegistry.getApiKey(model, providerSessionId),
-				sessionId: providerSessionId,
-				preferWebsockets: preferOpenAICodexWebsockets,
-				providerSessionState: session.providerSessionState,
-			});
-		} catch (error) {
-			logger.debug("Codex websocket prewarm failed", {
-				error: error instanceof Error ? error.message : String(error),
-				provider: model.provider,
-				model: model.id,
-			});
+		const codexModel = model;
+		const codexTransport = getOpenAICodexTransportDetails(codexModel, {
+			sessionId: providerSessionId,
+			baseUrl: codexModel.baseUrl,
+			preferWebsockets: preferOpenAICodexWebsockets,
+			providerSessionState: session.providerSessionState,
+		});
+		if (codexTransport.websocketPreferred) {
+			void (async () => {
+				try {
+					const codexPrewarmApiKey = await modelRegistry.getApiKey(codexModel, providerSessionId);
+					if (!codexPrewarmApiKey) return;
+					await logger.time("prewarmOpenAICodexResponses", prewarmOpenAICodexResponses, codexModel, {
+						apiKey: codexPrewarmApiKey,
+						sessionId: providerSessionId,
+						preferWebsockets: preferOpenAICodexWebsockets,
+						providerSessionState: session.providerSessionState,
+					});
+				} catch (error) {
+					const errorMessage = error instanceof Error ? error.message : String(error);
+					logger.debug("Codex websocket prewarm failed", {
+						error: errorMessage,
+						provider: codexModel.provider,
+						model: codexModel.id,
+					});
+				}
+			})();
 		}
 	}
 
@@ -1579,7 +1595,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		if (lspServers.length > 0) {
 			void (async () => {
 				try {
-					const result = await logger.timeAsync("warmupLspServers", warmupLspServers, cwd);
+					const result = await logger.time("warmupLspServers", warmupLspServers, cwd);
 					const serversByName = new Map(result.servers.map(server => [server.name, server] as const));
 					for (const server of lspServers ?? []) {
 						const next = serversByName.get(server.name);
