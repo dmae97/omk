@@ -19,12 +19,48 @@ type HistoryRow = {
 
 const SQLITE_NOW_EPOCH = "CAST(strftime('%s','now') AS INTEGER)";
 
+class AsyncDrain<T> {
+	#queue?: T[];
+	#promise = Promise.resolve();
+
+	constructor(readonly delayMs: number = 0) {}
+
+	push(value: T, hnd: (values: T[]) => Promise<void> | void): Promise<void> {
+		let queue = this.#queue;
+		if (!queue) {
+			queue = [];
+			this.#queue = [];
+			this.#promise = new Promise((resolve, reject) => {
+				const exec = () => {
+					try {
+						if (this.#queue === queue) {
+							this.#queue = undefined;
+						}
+						resolve(hnd(queue!));
+					} catch (error) {
+						reject(error);
+					}
+				};
+
+				if (this.delayMs > 0) {
+					setTimeout(exec, this.delayMs);
+				} else {
+					queueMicrotask(exec);
+				}
+			});
+		}
+		queue.push(value);
+		return this.#promise;
+	}
+}
+
 export class HistoryStorage {
 	#db: Database;
 	static #instance?: HistoryStorage;
+	#drain = new AsyncDrain<Pick<HistoryEntry, "prompt" | "cwd">>(100);
 
 	// Prepared statements
-	#insertStmt: Statement;
+	#insertRowStmt: Statement;
 	#recentStmt: Statement;
 	#searchStmt: Statement;
 	#lastPromptStmt: Statement;
@@ -71,7 +107,6 @@ CREATE TRIGGER IF NOT EXISTS history_ai AFTER INSERT ON history BEGIN
 			}
 		}
 
-		this.#insertStmt = this.#db.prepare("INSERT INTO history (prompt, cwd) VALUES (?, ?)");
 		this.#recentStmt = this.#db.prepare(
 			"SELECT id, prompt, created_at, cwd FROM history ORDER BY created_at DESC, id DESC LIMIT ?",
 		);
@@ -79,6 +114,8 @@ CREATE TRIGGER IF NOT EXISTS history_ai AFTER INSERT ON history BEGIN
 			"SELECT h.id, h.prompt, h.created_at, h.cwd FROM history_fts f JOIN history h ON h.id = f.rowid WHERE history_fts MATCH ? ORDER BY h.created_at DESC, h.id DESC LIMIT ?",
 		);
 		this.#lastPromptStmt = this.#db.prepare("SELECT prompt FROM history ORDER BY id DESC LIMIT 1");
+
+		this.#insertRowStmt = this.#db.prepare("INSERT INTO history (prompt, cwd) VALUES (?, ?)");
 
 		const last = this.#lastPromptStmt.get() as { prompt?: string } | undefined;
 		this.#lastPromptCache = last?.prompt ?? null;
@@ -91,19 +128,21 @@ CREATE TRIGGER IF NOT EXISTS history_ai AFTER INSERT ON history BEGIN
 		return HistoryStorage.#instance;
 	}
 
-	add(prompt: string, cwd?: string): void {
-		const trimmed = prompt.trim();
-		if (!trimmed) return;
-		if (this.#lastPromptCache === trimmed) return;
-
-		this.#lastPromptCache = trimmed;
-
-		setImmediate(() => {
-			try {
-				this.#insertStmt.run(trimmed, cwd ?? null);
-			} catch (error) {
-				logger.error("HistoryStorage add failed", { error: String(error) });
+	#insertBatch(rows: Array<Pick<HistoryEntry, "prompt" | "cwd">>): void {
+		this.#db.transaction((rows: Array<Pick<HistoryEntry, "prompt" | "cwd">>) => {
+			for (const row of rows) {
+				this.#insertRowStmt.run(row.prompt, row.cwd ?? null);
 			}
+		})(rows);
+	}
+
+	add(prompt: string, cwd?: string): Promise<void> {
+		const trimmed = prompt.trim();
+		if (!trimmed) return Promise.resolve();
+		if (this.#lastPromptCache === trimmed) return Promise.resolve();
+		this.#lastPromptCache = trimmed;
+		return this.#drain.push({ prompt: trimmed, cwd: cwd ?? undefined }, rows => {
+			this.#insertBatch(rows);
 		});
 	}
 

@@ -1,4 +1,4 @@
-import { getProjectDir } from "@oh-my-pi/pi-utils";
+import { getProjectDir, logger } from "@oh-my-pi/pi-utils";
 import type { AutocompleteProvider, CombinedAutocompleteProvider } from "../autocomplete";
 import { BracketedPasteHandler } from "../bracketed-paste";
 import { getKeybindings, type KeybindingsManager } from "../keybindings";
@@ -304,7 +304,7 @@ interface HistoryEntry {
 }
 
 interface HistoryStorage {
-	add(prompt: string, cwd?: string): void;
+	add(prompt: string, cwd?: string): Promise<void>;
 	getRecent(limit: number): HistoryEntry[];
 }
 
@@ -478,7 +478,12 @@ export class Editor implements Component, Focusable {
 			this.#history.pop();
 		}
 
-		this.#historyStorage?.add(trimmed, getProjectDir());
+		const stor = this.#historyStorage;
+		if (stor) {
+			stor.add(trimmed, getProjectDir()).catch(error => {
+				logger.error("HistoryStorage add failed", { error: String(error) });
+			});
+		}
 	}
 
 	#isEditorEmpty(): boolean {

@@ -46,9 +46,7 @@ it("migrates legacy history schema away from unixepoch defaults", async () => {
 	legacyDb.close();
 
 	const storage = HistoryStorage.open(dbPath);
-	storage.add("new prompt", "/tmp/new");
-	// add() defers the INSERT via setImmediate; drain the macrotask queue
-	await new Promise<void>(resolve => setImmediate(resolve));
+	await storage.add("new prompt", "/tmp/new");
 
 	const db = new Database(dbPath, { readonly: true });
 	try {
