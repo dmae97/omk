@@ -1,6 +1,8 @@
 // OS-agnostic "which" helper with robust macOS toolchain lookup and flexible cache control.
 //
-// - Falls back to macOS Xcode toolchain locations and `xcrun` if standard `Bun.which()` fails on Darwin.
+// - Falls back to macOS Xcode/CLT toolchain directories if standard `Bun.which()` fails on Darwin.
+//   Resolves the active developer directory via $DEVELOPER_DIR / /var/db/xcode_select_link symlink
+//   to avoid spawning xcrun subprocesses.
 // - Supports four cache modes (`none`, `fresh`, `ro`, `cached`) for control over discovery cost and determinism.
 // - Computes a stable cache key from command + options to avoid redundant lookups within a process.
 // - Returns path to resolved binary or null if not found.
@@ -10,11 +12,99 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-// Extra toolchain directories for Apple tool CLI binaries not on PATH by default
-const MACOS_TOOL_PATHS = [
-	"/Library/Developer/CommandLineTools/usr/bin",
-	"/Applications/Xcode.app/Contents/Developer/usr/bin",
-] as const;
+// Tools shipped by Xcode / Command Line Tools that callers actually look up.
+// Keeps the set small so darwinWhich can fast-reject non-Xcode commands without
+// touching the filesystem.  Only needs entries for binaries that live *exclusively*
+// in toolchain dirs (not on a typical $PATH).
+const XCODE_BINS = new Set([
+	// Compilers & driver aliases
+	"clang", "clang++", "gcc", "g++", "cc", "c++", "cpp", "c89", "c99",
+	"swift", "swiftc", "swift-frontend",
+	// Language servers (LSP)
+	"clangd", "sourcekit-lsp",
+	// Linker & archive tools
+	"ld", "ld-classic", "ar", "ranlib", "libtool", "as", "lipo",
+	"install_name_tool", "codesign_allocate",
+	// Build utilities
+	"make", "gnumake", "m4", "flex", "bison", "yacc", "lex",
+	// VCS (CLT ships git)
+	"git", "git-receive-pack", "git-upload-pack", "git-upload-archive", "git-shell", "scalar",
+	// Debugger
+	"lldb", "lldb-dap",
+	// Binary inspection
+	"nm", "otool", "objdump", "strings", "strip", "size",
+	"dsymutil", "dwarfdump", "lipo", "vtool",
+	// Clang tooling
+	"clang-format", "swift-format",
+]);
+
+// Prefixes for versioned binaries (e.g. python3.9, pip3.12, pydoc3.9, 2to3-3.9)
+const XCODE_BIN_PREFIXES = ["python", "pip", "pydoc", "2to3"];
+
+function isXcodeBin(command: string): boolean {
+	if (XCODE_BINS.has(command)) return true;
+	for (const prefix of XCODE_BIN_PREFIXES) {
+		if (command.startsWith(prefix)) return true;
+	}
+	return false;
+}
+
+// Resolve the active Xcode developer directory once, without spawning any process.
+// Priority: $DEVELOPER_DIR env → /var/db/xcode_select_link symlink → common fallback paths.
+function getDeveloperDirs(): string | null {
+	// 1. Explicit env override
+	const envDir = process.env.DEVELOPER_DIR;
+	if (envDir && fs.existsSync(envDir)) {
+		return envDir;
+	}
+
+	// 2. xcode-select stores the active path as a symlink
+	try {
+		return fs.readlinkSync("/var/db/xcode_select_link");
+	} catch {
+		// symlink may not exist on minimal installs
+	}
+	// 3. Common locations
+	for (const candidate of ["/Applications/Xcode.app/Contents/Developer", "/Library/Developer/CommandLineTools"]) {
+		if (fs.existsSync(candidate)) {
+			return candidate;
+		}
+	}
+	return null;
+}
+
+// Build the list of extra toolchain bin directories to check on macOS.
+// Computed lazily once from the resolved developer directory.
+let macosToolPaths: Map<string, string> | undefined;
+function getMacosToolPaths(): Map<string, string> {
+	if (macosToolPaths) return macosToolPaths;
+	const paths: string[] = [
+		// Always check Command Line Tools (may be independent of Xcode)
+		"/Library/Developer/CommandLineTools/usr/bin",
+	];
+	const devDir = getDeveloperDirs();
+	if (devDir) {
+		paths.push(path.join(devDir, "usr/bin"), path.join(devDir, "Toolchains/XcodeDefault.xctoolchain/usr/bin"));
+	}
+
+	// Deduplicate (e.g. devDir may already be CommandLineTools)
+	macosToolPaths = new Map<string, string>();
+	for (const dir of Array.from(new Set(paths))) {
+		try {
+			for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+				if (entry.isFile() || entry.isSymbolicLink()) {
+					if (macosToolPaths.has(entry.name)) {
+						continue;
+					}
+					macosToolPaths.set(entry.name, path.join(dir, entry.name));
+				}
+			}
+		} catch {
+			// dir doesn't exist or isn't readable
+		}
+	}
+	return macosToolPaths;
+}
 
 // Map: cache key -> resolved binary path or null (not found)
 const toolCache = new Map<string | bigint, string | null>();
@@ -50,25 +140,15 @@ export interface WhichOptions extends Bun.WhichOptions {
 	cache?: WhichCachePolicy;
 }
 
-// Darwin-specific "which" shim: consult extra Xcode locations, then fallback to xcrun
+// Darwin-specific "which" shim: consult Xcode/CLT toolchain directories after $PATH.
+// Uses cached directory listings instead of per-command existsSync or xcrun subprocesses.
 function darwinWhich(command: string, _options?: Bun.WhichOptions): string | null {
 	const regular = Bun.which(command);
 	if (regular) return regular;
-	for (const toolPath of MACOS_TOOL_PATHS) {
-		const candidate = path.join(toolPath, command);
-		if (fs.existsSync(candidate)) return candidate;
+	if (isXcodeBin(command)) {
+		return getMacosToolPaths().get(command) ?? null;
 	}
-	const xcrun = Bun.which("xcrun");
-	if (!xcrun) return null;
-	const result = Bun.spawnSync([xcrun, "-f", command], {
-		stdout: "pipe",
-		stderr: "ignore",
-	});
-	if (result.exitCode !== 0) return null;
-	// xcrun -f returns path or empty string on failure
-	const resolved = Buffer.from(result.stdout).toString("utf-8").trim();
-	const candidate = resolved.length > 0 && fs.existsSync(resolved) ? resolved : null;
-	return candidate;
+	return null;
 }
 
 // Which function that incorporates Darwin Xcode logic if platform reports as 'darwin'
