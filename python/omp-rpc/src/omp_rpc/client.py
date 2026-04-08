@@ -11,9 +11,14 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence, TypeVar, cast
 
 from .protocol import (
+    AgentStartEvent,
     AgentEndEvent,
     AgentMessage,
     AssistantMessage,
+    AutoCompactionEndEvent,
+    AutoCompactionStartEvent,
+    AutoRetryEndEvent,
+    AutoRetryStartEvent,
     BashResult,
     BranchMessage,
     BranchResult,
@@ -25,16 +30,34 @@ from .protocol import (
     InterruptMode,
     JsonObject,
     JsonValue,
+    MessageEndEvent,
+    MessageStartEvent,
+    MessageUpdateEvent,
     ModelCycleResult,
     ModelInfo,
     ReadyEvent,
+    RetryFallbackAppliedEvent,
+    RetryFallbackSucceededEvent,
     RpcAgentEvent,
+    RpcNotification,
     SessionState,
     SessionStats,
     SteeringMode,
     StreamingBehavior,
     ThinkingLevel,
     ThinkingLevelCycleResult,
+    TodoItem,
+    TodoPhase,
+    TodoStatus,
+    TodoAutoClearEvent,
+    TodoReminderEvent,
+    ToolExecutionEndEvent,
+    ToolExecutionStartEvent,
+    ToolExecutionUpdateEvent,
+    TtsrTriggeredEvent,
+    TurnEndEvent,
+    TurnStartEvent,
+    UnknownNotification,
     assistant_text,
     parse_bash_result,
     parse_branch_messages,
@@ -47,12 +70,36 @@ from .protocol import (
     parse_session_state,
     parse_session_stats,
     parse_thinking_level_cycle_result,
+    parse_todo_phases,
 )
 
 AgentEventListener = Callable[[RpcAgentEvent], None]
+NotificationListener = Callable[[RpcNotification], None]
 UiRequestListener = Callable[[ExtensionUiRequest], None]
 ExtensionErrorListener = Callable[[ExtensionError], None]
+ReadyListener = Callable[[ReadyEvent], None]
+UnknownNotificationListener = Callable[[UnknownNotification], None]
+AgentStartListener = Callable[[AgentStartEvent], None]
+AgentEndListener = Callable[[AgentEndEvent], None]
+TurnStartListener = Callable[[TurnStartEvent], None]
+TurnEndListener = Callable[[TurnEndEvent], None]
+MessageStartListener = Callable[[MessageStartEvent], None]
+MessageUpdateListener = Callable[[MessageUpdateEvent], None]
+MessageEndListener = Callable[[MessageEndEvent], None]
+ToolExecutionStartListener = Callable[[ToolExecutionStartEvent], None]
+ToolExecutionUpdateListener = Callable[[ToolExecutionUpdateEvent], None]
+ToolExecutionEndListener = Callable[[ToolExecutionEndEvent], None]
+AutoCompactionStartListener = Callable[[AutoCompactionStartEvent], None]
+AutoCompactionEndListener = Callable[[AutoCompactionEndEvent], None]
+AutoRetryStartListener = Callable[[AutoRetryStartEvent], None]
+AutoRetryEndListener = Callable[[AutoRetryEndEvent], None]
+RetryFallbackAppliedListener = Callable[[RetryFallbackAppliedEvent], None]
+RetryFallbackSucceededListener = Callable[[RetryFallbackSucceededEvent], None]
+TtsrTriggeredListener = Callable[[TtsrTriggeredEvent], None]
+TodoReminderListener = Callable[[TodoReminderEvent], None]
+TodoAutoClearListener = Callable[[TodoAutoClearEvent], None]
 TListener = TypeVar("TListener")
+TEventListener = TypeVar("TEventListener", bound=Callable[..., None])
 
 
 class RpcError(RuntimeError):
@@ -89,6 +136,10 @@ class PromptTurn:
         return self.assistant_text
 
 
+TodoSeed = str | TodoItem | Mapping[str, object]
+TodoPhaseSeed = TodoPhase | Mapping[str, object]
+
+
 class RpcClient:
     def __init__(
         self,
@@ -100,6 +151,15 @@ class RpcClient:
         session_dir: str | Path | None = None,
         cwd: str | Path | None = None,
         env: Mapping[str, str] | None = None,
+        thinking: ThinkingLevel | None = None,
+        append_system_prompt: str | None = None,
+        provider_session_id: str | None = None,
+        tools: Sequence[str] | None = None,
+        no_session: bool = False,
+        no_skills: bool = False,
+        no_rules: bool = False,
+        no_title: bool | None = None,
+        rpc_defaults: bool = True,
         extra_args: Sequence[str] = (),
         startup_timeout: float = 30.0,
         request_timeout: float = 30.0,
@@ -111,6 +171,15 @@ class RpcClient:
         self._session_dir = Path(session_dir) if session_dir is not None else None
         self._cwd = Path(cwd) if cwd is not None else None
         self._env = dict(env or {})
+        self._thinking = thinking
+        self._append_system_prompt = append_system_prompt
+        self._provider_session_id = provider_session_id
+        self._tools = tuple(tools) if tools is not None else None
+        self._no_session = no_session
+        self._no_skills = no_skills
+        self._no_rules = no_rules
+        self._no_title = no_title
+        self._rpc_defaults = rpc_defaults
         self._extra_args = tuple(extra_args)
         self._startup_timeout = startup_timeout
         self._request_timeout = request_timeout
@@ -130,7 +199,11 @@ class RpcClient:
         self._closed_error: BaseException | None = None
         self._stopping = False
 
+        self._notification_listeners: list[NotificationListener] = []
         self._event_listeners: list[AgentEventListener] = []
+        self._typed_event_listeners: dict[str, list[AgentEventListener]] = {}
+        self._ready_listeners: list[ReadyListener] = []
+        self._unknown_notification_listeners: list[UnknownNotificationListener] = []
         self._ui_request_listeners: list[UiRequestListener] = []
         self._extension_error_listeners: list[ExtensionErrorListener] = []
 
@@ -232,6 +305,71 @@ class RpcClient:
         self._event_listeners.append(listener)
         return lambda: self._remove_listener(self._event_listeners, listener)
 
+    def on_notification(self, listener: NotificationListener) -> Callable[[], None]:
+        self._notification_listeners.append(listener)
+        return lambda: self._remove_listener(self._notification_listeners, listener)
+
+    def on_ready(self, listener: ReadyListener) -> Callable[[], None]:
+        self._ready_listeners.append(listener)
+        return lambda: self._remove_listener(self._ready_listeners, listener)
+
+    def on_agent_start(self, listener: AgentStartListener) -> Callable[[], None]:
+        return self._add_typed_event_listener("agent_start", listener)
+
+    def on_agent_end(self, listener: AgentEndListener) -> Callable[[], None]:
+        return self._add_typed_event_listener("agent_end", listener)
+
+    def on_turn_start(self, listener: TurnStartListener) -> Callable[[], None]:
+        return self._add_typed_event_listener("turn_start", listener)
+
+    def on_turn_end(self, listener: TurnEndListener) -> Callable[[], None]:
+        return self._add_typed_event_listener("turn_end", listener)
+
+    def on_message_start(self, listener: MessageStartListener) -> Callable[[], None]:
+        return self._add_typed_event_listener("message_start", listener)
+
+    def on_message_update(self, listener: MessageUpdateListener) -> Callable[[], None]:
+        return self._add_typed_event_listener("message_update", listener)
+
+    def on_message_end(self, listener: MessageEndListener) -> Callable[[], None]:
+        return self._add_typed_event_listener("message_end", listener)
+
+    def on_tool_execution_start(self, listener: ToolExecutionStartListener) -> Callable[[], None]:
+        return self._add_typed_event_listener("tool_execution_start", listener)
+
+    def on_tool_execution_update(self, listener: ToolExecutionUpdateListener) -> Callable[[], None]:
+        return self._add_typed_event_listener("tool_execution_update", listener)
+
+    def on_tool_execution_end(self, listener: ToolExecutionEndListener) -> Callable[[], None]:
+        return self._add_typed_event_listener("tool_execution_end", listener)
+
+    def on_auto_compaction_start(self, listener: AutoCompactionStartListener) -> Callable[[], None]:
+        return self._add_typed_event_listener("auto_compaction_start", listener)
+
+    def on_auto_compaction_end(self, listener: AutoCompactionEndListener) -> Callable[[], None]:
+        return self._add_typed_event_listener("auto_compaction_end", listener)
+
+    def on_auto_retry_start(self, listener: AutoRetryStartListener) -> Callable[[], None]:
+        return self._add_typed_event_listener("auto_retry_start", listener)
+
+    def on_auto_retry_end(self, listener: AutoRetryEndListener) -> Callable[[], None]:
+        return self._add_typed_event_listener("auto_retry_end", listener)
+
+    def on_retry_fallback_applied(self, listener: RetryFallbackAppliedListener) -> Callable[[], None]:
+        return self._add_typed_event_listener("retry_fallback_applied", listener)
+
+    def on_retry_fallback_succeeded(self, listener: RetryFallbackSucceededListener) -> Callable[[], None]:
+        return self._add_typed_event_listener("retry_fallback_succeeded", listener)
+
+    def on_ttsr_triggered(self, listener: TtsrTriggeredListener) -> Callable[[], None]:
+        return self._add_typed_event_listener("ttsr_triggered", listener)
+
+    def on_todo_reminder(self, listener: TodoReminderListener) -> Callable[[], None]:
+        return self._add_typed_event_listener("todo_reminder", listener)
+
+    def on_todo_auto_clear(self, listener: TodoAutoClearListener) -> Callable[[], None]:
+        return self._add_typed_event_listener("todo_auto_clear", listener)
+
     def on_ui_request(self, listener: UiRequestListener) -> Callable[[], None]:
         self._ui_request_listeners.append(listener)
         return lambda: self._remove_listener(self._ui_request_listeners, listener)
@@ -239,6 +377,55 @@ class RpcClient:
     def on_extension_error(self, listener: ExtensionErrorListener) -> Callable[[], None]:
         self._extension_error_listeners.append(listener)
         return lambda: self._remove_listener(self._extension_error_listeners, listener)
+
+    def on_unknown_notification(self, listener: UnknownNotificationListener) -> Callable[[], None]:
+        self._unknown_notification_listeners.append(listener)
+        return lambda: self._remove_listener(self._unknown_notification_listeners, listener)
+
+    def install_headless_ui(
+        self,
+        *,
+        on_request: UiRequestListener | None = None,
+        confirm: bool = False,
+        select_value: str | None = None,
+        input_value: str | None = None,
+        editor_value: str | None = None,
+    ) -> Callable[[], None]:
+        """Auto-handle RPC UI requests for non-interactive hosts.
+
+        Passive UI methods such as notifications and status updates are ignored.
+        Confirm dialogs default to `False`. Select, input, and editor requests
+        are cancelled unless an explicit value is provided.
+        """
+
+        def handle(request: ExtensionUiRequest) -> None:
+            if on_request is not None:
+                on_request(request)
+
+            if request.method == "cancel" or request.is_passive():
+                return
+            if request.method == "confirm":
+                self.send_ui_confirmation(request.id, confirm)
+                return
+            if request.method == "select":
+                if select_value is not None:
+                    self.send_ui_value(request.id, select_value)
+                else:
+                    self.cancel_ui_request(request.id)
+                return
+            if request.method == "input":
+                if input_value is not None:
+                    self.send_ui_value(request.id, input_value)
+                else:
+                    self.cancel_ui_request(request.id)
+                return
+            if request.method == "editor":
+                if editor_value is not None:
+                    self.send_ui_value(request.id, editor_value)
+                else:
+                    self.cancel_ui_request(request.id)
+
+        return self.on_ui_request(handle)
 
     def next_ui_request(self, timeout: float | None = None) -> ExtensionUiRequest:
         try:
@@ -339,6 +526,17 @@ class RpcClient:
 
     def set_session_name(self, name: str) -> None:
         self._request("set_session_name", name=name)
+
+    def get_todos(self) -> tuple[TodoPhase, ...]:
+        return self.get_state().todo_phases
+
+    def set_todos(self, todos: Sequence[TodoSeed | TodoPhaseSeed]) -> tuple[TodoPhase, ...]:
+        phases = self._normalize_todo_phases(todos)
+        payload = self._request("set_todos", phases=cast(JsonValue, phases))
+        return parse_todo_phases(payload.get("todoPhases"))
+
+    def clear_todos(self) -> tuple[TodoPhase, ...]:
+        return self.set_todos(())
 
     def get_messages(self) -> tuple[AgentMessage, ...]:
         payload = self._request("get_messages")
@@ -476,6 +674,91 @@ class RpcClient:
         process = self._require_process()
         self._write_json(process, payload)
 
+    def _add_typed_event_listener(self, event_type: str, listener: TEventListener) -> Callable[[], None]:
+        listeners = self._typed_event_listeners.setdefault(event_type, [])
+        typed_listener = cast(AgentEventListener, listener)
+        listeners.append(typed_listener)
+        return lambda: self._remove_listener(listeners, typed_listener)
+
+    @staticmethod
+    def _normalize_todo_phases(todos: Sequence[TodoSeed | TodoPhaseSeed]) -> list[JsonObject]:
+        if len(todos) == 0:
+            return []
+
+        next_task_id = 1
+
+        def next_task() -> str:
+            nonlocal next_task_id
+            task_id = f"task-{next_task_id}"
+            next_task_id += 1
+            return task_id
+
+        def normalize_todo_item(seed: TodoSeed) -> JsonObject:
+            if isinstance(seed, str):
+                return {"id": next_task(), "content": seed, "status": cast(JsonValue, "pending")}
+
+            if isinstance(seed, TodoItem):
+                return {
+                    "id": seed.id or next_task(),
+                    "content": seed.content,
+                    "status": cast(JsonValue, seed.status),
+                    "notes": seed.notes,
+                    "details": seed.details,
+                }
+
+            content = seed.get("content")
+            if not isinstance(content, str) or not content.strip():
+                raise RpcError("Todo items must provide a non-empty 'content' value")
+
+            raw_id = seed.get("id")
+            raw_status = seed.get("status")
+            raw_notes = seed.get("notes")
+            raw_details = seed.get("details")
+            status: TodoStatus = cast(TodoStatus, raw_status) if isinstance(raw_status, str) else "pending"
+            return {
+                "id": str(raw_id) if isinstance(raw_id, str) and raw_id else next_task(),
+                "content": content,
+                "status": cast(JsonValue, status),
+                "notes": raw_notes if isinstance(raw_notes, str) else None,
+                "details": raw_details if isinstance(raw_details, str) else None,
+            }
+
+        def is_phase_seed(seed: TodoSeed | TodoPhaseSeed) -> bool:
+            if isinstance(seed, TodoPhase):
+                return True
+            if not isinstance(seed, Mapping):
+                return False
+            return "tasks" in seed or ("name" in seed and "content" not in seed)
+
+        def normalize_phase(seed: TodoPhaseSeed, index: int) -> JsonObject:
+            if isinstance(seed, TodoPhase):
+                phase_id = seed.id or f"phase-{index}"
+                name = seed.name
+                tasks = [normalize_todo_item(task) for task in seed.tasks]
+            else:
+                raw_name = seed.get("name")
+                if not isinstance(raw_name, str) or not raw_name.strip():
+                    raise RpcError("Todo phases must provide a non-empty 'name' value")
+                phase_id_value = seed.get("id")
+                raw_tasks = seed.get("tasks") or ()
+                if not isinstance(raw_tasks, Sequence) or isinstance(raw_tasks, (str, bytes)):
+                    raise RpcError("Todo phase 'tasks' must be a sequence")
+                phase_id = str(phase_id_value) if isinstance(phase_id_value, str) and phase_id_value else f"phase-{index}"
+                name = raw_name
+                tasks = [normalize_todo_item(cast(TodoSeed, task)) for task in raw_tasks]
+
+            return {"id": phase_id, "name": name, "tasks": tasks}
+
+        if any(is_phase_seed(todo) for todo in todos):
+            phases: list[JsonObject] = []
+            for index, seed in enumerate(todos, start=1):
+                if not is_phase_seed(seed):
+                    raise RpcError("Cannot mix flat todo items with todo phases in one set_todos() call")
+                phases.append(normalize_phase(cast(TodoPhaseSeed, seed), index))
+            return phases
+
+        return [{"id": "phase-1", "name": "Todos", "tasks": [normalize_todo_item(cast(TodoSeed, todo)) for todo in todos]}]
+
     def _build_command(self) -> tuple[str, ...]:
         if self._command is not None:
             return self._command
@@ -487,6 +770,26 @@ class RpcClient:
             command.extend(["--model", self._model])
         if self._session_dir is not None:
             command.extend(["--session-dir", str(self._session_dir)])
+        if self._thinking is not None:
+            command.extend(["--thinking", self._thinking])
+        if self._append_system_prompt is not None:
+            command.extend(["--append-system-prompt", self._append_system_prompt])
+        if self._provider_session_id is not None:
+            command.extend(["--provider-session-id", self._provider_session_id])
+        if self._tools is not None:
+            if len(self._tools) == 0:
+                command.append("--no-tools")
+            else:
+                command.extend(["--tools", ",".join(self._tools)])
+        if self._no_session:
+            command.append("--no-session")
+        if self._no_skills:
+            command.append("--no-skills")
+        if self._no_rules:
+            command.append("--no-rules")
+        emit_no_title = self._no_title if self._no_title is not None else self._rpc_defaults
+        if emit_no_title:
+            command.append("--no-title")
         command.extend(self._extra_args)
         return tuple(command)
 
@@ -533,8 +836,13 @@ class RpcClient:
                     continue
 
                 notification = parse_notification(payload)
+                for listener in list(self._notification_listeners):
+                    listener(notification)
+
                 if isinstance(notification, ReadyEvent):
                     self._ready.set()
+                    for listener in list(self._ready_listeners):
+                        listener(notification)
                     continue
 
                 if isinstance(notification, ExtensionUiRequest):
@@ -548,12 +856,19 @@ class RpcClient:
                         listener(notification)
                     continue
 
-                if getattr(notification, "type", None) != "unknown":
-                    with self._event_condition:
-                        self._events.append(cast(RpcAgentEvent, notification))
-                        self._event_condition.notify_all()
-                    for listener in list(self._event_listeners):
-                        listener(cast(RpcAgentEvent, notification))
+                if isinstance(notification, UnknownNotification):
+                    for listener in list(self._unknown_notification_listeners):
+                        listener(notification)
+                    continue
+
+                event = cast(RpcAgentEvent, notification)
+                with self._event_condition:
+                    self._events.append(event)
+                    self._event_condition.notify_all()
+                for listener in list(self._event_listeners):
+                    listener(event)
+                for listener in list(self._typed_event_listeners.get(event.type, [])):
+                    listener(event)
         except json.JSONDecodeError as exc:
             self._mark_closed(RpcError(f"Failed to decode RPC output: {exc}"))
         except Exception as exc:

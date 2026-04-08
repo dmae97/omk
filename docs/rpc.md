@@ -22,6 +22,8 @@ omp --mode rpc [regular CLI options]
 Behavior notes:
 
 - `@file` CLI arguments are rejected in RPC mode.
+- RPC mode disables automatic session title generation by default to avoid an extra model call.
+- RPC mode resets workflow-altering `todo.*`, `task.*`, and `async.*` settings to their built-in defaults instead of inheriting user overrides.
 - The process reads stdin as JSONL (`readJsonl(Bun.stdin.stream())`).
 - When stdin closes, the process exits with code `0`.
 - Responses/events are written as one JSON object per line.
@@ -73,6 +75,7 @@ Important edge behavior from runtime:
 ### State
 
 - `{ id?, type: "get_state" }`
+- `{ id?, type: "set_todos", phases: TodoPhase[] }`
 
 ### Model
 
@@ -145,9 +148,53 @@ Data payloads are command-specific and defined in `rpc-types.ts`.
   "sessionName": "...",
   "autoCompactionEnabled": true,
   "messageCount": 0,
-  "queuedMessageCount": 0
+  "queuedMessageCount": 0,
+  "todoPhases": [
+    {
+      "id": "phase-1",
+      "name": "Todos",
+      "tasks": [
+        {
+          "id": "task-1",
+          "content": "Map the tool surface",
+          "status": "in_progress"
+        }
+      ]
+    }
+  ]
 }
 ```
+
+### `set_todos` payload
+
+Replaces the in-memory todo state for the current session and returns the normalized phase list:
+
+```json
+{
+  "id": "req_2",
+  "type": "set_todos",
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Evaluation",
+      "tasks": [
+        {
+          "id": "task-1",
+          "content": "Map the read tool surface",
+          "status": "in_progress"
+        },
+        {
+          "id": "task-2",
+          "content": "Exercise edit operations",
+          "status": "pending"
+        }
+      ]
+    }
+  ]
+}
+```
+
+This is useful for hosts that want to pre-seed a plan before the first prompt.
 
 ## Event Stream Schema
 
@@ -163,6 +210,7 @@ Common event types:
 - `auto_retry_start`, `auto_retry_end`
 - `ttsr_triggered`
 - `todo_reminder`
+- `todo_auto_clear`
 
 Extension runner errors are emitted separately as:
 
@@ -225,6 +273,13 @@ Extensions in RPC mode use request/response UI frames.
 
 - `select`, `confirm`, `input`, `editor`
 - `notify`, `setStatus`, `setWidget`, `setTitle`, `set_editor_text`
+
+Runtime note:
+
+- Automatic session title generation is disabled in RPC mode, and `setTitle` UI
+  requests are also suppressed by default because most hosts do not have a
+  meaningful terminal-title surface. Set `PI_RPC_EMIT_TITLE=1` to opt back in to
+  the UI event only.
 
 Example:
 

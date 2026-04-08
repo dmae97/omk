@@ -6,6 +6,7 @@ from omp_rpc import (
     AgentEndEvent,
     ExtensionUiRequest,
     SessionState,
+    TodoReminderEvent,
     assistant_text,
     parse_notification,
     parse_session_state,
@@ -50,6 +51,20 @@ class ProtocolParsingTests(unittest.TestCase):
                 "autoCompactionEnabled": True,
                 "messageCount": 4,
                 "queuedMessageCount": 1,
+                "todoPhases": [
+                    {
+                        "id": "phase-1",
+                        "name": "Todos",
+                        "tasks": [
+                            {
+                                "id": "task-1",
+                                "content": "Map tools",
+                                "status": "in_progress",
+                                "details": "Inspect read and edit first.",
+                            }
+                        ],
+                    }
+                ],
                 "systemPrompt": "You are useful.",
                 "dumpTools": [
                     {
@@ -65,6 +80,7 @@ class ProtocolParsingTests(unittest.TestCase):
         self.assertEqual(state.session_id, "session-123")
         self.assertEqual(state.follow_up_mode, "all")
         self.assertEqual(state.model.id if state.model else None, "claude-sonnet-4-5")
+        self.assertEqual(state.todo_phases[0].tasks[0].status, "in_progress")
         self.assertEqual(state.dump_tools[0].name, "read")
 
     def test_parse_agent_end_notification(self) -> None:
@@ -117,6 +133,29 @@ class ProtocolParsingTests(unittest.TestCase):
         self.assertIsInstance(notification, ExtensionUiRequest)
         self.assertEqual(notification.method, "confirm")
         self.assertEqual(notification.message, "Continue?")
+        self.assertTrue(notification.is_interactive())
+        self.assertTrue(notification.requires_response())
+        self.assertFalse(notification.is_passive())
+
+    def test_parse_todo_reminder_notification(self) -> None:
+        notification = parse_notification(
+            {
+                "type": "todo_reminder",
+                "attempt": 1,
+                "maxAttempts": 3,
+                "todos": [
+                    {
+                        "id": "task-1",
+                        "content": "Map tools",
+                        "status": "pending",
+                    }
+                ],
+            }
+        )
+
+        self.assertIsInstance(notification, TodoReminderEvent)
+        self.assertEqual(notification.todos[0].content, "Map tools")
+        self.assertEqual(notification.todos[0].status, "pending")
 
 
 if __name__ == "__main__":

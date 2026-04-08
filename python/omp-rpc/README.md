@@ -6,9 +6,12 @@ This package wraps the newline-delimited JSON RPC transport exposed by the CLI a
 provides:
 
 - typed command methods for the stable RPC surface
+- typed startup options for common `omp --mode rpc` flags such as thinking level,
+  tool selection, prompt appends, provider session IDs, and headless session toggles
 - typed protocol models for state, bash results, compaction, and session stats
 - a process-backed client that manages request correlation over stdio
-- helpers for collecting prompt runs and handling extension UI requests
+- typed per-event listeners plus a typed catch-all notification hook
+- helpers for collecting prompt runs and handling extension UI requests in manual or headless mode
 
 ## Basic Usage
 
@@ -22,6 +25,50 @@ with RpcClient(provider="anthropic", model="claude-sonnet-4-5") as client:
     turn = client.prompt_and_wait("Reply with just the word hello")
     print(turn.require_assistant_text())
 ```
+
+The wrapper also exposes the common RPC startup flags directly, so scripts do not
+need to build `extra_args` by hand:
+
+```python
+from omp_rpc import RpcClient
+
+with RpcClient(
+    model="openrouter/anthropic/claude-sonnet-4.6",
+    thinking="high",
+    no_session=True,
+    no_skills=True,
+    no_rules=True,
+    tools=("read", "edit", "write"),
+    append_system_prompt="Focus on reproducible benchmark behavior.",
+) as client:
+    print(client.get_state().thinking_level)
+```
+
+For orchestration hosts, the wrapper also exposes typed event hooks and a simple
+way to seed todos before the first prompt:
+
+```python
+from omp_rpc import MessageUpdateEvent, RpcClient
+
+def on_message_update(event: MessageUpdateEvent) -> None:
+    assistant_event = event.assistant_message_event
+    if assistant_event.get("type") == "text_delta":
+        print(assistant_event["delta"], end="", flush=True)
+
+with RpcClient(model="openrouter/anthropic/claude-sonnet-4.6", no_session=True) as client:
+    client.on_message_update(on_message_update)
+    client.set_todos(
+        [
+            "Map the read and edit tool surface.",
+            "Exercise the supported edit paths.",
+            "Write concrete findings and gaps.",
+        ]
+    )
+    client.prompt_and_wait("Evaluate the current tool behavior.")
+```
+
+`set_todos()` accepts either a flat list of todo strings/items or explicit
+phases, and `get_state().todo_phases` returns the typed current todo state.
 
 By default the client runs:
 
@@ -63,6 +110,20 @@ if request.method == "confirm":
 elif request.method in {"input", "editor"}:
     client.send_ui_value(request.id, "approved")
 ```
+
+For non-interactive scripts, you can install a default headless policy instead of
+handling every request manually:
+
+```python
+with RpcClient(model="anthropic/claude-sonnet-4-5") as client:
+    client.install_headless_ui()
+    turn = client.prompt_and_wait("needs ui-safe automation")
+    print(turn.assistant_text)
+```
+
+That helper ignores passive UI notifications (`notify`, `setStatus`, `setWidget`,
+`setTitle`, `set_editor_text`), answers `confirm` with `False`, and cancels
+`select`/`input`/`editor` requests unless you provide explicit values.
 
 ## Protocol Reference
 

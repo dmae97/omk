@@ -4,7 +4,7 @@ import base64
 import mimetypes
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, NotRequired, TypedDict, TypeAlias, cast
+from typing import Any, Final, Literal, NotRequired, TypedDict, TypeAlias, cast
 
 JsonPrimitive: TypeAlias = str | int | float | bool | None
 JsonValue: TypeAlias = JsonPrimitive | list["JsonValue"] | dict[str, "JsonValue"]
@@ -18,6 +18,30 @@ InterruptMode: TypeAlias = Literal["immediate", "wait"]
 StopReason: TypeAlias = Literal["stop", "length", "toolUse", "error", "aborted"]
 NotifyType: TypeAlias = Literal["info", "warning", "error"]
 WidgetPlacement: TypeAlias = Literal["aboveEditor", "belowEditor"]
+TodoStatus: TypeAlias = Literal["pending", "in_progress", "completed", "abandoned"]
+ExtensionUiMethod: TypeAlias = Literal[
+    "select",
+    "confirm",
+    "input",
+    "editor",
+    "cancel",
+    "notify",
+    "setStatus",
+    "setWidget",
+    "setTitle",
+    "set_editor_text",
+]
+InteractiveExtensionUiMethod: TypeAlias = Literal["select", "confirm", "input", "editor"]
+PassiveExtensionUiMethod: TypeAlias = Literal["notify", "setStatus", "setWidget", "setTitle", "set_editor_text"]
+ValueExtensionUiMethod: TypeAlias = Literal["select", "input", "editor"]
+
+PASSIVE_EXTENSION_UI_METHODS: Final[frozenset[PassiveExtensionUiMethod]] = frozenset(
+    {"notify", "setStatus", "setWidget", "setTitle", "set_editor_text"}
+)
+INTERACTIVE_EXTENSION_UI_METHODS: Final[frozenset[InteractiveExtensionUiMethod]] = frozenset(
+    {"select", "confirm", "input", "editor"}
+)
+VALUE_EXTENSION_UI_METHODS: Final[frozenset[ValueExtensionUiMethod]] = frozenset({"select", "input", "editor"})
 
 
 class TextContent(TypedDict, total=False):
@@ -342,6 +366,22 @@ class ToolDescriptor:
 
 
 @dataclass(slots=True, frozen=True)
+class TodoItem:
+    id: str
+    content: str
+    status: TodoStatus
+    notes: str | None = None
+    details: str | None = None
+
+
+@dataclass(slots=True, frozen=True)
+class TodoPhase:
+    id: str
+    name: str
+    tasks: tuple[TodoItem, ...]
+
+
+@dataclass(slots=True, frozen=True)
 class SessionState:
     model: ModelInfo | None
     thinking_level: ThinkingLevel | None
@@ -356,6 +396,7 @@ class SessionState:
     auto_compaction_enabled: bool
     message_count: int
     queued_message_count: int
+    todo_phases: tuple[TodoPhase, ...] = ()
     system_prompt: str | None = None
     dump_tools: tuple[ToolDescriptor, ...] = ()
 
@@ -443,7 +484,7 @@ class ReadyEvent:
 @dataclass(slots=True, frozen=True)
 class ExtensionUiRequest:
     id: str
-    method: str
+    method: ExtensionUiMethod
     title: str | None = None
     options: tuple[str, ...] | None = None
     message: str | None = None
@@ -459,6 +500,19 @@ class ExtensionUiRequest:
     widget_lines: tuple[str, ...] | None = None
     widget_placement: WidgetPlacement | None = None
     text: str | None = None
+    type: Literal["extension_ui_request"] = "extension_ui_request"
+
+    def is_passive(self) -> bool:
+        return self.method in PASSIVE_EXTENSION_UI_METHODS
+
+    def is_interactive(self) -> bool:
+        return self.method in INTERACTIVE_EXTENSION_UI_METHODS
+
+    def accepts_text(self) -> bool:
+        return self.method in VALUE_EXTENSION_UI_METHODS
+
+    def requires_response(self) -> bool:
+        return self.is_interactive()
 
 
 @dataclass(slots=True, frozen=True)
@@ -596,7 +650,7 @@ class TtsrTriggeredEvent:
 
 @dataclass(slots=True, frozen=True)
 class TodoReminderEvent:
-    todos: tuple[JsonObject, ...]
+    todos: tuple[TodoItem, ...]
     attempt: int
     max_attempts: int
     type: Literal["todo_reminder"] = "todo_reminder"
@@ -728,6 +782,31 @@ def parse_tool_descriptor(payload: JsonObject) -> ToolDescriptor:
     )
 
 
+def parse_todo_item(payload: JsonObject) -> TodoItem:
+    return TodoItem(
+        id=str(payload.get("id", "")),
+        content=str(payload.get("content", "")),
+        status=cast(TodoStatus, payload.get("status", "pending")),
+        notes=str(payload["notes"]) if payload.get("notes") is not None else None,
+        details=str(payload["details"]) if payload.get("details") is not None else None,
+    )
+
+
+def parse_todo_phase(payload: JsonObject) -> TodoPhase:
+    tasks = tuple(parse_todo_item(cast(JsonObject, item)) for item in cast(list[Any], payload.get("tasks") or []))
+    return TodoPhase(
+        id=str(payload.get("id", "")),
+        name=str(payload.get("name", "")),
+        tasks=tasks,
+    )
+
+
+def parse_todo_phases(payload: JsonValue | None) -> tuple[TodoPhase, ...]:
+    if not isinstance(payload, list):
+        return ()
+    return tuple(parse_todo_phase(cast(JsonObject, item)) for item in payload)
+
+
 def parse_session_state(payload: JsonObject) -> SessionState:
     dump_tools = tuple(
         parse_tool_descriptor(cast(JsonObject, item)) for item in cast(list[Any], payload.get("dumpTools") or [])
@@ -746,6 +825,7 @@ def parse_session_state(payload: JsonObject) -> SessionState:
         auto_compaction_enabled=bool(payload.get("autoCompactionEnabled", False)),
         message_count=int(payload.get("messageCount", 0)),
         queued_message_count=int(payload.get("queuedMessageCount", 0)),
+        todo_phases=parse_todo_phases(cast(JsonValue | None, payload.get("todoPhases"))),
         system_prompt=str(payload["systemPrompt"]) if payload.get("systemPrompt") is not None else None,
         dump_tools=dump_tools,
     )
@@ -836,7 +916,7 @@ def parse_session_stats(payload: JsonObject) -> SessionStats:
 def parse_extension_ui_request(payload: JsonObject) -> ExtensionUiRequest:
     return ExtensionUiRequest(
         id=str(payload["id"]),
-        method=str(payload["method"]),
+        method=cast(ExtensionUiMethod, payload["method"]),
         title=str(payload["title"]) if payload.get("title") is not None else None,
         options=tuple(str(item) for item in cast(list[Any], payload.get("options") or [])) or None,
         message=str(payload["message"]) if payload.get("message") is not None else None,
@@ -954,7 +1034,7 @@ def parse_notification(payload: JsonObject) -> RpcNotification:
         return TtsrTriggeredEvent(rules=tuple(cast(list[JsonObject], payload.get("rules") or [])))
     if event_type == "todo_reminder":
         return TodoReminderEvent(
-            todos=tuple(cast(list[JsonObject], payload.get("todos") or [])),
+            todos=tuple(parse_todo_item(cast(JsonObject, item)) for item in cast(list[Any], payload.get("todos") or [])),
             attempt=int(payload.get("attempt", 0)),
             max_attempts=int(payload.get("maxAttempts", 0)),
         )

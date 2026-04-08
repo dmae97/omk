@@ -1,8 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- RPC `set_todos` command and `todoPhases` in `get_state`, allowing hosts to pre-seed and inspect session todo state over the protocol
 - Deferred diagnostics support in LSP writethrough: `onDeferredDiagnostics` callback and `deferredSignal` in `WritethroughOptions` allow callers to receive diagnostics that arrive after the main 5-second timeout
 - Language detection for `.pm` (Perl modules), `.astro` (Astro framework), and special filenames `containerfile` and `justfile`
 - Workspace-scoped diagnostics and reload actions via `*` file parameter; `diagnostics` action now supports `*` for workspace-wide diagnostics across all configured servers
@@ -23,6 +25,9 @@
 
 ### Changed
 
+- RPC mode now automatically disables session title generation by default; hosts can opt in with `PI_RPC_EMIT_TITLE=1` environment variable to receive title updates
+- RPC mode now resets workflow-altering `todo.*`, `task.*`, and `async.*` settings to built-in defaults instead of inheriting user overrides
+- RPC mode now disables automatic session title generation by default and suppresses `setTitle` extension UI requests unless hosts opt in with `PI_RPC_EMIT_TITLE=1`
 - Reorganized edit tool implementation from `patch/` to `edit/` directory structure with dedicated mode subdirectories (`edit/modes/chunk.ts`, `edit/modes/hashline.ts`, `edit/modes/patch.ts`, `edit/modes/replace.ts`)
 - Updated package.json exports to use `./edit` path instead of `./patch` for edit tool and related utilities
 - Chunk edit tool documentation simplified: removed line-based edit examples, clarified `target` format with full path and CRC suffix, added guidance for `replace_body` operation to preserve declarations

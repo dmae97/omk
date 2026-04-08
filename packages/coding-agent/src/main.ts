@@ -22,7 +22,7 @@ import { selectSession } from "./cli/session-picker";
 import { findConfigFile } from "./config";
 import { ModelRegistry, ModelsConfigFile } from "./config/model-registry";
 import { resolveCliModel, resolveModelRoleValue, resolveModelScope, type ScopedModel } from "./config/model-resolver";
-import { Settings, settings } from "./config/settings";
+import { getDefault, type SettingPath, Settings, settings } from "./config/settings";
 import { initializeWithSettings } from "./discovery";
 import {
 	clearClaudePluginRootsCache,
@@ -68,6 +68,29 @@ async function checkForNewVersion(currentVersion: string): Promise<string | unde
 		return undefined;
 	} catch {
 		return undefined;
+	}
+}
+
+const RPC_DEFAULTED_SETTING_PATHS: SettingPath[] = [
+	"todo.enabled",
+	"todo.reminders",
+	"todo.reminders.max",
+	"todo.eager",
+	"async.enabled",
+	"async.maxJobs",
+	"task.isolation.mode",
+	"task.isolation.merge",
+	"task.isolation.commits",
+	"task.eager",
+	"task.maxConcurrency",
+	"task.maxRecursionDepth",
+	"task.disabledAgents",
+	"task.agentModelOverrides",
+];
+
+function applyRpcDefaultSettingOverrides(): void {
+	for (const settingPath of RPC_DEFAULTED_SETTING_PATHS) {
+		settings.override(settingPath, getDefault(settingPath));
 	}
 }
 
@@ -590,8 +613,14 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 
 	const cwd = getProjectDir();
 	await logger.timeAsync("settings:init", () => Settings.init({ cwd }));
+	if (parsedArgs.mode === "rpc") {
+		applyRpcDefaultSettingOverrides();
+	}
 	if (parsedArgs.noPty) {
 		Bun.env.PI_NO_PTY = "1";
+	}
+	if (parsedArgs.noTitle || parsedArgs.mode === "rpc") {
+		Bun.env.PI_NO_TITLE = "1";
 	}
 	const { pipedInput, fileText, fileImages } = await logger.timeAsync("prepareInitialMessage", async () => {
 		const pipedInput = await readPipedInput();

@@ -10,7 +10,7 @@
  * - Events: AgentSessionEvent objects streamed as they occur
  * - Extension UI: Extension UI requests are emitted, client responds with extension_ui_response
  */
-import { readJsonl, Snowflake } from "@oh-my-pi/pi-utils";
+import { $env, readJsonl, Snowflake } from "@oh-my-pi/pi-utils";
 import type {
 	ExtensionUIContext,
 	ExtensionUIDialogOptions,
@@ -35,6 +35,13 @@ export type PendingExtensionRequest = {
 };
 
 type RpcOutput = (obj: RpcResponse | RpcExtensionUIRequest | object) => void;
+
+function shouldEmitRpcTitles(): boolean {
+	const raw = $env.PI_RPC_EMIT_TITLE;
+	if (!raw) return false;
+	const normalized = raw.trim().toLowerCase();
+	return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
 
 export function requestRpcEditor(
 	pendingRequests: Map<string, PendingExtensionRequest>,
@@ -110,6 +117,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 	const output = (obj: RpcResponse | RpcExtensionUIRequest | object) => {
 		process.stdout.write(`${JSON.stringify(obj)}\n`);
 	};
+	const emitRpcTitles = shouldEmitRpcTitles();
 
 	const success = <T extends RpcCommand["type"]>(
 		id: string | undefined,
@@ -291,7 +299,8 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 		}
 
 		setTitle(title: string): void {
-			// Fire and forget - host can implement terminal title control
+			// Title updates are low-value noise for most RPC hosts; opt in via PI_RPC_EMIT_TITLE=1.
+			if (!emitRpcTitles) return;
 			this.output({
 				type: "extension_ui_request",
 				id: Snowflake.next() as string,
@@ -544,6 +553,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 					autoCompactionEnabled: session.autoCompactionEnabled,
 					messageCount: session.messages.length,
 					queuedMessageCount: session.queuedMessageCount,
+					todoPhases: session.getTodoPhases(),
 					systemPrompt: session.systemPrompt,
 					dumpTools: session.agent.state.tools.map(tool => ({
 						name: tool.name,
@@ -552,6 +562,11 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 					})),
 				};
 				return success(id, "get_state", state);
+			}
+
+			case "set_todos": {
+				session.setTodoPhases(command.phases);
+				return success(id, "set_todos", { todoPhases: session.getTodoPhases() });
 			}
 
 			// =================================================================
