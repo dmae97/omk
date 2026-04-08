@@ -88,10 +88,6 @@ export function invalidateChunkCache(filePath: string): void {
 	chunkStateCache.delete(filePath);
 }
 
-type ParsedChunkTarget = {
-	selector: string;
-};
-
 type ChunkSourceContext = {
 	resolvedPath: string;
 	sourceFile: BunFile;

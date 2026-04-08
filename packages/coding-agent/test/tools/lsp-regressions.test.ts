@@ -17,6 +17,7 @@ import {
 import { getThemeByName } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { clampTimeout } from "@oh-my-pi/pi-coding-agent/tools/tool-timeouts";
 import { sanitizeText } from "@oh-my-pi/pi-natives";
+import * as piUtils from "@oh-my-pi/pi-utils";
 import { TempDir } from "@oh-my-pi/pi-utils";
 
 describe("lsp regressions", () => {
@@ -236,7 +237,7 @@ describe("lsp regressions", () => {
 		await Bun.write(specPath, "---- MODULE Spec ----\n====\n");
 
 		const whichSpy = vi
-			.spyOn(Bun, "which")
+			.spyOn(piUtils, "$which")
 			.mockImplementation(command => (command === "tlapm_lsp" ? "/usr/local/bin/tlapm_lsp" : null));
 		const existsSpy = vi
 			.spyOn(fs, "existsSync")

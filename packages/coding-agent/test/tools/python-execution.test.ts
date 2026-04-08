@@ -23,6 +23,7 @@ function createSession(cwd: string): ToolSession {
 describe("python tool execution", () => {
 	it("passes kernel options from settings and args", async () => {
 		const tempDir = TempDir.createSync("@python-tool-");
+		vi.spyOn(pythonExecutor, "warmPythonEnvironment").mockResolvedValue({ ok: true });
 		const executeSpy = vi.spyOn(pythonExecutor, "executePython").mockResolvedValue({
 			output: "ok",
 			exitCode: 0,

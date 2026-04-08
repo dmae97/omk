@@ -47,7 +47,7 @@ it("migrates legacy history schema away from unixepoch defaults", async () => {
 
 	const storage = HistoryStorage.open(dbPath);
 	storage.add("new prompt", "/tmp/new");
-	await Bun.sleep(10);
+	await Bun.sleep(100);
 
 	const db = new Database(dbPath, { readonly: true });
 	try {

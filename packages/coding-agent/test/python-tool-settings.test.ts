@@ -56,6 +56,7 @@ describe("python tool settings", () => {
 	});
 
 	it("passes kernel mode from settings to executor", async () => {
+		vi.spyOn(pythonExecutor, "warmPythonEnvironment").mockResolvedValue({ ok: true });
 		const executeSpy = vi.spyOn(pythonExecutor, "executePython").mockResolvedValue({
 			output: "ok",
 			exitCode: 0,
