@@ -34,6 +34,12 @@ export function resolveEditMode(session: EditModeSessionLike): EditMode {
 	const envMode = normalizeEditMode(Bun.env.PI_EDIT_VARIANT);
 	if (envMode) return envMode;
 
+	if (activeModel?.includes("spark")) return "replace";
+	if (activeModel?.includes("nano")) return "replace";
+	if (activeModel?.includes("mini")) return "replace";
+	if (activeModel?.includes("haiku")) return "replace";
+	if (activeModel?.includes("flash")) return "replace";
+
 	const settingsMode = normalizeEditMode(String(session.settings.get("edit.mode") ?? ""));
 	return settingsMode ?? DEFAULT_EDIT_MODE;
 }
