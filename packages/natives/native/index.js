@@ -16,7 +16,7 @@ function getNativesDir() {
 	return path.join(os.homedir(), ".omp", "natives");
 }
 const packageJson = require("../package.json");
-const { embeddedAddon } = require("./embedded-addon");
+let embeddedAddon = null;
 
 const require_ = createRequire(__filename);
 const platformTag = `${process.platform}-${process.arch}`;
@@ -33,6 +33,14 @@ const isCompiledBinary =
 	__filename.includes("$bunfs") ||
 	__filename.includes("~BUN") ||
 	__filename.includes("%7EBUN");
+
+if (isCompiledBinary) {
+	try {
+		({ embeddedAddon } = require("./embedded-addon"));
+	} catch {
+		embeddedAddon = null;
+	}
+}
 const SUPPORTED_PLATFORMS = ["linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64", "win32-x64"];
 
 function getVariantOverride() {
