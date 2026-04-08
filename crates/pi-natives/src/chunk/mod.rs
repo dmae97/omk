@@ -1716,6 +1716,82 @@ impl Config {
 	}
 
 	#[test]
+	fn read_body_region_returns_only_body_content() {
+		let source = "/// A doc.\nfunction run() {\n    return 1;\n}\n";
+		let state = ChunkState::parse(source.to_string(), "typescript".to_string())
+			.expect("state should parse");
+		let result = state
+			.render_read(ReadRenderParams {
+				read_path:           "sample.ts:fn_run@body".to_string(),
+				display_path:        "sample.ts".to_string(),
+				language_tag:        Some("ts".to_string()),
+				omit_checksum:       false,
+				anchor_style:        Some(ChunkAnchorStyle::Full),
+				absolute_line_range: None,
+				tab_replacement:     Some("    ".to_string()),
+				normalize_indent:    Some(true),
+			})
+			.expect("render_read should succeed");
+
+		// Should contain only the body, not the signature or doc comment.
+		assert!(
+			!result.text.contains("/// A doc"),
+			"body read should not contain the doc comment: {}",
+			result.text
+		);
+		assert!(
+			!result.text.contains("function run"),
+			"body read should not contain the signature: {}",
+			result.text
+		);
+		assert!(
+			result.text.contains("return 1"),
+			"body read should contain the body content: {}",
+			result.text
+		);
+	}
+
+	#[test]
+	fn python_prologue_read_has_consistent_indentation() {
+		let source =
+			"class Server:\n    @property\n    def address(self) -> str:\n        return self._addr\n";
+		let state =
+			ChunkState::parse(source.to_string(), "python".to_string()).expect("state should parse");
+		let result = state
+			.render_read(ReadRenderParams {
+				read_path:           "test.py:class_Server.fn_address@prologue".to_string(),
+				display_path:        "test.py".to_string(),
+				language_tag:        Some("py".to_string()),
+				omit_checksum:       false,
+				anchor_style:        Some(ChunkAnchorStyle::Full),
+				absolute_line_range: None,
+				tab_replacement:     Some("    ".to_string()),
+				normalize_indent:    Some(true),
+			})
+			.expect("render_read should succeed");
+
+		// Both lines of the prologue should have the same indent depth.
+		// Skip the first line (selector_ref header).
+		let content_lines: Vec<&str> = result
+			.text
+			.split('\n')
+			.filter(|l| !l.trim().is_empty())
+			.skip(1)
+			.collect();
+		assert!(
+			content_lines.len() >= 2,
+			"prologue should have at least 2 lines (decorator + def): {content_lines:?}"
+		);
+		let decorator_tabs = content_lines[0].chars().take_while(|c| *c == '\t').count();
+		let def_tabs = content_lines[1].chars().take_while(|c| *c == '\t').count();
+		assert_eq!(
+			decorator_tabs, def_tabs,
+			"decorator and def should have same indent: decorator={decorator_tabs} tabs, \
+			 def={def_tabs} tabs in {content_lines:?}"
+		);
+	}
+
+	#[test]
 	fn go_struct_checksum_ignores_method_body_changes() {
 		let before = r"package main
 

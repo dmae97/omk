@@ -428,6 +428,12 @@ fn visual_prefix_len(line: &str) -> Option<usize> {
 	let trimmed_start = line
 		.find(|ch| !matches!(ch, ' ' | '\t'))
 		.unwrap_or(line.len());
+	// A `|` at column 0 is content (e.g. markdown tables), not a
+	// gutter prefix.  The chunk view gutter always has a line-number
+	// column before the pipe, so `trimmed_start > 0`.
+	if trimmed_start == 0 {
+		return None;
+	}
 	let after_indent = &line[trimmed_start..];
 	let marker = after_indent.chars().next()?;
 	if marker != '|' && marker != '│' {

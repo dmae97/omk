@@ -446,16 +446,19 @@ impl ChunkState {
 			},
 		};
 		let chunk = resolved.chunk;
-		let selector_ref = format_region_ref(chunk, resolved.region);
+		// Use the region from parse_chunk_read_path, NOT region,
+		// because resolve_chunk_with_crc re-parses the already-cleaned
+		// selector and loses the region suffix.
+		let selector_ref = format_region_ref(chunk, region);
 
-		if !chunk_supports_region(chunk, resolved.region) {
+		if !chunk_supports_region(chunk, region) {
 			return Ok(ReadResult {
 				text:  format!(
 					"{}:{}\n\nChunk \"{}\" does not support @{}.",
 					params.display_path,
 					chunk.path,
 					chunk.path,
-					resolved.region.as_str(),
+					region.as_str(),
 				),
 				chunk: Some(ChunkReadTarget {
 					status:   ChunkReadStatus::UnsupportedRegion,
@@ -488,9 +491,9 @@ impl ChunkState {
 			}
 		}
 
-		if resolved.region != ChunkRegion::Container {
+		if region != ChunkRegion::Container {
 			let masked_source = mask_chunk_display_source(self.inner.source(), self.inner.language());
-			let (start, end) = match chunk_region_range(chunk, resolved.region) {
+			let (start, end) = match chunk_region_range(chunk, region) {
 				Ok(range) => range,
 				Err(err) => {
 					return Ok(ReadResult {
@@ -509,8 +512,14 @@ impl ChunkState {
 					detect_file_indent_step(self.inner.tree()) as usize,
 				)
 			});
+			// Extend the region start to the beginning of the line so that the
+			// leading indentation of the first line is included.  Without this,
+			// regions whose start_byte is mid-line (e.g. a decorator `@property`
+			// inside a class) would show the first line without indentation,
+			// making the normalization inconsistent with subsequent lines.
+			let display_start = masked_source[..start].rfind('\n').map_or(0, |nl| nl + 1);
 			let region_text = masked_source
-				.get(start..end)
+				.get(display_start..end)
 				.unwrap_or_default()
 				.split('\n')
 				.map(|line| match normalize_indent {
@@ -522,7 +531,7 @@ impl ChunkState {
 				.collect::<Vec<_>>()
 				.join("\n");
 			let text = if region_text.is_empty() {
-				format!("{selector_ref}\n\n[Empty @{} region]", resolved.region.as_str())
+				format!("{selector_ref}\n\n[Empty @{} region]", region.as_str())
 			} else {
 				format!("{selector_ref}\n\n{region_text}")
 			};
@@ -539,7 +548,7 @@ impl ChunkState {
 					"{}:{}@{}",
 					params.display_path,
 					chunk.path,
-					resolved.region.as_str()
+					region.as_str()
 				),
 				language_tag:         params.language_tag.clone(),
 				visible_range:        None,

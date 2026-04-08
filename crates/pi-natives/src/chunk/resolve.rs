@@ -10,9 +10,8 @@ const CHUNK_NAME_PREFIXES: &[&str] =
 const CHECKSUM_ALPHABET: &str = "ZPMQVRWSNKTXJBYH";
 
 pub struct ResolvedChunk<'a> {
-	pub chunk:  &'a ChunkNode,
-	pub crc:    Option<String>,
-	pub region: ChunkRegion,
+	pub chunk: &'a ChunkNode,
+	pub crc:   Option<String>,
 }
 
 fn parse_region_name(value: &str) -> Option<ChunkRegion> {
@@ -136,18 +135,17 @@ pub fn resolve_chunk_with_crc<'a>(
 	crc: Option<&str>,
 	warnings: &mut Vec<String>,
 ) -> Result<ResolvedChunk<'a>, String> {
-	let (cleaned_selector, cleaned_crc, region) =
-		split_selector_crc_and_region(selector, crc, None)?;
+	let (cleaned_selector, cleaned_crc, _) = split_selector_crc_and_region(selector, crc, None)?;
 
 	if cleaned_selector.is_none()
 		&& let Some(cleaned_crc) = cleaned_crc.clone()
 	{
 		let chunk = resolve_chunk_by_checksum(state, &cleaned_crc)?;
-		return Ok(ResolvedChunk { chunk, crc: Some(cleaned_crc), region });
+		return Ok(ResolvedChunk { chunk, crc: Some(cleaned_crc) });
 	}
 
 	let chunk = resolve_chunk_selector_impl(state, cleaned_selector.as_deref(), None, warnings)?;
-	Ok(ResolvedChunk { chunk, crc: cleaned_crc, region })
+	Ok(ResolvedChunk { chunk, crc: cleaned_crc })
 }
 
 pub fn resolve_chunk_by_checksum<'a>(

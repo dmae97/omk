@@ -404,6 +404,16 @@ fn apply_replace(
 			state.source = cleanup_blank_line_artifacts_at_offset(&state.source, range_start);
 		}
 	} else {
+		// For prologue/epilogue replacements, ensure the replacement preserves
+		// the newline boundary so the body content isn't joined onto the same
+		// line as the replacement.
+		if (target.region == ChunkRegion::Prologue || target.region == ChunkRegion::Epilogue)
+			&& !replacement.is_empty()
+			&& !replacement.ends_with('\n')
+			&& state.source.as_bytes().get(region_end.saturating_sub(1)) == Some(&b'\n')
+		{
+			replacement.push('\n');
+		}
 		state.source = replace_byte_range(&state.source, region_start, region_end, &replacement);
 	}
 	touched_paths.push(anchor.path);
@@ -475,7 +485,8 @@ fn apply_insert(
 		file_indent_char,
 		file_indent_step,
 	)?;
-	let spacing = compute_insert_spacing(state, &anchor, pos);
+	let is_prepend_or_append = matches!(operation.op, ChunkEditOp::Prepend | ChunkEditOp::Append);
+	let spacing = compute_insert_spacing(state, &anchor, pos, is_prepend_or_append);
 	let content = operation.content.as_deref().unwrap_or_default();
 	let mut replacement = normalize_inserted_content(
 		content,
@@ -1224,6 +1235,7 @@ fn compute_insert_spacing(
 	state: &ChunkStateInner,
 	anchor: &ChunkNode,
 	pos: InsertPosition,
+	is_prepend_or_append: bool,
 ) -> InsertSpacing {
 	let has_interior_content = container_has_interior_content(state, anchor);
 	match pos {
@@ -1243,10 +1255,15 @@ fn compute_insert_spacing(
 		},
 		InsertPosition::Before => InsertSpacing {
 			blank_line_before: has_sibling_before(state, anchor) && is_spaced_sibling(state, anchor),
-			blank_line_after:  is_spaced_sibling(state, anchor),
+			// When the op is `prepend` (container.prepend), omit the trailing
+			// blank line so the content stays adjacent to the chunk and gets
+			// absorbed as leading trivia on tree rebuild.
+			blank_line_after:  !is_prepend_or_append && is_spaced_sibling(state, anchor),
 		},
 		InsertPosition::After => InsertSpacing {
-			blank_line_before: is_spaced_sibling(state, anchor),
+			// When the op is `append` (container.append), omit the leading
+			// blank line so the content stays adjacent to the chunk.
+			blank_line_before: !is_prepend_or_append && is_spaced_sibling(state, anchor),
 			blank_line_after:  has_sibling_after(state, anchor) && is_spaced_sibling(state, anchor),
 		},
 	}
@@ -2259,6 +2276,92 @@ mod tests {
 		assert!(err.contains("Fresh content:"), "error should include fresh content: {err}");
 		assert!(err.contains("fn_bar"), "error should show the chunk with fresh anchor: {err}");
 		assert!(err.contains("class_Foo"), "error should show ancestor context: {err}");
+	}
+
+	#[test]
+	fn prologue_replace_preserves_newline_before_body() {
+		let source = "/// Old doc.\nfn main() {\n    work();\n}\n";
+		let state = state_for(source, "rust");
+		let chunk = state.inner().chunk("fn_main").expect("fn_main");
+
+		let result = apply_single_edit(&state, "test.rs", EditOperation {
+			op:      ChunkEditOp::Replace,
+			sel:     Some(format!("fn_main#{}@prologue", chunk.checksum)),
+			crc:     None,
+			region:  None,
+			content: Some("/// New doc.\nfn main() {".to_owned()),
+			find:    None,
+		});
+
+		// The body should NOT be joined onto the prologue line.
+		assert!(
+			!result.diff_after.contains("{    work"),
+			"prologue replace should not join body onto same line: {}",
+			result.diff_after
+		);
+		assert_eq!(result.diff_after, "/// New doc.\nfn main() {\n    work();\n}\n",);
+	}
+
+	#[test]
+	fn markdown_table_pipes_preserved_in_replace() {
+		let new_table = "| Header A | Header B |\n| --- | --- |\n| cell A | cell B |\n";
+
+		// Simulate what normalize_inserted_content does to table content.
+		let result = super::normalize_inserted_content(new_table, "", None, ' ');
+
+		assert!(result.contains("| Header A"), "table pipes should not be stripped: {result}");
+	}
+
+	#[test]
+	fn container_prepend_creates_addressable_chunk() {
+		// Prepending to @container inserts before the chunk. After tree rebuild,
+		// the inserted content should be addressable (either absorbed as trivia
+		// or as a new preamble/chunk), not orphaned.
+		let source = "const a = 1;\n\nstruct Config {\n    host: String,\n}\n";
+		let state = state_for(source, "rust");
+
+		let result = apply_single_edit(&state, "test.rs", EditOperation {
+			op:      ChunkEditOp::Prepend,
+			sel:     Some("struct_Config@container".to_owned()),
+			crc:     None,
+			region:  None,
+			content: Some("// Config documentation\n".to_owned()),
+			find:    None,
+		});
+
+		// The comment should exist in the output.
+		assert!(
+			result.diff_after.contains("// Config documentation"),
+			"prepended content should be in the file: {}",
+			result.diff_after
+		);
+
+		// Re-parse and check that every non-empty line is covered by some chunk.
+		let new_state = state_for(&result.diff_after, "rust");
+		let tree = new_state.inner().tree();
+		let lines: Vec<&str> = result.diff_after.split('\n').collect();
+		for (i, line) in lines.iter().enumerate() {
+			if line.trim().is_empty() {
+				continue;
+			}
+			let line_num = (i + 1) as u32;
+			let covered = tree
+				.chunks
+				.iter()
+				.any(|c| !c.path.is_empty() && c.start_line <= line_num && c.end_line >= line_num);
+			assert!(
+				covered,
+				"line {} ({:?}) should be covered by a chunk, but isn't. Chunks: {:?}",
+				line_num,
+				line,
+				tree
+					.chunks
+					.iter()
+					.filter(|c| !c.path.is_empty())
+					.map(|c| format!("{}:L{}-L{}", c.path, c.start_line, c.end_line))
+					.collect::<Vec<_>>()
+			);
+		}
 	}
 
 	#[test]
