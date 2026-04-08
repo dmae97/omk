@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [14.0.1] - 2026-04-08
+
 ### Changed
 
 - Improved auto-generated file detection to gracefully handle ENOENT errors when peeking file content, preventing unnecessary abort failures

@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [14.0.1] - 2026-04-08
 ### Added
 
 - Added `onAssistantMessageEvent` callback option to inspect assistant streaming events before they are emitted, enabling abort decisions before buffered events continue flowing
