@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { Effort, type OpenAICompat, type ThinkingConfig } from "@oh-my-pi/pi-ai";
+import { Effort, type Model, type OpenAICompat, type ThinkingConfig, writeModelCache } from "@oh-my-pi/pi-ai";
 import { kNoAuth, MODEL_ROLES, ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { _resetSettingsForTest, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
@@ -11,6 +11,7 @@ import { hookFetch, Snowflake } from "@oh-my-pi/pi-utils";
 describe("ModelRegistry", () => {
 	let tempDir: string;
 	let modelsJsonPath: string;
+	let cacheDbPath: string;
 	let authStorage: AuthStorage;
 
 	test("commit role includes a visible badge tag", () => {
@@ -23,6 +24,7 @@ describe("ModelRegistry", () => {
 		tempDir = path.join(os.tmpdir(), `pi-test-model-registry-${Snowflake.next()}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 		modelsJsonPath = path.join(tempDir, "models.json");
+		cacheDbPath = path.join(tempDir, "models.db");
 		authStorage = await AuthStorage.create(path.join(tempDir, "testauth.db"));
 	});
 
@@ -81,6 +83,10 @@ describe("ModelRegistry", () => {
 
 	function writeModelsJson(providers: Record<string, ProviderConfig>) {
 		fs.writeFileSync(modelsJsonPath, JSON.stringify({ providers }));
+	}
+
+	function writeCachedOllamaModels(models: Model<"openai-completions">[]) {
+		writeModelCache("ollama", Date.now(), models, true, cacheDbPath);
 	}
 
 	function getModelsForProvider(registry: ModelRegistry, provider: string) {
@@ -1135,6 +1141,38 @@ describe("ModelRegistry", () => {
 			const available = registry.getAvailable().filter(m => m.provider === "ollama");
 			expect(available.length).toBe(2);
 			expect(await registry.getApiKey(available[0])).toBe(kNoAuth);
+		});
+
+		test("normalizes cached ollama completions rows to responses on load", () => {
+			writeRawModelsJson({
+				ollama: {
+					baseUrl: "http://127.0.0.1:11434/v1",
+					api: "openai-responses",
+					auth: "none",
+					discovery: { type: "ollama" },
+				},
+			});
+			writeCachedOllamaModels([
+				{
+					id: "phi4-mini",
+					name: "phi4-mini",
+					api: "openai-completions",
+					provider: "ollama",
+					baseUrl: "http://127.0.0.1:11434/v1",
+					reasoning: false,
+					input: ["text"],
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+					contextWindow: 128000,
+					maxTokens: 8192,
+				},
+			]);
+
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			const ollama = registry.find("ollama", "phi4-mini");
+
+			expect(ollama?.api).toBe("openai-responses");
+			expect(ollama?.baseUrl).toBe("http://127.0.0.1:11434/v1");
+			expect(registry.getProviderDiscoveryState("ollama")?.status).toBe("cached");
 		});
 
 		test("discovers ollama thinking capabilities from show metadata", async () => {

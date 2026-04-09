@@ -947,7 +947,10 @@ export class ModelRegistry {
 			}
 			const models = this.#applyProviderModelOverrides(
 				providerConfig.provider,
-				this.#applyProviderCompat(providerConfig.compat, cache.models),
+				this.#normalizeDiscoverableModels(
+					providerConfig,
+					this.#applyProviderCompat(providerConfig.compat, cache.models),
+				),
 			);
 			cachedModels.push(...models);
 			this.#providerDiscoveryStates.set(providerConfig.provider, {
@@ -967,11 +970,19 @@ export class ModelRegistry {
 		return models.map(model => ({ ...model, compat: mergeCompat(model.compat, compat) }));
 	}
 
+	#normalizeDiscoverableModels(providerConfig: DiscoveryProviderConfig, models: Model<Api>[]): Model<Api>[] {
+		if (providerConfig.provider !== "ollama" || providerConfig.api !== "openai-responses") {
+			return models;
+		}
+
+		return models.map(model => (model.api === "openai-completions" ? { ...model, api: "openai-responses" } : model));
+	}
+
 	#addImplicitDiscoverableProviders(configuredProviders: Set<string>): void {
 		if (!configuredProviders.has("ollama")) {
 			this.#discoverableProviders.push({
 				provider: "ollama",
-				api: "openai-completions",
+				api: "openai-responses",
 				baseUrl: Bun.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434",
 				discovery: { type: "ollama" },
 				optional: true,
@@ -1203,7 +1214,10 @@ export class ModelRegistry {
 		}
 		return this.#applyProviderModelOverrides(
 			providerId,
-			this.#applyProviderCompat(providerConfig.compat, result.models),
+			this.#normalizeDiscoverableModels(
+				providerConfig,
+				this.#applyProviderCompat(providerConfig.compat, result.models),
+			),
 		);
 	}
 
