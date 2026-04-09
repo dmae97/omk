@@ -38,7 +38,7 @@ for (;;) {
 	}
 
 	if (entries.length > 0) {
-		enums.push(`exports.${name} = {\n${entries.join("\n")}\n};`);
+		enums.push(`module.exports.${name} = {\n${entries.join("\n")}\n};`);
 	}
 }
 

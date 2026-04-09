@@ -231,7 +231,7 @@ function loadNative() {
 module.exports = loadNative();
 
 // --- generated const enum exports (do not edit) ---
-exports.AstMatchStrictness = {
+module.exports.AstMatchStrictness = {
   Cst: 'cst',
   Smart: 'smart',
   Ast: 'ast',
@@ -239,7 +239,7 @@ exports.AstMatchStrictness = {
   Signature: 'signature',
   Template: 'template',
 };
-exports.ChunkAnchorStyle = {
+module.exports.ChunkAnchorStyle = {
   Full: 'full',
   Kind: 'kind',
   Bare: 'bare',
@@ -247,7 +247,7 @@ exports.ChunkAnchorStyle = {
   KindOmit: 'kind-omit',
   None: 'none',
 };
-exports.ChunkEditOp = {
+module.exports.ChunkEditOp = {
   Replace: 'replace',
   Delete: 'delete',
   Before: 'before',
@@ -255,53 +255,53 @@ exports.ChunkEditOp = {
   Prepend: 'prepend',
   Append: 'append',
 };
-exports.ChunkFocusMode = {
+module.exports.ChunkFocusMode = {
   Expanded: 'expanded',
   Collapsed: 'collapsed',
   Container: 'container',
 };
-exports.ChunkReadStatus = {
+module.exports.ChunkReadStatus = {
   Ok: 'ok',
   NotFound: 'not_found',
   UnsupportedRegion: 'unsupported_region',
 };
-exports.ChunkRegion = {
+module.exports.ChunkRegion = {
   Head: 'head',
   Body: 'body',
   Tail: 'tail',
   Decl: 'decl',
 };
-exports.Ellipsis = {
+module.exports.Ellipsis = {
   Unicode: 0,
   Ascii: 1,
   Omit: 2,
 };
-exports.FileType = {
+module.exports.FileType = {
   File: 1,
   Dir: 2,
   Symlink: 3,
 };
-exports.GrepOutputMode = {
+module.exports.GrepOutputMode = {
   Content: 'content',
   Count: 'count',
   FilesWithMatches: 'filesWithMatches',
 };
-exports.ImageFormat = {
+module.exports.ImageFormat = {
   PNG: 0,
   JPEG: 1,
   WEBP: 2,
   GIF: 3,
 };
-exports.KeyEventType = {
+module.exports.KeyEventType = {
   Press: 1,
   Repeat: 2,
   Release: 3,
 };
-exports.MacOSAppearance = {
+module.exports.MacOSAppearance = {
   Dark: 'dark',
   Light: 'light',
 };
-exports.SamplingFilter = {
+module.exports.SamplingFilter = {
   Nearest: 1,
   Triangle: 2,
   CatmullRom: 3,

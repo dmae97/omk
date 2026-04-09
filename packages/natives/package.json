@@ -1,5 +1,4 @@
 {
-	"type": "module",
 	"name": "@oh-my-pi/pi-natives",
 	"version": "14.0.2",
 	"description": "Native Rust bindings for grep, clipboard, image processing, syntax highlighting, PTY, and shell operations via N-API",
