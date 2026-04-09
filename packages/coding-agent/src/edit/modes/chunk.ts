@@ -312,7 +312,7 @@ export const chunkToolEditSchema = Type.Object({
 			"Chunk selector. Format: 'path@region' for insertions, 'path#CRC@region' for replace. Omit @region to target the full chunk. Valid regions: head, body, tail, decl.",
 	}),
 	content: Type.String({
-		description: "New content. Use one leading space per indent level; do not include the chunk's base padding.",
+		description: "New content. Use \\t for indentation. Do NOT include the chunk's base padding.",
 	}),
 });
 export const chunkEditParamsSchema = Type.Object(

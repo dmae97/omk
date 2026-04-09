@@ -9,7 +9,7 @@ use regex::Regex;
 
 use super::{
 	build_chunk_tree,
-	indent::{compact_indent, detect_file_indent_char, detect_file_indent_step},
+	indent::{detect_file_indent_char, detect_file_indent_step, normalize_to_tabs},
 	resolve::{
 		ParsedSelector, chunk_region_range, format_region_ref, format_selector_tree,
 		resolve_chunk_selector, resolve_chunk_with_crc, split_selector_crc_and_region,
@@ -487,7 +487,9 @@ impl ChunkState {
 				.unwrap_or_default()
 				.split('\n')
 				.map(|line| match normalize_indent {
-					Some((indent_char, indent_step)) => compact_indent(line, indent_char, indent_step),
+					Some((indent_char, indent_step)) => {
+						normalize_to_tabs(line, indent_char, indent_step)
+					},
 					None => line.replace('\t', tab_replacement),
 				})
 				.collect::<Vec<_>>()

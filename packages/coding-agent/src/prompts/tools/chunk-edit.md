@@ -7,9 +7,9 @@ Edits files via syntax-aware chunks. Run `read(path="file.ts")` first. The edit 
   - replacements: `chunk#CRC` or `chunk#CRC@region`
 - Without a `@region` it defaults to the entire chunk including leading trivia. Valid regions: `head`, `body`, `tail`, `decl`.
 - If the exact chunk path is unclear, run `read(path="file", sel="?")` and copy a selector from that listing.
-- Use a single leading space per indent level in `content`. Write content at indent-level 0 — the tool re-indents it to match the chunk's position in the file. For example, to replace `@body` of a method, write the body starting at column 0:
+- Use `\t` for indentation in `content`. Write content at indent-level 0 — the tool re-indents it to match the chunk's position in the file. For example, to replace `@body` of a method, write the body starting at column 0:
   ```
-  content: "if (x) {\n return true;\n}"
+  content: "if (x) {\n\treturn true;\n}"
   ```
   The tool adds the correct base indent automatically. Never manually pad with the chunk's own indentation.
 - `@region` only works on container chunks (classes, functions, impl blocks, sections). Do **not** use `@head`/`@body`/`@tail` on leaf chunks (enum variants, fields, single statements) — use the whole chunk instead.
@@ -19,6 +19,10 @@ Edits files via syntax-aware chunks. Run `read(path="file.ts")` first. The edit 
 
 <critical>
 You **MUST** use the narrowest region that covers your change. Replacing without a region replaces the **entire chunk including leading comments, decorators, and attributes** — omitting them from `content` deletes them.
+
+**`replace` is total, not surgical.** The `content` you supply becomes the *complete* new content for the targeted region. Everything in the original region that you omit from `content` is deleted. Before replacing `@body` on any chunk, verify the chunk does not contain children you intend to keep. If a chunk spans hundreds of lines and your change touches only a few, target a specific child chunk — not the parent.
+
+**Group chunks (`stmts_*`, `imports_*`, `decls_*`) are containers.** They hold many sibling items (test functions, import statements, declarations). Replacing `@body` on a group chunk replaces **all** of its children. To edit one item inside a group, target that item's own chunk path. If no child chunk exists, use the specific child's chunk selector from `read` output — do not replace the parent group.
 </critical>
 
 <regions>
@@ -108,9 +112,9 @@ Given this `read` output for `example.ts`:
 ```
 
 **Replace a whole chunk** (rename a function):
-```
-{ "sel": "fn_createCounter#PQQY", "op": "replace", "content": "function makeCounter(start: number): Counter {\n const c = new Counter();\n c.value = start;\n return c;\n}\n" }
-```
+~~~json
+{ "sel": "fn_createCounter#PQQY", "op": "replace", "content": "function makeCounter(start: number): Counter {\n\tconst c = new Counter();\n\tc.value = start;\n\treturn c;\n}\n" }
+~~~
 Result — the entire chunk is rewritten:
 ```
 function makeCounter(start: number): Counter {
@@ -158,9 +162,9 @@ function createCounter(initial: number): Counter {
 ```
 
 **Insert after a chunk** (`after`):
-```
-{ "sel": "enum_Status", "op": "after", "content": "\nfunction isActive(s: Status): boolean {\n return s === Status.Active;\n}\n" }
-```
+~~~json
+{ "sel": "enum_Status", "op": "after", "content": "\nfunction isActive(s: Status): boolean {\n\treturn s === Status.Active;\n}\n" }
+~~~
 Result — a new function appears after the enum:
 ```
 enum Status {
@@ -189,9 +193,9 @@ class Counter {
 ```
 
 **Append inside a container** (`@body` + `append`):
-```
-{ "sel": "class_Counter@body", "op": "append", "content": "\nreset(): void {\n this.value = 0;\n}\n" }
-```
+~~~json
+{ "sel": "class_Counter@body", "op": "append", "content": "\nreset(): void {\n\tthis.value = 0;\n}\n" }
+~~~
 Result — a new method is added at the end of the class body, before the closing `}`:
 ```
   toString(): string {
@@ -210,10 +214,10 @@ Result — a new method is added at the end of the class body, before the closin
 ```
 Result — the method is removed from the class.
 - Indentation rules (important):
-  - Use one leading space for each indent level in canonical chunk-edit content. The tool expands those levels to the file's actual style (2-space, 4-space, tabs, etc.).
+  - Use `\t` for each indent level. The tool converts tabs to the file's actual style (2-space, 4-space, etc.).
   - Do NOT include the chunk's base indentation — only indent relative to the region's opening level.
   - For `@body` of a function: write at column 0, e.g. `"return x;\n"`. The tool adds the correct base indent.
   - For `@head`: write at the chunk's own depth. A class member's head uses `"/** doc */\nstart(): void {"`.
-  - For a top-level item: start at zero indent. Write `"function foo() {\n return 1;\n}\n"`.
+  - For a top-level item: start at zero indent. Write `"function foo() {\n\treturn 1;\n}\n"`.
   - The tool strips common leading indentation from your content as a safety net, so accidental over-indentation is corrected.
 </examples>

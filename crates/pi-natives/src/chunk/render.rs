@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
 	chunk::{
-		indent::{compact_indent, detect_file_indent_char, detect_file_indent_step},
+		indent::{detect_file_indent_char, detect_file_indent_step, normalize_to_tabs},
 		state::{ChunkStateInner, mask_chunk_display_source},
 		types::{
 			ChunkAnchorStyle, ChunkFocusMode, ChunkNode, ChunkTree, RenderParams, VisibleLineRange,
@@ -34,7 +34,7 @@ fn normalize_rendered_line(
 	tab_replacement: &str,
 ) -> String {
 	match normalize_indent {
-		Some((indent_char, indent_step)) => compact_indent(line, indent_char, indent_step),
+		Some((indent_char, indent_step)) => normalize_to_tabs(line, indent_char, indent_step),
 		None => line.replace('\t', tab_replacement),
 	}
 }
@@ -897,7 +897,7 @@ pub fn hunk_indent_for_chunk(
 	};
 	let base = chunk_body_anchor_indent(&source_lines, chunk, tab_replacement, normalize_indent);
 	match normalize_indent {
-		Some(_) => format!("{base} "),
+		Some(_) => format!("{base}\t"),
 		None => format!("{base}{tab_replacement}"),
 	}
 }

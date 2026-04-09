@@ -602,14 +602,10 @@ export interface OllamaModelManagerConfig {
 	baseUrl?: string;
 }
 
-export function ollamaModelManagerOptions(
-	config?: OllamaModelManagerConfig,
-): ModelManagerOptions<"openai-responses"> {
+export function ollamaModelManagerOptions(config?: OllamaModelManagerConfig): ModelManagerOptions<"openai-responses"> {
 	const apiKey = config?.apiKey;
 	const baseUrl = normalizeOllamaBaseUrl(config?.baseUrl);
-	const references = createBundledReferenceMap<"openai-responses">(
-		"ollama" as Parameters<typeof getBundledModels>[0],
-	);
+	const references = createBundledReferenceMap<"openai-responses">("ollama" as Parameters<typeof getBundledModels>[0]);
 	return {
 		providerId: "ollama",
 		fetchDynamicModels: async () => {

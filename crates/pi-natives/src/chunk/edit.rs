@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::chunk::{
 	indent::{
-		detect_file_indent_char, detect_file_indent_step, expand_indent,
+		denormalize_from_tabs, detect_file_indent_char, detect_file_indent_step,
 		normalize_leading_whitespace_char, reindent_inserted_block, strip_content_prefixes,
 	},
 	kind::ChunkKind,
@@ -706,7 +706,7 @@ fn normalize_inserted_content(
 	normalized = strip_content_prefixes(&normalized);
 	normalized = normalized
 		.split('\n')
-		.map(|line| expand_indent(line, file_indent_char, file_indent_step.unwrap_or(1)))
+		.map(|line| denormalize_from_tabs(line, file_indent_char, file_indent_step.unwrap_or(1)))
 		.collect::<Vec<_>>()
 		.join("\n");
 	if target_indent.is_empty() {
