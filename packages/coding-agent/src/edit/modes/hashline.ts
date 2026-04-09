@@ -156,8 +156,8 @@ interface ExecuteHashlineModeOptions {
 	beginDeferredDiagnosticsForPath: (path: string) => WritethroughDeferredHandle;
 }
 
-export function hashlineParseText(edit: string[] | string | null): string[] {
-	if (edit === null) return [];
+export function hashlineParseText(edit: string[] | string | null | undefined): string[] {
+	if (edit == null) return [];
 	if (typeof edit === "string") {
 		const normalizedEdit = edit.endsWith("\n") ? edit.slice(0, -1) : edit;
 		edit = normalizedEdit.replaceAll("\r", "").split("\n");
