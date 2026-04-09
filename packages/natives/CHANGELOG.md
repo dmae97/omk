@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [14.0.2] - 2026-04-09
+
 ### Added
 
 - Added `Decl` variant to `ChunkRegion` enum for accessing semantic declarations without leading trivia

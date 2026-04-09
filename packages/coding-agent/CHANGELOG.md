@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [14.0.2] - 2026-04-09
 ### Added
 
 - Added `/force` slash command to force the next agent turn to use a specific tool
