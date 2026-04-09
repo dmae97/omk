@@ -43,6 +43,8 @@ export class SessionObserverOverlayComponent extends Container {
 	#observeKeys: KeyId[];
 	/** Cached parsed transcript per session file to avoid reparsing on every refresh */
 	#transcriptCache?: { path: string; bytesRead: number; entries: SessionMessageEntry[] };
+	/** Live stats text component, placed after transcript to avoid above-viewport diffs */
+	#statsText?: Text;
 
 	constructor(registry: SessionObserverRegistry, onDone: () => void, observeKeys: KeyId[]) {
 		super();
@@ -87,11 +89,13 @@ export class SessionObserverOverlayComponent extends Container {
 		this.#mode = "viewer";
 		this.children = [];
 		this.#viewerContainer = new Container();
+		this.#statsText = new Text("", 1, 0);
 		this.#refreshViewer();
 
 		this.addChild(new DynamicBorder());
 		this.addChild(this.#viewerContainer);
 		this.addChild(new Spacer(1));
+		this.addChild(this.#statsText);
 		this.addChild(new Text(theme.fg("dim", "Esc: back to picker  |  Ctrl+S: back to picker"), 1, 0));
 		this.addChild(new DynamicBorder());
 	}
@@ -133,16 +137,17 @@ export class SessionObserverOverlayComponent extends Container {
 		const session = sessions.find(s => s.id === this.#selectedSessionId);
 		if (!session) {
 			this.#viewerContainer.addChild(new Text(theme.fg("dim", "Session no longer available."), 1, 0));
+			this.#updateStats(undefined);
 			return;
 		}
 
 		this.#renderSessionHeader(session);
 		this.#renderSessionTranscript(session);
+		this.#updateStats(session);
 	}
 
 	#renderSessionHeader(session: ObservableSession): void {
 		const c = this.#viewerContainer;
-		const progress = session.progress;
 
 		// Header: label + status + [agent]
 		const statusColor = session.status === "active" ? "success" : session.status === "failed" ? "error" : "dim";
@@ -154,22 +159,26 @@ export class SessionObserverOverlayComponent extends Container {
 			c.addChild(new Text(theme.fg("muted", session.description), 1, 0));
 		}
 
-		// Stats from progress
-		if (progress) {
-			const stats: string[] = [];
-			if (progress.toolCount > 0) stats.push(`${formatNumber(progress.toolCount)} tools`);
-			if (progress.tokens > 0) stats.push(`${formatNumber(progress.tokens)} tokens`);
-			if (progress.durationMs > 0) stats.push(formatDuration(progress.durationMs));
-			if (stats.length > 0) {
-				c.addChild(new Text(theme.fg("dim", stats.join(theme.sep.dot)), 1, 0));
-			}
-		}
-
 		if (session.sessionFile) {
 			c.addChild(new Text(theme.fg("dim", `Session: ${shortenPath(session.sessionFile)}`), 1, 0));
 		}
 
 		c.addChild(new DynamicBorder());
+	}
+
+	/** Update live stats in-place (below transcript, within viewport). */
+	#updateStats(session: ObservableSession | undefined): void {
+		if (!this.#statsText) return;
+		const progress = session?.progress;
+		if (!progress) {
+			this.#statsText.setText("");
+			return;
+		}
+		const stats: string[] = [];
+		if (progress.toolCount > 0) stats.push(`${formatNumber(progress.toolCount)} tools`);
+		if (progress.tokens > 0) stats.push(`${formatNumber(progress.tokens)} tokens`);
+		if (progress.durationMs > 0) stats.push(formatDuration(progress.durationMs));
+		this.#statsText.setText(stats.length > 0 ? theme.fg("dim", stats.join(theme.sep.dot)) : "");
 	}
 
 	/** Incrementally read and parse the session JSONL, caching already-parsed entries. */
