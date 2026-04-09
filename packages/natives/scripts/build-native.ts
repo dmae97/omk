@@ -162,22 +162,29 @@ async function patchGeneratedIndexLoader(): Promise<void> {
 }
 
 async function resolveBuiltAddonPath(canonicalFilename: string): Promise<string> {
-	const canonicalFilenames = new Set([
-		`pi_natives.${targetPlatform}-${targetArch}.node`,
+	// Variant-tagged files produced by previous invocations of this script that
+	// should NOT be treated as this build's output (unless they equal our target).
+	const siblingVariantFilenames = new Set([
 		`pi_natives.${targetPlatform}-${targetArch}-modern.node`,
 		`pi_natives.${targetPlatform}-${targetArch}-baseline.node`,
 	]);
+	siblingVariantFilenames.delete(canonicalFilename);
+
 	const entries = await fs.readdir(nativeDir);
 
 	if (entries.includes(canonicalFilename)) {
 		return path.join(nativeDir, canonicalFilename);
 	}
 
+	// napi-rs 3.x emits `${binaryName}.${platformArchABI}.node` where
+	// platformArchABI is e.g. `darwin-x64`, `linux-x64-gnu`, `win32-x64-msvc`,
+	// `darwin-arm64`. Match any file for this platform/arch that isn't a
+	// sibling variant we might have produced previously.
 	const generatedCandidates = entries.filter(entry => {
 		if (!entry.startsWith(`pi_natives.${targetPlatform}-${targetArch}`) || !entry.endsWith(".node")) {
 			return false;
 		}
-		return !canonicalFilenames.has(entry);
+		return !siblingVariantFilenames.has(entry);
 	});
 
 	if (generatedCandidates.length === 1) {
@@ -186,7 +193,7 @@ async function resolveBuiltAddonPath(canonicalFilename: string): Promise<string>
 
 	if (generatedCandidates.length === 0) {
 		throw new Error(
-			`napi build succeeded but did not emit a native addon for ${targetPlatform}-${targetArch}. Expected ${canonicalFilename} or an environment-tagged variant in ${nativeDir}.`,
+			`napi build succeeded but did not emit a native addon for ${targetPlatform}-${targetArch}. Expected ${canonicalFilename} or an environment-tagged variant in ${nativeDir}. Directory contents: ${entries.join(", ") || "(empty)"}.`,
 		);
 	}
 
