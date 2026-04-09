@@ -195,10 +195,7 @@ const FAR_FUTURE_MS = Date.now() + 10 * 365.25 * 24 * 60 * 60 * 1000;
  * Refresh GitHub Copilot token.
  * With the opencode OAuth flow, the GitHub token is used directly — no JWT exchange needed.
  */
-export function refreshGitHubCopilotToken(
-	refreshToken: string,
-	enterpriseDomain?: string,
-): OAuthCredentials {
+export function refreshGitHubCopilotToken(refreshToken: string, enterpriseDomain?: string): OAuthCredentials {
 	return {
 		refresh: refreshToken,
 		access: refreshToken,
