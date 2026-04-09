@@ -1021,6 +1021,7 @@ describe("ModelRegistry", () => {
 					access: "ghu_enterprise_token_456",
 					refresh: "ghu_enterprise_token_456",
 					expires: Date.now() + 60_000,
+					enterpriseUrl: "ghe.example.com",
 				},
 			]);
 
@@ -1031,9 +1032,15 @@ describe("ModelRegistry", () => {
 
 			const initialBaseUrl = model.baseUrl;
 			const firstApiKey = await registry.getApiKey(model);
-			expect(firstApiKey).toBe("ghu_individual_token_123");
+			expect(firstApiKey).toBeDefined();
+			const firstParsed = JSON.parse(firstApiKey!) as { token?: string; enterpriseUrl?: string };
+			expect(firstParsed.token).toBe("ghu_individual_token_123");
+			expect(firstParsed.enterpriseUrl).toBeUndefined();
 			const secondApiKey = await registry.getApiKey(model);
-			expect(secondApiKey).toBe("ghu_enterprise_token_456");
+			expect(secondApiKey).toBeDefined();
+			const secondParsed = JSON.parse(secondApiKey!) as { token?: string; enterpriseUrl?: string };
+			expect(secondParsed.token).toBe("ghu_enterprise_token_456");
+			expect(secondParsed.enterpriseUrl).toBe("ghe.example.com");
 			expect(model.baseUrl).toBe(initialBaseUrl);
 		});
 	});

@@ -1,4 +1,5 @@
 import type { Message } from "../types";
+import { getGitHubCopilotBaseUrl, parseGitHubCopilotApiKey } from "../utils/oauth/github-copilot";
 /**
  * Infer whether the current request to Copilot is user-initiated or agent-initiated.
  * Accepts `unknown[]` because providers may pass pre-converted message shapes.
@@ -12,9 +13,13 @@ export type CopilotDynamicHeaders = {
 };
 export function resolveGitHubCopilotBaseUrl(
 	baseUrl: string | undefined,
-	_apiKey: string | undefined,
+	apiKey: string | undefined,
 ): string | undefined {
-	return baseUrl;
+	if (!apiKey) return baseUrl;
+	const { enterpriseUrl } = parseGitHubCopilotApiKey(apiKey);
+	if (!enterpriseUrl) return baseUrl;
+	if (baseUrl && !baseUrl.includes("githubcopilot.com")) return baseUrl;
+	return getGitHubCopilotBaseUrl(enterpriseUrl);
 }
 export function inferCopilotInitiator(messages: unknown[]): CopilotInitiator {
 	if (messages.length === 0) return "user";

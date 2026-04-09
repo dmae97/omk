@@ -38,6 +38,7 @@ import {
 	iterateWithIdleTimeout,
 	markFirstStreamEvent,
 } from "../utils/idle-iterator";
+import { parseGitHubCopilotApiKey } from "../utils/oauth/github-copilot";
 import { adaptSchemaForStrict, NO_STRICT } from "../utils/schema";
 import { mapToOpenAIResponsesToolChoice } from "../utils/tool-choice";
 import {
@@ -272,12 +273,14 @@ function createClient(
 		}
 		apiKey = $env.OPENAI_API_KEY;
 	}
+	const rawApiKey = apiKey;
 
 	const headers = { ...(model.headers ?? {}), ...(extraHeaders ?? {}) };
 	let copilotPremiumRequests: number | undefined;
 
 	let baseUrl = model.baseUrl;
 	if (model.provider === "github-copilot") {
+		apiKey = parseGitHubCopilotApiKey(rawApiKey).accessToken;
 		const hasImages = hasCopilotVisionInput(context.messages);
 		const copilot = buildCopilotDynamicHeaders({
 			messages: context.messages,
@@ -288,7 +291,7 @@ function createClient(
 		});
 		Object.assign(headers, copilot.headers);
 		copilotPremiumRequests = copilot.premiumRequests;
-		baseUrl = resolveGitHubCopilotBaseUrl(model.baseUrl, apiKey) ?? model.baseUrl;
+		baseUrl = resolveGitHubCopilotBaseUrl(model.baseUrl, rawApiKey) ?? model.baseUrl;
 	}
 	return {
 		client: new OpenAI({

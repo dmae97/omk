@@ -64,6 +64,20 @@ describe("Anthropic Copilot auth config", () => {
 		expect(options.defaultHeaders.Authorization).toBe(`Bearer ${token}`);
 	});
 
+	it("unwraps structured Copilot credentials before setting Authorization", () => {
+		const model = makeCopilotClaudeModel();
+		const options = buildAnthropicClientOptions({
+			model,
+			apiKey: JSON.stringify({ token: "ghu_test_token_12345", enterpriseUrl: "ghe.example.com" }),
+			extraBetas: [],
+			stream: true,
+			dynamicHeaders: {},
+		});
+
+		expect(options.apiKey).toBeNull();
+		expect(options.defaultHeaders.Authorization).toBe("Bearer ghu_test_token_12345");
+	});
+
 	it("uses model baseUrl directly (no proxy-ep extraction)", () => {
 		const model = makeCopilotClaudeModel();
 		const token = "ghu_test_token_12345";
@@ -76,6 +90,19 @@ describe("Anthropic Copilot auth config", () => {
 		});
 
 		expect(options.baseURL).toBe("https://api.githubcopilot.com");
+	});
+
+	it("routes structured enterprise credentials to the enterprise baseUrl", () => {
+		const model = makeCopilotClaudeModel();
+		const options = buildAnthropicClientOptions({
+			model,
+			apiKey: JSON.stringify({ token: "ghu_test_token_12345", enterpriseUrl: "ghe.example.com" }),
+			extraBetas: [],
+			stream: true,
+			dynamicHeaders: {},
+		});
+
+		expect(options.baseURL).toBe("https://copilot-api.ghe.example.com");
 	});
 	it("includes Copilot static headers from model.headers", () => {
 		const model = makeCopilotClaudeModel();

@@ -40,6 +40,7 @@ import {
 	markFirstStreamEvent,
 } from "../utils/idle-iterator";
 import { parseStreamingJson } from "../utils/json-parse";
+import { parseGitHubCopilotApiKey } from "../utils/oauth/github-copilot";
 import { getKimiCommonHeaders } from "../utils/oauth/kimi";
 import { adaptSchemaForStrict, NO_STRICT } from "../utils/schema";
 import { mapToOpenAICompletionsToolChoice } from "../utils/tool-choice";
@@ -545,6 +546,7 @@ async function createClient(
 		}
 		apiKey = $env.OPENAI_API_KEY;
 	}
+	const rawApiKey = apiKey;
 
 	let headers = { ...(model.headers ?? {}), ...(extraHeaders ?? {}) };
 	if (model.provider === "kimi-code") {
@@ -554,6 +556,7 @@ async function createClient(
 
 	let baseUrl = model.baseUrl;
 	if (model.provider === "github-copilot") {
+		apiKey = parseGitHubCopilotApiKey(rawApiKey).accessToken;
 		const hasImages = hasCopilotVisionInput(context.messages);
 		const copilot = buildCopilotDynamicHeaders({
 			messages: context.messages,
@@ -564,7 +567,7 @@ async function createClient(
 		});
 		Object.assign(headers, copilot.headers);
 		copilotPremiumRequests = copilot.premiumRequests;
-		baseUrl = resolveGitHubCopilotBaseUrl(model.baseUrl, apiKey) ?? model.baseUrl;
+		baseUrl = resolveGitHubCopilotBaseUrl(model.baseUrl, rawApiKey) ?? model.baseUrl;
 	}
 	return {
 		client: new OpenAI({
