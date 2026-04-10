@@ -92,7 +92,7 @@ pub fn format_anchor(
 ) -> String {
 	style
 		.with_omit_checksum(omit_checksum.unwrap_or(false))
-		.render("", name.as_str(), checksum.as_str())
+		.render("", name.as_str(), checksum.as_str(), 0, 0)
 }
 
 // ── Core build logic ─────────────────────────────────────────────────────
@@ -2790,12 +2790,12 @@ end
 
 		// The output should contain truncation markers indicating the chunk continues.
 		assert!(
-			result.text.contains("lines above"),
+			result.text.contains("to expand above"),
 			"should show top truncation marker when chunk extends above visible range: {}",
 			result.text
 		);
 		assert!(
-			result.text.contains("lines below"),
+			result.text.contains("to expand below"),
 			"should show bottom truncation marker when chunk extends below visible range: {}",
 			result.text
 		);
@@ -2830,12 +2830,12 @@ end
 
 		// Should NOT have any truncation markers.
 		assert!(
-			!result.text.contains("lines above"),
+			!result.text.contains("to expand above"),
 			"no top clip marker when chunk fits: {}",
 			result.text
 		);
 		assert!(
-			!result.text.contains("lines below"),
+			!result.text.contains("to expand below"),
 			"no bottom clip marker when chunk fits: {}",
 			result.text
 		);

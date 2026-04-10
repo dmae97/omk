@@ -9,6 +9,8 @@ Each opening anchor `[< full.chunk.path#CCCC ]` in the default output identifies
 If you need a canonical target list, run `read(path="file", sel="?")`. That listing shows chunk paths with CRCs.
 Line numbers in the gutter are absolute file line numbers.
 
+`L20` (single line, no explicit end) is shorthand for `L20` to end-of-file. Use `L20-L20` for a one-line window.
+
 {{#if chunkAutoIndent}}
 Chunk reads normalize leading indentation so copied content round-trips cleanly into chunk edits.
 {{else}}

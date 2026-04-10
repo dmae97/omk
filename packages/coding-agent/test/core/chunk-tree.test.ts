@@ -1030,7 +1030,7 @@ describe("blank-line cleanup", () => {
 }
 `;
 
-	test("replace with empty content collapses triple newlines at the edit seam", () => {
+	test("replace with empty content collapses blank line before closing delimiter", () => {
 		const checksum = getChecksum(commentedSource, "class_Worker.fn_restar");
 		const result = edit(
 			[
@@ -1043,8 +1043,9 @@ describe("blank-line cleanup", () => {
 			commentedSource,
 		);
 
-		expect(result.diffSourceAfter).toContain("\t}\n\n}");
-		expect(result.diffSourceAfter).not.toContain("\t}\n\n\n}");
+		// Deletion of the last child collapses the blank line before the closing delimiter.
+		expect(result.diffSourceAfter).toContain("\t}\n}");
+		expect(result.diffSourceAfter).not.toContain("\t}\n\n}");
 	});
 });
 

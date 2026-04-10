@@ -1,19 +1,24 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `resolveDiagnosticTargets` utility function to handle glob pattern resolution with fallback to literal file paths for bracket-style paths
 
 ### Changed
 
+- Simplified no-changes response to omit redundant response text when chunk content already matches
+- Clarified region suffix behavior on leaf and compound statement chunks — `~` and `^` now fall back to whole-chunk replacement with explicit guidance to supply complete structural content
+- Updated CRC refresh guidance to direct users to use CRCs from edit responses or run `read(path="file", sel="?")`
+- Added clarification that region suffixes fall back to whole-chunk replacement for prose and data formats (markdown, YAML, JSON, fenced code blocks, frontmatter)
+- Documented `L20` shorthand syntax for single-line reads extending to end-of-file, with `L20-L20` for one-line windows
 - Refactored diagnostic target resolution to use new `resolveDiagnosticTargets` function, consolidating glob pattern detection and file matching logic
 - Updated chunk selector syntax from `@region` format to `~` (body) and `^` (head) suffixes for more concise region targeting
 - Simplified chunk edit documentation to use new `~` and `^` region syntax instead of `@head`, `@body`, `@tail`, `@decl` keywords
 - Replaced internal `raceAbort` function with imported `raceWithAbort` utility from pi-utils
 - Refactored cleanup timer to use async iterator pattern with `timers.setInterval` instead of `setInterval`
 - Made `#cleanupIdleSessions` synchronous and moved async cleanup loop logic to new `#runCleanupLoop` method
+- Replaced regex-based `htmlToBasicMarkdown` with a Turndown + GFM plugin pipeline (tables, strikethrough, task lists, nested lists now convert correctly). Added direct `turndown` and `turndown-plugin-gfm` dependencies
 
 ### Fixed
 

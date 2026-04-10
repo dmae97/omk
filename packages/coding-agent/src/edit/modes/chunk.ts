@@ -453,9 +453,8 @@ export async function executeChunkMode(
 	});
 
 	if (!chunkResult.changed) {
-		const responseText = `[No changes needed — content already matches.]\n\n${chunkResult.responseText}`;
 		return {
-			content: [{ type: "text", text: responseText }],
+			content: [{ type: "text", text: "[No changes needed \u2014 content already matches.]" }],
 			details: {
 				diff: "",
 				op: sourceExists ? "update" : "create",

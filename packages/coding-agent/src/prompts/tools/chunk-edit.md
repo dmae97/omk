@@ -21,9 +21,9 @@ Edits files via syntax-aware chunks. Run `read(path="file.ts")` first. The edit 
   ```
   The tool adds the correct base indent automatically, then preserves the tabs/spaces you used inside the snippet. Never manually pad with the chunk's own indentation.
 {{/if}}
-- Region suffixes only work on container chunks (classes, functions, impl blocks, sections). Do **not** use `^` or `~` on leaf chunks (enum variants, fields, single statements) — use the whole chunk instead.
+- Region suffixes only apply to container chunks (classes, functions, impl blocks, sections). On leaf chunks (enum variants, fields, single statements, and compound statements like `if`/`for`/`while`/`match`/`try`), `~` and `^` silently fall back to whole-chunk replacement — prefer the unsuffixed form and always supply the complete replacement (condition + body, not just the body) to avoid dropping structural parts.
 - `replace` requires the current CRC. Insertions do not.
-- **CRCs change after every edit.** Always use the selectors/CRCs from the most recent `read` or edit response. Never reuse a CRC from a previous edit.
+- **CRCs change after every edit.** The edit response always carries the new CRCs — use those for the next call or run `read(path="file", sel="?")` to refresh. Never reuse a CRC from before the latest edit.
 </rules>
 
 <critical>
@@ -51,6 +51,8 @@ Append `~` to target the body, `^` to target the head (trivia + signature), or n
 - `chunk~` + `append`/`prepend` inserts *inside* the container. `chunk` + `append`/`prepend` inserts *outside*.
 
 **Note on leading trivia:** whether a decorator/doc comment belongs to `^` depends on the parser. In Rust and Python, attributes and decorators are attached to the function chunk, so `^` covers them. In TypeScript/JavaScript, a `@decorator` + `/** jsdoc */` block immediately above a method often surfaces as a **separate sibling chunk** (shown as `chunk#CRC` in the `?` listing) rather than as part of the function's `^`. If you need to rewrite a decorator, check the `?` listing for a sibling `chunk#CRC` directly above your target.
+
+**Note on non-code formats:** for prose and data formats (markdown, YAML, JSON, fenced code blocks, frontmatter), `^` and `~` fall back to the whole chunk. Always replace the entire chunk and include any delimiter syntax (fence backticks, `---` frontmatter markers, list markers) in your `content` — omitting them deletes them. For markdown sections, replace the `sect_*` chunk directly instead of trying to edit its heading via `^`.
 </regions>
 
 <ops>

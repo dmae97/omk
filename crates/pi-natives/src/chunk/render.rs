@@ -99,6 +99,7 @@ pub fn render_state(state: &ChunkStateInner, params: &RenderParams) -> String {
 		out: String::new(),
 		tree,
 		lookup: &lookup,
+		source: &masked_source,
 		source_lines: &source_lines,
 		num_width,
 		visible_range: params.visible_range.as_ref(),
@@ -302,6 +303,45 @@ fn chunk_anchor_label(chunk: &ChunkNode, style: ChunkAnchorStyle) -> String {
 	}
 }
 
+/// Compute head and body line counts for a chunk.
+/// Head = lines covered by the prologue region (signature through opening
+/// delimiter). Body = remaining lines (interior through closing delimiter).
+/// When the chunk has no region boundaries, head = total, body = 0.
+fn chunk_head_body_lines(source: &str, chunk: &ChunkNode) -> (u32, u32) {
+	let total = chunk.line_count;
+	if total == 0 {
+		return (0, 0);
+	}
+	let Some(pro_end) = chunk.prologue_end_byte else {
+		return (total, 0);
+	};
+	let start = chunk.start_byte as usize;
+	let end = chunk.end_byte as usize;
+	let pro_end = (pro_end as usize).clamp(start, end);
+	if pro_end <= start {
+		return (0, total);
+	}
+	let bytes = source.as_bytes();
+	// Count newlines strictly within [start, pro_end).
+	#[expect(clippy::naive_bytecount, reason = "small head region, memchr dep not wired in")]
+	let head_newlines = bytes[start..pro_end]
+		.iter()
+		.filter(|&&b| b == b'\n')
+		.count() as u32;
+	// When the prologue ends exactly on a newline, the newline terminates the
+	// last head line, so head_lines == head_newlines. Otherwise the prologue
+	// ends mid-line and we're on the line following the last newline.
+	let head_ends_at_newline = bytes.get(pro_end - 1).copied() == Some(b'\n');
+	let raw_head_lines = if head_ends_at_newline {
+		head_newlines.max(1)
+	} else {
+		head_newlines + 1
+	};
+	let head_lines = raw_head_lines.min(total);
+	let body_lines = total.saturating_sub(head_lines);
+	(head_lines, body_lines)
+}
+
 #[derive(Clone, Copy)]
 struct VisibleSpan {
 	start: u32,
@@ -331,7 +371,7 @@ fn line_in_file_scope(line: u32, visible_range: Option<&VisibleLineRange>) -> bo
 #[derive(Clone)]
 enum LeafEntry {
 	Line { abs_line: u32, text: String },
-	Ellipsis { count: usize, start_abs: u32, end_abs: u32 },
+	Ellipsis { start_abs: u32, end_abs: u32 },
 }
 
 fn build_leaf_entries(
@@ -375,16 +415,12 @@ fn build_leaf_entries(
 		.into_iter()
 		.rev()
 		.collect::<Vec<_>>();
-	let omitted = visible_line_count.saturating_sub(head.len() + tail.len());
+	let _omitted = visible_line_count.saturating_sub(head.len() + tail.len());
 	let first_omitted = low + head.len() as u32;
 	let last_omitted = high.saturating_sub(tail.len() as u32);
 	let mut entries = Vec::with_capacity(head.len() + tail.len() + 1);
 	entries.extend(head);
-	entries.push(LeafEntry::Ellipsis {
-		count:     omitted,
-		start_abs: first_omitted,
-		end_abs:   last_omitted,
-	});
+	entries.push(LeafEntry::Ellipsis { start_abs: first_omitted, end_abs: last_omitted });
 	entries.extend(tail);
 	entries
 }
@@ -585,6 +621,7 @@ struct RenderCtx<'a> {
 	out:                    String,
 	tree:                   &'a ChunkTree,
 	lookup:                 &'a ChunkLookup<'a>,
+	source:                 &'a str,
 	source_lines:           &'a [&'a str],
 	num_width:              usize,
 	visible_range:          Option<&'a VisibleLineRange>,
@@ -668,22 +705,19 @@ fn emit_range_clip_marker(
 	if ctx.visible_range.is_none() {
 		return;
 	}
-	let (hidden, direction, boundary_line) = if above {
+	let (hidden, direction, start, end) = if above {
 		let n = span.start.saturating_sub(chunk.start_line);
-		(n, "above", chunk.start_line)
+		(n, "above", chunk.start_line, span.start.saturating_sub(1))
 	} else {
 		let n = chunk.end_line.saturating_sub(span.end);
-		(n, "below", chunk.end_line)
+		(n, "below", span.end + 1, chunk.end_line)
 	};
 	if hidden == 0 {
 		return;
 	}
 	let indent =
 		chunk_body_anchor_indent(ctx.source_lines, chunk, ctx.tab_replacement, ctx.normalize_indent);
-	push_meta(
-		ctx,
-		format!("{indent}... {hidden} lines {direction} (chunk continues to L{boundary_line})"),
-	);
+	push_meta(ctx, format!("{indent}[truncated\u{2026} sel=L{start}-L{end} to expand {direction}]"));
 }
 
 fn virtual_render_lines(
@@ -720,8 +754,8 @@ fn emit_leaf_body(ctx: &mut RenderCtx<'_>, chunk: &ChunkNode, span: VisibleSpan)
 	) {
 		match entry {
 			LeafEntry::Line { abs_line, text } => push_code(ctx, abs_line, &text),
-			LeafEntry::Ellipsis { count, start_abs, end_abs } => {
-				push_meta(ctx, format!("sel=L{start_abs}-L{end_abs} to expand ({count} lines)"));
+			LeafEntry::Ellipsis { start_abs, end_abs, .. } => {
+				push_meta(ctx, format!("[truncated\u{2026} sel=L{start_abs}-L{end_abs} to expand]"));
 			},
 		}
 	}
@@ -766,11 +800,18 @@ fn emit_chunk_subtree(
 					ctx.tab_replacement,
 					ctx.normalize_indent,
 				);
+				let (head_lines, body_lines) = chunk_head_body_lines(ctx.source, chunk);
 				let style = ctx.anchor_style.with_omit_checksum(ctx.omit_checksum);
 				let anchor_label = chunk_anchor_label(chunk, style);
 				push_meta(
 					ctx,
-					style.render(&anchor_indent, anchor_label.as_str(), chunk.checksum.as_str()),
+					style.render(
+						&anchor_indent,
+						anchor_label.as_str(),
+						chunk.checksum.as_str(),
+						head_lines,
+						body_lines,
+					),
 				);
 				return;
 			},
@@ -799,10 +840,21 @@ fn emit_chunk_subtree(
 			ctx.tab_replacement,
 			ctx.normalize_indent,
 		);
+		let (head_lines, body_lines) = chunk_head_body_lines(ctx.source, chunk);
 		let style = ctx.anchor_style.with_omit_checksum(ctx.omit_checksum);
 		let anchor_label = chunk_anchor_label(chunk, style);
-		push_meta(ctx, style.render(&anchor_indent, anchor_label.as_str(), chunk.checksum.as_str()));
+		push_meta(
+			ctx,
+			style.render(
+				&anchor_indent,
+				anchor_label.as_str(),
+				chunk.checksum.as_str(),
+				head_lines,
+				body_lines,
+			),
+		);
 	}
+
 	if !has_kids {
 		if ctx.show_leaf_preview
 			&& let Some(span) = span
@@ -1041,6 +1093,7 @@ pub fn render_state_with_hunks(
 		out: String::new(),
 		tree,
 		lookup: &lookup,
+		source: &masked_source,
 		source_lines: &source_lines,
 		num_width,
 		visible_range: params.visible_range.as_ref(),
