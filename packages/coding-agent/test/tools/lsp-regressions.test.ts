@@ -2,20 +2,31 @@ import { describe, expect, it, vi } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { RenderResultOptions } from "@oh-my-pi/pi-agent-core";
+import { LspTool } from "@oh-my-pi/pi-coding-agent/lsp";
+import * as lspClient from "@oh-my-pi/pi-coding-agent/lsp/client";
+import * as lspConfig from "@oh-my-pi/pi-coding-agent/lsp/config";
 import { getServersForFile, loadConfig } from "@oh-my-pi/pi-coding-agent/lsp/config";
 import { renderCall, renderResult } from "@oh-my-pi/pi-coding-agent/lsp/render";
-import type { CodeAction, SymbolInformation } from "@oh-my-pi/pi-coding-agent/lsp/types";
+import type {
+	CodeAction,
+	Diagnostic,
+	LspClient,
+	ServerConfig,
+	SymbolInformation,
+} from "@oh-my-pi/pi-coding-agent/lsp/types";
 import {
 	applyCodeAction,
 	collectGlobMatches,
 	dedupeWorkspaceSymbols,
 	detectLanguageId,
+	fileToUri,
 	filterWorkspaceSymbols,
 	hasGlobPattern,
 	resolveDiagnosticTargets,
 	resolveSymbolColumn,
 } from "@oh-my-pi/pi-coding-agent/lsp/utils";
 import { getThemeByName } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { clampTimeout } from "@oh-my-pi/pi-coding-agent/tools/tool-timeouts";
 import { sanitizeText } from "@oh-my-pi/pi-natives";
 import * as piUtils from "@oh-my-pi/pi-utils";
@@ -156,6 +167,7 @@ describe("lsp regressions", () => {
 		expect(unique).toHaveLength(1);
 		expect(unique[0]?.name).toBe("logger");
 	});
+
 	it("applies command-only code actions by executing workspace commands", async () => {
 		const executedCommands: string[] = [];
 		const result = await applyCodeAction(
@@ -249,6 +261,87 @@ describe("lsp regressions", () => {
 		expect(normalizedResultText).toContain("symbol: foo bar baz");
 		expect(normalizedResultText).toContain("occurrence: 2");
 		expect(resultText).not.toContain("\t");
+	});
+
+	it("does not reuse stale file diagnostics after another URI publishes", async () => {
+		const tempDir = TempDir.createSync("@omp-lsp-stale-diags-");
+		try {
+			const targetFile = path.join(tempDir.path(), "target.ts");
+			const otherFile = path.join(tempDir.path(), "other.ts");
+			await Bun.write(targetFile, "export const target = 1;\n");
+			await Bun.write(otherFile, "export const other = 1;\n");
+
+			const targetUri = fileToUri(targetFile);
+			const otherUri = fileToUri(otherFile);
+			const server: ServerConfig = { command: "test-lsp", fileTypes: ["ts"], rootMarkers: [] };
+			const staleDiagnostic: Diagnostic = {
+				message: "stale target error",
+				severity: 1,
+				range: {
+					start: { line: 0, character: 0 },
+					end: { line: 0, character: 1 },
+				},
+			};
+			const otherDiagnostic: Diagnostic = {
+				message: "other file warning",
+				severity: 2,
+				range: {
+					start: { line: 0, character: 0 },
+					end: { line: 0, character: 1 },
+				},
+			};
+			const client: LspClient = {
+				name: "test-lsp",
+				cwd: tempDir.path(),
+				config: server,
+				proc: {
+					stdin: {
+						write() {},
+						flush: async () => {},
+					},
+				} as unknown as LspClient["proc"],
+				requestId: 0,
+				diagnostics: new Map([[targetUri, { diagnostics: [staleDiagnostic], version: null }]]),
+				diagnosticsVersion: 1,
+				openFiles: new Map([[targetUri, { version: 1, languageId: "typescript" }]]),
+				pendingRequests: new Map(),
+				messageBuffer: new Uint8Array(),
+				isReading: false,
+				lastActivity: Date.now(),
+			};
+
+			vi.spyOn(lspConfig, "loadConfig").mockReturnValue({ servers: {}, idleTimeoutMs: undefined });
+			vi.spyOn(lspConfig, "getServersForFile").mockReturnValue([["test-lsp", server]]);
+			vi.spyOn(lspClient, "getOrCreateClient").mockResolvedValue(client);
+
+			setTimeout(() => {
+				client.diagnostics.set(otherUri, { diagnostics: [otherDiagnostic], version: 1 });
+				client.diagnosticsVersion += 1;
+			}, 20);
+			setTimeout(() => {
+				client.diagnostics.set(targetUri, {
+					diagnostics: [],
+					version: client.openFiles.get(targetUri)?.version ?? 2,
+				});
+				client.diagnosticsVersion += 1;
+			}, 80);
+
+			const tool = new LspTool({ cwd: tempDir.path() } as ToolSession);
+			const result = await tool.execute("diag-stale", {
+				action: "diagnostics",
+				file: targetFile,
+				timeout: 5,
+			});
+			const output = result.content
+				.filter(block => block.type === "text")
+				.map(block => block.text)
+				.join("\n");
+
+			expect(output).toBe("No diagnostics");
+		} finally {
+			vi.restoreAllMocks();
+			tempDir.removeSync();
+		}
 	});
 
 	it("detects Windows local .exe LSP shims in node_modules/.bin", async () => {

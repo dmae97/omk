@@ -638,15 +638,17 @@ export async function refreshFile(client: LspClient, filePath: string, signal?: 
 	const uri = fileToUri(filePath);
 	const lockKey = `${client.name}:${uri}`;
 
-	// Check if another operation is in progress
 	const existingLock = fileOperationLocks.get(lockKey);
 	if (existingLock) {
 		await untilAborted(signal, () => existingLock);
 	}
 
-	// Lock and refresh file
 	const refreshPromise = (async () => {
 		throwIfAborted(signal);
+		// Drop cached diagnostics for this URI before asking the server to recompute.
+		// Otherwise an unrelated publishDiagnostics notification can advance the global
+		// diagnostics version and cause waiters to accept stale unversioned diagnostics.
+		client.diagnostics.delete(uri);
 		const info = client.openFiles.get(uri);
 
 		if (!info) {

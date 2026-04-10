@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `extractReadableFromHtml` utility function to extract readable content from HTML with Readability article extraction and CSS selector fallback
@@ -26,6 +25,7 @@
 
 ### Fixed
 
+- Fixed stale diagnostics being reused after unrelated file publishes by clearing cached diagnostics before refreshing file state
 - Fixed Codex search to use streamed answer text when final answer is an image placeholder or empty
 
 ## [14.0.4] - 2026-04-10
