@@ -626,7 +626,8 @@ fn apply_insert(
 
 	if pos == InsertPosition::FirstChild {
 		let body = replacement.trim_matches('\n');
-		let comment_only = !body.is_empty() && body.lines().all(|line| is_comment_only_line(line.trim()));
+		let comment_only =
+			!body.is_empty() && body.lines().all(|line| is_comment_only_line(line.trim()));
 		if comment_only
 			&& anchor.path.is_empty()
 			&& anchor.children.iter().any(|child| child == "preamble")
@@ -1008,27 +1009,28 @@ fn cleanup_blank_line_artifacts_at_offset(text: &str, offset: usize) -> String {
 
 	let after_run = &text[run_end..];
 	let before_run = &text[..run_start];
-	let trailing_line = before_run.rsplit('\n').next().unwrap_or("");
 	let after_starts_with_close = after_run
 		.trim_start_matches([' ', '\t'])
 		.chars()
 		.next()
 		.is_some_and(|ch| matches!(ch, '}' | ']' | ')'));
-	let trailing_trimmed = trailing_line.trim_matches([' ', '\t']);
-	let trailing_is_only_close = trailing_trimmed.chars().count() == 1
-		&& trailing_trimmed
-			.chars()
-			.next()
-			.is_some_and(|ch| matches!(ch, '}' | ']' | ')'));
-	let between_adjacent_closing = trailing_is_only_close && after_starts_with_close;
 
 	if after_starts_with_close {
 		if newline_run.contains("\n\n\n") {
 			return format!("{}{}{}", before_run, collapse_newline_runs(newline_run, 2), after_run);
 		}
-		if between_adjacent_closing {
-			return text.to_owned();
-		}
+		// In a deletion context, blank lines before closing delimiters are
+		// artifacts of the removed chunk, not intentional formatting.
+		return format!("{before_run}\n{after_run}");
+	}
+	// After deleting a first-child chunk, collapse the blank line between an
+	// opening delimiter and the next sibling content.
+	let before_ends_with_open = before_run
+		.trim_end()
+		.chars()
+		.last()
+		.is_some_and(|ch| matches!(ch, '{' | '[' | '(' | ':'));
+	if before_ends_with_open && newline_run.contains("\n\n") && !newline_run.contains("\n\n\n") {
 		return format!("{before_run}\n{after_run}");
 	}
 	if !newline_run.contains("\n\n\n") {
@@ -4073,5 +4075,39 @@ function foo() {\n<<<<<<< HEAD\n\treturn bar();\n=======\n\treturn baz();\n>>>>>
 		// Plain code lines are not comments.
 		assert!(!is_comment_only_line("let x = 1;"));
 		assert!(!is_comment_only_line("return 0;"));
+	}
+
+	#[test]
+	fn deletion_cleanup_collapses_blank_line_before_closing_delimiter() {
+		// Scenario: deleting the last method in a class leaves }\n\n}.
+		// The cleanup should collapse to }\n}.
+		let text = "class Foo {\n\tmethod() {}\n\n}\n";
+		let offset = "class Foo {\n\tmethod() {}\n".len();
+		let result = cleanup_blank_line_artifacts_at_offset(text, offset);
+		assert!(
+			!result.contains("}\n\n}"),
+			"should collapse blank line before closing brace, got: {result:?}"
+		);
+		assert!(
+			result.contains("method() {}\n}"),
+			"last method should be followed directly by class close, got: {result:?}"
+		);
+	}
+
+	#[test]
+	fn deletion_cleanup_collapses_blank_line_after_opening_delimiter() {
+		// Scenario: deleting the first child in a container leaves {\n\n\tcontent.
+		// The cleanup should collapse to {\n\tcontent.
+		let text = "class Foo {\n\n\tfield: number;\n}\n";
+		let offset = "class Foo {\n".len();
+		let result = cleanup_blank_line_artifacts_at_offset(text, offset);
+		assert!(
+			!result.contains("{\n\n\t"),
+			"should collapse blank line after opening brace, got: {result:?}"
+		);
+		assert!(
+			result.contains("{\n\tfield"),
+			"first child should follow opening brace directly, got: {result:?}"
+		);
 	}
 }

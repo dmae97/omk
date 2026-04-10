@@ -633,6 +633,13 @@ REFERENCE_FILES = {
     "main.md": MARKDOWN_FIXTURE,
 }
 
+FIXTURES: tuple[tuple[str, str], ...] = (
+    ("typescript", "main.ts"),
+    ("rust", "main.rs"),
+    ("python", "main.py"),
+    ("markdown", "main.md"),
+)
+
 WORKSPACE_FILES = {
     "main.ts": TS_FIXTURE,
     "main.rs": RUST_FIXTURE,
@@ -640,9 +647,22 @@ WORKSPACE_FILES = {
     "main.md": MARKDOWN_FIXTURE,
 }
 
+
+def build_fixture_prompt(fixture_language: str, fixture_file: str) -> str:
+    return textwrap.dedent(
+        f"""\
+        {PROMPT}
+
+        This run is constrained to `{fixture_file}` (`{fixture_language}`).
+        Keep all operations and edits scoped to this fixture unless absolutely required to inspect shared context.
+        """
+    ).strip()
+
+
 @dataclass
 class ModelResult:
     model: str
+    fixture: str
     status: str
     started_at: float
     finished_at: float
@@ -882,15 +902,15 @@ def apply_todo_ops(progress: ModelProgress, args: Any) -> None:
 
 
 class ProgressPrinter:
-    def __init__(self, models: list[str], *, stream: TextIO | None = None, interactive: bool | None = None) -> None:
+    def __init__(self, runs: list[tuple[str, str]], *, stream: TextIO | None = None, interactive: bool | None = None) -> None:
         self._lock = threading.Lock()
         self._stream = sys.stdout if stream is None else stream
         self._interactive = self._stream.isatty() if interactive is None else interactive
         self._console = Console(file=self._stream, force_terminal=self._interactive, soft_wrap=False)
-        self._model_order = list(models)
+        self._model_order = [run_id for run_id, _ in runs]
         self._states = {
-            model: ModelProgress(model=model, label=shorten_model_name(model))
-            for model in self._model_order
+            run_id: ModelProgress(model=run_id, label=label)
+            for run_id, label in runs
         }
         self._fixtures_dir: str | None = None
         self._results_dir: str | None = None
@@ -1115,7 +1135,12 @@ def slugify(value: str) -> str:
     return "".join(char if char.isalnum() or char in "._-" else "_" for char in value)
 
 
-def materialize_workspace(target_dir: Path) -> None:
+def materialize_workspace(target_dir: Path, fixture_file: str | None = None) -> None:
+    if fixture_file is not None:
+        content = WORKSPACE_FILES[fixture_file]
+        (target_dir / fixture_file).write_text(content)
+        return
+
     for name, content in WORKSPACE_FILES.items():
         (target_dir / name).write_text(content)
 
@@ -1161,8 +1186,10 @@ def serialize_notification(notification: Any) -> dict[str, Any]:
 
 
 class ModelRunRecorder:
-    def __init__(self, model: str, printer: ProgressPrinter, jsonl_path: Path) -> None:
+    def __init__(self, run_id: str, model: str, fixture: str, printer: ProgressPrinter, jsonl_path: Path) -> None:
+        self.run_id = run_id
         self.model = model
+        self.fixture = fixture
         self.printer = printer
         self.jsonl_path = jsonl_path
         self.turns = 0
@@ -1200,16 +1227,16 @@ class ModelRunRecorder:
     def record_turn_start(self, _event: TurnStartEvent) -> None:
         self._touch()
         self.turns += 1
-        self.printer.mark_turn_start(self.model, self.turns)
+        self.printer.mark_turn_start(self.run_id, self.turns)
 
     def record_turn_end(self, _event: TurnEndEvent) -> None:
         self._touch()
-        self.printer.mark_turn_end(self.model, self.turns)
+        self.printer.mark_turn_end(self.run_id, self.turns)
 
     def record_tool_execution_start(self, event: ToolExecutionStartEvent) -> None:
         self._touch()
         self.tool_calls += 1
-        self.printer.note_tool_start(self.model, event.tool_name, event.intent, self.tool_calls, event.args)
+        self.printer.note_tool_start(self.run_id, event.tool_name, event.intent, self.tool_calls, event.args)
 
     def record_tool_execution_update(self, _event: ToolExecutionUpdateEvent) -> None:
         self._touch()
@@ -1217,7 +1244,7 @@ class ModelRunRecorder:
 
     def record_tool_execution_end(self, event: ToolExecutionEndEvent) -> None:
         self._touch()
-        self.printer.note_tool_end(self.model, event.tool_name, event.is_error)
+        self.printer.note_tool_end(self.run_id, event.tool_name, event.is_error)
 
     def record_auto_retry_start(self, event: AutoRetryStartEvent) -> None:
         self._touch()
@@ -1245,7 +1272,7 @@ class ModelRunRecorder:
             self.token_input = token_input
             self.token_output = token_output
             self.token_total = token_total
-            self.printer.note_usage(self.model, token_input, token_output, token_total)
+            self.printer.note_usage(self.run_id, token_input, token_output, token_total)
 
     def record_agent_end(self, event: AgentEndEvent) -> None:
         self._touch()
@@ -1267,7 +1294,7 @@ class ModelRunRecorder:
                 self.token_input = token_input
                 self.token_output = token_output
                 self.token_total = token_total
-                self.printer.note_usage(self.model, token_input, token_output, token_total)
+                self.printer.note_usage(self.run_id, token_input, token_output, token_total)
                 break
 
     def record_message_update(self, event: MessageUpdateEvent) -> None:
@@ -1280,7 +1307,7 @@ class ModelRunRecorder:
                 self.token_input = token_input
                 self.token_output = token_output
                 self.token_total = token_total
-                self.printer.note_usage(self.model, token_input, token_output, token_total)
+                self.printer.note_usage(self.run_id, token_input, token_output, token_total)
 
         delta_type = assistant_event.get("type")
         delta = assistant_event.get("delta")
@@ -1288,10 +1315,10 @@ class ModelRunRecorder:
             return
         if delta_type == "thinking_delta":
             self.thinking_chars += len(delta)
-            self.printer.note_thinking(self.model, delta, self.thinking_chars)
+            self.printer.note_thinking(self.run_id, delta, self.thinking_chars)
         elif delta_type == "text_delta":
             self.text_chars += len(delta)
-            self.printer.note_text(self.model, delta, self.text_chars)
+            self.printer.note_text(self.run_id, delta, self.text_chars)
 
     def record_todo_reminder(self, event: TodoReminderEvent) -> None:
         self._touch()
@@ -1300,19 +1327,19 @@ class ModelRunRecorder:
         in_progress = next((task.content for task in event.todos if task.status == "in_progress"), None)
         pending = next((task.content for task in event.todos if task.status == "pending"), None)
         self.todo_current = in_progress or pending
-        self.printer.note_todo_reminder(self.model, event.todos)
+        self.printer.note_todo_reminder(self.run_id, event.todos)
 
     def record_todo_auto_clear(self, _event: TodoAutoClearEvent) -> None:
         self._touch()
         self.todo_completed = self.todo_total
         self.todo_current = None
-        self.printer.note_todo_auto_clear(self.model)
+        self.printer.note_todo_auto_clear(self.run_id)
 
     def sync_final_todos(self, phases: tuple[TodoPhase, ...]) -> None:
         order, items = build_todo_state_from_phases(phases)
         self.todo_completed, self.todo_total, self.todo_current = summarize_todo_state(order, items)
         flattened = tuple(task for phase in phases for task in phase.tasks)
-        self.printer.note_todo_reminder(self.model, flattened)
+        self.printer.note_todo_reminder(self.run_id, flattened)
 
     def build_review_markdown(self) -> str:
         if not self.review_sections:
@@ -1338,6 +1365,8 @@ class ModelRunRecorder:
 def run_model_sync(
     *,
     model: str,
+    fixture_language: str,
+    fixture_file: str,
     omp_bin: str,
     results_dir: Path,
     workspace_root: Path,
@@ -1347,18 +1376,26 @@ def run_model_sync(
 ) -> ModelResult:
     started_at = time.time()
     model_slug = slugify(model)
-    review_slug = slugify(shorten_model_name(model))
-    workspace = workspace_root / model_slug
+    fixture_slug = slugify(fixture_language)
+    run_id = f"{model}|{fixture_slug}"
+    workspace = workspace_root / model_slug / fixture_slug
     workspace.mkdir(parents=True, exist_ok=True)
-    materialize_workspace(workspace)
+    materialize_workspace(workspace, fixture_file=fixture_file)
 
-    review_path = results_dir / f"review_{review_slug}.md"
-    jsonl_path = Path(tempfile.gettempdir()) / f"rate-edit-tool-{results_dir.name}-{model_slug}.jsonl"
+    review_slug = slugify(shorten_model_name(model))
+    review_path = results_dir / f"review_{review_slug}_{fixture_slug}.md"
+    jsonl_path = Path(tempfile.gettempdir()) / f"rate-edit-tool-{results_dir.name}-{model_slug}-{fixture_slug}.jsonl"
     jsonl_path.unlink(missing_ok=True)
     jsonl_path.touch()
-    recorder = ModelRunRecorder(model, printer, jsonl_path)
+    recorder = ModelRunRecorder(
+        run_id=run_id,
+        model=model,
+        fixture=fixture_language,
+        printer=printer,
+        jsonl_path=jsonl_path,
+    )
 
-    printer.mark_starting(model)
+    printer.mark_starting(run_id)
     error_message: str | None = None
     session_state: dict[str, Any] | None = None
 
@@ -1392,9 +1429,9 @@ def run_model_sync(
             client.on_ui_request(recorder.record_ui)
             client.install_headless_ui()
 
-            printer.mark_ready(model)
+            printer.mark_ready(run_id)
             client.set_todos(TODOS)
-            printer.seed_todos(model, TODOS)
+            printer.seed_todos(run_id, TODOS)
 
             deadline = time.monotonic() + timeout
 
@@ -1430,12 +1467,12 @@ def run_model_sync(
                         if recorder.is_effectively_complete(quiet_seconds=2.0):
                             return
 
-            printer.mark_prompt_submitted(model)
-            client.prompt(PROMPT)
+            printer.mark_prompt_submitted(run_id)
+            client.prompt(build_fixture_prompt(fixture_language, fixture_file))
             wait_for_settle()
             review_markdown = recorder.build_review_markdown()
             if not review_markdown.strip():
-                printer.mark_prompt_submitted(model)
+                printer.mark_prompt_submitted(run_id)
                 client.prompt(FINAL_REVIEW_PROMPT)
                 wait_for_settle()
                 review_markdown = recorder.build_review_markdown()
@@ -1449,7 +1486,7 @@ def run_model_sync(
                 recorder.token_input = stats.tokens.input
                 recorder.token_output = stats.tokens.output
                 recorder.token_total = stats.tokens.total
-                printer.note_usage(model, recorder.token_input, recorder.token_output, recorder.token_total)
+                printer.note_usage(run_id, recorder.token_input, recorder.token_output, recorder.token_total)
             review_path.write_text(review_markdown)
             provider, model_id = model.split("/", 1)
             session_state = {
@@ -1459,17 +1496,18 @@ def run_model_sync(
             status = "ok"
     except Exception as error:  # noqa: BLE001
         error_message = f"{type(error).__name__}: {error}" if str(error) else type(error).__name__
-        printer.mark_failed(model, error_message)
+        printer.mark_failed(run_id, error_message)
         status = "failed"
 
     finished_at = time.time()
     duration_seconds = round(finished_at - started_at, 3)
 
     if status == "ok":
-        printer.mark_completed(model, duration_seconds)
+        printer.mark_completed(run_id, duration_seconds)
 
     return ModelResult(
         model=model,
+        fixture=fixture_language,
         status=status,
         started_at=started_at,
         finished_at=finished_at,
@@ -1492,7 +1530,7 @@ def run_model_sync(
 
 def build_oracle_review_prompt(results: list[ModelResult]) -> str:
     review_sections: list[str] = []
-    for result in sorted(results, key=lambda candidate: candidate.model):
+    for result in sorted(results, key=lambda candidate: (candidate.model, candidate.fixture)):
         review_text = Path(result.review_path).read_text(encoding="utf-8").strip()
         if not review_text:
             continue
@@ -1501,6 +1539,7 @@ def build_oracle_review_prompt(results: list[ModelResult]) -> str:
                 f"""\
                 <review>
                 <model>{result.model}</model>
+                <fixture>{result.fixture}</fixture>
                 <path>{result.review_path}</path>
 
                 {review_text}
@@ -1525,8 +1564,7 @@ def run_oracle_review_sync(
     results_dir: Path,
     timeout: float,
     openrouter_key: str,
-) -> Path:
-    oracle_path = results_dir / f"review_oracle_{slugify(shorten_model_name(model))}.md"
+) -> str:
     prompt = build_oracle_review_prompt(results)
 
     with RpcClient(
@@ -1549,15 +1587,14 @@ def run_oracle_review_sync(
     if not isinstance(review_markdown, str) or not review_markdown.strip():
         raise RpcError("Oracle model completed without synthesis text")
 
-    oracle_path.write_text(review_markdown.strip() + "\n", encoding="utf-8")
-    return oracle_path
+    return review_markdown.strip()
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run OpenRouter fixture evaluations through omp RPC mode.")
     parser.add_argument("--omp-bin", default=os.environ.get("OMP_BIN"))
     parser.add_argument("--fixtures-dir", default=os.path.expanduser("~/tmp/fixtures"))
     parser.add_argument("--results-dir")
-    parser.add_argument("--timeout", type=float, default=900.0, help="Per-model timeout in seconds.")
+    parser.add_argument("--timeout", type=float, default=900.0, help="Per run timeout in seconds.")
     parser.add_argument("--model", dest="models", action="append", help="Repeat to limit execution to specific models.")
     parser.add_argument("--oracle-model", default=ORACLE_MODEL, help="Model used to synthesize findings across all reviews.")
     return parser.parse_args()
@@ -1577,13 +1614,20 @@ async def run_all(args: argparse.Namespace) -> int:
     workspace_root.mkdir(parents=True, exist_ok=True)
 
     selected_models = args.models or MODELS
-    printer = ProgressPrinter(list(selected_models))
+    run_specs = [
+        (f"{model}|{fixture_language}", f"{shorten_model_name(model)}:{fixture_language}")
+        for model in selected_models
+        for fixture_language, _ in FIXTURES
+    ]
+    printer = ProgressPrinter(run_specs)
     printer.configure(fixtures_dir=fixtures_dir, results_dir=results_dir)
 
     tasks = [
         asyncio.to_thread(
             run_model_sync,
             model=model,
+            fixture_language=fixture_language,
+            fixture_file=fixture_file,
             omp_bin=omp_bin,
             results_dir=results_dir,
             workspace_root=workspace_root,
@@ -1592,15 +1636,16 @@ async def run_all(args: argparse.Namespace) -> int:
             openrouter_key=openrouter_key,
         )
         for model in selected_models
+        for fixture_language, fixture_file in FIXTURES
     ]
     results = await asyncio.gather(*tasks)
 
     failures = sum(1 for result in results if result.status != "ok")
     if failures:
-        printer.finish(f"{failures}/{len(results)} model run(s) failed")
+        printer.finish(f"{failures}/{len(results)} run(s) failed")
         return 1
 
-    oracle_path = await asyncio.to_thread(
+    oracle_synthesis = await asyncio.to_thread(
         run_oracle_review_sync,
         model=args.oracle_model,
         omp_bin=omp_bin,
@@ -1610,7 +1655,7 @@ async def run_all(args: argparse.Namespace) -> int:
         openrouter_key=openrouter_key,
     )
     printer.finish(
-        f"{len(results)} review file(s) and oracle synthesis written to {results_dir} ({oracle_path.name})"
+        f"{len(results)} review file(s) completed. Oracle synthesis:\n\n{oracle_synthesis}"
     )
     return 0
 
