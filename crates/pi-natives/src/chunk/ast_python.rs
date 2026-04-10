@@ -4,7 +4,8 @@ use tree_sitter::Node;
 
 use super::{
 	classify::{
-		ClassifierTables, LangClassifier, NamingMode, RecurseMode, RuleStyle, semantic_rule,
+		ClassifierTables, LangClassifier, NamingMode, RecurseMode, RuleStyle, WrapperSignature,
+		WrapperTransform, promote_wrapper_candidate, semantic_rule,
 	},
 	common::*,
 	kind::ChunkKind,
@@ -202,7 +203,11 @@ impl LangClassifier for PythonClassifier {
 	) -> Option<RawChunkCandidate<'t>> {
 		match context {
 			ChunkContext::Root | ChunkContext::ClassBody if node.kind() == "decorated_definition" => {
-				Some(classify_decorated(node, source, context))
+				promote_wrapper_candidate(self, context, node, source, WrapperTransform {
+					signature: WrapperSignature::Wrapper,
+					..WrapperTransform::default()
+				})
+				.or_else(|| Some(positional_candidate(node, ChunkKind::Block, source)))
 			},
 			ChunkContext::ClassBody if node.kind() == "function_definition" => {
 				Some(classify_class_method(node, source))
@@ -236,53 +241,4 @@ fn classify_class_method<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<
 		source,
 		resolve_recurse(node, ChunkContext::FunctionBody),
 	)
-}
-
-fn classify_decorated<'t>(
-	node: Node<'t>,
-	source: &str,
-	context: ChunkContext,
-) -> RawChunkCandidate<'t> {
-	let inner = named_children(node)
-		.into_iter()
-		.find(|c| matches!(c.kind(), "class_definition" | "function_definition"));
-	match inner {
-		Some(child) if child.kind() == "class_definition" => make_container_chunk(
-			node,
-			ChunkKind::Class,
-			extract_identifier(child, source),
-			source,
-			resolve_recurse(child, ChunkContext::ClassBody),
-		),
-		Some(child)
-			if child.kind() == "function_definition" && context == ChunkContext::ClassBody =>
-		{
-			let name = extract_identifier(child, source).unwrap_or_else(|| "anonymous".to_string());
-			let kind = if name == "__init__" || name == "__new__" {
-				ChunkKind::Constructor
-			} else {
-				ChunkKind::Function
-			};
-			let identifier = if kind == ChunkKind::Constructor {
-				None
-			} else {
-				Some(name)
-			};
-			make_kind_chunk(
-				node,
-				kind,
-				identifier,
-				source,
-				resolve_recurse(child, ChunkContext::FunctionBody),
-			)
-		},
-		Some(child) if child.kind() == "function_definition" => make_kind_chunk(
-			node,
-			ChunkKind::Function,
-			extract_identifier(child, source),
-			source,
-			resolve_recurse(child, ChunkContext::FunctionBody),
-		),
-		_ => positional_candidate(node, ChunkKind::Block, source),
-	}
 }

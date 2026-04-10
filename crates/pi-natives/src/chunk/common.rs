@@ -414,10 +414,6 @@ pub fn recurse_class(node: Node<'_>) -> Option<RecurseSpec<'_>> {
 	resolve_recurse(node, ChunkContext::ClassBody)
 }
 
-pub fn recurse_interface(node: Node<'_>) -> Option<RecurseSpec<'_>> {
-	resolve_recurse(node, ChunkContext::ClassBody)
-}
-
 pub fn recurse_enum(node: Node<'_>) -> Option<RecurseSpec<'_>> {
 	resolve_recurse(node, ChunkContext::ClassBody)
 }
@@ -683,10 +679,6 @@ fn rust_function_signature(header: &str) -> Option<String> {
 }
 
 // ── Trivia and attribute detection ───────────────────────────────────────
-
-pub fn is_trivia(kind: &str) -> bool {
-	shape::is_generic_trivia_name(kind)
-}
 
 pub fn is_trivia_node(node: Node<'_>) -> bool {
 	shape::is_generic_trivia(node)

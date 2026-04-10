@@ -4,10 +4,11 @@ use tree_sitter::Node;
 
 use super::{
 	classify::{
-		ClassifierTables, LangClassifier, NamingMode, RecurseMode, RuleStyle, semantic_rule,
+		ClassifierTables, LangClassifier, NamingMode, RecurseMode, RuleStyle, WrapperSignature,
+		WrapperTransform, classify_with_defaults, first_wrapper_content_child,
+		promote_wrapper_candidate, semantic_rule,
 	},
 	common::*,
-	defaults::promote_assigned_expression,
 	kind::ChunkKind,
 };
 
@@ -41,7 +42,56 @@ static JSTS_TABLES: ClassifierTables = ClassifierTables {
 			RecurseMode::Auto(ChunkContext::FunctionBody),
 		),
 		semantic_rule(
+			"function",
+			ChunkKind::Function,
+			RuleStyle::Named,
+			NamingMode::AutoIdentifier,
+			RecurseMode::Auto(ChunkContext::FunctionBody),
+		),
+		semantic_rule(
+			"function_expression",
+			ChunkKind::Function,
+			RuleStyle::Named,
+			NamingMode::AutoIdentifier,
+			RecurseMode::Auto(ChunkContext::FunctionBody),
+		),
+		semantic_rule(
+			"arrow_function",
+			ChunkKind::Function,
+			RuleStyle::Named,
+			NamingMode::AutoIdentifier,
+			RecurseMode::Auto(ChunkContext::FunctionBody),
+		),
+		semantic_rule(
+			"generator_function",
+			ChunkKind::Function,
+			RuleStyle::Named,
+			NamingMode::AutoIdentifier,
+			RecurseMode::Auto(ChunkContext::FunctionBody),
+		),
+		semantic_rule(
+			"generator_function_declaration",
+			ChunkKind::Function,
+			RuleStyle::Named,
+			NamingMode::AutoIdentifier,
+			RecurseMode::Auto(ChunkContext::FunctionBody),
+		),
+		semantic_rule(
 			"class_declaration",
+			ChunkKind::Class,
+			RuleStyle::Named,
+			NamingMode::AutoIdentifier,
+			RecurseMode::Auto(ChunkContext::ClassBody),
+		),
+		semantic_rule(
+			"class",
+			ChunkKind::Class,
+			RuleStyle::Named,
+			NamingMode::AutoIdentifier,
+			RecurseMode::Auto(ChunkContext::ClassBody),
+		),
+		semantic_rule(
+			"class_expression",
 			ChunkKind::Class,
 			RuleStyle::Named,
 			NamingMode::AutoIdentifier,
@@ -118,8 +168,15 @@ impl LangClassifier for JsTsClassifier {
 fn classify_root_custom<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 	match node.kind() {
 		// ── Exports / decorators ──
-		"export_statement" => Some(classify_export_statement(node, source)),
-		"decorated_definition" => Some(classify_decorated(node, source)),
+		"export_statement" => Some(classify_export_statement(ChunkContext::Root, node, source)),
+		"decorated_definition" => promote_wrapper_candidate(
+			&JsTsClassifier,
+			ChunkContext::Root,
+			node,
+			source,
+			WrapperTransform { signature: WrapperSignature::Wrapper, ..WrapperTransform::default() },
+		)
+		.or_else(|| Some(positional_candidate(node, ChunkKind::Block, source))),
 
 		// ── Variables ──
 		"lexical_declaration" | "variable_declaration" => Some(classify_var_decl_js(node, source)),
@@ -154,8 +211,15 @@ fn classify_root_custom<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCand
 fn classify_class_custom<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 	match node.kind() {
 		// ── Exports / decorators (re-exported members) ──
-		"export_statement" => Some(classify_export_statement(node, source)),
-		"decorated_definition" => Some(classify_decorated(node, source)),
+		"export_statement" => Some(classify_export_statement(ChunkContext::ClassBody, node, source)),
+		"decorated_definition" => promote_wrapper_candidate(
+			&JsTsClassifier,
+			ChunkContext::ClassBody,
+			node,
+			source,
+			WrapperTransform { signature: WrapperSignature::Wrapper, ..WrapperTransform::default() },
+		)
+		.or_else(|| Some(positional_candidate(node, ChunkKind::Block, source))),
 
 		// ── Variables ──
 		"lexical_declaration" | "variable_declaration" => Some(classify_var_decl_js(node, source)),
@@ -300,19 +364,28 @@ fn group_from_sanitized<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'
 
 /// Unwrap `export` / `export default` to classify the inner declaration.
 ///
-/// Named exports delegate to the appropriate container/named-chunk builder;
-/// `export default …` always maps to `default_export`.  Re-exports and
-/// bare expression exports fall through to the `stmts` group.
-fn classify_export_statement<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
+/// Wrapper promotion handles declaration-like exports automatically.
+/// `export default …` remaps the promoted child to `default_export`, while
+/// re-exports and bare expression exports still fall through to `stmts`.
+fn classify_export_statement<'t>(
+	context: ChunkContext,
+	node: Node<'t>,
+	source: &str,
+) -> RawChunkCandidate<'t> {
 	let header = normalized_header(source, node.start_byte(), node.end_byte());
 	let is_default = header.starts_with("export default");
 
-	let inner = named_children(node)
-		.into_iter()
-		.find(|child| !is_trivia(child.kind()) && !child.is_error() && child.kind() != "comment");
+	if let Some(candidate) =
+		promote_wrapper_candidate(&JsTsClassifier, context, node, source, WrapperTransform {
+			kind: is_default.then_some(ChunkKind::DefaultExport),
+			name_style: is_default.then_some(NameStyle::Named),
+			clear_identifier: is_default,
+			..WrapperTransform::default()
+		}) {
+		return candidate;
+	}
 
-	let Some(child) = inner else {
-		// `export { foo } from "bar"` with no inner declaration node.
+	let Some(child) = first_wrapper_content_child(&JsTsClassifier, node) else {
 		return if is_default {
 			make_kind_chunk(node, ChunkKind::DefaultExport, None, source, None)
 		} else {
@@ -320,149 +393,14 @@ fn classify_export_statement<'t>(node: Node<'t>, source: &str) -> RawChunkCandid
 		};
 	};
 
-	match child.kind() {
-		"class_declaration" => {
-			let recurse = recurse_class(child);
-			if is_default {
-				make_container_chunk_from(node, child, ChunkKind::DefaultExport, None, source, recurse)
-			} else {
-				make_container_chunk_from(
-					node,
-					child,
-					ChunkKind::Class,
-					extract_identifier(child, source),
-					source,
-					recurse,
-				)
-			}
-		},
-		"function_declaration"
-		| "function"
-		| "function_expression"
-		| "arrow_function"
-		| "generator_function"
-		| "generator_function_declaration" => {
-			let recurse = recurse_body(child, ChunkContext::FunctionBody);
-			if is_default {
-				make_kind_chunk_from(node, child, ChunkKind::DefaultExport, None, source, recurse)
-			} else {
-				make_kind_chunk_from(
-					node,
-					child,
-					ChunkKind::Function,
-					extract_identifier(child, source),
-					source,
-					recurse,
-				)
-			}
-		},
-		"interface_declaration" => {
-			let recurse = recurse_interface(child);
-			if is_default {
-				make_container_chunk_from(node, child, ChunkKind::DefaultExport, None, source, recurse)
-			} else {
-				make_container_chunk_from(
-					node,
-					child,
-					ChunkKind::Interface,
-					extract_identifier(child, source),
-					source,
-					recurse,
-				)
-			}
-		},
-		"type_alias_declaration" => {
-			if is_default {
-				make_kind_chunk_from(node, child, ChunkKind::DefaultExport, None, source, None)
-			} else {
-				make_kind_chunk_from(
-					node,
-					child,
-					ChunkKind::Type,
-					extract_identifier(child, source),
-					source,
-					None,
-				)
-			}
-		},
-		"enum_declaration" => {
-			let recurse = recurse_enum(child);
-			if is_default {
-				make_container_chunk_from(node, child, ChunkKind::DefaultExport, None, source, recurse)
-			} else {
-				make_container_chunk_from(
-					node,
-					child,
-					ChunkKind::Enum,
-					extract_identifier(child, source),
-					source,
-					recurse,
-				)
-			}
-		},
-		"internal_module" => {
-			let recurse = recurse_internal_module(child);
-			if is_default {
-				make_container_chunk_from(node, child, ChunkKind::DefaultExport, None, source, recurse)
-			} else {
-				make_container_chunk_from(
-					node,
-					child,
-					ChunkKind::Module,
-					extract_identifier(child, source),
-					source,
-					recurse,
-				)
-			}
-		},
-		"lexical_declaration" | "variable_declaration" => {
-			if is_default {
-				make_kind_chunk_from(node, child, ChunkKind::DefaultExport, None, source, None)
-			} else {
-				promote_assigned_expression(node, child, source)
-					.unwrap_or_else(|| super::defaults::classify_var_decl(child, source))
-			}
-		},
-		_ => {
-			// expression_statement, re-exports, or anything else.
-			if is_default {
-				make_kind_chunk_from(node, child, ChunkKind::DefaultExport, None, source, None)
-			} else {
-				group_candidate(child, ChunkKind::Statements, source)
-			}
-		},
+	if is_default {
+		return make_kind_chunk(node, ChunkKind::DefaultExport, None, source, None);
 	}
-}
 
-/// Unwrap `@decorator` wrappers (TS/Python `decorated_definition`) to find
-/// the inner class or function definition.
-fn classify_decorated<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
-	let inner = named_children(node).into_iter().find(|c| {
-		matches!(
-			c.kind(),
-			"class_declaration" | "class_definition" | "function_declaration" | "function_definition"
-		)
-	});
-
-	match inner {
-		Some(child) if child.kind() == "class_declaration" || child.kind() == "class_definition" => {
-			let recurse = recurse_class(child);
-			make_container_chunk(
-				node,
-				ChunkKind::Class,
-				extract_identifier(child, source),
-				source,
-				recurse,
-			)
+	match child.kind() {
+		"lexical_declaration" | "variable_declaration" => {
+			classify_with_defaults(&JsTsClassifier, context, child, source)
 		},
-		Some(child) => {
-			// function_declaration | function_definition
-			let name = extract_identifier(child, source).unwrap_or_else(|| "anonymous".to_string());
-			make_kind_chunk(node, ChunkKind::Function, Some(name), source, {
-				let context = ChunkContext::FunctionBody;
-				recurse_into(child, context, &["body"], &["block"])
-			})
-		},
-		None => positional_candidate(node, ChunkKind::Block, source),
+		_ => group_candidate(child, ChunkKind::Statements, source),
 	}
 }

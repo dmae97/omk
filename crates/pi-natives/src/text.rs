@@ -8,10 +8,7 @@
 //! - Ellipsis decoded lazily
 //! - truncateToWidth returns the original `JsString` when possible
 
-use std::{
-	cell::{Cell, RefCell},
-	sync::atomic::{AtomicU32, Ordering},
-};
+use std::cell::RefCell;
 
 use napi::{JsString, bindgen_prelude::*};
 use napi_derive::napi;
@@ -24,47 +21,9 @@ const MAX_TAB_WIDTH: u32 = 16;
 pub const DEFAULT_TAB_WIDTH: usize = 3;
 const ESC: u16 = 0x1b;
 
-static PROCESS_TAB_WIDTH: AtomicU32 = AtomicU32::new(DEFAULT_TAB_WIDTH as u32);
-
-thread_local! {
-	static THREAD_TAB_WIDTH: Cell<u32> = const { Cell::new(0) };
-}
-
-struct EnvTabWidth {
-	width: u32,
-}
-
-/// Set the default tab width for the process.
-#[napi]
-pub fn set_default_tab_width(env: &napi::Env, width: u32) {
-	// #1. env-wide tab width
-	_ = env.set_instance_data(EnvTabWidth { width }, 0, |_| {});
-	// #2. thread-local tab width
-	THREAD_TAB_WIDTH.set(width);
-	// #3. process-wide tab width
-	PROCESS_TAB_WIDTH.store(width, Ordering::Relaxed);
-}
-
-/// Get the default tab width for the process.
-#[napi]
-pub fn get_default_tab_width(env: &napi::Env) -> u32 {
-	// #1. env-wide tab width
-	if let Ok(Some(data)) = env.get_instance_data::<EnvTabWidth>() {
-		return data.width;
-	}
-	// #2. thread-local tab width
-	let tls = THREAD_TAB_WIDTH.get();
-	if tls > 0 {
-		return tls;
-	}
-	// #3. process-wide tab width
-	PROCESS_TAB_WIDTH.load(Ordering::Relaxed)
-}
-
-pub fn operation_tab_width(env: &napi::Env, explicit: Option<u32>) -> usize {
-	explicit
-		.unwrap_or_else(|| get_default_tab_width(env))
-		.clamp(MIN_TAB_WIDTH, MAX_TAB_WIDTH) as usize
+#[inline]
+fn clamp_tab_width_for_ops(width: u32) -> usize {
+	width.clamp(MIN_TAB_WIDTH, MAX_TAB_WIDTH) as usize
 }
 
 /// Ellipsis strategy for [`truncate_to_width`].
@@ -831,14 +790,9 @@ fn wrap_text_with_ansi_impl(
 ///
 /// Returns UTF-16 lines with active SGR codes carried across line boundaries.
 #[napi]
-pub fn wrap_text_with_ansi(
-	env: &napi::Env,
-	text: JsString,
-	width: u32,
-	tab_width: Option<u32>,
-) -> Result<Vec<Utf16String>> {
+pub fn wrap_text_with_ansi(text: JsString, width: u32, tab_width: u32) -> Result<Vec<Utf16String>> {
 	let text_u16 = text.into_utf16()?;
-	let tab_width = operation_tab_width(env, tab_width);
+	let tab_width = clamp_tab_width_for_ops(tab_width);
 	let lines = wrap_text_with_ansi_impl(text_u16.as_slice(), width as usize, tab_width);
 	Ok(lines.into_iter().map(build_utf16_string).collect())
 }
@@ -851,18 +805,17 @@ pub fn wrap_text_with_ansi(
 ///
 /// Pads with spaces when requested.
 #[napi]
-pub fn truncate_to_width<'a>(
-	env: &napi::Env,
-	text: JsString<'a>,
+pub fn truncate_to_width(
+	text: JsString<'_>,
 	max_width: u32,
 	ellipsis_kind: Option<Ellipsis>,
 	pad: Option<bool>,
-	tab_width: Option<u32>,
-) -> Result<Either<JsString<'a>, Utf16String>> {
+	tab_width: u32,
+) -> Result<Either<JsString<'_>, Utf16String>> {
 	let max_width = max_width as usize;
 	let ellipsis_kind = ellipsis_kind.unwrap_or(Ellipsis::Unicode);
 	let pad = pad.unwrap_or(false);
-	let tab_width = operation_tab_width(env, tab_width);
+	let tab_width = clamp_tab_width_for_ops(tab_width);
 
 	// Keep original handle so we can return it without allocating.
 	let original = text;
@@ -1117,12 +1070,11 @@ fn slice_with_width_impl(
 /// width.
 #[napi]
 pub fn slice_with_width(
-	env: &napi::Env,
 	line: JsString,
 	start_col: u32,
 	length: u32,
 	strict: Option<bool>,
-	tab_width: Option<u32>,
+	tab_width: u32,
 ) -> Result<SliceResult> {
 	let line_u16 = line.into_utf16()?;
 	let line = line_u16.as_slice();
@@ -1132,7 +1084,7 @@ pub fn slice_with_width(
 		return Ok(SliceResult { text: build_utf16_string(vec![]), width: 0 });
 	}
 
-	let tab_width = operation_tab_width(env, tab_width);
+	let tab_width = clamp_tab_width_for_ops(tab_width);
 	let (out, w) =
 		slice_with_width_impl(line, start_col as usize, length as usize, strict, tab_width);
 
@@ -1283,18 +1235,17 @@ fn extract_segments_impl(
 /// truncation.
 #[napi]
 pub fn extract_segments(
-	env: &napi::Env,
 	line: JsString,
 	before_end: u32,
 	after_start: u32,
 	after_len: u32,
 	strict_after: bool,
-	tab_width: Option<u32>,
+	tab_width: u32,
 ) -> Result<ExtractSegmentsResult> {
 	let line_u16 = line.into_utf16()?;
 	let line = line_u16.as_slice();
 
-	let tab_width = operation_tab_width(env, tab_width);
+	let tab_width = clamp_tab_width_for_ops(tab_width);
 	let (before, bw, after, aw) = extract_segments_impl(
 		line,
 		before_end as usize,
@@ -1403,9 +1354,9 @@ pub fn sanitize_text(text: JsString<'_>) -> Result<Either<JsString<'_>, Utf16Str
 ///
 /// Tabs count as a fixed-width cell.
 #[napi]
-pub fn visible_width(env: &napi::Env, text: JsString, tab_width: Option<u32>) -> Result<u32> {
+pub fn visible_width(text: JsString, tab_width: u32) -> Result<u32> {
 	let text_u16 = text.into_utf16()?;
-	let tab_width = operation_tab_width(env, tab_width);
+	let tab_width = clamp_tab_width_for_ops(tab_width);
 	Ok(crate::utils::clamp_u32(visible_width_u16(text_u16.as_slice(), tab_width) as u64))
 }
 

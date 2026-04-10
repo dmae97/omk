@@ -124,8 +124,6 @@ memmap2 = "0.9"
 xxhash-rust = { version = "0.8", features = ["xxh64"] }
 regex = "1"
 similar = "3.0.0"
-path-clean = "1"
-pathdiff = "0.2"
 serde = "1.0"
 serde_json = { version = "1.0", features = ["preserve_order"] }
 

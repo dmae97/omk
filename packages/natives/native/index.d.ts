@@ -598,7 +598,7 @@ export declare function executeShell(options: ShellExecuteOptions, onChunk?: ((e
  * Preserves ANSI state so the `after` segment renders correctly after
  * truncation.
  */
-export declare function extractSegments(line: string, beforeEnd: number, afterStart: number, afterLen: number, strictAfter: boolean, tabWidth?: number | undefined | null): ExtractSegmentsResult
+export declare function extractSegments(line: string, beforeEnd: number, afterStart: number, afterLen: number, strictAfter: boolean, tabWidth: number): ExtractSegmentsResult
 
 /** Before/after UTF-16 segments around an overlay region, with measured widths. */
 export interface ExtractSegmentsResult {
@@ -682,12 +682,6 @@ export interface FuzzyFindResult {
   /** Total number of matches found (may exceed `matches.len()`). */
   totalMatches: number
 }
-
-/** Get the default tab width for the process. */
-export declare function getDefaultTabWidth(): number
-
-/** Get the indentation for a file. */
-export declare function getIndentation(file?: string | undefined | null, projectDir?: string | undefined | null): number
 
 /** Get list of supported languages. */
 export declare function getSupportedLanguages(): Array<string>
@@ -1266,9 +1260,6 @@ export interface SearchResult {
   error?: string
 }
 
-/** Set the default tab width for the process. */
-export declare function setDefaultTabWidth(width: number): void
-
 /** Options for executing a shell command via brush-core. */
 export interface ShellExecuteOptions {
   /** Command string to execute in the shell. */
@@ -1346,7 +1337,7 @@ export interface SliceResult {
  * Counts terminal cells, skipping ANSI escapes, and optionally enforces strict
  * width.
  */
-export declare function sliceWithWidth(line: string, startCol: number, length: number, strict?: boolean | undefined | null, tabWidth?: number | undefined | null): SliceResult
+export declare function sliceWithWidth(line: string, startCol: number, length: number, strict: boolean | undefined | null, tabWidth: number): SliceResult
 
 /**
  * Check if a language is supported for highlighting.
@@ -1360,7 +1351,7 @@ export declare function supportsLanguage(lang: string): boolean
  *
  * Pads with spaces when requested.
  */
-export declare function truncateToWidth(text: string, maxWidth: number, ellipsisKind?: Ellipsis | undefined | null, pad?: boolean | undefined | null, tabWidth?: number | undefined | null): string
+export declare function truncateToWidth(text: string, maxWidth: number, ellipsisKind: Ellipsis | undefined | null, pad: boolean | undefined | null, tabWidth: number): string
 
 /**
  * Inclusive 1-based line range within a source file (used for scoped chunk
@@ -1378,7 +1369,7 @@ export interface VisibleLineRange {
  *
  * Tabs count as a fixed-width cell.
  */
-export declare function visibleWidth(text: string, tabWidth?: number | undefined | null): number
+export declare function visibleWidth(text: string, tabWidth: number): number
 
 /** Profiling results returned to JavaScript. */
 export interface WorkProfile {
@@ -1400,4 +1391,4 @@ export interface WorkProfile {
  *
  * Returns UTF-16 lines with active SGR codes carried across line boundaries.
  */
-export declare function wrapTextWithAnsi(text: string, width: number, tabWidth?: number | undefined | null): Array<string>
+export declare function wrapTextWithAnsi(text: string, width: number, tabWidth: number): Array<string>

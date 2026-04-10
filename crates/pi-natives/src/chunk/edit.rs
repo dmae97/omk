@@ -372,10 +372,15 @@ fn apply_replace(
 				.to_owned(),
 		);
 	}
-	let (region_start, region_end) = match target.region {
+
+	let (mut region_start, region_end) = match target.region {
 		None => (anchor.start_byte as usize, anchor.end_byte as usize),
 		Some(r) => chunk_region_range(&anchor, r),
 	};
+	if matches!(target.region, Some(ChunkRegion::Head)) {
+		region_start =
+			line_start_offset(&line_offsets(&state.source), anchor.start_line, &state.source);
+	}
 
 	// Scoped find/replace: locate a literal substring inside the chunk and replace
 	// it.
@@ -420,6 +425,7 @@ fn apply_replace(
 
 	let target_indent =
 		target_indent_for_region(state, &anchor, target.region, file_indent_char, file_indent_step);
+
 	let content = operation.content.as_deref().unwrap_or_default();
 	let mut replacement = normalize_inserted_content(
 		content,
@@ -1932,13 +1938,13 @@ mod tests {
 		let state = state_for(source, "typescript");
 		let chunk = state
 			.inner()
-			.chunk("class_Foo.fn_increment")
-			.expect("fn_increment");
+			.chunk("class_Foo.fn_increm")
+			.expect("fn_increm");
 
 		let result = apply_edits(&state, &EditParams {
 			operations:       vec![EditOperation {
 				op:      ChunkEditOp::Replace,
-				sel:     Some("class_Foo.fn_increment".to_owned()),
+				sel:     Some("class_Foo.fn_increm".to_owned()),
 				crc:     Some(chunk.checksum.clone()),
 				region:  Some(ChunkRegion::Body),
 				content: Some("this.value += 2;\n".to_owned()),
@@ -2045,13 +2051,13 @@ mod tests {
 		let state = state_for(source, "typescript");
 		let chunk = state
 			.inner()
-			.chunk("fn_fuzzyMatch")
-			.expect("fn_fuzzyMatch should exist");
+			.chunk("fn_fuzzyM")
+			.expect("fn_fuzzyM should exist");
 
 		let result = apply_edits(&state, &EditParams {
 			operations:       vec![EditOperation {
 				op:      ChunkEditOp::Replace,
-				sel:     Some("fuzzyMatch".to_owned()),
+				sel:     Some("fuzzyM".to_owned()),
 				crc:     Some(chunk.checksum.clone()),
 				region:  None,
 				content: Some(
@@ -2070,7 +2076,7 @@ mod tests {
 
 		assert!(result.diff_after.contains("console.log(\"resolved\");"), "{}", result.diff_after);
 		assert!(result.warnings.iter().any(|warning| {
-			warning.contains("Auto-resolved chunk selector \"fuzzyMatch\" to \"fn_fuzzyMatch#")
+			warning.contains("Auto-resolved chunk selector \"fuzzyM\" to \"fn_fuzzyM#")
 		}));
 	}
 
@@ -2178,13 +2184,13 @@ mod tests {
 		let state = state_for(source, "markdown");
 		let chunk = state
 			.inner()
-			.chunk("section_Top.section_Building")
-			.expect("section_Building");
+			.chunk("sect_Top.sect_Buildi")
+			.expect("sect_Buildi");
 
 		let result = apply_edits(&state, &EditParams {
 			operations:       vec![EditOperation {
 				op:      ChunkEditOp::Replace,
-				sel:     Some("section_Top.section_Building".to_owned()),
+				sel:     Some("sect_Top.sect_Buildi".to_owned()),
 				crc:     Some(chunk.checksum.clone()),
 				region:  None,
 				content: Some("## Building\n\nNew content.\n".to_owned()),
@@ -2644,7 +2650,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "Cargo.toml", EditOperation {
 			op:      ChunkEditOp::After,
-			sel:     Some("table_dependencies.key_parking_lot_workspace".to_owned()),
+			sel:     Some("table_depend.key_parkin".to_owned()),
 			crc:     None,
 			region:  None,
 			content: Some("rayon.workspace = true\n".to_owned()),
@@ -3013,7 +3019,7 @@ mod tests {
 		let state = state_for(source, "markdown");
 		let section = state
 			.inner()
-			.chunk("section_Title.section_Alpha")
+			.chunk("sect_Title.sect_Alpha")
 			.expect("alpha section");
 
 		let result = apply_single_edit(&state, "test.md", EditOperation {
@@ -3040,7 +3046,7 @@ mod tests {
 		let state = state_for(source, "markdown");
 		let section = state
 			.inner()
-			.chunk("section_Title.section_Alpha")
+			.chunk("sect_Title.sect_Alpha")
 			.expect("alpha section");
 
 		let result = apply_single_edit(&state, "test.md", EditOperation {
@@ -3071,14 +3077,14 @@ mod tests {
 		let trait_chunk = tree
 			.chunks
 			.iter()
-			.find(|c| c.path == "trait_Handler")
-			.expect("trait_Handler should exist");
+			.find(|c| c.path == "trait_Handle")
+			.expect("trait_Handle should exist");
 
 		// Trait members should be listed as children even when they're
 		// single-line signatures (not collapsed as trivial).
 		assert!(
 			!trait_chunk.children.is_empty(),
-			"trait_Handler should have children, got leaf. Chunks: {:?}",
+			"trait_Handle should have children, got leaf. Chunks: {:?}",
 			tree.chunks.iter().map(|c| &c.path).collect::<Vec<_>>()
 		);
 	}
@@ -3115,12 +3121,12 @@ mod tests {
 		let state = state_for(source, "rust");
 		let chunk = state
 			.inner()
-			.chunk("enum_LogLevel.variant_Info")
-			.expect("variant_Info should exist");
+			.chunk("enum_LogLev.vrnt_Info")
+			.expect("vrnt_Info should exist");
 		assert!(chunk.prologue_end_byte.is_none(), "leaf variant should not have prologue_end_byte");
 
 		for region_name in ["body", "head", "tail"] {
-			let sel = format!("enum_LogLevel.variant_Info#{}@{}", chunk.checksum, region_name);
+			let sel = format!("enum_LogLev.vrnt_Info#{}@{}", chunk.checksum, region_name);
 			let result = apply_edits(&state, &EditParams {
 				operations:       vec![EditOperation {
 					op:      ChunkEditOp::Replace,
@@ -3431,8 +3437,8 @@ mod tests {
 		let state = state_for(source, "rust");
 		let chunk = state
 			.inner()
-			.chunk("mod_tests.fn_my_test")
-			.expect("mod_tests.fn_my_test should exist");
+			.chunk("mod_tests.fn_my_tes")
+			.expect("mod_tests.fn_my_tes should exist");
 
 		// Verify the chunk absorbs the #[test] attribute as leading trivia.
 		assert!(
@@ -3445,7 +3451,7 @@ mod tests {
 		// Replace the function WITHOUT including #[test] in the content.
 		let result = apply_single_edit(&state, "test.rs", EditOperation {
 			op:      ChunkEditOp::Replace,
-			sel:     Some("mod_tests.fn_my_test".to_owned()),
+			sel:     Some("mod_tests.fn_my_tes".to_owned()),
 			crc:     Some(chunk.checksum.clone()),
 			region:  None,
 			content: Some("fn my_test() {\n\tnew();\n}".to_owned()),
@@ -3490,12 +3496,12 @@ mod tests {
 		let state = state_for(source, "rust");
 		let chunk = state
 			.inner()
-			.chunk("mod_tests.fn_my_test")
-			.expect("fn_my_test should exist");
+			.chunk("mod_tests.fn_my_tes")
+			.expect("fn_my_tes should exist");
 
 		let result = apply_single_edit(&state, "test.rs", EditOperation {
 			op:      ChunkEditOp::Replace,
-			sel:     Some("mod_tests.fn_my_test".to_owned()),
+			sel:     Some("mod_tests.fn_my_tes".to_owned()),
 			crc:     Some(chunk.checksum.clone()),
 			region:  Some(ChunkRegion::Decl),
 			content: Some("fn my_test() {\n\tnew();\n}".to_owned()),
@@ -3528,19 +3534,19 @@ mod tests {
 		let state = state_for(source, "rust");
 		let chunk_a = state
 			.inner()
-			.chunk("mod_tests.fn_test_alpha")
-			.expect("fn_test_alpha should exist");
+			.chunk("mod_tests.fn_test_a")
+			.expect("fn_test_a should exist");
 		let chunk_b = state
 			.inner()
-			.chunk("mod_tests.fn_test_beta")
-			.expect("fn_test_beta should exist");
+			.chunk("mod_tests.fn_test_b")
+			.expect("fn_test_b should exist");
 
 		// Batch replace: add #[test] to both functions.
 		let result = apply_edits(&state, &EditParams {
 			operations:       vec![
 				EditOperation {
 					op:      ChunkEditOp::Replace,
-					sel:     Some("mod_tests.fn_test_alpha".to_owned()),
+					sel:     Some("mod_tests.fn_test_a".to_owned()),
 					crc:     Some(chunk_a.checksum.clone()),
 					region:  None,
 					content: Some("#[test]\nfn test_alpha() {\n\tnew_alpha();\n}".to_owned()),
@@ -3548,7 +3554,7 @@ mod tests {
 				},
 				EditOperation {
 					op:      ChunkEditOp::Replace,
-					sel:     Some("mod_tests.fn_test_beta".to_owned()),
+					sel:     Some("mod_tests.fn_test_b".to_owned()),
 					crc:     Some(chunk_b.checksum.clone()),
 					region:  None,
 					content: Some("#[test]\nfn test_beta() {\n\tnew_beta();\n}".to_owned()),
@@ -3600,20 +3606,20 @@ mod tests {
 		// Verify the functions have children (sub-chunks).
 		let chunk_a = state
 			.inner()
-			.chunk("mod_tests.fn_test_alpha")
-			.expect("fn_test_alpha should exist");
+			.chunk("mod_tests.fn_test_a")
+			.expect("fn_test_a should exist");
 		assert!(
 			!chunk_a.children.is_empty(),
-			"fn_test_alpha should have children (sub-chunks), got: {:?}",
+			"fn_test_a should have children (sub-chunks), got: {:?}",
 			chunk_a.children
 		);
 		let chunk_b = state
 			.inner()
-			.chunk("mod_tests.fn_test_beta")
-			.expect("fn_test_beta should exist");
+			.chunk("mod_tests.fn_test_b")
+			.expect("fn_test_b should exist");
 		assert!(
 			!chunk_b.children.is_empty(),
-			"fn_test_beta should have children (sub-chunks), got: {:?}",
+			"fn_test_b should have children (sub-chunks), got: {:?}",
 			chunk_b.children
 		);
 
@@ -3622,7 +3628,7 @@ mod tests {
 			operations:       vec![
 				EditOperation {
 					op:      ChunkEditOp::Replace,
-					sel:     Some("mod_tests.fn_test_alpha".to_owned()),
+					sel:     Some("mod_tests.fn_test_a".to_owned()),
 					crc:     Some(chunk_a.checksum.clone()),
 					region:  None,
 					content: Some(
@@ -3637,7 +3643,7 @@ mod tests {
 				},
 				EditOperation {
 					op:      ChunkEditOp::Replace,
-					sel:     Some("mod_tests.fn_test_beta".to_owned()),
+					sel:     Some("mod_tests.fn_test_b".to_owned()),
 					crc:     Some(chunk_b.checksum.clone()),
 					region:  None,
 					content: Some(
@@ -3852,5 +3858,101 @@ function foo() {\n<<<<<<< HEAD\n\treturn bar();\n=======\n\treturn baz();\n>>>>>
 		assert!(!result.state.has_conflicts());
 		assert!(result.diff_after.contains("return bar(1);"));
 		assert!(!result.diff_after.contains("<<<<<<<"));
+	}
+
+	#[test]
+	fn exported_decorated_class_is_addressable() {
+		let source = concat!(
+			"function sealed(target: any) {}\n",
+			"\n",
+			"@sealed\n",
+			"export class Server {\n",
+			"    start(): void {\n",
+			"        console.log(\"starting\");\n",
+			"    }\n",
+			"    stop(): void {\n",
+			"        console.log(\"stopping\");\n",
+			"    }\n",
+			"}\n",
+			"\n",
+			"function formatLog(msg: string): string {\n",
+			"    return `[LOG] ${msg}`;\n",
+			"}\n",
+		);
+		let state = state_for(source, "typescript");
+		let tree = state.inner().tree();
+
+		let class_chunk = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "class_Server")
+			.unwrap_or_else(|| {
+				panic!(
+					"class_Server should be in the chunk tree. Available chunks: {:?}",
+					tree.chunks.iter().map(|c| &c.path).collect::<Vec<_>>()
+				)
+			});
+		assert!(!class_chunk.children.is_empty(), "class_Server should have child methods");
+
+		let start = state.inner().chunk("class_Server.fn_start");
+		assert!(start.is_some(), "class_Server.fn_start should exist");
+		let stop = state.inner().chunk("class_Server.fn_stop");
+		assert!(stop.is_some(), "class_Server.fn_stop should exist");
+	}
+
+	#[test]
+	fn head_replace_on_nested_rust_fn_uniform_indent() {
+		let source = concat!(
+			"pub struct Server {\n",
+			"\thost: String,\n",
+			"\tport: u16,\n",
+			"}\n",
+			"\n",
+			"impl Server {\n",
+			"\tpub fn address(&self) -> String {\n",
+			"\t\tformat!(\"{}:{}\", self.host, self.port)\n",
+			"\t}\n",
+			"}\n",
+		);
+		let state = state_for(source, "rust");
+		let chunk = state
+			.inner()
+			.chunk("impl_Server.fn_addres")
+			.expect("impl_Server.fn_addres should exist");
+
+		let result = apply_single_edit(&state, "test.rs", EditOperation {
+			op:      ChunkEditOp::Replace,
+			sel:     Some(format!("impl_Server.fn_addres#{}@head", chunk.checksum)),
+			crc:     None,
+			region:  None,
+			content: Some(
+				"/// Returns the server address.\n#[must_use]\npub fn address(&self) -> String {\n"
+					.to_owned(),
+			),
+			find:    None,
+		});
+
+		assert!(
+			result
+				.diff_after
+				.contains("\t/// Returns the server address."),
+			"doc comment should be at 1-tab indent, got:\n{}",
+			result.diff_after
+		);
+		assert!(
+			result.diff_after.contains("\t#[must_use]"),
+			"attribute should be at 1-tab indent, got:\n{}",
+			result.diff_after
+		);
+		assert!(
+			result.diff_after.contains("\tpub fn address"),
+			"signature should be at 1-tab indent, got:\n{}",
+			result.diff_after
+		);
+		assert!(
+			!result.diff_after.contains("\t\t///"),
+			"doc comment must NOT be double-indented, got:\n{}",
+			result.diff_after
+		);
 	}
 }

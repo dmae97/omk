@@ -100,9 +100,9 @@ export function isBunTestRuntime(): boolean {
 	return Bun.env.BUN_ENV === "test" || Bun.env.NODE_ENV === "test";
 }
 
-const TRUTHY: Dict<boolean> = { "1": true, TRUE: true, YES: true, ON: true };
+const TRUTHY: Dict<boolean> = { "1": true, Y: true, TRUE: true, YES: true, ON: true };
 export function $flag(name: string, def: boolean = false): boolean {
 	const value = $env[name];
 	if (!value) return def;
-	return !!TRUTHY[value];
+	return TRUTHY[value] === true;
 }

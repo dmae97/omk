@@ -3,8 +3,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { _resetSettingsForTest, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
-import { getDefaultTabWidth, getIndentation, setDefaultTabWidth } from "@oh-my-pi/pi-natives";
-import { Snowflake } from "@oh-my-pi/pi-utils";
+import { getDefaultTabWidth, getIndentation, Snowflake, setDefaultTabWidth } from "@oh-my-pi/pi-utils";
 
 describe("indentation resolver", () => {
 	let tempDir = "";

@@ -21,6 +21,7 @@ export * as ptree from "./ptree";
 export { AbortError, ChildProcess, Exception, NonZeroExitError } from "./ptree";
 export * from "./snowflake";
 export * from "./stream";
+export * from "./tab-spacing";
 export * from "./temp";
 export * from "./type-guards";
 export * from "./which";

@@ -84,10 +84,6 @@ pub fn is_generic_trivia(node: Node<'_>) -> bool {
 	node.is_extra() || kind_looks_like_comment(node.kind())
 }
 
-pub fn is_generic_trivia_name(kind: &str) -> bool {
-	kind_looks_like_comment(kind)
-}
-
 pub fn is_generic_absorbable_attr(kind: &str) -> bool {
 	matches!(kind, "attribute_item" | "inner_attribute_item")
 }

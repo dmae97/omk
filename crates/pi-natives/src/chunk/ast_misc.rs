@@ -9,7 +9,7 @@ use tree_sitter::Node;
 use super::{
 	classify::{
 		ClassifierTables, LangClassifier, NamingMode, RecurseMode, RuleStyle, StructuralOverrides,
-		semantic_rule,
+		WrapperSignature, WrapperTransform, promote_wrapper_candidate, semantic_rule,
 	},
 	common::*,
 	defaults::classify_var_decl,
@@ -1097,21 +1097,13 @@ fn classify_class_override<'t>(node: Node<'t>, source: &str) -> Option<RawChunkC
 			}
 		},
 
-		// Custom child-node logic (recurse_into on inner function_definition)
-		"decorated_definition" => {
-			let inner = named_children(node)
-				.into_iter()
-				.find(|c| c.kind() == "function_definition");
-			if let Some(child) = inner {
-				let name = extract_identifier(child, source).unwrap_or_else(|| "anonymous".to_string());
-				make_kind_chunk(node, ChunkKind::Function, Some(name), source, {
-					let context = ChunkContext::FunctionBody;
-					recurse_into(child, context, &["body"], &["block"])
-				})
-			} else {
-				return None;
-			}
-		},
+		"decorated_definition" => promote_wrapper_candidate(
+			&MiscClassifier,
+			ChunkContext::ClassBody,
+			node,
+			source,
+			WrapperTransform { signature: WrapperSignature::Wrapper, ..WrapperTransform::default() },
+		)?,
 
 		_ => return None,
 	})

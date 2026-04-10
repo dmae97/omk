@@ -338,7 +338,7 @@ describe("pi-natives", () => {
 
 	describe("text tab width", () => {
 		it("uses default tab width and supports explicit overrides", () => {
-			expect(visibleWidth("a\tb")).toBe(5);
+			expect(visibleWidth("a\tb", 3)).toBe(5);
 			expect(visibleWidth("a\tb", 4)).toBe(6);
 			expect(visibleWidth("a\tb", 2)).toBe(4);
 		});
