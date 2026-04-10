@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [14.0.4] - 2026-04-10
+
 ### Added
 
 - Added `normalizeIndent` option to `EditParams` to control indentation normalization for response rendering and inserted content
