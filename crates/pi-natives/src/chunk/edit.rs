@@ -346,6 +346,7 @@ fn resolve_edit_target(
 	if chunk.prologue_end_byte.is_none()
 		|| chunk.epilogue_start_byte.is_none()
 		|| python_leaf_control_flow
+		|| (chunk.kind == ChunkKind::Section && matches!(operation.op, ChunkEditOp::Replace))
 	{
 		region = None;
 	}
@@ -456,21 +457,20 @@ fn apply_replace(
 		requested_region,
 		target.region,
 		&replacement,
-	)
-		&& let Some(preserved_replacement) = build_head_preserved_full_replacement(
-			state,
-			&anchor,
-			content,
-			file_indent_step,
-			file_indent_char,
-			normalize_indent,
-		) {
-			replacement = preserved_replacement;
-			warnings.push(format!(
-				"Auto-preserved {} head while applying fallback body edit.",
-				chunk_path_opt(&anchor)
-			));
-		}
+	) && let Some(preserved_replacement) = build_head_preserved_full_replacement(
+		state,
+		&anchor,
+		content,
+		file_indent_step,
+		file_indent_char,
+		normalize_indent,
+	) {
+		replacement = preserved_replacement;
+		warnings.push(format!(
+			"Auto-preserved {} head while applying fallback body edit.",
+			chunk_path_opt(&anchor)
+		));
+	}
 
 	let (mut effective_region_start, effective_region_end) = match effective_region {
 		None => (anchor.start_byte as usize, anchor.end_byte as usize),

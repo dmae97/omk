@@ -481,7 +481,7 @@ export function resolveModelRoleValue(
 	}
 
 	const lastColonIndex = normalized.lastIndexOf(":");
-	const thinkingSelector =
+	const _thinkingSelector =
 		lastColonIndex > PREFIX_MODEL_ROLE.length ? parseThinkingLevel(normalized.slice(lastColonIndex + 1)) : undefined;
 	const effectivePatterns = resolveConfiguredRolePattern(normalized, options?.settings);
 	if (!effectivePatterns || effectivePatterns.length === 0) {

@@ -555,6 +555,35 @@ describe("chunk mode tools", () => {
 		expect(updatedSource).not.toContain('console.log("boot")');
 	});
 
+	it("reuses a stale child selector when the checksum still matches under the same parent", async () => {
+		const filePath = path.join(tmpDir, "stale-selector.ts");
+		const originalSource = ["class A {", "  run(): void { work(); }", "}", ""].join("\n");
+		const updatedSource = ["class A {", "  run(): void { other(); }", "  run(): void { work(); }", "}", ""].join(
+			"\n",
+		);
+		await Bun.write(filePath, updatedSource);
+		const session = createSession(tmpDir);
+		const editTool = new EditTool(session);
+		const staleChecksum = getChunkChecksum(originalSource, "typescript", "class_A.fn_run");
+
+		await editTool.execute("chunk-edit-stale-child-selector", {
+			path: filePath,
+			edits: [
+				{
+					sel: `class_A.fn_run#${staleChecksum}`,
+					op: "replace",
+					content: "run(): void { patched(); }\n",
+				},
+			],
+		} as never);
+
+		const finalSource = await Bun.file(filePath).text();
+		expect(finalSource).toContain("other();");
+		expect(finalSource).toContain("patched();");
+		expect(finalSource.match(/run\(\): void/g)?.length).toBe(2);
+		expect(finalSource).not.toContain("work();");
+	});
+
 	it("preserves sibling headings when replacing a whole markdown section", async () => {
 		const filePath = path.join(tmpDir, "CONTRIBUTING.md");
 		const source = [

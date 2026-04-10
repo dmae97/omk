@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `designer` model role for UI/UX design tasks with Gemini 3.1 Pro as default model
@@ -12,6 +11,8 @@
 
 ### Changed
 
+- Clarified that chunk names are truncated and must be copied from `read` or `?` output rather than constructed from source identifiers
+- Enhanced guidance for editing fenced code blocks in markdown to preserve exact whitespace using `raw` reads, as the tool normalizes tabs to spaces which can damage indentation-sensitive content
 - Updated designer agent to use `pi/designer` role alias instead of explicit model list
 - Refactored model role resolution to support multiple fallback patterns per role, improving model availability handling
 - Replaced regex-based HTML-to-markdown conversion with Turndown library and GFM plugin for more accurate formatting of complex HTML structures
@@ -30,6 +31,7 @@
 
 ### Fixed
 
+- Fixed stale child selector reuse to correctly match chunks by checksum when multiple sibling chunks with the same name exist under the same parent
 - Fixed stale diagnostics being reused after unrelated file publishes by clearing cached diagnostics before refreshing file state
 - Fixed Codex search to use streamed answer text when final answer is an image placeholder or empty
 

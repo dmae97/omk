@@ -22,4 +22,5 @@ Chunk trees: JS, TS, TSX, Python, Rust, Go. Others use blank-line fallback.
 
 <critical>
 - **MUST** `read` before editing — never invent chunk names or CRCs.
+    - Chunk names are truncated (e.g., `handleRequest` becomes `fn_handleRequ`). Always copy chunk paths from `read` or `?` output — never construct them from source identifiers.
 </critical>

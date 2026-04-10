@@ -154,8 +154,134 @@ pub fn resolve_chunk_with_crc<'a>(
 		return Ok(ResolvedChunk { chunk, crc: Some(cleaned_crc) });
 	}
 
+	if let (Some(cleaned_selector), Some(cleaned_crc)) =
+		(cleaned_selector.as_deref(), cleaned_crc.as_deref())
+		&& state.chunk(cleaned_selector).is_none()
+		&& let Some(chunk) =
+			resolve_same_parent_crc_fallback(state, cleaned_selector, cleaned_crc, warnings)?
+	{
+		return Ok(ResolvedChunk { chunk, crc: Some(cleaned_crc.to_owned()) });
+	}
+
 	let chunk = resolve_chunk_selector_impl(state, cleaned_selector.as_deref(), None, warnings)?;
 	Ok(ResolvedChunk { chunk, crc: cleaned_crc })
+}
+
+fn resolve_same_parent_crc_fallback<'a>(
+	state: &'a ChunkStateInner,
+	selector: &str,
+	crc: &str,
+	warnings: &mut Vec<String>,
+) -> Result<Option<&'a ChunkNode>, String> {
+	let (parent_path, requested_leaf) = split_parent_selector(selector);
+	let child_paths = match parent_path {
+		Some(parent_path) => {
+			let Some(parent_chunk) = state.chunk(parent_path) else {
+				return Ok(None);
+			};
+			parent_chunk.children.as_slice()
+		},
+		None => state.tree().root_children.as_slice(),
+	};
+	let matches = collect_unique_matches(
+		child_paths
+			.iter()
+			.filter_map(|child_path| state.chunk(child_path))
+			.filter(|chunk| chunk.checksum == crc),
+	);
+	if matches.is_empty() {
+		return Ok(None);
+	}
+
+	let resolved = if matches.len() == 1 {
+		matches[0]
+	} else if let Some(candidate) = choose_named_crc_match(matches.as_slice(), requested_leaf) {
+		candidate
+	} else {
+		let scope = parent_path.unwrap_or("<root>");
+		return Err(format!(
+			"Ambiguous stale selector \"{selector}#{crc}\" under \"{scope}\" matches {} siblings: \
+			 {}. Re-read the file to get the current selector.",
+			matches.len(),
+			matches
+				.iter()
+				.map(|chunk| format_node_ref(chunk))
+				.collect::<Vec<_>>()
+				.join(", "),
+		));
+	};
+
+	warnings.push(format!(
+		"Auto-resolved stale selector \"{selector}#{crc}\" to sibling \"{}\". Use the fresh \
+		 selector from read output.",
+		format_node_ref(resolved)
+	));
+	Ok(Some(resolved))
+}
+
+fn split_parent_selector(selector: &str) -> (Option<&str>, &str) {
+	match selector.rsplit_once('.') {
+		Some((parent_path, leaf)) if !parent_path.is_empty() => (Some(parent_path), leaf),
+		_ => (None, selector),
+	}
+}
+
+fn choose_named_crc_match<'a>(
+	matches: &[&'a ChunkNode],
+	requested_leaf: &str,
+) -> Option<&'a ChunkNode> {
+	let mut best_match = None;
+	let mut best_score = 0;
+	let mut tied = false;
+
+	for candidate in matches {
+		let candidate_leaf = candidate
+			.path
+			.rsplit('.')
+			.next()
+			.unwrap_or(candidate.path.as_str());
+		let score = leaf_name_similarity(requested_leaf, candidate_leaf);
+		if score > best_score {
+			best_match = Some(*candidate);
+			best_score = score;
+			tied = false;
+		} else if score > 0 && score == best_score {
+			tied = true;
+		}
+	}
+
+	if tied || best_score == 0 {
+		None
+	} else {
+		best_match
+	}
+}
+
+fn leaf_name_similarity(requested_leaf: &str, candidate_leaf: &str) -> usize {
+	if candidate_leaf == requested_leaf {
+		return 4;
+	}
+	if normalize_leaf_name(candidate_leaf) == normalize_leaf_name(requested_leaf) {
+		return 3;
+	}
+	if candidate_leaf.contains(requested_leaf) || requested_leaf.contains(candidate_leaf) {
+		return 2;
+	}
+	if chunk_path_similarity(requested_leaf, candidate_leaf) > 0.5 {
+		return 1;
+	}
+	0
+}
+
+fn normalize_leaf_name(name: &str) -> &str {
+	match name.rsplit_once('_') {
+		Some((prefix, suffix))
+			if !prefix.is_empty() && suffix.chars().all(|ch| ch.is_ascii_digit()) =>
+		{
+			prefix
+		},
+		_ => name,
+	}
 }
 
 pub fn resolve_chunk_by_checksum<'a>(
@@ -796,5 +922,88 @@ mod tests {
 				.unwrap_or_else(|err| panic!("selector {selector} should resolve: {err}"));
 			assert_eq!(resolved.chunk.path, "fn_handleTerraform.try.if_2");
 		}
+	}
+
+	#[test]
+	fn resolves_stale_selector_by_same_parent_checksum() {
+		let state = ChunkStateInner::new(String::new(), "typescript".to_owned(), ChunkTree {
+			language:      "typescript".to_owned(),
+			checksum:      "ROOT".to_owned(),
+			line_count:    1,
+			parse_errors:  0,
+			fallback:      false,
+			root_path:     String::new(),
+			root_children: vec!["fn_run".to_owned()],
+			chunks:        vec![
+				chunk("", "ROOT", None, vec!["fn_run"]),
+				chunk("fn_run", "RUNN", Some(""), vec!["fn_run.var_effect_1", "fn_run.var_effect_2"]),
+				chunk("fn_run.var_effect_1", "AAAA", Some("fn_run"), vec![]),
+				chunk("fn_run.var_effect_2", "BBBB", Some("fn_run"), vec![]),
+			],
+		});
+		let mut warnings = Vec::new();
+		let resolved =
+			resolve_chunk_with_crc(&state, Some("fn_run.var_effect"), Some("BBBB"), &mut warnings)
+				.expect("stale selector should resolve to same-parent checksum match");
+		assert_eq!(resolved.chunk.path, "fn_run.var_effect_2");
+		assert!(
+			warnings
+				.iter()
+				.any(|warning| warning.contains("Auto-resolved stale selector"))
+		);
+	}
+
+	#[test]
+	fn stale_selector_prefers_best_leaf_name_when_crc_matches_multiple_siblings() {
+		let state = ChunkStateInner::new(String::new(), "typescript".to_owned(), ChunkTree {
+			language:      "typescript".to_owned(),
+			checksum:      "ROOT".to_owned(),
+			line_count:    1,
+			parse_errors:  0,
+			fallback:      false,
+			root_path:     String::new(),
+			root_children: vec!["fn_run".to_owned()],
+			chunks:        vec![
+				chunk("", "ROOT", None, vec!["fn_run"]),
+				chunk("fn_run", "RUNN", Some(""), vec!["fn_run.var_other", "fn_run.var_effect_1"]),
+				chunk("fn_run.var_other", "BBBB", Some("fn_run"), vec![]),
+				chunk("fn_run.var_effect_1", "BBBB", Some("fn_run"), vec![]),
+			],
+		});
+		let mut warnings = Vec::new();
+		let resolved =
+			resolve_chunk_with_crc(&state, Some("fn_run.var_effect"), Some("BBBB"), &mut warnings)
+				.expect("best name match should disambiguate same-parent checksum siblings");
+		assert_eq!(resolved.chunk.path, "fn_run.var_effect_1");
+	}
+
+	#[test]
+	fn stale_selector_fails_closed_when_same_parent_crc_matches_are_ambiguous() {
+		let state = ChunkStateInner::new(String::new(), "typescript".to_owned(), ChunkTree {
+			language:      "typescript".to_owned(),
+			checksum:      "ROOT".to_owned(),
+			line_count:    1,
+			parse_errors:  0,
+			fallback:      false,
+			root_path:     String::new(),
+			root_children: vec!["fn_run".to_owned()],
+			chunks:        vec![
+				chunk("", "ROOT", None, vec!["fn_run"]),
+				chunk("fn_run", "RUNN", Some(""), vec!["fn_run.var_effect_1", "fn_run.var_effect_2"]),
+				chunk("fn_run.var_effect_1", "BBBB", Some("fn_run"), vec![]),
+				chunk("fn_run.var_effect_2", "BBBB", Some("fn_run"), vec![]),
+			],
+		});
+		let mut warnings = Vec::new();
+		let err = match resolve_chunk_with_crc(
+			&state,
+			Some("fn_run.var_effect"),
+			Some("BBBB"),
+			&mut warnings,
+		) {
+			Ok(_) => panic!("ambiguous stale selector should fail closed"),
+			Err(err) => err,
+		};
+		assert!(err.contains("Ambiguous stale selector"), "{err}");
 	}
 }
