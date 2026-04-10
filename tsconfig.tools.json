@@ -1,9 +1,10 @@
 {
 	"extends": "./tsconfig.base.json",
-	"include": [
-		"scripts"
-	],
-	"exclude": [
-		"node_modules"
-	]
+	"compilerOptions": {
+		"composite": true,
+		"noEmit": true,
+		"emitDeclarationOnly": false
+	},
+	"include": ["scripts"],
+	"exclude": ["node_modules"]
 }

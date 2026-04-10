@@ -13,6 +13,7 @@ use super::{
 	},
 	defaults,
 	kind::ChunkKind,
+	schema,
 };
 use crate::chunk::types::ChunkNode;
 
@@ -240,6 +241,10 @@ pub fn first_wrapper_content_child<'tree>(
 	classifier: &dyn LangClassifier,
 	node: Node<'tree>,
 ) -> Option<Node<'tree>> {
+	if let Some(child) = schema_wrapper_child(node) {
+		return Some(child);
+	}
+
 	let overrides = structural_overrides(classifier);
 	named_children(node)
 		.into_iter()
@@ -340,6 +345,13 @@ fn promotable_wrapper_child<'tree>(
 	node: Node<'tree>,
 	source: &str,
 ) -> Option<(Node<'tree>, RawChunkCandidate<'tree>)> {
+	if let Some(child) = schema_wrapper_child(node) {
+		let candidate = classify_with_defaults(classifier, context, child, source);
+		if is_promotable_wrapper_candidate(child, &candidate) {
+			return Some((child, candidate));
+		}
+	}
+
 	let overrides = structural_overrides(classifier);
 	let mut promoted = named_children(node).into_iter().filter_map(|child| {
 		if is_wrapper_metadata_child(child, classifier, overrides) {
@@ -372,11 +384,6 @@ fn is_wrapper_metadata_child(
 		|| is_absorbable_attribute(kind)
 		|| overrides.is_absorbable_attr(kind)
 		|| classifier.is_absorbable_attr(kind)
-		|| matches!(kind, "annotation" | "annotations" | "decorator" | "modifier" | "modifiers")
-		|| kind.ends_with("_annotation")
-		|| kind.ends_with("_attribute")
-		|| kind.ends_with("_decorator")
-		|| kind.ends_with("_modifier")
 }
 
 fn is_promotable_wrapper_candidate(node: Node<'_>, candidate: &RawChunkCandidate<'_>) -> bool {
@@ -389,6 +396,16 @@ fn is_promotable_wrapper_candidate(node: Node<'_>, candidate: &RawChunkCandidate
 		|| candidate.kind.traits().container
 		|| node.kind().ends_with("_definition")
 		|| node.kind().ends_with("_declaration")
+}
+
+fn schema_wrapper_child(node: Node<'_>) -> Option<Node<'_>> {
+	let schema = schema::schema_for_current(node.kind())?;
+	for field in &schema.promotion_fields {
+		if let Some(child) = node.child_by_field_name(field) {
+			return Some(child);
+		}
+	}
+	None
 }
 
 /// Resolve a [`LangClassifier`] for the given language.

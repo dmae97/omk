@@ -11,6 +11,7 @@ struct GeneratedSchema {
 pub struct NodeTypeSchema {
 	pub identifier_fields:       Vec<String>,
 	pub body_fields:             Vec<String>,
+	pub promotion_fields:        Vec<String>,
 	pub container_child_kinds:   Vec<String>,
 	pub is_supertype:            bool,
 	pub has_structural_children: bool,
@@ -84,6 +85,7 @@ mod tests {
 			.expect("python function_definition schema should exist");
 		assert_eq!(schema.identifier_fields, vec!["name".to_string()]);
 		assert_eq!(schema.body_fields, vec!["body".to_string()]);
+		assert!(schema.promotion_fields.is_empty());
 		assert!(schema.is_structural());
 	}
 
@@ -100,6 +102,23 @@ mod tests {
 			"let_expression should surface binding_set children"
 		);
 		assert!(schema.has_structural_children);
+	}
+
+	#[test]
+	fn wrapper_schemas_preserve_promotable_definition_fields() {
+		let python = schema_for("python", "decorated_definition")
+			.expect("python decorated_definition schema should exist");
+		assert_eq!(python.promotion_fields, vec!["definition".to_string()]);
+
+		let typescript = schema_for("typescript", "export_statement")
+			.expect("typescript export_statement schema should exist");
+		assert!(
+			typescript
+				.promotion_fields
+				.iter()
+				.any(|field| field == "declaration"),
+			"export_statement should preserve declaration field for promotion"
+		);
 	}
 
 	#[test]

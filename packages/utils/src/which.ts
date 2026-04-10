@@ -12,6 +12,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
+type CacheKey = string | bigint | number;
+
 // Tools shipped by Xcode / Command Line Tools that callers actually look up.
 // Keeps the set small so darwinWhich can fast-reject non-Xcode commands without
 // touching the filesystem.  Only needs entries for binaries that live *exclusively*
@@ -146,7 +148,7 @@ function getMacosToolPaths(): Map<string, string> {
 }
 
 // Map: cache key -> resolved binary path or null (not found)
-const toolCache = new Map<string | bigint, string | null>();
+const toolCache = new Map<CacheKey, string | null>();
 
 /**
  * Cache policy for which lookups.
@@ -194,12 +196,12 @@ function darwinWhich(command: string, _options?: Bun.WhichOptions): string | nul
 export const whichFresh = os.platform() === "darwin" ? darwinWhich : Bun.which;
 
 // Derive stable cache key from command and lookup options
-function cacheKey(command: string, options?: Bun.WhichOptions): string | bigint {
+function cacheKey(command: string, options?: Bun.WhichOptions): CacheKey {
 	if (!options) return command;
 	if (!options.cwd && !options.PATH) return command;
-	let h = Bun.hash.xxHash64(command);
-	if (options.cwd) h = Bun.hash.xxHash64(options.cwd, h);
-	if (options.PATH) h = Bun.hash.xxHash64(options.PATH, h);
+	let h = Bun.hash(command);
+	if (options.cwd) h = Bun.hash(options.cwd, h);
+	if (options.PATH) h = Bun.hash(options.PATH, h);
 	return h;
 }
 
@@ -212,7 +214,7 @@ function cacheKey(command: string, options?: Bun.WhichOptions): string | bigint 
  */
 export function $which(command: string, options?: WhichOptions): string | null {
 	const cachePolicy = options?.cache ?? WhichCachePolicy.Cached;
-	let key: string | bigint | undefined;
+	let key: CacheKey | undefined;
 
 	if (cachePolicy !== WhichCachePolicy.Bypass) {
 		key = cacheKey(command, options);

@@ -22,6 +22,7 @@ const IDENTIFIER_FIELD_PRIORITY: &[&str] = &[
 ];
 
 const BODY_FIELD_PRIORITY: &[&str] = &["body", "value", "declaration_list", "block", "members"];
+const PROMOTION_FIELD_PRIORITY: &[&str] = &["definition", "declaration", "item", "member"];
 
 #[derive(Clone, Copy)]
 struct GrammarSpec {
@@ -40,7 +41,9 @@ struct RawTypeRef {
 #[derive(Deserialize)]
 struct RawFieldSpec {
 	#[serde(default)]
-	types: Vec<RawTypeRef>,
+	multiple: bool,
+	#[serde(default)]
+	types:    Vec<RawTypeRef>,
 }
 
 #[derive(Deserialize)]
@@ -61,6 +64,7 @@ struct GeneratedSchema {
 struct GeneratedNodeTypeSchema {
 	identifier_fields:       Vec<String>,
 	body_fields:             Vec<String>,
+	promotion_fields:        Vec<String>,
 	container_child_kinds:   Vec<String>,
 	is_supertype:            bool,
 	has_structural_children: bool,
@@ -430,6 +434,8 @@ fn build_language_schema(raw_nodes: Vec<RawNodeType>) -> BTreeMap<String, Genera
 	for (kind, raw) in &raw_by_kind {
 		let identifier_fields = pick_priority_fields(raw.fields.as_ref(), IDENTIFIER_FIELD_PRIORITY);
 		let body_fields = pick_priority_fields(raw.fields.as_ref(), BODY_FIELD_PRIORITY);
+		let promotion_fields =
+			collect_promotion_fields(raw, &structural_state, &identifier_fields, &body_fields);
 		let container_child_kinds = collect_child_container_kinds(raw, &structural_state);
 		let is_supertype = is_supertype(raw);
 		let has_structural_children = structural_state
@@ -438,6 +444,7 @@ fn build_language_schema(raw_nodes: Vec<RawNodeType>) -> BTreeMap<String, Genera
 
 		if identifier_fields.is_empty()
 			&& body_fields.is_empty()
+			&& promotion_fields.is_empty()
 			&& container_child_kinds.is_empty()
 			&& !is_supertype
 			&& !has_structural_children
@@ -448,6 +455,7 @@ fn build_language_schema(raw_nodes: Vec<RawNodeType>) -> BTreeMap<String, Genera
 		out.insert(kind.clone(), GeneratedNodeTypeSchema {
 			identifier_fields,
 			body_fields,
+			promotion_fields,
 			container_child_kinds,
 			is_supertype,
 			has_structural_children,
@@ -500,6 +508,41 @@ fn collect_child_container_kinds(
 	}
 
 	kinds.into_iter().collect()
+}
+
+fn collect_promotion_fields(
+	raw: &RawNodeType,
+	structural_state: &HashMap<String, StructuralState>,
+	identifier_fields: &[String],
+	body_fields: &[String],
+) -> Vec<String> {
+	let Some(fields) = raw.fields.as_ref() else {
+		return Vec::new();
+	};
+
+	PROMOTION_FIELD_PRIORITY
+		.iter()
+		.filter_map(|field_name| {
+			let spec = fields.get(*field_name)?;
+			if spec.multiple
+				|| identifier_fields.iter().any(|field| field == field_name)
+				|| body_fields.iter().any(|field| field == field_name)
+			{
+				return None;
+			}
+
+			let has_structural_type = spec.types.iter().any(|field_type| {
+				field_type.named
+					&& field_type
+						.kind
+						.as_deref()
+						.and_then(|kind| structural_state.get(kind))
+						.copied()
+						.is_some_and(StructuralState::is_structural)
+			});
+			has_structural_type.then(|| (*field_name).to_string())
+		})
+		.collect()
 }
 
 #[derive(Clone, Copy, Default)]

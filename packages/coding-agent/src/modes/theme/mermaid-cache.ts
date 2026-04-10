@@ -1,7 +1,6 @@
 import { extractMermaidBlocks, logger, renderMermaidAsciiSafe } from "@oh-my-pi/pi-utils";
 
-const cache = new Map<bigint, string>();
-const failed = new Set<bigint>();
+const cache = new Map<bigint | number, string | null>();
 
 let onRenderNeeded: (() => void) | null = null;
 
@@ -16,7 +15,7 @@ export function setMermaidRenderCallback(callback: (() => void) | null): void {
  * Get a pre-rendered mermaid ASCII diagram by hash.
  * Returns null if not cached or rendering failed.
  */
-export function getMermaidAscii(hash: bigint): string | null {
+export function getMermaidAscii(hash: bigint | number): string | null {
 	return cache.get(hash) ?? null;
 }
 
@@ -31,14 +30,14 @@ export function prerenderMermaid(markdown: string): void {
 	let hasNew = false;
 
 	for (const { source, hash } of blocks) {
-		if (cache.has(hash) || failed.has(hash)) continue;
+		if (cache.has(hash)) continue;
 
 		const ascii = renderMermaidAsciiSafe(source);
 		if (ascii) {
 			cache.set(hash, ascii);
 			hasNew = true;
 		} else {
-			failed.add(hash);
+			cache.set(hash, null);
 		}
 	}
 
@@ -58,7 +57,7 @@ export function prerenderMermaid(markdown: string): void {
  */
 export function hasPendingMermaid(markdown: string): boolean {
 	const blocks = extractMermaidBlocks(markdown);
-	return blocks.some(({ hash }) => !cache.has(hash) && !failed.has(hash));
+	return blocks.some(({ hash }) => !cache.has(hash));
 }
 
 /**
@@ -66,5 +65,4 @@ export function hasPendingMermaid(markdown: string): boolean {
  */
 export function clearMermaidCache(): void {
 	cache.clear();
-	failed.clear();
 }

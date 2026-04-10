@@ -761,7 +761,7 @@ function buildOpenAiNativeHistory(
 					if (!msgId) {
 						msgId = `msg_${msgIndex}`;
 					} else if (msgId.length > 64) {
-						msgId = `msg_${Bun.hash.xxHash64(msgId).toString(36)}`;
+						msgId = `msg_${Bun.hash(msgId).toString(36)}`;
 					}
 					input.push({
 						type: "message",

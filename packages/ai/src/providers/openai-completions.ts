@@ -805,9 +805,7 @@ export function convertMessages(
 
 	const generateFallbackToolCallId = (seed: string): string => {
 		generatedToolCallIdCounter += 1;
-		const hash = Bun.hash
-			.xxHash64(`${model.provider}:${model.id}:${seed}:${generatedToolCallIdCounter}`)
-			.toString(36);
+		const hash = Bun.hash(`${model.provider}:${model.id}:${seed}:${generatedToolCallIdCounter}`).toString(36);
 		return `call_${hash}`;
 	};
 

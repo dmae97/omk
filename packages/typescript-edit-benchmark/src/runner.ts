@@ -672,7 +672,7 @@ function buildBenchmarkProviderSessionId(params: {
 		`system:${buildBenchmarkSystemPrompt({ multiFile: params.multiFile, config: params.config })}`,
 		`initial:${buildInitialBenchmarkPrompt({ taskPrompt: params.task.prompt, guidedContext: params.initialGuidedContext })}`,
 	].join("\n");
-	return `reb_${Bun.hash.xxHash64(keyMaterial).toString(36)}`;
+	return `reb_${Bun.hash(keyMaterial).toString(36)}`;
 }
 
 async function prepareBenchmarkSessionSetup(params: {

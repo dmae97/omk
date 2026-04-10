@@ -2,10 +2,7 @@
 	"compilerOptions": {
 		"target": "ES2024",
 		"module": "ESNext",
-		"lib": [
-			"ES2024",
-			"DOM.AsyncIterable"
-		],
+		"lib": ["ES2024", "DOM.AsyncIterable"],
 		"moduleResolution": "Bundler",
 		"moduleDetection": "force",
 		"strict": true,
@@ -13,6 +10,7 @@
 		"allowArbitraryExtensions": true,
 		"verbatimModuleSyntax": true,
 		"noEmit": true,
+		"emitDeclarationOnly": false,
 		"declaration": true,
 		"declarationMap": true,
 		"sourceMap": true,
@@ -24,14 +22,8 @@
 		"experimentalDecorators": true,
 		"emitDecoratorMetadata": true,
 		"useDefineForClassFields": false,
-		"types": [
-			"bun",
-			"assets"
-		],
-		"typeRoots": [
-			"./types",
-			"./node_modules/@types"
-		],
+		"types": ["bun", "assets"],
+		"typeRoots": ["./types", "./node_modules/@types"],
 		"assumeChangesOnlyAffectDirectDependencies": true
 	}
 }
