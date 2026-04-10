@@ -12,6 +12,7 @@ import {
 	detectLanguageId,
 	filterWorkspaceSymbols,
 	hasGlobPattern,
+	resolveDiagnosticTargets,
 	resolveSymbolColumn,
 } from "@oh-my-pi/pi-coding-agent/lsp/utils";
 import { getThemeByName } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
@@ -44,6 +45,27 @@ describe("lsp regressions", () => {
 			const result = await collectGlobMatches("*.ts", tempDir.path(), 2);
 			expect(result.matches).toHaveLength(2);
 			expect(result.truncated).toBe(true);
+		} finally {
+			tempDir.removeSync();
+		}
+	});
+
+	it("treats existing bracket paths as literal diagnostic targets", async () => {
+		const tempDir = TempDir.createSync("@omp-lsp-bracket-path-");
+		try {
+			const filePath = `${tempDir.path()}/apps/frontend/src/app/runs/[runId]/public/opengraph-image.tsx`;
+			await Bun.write(filePath, "export default function OpenGraphImage() {}\n");
+
+			const result = await resolveDiagnosticTargets(
+				"apps/frontend/src/app/runs/[runId]/public/opengraph-image.tsx",
+				tempDir.path(),
+				10,
+			);
+
+			expect(result).toEqual({
+				matches: ["apps/frontend/src/app/runs/[runId]/public/opengraph-image.tsx"],
+				truncated: false,
+			});
 		} finally {
 			tempDir.removeSync();
 		}

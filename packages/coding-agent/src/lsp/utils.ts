@@ -1,8 +1,10 @@
 export { truncate } from "@oh-my-pi/pi-utils";
 
+import * as fs from "node:fs/promises";
 import path from "node:path";
 import { isEnoent } from "@oh-my-pi/pi-utils";
 import { type Theme, theme } from "../modes/theme/theme";
+import { resolveToCwd } from "../tools/path-utils";
 import type {
 	CodeAction,
 	Command,
@@ -549,6 +551,30 @@ export async function collectGlobMatches(
 		matches.push(match);
 	}
 	return { matches, truncated: false };
+}
+
+export async function resolveDiagnosticTargets(
+	file: string,
+	cwd: string,
+	maxMatches: number,
+): Promise<{ matches: string[]; truncated: boolean }> {
+	if (!hasGlobPattern(file)) {
+		return { matches: [file], truncated: false };
+	}
+
+	const resolved = resolveToCwd(file, cwd);
+	try {
+		const stat = await fs.stat(resolved);
+		if (stat.isFile()) {
+			return { matches: [file], truncated: false };
+		}
+	} catch (error) {
+		if (!isEnoent(error)) {
+			throw error;
+		}
+	}
+
+	return collectGlobMatches(file, cwd, maxMatches);
 }
 // =============================================================================
 // Hover Content Extraction

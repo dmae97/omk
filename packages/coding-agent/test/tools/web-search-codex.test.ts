@@ -43,6 +43,40 @@ function makeSseResponse(model: string): string {
 	].join("\n");
 }
 
+function makeImagePlaceholderSseResponse(model: string): string {
+	return [
+		`data: ${JSON.stringify({
+			type: "response.output_text.delta",
+			delta: "OpenAI Responses API defaults `store` to false unless you opt in.",
+		})}`,
+		"",
+		`data: ${JSON.stringify({
+			type: "response.output_item.done",
+			item: {
+				type: "message",
+				content: [
+					{
+						type: "output_text",
+						text: "(see attached image)",
+						annotations: [
+							{ type: "url_citation", url: "https://platform.openai.com/docs/api-reference/responses" },
+						],
+					},
+				],
+			},
+		})}`,
+		"",
+		`data: ${JSON.stringify({
+			type: "response.completed",
+			response: {
+				id: "resp_codex_placeholder_test",
+				model,
+			},
+		})}`,
+		"",
+	].join("\n");
+}
+
 describe("searchCodex model selection", () => {
 	let capturedRequest: CapturedRequest | null = null;
 
@@ -117,5 +151,37 @@ describe("searchCodex model selection", () => {
 		expect(capturedRequest).not.toBeNull();
 		expect(capturedRequest?.body?.model).toBe("gpt-5.4-mini");
 		expect(result.model).toBe("gpt-5.4-mini");
+	});
+
+	it("prefers streamed text when the final item only contains an image placeholder", async () => {
+		vi.spyOn(AgentStorage, "open").mockResolvedValue({
+			listAuthCredentials: () => [
+				{
+					id: 1,
+					credential: {
+						type: "oauth",
+						access: "test-access-token",
+						expires: Date.now() + 600_000,
+						accountId: "acct-test",
+					},
+				},
+			],
+		} as unknown as AgentStorage);
+		using _hook = hookFetch(() => {
+			return new Response(makeImagePlaceholderSseResponse("gpt-5.4-mini"), {
+				status: 200,
+				headers: { "Content-Type": "text/event-stream" },
+			});
+		});
+
+		const result = await searchCodex({ query: "responses api store semantics" });
+
+		expect(result.answer).toBe("OpenAI Responses API defaults `store` to false unless you opt in.");
+		expect(result.sources).toEqual([
+			{
+				title: "https://platform.openai.com/docs/api-reference/responses",
+				url: "https://platform.openai.com/docs/api-reference/responses",
+			},
+		]);
 	});
 });

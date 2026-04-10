@@ -47,7 +47,6 @@ import {
 } from "./types";
 import {
 	applyCodeAction,
-	collectGlobMatches,
 	dedupeWorkspaceSymbols,
 	extractHoverText,
 	fileToUri,
@@ -60,8 +59,8 @@ import {
 	formatLocation,
 	formatSymbolInformation,
 	formatWorkspaceEdit,
-	hasGlobPattern,
 	readLocationContext,
+	resolveDiagnosticTargets,
 	resolveSymbolColumn,
 	sortDiagnostics,
 	symbolKindToIcon,
@@ -1172,13 +1171,9 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 
 			let targets: string[];
 			let truncatedGlobTargets = false;
-			if (hasGlobPattern(file)) {
-				const globMatches = await collectGlobMatches(file, this.session.cwd, MAX_GLOB_DIAGNOSTIC_TARGETS);
-				targets = globMatches.matches;
-				truncatedGlobTargets = globMatches.truncated;
-			} else {
-				targets = [file];
-			}
+			const resolvedTargets = await resolveDiagnosticTargets(file, this.session.cwd, MAX_GLOB_DIAGNOSTIC_TARGETS);
+			targets = resolvedTargets.matches;
+			truncatedGlobTargets = resolvedTargets.truncated;
 
 			if (targets.length === 0) {
 				return {

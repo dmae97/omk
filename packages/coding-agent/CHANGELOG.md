@@ -1,9 +1,13 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `resolveDiagnosticTargets` utility function to handle glob pattern resolution with fallback to literal file paths for bracket-style paths
 
 ### Changed
 
+- Refactored diagnostic target resolution to use new `resolveDiagnosticTargets` function, consolidating glob pattern detection and file matching logic
 - Updated chunk selector syntax from `@region` format to `~` (body) and `^` (head) suffixes for more concise region targeting
 - Simplified chunk edit documentation to use new `~` and `^` region syntax instead of `@head`, `@body`, `@tail`, `@decl` keywords
 - Replaced internal `raceAbort` function with imported `raceWithAbort` utility from pi-utils
