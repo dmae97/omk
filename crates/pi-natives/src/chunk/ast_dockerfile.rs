@@ -2,9 +2,105 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*, kind::ChunkKind};
+use super::{
+	classify::{
+		ClassifierTables, LangClassifier, NamingMode, RecurseMode, RuleStyle, semantic_rule,
+	},
+	common::*,
+	kind::ChunkKind,
+};
 
 pub struct DockerfileClassifier;
+
+const DOCKERFILE_ROOT_RULES: &[super::classify::SemanticRule] = &[
+	semantic_rule(
+		"run_instruction",
+		ChunkKind::Cmd,
+		RuleStyle::Named,
+		NamingMode::SanitizedKind,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	semantic_rule(
+		"cmd_instruction",
+		ChunkKind::Cmd,
+		RuleStyle::Named,
+		NamingMode::SanitizedKind,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	semantic_rule(
+		"entrypoint_instruction",
+		ChunkKind::Cmd,
+		RuleStyle::Named,
+		NamingMode::SanitizedKind,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	semantic_rule(
+		"copy_instruction",
+		ChunkKind::Copy,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"add_instruction",
+		ChunkKind::Add,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"workdir_instruction",
+		ChunkKind::Workdir,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"expose_instruction",
+		ChunkKind::Expose,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"user_instruction",
+		ChunkKind::User,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+];
+
+const DOCKERFILE_FUNCTION_RULES: &[super::classify::SemanticRule] = &[
+	semantic_rule(
+		"cmd_instruction",
+		ChunkKind::Cmd,
+		RuleStyle::Named,
+		NamingMode::SanitizedKind,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	semantic_rule(
+		"shell_command",
+		ChunkKind::Shell,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"json_string_array",
+		ChunkKind::Argv,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+];
+
+const DOCKERFILE_TABLES: ClassifierTables = ClassifierTables {
+	root:                 DOCKERFILE_ROOT_RULES,
+	class:                &[],
+	function:             DOCKERFILE_FUNCTION_RULES,
+	structural_overrides: super::classify::StructuralOverrides::EMPTY,
+};
 
 fn child_text<'a>(source: &'a str, node: Node<'_>) -> &'a str {
 	node_text(source, node.start_byte(), node.end_byte())
@@ -41,78 +137,47 @@ fn extract_arg_name(node: Node<'_>, source: &str) -> Option<String> {
 	first_named_child(node).and_then(|name| sanitize_identifier(child_text(source, name)))
 }
 
-fn recurse_command(node: Node<'_>) -> Option<RecurseSpec<'_>> {
-	recurse_into(node, ChunkContext::FunctionBody, &[], &["shell_command", "json_string_array"])
-}
-
-fn classify_command_instruction<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-	let chunk_name = match node.kind() {
-		"run_instruction" => "run",
-		"cmd_instruction" => "cmd",
-		"entrypoint_instruction" => "entrypoint",
-		_ => return None,
-	};
-
-	Some(make_candidate(
-		node,
-		ChunkKind::Cmd,
-		chunk_name.to_string(),
-		NameStyle::Named,
-		signature_for_node(node, source),
-		recurse_command(node),
-		source,
-	))
-}
-
 impl LangClassifier for DockerfileClassifier {
-	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
-			"from_instruction" => {
-				let name = extract_stage_name(node, source).unwrap_or_else(|| "anonymous".to_string());
-				Some(make_kind_chunk(node, ChunkKind::Stage, Some(name), source, None))
-			},
-			"arg_instruction" => {
-				let name = extract_arg_name(node, source).unwrap_or_else(|| "anonymous".to_string());
-				Some(make_kind_chunk(node, ChunkKind::Arg, Some(name), source, None))
-			},
-			"env_instruction" => {
-				let name = extract_pair_key(node, "env_pair", source)
-					.unwrap_or_else(|| "anonymous".to_string());
-				Some(make_kind_chunk(node, ChunkKind::Env, Some(name), source, None))
-			},
-			"label_instruction" => {
-				let name = extract_pair_key(node, "label_pair", source)
-					.unwrap_or_else(|| "anonymous".to_string());
-				Some(make_kind_chunk(node, ChunkKind::Label, Some(name), source, None))
-			},
-			"run_instruction" | "cmd_instruction" | "entrypoint_instruction" => {
-				classify_command_instruction(node, source)
-			},
-			"healthcheck_instruction" => Some(make_container_chunk(
-				node,
-				ChunkKind::Healthcheck,
-				None,
-				source,
-				recurse_into(node, ChunkContext::FunctionBody, &[], &["cmd_instruction"]),
-			)),
-			"copy_instruction" => Some(group_candidate(node, ChunkKind::Copy, source)),
-			"add_instruction" => Some(group_candidate(node, ChunkKind::Add, source)),
-			"workdir_instruction" => Some(group_candidate(node, ChunkKind::Workdir, source)),
-			"expose_instruction" => Some(group_candidate(node, ChunkKind::Expose, source)),
-			"user_instruction" => Some(group_candidate(node, ChunkKind::User, source)),
-			_ => None,
-		}
+	fn tables(&self) -> &'static ClassifierTables {
+		&DOCKERFILE_TABLES
 	}
 
-	fn classify_class<'t>(&self, _node: Node<'t>, _source: &str) -> Option<RawChunkCandidate<'t>> {
-		None
-	}
-
-	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
-			"cmd_instruction" => classify_command_instruction(node, source),
-			"shell_command" => Some(group_candidate(node, ChunkKind::Shell, source)),
-			"json_string_array" => Some(group_candidate(node, ChunkKind::Argv, source)),
+	fn classify_override<'t>(
+		&self,
+		context: ChunkContext,
+		node: Node<'t>,
+		source: &str,
+	) -> Option<RawChunkCandidate<'t>> {
+		match context {
+			ChunkContext::Root => match node.kind() {
+				"from_instruction" => {
+					let name =
+						extract_stage_name(node, source).unwrap_or_else(|| "anonymous".to_string());
+					Some(make_kind_chunk(node, ChunkKind::Stage, Some(name), source, None))
+				},
+				"arg_instruction" => {
+					let name = extract_arg_name(node, source).unwrap_or_else(|| "anonymous".to_string());
+					Some(make_kind_chunk(node, ChunkKind::Arg, Some(name), source, None))
+				},
+				"env_instruction" => {
+					let name = extract_pair_key(node, "env_pair", source)
+						.unwrap_or_else(|| "anonymous".to_string());
+					Some(make_kind_chunk(node, ChunkKind::Env, Some(name), source, None))
+				},
+				"label_instruction" => {
+					let name = extract_pair_key(node, "label_pair", source)
+						.unwrap_or_else(|| "anonymous".to_string());
+					Some(make_kind_chunk(node, ChunkKind::Label, Some(name), source, None))
+				},
+				"healthcheck_instruction" => Some(make_container_chunk(
+					node,
+					ChunkKind::Healthcheck,
+					None,
+					source,
+					recurse_into(node, ChunkContext::FunctionBody, &[], &["cmd_instruction"]),
+				)),
+				_ => None,
+			},
 			_ => None,
 		}
 	}

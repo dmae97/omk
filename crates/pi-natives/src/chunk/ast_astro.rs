@@ -2,25 +2,38 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*, kind::ChunkKind};
+use super::{
+	classify::{ClassifierTables, LangClassifier, StructuralOverrides},
+	common::*,
+	kind::ChunkKind,
+};
 
 pub struct AstroClassifier;
 
 impl LangClassifier for AstroClassifier {
-	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_astro_node(node, source)
+	fn tables(&self) -> &'static ClassifierTables {
+		static TABLES: ClassifierTables = ClassifierTables {
+			root:                 &[],
+			class:                &[],
+			function:             &[],
+			structural_overrides: StructuralOverrides {
+				extra_trivia:            &[],
+				preserved_trivia:        &[],
+				extra_root_wrappers:     &["document"],
+				preserved_root_wrappers: &[],
+				absorbable_attrs:        &[],
+			},
+		};
+		&TABLES
 	}
 
-	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
+	fn classify_override<'t>(
+		&self,
+		_context: ChunkContext,
+		node: Node<'t>,
+		source: &str,
+	) -> Option<RawChunkCandidate<'t>> {
 		classify_astro_node(node, source)
-	}
-
-	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_astro_node(node, source)
-	}
-
-	fn is_root_wrapper(&self, kind: &str) -> bool {
-		kind == "document"
 	}
 }
 

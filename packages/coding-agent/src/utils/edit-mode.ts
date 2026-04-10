@@ -1,4 +1,4 @@
-import { $env } from "@oh-my-pi/pi-utils";
+import { $env, $flag } from "@oh-my-pi/pi-utils";
 
 export type EditMode = "replace" | "patch" | "hashline" | "chunk";
 
@@ -36,7 +36,7 @@ export function resolveEditMode(session: EditModeSessionLike): EditMode {
 	const envMode = normalizeEditMode($env.PI_EDIT_VARIANT);
 	if (envMode) return envMode;
 
-	if ($env.PI_STRICT_EDIT_MODE === "1") {
+	if (!$flag("PI_STRICT_EDIT_MODE")) {
 		if (activeModel?.includes("spark")) return "replace";
 		if (activeModel?.includes("nano")) return "replace";
 		if (activeModel?.includes("mini")) return "replace";

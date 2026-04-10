@@ -245,9 +245,9 @@ pub fn detect_file_indent_char(source: &str, tree: &ChunkTree) -> char {
 }
 
 /// Detect spaces-per-indent-level from parent→child indent differences.
-/// Only meaningful for space-indented files; returns
-/// `DEFAULT_SPACE_INDENT_STEP` for tab files.
-pub fn detect_file_indent_step(tree: &ChunkTree) -> u32 {
+/// Falls back to scanning `source` for the minimum indented-line width,
+/// then to `DEFAULT_SPACE_INDENT_STEP` when neither gives a signal.
+pub fn detect_file_indent_step(source: &str, tree: &ChunkTree) -> u32 {
 	for chunk in &tree.chunks {
 		if chunk.children.is_empty() {
 			continue;
@@ -269,7 +269,7 @@ pub fn detect_file_indent_step(tree: &ChunkTree) -> u32 {
 			}
 		}
 	}
-	DEFAULT_SPACE_INDENT_STEP as u32
+	detect_space_indent_step(source) as u32
 }
 
 pub fn strip_content_prefixes(content: &str) -> String {
@@ -382,44 +382,7 @@ fn strip_new_line_prefixes(lines: &[String]) -> Vec<String> {
 			.collect();
 	}
 
-	let prefixed = lines
-		.iter()
-		.filter(|line| !line.trim().is_empty())
-		.filter(|line| visual_prefix_len(line).is_some())
-		.count();
-	if prefixed * 10 <= non_empty * 6 {
-		return lines.to_vec();
-	}
-
-	lines
-		.iter()
-		.map(|line| match visual_prefix_len(line) {
-			Some(prefix_len) => line[prefix_len..].to_owned(),
-			None => line.clone(),
-		})
-		.collect()
-}
-
-fn visual_prefix_len(line: &str) -> Option<usize> {
-	let trimmed_start = line
-		.find(|ch| !matches!(ch, ' ' | '\t'))
-		.unwrap_or(line.len());
-	// A `|` at column 0 is content (e.g. markdown tables), not a
-	// gutter prefix.  The chunk view gutter always has a line-number
-	// column before the pipe, so `trimmed_start > 0`.
-	if trimmed_start == 0 {
-		return None;
-	}
-	let after_indent = &line[trimmed_start..];
-	let marker = after_indent.chars().next()?;
-	if marker != '|' && marker != '│' {
-		return None;
-	}
-	let mut length = trimmed_start + marker.len_utf8();
-	let remainder = &line[length..];
-	let space_prefix = remainder.len() - remainder.trim_start_matches([' ', '\t']).len();
-	length += space_prefix;
-	Some(length)
+	lines.to_vec()
 }
 
 fn hashline_prefix_len(line: &str) -> Option<usize> {
@@ -507,6 +470,7 @@ mod tests {
 				.and_then(|(_, identifier)| (!identifier.is_empty()).then_some(identifier.to_owned())),
 			kind,
 			leaf: children.is_empty(),
+			virtual_content: None,
 			parent_path: parent_path.map(str::to_owned),
 			children: children.iter().map(|child| (*child).to_owned()).collect(),
 			signature: None,
@@ -595,7 +559,25 @@ mod tests {
 				chunk("fn_b", Some("class_A"), &[], 2, " "),
 			],
 		};
-		assert_eq!(detect_file_indent_step(&tree), 2);
+		assert_eq!(detect_file_indent_step("", &tree), 2);
+	}
+
+	#[test]
+	fn detect_file_indent_step_falls_back_to_source_scan() {
+		// When the chunk tree has no parent->child pairs (all leaves),
+		// fall back to scanning source lines for the minimum indent width.
+		let tree = ChunkTree {
+			language:      "yaml".to_owned(),
+			checksum:      "ABCD".to_owned(),
+			line_count:    3,
+			parse_errors:  0,
+			fallback:      false,
+			root_path:     String::new(),
+			root_children: vec!["key_server".to_owned()],
+			chunks:        vec![chunk("key_server", Some(""), &[], 0, " ")],
+		};
+		let source = "server:\n  host: localhost\n  port: 5432\n";
+		assert_eq!(detect_file_indent_step(source, &tree), 2);
 	}
 
 	#[test]

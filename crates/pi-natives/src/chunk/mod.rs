@@ -8,13 +8,17 @@
 //! - `classify` — `LangClassifier` trait and dispatch
 //! - `ast_*` — per-language classifier implementations
 
+mod atom_list;
 mod classify;
 pub(crate) mod common;
+pub(crate) mod conflict;
 mod defaults;
 pub(crate) mod edit;
 pub(crate) mod indent;
 mod render;
 pub(crate) mod resolve;
+mod schema;
+mod shape;
 pub(crate) mod state;
 pub mod types;
 
@@ -65,7 +69,7 @@ use tree_sitter::{Node, Parser, Tree};
 use xxhash_rust::xxh64::xxh64;
 
 use self::{
-	classify::{LangClassifier, classifier_for},
+	classify::{LangClassifier, classifier_for, classify_with_tables, structural_overrides},
 	common::*,
 	kind::ChunkKind,
 };
@@ -111,6 +115,7 @@ pub(crate) fn build_chunk_tree(source: &str, language: &str) -> Result<ChunkTree
 		return Ok(build_blank_line_tree(source, language.to_string(), total_lines, root_checksum));
 	};
 
+	let _schema_language = schema::enter_language(chunk_lang.canonical_name());
 	let classifier = classifier_for(normalized_language.as_str());
 	let tree = parse_tree(source, chunk_lang)?;
 	let root = tree.root_node();
@@ -131,6 +136,7 @@ pub(crate) fn build_chunk_tree(source: &str, language: &str) -> Result<ChunkTree
 		identifier:          None,
 		kind:                ChunkKind::Root,
 		leaf:                false,
+		virtual_content:     None,
 		parent_path:         None,
 		children:            root_children.clone(),
 		signature:           None,
@@ -209,6 +215,7 @@ fn build_blank_line_tree(
 		identifier:          None,
 		kind:                ChunkKind::Root,
 		leaf:                false,
+		virtual_content:     None,
 		parent_path:         None,
 		children:            Vec::new(),
 		signature:           None,
@@ -258,6 +265,7 @@ fn build_blank_line_tree(
 			identifier:          Some(name.clone()),
 			kind:                ChunkKind::Chunk,
 			leaf:                true,
+			virtual_content:     None,
 			parent_path:         Some(String::new()),
 			children:            Vec::new(),
 			signature:           None,
@@ -382,6 +390,7 @@ fn build_chunk(
 		identifier: candidate.identifier,
 		kind: candidate.kind,
 		leaf,
+		virtual_content: None,
 		parent_path: Some(parent_path.to_string()),
 		children,
 		signature: candidate.signature,
@@ -411,12 +420,18 @@ pub(crate) fn collect_children_for_context<'tree>(
 	classifier: &dyn LangClassifier,
 ) -> Vec<RawChunkCandidate<'tree>> {
 	let named_children_list = children_for_context(container, context, classifier);
+	let overrides = structural_overrides(classifier);
 	let mut raw = Vec::new();
 
 	for (index, child) in named_children_list.iter().enumerate() {
-		let is_skippable_trivia = (is_trivia(child.kind()) || classifier.is_trivia(child.kind()))
-			&& !classifier.preserve_trivia(child.kind());
-		if is_skippable_trivia || child.is_missing() {
+		let is_error_node = child.is_error() || child.kind() == "ERROR";
+		let is_skippable_trivia =
+			!is_error_node && is_trivia_for_classifier(*child, classifier, overrides);
+		let is_absorbable_attr = !is_error_node
+			&& (is_absorbable_attribute(child.kind())
+				|| overrides.is_absorbable_attr(child.kind())
+				|| classifier.is_absorbable_attr(child.kind()));
+		if is_skippable_trivia || is_absorbable_attr || (child.is_missing() && !is_error_node) {
 			continue;
 		}
 
@@ -444,12 +459,23 @@ fn flatten_root_children<'tree>(
 	classifier: &dyn LangClassifier,
 ) -> Vec<Node<'tree>> {
 	let children = named_children(container);
-	if children.len() == 1
-		&& ((is_root_wrapper_kind(children[0].kind())
-			&& !classifier.preserve_root_wrapper(children[0].kind()))
-			|| classifier.is_root_wrapper(children[0].kind()))
-	{
+	let overrides = structural_overrides(classifier);
+	if children.len() == 1 && is_root_wrapper_for_classifier(children[0], classifier, overrides) {
 		return flatten_root_children(children[0], classifier);
+	}
+	// When a root wrapper's only non-trivia child is another wrapper,
+	// flatten through it. Handles YAML's `document` containing a leading
+	// comment alongside a single `block_node`.
+	if children.len() > 1 {
+		let non_trivia: Vec<_> = children
+			.iter()
+			.filter(|child| !is_trivia_for_classifier(**child, classifier, overrides))
+			.collect();
+		if non_trivia.len() == 1
+			&& is_root_wrapper_for_classifier(*non_trivia[0], classifier, overrides)
+		{
+			return flatten_root_children(*non_trivia[0], classifier);
+		}
 	}
 	children
 }
@@ -466,14 +492,11 @@ fn classify_node<'tree>(
 
 	// Try language-specific classifier first, then fall back to defaults.
 	match context {
-		ChunkContext::Root => classifier
-			.classify_root(node, source)
+		ChunkContext::Root => classify_with_tables(classifier, context, node, source)
 			.unwrap_or_else(|| defaults::classify_root_default(node, source)),
-		ChunkContext::ClassBody => classifier
-			.classify_class(node, source)
+		ChunkContext::ClassBody => classify_with_tables(classifier, context, node, source)
 			.unwrap_or_else(|| defaults::classify_class_default(node, source)),
-		ChunkContext::FunctionBody => classifier
-			.classify_function(node, source)
+		ChunkContext::FunctionBody => classify_with_tables(classifier, context, node, source)
 			.unwrap_or_else(|| defaults::classify_function_default(node, source)),
 	}
 }
@@ -484,12 +507,13 @@ fn attach_leading_trivia<'tree>(
 	index: usize,
 	classifier: &dyn LangClassifier,
 ) {
+	let overrides = structural_overrides(classifier);
 	let mut cursor = index;
 	while cursor > 0 {
 		let prev = named_children_list[cursor - 1];
-		if !is_trivia(prev.kind())
+		if !is_trivia_for_classifier(prev, classifier, overrides)
 			&& !is_absorbable_attribute(prev.kind())
-			&& !classifier.is_trivia(prev.kind())
+			&& !overrides.is_absorbable_attr(prev.kind())
 			&& !classifier.is_absorbable_attr(prev.kind())
 		{
 			break;
@@ -507,6 +531,34 @@ fn attach_leading_trivia<'tree>(
 		}
 		cursor -= 1;
 	}
+}
+
+fn is_trivia_for_classifier(
+	node: Node<'_>,
+	classifier: &dyn LangClassifier,
+	overrides: classify::StructuralOverrides,
+) -> bool {
+	let kind = node.kind();
+	((is_trivia_node(node) || classifier.is_trivia(kind))
+		&& !overrides.preserves_trivia(kind)
+		&& !classifier.preserve_trivia(kind))
+		|| (overrides.is_extra_trivia(kind)
+			&& !overrides.preserves_trivia(kind)
+			&& !classifier.preserve_trivia(kind))
+}
+
+fn is_root_wrapper_for_classifier(
+	node: Node<'_>,
+	classifier: &dyn LangClassifier,
+	overrides: classify::StructuralOverrides,
+) -> bool {
+	let kind = node.kind();
+	if overrides.preserves_root_wrapper(kind) || classifier.preserve_root_wrapper(kind) {
+		return false;
+	}
+	overrides.is_extra_root_wrapper(kind)
+		|| classifier.is_root_wrapper(kind)
+		|| is_root_wrapper_node(node)
 }
 
 // ── Grouping / deduplication ─────────────────────────────────────────────
@@ -651,7 +703,7 @@ const fn is_collapsible_flat_child(candidate: &RawChunkCandidate<'_>) -> bool {
 // ── Utility ──────────────────────────────────────────────────────────────
 
 fn count_parse_errors(node: Node<'_>) -> usize {
-	let mut count = usize::from(node.is_error() || node.is_missing());
+	let mut count = usize::from(node.is_error() || node.is_missing() || node.kind() == "ERROR");
 	for child in named_children(node) {
 		count += count_parse_errors(child);
 	}
@@ -763,6 +815,7 @@ fn insert_preamble_chunk(
 		identifier: None,
 		kind: ChunkKind::Preamble,
 		leaf: true,
+		virtual_content: None,
 		parent_path: Some(String::new()),
 		children: Vec::new(),
 		signature: None,
@@ -967,6 +1020,108 @@ mod tests {
 	}
 
 	#[test]
+	fn yaml_nested_keys_produce_sub_chunks() {
+		// YAML keys with container values always recurse (force_recurse=true),
+		// so even small mappings produce sub-chunks.
+		let source = "database:\n  host: localhost\n  port: 5432\n  credentials:\n    username: \
+		              admin\n    password: secret\n";
+		let tree = build_chunk_tree(source, "yaml").expect("yaml tree should build");
+
+		assert!(
+			tree.root_children.contains(&"key_database".to_string()),
+			"expected key_database, got {:?}",
+			tree.root_children
+		);
+
+		let db = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "key_database")
+			.expect("key_database");
+		assert!(!db.leaf, "key_database should have children: {:?}", db.children);
+		assert!(
+			db.children.iter().any(|c| c.contains("key_host")),
+			"expected key_host child, got {:?}",
+			db.children
+		);
+		assert!(
+			db.children.iter().any(|c| c.contains("key_credentials")),
+			"expected key_credentials child, got {:?}",
+			db.children
+		);
+
+		// 3-level deep: credentials should also have sub-chunks.
+		let creds = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "key_database.key_credentials")
+			.expect("key_credentials");
+		assert!(!creds.leaf, "key_credentials should have children: {:?}", creds.children);
+		assert!(
+			creds.children.iter().any(|c| c.contains("key_username")),
+			"expected key_username child of credentials, got {:?}",
+			creds.children
+		);
+	}
+
+	#[test]
+	fn yaml_key_region_boundaries_separate_key_from_value() {
+		use super::{resolve::chunk_region_range, types::ChunkRegion};
+
+		let source = "server:\n  host: 0.0.0.0\n  port: 8080\n";
+		let tree = build_chunk_tree(source, "yaml").expect("yaml tree should build");
+		let server = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "key_server")
+			.expect("key_server");
+
+		// @head should contain "server:" but not the nested keys.
+		let (head_s, head_e) = chunk_region_range(server, ChunkRegion::Head);
+		let head = &source[head_s..head_e];
+		assert!(head.contains("server"), "@head should contain the key, got {head:?}");
+		assert!(!head.contains("host"), "@head should not contain value content, got {head:?}");
+
+		// @body should contain the nested keys but not "server:".
+		let (body_s, body_e) = chunk_region_range(server, ChunkRegion::Body);
+		let body = &source[body_s..body_e];
+		assert!(body.contains("host"), "@body should contain nested keys, got {body:?}");
+		assert!(!body.contains("server"), "@body should not contain the key header, got {body:?}");
+	}
+
+	#[test]
+	fn yaml_leading_comment_does_not_prevent_sub_chunks() {
+		let source = "# Global settings\napp:\n  name: my-app\n  debug: true\n  features:\n    - \
+		              auth\n    - logging\n";
+		let tree = build_chunk_tree(source, "yaml").expect("yaml tree should build");
+
+		// The leading comment becomes a preamble; key_app is a separate chunk.
+		let app = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "key_app")
+			.expect("key_app");
+
+		// Sub-keys should be individually addressable.
+		assert!(!app.leaf, "key_app should have children: {:?}", app.children);
+		assert!(
+			app.children.iter().any(|c| c.contains("key_name")),
+			"expected key_name child, got {:?}",
+			app.children
+		);
+		assert!(
+			app.children.iter().any(|c| c.contains("key_debug")),
+			"expected key_debug child, got {:?}",
+			app.children
+		);
+		assert!(
+			app.children.iter().any(|c| c.contains("key_features")),
+			"expected key_features child, got {:?}",
+			app.children
+		);
+	}
+
+	#[test]
 	fn handlebars_chunks_blocks_and_tags() {
 		let tree =
 			build_chunk_tree("{{#if ready}}<div class=\"ok\">{{name}}</div>{{/if}}\n", "handlebars")
@@ -1071,7 +1226,13 @@ function main(): void {{
 			tree
 				.chunks
 				.iter()
-				.any(|chunk| chunk.kind == ChunkKind::Error && chunk.identifier.is_none())
+				.any(|chunk| chunk.kind == ChunkKind::Error && chunk.identifier.is_none()),
+			"expected error chunk, got {:?}",
+			tree
+				.chunks
+				.iter()
+				.map(|chunk| (&chunk.path, chunk.kind, chunk.identifier.as_deref()))
+				.collect::<Vec<_>>()
 		);
 	}
 
@@ -1650,7 +1811,7 @@ impl Config {
 				normalize_indent:    Some(true),
 			})
 			.expect("listing should succeed");
-		assert!(result.text.contains("sample.ts chunks:"));
+		assert!(result.text.contains("sample.ts chunks"), "{}", result.text);
 		assert!(result.text.contains("fn_run#"));
 		// Region listing removed — all chunks accept all regions now.
 		assert!(!result.text.contains("return 1"));
@@ -2462,5 +2623,194 @@ end
 			let (ts, te) = chunk_region_range(chunk, ChunkRegion::Tail);
 			assert!(te >= ts, "tail of {:?} must not be inverted: start={ts} end={te}", chunk.path);
 		}
+	}
+
+	#[test]
+	fn diff_block_produces_file_chunks() {
+		let source = "diff --git a/src/foo.ts b/src/foo.ts\nindex abcdef0..1234567 100644\n--- \
+		              a/src/foo.ts\n+++ b/src/foo.ts\n@@ -1,3 +1,4 @@\n line1\n+added\n line2\n \
+		              line3\ndiff --git a/src/bar.ts b/src/bar.ts\nindex 1111111..2222222 \
+		              100644\n--- a/src/bar.ts\n+++ b/src/bar.ts\n@@ -5,2 +5,3 @@\n x\n+y\n z\n";
+		let tree = build_chunk_tree(source, "diff").expect("diff tree should build");
+		assert!(
+			tree.root_children.contains(&"file_src_foo_ts".to_string()),
+			"expected file_src_foo_ts, got {:?}",
+			tree.root_children
+		);
+		assert!(
+			tree.root_children.contains(&"file_src_bar_ts".to_string()),
+			"expected file_src_bar_ts, got {:?}",
+			tree.root_children
+		);
+	}
+
+	#[test]
+	fn diff_hunks_individually_addressable() {
+		let source = "diff --git a/app.rs b/app.rs\nindex abcdef0..1234567 100644\n--- \
+		              a/app.rs\n+++ b/app.rs\n@@ -1,3 +1,4 @@\n line1\n+added1\n line2\n line3\n@@ \
+		              -10,3 +11,4 @@\n line10\n+added2\n line11\n line12\n";
+		let tree = build_chunk_tree(source, "diff").expect("diff tree should build");
+		let file_chunk = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "file_app_rs")
+			.expect("file_app_rs chunk should exist");
+		assert!(!file_chunk.leaf, "file chunk with hunks should not be leaf");
+		assert!(
+			file_chunk
+				.children
+				.iter()
+				.any(|c| c == "file_app_rs.hunk_1"),
+			"expected hunk_1 child, got {:?}",
+			file_chunk.children
+		);
+		assert!(
+			file_chunk
+				.children
+				.iter()
+				.any(|c| c == "file_app_rs.hunk_2"),
+			"expected hunk_2 child, got {:?}",
+			file_chunk.children
+		);
+	}
+
+	#[test]
+	fn diff_deleted_file_uses_old_path() {
+		let source = "diff --git a/old.txt b/old.txt\ndeleted file mode 100644\nindex \
+		              abcdef0..0000000 100644\n--- a/old.txt\n+++ /dev/null\n@@ -1,2 +0,0 \
+		              @@\n-line1\n-line2\n";
+		let tree = build_chunk_tree(source, "diff").expect("diff tree should build");
+		assert!(
+			tree.root_children.contains(&"file_old_txt".to_string()),
+			"expected file_old_txt for deleted file, got {:?}",
+			tree.root_children
+		);
+	}
+
+	#[test]
+	fn diff_single_hunk_has_no_suffix() {
+		let source = "diff --git a/one.rs b/one.rs\nindex abcdef0..1234567 100644\n--- \
+		              a/one.rs\n+++ b/one.rs\n@@ -1,2 +1,3 @@\n line1\n+added\n line2\n";
+		let tree = build_chunk_tree(source, "diff").expect("diff tree should build");
+		let file_chunk = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "file_one_rs")
+			.expect("file_one_rs should exist");
+		assert!(!file_chunk.leaf);
+		// Single hunk should be named "hunk" without a numeric suffix
+		assert!(
+			file_chunk.children.iter().any(|c| c == "file_one_rs.hunk"),
+			"expected hunk child (no suffix), got {:?}",
+			file_chunk.children
+		);
+	}
+
+	#[test]
+	fn visible_range_clip_shows_truncation_markers() {
+		// Build a TypeScript file with a function spanning lines 1-10.
+		let source = "function longFunc() {\nlet a = 1;\nlet b = 2;\nlet c = 3;\nlet d = 4;\nlet e \
+		              = 5;\nlet f = 6;\nlet g = 7;\nlet h = 8;\nreturn a + b + c + d + e + f + g + \
+		              h;\n}\n";
+		let state = ChunkState::parse(source.to_string(), "typescript".to_string())
+			.expect("state should parse");
+
+		// Read only lines 3-7 — the function spans L1-L11, so it should be clipped.
+		let result = state
+			.render_read(ReadRenderParams {
+				read_path:           "test.ts:L3-L7".to_string(),
+				display_path:        "test.ts".to_string(),
+				language_tag:        Some("ts".to_string()),
+				omit_checksum:       true,
+				anchor_style:        Some(ChunkAnchorStyle::FullOmit),
+				absolute_line_range: None,
+				tab_replacement:     Some("  ".to_string()),
+				normalize_indent:    Some(true),
+			})
+			.expect("render_read should succeed");
+
+		// The output should contain truncation markers indicating the chunk continues.
+		assert!(
+			result.text.contains("lines above"),
+			"should show top truncation marker when chunk extends above visible range: {}",
+			result.text
+		);
+		assert!(
+			result.text.contains("lines below"),
+			"should show bottom truncation marker when chunk extends below visible range: {}",
+			result.text
+		);
+		// The visible content should still be there.
+		assert!(
+			result.text.contains("let c = 3"),
+			"visible content should be rendered: {}",
+			result.text
+		);
+	}
+
+	#[test]
+	fn visible_range_no_clip_markers_when_chunk_fits() {
+		// A small file fully contained in the visible range should have no clip
+		// markers.
+		let source = "const x = 1;\nconst y = 2;\n";
+		let state = ChunkState::parse(source.to_string(), "typescript".to_string())
+			.expect("state should parse");
+
+		let result = state
+			.render_read(ReadRenderParams {
+				read_path:           "test.ts:L1-L2".to_string(),
+				display_path:        "test.ts".to_string(),
+				language_tag:        Some("ts".to_string()),
+				omit_checksum:       true,
+				anchor_style:        Some(ChunkAnchorStyle::FullOmit),
+				absolute_line_range: None,
+				tab_replacement:     Some("  ".to_string()),
+				normalize_indent:    Some(true),
+			})
+			.expect("render_read should succeed");
+
+		// Should NOT have any truncation markers.
+		assert!(
+			!result.text.contains("lines above"),
+			"no top clip marker when chunk fits: {}",
+			result.text
+		);
+		assert!(
+			!result.text.contains("lines below"),
+			"no bottom clip marker when chunk fits: {}",
+			result.text
+		);
+	}
+
+	#[test]
+	fn nix_let_expression_bindings_are_individually_addressable() {
+		// A Nix file with { args }: let bindings in body should produce
+		// individual chunks for each binding, not a single opaque chunk.
+		let source = r"{ pkgs }:
+	let
+	  foo = 1;
+	  bar = pkgs.hello;
+	  baz = {
+		x = 1;
+		y = 2;
+	  };
+	in
+	{
+	  inherit foo bar baz;
+	}
+	";
+		let tree = build_chunk_tree(source, "nix").expect("nix tree should build");
+
+		// There should be chunks for individual bindings, not just a single
+		// opaque chunk containing all of them.
+		let has_foo = tree.chunks.iter().any(|c| c.path.contains("foo"));
+		let has_bar = tree.chunks.iter().any(|c| c.path.contains("bar"));
+		let has_baz = tree.chunks.iter().any(|c| c.path.contains("baz"));
+
+		assert!(
+			has_foo && has_bar && has_baz,
+			"individual bindings should be addressable chunks. Chunks: {:?}",
+			tree.chunks.iter().map(|c| &c.path).collect::<Vec<_>>()
+		);
 	}
 }

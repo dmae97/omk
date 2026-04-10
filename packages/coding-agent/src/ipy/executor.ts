@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { getAgentDir, getProjectDir, isEnoent, logger } from "@oh-my-pi/pi-utils";
+import { getAgentDir, getProjectDir, isBunTestRuntime, isEnoent, logger } from "@oh-my-pi/pi-utils";
 import { OutputSink } from "../session/streaming-output";
 import { shutdownSharedGateway } from "./gateway-coordinator";
 import {
@@ -299,10 +299,6 @@ async function writePreludeCache(state: PreludeCacheState, helpers: PreludeHelpe
 	}
 }
 
-function isPythonTestEnvironment(): boolean {
-	return Bun.env.BUN_ENV === "test" || Bun.env.NODE_ENV === "test";
-}
-
 function getPreludeIntrospectionOptions(
 	options: KernelSessionExecutionOptions = {},
 ): Pick<KernelExecuteOptions, "signal" | "timeoutMs"> {
@@ -318,7 +314,7 @@ async function cachePreludeDocs(
 	cacheState?: PreludeCacheState | null,
 ): Promise<PreludeHelper[]> {
 	cachedPreludeDocs = docs;
-	if (!isPythonTestEnvironment() && docs.length > 0) {
+	if (!isBunTestRuntime() && docs.length > 0) {
 		const state = cacheState ?? (await buildPreludeCacheState(cwd));
 		await writePreludeCache(state, docs);
 	}
@@ -416,7 +412,7 @@ export async function warmPythonEnvironment(
 		cachedPreludeDocs = [];
 		return { ok: false, reason, docs: [] };
 	}
-	if (!isPythonTestEnvironment()) {
+	if (!isBunTestRuntime()) {
 		try {
 			cacheState = await buildPreludeCacheState(cwd);
 			const cached = await readPreludeCache(cacheState);

@@ -2,7 +2,11 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*, kind::ChunkKind};
+use super::{
+	classify::{ClassifierTables, LangClassifier},
+	common::*,
+	kind::ChunkKind,
+};
 
 pub struct MarkupClassifier;
 
@@ -57,36 +61,34 @@ impl MarkupClassifier {
 }
 
 impl LangClassifier for MarkupClassifier {
-	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
-			"section" => Some(Self::classify_section(node, source)),
-			"block_statement" => Some(Self::classify_block_statement(node, source)),
-			"mustache_statement" => Some(Self::classify_mustache_statement(node, source)),
-			"element" | "script_element" | "style_element" | "element_node" | "text_node" => {
-				Self::classify_element(node, source)
-			},
-			_ => None,
-		}
+	fn tables(&self) -> &'static ClassifierTables {
+		static TABLES: ClassifierTables = ClassifierTables {
+			root:                 &[],
+			class:                &[],
+			function:             &[],
+			structural_overrides: super::classify::StructuralOverrides::EMPTY,
+		};
+		&TABLES
 	}
 
-	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
-			"section" => Some(Self::classify_section(node, source)),
-			"block_statement" => Some(Self::classify_block_statement(node, source)),
-			"mustache_statement" => Some(Self::classify_mustache_statement(node, source)),
-			"element" | "script_element" | "style_element" | "element_node" | "text_node" => {
-				Self::classify_element(node, source)
-			},
-			_ => None,
-		}
-	}
-
-	fn classify_function<'t>(
+	fn classify_override<'t>(
 		&self,
-		_node: Node<'t>,
-		_source: &str,
+		context: ChunkContext,
+		node: Node<'t>,
+		source: &str,
 	) -> Option<RawChunkCandidate<'t>> {
-		None
+		if !matches!(context, ChunkContext::Root | ChunkContext::ClassBody) {
+			return None;
+		}
+		match node.kind() {
+			"section" => Some(Self::classify_section(node, source)),
+			"block_statement" => Some(Self::classify_block_statement(node, source)),
+			"mustache_statement" => Some(Self::classify_mustache_statement(node, source)),
+			"element" | "script_element" | "style_element" | "element_node" | "text_node" => {
+				Self::classify_element(node, source)
+			},
+			_ => None,
+		}
 	}
 }
 

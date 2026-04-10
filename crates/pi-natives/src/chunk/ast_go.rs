@@ -1,143 +1,250 @@
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*, kind::ChunkKind};
+use super::{
+	classify::{
+		ClassifierTables, LangClassifier, NamingMode, RecurseMode, RuleStyle, StructuralOverrides,
+		semantic_rule,
+	},
+	common::*,
+	kind::ChunkKind,
+};
 
 pub struct GoClassifier;
 
+const ROOT_RULES: &[super::classify::SemanticRule] = &[
+	// ── Imports / package ──
+	semantic_rule(
+		"import_declaration",
+		ChunkKind::Imports,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"package_clause",
+		ChunkKind::Imports,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	// ── Functions ──
+	semantic_rule(
+		"function_declaration",
+		ChunkKind::Function,
+		RuleStyle::Named,
+		NamingMode::AutoIdentifier,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	semantic_rule(
+		"method_declaration",
+		ChunkKind::Function,
+		RuleStyle::Named,
+		NamingMode::AutoIdentifier,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	// ── Statements ──
+	semantic_rule(
+		"expression_statement",
+		ChunkKind::Statements,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"go_statement",
+		ChunkKind::Statements,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"defer_statement",
+		ChunkKind::Statements,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"send_statement",
+		ChunkKind::Statements,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+];
+
+const CLASS_RULES: &[super::classify::SemanticRule] = &[
+	// ── Methods ──
+	semantic_rule(
+		"method_spec",
+		ChunkKind::Method,
+		RuleStyle::Named,
+		NamingMode::AutoIdentifier,
+		RecurseMode::None,
+	),
+	// ── Field / method lists ──
+	semantic_rule(
+		"field_declaration_list",
+		ChunkKind::Fields,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"method_spec_list",
+		ChunkKind::Methods,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+];
+
+const FUNCTION_RULES: &[super::classify::SemanticRule] = &[
+	// ── Control flow ──
+	semantic_rule(
+		"if_statement",
+		ChunkKind::If,
+		RuleStyle::Named,
+		NamingMode::None,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	semantic_rule(
+		"for_statement",
+		ChunkKind::For,
+		RuleStyle::Named,
+		NamingMode::None,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	semantic_rule(
+		"switch_statement",
+		ChunkKind::Switch,
+		RuleStyle::Named,
+		NamingMode::None,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	semantic_rule(
+		"expression_switch_statement",
+		ChunkKind::Switch,
+		RuleStyle::Named,
+		NamingMode::None,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	semantic_rule(
+		"type_switch_statement",
+		ChunkKind::Switch,
+		RuleStyle::Named,
+		NamingMode::None,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	semantic_rule(
+		"select_statement",
+		ChunkKind::Switch,
+		RuleStyle::Named,
+		NamingMode::None,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	// ── Statements ──
+	semantic_rule(
+		"go_statement",
+		ChunkKind::Statements,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"defer_statement",
+		ChunkKind::Statements,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"send_statement",
+		ChunkKind::Statements,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+];
+
+const GO_TABLES: ClassifierTables = ClassifierTables {
+	root:                 ROOT_RULES,
+	class:                CLASS_RULES,
+	function:             FUNCTION_RULES,
+	structural_overrides: StructuralOverrides::EMPTY,
+};
+
 impl LangClassifier for GoClassifier {
-	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
-			// ── Imports / package ──
-			"import_declaration" | "package_clause" => {
-				Some(group_candidate(node, ChunkKind::Imports, source))
-			},
-
-			// ── Variables ──
-			"const_declaration" | "var_declaration" | "short_var_declaration" => {
-				Some(match extract_identifier(node, source) {
-					Some(name) => make_kind_chunk(node, ChunkKind::Variable, Some(name), source, None),
-					None => group_candidate(node, ChunkKind::Declarations, source),
-				})
-			},
-
-			// ── Functions ──
-			"function_declaration" => Some(named_candidate(
-				node,
-				ChunkKind::Function,
-				source,
-				recurse_body(node, ChunkContext::FunctionBody),
-			)),
-			"method_declaration" => Some(named_candidate(
-				node,
-				ChunkKind::Function,
-				source,
-				recurse_body(node, ChunkContext::FunctionBody),
-			)),
-
-			// ── Containers ──
-			"type_declaration" => Some(classify_type_decl(node, source)),
-
-			// ── Control flow (top-level scripts) ──
-			"if_statement"
-			| "switch_statement"
-			| "expression_switch_statement"
-			| "type_switch_statement"
-			| "select_statement"
-			| "for_statement" => Some(classify_function_go(node, source)),
-
-			// ── Statements ──
-			"expression_statement" | "go_statement" | "defer_statement" | "send_statement" => {
-				Some(group_candidate(node, ChunkKind::Statements, source))
-			},
-
-			_ => None,
-		}
+	fn tables(&self) -> &'static ClassifierTables {
+		&GO_TABLES
 	}
 
-	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
-			// ── Methods ──
-			"method_spec" => Some(named_candidate(node, ChunkKind::Method, source, None)),
-
-			// ── Fields ──
-			"field_declaration" | "embedded_field" => Some(match extract_identifier(node, source) {
-				Some(name) => make_kind_chunk(node, ChunkKind::Field, Some(name), source, None),
-				None => group_candidate(node, ChunkKind::Fields, source),
-			}),
-
-			// ── Field / method lists ──
-			"field_declaration_list" => Some(group_candidate(node, ChunkKind::Fields, source)),
-			"method_spec_list" => Some(group_candidate(node, ChunkKind::Methods, source)),
-
-			_ => None,
+	fn classify_override<'t>(
+		&self,
+		context: ChunkContext,
+		node: Node<'t>,
+		source: &str,
+	) -> Option<RawChunkCandidate<'t>> {
+		match context {
+			ChunkContext::Root => classify_root_custom(node, source),
+			ChunkContext::ClassBody => classify_class_custom(node, source),
+			ChunkContext::FunctionBody => classify_function_custom(node, source),
 		}
 	}
+}
 
-	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
-			// ── Control flow ──
-			"if_statement" => Some(make_candidate(
-				node,
-				ChunkKind::If,
-				None,
-				NameStyle::Named,
-				None,
-				recurse_body(node, ChunkContext::FunctionBody),
-				source,
-			)),
-			"switch_statement" | "expression_switch_statement" | "type_switch_statement" => {
-				Some(make_candidate(
-					node,
-					ChunkKind::Switch,
-					None,
-					NameStyle::Named,
-					None,
-					recurse_body(node, ChunkContext::FunctionBody),
-					source,
-				))
-			},
-			"select_statement" => Some(make_candidate(
-				node,
-				ChunkKind::Switch,
-				None,
-				NameStyle::Named,
-				None,
-				recurse_body(node, ChunkContext::FunctionBody),
-				source,
-			)),
+fn classify_root_custom<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
+	match node.kind() {
+		// ── Variables ──
+		"const_declaration" | "var_declaration" | "short_var_declaration" => {
+			Some(match extract_identifier(node, source) {
+				Some(name) => make_kind_chunk(node, ChunkKind::Variable, Some(name), source, None),
+				None => group_candidate(node, ChunkKind::Declarations, source),
+			})
+		},
 
-			// ── Loops ──
-			"for_statement" => Some(make_candidate(
-				node,
-				ChunkKind::For,
-				None,
-				NameStyle::Named,
-				None,
-				recurse_body(node, ChunkContext::FunctionBody),
-				source,
-			)),
+		// ── Containers ──
+		"type_declaration" => Some(classify_type_decl(node, source)),
 
-			// ── Blocks ──
-			"go_statement" | "defer_statement" | "send_statement" => {
-				Some(group_candidate(node, ChunkKind::Statements, source))
-			},
+		// ── Control flow (top-level scripts) ──
+		"if_statement"
+		| "switch_statement"
+		| "expression_switch_statement"
+		| "type_switch_statement"
+		| "select_statement"
+		| "for_statement" => Some(classify_function_go(node, source)),
 
-			// ── Variables ──
-			"short_var_declaration" | "var_declaration" | "const_declaration" => {
-				let span = line_span(node.start_position().row + 1, node.end_position().row + 1);
-				Some(if span > 1 {
-					if let Some(name) = extract_identifier(node, source) {
-						make_kind_chunk(node, ChunkKind::Variable, Some(name), source, None)
-					} else {
-						group_from_sanitized(node, source)
-					}
+		_ => None,
+	}
+}
+
+fn classify_class_custom<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
+	match node.kind() {
+		// ── Fields ──
+		"field_declaration" | "embedded_field" => Some(match extract_identifier(node, source) {
+			Some(name) => make_kind_chunk(node, ChunkKind::Field, Some(name), source, None),
+			None => group_candidate(node, ChunkKind::Fields, source),
+		}),
+		_ => None,
+	}
+}
+
+fn classify_function_custom<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
+	match node.kind() {
+		// ── Variables ──
+		"short_var_declaration" | "var_declaration" | "const_declaration" => {
+			let span = line_span(node.start_position().row + 1, node.end_position().row + 1);
+			Some(if span > 1 {
+				if let Some(name) = extract_identifier(node, source) {
+					make_kind_chunk(node, ChunkKind::Variable, Some(name), source, None)
 				} else {
 					group_from_sanitized(node, source)
-				})
-			},
-
-			_ => None,
-		}
+				}
+			} else {
+				group_from_sanitized(node, source)
+			})
+		},
+		_ => None,
 	}
 }
 

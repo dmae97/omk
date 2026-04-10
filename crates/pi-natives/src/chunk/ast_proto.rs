@@ -7,25 +7,83 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*, kind::ChunkKind};
+use super::{
+	classify::{
+		ClassifierTables, LangClassifier, NamingMode, RecurseMode, RuleStyle, semantic_rule,
+	},
+	common::*,
+	kind::ChunkKind,
+};
 
 pub struct ProtoClassifier;
 
+const PROTO_ROOT_RULES: &[super::classify::SemanticRule] = &[
+	semantic_rule(
+		"syntax",
+		ChunkKind::Headers,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"package",
+		ChunkKind::Headers,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"import",
+		ChunkKind::Imports,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"option",
+		ChunkKind::Options,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+];
+
+const PROTO_CLASS_RULES: &[super::classify::SemanticRule] = &[semantic_rule(
+	"option",
+	ChunkKind::Options,
+	RuleStyle::Group,
+	NamingMode::None,
+	RecurseMode::None,
+)];
+
+const PROTO_TABLES: ClassifierTables = ClassifierTables {
+	root:                 PROTO_ROOT_RULES,
+	class:                PROTO_CLASS_RULES,
+	function:             &[],
+	structural_overrides: super::classify::StructuralOverrides::EMPTY,
+};
+
 impl LangClassifier for ProtoClassifier {
-	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_proto_root(node, source)
+	fn tables(&self) -> &'static ClassifierTables {
+		&PROTO_TABLES
 	}
 
-	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_proto_class(node, source)
+	fn classify_override<'t>(
+		&self,
+		context: ChunkContext,
+		node: Node<'t>,
+		source: &str,
+	) -> Option<RawChunkCandidate<'t>> {
+		match context {
+			ChunkContext::Root => classify_proto_root(node, source),
+			ChunkContext::ClassBody => classify_proto_class(node, source),
+			ChunkContext::FunctionBody => None,
+		}
 	}
 }
 
 fn classify_proto_root<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 	Some(match node.kind() {
-		"syntax" | "package" => group_candidate(node, ChunkKind::Headers, source),
-		"import" => group_candidate(node, ChunkKind::Imports, source),
-		"option" => group_candidate(node, ChunkKind::Options, source),
 		"message" => make_named_proto_chunk(
 			node,
 			ChunkKind::Type,
@@ -53,7 +111,6 @@ fn classify_proto_root<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandi
 
 fn classify_proto_class<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 	Some(match node.kind() {
-		"option" => group_candidate(node, ChunkKind::Options, source),
 		"field" if is_proto_message_field(node) => {
 			make_kind_chunk(node, ChunkKind::Field, proto_name(node, source), source, None)
 		},

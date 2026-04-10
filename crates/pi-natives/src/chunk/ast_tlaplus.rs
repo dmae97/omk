@@ -8,11 +8,14 @@
 use tree_sitter::Node;
 
 use super::{
-	classify::LangClassifier,
+	classify::{
+		ClassifierTables, LangClassifier, NamingMode, RecurseMode, RuleStyle, StructuralOverrides,
+		semantic_rule,
+	},
 	common::{
 		ChunkContext, RawChunkCandidate, RecurseSpec, child_by_kind, extract_identifier,
-		group_candidate, make_container_chunk, make_container_chunk_from, make_kind_chunk,
-		positional_candidate, recurse_self, sanitize_identifier,
+		make_container_chunk, make_container_chunk_from, make_kind_chunk, recurse_self,
+		sanitize_identifier,
 	},
 	kind::ChunkKind,
 	types::ChunkNode,
@@ -21,97 +24,102 @@ use super::{
 pub struct TlaplusClassifier;
 
 impl LangClassifier for TlaplusClassifier {
-	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
-			"module" => Some(make_container_chunk(
-				node,
-				ChunkKind::Module,
-				tla_identifier(node, source),
-				source,
-				Some(recurse_self(node, ChunkContext::Root)),
-			)),
-			"variable_declaration" | "constant_declaration" | "recursive_declaration" => {
-				Some(group_candidate(node, ChunkKind::Declarations, source))
+	fn tables(&self) -> &'static ClassifierTables {
+		static TABLES: ClassifierTables = ClassifierTables {
+			root:                 &[
+				semantic_rule(
+					"variable_declaration",
+					ChunkKind::Declarations,
+					RuleStyle::Group,
+					NamingMode::None,
+					RecurseMode::None,
+				),
+				semantic_rule(
+					"constant_declaration",
+					ChunkKind::Declarations,
+					RuleStyle::Group,
+					NamingMode::None,
+					RecurseMode::None,
+				),
+				semantic_rule(
+					"recursive_declaration",
+					ChunkKind::Declarations,
+					RuleStyle::Group,
+					NamingMode::None,
+					RecurseMode::None,
+				),
+			],
+			class:                &[semantic_rule(
+				"pcal_var_decls",
+				ChunkKind::Declarations,
+				RuleStyle::Group,
+				NamingMode::None,
+				RecurseMode::None,
+			)],
+			function:             &[
+				semantic_rule(
+					"pcal_if",
+					ChunkKind::If,
+					RuleStyle::Positional,
+					NamingMode::None,
+					RecurseMode::None,
+				),
+				semantic_rule(
+					"pcal_while",
+					ChunkKind::Loop,
+					RuleStyle::Positional,
+					NamingMode::None,
+					RecurseMode::None,
+				),
+				semantic_rule(
+					"pcal_either",
+					ChunkKind::Either,
+					RuleStyle::Positional,
+					NamingMode::None,
+					RecurseMode::None,
+				),
+				semantic_rule(
+					"pcal_with",
+					ChunkKind::With,
+					RuleStyle::Positional,
+					NamingMode::None,
+					RecurseMode::None,
+				),
+				semantic_rule(
+					"pcal_assign",
+					ChunkKind::Statements,
+					RuleStyle::Group,
+					NamingMode::None,
+					RecurseMode::None,
+				),
+			],
+			structural_overrides: StructuralOverrides {
+				extra_trivia:            &[
+					"header_line",
+					"double_line",
+					"extends",
+					"pcal_algorithm_start",
+				],
+				preserved_trivia:        &["block_comment"],
+				extra_root_wrappers:     &[],
+				preserved_root_wrappers: &["module"],
+				absorbable_attrs:        &[],
 			},
-			"operator_definition" => Some(make_kind_chunk(
-				node,
-				ChunkKind::Operator,
-				tla_identifier(node, source),
-				source,
-				None,
-			)),
-			"module_definition" => Some(make_container_chunk(
-				node,
-				ChunkKind::Module,
-				tla_identifier(node, source),
-				source,
-				Some(recurse_self(node, ChunkContext::Root)),
-			)),
-			"pcal_algorithm" => Some(make_container_chunk(
-				node,
-				ChunkKind::Algo,
-				tla_identifier(node, source),
-				source,
-				recurse_child(node, "pcal_algorithm_body", ChunkContext::ClassBody),
-			)),
-			"block_comment" => child_by_kind(node, &["pcal_algorithm"]).map(|algorithm| {
-				make_container_chunk_from(
-					node,
-					algorithm,
-					ChunkKind::Algo,
-					tla_identifier(algorithm, source),
-					source,
-					recurse_child(algorithm, "pcal_algorithm_body", ChunkContext::ClassBody),
-				)
-			}),
+		};
+		&TABLES
+	}
+
+	fn classify_override<'t>(
+		&self,
+		context: ChunkContext,
+		node: Node<'t>,
+		source: &str,
+	) -> Option<RawChunkCandidate<'t>> {
+		match context {
+			ChunkContext::Root => classify_root_custom(node, source),
+			ChunkContext::ClassBody => classify_class_custom(node, source),
 			_ => None,
 		}
-	}
-
-	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
-			"pcal_procedure" => Some(make_container_chunk(
-				node,
-				ChunkKind::Proc,
-				tla_identifier(node, source),
-				source,
-				recurse_child(node, "pcal_algorithm_body", ChunkContext::ClassBody),
-			)),
-			"pcal_process" => Some(make_container_chunk(
-				node,
-				ChunkKind::Process,
-				tla_identifier(node, source),
-				source,
-				recurse_child(node, "pcal_algorithm_body", ChunkContext::ClassBody),
-			)),
-			"pcal_var_decls" => Some(group_candidate(node, ChunkKind::Declarations, source)),
-			_ => None,
-		}
-	}
-
-	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
-			// PlusCal control flow
-			"pcal_if" => Some(positional_candidate(node, ChunkKind::If, source)),
-			"pcal_while" => Some(positional_candidate(node, ChunkKind::Loop, source)),
-			"pcal_either" => Some(positional_candidate(node, ChunkKind::Either, source)),
-			"pcal_with" => Some(positional_candidate(node, ChunkKind::With, source)),
-			// PlusCal assignments
-			"pcal_assign" => Some(group_candidate(node, ChunkKind::Statements, source)),
-			_ => None,
-		}
-	}
-
-	fn preserve_trivia(&self, kind: &str) -> bool {
-		kind == "block_comment"
-	}
-
-	fn is_trivia(&self, kind: &str) -> bool {
-		matches!(kind, "header_line" | "double_line" | "extends" | "pcal_algorithm_start")
-	}
-
-	fn preserve_root_wrapper(&self, kind: &str) -> bool {
-		kind == "module"
 	}
 
 	fn preserve_children(
@@ -181,6 +189,70 @@ impl LangClassifier for TlaplusClassifier {
 			}
 			chunks.push(synthetic);
 		}
+	}
+}
+
+fn classify_root_custom<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
+	match node.kind() {
+		"module" => Some(make_container_chunk(
+			node,
+			ChunkKind::Module,
+			tla_identifier(node, source),
+			source,
+			Some(recurse_self(node, ChunkContext::Root)),
+		)),
+		"operator_definition" => Some(make_kind_chunk(
+			node,
+			ChunkKind::Operator,
+			tla_identifier(node, source),
+			source,
+			None,
+		)),
+		"module_definition" => Some(make_container_chunk(
+			node,
+			ChunkKind::Module,
+			tla_identifier(node, source),
+			source,
+			Some(recurse_self(node, ChunkContext::Root)),
+		)),
+		"pcal_algorithm" => Some(make_container_chunk(
+			node,
+			ChunkKind::Algo,
+			tla_identifier(node, source),
+			source,
+			recurse_child(node, "pcal_algorithm_body", ChunkContext::ClassBody),
+		)),
+		"block_comment" => child_by_kind(node, &["pcal_algorithm"]).map(|algorithm| {
+			make_container_chunk_from(
+				node,
+				algorithm,
+				ChunkKind::Algo,
+				tla_identifier(algorithm, source),
+				source,
+				recurse_child(algorithm, "pcal_algorithm_body", ChunkContext::ClassBody),
+			)
+		}),
+		_ => None,
+	}
+}
+
+fn classify_class_custom<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
+	match node.kind() {
+		"pcal_procedure" => Some(make_container_chunk(
+			node,
+			ChunkKind::Proc,
+			tla_identifier(node, source),
+			source,
+			recurse_child(node, "pcal_algorithm_body", ChunkContext::ClassBody),
+		)),
+		"pcal_process" => Some(make_container_chunk(
+			node,
+			ChunkKind::Process,
+			tla_identifier(node, source),
+			source,
+			recurse_child(node, "pcal_algorithm_body", ChunkContext::ClassBody),
+		)),
+		_ => None,
 	}
 }
 
@@ -265,6 +337,7 @@ fn translation_chunk(
 		identifier: Some(range.start_line.to_string()),
 		kind: ChunkKind::Translation,
 		leaf: true,
+		virtual_content: None,
 		parent_path,
 		children: Vec::new(),
 		signature: Some("translation block".to_string()),

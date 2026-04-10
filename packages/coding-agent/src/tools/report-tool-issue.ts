@@ -8,7 +8,7 @@
 import { Database } from "bun:sqlite";
 import path from "node:path";
 import type { AgentTool } from "@oh-my-pi/pi-agent-core";
-import { $env, getAgentDir, logger, VERSION } from "@oh-my-pi/pi-utils";
+import { $flag, getAgentDir, logger, VERSION } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
 import type { Settings } from "..";
 import type { ToolSession } from "./index";
@@ -19,7 +19,7 @@ const ReportToolIssueParams = Type.Object({
 });
 
 export function isAutoQaEnabled(settings?: Settings): boolean {
-	return $env.PI_AUTO_QA === "1" || !!settings?.get("dev.autoqa");
+	return $flag("PI_AUTO_QA") || !!settings?.get("dev.autoqa");
 }
 
 export function getAutoQaDbPath(): string {

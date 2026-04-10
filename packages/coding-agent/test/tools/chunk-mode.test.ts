@@ -57,13 +57,16 @@ ${ret}
 describe("chunk mode tools", () => {
 	let tmpDir: string;
 	let originalEditVariant: string | undefined;
+	let originalChunkAutoIndent: string | undefined;
 
 	beforeEach(async () => {
 		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "chunk-mode-test-"));
 		_resetSettingsForTest();
 		await Settings.init({ inMemory: true, cwd: tmpDir });
 		originalEditVariant = Bun.env.PI_EDIT_VARIANT;
+		originalChunkAutoIndent = Bun.env.PI_CHUNK_AUTOINDENT;
 		Bun.env.PI_EDIT_VARIANT = "chunk";
+		delete Bun.env.PI_CHUNK_AUTOINDENT;
 	});
 
 	afterEach(async () => {
@@ -73,6 +76,11 @@ describe("chunk mode tools", () => {
 			delete Bun.env.PI_EDIT_VARIANT;
 		} else {
 			Bun.env.PI_EDIT_VARIANT = originalEditVariant;
+		}
+		if (originalChunkAutoIndent === undefined) {
+			delete Bun.env.PI_CHUNK_AUTOINDENT;
+		} else {
+			Bun.env.PI_CHUNK_AUTOINDENT = originalChunkAutoIndent;
 		}
 	});
 
@@ -88,6 +96,31 @@ describe("chunk mode tools", () => {
 		expect(text).toContain("class_Server#");
 		expect(text).toContain("fn_main#");
 		expect(text).not.toContain("ck:");
+	});
+
+	it("documents default chunk auto-indent behavior without exposing a tool parameter", () => {
+		const session = createSession(tmpDir);
+		const readTool = new ReadTool(session);
+		const editTool = new EditTool(session);
+
+		expect(readTool.description).toContain("normalize leading indentation");
+		expect(readTool.description).not.toContain("indent_mode");
+		expect(JSON.stringify(readTool.parameters)).not.toContain("indent_mode");
+		expect(editTool.description).toContain("Use `\\t` for indentation");
+		expect(editTool.description).not.toContain("indent_mode");
+		expect(JSON.stringify(editTool.parameters)).not.toContain("indent_mode");
+	});
+
+	it("adjusts chunk prompts when PI_CHUNK_AUTOINDENT=0", () => {
+		Bun.env.PI_CHUNK_AUTOINDENT = "0";
+		const session = createSession(tmpDir);
+		const readTool = new ReadTool(session);
+		const editTool = new EditTool(session);
+
+		expect(readTool.description).toContain("preserve literal leading tabs/spaces");
+		expect(readTool.description).not.toContain("indent_mode");
+		expect(editTool.description).toContain("Match the file's literal tabs/spaces");
+		expect(editTool.description).not.toContain("indent_mode");
 	});
 
 	it("disables hashline display mode across shared tool renderers in chunk mode", () => {
@@ -110,6 +143,24 @@ describe("chunk mode tools", () => {
 		expect(text).toContain("let total = 0;");
 		expect(text).toContain("29| \t\t\ttotal +=");
 		expect(text).toContain("return err.message + total;");
+	});
+
+	it("preserves literal spaces in chunk reads when PI_CHUNK_AUTOINDENT=0", async () => {
+		Bun.env.PI_CHUNK_AUTOINDENT = "0";
+		const filePath = path.join(tmpDir, "server.ts");
+		await Bun.write(filePath, buildLargeTypescriptFixture());
+		const tool = new ReadTool(createSession(tmpDir));
+
+		const result = await tool.execute("chunk-read-preserve-indent", {
+			path: `${filePath}:class_Server.fn_handleError`,
+		});
+		const text = getText(result);
+
+		expect(text).toContain("2|   private handleError(err: Error): string {");
+		expect(text).toContain("3|     let total = 0;");
+		expect(text).toContain("29|       total +=");
+		expect(text).not.toContain("2| \tprivate handleError");
+		expect(text).not.toContain("29| \t\t\ttotal +=");
 	});
 
 	it("renders line-range reads as range-scoped chunk output", async () => {
@@ -234,6 +285,34 @@ describe("chunk mode tools", () => {
 		expect(updatedSource).not.toContain("total +=");
 		expect(editText).toContain("server.ts·");
 		expect(editText).toContain("@@ -3,62 +3,1 @@");
+	});
+
+	it("preserves literal tabs in chunk edits when PI_CHUNK_AUTOINDENT=0", async () => {
+		Bun.env.PI_CHUNK_AUTOINDENT = "0";
+		const filePath = path.join(tmpDir, "preserve-tabs.ts");
+		const source = 'class Server {\n  handle(): void {\n    console.log("old");\n  }\n}\n';
+		await Bun.write(filePath, source);
+		const session = createSession(tmpDir);
+		const editTool = new EditTool(session);
+		const checksum = getChunkChecksum(source, "typescript", "class_Server.fn_handle");
+
+		const result = await editTool.execute("chunk-edit-preserve-indent", {
+			path: filePath,
+			edits: [
+				{
+					sel: `class_Server.fn_handle#${checksum}@body`,
+					op: "replace",
+					content: 'if (flag) {\n\tconsole.log("tabbed");\n}\n',
+				},
+			],
+		} as never);
+		const text = getText(result);
+		const updatedSource = await Bun.file(filePath).text();
+
+		expect(updatedSource).toContain(
+			'  handle(): void {\n    if (flag) {\n    \tconsole.log("tabbed");\n    }\n  }\n',
+		);
+		expect(text).toContain('\tconsole.log("tabbed");');
 	});
 
 	it("applies omitted-sel batch splices when the second operation uses the post-first checksum", async () => {

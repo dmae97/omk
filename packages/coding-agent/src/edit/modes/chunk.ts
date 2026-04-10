@@ -11,6 +11,7 @@ import {
 	ChunkState,
 	type EditOperation as NativeEditOperation,
 } from "@oh-my-pi/pi-natives";
+import { $envpos } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import type { BunFile } from "bun";
 import { LRUCache } from "lru-cache";
@@ -63,6 +64,34 @@ const validAnchorStyles: Record<string, ChunkAnchorStyle> = {
 	bare: ChunkAnchorStyle.Bare,
 };
 
+export function resolveChunkAutoIndent(rawValue = Bun.env.PI_CHUNK_AUTOINDENT): boolean {
+	if (!rawValue) return true;
+	const normalized = rawValue.trim().toLowerCase();
+	switch (normalized) {
+		case "1":
+		case "true":
+		case "yes":
+		case "on":
+			return true;
+		case "0":
+		case "false":
+		case "no":
+		case "off":
+			return false;
+		default:
+			throw new Error(`Invalid PI_CHUNK_AUTOINDENT: ${rawValue}`);
+	}
+}
+
+function getChunkRenderIndentOptions(): {
+	normalizeIndent: boolean;
+	tabReplacement: string;
+} {
+	return resolveChunkAutoIndent()
+		? { normalizeIndent: true, tabReplacement: "    " }
+		: { normalizeIndent: false, tabReplacement: "\t" };
+}
+
 export function resolveAnchorStyle(settings?: Settings): ChunkAnchorStyle {
 	const envStyle = Bun.env.PI_ANCHOR_STYLE;
 	return (
@@ -72,16 +101,8 @@ export function resolveAnchorStyle(settings?: Settings): ChunkAnchorStyle {
 	);
 }
 
-const readEnvInt = (name: string, defaultValue: number): number => {
-	const value = Bun.env[name];
-	if (!value) return defaultValue;
-	const parsed = Number.parseInt(value, 10);
-	if (Number.isNaN(parsed) || parsed <= 0) return defaultValue;
-	return parsed;
-};
-
 const chunkStateCache = new LRUCache<string, ChunkCacheEntry>({
-	max: readEnvInt("PI_CHUNK_CACHE_MAX_ENTRIES", 200),
+	max: $envpos("PI_CHUNK_CACHE_MAX_ENTRIES", 200),
 });
 
 export function invalidateChunkCache(filePath: string): void {
@@ -215,6 +236,7 @@ export async function formatChunkedRead(params: {
 	const normalizedLanguage = normalizeLanguage(language);
 	const { state } = await loadChunkStateForFile(filePath, normalizedLanguage);
 	const displayPath = displayPathForFile(filePath, cwd);
+	const renderIndentOptions = getChunkRenderIndentOptions();
 	const result = state.renderRead({
 		readPath,
 		displayPath,
@@ -224,8 +246,8 @@ export async function formatChunkedRead(params: {
 		absoluteLineRange: absoluteLineRange
 			? { startLine: absoluteLineRange.startLine, endLine: absoluteLineRange.endLine ?? absoluteLineRange.startLine }
 			: undefined,
-		tabReplacement: "    ",
-		normalizeIndent: true,
+		tabReplacement: renderIndentOptions.tabReplacement,
+		normalizeIndent: renderIndentOptions.normalizeIndent,
 	});
 	return { text: result.text, resolvedPath: filePath, chunk: result.chunk };
 }
@@ -280,6 +302,7 @@ export function applyChunkEdits(params: {
 	const state = ChunkState.parse(normalizedSource, normalizeLanguage(params.language));
 	const result = state.applyEdits({
 		operations: nativeOperations,
+		normalizeIndent: resolveChunkAutoIndent(),
 		defaultSelector: params.defaultSelector,
 		defaultCrc: params.defaultCrc,
 		anchorStyle: params.anchorStyle,
@@ -312,7 +335,8 @@ export const chunkToolEditSchema = Type.Object({
 			"Chunk selector. Format: 'path@region' for insertions, 'path#CRC@region' for replace. Omit @region to target the full chunk. Valid regions: head, body, tail, decl.",
 	}),
 	content: Type.String({
-		description: "New content. Use \\t for indentation. Do NOT include the chunk's base padding.",
+		description:
+			"New content. Write indentation relative to the targeted region as described in the tool prompt. Do NOT include the chunk's base padding.",
 	}),
 });
 export const chunkEditParamsSchema = Type.Object(
@@ -387,7 +411,7 @@ async function writeChunkResult(params: {
 	invalidateFsScanAfterWrite(resolvedPath);
 
 	const diffResult = generateUnifiedDiffString(result.diffSourceBefore, result.diffSourceAfter);
-	const warningsBlock = result.warnings.length > 0 ? `\n\n${result.warnings.join("\n")}` : "";
+	const warningsBlock = result.warnings.length > 0 ? `\n\nWarnings:\n${result.warnings.join("\n")}` : "";
 	const meta = outputMeta()
 		.diagnostics(diagnostics?.summary ?? "", diagnostics?.messages ?? [])
 		.get();

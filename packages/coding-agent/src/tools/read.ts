@@ -14,6 +14,7 @@ import {
 	parseChunkReadPath,
 	parseChunkSelector,
 	resolveAnchorStyle,
+	resolveChunkAutoIndent,
 } from "../edit/modes/chunk";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import { parseInternalUrl } from "../internal-urls/parse";
@@ -449,6 +450,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			resolveEditMode(session) === "chunk"
 				? prompt.render(readChunkDescription, {
 						anchorStyle: resolveAnchorStyle(session.settings),
+						chunkAutoIndent: resolveChunkAutoIndent(),
 					})
 				: prompt.render(readDescription, {
 						DEFAULT_LIMIT: String(this.#defaultLimit),

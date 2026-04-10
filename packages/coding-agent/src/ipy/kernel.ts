@@ -1,4 +1,4 @@
-import { $env, logger, Snowflake } from "@oh-my-pi/pi-utils";
+import { $env, $flag, isBunTestRuntime, logger, Snowflake } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
 import { Settings } from "../config/settings";
 import { htmlToBasicMarkdown } from "../web/scrapers/types";
@@ -10,7 +10,7 @@ import { filterEnv, resolvePythonRuntime } from "./runtime";
 
 const TEXT_ENCODER = new TextEncoder();
 const TEXT_DECODER = new TextDecoder();
-const TRACE_IPC = $env.PI_PYTHON_IPC_TRACE === "1";
+const TRACE_IPC = $flag("PI_PYTHON_IPC_TRACE");
 const PRELUDE_INTROSPECTION_SNIPPET = "import json\nprint(json.dumps(__omp_prelude_docs__()))";
 
 class SharedGatewayCreateError extends Error {
@@ -195,7 +195,7 @@ export interface PythonKernelAvailability {
 }
 
 export async function checkPythonKernelAvailability(cwd: string): Promise<PythonKernelAvailability> {
-	if (Bun.env.BUN_ENV === "test" || Bun.env.NODE_ENV === "test" || $env.PI_PYTHON_SKIP_CHECK === "1") {
+	if (isBunTestRuntime() || $flag("PI_PYTHON_SKIP_CHECK")) {
 		return { ok: true };
 	}
 

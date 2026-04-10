@@ -59,6 +59,7 @@ pub enum ChunkKind {
 	Healthcheck,
 	Html,
 	Hunks,
+	Hunk,
 	If,
 	Iface,
 	Impl,
@@ -148,6 +149,9 @@ pub enum ChunkKind {
 	While,
 	With,
 	Workdir,
+	Conflict,
+	Ours,
+	Theirs,
 	Chunk,
 }
 
@@ -268,6 +272,7 @@ impl ChunkKind {
 			Self::Healthcheck => "healthcheck",
 			Self::Html => "html",
 			Self::Hunks => "hunks",
+			Self::Hunk => "hunk",
 			Self::If => "if",
 			Self::Iface => "iface",
 			Self::Impl => "impl",
@@ -357,6 +362,9 @@ impl ChunkKind {
 			Self::While => "while",
 			Self::With => "with",
 			Self::Workdir => "workdir",
+			Self::Conflict => "conflict",
+			Self::Ours => "ours",
+			Self::Theirs => "theirs",
 			Self::Chunk => "chunk",
 		}
 	}
@@ -422,6 +430,7 @@ impl ChunkKind {
 			Self::Healthcheck => &DEFAULT_TRAITS,
 			Self::Html => &GROUP_TRAITS,
 			Self::Hunks => &GROUP_TRAITS,
+			Self::Hunk => &DEFAULT_TRAITS,
 			Self::If => &DEFAULT_TRAITS,
 			Self::Iface => &PRESERVE_CHILDREN_TRAITS,
 			Self::Impl => &CONTAINER_TRAITS,
@@ -511,6 +520,9 @@ impl ChunkKind {
 			Self::While => &DEFAULT_TRAITS,
 			Self::With => &GROUP_TRAITS,
 			Self::Workdir => &DEFAULT_TRAITS,
+			Self::Conflict => &DEFAULT_TRAITS,
+			Self::Ours => &PACKED_LEAF_TRAITS,
+			Self::Theirs => &PACKED_LEAF_TRAITS,
 			Self::Chunk => &DEFAULT_TRAITS,
 		}
 	}
@@ -583,6 +595,7 @@ impl ChunkKind {
 			"healthcheck" => Self::Healthcheck,
 			"html" => Self::Html,
 			"hunks" => Self::Hunks,
+			"hunk" => Self::Hunk,
 			"if" => Self::If,
 			"iface" => Self::Iface,
 			"impl" => Self::Impl,
@@ -672,6 +685,9 @@ impl ChunkKind {
 			"while" => Self::While,
 			"with" => Self::With,
 			"workdir" => Self::Workdir,
+			"conflict" => Self::Conflict,
+			"ours" => Self::Ours,
+			"theirs" => Self::Theirs,
 			"chunk" => Self::Chunk,
 			_ => Self::Chunk,
 		}

@@ -56,7 +56,10 @@ pub fn render_state(state: &ChunkStateInner, params: &RenderParams) -> String {
 	let preview_tail_lines = *PREVIEW_TAIL_LINES;
 	let tab_replacement = params.tab_replacement.as_deref().unwrap_or("    ");
 	let normalize_indent = params.normalize_indent.unwrap_or(false).then(|| {
-		(detect_file_indent_char(state.source(), tree), detect_file_indent_step(tree) as usize)
+		(
+			detect_file_indent_char(state.source(), tree),
+			detect_file_indent_step(state.source(), tree) as usize,
+		)
 	});
 	let anchor_style = params.anchor_style.unwrap_or_default();
 	let focus: Option<HashMap<&str, ChunkFocusMode>> = params
@@ -181,7 +184,11 @@ fn line_to_chunk_path_leaf(tree: &ChunkTree, line: u32) -> Option<&ChunkNode> {
 		.chunks
 		.iter()
 		.filter(|chunk| {
-			chunk.leaf && chunk.start_line <= line && line <= chunk.end_line && !chunk.path.is_empty()
+			chunk.leaf
+				&& chunk.virtual_content.is_none()
+				&& chunk.start_line <= line
+				&& line <= chunk.end_line
+				&& !chunk.path.is_empty()
 		})
 		.min_by_key(|chunk| chunk.line_count)
 }
@@ -189,7 +196,11 @@ fn line_to_chunk_path_leaf(tree: &ChunkTree, line: u32) -> Option<&ChunkNode> {
 fn smallest_containing_chunk(tree: &ChunkTree, line: u32) -> Option<&ChunkNode> {
 	let mut best: Option<&ChunkNode> = None;
 	for chunk in &tree.chunks {
-		if chunk.path.is_empty() || chunk.start_line > line || line > chunk.end_line {
+		if chunk.path.is_empty()
+			|| chunk.virtual_content.is_some()
+			|| chunk.start_line > line
+			|| line > chunk.end_line
+		{
 			continue;
 		}
 		if best.is_none_or(|current| chunk.line_count < current.line_count) {
@@ -248,7 +259,13 @@ fn visible_children_for_chunk<'a>(
 		})
 		.filter(|child| focus.is_none_or(|map| map.contains_key(child.path.as_str())))
 		.collect::<Vec<_>>();
-	children.sort_unstable_by_key(|child| child.start_line);
+	children.sort_by(|left, right| {
+		left
+			.start_line
+			.cmp(&right.start_line)
+			.then_with(|| left.start_byte.cmp(&right.start_byte))
+			.then_with(|| left.path.cmp(&right.path))
+	});
 	children
 }
 
@@ -640,7 +657,58 @@ fn emit_line_gap(ctx: &mut RenderCtx<'_>, from: u32, to: u32) {
 	}
 }
 
-fn emit_leaf_body(ctx: &mut RenderCtx<'_>, _chunk: &ChunkNode, span: VisibleSpan) {
+/// Emit a truncation marker when `visible_range` clips a chunk.
+/// `above` = true for top clip, false for bottom clip.
+fn emit_range_clip_marker(
+	ctx: &mut RenderCtx<'_>,
+	chunk: &ChunkNode,
+	span: &VisibleSpan,
+	above: bool,
+) {
+	if ctx.visible_range.is_none() {
+		return;
+	}
+	let (hidden, direction, boundary_line) = if above {
+		let n = span.start.saturating_sub(chunk.start_line);
+		(n, "above", chunk.start_line)
+	} else {
+		let n = chunk.end_line.saturating_sub(span.end);
+		(n, "below", chunk.end_line)
+	};
+	if hidden == 0 {
+		return;
+	}
+	let indent =
+		chunk_body_anchor_indent(ctx.source_lines, chunk, ctx.tab_replacement, ctx.normalize_indent);
+	push_meta(
+		ctx,
+		format!("{indent}... {hidden} lines {direction} (chunk continues to L{boundary_line})"),
+	);
+}
+
+fn virtual_render_lines(
+	content: &str,
+	tab_replacement: &str,
+	normalize_indent: Option<(char, usize)>,
+) -> Vec<String> {
+	if content.is_empty() {
+		return Vec::new();
+	}
+	let content = content.strip_suffix('\n').unwrap_or(content);
+	content
+		.split('\n')
+		.map(|line| normalize_rendered_line(line, normalize_indent, tab_replacement))
+		.collect()
+}
+
+fn emit_leaf_body(ctx: &mut RenderCtx<'_>, chunk: &ChunkNode, span: VisibleSpan) {
+	if let Some(content) = chunk.virtual_content.as_deref() {
+		for line in virtual_render_lines(content, ctx.tab_replacement, ctx.normalize_indent) {
+			push_meta(ctx, line);
+		}
+		return;
+	}
+
 	for entry in build_leaf_entries(
 		ctx.source_lines,
 		span,
@@ -739,7 +807,9 @@ fn emit_chunk_subtree(
 		if ctx.show_leaf_preview
 			&& let Some(span) = span
 		{
+			emit_range_clip_marker(ctx, chunk, &span, true);
 			emit_leaf_body(ctx, chunk, span);
+			emit_range_clip_marker(ctx, chunk, &span, false);
 		}
 		// Emit inline diff hunks even when children are filtered out by
 		// focus (the chunk is "effectively leaf" but may own hunks).
@@ -757,6 +827,8 @@ fn emit_chunk_subtree(
 		== Some(ChunkFocusMode::Container);
 
 	if let Some(span) = span {
+		// Top clip marker for container chunks
+		emit_range_clip_marker(ctx, chunk, &span, true);
 		let mut cursor = chunk.start_line;
 		for child in children {
 			let gap_end = child.start_line.saturating_sub(1);
@@ -778,6 +850,8 @@ fn emit_chunk_subtree(
 		if cursor <= span.end && !is_container {
 			emit_line_gap(ctx, cursor, span.end);
 		}
+		// Bottom clip marker for container chunks
+		emit_range_clip_marker(ctx, chunk, &span, false);
 		// Emit inline diff hunks before the closing tag.
 		if !chunk.path.is_empty() {
 			emit_inline_hunks_for(ctx, &chunk.path);
@@ -924,7 +998,10 @@ pub fn render_state_with_hunks(
 	let preview_tail_lines = *PREVIEW_TAIL_LINES;
 	let tab_replacement = params.tab_replacement.as_deref().unwrap_or("    ");
 	let normalize_indent = params.normalize_indent.unwrap_or(false).then(|| {
-		(detect_file_indent_char(state.source(), tree), detect_file_indent_step(tree) as usize)
+		(
+			detect_file_indent_char(state.source(), tree),
+			detect_file_indent_step(state.source(), tree) as usize,
+		)
 	});
 	let anchor_style = params.anchor_style.unwrap_or_default();
 	let focus: Option<HashMap<&str, ChunkFocusMode>> = params

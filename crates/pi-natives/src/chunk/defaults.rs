@@ -21,7 +21,13 @@ pub fn classify_function_default<'tree>(
 	source: &str,
 ) -> RawChunkCandidate<'tree> {
 	let kind_name = sanitize_node_kind(node.kind());
-	group_candidate(node, ChunkKind::from_sanitized_kind(kind_name), source)
+	let kind = ChunkKind::from_sanitized_kind(kind_name);
+	let candidate = auto_classify(node, kind, source);
+	if candidate.recurse.is_some() || candidate.identifier.is_some() {
+		candidate
+	} else {
+		group_candidate(node, kind, source)
+	}
 }
 
 pub fn classify_var_decl<'tree>(node: Node<'tree>, source: &str) -> RawChunkCandidate<'tree> {

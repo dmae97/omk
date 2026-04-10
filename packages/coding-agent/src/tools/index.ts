@@ -1,7 +1,7 @@
 import type { AgentTool } from "@oh-my-pi/pi-agent-core";
 import type { ToolChoice } from "@oh-my-pi/pi-ai";
 import type { SearchDb } from "@oh-my-pi/pi-natives";
-import { $env, logger } from "@oh-my-pi/pi-utils";
+import { $env, $flag, isBunTestRuntime, logger } from "@oh-my-pi/pi-utils";
 import type { AsyncJobManager } from "../async";
 import type { PromptTemplate } from "../config/prompt-templates";
 import type { Settings } from "../config/settings";
@@ -297,8 +297,7 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 		!skipPythonPreflight &&
 		pythonMode !== "bash-only" &&
 		(requestedTools === undefined || requestedTools.includes("python"));
-	const isTestEnv = Bun.env.BUN_ENV === "test" || Bun.env.NODE_ENV === "test";
-	const skipPythonWarm = isTestEnv || $env.PI_PYTHON_SKIP_CHECK === "1";
+	const skipPythonWarm = isBunTestRuntime() || $flag("PI_PYTHON_SKIP_CHECK");
 	if (shouldCheckPython) {
 		const availability = await logger.time("createTools:pythonCheck", checkPythonKernelAvailability, session.cwd);
 		pythonAvailable = availability.ok;

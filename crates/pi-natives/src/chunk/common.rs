@@ -8,6 +8,7 @@ use tree_sitter::Node;
 
 use super::{
 	kind::{ChunkKind, SummaryStyle},
+	shape,
 	types::ChunkNode,
 };
 use crate::env_uint;
@@ -129,7 +130,7 @@ pub fn make_candidate<'tree>(
 		error: kind == ChunkKind::Error,
 		groupable: kind.traits().groupable,
 		has_leading_comment: false,
-		force_recurse: kind.traits().container,
+		force_recurse: kind.traits().container || (recurse.is_some() && node.has_error()),
 		recurse,
 	}
 }
@@ -254,15 +255,31 @@ pub fn prefixed_name(prefix: &str, node: Node<'_>, source: &str) -> String {
 pub fn infer_named_candidate<'tree>(node: Node<'tree>, source: &str) -> RawChunkCandidate<'tree> {
 	let kind_name = sanitize_node_kind(node.kind());
 	let kind = ChunkKind::from_sanitized_kind(kind_name);
-	make_kind_chunk(node, kind, extract_identifier(node, source), source, None)
+	auto_classify(node, kind, source)
+}
+
+pub fn auto_classify<'tree>(
+	node: Node<'tree>,
+	kind: ChunkKind,
+	source: &str,
+) -> RawChunkCandidate<'tree> {
+	make_kind_chunk(
+		node,
+		kind,
+		extract_identifier(node, source),
+		source,
+		auto_recurse_for_kind(node, kind),
+	)
 }
 
 // ── Tree navigation helpers ──────────────────────────────────────────────
 
 pub fn named_children(node: Node<'_>) -> Vec<Node<'_>> {
 	let mut children = Vec::new();
-	for index in 0..node.named_child_count() {
-		if let Some(child) = node.named_child(index) {
+	for index in 0..node.child_count() {
+		if let Some(child) = node.child(index)
+			&& (child.is_named() || child.is_error() || child.kind() == "ERROR")
+		{
 			children.push(child);
 		}
 	}
@@ -286,6 +303,30 @@ pub fn child_by_field_or_kind<'tree>(
 		}
 	}
 	child_by_kind(node, kinds)
+}
+
+pub fn resolve_recurse(node: Node<'_>, context: ChunkContext) -> Option<RecurseSpec<'_>> {
+	shape::recurse_target(node).map(|child| RecurseSpec { node: child, context })
+}
+
+pub fn resolve_value_container(node: Node<'_>) -> Option<RecurseSpec<'_>> {
+	shape::value_container_target(node)
+		.map(|child| RecurseSpec { node: child, context: ChunkContext::ClassBody })
+}
+
+fn auto_recurse_for_kind(node: Node<'_>, kind: ChunkKind) -> Option<RecurseSpec<'_>> {
+	let context = match kind {
+		ChunkKind::Constructor
+		| ChunkKind::Function
+		| ChunkKind::Macro
+		| ChunkKind::Method
+		| ChunkKind::Proc
+		| ChunkKind::Recipe => ChunkContext::FunctionBody,
+		_ if kind.traits().container => ChunkContext::ClassBody,
+		_ => return None,
+	};
+
+	resolve_recurse(node, context)
 }
 
 pub fn compute_body_inner_boundaries(
@@ -366,80 +407,23 @@ pub const fn recurse_self(node: Node<'_>, context: ChunkContext) -> RecurseSpec<
 }
 
 pub fn recurse_body(node: Node<'_>, context: ChunkContext) -> Option<RecurseSpec<'_>> {
-	recurse_into(node, context, &["body"], &[
-		"statement_block",
-		"compound_statement",
-		"function_body",
-		"constructor_body",
-		"do_block",
-		"do_group",
-		"block",
-		"body_statement",
-		"statements",
-		"recipe",
-		"yul_block",
-	])
+	resolve_recurse(node, context)
 }
 
 pub fn recurse_class(node: Node<'_>) -> Option<RecurseSpec<'_>> {
-	recurse_into(node, ChunkContext::ClassBody, &["body"], &[
-		"class_body",
-		"interface_body",
-		"enum_body",
-		"protocol_body",
-		"declaration_list",
-		"implementation_definition",
-		"contract_body",
-		"struct_body",
-		"keyframe_block_list",
-		"block",
-		"body_statement",
-		"body",
-		"enum_class_body",
-	])
+	resolve_recurse(node, ChunkContext::ClassBody)
 }
 
 pub fn recurse_interface(node: Node<'_>) -> Option<RecurseSpec<'_>> {
-	recurse_into(node, ChunkContext::ClassBody, &["body"], &[
-		"object_type",
-		"interface_body",
-		"protocol_body",
-		"contract_body",
-		"struct_body",
-		"block",
-		"body",
-	])
+	resolve_recurse(node, ChunkContext::ClassBody)
 }
 
 pub fn recurse_enum(node: Node<'_>) -> Option<RecurseSpec<'_>> {
-	recurse_into(node, ChunkContext::ClassBody, &["body"], &[
-		"enum_body",
-		"block",
-		"body",
-		"struct_body",
-	])
+	resolve_recurse(node, ChunkContext::ClassBody)
 }
 
 pub fn recurse_value_container(node: Node<'_>) -> Option<RecurseSpec<'_>> {
-	named_children(node)
-		.into_iter()
-		.find(|child| {
-			matches!(
-				child.kind(),
-				"object"
-					| "array" | "inline_table"
-					| "table" | "table_array_element"
-					| "block_mapping"
-					| "block_sequence"
-					| "flow_mapping"
-					| "flow_sequence"
-					| "block" | "attrset_expression"
-					| "let_expression"
-					| "function_expression"
-					| "body" | "binding_set"
-			)
-		})
-		.map(|child| RecurseSpec { node: child, context: ChunkContext::ClassBody })
+	resolve_value_container(node)
 }
 
 // ── Identifier extraction ────────────────────────────────────────────────
@@ -449,45 +433,11 @@ pub fn extract_identifier(node: Node<'_>, source: &str) -> Option<String> {
 		return Some("constructor".to_string());
 	}
 
-	let field_name = node.child_by_field_name("name").or_else(|| {
-		child_by_kind(node, &[
-			"identifier",
-			"property_identifier",
-			"private_property_identifier",
-			"type_identifier",
-			"field_identifier",
-			"simple_identifier",
-			"word",
-			"symbol",
-			"bare_key",
-			"quoted_key",
-			"dotted_key",
-		])
-	});
-	if let Some(name_node) = field_name {
+	if let Some(name_node) = shape::identifier_node(node) {
 		return sanitize_identifier(node_text(source, name_node.start_byte(), name_node.end_byte()));
 	}
 
-	named_children(node)
-		.into_iter()
-		.find(|child| {
-			matches!(
-				child.kind(),
-				"identifier"
-					| "property_identifier"
-					| "private_property_identifier"
-					| "type_identifier"
-					| "field_identifier"
-					| "simple_identifier"
-					| "word" | "symbol"
-					| "bare_key"
-					| "quoted_key"
-					| "dotted_key"
-			)
-		})
-		.and_then(|child| {
-			sanitize_identifier(node_text(source, child.start_byte(), child.end_byte()))
-		})
+	None
 }
 
 /// Extract the name of a single-declarator binding like `const FOO = ...`.
@@ -539,6 +489,7 @@ pub fn unquote_text(text: &str) -> String {
 
 pub fn sanitize_node_kind(kind: &str) -> &str {
 	let kind_stripped = kind
+		.trim_suffix("_instruction")
 		.trim_suffix("_statement")
 		.trim_suffix("_declaration")
 		.trim_suffix("_definition")
@@ -591,48 +542,9 @@ pub fn collapse_whitespace(text: &str) -> String {
 
 // ── Signature helpers ────────────────────────────────────────────────────
 
-/// Kinds that represent "body" blocks — the signature is everything before
-/// them.
-pub const BODY_KINDS: &[&str] = &[
-	"statement_block",
-	"compound_statement",
-	"function_body",
-	"constructor_body",
-	"do_block",
-	"do_group",
-	"block",
-	"body_statement",
-	"statements",
-	"recipe",
-	"yul_block",
-	"class_body",
-	"interface_body",
-	"enum_body",
-	"protocol_body",
-	"declaration_list",
-	"implementation_definition",
-	"contract_body",
-	"struct_body",
-	"keyframe_block_list",
-	"body",
-	"enum_class_body",
-	"object_type",
-	"field_declaration_list",
-	"method_spec_list",
-];
-
 pub fn signature_for_node(node: Node<'_>, source: &str) -> Option<String> {
-	let body_child = node
-		.child_by_field_name("body")
-		.filter(|c| c.start_byte() > node.start_byte())
-		.or_else(|| {
-			named_children(node)
-				.into_iter()
-				.find(|c| BODY_KINDS.contains(&c.kind()))
-		});
-
-	let raw = if let Some(body) = body_child {
-		node_text(source, node.start_byte(), body.start_byte())
+	let raw = if let Some(end_byte) = shape::signature_end_byte(node) {
+		node_text(source, node.start_byte(), end_byte)
 	} else {
 		node_text(source, node.start_byte(), node.end_byte())
 	};
@@ -773,30 +685,15 @@ fn rust_function_signature(header: &str) -> Option<String> {
 // ── Trivia and attribute detection ───────────────────────────────────────
 
 pub fn is_trivia(kind: &str) -> bool {
-	matches!(
-		kind,
-		"comment"
-			| "decorator"
-			| "line_comment"
-			| "block_comment"
-			| "start_tag"
-			| "end_tag"
-			| "comment_statement"
-			| "element_node_start"
-			| "element_node_end"
-			| "element_node_void"
-			| "block_statement_start"
-			| "block_statement_end"
-			| "xml_decl"
-			| "else_directive"
-			| "elsif_directive"
-			| "attribute_item"
-			| "inner_attribute_item"
-	)
+	shape::is_generic_trivia_name(kind)
+}
+
+pub fn is_trivia_node(node: Node<'_>) -> bool {
+	shape::is_generic_trivia(node)
 }
 
 pub fn is_absorbable_attribute(kind: &str) -> bool {
-	matches!(kind, "attribute_item" | "inner_attribute_item")
+	shape::is_generic_absorbable_attr(kind)
 }
 
 // ── Other helpers ────────────────────────────────────────────────────────
@@ -834,32 +731,8 @@ pub fn detect_indent(source: &str, start_byte: usize) -> (u32, String) {
 	(cols, ch)
 }
 
-pub fn is_root_wrapper_kind(kind: &str) -> bool {
-	matches!(
-		kind,
-		"body"
-			| "block_node"
-			| "flow_node"
-			| "object"
-			| "array"
-			| "binding_set"
-			| "block_mapping"
-			| "flow_mapping"
-			| "block_sequence"
-			| "flow_sequence"
-			| "program"
-			| "source"
-			| "source_code"
-			| "source_file"
-			| "template"
-			| "document"
-			| "config_file"
-			| "module"
-			| "makefile"
-			| "stylesheet"
-			| "translation_unit"
-			| "compilation_unit"
-	)
+pub fn is_root_wrapper_node(node: Node<'_>) -> bool {
+	shape::is_root_wrapper_node(node)
 }
 
 pub const fn line_span(start_line: usize, end_line: usize) -> usize {

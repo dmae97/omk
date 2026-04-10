@@ -10,6 +10,9 @@ pub struct ChunkNode {
 	pub identifier:          Option<String>,
 	pub kind:                ChunkKind,
 	pub leaf:                bool,
+	/// For virtual chunks (for example `theirs` branches in conflicts), content
+	/// that is rendered instead of slicing `source`.
+	pub virtual_content:     Option<String>,
 	pub parent_path:         Option<String>,
 	pub children:            Vec<String>,
 	pub signature:           Option<String>,
@@ -356,6 +359,9 @@ pub struct EditOperation {
 pub struct EditParams {
 	/// Edits to apply in order.
 	pub operations:       Vec<EditOperation>,
+	/// When true, normalize indentation for response rendering and inserted
+	/// content. When false, preserve literal tabs/spaces.
+	pub normalize_indent: Option<bool>,
 	/// Default chunk selector when an `EditOperation` omits `sel`.
 	pub default_selector: Option<String>,
 	/// Default checksum when an `EditOperation` omits `crc`.

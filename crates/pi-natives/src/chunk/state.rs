@@ -33,16 +33,28 @@ static TLAPLUS_END_TRANSLATION_REGEX: LazyLock<Regex> = LazyLock::new(|| {
 	Regex::new(TLAPLUS_END_TRANSLATION_RE).expect("tlaplus end regex must compile")
 });
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConflictMeta {
+	pub theirs_content:  String,
+	pub ours_label:      String,
+	pub theirs_label:    String,
+	pub base_content:    Option<String>,
+	pub base_label:      Option<String>,
+	pub ours_start_byte: usize,
+	pub ours_end_byte:   usize,
+}
+
 #[derive(Clone)]
 pub struct ChunkStateInner {
-	pub(crate) source:   String,
-	pub(crate) language: String,
-	pub(crate) tree:     ChunkTree,
-	pub(crate) notebook: Option<crate::chunk::ast_ipynb::SharedNotebookContext>,
-	lookup:              HashMap<String, usize>,
-	checksum_lookup:     HashMap<String, Vec<usize>>,
-	leaf_lookup:         HashMap<String, Vec<usize>>,
-	suffix_lookup:       HashMap<String, Vec<usize>>,
+	pub(crate) source:        String,
+	pub(crate) language:      String,
+	pub(crate) tree:          ChunkTree,
+	pub(crate) notebook:      Option<crate::chunk::ast_ipynb::SharedNotebookContext>,
+	pub(crate) conflict_meta: HashMap<String, ConflictMeta>,
+	lookup:                   HashMap<String, usize>,
+	checksum_lookup:          HashMap<String, Vec<usize>>,
+	leaf_lookup:              HashMap<String, Vec<usize>>,
+	suffix_lookup:            HashMap<String, Vec<usize>>,
 }
 
 impl ChunkStateInner {
@@ -61,6 +73,22 @@ impl ChunkStateInner {
 			let mut inner = Self::new(parsed.virtual_source, normalized_language, tree);
 			inner.notebook = Some(ctx);
 			return Ok(inner);
+		}
+		if crate::chunk::conflict::has_conflict_markers(source.as_str()) {
+			let conflicts = crate::chunk::conflict::detect_conflicts(source.as_str());
+			if !conflicts.is_empty() {
+				let clean_result = crate::chunk::conflict::accept_ours(source.as_str(), &conflicts);
+				let mut tree =
+					build_chunk_tree(clean_result.source.as_str(), normalized_language.as_str())?;
+				let conflict_meta = crate::chunk::conflict::inject_conflict_chunks(
+					&mut tree,
+					clean_result.source.as_str(),
+					&clean_result,
+				);
+				let mut inner = Self::new(clean_result.source, normalized_language, tree);
+				inner.conflict_meta = conflict_meta;
+				return Ok(inner);
+			}
 		}
 		let tree = build_chunk_tree(source.as_str(), normalized_language.as_str())?;
 		Ok(Self::new(source, normalized_language, tree))
@@ -99,6 +127,7 @@ impl ChunkStateInner {
 			language,
 			tree,
 			notebook: None,
+			conflict_meta: HashMap::new(),
 			lookup,
 			checksum_lookup,
 			leaf_lookup,
@@ -264,6 +293,18 @@ impl ChunkState {
 	#[napi(getter)]
 	pub fn chunk_count(&self) -> u32 {
 		self.inner.tree().chunks.len() as u32
+	}
+
+	/// True when the parsed file contains unresolved merge conflicts.
+	#[napi]
+	pub fn has_conflicts(&self) -> bool {
+		!self.inner.conflict_meta.is_empty()
+	}
+
+	/// Count of unresolved merge conflicts represented in the chunk tree.
+	#[napi]
+	pub fn conflict_count(&self) -> u32 {
+		self.inner.conflict_meta.len() as u32
 	}
 
 	/// Summary for the root chunk, if it exists.
@@ -473,7 +514,7 @@ impl ChunkState {
 			let normalize_indent = params.normalize_indent.unwrap_or(false).then(|| {
 				(
 					detect_file_indent_char(self.inner.source(), self.inner.tree()),
-					detect_file_indent_step(self.inner.tree()) as usize,
+					detect_file_indent_step(self.inner.source(), self.inner.tree()) as usize,
 				)
 			});
 			// Extend the region start to the beginning of the line so that the

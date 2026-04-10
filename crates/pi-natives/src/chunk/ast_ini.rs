@@ -7,17 +7,36 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*, kind::ChunkKind};
+use super::{
+	classify::{ClassifierTables, LangClassifier},
+	common::*,
+	kind::ChunkKind,
+};
 
 pub struct IniClassifier;
 
 impl LangClassifier for IniClassifier {
-	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_ini_root(node, source)
+	fn tables(&self) -> &'static ClassifierTables {
+		static TABLES: ClassifierTables = ClassifierTables {
+			root:                 &[],
+			class:                &[],
+			function:             &[],
+			structural_overrides: super::classify::StructuralOverrides::EMPTY,
+		};
+		&TABLES
 	}
 
-	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_ini_class(node, source)
+	fn classify_override<'t>(
+		&self,
+		context: ChunkContext,
+		node: Node<'t>,
+		source: &str,
+	) -> Option<RawChunkCandidate<'t>> {
+		match context {
+			ChunkContext::Root => classify_ini_root(node, source),
+			ChunkContext::ClassBody => classify_ini_class(node, source),
+			ChunkContext::FunctionBody => None,
+		}
 	}
 }
 

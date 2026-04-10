@@ -2,9 +2,46 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*, kind::ChunkKind};
+use super::{
+	classify::{
+		ClassifierTables, LangClassifier, NamingMode, RecurseMode, RuleStyle, StructuralOverrides,
+		semantic_rule,
+	},
+	common::*,
+	kind::ChunkKind,
+};
 
 pub struct JustClassifier;
+
+const JUST_FUNCTION_RULES: &[super::classify::SemanticRule] = &[
+	semantic_rule(
+		"recipe_line",
+		ChunkKind::Cmd,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"shebang",
+		ChunkKind::Shebang,
+		RuleStyle::Named,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+];
+
+const JUST_TABLES: ClassifierTables = ClassifierTables {
+	root:                 &[],
+	class:                &[],
+	function:             JUST_FUNCTION_RULES,
+	structural_overrides: StructuralOverrides {
+		extra_trivia:            &[],
+		preserved_trivia:        &[],
+		extra_root_wrappers:     &["source_file"],
+		preserved_root_wrappers: &[],
+		absorbable_attrs:        &[],
+	},
+};
 
 fn first_named_child(node: Node<'_>) -> Option<Node<'_>> {
 	named_children(node).into_iter().next()
@@ -73,19 +110,20 @@ fn classify_just_body_node<'t>(node: Node<'t>, source: &str) -> Option<RawChunkC
 }
 
 impl LangClassifier for JustClassifier {
-	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_just_root_node(node, source)
+	fn tables(&self) -> &'static ClassifierTables {
+		&JUST_TABLES
 	}
 
-	fn classify_class<'t>(&self, _node: Node<'t>, _source: &str) -> Option<RawChunkCandidate<'t>> {
-		None
-	}
-
-	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_just_body_node(node, source)
-	}
-
-	fn is_root_wrapper(&self, kind: &str) -> bool {
-		kind == "source_file"
+	fn classify_override<'t>(
+		&self,
+		context: ChunkContext,
+		node: Node<'t>,
+		source: &str,
+	) -> Option<RawChunkCandidate<'t>> {
+		match context {
+			ChunkContext::Root => classify_just_root_node(node, source),
+			ChunkContext::FunctionBody => classify_just_body_node(node, source),
+			ChunkContext::ClassBody => None,
+		}
 	}
 }

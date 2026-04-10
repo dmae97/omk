@@ -415,9 +415,13 @@ type Server struct {
 
 	test("replace with empty content on last impl method collapses extra whitespace-only lines before the closing brace", () => {
 		const source = `impl S {
-    fn a() {}
+    fn a() {
+        keep();
+    }
 
-    fn b() {}
+    fn b() {
+        drop();
+    }
 
 }
 `;
@@ -429,7 +433,7 @@ type Server struct {
 			operations: [{ op: "replace", sel: targetWithChecksum("impl_S.fn_b", crc), content: "" }],
 		});
 
-		expect(result.diffSourceAfter).toBe("impl S {\n    fn a() {}\n\n}\n");
+		expect(result.diffSourceAfter).toBe("impl S {\n    fn a() {\n        keep();\n    }\n\n}\n");
 	});
 });
 

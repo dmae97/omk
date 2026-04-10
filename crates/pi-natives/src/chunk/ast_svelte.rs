@@ -2,25 +2,39 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*, kind::ChunkKind};
+use super::{
+	classify::{ClassifierTables, LangClassifier, StructuralOverrides},
+	common::*,
+	kind::ChunkKind,
+};
 
 pub struct SvelteClassifier;
 
 impl LangClassifier for SvelteClassifier {
-	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_svelte_node(node, source, true)
+	fn tables(&self) -> &'static ClassifierTables {
+		static TABLES: ClassifierTables = ClassifierTables {
+			root:                 &[],
+			class:                &[],
+			function:             &[],
+			structural_overrides: StructuralOverrides {
+				extra_trivia:            &[],
+				preserved_trivia:        &[],
+				extra_root_wrappers:     &["document"],
+				preserved_root_wrappers: &[],
+				absorbable_attrs:        &[],
+			},
+		};
+		&TABLES
 	}
 
-	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_svelte_node(node, source, false)
-	}
-
-	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_svelte_node(node, source, false)
-	}
-
-	fn is_root_wrapper(&self, kind: &str) -> bool {
-		kind == "document"
+	fn classify_override<'t>(
+		&self,
+		context: ChunkContext,
+		node: Node<'t>,
+		source: &str,
+	) -> Option<RawChunkCandidate<'t>> {
+		let include_plain_elements = matches!(context, ChunkContext::Root);
+		classify_svelte_node(node, source, include_plain_elements)
 	}
 }
 

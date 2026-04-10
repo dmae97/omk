@@ -2,217 +2,286 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*, kind::ChunkKind};
+use super::{
+	classify::{
+		ClassifierTables, LangClassifier, NamingMode, RecurseMode, RuleStyle, semantic_rule,
+	},
+	common::*,
+	kind::ChunkKind,
+};
 
 pub struct PythonClassifier;
 
+const ROOT_RULES: &[super::classify::SemanticRule] = &[
+	semantic_rule(
+		"import_statement",
+		ChunkKind::Imports,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"import_from_statement",
+		ChunkKind::Imports,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"assignment",
+		ChunkKind::Declarations,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"function_definition",
+		ChunkKind::Function,
+		RuleStyle::Named,
+		NamingMode::AutoIdentifier,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	semantic_rule(
+		"class_definition",
+		ChunkKind::Class,
+		RuleStyle::Named,
+		NamingMode::AutoIdentifier,
+		RecurseMode::Auto(ChunkContext::ClassBody),
+	),
+	semantic_rule(
+		"if_statement",
+		ChunkKind::If,
+		RuleStyle::Positional,
+		NamingMode::None,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	semantic_rule(
+		"for_statement",
+		ChunkKind::Loop,
+		RuleStyle::Positional,
+		NamingMode::None,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	semantic_rule(
+		"while_statement",
+		ChunkKind::Loop,
+		RuleStyle::Positional,
+		NamingMode::None,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	semantic_rule(
+		"try_statement",
+		ChunkKind::Try,
+		RuleStyle::Positional,
+		NamingMode::None,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	semantic_rule(
+		"with_statement",
+		ChunkKind::Block,
+		RuleStyle::Positional,
+		NamingMode::None,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	semantic_rule(
+		"expression_statement",
+		ChunkKind::Statements,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"global_statement",
+		ChunkKind::Statements,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+];
+
+const CLASS_RULES: &[super::classify::SemanticRule] = &[
+	semantic_rule(
+		"expression_statement",
+		ChunkKind::Fields,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"assignment",
+		ChunkKind::Fields,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"type_alias_statement",
+		ChunkKind::Type,
+		RuleStyle::Named,
+		NamingMode::AutoIdentifier,
+		RecurseMode::None,
+	),
+];
+
+const FUNCTION_RULES: &[super::classify::SemanticRule] = &[
+	semantic_rule(
+		"if_statement",
+		ChunkKind::If,
+		RuleStyle::Positional,
+		NamingMode::None,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	semantic_rule(
+		"for_statement",
+		ChunkKind::Loop,
+		RuleStyle::Positional,
+		NamingMode::None,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	semantic_rule(
+		"while_statement",
+		ChunkKind::Loop,
+		RuleStyle::Positional,
+		NamingMode::None,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	semantic_rule(
+		"try_statement",
+		ChunkKind::Try,
+		RuleStyle::Positional,
+		NamingMode::None,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	semantic_rule(
+		"with_statement",
+		ChunkKind::Block,
+		RuleStyle::Positional,
+		NamingMode::None,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	semantic_rule(
+		"elif_clause",
+		ChunkKind::Elif,
+		RuleStyle::Positional,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"except_clause",
+		ChunkKind::Except,
+		RuleStyle::Positional,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"match_statement",
+		ChunkKind::Match,
+		RuleStyle::Positional,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+];
+
+const PYTHON_TABLES: ClassifierTables = ClassifierTables {
+	root:                 ROOT_RULES,
+	class:                CLASS_RULES,
+	function:             FUNCTION_RULES,
+	structural_overrides: super::classify::StructuralOverrides::EMPTY,
+};
+
 impl LangClassifier for PythonClassifier {
-	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
-			// ── Imports ──
-			"import_statement" | "import_from_statement" => {
-				Some(group_candidate(node, ChunkKind::Imports, source))
-			},
-
-			// ── Variables / assignments ──
-			"assignment" => Some(group_candidate(node, ChunkKind::Declarations, source)),
-
-			// ── Functions ──
-			"function_definition" => Some(make_kind_chunk(
-				node,
-				ChunkKind::Function,
-				extract_identifier(node, source),
-				source,
-				recurse_into(node, ChunkContext::FunctionBody, &["body"], &["block"]),
-			)),
-
-			// ── Containers ──
-			"class_definition" => Some(make_container_chunk(
-				node,
-				ChunkKind::Class,
-				extract_identifier(node, source),
-				source,
-				recurse_into(node, ChunkContext::ClassBody, &["body"], &["block"]),
-			)),
-
-			// ── Control flow (top-level scripts) ──
-			"if_statement" | "for_statement" | "while_statement" | "try_statement"
-			| "with_statement" => Some(classify_function_python(node, source)),
-
-			// ── Statements ──
-			"expression_statement" | "global_statement" => {
-				Some(group_candidate(node, ChunkKind::Statements, source))
-			},
-
-			// ── Decorated ──
-			"decorated_definition" => Some(classify_decorated(node, source)),
-
-			_ => None,
-		}
+	fn tables(&self) -> &'static ClassifierTables {
+		&PYTHON_TABLES
 	}
 
-	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
-			// ── Methods ──
-			"function_definition" => {
-				let name = extract_identifier(node, source).unwrap_or_else(|| "anonymous".to_string());
-				let kind = if name == "__init__" || name == "__new__" {
-					ChunkKind::Constructor
-				} else {
-					ChunkKind::Function
-				};
-				let identifier = if kind == ChunkKind::Constructor {
-					None
-				} else {
-					Some(name)
-				};
-				Some(make_kind_chunk(
-					node,
-					kind,
-					identifier,
-					source,
-					recurse_into(node, ChunkContext::FunctionBody, &["body"], &["block"]),
-				))
+	fn classify_override<'t>(
+		&self,
+		context: ChunkContext,
+		node: Node<'t>,
+		source: &str,
+	) -> Option<RawChunkCandidate<'t>> {
+		match context {
+			ChunkContext::Root | ChunkContext::ClassBody if node.kind() == "decorated_definition" => {
+				Some(classify_decorated(node, source, context))
 			},
-
-			// ── Decorated methods ──
-			"decorated_definition" => {
-				let inner = named_children(node)
-					.into_iter()
-					.find(|c| c.kind() == "function_definition");
-				if let Some(child) = inner {
-					let name =
-						extract_identifier(child, source).unwrap_or_else(|| "anonymous".to_string());
-					let kind = if name == "__init__" || name == "__new__" {
-						ChunkKind::Constructor
-					} else {
-						ChunkKind::Function
-					};
-					let identifier = if kind == ChunkKind::Constructor {
-						None
-					} else {
-						Some(name)
-					};
-					Some(make_kind_chunk(
-						node,
-						kind,
-						identifier,
-						source,
-						recurse_into(child, ChunkContext::FunctionBody, &["body"], &["block"]),
-					))
-				} else {
-					Some(infer_named_candidate(node, source))
-				}
+			ChunkContext::ClassBody if node.kind() == "function_definition" => {
+				Some(classify_class_method(node, source))
 			},
-
-			// ── Fields ──
-			"expression_statement" | "assignment" => {
-				Some(group_candidate(node, ChunkKind::Fields, source))
-			},
-
-			// ── Type aliases ──
-			"type_alias_statement" => Some(named_candidate(node, ChunkKind::Type, source, None)),
-
 			_ => None,
 		}
 	}
 
 	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
-			// ── Control flow ──
-			"if_statement" => Some(make_candidate(
-				node,
-				ChunkKind::If,
-				None,
-				NameStyle::Named,
-				None,
-				recurse_body(node, ChunkContext::FunctionBody),
-				source,
-			)),
-			"for_statement" | "while_statement" => Some(make_candidate(
-				node,
-				ChunkKind::Loop,
-				None,
-				NameStyle::Named,
-				None,
-				recurse_body(node, ChunkContext::FunctionBody),
-				source,
-			)),
-			"try_statement" => Some(make_candidate(
-				node,
-				ChunkKind::Try,
-				None,
-				NameStyle::Named,
-				None,
-				recurse_body(node, ChunkContext::FunctionBody),
-				source,
-			)),
-			"with_statement" => Some(make_candidate(
-				node,
-				ChunkKind::Block,
-				None,
-				NameStyle::Named,
-				None,
-				recurse_body(node, ChunkContext::FunctionBody),
-				source,
-			)),
-
-			// ── Positional ──
-			"elif_clause" => Some(positional_candidate(node, ChunkKind::Elif, source)),
-			"except_clause" => Some(positional_candidate(node, ChunkKind::Except, source)),
-			"match_statement" => Some(positional_candidate(node, ChunkKind::Match, source)),
-
-			// ── Variables / simple statements ──
-			// Catch `expression_statement`, `assignment`, `return_statement`,
-			// `raise_statement`, `pass_statement`, `break_statement`,
-			// `continue_statement`, `delete_statement`, `assert_statement`,
-			// `nonlocal_statement`, `global_statement`, `type_alias_statement`,
-			// and any other leaf statements so they merge into the parent
-			// function body instead of becoming standalone addressable chunks.
-			_ => Some(group_candidate(node, ChunkKind::Statements, source)),
-		}
+		let _ = source;
+		Some(group_candidate(node, ChunkKind::Statements, source))
 	}
 }
 
-/// Classify Python function-level nodes (reused for top-level control flow
-/// delegation).
-fn classify_function_python<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
-	let fn_recurse = || recurse_body(node, ChunkContext::FunctionBody);
-	match node.kind() {
-		"if_statement" => {
-			make_candidate(node, ChunkKind::If, None, NameStyle::Named, None, fn_recurse(), source)
-		},
-		"for_statement" | "while_statement" => {
-			make_candidate(node, ChunkKind::Loop, None, NameStyle::Named, None, fn_recurse(), source)
-		},
-		"try_statement" => {
-			make_candidate(node, ChunkKind::Try, None, NameStyle::Named, None, fn_recurse(), source)
-		},
-		"with_statement" => {
-			make_candidate(node, ChunkKind::Block, None, NameStyle::Named, None, fn_recurse(), source)
-		},
-		_ => group_candidate(node, ChunkKind::Statements, source),
-	}
+fn classify_class_method<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
+	let name = extract_identifier(node, source).unwrap_or_else(|| "anonymous".to_string());
+	let kind = if name == "__init__" || name == "__new__" {
+		ChunkKind::Constructor
+	} else {
+		ChunkKind::Function
+	};
+	let identifier = if kind == ChunkKind::Constructor {
+		None
+	} else {
+		Some(name)
+	};
+	make_kind_chunk(
+		node,
+		kind,
+		identifier,
+		source,
+		resolve_recurse(node, ChunkContext::FunctionBody),
+	)
 }
 
-fn classify_decorated<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
+fn classify_decorated<'t>(
+	node: Node<'t>,
+	source: &str,
+	context: ChunkContext,
+) -> RawChunkCandidate<'t> {
 	let inner = named_children(node)
 		.into_iter()
-		.find(|c| c.kind() == "class_definition" || c.kind() == "function_definition");
+		.find(|c| matches!(c.kind(), "class_definition" | "function_definition"));
 	match inner {
 		Some(child) if child.kind() == "class_definition" => make_container_chunk(
 			node,
 			ChunkKind::Class,
 			extract_identifier(child, source),
 			source,
-			recurse_into(child, ChunkContext::ClassBody, &["body"], &["block"]),
+			resolve_recurse(child, ChunkContext::ClassBody),
 		),
+		Some(child)
+			if child.kind() == "function_definition" && context == ChunkContext::ClassBody =>
+		{
+			let name = extract_identifier(child, source).unwrap_or_else(|| "anonymous".to_string());
+			let kind = if name == "__init__" || name == "__new__" {
+				ChunkKind::Constructor
+			} else {
+				ChunkKind::Function
+			};
+			let identifier = if kind == ChunkKind::Constructor {
+				None
+			} else {
+				Some(name)
+			};
+			make_kind_chunk(
+				node,
+				kind,
+				identifier,
+				source,
+				resolve_recurse(child, ChunkContext::FunctionBody),
+			)
+		},
 		Some(child) if child.kind() == "function_definition" => make_kind_chunk(
 			node,
 			ChunkKind::Function,
 			extract_identifier(child, source),
 			source,
-			recurse_into(child, ChunkContext::FunctionBody, &["body"], &["block"]),
+			resolve_recurse(child, ChunkContext::FunctionBody),
 		),
 		_ => positional_candidate(node, ChunkKind::Block, source),
 	}

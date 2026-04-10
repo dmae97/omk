@@ -729,6 +729,7 @@ mod tests {
 				.and_then(|(_, identifier)| (!identifier.is_empty()).then_some(identifier.to_owned())),
 			kind,
 			leaf: children.is_empty(),
+			virtual_content: None,
 			parent_path: parent_path.map(str::to_owned),
 			children: children.into_iter().map(str::to_owned).collect(),
 			signature: None,

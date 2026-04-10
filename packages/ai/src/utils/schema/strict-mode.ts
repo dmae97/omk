@@ -1,3 +1,4 @@
+import { $flag } from "@oh-my-pi/pi-utils";
 import { type TUnsafe, Type } from "@sinclair/typebox";
 import { areJsonValuesEqual } from "./equality";
 import { COMBINATOR_KEYS, NON_STRUCTURAL_SCHEMA_KEYS } from "./fields";
@@ -26,7 +27,7 @@ export function StringEnum<const T extends readonly string[]>(
 	});
 }
 
-export const NO_STRICT = Bun.env.PI_NO_STRICT === "1";
+export const NO_STRICT = $flag("PI_NO_STRICT");
 
 const strictSchemaCache = new WeakMap<Record<string, unknown>, { schema: Record<string, unknown>; strict: boolean }>();
 function hasUnrepresentableStrictObjectMap(schema: Record<string, unknown>, seen?: WeakSet<object>): boolean {

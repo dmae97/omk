@@ -1,6 +1,6 @@
 import * as os from "node:os";
 import * as path from "node:path";
-import { $env, $which, logger } from "@oh-my-pi/pi-utils";
+import { $flag, $which, logger } from "@oh-my-pi/pi-utils";
 import { TOML } from "bun";
 
 /**
@@ -135,7 +135,7 @@ export async function detectLspmux(): Promise<LspmuxState> {
 		return cachedState;
 	}
 
-	if ($env.PI_DISABLE_LSPMUX === "1") {
+	if ($flag("PI_DISABLE_LSPMUX")) {
 		cachedState = { available: false, running: false, binaryPath: null, config: null };
 		cacheTimestamp = now;
 		return cachedState;

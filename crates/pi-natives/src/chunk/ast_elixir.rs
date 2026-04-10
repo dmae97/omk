@@ -2,7 +2,11 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*, kind::ChunkKind};
+use super::{
+	classify::{ClassifierTables, LangClassifier, StructuralOverrides},
+	common::*,
+	kind::ChunkKind,
+};
 
 pub struct ElixirClassifier;
 
@@ -128,31 +132,28 @@ fn call_name(node: Node<'_>, source: &str) -> Option<String> {
 }
 
 impl LangClassifier for ElixirClassifier {
-	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
-			"call" => Some(classify_call(node, source, true)),
-			_ => None,
-		}
+	fn tables(&self) -> &'static ClassifierTables {
+		static TABLES: ClassifierTables = ClassifierTables {
+			root:                 &[],
+			class:                &[],
+			function:             &[],
+			structural_overrides: StructuralOverrides {
+				extra_trivia:            &["unary_operator"],
+				preserved_trivia:        &[],
+				extra_root_wrappers:     &[],
+				preserved_root_wrappers: &[],
+				absorbable_attrs:        &[],
+			},
+		};
+		&TABLES
 	}
 
-	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
-			"call" => Some(classify_call(node, source, false)),
-			_ => None,
-		}
-	}
-
-	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
-			"call" => Some(classify_call(node, source, false)),
-			_ => None,
-		}
-	}
-
-	fn is_trivia(&self, kind: &str) -> bool {
-		// `@doc`, `@spec`, `@impl`, `@type`, `@moduledoc`, etc. are all
-		// `unary_operator` nodes in the Elixir grammar (operator `@`).
-		// Treat them as trivia so they get absorbed into the next chunk.
-		kind == "unary_operator"
+	fn classify_override<'t>(
+		&self,
+		context: ChunkContext,
+		node: Node<'t>,
+		source: &str,
+	) -> Option<RawChunkCandidate<'t>> {
+		(node.kind() == "call").then(|| classify_call(node, source, context == ChunkContext::Root))
 	}
 }

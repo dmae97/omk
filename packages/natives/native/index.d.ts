@@ -28,6 +28,10 @@ export declare class ChunkState {
   get rootChildren(): Array<string>
   /** Total number of chunk nodes. */
   get chunkCount(): number
+  /** True when the parsed file contains unresolved merge conflicts. */
+  hasConflicts(): boolean
+  /** Count of unresolved merge conflicts represented in the chunk tree. */
+  conflictCount(): number
   /** Summary for the root chunk, if it exists. */
   root(): ChunkInfo | null
   /** Look up [`ChunkInfo`] for a chunk selector path. */
@@ -518,6 +522,11 @@ export interface EditOperation {
 export interface EditParams {
   /** Edits to apply in order. */
   operations: Array<EditOperation>
+  /**
+   * When true, normalize indentation for response rendering and inserted
+   * content. When false, preserve literal tabs/spaces.
+   */
+  normalizeIndent?: boolean
   /** Default chunk selector when an `EditOperation` omits `sel`. */
   defaultSelector?: string
   /** Default checksum when an `EditOperation` omits `crc`. */

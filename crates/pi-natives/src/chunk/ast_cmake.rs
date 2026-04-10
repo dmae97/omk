@@ -2,7 +2,11 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*, kind::ChunkKind};
+use super::{
+	classify::{ClassifierTables, LangClassifier, StructuralOverrides},
+	common::*,
+	kind::ChunkKind,
+};
 
 pub struct CMakeClassifier;
 
@@ -129,24 +133,42 @@ fn classify_if_child<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandida
 }
 
 impl LangClassifier for CMakeClassifier {
-	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_definition(node, source).or_else(|| classify_command(node, source))
+	fn tables(&self) -> &'static ClassifierTables {
+		static TABLES: ClassifierTables = ClassifierTables {
+			root:                 &[],
+			class:                &[],
+			function:             &[],
+			structural_overrides: StructuralOverrides {
+				extra_trivia:            &[
+					"endif_command",
+					"endforeach_command",
+					"endwhile_command",
+					"endfunction_command",
+					"endmacro_command",
+				],
+				preserved_trivia:        &[],
+				extra_root_wrappers:     &[],
+				preserved_root_wrappers: &[],
+				absorbable_attrs:        &[],
+			},
+		};
+		&TABLES
 	}
 
-	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_definition(node, source)
-			.or_else(|| classify_if_child(node, source))
-			.or_else(|| classify_command(node, source))
-	}
-
-	fn is_trivia(&self, kind: &str) -> bool {
-		matches!(
-			kind,
-			"endif_command"
-				| "endforeach_command"
-				| "endwhile_command"
-				| "endfunction_command"
-				| "endmacro_command"
-		)
+	fn classify_override<'t>(
+		&self,
+		context: ChunkContext,
+		node: Node<'t>,
+		source: &str,
+	) -> Option<RawChunkCandidate<'t>> {
+		match context {
+			ChunkContext::Root => {
+				classify_definition(node, source).or_else(|| classify_command(node, source))
+			},
+			ChunkContext::FunctionBody => classify_definition(node, source)
+				.or_else(|| classify_if_child(node, source))
+				.or_else(|| classify_command(node, source)),
+			ChunkContext::ClassBody => None,
+		}
 	}
 }

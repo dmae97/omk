@@ -2,36 +2,48 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*, kind::ChunkKind};
+use super::{
+	classify::{ClassifierTables, LangClassifier, StructuralOverrides},
+	common::*,
+	kind::ChunkKind,
+};
 
 pub struct GraphqlClassifier;
 
 impl LangClassifier for GraphqlClassifier {
-	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_graphql_root(node, source)
+	fn tables(&self) -> &'static ClassifierTables {
+		static TABLES: ClassifierTables = ClassifierTables {
+			root:                 &[],
+			class:                &[],
+			function:             &[],
+			structural_overrides: StructuralOverrides {
+				extra_trivia:            &["comma"],
+				preserved_trivia:        &[],
+				extra_root_wrappers:     &[
+					"document",
+					"definition",
+					"type_system_definition",
+					"type_definition",
+					"executable_definition",
+				],
+				preserved_root_wrappers: &[],
+				absorbable_attrs:        &[],
+			},
+		};
+		&TABLES
 	}
 
-	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_graphql_class(node, source)
-	}
-
-	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_graphql_function(node, source)
-	}
-
-	fn is_root_wrapper(&self, kind: &str) -> bool {
-		matches!(
-			kind,
-			"document"
-				| "definition"
-				| "type_system_definition"
-				| "type_definition"
-				| "executable_definition"
-		)
-	}
-
-	fn is_trivia(&self, kind: &str) -> bool {
-		matches!(kind, "comma")
+	fn classify_override<'t>(
+		&self,
+		context: ChunkContext,
+		node: Node<'t>,
+		source: &str,
+	) -> Option<RawChunkCandidate<'t>> {
+		match context {
+			ChunkContext::Root => classify_graphql_root(node, source),
+			ChunkContext::ClassBody => classify_graphql_class(node, source),
+			ChunkContext::FunctionBody => classify_graphql_function(node, source),
+		}
 	}
 }
 

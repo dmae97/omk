@@ -2,9 +2,30 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*, kind::ChunkKind};
+use super::{
+	classify::{
+		ClassifierTables, LangClassifier, NamingMode, RecurseMode, RuleStyle, semantic_rule,
+	},
+	common::*,
+	kind::ChunkKind,
+};
 
 pub struct HtmlXmlClassifier;
+
+const HTML_XML_SHARED_RULES: &[super::classify::SemanticRule] = &[semantic_rule(
+	"text_node",
+	ChunkKind::Text,
+	RuleStyle::Group,
+	NamingMode::None,
+	RecurseMode::None,
+)];
+
+const HTML_XML_TABLES: ClassifierTables = ClassifierTables {
+	root:                 HTML_XML_SHARED_RULES,
+	class:                HTML_XML_SHARED_RULES,
+	function:             &[],
+	structural_overrides: super::classify::StructuralOverrides::EMPTY,
+};
 
 /// Classify an element-like node as a container with tag semantics.
 ///
@@ -50,19 +71,19 @@ fn extract_markup_tag_name(node: Node<'_>, source: &str) -> Option<String> {
 }
 
 impl LangClassifier for HtmlXmlClassifier {
-	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_element(node, source)
+	fn tables(&self) -> &'static ClassifierTables {
+		&HTML_XML_TABLES
 	}
 
-	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_element(node, source)
-	}
-
-	fn classify_function<'t>(
+	fn classify_override<'t>(
 		&self,
-		_node: Node<'t>,
-		_source: &str,
+		context: ChunkContext,
+		node: Node<'t>,
+		source: &str,
 	) -> Option<RawChunkCandidate<'t>> {
+		if matches!(context, ChunkContext::Root | ChunkContext::ClassBody) {
+			return classify_element(node, source);
+		}
 		None
 	}
 }

@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [14.0.4] - 2026-04-10
+### Added
+
+- Added `PI_CHUNK_AUTOINDENT` environment variable to control whether chunk read/edit tools normalize indentation to canonical tabs or preserve literal file whitespace
+- Added dynamic chunk tool prompts that automatically adjust guidance based on `PI_CHUNK_AUTOINDENT` setting without exposing a tool parameter
+- Added `<instruction-priority>`, `<output-contract>`, `<default-follow-through>`, `<tool-persistence>`, and `<completeness-contract>` sections to system prompt for improved long-horizon agent workflows
+
+### Changed
+
+- Updated chunk edit tool to apply `normalizeIndent` setting during edit operations, enabling literal whitespace preservation when `PI_CHUNK_AUTOINDENT=0`
+- Refactored environment variable parsing to use `$flag()` and `$envpos()` utilities from pi-utils for consistent boolean and integer handling across codebase
+- Updated system prompt communication guidelines to emphasize conciseness and information density, and added guidance on avoiding repetition of user requests
+- Enhanced system prompt with explicit rules for design integrity, verification before yielding, and handling of missing context via tool-based retrieval
+- Added `PI_CHUNK_AUTOINDENT` to control whether chunk read/edit tools normalize indentation, and updated chunk prompts to switch guidance automatically based on that setting
+- Refined the default system prompt with explicit instruction-priority, output-contract, tool-persistence, completeness, and verification rules for long-horizon GPT-5.4-style agent workflows
+
+### Fixed
+
+- Fixed typo in system prompt: 'backwards compatibiltity' → 'backwards compatibility'
+
 ## [14.0.3] - 2026-04-09
 
 ### Fixed

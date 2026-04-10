@@ -19,7 +19,7 @@ import {
 	type ToolConfiguration,
 	ToolResultStatus,
 } from "@aws-sdk/client-bedrock-runtime";
-import { $env } from "@oh-my-pi/pi-utils";
+import { $env, $flag } from "@oh-my-pi/pi-utils";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
 import type { Effort } from "../model-thinking";
 import { mapEffortToAnthropicAdaptiveEffort, requireSupportedEffort } from "../model-thinking";
@@ -102,14 +102,14 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream"> = (
 			config.region = config.region || $env.AWS_REGION || $env.AWS_DEFAULT_REGION;
 
 			// Support proxies that don't need authentication
-			if ($env.AWS_BEDROCK_SKIP_AUTH === "1") {
+			if ($flag("AWS_BEDROCK_SKIP_AUTH")) {
 				config.credentials = {
 					accessKeyId: "dummy-access-key",
 					secretAccessKey: "dummy-secret-key",
 				};
 			}
 
-			if ($env.AWS_BEDROCK_FORCE_HTTP1 === "1") {
+			if ($flag("AWS_BEDROCK_FORCE_HTTP1")) {
 				config.requestHandler = new NodeHttpHandler();
 			}
 		}
@@ -379,7 +379,7 @@ function supportsPromptCaching(model: Model<"bedrock-converse-stream">): boolean
 	if (id.includes("claude-haiku")) return true;
 	// Application inference profiles don't contain the model name in the ARN.
 	// Allow users to force cache points via environment variable.
-	if (typeof process !== "undefined" && process.env.AWS_BEDROCK_FORCE_CACHE === "1") return true;
+	if (typeof process !== "undefined" && $flag("AWS_BEDROCK_FORCE_CACHE")) return true;
 	return false;
 }
 

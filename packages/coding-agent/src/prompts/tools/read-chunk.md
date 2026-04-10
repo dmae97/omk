@@ -9,6 +9,12 @@ Each opening anchor `[< full.chunk.path#CCCC ]` in the default output identifies
 If you need a canonical target list, run `read(path="file", sel="?")`. That listing shows chunk paths with CRCs.
 Line numbers in the gutter are absolute file line numbers.
 
+{{#if chunkAutoIndent}}
+Chunk reads normalize leading indentation so copied content round-trips cleanly into chunk edits.
+{{else}}
+Chunk reads preserve literal leading tabs/spaces from the file. When editing, keep the same whitespace characters you see here.
+{{/if}}
+
 Chunk trees: JS, TS, TSX, Python, Rust, Go. Others use blank-line fallback.
 </instruction>
 

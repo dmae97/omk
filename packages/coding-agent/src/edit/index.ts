@@ -19,6 +19,7 @@ import {
 	executeChunkMode,
 	isChunkParams,
 	resolveAnchorStyle,
+	resolveChunkAutoIndent,
 } from "./modes/chunk";
 import { executeHashlineMode, type HashlineParams, hashlineEditParamsSchema, isHashlineParams } from "./modes/hashline";
 import { executePatchMode, isPatchParams, type PatchParams, patchEditSchema } from "./modes/patch";
@@ -197,6 +198,7 @@ export class EditTool implements AgentTool<TInput> {
 				description: (session: ToolSession) =>
 					prompt.render(chunkEditDescription, {
 						anchorStyle: resolveAnchorStyle(session.settings),
+						chunkAutoIndent: resolveChunkAutoIndent(),
 					}),
 				parameters: chunkEditParamsSchema,
 				invalidParamsMessage: "Invalid edit parameters for chunk mode.",

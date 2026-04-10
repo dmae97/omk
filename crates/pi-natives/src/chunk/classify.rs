@@ -1,31 +1,127 @@
 //! Per-language chunk classification trait.
 //!
-//! Each language module implements [`LangClassifier`] to provide
-//! language-specific node classification. The trait methods return `Option`
-//! — returning `None` falls through to the shared default classification in
-//! [`super::defaults`].
+//! Languages now provide semantic tables plus a narrow override hook for
+//! genuinely custom behavior.
 
 use tree_sitter::Node;
 
-use super::common::RawChunkCandidate;
+use super::{
+	common::{
+		ChunkContext, NameStyle, RawChunkCandidate, extract_identifier, make_candidate, recurse_self,
+		resolve_recurse, resolve_value_container, sanitize_node_kind, signature_for_node,
+	},
+	kind::ChunkKind,
+};
 use crate::chunk::types::ChunkNode;
 
-/// Language-specific chunk classification.
-///
-/// All methods have default no-op implementations so languages only need to
-/// override the ones they specialize.
+#[derive(Clone, Copy, Debug)]
+pub enum RuleStyle {
+	Named,
+	Group,
+	Positional,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum NamingMode {
+	AutoIdentifier,
+	None,
+	SanitizedKind,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum RecurseMode {
+	None,
+	Auto(ChunkContext),
+	SelfNode(ChunkContext),
+	ValueContainer,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct SemanticRule {
+	pub ts_kind:    &'static str,
+	pub chunk_kind: ChunkKind,
+	pub style:      RuleStyle,
+	pub naming:     NamingMode,
+	pub recurse:    RecurseMode,
+}
+
+pub const fn semantic_rule(
+	ts_kind: &'static str,
+	chunk_kind: ChunkKind,
+	style: RuleStyle,
+	naming: NamingMode,
+	recurse: RecurseMode,
+) -> SemanticRule {
+	SemanticRule { ts_kind, chunk_kind, style, naming, recurse }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct StructuralOverrides {
+	pub extra_trivia:            &'static [&'static str],
+	pub preserved_trivia:        &'static [&'static str],
+	pub extra_root_wrappers:     &'static [&'static str],
+	pub preserved_root_wrappers: &'static [&'static str],
+	pub absorbable_attrs:        &'static [&'static str],
+}
+
+impl StructuralOverrides {
+	pub const EMPTY: Self = Self {
+		extra_trivia:            &[],
+		preserved_trivia:        &[],
+		extra_root_wrappers:     &[],
+		preserved_root_wrappers: &[],
+		absorbable_attrs:        &[],
+	};
+
+	pub fn is_extra_trivia(&self, kind: &str) -> bool {
+		self.extra_trivia.contains(&kind)
+	}
+
+	pub fn preserves_trivia(&self, kind: &str) -> bool {
+		self.preserved_trivia.contains(&kind)
+	}
+
+	pub fn is_extra_root_wrapper(&self, kind: &str) -> bool {
+		self.extra_root_wrappers.contains(&kind)
+	}
+
+	pub fn preserves_root_wrapper(&self, kind: &str) -> bool {
+		self.preserved_root_wrappers.contains(&kind)
+	}
+
+	pub fn is_absorbable_attr(&self, kind: &str) -> bool {
+		self.absorbable_attrs.contains(&kind)
+	}
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ClassifierTables {
+	pub root:                 &'static [SemanticRule],
+	pub class:                &'static [SemanticRule],
+	pub function:             &'static [SemanticRule],
+	pub structural_overrides: StructuralOverrides,
+}
+
+pub const EMPTY_CLASSIFIER_TABLES: ClassifierTables = ClassifierTables {
+	root:                 &[],
+	class:                &[],
+	function:             &[],
+	structural_overrides: StructuralOverrides::EMPTY,
+};
+
 pub trait LangClassifier {
-	/// Classify a root-level node. Return `None` to use shared defaults.
+	fn tables(&self) -> &'static ClassifierTables {
+		&EMPTY_CLASSIFIER_TABLES
+	}
+
 	fn classify_root<'t>(&self, _node: Node<'t>, _source: &str) -> Option<RawChunkCandidate<'t>> {
 		None
 	}
 
-	/// Classify a node inside a class/struct/interface body.
 	fn classify_class<'t>(&self, _node: Node<'t>, _source: &str) -> Option<RawChunkCandidate<'t>> {
 		None
 	}
 
-	/// Classify a node inside a function body.
 	fn classify_function<'t>(
 		&self,
 		_node: Node<'t>,
@@ -34,8 +130,35 @@ pub trait LangClassifier {
 		None
 	}
 
-	/// Allow a language to keep container children expanded even when the shared
-	/// collapse heuristic would flatten them into a leaf preview.
+	fn is_root_wrapper(&self, _kind: &str) -> bool {
+		false
+	}
+
+	fn preserve_root_wrapper(&self, _kind: &str) -> bool {
+		false
+	}
+
+	fn preserve_trivia(&self, _kind: &str) -> bool {
+		false
+	}
+
+	fn is_trivia(&self, _kind: &str) -> bool {
+		false
+	}
+
+	fn is_absorbable_attr(&self, _kind: &str) -> bool {
+		false
+	}
+
+	fn classify_override<'t>(
+		&self,
+		_context: ChunkContext,
+		_node: Node<'t>,
+		_source: &str,
+	) -> Option<RawChunkCandidate<'t>> {
+		None
+	}
+
 	fn preserve_children(
 		&self,
 		_parent: &RawChunkCandidate<'_>,
@@ -44,8 +167,6 @@ pub trait LangClassifier {
 		false
 	}
 
-	/// Post-process the chunk tree after initial construction.
-	/// Used for structural transformations
 	fn post_process(
 		&self,
 		_chunks: &mut Vec<ChunkNode>,
@@ -53,34 +174,86 @@ pub trait LangClassifier {
 		_source: &str,
 	) {
 	}
+}
 
-	/// Additional node kinds treated as root wrappers to flatten.
-	fn is_root_wrapper(&self, _kind: &str) -> bool {
-		false
+pub fn structural_overrides(classifier: &dyn LangClassifier) -> StructuralOverrides {
+	classifier.tables().structural_overrides
+}
+
+pub fn classify_with_tables<'tree>(
+	classifier: &dyn LangClassifier,
+	context: ChunkContext,
+	node: Node<'tree>,
+	source: &str,
+) -> Option<RawChunkCandidate<'tree>> {
+	if let Some(candidate) = classifier.classify_override(context, node, source) {
+		return Some(candidate);
 	}
 
-	/// Shared root-wrapper kinds that this language wants to preserve as real
-	/// chunks.
-	fn preserve_root_wrapper(&self, _kind: &str) -> bool {
-		false
-	}
+	find_rule(classifier.tables(), context, node.kind())
+		.map(|rule| build_candidate_from_rule(node, source, *rule))
+		.or_else(|| match context {
+			ChunkContext::Root => classifier.classify_root(node, source),
+			ChunkContext::ClassBody => classifier.classify_class(node, source),
+			ChunkContext::FunctionBody => classifier.classify_function(node, source),
+		})
+}
 
-	/// Allow a language to opt specific trivia nodes back into structural
-	/// classification. Used when a grammar wraps real structure in comments.
-	fn preserve_trivia(&self, _kind: &str) -> bool {
-		false
-	}
+pub fn build_candidate_from_rule<'tree>(
+	node: Node<'tree>,
+	source: &str,
+	rule: SemanticRule,
+) -> RawChunkCandidate<'tree> {
+	let identifier = match rule.naming {
+		NamingMode::AutoIdentifier => extract_identifier(node, source),
+		NamingMode::None => None,
+		NamingMode::SanitizedKind => Some(sanitize_node_kind(node.kind()).to_string()),
+	};
 
-	/// Additional node kinds treated as trivia (absorbed into adjacent chunks).
-	fn is_trivia(&self, _kind: &str) -> bool {
-		false
-	}
+	let recurse = match rule.recurse {
+		RecurseMode::None => None,
+		RecurseMode::Auto(context) => resolve_recurse(node, context),
+		RecurseMode::SelfNode(context) => Some(recurse_self(node, context)),
+		RecurseMode::ValueContainer => resolve_value_container(node),
+	};
 
-	/// Additional node kinds treated as absorbable attributes (like Rust
-	/// `#[derive(...)]`).
-	fn is_absorbable_attr(&self, _kind: &str) -> bool {
-		false
+	match rule.style {
+		RuleStyle::Named => make_candidate(
+			node,
+			rule.chunk_kind,
+			identifier,
+			NameStyle::Named,
+			signature_for_node(node, source),
+			recurse,
+			source,
+		),
+		RuleStyle::Group => {
+			make_candidate(node, rule.chunk_kind, identifier, NameStyle::Group, None, recurse, source)
+		},
+		RuleStyle::Positional => make_candidate(
+			node,
+			rule.chunk_kind,
+			None::<String>,
+			NameStyle::Named,
+			None,
+			recurse,
+			source,
+		),
 	}
+}
+
+fn find_rule(
+	tables: &ClassifierTables,
+	context: ChunkContext,
+	kind: &str,
+) -> Option<&'static SemanticRule> {
+	let rules = match context {
+		ChunkContext::Root => tables.root,
+		ChunkContext::ClassBody => tables.class,
+		ChunkContext::FunctionBody => tables.function,
+	};
+
+	rules.iter().find(|rule| rule.ts_kind == kind)
 }
 
 /// Resolve a [`LangClassifier`] for the given language.

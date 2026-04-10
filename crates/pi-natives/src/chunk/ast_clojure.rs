@@ -2,7 +2,11 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*, kind::ChunkKind};
+use super::{
+	classify::{ClassifierTables, LangClassifier},
+	common::*,
+	kind::ChunkKind,
+};
 
 pub struct ClojureClassifier;
 
@@ -52,24 +56,23 @@ fn classify_form<'t>(node: Node<'t>, source: &str, at_root: bool) -> RawChunkCan
 }
 
 impl LangClassifier for ClojureClassifier {
-	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
-			"list_lit" => Some(classify_form(node, source, true)),
-			_ => None,
-		}
+	fn tables(&self) -> &'static ClassifierTables {
+		static TABLES: ClassifierTables = ClassifierTables {
+			root:                 &[],
+			class:                &[],
+			function:             &[],
+			structural_overrides: super::classify::StructuralOverrides::EMPTY,
+		};
+		&TABLES
 	}
 
-	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
-			"list_lit" => Some(classify_form(node, source, false)),
-			_ => None,
-		}
-	}
-
-	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
-			"list_lit" => Some(classify_form(node, source, false)),
-			_ => None,
-		}
+	fn classify_override<'t>(
+		&self,
+		context: ChunkContext,
+		node: Node<'t>,
+		source: &str,
+	) -> Option<RawChunkCandidate<'t>> {
+		(node.kind() == "list_lit")
+			.then(|| classify_form(node, source, matches!(context, ChunkContext::Root)))
 	}
 }

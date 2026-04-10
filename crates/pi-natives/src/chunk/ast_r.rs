@@ -2,55 +2,81 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*, kind::ChunkKind};
+use super::{
+	classify::{ClassifierTables, LangClassifier},
+	common::*,
+	kind::ChunkKind,
+};
 
 pub struct RClassifier;
 
+static R_TABLES: ClassifierTables = ClassifierTables {
+	root:                 &[],
+	class:                &[],
+	function:             &[],
+	structural_overrides: super::classify::StructuralOverrides::EMPTY,
+};
+
 impl LangClassifier for RClassifier {
-	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		Some(match node.kind() {
-			// ── Imports ──
-			"call" if is_import_call(node, source) => {
-				group_candidate(node, ChunkKind::Imports, source)
-			},
-			"call" => group_candidate(node, ChunkKind::Statements, source),
-
-			// ── Function / value assignments ──
-			"binary_operator" => classify_assignment(node, source, ChunkScope::Root)?,
-
-			// ── Control flow at script scope ──
-			"if_statement" => control_candidate(node, ChunkKind::If, source, recurse_if(node)),
-			"for_statement" | "while_statement" | "repeat_statement" => {
-				control_candidate(node, ChunkKind::Loop, source, recurse_loop(node))
-			},
-
-			// ── Bare expressions ──
-			"identifier" | "subset" | "subset2" | "extract_operator" => {
-				group_candidate(node, ChunkKind::Statements, source)
-			},
-
-			_ => return None,
-		})
+	fn tables(&self) -> &'static ClassifierTables {
+		&R_TABLES
 	}
 
-	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		Some(match node.kind() {
-			// ── Local assignments ──
-			"binary_operator" => classify_assignment(node, source, ChunkScope::Function)?,
-
-			// ── Control flow ──
-			"if_statement" => control_candidate(node, ChunkKind::If, source, recurse_if(node)),
-			"for_statement" | "while_statement" | "repeat_statement" => {
-				control_candidate(node, ChunkKind::Loop, source, recurse_loop(node))
-			},
-
-			// ── Calls / bare expressions ──
-			"call" | "identifier" | "subset" | "subset2" | "extract_operator" | "break" | "next"
-			| "return" => group_candidate(node, ChunkKind::Statements, source),
-
-			_ => return None,
-		})
+	fn classify_override<'t>(
+		&self,
+		context: ChunkContext,
+		node: Node<'t>,
+		source: &str,
+	) -> Option<RawChunkCandidate<'t>> {
+		match context {
+			ChunkContext::Root => classify_root_custom(node, source),
+			ChunkContext::FunctionBody => classify_function_custom(node, source),
+			_ => None,
+		}
 	}
+}
+
+fn classify_root_custom<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
+	Some(match node.kind() {
+		// ── Imports ──
+		"call" if is_import_call(node, source) => group_candidate(node, ChunkKind::Imports, source),
+		"call" => group_candidate(node, ChunkKind::Statements, source),
+
+		// ── Function / value assignments ──
+		"binary_operator" => classify_assignment(node, source, ChunkScope::Root)?,
+
+		// ── Control flow at script scope ──
+		"if_statement" => control_candidate(node, ChunkKind::If, source, recurse_if(node)),
+		"for_statement" | "while_statement" | "repeat_statement" => {
+			control_candidate(node, ChunkKind::Loop, source, recurse_loop(node))
+		},
+
+		// ── Bare expressions ──
+		"identifier" | "subset" | "subset2" | "extract_operator" => {
+			group_candidate(node, ChunkKind::Statements, source)
+		},
+
+		_ => return None,
+	})
+}
+
+fn classify_function_custom<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
+	Some(match node.kind() {
+		// ── Local assignments ──
+		"binary_operator" => classify_assignment(node, source, ChunkScope::Function)?,
+
+		// ── Control flow ──
+		"if_statement" => control_candidate(node, ChunkKind::If, source, recurse_if(node)),
+		"for_statement" | "while_statement" | "repeat_statement" => {
+			control_candidate(node, ChunkKind::Loop, source, recurse_loop(node))
+		},
+
+		// ── Calls / bare expressions ──
+		"call" | "identifier" | "subset" | "subset2" | "extract_operator" | "break" | "next"
+		| "return" => group_candidate(node, ChunkKind::Statements, source),
+
+		_ => return None,
+	})
 }
 
 #[derive(Clone, Copy)]

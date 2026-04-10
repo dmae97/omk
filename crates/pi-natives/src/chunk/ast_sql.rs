@@ -2,25 +2,42 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*, kind::ChunkKind};
+use super::{
+	classify::{ClassifierTables, LangClassifier, StructuralOverrides},
+	common::*,
+	kind::ChunkKind,
+};
 
 pub struct SqlClassifier;
 
 impl LangClassifier for SqlClassifier {
-	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_sql_root(node, source)
+	fn tables(&self) -> &'static ClassifierTables {
+		static TABLES: ClassifierTables = ClassifierTables {
+			root:                 &[],
+			class:                &[],
+			function:             &[],
+			structural_overrides: StructuralOverrides {
+				extra_trivia:            &["empty_statement", "dollar_quote", "keyword_from"],
+				preserved_trivia:        &[],
+				extra_root_wrappers:     &[],
+				preserved_root_wrappers: &[],
+				absorbable_attrs:        &[],
+			},
+		};
+		&TABLES
 	}
 
-	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_sql_class(node, source)
-	}
-
-	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_sql_function(node, source)
-	}
-
-	fn is_trivia(&self, kind: &str) -> bool {
-		matches!(kind, "empty_statement" | "dollar_quote" | "keyword_from")
+	fn classify_override<'t>(
+		&self,
+		context: ChunkContext,
+		node: Node<'t>,
+		source: &str,
+	) -> Option<RawChunkCandidate<'t>> {
+		match context {
+			ChunkContext::Root => classify_sql_root(node, source),
+			ChunkContext::ClassBody => classify_sql_class(node, source),
+			ChunkContext::FunctionBody => classify_sql_function(node, source),
+		}
 	}
 }
 

@@ -15,6 +15,7 @@ import { SearchDb } from "@oh-my-pi/pi-natives";
 import type { Component } from "@oh-my-pi/pi-tui";
 import {
 	$env,
+	$flag,
 	getAgentDbPath,
 	getAgentDir,
 	getProjectDir,
@@ -1262,7 +1263,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 	const repeatToolDescriptions = settings.get("repeatToolDescriptions");
 	const eagerTasks = settings.get("task.eager");
-	const intentField = settings.get("tools.intentTracing") || $env.PI_INTENT_TRACING === "1" ? INTENT_FIELD : undefined;
+	const intentField = settings.get("tools.intentTracing") || $flag("PI_INTENT_TRACING") ? INTENT_FIELD : undefined;
 	const rebuildSystemPrompt = async (toolNames: string[], tools: Map<string, AgentTool>): Promise<string> => {
 		toolContextStore.setToolNames(toolNames);
 		const discoverableMCPTools = mcpDiscoveryEnabled ? collectDiscoverableMCPTools(tools.values()) : [];

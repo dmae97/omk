@@ -2,9 +2,46 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*, kind::ChunkKind};
+use super::{
+	classify::{
+		ClassifierTables, LangClassifier, NamingMode, RecurseMode, RuleStyle, StructuralOverrides,
+		semantic_rule,
+	},
+	common::*,
+	kind::ChunkKind,
+};
 
 pub struct CssClassifier;
+
+const CSS_SHARED_RULES: &[super::classify::SemanticRule] = &[
+	semantic_rule(
+		"keyframe_block",
+		ChunkKind::Frame,
+		RuleStyle::Named,
+		NamingMode::AutoIdentifier,
+		RecurseMode::SelfNode(ChunkContext::ClassBody),
+	),
+	semantic_rule(
+		"declaration",
+		ChunkKind::Fields,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+];
+
+const CSS_TABLES: ClassifierTables = ClassifierTables {
+	root:                 CSS_SHARED_RULES,
+	class:                CSS_SHARED_RULES,
+	function:             &[],
+	structural_overrides: StructuralOverrides {
+		extra_trivia:            &[],
+		preserved_trivia:        &[],
+		extra_root_wrappers:     &["stylesheet"],
+		preserved_root_wrappers: &[],
+		absorbable_attrs:        &[],
+	},
+};
 
 /// Extract a CSS selector name from a `rule_set` or `at_rule` node.
 ///
@@ -69,23 +106,19 @@ fn classify_css_node<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandida
 }
 
 impl LangClassifier for CssClassifier {
-	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_css_node(node, source)
+	fn tables(&self) -> &'static ClassifierTables {
+		&CSS_TABLES
 	}
 
-	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_css_node(node, source)
-	}
-
-	fn classify_function<'t>(
+	fn classify_override<'t>(
 		&self,
-		_node: Node<'t>,
-		_source: &str,
+		context: ChunkContext,
+		node: Node<'t>,
+		source: &str,
 	) -> Option<RawChunkCandidate<'t>> {
+		if matches!(context, ChunkContext::Root | ChunkContext::ClassBody) {
+			return classify_css_node(node, source);
+		}
 		None
-	}
-
-	fn is_root_wrapper(&self, kind: &str) -> bool {
-		kind == "stylesheet"
 	}
 }

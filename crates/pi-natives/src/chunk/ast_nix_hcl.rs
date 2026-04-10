@@ -2,9 +2,26 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*, kind::ChunkKind};
+use super::{
+	classify::{ClassifierTables, LangClassifier, StructuralOverrides},
+	common::*,
+	kind::ChunkKind,
+};
 
 pub struct NixHclClassifier;
+
+const NIX_HCL_TABLES: ClassifierTables = ClassifierTables {
+	root:                 &[],
+	class:                &[],
+	function:             &[],
+	structural_overrides: StructuralOverrides {
+		extra_trivia:            &[],
+		preserved_trivia:        &[],
+		extra_root_wrappers:     &["body"],
+		preserved_root_wrappers: &[],
+		absorbable_attrs:        &[],
+	},
+};
 
 /// Extract a structured name from an HCL `block` node.
 ///
@@ -77,6 +94,10 @@ fn classify_nix_binding<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'
 }
 
 impl LangClassifier for NixHclClassifier {
+	fn tables(&self) -> &'static ClassifierTables {
+		&NIX_HCL_TABLES
+	}
+
 	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
 		match node.kind() {
 			// Nix top-level attrsets should recurse into their binding_set so the file exposes
@@ -167,6 +188,29 @@ impl LangClassifier for NixHclClassifier {
 					source,
 				))
 			},
+			// Nix binding_set is a transparent wrapper around individual bindings.
+			// Without this, the binding_set becomes an opaque leaf chunk hiding
+			// all bindings inside a single massive block.
+			"binding_set" => Some(make_candidate(
+				node,
+				ChunkKind::Attrs,
+				None,
+				NameStyle::Named,
+				None,
+				Some(RecurseSpec { node, context: ChunkContext::ClassBody }),
+				source,
+			)),
+			// Nix let_expression inside a class-body context — recurse into its
+			// binding_set so individual bindings are addressable.
+			"let_expression" => Some(make_candidate(
+				node,
+				ChunkKind::Expression,
+				None,
+				NameStyle::Named,
+				signature_for_node(node, source),
+				recurse_value_container(node),
+				source,
+			)),
 			// Nested Nix binding
 			"binding" => Some(classify_nix_binding(node, source)),
 			_ => None,

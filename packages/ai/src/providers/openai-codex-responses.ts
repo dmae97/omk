@@ -1,5 +1,5 @@
 import * as os from "node:os";
-import { $env, abortableSleep, asRecord, logger, readSseJson, structuredCloneJSON } from "@oh-my-pi/pi-utils";
+import { $env, $flag, abortableSleep, asRecord, logger, readSseJson, structuredCloneJSON } from "@oh-my-pi/pi-utils";
 import type OpenAI from "openai";
 import type {
 	ResponseFunctionToolCall,
@@ -90,7 +90,7 @@ export function buildCodexSystemPrompt(args: { userSystemPrompt?: string }): Cod
 	};
 }
 
-const CODEX_DEBUG = $env.PI_CODEX_DEBUG === "1" || $env.PI_CODEX_DEBUG === "true";
+const CODEX_DEBUG = $flag("PI_CODEX_DEBUG");
 const CODEX_MAX_RETRIES = 5;
 const CODEX_RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 const CODEX_RETRY_DELAY_MS = 500;
@@ -197,7 +197,7 @@ function parseCodexPositiveInteger(value: string | undefined, fallback: number):
 }
 
 function isCodexWebSocketEnvEnabled(): boolean {
-	return $env.PI_CODEX_WEBSOCKET === "1" || $env.PI_CODEX_WEBSOCKET === "true";
+	return $flag("PI_CODEX_WEBSOCKET");
 }
 
 function getCodexWebSocketRetryBudget(): number {

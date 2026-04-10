@@ -2,7 +2,14 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*, kind::ChunkKind};
+use super::{
+	classify::{
+		ClassifierTables, LangClassifier, NamingMode, RecurseMode, RuleStyle, StructuralOverrides,
+		semantic_rule,
+	},
+	common::*,
+	kind::ChunkKind,
+};
 
 pub struct ErlangClassifier;
 
@@ -51,129 +58,185 @@ fn recurse_clause_body(node: Node<'_>) -> Option<RecurseSpec<'_>> {
 }
 
 impl LangClassifier for ErlangClassifier {
-	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		Some(match node.kind() {
-			"module_attribute" => {
-				make_kind_chunk(node, ChunkKind::Module, erlang_name(node, source), source, None)
+	fn tables(&self) -> &'static ClassifierTables {
+		static TABLES: ClassifierTables = ClassifierTables {
+			root:                 &[
+				semantic_rule(
+					"export_attribute",
+					ChunkKind::Exports,
+					RuleStyle::Group,
+					NamingMode::None,
+					RecurseMode::None,
+				),
+				semantic_rule(
+					"export_type_attribute",
+					ChunkKind::Exports,
+					RuleStyle::Group,
+					NamingMode::None,
+					RecurseMode::None,
+				),
+				semantic_rule(
+					"import_attribute",
+					ChunkKind::Imports,
+					RuleStyle::Group,
+					NamingMode::None,
+					RecurseMode::None,
+				),
+				semantic_rule(
+					"pp_include",
+					ChunkKind::Includes,
+					RuleStyle::Group,
+					NamingMode::None,
+					RecurseMode::None,
+				),
+				semantic_rule(
+					"pp_include_lib",
+					ChunkKind::Includes,
+					RuleStyle::Group,
+					NamingMode::None,
+					RecurseMode::None,
+				),
+			],
+			class:                &[],
+			function:             &[],
+			structural_overrides: StructuralOverrides {
+				extra_trivia:            &[],
+				preserved_trivia:        &[],
+				extra_root_wrappers:     &[],
+				preserved_root_wrappers: &[],
+				absorbable_attrs:        &["spec"],
 			},
-			"export_attribute" | "export_type_attribute" => {
-				group_candidate(node, ChunkKind::Exports, source)
-			},
-			"import_attribute" => group_candidate(node, ChunkKind::Imports, source),
-			"pp_include" | "pp_include_lib" => group_candidate(node, ChunkKind::Includes, source),
-			"pp_define" => {
-				make_kind_chunk(node, ChunkKind::Macro, erlang_name(node, source), source, None)
-			},
-			"record_decl" => make_candidate(
-				node,
-				ChunkKind::Struct,
-				format!("record_{}", erlang_name(node, source)?),
-				NameStyle::Named,
-				signature_for_node(node, source),
-				Some(recurse_self(node, ChunkContext::ClassBody)),
-				source,
-			),
-			"type_alias" => {
-				make_kind_chunk(node, ChunkKind::Type, erlang_name(node, source), source, None)
-			},
-			// The Erlang grammar exposes each top-level clause as its own `fun_decl`.
-			// Keep that shape instead of inventing a synthetic merged function node.
-			"fun_decl" => make_kind_chunk(
-				node,
-				ChunkKind::Function,
-				erlang_name(node, source),
-				source,
-				Some(recurse_self(node, ChunkContext::FunctionBody)),
-			),
-			"spec" => return None,
-			_ => return None,
-		})
+		};
+		&TABLES
 	}
 
-	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		Some(match node.kind() {
-			"record_field" => {
-				make_kind_chunk(node, ChunkKind::Field, erlang_name(node, source), source, None)
-			},
-			_ => return None,
-		})
+	fn classify_override<'t>(
+		&self,
+		context: ChunkContext,
+		node: Node<'t>,
+		source: &str,
+	) -> Option<RawChunkCandidate<'t>> {
+		match context {
+			ChunkContext::Root => classify_erlang_root(node, source),
+			ChunkContext::ClassBody => classify_erlang_class(node, source),
+			ChunkContext::FunctionBody => classify_erlang_function(node, source),
+		}
 	}
+}
 
-	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		Some(match node.kind() {
-			"function_clause" => make_kind_chunk(
-				node,
-				ChunkKind::Clause,
-				erlang_name(node, source),
-				source,
-				recurse_clause_body(node),
-			),
-			"fun_clause" | "cr_clause" => make_candidate(
-				node,
-				ChunkKind::Clause,
-				None,
-				NameStyle::Named,
-				signature_for_node(node, source),
-				recurse_clause_body(node),
-				source,
-			),
-			"receive_after" => make_candidate(
-				node,
-				ChunkKind::After,
-				None,
-				NameStyle::Named,
-				signature_for_node(node, source),
-				recurse_clause_body(node),
-				source,
-			),
-			"catch_clause" => make_candidate(
-				node,
-				ChunkKind::Catch,
-				None,
-				NameStyle::Named,
-				signature_for_node(node, source),
-				recurse_clause_body(node),
-				source,
-			),
-			"receive_expr" => make_candidate(
-				node,
-				ChunkKind::Receive,
-				None,
-				NameStyle::Named,
-				signature_for_node(node, source),
-				Some(recurse_self(node, ChunkContext::FunctionBody)),
-				source,
-			),
-			"case_expr" => make_candidate(
-				node,
-				ChunkKind::Case,
-				None,
-				NameStyle::Named,
-				signature_for_node(node, source),
-				Some(recurse_self(node, ChunkContext::FunctionBody)),
-				source,
-			),
-			"try_expr" => make_candidate(
-				node,
-				ChunkKind::Try,
-				None,
-				NameStyle::Named,
-				signature_for_node(node, source),
-				Some(recurse_self(node, ChunkContext::FunctionBody)),
-				source,
-			),
-			"anonymous_fun" => make_kind_chunk(
-				node,
-				ChunkKind::Function,
-				Some("anonymous".to_string()),
-				source,
-				Some(recurse_self(node, ChunkContext::FunctionBody)),
-			),
-			_ => return None,
-		})
-	}
+fn classify_erlang_root<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
+	Some(match node.kind() {
+		"module_attribute" => {
+			make_kind_chunk(node, ChunkKind::Module, erlang_name(node, source), source, None)
+		},
+		"pp_define" => {
+			make_kind_chunk(node, ChunkKind::Macro, erlang_name(node, source), source, None)
+		},
+		"record_decl" => make_candidate(
+			node,
+			ChunkKind::Struct,
+			format!("record_{}", erlang_name(node, source)?),
+			NameStyle::Named,
+			signature_for_node(node, source),
+			Some(recurse_self(node, ChunkContext::ClassBody)),
+			source,
+		),
+		"type_alias" => {
+			make_kind_chunk(node, ChunkKind::Type, erlang_name(node, source), source, None)
+		},
+		// The Erlang grammar exposes each top-level clause as its own `fun_decl`.
+		// Keep that shape instead of inventing a synthetic merged function node.
+		"fun_decl" => make_kind_chunk(
+			node,
+			ChunkKind::Function,
+			erlang_name(node, source),
+			source,
+			Some(recurse_self(node, ChunkContext::FunctionBody)),
+		),
+		"spec" => return None,
+		_ => return None,
+	})
+}
 
-	fn is_absorbable_attr(&self, kind: &str) -> bool {
-		kind == "spec"
-	}
+fn classify_erlang_class<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
+	Some(match node.kind() {
+		"record_field" => {
+			make_kind_chunk(node, ChunkKind::Field, erlang_name(node, source), source, None)
+		},
+		_ => return None,
+	})
+}
+
+fn classify_erlang_function<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
+	Some(match node.kind() {
+		"function_clause" => make_kind_chunk(
+			node,
+			ChunkKind::Clause,
+			erlang_name(node, source),
+			source,
+			recurse_clause_body(node),
+		),
+		"fun_clause" | "cr_clause" => make_candidate(
+			node,
+			ChunkKind::Clause,
+			None,
+			NameStyle::Named,
+			signature_for_node(node, source),
+			recurse_clause_body(node),
+			source,
+		),
+		"receive_after" => make_candidate(
+			node,
+			ChunkKind::After,
+			None,
+			NameStyle::Named,
+			signature_for_node(node, source),
+			recurse_clause_body(node),
+			source,
+		),
+		"catch_clause" => make_candidate(
+			node,
+			ChunkKind::Catch,
+			None,
+			NameStyle::Named,
+			signature_for_node(node, source),
+			recurse_clause_body(node),
+			source,
+		),
+		"receive_expr" => make_candidate(
+			node,
+			ChunkKind::Receive,
+			None,
+			NameStyle::Named,
+			signature_for_node(node, source),
+			Some(recurse_self(node, ChunkContext::FunctionBody)),
+			source,
+		),
+		"case_expr" => make_candidate(
+			node,
+			ChunkKind::Case,
+			None,
+			NameStyle::Named,
+			signature_for_node(node, source),
+			Some(recurse_self(node, ChunkContext::FunctionBody)),
+			source,
+		),
+		"try_expr" => make_candidate(
+			node,
+			ChunkKind::Try,
+			None,
+			NameStyle::Named,
+			signature_for_node(node, source),
+			Some(recurse_self(node, ChunkContext::FunctionBody)),
+			source,
+		),
+		"anonymous_fun" => make_kind_chunk(
+			node,
+			ChunkKind::Function,
+			Some("anonymous".to_string()),
+			source,
+			Some(recurse_self(node, ChunkContext::FunctionBody)),
+		),
+		_ => return None,
+	})
 }

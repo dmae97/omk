@@ -2,21 +2,76 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*, kind::ChunkKind};
+use super::{
+	classify::{
+		ClassifierTables, LangClassifier, NamingMode, RecurseMode, RuleStyle, StructuralOverrides,
+		semantic_rule,
+	},
+	common::*,
+	kind::ChunkKind,
+};
 
 pub struct PerlClassifier;
 
+const PERL_SHARED_RULES: &[super::classify::SemanticRule] = &[
+	semantic_rule(
+		"use_statement",
+		ChunkKind::Imports,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"conditional_statement",
+		ChunkKind::If,
+		RuleStyle::Positional,
+		NamingMode::None,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	semantic_rule(
+		"for_statement",
+		ChunkKind::Loop,
+		RuleStyle::Positional,
+		NamingMode::None,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+	semantic_rule(
+		"loop_statement",
+		ChunkKind::Loop,
+		RuleStyle::Positional,
+		NamingMode::None,
+		RecurseMode::Auto(ChunkContext::FunctionBody),
+	),
+];
+
+const PERL_TABLES: ClassifierTables = ClassifierTables {
+	root:                 PERL_SHARED_RULES,
+	class:                &[],
+	function:             PERL_SHARED_RULES,
+	structural_overrides: StructuralOverrides {
+		extra_trivia:            &[],
+		preserved_trivia:        &[],
+		extra_root_wrappers:     &["statement_list"],
+		preserved_root_wrappers: &[],
+		absorbable_attrs:        &[],
+	},
+};
+
 impl LangClassifier for PerlClassifier {
-	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_perl_node(node, source)
+	fn tables(&self) -> &'static ClassifierTables {
+		&PERL_TABLES
 	}
 
-	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		classify_perl_node(node, source)
-	}
-
-	fn is_root_wrapper(&self, kind: &str) -> bool {
-		kind == "statement_list"
+	fn classify_override<'t>(
+		&self,
+		context: ChunkContext,
+		node: Node<'t>,
+		source: &str,
+	) -> Option<RawChunkCandidate<'t>> {
+		match context {
+			ChunkContext::Root | ChunkContext::FunctionBody => classify_perl_node(node, source),
+			ChunkContext::ClassBody => None,
+		}
 	}
 }
 
@@ -27,7 +82,6 @@ fn classify_perl_node<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandid
 		"package_statement" => {
 			make_kind_chunk(node, ChunkKind::Module, Some(perl_name(node, source)?), source, None)
 		},
-		"use_statement" => group_candidate(node, ChunkKind::Imports, source),
 		"subroutine_declaration_statement" => make_kind_chunk(
 			node,
 			ChunkKind::Function,
@@ -35,12 +89,6 @@ fn classify_perl_node<'t>(node: Node<'t>, source: &str) -> Option<RawChunkCandid
 			source,
 			body_recurse(),
 		),
-		"conditional_statement" => {
-			make_candidate(node, ChunkKind::If, None, NameStyle::Named, None, body_recurse(), source)
-		},
-		"for_statement" | "loop_statement" => {
-			make_candidate(node, ChunkKind::Loop, None, NameStyle::Named, None, body_recurse(), source)
-		},
 		"expression_statement" => classify_perl_statement(node, source),
 		_ => return None,
 	})

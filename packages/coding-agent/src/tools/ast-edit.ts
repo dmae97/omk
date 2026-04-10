@@ -3,7 +3,7 @@ import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallb
 import { type AstReplaceChange, astEdit } from "@oh-my-pi/pi-natives";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
-import { prompt, untilAborted } from "@oh-my-pi/pi-utils";
+import { $envpos, prompt, untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { computeLineHash } from "../edit/line-hash";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
@@ -103,7 +103,7 @@ export class AstEditTool implements AgentTool<typeof astEditSchema, AstEditToolD
 			if (maxReplacements !== undefined && (!Number.isFinite(maxReplacements) || maxReplacements < 1)) {
 				throw new ToolError("limit must be a positive number");
 			}
-			const maxFiles = parseInt(process.env.PI_MAX_AST_FILES ?? "", 10) || 1000;
+			const maxFiles = $envpos("PI_MAX_AST_FILES", 1000);
 
 			const formatScopePath = (targetPath: string): string => {
 				const relative = path.relative(this.session.cwd, targetPath).replace(/\\/g, "/");

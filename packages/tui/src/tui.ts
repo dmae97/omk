@@ -3,7 +3,7 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { getDebugLogPath } from "@oh-my-pi/pi-utils";
+import { $flag, getCrashLogPath, getDebugLogPath } from "@oh-my-pi/pi-utils";
 import { isKeyRelease, matchesKey } from "./keys";
 import type { Terminal } from "./terminal";
 import { ImageProtocol, setCellDimensions, setTerminalImageProtocol, TERMINAL } from "./terminal-capabilities";
@@ -228,8 +228,8 @@ export class TUI extends Container {
 	#sixelProbeBuffer = "";
 	#sixelProbeTimeout?: NodeJS.Timeout;
 	#sixelProbeUnsubscribe?: () => void;
-	#showHardwareCursor = process.env.PI_HARDWARE_CURSOR === "1";
-	#clearOnShrink = process.env.PI_CLEAR_ON_SHRINK === "1"; // Clear empty rows when content shrinks (default: off)
+	#showHardwareCursor = $flag("PI_HARDWARE_CURSOR");
+	#clearOnShrink = $flag("PI_CLEAR_ON_SHRINK"); // Clear empty rows when content shrinks (default: off)
 	#maxLinesRendered = 0; // High-water line count used for clear-on-shrink policy
 	#fullRedrawCount = 0;
 	#stopped = false;
@@ -1035,7 +1035,7 @@ export class TUI extends Container {
 			this.#previousHeight = height;
 		};
 
-		const debugRedraw = process.env.PI_DEBUG_REDRAW === "1";
+		const debugRedraw = $flag("PI_DEBUG_REDRAW");
 		const logRedraw = (reason: string): void => {
 			if (!debugRedraw) return;
 			const logPath = getDebugLogPath();
@@ -1236,7 +1236,7 @@ export class TUI extends Container {
 
 		buffer += "\x1b[?2026l"; // End synchronized output
 
-		if (process.env.PI_TUI_DEBUG === "1") {
+		if ($flag("PI_TUI_DEBUG")) {
 			const debugDir = "/tmp/tui";
 			fs.mkdirSync(debugDir, { recursive: true });
 			const debugPath = path.join(debugDir, `render-${Date.now()}-${Math.random().toString(36).slice(2)}.log`);

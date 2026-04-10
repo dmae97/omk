@@ -2,11 +2,17 @@
 
 use tree_sitter::Node;
 
-use super::{classify::LangClassifier, common::*, defaults::classify_var_decl, kind::ChunkKind};
+use super::{
+	classify::{
+		ClassifierTables, LangClassifier, NamingMode, RecurseMode, RuleStyle, StructuralOverrides,
+		semantic_rule,
+	},
+	common::*,
+	defaults::classify_var_decl,
+	kind::ChunkKind,
+};
 
 pub struct CCppClassifier;
-
-// ── C/C++ declarator name extraction ────────────────────────────────────
 
 /// Extract the function name from a C/C++ `function_definition` or
 /// `function_declaration` node by traversing into the `declarator` chain.
@@ -94,217 +100,292 @@ fn extract_c_field_name(node: Node<'_>, source: &str) -> Option<String> {
 	extract_c_declarator_name(decl, source)
 }
 
+const C_CPP_ROOT_RULES: &[super::classify::SemanticRule] = &[
+	// ── Imports ──
+	semantic_rule(
+		"include_directive",
+		ChunkKind::Imports,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"preproc_include",
+		ChunkKind::Imports,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"using_directive",
+		ChunkKind::Imports,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"using_statement",
+		ChunkKind::Imports,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"import_declaration",
+		ChunkKind::Imports,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	semantic_rule(
+		"module_import",
+		ChunkKind::Imports,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+	// ── Statements ──
+	semantic_rule(
+		"expression_statement",
+		ChunkKind::Statements,
+		RuleStyle::Group,
+		NamingMode::None,
+		RecurseMode::None,
+	),
+];
+
+const C_CPP_TABLES: ClassifierTables = ClassifierTables {
+	root:                 C_CPP_ROOT_RULES,
+	class:                &[],
+	function:             &[],
+	structural_overrides: StructuralOverrides::EMPTY,
+};
+
 impl LangClassifier for CCppClassifier {
-	fn classify_root<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
-			// ── Imports ──
-			"include_directive" | "preproc_include" | "using_directive" | "using_statement"
-			| "import_declaration" | "module_import" => {
-				Some(group_candidate(node, ChunkKind::Imports, source))
-			},
-
-			// ── Functions ──
-			"function_definition" | "function_declaration" => Some(make_kind_chunk(
-				node,
-				ChunkKind::Function,
-				extract_c_function_name(node, source),
-				source,
-				recurse_body(node, ChunkContext::FunctionBody),
-			)),
-			"constructor_definition" => Some(make_kind_chunk(
-				node,
-				ChunkKind::Constructor,
-				None,
-				source,
-				recurse_body(node, ChunkContext::FunctionBody),
-			)),
-
-			// ── Templates (unwrap to find the inner declaration) ──
-			"template_declaration" => {
-				// Find the inner function_definition / class_specifier / etc.
-				let inner = named_children(node).into_iter().find(|c| {
-					matches!(
-						c.kind(),
-						"function_definition"
-							| "function_declaration"
-							| "class_specifier"
-							| "struct_specifier"
-							| "type_alias_declaration"
-					)
-				});
-				match inner {
-					Some(inner) => {
-						let mut candidate = self.classify_root(inner, source)?;
-						// Expand range to include the template<...> prefix
-						candidate.range_start_byte = node.start_byte();
-						candidate.range_start_line = node.start_position().row + 1;
-						candidate.checksum_start_byte = node.start_byte();
-						Some(candidate)
-					},
-					None => Some(make_candidate(
-						node,
-						ChunkKind::Template,
-						None,
-						NameStyle::Named,
-						signature_for_node(node, source),
-						recurse_body(node, ChunkContext::FunctionBody),
-						source,
-					)),
-				}
-			},
-
-			// ── Containers ──
-			"class_specifier" | "class_declaration" | "class_interface" | "class_implementation" => {
-				Some(container_candidate(node, ChunkKind::Class, source, recurse_class(node)))
-			},
-			"struct_specifier" | "struct_declaration" => {
-				Some(container_candidate(node, ChunkKind::Struct, source, recurse_class(node)))
-			},
-			"enum_specifier" | "enum_declaration" => {
-				Some(container_candidate(node, ChunkKind::Enum, source, recurse_enum(node)))
-			},
-			"namespace_definition" => {
-				Some(container_candidate(node, ChunkKind::Module, source, recurse_class(node)))
-			},
-			"union_declaration" => {
-				Some(container_candidate(node, ChunkKind::Union, source, recurse_class(node)))
-			},
-
-			// ── Types ──
-			"type_alias_declaration" | "user_defined_type_definition" => {
-				Some(named_candidate(node, ChunkKind::Type, source, recurse_class(node)))
-			},
-
-			// ── Variables / assignments ──
-			"variable_declaration" => Some(classify_var_decl(node, source)),
-			"assignment_statement" | "property_declaration" => {
-				Some(group_candidate(node, ChunkKind::Declarations, source))
-			},
-
-			// ── Macros ──
-			"macro_definition" => Some(named_candidate(
-				node,
-				ChunkKind::Macro,
-				source,
-				recurse_body(node, ChunkContext::FunctionBody),
-			)),
-
-			// ── Control flow (top-level scripts) ──
-			"if_statement" | "switch_statement" | "for_statement" | "while_statement"
-			| "do_statement" | "try_block" => Some(classify_function_c(node, source)),
-
-			// ── Statements ──
-			"expression_statement" => Some(group_candidate(node, ChunkKind::Statements, source)),
-
-			_ => None,
-		}
+	fn tables(&self) -> &'static ClassifierTables {
+		&C_CPP_TABLES
 	}
 
-	fn classify_class<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		match node.kind() {
-			// ── Methods ──
-			"function_definition" | "function_declaration" | "method_declaration" => {
-				let name = extract_c_function_name(node, source)
-					.or_else(|| extract_identifier(node, source))
-					.unwrap_or_else(|| "anonymous".to_string());
-				if name == "constructor" {
-					Some(make_kind_chunk(
-						node,
-						ChunkKind::Constructor,
-						None,
-						source,
-						recurse_body(node, ChunkContext::FunctionBody),
-					))
-				} else {
-					Some(make_kind_chunk(
-						node,
-						ChunkKind::Function,
-						Some(name),
-						source,
-						recurse_body(node, ChunkContext::FunctionBody),
-					))
-				}
-			},
-
-			// ── Constructors ──
-			"constructor_definition" | "constructor_declaration" => Some(make_kind_chunk(
-				node,
-				ChunkKind::Constructor,
-				None,
-				source,
-				recurse_body(node, ChunkContext::FunctionBody),
-			)),
-
-			// ── Fields ──
-			"field_declaration" => Some(match extract_c_field_name(node, source) {
-				Some(name) => make_kind_chunk(node, ChunkKind::Field, Some(name), source, None),
-				None => group_candidate(node, ChunkKind::Fields, source),
-			}),
-
-			// ── Enum variants ──
-			"enum_constant" => Some(match extract_identifier(node, source) {
-				Some(name) => make_kind_chunk(node, ChunkKind::Variant, Some(name), source, None),
-				None => group_candidate(node, ChunkKind::Variants, source),
-			}),
-
-			// ── Nested containers ──
-			"class_specifier" | "class_declaration" | "class_interface" | "class_implementation" => {
-				Some(container_candidate(node, ChunkKind::Class, source, recurse_class(node)))
-			},
-			"struct_specifier" | "struct_declaration" => {
-				Some(container_candidate(node, ChunkKind::Struct, source, recurse_class(node)))
-			},
-			"enum_specifier" | "enum_declaration" => {
-				Some(container_candidate(node, ChunkKind::Enum, source, recurse_enum(node)))
-			},
-			"union_declaration" => {
-				Some(container_candidate(node, ChunkKind::Union, source, recurse_class(node)))
-			},
-			"namespace_definition" => {
-				Some(container_candidate(node, ChunkKind::Module, source, recurse_class(node)))
-			},
-
-			// ── Templates (class body) ──
-			"template_declaration" => {
-				let inner = named_children(node).into_iter().find(|c| {
-					matches!(
-						c.kind(),
-						"function_definition"
-							| "function_declaration"
-							| "class_specifier"
-							| "struct_specifier"
-							| "type_alias_declaration"
-					)
-				});
-				match inner {
-					Some(inner) => {
-						let mut candidate = self.classify_class(inner, source)?;
-						candidate.range_start_byte = node.start_byte();
-						candidate.range_start_line = node.start_position().row + 1;
-						candidate.checksum_start_byte = node.start_byte();
-						Some(candidate)
-					},
-					None => Some(make_candidate(
-						node,
-						ChunkKind::Template,
-						None,
-						NameStyle::Named,
-						signature_for_node(node, source),
-						recurse_body(node, ChunkContext::FunctionBody),
-						source,
-					)),
-				}
-			},
-
-			// ── Types ──
-			"type_alias_declaration" => Some(named_candidate(node, ChunkKind::Type, source, None)),
-
-			_ => None,
+	fn classify_override<'t>(
+		&self,
+		context: ChunkContext,
+		node: Node<'t>,
+		source: &str,
+	) -> Option<RawChunkCandidate<'t>> {
+		match context {
+			ChunkContext::Root => classify_root_custom(self, node, source),
+			ChunkContext::ClassBody => classify_class_custom(self, node, source),
+			ChunkContext::FunctionBody => Some(classify_function_c(node, source)),
 		}
 	}
+}
 
-	fn classify_function<'t>(&self, node: Node<'t>, source: &str) -> Option<RawChunkCandidate<'t>> {
-		Some(classify_function_c(node, source))
+fn classify_root_custom<'t>(
+	classifier: &CCppClassifier,
+	node: Node<'t>,
+	source: &str,
+) -> Option<RawChunkCandidate<'t>> {
+	match node.kind() {
+		// ── Functions ──
+		"function_definition" | "function_declaration" => Some(make_kind_chunk(
+			node,
+			ChunkKind::Function,
+			extract_c_function_name(node, source),
+			source,
+			recurse_body(node, ChunkContext::FunctionBody),
+		)),
+		"constructor_definition" => Some(make_kind_chunk(
+			node,
+			ChunkKind::Constructor,
+			None,
+			source,
+			recurse_body(node, ChunkContext::FunctionBody),
+		)),
+
+		// ── Templates (unwrap to find the inner declaration) ──
+		"template_declaration" => {
+			// Find the inner function_definition / class_specifier / etc.
+			let inner = named_children(node).into_iter().find(|c| {
+				matches!(
+					c.kind(),
+					"function_definition"
+						| "function_declaration"
+						| "class_specifier"
+						| "struct_specifier"
+						| "type_alias_declaration"
+				)
+			});
+			match inner {
+				Some(inner) => {
+					let mut candidate =
+						classifier.classify_override(ChunkContext::Root, inner, source)?;
+					// Expand range to include the template<...> prefix
+					candidate.range_start_byte = node.start_byte();
+					candidate.range_start_line = node.start_position().row + 1;
+					candidate.checksum_start_byte = node.start_byte();
+					Some(candidate)
+				},
+				None => Some(make_candidate(
+					node,
+					ChunkKind::Template,
+					None,
+					NameStyle::Named,
+					signature_for_node(node, source),
+					recurse_body(node, ChunkContext::FunctionBody),
+					source,
+				)),
+			}
+		},
+
+		// ── Containers ──
+		"class_specifier" | "class_declaration" | "class_interface" | "class_implementation" => {
+			Some(container_candidate(node, ChunkKind::Class, source, recurse_class(node)))
+		},
+		"struct_specifier" | "struct_declaration" => {
+			Some(container_candidate(node, ChunkKind::Struct, source, recurse_class(node)))
+		},
+		"enum_specifier" | "enum_declaration" => {
+			Some(container_candidate(node, ChunkKind::Enum, source, recurse_enum(node)))
+		},
+		"namespace_definition" => {
+			Some(container_candidate(node, ChunkKind::Module, source, recurse_class(node)))
+		},
+		"union_declaration" => {
+			Some(container_candidate(node, ChunkKind::Union, source, recurse_class(node)))
+		},
+
+		// ── Types ──
+		"type_alias_declaration" | "user_defined_type_definition" => {
+			Some(named_candidate(node, ChunkKind::Type, source, recurse_class(node)))
+		},
+
+		// ── Variables / assignments ──
+		"variable_declaration" => Some(classify_var_decl(node, source)),
+		"assignment_statement" | "property_declaration" => {
+			Some(group_candidate(node, ChunkKind::Declarations, source))
+		},
+
+		// ── Macros ──
+		"macro_definition" => Some(named_candidate(
+			node,
+			ChunkKind::Macro,
+			source,
+			recurse_body(node, ChunkContext::FunctionBody),
+		)),
+
+		// ── Control flow (top-level scripts) ──
+		"if_statement" | "switch_statement" | "for_statement" | "while_statement"
+		| "do_statement" | "try_block" => Some(classify_function_c(node, source)),
+
+		_ => None,
+	}
+}
+
+fn classify_class_custom<'t>(
+	classifier: &CCppClassifier,
+	node: Node<'t>,
+	source: &str,
+) -> Option<RawChunkCandidate<'t>> {
+	match node.kind() {
+		// ── Methods ──
+		"function_definition" | "function_declaration" | "method_declaration" => {
+			let name = extract_c_function_name(node, source)
+				.or_else(|| extract_identifier(node, source))
+				.unwrap_or_else(|| "anonymous".to_string());
+			if name == "constructor" {
+				Some(make_kind_chunk(
+					node,
+					ChunkKind::Constructor,
+					None,
+					source,
+					recurse_body(node, ChunkContext::FunctionBody),
+				))
+			} else {
+				Some(make_kind_chunk(
+					node,
+					ChunkKind::Function,
+					Some(name),
+					source,
+					recurse_body(node, ChunkContext::FunctionBody),
+				))
+			}
+		},
+
+		// ── Constructors ──
+		"constructor_definition" | "constructor_declaration" => Some(make_kind_chunk(
+			node,
+			ChunkKind::Constructor,
+			None,
+			source,
+			recurse_body(node, ChunkContext::FunctionBody),
+		)),
+
+		// ── Fields ──
+		"field_declaration" => Some(match extract_c_field_name(node, source) {
+			Some(name) => make_kind_chunk(node, ChunkKind::Field, Some(name), source, None),
+			None => group_candidate(node, ChunkKind::Fields, source),
+		}),
+
+		// ── Enum variants ──
+		"enum_constant" => Some(match extract_identifier(node, source) {
+			Some(name) => make_kind_chunk(node, ChunkKind::Variant, Some(name), source, None),
+			None => group_candidate(node, ChunkKind::Variants, source),
+		}),
+
+		// ── Nested containers ──
+		"class_specifier" | "class_declaration" | "class_interface" | "class_implementation" => {
+			Some(container_candidate(node, ChunkKind::Class, source, recurse_class(node)))
+		},
+		"struct_specifier" | "struct_declaration" => {
+			Some(container_candidate(node, ChunkKind::Struct, source, recurse_class(node)))
+		},
+		"enum_specifier" | "enum_declaration" => {
+			Some(container_candidate(node, ChunkKind::Enum, source, recurse_enum(node)))
+		},
+		"union_declaration" => {
+			Some(container_candidate(node, ChunkKind::Union, source, recurse_class(node)))
+		},
+		"namespace_definition" => {
+			Some(container_candidate(node, ChunkKind::Module, source, recurse_class(node)))
+		},
+
+		// ── Templates (class body) ──
+		"template_declaration" => {
+			let inner = named_children(node).into_iter().find(|c| {
+				matches!(
+					c.kind(),
+					"function_definition"
+						| "function_declaration"
+						| "class_specifier"
+						| "struct_specifier"
+						| "type_alias_declaration"
+				)
+			});
+			match inner {
+				Some(inner) => {
+					let mut candidate =
+						classifier.classify_override(ChunkContext::ClassBody, inner, source)?;
+					candidate.range_start_byte = node.start_byte();
+					candidate.range_start_line = node.start_position().row + 1;
+					candidate.checksum_start_byte = node.start_byte();
+					Some(candidate)
+				},
+				None => Some(make_candidate(
+					node,
+					ChunkKind::Template,
+					None,
+					NameStyle::Named,
+					signature_for_node(node, source),
+					recurse_body(node, ChunkContext::FunctionBody),
+					source,
+				)),
+			}
+		},
+
+		// ── Types ──
+		"type_alias_declaration" => Some(named_candidate(node, ChunkKind::Type, source, None)),
+
+		_ => None,
 	}
 }
 
