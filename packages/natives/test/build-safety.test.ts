@@ -30,8 +30,14 @@ describe("native build safety", () => {
 			expect(hasAvx512Markers("123456:\t62 f1 7d 48 6f c0\tvmovdqa32 %zmm0,%zmm1")).toBe(true);
 		});
 
+		it("flags EVEX-encoded AVX-512 even without zmm or mask registers", () => {
+			expect(hasAvx512Markers("401000:\t62 f3 75 28 25 c2 96\tvpternlogd $0x96,%ymm2,%ymm1,%ymm0")).toBe(true);
+		});
+
 		it("ignores ordinary x86-64 disassembly", () => {
 			expect(hasAvx512Markers("401000:\t48 89 e5\t\tmov %rsp,%rbp")).toBe(false);
+			expect(hasAvx512Markers("401004:\tc5 f5 fe c2\tvpaddd %ymm2,%ymm1,%ymm0")).toBe(false);
+			expect(hasAvx512Markers("58b83d7:\t62 00 00 00 ")).toBe(false);
 		});
 	});
 });

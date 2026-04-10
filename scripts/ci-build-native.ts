@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import * as fs from "node:fs";
 import * as path from "node:path";
 import { $ } from "bun";
 
@@ -36,6 +37,60 @@ function parseTargetVariants(): NativeBuildVariant[] {
 	});
 }
 
+function runCommand(command: string, args: string[]): string | null {
+	try {
+		const result = Bun.spawnSync([command, ...args], { stdout: "pipe", stderr: "pipe" });
+		if (result.exitCode !== 0) return null;
+		return result.stdout.toString("utf-8").trim();
+	} catch {
+		return null;
+	}
+}
+
+function detectHostAvx2Support(): boolean {
+	if (process.arch !== "x64") return false;
+
+	if (process.platform === "linux") {
+		try {
+			const cpuInfo = fs.readFileSync("/proc/cpuinfo", "utf8");
+			return /\bavx2\b/i.test(cpuInfo);
+		} catch {
+			return false;
+		}
+	}
+
+	if (process.platform === "darwin") {
+		const leaf7 = runCommand("sysctl", ["-n", "machdep.cpu.leaf7_features"]);
+		if (leaf7 && /\bAVX2\b/i.test(leaf7)) return true;
+		const features = runCommand("sysctl", ["-n", "machdep.cpu.features"]);
+		return Boolean(features && /\bAVX2\b/i.test(features));
+	}
+
+	if (process.platform === "win32") {
+		const output = runCommand("powershell.exe", [
+			"-NoProfile",
+			"-NonInteractive",
+			"-Command",
+			"[System.Runtime.Intrinsics.X86.Avx2]::IsSupported",
+		]);
+		return output?.toLowerCase() === "true";
+	}
+
+	return false;
+}
+
+function resolveExpectedAddons(variants: NativeBuildVariant[]): string[] {
+	if (variants.length > 0) {
+		return variants.map(variant => `${targetPlatform}-${targetArch}-${variant.name}`);
+	}
+
+	if (targetArch === "x64") {
+		return [`${targetPlatform}-${targetArch}-${detectHostAvx2Support() ? "modern" : "baseline"}`];
+	}
+
+	return [`${targetPlatform}-${targetArch}`];
+}
+
 async function runNativeBuild(env: Record<string, string | undefined>, label: string): Promise<void> {
 	if (isDryRun) {
 		const variant = env.TARGET_VARIANT ? ` TARGET_VARIANT=${env.TARGET_VARIANT}` : "";
@@ -46,14 +101,6 @@ async function runNativeBuild(env: Record<string, string | undefined>, label: st
 
 	console.log(`Building natives [${label}]...`);
 	await $`bun --cwd=packages/natives run build`.cwd(repoRoot).env(env);
-}
-
-function resolveExpectedAddons(variants: NativeBuildVariant[]): string[] {
-	if (variants.length === 0) {
-		return [`${targetPlatform}-${targetArch}`];
-	}
-
-	return variants.map(variant => `${targetPlatform}-${targetArch}-${variant.name}`);
 }
 
 async function verifyBuiltAddons(expectedAddons: string[]): Promise<void> {

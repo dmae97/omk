@@ -19,10 +19,23 @@ const x64LinuxIsaContracts = [
 	{ addon: "linux-x64-baseline", filename: "pi_natives.linux-x64-baseline.node", label: "x86-64-v2" },
 	{ addon: "linux-x64-modern", filename: "pi_natives.linux-x64-modern.node", label: "x86-64-v3" },
 ] as const;
-const AVX512_MARKER_PATTERN = /\bzmm\d+\b|\bk[0-7]\b/;
+const AVX512_REGISTER_PATTERN = /\bzmm\d+\b|\bk[0-7]\b/;
 
 export function hasAvx512Markers(disassembly: string): boolean {
-	return AVX512_MARKER_PATTERN.test(disassembly);
+	return disassembly.split("\n").some(line => {
+		if (AVX512_REGISTER_PATTERN.test(line)) {
+			return true;
+		}
+
+		const columns = line.split("\t");
+		if (columns.length < 3) {
+			return false;
+		}
+
+		const bytes = columns[1]?.trim() ?? "";
+		const instruction = columns[2]?.trim() ?? "";
+		return bytes.startsWith("62 ") && /^[a-z]/i.test(instruction) && !instruction.startsWith(".byte");
+	});
 }
 
 function disassemble(binaryPath: string): string {
