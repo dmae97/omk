@@ -55,14 +55,21 @@ export function withHttpStatus(error: unknown, status: number): Error {
 }
 
 /**
- * Rewrite error message for GitHub Copilot auth failures (401/403).
+ * Rewrite error message for GitHub Copilot request failures.
  * Must run AFTER finalizeErrorMessage since it replaces the message entirely.
+ *
+ * 401 = token invalid/expired → credential removal is safe, prompt re-login.
+ * 403 = token valid but access denied (plan, model policy, org restriction) →
+ *       do NOT reuse the auth-failed string (which triggers credential removal).
  */
 export function rewriteCopilotAuthError(errorMessage: string, error: unknown, provider: string): string {
 	if (provider !== "github-copilot") return errorMessage;
 	const status = extractHttpStatusFromError(error);
-	if (status === 401 || status === 403) {
-		return `GitHub Copilot authentication failed (HTTP ${status}). Your token may have been revoked. Please re-login with /login github-copilot`;
+	if (status === 401) {
+		return `GitHub Copilot authentication failed (HTTP 401). Your token may have been revoked. Please re-login with /login github-copilot`;
+	}
+	if (status === 403) {
+		return `GitHub Copilot access denied (HTTP 403). Your account may not have access to this model or feature. Check your Copilot plan or model policy settings.`;
 	}
 	return errorMessage;
 }

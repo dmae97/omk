@@ -25,10 +25,11 @@ describe("rewriteCopilotAuthError", () => {
 		expect(result).toContain("/login github-copilot");
 	});
 
-	it("rewrites message for 403 with github-copilot provider", () => {
+	it("rewrites 403 with access-denied message (not auth-failed, to avoid credential removal)", () => {
 		const err = errorWithStatus(403);
 		const result = rewriteCopilotAuthError("403 Forbidden", err, "github-copilot");
-		expect(result).toContain("GitHub Copilot authentication failed (HTTP 403)");
-		expect(result).toContain("/login github-copilot");
+		expect(result).toContain("GitHub Copilot access denied (HTTP 403)");
+		expect(result).not.toContain("GitHub Copilot authentication failed");
+		expect(result).not.toContain("/login github-copilot");
 	});
 });
