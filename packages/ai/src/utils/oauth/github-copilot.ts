@@ -7,8 +7,10 @@ import type { OAuthCredentials } from "./types";
 
 const CLIENT_ID = "Ov23li8tweQw6odWQebz";
 
-const OPENCODE_HEADERS = {
-	"User-Agent": "opencode/1.3.15",
+export const COPILOT_USER_AGENT = "opencode/1.3.15" as const;
+
+export const OPENCODE_HEADERS = {
+	"User-Agent": COPILOT_USER_AGENT,
 } as const;
 
 const INITIAL_POLL_INTERVAL_MULTIPLIER = 1.2;
@@ -285,12 +287,16 @@ async function enableAllGitHubCopilotModels(
 	onProgress?: (model: string, success: boolean) => void,
 ): Promise<void> {
 	const models = getBundledModels("github-copilot");
-	await Promise.all(
-		models.map(async model => {
-			const success = await enableGitHubCopilotModel(token, model.id, enterpriseDomain);
-			onProgress?.(model.id, success);
-		}),
-	);
+	const BATCH_SIZE = 5;
+	for (let i = 0; i < models.length; i += BATCH_SIZE) {
+		const batch = models.slice(i, i + BATCH_SIZE);
+		await Promise.all(
+			batch.map(async model => {
+				const success = await enableGitHubCopilotModel(token, model.id, enterpriseDomain);
+				onProgress?.(model.id, success);
+			}),
+		);
+	}
 }
 
 /**

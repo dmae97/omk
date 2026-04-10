@@ -14,10 +14,7 @@ import type {
 	UsageWindow,
 } from "../usage";
 import { isRecord, toBoolean, toNumber } from "../utils";
-
-const COPILOT_HEADERS = {
-	"User-Agent": "opencode/1.3.15",
-} as const;
+import { OPENCODE_HEADERS } from "../utils/oauth/github-copilot";
 
 type CopilotQuotaDetail = {
 	entitlement: number;
@@ -180,7 +177,7 @@ async function fetchInternalUsage(
 		"Content-Type": "application/json",
 		Accept: "application/json",
 		Authorization: `Bearer ${token}`,
-		...COPILOT_HEADERS,
+		...OPENCODE_HEADERS,
 	};
 	const data = await fetchJson(ctx, `${githubApiBaseUrl}/copilot_internal/user`, { headers, signal });
 	if (!isRecord(data)) throw new Error("Invalid Copilot usage response");

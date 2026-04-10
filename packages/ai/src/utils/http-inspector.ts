@@ -54,6 +54,19 @@ export function withHttpStatus(error: unknown, status: number): Error {
 	return wrapped;
 }
 
+/**
+ * Rewrite error message for GitHub Copilot auth failures (401/403).
+ * Must run AFTER finalizeErrorMessage since it replaces the message entirely.
+ */
+export function rewriteCopilotAuthError(errorMessage: string, error: unknown, provider: string): string {
+	if (provider !== "github-copilot") return errorMessage;
+	const status = extractHttpStatusFromError(error);
+	if (status === 401 || status === 403) {
+		return `GitHub Copilot authentication failed (HTTP ${status}). Your token may have been revoked. Please re-login with /login github-copilot`;
+	}
+	return errorMessage;
+}
+
 function sanitizeDump(dump: RawHttpRequestDump): RawHttpRequestDump {
 	return {
 		...dump,
