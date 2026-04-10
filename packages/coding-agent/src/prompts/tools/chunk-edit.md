@@ -35,29 +35,26 @@ You **MUST** use the narrowest region that covers your change. Replacing without
 </critical>
 
 <regions>
+Given a chunk like:
 ```
-  @head ··· ┊ /// doc comment
-          · ┊ #[attr]
-  @decl ··· ┊ fn foo(x: i32) {
-   @body ·· ┊     body();
-   @tail ·· ┊ }
+/// doc comment      <-- leading trivia (comment, decorator, attribute)
+#[attr]              <-- leading trivia
+fn foo(x: i32) {     <-- signature + opening delimiter
+    body();          <-- body
+}                    <-- closing delimiter
 ```
-- `@body` — the interior only. **Use for most edits.**
-- `@head` — leading trivia + signature + opening delimiter.
-- `@tail` — the closing delimiter.
-- `@decl` — everything except leading trivia (signature + body + closing delimiter).
-- *(no region)* — the entire chunk including leading trivia. Same as `@head` + `@body` + `@tail`.
 
-**`@decl` excludes leading trivia** (doc comments, decorators, attributes). In Rust, `#[attr]` is trivia; in Python, `@decorator` is trivia; in TypeScript, JSDoc + decorators are trivia. To modify attributes or decorators, target `@head` instead. Including them in `@decl` replacement content **will duplicate them** because the original trivia is preserved.
+|Region|Covers|Use when|
+|---|---|---|
+|`@body`|interior only|most edits — signature and delimiters are preserved|
+|`@head`|leading trivia + signature + opening delimiter|changing signature, decorators, attributes, or doc comments|
+|`@tail`|closing delimiter only|rarely needed|
+|`@decl`|`@head` minus leading trivia|changing signature without touching decorators/attributes|
+|*(no region)*|entire chunk (`@head` + `@body` + `@tail`)|full replacement|
 
-For leaf chunks (fields, variants, single-line items), `@body` falls back to the full chunk.
-
-In TypeScript, if a doc comment or decorator is separated from the function by a blank line, it may appear as its own orphan `chunk` node instead of being absorbed into the function's `@head`. Use the `?` selector (`read(path="file", sel="?")`) to discover the actual chunk layout before editing.
-
-`append`/`prepend` without a `@region` inserts _outside_ the chunk. To add children _inside_ a class, struct, enum, or function body, use `@body`:
-- `class_Foo@body` + `append` → adds inside the class before `}`
-- `class_Foo@body` + `prepend` → adds inside the class after `{`
-- `class_Foo` + `append` → adds after the entire class (after `}`)
+- On leaf chunks (fields, variants, single-line items), `@body` falls back to the whole chunk.
+- `@decl` excludes decorators/attributes/doc-comments. Including them in `@decl` content **duplicates** them. Use `@head` instead.
+- `chunk@body` + `append`/`prepend` inserts *inside* the container. `chunk` + `append`/`prepend` inserts *outside* it.
 </regions>
 
 <ops>
