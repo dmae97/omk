@@ -420,26 +420,50 @@ pub fn recurse_enum(node: Node<'_>) -> Option<RecurseSpec<'_>> {
 	])
 }
 
+/// Node kinds that represent a container value in a key-value pair.
+fn is_value_container_kind(kind: &str) -> bool {
+	matches!(
+		kind,
+		"object"
+			| "array"
+			| "inline_table"
+			| "table"
+			| "table_array_element"
+			| "block_mapping"
+			| "block_sequence"
+			| "flow_mapping"
+			| "flow_sequence"
+			| "block"
+			| "attrset_expression"
+			| "let_expression"
+			| "function_expression"
+			| "body"
+			| "binding_set"
+	)
+}
+
 pub fn recurse_value_container(node: Node<'_>) -> Option<RecurseSpec<'_>> {
-	named_children(node)
-		.into_iter()
-		.find(|child| {
-			matches!(
-				child.kind(),
-				"object"
-					| "array" | "inline_table"
-					| "table" | "table_array_element"
-					| "block_mapping"
-					| "block_sequence"
-					| "flow_mapping"
-					| "flow_sequence"
-					| "block" | "attrset_expression"
-					| "let_expression"
-					| "function_expression"
-					| "body" | "binding_set"
-			)
-		})
-		.map(|child| RecurseSpec { node: child, context: ChunkContext::ClassBody })
+	let children = named_children(node);
+	// Direct container child (JSON objects/arrays, TOML tables, Nix attrsets).
+	if let Some(container) = children
+		.iter()
+		.find(|child| is_value_container_kind(child.kind()))
+	{
+		return Some(RecurseSpec { node: *container, context: ChunkContext::ClassBody });
+	}
+	// YAML wraps values in `block_node` / `flow_node` before the actual
+	// container. Unwrap one level so we find the `block_mapping`,
+	// `block_sequence`, etc. inside.
+	for child in &children {
+		if matches!(child.kind(), "block_node" | "flow_node")
+			&& let Some(inner) = named_children(*child)
+				.into_iter()
+				.find(|c| is_value_container_kind(c.kind()))
+		{
+			return Some(RecurseSpec { node: inner, context: ChunkContext::ClassBody });
+		}
+	}
+	None
 }
 
 // ── Identifier extraction ────────────────────────────────────────────────

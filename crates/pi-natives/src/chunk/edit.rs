@@ -3,7 +3,8 @@ use std::{collections::HashMap, path::Path};
 use crate::chunk::{
 	indent::{
 		denormalize_from_tabs, detect_file_indent_char, detect_file_indent_step,
-		normalize_leading_whitespace_char, reindent_inserted_block, strip_content_prefixes,
+		normalize_leading_whitespace_char, normalize_to_tabs, reindent_inserted_block,
+		strip_content_prefixes,
 	},
 	kind::ChunkKind,
 	resolve::{
@@ -1536,6 +1537,23 @@ struct DiffHunk {
 	new_start: u32,
 }
 
+/// Normalize the content part of a diff hunk line (after the +/-/space prefix)
+/// so that its indentation matches the chunk tree display format.
+fn normalize_hunk_line(line: &str, indent_char: char, indent_step: usize) -> String {
+	if line.is_empty() {
+		return line.to_owned();
+	}
+	let first = line.as_bytes()[0];
+	if matches!(first, b'+' | b'-' | b' ') {
+		let prefix = &line[..1];
+		let content = &line[1..];
+		let normalized = normalize_to_tabs(content, indent_char, indent_step);
+		format!("{prefix}{normalized}")
+	} else {
+		line.to_owned()
+	}
+}
+
 /// Generate unified diff hunks between two texts using the `similar` crate.
 fn generate_diff_hunks(before: &str, after: &str, context: usize) -> Vec<DiffHunk> {
 	use similar::{ChangeTag, TextDiff};
@@ -1616,7 +1634,8 @@ fn render_changed_hunks(
 				let mut lines = Vec::with_capacity(hunk.lines.len() + 1);
 				lines.push(format!("{indent}{}", hunk.header));
 				for line in &hunk.lines {
-					lines.push(format!("{indent}{line}"));
+					let normalized = normalize_hunk_line(line, file_indent_char, file_indent_step);
+					lines.push(format!("{indent}{normalized}"));
 				}
 				inline_hunks
 					.entry(chunk_path.to_owned())
@@ -1655,7 +1674,12 @@ fn render_changed_hunks(
 		.flat_map(|hunk| {
 			let mut lines = Vec::with_capacity(hunk.lines.len() + 1);
 			lines.push(hunk.header.clone());
-			lines.extend(hunk.lines.iter().cloned());
+			lines.extend(
+				hunk
+					.lines
+					.iter()
+					.map(|line| normalize_hunk_line(line, file_indent_char, file_indent_step)),
+			);
 			lines
 		})
 		.collect::<Vec<_>>()
@@ -1845,6 +1869,58 @@ mod tests {
 			!result.diff_after.contains("\n\tprintln!(\"new\");\n"),
 			"expected no tab-indented body, got {:?}",
 			result.diff_after
+		);
+	}
+
+	#[test]
+	fn diff_hunks_use_normalized_indentation() {
+		// Source uses 4-space indentation with nested children, so the tree
+		// can detect indent_char=' ' and indent_step=4. The diff hunk lines
+		// in the response should use tab-normalized indentation (matching the
+		// read tool's output) instead of the raw file indentation.
+		let source = "class Foo {\n    value: number = 0;\n\n    increment(): void {\n        \
+		              this.value += 1;\n    }\n\n    decrement(): void {\n        this.value -= \
+		              1;\n    }\n}\n";
+		let state = state_for(source, "typescript");
+		let chunk = state
+			.inner()
+			.chunk("class_Foo.fn_increment")
+			.expect("fn_increment");
+
+		let result = apply_edits(&state, &EditParams {
+			operations:       vec![EditOperation {
+				op:      ChunkEditOp::Replace,
+				sel:     Some("class_Foo.fn_increment".to_owned()),
+				crc:     Some(chunk.checksum.clone()),
+				region:  Some(ChunkRegion::Body),
+				content: Some("this.value += 2;\n".to_owned()),
+				find:    None,
+			}],
+			default_selector: None,
+			default_crc:      None,
+			anchor_style:     None,
+			cwd:              ".".to_owned(),
+			file_path:        "test.ts".to_owned(),
+		})
+		.expect("edit should apply");
+
+		// The response text should contain diff hunks with tab-normalized
+		// indentation, not the raw 4-space (two levels = 8-space) indentation.
+		assert!(
+			result.response_text.contains("-\t\tthis.value += 1;"),
+			"diff hunk removed line should use tab-normalized indent. Response:\n{}",
+			result.response_text
+		);
+		assert!(
+			result.response_text.contains("+\t\tthis.value += 2;"),
+			"diff hunk added line should use tab-normalized indent. Response:\n{}",
+			result.response_text
+		);
+		// Should NOT contain the raw 8-space-indented diff lines.
+		assert!(
+			!result.response_text.contains("-        this.value += 1;"),
+			"should not have raw space-indented diff lines. Response:\n{}",
+			result.response_text
 		);
 	}
 

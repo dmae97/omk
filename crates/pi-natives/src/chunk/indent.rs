@@ -382,44 +382,7 @@ fn strip_new_line_prefixes(lines: &[String]) -> Vec<String> {
 			.collect();
 	}
 
-	let prefixed = lines
-		.iter()
-		.filter(|line| !line.trim().is_empty())
-		.filter(|line| visual_prefix_len(line).is_some())
-		.count();
-	if prefixed * 10 <= non_empty * 6 {
-		return lines.to_vec();
-	}
-
-	lines
-		.iter()
-		.map(|line| match visual_prefix_len(line) {
-			Some(prefix_len) => line[prefix_len..].to_owned(),
-			None => line.clone(),
-		})
-		.collect()
-}
-
-fn visual_prefix_len(line: &str) -> Option<usize> {
-	let trimmed_start = line
-		.find(|ch| !matches!(ch, ' ' | '\t'))
-		.unwrap_or(line.len());
-	// A `|` at column 0 is content (e.g. markdown tables), not a
-	// gutter prefix.  The chunk view gutter always has a line-number
-	// column before the pipe, so `trimmed_start > 0`.
-	if trimmed_start == 0 {
-		return None;
-	}
-	let after_indent = &line[trimmed_start..];
-	let marker = after_indent.chars().next()?;
-	if marker != '|' && marker != '│' {
-		return None;
-	}
-	let mut length = trimmed_start + marker.len_utf8();
-	let remainder = &line[length..];
-	let space_prefix = remainder.len() - remainder.trim_start_matches([' ', '\t']).len();
-	length += space_prefix;
-	Some(length)
+	lines.to_vec()
 }
 
 fn hashline_prefix_len(line: &str) -> Option<usize> {

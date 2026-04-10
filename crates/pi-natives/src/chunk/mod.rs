@@ -973,6 +973,69 @@ mod tests {
 	}
 
 	#[test]
+	fn yaml_nested_keys_produce_sub_chunks() {
+		// Need > 8 lines (LEAF_THRESHOLD) for the recursion heuristic to kick in.
+		let source = "database:\n  host: localhost\n  port: 5432\n  name: mydb\n  credentials:\n    \
+		              username: admin\n    password: secret\n    token: abc123\n  pool:\n    min: \
+		              5\n    max: 20\n";
+		let tree = build_chunk_tree(source, "yaml").expect("yaml tree should build");
+
+		// Top-level key should exist.
+		assert!(
+			tree.root_children.contains(&"key_database".to_string()),
+			"expected key_database, got {:?}",
+			tree.root_children
+		);
+
+		let db = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "key_database")
+			.expect("key_database");
+		// Should have children for nested keys.
+		assert!(
+			!db.leaf,
+			"key_database should recurse into children, got leaf=true. children: {:?}",
+			db.children
+		);
+		assert!(
+			db.children.iter().any(|c| c.contains("key_host")),
+			"expected key_host child, got {:?}",
+			db.children
+		);
+		assert!(
+			db.children.iter().any(|c| c.contains("key_credentials")),
+			"expected key_credentials child, got {:?}",
+			db.children
+		);
+	}
+
+	#[test]
+	fn yaml_key_region_boundaries_separate_key_from_value() {
+		use super::{resolve::chunk_region_range, types::ChunkRegion};
+
+		let source = "server:\n  host: 0.0.0.0\n  port: 8080\n";
+		let tree = build_chunk_tree(source, "yaml").expect("yaml tree should build");
+		let server = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "key_server")
+			.expect("key_server");
+
+		// @head should contain "server:" but not the nested keys.
+		let (head_s, head_e) = chunk_region_range(server, ChunkRegion::Head);
+		let head = &source[head_s..head_e];
+		assert!(head.contains("server"), "@head should contain the key, got {head:?}");
+		assert!(!head.contains("host"), "@head should not contain value content, got {head:?}");
+
+		// @body should contain the nested keys but not "server:".
+		let (body_s, body_e) = chunk_region_range(server, ChunkRegion::Body);
+		let body = &source[body_s..body_e];
+		assert!(body.contains("host"), "@body should contain nested keys, got {body:?}");
+		assert!(!body.contains("server"), "@body should not contain the key header, got {body:?}");
+	}
+
+	#[test]
 	fn handlebars_chunks_blocks_and_tags() {
 		let tree =
 			build_chunk_tree("{{#if ready}}<div class=\"ok\">{{name}}</div>{{/if}}\n", "handlebars")
@@ -1656,7 +1719,7 @@ impl Config {
 				normalize_indent:    Some(true),
 			})
 			.expect("listing should succeed");
-		assert!(result.text.contains("sample.ts chunks:"));
+		assert!(result.text.contains("sample.ts chunks"), "{}", result.text);
 		assert!(result.text.contains("fn_run#"));
 		// Region listing removed — all chunks accept all regions now.
 		assert!(!result.text.contains("return 1"));
@@ -2548,6 +2611,114 @@ end
 			file_chunk.children.iter().any(|c| c == "file_one_rs.hunk"),
 			"expected hunk child (no suffix), got {:?}",
 			file_chunk.children
+		);
+	}
+
+	#[test]
+	fn visible_range_clip_shows_truncation_markers() {
+		// Build a TypeScript file with a function spanning lines 1-10.
+		let source = "function longFunc() {\nlet a = 1;\nlet b = 2;\nlet c = 3;\nlet d = 4;\nlet e \
+		              = 5;\nlet f = 6;\nlet g = 7;\nlet h = 8;\nreturn a + b + c + d + e + f + g + \
+		              h;\n}\n";
+		let state = ChunkState::parse(source.to_string(), "typescript".to_string())
+			.expect("state should parse");
+
+		// Read only lines 3-7 — the function spans L1-L11, so it should be clipped.
+		let result = state
+			.render_read(ReadRenderParams {
+				read_path:           "test.ts:L3-L7".to_string(),
+				display_path:        "test.ts".to_string(),
+				language_tag:        Some("ts".to_string()),
+				omit_checksum:       true,
+				anchor_style:        Some(ChunkAnchorStyle::FullOmit),
+				absolute_line_range: None,
+				tab_replacement:     Some("  ".to_string()),
+				normalize_indent:    Some(true),
+			})
+			.expect("render_read should succeed");
+
+		// The output should contain truncation markers indicating the chunk continues.
+		assert!(
+			result.text.contains("lines above"),
+			"should show top truncation marker when chunk extends above visible range: {}",
+			result.text
+		);
+		assert!(
+			result.text.contains("lines below"),
+			"should show bottom truncation marker when chunk extends below visible range: {}",
+			result.text
+		);
+		// The visible content should still be there.
+		assert!(
+			result.text.contains("let c = 3"),
+			"visible content should be rendered: {}",
+			result.text
+		);
+	}
+
+	#[test]
+	fn visible_range_no_clip_markers_when_chunk_fits() {
+		// A small file fully contained in the visible range should have no clip
+		// markers.
+		let source = "const x = 1;\nconst y = 2;\n";
+		let state = ChunkState::parse(source.to_string(), "typescript".to_string())
+			.expect("state should parse");
+
+		let result = state
+			.render_read(ReadRenderParams {
+				read_path:           "test.ts:L1-L2".to_string(),
+				display_path:        "test.ts".to_string(),
+				language_tag:        Some("ts".to_string()),
+				omit_checksum:       true,
+				anchor_style:        Some(ChunkAnchorStyle::FullOmit),
+				absolute_line_range: None,
+				tab_replacement:     Some("  ".to_string()),
+				normalize_indent:    Some(true),
+			})
+			.expect("render_read should succeed");
+
+		// Should NOT have any truncation markers.
+		assert!(
+			!result.text.contains("lines above"),
+			"no top clip marker when chunk fits: {}",
+			result.text
+		);
+		assert!(
+			!result.text.contains("lines below"),
+			"no bottom clip marker when chunk fits: {}",
+			result.text
+		);
+	}
+
+	#[test]
+	fn nix_let_expression_bindings_are_individually_addressable() {
+		// A Nix file with { args }: let bindings in body should produce
+		// individual chunks for each binding, not a single opaque chunk.
+		let source = r#"{ pkgs }:
+	let
+	  foo = 1;
+	  bar = pkgs.hello;
+	  baz = {
+		x = 1;
+		y = 2;
+	  };
+	in
+	{
+	  inherit foo bar baz;
+	}
+	"#;
+		let tree = build_chunk_tree(source, "nix").expect("nix tree should build");
+
+		// There should be chunks for individual bindings, not just a single
+		// opaque chunk containing all of them.
+		let has_foo = tree.chunks.iter().any(|c| c.path.contains("foo"));
+		let has_bar = tree.chunks.iter().any(|c| c.path.contains("bar"));
+		let has_baz = tree.chunks.iter().any(|c| c.path.contains("baz"));
+
+		assert!(
+			has_foo && has_bar && has_baz,
+			"individual bindings should be addressable chunks. Chunks: {:?}",
+			tree.chunks.iter().map(|c| &c.path).collect::<Vec<_>>()
 		);
 	}
 }
