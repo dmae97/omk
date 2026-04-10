@@ -209,12 +209,76 @@ fn kind_looks_like_comment(kind: &str) -> bool {
 	kind == "comment" || kind.contains("comment")
 }
 
+/// Detect a call-with-trailing-callback pattern inside a node.
+///
+/// Returns `(call_text_node, body_node)` where `call_text_node` is the function
+/// being called (for name extraction) and `body_node` is the block body of the
+/// trailing callback argument.
+///
+/// This handles patterns like:
+/// - JS/TS: `describe('x', () => { ... })`, `app.use(handler)`
+/// - Go: `t.Run("x", func(t *testing.T) { ... })`
+/// - Rust: `tokio::spawn(async { ... })`
+/// - Ruby: `describe 'x' do ... end` (via `do_block`)
+///
+/// Only matches when the last argument has a structural block body, so
+/// expression-body arrows and simple value arguments are not promoted.
+pub fn trailing_callback_body(node: Node<'_>) -> Option<(Node<'_>, Node<'_>)> {
+	// Look through the node's children for a call-like node.
+	let call = local_named_children(node)
+		.into_iter()
+		.find(|c| is_call_like(*c))?;
+
+	// Find the arguments / parameter list.
+	let args_node = call
+		.child_by_field_name("arguments")
+		.or_else(|| call.child_by_field_name("args"))
+		.or_else(|| call.child_by_field_name("block"))?;
+
+	// Get the last named child of the arguments list.
+	let last_arg = local_named_children(args_node).into_iter().last()?;
+
+	// Try to find a structural body inside the last argument.
+	let body = recurse_target(last_arg)?;
+
+	// Extract the call target node for name purposes.
+	let func_node = call
+		.child_by_field_name("function")
+		.or_else(|| call.child_by_field_name("method"))
+		.or_else(|| call.child_by_field_name("name"))
+		.unwrap_or(call);
+
+	Some((func_node, body))
+}
+
+/// Returns `true` if the node looks like a function/method call.
+fn is_call_like(node: Node<'_>) -> bool {
+	let kind = node.kind();
+	// Explicit known call kinds.
+	if matches!(
+		kind,
+		"call_expression"
+			| "call"
+			| "function_call"
+			| "method_call"
+			| "method_call_expression"
+			| "invocation_expression"
+	) {
+		return true;
+	}
+	// Heuristic: has an `arguments` field.
+	node.child_by_field_name("arguments").is_some()
+}
+
 #[cfg(test)]
 mod tests {
 	use ast_grep_core::tree_sitter::LanguageExt;
 	use tree_sitter::{Node, Parser};
 
-	use super::{identifier_node, is_root_wrapper_node, recurse_target, signature_end_byte};
+	use super::{
+		identifier_node, is_root_wrapper_node, recurse_target, signature_end_byte,
+		trailing_callback_body,
+	};
 	use crate::language::SupportLang;
 
 	fn parse_tree_with_language(
@@ -270,5 +334,21 @@ mod tests {
 			parse_tree_with_language("root:\n  child: 1\n", SupportLang::Yaml);
 		let node = find_named_node(tree.root_node(), "block_node").expect("block_node");
 		assert!(is_root_wrapper_node(node), "block_node should be treated as a structural wrapper");
+	}
+
+	#[test]
+	fn js_expression_statement_with_callback_detects_body() {
+		let source = "describe(\"suite\", () => {\n\tit(\"a\", () => {});\n});\n";
+		let (_schema_language, tree) = parse_tree_with_language(source, SupportLang::TypeScript);
+		let expr_stmt =
+			find_named_node(tree.root_node(), "expression_statement").expect("expression_statement");
+		let (func_node, body) =
+			trailing_callback_body(expr_stmt).expect("should detect trailing callback body");
+		assert_eq!(body.kind(), "statement_block");
+		assert!(
+			matches!(func_node.kind(), "identifier" | "member_expression"),
+			"func_node should be an identifier or member_expression, got {}",
+			func_node.kind()
+		);
 	}
 }

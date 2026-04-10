@@ -447,14 +447,8 @@ export interface ChunkReadTarget {
 }
 
 export declare enum ChunkRegion {
-  Head = 'head',
-  Body = 'body',
-  Tail = 'tail',
-  /**
-   * The semantic declaration without leading trivia (comments, attributes).
-   * Spans from `checksum_start_byte` to `end_byte`.
-   */
-  Decl = 'decl'
+  Head = '^',
+  Body = '~'
 }
 
 /** Clipboard image payload encoded as PNG bytes. */

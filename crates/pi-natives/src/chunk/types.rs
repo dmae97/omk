@@ -91,25 +91,17 @@ pub enum ChunkReadStatus {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[napi(string_enum)]
 pub enum ChunkRegion {
-	#[napi(value = "head")]
+	#[napi(value = "^")]
 	Head,
-	#[napi(value = "body")]
+	#[napi(value = "~")]
 	Body,
-	#[napi(value = "tail")]
-	Tail,
-	/// The semantic declaration without leading trivia (comments, attributes).
-	/// Spans from `checksum_start_byte` to `end_byte`.
-	#[napi(value = "decl")]
-	Decl,
 }
 
 impl ChunkRegion {
 	pub const fn as_str(self) -> &'static str {
 		match self {
-			Self::Head => "head",
-			Self::Body => "body",
-			Self::Tail => "tail",
-			Self::Decl => "decl",
+			Self::Head => "^",
+			Self::Body => "~",
 		}
 	}
 }

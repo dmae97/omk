@@ -10,6 +10,7 @@ use super::{
 		ChunkContext, NameStyle, RawChunkCandidate, extract_identifier, is_absorbable_attribute,
 		is_trivia_node, make_candidate, named_children, recurse_self, resolve_recurse,
 		resolve_value_container, sanitize_node_kind, signature_for_node,
+		try_promote_call_with_callback,
 	},
 	defaults,
 	kind::ChunkKind,
@@ -227,14 +228,27 @@ pub fn classify_with_defaults<'tree>(
 		return make_candidate(node, ChunkKind::Error, None, NameStyle::Error, None, None, source);
 	}
 
-	match context {
+	let candidate = match context {
 		ChunkContext::Root => classify_with_tables(classifier, context, node, source)
 			.unwrap_or_else(|| defaults::classify_root_default(node, source)),
 		ChunkContext::ClassBody => classify_with_tables(classifier, context, node, source)
 			.unwrap_or_else(|| defaults::classify_class_default(node, source)),
 		ChunkContext::FunctionBody => classify_with_tables(classifier, context, node, source)
 			.unwrap_or_else(|| defaults::classify_function_default(node, source)),
+	};
+
+	// If the classifier produced a groupable leaf (no recurse), try to
+	// promote call-with-trailing-callback patterns into named container
+	// chunks. This handles `describe(...)`, `t.Run(...)`, etc. across
+	// all languages without per-language opt-in.
+	if candidate.recurse.is_none()
+		&& candidate.groupable
+		&& let Some(promoted) = try_promote_call_with_callback(node, source)
+	{
+		return promoted;
 	}
+
+	candidate
 }
 
 pub fn first_wrapper_content_child<'tree>(

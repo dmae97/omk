@@ -266,10 +266,8 @@ module.exports.ChunkReadStatus = {
   UnsupportedRegion: 'unsupported_region',
 };
 module.exports.ChunkRegion = {
-  Head: 'head',
-  Body: 'body',
-  Tail: 'tail',
-  Decl: 'decl',
+  Head: '^',
+  Body: '~',
 };
 module.exports.Ellipsis = {
   Unicode: 0,

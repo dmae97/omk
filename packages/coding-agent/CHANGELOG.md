@@ -1,8 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Changed
 
+- Updated chunk selector syntax from `@region` format to `~` (body) and `^` (head) suffixes for more concise region targeting
+- Simplified chunk edit documentation to use new `~` and `^` region syntax instead of `@head`, `@body`, `@tail`, `@decl` keywords
 - Replaced internal `raceAbort` function with imported `raceWithAbort` utility from pi-utils
 - Refactored cleanup timer to use async iterator pattern with `timers.setInterval` instead of `setInterval`
 - Made `#cleanupIdleSessions` synchronous and moved async cleanup loop logic to new `#runCleanupLoop` method

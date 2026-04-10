@@ -2,7 +2,7 @@ Reads files using syntax-aware chunks.
 
 <instruction>
 - `path` — file path or URL; may include `:selector` suffix
-- `sel` — optional selector: `class_Foo`, `class_Foo.fn_bar#ABCD@body`, `?`, `L50`, `L50-L120`, or `raw`
+- `sel` — optional selector: `class_Foo`, `class_Foo.fn_bar#ABCD~`, `?`, `L50`, `L50-L120`, or `raw`
 - `timeout` — seconds, for URLs only
 
 Each opening anchor `[< full.chunk.path#CCCC ]` in the default output identifies a chunk. Use `full.chunk.path#CCCC` as-is to read truncated chunks.

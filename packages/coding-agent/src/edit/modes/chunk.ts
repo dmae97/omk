@@ -332,7 +332,7 @@ export const chunkToolEditSchema = Type.Object({
 	op: StringEnum(CHUNK_OP_VALUES),
 	sel: Type.String({
 		description:
-			"Chunk selector. Format: 'path@region' for insertions, 'path#CRC@region' for replace. Omit @region to target the full chunk. Valid regions: head, body, tail, decl.",
+			"Chunk selector. Use 'path~' or 'path^' for insertions, 'path#CRC~' or 'path#CRC^' for replace, or omit the suffix to target the full chunk.",
 	}),
 	content: Type.String({
 		description:

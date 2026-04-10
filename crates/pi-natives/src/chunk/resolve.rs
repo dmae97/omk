@@ -14,29 +14,26 @@ pub struct ResolvedChunk<'a> {
 
 fn parse_region_name(value: &str) -> Option<ChunkRegion> {
 	match value.trim() {
-		"head" => Some(ChunkRegion::Head),
-		"body" => Some(ChunkRegion::Body),
-		"tail" => Some(ChunkRegion::Tail),
-		"decl" => Some(ChunkRegion::Decl),
+		"^" => Some(ChunkRegion::Head),
+		"~" => Some(ChunkRegion::Body),
 		_ => None,
 	}
 }
 
 fn is_known_region_name(value: &str) -> bool {
-	matches!(value.trim(), "head" | "body" | "tail" | "decl")
+	matches!(value.trim(), "^" | "~")
 }
 
-/// Split a trailing `@region` suffix from a selector. Returns the selector
-/// prefix, and `Some(region)` if a region was specified. The outer `Option`
-/// indicates whether an `@` was found.
 pub fn split_region_suffix(selector: &str) -> (&str, bool, Option<ChunkRegion>) {
-	let Some((prefix, suffix)) = selector.rsplit_once('@') else {
+	let Some(suffix) = selector.chars().last() else {
 		return (selector, false, None);
 	};
-	if !is_known_region_name(suffix.trim()) {
+	let suffix = suffix.to_string();
+	if !is_known_region_name(&suffix) {
 		return (selector, false, None);
 	}
-	(prefix.trim_end(), true, parse_region_name(suffix.trim()))
+	let prefix = &selector[..selector.len() - suffix.len()];
+	(prefix.trim_end(), true, parse_region_name(&suffix))
 }
 
 pub struct ParsedSelector {
@@ -67,8 +64,7 @@ pub fn split_selector_crc_and_region(
 			(prefix, parsed_region)
 		} else if let Some((_, suffix)) = raw.rsplit_once('@') {
 			return Err(format!(
-				"Unknown chunk region \"{}\". Valid regions: head, body, tail (or omit for the full \
-				 chunk).",
+				"Unknown chunk region \"{}\". Valid regions: ^, ~ (or omit for the full chunk).",
 				suffix.trim()
 			));
 		} else {
@@ -204,13 +200,11 @@ pub fn chunk_region_range(chunk: &ChunkNode, region: ChunkRegion) -> (usize, usi
 	match region {
 		ChunkRegion::Head => (start, pro_end),
 		ChunkRegion::Body => (pro_end, epi_start),
-		ChunkRegion::Tail => (epi_start, end),
-		ChunkRegion::Decl => ((chunk.checksum_start_byte as usize).clamp(start, end), end),
 	}
 }
 
 pub fn format_region_ref(chunk: &ChunkNode, region: Option<ChunkRegion>) -> String {
-	let suffix = region.map_or(String::new(), |r| format!("@{}", r.as_str()));
+	let suffix = region.map_or(String::new(), |r| r.as_str().to_owned());
 	if chunk.path.is_empty() {
 		format!("<root>#{}{suffix}", chunk.checksum)
 	} else {

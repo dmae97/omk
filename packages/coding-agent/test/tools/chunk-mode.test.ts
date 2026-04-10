@@ -300,7 +300,7 @@ describe("chunk mode tools", () => {
 			path: filePath,
 			edits: [
 				{
-					sel: `class_Server.fn_handle#${checksum}@body`,
+					sel: `class_Server.fn_handle#${checksum}~`,
 					op: "replace",
 					content: 'if (flag) {\n\tconsole.log("tabbed");\n}\n',
 				},
@@ -392,7 +392,7 @@ describe("chunk mode tools", () => {
 			path: filePath,
 			edits: [
 				{
-					sel: "class_Server@body",
+					sel: "class_Server~",
 					op: "append",
 					content: 'status(): string {\n  return "ok";\n}\n',
 				},

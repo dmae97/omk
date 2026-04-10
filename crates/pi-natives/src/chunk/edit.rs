@@ -332,10 +332,7 @@ fn resolve_edit_target(
 	}
 	let chunk = resolved.chunk.clone();
 	if chunk.prologue_end_byte.is_none() || chunk.epilogue_start_byte.is_none() {
-		// @decl only depends on checksum_start_byte, not prologue/epilogue.
-		if region != Some(ChunkRegion::Decl) {
-			region = None;
-		}
+		region = None;
 	}
 
 	Ok(ResolvedEditTarget { chunk, region })
@@ -470,13 +467,9 @@ fn apply_replace(
 		}
 		replace_source_and_adjust_conflicts(state, new_source, warnings);
 	} else {
-		// For prologue/epilogue replacements, ensure the replacement preserves
-		// the newline boundary so the body content isn't joined onto the same
-		// line as the replacement.
-		if matches!(
-			target.region,
-			Some(ChunkRegion::Head | ChunkRegion::Body | ChunkRegion::Tail | ChunkRegion::Decl)
-		) && !replacement.is_empty()
+		// Preserve the region's trailing newline boundary so the next line stays
+		// structurally separate after a head/body replacement.
+		if !replacement.is_empty()
 			&& !replacement.ends_with('\n')
 			&& state.source.as_bytes().get(region_end.saturating_sub(1)) == Some(&b'\n')
 		{
@@ -633,29 +626,21 @@ fn apply_insert(
 
 	if pos == InsertPosition::FirstChild {
 		let body = replacement.trim_matches('\n');
-		let comment_only = !body.is_empty()
-			&& body.lines().all(|line| {
-				let trimmed = line.trim();
-				trimmed.is_empty()
-					|| trimmed.starts_with("//")
-					|| trimmed.starts_with("///")
-					|| trimmed.starts_with('#')
-					|| trimmed.starts_with("/*")
-			});
+		let comment_only = !body.is_empty() && body.lines().all(|line| is_comment_only_line(line.trim()));
 		if comment_only
 			&& anchor.path.is_empty()
 			&& anchor.children.iter().any(|child| child == "preamble")
 		{
 			return Err(
-				"Comment-only @body.prepend on root is not allowed when the file has a preamble \
-				 chunk. Use replace on the preamble chunk instead."
+				"Comment-only ~.prepend on root is not allowed when the file has a preamble chunk. \
+				 Use replace on the preamble chunk instead."
 					.to_owned(),
 			);
 		}
 		if comment_only && !anchor.children.is_empty() {
 			warnings.push(
-				"Comment-only @body.prepend can merge into the following chunk's first line; it is \
-				 not a separate named chunk."
+				"Comment-only ~.prepend can merge into the following chunk's first line; it is not a \
+				 separate named chunk."
 					.to_owned(),
 			);
 		}
@@ -732,7 +717,7 @@ fn validate_crc(chunk: &ChunkNode, crc: Option<&str>) -> Result<(), String> {
 		format!(
 			"Checksum required for {}. Re-read the chunk to get the current checksum, then include \
 			 it in the selector. Hint: use target \"{}\" for container replacement, or append \
-			 another region such as @body.",
+			 another region such as ~.",
 			chunk_path_opt(chunk),
 			selector
 		)
@@ -797,6 +782,33 @@ fn describe_scheduled_operation(scheduled: &ScheduledEditOperation) -> String {
 	} else {
 		op.to_owned()
 	}
+}
+
+/// Return `true` when `line` (already trimmed) is empty or a line comment in
+/// any of the languages this tool edits.
+///
+/// Distinguishes shell/Python `# comment` (hash followed by whitespace, `!`,
+/// or end-of-line) from TS/JS `#private` field declarations and Rust `#[attr]`
+/// attributes, which all start with `#` but are not comments.
+fn is_comment_only_line(line: &str) -> bool {
+	if line.is_empty() {
+		return true;
+	}
+	// C-family single-line and block comments. `//` covers `///` doc comments.
+	if line.starts_with("//") || line.starts_with("/*") {
+		return true;
+	}
+	// Hash-family comments (shell, Python, YAML, TOML, Nix, make, ...).
+	// A bare `#`, shebang `#!`, or `#` followed by whitespace is a comment.
+	// `#[attr]` (Rust), `#![attr]` (Rust inner), and `#foo` (TS private field)
+	// are **not** comments.
+	if let Some(rest) = line.strip_prefix('#') {
+		return rest.is_empty()
+			|| rest.starts_with('!') && !rest.starts_with("![")
+			|| rest.starts_with(' ')
+			|| rest.starts_with('\t');
+	}
+	false
 }
 
 fn replace_byte_range(source: &str, start: usize, end: usize, replacement: &str) -> String {
@@ -906,9 +918,7 @@ fn target_indent_for_region(
 	file_indent_step: usize,
 ) -> String {
 	match region {
-		None | Some(ChunkRegion::Head | ChunkRegion::Tail | ChunkRegion::Decl) => {
-			anchor.indent_char.repeat(anchor.indent as usize)
-		},
+		None | Some(ChunkRegion::Head) => anchor.indent_char.repeat(anchor.indent as usize),
 		Some(ChunkRegion::Body) => {
 			compute_insert_indent(state, anchor, true, file_indent_char, file_indent_step)
 		},
@@ -1196,15 +1206,13 @@ fn resolve_insertion_point(
 ) -> Result<(InsertionPoint, InsertPosition), String> {
 	match (region, op) {
 		// Before chunk boundary
-		(
-			None | Some(ChunkRegion::Head | ChunkRegion::Decl),
-			ChunkEditOp::Before | ChunkEditOp::Prepend,
-		) => Ok((before_chunk_insertion_point(state, anchor), InsertPosition::Before)),
+		(None, ChunkEditOp::Before | ChunkEditOp::Prepend) => {
+			Ok((before_chunk_insertion_point(state, anchor), InsertPosition::Before))
+		},
 		// After chunk boundary
-		(
-			None | Some(ChunkRegion::Tail | ChunkRegion::Decl),
-			ChunkEditOp::After | ChunkEditOp::Append,
-		) => Ok((after_chunk_insertion_point(state, anchor), InsertPosition::After)),
+		(None, ChunkEditOp::After | ChunkEditOp::Append) => {
+			Ok((after_chunk_insertion_point(state, anchor), InsertPosition::After))
+		},
 		// Inner first-child position
 		(Some(ChunkRegion::Body), ChunkEditOp::Before | ChunkEditOp::Prepend)
 		| (Some(ChunkRegion::Head), ChunkEditOp::After | ChunkEditOp::Append) => Ok((
@@ -1213,7 +1221,7 @@ fn resolve_insertion_point(
 		)),
 		// Inner last-child position
 		(Some(ChunkRegion::Body), ChunkEditOp::After | ChunkEditOp::Append)
-		| (Some(ChunkRegion::Tail), ChunkEditOp::Before | ChunkEditOp::Prepend) => Ok((
+		| (Some(ChunkRegion::Head), ChunkEditOp::Before | ChunkEditOp::Prepend) => Ok((
 			body_insertion_point(state, anchor, true, file_indent_char, file_indent_step),
 			InsertPosition::LastChild,
 		)),
@@ -1271,7 +1279,7 @@ fn compute_insert_indent(
 		return indent_char.repeat(first_child.indent as usize);
 	}
 
-	// Scan only the @body region (between prologue and epilogue), not the full
+	// Scan only the ~ region (between prologue and epilogue), not the full
 	// chunk. This avoids picking up the closing delimiter's indent for
 	// empty/sparse bodies.
 	let (body_start, body_end) = chunk_region_range(anchor, ChunkRegion::Body);
@@ -2425,24 +2433,16 @@ mod tests {
 	}
 
 	#[test]
-	fn append_on_group_chunk_container_inserts_at_end() {
-		// A file with only a `stmts` group chunk (e.g. a describe() call in a test
-		// file). Appending to it should insert content at the end of the statement
-		// list.
-		let source = "import { describe } from \"bun:test\";\n\ndescribe(\"suite\", () => \
-		              {\n\tit(\"a\", () => {});\n});\n";
-		let state = state_for(source, "typescript");
+	fn append_on_root_stmts_group_inserts_after_grouped_statements() {
+		// This fixture exposes the root-level `stmts` group. Appending to that
+		// group should place content after the grouped top-level statements.
+		// Use plain expression statements (no trailing callback) so they stay
+		// as groupable stmts rather than being promoted to named expr chunks.
+		let source = "import { foo } from \"bar\";\n\nconsole.log(\"a\");\nconsole.log(\"b\");\n";
+		let state = parsed_state_for(source, "typescript");
 		let stmts = state
 			.inner()
-			.tree
-			.chunks
-			.iter()
-			.find(|c| {
-				c.path
-					.rsplit('.')
-					.next()
-					.is_some_and(|leaf| leaf.starts_with("stmts"))
-			})
+			.chunk("stmts")
 			.expect("stmts chunk should exist");
 		assert!(stmts.group, "stmts chunk should be marked as group");
 
@@ -2451,13 +2451,20 @@ mod tests {
 			sel:     Some(stmts.path.clone()),
 			crc:     None,
 			region:  None,
-			content: Some("\nit(\"b\", () => {});".to_owned()),
+			content: Some("\nconsole.log(\"c\");".to_owned()),
 			find:    None,
 		});
 
 		assert!(
-			result.diff_after.contains("it(\"b\""),
+			result.diff_after.contains("log(\"c\""),
 			"appended content should appear in output, got: {}",
+			result.diff_after
+		);
+		assert!(
+			result
+				.diff_after
+				.contains("log(\"b\");\nconsole.log(\"c\");"),
+			"appended statement should land after the grouped top-level statements, got: {}",
 			result.diff_after
 		);
 	}
@@ -2470,7 +2477,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "test.ts", EditOperation {
 			op:      ChunkEditOp::Replace,
-			sel:     Some(format!("fn_main#{}@body", chunk.checksum)),
+			sel:     Some(format!("fn_main#{}~", chunk.checksum)),
 			crc:     None,
 			region:  None,
 			content: Some("\treturn next();\n".to_owned()),
@@ -2488,7 +2495,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "test.rs", EditOperation {
 			op:      ChunkEditOp::Replace,
-			sel:     Some(format!("fn_main#{}@body", chunk.checksum)),
+			sel:     Some(format!("fn_main#{}~", chunk.checksum)),
 			crc:     None,
 			region:  None,
 			content: Some("\tprintln!(\"new\");\n".to_owned()),
@@ -2506,7 +2513,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "test.go", EditOperation {
 			op:      ChunkEditOp::Replace,
-			sel:     Some(format!("fn_main#{}@body", chunk.checksum)),
+			sel:     Some(format!("fn_main#{}~", chunk.checksum)),
 			crc:     None,
 			region:  None,
 			content: Some("\treturn\n".to_owned()),
@@ -2524,7 +2531,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "test.py", EditOperation {
 			op:      ChunkEditOp::Replace,
-			sel:     Some(format!("fn_run#{}@body", chunk.checksum)),
+			sel:     Some(format!("fn_run#{}~", chunk.checksum)),
 			crc:     None,
 			region:  None,
 			content: Some("\treturn 2\n".to_owned()),
@@ -2570,7 +2577,7 @@ mod tests {
 		let body_state = state_for(source, "go");
 		let body_result = apply_single_edit(&body_state, "test.go", EditOperation {
 			op:      ChunkEditOp::Append,
-			sel:     Some("type_Server@body".to_owned()),
+			sel:     Some("type_Server~".to_owned()),
 			crc:     None,
 			region:  None,
 			content: Some("\tPort int\n".to_owned()),
@@ -2757,7 +2764,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "test.rs", EditOperation {
 			op:      ChunkEditOp::Replace,
-			sel:     Some(format!("fn_main#{}@head", chunk.checksum)),
+			sel:     Some(format!("fn_main#{}^", chunk.checksum)),
 			crc:     None,
 			region:  None,
 			content: Some("/// New doc.\nfn main() {".to_owned()),
@@ -2862,7 +2869,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "test.ts", EditOperation {
 			op:      ChunkEditOp::Replace,
-			sel:     Some(format!("class_Server.fn_start#{}@body", chunk.checksum)),
+			sel:     Some(format!("class_Server.fn_start#{}~", chunk.checksum)),
 			crc:     None,
 			region:  None,
 			content: Some("\treturn 42;\n".to_owned()),
@@ -2887,7 +2894,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "test.ts", EditOperation {
 			op:      ChunkEditOp::Replace,
-			sel:     Some(format!("class_Server.fn_start#{}@body", chunk.checksum)),
+			sel:     Some(format!("class_Server.fn_start#{}~", chunk.checksum)),
 			crc:     None,
 			region:  None,
 			content: Some("\treturn 42;\n".to_owned()),
@@ -2913,7 +2920,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "test.ts", EditOperation {
 			op:      ChunkEditOp::Replace,
-			sel:     Some(format!("class_Server.fn_start#{}@body", chunk.checksum)),
+			sel:     Some(format!("class_Server.fn_start#{}~", chunk.checksum)),
 			crc:     None,
 			region:  None,
 			content: Some("\t\tif (x) {\n\t\t\ty();\n\t\t}\n".to_owned()),
@@ -2929,14 +2936,14 @@ mod tests {
 
 	#[test]
 	fn body_append_inserts_inside_class() {
-		// Appending to @body of a class should insert inside the body,
+		// Appending to ~ of a class should insert inside the body,
 		// not after the closing brace.
 		let source = "class Foo {\n    bar() {\n        return 1;\n    }\n}\n";
 		let state = state_for(source, "typescript");
 
 		let result = apply_single_edit(&state, "test.ts", EditOperation {
 			op:      ChunkEditOp::Append,
-			sel:     Some("class_Foo@body".to_owned()),
+			sel:     Some("class_Foo~".to_owned()),
 			crc:     None,
 			region:  None,
 			content: Some("baz() {\n\treturn 2;\n}\n".to_owned()),
@@ -2960,14 +2967,14 @@ mod tests {
 
 	#[test]
 	fn body_prepend_inserts_after_opening_brace() {
-		// Prepending to @body of an enum should insert after the opening brace,
+		// Prepending to ~ of an enum should insert after the opening brace,
 		// not before doc comments.
 		let source = "/** My enum. */\nenum Color {\n    Red,\n    Green,\n    Blue,\n}\n";
 		let state = state_for(source, "typescript");
 
 		let result = apply_single_edit(&state, "test.ts", EditOperation {
 			op:      ChunkEditOp::Prepend,
-			sel:     Some("enum_Color@body".to_owned()),
+			sel:     Some("enum_Color~".to_owned()),
 			crc:     None,
 			region:  None,
 			content: Some("White,\n".to_owned()),
@@ -3059,7 +3066,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "test.md", EditOperation {
 			op:      ChunkEditOp::Append,
-			sel:     Some(format!("{}#{}@body", section.path, section.checksum)),
+			sel:     Some(format!("{}#{}~", section.path, section.checksum)),
 			crc:     None,
 			region:  None,
 			content: Some("\nextra paragraph\n".to_owned()),
@@ -3105,7 +3112,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "test.py", EditOperation {
 			op:      ChunkEditOp::Append,
-			sel:     Some("class_Server@body".to_owned()),
+			sel:     Some("class_Server~".to_owned()),
 			crc:     None,
 			region:  None,
 			content: Some("def stop(self):\n\tpass\n".to_owned()),
@@ -3133,8 +3140,8 @@ mod tests {
 			.expect("vrnt_Info should exist");
 		assert!(chunk.prologue_end_byte.is_none(), "leaf variant should not have prologue_end_byte");
 
-		for region_name in ["body", "head", "tail"] {
-			let sel = format!("enum_LogLev.vrnt_Info#{}@{}", chunk.checksum, region_name);
+		for region_suffix in ["~", "^"] {
+			let sel = format!("enum_LogLev.vrnt_Info#{}{}", chunk.checksum, region_suffix);
 			let result = apply_edits(&state, &EditParams {
 				operations:       vec![EditOperation {
 					op:      ChunkEditOp::Replace,
@@ -3155,7 +3162,7 @@ mod tests {
 
 			assert!(
 				result.diff_after.contains("Debug,\n    Error,\n    Warn,"),
-				"@{region_name} should replace the full leaf chunk, got: {}",
+				"{region_suffix} should replace the full leaf chunk, got: {}",
 				result.diff_after
 			);
 		}
@@ -3203,7 +3210,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "test.rs", EditOperation {
 			op:      ChunkEditOp::Replace,
-			sel:     Some(format!("impl_Server.fn_start#{}@head", chunk.checksum)),
+			sel:     Some(format!("impl_Server.fn_start#{}^", chunk.checksum)),
 			crc:     None,
 			region:  None,
 			content: Some(
@@ -3217,7 +3224,7 @@ mod tests {
 		let body_count = result.diff_after.matches("self.running = true;").count();
 		assert_eq!(
 			body_count, 1,
-			"body should appear exactly once after @head replace, got {} occurrences in:
+			"body should appear exactly once after ^ replace, got {} occurrences in:
 {}",
 			body_count, result.diff_after
 		);
@@ -3264,7 +3271,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "test.ts", EditOperation {
 			op:      ChunkEditOp::Replace,
-			sel:     Some(format!("class_Server.fn_start#{}@head", chunk.checksum)),
+			sel:     Some(format!("class_Server.fn_start#{}^", chunk.checksum)),
 			crc:     None,
 			region:  None,
 			content: Some(
@@ -3278,7 +3285,7 @@ mod tests {
 		let body_count = result.diff_after.matches("this.running = true;").count();
 		assert_eq!(
 			body_count, 1,
-			"body should appear exactly once after @head replace, got {} occurrences in:
+			"body should appear exactly once after ^ replace, got {} occurrences in:
 {}",
 			body_count, result.diff_after
 		);
@@ -3299,7 +3306,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "test.py", EditOperation {
 			op:      ChunkEditOp::Replace,
-			sel:     Some(format!("fn_main#{}@body", chunk.checksum)),
+			sel:     Some(format!("fn_main#{}~", chunk.checksum)),
 			crc:     None,
 			region:  None,
 			content: Some("y = 2\nprint(y)\n".to_owned()),
@@ -3350,7 +3357,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "test.py", EditOperation {
 			op:      ChunkEditOp::Replace,
-			sel:     Some(format!("class_Server.fn_start#{}@head", chunk.checksum)),
+			sel:     Some(format!("class_Server.fn_start#{}^", chunk.checksum)),
 			crc:     None,
 			region:  None,
 			content: Some("def begin(self) -> None:\n".to_owned()),
@@ -3376,7 +3383,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "test.py", EditOperation {
 			op:      ChunkEditOp::Prepend,
-			sel:     Some("fn_main@body".to_owned()),
+			sel:     Some("fn_main~".to_owned()),
 			crc:     None,
 			region:  None,
 			content: Some("y = 0\n".to_owned()),
@@ -3410,7 +3417,7 @@ mod tests {
 
 		let result = apply_single_edit(&state, "test.py", EditOperation {
 			op:      ChunkEditOp::Replace,
-			sel:     Some(format!("class_Server#{}@body", chunk.checksum)),
+			sel:     Some(format!("class_Server#{}~", chunk.checksum)),
 			crc:     None,
 			region:  None,
 			content: Some("def run(self):\n\tpass\n".to_owned()),
@@ -3492,40 +3499,6 @@ mod tests {
 		assert!(
 			read_output.contains("#[test]"),
 			"read output must show #[test] as part of the chunk. Output:\n{read_output}"
-		);
-	}
-
-	#[test]
-	fn decl_region_replaces_without_leading_trivia() {
-		// @decl covers checksum_start_byte → end_byte: the declaration itself
-		// without leading trivia. Leading comments/attributes are preserved.
-		let source = "#[cfg(test)]\nmod tests {\n\tuse super::*;\n\n\t#[test]\n\tfn my_test() \
-		              {\n\t\told();\n\t}\n}\n";
-		let state = state_for(source, "rust");
-		let chunk = state
-			.inner()
-			.chunk("mod_tests.fn_my_tes")
-			.expect("fn_my_tes should exist");
-
-		let result = apply_single_edit(&state, "test.rs", EditOperation {
-			op:      ChunkEditOp::Replace,
-			sel:     Some("mod_tests.fn_my_tes".to_owned()),
-			crc:     Some(chunk.checksum.clone()),
-			region:  Some(ChunkRegion::Decl),
-			content: Some("fn my_test() {\n\tnew();\n}".to_owned()),
-			find:    None,
-		});
-
-		// #[test] should be preserved — @decl doesn't cover leading trivia.
-		assert!(
-			result.diff_after.contains("#[test]"),
-			"#[test] should be preserved with @decl. Full text:\n{}",
-			result.diff_after
-		);
-		assert!(
-			result.diff_after.contains("new()"),
-			"replacement body should appear. Full text:\n{}",
-			result.diff_after
 		);
 	}
 
@@ -3930,7 +3903,7 @@ function foo() {\n<<<<<<< HEAD\n\treturn bar();\n=======\n\treturn baz();\n>>>>>
 
 		let result = apply_single_edit(&state, "test.rs", EditOperation {
 			op:      ChunkEditOp::Replace,
-			sel:     Some(format!("impl_Server.fn_addres#{}@head", chunk.checksum)),
+			sel:     Some(format!("impl_Server.fn_addres#{}^", chunk.checksum)),
 			crc:     None,
 			region:  None,
 			content: Some(
@@ -4073,5 +4046,32 @@ function foo() {\n<<<<<<< HEAD\n\treturn bar();\n=======\n\treturn baz();\n>>>>>
 			new_source.contains("new_body();\n}"),
 			"expected closing brace on own line, got:\n{new_source}"
 		);
+	}
+
+	#[test]
+	fn is_comment_only_line_distinguishes_hash_comment_from_private_field_and_attribute() {
+		// Shell/Python-style comments are treated as comments.
+		assert!(is_comment_only_line(""));
+		assert!(is_comment_only_line("# shell comment"));
+		assert!(is_comment_only_line("#\tpython-style tab after hash"));
+		assert!(is_comment_only_line("#"));
+		assert!(is_comment_only_line("#!/usr/bin/env bash"));
+		assert!(is_comment_only_line("// line comment"));
+		assert!(is_comment_only_line("/// doc comment"));
+		assert!(is_comment_only_line("/* block comment start"));
+
+		// TypeScript / JavaScript private fields are NOT comments.
+		assert!(!is_comment_only_line("#config: Config;"));
+		assert!(!is_comment_only_line("#running = false;"));
+		assert!(!is_comment_only_line("#_internal: number = 0;"));
+
+		// Rust attributes and inner attributes are NOT comments.
+		assert!(!is_comment_only_line("#[napi]"));
+		assert!(!is_comment_only_line("#[derive(Debug)]"));
+		assert!(!is_comment_only_line("#![deny(warnings)]"));
+
+		// Plain code lines are not comments.
+		assert!(!is_comment_only_line("let x = 1;"));
+		assert!(!is_comment_only_line("return 0;"));
 	}
 }

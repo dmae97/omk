@@ -556,12 +556,12 @@ describe("Tool argument coercion", () => {
 			id: "call-heal-esc-1",
 			name: "heal-esc-1",
 			arguments: {
-				edits: '[{"target": "fn_foo#ABCD@body", "content": "return 1;\\n"}\\n]',
+				edits: '[{"target": "fn_foo#ABCD~", "content": "return 1;\\n"}\\n]',
 			},
 		};
 
 		const result = validateToolArguments(tool, toolCall);
-		expect(result.edits).toEqual([{ target: "fn_foo#ABCD@body", content: "return 1;\n" }]);
+		expect(result.edits).toEqual([{ target: "fn_foo#ABCD~", content: "return 1;\n" }]);
 	});
 
 	it("heals stringified array with trailing junk after balanced container", () => {

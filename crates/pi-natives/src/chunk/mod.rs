@@ -343,8 +343,8 @@ fn build_chunk(
 		// trailing newline that logically terminates the last body line.
 		// When this happens and the source byte at chunk_end is indeed a
 		// newline, extend the chunk's end_byte to match so that:
-		//   - @body covers complete lines including their trailing newline
-		//   - @tail remains a valid (empty) region
+		//   - ~ covers complete lines including their trailing newline
+		//   - ^ and ~ are the only supported sub-chunk regions
 		if epi_start > chunk_end
 			&& epi_start <= source.len()
 			&& source.as_bytes().get(chunk_end) == Some(&b'\n')
@@ -1087,17 +1087,17 @@ mod tests {
 			.find(|c| c.path == "key_server")
 			.expect("key_server");
 
-		// @head should contain "server:" but not the nested keys.
+		// ^ should contain "server:" but not the nested keys.
 		let (head_s, head_e) = chunk_region_range(server, ChunkRegion::Head);
 		let head = &source[head_s..head_e];
-		assert!(head.contains("server"), "@head should contain the key, got {head:?}");
-		assert!(!head.contains("host"), "@head should not contain value content, got {head:?}");
+		assert!(head.contains("server"), "^ should contain the key, got {head:?}");
+		assert!(!head.contains("host"), "^ should not contain value content, got {head:?}");
 
-		// @body should contain the nested keys but not "server:".
+		// ~ should contain the nested keys but not "server:".
 		let (body_s, body_e) = chunk_region_range(server, ChunkRegion::Body);
 		let body = &source[body_s..body_e];
-		assert!(body.contains("host"), "@body should contain nested keys, got {body:?}");
-		assert!(!body.contains("server"), "@body should not contain the key header, got {body:?}");
+		assert!(body.contains("host"), "~ should contain nested keys, got {body:?}");
+		assert!(!body.contains("server"), "~ should not contain the key header, got {body:?}");
 	}
 
 	#[test]
@@ -1216,6 +1216,71 @@ function main(): void {{
 
 		let line_path = line_to_chunk_path(&tree, 15).expect("line should resolve");
 		assert!(line_path.starts_with("class_Bla.fn_onEven"));
+	}
+
+	#[test]
+	fn call_with_trailing_callback_promotes_to_named_expression() {
+		// Test that `describe(...)` / `it(...)` patterns with trailing callback
+		// arguments are promoted to named expression chunks with children,
+		// rather than being flat groupable stmts leaves.
+		let source = "import { describe, it } from \"bun:test\";\n\ndescribe(\"suite\", () => \
+		              {\n\tit(\"does a\", () => {\n\t\texpect(1).toBe(1);\n\t});\n\n\tit(\"does \
+		              b\", () => {\n\t\texpect(2).toBe(2);\n\t});\n});\n";
+		let tree = build_chunk_tree(source, "typescript").expect("tree should build");
+
+		// describe(...) should be promoted to a named expr chunk, not grouped into
+		// stmts.
+		let describe_chunk = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "expr_descri")
+			.expect("describe should be a named chunk");
+		assert!(!describe_chunk.leaf, "describe chunk should have children (not a leaf)");
+		assert!(!describe_chunk.group, "describe chunk should not be groupable");
+
+		// The nested calls inside should stay addressable under the promoted parent.
+		let it_chunks = tree
+			.chunks
+			.iter()
+			.filter(|c| c.path.starts_with("expr_descri.expr"))
+			.count();
+		assert_eq!(
+			it_chunks,
+			2,
+			"nested calls under describe() should stay addressable; chunks: {:?}",
+			tree.chunks.iter().map(|c| &c.path).collect::<Vec<_>>()
+		);
+	}
+
+	#[test]
+	fn call_with_trailing_callback_works_for_member_expressions() {
+		// Test member expression calls like `describe.serial(...)` or `app.use(...)`.
+		let source = "describe.serial(\"ordered\", () => {\n\tit(\"first\", () => \
+		              {\n\t\texpect(true).toBe(true);\n\t});\n});\n";
+		let tree = build_chunk_tree(source, "typescript").expect("tree should build");
+
+		let describe_chunk = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "expr_descri")
+			.expect("describe.serial should be a named chunk");
+		assert!(!describe_chunk.group, "describe.serial chunk should not be groupable");
+	}
+
+	#[test]
+	fn call_without_callback_stays_grouped() {
+		// Plain call expressions without trailing callbacks should remain as
+		// groupable stmts, not promoted.
+		let source = "console.log(\"a\");\nconsole.log(\"b\");\n";
+		let tree = build_chunk_tree(source, "typescript").expect("tree should build");
+
+		let stmts_chunk = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "stmts")
+			.expect("plain calls should be grouped into stmts");
+		assert!(stmts_chunk.group, "stmts should be a group");
+		assert!(stmts_chunk.leaf, "stmts with no callback should be a leaf");
 	}
 
 	#[test]
@@ -1928,7 +1993,7 @@ impl Config {
 			.expect("state should parse");
 		let result = state
 			.render_read(ReadRenderParams {
-				read_path:           "sample.ts:fn_run@body".to_string(),
+				read_path:           "sample.ts:fn_run~".to_string(),
 				display_path:        "sample.ts".to_string(),
 				language_tag:        Some("ts".to_string()),
 				omit_checksum:       false,
@@ -1965,7 +2030,7 @@ impl Config {
 			ChunkState::parse(source.to_string(), "python".to_string()).expect("state should parse");
 		let result = state
 			.render_read(ReadRenderParams {
-				read_path:           "test.py:class_Server.fn_addres@head".to_string(),
+				read_path:           "test.py:class_Server.fn_addres^".to_string(),
 				display_path:        "test.py".to_string(),
 				language_tag:        Some("py".to_string()),
 				omit_checksum:       false,
@@ -2469,18 +2534,14 @@ end
 
 		let (head_s, head_e) = chunk_region_range(fn_chunk, ChunkRegion::Head);
 		let head = &source[head_s..head_e];
-		assert!(head.contains("def run():"), "fn @head should contain def signature, got {head:?}");
-		assert!(!head.contains("return"), "fn @head should not contain body, got {head:?}");
+		assert!(head.contains("def run():"), "fn ^ should contain def signature, got {head:?}");
+		assert!(!head.contains("return"), "fn ^ should not contain body, got {head:?}");
 
 		let (body_s, body_e) = chunk_region_range(fn_chunk, ChunkRegion::Body);
 		let body = &source[body_s..body_e];
-		assert!(body.contains("return 1"), "fn @body should contain body, got {body:?}");
-		assert!(!body.contains("def run"), "fn @body should not contain head, got {body:?}");
-		assert!(body.ends_with('\n'), "fn @body should end with newline, got {body:?}");
-
-		let (tail_s, tail_e) = chunk_region_range(fn_chunk, ChunkRegion::Tail);
-		assert!(tail_e >= tail_s, "tail range must not be inverted");
-		assert_eq!(tail_e - tail_s, 0, "fn @tail should be empty for Python");
+		assert!(body.contains("return 1"), "fn ~ should contain body, got {body:?}");
+		assert!(!body.contains("def run"), "fn ~ should not contain head, got {body:?}");
+		assert!(body.ends_with('\n'), "fn ~ should end with newline, got {body:?}");
 	}
 
 	#[test]
@@ -2499,21 +2560,14 @@ end
 
 		let (head_s, head_e) = chunk_region_range(class_chunk, ChunkRegion::Head);
 		let head = &source[head_s..head_e];
-		assert!(head.contains("class Server:"), "class @head should contain class def, got {head:?}");
-		assert!(!head.contains("def start"), "class @head should not contain methods, got {head:?}");
+		assert!(head.contains("class Server:"), "class ^ should contain class def, got {head:?}");
+		assert!(!head.contains("def start"), "class ^ should not contain methods, got {head:?}");
 
 		let (body_s, body_e) = chunk_region_range(class_chunk, ChunkRegion::Body);
 		let body = &source[body_s..body_e];
-		assert!(body.contains("def start"), "class @body should contain methods, got {body:?}");
-		assert!(body.contains("def stop"), "class @body should contain all methods, got {body:?}");
-		assert!(
-			!body.contains("class Server"),
-			"class @body should not contain header, got {body:?}"
-		);
-
-		let (tail_s, tail_e) = chunk_region_range(class_chunk, ChunkRegion::Tail);
-		assert!(tail_e >= tail_s, "tail range must not be inverted");
-		assert_eq!(tail_e - tail_s, 0, "class @tail should be empty for Python");
+		assert!(body.contains("def start"), "class ~ should contain methods, got {body:?}");
+		assert!(body.contains("def stop"), "class ~ should contain all methods, got {body:?}");
+		assert!(!body.contains("class Server"), "class ~ should not contain header, got {body:?}");
 	}
 
 	#[test]
@@ -2531,19 +2585,15 @@ end
 
 		let (head_s, head_e) = chunk_region_range(fn_chunk, ChunkRegion::Head);
 		let head = &source[head_s..head_e];
-		assert!(head.contains("@property"), "@head should include decorator, got {head:?}");
-		assert!(head.contains("def address"), "@head should include def, got {head:?}");
-		assert!(!head.contains("return"), "@head should not include body, got {head:?}");
+		assert!(head.contains("@property"), "^ should include decorator, got {head:?}");
+		assert!(head.contains("def address"), "^ should include def, got {head:?}");
+		assert!(!head.contains("return"), "^ should not include body, got {head:?}");
 
 		let (body_s, body_e) = chunk_region_range(fn_chunk, ChunkRegion::Body);
 		let body = &source[body_s..body_e];
-		assert!(body.contains("return self._addr"), "@body should contain return, got {body:?}");
-		assert!(!body.contains("@property"), "@body should not contain decorator, got {body:?}");
-		assert!(!body.contains("def address"), "@body should not contain def, got {body:?}");
-
-		let (tail_s, tail_e) = chunk_region_range(fn_chunk, ChunkRegion::Tail);
-		assert!(tail_e >= tail_s, "tail range must not be inverted");
-		assert_eq!(tail_e - tail_s, 0, "fn @tail should be empty for Python");
+		assert!(body.contains("return self._addr"), "~ should contain return, got {body:?}");
+		assert!(!body.contains("@property"), "~ should not contain decorator, got {body:?}");
+		assert!(!body.contains("def address"), "~ should not contain def, got {body:?}");
 	}
 
 	#[test]
@@ -2618,29 +2668,20 @@ end
 		let fn_body = &source[fn_body_s..fn_body_e];
 		assert!(
 			fn_body.contains("if self.running"),
-			"fn_start @body should contain body, got {fn_body:?}"
+			"fn_start ~ should contain body, got {fn_body:?}"
 		);
 		assert!(
 			fn_body.contains("self.running = True"),
-			"fn_start @body should contain all lines, got {fn_body:?}"
+			"fn_start ~ should contain all lines, got {fn_body:?}"
 		);
 		assert!(
 			!fn_body.contains("def start"),
-			"fn_start @body should not include head, got {fn_body:?}"
+			"fn_start ~ should not include head, got {fn_body:?}"
 		);
 		assert!(
 			!fn_body.contains("@property"),
-			"fn_start @body should not leak into next method, got {fn_body:?}"
+			"fn_start ~ should not leak into next method, got {fn_body:?}"
 		);
-
-		// Verify all tail regions are empty
-		for chunk in &tree.chunks {
-			if chunk.path.is_empty() {
-				continue;
-			}
-			let (ts, te) = chunk_region_range(chunk, ChunkRegion::Tail);
-			assert!(te >= ts, "tail of {:?} must not be inverted: start={ts} end={te}", chunk.path);
-		}
 	}
 
 	#[test]
