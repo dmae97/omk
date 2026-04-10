@@ -24,7 +24,7 @@ function createErrorMessage(errorMessage: string): AssistantMessage {
 }
 
 describe("isContextOverflow - model_context_window_exceeded", () => {
-	it("detects model_context_window_exceeded from OpenAI-compatible providers", () => {
+	it("detects model_context_window_exceeded in finish_reason error message", () => {
 		const message = createErrorMessage("Provider finish_reason: model_context_window_exceeded");
 		expect(isContextOverflow(message)).toBe(true);
 	});
