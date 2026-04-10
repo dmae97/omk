@@ -331,7 +331,22 @@ fn resolve_edit_target(
 		validate_batch_crc(resolved.chunk, resolved.crc.as_deref(), requires_checksum)?;
 	}
 	let chunk = resolved.chunk.clone();
-	if chunk.prologue_end_byte.is_none() || chunk.epilogue_start_byte.is_none() {
+	let python_leaf_control_flow = state.language == "python"
+		&& chunk.leaf
+		&& matches!(
+			chunk.kind,
+			ChunkKind::If
+				| ChunkKind::Loop
+				| ChunkKind::Try
+				| ChunkKind::Block
+				| ChunkKind::Match
+				| ChunkKind::Elif
+				| ChunkKind::Except
+		);
+	if chunk.prologue_end_byte.is_none()
+		|| chunk.epilogue_start_byte.is_none()
+		|| python_leaf_control_flow
+	{
 		region = None;
 	}
 
@@ -4108,6 +4123,54 @@ function foo() {\n<<<<<<< HEAD\n\treturn bar();\n=======\n\treturn baz();\n>>>>>
 		assert!(
 			result.contains("{\n\tfield"),
 			"first child should follow opening brace directly, got: {result:?}"
+		);
+	}
+
+	#[test]
+	fn body_region_on_leaf_if_falls_back_to_whole_chunk_python() {
+		// Python `if` inside a function body is a leaf chunk with prologue/epilogue
+		// bytes set by the classifier. Using `~` on it should fall back to
+		// whole-chunk replacement instead of mangling the guard.
+		let source = "def handle(request):\n    x = 1\n    y = 2\n    if request.ok:\n        return \
+					  \"yes\"\n    z = 3\n    for item in items:\n        process(item)\n    return \"no\"\n";
+		let state = parsed_state_for(source, "python");
+		let if_chunk = state
+			.inner()
+			.tree
+			.chunks
+			.iter()
+			.find(|c| c.path.ends_with(".if"))
+			.expect("if chunk should exist");
+		assert!(if_chunk.leaf, "if chunk should be leaf");
+
+		let result = apply_edits(&state, &EditParams {
+			operations:       vec![EditOperation {
+				op:      ChunkEditOp::Replace,
+				sel:     Some(format!("{}~", if_chunk.path)),
+				crc:     Some(if_chunk.checksum.clone()),
+				region:  None,
+				content: Some("if request.ok:\n    return \"forced\"\n".to_owned()),
+				find:    None,
+			}],
+			default_selector: None,
+			default_crc:      None,
+			anchor_style:     None,
+			cwd:              ".".to_owned(),
+			file_path:        "test.py".to_owned(),
+			normalize_indent: None,
+		})
+		.expect("leaf ~ should fall back to whole-chunk, not produce a parse error");
+
+		assert!(result.parse_valid, "edit should produce valid Python");
+		assert!(
+			result.diff_after.contains("return \"forced\""),
+			"replacement content should appear in output, got: {}",
+			result.diff_after
+		);
+		assert!(
+			result.diff_after.contains("if request.ok:"),
+			"guard should be preserved (whole-chunk replacement), got: {}",
+			result.diff_after
 		);
 	}
 }
