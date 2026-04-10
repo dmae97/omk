@@ -720,19 +720,50 @@ async function handleShellStreamArgs(
 		}
 	};
 
+	let stdoutFlushTimer: NodeJS.Timeout | null = null;
+	let stderrFlushTimer: NodeJS.Timeout | null = null;
+
+	const scheduleStdoutFlush = () => {
+		if (!stdoutFlushTimer) {
+			stdoutFlushTimer = setTimeout(() => {
+				stdoutFlushTimer = null;
+				flushStdout();
+			}, 100);
+		}
+	};
+
+	const scheduleStderrFlush = () => {
+		if (!stderrFlushTimer) {
+			stderrFlushTimer = setTimeout(() => {
+				stderrFlushTimer = null;
+				flushStderr();
+			}, 100);
+		}
+	};
+
 	const streamCallbacks: CursorShellStreamCallbacks = {
 		onStdout(data: string) {
 			stdoutBuffer += data;
-			// Flush on newline or if buffer gets large
 			if (stdoutBuffer.includes("\n") || stdoutBuffer.length > 4096) {
+				if (stdoutFlushTimer) {
+					clearTimeout(stdoutFlushTimer);
+					stdoutFlushTimer = null;
+				}
 				flushStdout();
+			} else {
+				scheduleStdoutFlush();
 			}
 		},
 		onStderr(data: string) {
 			stderrBuffer += data;
-			// Flush on newline or if buffer gets large
 			if (stderrBuffer.includes("\n") || stderrBuffer.length > 4096) {
+				if (stderrFlushTimer) {
+					clearTimeout(stderrFlushTimer);
+					stderrFlushTimer = null;
+				}
 				flushStderr();
+			} else {
+				scheduleStderrFlush();
 			}
 		},
 	};
@@ -786,6 +817,8 @@ async function handleShellStreamArgs(
 	const sanitizedExecResult = sanitizeShellExecResult(execResult);
 
 	// Flush any remaining buffered output before sending results
+	if (stdoutFlushTimer) clearTimeout(stdoutFlushTimer);
+	if (stderrFlushTimer) clearTimeout(stderrFlushTimer);
 	flushStdout();
 	flushStderr();
 

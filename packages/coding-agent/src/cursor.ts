@@ -265,6 +265,19 @@ export class CursorExecHandlers implements ICursorExecHandlers {
 					partialResult: sanitizedPartialResult,
 				});
 				callbacks.onStdout(sanitizedDelta);
+			} else if (newRawText !== rawText) {
+				rawText = newRawText;
+				const sanitizedPartialResult: AgentToolResult<unknown> = {
+					content: partialResult.content.map(c => (c.type === "text" ? { ...c, text: sanitizeText(c.text) } : c)),
+					details: partialResult.details,
+				};
+				this.options.emitEvent?.({
+					type: "tool_execution_update",
+					toolCallId,
+					toolName,
+					args: toolArgs,
+					partialResult: sanitizedPartialResult,
+				});
 			}
 		};
 
