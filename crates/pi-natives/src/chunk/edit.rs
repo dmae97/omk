@@ -385,6 +385,8 @@ fn apply_replace(
 		);
 	}
 
+	let requested_region = requested_region_for_operation(operation, default_selector, default_crc);
+
 	let (mut region_start, region_end) = match target.region {
 		None => (anchor.start_byte as usize, anchor.end_byte as usize),
 		Some(r) => chunk_region_range(&anchor, r),
@@ -435,18 +437,51 @@ fn apply_replace(
 		return Ok(());
 	}
 
-	let target_indent =
+	let initial_target_indent =
 		target_indent_for_region(state, &anchor, target.region, file_indent_char, file_indent_step);
 
 	let content = operation.content.as_deref().unwrap_or_default();
 	let mut replacement = normalize_inserted_content(
 		content,
-		&target_indent,
+		&initial_target_indent,
 		Some(file_indent_step),
 		file_indent_char,
 		normalize_indent,
 	);
-	if target.region.is_none() {
+
+	let effective_region = target.region;
+	if should_preserve_head_for_fallback_body_replace(
+		state,
+		&anchor,
+		requested_region,
+		target.region,
+		&replacement,
+	)
+		&& let Some(preserved_replacement) = build_head_preserved_full_replacement(
+			state,
+			&anchor,
+			content,
+			file_indent_step,
+			file_indent_char,
+			normalize_indent,
+		) {
+			replacement = preserved_replacement;
+			warnings.push(format!(
+				"Auto-preserved {} head while applying fallback body edit.",
+				chunk_path_opt(&anchor)
+			));
+		}
+
+	let (mut effective_region_start, effective_region_end) = match effective_region {
+		None => (anchor.start_byte as usize, anchor.end_byte as usize),
+		Some(r) => chunk_region_range(&anchor, r),
+	};
+	if matches!(effective_region, Some(ChunkRegion::Head)) {
+		effective_region_start =
+			line_start_offset(&line_offsets(&state.source), anchor.start_line, &state.source);
+	}
+
+	if effective_region.is_none() {
 		if !replacement.is_empty()
 			&& !replacement.ends_with('\n')
 			&& anchor.end_line < state.tree.line_count
@@ -486,11 +521,20 @@ fn apply_replace(
 		// structurally separate after a head/body replacement.
 		if !replacement.is_empty()
 			&& !replacement.ends_with('\n')
-			&& state.source.as_bytes().get(region_end.saturating_sub(1)) == Some(&b'\n')
+			&& state
+				.source
+				.as_bytes()
+				.get(effective_region_end.saturating_sub(1))
+				== Some(&b'\n')
 		{
 			replacement.push('\n');
 		}
-		let new_source = replace_byte_range(&state.source, region_start, region_end, &replacement);
+		let new_source = replace_byte_range(
+			&state.source,
+			effective_region_start,
+			effective_region_end,
+			&replacement,
+		);
 		if anchor.kind == ChunkKind::Conflict {
 			state.conflict_meta.remove(anchor.path.as_str());
 		}
@@ -498,6 +542,139 @@ fn apply_replace(
 	}
 	touched_paths.push(anchor.path);
 	Ok(())
+}
+
+fn requested_region_for_operation(
+	operation: &EditOperation,
+	default_selector: Option<&str>,
+	default_crc: Option<&str>,
+) -> Option<ChunkRegion> {
+	if operation.region.is_some() {
+		return operation.region;
+	}
+	let selector = operation.sel.as_deref().or(default_selector);
+	let crc = operation.crc.as_deref().or(default_crc);
+	split_selector_crc_and_region(selector, crc, None)
+		.ok()
+		.and_then(|parsed| parsed.region)
+}
+
+fn collapse_whitespace(text: &str) -> String {
+	text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn should_preserve_existing_epilogue(epilogue: &str) -> bool {
+	let first_non_empty = epilogue.lines().find(|line| !line.trim().is_empty());
+	let Some(first) = first_non_empty.map(str::trim_start) else {
+		return false;
+	};
+	first.starts_with('}')
+		|| first.starts_with(']')
+		|| first.starts_with(')')
+		|| first.starts_with("end")
+}
+
+fn should_preserve_head_for_fallback_body_replace(
+	state: &ChunkStateInner,
+	anchor: &ChunkNode,
+	requested_region: Option<ChunkRegion>,
+	resolved_region: Option<ChunkRegion>,
+	replacement: &str,
+) -> bool {
+	if requested_region != Some(ChunkRegion::Body) || resolved_region.is_some() {
+		return false;
+	}
+	if replacement.trim().is_empty() {
+		return false;
+	}
+	if anchor.prologue_end_byte.is_none() || anchor.epilogue_start_byte.is_none() {
+		return false;
+	}
+	let (head_start, head_end) = chunk_region_range(anchor, ChunkRegion::Head);
+	let (body_start, body_end) = chunk_region_range(anchor, ChunkRegion::Body);
+	if head_end <= head_start || body_end <= body_start {
+		return false;
+	}
+	let head_text = state.source[head_start..head_end].trim();
+	if head_text.is_empty() {
+		return false;
+	}
+	let head_collapsed = collapse_whitespace(head_text);
+	if head_collapsed.is_empty() {
+		return false;
+	}
+	let replacement_collapsed = collapse_whitespace(replacement);
+	if replacement_collapsed.is_empty() {
+		return false;
+	}
+	!replacement_collapsed.contains(&head_collapsed)
+}
+
+fn build_head_preserved_full_replacement(
+	state: &ChunkStateInner,
+	anchor: &ChunkNode,
+	content: &str,
+	file_indent_step: usize,
+	file_indent_char: char,
+	normalize_indent: bool,
+) -> Option<String> {
+	if anchor.prologue_end_byte.is_none() || anchor.epilogue_start_byte.is_none() {
+		return None;
+	}
+	let (_head_start, _head_end) = chunk_region_range(anchor, ChunkRegion::Head);
+	let (_body_start, body_end) = chunk_region_range(anchor, ChunkRegion::Body);
+	let chunk_start = anchor.start_byte as usize;
+	let chunk_end = anchor.end_byte as usize;
+	if chunk_end <= chunk_start {
+		return None;
+	}
+	let chunk_text = &state.source[chunk_start..chunk_end];
+	let first_line_end = chunk_text
+		.find('\n')
+		.map_or(chunk_end, |idx| chunk_start + idx + 1);
+	let head = &state.source[chunk_start..first_line_end];
+	if head.trim().is_empty() {
+		return None;
+	}
+	let inferred_body_end = body_end.min(chunk_end).max(first_line_end);
+	let inferred_body_indent = state.source[first_line_end..inferred_body_end]
+		.lines()
+		.find_map(|line| {
+			if line.trim().is_empty() {
+				None
+			} else {
+				Some(
+					line
+						.chars()
+						.take_while(|ch| *ch == ' ' || *ch == '\t')
+						.collect::<String>(),
+				)
+			}
+		})
+		.unwrap_or_default();
+	let normalized_body = normalize_inserted_content(
+		content,
+		"",
+		Some(file_indent_step),
+		file_indent_char,
+		normalize_indent,
+	);
+	let mut body = if inferred_body_indent.is_empty() {
+		normalized_body
+	} else {
+		indent_non_empty_lines(&normalized_body, &inferred_body_indent)
+	};
+	let epilogue_start = body_end.max(first_line_end).min(chunk_end);
+	let raw_epilogue = &state.source[epilogue_start..chunk_end];
+	let epilogue = if should_preserve_existing_epilogue(raw_epilogue) {
+		raw_epilogue
+	} else {
+		""
+	};
+	if !body.is_empty() && !body.ends_with('\n') && !epilogue.is_empty() {
+		body.push('\n');
+	}
+	Some(format!("{head}{body}{epilogue}"))
 }
 
 fn apply_delete(
@@ -4175,6 +4352,56 @@ function foo() {\n<<<<<<< HEAD\n\treturn bar();\n=======\n\treturn baz();\n>>>>>
 		assert!(
 			result.diff_after.contains("if request.ok:"),
 			"guard should be preserved (whole-chunk replacement), got: {}",
+			result.diff_after
+		);
+	}
+
+	#[test]
+	fn body_region_fallback_preserves_head_when_replacement_omits_it_python() {
+		let source = "def handle(request):\n    x = 1\n    y = 2\n    if request.ok:\n        \
+		              return \"yes\"\n    z = 3\n    for item in items:\n        process(item)\n    \
+		              return \"no\"\n";
+		let state = parsed_state_for(source, "python");
+		let if_chunk = state
+			.inner()
+			.tree
+			.chunks
+			.iter()
+			.find(|c| c.kind == ChunkKind::If)
+			.expect("if chunk should exist");
+
+		let result = apply_edits(&state, &EditParams {
+			operations:       vec![EditOperation {
+				op:      ChunkEditOp::Replace,
+				sel:     Some(format!("{}~", if_chunk.path)),
+				crc:     Some(if_chunk.checksum.clone()),
+				region:  None,
+				content: Some("return \"forced\"\n".to_owned()),
+				find:    None,
+			}],
+			default_selector: None,
+			default_crc:      None,
+			anchor_style:     None,
+			cwd:              ".".to_owned(),
+			file_path:        "test.py".to_owned(),
+			normalize_indent: None,
+		})
+		.expect("fallback body edit should preserve head and stay parse-valid");
+
+		assert!(result.parse_valid, "edit should remain parse-valid");
+		assert!(
+			result.diff_after.contains("if request.ok:"),
+			"if guard should be preserved, got: {}",
+			result.diff_after
+		);
+		assert!(
+			result.diff_after.contains("return \"forced\""),
+			"replacement body should appear, got: {}",
+			result.diff_after
+		);
+		assert!(
+			!result.diff_after.contains("return \"yes\""),
+			"old body should be replaced, got: {}",
 			result.diff_after
 		);
 	}
