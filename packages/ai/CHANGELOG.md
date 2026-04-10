@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed context overflow detection to recognize `model_context_window_exceeded` from z.ai / GLM providers, preventing infinite retry loops when context window is exceeded ([#638](https://github.com/can1357/oh-my-pi/issues/638))
+
+
 ## [14.1.0] - 2026-04-11
 ### Added
 
@@ -31,6 +36,7 @@
 
 ### Removed
 - Removed Copilot JWT proxy-ep base URL resolution (no longer needed with opencode auth).
+
 ## [14.0.3] - 2026-04-09
 
 ### Fixed
