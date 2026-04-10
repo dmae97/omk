@@ -48,7 +48,11 @@ You **MUST** use the narrowest region that covers your change. Replacing without
 - `@decl` — everything except leading trivia (signature + body + closing delimiter).
 - *(no region)* — the entire chunk including leading trivia. Same as `@head` + `@body` + `@tail`.
 
+**`@decl` excludes leading trivia** (doc comments, decorators, attributes). In Rust, `#[attr]` is trivia; in Python, `@decorator` is trivia; in TypeScript, JSDoc + decorators are trivia. To modify attributes or decorators, target `@head` instead. Including them in `@decl` replacement content **will duplicate them** because the original trivia is preserved.
+
 For leaf chunks (fields, variants, single-line items), `@body` falls back to the full chunk.
+
+In TypeScript, if a doc comment or decorator is separated from the function by a blank line, it may appear as its own orphan `chunk` node instead of being absorbed into the function's `@head`. Use the `?` selector (`read(path="file", sel="?")`) to discover the actual chunk layout before editing.
 
 `append`/`prepend` without a `@region` inserts _outside_ the chunk. To add children _inside_ a class, struct, enum, or function body, use `@body`:
 - `class_Foo@body` + `append` → adds inside the class before `}`

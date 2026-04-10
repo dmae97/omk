@@ -57,6 +57,8 @@ MODELS = [
     "openrouter/minimax/minimax-m2.7",
 ]
 
+ORACLE_MODEL = "openrouter/anthropic/claude-opus-4.6"
+
 PROMPT = textwrap.dedent(
     """\
     You are evaluating the current code-reading and code-editing tools on the files in this directory.
@@ -108,6 +110,49 @@ FINAL_REVIEW_PROMPT = textwrap.dedent(
     - clear vs unclear errors
     - ambiguous or under-documented behavior
     - changes that would improve trustworthiness and usability
+    """
+).strip()
+
+ORACLE_REVIEW_PROMPT = textwrap.dedent(
+    """\
+    <context>
+    You are the oracle reviewer for a tool-evaluation benchmark.
+    You are reading multiple independent reviews of the same edit-tool session.
+    Synthesize only what is supported by the supplied reviews.
+
+    This matters. Be specific and conservative.
+    </context>
+
+    <instructions>
+    1. Deduplicate overlapping observations into one finding.
+    2. Separate well-supported findings from weaker signals. When evidence is mixed or thin, lower confidence instead of overstating.
+    3. Cite which review models reported each finding and summarize the concrete evidence they observed.
+    4. End with practical improvement areas prioritized by expected trust and usability gains.
+
+    Output markdown only with this exact structure:
+
+    # Oracle synthesis
+
+    ## Findings
+    - Finding: ...
+      - Confidence: High | Medium | Low
+      - Evidence: cite the models and the behavior they observed
+      - Improvement area: the concrete product or UX change this finding points to
+
+    ## Improvement areas
+    1. ...
+    2. ...
+
+    If the reviews do not support any concrete finding, say so explicitly under `## Findings`.
+    </instructions>
+
+    <data>
+    {{REVIEWS}}
+    </data>
+
+    <instructions>
+    Use only the supplied reviews. Output markdown only.
+    </instructions>
     """
 ).strip()
 
@@ -1445,6 +1490,68 @@ def run_model_sync(
         session_state=session_state,
     )
 
+def build_oracle_review_prompt(results: list[ModelResult]) -> str:
+    review_sections: list[str] = []
+    for result in sorted(results, key=lambda candidate: candidate.model):
+        review_text = Path(result.review_path).read_text(encoding="utf-8").strip()
+        if not review_text:
+            continue
+        review_sections.append(
+            textwrap.dedent(
+                f"""\
+                <review>
+                <model>{result.model}</model>
+                <path>{result.review_path}</path>
+
+                {review_text}
+                </review>
+                """
+            ).strip()
+        )
+
+    if not review_sections:
+        raise ValueError("No review content available for oracle synthesis")
+
+    review_payload = "\n\n".join(review_sections)
+    return ORACLE_REVIEW_PROMPT.replace("{{REVIEWS}}", review_payload)
+
+
+
+def run_oracle_review_sync(
+    *,
+    model: str,
+    omp_bin: str,
+    results: list[ModelResult],
+    results_dir: Path,
+    timeout: float,
+    openrouter_key: str,
+) -> Path:
+    oracle_path = results_dir / f"review_oracle_{slugify(shorten_model_name(model))}.md"
+    prompt = build_oracle_review_prompt(results)
+
+    with RpcClient(
+        executable=omp_bin,
+        model=model,
+        cwd=results_dir,
+        env={"OPENROUTER_API_KEY": openrouter_key, "PI_STRICT_EDIT_MODE": "1"},
+        thinking="high",
+        tools=(),
+        no_skills=True,
+        no_rules=True,
+        no_session=True,
+        startup_timeout=30.0,
+        request_timeout=30.0,
+    ) as client:
+        client.install_headless_ui()
+        client.prompt_and_wait(prompt, timeout=timeout)
+        review_markdown = client.get_last_assistant_text()
+
+    if not isinstance(review_markdown, str) or not review_markdown.strip():
+        raise RpcError("Oracle model completed without synthesis text")
+
+    oracle_path.write_text(review_markdown.strip() + "\n", encoding="utf-8")
+    return oracle_path
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run OpenRouter fixture evaluations through omp RPC mode.")
     parser.add_argument("--omp-bin", default=os.environ.get("OMP_BIN"))
@@ -1452,6 +1559,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--results-dir")
     parser.add_argument("--timeout", type=float, default=900.0, help="Per-model timeout in seconds.")
     parser.add_argument("--model", dest="models", action="append", help="Repeat to limit execution to specific models.")
+    parser.add_argument("--oracle-model", default=ORACLE_MODEL, help="Model used to synthesize findings across all reviews.")
     return parser.parse_args()
 
 
@@ -1491,7 +1599,19 @@ async def run_all(args: argparse.Namespace) -> int:
     if failures:
         printer.finish(f"{failures}/{len(results)} model run(s) failed")
         return 1
-    printer.finish(f"{len(results)} review file(s) written to {results_dir}")
+
+    oracle_path = await asyncio.to_thread(
+        run_oracle_review_sync,
+        model=args.oracle_model,
+        omp_bin=omp_bin,
+        results=results,
+        results_dir=results_dir,
+        timeout=args.timeout,
+        openrouter_key=openrouter_key,
+    )
+    printer.finish(
+        f"{len(results)} review file(s) and oracle synthesis written to {results_dir} ({oracle_path.name})"
+    )
     return 0
 
 

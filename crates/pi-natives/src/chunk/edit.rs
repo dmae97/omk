@@ -473,8 +473,10 @@ fn apply_replace(
 		// For prologue/epilogue replacements, ensure the replacement preserves
 		// the newline boundary so the body content isn't joined onto the same
 		// line as the replacement.
-		if matches!(target.region, Some(ChunkRegion::Head | ChunkRegion::Tail | ChunkRegion::Decl))
-			&& !replacement.is_empty()
+		if matches!(
+			target.region,
+			Some(ChunkRegion::Head | ChunkRegion::Body | ChunkRegion::Tail | ChunkRegion::Decl)
+		) && !replacement.is_empty()
 			&& !replacement.ends_with('\n')
 			&& state.source.as_bytes().get(region_end.saturating_sub(1)) == Some(&b'\n')
 		{
@@ -1269,15 +1271,21 @@ fn compute_insert_indent(
 		return indent_char.repeat(first_child.indent as usize);
 	}
 
-	for line in chunk_slice(&state.source, anchor).split('\n').skip(1) {
-		if line.trim().is_empty() {
-			continue;
+	// Scan only the @body region (between prologue and epilogue), not the full
+	// chunk. This avoids picking up the closing delimiter's indent for
+	// empty/sparse bodies.
+	let (body_start, body_end) = chunk_region_range(anchor, ChunkRegion::Body);
+	if body_start < body_end && body_end <= state.source.len() {
+		for line in state.source[body_start..body_end].split('\n') {
+			if line.trim().is_empty() {
+				continue;
+			}
+			let prefix_len = line.len() - line.trim_start_matches([' ', '\t']).len();
+			if prefix_len > 0 {
+				return line[..prefix_len].to_owned();
+			}
+			break;
 		}
-		let prefix_len = line.len() - line.trim_start_matches([' ', '\t']).len();
-		if prefix_len > 0 {
-			return line[..prefix_len].to_owned();
-		}
-		break;
 	}
 
 	let indent_char = if anchor.indent_char.is_empty() {
@@ -3953,6 +3961,117 @@ function foo() {\n<<<<<<< HEAD\n\treturn bar();\n=======\n\treturn baz();\n>>>>>
 			!result.diff_after.contains("\t\t///"),
 			"doc comment must NOT be double-indented, got:\n{}",
 			result.diff_after
+		);
+	}
+
+	#[test]
+	fn markdown_append_chunk_preserves_trailing_blank_line() {
+		// Two sibling sections separated by a blank line. Appending to the
+		// paragraph chunk (leaf) inside the first section must preserve the
+		// blank-line gap before the next heading.
+		let source = "# Title\n\nSome text.\n\n## Next Section\n\nMore text.\n";
+		let state = state_for(source, "markdown");
+
+		// The paragraph "Some text." is sect_Title.chunk_2.
+		let para_chunk = state
+			.inner()
+			.chunk("sect_Title.chunk_2")
+			.expect("paragraph chunk should exist");
+
+		let result = apply_single_edit(&state, "test.md", EditOperation {
+			op:      ChunkEditOp::Append,
+			sel:     Some(para_chunk.path.clone()),
+			crc:     None,
+			region:  None,
+			content: Some("Appended line.\n".to_owned()),
+			find:    None,
+		});
+
+		// The blank line before ## Next Section should be preserved
+		assert!(
+			result
+				.diff_after
+				.contains("Appended line.\n\n## Next Section"),
+			"blank line before next section must be preserved after append: {:?}",
+			result.diff_after
+		);
+	}
+
+	#[test]
+	fn markdown_after_chunk_preserves_blank_line_separator() {
+		// 'after' on a table chunk followed by a blank-line separator and a
+		// heading. The blank line must survive the insertion.
+		let source = "# Section\n\n| A | B |\n|---|---|\n| 1 | 2 |\n\n## Next\n";
+		let state = state_for(source, "markdown");
+
+		// The table is sect_Sectio.chunk_2 (L3-L5).
+		let table_chunk = state
+			.inner()
+			.chunk("sect_Sectio.chunk_2")
+			.expect("table chunk should exist");
+
+		let result = apply_single_edit(&state, "test.md", EditOperation {
+			op:      ChunkEditOp::After,
+			sel:     Some(table_chunk.path.clone()),
+			crc:     None,
+			region:  None,
+			content: Some("Extra paragraph.\n".to_owned()),
+			find:    None,
+		});
+
+		// Blank line before ## Next must be preserved
+		assert!(
+			result.diff_after.contains("Extra paragraph.\n\n## Next"),
+			"blank line before next heading must be preserved after 'after' insert: {:?}",
+			result.diff_after
+		);
+	}
+
+	#[test]
+	fn body_replace_nested_fn_uses_correct_indent() {
+		let source = "impl Server {\n    fn is_running(&self) -> bool {\n        true\n    }\n}\n";
+		let state = state_for(source, "rust");
+		let chunk = state
+			.inner()
+			.tree
+			.chunks
+			.iter()
+			.find(|c| c.identifier.as_deref() == Some("is_running") || c.path.contains("is_run"))
+			.expect("is_running chunk");
+		let result = apply_single_edit(&state, "test.rs", EditOperation {
+			op:      ChunkEditOp::Replace,
+			sel:     Some(chunk.path.clone()),
+			crc:     Some(chunk.checksum.clone()),
+			region:  Some(ChunkRegion::Body),
+			content: Some("false\n".to_owned()),
+			find:    None,
+		});
+		// Body should be at 2 levels of indent (8 spaces), not 1 level (4 spaces)
+		let new_source = &result.diff_after;
+		assert!(
+			new_source.contains("        false"),
+			"expected body at 8-space indent (2 levels), got:\n{new_source}"
+		);
+	}
+
+	#[test]
+	fn body_replace_preserves_closing_delimiter_on_own_line() {
+		let source = "fn foo() {\n    old_body();\n}\n";
+		let state = state_for(source, "rust");
+		let chunk = state.inner().chunk("fn_foo").expect("fn_foo");
+		let result = apply_single_edit(&state, "test.rs", EditOperation {
+			op:      ChunkEditOp::Replace,
+			sel:     Some("fn_foo".to_owned()),
+			crc:     Some(chunk.checksum.clone()),
+			region:  Some(ChunkRegion::Body),
+			content: Some("new_body();".to_owned()), // No trailing newline
+			find:    None,
+		});
+		let new_source = &result.diff_after;
+		// Closing } should be on its own line, not merged
+		assert!(
+			new_source.contains("new_body();\n}"),
+			"expected closing brace on own line, got:\n{new_source}"
 		);
 	}
 }
