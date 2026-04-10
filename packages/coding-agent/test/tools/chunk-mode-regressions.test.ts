@@ -69,9 +69,9 @@ describe("chunk mode regression coverage", () => {
 		const editTool = new EditTool(session);
 
 		const beforeRead = getText(
-			await readTool.execute("chunk-read-rust", { path: `${filePath}:impl_Greeter.fn_render` }),
+			await readTool.execute("chunk-read-rust", { path: `${filePath}:impl_Greete.fn_render` }),
 		);
-		const selector = extractSelector(beforeRead, "impl_Greeter.fn_render");
+		const selector = extractSelector(beforeRead, "impl_Greete.fn_render");
 
 		await editTool.execute("chunk-edit-rust-body", {
 			path: filePath,
@@ -98,7 +98,7 @@ describe("chunk mode regression coverage", () => {
 		const editTool = new EditTool(session);
 
 		const beforeRead = getText(await readTool.execute("chunk-read-markdown-after", { path: filePath }));
-		const selector = extractSelector(beforeRead, "section_Title.section_Alpha");
+		const selector = extractSelector(beforeRead, "sect_Title.sect_Alpha");
 
 		await editTool.execute("chunk-edit-markdown-after", {
 			path: filePath,
@@ -124,7 +124,7 @@ describe("chunk mode regression coverage", () => {
 		const editTool = new EditTool(session);
 
 		const beforeRead = getText(await readTool.execute("chunk-read-markdown-append", { path: filePath }));
-		const selector = extractSelector(beforeRead, "section_Title.section_Alpha");
+		const selector = extractSelector(beforeRead, "sect_Title.sect_Alpha");
 
 		await editTool.execute("chunk-edit-markdown-append", {
 			path: filePath,

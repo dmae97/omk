@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Replaced internal `raceAbort` function with imported `raceWithAbort` utility from pi-utils
+- Refactored cleanup timer to use async iterator pattern with `timers.setInterval` instead of `setInterval`
+- Made `#cleanupIdleSessions` synchronous and moved async cleanup loop logic to new `#runCleanupLoop` method
 
 ## [14.0.4] - 2026-04-10
 ### Added

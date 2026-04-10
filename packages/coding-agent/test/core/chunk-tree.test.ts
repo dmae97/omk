@@ -189,12 +189,12 @@ describe("applyChunkEdits", () => {
 
 	test("replace does not duplicate attached doc comments when replacement includes a new one", () => {
 		const source = `class Worker {\n\t/** restart note */\n\trestart(): void {\n\t\tboot();\n\t}\n}\n`;
-		const checksum = getChecksum(source, "class_Worker.fn_restart");
+		const checksum = getChecksum(source, "class_Worker.fn_restar");
 		const result = edit(
 			[
 				{
 					op: "replace",
-					sel: targetWithChecksum("class_Worker.fn_restart", checksum),
+					sel: targetWithChecksum("class_Worker.fn_restar", checksum),
 					content: `\t/** updated restart note */\n\trestart(): void {\n\t\tshutdown();\n\t}`,
 				},
 			],
@@ -207,7 +207,7 @@ describe("applyChunkEdits", () => {
 	});
 
 	test("sibling chunk crc from before the batch still validates after an unrelated sibling is replaced first", () => {
-		const ctorCrc = getChecksum(testSource, "class_Worker.constructor");
+		const ctorCrc = getChecksum(testSource, "class_Worker.ctor");
 		const runCrc = getChecksum(testSource, "class_Worker.fn_run");
 		const result = applyChunkEdits({
 			source: testSource,
@@ -217,7 +217,7 @@ describe("applyChunkEdits", () => {
 			operations: [
 				{
 					op: "replace",
-					sel: targetWithChecksum("class_Worker.constructor", ctorCrc),
+					sel: targetWithChecksum("class_Worker.ctor", ctorCrc),
 					content: `\tconstructor(name: string) {\n\t\tthis.name = name.trim();\n\t}`,
 				},
 				{
@@ -582,7 +582,7 @@ describe("edit safety invariants", () => {
 	});
 
 	test("keeps untouched sibling checksums stable after a nearby edit", () => {
-		const before = getChecksum(testSource, "class_Worker.constructor");
+		const before = getChecksum(testSource, "class_Worker.ctor");
 		const after = edit([
 			{
 				op: "replace",
@@ -591,7 +591,7 @@ describe("edit safety invariants", () => {
 			},
 		]).diffSourceAfter;
 
-		expect(getChecksum(after, "class_Worker.constructor")).toBe(before);
+		expect(getChecksum(after, "class_Worker.ctor")).toBe(before);
 	});
 	test("preserves a chunk checksum after unrelated file changes outside the chunk", () => {
 		const checksum = getChecksum(testSource, runChunkPath);
@@ -668,7 +668,7 @@ describe("chunk path resolution errors", () => {
 			message = (err as Error).message;
 		}
 		expect(message).toContain('Direct children of "class_Worker":');
-		expect(message).toMatch(/├── \.constructor#[A-Z]{4}\s+L\d+-L\d+/);
+		expect(message).toMatch(/├── \.ctor#[A-Z]{4}\s+L\d+-L\d+/);
 		expect(message).toMatch(/└── \.fn_run#[A-Z]{4}\s+L\d+-L\d+/);
 	});
 });
@@ -736,13 +736,13 @@ describe("formatChunkedRead", () => {
 
 		const result = await formatChunkedRead({
 			filePath,
-			readPath: `${filePath}:class_Service.fn_handle`,
+			readPath: `${filePath}:class_Servic.fn_handle`,
 			cwd: tmpDir,
 			language: "typescript",
 		});
 
 		expect(result.text).not.toContain("to expand ⋮");
-		expect(result.text).toContain("service.ts:class_Service.fn_handle·");
+		expect(result.text).toContain("service.ts:class_Servic.fn_handle·");
 		expect(result.text).toContain("3| \t\tstep(0);");
 		expect(result.text).toContain("27| \t\tstep(24);");
 		expect(result.text).toContain("done();");
@@ -831,9 +831,9 @@ describe("addressable member rendering", () => {
 			language: "rust",
 		});
 
-		expect(result.text).toContain("enum_LogLevel#");
-		expect(result.text).toContain("enum_LogLevel.variant_Debug#");
-		expect(result.text).toContain("enum_LogLevel.variant_Error#");
+		expect(result.text).toContain("enum_LogLev#");
+		expect(result.text).toContain("enum_LogLev.vrnt_Debug#");
+		expect(result.text).toContain("enum_LogLev.vrnt_Error#");
 	});
 
 	test("renders a single-method Go interface inline on the parent chunk", async () => {
@@ -851,7 +851,7 @@ describe("addressable member rendering", () => {
 			language: "go",
 		});
 
-		expect(result.text).toContain("type_Handler#");
+		expect(result.text).toContain("type_Handle#");
 		expect(result.text).toContain("3| type Handler interface {");
 		expect(result.text).toContain("4| \tHandle(method, path string) Result");
 	});
@@ -913,8 +913,8 @@ describe("addressable member rendering", () => {
 		});
 
 		expect(result.text).toContain("enum_Status#");
-		expect(result.text).toContain("enum_Status.variant_Idle#");
-		expect(result.text).toContain("enum_Status.variant_Busy#");
+		expect(result.text).toContain("enum_Status.vrnt_Idle#");
+		expect(result.text).toContain("enum_Status.vrnt_Busy#");
 	});
 
 	test("keeps non-trivial containers expanded", () => {
@@ -980,7 +980,7 @@ describe("addressable member editing", () => {
 			[
 				{
 					op: "after",
-					sel: "enum_Status.variant_Idle",
+					sel: "enum_Status.vrnt_Idle",
 					content: 'Paused = "paused",',
 				},
 			],
@@ -991,7 +991,7 @@ describe("addressable member editing", () => {
 	});
 
 	test("replace with empty content removes an individually addressable enum variant", () => {
-		const busy = { sel: currentTarget(enumSource, "enum_Status.variant_Busy") };
+		const busy = { sel: currentTarget(enumSource, "enum_Status.vrnt_Busy") };
 		const result = edit([{ op: "replace", ...busy, content: "" }], enumSource);
 
 		expect(result.diffSourceAfter).toContain('Idle = "idle"');
@@ -1016,7 +1016,7 @@ describe("Go receiver render ownership", () => {
 		});
 
 		expect(result.responseText).toContain("func DefaultServer() *Server");
-		expect(result.responseText).toContain("fn_DefaultServer#");
+		expect(result.responseText).toContain("fn_Defaul#");
 		expect(result.responseText).toContain("fn_Start#");
 		expect(result.responseText).not.toContain("type_Server.fn_Start#");
 	});
@@ -1036,12 +1036,12 @@ describe("blank-line cleanup", () => {
 `;
 
 	test("replace with empty content collapses triple newlines at the edit seam", () => {
-		const checksum = getChecksum(commentedSource, "class_Worker.fn_restart");
+		const checksum = getChecksum(commentedSource, "class_Worker.fn_restar");
 		const result = edit(
 			[
 				{
 					op: "replace",
-					sel: targetWithChecksum("class_Worker.fn_restart", checksum),
+					sel: targetWithChecksum("class_Worker.fn_restar", checksum),
 					content: "",
 				},
 			],
@@ -1162,8 +1162,8 @@ describe("tlaplus chunk rendering", () => {
 		const state = ChunkState.parse(tlaplusSource, "tlaplus");
 		const initChunk = state
 			.chunks()
-			.find((chunk: { path: string; checksum: string }) => chunk.path.endsWith("operator_Init"));
-		if (!initChunk) throw new Error("Expected operator_Init chunk in tlaplus fixture");
+			.find((chunk: { path: string; checksum: string }) => chunk.path.endsWith("oper_Init"));
+		if (!initChunk) throw new Error("Expected oper_Init chunk in tlaplus fixture");
 
 		const result = applyChunkEdits({
 			source: tlaplusSource,
@@ -1183,7 +1183,7 @@ describe("tlaplus chunk rendering", () => {
 		// The scoped response tree includes the touched chunk and adjacent siblings,
 		// but not distant ones like translation_12. The translation content must
 		// still be hidden from any chunk that IS visible.
-		expect(result.responseText).toContain("mod_Spec.operator_Start#");
+		expect(result.responseText).toContain("mod_Spec.oper_Start#");
 		expect(result.responseText).not.toContain("Next == pc' = pc");
 	});
 });
