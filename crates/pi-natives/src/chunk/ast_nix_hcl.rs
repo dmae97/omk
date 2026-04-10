@@ -167,6 +167,29 @@ impl LangClassifier for NixHclClassifier {
 					source,
 				))
 			},
+			// Nix binding_set is a transparent wrapper around individual bindings.
+			// Without this, the binding_set becomes an opaque leaf chunk hiding
+			// all bindings inside a single massive block.
+			"binding_set" => Some(make_candidate(
+				node,
+				ChunkKind::Attrs,
+				None,
+				NameStyle::Named,
+				None,
+				Some(RecurseSpec { node, context: ChunkContext::ClassBody }),
+				source,
+			)),
+			// Nix let_expression inside a class-body context — recurse into its
+			// binding_set so individual bindings are addressable.
+			"let_expression" => Some(make_candidate(
+				node,
+				ChunkKind::Expression,
+				None,
+				NameStyle::Named,
+				signature_for_node(node, source),
+				recurse_value_container(node),
+				source,
+			)),
 			// Nested Nix binding
 			"binding" => Some(classify_nix_binding(node, source)),
 			_ => None,
