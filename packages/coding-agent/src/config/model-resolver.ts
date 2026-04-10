@@ -387,7 +387,7 @@ function isSessionInheritedAgentPattern(value: string): boolean {
 	return value === DEFAULT_MODEL_ROLE || value === `${PREFIX_MODEL_ROLE}${DEFAULT_MODEL_ROLE}` || value === "pi/task";
 }
 
-function resolveConfiguredRolePattern(value: string, settings?: Settings): string | undefined {
+function resolveConfiguredRolePattern(value: string, settings?: Settings): string[] | undefined {
 	const normalized = value.trim();
 	if (!normalized) return undefined;
 
@@ -396,11 +396,16 @@ function resolveConfiguredRolePattern(value: string, settings?: Settings): strin
 		lastColonIndex > PREFIX_MODEL_ROLE.length ? parseThinkingLevel(normalized.slice(lastColonIndex + 1)) : undefined;
 	const aliasCandidate = thinkingLevel ? normalized.slice(0, lastColonIndex) : normalized;
 	const role = getModelRoleAlias(aliasCandidate);
-	if (!role) return normalized;
+	if (!role) return [normalized];
 
 	const configured = settings?.getModelRole(role)?.trim();
-	if (!configured) return undefined;
-	return thinkingLevel ? `${configured}:${thinkingLevel}` : configured;
+	const roleDefaults = normalizeModelPatternList(MODEL_PRIO[role as keyof typeof MODEL_PRIO]);
+	const resolved = configured ? normalizeModelPatternList(configured) : roleDefaults;
+	if (!resolved || resolved.length === 0) {
+		return undefined;
+	}
+
+	return thinkingLevel ? resolved.map(pattern => `${pattern}:${thinkingLevel}`) : resolved;
 }
 
 /**
@@ -412,7 +417,7 @@ export function expandRoleAlias(value: string, settings?: Settings): string {
 		return settings?.getModelRole("default") ?? value;
 	}
 
-	const resolved = resolveConfiguredRolePattern(value, settings);
+	const resolved = resolveConfiguredRolePattern(value, settings)?.[0];
 	return resolved ?? value;
 }
 
@@ -420,10 +425,9 @@ export function resolveConfiguredModelPatterns(value: string | string[] | undefi
 	const patterns = normalizeModelPatternList(value);
 	return patterns.flatMap(pattern => {
 		const resolved = resolveConfiguredRolePattern(pattern, settings);
-		return resolved ? [resolved] : [];
+		return resolved ?? [];
 	});
 }
-
 export interface AgentModelPatternResolutionOptions {
 	settingsOverride?: string | string[];
 	agentModel?: string | string[];
@@ -479,26 +483,30 @@ export function resolveModelRoleValue(
 	const lastColonIndex = normalized.lastIndexOf(":");
 	const thinkingSelector =
 		lastColonIndex > PREFIX_MODEL_ROLE.length ? parseThinkingLevel(normalized.slice(lastColonIndex + 1)) : undefined;
-	const aliasCandidate = thinkingSelector ? normalized.slice(0, lastColonIndex) : normalized;
-	const effectivePattern = resolveConfiguredRolePattern(aliasCandidate, options?.settings);
-	if (!effectivePattern) {
+	const effectivePatterns = resolveConfiguredRolePattern(normalized, options?.settings);
+	if (!effectivePatterns || effectivePatterns.length === 0) {
 		return { model: undefined, thinkingLevel: undefined, explicitThinkingLevel: false, warning: undefined };
 	}
-	const patternWithSuffix = thinkingSelector ? `${effectivePattern}:${thinkingSelector}` : effectivePattern;
-	const { model, thinkingLevel, warning, explicitThinkingLevel } = parseModelPattern(
-		patternWithSuffix,
-		availableModels,
-		options?.matchPreferences,
-	);
 
-	return {
-		model,
-		thinkingLevel: explicitThinkingLevel
-			? (resolveThinkingLevelForModel(model, thinkingLevel) ?? thinkingLevel)
-			: thinkingLevel,
-		explicitThinkingLevel,
-		warning,
-	};
+	let warning: string | undefined;
+	for (const effectivePattern of effectivePatterns) {
+		const resolved = parseModelPattern(effectivePattern, availableModels, options?.matchPreferences);
+		if (resolved.model) {
+			return {
+				model: resolved.model,
+				thinkingLevel: resolved.explicitThinkingLevel
+					? (resolveThinkingLevelForModel(resolved.model, resolved.thinkingLevel) ?? resolved.thinkingLevel)
+					: resolved.thinkingLevel,
+				explicitThinkingLevel: resolved.explicitThinkingLevel,
+				warning: resolved.warning,
+			};
+		}
+		if (!warning && resolved.warning) {
+			warning = resolved.warning;
+		}
+	}
+
+	return { model: undefined, thinkingLevel: undefined, explicitThinkingLevel: false, warning };
 }
 
 export function extractExplicitThinkingSelector(

@@ -1,14 +1,19 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added `designer` model role for UI/UX design tasks with Gemini 3.1 Pro as default model
+- Added support for model role fallback lists — roles can now resolve to multiple model patterns with automatic fallback to next available model
 - Added `extractReadableFromHtml` utility function to extract readable content from HTML with Readability article extraction and CSS selector fallback
 - Added support for GFM (GitHub Flavored Markdown) features including tables, strikethrough, and task lists in HTML-to-markdown conversion
 - Added `resolveDiagnosticTargets` utility function to handle glob pattern resolution with fallback to literal file paths for bracket-style paths
 
 ### Changed
 
+- Updated designer agent to use `pi/designer` role alias instead of explicit model list
+- Refactored model role resolution to support multiple fallback patterns per role, improving model availability handling
 - Replaced regex-based HTML-to-markdown conversion with Turndown library and GFM plugin for more accurate formatting of complex HTML structures
 - Simplified no-changes response to omit redundant response text when chunk content already matches
 - Clarified region suffix behavior on leaf and compound statement chunks — `~` and `^` now fall back to whole-chunk replacement with explicit guidance to supply complete structural content

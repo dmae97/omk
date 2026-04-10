@@ -403,6 +403,44 @@ describe("resolveAgentModelPatterns", () => {
 
 		expect(result).toEqual(["anthropic/claude-sonnet-4-5:high"]);
 	});
+
+	test("expands pi/designer to priority defaults", () => {
+		const settings = Settings.isolated({
+			modelRoles: {
+				default: "anthropic/claude-sonnet-4-5",
+			},
+		});
+
+		const result = resolveAgentModelPatterns({
+			agentModel: "pi/designer",
+			settings,
+		});
+
+		expect(result).toEqual([
+			"google-gemini-cli/gemini-3.1-pro",
+			"google-gemini-cli/gemini-3-pro",
+			"gemini-3.1-pro",
+			"gemini-3-1-pro",
+			"gemini-3-pro",
+			"gemini-3",
+		]);
+	});
+
+	test("prefers configured designer role override over priority defaults", () => {
+		const settings = Settings.isolated({
+			modelRoles: {
+				default: "anthropic/claude-sonnet-4-5",
+				designer: "openai/gpt-4o",
+			},
+		});
+
+		const result = resolveAgentModelPatterns({
+			agentModel: "pi/designer",
+			settings,
+		});
+
+		expect(result).toEqual(["openai/gpt-4o"]);
+	});
 });
 
 describe("resolveModelFromString", () => {
