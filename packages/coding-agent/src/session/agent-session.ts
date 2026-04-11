@@ -997,6 +997,16 @@ export class AgentSession {
 			this.#lastAssistantMessage = undefined;
 			if (!msg) return;
 
+			// Invalidate GitHub Copilot credentials on auth failure so stale tokens
+			// aren't reused on the next request
+			if (
+				msg.stopReason === "error" &&
+				msg.provider === "github-copilot" &&
+				msg.errorMessage?.includes("GitHub Copilot authentication failed")
+			) {
+				await this.#modelRegistry.authStorage.remove("github-copilot");
+			}
+
 			if (this.#skipPostTurnMaintenanceAssistantTimestamp === msg.timestamp) {
 				this.#skipPostTurnMaintenanceAssistantTimestamp = undefined;
 				return;

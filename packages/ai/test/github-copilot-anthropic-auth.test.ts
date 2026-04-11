@@ -11,10 +11,7 @@ afterEach(() => {
 });
 
 const COPILOT_HEADERS = {
-	"User-Agent": "GitHubCopilotChat/0.35.0",
-	"Editor-Version": "vscode/1.107.0",
-	"Editor-Plugin-Version": "copilot-chat/0.35.0",
-	"Copilot-Integration-Id": "vscode-chat",
+	"User-Agent": "opencode/1.3.15",
 };
 
 function makeCopilotClaudeModel(): Model<"anthropic-messages"> {
@@ -23,7 +20,7 @@ function makeCopilotClaudeModel(): Model<"anthropic-messages"> {
 		name: "Claude Sonnet 4",
 		api: "anthropic-messages",
 		provider: "github-copilot",
-		baseUrl: "https://api.individual.githubcopilot.com",
+		baseUrl: "https://api.githubcopilot.com",
 		headers: { ...COPILOT_HEADERS },
 		reasoning: true,
 		input: ["text", "image"],
@@ -67,9 +64,23 @@ describe("Anthropic Copilot auth config", () => {
 		expect(options.defaultHeaders.Authorization).toBe(`Bearer ${token}`);
 	});
 
-	it("derives baseURL from proxy endpoint token", () => {
+	it("unwraps structured Copilot credentials before setting Authorization", () => {
 		const model = makeCopilotClaudeModel();
-		const token = "tid=2;proxy-ep=proxy.enterprise.githubcopilot.com;exp=9999999999";
+		const options = buildAnthropicClientOptions({
+			model,
+			apiKey: JSON.stringify({ token: "ghu_test_token_12345", enterpriseUrl: "ghe.example.com" }),
+			extraBetas: [],
+			stream: true,
+			dynamicHeaders: {},
+		});
+
+		expect(options.apiKey).toBeNull();
+		expect(options.defaultHeaders.Authorization).toBe("Bearer ghu_test_token_12345");
+	});
+
+	it("uses model baseUrl directly (no proxy-ep extraction)", () => {
+		const model = makeCopilotClaudeModel();
+		const token = "ghu_test_token_12345";
 		const options = buildAnthropicClientOptions({
 			model,
 			apiKey: token,
@@ -78,7 +89,20 @@ describe("Anthropic Copilot auth config", () => {
 			dynamicHeaders: {},
 		});
 
-		expect(options.baseURL).toBe("https://api.enterprise.githubcopilot.com");
+		expect(options.baseURL).toBe("https://api.githubcopilot.com");
+	});
+
+	it("routes structured enterprise credentials to the enterprise baseUrl", () => {
+		const model = makeCopilotClaudeModel();
+		const options = buildAnthropicClientOptions({
+			model,
+			apiKey: JSON.stringify({ token: "ghu_test_token_12345", enterpriseUrl: "ghe.example.com" }),
+			extraBetas: [],
+			stream: true,
+			dynamicHeaders: {},
+		});
+
+		expect(options.baseURL).toBe("https://copilot-api.ghe.example.com");
 	});
 	it("includes Copilot static headers from model.headers", () => {
 		const model = makeCopilotClaudeModel();
@@ -90,8 +114,7 @@ describe("Anthropic Copilot auth config", () => {
 			dynamicHeaders: {},
 		});
 
-		expect(options.defaultHeaders["User-Agent"]).toContain("GitHubCopilotChat");
-		expect(options.defaultHeaders["Copilot-Integration-Id"]).toBe("vscode-chat");
+		expect(options.defaultHeaders["User-Agent"]).toContain("opencode");
 	});
 
 	it("includes interleaved-thinking beta header when enabled", () => {
@@ -177,7 +200,7 @@ describe("Anthropic Copilot auth config", () => {
 
 		const model = makeCopilotClaudeModel();
 		const result = await streamAnthropic(model, testContext, {
-			apiKey: "tid=2;proxy-ep=proxy.enterprise.githubcopilot.com;exp=9999999999",
+			apiKey: "ghu_test_copilot_token",
 			initiatorOverride: "agent",
 		}).result();
 

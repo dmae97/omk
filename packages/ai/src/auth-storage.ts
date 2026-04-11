@@ -1882,8 +1882,8 @@ export class AuthStorage {
 	/**
 	 * Peek at API key for a provider without refreshing OAuth tokens.
 	 * Used for model discovery where we only need to know if credentials exist
-	 * and get a best-effort token. The actual refresh happens lazily when the
-	 * provider is used for an API call.
+	 * and get a best-effort token. For GitHub Copilot we preserve enterprise
+	 * routing metadata so discovery can hit the correct host.
 	 */
 	async peekApiKey(provider: string): Promise<string | undefined> {
 		const runtimeKey = this.#runtimeOverrides.get(provider);
@@ -1901,6 +1901,12 @@ export class AuthStorage {
 		if (oauthSelection) {
 			const expiresAt = oauthSelection.credential.expires;
 			if (Number.isFinite(expiresAt) && expiresAt > Date.now()) {
+				if (provider === "github-copilot") {
+					return JSON.stringify({
+						token: oauthSelection.credential.access,
+						enterpriseUrl: oauthSelection.credential.enterpriseUrl,
+					});
+				}
 				return oauthSelection.credential.access;
 			}
 		}

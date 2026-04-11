@@ -7,7 +7,7 @@ import {
 	type OpenAICompatibleModelMapperContext,
 	type OpenAICompatibleModelRecord,
 } from "../utils/discovery/openai-compatible";
-import { getGitHubCopilotBaseUrl } from "../utils/oauth/github-copilot";
+import { getGitHubCopilotBaseUrl, OPENCODE_HEADERS, parseGitHubCopilotApiKey } from "../utils/oauth/github-copilot";
 
 const MODELS_DEV_URL = "https://models.dev/api.json";
 const ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1";
@@ -1441,12 +1441,6 @@ export interface GithubCopilotModelManagerConfig {
 	apiKey?: string;
 	baseUrl?: string;
 }
-const GITHUB_COPILOT_HEADERS: Record<string, string> = {
-	"User-Agent": "GitHubCopilotChat/0.35.0",
-	"Editor-Version": "vscode/1.107.0",
-	"Editor-Plugin-Version": "copilot-chat/0.35.0",
-	"Copilot-Integration-Id": "vscode-chat",
-};
 
 function inferCopilotApi(modelId: string): Api {
 	if (/^claude-(haiku|sonnet|opus)-4([.-]|$)/.test(modelId)) {
@@ -1480,12 +1474,14 @@ function extractCopilotLimits(entry: OpenAICompatibleModelRecord): {
 }
 
 export function githubCopilotModelManagerOptions(config?: GithubCopilotModelManagerConfig): ModelManagerOptions<Api> {
-	const apiKey = config?.apiKey;
-	const configuredBaseUrl = config?.baseUrl ?? "https://api.individual.githubcopilot.com";
-	const baseUrl =
-		apiKey?.includes("proxy-ep=") && configuredBaseUrl.includes("githubcopilot.com")
-			? getGitHubCopilotBaseUrl(apiKey)
-			: configuredBaseUrl;
+	const rawApiKey = config?.apiKey;
+	const baseUrl = config?.baseUrl ?? "https://api.githubcopilot.com";
+	const parsedApiKey = rawApiKey ? parseGitHubCopilotApiKey(rawApiKey) : undefined;
+	const apiKey = parsedApiKey?.accessToken;
+	const resolvedBaseUrl =
+		parsedApiKey?.enterpriseUrl && baseUrl.includes("githubcopilot.com")
+			? getGitHubCopilotBaseUrl(parsedApiKey.enterpriseUrl)
+			: baseUrl;
 	const references = createBundledReferenceMap<Api>("github-copilot");
 	const globalReferences = createGlobalReferenceMap();
 	return {
@@ -1495,9 +1491,9 @@ export function githubCopilotModelManagerOptions(config?: GithubCopilotModelMana
 				fetchOpenAICompatibleModels<Api>({
 					api: "openai-completions",
 					provider: "github-copilot",
-					baseUrl,
+					baseUrl: resolvedBaseUrl,
 					apiKey,
-					headers: GITHUB_COPILOT_HEADERS,
+					headers: OPENCODE_HEADERS,
 					mapModel: (
 						entry: OpenAICompatibleModelRecord,
 						defaults: Model<Api>,
@@ -1549,7 +1545,7 @@ export function githubCopilotModelManagerOptions(config?: GithubCopilotModelMana
 								name,
 								contextWindow,
 								maxTokens,
-								headers: { ...GITHUB_COPILOT_HEADERS, ...(providerReference?.headers ?? {}) },
+								headers: { ...OPENCODE_HEADERS, ...(providerReference?.headers ?? {}) },
 								...(api === "openai-completions"
 									? {
 											compat: {
@@ -1568,7 +1564,7 @@ export function githubCopilotModelManagerOptions(config?: GithubCopilotModelMana
 							name,
 							contextWindow,
 							maxTokens,
-							headers: { ...GITHUB_COPILOT_HEADERS },
+							headers: { ...OPENCODE_HEADERS },
 							...(api === "openai-completions"
 								? {
 										compat: {
@@ -1781,12 +1777,6 @@ function bedrockCrossRegionId(id: string): string {
 	return id;
 }
 
-const COPILOT_HEADERS = {
-	"User-Agent": "GitHubCopilotChat/0.35.0",
-	"Editor-Version": "vscode/1.107.0",
-	"Editor-Plugin-Version": "copilot-chat/0.35.0",
-	"Copilot-Integration-Id": "vscode-chat",
-} as const;
 interface ApiResolutionRule {
 	matches: (modelId: string, raw: ModelsDevModel) => boolean;
 	resolved: { api: Api; baseUrl: string };
@@ -1831,7 +1821,7 @@ function createOpenCodeApiResolution(basePath: string): {
 const OPENCODE_ZEN_API_RESOLUTION = createOpenCodeApiResolution("https://opencode.ai/zen");
 const OPENCODE_GO_API_RESOLUTION = createOpenCodeApiResolution("https://opencode.ai/zen/go");
 
-const COPILOT_BASE_URL = "https://api.individual.githubcopilot.com";
+const COPILOT_BASE_URL = "https://api.githubcopilot.com";
 
 const COPILOT_DEFAULT_RESOLUTION = {
 	api: "openai-completions",
@@ -2039,7 +2029,7 @@ const MODELS_DEV_PROVIDER_DESCRIPTORS_SPECIALIZED: readonly ModelsDevProviderDes
 	openAiCompletionsDescriptor("github-copilot", "github-copilot", COPILOT_BASE_URL, {
 		defaultContextWindow: 128000,
 		defaultMaxTokens: 8192,
-		headers: { ...COPILOT_HEADERS },
+		headers: { ...OPENCODE_HEADERS },
 		filterModel: (_id, m) => {
 			if (m.tool_call !== true) return false;
 			if (m.status === "deprecated") return false;

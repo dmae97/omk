@@ -3,13 +3,18 @@
 ## [Unreleased]
 
 ### Changed
-
+- Replaced GitHub Copilot authentication from VSCode extension impersonation to the opencode OAuth flow, eliminating TOS concerns. Existing users will need to re-authenticate once with `/login github-copilot`.
+- Simplified Copilot token handling: GitHub OAuth token is used directly for all API requests (no JWT exchange or refresh cycle).
+- Changed GitHub Copilot API base URL from `api.individual.githubcopilot.com` to `api.githubcopilot.com`.
 - Updated default OpenAI stream idle timeout to 120,000 milliseconds to keep stream generation alive longer
 
 ### Fixed
 
 - Fixed duplicate synthetic tool results being generated when a real tool result appears later in message history
+- Fixed GitHub Copilot `/models` discovery to unwrap structured OAuth credentials before sending the bearer token, preserving dynamic catalog refresh for OAuth-backed callers.
 
+### Removed
+- Removed Copilot JWT proxy-ep base URL resolution (no longer needed with opencode auth).
 ## [14.0.3] - 2026-04-09
 
 ### Fixed

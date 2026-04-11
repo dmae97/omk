@@ -34,9 +34,10 @@ import type {
 import { isAnthropicOAuthToken, normalizeToolCallId, resolveCacheRetention } from "../utils";
 import { createAbortSourceTracker } from "../utils/abort";
 import { AssistantMessageEventStream } from "../utils/event-stream";
-import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
+import { finalizeErrorMessage, type RawHttpRequestDump, rewriteCopilotAuthError } from "../utils/http-inspector";
 import { createFirstEventWatchdog, getStreamFirstEventTimeoutMs, markFirstStreamEvent } from "../utils/idle-iterator";
 import { parseStreamingJson } from "../utils/json-parse";
+import { parseGitHubCopilotApiKey } from "../utils/oauth/github-copilot";
 import {
 	buildCopilotDynamicHeaders,
 	hasCopilotVisionInput,
@@ -978,6 +979,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 			const firstEventTimeoutError = activeAbortTracker.getLocalAbortReason();
 			output.stopReason = activeAbortTracker.wasCallerAbort() ? "aborted" : "error";
 			output.errorMessage = firstEventTimeoutError?.message ?? (await finalizeErrorMessage(error, rawRequestDump));
+			output.errorMessage = rewriteCopilotAuthError(output.errorMessage, error, model.provider);
 			output.duration = Date.now() - startTime;
 			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "error", reason: output.stopReason, error: output });
@@ -1065,6 +1067,7 @@ export function buildAnthropicClientOptions(args: AnthropicClientOptionsArgs): A
 	const foundryCustomHeaders = resolveAnthropicCustomHeaders(model);
 	const tlsFetchOptions = buildClaudeCodeTlsFetchOptions(model, baseUrl);
 	if (model.provider === "github-copilot") {
+		const copilotApiKey = parseGitHubCopilotApiKey(apiKey).accessToken;
 		const betaFeatures = [...extraBetas];
 		if (interleavedThinking) {
 			betaFeatures.push("interleaved-thinking-2025-05-14");
@@ -1073,7 +1076,7 @@ export function buildAnthropicClientOptions(args: AnthropicClientOptionsArgs): A
 			{
 				Accept: stream ? "text/event-stream" : "application/json",
 				"Anthropic-Dangerous-Direct-Browser-Access": "true",
-				Authorization: `Bearer ${apiKey}`,
+				Authorization: `Bearer ${copilotApiKey}`,
 				...(betaFeatures.length > 0 ? { "anthropic-beta": buildBetaHeader([], betaFeatures) } : {}),
 			},
 			model.headers,
@@ -1084,7 +1087,7 @@ export function buildAnthropicClientOptions(args: AnthropicClientOptionsArgs): A
 		return {
 			isOAuthToken: false,
 			apiKey: null,
-			authToken: apiKey,
+			authToken: copilotApiKey,
 			baseURL: baseUrl,
 			maxRetries: 5,
 			dangerouslyAllowBrowser: true,

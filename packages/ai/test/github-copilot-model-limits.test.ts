@@ -38,13 +38,14 @@ function getHeaderValue(headers: unknown, key: string): string | undefined {
 async function discoverCopilotModels(
 	payload: unknown,
 	apiKey = "copilot-test-key",
-	expectedBaseUrl = "https://api.individual.githubcopilot.com",
+	expectedBaseUrl = "https://api.githubcopilot.com",
+	expectedAuthorizationToken = apiKey,
 ) {
 	const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
 		const url = typeof input === "string" ? input : input.toString();
 		expect(url).toBe(`${expectedBaseUrl}/models`);
 		expect(init?.method).toBe("GET");
-		expect(getHeaderValue(init?.headers, "Authorization")).toBe(`Bearer ${apiKey}`);
+		expect(getHeaderValue(init?.headers, "Authorization")).toBe(`Bearer ${expectedAuthorizationToken}`);
 		return new Response(JSON.stringify(payload), {
 			status: 200,
 			headers: { "Content-Type": "application/json" },
@@ -60,15 +61,29 @@ async function discoverCopilotModels(
 }
 
 describe("github copilot model limits mapping", () => {
-	it("uses proxy endpoint from token for discovery base URL", async () => {
-		const enterpriseToken = "tid=2;proxy-ep=proxy.enterprise.githubcopilot.com;exp=9999999999";
+	it("uses configured base URL for discovery", async () => {
 		const { fetchMock } = await discoverCopilotModels(
 			{ data: [] },
-			enterpriseToken,
-			"https://api.enterprise.githubcopilot.com",
+			"copilot-test-key",
+			"https://api.githubcopilot.com",
 		);
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
+
+	it("unwraps structured OAuth keys for discovery and routes enterprise discovery to the enterprise host", async () => {
+		const structuredApiKey = JSON.stringify({
+			token: "ghu_test_copilot_token",
+			enterpriseUrl: "ghe.example.com",
+		});
+		const { fetchMock } = await discoverCopilotModels(
+			{ data: [] },
+			structuredApiKey,
+			"https://copilot-api.ghe.example.com",
+			"ghu_test_copilot_token",
+		);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
 	it("uses capabilities.limits max_context_window_tokens as context window when context_length is absent", async () => {
 		const { models, fetchMock } = await discoverCopilotModels({
 			data: [

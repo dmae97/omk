@@ -30,7 +30,7 @@ import {
 } from "../utils";
 import { createAbortSourceTracker } from "../utils/abort";
 import { AssistantMessageEventStream } from "../utils/event-stream";
-import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
+import { finalizeErrorMessage, type RawHttpRequestDump, rewriteCopilotAuthError } from "../utils/http-inspector";
 import {
 	createFirstEventWatchdog,
 	getOpenAIStreamIdleTimeoutMs,
@@ -38,6 +38,7 @@ import {
 	iterateWithIdleTimeout,
 	markFirstStreamEvent,
 } from "../utils/idle-iterator";
+import { parseGitHubCopilotApiKey } from "../utils/oauth/github-copilot";
 import { adaptSchemaForStrict, NO_STRICT } from "../utils/schema";
 import { mapToOpenAIResponsesToolChoice } from "../utils/tool-choice";
 import {
@@ -243,6 +244,7 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 			const firstEventTimeoutError = abortTracker.getLocalAbortReason();
 			output.stopReason = abortTracker.wasCallerAbort() ? "aborted" : "error";
 			output.errorMessage = firstEventTimeoutError?.message ?? (await finalizeErrorMessage(error, rawRequestDump));
+			output.errorMessage = rewriteCopilotAuthError(output.errorMessage, error, model.provider);
 			output.duration = Date.now() - startTime;
 			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "error", reason: output.stopReason, error: output });
@@ -272,12 +274,14 @@ function createClient(
 		}
 		apiKey = $env.OPENAI_API_KEY;
 	}
+	const rawApiKey = apiKey;
 
 	const headers = { ...(model.headers ?? {}), ...(extraHeaders ?? {}) };
 	let copilotPremiumRequests: number | undefined;
 
 	let baseUrl = model.baseUrl;
 	if (model.provider === "github-copilot") {
+		apiKey = parseGitHubCopilotApiKey(rawApiKey).accessToken;
 		const hasImages = hasCopilotVisionInput(context.messages);
 		const copilot = buildCopilotDynamicHeaders({
 			messages: context.messages,
@@ -288,7 +292,7 @@ function createClient(
 		});
 		Object.assign(headers, copilot.headers);
 		copilotPremiumRequests = copilot.premiumRequests;
-		baseUrl = resolveGitHubCopilotBaseUrl(model.baseUrl, apiKey) ?? model.baseUrl;
+		baseUrl = resolveGitHubCopilotBaseUrl(model.baseUrl, rawApiKey) ?? model.baseUrl;
 	}
 	return {
 		client: new OpenAI({

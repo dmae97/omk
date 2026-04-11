@@ -4582,7 +4582,7 @@
 			"name": "Claude Haiku 4.5",
 			"api": "anthropic-messages",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": true,
 			"input": [
 				"text",
@@ -4597,10 +4597,7 @@
 			"contextWindow": 144000,
 			"maxTokens": 32000,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"premiumMultiplier": 0.33,
 			"thinking": {
@@ -4614,7 +4611,7 @@
 			"name": "Claude Opus 4.5",
 			"api": "anthropic-messages",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": true,
 			"input": [
 				"text",
@@ -4629,10 +4626,7 @@
 			"contextWindow": 160000,
 			"maxTokens": 32000,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"thinking": {
 				"mode": "anthropic-budget-effort",
@@ -4645,7 +4639,7 @@
 			"name": "Claude Opus 4.6",
 			"api": "anthropic-messages",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": true,
 			"input": [
 				"text",
@@ -4660,10 +4654,7 @@
 			"contextWindow": 1000000,
 			"maxTokens": 64000,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"premiumMultiplier": 3,
 			"thinking": {
@@ -4677,7 +4668,7 @@
 			"name": "Claude Sonnet 4",
 			"api": "anthropic-messages",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": true,
 			"input": [
 				"text",
@@ -4692,10 +4683,7 @@
 			"contextWindow": 216000,
 			"maxTokens": 16000,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"thinking": {
 				"mode": "budget",
@@ -4708,7 +4696,7 @@
 			"name": "Claude Sonnet 4.5",
 			"api": "anthropic-messages",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": true,
 			"input": [
 				"text",
@@ -4723,10 +4711,7 @@
 			"contextWindow": 144000,
 			"maxTokens": 32000,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"thinking": {
 				"mode": "anthropic-budget-effort",
@@ -4739,7 +4724,7 @@
 			"name": "Claude Sonnet 4.6",
 			"api": "anthropic-messages",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": true,
 			"input": [
 				"text",
@@ -4754,10 +4739,7 @@
 			"contextWindow": 200000,
 			"maxTokens": 32000,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"thinking": {
 				"mode": "anthropic-adaptive",
@@ -4770,7 +4752,7 @@
 			"name": "Gemini 2.5 Pro",
 			"api": "openai-completions",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": false,
 			"input": [
 				"text",
@@ -4785,10 +4767,7 @@
 			"contextWindow": 128000,
 			"maxTokens": 64000,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"compat": {
 				"supportsStore": false,
@@ -4801,7 +4780,7 @@
 			"name": "Gemini 3 Flash",
 			"api": "openai-completions",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": true,
 			"input": [
 				"text",
@@ -4816,10 +4795,7 @@
 			"contextWindow": 128000,
 			"maxTokens": 64000,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"compat": {
 				"supportsStore": false,
@@ -4837,7 +4813,7 @@
 			"name": "Gemini 3 Pro Preview",
 			"api": "openai-completions",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": true,
 			"input": [
 				"text",
@@ -4852,10 +4828,7 @@
 			"contextWindow": 128000,
 			"maxTokens": 64000,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"compat": {
 				"supportsStore": false,
@@ -4873,7 +4846,7 @@
 			"name": "Gemini 3.1 Pro Preview",
 			"api": "openai-completions",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": true,
 			"input": [
 				"text",
@@ -4888,10 +4861,7 @@
 			"contextWindow": 128000,
 			"maxTokens": 64000,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"compat": {
 				"supportsStore": false,
@@ -4909,7 +4879,7 @@
 			"name": "GPT-4.1",
 			"api": "openai-completions",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": false,
 			"input": [
 				"text",
@@ -4924,10 +4894,7 @@
 			"contextWindow": 128000,
 			"maxTokens": 16384,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"compat": {
 				"supportsStore": false,
@@ -4940,7 +4907,7 @@
 			"name": "GPT-4o",
 			"api": "openai-completions",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": false,
 			"input": [
 				"text",
@@ -4955,10 +4922,7 @@
 			"contextWindow": 128000,
 			"maxTokens": 4096,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"compat": {
 				"supportsStore": false,
@@ -4972,7 +4936,7 @@
 			"name": "GPT-5",
 			"api": "openai-responses",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": true,
 			"input": [
 				"text",
@@ -4987,10 +4951,7 @@
 			"contextWindow": 128000,
 			"maxTokens": 128000,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"thinking": {
 				"mode": "effort",
@@ -5003,7 +4964,7 @@
 			"name": "GPT-5-mini",
 			"api": "openai-responses",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": true,
 			"input": [
 				"text",
@@ -5018,10 +4979,7 @@
 			"contextWindow": 264000,
 			"maxTokens": 64000,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"thinking": {
 				"mode": "effort",
@@ -5034,7 +4992,7 @@
 			"name": "GPT-5.1",
 			"api": "openai-responses",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": true,
 			"input": [
 				"text",
@@ -5049,10 +5007,7 @@
 			"contextWindow": 264000,
 			"maxTokens": 64000,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"thinking": {
 				"mode": "effort",
@@ -5065,7 +5020,7 @@
 			"name": "GPT-5.1-Codex",
 			"api": "openai-responses",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": true,
 			"input": [
 				"text",
@@ -5080,10 +5035,7 @@
 			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"thinking": {
 				"mode": "effort",
@@ -5096,7 +5048,7 @@
 			"name": "GPT-5.1-Codex-max",
 			"api": "openai-responses",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": true,
 			"input": [
 				"text",
@@ -5111,10 +5063,7 @@
 			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"thinking": {
 				"mode": "effort",
@@ -5127,7 +5076,7 @@
 			"name": "GPT-5.1-Codex-mini",
 			"api": "openai-responses",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": true,
 			"input": [
 				"text",
@@ -5142,10 +5091,7 @@
 			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"thinking": {
 				"mode": "effort",
@@ -5158,7 +5104,7 @@
 			"name": "GPT-5.2",
 			"api": "openai-responses",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": true,
 			"input": [
 				"text",
@@ -5173,10 +5119,7 @@
 			"contextWindow": 264000,
 			"maxTokens": 64000,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"thinking": {
 				"mode": "effort",
@@ -5189,7 +5132,7 @@
 			"name": "GPT-5.2-Codex",
 			"api": "openai-responses",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": true,
 			"input": [
 				"text",
@@ -5204,10 +5147,7 @@
 			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"thinking": {
 				"mode": "effort",
@@ -5220,7 +5160,7 @@
 			"name": "GPT-5.3-Codex",
 			"api": "openai-responses",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": true,
 			"input": [
 				"text",
@@ -5235,10 +5175,7 @@
 			"contextWindow": 272000,
 			"maxTokens": 128000,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"thinking": {
 				"mode": "effort",
@@ -5251,7 +5188,7 @@
 			"name": "GPT-5.4",
 			"api": "openai-responses",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": true,
 			"input": [
 				"text",
@@ -5266,10 +5203,7 @@
 			"contextWindow": 400000,
 			"maxTokens": 128000,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"thinking": {
 				"mode": "effort",
@@ -5282,7 +5216,7 @@
 			"name": "GPT-5.4 Mini",
 			"api": "openai-responses",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": true,
 			"input": [
 				"text",
@@ -5297,10 +5231,7 @@
 			"contextWindow": 400000,
 			"maxTokens": 128000,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"premiumMultiplier": 0.33,
 			"thinking": {
@@ -5314,7 +5245,7 @@
 			"name": "Grok Code Fast 1",
 			"api": "openai-completions",
 			"provider": "github-copilot",
-			"baseUrl": "https://api.individual.githubcopilot.com",
+			"baseUrl": "https://api.githubcopilot.com",
 			"reasoning": true,
 			"input": [
 				"text"
@@ -5328,10 +5259,7 @@
 			"contextWindow": 128000,
 			"maxTokens": 64000,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"compat": {
 				"supportsStore": false,
@@ -21292,10 +21220,7 @@
 			"contextWindow": 1048576,
 			"maxTokens": 65536,
 			"headers": {
-				"User-Agent": "GitHubCopilotChat/0.35.0",
-				"Editor-Version": "vscode/1.107.0",
-				"Editor-Plugin-Version": "copilot-chat/0.35.0",
-				"Copilot-Integration-Id": "vscode-chat"
+				"User-Agent": "opencode/1.3.15"
 			},
 			"compat": {
 				"supportsStore": false,
