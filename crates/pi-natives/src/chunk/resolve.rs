@@ -399,7 +399,8 @@ fn resolve_chunk_selector_impl<'a>(
 			}
 			let leaf = chunk.path.rsplit('.').next().unwrap_or(chunk.path.as_str());
 			let expected = chunk.kind.path_segment(Some(cleaned));
-			leaf == expected || leaf == cleaned
+			path_segment_matches_requested(leaf, &expected)
+				|| path_segment_matches_requested(leaf, cleaned)
 		}));
 		if !prefixed_matches.is_empty() {
 			return resolve_matches(
@@ -420,6 +421,17 @@ fn resolve_chunk_selector_impl<'a>(
 			.into_iter()
 			.filter(|candidate| kind_path_matches(candidate, &kind_segments)),
 	);
+	let full_path_candidates = if kind_candidates.is_empty() {
+		collect_unique_matches(
+			state
+				.tree
+				.chunks
+				.iter()
+				.filter(|candidate| kind_path_matches(candidate, &kind_segments)),
+		)
+	} else {
+		Vec::new()
+	};
 	if !kind_candidates.is_empty() {
 		return resolve_matches(
 			kind_candidates,
@@ -428,6 +440,16 @@ fn resolve_chunk_selector_impl<'a>(
 			warnings,
 			"kind selector",
 			"Auto-resolved kind selector",
+		);
+	}
+	if !full_path_candidates.is_empty() {
+		return resolve_matches(
+			full_path_candidates,
+			cleaned,
+			crc,
+			warnings,
+			"full-path selector",
+			"Auto-resolved full-path selector",
 		);
 	}
 
@@ -576,12 +598,42 @@ fn kind_path_matches(candidate: &ChunkNode, kind_segments: &[&str]) -> bool {
 		&& kind_segments
 			.iter()
 			.zip(path_segments)
-			.all(|(kind, segment)| {
-				segment == *kind
-					|| segment
-						.split_once('_')
-						.is_some_and(|(prefix, identifier)| prefix == *kind || identifier == *kind)
+			.all(|(requested, candidate_segment)| {
+				path_segment_matches_requested(candidate_segment, requested)
 			})
+}
+
+fn path_segment_matches_requested(candidate_segment: &str, requested_segment: &str) -> bool {
+	if candidate_segment == requested_segment {
+		return true;
+	}
+
+	let normalized_candidate = normalize_leaf_name(candidate_segment);
+	let normalized_requested = normalize_leaf_name(requested_segment);
+	if normalized_candidate == normalized_requested {
+		return true;
+	}
+
+	let (candidate_kind, candidate_identifier) = split_path_segment(normalized_candidate);
+	let (requested_kind, requested_identifier) = split_path_segment(normalized_requested);
+	match (candidate_identifier, requested_identifier) {
+		(Some(candidate_identifier), Some(requested_identifier)) => {
+			candidate_kind == requested_kind && requested_identifier.starts_with(candidate_identifier)
+		},
+		(Some(candidate_identifier), None) => {
+			normalized_requested == candidate_identifier
+				|| normalized_requested.starts_with(candidate_identifier)
+		},
+		(None, Some(_)) => false,
+		(None, None) => false,
+	}
+}
+
+fn split_path_segment(segment: &str) -> (&str, Option<&str>) {
+	match segment.split_once('_') {
+		Some((kind, identifier)) if !identifier.is_empty() => (kind, Some(identifier)),
+		_ => (segment, None),
+	}
 }
 
 /// Format a `ChunkNode` as `path#CRC`.
@@ -1005,5 +1057,37 @@ mod tests {
 			Err(err) => err,
 		};
 		assert!(err.contains("Ambiguous stale selector"), "{err}");
+	}
+
+	#[test]
+	fn resolves_full_untruncated_identifier_paths() {
+		let state = ChunkStateInner::new(String::new(), "typescript".to_owned(), ChunkTree {
+			language:      "typescript".to_owned(),
+			checksum:      "ROOT".to_owned(),
+			line_count:    1,
+			parse_errors:  0,
+			fallback:      false,
+			root_path:     String::new(),
+			root_children: vec!["class_Server".to_owned()],
+			chunks:        vec![
+				chunk("", "ROOT", None, vec!["class_Server"]),
+				chunk("class_Server", "CLSS", Some(""), vec!["class_Server.fn_handle"]),
+				chunk("class_Server.fn_handle", "ABCD", Some("class_Server"), vec![]),
+			],
+		});
+		let mut warnings = Vec::new();
+		let resolved = resolve_chunk_with_crc(
+			&state,
+			Some("class_Server.fn_handleRequest"),
+			Some("ABCD"),
+			&mut warnings,
+		)
+		.expect("full untruncated selector should resolve to truncated chunk path");
+		assert_eq!(resolved.chunk.path, "class_Server.fn_handle");
+		assert!(
+			warnings
+				.iter()
+				.any(|warning| warning.contains("Auto-resolved"))
+		);
 	}
 }

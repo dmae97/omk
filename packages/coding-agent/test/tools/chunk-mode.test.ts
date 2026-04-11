@@ -555,6 +555,30 @@ describe("chunk mode tools", () => {
 		expect(updatedSource).not.toContain('console.log("boot")');
 	});
 
+	it("accepts full untruncated selector paths when they resolve uniquely", async () => {
+		const filePath = path.join(tmpDir, "server.ts");
+		const originalSource = buildLargeTypescriptFixture();
+		await Bun.write(filePath, originalSource);
+		const session = createSession(tmpDir);
+		const editTool = new EditTool(session);
+		const checksum = getChunkChecksum(originalSource, "typescript", "class_Server.fn_handle");
+
+		await editTool.execute("chunk-edit-full-path-resolve", {
+			path: filePath,
+			edits: [
+				{
+					sel: `class_Server.fn_handleError#${checksum}`,
+					op: "replace",
+					content: `  private handleError(err: Error): string {\n    return \`expanded:\${err.message}\`;\n  }\n`,
+				},
+			],
+		} as never);
+
+		const updatedSource = await Bun.file(filePath).text();
+		expect(updatedSource).toContain("expanded:");
+		expect(updatedSource).not.toContain("total += 0;");
+	});
+
 	it("reuses a stale child selector when the checksum still matches under the same parent", async () => {
 		const filePath = path.join(tmpDir, "stale-selector.ts");
 		const originalSource = ["class A {", "  run(): void { work(); }", "}", ""].join("\n");
