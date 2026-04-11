@@ -84,7 +84,7 @@ const IMAGE_MIME_BY_EXTENSION = new Map<string, string>([
 ]);
 const SUPPORTED_INLINE_IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 const MAX_INLINE_IMAGE_SOURCE_BYTES = 20 * 1024 * 1024;
-const MAX_INLINE_IMAGE_OUTPUT_BYTES = 0.75 * 1024 * 1024;
+const MAX_INLINE_IMAGE_OUTPUT_BYTES = 300 * 1024;
 
 // =============================================================================
 // Utilities

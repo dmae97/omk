@@ -10,8 +10,7 @@ use std::{io::Cursor, sync::Arc};
 
 use icy_sixel::{EncodeOptions, sixel_encode};
 use image::{
-	DynamicImage, ImageFormat as StdImageFormat, ImageReader,
-	codecs::{jpeg::JpegEncoder, webp::WebPEncoder},
+	DynamicImage, ImageFormat as StdImageFormat, ImageReader, codecs::jpeg::JpegEncoder,
 	imageops::FilterType,
 };
 use napi::bindgen_prelude::*;
@@ -173,11 +172,13 @@ fn encode_image(img: &DynamicImage, format: ImageFormat, quality: u8) -> Result<
 			Ok(buffer)
 		},
 		ImageFormat::WEBP => {
-			let mut buffer = Vec::with_capacity((w * h * 4) as usize);
-			let encoder = WebPEncoder::new_lossless(&mut buffer);
-			img.write_with_encoder(encoder)
-				.map_err(|e| Error::from_reason(format!("Failed to encode WebP: {e}")))?;
-			Ok(buffer)
+			// Lossy WebP via libwebp (the `image` crate's bundled WebP encoder is
+			// lossless-only). quality is 0..=100; libwebp accepts an f32 in the same
+			// range.
+			let encoder = webp::Encoder::from_image(img)
+				.map_err(|e| Error::from_reason(format!("Failed to prepare WebP encoder: {e}")))?;
+			let memory = encoder.encode(quality as f32);
+			Ok(memory.to_vec())
 		},
 		ImageFormat::GIF => {
 			let mut buffer = Vec::with_capacity((w * h) as usize);

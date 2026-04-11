@@ -1471,13 +1471,12 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 						buffer = (await untilAborted(signal, () => page.screenshot({ type: "png", fullPage }))) as Buffer;
 					}
 
-					// Compress for API content (same as pasted images)
-					// NOTE: screenshots can be deceptively large (especially PNG) even at modest resolutions,
-					// and tool results are immediately embedded in the next LLM request.
-					// Use a tighter budget than the global per-image limit to avoid 413 request_too_large.
+					// Compress aggressively for API content — screenshots are the most
+					// frequent image source and land directly in the next LLM request.
+					// 1024px is plenty for OCR/UI inspection; 150KB keeps payloads lean.
 					const resized = await resizeImage(
 						{ type: "image", data: buffer.toBase64(), mimeType: "image/png" },
-						{ maxBytes: 0.75 * 1024 * 1024 },
+						{ maxWidth: 1024, maxHeight: 1024, maxBytes: 150 * 1024, jpegQuality: 70 },
 					);
 					// Resolve destination: user-defined path > screenshotDir (auto-named) > temp file.
 					const screenshotDir = (() => {
