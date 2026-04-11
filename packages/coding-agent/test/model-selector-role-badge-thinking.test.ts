@@ -21,6 +21,8 @@ function createSelector(model: Model, settings: Settings): ModelSelectorComponen
 	const modelRegistry = {
 		getAll: () => [model],
 		getDiscoverableProviders: () => [],
+		getCanonicalModels: () => [],
+		resolveCanonicalModel: () => undefined,
 	} as unknown as ModelRegistry;
 	const ui = {
 		requestRender: vi.fn(),

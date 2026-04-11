@@ -868,9 +868,18 @@ providers:
     auth: none
     discovery:
       type: llama.cpp
+
+equivalence:
+  overrides:
+    zenmux/codex: gpt-5.3-codex
+    p-codex/codex: gpt-5.3-codex
+  exclude:
+    - demo/codex-preview
 ```
 
 **Supported APIs:** `openai-completions`, `openai-responses`, `openai-codex-responses`, `azure-openai-responses`, `anthropic-messages`, `google-generative-ai`, `google-vertex`
+
+Canonical ids are official upstream model ids such as `claude-sonnet-4-6` or `gpt-5.3-codex`. Use `equivalence.overrides` to map custom provider variants into those canonical groups while keeping explicit `provider/model` selection available.
 
 ### Settings File
 
@@ -889,13 +898,17 @@ theme:
 
 enabledModels:
   - "anthropic/*"
-  - "*gpt*"
+  - "gpt-5.3-codex"
   - "gemini-2.5-pro:high"
 
 modelRoles:
-  default: anthropic/claude-sonnet-4-20250514
-  plan: anthropic/claude-opus-4-1:high
-  smol: anthropic/claude-sonnet-4-20250514
+  default: claude-sonnet-4-6
+  plan: claude-opus-4-6:high
+  smol: anthropic/claude-sonnet-4-6
+modelProviderOrder:
+  - github-copilot
+  - zenmux
+  - openai
 defaultThinkingLevel: high
 
 retry:
@@ -954,6 +967,8 @@ task:
     mode: none # none | worktree | fuse-overlay | fuse-projfs
     merge: patch # patch | branch
 ```
+
+`modelRoles` may use either canonical ids or explicit `provider/model` selectors. `modelProviderOrder` decides which provider backs a canonical model when multiple equivalent variants are available.
 
 Legacy migration notes:
 

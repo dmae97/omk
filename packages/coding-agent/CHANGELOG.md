@@ -1,16 +1,27 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added rendering of usage report entries for accounts with no usage limits, including account label and optional plan type with a `-- no limits` indicator
 - Updated account label resolution to fall back to email or accountId so unlabeled unlimited-plan accounts display a meaningful name
+- Added canonical model equivalence and provider coalescing across `models.yml`, `enabledModels`, `--models`, `/model`, and `--list-models`
+- Added `equivalence` overrides/exclusions to `models.yml` and `modelProviderOrder` to `config.yml` for global canonical-provider preference
 
 ### Changed
 
+- Updated interactive and CLI model listings/selectors to work with canonical model ids while resolving them to concrete provider variants for actual execution
+- Updated role assignment persistence so selected model settings now store the selector used by users, including thinking-level suffixes, while runtime continues to run against the resolved concrete provider model
+- Updated model scope resolution to expand exact canonical model ids into all matching provider variants when filtering supported model sets
 - Changed the agent to avoid giving time estimates or task-duration predictions in user responses, focusing on required work instead
 - Changed generated code guidance to avoid speculative abstractions and extra compatibility scaffolding, favoring direct implementations that match current needs
+- Changed model role resolution so roles can store either canonical model ids or explicit `provider/model` selectors while sessions continue to record the concrete model actually used
+
+### Fixed
+
+- Fixed model resolution for commit message generation, title generation, memory consolidation, and image inspection when role strings use canonical ids instead of raw provider/model values
+- Fixed default-model updates so previously configured thinking levels were preserved when reassigning a role
+- Fixed model scope and selection handling in CLI/session startup paths that previously failed to resolve aliases consistently across features
 
 ## [14.0.5] - 2026-04-11
 ### Added

@@ -31,7 +31,17 @@ import { type ConfigError, ConfigFile } from "../config";
 import { parseModelString } from "../config/model-resolver";
 import { isValidThemeColor, type ThemeColor } from "../modes/theme/theme";
 import type { AuthStorage, OAuthCredential } from "../session/auth-storage";
+import {
+	buildCanonicalModelIndex,
+	type CanonicalModelIndex,
+	type CanonicalModelRecord,
+	type CanonicalModelVariant,
+	formatCanonicalVariantSelector,
+	type ModelEquivalenceConfig,
+} from "./model-equivalence";
 import { type Settings, settings } from "./settings";
+
+export type { CanonicalModelIndex, CanonicalModelRecord, CanonicalModelVariant, ModelEquivalenceConfig };
 
 export const kNoAuth = "N/A";
 
@@ -263,8 +273,14 @@ const ProviderConfigSchema = Type.Object({
 	modelOverrides: Type.Optional(Type.Record(Type.String(), ModelOverrideSchema)),
 });
 
+const EquivalenceConfigSchema = Type.Object({
+	overrides: Type.Optional(Type.Record(Type.String(), Type.String({ minLength: 1 }))),
+	exclude: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+});
+
 const ModelsConfigSchema = Type.Object({
-	providers: Type.Record(Type.String(), ProviderConfigSchema),
+	providers: Type.Optional(Type.Record(Type.String(), ProviderConfigSchema)),
+	equivalence: Type.Optional(EquivalenceConfigSchema),
 });
 
 type ModelsConfig = Static<typeof ModelsConfigSchema>;
@@ -356,7 +372,7 @@ function validateProviderConfiguration(
 export const ModelsConfigFile = new ConfigFile<ModelsConfig>("models", ModelsConfigSchema).withValidation(
 	"models",
 	config => {
-		for (const [providerName, providerConfig] of Object.entries(config.providers)) {
+		for (const [providerName, providerConfig] of Object.entries(config.providers ?? {})) {
 			validateProviderConfiguration(
 				providerName,
 				{
@@ -405,6 +421,11 @@ export interface ProviderDiscoveryState {
 	error?: string;
 }
 
+export interface CanonicalModelQueryOptions {
+	availableOnly?: boolean;
+	candidates?: readonly Model<Api>[];
+}
+
 /** Result of loading custom models from models.json */
 interface CustomModelsResult {
 	models?: CustomModelOverlay[];
@@ -413,6 +434,7 @@ interface CustomModelsResult {
 	keylessProviders?: Set<string>;
 	discoverableProviders?: DiscoveryProviderConfig[];
 	configuredProviders?: Set<string>;
+	equivalence?: ModelEquivalenceConfig;
 	error?: ConfigError;
 	found: boolean;
 }
@@ -739,17 +761,27 @@ function getDisabledProviderIdsFromSettings(): Set<string> {
 	}
 }
 
+function getConfiguredProviderOrderFromSettings(): string[] {
+	try {
+		return settings.get("modelProviderOrder");
+	} catch {
+		return [];
+	}
+}
+
 /**
  * Model registry - loads and manages models, resolves API keys via AuthStorage.
  */
 export class ModelRegistry {
 	#models: Model<Api>[] = [];
+	#canonicalIndex: CanonicalModelIndex = { records: [], byId: new Map(), bySelector: new Map() };
 	#customProviderApiKeys: Map<string, string> = new Map();
 	#keylessProviders: Set<string> = new Set();
 	#discoverableProviders: DiscoveryProviderConfig[] = [];
 	#customModelOverlays: CustomModelOverlay[] = [];
 	#providerOverrides: Map<string, ProviderOverride> = new Map();
 	#modelOverrides: Map<string, Map<string, ModelOverride>> = new Map();
+	#equivalenceConfig: ModelEquivalenceConfig | undefined;
 	#configError: ConfigError | undefined = undefined;
 	#modelsConfigFile: ConfigFile<ModelsConfig>;
 	#registeredProviderSources: Set<string> = new Set();
@@ -824,6 +856,7 @@ export class ModelRegistry {
 		this.#discoverableProviders = [];
 		this.#providerOverrides.clear();
 		this.#modelOverrides.clear();
+		this.#equivalenceConfig = undefined;
 		this.#configError = undefined;
 		this.#providerDiscoveryStates.clear();
 		this.#loadModels();
@@ -845,6 +878,7 @@ export class ModelRegistry {
 			keylessProviders = new Set(),
 			discoverableProviders = [],
 			configuredProviders = new Set(),
+			equivalence,
 			error: configError,
 		} = this.#loadCustomModels();
 		this.#configError = configError;
@@ -853,6 +887,7 @@ export class ModelRegistry {
 		this.#customModelOverlays = customModels;
 		this.#providerOverrides = overrides;
 		this.#modelOverrides = modelOverrides;
+		this.#equivalenceConfig = equivalence;
 
 		this.#addImplicitDiscoverableProviders(configuredProviders);
 		const builtInModels = this.#applyHardcodedModelPolicies(this.#loadBuiltInModels(overrides));
@@ -861,6 +896,7 @@ export class ModelRegistry {
 		const combined = this.#mergeCustomModels(resolvedDefaults, this.#customModelOverlays);
 
 		this.#models = this.#applyModelOverrides(combined, this.#modelOverrides);
+		this.#rebuildCanonicalIndex();
 	}
 
 	/** Load built-in models, applying provider-level overrides only.
@@ -1045,9 +1081,10 @@ export class ModelRegistry {
 		const allModelOverrides = new Map<string, Map<string, ModelOverride>>();
 		const keylessProviders = new Set<string>();
 		const discoverableProviders: DiscoveryProviderConfig[] = [];
-		const configuredProviders = new Set(Object.keys(value.providers));
+		const providerEntries = Object.entries(value.providers ?? {});
+		const configuredProviders = new Set(Object.keys(value.providers ?? {}));
 
-		for (const [providerName, providerConfig] of Object.entries(value.providers)) {
+		for (const [providerName, providerConfig] of providerEntries) {
 			// Always set overrides when baseUrl/headers/apiKey/compat are present
 			if (providerConfig.baseUrl || providerConfig.headers || providerConfig.apiKey || providerConfig.compat) {
 				overrides.set(providerName, {
@@ -1097,6 +1134,7 @@ export class ModelRegistry {
 			keylessProviders,
 			discoverableProviders,
 			configuredProviders,
+			equivalence: value.equivalence,
 			found: true,
 		};
 	}
@@ -1147,6 +1185,7 @@ export class ModelRegistry {
 		const resolved = this.#mergeResolvedModels(this.#models, discoveredModels);
 		const combined = this.#mergeCustomModels(resolved, this.#customModelOverlays);
 		this.#models = this.#applyModelOverrides(combined, this.#modelOverrides);
+		this.#rebuildCanonicalIndex();
 	}
 
 	async #discoverProviderModels(
@@ -1653,10 +1692,14 @@ export class ModelRegistry {
 		});
 	}
 
+	#rebuildCanonicalIndex(): void {
+		this.#canonicalIndex = buildCanonicalModelIndex(this.#models, this.#equivalenceConfig);
+	}
+
 	#parseModels(config: ModelsConfig): CustomModelOverlay[] {
 		const models: CustomModelOverlay[] = [];
 
-		for (const [providerName, providerConfig] of Object.entries(config.providers)) {
+		for (const [providerName, providerConfig] of Object.entries(config.providers ?? {})) {
 			const modelDefs = providerConfig.models ?? [];
 			if (modelDefs.length === 0) continue; // Override-only, no custom models
 			if (providerConfig.apiKey) {
@@ -1688,17 +1731,139 @@ export class ModelRegistry {
 		return this.#models;
 	}
 
+	#isModelAvailable(model: Model<Api>): boolean {
+		const disabledProviders = getDisabledProviderIdsFromSettings();
+		return (
+			!disabledProviders.has(model.provider) &&
+			(this.#keylessProviders.has(model.provider) || this.authStorage.hasAuth(model.provider))
+		);
+	}
+
+	#filterCanonicalVariants(
+		record: CanonicalModelRecord,
+		options: CanonicalModelQueryOptions | undefined,
+	): CanonicalModelVariant[] {
+		const candidateKeys = options?.candidates
+			? new Set(options.candidates.map(candidate => formatCanonicalVariantSelector(candidate)))
+			: undefined;
+		return record.variants.filter(variant => {
+			if (candidateKeys && !candidateKeys.has(variant.selector)) {
+				return false;
+			}
+			if (options?.availableOnly && !this.#isModelAvailable(variant.model)) {
+				return false;
+			}
+			return true;
+		});
+	}
+
+	#providerRank(models: readonly Model<Api>[]): Map<string, number> {
+		const configuredProviders = getConfiguredProviderOrderFromSettings();
+		const result = new Map<string, number>();
+		let nextRank = 0;
+		for (const provider of configuredProviders) {
+			const normalized = provider.trim().toLowerCase();
+			if (!normalized || result.has(normalized)) {
+				continue;
+			}
+			result.set(normalized, nextRank);
+			nextRank += 1;
+		}
+		for (const model of models) {
+			const normalized = model.provider.toLowerCase();
+			if (result.has(normalized)) {
+				continue;
+			}
+			result.set(normalized, nextRank);
+			nextRank += 1;
+		}
+		return result;
+	}
+
+	#resolveCanonicalVariant(
+		variants: readonly CanonicalModelVariant[],
+		allCandidates: readonly Model<Api>[],
+	): CanonicalModelVariant | undefined {
+		if (variants.length === 0) {
+			return undefined;
+		}
+		const providerRank = this.#providerRank(allCandidates);
+		const modelOrder = new Map<string, number>();
+		for (let index = 0; index < allCandidates.length; index += 1) {
+			modelOrder.set(formatCanonicalVariantSelector(allCandidates[index]!), index);
+		}
+		const sourceRank: Record<CanonicalModelVariant["source"], number> = {
+			override: 1,
+			bundled: 1,
+			heuristic: 2,
+			fallback: 3,
+		};
+		return [...variants].sort((left, right) => {
+			const leftProviderRank = providerRank.get(left.model.provider.toLowerCase()) ?? Number.MAX_SAFE_INTEGER;
+			const rightProviderRank = providerRank.get(right.model.provider.toLowerCase()) ?? Number.MAX_SAFE_INTEGER;
+			if (leftProviderRank !== rightProviderRank) {
+				return leftProviderRank - rightProviderRank;
+			}
+			const leftExact = left.model.id === left.canonicalId ? 0 : 1;
+			const rightExact = right.model.id === right.canonicalId ? 0 : 1;
+			if (leftExact !== rightExact) {
+				return leftExact - rightExact;
+			}
+			if (sourceRank[left.source] !== sourceRank[right.source]) {
+				return sourceRank[left.source] - sourceRank[right.source];
+			}
+			if (left.model.id.length !== right.model.id.length) {
+				return left.model.id.length - right.model.id.length;
+			}
+			const leftOrder = modelOrder.get(left.selector) ?? Number.MAX_SAFE_INTEGER;
+			const rightOrder = modelOrder.get(right.selector) ?? Number.MAX_SAFE_INTEGER;
+			return leftOrder - rightOrder;
+		})[0];
+	}
+
+	getCanonicalModels(options?: CanonicalModelQueryOptions): CanonicalModelRecord[] {
+		const records: CanonicalModelRecord[] = [];
+		for (const record of this.#canonicalIndex.records) {
+			const variants = this.#filterCanonicalVariants(record, options);
+			if (variants.length === 0) {
+				continue;
+			}
+			records.push({
+				id: record.id,
+				name: record.name,
+				variants,
+			});
+		}
+		return records;
+	}
+
+	getCanonicalVariants(canonicalId: string, options?: CanonicalModelQueryOptions): CanonicalModelVariant[] {
+		const record = this.#canonicalIndex.byId.get(canonicalId.trim().toLowerCase());
+		if (!record) {
+			return [];
+		}
+		return this.#filterCanonicalVariants(record, options);
+	}
+
+	resolveCanonicalModel(canonicalId: string, options?: CanonicalModelQueryOptions): Model<Api> | undefined {
+		const variants = this.getCanonicalVariants(canonicalId, options);
+		if (variants.length === 0) {
+			return undefined;
+		}
+		const candidates = options?.candidates ?? (options?.availableOnly ? this.getAvailable() : this.getAll());
+		return this.#resolveCanonicalVariant(variants, candidates)?.model;
+	}
+
+	getCanonicalId(model: Model<Api>): string | undefined {
+		return this.#canonicalIndex.bySelector.get(formatCanonicalVariantSelector(model).toLowerCase());
+	}
+
 	/**
 	 * Get only models that have auth configured.
 	 * This is a fast check that doesn't refresh OAuth tokens.
 	 */
 	getAvailable(): Model<Api>[] {
-		const disabledProviders = getDisabledProviderIdsFromSettings();
-		return this.#models.filter(
-			m =>
-				!disabledProviders.has(m.provider) &&
-				(this.#keylessProviders.has(m.provider) || this.authStorage.hasAuth(m.provider)),
-		);
+		return this.#models.filter(model => this.#isModelAvailable(model));
 	}
 
 	getDiscoverableProviders(): string[] {
@@ -1853,11 +2018,13 @@ export class ModelRegistry {
 				const credential = this.authStorage.getOAuthCredential(providerName);
 				if (credential) {
 					this.#models = config.oauth.modifyModels(nextModels, credential);
+					this.#rebuildCanonicalIndex();
 					return;
 				}
 			}
 
 			this.#models = nextModels;
+			this.#rebuildCanonicalIndex();
 			return;
 		}
 
@@ -1870,6 +2037,7 @@ export class ModelRegistry {
 					headers: config.headers ? { ...m.headers, ...config.headers } : m.headers,
 				};
 			});
+			this.#rebuildCanonicalIndex();
 		}
 	}
 

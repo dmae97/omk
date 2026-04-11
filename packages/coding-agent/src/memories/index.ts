@@ -6,7 +6,7 @@ import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import { completeSimple, Effort, type Model } from "@oh-my-pi/pi-ai";
 import { getAgentDbPath, getMemoriesDir, logger, parseJsonlLenient, prompt } from "@oh-my-pi/pi-utils";
 import type { ModelRegistry } from "../config/model-registry";
-import { parseModelString } from "../config/model-resolver";
+import { resolveModelRoleValue } from "../config/model-resolver";
 import type { Settings } from "../config/settings";
 import consolidationTemplate from "../prompts/memories/consolidation.md" with { type: "text" };
 import readPathTemplate from "../prompts/memories/read-path.md" with { type: "text" };
@@ -1055,11 +1055,12 @@ async function resolveMemoryModel(options: {
 	const { modelRegistry, session, fallbackRole } = options;
 	const requestedModel = session.settings.getModelRole(fallbackRole) || session.settings.getModelRole("default");
 	if (requestedModel) {
-		const parsed = parseModelString(requestedModel);
-		if (parsed) {
-			const found = modelRegistry.find(parsed.provider, parsed.id);
-			if (found) return found;
-		}
+		const resolved = resolveModelRoleValue(requestedModel, modelRegistry.getAll(), {
+			settings: session.settings,
+			matchPreferences: { usageOrder: session.settings.getStorage()?.getModelUsageOrder() },
+			modelRegistry,
+		});
+		if (resolved.model) return resolved.model;
 	}
 	return session.model ?? modelRegistry.getAll()[0];
 }

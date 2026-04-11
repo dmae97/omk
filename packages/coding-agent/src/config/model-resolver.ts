@@ -58,12 +58,24 @@ export function formatModelString(model: Model<Api>): string {
 	return `${model.provider}/${model.id}`;
 }
 
+export function formatModelSelectorValue(selector: string, thinkingLevel: ThinkingLevel | undefined): string {
+	return thinkingLevel && thinkingLevel !== ThinkingLevel.Inherit ? `${selector}:${thinkingLevel}` : selector;
+}
+
 export interface ModelMatchPreferences {
 	/** Most-recently-used model keys (provider/modelId) to prefer when ambiguous. */
 	usageOrder?: string[];
 	/** Providers to deprioritize when no recent usage is available. */
 	deprioritizeProviders?: string[];
 }
+
+export type CanonicalModelRegistry = Partial<
+	Pick<ModelRegistry, "resolveCanonicalModel" | "getCanonicalVariants" | "getCanonicalId">
+>;
+export type ModelLookupRegistry = Pick<ModelRegistry, "getAvailable"> & Partial<CanonicalModelRegistry>;
+type CliModelRegistry = Pick<ModelRegistry, "getAll"> & Partial<CanonicalModelRegistry>;
+type InitialModelRegistry = Pick<ModelRegistry, "getAvailable" | "find">;
+type RestorableModelRegistry = Pick<ModelRegistry, "getAvailable" | "find" | "getApiKey">;
 
 interface ModelPreferenceContext {
 	modelUsageRank: Map<string, number>;
@@ -142,9 +154,8 @@ function isAlias(id: string): boolean {
 }
 
 /**
- * Find an exact model reference match.
- * Supports either a bare model id or a canonical provider/modelId reference.
- * When matching by bare id, ambiguous matches across providers are rejected.
+ * Find an exact explicit provider/model match.
+ * Bare model ids are handled separately so canonical ids can coalesce variants.
  */
 export function findExactModelReferenceMatch(
 	modelReference: string,
@@ -152,18 +163,6 @@ export function findExactModelReferenceMatch(
 ): Model<Api> | undefined {
 	const trimmedReference = modelReference.trim();
 	if (!trimmedReference) {
-		return undefined;
-	}
-
-	const normalizedReference = trimmedReference.toLowerCase();
-
-	const canonicalMatches = availableModels.filter(
-		model => `${model.provider}/${model.id}`.toLowerCase() === normalizedReference,
-	);
-	if (canonicalMatches.length === 1) {
-		return canonicalMatches[0];
-	}
-	if (canonicalMatches.length > 1) {
 		return undefined;
 	}
 
@@ -185,9 +184,25 @@ export function findExactModelReferenceMatch(
 			}
 		}
 	}
+	return undefined;
+}
 
-	const idMatches = availableModels.filter(model => model.id.toLowerCase() === normalizedReference);
-	return idMatches.length === 1 ? idMatches[0] : undefined;
+function findExactCanonicalModelMatch(
+	modelReference: string,
+	availableModels: Model<Api>[],
+	modelRegistry: CanonicalModelRegistry | undefined,
+): Model<Api> | undefined {
+	if (!modelRegistry) {
+		return undefined;
+	}
+	const trimmedReference = modelReference.trim();
+	if (!trimmedReference || trimmedReference.includes("/")) {
+		return undefined;
+	}
+	return modelRegistry.resolveCanonicalModel?.(trimmedReference, {
+		availableOnly: false,
+		candidates: availableModels,
+	});
 }
 
 /**
@@ -198,11 +213,18 @@ function tryMatchModel(
 	modelPattern: string,
 	availableModels: Model<Api>[],
 	context: ModelPreferenceContext,
+	options?: { modelRegistry?: CanonicalModelRegistry },
 ): Model<Api> | undefined {
-	// Try exact reference match first (handles provider/modelId and bare id with ambiguity rejection)
+	// Explicit provider/model selectors always bypass canonical coalescing.
 	const exactRefMatch = findExactModelReferenceMatch(modelPattern, availableModels);
 	if (exactRefMatch) {
 		return exactRefMatch;
+	}
+
+	// Exact canonical ids coalesce provider variants before bare-id matching.
+	const exactCanonicalMatch = findExactCanonicalModelMatch(modelPattern, availableModels, options?.modelRegistry);
+	if (exactCanonicalMatch) {
+		return exactCanonicalMatch;
 	}
 
 	// Check for provider/modelId format — fuzzy match within provider
@@ -300,10 +322,10 @@ function parseModelPatternWithContext(
 	pattern: string,
 	availableModels: Model<Api>[],
 	context: ModelPreferenceContext,
-	options?: { allowInvalidThinkingSelectorFallback?: boolean },
+	options?: { allowInvalidThinkingSelectorFallback?: boolean; modelRegistry?: CanonicalModelRegistry },
 ): ParsedModelResult {
 	// Try exact match first
-	const exactMatch = tryMatchModel(pattern, availableModels, context);
+	const exactMatch = tryMatchModel(pattern, availableModels, context, options);
 	if (exactMatch) {
 		return { model: exactMatch, thinkingLevel: undefined, warning: undefined, explicitThinkingLevel: false };
 	}
@@ -357,7 +379,7 @@ export function parseModelPattern(
 	pattern: string,
 	availableModels: Model<Api>[],
 	preferences?: ModelMatchPreferences,
-	options?: { allowInvalidThinkingSelectorFallback?: boolean },
+	options?: { allowInvalidThinkingSelectorFallback?: boolean; modelRegistry?: CanonicalModelRegistry },
 ): ParsedModelResult {
 	const context = buildPreferenceContext(availableModels, preferences);
 	return parseModelPatternWithContext(pattern, availableModels, context, options);
@@ -469,7 +491,7 @@ export interface ResolvedModelRoleValue {
 export function resolveModelRoleValue(
 	roleValue: string | undefined,
 	availableModels: Model<Api>[],
-	options?: { settings?: Settings; matchPreferences?: ModelMatchPreferences },
+	options?: { settings?: Settings; matchPreferences?: ModelMatchPreferences; modelRegistry?: CanonicalModelRegistry },
 ): ResolvedModelRoleValue {
 	if (!roleValue) {
 		return { model: undefined, thinkingLevel: undefined, explicitThinkingLevel: false, warning: undefined };
@@ -490,7 +512,9 @@ export function resolveModelRoleValue(
 
 	let warning: string | undefined;
 	for (const effectivePattern of effectivePatterns) {
-		const resolved = parseModelPattern(effectivePattern, availableModels, options?.matchPreferences);
+		const resolved = parseModelPattern(effectivePattern, availableModels, options?.matchPreferences, {
+			modelRegistry: options?.modelRegistry,
+		});
 		if (resolved.model) {
 			return {
 				model: resolved.model,
@@ -543,13 +567,14 @@ export function resolveModelFromString(
 	value: string,
 	available: Model<Api>[],
 	matchPreferences?: ModelMatchPreferences,
+	modelRegistry?: CanonicalModelRegistry,
 ): Model<Api> | undefined {
 	const parsed = parseModelString(value);
 	if (parsed) {
 		const exact = available.find(model => model.provider === parsed.provider && model.id === parsed.id);
 		if (exact) return exact;
 	}
-	return parseModelPattern(value, available, matchPreferences).model;
+	return parseModelPattern(value, available, matchPreferences, { modelRegistry }).model;
 }
 
 /**
@@ -560,13 +585,19 @@ export function resolveModelFromSettings(options: {
 	availableModels: Model<Api>[];
 	matchPreferences?: ModelMatchPreferences;
 	roleOrder?: readonly ModelRole[];
+	modelRegistry?: CanonicalModelRegistry;
 }): Model<Api> | undefined {
-	const { settings, availableModels, matchPreferences, roleOrder } = options;
+	const { settings, availableModels, matchPreferences, roleOrder, modelRegistry } = options;
 	const roles = roleOrder ?? MODEL_ROLE_IDS;
 	for (const role of roles) {
 		const configured = settings.getModelRole(role);
 		if (!configured) continue;
-		const resolved = resolveModelFromString(expandRoleAlias(configured, settings), availableModels, matchPreferences);
+		const resolved = resolveModelFromString(
+			expandRoleAlias(configured, settings),
+			availableModels,
+			matchPreferences,
+			modelRegistry,
+		);
 		if (resolved) return resolved;
 	}
 	return availableModels[0];
@@ -577,7 +608,7 @@ export function resolveModelFromSettings(options: {
  */
 export function resolveModelOverride(
 	modelPatterns: string[],
-	modelRegistry: ModelRegistry,
+	modelRegistry: ModelLookupRegistry,
 	settings?: Settings,
 ): { model?: Model<Api>; thinkingLevel?: ThinkingLevel; explicitThinkingLevel: boolean } {
 	if (modelPatterns.length === 0) return { explicitThinkingLevel: false };
@@ -587,6 +618,7 @@ export function resolveModelOverride(
 		const { model, thinkingLevel, explicitThinkingLevel } = resolveModelRoleValue(pattern, availableModels, {
 			settings,
 			matchPreferences,
+			modelRegistry,
 		});
 		if (model) {
 			return { model, thinkingLevel, explicitThinkingLevel };
@@ -602,18 +634,50 @@ export function resolveRoleSelection(
 	roles: readonly string[],
 	settings: Settings,
 	availableModels: Model<Api>[],
+	modelRegistry?: CanonicalModelRegistry,
 ): { model: Model<Api>; thinkingLevel?: ThinkingLevel } | undefined {
 	const matchPreferences = { usageOrder: settings.getStorage()?.getModelUsageOrder() };
 	for (const role of roles) {
 		const resolved = resolveModelRoleValue(settings.getModelRole(role), availableModels, {
 			settings,
 			matchPreferences,
+			modelRegistry,
 		});
 		if (resolved.model) {
 			return { model: resolved.model, thinkingLevel: resolved.thinkingLevel };
 		}
 	}
 	return undefined;
+}
+
+function resolveExactCanonicalScopePattern(
+	pattern: string,
+	modelRegistry: Pick<ModelRegistry, "getCanonicalVariants">,
+	availableModels: Model<Api>[],
+): { models: Model<Api>[]; thinkingLevel?: ThinkingLevel; explicitThinkingLevel: boolean } | undefined {
+	const lastColonIndex = pattern.lastIndexOf(":");
+	let canonicalId = pattern;
+	let thinkingLevel: ThinkingLevel | undefined;
+	let explicitThinkingLevel = false;
+
+	if (lastColonIndex !== -1) {
+		const suffix = pattern.substring(lastColonIndex + 1);
+		const parsedThinkingLevel = parseThinkingLevel(suffix);
+		if (parsedThinkingLevel) {
+			canonicalId = pattern.substring(0, lastColonIndex);
+			thinkingLevel = parsedThinkingLevel;
+			explicitThinkingLevel = true;
+		}
+	}
+
+	const variants = modelRegistry
+		.getCanonicalVariants(canonicalId, { availableOnly: true, candidates: availableModels })
+		.map(variant => variant.model);
+	if (variants.length === 0) {
+		return undefined;
+	}
+
+	return { models: variants, thinkingLevel, explicitThinkingLevel };
 }
 
 /**
@@ -629,7 +693,7 @@ export function resolveRoleSelection(
  */
 export async function resolveModelScope(
 	patterns: string[],
-	modelRegistry: ModelRegistry,
+	modelRegistry: Pick<ModelRegistry, "getAvailable" | "getCanonicalVariants">,
 	preferences?: ModelMatchPreferences,
 ): Promise<ScopedModel[]> {
 	const availableModels = modelRegistry.getAvailable();
@@ -682,10 +746,28 @@ export async function resolveModelScope(
 			continue;
 		}
 
+		const exactCanonical = resolveExactCanonicalScopePattern(pattern, modelRegistry, availableModels);
+		if (exactCanonical) {
+			for (const model of exactCanonical.models) {
+				if (!scopedModels.find(sm => modelsAreEqual(sm.model, model))) {
+					scopedModels.push({
+						model,
+						thinkingLevel: exactCanonical.explicitThinkingLevel
+							? (resolveThinkingLevelForModel(model, exactCanonical.thinkingLevel) ??
+								exactCanonical.thinkingLevel)
+							: exactCanonical.thinkingLevel,
+						explicitThinkingLevel: exactCanonical.explicitThinkingLevel,
+					});
+				}
+			}
+			continue;
+		}
+
 		const { model, thinkingLevel, warning, explicitThinkingLevel } = parseModelPatternWithContext(
 			pattern,
 			availableModels,
 			context,
+			{ modelRegistry },
 		);
 
 		if (warning) {
@@ -714,6 +796,7 @@ export async function resolveModelScope(
 
 export interface ResolveCliModelResult {
 	model: Model<Api> | undefined;
+	selector?: string;
 	thinkingLevel?: ThinkingLevel;
 	warning: string | undefined;
 	error: string | undefined;
@@ -725,19 +808,20 @@ export interface ResolveCliModelResult {
 export function resolveCliModel(options: {
 	cliProvider?: string;
 	cliModel?: string;
-	modelRegistry: ModelRegistry;
+	modelRegistry: CliModelRegistry;
 	preferences?: ModelMatchPreferences;
 }): ResolveCliModelResult {
 	const { cliProvider, cliModel, modelRegistry, preferences } = options;
 
 	if (!cliModel) {
-		return { model: undefined, warning: undefined, error: undefined };
+		return { model: undefined, selector: undefined, warning: undefined, error: undefined };
 	}
 
 	const availableModels = modelRegistry.getAll();
 	if (availableModels.length === 0) {
 		return {
 			model: undefined,
+			selector: undefined,
 			warning: undefined,
 			error: "No models available. Check your installation or add models to models.json.",
 		};
@@ -752,13 +836,15 @@ export function resolveCliModel(options: {
 	if (cliProvider && !provider) {
 		return {
 			model: undefined,
+			selector: undefined,
 			warning: undefined,
 			error: `Unknown provider "${cliProvider}". Use --list-models to see available providers/models.`,
 		};
 	}
 
+	const trimmedModel = cliModel.trim();
 	if (!provider) {
-		const lower = cliModel.toLowerCase();
+		const lower = trimmedModel.toLowerCase();
 		// When input has provider/id format (e.g. "zai/glm-5"), prefer decomposed
 		// provider+id match over flat id match. Without this, a model with id
 		// "zai/glm-5" on provider "vercel-ai-gateway" wins over provider "zai"
@@ -772,17 +858,35 @@ export function resolveCliModel(options: {
 				model => model.provider.toLowerCase() === prefix && model.id.toLowerCase() === suffix,
 			);
 		}
+		if (!exact && !trimmedModel.includes(":")) {
+			const canonicalMatch = modelRegistry.resolveCanonicalModel?.(trimmedModel, { availableOnly: false });
+			if (canonicalMatch) {
+				return {
+					model: canonicalMatch,
+					selector: modelRegistry.getCanonicalId?.(canonicalMatch) ?? trimmedModel,
+					warning: undefined,
+					thinkingLevel: undefined,
+					error: undefined,
+				};
+			}
+		}
 		if (!exact) {
 			exact = availableModels.find(
 				model => model.id.toLowerCase() === lower || `${model.provider}/${model.id}`.toLowerCase() === lower,
 			);
 		}
 		if (exact) {
-			return { model: exact, warning: undefined, thinkingLevel: undefined, error: undefined };
+			return {
+				model: exact,
+				selector: formatModelString(exact),
+				warning: undefined,
+				thinkingLevel: undefined,
+				error: undefined,
+			};
 		}
 	}
 
-	let pattern = cliModel;
+	let pattern = trimmedModel;
 
 	if (!provider) {
 		const slashIndex = cliModel.indexOf("/");
@@ -804,19 +908,42 @@ export function resolveCliModel(options: {
 	const candidates = provider ? availableModels.filter(model => model.provider === provider) : availableModels;
 	const { model, thinkingLevel, warning } = parseModelPattern(pattern, candidates, preferences, {
 		allowInvalidThinkingSelectorFallback: false,
+		modelRegistry,
 	});
 
 	if (!model) {
 		const display = provider ? `${provider}/${pattern}` : cliModel;
 		return {
 			model: undefined,
+			selector: undefined,
 			thinkingLevel: undefined,
 			warning,
 			error: `Model "${display}" not found. Use --list-models to see available models.`,
 		};
 	}
 
-	return { model, thinkingLevel, warning, error: undefined };
+	let selector = provider ? formatModelString(model) : undefined;
+	if (!provider) {
+		const lastColonIndex = pattern.lastIndexOf(":");
+		const canonicalCandidate =
+			lastColonIndex !== -1 && parseThinkingLevel(pattern.substring(lastColonIndex + 1))
+				? pattern.substring(0, lastColonIndex)
+				: pattern;
+		if (!canonicalCandidate.includes("/")) {
+			const canonicalResolved = modelRegistry.resolveCanonicalModel?.(canonicalCandidate, { availableOnly: false });
+			if (canonicalResolved && canonicalResolved.provider === model.provider && canonicalResolved.id === model.id) {
+				selector = modelRegistry.getCanonicalId?.(canonicalResolved) ?? canonicalCandidate;
+			}
+		}
+	}
+
+	return {
+		model,
+		selector,
+		thinkingLevel,
+		warning,
+		error: undefined,
+	};
 }
 
 export interface InitialModelResult {
@@ -841,7 +968,7 @@ export async function findInitialModel(options: {
 	defaultProvider?: string;
 	defaultModelId?: string;
 	defaultThinkingSelector?: Effort;
-	modelRegistry: ModelRegistry;
+	modelRegistry: InitialModelRegistry;
 }): Promise<InitialModelResult> {
 	const {
 		cliProvider,
@@ -923,7 +1050,7 @@ export async function restoreModelFromSession(
 	savedModelId: string,
 	currentModel: Model<Api> | undefined,
 	shouldPrintMessages: boolean,
-	modelRegistry: ModelRegistry,
+	modelRegistry: RestorableModelRegistry,
 ): Promise<{ model: Model<Api> | undefined; fallbackMessage: string | undefined }> {
 	const restoredModel = modelRegistry.find(savedProvider, savedModelId);
 
@@ -998,7 +1125,7 @@ export async function restoreModelFromSession(
  * @returns The best available smol model, or undefined if none found
  */
 export async function findSmolModel(
-	modelRegistry: ModelRegistry,
+	modelRegistry: ModelLookupRegistry,
 	savedModel?: string,
 ): Promise<Model<Api> | undefined> {
 	const availableModels = modelRegistry.getAvailable();
@@ -1006,11 +1133,8 @@ export async function findSmolModel(
 
 	// 1. Try saved model from settings
 	if (savedModel) {
-		const parsed = parseModelString(savedModel);
-		if (parsed) {
-			const match = availableModels.find(m => m.provider === parsed.provider && m.id === parsed.id);
-			if (match) return match;
-		}
+		const match = resolveModelFromString(savedModel, availableModels, undefined, modelRegistry);
+		if (match) return match;
 	}
 
 	// 2. Try priority chain
@@ -1020,7 +1144,7 @@ export async function findSmolModel(
 		if (providerMatch) return providerMatch;
 
 		// Try exact match first
-		const exactMatch = availableModels.find(m => m.id.toLowerCase() === pattern);
+		const exactMatch = parseModelPattern(pattern, availableModels, undefined, { modelRegistry }).model;
 		if (exactMatch) return exactMatch;
 
 		// Try fuzzy match (substring)
@@ -1041,7 +1165,7 @@ export async function findSmolModel(
  * @returns The best available slow model, or undefined if none found
  */
 export async function findSlowModel(
-	modelRegistry: ModelRegistry,
+	modelRegistry: ModelLookupRegistry,
 	savedModel?: string,
 ): Promise<Model<Api> | undefined> {
 	const availableModels = modelRegistry.getAvailable();
@@ -1049,17 +1173,14 @@ export async function findSlowModel(
 
 	// 1. Try saved model from settings
 	if (savedModel) {
-		const parsed = parseModelString(savedModel);
-		if (parsed) {
-			const match = availableModels.find(m => m.provider === parsed.provider && m.id === parsed.id);
-			if (match) return match;
-		}
+		const match = resolveModelFromString(savedModel, availableModels, undefined, modelRegistry);
+		if (match) return match;
 	}
 
 	// 2. Try priority chain
 	for (const pattern of MODEL_PRIO.slow) {
 		// Try exact match first
-		const exactMatch = availableModels.find(m => m.id.toLowerCase() === pattern.toLowerCase());
+		const exactMatch = parseModelPattern(pattern, availableModels, undefined, { modelRegistry }).model;
 		if (exactMatch) return exactMatch;
 
 		// Try fuzzy match (substring)

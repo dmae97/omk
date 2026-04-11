@@ -27,7 +27,7 @@ function getTitleModel(
 	const availableModels = registry.getAvailable();
 	if (availableModels.length === 0) return undefined;
 
-	const titleModel = resolveRoleSelection(["commit", "smol"], settings, availableModels);
+	const titleModel = resolveRoleSelection(["commit", "smol"], settings, availableModels, registry);
 	if (titleModel) {
 		return { model: titleModel.model, thinkingLevel: titleModel.thinkingLevel };
 	}

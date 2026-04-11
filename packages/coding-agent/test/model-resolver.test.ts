@@ -9,6 +9,7 @@ import {
 	resolveModelFromString,
 	resolveModelOverride,
 	resolveModelRoleValue,
+	resolveModelScope,
 } from "@oh-my-pi/pi-coding-agent/config/model-resolver";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 
@@ -141,6 +142,66 @@ const mockCodexOverlapModels: Model<"anthropic-messages">[] = [
 		maxTokens: 8192,
 	},
 ];
+
+const canonicalVariantModels: Model<"anthropic-messages">[] = [
+	{
+		id: "claude-sonnet-4-5",
+		name: "Claude Sonnet 4.5",
+		api: "anthropic-messages",
+		provider: "anthropic",
+		baseUrl: "https://api.anthropic.com",
+		reasoning: true,
+		thinking: {
+			mode: "budget",
+			minLevel: Effort.Minimal,
+			maxLevel: Effort.High,
+		},
+		input: ["text", "image"],
+		cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+		contextWindow: 200000,
+		maxTokens: 8192,
+	},
+	{
+		id: "anthropic/claude-sonnet-4.5",
+		name: "Claude Sonnet 4.5 (Copilot)",
+		api: "anthropic-messages",
+		provider: "github-copilot",
+		baseUrl: "https://api.githubcopilot.com",
+		reasoning: true,
+		thinking: {
+			mode: "budget",
+			minLevel: Effort.Minimal,
+			maxLevel: Effort.High,
+		},
+		input: ["text", "image"],
+		cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+		contextWindow: 200000,
+		maxTokens: 8192,
+	},
+];
+
+const canonicalRegistry = {
+	resolveCanonicalModel: (canonicalId: string, options?: { candidates?: Model<"anthropic-messages">[] }) => {
+		if (canonicalId !== "claude-sonnet-4-5") return undefined;
+		const candidates = options?.candidates ?? canonicalVariantModels;
+		return (
+			candidates.find(model => model.provider === "github-copilot") ??
+			candidates.find(model => model.provider === "anthropic")
+		);
+	},
+	getCanonicalVariants: (canonicalId: string, options?: { candidates?: Model<"anthropic-messages">[] }) => {
+		if (canonicalId !== "claude-sonnet-4-5") return [];
+		const candidates = options?.candidates ?? canonicalVariantModels;
+		return candidates.map(model => ({
+			canonicalId,
+			selector: `${model.provider}/${model.id}`,
+			model,
+			source: model.id === canonicalId ? "bundled" : "heuristic",
+		}));
+	},
+	getCanonicalId: () => "claude-sonnet-4-5",
+	getAvailable: () => canonicalVariantModels,
+} as unknown as Parameters<typeof resolveCliModel>[0]["modelRegistry"];
 
 const allModels = [...mockModels, ...mockOpenRouterModels, ...mockProviderOverlapModels, ...mockCodexOverlapModels];
 
@@ -319,6 +380,16 @@ describe("parseModelPattern", () => {
 			expect(result.model?.id).toBe("moonshotai/kimi-k2.5");
 		});
 	});
+
+	describe("canonical ids", () => {
+		test("resolves an exact canonical id through the registry before bare-id matching", () => {
+			const result = parseModelPattern("claude-sonnet-4-5", canonicalVariantModels, undefined, {
+				modelRegistry: canonicalRegistry,
+			});
+			expect(result.model?.provider).toBe("github-copilot");
+			expect(result.model?.id).toBe("anthropic/claude-sonnet-4.5");
+		});
+	});
 });
 
 describe("resolveModelRoleValue", () => {
@@ -484,6 +555,21 @@ describe("resolveModelOverride", () => {
 	});
 });
 describe("resolveCliModel", () => {
+	test("resolves exact canonical ids to the preferred concrete provider", () => {
+		const result = resolveCliModel({
+			cliModel: "claude-sonnet-4-5",
+			modelRegistry: {
+				...canonicalRegistry,
+				getAll: () => canonicalVariantModels,
+			} as unknown as Parameters<typeof resolveCliModel>[0]["modelRegistry"],
+		});
+
+		expect(result.error).toBeUndefined();
+		expect(result.selector).toBe("claude-sonnet-4-5");
+		expect(result.model?.provider).toBe("github-copilot");
+		expect(result.model?.id).toBe("anthropic/claude-sonnet-4.5");
+	});
+
 	test("resolves --model provider/id without --provider", () => {
 		const registry = {
 			getAll: () => allModels,
@@ -631,6 +717,22 @@ describe("resolveCliModel", () => {
 		expect(result.error).toBeUndefined();
 		expect(result.model?.provider).toBe("zai");
 		expect(result.model?.id).toBe("glm-5");
+	});
+});
+
+describe("resolveModelScope", () => {
+	test("expands exact canonical ids into all concrete variants", async () => {
+		const scoped = await resolveModelScope(["claude-sonnet-4-5"], {
+			getAvailable: () => canonicalVariantModels,
+			getCanonicalVariants: (canonicalId: string, options?: { candidates?: Model<"anthropic-messages">[] }) =>
+				canonicalRegistry.getCanonicalVariants!(canonicalId, options),
+		} as unknown as Parameters<typeof resolveModelScope>[1]);
+
+		expect(scoped).toHaveLength(2);
+		expect(scoped.map(entry => `${entry.model.provider}/${entry.model.id}`).sort()).toEqual([
+			"anthropic/claude-sonnet-4-5",
+			"github-copilot/anthropic/claude-sonnet-4.5",
+		]);
 	});
 });
 

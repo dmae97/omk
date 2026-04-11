@@ -453,7 +453,9 @@ async function buildSessionOptions(
 			}
 		} else if (resolved.model) {
 			options.model = resolved.model;
-			settings.overrideModelRoles({ default: `${resolved.model.provider}/${resolved.model.id}` });
+			settings.overrideModelRoles({
+				default: resolved.selector ?? `${resolved.model.provider}/${resolved.model.id}`,
+			});
 			if (!parsed.thinking && resolved.thinkingLevel) {
 				options.thinkingLevel = resolved.thinkingLevel;
 			}
@@ -467,6 +469,7 @@ async function buildSessionOptions(
 				{
 					settings,
 					matchPreferences: modelMatchPreferences,
+					modelRegistry,
 				},
 			);
 			const rememberedResolvedModel = rememberedSpec.model;

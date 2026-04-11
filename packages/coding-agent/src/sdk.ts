@@ -728,6 +728,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		resolveModelRoleValue(settings.getModelRole("default"), modelRegistry.getAvailable(), {
 			settings,
 			matchPreferences: modelMatchPreferences,
+			modelRegistry,
 		}),
 	);
 	let model = options.model;
@@ -1132,7 +1133,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		const matchPreferences = {
 			usageOrder: settings.getStorage()?.getModelUsageOrder(),
 		};
-		const { model: resolved } = parseModelPattern(options.modelPattern, availableModels, matchPreferences);
+		const { model: resolved } = parseModelPattern(options.modelPattern, availableModels, matchPreferences, {
+			modelRegistry,
+		});
 		if (resolved) {
 			model = resolved;
 			modelFallbackMessage = undefined;
