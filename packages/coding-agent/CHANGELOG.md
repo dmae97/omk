@@ -1,10 +1,16 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added rendering of usage report entries for accounts with no usage limits, including account label and optional plan type with a `-- no limits` indicator
 - Updated account label resolution to fall back to email or accountId so unlabeled unlimited-plan accounts display a meaningful name
+
+### Changed
+
+- Changed the agent to avoid giving time estimates or task-duration predictions in user responses, focusing on required work instead
+- Changed generated code guidance to avoid speculative abstractions and extra compatibility scaffolding, favoring direct implementations that match current needs
 
 ## [14.0.5] - 2026-04-11
 ### Added
