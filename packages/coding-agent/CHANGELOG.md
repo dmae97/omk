@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [14.1.0] - 2026-04-11
 ### Added
 
 - Added richer tool rendering details in session export HTML, including metadata badges, argument formatting, and todo task tree styling for exported tool and workflow messages

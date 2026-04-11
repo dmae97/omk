@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [14.1.0] - 2026-04-11
 ### Added
 
 - Added `accountId` to usage report metadata
