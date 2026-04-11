@@ -483,6 +483,18 @@ impl ChunkState {
 		// selector and loses the region suffix.
 		let selector_ref = format_region_ref(chunk, region);
 
+		// Fall back to whole-chunk read when the chunk has no real region
+		// boundaries (e.g. markdown fenced blocks, leaf chunks without
+		// prologue/epilogue). Without this, `^` on such chunks returns
+		// "[Empty @^ region]" instead of the whole chunk.
+		let region = if region.is_some()
+			&& (chunk.prologue_end_byte.is_none() || chunk.epilogue_start_byte.is_none())
+		{
+			None
+		} else {
+			region
+		};
+
 		if let Some(absolute_line_range) = params.absolute_line_range {
 			let req_start = absolute_line_range.start_line;
 			let req_end = absolute_line_range.end_line;
