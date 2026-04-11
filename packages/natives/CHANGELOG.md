@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [14.0.5] - 2026-04-11
 ### Breaking Changes
 
 - Made `tabWidth` parameter required (no longer optional) for `visibleWidth`, `truncateToWidth`, `wrapTextWithAnsi`, `sliceWithWidth`, and `extractSegments`

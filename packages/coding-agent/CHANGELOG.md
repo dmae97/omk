@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [14.0.5] - 2026-04-11
 ### Added
 
 - Added `designer` model role for UI/UX design tasks with Gemini 3.1 Pro as default model

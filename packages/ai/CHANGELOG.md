@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [14.0.5] - 2026-04-11
+
 ### Changed
 - Replaced GitHub Copilot authentication from VSCode extension impersonation to the opencode OAuth flow, eliminating TOS concerns. Existing users will need to re-authenticate once with `/login github-copilot`.
 - Simplified Copilot token handling: GitHub OAuth token is used directly for all API requests (no JWT exchange or refresh cycle).

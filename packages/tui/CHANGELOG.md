@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [14.0.5] - 2026-04-11
+
 ### Changed
 
 - Updated hash computation to use `Bun.hash()` instead of `Bun.hash.xxHash64()`, which may return `number` in addition to `bigint`
