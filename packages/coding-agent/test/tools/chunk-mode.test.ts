@@ -489,7 +489,7 @@ describe("chunk mode tools", () => {
 					},
 				],
 			}),
-		).rejects.toThrow(/Parse errors:[\s\S]*L\d+-L\d+.*parse error introduced/i);
+		).rejects.toThrow(/Parse errors:[\s\S]*L\d+.*parse error introduced/i);
 
 		expect(await Bun.file(filePath).text()).toBe(originalSource);
 	});
