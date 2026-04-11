@@ -77,7 +77,7 @@ export class AwaitTool implements AgentTool<typeof awaitSchema, AwaitToolDetails
 			};
 		}
 
-		// If all jobs are already done, acknowledge and return
+		// If all watched jobs are already done, return immediately
 		const runningJobs = jobsToWatch.filter(j => j.status === "running");
 		if (runningJobs.length === 0) {
 			return this.#buildResult(manager, jobsToWatch);
@@ -85,6 +85,7 @@ export class AwaitTool implements AgentTool<typeof awaitSchema, AwaitToolDetails
 
 		// Block until at least one running job finishes or the call is aborted
 		const racePromises: Promise<unknown>[] = runningJobs.map(j => j.promise);
+
 		if (signal) {
 			const { promise: abortPromise, resolve: abortResolve } = Promise.withResolvers<void>();
 			const onAbort = () => abortResolve();
@@ -97,6 +98,10 @@ export class AwaitTool implements AgentTool<typeof awaitSchema, AwaitToolDetails
 			}
 		} else {
 			await Promise.race(racePromises);
+		}
+
+		if (signal?.aborted) {
+			return this.#buildResult(manager, jobsToWatch);
 		}
 
 		return this.#buildResult(manager, jobsToWatch);
