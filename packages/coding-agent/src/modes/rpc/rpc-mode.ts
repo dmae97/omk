@@ -440,6 +440,10 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				},
 				getThinkingLevel: () => session.thinkingLevel,
 				setThinkingLevel: level => session.setThinkingLevel(level),
+				getSessionName: () => session.sessionManager.getSessionName(),
+				setSessionName: async name => {
+					await session.sessionManager.setSessionName(name);
+				},
 			},
 			// ExtensionContextActions
 			{

@@ -1057,6 +1057,10 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 						},
 						getThinkingLevel: () => session.thinkingLevel,
 						setThinkingLevel: level => session.setThinkingLevel(level),
+						getSessionName: () => session.sessionManager.getSessionName(),
+						setSessionName: async name => {
+							await session.sessionManager.setSessionName(name);
+						},
 					},
 					{
 						getModel: () => session.model,

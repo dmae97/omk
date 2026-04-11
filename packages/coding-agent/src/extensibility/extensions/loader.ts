@@ -91,6 +91,14 @@ export class ExtensionRuntime implements IExtensionRuntime {
 	setThinkingLevel(): void {
 		throw new ExtensionRuntimeNotInitializedError();
 	}
+
+	getSessionName(): string | undefined {
+		throw new ExtensionRuntimeNotInitializedError();
+	}
+
+	setSessionName(): Promise<void> {
+		throw new ExtensionRuntimeNotInitializedError();
+	}
 }
 
 /**
@@ -221,6 +229,14 @@ class ConcreteExtensionAPI implements ExtensionAPI, IExtensionRuntime {
 
 	setThinkingLevel(level: ThinkingLevel, persist?: boolean): void {
 		this.runtime.setThinkingLevel(level, persist);
+	}
+
+	getSessionName(): string | undefined {
+		return this.runtime.getSessionName();
+	}
+
+	setSessionName(name: string): Promise<void> {
+		return this.runtime.setSessionName(name);
 	}
 
 	registerProvider(name: string, config: import("./types").ProviderConfig): void {

@@ -120,6 +120,11 @@ export class ExtensionUiController {
 			getThinkingLevel: () => this.ctx.session.thinkingLevel,
 			setThinkingLevel: level => this.ctx.session.setThinkingLevel(level),
 			getCommands: () => [],
+			getSessionName: () => this.ctx.sessionManager.getSessionName(),
+			setSessionName: async name => {
+				await this.ctx.sessionManager.setSessionName(name);
+				setSessionTerminalTitle(this.ctx.sessionManager.getSessionName(), this.ctx.sessionManager.getCwd());
+			},
 		};
 		const contextActions: ExtensionContextActions = {
 			getModel: () => this.ctx.session.model,
@@ -382,6 +387,11 @@ export class ExtensionUiController {
 			getThinkingLevel: () => this.ctx.session.thinkingLevel,
 			setThinkingLevel: (level, persist) => this.ctx.session.setThinkingLevel(level, persist),
 			getCommands: () => [],
+			getSessionName: () => this.ctx.sessionManager.getSessionName(),
+			setSessionName: async name => {
+				await this.ctx.sessionManager.setSessionName(name);
+				setSessionTerminalTitle(this.ctx.sessionManager.getSessionName(), this.ctx.sessionManager.getCwd());
+			},
 		};
 		const contextActions: ExtensionContextActions = {
 			getModel: () => this.ctx.session.model,

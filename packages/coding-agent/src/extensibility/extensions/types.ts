@@ -1109,6 +1109,12 @@ export interface ExtensionAPI {
 	/** Set thinking level for the current session. */
 	setThinkingLevel(level: ThinkingLevel): void;
 
+	/** Get the current session name. */
+	getSessionName(): string | undefined;
+
+	/** Set the session name. Persists to the session file. */
+	setSessionName(name: string): Promise<void>;
+
 	// =========================================================================
 	// Provider Registration
 	// =========================================================================
@@ -1295,6 +1301,8 @@ export interface ExtensionActions {
 	setModel: SetModelHandler;
 	getThinkingLevel: GetThinkingLevelHandler;
 	setThinkingLevel: SetThinkingLevelHandler;
+	getSessionName: () => string | undefined;
+	setSessionName: (name: string) => Promise<void>;
 }
 
 /** Actions for ExtensionContext (ctx.* in event handlers). */
