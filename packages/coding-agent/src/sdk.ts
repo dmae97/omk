@@ -868,6 +868,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				onJobComplete: async (jobId, result, job) => {
 					if (!session) return;
 					const formattedResult = await formatAsyncResultForFollowUp(result);
+					if (asyncJobManager!.isDeliverySuppressed(jobId)) return;
+
 					const message = prompt.render(asyncResultTemplate, { jobId, result: formattedResult });
 					const durationMs = job ? Math.max(0, Date.now() - job.startTime) : undefined;
 					await session.sendCustomMessage(
