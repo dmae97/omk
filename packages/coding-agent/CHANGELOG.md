@@ -14,6 +14,8 @@
 
 ### Changed
 
+- Enabled `await` and `cancel_job` to be available when `bash.autoBackground.enabled` is set, so auto-backgrounded bash jobs can be awaited or cancelled without enabling `async.enabled`
+- Updated bash auto-background behavior so short commands returned inline output when they completed before the configured threshold, while longer runs moved to background jobs automatically
 - Replaced the LLM-callable Python execution path with JavaScript execution in the shared VM context, including updated renderers, prompts, session messages, and extension events
 - Updated interactive and CLI model listings/selectors to work with canonical model ids while resolving them to concrete provider variants for actual execution
 - Updated role assignment persistence so selected model settings now store the selector used by users, including thinking-level suffixes, while runtime continues to run against the resolved concrete provider model
@@ -21,6 +23,7 @@
 - Changed the agent to avoid giving time estimates or task-duration predictions in user responses, focusing on required work instead
 - Changed generated code guidance to avoid speculative abstractions and extra compatibility scaffolding, favoring direct implementations that match current needs
 - Changed model role resolution so roles can store either canonical model ids or explicit `provider/model` selectors while sessions continue to record the concrete model actually used
+- Updated bash execution to optionally auto-background long-running commands through the existing background-job pipeline, with dedicated settings for enabling the behavior and adjusting the delay
 
 ### Fixed
 

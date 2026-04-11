@@ -1385,6 +1385,27 @@ export const SETTINGS_SCHEMA = {
 		},
 	},
 
+	"bash.autoBackground.enabled": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "tools",
+			label: "Bash Auto-Background",
+			description: "Automatically background long-running bash commands and deliver the result later",
+		},
+	},
+
+	"bash.autoBackground.thresholdMs": {
+		type: "number",
+		default: 60_000,
+		ui: {
+			tab: "tools",
+			label: "Bash Auto-Background Delay",
+			description: "Milliseconds to wait before a bash command is moved to the background (0 = immediately)",
+			submenu: true,
+		},
+	},
+
 	// MCP
 	"mcp.enableProjectConfig": {
 		type: "boolean",

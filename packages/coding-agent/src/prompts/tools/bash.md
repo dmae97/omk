@@ -12,8 +12,23 @@ Executes bash command in shell session for terminal operations like git, bun, ca
 - Internal URLs are also auto-resolved to filesystem paths before execution.
 {{#if asyncEnabled}}
 - Use `async: true` for long-running commands when you don't need immediate output; the call returns a background job ID and the result is delivered automatically as a follow-up.
+{{/if}}
+{{#if autoBackgroundEnabled}}
+- Long-running non-PTY bash commands may auto-background after about {{autoBackgroundThresholdSeconds}}s and continue as background jobs automatically.
+{{/if}}
+{{#if asyncEnabled}}
+{{else}}
+{{#if autoBackgroundEnabled}}
+- Auto-backgrounded jobs use the same background-job pipeline as explicit async execution.
+{{/if}}
+{{/if}}
+{{#if asyncEnabled}}
 - Use `read jobs://` to inspect all background jobs and `read jobs://<job-id>` for detailed status/output when needed.
 - When you need to wait for async results before continuing, call `await` — it blocks until jobs complete. Do NOT poll `read jobs://` in a loop or yield and hope for delivery.
+{{else}}
+{{#if autoBackgroundEnabled}}
+- If a command auto-backgrounds, use `read jobs://` to inspect jobs and `await` when you need to wait for completion instead of polling in a loop.
+{{/if}}
 {{/if}}
 </instruction>
 

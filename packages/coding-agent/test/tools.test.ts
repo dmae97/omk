@@ -5,11 +5,14 @@ import * as path from "node:path";
 import * as url from "node:url";
 import * as zlib from "node:zlib";
 import type { AgentToolContext } from "@oh-my-pi/pi-agent-core";
+import { AsyncJobManager } from "@oh-my-pi/pi-coding-agent/async";
 import { DEFAULT_BASH_INTERCEPTOR_RULES, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { EditTool } from "@oh-my-pi/pi-coding-agent/edit";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
+import { AwaitTool } from "@oh-my-pi/pi-coding-agent/tools/await-tool";
 import { BashTool } from "@oh-my-pi/pi-coding-agent/tools/bash";
+import { CancelJobTool } from "@oh-my-pi/pi-coding-agent/tools/cancel-job";
 import { FindTool } from "@oh-my-pi/pi-coding-agent/tools/find";
 import { GrepTool } from "@oh-my-pi/pi-coding-agent/tools/grep";
 import { wrapToolWithMetaNotice } from "@oh-my-pi/pi-coding-agent/tools/output-meta";
@@ -171,7 +174,11 @@ function createZipArchive(entries: ArchiveFixtureEntry[]): Buffer {
 }
 
 let artifactCounter = 0;
-function createTestToolSession(cwd: string, settings: Settings = Settings.isolated()): ToolSession {
+function createTestToolSession(
+	cwd: string,
+	settings: Settings = Settings.isolated(),
+	overrides: Partial<ToolSession> = {},
+): ToolSession {
 	const sessionFile = path.join(cwd, "session.jsonl");
 	const sessionDir = path.join(cwd, "session");
 	return {
@@ -186,6 +193,7 @@ function createTestToolSession(cwd: string, settings: Settings = Settings.isolat
 			return { id, path: path.join(sessionDir, `${id}.${toolType}.log`) };
 		},
 		settings,
+		...overrides,
 	};
 }
 
@@ -969,6 +977,84 @@ function b() {
 			);
 		});
 
+		it("should keep short commands inline when auto-background is enabled", async () => {
+			const deliveries: string[] = [];
+			const asyncJobManager = new AsyncJobManager({
+				onJobComplete: async (_jobId, text) => {
+					deliveries.push(text);
+				},
+			});
+			const autoBackgroundBashTool = wrapToolWithMetaNotice(
+				new BashTool(
+					createTestToolSession(
+						testDir,
+						Settings.isolated({
+							"bash.autoBackground.enabled": true,
+							"bash.autoBackground.thresholdMs": 50,
+						}),
+						{
+							asyncJobManager,
+							getSessionId: () => "test-session",
+						},
+					),
+				),
+			);
+
+			const result = await autoBackgroundBashTool.execute("test-call-9-auto-inline", { command: "echo short" });
+
+			expect(getTextOutput(result)).toContain("short");
+			expect(result.details).toBeUndefined();
+			await Bun.sleep(150);
+			expect(deliveries).toEqual([]);
+			await asyncJobManager.dispose();
+		});
+
+		it("should auto-background long-running commands when enabled", async () => {
+			const deliveries: Array<{ jobId: string; text: string }> = [];
+			const asyncJobManager = new AsyncJobManager({
+				onJobComplete: async (jobId, text) => {
+					deliveries.push({ jobId, text });
+				},
+			});
+			const autoBackgroundBashTool = wrapToolWithMetaNotice(
+				new BashTool(
+					createTestToolSession(
+						testDir,
+						Settings.isolated({
+							"bash.autoBackground.enabled": true,
+							"bash.autoBackground.thresholdMs": 50,
+						}),
+						{
+							asyncJobManager,
+							getSessionId: () => "test-session",
+						},
+					),
+				),
+			);
+
+			const result = await autoBackgroundBashTool.execute("test-call-9-auto-running", {
+				command: "printf 'start\\n'; sleep 0.2; printf 'done\\n'",
+			});
+
+			expect(result.details?.async?.state).toBe("running");
+			expect(result.details?.async?.type).toBe("bash");
+			expect(getTextOutput(result)).toContain("Background job");
+			expect(getTextOutput(result)).toContain("start");
+
+			const jobId = result.details?.async?.jobId;
+			if (!jobId) {
+				throw new Error("expected an auto-backgrounded job id");
+			}
+			const runningJob = asyncJobManager.getJob(jobId);
+			expect(runningJob?.status).toBe("running");
+			await runningJob?.promise;
+			await Bun.sleep(50);
+			expect(deliveries).toHaveLength(1);
+			expect(deliveries[0]?.jobId).toBe(jobId);
+			expect(deliveries[0]?.text).toContain("done");
+			await asyncJobManager.dispose();
+		});
+
 		it("should respect timeout", async () => {
 			await expect(bashTool.execute("test-call-10", { command: "sleep 5", timeout: 1 })).rejects.toThrow(
 				/timed out/i,
@@ -994,6 +1080,16 @@ function b() {
 			await expect(bashToolWithBadCwd.execute("test-call-11", { command: "echo test" })).rejects.toThrow(
 				/Working directory does not exist/,
 			);
+		});
+
+		it("should expose background-job tools when bash auto-background is enabled", () => {
+			const autoBackgroundSession = createTestToolSession(
+				testDir,
+				Settings.isolated({ "bash.autoBackground.enabled": true }),
+			);
+
+			expect(AwaitTool.createIf(autoBackgroundSession)).not.toBeNull();
+			expect(CancelJobTool.createIf(autoBackgroundSession)).not.toBeNull();
 		});
 	});
 

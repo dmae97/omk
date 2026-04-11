@@ -28,6 +28,7 @@ import { clampTimeout } from "./tool-timeouts";
 export const BASH_DEFAULT_PREVIEW_LINES = 10;
 
 const BASH_ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const DEFAULT_AUTO_BACKGROUND_THRESHOLD_MS = 60_000;
 
 const bashSchemaBase = Type.Object({
 	command: Type.String({ description: "Command to execute" }),
@@ -80,6 +81,24 @@ export interface BashToolDetails {
 }
 
 export interface BashToolOptions {}
+
+type ManagedBashJobCompletion =
+	| {
+			kind: "completed";
+			result: AgentToolResult<BashToolDetails>;
+	  }
+	| {
+			kind: "failed";
+			error: unknown;
+	  };
+
+interface ManagedBashJobHandle {
+	jobId: string;
+	label: string;
+	completion: Promise<ManagedBashJobCompletion>;
+	getLatestText: () => string;
+	setBackgrounded: (backgrounded: boolean) => void;
+}
 
 function normalizeResultOutput(result: BashResult | BashInteractiveResult): string {
 	return result.output || "";
@@ -212,12 +231,23 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 	readonly concurrency = "exclusive";
 	readonly strict = true;
 	readonly #asyncEnabled: boolean;
+	readonly #autoBackgroundEnabled: boolean;
+	readonly #autoBackgroundThresholdMs: number;
 
 	constructor(private readonly session: ToolSession) {
 		this.#asyncEnabled = this.session.settings.get("async.enabled");
+		this.#autoBackgroundEnabled = this.session.settings.get("bash.autoBackground.enabled");
+		this.#autoBackgroundThresholdMs = Math.max(
+			0,
+			Math.floor(
+				this.session.settings.get("bash.autoBackground.thresholdMs") ?? DEFAULT_AUTO_BACKGROUND_THRESHOLD_MS,
+			),
+		);
 		this.parameters = this.#asyncEnabled ? bashSchemaWithAsync : bashSchemaBase;
 		this.description = prompt.render(bashDescription, {
 			asyncEnabled: this.#asyncEnabled,
+			autoBackgroundEnabled: this.#autoBackgroundEnabled,
+			autoBackgroundThresholdSeconds: Math.max(0, Math.floor(this.#autoBackgroundThresholdMs / 1000)),
 			hasAstGrep: this.session.settings.get("astGrep.enabled"),
 			hasAstEdit: this.session.settings.get("astEdit.enabled"),
 			hasGrep: this.session.settings.get("grep.enabled"),
@@ -251,6 +281,153 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 			throw new ToolError(`${outputText}\n\nCommand exited with code ${result.exitCode}`);
 		}
 		return outputText;
+	}
+
+	#buildCompletedResult(
+		result: BashResult | BashInteractiveResult,
+		timeoutSec: number,
+		headLines?: number,
+		tailLines?: number,
+	): AgentToolResult<BashToolDetails> {
+		const outputText = this.#formatResultOutput(result, headLines, tailLines);
+		const details: BashToolDetails = {};
+		const resultBuilder = toolResult(details).text(outputText).truncationFromSummary(result, { direction: "tail" });
+		this.#buildResultText(result, timeoutSec, outputText);
+		return resultBuilder.done();
+	}
+
+	#buildBackgroundStartResult(jobId: string, label: string, previewText: string): AgentToolResult<BashToolDetails> {
+		const details: BashToolDetails = {
+			async: { state: "running", jobId, type: "bash" },
+		};
+		const lines: string[] = [];
+		const trimmedPreview = previewText.trimEnd();
+		if (trimmedPreview.length > 0) {
+			lines.push(trimmedPreview, "");
+		}
+		lines.push(`Background job ${jobId} started: ${label}`);
+		lines.push("Result will be delivered automatically when complete.");
+		lines.push(`Use \`await\`, \`read jobs://${jobId}\`, or \`cancel_job\` if needed.`);
+		return {
+			content: [{ type: "text", text: lines.join("\n") }],
+			details,
+		};
+	}
+
+	#extractTextResult(result: AgentToolResult<BashToolDetails>): string {
+		return result.content.find(block => block.type === "text")?.text ?? "";
+	}
+
+	#startManagedBashJob(options: {
+		command: string;
+		commandCwd: string;
+		timeoutMs: number;
+		timeoutSec: number;
+		headLines?: number;
+		tailLines?: number;
+		resolvedEnv?: Record<string, string>;
+		onUpdate?: AgentToolUpdateCallback<BashToolDetails>;
+		startBackgrounded: boolean;
+	}): ManagedBashJobHandle {
+		const manager = this.session.asyncJobManager;
+		if (!manager) {
+			throw new ToolError("Background job manager unavailable for this session.");
+		}
+
+		const label = options.command.length > 120 ? `${options.command.slice(0, 117)}...` : options.command;
+		let latestText = "";
+		let backgrounded = options.startBackgrounded;
+		const completion = Promise.withResolvers<ManagedBashJobCompletion>();
+
+		const jobId = manager.register(
+			"bash",
+			label,
+			async ({ jobId, signal: runSignal, reportProgress }) => {
+				const { path: artifactPath, id: artifactId } = (await this.session.allocateOutputArtifact?.("bash")) ?? {};
+				const tailBuffer = new TailBuffer(DEFAULT_MAX_BYTES);
+				try {
+					const result = await executeBash(options.command, {
+						cwd: options.commandCwd,
+						sessionKey: `${this.session.getSessionId?.() ?? ""}:async:${jobId}`,
+						timeout: options.timeoutMs,
+						signal: runSignal,
+						env: options.resolvedEnv,
+						artifactPath,
+						artifactId,
+						onChunk: chunk => {
+							tailBuffer.append(chunk);
+							latestText = tailBuffer.text();
+							void reportProgress(latestText, { async: { state: "running", jobId, type: "bash" } });
+						},
+					});
+					const finalResult = this.#buildCompletedResult(
+						result,
+						options.timeoutSec,
+						options.headLines,
+						options.tailLines,
+					);
+					const finalText = this.#extractTextResult(finalResult);
+					latestText = finalText;
+					completion.resolve({ kind: "completed", result: finalResult });
+					await reportProgress(finalText, { async: { state: "completed", jobId, type: "bash" } });
+					return finalText;
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					latestText = message;
+					completion.resolve({ kind: "failed", error });
+					await reportProgress(message, { async: { state: "failed", jobId, type: "bash" } });
+					throw error;
+				}
+			},
+			{
+				onProgress: async (text, details) => {
+					latestText = text;
+					await options.onUpdate?.({
+						content: [{ type: "text", text }],
+						details: backgrounded ? ((details ?? {}) as BashToolDetails) : {},
+					});
+				},
+			},
+		);
+
+		return {
+			jobId,
+			label,
+			completion: completion.promise,
+			getLatestText: () => latestText,
+			setBackgrounded: (nextBackgrounded: boolean) => {
+				backgrounded = nextBackgrounded;
+			},
+		};
+	}
+
+	async #waitForManagedBashJob(
+		job: ManagedBashJobHandle,
+		thresholdMs: number,
+		signal?: AbortSignal,
+	): Promise<ManagedBashJobCompletion | { kind: "running" } | { kind: "aborted" }> {
+		if (signal?.aborted) {
+			return { kind: "aborted" };
+		}
+
+		const waiters: Array<Promise<ManagedBashJobCompletion | { kind: "running" } | { kind: "aborted" }>> = [
+			job.completion,
+			Bun.sleep(thresholdMs).then(() => ({ kind: "running" as const })),
+		];
+
+		if (!signal) {
+			return await Promise.race(waiters);
+		}
+
+		const { promise: abortedPromise, resolve: resolveAborted } = Promise.withResolvers<{ kind: "aborted" }>();
+		const onAbort = () => resolveAborted({ kind: "aborted" });
+		signal.addEventListener("abort", onAbort, { once: true });
+		waiters.push(abortedPromise);
+		try {
+			return await Promise.race(waiters);
+		} finally {
+			signal.removeEventListener("abort", onAbort);
+		}
 	}
 
 	async execute(
@@ -345,52 +522,51 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 		const timeoutMs = timeoutSec * 1000;
 
 		if (asyncRequested) {
-			const manager = this.session.asyncJobManager;
-			if (!manager) {
+			if (!this.session.asyncJobManager) {
 				throw new ToolError("Async job manager unavailable for this session.");
 			}
-			const label = command.length > 120 ? `${command.slice(0, 117)}...` : command;
-			const tailBuffer = new TailBuffer(DEFAULT_MAX_BYTES);
-			const jobId = manager.register(
-				"bash",
-				label,
-				async ({ jobId, signal: runSignal, reportProgress }) => {
-					const { path: artifactPath, id: artifactId } =
-						(await this.session.allocateOutputArtifact?.("bash")) ?? {};
-					try {
-						const result = await executeBash(command, {
-							cwd: commandCwd,
-							sessionKey: `${this.session.getSessionId?.() ?? ""}:async:${jobId}`,
-							timeout: timeoutMs,
-							signal: runSignal,
-							env: resolvedEnv,
-							artifactPath,
-							artifactId,
-							onChunk: chunk => {
-								tailBuffer.append(chunk);
-								void reportProgress(tailBuffer.text(), { async: { state: "running", jobId, type: "bash" } });
-							},
-						});
-						const outputText = this.#formatResultOutput(result, headLines, tailLines);
-						const finalText = this.#buildResultText(result, timeoutSec, outputText);
-						await reportProgress(finalText, { async: { state: "completed", jobId, type: "bash" } });
-						return finalText;
-					} catch (error) {
-						const message = error instanceof Error ? error.message : String(error);
-						await reportProgress(message, { async: { state: "failed", jobId, type: "bash" } });
-						throw error;
-					}
-				},
-				{
-					onProgress: (text, details) => {
-						onUpdate?.({ content: [{ type: "text", text }], details: details ?? {} });
-					},
-				},
-			);
-			return {
-				content: [{ type: "text", text: `Background job ${jobId} started: ${label}` }],
-				details: { async: { state: "running", jobId, type: "bash" } },
-			};
+			const job = this.#startManagedBashJob({
+				command,
+				commandCwd,
+				timeoutMs,
+				timeoutSec,
+				headLines,
+				tailLines,
+				resolvedEnv,
+				onUpdate,
+				startBackgrounded: true,
+			});
+			return this.#buildBackgroundStartResult(job.jobId, job.label, "");
+		}
+
+		if (this.#autoBackgroundEnabled && !pty && this.session.asyncJobManager) {
+			const job = this.#startManagedBashJob({
+				command,
+				commandCwd,
+				timeoutMs,
+				timeoutSec,
+				headLines,
+				tailLines,
+				resolvedEnv,
+				onUpdate,
+				startBackgrounded: false,
+			});
+			const waitResult = await this.#waitForManagedBashJob(job, this.#autoBackgroundThresholdMs, signal);
+			if (waitResult.kind === "completed") {
+				this.session.asyncJobManager.acknowledgeDeliveries([job.jobId]);
+				return waitResult.result;
+			}
+			if (waitResult.kind === "failed") {
+				this.session.asyncJobManager.acknowledgeDeliveries([job.jobId]);
+				throw waitResult.error;
+			}
+			if (waitResult.kind === "aborted") {
+				this.session.asyncJobManager.cancel(job.jobId);
+				this.session.asyncJobManager.acknowledgeDeliveries([job.jobId]);
+				throw new ToolAbortError(job.getLatestText() || "Command aborted");
+			}
+			job.setBackgrounded(true);
+			return this.#buildBackgroundStartResult(job.jobId, job.label, job.getLatestText());
 		}
 
 		// Track output for streaming updates (tail only)
@@ -437,18 +613,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 		if (isInteractiveResult(result) && result.timedOut) {
 			throw new ToolError(normalizeResultOutput(result) || `Command timed out after ${timeoutSec} seconds`);
 		}
-
-		const outputText = this.#formatResultOutput(result, headLines, tailLines);
-		const details: BashToolDetails = {};
-		const resultBuilder = toolResult(details).text(outputText).truncationFromSummary(result, { direction: "tail" });
-		if (result.exitCode === undefined) {
-			throw new ToolError(`${outputText}\n\nCommand failed: missing exit status`);
-		}
-		if (result.exitCode !== 0 && result.exitCode !== undefined) {
-			throw new ToolError(`${outputText}\n\nCommand exited with code ${result.exitCode}`);
-		}
-
-		return resultBuilder.done();
+		return this.#buildCompletedResult(result, timeoutSec, headLines, tailLines);
 	}
 }
 

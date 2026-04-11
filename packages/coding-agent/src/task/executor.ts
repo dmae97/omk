@@ -435,7 +435,11 @@ function createSubagentSettings(baseSettings: Settings): Settings {
 	for (const key of Object.keys(SETTINGS_SCHEMA) as SettingPath[]) {
 		snapshot[key] = baseSettings.get(key);
 	}
-	return Settings.isolated({ ...snapshot, "async.enabled": false });
+	return Settings.isolated({
+		...snapshot,
+		"async.enabled": false,
+		"bash.autoBackground.enabled": false,
+	});
 }
 
 /**

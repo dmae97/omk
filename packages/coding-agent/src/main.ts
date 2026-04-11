@@ -79,6 +79,8 @@ const RPC_DEFAULTED_SETTING_PATHS: SettingPath[] = [
 	"todo.eager",
 	"async.enabled",
 	"async.maxJobs",
+	"bash.autoBackground.enabled",
+	"bash.autoBackground.thresholdMs",
 	"task.isolation.mode",
 	"task.isolation.merge",
 	"task.isolation.commits",
