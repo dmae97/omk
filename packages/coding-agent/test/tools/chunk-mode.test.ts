@@ -721,4 +721,16 @@ describe("chunk mode tools", () => {
 			}),
 		).rejects.toThrow(/Direct children of "class_Server":\n└── \.fn_handle#[A-Z]{4}\s+L\d+-L\d+/);
 	});
+
+	it("reports file-not-found distinctly from chunk-not-found on edits", async () => {
+		const missingPath = path.join(tmpDir, "does-not-exist.ts");
+		const editTool = new EditTool(createSession(tmpDir));
+
+		await expect(
+			editTool.execute("chunk-edit-missing-file", {
+				path: missingPath,
+				edits: [{ sel: "fn_foo", op: "replace", content: "function foo() {}" }],
+			}),
+		).rejects.toThrow(/File does not exist.*Cannot resolve chunk selectors/);
+	});
 });

@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `designer` model role for UI/UX design tasks with Gemini 3.1 Pro as default model
@@ -12,6 +11,8 @@
 
 ### Changed
 
+- Clarified fenced code block editing behavior in markdown — the tool now preserves literal indentation inside fenced blocks, with content written verbatim as supplied
+- Updated guidance for inserting content after markdown section headings to use `after` on the heading chunk rather than `before`/`prepend` on the section itself
 - Reduced default image resize limits to 1568px (from 2000px) and 500KB (from 4.5MB) to match Anthropic's internal downscaling threshold and reduce payload sizes in tool calls
 - Adjusted screenshot compression to use 1024px max dimensions and 150KB budget for more aggressive optimization of browser screenshots in LLM requests
 - Updated JPEG quality defaults from 80 to 75 and refined quality ladder steps (70, 60, 50, 40) for tighter byte budgets
@@ -36,6 +37,7 @@
 
 ### Fixed
 
+- Fixed chunk edit tool to report file-not-found error distinctly when attempting to use chunk selectors on non-existent files, with guidance to use write tool or verify the path
 - Fixed stale child selector reuse to correctly match chunks by checksum when multiple sibling chunks with the same name exist under the same parent
 - Fixed stale diagnostics being reused after unrelated file publishes by clearing cached diagnostics before refreshing file state
 - Fixed Codex search to use streamed answer text when final answer is an image placeholder or empty

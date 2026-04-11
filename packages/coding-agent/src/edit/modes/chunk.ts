@@ -443,6 +443,12 @@ export async function executeChunkMode(
 	}
 	const normalizedOperations = normalizeChunkEditOperations(edits);
 
+	if (!sourceExists && normalizedOperations.some(op => op.sel)) {
+		throw new Error(
+			`File does not exist: ${path}. Cannot resolve chunk selectors on a non-existent file. Use the write tool to create a new file, or check the path for typos.`,
+		);
+	}
+
 	const chunkResult = applyChunkEdits({
 		source: rawContent,
 		language: chunkLanguage,

@@ -609,20 +609,19 @@ fn path_segment_matches_requested(candidate_segment: &str, requested_segment: &s
 	}
 
 	let normalized_candidate = normalize_leaf_name(candidate_segment);
-	let normalized_requested = normalize_leaf_name(requested_segment);
-	if normalized_candidate == normalized_requested {
+	if normalized_candidate == requested_segment {
 		return true;
 	}
 
 	let (candidate_kind, candidate_identifier) = split_path_segment(normalized_candidate);
-	let (requested_kind, requested_identifier) = split_path_segment(normalized_requested);
+	let (requested_kind, requested_identifier) = split_path_segment(requested_segment);
 	match (candidate_identifier, requested_identifier) {
 		(Some(candidate_identifier), Some(requested_identifier)) => {
 			candidate_kind == requested_kind && requested_identifier.starts_with(candidate_identifier)
 		},
 		(Some(candidate_identifier), None) => {
-			normalized_requested == candidate_identifier
-				|| normalized_requested.starts_with(candidate_identifier)
+			requested_segment == candidate_identifier
+				|| requested_segment.starts_with(candidate_identifier)
 		},
 		(None, Some(_)) => false,
 		(None, None) => false,

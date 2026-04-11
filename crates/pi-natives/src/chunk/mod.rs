@@ -2872,4 +2872,86 @@ end
 			tree.chunks.iter().map(|c| &c.path).collect::<Vec<_>>()
 		);
 	}
+
+	#[test]
+	fn md_fenced_block_caret_read_falls_back_to_whole_chunk() {
+		// `^` on a markdown fenced code block should NOT return [Empty @^ region].
+		// Fenced blocks have no meaningful head/body distinction, so `^` should
+		// fall back to whole-chunk rendering, matching the documented behavior.
+		let source = "# Title\n\nIntro text.\n\n```python\ndef hello():\n    return 1\n```\n";
+		let state =
+			ChunkState::parse(source.to_owned(), "markdown".to_owned()).expect("state should parse");
+		let tree = state.inner().tree();
+		let fence = tree
+			.chunks
+			.iter()
+			.find(|c| {
+				!c.path.is_empty()
+					&& state
+						.inner()
+						.source()
+						.lines()
+						.nth(c.start_line.saturating_sub(1) as usize)
+						.is_some_and(|line| line.trim_start().starts_with("```"))
+			})
+			.expect("fenced code block chunk should exist");
+
+		let read_path = format!("sample.md:{}#{}^", fence.path, fence.checksum);
+		let result = state
+			.render_read(ReadRenderParams {
+				read_path,
+				display_path: "sample.md".to_owned(),
+				language_tag: Some("md".to_owned()),
+				omit_checksum: false,
+				anchor_style: Some(ChunkAnchorStyle::Full),
+				absolute_line_range: None,
+				tab_replacement: Some("    ".to_owned()),
+				normalize_indent: Some(true),
+			})
+			.expect("render_read should succeed");
+
+		assert!(
+			!result.text.contains("[Empty @^ region]"),
+			"^ on fenced block must not return an empty region, got: {}",
+			result.text
+		);
+		assert!(
+			result.text.contains("```python") || result.text.contains("def hello"),
+			"^ fallback must show fenced block content, got: {}",
+			result.text
+		);
+	}
+
+	#[test]
+	fn md_fenced_block_display_preserves_space_indentation() {
+		// When rendering a markdown fenced code block, the 4-space indentation
+		// inside the fence must NOT be normalized to tabs — code-block content is
+		// opaque to the chunk renderer.
+		let source = "# Title\n\n```python\ndef hello():\n    return 1\n```\n";
+		let state =
+			ChunkState::parse(source.to_owned(), "markdown".to_owned()).expect("state should parse");
+		let result = state
+			.render_read(ReadRenderParams {
+				read_path:           "sample.md".to_owned(),
+				display_path:        "sample.md".to_owned(),
+				language_tag:        Some("md".to_owned()),
+				omit_checksum:       false,
+				anchor_style:        Some(ChunkAnchorStyle::Full),
+				absolute_line_range: None,
+				tab_replacement:     Some("    ".to_owned()),
+				normalize_indent:    Some(true),
+			})
+			.expect("render_read should succeed");
+
+		assert!(
+			result.text.contains("    return 1"),
+			"fenced block must keep 4-space indentation in display, got:\n{}",
+			result.text
+		);
+		assert!(
+			!result.text.contains("\treturn 1"),
+			"fenced block must NOT normalize spaces to tabs in display, got:\n{}",
+			result.text
+		);
+	}
 }

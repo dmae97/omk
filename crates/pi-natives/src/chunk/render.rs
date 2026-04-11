@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
 	chunk::{
@@ -39,6 +39,54 @@ fn normalize_rendered_line(
 	}
 }
 
+/// Detect a CommonMark fence marker (``` or ~~~) at the start of trimmed text.
+/// Returns `(marker_char, marker_length)` when at least 3 consecutive markers
+/// begin the line.
+fn fence_marker(trimmed: &str) -> Option<(char, usize)> {
+	let first = trimmed.as_bytes().first().copied()?;
+	if first != b'`' && first != b'~' {
+		return None;
+	}
+	let len = trimmed.bytes().take_while(|&b| b == first).count();
+	(len >= 3).then_some((first as char, len))
+}
+
+/// Returns 1-indexed line numbers that fall strictly inside a fenced code
+/// block in a markdown / handlebars file. Opening and closing fence lines
+/// are excluded (only opaque content lines are returned).
+/// For non-prose languages the set is always empty.
+fn compute_fenced_code_lines(source_lines: &[&str], language: &str) -> HashSet<u32> {
+	if !matches!(language, "markdown" | "handlebars") {
+		return HashSet::new();
+	}
+	let mut fenced = HashSet::new();
+	let mut open_fence: Option<(u8, usize)> = None;
+	for (idx, line) in source_lines.iter().enumerate() {
+		let line_no = idx as u32 + 1;
+		let trimmed = line.trim_start();
+		match open_fence {
+			None => {
+				if let Some((marker, len)) = fence_marker(trimmed) {
+					open_fence = Some((marker as u8, len));
+				}
+			},
+			Some((marker, min_len)) => {
+				// Closing fence: same char, length >= opening, only whitespace after.
+				if let Some((m, len)) = fence_marker(trimmed)
+					&& m as u8 == marker
+					&& len >= min_len
+					&& trimmed[len..].trim().is_empty()
+				{
+					open_fence = None;
+				} else {
+					fenced.insert(line_no);
+				}
+			},
+		}
+	}
+	fenced
+}
+
 pub fn render_state(state: &ChunkStateInner, params: &RenderParams) -> String {
 	let tree = state.tree();
 	let lookup = build_lookup(tree);
@@ -61,6 +109,9 @@ pub fn render_state(state: &ChunkStateInner, params: &RenderParams) -> String {
 			detect_file_indent_step(state.source(), tree) as usize,
 		)
 	});
+
+	let fenced_lines = compute_fenced_code_lines(&source_lines, &tree.language);
+
 	let anchor_style = params.anchor_style.unwrap_or_default();
 	let focus: Option<HashMap<&str, ChunkFocusMode>> = params
 		.focused_paths
@@ -76,6 +127,7 @@ pub fn render_state(state: &ChunkStateInner, params: &RenderParams) -> String {
 		&source_lines,
 		tab_replacement,
 		normalize_indent,
+		&fenced_lines,
 		full_display_threshold,
 		preview_head_lines,
 		preview_tail_lines,
@@ -90,6 +142,7 @@ pub fn render_state(state: &ChunkStateInner, params: &RenderParams) -> String {
 		&source_lines,
 		tab_replacement,
 		normalize_indent,
+		&fenced_lines,
 		full_display_threshold,
 		preview_head_lines,
 		preview_tail_lines,
@@ -112,6 +165,7 @@ pub fn render_state(state: &ChunkStateInner, params: &RenderParams) -> String {
 		preview_tail_lines,
 		tab_replacement,
 		normalize_indent,
+		fenced_lines,
 		focus,
 		inline_hunks: HashMap::new(),
 	};
@@ -379,6 +433,7 @@ fn build_leaf_entries(
 	span: VisibleSpan,
 	tab_replacement: &str,
 	normalize_indent: Option<(char, usize)>,
+	fenced_lines: &HashSet<u32>,
 	full_display_threshold: usize,
 	preview_head_lines: usize,
 	preview_tail_lines: usize,
@@ -387,13 +442,20 @@ fn build_leaf_entries(
 	let high = span.end;
 	let visible_line_count = (high - low + 1) as usize;
 	let raw = (low..=high)
-		.map(|line| LeafEntry::Line {
-			abs_line: line,
-			text:     source_lines
-				.get(line.saturating_sub(1) as usize)
-				.map_or(String::new(), |text| {
-					normalize_rendered_line(text, normalize_indent, tab_replacement)
-				}),
+		.map(|line| {
+			let normalize = if fenced_lines.contains(&line) {
+				None
+			} else {
+				normalize_indent
+			};
+			LeafEntry::Line {
+				abs_line: line,
+				text:     source_lines
+					.get(line.saturating_sub(1) as usize)
+					.map_or(String::new(), |text| {
+						normalize_rendered_line(text, normalize, tab_replacement)
+					}),
+			}
 		})
 		.collect::<Vec<_>>();
 
@@ -472,6 +534,7 @@ fn for_each_rendered_source_line(
 	source_lines: &[&str],
 	tab_replacement: &str,
 	normalize_indent: Option<(char, usize)>,
+	fenced_lines: &HashSet<u32>,
 	full_display_threshold: usize,
 	preview_head_lines: usize,
 	preview_tail_lines: usize,
@@ -495,6 +558,7 @@ fn for_each_rendered_source_line(
 				span,
 				tab_replacement,
 				normalize_indent,
+				fenced_lines,
 				full_display_threshold,
 				preview_head_lines,
 				preview_tail_lines,
@@ -529,6 +593,7 @@ fn for_each_rendered_source_line(
 				source_lines,
 				tab_replacement,
 				normalize_indent,
+				fenced_lines,
 				full_display_threshold,
 				preview_head_lines,
 				preview_tail_lines,
@@ -556,6 +621,7 @@ fn for_each_rendered_source_line(
 			source_lines,
 			tab_replacement,
 			normalize_indent,
+			fenced_lines,
 			full_display_threshold,
 			preview_head_lines,
 			preview_tail_lines,
@@ -574,6 +640,7 @@ fn compute_rendered_line_count(
 	source_lines: &[&str],
 	tab_replacement: &str,
 	normalize_indent: Option<(char, usize)>,
+	fenced_lines: &HashSet<u32>,
 	full_display_threshold: usize,
 	preview_head_lines: usize,
 	preview_tail_lines: usize,
@@ -607,6 +674,7 @@ fn compute_rendered_line_count(
 		source_lines,
 		tab_replacement,
 		normalize_indent,
+		fenced_lines,
 		full_display_threshold,
 		preview_head_lines,
 		preview_tail_lines,
@@ -634,6 +702,7 @@ struct RenderCtx<'a> {
 	preview_tail_lines:     usize,
 	tab_replacement:        &'a str,
 	normalize_indent:       Option<(char, usize)>,
+	fenced_lines:           HashSet<u32>,
 	focus:                  Option<HashMap<&'a str, ChunkFocusMode>>,
 	inline_hunks:           HashMap<String, Vec<InlineHunk>>,
 }
@@ -684,11 +753,16 @@ fn emit_line_gap(ctx: &mut RenderCtx<'_>, from: u32, to: u32) {
 		if !line_in_file_scope(line, ctx.visible_range) {
 			continue;
 		}
+		let normalize = if ctx.fenced_lines.contains(&line) {
+			None
+		} else {
+			ctx.normalize_indent
+		};
 		let text = ctx
 			.source_lines
 			.get(line.saturating_sub(1) as usize)
 			.map_or(String::new(), |text| {
-				normalize_rendered_line(text, ctx.normalize_indent, ctx.tab_replacement)
+				normalize_rendered_line(text, normalize, ctx.tab_replacement)
 			});
 		push_code(ctx, line, &text);
 	}
@@ -748,6 +822,7 @@ fn emit_leaf_body(ctx: &mut RenderCtx<'_>, chunk: &ChunkNode, span: VisibleSpan)
 		span,
 		ctx.tab_replacement,
 		ctx.normalize_indent,
+		&ctx.fenced_lines,
 		ctx.full_display_threshold,
 		ctx.preview_head_lines,
 		ctx.preview_tail_lines,
@@ -943,6 +1018,7 @@ fn compute_num_width(
 	source_lines: &[&str],
 	tab_replacement: &str,
 	normalize_indent: Option<(char, usize)>,
+	fenced_lines: &HashSet<u32>,
 	full_display_threshold: usize,
 	preview_head_lines: usize,
 	preview_tail_lines: usize,
@@ -970,6 +1046,7 @@ fn compute_num_width(
 		source_lines,
 		tab_replacement,
 		normalize_indent,
+		fenced_lines,
 		full_display_threshold,
 		preview_head_lines,
 		preview_tail_lines,
@@ -1055,6 +1132,9 @@ pub fn render_state_with_hunks(
 			detect_file_indent_step(state.source(), tree) as usize,
 		)
 	});
+
+	let fenced_lines = compute_fenced_code_lines(&source_lines, &tree.language);
+
 	let anchor_style = params.anchor_style.unwrap_or_default();
 	let focus: Option<HashMap<&str, ChunkFocusMode>> = params
 		.focused_paths
@@ -1070,6 +1150,7 @@ pub fn render_state_with_hunks(
 		&source_lines,
 		tab_replacement,
 		normalize_indent,
+		&fenced_lines,
 		full_display_threshold,
 		preview_head_lines,
 		preview_tail_lines,
@@ -1084,6 +1165,7 @@ pub fn render_state_with_hunks(
 		&source_lines,
 		tab_replacement,
 		normalize_indent,
+		&fenced_lines,
 		full_display_threshold,
 		preview_head_lines,
 		preview_tail_lines,
@@ -1106,6 +1188,7 @@ pub fn render_state_with_hunks(
 		preview_tail_lines,
 		tab_replacement,
 		normalize_indent,
+		fenced_lines,
 		focus,
 		inline_hunks,
 	};

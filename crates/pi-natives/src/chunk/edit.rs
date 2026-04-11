@@ -1957,6 +1957,29 @@ fn compute_focus(
 
 	for path in touched {
 		let Some(chunk) = lookup.get(path.as_str()) else {
+			// Deleted chunk: derive parent from the path string and mark it
+			// Expanded so the diff hunk (owned by the parent) still renders.
+			if let Some(dot) = path.rfind('.') {
+				let parent_path = &path[..dot];
+				focus
+					.entry(parent_path.to_string())
+					.and_modify(|m| {
+						if *m == ChunkFocusMode::Container {
+							*m = ChunkFocusMode::Expanded;
+						}
+					})
+					.or_insert(ChunkFocusMode::Expanded);
+				// Walk ancestors of the parent upward.
+				let mut current = lookup
+					.get(parent_path)
+					.and_then(|p| p.parent_path.as_deref());
+				while let Some(anc) = current {
+					focus
+						.entry(anc.to_string())
+						.or_insert(ChunkFocusMode::Container);
+					current = lookup.get(anc).and_then(|p| p.parent_path.as_deref());
+				}
+			}
 			continue;
 		};
 		focus.insert(path.clone(), ChunkFocusMode::Expanded);
@@ -4403,6 +4426,56 @@ function foo() {\n<<<<<<< HEAD\n\treturn bar();\n=======\n\treturn baz();\n>>>>>
 			!result.diff_after.contains("return \"yes\""),
 			"old body should be replaced, got: {}",
 			result.diff_after
+		);
+	}
+
+	#[test]
+	fn delete_chunk_produces_removal_diff() {
+		let source = "fn foo() {\n    println!(\"a\");\n}\n\nfn bar() {\n    println!(\"b\");\n}\n";
+		let state = state_for(source, "rust");
+		let foo = state.inner().chunk("fn_foo").expect("fn_foo");
+		let result = apply_single_edit(&state, "test.rs", EditOperation {
+			op:      ChunkEditOp::Replace,
+			sel:     Some("fn_foo".to_owned()),
+			crc:     Some(foo.checksum.clone()),
+			region:  None,
+			content: Some(String::new()),
+			find:    None,
+		});
+
+		assert!(result.changed, "deletion should be marked as changed");
+		// The response_text should include a diff showing removed lines,
+		// not an empty body after the file header.
+		assert!(
+			result.response_text.contains("fn foo"),
+			"deletion response should include a diff showing the removed function: {}",
+			result.response_text
+		);
+	}
+
+	#[test]
+	fn delete_first_enum_variant_produces_diff() {
+		let source = "enum Level {\n    Debug,\n    Info,\n    Warn,\n}\n";
+		let state = state_for(source, "rust");
+		let debug = state
+			.inner()
+			.chunk("enum_Level.vrnt_Debug")
+			.expect("vrnt_Debug");
+		let result = apply_single_edit(&state, "test.rs", EditOperation {
+			op:      ChunkEditOp::Replace,
+			sel:     Some("enum_Level.vrnt_Debug".to_owned()),
+			crc:     Some(debug.checksum.clone()),
+			region:  None,
+			content: Some(String::new()),
+			find:    None,
+		});
+
+		assert!(result.changed, "deletion should be marked as changed");
+		// The response should show the removed variant in a diff hunk.
+		assert!(
+			result.response_text.contains("Debug"),
+			"deletion of first enum variant should show a diff with the removed content: {}",
+			result.response_text
 		);
 	}
 }
