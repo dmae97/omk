@@ -23,7 +23,7 @@ const fileOperationLocks = new Map<string, Promise<void>>();
 
 // Idle timeout configuration (disabled by default)
 let idleTimeoutMs: number | null = null;
-let idleCheckInterval: Timer | null = null;
+let idleCheckInterval: NodeJS.Timeout | null = null;
 const IDLE_CHECK_INTERVAL_MS = 60 * 1000;
 
 /**

@@ -1,9 +1,10 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added richer tool rendering details in session export HTML, including metadata badges, argument formatting, and todo task tree styling for exported tool and workflow messages
+- Added a persistent `js` tool backed by `node:vm`, with cross-session `highway` KV/pubsub, tool calls from inside JS cells, and `$` / `$$` interactive JavaScript execution
 - Added SQLite database read support to the `read` tool for `.sqlite`, `.sqlite3`, `.db`, and `.db3` files with table listing, schema + sample output, row lookup, paginated query filtering, and read-only `q=SELECT` mode
 - Added SQLite mutation support to the `write` tool so `db.sqlite:table` inserts JSON5 rows and `db.sqlite:table:key` updates or deletes rows via row key
 - Added rendering of usage report entries for accounts with no usage limits, including account label and optional plan type with a `-- no limits` indicator
@@ -13,6 +14,7 @@
 
 ### Changed
 
+- Replaced the LLM-callable Python execution path with JavaScript execution in the shared VM context, including updated renderers, prompts, session messages, and extension events
 - Updated interactive and CLI model listings/selectors to work with canonical model ids while resolving them to concrete provider variants for actual execution
 - Updated role assignment persistence so selected model settings now store the selector used by users, including thinking-level suffixes, while runtime continues to run against the resolved concrete provider model
 - Updated model scope resolution to expand exact canonical model ids into all matching provider variants when filtering supported model sets
@@ -22,6 +24,8 @@
 
 ### Fixed
 
+- Fixed session export rendering so JavaScript execution messages now use `jsExecution` labels and content instead of `pythonExecution`, matching current tool behavior
+- Fixed JavaScript cell execution to auto-display returned values once and preserve persistent VM bindings across calls until reset
 - Fixed `.db`/`.db3` reads to verify SQLite file headers and fall back to normal file reading when the extension matches but the content is not a SQLite database
 - Fixed SQLite selector parsing and resolution to correctly route requests to database operations at the file-extension boundary instead of misrouting through plain file/archive handlers
 - Fixed unsupported or unsafe selectors by rejecting missing tables, composite primary keys for row lookups, unknown query parameters, and row operations on non-existent tables
