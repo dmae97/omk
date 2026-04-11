@@ -169,6 +169,19 @@ pub trait LangClassifier {
 		false
 	}
 
+	/// Return true to drop a named child from `collect_children_for_context`
+	/// without turning it into a chunk and without absorbing its byte range
+	/// into the next sibling via `attach_leading_trivia`.
+	///
+	/// Use this for structural framing nodes (JSX opening/closing elements,
+	/// framework fragment markers, etc.) that have no meaningful chunk of
+	/// their own and should NOT extend the following chunk's span backward.
+	/// Prefer `is_trivia` for comment-like nodes that should be absorbed as
+	/// leading context of the next chunk.
+	fn should_skip_child(&self, _kind: &str) -> bool {
+		false
+	}
+
 	fn classify_override<'t>(
 		&self,
 		_context: ChunkContext,

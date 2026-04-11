@@ -151,6 +151,22 @@ impl LangClassifier for JsTsClassifier {
 		&JSTS_TABLES
 	}
 
+	fn is_trivia(&self, kind: &str) -> bool {
+		// Whitespace/text runs between JSX elements carry no structure and
+		// should be absorbed as leading trivia of the next element (matching
+		// the existing comment-absorption semantics).
+		kind == "jsx_text"
+	}
+
+	fn should_skip_child(&self, kind: &str) -> bool {
+		// JSX opening and closing elements are part of the enclosing
+		// `jsx_element` chunk's framing, not children in their own right.
+		// Skip them entirely when enumerating children so they don't pollute
+		// the chunk tree with noisy 1‑line entries and, crucially, so they
+		// don't get absorbed backward into the next real child.
+		matches!(kind, "jsx_opening_element" | "jsx_closing_element")
+	}
+
 	fn classify_override<'t>(
 		&self,
 		context: ChunkContext,
@@ -313,9 +329,148 @@ fn classify_function_js<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'
 			}
 		},
 
+		// ── Return statements ──
+		// A bare `return <Link>…</Link>` or `return (<Link>…</Link>)` creates a
+		// huge monolithic leaf chunk in React components. Recurse into the JSX
+		// so each child element inside the returned tree stays individually
+		// addressable. Callback-with-trailing-block patterns such as
+		// `return items.map(item => { … })` are handled by the shared
+		// call-with-callback promotion in `classify_with_defaults` via the
+		// `return_statement` arm below.
+		"return_statement" => classify_return_statement_js(node, source),
+
+		// ── JSX elements ──
+		// Inside function bodies, JSX elements become container chunks with
+		// their tag name so React component trees are navigable instead of
+		// opaque walls of markup.
+		"jsx_element" => classify_jsx_element(node, source),
+		"jsx_self_closing_element" => classify_jsx_self_closing_element(node, source),
+		"jsx_fragment" => make_candidate(
+			node,
+			ChunkKind::Tag,
+			Some("fragment".to_string()),
+			NameStyle::Named,
+			signature_for_node(node, source),
+			Some(recurse_self(node, ChunkContext::FunctionBody)),
+			source,
+		),
+
 		// ── Fallback ──
 		_ => group_from_sanitized(node, source),
 	}
+}
+
+/// Classify a `jsx_element` as a container chunk named after its tag.
+///
+/// The chunk recurses into itself so that nested JSX children are emitted as
+/// sub-chunks. Structural JSX nodes (opening/closing elements, text,
+/// attributes) are filtered out as trivia by the classifier's `is_trivia`
+/// override, so only meaningful children (child elements, expression
+/// containers) become chunks.
+fn classify_jsx_element<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
+	let tag_name = extract_jsx_tag_name(node, source);
+	let mut candidate = make_candidate(
+		node,
+		ChunkKind::Tag,
+		tag_name,
+		NameStyle::Named,
+		signature_for_node(node, source),
+		Some(recurse_self(node, ChunkContext::FunctionBody)),
+		source,
+	);
+	// Force recursion for jsx_elements that span more than a single
+	// source line. Without this, a `<div>` wrapping a single
+	// near-equal-sized child fails `recursion_narrows_scope` and the
+	// whole subtree collapses into one opaque chunk. One-line elements
+	// keep natural collapse behavior so short inline JSX stays a leaf.
+	if candidate
+		.range_end_line
+		.saturating_sub(candidate.range_start_line)
+		> 0
+	{
+		candidate.force_recurse = true;
+	}
+	candidate
+}
+
+/// Classify a `return_statement`.
+///
+/// Two patterns matter:
+///
+/// 1. `return <Link>…</Link>` / `return (<Link>…</Link>)` — unwrap any
+///    parentheses and recurse directly into the JSX tree so each nested JSX
+///    element is individually addressable.
+/// 2. `return items.map(item => { … })` — the shared call-with-trailing-
+///    callback promoter turns this into a named expression container that
+///    recurses into the callback body. We invoke it explicitly here because the
+///    shared promotion in `classify_with_defaults` only runs on groupable
+///    leaves, and `Return` is not groupable.
+fn classify_return_statement_js<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
+	if let Some(expr) = named_children(node).into_iter().next() {
+		let target = unwrap_parenthesized(expr);
+		if matches!(target.kind(), "jsx_element" | "jsx_fragment" | "jsx_self_closing_element") {
+			let mut candidate = make_candidate(
+				node,
+				ChunkKind::Return,
+				None::<String>,
+				NameStyle::Named,
+				signature_for_node(node, source),
+				Some(RecurseSpec { node: target, context: ChunkContext::FunctionBody }),
+				source,
+			);
+			// The JSX tree may span nearly the entire return statement, which
+			// would fail the `recursion_narrows_scope` check. Force recursion
+			// so the JSX children are always individually addressable.
+			candidate.force_recurse = true;
+			return candidate;
+		}
+	}
+	if let Some(mut promoted) = try_promote_call_with_callback(node, source) {
+		// The callback body is the sole child of the return value, so it
+		// spans nearly the entire return statement. Force recursion to
+		// guarantee the callback internals are addressable.
+		promoted.force_recurse = true;
+		return promoted;
+	}
+	group_from_sanitized(node, source)
+}
+
+/// Classify a `jsx_self_closing_element` as a leaf chunk named after its tag.
+fn classify_jsx_self_closing_element<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'t> {
+	let tag_name = extract_jsx_tag_name(node, source);
+	make_kind_chunk(node, ChunkKind::Tag, tag_name, source, None)
+}
+
+/// Unwrap nested `parenthesized_expression` wrappers to reach the meaningful
+/// inner expression.
+fn unwrap_parenthesized(mut node: Node<'_>) -> Node<'_> {
+	while node.kind() == "parenthesized_expression" {
+		let Some(inner) = named_children(node).into_iter().next() else {
+			break;
+		};
+		node = inner;
+	}
+	node
+}
+
+/// Extract the tag name from a `jsx_element` or `jsx_self_closing_element`.
+///
+/// The tag may be an identifier (`div`, `Link`), a member expression
+/// (`Foo.Bar`), or a nested identifier. We sanitize the full text so path
+/// segments remain valid identifiers.
+fn extract_jsx_tag_name(node: Node<'_>, source: &str) -> Option<String> {
+	let name_holder = match node.kind() {
+		"jsx_element" => child_by_kind(node, &["jsx_opening_element"])?,
+		"jsx_self_closing_element" => node,
+		_ => return None,
+	};
+	let name_node = named_children(name_holder).into_iter().find(|child| {
+		matches!(
+			child.kind(),
+			"identifier" | "member_expression" | "nested_identifier" | "jsx_namespace_name"
+		)
+	})?;
+	sanitize_identifier(node_text(source, name_node.start_byte(), name_node.end_byte()))
 }
 
 /// Classify `const`/`let`/`var` declarations, promoting arrow functions

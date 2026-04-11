@@ -369,6 +369,14 @@ fn build_chunk(
 		&& recurse_parse_errors == 0
 		&& should_collapse_trivial_children(&candidate, &child_candidates);
 	let always_recurse = *ALWAYS_RECURSE && !candidate.groupable && !child_candidates.is_empty();
+	// A child that already committed to splitting further (force_recurse +
+	// recurse) should always pull its parent along. Otherwise a small
+	// wrapper parent would keep the child's sub-structure hidden just
+	// because the wrapper itself fits under LEAF_THRESHOLD — e.g. a tiny
+	// function whose body is one JSX return.
+	let has_forced_child = child_candidates
+		.iter()
+		.any(|c| c.force_recurse && c.recurse.is_some());
 	let should_recurse = !has_injected_children
 		&& !candidate.error
 		&& recurse.is_some()
@@ -376,6 +384,7 @@ fn build_chunk(
 		&& (candidate.force_recurse
 			|| always_recurse
 			|| recurse_parse_errors > 0
+			|| has_forced_child
 			|| (line_count > *LEAF_THRESHOLD
 				&& recursion_narrows_scope(line_count, &child_candidates)));
 	let children = if let Some(injected) = injected {
@@ -503,7 +512,12 @@ pub(crate) fn collect_children_for_context<'tree>(
 			&& (is_absorbable_attribute(child.kind())
 				|| overrides.is_absorbable_attr(child.kind())
 				|| classifier.is_absorbable_attr(child.kind()));
-		if is_skippable_trivia || is_absorbable_attr || (child.is_missing() && !is_error_node) {
+		let is_skipped = !is_error_node && classifier.should_skip_child(child.kind());
+		if is_skipped
+			|| is_skippable_trivia
+			|| is_absorbable_attr
+			|| (child.is_missing() && !is_error_node)
+		{
 			continue;
 		}
 
@@ -726,10 +740,24 @@ fn assign_unique_names(mut candidates: Vec<RawChunkCandidate<'_>>) -> Vec<RawChu
 /// Returns `true` when splitting a parent into children actually provides
 /// meaningful scope narrowing. Recursion is only worthwhile if addressing
 /// the largest child saves at least `PI_CHUNK_MIN_SAVINGS` lines compared
-/// to addressing the parent directly.
+/// to addressing the parent directly — or when a child already wants to
+/// recurse further (in which case the scope narrowing happens at the next
+/// level and should not be cut off here).
 fn recursion_narrows_scope(parent_lines: usize, children: &[RawChunkCandidate<'_>]) -> bool {
 	if children.is_empty() {
 		return false;
+	}
+	// If any child has already been marked as needing its own recursion,
+	// always recurse through it. Otherwise a wrapper parent whose single
+	// child covers almost the whole body (function -> return_statement,
+	// arrow body -> JSX element, etc.) would fail the simple savings
+	// heuristic even though splitting down the chain exposes real
+	// structure.
+	if children
+		.iter()
+		.any(|c| c.force_recurse && c.recurse.is_some())
+	{
+		return true;
 	}
 	let max_child_lines = children
 		.iter()
@@ -1355,6 +1383,150 @@ function main(): void {{
 			.expect("plain calls should be grouped into stmts");
 		assert!(stmts_chunk.group, "stmts should be a group");
 		assert!(stmts_chunk.leaf, "stmts with no callback should be a leaf");
+	}
+
+	#[test]
+	fn jsx_return_with_map_callback_exposes_nested_chunks() {
+		// A React component body that returns `items.map(item =>
+		// <Link>...children...</Link>)` used to collapse into a single opaque return
+		// chunk, forcing any edit to replace the full return body. The pipeline must
+		// now surface:
+		//   * the `.map()` call as a promoted `expr_*` container
+		//   * the inner `return (<Link>...)` as a `ret` container
+		//   * every direct JSX child of the returned element as its own `tag_*` chunk
+		let source = r#"
+	const runsBody = () => {
+		return items.map(run => {
+			return (
+				<Link
+					key={run.uid}
+					href={`/runs/${run.uid}`}
+				>
+					<div className="col-a">
+						{run.uid}
+					</div>
+					<div className="col-b">
+						{run.name}
+					</div>
+					<div className="col-c">
+						{run.state}
+					</div>
+				</Link>
+			);
+		});
+	};
+	"#;
+		let tree = build_chunk_tree(source, "tsx").expect("tsx tree should build");
+		let paths: Vec<&str> = tree.chunks.iter().map(|c| c.path.as_str()).collect();
+
+		let ret = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "fn_runsBo.expr_items.ret")
+			.unwrap_or_else(|| panic!("expected fn_runsBo.expr_items.ret; chunks: {paths:?}"));
+		assert!(!ret.leaf, "JSX return chunk must expose children, got leaf");
+
+		let div_children: Vec<&str> = tree
+			.chunks
+			.iter()
+			.filter(|c| c.path.starts_with("fn_runsBo.expr_items.ret.tag_div"))
+			.map(|c| c.path.as_str())
+			.collect();
+		assert_eq!(
+			div_children.len(),
+			3,
+			"expected 3 top-level div chunks inside the returned <Link>, got {div_children:?}"
+		);
+
+		// The JSX opening/closing elements must not leak into the chunk tree.
+		assert!(
+			!paths
+				.iter()
+				.any(|p| p.contains("chunk_jsx_op") || p.contains("chunk_jsx_cl")),
+			"jsx opening/closing elements must be filtered out; chunks: {paths:?}"
+		);
+	}
+
+	#[test]
+	fn jsx_return_does_not_absorb_opening_tag_into_first_child() {
+		// When the outer `<Link>` has a multi-line opening element, the first
+		// `<div>` child must still report its own real start line and not be
+		// extended backward to swallow the opening element.
+		let source = r#"
+	const row = (run: Run) => {
+		return (
+			<Link
+				key={run.uid}
+				href={`/runs/${run.uid}`}
+				className="row"
+			>
+				<div className="first-cell">
+					{run.uid}
+				</div>
+				<div className="second-cell">
+					{run.name}
+				</div>
+			</Link>
+		);
+	};
+	"#;
+		let tree = build_chunk_tree(source, "tsx").expect("tsx tree should build");
+		let first_div = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "fn_row.ret.tag_div_1")
+			.expect("first tag_div_1 should exist");
+		// The `<div className="first-cell">` starts well below the `<Link` opening;
+		// it must NOT have its start line dragged backward onto the opening tag.
+		assert!(
+			first_div.start_line >= 9,
+			"first div chunk must start at its own opening line (>=9), got {}",
+			first_div.start_line
+		);
+	}
+
+	#[test]
+	fn jsx_return_directly_returning_element_exposes_children() {
+		// `return <Foo>...</Foo>` without parens should still recurse into the JSX.
+		let source = r#"
+	const header = () => {
+		return <header className="h">
+			<div>title</div>
+			<div>subtitle</div>
+			<div>body</div>
+			<div>footer</div>
+		</header>;
+	};
+	"#;
+		let tree = build_chunk_tree(source, "tsx").expect("tsx tree should build");
+		let ret = tree
+			.chunks
+			.iter()
+			.find(|c| c.path == "fn_header.ret")
+			.expect("ret chunk should exist");
+		assert!(!ret.leaf, "bare JSX return should expose its children");
+	}
+
+	#[test]
+	fn small_jsx_return_stays_collapsed() {
+		// Short JSX returns (well under the leaf threshold) should NOT explode
+		// into per-element chunks — otherwise small React components get drowned
+		// in noise.
+		let source = r"
+		const Loading = () => {
+			return <div>Loading…</div>;
+		};
+		";
+		let tree = build_chunk_tree(source, "tsx").expect("tsx tree should build");
+		let has_tag_children = tree
+			.chunks
+			.iter()
+			.any(|c| c.path.starts_with("fn_Loading.") && c.path.contains("tag_"));
+		assert!(
+			!has_tag_children,
+			"tiny JSX components should not explode; chunks: {:?}",
+			tree.chunks.iter().map(|c| &c.path).collect::<Vec<_>>()
+		);
 	}
 
 	#[test]
