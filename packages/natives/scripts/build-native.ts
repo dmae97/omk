@@ -225,10 +225,10 @@ async function resolveBuiltAddonPath(outputDir: string, canonicalFilename: strin
 	);
 }
 
-function resolveBuildOutputDir(profileLabel: string): string {
+function resolveBuildOutputDirPrefix(profileLabel: string): string {
 	const buildTarget = crossTarget ?? `${targetPlatform}-${targetArch}`;
 	const variantLabel = effectiveVariant ?? "default";
-	return path.join(nativeDir, ".build", `${buildTarget}-${variantLabel}-${profileLabel}`);
+	return path.join(nativeDir, ".build", `${buildTarget}-${variantLabel}-${profileLabel}-`);
 }
 
 async function installGeneratedBindings(outputDir: string): Promise<void> {
@@ -266,7 +266,7 @@ const useLocalProfile = !isCI && !isCrossCompile;
 const profileLabel = useLocalProfile ? "local" : "release";
 const profileSuffix = useLocalProfile ? " (local)" : "";
 
-const buildOutputDir = resolveBuildOutputDir(profileLabel);
+const buildOutputDirPrefix = resolveBuildOutputDirPrefix(profileLabel);
 
 // Build napi args
 const napiArgs = [
@@ -280,7 +280,7 @@ const napiArgs = [
 	"--dts",
 	"index.d.ts",
 	"-o",
-	buildOutputDir,
+	"",
 ];
 
 if (useLocalProfile) {
@@ -298,8 +298,9 @@ console.log(`Building pi-natives for ${targetPlatform}-${targetArch}${variantSuf
 
 await fs.mkdir(nativeDir, { recursive: true });
 await cleanupStaleTemps(nativeDir);
-await fs.rm(buildOutputDir, { recursive: true, force: true });
-await fs.mkdir(buildOutputDir, { recursive: true });
+await fs.mkdir(path.join(nativeDir, ".build"), { recursive: true });
+const buildOutputDir = await fs.mkdtemp(buildOutputDirPrefix);
+napiArgs[10] = buildOutputDir;
 
 // Resolve napi bin directly: `bunx @napi-rs/cli` can pick up the wrong bin on
 // systems where `cli` exists on PATH (e.g. Mono's /usr/bin/cli on Ubuntu).
@@ -327,23 +328,26 @@ if (safeHostZigBuildConfig) {
 	);
 }
 
-const buildResult = await $`${napiBin} ${napiArgs}`.nothrow();
-if (buildResult.exitCode !== 0) {
-	const stderr = buildResult.stderr?.toString("utf-8") ?? "";
-	throw new Error(`napi build failed${stderr ? `:\n${stderr}` : ""}`);
+try {
+	const buildResult = await $`${napiBin} ${napiArgs}`.nothrow();
+	if (buildResult.exitCode !== 0) {
+		const stderr = buildResult.stderr?.toString("utf-8") ?? "";
+		throw new Error(`napi build failed${stderr ? `:\n${stderr}` : ""}`);
+	}
+
+	const builtAddonPath = await resolveBuiltAddonPath(buildOutputDir, canonicalAddonFilename);
+	if (builtAddonPath !== canonicalAddonPath) {
+		console.log(`Normalizing native addon filename: ${path.basename(builtAddonPath)} → ${canonicalAddonFilename}`);
+		await installBinary(builtAddonPath, canonicalAddonPath);
+	}
+
+	await installGeneratedBindings(buildOutputDir);
+
+	// Generate runtime enum exports from const enums in index.d.ts
+	await $`bun ${path.join(import.meta.dir, "gen-enums.ts")}`;
+	await patchGeneratedIndexLoader();
+
+	console.log("Build complete.");
+} finally {
+	await fs.rm(buildOutputDir, { recursive: true, force: true });
 }
-
-const builtAddonPath = await resolveBuiltAddonPath(buildOutputDir, canonicalAddonFilename);
-if (builtAddonPath !== canonicalAddonPath) {
-	console.log(`Normalizing native addon filename: ${path.basename(builtAddonPath)} → ${canonicalAddonFilename}`);
-	await installBinary(builtAddonPath, canonicalAddonPath);
-}
-
-await installGeneratedBindings(buildOutputDir);
-
-// Generate runtime enum exports from const enums in index.d.ts
-await $`bun ${path.join(import.meta.dir, "gen-enums.ts")}`;
-await patchGeneratedIndexLoader();
-await fs.rm(buildOutputDir, { recursive: true, force: true });
-
-console.log("Build complete.");
