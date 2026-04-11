@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added rendering of usage report entries for accounts with no usage limits, including account label and optional plan type with a `-- no limits` indicator
+- Updated account label resolution to fall back to email or accountId so unlabeled unlimited-plan accounts display a meaningful name
 
 ## [14.0.5] - 2026-04-11
 ### Added

@@ -308,31 +308,30 @@ export const openaiCodexUsageProvider: UsageProvider = {
 		}
 
 		const parsed = parseUsagePayload(payload);
-		if (!parsed) {
-			ctx.logger?.warn("Codex usage response invalid", { provider: params.provider });
-			return null;
-		}
+		const planType =
+			parsed?.planType ??
+			(isRecord(payload) && typeof payload.plan_type === "string" ? payload.plan_type : undefined);
 
 		const limits: UsageLimit[] = [];
-		if (parsed.primary) {
+		if (parsed?.primary) {
 			limits.push(
 				buildUsageLimit({
 					key: "primary",
 					window: parsed.primary,
 					accountId,
-					planType: parsed.planType,
+					planType,
 					limitReached: parsed.limitReached,
 					nowMs,
 				}),
 			);
 		}
-		if (parsed.secondary) {
+		if (parsed?.secondary) {
 			limits.push(
 				buildUsageLimit({
 					key: "secondary",
 					window: parsed.secondary,
 					accountId,
-					planType: parsed.planType,
+					planType,
 					limitReached: parsed.limitReached,
 					nowMs,
 				}),
@@ -344,12 +343,13 @@ export const openaiCodexUsageProvider: UsageProvider = {
 			fetchedAt: nowMs,
 			limits,
 			metadata: {
-				planType: parsed.planType,
-				allowed: parsed.allowed,
-				limitReached: parsed.limitReached,
+				planType,
+				allowed: parsed?.allowed,
+				limitReached: parsed?.limitReached,
 				email,
+				accountId,
 			},
-			raw: parsed.raw,
+			raw: parsed?.raw ?? payload,
 		};
 
 		return report;
