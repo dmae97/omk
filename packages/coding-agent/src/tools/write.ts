@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type {
@@ -9,7 +10,7 @@ import type {
 } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
-import { isEnoent, prompt, untilAborted } from "@oh-my-pi/pi-utils";
+import { isEnoent, isRecord, prompt, untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { unzipSync, zipSync } from "fflate";
 import { stripHashlinePrefixes } from "../edit";
@@ -34,7 +35,18 @@ import {
 	replaceTabs,
 	shortenPath,
 } from "./render-utils";
+import {
+	deleteRowByKey,
+	deleteRowByRowId,
+	insertRow,
+	isSqliteFile,
+	parseSqlitePathCandidates,
+	resolveTableRowLookup,
+	updateRowByKey,
+	updateRowByRowId,
+} from "./sqlite-reader";
 import { ToolError } from "./tool-errors";
+import { toolResult } from "./tool-result";
 
 const writeSchema = Type.Object({
 	path: Type.String({ description: "Path to the file to write (relative or absolute)" }),
@@ -94,6 +106,14 @@ interface ResolvedArchiveWritePath {
 	exists: boolean;
 }
 
+interface ResolvedSqliteWritePath {
+	absolutePath: string;
+	sqlitePath: string;
+	table: string;
+	key?: string;
+	exists: boolean;
+}
+
 function isArchivePathNotFound(error: unknown): boolean {
 	if (isEnoent(error)) return true;
 	return typeof error === "object" && error !== null && "code" in error && error.code === "ENOTDIR";
@@ -123,6 +143,29 @@ function normalizeArchiveWriteSubPath(rawPath: string): string {
 	}
 
 	return normalizedParts.join("/");
+}
+
+function parseSqliteWriteTarget(subPath: string, queryString: string): { table: string; key?: string } {
+	if (queryString.trim().length > 0) {
+		throw new ToolError("SQLite write paths do not support query parameters");
+	}
+
+	const normalized = subPath.replace(/^:+/, "").trim();
+	if (!normalized) {
+		throw new ToolError("SQLite write path must target a table");
+	}
+
+	const separatorIndex = normalized.indexOf(":");
+	const table = separatorIndex === -1 ? normalized : normalized.slice(0, separatorIndex);
+	const key = separatorIndex === -1 ? undefined : normalized.slice(separatorIndex + 1);
+	if (!table) {
+		throw new ToolError("SQLite write path must target a table");
+	}
+	if (key !== undefined && key.length === 0) {
+		throw new ToolError("SQLite row writes require a non-empty row key");
+	}
+
+	return { table, key };
 }
 
 /**
@@ -262,6 +305,132 @@ export class WriteTool implements AgentTool<typeof writeSchema, WriteToolDetails
 		};
 	}
 
+	async #resolveSqliteWritePath(writePath: string): Promise<ResolvedSqliteWritePath | null> {
+		const candidates = parseSqlitePathCandidates(writePath).filter(candidate => candidate.sqlitePath !== writePath);
+		if (candidates.length === 0) {
+			return null;
+		}
+
+		const fallbackCandidate = candidates[candidates.length - 1]!;
+		const fallbackTarget = parseSqliteWriteTarget(fallbackCandidate.subPath, fallbackCandidate.queryString);
+		const fallback: ResolvedSqliteWritePath = {
+			absolutePath: resolvePlanPath(this.session, fallbackCandidate.sqlitePath),
+			sqlitePath: fallbackCandidate.sqlitePath,
+			table: fallbackTarget.table,
+			key: fallbackTarget.key,
+			exists: false,
+		};
+
+		let sawExistingNonSqlite = false;
+		for (const candidate of candidates) {
+			const target = parseSqliteWriteTarget(candidate.subPath, candidate.queryString);
+			const absolutePath = resolvePlanPath(this.session, candidate.sqlitePath);
+			try {
+				const stat = await Bun.file(absolutePath).stat();
+				if (stat.isDirectory()) {
+					continue;
+				}
+				if (!(await isSqliteFile(absolutePath))) {
+					sawExistingNonSqlite = true;
+					continue;
+				}
+
+				return {
+					absolutePath,
+					sqlitePath: candidate.sqlitePath,
+					table: target.table,
+					key: target.key,
+					exists: true,
+				};
+			} catch (error) {
+				if (!isArchivePathNotFound(error)) {
+					throw error;
+				}
+			}
+		}
+
+		if (sawExistingNonSqlite) {
+			return null;
+		}
+
+		return fallback;
+	}
+
+	async #writeSqliteRow(
+		displayPath: string,
+		content: string,
+		resolvedSqlitePath: ResolvedSqliteWritePath,
+	): Promise<AgentToolResult<WriteToolDetails>> {
+		let db: Database | null = null;
+		try {
+			if (!resolvedSqlitePath.exists) {
+				throw new ToolError(`SQLite database '${displayPath}' not found`);
+			}
+
+			db = new Database(resolvedSqlitePath.absolutePath, { create: false, strict: true });
+			db.run("PRAGMA busy_timeout = 3000");
+
+			const trimmedContent = content.trim();
+			let resultText: string;
+			if (trimmedContent.length === 0) {
+				if (!resolvedSqlitePath.key) {
+					throw new ToolError("SQLite deletes require a row key in the path");
+				}
+
+				const lookup = resolveTableRowLookup(db, resolvedSqlitePath.table);
+				const deleted =
+					lookup.kind === "pk"
+						? deleteRowByKey(db, resolvedSqlitePath.table, lookup, resolvedSqlitePath.key)
+						: deleteRowByRowId(db, resolvedSqlitePath.table, resolvedSqlitePath.key);
+				resultText =
+					deleted > 0
+						? `Deleted row '${resolvedSqlitePath.key}' from ${resolvedSqlitePath.table}`
+						: `No row deleted from ${resolvedSqlitePath.table} for key '${resolvedSqlitePath.key}'`;
+			} else {
+				let parsedContent: unknown;
+				try {
+					parsedContent = Bun.JSON5.parse(content);
+				} catch (error) {
+					throw new ToolError(
+						`SQLite write content must be valid JSON5: ${error instanceof Error ? error.message : String(error)}`,
+					);
+				}
+
+				if (!isRecord(parsedContent)) {
+					throw new ToolError("SQLite write content must be a JSON object");
+				}
+
+				if (resolvedSqlitePath.key) {
+					const lookup = resolveTableRowLookup(db, resolvedSqlitePath.table);
+					const updated =
+						lookup.kind === "pk"
+							? updateRowByKey(db, resolvedSqlitePath.table, lookup, resolvedSqlitePath.key, parsedContent)
+							: updateRowByRowId(db, resolvedSqlitePath.table, resolvedSqlitePath.key, parsedContent);
+					resultText =
+						updated > 0
+							? `Updated row '${resolvedSqlitePath.key}' in ${resolvedSqlitePath.table}`
+							: `No row updated in ${resolvedSqlitePath.table} for key '${resolvedSqlitePath.key}'`;
+				} else {
+					insertRow(db, resolvedSqlitePath.table, parsedContent);
+					resultText = `Inserted row into ${resolvedSqlitePath.table}`;
+				}
+			}
+
+			invalidateFsScanAfterWrite(resolvedSqlitePath.absolutePath);
+			return toolResult<WriteToolDetails>({}).text(resultText).sourcePath(resolvedSqlitePath.absolutePath).done();
+		} catch (error) {
+			if (isEnoent(error)) {
+				throw new ToolError(`SQLite database '${displayPath}' not found`);
+			}
+			if (error instanceof ToolError) {
+				throw error;
+			}
+			throw new ToolError(error instanceof Error ? error.message : String(error));
+		} finally {
+			db?.close();
+		}
+	}
+
 	async execute(
 		_toolCallId: string,
 		{ path, content }: WriteParams,
@@ -289,6 +458,23 @@ export class WriteTool implements AgentTool<typeof writeSchema, WriteToolDetails
 					}
 				}
 				return archiveResult;
+			}
+
+			const resolvedSqlitePath = await this.#resolveSqliteWritePath(path);
+			if (resolvedSqlitePath) {
+				enforcePlanModeWrite(this.session, resolvedSqlitePath.sqlitePath, { op: "update" });
+
+				const sqliteResult = await this.#writeSqliteRow(path, cleanContent, resolvedSqlitePath);
+				if (stripped) {
+					const firstText = sqliteResult.content.find(
+						(block): block is { type: "text"; text: string } =>
+							block.type === "text" && typeof block.text === "string",
+					);
+					if (firstText) {
+						firstText.text += `\nNote: auto-stripped hashline display prefixes from content before writing.`;
+					}
+				}
+				return sqliteResult;
 			}
 
 			enforcePlanModeWrite(this.session, path, { op: "create" });

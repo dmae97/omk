@@ -18,6 +18,15 @@ Chunk reads preserve literal leading tabs/spaces from the file. When editing, ke
 {{/if}}
 
 Chunk trees: JS, TS, TSX, Python, Rust, Go. Others use blank-line fallback.
+
+# SQLite Databases
+When used against a SQLite database (`.sqlite`, `.sqlite3`, `.db`, `.db3`), returns structured database content.
+- `file.db` — list tables with row counts
+- `file.db:table` — table schema + sample rows
+- `file.db:table:key` — single row by primary key
+- `file.db:table?limit=50&offset=100` — paginated rows
+- `file.db:table?where=status='active'&order=created:desc` — filtered rows
+- `file.db?q=SELECT ...` — read-only SELECT query
 </instruction>
 
 <critical>

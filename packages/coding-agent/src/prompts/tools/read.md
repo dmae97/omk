@@ -38,6 +38,15 @@ When used against a directory, or an archive root, the tool will return a list o
 - Formats: `.tar`, `.tar.gz`, `.tgz`, and `.zip`.
 - Use `archive.ext:path/inside/archive` to read or list archive contents
 
+# SQLite Databases
+When used against a SQLite database (`.sqlite`, `.sqlite3`, `.db`, `.db3`), returns structured database content.
+- `file.db` — list tables with row counts
+- `file.db:table` — table schema + sample rows
+- `file.db:table:key` — single row by primary key
+- `file.db:table?limit=50&offset=100` — paginated rows
+- `file.db:table?where=status='active'&order=created:desc` — filtered rows
+- `file.db?q=SELECT ...` — read-only SELECT query
+
 # URLs
 - Extract information from web pages, GitHub issues/PRs, Stack Overflow, Wikipedia, Reddit, NPM, arXiv, technical blogs, RSS/Atom feeds, JSON endpoints
 - `sel="raw"` for untouched HTML or debugging
