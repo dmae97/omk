@@ -2,7 +2,7 @@
 
 import * as path from "node:path";
 import { $ } from "bun";
-import { detectHostAvx2Support } from "../packages/natives/scripts/host-detect";
+import { detectHostAvx2Support } from "./host-detect"
 
 interface NativeBuildVariant {
 	name: "baseline" | "modern";
