@@ -147,8 +147,10 @@ function applyGlobalModelsDevFallback(models: readonly Model[], modelsDevModels:
 			name: reference.name,
 			reasoning: reference.reasoning,
 			input: reference.input,
-			contextWindow: reference.contextWindow,
-			maxTokens: reference.maxTokens,
+			// contextWindow and maxTokens intentionally NOT overwritten.
+			// Limits are provider-specific (e.g. Copilot imposes its own limits
+			// that are lower than native provider limits). Cross-provider models.dev
+			// references would inflate them.
 		};
 	});
 }

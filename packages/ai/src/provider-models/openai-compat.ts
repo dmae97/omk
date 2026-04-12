@@ -173,31 +173,36 @@ function createBundledReferenceMap<TApi extends Api>(
 	return references;
 }
 
-function shouldReplaceGlobalReference(existing: Model<Api> | undefined, candidate: Model<Api>): boolean {
-	if (!existing) return true;
-	if (candidate.contextWindow !== existing.contextWindow) {
-		return candidate.contextWindow > existing.contextWindow;
-	}
-	if (candidate.maxTokens !== existing.maxTokens) {
-		return candidate.maxTokens > existing.maxTokens;
-	}
-	// When limits tie, prefer OpenAI as the canonical reference so generic OpenAI-family
-	// providers inherit OpenAI pricing/capabilities instead of Copilot-specific metadata.
-	return existing.provider !== "openai" && candidate.provider === "openai";
-}
-
-function createGlobalReferenceMap(): Map<string, Model<Api>> {
-	const references = new Map<string, Model<Api>>();
+/**
+ * Returns a lookup that resolves a model ID to a bundled reference, preferring
+ * the provider-specific entry over a cross-provider fallback. The global fallback
+ * picks the best entry across all providers (largest contextWindow, then maxTokens,
+ * then canonical OpenAI), but proxy providers (Copilot, nanogpt, etc.) impose their
+ * own limits that are typically lower than native provider limits, so the
+ * provider-specific entry must win.
+ */
+function createReferenceResolver<TApi extends Api>(
+	providerRefs: Map<string, Model<TApi>>,
+): (modelId: string) => Model<TApi> | undefined {
+	const globalRefs = new Map<string, Model<Api>>();
 	for (const provider of getBundledProviders()) {
 		for (const model of getBundledModels(provider as Parameters<typeof getBundledModels>[0])) {
 			const candidate = model as Model<Api>;
-			const existing = references.get(candidate.id);
-			if (shouldReplaceGlobalReference(existing, candidate)) {
-				references.set(candidate.id, candidate);
+			const existing = globalRefs.get(candidate.id);
+			if (!existing) {
+				globalRefs.set(candidate.id, candidate);
+			} else if (candidate.contextWindow !== existing.contextWindow) {
+				if (candidate.contextWindow > existing.contextWindow) globalRefs.set(candidate.id, candidate);
+			} else if (candidate.maxTokens !== existing.maxTokens) {
+				if (candidate.maxTokens > existing.maxTokens) globalRefs.set(candidate.id, candidate);
+			} else if (existing.provider !== "openai" && candidate.provider === "openai") {
+				// When limits tie, prefer OpenAI as canonical so generic OpenAI-family
+				// providers inherit OpenAI pricing/capabilities instead of proxy metadata.
+				globalRefs.set(candidate.id, candidate);
 			}
 		}
 	}
-	return references;
+	return (modelId: string) => providerRefs.get(modelId) ?? (globalRefs.get(modelId) as Model<TApi> | undefined);
 }
 
 function normalizeAnthropicBaseUrl(baseUrl: string | undefined, fallback: string): string {
@@ -1384,10 +1389,9 @@ export function nanoGptModelManagerOptions(
 ): ModelManagerOptions<"openai-completions"> {
 	const apiKey = config?.apiKey;
 	const baseUrl = config?.baseUrl ?? "https://nano-gpt.com/api/v1";
-	const references = createBundledReferenceMap<"openai-completions">(
-		"nanogpt" as Parameters<typeof getBundledModels>[0],
+	const resolveReference = createReferenceResolver(
+		createBundledReferenceMap<"openai-completions">("nanogpt" as Parameters<typeof getBundledModels>[0]),
 	);
-	const globalReferences = createGlobalReferenceMap();
 	return {
 		providerId: "nanogpt",
 		...(apiKey && {
@@ -1400,14 +1404,7 @@ export function nanoGptModelManagerOptions(
 					baseUrl,
 					apiKey,
 					mapModel: (entry, defaults) => {
-						const providerReference = references.get(defaults.id);
-						const globalReference = globalReferences.get(defaults.id);
-						const reference =
-							providerReference && globalReference
-								? providerReference.contextWindow >= globalReference.contextWindow
-									? providerReference
-									: globalReference
-								: (providerReference ?? globalReference);
+						const reference = resolveReference(defaults.id);
 						const mapped = mapWithBundledReference(entry, defaults, reference);
 						return { ...mapped, api: "openai-completions", provider: "nanogpt" };
 					},
@@ -1475,15 +1472,15 @@ function extractCopilotLimits(entry: OpenAICompatibleModelRecord): {
 
 export function githubCopilotModelManagerOptions(config?: GithubCopilotModelManagerConfig): ModelManagerOptions<Api> {
 	const rawApiKey = config?.apiKey;
-	const baseUrl = config?.baseUrl ?? "https://api.githubcopilot.com";
+	const configuredBaseUrl = config?.baseUrl ?? "https://api.githubcopilot.com";
 	const parsedApiKey = rawApiKey ? parseGitHubCopilotApiKey(rawApiKey) : undefined;
 	const apiKey = parsedApiKey?.accessToken;
-	const resolvedBaseUrl =
-		parsedApiKey?.enterpriseUrl && baseUrl.includes("githubcopilot.com")
+	const baseUrl =
+		parsedApiKey?.enterpriseUrl && configuredBaseUrl.includes("githubcopilot.com")
 			? getGitHubCopilotBaseUrl(parsedApiKey.enterpriseUrl)
-			: baseUrl;
-	const references = createBundledReferenceMap<Api>("github-copilot");
-	const globalReferences = createGlobalReferenceMap();
+			: configuredBaseUrl;
+	const providerRefs = createBundledReferenceMap<Api>("github-copilot");
+	const resolveReference = createReferenceResolver(providerRefs);
 	return {
 		providerId: "github-copilot",
 		...(apiKey && {
@@ -1491,7 +1488,7 @@ export function githubCopilotModelManagerOptions(config?: GithubCopilotModelMana
 				fetchOpenAICompatibleModels<Api>({
 					api: "openai-completions",
 					provider: "github-copilot",
-					baseUrl: resolvedBaseUrl,
+					baseUrl,
 					apiKey,
 					headers: OPENCODE_HEADERS,
 					mapModel: (
@@ -1499,26 +1496,18 @@ export function githubCopilotModelManagerOptions(config?: GithubCopilotModelMana
 						defaults: Model<Api>,
 						_context: OpenAICompatibleModelMapperContext<Api>,
 					): Model<Api> => {
-						const providerReference = references.get(defaults.id);
-						const globalReference = globalReferences.get(defaults.id) as Model<Api> | undefined;
-						const reference =
-							providerReference && globalReference
-								? providerReference.contextWindow >= globalReference.contextWindow
-									? providerReference
-									: globalReference
-								: (providerReference ?? globalReference);
+						const reference = resolveReference(defaults.id);
 						const copilotLimits = extractCopilotLimits(entry);
-						// Copilot currently exposes token limits under capabilities.limits.*.
-						// Keep OpenAI-compatible fields as outer fallbacks for forward compatibility if
-						// `/models` starts returning context_length/max_completion_tokens in the future.
+						// Copilot exposes token limits under capabilities.limits.*.
+						// max_prompt_tokens is the prompt capacity (what OMP calls contextWindow).
+						// max_context_window_tokens is the total window (prompt + output budget)
+						// and must NOT be used for contextWindow — it inflates the limit and
+						// breaks compaction thresholds, overflow detection, and promotion.
 						const contextWindow = toPositiveNumber(
 							entry.context_length,
 							toPositiveNumber(
-								copilotLimits.maxContextWindowTokens,
-								toPositiveNumber(
-									copilotLimits.maxPromptTokens,
-									reference?.contextWindow ?? defaults.contextWindow,
-								),
+								copilotLimits.maxPromptTokens,
+								reference?.contextWindow ?? defaults.contextWindow,
 							),
 						);
 						const maxTokens = toPositiveNumber(
@@ -1545,7 +1534,7 @@ export function githubCopilotModelManagerOptions(config?: GithubCopilotModelMana
 								name,
 								contextWindow,
 								maxTokens,
-								headers: { ...OPENCODE_HEADERS, ...(providerReference?.headers ?? {}) },
+								headers: { ...OPENCODE_HEADERS, ...(providerRefs.get(defaults.id)?.headers ?? {}) },
 								...(api === "openai-completions"
 									? {
 											compat: {
