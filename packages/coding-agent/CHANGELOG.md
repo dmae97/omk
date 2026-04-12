@@ -92,6 +92,10 @@
 - Fixed stale diagnostics being reused after unrelated file publishes by clearing cached diagnostics before refreshing file state
 - Fixed Codex search to use streamed answer text when final answer is an image placeholder or empty
 
+### Fixed
+
+- Fixed MCP config docs and schema to use `~/.omp/agent/mcp.json` for user-scoped OMP-native MCP config while keeping project config at `<cwd>/.omp/mcp.json`
+
 ## [14.0.4] - 2026-04-10
 ### Added
 
