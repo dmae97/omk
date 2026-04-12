@@ -16,6 +16,13 @@ const isCrossCompile = Boolean(crossTarget) || targetPlatform !== process.platfo
 
 type X64Variant = "modern" | "baseline";
 
+interface SafeHostZigBuildConfig {
+	wrapperPath: string;
+	realZigPath: string;
+	target: string;
+	cpu: string;
+}
+
 let configuredVariant: X64Variant | undefined;
 if (configuredVariantRaw) {
 	if (targetArch !== "x64") {
@@ -77,11 +84,34 @@ function resolveEffectiveVariant(): X64Variant | null {
 	}
 	return detectHostAvx2Support() ? "modern" : "baseline";
 }
-
 const effectiveVariant = resolveEffectiveVariant();
 const variantSuffix = effectiveVariant ? `-${effectiveVariant}` : "";
 
-// Default to native CPU optimization for local builds; explicit variants use fixed ISA targets.
+function resolveSafeHostZigBuildConfig(): SafeHostZigBuildConfig | null {
+	if (isCrossCompile || targetArch !== "x64" || !effectiveVariant) {
+		return null;
+	}
+
+	if (targetPlatform !== "linux" && targetPlatform !== "darwin") {
+		return null;
+	}
+
+	const realZigPath = Bun.which("zig");
+	if (!realZigPath) {
+		return null;
+	}
+
+	return {
+		wrapperPath: path.join(import.meta.dir, "zig-safe-wrapper.ts"),
+		realZigPath,
+		target: targetPlatform === "linux" ? "x86_64-linux-gnu" : "x86_64-macos",
+		cpu: effectiveVariant === "modern" ? "x86_64_v3" : "x86_64_v2",
+	};
+}
+
+// Keep host-built Zig dependencies on the same ISA floor as the Rust addon.
+// zlob's build.rs defaults host builds to `native`, which can leak newer CPU
+// instructions into release artifacts even when Rust itself targets x86-64-v2/v3.
 if (!isCrossCompile && !Bun.env.RUSTFLAGS) {
 	if (effectiveVariant === "modern") {
 		Bun.env.RUSTFLAGS = "-C target-cpu=x86-64-v3";
@@ -161,39 +191,31 @@ async function patchGeneratedIndexLoader(): Promise<void> {
 	await Bun.write(indexPath, content);
 }
 
-async function resolveBuiltAddonPath(canonicalFilename: string): Promise<string> {
-	// Variant-tagged files produced by previous invocations of this script that
-	// should NOT be treated as this build's output (unless they equal our target).
-	const siblingVariantFilenames = new Set([
-		`pi_natives.${targetPlatform}-${targetArch}-modern.node`,
-		`pi_natives.${targetPlatform}-${targetArch}-baseline.node`,
-	]);
-	siblingVariantFilenames.delete(canonicalFilename);
-
-	const entries = await fs.readdir(nativeDir);
-
-	if (entries.includes(canonicalFilename)) {
-		return path.join(nativeDir, canonicalFilename);
-	}
-
+async function resolveBuiltAddonPath(outputDir: string, canonicalFilename: string): Promise<string> {
 	// napi-rs 3.x emits `${binaryName}.${platformArchABI}.node` where
 	// platformArchABI is e.g. `darwin-x64`, `linux-x64-gnu`, `win32-x64-msvc`,
-	// `darwin-arm64`. Match any file for this platform/arch that isn't a
-	// sibling variant we might have produced previously.
+	// `darwin-arm64`. Build into an isolated output dir so only this invocation's
+	// outputs are considered fresh candidates.
+	const entries = await fs.readdir(outputDir);
+
+	if (entries.includes(canonicalFilename)) {
+		return path.join(outputDir, canonicalFilename);
+	}
+
 	const generatedCandidates = entries.filter(entry => {
 		if (!entry.startsWith(`pi_natives.${targetPlatform}-${targetArch}`) || !entry.endsWith(".node")) {
 			return false;
 		}
-		return !siblingVariantFilenames.has(entry);
+		return true;
 	});
 
 	if (generatedCandidates.length === 1) {
-		return path.join(nativeDir, generatedCandidates[0]);
+		return path.join(outputDir, generatedCandidates[0]);
 	}
 
 	if (generatedCandidates.length === 0) {
 		throw new Error(
-			`napi build succeeded but did not emit a native addon for ${targetPlatform}-${targetArch}. Expected ${canonicalFilename} or an environment-tagged variant in ${nativeDir}. Directory contents: ${entries.join(", ") || "(empty)"}.`,
+			`napi build succeeded but did not emit a native addon for ${targetPlatform}-${targetArch}. Expected ${canonicalFilename} or an environment-tagged variant in ${outputDir}. Directory contents: ${entries.join(", ") || "(empty)"}.`,
 		);
 	}
 
@@ -203,8 +225,48 @@ async function resolveBuiltAddonPath(canonicalFilename: string): Promise<string>
 	);
 }
 
+function resolveBuildOutputDirPrefix(profileLabel: string): string {
+	const buildTarget = crossTarget ?? `${targetPlatform}-${targetArch}`;
+	const variantLabel = effectiveVariant ?? "default";
+	return path.join(nativeDir, ".build", `${buildTarget}-${variantLabel}-${profileLabel}-`);
+}
+
+async function installGeneratedBindings(outputDir: string): Promise<void> {
+	for (const filename of ["index.js", "index.d.ts"]) {
+		const sourcePath = path.join(outputDir, filename);
+		const destPath = path.join(nativeDir, filename);
+		try {
+			await fs.copyFile(sourcePath, destPath);
+		} catch (err) {
+			const errno = err as NodeJS.ErrnoException;
+			if (errno.code === "ENOENT") {
+				const destExists = await Bun.file(destPath).exists();
+				if (destExists) {
+					continue;
+				}
+			}
+			const message = err instanceof Error ? err.message : String(err);
+			throw new Error(`Failed to install generated ${filename}: ${message}`);
+		}
+	}
+}
+
+function resolveManagedCargoTargetDir(profileLabel: string): string | null {
+	if (Bun.env.CARGO_TARGET_DIR) {
+		return null;
+	}
+
+	const buildTarget = crossTarget ?? `${targetPlatform}-${targetArch}`;
+	const variantLabel = effectiveVariant ?? "default";
+	return path.join(repoRoot, "target", "napi-build", `${buildTarget}-${variantLabel}-${profileLabel}`);
+}
+
 const isCI = Boolean(Bun.env.CI);
 const useLocalProfile = !isCI && !isCrossCompile;
+const profileLabel = useLocalProfile ? "local" : "release";
+const profileSuffix = useLocalProfile ? " (local)" : "";
+
+const buildOutputDirPrefix = resolveBuildOutputDirPrefix(profileLabel);
 
 // Build napi args
 const napiArgs = [
@@ -218,7 +280,7 @@ const napiArgs = [
 	"--dts",
 	"index.d.ts",
 	"-o",
-	nativeDir,
+	"",
 ];
 
 if (useLocalProfile) {
@@ -229,14 +291,16 @@ if (useLocalProfile) {
 
 if (crossTarget) napiArgs.push("--target", crossTarget);
 
-const profileLabel = useLocalProfile ? " (local)" : "";
 const canonicalAddonFilename = `pi_natives.${targetPlatform}-${targetArch}${variantSuffix}.node`;
 const canonicalAddonPath = path.join(nativeDir, canonicalAddonFilename);
 
-console.log(`Building pi-natives for ${targetPlatform}-${targetArch}${variantSuffix}${profileLabel}…`);
+console.log(`Building pi-natives for ${targetPlatform}-${targetArch}${variantSuffix}${profileSuffix}…`);
 
 await fs.mkdir(nativeDir, { recursive: true });
 await cleanupStaleTemps(nativeDir);
+await fs.mkdir(path.join(nativeDir, ".build"), { recursive: true });
+const buildOutputDir = await fs.mkdtemp(buildOutputDirPrefix);
+napiArgs[10] = buildOutputDir;
 
 // Resolve napi bin directly: `bunx @napi-rs/cli` can pick up the wrong bin on
 // systems where `cli` exists on PATH (e.g. Mono's /usr/bin/cli on Ubuntu).
@@ -246,21 +310,44 @@ const napiBin = Bun.which("napi", {
 if (!napiBin) {
 	throw new Error("Could not locate @napi-rs/cli `napi` binary in node_modules/.bin");
 }
-const buildResult = await $`${napiBin} ${napiArgs}`.nothrow();
-if (buildResult.exitCode !== 0) {
-	const stderr = buildResult.stderr?.toString("utf-8") ?? "";
-	throw new Error(`napi build failed${stderr ? `:\n${stderr}` : ""}`);
+
+const managedCargoTargetDir = resolveManagedCargoTargetDir(profileLabel);
+if (managedCargoTargetDir) {
+	Bun.env.CARGO_TARGET_DIR = managedCargoTargetDir;
+	console.log(`Using isolated CARGO_TARGET_DIR: ${managedCargoTargetDir}`);
 }
 
-const builtAddonPath = await resolveBuiltAddonPath(canonicalAddonFilename);
-if (builtAddonPath !== canonicalAddonPath) {
-	console.log(`Normalizing native addon filename: ${path.basename(builtAddonPath)} → ${canonicalAddonFilename}`);
-	await installBinary(builtAddonPath, canonicalAddonPath);
-	await fs.unlink(builtAddonPath).catch(() => {});
+const safeHostZigBuildConfig = resolveSafeHostZigBuildConfig();
+if (safeHostZigBuildConfig) {
+	Bun.env.ZIG = safeHostZigBuildConfig.wrapperPath;
+	Bun.env.PI_NATIVE_REAL_ZIG = safeHostZigBuildConfig.realZigPath;
+	Bun.env.PI_NATIVE_ZIG_TARGET = safeHostZigBuildConfig.target;
+	Bun.env.PI_NATIVE_ZIG_CPU = safeHostZigBuildConfig.cpu;
+	console.log(
+		`Pinning host Zig CPU contract: ${safeHostZigBuildConfig.target} ${safeHostZigBuildConfig.cpu} (${effectiveVariant})`,
+	);
 }
 
-// Generate runtime enum exports from const enums in index.d.ts
-await $`bun ${path.join(import.meta.dir, "gen-enums.ts")}`;
-await patchGeneratedIndexLoader();
+try {
+	const buildResult = await $`${napiBin} ${napiArgs}`.nothrow();
+	if (buildResult.exitCode !== 0) {
+		const stderr = buildResult.stderr?.toString("utf-8") ?? "";
+		throw new Error(`napi build failed${stderr ? `:\n${stderr}` : ""}`);
+	}
 
-console.log("Build complete.");
+	const builtAddonPath = await resolveBuiltAddonPath(buildOutputDir, canonicalAddonFilename);
+	if (builtAddonPath !== canonicalAddonPath) {
+		console.log(`Normalizing native addon filename: ${path.basename(builtAddonPath)} → ${canonicalAddonFilename}`);
+		await installBinary(builtAddonPath, canonicalAddonPath);
+	}
+
+	await installGeneratedBindings(buildOutputDir);
+
+	// Generate runtime enum exports from const enums in index.d.ts
+	await $`bun ${path.join(import.meta.dir, "gen-enums.ts")}`;
+	await patchGeneratedIndexLoader();
+
+	console.log("Build complete.");
+} finally {
+	await fs.rm(buildOutputDir, { recursive: true, force: true });
+}

@@ -2722,6 +2722,7 @@ version = "14.1.0"
 dependencies = [
  "arboard",
  "ast-grep-core",
+ "blake3",
  "brush-builtins",
  "brush-core",
  "bytes",
