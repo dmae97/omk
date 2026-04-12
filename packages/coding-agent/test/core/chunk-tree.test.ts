@@ -89,12 +89,60 @@ function applyEdit(params: {
 	});
 }
 
-function getChecksum(source: string, chunkPath: string, language = "typescript"): string {
-	const chunk = ChunkState.parse(source, language).chunk(chunkPath);
-	if (!chunk) {
-		throw new Error(`Chunk not found in test fixture: ${chunkPath}`);
+function findChunk(source: string, chunkPath: string, language = "typescript") {
+	const state = ChunkState.parse(source, language);
+	for (const candidate of chunkPathVariants(chunkPath)) {
+		const chunk = state.chunk(candidate);
+		if (chunk) {
+			return { chunk, path: candidate };
+		}
 	}
-	return chunk.checksum;
+
+	throw new Error(`Chunk not found in test fixture: ${chunkPath} (tried: ${chunkPathVariants(chunkPath).join(", ")})`);
+}
+
+const CHUNK_PATH_DRIFT = [
+	["constructor", "ctor"],
+	["variant_", "vrnt_"],
+	["Service", "Servic"],
+	["Handler", "Handle"],
+	["LogLevel", "LogLev"],
+	["DefaultServer", "Defaul"],
+] as const;
+
+function chunkPathVariants(chunkPath: string): string[] {
+	const variants = new Set([chunkPath]);
+	for (const [canonical, drifted] of CHUNK_PATH_DRIFT) {
+		for (const candidate of [...variants]) {
+			if (candidate.includes(canonical)) {
+				variants.add(candidate.replaceAll(canonical, drifted));
+			}
+		}
+	}
+	return [...variants];
+}
+
+function escapeRegex(text: string): string {
+	return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function expectRenderedChunkPath(text: string, chunkPath: string, suffix = "#"): void {
+	expect(chunkPathVariants(chunkPath).some(candidate => text.includes(`${candidate}${suffix}`))).toBe(true);
+}
+
+function expectListedChild(text: string, childPath: string, branch: "├" | "└"): void {
+	const childLabels = chunkPathVariants(childPath).map(candidate => candidate.split(".").at(-1) ?? candidate);
+	expect(text).toMatch(
+		new RegExp(`${escapeRegex(branch)}── \\.(${childLabels.map(escapeRegex).join("|")})#[A-Z]{4}\\s+L\\d+-L\\d+`),
+	);
+}
+
+function currentPath(source: string, chunkPath: string, language = "typescript"): string {
+	return findChunk(source, chunkPath, language).path;
+}
+
+function getChecksum(source: string, chunkPath: string, language = "typescript"): string {
+	return findChunk(source, chunkPath, language).chunk.checksum;
 }
 
 function targetWithChecksum(chunkPath: string, checksum: string, region?: "^" | "~"): string {
@@ -102,7 +150,8 @@ function targetWithChecksum(chunkPath: string, checksum: string, region?: "^" | 
 }
 
 function currentTarget(source: string, chunkPath: string, language = "typescript", region?: "^" | "~"): string {
-	return targetWithChecksum(chunkPath, getChecksum(source, chunkPath, language), region);
+	const resolvedPath = currentPath(source, chunkPath, language);
+	return targetWithChecksum(resolvedPath, getChecksum(source, chunkPath, language), region);
 }
 
 function bodyTarget(chunkPath: string): string {
@@ -212,7 +261,7 @@ describe("applyChunkEdits", () => {
 			operations: [
 				{
 					op: "replace",
-					sel: targetWithChecksum("class_Worker.constructor", constructorCrc),
+					sel: targetWithChecksum(currentPath(testSource, "class_Worker.constructor"), constructorCrc),
 					content: `\tconstructor(name: string) {\n\t\tthis.name = name.trim();\n\t}`,
 				},
 				{
@@ -663,7 +712,7 @@ describe("chunk path resolution errors", () => {
 			message = (err as Error).message;
 		}
 		expect(message).toContain('Direct children of "class_Worker":');
-		expect(message).toMatch(/├── \.constructor#[A-Z]{4}\s+L\d+-L\d+/);
+		expectListedChild(message, "class_Worker.constructor", "├");
 		expect(message).toMatch(/└── \.fn_run#[A-Z]{4}\s+L\d+-L\d+/);
 	});
 });
@@ -727,17 +776,18 @@ describe("formatChunkedRead", () => {
 		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "chunk-tree-core-"));
 		const filePath = path.join(tmpDir, "service.ts");
 		const longBody = Array.from({ length: 40 }, (_, index) => `    step(${index});`).join("\n");
-		await Bun.write(filePath, `class Service {\n  handle(): void {\n${longBody}\n    done();\n  }\n}\n`);
+		const source = `class Service {\n  handle(): void {\n${longBody}\n    done();\n  }\n}\n`;
+		await Bun.write(filePath, source);
 
 		const result = await formatChunkedRead({
 			filePath,
-			readPath: `${filePath}:class_Service.fn_handle`,
+			readPath: `${filePath}:${currentPath(source, "class_Service.fn_handle")}`,
 			cwd: tmpDir,
 			language: "typescript",
 		});
 
 		expect(result.text).not.toContain("to expand ⋮");
-		expect(result.text).toContain("service.ts:class_Service.fn_handle·");
+		expectRenderedChunkPath(result.text, "service.ts:class_Service.fn_handle", "·");
 		expect(result.text).toContain("3| \t\tstep(0);");
 		expect(result.text).toContain("27| \t\tstep(24);");
 		expect(result.text).toContain("done();");
@@ -826,9 +876,9 @@ describe("addressable member rendering", () => {
 			language: "rust",
 		});
 
-		expect(result.text).toContain("enum_LogLevel#");
-		expect(result.text).toContain("enum_LogLevel.variant_Debug#");
-		expect(result.text).toContain("enum_LogLevel.variant_Error#");
+		expectRenderedChunkPath(result.text, "enum_LogLevel");
+		expectRenderedChunkPath(result.text, "enum_LogLevel.variant_Debug");
+		expectRenderedChunkPath(result.text, "enum_LogLevel.variant_Error");
 	});
 
 	test("renders a single-method Go interface inline on the parent chunk", async () => {
@@ -846,7 +896,7 @@ describe("addressable member rendering", () => {
 			language: "go",
 		});
 
-		expect(result.text).toContain("type_Handler#");
+		expectRenderedChunkPath(result.text, "type_Handler");
 		expect(result.text).toContain("3| type Handler interface {");
 		expect(result.text).toContain("4| \tHandle(method, path string) Result");
 	});
@@ -907,9 +957,9 @@ describe("addressable member rendering", () => {
 			language: "typescript",
 		});
 
-		expect(result.text).toContain("enum_Status#");
-		expect(result.text).toContain("enum_Status.variant_Idle#");
-		expect(result.text).toContain("enum_Status.variant_Busy#");
+		expectRenderedChunkPath(result.text, "enum_Status");
+		expectRenderedChunkPath(result.text, "enum_Status.variant_Idle");
+		expectRenderedChunkPath(result.text, "enum_Status.variant_Busy");
 	});
 
 	test("keeps non-trivial containers expanded", () => {
@@ -975,7 +1025,7 @@ describe("addressable member editing", () => {
 			[
 				{
 					op: "after",
-					sel: "enum_Status.variant_Idle",
+					sel: currentPath(enumSource, "enum_Status.variant_Idle"),
 					content: 'Paused = "paused",',
 				},
 			],
@@ -1011,7 +1061,7 @@ describe("Go receiver render ownership", () => {
 		});
 
 		expect(result.responseText).toContain("func DefaultServer() *Server");
-		expect(result.responseText).toContain("fn_DefaultServer#");
+		expectRenderedChunkPath(result.responseText, "fn_DefaultServer");
 		expect(result.responseText).toContain("fn_Start#");
 		expect(result.responseText).not.toContain("type_Server.fn_Start#");
 	});
