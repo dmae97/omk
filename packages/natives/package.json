@@ -39,8 +39,8 @@
 		"bench": "bun bench/grep.ts"
 	},
 	"devDependencies": {
-		"@napi-rs/cli": "3.6.0",
-		"@types/bun": "^1.3"
+		"@napi-rs/cli": "catalog:",
+		"@types/bun": "catalog:"
 	},
 	"engines": {
 		"bun": ">=1.3.7"

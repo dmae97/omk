@@ -35,13 +35,13 @@
 		"fmt": "biome format --write ."
 	},
 	"dependencies": {
-		"@oh-my-pi/pi-ai": "workspace:*",
-		"@oh-my-pi/pi-natives": "workspace:*",
-		"@oh-my-pi/pi-utils": "workspace:*"
+		"@oh-my-pi/pi-ai": "catalog:",
+		"@oh-my-pi/pi-natives": "catalog:",
+		"@oh-my-pi/pi-utils": "catalog:"
 	},
 	"devDependencies": {
-		"@sinclair/typebox": "^0.34",
-		"@types/bun": "^1.3"
+		"@sinclair/typebox": "catalog:",
+		"@types/bun": "catalog:"
 	},
 	"engines": {
 		"bun": ">=1.3.7"
