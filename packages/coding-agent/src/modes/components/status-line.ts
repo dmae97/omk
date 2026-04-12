@@ -9,7 +9,7 @@ import { theme } from "../../modes/theme/theme";
 import type { AgentSession } from "../../session/agent-session";
 import { calculatePromptTokens } from "../../session/compaction/compaction";
 import * as git from "../../utils/git";
-import { getSessionAccentHex } from "../../utils/session-color";
+import { getSessionAccentHexForTitle } from "../../utils/session-color";
 import { sanitizeStatusText } from "../shared";
 import {
 	canReuseCachedPr,
@@ -472,10 +472,11 @@ export class StatusLineComponent implements Component {
 		leftWidth = groupWidth(left, leftCapWidth, leftSepWidth);
 		rightWidth = groupWidth(right, rightCapWidth, rightSepWidth);
 		const gapWidth = Math.max(1, topFillWidth - leftWidth - rightWidth);
-		const sessionName = this.session.sessionManager?.getSessionName();
-		const gapColor = sessionName
-			? (Bun.color(getSessionAccentHex(sessionName), "ansi-16m") ?? theme.getFgAnsi("border"))
-			: theme.getFgAnsi("border");
+		const accentHex = getSessionAccentHexForTitle(
+			this.session.sessionManager?.getSessionName(),
+			this.session.sessionManager?.titleSource,
+		);
+		const gapColor = accentHex ? (Bun.color(accentHex, "ansi-16m") ?? theme.getFgAnsi("border")) : theme.getFgAnsi("border");
 		const gapFill = `${gapColor}${theme.boxRound.horizontal.repeat(gapWidth)}\x1b[0m`;
 		return leftGroup + gapFill + rightGroup;
 	}

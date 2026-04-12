@@ -32,3 +32,15 @@ function hslToHex(h: number, s: number, l: number): string {
 export function getSessionAccentHex(name: string): string {
 	return hslToHex(nameToHue(name), 0.9, 0.72);
 }
+
+/**
+ * Auto-generated titles should not drive the session accent.
+ * Legacy sessions with unknown title source keep the old behavior.
+ */
+export function getSessionAccentHexForTitle(
+	name: string | undefined,
+	titleSource: "auto" | "user" | undefined,
+): string | undefined {
+	if (!name || titleSource === "auto") return undefined;
+	return getSessionAccentHex(name);
+}
