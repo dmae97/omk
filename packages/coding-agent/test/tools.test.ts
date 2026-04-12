@@ -1093,6 +1093,33 @@ function b() {
 		});
 	});
 
+	describe("AwaitTool", () => {
+		it("should wait for jobs and acknowledge deliveries to prevent race conditions", async () => {
+			const manager = new AsyncJobManager({
+				onJobComplete: async () => {},
+			});
+			const session = createTestToolSession(testDir, Settings.isolated({ "bash.autoBackground.enabled": true }), {
+				asyncJobManager: manager,
+			});
+			const awaitTool = AwaitTool.createIf(session)!;
+
+			const jobId = manager.register("bash", "test job", async () => "success");
+
+			// Job is running, call await
+			const resultPromise = awaitTool.execute("test-call-await-1", { jobs: [jobId] });
+
+			// Ensure await finished
+			const result = await resultPromise;
+			expect(getTextOutput(result)).toContain("Completed");
+
+			// Wait for deliveries to be processed
+			await manager.drainDeliveries({ timeoutMs: 100 });
+
+			// If it correctly acknowledged, the delivery is suppressed.
+			expect(manager.hasPendingDeliveries()).toBe(false);
+		});
+	});
+
 	describe("grep tool", () => {
 		it("should include filename when searching a single file", async () => {
 			const testFile = path.join(testDir, "example.txt");
