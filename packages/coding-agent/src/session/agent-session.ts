@@ -3314,8 +3314,8 @@ export class AgentSession {
 	/**
 	 * Set a display name for the current session.
 	 */
-	setSessionName(name: string): void {
-		this.sessionManager.setSessionName(name);
+	setSessionName(name: string, source: "auto" | "user" = "auto"): Promise<boolean> {
+		return this.sessionManager.setSessionName(name, source);
 	}
 
 	/**

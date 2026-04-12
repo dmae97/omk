@@ -767,6 +767,7 @@ export class SelectorController {
 		this.ctx.statusLine.invalidate();
 		this.ctx.statusLine.setSessionStartTime(Date.now());
 		this.ctx.updateEditorTopBorder();
+		this.ctx.updateEditorBorderColor();
 		this.ctx.renderInitialMessages();
 		await this.ctx.reloadTodos();
 		this.ctx.ui.requestRender();
@@ -779,6 +780,7 @@ export class SelectorController {
 		// Switch session via AgentSession (emits hook and tool session events)
 		await this.ctx.session.switchSession(sessionPath);
 		this.#refreshSessionTerminalTitle();
+		this.ctx.updateEditorBorderColor();
 
 		// Clear and re-render the chat
 		this.ctx.chatContainer.clear();

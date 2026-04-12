@@ -751,7 +751,10 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				if (!name) {
 					return error(id, "set_session_name", "Session name cannot be empty");
 				}
-				session.setSessionName(name);
+				const applied = await session.setSessionName(name, "user");
+				if (!applied) {
+					return error(id, "set_session_name", "Session name cannot be empty");
+				}
 				return success(id, "set_session_name");
 			}
 

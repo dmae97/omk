@@ -5,10 +5,10 @@ import { theme } from "./theme/theme";
 // Text Sanitization
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Sanitize text for display in a single-line status. Replaces newlines/tabs with space, collapses runs, trims. */
+/** Sanitize text for display in a single-line status. Strips C0/C1 control characters (including ANSI ESC), collapses whitespace, trims. */
 export function sanitizeStatusText(text: string): string {
 	return text
-		.replace(/[\r\n\t]/g, " ")
+		.replace(/[\u0000-\u001f\u007f-\u009f]/g, " ")
 		.replace(/ +/g, " ")
 		.trim();
 }

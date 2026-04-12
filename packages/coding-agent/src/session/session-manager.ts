@@ -1378,6 +1378,7 @@ export async function resolveResumableSession(
 interface SessionManagerStateSnapshot {
 	sessionId: string;
 	sessionName: string | undefined;
+	titleSource: "auto" | "user" | undefined;
 	sessionFile: string | undefined;
 	flushed: boolean;
 	needsFullRewriteOnNextPersist: boolean;
@@ -1387,6 +1388,7 @@ interface SessionManagerStateSnapshot {
 export class SessionManager {
 	#sessionId: string = "";
 	#sessionName: string | undefined;
+	#titleSource: "auto" | "user" | undefined;
 	#sessionFile: string | undefined;
 	#flushed: boolean = false;
 	#needsFullRewriteOnNextPersist: boolean = false;
@@ -1438,6 +1440,7 @@ export class SessionManager {
 		return {
 			sessionId: this.#sessionId,
 			sessionName: this.#sessionName,
+			titleSource: this.#titleSource,
 			sessionFile: this.#sessionFile,
 			flushed: this.#flushed,
 			needsFullRewriteOnNextPersist: this.#needsFullRewriteOnNextPersist,
@@ -1450,6 +1453,7 @@ export class SessionManager {
 	restoreState(snapshot: SessionManagerStateSnapshot): void {
 		this.#sessionId = snapshot.sessionId;
 		this.#sessionName = snapshot.sessionName;
+		this.#titleSource = snapshot.titleSource;
 		this.#sessionFile = snapshot.sessionFile;
 		this.#flushed = snapshot.flushed;
 		this.#needsFullRewriteOnNextPersist = snapshot.needsFullRewriteOnNextPersist;
@@ -1489,6 +1493,7 @@ export class SessionManager {
 			const header = this.#fileEntries.find(e => e.type === "session") as SessionHeader | undefined;
 			this.#sessionId = header?.id ?? Snowflake.next();
 			this.#sessionName = header?.title;
+			this.#titleSource = undefined; // loaded session: reset so auto-title can run for untitled sessions
 
 			this.#needsFullRewriteOnNextPersist = migrateToCurrentVersion(this.#fileEntries);
 
@@ -1666,6 +1671,7 @@ export class SessionManager {
 		this.#persistErrorReported = false;
 		this.#sessionId = Snowflake.next();
 		this.#sessionName = undefined;
+		this.#titleSource = undefined;
 		const timestamp = new Date().toISOString();
 		const header: SessionHeader = {
 			type: "session",
@@ -1953,17 +1959,42 @@ export class SessionManager {
 		return manager.getPath(id);
 	}
 
+	/** The source that set the session name: "user" (manual /rename or RPC) or "auto" (generated title). */
+	get titleSource(): "auto" | "user" | undefined {
+		return this.#titleSource;
+	}
+
 	getSessionName(): string | undefined {
 		return this.#sessionName;
 	}
 
-	async setSessionName(name: string): Promise<void> {
-		this.#sessionName = name;
+	/** Strip C0/C1 control characters (includes ESC, so removes ANSI sequences) and collapse whitespace. */
+	static #sanitizeName(name: string): string {
+		return name
+			.replace(/[\u0000-\u001f\u007f-\u009f]/g, " ")
+			.replace(/ +/g, " ")
+			.trim();
+	}
+
+	/**
+	 * Set the session display name.
+	 * @param source - "user" for explicit renames (/rename command, RPC); "auto" for generated titles.
+	 *   Auto-generated titles are silently ignored when the user has already set a name.
+	 */
+	async setSessionName(name: string, source: "auto" | "user" = "auto"): Promise<boolean> {
+		// User-set names take permanent precedence over auto-generated ones.
+		if (this.#titleSource === "user" && source === "auto") return false;
+
+		const sanitized = SessionManager.#sanitizeName(name);
+		if (!sanitized) return false;
+
+		this.#sessionName = sanitized;
+		this.#titleSource = source;
 
 		// Update the in-memory header (so first flush includes title)
 		const header = this.#fileEntries.find(e => e.type === "session") as SessionHeader | undefined;
 		if (header) {
-			header.title = name;
+			header.title = sanitized;
 		}
 
 		// Update the session file header with the title (if already flushed)
@@ -1971,6 +2002,7 @@ export class SessionManager {
 		if (this.persist && sessionFile && this.storage.existsSync(sessionFile)) {
 			await this.#rewriteFile();
 		}
+		return true;
 	}
 
 	_persist(entry: SessionEntry): void {

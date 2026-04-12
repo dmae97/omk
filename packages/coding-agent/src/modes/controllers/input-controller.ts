@@ -342,8 +342,14 @@ export class InputController {
 				generateSessionTitle(text, registry, this.ctx.settings, this.ctx.session.sessionId, this.ctx.session.model)
 					.then(async title => {
 						if (title) {
-							await this.ctx.sessionManager.setSessionName(title);
-							setSessionTerminalTitle(title, this.ctx.sessionManager.getCwd());
+							const applied = await this.ctx.sessionManager.setSessionName(title, "auto");
+							if (applied) {
+								setSessionTerminalTitle(
+									this.ctx.sessionManager.getSessionName()!,
+									this.ctx.sessionManager.getCwd(),
+								);
+								this.ctx.updateEditorBorderColor();
+							}
 						}
 					})
 					.catch(() => {});

@@ -562,6 +562,23 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 		},
 	},
 	{
+		name: "rename",
+		description: "Rename the current session",
+		inlineHint: "<title>",
+		allowArgs: true,
+		handle: async (command, runtime) => {
+			const title = command.args.trim();
+			if (!title) {
+				runtime.ctx.showError("Usage: /rename <title>");
+				runtime.ctx.editor.setText("");
+				return;
+			}
+			runtime.ctx.editor.setText("");
+			await runtime.ctx.handleRenameCommand(title);
+		},
+	},
+
+	{
 		name: "move",
 		description: "Move session to a different working directory",
 		inlineHint: "<path>",

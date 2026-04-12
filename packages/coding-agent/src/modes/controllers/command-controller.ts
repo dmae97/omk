@@ -593,6 +593,7 @@ export class CommandController {
 		this.ctx.statusLine.invalidate();
 		this.ctx.statusLine.setSessionStartTime(Date.now());
 		this.ctx.updateEditorTopBorder();
+		this.ctx.updateEditorBorderColor();
 		this.ctx.ui.requestRender();
 
 		this.ctx.chatContainer.clear();
@@ -683,6 +684,23 @@ export class CommandController {
 			this.ctx.ui.requestRender();
 		} catch (err) {
 			this.ctx.showError(`Move failed: ${err instanceof Error ? err.message : String(err)}`);
+		}
+	}
+
+	async handleRenameCommand(title: string): Promise<void> {
+		try {
+			const stored = await this.ctx.sessionManager.setSessionName(title, "user");
+			if (!stored) {
+				this.ctx.showError("Session name cannot be empty.");
+				return;
+			}
+			const name = this.ctx.sessionManager.getSessionName()!;
+			setSessionTerminalTitle(name, this.ctx.sessionManager.getCwd());
+			this.ctx.statusLine.invalidate();
+			this.ctx.updateEditorBorderColor();
+			this.ctx.showStatus(`Session renamed to "${name}".`);
+		} catch (err) {
+			this.ctx.showError(`Rename failed: ${err instanceof Error ? err.message : String(err)}`);
 		}
 	}
 
@@ -869,6 +887,7 @@ export class CommandController {
 
 			this.ctx.statusLine.invalidate();
 			this.ctx.updateEditorTopBorder();
+			this.ctx.updateEditorBorderColor();
 			await this.ctx.reloadTodos();
 
 			this.ctx.chatContainer.addChild(new Spacer(1));

@@ -159,10 +159,10 @@ export function formatSessionTerminalTitle(sessionName: string | undefined, cwd?
 }
 
 /**
- * Set the terminal title using OSC 2. Unsupported terminals ignore it.
+ * Set the terminal title using OSC 0 (sets both tab and window title). Unsupported terminals ignore it.
  */
 export function setTerminalTitle(title: string): void {
-	process.stdout.write(`\x1b]2;${sanitizeTerminalTitlePart(title) ?? DEFAULT_TERMINAL_TITLE}\x07`);
+	process.stdout.write(`\x1b]0;${sanitizeTerminalTitlePart(title) ?? DEFAULT_TERMINAL_TITLE}\x07`);
 }
 
 export function setSessionTerminalTitle(sessionName: string | undefined, cwd?: string): void {

@@ -5,6 +5,8 @@ import { TERMINAL } from "@oh-my-pi/pi-tui";
 import { formatDuration, formatNumber, getProjectDir, relativePathWithinRoot } from "@oh-my-pi/pi-utils";
 import { theme } from "../../../modes/theme/theme";
 import { shortenPath } from "../../../tools/render-utils";
+import { getSessionAccentHex } from "../../../utils/session-color";
+import { sanitizeStatusText } from "../../shared";
 import { getContextUsageLevel, getContextUsageThemeColor } from "./context-thresholds";
 import type { RenderedSegment, SegmentContext, StatusLineSegment, StatusLineSegmentId } from "./types";
 
@@ -354,6 +356,18 @@ const cacheWriteSegment: StatusLineSegment = {
 	},
 };
 
+const sessionNameSegment: StatusLineSegment = {
+	id: "session_name",
+	render(ctx) {
+		const name = ctx.session.sessionManager?.getSessionName();
+		if (!name) return { content: "", visible: false };
+
+		const hex = getSessionAccentHex(name);
+		const ansi = Bun.color(hex, "ansi-16m") ?? theme.getFgAnsi("accent");
+		return { content: `${ansi}${sanitizeStatusText(name)}\x1b[39m`, visible: true };
+	},
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Segment Registry
 // ═══════════════════════════════════════════════════════════════════════════
@@ -379,6 +393,7 @@ export const SEGMENTS: Record<StatusLineSegmentId, StatusLineSegment> = {
 	hostname: hostnameSegment,
 	cache_read: cacheReadSegment,
 	cache_write: cacheWriteSegment,
+	session_name: sessionNameSegment,
 };
 
 export function renderSegment(id: StatusLineSegmentId, ctx: SegmentContext): RenderedSegment {

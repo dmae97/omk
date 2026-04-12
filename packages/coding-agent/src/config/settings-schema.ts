@@ -74,7 +74,8 @@ export type StatusLineSegmentId =
 	| "session"
 	| "hostname"
 	| "cache_read"
-	| "cache_write";
+	| "cache_write"
+	| "session_name";
 
 interface UiMetadata {
 	tab: SettingTab;
