@@ -134,6 +134,151 @@ describe("ModelRegistry runtime provider registration", () => {
 		});
 	});
 
+	test("extension-registered models survive refresh('offline') cycle", async () => {
+		const registry = new ModelRegistry(authStorage, modelsJsonPath);
+		const config: ProviderConfigInput = {
+			baseUrl: "https://runtime.example.com/v1",
+			apiKey: "RUNTIME_KEY",
+			api: "openai-completions",
+			models: [baseModel],
+		};
+
+		registry.registerProvider("runtime-provider", config, "ext://runtime");
+		expect(registry.find("runtime-provider", "runtime-model")).toBeDefined();
+
+		await registry.refresh("offline");
+
+		const model = registry.find("runtime-provider", "runtime-model");
+		expect(model).toBeDefined();
+		expect(model?.baseUrl).toBe("https://runtime.example.com/v1");
+		expect(model?.api).toBe("openai-completions");
+	});
+
+	test("extension-registered models survive refresh('online') cycle", async () => {
+		const registry = new ModelRegistry(authStorage, modelsJsonPath);
+		const config: ProviderConfigInput = {
+			baseUrl: "https://runtime.example.com/v1",
+			apiKey: "RUNTIME_KEY",
+			api: "openai-completions",
+			models: [{ ...baseModel, id: "online-survivor" }],
+		};
+
+		registry.registerProvider("runtime-provider", config, "ext://runtime");
+		expect(registry.find("runtime-provider", "online-survivor")).toBeDefined();
+
+		await registry.refresh("online");
+
+		const model = registry.find("runtime-provider", "online-survivor");
+		expect(model).toBeDefined();
+		expect(model?.api).toBe("openai-completions");
+	});
+
+	test("extension-registered API keys survive refresh cycle for auth resolution", async () => {
+		const registry = new ModelRegistry(authStorage, modelsJsonPath);
+
+		// Set up the env var that the apiKey config references
+		process.env.TEST_RUNTIME_KEY = "test-value";
+
+		const config: ProviderConfigInput = {
+			baseUrl: "https://runtime.example.com/v1",
+			apiKey: "TEST_RUNTIME_KEY",
+			api: "openai-completions",
+			models: [baseModel],
+		};
+
+		registry.registerProvider("runtime-provider", config, "ext://runtime");
+		expect(registry.authStorage.hasAuth("runtime-provider")).toBe(true);
+
+		await registry.refresh("offline");
+
+		// The fallback resolver should still find the API key after refresh
+		expect(registry.authStorage.hasAuth("runtime-provider")).toBe(true);
+
+		delete process.env.TEST_RUNTIME_KEY;
+	});
+
+	test("extension-registered custom API handler survives model refresh", async () => {
+		const registry = new ModelRegistry(authStorage, modelsJsonPath);
+		const config: ProviderConfigInput = {
+			baseUrl: "https://runtime.example.com/v1",
+			apiKey: "RUNTIME_KEY",
+			api: "custom-runtime-api",
+			streamSimple,
+			models: [baseModel],
+		};
+
+		registry.registerProvider("runtime-provider", config, "ext://runtime");
+		expect(getCustomApi("custom-runtime-api")).toBeDefined();
+
+		// Custom API registry is separate from model registry — verify it persists
+		// Note: refresh clears+re-registers source registrations via sdk.ts,
+		// but the custom API registry itself is not cleared by refresh()
+		await registry.refresh("offline");
+
+		expect(getCustomApi("custom-runtime-api")).toBeDefined();
+	});
+
+	test("re-registering a provider replaces previous runtime overlays", async () => {
+		const registry = new ModelRegistry(authStorage, modelsJsonPath);
+		const config1: ProviderConfigInput = {
+			baseUrl: "https://runtime.example.com/v1",
+			apiKey: "RUNTIME_KEY",
+			api: "openai-completions",
+			models: [{ ...baseModel, id: "model-v1", name: "Model V1" }],
+		};
+		const config2: ProviderConfigInput = {
+			baseUrl: "https://runtime.example.com/v2",
+			apiKey: "RUNTIME_KEY",
+			api: "openai-completions",
+			models: [{ ...baseModel, id: "model-v2", name: "Model V2" }],
+		};
+
+		registry.registerProvider("runtime-provider", config1, "ext://runtime");
+		expect(registry.find("runtime-provider", "model-v1")).toBeDefined();
+
+		registry.registerProvider("runtime-provider", config2, "ext://runtime");
+		expect(registry.find("runtime-provider", "model-v2")).toBeDefined();
+		expect(registry.find("runtime-provider", "model-v1")).toBeUndefined();
+
+		// After refresh, only v2 should exist
+		await registry.refresh("offline");
+		expect(registry.find("runtime-provider", "model-v2")).toBeDefined();
+		expect(registry.find("runtime-provider", "model-v1")).toBeUndefined();
+	});
+
+	test("multiple extension providers survive refresh independently", async () => {
+		const registry = new ModelRegistry(authStorage, modelsJsonPath);
+
+		registry.registerProvider(
+			"provider-a",
+			{
+				baseUrl: "https://a.example.com",
+				apiKey: "KEY_A",
+				api: "openai-completions",
+				models: [{ ...baseModel, id: "model-a" }],
+			},
+			"ext://a",
+		);
+		registry.registerProvider(
+			"provider-b",
+			{
+				baseUrl: "https://b.example.com",
+				apiKey: "KEY_B",
+				api: "openai-completions",
+				models: [{ ...baseModel, id: "model-b" }],
+			},
+			"ext://b",
+		);
+
+		expect(registry.find("provider-a", "model-a")).toBeDefined();
+		expect(registry.find("provider-b", "model-b")).toBeDefined();
+
+		await registry.refresh("offline");
+
+		expect(registry.find("provider-a", "model-a")).toBeDefined();
+		expect(registry.find("provider-b", "model-b")).toBeDefined();
+	});
+
 	test("clearSourceRegistrations and syncExtensionSources remove source-scoped API and OAuth providers", () => {
 		const registry = new ModelRegistry(authStorage, modelsJsonPath);
 		const oauthCredentials: OAuthCredentials = {
