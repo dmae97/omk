@@ -77,7 +77,7 @@ describe("chunk mode regression coverage", () => {
 			path: filePath,
 			edits: [
 				{
-					sel: `${selector}@body`,
+					sel: `${selector}~`,
 					op: "replace",
 					content: 'let greeting = format!("Hello, {name}");\nprintln!("{greeting}");\ngreeting\n',
 				},
