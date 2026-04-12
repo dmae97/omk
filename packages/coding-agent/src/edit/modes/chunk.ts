@@ -8,6 +8,7 @@ import {
 	type ChunkInfo,
 	ChunkReadStatus,
 	type ChunkReadTarget,
+	ChunkRegion,
 	ChunkState,
 	type EditOperation as NativeEditOperation,
 } from "@oh-my-pi/pi-natives";
@@ -313,16 +314,28 @@ function parseChunkEditSelector(selector: string | undefined): {
 	return { selector: selectorPart || undefined, crc, region };
 }
 
-function toNativeEditRegion(region: NativeChunkRegion | undefined): NativeEditOperation["region"] | undefined {
+type NativeChunkRegionEncoding = "named" | "symbolic";
+
+function toNativeEditRegion(
+	region: NativeChunkRegion | undefined,
+	encoding: NativeChunkRegionEncoding,
+): NativeEditOperation["region"] | undefined {
+	if (!region) {
+		return undefined;
+	}
+	if (encoding === "symbolic") {
+		return region === "body" ? ChunkRegion.Body : ChunkRegion.Head;
+	}
 	return region as unknown as NativeEditOperation["region"] | undefined;
 }
 
 function toNativeEditOperation(
 	operation: ChunkEditOperation,
 	defaultRegion: NativeChunkRegion | undefined,
+	encoding: NativeChunkRegionEncoding,
 ): NativeEditOperation {
 	const { selector, crc, region } = parseChunkEditSelector(operation.sel);
-	const nativeRegion = toNativeEditRegion(operation.sel === undefined ? (region ?? defaultRegion) : region);
+	const nativeRegion = toNativeEditRegion(operation.sel === undefined ? (region ?? defaultRegion) : region, encoding);
 	switch (operation.op) {
 		case "replace":
 			return {
@@ -347,6 +360,28 @@ function toNativeEditOperation(
 	}
 }
 
+function buildNativeChunkEditRequest(
+	params: { defaultSelector?: string; defaultCrc?: string; operations: ChunkEditOperation[] },
+	encoding: NativeChunkRegionEncoding,
+): Pick<Parameters<ChunkState["applyEdits"]>[0], "operations" | "defaultSelector" | "defaultCrc"> {
+	const parsedDefaultSelector = parseChunkEditSelector(params.defaultSelector);
+	const operations = params.operations.map(operation =>
+		toNativeEditOperation(operation, parsedDefaultSelector.region, encoding),
+	);
+	return {
+		operations,
+		defaultSelector: parsedDefaultSelector.selector,
+		defaultCrc: params.defaultCrc ?? parsedDefaultSelector.crc,
+	};
+}
+
+function isChunkRegionEncodingError(error: unknown): error is Error {
+	return (
+		error instanceof Error &&
+		/value `"(body|head|~|\^)"` does not match any variant of enum `ChunkRegion`/.test(error.message)
+	);
+}
+
 export function applyChunkEdits(params: {
 	source: string;
 	language?: string;
@@ -358,24 +393,35 @@ export function applyChunkEdits(params: {
 	anchorStyle?: ChunkAnchorStyle;
 }): ChunkEditResult {
 	const normalizedSource = normalizeChunkSource(params.source);
-	const parsedDefaultSelector = parseChunkEditSelector(params.defaultSelector);
-	const nativeOperations = params.operations.map(operation =>
-		toNativeEditOperation(operation, parsedDefaultSelector.region),
-	);
-	const state = ChunkState.parse(normalizedSource, normalizeLanguage(params.language));
-	try {
-		const result = state.applyEdits({
-			operations: nativeOperations,
-			normalizeIndent: resolveChunkAutoIndent(),
-			defaultSelector: parsedDefaultSelector.selector,
-			defaultCrc: params.defaultCrc ?? parsedDefaultSelector.crc,
-			anchorStyle: params.anchorStyle,
-			cwd: params.cwd,
-			filePath: params.filePath,
-		});
+	const applyNativeEdits = (encoding: NativeChunkRegionEncoding): ChunkEditResult => {
+		const request = buildNativeChunkEditRequest(params, encoding);
+		const state = ChunkState.parse(normalizedSource, normalizeLanguage(params.language));
+		return buildChunkEditResult(
+			state.applyEdits({
+				operations: request.operations,
+				normalizeIndent: resolveChunkAutoIndent(),
+				defaultSelector: request.defaultSelector,
+				defaultCrc: request.defaultCrc,
+				anchorStyle: params.anchorStyle,
+				cwd: params.cwd,
+				filePath: params.filePath,
+			}),
+		);
+	};
 
-		return buildChunkEditResult(result);
+	try {
+		return applyNativeEdits("named");
 	} catch (error) {
+		if (isChunkRegionEncodingError(error)) {
+			try {
+				return applyNativeEdits("symbolic");
+			} catch (fallbackError) {
+				if (fallbackError instanceof Error) {
+					throw new Error(normalizeChunkRegionSyntax(fallbackError.message));
+				}
+				throw fallbackError;
+			}
+		}
 		if (error instanceof Error) {
 			throw new Error(normalizeChunkRegionSyntax(error.message));
 		}
