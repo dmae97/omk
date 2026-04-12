@@ -769,7 +769,6 @@ export class ModelRegistry {
 	// models registered by extensions survive the model selector's offline reload.
 	#runtimeModelOverlays: CustomModelOverlay[] = [];
 	#runtimeProviderApiKeys: Map<string, string> = new Map();
-	#runtimeKeylessProviders: Set<string> = new Set();
 	#runtimeProvidersBySource: Map<string, Set<string>> = new Map();
 	#runtimeProviderSourceByName: Map<string, string> = new Map();
 
@@ -847,11 +846,6 @@ export class ModelRegistry {
 		this.#configError = undefined;
 		this.#providerDiscoveryStates.clear();
 		this.#loadModels();
-		// Restore runtime keyless providers AFTER #loadModels, because #loadModels
-		// replaces this.#keylessProviders via = with a new Set from models.yml.
-		for (const k of this.#runtimeKeylessProviders) {
-			this.#keylessProviders.add(k);
-		}
 	}
 
 	/**
@@ -1938,7 +1932,6 @@ export class ModelRegistry {
 			}
 			this.#runtimeProviderSourceByName.delete(providerName);
 			this.#runtimeProviderApiKeys.delete(providerName);
-			this.#runtimeKeylessProviders.delete(providerName);
 			this.#runtimeModelOverlays = this.#runtimeModelOverlays.filter(overlay => overlay.provider !== providerName);
 		}
 		this.#reloadStaticModels();

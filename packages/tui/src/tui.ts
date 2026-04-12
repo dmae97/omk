@@ -1196,19 +1196,18 @@ export class TUI extends Container {
 			let truncatedLine = line;
 			const isImage = TERMINAL.isImageLine(line);
 			if (!isImage && visibleWidth(line) > width) {
-				// Debug log for component developers (not a crash)
-				const debugLogPath = getDebugLogPath();
-				const debugData = [
-					`[TUI Truncate] ${new Date().toISOString()}`,
-					`Line ${i} truncated: ${visibleWidth(line)} > ${width}`,
-					`Content preview: ${line.slice(0, 100)}...`,
-					"",
-				].join("\n");
-				try {
-					fs.mkdirSync(path.dirname(debugLogPath), { recursive: true });
-					fs.appendFileSync(debugLogPath, debugData);
-				} catch {
-					// Ignore write errors - truncation should still work
+				if (debugRedraw) {
+					const debugData = [
+						`[TUI Truncate] ${new Date().toISOString()}`,
+						`Line ${i} truncated: ${visibleWidth(line)} > ${width}`,
+						`Content preview: ${line.slice(0, 100)}...`,
+						"",
+					].join("\n");
+					try {
+						fs.appendFileSync(getDebugLogPath(), debugData);
+					} catch {
+						// Ignore write errors - truncation should still work
+					}
 				}
 				truncatedLine = truncateToWidth(line, width, Ellipsis.Omit);
 			}

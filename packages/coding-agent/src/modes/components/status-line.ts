@@ -9,7 +9,7 @@ import { theme } from "../../modes/theme/theme";
 import type { AgentSession } from "../../session/agent-session";
 import { calculatePromptTokens } from "../../session/compaction/compaction";
 import * as git from "../../utils/git";
-import { getSessionAccentHexForTitle } from "../../utils/session-color";
+import { getSessionAccentAnsi, getSessionAccentHexForTitle } from "../../utils/session-color";
 import { sanitizeStatusText } from "../shared";
 import {
 	canReuseCachedPr,
@@ -476,10 +476,8 @@ export class StatusLineComponent implements Component {
 			this.session.sessionManager?.getSessionName(),
 			this.session.sessionManager?.titleSource,
 		);
-		const gapColor = accentHex
-			? (Bun.color(accentHex, "ansi-16m") ?? theme.getFgAnsi("border"))
-			: theme.getFgAnsi("border");
-		const gapFill = `${gapColor}${theme.boxRound.horizontal.repeat(gapWidth)}\x1b[0m`;
+		const gapColor = getSessionAccentAnsi(accentHex) ?? theme.getFgAnsi("border");
+		const gapFill = `${gapColor}${theme.boxRound.horizontal.repeat(gapWidth)}\x1b[39m`;
 		return leftGroup + gapFill + rightGroup;
 	}
 

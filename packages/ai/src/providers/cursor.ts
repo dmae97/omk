@@ -106,6 +106,7 @@ import {
 	type ShellArgs,
 	ShellFailureSchema,
 	ShellRejectedSchema,
+	type ShellResult,
 	ShellResultSchema,
 	type ShellStream,
 	ShellStreamExitSchema,
@@ -675,9 +676,7 @@ function sendShellStreamEvent(
 	sendExecClientMessage(h2Request, execMsg, "shellStream", create(ShellStreamSchema, { event }));
 }
 
-function sanitizeShellExecResult(execResult: { result: { case?: string; value?: any } }): {
-	result: { case?: string; value?: any };
-} {
+function sanitizeShellExecResult(execResult: ShellResult): ShellResult {
 	const result = execResult.result;
 	if (!result) return execResult;
 
@@ -686,6 +685,7 @@ function sanitizeShellExecResult(execResult: { result: { case?: string; value?: 
 		case "failure": {
 			const value = result.value;
 			return {
+				...execResult,
 				result: {
 					case: result.case,
 					value: {
@@ -694,7 +694,7 @@ function sanitizeShellExecResult(execResult: { result: { case?: string; value?: 
 						stderr: value.stderr ? sanitizeText(value.stderr) : value.stderr,
 					},
 				},
-			};
+			} as ShellResult;
 		}
 		default:
 			return execResult;
@@ -854,7 +854,7 @@ async function handleShellStreamArgs(
 function sendShellStreamExitFromResult(
 	h2Request: http2.ClientHttp2Stream,
 	execMsg: ExecServerMessage,
-	execResult: { result: { case?: string; value?: any } },
+	execResult: ShellResult,
 	sendBufferedOutput: boolean,
 ): void {
 	const result = execResult.result;

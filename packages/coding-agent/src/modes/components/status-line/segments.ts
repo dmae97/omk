@@ -5,7 +5,7 @@ import { TERMINAL } from "@oh-my-pi/pi-tui";
 import { formatDuration, formatNumber, getProjectDir, relativePathWithinRoot } from "@oh-my-pi/pi-utils";
 import { theme } from "../../../modes/theme/theme";
 import { shortenPath } from "../../../tools/render-utils";
-import { getSessionAccentHex } from "../../../utils/session-color";
+import { getSessionAccentAnsi, getSessionAccentHex } from "../../../utils/session-color";
 import { sanitizeStatusText } from "../../shared";
 import { getContextUsageLevel, getContextUsageThemeColor } from "./context-thresholds";
 import type { RenderedSegment, SegmentContext, StatusLineSegment, StatusLineSegmentId } from "./types";
@@ -362,8 +362,7 @@ const sessionNameSegment: StatusLineSegment = {
 		const name = ctx.session.sessionManager?.getSessionName();
 		if (!name) return { content: "", visible: false };
 
-		const hex = getSessionAccentHex(name);
-		const ansi = Bun.color(hex, "ansi-16m") ?? theme.getFgAnsi("accent");
+		const ansi = getSessionAccentAnsi(getSessionAccentHex(name)) ?? theme.getFgAnsi("accent");
 		return { content: `${ansi}${sanitizeStatusText(name)}\x1b[39m`, visible: true };
 	},
 };

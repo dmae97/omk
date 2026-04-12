@@ -44,3 +44,12 @@ export function getSessionAccentHexForTitle(
 	if (!name || titleSource === "auto") return undefined;
 	return getSessionAccentHex(name);
 }
+
+/**
+ * Convert a hex accent color to an ANSI-16m foreground escape sequence.
+ * Returns `undefined` if `hex` is nullish or Bun.color conversion fails.
+ */
+export function getSessionAccentAnsi(hex: string | undefined): string | undefined {
+	if (!hex) return undefined;
+	return Bun.color(hex, "ansi-16m") ?? undefined;
+}

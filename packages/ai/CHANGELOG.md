@@ -1,11 +1,10 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Fixed
 
+- Fixed shell execution failure responses to preserve all result fields when sanitizing, preventing truncated metadata in stream results
 - Fixed context overflow detection to recognize `model_context_window_exceeded` from z.ai / GLM providers, preventing infinite retry loops when context window is exceeded ([#638](https://github.com/can1357/oh-my-pi/issues/638))
-
 
 ## [14.1.0] - 2026-04-11
 ### Added

@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Changed truncation debug logging to run only when `debugRedraw` is enabled
 
 ## [14.0.5] - 2026-04-11
 

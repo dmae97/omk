@@ -1150,7 +1150,7 @@ export class AcpAgent implements Agent {
 				setThinkingLevel: level => record.session.setThinkingLevel(level),
 				getSessionName: () => record.session.sessionManager.getSessionName(),
 				setSessionName: async name => {
-					await record.session.sessionManager.setSessionName(name);
+					await record.session.sessionManager.setSessionName(name, "user");
 				},
 			},
 			{

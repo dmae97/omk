@@ -65,7 +65,7 @@
 		"puppeteer": "catalog:",
 		"turndown": "catalog:",
 		"turndown-plugin-gfm": "catalog:",
-		"zod": "catalog:pinned"
+		"zod": "catalog:"
 	},
 	"devDependencies": {
 		"@types/bun": "catalog:",

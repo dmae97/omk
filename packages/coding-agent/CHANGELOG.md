@@ -1,27 +1,24 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added support for `computeHashlineDiff` to accept hashline edits with `loc` and `content` payloads without requiring pre-resolved `op` fields
+- Added `/rename <title>` slash command to set an explicit session name, updating the session header and terminal tab title ([#658](https://github.com/can1357/oh-my-pi/issues/658))
+- Added `session_name` status line segment: displays the session name in the status bar right side with a stable hash-derived accent color unique to each name; shown in all presets when a name is set
 
 ### Changed
 
 - Changed eager todo enforcement to only apply on the first user message of a conversation, skipping subsequent user turns that may correct, clarify, or redirect the prior task
 
-### Added
-
-- Added `/rename <title>` slash command to set an explicit session name, updating the session header and terminal tab title ([#658](https://github.com/can1357/oh-my-pi/issues/658))
-- Added `session_name` status line segment: displays the session name in the status bar right side with a stable hash-derived accent color unique to each name; shown in all presets when a name is set
-
 ### Fixed
 
+- Fixed tool execution output to return the original `toolResult` text content from tools instead of sanitizing it before sending completion messages
+- Fixed session accent rendering in the status line and editor to reset only foreground color (`\x1b[39m`) so applying a session color no longer clears other ANSI styles
 - Session name sanitization: strip C0/C1 control characters (including ANSI ESC) from session names at storage time and in status line rendering, preventing escape sequence injection into TUI output
 - Auto-generated session titles no longer overwrite a name set via `/rename`: `setSessionName` now tracks whether the name was set by the user or auto-generated and silently ignores auto titles once a user name is in place; terminal title follows the same guard
 - Session accent border color now applied on session resume and after auto-title generation, not only after an explicit `/rename`
-
-### Fixed
-
 - Fixed retained Python kernel ownership so `AgentSession.dispose()` only shuts down kernels owned by that session, including warmup-created kernels
 
 ## [14.1.0] - 2026-04-11

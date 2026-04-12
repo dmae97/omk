@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added support for honoring the `ZIG` environment variable when resolving the Zig executable for native builds
 
 ## [14.0.5] - 2026-04-11
 ### Breaking Changes
