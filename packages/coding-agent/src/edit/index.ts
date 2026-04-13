@@ -15,16 +15,36 @@ import type { ToolSession } from "../tools";
 import { type EditMode, normalizeEditMode, resolveEditMode } from "../utils/edit-mode";
 import {
 	type ChunkParams,
+	type ChunkToolEdit,
 	chunkEditParamsSchema,
-	executeChunkMode,
+	executeChunkSingle,
 	isChunkParams,
+	parseChunkEditPath,
 	resolveAnchorStyle,
 	resolveChunkAutoIndent,
 } from "./modes/chunk";
-import { executeHashlineMode, type HashlineParams, hashlineEditParamsSchema, isHashlineParams } from "./modes/hashline";
-import { executePatchMode, isPatchParams, type PatchParams, patchEditSchema } from "./modes/patch";
-import { executeReplaceMode, isReplaceParams, type ReplaceParams, replaceEditSchema } from "./modes/replace";
-import { type EditToolDetails, getLspBatchRequest, type LspBatchRequest } from "./renderer";
+import {
+	executeHashlineSingle,
+	type HashlineParams,
+	type HashlineToolEdit,
+	hashlineEditParamsSchema,
+	isHashlineParams,
+} from "./modes/hashline";
+import {
+	executePatchSingle,
+	isPatchParams,
+	type PatchEditEntry,
+	type PatchParams,
+	patchEditSchema,
+} from "./modes/patch";
+import {
+	executeReplaceSingle,
+	isReplaceParams,
+	type ReplaceEditEntry,
+	type ReplaceParams,
+	replaceEditSchema,
+} from "./modes/replace";
+import { type EditToolDetails, type EditToolPerFileResult, getLspBatchRequest, type LspBatchRequest } from "./renderer";
 
 export { DEFAULT_EDIT_MODE, type EditMode, normalizeEditMode } from "../utils/edit-mode";
 export * from "./diff";
@@ -44,18 +64,17 @@ type TInput =
 
 type EditParams = ReplaceParams | PatchParams | HashlineParams | ChunkParams;
 
-type ModeExecutionArgs = {
-	params: EditParams;
-	signal: AbortSignal | undefined;
-	batchRequest: LspBatchRequest | undefined;
-};
-
 type EditModeDefinition = {
 	description: (session: ToolSession) => string;
 	parameters: TInput;
 	invalidParamsMessage: string;
 	validate: (params: EditParams) => boolean;
-	execute: (tool: EditTool, args: ModeExecutionArgs) => Promise<AgentToolResult<EditToolDetails, TInput>>;
+	execute: (
+		tool: EditTool,
+		params: EditParams,
+		signal: AbortSignal | undefined,
+		batchRequest: LspBatchRequest | undefined,
+	) => Promise<AgentToolResult<EditToolDetails, TInput>>;
 };
 
 function resolveConfiguredEditMode(rawEditMode: string): EditMode | undefined {
@@ -106,6 +125,78 @@ function createEditWritethrough(session: ToolSession): WritethroughCallback {
 	return enableLsp ? createLspWritethrough(session.cwd, { enableFormat, enableDiagnostics }) : writethroughNoop;
 }
 
+/** Group items by a key, preserving insertion order. */
+function groupBy<T, K>(items: T[], key: (item: T) => K): Map<K, T[]> {
+	const map = new Map<K, T[]>();
+	for (const item of items) {
+		const k = key(item);
+		let arr = map.get(k);
+		if (!arr) {
+			arr = [];
+			map.set(k, arr);
+		}
+		arr.push(item);
+	}
+	return map;
+}
+
+/** Run single-file executors for each file group and aggregate results. */
+async function executePerFile(
+	fileEntries: {
+		path: string;
+		run: (batchRequest: LspBatchRequest | undefined) => Promise<AgentToolResult<EditToolDetails, any>>;
+	}[],
+	outerBatchRequest: LspBatchRequest | undefined,
+): Promise<AgentToolResult<EditToolDetails, TInput>> {
+	if (fileEntries.length === 1) {
+		// Single file — just run directly, no wrapping
+		return fileEntries[0].run(outerBatchRequest);
+	}
+
+	const perFileResults: EditToolPerFileResult[] = [];
+	const contentTexts: string[] = [];
+
+	for (let i = 0; i < fileEntries.length; i++) {
+		const { path, run } = fileEntries[i];
+		const isLast = i === fileEntries.length - 1;
+		const batchRequest: LspBatchRequest | undefined = outerBatchRequest
+			? { id: outerBatchRequest.id, flush: isLast && outerBatchRequest.flush }
+			: undefined;
+
+		try {
+			const result = await run(batchRequest);
+			const details = result.details;
+			perFileResults.push({
+				path,
+				diff: details?.diff ?? "",
+				firstChangedLine: details?.firstChangedLine,
+				diagnostics: details?.diagnostics,
+				op: details?.op,
+				move: details?.move,
+				meta: details?.meta,
+			});
+			const text = result.content?.find(c => c.type === "text")?.text ?? "";
+			if (text) contentTexts.push(text);
+		} catch (err) {
+			const errorText = err instanceof Error ? err.message : String(err);
+			perFileResults.push({ path, diff: "", isError: true, errorText });
+			contentTexts.push(`Error editing ${path}: ${errorText}`);
+		}
+	}
+
+	return {
+		content: [{ type: "text", text: contentTexts.join("\n") }],
+		details: {
+			diff: perFileResults
+				.map(r => r.diff)
+				.filter(Boolean)
+				.join("\n"),
+			firstChangedLine: perFileResults.find(r => r.firstChangedLine)?.firstChangedLine,
+			perFileResults,
+		},
+	};
+}
+
 export class EditTool implements AgentTool<TInput> {
 	readonly name = "edit";
 	readonly label = "Edit";
@@ -147,34 +238,6 @@ export class EditTool implements AgentTool<TInput> {
 
 	async execute(
 		_toolCallId: string,
-		params: ReplaceParams,
-		signal?: AbortSignal,
-		_onUpdate?: AgentToolUpdateCallback<EditToolDetails, TInput>,
-		context?: AgentToolContext,
-	): Promise<AgentToolResult<EditToolDetails, TInput>>;
-	async execute(
-		_toolCallId: string,
-		params: PatchParams,
-		signal?: AbortSignal,
-		_onUpdate?: AgentToolUpdateCallback<EditToolDetails, TInput>,
-		context?: AgentToolContext,
-	): Promise<AgentToolResult<EditToolDetails, TInput>>;
-	async execute(
-		_toolCallId: string,
-		params: HashlineParams,
-		signal?: AbortSignal,
-		_onUpdate?: AgentToolUpdateCallback<EditToolDetails, TInput>,
-		context?: AgentToolContext,
-	): Promise<AgentToolResult<EditToolDetails, TInput>>;
-	async execute(
-		_toolCallId: string,
-		params: ChunkParams,
-		signal?: AbortSignal,
-		_onUpdate?: AgentToolUpdateCallback<EditToolDetails, TInput>,
-		context?: AgentToolContext,
-	): Promise<AgentToolResult<EditToolDetails, TInput>>;
-	async execute(
-		_toolCallId: string,
 		params: EditParams,
 		signal?: AbortSignal,
 		_onUpdate?: AgentToolUpdateCallback<EditToolDetails, TInput>,
@@ -185,11 +248,7 @@ export class EditTool implements AgentTool<TInput> {
 			throw new Error(modeDefinition.invalidParamsMessage);
 		}
 
-		return modeDefinition.execute(this, {
-			params,
-			signal,
-			batchRequest: getLspBatchRequest(context?.toolCall),
-		});
+		return modeDefinition.execute(this, params, signal, getLspBatchRequest(context?.toolCall));
 	}
 
 	#getModeDefinition(): EditModeDefinition {
@@ -203,15 +262,28 @@ export class EditTool implements AgentTool<TInput> {
 				parameters: chunkEditParamsSchema,
 				invalidParamsMessage: "Invalid edit parameters for chunk mode.",
 				validate: isChunkParams,
-				async execute(tool: EditTool, args: ModeExecutionArgs) {
-					return executeChunkMode({
-						session: tool.session,
-						params: args.params as ChunkParams,
-						signal: args.signal,
-						batchRequest: args.batchRequest,
-						writethrough: tool.#writethrough,
-						beginDeferredDiagnosticsForPath: path => tool.#beginDeferredDiagnosticsForPath(path),
-					});
+				execute: (
+					tool: EditTool,
+					params: EditParams,
+					signal: AbortSignal | undefined,
+					batchRequest: LspBatchRequest | undefined,
+				) => {
+					const { edits } = params as ChunkParams;
+					const byFile = groupBy(edits, (e: ChunkToolEdit) => parseChunkEditPath(e.path).filePath);
+					const entries = [...byFile.entries()].map(([filePath, fileEdits]) => ({
+						path: filePath,
+						run: (br: LspBatchRequest | undefined) =>
+							executeChunkSingle({
+								session: tool.session,
+								path: filePath,
+								edits: fileEdits,
+								signal,
+								batchRequest: br,
+								writethrough: tool.#writethrough,
+								beginDeferredDiagnosticsForPath: p => tool.#beginDeferredDiagnosticsForPath(p),
+							}),
+					}));
+					return executePerFile(entries, batchRequest);
 				},
 			},
 			patch: {
@@ -219,17 +291,28 @@ export class EditTool implements AgentTool<TInput> {
 				parameters: patchEditSchema,
 				invalidParamsMessage: "Invalid edit parameters for patch mode.",
 				validate: isPatchParams,
-				async execute(tool: EditTool, args: ModeExecutionArgs) {
-					return executePatchMode({
-						session: tool.session,
-						params: args.params as PatchParams,
-						signal: args.signal,
-						batchRequest: args.batchRequest,
-						allowFuzzy: tool.#allowFuzzy,
-						fuzzyThreshold: tool.#fuzzyThreshold,
-						writethrough: tool.#writethrough,
-						beginDeferredDiagnosticsForPath: path => tool.#beginDeferredDiagnosticsForPath(path),
-					});
+				execute: (
+					tool: EditTool,
+					params: EditParams,
+					signal: AbortSignal | undefined,
+					batchRequest: LspBatchRequest | undefined,
+				) => {
+					const { edits } = params as PatchParams;
+					const entries = edits.map((entry: PatchEditEntry) => ({
+						path: entry.path,
+						run: (br: LspBatchRequest | undefined) =>
+							executePatchSingle({
+								session: tool.session,
+								params: entry,
+								signal,
+								batchRequest: br,
+								allowFuzzy: tool.#allowFuzzy,
+								fuzzyThreshold: tool.#fuzzyThreshold,
+								writethrough: tool.#writethrough,
+								beginDeferredDiagnosticsForPath: p => tool.#beginDeferredDiagnosticsForPath(p),
+							}),
+					}));
+					return executePerFile(entries, batchRequest);
 				},
 			},
 			hashline: {
@@ -237,15 +320,28 @@ export class EditTool implements AgentTool<TInput> {
 				parameters: hashlineEditParamsSchema,
 				invalidParamsMessage: "Invalid edit parameters for hashline mode.",
 				validate: isHashlineParams,
-				async execute(tool: EditTool, args: ModeExecutionArgs) {
-					return executeHashlineMode({
-						session: tool.session,
-						params: args.params as HashlineParams,
-						signal: args.signal,
-						batchRequest: args.batchRequest,
-						writethrough: tool.#writethrough,
-						beginDeferredDiagnosticsForPath: path => tool.#beginDeferredDiagnosticsForPath(path),
-					});
+				execute: (
+					tool: EditTool,
+					params: EditParams,
+					signal: AbortSignal | undefined,
+					batchRequest: LspBatchRequest | undefined,
+				) => {
+					const { edits } = params as HashlineParams;
+					const byFile = groupBy(edits, (e: HashlineToolEdit) => e.path);
+					const entries = [...byFile.entries()].map(([path, fileEdits]) => ({
+						path,
+						run: (br: LspBatchRequest | undefined) =>
+							executeHashlineSingle({
+								session: tool.session,
+								path,
+								edits: fileEdits,
+								signal,
+								batchRequest: br,
+								writethrough: tool.#writethrough,
+								beginDeferredDiagnosticsForPath: p => tool.#beginDeferredDiagnosticsForPath(p),
+							}),
+					}));
+					return executePerFile(entries, batchRequest);
 				},
 			},
 			replace: {
@@ -253,17 +349,28 @@ export class EditTool implements AgentTool<TInput> {
 				parameters: replaceEditSchema,
 				invalidParamsMessage: "Invalid edit parameters for replace mode.",
 				validate: isReplaceParams,
-				async execute(tool: EditTool, args: ModeExecutionArgs) {
-					return executeReplaceMode({
-						session: tool.session,
-						params: args.params as ReplaceParams,
-						signal: args.signal,
-						batchRequest: args.batchRequest,
-						allowFuzzy: tool.#allowFuzzy,
-						fuzzyThreshold: tool.#fuzzyThreshold,
-						writethrough: tool.#writethrough,
-						beginDeferredDiagnosticsForPath: path => tool.#beginDeferredDiagnosticsForPath(path),
-					});
+				execute: (
+					tool: EditTool,
+					params: EditParams,
+					signal: AbortSignal | undefined,
+					batchRequest: LspBatchRequest | undefined,
+				) => {
+					const { edits } = params as ReplaceParams;
+					const entries = edits.map((entry: ReplaceEditEntry) => ({
+						path: entry.path,
+						run: (br: LspBatchRequest | undefined) =>
+							executeReplaceSingle({
+								session: tool.session,
+								params: entry,
+								signal,
+								batchRequest: br,
+								allowFuzzy: tool.#allowFuzzy,
+								fuzzyThreshold: tool.#fuzzyThreshold,
+								writethrough: tool.#writethrough,
+								beginDeferredDiagnosticsForPath: p => tool.#beginDeferredDiagnosticsForPath(p),
+							}),
+					}));
+					return executePerFile(entries, batchRequest);
 				},
 			},
 		}[this.mode];

@@ -98,7 +98,7 @@ fn compute_fenced_code_lines(source_lines: &[&str], language: &str) -> HashSet<u
 }
 
 pub fn render_state(state: &ChunkStateInner, params: &RenderParams) -> String {
-	render_state_impl(state, params, HashMap::new(), HashSet::new(), false, false)
+	render_state_impl(state, params, HashMap::new(), HashSet::new(), false)
 }
 
 pub fn render_state_with_hunks(
@@ -107,7 +107,7 @@ pub fn render_state_with_hunks(
 	inline_hunks: HashMap<String, Vec<InlineHunk>>,
 	changed_anchor_paths: HashSet<String>,
 ) -> String {
-	render_state_impl(state, params, inline_hunks, changed_anchor_paths, true, true)
+	render_state_impl(state, params, inline_hunks, changed_anchor_paths, true)
 }
 
 fn render_state_impl(
@@ -116,7 +116,6 @@ fn render_state_impl(
 	inline_hunks: HashMap<String, Vec<InlineHunk>>,
 	changed_anchor_paths: HashSet<String>,
 	compact_meta: bool,
-	omit_anchor_line_counts: bool,
 ) -> String {
 	let tree = state.tree();
 	let lookup = build_lookup(tree);
@@ -201,7 +200,6 @@ fn render_state_impl(
 		focus,
 		inline_hunks,
 		compact_meta,
-		omit_anchor_line_counts,
 		changed_anchor_paths,
 	};
 
@@ -843,28 +841,27 @@ fn compute_rendered_line_count(
 }
 
 struct RenderCtx<'a> {
-	out:                     String,
-	tree:                    &'a ChunkTree,
-	lookup:                  &'a ChunkLookup<'a>,
-	source:                  &'a str,
-	source_lines:            &'a [&'a str],
-	num_width:               usize,
-	visible_range:           Option<&'a VisibleLineRange>,
-	omit_checksum:           bool,
-	anchor_style:            ChunkAnchorStyle,
-	show_leaf_preview:       bool,
-	last_was_blank_meta:     bool,
-	full_display_threshold:  usize,
-	preview_head_lines:      usize,
-	preview_tail_lines:      usize,
-	tab_replacement:         &'a str,
-	normalize_indent:        Option<(char, usize)>,
-	fenced_lines:            HashSet<u32>,
-	focus:                   Option<HashMap<&'a str, ChunkFocusMode>>,
-	inline_hunks:            HashMap<String, Vec<InlineHunk>>,
-	compact_meta:            bool,
-	omit_anchor_line_counts: bool,
-	changed_anchor_paths:    HashSet<String>,
+	out:                    String,
+	tree:                   &'a ChunkTree,
+	lookup:                 &'a ChunkLookup<'a>,
+	source:                 &'a str,
+	source_lines:           &'a [&'a str],
+	num_width:              usize,
+	visible_range:          Option<&'a VisibleLineRange>,
+	omit_checksum:          bool,
+	anchor_style:           ChunkAnchorStyle,
+	show_leaf_preview:      bool,
+	last_was_blank_meta:    bool,
+	full_display_threshold: usize,
+	preview_head_lines:     usize,
+	preview_tail_lines:     usize,
+	tab_replacement:        &'a str,
+	normalize_indent:       Option<(char, usize)>,
+	fenced_lines:           HashSet<u32>,
+	focus:                  Option<HashMap<&'a str, ChunkFocusMode>>,
+	inline_hunks:           HashMap<String, Vec<InlineHunk>>,
+	compact_meta:           bool,
+	changed_anchor_paths:   HashSet<String>,
 }
 
 fn push_line(out: &mut String, line: String) {
@@ -878,15 +875,15 @@ fn push_blank_meta(ctx: &mut RenderCtx<'_>) {
 	if ctx.last_was_blank_meta {
 		return;
 	}
-	push_line(&mut ctx.out, format!("{}|", " ".repeat(ctx.num_width)));
+	push_line(&mut ctx.out, format!("{} |", " ".repeat(ctx.num_width)));
 	ctx.last_was_blank_meta = true;
 }
 
 fn push_meta_marked(ctx: &mut RenderCtx<'_>, body: String, marker: Option<char>) {
 	ctx.last_was_blank_meta = false;
 	let gutter = match marker {
-		Some(marker) => format!("{marker}{}", " ".repeat(ctx.num_width.saturating_sub(1))),
-		None => " ".repeat(ctx.num_width),
+		Some(marker) => format!("{marker}{}", " ".repeat(ctx.num_width)),
+		None => " ".repeat(ctx.num_width + 1),
 	};
 	let separator = if ctx.compact_meta { "|" } else { "| " };
 	push_line(&mut ctx.out, format!("{gutter}{separator}{body}"));
@@ -896,11 +893,17 @@ fn push_meta(ctx: &mut RenderCtx<'_>, body: String) {
 	push_meta_marked(ctx, body, None);
 }
 
-fn push_code(ctx: &mut RenderCtx<'_>, abs_line: u32, source_text: &str) {
+fn line_is_in_head(source: &str, chunk: &ChunkNode, abs_line: u32) -> bool {
+	let (head_lines, body_lines) = chunk_head_body_lines(source, chunk);
+	body_lines > 0 && abs_line >= chunk.start_line && abs_line < chunk.start_line + head_lines
+}
+
+fn push_code(ctx: &mut RenderCtx<'_>, abs_line: u32, source_text: &str, head: bool) {
 	ctx.last_was_blank_meta = false;
+	let marker = if head { '^' } else { ' ' };
 	push_line(
 		&mut ctx.out,
-		format!("{}|{}", abs_line.to_string().pad_start(ctx.num_width, ' '), source_text),
+		format!("{}{}|{}", abs_line.to_string().pad_start(ctx.num_width, ' '), marker, source_text),
 	);
 }
 
@@ -917,7 +920,7 @@ impl PadStart for String {
 	}
 }
 
-fn emit_line_gap(ctx: &mut RenderCtx<'_>, from: u32, to: u32) {
+fn emit_line_gap(ctx: &mut RenderCtx<'_>, from: u32, to: u32, chunk: &ChunkNode) {
 	for line in from..=to {
 		if !line_in_file_scope(line, ctx.visible_range) {
 			continue;
@@ -933,7 +936,8 @@ fn emit_line_gap(ctx: &mut RenderCtx<'_>, from: u32, to: u32) {
 			.map_or(String::new(), |text| {
 				normalize_rendered_line(text, normalize, ctx.tab_replacement)
 			});
-		push_code(ctx, line, &text);
+		let head = line_is_in_head(ctx.source, chunk, line);
+		push_code(ctx, line, &text, head);
 	}
 }
 
@@ -965,7 +969,8 @@ fn emit_explicit_gap_lines(ctx: &mut RenderCtx<'_>, chunk: &ChunkNode, from: u32
 			.map_or(String::new(), |source_text| {
 				normalize_rendered_line(source_text, normalize, ctx.tab_replacement)
 			});
-		push_code(ctx, line, &text);
+		let head = line_is_in_head(ctx.source, chunk, line);
+		push_code(ctx, line, &text, head);
 	}
 }
 
@@ -1054,7 +1059,10 @@ fn emit_leaf_body(ctx: &mut RenderCtx<'_>, chunk: &ChunkNode, span: VisibleSpan)
 		ctx.preview_tail_lines,
 	) {
 		match entry {
-			LeafEntry::Line { abs_line, text } => push_code(ctx, abs_line, &text),
+			LeafEntry::Line { abs_line, text } => {
+				let head = line_is_in_head(ctx.source, chunk, abs_line);
+				push_code(ctx, abs_line, &text, head);
+			},
 			LeafEntry::Ellipsis { start_abs, end_abs, .. } => {
 				push_truncation_marker(ctx, chunk, start_abs, end_abs);
 			},
@@ -1065,20 +1073,9 @@ fn emit_leaf_body(ctx: &mut RenderCtx<'_>, chunk: &ChunkNode, span: VisibleSpan)
 fn render_open_anchor_line(ctx: &RenderCtx<'_>, chunk: &ChunkNode) -> String {
 	let anchor_indent =
 		chunk_body_anchor_indent(ctx.source_lines, chunk, ctx.tab_replacement, ctx.normalize_indent);
-	let (head_lines, body_lines) = chunk_head_body_lines(ctx.source, chunk);
 	let style = ctx.anchor_style.with_omit_checksum(ctx.omit_checksum);
 	let anchor_label = chunk_anchor_label(chunk, style);
-	if ctx.omit_anchor_line_counts {
-		style.render_without_counts(&anchor_indent, anchor_label.as_str(), chunk.checksum.as_str())
-	} else {
-		style.render(
-			&anchor_indent,
-			anchor_label.as_str(),
-			chunk.checksum.as_str(),
-			head_lines,
-			body_lines,
-		)
-	}
+	style.render(&anchor_indent, anchor_label.as_str(), chunk.checksum.as_str())
 }
 
 fn emit_inline_hunks_for(ctx: &mut RenderCtx<'_>, chunk_path: &str) {
@@ -1183,7 +1180,7 @@ fn emit_chunk_subtree(
 					if line_in_file_scope(line, ctx.visible_range)
 						&& should_render_gap_line(ctx.tree, chunk, ctx.lookup, line)
 					{
-						emit_line_gap(ctx, line, line);
+						emit_line_gap(ctx, line, line, chunk);
 					}
 				}
 			}
@@ -1194,7 +1191,7 @@ fn emit_chunk_subtree(
 			cursor = cursor.max(child.end_line.saturating_add(1));
 		}
 		if cursor <= span.end && !is_container {
-			emit_line_gap(ctx, cursor, span.end);
+			emit_line_gap(ctx, cursor, span.end, chunk);
 		}
 		emit_container_clip_below(ctx, chunk, &span, &children);
 		if !chunk.path.is_empty() {

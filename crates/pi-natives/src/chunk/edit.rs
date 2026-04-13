@@ -1971,7 +1971,7 @@ fn render_changed_hunks(
 			let anchor_label = deleted_chunk_anchor_label(deleted_chunk, style);
 			let mut lines = Vec::with_capacity(hunk.lines.len() + 2);
 			lines.push(crate::chunk::render::InlineHunkLine {
-				text:   style.render_without_counts(
+				text:   style.render(
 					&anchor_indent,
 					anchor_label.as_str(),
 					deleted_chunk.checksum.as_str(),
@@ -2762,7 +2762,7 @@ mod tests {
 		let response = &result.response_text;
 		assert!(response.contains("var_c"), "touched chunk should appear: {response}");
 		assert!(
-			response.contains("* |[<var_c#"),
+			response.contains("*  |[<var_c#"),
 			"changed chunk should be marked in the gutter: {response}"
 		);
 		assert!(
@@ -4678,7 +4678,7 @@ function foo() {\n<<<<<<< HEAD\n\treturn bar();\n=======\n\treturn baz();\n>>>>>
 			result.response_text
 		);
 		assert!(
-			result.response_text.contains("-|")
+			result.response_text.contains("- |")
 				&& result.response_text.contains("[<enum_Level.vrnt_Debug#"),
 			"deleted variant should keep its chunk anchor with a deletion marker: {}",
 			result.response_text

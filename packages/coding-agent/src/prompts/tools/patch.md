@@ -18,7 +18,8 @@ When editing structured blocks (nested braces, tags, indented regions), include 
 
 <parameters>
 ```ts
-type T =
+// Input is { edits: Entry[] } where Entry is one of:
+type Entry =
    // Diff is one or more hunks in the same file.
    // - Each hunk begins with "@@" (anchor optional).
    // - Each hunk body only has lines starting with ' ' | '+' | '-'.
@@ -50,19 +51,23 @@ Returns success/failure; on failure, error message indicates:
 </critical>
 
 <example name="create">
-edit {"path":"hello.txt","op":"create","diff":"Hello\n"}
+edit {"edits":[{"path":"hello.txt","op":"create","diff":"Hello\n"}]}
 </example>
 
 <example name="update">
-edit {"path":"src/app.py","op":"update","diff":"@@ def greet():\n def greet():\n-print('Hi')\n+print('Hello')\n"}
+edit {"edits":[{"path":"src/app.py","op":"update","diff":"@@ def greet():\n def greet():\n-print('Hi')\n+print('Hello')\n"}]}
 </example>
 
 <example name="rename">
-edit {"path":"src/app.py","op":"update","rename":"src/main.py","diff":"@@\n …\n"}
+edit {"edits":[{"path":"src/app.py","op":"update","rename":"src/main.py","diff":"@@\n …\n"}]}
 </example>
 
 <example name="delete">
-edit {"path":"obsolete.txt","op":"delete"}
+edit {"edits":[{"path":"obsolete.txt","op":"delete"}]}
+</example>
+
+<example name="multi-file">
+edit {"edits":[{"path":"src/types.ts","op":"update","diff":"@@\n-old\n+new\n"},{"path":"src/index.ts","op":"update","diff":"@@\n-old\n+new\n"}]}
 </example>
 
 <avoid>

@@ -1,17 +1,17 @@
 Applies precise file edits using `LINE#ID` anchors from `read` output.
 
-Read the file first. Copy anchors exactly from the latest `read` output. In one `edit` call, batch all edits for one file. After any successful edit, re-read before editing that file again.
+Read the file first. Copy anchors exactly from the latest `read` output. After any successful edit, re-read before editing that file again.
 
 <operations>
 **Top level**
-- `path` — file path
-- `move` — optional rename target
-- `delete` — optional whole-file delete
-- `edits` — array of `{ loc, content }` entries
+- `edits` — array of edit entries
 
-**Edit entry**: `{ loc, content }`
+**Edit entry**: `{ path, loc, content }` or `{ path, delete: true }` or `{ path, move: "new/path" }`
+- `path` — file path
 - `loc` — where to apply the edit (see below)
 - `content` — replacement/inserted lines (array of strings preferred, `null` to delete)
+- `delete` — delete the file
+- `move` — move/rename the file
 
 **`loc` values**
 - `"append"` / `"prepend"` — insert at end/start of file
@@ -46,8 +46,8 @@ All examples below reference the same file:
 Replace only the catch body. Do not target the shared boundary line `} catch (err) {`.
 ```
 {
-  path: "a.ts",
   edits: [{
+    path: "a.ts",
     loc: { range: { pos: {{href 15 "\t\tconsole.error(err);"}}, end: {{href 16 "\t\treturn null;"}} } },
     content: [
       "\t\tif (isEnoent(err)) return null;",
@@ -62,8 +62,8 @@ Replace only the catch body. Do not target the shared boundary line `} catch (er
 Replace the entire body of `alpha`, including its closing `}`. `end` **MUST** be {{href 7 "}"}} because `content` includes `}`.
 ```
 {
-  path: "a.ts",
   edits: [{
+    path: "a.ts",
     loc: { range: { pos: {{href 6 "\tlog();"}}, end: {{href 7 "}"}} } },
     content: [
       "\tvalidate();",
@@ -79,8 +79,8 @@ Replace the entire body of `alpha`, including its closing `}`. `end` **MUST** be
 <example name="replace one line">
 ```
 {
-  path: "a.ts",
   edits: [{
+    path: "a.ts",
     loc: { range: { pos: {{href 2 "const timeout = 5000;"}}, end: {{href 2 "const timeout = 5000;"}} } },
     content: ["const timeout = 30_000;"]
   }]
@@ -91,8 +91,8 @@ Replace the entire body of `alpha`, including its closing `}`. `end` **MUST** be
 <example name="delete a range">
 ```
 {
-  path: "a.ts",
   edits: [{
+    path: "a.ts",
     loc: { range: { pos: {{href 10 "\t// TODO: remove after migration"}}, end: {{href 11 "\tlegacy();"}} } },
     content: null
   }]
@@ -104,8 +104,8 @@ Replace the entire body of `alpha`, including its closing `}`. `end` **MUST** be
 When adding a sibling declaration, prefer `prepend` on the next declaration.
 ```
 {
-  path: "a.ts",
   edits: [{
+    path: "a.ts",
     loc: { prepend: {{href 9 "function beta() {"}} },
     content: [
       "function gamma() {",

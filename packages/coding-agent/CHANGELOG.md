@@ -1,20 +1,31 @@
 # Changelog
 
 ## [Unreleased]
+
+### Breaking Changes
+
+- Changed the `edit` schemas for patch, replace, hashline, and chunk modes from top-level request fields to `edits` array entries, requiring path/mode details on each edit and breaking callers that send legacy top-level `path`, `old_text`, `new_text`, `op`, `move`, or `delete` payloads
+
 ### Added
 
+- Added support for multi-file `edit` calls across replace, patch, hashline, and chunk modes by grouping `edits` entries by file path and returning combined per-file results
+- Added per-edit `path` support in chunk entries so each operation can target explicit files when submitting mixed edits in a single request
 - Added support for `computeHashlineDiff` to accept hashline edits with `loc` and `content` payloads without requiring pre-resolved `op` fields
 - Added `/rename <title>` slash command to set an explicit session name, updating the session header and terminal tab title ([#658](https://github.com/can1357/oh-my-pi/issues/658))
 - Added `session_name` status line segment: displays the session name in the status bar right side with a stable hash-derived accent color unique to each name; shown in all presets when a name is set
 
 ### Changed
 
+- Changed chunk edit payloads to encode selectors as `path: "file:selector"` and updated chunk tool guidance and examples to match
+- Updated `edit` call/result rendering to show per-file diff sections and append a `(+N more)` hint when edits target multiple files
 - Grouped chunk-mode `grep` results by directory, file, and chunk so directory searches now render as hierarchical sections (`#`/`##`) with per-chunk anchor lines
 - Updated chunk-mode `grep` output to include match lines under their containing chunk entries with consistent line-number alignment based on file length
 - Changed eager todo enforcement to only apply on the first user message of a conversation, skipping subsequent user turns that may correct, clarify, or redirect the prior task
 
 ### Fixed
 
+- Fixed pre-execution edit preview routing so replace/patch/hashline mode diffs are computed from the new structured edit entries
+- Adjusted chunk/hashline/prompt guidance and validation to align with the refactored per-entry schema
 - Fixed chunk streaming output detection to verify chunk edits with `chunkToolEditSchema`, preventing non-chunk edit payloads from being rendered as chunk diffs
 - Fixed tool execution output to return the original `toolResult` text content from tools instead of sanitizing it before sending completion messages
 - Fixed session accent rendering in the status line and editor to reset only foreground color (`\x1b[39m`) so applying a session color no longer clears other ANSI styles

@@ -128,18 +128,18 @@ const locSchema = Type.Union(
 
 export const hashlineEditSchema = Type.Object(
 	{
-		loc: locSchema,
-		content: linesSchema,
+		path: Type.String({ description: "File path" }),
+		loc: Type.Optional(locSchema),
+		content: Type.Optional(linesSchema),
+		delete: Type.Optional(Type.Boolean({ description: "Delete the file" })),
+		move: Type.Optional(Type.String({ description: "Move/rename the file to this path" })),
 	},
 	{ additionalProperties: false },
 );
 
 export const hashlineEditParamsSchema = Type.Object(
 	{
-		path: Type.String({ description: "path" }),
-		edits: Type.Array(hashlineEditSchema, { description: "edits over $path" }),
-		delete: Type.Optional(Type.Boolean({ description: "If true, delete $path" })),
-		move: Type.Optional(Type.String({ description: "If set, move $path to $move" })),
+		edits: Type.Array(hashlineEditSchema, { description: "edits" }),
 	},
 	{ additionalProperties: false },
 );
@@ -147,9 +147,10 @@ export const hashlineEditParamsSchema = Type.Object(
 export type HashlineToolEdit = Static<typeof hashlineEditSchema>;
 export type HashlineParams = Static<typeof hashlineEditParamsSchema>;
 
-interface ExecuteHashlineModeOptions {
+export interface ExecuteHashlineSingleOptions {
 	session: ToolSession;
-	params: HashlineParams;
+	path: string;
+	edits: HashlineToolEdit[];
 	signal?: AbortSignal;
 	batchRequest?: LspBatchRequest;
 	writethrough: WritethroughCallback;
@@ -166,14 +167,11 @@ export function hashlineParseText(edit: string[] | string | null | undefined): s
 }
 
 export function isHashlineParams(params: unknown): params is HashlineParams {
-	return (
-		typeof params === "object" &&
-		params !== null &&
-		"edits" in params &&
-		Array.isArray(params.edits) &&
-		(params.edits.length === 0 ||
-			(typeof params.edits[0] === "object" && params.edits[0] !== null && "loc" in params.edits[0]))
-	);
+	if (typeof params !== "object" || params === null || !("edits" in params) || !Array.isArray(params.edits)) return false;
+	if (params.edits.length === 0) return true;
+	const first = params.edits[0];
+	if (typeof first !== "object" || first === null) return false;
+	return "loc" in first || "delete" in first || "move" in first;
 }
 
 function resolveEditAnchors(edits: HashlineToolEdit[]): HashlineEdit[] {
@@ -1200,15 +1198,20 @@ async function readHashlineFileText(file: BunFile, path: string): Promise<string
 	}
 }
 
-export async function executeHashlineMode(
-	options: ExecuteHashlineModeOptions,
+export async function executeHashlineSingle(
+	options: ExecuteHashlineSingleOptions,
 ): Promise<AgentToolResult<EditToolDetails, typeof hashlineEditParamsSchema>> {
-	const { session, params, signal, batchRequest, writethrough, beginDeferredDiagnosticsForPath } = options;
-	const { path, edits, delete: deleteFile, move } = params;
+	const { session, path, edits, signal, batchRequest, writethrough, beginDeferredDiagnosticsForPath } = options;
+
+	// Extract file-level ops from edits
+	const deleteFile = edits.some(e => e.delete);
+	const move = edits.find(e => e.move)?.move;
+	// Filter to content edits only (those with loc)
+	const contentEdits = edits.filter(e => e.loc != null);
 
 	enforcePlanModeWrite(session, path, { op: deleteFile ? "delete" : "update", move });
 
-	if (path.endsWith(".ipynb") && edits?.length > 0) {
+	if (path.endsWith(".ipynb") && contentEdits.length > 0) {
 		throw new Error("Cannot edit Jupyter notebooks with the Edit tool. Use the NotebookEdit tool instead.");
 	}
 
@@ -1220,7 +1223,7 @@ export async function executeHashlineMode(
 
 	const sourceFile = Bun.file(absolutePath);
 	const sourceExists = await sourceFile.exists();
-	const isMoveOnly = Boolean(resolvedMove) && edits.length === 0;
+	const isMoveOnly = Boolean(resolvedMove) && contentEdits.length === 0;
 
 	if (deleteFile) {
 		if (sourceExists) {
@@ -1260,7 +1263,7 @@ export async function executeHashlineMode(
 
 	if (!sourceExists) {
 		const lines: string[] = [];
-		for (const edit of edits) {
+		for (const edit of contentEdits) {
 			if (edit.loc === "append") {
 				lines.push(...hashlineParseText(edit.content));
 			} else if (edit.loc === "prepend") {
@@ -1282,7 +1285,7 @@ export async function executeHashlineMode(
 		};
 	}
 
-	const anchorEdits = resolveEditAnchors(edits);
+	const anchorEdits = resolveEditAnchors(contentEdits);
 	const rawContent = await sourceFile.text();
 	assertEditableFileContent(rawContent, path);
 

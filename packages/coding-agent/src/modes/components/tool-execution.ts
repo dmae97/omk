@@ -179,12 +179,32 @@ export class ToolExecutionComponent extends Container {
 	#maybeComputeEditDiff(): void {
 		if (this.#toolName !== "edit") return;
 
-		const path = this.#args?.path;
-		const op = this.#args?.op;
+		const edits = this.#args?.edits;
+		if (!Array.isArray(edits) || edits.length === 0) return;
 
-		if (op) {
-			const diff = this.#args?.diff;
-			const rename = this.#args?.rename;
+		const first = edits[0];
+		if (!first || typeof first !== "object") return;
+
+		// Detect mode from first edit entry shape and compute preview for first file
+		if ("old_text" in first && "new_text" in first) {
+			// Replace mode
+			const { path, old_text: oldText, new_text: newText, all } = first;
+			if (!path || oldText === undefined || newText === undefined) return;
+
+			const argsKey = JSON.stringify({ path, oldText, newText, all });
+			if (this.#editDiffArgsKey === argsKey) return;
+			this.#editDiffArgsKey = argsKey;
+
+			computeEditDiff(path, oldText, newText, this.#cwd, true, all, this.#editFuzzyThreshold).then(result => {
+				if (this.#editDiffArgsKey === argsKey) {
+					this.#editDiffPreview = result;
+					this.#updateDisplay();
+					this.#ui.requestRender();
+				}
+			});
+		} else if ("path" in first && ("diff" in first || ("op" in first && !("content" in first)))) {
+			// Patch mode (has diff or op without content — chunk edits always have content)
+			const { path, op, rename, diff } = first;
 			if (!path) return;
 
 			const argsKey = JSON.stringify({ path, op, rename, diff });
@@ -201,49 +221,26 @@ export class ToolExecutionComponent extends Container {
 					this.#ui.requestRender();
 				}
 			});
-			return;
-		}
-		const edits = this.#args?.edits;
-		const move = this.#args?.move;
-		if (path && Array.isArray(edits)) {
-			const argsKey = JSON.stringify({ path, edits, move });
+		} else if ("loc" in first && "path" in first) {
+			// Hashline mode — group edits by path, preview first file
+			const path = first.path;
+			if (!path) return;
+			const fileEdits = edits.filter((e: any) => e.path === path);
+			const move = this.#args?.move;
+
+			const argsKey = JSON.stringify({ path, edits: fileEdits, move });
 			if (this.#editDiffArgsKey === argsKey) return;
 			this.#editDiffArgsKey = argsKey;
 
-			computeHashlineDiff({ path, edits, move }, this.#cwd).then(result => {
+			computeHashlineDiff({ path, edits: fileEdits, move }, this.#cwd).then(result => {
 				if (this.#editDiffArgsKey === argsKey) {
 					this.#editDiffPreview = result;
 					this.#updateDisplay();
 					this.#ui.requestRender();
 				}
 			});
-			return;
 		}
-
-		const oldText = this.#args?.old_text;
-		const newText = this.#args?.new_text;
-		const all = this.#args?.all;
-
-		// Need all three params to compute diff
-		if (!path || oldText === undefined || newText === undefined) return;
-
-		// Create a key to track which args this computation is for
-		const argsKey = JSON.stringify({ path, oldText, newText, all });
-
-		// Skip if we already computed for these exact args
-		if (this.#editDiffArgsKey === argsKey) return;
-
-		this.#editDiffArgsKey = argsKey;
-
-		// Compute diff async
-		computeEditDiff(path, oldText, newText, this.#cwd, true, all, this.#editFuzzyThreshold).then(result => {
-			// Only update if args haven't changed since we started
-			if (this.#editDiffArgsKey === argsKey) {
-				this.#editDiffPreview = result;
-				this.#updateDisplay();
-				this.#ui.requestRender();
-			}
-		});
+		// Chunk mode edits don't have a pre-execution diff preview
 	}
 
 	updateResult(

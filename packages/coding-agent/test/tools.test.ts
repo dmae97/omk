@@ -667,9 +667,7 @@ describe("Coding Agent Tools", () => {
 			fs.writeFileSync(testFile, originalContent);
 
 			const result = await editTool.execute("test-call-5", {
-				path: testFile,
-				old_text: "world",
-				new_text: "testing",
+				edits: [{ path: testFile, old_text: "world", new_text: "testing" }],
 			});
 
 			expect(getTextOutput(result)).toContain("Successfully replaced");
@@ -686,9 +684,7 @@ describe("Coding Agent Tools", () => {
 
 			await expect(
 				editTool.execute("test-call-6", {
-					path: testFile,
-					old_text: "nonexistent",
-					new_text: "testing",
+					edits: [{ path: testFile, old_text: "nonexistent", new_text: "testing" }],
 				}),
 			).rejects.toThrow(/Could not find/);
 		});
@@ -700,9 +696,7 @@ describe("Coding Agent Tools", () => {
 
 			await expect(
 				editTool.execute("test-call-7", {
-					path: testFile,
-					old_text: "foo",
-					new_text: "bar",
+					edits: [{ path: testFile, old_text: "foo", new_text: "bar" }],
 				}),
 			).rejects.toThrow(/Found 3 occurrences/);
 		});
@@ -712,10 +706,7 @@ describe("Coding Agent Tools", () => {
 			fs.writeFileSync(testFile, "foo bar foo baz foo");
 
 			const result = await editTool.execute("test-all-1", {
-				path: testFile,
-				old_text: "foo",
-				new_text: "qux",
-				all: true,
+				edits: [{ path: testFile, old_text: "foo", new_text: "qux", all: true }],
 			});
 
 			expect(getTextOutput(result)).toContain("Successfully replaced 3 occurrences");
@@ -744,10 +735,14 @@ function b() {
 			// With multiple fuzzy matches, the tool rejects for safety to avoid ambiguous replacements
 			await expect(
 				editTool.execute("test-all-fuzzy", {
-					path: testFile,
-					old_text: "if (x) {\n  doThing();\n}",
-					new_text: "if (y) {\n  doOther();\n}",
-					all: true,
+					edits: [
+						{
+							path: testFile,
+							old_text: "if (x) {\n  doThing();\n}",
+							new_text: "if (y) {\n  doOther();\n}",
+							all: true,
+						},
+					],
 				}),
 			).rejects.toThrow(/Found 2 high-confidence matches/);
 		});
@@ -758,10 +753,7 @@ function b() {
 
 			await expect(
 				editTool.execute("test-all-nomatch", {
-					path: testFile,
-					old_text: "nonexistent",
-					new_text: "bar",
-					all: true,
+					edits: [{ path: testFile, old_text: "nonexistent", new_text: "bar", all: true }],
 				}),
 			).rejects.toThrow(/Could not find/);
 		});
@@ -771,10 +763,7 @@ function b() {
 			fs.writeFileSync(testFile, "start\nfoo\nbar\nend\nstart\nfoo\nbar\nend");
 
 			const result = await editTool.execute("test-all-multiline", {
-				path: testFile,
-				old_text: "foo\nbar",
-				new_text: "replaced",
-				all: true,
+				edits: [{ path: testFile, old_text: "foo\nbar", new_text: "replaced", all: true }],
 			});
 
 			expect(getTextOutput(result)).toContain("Successfully replaced 2 occurrences");
@@ -787,10 +776,7 @@ function b() {
 			fs.writeFileSync(testFile, "hello world");
 
 			const result = await editTool.execute("test-all-single", {
-				path: testFile,
-				old_text: "world",
-				new_text: "universe",
-				all: true,
+				edits: [{ path: testFile, old_text: "world", new_text: "universe", all: true }],
 			});
 
 			expect(getTextOutput(result)).toContain("Successfully replaced text");
@@ -1455,9 +1441,7 @@ describe("edit tool CRLF handling", () => {
 		fs.writeFileSync(testFile, "line one\r\nline two\r\nline three\r\n");
 
 		const result = await editTool.execute("test-crlf-1", {
-			path: testFile,
-			old_text: "line two\n",
-			new_text: "replaced line\n",
+			edits: [{ path: testFile, old_text: "line two\n", new_text: "replaced line\n" }],
 		});
 
 		expect(getTextOutput(result)).toContain("Successfully replaced");
@@ -1468,9 +1452,7 @@ describe("edit tool CRLF handling", () => {
 		fs.writeFileSync(testFile, "first\r\nsecond\r\nthird\r\n");
 
 		await editTool.execute("test-crlf-2", {
-			path: testFile,
-			old_text: "second\n",
-			new_text: "REPLACED\n",
+			edits: [{ path: testFile, old_text: "second\n", new_text: "REPLACED\n" }],
 		});
 
 		const content = await Bun.file(testFile).text();
@@ -1482,9 +1464,7 @@ describe("edit tool CRLF handling", () => {
 		fs.writeFileSync(testFile, "first\nsecond\nthird\n");
 
 		await editTool.execute("test-lf-1", {
-			path: testFile,
-			old_text: "second\n",
-			new_text: "REPLACED\n",
+			edits: [{ path: testFile, old_text: "second\n", new_text: "REPLACED\n" }],
 		});
 
 		const content = await Bun.file(testFile).text();
@@ -1498,9 +1478,7 @@ describe("edit tool CRLF handling", () => {
 
 		await expect(
 			editTool.execute("test-crlf-dup", {
-				path: testFile,
-				old_text: "hello\nworld\n",
-				new_text: "replaced\n",
+				edits: [{ path: testFile, old_text: "hello\nworld\n", new_text: "replaced\n" }],
 			}),
 		).rejects.toThrow(/Found 2 occurrences/);
 	});
@@ -1518,10 +1496,8 @@ describe("edit tool CRLF handling", () => {
 			const session = createTestToolSession(hashDir);
 			const hashlineEditTool = new EditTool(session);
 			const result = await hashlineEditTool.execute("hashline-delete-1", {
-				path: testFile,
-				edits: [],
-				delete: true,
-			});
+				edits: [{ path: testFile, delete: true }],
+			} as any);
 
 			expect(getTextOutput(result)).toContain("Deleted");
 			expect(fs.existsSync(testFile)).toBe(false);
@@ -1546,10 +1522,8 @@ describe("edit tool CRLF handling", () => {
 			const session = createTestToolSession(hashDir);
 			const hashlineEditTool = new EditTool(session);
 			const result = await hashlineEditTool.execute("hashline-rename-1", {
-				path: sourceFile,
-				edits: [],
-				move: targetFile,
-			});
+				edits: [{ path: sourceFile, move: targetFile }],
+			} as any);
 
 			expect(getTextOutput(result)).toContain("Moved");
 			expect(fs.existsSync(sourceFile)).toBe(false);
@@ -1577,10 +1551,8 @@ describe("edit tool CRLF handling", () => {
 			const session = createTestToolSession(hashDir);
 			const hashlineEditTool = new EditTool(session);
 			const result = await hashlineEditTool.execute("hashline-rename-binary", {
-				path: sourceFile,
-				edits: [],
-				move: targetFile,
-			});
+				edits: [{ path: sourceFile, move: targetFile }],
+			} as any);
 
 			expect(getTextOutput(result)).toContain("Moved");
 			expect(fs.existsSync(sourceFile)).toBe(false);
@@ -1599,9 +1571,7 @@ describe("edit tool CRLF handling", () => {
 		fs.writeFileSync(testFile, "\uFEFFfirst\r\nsecond\r\nthird\r\n");
 
 		await editTool.execute("test-bom", {
-			path: testFile,
-			old_text: "second\n",
-			new_text: "REPLACED\n",
+			edits: [{ path: testFile, old_text: "second\n", new_text: "REPLACED\n" }],
 		});
 
 		const content = await Bun.file(testFile).text();

@@ -197,6 +197,17 @@ export function parseChunkSelector(selector: string | undefined): { selector?: s
 	return { selector };
 }
 
+/** Split a combined `file:selector` path into file path and chunk selector. */
+export function parseChunkEditPath(editPath: string | undefined): { filePath: string; selector?: string } {
+	if (!editPath) return { filePath: "" };
+	const colonIndex = chunkReadPathSeparatorIndex(editPath);
+	if (colonIndex === -1) {
+		return { filePath: editPath };
+	}
+	const sel = editPath.slice(colonIndex + 1) || undefined;
+	return { filePath: editPath.slice(0, colonIndex), selector: sel };
+}
+
 export function parseChunkReadPath(readPath: string): ParsedChunkReadPath {
 	const colonIndex = chunkReadPathSeparatorIndex(readPath);
 	if (colonIndex === -1) {
@@ -464,9 +475,9 @@ const CHUNK_OP_VALUES = ["replace", "after", "before", "prepend", "append"] as c
 
 export const chunkToolEditSchema = Type.Object({
 	op: StringEnum(CHUNK_OP_VALUES),
-	sel: Type.String({
+	path: Type.String({
 		description:
-			"Chunk selector. Use 'path~' or 'path^' for insertions, 'path#CRC~' or 'path#CRC^' for replace, or omit the suffix to target the full chunk.",
+			"File path with chunk selector after colon. Format: 'file:sel~' or 'file:sel^' for insertions, 'file:sel#CRC~' or 'file:sel#CRC^' for replace. Omit suffix to target the full chunk. Examples: 'src/app.ts:fn_foo#ABCD~', 'src/app.ts:class_Bar'.",
 	}),
 	content: Type.String({
 		description:
@@ -475,7 +486,6 @@ export const chunkToolEditSchema = Type.Object({
 });
 export const chunkEditParamsSchema = Type.Object(
 	{
-		path: Type.String({ description: "File path" }),
 		edits: Type.Array(chunkToolEditSchema, {
 			description: "Chunk edits",
 			minItems: 1,
@@ -487,9 +497,10 @@ export const chunkEditParamsSchema = Type.Object(
 export type ChunkToolEdit = Static<typeof chunkToolEditSchema>;
 export type ChunkParams = Static<typeof chunkEditParamsSchema>;
 
-interface ExecuteChunkModeOptions {
+export interface ExecuteChunkSingleOptions {
 	session: ToolSession;
-	params: ChunkParams;
+	path: string;
+	edits: ChunkToolEdit[];
 	signal?: AbortSignal;
 	batchRequest?: LspBatchRequest;
 	writethrough: WritethroughCallback;
@@ -505,12 +516,17 @@ export function isChunkParams(params: unknown): params is ChunkParams {
 		params.edits.length > 0 &&
 		typeof params.edits[0] === "object" &&
 		params.edits[0] !== null &&
-		"sel" in params.edits[0]
+		"op" in params.edits[0] &&
+		"content" in params.edits[0] &&
+		!("loc" in params.edits[0])
 	);
 }
 
 function normalizeChunkEditOperations(edits: ChunkToolEdit[]): ChunkEditOperation[] {
-	return edits as ChunkEditOperation[];
+	return edits.map(edit => {
+		const { selector } = parseChunkEditPath(edit.path);
+		return { op: edit.op, sel: selector, content: edit.content };
+	});
 }
 
 async function writeChunkResult(params: {
@@ -562,11 +578,10 @@ async function writeChunkResult(params: {
 	};
 }
 
-export async function executeChunkMode(
-	options: ExecuteChunkModeOptions,
+export async function executeChunkSingle(
+	options: ExecuteChunkSingleOptions,
 ): Promise<AgentToolResult<EditToolDetails, typeof chunkEditParamsSchema>> {
-	const { session, params, signal, batchRequest, writethrough, beginDeferredDiagnosticsForPath } = options;
-	const { path, edits } = params;
+	const { session, path, edits, signal, batchRequest, writethrough, beginDeferredDiagnosticsForPath } = options;
 	const { resolvedPath, sourceFile, sourceExists, rawContent, chunkLanguage } = await resolveChunkSourceContext(
 		session,
 		path,

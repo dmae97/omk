@@ -245,7 +245,7 @@ describe("computeHashlineDiff", () => {
 		await Bun.write(sourcePath, "first\n");
 
 		const result = await computeHashlineDiff(
-			{ path: sourcePath, edits: [{ loc: "append", content: "second" }] },
+			{ path: sourcePath, edits: [{ path: sourcePath, loc: "append", content: "second" }] },
 			tempDir,
 		);
 		expect("diff" in result).toBe(true);

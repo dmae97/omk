@@ -238,31 +238,8 @@ impl ChunkAnchorStyle {
 		}
 	}
 
-	/// Render an opening anchor tag with head/body line counts:
-	/// `[< name#crc >] (H+B lns)` for containers, `[< name#crc >] (N lns)` for
-	/// leaves. Omitted when total lines <= 1. Returns empty string for `None`
-	/// style.
-	pub fn render(
-		&self,
-		indent: &str,
-		name: &str,
-		crc: &str,
-		head_lines: u32,
-		body_lines: u32,
-	) -> String {
-		let total = head_lines + body_lines;
-		let suffix = if total <= 1 {
-			String::new()
-		} else if body_lines == 0 {
-			format!(" ({total} lns)")
-		} else {
-			format!(" ({head_lines}+{body_lines} lns)")
-		};
-		self.render_i(("[<", ">]"), indent, name, crc, &suffix)
-	}
-
-	/// Render an opening anchor tag without the `(N lns)` suffix.
-	pub fn render_without_counts(&self, indent: &str, name: &str, crc: &str) -> String {
+	/// Render an opening anchor tag
+	pub fn render(&self, indent: &str, name: &str, crc: &str) -> String {
 		self.render_i(("[<", ">]"), indent, name, crc, "")
 	}
 

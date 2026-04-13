@@ -987,18 +987,23 @@ export function findContextLine(
 	return { index: undefined, confidence: bestScore };
 }
 
-export const replaceEditSchema = Type.Object({
+export const replaceEditEntrySchema = Type.Object({
 	path: Type.String({ description: "File path (relative or absolute)" }),
 	old_text: Type.String({ description: "Text to find (fuzzy whitespace matching enabled)" }),
 	new_text: Type.String({ description: "Replacement text" }),
 	all: Type.Optional(Type.Boolean({ description: "Replace all occurrences (default: unique match required)" })),
 });
 
+export const replaceEditSchema = Type.Object({
+	edits: Type.Array(replaceEditEntrySchema, { description: "Replacements", minItems: 1 }),
+});
+
+export type ReplaceEditEntry = Static<typeof replaceEditEntrySchema>;
 export type ReplaceParams = Static<typeof replaceEditSchema>;
 
-interface ExecuteReplaceModeOptions {
+export interface ExecuteReplaceSingleOptions {
 	session: ToolSession;
-	params: ReplaceParams;
+	params: ReplaceEditEntry;
 	signal?: AbortSignal;
 	batchRequest?: LspBatchRequest;
 	allowFuzzy: boolean;
@@ -1008,12 +1013,15 @@ interface ExecuteReplaceModeOptions {
 }
 
 export function isReplaceParams(params: unknown): params is ReplaceParams {
-	return typeof params === "object" && params !== null && "old_text" in params && "new_text" in params;
+	if (typeof params !== "object" || params === null) return false;
+	if (!("edits" in params) || !Array.isArray((params as any).edits)) return false;
+	const first = (params as any).edits[0];
+	return first && typeof first === "object" && "old_text" in first && "new_text" in first;
 }
 
-export async function executeReplaceMode(
-	options: ExecuteReplaceModeOptions,
-): Promise<AgentToolResult<EditToolDetails, typeof replaceEditSchema>> {
+export async function executeReplaceSingle(
+	options: ExecuteReplaceSingleOptions,
+): Promise<AgentToolResult<EditToolDetails, typeof replaceEditEntrySchema>> {
 	const {
 		session,
 		params,

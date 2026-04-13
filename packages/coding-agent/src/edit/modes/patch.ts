@@ -1576,7 +1576,7 @@ export async function computePatchDiff(
 	}
 }
 
-export const patchEditSchema = Type.Object({
+export const patchEditEntrySchema = Type.Object({
 	path: Type.String({ description: "File path" }),
 	op: Type.Optional(
 		StringEnum(["create", "delete", "update"], {
@@ -1587,11 +1587,16 @@ export const patchEditSchema = Type.Object({
 	diff: Type.Optional(Type.String({ description: "Diff hunks (update) or full content (create)" })),
 });
 
+export const patchEditSchema = Type.Object({
+	edits: Type.Array(patchEditEntrySchema, { description: "Patch operations", minItems: 1 }),
+});
+
+export type PatchEditEntry = Static<typeof patchEditEntrySchema>;
 export type PatchParams = Static<typeof patchEditSchema>;
 
-interface ExecutePatchModeOptions {
+export interface ExecutePatchSingleOptions {
 	session: ToolSession;
-	params: PatchParams;
+	params: PatchEditEntry;
 	signal?: AbortSignal;
 	batchRequest?: LspBatchRequest;
 	allowFuzzy: boolean;
@@ -1601,10 +1606,11 @@ interface ExecutePatchModeOptions {
 }
 
 export function isPatchParams(params: unknown): params is PatchParams {
-	if (typeof params !== "object" || params === null || !("path" in params)) {
-		return false;
-	}
-	return !("old_text" in params) && !("new_text" in params) && !("edits" in params);
+	if (typeof params !== "object" || params === null) return false;
+	if (!("edits" in params) || !Array.isArray((params as any).edits)) return false;
+	const first = (params as any).edits[0];
+	if (!first || typeof first !== "object") return false;
+	return "path" in first && !("old_text" in first) && !("new_text" in first);
 }
 
 class LspFileSystem implements FileSystem {
@@ -1690,9 +1696,9 @@ function mergeDiagnosticsWithWarnings(
 	};
 }
 
-export async function executePatchMode(
-	options: ExecutePatchModeOptions,
-): Promise<AgentToolResult<EditToolDetails, typeof patchEditSchema>> {
+export async function executePatchSingle(
+	options: ExecutePatchSingleOptions,
+): Promise<AgentToolResult<EditToolDetails, typeof patchEditEntrySchema>> {
 	const {
 		session,
 		params,

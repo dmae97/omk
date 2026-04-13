@@ -4,7 +4,6 @@
 import type { ToolCallContext } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text, visibleWidth, wrapTextWithAnsi } from "@oh-my-pi/pi-tui";
-import { Type } from "@sinclair/typebox";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import type { FileDiagnosticsResult } from "../lsp";
 import { renderDiff as renderDiffColored } from "../modes/components/diff";
@@ -24,7 +23,7 @@ import {
 } from "../tools/render-utils";
 import { Hasher, type RenderCache, renderStatusLine, truncateToWidth } from "../tui";
 import type { DiffError, DiffResult } from "./diff";
-import { type ChunkToolEdit, chunkToolEditSchema } from "./modes/chunk";
+import { type ChunkToolEdit, parseChunkEditPath } from "./modes/chunk";
 import type { HashlineToolEdit } from "./modes/hashline";
 import type { Operation } from "./modes/patch";
 
@@ -57,6 +56,18 @@ export function getLspBatchRequest(toolCall: ToolCallContext | undefined): LspBa
 // Tool Details Types
 // ═══════════════════════════════════════════════════════════════════════════
 
+export interface EditToolPerFileResult {
+	path: string;
+	diff: string;
+	firstChangedLine?: number;
+	diagnostics?: FileDiagnosticsResult;
+	op?: Operation;
+	move?: string;
+	isError?: boolean;
+	errorText?: string;
+	meta?: OutputMeta;
+}
+
 export interface EditToolDetails {
 	/** Unified diff of the changes made */
 	diff: string;
@@ -70,6 +81,8 @@ export interface EditToolDetails {
 	move?: string;
 	/** Structured output metadata */
 	meta?: OutputMeta;
+	/** Per-file results (multi-file edits) */
+	perFileResults?: EditToolPerFileResult[];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -183,7 +196,7 @@ function formatStreamingDiff(diff: string, rawPath: string, uiTheme: Theme, labe
 }
 
 function isChunkStreamingEdit(edit: Partial<HashlineToolEdit | ChunkToolEdit>): edit is Partial<ChunkToolEdit> {
-	return Type.Partial(chunkToolEditSchema).Check(edit);
+	return typeof edit === "object" && edit !== null && "op" in edit && !("loc" in edit);
 }
 
 function getStreamingEditContent(content: unknown): string {
@@ -227,7 +240,7 @@ function formatChunkStreamingEdit(edit: Partial<ChunkToolEdit>): FormattedStream
 	}
 
 	const contentLines = getStreamingEditContent(edit.content);
-	const target = edit.sel ?? "?";
+	const target = edit.path ? (parseChunkEditPath(edit.path).selector ?? edit.path) : "?";
 	const op = edit.op ?? "replace";
 
 	switch (op) {
@@ -303,7 +316,15 @@ function getCallPreview(args: EditRenderArgs, rawPath: string, uiTheme: Theme): 
 		return formatStreamingDiff(args.diff, rawPath, uiTheme);
 	}
 	if (args.edits && args.edits.length > 0) {
-		return formatStreamingHashlineEdits(args.edits, uiTheme);
+		// Only show hashline/chunk streaming edits — replace/patch use previewDiff above
+		const first = args.edits[0];
+		if (
+			first &&
+			typeof first === "object" &&
+			("loc" in first || ("op" in first && "content" in first && !("old_text" in first) && !("diff" in first)))
+		) {
+			return formatStreamingHashlineEdits(args.edits, uiTheme);
+		}
 	}
 	if (args.diff) {
 		return renderPlainTextPreview(args.diff, uiTheme);
@@ -377,11 +398,22 @@ export const editToolRenderer = {
 	mergeCallAndResult: true,
 
 	renderCall(args: EditRenderArgs, options: RenderResultOptions, uiTheme: Theme): Component {
-		const rawPath = args.file_path || args.path || "";
-		const { description } = formatEditDescription(rawPath, uiTheme, { rename: args.rename });
+		// Extract path from first edit entry when top-level path is absent (new schema)
+		const firstEdit = Array.isArray(args.edits) && args.edits.length > 0 ? args.edits[0] : undefined;
+		const rawPath = args.file_path || args.path || (firstEdit as any)?.path || "";
+		const rename = args.rename || (firstEdit as any)?.rename;
+		const op = args.op || (firstEdit as any)?.op;
+		const { description } = formatEditDescription(rawPath, uiTheme, { rename });
 		const spinner =
 			options?.spinnerFrame !== undefined ? formatStatusIcon("running", uiTheme, options.spinnerFrame) : "";
-		let text = `${formatTitle(getOperationTitle(args.op), uiTheme)} ${spinner ? `${spinner} ` : ""}${description}`;
+		let text = `${formatTitle(getOperationTitle(op), uiTheme)} ${spinner ? `${spinner} ` : ""}${description}`;
+		// Show file count hint for multi-file edits
+		const fileCount = Array.isArray(args.edits)
+			? new Set((args.edits as any[]).map(e => e?.path).filter(Boolean)).size
+			: 0;
+		if (fileCount > 1) {
+			text += uiTheme.fg("dim", ` (+${fileCount - 1} more)`);
+		}
 		text += getCallPreview(args, rawPath, uiTheme);
 
 		return new Text(text, 0, 0);
@@ -393,76 +425,126 @@ export const editToolRenderer = {
 		uiTheme: Theme,
 		args?: EditRenderArgs,
 	): Component {
-		const rawPath = args?.file_path || args?.path || "";
-		const op = args?.op || result.details?.op;
-		const rename = args?.rename || result.details?.move;
-		const { language } = formatEditDescription(rawPath, uiTheme, { rename });
-
-		// Pre-compute metadata line (static across renders)
-		const metadataLine =
-			op !== "delete"
-				? `\n${formatMetadataLine(countLines(args?.newText ?? args?.oldText ?? args?.diff ?? args?.patch ?? ""), language, uiTheme)}`
-				: "";
-
-		// Pre-compute error text (static)
-		const errorText = result.isError ? (result.content?.find(c => c.type === "text")?.text ?? "") : "";
-
-		let cached: RenderCache | undefined;
-
-		return {
-			render(width) {
-				const { expanded, renderContext } = options;
-				const editDiffPreview = renderContext?.editDiffPreview;
-				const renderDiffFn = renderContext?.renderDiff ?? ((t: string) => t);
-				const key = new Hasher().bool(expanded).u32(width).digest();
-				if (cached?.key === key) return cached.lines;
-
-				const firstChangedLine =
-					(editDiffPreview && "firstChangedLine" in editDiffPreview
-						? editDiffPreview.firstChangedLine
-						: undefined) || (result.details && !result.isError ? result.details.firstChangedLine : undefined);
-				const { description } = formatEditDescription(rawPath, uiTheme, { rename, firstChangedLine });
-
-				const header = renderStatusLine(
-					{
-						icon: result.isError ? "error" : "success",
-						title: getOperationTitle(op),
-						description,
-					},
-					uiTheme,
-				);
-				let text = header;
-				text += metadataLine;
-
-				if (result.isError) {
-					if (errorText) {
-						text += `\n\n${uiTheme.fg("error", replaceTabs(errorText))}`;
-					}
-				} else if (result.details?.diff) {
-					text += renderDiffSection(result.details.diff, rawPath, expanded, uiTheme, renderDiffFn);
-				} else if (editDiffPreview) {
-					if ("error" in editDiffPreview) {
-						text += `\n\n${uiTheme.fg("error", replaceTabs(editDiffPreview.error))}`;
-					} else if (editDiffPreview.diff) {
-						text += renderDiffSection(editDiffPreview.diff, rawPath, expanded, uiTheme, renderDiffFn);
-					}
-				}
-
-				// Show LSP diagnostics if available
-				if (result.details?.diagnostics) {
-					text += formatDiagnostics(result.details.diagnostics, expanded, uiTheme, (fp: string) =>
-						uiTheme.getLangIcon(getLanguageFromPath(fp)),
-					);
-				}
-
-				const lines =
-					width > 0 ? text.split("\n").flatMap(line => wrapEditRendererLine(line, width)) : text.split("\n");
-				cached = { key, lines };
-				return lines;
-			},
-			invalidate() {
-				cached = undefined;
-			},
-		};
+		const perFileResults = result.details?.perFileResults;
+		if (perFileResults && perFileResults.length > 1) {
+			return renderMultiFileResult(perFileResults, options, uiTheme);
+		}
+		return renderSingleFileResult(result, options, uiTheme, args);
 	},
 };
+
+function renderSingleFileResult(
+	result: {
+		content: Array<{ type: string; text?: string }>;
+		details?: EditToolDetails | EditToolPerFileResult;
+		isError?: boolean;
+	},
+	options: RenderResultOptions & { renderContext?: EditRenderContext },
+	uiTheme: Theme,
+	args?: EditRenderArgs,
+): Component {
+	const details = result.details;
+	const isError = result.isError ?? (details && "isError" in details ? details.isError : false);
+	const rawPath = args?.file_path || args?.path || (details && "path" in details ? details.path : "") || "";
+	const op = args?.op || details?.op;
+	const rename = args?.rename || details?.move;
+	const { language } = formatEditDescription(rawPath, uiTheme, { rename });
+
+	const metadataLine =
+		op !== "delete"
+			? `\n${formatMetadataLine(countLines(args?.newText ?? args?.oldText ?? args?.diff ?? args?.patch ?? ""), language, uiTheme)}`
+			: "";
+
+	const errorText = isError
+		? (details && "errorText" in details && details.errorText) ||
+			(result.content?.find(c => c.type === "text")?.text ?? "")
+		: "";
+
+	let cached: RenderCache | undefined;
+
+	return {
+		render(width) {
+			const { expanded, renderContext } = options;
+			const editDiffPreview = renderContext?.editDiffPreview;
+			const renderDiffFn = renderContext?.renderDiff ?? ((t: string) => t);
+			const key = new Hasher().bool(expanded).u32(width).digest();
+			if (cached?.key === key) return cached.lines;
+
+			const firstChangedLine =
+				(editDiffPreview && "firstChangedLine" in editDiffPreview ? editDiffPreview.firstChangedLine : undefined) ||
+				(details && !isError ? details.firstChangedLine : undefined);
+			const { description } = formatEditDescription(rawPath, uiTheme, { rename, firstChangedLine });
+
+			const header = renderStatusLine(
+				{
+					icon: isError ? "error" : "success",
+					title: getOperationTitle(op),
+					description,
+				},
+				uiTheme,
+			);
+			let text = header;
+			text += metadataLine;
+
+			if (isError) {
+				if (errorText) {
+					text += `\n\n${uiTheme.fg("error", replaceTabs(errorText))}`;
+				}
+			} else if (details?.diff) {
+				text += renderDiffSection(details.diff, rawPath, expanded, uiTheme, renderDiffFn);
+			} else if (editDiffPreview) {
+				if ("error" in editDiffPreview) {
+					text += `\n\n${uiTheme.fg("error", replaceTabs(editDiffPreview.error))}`;
+				} else if (editDiffPreview.diff) {
+					text += renderDiffSection(editDiffPreview.diff, rawPath, expanded, uiTheme, renderDiffFn);
+				}
+			}
+
+			if (details?.diagnostics) {
+				text += formatDiagnostics(details.diagnostics, expanded, uiTheme, (fp: string) =>
+					uiTheme.getLangIcon(getLanguageFromPath(fp)),
+				);
+			}
+
+			const lines =
+				width > 0 ? text.split("\n").flatMap(line => wrapEditRendererLine(line, width)) : text.split("\n");
+			cached = { key, lines };
+			return lines;
+		},
+		invalidate() {
+			cached = undefined;
+		},
+	};
+}
+
+function renderMultiFileResult(
+	perFileResults: EditToolPerFileResult[],
+	options: RenderResultOptions & { renderContext?: EditRenderContext },
+	uiTheme: Theme,
+): Component {
+	const fileComponents = perFileResults.map(fileResult =>
+		renderSingleFileResult({ content: [], details: fileResult, isError: fileResult.isError }, options, uiTheme),
+	);
+
+	let cached: RenderCache | undefined;
+
+	return {
+		render(width) {
+			const key = new Hasher().bool(options.expanded).u32(width).u32(perFileResults.length).digest();
+			if (cached?.key === key) return cached.lines;
+
+			const allLines: string[] = [];
+			for (let i = 0; i < fileComponents.length; i++) {
+				if (i > 0) allLines.push("");
+				allLines.push(...fileComponents[i].render(width));
+			}
+
+			cached = { key, lines: allLines };
+			return allLines;
+		},
+		invalidate() {
+			cached = undefined;
+			for (const c of fileComponents) c.invalidate();
+		},
+	};
+}

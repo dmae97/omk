@@ -2,9 +2,9 @@ Edits files via syntax-aware chunks. Run `read(path="file.ts")` first. The edit 
 
 <rules>
 - **MUST** `read` first. Never invent chunk paths or CRCs. Copy them from the latest `read` output or edit response.
-- `sel` format:
-  - insertions: `chunk`, `chunk~`, or `chunk^`
-  - replacements: `chunk#CRC`, `chunk#CRC~`, or `chunk#CRC^`
+- `path` format: `file:selector` where selector is:
+  - insertions: `file:chunk`, `file:chunk~`, or `file:chunk^`
+  - replacements: `file:chunk#CRC`, `file:chunk#CRC~`, or `file:chunk#CRC^`
 - Without a suffix it defaults to the entire chunk including leading trivia. `~` targets the body, `^` targets the head.
 - If the exact chunk path is unclear, run `read(path="file", sel="?")` and copy a selector from that listing.
 {{#if chunkAutoIndent}}
@@ -35,19 +35,11 @@ You **MUST** use the narrowest region that covers your change. Replacing without
 </critical>
 
 <regions>
-Given a chunk like:
-```
-/// doc comment      <-- leading trivia
-#[attr]              <-- leading trivia
-fn foo(x: i32) {     <-- signature + opening delimiter
-    body();          <-- body
-}                    <-- closing delimiter
-```
+In `read` output, lines marked `^` between the line number and `|` are **head** lines (doc comments, attributes/decorators, signature). Lines without `^` are **body** lines. Use this to decide which region to target:
 
-Append `~` to target the body, `^` to target the head (trivia + signature), or nothing for the whole chunk:
-- `fn_foo#CRC~` — body only. **Use for most edits.** On leaf chunks, falls back to whole chunk.
-- `fn_foo#CRC^` — head (decorators, attributes, doc comments, signature, opening delimiter).
-- `fn_foo#CRC` — entire chunk including leading trivia.
+- `fn_foo#CRC~` — **body only (the default choice for most edits).** Head lines (`^`) are preserved automatically — doc comments, attributes, and signature stay untouched. On leaf chunks, falls back to whole chunk.
+- `fn_foo#CRC^` — head only (decorators, attributes, doc comments, signature, opening delimiter). Body stays untouched.
+- `fn_foo#CRC` — entire chunk including leading trivia. **You must include doc comments and attributes in `content`; omitting them deletes them.**
 - `chunk~` + `append`/`prepend` inserts *inside* the container. `chunk` + `append`/`prepend` inserts *outside*.
 
 **Note on leading trivia:** whether a decorator/doc comment belongs to `^` depends on the parser. In Rust and Python, attributes and decorators are attached to the function chunk, so `^` covers them. In TypeScript/JavaScript, a `@decorator` + `/** jsdoc */` block immediately above a method often surfaces as a **separate sibling chunk** (shown as `chunk#CRC` in the `?` listing) rather than as part of the function's `^`. If you need to rewrite a decorator, check the `?` listing for a sibling `chunk#CRC` directly above your target.
@@ -56,183 +48,209 @@ Append `~` to target the body, `^` to target the head (trivia + signature), or n
 </regions>
 
 <ops>
-|op|sel|effect|
+Each edit entry has: `{ op, path, content }` where `path` is `file:selector`.
+
+|op|path (selector part)|effect|
 |---|---|---|
-|`replace`|`chunk#CRC`, `chunk#CRC~`, or `chunk#CRC^`|rewrite the addressed region|
-|`before`|`chunk`, `chunk~`, or `chunk^`|insert before the region span|
-|`after`|`chunk`, `chunk~`, or `chunk^`|insert after the region span|
-|`prepend`|`chunk`, `chunk~`, or `chunk^`|insert at the start inside the region|
-|`append`|`chunk`, `chunk~`, or `chunk^`|insert at the end inside the region|
+|`replace`|`file:chunk#CRC`, `file:chunk#CRC~`, or `file:chunk#CRC^`|rewrite the addressed region|
+|`before`|`file:chunk`, `file:chunk~`, or `file:chunk^`|insert before the region span|
+|`after`|`file:chunk`, `file:chunk~`, or `file:chunk^`|insert after the region span|
+|`prepend`|`file:chunk`, `file:chunk~`, or `file:chunk^`|insert at the start inside the region|
+|`append`|`file:chunk`, `file:chunk~`, or `file:chunk^`|insert at the end inside the region|
 </ops>
 
 <examples>
-Given this `read` output for `example.ts`:
+Given this `read` output for `counter.rs`:
 ```
-  | example.ts·34L·ts·#QBMH
-  |
-  | [<interface_Config#BWTR>]
- 1|interface Config {
-  | 	[<interface_Config.field_host#TTMN>]
- 2|	host: string;
-  | 	[<interface_Config.field_port#QSMH>]
- 3|	port: number;
-  | 	[<interface_Config.field_debug#JPRR>]
- 4|	debug: boolean;
- 5|}
-  |
-  | [<class_Counter#HZHY>]
- 7|class Counter {
-  | 	[<class_Counter.field_value#QJBY>]
- 8|	value: number = 0;
- 9|
-  | 	[<class_Counter.fn_increment#NQWY>]
-10|	increment(): void {
-11|		this.value += 1;
-12|	}
-13|
-  | 	[<class_Counter.fn_decrement#PMBP>]
-14|	decrement(): void {
-15|		this.value -= 1;
-16|	}
-17|
-  | 	[<class_Counter.fn_toString#ZQZP>]
-18|	toString(): string {
-19|		return `Counter(${this.value})`;
-20|	}
-21|}
-  |
-  | [<enum_Status#HYQJ>]
-23|enum Status {
-  | 	[<enum_Status.variant_Active#PQNS>]
-24|	Active = "ACTIVE",
-  | 	[<enum_Status.variant_Paused#HHNM>]
-25|	Paused = "PAUSED",
-  | 	[<enum_Status.variant_Stopped#NHTY>]
-26|	Stopped = "STOPPED",
-27|}
-  |
-  | [<fn_createCounter#PQQY>]
-29|function createCounter(initial: number): Counter {
-30|	const counter = new Counter();
-31|	counter.value = initial;
-32|	return counter;
-33|}
+   | counter.rs·62L·rust·#ZRPW
+   |
+   | [<imp#MNHH>]
+ 1 |use std::fmt;
+   |
+   | [<struct_Counte#QTSX>]
+ 3^|/// A simple counter that tracks a value and its history.
+ 4^|#[derive(Debug, Clone)]
+ 5^|pub struct Counter {
+   | 	[<struct_Counte.field_value#MQTW>]
+ 6 |	/// The current value.
+ 7 |	value: i32,
+   | 	[<struct_Counte.field_max#HJMQ>]
+ 8 |	/// Maximum allowed value.
+ 9 |	max: i32,
+10 |}
+   |
+   | [<impl_Counte#VNPP>]
+12^|impl Counter {
+   | 	[<impl_Counte.fn_new#RWZV>]
+13^|	/// Creates a new counter starting at zero.
+14^|	pub fn new(max: i32) -> Self {
+15 |		Self { value: 0, max }
+16 |	}
+17 |
+   | 	[<impl_Counte.fn_increm#MNHV>]
+18^|	/// Increments the counter by one, clamping at max.
+19^|	pub fn increment(&mut self) {
+20 |		if self.value < self.max {
+21 |			self.value += 1;
+22 |		}
+23 |	}
+24 |
+   | 	[<impl_Counte.fn_decrem#TTWB>]
+25^|	/// Decrements the counter by one, clamping at zero.
+26^|	pub fn decrement(&mut self) {
+27 |		if self.value > 0 {
+28 |			self.value -= 1;
+29 |		}
+30 |	}
+31 |
+   | 	[<impl_Counte.fn_get#PTNT>]
+32^|	/// Returns the current value.
+33^|	pub fn get(&self) -> i32 {
+34 |		self.value
+35 |	}
+36 |}
+   |
+   | [<impl_Displa#BNJH>]
+38^|impl fmt::Display for Counter {
+   | 	[<impl_Displa.fn_fmt#NKRN>]
+39^|	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+40 |		write!(f, "Counter({}/{})", self.value, self.max)
+41 |	}
+42 |}
+   |
+   | [<mod_tests#YWXM>]
+44^|#[cfg(test)]
+45^|mod tests {
+   | 	[<mod_tests.chunk#VSMY>]
+46 |	use super::*;
+47 |
+   | 	[<mod_tests.fn_test_i#YXQZ>]
+48^|	#[test]
+49^|	fn test_increment() {
+50 |		let mut c = Counter::new(10);
+51 |		c.increment();
+52 |		assert_eq!(c.get(), 1);
+53 |	}
+54 |
+   | 	[<mod_tests.fn_test_d#XPBQ>]
+55^|	#[test]
+56^|	fn test_decrement_at_zero() {
+57 |		let mut c = Counter::new(10);
+58 |		c.decrement();
+59 |		assert_eq!(c.get(), 0);
+60 |	}
+61 |}
 ```
 
-**Replace a whole chunk** (rename a function):
-~~~json
-{{#if chunkAutoIndent}}
-{ "sel": "fn_createCounter#PQQY", "op": "replace", "content": "function makeCounter(start: number): Counter {\n\tconst c = new Counter();\n\tc.value = start;\n\treturn c;\n}\n" }
-{{else}}
-{ "sel": "fn_createCounter#PQQY", "op": "replace", "content": "function makeCounter(start: number): Counter {\n  const c = new Counter();\n  c.value = start;\n  return c;\n}\n" }
-{{/if}}
-~~~
-Result — the entire chunk is rewritten:
+**Understanding `^` markers in `read` output:** Lines marked with `^` between the line number and `|` (e.g. ` 3^|`) are **head** lines — doc comments, attributes, and the signature. Lines without `^` (e.g. ` 7 |`) are **body** lines. `~` replaces body lines only, keeping head lines intact.
+
+**Replace a method body** (`~` — the common case):
 ```
-function makeCounter(start: number): Counter {
-  const c = new Counter();
-  c.value = start;
-  return c;
-}
+{ "path": "counter.rs:impl_Counte.fn_increm#MNHV~", "op": "replace", "content": "self.value = (self.value + 1).min(self.max);\n" }
+```
+Result — only the body (non-`^` lines) changes; the doc comment `/// Increments the counter...`, the signature `pub fn increment(&mut self) {`, and the closing `}` are all preserved:
+```
+    /// Increments the counter by one, clamping at max.
+    pub fn increment(&mut self) {
+        self.value = (self.value + 1).min(self.max);
+    }
 ```
 
-**Replace a method body** (`~`):
+**Replace a whole chunk** (rewrite signature + doc comment + body):
 ```
-{ "sel": "class_Counter.fn_increment#NQWY~", "op": "replace", "content": "this.value += 1;\nconsole.log('incremented to', this.value);\n" }
+{ "path": "counter.rs:impl_Counte.fn_increm#MNHV", "op": "replace", "content": "/// Increments by the given step, clamping at max.\npub fn increment(&mut self, step: i32) {\n\tself.value = (self.value + step).min(self.max);\n}\n" }
 ```
-Result — only the body changes, signature and braces are kept:
+Result — **everything** including the doc comment and signature is rewritten. You must include the doc comment and signature in `content`; omitting them deletes them:
 ```
-  increment(): void {
-    this.value += 1;
-    console.log('incremented to', this.value);
-  }
+    /// Increments by the given step, clamping at max.
+    pub fn increment(&mut self, step: i32) {
+        self.value = (self.value + step).min(self.max);
+    }
 ```
 
-**Replace a function header** (`^` — signature and doc comment):
+**Replace a function header** (`^` — attributes, doc comments, signature):
 ```
-{ "sel": "fn_createCounter#PQQY^", "op": "replace", "content": "/** Creates a counter with the given start value. */\nfunction createCounter(initial: number, label?: string): Counter {\n" }
+{ "path": "counter.rs:impl_Counte.fn_get#PTNT^", "op": "replace", "content": "/// Returns the current counter value.\n#[inline]\npub fn get(&self) -> i32 {\n" }
 ```
-Result — adds a doc comment and updates the signature, body untouched:
+Result — the head (all `^` lines + opening brace) changes, body untouched:
 ```
-/** Creates a counter with the given start value. */
-function createCounter(initial: number, label?: string): Counter {
-  const counter = new Counter();
-  counter.value = initial;
-  return counter;
-}
+    /// Returns the current counter value.
+    #[inline]
+    pub fn get(&self) -> i32 {
+        self.value
+    }
 ```
 
 **Insert before a chunk** (`before`):
 ```
-{ "sel": "fn_createCounter", "op": "before", "content": "/** Factory function below. */\n" }
+{ "path": "counter.rs:impl_Counte.fn_get", "op": "before", "content": "/// Resets the counter to zero.\npub fn reset(&mut self) {\n\tself.value = 0;\n}\n\n" }
 ```
-Result — a comment is inserted before the function:
+Result — a new method is inserted before `fn get`:
 ```
-/** Factory function below. */
+    /// Resets the counter to zero.
+    pub fn reset(&mut self) {
+        self.value = 0;
+    }
 
-function createCounter(initial: number): Counter {
+    /// Returns the current value.
+    pub fn get(&self) -> i32 {
 ```
 
 **Insert after a chunk** (`after`):
-~~~json
-{{#if chunkAutoIndent}}
-{ "sel": "enum_Status", "op": "after", "content": "\nfunction isActive(s: Status): boolean {\n\treturn s === Status.Active;\n}\n" }
-{{else}}
-{ "sel": "enum_Status", "op": "after", "content": "\nfunction isActive(s: Status): boolean {\n  return s === Status.Active;\n}\n" }
-{{/if}}
-~~~
-Result — a new function appears after the enum:
 ```
-enum Status {
-  Active = "ACTIVE",
-  Paused = "PAUSED",
-  Stopped = "STOPPED",
+{ "path": "counter.rs:struct_Counte", "op": "after", "content": "\nimpl Default for Counter {\n\tfn default() -> Self {\n\t\tSelf { value: 0, max: 100 }\n\t}\n}\n" }
+```
+Result — a new impl block appears after the struct:
+```
 }
 
-function isActive(s: Status): boolean {
-  return s === Status.Active;
+impl Default for Counter {
+    fn default() -> Self {
+        Self { value: 0, max: 100 }
+    }
 }
 
-function createCounter(initial: number): Counter {
+impl Counter {
 ```
 
 **Prepend inside a container** (`~` + `prepend`):
 ```
-{ "sel": "class_Counter~", "op": "prepend", "content": "label: string = 'default';\n\n" }
+{ "path": "counter.rs:impl_Counte~", "op": "prepend", "content": "/// Creates a counter starting at the given value.\npub fn with_value(value: i32, max: i32) -> Self {\n\tSelf { value: value.min(max), max }\n}\n\n" }
 ```
-Result — a new field is added at the top of the class body, before existing members:
+Result — a new method is added at the top of the impl body, before existing methods:
 ```
-class Counter {
-  label: string = 'default';
+impl Counter {
+    /// Creates a counter starting at the given value.
+    pub fn with_value(value: i32, max: i32) -> Self {
+        Self { value: value.min(max), max }
+    }
 
-  value: number = 0;
+    /// Creates a new counter starting at zero.
+    pub fn new(max: i32) -> Self {
 ```
 
 **Append inside a container** (`~` + `append`):
-~~~json
-{{#if chunkAutoIndent}}
-{ "sel": "class_Counter~", "op": "append", "content": "\nreset(): void {\n\tthis.value = 0;\n}\n" }
-{{else}}
-{ "sel": "class_Counter~", "op": "append", "content": "\nreset(): void {\n  this.value = 0;\n}\n" }
-{{/if}}
-~~~
-Result — a new method is added at the end of the class body, before the closing `}`:
 ```
-  toString(): string {
-    return `Counter(${this.value})`;
-  }
+{ "path": "counter.rs:impl_Counte~", "op": "append", "content": "\n/// Returns true if the counter is at its maximum.\npub fn is_maxed(&self) -> bool {\n\tself.value >= self.max\n}\n" }
+```
+Result — a new method is added at the end of the impl body, before the closing `}`:
+```
+    pub fn get(&self) -> i32 {
+        self.value
+    }
 
-  reset(): void {
-    this.value = 0;
-  }
+    /// Returns true if the counter is at its maximum.
+    pub fn is_maxed(&self) -> bool {
+        self.value >= self.max
+    }
 }
 ```
 
 **Delete a chunk** (`replace` with empty content):
 ```
-{ "sel": "class_Counter.fn_toString#ZQZP", "op": "replace", "content": "" }
+{ "path": "counter.rs:impl_Counte.fn_decrem#TTWB", "op": "replace", "content": "" }
 ```
-Result — the method is removed from the class.
+Result — the method (including its doc comment and signature) is removed.
 - Indentation rules (important):
 {{#if chunkAutoIndent}}
   - Use `\t` for each indent level. The tool converts tabs to the file's actual style (2-space, 4-space, etc.).
@@ -241,11 +259,11 @@ Result — the method is removed from the class.
 {{/if}}
   - Do NOT include the chunk's base indentation — only indent relative to the region's opening level.
   - For `~` of a function: write at column 0, and use `\t` for *relative* nesting. Flat body: `"return x;\n"`. Nested body: `"if (cond) {\n\treturn x;\n}\n"` — the `if` is at column 0, the `return` is one tab in, and the tool adds the method's base indent to both.
-  - For `^`: write at the chunk's own depth. A class member's head uses `"/** doc */\nstart(): void {"`.
+  - For `^`: write at the chunk's own depth. A class member's head uses `"/// doc\n#[attr]\npub fn start() {"`.
 {{#if chunkAutoIndent}}
-  - For a top-level item: start at zero indent. Write `"function foo() {\n\treturn 1;\n}\n"`.
+  - For a top-level item: start at zero indent. Write `"fn foo() {\n\treturn 1;\n}\n"`.
 {{else}}
-  - For a top-level item: start at zero indent. Write `"function foo() {\n  return 1;\n}\n"`.
+  - For a top-level item: start at zero indent. Write `"fn foo() {\n  return 1;\n}\n"`.
 {{/if}}
   - The tool strips common leading indentation from your content as a safety net, so accidental over-indentation is corrected.
 </examples>

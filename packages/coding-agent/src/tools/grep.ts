@@ -316,7 +316,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 							outputLines.push(`  ${anchor}`);
 						}
 						for (const match of chunkMatches) {
-							outputLines.push(`    ${match.lineNumber.toString().padStart(lineWidth, " ")}|${match.line}`);
+							outputLines.push(`    ${match.lineNumber.toString().padStart(lineWidth, " ")} |${match.line}`);
 							fileMatchCounts.set(relativePath, (fileMatchCounts.get(relativePath) ?? 0) + 1);
 						}
 					}

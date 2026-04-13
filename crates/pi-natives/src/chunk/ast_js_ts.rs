@@ -355,6 +355,9 @@ fn classify_function_js<'t>(node: Node<'t>, source: &str) -> RawChunkCandidate<'
 			source,
 		),
 
+		// ── Expression statements (enable call-with-callback promotion) ──
+		"expression_statement" => group_candidate(node, ChunkKind::Statements, source),
+
 		// ── Fallback ──
 		_ => group_from_sanitized(node, source),
 	}

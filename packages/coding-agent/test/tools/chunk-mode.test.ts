@@ -151,7 +151,7 @@ describe("chunk mode tools", () => {
 		expect(text).not.toContain("to expand ⋮");
 		expect(text).toContain(`server.ts:${HANDLE_ERROR_CHUNK_PATH}·`);
 		expect(text).toContain("let total = 0;");
-		expect(text).toContain("29|\t\t\ttotal +=");
+		expect(text).toContain("29 |\t\t\ttotal +=");
 		expect(text).toContain("return err.message + total;");
 	});
 
@@ -166,11 +166,11 @@ describe("chunk mode tools", () => {
 		});
 		const text = getText(result);
 
-		expect(text).toContain("2|  private handleError(err: Error): string {");
-		expect(text).toContain("3|    let total = 0;");
-		expect(text).toContain("29|      total +=");
-		expect(text).not.toContain("2|\tprivate handleError");
-		expect(text).not.toContain("29|\t\t\ttotal +=");
+		expect(text).toContain("2^|  private handleError(err: Error): string {");
+		expect(text).toContain("3 |    let total = 0;");
+		expect(text).toContain("29 |      total +=");
+		expect(text).not.toContain("2 |\tprivate handleError");
+		expect(text).not.toContain("29 |\t\t\ttotal +=");
 	});
 
 	it("renders line-range reads as range-scoped chunk output", async () => {
@@ -187,9 +187,9 @@ describe("chunk mode tools", () => {
 		expect(text).toContain("server.ts·");
 		expect(text).toContain(`[<${HANDLE_ERROR_CHUNK_PATH}#`);
 		expect(text).toContain(`[<${HANDLE_ERROR_CHUNK_PATH}.var_total#`);
-		expect(text).toContain("3|");
-		expect(text).toContain("4|");
-		expect(text).toContain("64|\t\treturn err.message + total;");
+		expect(text).toContain("3 |");
+		expect(text).toContain("4 |");
+		expect(text).toContain("64 |\t\treturn err.message + total;");
 		expect(text).toContain("[truncated… sel=L5-L62 to expand]");
 		expect(text).not.toContain("to expand above");
 		expect(text).not.toContain("to expand below");
@@ -209,8 +209,8 @@ describe("chunk mode tools", () => {
 		expect(text).toContain("server.ts·");
 		expect(text).toContain(`[<${HANDLE_ERROR_CHUNK_PATH}#`);
 		expect(text).toContain(`[<${HANDLE_ERROR_CHUNK_PATH}.var_total#`);
-		expect(text).toContain("3|");
-		expect(text).toContain("64|\t\treturn err.message + total;");
+		expect(text).toContain("3 |");
+		expect(text).toContain("64 |\t\treturn err.message + total;");
 		expect(text).toContain("[truncated… sel=L5-L62 to expand]");
 		expect(text).not.toContain("to expand above");
 		expect(text).not.toContain("to expand below");
@@ -224,12 +224,12 @@ describe("chunk mode tools", () => {
 		const result = await tool.execute("chunk-read-lines-middle", { path: filePath, sel: "L40-L42" });
 		const text = getText(result);
 
-		expect(text).toContain("2|\tprivate handleError(err: Error): string {");
-		expect(text).toContain("40|\t\t\ttotal += 36;");
-		expect(text).toContain("42|\t\t\ttotal += 38;");
-		expect(text).toContain("63|\t\t\ttotal += 59;");
-		expect(text).toContain("64|\t\treturn err.message + total;");
-		expect(text).toContain("65|\t}");
+		expect(text).toContain("2^|\tprivate handleError(err: Error): string {");
+		expect(text).toContain("40 |\t\t\ttotal += 36;");
+		expect(text).toContain("42 |\t\t\ttotal += 38;");
+		expect(text).toContain("63 |\t\t\ttotal += 59;");
+		expect(text).toContain("64 |\t\treturn err.message + total;");
+		expect(text).toContain("65 |\t}");
 		expect(text).toContain("[truncated… sel=L3-L39 to expand]");
 		expect(text).toContain("[truncated… sel=L43-L62 to expand]");
 	});
@@ -297,7 +297,7 @@ describe("chunk mode tools", () => {
 		const text = getText(result);
 
 		expect(text).toContain("[<class_Server.fn_handle.ret#");
-		expect(text).toContain("64|    return err.message + total;");
+		expect(text).toContain("64 |    return err.message + total;");
 		expect(text).toContain("err.message");
 	});
 
@@ -317,7 +317,7 @@ describe("chunk mode tools", () => {
 		});
 		const text = getText(result);
 
-		expect(text).toContain('      1|const top = "match";');
+		expect(text).toContain('      1 |const top = "match";');
 	});
 
 	it("groups chunk-mode grep output by directory, file, and chunk", async () => {
@@ -345,11 +345,11 @@ describe("chunk mode tools", () => {
 		expect(text).toContain("# src/tools");
 		expect(text).toContain("## └─ grep.ts");
 		expect(text).toContain("  [<fn_execut#");
-		expect(text).toContain('    2|  return "needle";');
+		expect(text).toContain('    2 |  return "needle";');
 		expect(text).toContain("# src/core");
 		expect(text).toContain("## └─ server.ts");
 		expect(text).toContain("  [<class_Server.fn_start#");
-		expect(text).toContain('    3|    return "needle";');
+		expect(text).toContain('    3 |    return "needle";');
 	});
 
 	it("replaces a chunk using a copied selector in path", async () => {
@@ -366,10 +366,9 @@ describe("chunk mode tools", () => {
 		const selector = extractSelector(branchText, HANDLE_ERROR_CHUNK_PATH);
 
 		const editResult = await editTool.execute("chunk-edit", {
-			path: filePath,
 			edits: [
 				{
-					sel: selector,
+					path: `${filePath}:${selector}`,
 					op: "replace",
 					content: `  private handleError(err: Error): string {
     return \`normalized:\${err.message}\`;
@@ -377,7 +376,7 @@ describe("chunk mode tools", () => {
 `,
 				},
 			],
-		} as never);
+		});
 		const editText = getText(editResult);
 		const updatedSource = await Bun.file(filePath).text();
 
@@ -412,24 +411,23 @@ describe("chunk mode tools", () => {
 		const selector = extractSelector(branchText, "class_Server.fn_handle");
 
 		const editResult = await editTool.execute("chunk-edit-hierarchy", {
-			path: filePath,
 			edits: [
 				{
-					sel: selector,
+					path: `${filePath}:${selector}`,
 					op: "replace",
 					content: '  handle(): void {\n    console.log("new");\n  }\n',
 				},
 			],
-		} as never);
+		});
 		const editText = getText(editResult);
 
-		expect(editText).toMatch(/^ {2}\|server\.ts·10L·typescript·#/m);
-		expect(editText).toMatch(/^\* \|\[<class_Server#/m);
-		expect(editText).toMatch(/^\* \|\s+\[<class_Server\.fn_handle#/m);
-		expect(editText).toMatch(/^ {2}\|\s+@@ -3,1 \+3,1 @@$/m);
+		expect(editText).toMatch(/^ {3}\|server\.ts·10L·typescript·#/m);
+		expect(editText).toMatch(/^\* {2}\|\[<class_Server#/m);
+		expect(editText).toMatch(/^\* {2}\|\s+\[<class_Server\.fn_handle#/m);
+		expect(editText).toMatch(/^ {3}\|\s+@@ -3,1 \+3,1 @@$/m);
 		expect(editText).toContain('console.log("old");');
 		expect(editText).toContain('console.log("new");');
-		expect(editText).not.toContain("1|class Server {");
+		expect(editText).not.toContain("1 |class Server {");
 		expect(editText).not.toContain("crc updated");
 		expect(editText).not.toContain(" lns)");
 		expect(editText).not.toContain("[<class_Server.fn_other#");
@@ -445,15 +443,14 @@ describe("chunk mode tools", () => {
 		const checksum = getChunkChecksum(source, "typescript", "class_Server.fn_handle");
 
 		const result = await editTool.execute("chunk-edit-preserve-indent", {
-			path: filePath,
 			edits: [
 				{
-					sel: `class_Server.fn_handle#${checksum}`,
+					path: `${filePath}:class_Server.fn_handle#${checksum}`,
 					op: "replace",
 					content: '  handle(): void {\n    if (flag) {\n\tconsole.log("tabbed");\n    }\n  }\n',
 				},
 			],
-		} as never);
+		});
 		const text = getText(result);
 		const updatedSource = await Bun.file(filePath).text();
 
@@ -488,15 +485,14 @@ describe("chunk mode tools", () => {
 		const checksum2 = getChunkChecksum(afterFirst, "typescript", chunkPath);
 
 		await editTool.execute("chunk-edit-default-selector-batch", {
-			path: filePath,
 			edits: [
 				{
-					sel: `${chunkPath}#${checksum}`,
+					path: `${filePath}:${chunkPath}#${checksum}`,
 					op: "replace",
 					content: buildHandleErrorMethod({ returnLine: "    return err.message.toUpperCase() + total;" }),
 				},
 				{
-					sel: `${chunkPath}#${checksum2}`,
+					path: `${filePath}:${chunkPath}#${checksum2}`,
 					op: "replace",
 					content: buildHandleErrorMethod({
 						totalInitLine: "    let total = 1;",
@@ -504,7 +500,7 @@ describe("chunk mode tools", () => {
 					}),
 				},
 			],
-		} as never);
+		});
 
 		const updatedSource = await Bun.file(filePath).text();
 		expect(updatedSource).toContain("let total = 1;");
@@ -539,15 +535,14 @@ describe("chunk mode tools", () => {
 
 		const classChecksum = getChunkChecksum(await Bun.file(filePath).text(), "typescript", "class_Server");
 		await editTool.execute("chunk-edit-string-content", {
-			path: filePath,
 			edits: [
 				{
-					sel: `class_Server#${classChecksum}`,
+					path: `${filePath}:class_Server#${classChecksum}`,
 					op: "after",
 					content: '\nfunction status(): string {\n  return "ok";\n}\n',
 				},
 			],
-		} as never);
+		});
 
 		const updatedSource = await Bun.file(filePath).text();
 		expect(updatedSource).toContain("status(): string");
@@ -563,8 +558,7 @@ describe("chunk mode tools", () => {
 		const checksum = getChunkChecksum(originalSource, "typescript", "fn_main");
 
 		await editTool.execute("chunk-edit-empty-replace-delete", {
-			path: filePath,
-			edits: [{ sel: `fn_main#${checksum}`, op: "replace", content: "" }],
+			edits: [{ path: `${filePath}:fn_main#${checksum}`, op: "replace", content: "" }],
 		});
 
 		const updatedSource = await Bun.file(filePath).text();
@@ -596,14 +590,13 @@ describe("chunk mode tools", () => {
 
 		await expect(
 			editTool.execute("chunk-edit-batch-rollback", {
-				path: filePath,
 				edits: [
 					{
-						sel: `class_Server#${getChunkChecksum(originalSource, "typescript", "class_Server")}`,
+						path: `${filePath}:class_Server#${getChunkChecksum(originalSource, "typescript", "class_Server")}`,
 						op: "append",
 						content: '  status(): string {\n    return "ok";\n  }',
 					},
-					{ sel: `${HANDLE_ERROR_CHUNK_PATH}#ZZZZ`, op: "replace", content: "" },
+					{ path: `${filePath}:${HANDLE_ERROR_CHUNK_PATH}#ZZZZ`, op: "replace", content: "" },
 				],
 			}),
 		).rejects.toThrow(/No changes were saved/);
@@ -621,10 +614,9 @@ describe("chunk mode tools", () => {
 
 		await expect(
 			editTool.execute("chunk-edit-parse-reject", {
-				path: filePath,
 				edits: [
 					{
-						sel: `${HANDLE_ERROR_CHUNK_PATH}#${checksum}`,
+						path: `${filePath}:${HANDLE_ERROR_CHUNK_PATH}#${checksum}`,
 						op: "replace",
 						content: "  private handleError(err: Error): string {\n    if (err) {\n",
 					},
@@ -644,15 +636,14 @@ describe("chunk mode tools", () => {
 		const checksum = getChunkChecksum(originalSource, "typescript", HANDLE_ERROR_CHUNK_PATH);
 
 		const _result = await editTool.execute("chunk-edit-stale-mixed-batch", {
-			path: filePath,
 			edits: [
 				{
-					sel: `${HANDLE_ERROR_CHUNK_PATH}#${checksum}`,
+					path: `${filePath}:${HANDLE_ERROR_CHUNK_PATH}#${checksum}`,
 					op: "replace",
 					content: "  private handleError(err: Error): string {\n    return err.message;\n  }",
 				},
 				{
-					sel: `${HANDLE_ERROR_CHUNK_PATH}#${checksum}`,
+					path: `${filePath}:${HANDLE_ERROR_CHUNK_PATH}#${checksum}`,
 					op: "replace",
 					content: "  private handleError(err: Error): string {\n    return err.message.toUpperCase();\n  }",
 				},
@@ -672,10 +663,9 @@ describe("chunk mode tools", () => {
 
 		await expect(
 			editTool.execute("chunk-edit-strong-crc", {
-				path: filePath,
 				edits: [
 					{
-						sel: HANDLE_ERROR_CHUNK_PATH,
+						path: `${filePath}:${HANDLE_ERROR_CHUNK_PATH}`,
 						op: "replace",
 						content: buildHandleErrorMethod({ totalInitLine: "    let total = 1;" }),
 					},
@@ -695,10 +685,9 @@ describe("chunk mode tools", () => {
 
 		// Use bare "main" instead of "fn_main"
 		const _result = await editTool.execute("chunk-edit-prefix-resolve", {
-			path: filePath,
 			edits: [
 				{
-					sel: `main#${checksum}`,
+					path: `${filePath}:main#${checksum}`,
 					op: "replace",
 					content: 'function main(): void {\n  console.log("started");\n}\n',
 				},
@@ -718,15 +707,14 @@ describe("chunk mode tools", () => {
 		const checksum = getChunkChecksum(originalSource, "typescript", HANDLE_ERROR_CHUNK_PATH);
 
 		await editTool.execute("chunk-edit-full-path-resolve", {
-			path: filePath,
 			edits: [
 				{
-					sel: `class_Server.handleError#${checksum}`,
+					path: `${filePath}:class_Server.handleError#${checksum}`,
 					op: "replace",
 					content: `  private handleError(err: Error): string {\n    return \`expanded:\${err.message}\`;\n  }\n`,
 				},
 			],
-		} as never);
+		});
 
 		const updatedSource = await Bun.file(filePath).text();
 		expect(updatedSource).toContain("expanded:");
@@ -745,15 +733,14 @@ describe("chunk mode tools", () => {
 		const staleChecksum = getChunkChecksum(originalSource, "typescript", "class_A.fn_run");
 
 		await editTool.execute("chunk-edit-stale-child-selector", {
-			path: filePath,
 			edits: [
 				{
-					sel: `class_A.fn_run_2#${staleChecksum}`,
+					path: `${filePath}:class_A.fn_run_2#${staleChecksum}`,
 					op: "replace",
 					content: "run(): void { patched(); }\n",
 				},
 			],
-		} as never);
+		});
 
 		const finalSource = await Bun.file(filePath).text();
 		expect(finalSource).toContain("other();");
@@ -796,10 +783,9 @@ describe("chunk mode tools", () => {
 		}
 
 		await editTool.execute("chunk-edit-section-replace", {
-			path: filePath,
 			edits: [
 				{
-					sel: `${building.path}#${building.checksum}`,
+					path: `${filePath}:${building.path}#${building.checksum}`,
 					op: "replace",
 					content: "## Building and Testing\n\nUse `just verify` instead. It wraps cmake and ctest.\n",
 				},
@@ -870,8 +856,7 @@ describe("chunk mode tools", () => {
 
 		await expect(
 			editTool.execute("chunk-edit-missing-selector", {
-				path: filePath,
-				edits: [{ sel: "class_Server.fn_missing", op: "before", content: "  noop(): void {}" }],
+				edits: [{ path: `${filePath}:class_Server.fn_missing`, op: "before", content: "  noop(): void {}" }],
 			}),
 		).rejects.toThrow(/Direct children of "class_Server":\n└── \.fn_handle#[A-Z]{4}\s+L\d+-L\d+/);
 	});
@@ -882,8 +867,7 @@ describe("chunk mode tools", () => {
 
 		await expect(
 			editTool.execute("chunk-edit-missing-file", {
-				path: missingPath,
-				edits: [{ sel: "fn_foo", op: "replace", content: "function foo() {}" }],
+				edits: [{ path: `${missingPath}:fn_foo`, op: "replace", content: "function foo() {}" }],
 			}),
 		).rejects.toThrow(/File does not exist.*Cannot resolve chunk selectors/);
 	});
