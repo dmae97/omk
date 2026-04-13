@@ -17,6 +17,8 @@ For `insert` to work, the last `kbd` entry must leave INSERT mode active (`o`, `
 
 Each non-final `kbd` entry must end in NORMAL mode (add `<Esc>`).
 
+Whitespace in `kbd` is literal. Do not use spaces as separators between keys; `ggdGi` is one sequence, not `ggdG i`.
+
 ## Editing patterns
 
 **Insert after line N** — use `NGo` (Go to line N, open below). Include full indentation in insert:
@@ -34,7 +36,7 @@ Each non-final `kbd` entry must end in NORMAL mode (add `<Esc>`).
 {"file": "f.py", "kbd": ["5Gcc"], "insert": "    replacement content"}
 ```
 
-**Replace entire file** — `ggdGi` = go to top, delete all, enter INSERT:
+**Replace entire file** — `ggdGi` = go to top, delete all, enter INSERT. Use that exact sequence when rewriting the whole file:
 ```json
 {"file": "f.py", "kbd": ["ggdGi"], "insert": "entire new file content"}
 ```
@@ -60,7 +62,7 @@ The vim buffer persists across tool calls. Your cursor position, undo history, a
 ## Supported
 
 Keys: `<Esc>` `<CR>` `<BS>` `<Tab>` `<C-d>` `<C-u>` `<C-r>` `<C-w>` `<C-o>`
-Motions: `h j k l w b e 0 $ gg G { } f t` with counts
+Motions: `h j k l <Space> w b e 0 $ gg G { } f t` with counts
 Operators: `d c y p` with motions and text objects (`iw aw i" a" i( a(`)
 Insert: `i a o O I A cc C s S` — these all enter INSERT mode; do NOT add another `i` after them
 Visual: `v V`

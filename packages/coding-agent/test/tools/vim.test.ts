@@ -154,6 +154,11 @@ describe("vim engine", () => {
 		expect(engine.buffer.getText()).toBe("");
 		expect(engine.statusMessage).toBe("Deleted 3 lines");
 	});
+
+	it("renders literal spaces visibly in unsupported command errors", async () => {
+		const engine = createEngine("alpha");
+		await expect(engine.executeTokens(parseKeySequences(["z "]), "z ")).rejects.toThrow(/z<Space>/);
+	});
 });
 
 describe("vim tool", () => {
@@ -232,6 +237,24 @@ describe("vim tool", () => {
 		expect(saved).toBe("alpha\nbeta\nsecond\n");
 		expect(textResult(replaced)).toContain("Diff:");
 		expect(textResult(replaced)).toContain("+beta");
+	});
+
+	it("supports full-file rewrites when models emit a space before i", async () => {
+		const filePath = path.join(tmpDir, "full-rewrite.ts");
+		await Bun.write(filePath, "first\nsecond\n");
+		const tool = new VimTool(createSession(tmpDir));
+
+		await tool.execute("open", { file: "full-rewrite.ts" });
+		const rewritten = await tool.execute("rewrite", {
+			file: "full-rewrite.ts",
+			kbd: ["ggdG i"],
+			insert: "alpha\nbeta\n",
+		});
+
+		const saved = await Bun.file(filePath).text();
+		expect(saved).toBe("alpha\nbeta\n");
+		expect(textResult(rewritten)).toContain("+alpha");
+		expect(rewritten.details?.cursor.line).toBe(2);
 	});
 
 	it("rejects another kbd entry after entering insert mode", async () => {

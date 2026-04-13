@@ -560,33 +560,37 @@ function normalizeChunkEditOperations(edits: ChunkToolEdit[]): {
 	const warnings: string[] = [];
 	const operations = edits.map((edit, index): ChunkEditOperation => {
 		const { selector } = parseChunkEditPath(edit.path);
-		// When multiple ops are present (model confusion), pick the most substantive one.
-		// insert with real body > replace with real old/new > write string > delete
+		// When multiple ops are present (model confusion), prefer write (total replacement) as the
+		// safest default, then replace (surgical), then insert (additive), then delete.
 		const hasInsert = edit.insert != null && typeof edit.insert.body === "string" && edit.insert.body.length > 0;
 		const hasReplace =
 			edit.replace != null &&
 			((typeof edit.replace.old === "string" && edit.replace.old.length > 0) ||
 				(typeof edit.replace.new === "string" && edit.replace.new.length > 0));
-		const hasWrite = typeof edit.write === "string";
+		const hasWrite = typeof edit.write === "string" && edit.write.length > 0;
 		const opCount = [hasInsert, hasReplace, hasWrite].filter(Boolean).length;
 		if (opCount > 1) {
-			const chosen = hasInsert ? "insert" : hasReplace ? "replace" : "write";
-			const present = [hasInsert && "insert", hasReplace && "replace", hasWrite && "write"]
+			const chosen = hasWrite ? "write" : hasReplace ? "replace" : "insert";
+			const present = [hasWrite && "write", hasReplace && "replace", hasInsert && "insert"]
 				.filter(Boolean)
 				.join(", ");
 			warnings.push(
 				`Edit ${index + 1}: multiple operation fields set (${present}). Each edit entry must have exactly ONE of write/replace/insert — not multiple. Used "${chosen}", ignored the rest.`,
 			);
 		}
-		if (hasInsert) {
-			const op = edit.insert!.loc === "prepend" ? "before" : "after";
-			return { op, sel: selector, content: edit.insert!.body };
+		if (hasWrite) {
+			return { op: "put", sel: selector, content: edit.write };
+		}
+		if (typeof edit.write === "string") {
+			// write: "" (empty string) — clear the chunk content
+			return { op: "put", sel: selector, content: edit.write };
 		}
 		if (hasReplace) {
 			return { op: "replace", sel: selector, content: edit.replace!.new, find: edit.replace!.old };
 		}
-		if (hasWrite) {
-			return { op: "put", sel: selector, content: edit.write };
+		if (hasInsert) {
+			const op = edit.insert!.loc === "prepend" ? "before" : "after";
+			return { op, sel: selector, content: edit.insert!.body };
 		}
 		// write: null or no op specified → delete
 		return { op: "delete", sel: selector };

@@ -789,6 +789,7 @@ export class VimEngine {
 				this.buffer.setCursor({ line: this.buffer.cursor.line - count, col: this.buffer.cursor.col });
 				return nextIndex + 1;
 			case "l":
+			case " ":
 				this.buffer.setCursor({ line: this.buffer.cursor.line, col: this.buffer.cursor.col + count });
 				return nextIndex + 1;
 			case "w":
@@ -999,7 +1000,7 @@ export class VimEngine {
 				} else if (zTarget.value === "b") {
 					this.viewportStart = Math.max(1, this.buffer.cursor.line + 1 - 39);
 				} else {
-					throw new VimError(`Unsupported z command: z${zTarget.value}`, zTarget);
+					throw new VimError(`Unsupported z command: z${zTarget.display}`, zTarget);
 				}
 				return nextIndex + 2;
 			}
@@ -1016,7 +1017,7 @@ export class VimEngine {
 				});
 				return nextIndex + 1;
 			default:
-				throw new VimError(`Unsupported command: ${token.value}`, token);
+				throw new VimError(`Unsupported command: ${token.display}`, token);
 		}
 	}
 
@@ -1265,6 +1266,7 @@ export class VimEngine {
 					linewise: true,
 				};
 			case "l":
+			case " ":
 				return {
 					nextIndex: index + 1,
 					target: { line: this.buffer.cursor.line, col: this.buffer.cursor.col + count },
@@ -1403,7 +1405,7 @@ export class VimEngine {
 					linewise: true,
 				};
 			default:
-				throw new VimError(`Unsupported motion: ${token.value}`, token);
+				throw new VimError(`Unsupported motion: ${token.display}`, token);
 		}
 	}
 

@@ -21,7 +21,12 @@ function normalizeSpecialKey(raw: string): string | undefined {
 }
 
 function toDisplayToken(value: string): string {
-	return value.length === 1 ? value : `<${value}>`;
+	switch (value) {
+		case " ":
+			return "<Space>";
+		default:
+			return value.length === 1 ? value : `<${value}>`;
+	}
 }
 
 export function parseKeySequences(sequences: string[]): VimKeyToken[] {
@@ -78,7 +83,7 @@ export function parseKeySequences(sequences: string[]): VimKeyToken[] {
 			if (char !== "<") {
 				tokens.push({
 					value: char,
-					display: char,
+					display: toDisplayToken(char),
 					sequenceIndex,
 					offset,
 				});

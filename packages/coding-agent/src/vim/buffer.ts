@@ -167,7 +167,8 @@ export class VimBuffer {
 	}
 
 	setText(text: string, trailingNewline = this.trailingNewline): void {
-		this.lines = splitText(text);
+		const normalizedText = trailingNewline && text.endsWith("\n") ? text.slice(0, -1) : text;
+		this.lines = splitText(normalizedText);
 		this.trailingNewline = trailingNewline;
 		this.clampCursor();
 	}

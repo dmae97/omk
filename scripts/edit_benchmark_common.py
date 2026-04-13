@@ -95,8 +95,8 @@ This is a survey. Answer these 6 questions about your experience using the editi
 6. Other thoughts: Anything else?
 """
 
-DEFAULT_MAX_TURNS = 20
-MAX_TOOL_CALLS_PER_PROMPT = 10
+DEFAULT_MAX_TURNS = 5
+MAX_TOOL_CALLS_PER_PROMPT = 6
 _PRINT_LOCK = threading.Lock()
 
 
@@ -244,7 +244,8 @@ def resolve_omp_bin(raw: str | None) -> str:
 
 def build_retry_prompt(spec: BenchmarkSpec, current_content: str) -> str:
     return (
-        "The file doesn't match the expected result yet.\n\n"
+        "Previous attempt did not produce the expected result. "
+        "The file has been reset to its original state — start fresh.\n\n"
         f"Current content:\n```\n{current_content}```\n\n"
         f"Expected:\n```\n{EXPECTED_CONTENT}```\n\n"
         f"{spec.retry_instruction}"
@@ -358,34 +359,39 @@ def run_benchmark_for_model(
             client.install_headless_ui()
             verbose_cleanup = install_verbose_logging(client, model, log_mode, thinking)
 
-            per_prompt_tool_calls = 0
 
             def handle_tool_count(event: ToolExecutionStartEvent) -> None:
-                nonlocal edit_vim_tool_calls, turns_used, per_prompt_tool_calls
-                per_prompt_tool_calls += 1
+                nonlocal edit_vim_tool_calls, turns_used
                 if counting_edit_turns:
                     turns_used += 1
                 if event.tool_name in {"edit", "vim"}:
                     edit_vim_tool_calls += 1
-                if per_prompt_tool_calls >= MAX_TOOL_CALLS_PER_PROMPT:
-                    try:
-                        client.abort()
-                    except Exception:
-                        pass  # best-effort interrupt
 
             tool_count_remover = client.on_tool_execution_start(handle_tool_count)
 
             try:
                 for turn in range(1, max_turns + 1):
                     prompt_attempts = turn
-                    per_prompt_tool_calls = 0
 
                     if turn == 1:
                         client.prompt(spec.initial_prompt)
                     else:
-                        client.prompt(build_retry_prompt(spec, test_file.read_text()))
+                        # Reset file to initial state on retry so the model starts fresh
+                        # instead of trying to fix a potentially corrupted file.
+                        test_file.write_text(INITIAL_CONTENT)
+                        client.prompt(build_retry_prompt(spec, INITIAL_CONTENT))
 
-                    client.wait_for_idle(timeout=timeout)
+                    try:
+                        client.wait_for_idle(timeout=timeout)
+                    except Exception:
+                        # Prompt timed out or errored — abort the agent then retry.
+                        try:
+                            client.abort()
+                            time.sleep(1)
+                            client.wait_for_idle(timeout=10)
+                        except Exception:
+                            pass
+                        continue
 
                     current_content = test_file.read_text()
                     if current_content.strip() == EXPECTED_CONTENT.strip():
@@ -495,7 +501,7 @@ def parse_args(description: str) -> argparse.Namespace:
         help="Executable to launch. Defaults to the repo checkout CLI, then falls back to `omp` on PATH.",
     )
     parser.add_argument(
-        "--timeout", type=float, default=300.0, help="Per-turn timeout in seconds."
+        "--timeout", type=float, default=60.0, help="Per-turn timeout in seconds."
     )
     parser.add_argument(
         "--max-turns",
