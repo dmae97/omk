@@ -176,6 +176,19 @@ describe("vim engine", () => {
 		expect(engine.statusMessage).toBe("Global: processed alpha");
 	});
 
+	it("supports :join aliases with whitespace normalization", async () => {
+		const engine = createEngine("alpha \n beta\ngamma");
+		await engine.executeTokens(parseKeySequences([":1,2j<CR>"]), ":1,2j<CR>");
+		expect(engine.buffer.getText()).toBe("alpha beta\ngamma");
+		expect(engine.statusMessage).toBe("Joined 2 lines");
+	});
+
+	it("supports :join! aliases without whitespace normalization", async () => {
+		const engine = createEngine("alpha \n beta\ngamma");
+		await engine.executeTokens(parseKeySequences([":1,2join!<CR>"]), ":1,2join!<CR>");
+		expect(engine.buffer.getText()).toBe("alpha  beta\ngamma");
+		expect(engine.statusMessage).toBe("Joined 2 lines");
+	});
 	it("supports destination addresses for :copy", async () => {
 		const engine = createEngine("one\ntwo\nthree\nfour");
 		await engine.executeTokens(parseKeySequences([":1,2t$<CR>"]), ":1,2t$<CR>");
@@ -407,9 +420,9 @@ describe("vim tool", () => {
 		});
 
 		const saved = await Bun.file(filePath).text();
-		expect(saved).toBe("alpha\nbeta\n\n");
+		expect(saved).toBe("alpha\nbeta\n");
 		expect(textResult(rewritten)).toContain("+alpha");
-		expect(rewritten.details?.cursor.line).toBe(3);
+		expect(rewritten.details?.cursor.line).toBe(2);
 	});
 
 	it("rejects another kbd entry after entering insert mode", async () => {

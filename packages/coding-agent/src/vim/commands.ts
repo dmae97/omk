@@ -294,6 +294,9 @@ export function parseExCommand(input: string, context?: VimExParseContext): VimE
 		const flags = rest.slice(4).trim();
 		return { kind: "sort", range: range ?? undefined, flags };
 	}
+	if (rest === "j" || rest === "join" || rest === "j!" || rest === "join!") {
+		return { kind: "join", range: range ?? undefined, trimWhitespace: !rest.endsWith("!") };
+	}
 
 	if (rest.startsWith("substitute")) {
 		const segments = parseDelimitedSegments(rest.slice("substitute".length));

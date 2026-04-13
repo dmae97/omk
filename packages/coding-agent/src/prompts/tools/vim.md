@@ -91,6 +91,6 @@ Operators: `d c y p` with motions and text objects (`iw aw ip ap i" a" i( a( i{ 
 Insert: `i a o O I A cc C s S R` - these all enter INSERT mode; do not add another `i` after them
 Visual: `v V` with `d y c > < ~ r u U p P o J`
 Other: `.` repeat, `u`/`<C-r>` undo/redo, `/pattern<CR>` search, `n N * #`, `gv` `gJ` `gU` `gu` `ZZ` `ZQ`
-Ex: `:w` `:q` `:wq` `:e` `:e!` `:N` `:s///` `:%s///` `:N,Md` `:%d` `:N,Mt N` `:sort` `:g/pattern/d` `:v/pattern/d`
+Ex: `:w` `:q` `:wq` `:e` `:e!` `:N` `:s///` `:%s///` `:N,Md` `:%d` `:N,Mt N` `:sort` `:j` `:j!` `:g/pattern/d` `:v/pattern/d`
 Addresses: absolute line numbers, `.`, `$`, and `+N`/`-N` relative offsets, including ranges like `:.,$d` and `:.+2,$g/pattern/d`
 More ex: `:up` `:N,My` `:put` `:put!` `:N,Mco $` `:N,Mm $`

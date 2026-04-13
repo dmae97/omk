@@ -140,6 +140,7 @@ export type VimExCommand =
 	| { kind: "copy"; range?: VimLineRange | "all"; destination: number }
 	| { kind: "move"; range?: VimLineRange | "all"; destination: number }
 	| { kind: "sort"; range?: VimLineRange | "all"; flags: string }
+	| { kind: "join"; range?: VimLineRange | "all"; trimWhitespace: boolean }
 	| { kind: "global"; range?: VimLineRange | "all"; pattern: string; command: string; invert: boolean }
 	| { kind: "append"; range?: VimLineRange; text: string }
 	| { kind: "insert-before"; range?: VimLineRange; text: string };

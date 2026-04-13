@@ -23,6 +23,7 @@
 - Added `gJ` to join a line range, `gv` to restore the last visual selection, and `ZZ`/`ZQ` shortcuts for save-and-exit or exit-without-save in vim mode
 - Added paragraph text object `p` for `ip`/`ap`-style paragraph selection
 - Added support for Vim ex line-address forms like `.`, `$`, `+N`/`-N`, destination addresses such as `:t$`, and ranged `:global` commands
+- Added Vim ex `:join`/`:j` and `:join!`/`:j!` support to join addressed lines with or without whitespace normalization
 - Added a warning when chunk edits write to the `~` selector with body lines that appear over-indented, instructing users to start top-level body text at column 0
 - Added validation feedback for suspect indentation in chunk-mode `~` body writes so users can align content with the tool's automatic base indentation
 - Added support for multi-file `edit` calls across replace, patch, hashline, and chunk modes by grouping `edits` entries by file path and returning combined per-file results

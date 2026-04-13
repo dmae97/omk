@@ -2298,6 +2298,34 @@ export class VimEngine {
 				this.statusMessage = `Sorted ${endLine - startLine + 1} line${endLine === startLine ? "" : "s"}`;
 				return;
 			}
+			case "join": {
+				const currentLine = this.buffer.cursor.line + 1;
+				const baseRange = this.#resolveExRange(
+					command.range,
+					currentLine,
+					command.range ? undefined : Math.min(this.buffer.lineCount(), currentLine + 1),
+				);
+				const startLine = baseRange.start;
+				const endLine =
+					baseRange.start === baseRange.end ? Math.min(this.buffer.lineCount(), baseRange.end + 1) : baseRange.end;
+				const lineCount = endLine - startLine + 1;
+				if (lineCount < 2) {
+					this.statusMessage = "Nothing to join";
+					return;
+				}
+				await this.#applyAtomicChange([":join"], () => {
+					const startIndex = startLine - 1;
+					if (command.trimWhitespace) {
+						this.buffer.joinLines(startIndex, lineCount - 1);
+						return;
+					}
+					const joined = this.buffer.lines.slice(startIndex, endLine).join("");
+					this.buffer.lines.splice(startIndex, lineCount, joined);
+					this.buffer.setCursor({ line: startIndex, col: Math.max(0, joined.length - 1) });
+				});
+				this.statusMessage = `Joined ${lineCount} lines`;
+				return;
+			}
 			case "append": {
 				const anchorRange = this.#resolveExRange(command.range, this.buffer.cursor.line + 1);
 				const anchorLine = anchorRange.end;
