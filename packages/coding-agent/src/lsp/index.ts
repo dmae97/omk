@@ -19,8 +19,8 @@ import {
 	sendRequest,
 	setIdleTimeout,
 	syncContent,
-	waitForProjectLoaded,
 	WARMUP_TIMEOUT_MS,
+	waitForProjectLoaded,
 } from "./client";
 import { getLinterClient } from "./clients";
 import { getServersForFile, type LspConfig, loadConfig } from "./config";

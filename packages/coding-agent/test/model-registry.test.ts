@@ -189,6 +189,17 @@ describe("ModelRegistry", () => {
 			expect(sonnetVariants.some(variant => variant.selector === "demo/claude-4.5-sonnet")).toBe(true);
 		});
 
+		test("collapses nitro-suffixed OpenRouter variants under the upstream canonical id", () => {
+			writeRawModelsJson({
+				openrouter: providerConfig("https://openrouter.ai/api/v1", [{ id: "z-ai/glm-4.7-20251222:nitro" }]),
+			});
+
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			const variants = registry.getCanonicalVariants("glm-4.7");
+
+			expect(variants.some(variant => variant.selector === "openrouter/z-ai/glm-4.7-20251222:nitro")).toBe(true);
+		});
+
 		test("collapses anthropic latest aliases into the best upstream claude family id", () => {
 			writeRawModelsJson({
 				demo: providerConfig("https://demo.example.com/v1", [
@@ -333,6 +344,21 @@ describe("ModelRegistry", () => {
 
 			expect(resolved?.provider).toBe("demo");
 			expect(resolved?.id).toBe("anthropic/claude-sonnet-4.5");
+		});
+	});
+
+	describe("OpenRouter routed suffix fallback", () => {
+		test("find synthesizes a routed model id from the base OpenRouter metadata", () => {
+			writeRawModelsJson({
+				openrouter: providerConfig("https://openrouter.ai/api/v1", [{ id: "z-ai/glm-4.7" }]),
+			});
+
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			const model = registry.find("openrouter", "z-ai/glm-4.7-20251222:nitro");
+
+			expect(model?.provider).toBe("openrouter");
+			expect(model?.id).toBe("z-ai/glm-4.7-20251222:nitro");
+			expect(model?.name).toBe("z-ai/glm-4.7-20251222:nitro");
 		});
 	});
 

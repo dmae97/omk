@@ -13,7 +13,7 @@ Subagents lack your conversation history. Every decision, file content, and user
   - `.description`: UI display only — subagent never sees it
   - `.assignment`: Complete self-contained instructions. One-liners PROHIBITED; missing acceptance criteria = too vague.
 - `context`: Shared background prepended to every assignment. Session-specific info only.
-- `schema`: JTD schema for expected output. Format lives here — **MUST NOT** be duplicated in assignments.
+- `schema`: JSON-encoded JTD schema for expected output. Format lives here — **MUST NOT** be duplicated in assignments.
 - `tasks`: Tasks to execute in parallel.
 - `isolated`: Run in isolated environment; returns patches. Use when tasks edit overlapping files.
 </parameters>

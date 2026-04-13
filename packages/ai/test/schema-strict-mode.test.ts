@@ -178,6 +178,42 @@ describe("enforceStrictSchema", () => {
 		expect(validBranch.additionalProperties).toBe(false);
 	});
 
+	it("reuses enforced object schemas across shared branches", () => {
+		const sharedTaskSchema = {
+			type: "object",
+			properties: {
+				content: { type: "string" },
+				notes: { type: "string" },
+			},
+			required: ["content"],
+		} as Record<string, unknown>;
+		const schema = {
+			type: "object",
+			properties: {
+				primary: {
+					type: "array",
+					items: sharedTaskSchema,
+				},
+				secondary: {
+					anyOf: [{ type: "array", items: sharedTaskSchema }, { type: "null" }],
+				},
+			},
+			required: ["primary", "secondary"],
+		} as Record<string, unknown>;
+
+		const strict = enforceStrictSchema(schema);
+		const rootProperties = strict.properties as Record<string, Record<string, unknown>>;
+		const primaryItems = rootProperties.primary.items as Record<string, unknown>;
+		const secondaryBranches = rootProperties.secondary.anyOf as Array<Record<string, unknown>>;
+		const secondaryItems = secondaryBranches[0]?.items as Record<string, unknown>;
+
+		expect(primaryItems.additionalProperties).toBe(false);
+		expect(primaryItems.required).toEqual(["content", "notes"]);
+		expect(secondaryItems.additionalProperties).toBe(false);
+		expect(secondaryItems.required).toEqual(["content", "notes"]);
+		expect(secondaryItems.properties).toEqual(primaryItems.properties);
+	});
+
 	it("treats type arrays containing object as object schemas via tryEnforceStrictSchema", () => {
 		const schema = {
 			type: ["object", "null"],
@@ -286,5 +322,46 @@ describe("tryEnforceStrictSchema", () => {
 
 		expect(result.strict).toBe(false);
 		expect(result.schema).toBe(schema);
+	});
+
+	it("keeps shared object schemas strict-compatible after adaptation", () => {
+		const sharedTaskSchema = Type.Object({
+			content: Type.String(),
+			status: Type.Optional(Type.String()),
+			notes: Type.Optional(Type.String()),
+		});
+		const schema = Type.Object({
+			ops: Type.Array(
+				Type.Union([
+					Type.Object({
+						op: Type.Literal("replace"),
+						tasks: Type.Array(sharedTaskSchema),
+					}),
+					Type.Object({
+						op: Type.Literal("update"),
+						tasks: Type.Optional(Type.Array(sharedTaskSchema)),
+					}),
+				]),
+			),
+		});
+
+		const result = tryEnforceStrictSchema(schema as unknown as Record<string, unknown>);
+		const rootProperties = result.schema.properties as Record<string, Record<string, unknown>>;
+		const opBranches = ((rootProperties.ops.items as Record<string, unknown>).anyOf ?? []) as Array<
+			Record<string, unknown>
+		>;
+		const replaceTasks = ((opBranches[0]?.properties as Record<string, Record<string, unknown>>)?.tasks?.items ??
+			{}) as Record<string, unknown>;
+		const updateTasks = (
+			((opBranches[1]?.properties as Record<string, Record<string, unknown>>)?.tasks?.anyOf ?? []) as Array<
+				Record<string, unknown>
+			>
+		)[0]?.items as Record<string, unknown>;
+
+		expect(result.strict).toBe(true);
+		expect(replaceTasks.additionalProperties).toBe(false);
+		expect(replaceTasks.required).toEqual(["content", "status", "notes"]);
+		expect(updateTasks.additionalProperties).toBe(false);
+		expect(updateTasks.required).toEqual(["content", "status", "notes"]);
 	});
 });

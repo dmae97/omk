@@ -162,9 +162,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 				const stat = await Bun.file(searchPath).stat();
 				isDirectory = stat.isDirectory();
 			} catch {
-				const hint = scopePath.includes(",")
-					? ` (comma-separated paths must each exist relative to cwd)`
-					: "";
+				const hint = scopePath.includes(",") ? ` (comma-separated paths must each exist relative to cwd)` : "";
 				throw new ToolError(`Path not found: ${scopePath}${hint}`);
 			}
 

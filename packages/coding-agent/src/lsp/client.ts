@@ -602,7 +602,9 @@ export async function waitForProjectLoaded(client: LspClient, signal?: AbortSign
 	if (signal?.aborted) return;
 	await Promise.race([
 		client.projectLoaded,
-		...(signal ? [new Promise<void>(resolve => signal.addEventListener("abort", () => resolve(), { once: true }))] : []),
+		...(signal
+			? [new Promise<void>(resolve => signal.addEventListener("abort", () => resolve(), { once: true }))]
+			: []),
 	]);
 }
 

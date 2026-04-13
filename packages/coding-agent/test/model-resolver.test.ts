@@ -77,6 +77,23 @@ const mockOpenRouterModels: Model<"anthropic-messages">[] = [
 		contextWindow: 128000,
 		maxTokens: 4096,
 	},
+	{
+		id: "z-ai/glm-4.7",
+		name: "GLM 4.7",
+		api: "anthropic-messages",
+		provider: "openrouter",
+		baseUrl: "https://openrouter.ai/api/v1",
+		reasoning: true,
+		thinking: {
+			mode: "budget",
+			minLevel: Effort.Minimal,
+			maxLevel: Effort.High,
+		},
+		input: ["text"],
+		cost: { input: 1, output: 2, cacheRead: 0.1, cacheWrite: 1 },
+		contextWindow: 128000,
+		maxTokens: 8192,
+	},
 ];
 
 const mockProviderOverlapModels: Model<"anthropic-messages">[] = [
@@ -317,6 +334,24 @@ describe("parseModelPattern", () => {
 			expect(result.model?.id).toBe("openai/gpt-4o:extended");
 			expect(result.thinkingLevel).toBeUndefined();
 			expect(result.explicitThinkingLevel).toBe(false);
+			expect(result.warning).toBeUndefined();
+		});
+
+		test("supports OpenRouter route suffixes that are not present in the catalog", () => {
+			const result = parseModelPattern("openrouter/z-ai/glm-4.7-20251222:nitro", allModels);
+			expect(result.model?.provider).toBe("openrouter");
+			expect(result.model?.id).toBe("z-ai/glm-4.7-20251222:nitro");
+			expect(result.thinkingLevel).toBeUndefined();
+			expect(result.explicitThinkingLevel).toBe(false);
+			expect(result.warning).toBeUndefined();
+		});
+
+		test("supports OpenRouter route suffixes with an appended thinking level", () => {
+			const result = parseModelPattern("openrouter/z-ai/glm-4.7-20251222:nitro:high", allModels);
+			expect(result.model?.provider).toBe("openrouter");
+			expect(result.model?.id).toBe("z-ai/glm-4.7-20251222:nitro");
+			expect(result.thinkingLevel).toBe(Effort.High);
+			expect(result.explicitThinkingLevel).toBe(true);
 			expect(result.warning).toBeUndefined();
 		});
 	});
@@ -644,6 +679,37 @@ describe("resolveCliModel", () => {
 
 		expect(result.model).toBeUndefined();
 		expect(result.error).toContain("not found");
+	});
+
+	test("supports provider-prefixed OpenRouter route suffixes even when the base model is cataloged without them", () => {
+		const registry = {
+			getAll: () => allModels,
+		} as unknown as Parameters<typeof resolveCliModel>[0]["modelRegistry"];
+
+		const result = resolveCliModel({
+			cliModel: "openrouter/z-ai/glm-4.7-20251222:nitro",
+			modelRegistry: registry,
+		});
+
+		expect(result.error).toBeUndefined();
+		expect(result.model?.provider).toBe("openrouter");
+		expect(result.model?.id).toBe("z-ai/glm-4.7-20251222:nitro");
+	});
+
+	test("supports explicit OpenRouter provider with route suffixes that are not in the catalog", () => {
+		const registry = {
+			getAll: () => allModels,
+		} as unknown as Parameters<typeof resolveCliModel>[0]["modelRegistry"];
+
+		const result = resolveCliModel({
+			cliProvider: "openrouter",
+			cliModel: "z-ai/glm-4.7-20251222:nitro",
+			modelRegistry: registry,
+		});
+
+		expect(result.error).toBeUndefined();
+		expect(result.model?.provider).toBe("openrouter");
+		expect(result.model?.id).toBe("z-ai/glm-4.7-20251222:nitro");
 	});
 
 	test("returns a clear error when there are no models", () => {

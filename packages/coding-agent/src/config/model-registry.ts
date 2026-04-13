@@ -28,7 +28,7 @@ import {
 import { isRecord, logger } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { type ConfigError, ConfigFile } from "../config";
-import { parseModelString } from "../config/model-resolver";
+import { parseModelString, resolveProviderModelReference } from "../config/model-resolver";
 import { isValidThemeColor, type ThemeColor } from "../modes/theme/theme";
 import type { AuthStorage, OAuthCredential } from "../session/auth-storage";
 import {
@@ -160,6 +160,7 @@ const OpenAICompatSchema = Type.Object({
 	vercelGatewayRouting: Type.Optional(VercelGatewayRoutingSchema),
 	extraBody: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
 	supportsStrictMode: Type.Optional(Type.Boolean()),
+	toolStrictMode: Type.Optional(Type.Union([Type.Literal("all_strict"), Type.Literal("none")])),
 });
 
 const EffortSchema = Type.Union([
@@ -1871,7 +1872,7 @@ export class ModelRegistry {
 	 * Find a model by provider and ID.
 	 */
 	find(provider: string, modelId: string): Model<Api> | undefined {
-		return this.#models.find(m => m.provider === provider && m.id === modelId);
+		return resolveProviderModelReference(provider, modelId, this.#models);
 	}
 
 	/**

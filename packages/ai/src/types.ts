@@ -483,6 +483,8 @@ export interface OpenAICompat {
 	extraBody?: Record<string, unknown>;
 	/** Whether the provider supports the `strict` field in tool definitions. Default: auto-detected per provider/baseUrl (conservative for unknown providers). */
 	supportsStrictMode?: boolean;
+	/** Whether tool schemas must be sent either all strict or all non-strict. Undefined keeps the existing per-tool mixed behavior. */
+	toolStrictMode?: "all_strict" | "none";
 }
 
 /**

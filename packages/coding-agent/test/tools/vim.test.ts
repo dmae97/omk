@@ -159,9 +159,9 @@ describe("vim tool", () => {
 		await Bun.write(filePath, "foo = 1;\nfoo = foo + 1;\n");
 		const tool = new VimTool(createSession(tmpDir));
 
-		await tool.execute("open", { open: "sample.ts" });
-		await tool.execute("edit", { kbd: ["ciwbar<Esc>", "j", "."] });
-		await tool.execute("save", { kbd: [":w<CR>"] });
+		await tool.execute("open", { file: "sample.ts" });
+		await tool.execute("edit", { file: "sample.ts", kbd: ["ciwbar<Esc>", "j", "."] });
+		await tool.execute("save", { file: "sample.ts", kbd: [":w<CR>"] });
 
 		const saved = await Bun.file(filePath).text();
 		expect(saved).toContain("bar = 1;");
@@ -173,8 +173,8 @@ describe("vim tool", () => {
 		await Bun.write(filePath, Array.from({ length: 1100 }, (_, index) => `line ${index + 1};`).join("\n"));
 		const tool = new VimTool(createSession(tmpDir));
 
-		await tool.execute("open", { open: "long.ts" });
-		const moved = await tool.execute("jump", { kbd: ["1014G"] });
+		await tool.execute("open", { file: "long.ts" });
+		const moved = await tool.execute("jump", { file: "long.ts", kbd: ["1014G"] });
 		const text = textResult(moved);
 		expect(text).toContain(">1014│line 1014;");
 		expect(moved.details?.cursor.line).toBe(1014);
@@ -185,8 +185,8 @@ describe("vim tool", () => {
 		await Bun.write(filePath, Array.from({ length: 500 }, (_, index) => `line ${index + 1};`).join("\n"));
 		const tool = new VimTool(createSession(tmpDir));
 
-		await tool.execute("open", { open: "center.ts" });
-		const edited = await tool.execute("edit", { kbd: ["386Go"], insert: "inserted", pause: true });
+		await tool.execute("open", { file: "center.ts" });
+		const edited = await tool.execute("edit", { file: "center.ts", kbd: ["386Go"], insert: "inserted", pause: true });
 		expect(edited.details?.cursor.line).toBe(387);
 		expect(edited.details?.viewport.start).toBe(367);
 		expect(edited.details?.viewport.end).toBe(406);
@@ -199,8 +199,8 @@ describe("vim tool", () => {
 		await Bun.write(filePath, Array.from({ length: 1100 }, (_, index) => `line ${index + 1};`).join("\n"));
 		const tool = new VimTool(createSession(tmpDir));
 
-		await tool.execute("open", { open: "long-edit.ts" });
-		const edited = await tool.execute("edit", { kbd: ["1014G", "o"], insert: "inserted" });
+		await tool.execute("open", { file: "long-edit.ts" });
+		const edited = await tool.execute("edit", { file: "long-edit.ts", kbd: ["1014G", "o"], insert: "inserted" });
 		const text = textResult(edited);
 		expect(edited.details?.cursor.line).toBe(1015);
 		expect(edited.details?.viewport.start).toBe(995);
@@ -213,9 +213,9 @@ describe("vim tool", () => {
 		await Bun.write(filePath, "first\nsecond\n");
 		const tool = new VimTool(createSession(tmpDir));
 
-		await tool.execute("open", { open: "replace.ts" });
-		const replaced = await tool.execute("replace", { kbd: ["cc"], insert: "alpha\nbeta" });
-		await tool.execute("save", { kbd: [":w<CR>"] });
+		await tool.execute("open", { file: "replace.ts" });
+		const replaced = await tool.execute("replace", { file: "replace.ts", kbd: ["cc"], insert: "alpha\nbeta" });
+		await tool.execute("save", { file: "replace.ts", kbd: [":w<CR>"] });
 
 		const saved = await Bun.file(filePath).text();
 		expect(saved).toBe("alpha\nbeta\nsecond\n");
@@ -228,8 +228,8 @@ describe("vim tool", () => {
 		await Bun.write(filePath, "first\n");
 		const tool = new VimTool(createSession(tmpDir));
 
-		await tool.execute("open", { open: "ambiguous.ts" });
-		await expect(tool.execute("bad", { kbd: ["o", "o"] })).rejects.toThrow(/left Vim in INSERT mode/i);
+		await tool.execute("open", { file: "ambiguous.ts" });
+		await expect(tool.execute("bad", { file: "ambiguous.ts", kbd: ["o", "o"] })).rejects.toThrow(/left Vim in INSERT mode/i);
 	});
 
 	it("rejects additional kbd entries after entering insert mode", async () => {
@@ -237,8 +237,8 @@ describe("vim tool", () => {
 		await Bun.write(filePath, "alpha\nbeta\n");
 		const tool = new VimTool(createSession(tmpDir));
 
-		await tool.execute("open", { open: "insert-boundary.ts" });
-		await expect(tool.execute("edit", { kbd: ["2G", "o", "o"] })).rejects.toThrow(/insert field|<Esc>/i);
+		await tool.execute("open", { file: "insert-boundary.ts" });
+		await expect(tool.execute("edit", { file: "insert-boundary.ts", kbd: ["2G", "o", "o"] })).rejects.toThrow(/insert field|<Esc>/i);
 		const saved = await Bun.file(filePath).text();
 		expect(saved).toBe("alpha\nbeta\n");
 	});
@@ -248,13 +248,13 @@ describe("vim tool", () => {
 		await Bun.write(filePath, "first\n");
 		const tool = new VimTool(createSession(tmpDir));
 
-		await tool.execute("open", { open: "pause.ts" });
-		const paused = await tool.execute("pause", { kbd: ["cc"], pause: true });
+		await tool.execute("open", { file: "pause.ts" });
+		const paused = await tool.execute("pause", { file: "pause.ts", kbd: ["cc"], pause: true });
 		expect(paused.details?.mode).toBe("INSERT");
 		expect(textResult(paused)).toContain("Pending: INSERT mode");
 
-		await tool.execute("resume", { kbd: [], insert: "replacement" });
-		await tool.execute("save", { kbd: [":w<CR>"] });
+		await tool.execute("resume", { file: "pause.ts", kbd: [], insert: "replacement" });
+		await tool.execute("save", { file: "pause.ts", kbd: [":w<CR>"] });
 		const saved = await Bun.file(filePath).text();
 		expect(saved).toBe("replacement\n");
 	});
@@ -264,8 +264,8 @@ describe("vim tool", () => {
 		await Bun.write(filePath, "first\n");
 		const tool = new VimTool(createSession(tmpDir));
 
-		await tool.execute("open", { open: "bad-insert.ts" });
-		await expect(tool.execute("bad", { kbd: [], insert: "nope" })).rejects.toThrow(
+		await tool.execute("open", { file: "bad-insert.ts" });
+		await expect(tool.execute("bad", { file: "bad-insert.ts", kbd: [], insert: "nope" })).rejects.toThrow(
 			/Insert payload requires INSERT mode/i,
 		);
 	});
@@ -275,7 +275,7 @@ describe("vim tool", () => {
 		await Bun.write(filePath, "\treturn value;\n");
 		const tool = new VimTool(createSession(tmpDir));
 
-		const opened = await tool.execute("open", { open: "tabs.ts" });
+		const opened = await tool.execute("open", { file: "tabs.ts" });
 		const text = textResult(opened);
 		expect(text).toContain("Focus:");
 		expect(text).toContain(" → return value;");
@@ -287,8 +287,8 @@ describe("vim tool", () => {
 		await Bun.write(filePath, "alpha\nbeta\n");
 		const tool = new VimTool(createSession(tmpDir));
 
-		await tool.execute("open", { open: "search.ts" });
-		const paused = await tool.execute("search", { kbd: ["/be"], pause: true });
+		await tool.execute("open", { file: "search.ts" });
+		const paused = await tool.execute("search", { file: "search.ts", kbd: ["/be"], pause: true });
 		expect(paused.details?.pendingInput?.kind).toBe("search-forward");
 		expect(textResult(paused)).toContain("Pending: /be");
 	});
@@ -299,8 +299,8 @@ describe("vim tool", () => {
 		const tool = new VimTool(createSession(tmpDir));
 		const pendingInputs: string[] = [];
 
-		await tool.execute("open", { open: "command.ts" });
-		const result = await tool.execute("command", { kbd: [":%s/foo/bar/g<CR>"] }, undefined, update => {
+		await tool.execute("open", { file: "command.ts" });
+		const result = await tool.execute("command", { file: "command.ts", kbd: [":%s/foo/bar/g<CR>"] }, undefined, update => {
 			const pending = update.details?.pendingInput;
 			if (pending?.kind === "command") {
 				pendingInputs.push(pending.text);
@@ -325,11 +325,11 @@ describe("vim tool", () => {
 			}),
 		);
 
-		await tool.execute("open", { open: "plan.ts" });
-		const moved = await tool.execute("move", { kbd: ["2G"] });
+		await tool.execute("open", { file: "plan.ts" });
+		const moved = await tool.execute("move", { file: "plan.ts", kbd: ["2G"] });
 		expect(textResult(moved)).toContain("L2:1");
-		await expect(tool.execute("edit", { kbd: ["dd"] })).rejects.toThrow(/Plan mode/i);
-		await expect(tool.execute("insert", { kbd: ["cc"], insert: "blocked" })).rejects.toThrow(/Plan mode/i);
+		await expect(tool.execute("edit", { file: "plan.ts", kbd: ["dd"] })).rejects.toThrow(/Plan mode/i);
+		await expect(tool.execute("insert", { file: "plan.ts", kbd: ["cc"], insert: "blocked" })).rejects.toThrow(/Plan mode/i);
 	});
 });
 

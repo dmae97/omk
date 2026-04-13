@@ -37,23 +37,26 @@ const INTERNAL_URL_PREFIX = /^(agent|artifact|skill|rule|local|mcp):\/\//;
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
 const vimSchema = Type.Object({
-	open: Type.Optional(Type.String({ description: "File path to open" })),
-	line: Type.Optional(Type.Number({ description: "1-indexed line to place cursor on open" })),
-	col: Type.Optional(Type.Number({ description: "1-indexed column to place cursor on open" })),
-	kbd: Type.Optional(Type.Array(Type.String(), { description: "Vim key sequences to execute" })),
-	insert: Type.Optional(Type.String({ description: "Raw text to insert literally while in INSERT mode" })),
-	pause: Type.Optional(Type.Boolean({ description: "Return an intermediate snapshot without forcing a mode exit" })),
+	file: Type.String({ description: "File path to edit." }),
+	kbd: Type.Optional(
+		Type.Array(Type.String(), {
+			description: "Vim key sequences to execute against the buffer. Null when just viewing the file.",
+		}),
+	),
+	insert: Type.Optional(
+		Type.String({
+			description:
+				"Raw text to type into the buffer. kbd must leave INSERT mode active first (e.g. via o, O, i, cc). Null when not inserting.",
+		}),
+	),
+	pause: Type.Optional(
+		Type.Boolean({
+			description: "If true, skip auto-save and keep current mode. Null or false for normal auto-save.",
+		}),
+	),
 });
 
 type VimParams = Static<typeof vimSchema>;
-
-function isOpenParams(params: VimParams): boolean {
-	return params.open !== undefined;
-}
-
-function isKbdParams(params: VimParams): boolean {
-	return params.kbd! !== undefined;
-}
 
 function fingerprintEqual(left: VimFingerprint | null, right: VimFingerprint | null): boolean {
 	if (left === null || right === null) {
@@ -216,7 +219,7 @@ export class VimTool implements AgentTool<typeof vimSchema, VimToolDetails> {
 	readonly parameters = vimSchema;
 	readonly concurrency = "exclusive";
 
-	#engine: VimEngine | null = null;
+	#engines = new Map<string, VimEngine>();
 	#writethrough: WritethroughCallback;
 
 	constructor(private readonly session: ToolSession) {
@@ -329,125 +332,117 @@ export class VimTool implements AgentTool<typeof vimSchema, VimToolDetails> {
 		_context?: AgentToolContext,
 	): Promise<AgentToolResult<VimToolDetails>> {
 		return untilAborted(signal, async () => {
-			if (isOpenParams(params)) {
-				// Auto-save previous buffer before opening new file
-				if (this.#engine?.buffer.modified) {
-					await this.#saveBuffer(this.#engine.buffer);
-				}
-				this.#engine = null;
-				const loaded = await this.#loadBuffer(params.open!);
-				const engine = new VimEngine(new VimBuffer(loaded), {
+			// Resolve file path and get-or-create engine for this buffer
+			const { absolutePath } = normalizeTargetPath(params.file, this.session.cwd);
+			let engine = this.#engines.get(absolutePath);
+			let isNewBuffer = false;
+			if (!engine) {
+				const loaded = await this.#loadBuffer(params.file);
+				engine = new VimEngine(new VimBuffer(loaded), {
 					beforeMutate: buffer => this.#beforeMutate(buffer),
 					loadBuffer: path => this.#loadBuffer(path),
 					saveBuffer: (buffer, options) => this.#saveBuffer(buffer, options),
 				});
-				if (params.line || params.col) {
-					engine.setCursor(Math.max(0, (params.line ?? 1) - 1), Math.max(0, (params.col ?? 1) - 1));
-				}
-				engine.viewportStart = params.line ? Math.max(1, params.line - 20) : 1;
-				engine.statusMessage = `Opened ${engine.buffer.displayPath}`;
-				this.#engine = engine;
-				return this.#renderFromEngine(
-					engine,
-					VIM_OPEN_VIEWPORT_LINES,
-					params.line ? Math.max(1, params.line - 20) : 1,
-				);
+				engine.viewportStart = 1;
+				this.#engines.set(absolutePath, engine);
+				isNewBuffer = true;
 			}
 
-			if (isKbdParams(params)) {
-				if (!this.#engine) {
-					throw new ToolError("No active vim buffer. Open a file first.");
+			const sequences = Array.isArray(params.kbd) ? params.kbd : undefined;
+			if (!sequences) {
+				// No kbd — just show the file viewport
+				if (isNewBuffer) {
+					engine.statusMessage = `Opened ${engine.buffer.displayPath}`;
 				}
-				const engine = this.#engine;
-				const sequences = params.kbd!;
-				const commandText = sequences.join(" ");
-				const tokenGroups = splitTokensBySequence(sequences);
-				const beforeText = serializeBufferText(engine.buffer);
+				return this.#renderFromEngine(engine, VIM_OPEN_VIEWPORT_LINES, engine.viewportStart);
+			}
 
-				if (this.session.getPlanModeState?.()?.enabled) {
-					if (params.insert !== undefined) {
-						throw new ToolError("Plan mode: vim is read-only; insert payloads are not allowed.");
-					}
-					const preview = engine.clone({
-						beforeMutate: async () => {
-							throw new VimInputError(
-								"Plan mode: vim is read-only; only navigation, search, open, and close are allowed.",
-							);
-						},
-						saveBuffer: async () => {
-							throw new VimInputError("Plan mode: :w is not allowed.");
-						},
-					});
-					await executeKeySequences(preview, tokenGroups, commandText);
+			// Execute kbd sequences
+			const commandText = sequences.join(" ");
+			const tokenGroups = splitTokensBySequence(sequences);
+			const beforeText = serializeBufferText(engine.buffer);
+
+			if (this.session.getPlanModeState?.()?.enabled) {
+				if (params.insert !== undefined) {
+					throw new ToolError("Plan mode: vim is read-only; insert payloads are not allowed.");
 				}
+				const preview = engine.clone({
+					beforeMutate: async () => {
+						throw new VimInputError(
+							"Plan mode: vim is read-only; only navigation, search, open, and close are allowed.",
+						);
+					},
+					saveBuffer: async () => {
+						throw new VimInputError("Plan mode: :w is not allowed.");
+					},
+				});
+				await executeKeySequences(preview, tokenGroups, commandText);
+			}
 
-				try {
-					const FRAME_INTERVAL_MS = 16; // ~60fps
-					let lastUpdateTime = 0;
+			try {
+				const FRAME_INTERVAL_MS = 16; // ~60fps
+				let lastUpdateTime = 0;
 
-					const emitUpdate = onUpdate
-						? async () => {
-								const now = Date.now();
-								if (now - lastUpdateTime < FRAME_INTERVAL_MS) {
-									return; // throttle: skip if too soon
-								}
-								onUpdate(this.#renderFromEngine(engine, VIM_DEFAULT_VIEWPORT_LINES, engine.viewportStart));
-								lastUpdateTime = Date.now();
-								await Bun.sleep(FRAME_INTERVAL_MS); // real delay for terminal to render
+				const emitUpdate = onUpdate
+					? async () => {
+							const now = Date.now();
+							if (now - lastUpdateTime < FRAME_INTERVAL_MS) {
+								return; // throttle: skip if too soon
 							}
-						: undefined;
+							onUpdate(this.#renderFromEngine(engine, VIM_DEFAULT_VIEWPORT_LINES, engine.viewportStart));
+							lastUpdateTime = Date.now();
+							await Bun.sleep(FRAME_INTERVAL_MS); // real delay for terminal to render
+						}
+					: undefined;
 
-					await executeKeySequences(engine, tokenGroups, commandText, emitUpdate);
+				await executeKeySequences(engine, tokenGroups, commandText, emitUpdate);
 
-					if (!engine.closed && params.insert !== undefined) {
-						await engine.applyLiteralInsert(params.insert, params.pause !== true);
-						await emitUpdate?.();
-					}
+				if (!engine.closed && params.insert !== undefined) {
+					await engine.applyLiteralInsert(params.insert, params.pause !== true);
+					await emitUpdate?.();
+				}
 
-					if (params.pause === true && !engine.closed && engine.getPendingInput()) {
-						engine.statusMessage = engine.statusMessage ?? `Paused in ${engine.getPublicMode()} mode`;
+				if (params.pause === true && !engine.closed && engine.getPendingInput()) {
+					engine.statusMessage = engine.statusMessage ?? `Paused in ${engine.getPublicMode()} mode`;
+				}
+			} catch (error) {
+				this.#throwWithSnapshot(engine, error);
+			}
+
+			if (beforeText !== serializeBufferText(engine.buffer)) {
+				engine.centerViewportOnCursor();
+			}
+
+			// Auto-save when buffer was modified
+			if (!engine.closed && engine.buffer.modified && params.pause !== true) {
+				try {
+					const result = await this.#saveBuffer(engine.buffer);
+					engine.buffer.markSaved(result.loaded);
+					engine.diagnostics = result.diagnostics;
+					if (beforeText !== serializeBufferText(engine.buffer)) {
+						engine.centerViewportOnCursor();
 					}
 				} catch (error) {
 					this.#throwWithSnapshot(engine, error);
 				}
-
-				if (beforeText !== serializeBufferText(engine.buffer)) {
-					engine.centerViewportOnCursor();
-				}
-
-				// Auto-save when buffer was modified
-				if (!engine.closed && engine.buffer.modified && params.pause !== true) {
-					try {
-						const result = await this.#saveBuffer(engine.buffer);
-						engine.buffer.markSaved(result.loaded);
-						engine.diagnostics = result.diagnostics;
-						if (beforeText !== serializeBufferText(engine.buffer)) {
-							engine.centerViewportOnCursor();
-						}
-					} catch (error) {
-						this.#throwWithSnapshot(engine, error);
-					}
-				}
-
-				const afterText = serializeBufferText(engine.buffer);
-				const modelDiff = buildModelDiff(beforeText, afterText);
-
-				const result = this.#renderFromEngine(
-					engine,
-					VIM_DEFAULT_VIEWPORT_LINES,
-					engine.viewportStart,
-					engine.closed,
-					undefined,
-					undefined,
-					modelDiff,
-				);
-				if (engine.closed) {
-					this.#engine = null;
-				}
-				return result;
 			}
 
-			throw new ToolError("Invalid vim parameters");
+			const afterText = serializeBufferText(engine.buffer);
+			const modelDiff = buildModelDiff(beforeText, afterText);
+
+			const result = this.#renderFromEngine(
+				engine,
+				VIM_DEFAULT_VIEWPORT_LINES,
+				engine.viewportStart,
+				engine.closed,
+				undefined,
+				undefined,
+				modelDiff,
+			);
+			if (engine.closed) {
+				this.#engines.delete(absolutePath);
+			}
+			return result;
 		});
 	}
 }
@@ -535,7 +530,7 @@ function getInsertForDisplay(args: VimRenderArgs): string | undefined {
 }
 
 interface VimRenderArgs {
-	open?: string;
+	file?: string;
 	kbd?: string[];
 	insert?: string;
 	pause?: boolean;
@@ -544,8 +539,8 @@ interface VimRenderArgs {
 
 export const vimToolRenderer = {
 	renderCall(args: VimRenderArgs, options: RenderResultOptions, uiTheme: Theme): Component {
-		if (args.open) {
-			return renderText(`${uiTheme.bold("Vim")} open ${args.open}`);
+		if (args.file && !args.kbd) {
+			return renderText(`${uiTheme.bold("Vim")} open ${args.file}`);
 		}
 
 		// Build a description of the streaming args for the header

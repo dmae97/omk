@@ -37,9 +37,20 @@ function createAbortedSignal(): AbortSignal {
 	return controller.signal;
 }
 
-function captureCompletionsPayload(model: Model<"openai-completions">): Promise<unknown> {
+function createSseResponse(events: unknown[]): Response {
+	const payload = `${events.map(event => `data: ${typeof event === "string" ? event : JSON.stringify(event)}`).join("\n\n")}\n\n`;
+	return new Response(payload, {
+		status: 200,
+		headers: { "content-type": "text/event-stream" },
+	});
+}
+
+function captureCompletionsPayload(
+	model: Model<"openai-completions">,
+	context: Context = testContext,
+): Promise<unknown> {
 	const { promise, resolve } = Promise.withResolvers<unknown>();
-	streamOpenAICompletions(model, testContext, {
+	streamOpenAICompletions(model, context, {
 		apiKey: "test-key",
 		signal: createAbortedSignal(),
 		onPayload: payload => resolve(payload),
@@ -108,6 +119,117 @@ describe("OpenAI tool strict mode", () => {
 			stream_options?: { include_usage?: boolean };
 		};
 		expect(payload.stream_options).toBeUndefined();
+	});
+
+	it("uses uniformly non-strict tool schemas when provider requires all-or-none strictness", async () => {
+		const model: Model<"openai-completions"> = {
+			...getBundledModel("openai", "gpt-4o-mini"),
+			api: "openai-completions",
+			compat: { toolStrictMode: "all_strict" } satisfies OpenAICompat,
+		};
+		const context: Context = {
+			...testContext,
+			tools: [
+				testTool,
+				{
+					name: "dynamic_map",
+					description: "Dynamic object map",
+					parameters: Type.Object({
+						values: Type.Optional(Type.Record(Type.String(), Type.String())),
+					}),
+				},
+			],
+		};
+
+		const payload = (await captureCompletionsPayload(model, context)) as {
+			tools?: Array<{ function?: { strict?: boolean } }>;
+		};
+		expect(payload.tools).toHaveLength(2);
+		expect(payload.tools?.every(tool => tool.function?.strict === undefined)).toBe(true);
+	});
+
+	it("surfaces captured JSON error bodies when the SDK reports no body", async () => {
+		const model: Model<"openai-completions"> = {
+			...getBundledModel("openai", "gpt-4o-mini"),
+			api: "openai-completions",
+		};
+		global.fetch = Object.assign(
+			async (_input: string | URL | Request, _init?: RequestInit): Promise<Response> =>
+				new Response(
+					JSON.stringify({
+						message: "Tools with mixed values for 'strict' are not allowed.",
+						type: "invalid_request_error",
+						param: "tools",
+						code: "wrong_api_format",
+					}),
+					{
+						status: 422,
+						headers: { "content-type": "application/json" },
+					},
+				),
+			{ preconnect: originalFetch.preconnect },
+		);
+
+		const result = await streamOpenAICompletions(model, testContext, { apiKey: "test-key" }).result();
+		expect(result.stopReason).toBe("error");
+		expect(result.errorMessage).toContain("Tools with mixed values for 'strict' are not allowed.");
+		expect(result.errorMessage).toContain("param=tools");
+		expect(result.errorMessage).toContain("code=wrong_api_format");
+	});
+
+	it("retries with non-strict tool schemas after strict-mode request errors", async () => {
+		const model: Model<"openai-completions"> = {
+			...getBundledModel("openai", "gpt-4o-mini"),
+			api: "openai-completions",
+			compat: { toolStrictMode: "all_strict" } satisfies OpenAICompat,
+		};
+		const strictFlags: boolean[][] = [];
+		global.fetch = Object.assign(
+			async (_input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+				const bodyText = typeof init?.body === "string" ? init.body : "";
+				const payload = JSON.parse(bodyText) as {
+					tools?: Array<{ function?: { strict?: boolean } }>;
+				};
+				strictFlags.push((payload.tools ?? []).map(tool => tool.function?.strict === true));
+				if (strictFlags.length === 1) {
+					return new Response(
+						JSON.stringify({
+							message: "Strict tool schema validation failed.",
+							type: "invalid_request_error",
+							param: "tools",
+							code: "wrong_api_format",
+						}),
+						{
+							status: 422,
+							headers: { "content-type": "application/json" },
+						},
+					);
+				}
+				return createSseResponse([
+					{
+						id: "chatcmpl-retry",
+						object: "chat.completion.chunk",
+						created: 0,
+						model: model.id,
+						choices: [{ index: 0, delta: { content: "Hello" } }],
+					},
+					{
+						id: "chatcmpl-retry",
+						object: "chat.completion.chunk",
+						created: 0,
+						model: model.id,
+						choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+					},
+					"[DONE]",
+				]);
+			},
+			{ preconnect: originalFetch.preconnect },
+		);
+
+		const result = await streamOpenAICompletions(model, testContext, { apiKey: "test-key" }).result();
+		expect(result.stopReason).toBe("stop");
+		expect(result.content).toContainEqual({ type: "text", text: "Hello" });
+		expect(strictFlags).toEqual([[true], [false]]);
 	});
 
 	it("sends strict=true for openai-responses tool schemas on OpenAI", async () => {

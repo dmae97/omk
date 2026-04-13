@@ -86,6 +86,7 @@ describe("openai-completions compatibility", () => {
 			vercelGatewayRouting: {},
 			extraBody: {},
 			supportsStrictMode: true,
+			toolStrictMode: "none",
 		} satisfies Required<OpenAICompat>;
 		const assistantMessage: AssistantMessage = {
 			role: "assistant",

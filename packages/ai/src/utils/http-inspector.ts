@@ -13,6 +13,13 @@ export type RawHttpRequestDump = {
 	body?: unknown;
 };
 
+export type CapturedHttpErrorResponse = {
+	status: number;
+	headers?: Headers;
+	bodyText?: string;
+	bodyJson?: unknown;
+};
+
 type ErrorWithStatus = {
 	status?: unknown;
 };
@@ -44,8 +51,18 @@ export async function appendRawHttpRequestDumpFor400(
 export async function finalizeErrorMessage(
 	error: unknown,
 	rawRequestDump: RawHttpRequestDump | undefined,
+	capturedErrorResponse?: CapturedHttpErrorResponse,
 ): Promise<string> {
-	return appendRawHttpRequestDumpFor400(formatErrorMessageWithRetryAfter(error), error, rawRequestDump);
+	let message = formatErrorMessageWithRetryAfter(error, capturedErrorResponse?.headers);
+	const capturedMessage = formatCapturedHttpError(capturedErrorResponse);
+	if (capturedMessage) {
+		if (/\bstatus code\s*\(no body\)/i.test(message)) {
+			message = `${capturedErrorResponse?.status ?? "HTTP"} status code: ${capturedMessage}`;
+		} else if (!message.includes(capturedMessage)) {
+			message = `${message}\n${capturedMessage}`;
+		}
+	}
+	return appendRawHttpRequestDumpFor400(message, error, rawRequestDump);
 }
 
 export function withHttpStatus(error: unknown, status: number): Error {
@@ -95,4 +112,54 @@ function redactHeaders(headers: Record<string, string> | undefined): Record<stri
 		redacted[key] = value;
 	}
 	return redacted;
+}
+
+function formatCapturedHttpError(captured: CapturedHttpErrorResponse | undefined): string | undefined {
+	if (!captured) return undefined;
+	const bodyText = captured.bodyText?.trim();
+	if (!bodyText) return undefined;
+	const payload = parseCapturedErrorPayload(captured);
+	if (!payload) return bodyText;
+
+	const errorPayload = getObjectProperty(payload, "error") ?? payload;
+	const message = getStringProperty(errorPayload, "message") ?? getStringProperty(payload, "message") ?? bodyText;
+	const extras = [
+		getStringProperty(errorPayload, "type") ?? getStringProperty(payload, "type"),
+		getStringProperty(errorPayload, "param") ?? getStringProperty(payload, "param"),
+		getStringProperty(errorPayload, "code") ?? getStringProperty(payload, "code"),
+	]
+		.filter(Boolean)
+		.map((value, index) => {
+			if (index === 0) return `type=${value}`;
+			if (index === 1) return `param=${value}`;
+			return `code=${value}`;
+		});
+	return extras.length > 0 ? `${message} (${extras.join(" ")})` : message;
+}
+
+function parseCapturedErrorPayload(captured: CapturedHttpErrorResponse): Record<string, unknown> | undefined {
+	if (isObject(captured.bodyJson)) {
+		return captured.bodyJson;
+	}
+	if (!captured.bodyText) return undefined;
+	try {
+		const parsed = JSON.parse(captured.bodyText);
+		return isObject(parsed) ? parsed : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+function getObjectProperty(value: Record<string, unknown>, key: string): Record<string, unknown> | undefined {
+	const property = value[key];
+	return isObject(property) ? property : undefined;
+}
+
+function getStringProperty(value: Record<string, unknown>, key: string): string | undefined {
+	const property = value[key];
+	return typeof property === "string" && property.trim().length > 0 ? property : undefined;
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -88,8 +88,12 @@ function hasUnrepresentableStrictObjectMap(schema: Record<string, unknown>, seen
 export function sanitizeSchemaForStrictMode(
 	schema: Record<string, unknown>,
 	seen?: WeakSet<object>,
+	cache?: WeakMap<Record<string, unknown>, Record<string, unknown>>,
 ): Record<string, unknown> {
 	if (!seen) seen = new WeakSet();
+	if (!cache) cache = new WeakMap();
+	const cached = cache.get(schema);
+	if (cached) return cached;
 	if (seen.has(schema)) return {};
 	seen.add(schema);
 	const typeValue = schema.type;
@@ -98,8 +102,10 @@ export function sanitizeSchemaForStrictMode(
 		const schemaWithoutType = { ...schema };
 		delete schemaWithoutType.type;
 
-		const sanitizedWithoutType = sanitizeSchemaForStrictMode(schemaWithoutType, seen);
+		const sanitizedWithoutType = sanitizeSchemaForStrictMode(schemaWithoutType, seen, cache);
 		if (typeVariants.length === 0) {
+			cache.set(schema, sanitizedWithoutType);
+			seen.delete(schema);
 			return sanitizedWithoutType;
 		}
 
@@ -113,19 +119,25 @@ export function sanitizeSchemaForStrictMode(
 			if (variantType !== "array") {
 				delete variantSchema.items;
 			}
-			return sanitizeSchemaForStrictMode(variantSchema, seen);
+			return sanitizeSchemaForStrictMode(variantSchema, seen, cache);
 		});
 
 		if (variants.length === 1) {
+			cache.set(schema, variants[0] as Record<string, unknown>);
+			seen.delete(schema);
 			return variants[0] as Record<string, unknown>;
 		}
 
-		return {
+		const result = {
 			anyOf: variants,
 		};
+		cache.set(schema, result);
+		seen.delete(schema);
+		return result;
 	}
 
 	const sanitized: Record<string, unknown> = {};
+	cache.set(schema, sanitized);
 	for (const [key, value] of Object.entries(schema)) {
 		if (NON_STRUCTURAL_SCHEMA_KEYS.has(key) || key === "type" || key === "const" || key === "nullable") {
 			continue;
@@ -135,7 +147,7 @@ export function sanitizeSchemaForStrictMode(
 			const properties = Object.fromEntries(
 				Object.entries(value).map(([propertyName, propertySchema]) => [
 					propertyName,
-					isJsonObject(propertySchema) ? sanitizeSchemaForStrictMode(propertySchema, seen) : propertySchema,
+					isJsonObject(propertySchema) ? sanitizeSchemaForStrictMode(propertySchema, seen, cache) : propertySchema,
 				]),
 			);
 			sanitized.properties = properties;
@@ -144,10 +156,10 @@ export function sanitizeSchemaForStrictMode(
 
 		if (key === "items") {
 			if (isJsonObject(value)) {
-				sanitized.items = sanitizeSchemaForStrictMode(value, seen);
+				sanitized.items = sanitizeSchemaForStrictMode(value, seen, cache);
 			} else if (Array.isArray(value)) {
 				sanitized.items = value.map(entry =>
-					isJsonObject(entry) ? sanitizeSchemaForStrictMode(entry, seen) : entry,
+					isJsonObject(entry) ? sanitizeSchemaForStrictMode(entry, seen, cache) : entry,
 				);
 			} else {
 				sanitized.items = value;
@@ -156,7 +168,9 @@ export function sanitizeSchemaForStrictMode(
 		}
 
 		if (COMBINATOR_KEYS.includes(key as (typeof COMBINATOR_KEYS)[number]) && Array.isArray(value)) {
-			sanitized[key] = value.map(entry => (isJsonObject(entry) ? sanitizeSchemaForStrictMode(entry, seen) : entry));
+			sanitized[key] = value.map(entry =>
+				isJsonObject(entry) ? sanitizeSchemaForStrictMode(entry, seen, cache) : entry,
+			);
 			continue;
 		}
 
@@ -164,7 +178,9 @@ export function sanitizeSchemaForStrictMode(
 			sanitized[key] = Object.fromEntries(
 				Object.entries(value).map(([definitionName, definitionSchema]) => [
 					definitionName,
-					isJsonObject(definitionSchema) ? sanitizeSchemaForStrictMode(definitionSchema, seen) : definitionSchema,
+					isJsonObject(definitionSchema)
+						? sanitizeSchemaForStrictMode(definitionSchema, seen, cache)
+						: definitionSchema,
 				]),
 			);
 			continue;
@@ -221,9 +237,11 @@ export function sanitizeSchemaForStrictMode(
 
 	if (schema.nullable === true) {
 		const { nullable: _, ...withoutNullable } = sanitized;
+		seen.delete(schema);
 		return { anyOf: [withoutNullable, { type: "null" }] };
 	}
 
+	seen.delete(schema);
 	return sanitized;
 }
 
@@ -241,11 +259,23 @@ export function sanitizeSchemaForStrictMode(
  *   i.e. the node is not representable in strict mode. Prefer
  *   {@link tryEnforceStrictSchema} which catches this and degrades gracefully.
  */
-export function enforceStrictSchema(schema: Record<string, unknown>, seen?: WeakSet<object>): Record<string, unknown> {
+export function enforceStrictSchema(
+	schema: Record<string, unknown>,
+	seen?: WeakSet<object>,
+	cache?: WeakMap<Record<string, unknown>, Record<string, unknown>>,
+): Record<string, unknown> {
 	if (!seen) seen = new WeakSet();
-	if (seen.has(schema)) return schema;
+	if (!cache) cache = new WeakMap();
+	if (seen.has(schema)) {
+		throw new Error("Schema contains a circular object graph — cannot enforce strict mode");
+	}
+	const cached = cache.get(schema);
+	if (cached) {
+		return cached;
+	}
 	seen.add(schema);
 	const result = { ...schema };
+	cache.set(schema, result);
 	const isObjectType = result.type === "object";
 	if (isObjectType) {
 		result.additionalProperties = false;
@@ -263,7 +293,7 @@ export function enforceStrictSchema(schema: Record<string, unknown>, seen?: Weak
 			Object.entries(props).map(([key, value]) => {
 				const processed =
 					value != null && typeof value === "object" && !Array.isArray(value)
-						? enforceStrictSchema(value as Record<string, unknown>, seen)
+						? enforceStrictSchema(value as Record<string, unknown>, seen, cache)
 						: value;
 				// Optional property — wrap as nullable so strict mode accepts it
 				if (!originalRequired.has(key)) {
@@ -287,18 +317,18 @@ export function enforceStrictSchema(schema: Record<string, unknown>, seen?: Weak
 		if (Array.isArray(result.items)) {
 			result.items = result.items.map(entry =>
 				entry != null && typeof entry === "object" && !Array.isArray(entry)
-					? enforceStrictSchema(entry as Record<string, unknown>, seen)
+					? enforceStrictSchema(entry as Record<string, unknown>, seen, cache)
 					: entry,
 			);
 		} else {
-			result.items = enforceStrictSchema(result.items as Record<string, unknown>, seen);
+			result.items = enforceStrictSchema(result.items as Record<string, unknown>, seen, cache);
 		}
 	}
 	for (const key of COMBINATOR_KEYS) {
 		if (Array.isArray(result[key])) {
 			result[key] = (result[key] as unknown[]).map(entry =>
 				entry != null && typeof entry === "object" && !Array.isArray(entry)
-					? enforceStrictSchema(entry as Record<string, unknown>, seen)
+					? enforceStrictSchema(entry as Record<string, unknown>, seen, cache)
 					: entry,
 			);
 		}
@@ -310,7 +340,7 @@ export function enforceStrictSchema(schema: Record<string, unknown>, seen?: Weak
 				Object.entries(defs).map(([name, def]) => [
 					name,
 					def != null && typeof def === "object" && !Array.isArray(def)
-						? enforceStrictSchema(def as Record<string, unknown>, seen)
+						? enforceStrictSchema(def as Record<string, unknown>, seen, cache)
 						: def,
 				]),
 			);
@@ -326,6 +356,7 @@ export function enforceStrictSchema(schema: Record<string, unknown>, seen?: Weak
 	) {
 		throw new Error("Schema node has no type, combinator, or $ref — cannot enforce strict mode");
 	}
+	seen.delete(schema);
 	return result;
 }
 

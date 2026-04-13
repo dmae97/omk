@@ -325,6 +325,7 @@ class RpcClient:
         self._async_errors = _BoundedHistory[BaseException](_DEFAULT_ERROR_HISTORY_LIMIT)
         self._scheduled_agent_runs = 0
         self._completed_agent_runs = 0
+        self._last_schedule_async_error_index = 0
         self._ui_requests: queue.Queue[ExtensionUiRequest] = queue.Queue()
         self._stderr_chunks = _BoundedHistory[str](self._max_stderr_chunks)
         self._closed_error: BaseException | None = None
@@ -381,6 +382,7 @@ class RpcClient:
         self._async_errors.clear()
         self._scheduled_agent_runs = 0
         self._completed_agent_runs = 0
+        self._last_schedule_async_error_index = 0
         self._ui_requests = queue.Queue()
         with self._state_lock:
             self._stderr_chunks.clear()
@@ -810,6 +812,7 @@ class RpcClient:
         self._prompt_lifecycle.acquire(operation)
         try:
             if self._is_agent_idle():
+                self._check_async_errors()
                 return
             start_index = self._current_event_index()
             start_async_error_index = self._current_async_error_index()
@@ -841,7 +844,7 @@ class RpcClient:
     def _mark_agent_run_scheduled(self) -> None:
         with self._event_condition:
             self._scheduled_agent_runs += 1
-
+            self._last_schedule_async_error_index = self._async_errors.current_index()
     def _mark_agent_run_completed(self) -> None:
         with self._event_condition:
             self._completed_agent_runs += 1
@@ -850,6 +853,12 @@ class RpcClient:
     def _is_agent_idle(self) -> bool:
         with self._event_condition:
             return self._scheduled_agent_runs == self._completed_agent_runs
+
+    def _check_async_errors(self) -> None:
+        with self._event_condition:
+            errors = self._async_errors.snapshot_from(self._last_schedule_async_error_index)
+        if errors:
+            raise errors[0]
 
     def _build_prompt_turn(self, events: tuple[RpcAgentEvent, ...]) -> PromptTurn:
         final_messages: tuple[AgentMessage, ...] = ()

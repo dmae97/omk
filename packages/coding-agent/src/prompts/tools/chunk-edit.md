@@ -1,5 +1,4 @@
 Edits files via syntax-aware chunks. Run `read(path="file.ts")` first.
-
 - `write` rewrites the entire targeted region — best for most edits.
 - `replace` does surgical find-and-replace within a chunk — use when making small changes to a large chunk, or batching multiple substitutions.
 

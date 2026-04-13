@@ -10,12 +10,12 @@ import { DEFAULT_BASH_INTERCEPTOR_RULES, Settings } from "@oh-my-pi/pi-coding-ag
 import { EditTool } from "@oh-my-pi/pi-coding-agent/edit";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
-import { PollTool } from "@oh-my-pi/pi-coding-agent/tools/poll-tool";
 import { BashTool } from "@oh-my-pi/pi-coding-agent/tools/bash";
 import { CancelJobTool } from "@oh-my-pi/pi-coding-agent/tools/cancel-job";
 import { FindTool } from "@oh-my-pi/pi-coding-agent/tools/find";
 import { GrepTool } from "@oh-my-pi/pi-coding-agent/tools/grep";
 import { wrapToolWithMetaNotice } from "@oh-my-pi/pi-coding-agent/tools/output-meta";
+import { PollTool } from "@oh-my-pi/pi-coding-agent/tools/poll-tool";
 import { ReadTool } from "@oh-my-pi/pi-coding-agent/tools/read";
 import { WriteTool } from "@oh-my-pi/pi-coding-agent/tools/write";
 import * as markitUtils from "@oh-my-pi/pi-coding-agent/utils/markit";

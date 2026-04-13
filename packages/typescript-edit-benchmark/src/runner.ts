@@ -1132,7 +1132,6 @@ async function runSingleTask(
 					}
 				}
 
-
 				// Retry if the model didn't attempt any edit/write (read-only or no tool calls)
 				const madeEditAttempt = toolStats.edit > 0 || toolStats.write > 0;
 				if (!madeEditAttempt && zeroToolRetries < noOpRetryLimit) {
@@ -1413,7 +1412,7 @@ async function _runRpcBenchmarkRun(
 					} else if (toolName === "write") {
 						toolStats.write++;
 					}
-				
+
 					if (e.args) {
 						toolStats.totalInputChars += JSON.stringify(e.args).length;
 					}
@@ -1460,7 +1459,7 @@ async function _runRpcBenchmarkRun(
 					}
 				}
 			}
-			
+
 			// Retry if the model didn't attempt any edit/write (read-only or no tool calls)
 			const madeEditAttempt = toolStats.edit > 0 || toolStats.write > 0;
 			if (!madeEditAttempt && zeroToolRetries < noOpRetryLimit) {
@@ -1470,15 +1469,15 @@ async function _runRpcBenchmarkRun(
 				attempt--; // Don't consume a regular attempt slot
 				continue;
 			}
-			
+
 			patchApplied = toolStats.edit > 0;
-			
+
 			const filesToVerify = task.files.length > 0 ? task.files : undefined;
 			const verification = await verifyExpectedFileSubset(expectedDir, cwd, filesToVerify);
 			if (config.autoFormat) {
 				await formatDirectory(cwd);
 			}
-			
+
 			verificationPassed = verification.success;
 			indentScore = verification.indentScore;
 			formattedEquivalent = verification.formattedEquivalent;
@@ -1488,11 +1487,11 @@ async function _runRpcBenchmarkRun(
 			if (!verification.success && verification.error) {
 				error = verification.error;
 			}
-			
+
 			if (verification.success) {
 				break;
 			}
-			
+
 			const mutationIntentSuffix = mutationIntentValidation
 				? `\n\nMutation intent: ${mutationIntentValidation.matched ? "matched" : "not matched"} (${mutationIntentValidation.reason})`
 				: "";

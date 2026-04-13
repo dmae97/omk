@@ -1,13 +1,15 @@
 import type { Model, OpenAICompat } from "../types";
 
 type OpenAIReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
+type ResolvedToolStrictMode = NonNullable<OpenAICompat["toolStrictMode"]> | "mixed";
 
 export type ResolvedOpenAICompat = Required<
-	Omit<OpenAICompat, "openRouterRouting" | "vercelGatewayRouting" | "extraBody">
+	Omit<OpenAICompat, "openRouterRouting" | "vercelGatewayRouting" | "extraBody" | "toolStrictMode">
 > & {
 	openRouterRouting?: OpenAICompat["openRouterRouting"];
 	vercelGatewayRouting?: OpenAICompat["vercelGatewayRouting"];
 	extraBody?: OpenAICompat["extraBody"];
+	toolStrictMode: ResolvedToolStrictMode;
 };
 
 function detectStrictModeSupport(provider: string, baseUrl: string): boolean {
@@ -109,6 +111,7 @@ export function detectOpenAICompat(model: Model<"openai-completions">, resolvedB
 		vercelGatewayRouting: undefined,
 		supportsStrictMode: detectStrictModeSupport(provider, baseUrl),
 		extraBody: undefined,
+		toolStrictMode: isCerebras ? "all_strict" : "mixed",
 	};
 }
 
@@ -151,5 +154,6 @@ export function resolveOpenAICompat(
 		vercelGatewayRouting: model.compat.vercelGatewayRouting ?? detected.vercelGatewayRouting,
 		supportsStrictMode: model.compat.supportsStrictMode ?? detected.supportsStrictMode,
 		extraBody: model.compat.extraBody,
+		toolStrictMode: model.compat.toolStrictMode ?? detected.toolStrictMode,
 	};
 }

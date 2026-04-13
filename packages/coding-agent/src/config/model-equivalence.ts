@@ -51,6 +51,7 @@ const TRAILING_CANONICAL_MARKERS = [
 	"xhigh",
 	"free",
 	"exacto",
+	"nitro",
 	"original",
 	"optimized",
 	"nvfp4",

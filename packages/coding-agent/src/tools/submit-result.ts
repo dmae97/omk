@@ -57,7 +57,7 @@ export class SubmitResultTool implements AgentTool<TSchema, SubmitResultDetails>
 	readonly label = "Submit Result";
 	readonly description =
 		"Finish the task with structured JSON output. Call exactly once at the end of the task.\n\n" +
-		"Pass `result: { data: <your output> }` for success, or `result: { error: \"message\" }` for failure.\n" +
+		'Pass `result: { data: <your output> }` for success, or `result: { error: "message" }` for failure.\n' +
 		"The `data`/`error` wrapper is required — do not put your output directly in `result`.";
 	readonly parameters: TSchema;
 	strict = true;
@@ -173,7 +173,7 @@ export class SubmitResultTool implements AgentTool<TSchema, SubmitResultDetails>
 		}
 		if (errorMessage === undefined && data === undefined) {
 			throw new Error(
-				"result must contain either `data` or `error`. Use `{result: {data: <your output>}}` for success or `{result: {error: \"message\"}}` for failure.",
+				'result must contain either `data` or `error`. Use `{result: {data: <your output>}}` for success or `{result: {error: "message"}}` for failure.',
 			);
 		}
 

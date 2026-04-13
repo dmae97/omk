@@ -116,7 +116,6 @@ describe("executeBash", () => {
 		expect(() => process.kill(pid, "SIGKILL")).not.toThrow();
 	});
 
-
 	it("times out commands", async () => {
 		if (process.platform === "win32") {
 			return;

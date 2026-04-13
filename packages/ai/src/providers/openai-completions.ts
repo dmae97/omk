@@ -31,7 +31,12 @@ import {
 } from "../types";
 import { createAbortSourceTracker } from "../utils/abort";
 import { AssistantMessageEventStream } from "../utils/event-stream";
-import { finalizeErrorMessage, type RawHttpRequestDump, rewriteCopilotAuthError } from "../utils/http-inspector";
+import {
+	type CapturedHttpErrorResponse,
+	finalizeErrorMessage,
+	type RawHttpRequestDump,
+	rewriteCopilotAuthError,
+} from "../utils/http-inspector";
 import {
 	createFirstEventWatchdog,
 	getOpenAIStreamIdleTimeoutMs,
@@ -42,6 +47,7 @@ import {
 import { parseStreamingJson } from "../utils/json-parse";
 import { parseGitHubCopilotApiKey } from "../utils/oauth/github-copilot";
 import { getKimiCommonHeaders } from "../utils/oauth/kimi";
+import { extractHttpStatusFromError } from "../utils/retry";
 import { adaptSchemaForStrict, NO_STRICT } from "../utils/schema";
 import { mapToOpenAICompletionsToolChoice } from "../utils/tool-choice";
 import {
@@ -126,6 +132,14 @@ type OpenAICompletionsSamplingParams = OpenAI.Chat.Completions.ChatCompletionCre
 	repetition_penalty?: number;
 };
 
+type AppliedToolStrictMode = "mixed" | "all_strict" | "none";
+type ToolStrictModeOverride = Exclude<ResolvedOpenAICompat["toolStrictMode"], "mixed"> | undefined;
+
+type BuiltOpenAICompletionTools = {
+	tools: OpenAI.Chat.Completions.ChatCompletionTool[];
+	toolStrictMode: AppliedToolStrictMode;
+};
+
 // LIMITATION: The think tag parser uses naive string matching for <think>/<thinking> tags.
 // If MiniMax models output these literal strings in code blocks, XML examples, or explanations,
 // they will be incorrectly consumed as thinking delimiters, truncating visible output.
@@ -177,6 +191,7 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 	(async () => {
 		const startTime = Date.now();
 		let firstTokenTime: number | undefined;
+		let getCapturedErrorResponse: (() => CapturedHttpErrorResponse | undefined) | undefined;
 
 		const output: AssistantMessage = {
 			role: "assistant",
@@ -203,24 +218,42 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 		try {
 			const apiKey = options?.apiKey || getEnvApiKey(model.provider) || "";
 			const idleTimeoutMs = getOpenAIStreamIdleTimeoutMs();
-			const { client, copilotPremiumRequests, baseUrl } = await createClient(
-				model,
-				context,
-				apiKey,
-				options?.headers,
-				options?.initiatorOverride,
-			);
-			const params = buildParams(model, context, options, baseUrl);
-			options?.onPayload?.(params);
-			rawRequestDump = {
-				provider: model.provider,
-				api: output.api,
-				model: model.id,
-				method: "POST",
-				url: `${baseUrl}/chat/completions`,
-				body: params,
+			const {
+				client,
+				copilotPremiumRequests,
+				baseUrl,
+				requestHeaders,
+				getCapturedErrorResponse: captureErrorResponse,
+				clearCapturedErrorResponse,
+			} = await createClient(model, context, apiKey, options?.headers, options?.initiatorOverride);
+			getCapturedErrorResponse = captureErrorResponse;
+			let appliedToolStrictMode: AppliedToolStrictMode = "mixed";
+			const createCompletionsStream = async (toolStrictModeOverride?: ToolStrictModeOverride) => {
+				clearCapturedErrorResponse();
+				const { params, toolStrictMode } = buildParams(model, context, options, baseUrl, toolStrictModeOverride);
+				appliedToolStrictMode = toolStrictMode;
+				options?.onPayload?.(params);
+				rawRequestDump = {
+					provider: model.provider,
+					api: output.api,
+					model: model.id,
+					method: "POST",
+					url: `${baseUrl}/chat/completions`,
+					headers: requestHeaders,
+					body: params,
+				};
+				return client.chat.completions.create(params, { signal: requestSignal });
 			};
-			const openaiStream = await client.chat.completions.create(params, { signal: requestSignal });
+			let openaiStream: AsyncIterable<ChatCompletionChunk>;
+			try {
+				openaiStream = await createCompletionsStream();
+			} catch (error) {
+				const capturedErrorResponse = getCapturedErrorResponse();
+				if (!shouldRetryWithoutStrictTools(error, capturedErrorResponse, appliedToolStrictMode, context.tools)) {
+					throw error;
+				}
+				openaiStream = await createCompletionsStream("none");
+			}
 			const firstEventWatchdog = createFirstEventWatchdog(
 				options?.streamFirstEventTimeoutMs ?? getStreamFirstEventTimeoutMs(idleTimeoutMs),
 				() => abortTracker.abortLocally(firstEventTimeoutAbortError),
@@ -513,7 +546,9 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 			for (const block of output.content) delete (block as any).index;
 			const firstEventTimeoutError = abortTracker.getLocalAbortReason();
 			output.stopReason = abortTracker.wasCallerAbort() ? "aborted" : "error";
-			output.errorMessage = firstEventTimeoutError?.message ?? (await finalizeErrorMessage(error, rawRequestDump));
+			output.errorMessage =
+				firstEventTimeoutError?.message ??
+				(await finalizeErrorMessage(error, rawRequestDump, getCapturedErrorResponse?.()));
 			// Some providers via OpenRouter include extra details here.
 			const rawMetadata = (error as { error?: { metadata?: { raw?: string } } })?.error?.metadata?.raw;
 			if (rawMetadata) output.errorMessage += `\n${rawMetadata}`;
@@ -538,6 +573,9 @@ async function createClient(
 	client: OpenAI;
 	copilotPremiumRequests: number | undefined;
 	baseUrl: string | undefined;
+	requestHeaders: Record<string, string>;
+	getCapturedErrorResponse: () => CapturedHttpErrorResponse | undefined;
+	clearCapturedErrorResponse: () => void;
 }> {
 	if (!apiKey) {
 		if (!$env.OPENAI_API_KEY) {
@@ -573,6 +611,34 @@ async function createClient(
 		copilotPremiumRequests = copilot.premiumRequests;
 		baseUrl = resolveGitHubCopilotBaseUrl(model.baseUrl, rawApiKey) ?? model.baseUrl;
 	}
+	let capturedErrorResponse: CapturedHttpErrorResponse | undefined;
+	const wrappedFetch = Object.assign(
+		async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+			const response = await fetch(input, init);
+			if (response.ok) {
+				capturedErrorResponse = undefined;
+				return response;
+			}
+			let bodyText: string | undefined;
+			let bodyJson: unknown;
+			try {
+				bodyText = await response.clone().text();
+				if (bodyText.trim().length > 0) {
+					try {
+						bodyJson = JSON.parse(bodyText);
+					} catch {}
+				}
+			} catch {}
+			capturedErrorResponse = {
+				status: response.status,
+				headers: response.headers,
+				bodyText,
+				bodyJson,
+			};
+			return response;
+		},
+		{ preconnect: fetch.preconnect },
+	);
 	return {
 		client: new OpenAI({
 			apiKey,
@@ -580,9 +646,15 @@ async function createClient(
 			dangerouslyAllowBrowser: true,
 			maxRetries: 5,
 			defaultHeaders: headers,
+			fetch: wrappedFetch,
 		}),
 		copilotPremiumRequests,
 		baseUrl,
+		requestHeaders: headers,
+		getCapturedErrorResponse: () => capturedErrorResponse,
+		clearCapturedErrorResponse: () => {
+			capturedErrorResponse = undefined;
+		},
 	};
 }
 
@@ -591,7 +663,8 @@ function buildParams(
 	context: Context,
 	options: OpenAICompletionsOptions | undefined,
 	resolvedBaseUrl?: string,
-) {
+	toolStrictModeOverride?: ToolStrictModeOverride,
+): { params: OpenAICompletionsSamplingParams; toolStrictMode: AppliedToolStrictMode } {
 	const compat = getCompat(model, resolvedBaseUrl);
 	const messages = convertMessages(model, context, compat);
 	maybeAddOpenRouterAnthropicCacheControl(model, messages);
@@ -607,6 +680,7 @@ function buildParams(
 		messages,
 		stream: true,
 	};
+	let toolStrictMode: AppliedToolStrictMode = "none";
 
 	if (compat.supportsUsageInStreaming !== false) {
 		(params as { stream_options?: { include_usage: boolean } }).stream_options = { include_usage: true };
@@ -647,7 +721,9 @@ function buildParams(
 	}
 
 	if (context.tools) {
-		params.tools = convertTools(context.tools, compat);
+		const builtTools = convertTools(context.tools, compat, toolStrictModeOverride);
+		params.tools = builtTools.tools;
+		toolStrictMode = builtTools.toolStrictMode;
 	} else if (hasToolHistory(context.messages)) {
 		// Anthropic (via LiteLLM/proxy) requires tools param when conversation has tool_calls/tool_results
 		params.tools = [];
@@ -697,7 +773,14 @@ function buildParams(
 		Object.assign(params, compat.extraBody);
 	}
 
-	return params;
+	return buildParamsResult(params, toolStrictMode);
+}
+
+function buildParamsResult(
+	params: OpenAICompletionsSamplingParams,
+	toolStrictMode: AppliedToolStrictMode,
+): { params: OpenAICompletionsSamplingParams; toolStrictMode: AppliedToolStrictMode } {
+	return { params, toolStrictMode };
 }
 
 function getOptionalNumberProperty(value: object, key: string): number | undefined {
@@ -1102,22 +1185,68 @@ export function convertMessages(
 	return params;
 }
 
-function convertTools(tools: Tool[], compat: ResolvedOpenAICompat): OpenAI.Chat.Completions.ChatCompletionTool[] {
-	return tools.map(tool => {
+function convertTools(
+	tools: Tool[],
+	compat: ResolvedOpenAICompat,
+	toolStrictModeOverride?: ToolStrictModeOverride,
+): BuiltOpenAICompletionTools {
+	const adaptedTools = tools.map(tool => {
 		const strict = !NO_STRICT && compat.supportsStrictMode !== false && tool.strict !== false;
 		const baseParameters = tool.parameters as unknown as Record<string, unknown>;
-		const { schema: parameters, strict: effectiveStrict } = adaptSchemaForStrict(baseParameters, strict);
+		const adapted = adaptSchemaForStrict(baseParameters, strict);
 		return {
-			type: "function",
-			function: {
-				name: tool.name,
-				description: tool.description || "",
-				parameters,
-				// Only include strict if provider supports it. Some reject unknown fields.
-				...(effectiveStrict && { strict: true }),
-			},
+			tool,
+			baseParameters,
+			parameters: adapted.schema,
+			strict: adapted.strict,
 		};
 	});
+
+	const requestedStrictMode = toolStrictModeOverride ?? compat.toolStrictMode;
+	const toolStrictMode =
+		requestedStrictMode === "none"
+			? "none"
+			: requestedStrictMode === "all_strict"
+				? adaptedTools.every(tool => tool.strict)
+					? "all_strict"
+					: "none"
+				: "mixed";
+
+	return {
+		tools: adaptedTools.map(({ tool, baseParameters, parameters, strict }) => {
+			const includeStrict = toolStrictMode === "all_strict" || (toolStrictMode === "mixed" && strict);
+			return {
+				type: "function",
+				function: {
+					name: tool.name,
+					description: tool.description || "",
+					parameters: includeStrict ? parameters : baseParameters,
+					// Only include strict if provider supports it. Some reject unknown fields.
+					...(includeStrict && { strict: true }),
+				},
+			};
+		}),
+		toolStrictMode,
+	};
+}
+
+function shouldRetryWithoutStrictTools(
+	error: unknown,
+	capturedErrorResponse: CapturedHttpErrorResponse | undefined,
+	toolStrictMode: AppliedToolStrictMode,
+	tools: Tool[] | undefined,
+): boolean {
+	if (!tools || tools.length === 0 || toolStrictMode !== "all_strict") {
+		return false;
+	}
+	const status = extractHttpStatusFromError(error) ?? capturedErrorResponse?.status;
+	if (status !== 400 && status !== 422) {
+		return false;
+	}
+	const messageParts = [error instanceof Error ? error.message : undefined, capturedErrorResponse?.bodyText]
+		.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+		.join("\n");
+	return /wrong_api_format|mixed values for 'strict'|tool[s]?\b.*strict|\bstrict\b.*tool/i.test(messageParts);
 }
 
 function mapStopReason(reason: ChatCompletionChunk.Choice["finish_reason"] | string): {

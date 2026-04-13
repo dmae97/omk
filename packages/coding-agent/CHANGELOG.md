@@ -1,9 +1,9 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
+- Changed the `vim` tool API to require either `open: "path"` or `kbd: [...]` per call and removed direct `line`/`col` cursor parameters from `open`, so callers must position the cursor via key sequences after opening
 - Changed the `edit` schemas for patch, replace, hashline, and chunk modes from top-level request fields to `edits` array entries, requiring path/mode details on each edit and breaking callers that send legacy top-level `path`, `old_text`, `new_text`, `op`, `move`, or `delete` payloads
 
 ### Added
@@ -16,6 +16,7 @@
 
 ### Changed
 
+- Changed the `task` tool `schema` field to require JSON-encoded JTD schema text instead of a schema object, matching prompt guidance and task-subagent invocation
 - Changed chunk edit payloads to encode selectors as `path: "file:selector"` and updated chunk tool guidance and examples to match
 - Updated `edit` call/result rendering to show per-file diff sections and append a `(+N more)` hint when edits target multiple files
 - Grouped chunk-mode `grep` results by directory, file, and chunk so directory searches now render as hierarchical sections (`#`/`##`) with per-chunk anchor lines
@@ -24,6 +25,7 @@
 
 ### Fixed
 
+- Fixed OpenRouter model resolution to accept dated routed selectors such as `openrouter/z-ai/glm-4.7-20251222:nitro`, inheriting metadata from the base catalog model when the exact variant is not listed yet
 - Fixed pre-execution edit preview routing so replace/patch/hashline mode diffs are computed from the new structured edit entries
 - Adjusted chunk/hashline/prompt guidance and validation to align with the refactored per-entry schema
 - Fixed chunk streaming output detection to verify chunk edits with `chunkToolEditSchema`, preventing non-chunk edit payloads from being rendered as chunk diffs

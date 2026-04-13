@@ -82,9 +82,9 @@ const createTaskSchema = (options: { isolationEnabled: boolean }) => {
 			}),
 		),
 		schema: Type.Optional(
-			Type.Record(Type.String(), Type.Unknown(), {
+			Type.String({
 				description:
-					"JTD schema defining expected response structure. Use typed properties. Output format belongs here — never in context or assignment.",
+					"JSON-encoded JTD schema defining expected response structure. Output format belongs here — never in context or assignment.",
 			}),
 		),
 		tasks: Type.Array(taskItemSchema, {

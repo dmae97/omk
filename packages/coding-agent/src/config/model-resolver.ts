@@ -62,6 +62,101 @@ export function formatModelSelectorValue(selector: string, thinkingLevel: Thinki
 	return thinkingLevel && thinkingLevel !== ThinkingLevel.Inherit ? `${selector}:${thinkingLevel}` : selector;
 }
 
+function getOpenRouterRouteSuffix(modelId: string): { baseId: string; suffix: string } | undefined {
+	const colonIdx = modelId.lastIndexOf(":");
+	if (colonIdx === -1) {
+		return undefined;
+	}
+
+	const suffix = modelId.slice(colonIdx + 1).trim();
+	if (!suffix || parseThinkingLevel(suffix)) {
+		return undefined;
+	}
+
+	return { baseId: modelId.slice(0, colonIdx), suffix };
+}
+
+function stripOpenRouterDateSuffix(modelId: string): string | undefined {
+	const stripped = modelId.replace(/-\d{8}(?=$|:)/i, "");
+	return stripped !== modelId ? stripped : undefined;
+}
+
+function getOpenRouterFallbackModelIds(modelId: string): string[] {
+	const orderedCandidates: string[] = [];
+	const queue = [modelId];
+	const seen = new Set<string>();
+
+	while (queue.length > 0) {
+		const candidate = queue.shift();
+		if (!candidate || seen.has(candidate)) {
+			continue;
+		}
+		seen.add(candidate);
+		orderedCandidates.push(candidate);
+
+		const routedSuffix = getOpenRouterRouteSuffix(candidate);
+		if (routedSuffix) {
+			queue.push(routedSuffix.baseId);
+		}
+
+		const strippedDate = stripOpenRouterDateSuffix(candidate);
+		if (strippedDate) {
+			queue.push(strippedDate);
+		}
+	}
+
+	return orderedCandidates;
+}
+
+function cloneModelWithRequestedId(model: Model<Api>, requestedId: string): Model<Api> {
+	return {
+		...model,
+		id: requestedId,
+		...(model.name === model.id ? { name: requestedId } : {}),
+	};
+}
+
+export function resolveProviderModelReference(
+	provider: string,
+	modelId: string,
+	availableModels: readonly Model<Api>[],
+): Model<Api> | undefined {
+	const normalizedProvider = provider.trim().toLowerCase();
+	const normalizedModelId = modelId.trim().toLowerCase();
+	if (!normalizedProvider || !normalizedModelId) {
+		return undefined;
+	}
+
+	const exactMatches = availableModels.filter(
+		model => model.provider.toLowerCase() === normalizedProvider && model.id.toLowerCase() === normalizedModelId,
+	);
+	if (exactMatches.length === 1) {
+		return exactMatches[0];
+	}
+	if (exactMatches.length > 1) {
+		return undefined;
+	}
+
+	if (normalizedProvider !== "openrouter") {
+		return undefined;
+	}
+
+	for (const fallbackId of getOpenRouterFallbackModelIds(modelId).slice(1)) {
+		const baseMatches = availableModels.filter(
+			model =>
+				model.provider.toLowerCase() === normalizedProvider && model.id.toLowerCase() === fallbackId.toLowerCase(),
+		);
+		if (baseMatches.length === 1) {
+			return cloneModelWithRequestedId(baseMatches[0], modelId);
+		}
+		if (baseMatches.length > 1) {
+			return undefined;
+		}
+	}
+
+	return undefined;
+}
+
 export interface ModelMatchPreferences {
 	/** Most-recently-used model keys (provider/modelId) to prefer when ambiguous. */
 	usageOrder?: string[];
@@ -171,17 +266,7 @@ export function findExactModelReferenceMatch(
 		const provider = trimmedReference.substring(0, slashIndex).trim();
 		const modelId = trimmedReference.substring(slashIndex + 1).trim();
 		if (provider && modelId) {
-			const providerMatches = availableModels.filter(
-				model =>
-					model.provider.toLowerCase() === provider.toLowerCase() &&
-					model.id.toLowerCase() === modelId.toLowerCase(),
-			);
-			if (providerMatches.length === 1) {
-				return providerMatches[0];
-			}
-			if (providerMatches.length > 1) {
-				return undefined;
-			}
+			return resolveProviderModelReference(provider, modelId, availableModels);
 		}
 	}
 	return undefined;
@@ -853,10 +938,8 @@ export function resolveCliModel(options: {
 		let exact: (typeof availableModels)[number] | undefined;
 		if (slashIdx !== -1) {
 			const prefix = lower.substring(0, slashIdx);
-			const suffix = lower.substring(slashIdx + 1);
-			exact = availableModels.find(
-				model => model.provider.toLowerCase() === prefix && model.id.toLowerCase() === suffix,
-			);
+			const suffix = trimmedModel.substring(slashIdx + 1);
+			exact = resolveProviderModelReference(prefix, suffix, availableModels);
 		}
 		if (!exact && !trimmedModel.includes(":")) {
 			const canonicalMatch = modelRegistry.resolveCanonicalModel?.(trimmedModel, { availableOnly: false });
@@ -902,6 +985,19 @@ export function resolveCliModel(options: {
 		const prefix = `${provider}/`;
 		if (cliModel.toLowerCase().startsWith(prefix.toLowerCase())) {
 			pattern = cliModel.substring(prefix.length);
+		}
+	}
+
+	if (provider) {
+		const exactProviderMatch = resolveProviderModelReference(provider, pattern, availableModels);
+		if (exactProviderMatch) {
+			return {
+				model: exactProviderMatch,
+				selector: formatModelString(exactProviderMatch),
+				warning: undefined,
+				thinkingLevel: undefined,
+				error: undefined,
+			};
 		}
 	}
 
