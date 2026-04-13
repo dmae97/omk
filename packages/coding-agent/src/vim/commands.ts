@@ -133,5 +133,24 @@ export function parseExCommand(input: string): VimExCommand {
 		};
 	}
 
+	if (rest.startsWith("t ") || /^t\d/.test(rest) || rest.startsWith("copy ") || /^copy\d/.test(rest)) {
+		const destStr = rest.startsWith("copy") ? rest.slice(4).trim() : rest.slice(1).trim();
+		const destination = parseInt(destStr, 10);
+		if (Number.isNaN(destination)) throw new VimInputError("Invalid destination for :copy");
+		return { kind: "copy", range, destination };
+	}
+
+	if (rest.startsWith("m ") || /^m\d/.test(rest) || rest.startsWith("move ") || /^move\d/.test(rest)) {
+		const destStr = rest.startsWith("move") ? rest.slice(4).trim() : rest.slice(1).trim();
+		const destination = parseInt(destStr, 10);
+		if (Number.isNaN(destination)) throw new VimInputError("Invalid destination for :move");
+		return { kind: "move", range, destination };
+	}
+
+	if (rest === "sort" || rest.startsWith("sort ") || rest.startsWith("sort!")) {
+		const flags = rest.slice(4).trim();
+		return { kind: "sort", range: range ?? undefined, flags };
+	}
+
 	throw new VimInputError(`Unsupported ex command: ${input}`);
 }

@@ -249,6 +249,7 @@ export class VimEngine {
 	selectionAnchor: Position | null = null;
 	register: VimRegister = { kind: "char", text: "" };
 	lastSearch: VimSearchState | null = null;
+	lastCharFind: { char: string; mode: "f" | "F" | "t" | "T" } | null = null;
 	lastCommand?: string;
 	statusMessage?: string;
 	diagnostics?: FileDiagnosticsResult;
@@ -278,6 +279,7 @@ export class VimEngine {
 		next.selectionAnchor = this.selectionAnchor ? clonePosition(this.selectionAnchor) : null;
 		next.register = { ...this.register };
 		next.lastSearch = this.lastSearch ? { ...this.lastSearch } : null;
+		next.lastCharFind = this.lastCharFind ? { ...this.lastCharFind } : null;
 		next.lastCommand = this.lastCommand;
 		next.statusMessage = this.statusMessage;
 		next.diagnostics = this.diagnostics;
@@ -801,7 +803,8 @@ export class VimEngine {
 			case "0":
 			case "$":
 			case "^":
-			case "g":
+			case ";":
+			case ",":
 			case "G":
 			case "f":
 			case "F":
@@ -1016,6 +1019,63 @@ export class VimEngine {
 					col: this.buffer.cursor.col,
 				});
 				return nextIndex + 1;
+			case "Esc":
+				return nextIndex + 1;
+			case "Y": {
+				const start = this.buffer.cursor.line;
+				const end = this.buffer.clampLine(start + count - 1);
+				this.register = { kind: "line", text: this.buffer.lines.slice(start, end + 1).join("\n") };
+				this.statusMessage = `Yanked ${end - start + 1} line${end === start ? "" : "s"}`;
+				return nextIndex + 1;
+			}
+			case "R":
+				await this.#startInsertChange(["R"], undefined, false);
+				return nextIndex + 1;
+			case "g": {
+				const gNext = tokens[nextIndex + 1];
+				if (!gNext) {
+					throw new VimError("g requires a second key", token);
+				}
+				if (gNext.value === "g") {
+					this.buffer.setCursor({ line: hasCount ? Math.max(0, count - 1) : 0, col: 0 });
+					return nextIndex + 2;
+				}
+				if (gNext.value === "U" || gNext.value === "u") {
+					const caseOp = gNext.value;
+					const {
+						count: motionCount,
+						hasCount: hasMotionCount,
+						nextIndex: motionStart,
+					} = this.#readCount(tokens, nextIndex + 2);
+					const motionToken = tokens[motionStart];
+					if (!motionToken) {
+						throw new VimError(`g${caseOp} requires a motion`, gNext);
+					}
+					if ((motionToken.value === "U" && caseOp === "U") || (motionToken.value === "u" && caseOp === "u")) {
+						const effectiveCount = hasMotionCount ? count * motionCount : count;
+						await this.#applyAtomicChange(["g", caseOp, motionToken.value], () => {
+							const start = this.buffer.cursor.line;
+							const end = this.buffer.clampLine(start + effectiveCount - 1);
+							for (let line = start; line <= end; line++) {
+								const content = this.buffer.getLine(line);
+								this.buffer.replaceLine(line, caseOp === "U" ? content.toUpperCase() : content.toLowerCase());
+							}
+						});
+						return motionStart + 1;
+					}
+					const effectiveCount = hasMotionCount ? count * motionCount : count;
+					const motion = this.#resolveMotion(tokens, motionStart, effectiveCount, hasCount || hasMotionCount);
+					const range = this.#resolveMotionRange(motion);
+					await this.#applyAtomicChange(["g", caseOp], () => {
+						const text = this.buffer.getText();
+						const slice = text.slice(range.start, range.end);
+						const transformed = caseOp === "U" ? slice.toUpperCase() : slice.toLowerCase();
+						this.buffer.replaceOffsets(range.start, range.end, transformed, range.start);
+					});
+					return motion.nextIndex;
+				}
+				throw new VimError(`Unsupported g command: g${gNext.display}`, gNext);
+			}
 			default:
 				throw new VimError(`Unsupported command: ${token.display}`, token);
 		}
@@ -1335,6 +1395,7 @@ export class VimEngine {
 				if (!searchToken || searchToken.value.length !== 1) {
 					throw new VimError(`${token.value} requires a literal character`, token);
 				}
+				this.lastCharFind = { char: searchToken.value, mode: token.value as "f" | "F" | "t" | "T" };
 				const line = this.buffer.getLine(this.buffer.cursor.line);
 				const cursorCol = this.buffer.cursor.col;
 				let matchIndex = -1;
@@ -1404,6 +1465,44 @@ export class VimEngine {
 					target: { line: Math.max(0, this.viewportStart - 1 + 39), col: 0 },
 					linewise: true,
 				};
+			case ";":
+			case ",": {
+				if (!this.lastCharFind) {
+					throw new VimError("No previous character search", token);
+				}
+				let mode = this.lastCharFind.mode;
+				if (token.value === ",") {
+					const reverseMap: Record<string, "f" | "F" | "t" | "T"> = { f: "F", F: "f", t: "T", T: "t" };
+					mode = reverseMap[mode]!;
+				}
+				const line = this.buffer.getLine(this.buffer.cursor.line);
+				const cursorCol = this.buffer.cursor.col;
+				let matchIndex = -1;
+				if (mode === "f" || mode === "t") {
+					let start = cursorCol + 1;
+					for (let step = 0; step < count; step += 1) {
+						matchIndex = line.indexOf(this.lastCharFind.char, start);
+						if (matchIndex === -1) break;
+						start = matchIndex + 1;
+					}
+					if (matchIndex !== -1 && mode === "t") matchIndex -= 1;
+				} else {
+					let start = Math.max(0, cursorCol - 1);
+					for (let step = 0; step < count; step += 1) {
+						matchIndex = line.lastIndexOf(this.lastCharFind.char, start);
+						if (matchIndex === -1) break;
+						start = matchIndex - 1;
+					}
+					if (matchIndex !== -1 && mode === "T") matchIndex += 1;
+				}
+				if (matchIndex === -1) {
+					throw new VimError(`Character not found: ${this.lastCharFind.char}`, token);
+				}
+				return {
+					nextIndex: index + 1,
+					target: { line: this.buffer.cursor.line, col: Math.max(0, matchIndex) },
+				};
+			}
 			default:
 				throw new VimError(`Unsupported motion: ${token.display}`, token);
 		}
@@ -1707,6 +1806,59 @@ export class VimEngine {
 					this.register = { kind: "line", text: removed.join("\n") };
 				});
 				this.statusMessage = `Deleted ${range.end - range.start + 1} line${range.end === range.start ? "" : "s"}`;
+				return;
+			}
+			case "copy": {
+				const totalLines = this.buffer.lineCount();
+				const range =
+					command.range === "all"
+						? { start: 1, end: totalLines }
+						: (command.range ?? { start: this.buffer.cursor.line + 1, end: this.buffer.cursor.line + 1 });
+				const dest = Math.max(0, Math.min(command.destination, totalLines));
+				await this.#applyAtomicChange([":copy"], () => {
+					const lines = this.buffer.lines.slice(range.start - 1, range.end);
+					this.buffer.insertLines(dest, lines);
+				});
+				this.statusMessage = `Copied ${range.end - range.start + 1} line${range.end === range.start ? "" : "s"}`;
+				return;
+			}
+			case "move": {
+				const totalLines = this.buffer.lineCount();
+				const range =
+					command.range === "all"
+						? { start: 1, end: totalLines }
+						: (command.range ?? { start: this.buffer.cursor.line + 1, end: this.buffer.cursor.line + 1 });
+				const dest = Math.max(0, Math.min(command.destination, totalLines));
+				await this.#applyAtomicChange([":move"], () => {
+					const lines = this.buffer.lines.splice(range.start - 1, range.end - range.start + 1);
+					const adjustedDest = dest > range.end - 1 ? dest - lines.length : dest;
+					this.buffer.lines.splice(adjustedDest, 0, ...lines);
+					if (this.buffer.lines.length === 0) this.buffer.lines = [""];
+					this.buffer.setCursor({ line: adjustedDest, col: 0 });
+				});
+				this.statusMessage = `Moved ${range.end - range.start + 1} line${range.end === range.start ? "" : "s"}`;
+				return;
+			}
+			case "sort": {
+				const totalLines = this.buffer.lineCount();
+				const range = command.range === "all" || !command.range ? { start: 1, end: totalLines } : command.range;
+				const startLine = Math.max(1, Math.min(range.start, totalLines));
+				const endLine = Math.max(startLine, Math.min(range.end, totalLines));
+				const reverse = command.flags.includes("!");
+				const ignoreCase = command.flags.includes("i");
+				await this.#applyAtomicChange([":sort"], () => {
+					const slice = this.buffer.lines.slice(startLine - 1, endLine);
+					slice.sort((a, b) => {
+						const left = ignoreCase ? a.toLowerCase() : a;
+						const right = ignoreCase ? b.toLowerCase() : b;
+						return left < right ? -1 : left > right ? 1 : 0;
+					});
+					if (reverse) slice.reverse();
+					for (let i = 0; i < slice.length; i++) {
+						this.buffer.lines[startLine - 1 + i] = slice[i]!;
+					}
+				});
+				this.statusMessage = `Sorted ${endLine - startLine + 1} line${endLine === startLine ? "" : "s"}`;
 				return;
 			}
 		}
