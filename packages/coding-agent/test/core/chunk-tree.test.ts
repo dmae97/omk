@@ -106,8 +106,12 @@ const CHUNK_PATH_DRIFT = [
 	["variant_", "vrnt_"],
 	["Service", "Servic"],
 	["Handler", "Handle"],
+	["handleError", "handle"],
+	["Greeter", "Greete"],
 	["LogLevel", "LogLev"],
 	["DefaultServer", "Defaul"],
+	["operator_", "oper_"],
+	["section_", "sect_"],
 ] as const;
 
 function chunkPathVariants(chunkPath: string): string[] {
@@ -1093,9 +1097,9 @@ describe("blank-line cleanup", () => {
 			commentedSource,
 		);
 
-		// Deletion of the last child currently preserves the separating blank line before the closing delimiter.
-		expect(result.diffSourceAfter).toContain("\t}\n\n}");
-		expect(result.diffSourceAfter).not.toContain("\t}\n}");
+		// Deletion of the last child now collapses the separating blank line before the closing delimiter.
+		expect(result.diffSourceAfter).toContain("\t}\n}");
+		expect(result.diffSourceAfter).not.toContain("\t}\n\n}");
 	});
 });
 
@@ -1186,9 +1190,9 @@ describe("embedded-language chunking", () => {
 		const state = ChunkState.parse(source, "markdown");
 		const chunkPaths = state.chunks().map(chunk => chunk.path);
 
-		expect(chunkPaths).toContain("section_Title.chunk_1");
-		expect(chunkPaths).toContain("section_Title.chunk_2");
-		expect(chunkPaths).not.toContain("section_Title.chunk_2.fn_hello");
+		expect(chunkPaths).toContain("sect_Title.chunk");
+		expect(chunkPaths).toContain("sect_Title.code_js");
+		expect(chunkPaths).toContain("sect_Title.code_js.fn_hello");
 	});
 
 	test("html script content currently stays on the host tag chunk", () => {
@@ -1198,7 +1202,7 @@ describe("embedded-language chunking", () => {
 			.map(chunk => chunk.path);
 
 		expect(chunkPaths).toContain("tag_div");
-		expect(chunkPaths).not.toContain("tag_div.script");
+		expect(chunkPaths).toContain("tag_div.script");
 	});
 });
 
@@ -1230,8 +1234,11 @@ describe("tlaplus chunk rendering", () => {
 		const state = ChunkState.parse(tlaplusSource, "tlaplus");
 		const initChunk = state
 			.chunks()
-			.find((chunk: { path: string; checksum: string }) => chunk.path.endsWith("operator_Init"));
-		if (!initChunk) throw new Error("Expected operator_Init chunk in tlaplus fixture");
+			.find(
+				(chunk: { path: string; checksum: string }) =>
+					chunk.path.endsWith("oper_Init") || chunk.path.endsWith("operator_Init"),
+			);
+		if (!initChunk) throw new Error("Expected operator_Init/oper_Init chunk in tlaplus fixture");
 
 		const result = applyChunkEdits({
 			source: tlaplusSource,
@@ -1250,7 +1257,7 @@ describe("tlaplus chunk rendering", () => {
 		expect(result.diffSourceAfter).toContain("Start == x = 0");
 		// The scoped response tree includes the touched chunk and adjacent siblings,
 		// but not distant translated chunks. Translation content must still stay hidden.
-		expect(result.responseText).toContain("mod_Spec.operator_Start#");
+		expect(result.responseText).toMatch(/mod_Spec\.oper(?:ator)?_Start#/);
 		expect(result.responseText).not.toContain("Next == pc' = pc");
 	});
 });

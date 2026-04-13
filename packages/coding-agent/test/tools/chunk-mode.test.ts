@@ -61,8 +61,8 @@ ${ret}
   }`;
 }
 
-const HANDLE_ERROR_CHUNK_PATH = "class_Server.fn_handleError";
-const CONTRIBUTING_BUILD_SECTION_PATH = "section_Contributing_to_uLua.section_Building_and_Testing";
+const HANDLE_ERROR_CHUNK_PATH = "class_Server.fn_handle";
+const CONTRIBUTING_BUILD_SECTION_PATH = "sect_Contri.sect_Buildi";
 
 describe("chunk mode tools", () => {
 	let tmpDir: string;
@@ -244,9 +244,9 @@ describe("chunk mode tools", () => {
 		const text = getText(result);
 
 		expect(text).toContain("guide.md·");
-		expect(text).toContain("section_Title.chunk_2#");
+		expect(text).toContain("sect_Title.code_js#");
 		expect(text).toContain("function hello(name) {");
-		expect(text).not.toContain("fn_hello#");
+		expect(text).toContain("fn_hello#");
 	});
 
 	it("maps Handlebars and TLA+ file extensions for chunk mode", () => {
@@ -329,7 +329,7 @@ describe("chunk mode tools", () => {
 		const text = getText(result);
 		const updatedSource = await Bun.file(filePath).text();
 
-		expect(updatedSource).toContain('  handle(): void {\n    if (flag) {\n  console.log("tabbed");\n    }\n  }\n');
+		expect(updatedSource).toContain('    handle(): void {\n      if (flag) {\n  \tconsole.log("tabbed");\n      }\n    }\n');
 		expect(updatedSource).not.toContain('console.log("old")');
 		expect(text).toContain('console.log("tabbed")');
 	});
@@ -743,7 +743,7 @@ describe("chunk mode tools", () => {
 				path: filePath,
 				edits: [{ sel: "class_Server.fn_missing", op: "before", content: "  noop(): void {}" }],
 			}),
-		).rejects.toThrow(/Direct children of "class_Server":\n└── \.fn_handleError#[A-Z]{4}\s+L\d+-L\d+/);
+		).rejects.toThrow(/Direct children of "class_Server":\n└── \.fn_handle#[A-Z]{4}\s+L\d+-L\d+/);
 	});
 
 	it("reports file-not-found distinctly from chunk-not-found on edits", async () => {
