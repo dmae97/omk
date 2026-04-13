@@ -557,7 +557,7 @@ function normalizeChunkEditOperations(edits: ChunkToolEdit[]): ChunkEditOperatio
 	return edits.map((edit): ChunkEditOperation => {
 		const { selector } = parseChunkEditPath(edit.path);
 		// When multiple ops are present (model confusion), pick the most substantive one.
-		// insert with real body > replace with real old/new > write string > write null (delete)
+		// insert with real body > replace with real old/new > write string > delete
 		const hasInsert = edit.insert && edit.insert.body.length > 0;
 		const hasReplace = edit.replace && (edit.replace.old.length > 0 || edit.replace.new.length > 0);
 		if (hasInsert) {
@@ -567,11 +567,11 @@ function normalizeChunkEditOperations(edits: ChunkToolEdit[]): ChunkEditOperatio
 		if (hasReplace) {
 			return { op: "replace", sel: selector, content: edit.replace!.new, find: edit.replace!.old };
 		}
-		// write: null = explicit delete; write: undefined = no op specified (also delete)
-		if (edit.write == null) {
-			return { op: "delete", sel: selector };
+		if (typeof edit.write === "string") {
+			return { op: "put", sel: selector, content: edit.write };
 		}
-		return { op: "put", sel: selector, content: edit.write };
+		// write: null or no op specified → delete
+		return { op: "delete", sel: selector };
 	});
 }
 
