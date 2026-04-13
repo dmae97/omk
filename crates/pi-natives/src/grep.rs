@@ -1509,17 +1509,17 @@ fn grep_sync(
 			&ct,
 		)?
 	} else if use_cache {
-		let scan = fs_cache::get_or_scan(&search_path, include_hidden, use_gitignore, &ct)?;
+		let scan = fs_cache::get_or_scan(&search_path, include_hidden, use_gitignore, true, &ct)?;
 		let mut entries =
 			collect_files(&search_path, &scan.entries, glob_set.as_ref(), type_filter.as_ref());
 		if entries.is_empty() && scan.cache_age_ms >= fs_cache::empty_recheck_ms() {
 			let fresh =
-				fs_cache::force_rescan(&search_path, include_hidden, use_gitignore, true, &ct)?;
+				fs_cache::force_rescan(&search_path, include_hidden, use_gitignore, true, true, &ct)?;
 			entries = collect_files(&search_path, &fresh, glob_set.as_ref(), type_filter.as_ref());
 		}
 		entries
 	} else {
-		let fresh = fs_cache::force_rescan(&search_path, include_hidden, use_gitignore, false, &ct)?;
+		let fresh = fs_cache::force_rescan(&search_path, include_hidden, use_gitignore, true, false, &ct)?;
 		collect_files(&search_path, &fresh, glob_set.as_ref(), type_filter.as_ref())
 	};
 	// Check cancellation before heavy work

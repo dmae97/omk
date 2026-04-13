@@ -239,8 +239,9 @@ fn run_glob(
 	{
 		collect_files_from_picker(&config.root, &glob_set, &config, db, on_match, &ct)?
 	} else if config.use_cache {
+		let skip_node_modules = !config.mentions_node_modules;
 		let scan =
-			fs_cache::get_or_scan(&config.root, config.include_hidden, config.use_gitignore, &ct)?;
+			fs_cache::get_or_scan(&config.root, config.include_hidden, config.use_gitignore, skip_node_modules, &ct)?;
 		let mut matches = filter_entries(&scan.entries, &glob_set, &config, on_match, &ct)?;
 		// Empty-result recheck: if we got zero matches from a cached scan that's old
 		// enough, force a rescan and try once more before returning empty.
@@ -249,6 +250,7 @@ fn run_glob(
 				&config.root,
 				config.include_hidden,
 				config.use_gitignore,
+				skip_node_modules,
 				true,
 				&ct,
 			)?;
@@ -256,10 +258,12 @@ fn run_glob(
 		}
 		matches
 	} else {
+		let skip_node_modules = !config.mentions_node_modules;
 		let fresh = fs_cache::force_rescan(
 			&config.root,
 			config.include_hidden,
 			config.use_gitignore,
+			skip_node_modules,
 			false,
 			&ct,
 		)?;

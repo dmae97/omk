@@ -369,7 +369,8 @@ fn collect_candidates(
 
 	let glob_set = glob_util::try_compile_glob(glob, false)?;
 	let mentions_node_modules = glob.is_some_and(|value| value.contains("node_modules"));
-	let scan = fs_cache::get_or_scan(&search_path, true, true, ct)?;
+	let skip_node_modules = !mentions_node_modules;
+	let scan = fs_cache::get_or_scan(&search_path, true, true, skip_node_modules, ct)?;
 	let mut files = collect_from_entries(
 		&search_path,
 		&scan.entries,
@@ -379,7 +380,7 @@ fn collect_candidates(
 	)?;
 
 	if files.is_empty() && scan.cache_age_ms >= fs_cache::empty_recheck_ms() {
-		let fresh = fs_cache::force_rescan(&search_path, true, true, true, ct)?;
+		let fresh = fs_cache::force_rescan(&search_path, true, true, skip_node_modules, true, ct)?;
 		files =
 			collect_from_entries(&search_path, &fresh, glob_set.as_ref(), mentions_node_modules, ct)?;
 	}

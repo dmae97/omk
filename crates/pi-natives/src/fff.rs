@@ -280,7 +280,7 @@ fn fuzzy_find_sync(
 	let query = config.query.trim().to_string();
 	let use_cache = config.cache.unwrap_or(false);
 	if use_cache {
-		let scan = fs_cache::get_or_scan(&root, include_hidden, respect_gitignore, &ct)?;
+		let scan = fs_cache::get_or_scan(&root, include_hidden, respect_gitignore, true, &ct)?;
 		let mut results = run_fff_search(
 			&root,
 			&scan.entries,
@@ -295,7 +295,7 @@ fn fuzzy_find_sync(
 			&& !query.is_empty()
 			&& scan.cache_age_ms >= fs_cache::empty_recheck_ms()
 		{
-			let fresh = fs_cache::force_rescan(&root, include_hidden, respect_gitignore, true, &ct)?;
+			let fresh = fs_cache::force_rescan(&root, include_hidden, respect_gitignore, true, true, &ct)?;
 			results = run_fff_search(
 				&root,
 				&fresh,
@@ -310,7 +310,7 @@ fn fuzzy_find_sync(
 		return Ok(results);
 	}
 
-	let fresh = fs_cache::force_rescan(&root, include_hidden, respect_gitignore, false, &ct)?;
+	let fresh = fs_cache::force_rescan(&root, include_hidden, respect_gitignore, true, false, &ct)?;
 	run_fff_search(&root, &fresh, &query, max_results, include_hidden, respect_gitignore, db, &ct)
 }
 
