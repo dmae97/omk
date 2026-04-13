@@ -308,6 +308,9 @@ describe("lsp regressions", () => {
 				messageBuffer: new Uint8Array(),
 				isReading: false,
 				lastActivity: Date.now(),
+				activeProgressTokens: new Set(),
+				projectLoaded: Promise.resolve(),
+				resolveProjectLoaded: () => {},
 			};
 
 			vi.spyOn(lspConfig, "loadConfig").mockReturnValue({ servers: {}, idleTimeoutMs: undefined });

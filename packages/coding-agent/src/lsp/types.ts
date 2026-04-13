@@ -411,6 +411,12 @@ export interface LspClient {
 	isReading: boolean;
 	serverCapabilities?: LspServerCapabilities;
 	lastActivity: number;
+	/** Tracks active work-done progress tokens from the server */
+	activeProgressTokens: Set<string | number>;
+	/** Resolves when the server's initial project loading completes (or after timeout) */
+	projectLoaded: Promise<void>;
+	/** Call to signal that project loading has completed */
+	resolveProjectLoaded: () => void;
 }
 
 // =============================================================================

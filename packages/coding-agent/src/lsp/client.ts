@@ -136,6 +136,9 @@ const CLIENT_CAPABILITIES = {
 			dataSupport: true,
 		},
 	},
+	window: {
+		workDoneProgress: true,
+	},
 	workspace: {
 		applyEdit: true,
 		workspaceEdit: {
@@ -267,6 +270,16 @@ async function startMessageReader(client: LspClient): Promise<void> {
 							version: params.version ?? null,
 						});
 						client.diagnosticsVersion += 1;
+					} else if (message.method === "$/progress" && message.params) {
+						const params = message.params as { token: string | number; value?: { kind?: string } };
+						if (params.value?.kind === "begin") {
+							client.activeProgressTokens.add(params.token);
+						} else if (params.value?.kind === "end") {
+							client.activeProgressTokens.delete(params.token);
+							if (client.activeProgressTokens.size === 0) {
+								client.resolveProjectLoaded();
+							}
+						}
 					}
 				}
 
@@ -338,6 +351,13 @@ async function handleServerRequest(client: LspClient, message: LspJsonRpcRequest
 		await handleApplyEditRequest(client, message);
 		return;
 	}
+	if (message.method === "window/workDoneProgress/create") {
+		// Accept progress token registration from the server
+		if (typeof message.id === "number") {
+			await sendResponse(client, message.id, null, message.method);
+		}
+		return;
+	}
 	if (typeof message.id !== "number") return;
 	await sendResponse(client, message.id, null, message.method, {
 		code: -32601,
@@ -374,6 +394,9 @@ async function sendResponse(
 
 /** Timeout for warmup initialize requests (5 seconds) */
 export const WARMUP_TIMEOUT_MS = 5000;
+
+/** Max time to wait for the server to report project loading completion via $/progress */
+const PROJECT_LOAD_TIMEOUT_MS = 15_000;
 
 /**
  * Get or create an LSP client for the given server configuration and working directory.
@@ -413,6 +436,18 @@ export async function getOrCreateClient(config: ServerConfig, cwd: string, initT
 			env: env ? { ...Bun.env, ...env } : undefined,
 		});
 
+		let resolveProjectLoaded!: () => void;
+		const projectLoaded = new Promise<void>(resolve => {
+			resolveProjectLoaded = resolve;
+		});
+		// Auto-resolve after timeout in case server doesn't use progress tokens
+		const projectLoadTimeout = setTimeout(resolveProjectLoaded, PROJECT_LOAD_TIMEOUT_MS);
+		const originalResolve = resolveProjectLoaded;
+		resolveProjectLoaded = () => {
+			clearTimeout(projectLoadTimeout);
+			originalResolve();
+		};
+
 		const client: LspClient = {
 			name: key,
 			cwd,
@@ -426,6 +461,9 @@ export async function getOrCreateClient(config: ServerConfig, cwd: string, initT
 			messageBuffer: new Uint8Array(0),
 			isReading: false,
 			lastActivity: Date.now(),
+			activeProgressTokens: new Set(),
+			projectLoaded,
+			resolveProjectLoaded,
 		};
 		clients.set(key, client);
 
@@ -433,6 +471,7 @@ export async function getOrCreateClient(config: ServerConfig, cwd: string, initT
 		proc.exited.then(() => {
 			clients.delete(key);
 			clientLocks.delete(key);
+			client.resolveProjectLoaded();
 
 			// Reject any pending requests — the server is gone, they will never complete.
 			if (client.pendingRequests.size > 0) {
@@ -552,6 +591,19 @@ export async function ensureFileOpen(client: LspClient, filePath: string, signal
 	} finally {
 		fileOperationLocks.delete(lockKey);
 	}
+}
+
+/**
+ * Wait for the server's initial project loading to complete.
+ * Races the server's $/progress tracking against the abort signal.
+ * Returns immediately if loading already completed or timed out.
+ */
+export async function waitForProjectLoaded(client: LspClient, signal?: AbortSignal): Promise<void> {
+	if (signal?.aborted) return;
+	await Promise.race([
+		client.projectLoaded,
+		...(signal ? [new Promise<void>(resolve => signal.addEventListener("abort", () => resolve(), { once: true }))] : []),
+	]);
 }
 
 /**
