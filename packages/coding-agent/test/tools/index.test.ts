@@ -67,6 +67,20 @@ describe("createTools", () => {
 		expect(names).toContain("web_search");
 		expect(names).toContain("exit_plan_mode");
 		expect(names).not.toContain("fetch");
+		expect(names).not.toContain("vim");
+	});
+
+	it("exposes vim instead of edit when vim edit mode is active", async () => {
+		const session = createTestSession({
+			settings: createSettingsWithOverrides({
+				"edit.mode": "vim",
+			}),
+		});
+		const tools = await createTools(session);
+		const names = tools.map(t => t.name);
+
+		expect(names).toContain("vim");
+		expect(names).not.toContain("edit");
 	});
 
 	it("includes bash and python when python mode is both", async () => {
@@ -133,6 +147,18 @@ describe("createTools", () => {
 		const names = tools.map(t => t.name);
 
 		expect(names).toEqual(["read", "write", "exit_plan_mode"]);
+	});
+
+	it("maps requested edit to vim when vim edit mode is active", async () => {
+		const session = createTestSession({
+			settings: createSettingsWithOverrides({
+				"edit.mode": "vim",
+			}),
+		});
+		const tools = await createTools(session, ["read", "edit"]);
+		const names = tools.map(t => t.name);
+
+		expect(names).toEqual(["read", "vim", "exit_plan_mode", "ast_edit"]);
 	});
 
 	it("lowercases requested tool subset", async () => {

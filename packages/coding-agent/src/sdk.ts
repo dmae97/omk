@@ -133,6 +133,12 @@ import { ToolContextStore } from "./tools/context";
 import { getGeminiImageTools } from "./tools/gemini-image";
 import { wrapToolWithMetaNotice } from "./tools/output-meta";
 import { queueResolveHandler } from "./tools/resolve";
+import {
+	filterInactiveEditToolName,
+	normalizeToolNamesForEditMode,
+	resolveEditToolName,
+	resolveInactiveEditToolName,
+} from "./utils/edit-mode";
 import { EventBus } from "./utils/event-bus";
 import { buildNamedToolChoice } from "./utils/tool-choice";
 
@@ -898,12 +904,23 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 	try {
 		const searchDb = options.searchDb ?? new SearchDb(getSearchDbDir(agentDir));
+		const getActiveModelString = (): string | undefined => {
+			const activeModel = agent?.state.model;
+			if (activeModel) return formatModelString(activeModel);
+			if (model) return formatModelString(model);
+			return undefined;
+		};
+		const editModeSession = {
+			settings,
+			getActiveModelString,
+		} as const;
 		const toolSession: ToolSession = {
 			cwd,
 			hasUI: options.hasUI ?? false,
 			enableLsp,
 			get hasEditTool() {
-				return !options.toolNames || options.toolNames.includes("edit");
+				const requestedToolNames = normalizeToolNamesForEditMode(options.toolNames, editModeSession);
+				return !requestedToolNames || requestedToolNames.includes(resolveEditToolName(editModeSession));
 			},
 			skipPythonPreflight: options.skipPythonPreflight,
 			forcePythonWarmup: options.forcePythonWarmup,
@@ -921,13 +938,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			getSessionId: () => sessionManager.getSessionId?.() ?? null,
 			getSessionSpawns: () => options.spawns ?? "*",
 			getModelString: () => (hasExplicitModel && model ? formatModelString(model) : undefined),
-			getActiveModelString: () => {
-				const activeModel = agent?.state.model;
-				if (activeModel) return formatModelString(activeModel);
-				// Fall back to initial model during tool creation (before agent exists)
-				if (model) return formatModelString(model);
-				return undefined;
-			},
+			getActiveModelString,
 			getPlanModeState: () => session.getPlanModeState(),
 			getCompactContext: () => session.formatCompactContext(),
 			getTodoPhases: () => session.getTodoPhases(),
@@ -1247,6 +1258,17 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		for (const tool of builtinTools) {
 			toolRegistry.set(tool.name, tool);
 		}
+		const inactiveEditToolName = resolveInactiveEditToolName(editModeSession);
+		if (!toolRegistry.has(inactiveEditToolName)) {
+			const inactiveEditTool = await logger.time(
+				`createTools:${inactiveEditToolName}:hidden`,
+				BUILTIN_TOOLS[inactiveEditToolName],
+				toolSession,
+			);
+			if (inactiveEditTool) {
+				toolRegistry.set(inactiveEditTool.name, wrapToolWithMetaNotice(inactiveEditTool));
+			}
+		}
 		for (const tool of wrappedExtensionTools) {
 			toolRegistry.set(tool.name, tool);
 		}
@@ -1354,8 +1376,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			return options.systemPrompt(defaultPrompt);
 		};
 
-		const toolNamesFromRegistry = Array.from(toolRegistry.keys());
-		const requestedToolNames = options.toolNames?.map(name => name.toLowerCase()) ?? toolNamesFromRegistry;
+		const toolNamesFromRegistry = filterInactiveEditToolName(toolRegistry.keys(), editModeSession);
+		const requestedToolNames =
+			normalizeToolNamesForEditMode(options.toolNames, editModeSession) ?? toolNamesFromRegistry;
 		const normalizedRequested = requestedToolNames.filter(name => toolRegistry.has(name));
 		const includeExitPlanMode = requestedToolNames.includes("exit_plan_mode");
 		const mcpDiscoveryEnabled = settings.get("mcp.discoveryMode") ?? false;

@@ -12,7 +12,7 @@ import hashlineDescription from "../prompts/tools/hashline.md" with { type: "tex
 import patchDescription from "../prompts/tools/patch.md" with { type: "text" };
 import replaceDescription from "../prompts/tools/replace.md" with { type: "text" };
 import type { ToolSession } from "../tools";
-import { type EditMode, normalizeEditMode, resolveEditMode } from "../utils/edit-mode";
+import { DEFAULT_EDIT_MODE, type EditMode, normalizeEditMode, resolveEditMode } from "../utils/edit-mode";
 import {
 	type ChunkParams,
 	type ChunkToolEdit,
@@ -63,6 +63,7 @@ type TInput =
 	| typeof chunkEditParamsSchema;
 
 type EditParams = ReplaceParams | PatchParams | HashlineParams | ChunkParams;
+type EditToolMode = Exclude<EditMode, "vim">;
 
 type EditModeDefinition = {
 	description: (session: ToolSession) => string;
@@ -74,10 +75,11 @@ type EditModeDefinition = {
 		params: EditParams,
 		signal: AbortSignal | undefined,
 		batchRequest: LspBatchRequest | undefined,
+		onUpdate?: (partialResult: AgentToolResult<EditToolDetails, TInput>) => void,
 	) => Promise<AgentToolResult<EditToolDetails, TInput>>;
 };
 
-function resolveConfiguredEditMode(rawEditMode: string): EditMode | undefined {
+function resolveConfiguredEditMode(rawEditMode: string): EditToolMode | undefined {
 	if (!rawEditMode || rawEditMode === "auto") {
 		return undefined;
 	}
@@ -85,6 +87,9 @@ function resolveConfiguredEditMode(rawEditMode: string): EditMode | undefined {
 	const editMode = normalizeEditMode(rawEditMode);
 	if (!editMode) {
 		throw new Error(`Invalid PI_EDIT_VARIANT: ${rawEditMode}`);
+	}
+	if (editMode === "vim") {
+		return undefined;
 	}
 
 	return editMode;
@@ -147,6 +152,7 @@ async function executePerFile(
 		run: (batchRequest: LspBatchRequest | undefined) => Promise<AgentToolResult<EditToolDetails, any>>;
 	}[],
 	outerBatchRequest: LspBatchRequest | undefined,
+	onUpdate?: (partialResult: AgentToolResult<EditToolDetails, TInput>) => void,
 ): Promise<AgentToolResult<EditToolDetails, TInput>> {
 	if (fileEntries.length === 1) {
 		// Single file — just run directly, no wrapping
@@ -182,6 +188,21 @@ async function executePerFile(
 			perFileResults.push({ path, diff: "", isError: true, errorText });
 			contentTexts.push(`Error editing ${path}: ${errorText}`);
 		}
+
+		// Emit partial result after each file so UI shows progressive completion
+		if (!isLast && onUpdate) {
+			onUpdate({
+				content: [{ type: "text", text: contentTexts.join("\n") }],
+				details: {
+					diff: perFileResults
+						.map(r => r.diff)
+						.filter(Boolean)
+						.join("\n"),
+					firstChangedLine: perFileResults.find(r => r.firstChangedLine)?.firstChangedLine,
+					perFileResults: [...perFileResults],
+				},
+			});
+		}
 	}
 
 	return {
@@ -207,7 +228,7 @@ export class EditTool implements AgentTool<TInput> {
 	readonly #allowFuzzy: boolean;
 	readonly #fuzzyThreshold: number;
 	readonly #writethrough: WritethroughCallback;
-	readonly #editMode?: EditMode;
+	readonly #editMode?: EditToolMode;
 	readonly #pendingDeferredFetches = new Map<string, AbortController>();
 
 	constructor(private readonly session: ToolSession) {
@@ -223,9 +244,10 @@ export class EditTool implements AgentTool<TInput> {
 		this.#writethrough = createEditWritethrough(session);
 	}
 
-	get mode(): EditMode {
+	get mode(): EditToolMode {
 		if (this.#editMode) return this.#editMode;
-		return resolveEditMode(this.session);
+		const mode = resolveEditMode(this.session);
+		return mode === "vim" ? (DEFAULT_EDIT_MODE as EditToolMode) : mode;
 	}
 
 	get description(): string {
@@ -240,7 +262,7 @@ export class EditTool implements AgentTool<TInput> {
 		_toolCallId: string,
 		params: EditParams,
 		signal?: AbortSignal,
-		_onUpdate?: AgentToolUpdateCallback<EditToolDetails, TInput>,
+		onUpdate?: AgentToolUpdateCallback<EditToolDetails, TInput>,
 		context?: AgentToolContext,
 	): Promise<AgentToolResult<EditToolDetails, TInput>> {
 		const modeDefinition = this.#getModeDefinition();
@@ -248,7 +270,7 @@ export class EditTool implements AgentTool<TInput> {
 			throw new Error(modeDefinition.invalidParamsMessage);
 		}
 
-		return modeDefinition.execute(this, params, signal, getLspBatchRequest(context?.toolCall));
+		return modeDefinition.execute(this, params, signal, getLspBatchRequest(context?.toolCall), onUpdate);
 	}
 
 	#getModeDefinition(): EditModeDefinition {
@@ -267,6 +289,7 @@ export class EditTool implements AgentTool<TInput> {
 					params: EditParams,
 					signal: AbortSignal | undefined,
 					batchRequest: LspBatchRequest | undefined,
+					onUpdate?: (partialResult: AgentToolResult<EditToolDetails, TInput>) => void,
 				) => {
 					const { edits } = params as ChunkParams;
 					const byFile = groupBy(edits, (e: ChunkToolEdit) => parseChunkEditPath(e.path).filePath);
@@ -283,7 +306,7 @@ export class EditTool implements AgentTool<TInput> {
 								beginDeferredDiagnosticsForPath: p => tool.#beginDeferredDiagnosticsForPath(p),
 							}),
 					}));
-					return executePerFile(entries, batchRequest);
+					return executePerFile(entries, batchRequest, onUpdate);
 				},
 			},
 			patch: {
@@ -296,6 +319,7 @@ export class EditTool implements AgentTool<TInput> {
 					params: EditParams,
 					signal: AbortSignal | undefined,
 					batchRequest: LspBatchRequest | undefined,
+					onUpdate?: (partialResult: AgentToolResult<EditToolDetails, TInput>) => void,
 				) => {
 					const { edits } = params as PatchParams;
 					const entries = edits.map((entry: PatchEditEntry) => ({
@@ -312,7 +336,7 @@ export class EditTool implements AgentTool<TInput> {
 								beginDeferredDiagnosticsForPath: p => tool.#beginDeferredDiagnosticsForPath(p),
 							}),
 					}));
-					return executePerFile(entries, batchRequest);
+					return executePerFile(entries, batchRequest, onUpdate);
 				},
 			},
 			hashline: {
@@ -325,6 +349,7 @@ export class EditTool implements AgentTool<TInput> {
 					params: EditParams,
 					signal: AbortSignal | undefined,
 					batchRequest: LspBatchRequest | undefined,
+					onUpdate?: (partialResult: AgentToolResult<EditToolDetails, TInput>) => void,
 				) => {
 					const { edits } = params as HashlineParams;
 					const byFile = groupBy(edits, (e: HashlineToolEdit) => e.path);
@@ -341,7 +366,7 @@ export class EditTool implements AgentTool<TInput> {
 								beginDeferredDiagnosticsForPath: p => tool.#beginDeferredDiagnosticsForPath(p),
 							}),
 					}));
-					return executePerFile(entries, batchRequest);
+					return executePerFile(entries, batchRequest, onUpdate);
 				},
 			},
 			replace: {
@@ -354,6 +379,7 @@ export class EditTool implements AgentTool<TInput> {
 					params: EditParams,
 					signal: AbortSignal | undefined,
 					batchRequest: LspBatchRequest | undefined,
+					onUpdate?: (partialResult: AgentToolResult<EditToolDetails, TInput>) => void,
 				) => {
 					const { edits } = params as ReplaceParams;
 					const entries = edits.map((entry: ReplaceEditEntry) => ({
@@ -370,7 +396,7 @@ export class EditTool implements AgentTool<TInput> {
 								beginDeferredDiagnosticsForPath: p => tool.#beginDeferredDiagnosticsForPath(p),
 							}),
 					}));
-					return executePerFile(entries, batchRequest);
+					return executePerFile(entries, batchRequest, onUpdate);
 				},
 			},
 		}[this.mode];

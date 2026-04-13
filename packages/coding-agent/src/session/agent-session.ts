@@ -138,6 +138,13 @@ import { getLatestTodoPhasesFromEntries, type TodoItem, type TodoPhase } from ".
 import { ToolError } from "../tools/tool-errors";
 import { clampTimeout } from "../tools/tool-timeouts";
 import { parseCommandArgs } from "../utils/command-args";
+import {
+	type EditMode,
+	filterInactiveEditToolName,
+	normalizeToolNamesForEditMode,
+	resolveEditMode,
+	resolveEditToolName,
+} from "../utils/edit-mode";
 import { resolveFileDisplayMode } from "../utils/file-display-mode";
 import { extractFileMentions, generateFileMentionMessages } from "../utils/file-mentions";
 import { buildNamedToolChoice } from "../utils/tool-choice";
@@ -1978,7 +1985,7 @@ export class AgentSession {
 
 	/** Whether the edit tool is registered in this session. */
 	get hasEditTool(): boolean {
-		return this.#toolRegistry.has("edit");
+		return this.#toolRegistry.has("edit") || this.#toolRegistry.has("vim");
 	}
 
 	/**
@@ -1992,7 +1999,43 @@ export class AgentSession {
 	 * Get all configured tool names (built-in via --tools or default, plus custom tools).
 	 */
 	getAllToolNames(): string[] {
-		return Array.from(this.#toolRegistry.keys());
+		return filterInactiveEditToolName(this.#toolRegistry.keys(), this.#getEditModeSession());
+	}
+
+	#getEditModeSession() {
+		return {
+			settings: this.settings,
+			getActiveModelString: () => (this.model ? formatModelString(this.model) : undefined),
+		} as const;
+	}
+
+	#resolveActiveEditMode(): EditMode {
+		return resolveEditMode(this.#getEditModeSession());
+	}
+
+	async #syncEditToolModeAfterModelChange(previousEditMode: EditMode): Promise<void> {
+		const activeToolNames = this.getActiveToolNames();
+		const currentEditMode = this.#resolveActiveEditMode();
+		const hasActiveEditTool = activeToolNames.some(name => name === "edit" || name === "vim");
+		if (!hasActiveEditTool) {
+			if (previousEditMode !== currentEditMode) {
+				await this.refreshBaseSystemPrompt();
+			}
+			return;
+		}
+
+		const normalizedToolNames = normalizeToolNamesForEditMode(activeToolNames, this.#getEditModeSession()) ?? [];
+		const toolNamesChanged =
+			normalizedToolNames.length !== activeToolNames.length ||
+			normalizedToolNames.some((name, index) => name !== activeToolNames[index]);
+		if (toolNamesChanged) {
+			await this.#applyActiveToolsByName(normalizedToolNames);
+			return;
+		}
+
+		if (previousEditMode !== currentEditMode) {
+			await this.refreshBaseSystemPrompt();
+		}
 	}
 
 	isMCPDiscoveryEnabled(): boolean {
@@ -2042,6 +2085,7 @@ export class AgentSession {
 		toolNames: string[],
 		options?: { persistMCPSelection?: boolean; previousSelectedMCPToolNames?: string[] },
 	): Promise<void> {
+		toolNames = normalizeToolNamesForEditMode(toolNames, this.#getEditModeSession()) ?? [];
 		const previousSelectedMCPToolNames = options?.previousSelectedMCPToolNames ?? this.getSelectedMCPToolNames();
 		const tools: AgentTool[] = [];
 		const validToolNames: string[] = [];
@@ -2435,7 +2479,7 @@ export class AgentSession {
 			planExists,
 			askToolName: "ask",
 			writeToolName: "write",
-			editToolName: "edit",
+			editToolName: resolveEditToolName(this.#getEditModeSession()),
 			exitToolName: "exit_plan_mode",
 			reentry: state.reentry ?? false,
 			iterative: state.workflow === "iterative",
@@ -3421,6 +3465,7 @@ export class AgentSession {
 		role: string = "default",
 		options?: { selector?: string; thinkingLevel?: ThinkingLevel },
 	): Promise<void> {
+		const previousEditMode = this.#resolveActiveEditMode();
 		const apiKey = await this.#modelRegistry.getApiKey(model, this.sessionId);
 		if (!apiKey) {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
@@ -3437,6 +3482,7 @@ export class AgentSession {
 
 		// Re-apply the current thinking level for the newly selected model
 		this.setThinkingLevel(this.thinkingLevel);
+		await this.#syncEditToolModeAfterModelChange(previousEditMode);
 	}
 
 	/**
@@ -3445,6 +3491,7 @@ export class AgentSession {
 	 * @throws Error if no API key available for the model
 	 */
 	async setModelTemporary(model: Model, thinkingLevel?: ThinkingLevel): Promise<void> {
+		const previousEditMode = this.#resolveActiveEditMode();
 		const apiKey = await this.#modelRegistry.getApiKey(model, this.sessionId);
 		if (!apiKey) {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
@@ -3457,6 +3504,7 @@ export class AgentSession {
 
 		// Apply explicit thinking level, or re-clamp current level to new model's capabilities
 		this.setThinkingLevel(thinkingLevel ?? this.thinkingLevel);
+		await this.#syncEditToolModeAfterModelChange(previousEditMode);
 	}
 
 	/**
@@ -3564,6 +3612,7 @@ export class AgentSession {
 	}
 
 	async #cycleScopedModel(direction: "forward" | "backward"): Promise<ModelCycleResult | undefined> {
+		const previousEditMode = this.#resolveActiveEditMode();
 		const scopedModels = await this.#getScopedModelsWithApiKey();
 		if (scopedModels.length <= 1) return undefined;
 
@@ -3584,11 +3633,13 @@ export class AgentSession {
 
 		// Apply the scoped model's configured thinking level
 		this.setThinkingLevel(next.thinkingLevel);
+		await this.#syncEditToolModeAfterModelChange(previousEditMode);
 
 		return { model: next.model, thinkingLevel: this.thinkingLevel, isScoped: true };
 	}
 
 	async #cycleAvailableModel(direction: "forward" | "backward"): Promise<ModelCycleResult | undefined> {
+		const previousEditMode = this.#resolveActiveEditMode();
 		const availableModels = this.#modelRegistry.getAvailable();
 		if (availableModels.length <= 1) return undefined;
 
@@ -3612,6 +3663,7 @@ export class AgentSession {
 		this.settings.getStorage()?.recordModelUsage(`${nextModel.provider}/${nextModel.id}`);
 		// Re-apply the current thinking level for the newly selected model
 		this.setThinkingLevel(this.thinkingLevel);
+		await this.#syncEditToolModeAfterModelChange(previousEditMode);
 
 		return { model: nextModel, thinkingLevel: this.thinkingLevel, isScoped: false };
 	}
