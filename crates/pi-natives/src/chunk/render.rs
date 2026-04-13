@@ -13,10 +13,18 @@ use crate::{
 
 type ChunkLookup<'a> = HashMap<&'a str, &'a ChunkNode>;
 
+#[derive(Clone)]
+pub struct InlineHunkLine {
+	/// Fully indented line text ready to push as a meta line.
+	pub text:   String,
+	/// Optional gutter marker (`*`, `-`, etc.) for the rendered meta line.
+	pub marker: Option<char>,
+}
+
 /// A pre-formatted diff hunk ready for inline display inside a chunk block.
 pub struct InlineHunk {
 	/// Fully indented lines (header + diff lines) ready to push as meta lines.
-	pub lines: Vec<String>,
+	pub lines: Vec<InlineHunkLine>,
 }
 
 env_uint! {
@@ -874,19 +882,18 @@ fn push_blank_meta(ctx: &mut RenderCtx<'_>) {
 	ctx.last_was_blank_meta = true;
 }
 
-fn push_meta_marked(ctx: &mut RenderCtx<'_>, body: String, changed: bool) {
+fn push_meta_marked(ctx: &mut RenderCtx<'_>, body: String, marker: Option<char>) {
 	ctx.last_was_blank_meta = false;
-	let gutter = if changed {
-		format!("*{}", " ".repeat(ctx.num_width.saturating_sub(1)))
-	} else {
-		" ".repeat(ctx.num_width)
+	let gutter = match marker {
+		Some(marker) => format!("{marker}{}", " ".repeat(ctx.num_width.saturating_sub(1))),
+		None => " ".repeat(ctx.num_width),
 	};
 	let separator = if ctx.compact_meta { "|" } else { "| " };
 	push_line(&mut ctx.out, format!("{gutter}{separator}{body}"));
 }
 
 fn push_meta(ctx: &mut RenderCtx<'_>, body: String) {
-	push_meta_marked(ctx, body, false);
+	push_meta_marked(ctx, body, None);
 }
 
 fn push_code(ctx: &mut RenderCtx<'_>, abs_line: u32, source_text: &str) {
@@ -1083,7 +1090,7 @@ fn emit_inline_hunks_for(ctx: &mut RenderCtx<'_>, chunk_path: &str) {
 		None => return,
 	};
 	for line in lines {
-		push_meta(ctx, line);
+		push_meta_marked(ctx, line.text, line.marker);
 	}
 }
 
@@ -1112,7 +1119,9 @@ fn emit_chunk_subtree(
 				push_meta_marked(
 					ctx,
 					render_open_anchor_line(ctx, chunk),
-					ctx.changed_anchor_paths.contains(chunk.path.as_str()),
+					ctx.changed_anchor_paths
+						.contains(chunk.path.as_str())
+						.then_some('*'),
 				);
 				return;
 			},
@@ -1138,7 +1147,9 @@ fn emit_chunk_subtree(
 		push_meta_marked(
 			ctx,
 			render_open_anchor_line(ctx, chunk),
-			ctx.changed_anchor_paths.contains(chunk.path.as_str()),
+			ctx.changed_anchor_paths
+				.contains(chunk.path.as_str())
+				.then_some('*'),
 		);
 	}
 

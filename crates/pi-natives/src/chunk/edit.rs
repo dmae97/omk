@@ -70,6 +70,12 @@ pub fn apply_edits(state: &ChunkState, params: &EditParams) -> Result<EditResult
 	let initial_parse_errors = state.tree.parse_errors;
 	let initial_chunk_paths: std::collections::HashSet<String> =
 		state.tree.chunks.iter().map(|c| c.path.clone()).collect();
+	let initial_chunks_by_path: std::collections::HashMap<String, ChunkNode> = state
+		.tree
+		.chunks
+		.iter()
+		.map(|chunk| (chunk.path.clone(), chunk.clone()))
+		.collect();
 	let initial_chunk_checksums: std::collections::HashMap<String, String> = state
 		.tree
 		.chunks
@@ -293,6 +299,7 @@ pub fn apply_edits(state: &ChunkState, params: &EditParams) -> Result<EditResult
 			params.anchor_style,
 			&touched_paths,
 			&initial_chunk_checksums,
+			&initial_chunks_by_path,
 			normalize_indent,
 		)
 	} else {
@@ -1786,6 +1793,8 @@ fn display_path_for_file(file_path: &str, cwd: &str) -> String {
 struct DiffHunk {
 	header:    String,
 	lines:     Vec<String>,
+	old_start: u32,
+	old_len:   u32,
 	new_start: u32,
 }
 
@@ -1844,10 +1853,66 @@ fn generate_diff_hunks(before: &str, after: &str, context: usize) -> Vec<DiffHun
 			}
 		}
 
-		hunks.push(DiffHunk { header, lines: hunk_lines, new_start: new_start as u32 });
+		hunks.push(DiffHunk {
+			header,
+			lines: hunk_lines,
+			old_start: old_start as u32,
+			old_len: old_len as u32,
+			new_start: new_start as u32,
+		});
 	}
 
 	hunks
+}
+
+fn deleted_chunk_anchor_label(chunk: &ChunkNode, style: ChunkAnchorStyle) -> String {
+	match style {
+		ChunkAnchorStyle::Full | ChunkAnchorStyle::FullOmit => chunk.path.clone(),
+		ChunkAnchorStyle::Kind
+		| ChunkAnchorStyle::KindOmit
+		| ChunkAnchorStyle::Bare
+		| ChunkAnchorStyle::None => chunk.kind.path_segment(chunk.identifier.as_deref()),
+	}
+}
+
+fn deleted_chunk_anchor_indent(
+	chunk: &ChunkNode,
+	normalize_indent: bool,
+	file_indent_char: char,
+	file_indent_step: usize,
+	tab_replacement: &str,
+) -> String {
+	let indent_char = if chunk.indent_char.is_empty() {
+		file_indent_char.to_string()
+	} else {
+		chunk.indent_char.clone()
+	};
+	let raw_indent = indent_char.repeat(chunk.indent as usize);
+	if normalize_indent {
+		normalize_to_tabs(&raw_indent, file_indent_char, file_indent_step)
+	} else {
+		raw_indent.replace('\t', tab_replacement)
+	}
+}
+
+fn deleted_hunk_owner<'a>(
+	hunk: &DiffHunk,
+	before_chunks: &'a HashMap<String, ChunkNode>,
+	current_lookup: &HashMap<&str, &ChunkNode>,
+	touched_paths: &[String],
+) -> Option<&'a ChunkNode> {
+	if hunk.old_len == 0 {
+		return None;
+	}
+	let old_end = hunk
+		.old_start
+		.saturating_add(hunk.old_len.saturating_sub(1));
+	touched_paths
+		.iter()
+		.filter(|path| !current_lookup.contains_key(path.as_str()))
+		.filter_map(|path| before_chunks.get(path))
+		.filter(|chunk| chunk.start_line <= old_end && hunk.old_start <= chunk.end_line)
+		.min_by_key(|chunk| chunk.line_count)
 }
 
 /// Render the response text for a changed file, combining the current chunked
@@ -1860,6 +1925,7 @@ fn render_changed_hunks(
 	anchor_style: Option<ChunkAnchorStyle>,
 	touched_paths: &[String],
 	before_checksums: &std::collections::HashMap<String, String>,
+	before_chunks: &HashMap<String, ChunkNode>,
 	normalize_indent: bool,
 ) -> String {
 	use std::collections::{HashMap, HashSet};
@@ -1881,10 +1947,58 @@ fn render_changed_hunks(
 	let render_indent = normalize_indent.then_some((file_indent_char, file_indent_step));
 	let mut inline_hunks: HashMap<String, Vec<crate::chunk::render::InlineHunk>> = HashMap::new();
 	let mut changed_anchor_paths = HashSet::new();
+	let style = anchor_style.unwrap_or_default();
 
 	for hunk in &hunks {
-		let owner = crate::chunk::render::find_hunk_owner_chunk(tree, &lookup, hunk.new_start);
-		let owner_path = owner.unwrap_or("");
+		if let Some(deleted_chunk) = deleted_hunk_owner(hunk, before_chunks, &lookup, touched_paths) {
+			let owner_path = deleted_chunk
+				.parent_path
+				.as_deref()
+				.unwrap_or("")
+				.to_owned();
+			let anchor_indent = deleted_chunk_anchor_indent(
+				deleted_chunk,
+				normalize_indent,
+				file_indent_char,
+				file_indent_step,
+				tab_replacement,
+			);
+			let diff_indent = if normalize_indent {
+				format!("{anchor_indent}\t")
+			} else {
+				format!("{anchor_indent}{tab_replacement}")
+			};
+			let anchor_label = deleted_chunk_anchor_label(deleted_chunk, style);
+			let mut lines = Vec::with_capacity(hunk.lines.len() + 2);
+			lines.push(crate::chunk::render::InlineHunkLine {
+				text:   style.render_without_counts(
+					&anchor_indent,
+					anchor_label.as_str(),
+					deleted_chunk.checksum.as_str(),
+				),
+				marker: Some('-'),
+			});
+			lines.push(crate::chunk::render::InlineHunkLine {
+				text:   format!("{diff_indent}{}", hunk.header),
+				marker: None,
+			});
+			for line in &hunk.lines {
+				let normalized =
+					render_hunk_line(line, normalize_indent, file_indent_char, file_indent_step);
+				lines.push(crate::chunk::render::InlineHunkLine {
+					text:   format!("{diff_indent}{normalized}"),
+					marker: None,
+				});
+			}
+			inline_hunks
+				.entry(owner_path)
+				.or_default()
+				.push(crate::chunk::render::InlineHunk { lines });
+			continue;
+		}
+
+		let owner_path =
+			crate::chunk::render::find_hunk_owner_chunk(tree, &lookup, hunk.new_start).unwrap_or("");
 		let indent = if owner_path.is_empty() {
 			String::new()
 		} else {
@@ -1897,11 +2011,17 @@ fn render_changed_hunks(
 			)
 		};
 		let mut lines = Vec::with_capacity(hunk.lines.len() + 1);
-		lines.push(format!("{indent}{}", hunk.header));
+		lines.push(crate::chunk::render::InlineHunkLine {
+			text:   format!("{indent}{}", hunk.header),
+			marker: None,
+		});
 		for line in &hunk.lines {
 			let normalized =
 				render_hunk_line(line, normalize_indent, file_indent_char, file_indent_step);
-			lines.push(format!("{indent}{normalized}"));
+			lines.push(crate::chunk::render::InlineHunkLine {
+				text:   format!("{indent}{normalized}"),
+				marker: None,
+			});
 		}
 		inline_hunks
 			.entry(owner_path.to_owned())
@@ -2614,7 +2734,7 @@ mod tests {
 	}
 
 	#[test]
-	fn focus_emits_only_touched_and_siblings() {
+	fn focus_emits_only_changed_chain() {
 		let source = "const a = 1;\n\nconst b = 2;\n\nconst c = 3;\n\nconst d = 4;\n\nconst e = 5;\n";
 		let state = state_for(source, "typescript");
 		let chunk = state.inner().chunk("var_c").expect("var_c");
@@ -2637,12 +2757,22 @@ mod tests {
 		})
 		.expect("edit should apply");
 
-		// Touched chunk and immediate siblings should appear; distant chunks should
-		// not contribute their bodies.
+		// The focused edit view should show only the changed chunk chain, not
+		// sibling context blocks.
 		let response = &result.response_text;
-		assert!(response.contains("var_b"), "prev sibling should appear: {response}");
 		assert!(response.contains("var_c"), "touched chunk should appear: {response}");
-		assert!(response.contains("var_d"), "next sibling should appear: {response}");
+		assert!(
+			response.contains("* |[<var_c#"),
+			"changed chunk should be marked in the gutter: {response}"
+		);
+		assert!(
+			!response.contains("var_b"),
+			"prev sibling should not appear in the focused edit view: {response}"
+		);
+		assert!(
+			!response.contains("var_d"),
+			"next sibling should not appear in the focused edit view: {response}"
+		);
 		assert!(
 			!response.contains("const a"),
 			"distant chunk var_a body should not appear: {response}"
@@ -4545,6 +4675,12 @@ function foo() {\n<<<<<<< HEAD\n\treturn bar();\n=======\n\treturn baz();\n>>>>>
 		assert!(
 			result.response_text.contains("Debug"),
 			"deletion of first enum variant should show a diff with the removed content: {}",
+			result.response_text
+		);
+		assert!(
+			result.response_text.contains("-|")
+				&& result.response_text.contains("[<enum_Level.vrnt_Debug#"),
+			"deleted variant should keep its chunk anchor with a deletion marker: {}",
 			result.response_text
 		);
 	}
