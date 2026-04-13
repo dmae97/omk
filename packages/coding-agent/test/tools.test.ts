@@ -10,7 +10,7 @@ import { DEFAULT_BASH_INTERCEPTOR_RULES, Settings } from "@oh-my-pi/pi-coding-ag
 import { EditTool } from "@oh-my-pi/pi-coding-agent/edit";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
-import { AwaitTool } from "@oh-my-pi/pi-coding-agent/tools/await-tool";
+import { PollTool } from "@oh-my-pi/pi-coding-agent/tools/poll-tool";
 import { BashTool } from "@oh-my-pi/pi-coding-agent/tools/bash";
 import { CancelJobTool } from "@oh-my-pi/pi-coding-agent/tools/cancel-job";
 import { FindTool } from "@oh-my-pi/pi-coding-agent/tools/find";
@@ -790,7 +790,7 @@ function b() {
 			const result = await bashTool.execute("test-call-8", { command: "echo 'test output'" });
 
 			expect(getTextOutput(result)).toContain("test output");
-			expect(result.details).toBeUndefined();
+			expect(result.details?.timeoutSeconds).toBe(300);
 		});
 
 		it("should expose built-in interceptor defaults truthfully", () => {
@@ -989,7 +989,8 @@ function b() {
 			const result = await autoBackgroundBashTool.execute("test-call-9-auto-inline", { command: "echo short" });
 
 			expect(getTextOutput(result)).toContain("short");
-			expect(result.details).toBeUndefined();
+			expect(result.details?.timeoutSeconds).toBe(300);
+			expect(result.details?.async).toBeUndefined();
 			await Bun.sleep(150);
 			expect(deliveries).toEqual([]);
 			await asyncJobManager.dispose();
@@ -1041,6 +1042,51 @@ function b() {
 			await asyncJobManager.dispose();
 		});
 
+		it("should background instead of timing out when auto-background wait exceeds the effective timeout", async () => {
+			const deliveries: Array<{ jobId: string; text: string }> = [];
+			const asyncJobManager = new AsyncJobManager({
+				onJobComplete: async (jobId, text) => {
+					deliveries.push({ jobId, text });
+				},
+			});
+			const autoBackgroundBashTool = wrapToolWithMetaNotice(
+				new BashTool(
+					createTestToolSession(
+						testDir,
+						Settings.isolated({
+							"bash.autoBackground.enabled": true,
+							"bash.autoBackground.thresholdMs": 60_000,
+						}),
+						{
+							asyncJobManager,
+							getSessionId: () => "test-session",
+						},
+					),
+				),
+			);
+
+			const result = await autoBackgroundBashTool.execute("test-call-9-auto-timeout-background", {
+				command: "printf 'start\\n'; sleep 1.2; printf 'done\\n'",
+				timeout: 1,
+			});
+
+			expect(result.details?.timeoutSeconds).toBe(1);
+			expect(result.details?.async?.state).toBe("running");
+			expect(getTextOutput(result)).toContain("Background job");
+			const jobId = result.details?.async?.jobId;
+			if (!jobId) {
+				throw new Error("expected an auto-backgrounded job id");
+			}
+			const runningJob = asyncJobManager.getJob(jobId);
+			expect(runningJob?.status).toBe("running");
+			await runningJob?.promise;
+			await Bun.sleep(50);
+			expect(deliveries).toHaveLength(1);
+			expect(deliveries[0]?.jobId).toBe(jobId);
+			expect(deliveries[0]?.text).toContain("Command timed out after 1 seconds");
+			await asyncJobManager.dispose();
+		});
+
 		it("should respect timeout", async () => {
 			await expect(bashTool.execute("test-call-10", { command: "sleep 5", timeout: 1 })).rejects.toThrow(
 				/timed out/i,
@@ -1074,12 +1120,12 @@ function b() {
 				Settings.isolated({ "bash.autoBackground.enabled": true }),
 			);
 
-			expect(AwaitTool.createIf(autoBackgroundSession)).not.toBeNull();
+			expect(PollTool.createIf(autoBackgroundSession)).not.toBeNull();
 			expect(CancelJobTool.createIf(autoBackgroundSession)).not.toBeNull();
 		});
 	});
 
-	describe("AwaitTool", () => {
+	describe("PollTool", () => {
 		it("should wait for jobs and acknowledge deliveries to prevent race conditions", async () => {
 			const manager = new AsyncJobManager({
 				onJobComplete: async () => {},
@@ -1087,14 +1133,14 @@ function b() {
 			const session = createTestToolSession(testDir, Settings.isolated({ "bash.autoBackground.enabled": true }), {
 				asyncJobManager: manager,
 			});
-			const awaitTool = AwaitTool.createIf(session)!;
+			const pollTool = PollTool.createIf(session)!;
 
 			const jobId = manager.register("bash", "test job", async () => "success");
 
-			// Job is running, call await
-			const resultPromise = awaitTool.execute("test-call-await-1", { jobs: [jobId] });
+			// Job is running, call poll
+			const resultPromise = pollTool.execute("test-call-poll-1", { jobs: [jobId] });
 
-			// Ensure await finished
+			// Ensure poll finished
 			const result = await resultPromise;
 			expect(getTextOutput(result)).toContain("Completed");
 

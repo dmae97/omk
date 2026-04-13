@@ -69,6 +69,21 @@ describe("bashToolRenderer", () => {
 		expect(rendered).not.toContain("\t");
 	});
 
+	it("shows the effective timeout from result details when it differs from call args", async () => {
+		const theme = await getThemeByName("dark");
+		expect(theme).toBeDefined();
+		const uiTheme = theme!;
+		const component = bashToolRenderer.renderResult(
+			{ content: [{ type: "text", text: "" }], details: { timeoutSeconds: 120 }, isError: false },
+			{ expanded: false, isPartial: false, renderContext: { timeout: 1200 } },
+			uiTheme,
+			{ command: "python3 scripts/vim-edit-benchmark.py", timeout: 1200 },
+		);
+		const rendered = sanitizeText(component.render(120).join("\n"));
+		expect(rendered).toContain("Timeout: 120s");
+		expect(rendered).not.toContain("Timeout: 1200s");
+	});
+
 	it("bypasses truncation/styling for SIXEL lines", async () => {
 		terminal.imageProtocol = ImageProtocol.Sixel;
 		const theme = await getThemeByName("dark");

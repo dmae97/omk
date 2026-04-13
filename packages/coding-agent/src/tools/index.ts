@@ -23,7 +23,7 @@ import { SearchTool } from "../web/search";
 import { AskTool } from "./ask";
 import { AstEditTool } from "./ast-edit";
 import { AstGrepTool } from "./ast-grep";
-import { AwaitTool } from "./await-tool";
+import { PollTool } from "./poll-tool";
 import { BashTool } from "./bash";
 import { BrowserTool } from "./browser";
 
@@ -73,7 +73,7 @@ export * from "../web/search";
 export * from "./ask";
 export * from "./ast-edit";
 export * from "./ast-grep";
-export * from "./await-tool";
+export * from "./poll-tool";
 export * from "./bash";
 export * from "./browser";
 export * from "./calculator";
@@ -243,7 +243,7 @@ export const BUILTIN_TOOLS: Record<string, ToolFactory> = {
 	rewind: RewindTool.createIf,
 	task: TaskTool.create,
 	cancel_job: CancelJobTool.createIf,
-	await: AwaitTool.createIf,
+	poll: PollTool.createIf,
 	todo_write: s => new TodoWriteTool(s),
 	web_search: s => new SearchTool(s),
 	search_tool_bm25: SearchToolBm25Tool.createIf,

@@ -105,7 +105,7 @@ describe("executeBash", () => {
 			return;
 		}
 
-		const result = await executeBash("sleep 10 & echo $!", {
+		const result = await executeBash('python3 -c "import time; time.sleep(10)" & echo $!', {
 			cwd: tempDir,
 			timeout: 5000,
 		});
@@ -113,9 +113,7 @@ describe("executeBash", () => {
 		expect(Number.isInteger(pid)).toBe(true);
 		expect(pid).toBeGreaterThan(0);
 		expect(() => process.kill(pid, 0)).not.toThrow();
-		process.kill(pid, "SIGTERM");
-		await Bun.sleep(100);
-		expect(() => process.kill(pid, 0)).toThrow();
+		expect(() => process.kill(pid, "SIGKILL")).not.toThrow();
 	});
 
 

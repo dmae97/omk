@@ -73,6 +73,7 @@ export interface BashToolInput {
 
 export interface BashToolDetails {
 	meta?: OutputMeta;
+	timeoutSeconds?: number;
 	async?: {
 		state: "running" | "completed" | "failed";
 		jobId: string;
@@ -290,14 +291,20 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 		tailLines?: number,
 	): AgentToolResult<BashToolDetails> {
 		const outputText = this.#formatResultOutput(result, headLines, tailLines);
-		const details: BashToolDetails = {};
+		const details: BashToolDetails = { timeoutSeconds: timeoutSec };
 		const resultBuilder = toolResult(details).text(outputText).truncationFromSummary(result, { direction: "tail" });
 		this.#buildResultText(result, timeoutSec, outputText);
 		return resultBuilder.done();
 	}
 
-	#buildBackgroundStartResult(jobId: string, label: string, previewText: string): AgentToolResult<BashToolDetails> {
+	#buildBackgroundStartResult(
+		jobId: string,
+		label: string,
+		previewText: string,
+		timeoutSec: number,
+	): AgentToolResult<BashToolDetails> {
 		const details: BashToolDetails = {
+			timeoutSeconds: timeoutSec,
 			async: { state: "running", jobId, type: "bash" },
 		};
 		const lines: string[] = [];
@@ -307,7 +314,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 		}
 		lines.push(`Background job ${jobId} started: ${label}`);
 		lines.push("Result will be delivered automatically when complete.");
-		lines.push(`Use \`await\`, \`read jobs://${jobId}\`, or \`cancel_job\` if needed.`);
+		lines.push(`Use \`poll\`, \`read jobs://${jobId}\`, or \`cancel_job\` if needed.`);
 		return {
 			content: [{ type: "text", text: lines.join("\n") }],
 			details,
@@ -430,6 +437,12 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 		}
 	}
 
+	#resolveAutoBackgroundWaitMs(timeoutMs: number): number {
+		if (this.#autoBackgroundThresholdMs <= 0) return 0;
+		const timeoutBufferMs = 1_000;
+		return Math.max(0, Math.min(this.#autoBackgroundThresholdMs, timeoutMs - timeoutBufferMs));
+	}
+
 	async execute(
 		_toolCallId: string,
 		{
@@ -536,10 +549,12 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 				onUpdate,
 				startBackgrounded: true,
 			});
-			return this.#buildBackgroundStartResult(job.jobId, job.label, "");
+			return this.#buildBackgroundStartResult(job.jobId, job.label, "", timeoutSec);
 		}
 
 		if (this.#autoBackgroundEnabled && !pty && this.session.asyncJobManager) {
+			const autoBackgroundWaitMs = this.#resolveAutoBackgroundWaitMs(timeoutMs);
+			const startBackgrounded = autoBackgroundWaitMs === 0;
 			const job = this.#startManagedBashJob({
 				command,
 				commandCwd,
@@ -549,9 +564,12 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 				tailLines,
 				resolvedEnv,
 				onUpdate,
-				startBackgrounded: false,
+				startBackgrounded,
 			});
-			const waitResult = await this.#waitForManagedBashJob(job, this.#autoBackgroundThresholdMs, signal);
+			if (startBackgrounded) {
+				return this.#buildBackgroundStartResult(job.jobId, job.label, "", timeoutSec);
+			}
+			const waitResult = await this.#waitForManagedBashJob(job, autoBackgroundWaitMs, signal);
 			if (waitResult.kind === "completed") {
 				this.session.asyncJobManager.acknowledgeDeliveries([job.jobId]);
 				return waitResult.result;
@@ -566,7 +584,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 				throw new ToolAbortError(job.getLatestText() || "Command aborted");
 			}
 			job.setBackgrounded(true);
-			return this.#buildBackgroundStartResult(job.jobId, job.label, job.getLatestText());
+			return this.#buildBackgroundStartResult(job.jobId, job.label, job.getLatestText(), timeoutSec);
 		}
 
 		// Track output for streaming updates (tail only)
@@ -689,7 +707,7 @@ export const bashToolRenderer = {
 				const showingFullOutput = expanded && renderContext?.isFullOutput === true;
 
 				// Build truncation warning
-				const timeoutSeconds = renderContext?.timeout;
+				const timeoutSeconds = details?.timeoutSeconds ?? renderContext?.timeout;
 				const timeoutLine =
 					typeof timeoutSeconds === "number"
 						? uiTheme.fg(
