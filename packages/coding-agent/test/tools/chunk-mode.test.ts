@@ -329,7 +329,9 @@ describe("chunk mode tools", () => {
 		const text = getText(result);
 		const updatedSource = await Bun.file(filePath).text();
 
-		expect(updatedSource).toContain('    handle(): void {\n      if (flag) {\n  \tconsole.log("tabbed");\n      }\n    }\n');
+		expect(updatedSource).toContain(
+			'    handle(): void {\n      if (flag) {\n  \tconsole.log("tabbed");\n      }\n    }\n',
+		);
 		expect(updatedSource).not.toContain('console.log("old")');
 		expect(text).toContain('console.log("tabbed")');
 	});

@@ -108,6 +108,9 @@ function createContext(currentSessionFile: string): {
 		updateEditorTopBorder: vi.fn(() => {
 			calls.push("updateEditorTopBorder");
 		}),
+		updateEditorBorderColor: vi.fn(() => {
+			calls.push("updateEditorBorderColor");
+		}),
 		renderInitialMessages: vi.fn(() => {
 			calls.push("renderInitialMessages");
 		}),
@@ -187,6 +190,7 @@ describe("SelectorController session deletion", () => {
 			"statusLine.invalidate",
 			"statusLine.setSessionStartTime",
 			"updateEditorTopBorder",
+			"updateEditorBorderColor",
 			"renderInitialMessages",
 			"reloadTodos",
 			"ui.requestRender",
@@ -255,6 +259,7 @@ describe("SelectorController session deletion", () => {
 			"statusLine.invalidate",
 			"statusLine.setSessionStartTime",
 			"updateEditorTopBorder",
+			"updateEditorBorderColor",
 			"renderInitialMessages",
 			"reloadTodos",
 			"ui.requestRender",
