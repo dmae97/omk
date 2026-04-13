@@ -90,6 +90,13 @@ struct CacheKey {
 	skip_node_modules: bool,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct ScanOptions {
+	pub include_hidden:    bool,
+	pub use_gitignore:     bool,
+	pub skip_node_modules: bool,
+}
+
 #[derive(Clone)]
 struct CacheEntry {
 	created_at: Instant,
@@ -254,12 +261,11 @@ pub fn build_walker(
 /// metadata.
 fn collect_entries(
 	root: &Path,
-	include_hidden: bool,
-	use_gitignore: bool,
-	skip_node_modules: bool,
+	options: ScanOptions,
 	ct: &task::CancelToken,
 ) -> Result<Vec<GlobMatch>> {
-	let builder = build_walker(root, include_hidden, use_gitignore, skip_node_modules);
+	let builder =
+		build_walker(root, options.include_hidden, options.use_gitignore, options.skip_node_modules);
 	let mut entries = Vec::new();
 
 	for entry in builder.build() {
@@ -296,20 +302,22 @@ fn collect_entries(
 /// empty.
 pub fn get_or_scan(
 	root: &Path,
-	include_hidden: bool,
-	use_gitignore: bool,
-	skip_node_modules: bool,
+	options: ScanOptions,
 	ct: &task::CancelToken,
 ) -> Result<ScanResult> {
 	let ttl = *CACHE_TTL_MS;
 	if ttl == 0 {
 		// Caching disabled – always scan fresh.
-		let entries = collect_entries(root, include_hidden, use_gitignore, skip_node_modules, ct)?;
+		let entries = collect_entries(root, options, ct)?;
 		return Ok(ScanResult { entries, cache_age_ms: 0 });
 	}
 
-	let key =
-		CacheKey { root: root.to_path_buf(), include_hidden, use_gitignore, skip_node_modules };
+	let key = CacheKey {
+		root:              root.to_path_buf(),
+		include_hidden:    options.include_hidden,
+		use_gitignore:     options.use_gitignore,
+		skip_node_modules: options.skip_node_modules,
+	};
 
 	let now = Instant::now();
 	if let Some(entry) = FS_CACHE.get(&key) {
@@ -324,7 +332,7 @@ pub fn get_or_scan(
 		FS_CACHE.remove(&key);
 	}
 
-	let entries = collect_entries(root, include_hidden, use_gitignore, skip_node_modules, ct)?;
+	let entries = collect_entries(root, options, ct)?;
 	FS_CACHE.insert(key, CacheEntry { created_at: now, entries: entries.clone() });
 	evict_oldest();
 	Ok(ScanResult { entries, cache_age_ms: 0 })
@@ -337,17 +345,19 @@ pub fn get_or_scan(
 /// returned without repopulating the cache.
 pub fn force_rescan(
 	root: &Path,
-	include_hidden: bool,
-	use_gitignore: bool,
-	skip_node_modules: bool,
+	options: ScanOptions,
 	store: bool,
 	ct: &task::CancelToken,
 ) -> Result<Vec<GlobMatch>> {
-	let key =
-		CacheKey { root: root.to_path_buf(), include_hidden, use_gitignore, skip_node_modules };
+	let key = CacheKey {
+		root:              root.to_path_buf(),
+		include_hidden:    options.include_hidden,
+		use_gitignore:     options.use_gitignore,
+		skip_node_modules: options.skip_node_modules,
+	};
 	FS_CACHE.remove(&key);
 
-	let entries = collect_entries(root, include_hidden, use_gitignore, skip_node_modules, ct)?;
+	let entries = collect_entries(root, options, ct)?;
 	if store {
 		let now = Instant::now();
 		FS_CACHE.insert(key, CacheEntry { created_at: now, entries: entries.clone() });
@@ -534,7 +544,16 @@ mod tests {
 		fs::write(root.path().join("real.txt"), "ok").unwrap();
 
 		let ct = crate::task::CancelToken::default();
-		let entries = super::collect_entries(root.path(), true, false, true, &ct).unwrap();
+		let entries = super::collect_entries(
+			root.path(),
+			super::ScanOptions {
+				include_hidden:    true,
+				use_gitignore:     false,
+				skip_node_modules: true,
+			},
+			&ct,
+		)
+		.unwrap();
 		let paths: Vec<&str> = entries.iter().map(|e| e.path.as_str()).collect();
 		assert!(
 			!paths.iter().any(|p| p.contains("node_modules")),
@@ -557,12 +576,32 @@ mod tests {
 		let ct = crate::task::CancelToken::default();
 
 		// With skip: should only get app.js
-		let entries = super::force_rescan(root.path(), true, false, true, false, &ct).unwrap();
+		let entries = super::force_rescan(
+			root.path(),
+			super::ScanOptions {
+				include_hidden:    true,
+				use_gitignore:     false,
+				skip_node_modules: true,
+			},
+			false,
+			&ct,
+		)
+		.unwrap();
 		assert_eq!(entries.len(), 1, "skip=true got: {}", entries.len());
 		assert_eq!(entries[0].path, "app.js");
 
 		// Without skip: should get app.js + 100 node_modules files + directories
-		let entries = super::force_rescan(root.path(), true, false, false, false, &ct).unwrap();
+		let entries = super::force_rescan(
+			root.path(),
+			super::ScanOptions {
+				include_hidden:    true,
+				use_gitignore:     false,
+				skip_node_modules: false,
+			},
+			false,
+			&ct,
+		)
+		.unwrap();
 		assert!(entries.len() > 100, "skip=false got: {}", entries.len());
 	}
 }

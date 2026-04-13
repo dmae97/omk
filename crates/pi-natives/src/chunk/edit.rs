@@ -576,15 +576,6 @@ fn apply_put(
 
 	let requested_region = requested_region_for_operation(operation, default_selector, default_crc);
 
-	let (mut region_start, _region_end) = match target.region {
-		None => (anchor.start_byte as usize, anchor.end_byte as usize),
-		Some(r) => chunk_region_range(&anchor, r),
-	};
-	if matches!(target.region, Some(ChunkRegion::Head)) {
-		region_start =
-			line_start_offset(&line_offsets(&state.source), anchor.start_line, &state.source);
-	}
-
 	let initial_target_indent =
 		target_indent_for_region(state, &anchor, target.region, file_indent_char, file_indent_step);
 

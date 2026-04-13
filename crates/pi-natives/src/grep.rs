@@ -317,7 +317,7 @@ fn bytes_to_trimmed_string(bytes: &[u8]) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Sink implementation for fff-grep
+// Sink implementation for grep-searcher
 // ---------------------------------------------------------------------------
 
 impl Sink for MatchCollector {
@@ -504,7 +504,6 @@ struct SearchParams {
 	mode:           OutputMode,
 	max_count:      Option<u64>,
 	offset:         u64,
-	multiline:      bool,
 }
 
 fn run_search(
@@ -1188,15 +1187,8 @@ fn search_sync(content: &[u8], options: SearchOptions) -> SearchResult {
 	let max_columns = options.max_columns;
 	let max_count = options.max_count.map(u64::from);
 	let offset = options.offset.unwrap_or(0) as u64;
-	let params = SearchParams {
-		context_before,
-		context_after,
-		max_columns,
-		mode,
-		max_count,
-		offset,
-		multiline,
-	};
+	let params =
+		SearchParams { context_before, context_after, max_columns, mode, max_count, offset };
 	let result = match run_search(&matcher, content, params) {
 		Ok(result) => result,
 		Err(err) => return empty_search_result(Some(err.to_string())),
@@ -1246,7 +1238,6 @@ fn grep_sync(
 		mode: output_mode,
 		max_count,
 		offset,
-		multiline,
 	};
 
 	if !metadata.is_file() && !metadata.is_dir() {
@@ -1339,19 +1330,19 @@ fn grep_sync(
 		});
 	}
 
+	let scan_options =
+		fs_cache::ScanOptions { include_hidden, use_gitignore, skip_node_modules: true };
 	let entries = if use_cache {
-		let scan = fs_cache::get_or_scan(&search_path, include_hidden, use_gitignore, true, &ct)?;
+		let scan = fs_cache::get_or_scan(&search_path, scan_options, &ct)?;
 		let mut entries =
 			collect_files(&search_path, &scan.entries, glob_set.as_ref(), type_filter.as_ref());
 		if entries.is_empty() && scan.cache_age_ms >= fs_cache::empty_recheck_ms() {
-			let fresh =
-				fs_cache::force_rescan(&search_path, include_hidden, use_gitignore, true, true, &ct)?;
+			let fresh = fs_cache::force_rescan(&search_path, scan_options, true, &ct)?;
 			entries = collect_files(&search_path, &fresh, glob_set.as_ref(), type_filter.as_ref());
 		}
 		entries
 	} else {
-		let fresh =
-			fs_cache::force_rescan(&search_path, include_hidden, use_gitignore, true, false, &ct)?;
+		let fresh = fs_cache::force_rescan(&search_path, scan_options, false, &ct)?;
 		collect_files(&search_path, &fresh, glob_set.as_ref(), type_filter.as_ref())
 	};
 	// Check cancellation before heavy work

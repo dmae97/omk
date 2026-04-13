@@ -194,22 +194,25 @@ fn fuzzy_find_sync(config: FuzzyFindConfig, ct: task::CancelToken) -> Result<Fuz
 	}
 
 	let use_cache = config.cache.unwrap_or(false);
+	let scan_options = fs_cache::ScanOptions {
+		include_hidden,
+		use_gitignore: respect_gitignore,
+		skip_node_modules: true,
+	};
 	let mut scored = if use_cache {
-		let scan = fs_cache::get_or_scan(&root, include_hidden, respect_gitignore, true, &ct)?;
+		let scan = fs_cache::get_or_scan(&root, scan_options, &ct)?;
 		let mut scored =
 			score_entries(&scan.entries, &query_lower, &normalized_query, &query_chars, &ct)?;
 		if scored.is_empty()
 			&& !query_lower.is_empty()
 			&& scan.cache_age_ms >= fs_cache::empty_recheck_ms()
 		{
-			let fresh =
-				fs_cache::force_rescan(&root, include_hidden, respect_gitignore, true, true, &ct)?;
+			let fresh = fs_cache::force_rescan(&root, scan_options, true, &ct)?;
 			scored = score_entries(&fresh, &query_lower, &normalized_query, &query_chars, &ct)?;
 		}
 		scored
 	} else {
-		let fresh =
-			fs_cache::force_rescan(&root, include_hidden, respect_gitignore, true, false, &ct)?;
+		let fresh = fs_cache::force_rescan(&root, scan_options, false, &ct)?;
 		score_entries(&fresh, &query_lower, &normalized_query, &query_chars, &ct)?
 	};
 
