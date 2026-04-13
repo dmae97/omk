@@ -261,7 +261,7 @@ Result — the method (including its doc comment and signature) is removed.
   - Match the file's real indentation characters in your snippet. The tool preserves your literal tabs/spaces after adding the target region's base indent.
 {{/if}}
   - Do NOT include the chunk's base indentation — only indent relative to the region's opening level.
-  - For `~` of a function: write at column 0, and use `\t` for *relative* nesting. Flat body: `"return x;\n"`. Nested body: `"if (cond) {\n\treturn x;\n}\n"` — the `if` is at column 0, the `return` is one tab in, and the tool adds the method's base indent to both. Python example — to replace `~` of `def divide(a, b):`, write: `"if b == 0:\n\treturn None\nreturn a / b\n"` — the `if` and `return a / b` are at column 0, `return None` is one `\t` in.
+  - For `~` of a function: write at column 0, and use `\t` for *relative* nesting. Flat body: `"return x;\n"`. Multiple sibling lines: `"print(a)\nprint(b)\nprint(c)\n"` — all at column 0, the tool adds the function's base indent. Nested body: `"if (cond) {\n\treturn x;\n}\n"` — the `if` is at column 0, the `return` is one tab in. Python example — to replace `~` of `def divide(a, b):`, write: `"if b == 0:\n\treturn None\nreturn a / b\n"` — the `if` and `return a / b` are at column 0, `return None` is one `\t` in.
   - For `^`: write at the chunk's own depth. A class member's head uses `"/// doc\n#[attr]\npub fn start() {"`.
 {{#if chunkAutoIndent}}
   - For a top-level item: start at zero indent. Write `"fn foo() {\n\treturn 1;\n}\n"`.
