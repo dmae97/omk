@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
 - Removed the `searchDb` field from session and extension tool contexts, so custom tools and extensions no longer receive a shared native search DB handle from `ToolSession`, `CustomToolContext`, `ExtensionContext`, and `CreateAgentSessionOptions`
@@ -10,6 +9,12 @@
 
 ### Added
 
+- Added `C-u` and `C-o` in vim insert mode to clear to line start and execute a one-off normal-mode command before returning to insert
+- Added insert-mode visual operators `J`, `u`, `U`, `p`, and `P` to join lines, convert case, and replace the selected region with register content
+- Added normal-mode line motions `+`, `-`, and `_` to move to line offsets at the first non-blank character
+- Added `*` and `#` normal-mode commands to search forward or backward for the word under the cursor
+- Added `gJ` to join a line range, `gv` to restore the last visual selection, and `ZZ`/`ZQ` shortcuts for save-and-exit or exit-without-save in vim mode
+- Added paragraph text object `p` for `ip`/`ap`-style paragraph selection
 - Added a warning when chunk edits write to the `~` selector with body lines that appear over-indented, instructing users to start top-level body text at column 0
 - Added validation feedback for suspect indentation in chunk-mode `~` body writes so users can align content with the tool's automatic base indentation
 - Added support for multi-file `edit` calls across replace, patch, hashline, and chunk modes by grouping `edits` entries by file path and returning combined per-file results
@@ -20,6 +25,7 @@
 
 ### Changed
 
+- Changed vim tab breadcrumb rendering from ` → ` to `→` in the editor view
 - Changed custom tool and task execution contexts to no longer expose a shared `searchDb` accessor, removing direct access to native grep/glob/fuzzyFind search backends from extension callbacks
 - Changed the `task` tool `schema` field to require JSON-encoded JTD schema text instead of a schema object, matching prompt guidance and task-subagent invocation
 - Changed chunk edit payloads to encode selectors as `path: "file:selector"` and updated chunk tool guidance and examples to match

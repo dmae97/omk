@@ -250,6 +250,7 @@ export class VimEngine {
 	register: VimRegister = { kind: "char", text: "" };
 	lastSearch: VimSearchState | null = null;
 	lastCharFind: { char: string; mode: "f" | "F" | "t" | "T" } | null = null;
+	lastVisual: { anchor: Position; cursor: Position; mode: VimInputMode } | null = null;
 	lastCommand?: string;
 	statusMessage?: string;
 	diagnostics?: FileDiagnosticsResult;
@@ -386,7 +387,7 @@ export class VimEngine {
 			for (let index = 0; index < tokens.length; ) {
 				switch (this.inputMode) {
 					case "insert":
-						index = this.#executeInsert(tokens, index);
+						index = await this.#executeInsert(tokens, index);
 						break;
 					case "command":
 					case "search-forward":
@@ -440,6 +441,13 @@ export class VimEngine {
 	}
 
 	#clearSelection(): void {
+		if (this.selectionAnchor && (this.inputMode === "visual" || this.inputMode === "visual-line")) {
+			this.lastVisual = {
+				anchor: clonePosition(this.selectionAnchor),
+				cursor: clonePosition(this.buffer.cursor),
+				mode: this.inputMode,
+			};
+		}
 		this.selectionAnchor = null;
 		if (this.inputMode === "visual" || this.inputMode === "visual-line") {
 			this.inputMode = "normal";
@@ -570,7 +578,7 @@ export class VimEngine {
 		}
 	}
 
-	#executeInsert(tokens: readonly VimKeyToken[], index: number): number {
+	async #executeInsert(tokens: readonly VimKeyToken[], index: number): Promise<number> {
 		const token = tokens[index]!;
 		if (token.value === "Esc") {
 			this.#exitInsertMode();
@@ -616,6 +624,29 @@ export class VimEngine {
 			this.#markPendingInserted();
 			return index + 1;
 		}
+		if (token.value === "C-u") {
+			const offset = this.buffer.currentOffset();
+			const lineStart = this.buffer.positionToOffset({ line: this.buffer.cursor.line, col: 0 });
+			if (offset > lineStart) {
+				this.buffer.deleteOffsets(lineStart, offset);
+				this.buffer.modified = true;
+				this.#pendingChange?.tokens.push(token.value);
+				this.#markPendingInserted();
+			}
+			return index + 1;
+		}
+		if (token.value === "C-o") {
+			// Execute one normal-mode command, then return to insert
+			const nextToken = tokens[index + 1];
+			if (!nextToken) {
+				return index + 1;
+			}
+			const savedMode = this.inputMode;
+			this.inputMode = "normal";
+			const nextIdx = await this.#executeNormal(tokens, index + 1);
+			this.inputMode = savedMode;
+			return nextIdx;
+		}
 
 		const insertText = token.value;
 		const offset = this.buffer.currentOffset();
@@ -640,6 +671,57 @@ export class VimEngine {
 		}
 		if (token.value === "V") {
 			this.inputMode = this.inputMode === "visual-line" ? "visual" : "visual-line";
+			return index + 1;
+		}
+		if (token.value === "o") {
+			if (this.selectionAnchor) {
+				const tmp = clonePosition(this.buffer.cursor);
+				this.buffer.setCursor(this.selectionAnchor);
+				this.selectionAnchor = tmp;
+			}
+			return index + 1;
+		}
+		if (token.value === "J") {
+			const visual = expandVisualOffsets(
+				this.buffer,
+				this.selectionAnchor ?? this.buffer.cursor,
+				this.inputMode === "visual-line",
+			);
+			const startLine = this.buffer.offsetToPosition(visual.start).line;
+			const endLine = this.buffer.offsetToPosition(Math.max(visual.start, visual.end - 1)).line;
+			await this.#applyAtomicChange(["J"], () => {
+				this.buffer.joinLines(startLine, endLine - startLine);
+			});
+			this.#clearSelection();
+			return index + 1;
+		}
+		if (token.value === "u" || token.value === "U") {
+			const visual = expandVisualOffsets(
+				this.buffer,
+				this.selectionAnchor ?? this.buffer.cursor,
+				this.inputMode === "visual-line",
+			);
+			await this.#applyAtomicChange([token.value], () => {
+				const original = this.buffer.getText().slice(visual.start, visual.end);
+				const transformed = token.value === "U" ? original.toUpperCase() : original.toLowerCase();
+				this.buffer.replaceOffsets(visual.start, visual.end, transformed, visual.start);
+			});
+			this.#clearSelection();
+			return index + 1;
+		}
+		if (token.value === "p" || token.value === "P") {
+			const visual = expandVisualOffsets(
+				this.buffer,
+				this.selectionAnchor ?? this.buffer.cursor,
+				this.inputMode === "visual-line",
+			);
+			await this.#applyAtomicChange([token.value], () => {
+				const removed = this.buffer.getText().slice(visual.start, visual.end);
+				const pasteText = this.register.text;
+				this.buffer.replaceOffsets(visual.start, visual.end, pasteText, visual.start + pasteText.length);
+				this.register = { kind: visual.linewise ? "line" : "char", text: removed };
+			});
+			this.#clearSelection();
 			return index + 1;
 		}
 
@@ -815,10 +897,33 @@ export class VimEngine {
 			case "%":
 			case "H":
 			case "M":
+			case "+":
+			case "-":
+			case "_":
 			case "L": {
 				const motion = this.#resolveMotion(tokens, nextIndex, count, hasCount);
 				this.buffer.setCursor(motion.target);
 				return motion.nextIndex;
+			}
+			case "*":
+			case "#": {
+				const text = this.buffer.getText();
+				const offset = this.buffer.currentOffset();
+				const cat = wordCategory(text[offset] ?? "", false);
+				if (cat === "space") {
+					throw new VimError("No word under cursor", token);
+				}
+				let start = offset;
+				while (start > 0 && wordCategory(text[start - 1] ?? "", false) === cat) start -= 1;
+				let end = offset;
+				while (end < text.length && wordCategory(text[end] ?? "", false) === cat) end += 1;
+				const word = text.slice(start, end);
+				const pattern = `\\b${escapeRegex(word)}\\b`;
+				const direction = token.value === "*" ? 1 : -1;
+				for (let step = 0; step < count; step += 1) {
+					await this.#runSearch(pattern, direction, true);
+				}
+				return nextIndex + 1;
 			}
 			case "n":
 				await this.#repeatSearch(this.lastSearch?.direction ?? 1, count);
@@ -1040,6 +1145,14 @@ export class VimEngine {
 					this.buffer.setCursor({ line: hasCount ? Math.max(0, count - 1) : 0, col: 0 });
 					return nextIndex + 2;
 				}
+				if (gNext.value === "v") {
+					if (this.lastVisual) {
+						this.selectionAnchor = clonePosition(this.lastVisual.anchor);
+						this.buffer.setCursor(this.lastVisual.cursor);
+						this.inputMode = this.lastVisual.mode;
+					}
+					return nextIndex + 2;
+				}
 				if (gNext.value === "U" || gNext.value === "u") {
 					const caseOp = gNext.value;
 					const {
@@ -1074,7 +1187,34 @@ export class VimEngine {
 					});
 					return motion.nextIndex;
 				}
+				if (gNext.value === "J") {
+					await this.#applyAtomicChange(["g", "J"], () => {
+						const start = this.buffer.clampLine(this.buffer.cursor.line);
+						const end = this.buffer.clampLine(start + Math.max(count, 1));
+						if (start < end) {
+							const joined = this.buffer.lines.slice(start, end + 1).join("");
+							this.buffer.lines.splice(start, end - start + 1, joined);
+							this.buffer.setCursor({ line: start, col: Math.max(0, joined.length - 1) });
+						}
+					});
+					return nextIndex + 2;
+				}
 				throw new VimError(`Unsupported g command: g${gNext.display}`, gNext);
+			}
+			case "Z": {
+				const zNext = tokens[nextIndex + 1];
+				if (!zNext) {
+					throw new VimError("Z requires a second key", token);
+				}
+				if (zNext.value === "Z") {
+					await this.#executeEx("wq");
+					return nextIndex + 2;
+				}
+				if (zNext.value === "Q") {
+					await this.#executeEx("q!");
+					return nextIndex + 2;
+				}
+				throw new VimError(`Unsupported Z command: Z${zNext.display}`, zNext);
 			}
 			default:
 				throw new VimError(`Unsupported command: ${token.display}`, token);
@@ -1370,6 +1510,30 @@ export class VimEngine {
 						col: Math.max(0, this.buffer.getLine(this.buffer.cursor.line).length - 1),
 					},
 				};
+			case "+": {
+				const targetLine = this.buffer.clampLine(this.buffer.cursor.line + count);
+				return {
+					nextIndex: index + 1,
+					target: { line: targetLine, col: this.buffer.firstNonBlank(targetLine) },
+					linewise: true,
+				};
+			}
+			case "-": {
+				const targetLine = this.buffer.clampLine(this.buffer.cursor.line - count);
+				return {
+					nextIndex: index + 1,
+					target: { line: targetLine, col: this.buffer.firstNonBlank(targetLine) },
+					linewise: true,
+				};
+			}
+			case "_": {
+				const targetLine = this.buffer.clampLine(this.buffer.cursor.line + (count - 1));
+				return {
+					nextIndex: index + 1,
+					target: { line: targetLine, col: this.buffer.firstNonBlank(targetLine) },
+					linewise: true,
+				};
+			}
 			case "g": {
 				const next = tokens[index + 1];
 				if (!next || next.value !== "g") {
@@ -1520,6 +1684,10 @@ export class VimEngine {
 			return this.#resolveQuoteTextObject(inner, objectToken, sourceToken);
 		}
 
+		if (objectToken === "p") {
+			return this.#resolveParagraphTextObject(inner);
+		}
+
 		const normalized =
 			objectToken === ")"
 				? "("
@@ -1560,6 +1728,37 @@ export class VimEngine {
 			}
 		}
 		return { start, end };
+	}
+
+	#resolveParagraphTextObject(inner: boolean): { start: number; end: number; linewise: boolean } {
+		const lines = this.buffer.lines;
+		const cursorLine = this.buffer.cursor.line;
+		let start = cursorLine;
+		let end = cursorLine;
+		// Find paragraph boundaries (delimited by blank lines)
+		if (lines[cursorLine]?.trim().length === 0) {
+			// On a blank line: select contiguous blank lines
+			while (start > 0 && lines[start - 1]!.trim().length === 0) start -= 1;
+			while (end < lines.length - 1 && lines[end + 1]!.trim().length === 0) end += 1;
+			if (!inner) {
+				// Include following non-blank paragraph
+				while (end < lines.length - 1 && lines[end + 1]!.trim().length > 0) end += 1;
+			}
+		} else {
+			// On a non-blank line: select contiguous non-blank lines
+			while (start > 0 && lines[start - 1]!.trim().length > 0) start -= 1;
+			while (end < lines.length - 1 && lines[end + 1]!.trim().length > 0) end += 1;
+			if (!inner) {
+				// Include trailing blank lines
+				while (end < lines.length - 1 && lines[end + 1]!.trim().length === 0) end += 1;
+			}
+		}
+		const startOffset = this.buffer.positionToOffset({ line: start, col: 0 });
+		const endOffset =
+			end >= this.buffer.lastLineIndex()
+				? this.buffer.getText().length
+				: this.buffer.positionToOffset({ line: end + 1, col: 0 });
+		return { start: startOffset, end: endOffset, linewise: true };
 	}
 
 	#resolveQuoteTextObject(inner: boolean, quote: string, sourceToken: VimKeyToken): { start: number; end: number } {
