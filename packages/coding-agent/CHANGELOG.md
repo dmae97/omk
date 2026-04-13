@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added support for `computeHashlineDiff` to accept hashline edits with `loc` and `content` payloads without requiring pre-resolved `op` fields
@@ -10,10 +9,13 @@
 
 ### Changed
 
+- Grouped chunk-mode `grep` results by directory, file, and chunk so directory searches now render as hierarchical sections (`#`/`##`) with per-chunk anchor lines
+- Updated chunk-mode `grep` output to include match lines under their containing chunk entries with consistent line-number alignment based on file length
 - Changed eager todo enforcement to only apply on the first user message of a conversation, skipping subsequent user turns that may correct, clarify, or redirect the prior task
 
 ### Fixed
 
+- Fixed chunk streaming output detection to verify chunk edits with `chunkToolEditSchema`, preventing non-chunk edit payloads from being rendered as chunk diffs
 - Fixed tool execution output to return the original `toolResult` text content from tools instead of sanitizing it before sending completion messages
 - Fixed session accent rendering in the status line and editor to reset only foreground color (`\x1b[39m`) so applying a session color no longer clears other ANSI styles
 - Session name sanitization: strip C0/C1 control characters (including ANSI ESC) from session names at storage time and in status line rendering, preventing escape sequence injection into TUI output

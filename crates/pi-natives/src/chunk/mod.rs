@@ -3047,21 +3047,31 @@ end
 			})
 			.expect("render_read should succeed");
 
-		// The output should contain truncation markers indicating the chunk continues.
+		// The output should keep the chunk head and tail context and collapse the
+		// omitted middle ranges with generic expansion markers.
 		assert!(
-			result.text.contains("to expand above"),
-			"should show top truncation marker when chunk extends above visible range: {}",
+			result.text.contains("1|function longFunc() {"),
+			"should keep the chunk signature when the visible range clips the head: {}",
 			result.text
 		);
 		assert!(
-			result.text.contains("to expand below"),
-			"should show bottom truncation marker when chunk extends below visible range: {}",
+			result.text.contains("9|let h = 8;"),
+			"should keep tail context when the visible range clips the body: {}",
 			result.text
 		);
-		// The visible content should still be there.
 		assert!(
 			result.text.contains("let c = 3"),
 			"visible content should be rendered: {}",
+			result.text
+		);
+		assert!(
+			result.text.contains("[truncated… sel=L2-L2 to expand]"),
+			"should show a generic truncation marker above the requested lines: {}",
+			result.text
+		);
+		assert!(
+			result.text.contains("[truncated… sel=L8-L8 to expand]"),
+			"should show a generic truncation marker below the requested lines: {}",
 			result.text
 		);
 	}
@@ -3089,13 +3099,8 @@ end
 
 		// Should NOT have any truncation markers.
 		assert!(
-			!result.text.contains("to expand above"),
-			"no top clip marker when chunk fits: {}",
-			result.text
-		);
-		assert!(
-			!result.text.contains("to expand below"),
-			"no bottom clip marker when chunk fits: {}",
+			!result.text.contains("[truncated…"),
+			"no clip marker when chunk fits: {}",
 			result.text
 		);
 	}

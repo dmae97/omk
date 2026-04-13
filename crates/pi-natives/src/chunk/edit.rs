@@ -70,6 +70,12 @@ pub fn apply_edits(state: &ChunkState, params: &EditParams) -> Result<EditResult
 	let initial_parse_errors = state.tree.parse_errors;
 	let initial_chunk_paths: std::collections::HashSet<String> =
 		state.tree.chunks.iter().map(|c| c.path.clone()).collect();
+	let initial_chunk_checksums: std::collections::HashMap<String, String> = state
+		.tree
+		.chunks
+		.iter()
+		.map(|chunk| (chunk.path.clone(), chunk.checksum.clone()))
+		.collect();
 	let normalize_indent = params.normalize_indent.unwrap_or(true);
 	let mut touched_paths = Vec::new();
 	let mut warnings = Vec::new();
@@ -286,6 +292,7 @@ pub fn apply_edits(state: &ChunkState, params: &EditParams) -> Result<EditResult
 			&diff_after,
 			params.anchor_style,
 			&touched_paths,
+			&initial_chunk_checksums,
 			normalize_indent,
 		)
 	} else {
@@ -1852,17 +1859,15 @@ fn render_changed_hunks(
 	after: &str,
 	anchor_style: Option<ChunkAnchorStyle>,
 	touched_paths: &[String],
+	before_checksums: &std::collections::HashMap<String, String>,
 	normalize_indent: bool,
 ) -> String {
-	use std::collections::HashMap;
+	use std::collections::{HashMap, HashSet};
 
 	let show_leaf_preview = state.language == "tlaplus";
 	let focused_paths = compute_focus(state.tree(), touched_paths);
 	let hunks = generate_diff_hunks(before, after, 0);
 
-	// Map each hunk to the chunk that should display it.
-	// Walk from the deepest containing chunk upward until we find one that
-	// has children (and therefore a closing tag in the tree output).
 	let tree = state.tree();
 	let tab_replacement = if normalize_indent {
 		NORMALIZED_TAB_REPLACEMENT
@@ -1874,39 +1879,57 @@ fn render_changed_hunks(
 	let lookup: HashMap<&str, &ChunkNode> =
 		tree.chunks.iter().map(|c| (c.path.as_str(), c)).collect();
 	let render_indent = normalize_indent.then_some((file_indent_char, file_indent_step));
-
 	let mut inline_hunks: HashMap<String, Vec<crate::chunk::render::InlineHunk>> = HashMap::new();
-	let mut orphan_hunks: Vec<&DiffHunk> = Vec::new();
+	let mut changed_anchor_paths = HashSet::new();
 
 	for hunk in &hunks {
-		// Find the deepest chunk containing this hunk's new-file start line.
 		let owner = crate::chunk::render::find_hunk_owner_chunk(tree, &lookup, hunk.new_start);
-		match owner {
-			Some(chunk_path) => {
-				let indent = crate::chunk::render::hunk_indent_for_chunk(
-					&lookup,
-					chunk_path,
-					state.source(),
-					tab_replacement,
-					render_indent,
-				);
-				let mut lines = Vec::with_capacity(hunk.lines.len() + 1);
-				lines.push(format!("{indent}{}", hunk.header));
-				for line in &hunk.lines {
-					let normalized =
-						render_hunk_line(line, normalize_indent, file_indent_char, file_indent_step);
-					lines.push(format!("{indent}{normalized}"));
-				}
-				inline_hunks
-					.entry(chunk_path.to_owned())
-					.or_default()
-					.push(crate::chunk::render::InlineHunk { lines });
-			},
-			None => orphan_hunks.push(hunk),
+		let owner_path = owner.unwrap_or("");
+		let indent = if owner_path.is_empty() {
+			String::new()
+		} else {
+			crate::chunk::render::hunk_indent_for_chunk(
+				&lookup,
+				owner_path,
+				state.source(),
+				tab_replacement,
+				render_indent,
+			)
+		};
+		let mut lines = Vec::with_capacity(hunk.lines.len() + 1);
+		lines.push(format!("{indent}{}", hunk.header));
+		for line in &hunk.lines {
+			let normalized =
+				render_hunk_line(line, normalize_indent, file_indent_char, file_indent_step);
+			lines.push(format!("{indent}{normalized}"));
+		}
+		inline_hunks
+			.entry(owner_path.to_owned())
+			.or_default()
+			.push(crate::chunk::render::InlineHunk { lines });
+	}
+
+	for path in touched_paths {
+		let mut current = Some(path.as_str());
+		while let Some(chunk_path) = current {
+			if chunk_path.is_empty() {
+				break;
+			}
+			let Some(chunk) = lookup.get(chunk_path) else {
+				current = chunk_path.rfind('.').map(|dot| &chunk_path[..dot]);
+				continue;
+			};
+			if before_checksums
+				.get(&chunk.path)
+				.is_none_or(|previous| previous != &chunk.checksum)
+			{
+				changed_anchor_paths.insert(chunk.path.clone());
+			}
+			current = chunk.parent_path.as_deref();
 		}
 	}
 
-	let tree_text = crate::chunk::render::render_state_with_hunks(
+	crate::chunk::render::render_state_with_hunks(
 		state,
 		&RenderParams {
 			chunk_path: Some(String::new()),
@@ -1922,31 +1945,12 @@ fn render_changed_hunks(
 			focused_paths,
 		},
 		inline_hunks,
-	);
-
-	if orphan_hunks.is_empty() {
-		return tree_text;
-	}
-
-	// Append orphan hunks (not belonging to any named chunk) at the end.
-	let orphan_text = orphan_hunks
-		.iter()
-		.flat_map(|hunk| {
-			let mut lines = Vec::with_capacity(hunk.lines.len() + 1);
-			lines.push(hunk.header.clone());
-			lines.extend(hunk.lines.iter().map(|line| {
-				render_hunk_line(line, normalize_indent, file_indent_char, file_indent_step)
-			}));
-			lines
-		})
-		.collect::<Vec<_>>()
-		.join("\n");
-
-	format!("{tree_text}\n\n{orphan_text}")
+		changed_anchor_paths,
+	)
 }
 
-/// Build a focus list that includes touched chunks as Expanded, their
-/// immediate siblings as Collapsed, and all ancestors as Container.
+/// Build a focus list that includes touched chunks as Expanded and all
+/// ancestors as Container.
 /// Falls back to no focus (full render) when more than 20 chunks were touched.
 fn compute_focus(
 	tree: &crate::chunk::types::ChunkTree,
@@ -2000,23 +2004,6 @@ fn compute_focus(
 			current = lookup
 				.get(parent_path)
 				.and_then(|p| p.parent_path.as_deref());
-		}
-
-		// Immediate prev/next sibling -> Collapsed.
-		if let Some(parent_path) = chunk.parent_path.as_deref()
-			&& let Some(parent) = lookup.get(parent_path)
-			&& let Some(idx) = parent.children.iter().position(|p| p == path)
-		{
-			if idx > 0 {
-				focus
-					.entry(parent.children[idx - 1].clone())
-					.or_insert(ChunkFocusMode::Collapsed);
-			}
-			if idx + 1 < parent.children.len() {
-				focus
-					.entry(parent.children[idx + 1].clone())
-					.or_insert(ChunkFocusMode::Collapsed);
-			}
 		}
 	}
 

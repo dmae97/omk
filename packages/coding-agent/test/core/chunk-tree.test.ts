@@ -771,8 +771,8 @@ describe("formatChunkedRead", () => {
 
 		expect(result.text).toContain("worker.ts:class_Worker.fn_run·");
 		expect(result.text).toContain("class_Worker.fn_run#");
-		expect(result.text).toContain("6| \trun(): void {");
-		expect(result.text).toContain("7| \t\tconsole.log(this.name);");
+		expect(result.text).toContain("6|\trun(): void {");
+		expect(result.text).toContain("7|\t\tconsole.log(this.name);");
 		expect(result.text).toContain("console.log(this.name);");
 	});
 
@@ -792,8 +792,8 @@ describe("formatChunkedRead", () => {
 
 		expect(result.text).not.toContain("to expand ⋮");
 		expectRenderedChunkPath(result.text, "service.ts:class_Service.fn_handle", "·");
-		expect(result.text).toContain("3| \t\tstep(0);");
-		expect(result.text).toContain("27| \t\tstep(24);");
+		expect(result.text).toContain("3|\t\tstep(0);");
+		expect(result.text).toContain("27|\t\tstep(24);");
 		expect(result.text).toContain("done();");
 	});
 });
@@ -901,8 +901,8 @@ describe("addressable member rendering", () => {
 		});
 
 		expectRenderedChunkPath(result.text, "type_Handler");
-		expect(result.text).toContain("3| type Handler interface {");
-		expect(result.text).toContain("4| \tHandle(method, path string) Result");
+		expect(result.text).toContain("3|type Handler interface {");
+		expect(result.text).toContain("4|\tHandle(method, path string) Result");
 	});
 
 	test("renders Go receiver methods as top-level siblings", async () => {

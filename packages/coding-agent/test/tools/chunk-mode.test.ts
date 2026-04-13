@@ -151,7 +151,7 @@ describe("chunk mode tools", () => {
 		expect(text).not.toContain("to expand ⋮");
 		expect(text).toContain(`server.ts:${HANDLE_ERROR_CHUNK_PATH}·`);
 		expect(text).toContain("let total = 0;");
-		expect(text).toContain("29| \t\t\ttotal +=");
+		expect(text).toContain("29|\t\t\ttotal +=");
 		expect(text).toContain("return err.message + total;");
 	});
 
@@ -166,11 +166,11 @@ describe("chunk mode tools", () => {
 		});
 		const text = getText(result);
 
-		expect(text).toContain("2|   private handleError(err: Error): string {");
-		expect(text).toContain("3|     let total = 0;");
-		expect(text).toContain("29|       total +=");
-		expect(text).not.toContain("2| \tprivate handleError");
-		expect(text).not.toContain("29| \t\t\ttotal +=");
+		expect(text).toContain("2|  private handleError(err: Error): string {");
+		expect(text).toContain("3|    let total = 0;");
+		expect(text).toContain("29|      total +=");
+		expect(text).not.toContain("2|\tprivate handleError");
+		expect(text).not.toContain("29|\t\t\ttotal +=");
 	});
 
 	it("renders line-range reads as range-scoped chunk output", async () => {
@@ -181,13 +181,16 @@ describe("chunk mode tools", () => {
 		const result = await tool.execute("chunk-read-lines", { path: filePath, sel: "L2-L4" });
 		const text = getText(result);
 
-		expect(text).toContain("[Notice: chunk view scoped to requested lines L2-L4; non-overlapping lines omitted.]");
+		expect(text).toContain(
+			"[Notice: chunk view scoped to requested lines L2-L4; clipped chunks keep head/tail context and collapse non-overlapping children.]",
+		);
 		expect(text).toContain("server.ts·");
 		expect(text).toContain(`[<${HANDLE_ERROR_CHUNK_PATH}#`);
 		expect(text).toContain(`[<${HANDLE_ERROR_CHUNK_PATH}.var_total#`);
 		expect(text).toContain("3|");
 		expect(text).toContain("4|");
-		expect(text).not.toContain("⋯");
+		expect(text).toContain("64|\t\treturn err.message + total;");
+		expect(text).toContain("[truncated… sel=L5-L62 to expand]");
 		expect(text).not.toContain("to expand above");
 		expect(text).not.toContain("to expand below");
 	});
@@ -200,13 +203,35 @@ describe("chunk mode tools", () => {
 		const result = await tool.execute("chunk-read-lines-in-path", { path: `${filePath}:L2-L4` });
 		const text = getText(result);
 
-		expect(text).toContain("[Notice: chunk view scoped to requested lines L2-L4; non-overlapping lines omitted.]");
+		expect(text).toContain(
+			"[Notice: chunk view scoped to requested lines L2-L4; clipped chunks keep head/tail context and collapse non-overlapping children.]",
+		);
 		expect(text).toContain("server.ts·");
 		expect(text).toContain(`[<${HANDLE_ERROR_CHUNK_PATH}#`);
 		expect(text).toContain(`[<${HANDLE_ERROR_CHUNK_PATH}.var_total#`);
 		expect(text).toContain("3|");
+		expect(text).toContain("64|\t\treturn err.message + total;");
+		expect(text).toContain("[truncated… sel=L5-L62 to expand]");
 		expect(text).not.toContain("to expand above");
 		expect(text).not.toContain("to expand below");
+	});
+
+	it("keeps chunk head and tail context when a line range lands in the middle of a large chunk", async () => {
+		const filePath = path.join(tmpDir, "server.ts");
+		await Bun.write(filePath, buildLargeTypescriptFixture());
+		const tool = new ReadTool(createSession(tmpDir));
+
+		const result = await tool.execute("chunk-read-lines-middle", { path: filePath, sel: "L40-L42" });
+		const text = getText(result);
+
+		expect(text).toContain("2|\tprivate handleError(err: Error): string {");
+		expect(text).toContain("40|\t\t\ttotal += 36;");
+		expect(text).toContain("42|\t\t\ttotal += 38;");
+		expect(text).toContain("63|\t\t\ttotal += 59;");
+		expect(text).toContain("64|\t\treturn err.message + total;");
+		expect(text).toContain("65|\t}");
+		expect(text).toContain("[truncated… sel=L3-L39 to expand]");
+		expect(text).toContain("[truncated… sel=L43-L62 to expand]");
 	});
 
 	it("ignores a chunk selector checksum suffix on read", async () => {
@@ -271,8 +296,8 @@ describe("chunk mode tools", () => {
 		});
 		const text = getText(result);
 
-		expect(text).toContain(`server.ts:${HANDLE_ERROR_CHUNK_PATH}`);
-		expect(text).toContain(".ret>64|");
+		expect(text).toContain("[<class_Server.fn_handle.ret#");
+		expect(text).toContain("64|    return err.message + total;");
 		expect(text).toContain("err.message");
 	});
 
@@ -292,7 +317,39 @@ describe("chunk mode tools", () => {
 		});
 		const text = getText(result);
 
-		expect(text).toContain('>  1|const top = "match";');
+		expect(text).toContain('      1|const top = "match";');
+	});
+
+	it("groups chunk-mode grep output by directory, file, and chunk", async () => {
+		const toolsDir = path.join(tmpDir, "src", "tools");
+		const coreDir = path.join(tmpDir, "src", "core");
+		await fs.mkdir(toolsDir, { recursive: true });
+		await fs.mkdir(coreDir, { recursive: true });
+		await Bun.write(
+			path.join(toolsDir, "grep.ts"),
+			["function execute(): string {", '  return "needle";', "}", ""].join("\n"),
+		);
+		await Bun.write(
+			path.join(coreDir, "server.ts"),
+			["class Server {", "  start(): string {", '    return "needle";', "  }", "}", ""].join("\n"),
+		);
+		const tool = new GrepTool(createSession(tmpDir));
+
+		const result = await tool.execute("chunk-grep-grouped", {
+			pattern: "needle",
+			path: tmpDir,
+			glob: "src/**/*.ts",
+		});
+		const text = getText(result);
+
+		expect(text).toContain("# src/tools");
+		expect(text).toContain("## └─ grep.ts");
+		expect(text).toContain("  [<fn_execut#");
+		expect(text).toContain('    2|  return "needle";');
+		expect(text).toContain("# src/core");
+		expect(text).toContain("## └─ server.ts");
+		expect(text).toContain("  [<class_Server.fn_start#");
+		expect(text).toContain('    3|    return "needle";');
 	});
 
 	it("replaces a chunk using a copied selector in path", async () => {
@@ -327,6 +384,7 @@ describe("chunk mode tools", () => {
 		expect(updatedSource).toContain("normalized:");
 		expect(updatedSource).not.toContain("total +=");
 		expect(editText).toContain("server.ts·");
+		expect(editText).toContain("[<class_Server.fn_handle#");
 		expect(editText).toContain("@@ -3,62 +3,1 @@");
 	});
 
@@ -365,12 +423,16 @@ describe("chunk mode tools", () => {
 		} as never);
 		const editText = getText(editResult);
 
-		expect(editText).toContain("[<class_Server#");
-		expect(editText).toContain("1| class Server {");
-		expect(editText).toContain("[<class_Server.fn_handle#");
-		expect(editText).toContain('3| \t\tconsole.log("new");');
-		expect(editText).toContain("@@ -3,1 +3,1 @@");
-		expect(editText).toContain("[<class_Server.fn_other#");
+		expect(editText).toMatch(/^ {2}\|server\.ts·10L·typescript·#/m);
+		expect(editText).toMatch(/^\* \|\[<class_Server#/m);
+		expect(editText).toMatch(/^\* \|\s+\[<class_Server\.fn_handle#/m);
+		expect(editText).toMatch(/^ {2}\|\s+@@ -3,1 \+3,1 @@$/m);
+		expect(editText).toContain('console.log("old");');
+		expect(editText).toContain('console.log("new");');
+		expect(editText).not.toContain("1|class Server {");
+		expect(editText).not.toContain("crc updated");
+		expect(editText).not.toContain(" lns)");
+		expect(editText).not.toContain("[<class_Server.fn_other#");
 	});
 
 	it("replaces a whole method chunk when PI_CHUNK_AUTOINDENT=0", async () => {

@@ -4,6 +4,7 @@
 import type { ToolCallContext } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text, visibleWidth, wrapTextWithAnsi } from "@oh-my-pi/pi-tui";
+import { Type } from "@sinclair/typebox";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import type { FileDiagnosticsResult } from "../lsp";
 import { renderDiff as renderDiffColored } from "../modes/components/diff";
@@ -23,7 +24,7 @@ import {
 } from "../tools/render-utils";
 import { Hasher, type RenderCache, renderStatusLine, truncateToWidth } from "../tui";
 import type { DiffError, DiffResult } from "./diff";
-import type { ChunkToolEdit } from "./modes/chunk";
+import { type ChunkToolEdit, chunkToolEditSchema } from "./modes/chunk";
 import type { HashlineToolEdit } from "./modes/hashline";
 import type { Operation } from "./modes/patch";
 
@@ -182,7 +183,7 @@ function formatStreamingDiff(diff: string, rawPath: string, uiTheme: Theme, labe
 }
 
 function isChunkStreamingEdit(edit: Partial<HashlineToolEdit | ChunkToolEdit>): edit is Partial<ChunkToolEdit> {
-	return "sel" in edit;
+	return Type.Partial(chunkToolEditSchema).Check(edit);
 }
 
 function getStreamingEditContent(content: unknown): string {

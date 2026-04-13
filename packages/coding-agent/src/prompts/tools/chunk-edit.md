@@ -71,52 +71,52 @@ Given this `read` output for `example.ts`:
   | example.ts·34L·ts·#QBMH
   |
   | [<interface_Config#BWTR>]
- 1| interface Config {
+ 1|interface Config {
   | 	[<interface_Config.field_host#TTMN>]
- 2| 	host: string;
+ 2|	host: string;
   | 	[<interface_Config.field_port#QSMH>]
- 3| 	port: number;
+ 3|	port: number;
   | 	[<interface_Config.field_debug#JPRR>]
- 4| 	debug: boolean;
- 5| }
+ 4|	debug: boolean;
+ 5|}
   |
   | [<class_Counter#HZHY>]
- 7| class Counter {
+ 7|class Counter {
   | 	[<class_Counter.field_value#QJBY>]
- 8| 	value: number = 0;
+ 8|	value: number = 0;
  9|
   | 	[<class_Counter.fn_increment#NQWY>]
-10| 	increment(): void {
-11| 		this.value += 1;
-12| 	}
+10|	increment(): void {
+11|		this.value += 1;
+12|	}
 13|
   | 	[<class_Counter.fn_decrement#PMBP>]
-14| 	decrement(): void {
-15| 		this.value -= 1;
-16| 	}
+14|	decrement(): void {
+15|		this.value -= 1;
+16|	}
 17|
   | 	[<class_Counter.fn_toString#ZQZP>]
-18| 	toString(): string {
-19| 		return `Counter(${this.value})`;
-20| 	}
-21| }
+18|	toString(): string {
+19|		return `Counter(${this.value})`;
+20|	}
+21|}
   |
   | [<enum_Status#HYQJ>]
-23| enum Status {
+23|enum Status {
   | 	[<enum_Status.variant_Active#PQNS>]
-24| 	Active = "ACTIVE",
+24|	Active = "ACTIVE",
   | 	[<enum_Status.variant_Paused#HHNM>]
-25| 	Paused = "PAUSED",
+25|	Paused = "PAUSED",
   | 	[<enum_Status.variant_Stopped#NHTY>]
-26| 	Stopped = "STOPPED",
-27| }
+26|	Stopped = "STOPPED",
+27|}
   |
   | [<fn_createCounter#PQQY>]
-29| function createCounter(initial: number): Counter {
-30| 	const counter = new Counter();
-31| 	counter.value = initial;
-32| 	return counter;
-33| }
+29|function createCounter(initial: number): Counter {
+30|	const counter = new Counter();
+31|	counter.value = initial;
+32|	return counter;
+33|}
 ```
 
 **Replace a whole chunk** (rename a function):

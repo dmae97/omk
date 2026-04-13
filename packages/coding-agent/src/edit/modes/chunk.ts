@@ -257,16 +257,34 @@ export async function formatChunkedRead(params: {
 	return { text: result.text, resolvedPath: filePath, chunk: result.chunk };
 }
 
-export async function formatChunkedGrepLine(params: {
+export type ChunkedGrepMatch = {
+	displayPath: string;
+	fileLineCount: number;
+	chunkPath?: string;
+	chunkChecksum?: string;
+	lineNumber: number;
+	line: string;
+};
+
+export async function describeChunkedGrepMatch(params: {
 	filePath: string;
 	lineNumber: number;
 	line: string;
 	cwd: string;
 	language?: string;
-}): Promise<string> {
+}): Promise<ChunkedGrepMatch> {
 	const { filePath, lineNumber, line, cwd, language } = params;
 	const { state } = await loadChunkStateForFile(filePath, language);
-	return state.formatGrepLine(displayPathForFile(filePath, cwd), lineNumber, line);
+	const chunkPath = state.lineToContainingChunkPath(lineNumber) || undefined;
+	const chunkInfo = chunkPath ? state.chunk(chunkPath) : null;
+	return {
+		displayPath: displayPathForFile(filePath, cwd),
+		fileLineCount: state.lineCount,
+		chunkPath,
+		chunkChecksum: chunkInfo?.checksum,
+		lineNumber,
+		line,
+	};
 }
 
 const CHUNK_CHECKSUM_ALPHABET = "ZPMQVRWSNKTXJBYH";

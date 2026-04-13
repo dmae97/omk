@@ -261,6 +261,11 @@ impl ChunkAnchorStyle {
 		self.render_i(("[<", ">]"), indent, name, crc, &suffix)
 	}
 
+	/// Render an opening anchor tag without the `(N lns)` suffix.
+	pub fn render_without_counts(&self, indent: &str, name: &str, crc: &str) -> String {
+		self.render_i(("[<", ">]"), indent, name, crc, "")
+	}
+
 	/// Render a closing anchor tag: `[</ name#crc >]`.
 	/// Returns empty string for `None` style.
 	pub fn render_close(&self, indent: &str, name: &str, crc: &str) -> String {

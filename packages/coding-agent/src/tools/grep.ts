@@ -7,7 +7,7 @@ import { Text } from "@oh-my-pi/pi-tui";
 import { prompt, untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { computeLineHash } from "../edit/line-hash";
-import { formatChunkedGrepLine } from "../edit/modes/chunk";
+import { type ChunkedGrepMatch, describeChunkedGrepMatch } from "../edit/modes/chunk";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import { getLanguageFromPath, type Theme } from "../modes/theme/theme";
 import grepDescription from "../prompts/tools/grep.md" with { type: "text" };
@@ -274,13 +274,11 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 				matchesByFile.get(relativePath)!.push(match);
 			}
 			if (chunkMode) {
-				const annotatedLines = await Promise.all(
+				const annotatedMatches = await Promise.all(
 					selectedMatches.map(match => {
 						const relativePath = match.path.startsWith("/") ? match.path.slice(1) : match.path;
 						const absoluteFilePath = isDirectory ? path.join(searchPath, relativePath) : searchPath;
-						const displayPath = formatPath(match.path);
-						fileMatchCounts.set(displayPath, (fileMatchCounts.get(displayPath) ?? 0) + 1);
-						return formatChunkedGrepLine({
+						return describeChunkedGrepMatch({
 							filePath: absoluteFilePath,
 							lineNumber: match.lineNumber,
 							line: match.line,
@@ -289,7 +287,75 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 						});
 					}),
 				);
-				const rawOutput = annotatedLines.join("\n");
+				const chunkMatchesByFile = new Map<string, ChunkedGrepMatch[]>();
+				for (const match of annotatedMatches) {
+					recordFile(match.displayPath);
+					if (!chunkMatchesByFile.has(match.displayPath)) {
+						chunkMatchesByFile.set(match.displayPath, []);
+					}
+					chunkMatchesByFile.get(match.displayPath)!.push(match);
+				}
+				const renderChunkedMatchesForFile = (relativePath: string) => {
+					const fileMatches = chunkMatchesByFile.get(relativePath) ?? [];
+					if (fileMatches.length === 0) {
+						return;
+					}
+					const lineWidth = fileMatches[0]?.fileLineCount.toString().length ?? 1;
+					const matchesByChunk = new Map<string, ChunkedGrepMatch[]>();
+					for (const match of fileMatches) {
+						const chunkKey = match.chunkPath ?? "";
+						if (!matchesByChunk.has(chunkKey)) {
+							matchesByChunk.set(chunkKey, []);
+						}
+						matchesByChunk.get(chunkKey)!.push(match);
+					}
+					for (const [chunkPath, chunkMatches] of matchesByChunk) {
+						if (chunkPath) {
+							const chunkChecksum = chunkMatches[0]?.chunkChecksum;
+							const anchor = chunkChecksum ? `[<${chunkPath}#${chunkChecksum}>]` : `[<${chunkPath}>]`;
+							outputLines.push(`  ${anchor}`);
+						}
+						for (const match of chunkMatches) {
+							outputLines.push(`    ${match.lineNumber.toString().padStart(lineWidth, " ")}|${match.line}`);
+							fileMatchCounts.set(relativePath, (fileMatchCounts.get(relativePath) ?? 0) + 1);
+						}
+					}
+				};
+				if (isDirectory) {
+					const filesByDirectory = new Map<string, string[]>();
+					for (const relativePath of fileList) {
+						const directory = path.dirname(relativePath).replace(/\\/g, "/");
+						if (!filesByDirectory.has(directory)) {
+							filesByDirectory.set(directory, []);
+						}
+						filesByDirectory.get(directory)!.push(relativePath);
+					}
+					for (const [directory, directoryFiles] of filesByDirectory) {
+						if (directory === ".") {
+							for (const relativePath of directoryFiles) {
+								if (outputLines.length > 0) {
+									outputLines.push("");
+								}
+								outputLines.push(`# ${path.basename(relativePath)}`);
+								renderChunkedMatchesForFile(relativePath);
+							}
+							continue;
+						}
+						if (outputLines.length > 0) {
+							outputLines.push("");
+						}
+						outputLines.push(`# ${directory}`);
+						for (const relativePath of directoryFiles) {
+							outputLines.push(`## └─ ${path.basename(relativePath)}`);
+							renderChunkedMatchesForFile(relativePath);
+						}
+					}
+				} else {
+					for (const relativePath of fileList) {
+						renderChunkedMatchesForFile(relativePath);
+					}
+				}
+				const rawOutput = outputLines.join("\n");
 				const truncation = truncateHead(rawOutput, { maxLines: Number.MAX_SAFE_INTEGER });
 				const truncated = Boolean(matchLimitReached || result.limitReached || truncation.truncated);
 				const details: GrepToolDetails = {

@@ -412,8 +412,8 @@ impl ChunkState {
 				end_line:   visible_range.end_line.min(self.inner.tree().line_count),
 			};
 			let notice = format!(
-				"[Notice: chunk view scoped to requested lines L{}-L{}; non-overlapping lines \
-				 omitted.]",
+				"[Notice: chunk view scoped to requested lines L{}-L{}; clipped chunks keep head/tail \
+				 context and collapse non-overlapping children.]",
 				clamped_range.start_line, clamped_range.end_line
 			);
 			let text = self.render(RenderParams {
