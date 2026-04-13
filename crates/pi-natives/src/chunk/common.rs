@@ -23,18 +23,6 @@ env_uint! {
 	pub static MIN_RECURSE_SAVINGS: usize = "PI_CHUNK_MIN_SAVINGS" or 4 => [1, usize::MAX];
 }
 
-/// Always recurse into named (non-group) chunks when children exist,
-/// regardless of the leaf threshold. Enabled via `PI_CHUNK_ALWAYS_RECURSE=1`.
-pub static ALWAYS_RECURSE: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
-	std::env::var("PI_CHUNK_ALWAYS_RECURSE").is_ok_and(|v| !matches!(v.as_str(), "0" | "false"))
-});
-
-/// Suppress `[/chunk#CRC]` closing tags in rendered output.
-/// Disabled via `PI_HIDE_CLOSING_TAGS=0`.
-pub static HIDE_CLOSING_TAGS: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
-	std::env::var("PI_HIDE_CLOSING_TAGS").map_or(true, |v| !matches!(v.as_str(), "0" | "false"))
-});
-
 // ── Internal types ───────────────────────────────────────────────────────
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

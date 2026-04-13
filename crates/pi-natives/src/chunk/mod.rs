@@ -370,7 +370,7 @@ fn build_chunk(
 		&& recurse.is_some()
 		&& recurse_parse_errors == 0
 		&& should_collapse_trivial_children(&candidate, &child_candidates);
-	let always_recurse = *ALWAYS_RECURSE && !candidate.groupable && !child_candidates.is_empty();
+	let always_recurse = !candidate.groupable && !child_candidates.is_empty();
 	// A child that already committed to splitting further (force_recurse +
 	// recurse) should always pull its parent along. Otherwise a small
 	// wrapper parent would keep the child's sub-structure hidden just

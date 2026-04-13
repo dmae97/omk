@@ -114,7 +114,10 @@ impl ChunkRegion {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[napi(string_enum)]
 pub enum ChunkEditOp {
-	/// Replace the targeted region, or a substring via `find`.
+	/// Put new content into the targeted region.
+	#[napi(value = "put")]
+	Put,
+	/// Find and replace a literal substring within the targeted region.
 	#[napi(value = "replace")]
 	Replace,
 	/// Remove the targeted region.
@@ -137,6 +140,7 @@ pub enum ChunkEditOp {
 impl ChunkEditOp {
 	pub const fn as_str(self) -> &'static str {
 		match self {
+			Self::Put => "put",
 			Self::Replace => "replace",
 			Self::Delete => "delete",
 			Self::Before => "before",
@@ -238,15 +242,9 @@ impl ChunkAnchorStyle {
 		}
 	}
 
-	/// Render an opening anchor tag
-	pub fn render(&self, indent: &str, name: &str, crc: &str) -> String {
-		self.render_i(("[<", ">]"), indent, name, crc, "")
-	}
-
-	/// Render a closing anchor tag: `[</ name#crc >]`.
-	/// Returns empty string for `None` style.
-	pub fn render_close(&self, indent: &str, name: &str, crc: &str) -> String {
-		self.render_i(("[</", ">]"), indent, name, crc, "")
+	/// Render an opening anchor: `{prefix}@{name}#{crc}`.
+	pub fn render(&self, prefix: &str, name: &str, crc: &str) -> String {
+		self.render_i(("@", ""), prefix, name, crc, "")
 	}
 }
 
@@ -355,8 +353,8 @@ pub struct EditOperation {
 	pub region:  Option<ChunkRegion>,
 	/// Replacement or inserted text (meaning depends on `op`).
 	pub content: Option<String>,
-	/// For scoped find/replace: literal substring to locate inside the target
-	/// chunk. Must match exactly once. Pairs with `content` as the replacement.
+	/// For `replace` op: literal substring to find inside the target chunk.
+	/// Must match exactly once.
 	pub find:    Option<String>,
 }
 

@@ -385,7 +385,9 @@ export declare enum ChunkAnchorStyle {
 
 /** Structural edit to apply relative to a chunk anchor. */
 export declare enum ChunkEditOp {
-  /** Replace the targeted region, or a substring via `find`. */
+  /** Put new content into the targeted region. */
+  Put = 'put',
+  /** Find and replace a literal substring within the targeted region. */
   Replace = 'replace',
   /** Remove the targeted region. */
   Delete = 'delete',
@@ -506,8 +508,8 @@ export interface EditOperation {
   /** Replacement or inserted text (meaning depends on `op`). */
   content?: string
   /**
-   * For scoped find/replace: literal substring to locate inside the target
-   * chunk. Must match exactly once. Pairs with `content` as the replacement.
+   * For `replace` op: literal substring to find inside the target chunk.
+   * Must match exactly once.
    */
   find?: string
 }

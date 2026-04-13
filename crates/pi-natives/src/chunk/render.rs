@@ -893,6 +893,15 @@ fn push_meta(ctx: &mut RenderCtx<'_>, body: String) {
 	push_meta_marked(ctx, body, None);
 }
 
+fn push_anchor(ctx: &mut RenderCtx<'_>, body: String, marker: Option<char>) {
+	ctx.last_was_blank_meta = false;
+	let line = match marker {
+		Some(m) => format!("{m}{body}"),
+		None => body,
+	};
+	push_line(&mut ctx.out, line);
+}
+
 fn line_is_in_head(source: &str, chunk: &ChunkNode, abs_line: u32) -> bool {
 	let (head_lines, body_lines) = chunk_head_body_lines(source, chunk);
 	body_lines > 0 && abs_line >= chunk.start_line && abs_line < chunk.start_line + head_lines
@@ -1070,12 +1079,16 @@ fn emit_leaf_body(ctx: &mut RenderCtx<'_>, chunk: &ChunkNode, span: VisibleSpan)
 	}
 }
 
+fn chunk_depth_dashes(chunk: &ChunkNode) -> String {
+	let depth = chunk.path.chars().filter(|&c| c == '.').count();
+	"-".repeat(depth)
+}
+
 fn render_open_anchor_line(ctx: &RenderCtx<'_>, chunk: &ChunkNode) -> String {
-	let anchor_indent =
-		chunk_body_anchor_indent(ctx.source_lines, chunk, ctx.tab_replacement, ctx.normalize_indent);
 	let style = ctx.anchor_style.with_omit_checksum(ctx.omit_checksum);
 	let anchor_label = chunk_anchor_label(chunk, style);
-	style.render(&anchor_indent, anchor_label.as_str(), chunk.checksum.as_str())
+	let dashes = chunk_depth_dashes(chunk);
+	style.render(&dashes, anchor_label.as_str(), chunk.checksum.as_str())
 }
 
 fn emit_inline_hunks_for(ctx: &mut RenderCtx<'_>, chunk_path: &str) {
@@ -1113,7 +1126,7 @@ fn emit_chunk_subtree(
 				if options.between_top_level_definitions && depth == 0 && !options.is_first_top_level {
 					push_blank_meta(ctx);
 				}
-				push_meta_marked(
+				push_anchor(
 					ctx,
 					render_open_anchor_line(ctx, chunk),
 					ctx.changed_anchor_paths
@@ -1141,7 +1154,7 @@ fn emit_chunk_subtree(
 		push_blank_meta(ctx);
 	}
 	if !chunk.path.is_empty() {
-		push_meta_marked(
+		push_anchor(
 			ctx,
 			render_open_anchor_line(ctx, chunk),
 			ctx.changed_anchor_paths
@@ -1196,21 +1209,6 @@ fn emit_chunk_subtree(
 		emit_container_clip_below(ctx, chunk, &span, &children);
 		if !chunk.path.is_empty() {
 			emit_inline_hunks_for(ctx, &chunk.path);
-		}
-		// Closing tag for chunks with children
-		if !chunk.path.is_empty() && !*crate::chunk::common::HIDE_CLOSING_TAGS {
-			let anchor_indent = chunk_body_anchor_indent(
-				ctx.source_lines,
-				chunk,
-				ctx.tab_replacement,
-				ctx.normalize_indent,
-			);
-			let style = ctx.anchor_style.with_omit_checksum(ctx.omit_checksum);
-			let anchor_label = chunk_anchor_label(chunk, style);
-			push_meta(
-				ctx,
-				style.render_close(&anchor_indent, anchor_label.as_str(), chunk.checksum.as_str()),
-			);
 		}
 		return;
 	}

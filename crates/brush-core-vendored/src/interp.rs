@@ -270,10 +270,7 @@ impl Execute for ast::CompoundList {
 			let run_async = matches!(sep, ast::SeparatorOperator::Async);
 
 			if run_async {
-				// TODO: Reenable launching in child process?
-				// let job = spawn_ao_list_in_child(ao_list, shell, params).await?;
-
-				let job = spawn_ao_list_in_task(ao_list, shell, params);
+				let job = spawn_ao_list_as_job(ao_list, shell, params).await?;
 				let job_formatted = job.to_pid_style_string();
 
 				if shell.options.interactive && !shell.is_subshell() {
@@ -295,11 +292,52 @@ impl Execute for ast::CompoundList {
 	}
 }
 
-fn spawn_ao_list_in_task<'a>(
+async fn spawn_ao_list_as_job<'a>(
 	ao_list: &ast::AndOrList,
 	shell: &'a mut Shell,
 	params: &ExecutionParameters,
-) -> &'a jobs::Job {
+) -> Result<&'a jobs::Job, error::Error> {
+	let job = if ao_list.additional.is_empty() {
+		try_spawn_pipeline_as_job(&ao_list.first, ao_list.to_string(), shell, params)
+			.await?
+			.unwrap_or_else(|| spawn_ao_list_in_task(ao_list, shell, params))
+	} else {
+		spawn_ao_list_in_task(ao_list, shell, params)
+	};
+
+	Ok(shell.jobs.add_as_current(job))
+}
+
+async fn try_spawn_pipeline_as_job(
+	pipeline: &ast::Pipeline,
+	command_line: String,
+	shell: &mut Shell,
+	params: &ExecutionParameters,
+) -> Result<Option<jobs::Job>, error::Error> {
+	let mut subshell = shell.clone();
+	subshell.options.interactive = false;
+
+	let spawn_results = spawn_pipeline_processes(pipeline, &mut subshell, params, false).await?;
+	let mut tasks = VecDeque::new();
+
+	for spawn_result in spawn_results {
+		if let ExecutionWaitResult::Stopped(child) = spawn_result.wait(true, None).await? {
+			tasks.push_back(jobs::JobTask::External(child));
+		}
+	}
+
+	if tasks.is_empty() {
+		return Ok(None);
+	}
+
+	Ok(Some(jobs::Job::new(tasks, command_line, jobs::JobState::Running)))
+}
+
+fn spawn_ao_list_in_task(
+	ao_list: &ast::AndOrList,
+	shell: &mut Shell,
+	params: &ExecutionParameters,
+) -> jobs::Job {
 	// Clone the inputs.
 	let mut cloned_shell = shell.clone();
 	let cloned_params = params.clone();
@@ -315,11 +353,11 @@ fn spawn_ao_list_in_task<'a>(
 			.await
 	});
 
-	shell.jobs.add_as_current(jobs::Job::new(
+	jobs::Job::new(
 		[jobs::JobTask::Internal(join_handle)],
 		ao_list.to_string(),
 		jobs::JobState::Running,
-	))
+	)
 }
 
 #[async_trait::async_trait]
@@ -380,7 +418,7 @@ impl Execute for ast::Pipeline {
 
 		// Spawn all the processes required for the pipeline, connecting outputs/inputs
 		// with pipes as needed.
-		let spawn_results = spawn_pipeline_processes(self, shell, params).await?;
+		let spawn_results = spawn_pipeline_processes(self, shell, params, true).await?;
 
 		// Wait for the processes. This also has a side effect of updating pipeline
 		// status.
@@ -428,6 +466,7 @@ async fn spawn_pipeline_processes(
 	pipeline: &ast::Pipeline,
 	shell: &mut Shell,
 	params: &ExecutionParameters,
+	allow_current_shell: bool,
 ) -> Result<VecDeque<ExecutionSpawnResult>, error::Error> {
 	ensure_not_cancelled(params)?;
 	let pipeline_len = pipeline.seq.len();
@@ -437,19 +476,13 @@ async fn spawn_pipeline_processes(
 
 	for (current_pipeline_index, command) in pipeline.seq.iter().enumerate() {
 		ensure_not_cancelled(params)?;
-		//
-		// We run a command directly in the current shell if either of the following is
-		// true:
-		//     * There's only one command in the pipeline.
-		//     * This is the *last* command in the pipeline, the lastpipe option is
-		//       enabled, and job monitoring is disabled.
-		// Otherwise, we spawn a separate subshell for each command in the pipeline.
-		//
-
-		let run_in_current_shell = pipeline_len == 1
-			|| (current_pipeline_index == pipeline_len - 1
-				&& shell.options.run_last_pipeline_cmd_in_current_shell
-				&& !shell.options.enable_job_control);
+		// Background jobs need a real spawned process when possible, so callers can
+		// forbid running a single-command pipeline directly in the parent shell.
+		let run_in_current_shell = allow_current_shell
+			&& (pipeline_len == 1
+				|| (current_pipeline_index == pipeline_len - 1
+					&& shell.options.run_last_pipeline_cmd_in_current_shell
+					&& !shell.options.enable_job_control));
 
 		if !run_in_current_shell {
 			let mut subshell = shell.clone();

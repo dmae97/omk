@@ -248,6 +248,7 @@ module.exports.ChunkAnchorStyle = {
   None: 'none',
 };
 module.exports.ChunkEditOp = {
+  Put: 'put',
   Replace: 'replace',
   Delete: 'delete',
   Before: 'before',
