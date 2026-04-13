@@ -1,7 +1,6 @@
 # Dependencies
 node_modules/
 .npm/
-.turbo/
 
 # Build output
 dist/
