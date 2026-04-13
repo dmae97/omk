@@ -712,9 +712,24 @@ export class AgentSession {
 		}
 	}
 
+	#queuedExtensionEvents: Promise<void> = Promise.resolve();
+
+	#queueExtensionEvent(event: AgentSessionEvent): Promise<void> {
+		const emit = async () => {
+			await this.#emitExtensionEvent(event);
+		};
+		const queued = this.#queuedExtensionEvents.then(emit, emit);
+		this.#queuedExtensionEvents = queued.catch(() => {});
+		return queued;
+	}
+
 	async #emitSessionEvent(event: AgentSessionEvent): Promise<void> {
-		await this.#emitExtensionEvent(event);
 		this.#emit(event);
+		if (event.type === "message_update") {
+			void this.#queueExtensionEvent(event);
+			return;
+		}
+		await this.#queueExtensionEvent(event);
 	}
 
 	// Track last assistant message for auto-compaction check

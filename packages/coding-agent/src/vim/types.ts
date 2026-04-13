@@ -41,6 +41,7 @@ export interface VimViewportLine {
 	text: string;
 	isCursor: boolean;
 	isSelected: boolean;
+	cursorCol?: number;
 }
 
 export interface VimPendingInput {
@@ -139,7 +140,9 @@ export type VimExCommand =
 	| { kind: "copy"; range?: VimLineRange | "all"; destination: number }
 	| { kind: "move"; range?: VimLineRange | "all"; destination: number }
 	| { kind: "sort"; range?: VimLineRange | "all"; flags: string }
-	| { kind: "global"; pattern: string; command: string; invert: boolean };
+	| { kind: "global"; range?: VimLineRange | "all"; pattern: string; command: string; invert: boolean }
+	| { kind: "append"; range?: VimLineRange; text: string }
+	| { kind: "insert-before"; range?: VimLineRange; text: string };
 
 export class VimInputError extends Error {
 	location?: { sequenceIndex: number; offset: number };

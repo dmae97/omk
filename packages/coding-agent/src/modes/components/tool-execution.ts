@@ -112,6 +112,8 @@ export class ToolExecutionComponent extends Container {
 	#spinnerInterval?: NodeJS.Timeout;
 	// Track if args are still being streamed (for edit/write spinner)
 	#argsComplete = false;
+	#vimPreviewPrimeRunning = false;
+	#vimPreviewPrimeVersion = 0;
 	#renderState: {
 		spinnerFrame?: number;
 		expanded: boolean;
@@ -289,12 +291,32 @@ export class ToolExecutionComponent extends Container {
 		if (this.#toolName !== "vim" || this.#argsComplete || !this.#toolCallId) {
 			return;
 		}
-		void primeVimCallPreview(this.#toolCallId, this.#args).then(() => {
-			if (this.#toolCallId) {
-				this.#updateDisplay();
-				this.#ui.requestRender();
+
+		this.#vimPreviewPrimeVersion += 1;
+		if (this.#vimPreviewPrimeRunning) {
+			return;
+		}
+
+		this.#vimPreviewPrimeRunning = true;
+		void (async () => {
+			try {
+				while (!this.#argsComplete && this.#toolCallId) {
+					const version = this.#vimPreviewPrimeVersion;
+					const toolCallId = this.#toolCallId;
+					const args = this.#args;
+					await primeVimCallPreview(toolCallId, args);
+					if (this.#toolCallId === toolCallId) {
+						this.#updateDisplay();
+						this.#ui.requestRender();
+					}
+					if (version === this.#vimPreviewPrimeVersion) {
+						break;
+					}
+				}
+			} finally {
+				this.#vimPreviewPrimeRunning = false;
 			}
-		});
+		})();
 	}
 
 	/**

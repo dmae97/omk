@@ -208,7 +208,12 @@ function formatStreamingDiff(diff: string, rawPath: string, uiTheme: Theme, labe
 }
 
 function isChunkStreamingEdit(edit: Partial<HashlineToolEdit | ChunkToolEdit>): edit is Partial<ChunkToolEdit> {
-	return typeof edit === "object" && edit !== null && "op" in edit && !("loc" in edit);
+	return (
+		typeof edit === "object" &&
+		edit !== null &&
+		"path" in edit &&
+		("write" in edit || "replace" in edit || "insert" in edit)
+	);
 }
 
 function getStreamingEditContent(content: unknown): string {
@@ -251,25 +256,20 @@ function formatChunkStreamingEdit(edit: Partial<ChunkToolEdit>): FormattedStream
 		return { srcLabel: "\u2022 (incomplete edit)", dst: "" };
 	}
 
-	const contentLines = getStreamingEditContent(edit.content);
 	const target = edit.path ? (parseChunkEditPath(edit.path).selector ?? edit.path) : "?";
-	const op = edit.op ?? "put";
-
-	switch (op) {
-		case "append":
-			return { srcLabel: `\u2022 append ${target}`, dst: contentLines };
-		case "prepend":
-			return { srcLabel: `\u2022 prepend ${target}`, dst: contentLines };
-		case "after":
-			return { srcLabel: `\u2022 insert after ${target}`, dst: contentLines };
-		case "before":
-			return { srcLabel: `\u2022 insert before ${target}`, dst: contentLines };
-		default:
-			return {
-				srcLabel: contentLines.length === 0 ? `\u2022 remove ${target}` : `\u2022 replace ${target}`,
-				dst: contentLines,
-			};
+	if (edit.write === null) {
+		return { srcLabel: `\u2022 remove ${target}`, dst: "" };
 	}
+	if (typeof edit.write === "string") {
+		return { srcLabel: `\u2022 replace ${target}`, dst: getStreamingEditContent(edit.write) };
+	}
+	if (typeof edit.replace === "object" && edit.replace) {
+		return { srcLabel: `\u2022 replace ${target}`, dst: getStreamingEditContent(edit.replace.new) };
+	}
+	if (typeof edit.insert === "object" && edit.insert) {
+		return { srcLabel: `\u2022 ${edit.insert.loc} ${target}`, dst: getStreamingEditContent(edit.insert.body) };
+	}
+	return { srcLabel: `\u2022 edit ${target}`, dst: "" };
 }
 
 function formatStreamingHashlineEdits(edits: Partial<HashlineToolEdit | ChunkToolEdit>[], uiTheme: Theme): string {
@@ -330,11 +330,7 @@ function getCallPreview(args: EditRenderArgs, rawPath: string, uiTheme: Theme): 
 	if (args.edits && args.edits.length > 0) {
 		// Only show hashline/chunk streaming edits — replace/patch use previewDiff above
 		const first = args.edits[0];
-		if (
-			first &&
-			typeof first === "object" &&
-			("loc" in first || ("op" in first && "content" in first && !("old_text" in first) && !("diff" in first)))
-		) {
+		if (first && typeof first === "object" && ("loc" in first || isChunkStreamingEdit(first))) {
 			return formatStreamingHashlineEdits(args.edits, uiTheme);
 		}
 	}

@@ -66,6 +66,10 @@ function createEngine(text: string): VimEngine {
 	);
 }
 
+function step(kbd: string[], insert?: string): { kbd: string[]; insert?: string } {
+	return insert === undefined ? { kbd } : { kbd, insert };
+}
+
 afterEach(() => {
 	vi.restoreAllMocks();
 	resetVimRendererStateForTest();
@@ -163,6 +167,78 @@ describe("vim engine", () => {
 		expect(engine.statusMessage).toBe("Deleted 3 lines");
 	});
 
+	it("supports explicit numeric ex ranges like :4,6d", async () => {
+		const engine = createEngine("one\ntwo\nthree\nfour\nfive\nsix\nseven");
+		await engine.executeTokens(parseKeySequences([":4,6d<CR>"]), ":4,6d<CR>");
+		expect(engine.buffer.getText()).toBe("one\ntwo\nthree\nseven");
+		expect(engine.statusMessage).toBe("Deleted 3 lines");
+	});
+
+	it("supports current and last-line ex addresses plus ranged :global", async () => {
+		const engine = createEngine("alpha\nkeep\nalpha\ntrim alpha\nfinal alpha");
+		await engine.executeTokens(parseKeySequences(["2G", ":.,$g/alpha/d<CR>"]), "2G :.,$g/alpha/d<CR>");
+		expect(engine.buffer.getText()).toBe("alpha\nkeep");
+		expect(engine.statusMessage).toBe("Global: processed alpha");
+	});
+
+	it("supports destination addresses for :copy", async () => {
+		const engine = createEngine("one\ntwo\nthree\nfour");
+		await engine.executeTokens(parseKeySequences([":1,2t$<CR>"]), ":1,2t$<CR>");
+		expect(engine.buffer.getText()).toBe("one\ntwo\nthree\nfour\none\ntwo");
+		expect(engine.statusMessage).toBe("Copied 2 lines");
+	});
+
+	it("yanks addressed lines and puts them before or after the anchor line", async () => {
+		const engine = createEngine("one\ntwo\nthree\nfour");
+		await engine.executeTokens(
+			parseKeySequences([":2,3yank<CR>", "1G", ":put<CR>", "G", ":put!<CR>"]),
+			":2,3yank<CR> 1G :put<CR> G :put!<CR>",
+		);
+		expect(engine.buffer.getText()).toBe("one\ntwo\nthree\ntwo\nthree\ntwo\nthree\nfour");
+		expect(engine.statusMessage).toBe("Put 2 lines");
+	});
+
+	it("treats :update as a no-op for clean buffers and writes modified buffers", async () => {
+		const saveBuffer = vi.fn(async (buffer: VimBuffer) => ({
+			loaded: {
+				absolutePath: buffer.filePath,
+				displayPath: buffer.displayPath,
+				lines: [...buffer.lines],
+				trailingNewline: buffer.trailingNewline,
+				fingerprint: null,
+			},
+		}));
+		const engine = new VimEngine(
+			new VimBuffer({
+				absolutePath: "/tmp/test.ts",
+				displayPath: "test.ts",
+				lines: ["alpha"],
+				trailingNewline: false,
+				fingerprint: null,
+			}),
+			{
+				beforeMutate: async () => {},
+				loadBuffer: async inputPath => ({
+					absolutePath: inputPath,
+					displayPath: inputPath,
+					lines: [""],
+					trailingNewline: false,
+					fingerprint: null,
+				}),
+				saveBuffer,
+			},
+		);
+
+		await engine.executeTokens(parseKeySequences([":up<CR>"]), ":up<CR>");
+		expect(saveBuffer).not.toHaveBeenCalled();
+		expect(engine.statusMessage).toBe("test.ts unchanged");
+
+		await engine.executeTokens(parseKeySequences(["ccchanged<Esc>", ":up<CR>"]), "ccchanged<Esc> :up<CR>");
+		expect(saveBuffer).toHaveBeenCalledTimes(1);
+		expect(engine.buffer.getText()).toBe("changed");
+		expect(engine.statusMessage).toBe("Wrote test.ts");
+	});
+
 	it("renders literal spaces visibly in unsupported command errors", async () => {
 		const engine = createEngine("alpha");
 		await expect(engine.executeTokens(parseKeySequences(["z "]), "z ")).rejects.toThrow(/z<Space>/);
@@ -184,8 +260,8 @@ describe("vim tool", () => {
 		const tool = new VimTool(createSession(tmpDir));
 
 		await tool.execute("open", { file: "sample.ts" });
-		await tool.execute("edit", { file: "sample.ts", kbd: ["ciwbar<Esc>", "j", "."] });
-		await tool.execute("save", { file: "sample.ts", kbd: [":w<CR>"] });
+		await tool.execute("edit", { file: "sample.ts", steps: [step(["ciwbar<Esc>", "j", "."])] });
+		await tool.execute("save", { file: "sample.ts", steps: [step([":w<CR>"])] });
 
 		const saved = await Bun.file(filePath).text();
 		expect(saved).toContain("bar = 1;");
@@ -198,7 +274,7 @@ describe("vim tool", () => {
 		const tool = new VimTool(createSession(tmpDir));
 
 		await tool.execute("open", { file: "long.ts" });
-		const moved = await tool.execute("jump", { file: "long.ts", kbd: ["1014G"] });
+		const moved = await tool.execute("jump", { file: "long.ts", steps: [step(["1014G"])] });
 		const text = textResult(moved);
 		expect(text).toContain(">1014│line 1014;");
 		expect(moved.details?.cursor.line).toBe(1014);
@@ -210,7 +286,11 @@ describe("vim tool", () => {
 		const tool = new VimTool(createSession(tmpDir));
 
 		await tool.execute("open", { file: "center.ts" });
-		const edited = await tool.execute("edit", { file: "center.ts", kbd: ["386Go"], insert: "inserted", pause: true });
+		const edited = await tool.execute("edit", {
+			file: "center.ts",
+			steps: [step(["386Go"], "inserted")],
+			pause: true,
+		});
 		expect(edited.details?.cursor.line).toBe(387);
 		expect(edited.details?.viewport.start).toBe(382);
 		expect(edited.details?.viewport.end).toBe(391);
@@ -224,7 +304,7 @@ describe("vim tool", () => {
 		const tool = new VimTool(createSession(tmpDir));
 
 		await tool.execute("open", { file: "long-edit.ts" });
-		const edited = await tool.execute("edit", { file: "long-edit.ts", kbd: ["1014G", "o"], insert: "inserted" });
+		const edited = await tool.execute("edit", { file: "long-edit.ts", steps: [step(["1014G", "o"], "inserted")] });
 		const text = textResult(edited);
 		expect(edited.details?.cursor.line).toBe(1015);
 		expect(edited.details?.viewport.start).toBe(1010);
@@ -238,13 +318,86 @@ describe("vim tool", () => {
 		const tool = new VimTool(createSession(tmpDir));
 
 		await tool.execute("open", { file: "replace.ts" });
-		const replaced = await tool.execute("replace", { file: "replace.ts", kbd: ["cc"], insert: "alpha\nbeta" });
-		await tool.execute("save", { file: "replace.ts", kbd: [":w<CR>"] });
+		const replaced = await tool.execute("replace", { file: "replace.ts", steps: [step(["cc"], "alpha\nbeta")] });
+		await tool.execute("save", { file: "replace.ts", steps: [step([":w<CR>"])] });
 
 		const saved = await Bun.file(filePath).text();
 		expect(saved).toBe("alpha\nbeta\nsecond\n");
 		expect(textResult(replaced)).toContain("Diff:");
 		expect(textResult(replaced)).toContain("+beta");
+	});
+
+	it("applies multi-step inserts at different locations", async () => {
+		const filePath = path.join(tmpDir, "multi-step.ts");
+		await Bun.write(filePath, "import sys\n\ndef main():\n    pass\n");
+		const tool = new VimTool(createSession(tmpDir));
+
+		await tool.execute("open", { file: "multi-step.ts" });
+		const edited = await tool.execute("edit", {
+			file: "multi-step.ts",
+			steps: [step(["1Go"], "import os"), step(["G", "o"], "    os.path.exists('tmp')")],
+		});
+
+		const saved = await Bun.file(filePath).text();
+		expect(saved).toBe("import sys\nimport os\n\ndef main():\n    pass\n    os.path.exists('tmp')\n");
+		expect(textResult(edited)).toContain("+import os");
+		expect(textResult(edited)).toContain("+    os.path.exists('tmp')");
+	});
+
+	it("supports navigation-only steps between inserts", async () => {
+		const filePath = path.join(tmpDir, "multi-step-navigation.ts");
+		await Bun.write(filePath, "alpha\nbeta\ngamma\n");
+		const tool = new VimTool(createSession(tmpDir));
+
+		await tool.execute("open", { file: "multi-step-navigation.ts" });
+		await tool.execute("edit", {
+			file: "multi-step-navigation.ts",
+			steps: [step(["1Go"], "between"), step(["/gamma<CR>"]), step(["o"], "tail")],
+		});
+
+		const saved = await Bun.file(filePath).text();
+		expect(saved).toBe("alpha\nbetween\nbeta\ngamma\ntail\n");
+	});
+
+	it("preserves earlier step changes when a later step fails", async () => {
+		const filePath = path.join(tmpDir, "multi-step-error.ts");
+		await Bun.write(filePath, "alpha\nbeta\n");
+		const tool = new VimTool(createSession(tmpDir));
+
+		await tool.execute("open", { file: "multi-step-error.ts" });
+		await expect(
+			tool.execute("bad", {
+				file: "multi-step-error.ts",
+				steps: [step(["1Go"], "first"), step(["o", "o"])],
+			}),
+		).rejects.toThrow(/entered INSERT mode/i);
+
+		const viewed = await tool.execute("view", { file: "multi-step-error.ts" });
+		expect(textResult(viewed)).toContain("first");
+		expect(await Bun.file(filePath).text()).toBe("alpha\nbeta\n");
+
+		await tool.execute("save", { file: "multi-step-error.ts", steps: [step([":w<CR>"])] });
+		expect(await Bun.file(filePath).text()).toBe("alpha\nfirst\nbeta\n");
+	});
+
+	it("applies pause only to the last step of a multi-step edit", async () => {
+		const filePath = path.join(tmpDir, "multi-step-pause.ts");
+		await Bun.write(filePath, "first\nsecond\n");
+		const tool = new VimTool(createSession(tmpDir));
+
+		await tool.execute("open", { file: "multi-step-pause.ts" });
+		const paused = await tool.execute("pause", {
+			file: "multi-step-pause.ts",
+			steps: [step(["1Go"], "alpha"), step(["G", "o"], "omega")],
+			pause: true,
+		});
+
+		expect(paused.details?.mode).toBe("INSERT");
+		expect(textResult(paused)).toContain("Pending: INSERT mode");
+		expect(await Bun.file(filePath).text()).toBe("first\nsecond\n");
+
+		await tool.execute("resume", { file: "multi-step-pause.ts", steps: [step([], "!")] });
+		expect(await Bun.file(filePath).text()).toBe("first\nalpha\nsecond\nomega!\n");
 	});
 
 	it("supports full-file rewrites when models emit a space before i", async () => {
@@ -255,14 +408,13 @@ describe("vim tool", () => {
 		await tool.execute("open", { file: "full-rewrite.ts" });
 		const rewritten = await tool.execute("rewrite", {
 			file: "full-rewrite.ts",
-			kbd: ["ggdG i"],
-			insert: "alpha\nbeta\n",
+			steps: [step(["ggdG i"], "alpha\nbeta\n")],
 		});
 
 		const saved = await Bun.file(filePath).text();
-		expect(saved).toBe("alpha\nbeta\n");
+		expect(saved).toBe("alpha\nbeta\n\n");
 		expect(textResult(rewritten)).toContain("+alpha");
-		expect(rewritten.details?.cursor.line).toBe(2);
+		expect(rewritten.details?.cursor.line).toBe(3);
 	});
 
 	it("rejects another kbd entry after entering insert mode", async () => {
@@ -271,7 +423,7 @@ describe("vim tool", () => {
 		const tool = new VimTool(createSession(tmpDir));
 
 		await tool.execute("open", { file: "ambiguous.ts" });
-		await expect(tool.execute("bad", { file: "ambiguous.ts", kbd: ["o", "o"] })).rejects.toThrow(
+		await expect(tool.execute("bad", { file: "ambiguous.ts", steps: [step(["o", "o"])] })).rejects.toThrow(
 			/entered INSERT mode/i,
 		);
 	});
@@ -282,9 +434,9 @@ describe("vim tool", () => {
 		const tool = new VimTool(createSession(tmpDir));
 
 		await tool.execute("open", { file: "insert-boundary.ts" });
-		await expect(tool.execute("edit", { file: "insert-boundary.ts", kbd: ["2G", "o", "o"] })).rejects.toThrow(
-			/insert field|<Esc>/i,
-		);
+		await expect(
+			tool.execute("edit", { file: "insert-boundary.ts", steps: [step(["2G", "o", "o"])] }),
+		).rejects.toThrow(/insert field|<Esc>/i);
 		const saved = await Bun.file(filePath).text();
 		expect(saved).toBe("alpha\nbeta\n");
 	});
@@ -295,12 +447,12 @@ describe("vim tool", () => {
 		const tool = new VimTool(createSession(tmpDir));
 
 		await tool.execute("open", { file: "pause.ts" });
-		const paused = await tool.execute("pause", { file: "pause.ts", kbd: ["cc"], pause: true });
+		const paused = await tool.execute("pause", { file: "pause.ts", steps: [step(["cc"])], pause: true });
 		expect(paused.details?.mode).toBe("INSERT");
 		expect(textResult(paused)).toContain("Pending: INSERT mode");
 
-		await tool.execute("resume", { file: "pause.ts", kbd: [], insert: "replacement" });
-		await tool.execute("save", { file: "pause.ts", kbd: [":w<CR>"] });
+		await tool.execute("resume", { file: "pause.ts", steps: [step([], "replacement")] });
+		await tool.execute("save", { file: "pause.ts", steps: [step([":w<CR>"])] });
 		const saved = await Bun.file(filePath).text();
 		expect(saved).toBe("replacement\n");
 	});
@@ -311,7 +463,7 @@ describe("vim tool", () => {
 		const tool = new VimTool(createSession(tmpDir));
 
 		await tool.execute("open", { file: "bad-insert.ts" });
-		await expect(tool.execute("bad", { file: "bad-insert.ts", kbd: [], insert: "nope" })).rejects.toThrow(
+		await expect(tool.execute("bad", { file: "bad-insert.ts", steps: [step([], "nope")] })).rejects.toThrow(
 			/Insert payload requires INSERT mode/i,
 		);
 	});
@@ -328,13 +480,22 @@ describe("vim tool", () => {
 		expect(text).toContain("^");
 	});
 
+	it("renders the cursor inline in plain text viewport snapshots", async () => {
+		const filePath = path.join(tmpDir, "cursor.txt");
+		await Bun.write(filePath, "alpha\n");
+		const tool = new VimTool(createSession(tmpDir));
+
+		const opened = await tool.execute("open", { file: "cursor.txt" });
+		expect(textResult(opened)).toContain(">1│▏alpha");
+	});
+
 	it("shows paused search input in the snapshot", async () => {
 		const filePath = path.join(tmpDir, "search.ts");
 		await Bun.write(filePath, "alpha\nbeta\n");
 		const tool = new VimTool(createSession(tmpDir));
 
 		await tool.execute("open", { file: "search.ts" });
-		const paused = await tool.execute("search", { file: "search.ts", kbd: ["/be"], pause: true });
+		const paused = await tool.execute("search", { file: "search.ts", steps: [step(["/be"])], pause: true });
 		expect(paused.details?.pendingInput?.kind).toBe("search-forward");
 		expect(textResult(paused)).toContain("Pending: /be");
 	});
@@ -348,7 +509,7 @@ describe("vim tool", () => {
 		await tool.execute("open", { file: "command.ts" });
 		const result = await tool.execute(
 			"command",
-			{ file: "command.ts", kbd: [":%s/foo/bar/g<CR>"] },
+			{ file: "command.ts", steps: [step([":%s/foo/bar/g<CR>"])] },
 			undefined,
 			update => {
 				const pending = update.details?.pendingInput;
@@ -375,8 +536,7 @@ describe("vim tool", () => {
 			"insert",
 			{
 				file: "stream-insert.ts",
-				kbd: ["2Go"],
-				insert: Array.from({ length: 60 }, (_, index) => `item ${index + 1}`).join("\n"),
+				steps: [step(["2Go"], Array.from({ length: 60 }, (_, index) => `item ${index + 1}`).join("\n"))],
 				pause: true,
 			},
 			undefined,
@@ -407,8 +567,7 @@ describe("vim tool", () => {
 			"insert-single-line",
 			{
 				file: "stream-single-line.ts",
-				kbd: ["2Go"],
-				insert: insertedText,
+				steps: [step(["2Go"], insertedText)],
 				pause: true,
 			},
 			undefined,
@@ -438,10 +597,10 @@ describe("vim tool", () => {
 		);
 
 		await tool.execute("open", { file: "plan.ts" });
-		const moved = await tool.execute("move", { file: "plan.ts", kbd: ["2G"] });
+		const moved = await tool.execute("move", { file: "plan.ts", steps: [step(["2G"])] });
 		expect(textResult(moved)).toContain("L2:1");
-		await expect(tool.execute("edit", { file: "plan.ts", kbd: ["dd"] })).rejects.toThrow(/Plan mode/i);
-		await expect(tool.execute("insert", { file: "plan.ts", kbd: ["cc"], insert: "blocked" })).rejects.toThrow(
+		await expect(tool.execute("edit", { file: "plan.ts", steps: [step(["dd"])] })).rejects.toThrow(/Plan mode/i);
+		await expect(tool.execute("insert", { file: "plan.ts", steps: [step(["cc"], "blocked")] })).rejects.toThrow(
 			/Plan mode/i,
 		);
 	});
@@ -458,15 +617,19 @@ describe("vim renderer", () => {
 		const uiTheme = theme!;
 
 		await tool.execute("open", { file: "preview.ts" });
-		await primeVimCallPreview("preview-call", { file: "preview.ts", kbd: ["643G"], __toolCallId: "preview-call" });
+		await primeVimCallPreview("preview-call", {
+			file: "preview.ts",
+			steps: [step(["643G"])],
+			__toolCallId: "preview-call",
+		});
 
 		const component = vimToolRenderer.renderCall(
-			{ file: "preview.ts", kbd: ["643G"], __toolCallId: "preview-call" },
+			{ file: "preview.ts", steps: [step(["643G"])], __toolCallId: "preview-call" },
 			{ expanded: false, isPartial: true, spinnerFrame: 0 },
 			uiTheme,
 		);
 
-		const rendered = component.render(160).join("\n");
+		const rendered = Bun.stripANSI(component.render(160).join("\n"));
 		expect(rendered).toContain("643G");
 		expect(rendered).toContain("line 643;");
 	});
@@ -483,19 +646,19 @@ describe("vim renderer", () => {
 		await tool.execute("open", { file: "preview.txt" });
 		await primeVimCallPreview("insert-preview-call", {
 			file: "preview.txt",
-			kbd: ["7Go"],
+			steps: [step(["7Go"])],
 			__toolCallId: "insert-preview-call",
 			__partialJson:
-				'{"file":"preview.txt","kbd":["7Go"],"insert":"// long streamed comment still being typed by the model',
+				'{"file":"preview.txt","steps":[{"kbd":["7Go"],"insert":"// long streamed comment still being typed by the model',
 		});
 
 		const component = vimToolRenderer.renderCall(
 			{
 				file: "preview.txt",
-				kbd: ["7Go"],
+				steps: [step(["7Go"])],
 				__toolCallId: "insert-preview-call",
 				__partialJson:
-					'{"file":"preview.txt","kbd":["7Go"],"insert":"// long streamed comment still being typed by the model',
+					'{"file":"preview.txt","steps":[{"kbd":["7Go"],"insert":"// long streamed comment still being typed by the model',
 			},
 			{ expanded: false, isPartial: true, spinnerFrame: 0 },
 			uiTheme,
@@ -516,19 +679,19 @@ describe("vim renderer", () => {
 
 		await primeVimCallPreview("first-call-preview", {
 			file: "preview.txt",
-			kbd: ["ggdGi"],
+			steps: [step(["ggdGi"])],
 			__toolCallId: "first-call-preview",
 			__cwd: previewDir,
-			__partialJson: '{"file":"preview.txt","kbd":["ggdGi"],"insert":"replacement',
+			__partialJson: '{"file":"preview.txt","steps":[{"kbd":["ggdGi"],"insert":"replacement',
 		});
 
 		const component = vimToolRenderer.renderCall(
 			{
 				file: "preview.txt",
-				kbd: ["ggdGi"],
+				steps: [step(["ggdGi"])],
 				__toolCallId: "first-call-preview",
 				__cwd: previewDir,
-				__partialJson: '{"file":"preview.txt","kbd":["ggdGi"],"insert":"replacement',
+				__partialJson: '{"file":"preview.txt","steps":[{"kbd":["ggdGi"],"insert":"replacement',
 			},
 			{ expanded: false, isPartial: true, spinnerFrame: 0 },
 			uiTheme,
@@ -552,8 +715,8 @@ describe("vim renderer", () => {
 			"vim",
 			{
 				file: "preview.txt",
-				kbd: ["ggdGi"],
-				__partialJson: '{"file":"preview.txt","kbd":["ggdGi"],"insert":"replacement',
+				steps: [step(["ggdGi"])],
+				__partialJson: '{"file":"preview.txt","steps":[{"kbd":["ggdGi"],"insert":"replacement',
 			},
 			{},
 			undefined,
@@ -566,6 +729,47 @@ describe("vim renderer", () => {
 		const rendered = Bun.stripANSI(component.render(140).join("\n"));
 		expect(rendered).toContain("ggdGi");
 		expect(rendered).toContain(">1│replacement");
+	});
+
+	it("extends streamed first-call insert previews across ToolExecutionComponent arg updates", async () => {
+		const previewDir = await fs.mkdtemp(path.join(os.tmpdir(), "vim-render-growing-first-call-component-"));
+		const filePath = path.join(previewDir, "preview.txt");
+		await Bun.write(filePath, "Line 1\nLine 2\nLine 3\n");
+		const theme = await themeModule.getThemeByName("dark");
+		expect(theme).toBeDefined();
+		await themeModule.initTheme(false, undefined, undefined, "dark", "light");
+		const uiStub = { requestRender() {} } as unknown as TUI;
+
+		const component = new ToolExecutionComponent(
+			"vim",
+			{
+				file: "preview.txt",
+				steps: [step(["ggdGi"])],
+				__partialJson: '{"file":"preview.txt","steps":[{"kbd":["ggdGi"],"insert":"rep',
+			},
+			{},
+			undefined,
+			uiStub,
+			previewDir,
+			"growing-first-call-component",
+		);
+		await Bun.sleep(50);
+
+		let rendered = Bun.stripANSI(component.render(140).join("\n"));
+		expect(rendered).toContain(">1│rep");
+
+		component.updateArgs(
+			{
+				file: "preview.txt",
+				steps: [step(["ggdGi"])],
+				__partialJson: '{"file":"preview.txt","steps":[{"kbd":["ggdGi"],"insert":"replacement text',
+			},
+			"growing-first-call-component",
+		);
+		await Bun.sleep(50);
+
+		rendered = Bun.stripANSI(component.render(140).join("\n"));
+		expect(rendered).toContain(">1│replacement text");
 	});
 
 	it("keeps vim preview state alive after args complete until a result arrives", async () => {
@@ -582,13 +786,13 @@ describe("vim renderer", () => {
 		await tool.execute("open", { file: "preview.ts" });
 		await primeVimCallPreview("complete-preview-call", {
 			file: "preview.ts",
-			kbd: ["643G"],
+			steps: [step(["643G"])],
 			__toolCallId: "complete-preview-call",
 		});
 
 		const component = new ToolExecutionComponent(
 			"vim",
-			{ file: "preview.ts", kbd: ["643G"] },
+			{ file: "preview.ts", steps: [step(["643G"])] },
 			{},
 			undefined,
 			uiStub,
@@ -599,7 +803,7 @@ describe("vim renderer", () => {
 
 		const rendered = vimToolRenderer
 			.renderCall(
-				{ file: "preview.ts", kbd: ["643G"], __toolCallId: "complete-preview-call" },
+				{ file: "preview.ts", steps: [step(["643G"])], __toolCallId: "complete-preview-call" },
 				{ expanded: false, isPartial: true, spinnerFrame: 0 },
 				uiTheme,
 			)
@@ -638,5 +842,44 @@ describe("vim renderer", () => {
 		component.render(120);
 
 		expect(highlightSpy).toHaveBeenCalledTimes(1);
+	});
+
+	it("renders an inline cursor highlight inside the viewport row", async () => {
+		const previewDir = await fs.mkdtemp(path.join(os.tmpdir(), "vim-render-inline-cursor-"));
+		const filePath = path.join(previewDir, "cursor.txt");
+		await Bun.write(filePath, "Title line\n");
+		const tool = new VimTool(createSession(previewDir));
+		const theme = await themeModule.getThemeByName("dark");
+		expect(theme).toBeDefined();
+		const uiTheme = theme!;
+
+		const opened = await tool.execute("open", { file: "cursor.txt" });
+		const rendered = vimToolRenderer
+			.renderResult(opened, { expanded: false, isPartial: false, spinnerFrame: 0 }, uiTheme)
+			.render(160)
+			.join("\n");
+
+		expect(rendered).toMatch(/\x1b\[7mT/);
+	});
+
+	it("keeps long cursor rows horizontally centered around the cursor", async () => {
+		const previewDir = await fs.mkdtemp(path.join(os.tmpdir(), "vim-render-long-line-cursor-"));
+		const filePath = path.join(previewDir, "cursor.txt");
+		await Bun.write(filePath, `prefix-${"x".repeat(220)};`);
+		const tool = new VimTool(createSession(previewDir));
+		const theme = await themeModule.getThemeByName("dark");
+		expect(theme).toBeDefined();
+		const uiTheme = theme!;
+
+		await tool.execute("open", { file: "cursor.txt" });
+		const moved = await tool.execute("move", { file: "cursor.txt", steps: [step(["$"])] });
+		expect(moved.details?.viewportLines?.[0]?.text.startsWith("…")).toBe(true);
+
+		const rendered = vimToolRenderer
+			.renderResult(moved, { expanded: false, isPartial: false, spinnerFrame: 0 }, uiTheme)
+			.render(200)
+			.join("\n");
+
+		expect(rendered).toMatch(/\x1b\[7m;/);
 	});
 });

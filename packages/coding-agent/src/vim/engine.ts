@@ -7,6 +7,7 @@ import type {
 	VimBufferSnapshot,
 	VimInputMode,
 	VimKeyToken,
+	VimLineRange,
 	VimLoadedFile,
 	VimPendingInput,
 	VimRegister,
@@ -2115,8 +2116,26 @@ export class VimEngine {
 		this.lastSearch = { pattern: this.lastSearch.pattern, direction };
 	}
 
+	#resolveExRange(
+		range: VimLineRange | "all" | undefined,
+		defaultStart: number,
+		defaultEnd = defaultStart,
+	): VimLineRange {
+		const totalLines = Math.max(1, this.buffer.lineCount());
+		if (range === "all") {
+			return { start: 1, end: totalLines };
+		}
+		const next = range ?? { start: defaultStart, end: defaultEnd };
+		const start = Math.max(1, Math.min(next.start, totalLines));
+		const end = Math.max(start, Math.min(next.end, totalLines));
+		return { start, end };
+	}
+
 	async #executeEx(input: string): Promise<void> {
-		const command = parseExCommand(input);
+		const command = parseExCommand(input, {
+			currentLine: this.buffer.cursor.line + 1,
+			lastLine: this.buffer.lineCount(),
+		});
 		switch (command.kind) {
 			case "goto-line":
 				this.buffer.setCursor({ line: Math.max(0, command.line - 1), col: 0 });
@@ -2133,6 +2152,13 @@ export class VimEngine {
 				this.#redoStack = [];
 				return;
 			}
+			case "update":
+				if (!this.buffer.modified) {
+					this.statusMessage = `${this.buffer.displayPath} unchanged`;
+					return;
+				}
+				await this.#executeEx(command.force ? "w!" : "w");
+				return;
 			case "write-quit":
 				await this.#executeEx(command.force ? "w!" : "w");
 				this.closed = true;
@@ -2163,13 +2189,9 @@ export class VimEngine {
 				return;
 			}
 			case "substitute": {
-				const totalLines = this.buffer.lineCount();
-				const range =
-					command.range === "all"
-						? { start: 1, end: totalLines }
-						: (command.range ?? { start: this.buffer.cursor.line + 1, end: this.buffer.cursor.line + 1 });
-				const startLine = Math.max(1, Math.min(range.start, totalLines));
-				const endLine = Math.max(startLine, Math.min(range.end, totalLines));
+				const range = this.#resolveExRange(command.range, this.buffer.cursor.line + 1);
+				const startLine = range.start;
+				const endLine = range.end;
 				const regexFlags = command.flags.includes("i") ? "gi" : "g";
 				const regex = createSearchRegex(command.pattern, regexFlags);
 				let replacements = 0;
@@ -2196,11 +2218,7 @@ export class VimEngine {
 				return;
 			}
 			case "delete": {
-				const totalLines = this.buffer.lineCount();
-				const range =
-					command.range === "all"
-						? { start: 1, end: totalLines }
-						: (command.range ?? { start: this.buffer.cursor.line + 1, end: this.buffer.cursor.line + 1 });
+				const range = this.#resolveExRange(command.range, this.buffer.cursor.line + 1);
 				await this.#applyAtomicChange([":delete"], () => {
 					const removed = this.buffer.deleteLines(range.start - 1, range.end - 1);
 					this.register = { kind: "line", text: removed.join("\n") };
@@ -2208,12 +2226,35 @@ export class VimEngine {
 				this.statusMessage = `Deleted ${range.end - range.start + 1} line${range.end === range.start ? "" : "s"}`;
 				return;
 			}
+			case "yank": {
+				const range = this.#resolveExRange(command.range, this.buffer.cursor.line + 1);
+				this.register = {
+					kind: "line",
+					text: this.buffer.lines.slice(range.start - 1, range.end).join("\n"),
+				};
+				this.statusMessage = `Yanked ${range.end - range.start + 1} line${range.end === range.start ? "" : "s"}`;
+				return;
+			}
+			case "put": {
+				if (!this.register.text) {
+					this.statusMessage = "Register empty";
+					return;
+				}
+				const anchorRange = this.#resolveExRange(command.range, this.buffer.cursor.line + 1);
+				const anchorLine = command.before ? anchorRange.start : anchorRange.end;
+				const lines = this.register.text.split("\n");
+				await this.#applyAtomicChange([":put"], () => {
+					const insertAt = command.before
+						? Math.max(0, anchorLine - 1)
+						: Math.min(anchorLine, this.buffer.lineCount());
+					this.buffer.insertLines(insertAt, lines);
+				});
+				this.statusMessage = `Put ${lines.length} line${lines.length === 1 ? "" : "s"}`;
+				return;
+			}
 			case "copy": {
 				const totalLines = this.buffer.lineCount();
-				const range =
-					command.range === "all"
-						? { start: 1, end: totalLines }
-						: (command.range ?? { start: this.buffer.cursor.line + 1, end: this.buffer.cursor.line + 1 });
+				const range = this.#resolveExRange(command.range, this.buffer.cursor.line + 1);
 				const dest = Math.max(0, Math.min(command.destination, totalLines));
 				await this.#applyAtomicChange([":copy"], () => {
 					const lines = this.buffer.lines.slice(range.start - 1, range.end);
@@ -2224,10 +2265,7 @@ export class VimEngine {
 			}
 			case "move": {
 				const totalLines = this.buffer.lineCount();
-				const range =
-					command.range === "all"
-						? { start: 1, end: totalLines }
-						: (command.range ?? { start: this.buffer.cursor.line + 1, end: this.buffer.cursor.line + 1 });
+				const range = this.#resolveExRange(command.range, this.buffer.cursor.line + 1);
 				const dest = Math.max(0, Math.min(command.destination, totalLines));
 				await this.#applyAtomicChange([":move"], () => {
 					const lines = this.buffer.lines.splice(range.start - 1, range.end - range.start + 1);
@@ -2240,10 +2278,9 @@ export class VimEngine {
 				return;
 			}
 			case "sort": {
-				const totalLines = this.buffer.lineCount();
-				const range = command.range === "all" || !command.range ? { start: 1, end: totalLines } : command.range;
-				const startLine = Math.max(1, Math.min(range.start, totalLines));
-				const endLine = Math.max(startLine, Math.min(range.end, totalLines));
+				const range = this.#resolveExRange(command.range ?? "all", 1, this.buffer.lineCount());
+				const startLine = range.start;
+				const endLine = range.end;
 				const reverse = command.flags.includes("!");
 				const ignoreCase = command.flags.includes("i");
 				await this.#applyAtomicChange([":sort"], () => {
@@ -2263,9 +2300,10 @@ export class VimEngine {
 			}
 			case "global": {
 				const regex = createSearchRegex(command.pattern);
+				const range = this.#resolveExRange(command.range ?? "all", 1, this.buffer.lineCount());
 				await this.#applyAtomicChange([":global"], () => {
 					const linesToProcess: number[] = [];
-					for (let i = 0; i < this.buffer.lineCount(); i++) {
+					for (let i = range.start - 1; i <= range.end - 1; i += 1) {
 						const matches = regex.test(this.buffer.getLine(i));
 						regex.lastIndex = 0;
 						if (command.invert ? !matches : matches) {

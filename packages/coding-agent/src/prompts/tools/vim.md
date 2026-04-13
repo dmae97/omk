@@ -1,70 +1,95 @@
-Stateful Vim editor. Every call requires `file` — the buffer loads automatically on first use.
-- `{"file": "path"}` — view file
-- `{"file": "path", "kbd": ["…"], "insert": "…"}` — edit file
+Stateful Vim editor. Every call requires `file`; the buffer loads automatically on first use.
+- `{"file": "path"}` - view file
+- `{"file": "path", "steps": [{"kbd": ["..."], "insert": "..."}]}` - edit file
 
-## kbd vs insert — get this right
+## steps vs kbd vs insert
 
+`steps` = ordered editing steps. Each step runs `kbd`, then optionally types `insert`.
 `kbd` = Vim commands only (`dd`, `G`, `o`, `cc`, `gg`, etc.).
-`insert` = text content to type into the buffer.
+`insert` = raw text content to type into the buffer.
 
-**Never put text content in kbd.** Only Vim keystrokes go there.
-- BAD: `{"kbd": ["1Gohello world<Esc>"]}` — text mixed into kbd
-- BAD: `{"kbd": ["1Go", "hello world"]}` — text as a separate kbd entry (gets executed as keystrokes!)
-- BAD: `{"kbd": ["1Ao"], "insert": "text"}` — `A` enters INSERT so `o` is typed as text, not a command
-- GOOD: `{"kbd": ["1Go"], "insert": "hello world"}` — command in kbd, text in insert
+Never put text content in `kbd`. Only Vim keystrokes go there.
+- BAD: `{"steps": [{"kbd": ["1Gohello world<Esc>"]}]}`
+- BAD: `{"steps": [{"kbd": ["1Go", "hello world"]}]}`
+- BAD: `{"steps": [{"kbd": ["1Ao"], "insert": "text"}]}`
+- GOOD: `{"steps": [{"kbd": ["1Go"], "insert": "hello world"}]}`
 
-For `insert` to work, the last `kbd` entry must leave INSERT mode active (`o`, `O`, `i`, `a`, `A`, `cc`, `C`, `s`, `S`). The tool auto-exits INSERT and auto-saves after each call.
+If a step uses `insert`, the last `kbd` entry in that step must leave INSERT mode active (`o`, `O`, `i`, `a`, `A`, `cc`, `C`, `s`, `S`).
 
-Each non-final `kbd` entry must end in NORMAL mode (add `<Esc>`).
+Each non-final `kbd` entry inside a step must end in NORMAL mode (add `<Esc>`).
+
+Between steps, the tool auto-exits INSERT mode.
 
 Whitespace in `kbd` is literal. Do not use spaces as separators between keys; `ggdGi` is one sequence, not `ggdG i`.
 
+Common mistake: `Ni` means "insert N copies", NOT "insert at line N". To insert at line N, use `NGo` (below) or `NGO` (above).
 ## Editing patterns
 
-**Insert after line N** — use `NGo` (Go to line N, open below). Include full indentation in insert:
+`NGo` = new line BELOW line N. `NGO` = new line ABOVE line N.
+
+Insert new line after line 3:
 ```json
-{"file": "f.py", "kbd": ["3Go"], "insert": "    new line here"}
+{"file": "f.py", "steps": [{"kbd": ["3Go"], "insert": "    new line here"}]}
 ```
 
-**Insert before line N** — use `NGO` (Go to line N, open above). Include full indentation:
+Insert new line before line 3:
 ```json
-{"file": "f.py", "kbd": ["3GO"], "insert": "    new line here"}
+{"file": "f.py", "steps": [{"kbd": ["3GO"], "insert": "    new line here"}]}
 ```
 
-**Replace line N** — `cc` clears the line and enters INSERT:
+Replace line N:
 ```json
-{"file": "f.py", "kbd": ["5Gcc"], "insert": "    replacement content"}
+{"file": "f.py", "steps": [{"kbd": ["5Gcc"], "insert": "    replacement content"}]}
 ```
 
-**Replace entire file** — `ggdGi` = go to top, delete all, enter INSERT. Use that exact sequence when rewriting the whole file:
+Replace entire file. `ggdGi` = go to top, delete all, enter INSERT. Use that exact sequence when rewriting the whole file:
 ```json
-{"file": "f.py", "kbd": ["ggdGi"], "insert": "entire new file content"}
+{"file": "f.py", "steps": [{"kbd": ["ggdGi"], "insert": "entire new file content"}]}
 ```
 
-**Find and replace**:
+Multi-location edit — work bottom-up so earlier inserts don't shift later line numbers:
 ```json
-{"file": "f.py", "kbd": [":%s/old/new/g<CR>"]}
+{"file": "f.py", "steps": [
+  {"kbd": ["10Go"], "insert": "os.path.exists('...')"},
+  {"kbd": ["3Go"], "insert": "import os"}
+]}
+```
+When inserting at multiple lines in one call, edit the **highest line number first** and work upward. Each insert shifts lines below it, so bottom-up order keeps all line targets stable.
+
+Navigation or search step without insert:
+```json
+{"file": "f.py", "steps": [{"kbd": ["/pattern<CR>"]}]}
 ```
 
-**Delete line range**:
+Find and replace:
 ```json
-{"file": "f.py", "kbd": [":3,5d<CR>"]}
+{"file": "f.py", "steps": [{"kbd": [":%s/old/new/g<CR>"]}]}
 ```
+
+Delete line range:
+```json
+{"file": "f.py", "steps": [{"kbd": [":3,5d<CR>"]}]}
+```
+
 ## Undo mistakes
-- `{"file": "f.py", "kbd": ["u"]}` — undo last change
-- `{"file": "f.py", "kbd": ["3u"]}` — undo last 3 changes
 
-`:e!` reloads from disk. **WARNING**: Since auto-save commits after each call, `:e!` reloads your *last saved state* (including any mistakes), not the original file. Use `u` to undo instead. If stuck, use `ggdGi` with the full desired file content.
+- `{"file": "f.py", "steps": [{"kbd": ["u"]}]}` - undo last change
+- `{"file": "f.py", "steps": [{"kbd": ["3u"]}]}` - undo last 3 changes
+
+`:e!` reloads from disk. Warning: because non-paused calls auto-save, `:e!` reloads your last saved state, not the original file. Use `u` to undo instead. If stuck, use `ggdGi` with the full desired file content.
 
 ## Session persistence
 
-The vim buffer persists across tool calls. Your cursor position, undo history, and file state are maintained until you close the tool. Auto-save commits changes to disk after every call.
+The vim buffer persists across tool calls. Cursor position, undo history, and file state are maintained until you close the tool. Auto-save happens once after all steps in a non-paused call complete.
+
 ## Supported
 
 Keys: `<Esc>` `<CR>` `<BS>` `<Tab>` `<C-d>` `<C-u>` `<C-r>` `<C-w>` `<C-o>`
 Motions: `h j k l <Space> w b e 0 $ ^ + - _ gg G { } f F t T % H M L ; ,` with counts
 Operators: `d c y p` with motions and text objects (`iw aw ip ap i" a" i( a( i{ a{`)
-Insert: `i a o O I A cc C s S R` — these all enter INSERT mode; do NOT add another `i` after them
+Insert: `i a o O I A cc C s S R` - these all enter INSERT mode; do not add another `i` after them
 Visual: `v V` with `d y c > < ~ r u U p P o J`
 Other: `.` repeat, `u`/`<C-r>` undo/redo, `/pattern<CR>` search, `n N * #`, `gv` `gJ` `gU` `gu` `ZZ` `ZQ`
 Ex: `:w` `:q` `:wq` `:e` `:e!` `:N` `:s///` `:%s///` `:N,Md` `:%d` `:N,Mt N` `:sort` `:g/pattern/d` `:v/pattern/d`
+Addresses: absolute line numbers, `.`, `$`, and `+N`/`-N` relative offsets, including ranges like `:.,$d` and `:.+2,$g/pattern/d`
+More ex: `:up` `:N,My` `:put` `:put!` `:N,Mco $` `:N,Mm $`

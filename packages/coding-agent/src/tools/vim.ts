@@ -1,6 +1,6 @@
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
-import { Text } from "@oh-my-pi/pi-tui";
+import { extractSegments, sliceWithWidth, Text } from "@oh-my-pi/pi-tui";
 import { isEnoent, prompt, untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import * as Diff from "diff";
@@ -20,7 +20,7 @@ import {
 	VIM_DEFAULT_VIEWPORT_LINES,
 	VIM_OPEN_VIEWPORT_LINES,
 } from "../vim/render";
-import type { VimFingerprint, VimKeyToken, VimLoadedFile, VimToolDetails } from "../vim/types";
+import type { VimFingerprint, VimKeyToken, VimLoadedFile, VimToolDetails, VimViewportLine } from "../vim/types";
 import { VimInputError } from "../vim/types";
 import type { ToolSession } from ".";
 import { parseArchivePathCandidates } from "./archive-reader";
@@ -36,41 +36,66 @@ import { toolResult } from "./tool-result";
 const INTERNAL_URL_PREFIX = /^(agent|artifact|skill|rule|local|mcp):\/\//;
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
-const vimSchema = Type.Object({
-	file: Type.String({ description: "File path to edit." }),
-	kbd: Type.Optional(
-		Type.Array(Type.String(), {
-			description: "Vim key sequences to execute against the buffer. Null when just viewing the file.",
-		}),
-	),
+const vimStepSchema = Type.Object({
+	kbd: Type.Array(Type.String(), {
+		description: "Vim key sequences to execute against the buffer.",
+	}),
 	insert: Type.Optional(
 		Type.String({
 			description:
-				"Raw text to type into the buffer. kbd must leave INSERT mode active first (e.g. via o, O, i, cc). Null when not inserting.",
+				"Raw text to type into the buffer. kbd must leave INSERT mode active first (e.g. via o, O, i, cc).",
+		}),
+	),
+});
+
+const vimSchema = Type.Object({
+	file: Type.String({ description: "File path to edit." }),
+	steps: Type.Optional(
+		Type.Array(vimStepSchema, {
+			description:
+				"Ordered editing steps. Each step executes kbd sequences, then optionally inserts text. INSERT mode is auto-exited between steps.",
 		}),
 	),
 	pause: Type.Optional(
 		Type.Boolean({
-			description: "If true, skip auto-save and keep current mode. Null or false for normal auto-save.",
+			description:
+				"Advanced: skip auto-save after the last step. Rarely needed. Omit or set false for normal use — edits auto-save.",
 		}),
 	),
 });
 
 type VimParams = Static<typeof vimSchema>;
+type VimStep = Static<typeof vimStepSchema>;
+
+interface VimRenderStep {
+	kbd?: string[];
+	insert?: string;
+}
 
 export interface VimRenderArgs {
 	file?: string;
-	kbd?: string[];
-	insert?: string;
+	steps?: VimRenderStep[];
 	pause?: boolean;
 	__partialJson?: string;
 	__toolCallId?: string;
 	__cwd?: string;
 }
 
+interface VimPreviewBuildResult {
+	details: VimToolDetails;
+	engine: VimEngine;
+	file?: string;
+	steps?: VimStep[];
+	pause: boolean;
+}
+
 interface VimCallPreviewState {
 	key: string;
 	details?: VimToolDetails;
+	engine?: VimEngine;
+	file?: string;
+	steps?: VimStep[];
+	pause?: boolean;
 }
 
 function fingerprintEqual(left: VimFingerprint | null, right: VimFingerprint | null): boolean {
@@ -102,6 +127,35 @@ function buildModelDiff(beforeText: string, afterText: string): string | undefin
 		.flatMap(hunk => [`@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`, ...hunk.lines])
 		.join("\n");
 	return diff.length > 0 ? diff : undefined;
+}
+
+function renderViewportCursor(line: VimViewportLine, styledText: string, uiTheme: Theme): string {
+	if (!line.isCursor || line.cursorCol === undefined) {
+		return styledText;
+	}
+
+	const totalWidth = Bun.stringWidth(line.text);
+	const cursorCol = Math.max(0, Math.min(line.cursorCol, totalWidth));
+	const cursorSlice = sliceWithWidth(line.text, cursorCol, 1, false);
+	const replaceWidth = cursorSlice.width;
+	const afterStart = Math.min(totalWidth, cursorCol + replaceWidth);
+	const segments = extractSegments(styledText, cursorCol, afterStart, Math.max(0, totalWidth - afterStart), true);
+	const cursorText = cursorSlice.text.length > 0 ? cursorSlice.text : " ";
+	const invertedCursor = uiTheme.inverse(cursorText);
+	const cursorHighlight = invertedCursor === cursorText ? `\x1b[7m${cursorText}\x1b[27m` : invertedCursor;
+	return `${segments.before}${cursorHighlight}${segments.after}`;
+}
+
+function renderViewportLine(line: VimViewportLine, styledText: string, padWidth: number, uiTheme: Theme): string {
+	const lineNoStr = String(line.line).padStart(padWidth, " ");
+	const lineNoStyled = line.isCursor
+		? uiTheme.fg("accent", lineNoStr)
+		: line.isSelected
+			? uiTheme.fg("warning", lineNoStr)
+			: uiTheme.fg("dim", lineNoStr);
+	const separator = uiTheme.fg("dim", "│");
+	const prefix = line.isCursor ? uiTheme.fg("accent", ">") : line.isSelected ? uiTheme.fg("warning", "*") : " ";
+	return `${prefix}${lineNoStyled}${separator}${renderViewportCursor(line, styledText, uiTheme)}`;
 }
 
 function splitTokensBySequence(kbd: string[]): Array<{ sequence: string; tokens: VimKeyToken[] }> {
@@ -137,7 +191,7 @@ async function executeKeySequences(
 			let hint =
 				"Use the insert field for inserted text, or include <Esc> to return to NORMAL mode before the next kbd entry.";
 			if (looksLikeText) {
-				hint += ` The next entry (\`${nextSeq.length > 40 ? `${nextSeq.slice(0, 37)}...` : nextSeq}\`) looks like text content — put it in the \`insert\` field instead. For multi-location edits, replace the entire file: {"kbd": ["ggdGi"], "insert": "full new content"}.`;
+				hint += ` The next entry (\`${nextSeq.length > 40 ? `${nextSeq.slice(0, 37)}...` : nextSeq}\`) looks like text content — put it in the \`insert\` field instead. For another edit location, add a new \`steps\` entry instead of another kbd entry.`;
 			}
 			throw new VimInputError(
 				`Sequence ${index + 1} (\`${group.sequence}\`) entered INSERT mode — changes rolled back. ${hint}`,
@@ -247,10 +301,104 @@ function buildToolDetailsFromEngine(
 function buildPreviewKey(args: VimRenderArgs): string {
 	return JSON.stringify({
 		file: args.file,
-		kbd: args.kbd ?? [],
-		insert: getInsertForDisplay(args) ?? "",
+		steps: getStepsForDisplay(args) ?? [],
 		pause: args.pause === true,
 	});
+}
+
+function cloneSteps(steps: readonly VimStep[] | undefined): VimStep[] | undefined {
+	return steps?.map(step => ({
+		kbd: [...step.kbd],
+		...(step.insert !== undefined ? { insert: step.insert } : {}),
+	}));
+}
+
+function arraysEqual(left: string[] | undefined, right: string[] | undefined): boolean {
+	if (left === right) {
+		return true;
+	}
+	if (!left || !right || left.length !== right.length) {
+		return false;
+	}
+	for (let index = 0; index < left.length; index += 1) {
+		if (left[index] !== right[index]) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function stepsEqualExceptLastInsert(
+	left: readonly VimStep[] | undefined,
+	right: readonly VimStep[] | undefined,
+): boolean {
+	if (left === right) {
+		return true;
+	}
+	if (!left || !right || left.length !== right.length) {
+		return false;
+	}
+	for (let index = 0; index < left.length; index += 1) {
+		const leftStep = left[index]!;
+		const rightStep = right[index]!;
+		if (!arraysEqual(leftStep.kbd, rightStep.kbd)) {
+			return false;
+		}
+		const isLast = index === left.length - 1;
+		if (!isLast && leftStep.insert !== rightStep.insert) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function getLastStepInsert(steps: readonly VimStep[] | undefined): string | undefined {
+	if (!steps || steps.length === 0) {
+		return undefined;
+	}
+	return steps[steps.length - 1]?.insert;
+}
+
+function getNormalizedSteps(steps: VimRenderArgs["steps"]): VimStep[] | undefined {
+	if (!Array.isArray(steps)) {
+		return undefined;
+	}
+	return steps.map(step => ({
+		kbd: Array.isArray(step?.kbd) ? [...step.kbd] : [],
+		...(step?.insert !== undefined ? { insert: step.insert } : {}),
+	}));
+}
+
+function getStepsForDisplay(args: VimRenderArgs): VimStep[] | undefined {
+	const steps = getNormalizedSteps(args.steps);
+	if (!steps || steps.length === 0) {
+		return steps;
+	}
+
+	const partialInsert = extractPartialInsert(args.__partialJson);
+	if (partialInsert === undefined) {
+		return steps;
+	}
+
+	const lastStep = steps[steps.length - 1]!;
+	if (lastStep.insert === undefined || partialInsert.length >= lastStep.insert.length) {
+		lastStep.insert = partialInsert;
+	}
+	return steps;
+}
+
+function buildPreviewState(key: string, preview: VimPreviewBuildResult | undefined): VimCallPreviewState {
+	if (!preview) {
+		return { key };
+	}
+	return {
+		key,
+		details: preview.details,
+		engine: preview.engine,
+		file: preview.file,
+		steps: cloneSteps(preview.steps),
+		pause: preview.pause,
+	};
 }
 
 function splitInsertIntoChunks(text: string): string[] {
@@ -298,6 +446,49 @@ async function applyInsertWithStreaming(
 	for (let index = 0; index < chunks.length; index += 1) {
 		await engine.applyLiteralInsert(chunks[index]!, exitInsertMode && index === chunks.length - 1);
 		await onStep?.();
+	}
+}
+
+interface ExecuteVimStepsOptions {
+	pauseLastStep?: boolean;
+	keepFinalInsertOpen?: boolean;
+	onKbdStep?: () => Promise<void>;
+	onInsertStep?: () => Promise<void>;
+}
+
+async function executeVimSteps(
+	engine: VimEngine,
+	steps: readonly VimStep[],
+	options: ExecuteVimStepsOptions = {},
+): Promise<void> {
+	for (let index = 0; index < steps.length; index += 1) {
+		if (engine.closed) {
+			break;
+		}
+
+		const step = steps[index]!;
+		const isLast = index === steps.length - 1;
+		const hasKbd = step.kbd.some(sequence => sequence.length > 0);
+		const preservePausedState = !hasKbd && step.insert === undefined && isLast && options.pauseLastStep === true;
+		if (engine.inputMode === "insert" && (hasKbd || step.insert === undefined) && !preservePausedState) {
+			engine.rollbackPendingInsert();
+		}
+
+		if (step.kbd.length > 0) {
+			const commandText = step.kbd.join(" ");
+			const tokenGroups = splitTokensBySequence(step.kbd);
+			await executeKeySequences(engine, tokenGroups, commandText, options.onKbdStep);
+		}
+
+		if (!engine.closed && step.insert !== undefined && (step.insert.length > 0 || engine.inputMode === "insert")) {
+			const exitInsertMode =
+				options.keepFinalInsertOpen === true ? !isLast : !(isLast && options.pauseLastStep === true);
+			await applyInsertWithStreaming(engine, step.insert, exitInsertMode, options.onInsertStep);
+		}
+
+		if (!isLast && engine.inputMode === "insert") {
+			engine.rollbackPendingInsert();
+		}
 	}
 }
 
@@ -521,33 +712,19 @@ export class VimTool implements AgentTool<typeof vimSchema, VimToolDetails> {
 				if (fp) engine.buffer.baseFingerprint = fp;
 			}
 
-			const sequences = Array.isArray(params.kbd)
-				? params.kbd
-				: typeof params.kbd === "string"
-					? [params.kbd]
-					: undefined;
-			if (!sequences) {
-				// No kbd — just show the file viewport
+			const steps = params.steps;
+			if (!steps || steps.length === 0) {
+				// No steps — just show the file viewport
 				if (isNewBuffer) {
 					engine.statusMessage = `Opened ${engine.buffer.displayPath}`;
 				}
 				return this.#renderFromEngine(engine, VIM_OPEN_VIEWPORT_LINES, engine.viewportStart);
 			}
 
-			// Safety: if the engine is stuck in INSERT mode, always reset before executing kbd.
-			// Only skip for the intentional pause→resume pattern (no kbd, insert provided).
-			const hasKbd = sequences.some(s => s.length > 0);
-			if (engine.inputMode === "insert" && (hasKbd || (!params.pause && params.insert === undefined))) {
-				engine.rollbackPendingInsert();
-			}
-
-			// Execute kbd sequences
-			const commandText = sequences.join(" ");
-			const tokenGroups = splitTokensBySequence(sequences);
 			const beforeText = serializeBufferText(engine.buffer);
 
 			if (this.session.getPlanModeState?.()?.enabled) {
-				if (params.insert !== undefined) {
+				if (steps.some(step => step.insert !== undefined)) {
 					throw new ToolError("Plan mode: vim is read-only; insert payloads are not allowed.");
 				}
 				const preview = engine.clone({
@@ -560,7 +737,7 @@ export class VimTool implements AgentTool<typeof vimSchema, VimToolDetails> {
 						throw new VimInputError("Plan mode: :w is not allowed.");
 					},
 				});
-				await executeKeySequences(preview, tokenGroups, commandText);
+				await executeVimSteps(preview, steps, { pauseLastStep: params.pause === true });
 			}
 
 			try {
@@ -579,19 +756,11 @@ export class VimTool implements AgentTool<typeof vimSchema, VimToolDetails> {
 						}
 					: undefined;
 
-				await executeKeySequences(engine, tokenGroups, commandText, emitUpdate ? () => emitUpdate() : undefined);
-
-				if (!engine.closed && params.insert !== undefined) {
-					// Skip empty insert when not in INSERT mode (e.g., kbd included <Esc>)
-					if (params.insert.length > 0 || engine.inputMode === "insert") {
-						await applyInsertWithStreaming(
-							engine,
-							params.insert,
-							params.pause !== true,
-							emitUpdate ? () => emitUpdate(true) : undefined,
-						);
-					}
-				}
+				await executeVimSteps(engine, steps, {
+					pauseLastStep: params.pause === true,
+					onKbdStep: emitUpdate ? () => emitUpdate() : undefined,
+					onInsertStep: emitUpdate ? () => emitUpdate(true) : undefined,
+				});
 
 				if (params.pause === true && !engine.closed && engine.getPendingInput()) {
 					engine.statusMessage = engine.statusMessage ?? `Paused in ${engine.getPublicMode()} mode`;
@@ -697,23 +866,40 @@ function unescapePartialJsonString(value: string): string {
 // Extract partial insert text from raw JSON buffer during streaming.
 // partial-json often doesn't surface string values until the closing quote is seen.
 function extractPartialInsert(partialJson: string | undefined): string | undefined {
-	if (!partialJson) return undefined;
-	const match = partialJson.match(/"insert"\s*:\s*"((?:\\.|[^"\\])*)(?:"|$)/u);
-	if (!match) return undefined;
+	if (!partialJson) {
+		return undefined;
+	}
+	const matches = Array.from(partialJson.matchAll(/"insert"\s*:\s*"((?:\\.|[^"\\])*)(?:"|$)/gu));
+	const match = matches[matches.length - 1];
+	if (!match) {
+		return undefined;
+	}
 	return unescapePartialJsonString(match[1]!);
 }
 
-// Get the best available insert value - prefer raw partial JSON extraction during streaming
-function getInsertForDisplay(args: VimRenderArgs): string | undefined {
-	const partialInsert = extractPartialInsert(args.__partialJson);
-	// During streaming, partialInsert may have more content than args.insert
-	if (partialInsert !== undefined && (args.insert === undefined || partialInsert.length >= args.insert.length)) {
-		return partialInsert;
+function describeStepsForDisplay(args: VimRenderArgs): string {
+	const steps = getStepsForDisplay(args);
+	if (!steps || steps.length === 0) {
+		return "";
 	}
-	return args.insert;
+
+	const kbdSummary = steps.map(step => step.kbd.join(" ")).filter(summary => summary.length > 0);
+	let description = steps.length === 1 ? (kbdSummary[0] ?? "1 step") : `${steps.length} steps`;
+	if (steps.length > 1 && kbdSummary.length > 0) {
+		description += ` · ${kbdSummary.join(" → ")}`;
+	}
+
+	const insertText = getLastStepInsert(steps);
+	if (insertText !== undefined && insertText.length > 0) {
+		description += `${description.length > 0 ? " · " : ""}insert: ${insertText}`;
+	}
+	if (args.pause) {
+		description += `${description.length > 0 ? " · " : ""}pause`;
+	}
+	return description;
 }
 
-async function buildPreviewDetails(args: VimRenderArgs): Promise<VimToolDetails | undefined> {
+async function buildPreviewDetails(args: VimRenderArgs): Promise<VimPreviewBuildResult | undefined> {
 	if (!args.file) {
 		return undefined;
 	}
@@ -724,28 +910,89 @@ async function buildPreviewDetails(args: VimRenderArgs): Promise<VimToolDetails 
 	}
 
 	const preview = baseEngine.clone(createPreviewCallbacks());
-	const sequences = Array.isArray(args.kbd) ? args.kbd : [];
-	const insertText = getInsertForDisplay(args);
+	const steps = getStepsForDisplay(args) ?? [];
 
 	try {
-		if (sequences.length > 0) {
-			const commandText = sequences.join(" ");
-			const tokenGroups = splitTokensBySequence(sequences);
-			await executeKeySequences(preview, tokenGroups, commandText);
-		}
-
-		if (!preview.closed && insertText !== undefined && (insertText.length > 0 || preview.inputMode === "insert")) {
-			await preview.applyLiteralInsert(insertText, false);
-		}
+		await executeVimSteps(preview, steps, {
+			pauseLastStep: args.pause === true,
+			keepFinalInsertOpen: true,
+		});
 	} catch {
 		return undefined;
 	}
 
+	const insertText = getLastStepInsert(steps);
 	if (!preview.closed && insertText !== undefined) {
 		preview.statusMessage = preview.statusMessage ?? "Streaming insert preview";
 	}
 
-	return buildToolDetailsFromEngine(preview, VIM_DEFAULT_VIEWPORT_LINES, preview.viewportStart, preview.closed);
+	return {
+		details: buildToolDetailsFromEngine(preview, VIM_DEFAULT_VIEWPORT_LINES, preview.viewportStart, preview.closed),
+		engine: preview,
+		file: args.file,
+		steps: cloneSteps(steps),
+		pause: args.pause === true,
+	};
+}
+
+async function extendPreviewDetails(
+	state: VimCallPreviewState | undefined,
+	args: VimRenderArgs,
+): Promise<VimPreviewBuildResult | undefined> {
+	if (!state?.engine || !args.file || state.file !== args.file) {
+		return undefined;
+	}
+
+	const steps = getStepsForDisplay(args) ?? [];
+	if (!stepsEqualExceptLastInsert(state.steps, steps)) {
+		return undefined;
+	}
+
+	const pause = args.pause === true;
+	if ((state.pause ?? false) !== pause) {
+		return undefined;
+	}
+
+	const nextInsert = getLastStepInsert(steps);
+	const previousInsert = getLastStepInsert(state.steps);
+	if (nextInsert === previousInsert) {
+		return {
+			details:
+				state.details ??
+				buildToolDetailsFromEngine(
+					state.engine,
+					VIM_DEFAULT_VIEWPORT_LINES,
+					state.engine.viewportStart,
+					state.engine.closed,
+				),
+			engine: state.engine,
+			file: args.file,
+			steps: cloneSteps(steps),
+			pause,
+		};
+	}
+
+	if (nextInsert === undefined || previousInsert === undefined || !nextInsert.startsWith(previousInsert)) {
+		return undefined;
+	}
+
+	const preview = state.engine.clone(createPreviewCallbacks());
+	const suffix = nextInsert.slice(previousInsert.length);
+	if (suffix.length > 0) {
+		try {
+			await preview.applyLiteralInsert(suffix, false);
+		} catch {
+			return undefined;
+		}
+	}
+	preview.statusMessage = preview.statusMessage ?? "Streaming insert preview";
+	return {
+		details: buildToolDetailsFromEngine(preview, VIM_DEFAULT_VIEWPORT_LINES, preview.viewportStart, preview.closed),
+		engine: preview,
+		file: args.file,
+		steps: cloneSteps(steps),
+		pause,
+	};
 }
 
 export async function primeVimCallPreview(toolCallId: string | undefined, args: VimRenderArgs): Promise<void> {
@@ -755,13 +1002,20 @@ export async function primeVimCallPreview(toolCallId: string | undefined, args: 
 
 	const key = buildPreviewKey(args);
 	const existing = previewStatesByToolCall.get(toolCallId);
-	previewStatesByToolCall.set(toolCallId, { key, details: existing?.details });
-	const details = await buildPreviewDetails(args);
+	previewStatesByToolCall.set(toolCallId, {
+		key,
+		details: existing?.details,
+		engine: existing?.engine,
+		file: existing?.file,
+		steps: cloneSteps(existing?.steps),
+		pause: existing?.pause,
+	});
+	const preview = (await extendPreviewDetails(existing, args)) ?? (await buildPreviewDetails(args));
 	const current = previewStatesByToolCall.get(toolCallId);
 	if (!current || current.key !== key) {
 		return;
 	}
-	previewStatesByToolCall.set(toolCallId, { key, details });
+	previewStatesByToolCall.set(toolCallId, buildPreviewState(key, preview));
 }
 
 export function clearVimCallPreview(toolCallId: string | undefined): void {
@@ -779,22 +1033,12 @@ export function resetVimRendererStateForTest(): void {
 
 export const vimToolRenderer = {
 	renderCall(args: VimRenderArgs, options: RenderResultOptions, uiTheme: Theme): Component {
-		if (args.file && !args.kbd) {
+		if (args.file && (!args.steps || args.steps.length === 0)) {
 			return renderText(`${uiTheme.bold("Vim")} open ${args.file}`);
 		}
 
 		// Build a description of the streaming args for the header
-		let argsDescription = "";
-		if (args.kbd) {
-			argsDescription = args.kbd.join(" ");
-			const insertText = getInsertForDisplay(args);
-			if (insertText !== undefined && insertText.length > 0) {
-				argsDescription += ` · insert: ${insertText}`;
-			}
-			if (args.pause) {
-				argsDescription += " · pause";
-			}
-		}
+		const argsDescription = describeStepsForDisplay(args);
 
 		// When a vim buffer is already open, show its viewport during LLM streaming
 		// instead of just a plain text line. This gives visual continuity.
@@ -809,21 +1053,9 @@ export const vimToolRenderer = {
 			const padWidth = String(details.viewport.end).length;
 			const viewportLines = details.viewportLines;
 			const highlightedLines = highlightCode(viewportLines.map(line => line.text).join("\n"), lang);
-			const renderedLines = viewportLines.map((line, index) => {
-				const lineNoStr = String(line.line).padStart(padWidth, " ");
-				const lineNoStyled = line.isCursor
-					? uiTheme.fg("accent", lineNoStr)
-					: line.isSelected
-						? uiTheme.fg("warning", lineNoStr)
-						: uiTheme.fg("dim", lineNoStr);
-				const separator = uiTheme.fg("dim", "│");
-				const prefix = line.isCursor
-					? uiTheme.fg("accent", ">")
-					: line.isSelected
-						? uiTheme.fg("warning", "*")
-						: " ";
-				return `${prefix}${lineNoStyled}${separator}${highlightedLines[index] ?? line.text}`;
-			});
+			const renderedLines = viewportLines.map((line, index) =>
+				renderViewportLine(line, highlightedLines[index] ?? line.text, padWidth, uiTheme),
+			);
 			if (details.statusMessage) {
 				renderedLines.push(uiTheme.fg("dim", details.statusMessage));
 			}
@@ -898,17 +1130,9 @@ export const vimToolRenderer = {
 		const padWidth = String(details.viewport.end).length;
 		const viewportLines = details.viewportLines;
 		const highlightedLines = highlightCode(viewportLines.map(line => line.text).join("\n"), lang);
-		const renderedLines = viewportLines.map((line, index) => {
-			const lineNoStr = String(line.line).padStart(padWidth, " ");
-			const lineNoStyled = line.isCursor
-				? uiTheme.fg("accent", lineNoStr)
-				: line.isSelected
-					? uiTheme.fg("warning", lineNoStr)
-					: uiTheme.fg("dim", lineNoStr);
-			const separator = uiTheme.fg("dim", "│");
-			const prefix = line.isCursor ? uiTheme.fg("accent", ">") : line.isSelected ? uiTheme.fg("warning", "*") : " ";
-			return `${prefix}${lineNoStyled}${separator}${highlightedLines[index] ?? line.text}`;
-		});
+		const renderedLines = viewportLines.map((line, index) =>
+			renderViewportLine(line, highlightedLines[index] ?? line.text, padWidth, uiTheme),
+		);
 		if (details.statusMessage) {
 			renderedLines.push(uiTheme.fg("dim", details.statusMessage));
 		}

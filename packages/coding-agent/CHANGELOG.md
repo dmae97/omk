@@ -1,15 +1,16 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
+- 
 - Removed the `searchDb` field from session and extension tool contexts, so custom tools and extensions no longer receive a shared native search DB handle from `ToolSession`, `CustomToolContext`, `ExtensionContext`, and `CreateAgentSessionOptions`
 - Changed the `vim` tool API to require either `open: "path"` or `kbd: [...]` per call and removed direct `line`/`col` cursor parameters from `open`, so callers must position the cursor via key sequences after opening
 - Changed the `edit` schemas for patch, replace, hashline, and chunk modes from top-level request fields to `edits` array entries, requiring path/mode details on each edit and breaking callers that send legacy top-level `path`, `old_text`, `new_text`, `op`, `move`, or `delete` payloads
 
 ### Added
 
+- Added Vim ex aliases `:del`, `:ya`, `:co`, and `:mo` as shorthand for existing delete, yank, copy, and move commands
 - Added support for additional Vim ex command aliases `:write`/`write!`, `:edit`/`edit!`, and `:update`/`:up` in command parsing
 - Added support for vim `:global` and `:vglobal`/`/` variants as `:g/pattern/d` and `:v/pattern/d` parsing and execution
 - Added support for extra Vim operations by treating `x`, `X`, `s`, `S`, `C`, and `D` as delete/change operator aliases
@@ -21,6 +22,7 @@
 - Added `*` and `#` normal-mode commands to search forward or backward for the word under the cursor
 - Added `gJ` to join a line range, `gv` to restore the last visual selection, and `ZZ`/`ZQ` shortcuts for save-and-exit or exit-without-save in vim mode
 - Added paragraph text object `p` for `ip`/`ap`-style paragraph selection
+- Added support for Vim ex line-address forms like `.`, `$`, `+N`/`-N`, destination addresses such as `:t$`, and ranged `:global` commands
 - Added a warning when chunk edits write to the `~` selector with body lines that appear over-indented, instructing users to start top-level body text at column 0
 - Added validation feedback for suspect indentation in chunk-mode `~` body writes so users can align content with the tool's automatic base indentation
 - Added support for multi-file `edit` calls across replace, patch, hashline, and chunk modes by grouping `edits` entries by file path and returning combined per-file results
@@ -31,6 +33,8 @@
 
 ### Changed
 
+- Changed default `providers.openaiWebsockets` setting to `off` when unset, so OpenAI websocket transport is now disabled unless explicitly enabled
+- Changed Vim ex `:update`/`:up` execution to skip writing unchanged buffers and report buffer unchanged status
 - Changed Vim page-scroll commands `C-f`, `C-b`, `C-u`, and `C-d` to move in viewport-height based increments instead of fixed constants
 - Changed `z` command behavior so `zt`, `zb`, and `z.` now align cursor movement to first non-blank in the line
 - Changed `:g`/`:v` global command handling to process matching lines safely by working in reverse order and preserving file structure
@@ -43,10 +47,21 @@
 - Updated chunk-mode `grep` output to include match lines under their containing chunk entries with consistent line-number alignment based on file length
 - Changed eager todo enforcement to only apply on the first user message of a conversation, skipping subsequent user turns that may correct, clarify, or redirect the prior task
 
+### Deprecated
+
+- 
+
+### Removed
+
+- 
+
 ### Fixed
 
+- Fixed Vim viewport rendering to display the inline highlighted cursor character and keep long cursor lines centered around the cursor in tool previews
 - Fixed Vim `:global` command defaults to handle only supported subcommands and report unsupported ones explicitly
+- Fixed Vim ex execution so parsed `:update`, `:yank`, and `:put` commands now run instead of falling through
 - Fixed vim tool rendering so streamed calls preview the live target viewport and large insert payloads update incrementally instead of popping in all at once
+- Fixed session event delivery so streaming `message_update`/tool-call previews reach the TUI immediately instead of waiting for extension handlers to finish
 - Fixed HTML session export rendering so background-job wait calls render as `poll` instead of stale `await`, while still recognizing legacy exported sessions
 - Fixed OpenRouter model resolution to accept dated routed selectors such as `openrouter/z-ai/glm-4.7-20251222:nitro`, inheriting metadata from the base catalog model when the exact variant is not listed yet
 - Fixed pre-execution edit preview routing so replace/patch/hashline mode diffs are computed from the new structured edit entries
@@ -58,6 +73,10 @@
 - Auto-generated session titles no longer overwrite a name set via `/rename`: `setSessionName` now tracks whether the name was set by the user or auto-generated and silently ignores auto titles once a user name is in place; terminal title follows the same guard
 - Session accent border color now applied on session resume and after auto-title generation, not only after an explicit `/rename`
 - Fixed retained Python kernel ownership so `AgentSession.dispose()` only shuts down kernels owned by that session, including warmup-created kernels
+
+### Security
+
+- 
 
 ## [14.1.0] - 2026-04-11
 ### Added

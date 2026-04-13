@@ -1497,7 +1497,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			.map(name => toolRegistry.get(name))
 			.filter((tool): tool is AgentTool => tool !== undefined);
 
-		const openaiWebsocketSetting = settings.get("providers.openaiWebsockets") ?? "auto";
+		const openaiWebsocketSetting = settings.get("providers.openaiWebsockets") ?? "off";
 		const preferOpenAICodexWebsockets =
 			openaiWebsocketSetting === "on" ? true : openaiWebsocketSetting === "off" ? false : undefined;
 		const serviceTierSetting = settings.get("serviceTier");

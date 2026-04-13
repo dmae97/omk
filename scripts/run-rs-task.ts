@@ -124,7 +124,7 @@ function isOneOf<T extends string>(value: string, values: readonly T[]): value i
 }
 
 async function runCommand(command: readonly string[]): Promise<number> {
-	const proc = Bun.spawn(command, {
+	const proc = Bun.spawn([...command], {
 		cwd: repoRoot,
 		stdin: "inherit",
 		stdout: "inherit",

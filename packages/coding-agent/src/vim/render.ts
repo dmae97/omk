@@ -1,3 +1,4 @@
+import { extractSegments } from "@oh-my-pi/pi-tui";
 import { truncateToWidth } from "../tools/render-utils";
 import type {
 	VimErrorLocation,
@@ -13,6 +14,7 @@ import type {
 export const VIM_OPEN_VIEWPORT_LINES = 80;
 export const VIM_DEFAULT_VIEWPORT_LINES = 10;
 export const VIM_TAB_DISPLAY = "→";
+const VIM_INLINE_CURSOR = "▏";
 
 const VIM_VIEWPORT_WIDTH = 140;
 const VIM_FOCUS_WIDTH = 100;
@@ -106,10 +108,26 @@ function buildViewportLines(
 ): VimViewportLine[] {
 	const lines: VimViewportLine[] = [];
 	for (let lineNumber = input.viewport.start; lineNumber <= input.viewport.end; lineNumber += 1) {
+		const rawText = input.lines[lineNumber - 1] ?? "";
+		const visibleText = renderVisibleText(rawText);
+		const isCursor = lineNumber === input.cursor.line;
+		if (isCursor) {
+			const cursorCol = renderedColumnForRawColumn(rawText, input.cursor.col - 1);
+			const desiredStart = Math.max(0, cursorCol - Math.floor(VIM_VIEWPORT_WIDTH / 2));
+			const cropped = cropVisibleText(visibleText, desiredStart, VIM_VIEWPORT_WIDTH);
+			lines.push({
+				line: lineNumber,
+				text: cropped.text,
+				isCursor: true,
+				isSelected: selectionContainsLine(input.selection, lineNumber),
+				cursorCol: Math.max(0, cursorCol - cropped.startCol),
+			});
+			continue;
+		}
 		lines.push({
 			line: lineNumber,
-			text: truncateToWidth(renderVisibleText(input.lines[lineNumber - 1] ?? ""), VIM_VIEWPORT_WIDTH),
-			isCursor: lineNumber === input.cursor.line,
+			text: truncateToWidth(visibleText, VIM_VIEWPORT_WIDTH),
+			isCursor: false,
 			isSelected: selectionContainsLine(input.selection, lineNumber),
 		});
 	}
@@ -149,6 +167,16 @@ function formatPendingInput(pending: VimPendingInput | undefined): string | unde
 	}
 	const prefix = pending.kind === "command" ? ":" : pending.kind === "search-forward" ? "/" : "?";
 	return `Pending: ${prefix}${truncateToWidth(renderVisibleText(pending.text), 80)}`;
+}
+
+function renderPlainViewportCursor(line: VimViewportLine): string {
+	if (!line.isCursor || line.cursorCol === undefined) {
+		return line.text;
+	}
+	const totalWidth = Bun.stringWidth(line.text);
+	const cursorCol = Math.max(0, Math.min(line.cursorCol, totalWidth));
+	const segments = extractSegments(line.text, cursorCol, cursorCol, Math.max(0, totalWidth - cursorCol), true);
+	return `${segments.before}${VIM_INLINE_CURSOR}${segments.after}`;
 }
 
 export function renderVimDetails(details: VimToolDetails): string {
@@ -192,7 +220,7 @@ export function renderVimDetails(details: VimToolDetails): string {
 		lines.push("Viewport:");
 		for (const line of details.viewportLines) {
 			const prefix = line.isCursor ? ">" : line.isSelected ? "*" : " ";
-			lines.push(`${prefix}${String(line.line).padStart(padWidth, " ")}│${line.text}`);
+			lines.push(`${prefix}${String(line.line).padStart(padWidth, " ")}│${renderPlainViewportCursor(line)}`);
 		}
 	}
 

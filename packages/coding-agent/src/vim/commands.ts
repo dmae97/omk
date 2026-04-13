@@ -1,21 +1,125 @@
 import type { VimExCommand, VimLineRange } from "./types";
 import { VimInputError } from "./types";
 
-function parseLineRange(raw: string): { range?: VimLineRange | "all"; rest: string } {
+export interface VimExParseContext {
+	currentLine: number;
+	lastLine: number;
+}
+
+interface ParsedLineAddress {
+	line: number;
+	nextIndex: number;
+}
+
+function clampLine(line: number, context: VimExParseContext): number {
+	return Math.min(Math.max(line, 1), Math.max(1, context.lastLine));
+}
+
+function readDigits(raw: string, start: number): { digits: string; nextIndex: number } {
+	let index = start;
+	let digits = "";
+	while (index < raw.length) {
+		const char = raw[index] ?? "";
+		if (!/^\d$/.test(char)) {
+			break;
+		}
+		digits += char;
+		index += 1;
+	}
+	return { digits, nextIndex: index };
+}
+
+function parseLineAddress(
+	raw: string,
+	start: number,
+	context: VimExParseContext,
+	relativeBase = context.currentLine,
+): ParsedLineAddress | undefined {
+	let index = start;
+	let line: number | undefined;
+	const first = raw[index] ?? "";
+
+	if (/^\d$/.test(first)) {
+		const { digits, nextIndex } = readDigits(raw, index);
+		line = Number.parseInt(digits, 10);
+		index = nextIndex;
+	} else if (first === ".") {
+		line = context.currentLine;
+		index += 1;
+	} else if (first === "$") {
+		line = context.lastLine;
+		index += 1;
+	} else if (first === "+" || first === "-") {
+		line = relativeBase;
+	} else {
+		return undefined;
+	}
+
+	while (index < raw.length) {
+		const sign = raw[index];
+		if (sign !== "+" && sign !== "-") {
+			break;
+		}
+		index += 1;
+		const { digits, nextIndex } = readDigits(raw, index);
+		index = nextIndex;
+		const offset = digits.length > 0 ? Number.parseInt(digits, 10) : 1;
+		line += sign === "+" ? offset : -offset;
+	}
+
+	return { line: clampLine(line, context), nextIndex: index };
+}
+
+function parseLineRange(raw: string, context?: VimExParseContext): { range?: VimLineRange | "all"; rest: string } {
 	if (raw.startsWith("%")) {
 		return { range: "all", rest: raw.slice(1).trimStart() };
 	}
 
-	const match = raw.match(/^(\d+)(?:\s*,\s*(\d+))?/);
-	if (!match) {
+	if (!context) {
+		const match = raw.match(/^(\d+)(?:\s*,\s*(\d+))?/);
+		if (!match) {
+			return { rest: raw };
+		}
+
+		const start = Number.parseInt(match[1] ?? "", 10);
+		const end = Number.parseInt(match[2] ?? match[1] ?? "", 10);
+		return {
+			range: { start, end },
+			rest: raw.slice(match[0].length).trimStart(),
+		};
+	}
+
+	const first = parseLineAddress(raw, 0, context);
+	if (!first) {
 		return { rest: raw };
 	}
 
-	const start = Number.parseInt(match[1] ?? "", 10);
-	const end = Number.parseInt(match[2] ?? match[1] ?? "", 10);
+	let index = first.nextIndex;
+	while (raw[index] === " ") {
+		index += 1;
+	}
+
+	const separator = raw[index];
+	if (separator !== "," && separator !== ";") {
+		return {
+			range: { start: first.line, end: first.line },
+			rest: raw.slice(index).trimStart(),
+		};
+	}
+
+	index += 1;
+	while (raw[index] === " ") {
+		index += 1;
+	}
+
+	const second = parseLineAddress(raw, index, context, separator === ";" ? first.line : context.currentLine);
+	if (!second) {
+		throw new VimInputError(`Missing line address after ${separator}`);
+	}
+
 	return {
-		range: { start, end },
-		rest: raw.slice(match[0].length).trimStart(),
+		range: { start: first.line, end: second.line },
+		rest: raw.slice(second.nextIndex).trimStart(),
 	};
 }
 
@@ -60,74 +164,117 @@ function parseDelimitedSegments(raw: string): { pattern: string; replacement: st
 	};
 }
 
-export function parseExCommand(input: string): VimExCommand {
-	const trimmed = input.trim();
+function parseDestination(raw: string, context?: VimExParseContext): number {
+	const trimmed = raw.trim();
 	if (trimmed.length === 0) {
-		throw new VimInputError("Empty ex command");
+		throw new VimInputError("Missing destination");
 	}
 
 	if (/^\d+$/.test(trimmed)) {
+		return Number.parseInt(trimmed, 10);
+	}
+
+	if (context) {
+		const address = parseLineAddress(trimmed, 0, context);
+		if (address && trimmed.slice(address.nextIndex).trim().length === 0) {
+			return address.line;
+		}
+	}
+
+	const destination = Number.parseInt(trimmed, 10);
+	if (Number.isNaN(destination)) {
+		throw new VimInputError("Invalid destination");
+	}
+	return destination;
+}
+
+function matchGlobalCommand(rest: string): { pattern: string; command: string; invert: boolean } | undefined {
+	const globalMatch = rest.match(/^(g|v|g!|global|global!|vglobal)\s*([/|#])(.+?)\2(.*)$/);
+	if (!globalMatch) {
+		return undefined;
+	}
+	return {
+		invert: globalMatch[1] === "v" || globalMatch[1] === "vglobal" || globalMatch[1]?.endsWith("!") === true,
+		pattern: globalMatch[3] ?? "",
+		command: (globalMatch[4] ?? "d").trim() || "d",
+	};
+}
+
+function matchDestinationCommand(rest: string, prefixes: readonly string[]): string | undefined {
+	for (const prefix of prefixes) {
+		if (!rest.startsWith(prefix)) {
+			continue;
+		}
+		const suffix = rest.slice(prefix.length);
+		if (suffix.length === 0) {
+			return "";
+		}
+		if (/^\s/.test(suffix) || /^[\d.$+-]/.test(suffix)) {
+			return suffix.trim();
+		}
+	}
+	return undefined;
+}
+
+export function parseExCommand(input: string, context?: VimExParseContext): VimExCommand {
+	const trimmed = input.trim();
+	const normalized = trimmed.startsWith(":") ? trimmed.slice(1).trimStart() : trimmed;
+	if (normalized.length === 0) {
+		throw new VimInputError("Empty ex command");
+	}
+
+	if (/^\d+$/.test(normalized)) {
 		return {
 			kind: "goto-line",
-			line: Number.parseInt(trimmed, 10),
+			line: Number.parseInt(normalized, 10),
 		};
 	}
 
-	if (trimmed === "w" || trimmed === "write") {
+	if (normalized === "w" || normalized === "write") {
 		return { kind: "write", force: false };
 	}
-	if (trimmed === "w!" || trimmed === "write!") {
+	if (normalized === "w!" || normalized === "write!") {
 		return { kind: "write", force: true };
 	}
-	if (trimmed === "update" || trimmed === "up") {
+	if (normalized === "update" || normalized === "up") {
 		return { kind: "update", force: false };
 	}
-	if (trimmed === "update!" || trimmed === "up!") {
+	if (normalized === "update!" || normalized === "up!") {
 		return { kind: "update", force: true };
 	}
-	if (trimmed === "wq" || trimmed === "x" || trimmed === "xit" || trimmed === "exit") {
+	if (normalized === "wq" || normalized === "x" || normalized === "xit" || normalized === "exit") {
 		return { kind: "write-quit", force: false };
 	}
-	if (trimmed === "wq!" || trimmed === "x!" || trimmed === "xit!" || trimmed === "exit!") {
+	if (normalized === "wq!" || normalized === "x!" || normalized === "xit!" || normalized === "exit!") {
 		return { kind: "write-quit", force: true };
 	}
-	if (trimmed === "q" || trimmed === "quit") {
+	if (normalized === "q" || normalized === "quit") {
 		return { kind: "quit", force: false };
 	}
-	if (trimmed === "q!" || trimmed === "quit!") {
+	if (normalized === "q!" || normalized === "quit!") {
 		return { kind: "quit", force: true };
 	}
-	if (trimmed === "e" || trimmed === "edit") {
+	if (normalized === "e" || normalized === "edit") {
 		return { kind: "edit", force: false };
 	}
-	if (trimmed === "e!" || trimmed === "edit!") {
+	if (normalized === "e!" || normalized === "edit!") {
 		return { kind: "edit", force: true };
 	}
-	if (trimmed.startsWith("e ") || trimmed.startsWith("edit ")) {
-		const path = trimmed.startsWith("edit ") ? trimmed.slice(5).trim() : trimmed.slice(2).trim();
+	if (normalized.startsWith("e ") || normalized.startsWith("edit ")) {
+		const path = normalized.startsWith("edit ") ? normalized.slice(5).trim() : normalized.slice(2).trim();
 		return { kind: "edit", force: false, path };
 	}
-	if (trimmed.startsWith("e! ") || trimmed.startsWith("edit! ")) {
-		const path = trimmed.startsWith("edit! ") ? trimmed.slice(6).trim() : trimmed.slice(3).trim();
+	if (normalized.startsWith("e! ") || normalized.startsWith("edit! ")) {
+		const path = normalized.startsWith("edit! ") ? normalized.slice(6).trim() : normalized.slice(3).trim();
 		return { kind: "edit", force: true, path };
 	}
 
-	const globalMatch = trimmed.match(/^(g|v|g!|global|global!|vglobal)\s*([/|#])(.+?)\2(.*)$/);
-	if (globalMatch) {
-		const invert = globalMatch[1] === "v" || globalMatch[1] === "vglobal" || globalMatch[1]?.endsWith("!");
-		const pattern = globalMatch[3] ?? "";
-		const command = (globalMatch[4] ?? "d").trim() || "d";
-		return { kind: "global", pattern, command, invert: !!invert };
+	const global = matchGlobalCommand(normalized);
+	if (global) {
+		return { kind: "global", ...global };
 	}
 
-	if (trimmed.startsWith("e ")) {
-		return { kind: "edit", force: false, path: trimmed.slice(2).trim() };
-	}
-	if (trimmed.startsWith("e! ")) {
-		return { kind: "edit", force: true, path: trimmed.slice(3).trim() };
-	}
-
-	const { range, rest } = parseLineRange(trimmed);
+	const { range, rest } = parseLineRange(normalized, context);
 	if (range && rest.length === 0) {
 		if (range === "all") {
 			throw new VimInputError(":% requires a following command");
@@ -136,6 +283,11 @@ export function parseExCommand(input: string): VimExCommand {
 			kind: "goto-line",
 			line: range.start,
 		};
+	}
+
+	const rangedGlobal = matchGlobalCommand(rest);
+	if (rangedGlobal) {
+		return { kind: "global", range, ...rangedGlobal };
 	}
 
 	if (rest === "sort" || rest.startsWith("sort ") || rest.startsWith("sort!")) {
@@ -165,14 +317,28 @@ export function parseExCommand(input: string): VimExCommand {
 		};
 	}
 
-	if (rest === "d" || rest === "delete" || rest.startsWith("d ") || rest.startsWith("delete ")) {
+	if (
+		rest === "d" ||
+		rest === "del" ||
+		rest === "delete" ||
+		rest.startsWith("d ") ||
+		rest.startsWith("del ") ||
+		rest.startsWith("delete ")
+	) {
 		return {
 			kind: "delete",
 			range,
 		};
 	}
 
-	if (rest === "y" || rest === "yank" || rest.startsWith("y ") || rest.startsWith("yank ")) {
+	if (
+		rest === "y" ||
+		rest === "ya" ||
+		rest === "yank" ||
+		rest.startsWith("y ") ||
+		rest.startsWith("ya ") ||
+		rest.startsWith("yank ")
+	) {
 		return {
 			kind: "yank",
 			range,
@@ -187,19 +353,25 @@ export function parseExCommand(input: string): VimExCommand {
 		};
 	}
 
-	if (rest.startsWith("t ") || /^t\d/.test(rest) || rest.startsWith("copy ") || /^copy\d/.test(rest)) {
-		const destStr = rest.startsWith("copy") ? rest.slice(4).trim() : rest.slice(1).trim();
-		const destination = parseInt(destStr, 10);
-		if (Number.isNaN(destination)) throw new VimInputError("Invalid destination for :copy");
+	const copyDestination = matchDestinationCommand(rest, ["copy", "co", "t"]);
+	if (copyDestination !== undefined) {
+		const destination = parseDestination(copyDestination, context);
 		return { kind: "copy", range, destination };
 	}
 
-	if (rest.startsWith("m ") || /^m\d/.test(rest) || rest.startsWith("move ") || /^move\d/.test(rest)) {
-		const destStr = rest.startsWith("move") ? rest.slice(4).trim() : rest.slice(1).trim();
-		const destination = parseInt(destStr, 10);
-		if (Number.isNaN(destination)) throw new VimInputError("Invalid destination for :move");
+	const moveDestination = matchDestinationCommand(rest, ["move", "mo", "m"]);
+	if (moveDestination !== undefined) {
+		const destination = parseDestination(moveDestination, context);
 		return { kind: "move", range, destination };
 	}
 
-	throw new VimInputError(`Unsupported ex command: ${input}`);
+	const suggestions: string[] = [];
+	if (/^\d*[aA]/.test(input)) {
+		suggestions.push("Use `NGo` (open line below N) or `NGO` (open line above N) in kbd instead of ex `:a` append.");
+	}
+	if (/^\d*[iI]$/.test(rest)) {
+		suggestions.push("Use `i` or `I` in kbd (normal mode) instead of ex `:i`.");
+	}
+	const hint = suggestions.length > 0 ? ` ${suggestions.join(" ")}` : "";
+	throw new VimInputError(`Unsupported ex command: ${input}.${hint}`);
 }
