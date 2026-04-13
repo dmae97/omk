@@ -279,8 +279,16 @@ export class AsyncJobManager {
 	}
 
 	#resolveJobId(preferredId?: string): string {
-		if (!preferredId || preferredId.trim().length === 0) {
-			return `bg_${Snowflake.next()}`;
+		preferredId = preferredId?.trim();
+		if (!preferredId) {
+			let candidate = 1;
+			while (true) {
+				const id = `bg_${candidate}`;
+				if (!this.#jobs.has(id)) {
+					return id;
+				}
+				candidate += 1;
+			}
 		}
 
 		const base = preferredId.trim();
