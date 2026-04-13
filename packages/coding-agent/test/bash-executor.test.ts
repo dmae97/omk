@@ -100,6 +100,25 @@ describe("executeBash", () => {
 		expect(Date.now() - start).toBeLessThan(3000);
 	});
 
+	it("returns a real PID for background external commands", async () => {
+		if (process.platform === "win32") {
+			return;
+		}
+
+		const result = await executeBash("sleep 10 & echo $!", {
+			cwd: tempDir,
+			timeout: 5000,
+		});
+		const pid = Number.parseInt(result.output.trim(), 10);
+		expect(Number.isInteger(pid)).toBe(true);
+		expect(pid).toBeGreaterThan(0);
+		expect(() => process.kill(pid, 0)).not.toThrow();
+		process.kill(pid, "SIGTERM");
+		await Bun.sleep(100);
+		expect(() => process.kill(pid, 0)).toThrow();
+	});
+
+
 	it("times out commands", async () => {
 		if (process.platform === "win32") {
 			return;

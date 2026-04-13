@@ -5,6 +5,7 @@ import argparse
 import asyncio
 import json
 import os
+import random
 import shutil
 import sys
 import tempfile
@@ -52,7 +53,6 @@ MODELS = [
     "openrouter/anthropic/claude-haiku-4.5",
     "openrouter/anthropic/claude-sonnet-4.6",
     "openrouter/google/gemini-3-flash-preview",
-    "openrouter/deepseek/deepseek-v3.2",
     "openrouter/z-ai/glm-5-turbo",
     "openrouter/minimax/minimax-m2.7",
 ]
@@ -61,40 +61,28 @@ ORACLE_MODEL = "openrouter/anthropic/claude-opus-4.6"
 
 PROMPT = textwrap.dedent(
     """\
-    You are evaluating the current code-reading and code-editing tools on the files in this directory.
+    You are evaluating the code-reading and code-editing tools on files in this directory.
 
-    Use `main.ts`, `main.rs`, `main.py`, and `main.md` as the test surfaces.
-
-    Treat `main.py` and `main.md` as explicit edge-case fixtures:
-    - `main.py` stresses indentation-sensitive editing, decorators, docstrings, and no-brace block structure.
-    - `main.md` stresses prose-oriented routing, headings, task lists, tables, fenced code blocks, and non-AST text editing.
+    {FIXTURE_SURFACE}
 
     Work in this order:
 
-    1. Map the real surface area.
-       - For each tool, identify the operations, selectors, addressing modes, and result shapes that actually work now.
-       - Compare how behavior differs across AST-heavy files (`main.ts`, `main.rs`), indentation-sensitive code (`main.py`), and prose/text (`main.md`).
+    1. Map the surface area. Identify operations, selectors, and addressing modes that actually work. Note differences across file types.
 
-    2. Exercise the supported paths.
-       - For reading: cover whole-file, structural chunks, nested members, line ranges, and raw source if available.
-       - For editing: cover replacing existing code, inserting into containers, inserting before/after anchors, deleting code, and the smallest addressable edits you can reach.
-       - On `main.md`, explicitly check whether prose-routed files can still be edited reliably and how addressing differs from code files.
+    2. Exercise the supported paths. Read: whole-file, structural chunks, nested members, line ranges, raw source. Edit/vim: replace, insert into containers, insert before/after, delete. On `main.md`, check how addressing differs from code files.
 
-    3. Push into awkward cases.
-       - Check first/last-child edits, container-relative vs file-relative behavior, indentation and delimiter preservation, and attached nodes such as doc comments, decorators, attributes, impl members, enum variants, markdown lists, tables, and fenced code blocks.
-       - If something fails, note whether the error message was clear and whether it told you how to recover.
+    3. Push into awkward cases. Test first/last-child edits, indentation preservation, decorators, docstrings, enum variants, markdown tables, and fenced code blocks. Note whether error messages were clear and actionable.
 
-    4. Verify the files after meaningful edits.
-       - Re-read the files in full after each meaningful edit round and confirm the tool did not make unintended changes.
+    4. Verify after edits. Re-read each file after meaningful edits and confirm no unintended changes.
 
-    When finished, report concrete findings:
-    - what felt awkward or required workarounds
+    Report concrete findings:
+    - what required workarounds
     - what was impossible
     - which errors were clear vs unclear
     - what was ambiguous or under-documented
-    - what changes would make the tools more trustworthy and easier to use
+    - suggested improvements
 
-    Be specific about observable behavior. Generic success summaries are not useful.
+    Be specific. Generic success summaries are not useful.
     """
 ).strip()
 
@@ -157,8 +145,8 @@ ORACLE_REVIEW_PROMPT = textwrap.dedent(
 ).strip()
 
 TODOS = [
-    "Map the current read and edit tool surface area on main.ts, main.rs, main.py, and main.md.",
-    "Exercise supported read and edit paths with concrete before/after verification across code and prose fixtures.",
+    "Map the current read, edit, and vim surface area on main.ts, main.rs, main.py, and main.md.",
+    "Exercise supported read, edit, and vim paths with concrete before/after verification across code and prose fixtures.",
     "Probe awkward selector, indentation, and boundary cases including decorators, docstrings, tables, and fenced blocks.",
     "Summarize what was awkward, impossible, ambiguous, or under-documented with concrete examples.",
 ]
@@ -640,6 +628,13 @@ FIXTURES: tuple[tuple[str, str], ...] = (
     ("markdown", "main.md"),
 )
 
+FIXTURE_DESCRIPTIONS: dict[str, str] = {
+    "typescript": "TypeScript/AST",
+    "rust": "Rust/AST",
+    "python": "indentation-sensitive",
+    "markdown": "prose/non-AST",
+}
+
 WORKSPACE_FILES = {
     "main.ts": TS_FIXTURE,
     "main.rs": RUST_FIXTURE,
@@ -649,14 +644,9 @@ WORKSPACE_FILES = {
 
 
 def build_fixture_prompt(fixture_language: str, fixture_file: str) -> str:
-    return textwrap.dedent(
-        f"""\
-        {PROMPT}
-
-        This run is constrained to `{fixture_file}` (`{fixture_language}`).
-        Keep all operations and edits scoped to this fixture unless absolutely required to inspect shared context.
-        """
-    ).strip()
+    description = FIXTURE_DESCRIPTIONS.get(fixture_language, fixture_language)
+    surface = f"Test surface: `{fixture_file}` ({description})."
+    return PROMPT.format(FIXTURE_SURFACE=surface) + "\n\nKeep all operations and edits scoped to this fixture."
 
 
 @dataclass
@@ -707,7 +697,7 @@ class ModelProgress:
     todo_items: dict[str, tuple[str, str]] = field(default_factory=dict)
 
 
-TOOL_WHITELIST = ("read", "edit", "todo_write", "report_tool_issue")
+TOOL_WHITELIST = ("read", "edit", "vim", "todo_write", "report_tool_issue")
 MODEL_LABEL_WIDTH = 30
 STATUS_WIDTH = 7
 TOKENS_WIDTH = 9
@@ -1614,10 +1604,11 @@ async def run_all(args: argparse.Namespace) -> int:
     workspace_root.mkdir(parents=True, exist_ok=True)
 
     selected_models = args.models or MODELS
+    model_fixtures = {model: random.sample(list(FIXTURES), min(2, len(FIXTURES))) for model in selected_models}
     run_specs = [
         (f"{model}|{fixture_language}", f"{shorten_model_name(model)}:{fixture_language}")
         for model in selected_models
-        for fixture_language, _ in FIXTURES
+        for fixture_language, _ in model_fixtures[model]
     ]
     printer = ProgressPrinter(run_specs)
     printer.configure(fixtures_dir=fixtures_dir, results_dir=results_dir)
@@ -1636,7 +1627,7 @@ async def run_all(args: argparse.Namespace) -> int:
             openrouter_key=openrouter_key,
         )
         for model in selected_models
-        for fixture_language, fixture_file in FIXTURES
+        for fixture_language, fixture_file in model_fixtures[model]
     ]
     results = await asyncio.gather(*tasks)
 

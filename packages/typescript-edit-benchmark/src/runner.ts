@@ -70,7 +70,7 @@ export interface BenchmarkConfig {
 	requireReadToolCall?: boolean;
 	noEditRequired?: boolean;
 	autoFormat?: boolean;
-	editVariant?: "replace" | "patch" | "hashline" | "chunk" | "auto";
+	editVariant?: "replace" | "patch" | "hashline" | "chunk" | "vim" | "auto";
 	editFuzzy?: boolean | "auto";
 	editFuzzyThreshold?: number | "auto";
 	guided?: boolean;
@@ -190,6 +190,17 @@ function getEditPathFromArgs(args: unknown): string | null {
 const HASHLINE_SUBTYPES = ["set", "set_range", "insert"] as const;
 
 const CHUNK_OP_SUBTYPES = ["append", "prepend", "replace", "delete"] as const;
+
+const BENCHMARK_TOOL_NAMES = ["read", "edit", "vim", "write"] as const;
+const EDIT_TOOL_NAMES = ["edit", "vim"] as const;
+
+function isEditTool(toolName: unknown): toolName is (typeof EDIT_TOOL_NAMES)[number] {
+	return toolName === "edit" || toolName === "vim";
+}
+
+function isMutationTool(toolName: unknown): boolean {
+	return isEditTool(toolName) || toolName === "write";
+}
 
 function countChunkEditSubtypes(args: unknown): Record<string, number> {
 	const counts: Record<string, number> = Object.fromEntries(CHUNK_OP_SUBTYPES.map(k => [k, 0]));
@@ -603,7 +614,7 @@ async function buildGuidedContext(
 function buildInstructions(config: BenchmarkConfig): string {
 	return config.noEditRequired
 		? "Read the relevant files first, then apply the fix."
-		: "Read the relevant files first, then use the edit tool to apply the fix.";
+		: "Read the relevant files first, then use the edit or vim tool to apply the fix.";
 }
 
 type BenchmarkPromptDelivery = {
@@ -703,7 +714,7 @@ function buildBenchmarkRpcArgs(config: BenchmarkConfig, multiFile: boolean, prov
 		"--append-system-prompt",
 		buildBenchmarkSystemPrompt({ multiFile, config }),
 		"--tools",
-		"read,edit,write",
+		BENCHMARK_TOOL_NAMES.join(","),
 		"--no-skills",
 		"--no-title",
 		"--no-rules",
@@ -923,7 +934,7 @@ async function runSingleTask(
 					cwd,
 					model: config.model,
 					appendSystemPrompt: buildBenchmarkSystemPrompt({ multiFile: false, config }),
-					tools: ["read", "edit", "write"],
+					tools: [...BENCHMARK_TOOL_NAMES],
 					editVariant: config.editVariant,
 					editFuzzy: config.editFuzzy,
 					editFuzzyThreshold: config.editFuzzyThreshold,
@@ -1018,9 +1029,7 @@ async function runSingleTask(
 				const providerFailure = detectProviderFailure(events);
 				const hasMutationToolCall = events.some(
 					event =>
-						event.type === "tool_execution_start" &&
-						((event as { toolName?: unknown }).toolName === "edit" ||
-							(event as { toolName?: unknown }).toolName === "write"),
+						event.type === "tool_execution_start" && isMutationTool((event as { toolName?: unknown }).toolName),
 				);
 				if (providerFailure && !hasMutationToolCall) {
 					await logEvent({
@@ -1066,11 +1075,14 @@ async function runSingleTask(
 					if (event.type === "tool_execution_start") {
 						const e = event as { toolName?: string; toolCallId?: string; args?: unknown };
 						const toolName = e.toolName;
-						if (toolName === "read") toolStats.read++;
-						else if (toolName === "edit") {
+						if (toolName === "read") {
+							toolStats.read++;
+						} else if (isEditTool(toolName)) {
 							toolStats.edit++;
 							if (e.toolCallId) pendingEdits.set(e.toolCallId, e.args);
-						} else if (toolName === "write") toolStats.write++;
+						} else if (toolName === "write") {
+							toolStats.write++;
+						}
 
 						// Count input chars from args
 						if (e.args) {
@@ -1078,7 +1090,7 @@ async function runSingleTask(
 						}
 					} else if (event.type === "tool_execution_end") {
 						const e = event as { toolName?: string; toolCallId?: string; isError?: boolean; result?: unknown };
-						if (e.toolName === "edit" && e.toolCallId && pendingEdits.has(e.toolCallId)) {
+						if (isEditTool(e.toolName) && e.toolCallId && pendingEdits.has(e.toolCallId)) {
 							const args = pendingEdits.get(e.toolCallId) ?? null;
 							pendingEdits.delete(e.toolCallId);
 							if (config.editVariant === "hashline" && args) {
@@ -1104,13 +1116,15 @@ async function runSingleTask(
 								editFailures.push({ toolCallId: e.toolCallId, args, error });
 							} else {
 								toolStats.editSuccesses++;
-								const warningMessages = extractHashlineWarnings(e.result);
-								if (warningMessages.length > 0) {
-									editWarnings.push(...warningMessages);
-									toolStats.editWarnings += warningMessages.length;
-									if (hasHashlineAutocorrectWarning(warningMessages)) {
-										editAutocorrectCount++;
-										toolStats.editAutocorrects++;
+								if (e.toolName === "edit") {
+									const warningMessages = extractHashlineWarnings(e.result);
+									if (warningMessages.length > 0) {
+										editWarnings.push(...warningMessages);
+										toolStats.editWarnings += warningMessages.length;
+										if (hasHashlineAutocorrectWarning(warningMessages)) {
+											editAutocorrectCount++;
+											toolStats.editAutocorrects++;
+										}
 									}
 								}
 							}
@@ -1118,12 +1132,13 @@ async function runSingleTask(
 					}
 				}
 
+
 				// Retry if the model didn't attempt any edit/write (read-only or no tool calls)
 				const madeEditAttempt = toolStats.edit > 0 || toolStats.write > 0;
 				if (!madeEditAttempt && zeroToolRetries < noOpRetryLimit) {
 					zeroToolRetries++;
 					await logEvent({ type: "zero_tool_retry", attempt: attempt + 1, retryNumber: zeroToolRetries });
-					retryContext = `Previous attempt read files but made no edit — you must use the edit tool to apply the fix. Retry ${zeroToolRetries}/${noOpRetryLimit}.`;
+					retryContext = `Previous attempt read files but made no edit attempt — you must use the edit or vim tool to apply the fix. Retry ${zeroToolRetries}/${noOpRetryLimit}.`;
 					attempt--; // Don't consume a regular attempt slot
 					continue;
 				}
@@ -1345,9 +1360,7 @@ async function _runRpcBenchmarkRun(
 			const providerFailure = detectProviderFailure(events);
 			const hasMutationToolCall = events.some(
 				event =>
-					event.type === "tool_execution_start" &&
-					((event as { toolName?: unknown }).toolName === "edit" ||
-						(event as { toolName?: unknown }).toolName === "write"),
+					event.type === "tool_execution_start" && isMutationTool((event as { toolName?: unknown }).toolName),
 			);
 			if (providerFailure && !hasMutationToolCall) {
 				await logEvent({
@@ -1392,18 +1405,21 @@ async function _runRpcBenchmarkRun(
 				if (event.type === "tool_execution_start") {
 					const e = event as { toolName?: string; toolCallId?: string; args?: unknown };
 					const toolName = e.toolName;
-					if (toolName === "read") toolStats.read++;
-					else if (toolName === "edit") {
+					if (toolName === "read") {
+						toolStats.read++;
+					} else if (isEditTool(toolName)) {
 						toolStats.edit++;
 						if (e.toolCallId) pendingEdits.set(e.toolCallId, e.args);
-					} else if (toolName === "write") toolStats.write++;
-
+					} else if (toolName === "write") {
+						toolStats.write++;
+					}
+				
 					if (e.args) {
 						toolStats.totalInputChars += JSON.stringify(e.args).length;
 					}
 				} else if (event.type === "tool_execution_end") {
 					const e = event as { toolName?: string; toolCallId?: string; isError?: boolean; result?: unknown };
-					if (e.toolName === "edit" && e.toolCallId && pendingEdits.has(e.toolCallId)) {
+					if (isEditTool(e.toolName) && e.toolCallId && pendingEdits.has(e.toolCallId)) {
 						const args = pendingEdits.get(e.toolCallId) ?? null;
 						pendingEdits.delete(e.toolCallId);
 						if (config.editVariant === "hashline" && args) {
@@ -1429,38 +1445,40 @@ async function _runRpcBenchmarkRun(
 							editFailures.push({ toolCallId: e.toolCallId, args, error: toolError });
 						} else {
 							toolStats.editSuccesses++;
-							const warningMessages = extractHashlineWarnings(e.result);
-							if (warningMessages.length > 0) {
-								editWarnings.push(...warningMessages);
-								toolStats.editWarnings += warningMessages.length;
-								if (hasHashlineAutocorrectWarning(warningMessages)) {
-									editAutocorrectCount++;
-									toolStats.editAutocorrects++;
+							if (e.toolName === "edit") {
+								const warningMessages = extractHashlineWarnings(e.result);
+								if (warningMessages.length > 0) {
+									editWarnings.push(...warningMessages);
+									toolStats.editWarnings += warningMessages.length;
+									if (hasHashlineAutocorrectWarning(warningMessages)) {
+										editAutocorrectCount++;
+										toolStats.editAutocorrects++;
+									}
 								}
 							}
 						}
 					}
 				}
 			}
-
+			
 			// Retry if the model didn't attempt any edit/write (read-only or no tool calls)
 			const madeEditAttempt = toolStats.edit > 0 || toolStats.write > 0;
 			if (!madeEditAttempt && zeroToolRetries < noOpRetryLimit) {
 				zeroToolRetries++;
 				await logEvent({ type: "zero_tool_retry", attempt: attempt + 1, retryNumber: zeroToolRetries });
-				retryContext = `Previous attempt read files but made no edit — you must use the edit tool to apply the fix. Retry ${zeroToolRetries}/${noOpRetryLimit}.`;
+				retryContext = `Previous attempt read files but made no edit attempt — you must use the edit or vim tool to apply the fix. Retry ${zeroToolRetries}/${noOpRetryLimit}.`;
 				attempt--; // Don't consume a regular attempt slot
 				continue;
 			}
-
+			
 			patchApplied = toolStats.edit > 0;
-
+			
 			const filesToVerify = task.files.length > 0 ? task.files : undefined;
 			const verification = await verifyExpectedFileSubset(expectedDir, cwd, filesToVerify);
 			if (config.autoFormat) {
 				await formatDirectory(cwd);
 			}
-
+			
 			verificationPassed = verification.success;
 			indentScore = verification.indentScore;
 			formattedEquivalent = verification.formattedEquivalent;
@@ -1470,11 +1488,11 @@ async function _runRpcBenchmarkRun(
 			if (!verification.success && verification.error) {
 				error = verification.error;
 			}
-
+			
 			if (verification.success) {
 				break;
 			}
-
+			
 			const mutationIntentSuffix = mutationIntentValidation
 				? `\n\nMutation intent: ${mutationIntentValidation.matched ? "matched" : "not matched"} (${mutationIntentValidation.reason})`
 				: "";

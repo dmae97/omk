@@ -74,7 +74,7 @@ Options:
   --tasks <ids>             Comma-separated task IDs to run (default: all)
   --max-tasks <n>            Max tasks to sample (default: 80, 0 = all)
   --fixtures <path>         Fixtures directory or .tar.gz archive (default: built-in)
-  --edit-variant <v>        Edit variant: replace, patch, hashline, chunk, auto (default: auto)
+  --edit-variant <v>        Edit variant: replace, patch, hashline, chunk, vim, auto (default: auto)
   --edit-fuzzy <bool>       Fuzzy matching: true, false, auto (default: auto)
   --edit-fuzzy-threshold <n> Fuzzy threshold 0-1 or auto (default: auto)
   --auto-format             Auto-format output files after verify (debug only)
@@ -307,9 +307,16 @@ async function main(): Promise<void> {
 		tasksToRun = Array.from({ length: maxTasks }, (_, i) => sorted[Math.floor(i * step)]!);
 	}
 
-	const editVariant = values["edit-variant"] as "replace" | "patch" | "hashline" | "chunk" | "auto" | undefined;
-	if (editVariant && !["replace", "patch", "hashline", "chunk", "auto"].includes(editVariant)) {
-		console.error(`Invalid edit-variant: ${editVariant}. Must be replace, patch, hashline, chunk, or auto.`);
+	const editVariant = values["edit-variant"] as
+		| "replace"
+		| "patch"
+		| "hashline"
+		| "chunk"
+		| "vim"
+		| "auto"
+		| undefined;
+	if (editVariant && !["replace", "patch", "hashline", "chunk", "vim", "auto"].includes(editVariant)) {
+		console.error(`Invalid edit-variant: ${editVariant}. Must be replace, patch, hashline, chunk, vim, or auto.`);
 		process.exit(1);
 	}
 

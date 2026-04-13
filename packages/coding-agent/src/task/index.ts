@@ -530,8 +530,8 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 		});
 		const thinkingLevelOverride = effectiveAgent.thinkingLevel;
 
-		// Output schema priority: agent frontmatter > params > inherited from parent session
-		const effectiveOutputSchema = effectiveAgent.output ?? outputSchema ?? this.session.outputSchema;
+		// Output schema priority: caller params > agent frontmatter > inherited from parent session
+		const effectiveOutputSchema = outputSchema ?? effectiveAgent.output ?? this.session.outputSchema;
 
 		// Handle empty or missing tasks
 		if (!params.tasks || params.tasks.length === 0) {
@@ -1116,8 +1116,8 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 			}
 
 			// Build final output - match plugin format
-			const successCount = results.filter(r => r.exitCode === 0 && !r.error).length;
 			const cancelledCount = results.filter(r => r.aborted).length;
+			const successCount = results.filter(r => r.exitCode === 0 && !r.error && !r.aborted).length;
 			const totalDuration = Date.now() - startTime;
 
 			const summaries = results.map(r => {
