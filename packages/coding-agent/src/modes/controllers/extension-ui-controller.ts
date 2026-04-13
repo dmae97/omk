@@ -123,7 +123,11 @@ export class ExtensionUiController {
 			getSessionName: () => this.ctx.sessionManager.getSessionName(),
 			setSessionName: async name => {
 				await this.ctx.sessionManager.setSessionName(name, "user");
-				setSessionTerminalTitle(this.ctx.sessionManager.getSessionName(), this.ctx.sessionManager.getCwd());
+				setSessionTerminalTitle(
+					this.ctx.sessionManager.getSessionName(),
+					this.ctx.sessionManager.getCwd(),
+					this.ctx.sessionManager.titleSource,
+				);
 			},
 		};
 		const contextActions: ExtensionContextActions = {
@@ -169,7 +173,11 @@ export class ExtensionUiController {
 				if (!success) {
 					return { cancelled: true };
 				}
-				setSessionTerminalTitle(this.ctx.sessionManager.getSessionName(), this.ctx.sessionManager.getCwd());
+				setSessionTerminalTitle(
+					this.ctx.sessionManager.getSessionName(),
+					this.ctx.sessionManager.getCwd(),
+					this.ctx.sessionManager.titleSource,
+				);
 
 				// Call setup callback if provided
 				if (options?.setup) {
@@ -247,7 +255,11 @@ export class ExtensionUiController {
 				if (!result) {
 					return { cancelled: true };
 				}
-				setSessionTerminalTitle(this.ctx.sessionManager.getSessionName(), this.ctx.sessionManager.getCwd());
+				setSessionTerminalTitle(
+					this.ctx.sessionManager.getSessionName(),
+					this.ctx.sessionManager.getCwd(),
+					this.ctx.sessionManager.titleSource,
+				);
 				this.ctx.chatContainer.clear();
 				this.ctx.renderInitialMessages();
 				await this.ctx.reloadTodos();
@@ -390,7 +402,11 @@ export class ExtensionUiController {
 			getSessionName: () => this.ctx.sessionManager.getSessionName(),
 			setSessionName: async name => {
 				await this.ctx.sessionManager.setSessionName(name, "user");
-				setSessionTerminalTitle(this.ctx.sessionManager.getSessionName(), this.ctx.sessionManager.getCwd());
+				setSessionTerminalTitle(
+					this.ctx.sessionManager.getSessionName(),
+					this.ctx.sessionManager.getCwd(),
+					this.ctx.sessionManager.titleSource,
+				);
 			},
 		};
 		const contextActions: ExtensionContextActions = {

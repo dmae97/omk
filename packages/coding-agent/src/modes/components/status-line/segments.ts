@@ -359,7 +359,8 @@ const cacheWriteSegment: StatusLineSegment = {
 const sessionNameSegment: StatusLineSegment = {
 	id: "session_name",
 	render(ctx) {
-		const name = ctx.session.sessionManager?.getSessionName();
+		const sessionManager = ctx.session.sessionManager;
+		const name = sessionManager?.titleSource === "auto" ? undefined : sessionManager?.getSessionName();
 		if (!name) return { content: "", visible: false };
 
 		const ansi = getSessionAccentAnsi(getSessionAccentHex(name)) ?? theme.getFgAnsi("accent");
