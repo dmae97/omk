@@ -297,7 +297,7 @@ async fn spawn_ao_list_as_job<'a>(
 	shell: &'a mut Shell,
 	params: &ExecutionParameters,
 ) -> Result<&'a jobs::Job, error::Error> {
-	let job = if ao_list.additional.is_empty() {
+	let job = if should_try_spawn_pipeline_as_job(ao_list, shell, params).await? {
 		try_spawn_pipeline_as_job(&ao_list.first, ao_list.to_string(), shell, params)
 			.await?
 			.unwrap_or_else(|| spawn_ao_list_in_task(ao_list, shell, params))
@@ -307,6 +307,46 @@ async fn spawn_ao_list_as_job<'a>(
 
 	Ok(shell.jobs.add_as_current(job))
 }
+
+async fn should_try_spawn_pipeline_as_job(
+	ao_list: &ast::AndOrList,
+	shell: &mut Shell,
+	params: &ExecutionParameters,
+) -> Result<bool, error::Error> {
+	if !ao_list.additional.is_empty() {
+		return Ok(false);
+	}
+
+	let pipeline = &ao_list.first;
+	if pipeline.bang {
+		return Ok(false);
+	}
+
+	let [ast::Command::Simple(simple_cmd)] = pipeline.seq.as_slice() else {
+		return Ok(false);
+	};
+	let Some(command_word) = simple_cmd.word_or_name.as_ref() else {
+		return Ok(false);
+	};
+
+	let expanded = expansion::full_expand_and_split_word(shell, params, command_word).await?;
+	let [command_name] = expanded.as_slice() else {
+		return Ok(false);
+	};
+
+	if shell.aliases.contains_key(command_name) {
+		return Ok(false);
+	}
+	if shell.builtins().get(command_name.as_str()).is_some_and(|registration| !registration.disabled) {
+		return Ok(false);
+	}
+	if shell.funcs().get(command_name.as_str()).is_some() {
+		return Ok(false);
+	}
+
+	Ok(true)
+}
+
 
 async fn try_spawn_pipeline_as_job(
 	pipeline: &ast::Pipeline,
