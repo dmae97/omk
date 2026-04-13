@@ -158,7 +158,7 @@ def run_benchmark_for_model(
             no_rules=True,
             no_session=True,
             startup_timeout=30.0,
-            request_timeout=60.0,
+            request_timeout=120.0,
         ) as client:
             client.install_headless_ui()
 

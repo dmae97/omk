@@ -2,8 +2,10 @@ import { VimInputError as VimError, type VimKeyToken } from "./types";
 
 const SPECIAL_KEYS = new Map<string, string>([
 	["esc", "Esc"],
+	["escape", "Esc"],
 	["cr", "CR"],
 	["enter", "CR"],
+	["return", "CR"],
 	["bs", "BS"],
 	["backspace", "BS"],
 	["tab", "Tab"],

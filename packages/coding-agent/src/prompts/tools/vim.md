@@ -3,26 +3,28 @@ Stateful single-buffer Vim-style editor.
 Use this for surgical text edits when motions and compact viewport feedback are more efficient than rewriting full regions.
 
 Actions:
-- `open`: open a filesystem text file in the in-process Vim buffer
-- `kbd`: execute Vim key sequences against the active buffer, optionally followed by raw text insertion
+- `open`: load a file into the buffer (auto-saves any previous buffer)
+- `kbd`: run Vim key sequences, then optionally insert literal text
 
 Rules:
-- One active buffer only
-- Edits auto-save to disk after each `kbd` call (unless `pause: true`)
-- `kbd` items are executed sequentially, but non-final items must finish stable navigation state; if one leaves INSERT/command/search pending, combine the keys into one string instead of splitting them across array entries
-- `insert` is literal text, not Vim key syntax; use it after `kbd` leaves the buffer in `INSERT` mode
-- `pause: true` keeps the current mode active and returns an intermediate snapshot
-- Output uses a cursor-focused hybrid snapshot with an explicit caret line, visible tab markers, and a surrounding viewport
-- Use `:e` or `:e!` to reload from disk
-- Opening a new file auto-saves and replaces the current buffer
+- One active buffer at a time; `open` replaces it
+- Each `kbd` call auto-saves to disk (unless `pause: true`)
+- `kbd` array entries run in order; every non-final entry must leave NORMAL mode — if an entry enters INSERT mode, end it with `<Esc>` or merge into one string
+- `insert` is **raw text** (newlines = real `\n` in JSON), NOT Vim key syntax; the buffer must already be in INSERT mode (via `i`, `o`, `O`, `a`, `A`, `cc`, etc.)
+- After `insert`, the tool exits INSERT mode and saves automatically (unless `pause: true`)
+- `pause: true` keeps the current mode active and skips auto-save; use it for multi-step edits
+- Use `:e!` to reload from disk and discard unsaved changes
 
-Supported subset includes common motions, insert mode, visual mode, search, undo/redo with counts like `5u`, repeat-last-change, and core ex commands like `:e`, `:e!`, `:s`, `:%s`, and ranged delete.
+Supported Vim subset: motions (`h/j/k/l`, `w/b/e`, `0/$`, `gg/G`, `{/}`, `f/t`), counts, `.` repeat, insert commands (`i/a/o/O/I/A/cc/C/s/S`), visual mode (`v/V`), operators (`d/c/y/p`), text objects (`iw/aw/i"/a"/i(/a(`), undo/redo (`u`/`<C-r>`), search (`/pattern<CR>`, `n/N`), ex commands (`:s`, `:%s`, `:e`, `:e!`, ranged `:d`).
+
+Special keys: `<Esc>` or `<Escape>`, `<CR>` or `<Enter>`, `<BS>`, `<Tab>`, `<C-d>`, `<C-u>`, `<C-r>`, `<C-w>`, `<C-o>`.
 
 Examples:
-- `{"open":"src/app.ts"}`
-- `{"kbd":["42G", "ciwnewName<Esc>"]}`
-- `{"kbd":["1014G", "cc"], "insert":"// comment\nconst x = 1;\n"}`
-- `{"kbd":["1014G", "O"], "pause":true}`
-- `{"kbd":[], "insert":"\treturn value;\n", "pause":true}`
-- `{"kbd":[":%s/oldName/newName/g<CR>"]}`
-- `{"kbd":["/TODO<CR>", "n", "dd"]}`
+- Open file: `{"open":"src/app.ts"}`
+- Open at line: `{"open":"src/app.ts", "line":42}`
+- Rename word: `{"kbd":["42G", "ciwnewName<Esc>"]}`
+- Replace line with multi-line text: `{"kbd":["5G", "cc"], "insert":"    if b == 0:\n        return None"}`
+- Add lines below: `{"kbd":["3G", "o"], "insert":"def multiply(a, b):\n    return a * b"}`
+- Global substitution: `{"kbd":[":%s/oldName/newName/g<CR>"]}`
+- Search and delete: `{"kbd":["/TODO<CR>", "dd"]}`
+- Delete range of lines: `{"kbd":[":3,5d<CR>"]}`
