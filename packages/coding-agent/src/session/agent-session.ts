@@ -718,12 +718,13 @@ export class AgentSession {
 	}
 
 	async #emitSessionEvent(event: AgentSessionEvent): Promise<void> {
-		this.#emit(event);
 		if (event.type === "message_update") {
+			this.#emit(event);
 			void this.#queueExtensionEvent(event);
 			return;
 		}
-		await this.#queueExtensionEvent(event);
+		await this.#emitExtensionEvent(event);
+		this.#emit(event);
 	}
 
 	// Track last assistant message for auto-compaction check
@@ -765,17 +766,6 @@ export class AgentSession {
 			}
 		}
 
-		// For agent_end events, eagerly track the handler's compaction work as a
-		// post-prompt task so that #waitForPostPromptRecovery blocks until the
-		// compaction check has run. The queued extension event introduces a
-		// microtask gap that could let #waitForPostPromptRecovery slip through
-		// before #postPromptTasksPromise is created.
-		let resolveAgentEndWork: (() => void) | undefined;
-		if (event.type === "agent_end") {
-			const { promise, resolve } = Promise.withResolvers<void>();
-			this.#trackPostPromptTask(promise);
-			resolveAgentEndWork = resolve;
-		}
 
 		await this.#emitSessionEvent(displayEvent);
 
@@ -1032,56 +1022,52 @@ export class AgentSession {
 
 		// Check auto-retry and auto-compaction after agent completes
 		if (event.type === "agent_end") {
-			try {
-				const fallbackAssistant = [...event.messages]
-					.reverse()
-					.find((message): message is AssistantMessage => message.role === "assistant");
-				const msg = this.#lastAssistantMessage ?? fallbackAssistant;
-				this.#lastAssistantMessage = undefined;
-				if (!msg) return;
+			const fallbackAssistant = [...event.messages]
+				.reverse()
+				.find((message): message is AssistantMessage => message.role === "assistant");
+			const msg = this.#lastAssistantMessage ?? fallbackAssistant;
+			this.#lastAssistantMessage = undefined;
+			if (!msg) return;
 
-				// Invalidate GitHub Copilot credentials on auth failure so stale tokens
-				// aren't reused on the next request
-				if (
-					msg.stopReason === "error" &&
-					msg.provider === "github-copilot" &&
-					msg.errorMessage?.includes("GitHub Copilot authentication failed")
-				) {
-					await this.#modelRegistry.authStorage.remove("github-copilot");
-				}
+			// Invalidate GitHub Copilot credentials on auth failure so stale tokens
+			// aren't reused on the next request
+			if (
+				msg.stopReason === "error" &&
+				msg.provider === "github-copilot" &&
+				msg.errorMessage?.includes("GitHub Copilot authentication failed")
+			) {
+				await this.#modelRegistry.authStorage.remove("github-copilot");
+			}
 
-				if (this.#skipPostTurnMaintenanceAssistantTimestamp === msg.timestamp) {
-					this.#skipPostTurnMaintenanceAssistantTimestamp = undefined;
+			if (this.#skipPostTurnMaintenanceAssistantTimestamp === msg.timestamp) {
+				this.#skipPostTurnMaintenanceAssistantTimestamp = undefined;
+				return;
+			}
+
+			// Check for retryable errors first (overloaded, rate limit, server errors)
+			if (this.#isRetryableError(msg)) {
+				const didRetry = await this.#handleRetryableError(msg);
+				if (didRetry) return; // Retry was initiated, don't proceed to compaction
+			}
+			this.#resolveRetry();
+
+			if (msg.stopReason === "aborted" && this.#checkpointState) {
+				this.#checkpointState = undefined;
+				this.#pendingRewindReport = undefined;
+			}
+			const compactionTask = this.#checkCompaction(msg);
+			this.#trackPostPromptTask(compactionTask);
+			await compactionTask;
+			// Check for incomplete todos only after a final assistant stop, not intermediate tool-use turns.
+			const hasToolCalls = msg.content.some(content => content.type === "toolCall");
+			if (hasToolCalls) {
+				return;
+			}
+			if (msg.stopReason !== "error" && msg.stopReason !== "aborted") {
+				if (this.#enforceRewindBeforeYield()) {
 					return;
 				}
-
-				// Check for retryable errors first (overloaded, rate limit, server errors)
-				if (this.#isRetryableError(msg)) {
-					const didRetry = await this.#handleRetryableError(msg);
-					if (didRetry) return; // Retry was initiated, don't proceed to compaction
-				}
-				this.#resolveRetry();
-
-				if (msg.stopReason === "aborted" && this.#checkpointState) {
-					this.#checkpointState = undefined;
-					this.#pendingRewindReport = undefined;
-				}
-				const compactionTask = this.#checkCompaction(msg);
-				this.#trackPostPromptTask(compactionTask);
-				await compactionTask;
-				// Check for incomplete todos only after a final assistant stop, not intermediate tool-use turns.
-				const hasToolCalls = msg.content.some(content => content.type === "toolCall");
-				if (hasToolCalls) {
-					return;
-				}
-				if (msg.stopReason !== "error" && msg.stopReason !== "aborted") {
-					if (this.#enforceRewindBeforeYield()) {
-						return;
-					}
-					await this.#checkTodoCompletion();
-				}
-			} finally {
-				resolveAgentEndWork?.();
+				await this.#checkTodoCompletion();
 			}
 		}
 	};
