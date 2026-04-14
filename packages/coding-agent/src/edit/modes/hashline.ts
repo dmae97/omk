@@ -27,7 +27,7 @@ import {
 	invalidateFsScanAfterWrite,
 } from "../../tools/fs-cache-invalidation";
 import { outputMeta } from "../../tools/output-meta";
-import { isInternalUrlPath, resolveToCwd } from "../../tools/path-utils";
+import { resolveToCwd } from "../../tools/path-utils";
 import { enforcePlanModeWrite, resolvePlanPath } from "../../tools/plan-mode-guard";
 import { generateDiffString } from "../diff";
 import { computeLineHash, formatLineHash } from "../line-hash";
@@ -1157,9 +1157,6 @@ export async function computeHashlineDiff(
 	  }
 > {
 	const { path, edits, move } = input;
-	if (isInternalUrlPath(path) || (move && isInternalUrlPath(move))) {
-		return { error: `Preview not available for internal URL: ${path}` };
-	}
 	const absolutePath = resolveToCwd(path, cwd);
 	const movePath = move ? resolveToCwd(move, cwd) : undefined;
 	const isMoveOnly = Boolean(movePath) && movePath !== absolutePath && edits.length === 0;

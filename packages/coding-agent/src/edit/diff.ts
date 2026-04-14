@@ -6,7 +6,7 @@
  */
 import { isEnoent } from "@oh-my-pi/pi-utils";
 import * as Diff from "diff";
-import { isInternalUrlPath, resolveToCwd } from "../tools/path-utils";
+import { resolveToCwd } from "../tools/path-utils";
 import { DEFAULT_FUZZY_THRESHOLD, EditMatchError, findMatch } from "./modes/replace";
 import { adjustIndentation, normalizeToLF, stripBom } from "./normalize";
 
@@ -760,9 +760,6 @@ export async function computeEditDiff(
 ): Promise<DiffResult | DiffError> {
 	if (oldText.length === 0) {
 		return { error: "oldText must not be empty." };
-	}
-	if (isInternalUrlPath(path)) {
-		return { error: `Preview not available for internal URL: ${path}` };
 	}
 	const absolutePath = resolveToCwd(path, cwd);
 

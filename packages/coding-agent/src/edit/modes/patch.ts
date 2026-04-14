@@ -25,7 +25,7 @@ import {
 	invalidateFsScanAfterWrite,
 } from "../../tools/fs-cache-invalidation";
 import { outputMeta } from "../../tools/output-meta";
-import { isInternalUrlPath, resolveToCwd } from "../../tools/path-utils";
+import { resolveToCwd } from "../../tools/path-utils";
 import { enforcePlanModeWrite, resolvePlanPath } from "../../tools/plan-mode-guard";
 import {
 	ApplyPatchError,
@@ -1557,9 +1557,6 @@ export async function computePatchDiff(
 			error: string;
 	  }
 > {
-	if (isInternalUrlPath(input.path) || (input.rename && isInternalUrlPath(input.rename))) {
-		return { error: `Preview not available for internal URL: ${input.path}` };
-	}
 	try {
 		const result = await previewPatch(input, {
 			cwd,
