@@ -74,12 +74,10 @@ describe("chunk mode regression coverage", () => {
 		const selector = extractSelector(beforeRead, "impl_Greete.fn_render");
 
 		await editTool.execute("chunk-edit-rust-body", {
-			path: filePath,
 			edits: [
 				{
-					sel: `${selector}~`,
-					op: "put",
-					content: 'let greeting = format!("Hello, {name}");\nprintln!("{greeting}");\ngreeting\n',
+					path: `${filePath}:${selector}~`,
+					write: 'let greeting = format!("Hello, {name}");\nprintln!("{greeting}");\ngreeting\n',
 				},
 			],
 		} as never);
@@ -101,12 +99,10 @@ describe("chunk mode regression coverage", () => {
 		const selector = extractSelector(beforeRead, "sect_Title.sect_Alpha");
 
 		await editTool.execute("chunk-edit-markdown-after", {
-			path: filePath,
 			edits: [
 				{
-					sel: selector,
-					op: "after",
-					content: "## Inserted\n\ninserted body\n",
+					path: `${filePath}:${selector}`,
+					insert: { loc: "append", body: "## Inserted\n\ninserted body\n" },
 				},
 			],
 		} as never);
@@ -127,12 +123,10 @@ describe("chunk mode regression coverage", () => {
 		const selector = extractSelector(beforeRead, "sect_Title.sect_Alpha");
 
 		await editTool.execute("chunk-edit-markdown-append", {
-			path: filePath,
 			edits: [
 				{
-					sel: selector,
-					op: "append",
-					content: "\nextra paragraph\n",
+					path: `${filePath}:${selector}`,
+					insert: { loc: "append", body: "\nextra paragraph\n" },
 				},
 			],
 		} as never);
