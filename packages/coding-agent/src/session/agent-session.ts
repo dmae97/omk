@@ -766,7 +766,6 @@ export class AgentSession {
 			}
 		}
 
-
 		await this.#emitSessionEvent(displayEvent);
 
 		if (event.type === "turn_start") {
