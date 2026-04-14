@@ -120,6 +120,10 @@ function assertNotInternalUrl(expanded: string, original: string): void {
 	}
 }
 
+export function normalizeLocalScheme(filePath: string): string {
+	return filePath.replace(/^(local:)\/(?!\/)/, "$1//");
+}
+
 export function isInternalUrlPath(filePath: string): boolean {
 	const expanded = expandPath(filePath);
 	for (const prefix of TOP_LEVEL_INTERNAL_URL_PREFIXES) {

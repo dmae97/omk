@@ -4,6 +4,7 @@ import type { Skill } from "../extensibility/skills";
 import { type LocalProtocolOptions, resolveLocalUrlToPath } from "../internal-urls";
 import { validateRelativePath } from "../internal-urls/skill-protocol";
 import type { InternalResource } from "../internal-urls/types";
+import { normalizeLocalScheme } from "./path-utils";
 import { ToolError } from "./tool-errors";
 
 /** Regex to find skill:// tokens in command text. */
@@ -151,7 +152,7 @@ async function resolveInternalUrlToPath(
 	localOptions?: LocalProtocolOptions,
 	ensureLocalParentDirs?: boolean,
 ): Promise<string> {
-	const url = rawUrl.replace(/^(local:)\/(?!\/)/, "$1//");
+	const url = normalizeLocalScheme(rawUrl);
 	const scheme = extractScheme(url);
 	if (!scheme) {
 		throw new ToolError(`Unsupported internal URL in bash command: ${url}`);
@@ -231,7 +232,7 @@ export async function expandInternalUrls(command: string, options: InternalUrlEx
 		if (index === undefined) continue;
 
 		const rawUrl = unquoteToken(token);
-		const url = rawUrl.replace(/^(local:)\/(?!\/)/, "$1//");
+		const url = normalizeLocalScheme(rawUrl);
 		const resolvedPath = await resolveInternalUrlToPath(
 			url,
 			options.skills,

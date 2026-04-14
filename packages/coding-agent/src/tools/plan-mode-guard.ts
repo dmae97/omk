@@ -1,13 +1,9 @@
 import { resolveLocalUrlToPath } from "../internal-urls";
 import type { ToolSession } from ".";
-import { resolveToCwd } from "./path-utils";
+import { normalizeLocalScheme, resolveToCwd } from "./path-utils";
 import { ToolError } from "./tool-errors";
 
 const LOCAL_SCHEME_PREFIX = "local:";
-
-function normalizeLocalScheme(path: string): string {
-	return path.replace(/^(local:)\/(?!\/)/, "$1//");
-}
 
 export function resolvePlanPath(session: ToolSession, targetPath: string): string {
 	const normalized = normalizeLocalScheme(targetPath);
