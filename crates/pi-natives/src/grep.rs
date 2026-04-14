@@ -1330,8 +1330,9 @@ fn grep_sync(
 		});
 	}
 
+	let mentions_node_modules = options.glob.as_deref().is_some_and(|g| g.contains("node_modules"));
 	let scan_options =
-		fs_cache::ScanOptions { include_hidden, use_gitignore, skip_node_modules: true };
+		fs_cache::ScanOptions { include_hidden, use_gitignore, skip_node_modules: !mentions_node_modules };
 	let entries = if use_cache {
 		let scan = fs_cache::get_or_scan(&search_path, scan_options, &ct)?;
 		let mut entries =
