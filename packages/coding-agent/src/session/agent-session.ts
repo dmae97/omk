@@ -138,13 +138,7 @@ import { getLatestTodoPhasesFromEntries, type TodoItem, type TodoPhase } from ".
 import { ToolError } from "../tools/tool-errors";
 import { clampTimeout } from "../tools/tool-timeouts";
 import { parseCommandArgs } from "../utils/command-args";
-import {
-	type EditMode,
-	filterInactiveEditToolName,
-	normalizeToolNamesForEditMode,
-	resolveEditMode,
-	resolveEditToolName,
-} from "../utils/edit-mode";
+import { type EditMode, resolveEditMode } from "../utils/edit-mode";
 import { resolveFileDisplayMode } from "../utils/file-display-mode";
 import { extractFileMentions, generateFileMentionMessages } from "../utils/file-mentions";
 import { buildNamedToolChoice } from "../utils/tool-choice";
@@ -1996,7 +1990,7 @@ export class AgentSession {
 
 	/** Whether the edit tool is registered in this session. */
 	get hasEditTool(): boolean {
-		return this.#toolRegistry.has("edit") || this.#toolRegistry.has("vim");
+		return this.#toolRegistry.has("edit");
 	}
 
 	/**
@@ -2010,7 +2004,7 @@ export class AgentSession {
 	 * Get all configured tool names (built-in via --tools or default, plus custom tools).
 	 */
 	getAllToolNames(): string[] {
-		return filterInactiveEditToolName(this.#toolRegistry.keys(), this.#getEditModeSession());
+		return Array.from(this.#toolRegistry.keys());
 	}
 
 	#getEditModeSession() {
@@ -2025,26 +2019,8 @@ export class AgentSession {
 	}
 
 	async #syncEditToolModeAfterModelChange(previousEditMode: EditMode): Promise<void> {
-		const activeToolNames = this.getActiveToolNames();
 		const currentEditMode = this.#resolveActiveEditMode();
-		const hasActiveEditTool = activeToolNames.some(name => name === "edit" || name === "vim");
-		if (!hasActiveEditTool) {
-			if (previousEditMode !== currentEditMode) {
-				await this.refreshBaseSystemPrompt();
-			}
-			return;
-		}
-
-		const normalizedToolNames = normalizeToolNamesForEditMode(activeToolNames, this.#getEditModeSession()) ?? [];
-		const toolNamesChanged =
-			normalizedToolNames.length !== activeToolNames.length ||
-			normalizedToolNames.some((name, index) => name !== activeToolNames[index]);
-		if (toolNamesChanged) {
-			await this.#applyActiveToolsByName(normalizedToolNames);
-			return;
-		}
-
-		if (previousEditMode !== currentEditMode) {
+		if (previousEditMode !== currentEditMode && this.getActiveToolNames().includes("edit")) {
 			await this.refreshBaseSystemPrompt();
 		}
 	}
@@ -2096,7 +2072,7 @@ export class AgentSession {
 		toolNames: string[],
 		options?: { persistMCPSelection?: boolean; previousSelectedMCPToolNames?: string[] },
 	): Promise<void> {
-		toolNames = normalizeToolNamesForEditMode(toolNames, this.#getEditModeSession()) ?? [];
+		toolNames = [...new Set(toolNames.map(name => name.toLowerCase()))];
 		const previousSelectedMCPToolNames = options?.previousSelectedMCPToolNames ?? this.getSelectedMCPToolNames();
 		const tools: AgentTool[] = [];
 		const validToolNames: string[] = [];
@@ -2489,7 +2465,7 @@ export class AgentSession {
 			planExists,
 			askToolName: "ask",
 			writeToolName: "write",
-			editToolName: resolveEditToolName(this.#getEditModeSession()),
+			editToolName: "edit",
 			exitToolName: "exit_plan_mode",
 			reentry: state.reentry ?? false,
 			iterative: state.workflow === "iterative",

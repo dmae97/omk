@@ -1,4 +1,4 @@
-Stateful Vim editor. Every call requires `file`; the buffer loads automatically on first use.
+Vim-style `edit` mode. The tool name stays `edit`; every call requires `file`, and the buffer loads automatically on first use.
 - `{"file": "path"}` - view file
 - `{"file": "path", "steps": [{"kbd": ["…"], "insert": "…"}]}` - edit file
 
@@ -83,7 +83,7 @@ Ex commands always start with `:` and end with `<CR>`. `3,5d` without `:` is NOT
 
 ## Session persistence
 
-The vim buffer persists across tool calls. Cursor position, undo history, and file state are maintained until you close the tool. Auto-save happens once after all steps in a non-paused call complete.
+The edit buffer in vim mode persists across tool calls. Cursor position, undo history, and file state are maintained until you close the buffer. Auto-save happens once after all steps in a non-paused call complete.
 
 ## Supported
 

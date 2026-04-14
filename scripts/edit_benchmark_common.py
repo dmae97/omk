@@ -722,7 +722,7 @@ def run_benchmark_for_model(
     token_input = 0
     token_output = 0
     turns_used = 0
-    edit_vim_tool_calls = 0
+    edit_tool_calls = 0
     success = False
     feedback = ""
     error_msg: str | None = None
@@ -747,11 +747,11 @@ def run_benchmark_for_model(
 
 
             def handle_tool_count(event: ToolExecutionStartEvent) -> None:
-                nonlocal edit_vim_tool_calls, turns_used
+                nonlocal edit_tool_calls, turns_used
                 if counting_edit_turns:
                     turns_used += 1
-                if event.tool_name in {"edit", "vim"}:
-                    edit_vim_tool_calls += 1
+                if event.tool_name == "edit":
+                    edit_tool_calls += 1
 
             tool_count_remover = client.on_tool_execution_start(handle_tool_count)
 
@@ -808,7 +808,7 @@ def run_benchmark_for_model(
         success=success,
         turns_used=turns_used,
         prompt_attempts=prompt_attempts,
-        edit_calls=edit_vim_tool_calls,
+        edit_calls=edit_tool_calls,
         token_input=token_input,
         token_output=token_output,
         feedback=feedback.strip(),

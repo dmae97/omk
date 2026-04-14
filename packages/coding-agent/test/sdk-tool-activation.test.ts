@@ -112,7 +112,7 @@ describe("createAgentSession defaultInactive tool activation", () => {
 		}
 	});
 
-	it("normalizes edit tool activation to vim when vim edit mode is configured", async () => {
+	it("keeps edit active when vim edit mode is configured", async () => {
 		const tempDir = path.join(os.tmpdir(), `pi-sdk-tool-activation-${Snowflake.next()}`);
 		tempDirs.push(tempDir);
 		fs.mkdirSync(tempDir, { recursive: true });
@@ -135,21 +135,21 @@ describe("createAgentSession defaultInactive tool activation", () => {
 		});
 
 		try {
-			expect(session.getActiveToolNames()).toContain("vim");
-			expect(session.getActiveToolNames()).not.toContain("edit");
-			expect(session.getAllToolNames()).toContain("vim");
-			expect(session.getAllToolNames()).not.toContain("edit");
+			expect(session.getActiveToolNames()).toContain("edit");
+			expect(session.getActiveToolNames()).not.toContain("vim");
+			expect(session.getAllToolNames()).toContain("edit");
+			expect(session.getAllToolNames()).not.toContain("vim");
 
 			await session.setActiveToolsByName(["read", "edit"]);
 
-			expect(session.getActiveToolNames()).toContain("vim");
-			expect(session.getActiveToolNames()).not.toContain("edit");
+			expect(session.getActiveToolNames()).toContain("edit");
+			expect(session.getActiveToolNames()).not.toContain("vim");
 		} finally {
 			await session.dispose();
 		}
 	});
 
-	it("swaps the visible edit-capable tool when the active model changes edit modes", async () => {
+	it("keeps the visible edit tool stable when the active model changes edit modes", async () => {
 		const tempDir = path.join(os.tmpdir(), `pi-sdk-tool-activation-${Snowflake.next()}`);
 		tempDirs.push(tempDir);
 		fs.mkdirSync(tempDir, { recursive: true });
@@ -195,10 +195,10 @@ describe("createAgentSession defaultInactive tool activation", () => {
 
 			await session.setModel(vimModel);
 
-			expect(session.getActiveToolNames()).toContain("vim");
-			expect(session.getActiveToolNames()).not.toContain("edit");
-			expect(session.getAllToolNames()).toContain("vim");
-			expect(session.getAllToolNames()).not.toContain("edit");
+			expect(session.getActiveToolNames()).toContain("edit");
+			expect(session.getActiveToolNames()).not.toContain("vim");
+			expect(session.getAllToolNames()).toContain("edit");
+			expect(session.getAllToolNames()).not.toContain("vim");
 		} finally {
 			await session.dispose();
 		}

@@ -667,7 +667,7 @@ describe("vim renderer", () => {
 		const uiStub = { requestRender() {} } as unknown as TUI;
 
 		const component = new ToolExecutionComponent(
-			"vim",
+			"edit",
 			{
 				file: "preview.txt",
 				steps: [step(["ggdGi"])],

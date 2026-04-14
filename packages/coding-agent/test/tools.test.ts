@@ -669,12 +669,13 @@ describe("Coding Agent Tools", () => {
 			const result = await editTool.execute("test-call-5", {
 				edits: [{ path: testFile, old_text: "world", new_text: "testing" }],
 			});
+			const details = result.details as { diff?: string } | undefined;
 
 			expect(getTextOutput(result)).toContain("Successfully replaced");
-			expect(result.details).toBeDefined();
-			expect(result.details!.diff).toBeDefined();
-			expect(typeof result.details!.diff).toBe("string");
-			expect(result.details!.diff).toContain("testing");
+			expect(details).toBeDefined();
+			expect(details?.diff).toBeDefined();
+			expect(typeof details?.diff).toBe("string");
+			expect(details?.diff).toContain("testing");
 		});
 
 		it("should fail if text not found", async () => {

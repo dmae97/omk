@@ -120,7 +120,7 @@ describe("AgentSession message pipeline", () => {
 				{
 					type: "toolCall",
 					id: "call_1",
-					name: "vim",
+					name: "edit",
 					arguments: {},
 					partialJson: '{"file":"preview.txt","steps":[{"kbd":["ggdGi"],"insert":"rep',
 				},

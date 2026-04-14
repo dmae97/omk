@@ -131,12 +131,6 @@ import { ToolContextStore } from "./tools/context";
 import { getGeminiImageTools } from "./tools/gemini-image";
 import { wrapToolWithMetaNotice } from "./tools/output-meta";
 import { queueResolveHandler } from "./tools/resolve";
-import {
-	filterInactiveEditToolName,
-	normalizeToolNamesForEditMode,
-	resolveEditToolName,
-	resolveInactiveEditToolName,
-} from "./utils/edit-mode";
 import { EventBus } from "./utils/event-bus";
 import { buildNamedToolChoice } from "./utils/tool-choice";
 
@@ -904,17 +898,15 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			if (model) return formatModelString(model);
 			return undefined;
 		};
-		const editModeSession = {
-			settings,
-			getActiveModelString,
-		} as const;
 		const toolSession: ToolSession = {
 			cwd,
 			hasUI: options.hasUI ?? false,
 			enableLsp,
 			get hasEditTool() {
-				const requestedToolNames = normalizeToolNamesForEditMode(options.toolNames, editModeSession);
-				return !requestedToolNames || requestedToolNames.includes(resolveEditToolName(editModeSession));
+				const requestedToolNames = options.toolNames
+					? [...new Set(options.toolNames.map(name => name.toLowerCase()))]
+					: undefined;
+				return !requestedToolNames || requestedToolNames.includes("edit");
 			},
 			skipPythonPreflight: options.skipPythonPreflight,
 			forcePythonWarmup: options.forcePythonWarmup,
@@ -1250,17 +1242,6 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		for (const tool of builtinTools) {
 			toolRegistry.set(tool.name, tool);
 		}
-		const inactiveEditToolName = resolveInactiveEditToolName(editModeSession);
-		if (!toolRegistry.has(inactiveEditToolName)) {
-			const inactiveEditTool = await logger.time(
-				`createTools:${inactiveEditToolName}:hidden`,
-				BUILTIN_TOOLS[inactiveEditToolName],
-				toolSession,
-			);
-			if (inactiveEditTool) {
-				toolRegistry.set(inactiveEditTool.name, wrapToolWithMetaNotice(inactiveEditTool));
-			}
-		}
 		for (const tool of wrappedExtensionTools) {
 			toolRegistry.set(tool.name, tool);
 		}
@@ -1368,9 +1349,10 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			return options.systemPrompt(defaultPrompt);
 		};
 
-		const toolNamesFromRegistry = filterInactiveEditToolName(toolRegistry.keys(), editModeSession);
+		const toolNamesFromRegistry = Array.from(toolRegistry.keys());
 		const requestedToolNames =
-			normalizeToolNamesForEditMode(options.toolNames, editModeSession) ?? toolNamesFromRegistry;
+			(options.toolNames ? [...new Set(options.toolNames.map(name => name.toLowerCase()))] : undefined) ??
+			toolNamesFromRegistry;
 		const normalizedRequested = requestedToolNames.filter(name => toolRegistry.has(name));
 		const includeExitPlanMode = requestedToolNames.includes("exit_plan_mode");
 		const mcpDiscoveryEnabled = settings.get("mcp.discoveryMode") ?? false;

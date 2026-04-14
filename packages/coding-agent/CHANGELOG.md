@@ -1,8 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
+- Removed the standalone `vim` tool from built-in tool lists, so vim-style editing is now invoked through `edit` in `vim` mode
 - Removed the `searchDb` field from session and extension tool contexts, so custom tools and extensions no longer receive a shared native search DB handle from `ToolSession`, `CustomToolContext`, `ExtensionContext`, and `CreateAgentSessionOptions`
 - Changed the `vim` tool API to require either `open: "path"` or `kbd: [...]` per call and removed direct `line`/`col` cursor parameters from `open`, so callers must position the cursor via key sequences after opening
 - Changed the `edit` schemas for patch, replace, hashline, and chunk modes from top-level request fields to `edits` array entries, requiring path/mode details on each edit and breaking callers that send legacy top-level `path`, `old_text`, `new_text`, `op`, `move`, or `delete` payloads
@@ -54,6 +56,7 @@
 
 ### Fixed
 
+- Fixed vim-mode multi-step line edits by auto-reordering ascending line-positioned commands to descending order before execution
 - Fixed Vim viewport rendering to display the inline highlighted cursor character and keep long cursor lines centered around the cursor in tool previews
 - Fixed Vim `:global` command defaults to handle only supported subcommands and report unsupported ones explicitly
 - Fixed Vim ex execution so parsed `:update`, `:yank`, and `:put` commands now run instead of falling through

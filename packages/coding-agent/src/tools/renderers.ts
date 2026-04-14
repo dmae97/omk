@@ -27,7 +27,6 @@ import { resolveToolRenderer } from "./resolve";
 import { searchToolBm25Renderer } from "./search-tool-bm25";
 import { sshToolRenderer } from "./ssh";
 import { todoWriteToolRenderer } from "./todo-write";
-import { vimToolRenderer } from "./vim";
 import { writeToolRenderer } from "./write";
 
 type ToolRenderer = {
@@ -63,7 +62,6 @@ export const toolRenderers: Record<string, ToolRenderer> = {
 	ssh: sshToolRenderer as ToolRenderer,
 	task: taskToolRenderer as ToolRenderer,
 	todo_write: todoWriteToolRenderer as ToolRenderer,
-	vim: vimToolRenderer as ToolRenderer,
 	gh_run_watch: ghRunWatchToolRenderer as ToolRenderer,
 	web_search: webSearchToolRenderer as ToolRenderer,
 	write: writeToolRenderer as ToolRenderer,

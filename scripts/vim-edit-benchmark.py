@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Vim edit benchmark: tests the vim tool across models with a simple edit task.
+Vim edit-mode benchmark: tests the edit tool in vim mode across models with a simple edit task.
 """
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from edit_benchmark_common import BenchmarkSpec, EDIT_DIFF, EXPECTED_CONTENT, ru
 
 
 EDIT_PROMPT = f"""\
-Use the `read` tool to inspect `test.rs`, then use the `vim` tool to make `test.rs` exactly match the requested change.
+Use the `read` tool to inspect `test.rs`, then use the `edit` tool in vim mode to make `test.rs` exactly match the requested change.
 
 Apply this diff:
 ```diff
@@ -20,12 +20,12 @@ Final expected file content:
 """
 
 VIM_BENCHMARK = BenchmarkSpec(
-    description="Benchmark vim tool across models with simple edit tasks.",
+    description="Benchmark edit tool in vim mode across models with simple edit tasks.",
     workspace_prefix="vim-benchmark",
-    tools=("vim", "read"),
+    tools=("edit", "read"),
     env={"PI_EDIT_VARIANT": "vim", "PI_STRICT_EDIT_MODE": "1"},
     initial_prompt=EDIT_PROMPT,
-    retry_instruction="Please try again using the vim tool.",
+    retry_instruction="Please try again using the edit tool in vim mode.",
 )
 
 

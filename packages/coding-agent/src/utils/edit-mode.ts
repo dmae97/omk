@@ -1,7 +1,6 @@
 import { $env, $flag } from "@oh-my-pi/pi-utils";
 
 export type EditMode = "replace" | "patch" | "hashline" | "chunk" | "vim";
-export type EditToolName = "edit" | "vim";
 
 export const DEFAULT_EDIT_MODE: EditMode = "hashline";
 
@@ -48,38 +47,4 @@ export function resolveEditMode(session: EditModeSessionLike): EditMode {
 
 	const settingsMode = normalizeEditMode(String(session.settings.get("edit.mode") ?? ""));
 	return settingsMode ?? DEFAULT_EDIT_MODE;
-}
-
-export function resolveEditToolName(session: EditModeSessionLike): EditToolName {
-	return resolveEditMode(session) === "vim" ? "vim" : "edit";
-}
-
-export function resolveInactiveEditToolName(session: EditModeSessionLike): EditToolName {
-	return resolveEditToolName(session) === "edit" ? "vim" : "edit";
-}
-
-export function filterInactiveEditToolName(toolNames: Iterable<string>, session: EditModeSessionLike): string[] {
-	const inactiveEditToolName = resolveInactiveEditToolName(session);
-	return Array.from(toolNames).filter(name => name !== inactiveEditToolName);
-}
-
-export function normalizeToolNamesForEditMode(
-	toolNames: Iterable<string> | undefined,
-	session: EditModeSessionLike,
-): string[] | undefined {
-	if (!toolNames) return undefined;
-
-	const normalized: string[] = [];
-	const seen = new Set<string>();
-	const activeEditToolName = resolveEditToolName(session);
-
-	for (const rawName of toolNames) {
-		const lowerName = rawName.toLowerCase();
-		const nextName = lowerName === "edit" || lowerName === "vim" ? activeEditToolName : lowerName;
-		if (seen.has(nextName)) continue;
-		seen.add(nextName);
-		normalized.push(nextName);
-	}
-
-	return normalized;
 }

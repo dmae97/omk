@@ -1,5 +1,6 @@
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { prompt } from "@oh-my-pi/pi-utils";
+import type { Static } from "@sinclair/typebox";
 import {
 	createLspWritethrough,
 	type FileDiagnosticsResult,
@@ -12,7 +13,9 @@ import hashlineDescription from "../prompts/tools/hashline.md" with { type: "tex
 import patchDescription from "../prompts/tools/patch.md" with { type: "text" };
 import replaceDescription from "../prompts/tools/replace.md" with { type: "text" };
 import type { ToolSession } from "../tools";
-import { DEFAULT_EDIT_MODE, type EditMode, normalizeEditMode, resolveEditMode } from "../utils/edit-mode";
+import { VimTool, vimSchema } from "../tools/vim";
+import { type EditMode, normalizeEditMode, resolveEditMode } from "../utils/edit-mode";
+import type { VimToolDetails } from "../vim/types";
 import {
 	type ChunkParams,
 	type ChunkToolEdit,
@@ -60,10 +63,12 @@ type TInput =
 	| typeof replaceEditSchema
 	| typeof patchEditSchema
 	| typeof hashlineEditParamsSchema
-	| typeof chunkEditParamsSchema;
+	| typeof chunkEditParamsSchema
+	| typeof vimSchema;
 
-type EditParams = ReplaceParams | PatchParams | HashlineParams | ChunkParams;
-type EditToolMode = Exclude<EditMode, "vim">;
+type VimParams = Static<typeof vimSchema>;
+type EditParams = ReplaceParams | PatchParams | HashlineParams | ChunkParams | VimParams;
+type EditToolResultDetails = EditToolDetails | VimToolDetails;
 
 type EditModeDefinition = {
 	description: (session: ToolSession) => string;
@@ -75,11 +80,11 @@ type EditModeDefinition = {
 		params: EditParams,
 		signal: AbortSignal | undefined,
 		batchRequest: LspBatchRequest | undefined,
-		onUpdate?: (partialResult: AgentToolResult<EditToolDetails, TInput>) => void,
-	) => Promise<AgentToolResult<EditToolDetails, TInput>>;
+		onUpdate?: (partialResult: AgentToolResult<EditToolResultDetails, TInput>) => void,
+	) => Promise<AgentToolResult<EditToolResultDetails, TInput>>;
 };
 
-function resolveConfiguredEditMode(rawEditMode: string): EditToolMode | undefined {
+function resolveConfiguredEditMode(rawEditMode: string): EditMode | undefined {
 	if (!rawEditMode || rawEditMode === "auto") {
 		return undefined;
 	}
@@ -88,11 +93,12 @@ function resolveConfiguredEditMode(rawEditMode: string): EditToolMode | undefine
 	if (!editMode) {
 		throw new Error(`Invalid PI_EDIT_VARIANT: ${rawEditMode}`);
 	}
-	if (editMode === "vim") {
-		return undefined;
-	}
 
 	return editMode;
+}
+
+function isVimParams(params: EditParams): params is VimParams {
+	return typeof params === "object" && params !== null && "file" in params && typeof params.file === "string";
 }
 
 function resolveAllowFuzzy(session: ToolSession, rawValue: string): boolean {
@@ -228,7 +234,8 @@ export class EditTool implements AgentTool<TInput> {
 	readonly #allowFuzzy: boolean;
 	readonly #fuzzyThreshold: number;
 	readonly #writethrough: WritethroughCallback;
-	readonly #editMode?: EditToolMode;
+	readonly #editMode?: EditMode;
+	readonly #vimTool: VimTool;
 	readonly #pendingDeferredFetches = new Map<string, AbortController>();
 
 	constructor(private readonly session: ToolSession) {
@@ -242,12 +249,12 @@ export class EditTool implements AgentTool<TInput> {
 		this.#allowFuzzy = resolveAllowFuzzy(session, editFuzzy);
 		this.#fuzzyThreshold = resolveFuzzyThreshold(session, editFuzzyThreshold);
 		this.#writethrough = createEditWritethrough(session);
+		this.#vimTool = new VimTool(session);
 	}
 
-	get mode(): EditToolMode {
+	get mode(): EditMode {
 		if (this.#editMode) return this.#editMode;
-		const mode = resolveEditMode(this.session);
-		return mode === "vim" ? (DEFAULT_EDIT_MODE as EditToolMode) : mode;
+		return resolveEditMode(this.session);
 	}
 
 	get description(): string {
@@ -262,9 +269,9 @@ export class EditTool implements AgentTool<TInput> {
 		_toolCallId: string,
 		params: EditParams,
 		signal?: AbortSignal,
-		onUpdate?: AgentToolUpdateCallback<EditToolDetails, TInput>,
+		onUpdate?: AgentToolUpdateCallback<EditToolResultDetails, TInput>,
 		context?: AgentToolContext,
-	): Promise<AgentToolResult<EditToolDetails, TInput>> {
+	): Promise<AgentToolResult<EditToolResultDetails, TInput>> {
 		const modeDefinition = this.#getModeDefinition();
 		if (!modeDefinition.validate(params)) {
 			throw new Error(modeDefinition.invalidParamsMessage);
@@ -397,6 +404,31 @@ export class EditTool implements AgentTool<TInput> {
 							}),
 					}));
 					return executePerFile(entries, batchRequest, onUpdate);
+				},
+			},
+			vim: {
+				description: () => this.#vimTool.description,
+				parameters: vimSchema,
+				invalidParamsMessage: "Invalid edit parameters for vim mode.",
+				validate: isVimParams,
+				execute: async (
+					tool: EditTool,
+					params: EditParams,
+					signal: AbortSignal | undefined,
+					_batchRequest: LspBatchRequest | undefined,
+					onUpdate?: (partialResult: AgentToolResult<EditToolResultDetails, TInput>) => void,
+				) => {
+					const handleUpdate = onUpdate
+						? (partialResult: AgentToolResult<VimToolDetails>) => {
+								onUpdate(partialResult as AgentToolResult<EditToolResultDetails, TInput>);
+							}
+						: undefined;
+					return (await tool.#vimTool.execute(
+						"edit",
+						params as VimParams,
+						signal,
+						handleUpdate,
+					)) as AgentToolResult<EditToolResultDetails, TInput>;
 				},
 			},
 		}[this.mode];

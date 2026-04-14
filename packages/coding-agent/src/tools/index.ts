@@ -16,7 +16,6 @@ import type { CustomMessage } from "../session/messages";
 import type { ToolChoiceQueue } from "../session/tool-choice-queue";
 import { TaskTool } from "../task";
 import type { AgentOutputManager } from "../task/output-manager";
-import { normalizeToolNamesForEditMode, resolveEditToolName } from "../utils/edit-mode";
 import type { EventBus } from "../utils/event-bus";
 import { SearchTool } from "../web/search";
 import { AskTool } from "./ask";
@@ -56,7 +55,6 @@ import { SearchToolBm25Tool } from "./search-tool-bm25";
 import { loadSshTool } from "./ssh";
 import { SubmitResultTool } from "./submit-result";
 import { type TodoPhase, TodoWriteTool } from "./todo-write";
-import { VimTool } from "./vim";
 import { WriteTool } from "./write";
 
 // Exa MCP tools (22 tools)
@@ -243,7 +241,6 @@ export const BUILTIN_TOOLS: Record<string, ToolFactory> = {
 	todo_write: s => new TodoWriteTool(s),
 	web_search: s => new SearchTool(s),
 	search_tool_bm25: SearchToolBm25Tool.createIf,
-	vim: s => new VimTool(s),
 	write: s => new WriteTool(s),
 };
 
@@ -293,12 +290,8 @@ function getPythonModeFromEnv(): PythonToolMode | null {
 export async function createTools(session: ToolSession, toolNames?: string[]): Promise<Tool[]> {
 	const includeSubmitResult = session.requireSubmitResultTool === true;
 	const enableLsp = session.enableLsp ?? true;
-	const requestedTools = normalizeToolNamesForEditMode(
-		toolNames && toolNames.length > 0 ? toolNames : undefined,
-		session,
-	);
-	const activeEditToolName = resolveEditToolName(session);
-	const inactiveEditToolName = activeEditToolName === "edit" ? "vim" : "edit";
+	const requestedTools =
+		toolNames && toolNames.length > 0 ? [...new Set(toolNames.map(name => name.toLowerCase()))] : undefined;
 	if (requestedTools && !requestedTools.includes("exit_plan_mode")) {
 		requestedTools.push("exit_plan_mode");
 	}
@@ -384,7 +377,7 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 			requestedTools.push("ast_grep");
 		}
 		if (
-			requestedTools.includes(activeEditToolName) &&
+			requestedTools.includes("edit") &&
 			!requestedTools.includes("ast_edit") &&
 			session.settings.get("astEdit.enabled")
 		) {
@@ -427,9 +420,7 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 		filteredRequestedTools !== undefined
 			? filteredRequestedTools.filter(name => name !== "resolve").map(name => [name, allTools[name]] as const)
 			: [
-					...Object.entries(BUILTIN_TOOLS).filter(
-						([name]) => name !== inactiveEditToolName && isToolAllowed(name),
-					),
+					...Object.entries(BUILTIN_TOOLS).filter(([name]) => isToolAllowed(name)),
 					...(includeSubmitResult ? ([["submit_result", HIDDEN_TOOLS.submit_result]] as const) : []),
 					...([["exit_plan_mode", HIDDEN_TOOLS.exit_plan_mode]] as const),
 				];

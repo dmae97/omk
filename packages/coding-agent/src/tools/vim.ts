@@ -1,7 +1,7 @@
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { extractSegments, sliceWithWidth, Text } from "@oh-my-pi/pi-tui";
-import { isEnoent, prompt, untilAborted } from "@oh-my-pi/pi-utils";
+import { isEnoent, logger, prompt, untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import * as Diff from "diff";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
@@ -304,35 +304,37 @@ interface ExecuteVimStepsOptions {
 	onInsertStep?: () => Promise<void>;
 }
 
-// Auto-reorder insertion steps to descending line order (bottom-up) when all steps
-// are simple `NGo`/`NGO` patterns and appear to reference original line numbers.
-// Only reorders when steps are in strictly ascending order (common top-down mistake).
-function autoReorderInsertSteps(steps: readonly VimStep[]): VimStep[] {
+// Auto-reorder line-positioned steps to descending order (bottom-up) when all steps
+// are simple `NG<cmd>` patterns and appear in ascending order (top-down). Bottom-up
+// ordering is safe for any mix of insert/replace commands because edits at higher
+// line numbers never shift lower line numbers.
+function autoReorderSteps(steps: readonly VimStep[]): VimStep[] {
 	if (steps.length < 2) return [...steps];
 
-	// Check if ALL steps follow the pattern: single kbd entry of `NGo` or `NGO`
-	const linePattern = /^(\d+)G([oO])$/;
+	// Match single kbd entry of `<number>G<cmd>` where cmd enters insert mode
+	const linePattern = /^(\d+)G(o|O|cc|C|S|s|i|I|a|A)$/;
 	const parsed: Array<{ line: number; step: VimStep }> = [];
 	for (const step of steps) {
-		if (step.kbd.length !== 1) return [...steps]; // Can't reorder non-simple steps
+		if (step.kbd.length !== 1) return [...steps];
 		const match = step.kbd[0]!.match(linePattern);
-		if (!match) return [...steps]; // Not all steps are NGo/NGO — don't reorder
+		if (!match) return [...steps];
 		parsed.push({ line: Number(match[1]), step });
 	}
 
 	// Only reorder if steps are in strictly ascending order (top-down, likely a mistake).
 	// If already descending, mixed, or equal, the model likely planned the order deliberately.
-	let isAscending = true;
 	for (let i = 1; i < parsed.length; i++) {
 		if (parsed[i]!.line <= parsed[i - 1]!.line) {
-			isAscending = false;
-			break;
+			return [...steps];
 		}
 	}
-	if (!isAscending) return [...steps];
 
 	// Sort by descending line number (bottom-up)
 	parsed.sort((a, b) => b.line - a.line);
+	logger.debug("vim: auto-reordered steps to bottom-up", {
+		original: steps.map(s => s.kbd[0]),
+		reordered: parsed.map(p => p.step.kbd[0]),
+	});
 	return parsed.map(p => p.step);
 }
 
@@ -341,9 +343,9 @@ async function executeVimSteps(
 	steps: readonly VimStep[],
 	options: ExecuteVimStepsOptions = {},
 ): Promise<void> {
-	// Execute steps in the order specified. Models should use bottom-up ordering
-	// (highest line number first) when inserting at multiple locations.
-	const orderedSteps = [...steps];
+	// Auto-reorder ascending line-positioned steps to descending (bottom-up)
+	// to prevent line-shift corruption from top-down edits.
+	const orderedSteps = autoReorderSteps(steps);
 	for (let index = 0; index < orderedSteps.length; index += 1) {
 		if (engine.closed) {
 			break;
@@ -411,7 +413,7 @@ async function readTextFile(
 		const bytes = await file.bytes();
 		for (const byte of bytes) {
 			if (byte === 0) {
-				throw new ToolError("Vim only supports UTF-8 text files in v1");
+				throw new ToolError("Edit tool in vim mode only supports UTF-8 text files in v1");
 			}
 		}
 		const text = utf8Decoder.decode(bytes);
@@ -436,7 +438,7 @@ async function readTextFile(
 			};
 		}
 		if (error instanceof TypeError) {
-			throw new ToolError("Vim only supports UTF-8 text files in v1");
+			throw new ToolError("Edit tool in vim mode only supports UTF-8 text files in v1");
 		}
 		throw error;
 	}
@@ -445,16 +447,16 @@ async function readTextFile(
 function normalizeTargetPath(inputPath: string, cwd: string): { absolutePath: string; displayPath: string } {
 	const normalized = normalizePathLikeInput(inputPath);
 	if (INTERNAL_URL_PREFIX.test(normalized)) {
-		throw new ToolError("Vim only supports regular filesystem paths in v1");
+		throw new ToolError("Edit tool in vim mode only supports regular filesystem paths in v1");
 	}
 	if (isReadableUrlPath(normalized)) {
-		throw new ToolError("Vim only supports local filesystem paths in v1");
+		throw new ToolError("Edit tool in vim mode only supports local filesystem paths in v1");
 	}
 	if (parseArchivePathCandidates(normalized).some(candidate => candidate.archivePath === normalized)) {
-		throw new ToolError("Vim does not support archive targets in v1");
+		throw new ToolError("Edit tool in vim mode does not support archive targets in v1");
 	}
 	if (parseSqlitePathCandidates(normalized).some(candidate => candidate.sqlitePath === normalized)) {
-		throw new ToolError("Vim does not support SQLite targets in v1");
+		throw new ToolError("Edit tool in vim mode does not support SQLite targets in v1");
 	}
 	return {
 		absolutePath: resolveToCwd(normalized, cwd),
@@ -485,7 +487,7 @@ export class VimTool implements AgentTool<typeof vimSchema, VimToolDetails> {
 	async #loadBuffer(targetPath: string): Promise<VimLoadedFile> {
 		const { absolutePath, displayPath } = normalizeTargetPath(targetPath, this.session.cwd);
 		if (await isSqliteFile(absolutePath)) {
-			throw new ToolError("Vim does not support SQLite targets in v1");
+			throw new ToolError("Edit tool in vim mode does not support SQLite targets in v1");
 		}
 		const loaded = await readTextFile(absolutePath);
 		return {
@@ -604,12 +606,12 @@ export class VimTool implements AgentTool<typeof vimSchema, VimToolDetails> {
 
 			if (this.session.getPlanModeState?.()?.enabled) {
 				if (steps.some(step => step.insert !== undefined)) {
-					throw new ToolError("Plan mode: vim is read-only; insert payloads are not allowed.");
+					throw new ToolError("Plan mode: edit is read-only in vim mode; insert payloads are not allowed.");
 				}
 				const preview = engine.clone({
 					beforeMutate: async () => {
 						throw new VimInputError(
-							"Plan mode: vim is read-only; only navigation, search, open, and close are allowed.",
+							"Plan mode: edit is read-only in vim mode; only navigation, search, open, and close are allowed.",
 						);
 					},
 					saveBuffer: async () => {
@@ -785,7 +787,7 @@ export function resetVimRendererStateForTest(): void {
 export const vimToolRenderer = {
 	renderCall(args: VimRenderArgs, options: RenderResultOptions, uiTheme: Theme): Component {
 		if (args.file && (!args.steps || args.steps.length === 0)) {
-			return renderText(`${uiTheme.bold("Vim")} open ${args.file}`);
+			return renderText(`${uiTheme.bold("Edit")} open ${args.file}`);
 		}
 
 		// Build a description of the streaming args for the header
@@ -822,7 +824,7 @@ export const vimToolRenderer = {
 						{
 							icon: "pending",
 							spinnerFrame: options.spinnerFrame,
-							title: "Vim",
+							title: "Edit",
 							description: argsDescription || details.file + modified,
 							meta: [`${langIcon} ${details.totalLines} lines`, position],
 						},
@@ -850,9 +852,9 @@ export const vimToolRenderer = {
 
 		// Fallback: no previous viewport available (first vim call)
 		if (argsDescription) {
-			return renderText(`${uiTheme.bold("Vim")} ${argsDescription}`);
+			return renderText(`${uiTheme.bold("Edit")} ${argsDescription}`);
 		}
-		return renderText(`${uiTheme.bold("Vim")}`);
+		return renderText(`${uiTheme.bold("Edit")}`);
 	},
 	renderResult(
 		result: { content: Array<{ type: string; text?: string }>; details?: VimToolDetails; isError?: boolean },
@@ -932,7 +934,7 @@ export const vimToolRenderer = {
 					{
 						icon,
 						spinnerFrame: options.spinnerFrame,
-						title: "Vim",
+						title: "Edit",
 						description: details.file + modified,
 						badge: modeBadge,
 						meta: [`${langIcon} ${details.totalLines} lines`, position],
