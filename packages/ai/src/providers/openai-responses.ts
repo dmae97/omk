@@ -170,7 +170,8 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 		const { requestAbortController, requestSignal } = abortTracker;
 
 		try {
-			// Create OpenAI client
+			// Keep request headers and prompt-cache routing on the same session-derived value.
+			const cacheSessionId = getOpenAIResponsesCacheSessionId(options);
 			const apiKey = options?.apiKey || getEnvApiKey(model.provider) || "";
 			const { client, copilotPremiumRequests, baseUrl } = createClient(
 				model,
@@ -178,6 +179,7 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 				apiKey,
 				options?.headers,
 				options?.initiatorOverride,
+				cacheSessionId,
 			);
 			const providerSessionState = getOpenAIResponsesProviderSessionState(model, options?.providerSessionState);
 			const { params } = buildParams(model, context, options, providerSessionState, baseUrl);
@@ -261,6 +263,7 @@ function createClient(
 	apiKey?: string,
 	extraHeaders?: Record<string, string>,
 	initiatorOverride?: MessageAttribution,
+	sessionId?: string,
 ): {
 	client: OpenAI;
 	copilotPremiumRequests: number | undefined;
@@ -294,6 +297,10 @@ function createClient(
 		copilotPremiumRequests = copilot.premiumRequests;
 		baseUrl = resolveGitHubCopilotBaseUrl(model.baseUrl, rawApiKey) ?? model.baseUrl;
 	}
+	if (sessionId && model.provider === "openai" && (baseUrl ?? "").toLowerCase().includes("api.openai.com")) {
+		headers.session_id ??= sessionId;
+		headers["x-client-request-id"] ??= sessionId;
+	}
 	return {
 		client: new OpenAI({
 			apiKey,
@@ -305,6 +312,12 @@ function createClient(
 		copilotPremiumRequests,
 		baseUrl,
 	};
+}
+
+function getOpenAIResponsesCacheSessionId(
+	options: Pick<OpenAIResponsesOptions, "cacheRetention" | "sessionId"> | undefined,
+): string | undefined {
+	return resolveCacheRetention(options?.cacheRetention) === "none" ? undefined : options?.sessionId;
 }
 
 function buildParams(
@@ -334,7 +347,7 @@ function buildParams(
 	}
 
 	const cacheRetention = resolveCacheRetention(options?.cacheRetention);
-	const promptCacheKey = cacheRetention === "none" ? undefined : options?.sessionId;
+	const promptCacheKey = getOpenAIResponsesCacheSessionId(options);
 	const params: OpenAIResponsesSamplingParams = {
 		model: model.id,
 		input: messages,
