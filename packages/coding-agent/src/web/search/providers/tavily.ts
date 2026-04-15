@@ -63,17 +63,25 @@ export async function findApiKey(): Promise<string | null> {
 	return findCredential(getEnvApiKey("tavily"), "tavily");
 }
 
-function buildRequestBody(params: TavilySearchParams): Record<string, unknown> {
+/** Exported for testing. Builds the Tavily request body from unified params. */
+export function buildRequestBody(params: TavilySearchParams): Record<string, unknown> {
 	const numResults = clampNumResults(params.num_results, DEFAULT_NUM_RESULTS, MAX_NUM_RESULTS);
-	return {
+	// Tavily's `topic` (general/news/finance) and `time_range` are orthogonal
+	// dimensions in the upstream API. Recency is a temporal filter only; it must
+	// not narrow the index to news-only, which would break technical queries
+	// (release notes, docs, GitHub) whenever a user sets --recency. Always use
+	// the default "general" topic and only send `time_range` when recency is set.
+	const body: Record<string, unknown> = {
 		query: params.query,
 		search_depth: "basic",
-		topic: params.recency ? "news" : "general",
-		time_range: params.recency,
 		max_results: numResults,
 		include_answer: "advanced",
 		include_raw_content: false,
 	};
+	if (params.recency) {
+		body.time_range = params.recency;
+	}
+	return body;
 }
 
 async function callTavilySearch(apiKey: string, params: TavilySearchParams): Promise<TavilySearchResponse> {
