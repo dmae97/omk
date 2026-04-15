@@ -28,6 +28,12 @@ function getSchemaProperties(tool: TaskTool): Record<string, unknown> {
 	return ((tool.parameters as { properties?: Record<string, unknown> }).properties ?? {}) as Record<string, unknown>;
 }
 
+function getAssignmentDescription(tool: TaskTool): string {
+	const properties = getSchemaProperties(tool);
+	const tasks = properties.tasks as { items?: { properties?: Record<string, { description?: string }> } } | undefined;
+	return tasks?.items?.properties?.assignment?.description ?? "";
+}
+
 function getFirstText(result: { content: Array<{ type: string; text?: string }> }): string {
 	const content = result.content.find(part => part.type === "text");
 	return content?.type === "text" ? (content.text ?? "") : "";
@@ -52,6 +58,7 @@ describe("task.simple", () => {
 		expect(tool.description).toContain("Current input mode: `schema-free`.");
 		expect(tool.description).toContain("- `context`:");
 		expect(tool.description).not.toContain("- `schema`:");
+		expect(getAssignmentDescription(tool)).toContain("shared background belongs in `context`");
 	});
 
 	it("removes both context and schema inputs in independent mode", async () => {
@@ -69,6 +76,7 @@ describe("task.simple", () => {
 		expect(tool.description).toContain("Every task assignment must stand on its own.");
 		expect(tool.description).not.toContain("- `context`:");
 		expect(tool.description).not.toContain("- `schema`:");
+		expect(getAssignmentDescription(tool)).toContain("include any background that would otherwise live in `context`");
 	});
 
 	it("rejects direct schema and context fields when the mode disables them", async () => {

@@ -32,11 +32,10 @@ import { createAbortSourceTracker } from "../utils/abort";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump, rewriteCopilotAuthError } from "../utils/http-inspector";
 import {
-	createFirstEventWatchdog,
+	createWatchdog,
 	getOpenAIStreamIdleTimeoutMs,
 	getStreamFirstEventTimeoutMs,
 	iterateWithIdleTimeout,
-	markFirstStreamEvent,
 } from "../utils/idle-iterator";
 import { parseGitHubCopilotApiKey } from "../utils/oauth/github-copilot";
 import { adaptSchemaForStrict, NO_STRICT } from "../utils/schema";
@@ -194,7 +193,7 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 				body: params,
 			};
 			const openaiStream = await client.responses.create(params, { signal: requestSignal });
-			const firstEventWatchdog = createFirstEventWatchdog(
+			const firstEventWatchdog = createWatchdog(
 				options?.streamFirstEventTimeoutMs ?? getStreamFirstEventTimeoutMs(idleTimeoutMs),
 				() => abortTracker.abortLocally(firstEventTimeoutAbortError),
 			);
@@ -203,8 +202,9 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 
 			const nativeOutputItems: Array<Record<string, unknown>> = [];
 			await processResponsesStream(
-				iterateWithIdleTimeout(markFirstStreamEvent(openaiStream, firstEventWatchdog), {
+				iterateWithIdleTimeout(openaiStream, {
 					idleTimeoutMs,
+					watchdog: firstEventWatchdog,
 					errorMessage: "OpenAI responses stream stalled while waiting for the next event",
 					onIdle: () => requestAbortController.abort(),
 				}),

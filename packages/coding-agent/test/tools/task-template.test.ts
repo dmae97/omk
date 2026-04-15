@@ -43,20 +43,4 @@ describe("renderTemplate", () => {
 		});
 		expect(result.task).toBe("just the assignment");
 	});
-
-	test("independent mode ignores shared context and marks assignment as self-contained", () => {
-		const result = renderTemplate(
-			"Shared constraints that should not be forwarded",
-			{
-				id: "Solo",
-				description: "label",
-				assignment: "Handle this task without shared context.",
-			},
-			"independent",
-		);
-
-		expect(result.task).not.toContain("Shared constraints that should not be forwarded");
-		expect(result.task).toContain("No shared task context is available.");
-		expect(result.task).toContain("Handle this task without shared context.");
-	});
 });

@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Fixed
 
 - Preserved user-provided `session_id` and `x-client-request-id` headers in OpenAI Responses requests instead of overriding them with automatic session-derived values
@@ -26,6 +27,7 @@
 - Fixed strict tool schema enforcement to preserve `additionalProperties: false` and required keys for reused nested object schemas, preventing invalid `todo_write` function schemas in Codex/OpenAI requests
 
 ## [14.1.0] - 2026-04-11
+
 ### Added
 
 - Added `accountId` to usage report metadata
@@ -42,6 +44,7 @@
 ## [14.0.5] - 2026-04-11
 
 ### Changed
+
 - Replaced GitHub Copilot authentication from VSCode extension impersonation to the opencode OAuth flow, eliminating TOS concerns. Existing users will need to re-authenticate once with `/login github-copilot`.
 - Simplified Copilot token handling: GitHub OAuth token is used directly for all API requests (no JWT exchange or refresh cycle).
 - Changed GitHub Copilot API base URL from `api.individual.githubcopilot.com` to `api.githubcopilot.com`.
@@ -53,6 +56,7 @@
 - Fixed GitHub Copilot `/models` discovery to unwrap structured OAuth credentials before sending the bearer token, preserving dynamic catalog refresh for OAuth-backed callers.
 
 ### Removed
+
 - Removed Copilot JWT proxy-ep base URL resolution (no longer needed with opencode auth).
 
 ## [14.0.3] - 2026-04-09
@@ -62,6 +66,7 @@
 - Fixed Ollama discovery cache normalization so cached models upgrade to the OpenAI Responses transport after the provider change
 
 ## [14.0.0] - 2026-04-08
+
 ### Breaking Changes
 
 - Removed `coerceNullStrings` function and its automatic null-string coercion behavior from JSON parsing
@@ -84,6 +89,7 @@
 - Fixed Anthropic streaming to suppress transient SDK console errors for malformed SSE keep-alive frames so the TUI only shows surfaced provider errors
 
 - Added environment-based credential fallback for the OpenAI Codex provider.
+
 ## [13.17.6] - 2026-04-01
 
 ### Fixed
@@ -91,6 +97,7 @@
 - Fixed Anthropic first-event timeouts to exclude stream connection setup from the watchdog, preserve timeout-specific retry classification after local aborts, and reset retry state cleanly between attempts
 
 ## [13.17.5] - 2026-04-01
+
 ### Changed
 
 - Increased default first-event timeout from 15s to 45s to better accommodate longer request setup times
@@ -129,6 +136,7 @@
 - Added Vercel AI Gateway to `/login` providers for interactive API key setup
 
 ### Fixed
+
 - Fixed `omp commit` failing with HTTP 400 errors when using reasoning-enabled models on OpenAI-compatible endpoints that don't support the `developer` role (e.g., GitHub Copilot, custom proxies). Now falls back to `system` role when `developer` is unsupported.
 
 ## [13.17.0] - 2026-03-30
@@ -153,6 +161,7 @@
 - Fixed normalizeAnthropicBaseUrl returning empty string instead of undefined when baseUrl is empty
 
 ## [13.16.4] - 2026-03-28
+
 ### Added
 
 - Added support for Groq Compound and Compound Mini models with extended context window (131K tokens) and configurable thinking levels
@@ -173,6 +182,7 @@
 - Updated OpenRouter Claude 3.5 Sonnet pricing: input from 0.45 to 0.42, cache read from 0.225 to 0.21
 
 ## [13.16.3] - 2026-03-28
+
 ### Changed
 
 - Modified OAuth credential saving to preserve unrelated identities instead of replacing all credentials for a provider
@@ -198,6 +208,7 @@
 - Fixed `parseRateLimitReason` not recognizing "usage limit" in Codex error messages, causing incorrect fallback to `UNKNOWN` classification instead of `QUOTA_EXHAUSTED`
 
 ## [13.14.2] - 2026-03-21
+
 ### Changed
 
 - Updated thinking configuration format from `levels` array to `minLevel` and `maxLevel` properties for improved clarity
@@ -220,13 +231,14 @@
 - Added bundled GPT-5.4 mini model metadata for OpenAI, OpenAI Codex, and GitHub Copilot, including low-to-xhigh thinking support and GitHub Copilot premium multiplier metadata
 - Added bundled GPT-5.4 nano model metadata for OpenAI and OpenAI Codex, including low-to-xhigh thinking support
 
-
 ## [13.13.2] - 2026-03-18
+
 ### Changed
 
 - Modified tool result handling for aborted assistant messages to preserve existing tool results when already recorded, instead of always replacing them with synthetic 'aborted' results
 
 ## [13.13.0] - 2026-03-18
+
 ### Changed
 
 - Changed tool argument validation to always normalize optional null values before type coercion, ensuring consistent handling of LLM-generated 'null' strings
@@ -237,6 +249,7 @@
 - Improved type safety of `validateToolCall` and `validateToolArguments` functions by returning properly typed `ToolCall["arguments"]` instead of `any`
 
 ## [13.12.9] - 2026-03-17
+
 ### Changed
 
 - Extracted OpenAI compatibility detection and resolution logic into dedicated `openai-completions-compat` module for improved maintainability and reusability
@@ -286,6 +299,7 @@
 - Fixed auth schema V0-to-V1 migration crash when the V0 table lacks a `disabled` column
 
 ## [13.11.0] - 2026-03-12
+
 ### Added
 
 - Added support for Parallel AI provider with API key authentication
@@ -301,6 +315,7 @@
 - Improved retry logic to handle HTTP/2 stream errors and internal_error responses from Anthropic API
 
 ## [13.9.16] - 2026-03-10
+
 ### Added
 
 - Support for `onPayload` callback to replace provider request payloads before sending, enabling request interception and modification
@@ -323,11 +338,13 @@
 - Fixed handling of malformed JSON messages in websocket streams to trigger immediate fallback to SSE without retry attempts
 
 ## [13.9.13] - 2026-03-10
+
 ### Added
 
 - Added `isSpecialServiceTier` utility function to validate OpenAI service tier values
 
 ## [13.9.12] - 2026-03-09
+
 ### Added
 
 - Added Tavily web search provider support with API key authentication
@@ -360,11 +377,13 @@
 - Fixed auth storage to preserve newer recorded schema versions when opened by older binaries
 
 ## [13.9.8] - 2026-03-08
+
 ### Fixed
 
 - Fixed WebSocket stream fallback logic to safely replay buffered output over SSE when WebSocket fails after partial content has been streamed
 
 ## [13.9.4] - 2026-03-07
+
 ### Changed
 
 - Simplified API key credential storage to always replace existing credentials on re-login instead of accumulating multiple keys
@@ -377,6 +396,7 @@
 - Fixed Cerebras model compatibility by preventing `stream_options` usage requests in chat completions
 
 ## [13.9.3] - 2026-03-07
+
 ### Breaking Changes
 
 - Changed `reasoning` parameter from `ThinkingLevel | undefined` to `Effort | undefined` in `SimpleStreamOptions`; 'off' is no longer valid (omit the field instead)
