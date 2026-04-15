@@ -30,10 +30,11 @@ import { SearchProvider } from "./base";
 const DEFAULT_NUM_RESULTS = 10;
 const MAX_NUM_RESULTS = 20;
 
-/** Map our recency filter to SearXNG time_range parameter */
+/** Map our recency filter to SearXNG time_range parameter.
+ *  SearXNG only supports day/month/year, so week maps to month. */
 const RECENCY_MAP: Record<"day" | "week" | "month" | "year", string> = {
 	day: "day",
-	week: "week",
+	week: "month",
 	month: "month",
 	year: "year",
 };
