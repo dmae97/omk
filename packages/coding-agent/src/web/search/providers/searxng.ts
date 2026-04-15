@@ -14,11 +14,15 @@
  *   searxng.categories - Optional comma-separated categories filter
  *   searxng.language  - Optional language code (e.g. en, zh-CN)
  *
+ * Environment variable fallbacks:
+ *   SEARXNG_ENDPOINT  - Base URL of the SearXNG instance
+ *   SEARXNG_TOKEN     - Optional bearer token
+ *
  * Reference: https://docs.searxng.org/dev/search_api.html
  */
-import { getEnvApiKey } from "@oh-my-pi/pi-ai";
 import type { SearchResponse, SearchSource } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
+import { settings } from "../../../config/settings";
 import { clampNumResults, dateToAgeSeconds } from "../utils";
 import type { SearchParams } from "./base";
 import { SearchProvider } from "./base";
@@ -56,21 +60,25 @@ interface SearXNGResponse {
 }
 
 /** Find SearXNG endpoint from settings or environment. */
-function findEndpoint(settings?: { get: (key: string) => string | undefined }): string | null {
-	if (settings) {
+function findEndpoint(): string | null {
+	try {
 		const endpoint = settings.get("searxng.endpoint");
 		if (endpoint) return endpoint;
+	} catch {
+		// Settings not initialized yet
 	}
-	return getEnvApiKey("searxng_endpoint") ?? null;
+	return process.env.SEARXNG_ENDPOINT ?? null;
 }
 
 /** Find SearXNG bearer token from settings or environment. */
-function findToken(settings?: { get: (key: string) => string | undefined }): string | null {
-	if (settings) {
+function findToken(): string | null {
+	try {
 		const token = settings.get("searxng.token");
 		if (token) return token;
+	} catch {
+		// Settings not initialized yet
 	}
-	return getEnvApiKey("searxng_token") ?? null;
+	return process.env.SEARXNG_TOKEN ?? null;
 }
 
 /** Build the search URL and headers for a SearXNG request */
@@ -158,27 +166,33 @@ export async function searchSearXNG(
 		recency?: "day" | "week" | "month" | "year";
 		signal?: AbortSignal;
 	},
-	settings?: { get: (key: string) => string | undefined },
 ): Promise<SearchResponse> {
 	const numResults = clampNumResults(params.num_results, DEFAULT_NUM_RESULTS, MAX_NUM_RESULTS);
 
-	const endpoint = findEndpoint(settings);
+	const endpoint = findEndpoint();
 	if (!endpoint) {
 		throw new Error(
 			"SearXNG endpoint not configured. Set searxng.endpoint in settings or SEARXNG_ENDPOINT in environment.",
 		);
 	}
 
-	const token = findToken(settings);
-	const categories = settings?.get("searxng.categories");
-	const language = settings?.get("searxng.language");
+	const token = findToken();
+
+	let categories: string | undefined;
+	let language: string | undefined;
+	try {
+		categories = settings.get("searxng.categories") ?? undefined;
+		language = settings.get("searxng.language") ?? undefined;
+	} catch {
+		// Settings not initialized yet
+	}
 
 	const response = await callSearXNGSearch(
 		endpoint,
 		{
 			...params,
-			categories: categories ?? undefined,
-			language: language ?? undefined,
+			categories,
+			language,
 		},
 		token,
 	);
