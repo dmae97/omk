@@ -5,23 +5,47 @@ Launches subagents to parallelize workflows.
 - Use the `poll` tool to wait until completion. You **MUST NOT** poll `read jobs://` in a loop.
 {{/if}}
 
+{{#if defaultMode}}
+Current input mode: `default`. Shared `context` and custom task-call `schema` are available.
+{{/if}}
+{{#if schemaFreeMode}}
+Current input mode: `schema-free`. Shared `context` is available, but custom task-call `schema` is disabled. If structured output is required, rely on the selected agent definition or inherited session schema.
+{{/if}}
+{{#if independentMode}}
+Current input mode: `independent`. Shared `context` and custom task-call `schema` are both disabled. Every task assignment must stand on its own.
+{{/if}}
+
+{{#if contextEnabled}}
 Subagents lack your conversation history. Every decision, file content, and user requirement they need **MUST** be explicit in `context` or `assignment`.
+{{else}}
+Subagents lack your conversation history. Every decision, file content, and user requirement they need **MUST** be explicit in each task `assignment`.
+{{/if}}
 
 <parameters>
 - `agent`: Agent type for all tasks.
   - `.id`: CamelCase, max 32 chars
   - `.description`: UI display only — subagent never sees it
   - `.assignment`: Complete self-contained instructions. One-liners PROHIBITED; missing acceptance criteria = too vague.
+{{#if contextEnabled}}
 - `context`: Shared background prepended to every assignment. Session-specific info only.
+{{/if}}
+{{#if customSchemaEnabled}}
 - `schema`: JSON-encoded JTD schema for expected output. Format lives here — **MUST NOT** be duplicated in assignments.
+{{/if}}
 - `tasks`: Tasks to execute in parallel.
+{{#if isolationEnabled}}
 - `isolated`: Run in isolated environment; returns patches. Use when tasks edit overlapping files.
+{{/if}}
 </parameters>
 
 <critical>
+{{#if contextEnabled}}
 - **MUST NOT** duplicate shared constraints across assignments — put them in `context` once.
+{{else}}
+- Every `assignment` must repeat any constraints, reference paths, and acceptance criteria it needs — there is no shared `context` field.
+{{/if}}
 - **MUST NOT** tell tasks to run project-wide build/test/lint. Parallel agents share the working tree; each task edits, stops. Caller verifies after all complete.
-- For large payloads (traces, JSON blobs), write to `local://<path>` and pass the path in context.
+- For large payloads (traces, JSON blobs), write to `local://<path>` and pass the path in {{#if contextEnabled}}`context`{{else}}the relevant `assignment`{{/if}}.
 - Prefer `task` agents that investigate **and** edit in one pass. Only launch a dedicated read-only discovery step when the affected files are genuinely unknown and cannot be inferred from the task description.
 </critical>
 
@@ -42,6 +66,7 @@ Each task: **at most 3–5 files**. Globs in file paths, "update all", or packag
 </parallelization>
 
 <templates>
+{{#if contextEnabled}}
 **context:**
 ```
 ## Goal         ← one sentence: what the batch accomplishes
@@ -50,6 +75,9 @@ Each task: **at most 3–5 files**. Globs in file paths, "update all", or packag
 ## API Contract ← exact types/signatures if tasks share an interface (omit if N/A)
 ## Acceptance   ← definition of done; build/lint runs AFTER all tasks complete
 ```
+{{else}}
+No shared `context` field exists in this mode. Fold goal, non-goals, constraints, and acceptance criteria into each `assignment`.
+{{/if}}
 **assignment:**
 ```
 ## Target       ← exact file paths; named symbols; explicit non-goals
@@ -61,13 +89,22 @@ Each task: **at most 3–5 files**. Globs in file paths, "update all", or packag
 
 <checklist>
 Before invoking:
+{{#if contextEnabled}}
 - `context` contains only session-specific info
+{{else}}
+- Every `assignment` includes its own goal, constraints, and acceptance criteria because shared context is unavailable
+{{/if}}
 - Every `assignment` follows the template; no one-liners; edge cases covered
 - Tasks are truly parallel — you can articulate why none depends on another's output
 - File paths are explicit; no globs
+{{#if customSchemaEnabled}}
 - `schema` is set if you expect structured output
+{{else}}
+- Do not pass a custom task-call `schema` in this mode
+{{/if}}
 </checklist>
 
+{{#if contextEnabled}}
 <example label="Rename exported symbol + update all call sites">
 Two tasks with non-overlapping file sets. Neither depends on the other's edits.
 
@@ -123,6 +160,7 @@ Caller runs `bun check:ts` after both tasks complete. Tasks must NOT run it.
   </task>
 </tasks>
 </example>
+{{/if}}
 
 {{#list agents join="\n"}}
 ### Agent: {{name}}

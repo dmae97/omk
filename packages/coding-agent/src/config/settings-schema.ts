@@ -1,4 +1,5 @@
 import { THINKING_EFFORTS } from "@oh-my-pi/pi-ai";
+import { TASK_SIMPLE_MODES } from "../task/simple-mode";
 
 /** Unified settings schema - single source of truth for all settings.
  * Unified settings schema - single source of truth for all settings.
@@ -1503,6 +1504,18 @@ export const SETTINGS_SCHEMA = {
 			tab: "tasks",
 			label: "Prefer Task Delegation",
 			description: "Encourage the agent to delegate work to subagents unless changes are trivial",
+		},
+	},
+
+	"task.simple": {
+		type: "enum",
+		values: TASK_SIMPLE_MODES,
+		default: "default",
+		ui: {
+			tab: "tasks",
+			label: "Task Input Mode",
+			description: "How much shared structure the task tool accepts (default, schema-free, or independent)",
+			submenu: true,
 		},
 	},
 
