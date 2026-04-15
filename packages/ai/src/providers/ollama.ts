@@ -335,8 +335,11 @@ export const streamOllama: StreamFunction<"ollama-chat"> = (
 				throw new Error(`No API key for provider: ${model.provider}`);
 			}
 			const baseUrl = normalizeBaseUrl(model.baseUrl);
-			const body = createChatBody(model, context, options);
-			options.onPayload?.(body);
+			let body = createChatBody(model, context, options);
+			const replacementPayload = await options.onPayload?.(body, model);
+			if (replacementPayload !== undefined) {
+				body = replacementPayload as typeof body;
+			}
 			rawRequestDump = {
 				provider: model.provider,
 				api: model.api,
@@ -348,6 +351,8 @@ export const streamOllama: StreamFunction<"ollama-chat"> = (
 			const response = await fetch(`${baseUrl}/api/chat`, {
 				method: "POST",
 				headers: {
+					...model.headers,
+					...options.headers,
 					Authorization: `Bearer ${apiKey}`,
 					"Content-Type": "application/json",
 				},

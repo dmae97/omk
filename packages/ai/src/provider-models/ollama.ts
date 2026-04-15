@@ -107,24 +107,24 @@ export function ollamaCloudModelManagerOptions(
 					if (!id) {
 						return undefined;
 					}
-				let metadata: OllamaShowResponse | undefined;
-				try {
-					metadata = await fetchShowMetadata(baseUrl, apiKey, id);
-				} catch {
-					metadata = undefined;
-				}
-				const contextWindow = getContextWindow(metadata?.model_info) ?? 128000;
-				const thinking = getThinkingConfig(metadata?.capabilities);
-				const hasVision = metadata?.capabilities?.includes("vision") ?? false;
-				return {
-					id,
-					name: entry.name ?? id,
-					api: "ollama-chat" as const,
-					provider: "ollama-cloud" as const,
-					baseUrl,
-					reasoning: !!thinking,
-					thinking,
-					input: hasVision ? (["text", "image"] as Array<"text" | "image">) : (["text"] as Array<"text">),
+					let metadata: OllamaShowResponse | undefined;
+					try {
+						metadata = await fetchShowMetadata(baseUrl, apiKey, id);
+					} catch {
+						metadata = undefined;
+					}
+					const contextWindow = getContextWindow(metadata?.model_info) ?? 128000;
+					const thinking = getThinkingConfig(metadata?.capabilities);
+					const hasVision = metadata?.capabilities?.includes("vision") ?? false;
+					return {
+						id,
+						name: entry.name ?? id,
+						api: "ollama-chat" as const,
+						provider: "ollama-cloud" as const,
+						baseUrl,
+						reasoning: !!thinking,
+						thinking,
+						input: hasVision ? (["text", "image"] as Array<"text" | "image">) : (["text"] as Array<"text">),
 						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 						contextWindow,
 						maxTokens: Math.min(contextWindow, 8192),
