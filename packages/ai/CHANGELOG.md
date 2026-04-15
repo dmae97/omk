@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added `ollama-cloud` as a native hosted Ollama provider with `ollama-chat` transport, direct `/api/chat` streaming, and API-key onboarding
+
+### Changed
+
+- Kept `ollama` explicitly local-only while adding separate hosted Ollama Cloud catalog discovery via `OLLAMA_CLOUD_API_KEY`
+
 ## [14.1.1] - 2026-04-14
 
 ### Added

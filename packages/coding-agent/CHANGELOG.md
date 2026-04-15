@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added built-in model discovery coverage for the `ollama-cloud` provider while preserving implicit local `ollama` discovery
+
 ## [14.1.1] - 2026-04-14
 
 ### Breaking Changes
