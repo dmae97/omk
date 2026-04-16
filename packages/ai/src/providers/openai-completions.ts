@@ -35,7 +35,7 @@ import {
 	type CapturedHttpErrorResponse,
 	finalizeErrorMessage,
 	type RawHttpRequestDump,
-	rewriteCopilotAuthError,
+	rewriteCopilotError,
 } from "../utils/http-inspector";
 import {
 	createWatchdog,
@@ -46,7 +46,7 @@ import {
 import { parseStreamingJson } from "../utils/json-parse";
 import { parseGitHubCopilotApiKey } from "../utils/oauth/github-copilot";
 import { getKimiCommonHeaders } from "../utils/oauth/kimi";
-import { extractHttpStatusFromError } from "../utils/retry";
+import { callWithCopilotModelRetry, extractHttpStatusFromError } from "../utils/retry";
 import { adaptSchemaForStrict, NO_STRICT } from "../utils/schema";
 import { mapToOpenAICompletionsToolChoice } from "../utils/tool-choice";
 import {
@@ -245,7 +245,10 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 			};
 			let openaiStream: AsyncIterable<ChatCompletionChunk>;
 			try {
-				openaiStream = await createCompletionsStream();
+				openaiStream = await callWithCopilotModelRetry(() => createCompletionsStream(), {
+					provider: model.provider,
+					signal: requestSignal,
+				});
 			} catch (error) {
 				const capturedErrorResponse = getCapturedErrorResponse();
 				if (!shouldRetryWithoutStrictTools(error, capturedErrorResponse, appliedToolStrictMode, context.tools)) {
@@ -552,7 +555,7 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 			// Some providers via OpenRouter include extra details here.
 			const rawMetadata = (error as { error?: { metadata?: { raw?: string } } })?.error?.metadata?.raw;
 			if (rawMetadata) output.errorMessage += `\n${rawMetadata}`;
-			output.errorMessage = rewriteCopilotAuthError(output.errorMessage, error, model.provider);
+			output.errorMessage = rewriteCopilotError(output.errorMessage, error, model.provider);
 			output.duration = Date.now() - startTime;
 			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "error", reason: output.stopReason, error: output });

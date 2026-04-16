@@ -34,10 +34,11 @@ import type {
 import { isAnthropicOAuthToken, normalizeToolCallId, resolveCacheRetention } from "../utils";
 import { createAbortSourceTracker } from "../utils/abort";
 import { AssistantMessageEventStream } from "../utils/event-stream";
-import { finalizeErrorMessage, type RawHttpRequestDump, rewriteCopilotAuthError } from "../utils/http-inspector";
+import { finalizeErrorMessage, type RawHttpRequestDump, rewriteCopilotError } from "../utils/http-inspector";
 import { createWatchdog, getStreamFirstEventTimeoutMs } from "../utils/idle-iterator";
 import { parseStreamingJson } from "../utils/json-parse";
 import { parseGitHubCopilotApiKey } from "../utils/oauth/github-copilot";
+import { isCopilotTransientModelError } from "../utils/retry";
 import {
 	buildCopilotDynamicHeaders,
 	hasCopilotVisionInput,
@@ -627,6 +628,7 @@ function isProviderRetryableStreamEnvelopeError(error: unknown): boolean {
 
 export function isProviderRetryableError(error: unknown): boolean {
 	if (!(error instanceof Error)) return false;
+	if (isCopilotTransientModelError(error)) return true;
 	const msg = error.message.toLowerCase();
 	return (
 		/rate.?limit|too many requests|overloaded|service.?unavailable|internal_error|stream error.*received from peer|1302|timed?\s*out while waiting for the first event|timeout waiting for first/i.test(
@@ -994,7 +996,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 			const firstEventTimeoutError = activeAbortTracker.getLocalAbortReason();
 			output.stopReason = activeAbortTracker.wasCallerAbort() ? "aborted" : "error";
 			output.errorMessage = firstEventTimeoutError?.message ?? (await finalizeErrorMessage(error, rawRequestDump));
-			output.errorMessage = rewriteCopilotAuthError(output.errorMessage, error, model.provider);
+			output.errorMessage = rewriteCopilotError(output.errorMessage, error, model.provider);
 			output.duration = Date.now() - startTime;
 			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "error", reason: output.stopReason, error: output });
