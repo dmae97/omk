@@ -2103,12 +2103,25 @@ function extractAssistantMessageText(msg: Message): string {
 }
 
 /**
- * Convert context.messages to Cursor's serialized ConversationTurn format.
+ * Hash `data`, insert it into `blobStore`, and return its blob ID.
+ * Used to package bytes fields of the `*Structure` protobuf messages,
+ * which Cursor's backend resolves via the KV getBlob round-trip.
+ */
+function storeBlob(blobStore: Map<string, Uint8Array>, data: Uint8Array): Uint8Array {
+	const id = createBlobId(data);
+	blobStore.set(Buffer.from(id).toString("hex"), data);
+	return id;
+}
+
+/**
+ * Convert context.messages to Cursor's ConversationTurnStructure blob IDs.
  * Groups messages into turns: each turn is a user message followed by the assistant's response.
  * Excludes the last user message (which goes in the action).
- * Returns serialized bytes for ConversationStateStructure.turns field.
+ *
+ * Each `AgentConversationTurnStructure.user_message`, `steps[]`, and the outer
+ * `ConversationStateStructure.turns[]` entry is a blob ID into `blobStore`.
  */
-function buildConversationTurns(messages: Message[]): Uint8Array[] {
+function buildConversationTurns(messages: Message[], blobStore: Map<string, Uint8Array>): Uint8Array[] {
 	const turns: Uint8Array[] = [];
 
 	// Find turn boundaries - each turn starts with a user message
@@ -2146,9 +2159,10 @@ function buildConversationTurns(messages: Message[]): Uint8Array[] {
 			messageId: crypto.randomUUID(),
 		});
 		const userMessageBytes = toBinary(UserMessageSchema, userMessage);
+		const userMessageBlobId = storeBlob(blobStore, userMessageBytes);
 
 		// Collect and serialize steps until next user message
-		const stepBytes: Uint8Array[] = [];
+		const stepBlobIds: Uint8Array[] = [];
 		i++;
 
 		while (i < messages.length && messages[i].role !== "user" && messages[i].role !== "developer") {
@@ -2163,7 +2177,7 @@ function buildConversationTurns(messages: Message[]): Uint8Array[] {
 							value: create(AssistantMessageSchema, { text }),
 						},
 					});
-					stepBytes.push(toBinary(ConversationStepSchema, step));
+					stepBlobIds.push(storeBlob(blobStore, toBinary(ConversationStepSchema, step)));
 				}
 			} else if (stepMsg.role === "toolResult") {
 				// Include tool results as assistant text for context
@@ -2175,17 +2189,18 @@ function buildConversationTurns(messages: Message[]): Uint8Array[] {
 							value: create(AssistantMessageSchema, { text: `[Tool Result]\n${text}` }),
 						},
 					});
-					stepBytes.push(toBinary(ConversationStepSchema, step));
+					stepBlobIds.push(storeBlob(blobStore, toBinary(ConversationStepSchema, step)));
 				}
 			}
 
 			i++;
 		}
 
-		// Create the serialized turn using Structure types (bytes)
+		// Create the serialized turn using Structure types. The bytes fields
+		// (user_message, steps) are blob IDs resolved through the KV store.
 		const agentTurn = create(AgentConversationTurnStructureSchema, {
-			userMessage: userMessageBytes,
-			steps: stepBytes,
+			userMessage: userMessageBlobId,
+			steps: stepBlobIds,
 		});
 		const turn = create(ConversationTurnStructureSchema, {
 			turn: {
@@ -2193,7 +2208,8 @@ function buildConversationTurns(messages: Message[]): Uint8Array[] {
 				value: agentTurn,
 			},
 		});
-		turns.push(toBinary(ConversationTurnStructureSchema, turn));
+		const turnBytes = toBinary(ConversationTurnStructureSchema, turn);
+		turns.push(storeBlob(blobStore, turnBytes));
 	}
 
 	return turns;
@@ -2249,7 +2265,7 @@ function buildGrpcRequest(
 	});
 
 	// Build conversation turns from prior messages (excluding the last user message)
-	const turns = buildConversationTurns(context.messages);
+	const turns = buildConversationTurns(context.messages, blobStore);
 
 	const hasMatchingPrompt = state.conversationState?.rootPromptMessagesJson?.some(entry =>
 		Buffer.from(entry).equals(systemPromptId),
