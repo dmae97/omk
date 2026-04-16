@@ -626,9 +626,9 @@ function isProviderRetryableStreamEnvelopeError(error: unknown): boolean {
 	return /stream event order|before message_start/i.test(error.message);
 }
 
-export function isProviderRetryableError(error: unknown): boolean {
+export function isProviderRetryableError(error: unknown, provider?: string): boolean {
 	if (!(error instanceof Error)) return false;
-	if (isCopilotTransientModelError(error)) return true;
+	if (provider === "github-copilot" && isCopilotTransientModelError(error)) return true;
 	const msg = error.message.toLowerCase();
 	return (
 		/rate.?limit|too many requests|overloaded|service.?unavailable|internal_error|stream error.*received from peer|1302|timed?\s*out while waiting for the first event|timeout waiting for first/i.test(
@@ -963,7 +963,8 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 					const isTransientEnvelopeFailure =
 						isTransientStreamParseError(streamFailure) || isTransientStreamEnvelopeError(streamFailure);
 					const canRetryTransientEnvelopeFailure = isTransientEnvelopeFailure && !streamedReplayUnsafeContent;
-					const canRetryProviderFailure = firstTokenTime === undefined && isProviderRetryableError(streamFailure);
+					const canRetryProviderFailure =
+						firstTokenTime === undefined && isProviderRetryableError(streamFailure, model.provider);
 					if (
 						activeAbortTracker.wasCallerAbort() ||
 						providerRetryAttempt >= PROVIDER_MAX_RETRIES ||
