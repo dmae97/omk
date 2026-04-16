@@ -1,6 +1,7 @@
 import type { ModelManagerOptions } from "../model-manager";
 import { Effort } from "../model-thinking";
 import type { ThinkingConfig } from "../types";
+import { createBundledReferenceMap, createReferenceResolver } from "./bundled-references";
 
 export interface OllamaCloudModelManagerConfig {
 	apiKey?: string;
@@ -86,6 +87,7 @@ export function ollamaCloudModelManagerOptions(
 ): ModelManagerOptions<"ollama-chat"> {
 	const apiKey = config?.apiKey;
 	const baseUrl = normalizeOllamaCloudBaseUrl(config?.baseUrl);
+	const resolveReference = createReferenceResolver(createBundledReferenceMap<"ollama-chat">("ollama-cloud"));
 	return {
 		providerId: "ollama-cloud",
 		fetchDynamicModels: async () => {
@@ -107,27 +109,35 @@ export function ollamaCloudModelManagerOptions(
 					if (!id) {
 						return undefined;
 					}
+					const reference = resolveReference(id);
 					let metadata: OllamaShowResponse | undefined;
 					try {
 						metadata = await fetchShowMetadata(baseUrl, apiKey, id);
 					} catch {
 						metadata = undefined;
 					}
-					const contextWindow = getContextWindow(metadata?.model_info) ?? 128000;
-					const thinking = getThinkingConfig(metadata?.capabilities);
-					const hasVision = metadata?.capabilities?.includes("vision") ?? false;
+					const capabilities = metadata?.capabilities;
+					const contextWindow = getContextWindow(metadata?.model_info) ?? reference?.contextWindow ?? 128000;
+					const reasoning = capabilities ? capabilities.includes("thinking") : (reference?.reasoning ?? false);
+					const thinking = capabilities ? getThinkingConfig(capabilities) : reference?.thinking;
+					const input = capabilities
+						? capabilities.includes("vision")
+							? (["text", "image"] as Array<"text" | "image">)
+							: (["text"] as Array<"text">)
+						: ((reference?.input as Array<"text" | "image"> | undefined) ?? (["text"] as Array<"text">));
+					const resolvedName = entry.name && entry.name !== id ? entry.name : (reference?.name ?? id);
 					return {
 						id,
-						name: entry.name ?? id,
+						name: resolvedName,
 						api: "ollama-chat" as const,
 						provider: "ollama-cloud" as const,
 						baseUrl,
-						reasoning: !!thinking,
+						reasoning,
 						thinking,
-						input: hasVision ? (["text", "image"] as Array<"text" | "image">) : (["text"] as Array<"text">),
-						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+						input,
+						cost: reference?.cost ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 						contextWindow,
-						maxTokens: Math.min(contextWindow, 8192),
+						maxTokens: reference?.maxTokens ?? Math.min(contextWindow, 8192),
 					};
 				}),
 			);

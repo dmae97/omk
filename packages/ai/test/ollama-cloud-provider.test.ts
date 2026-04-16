@@ -94,8 +94,8 @@ describe("ollama-cloud provider support", () => {
 				if (body.model === "gpt-oss:120b") {
 					return new Response(
 						JSON.stringify({
-								capabilities: ["completion", "thinking", "vision"],
-								model_info: { "gpt-oss.context_length": 262144 },
+							capabilities: ["completion", "thinking", "vision"],
+							model_info: { "gpt-oss.context_length": 262144 },
 						}),
 						{ status: 200, headers: { "Content-Type": "application/json" } },
 					);
@@ -159,6 +159,35 @@ describe("ollama-cloud provider support", () => {
 		expect(ids).toEqual(["model-a", "model-b"]);
 		const modelB = models?.find(m => m.id === "model-b");
 		expect(modelB?.input).toEqual(["text"]);
+	});
+
+	test("falls back to bundled metadata when /api/show metadata is unavailable", async () => {
+		global.fetch = vi.fn(async (input, _init) => {
+			const url = String(input);
+			if (url === "https://ollama.com/api/tags") {
+				return new Response(
+					JSON.stringify({
+						models: [{ name: "gpt-oss:120b" }],
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				);
+			}
+			if (url === "https://ollama.com/api/show") {
+				return new Response(null, { status: 500 });
+			}
+			throw new Error(`Unexpected URL: ${url}`);
+		}) as unknown as typeof fetch;
+
+		const options = ollamaCloudModelManagerOptions({ apiKey: "cloud-test-key" });
+		const models = await options.fetchDynamicModels?.();
+		const model = models?.find(candidate => candidate.id === "gpt-oss:120b");
+
+		expect(model).toBeDefined();
+		expect(model?.name).toBe("GPT OSS (120B)");
+		expect(model?.reasoning).toBe(true);
+		expect(model?.input).toEqual(["text", "image"]);
+		expect(model?.contextWindow).toBe(131072);
+		expect(model?.maxTokens).toBe(16384);
 	});
 
 	test("streams native chat responses with thinking, text, and usage mapping", async () => {
@@ -400,47 +429,59 @@ describe("ollama-cloud provider support", () => {
 		});
 	});
 
-describe("mapToolChoice", () => {
-	test("omits tool_choice when undefined or auto", async () => {
-		let requestBody: Record<string, unknown> | undefined;
-		global.fetch = vi.fn(async (_input, init) => {
-			requestBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
-			return createNdjsonResponse([
-				{ model: "gpt-oss:120b", message: { role: "assistant", content: "ok" }, done: false },
-				{ model: "gpt-oss:120b", done: true, done_reason: "stop", prompt_eval_count: 1, eval_count: 1 },
-			]);
-		}) as unknown as typeof fetch;
+	describe("mapToolChoice", () => {
+		test("omits tool_choice when undefined or auto", async () => {
+			let requestBody: Record<string, unknown> | undefined;
+			global.fetch = vi.fn(async (_input, init) => {
+				requestBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+				return createNdjsonResponse([
+					{ model: "gpt-oss:120b", message: { role: "assistant", content: "ok" }, done: false },
+					{ model: "gpt-oss:120b", done: true, done_reason: "stop", prompt_eval_count: 1, eval_count: 1 },
+				]);
+			}) as unknown as typeof fetch;
 
-		await stream(cloudModel, { messages: [{ role: "user", content: "hi", timestamp: Date.now() }], tools: [readFileTool] }, { apiKey: "cloud-test-key", toolChoice: "auto" }).result();
-		expect(requestBody?.tool_choice).toBeUndefined();
+			await stream(
+				cloudModel,
+				{ messages: [{ role: "user", content: "hi", timestamp: Date.now() }], tools: [readFileTool] },
+				{ apiKey: "cloud-test-key", toolChoice: "auto" },
+			).result();
+			expect(requestBody?.tool_choice).toBeUndefined();
+		});
+
+		test("passes tool_choice: none when ToolChoice is none", async () => {
+			let requestBody: Record<string, unknown> | undefined;
+			global.fetch = vi.fn(async (_input, init) => {
+				requestBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+				return createNdjsonResponse([
+					{ model: "gpt-oss:120b", message: { role: "assistant", content: "ok" }, done: false },
+					{ model: "gpt-oss:120b", done: true, done_reason: "stop", prompt_eval_count: 1, eval_count: 1 },
+				]);
+			}) as unknown as typeof fetch;
+
+			await stream(
+				cloudModel,
+				{ messages: [{ role: "user", content: "hi", timestamp: Date.now() }], tools: [readFileTool] },
+				{ apiKey: "cloud-test-key", toolChoice: "none" },
+			).result();
+			expect(requestBody?.tool_choice).toBe("none");
+		});
+
+		test("passes tool_choice: required when ToolChoice is required or any", async () => {
+			let requestBody: Record<string, unknown> | undefined;
+			global.fetch = vi.fn(async (_input, init) => {
+				requestBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+				return createNdjsonResponse([
+					{ model: "gpt-oss:120b", message: { role: "assistant", content: "ok" }, done: false },
+					{ model: "gpt-oss:120b", done: true, done_reason: "stop", prompt_eval_count: 1, eval_count: 1 },
+				]);
+			}) as unknown as typeof fetch;
+
+			await stream(
+				cloudModel,
+				{ messages: [{ role: "user", content: "hi", timestamp: Date.now() }], tools: [readFileTool] },
+				{ apiKey: "cloud-test-key", toolChoice: "required" },
+			).result();
+			expect(requestBody?.tool_choice).toBe("required");
+		});
 	});
-
-	test("passes tool_choice: none when ToolChoice is none", async () => {
-		let requestBody: Record<string, unknown> | undefined;
-		global.fetch = vi.fn(async (_input, init) => {
-			requestBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
-			return createNdjsonResponse([
-				{ model: "gpt-oss:120b", message: { role: "assistant", content: "ok" }, done: false },
-				{ model: "gpt-oss:120b", done: true, done_reason: "stop", prompt_eval_count: 1, eval_count: 1 },
-			]);
-		}) as unknown as typeof fetch;
-
-		await stream(cloudModel, { messages: [{ role: "user", content: "hi", timestamp: Date.now() }], tools: [readFileTool] }, { apiKey: "cloud-test-key", toolChoice: "none" }).result();
-		expect(requestBody?.tool_choice).toBe("none");
-	});
-
-	test("passes tool_choice: required when ToolChoice is required or any", async () => {
-		let requestBody: Record<string, unknown> | undefined;
-		global.fetch = vi.fn(async (_input, init) => {
-			requestBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
-			return createNdjsonResponse([
-				{ model: "gpt-oss:120b", message: { role: "assistant", content: "ok" }, done: false },
-				{ model: "gpt-oss:120b", done: true, done_reason: "stop", prompt_eval_count: 1, eval_count: 1 },
-			]);
-		}) as unknown as typeof fetch;
-
-		await stream(cloudModel, { messages: [{ role: "user", content: "hi", timestamp: Date.now() }], tools: [readFileTool] }, { apiKey: "cloud-test-key", toolChoice: "required" }).result();
-		expect(requestBody?.tool_choice).toBe("required");
-	});
-});
 });
