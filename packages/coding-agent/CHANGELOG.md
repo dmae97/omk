@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [14.1.3] - 2026-04-17
+
 ### Breaking Changes
 
 - Replaced the legacy `todo_write` `ops`-based API (`replace`, `update`, `add_task`, and `remove_task`) with direct top-level fields, requiring migration of any callers using the old request shape
