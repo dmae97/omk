@@ -1508,10 +1508,7 @@ export function githubCopilotModelManagerOptions(config?: GithubCopilotModelMana
 						// (the true prompt budget) must take precedence whenever it is present.
 						const contextWindow = toPositiveNumber(
 							copilotLimits.maxPromptTokens,
-							toPositiveNumber(
-								entry.context_length,
-								reference?.contextWindow ?? defaults.contextWindow,
-							),
+							toPositiveNumber(entry.context_length, reference?.contextWindow ?? defaults.contextWindow),
 						);
 						const maxTokens = toPositiveNumber(
 							entry.max_completion_tokens,
