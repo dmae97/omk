@@ -1503,10 +1503,13 @@ export function githubCopilotModelManagerOptions(config?: GithubCopilotModelMana
 						// max_context_window_tokens is the total window (prompt + output budget)
 						// and must NOT be used for contextWindow — it inflates the limit and
 						// breaks compaction thresholds, overflow detection, and promotion.
+						// The OpenAI-compatible root-level `context_length` field mirrors the
+						// total window (e.g. 400k for gpt-5.4), so Copilot's max_prompt_tokens
+						// (the true prompt budget) must take precedence whenever it is present.
 						const contextWindow = toPositiveNumber(
-							entry.context_length,
+							copilotLimits.maxPromptTokens,
 							toPositiveNumber(
-								copilotLimits.maxPromptTokens,
+								entry.context_length,
 								reference?.contextWindow ?? defaults.contextWindow,
 							),
 						);

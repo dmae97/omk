@@ -57,27 +57,35 @@ export interface SubagentLifecyclePayload {
 	index: number;
 }
 
-/** Single task item for parallel execution */
-export const taskItemSchema = Type.Object({
-	id: Type.String({
-		description: "CamelCase identifier, max 48 chars",
-		maxLength: 48,
-	}),
-	description: Type.String({
-		description: "Short one-liner for UI display only — not seen by the subagent",
-	}),
-	assignment: Type.String({
-		description:
-			"Complete per-task instructions the subagent executes. Must follow the Target/Change/Edge Cases/Acceptance structure. Only include per-task deltas — shared background belongs in `context`.",
-	}),
-});
+const assignmentDescriptionForContextEnabled =
+	"Complete per-task instructions the subagent executes. Must follow the Target/Change/Edge Cases/Acceptance structure. Only include per-task deltas — shared background belongs in `context`.";
+const assignmentDescriptionForContextDisabled =
+	"Complete per-task instructions the subagent executes. Must follow the Target/Change/Edge Cases/Acceptance structure, and include any background that would otherwise live in `context` since shared context is disabled in this mode.";
+
+const createTaskItemSchema = (contextEnabled: boolean) =>
+	Type.Object({
+		id: Type.String({
+			description: "CamelCase identifier, max 48 chars",
+			maxLength: 48,
+		}),
+		description: Type.String({
+			description: "Short one-liner for UI display only — not seen by the subagent",
+		}),
+		assignment: Type.String({
+			description: contextEnabled ? assignmentDescriptionForContextEnabled : assignmentDescriptionForContextDisabled,
+		}),
+	});
+
+/** Single task item for parallel execution (default shape with context enabled). */
+export const taskItemSchema = createTaskItemSchema(true);
 export type TaskItem = Static<typeof taskItemSchema>;
 
 const createTaskSchema = (options: { isolationEnabled: boolean; simpleMode: TaskSimpleMode }) => {
 	const { contextEnabled, customSchemaEnabled } = getTaskSimpleModeCapabilities(options.simpleMode);
+	const itemSchema = createTaskItemSchema(contextEnabled);
 	const properties: Record<string, TSchema> = {
 		agent: Type.String({ description: "Agent type for all tasks in this batch" }),
-		tasks: Type.Array(taskItemSchema, {
+		tasks: Type.Array(itemSchema, {
 			description: contextEnabled
 				? "Tasks to execute in parallel. Each must be small-scoped (3-5 files max) and self-contained given context + assignment."
 				: "Tasks to execute in parallel. Each must be small-scoped (3-5 files max) and fully self-contained inside assignment because shared context is disabled.",
