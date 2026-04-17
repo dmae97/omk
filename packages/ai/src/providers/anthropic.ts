@@ -367,7 +367,7 @@ function convertContentBlocks(content: (TextContent | ImageContent)[]):
 	return blocks;
 }
 
-export type AnthropicEffort = "low" | "medium" | "high" | "max";
+export type AnthropicEffort = "low" | "medium" | "high" | "xhigh" | "max";
 
 export interface AnthropicOptions extends StreamOptions {
 	/**
@@ -1447,7 +1447,9 @@ function buildParams(
 			}
 			params.thinking = adaptive as typeof params.thinking;
 			if (effort) {
-				params.output_config = { effort };
+				// SDK's OutputConfig.effort type is not yet widened to include the new "xhigh"
+				// level introduced with Claude Opus 4.7. Cast until the SDK catches up.
+				params.output_config = { effort } as typeof params.output_config;
 			}
 		} else {
 			params.thinking = {
@@ -1455,7 +1457,7 @@ function buildParams(
 				budget_tokens: options.thinkingBudgetTokens || 1024,
 			};
 			if (mode === "anthropic-budget-effort" && effort) {
-				params.output_config = { effort };
+				params.output_config = { effort } as typeof params.output_config;
 			}
 		}
 	}

@@ -93,6 +93,16 @@ describe("model thinking metadata", () => {
 			api: "anthropic-messages",
 			provider: "anthropic",
 		});
+		const opus47 = createModel({
+			id: "claude-opus-4.7",
+			api: "anthropic-messages",
+			provider: "anthropic",
+		});
+		const opus47Bedrock = createModel({
+			id: "us.anthropic.claude-opus-4-7",
+			api: "bedrock-converse-stream",
+			provider: "amazon-bedrock",
+		});
 		const sonnet46 = createModel({
 			id: "claude-sonnet-4.6",
 			api: "anthropic-messages",
@@ -112,7 +122,12 @@ describe("model thinking metadata", () => {
 			minLevel: Effort.Minimal,
 			maxLevel: Effort.High,
 		});
+		// Opus 4.6 has no real xhigh level — pi-ai aliases XHigh to Anthropic's "max".
 		expect(mapEffortToAnthropicAdaptiveEffort(opus46, Effort.XHigh)).toBe("max");
+		// Opus 4.7 on Messages API sends the new literal "xhigh" level.
+		expect(mapEffortToAnthropicAdaptiveEffort(opus47, Effort.XHigh)).toBe("xhigh");
+		// Bedrock Converse is not the Messages API, so xhigh is not available there yet.
+		expect(mapEffortToAnthropicAdaptiveEffort(opus47Bedrock, Effort.XHigh)).toBe("max");
 		expect(() => mapEffortToAnthropicAdaptiveEffort(sonnet46, Effort.XHigh)).toThrow(/not supported/);
 	});
 });

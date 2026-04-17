@@ -258,7 +258,7 @@ export function mapEffortToGoogleThinkingLevel<TApi extends Api>(
 export function mapEffortToAnthropicAdaptiveEffort<TApi extends Api>(
 	model: ApiModel<TApi>,
 	effort: Effort,
-): "low" | "medium" | "high" | "max" {
+): "low" | "medium" | "high" | "xhigh" | "max" {
 	switch (requireSupportedEffort(model, effort)) {
 		case Effort.Minimal:
 		case Effort.Low:
@@ -268,8 +268,18 @@ export function mapEffortToAnthropicAdaptiveEffort<TApi extends Api>(
 		case Effort.High:
 			return "high";
 		case Effort.XHigh:
-			return "max";
+			// Opus 4.7+ introduced a distinct "xhigh" effort level (between "high" and "max").
+			// The Anthropic docs scope this to the Messages API only, so Bedrock Converse and
+			// older adaptive-thinking Opus 4.6 models keep the legacy "max" alias.
+			return anthropicModelHasRealXHighEffort(model) ? "xhigh" : "max";
 	}
+}
+
+function anthropicModelHasRealXHighEffort<TApi extends Api>(model: ApiModel<TApi>): boolean {
+	if (model.api !== "anthropic-messages") return false;
+	const parsedModel = parseKnownModel(model.id);
+	if (parsedModel.family !== "anthropic" || parsedModel.kind !== "opus") return false;
+	return semverGte(parsedModel.version, "4.7");
 }
 
 function applyGeneratedModelPolicy(model: ApiModel<Api>): void {
