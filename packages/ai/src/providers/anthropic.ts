@@ -166,6 +166,18 @@ type AnthropicSamplingParams = MessageCreateParamsStreaming & {
 	top_p?: number;
 	top_k?: number;
 };
+
+/**
+ * Adaptive thinking `display` is supported starting with Claude Opus 4.7.
+ * Older adaptive-thinking models (Opus 4.6, Sonnet 4.6+) reject the field.
+ */
+function supportsAdaptiveThinkingDisplay(modelId: string): boolean {
+	const match = /claude-opus-(\d+)-(\d+)/.exec(modelId);
+	if (!match) return false;
+	const major = Number(match[1]);
+	const minor = Number(match[2]);
+	return major > 4 || (major === 4 && minor >= 7);
+}
 function getCacheControl(
 	baseUrl: string,
 	cacheRetention?: CacheRetention,
@@ -1426,7 +1438,14 @@ function buildParams(
 			options.effort ?? (requestedEffort ? mapEffortToAnthropicAdaptiveEffort(model, requestedEffort) : undefined);
 
 		if (mode === "anthropic-adaptive") {
-			params.thinking = { type: "adaptive" };
+			// Starting with Claude Opus 4.7, adaptive thinking content is omitted from the
+			// response by default. Opt into summarized reasoning so thinking deltas keep
+			// streaming with human-readable content for callers that rely on it.
+			const adaptive: { type: "adaptive"; display?: "summarized" | "omitted" } = { type: "adaptive" };
+			if (supportsAdaptiveThinkingDisplay(model.id)) {
+				adaptive.display = "summarized";
+			}
+			params.thinking = adaptive as typeof params.thinking;
 			if (effort) {
 				params.output_config = { effort };
 			}
