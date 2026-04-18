@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed Tavily web search silently returning off-topic news articles when `--recency` was set. The provider was unconditionally coupling `topic: "news"` to recency, which scoped Tavily's index to news publications and excluded documentation, release notes, GitHub, and all non-news technical content. Technical queries with `--recency` now return the correct corpus.
+
+### Changed
+
+- Tightened the contract for `SearchParams.recency` in `web/search/providers/base.ts`: providers MUST interpret recency as a pure time filter and MUST NOT use it as an implicit signal to change topic scope, content domain, or ranking strategy.
+
 ## [14.1.3] - 2026-04-17
 
 ### Breaking Changes
@@ -24,7 +32,6 @@
 
 - Fixed task calls in `schema-free` and `independent` modes to return clear mode-specific errors when disallowed `context` or `schema` inputs are provided
 - Fixed newly generated session IDs to use UUIDv7 for new, forked, and branched sessions while preserving resumed session IDs
-
 ## [14.1.1] - 2026-04-14
 
 ### Breaking Changes
@@ -205,7 +212,6 @@
 ### Fixed
 
 - Fixed typo in system prompt: 'backwards compatibiltity' → 'backwards compatibility'
-
 
 ## [14.0.3] - 2026-04-09
 
