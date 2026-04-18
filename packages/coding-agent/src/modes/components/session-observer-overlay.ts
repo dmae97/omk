@@ -15,26 +15,15 @@
  *   - Enter on main session -> close overlay (jump back)
  */
 import type { ToolResultMessage } from "@oh-my-pi/pi-ai";
-import {
-	Container,
-	Markdown,
-	type MarkdownTheme,
-	matchesKey,
-	type SelectItem,
-	SelectList,
-	Spacer,
-	Text,
-} from "@oh-my-pi/pi-tui";
+import { Container, Markdown, type MarkdownTheme, matchesKey } from "@oh-my-pi/pi-tui";
 import { formatDuration, formatNumber, logger } from "@oh-my-pi/pi-utils";
 import type { KeyId } from "../../config/keybindings";
 import type { SessionMessageEntry } from "../../session/session-manager";
 import { parseSessionEntries } from "../../session/session-manager";
 import { replaceTabs, truncateToWidth } from "../../tools/render-utils";
 import type { ObservableSession, SessionObserverRegistry } from "../session-observer-registry";
-import { getMarkdownTheme, getSelectListTheme, theme } from "../theme/theme";
+import { getMarkdownTheme, theme } from "../theme/theme";
 import { DynamicBorder } from "./dynamic-border";
-
-type Mode = "picker" | "viewer";
 
 /** Max thinking characters in collapsed state */
 const MAX_THINKING_CHARS_COLLAPSED = 200;
@@ -68,8 +57,6 @@ interface BreadcrumbItem {
 export class SessionObserverOverlayComponent extends Container {
 	#registry: SessionObserverRegistry;
 	#onDone: () => void;
-	#mode: Mode = "picker";
-	#selectList: SelectList;
 	#selectedSessionId?: string;
 	#observeKeys: KeyId[];
 	#transcriptCache?: { path: string; bytesRead: number; entries: SessionMessageEntry[]; model?: string };
@@ -99,53 +86,33 @@ export class SessionObserverOverlayComponent extends Container {
 		this.#registry = registry;
 		this.#onDone = onDone;
 		this.#observeKeys = observeKeys;
-		this.#selectList = new SelectList([], 0, getSelectListTheme());
-		this.#setupPicker();
+
+		// Jump directly to the most recently active sub-agent
+		const mostRecent = this.#getMostRecentSubagent();
+		if (mostRecent) {
+			this.#selectedSessionId = mostRecent.id;
+			this.#setupViewer();
+		} else {
+			// No sub-agents — close immediately
+			queueMicrotask(() => this.#onDone());
+		}
 	}
 
-	// --- Override render to implement viewport scrolling in viewer mode ---
+	/** Find the most recently updated sub-agent session (prefer active ones) */
+	#getMostRecentSubagent(): ObservableSession | undefined {
+		const sessions = this.#registry.getSessions().filter(s => s.kind === "subagent");
+		if (sessions.length === 0) return undefined;
+		// Prefer active sessions, then sort by lastUpdate descending
+		const active = sessions.filter(s => s.status === "active");
+		const pool = active.length > 0 ? active : sessions;
+		return pool.sort((a, b) => b.lastUpdate - a.lastUpdate)[0];
+	}
+
 	override render(width: number): string[] {
-		if (this.#mode === "picker") {
-			return super.render(width);
-		}
-		// Viewer mode: build all lines, then slice to viewport
 		return this.#renderViewer(width);
 	}
 
-	#setupPicker(): void {
-		this.#mode = "picker";
-		this.children = [];
-		this.#navigationStack = [];
-		this.#scrollOffset = 0;
-		this.#selectedEntryIndex = 0;
-		this.#expandedEntries.clear();
-
-		this.addChild(new DynamicBorder());
-		this.addChild(new Text(theme.bold(theme.fg("accent", "Session Observer")), 1, 0));
-		this.addChild(new Spacer(1));
-
-		const items = this.#buildPickerItems();
-		this.#selectList = new SelectList(items, Math.min(items.length, 12), getSelectListTheme());
-
-		this.#selectList.onSelect = item => {
-			if (item.value === "main") {
-				this.#onDone();
-				return;
-			}
-			this.#selectedSessionId = item.value;
-			this.#setupViewer();
-		};
-
-		this.#selectList.onCancel = () => {
-			this.#onDone();
-		};
-
-		this.addChild(this.#selectList);
-		this.addChild(new DynamicBorder());
-	}
-
 	#setupViewer(): void {
-		this.#mode = "viewer";
 		this.children = [];
 		this.#scrollOffset = 0;
 		this.#selectedEntryIndex = 0;
@@ -163,28 +130,11 @@ export class SessionObserverOverlayComponent extends Container {
 
 	/** Rebuild content from live registry data */
 	refreshFromRegistry(): void {
-		if (this.#mode === "picker") {
-			this.#refreshPickerItems();
-		} else if (this.#mode === "viewer" && this.#selectedSessionId) {
+		if (this.#selectedSessionId) {
 			const totalLines = this.#renderedLines.length;
 			this.#wasAtBottom = this.#scrollOffset >= totalLines - this.#viewportHeight;
 			this.#rebuildViewerContent();
 		}
-	}
-
-	#refreshPickerItems(): void {
-		const previousValue = this.#selectList.getSelectedItem()?.value;
-		const items = this.#buildPickerItems();
-		const newList = new SelectList(items, Math.min(items.length, 12), getSelectListTheme());
-		newList.onSelect = this.#selectList.onSelect;
-		newList.onCancel = this.#selectList.onCancel;
-		if (previousValue) {
-			const newIndex = items.findIndex(i => i.value === previousValue);
-			if (newIndex >= 0) newList.setSelectedIndex(newIndex);
-		}
-		const idx = this.children.indexOf(this.#selectList);
-		if (idx >= 0) this.children[idx] = newList;
-		this.#selectList = newList;
 	}
 
 	/** Rebuild the transcript content lines (called on setup and refresh) */
@@ -237,7 +187,7 @@ export class SessionObserverOverlayComponent extends Container {
 		const statsLine = this.#buildStatsLine(session);
 		if (statsLine) this.#viewerFooterLines.push(statsLine);
 		this.#viewerFooterLines.push(
-			theme.fg("dim", "j/k:navigate  Enter:expand  [/]:prev/next agent  Esc:back  g/G:top/bottom"),
+			theme.fg("dim", "j/k:scroll  Enter:expand  [/]:cycle agents  Esc/Ctrl+S:close  g/G:top/bottom"),
 		);
 
 		// Auto-scroll to bottom if we were at bottom
@@ -647,59 +597,25 @@ export class SessionObserverOverlayComponent extends Container {
 		return true;
 	}
 
-	#buildPickerItems(): SelectItem[] {
-		const sessions = this.#registry.getSessions();
-		return sessions.map(s => {
-			const statusIcon =
-				s.status === "active" ? "●" : s.status === "completed" ? "✓" : s.status === "failed" ? "✗" : "○";
-			const statusColor = s.status === "active" ? "success" : s.status === "failed" ? "error" : "dim";
-			const prefix = theme.fg(statusColor, statusIcon);
-			const agentSuffix = s.agent ? theme.fg("dim", ` [${s.agent}]`) : "";
-			const modelInfo = s.progress?.modelOverride
-				? theme.fg(
-						"dim",
-						` ${Array.isArray(s.progress.modelOverride) ? s.progress.modelOverride[0] : s.progress.modelOverride}`,
-					)
-				: "";
-			const label =
-				s.kind === "main" ? `${prefix} ${s.label} (return)` : `${prefix} ${s.label}${agentSuffix}${modelInfo}`;
-
-			let description = s.description;
-			if (s.progress?.currentTool) {
-				const intent = s.progress.lastIntent;
-				description = intent ? `${s.progress.currentTool}: ${truncateToWidth(intent, 40)}` : s.progress.currentTool;
-			}
-
-			return { value: s.id, label, description };
-		});
-	}
-
 	handleInput(keyData: string): void {
+		// Ctrl+S (observe key) always closes the overlay
 		for (const key of this.#observeKeys) {
 			if (matchesKey(keyData, key)) {
-				if (this.#mode === "viewer") {
-					this.#setupPicker();
-					return;
-				}
 				this.#onDone();
 				return;
 			}
 		}
 
-		if (this.#mode === "picker") {
-			this.#selectList.handleInput(keyData);
-		} else if (this.#mode === "viewer") {
-			this.#handleViewerInput(keyData);
-		}
+		this.#handleViewerInput(keyData);
 	}
 
 	#handleViewerInput(keyData: string): void {
 		const entryCount = this.#viewerEntries.length;
 
-		// Escape — pop navigation or go to picker
+		// Escape — pop breadcrumb navigation or close overlay
 		if (matchesKey(keyData, "escape")) {
 			if (!this.#navigateBack()) {
-				this.#setupPicker();
+				this.#onDone();
 			}
 			return;
 		}
