@@ -72,7 +72,7 @@ export class SessionObserverOverlayComponent extends Container {
 	#selectList: SelectList;
 	#selectedSessionId?: string;
 	#observeKeys: KeyId[];
-	#transcriptCache?: { path: string; bytesRead: number; entries: SessionMessageEntry[] };
+	#transcriptCache?: { path: string; bytesRead: number; entries: SessionMessageEntry[]; model?: string };
 
 	// Scroll state
 	#scrollOffset = 0;
@@ -192,6 +192,12 @@ export class SessionObserverOverlayComponent extends Container {
 		const sessions = this.#registry.getSessions();
 		const session = sessions.find(s => s.id === this.#selectedSessionId);
 
+		// Load transcript first so model info is available for header
+		let messageEntries: SessionMessageEntry[] | null = null;
+		if (session?.sessionFile) {
+			messageEntries = this.#loadTranscript(session.sessionFile);
+		}
+
 		// Header
 		this.#viewerHeaderLines = [];
 		const breadcrumb = this.#buildBreadcrumb(session);
@@ -200,12 +206,13 @@ export class SessionObserverOverlayComponent extends Container {
 			const statusColor = session.status === "active" ? "success" : session.status === "failed" ? "error" : "dim";
 			const statusText = theme.fg(statusColor, `[${session.status}]`);
 			const agentTag = session.agent ? theme.fg("dim", ` ${session.agent}`) : "";
-			// Session position indicator for cycling
 			const subagentIds = this.#getSubagentSessionIds();
 			const posIdx = subagentIds.indexOf(this.#selectedSessionId ?? "");
 			const posLabel =
 				subagentIds.length > 1 && posIdx >= 0 ? theme.fg("dim", ` (${posIdx + 1}/${subagentIds.length})`) : "";
-			this.#viewerHeaderLines.push(`${theme.bold(session.label)} ${statusText}${agentTag}${posLabel}`);
+			const modelName = this.#transcriptCache?.model;
+			const modelLabel = modelName ? theme.fg("muted", ` · ${modelName}`) : "";
+			this.#viewerHeaderLines.push(`${theme.bold(session.label)} ${statusText}${agentTag}${posLabel}${modelLabel}`);
 		}
 
 		// Content
@@ -216,17 +223,13 @@ export class SessionObserverOverlayComponent extends Container {
 			contentLines.push(theme.fg("dim", "Session no longer available."));
 		} else if (!session.sessionFile) {
 			contentLines.push(theme.fg("dim", "No session file available yet."));
+		} else if (!messageEntries) {
+			contentLines.push(theme.fg("dim", "Unable to read session file."));
+		} else if (messageEntries.length === 0) {
+			contentLines.push(theme.fg("dim", "No messages yet."));
 		} else {
-			const messageEntries = this.#loadTranscript(session.sessionFile);
-			if (!messageEntries) {
-				contentLines.push(theme.fg("dim", "Unable to read session file."));
-			} else if (messageEntries.length === 0) {
-				contentLines.push(theme.fg("dim", "No messages yet."));
-			} else {
-				this.#buildTranscriptLines(messageEntries, contentLines);
-			}
+			this.#buildTranscriptLines(messageEntries, contentLines);
 		}
-
 		this.#renderedLines = contentLines;
 
 		// Footer
@@ -617,6 +620,13 @@ export class SessionObserverOverlayComponent extends Container {
 				for (const entry of newEntries) {
 					if (entry.type === "message") {
 						this.#transcriptCache.entries.push(entry as SessionMessageEntry);
+						// Extract model from first assistant message
+						const msg = (entry as SessionMessageEntry).message;
+						if (!this.#transcriptCache.model && msg.role === "assistant" && "model" in msg) {
+							this.#transcriptCache.model = (msg as any).model;
+						}
+					} else if (entry.type === "model_change" && "model" in entry) {
+						this.#transcriptCache.model = (entry as any).model;
 					}
 				}
 				this.#transcriptCache.bytesRead = fromByte + Buffer.byteLength(completeChunk, "utf-8");
@@ -645,7 +655,14 @@ export class SessionObserverOverlayComponent extends Container {
 			const statusColor = s.status === "active" ? "success" : s.status === "failed" ? "error" : "dim";
 			const prefix = theme.fg(statusColor, statusIcon);
 			const agentSuffix = s.agent ? theme.fg("dim", ` [${s.agent}]`) : "";
-			const label = s.kind === "main" ? `${prefix} ${s.label} (return)` : `${prefix} ${s.label}${agentSuffix}`;
+			const modelInfo = s.progress?.modelOverride
+				? theme.fg(
+						"dim",
+						` ${Array.isArray(s.progress.modelOverride) ? s.progress.modelOverride[0] : s.progress.modelOverride}`,
+					)
+				: "";
+			const label =
+				s.kind === "main" ? `${prefix} ${s.label} (return)` : `${prefix} ${s.label}${agentSuffix}${modelInfo}`;
 
 			let description = s.description;
 			if (s.progress?.currentTool) {
