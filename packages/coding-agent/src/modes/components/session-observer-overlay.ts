@@ -15,14 +15,23 @@
  *   - Enter on main session -> close overlay (jump back)
  */
 import type { ToolResultMessage } from "@oh-my-pi/pi-ai";
-import { Container, matchesKey, type SelectItem, SelectList, Spacer, Text } from "@oh-my-pi/pi-tui";
+import {
+	Container,
+	Markdown,
+	type MarkdownTheme,
+	matchesKey,
+	type SelectItem,
+	SelectList,
+	Spacer,
+	Text,
+} from "@oh-my-pi/pi-tui";
 import { formatDuration, formatNumber, logger } from "@oh-my-pi/pi-utils";
 import type { KeyId } from "../../config/keybindings";
 import type { SessionMessageEntry } from "../../session/session-manager";
 import { parseSessionEntries } from "../../session/session-manager";
 import { replaceTabs, truncateToWidth } from "../../tools/render-utils";
 import type { ObservableSession, SessionObserverRegistry } from "../session-observer-registry";
-import { getSelectListTheme, theme } from "../theme/theme";
+import { getMarkdownTheme, getSelectListTheme, theme } from "../theme/theme";
 import { DynamicBorder } from "./dynamic-border";
 
 type Mode = "picker" | "viewer";
@@ -82,6 +91,8 @@ export class SessionObserverOverlayComponent extends Container {
 	// Cached header/footer for viewer (rebuilt on refresh)
 	#viewerHeaderLines: string[] = [];
 	#viewerFooterLines: string[] = [];
+	// Markdown rendering
+	#mdTheme: MarkdownTheme = getMarkdownTheme();
 
 	constructor(registry: SessionObserverRegistry, onDone: () => void, observeKeys: KeyId[]) {
 		super();
@@ -360,8 +371,9 @@ export class SessionObserverOverlayComponent extends Container {
 					lines.push("");
 					if (isExpanded) {
 						lines.push(`${cursor} ${theme.fg("dim", `[${label}]`)}`);
-						for (const tl of text.trim().split("\n")) {
-							lines.push(`${INDENT}${theme.fg("muted", tl)}`);
+						const mdLines = this.#renderMarkdownToLines(text.trim());
+						for (const ml of mdLines) {
+							lines.push(ml);
 						}
 					} else {
 						const firstLine = text.trim().split("\n")[0];
@@ -378,6 +390,14 @@ export class SessionObserverOverlayComponent extends Container {
 		}
 	}
 
+	/** Render markdown text into indented lines using the theme's markdown renderer */
+	#renderMarkdownToLines(text: string, indent: string = INDENT): string[] {
+		const width = Math.max(40, (process.stdout.columns || 80) - indent.length - 4);
+		const md = new Markdown(text, 0, 0, this.#mdTheme);
+		const rendered = md.render(width);
+		return rendered.map(line => `${indent}${line.trimEnd()}`);
+	}
+
 	#renderThinkingLines(lines: string[], thinking: string, expanded: boolean, selected: boolean): void {
 		const cursor = selected ? theme.fg("accent", "▶") : " ";
 		const maxChars = expanded ? MAX_THINKING_CHARS_EXPANDED : MAX_THINKING_CHARS_COLLAPSED;
@@ -388,28 +408,51 @@ export class SessionObserverOverlayComponent extends Container {
 		lines.push(`${cursor} ${theme.fg("dim", "💭 Thinking")}${expandLabel}`);
 
 		const displayText = truncated ? `${thinking.slice(0, maxChars)}...` : thinking;
-		const thinkingLines = displayText.split("\n");
-		const maxLines = expanded ? 100 : 4;
-		for (let i = 0; i < Math.min(thinkingLines.length, maxLines); i++) {
-			lines.push(`${INDENT}${theme.fg("thinkingText", replaceTabs(thinkingLines[i]))}`);
-		}
-		if (thinkingLines.length > maxLines) {
-			lines.push(`${INDENT}${theme.fg("dim", `... ${thinkingLines.length - maxLines} more lines`)}`);
+		if (expanded) {
+			// Expanded thinking: render as markdown for readable formatting
+			const mdLines = this.#renderMarkdownToLines(displayText);
+			const maxLines = 100;
+			for (let i = 0; i < Math.min(mdLines.length, maxLines); i++) {
+				lines.push(mdLines[i]);
+			}
+			if (mdLines.length > maxLines) {
+				lines.push(`${INDENT}${theme.fg("dim", `... ${mdLines.length - maxLines} more lines`)}`);
+			}
+		} else {
+			// Collapsed thinking: brief italic preview
+			const thinkingLines = displayText.split("\n");
+			const maxLines = 4;
+			for (let i = 0; i < Math.min(thinkingLines.length, maxLines); i++) {
+				lines.push(`${INDENT}${theme.fg("thinkingText", replaceTabs(thinkingLines[i]))}`);
+			}
+			if (thinkingLines.length > maxLines) {
+				lines.push(`${INDENT}${theme.fg("dim", `... ${thinkingLines.length - maxLines} more lines`)}`);
+			}
 		}
 	}
 
 	#renderTextLines(lines: string[], text: string, expanded: boolean, selected: boolean): void {
 		const cursor = selected ? theme.fg("accent", "▶") : " ";
-		const textLines = text.split("\n");
-		const maxLines = expanded ? 50 : 5;
 
 		lines.push("");
 		lines.push(`${cursor} ${theme.fg("muted", "Response")}`);
-		for (let i = 0; i < Math.min(textLines.length, maxLines); i++) {
-			lines.push(`${INDENT}${textLines[i]}`);
-		}
-		if (textLines.length > maxLines) {
-			lines.push(`${INDENT}${theme.fg("dim", `... ${textLines.length - maxLines} more lines`)}`);
+
+		if (expanded) {
+			// Expanded: full markdown rendering
+			const mdLines = this.#renderMarkdownToLines(text);
+			for (const ml of mdLines) {
+				lines.push(ml);
+			}
+		} else {
+			// Collapsed: first few lines as plain text
+			const textLines = text.split("\n");
+			const maxLines = 5;
+			for (let i = 0; i < Math.min(textLines.length, maxLines); i++) {
+				lines.push(`${INDENT}${textLines[i]}`);
+			}
+			if (textLines.length > maxLines) {
+				lines.push(`${INDENT}${theme.fg("dim", `... ${textLines.length - maxLines} more lines`)}`);
+			}
 		}
 	}
 
