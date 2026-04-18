@@ -285,7 +285,14 @@ export class SessionObserverOverlayComponent extends Container {
 					const isSelected = entryIndex === this.#selectedEntryIndex;
 					const cursor = isSelected ? theme.fg("accent", "▶") : " ";
 					lines.push("");
-					lines.push(`${cursor} ${theme.fg("error", `✗ Error: ${msg.errorMessage}`)}`);
+					const errorLines = msg.errorMessage.split("\n");
+					const maxWidth = Math.max(40, (process.stdout.columns || 80) - 6);
+					lines.push(
+						`${cursor} ${theme.fg("error", `✗ Error: ${truncateToWidth(replaceTabs(errorLines[0]), maxWidth)}`)}`,
+					);
+					for (let i = 1; i < errorLines.length; i++) {
+						lines.push(`${INDENT}${theme.fg("error", truncateToWidth(replaceTabs(errorLines[i]), maxWidth))}`);
+					}
 					this.#viewerEntries.push({ lineStart: startLine, lineCount: lines.length - startLine, kind: "text" });
 					entryIndex++;
 				} else {
@@ -642,7 +649,15 @@ export class SessionObserverOverlayComponent extends Container {
 		// Page Down
 		if (matchesKey(keyData, "pageDown")) {
 			if (entryCount > 0) {
+				const prevIndex = this.#selectedEntryIndex;
 				this.#selectedEntryIndex = Math.min(this.#selectedEntryIndex + 5, entryCount - 1);
+				// If selection didn't move (bottom of list or single oversized entry), fall back to line scroll
+				if (this.#selectedEntryIndex === prevIndex) {
+					this.#scrollOffset = Math.min(
+						this.#scrollOffset + PAGE_SIZE,
+						Math.max(0, this.#renderedLines.length - this.#viewportHeight),
+					);
+				}
 			} else {
 				this.#scrollOffset = Math.min(
 					this.#scrollOffset + PAGE_SIZE,
@@ -656,7 +671,12 @@ export class SessionObserverOverlayComponent extends Container {
 		// Page Up
 		if (matchesKey(keyData, "pageUp")) {
 			if (entryCount > 0) {
+				const prevIndex = this.#selectedEntryIndex;
 				this.#selectedEntryIndex = Math.max(this.#selectedEntryIndex - 5, 0);
+				// If selection didn't move (top of list or single oversized entry), fall back to line scroll
+				if (this.#selectedEntryIndex === prevIndex) {
+					this.#scrollOffset = Math.max(this.#scrollOffset - PAGE_SIZE, 0);
+				}
 			} else {
 				this.#scrollOffset = Math.max(this.#scrollOffset - PAGE_SIZE, 0);
 			}
