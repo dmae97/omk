@@ -321,37 +321,52 @@ export class SessionObserverOverlayComponent extends Container {
 			const msg = entry.message;
 
 			if (msg.role === "assistant") {
-				for (const content of msg.content) {
-					if (content.type === "thinking" && content.thinking.trim()) {
-						const startLine = lines.length;
-						const isExpanded = this.#expandedEntries.has(entryIndex);
-						const isSelected = entryIndex === this.#selectedEntryIndex;
-						this.#renderThinkingLines(lines, content.thinking.trim(), isExpanded, isSelected);
-						this.#viewerEntries.push({
-							lineStart: startLine,
-							lineCount: lines.length - startLine,
-							kind: "thinking",
-						});
-						entryIndex++;
-					} else if (content.type === "text" && content.text.trim()) {
-						const startLine = lines.length;
-						const isExpanded = this.#expandedEntries.has(entryIndex);
-						const isSelected = entryIndex === this.#selectedEntryIndex;
-						this.#renderTextLines(lines, content.text.trim(), isExpanded, isSelected);
-						this.#viewerEntries.push({ lineStart: startLine, lineCount: lines.length - startLine, kind: "text" });
-						entryIndex++;
-					} else if (content.type === "toolCall") {
-						const startLine = lines.length;
-						const isExpanded = this.#expandedEntries.has(entryIndex);
-						const isSelected = entryIndex === this.#selectedEntryIndex;
-						const result = toolResults.get(content.id);
-						this.#renderToolCallLines(lines, content, result, isExpanded, isSelected);
-						this.#viewerEntries.push({
-							lineStart: startLine,
-							lineCount: lines.length - startLine,
-							kind: "toolCall",
-						});
-						entryIndex++;
+				// Handle error messages with empty content
+				if (msg.content.length === 0 && msg.errorMessage) {
+					const startLine = lines.length;
+					const isSelected = entryIndex === this.#selectedEntryIndex;
+					const cursor = isSelected ? theme.fg("accent", "▶") : " ";
+					lines.push("");
+					lines.push(`${cursor} ${theme.fg("error", `✗ Error: ${msg.errorMessage}`)}`);
+					this.#viewerEntries.push({ lineStart: startLine, lineCount: lines.length - startLine, kind: "text" });
+					entryIndex++;
+				} else {
+					for (const content of msg.content) {
+						if (content.type === "thinking" && content.thinking.trim()) {
+							const startLine = lines.length;
+							const isExpanded = this.#expandedEntries.has(entryIndex);
+							const isSelected = entryIndex === this.#selectedEntryIndex;
+							this.#renderThinkingLines(lines, content.thinking.trim(), isExpanded, isSelected);
+							this.#viewerEntries.push({
+								lineStart: startLine,
+								lineCount: lines.length - startLine,
+								kind: "thinking",
+							});
+							entryIndex++;
+						} else if (content.type === "text" && content.text.trim()) {
+							const startLine = lines.length;
+							const isExpanded = this.#expandedEntries.has(entryIndex);
+							const isSelected = entryIndex === this.#selectedEntryIndex;
+							this.#renderTextLines(lines, content.text.trim(), isExpanded, isSelected);
+							this.#viewerEntries.push({
+								lineStart: startLine,
+								lineCount: lines.length - startLine,
+								kind: "text",
+							});
+							entryIndex++;
+						} else if (content.type === "toolCall") {
+							const startLine = lines.length;
+							const isExpanded = this.#expandedEntries.has(entryIndex);
+							const isSelected = entryIndex === this.#selectedEntryIndex;
+							const result = toolResults.get(content.id);
+							this.#renderToolCallLines(lines, content, result, isExpanded, isSelected);
+							this.#viewerEntries.push({
+								lineStart: startLine,
+								lineCount: lines.length - startLine,
+								kind: "toolCall",
+							});
+							entryIndex++;
+						}
 					}
 				}
 			} else if (msg.role === "user" || msg.role === "developer") {
