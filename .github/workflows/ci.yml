@@ -34,11 +34,7 @@ jobs:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
       - run: bun install --frozen-lockfile
-      - name: Type check changed packages
-        if: github.event_name == 'pull_request'
-        run: bun run ci:check:affected
-      - name: Type check full workspace
-        if: github.event_name != 'pull_request'
+      - name: Type check workspace
         run: bun run ci:check:full
 
   native:
@@ -139,11 +135,7 @@ jobs:
           sudo ln -sf /usr/bin/convert /usr/local/bin/magick
       - run: bun install --frozen-lockfile
       - run: bun run build:native
-      - name: Test changed packages
-        if: github.event_name == 'pull_request'
-        run: bun run ci:test:affected
-      - name: Test full workspace
-        if: github.event_name != 'pull_request'
+      - name: Test workspace
         run: bun run ci:test:full
       - name: CLI smoke test
         run: bun run ci:test:smoke
