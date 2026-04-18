@@ -420,8 +420,9 @@ export class SessionObserverOverlayComponent extends Container {
 			// Collapsed: first few lines as plain text
 			const textLines = text.split("\n");
 			const maxLines = 5;
+			const maxWidth = Math.max(40, (process.stdout.columns || 80) - INDENT.length - 2);
 			for (let i = 0; i < Math.min(textLines.length, maxLines); i++) {
-				lines.push(`${INDENT}${textLines[i]}`);
+				lines.push(`${INDENT}${truncateToWidth(replaceTabs(textLines[i]), maxWidth)}`);
 			}
 			if (textLines.length > maxLines) {
 				lines.push(`${INDENT}${theme.fg("dim", `... ${textLines.length - maxLines} more lines`)}`);
@@ -752,11 +753,19 @@ export class SessionObserverOverlayComponent extends Container {
 		const entryTop = entry.lineStart;
 		const entryBottom = entry.lineStart + entry.lineCount;
 
-		if (entryTop < this.#scrollOffset) {
-			this.#scrollOffset = Math.max(0, entryTop - 1);
-		}
-		if (entryBottom > this.#scrollOffset + this.#viewportHeight) {
-			this.#scrollOffset = Math.max(0, entryBottom - this.#viewportHeight + 1);
+		if (entry.lineCount >= this.#viewportHeight) {
+			// Entry taller than viewport: ensure top is visible, don't snap to bottom
+			if (entryTop < this.#scrollOffset || entryTop >= this.#scrollOffset + this.#viewportHeight) {
+				this.#scrollOffset = Math.max(0, entryTop - 1);
+			}
+		} else {
+			// Entry fits in viewport: ensure it's fully visible
+			if (entryTop < this.#scrollOffset) {
+				this.#scrollOffset = Math.max(0, entryTop - 1);
+			}
+			if (entryBottom > this.#scrollOffset + this.#viewportHeight) {
+				this.#scrollOffset = Math.max(0, entryBottom - this.#viewportHeight + 1);
+			}
 		}
 	}
 }
