@@ -9,7 +9,7 @@
  * Lifecycle:
  *   - shortcut opens picker
  *   - Enter on a subagent -> viewer
- *   - shortcut while in viewer -> back to picker
+ *   - shortcut while in viewer -> back to picker (or pop breadcrumb)
  *   - Esc from viewer -> back to picker (or pop breadcrumb)
  *   - Esc from picker -> close overlay
  *   - Enter on main session -> close overlay (jump back)
@@ -27,38 +27,32 @@ import { DynamicBorder } from "./dynamic-border";
 
 type Mode = "picker" | "viewer";
 
-/** Max thinking characters to show in collapsed state */
+/** Max thinking characters in collapsed state */
 const MAX_THINKING_CHARS_COLLAPSED = 200;
-/** Max thinking characters to show in expanded state */
-const MAX_THINKING_CHARS_EXPANDED = 2000;
+/** Max thinking characters in expanded state */
+const MAX_THINKING_CHARS_EXPANDED = 4000;
 /** Max tool args characters to display */
 const MAX_TOOL_ARGS_CHARS = 500;
-/** Max tool result text in collapsed state */
+/** Max tool result lines in collapsed state */
 const MAX_TOOL_RESULT_LINES_COLLAPSED = 3;
-/** Max tool result text in expanded state */
-const MAX_TOOL_RESULT_LINES_EXPANDED = 20;
-/** Max line width for tool results */
-const MAX_TOOL_RESULT_LINE_WIDTH = 90;
+/** Max tool result lines in expanded state */
+const MAX_TOOL_RESULT_LINES_EXPANDED = 30;
 /** Lines per page for PageUp/PageDown */
 const PAGE_SIZE = 15;
+/** Left indent for content under entry headers */
+const INDENT = "    ";
 
 /** Represents a rendered entry in the viewer for selection/expand tracking */
 interface ViewerEntry {
-	/** Index in the rendered lines array where this entry starts */
 	lineStart: number;
-	/** Number of lines this entry occupies */
 	lineCount: number;
-	/** Type of entry for rendering decisions */
 	kind: "thinking" | "text" | "toolCall" | "user";
-	/** Original data for re-rendering on expand/collapse */
-	data: unknown;
 }
 
 /** Breadcrumb item for nested session navigation */
 interface BreadcrumbItem {
 	sessionId: string;
 	label: string;
-	/** Session file path to restore when navigating back */
 	sessionFile: string;
 }
 
@@ -67,26 +61,27 @@ export class SessionObserverOverlayComponent extends Container {
 	#onDone: () => void;
 	#mode: Mode = "picker";
 	#selectList: SelectList;
-	#viewerContainer: Container;
 	#selectedSessionId?: string;
 	#observeKeys: KeyId[];
-	/** Cached parsed transcript per session file to avoid reparsing on every refresh */
 	#transcriptCache?: { path: string; bytesRead: number; entries: SessionMessageEntry[] };
 
-	// --- Scroll state (Bead 3) ---
+	// Scroll state
 	#scrollOffset = 0;
 	#renderedLines: string[] = [];
 	#viewportHeight = 20;
-	/** Whether we were at the bottom before the last content update (for auto-scroll) */
 	#wasAtBottom = true;
 
-	// --- Entry selection & expand/collapse (Bead 4) ---
+	// Entry selection & expand/collapse
 	#viewerEntries: ViewerEntry[] = [];
 	#selectedEntryIndex = 0;
 	#expandedEntries = new Set<number>();
 
-	// --- Breadcrumb navigation (Bead 6) ---
+	// Breadcrumb navigation
 	#navigationStack: BreadcrumbItem[] = [];
+
+	// Cached header/footer for viewer (rebuilt on refresh)
+	#viewerHeaderLines: string[] = [];
+	#viewerFooterLines: string[] = [];
 
 	constructor(registry: SessionObserverRegistry, onDone: () => void, observeKeys: KeyId[]) {
 		super();
@@ -94,15 +89,21 @@ export class SessionObserverOverlayComponent extends Container {
 		this.#onDone = onDone;
 		this.#observeKeys = observeKeys;
 		this.#selectList = new SelectList([], 0, getSelectListTheme());
-		this.#viewerContainer = new Container();
-
 		this.#setupPicker();
+	}
+
+	// --- Override render to implement viewport scrolling in viewer mode ---
+	override render(width: number): string[] {
+		if (this.#mode === "picker") {
+			return super.render(width);
+		}
+		// Viewer mode: build all lines, then slice to viewport
+		return this.#renderViewer(width);
 	}
 
 	#setupPicker(): void {
 		this.#mode = "picker";
 		this.children = [];
-		// Reset viewer state
 		this.#navigationStack = [];
 		this.#scrollOffset = 0;
 		this.#selectedEntryIndex = 0;
@@ -138,9 +139,8 @@ export class SessionObserverOverlayComponent extends Container {
 		this.#scrollOffset = 0;
 		this.#selectedEntryIndex = 0;
 		this.#expandedEntries.clear();
-		this.#viewerContainer = new Container();
 		this.#wasAtBottom = true;
-		this.#refreshViewer();
+		this.#rebuildViewerContent();
 	}
 
 	/** Rebuild content from live registry data */
@@ -148,56 +148,44 @@ export class SessionObserverOverlayComponent extends Container {
 		if (this.#mode === "picker") {
 			this.#refreshPickerItems();
 		} else if (this.#mode === "viewer" && this.#selectedSessionId) {
-			// Check if we were at bottom before refresh for auto-scroll
 			const totalLines = this.#renderedLines.length;
 			this.#wasAtBottom = this.#scrollOffset >= totalLines - this.#viewportHeight;
-			this.#refreshViewer();
+			this.#rebuildViewerContent();
 		}
 	}
 
 	#refreshPickerItems(): void {
-		// Preserve selection across refresh by matching on value
 		const previousValue = this.#selectList.getSelectedItem()?.value;
-
 		const items = this.#buildPickerItems();
 		const newList = new SelectList(items, Math.min(items.length, 12), getSelectListTheme());
 		newList.onSelect = this.#selectList.onSelect;
 		newList.onCancel = this.#selectList.onCancel;
-
 		if (previousValue) {
 			const newIndex = items.findIndex(i => i.value === previousValue);
 			if (newIndex >= 0) newList.setSelectedIndex(newIndex);
 		}
-
 		const idx = this.children.indexOf(this.#selectList);
-		if (idx >= 0) {
-			this.children[idx] = newList;
-		}
+		if (idx >= 0) this.children[idx] = newList;
 		this.#selectList = newList;
 	}
 
-	#refreshViewer(): void {
-		this.#viewerContainer.clear();
-		this.children = [];
-
+	/** Rebuild the transcript content lines (called on setup and refresh) */
+	#rebuildViewerContent(): void {
 		const sessions = this.#registry.getSessions();
 		const session = sessions.find(s => s.id === this.#selectedSessionId);
 
-		// Build header
-		const headerLines: string[] = [];
-
-		// Breadcrumb header (Bead 5 + 6)
+		// Header
+		this.#viewerHeaderLines = [];
 		const breadcrumb = this.#buildBreadcrumb(session);
-		headerLines.push(theme.fg("accent", breadcrumb));
-
+		this.#viewerHeaderLines.push(theme.fg("accent", breadcrumb));
 		if (session) {
 			const statusColor = session.status === "active" ? "success" : session.status === "failed" ? "error" : "dim";
 			const statusText = theme.fg(statusColor, `[${session.status}]`);
 			const agentTag = session.agent ? theme.fg("dim", ` ${session.agent}`) : "";
-			headerLines.push(`${theme.bold(session.label)} ${statusText}${agentTag}`);
+			this.#viewerHeaderLines.push(`${theme.bold(session.label)} ${statusText}${agentTag}`);
 		}
 
-		// Build transcript content
+		// Content
 		const contentLines: string[] = [];
 		this.#viewerEntries = [];
 
@@ -216,59 +204,70 @@ export class SessionObserverOverlayComponent extends Container {
 			}
 		}
 
-		// Build stats footer
-		const statsLine = this.#buildStatsLine(session);
-
-		// Build footer with key hints
-		const footerHints = theme.fg("dim", "j/k:scroll  Enter:expand  Esc:back  PgUp/PgDn:page");
-
-		// Compute viewport: terminal height minus header, borders, footer
-		const termRows = process.stdout.rows || 40;
-		const headerHeight = headerLines.length + 2; // +2 for border + spacer
-		const footerHeight = 3; // stats + hints + border
-		this.#viewportHeight = Math.max(5, termRows - headerHeight - footerHeight);
-
-		// Store all content lines for scrolling
 		this.#renderedLines = contentLines;
+
+		// Footer
+		this.#viewerFooterLines = [];
+		const statsLine = this.#buildStatsLine(session);
+		if (statsLine) this.#viewerFooterLines.push(statsLine);
+		this.#viewerFooterLines.push(
+			theme.fg("dim", "j/k:navigate  Enter:expand/collapse  Esc:back  PgUp/PgDn:page  g/G:top/bottom"),
+		);
 
 		// Auto-scroll to bottom if we were at bottom
 		if (this.#wasAtBottom) {
 			this.#scrollOffset = Math.max(0, contentLines.length - this.#viewportHeight);
 		}
+	}
+
+	/** Produce the final viewer output for the overlay system */
+	#renderViewer(width: number): string[] {
+		const termHeight = process.stdout.rows || 40;
+
+		// Compute viewport: total height minus header chrome and footer chrome
+		// Header: border(1) + headerLines + border(1) = headerLines.length + 2
+		// Footer: spacer(1) + scrollInfo(1) + footerLines + border(1) = footerLines.length + 2
+		const headerChrome = this.#viewerHeaderLines.length + 2;
+		const footerChrome = this.#viewerFooterLines.length + 2;
+		this.#viewportHeight = Math.max(5, termHeight - headerChrome - footerChrome);
+
 		// Clamp scroll offset
-		this.#scrollOffset = Math.max(
-			0,
-			Math.min(this.#scrollOffset, Math.max(0, contentLines.length - this.#viewportHeight)),
-		);
+		const maxScroll = Math.max(0, this.#renderedLines.length - this.#viewportHeight);
+		this.#scrollOffset = Math.max(0, Math.min(this.#scrollOffset, maxScroll));
 
-		// Build final display
-		this.addChild(new DynamicBorder());
+		const lines: string[] = [];
 
-		// Header
-		for (const line of headerLines) {
-			this.addChild(new Text(line, 1, 0));
+		// --- Header ---
+		lines.push(...new DynamicBorder().render(width));
+		for (const hl of this.#viewerHeaderLines) {
+			lines.push(` ${hl}`);
 		}
-		this.addChild(new DynamicBorder());
+		lines.push(...new DynamicBorder().render(width));
 
-		// Scrolled content viewport
-		const visibleLines = contentLines.slice(this.#scrollOffset, this.#scrollOffset + this.#viewportHeight);
-		for (const line of visibleLines) {
-			this.addChild(new Text(line, 1, 0));
+		// --- Scrolled content viewport ---
+		const visibleLines = this.#renderedLines.slice(this.#scrollOffset, this.#scrollOffset + this.#viewportHeight);
+		for (const vl of visibleLines) {
+			lines.push(` ${vl}`);
+		}
+		// Pad to fill viewport if content is shorter
+		const pad = this.#viewportHeight - visibleLines.length;
+		for (let i = 0; i < pad; i++) {
+			lines.push("");
 		}
 
-		// Scroll indicator
+		// --- Footer ---
 		const scrollInfo =
-			contentLines.length > this.#viewportHeight
-				? theme.fg(
-						"dim",
-						` [${this.#scrollOffset + 1}-${Math.min(this.#scrollOffset + this.#viewportHeight, contentLines.length)}/${contentLines.length}]`,
-					)
+			this.#renderedLines.length > this.#viewportHeight
+				? ` ${theme.fg("dim", `[${this.#scrollOffset + 1}-${Math.min(this.#scrollOffset + this.#viewportHeight, this.#renderedLines.length)}/${this.#renderedLines.length}]`)}`
 				: "";
+		lines.push("");
+		lines.push(` ${this.#viewerFooterLines[0] ?? ""}${scrollInfo}`);
+		for (let i = 1; i < this.#viewerFooterLines.length; i++) {
+			lines.push(` ${this.#viewerFooterLines[i]}`);
+		}
+		lines.push(...new DynamicBorder().render(width));
 
-		this.addChild(new Spacer(1));
-		this.addChild(new Text(`${statsLine}${scrollInfo}`, 1, 0));
-		this.addChild(new Text(footerHints, 1, 0));
-		this.addChild(new DynamicBorder());
+		return lines;
 	}
 
 	#buildBreadcrumb(session: ObservableSession | undefined): string {
@@ -276,9 +275,7 @@ export class SessionObserverOverlayComponent extends Container {
 		for (const item of this.#navigationStack) {
 			parts.push(item.label);
 		}
-		if (session) {
-			parts.push(session.label);
-		}
+		if (session) parts.push(session.label);
 		return parts.join(" > ");
 	}
 
@@ -293,7 +290,7 @@ export class SessionObserverOverlayComponent extends Container {
 	}
 
 	#buildTranscriptLines(messageEntries: SessionMessageEntry[], lines: string[]): void {
-		// Build a tool call ID -> tool result map for matching
+		// Build a tool call ID -> tool result map
 		const toolResults = new Map<string, ToolResultMessage>();
 		for (const entry of messageEntries) {
 			if (entry.message.role === "toolResult") {
@@ -316,27 +313,14 @@ export class SessionObserverOverlayComponent extends Container {
 							lineStart: startLine,
 							lineCount: lines.length - startLine,
 							kind: "thinking",
-							data: content,
 						});
 						entryIndex++;
 					} else if (content.type === "text" && content.text.trim()) {
 						const startLine = lines.length;
+						const isExpanded = this.#expandedEntries.has(entryIndex);
 						const isSelected = entryIndex === this.#selectedEntryIndex;
-						lines.push("");
-						const prefix = isSelected ? theme.fg("accent", "▶ ") : "  ";
-						const textLines = content.text.trim().split("\n").slice(0, 5);
-						for (const tl of textLines) {
-							lines.push(`${prefix}${tl}`);
-						}
-						if (content.text.trim().split("\n").length > 5) {
-							lines.push(`  ${theme.fg("dim", `... ${content.text.trim().split("\n").length - 5} more lines`)}`);
-						}
-						this.#viewerEntries.push({
-							lineStart: startLine,
-							lineCount: lines.length - startLine,
-							kind: "text",
-							data: content,
-						});
+						this.#renderTextLines(lines, content.text.trim(), isExpanded, isSelected);
+						this.#viewerEntries.push({ lineStart: startLine, lineCount: lines.length - startLine, kind: "text" });
 						entryIndex++;
 					} else if (content.type === "toolCall") {
 						const startLine = lines.length;
@@ -348,7 +332,6 @@ export class SessionObserverOverlayComponent extends Container {
 							lineStart: startLine,
 							lineCount: lines.length - startLine,
 							kind: "toolCall",
-							data: { call: content, result },
 						});
 						entryIndex++;
 					}
@@ -364,45 +347,61 @@ export class SessionObserverOverlayComponent extends Container {
 				if (text.trim()) {
 					const startLine = lines.length;
 					const isSelected = entryIndex === this.#selectedEntryIndex;
+					const isExpanded = this.#expandedEntries.has(entryIndex);
 					const label = msg.role === "developer" ? "System" : "User";
-					const prefix = isSelected ? theme.fg("accent", "▶ ") : "  ";
+					const cursor = isSelected ? theme.fg("accent", "▶") : " ";
 					lines.push("");
-					lines.push(
-						`${prefix}${theme.fg("dim", `[${label}]`)} ${theme.fg("muted", truncateToWidth(text.trim(), 80))}`,
-					);
-					this.#viewerEntries.push({
-						lineStart: startLine,
-						lineCount: lines.length - startLine,
-						kind: "user",
-						data: msg,
-					});
+					if (isExpanded) {
+						lines.push(`${cursor} ${theme.fg("dim", `[${label}]`)}`);
+						for (const tl of text.trim().split("\n")) {
+							lines.push(`${INDENT}${theme.fg("muted", tl)}`);
+						}
+					} else {
+						const preview = text.trim().split("\n")[0];
+						lines.push(`${cursor} ${theme.fg("dim", `[${label}]`)} ${theme.fg("muted", preview)}`);
+						if (text.trim().split("\n").length > 1) {
+							lines.push(`${INDENT}${theme.fg("dim", `... ${text.trim().split("\n").length - 1} more lines`)}`);
+						}
+					}
+					this.#viewerEntries.push({ lineStart: startLine, lineCount: lines.length - startLine, kind: "user" });
 					entryIndex++;
 				}
 			}
-			// toolResult entries are rendered inline with their tool calls above
 		}
 	}
 
 	#renderThinkingLines(lines: string[], thinking: string, expanded: boolean, selected: boolean): void {
-		const prefix = selected ? theme.fg("accent", "▶ ") : "  ";
+		const cursor = selected ? theme.fg("accent", "▶") : " ";
 		const maxChars = expanded ? MAX_THINKING_CHARS_EXPANDED : MAX_THINKING_CHARS_COLLAPSED;
-		const expandHint =
-			!expanded && thinking.length > MAX_THINKING_CHARS_COLLAPSED ? theme.fg("dim", " [Enter to expand]") : "";
+		const truncated = thinking.length > maxChars;
+		const expandLabel = !expanded && truncated ? theme.fg("dim", " ↵") : "";
 
 		lines.push("");
-		lines.push(`${prefix}${theme.fg("dim", "💭 Thinking")}${expandHint}`);
+		lines.push(`${cursor} ${theme.fg("dim", "💭 Thinking")}${expandLabel}`);
 
-		const displayText = thinking.length > maxChars ? `${thinking.slice(0, maxChars)}...` : thinking;
-
+		const displayText = truncated ? `${thinking.slice(0, maxChars)}...` : thinking;
 		const thinkingLines = displayText.split("\n");
-		const maxLines = expanded ? 50 : 4;
+		const maxLines = expanded ? 100 : 4;
 		for (let i = 0; i < Math.min(thinkingLines.length, maxLines); i++) {
-			lines.push(
-				`    ${theme.fg("thinkingText", truncateToWidth(replaceTabs(thinkingLines[i]), MAX_TOOL_RESULT_LINE_WIDTH))}`,
-			);
+			lines.push(`${INDENT}${theme.fg("thinkingText", replaceTabs(thinkingLines[i]))}`);
 		}
 		if (thinkingLines.length > maxLines) {
-			lines.push(`    ${theme.fg("dim", `... ${thinkingLines.length - maxLines} more lines`)}`);
+			lines.push(`${INDENT}${theme.fg("dim", `... ${thinkingLines.length - maxLines} more lines`)}`);
+		}
+	}
+
+	#renderTextLines(lines: string[], text: string, expanded: boolean, selected: boolean): void {
+		const cursor = selected ? theme.fg("accent", "▶") : " ";
+		const textLines = text.split("\n");
+		const maxLines = expanded ? 50 : 5;
+
+		lines.push("");
+		lines.push(`${cursor} ${theme.fg("muted", "Response")}`);
+		for (let i = 0; i < Math.min(textLines.length, maxLines); i++) {
+			lines.push(`${INDENT}${textLines[i]}`);
+		}
+		if (textLines.length > maxLines) {
+			lines.push(`${INDENT}${theme.fg("dim", `... ${textLines.length - maxLines} more lines`)}`);
 		}
 	}
 
@@ -413,27 +412,26 @@ export class SessionObserverOverlayComponent extends Container {
 		expanded: boolean,
 		selected: boolean,
 	): void {
-		const prefix = selected ? theme.fg("accent", "▶ ") : "  ";
+		const cursor = selected ? theme.fg("accent", "▶") : " ";
 		lines.push("");
 
-		// Tool call header with intent
-		const intentStr = call.intent ? theme.fg("dim", ` ${truncateToWidth(call.intent, 50)}`) : "";
-		lines.push(`${prefix}${theme.fg("accent", "▸")} ${theme.bold(theme.fg("muted", call.name))}${intentStr}`);
+		// Tool call header
+		const intentStr = call.intent ? theme.fg("dim", ` ${call.intent}`) : "";
+		lines.push(`${cursor} ${theme.fg("accent", "▸")} ${theme.bold(theme.fg("muted", call.name))}${intentStr}`);
 
 		// Key arguments
 		const argSummary = this.#formatToolArgs(call.name, call.arguments);
 		if (argSummary) {
-			lines.push(`    ${theme.fg("dim", argSummary)}`);
+			lines.push(`${INDENT}${theme.fg("dim", argSummary)}`);
 		}
 
 		// Tool result
 		if (result) {
-			this.#renderToolResultLines(lines, call.name, result, expanded);
+			this.#renderToolResultLines(lines, result, expanded);
 		}
 	}
 
-	/** Rich tool result rendering (Bead 2) — per-tool-type display */
-	#renderToolResultLines(lines: string[], toolName: string, result: ToolResultMessage, expanded: boolean): void {
+	#renderToolResultLines(lines: string[], result: ToolResultMessage, expanded: boolean): void {
 		const textParts = result.content
 			.filter((p): p is { type: "text"; text: string } => p.type === "text")
 			.map(p => p.text);
@@ -441,119 +439,47 @@ export class SessionObserverOverlayComponent extends Container {
 
 		if (result.isError) {
 			const errorLines = text.split("\n");
-			const maxErrorLines = expanded ? 10 : 2;
-			lines.push(
-				`    ${theme.fg("error", `✗ ${truncateToWidth(replaceTabs(errorLines[0] || "Error"), MAX_TOOL_RESULT_LINE_WIDTH)}`)}`,
-			);
+			const maxErrorLines = expanded ? 15 : 2;
+			lines.push(`${INDENT}${theme.fg("error", `✗ ${replaceTabs(errorLines[0] || "Error")}`)}`);
 			for (let i = 1; i < Math.min(errorLines.length, maxErrorLines); i++) {
-				lines.push(
-					`      ${theme.fg("error", truncateToWidth(replaceTabs(errorLines[i]), MAX_TOOL_RESULT_LINE_WIDTH))}`,
-				);
+				lines.push(`${INDENT}  ${theme.fg("error", replaceTabs(errorLines[i]))}`);
 			}
 			if (errorLines.length > maxErrorLines) {
-				lines.push(`      ${theme.fg("dim", `... ${errorLines.length - maxErrorLines} more lines`)}`);
+				lines.push(`${INDENT}  ${theme.fg("dim", `... ${errorLines.length - maxErrorLines} more lines`)}`);
 			}
 			return;
 		}
 
 		if (!text) {
-			lines.push(`    ${theme.fg("dim", "✓ done")}`);
+			lines.push(`${INDENT}${theme.fg("dim", "✓ done")}`);
 			return;
 		}
 
 		const resultLines = text.split("\n");
 		const maxLines = expanded ? MAX_TOOL_RESULT_LINES_EXPANDED : MAX_TOOL_RESULT_LINES_COLLAPSED;
 
-		// Per-tool-type rendering
-		switch (toolName) {
-			case "bash":
-			case "python": {
-				// Show command output with line preview
-				const displayLines = resultLines.slice(0, maxLines);
-				lines.push(`    ${theme.fg("success", "✓")} ${theme.fg("dim", `${resultLines.length} lines`)}`);
-				for (const rl of displayLines) {
-					lines.push(`      ${theme.fg("dim", truncateToWidth(replaceTabs(rl), MAX_TOOL_RESULT_LINE_WIDTH))}`);
-				}
-				if (resultLines.length > maxLines) {
-					lines.push(`      ${theme.fg("dim", `... ${resultLines.length - maxLines} more`)}`);
-				}
-				break;
-			}
-			case "read":
-			case "grep":
-			case "find":
-			case "ast_grep": {
-				// Show search/read results
-				const displayLines = resultLines.slice(0, maxLines);
-				lines.push(`    ${theme.fg("success", "✓")} ${theme.fg("dim", `${resultLines.length} lines`)}`);
-				for (const rl of displayLines) {
-					lines.push(`      ${theme.fg("dim", truncateToWidth(replaceTabs(rl), MAX_TOOL_RESULT_LINE_WIDTH))}`);
-				}
-				if (resultLines.length > maxLines) {
-					lines.push(`      ${theme.fg("dim", `... ${resultLines.length - maxLines} more`)}`);
-				}
-				break;
-			}
-			case "edit":
-			case "write":
-			case "ast_edit": {
-				// Show file path + brief summary
-				if (resultLines.length === 1) {
-					lines.push(
-						`    ${theme.fg("success", "✓")} ${theme.fg("dim", truncateToWidth(replaceTabs(resultLines[0]), MAX_TOOL_RESULT_LINE_WIDTH))}`,
-					);
-				} else {
-					lines.push(`    ${theme.fg("success", "✓")} ${theme.fg("dim", `${resultLines.length} lines`)}`);
-					const displayLines = resultLines.slice(0, expanded ? 8 : 2);
-					for (const rl of displayLines) {
-						lines.push(`      ${theme.fg("dim", truncateToWidth(replaceTabs(rl), MAX_TOOL_RESULT_LINE_WIDTH))}`);
-					}
-					if (resultLines.length > displayLines.length) {
-						lines.push(`      ${theme.fg("dim", `... ${resultLines.length - displayLines.length} more`)}`);
-					}
-				}
-				break;
-			}
-			case "task": {
-				// Show task result - detect nested sessions for breadcrumb nav (Bead 6)
-				lines.push(`    ${theme.fg("success", "✓")} ${theme.fg("dim", "task completed")}`);
-				const displayLines = resultLines.slice(0, maxLines);
-				for (const rl of displayLines) {
-					lines.push(`      ${theme.fg("dim", truncateToWidth(replaceTabs(rl), MAX_TOOL_RESULT_LINE_WIDTH))}`);
-				}
-				if (resultLines.length > maxLines) {
-					lines.push(`      ${theme.fg("dim", `... ${resultLines.length - maxLines} more`)}`);
-				}
-				break;
-			}
-			default: {
-				// Generic rendering
-				if (resultLines.length === 1 && text.length < 80) {
-					lines.push(
-						`    ${theme.fg("success", "✓")} ${theme.fg("dim", truncateToWidth(replaceTabs(text), MAX_TOOL_RESULT_LINE_WIDTH))}`,
-					);
-				} else {
-					lines.push(`    ${theme.fg("success", "✓")} ${theme.fg("dim", `${resultLines.length} lines`)}`);
-					const displayLines = resultLines.slice(0, maxLines);
-					for (const rl of displayLines) {
-						lines.push(`      ${theme.fg("dim", truncateToWidth(replaceTabs(rl), MAX_TOOL_RESULT_LINE_WIDTH))}`);
-					}
-					if (resultLines.length > maxLines) {
-						lines.push(`      ${theme.fg("dim", `... ${resultLines.length - maxLines} more`)}`);
-					}
-				}
-				break;
-			}
+		// Status line
+		const statusPrefix = `${INDENT}${theme.fg("success", "✓")}`;
+
+		if (resultLines.length === 1 && text.length < 100) {
+			lines.push(`${statusPrefix} ${theme.fg("dim", replaceTabs(text))}`);
+			return;
+		}
+
+		lines.push(`${statusPrefix} ${theme.fg("dim", `${resultLines.length} lines`)}`);
+		const displayLines = resultLines.slice(0, maxLines);
+		for (const rl of displayLines) {
+			lines.push(`${INDENT}  ${theme.fg("dim", replaceTabs(rl))}`);
+		}
+		if (resultLines.length > maxLines) {
+			lines.push(`${INDENT}  ${theme.fg("dim", `... ${resultLines.length - maxLines} more`)}`);
 		}
 	}
 
 	#formatToolArgs(toolName: string, args: Record<string, unknown>): string {
-		// Show the most relevant arg for common tools
 		switch (toolName) {
 			case "read":
-				return args.path ? `path: ${args.path}` : "";
 			case "write":
-				return args.path ? `path: ${args.path}` : "";
 			case "edit":
 				return args.path ? `path: ${args.path}` : "";
 			case "grep":
@@ -564,10 +490,7 @@ export class SessionObserverOverlayComponent extends Container {
 				return args.pattern ? `pattern: ${args.pattern}` : "";
 			case "bash": {
 				const cmd = args.command;
-				if (typeof cmd === "string") {
-					return truncateToWidth(replaceTabs(cmd), 80);
-				}
-				return "";
+				return typeof cmd === "string" ? replaceTabs(cmd) : "";
 			}
 			case "lsp":
 				return [args.action, args.file, args.symbol].filter(Boolean).join(" ");
@@ -576,19 +499,15 @@ export class SessionObserverOverlayComponent extends Container {
 				return args.path ? `path: ${args.path}` : "";
 			case "task": {
 				const tasks = args.tasks;
-				if (Array.isArray(tasks)) {
-					return `${tasks.length} task(s)`;
-				}
-				return "";
+				return Array.isArray(tasks) ? `${tasks.length} task(s)` : "";
 			}
 			default: {
-				// Generic: show first few args truncated
 				const parts: string[] = [];
 				let total = 0;
 				for (const [key, value] of Object.entries(args)) {
 					if (key.startsWith("_")) continue;
 					const v = typeof value === "string" ? value : JSON.stringify(value);
-					const entry = `${key}: ${truncateToWidth(replaceTabs(v ?? ""), 50)}`;
+					const entry = `${key}: ${replaceTabs(v ?? "")}`;
 					if (total + entry.length > MAX_TOOL_ARGS_CHARS) break;
 					parts.push(entry);
 					total += entry.length;
@@ -598,9 +517,7 @@ export class SessionObserverOverlayComponent extends Container {
 		}
 	}
 
-	/** Incrementally read and parse the session JSONL, caching already-parsed entries. */
 	#loadTranscript(sessionFile: string): SessionMessageEntry[] | null {
-		// Invalidate cache if session file changed (e.g. switched to different subagent)
 		if (this.#transcriptCache && this.#transcriptCache.path !== sessionFile) {
 			this.#transcriptCache = undefined;
 		}
@@ -612,7 +529,6 @@ export class SessionObserverOverlayComponent extends Container {
 			return this.#transcriptCache?.entries ?? null;
 		}
 
-		// File shrank (compaction or pruning rewrote it) — invalidate and re-read from scratch
 		if (result.newSize < fromByte) {
 			this.#transcriptCache = undefined;
 			return this.#loadTranscript(sessionFile);
@@ -622,9 +538,6 @@ export class SessionObserverOverlayComponent extends Container {
 			this.#transcriptCache = { path: sessionFile, bytesRead: 0, entries: [] };
 		}
 
-		// Parse only new bytes, but only up to the last complete line.
-		// A partial trailing record (mid-write) must not be consumed —
-		// we leave those bytes for the next refresh.
 		if (result.text.length > 0) {
 			const lastNewline = result.text.lastIndexOf("\n");
 			if (lastNewline >= 0) {
@@ -637,74 +550,19 @@ export class SessionObserverOverlayComponent extends Container {
 				}
 				this.#transcriptCache.bytesRead = fromByte + Buffer.byteLength(completeChunk, "utf-8");
 			}
-			// If no newline found, the entire chunk is partial — leave bytesRead unchanged
 		}
 		return this.#transcriptCache.entries;
 	}
 
-	/** Try to detect nested sub-agent session files from a task tool call's result */
-	#detectNestedSessionFile(
-		call: { name: string; arguments: Record<string, unknown> },
-		result: ToolResultMessage | undefined,
-	): string | undefined {
-		if (call.name !== "task") return undefined;
-		if (!result) return undefined;
-
-		// Look for agent:// URLs or session file paths in the result text
-		const textParts = result.content
-			.filter((p): p is { type: "text"; text: string } => p.type === "text")
-			.map(p => p.text);
-		const text = textParts.join("\n");
-
-		// Check result details for session file references
-		const details = (result as any).details;
-		if (details?.sessionFile && typeof details.sessionFile === "string") {
-			return details.sessionFile;
-		}
-
-		// Try to find .jsonl file paths in output
-		const jsonlMatch = text.match(/([^\s"']+\.jsonl)/);
-		if (jsonlMatch) {
-			return jsonlMatch[1];
-		}
-
-		return undefined;
-	}
-
-	/** Navigate into a nested sub-agent session (Bead 6) */
-	#diveIntoSession(sessionFile: string): void {
-		// Push current session onto navigation stack
-		const currentSession = this.#registry.getSessions().find(s => s.id === this.#selectedSessionId);
-		if (currentSession?.sessionFile) {
-			this.#navigationStack.push({
-				sessionId: this.#selectedSessionId!,
-				label: currentSession.label,
-				sessionFile: currentSession.sessionFile,
-			});
-		}
-
-		// Clear transcript cache for new session
-		this.#transcriptCache = undefined;
-		this.#scrollOffset = 0;
-		this.#selectedEntryIndex = 0;
-		this.#expandedEntries.clear();
-
-		// Create a synthetic session ID for the nested session
-		this.#selectedSessionId = `nested:${sessionFile}`;
-		this.#refreshViewer();
-	}
-
-	/** Pop navigation stack (Bead 6) */
 	#navigateBack(): boolean {
 		if (this.#navigationStack.length === 0) return false;
-
 		const prev = this.#navigationStack.pop()!;
 		this.#selectedSessionId = prev.sessionId;
 		this.#transcriptCache = undefined;
 		this.#scrollOffset = 0;
 		this.#selectedEntryIndex = 0;
 		this.#expandedEntries.clear();
-		this.#refreshViewer();
+		this.#rebuildViewerContent();
 		return true;
 	}
 
@@ -718,7 +576,6 @@ export class SessionObserverOverlayComponent extends Container {
 			const agentSuffix = s.agent ? theme.fg("dim", ` [${s.agent}]`) : "";
 			const label = s.kind === "main" ? `${prefix} ${s.label} (return)` : `${prefix} ${s.label}${agentSuffix}`;
 
-			// Show current activity in the picker description for subagents
 			let description = s.description;
 			if (s.progress?.currentTool) {
 				const intent = s.progress.lastIntent;
@@ -749,38 +606,31 @@ export class SessionObserverOverlayComponent extends Container {
 	}
 
 	#handleViewerInput(keyData: string): void {
-		const maxScroll = Math.max(0, this.#renderedLines.length - this.#viewportHeight);
 		const entryCount = this.#viewerEntries.length;
 
+		// Escape — pop navigation or go to picker
 		if (matchesKey(keyData, "escape")) {
-			// Try to pop navigation stack first (Bead 6)
 			if (!this.#navigateBack()) {
 				this.#setupPicker();
 			}
 			return;
 		}
 
-		// j / down arrow — move selection down
+		// j / down — move selection down
 		if (keyData === "j" || matchesKey(keyData, "down")) {
 			if (entryCount > 0) {
 				this.#selectedEntryIndex = Math.min(this.#selectedEntryIndex + 1, entryCount - 1);
-				this.#scrollToSelectedEntry();
-			} else {
-				this.#scrollOffset = Math.min(this.#scrollOffset + 1, maxScroll);
 			}
-			this.#refreshViewer();
+			this.#rebuildAndScroll();
 			return;
 		}
 
-		// k / up arrow — move selection up
+		// k / up — move selection up
 		if (keyData === "k" || matchesKey(keyData, "up")) {
 			if (entryCount > 0) {
 				this.#selectedEntryIndex = Math.max(this.#selectedEntryIndex - 1, 0);
-				this.#scrollToSelectedEntry();
-			} else {
-				this.#scrollOffset = Math.max(this.#scrollOffset - 1, 0);
 			}
-			this.#refreshViewer();
+			this.#rebuildAndScroll();
 			return;
 		}
 
@@ -788,11 +638,13 @@ export class SessionObserverOverlayComponent extends Container {
 		if (matchesKey(keyData, "pageDown")) {
 			if (entryCount > 0) {
 				this.#selectedEntryIndex = Math.min(this.#selectedEntryIndex + 5, entryCount - 1);
-				this.#scrollToSelectedEntry();
 			} else {
-				this.#scrollOffset = Math.min(this.#scrollOffset + PAGE_SIZE, maxScroll);
+				this.#scrollOffset = Math.min(
+					this.#scrollOffset + PAGE_SIZE,
+					Math.max(0, this.#renderedLines.length - this.#viewportHeight),
+				);
 			}
-			this.#refreshViewer();
+			this.#rebuildAndScroll();
 			return;
 		}
 
@@ -800,48 +652,32 @@ export class SessionObserverOverlayComponent extends Container {
 		if (matchesKey(keyData, "pageUp")) {
 			if (entryCount > 0) {
 				this.#selectedEntryIndex = Math.max(this.#selectedEntryIndex - 5, 0);
-				this.#scrollToSelectedEntry();
 			} else {
 				this.#scrollOffset = Math.max(this.#scrollOffset - PAGE_SIZE, 0);
 			}
-			this.#refreshViewer();
+			this.#rebuildAndScroll();
 			return;
 		}
 
-		// Enter — toggle expand/collapse on selected entry (Bead 4)
-		// Or dive into nested session for task tool calls (Bead 6)
-		if (keyData === "\r" || keyData === "\n") {
+		// Enter — toggle expand/collapse, or dive into nested session
+		if (matchesKey(keyData, "enter") || keyData === "\r" || keyData === "\n") {
 			if (entryCount > 0 && this.#selectedEntryIndex < entryCount) {
-				const entry = this.#viewerEntries[this.#selectedEntryIndex];
-
-				// Check if this is a task tool call with a nested session (Bead 6)
-				if (entry?.kind === "toolCall") {
-					const entryData = entry.data as { call: any; result: any };
-					const nestedFile = this.#detectNestedSessionFile(entryData.call, entryData.result);
-					if (nestedFile) {
-						this.#diveIntoSession(nestedFile);
-						return;
-					}
-				}
-
 				// Toggle expand/collapse
 				if (this.#expandedEntries.has(this.#selectedEntryIndex)) {
 					this.#expandedEntries.delete(this.#selectedEntryIndex);
 				} else {
 					this.#expandedEntries.add(this.#selectedEntryIndex);
 				}
-				this.#refreshViewer();
+				this.#rebuildAndScroll();
 			}
 			return;
 		}
 
 		// G — jump to bottom
 		if (keyData === "G") {
-			if (entryCount > 0) {
-				this.#selectedEntryIndex = entryCount - 1;
-			}
-			this.#scrollOffset = maxScroll;
-			this.#refreshViewer();
+			if (entryCount > 0) this.#selectedEntryIndex = entryCount - 1;
+			this.#scrollOffset = Math.max(0, this.#renderedLines.length - this.#viewportHeight);
+			this.#rebuildAndScroll();
 			return;
 		}
 
@@ -849,12 +685,18 @@ export class SessionObserverOverlayComponent extends Container {
 		if (keyData === "g") {
 			this.#selectedEntryIndex = 0;
 			this.#scrollOffset = 0;
-			this.#refreshViewer();
+			this.#rebuildAndScroll();
 			return;
 		}
 	}
 
-	/** Ensure the selected entry is visible in the viewport */
+	/** Rebuild transcript lines (which depend on selectedEntryIndex/expandedEntries) and scroll to selection */
+	#rebuildAndScroll(): void {
+		this.#wasAtBottom = false;
+		this.#rebuildViewerContent();
+		this.#scrollToSelectedEntry();
+	}
+
 	#scrollToSelectedEntry(): void {
 		if (this.#viewerEntries.length === 0) return;
 		const entry = this.#viewerEntries[this.#selectedEntryIndex];
@@ -863,24 +705,18 @@ export class SessionObserverOverlayComponent extends Container {
 		const entryTop = entry.lineStart;
 		const entryBottom = entry.lineStart + entry.lineCount;
 
-		// Scroll up if entry is above viewport
 		if (entryTop < this.#scrollOffset) {
 			this.#scrollOffset = Math.max(0, entryTop - 1);
 		}
-		// Scroll down if entry is below viewport
 		if (entryBottom > this.#scrollOffset + this.#viewportHeight) {
 			this.#scrollOffset = Math.max(0, entryBottom - this.#viewportHeight + 1);
 		}
 	}
 }
 
-// Sync helpers for render path — avoid async in component rendering
+// Sync helpers for render path
 import * as fs from "node:fs";
 
-/**
- * Read new bytes from a file starting at the given byte offset.
- * Returns the new text and updated file size, or null on error.
- */
 function readFileIncremental(filePath: string, fromByte: number): { text: string; newSize: number } | null {
 	try {
 		const stat = fs.statSync(filePath);
