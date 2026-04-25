@@ -360,7 +360,7 @@ export class SessionObserverOverlayComponent extends Container {
 						const totalLines = text.trim().split("\n").length;
 						const hint = totalLines > 1 ? theme.fg("dim", ` (${totalLines} lines)`) : "";
 						lines.push(
-							`${cursor} ${theme.fg("dim", `[${label}]`)} ${theme.fg("muted", truncateToWidth(firstLine, 60))}${hint}`,
+							`${cursor} ${theme.fg("dim", `[${label}]`)} ${theme.fg("muted", truncateToWidth(replaceTabs(firstLine), 60))}${hint}`,
 						);
 					}
 					this.#viewerEntries.push({ lineStart: startLine, lineCount: lines.length - startLine, kind: "user" });
@@ -577,14 +577,14 @@ export class SessionObserverOverlayComponent extends Container {
 				const newEntries = parseSessionEntries(completeChunk);
 				for (const entry of newEntries) {
 					if (entry.type === "message") {
-						this.#transcriptCache.entries.push(entry as SessionMessageEntry);
+						this.#transcriptCache.entries.push(entry);
 						// Extract model from first assistant message
-						const msg = (entry as SessionMessageEntry).message;
-						if (!this.#transcriptCache.model && msg.role === "assistant" && "model" in msg) {
-							this.#transcriptCache.model = (msg as any).model;
+						const msg = entry.message;
+						if (!this.#transcriptCache.model && msg.role === "assistant") {
+							this.#transcriptCache.model = msg.model;
 						}
-					} else if (entry.type === "model_change" && "model" in entry) {
-						this.#transcriptCache.model = (entry as any).model;
+					} else if (entry.type === "model_change") {
+						this.#transcriptCache.model = entry.model;
 					}
 				}
 				this.#transcriptCache.bytesRead = fromByte + Buffer.byteLength(completeChunk, "utf-8");
