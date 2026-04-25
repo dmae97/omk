@@ -20,7 +20,7 @@ import { formatDuration, formatNumber, logger } from "@oh-my-pi/pi-utils";
 import type { KeyId } from "../../config/keybindings";
 import type { SessionMessageEntry } from "../../session/session-manager";
 import { parseSessionEntries } from "../../session/session-manager";
-import { replaceTabs, truncateToWidth } from "../../tools/render-utils";
+import { PREVIEW_LIMITS, replaceTabs, TRUNCATE_LENGTHS, truncateToWidth } from "../../tools/render-utils";
 import type { ObservableSession, SessionObserverRegistry } from "../session-observer-registry";
 import { getMarkdownTheme, theme } from "../theme/theme";
 import { DynamicBorder } from "./dynamic-border";
@@ -31,14 +31,20 @@ const MAX_THINKING_CHARS_COLLAPSED = 200;
 const MAX_THINKING_CHARS_EXPANDED = 4000;
 /** Max tool args characters to display */
 const MAX_TOOL_ARGS_CHARS = 500;
-/** Max tool result lines in collapsed state */
-const MAX_TOOL_RESULT_LINES_COLLAPSED = 3;
-/** Max tool result lines in expanded state */
-const MAX_TOOL_RESULT_LINES_EXPANDED = 30;
 /** Lines per page for PageUp/PageDown */
 const PAGE_SIZE = 15;
 /** Left indent for content under entry headers */
 const INDENT = "    ";
+
+/** Compute the max content width for the current terminal, accounting for indent and chrome. */
+function contentWidth(indent = INDENT): number {
+	return Math.max(TRUNCATE_LENGTHS.SHORT, (process.stdout.columns || 80) - indent.length - 2);
+}
+
+/** Sanitize a line for TUI display: replace tabs, then truncate to viewport width. */
+function sanitizeLine(text: string, maxWidth?: number): string {
+	return truncateToWidth(replaceTabs(text), maxWidth ?? contentWidth());
+}
 
 /** Represents a rendered entry in the viewer for selection/expand tracking */
 interface ViewerEntry {
@@ -286,12 +292,10 @@ export class SessionObserverOverlayComponent extends Container {
 					const cursor = isSelected ? theme.fg("accent", "▶") : " ";
 					lines.push("");
 					const errorLines = msg.errorMessage.split("\n");
-					const maxWidth = Math.max(40, (process.stdout.columns || 80) - 6);
-					lines.push(
-						`${cursor} ${theme.fg("error", `✗ Error: ${truncateToWidth(replaceTabs(errorLines[0]), maxWidth)}`)}`,
-					);
+					const maxWidth = contentWidth();
+					lines.push(`${cursor} ${theme.fg("error", `✗ Error: ${sanitizeLine(errorLines[0], maxWidth)}`)}`);
 					for (let i = 1; i < errorLines.length; i++) {
-						lines.push(`${INDENT}${theme.fg("error", truncateToWidth(replaceTabs(errorLines[i]), maxWidth))}`);
+						lines.push(`${INDENT}${theme.fg("error", sanitizeLine(errorLines[i], maxWidth))}`);
 					}
 					this.#viewerEntries.push({ lineStart: startLine, lineCount: lines.length - startLine, kind: "text" });
 					entryIndex++;
@@ -360,7 +364,7 @@ export class SessionObserverOverlayComponent extends Container {
 						const totalLines = text.trim().split("\n").length;
 						const hint = totalLines > 1 ? theme.fg("dim", ` (${totalLines} lines)`) : "";
 						lines.push(
-							`${cursor} ${theme.fg("dim", `[${label}]`)} ${theme.fg("muted", truncateToWidth(replaceTabs(firstLine), 60))}${hint}`,
+							`${cursor} ${theme.fg("dim", `[${label}]`)} ${theme.fg("muted", sanitizeLine(firstLine, TRUNCATE_LENGTHS.TITLE))}${hint}`,
 						);
 					}
 					this.#viewerEntries.push({ lineStart: startLine, lineCount: lines.length - startLine, kind: "user" });
@@ -401,9 +405,9 @@ export class SessionObserverOverlayComponent extends Container {
 		} else {
 			// Collapsed thinking: brief italic preview
 			const thinkingLines = displayText.split("\n");
-			const maxLines = 4;
+			const maxLines = PREVIEW_LIMITS.COLLAPSED_LINES;
 			for (let i = 0; i < Math.min(thinkingLines.length, maxLines); i++) {
-				lines.push(`${INDENT}${theme.fg("thinkingText", replaceTabs(thinkingLines[i]))}`);
+				lines.push(`${INDENT}${theme.fg("thinkingText", sanitizeLine(thinkingLines[i]))}`);
 			}
 			if (thinkingLines.length > maxLines) {
 				lines.push(`${INDENT}${theme.fg("dim", `... ${thinkingLines.length - maxLines} more lines`)}`);
@@ -426,10 +430,10 @@ export class SessionObserverOverlayComponent extends Container {
 		} else {
 			// Collapsed: first few lines as plain text
 			const textLines = text.split("\n");
-			const maxLines = 5;
-			const maxWidth = Math.max(40, (process.stdout.columns || 80) - INDENT.length - 2);
+			const maxLines = PREVIEW_LIMITS.COLLAPSED_LINES;
+			const maxWidth = contentWidth();
 			for (let i = 0; i < Math.min(textLines.length, maxLines); i++) {
-				lines.push(`${INDENT}${truncateToWidth(replaceTabs(textLines[i]), maxWidth)}`);
+				lines.push(`${INDENT}${sanitizeLine(textLines[i], maxWidth)}`);
 			}
 			if (textLines.length > maxLines) {
 				lines.push(`${INDENT}${theme.fg("dim", `... ${textLines.length - maxLines} more lines`)}`);
@@ -448,13 +452,13 @@ export class SessionObserverOverlayComponent extends Container {
 		lines.push("");
 
 		// Tool call header
-		const intentStr = call.intent ? theme.fg("dim", ` ${call.intent}`) : "";
-		lines.push(`${cursor} ${theme.fg("accent", "▸")} ${theme.bold(theme.fg("muted", call.name))}${intentStr}`);
+		const intentStr = call.intent ? theme.fg("dim", ` ${sanitizeLine(call.intent, TRUNCATE_LENGTHS.SHORT)}`) : "";
+		lines.push(`${cursor} ${theme.fg("accent", "\u25B8")} ${theme.bold(theme.fg("muted", call.name))}${intentStr}`);
 
 		// Key arguments
 		const argSummary = this.#formatToolArgs(call.name, call.arguments);
 		if (argSummary) {
-			lines.push(`${INDENT}${theme.fg("dim", argSummary)}`);
+			lines.push(`${INDENT}${theme.fg("dim", sanitizeLine(argSummary, contentWidth()))}`);
 		}
 
 		// Tool result
@@ -471,10 +475,11 @@ export class SessionObserverOverlayComponent extends Container {
 
 		if (result.isError) {
 			const errorLines = text.split("\n");
-			const maxErrorLines = expanded ? 15 : 2;
-			lines.push(`${INDENT}${theme.fg("error", `✗ ${replaceTabs(errorLines[0] || "Error")}`)}`);
+			const maxErrorLines = expanded ? PREVIEW_LIMITS.EXPANDED_LINES : PREVIEW_LIMITS.COLLAPSED_LINES;
+			const maxWidth = contentWidth();
+			lines.push(`${INDENT}${theme.fg("error", `✗ ${sanitizeLine(errorLines[0] || "Error", maxWidth)}`)}`);
 			for (let i = 1; i < Math.min(errorLines.length, maxErrorLines); i++) {
-				lines.push(`${INDENT}  ${theme.fg("error", replaceTabs(errorLines[i]))}`);
+				lines.push(`${INDENT}  ${theme.fg("error", sanitizeLine(errorLines[i], maxWidth))}`);
 			}
 			if (errorLines.length > maxErrorLines) {
 				lines.push(`${INDENT}  ${theme.fg("dim", `... ${errorLines.length - maxErrorLines} more lines`)}`);
@@ -488,20 +493,20 @@ export class SessionObserverOverlayComponent extends Container {
 		}
 
 		const resultLines = text.split("\n");
-		const maxLines = expanded ? MAX_TOOL_RESULT_LINES_EXPANDED : MAX_TOOL_RESULT_LINES_COLLAPSED;
+		const maxLines = expanded ? PREVIEW_LIMITS.EXPANDED_LINES : PREVIEW_LIMITS.OUTPUT_COLLAPSED;
 
 		// Status line
 		const statusPrefix = `${INDENT}${theme.fg("success", "✓")}`;
 
-		if (resultLines.length === 1 && text.length < 100) {
-			lines.push(`${statusPrefix} ${theme.fg("dim", replaceTabs(text))}`);
+		if (resultLines.length === 1 && text.length < TRUNCATE_LENGTHS.LONG) {
+			lines.push(`${statusPrefix} ${theme.fg("dim", sanitizeLine(text))}`);
 			return;
 		}
 
 		lines.push(`${statusPrefix} ${theme.fg("dim", `${resultLines.length} lines`)}`);
 		const displayLines = resultLines.slice(0, maxLines);
 		for (const rl of displayLines) {
-			lines.push(`${INDENT}  ${theme.fg("dim", replaceTabs(rl))}`);
+			lines.push(`${INDENT}  ${theme.fg("dim", sanitizeLine(rl))}`);
 		}
 		if (resultLines.length > maxLines) {
 			lines.push(`${INDENT}  ${theme.fg("dim", `... ${resultLines.length - maxLines} more`)}`);
