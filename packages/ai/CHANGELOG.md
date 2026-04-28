@@ -15,6 +15,8 @@
 ### Added
 
 - Added Azure Cognitive Services endpoint support for Azure OpenAI Responses base URLs ([#3799](https://github.com/badlogic/pi-mono/pull/3799) by [@marcbloech](https://github.com/marcbloech)).
+- Added OpenRouter image-generation support by registering Flux and Gemini image-preview models, accepting OpenRouter image-output models from discovery, and parsing generated image payloads from OpenAI-compatible completions responses.
+- Added Google streaming to surface inline image output parts as assistant image content blocks and `image_start`/`image_end` events.
 
 ### Changed
 

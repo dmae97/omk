@@ -10,6 +10,7 @@ import type {
 	Api,
 	AssistantMessage,
 	Context,
+	ImageContent,
 	Model,
 	SimpleStreamOptions,
 	StreamFunction,
@@ -148,6 +149,43 @@ export const streamGoogle: StreamFunction<"google-generative-ai", GoogleOptions>
 									type: "text_delta",
 									contentIndex: blockIndex(),
 									delta: part.text,
+									partial: output,
+								});
+							}
+						}
+
+						if (part.inlineData) {
+							if (currentBlock) {
+								if (currentBlock.type === "text") {
+									stream.push({
+										type: "text_end",
+										contentIndex: blockIndex(),
+										content: currentBlock.text,
+										partial: output,
+									});
+								} else {
+									stream.push({
+										type: "thinking_end",
+										contentIndex: blockIndex(),
+										content: currentBlock.thinking,
+										partial: output,
+									});
+								}
+								currentBlock = null;
+							}
+
+							if (part.inlineData.data && part.inlineData.mimeType) {
+								const imageBlock: ImageContent = {
+									type: "image",
+									data: part.inlineData.data,
+									mimeType: part.inlineData.mimeType,
+								};
+								output.content.push(imageBlock);
+								stream.push({ type: "image_start", contentIndex: blockIndex(), partial: output });
+								stream.push({
+									type: "image_end",
+									contentIndex: blockIndex(),
+									image: imageBlock,
 									partial: output,
 								});
 							}
