@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed OpenAI-compatible providers (Kilo AI gateway, etc.) rejecting `developer` role in messages. Now correctly maps `developer` → `user` for providers that don't support the `developer` role ([#843](https://github.com/can1357/oh-my-pi/issues/843))
+
 ## [13.17.6] - 2026-04-01
 
 ### Fixed
