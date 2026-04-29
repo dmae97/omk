@@ -575,6 +575,10 @@ function buildParams(
 		prompt_cache_retention: cacheRetention === "long" && compat.supportsLongCacheRetention ? "24h" : undefined,
 	};
 
+	if (isOpenRouterImageGenerationModel(model)) {
+		Reflect.set(params, "modalities", ["image"]);
+	}
+
 	if (compat.supportsUsageInStreaming !== false) {
 		(params as any).stream_options = { include_usage: true };
 	}

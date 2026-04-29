@@ -92,8 +92,9 @@ describe("openai-completions image output", () => {
 			data: "ZmFrZS1wbmc=",
 		});
 
-		const params = mockState.lastParams as { stream?: boolean; stream_options?: unknown };
+		const params = mockState.lastParams as { stream?: boolean; stream_options?: unknown; modalities?: string[] };
 		expect(params.stream).toBe(false);
 		expect("stream_options" in (params as object)).toBe(false);
+		expect(params.modalities).toEqual(["image"]);
 	});
 });
