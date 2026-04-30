@@ -341,11 +341,13 @@ export function createEditToolDefinition(
 								// Check if file exists.
 								try {
 									await ops.access(absolutePath);
-								} catch {
+								} catch (error: unknown) {
+									const errorMessage =
+										error instanceof Error && "code" in error ? `Error code: ${error.code}` : String(error);
 									if (signal) {
 										signal.removeEventListener("abort", onAbort);
 									}
-									reject(new Error(`File not found: ${path}`));
+									reject(new Error(`Could not write file: ${path}. ${errorMessage}.`));
 									return;
 								}
 
