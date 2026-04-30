@@ -53,6 +53,7 @@
 
 ### Removed
 
+- Removed the discontinued Qwen CLI OAuth custom provider extension example ([#3832](https://github.com/badlogic/pi-mono/pull/3832) by [@4h9fbZ](https://github.com/4h9fbZ)).
 - Removed Google Gemini CLI and Google Antigravity built-in login, default model, documentation, and example extension support.
 
 ## [0.70.6] - 2026-04-28
