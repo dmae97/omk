@@ -1,6 +1,15 @@
 import type { ChildProcess } from "node:child_process";
+import { basename } from "node:path";
 
 const EXIT_STDIO_GRACE_MS = 100;
+
+const WINDOWS_SHELL_COMMANDS = new Set(["npm", "npx", "pnpm", "yarn", "yarnpkg", "corepack"]);
+
+export function shouldUseWindowsShell(command: string): boolean {
+	if (process.platform !== "win32") return false;
+	const commandName = basename(command).toLowerCase();
+	return commandName.endsWith(".cmd") || commandName.endsWith(".bat") || WINDOWS_SHELL_COMMANDS.has(commandName);
+}
 
 /**
  * Wait for a child process to terminate without hanging on inherited stdio handles.

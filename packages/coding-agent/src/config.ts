@@ -1,8 +1,9 @@
 import { spawnSync } from "child_process";
-import { existsSync, readFileSync, realpathSync } from "fs";
+import { accessSync, constants, existsSync, readFileSync, realpathSync } from "fs";
 import { homedir } from "os";
-import { dirname, join, resolve, sep } from "path";
+import { basename, dirname, join, resolve, sep, win32 } from "path";
 import { fileURLToPath } from "url";
+import { shouldUseWindowsShell } from "./utils/child-process.js";
 
 // =============================================================================
 // Package Detection
@@ -46,7 +47,7 @@ export function detectInstallMethod(): InstallMethod {
 	if (resolvedPath.includes("/yarn/") || resolvedPath.includes("/.yarn/")) {
 		return "yarn";
 	}
-	if (isBunRuntime) {
+	if (isBunRuntime || resolvedPath.includes("/install/global/node_modules/")) {
 		return "bun";
 	}
 	if (resolvedPath.includes("/npm/") || resolvedPath.includes("/node_modules/")) {
@@ -56,58 +57,99 @@ export function detectInstallMethod(): InstallMethod {
 	return "unknown";
 }
 
-function getSelfUpdateCommandForMethod(method: InstallMethod, packageName: string): SelfUpdateCommand | undefined {
+function getNpmCommand(npmCommand?: string[]): { command: string; args: string[] } {
+	const [command = "npm", ...args] = npmCommand ?? [];
+	return { command, args };
+}
+
+function getInferredNpmInstall(packageName: string): { root: string; prefix: string } | undefined {
+	const packageDir = getPackageDir();
+	const path = process.platform === "win32" || packageDir.includes("\\") ? win32 : { basename, dirname };
+	const [scope, name] = packageName.split("/");
+	let root: string | undefined;
+	if (
+		name &&
+		scope?.startsWith("@") &&
+		path.basename(path.dirname(packageDir)) === scope &&
+		path.basename(packageDir) === name
+	) {
+		root = path.dirname(path.dirname(packageDir));
+	} else if (!name && path.basename(packageDir) === packageName) {
+		root = path.dirname(packageDir);
+	}
+	if (!root || path.basename(root) !== "node_modules") return undefined;
+	const parent = path.dirname(root);
+	if (path.basename(parent) === "lib") return { root, prefix: path.dirname(parent) };
+	// Windows global npm prefixes use `<prefix>\\node_modules`, which is
+	// indistinguishable from local project installs by path shape alone. Do not
+	// infer unsupported Windows custom prefixes without `npm root -g` evidence.
+	return undefined;
+}
+
+function getSelfUpdateCommandForMethod(
+	method: InstallMethod,
+	packageName: string,
+	npmCommand?: string[],
+): SelfUpdateCommand | undefined {
 	switch (method) {
 		case "bun-binary":
 			return undefined;
 		case "pnpm":
-			return {
-				command: "pnpm",
-				args: ["install", "-g", packageName],
-				display: `pnpm install -g ${packageName}`,
-			};
+			return { command: "pnpm", args: ["install", "-g", packageName], display: `pnpm install -g ${packageName}` };
 		case "yarn":
-			return {
-				command: "yarn",
-				args: ["global", "add", packageName],
-				display: `yarn global add ${packageName}`,
-			};
+			return { command: "yarn", args: ["global", "add", packageName], display: `yarn global add ${packageName}` };
 		case "bun":
-			return {
-				command: "bun",
-				args: ["install", "-g", packageName],
-				display: `bun install -g ${packageName}`,
-			};
-		case "npm":
-			return {
-				command: "npm",
-				args: ["install", "-g", packageName],
-				display: `npm install -g ${packageName}`,
-			};
+			return { command: "bun", args: ["install", "-g", packageName], display: `bun install -g ${packageName}` };
+		case "npm": {
+			const npm = getNpmCommand(npmCommand);
+			const inferred = npmCommand?.length ? undefined : getInferredNpmInstall(packageName);
+			const args = [...npm.args, ...(inferred ? ["--prefix", inferred.prefix] : []), "install", "-g", packageName];
+			const display = [npm.command, ...args].map((arg) => (/\s/.test(arg) ? `"${arg}"` : arg)).join(" ");
+			return { command: npm.command, args, display };
+		}
 		case "unknown":
 			return undefined;
 	}
 }
 
-function readCommandOutput(command: string, args: string[]): string | undefined {
+function readCommandOutput(
+	command: string,
+	args: string[],
+	options: { requireSuccess?: boolean } = {},
+): string | undefined {
 	const result = spawnSync(command, args, {
 		encoding: "utf-8",
-		stdio: ["ignore", "pipe", "ignore"],
-		timeout: 2000,
-		// Windows package managers are commonly .cmd shims. Use the shell so Node can execute them;
-		// command and args are fixed literals from getGlobalPackageRoots(), not user input.
-		shell: process.platform === "win32",
+		stdio: ["ignore", "pipe", "pipe"],
+		shell: shouldUseWindowsShell(command),
 	});
-	if (result.status !== 0) return undefined;
-	const stdout = result.stdout.trim();
-	return stdout || undefined;
+	if (result.status === 0) return result.stdout.trim() || undefined;
+	if (options.requireSuccess) {
+		const reason = result.error?.message || result.stderr.trim() || `exit code ${result.status ?? "unknown"}`;
+		throw new Error(`Failed to run ${[command, ...args].join(" ")}: ${reason}`);
+	}
+	return undefined;
 }
 
-function getGlobalPackageRoots(method: InstallMethod): string[] {
+function getGlobalPackageRoots(method: InstallMethod, packageName: string, npmCommand?: string[]): string[] {
 	switch (method) {
 		case "npm": {
-			const root = readCommandOutput("npm", ["root", "-g"]);
-			return root ? [root] : [];
+			const npm = getNpmCommand(npmCommand);
+			const configured = !!npmCommand?.length;
+			if (configured && npm.command === "bun") {
+				const bunBin = readCommandOutput(npm.command, [...npm.args, "pm", "bin", "-g"], {
+					requireSuccess: true,
+				});
+				const roots = [join(homedir(), ".bun", "install", "global", "node_modules")];
+				if (bunBin) {
+					roots.push(join(dirname(bunBin), "install", "global", "node_modules"));
+				}
+				return roots;
+			}
+			const root = readCommandOutput(npm.command, [...npm.args, "root", "-g"], {
+				requireSuccess: configured,
+			});
+			const inferred = configured ? undefined : getInferredNpmInstall(packageName);
+			return [root, inferred?.root].filter((x): x is string => !!x);
 		}
 		case "pnpm": {
 			const root = readCommandOutput("pnpm", ["root", "-g"]);
@@ -121,7 +163,7 @@ function getGlobalPackageRoots(method: InstallMethod): string[] {
 			const bunBin = readCommandOutput("bun", ["pm", "bin", "-g"]);
 			const roots = [join(homedir(), ".bun", "install", "global", "node_modules")];
 			if (bunBin) {
-				roots.push(join(dirname(dirname(bunBin)), "install", "global", "node_modules"));
+				roots.push(join(dirname(bunBin), "install", "global", "node_modules"));
 			}
 			return roots;
 		}
@@ -148,36 +190,50 @@ function normalizeExistingPathForComparison(path: string): string | undefined {
 	return normalizedPath;
 }
 
-function isManagedByGlobalPackageManager(method: InstallMethod): boolean {
-	const packageDir = normalizeExistingPathForComparison(getPackageDir());
-	if (!packageDir) {
+function isSelfUpdatePathWritable(): boolean {
+	const packageDir = getPackageDir();
+	try {
+		accessSync(packageDir, constants.W_OK);
+		accessSync(dirname(packageDir), constants.W_OK);
+		return true;
+	} catch {
 		return false;
 	}
-	return getGlobalPackageRoots(method).some((root) => {
-		const normalizedRoot = normalizeExistingPathForComparison(root);
-		return (
-			normalizedRoot !== undefined &&
-			(packageDir === normalizedRoot ||
-				packageDir.startsWith(normalizedRoot.endsWith(sep) ? normalizedRoot : `${normalizedRoot}${sep}`))
-		);
-	});
 }
 
-export function getSelfUpdateCommand(packageName: string): SelfUpdateCommand | undefined {
+function isManagedByGlobalPackageManager(method: InstallMethod, packageName: string, npmCommand?: string[]): boolean {
+	const packageDir = normalizeExistingPathForComparison(getPackageDir());
+	return (
+		!!packageDir &&
+		getGlobalPackageRoots(method, packageName, npmCommand).some((root) => {
+			const normalizedRoot = normalizeExistingPathForComparison(root);
+			return (
+				!!normalizedRoot &&
+				packageDir.startsWith(normalizedRoot.endsWith(sep) ? normalizedRoot : `${normalizedRoot}${sep}`)
+			);
+		})
+	);
+}
+
+export function getSelfUpdateCommand(packageName: string, npmCommand?: string[]): SelfUpdateCommand | undefined {
 	const method = detectInstallMethod();
-	const command = getSelfUpdateCommandForMethod(method, packageName);
-	if (!command || !isManagedByGlobalPackageManager(method)) {
+	const command = getSelfUpdateCommandForMethod(method, packageName, npmCommand);
+	if (!command || !isManagedByGlobalPackageManager(method, packageName, npmCommand) || !isSelfUpdatePathWritable()) {
 		return undefined;
 	}
 	return command;
 }
 
-export function getSelfUpdateUnavailableInstruction(packageName: string): string {
+export function getSelfUpdateUnavailableInstruction(packageName: string, npmCommand?: string[]): string {
 	const method = detectInstallMethod();
 	if (method === "bun-binary") {
 		return `Download from: https://github.com/badlogic/pi-mono/releases/latest`;
 	}
-	if (getSelfUpdateCommandForMethod(method, packageName)) {
+	const command = getSelfUpdateCommandForMethod(method, packageName, npmCommand);
+	if (command) {
+		if (isManagedByGlobalPackageManager(method, packageName, npmCommand) && !isSelfUpdatePathWritable()) {
+			return `This installation is managed by a global ${method} install, but the install path is not writable. Update it yourself with: ${command.display}`;
+		}
 		return `This installation is not managed by a global ${method} install. Update it with the package manager, wrapper, or source checkout that provides it.`;
 	}
 	return `Update ${packageName} using the package manager, wrapper, or source checkout that provides this installation.`;
