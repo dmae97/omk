@@ -197,11 +197,20 @@ function createClient(
 		Object.assign(headers, optionsHeaders);
 	}
 
+	const defaultHeaders =
+		model.provider === "cloudflare-ai-gateway"
+			? {
+					...headers,
+					Authorization: headers.Authorization ?? null,
+					"cf-aig-authorization": `Bearer ${apiKey}`,
+				}
+			: headers;
+
 	return new OpenAI({
 		apiKey,
 		baseURL: isCloudflareProvider(model.provider) ? resolveCloudflareBaseUrl(model) : model.baseUrl,
 		dangerouslyAllowBrowser: true,
-		defaultHeaders: headers,
+		defaultHeaders,
 	});
 }
 

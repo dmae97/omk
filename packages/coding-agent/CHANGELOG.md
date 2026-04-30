@@ -15,6 +15,7 @@
 
 ### Added
 
+- Added Cloudflare AI Gateway as a built-in provider with `CLOUDFLARE_API_KEY`/`CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_GATEWAY_ID` setup, default model resolution, `/login` display support, and provider documentation ([#3856](https://github.com/badlogic/pi-mono/pull/3856) by [@mchenco](https://github.com/mchenco)).
 - Added Moonshot AI as a built-in provider with `MOONSHOT_API_KEY` setup, default model resolution, and `/login` display support.
 - Added Mistral Medium 3.5 built-in model support via `@mariozechner/pi-ai` ([#4009](https://github.com/badlogic/pi-mono/pull/4009) by [@technocidal](https://github.com/technocidal)).
 - Added routed OpenAI-compatible response model metadata in assistant messages, so providers such as OpenRouter can expose the concrete model used ([#3968](https://github.com/badlogic/pi-mono/pull/3968) by [@purrgrammer](https://github.com/purrgrammer)).

@@ -458,11 +458,20 @@ function createClient(
 		Object.assign(headers, optionsHeaders);
 	}
 
+	const defaultHeaders =
+		model.provider === "cloudflare-ai-gateway"
+			? {
+					...headers,
+					Authorization: headers.Authorization ?? null,
+					"cf-aig-authorization": `Bearer ${apiKey}`,
+				}
+			: headers;
+
 	return new OpenAI({
 		apiKey,
 		baseURL: isCloudflareProvider(model.provider) ? resolveCloudflareBaseUrl(model) : model.baseUrl,
 		dangerouslyAllowBrowser: true,
-		defaultHeaders: headers,
+		defaultHeaders,
 	});
 }
 
@@ -1029,6 +1038,7 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAIComplet
 	const isZai = provider === "zai" || baseUrl.includes("api.z.ai");
 	const isMoonshot = provider === "moonshotai" || provider === "moonshotai-cn" || baseUrl.includes("api.moonshot.");
 	const isCloudflareWorkersAI = provider === "cloudflare-workers-ai" || baseUrl.includes("api.cloudflare.com");
+	const isCloudflareAiGateway = provider === "cloudflare-ai-gateway" || baseUrl.includes("gateway.ai.cloudflare.com");
 
 	const isNonStandard =
 		provider === "cerebras" ||
@@ -1041,9 +1051,10 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAIComplet
 		isMoonshot ||
 		provider === "opencode" ||
 		baseUrl.includes("opencode.ai") ||
-		isCloudflareWorkersAI;
+		isCloudflareWorkersAI ||
+		isCloudflareAiGateway;
 
-	const useMaxTokens = baseUrl.includes("chutes.ai") || isMoonshot;
+	const useMaxTokens = baseUrl.includes("chutes.ai") || isMoonshot || isCloudflareAiGateway;
 
 	const isGrok = provider === "xai" || baseUrl.includes("api.x.ai");
 	const isGroq = provider === "groq" || baseUrl.includes("groq.com");
@@ -1070,7 +1081,7 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAIComplet
 	return {
 		supportsStore: !isNonStandard,
 		supportsDeveloperRole: !isNonStandard,
-		supportsReasoningEffort: !isGrok && !isZai && !isMoonshot,
+		supportsReasoningEffort: !isGrok && !isZai && !isMoonshot && !isCloudflareAiGateway,
 		reasoningEffortMap,
 		supportsUsageInStreaming: true,
 		maxTokensField: useMaxTokens ? "max_tokens" : "max_completion_tokens",
@@ -1088,10 +1099,10 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAIComplet
 		openRouterRouting: {},
 		vercelGatewayRouting: {},
 		zaiToolStream: false,
-		supportsStrictMode: !isMoonshot,
+		supportsStrictMode: !isMoonshot && !isCloudflareAiGateway,
 		cacheControlFormat,
 		sendSessionAffinityHeaders: false,
-		supportsLongCacheRetention: true,
+		supportsLongCacheRetention: !(isCloudflareWorkersAI || isCloudflareAiGateway),
 	};
 }
 

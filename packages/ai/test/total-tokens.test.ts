@@ -21,6 +21,7 @@ type StreamOptionsWithExtras = StreamOptions & Record<string, unknown>;
 
 import { hasAzureOpenAICredentials, resolveAzureDeploymentName } from "./azure-utils.js";
 import { hasBedrockCredentials } from "./bedrock-utils.js";
+import { hasCloudflareAiGatewayCredentials, hasCloudflareWorkersAICredentials } from "./cloudflare-utils.js";
 import { resolveApiKey } from "./oauth.js";
 
 // Resolve OAuth tokens at module level (async, runs before tests)
@@ -308,29 +309,51 @@ describe("totalTokens field", () => {
 	// Cloudflare Workers AI
 	// =========================================================================
 
-	describe.skipIf(!process.env.CLOUDFLARE_API_KEY || !process.env.CLOUDFLARE_ACCOUNT_ID)(
-		"Cloudflare Workers AI",
-		() => {
-			it(
-				"@cf/moonshotai/kimi-k2.6 - should return totalTokens equal to sum of components",
-				{ retry: 3, timeout: 60000 },
-				async () => {
-					const llm = getModel("cloudflare-workers-ai", "@cf/moonshotai/kimi-k2.6");
+	describe.skipIf(!hasCloudflareWorkersAICredentials())("Cloudflare Workers AI", () => {
+		it(
+			"@cf/moonshotai/kimi-k2.6 - should return totalTokens equal to sum of components",
+			{ retry: 3, timeout: 60000 },
+			async () => {
+				const llm = getModel("cloudflare-workers-ai", "@cf/moonshotai/kimi-k2.6");
 
-					console.log(`\nCloudflare Workers AI / ${llm.id}:`);
-					const { first, second } = await testTotalTokensWithCache(llm, {
-						apiKey: process.env.CLOUDFLARE_API_KEY,
-					});
+				console.log(`\nCloudflare Workers AI / ${llm.id}:`);
+				const { first, second } = await testTotalTokensWithCache(llm, {
+					apiKey: process.env.CLOUDFLARE_API_KEY,
+				});
 
-					logUsage("First request", first);
-					logUsage("Second request", second);
+				logUsage("First request", first);
+				logUsage("Second request", second);
 
-					assertTotalTokensEqualsComponents(first);
-					assertTotalTokensEqualsComponents(second);
-				},
-			);
-		},
-	);
+				assertTotalTokensEqualsComponents(first);
+				assertTotalTokensEqualsComponents(second);
+			},
+		);
+	});
+
+	// =========================================================================
+	// Cloudflare AI Gateway
+	// =========================================================================
+
+	describe.skipIf(!hasCloudflareAiGatewayCredentials())("Cloudflare AI Gateway", () => {
+		it(
+			"workers-ai/@cf/moonshotai/kimi-k2.6 - should return totalTokens equal to sum of components",
+			{ retry: 3, timeout: 60000 },
+			async () => {
+				const llm = getModel("cloudflare-ai-gateway", "workers-ai/@cf/moonshotai/kimi-k2.6");
+
+				console.log(`\nCloudflare AI Gateway / ${llm.id}:`);
+				const { first, second } = await testTotalTokensWithCache(llm, {
+					apiKey: process.env.CLOUDFLARE_API_KEY,
+				});
+
+				logUsage("First request", first);
+				logUsage("Second request", second);
+
+				assertTotalTokensEqualsComponents(first);
+				assertTotalTokensEqualsComponents(second);
+			},
+		);
+	});
 
 	// =========================================================================
 	// Hugging Face

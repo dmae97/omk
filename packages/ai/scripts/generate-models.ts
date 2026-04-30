@@ -4,6 +4,7 @@ import { writeFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import {
+	CLOUDFLARE_AI_GATEWAY_ANTHROPIC_BASE_URL,
 	CLOUDFLARE_AI_GATEWAY_COMPAT_BASE_URL,
 	CLOUDFLARE_AI_GATEWAY_OPENAI_BASE_URL,
 	CLOUDFLARE_WORKERS_AI_BASE_URL,
@@ -419,14 +420,18 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 				const upstream = prefixedId.slice(0, slashIdx);
 				const nativeId = prefixedId.slice(slashIdx + 1);
 
-				let api: "openai-completions" | "openai-responses";
+				let api: "anthropic-messages" | "openai-completions" | "openai-responses";
 				let baseUrl: string;
 				let id: string;
 				if (upstream === "openai") {
 					api = "openai-responses";
 					baseUrl = CLOUDFLARE_AI_GATEWAY_OPENAI_BASE_URL;
 					id = nativeId;
-				} else if (upstream === "workers-ai" || upstream === "anthropic") {
+				} else if (upstream === "anthropic") {
+					api = "anthropic-messages";
+					baseUrl = CLOUDFLARE_AI_GATEWAY_ANTHROPIC_BASE_URL;
+					id = nativeId;
+				} else if (upstream === "workers-ai") {
 					api = "openai-completions";
 					baseUrl = CLOUDFLARE_AI_GATEWAY_COMPAT_BASE_URL;
 					id = prefixedId;

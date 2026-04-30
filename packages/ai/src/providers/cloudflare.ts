@@ -12,6 +12,10 @@ export const CLOUDFLARE_AI_GATEWAY_COMPAT_BASE_URL =
 export const CLOUDFLARE_AI_GATEWAY_OPENAI_BASE_URL =
 	"https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai";
 
+/** AI Gateway → Anthropic passthrough. */
+export const CLOUDFLARE_AI_GATEWAY_ANTHROPIC_BASE_URL =
+	"https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic";
+
 export function isCloudflareProvider(provider: string): boolean {
 	return provider === "cloudflare-workers-ai" || provider === "cloudflare-ai-gateway";
 }
@@ -20,11 +24,12 @@ export function isCloudflareProvider(provider: string): boolean {
 export function resolveCloudflareBaseUrl(model: Model<Api>): string {
 	const url = model.baseUrl;
 	if (!url.includes("{")) return url;
-	return url.replace(/\{([A-Z_][A-Z0-9_]*)\}/g, (_match, name: string) => {
+	const baseUrl = url.replace(/\{([A-Z_][A-Z0-9_]*)\}/g, (_match, name: string) => {
 		const value = process.env[name];
 		if (!value) {
 			throw new Error(`${name} is required for provider ${model.provider} but is not set.`);
 		}
 		return value;
 	});
+	return baseUrl;
 }

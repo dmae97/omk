@@ -8,6 +8,7 @@
 
 ### Added
 
+- Added Cloudflare AI Gateway as a built-in provider with OpenAI, Anthropic, and Workers AI gateway routing plus `CLOUDFLARE_API_KEY`/`CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_GATEWAY_ID` authentication ([#3856](https://github.com/badlogic/pi-mono/pull/3856) by [@mchenco](https://github.com/mchenco)).
 - Added Moonshot AI as a built-in OpenAI-compatible provider with model catalog generation and `MOONSHOT_API_KEY` authentication.
 - Added Mistral Medium 3.5 model metadata and reasoning-mode handling ([#4009](https://github.com/badlogic/pi-mono/pull/4009) by [@technocidal](https://github.com/technocidal)).
 - Added `AssistantMessage.responseModel` on the openai-completions path: surfaces the concrete `chunk.model` when it differs from the requested id (e.g. OpenRouter `auto` -> `anthropic/...`) ([#3968](https://github.com/badlogic/pi-mono/pull/3968) by [@purrgrammer](https://github.com/purrgrammer)).
