@@ -34,11 +34,11 @@ describe("google-shared convertMessages — Gemini 3 unsigned tool calls", () =>
 							id: "call_1",
 							name: "bash",
 							arguments: { command: "ls -la" },
-							// No thoughtSignature: simulates Claude via Antigravity.
+							// No thoughtSignature: simulates replay from a provider without thought signatures.
 						},
 					],
-					api: "google-gemini-cli",
-					provider: "google-antigravity",
+					api: "google-generative-ai",
+					provider: "google",
 					model: "claude-sonnet-4-6",
 					usage: {
 						input: 0,
@@ -144,8 +144,8 @@ describe("google-shared convertMessages — Gemini 3 unsigned tool calls", () =>
 							// No thoughtSignature
 						},
 					],
-					api: "google-gemini-cli",
-					provider: "google-antigravity",
+					api: "google-generative-ai",
+					provider: "google",
 					model: "claude-sonnet-4-6",
 					usage: {
 						input: 0,
