@@ -4,11 +4,9 @@
 
 ### Added
 
-- Added `AssistantMessage.responseModel` on the openai-completions path: surfaces the concrete `chunk.model` when it differs from the requested id (e.g. OpenRouter `auto` -> `anthropic/...`).
-
-### Removed
-
-- Removed built-in Google Gemini CLI and Google Antigravity provider, model, OAuth, and export support.
+- Added Moonshot AI as a built-in OpenAI-compatible provider with model catalog generation and `MOONSHOT_API_KEY` authentication.
+- Added Mistral Medium 3.5 model metadata and reasoning-mode handling ([#4009](https://github.com/badlogic/pi-mono/pull/4009) by [@technocidal](https://github.com/technocidal)).
+- Added `AssistantMessage.responseModel` on the openai-completions path: surfaces the concrete `chunk.model` when it differs from the requested id (e.g. OpenRouter `auto` -> `anthropic/...`) ([#3968](https://github.com/badlogic/pi-mono/pull/3968) by [@purrgrammer](https://github.com/purrgrammer)).
 
 ### Fixed
 
@@ -19,6 +17,10 @@
 - Fixed generated OpenAI-compatible DeepSeek V4 models to carry the provider-specific reasoning effort mapping outside the direct DeepSeek provider ([#3940](https://github.com/badlogic/pi-mono/issues/3940)).
 - Fixed DeepSeek V4 Flash and V4 Pro pricing metadata to match current official rates ([#3910](https://github.com/badlogic/pi-mono/issues/3910)).
 - Fixed DeepSeek prompt cache hits to be tracked from `prompt_cache_hit_tokens` in OpenAI-compatible usage responses ([#3880](https://github.com/badlogic/pi-mono/issues/3880)).
+
+### Removed
+
+- Removed built-in Google Gemini CLI and Google Antigravity provider, model, OAuth, and export support.
 
 ## [0.70.6] - 2026-04-28
 
