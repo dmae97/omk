@@ -8,6 +8,7 @@
 
 ### New Features
 
+- Cloudflare AI Gateway provider support with `CLOUDFLARE_API_KEY`/`CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_GATEWAY_ID`, default model resolution, and `/login` display. See [docs/providers.md#cloudflare-ai-gateway](docs/providers.md#cloudflare-ai-gateway). ([#3856](https://github.com/badlogic/pi-mono/pull/3856) by [@mchenco](https://github.com/mchenco)).
 - Moonshot AI provider support with `MOONSHOT_API_KEY`, default model resolution, and `/login` display.
 - Mistral Medium 3.5 built-in model support. See [docs/providers.md#api-keys](docs/providers.md#api-keys). ([#4009](https://github.com/badlogic/pi-mono/pull/4009) by [@technocidal](https://github.com/technocidal)).
 - Extension APIs can replace finalized `message_end` messages, wrap custom editor factories via `ctx.ui.getEditorComponent()`, and observe thinking level changes. See [docs/extensions.md#message_start--message_update--message_end](docs/extensions.md#message_start--message_update--message_end), [docs/extensions.md#widgets-status-and-footer](docs/extensions.md#widgets-status-and-footer), and [docs/extensions.md#thinking_level_select](docs/extensions.md#thinking_level_select).
