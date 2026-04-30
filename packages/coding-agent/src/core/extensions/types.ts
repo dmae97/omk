@@ -718,6 +718,13 @@ export interface ModelSelectEvent {
 	source: ModelSelectSource;
 }
 
+/** Fired when a new thinking level is selected */
+export interface ThinkingLevelSelectEvent {
+	type: "thinking_level_select";
+	level: ThinkingLevel;
+	previousLevel: ThinkingLevel;
+}
+
 // ============================================================================
 // User Bash Events
 // ============================================================================
@@ -958,6 +965,7 @@ export type ExtensionEvent =
 	| ToolExecutionUpdateEvent
 	| ToolExecutionEndEvent
 	| ModelSelectEvent
+	| ThinkingLevelSelectEvent
 	| UserBashEvent
 	| InputEvent
 	| ToolCallEvent
@@ -1111,6 +1119,7 @@ export interface ExtensionAPI {
 	on(event: "tool_execution_update", handler: ExtensionHandler<ToolExecutionUpdateEvent>): void;
 	on(event: "tool_execution_end", handler: ExtensionHandler<ToolExecutionEndEvent>): void;
 	on(event: "model_select", handler: ExtensionHandler<ModelSelectEvent>): void;
+	on(event: "thinking_level_select", handler: ExtensionHandler<ThinkingLevelSelectEvent>): void;
 	on(event: "tool_call", handler: ExtensionHandler<ToolCallEvent, ToolCallEventResult>): void;
 	on(event: "tool_result", handler: ExtensionHandler<ToolResultEvent, ToolResultEventResult>): void;
 	on(event: "user_bash", handler: ExtensionHandler<UserBashEvent, UserBashEventResult>): void;

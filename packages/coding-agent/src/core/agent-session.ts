@@ -120,6 +120,7 @@ export type AgentSessionEvent =
 	  }
 	| { type: "compaction_start"; reason: "manual" | "threshold" | "overflow" }
 	| { type: "session_info_changed"; name: string | undefined }
+	| { type: "thinking_level_changed"; level: ThinkingLevel }
 	| {
 			type: "compaction_end";
 			reason: "manual" | "threshold" | "overflow";
@@ -1505,7 +1506,8 @@ export class AgentSession {
 		const effectiveLevel = availableLevels.includes(level) ? level : this._clampThinkingLevel(level, availableLevels);
 
 		// Only persist if actually changing
-		const isChanging = effectiveLevel !== this.agent.state.thinkingLevel;
+		const previousLevel = this.agent.state.thinkingLevel;
+		const isChanging = effectiveLevel !== previousLevel;
 
 		this.agent.state.thinkingLevel = effectiveLevel;
 
@@ -1514,6 +1516,12 @@ export class AgentSession {
 			if (this.supportsThinking() || effectiveLevel !== "off") {
 				this.settingsManager.setDefaultThinkingLevel(effectiveLevel);
 			}
+			this._emit({ type: "thinking_level_changed", level: effectiveLevel });
+			void this._extensionRunner.emit({
+				type: "thinking_level_select",
+				level: effectiveLevel,
+				previousLevel,
+			});
 		}
 	}
 

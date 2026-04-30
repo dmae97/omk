@@ -8,6 +8,7 @@
 - Added `message_end` extension result support for replacing finalized messages, enabling extensions to override assistant usage cost ([#3982](https://github.com/badlogic/pi-mono/issues/3982)).
 - Added top-level `name` support to `pi.registerProvider()` so extension-registered providers can show a friendly name in `/login` ([#3956](https://github.com/badlogic/pi-mono/issues/3956)).
 - Added `ctx.ui.getEditorComponent()` so extensions can wrap the currently configured custom editor factory ([#3935](https://github.com/badlogic/pi-mono/issues/3935)).
+- Added a `thinking_level_select` extension event for observing thinking level changes ([#3888](https://github.com/badlogic/pi-mono/issues/3888)).
 
 ### Removed
 
@@ -15,6 +16,8 @@
 
 ### Fixed
 
+- Fixed blocked `edit` tool results rendering the rejection reason twice after interactive extension confirmation ([#3830](https://github.com/badlogic/pi-mono/issues/3830)).
+- Fixed extension-triggered thinking level changes refreshing the interactive editor border immediately ([#3888](https://github.com/badlogic/pi-mono/issues/3888)).
 - Fixed the coding-agent README See Also link to point at `@mariozechner/pi-agent-core` ([#4023](https://github.com/badlogic/pi-mono/issues/4023)).
 - Fixed `grep` and `find` tool argument injection for flag-like search patterns ([#4018](https://github.com/badlogic/pi-mono/issues/4018)).
 - Updated `@mariozechner/clipboard` to an attested release so package managers with trust policies do not reject installs ([#3946](https://github.com/badlogic/pi-mono/issues/3946)).
