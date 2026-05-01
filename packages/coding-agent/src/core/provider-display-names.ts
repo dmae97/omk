@@ -24,5 +24,5 @@ export const BUILT_IN_PROVIDER_DISPLAY_NAMES: Record<string, string> = {
 	"vercel-ai-gateway": "Vercel AI Gateway",
 	xai: "xAI",
 	zai: "ZAI",
-	xiaomi: "Xiaomi MiMo",
+	xiaomi: "Xiaomi MiMo Token Plan",
 };

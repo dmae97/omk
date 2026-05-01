@@ -69,7 +69,9 @@ pi
 | Kimi For Coding | `KIMI_API_KEY` | `kimi-coding` |
 | MiniMax | `MINIMAX_API_KEY` | `minimax` |
 | MiniMax (China) | `MINIMAX_CN_API_KEY` | `minimax-cn` |
-| Xiaomi MiMo | `XIAOMI_API_KEY` | `xiaomi` |
+| Xiaomi MiMo Token Plan | `XIAOMI_API_KEY` | `xiaomi` |
+
+The Xiaomi MiMo provider targets the Xiaomi MiMo Token Plan Anthropic-compatible endpoint.
 
 Reference for environment variables and `auth.json` keys: [`const envMap`](https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/env-api-keys.ts) in [`packages/ai/src/env-api-keys.ts`](https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/env-api-keys.ts).
 

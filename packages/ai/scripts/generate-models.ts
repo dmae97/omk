@@ -919,9 +919,9 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 				models.push({
 					id: modelId,
 					name: m.name || modelId,
-					api: "openai-completions",
+					api: "anthropic-messages",
 					provider: "xiaomi",
-					baseUrl: "https://api.xiaomimimo.com/v1",
+					baseUrl: "https://token-plan-ams.xiaomimimo.com/anthropic",
 					reasoning: m.reasoning === true,
 					input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
 					cost: {

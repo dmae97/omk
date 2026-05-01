@@ -16,7 +16,7 @@
 
 ### Added
 
-- Added Xiaomi MiMo provider (openai-completions compatible) with `XIAOMI_API_KEY` authentication.
+- Added Xiaomi MiMo Token Plan provider (Anthropic-compatible) with `XIAOMI_API_KEY` authentication ([#4005](https://github.com/badlogic/pi-mono/pull/4005) by [@Phoen1xCode](https://github.com/Phoen1xCode)).
 - Added `Model.thinkingLevelMap`, `getSupportedThinkingLevels()`, and `clampThinkingLevel()` so model metadata can describe supported thinking levels and provider-specific level values ([#3208](https://github.com/badlogic/pi-mono/issues/3208)).
 
 ## [0.71.1] - 2026-05-01
