@@ -3,10 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import { afterEach, describe, expect, it } from "vitest";
-import { JsonlSessionTreeStorage, loadJsonlSessionInfo } from "../../src/harness/session/jsonl-session-storage.js";
-import { InMemorySessionTreeStorage } from "../../src/harness/session/memory-session-storage.js";
-import { DefaultSessionTree } from "../../src/harness/session/session-tree.js";
-import type { MessageEntry, SessionInfo, SessionTreeStorage } from "../../src/harness/types.js";
+import { JsonlSessionRepo } from "../../src/harness/session/jsonl-session-repo.js";
+import { JsonlSessionStorage, loadJsonlSessionMetadata } from "../../src/harness/session/jsonl-session-storage.js";
+import { InMemorySessionRepo } from "../../src/harness/session/memory-session-repo.js";
+import { InMemorySessionStorage } from "../../src/harness/session/memory-session-storage.js";
+import { DefaultSession } from "../../src/harness/session/session-tree.js";
+import type { MessageEntry, SessionMetadata, SessionStorage } from "../../src/harness/types.js";
 
 function createUserMessage(text: string): AgentMessage {
 	return {
@@ -56,12 +58,12 @@ afterEach(() => {
 
 async function runSessionTreeSuite(
 	name: string,
-	createStorage: () => SessionTreeStorage | Promise<SessionTreeStorage>,
+	createStorage: () => SessionStorage | Promise<SessionStorage>,
 	inspect?: () => void,
 ) {
 	describe(name, () => {
 		it("appends messages and builds context in order", async () => {
-			const tree = new DefaultSessionTree(await createStorage());
+			const tree = new DefaultSession(await createStorage());
 			await tree.appendMessage(createUserMessage("one"));
 			await tree.appendMessage(createAssistantMessage("two"));
 			const context = await tree.buildContext();
@@ -69,7 +71,7 @@ async function runSessionTreeSuite(
 		});
 
 		it("tracks model and thinking level changes", async () => {
-			const tree = new DefaultSessionTree(await createStorage());
+			const tree = new DefaultSession(await createStorage());
 			await tree.appendMessage(createUserMessage("one"));
 			await tree.appendModelChange("openai", "gpt-4.1");
 			await tree.appendThinkingLevelChange("high");
@@ -79,7 +81,7 @@ async function runSessionTreeSuite(
 		});
 
 		it("supports branching by moving the leaf and appending a new branch", async () => {
-			const tree = new DefaultSessionTree(await createStorage());
+			const tree = new DefaultSession(await createStorage());
 			const user1 = await tree.appendMessage(createUserMessage("one"));
 			const assistant1 = await tree.appendMessage(createAssistantMessage("two"));
 			await tree.appendMessage(createUserMessage("three"));
@@ -93,7 +95,7 @@ async function runSessionTreeSuite(
 		});
 
 		it("supports moving the leaf to root", async () => {
-			const tree = new DefaultSessionTree(await createStorage());
+			const tree = new DefaultSession(await createStorage());
 			await tree.appendMessage(createUserMessage("one"));
 			await tree.moveTo(null);
 			expect(await tree.getLeafId()).toBeNull();
@@ -101,7 +103,7 @@ async function runSessionTreeSuite(
 		});
 
 		it("reconstructs compaction summaries in context", async () => {
-			const tree = new DefaultSessionTree(await createStorage());
+			const tree = new DefaultSession(await createStorage());
 			await tree.appendMessage(createUserMessage("one"));
 			await tree.appendMessage(createAssistantMessage("two"));
 			const user2 = await tree.appendMessage(createUserMessage("three"));
@@ -113,16 +115,19 @@ async function runSessionTreeSuite(
 			expect(context.messages).toHaveLength(4);
 		});
 
-		it("supports branch summary entries in context", async () => {
-			const tree = new DefaultSessionTree(await createStorage());
+		it("supports moving with branch summary entries in context", async () => {
+			const tree = new DefaultSession(await createStorage());
 			const user1 = await tree.appendMessage(createUserMessage("one"));
-			await tree.appendBranchSummary(user1, "summary text");
+			const summaryId = await tree.moveTo(user1, { summary: "summary text" });
+			expect(summaryId).toBeTruthy();
+			const summaryEntry = await tree.getEntry(summaryId!);
+			expect(summaryEntry).toMatchObject({ type: "branch_summary", parentId: user1, fromId: user1 });
 			const context = await tree.buildContext();
 			expect(context.messages[1]?.role).toBe("branchSummary");
 		});
 
 		it("supports custom message entries in context", async () => {
-			const tree = new DefaultSessionTree(await createStorage());
+			const tree = new DefaultSession(await createStorage());
 			await tree.appendMessage(createUserMessage("one"));
 			await tree.appendCustomMessageEntry("custom", "hello", true, { ok: true });
 			const context = await tree.buildContext();
@@ -130,10 +135,10 @@ async function runSessionTreeSuite(
 		});
 
 		it("supports labels and session info entries without affecting context", async () => {
-			const tree = new DefaultSessionTree(await createStorage());
+			const tree = new DefaultSession(await createStorage());
 			const user1 = await tree.appendMessage(createUserMessage("one"));
-			await tree.appendLabelChange(user1, "checkpoint");
-			await tree.appendSessionInfo("name");
+			await tree.appendLabel(user1, "checkpoint");
+			await tree.appendSessionName("name");
 			const entries = await tree.getEntries();
 			expect(entries.some((entry) => entry.type === "label")).toBe(true);
 			expect(entries.some((entry) => entry.type === "session_info")).toBe(true);
@@ -142,16 +147,21 @@ async function runSessionTreeSuite(
 			expect((await tree.buildContext()).messages).toHaveLength(1);
 		});
 
+		it("rejects labels for missing entries", async () => {
+			const tree = new DefaultSession(await createStorage());
+			await expect(tree.appendLabel("missing", "checkpoint")).rejects.toThrow("Entry missing not found");
+		});
+
 		it("persists leaf changes and appended entries via storage", async () => {
 			const storage = await createStorage();
-			const tree = new DefaultSessionTree(storage);
+			const tree = new DefaultSession(storage);
 			const user1 = await tree.appendMessage(createUserMessage("one"));
 			await tree.appendMessage(createAssistantMessage("two"));
-			await tree.appendLabelChange(user1, "checkpoint");
-			await tree.appendSessionInfo("name");
+			await tree.appendLabel(user1, "checkpoint");
+			await tree.appendSessionName("name");
 			await tree.moveTo(user1);
 			await tree.appendMessage(createAssistantMessage("branched"));
-			const tree2 = new DefaultSessionTree(storage);
+			const tree2 = new DefaultSession(storage);
 			const context = await tree2.buildContext();
 			expect(context.messages.map((message) => message.role)).toEqual(["user", "assistant"]);
 			expect(await tree2.getLabel(user1)).toBe("checkpoint");
@@ -161,11 +171,11 @@ async function runSessionTreeSuite(
 	});
 }
 
-describe("InMemorySessionTreeStorage", () => {
+describe("InMemorySessionStorage", () => {
 	it("returns configured session info", async () => {
-		const sessionInfo: SessionInfo = { id: "session-1", createdAt: "2026-01-01T00:00:00.000Z" };
-		const storage = new InMemorySessionTreeStorage({ sessionInfo });
-		expect(await storage.getSessionInfo()).toEqual(sessionInfo);
+		const metadata: SessionMetadata = { id: "session-1", createdAt: "2026-01-01T00:00:00.000Z" };
+		const storage = new InMemorySessionStorage({ metadata });
+		expect(await storage.getMetadata()).toEqual(metadata);
 	});
 
 	it("copies initial entries and tracks leaf independently", async () => {
@@ -177,7 +187,7 @@ describe("InMemorySessionTreeStorage", () => {
 			message: createUserMessage("one"),
 		};
 		const initialEntries = [entry];
-		const storage = new InMemorySessionTreeStorage({ entries: initialEntries });
+		const storage = new InMemorySessionStorage({ entries: initialEntries });
 		initialEntries.push({ ...entry, id: "entry-2" });
 		expect((await storage.getEntries()).map((storedEntry) => storedEntry.id)).toEqual(["entry-1"]);
 		expect(await storage.getLeafId()).toBe("entry-1");
@@ -186,9 +196,39 @@ describe("InMemorySessionTreeStorage", () => {
 	});
 
 	it("rejects invalid leaf ids", async () => {
-		const storage = new InMemorySessionTreeStorage();
+		const storage = new InMemorySessionStorage();
 		await expect(storage.setLeafId("missing")).rejects.toThrow("Entry missing not found");
-		expect(() => new InMemorySessionTreeStorage({ leafId: "missing" })).toThrow("Entry missing not found");
+		expect(() => new InMemorySessionStorage({ leafId: "missing" })).toThrow("Entry missing not found");
+	});
+
+	it("maintains label lookup", async () => {
+		const entry: MessageEntry = {
+			type: "message",
+			id: "entry-1",
+			parentId: null,
+			timestamp: "2026-01-01T00:00:00.000Z",
+			message: createUserMessage("one"),
+		};
+		const storage = new InMemorySessionStorage({ entries: [entry] });
+		expect(await storage.getLabel("entry-1")).toBeUndefined();
+		await storage.appendEntry({
+			type: "label",
+			id: "label-1",
+			parentId: "entry-1",
+			timestamp: "2026-01-01T00:00:01.000Z",
+			targetId: "entry-1",
+			label: "checkpoint",
+		});
+		expect(await storage.getLabel("entry-1")).toBe("checkpoint");
+		await storage.appendEntry({
+			type: "label",
+			id: "label-2",
+			parentId: "label-1",
+			timestamp: "2026-01-01T00:00:02.000Z",
+			targetId: "entry-1",
+			label: undefined,
+		});
+		expect(await storage.getLabel("entry-1")).toBeUndefined();
 	});
 
 	it("walks paths to root", async () => {
@@ -205,26 +245,70 @@ describe("InMemorySessionTreeStorage", () => {
 			parentId: "root",
 			message: createAssistantMessage("child"),
 		};
-		const storage = new InMemorySessionTreeStorage({ entries: [root, child] });
+		const storage = new InMemorySessionStorage({ entries: [root, child] });
 		expect((await storage.getPathToRoot("child")).map((entry) => entry.id)).toEqual(["root", "child"]);
 		expect(await storage.getPathToRoot(null)).toEqual([]);
 	});
 });
 
-runSessionTreeSuite("SessionTree with in-memory storage", () => new InMemorySessionTreeStorage());
+runSessionTreeSuite("Session with in-memory storage", () => new InMemorySessionStorage());
 
-describe("JsonlSessionTreeStorage", () => {
+describe("InMemorySessionRepo", () => {
+	it("lists session infos and forks via storage path traversal", async () => {
+		const repo = new InMemorySessionRepo();
+		const session = await repo.create({ id: "session-1" });
+		const user1 = await session.appendMessage(createUserMessage("one"));
+		const assistant1 = await session.appendMessage(createAssistantMessage("two"));
+		const user2 = await session.appendMessage(createUserMessage("three"));
+		const infos = await repo.list();
+		expect(infos.map((info) => info.id)).toEqual(["session-1"]);
+		const fork = await repo.fork("session-1", { entryId: user2, id: "session-2" });
+		expect((await fork.getEntries()).map((entry) => entry.id)).toEqual([user1, assistant1]);
+	});
+});
+
+describe("JsonlSessionRepo", () => {
+	it("stores sessions below encoded cwd directories and resolves prefixes", async () => {
+		const root = createTempDir();
+		const cwd = "/tmp/my-project";
+		const repo = new JsonlSessionRepo({ sessionsRoot: root });
+		const session = await repo.create({ cwd, id: "019de8c2-de29-73e9-ae0c-e134db34c447" });
+		const info = await session.getMetadata();
+		expect(info.path).toContain("--tmp-my-project--");
+		expect(existsSync(info.path)).toBe(true);
+		expect((await repo.list({ cwd })).map((sessionInfo) => sessionInfo.id)).toEqual([info.id]);
+		expect((await repo.resolve("019de8c2", { cwd })).map((sessionInfo) => sessionInfo.path)).toEqual([info.path]);
+	});
+
+	it("forks sessions and records the parent path", async () => {
+		const root = createTempDir();
+		const repo = new JsonlSessionRepo({ sessionsRoot: root });
+		const source = await repo.create({ cwd: "/tmp/source", id: "source-session" });
+		const sourceInfo = await source.getMetadata();
+		const user1 = await source.appendMessage(createUserMessage("one"));
+		const assistant1 = await source.appendMessage(createAssistantMessage("two"));
+		const user2 = await source.appendMessage(createUserMessage("three"));
+		const fork = await repo.fork(sourceInfo, { cwd: "/tmp/target", id: "fork-session", entryId: user2 });
+		const forkInfo = await fork.getMetadata();
+		expect(forkInfo.cwd).toBe("/tmp/target");
+		expect(forkInfo.parentSessionPath).toBe(sourceInfo.path);
+		expect((await fork.getEntries()).map((entry) => entry.id)).toEqual([user1, assistant1]);
+	});
+});
+
+describe("JsonlSessionStorage", () => {
 	it("throws for missing files when opening", async () => {
 		const dir = createTempDir();
 		const filePath = join(dir, "session.jsonl");
-		await expect(JsonlSessionTreeStorage.open(filePath)).rejects.toMatchObject({ code: "ENOENT" });
+		await expect(JsonlSessionStorage.open(filePath)).rejects.toMatchObject({ code: "ENOENT" });
 	});
 
-	it("writes the header before the first appended entry", async () => {
+	it("writes the header on create", async () => {
 		const dir = createTempDir();
 		const filePath = join(dir, "session.jsonl");
-		const storage = await JsonlSessionTreeStorage.create(filePath, { cwd: dir, sessionId: "session-1" });
-		expect(existsSync(filePath)).toBe(false);
+		const storage = await JsonlSessionStorage.create(filePath, { cwd: dir, sessionId: "session-1" });
+		expect(existsSync(filePath)).toBe(true);
+		expect(readFileSync(filePath, "utf8").trim().split("\n")).toHaveLength(1);
 		expect(await storage.getLeafId()).toBeNull();
 		expect(await storage.getEntries()).toEqual([]);
 		await storage.appendEntry({
@@ -245,7 +329,7 @@ describe("JsonlSessionTreeStorage", () => {
 		const dir = createTempDir();
 		const filePath = join(dir, "session.jsonl");
 		writeFileSync(filePath, "not json\n");
-		await expect(JsonlSessionTreeStorage.open(filePath)).rejects.toThrow("first line is not a valid session header");
+		await expect(JsonlSessionStorage.open(filePath)).rejects.toThrow("first line is not a valid session header");
 	});
 
 	it("ignores malformed entry lines", async () => {
@@ -266,7 +350,7 @@ describe("JsonlSessionTreeStorage", () => {
 			message: createUserMessage("one"),
 		};
 		writeFileSync(filePath, `${JSON.stringify(header)}\nnot json\n${JSON.stringify(entry)}\n`);
-		const storage = await JsonlSessionTreeStorage.open(filePath);
+		const storage = await JsonlSessionStorage.open(filePath);
 		expect((await storage.getEntries()).map((loadedEntry) => loadedEntry.id)).toEqual(["entry-1"]);
 		expect(await storage.getLeafId()).toBe("entry-1");
 	});
@@ -274,19 +358,19 @@ describe("JsonlSessionTreeStorage", () => {
 	it("creates and reads session info from the header", async () => {
 		const dir = createTempDir();
 		const filePath = join(dir, "session.jsonl");
-		const storage = await JsonlSessionTreeStorage.create(filePath, {
+		const storage = await JsonlSessionStorage.create(filePath, {
 			cwd: dir,
 			sessionId: "session-1",
 			parentSessionPath: "/tmp/parent.jsonl",
 		});
-		const info = await storage.getSessionInfo();
+		const info = await storage.getMetadata();
 		expect(info).toMatchObject({
 			id: "session-1",
 			cwd: dir,
 			path: filePath,
 			parentSessionPath: "/tmp/parent.jsonl",
 		});
-		expect(existsSync(filePath)).toBe(false);
+		expect(existsSync(filePath)).toBe(true);
 		await storage.appendEntry({
 			type: "message",
 			id: "user-1",
@@ -294,13 +378,13 @@ describe("JsonlSessionTreeStorage", () => {
 			timestamp: "2026-01-01T00:00:00.000Z",
 			message: createUserMessage("one"),
 		});
-		expect(await loadJsonlSessionInfo(filePath)).toEqual(info);
+		expect(await loadJsonlSessionMetadata(filePath)).toEqual(info);
 	});
 
 	it("loads existing entries and reconstructs leaf", async () => {
 		const dir = createTempDir();
 		const filePath = join(dir, "session.jsonl");
-		const storage = await JsonlSessionTreeStorage.create(filePath, { cwd: dir, sessionId: "session-1" });
+		const storage = await JsonlSessionStorage.create(filePath, { cwd: dir, sessionId: "session-1" });
 		const root: MessageEntry = {
 			type: "message",
 			id: "root",
@@ -316,10 +400,44 @@ describe("JsonlSessionTreeStorage", () => {
 		};
 		await storage.appendEntry(root);
 		await storage.appendEntry(child);
-		const loaded = await JsonlSessionTreeStorage.open(filePath);
+		const loaded = await JsonlSessionStorage.open(filePath);
 		expect(await loaded.getLeafId()).toBe("child");
 		expect((await loaded.getEntries()).map((entry) => entry.id)).toEqual(["root", "child"]);
 		expect((await loaded.getPathToRoot("child")).map((entry) => entry.id)).toEqual(["root", "child"]);
+	});
+
+	it("maintains label lookup", async () => {
+		const dir = createTempDir();
+		const filePath = join(dir, "session.jsonl");
+		const storage = await JsonlSessionStorage.create(filePath, { cwd: dir, sessionId: "session-1" });
+		await storage.appendEntry({
+			type: "message",
+			id: "entry-1",
+			parentId: null,
+			timestamp: "2026-01-01T00:00:00.000Z",
+			message: createUserMessage("one"),
+		});
+		expect(await storage.getLabel("entry-1")).toBeUndefined();
+		await storage.appendEntry({
+			type: "label",
+			id: "label-1",
+			parentId: "entry-1",
+			timestamp: "2026-01-01T00:00:01.000Z",
+			targetId: "entry-1",
+			label: "checkpoint",
+		});
+		expect(await storage.getLabel("entry-1")).toBe("checkpoint");
+		await storage.appendEntry({
+			type: "label",
+			id: "label-2",
+			parentId: "label-1",
+			timestamp: "2026-01-01T00:00:02.000Z",
+			targetId: "entry-1",
+			label: undefined,
+		});
+		expect(await storage.getLabel("entry-1")).toBeUndefined();
+		const loaded = await JsonlSessionStorage.open(filePath);
+		expect(await loaded.getLabel("entry-1")).toBeUndefined();
 	});
 
 	it("reads session info from only the first JSONL line", async () => {
@@ -334,7 +452,7 @@ describe("JsonlSessionTreeStorage", () => {
 		};
 		const malformedSecondLine = "{".repeat(10000);
 		writeFileSync(filePath, `${JSON.stringify(header)}\n${malformedSecondLine}\n`);
-		expect(await loadJsonlSessionInfo(filePath)).toEqual({
+		expect(await loadJsonlSessionMetadata(filePath)).toEqual({
 			id: "session-1",
 			createdAt: "2026-01-01T00:00:00.000Z",
 			cwd: dir,
@@ -345,10 +463,10 @@ describe("JsonlSessionTreeStorage", () => {
 });
 
 runSessionTreeSuite(
-	"SessionTree with JSONL storage",
+	"Session with JSONL storage",
 	async () => {
 		const dir = createTempDir();
-		return await JsonlSessionTreeStorage.create(join(dir, "session.jsonl"), { cwd: dir, sessionId: "session-1" });
+		return await JsonlSessionStorage.create(join(dir, "session.jsonl"), { cwd: dir, sessionId: "session-1" });
 	},
 	() => {
 		const dir = tempDirs[tempDirs.length - 1]!;

@@ -2,7 +2,7 @@ import { createReadStream } from "node:fs";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { createInterface } from "node:readline";
-import type { JsonlSessionInfo, SessionTreeEntry, SessionTreeStorage } from "../types.js";
+import type { JsonlSessionMetadata, SessionStorage, SessionTreeEntry } from "../types.js";
 
 interface SessionHeader {
 	type: "session";
@@ -13,7 +13,25 @@ interface SessionHeader {
 	parentSession?: string;
 }
 
-function headerToSessionInfo(header: SessionHeader, path: string): JsonlSessionInfo {
+function updateLabelCache(labelsById: Map<string, string>, entry: SessionTreeEntry): void {
+	if (entry.type !== "label") return;
+	const label = entry.label?.trim();
+	if (label) {
+		labelsById.set(entry.targetId, label);
+	} else {
+		labelsById.delete(entry.targetId);
+	}
+}
+
+function buildLabelsById(entries: SessionTreeEntry[]): Map<string, string> {
+	const labelsById = new Map<string, string>();
+	for (const entry of entries) {
+		updateLabelCache(labelsById, entry);
+	}
+	return labelsById;
+}
+
+function headerToSessionMetadata(header: SessionHeader, path: string): JsonlSessionMetadata {
 	return {
 		id: header.id,
 		createdAt: header.timestamp,
@@ -23,7 +41,7 @@ function headerToSessionInfo(header: SessionHeader, path: string): JsonlSessionI
 	};
 }
 
-export async function loadJsonlSessionInfo(filePath: string): Promise<JsonlSessionInfo> {
+export async function loadJsonlSessionMetadata(filePath: string): Promise<JsonlSessionMetadata> {
 	const stream = createReadStream(filePath, { encoding: "utf8" });
 	const lines = createInterface({ input: stream, crlfDelay: Infinity });
 	try {
@@ -31,7 +49,7 @@ export async function loadJsonlSessionInfo(filePath: string): Promise<JsonlSessi
 			if (!line.trim()) break;
 			try {
 				const header = JSON.parse(line) as SessionHeader;
-				return headerToSessionInfo(header, resolve(filePath));
+				return headerToSessionMetadata(header, resolve(filePath));
 			} catch {
 				throw new Error(`Invalid JSONL session file ${filePath}: first line is not a valid session header`);
 			}
@@ -75,35 +93,27 @@ async function loadJsonlStorage(filePath: string): Promise<{
 	return { header, entries, leafId };
 }
 
-export class JsonlSessionTreeStorage implements SessionTreeStorage<JsonlSessionInfo> {
+export class JsonlSessionStorage implements SessionStorage<JsonlSessionMetadata> {
 	private readonly filePath: string;
-	private readonly header: SessionHeader;
-	private readonly sessionInfo: JsonlSessionInfo;
+	private readonly metadata: JsonlSessionMetadata;
 	private entries: SessionTreeEntry[];
 	private byId: Map<string, SessionTreeEntry>;
+	private labelsById: Map<string, string>;
 	private currentLeafId: string | null;
-	private headerWritten: boolean;
 
-	private constructor(
-		filePath: string,
-		header: SessionHeader,
-		entries: SessionTreeEntry[],
-		leafId: string | null,
-		headerWritten: boolean,
-	) {
+	private constructor(filePath: string, header: SessionHeader, entries: SessionTreeEntry[], leafId: string | null) {
 		this.filePath = resolve(filePath);
-		this.header = header;
-		this.sessionInfo = headerToSessionInfo(header, this.filePath);
+		this.metadata = headerToSessionMetadata(header, this.filePath);
 		this.entries = entries;
 		this.byId = new Map(entries.map((entry) => [entry.id, entry]));
+		this.labelsById = buildLabelsById(entries);
 		this.currentLeafId = leafId;
-		this.headerWritten = headerWritten;
 	}
 
-	static async open(filePath: string): Promise<JsonlSessionTreeStorage> {
+	static async open(filePath: string): Promise<JsonlSessionStorage> {
 		const resolvedPath = resolve(filePath);
 		const loaded = await loadJsonlStorage(resolvedPath);
-		return new JsonlSessionTreeStorage(resolvedPath, loaded.header, loaded.entries, loaded.leafId, true);
+		return new JsonlSessionStorage(resolvedPath, loaded.header, loaded.entries, loaded.leafId);
 	}
 
 	static async create(
@@ -113,7 +123,7 @@ export class JsonlSessionTreeStorage implements SessionTreeStorage<JsonlSessionI
 			sessionId: string;
 			parentSessionPath?: string;
 		},
-	): Promise<JsonlSessionTreeStorage> {
+	): Promise<JsonlSessionStorage> {
 		const resolvedPath = resolve(filePath);
 		const header: SessionHeader = {
 			type: "session",
@@ -123,11 +133,13 @@ export class JsonlSessionTreeStorage implements SessionTreeStorage<JsonlSessionI
 			cwd: options.cwd,
 			parentSession: options.parentSessionPath,
 		};
-		return new JsonlSessionTreeStorage(resolvedPath, header, [], null, false);
+		await mkdir(dirname(resolvedPath), { recursive: true });
+		await writeFile(resolvedPath, `${JSON.stringify(header)}\n`);
+		return new JsonlSessionStorage(resolvedPath, header, [], null);
 	}
 
-	async getSessionInfo(): Promise<JsonlSessionInfo> {
-		return this.sessionInfo;
+	async getMetadata(): Promise<JsonlSessionMetadata> {
+		return this.metadata;
 	}
 
 	async getLeafId(): Promise<string | null> {
@@ -142,19 +154,19 @@ export class JsonlSessionTreeStorage implements SessionTreeStorage<JsonlSessionI
 	}
 
 	async appendEntry(entry: SessionTreeEntry): Promise<void> {
-		if (!this.headerWritten) {
-			await mkdir(dirname(this.filePath), { recursive: true });
-			await writeFile(this.filePath, `${JSON.stringify(this.header)}\n`);
-			this.headerWritten = true;
-		}
 		await appendFile(this.filePath, `${JSON.stringify(entry)}\n`);
 		this.entries.push(entry);
 		this.byId.set(entry.id, entry);
+		updateLabelCache(this.labelsById, entry);
 		this.currentLeafId = entry.id;
 	}
 
 	async getEntry(id: string): Promise<SessionTreeEntry | undefined> {
 		return this.byId.get(id);
+	}
+
+	async getLabel(id: string): Promise<string | undefined> {
+		return this.labelsById.get(id);
 	}
 
 	async getPathToRoot(leafId: string | null): Promise<SessionTreeEntry[]> {

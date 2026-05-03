@@ -5,7 +5,7 @@
  * and after compaction the session is reloaded.
  */
 
-import type { AssistantMessage, Model, Usage } from "@mariozechner/pi-ai";
+import type { AssistantMessage, ImageContent, Model, TextContent, Usage } from "@mariozechner/pi-ai";
 import { completeSimple } from "@mariozechner/pi-ai";
 import type { AgentMessage, ThinkingLevel } from "../../types.js";
 import {
@@ -79,10 +79,16 @@ function extractFileOperations(
  */
 function getMessageFromEntry(entry: SessionTreeEntry): AgentMessage | undefined {
 	if (entry.type === "message") {
-		return entry.message;
+		return entry.message as AgentMessage;
 	}
 	if (entry.type === "custom_message") {
-		return createCustomMessage(entry.customType, entry.content, entry.display, entry.details, entry.timestamp);
+		return createCustomMessage(
+			entry.customType,
+			entry.content as string | (TextContent | ImageContent)[],
+			entry.display,
+			entry.details,
+			entry.timestamp,
+		);
 	}
 	if (entry.type === "branch_summary") {
 		return createBranchSummaryMessage(entry.summary, entry.fromId, entry.timestamp);
@@ -158,7 +164,7 @@ export function getLastAssistantUsage(entries: SessionTreeEntry[]): Usage | unde
 	for (let i = entries.length - 1; i >= 0; i--) {
 		const entry = entries[i];
 		if (entry.type === "message") {
-			const usage = getAssistantUsage(entry.message);
+			const usage = getAssistantUsage(entry.message as AgentMessage);
 			if (usage) return usage;
 		}
 	}
@@ -405,7 +411,7 @@ export function findCutPoint(
 		if (entry.type !== "message") continue;
 
 		// Estimate this message's size
-		const messageTokens = estimateTokens(entry.message);
+		const messageTokens = estimateTokens(entry.message as AgentMessage);
 		accumulatedTokens += messageTokens;
 
 		// Check if we've exceeded the budget

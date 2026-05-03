@@ -136,7 +136,7 @@ export interface LabelEntry extends SessionTreeEntryBase {
 }
 
 export interface SessionInfoEntry extends SessionTreeEntryBase {
-	type: "session_info";
+	type: "session_info"; // legacy name, kept for backwards compatibility
 	name?: string;
 }
 
@@ -157,28 +157,32 @@ export interface SessionContext {
 	model: { provider: string; modelId: string } | null;
 }
 
-export interface SessionInfo {
+export interface SessionMetadata {
 	id: string;
 	createdAt: string;
 }
 
-export interface JsonlSessionInfo extends SessionInfo {
+export interface JsonlSessionMetadata extends SessionMetadata {
 	cwd: string;
 	path: string;
 	parentSessionPath?: string;
 }
 
-export interface SessionTreeStorage<TInfo extends SessionInfo = SessionInfo> {
-	getSessionInfo(): Promise<TInfo>;
+export interface SessionStorage<TMetadata extends SessionMetadata = SessionMetadata> {
+	getMetadata(): Promise<TMetadata>;
 	getLeafId(): Promise<string | null>;
 	setLeafId(leafId: string | null): Promise<void>;
 	appendEntry(entry: SessionTreeEntry): Promise<void>;
 	getEntry(id: string): Promise<SessionTreeEntry | undefined>;
+	getLabel(id: string): Promise<string | undefined>;
 	getPathToRoot(leafId: string | null): Promise<SessionTreeEntry[]>;
 	getEntries(): Promise<SessionTreeEntry[]>;
 }
 
-export interface SessionTree {
+export interface Session<TMetadata extends SessionMetadata = SessionMetadata> {
+	getMetadata(): Promise<TMetadata>;
+	getStorage(): SessionStorage<TMetadata>;
+
 	getLeafId(): Promise<string | null>;
 	getEntry(id: string): Promise<SessionTreeEntry | undefined>;
 	getEntries(): Promise<SessionTreeEntry[]>;
@@ -197,7 +201,6 @@ export interface SessionTree {
 		details?: T,
 		fromHook?: boolean,
 	): Promise<string>;
-	appendBranchSummary<T = unknown>(fromId: string, summary: string, details?: T, fromHook?: boolean): Promise<string>;
 	appendCustomEntry(customType: string, data?: unknown): Promise<string>;
 	appendCustomMessageEntry<T = unknown>(
 		customType: string,
@@ -205,15 +208,13 @@ export interface SessionTree {
 		display: boolean,
 		details?: T,
 	): Promise<string>;
-	appendLabelChange(targetId: string, label: string | undefined): Promise<string>;
-	appendSessionInfo(name: string): Promise<string>;
+	appendLabel(targetId: string, label: string | undefined): Promise<string>;
+	appendSessionName(name: string): Promise<string>;
 
-	moveTo(entryId: string | null): Promise<void>;
-}
-
-export interface Session<TInfo extends SessionInfo = SessionInfo> {
-	storage: SessionTreeStorage<TInfo>;
-	tree: SessionTree;
+	moveTo(
+		entryId: string | null,
+		summary?: { summary: string; details?: unknown; fromHook?: boolean },
+	): Promise<string | undefined>;
 }
 
 export interface SessionCreateOptions {
@@ -227,25 +228,38 @@ export interface SessionForkOptions {
 }
 
 export interface SessionRepo<
-	TRef = string,
-	TInfo extends SessionInfo = SessionInfo,
+	TMetadata extends SessionMetadata = SessionMetadata,
 	TCreateOptions extends SessionCreateOptions = SessionCreateOptions,
+	TRef = string,
+	TListQuery = void,
 > {
-	create(options?: TCreateOptions): Promise<Session<TInfo>>;
-	open(ref: TRef): Promise<Session<TInfo>>;
-	list(): Promise<Array<Session<TInfo>>>;
+	create(options: TCreateOptions): Promise<Session<TMetadata>>;
+	open(ref: TRef): Promise<Session<TMetadata>>;
+	list(query?: TListQuery): Promise<TMetadata[]>;
 	delete(ref: TRef): Promise<void>;
-	fork(ref: TRef, options: SessionForkOptions): Promise<Session<TInfo>>;
+	fork(ref: TRef, options: SessionForkOptions & TCreateOptions): Promise<Session<TMetadata>>;
 }
 
 export interface JsonlSessionCreateOptions extends SessionCreateOptions {
+	cwd: string;
 	parentSessionPath?: string;
 }
 
-export interface JsonlSessionRepo<TRef = string>
-	extends SessionRepo<TRef, JsonlSessionInfo, JsonlSessionCreateOptions> {
-	listByCwd(cwd: string): Promise<Array<Session<JsonlSessionInfo>>>;
-	getMostRecentByCwd(cwd: string): Promise<Session<JsonlSessionInfo> | undefined>;
+export type JsonlSessionRef = { path: string } | JsonlSessionMetadata;
+
+export interface JsonlSessionListQuery {
+	cwd?: string;
+}
+
+export interface JsonlSessionResolveOptions {
+	cwd?: string;
+	searchAll?: boolean;
+}
+
+export interface JsonlSessionRepoApi
+	extends SessionRepo<JsonlSessionMetadata, JsonlSessionCreateOptions, JsonlSessionRef, JsonlSessionListQuery> {
+	resolve(ref: string, options?: JsonlSessionResolveOptions): Promise<JsonlSessionMetadata[]>;
+	getMostRecent(query?: JsonlSessionListQuery): Promise<JsonlSessionMetadata | undefined>;
 }
 
 export interface AgentHarnessPendingMutations {
@@ -257,7 +271,7 @@ export interface AgentHarnessPendingMutations {
 }
 
 export interface AgentHarnessConversationState {
-	sessionTree: SessionTree;
+	session: Session;
 	model: Model<any> | undefined;
 	thinkingLevel: ThinkingLevel;
 	activeToolNames: string[];
@@ -284,8 +298,8 @@ export interface SavePointSnapshot {
 
 export interface AgentHarnessContext {
 	env: ExecutionEnv;
-	conversation: Readonly<AgentHarnessConversationState>;
-	operation: Readonly<AgentHarnessOperationState>;
+	conversation: AgentHarnessConversationState;
+	operation: AgentHarnessOperationState;
 	abortSignal?: AbortSignal;
 }
 
@@ -549,7 +563,7 @@ export interface BranchSummaryResult {
 export interface AgentHarnessOptions {
 	agent: Agent;
 	env: ExecutionEnv;
-	sessionTree: SessionTree;
+	session: Session;
 	promptTemplates?: PromptTemplate[];
 	skills?: Skill[];
 	requestAuth?: (model: Model<any>) => Promise<{ apiKey: string; headers?: Record<string, string> } | undefined>;
@@ -562,8 +576,8 @@ export interface AgentHarnessOptions {
 export interface AgentHarness {
 	readonly agent: Agent;
 	readonly env: ExecutionEnv;
-	readonly conversation: Readonly<AgentHarnessConversationState>;
-	readonly operation: Readonly<AgentHarnessOperationState>;
+	readonly conversation: AgentHarnessConversationState;
+	readonly operation: AgentHarnessOperationState;
 
 	prompt(text: string, options?: AgentHarnessPromptOptions): Promise<void>;
 	skill(name: string, args?: string): Promise<void>;

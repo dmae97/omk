@@ -25,6 +25,8 @@ export {
 export * from "./harness/execution-env.js";
 export * from "./harness/messages.js";
 export * from "./harness/prompt-templates.js";
+export * from "./harness/session/jsonl-session-repo.js";
+export * from "./harness/session/memory-session-repo.js";
 export * from "./harness/session/session-repo.js";
 export * from "./harness/session/session-tree.js";
 // Harness

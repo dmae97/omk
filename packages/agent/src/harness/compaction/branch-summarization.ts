@@ -5,7 +5,7 @@
  * a summary of the branch being left so context isn't lost.
  */
 
-import type { Model } from "@mariozechner/pi-ai";
+import type { ImageContent, Model, TextContent } from "@mariozechner/pi-ai";
 import { completeSimple } from "@mariozechner/pi-ai";
 import type { AgentMessage } from "../../types.js";
 import {
@@ -14,7 +14,7 @@ import {
 	createCompactionSummaryMessage,
 	createCustomMessage,
 } from "../messages.js";
-import type { SessionTree, SessionTreeEntry } from "../types.js";
+import type { Session, SessionTreeEntry } from "../types.js";
 import { estimateTokens } from "./compaction.js";
 import {
 	computeFileLists,
@@ -96,7 +96,7 @@ export interface GenerateBranchSummaryOptions {
  * @returns Entries to summarize and the common ancestor
  */
 export async function collectEntriesForBranchSummary(
-	session: SessionTree,
+	session: Session,
 	oldLeafId: string | null,
 	targetId: string,
 ): Promise<CollectEntriesResult> {
@@ -125,7 +125,7 @@ export async function collectEntriesForBranchSummary(
 	while (current && current !== commonAncestorId) {
 		const entry = await session.getEntry(current);
 		if (!entry) break;
-		entries.push(entry);
+		entries.push(entry as SessionTreeEntry);
 		current = entry.parentId;
 	}
 
@@ -148,10 +148,16 @@ function getMessageFromEntry(entry: SessionTreeEntry): AgentMessage | undefined 
 		case "message":
 			// Skip tool results - context is in assistant's tool call
 			if (entry.message.role === "toolResult") return undefined;
-			return entry.message;
+			return entry.message as AgentMessage;
 
 		case "custom_message":
-			return createCustomMessage(entry.customType, entry.content, entry.display, entry.details, entry.timestamp);
+			return createCustomMessage(
+				entry.customType,
+				entry.content as string | (TextContent | ImageContent)[],
+				entry.display,
+				entry.details,
+				entry.timestamp,
+			);
 
 		case "branch_summary":
 			return createBranchSummaryMessage(entry.summary, entry.fromId, entry.timestamp);

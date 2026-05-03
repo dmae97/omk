@@ -10,12 +10,12 @@ import type {
 	LabelEntry,
 	MessageEntry,
 	ModelChangeEntry,
+	Session,
 	SessionContext,
-	SessionInfo,
 	SessionInfoEntry,
-	SessionTree,
+	SessionMetadata,
+	SessionStorage,
 	SessionTreeEntry,
-	SessionTreeStorage,
 	ThinkingLevelChangeEntry,
 } from "../types.js";
 
@@ -27,12 +27,12 @@ function generateId(byId: { has(id: string): boolean }): string {
 	return randomUUID();
 }
 
-export function buildSessionContext(entries: SessionTreeEntry[]): SessionContext {
+export function buildSessionContext(pathEntries: SessionTreeEntry[]): SessionContext {
 	let thinkingLevel = "off";
 	let model: { provider: string; modelId: string } | null = null;
 	let compaction: CompactionEntry | null = null;
 
-	for (const entry of entries) {
+	for (const entry of pathEntries) {
 		if (entry.type === "thinking_level_change") {
 			thinkingLevel = entry.thinkingLevel;
 		} else if (entry.type === "model_change") {
@@ -47,10 +47,16 @@ export function buildSessionContext(entries: SessionTreeEntry[]): SessionContext
 	const messages: AgentMessage[] = [];
 	const appendMessage = (entry: SessionTreeEntry) => {
 		if (entry.type === "message") {
-			messages.push(entry.message);
+			messages.push(entry.message as AgentMessage);
 		} else if (entry.type === "custom_message") {
 			messages.push(
-				createCustomMessage(entry.customType, entry.content, entry.display, entry.details, entry.timestamp),
+				createCustomMessage(
+					entry.customType,
+					entry.content as string | (TextContent | ImageContent)[],
+					entry.display,
+					entry.details,
+					entry.timestamp,
+				),
 			);
 		} else if (entry.type === "branch_summary" && entry.summary) {
 			messages.push(createBranchSummaryMessage(entry.summary, entry.fromId, entry.timestamp));
@@ -59,18 +65,18 @@ export function buildSessionContext(entries: SessionTreeEntry[]): SessionContext
 
 	if (compaction) {
 		messages.push(createCompactionSummaryMessage(compaction.summary, compaction.tokensBefore, compaction.timestamp));
-		const compactionIdx = entries.findIndex((e) => e.type === "compaction" && e.id === compaction.id);
+		const compactionIdx = pathEntries.findIndex((e) => e.type === "compaction" && e.id === compaction.id);
 		let foundFirstKept = false;
 		for (let i = 0; i < compactionIdx; i++) {
-			const entry = entries[i]!;
+			const entry = pathEntries[i]!;
 			if (entry.id === compaction.firstKeptEntryId) foundFirstKept = true;
 			if (foundFirstKept) appendMessage(entry);
 		}
-		for (let i = compactionIdx + 1; i < entries.length; i++) {
-			appendMessage(entries[i]!);
+		for (let i = compactionIdx + 1; i < pathEntries.length; i++) {
+			appendMessage(pathEntries[i]!);
 		}
 	} else {
-		for (const entry of entries) {
+		for (const entry of pathEntries) {
 			appendMessage(entry);
 		}
 	}
@@ -78,11 +84,19 @@ export function buildSessionContext(entries: SessionTreeEntry[]): SessionContext
 	return { messages, thinkingLevel, model };
 }
 
-export class DefaultSessionTree<TInfo extends SessionInfo = SessionInfo> implements SessionTree {
-	private storage: SessionTreeStorage<TInfo>;
+export class DefaultSession<TMetadata extends SessionMetadata = SessionMetadata> implements Session<TMetadata> {
+	private storage: SessionStorage<TMetadata>;
 
-	constructor(storage: SessionTreeStorage<TInfo>) {
+	constructor(storage: SessionStorage<TMetadata>) {
 		this.storage = storage;
+	}
+
+	getMetadata(): Promise<TMetadata> {
+		return this.storage.getMetadata();
+	}
+
+	getStorage(): SessionStorage<TMetadata> {
+		return this.storage;
 	}
 
 	getLeafId(): Promise<string | null> {
@@ -106,19 +120,8 @@ export class DefaultSessionTree<TInfo extends SessionInfo = SessionInfo> impleme
 		return buildSessionContext(await this.getBranch());
 	}
 
-	getSessionInfo(): Promise<TInfo> {
-		return this.storage.getSessionInfo();
-	}
-
-	async getLabel(id: string): Promise<string | undefined> {
-		const entries = await this.storage.getEntries();
-		for (let i = entries.length - 1; i >= 0; i--) {
-			const entry = entries[i]!;
-			if (entry.type === "label" && entry.targetId === id) {
-				return entry.label?.trim() || undefined;
-			}
-		}
-		return undefined;
+	getLabel(id: string): Promise<string | undefined> {
+		return this.storage.getLabel(id);
 	}
 
 	async getSessionName(): Promise<string | undefined> {
@@ -193,24 +196,6 @@ export class DefaultSessionTree<TInfo extends SessionInfo = SessionInfo> impleme
 		} satisfies CompactionEntry<T>);
 	}
 
-	async appendBranchSummary<T = unknown>(
-		fromId: string,
-		summary: string,
-		details?: T,
-		fromHook?: boolean,
-	): Promise<string> {
-		return this.appendTypedEntry({
-			type: "branch_summary",
-			id: await this.makeEntryId(),
-			parentId: await this.storage.getLeafId(),
-			timestamp: new Date().toISOString(),
-			fromId,
-			summary,
-			details,
-			fromHook,
-		} satisfies BranchSummaryEntry<T>);
-	}
-
 	async appendCustomEntry(customType: string, data?: unknown): Promise<string> {
 		return this.appendTypedEntry({
 			type: "custom",
@@ -240,7 +225,10 @@ export class DefaultSessionTree<TInfo extends SessionInfo = SessionInfo> impleme
 		} satisfies CustomMessageEntry<T>);
 	}
 
-	async appendLabelChange(targetId: string, label: string | undefined): Promise<string> {
+	async appendLabel(targetId: string, label: string | undefined): Promise<string> {
+		if (!(await this.storage.getEntry(targetId))) {
+			throw new Error(`Entry ${targetId} not found`);
+		}
 		return this.appendTypedEntry({
 			type: "label",
 			id: await this.makeEntryId(),
@@ -251,7 +239,7 @@ export class DefaultSessionTree<TInfo extends SessionInfo = SessionInfo> impleme
 		} satisfies LabelEntry);
 	}
 
-	async appendSessionInfo(name: string): Promise<string> {
+	async appendSessionName(name: string): Promise<string> {
 		return this.appendTypedEntry({
 			type: "session_info",
 			id: await this.makeEntryId(),
@@ -261,10 +249,24 @@ export class DefaultSessionTree<TInfo extends SessionInfo = SessionInfo> impleme
 		} satisfies SessionInfoEntry);
 	}
 
-	async moveTo(entryId: string | null): Promise<void> {
+	async moveTo(
+		entryId: string | null,
+		summary?: { summary: string; details?: unknown; fromHook?: boolean },
+	): Promise<string | undefined> {
 		if (entryId !== null && !(await this.storage.getEntry(entryId))) {
 			throw new Error(`Entry ${entryId} not found`);
 		}
 		await this.storage.setLeafId(entryId);
+		if (!summary) return undefined;
+		return this.appendTypedEntry({
+			type: "branch_summary",
+			id: await this.makeEntryId(),
+			parentId: entryId,
+			timestamp: new Date().toISOString(),
+			fromId: entryId ?? "root",
+			summary: summary.summary,
+			details: summary.details,
+			fromHook: summary.fromHook,
+		} satisfies BranchSummaryEntry);
 	}
 }

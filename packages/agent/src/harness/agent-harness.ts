@@ -19,7 +19,7 @@ import type {
 	ExecutionEnv,
 	NavigateTreeResult,
 	PromptTemplate,
-	SessionTree,
+	Session,
 	Skill,
 	SystemPromptInputs,
 } from "./types.js";
@@ -56,7 +56,7 @@ export class DefaultAgentHarness implements AgentHarness {
 	readonly conversation: AgentHarnessConversationState;
 	readonly operation: AgentHarnessOperationState;
 
-	private sessionTree: SessionTree;
+	private session: Session;
 	private promptTemplates: PromptTemplate[];
 	private skills: Skill[];
 	private requestAuth?: AgentHarnessOptions["requestAuth"];
@@ -70,7 +70,7 @@ export class DefaultAgentHarness implements AgentHarness {
 	constructor(options: AgentHarnessOptions) {
 		this.agent = options.agent;
 		this.env = options.env;
-		this.sessionTree = options.sessionTree;
+		this.session = options.session;
 		this.promptTemplates = options.promptTemplates ?? [];
 		this.skills = options.skills ?? [];
 		this.requestAuth = options.requestAuth;
@@ -78,7 +78,7 @@ export class DefaultAgentHarness implements AgentHarness {
 			this.toolRegistry.set(tool.name, tool);
 		}
 		this.conversation = {
-			sessionTree: options.sessionTree,
+			session: options.session,
 			model: options.initialModel ?? this.agent.state.model,
 			thinkingLevel: options.initialThinkingLevel ?? this.agent.state.thinkingLevel,
 			activeToolNames: options.initialActiveToolNames ?? this.agent.state.tools.map((tool) => tool.name),
@@ -191,7 +191,7 @@ export class DefaultAgentHarness implements AgentHarness {
 	}
 
 	private async syncFromTree(): Promise<void> {
-		const context = await this.sessionTree.buildContext();
+		const context = await this.session.buildContext();
 		this.agent.state.messages = context.messages;
 		if (context.model && this.conversation.model) {
 			// leave active model untouched; harness-level model is source of truth
@@ -201,7 +201,7 @@ export class DefaultAgentHarness implements AgentHarness {
 
 	private async applyPendingMutations(): Promise<void> {
 		for (const message of this.operation.pendingMutations.appendMessages) {
-			await this.sessionTree.appendMessage(message);
+			await this.session.appendMessage(message);
 		}
 		this.operation.pendingMutations.appendMessages = [];
 
@@ -210,7 +210,7 @@ export class DefaultAgentHarness implements AgentHarness {
 			const previousModel = this.conversation.model;
 			this.conversation.model = model;
 			this.agent.state.model = model;
-			await this.sessionTree.appendModelChange(model.provider, model.id);
+			await this.session.appendModelChange(model.provider, model.id);
 			await this.emitOwn({ type: "model_select", model, previousModel, source: "set" });
 			this.operation.pendingMutations.model = undefined;
 		}
@@ -220,7 +220,7 @@ export class DefaultAgentHarness implements AgentHarness {
 			const previousLevel = this.conversation.thinkingLevel;
 			this.conversation.thinkingLevel = level;
 			this.agent.state.thinkingLevel = level;
-			await this.sessionTree.appendThinkingLevelChange(level);
+			await this.session.appendThinkingLevelChange(level);
 			await this.emitOwn({ type: "thinking_level_select", level, previousLevel });
 			this.operation.pendingMutations.thinkingLevel = undefined;
 		}
@@ -258,7 +258,7 @@ export class DefaultAgentHarness implements AgentHarness {
 			}
 		}
 		if (event.type === "message_end") {
-			await this.sessionTree.appendMessage(event.message);
+			await this.session.appendMessage(event.message);
 		}
 		if (event.type === "turn_end") {
 			const hadPendingMutations =
@@ -342,7 +342,7 @@ export class DefaultAgentHarness implements AgentHarness {
 
 	async appendMessage(message: AgentMessage): Promise<void> {
 		if (this.operation.idle) {
-			await this.sessionTree.appendMessage(message);
+			await this.session.appendMessage(message);
 			await this.syncFromTree();
 		} else {
 			this.operation.pendingMutations.appendMessages.push(message);
@@ -371,7 +371,7 @@ export class DefaultAgentHarness implements AgentHarness {
 		if (!model) throw new Error("No model set for compaction");
 		const auth = await this.requestAuth?.(model);
 		if (!auth) throw new Error("No auth available for compaction");
-		const branchEntries = await this.sessionTree.getBranch();
+		const branchEntries = await this.session.getBranch();
 		const preparation = prepareCompaction(branchEntries, DEFAULT_COMPACTION_SETTINGS);
 		if (!preparation) throw new Error("Nothing to compact");
 		const hookResult = await this.emitHook("session_before_compact", {
@@ -394,14 +394,14 @@ export class DefaultAgentHarness implements AgentHarness {
 				undefined,
 				this.conversation.thinkingLevel,
 			));
-		const entryId = await this.sessionTree.appendCompaction(
+		const entryId = await this.session.appendCompaction(
 			result.summary,
 			result.firstKeptEntryId,
 			result.tokensBefore,
 			result.details,
 			provided !== undefined,
 		);
-		const entry = await this.sessionTree.getEntry(entryId);
+		const entry = await this.session.getEntry(entryId);
 		await this.syncFromTree();
 		if (entry?.type === "compaction") {
 			await this.emitOwn({ type: "session_compact", compactionEntry: entry, fromHook: provided !== undefined });
@@ -414,11 +414,11 @@ export class DefaultAgentHarness implements AgentHarness {
 		options?: { summarize?: boolean; customInstructions?: string; replaceInstructions?: boolean; label?: string },
 	): Promise<NavigateTreeResult> {
 		if (!this.operation.idle) throw new Error("navigateTree() requires idle harness");
-		const oldLeafId = await this.sessionTree.getLeafId();
+		const oldLeafId = await this.session.getLeafId();
 		if (oldLeafId === targetId) return { cancelled: false };
-		const targetEntry = await this.sessionTree.getEntry(targetId);
+		const targetEntry = await this.session.getEntry(targetId);
 		if (!targetEntry) throw new Error(`Entry ${targetId} not found`);
-		const { entries, commonAncestorId } = await collectEntriesForBranchSummary(this.sessionTree, oldLeafId, targetId);
+		const { entries, commonAncestorId } = await collectEntriesForBranchSummary(this.session, oldLeafId, targetId);
 		const preparation = {
 			targetId,
 			oldLeafId,
@@ -469,7 +469,7 @@ export class DefaultAgentHarness implements AgentHarness {
 				typeof content === "string"
 					? content
 					: content
-							.filter((c): c is { type: "text"; text: string } => c.type === "text")
+							.filter((c): c is { readonly type: "text"; readonly text: string } => c.type === "text")
 							.map((c) => c.text)
 							.join("");
 		} else if (targetEntry.type === "custom_message") {
@@ -478,26 +478,29 @@ export class DefaultAgentHarness implements AgentHarness {
 				typeof targetEntry.content === "string"
 					? targetEntry.content
 					: targetEntry.content
-							.filter((c): c is { type: "text"; text: string } => c.type === "text")
+							.filter((c): c is { readonly type: "text"; readonly text: string } => c.type === "text")
 							.map((c) => c.text)
 							.join("");
 		} else {
 			newLeafId = targetId;
 		}
-		await this.sessionTree.moveTo(newLeafId);
-		if (summaryText) {
-			const summaryId = await this.sessionTree.appendBranchSummary(
-				newLeafId ?? "root",
-				summaryText,
-				summaryDetails,
-				hookResult?.summary !== undefined,
-			);
-			summaryEntry = await this.sessionTree.getEntry(summaryId);
+		const summaryId = await this.session.moveTo(
+			newLeafId,
+			summaryText
+				? {
+						summary: summaryText,
+						details: summaryDetails,
+						fromHook: hookResult?.summary !== undefined,
+					}
+				: undefined,
+		);
+		if (summaryId) {
+			summaryEntry = await this.session.getEntry(summaryId);
 		}
 		await this.syncFromTree();
 		await this.emitOwn({
 			type: "session_tree",
-			newLeafId: await this.sessionTree.getLeafId(),
+			newLeafId: await this.session.getLeafId(),
 			oldLeafId,
 			summaryEntry,
 			fromHook: hookResult?.summary !== undefined,
@@ -510,7 +513,7 @@ export class DefaultAgentHarness implements AgentHarness {
 			const previousModel = this.conversation.model;
 			this.conversation.model = model;
 			this.agent.state.model = model;
-			await this.sessionTree.appendModelChange(model.provider, model.id);
+			await this.session.appendModelChange(model.provider, model.id);
 			await this.emitOwn({ type: "model_select", model, previousModel, source: "set" });
 		} else {
 			this.operation.pendingMutations.model = model;
@@ -522,7 +525,7 @@ export class DefaultAgentHarness implements AgentHarness {
 			const previousLevel = this.conversation.thinkingLevel;
 			this.conversation.thinkingLevel = level;
 			this.agent.state.thinkingLevel = level;
-			await this.sessionTree.appendThinkingLevelChange(level);
+			await this.session.appendThinkingLevelChange(level);
 			await this.emitOwn({ type: "thinking_level_select", level, previousLevel });
 		} else {
 			this.operation.pendingMutations.thinkingLevel = level;

@@ -1,24 +1,44 @@
 import { v7 as uuidv7 } from "uuid";
-import type { SessionInfo, SessionTreeEntry, SessionTreeStorage } from "../types.js";
+import type { SessionMetadata, SessionStorage, SessionTreeEntry } from "../types.js";
 
-export class InMemorySessionTreeStorage implements SessionTreeStorage {
-	private readonly sessionInfo: SessionInfo;
+function updateLabelCache(labelsById: Map<string, string>, entry: SessionTreeEntry): void {
+	if (entry.type !== "label") return;
+	const label = entry.label?.trim();
+	if (label) {
+		labelsById.set(entry.targetId, label);
+	} else {
+		labelsById.delete(entry.targetId);
+	}
+}
+
+function buildLabelsById(entries: SessionTreeEntry[]): Map<string, string> {
+	const labelsById = new Map<string, string>();
+	for (const entry of entries) {
+		updateLabelCache(labelsById, entry);
+	}
+	return labelsById;
+}
+
+export class InMemorySessionStorage implements SessionStorage {
+	private readonly metadata: SessionMetadata;
 	private entries: SessionTreeEntry[];
 	private byId: Map<string, SessionTreeEntry>;
+	private labelsById: Map<string, string>;
 	private leafId: string | null;
 
-	constructor(options?: { entries?: SessionTreeEntry[]; leafId?: string | null; sessionInfo?: SessionInfo }) {
+	constructor(options?: { entries?: SessionTreeEntry[]; leafId?: string | null; metadata?: SessionMetadata }) {
 		this.entries = options?.entries ? [...options.entries] : [];
 		this.byId = new Map(this.entries.map((entry) => [entry.id, entry]));
+		this.labelsById = buildLabelsById(this.entries);
 		this.leafId = options?.leafId ?? this.entries[this.entries.length - 1]?.id ?? null;
 		if (this.leafId !== null && !this.byId.has(this.leafId)) {
 			throw new Error(`Entry ${this.leafId} not found`);
 		}
-		this.sessionInfo = options?.sessionInfo ?? { id: uuidv7(), createdAt: new Date().toISOString() };
+		this.metadata = options?.metadata ?? { id: uuidv7(), createdAt: new Date().toISOString() };
 	}
 
-	async getSessionInfo(): Promise<SessionInfo> {
-		return this.sessionInfo;
+	async getMetadata(): Promise<SessionMetadata> {
+		return this.metadata;
 	}
 
 	async getLeafId(): Promise<string | null> {
@@ -35,11 +55,16 @@ export class InMemorySessionTreeStorage implements SessionTreeStorage {
 	async appendEntry(entry: SessionTreeEntry): Promise<void> {
 		this.entries.push(entry);
 		this.byId.set(entry.id, entry);
+		updateLabelCache(this.labelsById, entry);
 		this.leafId = entry.id;
 	}
 
 	async getEntry(id: string): Promise<SessionTreeEntry | undefined> {
 		return this.byId.get(id);
+	}
+
+	async getLabel(id: string): Promise<string | undefined> {
+		return this.labelsById.get(id);
 	}
 
 	async getPathToRoot(leafId: string | null): Promise<SessionTreeEntry[]> {
