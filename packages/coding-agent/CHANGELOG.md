@@ -14,6 +14,10 @@
 
 - Changed `read` tool rendering to collapse Pi documentation, AGENTS/CLAUDE context files, and `SKILL.md` contents by default in interactive output.
 
+### Fixed
+
+- Fixed OpenAI Codex WebSocket transport keeping `--print` and JSON mode processes alive after the response by closing cached WebSocket sessions during session shutdown ([#4103](https://github.com/badlogic/pi-mono/issues/4103)).
+
 ## [0.72.1] - 2026-05-02
 
 ## [0.72.0] - 2026-05-01

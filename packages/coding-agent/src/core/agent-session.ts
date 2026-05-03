@@ -31,6 +31,7 @@ import {
 	modelsAreEqual,
 	resetApiProviders,
 } from "@mariozechner/pi-ai";
+import { closeOpenAICodexWebSocketSessions } from "@mariozechner/pi-ai/openai-codex-responses";
 import { theme } from "../modes/interactive/theme/theme.js";
 import { stripFrontmatter } from "../utils/frontmatter.js";
 import { sleep } from "../utils/sleep.js";
@@ -752,6 +753,7 @@ export class AgentSession {
 		);
 		this._disconnectFromAgent();
 		this._eventListeners = [];
+		closeOpenAICodexWebSocketSessions(this.sessionId);
 	}
 
 	// =========================================================================
