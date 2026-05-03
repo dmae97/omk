@@ -135,12 +135,16 @@ jobs:
               body: message,
             });
 
-            if (isFridayThroughSunday) {
+            const labelsToAdd = [];
+            if (isFridayThroughSunday) labelsToAdd.push('closed-because-weekend');
+            if (ISSUE_GATE_MESSAGE_MODE === 'refactor') labelsToAdd.push('closed-because-bigrefactor');
+
+            if (labelsToAdd.length > 0) {
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
-                labels: ['closed-because-weekend'],
+                labels: labelsToAdd,
               });
             }
 
