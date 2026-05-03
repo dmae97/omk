@@ -172,8 +172,12 @@ export interface SessionStorage<TMetadata extends SessionMetadata = SessionMetad
 	getMetadata(): Promise<TMetadata>;
 	getLeafId(): Promise<string | null>;
 	setLeafId(leafId: string | null): Promise<void>;
+	createEntryId(): Promise<string>;
 	appendEntry(entry: SessionTreeEntry): Promise<void>;
 	getEntry(id: string): Promise<SessionTreeEntry | undefined>;
+	findEntries<TType extends SessionTreeEntry["type"]>(
+		type: TType,
+	): Promise<Array<Extract<SessionTreeEntry, { type: TType }>>>;
 	getLabel(id: string): Promise<string | undefined>;
 	getPathToRoot(leafId: string | null): Promise<SessionTreeEntry[]>;
 	getEntries(): Promise<SessionTreeEntry[]>;
@@ -222,7 +226,7 @@ export interface SessionCreateOptions {
 }
 
 export interface SessionForkOptions {
-	entryId: string;
+	entryId?: string;
 	position?: "before" | "at";
 	id?: string;
 }
@@ -230,14 +234,13 @@ export interface SessionForkOptions {
 export interface SessionRepo<
 	TMetadata extends SessionMetadata = SessionMetadata,
 	TCreateOptions extends SessionCreateOptions = SessionCreateOptions,
-	TRef = string,
-	TListQuery = void,
+	TListOptions = void,
 > {
 	create(options: TCreateOptions): Promise<Session<TMetadata>>;
-	open(ref: TRef): Promise<Session<TMetadata>>;
-	list(query?: TListQuery): Promise<TMetadata[]>;
-	delete(ref: TRef): Promise<void>;
-	fork(ref: TRef, options: SessionForkOptions & TCreateOptions): Promise<Session<TMetadata>>;
+	open(metadata: TMetadata): Promise<Session<TMetadata>>;
+	list(options?: TListOptions): Promise<TMetadata[]>;
+	delete(metadata: TMetadata): Promise<void>;
+	fork(source: TMetadata, options: SessionForkOptions & TCreateOptions): Promise<Session<TMetadata>>;
 }
 
 export interface JsonlSessionCreateOptions extends SessionCreateOptions {
@@ -245,22 +248,12 @@ export interface JsonlSessionCreateOptions extends SessionCreateOptions {
 	parentSessionPath?: string;
 }
 
-export type JsonlSessionRef = { path: string } | JsonlSessionMetadata;
-
-export interface JsonlSessionListQuery {
+export interface JsonlSessionListOptions {
 	cwd?: string;
-}
-
-export interface JsonlSessionResolveOptions {
-	cwd?: string;
-	searchAll?: boolean;
 }
 
 export interface JsonlSessionRepoApi
-	extends SessionRepo<JsonlSessionMetadata, JsonlSessionCreateOptions, JsonlSessionRef, JsonlSessionListQuery> {
-	resolve(ref: string, options?: JsonlSessionResolveOptions): Promise<JsonlSessionMetadata[]>;
-	getMostRecent(query?: JsonlSessionListQuery): Promise<JsonlSessionMetadata | undefined>;
-}
+	extends SessionRepo<JsonlSessionMetadata, JsonlSessionCreateOptions, JsonlSessionListOptions> {}
 
 export interface AgentHarnessPendingMutations {
 	appendMessages: AgentMessage[];

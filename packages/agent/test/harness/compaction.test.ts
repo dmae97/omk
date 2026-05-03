@@ -18,7 +18,7 @@ import {
 	serializeConversation,
 	shouldCompact,
 } from "../../src/harness/compaction/compaction.js";
-import { buildSessionContext } from "../../src/harness/session/session-tree.js";
+import { buildSessionContext } from "../../src/harness/session/session.js";
 import type {
 	CompactionEntry,
 	CompactionSettings,

@@ -3,15 +3,13 @@ import { access, mkdir, readdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type {
 	JsonlSessionCreateOptions,
-	JsonlSessionListQuery,
+	JsonlSessionListOptions,
 	JsonlSessionMetadata,
-	JsonlSessionRef,
 	JsonlSessionRepoApi,
-	JsonlSessionResolveOptions,
 	Session,
-} from "../types.js";
-import { JsonlSessionStorage, loadJsonlSessionMetadata } from "./jsonl-session-storage.js";
-import { createSessionId, createTimestamp, getPathEntriesToFork, toSession } from "./session-repo.js";
+} from "../../types.js";
+import { JsonlSessionStorage, loadJsonlSessionMetadata } from "../storage/jsonl.js";
+import { createSessionId, createTimestamp, getEntriesToFork, toSession } from "./shared.js";
 
 async function exists(path: string): Promise<boolean> {
 	try {
@@ -41,10 +39,6 @@ export class JsonlSessionRepo implements JsonlSessionRepoApi {
 		return join(this.getSessionDir(cwd), `${timestamp.replace(/[:.]/g, "-")}_${sessionId}.jsonl`);
 	}
 
-	private refPath(ref: JsonlSessionRef): string {
-		return resolve(ref.path);
-	}
-
 	async create(options: JsonlSessionCreateOptions): Promise<Session<JsonlSessionMetadata>> {
 		await mkdir(this.sessionsRoot, { recursive: true });
 		const id = options.id ?? createSessionId();
@@ -58,17 +52,16 @@ export class JsonlSessionRepo implements JsonlSessionRepoApi {
 		return toSession(storage);
 	}
 
-	async open(ref: JsonlSessionRef): Promise<Session<JsonlSessionMetadata>> {
-		const filePath = this.refPath(ref);
-		if (!(await exists(filePath))) {
-			throw new Error(`Session not found: ${filePath}`);
+	async open(metadata: JsonlSessionMetadata): Promise<Session<JsonlSessionMetadata>> {
+		if (!(await exists(metadata.path))) {
+			throw new Error(`Session not found: ${metadata.path}`);
 		}
-		const storage = await JsonlSessionStorage.open(filePath);
+		const storage = await JsonlSessionStorage.open(metadata.path);
 		return toSession(storage);
 	}
 
-	async list(query: JsonlSessionListQuery = {}): Promise<JsonlSessionMetadata[]> {
-		const dirs = query.cwd ? [this.getSessionDir(query.cwd)] : await this.listSessionDirs();
+	async list(options: JsonlSessionListOptions = {}): Promise<JsonlSessionMetadata[]> {
+		const dirs = options.cwd ? [this.getSessionDir(options.cwd)] : await this.listSessionDirs();
 		const sessions: JsonlSessionMetadata[] = [];
 		for (const dir of dirs) {
 			if (!(await exists(dir))) continue;
@@ -85,48 +78,22 @@ export class JsonlSessionRepo implements JsonlSessionRepoApi {
 		return sessions;
 	}
 
-	async resolve(ref: string, options: JsonlSessionResolveOptions = {}): Promise<JsonlSessionMetadata[]> {
-		if (ref.includes("/") || ref.includes("\\") || ref.endsWith(".jsonl")) {
-			try {
-				return [await loadJsonlSessionMetadata(resolve(ref))];
-			} catch {
-				return [];
-			}
-		}
-
-		const local = options.cwd
-			? (await this.list({ cwd: options.cwd })).filter((session) => session.id.startsWith(ref))
-			: [];
-		if (local.length > 0 || !options.searchAll) return local;
-		return (await this.list()).filter((session) => session.id.startsWith(ref));
-	}
-
-	async getMostRecent(query: JsonlSessionListQuery = {}): Promise<JsonlSessionMetadata | undefined> {
-		return (await this.list(query))[0];
-	}
-
-	async delete(ref: JsonlSessionRef): Promise<void> {
-		const filePath = this.refPath(ref);
-		await rm(filePath, { force: true });
+	async delete(metadata: JsonlSessionMetadata): Promise<void> {
+		await rm(metadata.path, { force: true });
 	}
 
 	async fork(
-		ref: JsonlSessionRef,
-		options: JsonlSessionCreateOptions & { entryId: string; position?: "before" | "at"; id?: string },
+		sourceMetadata: JsonlSessionMetadata,
+		options: JsonlSessionCreateOptions & { entryId?: string; position?: "before" | "at"; id?: string },
 	): Promise<Session<JsonlSessionMetadata>> {
-		const source = await this.open(ref);
-		const forkedEntries = await getPathEntriesToFork(
-			source.getStorage(),
-			options.entryId,
-			options.position ?? "before",
-		);
-		const sourceInfo = await source.getMetadata();
+		const source = await this.open(sourceMetadata);
+		const forkedEntries = await getEntriesToFork(source.getStorage(), options);
 		const id = options.id ?? createSessionId();
 		const createdAt = createTimestamp();
 		const storage = await JsonlSessionStorage.create(this.createSessionFilePath(options.cwd, id, createdAt), {
 			cwd: options.cwd,
 			sessionId: id,
-			parentSessionPath: options.parentSessionPath ?? sourceInfo.path,
+			parentSessionPath: options.parentSessionPath ?? sourceMetadata.path,
 		});
 		for (const entry of forkedEntries) {
 			await storage.appendEntry(entry);

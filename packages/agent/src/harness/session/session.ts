@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { ImageContent, TextContent } from "@mariozechner/pi-ai";
 import type { AgentMessage } from "../../types.js";
 import { createBranchSummaryMessage, createCompactionSummaryMessage, createCustomMessage } from "../messages.js";
@@ -18,14 +17,6 @@ import type {
 	SessionTreeEntry,
 	ThinkingLevelChangeEntry,
 } from "../types.js";
-
-function generateId(byId: { has(id: string): boolean }): string {
-	for (let i = 0; i < 100; i++) {
-		const id = randomUUID().slice(0, 8);
-		if (!byId.has(id)) return id;
-	}
-	return randomUUID();
-}
 
 export function buildSessionContext(pathEntries: SessionTreeEntry[]): SessionContext {
 	let thinkingLevel = "off";
@@ -125,19 +116,8 @@ export class DefaultSession<TMetadata extends SessionMetadata = SessionMetadata>
 	}
 
 	async getSessionName(): Promise<string | undefined> {
-		const entries = await this.storage.getEntries();
-		for (let i = entries.length - 1; i >= 0; i--) {
-			const entry = entries[i]!;
-			if (entry.type === "session_info") {
-				return entry.name?.trim() || undefined;
-			}
-		}
-		return undefined;
-	}
-
-	private async makeEntryId(): Promise<string> {
-		const entries = await this.storage.getEntries();
-		return generateId(new Set(entries.map((entry) => entry.id)));
+		const entries = await this.storage.findEntries("session_info");
+		return entries[entries.length - 1]?.name?.trim() || undefined;
 	}
 
 	private async appendTypedEntry<TEntry extends SessionTreeEntry>(entry: TEntry): Promise<string> {
@@ -148,7 +128,7 @@ export class DefaultSession<TMetadata extends SessionMetadata = SessionMetadata>
 	async appendMessage(message: AgentMessage): Promise<string> {
 		return this.appendTypedEntry({
 			type: "message",
-			id: await this.makeEntryId(),
+			id: await this.storage.createEntryId(),
 			parentId: await this.storage.getLeafId(),
 			timestamp: new Date().toISOString(),
 			message,
@@ -158,7 +138,7 @@ export class DefaultSession<TMetadata extends SessionMetadata = SessionMetadata>
 	async appendThinkingLevelChange(thinkingLevel: string): Promise<string> {
 		return this.appendTypedEntry({
 			type: "thinking_level_change",
-			id: await this.makeEntryId(),
+			id: await this.storage.createEntryId(),
 			parentId: await this.storage.getLeafId(),
 			timestamp: new Date().toISOString(),
 			thinkingLevel,
@@ -168,7 +148,7 @@ export class DefaultSession<TMetadata extends SessionMetadata = SessionMetadata>
 	async appendModelChange(provider: string, modelId: string): Promise<string> {
 		return this.appendTypedEntry({
 			type: "model_change",
-			id: await this.makeEntryId(),
+			id: await this.storage.createEntryId(),
 			parentId: await this.storage.getLeafId(),
 			timestamp: new Date().toISOString(),
 			provider,
@@ -185,7 +165,7 @@ export class DefaultSession<TMetadata extends SessionMetadata = SessionMetadata>
 	): Promise<string> {
 		return this.appendTypedEntry({
 			type: "compaction",
-			id: await this.makeEntryId(),
+			id: await this.storage.createEntryId(),
 			parentId: await this.storage.getLeafId(),
 			timestamp: new Date().toISOString(),
 			summary,
@@ -199,7 +179,7 @@ export class DefaultSession<TMetadata extends SessionMetadata = SessionMetadata>
 	async appendCustomEntry(customType: string, data?: unknown): Promise<string> {
 		return this.appendTypedEntry({
 			type: "custom",
-			id: await this.makeEntryId(),
+			id: await this.storage.createEntryId(),
 			parentId: await this.storage.getLeafId(),
 			timestamp: new Date().toISOString(),
 			customType,
@@ -215,7 +195,7 @@ export class DefaultSession<TMetadata extends SessionMetadata = SessionMetadata>
 	): Promise<string> {
 		return this.appendTypedEntry({
 			type: "custom_message",
-			id: await this.makeEntryId(),
+			id: await this.storage.createEntryId(),
 			parentId: await this.storage.getLeafId(),
 			timestamp: new Date().toISOString(),
 			customType,
@@ -231,7 +211,7 @@ export class DefaultSession<TMetadata extends SessionMetadata = SessionMetadata>
 		}
 		return this.appendTypedEntry({
 			type: "label",
-			id: await this.makeEntryId(),
+			id: await this.storage.createEntryId(),
 			parentId: await this.storage.getLeafId(),
 			timestamp: new Date().toISOString(),
 			targetId,
@@ -242,7 +222,7 @@ export class DefaultSession<TMetadata extends SessionMetadata = SessionMetadata>
 	async appendSessionName(name: string): Promise<string> {
 		return this.appendTypedEntry({
 			type: "session_info",
-			id: await this.makeEntryId(),
+			id: await this.storage.createEntryId(),
 			parentId: await this.storage.getLeafId(),
 			timestamp: new Date().toISOString(),
 			name: name.trim(),
@@ -260,7 +240,7 @@ export class DefaultSession<TMetadata extends SessionMetadata = SessionMetadata>
 		if (!summary) return undefined;
 		return this.appendTypedEntry({
 			type: "branch_summary",
-			id: await this.makeEntryId(),
+			id: await this.storage.createEntryId(),
 			parentId: entryId,
 			timestamp: new Date().toISOString(),
 			fromId: entryId ?? "root",

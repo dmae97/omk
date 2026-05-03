@@ -1,6 +1,6 @@
 import { v7 as uuidv7 } from "uuid";
-import type { Session, SessionMetadata, SessionStorage, SessionTreeEntry } from "../types.js";
-import { DefaultSession } from "./session-tree.js";
+import type { Session, SessionMetadata, SessionStorage, SessionTreeEntry } from "../../types.js";
+import { DefaultSession } from "../session.js";
 
 export function createSessionId(): string {
 	return uuidv7();
@@ -14,21 +14,21 @@ export function toSession<TMetadata extends SessionMetadata>(storage: SessionSto
 	return new DefaultSession(storage);
 }
 
-export async function getPathEntriesToFork(
+export async function getEntriesToFork(
 	storage: SessionStorage,
-	entryId: string,
-	position: "before" | "at",
+	options: { entryId?: string; position?: "before" | "at" },
 ): Promise<SessionTreeEntry[]> {
-	const target = await storage.getEntry(entryId);
+	if (!options.entryId) return storage.getEntries();
+	const target = await storage.getEntry(options.entryId);
 	if (!target) {
-		throw new Error(`Entry ${entryId} not found`);
+		throw new Error(`Entry ${options.entryId} not found`);
 	}
 	let effectiveLeafId: string | null;
-	if (position === "at") {
+	if ((options.position ?? "before") === "at") {
 		effectiveLeafId = target.id;
 	} else {
 		if (target.type !== "message" || target.message.role !== "user") {
-			throw new Error(`Entry ${entryId} is not a user message`);
+			throw new Error(`Entry ${options.entryId} is not a user message`);
 		}
 		effectiveLeafId = target.parentId;
 	}

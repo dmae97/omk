@@ -1,8 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { createInterface } from "node:readline";
-import type { JsonlSessionMetadata, SessionStorage, SessionTreeEntry } from "../types.js";
+import type { JsonlSessionMetadata, SessionStorage, SessionTreeEntry } from "../../types.js";
 
 interface SessionHeader {
 	type: "session";
@@ -29,6 +30,14 @@ function buildLabelsById(entries: SessionTreeEntry[]): Map<string, string> {
 		updateLabelCache(labelsById, entry);
 	}
 	return labelsById;
+}
+
+function generateEntryId(byId: { has(id: string): boolean }): string {
+	for (let i = 0; i < 100; i++) {
+		const id = randomUUID().slice(0, 8);
+		if (!byId.has(id)) return id;
+	}
+	return randomUUID();
 }
 
 function headerToSessionMetadata(header: SessionHeader, path: string): JsonlSessionMetadata {
@@ -153,6 +162,10 @@ export class JsonlSessionStorage implements SessionStorage<JsonlSessionMetadata>
 		this.currentLeafId = leafId;
 	}
 
+	async createEntryId(): Promise<string> {
+		return generateEntryId(this.byId);
+	}
+
 	async appendEntry(entry: SessionTreeEntry): Promise<void> {
 		await appendFile(this.filePath, `${JSON.stringify(entry)}\n`);
 		this.entries.push(entry);
@@ -163,6 +176,12 @@ export class JsonlSessionStorage implements SessionStorage<JsonlSessionMetadata>
 
 	async getEntry(id: string): Promise<SessionTreeEntry | undefined> {
 		return this.byId.get(id);
+	}
+
+	async findEntries<TType extends SessionTreeEntry["type"]>(
+		type: TType,
+	): Promise<Array<Extract<SessionTreeEntry, { type: TType }>>> {
+		return this.entries.filter((entry): entry is Extract<SessionTreeEntry, { type: TType }> => entry.type === type);
 	}
 
 	async getLabel(id: string): Promise<string | undefined> {

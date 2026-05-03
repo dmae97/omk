@@ -1,5 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { v7 as uuidv7 } from "uuid";
-import type { SessionMetadata, SessionStorage, SessionTreeEntry } from "../types.js";
+import type { SessionMetadata, SessionStorage, SessionTreeEntry } from "../../types.js";
 
 function updateLabelCache(labelsById: Map<string, string>, entry: SessionTreeEntry): void {
 	if (entry.type !== "label") return;
@@ -17,6 +18,14 @@ function buildLabelsById(entries: SessionTreeEntry[]): Map<string, string> {
 		updateLabelCache(labelsById, entry);
 	}
 	return labelsById;
+}
+
+function generateEntryId(byId: { has(id: string): boolean }): string {
+	for (let i = 0; i < 100; i++) {
+		const id = randomUUID().slice(0, 8);
+		if (!byId.has(id)) return id;
+	}
+	return randomUUID();
 }
 
 export class InMemorySessionStorage implements SessionStorage {
@@ -52,6 +61,10 @@ export class InMemorySessionStorage implements SessionStorage {
 		this.leafId = leafId;
 	}
 
+	async createEntryId(): Promise<string> {
+		return generateEntryId(this.byId);
+	}
+
 	async appendEntry(entry: SessionTreeEntry): Promise<void> {
 		this.entries.push(entry);
 		this.byId.set(entry.id, entry);
@@ -61,6 +74,12 @@ export class InMemorySessionStorage implements SessionStorage {
 
 	async getEntry(id: string): Promise<SessionTreeEntry | undefined> {
 		return this.byId.get(id);
+	}
+
+	async findEntries<TType extends SessionTreeEntry["type"]>(
+		type: TType,
+	): Promise<Array<Extract<SessionTreeEntry, { type: TType }>>> {
+		return this.entries.filter((entry): entry is Extract<SessionTreeEntry, { type: TType }> => entry.type === type);
 	}
 
 	async getLabel(id: string): Promise<string | undefined> {

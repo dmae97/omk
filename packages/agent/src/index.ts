@@ -25,10 +25,10 @@ export {
 export * from "./harness/execution-env.js";
 export * from "./harness/messages.js";
 export * from "./harness/prompt-templates.js";
-export * from "./harness/session/jsonl-session-repo.js";
-export * from "./harness/session/memory-session-repo.js";
-export * from "./harness/session/session-repo.js";
-export * from "./harness/session/session-tree.js";
+export * from "./harness/session/repo/jsonl.js";
+export * from "./harness/session/repo/memory.js";
+export * from "./harness/session/repo/shared.js";
+export * from "./harness/session/session.js";
 // Harness
 export * from "./harness/types.js";
 export * from "./harness/utils/shell-output.js";
