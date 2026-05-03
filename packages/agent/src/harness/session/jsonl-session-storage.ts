@@ -1,7 +1,8 @@
-import { randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import type { CodingAgentSessionInfo, SessionInfo, SessionTreeEntry, SessionTreeStorage } from "../types.js";
+import { createInterface } from "node:readline";
+import type { JsonlSessionInfo, SessionTreeEntry, SessionTreeStorage } from "../types.js";
 
 interface SessionHeader {
 	type: "session";
@@ -12,116 +13,140 @@ interface SessionHeader {
 	parentSession?: string;
 }
 
-function headerToSessionInfo(header: SessionHeader, filePath?: string): CodingAgentSessionInfo {
+function headerToSessionInfo(header: SessionHeader, path: string): JsonlSessionInfo {
 	return {
 		id: header.id,
 		createdAt: header.timestamp,
-		parentSession: header.parentSession,
-		projectCwd: header.cwd,
-		filePath,
+		cwd: header.cwd,
+		path,
+		parentSessionPath: header.parentSession,
 	};
 }
 
-async function loadJsonlStorage(
-	filePath: string,
-): Promise<{ header?: SessionHeader; entries: SessionTreeEntry[]; leafId: string | null }> {
+export async function loadJsonlSessionInfo(filePath: string): Promise<JsonlSessionInfo> {
+	const stream = createReadStream(filePath, { encoding: "utf8" });
+	const lines = createInterface({ input: stream, crlfDelay: Infinity });
 	try {
-		const content = await readFile(filePath, "utf8");
-		const entries: SessionTreeEntry[] = [];
-		let header: SessionHeader | undefined;
-		let leafId: string | null = null;
-		for (const line of content.split("\n")) {
-			if (!line.trim()) continue;
+		for await (const line of lines) {
+			if (!line.trim()) break;
 			try {
-				const record = JSON.parse(line) as SessionHeader | SessionTreeEntry;
-				if (record.type === "session") {
-					header = record as SessionHeader;
-					continue;
-				}
-				entries.push(record as SessionTreeEntry);
-				leafId = (record as SessionTreeEntry).id;
+				const header = JSON.parse(line) as SessionHeader;
+				return headerToSessionInfo(header, resolve(filePath));
 			} catch {
-				// ignore malformed lines
+				throw new Error(`Invalid JSONL session file ${filePath}: first line is not a valid session header`);
 			}
 		}
-		return { header, entries, leafId };
-	} catch {
-		return { entries: [], leafId: null };
+		throw new Error(`Invalid JSONL session file ${filePath}: missing session header`);
+	} finally {
+		lines.close();
+		stream.destroy();
 	}
 }
 
-export class JsonlSessionTreeStorage implements SessionTreeStorage {
-	private filePath: string;
-	private cwd: string;
-	private headerInitialized = false;
-	private cacheLoaded = false;
-	private sessionInfo?: CodingAgentSessionInfo;
-	private entries: SessionTreeEntry[] = [];
-	private byId = new Map<string, SessionTreeEntry>();
-	private currentLeafId: string | null = null;
-	private requestedSessionId?: string;
-	private parentSession?: string;
+async function loadJsonlStorage(filePath: string): Promise<{
+	header: SessionHeader;
+	entries: SessionTreeEntry[];
+	leafId: string | null;
+}> {
+	const content = await readFile(filePath, "utf8");
+	const lines = content.split("\n").filter((line) => line.trim());
+	if (lines.length === 0) {
+		throw new Error(`Invalid JSONL session file ${filePath}: missing session header`);
+	}
 
-	constructor(filePath: string, options: { cwd: string; sessionId?: string; parentSession?: string }) {
+	let header: SessionHeader;
+	try {
+		header = JSON.parse(lines[0]!) as SessionHeader;
+	} catch {
+		throw new Error(`Invalid JSONL session file ${filePath}: first line is not a valid session header`);
+	}
+
+	const entries: SessionTreeEntry[] = [];
+	let leafId: string | null = null;
+	for (const line of lines.slice(1)) {
+		try {
+			const entry = JSON.parse(line) as SessionTreeEntry;
+			entries.push(entry);
+			leafId = entry.id;
+		} catch {
+			// ignore malformed entry lines
+		}
+	}
+	return { header, entries, leafId };
+}
+
+export class JsonlSessionTreeStorage implements SessionTreeStorage<JsonlSessionInfo> {
+	private readonly filePath: string;
+	private readonly header: SessionHeader;
+	private readonly sessionInfo: JsonlSessionInfo;
+	private entries: SessionTreeEntry[];
+	private byId: Map<string, SessionTreeEntry>;
+	private currentLeafId: string | null;
+	private headerWritten: boolean;
+
+	private constructor(
+		filePath: string,
+		header: SessionHeader,
+		entries: SessionTreeEntry[],
+		leafId: string | null,
+		headerWritten: boolean,
+	) {
 		this.filePath = resolve(filePath);
-		this.cwd = options.cwd;
-		this.requestedSessionId = options.sessionId;
-		this.parentSession = options.parentSession;
+		this.header = header;
+		this.sessionInfo = headerToSessionInfo(header, this.filePath);
+		this.entries = entries;
+		this.byId = new Map(entries.map((entry) => [entry.id, entry]));
+		this.currentLeafId = leafId;
+		this.headerWritten = headerWritten;
 	}
 
-	private async ensureParentDir(): Promise<void> {
-		await mkdir(dirname(this.filePath), { recursive: true });
+	static async open(filePath: string): Promise<JsonlSessionTreeStorage> {
+		const resolvedPath = resolve(filePath);
+		const loaded = await loadJsonlStorage(resolvedPath);
+		return new JsonlSessionTreeStorage(resolvedPath, loaded.header, loaded.entries, loaded.leafId, true);
 	}
 
-	private async ensureLoaded(): Promise<void> {
-		if (this.cacheLoaded) {
-			return;
-		}
-		const loaded = await loadJsonlStorage(this.filePath);
-		this.entries = loaded.entries;
-		this.byId = new Map(loaded.entries.map((entry) => [entry.id, entry]));
-		this.currentLeafId = loaded.leafId;
-		this.headerInitialized = loaded.header !== undefined;
-		if (loaded.header) {
-			this.sessionInfo = headerToSessionInfo(loaded.header, this.filePath);
-		}
-		this.cacheLoaded = true;
-	}
-
-	private async ensureHeader(): Promise<void> {
-		await this.ensureLoaded();
-		if (this.headerInitialized) return;
-		await this.ensureParentDir();
+	static async create(
+		filePath: string,
+		options: {
+			cwd: string;
+			sessionId: string;
+			parentSessionPath?: string;
+		},
+	): Promise<JsonlSessionTreeStorage> {
+		const resolvedPath = resolve(filePath);
 		const header: SessionHeader = {
 			type: "session",
 			version: 3,
-			id: this.requestedSessionId ?? randomUUID(),
+			id: options.sessionId,
 			timestamp: new Date().toISOString(),
-			cwd: this.cwd,
-			parentSession: this.parentSession,
+			cwd: options.cwd,
+			parentSession: options.parentSessionPath,
 		};
-		await writeFile(this.filePath, `${JSON.stringify(header)}\n`);
-		this.sessionInfo = headerToSessionInfo(header, this.filePath);
-		this.headerInitialized = true;
+		return new JsonlSessionTreeStorage(resolvedPath, header, [], null, false);
 	}
 
-	async getSessionInfo(): Promise<SessionInfo> {
-		await this.ensureHeader();
-		return this.sessionInfo!;
+	async getSessionInfo(): Promise<JsonlSessionInfo> {
+		return this.sessionInfo;
 	}
 
 	async getLeafId(): Promise<string | null> {
-		await this.ensureLoaded();
 		return this.currentLeafId;
 	}
 
 	async setLeafId(leafId: string | null): Promise<void> {
-		await this.ensureLoaded();
+		if (leafId !== null && !this.byId.has(leafId)) {
+			throw new Error(`Entry ${leafId} not found`);
+		}
 		this.currentLeafId = leafId;
 	}
 
 	async appendEntry(entry: SessionTreeEntry): Promise<void> {
-		await this.ensureHeader();
+		if (!this.headerWritten) {
+			await mkdir(dirname(this.filePath), { recursive: true });
+			await writeFile(this.filePath, `${JSON.stringify(this.header)}\n`);
+			this.headerWritten = true;
+		}
 		await appendFile(this.filePath, `${JSON.stringify(entry)}\n`);
 		this.entries.push(entry);
 		this.byId.set(entry.id, entry);
@@ -129,12 +154,10 @@ export class JsonlSessionTreeStorage implements SessionTreeStorage {
 	}
 
 	async getEntry(id: string): Promise<SessionTreeEntry | undefined> {
-		await this.ensureLoaded();
 		return this.byId.get(id);
 	}
 
 	async getPathToRoot(leafId: string | null): Promise<SessionTreeEntry[]> {
-		await this.ensureLoaded();
 		if (leafId === null) return [];
 		const path: SessionTreeEntry[] = [];
 		let current = this.byId.get(leafId);
@@ -146,7 +169,6 @@ export class JsonlSessionTreeStorage implements SessionTreeStorage {
 	}
 
 	async getEntries(): Promise<SessionTreeEntry[]> {
-		await this.ensureLoaded();
 		return [...this.entries];
 	}
 }

@@ -1,12 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import { afterEach, describe, expect, it } from "vitest";
-import { JsonlSessionTreeStorage } from "../../src/harness/session/jsonl-session-storage.js";
+import { JsonlSessionTreeStorage, loadJsonlSessionInfo } from "../../src/harness/session/jsonl-session-storage.js";
 import { InMemorySessionTreeStorage } from "../../src/harness/session/memory-session-storage.js";
 import { DefaultSessionTree } from "../../src/harness/session/session-tree.js";
-import type { SessionTreeStorage } from "../../src/harness/types.js";
+import type { MessageEntry, SessionInfo, SessionTreeStorage } from "../../src/harness/types.js";
 
 function createUserMessage(text: string): AgentMessage {
 	return {
@@ -38,6 +38,13 @@ function createAssistantMessage(text: string): AgentMessage {
 
 const tempDirs: string[] = [];
 
+function createTempDir(): string {
+	const dir = join(tmpdir(), `pi-agent-session-tree-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+	mkdirSync(dir, { recursive: true });
+	tempDirs.push(dir);
+	return dir;
+}
+
 afterEach(() => {
 	while (tempDirs.length > 0) {
 		const dir = tempDirs.pop()!;
@@ -47,10 +54,14 @@ afterEach(() => {
 	}
 });
 
-async function runSessionTreeSuite(name: string, createStorage: () => SessionTreeStorage, inspect?: () => void) {
+async function runSessionTreeSuite(
+	name: string,
+	createStorage: () => SessionTreeStorage | Promise<SessionTreeStorage>,
+	inspect?: () => void,
+) {
 	describe(name, () => {
 		it("appends messages and builds context in order", async () => {
-			const tree = new DefaultSessionTree(createStorage());
+			const tree = new DefaultSessionTree(await createStorage());
 			await tree.appendMessage(createUserMessage("one"));
 			await tree.appendMessage(createAssistantMessage("two"));
 			const context = await tree.buildContext();
@@ -58,7 +69,7 @@ async function runSessionTreeSuite(name: string, createStorage: () => SessionTre
 		});
 
 		it("tracks model and thinking level changes", async () => {
-			const tree = new DefaultSessionTree(createStorage());
+			const tree = new DefaultSessionTree(await createStorage());
 			await tree.appendMessage(createUserMessage("one"));
 			await tree.appendModelChange("openai", "gpt-4.1");
 			await tree.appendThinkingLevelChange("high");
@@ -68,7 +79,7 @@ async function runSessionTreeSuite(name: string, createStorage: () => SessionTre
 		});
 
 		it("supports branching by moving the leaf and appending a new branch", async () => {
-			const tree = new DefaultSessionTree(createStorage());
+			const tree = new DefaultSessionTree(await createStorage());
 			const user1 = await tree.appendMessage(createUserMessage("one"));
 			const assistant1 = await tree.appendMessage(createAssistantMessage("two"));
 			await tree.appendMessage(createUserMessage("three"));
@@ -82,7 +93,7 @@ async function runSessionTreeSuite(name: string, createStorage: () => SessionTre
 		});
 
 		it("supports moving the leaf to root", async () => {
-			const tree = new DefaultSessionTree(createStorage());
+			const tree = new DefaultSessionTree(await createStorage());
 			await tree.appendMessage(createUserMessage("one"));
 			await tree.moveTo(null);
 			expect(await tree.getLeafId()).toBeNull();
@@ -90,7 +101,7 @@ async function runSessionTreeSuite(name: string, createStorage: () => SessionTre
 		});
 
 		it("reconstructs compaction summaries in context", async () => {
-			const tree = new DefaultSessionTree(createStorage());
+			const tree = new DefaultSessionTree(await createStorage());
 			await tree.appendMessage(createUserMessage("one"));
 			await tree.appendMessage(createAssistantMessage("two"));
 			const user2 = await tree.appendMessage(createUserMessage("three"));
@@ -103,7 +114,7 @@ async function runSessionTreeSuite(name: string, createStorage: () => SessionTre
 		});
 
 		it("supports branch summary entries in context", async () => {
-			const tree = new DefaultSessionTree(createStorage());
+			const tree = new DefaultSessionTree(await createStorage());
 			const user1 = await tree.appendMessage(createUserMessage("one"));
 			await tree.appendBranchSummary(user1, "summary text");
 			const context = await tree.buildContext();
@@ -111,7 +122,7 @@ async function runSessionTreeSuite(name: string, createStorage: () => SessionTre
 		});
 
 		it("supports custom message entries in context", async () => {
-			const tree = new DefaultSessionTree(createStorage());
+			const tree = new DefaultSessionTree(await createStorage());
 			await tree.appendMessage(createUserMessage("one"));
 			await tree.appendCustomMessageEntry("custom", "hello", true, { ok: true });
 			const context = await tree.buildContext();
@@ -119,7 +130,7 @@ async function runSessionTreeSuite(name: string, createStorage: () => SessionTre
 		});
 
 		it("supports labels and session info entries without affecting context", async () => {
-			const tree = new DefaultSessionTree(createStorage());
+			const tree = new DefaultSessionTree(await createStorage());
 			const user1 = await tree.appendMessage(createUserMessage("one"));
 			await tree.appendLabelChange(user1, "checkpoint");
 			await tree.appendSessionInfo("name");
@@ -132,7 +143,7 @@ async function runSessionTreeSuite(name: string, createStorage: () => SessionTre
 		});
 
 		it("persists leaf changes and appended entries via storage", async () => {
-			const storage = createStorage();
+			const storage = await createStorage();
 			const tree = new DefaultSessionTree(storage);
 			const user1 = await tree.appendMessage(createUserMessage("one"));
 			await tree.appendMessage(createAssistantMessage("two"));
@@ -150,15 +161,194 @@ async function runSessionTreeSuite(name: string, createStorage: () => SessionTre
 	});
 }
 
+describe("InMemorySessionTreeStorage", () => {
+	it("returns configured session info", async () => {
+		const sessionInfo: SessionInfo = { id: "session-1", createdAt: "2026-01-01T00:00:00.000Z" };
+		const storage = new InMemorySessionTreeStorage({ sessionInfo });
+		expect(await storage.getSessionInfo()).toEqual(sessionInfo);
+	});
+
+	it("copies initial entries and tracks leaf independently", async () => {
+		const entry: MessageEntry = {
+			type: "message",
+			id: "entry-1",
+			parentId: null,
+			timestamp: "2026-01-01T00:00:00.000Z",
+			message: createUserMessage("one"),
+		};
+		const initialEntries = [entry];
+		const storage = new InMemorySessionTreeStorage({ entries: initialEntries });
+		initialEntries.push({ ...entry, id: "entry-2" });
+		expect((await storage.getEntries()).map((storedEntry) => storedEntry.id)).toEqual(["entry-1"]);
+		expect(await storage.getLeafId()).toBe("entry-1");
+		await storage.setLeafId(null);
+		expect(await storage.getLeafId()).toBeNull();
+	});
+
+	it("rejects invalid leaf ids", async () => {
+		const storage = new InMemorySessionTreeStorage();
+		await expect(storage.setLeafId("missing")).rejects.toThrow("Entry missing not found");
+		expect(() => new InMemorySessionTreeStorage({ leafId: "missing" })).toThrow("Entry missing not found");
+	});
+
+	it("walks paths to root", async () => {
+		const root: MessageEntry = {
+			type: "message",
+			id: "root",
+			parentId: null,
+			timestamp: "2026-01-01T00:00:00.000Z",
+			message: createUserMessage("root"),
+		};
+		const child: MessageEntry = {
+			...root,
+			id: "child",
+			parentId: "root",
+			message: createAssistantMessage("child"),
+		};
+		const storage = new InMemorySessionTreeStorage({ entries: [root, child] });
+		expect((await storage.getPathToRoot("child")).map((entry) => entry.id)).toEqual(["root", "child"]);
+		expect(await storage.getPathToRoot(null)).toEqual([]);
+	});
+});
+
 runSessionTreeSuite("SessionTree with in-memory storage", () => new InMemorySessionTreeStorage());
+
+describe("JsonlSessionTreeStorage", () => {
+	it("throws for missing files when opening", async () => {
+		const dir = createTempDir();
+		const filePath = join(dir, "session.jsonl");
+		await expect(JsonlSessionTreeStorage.open(filePath)).rejects.toMatchObject({ code: "ENOENT" });
+	});
+
+	it("writes the header before the first appended entry", async () => {
+		const dir = createTempDir();
+		const filePath = join(dir, "session.jsonl");
+		const storage = await JsonlSessionTreeStorage.create(filePath, { cwd: dir, sessionId: "session-1" });
+		expect(existsSync(filePath)).toBe(false);
+		expect(await storage.getLeafId()).toBeNull();
+		expect(await storage.getEntries()).toEqual([]);
+		await storage.appendEntry({
+			type: "message",
+			id: "user-1",
+			parentId: null,
+			timestamp: "2026-01-01T00:00:00.000Z",
+			message: createUserMessage("one"),
+		});
+		expect(existsSync(filePath)).toBe(true);
+		const lines = readFileSync(filePath, "utf8").trim().split("\n");
+		expect(JSON.parse(lines[0]!).type).toBe("session");
+		expect(JSON.parse(lines[1]!).id).toBe("user-1");
+		expect(lines).toHaveLength(2);
+	});
+
+	it("throws for malformed session headers", async () => {
+		const dir = createTempDir();
+		const filePath = join(dir, "session.jsonl");
+		writeFileSync(filePath, "not json\n");
+		await expect(JsonlSessionTreeStorage.open(filePath)).rejects.toThrow("first line is not a valid session header");
+	});
+
+	it("ignores malformed entry lines", async () => {
+		const dir = createTempDir();
+		const filePath = join(dir, "session.jsonl");
+		const header = {
+			type: "session",
+			version: 3,
+			id: "session-1",
+			timestamp: "2026-01-01T00:00:00.000Z",
+			cwd: dir,
+		};
+		const entry: MessageEntry = {
+			type: "message",
+			id: "entry-1",
+			parentId: null,
+			timestamp: "2026-01-01T00:00:00.000Z",
+			message: createUserMessage("one"),
+		};
+		writeFileSync(filePath, `${JSON.stringify(header)}\nnot json\n${JSON.stringify(entry)}\n`);
+		const storage = await JsonlSessionTreeStorage.open(filePath);
+		expect((await storage.getEntries()).map((loadedEntry) => loadedEntry.id)).toEqual(["entry-1"]);
+		expect(await storage.getLeafId()).toBe("entry-1");
+	});
+
+	it("creates and reads session info from the header", async () => {
+		const dir = createTempDir();
+		const filePath = join(dir, "session.jsonl");
+		const storage = await JsonlSessionTreeStorage.create(filePath, {
+			cwd: dir,
+			sessionId: "session-1",
+			parentSessionPath: "/tmp/parent.jsonl",
+		});
+		const info = await storage.getSessionInfo();
+		expect(info).toMatchObject({
+			id: "session-1",
+			cwd: dir,
+			path: filePath,
+			parentSessionPath: "/tmp/parent.jsonl",
+		});
+		expect(existsSync(filePath)).toBe(false);
+		await storage.appendEntry({
+			type: "message",
+			id: "user-1",
+			parentId: null,
+			timestamp: "2026-01-01T00:00:00.000Z",
+			message: createUserMessage("one"),
+		});
+		expect(await loadJsonlSessionInfo(filePath)).toEqual(info);
+	});
+
+	it("loads existing entries and reconstructs leaf", async () => {
+		const dir = createTempDir();
+		const filePath = join(dir, "session.jsonl");
+		const storage = await JsonlSessionTreeStorage.create(filePath, { cwd: dir, sessionId: "session-1" });
+		const root: MessageEntry = {
+			type: "message",
+			id: "root",
+			parentId: null,
+			timestamp: "2026-01-01T00:00:00.000Z",
+			message: createUserMessage("root"),
+		};
+		const child: MessageEntry = {
+			...root,
+			id: "child",
+			parentId: "root",
+			message: createAssistantMessage("child"),
+		};
+		await storage.appendEntry(root);
+		await storage.appendEntry(child);
+		const loaded = await JsonlSessionTreeStorage.open(filePath);
+		expect(await loaded.getLeafId()).toBe("child");
+		expect((await loaded.getEntries()).map((entry) => entry.id)).toEqual(["root", "child"]);
+		expect((await loaded.getPathToRoot("child")).map((entry) => entry.id)).toEqual(["root", "child"]);
+	});
+
+	it("reads session info from only the first JSONL line", async () => {
+		const dir = createTempDir();
+		const filePath = join(dir, "session.jsonl");
+		const header = {
+			type: "session",
+			version: 3,
+			id: "session-1",
+			timestamp: "2026-01-01T00:00:00.000Z",
+			cwd: dir,
+		};
+		const malformedSecondLine = "{".repeat(10000);
+		writeFileSync(filePath, `${JSON.stringify(header)}\n${malformedSecondLine}\n`);
+		expect(await loadJsonlSessionInfo(filePath)).toEqual({
+			id: "session-1",
+			createdAt: "2026-01-01T00:00:00.000Z",
+			cwd: dir,
+			path: filePath,
+			parentSessionPath: undefined,
+		});
+	});
+});
 
 runSessionTreeSuite(
 	"SessionTree with JSONL storage",
-	() => {
-		const dir = join(tmpdir(), `pi-agent-session-tree-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-		mkdirSync(dir, { recursive: true });
-		tempDirs.push(dir);
-		return new JsonlSessionTreeStorage(join(dir, "session.jsonl"), { cwd: dir });
+	async () => {
+		const dir = createTempDir();
+		return await JsonlSessionTreeStorage.create(join(dir, "session.jsonl"), { cwd: dir, sessionId: "session-1" });
 	},
 	() => {
 		const dir = tempDirs[tempDirs.length - 1]!;

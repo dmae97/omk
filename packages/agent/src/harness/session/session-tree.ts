@@ -18,7 +18,6 @@ import type {
 	SessionTreeStorage,
 	ThinkingLevelChangeEntry,
 } from "../types.js";
-import { InMemorySessionTreeStorage } from "./memory-session-storage.js";
 
 function generateId(byId: { has(id: string): boolean }): string {
 	for (let i = 0; i < 100; i++) {
@@ -79,11 +78,11 @@ export function buildSessionContext(entries: SessionTreeEntry[]): SessionContext
 	return { messages, thinkingLevel, model };
 }
 
-export class DefaultSessionTree implements SessionTree {
-	private storage: SessionTreeStorage;
+export class DefaultSessionTree<TInfo extends SessionInfo = SessionInfo> implements SessionTree {
+	private storage: SessionTreeStorage<TInfo>;
 
-	constructor(storage?: SessionTreeStorage) {
-		this.storage = storage ?? new InMemorySessionTreeStorage();
+	constructor(storage: SessionTreeStorage<TInfo>) {
+		this.storage = storage;
 	}
 
 	getLeafId(): Promise<string | null> {
@@ -107,7 +106,7 @@ export class DefaultSessionTree implements SessionTree {
 		return buildSessionContext(await this.getBranch());
 	}
 
-	getSessionInfo(): Promise<SessionInfo> {
+	getSessionInfo(): Promise<TInfo> {
 		return this.storage.getSessionInfo();
 	}
 

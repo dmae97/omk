@@ -1,13 +1,14 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { v7 as uuidv7 } from "uuid";
 import type {
-	CodingAgentSessionInfo,
-	CodingAgentSessionRepo,
+	JsonlSessionInfo,
+	JsonlSessionRepo,
 	Session,
 	SessionInfo,
 	SessionRepo,
 	SessionTreeEntry,
+	SessionTreeStorage,
 } from "../types.js";
 import { JsonlSessionTreeStorage } from "./jsonl-session-storage.js";
 import { InMemorySessionTreeStorage } from "./memory-session-storage.js";
@@ -21,8 +22,11 @@ function createTimestamp(): string {
 	return new Date().toISOString();
 }
 
-function toSession<TInfo extends SessionInfo>(info: TInfo, tree: DefaultSessionTree): Session<TInfo> {
-	return { info, tree };
+function toSession<TInfo extends SessionInfo>(
+	storage: SessionTreeStorage<TInfo>,
+	tree: DefaultSessionTree<TInfo>,
+): Session<TInfo> {
+	return { storage, tree };
 }
 
 function getPathEntriesToFork(
@@ -59,14 +63,13 @@ function getPathEntriesToFork(
 export class InMemorySessionRepo implements SessionRepo<string> {
 	private sessions = new Map<string, Session<SessionInfo>>();
 
-	async create(options?: { id?: string; parentSession?: string }): Promise<Session<SessionInfo>> {
+	async create(options?: { id?: string }): Promise<Session<SessionInfo>> {
 		const info: SessionInfo = {
 			id: options?.id ?? createSessionId(),
 			createdAt: createTimestamp(),
-			parentSession: options?.parentSession,
 		};
 		const storage = new InMemorySessionTreeStorage({ sessionInfo: info });
-		const session = toSession(info, new DefaultSessionTree(storage));
+		const session = toSession(storage, new DefaultSessionTree(storage));
 		this.sessions.set(info.id, session);
 		return session;
 	}
@@ -97,42 +100,16 @@ export class InMemorySessionRepo implements SessionRepo<string> {
 		const info: SessionInfo = {
 			id: options.id ?? createSessionId(),
 			createdAt: createTimestamp(),
-			parentSession: source.info.id,
 		};
 		const leafId = forkedEntries[forkedEntries.length - 1]?.id ?? null;
 		const storage = new InMemorySessionTreeStorage({ sessionInfo: info, entries: forkedEntries, leafId });
-		const session = toSession(info, new DefaultSessionTree(storage));
+		const session = toSession(storage, new DefaultSessionTree(storage));
 		this.sessions.set(info.id, session);
 		return session;
 	}
 }
 
-function readJsonlHeader(filePath: string): CodingAgentSessionInfo | undefined {
-	try {
-		const content = readFileSync(filePath, "utf8");
-		const firstLine = content.split("\n")[0];
-		if (!firstLine) return undefined;
-		const header = JSON.parse(firstLine) as {
-			type: string;
-			id: string;
-			timestamp: string;
-			cwd: string;
-			parentSession?: string;
-		};
-		if (header.type !== "session") return undefined;
-		return {
-			id: header.id,
-			createdAt: header.timestamp,
-			parentSession: header.parentSession,
-			projectCwd: header.cwd,
-			filePath,
-		};
-	} catch {
-		return undefined;
-	}
-}
-
-export class JsonlCodingAgentSessionRepo implements CodingAgentSessionRepo<string> {
+export class JsonlSessionFileRepo implements JsonlSessionRepo<string> {
 	private sessionDir: string;
 	private cwd: string;
 
@@ -146,55 +123,66 @@ export class JsonlCodingAgentSessionRepo implements CodingAgentSessionRepo<strin
 		return join(this.sessionDir, `${timestamp.replace(/[:.]/g, "-")}_${sessionId}.jsonl`);
 	}
 
-	async create(options?: { id?: string; parentSession?: string }): Promise<Session<CodingAgentSessionInfo>> {
+	async create(options?: { id?: string; parentSessionPath?: string }): Promise<Session<JsonlSessionInfo>> {
 		const id = options?.id ?? createSessionId();
 		const createdAt = createTimestamp();
 		const filePath = this.createSessionFilePath(id, createdAt);
-		const storage = new JsonlSessionTreeStorage(filePath, {
+		const storage = await JsonlSessionTreeStorage.create(filePath, {
 			cwd: this.cwd,
 			sessionId: id,
-			parentSession: options?.parentSession,
+			parentSessionPath: options?.parentSessionPath,
 		});
-		const info = (await storage.getSessionInfo()) as CodingAgentSessionInfo;
-		return toSession(info, new DefaultSessionTree(storage));
+		return toSession(storage, new DefaultSessionTree(storage));
 	}
 
-	async open(ref: string): Promise<Session<CodingAgentSessionInfo>> {
+	async open(ref: string): Promise<Session<JsonlSessionInfo>> {
 		const filePath = ref.includes("/") || ref.endsWith(".jsonl") ? resolve(ref) : join(this.sessionDir, ref);
 		if (!existsSync(filePath)) {
 			throw new Error(`Session not found: ${ref}`);
 		}
-		const storage = new JsonlSessionTreeStorage(filePath, { cwd: this.cwd });
-		const info = (await storage.getSessionInfo()) as CodingAgentSessionInfo;
-		return toSession(info, new DefaultSessionTree(storage));
+		const storage = await JsonlSessionTreeStorage.open(filePath);
+		return toSession(storage, new DefaultSessionTree(storage));
 	}
 
-	async list(): Promise<Array<Session<CodingAgentSessionInfo>>> {
+	async list(): Promise<Array<Session<JsonlSessionInfo>>> {
 		if (!existsSync(this.sessionDir)) {
 			return [];
 		}
 		const files = readdirSync(this.sessionDir)
 			.filter((file) => file.endsWith(".jsonl"))
 			.map((file) => join(this.sessionDir, file));
-		const sessions: Array<Session<CodingAgentSessionInfo>> = [];
+		const sessions: Array<Session<JsonlSessionInfo>> = [];
 		for (const filePath of files) {
-			const info = readJsonlHeader(filePath);
-			if (!info) continue;
-			sessions.push(
-				toSession(info, new DefaultSessionTree(new JsonlSessionTreeStorage(filePath, { cwd: info.projectCwd }))),
-			);
+			try {
+				const storage = await JsonlSessionTreeStorage.open(filePath);
+				sessions.push(toSession(storage, new DefaultSessionTree(storage)));
+			} catch {
+				// Ignore invalid session files when listing a directory.
+			}
 		}
 		return sessions;
 	}
 
-	async listByCwd(cwd: string): Promise<Array<Session<CodingAgentSessionInfo>>> {
-		return (await this.list()).filter((session) => session.info.projectCwd === cwd);
+	async listByCwd(cwd: string): Promise<Array<Session<JsonlSessionInfo>>> {
+		const sessions = await this.list();
+		const result: Array<Session<JsonlSessionInfo>> = [];
+		for (const session of sessions) {
+			if ((await session.storage.getSessionInfo()).cwd === cwd) {
+				result.push(session);
+			}
+		}
+		return result;
 	}
 
-	async getMostRecentByCwd(cwd: string): Promise<Session<CodingAgentSessionInfo> | undefined> {
-		const sessions = await this.listByCwd(cwd);
-		sessions.sort((a, b) => new Date(b.info.createdAt).getTime() - new Date(a.info.createdAt).getTime());
-		return sessions[0];
+	async getMostRecentByCwd(cwd: string): Promise<Session<JsonlSessionInfo> | undefined> {
+		const sessionsWithInfo = await Promise.all(
+			(await this.listByCwd(cwd)).map(async (session) => ({
+				session,
+				info: await session.storage.getSessionInfo(),
+			})),
+		);
+		sessionsWithInfo.sort((a, b) => new Date(b.info.createdAt).getTime() - new Date(a.info.createdAt).getTime());
+		return sessionsWithInfo[0]?.session;
 	}
 
 	async delete(ref: string): Promise<void> {
@@ -207,17 +195,18 @@ export class JsonlCodingAgentSessionRepo implements CodingAgentSessionRepo<strin
 	async fork(
 		ref: string,
 		options: { entryId: string; position?: "before" | "at"; id?: string },
-	): Promise<Session<CodingAgentSessionInfo>> {
+	): Promise<Session<JsonlSessionInfo>> {
 		const source = await this.open(ref);
 		const entries = await source.tree.getEntries();
 		const forkedEntries = getPathEntriesToFork(entries, options.entryId, options.position ?? "before");
 		const id = options.id ?? createSessionId();
 		const createdAt = createTimestamp();
 		const filePath = this.createSessionFilePath(id, createdAt);
-		const storage = new JsonlSessionTreeStorage(filePath, {
-			cwd: source.info.projectCwd,
+		const sourceInfo = await source.storage.getSessionInfo();
+		const storage = await JsonlSessionTreeStorage.create(filePath, {
+			cwd: sourceInfo.cwd,
 			sessionId: id,
-			parentSession: source.info.filePath ?? source.info.id,
+			parentSessionPath: sourceInfo.path,
 		});
 		for (const entry of forkedEntries) {
 			await storage.appendEntry(entry);
@@ -225,7 +214,6 @@ export class JsonlCodingAgentSessionRepo implements CodingAgentSessionRepo<strin
 		if (forkedEntries.length === 0) {
 			await storage.getSessionInfo();
 		}
-		const info = (await storage.getSessionInfo()) as CodingAgentSessionInfo;
-		return toSession(info, new DefaultSessionTree(storage));
+		return toSession(storage, new DefaultSessionTree(storage));
 	}
 }

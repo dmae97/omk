@@ -160,16 +160,16 @@ export interface SessionContext {
 export interface SessionInfo {
 	id: string;
 	createdAt: string;
-	parentSession?: string;
 }
 
-export interface CodingAgentSessionInfo extends SessionInfo {
-	projectCwd: string;
-	filePath?: string;
+export interface JsonlSessionInfo extends SessionInfo {
+	cwd: string;
+	path: string;
+	parentSessionPath?: string;
 }
 
-export interface SessionTreeStorage {
-	getSessionInfo(): Promise<SessionInfo>;
+export interface SessionTreeStorage<TInfo extends SessionInfo = SessionInfo> {
+	getSessionInfo(): Promise<TInfo>;
 	getLeafId(): Promise<string | null>;
 	setLeafId(leafId: string | null): Promise<void>;
 	appendEntry(entry: SessionTreeEntry): Promise<void>;
@@ -179,7 +179,6 @@ export interface SessionTreeStorage {
 }
 
 export interface SessionTree {
-	getSessionInfo(): Promise<SessionInfo>;
 	getLeafId(): Promise<string | null>;
 	getEntry(id: string): Promise<SessionTreeEntry | undefined>;
 	getEntries(): Promise<SessionTreeEntry[]>;
@@ -213,21 +212,40 @@ export interface SessionTree {
 }
 
 export interface Session<TInfo extends SessionInfo = SessionInfo> {
-	info: TInfo;
+	storage: SessionTreeStorage<TInfo>;
 	tree: SessionTree;
 }
 
-export interface SessionRepo<TRef = string, TInfo extends SessionInfo = SessionInfo> {
-	create(options?: { id?: string; parentSession?: string }): Promise<Session<TInfo>>;
+export interface SessionCreateOptions {
+	id?: string;
+}
+
+export interface SessionForkOptions {
+	entryId: string;
+	position?: "before" | "at";
+	id?: string;
+}
+
+export interface SessionRepo<
+	TRef = string,
+	TInfo extends SessionInfo = SessionInfo,
+	TCreateOptions extends SessionCreateOptions = SessionCreateOptions,
+> {
+	create(options?: TCreateOptions): Promise<Session<TInfo>>;
 	open(ref: TRef): Promise<Session<TInfo>>;
 	list(): Promise<Array<Session<TInfo>>>;
 	delete(ref: TRef): Promise<void>;
-	fork(ref: TRef, options: { entryId: string; position?: "before" | "at"; id?: string }): Promise<Session<TInfo>>;
+	fork(ref: TRef, options: SessionForkOptions): Promise<Session<TInfo>>;
 }
 
-export interface CodingAgentSessionRepo<TRef = string> extends SessionRepo<TRef, CodingAgentSessionInfo> {
-	listByCwd(cwd: string): Promise<Array<Session<CodingAgentSessionInfo>>>;
-	getMostRecentByCwd(cwd: string): Promise<Session<CodingAgentSessionInfo> | undefined>;
+export interface JsonlSessionCreateOptions extends SessionCreateOptions {
+	parentSessionPath?: string;
+}
+
+export interface JsonlSessionRepo<TRef = string>
+	extends SessionRepo<TRef, JsonlSessionInfo, JsonlSessionCreateOptions> {
+	listByCwd(cwd: string): Promise<Array<Session<JsonlSessionInfo>>>;
+	getMostRecentByCwd(cwd: string): Promise<Session<JsonlSessionInfo> | undefined>;
 }
 
 export interface AgentHarnessPendingMutations {
