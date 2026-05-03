@@ -33,20 +33,6 @@ interface CompactReadClassification {
 	label: string;
 }
 
-interface ReadRenderState {
-	hideCall?: boolean;
-}
-
-class ReadCallText extends Text {
-	constructor(private state: ReadRenderState) {
-		super("", 0, 0);
-	}
-
-	override render(width: number): string[] {
-		return this.state.hideCall ? [] : super.render(width);
-	}
-}
-
 const COMPACT_RESOURCE_FILE_NAMES = new Set(["AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD"]);
 
 /**
@@ -154,7 +140,7 @@ function getCompactReadClassification(
 	return undefined;
 }
 
-function formatCompactReadResult(classification: CompactReadClassification, theme: Theme): string {
+function formatCompactReadCall(classification: CompactReadClassification, theme: Theme): string {
 	if (classification.kind === "skill") {
 		return (
 			theme.fg("customMessageLabel", `\x1b[1m[skill]\x1b[22m `) +
@@ -180,11 +166,8 @@ function formatReadResult(
 	cwd: string,
 	isError: boolean,
 ): string {
-	if (!options.expanded && !isError) {
-		const classification = getCompactReadClassification(args, cwd);
-		if (classification) {
-			return formatCompactReadResult(classification, theme);
-		}
+	if (!options.expanded && !isError && getCompactReadClassification(args, cwd)) {
+		return "";
 	}
 
 	const rawPath = str(args?.file_path ?? args?.path);
@@ -216,7 +199,7 @@ function formatReadResult(
 export function createReadToolDefinition(
 	cwd: string,
 	options?: ReadToolOptions,
-): ToolDefinition<typeof readSchema, ReadToolDetails | undefined, ReadRenderState> {
+): ToolDefinition<typeof readSchema, ReadToolDetails | undefined> {
 	const autoResizeImages = options?.autoResizeImages ?? true;
 	const ops = options?.operations ?? defaultReadOperations;
 	return {
@@ -351,22 +334,16 @@ export function createReadToolDefinition(
 			);
 		},
 		renderCall(args, theme, context) {
-			const text =
-				context.lastComponent instanceof ReadCallText ? context.lastComponent : new ReadCallText(context.state);
-			context.state.hideCall = false;
-			text.setText(formatReadCall(args, theme));
+			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+			const classification = !context.expanded ? getCompactReadClassification(args, context.cwd) : undefined;
+			text.setText(classification ? formatCompactReadCall(classification, theme) : formatReadCall(args, theme));
 			return text;
 		},
 		renderResult(result, options, theme, context) {
 			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-			const hideCall =
-				!options.expanded &&
-				!context.isError &&
-				getCompactReadClassification(context.args, context.cwd) !== undefined;
 			text.setText(
 				formatReadResult(context.args, result, options, theme, context.showImages, context.cwd, context.isError),
 			);
-			context.state.hideCall = hideCall;
 			return text;
 		},
 	};

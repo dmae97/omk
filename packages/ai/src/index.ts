@@ -16,14 +16,10 @@ export type {
 	OpenAICodexResponsesOptions,
 	OpenAICodexWebSocketDebugStats,
 } from "./providers/openai-codex-responses.js";
-export {
-	closeOpenAICodexWebSocketSessions,
-	getOpenAICodexWebSocketDebugStats,
-	resetOpenAICodexWebSocketDebugStats,
-} from "./providers/openai-codex-responses.js";
 export type { OpenAICompletionsOptions } from "./providers/openai-completions.js";
 export type { OpenAIResponsesOptions } from "./providers/openai-responses.js";
 export * from "./providers/register-builtins.js";
+export * from "./session-resources.js";
 export * from "./stream.js";
 export * from "./types.js";
 export * from "./utils/diagnostics.js";

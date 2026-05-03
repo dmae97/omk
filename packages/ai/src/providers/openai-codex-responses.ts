@@ -22,6 +22,7 @@ if (typeof process !== "undefined" && (process.versions?.node || process.version
 
 import { getEnvApiKey } from "../env-api-keys.js";
 import { clampThinkingLevel } from "../models.js";
+import { registerSessionResourceCleanup } from "../session-resources.js";
 import type {
 	Api,
 	AssistantMessage,
@@ -681,6 +682,8 @@ export function closeOpenAICodexWebSocketSessions(sessionId?: string): void {
 	}
 	websocketSessionCache.clear();
 }
+
+registerSessionResourceCleanup(closeOpenAICodexWebSocketSessions);
 
 function isWebSocketSseFallbackActive(sessionId: string | undefined): boolean {
 	return sessionId ? websocketSseFallbackSessions.has(sessionId) : false;
