@@ -60,6 +60,10 @@ export function fuzzyMatch(query: string, text: string): FuzzyMatch {
 			return { matches: false, score: 0 };
 		}
 
+		if (normalizedQuery === textLower) {
+			score -= 100;
+		}
+
 		return { matches: true, score };
 	};
 

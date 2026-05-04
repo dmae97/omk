@@ -83,6 +83,13 @@ describe("fuzzyFilter", () => {
 		assert.strictEqual(result[0], "app");
 	});
 
+	it("prioritizes exact matches over longer prefix matches", () => {
+		const items = ["clone", "cl"];
+		const result = fuzzyFilter(items, "cl", (x: string) => x);
+
+		assert.deepStrictEqual(result, ["cl", "clone"]);
+	});
+
 	it("works with custom getText function", () => {
 		const items = [
 			{ name: "foo", id: 1 },
