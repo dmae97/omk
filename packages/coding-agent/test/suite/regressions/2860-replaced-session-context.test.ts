@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fauxAssistantMessage, registerFauxProvider, type TextContent } from "@mariozechner/pi-ai";
+import { fauxAssistantMessage, registerFauxProvider } from "@mariozechner/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AgentSession } from "../../../src/core/agent-session.js";
 import {
@@ -18,11 +18,12 @@ function getText(message: AgentSession["messages"][number]): string {
 	if (!("content" in message)) {
 		return "";
 	}
-	if (typeof message.content === "string") {
-		return message.content;
-	}
-	const textParts = message.content.filter((part): part is TextContent => part.type === "text") as TextContent[];
-	return textParts.map((part) => part.text).join("");
+	return typeof message.content === "string"
+		? message.content
+		: message.content
+				.filter((part): part is { type: "text"; text: string } => part.type === "text")
+				.map((part) => part.text)
+				.join("");
 }
 
 describe("regression #2860: replaced session callbacks", () => {

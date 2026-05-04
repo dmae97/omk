@@ -212,7 +212,7 @@ export interface UserMessage {
 
 export interface AssistantMessage {
 	role: "assistant";
-	content: (TextContent | ThinkingContent | ImageContent | ToolCall)[];
+	content: (TextContent | ThinkingContent | ToolCall)[];
 	api: Api;
 	provider: Provider;
 	model: string;
@@ -265,8 +265,6 @@ export type AssistantMessageEvent =
 	| { type: "thinking_start"; contentIndex: number; partial: AssistantMessage }
 	| { type: "thinking_delta"; contentIndex: number; delta: string; partial: AssistantMessage }
 	| { type: "thinking_end"; contentIndex: number; content: string; partial: AssistantMessage }
-	| { type: "image_start"; contentIndex: number; partial: AssistantMessage }
-	| { type: "image_end"; contentIndex: number; image: ImageContent; partial: AssistantMessage }
 	| { type: "toolcall_start"; contentIndex: number; partial: AssistantMessage }
 	| { type: "toolcall_delta"; contentIndex: number; delta: string; partial: AssistantMessage }
 	| { type: "toolcall_end"; contentIndex: number; toolCall: ToolCall; partial: AssistantMessage }
@@ -302,8 +300,6 @@ export interface OpenAICompletionsCompat {
 	thinkingFormat?: "openai" | "openrouter" | "deepseek" | "zai" | "qwen" | "qwen-chat-template";
 	/** OpenRouter-specific routing preferences. Only used when baseUrl points to OpenRouter. */
 	openRouterRouting?: OpenRouterRouting;
-	/** Whether the model uses OpenRouter's image-generation response shape with assistant `message.images`. */
-	openRouterImageGeneration?: boolean;
 	/** Vercel AI Gateway routing preferences. Only used when baseUrl points to Vercel AI Gateway. */
 	vercelGatewayRouting?: VercelGatewayRouting;
 	/** Whether z.ai supports top-level `tool_stream: true` for streaming tool call deltas. Default: false. */

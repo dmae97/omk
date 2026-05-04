@@ -88,29 +88,20 @@ function getBedrockBaseUrl(modelId: string): string {
 async function fetchOpenRouterModels(): Promise<Model<any>[]> {
 	try {
 		console.log("Fetching models from OpenRouter API...");
-		const [generalResponse, imageResponse] = await Promise.all([
-			fetch("https://openrouter.ai/api/v1/models"),
-			fetch("https://openrouter.ai/api/v1/models?output_modalities=image"),
-		]);
-		const generalData = await generalResponse.json();
-		const imageData = await imageResponse.json();
-
-		const combinedModels = new Map<string, any>();
-		for (const model of [...generalData.data, ...imageData.data]) {
-			combinedModels.set(model.id, model);
-		}
+		const response = await fetch("https://openrouter.ai/api/v1/models");
+		const data = await response.json();
 
 		const models: Model<any>[] = [];
 
-		for (const model of combinedModels.values()) {
-			// OpenRouter model IDs already include the upstream provider prefix.
-			// Keep the full ID (e.g. "google/gemini-2.5-flash-image").
-			const provider: KnownProvider = "openrouter";
-			const modelKey = model.id;
+		for (const model of data.data) {
+			// Only include models that support tools
+			if (!model.supported_parameters?.includes("tools")) continue;
 
-			const supportsTools = model.supported_parameters?.includes("tools");
-			const supportsImageOutput = model.architecture?.output_modalities?.includes("image");
-			if (!supportsTools && !supportsImageOutput) continue;
+			// Parse provider from model ID
+			let provider: KnownProvider = "openrouter";
+			let modelKey = model.id;
+
+			modelKey = model.id; // Keep full ID for OpenRouter
 
 			// Parse input modalities
 			const input: ("text" | "image")[] = ["text"];
@@ -132,7 +123,6 @@ async function fetchOpenRouterModels(): Promise<Model<any>[]> {
 				provider,
 				reasoning: model.supported_parameters?.includes("reasoning") || false,
 				input,
-				compat: supportsImageOutput ? { openRouterImageGeneration: true } : undefined,
 				cost: {
 					input: inputCost,
 					output: outputCost,
@@ -140,12 +130,12 @@ async function fetchOpenRouterModels(): Promise<Model<any>[]> {
 					cacheWrite: cacheWriteCost,
 				},
 				contextWindow: model.context_length || 4096,
-				maxTokens: model.top_provider?.max_completion_tokens || model.context_length || 4096,
+				maxTokens: model.top_provider?.max_completion_tokens || 4096,
 			};
 			models.push(normalizedModel);
 		}
 
-		console.log(`Fetched ${models.length} tool-capable or image-generation models from OpenRouter`);
+		console.log(`Fetched ${models.length} tool-capable models from OpenRouter`);
 		return models;
 	} catch (error) {
 		console.error("Failed to fetch OpenRouter models:", error);

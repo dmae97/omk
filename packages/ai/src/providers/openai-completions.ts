@@ -1,6 +1,5 @@
 import OpenAI from "openai";
 import type {
-	ChatCompletion,
 	ChatCompletionAssistantMessageParam,
 	ChatCompletionChunk,
 	ChatCompletionContentPart,
@@ -99,26 +98,6 @@ type ChatCompletionToolWithCacheControl = OpenAI.Chat.Completions.ChatCompletion
 	cache_control?: OpenAICompatCacheControl;
 };
 
-interface OpenRouterGeneratedImage {
-	image_url?: string | { url?: string };
-}
-
-type OpenRouterImageGenerationMessage = ChatCompletion["choices"][number]["message"] & {
-	images?: OpenRouterGeneratedImage[];
-};
-
-type OpenRouterImageGenerationChoice = ChatCompletion["choices"][number] & {
-	message: OpenRouterImageGenerationMessage;
-};
-
-type OpenRouterImageGenerationResponse = ChatCompletion & {
-	choices: OpenRouterImageGenerationChoice[];
-};
-
-function isOpenRouterImageGenerationModel(model: Model<"openai-completions">): boolean {
-	return model.provider === "openrouter" && model.compat?.openRouterImageGeneration === true;
-}
-
 function resolveCacheRetention(cacheRetention?: CacheRetention): CacheRetention {
 	if (cacheRetention) {
 		return cacheRetention;
@@ -171,75 +150,6 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions", OpenA
 				...(options?.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
 				...(options?.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
 			};
-			if (isOpenRouterImageGenerationModel(model)) {
-				const { stream_options: _streamOptions, ...nonStreamingBaseParams } = params;
-				const nonStreamingParams = {
-					...nonStreamingBaseParams,
-					stream: false,
-				} as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming;
-				const { data: response, response: rawResponse } = await client.chat.completions
-					.create(nonStreamingParams, requestOptions)
-					.withResponse();
-				await options?.onResponse?.(
-					{ status: rawResponse.status, headers: headersToRecord(rawResponse.headers) },
-					model,
-				);
-				stream.push({ type: "start", partial: output });
-
-				const imageResponse = response as OpenRouterImageGenerationResponse;
-				output.responseId ||= imageResponse.id;
-				output.usage = parseChunkUsage(imageResponse.usage ?? {}, model);
-
-				const choice = imageResponse.choices[0];
-				if (choice) {
-					const text = choice.message.content;
-					if (text) {
-						const textBlock: TextContent = { type: "text", text };
-						output.content.push(textBlock);
-						const contentIndex = output.content.length - 1;
-						stream.push({ type: "text_start", contentIndex, partial: output });
-						stream.push({ type: "text_delta", contentIndex, delta: text, partial: output });
-						stream.push({ type: "text_end", contentIndex, content: text, partial: output });
-					}
-
-					for (const image of choice.message.images ?? []) {
-						const imageUrl = typeof image.image_url === "string" ? image.image_url : image.image_url?.url;
-						if (!imageUrl?.startsWith("data:")) {
-							continue;
-						}
-						const matches = imageUrl.match(/^data:([^;]+);base64,(.+)$/);
-						if (!matches) {
-							continue;
-						}
-						const imageBlock: ImageContent = {
-							type: "image",
-							mimeType: matches[1],
-							data: matches[2],
-						};
-						output.content.push(imageBlock);
-						const contentIndex = output.content.length - 1;
-						stream.push({ type: "image_start", contentIndex, partial: output });
-						stream.push({ type: "image_end", contentIndex, image: imageBlock, partial: output });
-					}
-
-					if (choice.finish_reason) {
-						const finishReasonResult = mapStopReason(choice.finish_reason);
-						output.stopReason = finishReasonResult.stopReason;
-						if (finishReasonResult.errorMessage) {
-							output.errorMessage = finishReasonResult.errorMessage;
-						}
-					}
-				}
-
-				if (output.stopReason === "stop" || output.stopReason === "length" || output.stopReason === "toolUse") {
-					stream.push({ type: "done", reason: output.stopReason, message: output });
-				} else {
-					stream.push({ type: "error", reason: output.stopReason, error: output });
-				}
-				stream.end();
-				return;
-			}
-
 			const { data: openaiStream, response } = await client.chat.completions
 				.create(params, requestOptions)
 				.withResponse();
@@ -575,10 +485,6 @@ function buildParams(
 		prompt_cache_retention: cacheRetention === "long" && compat.supportsLongCacheRetention ? "24h" : undefined,
 	};
 
-	if (isOpenRouterImageGenerationModel(model)) {
-		Reflect.set(params, "modalities", ["image"]);
-	}
-
 	if (compat.supportsUsageInStreaming !== false) {
 		(params as any).stream_options = { include_usage: true };
 	}
@@ -599,12 +505,12 @@ function buildParams(
 		params.temperature = options.temperature;
 	}
 
-	if (!isOpenRouterImageGenerationModel(model) && context.tools && context.tools.length > 0) {
+	if (context.tools && context.tools.length > 0) {
 		params.tools = convertTools(context.tools, compat);
 		if (compat.zaiToolStream) {
 			(params as any).tool_stream = true;
 		}
-	} else if (!isOpenRouterImageGenerationModel(model) && hasToolHistory(context.messages)) {
+	} else if (hasToolHistory(context.messages)) {
 		// Anthropic (via LiteLLM/proxy) requires tools param when conversation has tool_calls/tool_results
 		params.tools = [];
 	}
@@ -1174,7 +1080,6 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAIComplet
 					? "openrouter"
 					: "openai",
 		openRouterRouting: {},
-		openRouterImageGeneration: false,
 		vercelGatewayRouting: {},
 		zaiToolStream: false,
 		supportsStrictMode: true,
@@ -1208,7 +1113,6 @@ function getCompat(model: Model<"openai-completions">): ResolvedOpenAICompletion
 			detected.requiresReasoningContentOnAssistantMessages,
 		thinkingFormat: model.compat.thinkingFormat ?? detected.thinkingFormat,
 		openRouterRouting: model.compat.openRouterRouting ?? {},
-		openRouterImageGeneration: model.compat.openRouterImageGeneration ?? detected.openRouterImageGeneration,
 		vercelGatewayRouting: model.compat.vercelGatewayRouting ?? detected.vercelGatewayRouting,
 		zaiToolStream: model.compat.zaiToolStream ?? detected.zaiToolStream,
 		supportsStrictMode: model.compat.supportsStrictMode ?? detected.supportsStrictMode,

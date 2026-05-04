@@ -7,7 +7,6 @@ import {
 	fauxToolCall,
 	type Model,
 	registerFauxProvider,
-	type TextContent,
 	type ToolResultMessage,
 	type UserMessage,
 } from "@mariozechner/pi-ai";
@@ -24,8 +23,10 @@ function createFauxRegistration(options: Parameters<typeof registerFauxProvider>
 }
 
 function getTextContent(message: AssistantMessage | ToolResultMessage): string {
-	const textBlocks = message.content.filter((block): block is TextContent => block.type === "text") as TextContent[];
-	return textBlocks.map((block) => block.text).join("\n");
+	return message.content
+		.filter((block) => block.type === "text")
+		.map((block) => block.text)
+		.join("\n");
 }
 
 afterEach(() => {

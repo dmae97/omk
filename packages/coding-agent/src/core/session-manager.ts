@@ -502,8 +502,10 @@ function extractTextContent(message: Message): string {
 	if (typeof content === "string") {
 		return content;
 	}
-	const textBlocks = content.filter((block): block is TextContent => block.type === "text") as TextContent[];
-	return textBlocks.map((block) => block.text).join(" ");
+	return content
+		.filter((block): block is TextContent => block.type === "text")
+		.map((block) => block.text)
+		.join(" ");
 }
 
 function getLastActivityTime(entries: FileEntry[]): number | undefined {

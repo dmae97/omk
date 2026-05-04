@@ -524,9 +524,6 @@ function toChatMessages(messages: Message[], supportsImages: boolean): ChatCompl
 					}
 					continue;
 				}
-				if (block.type !== "toolCall") {
-					continue;
-				}
 				toolCalls.push({
 					id: block.id,
 					type: "function",
