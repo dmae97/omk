@@ -58,19 +58,3 @@ export function registerImagesApiProvider<TApi extends ImagesApi, TOptions exten
 export function getImagesApiProvider(api: ImagesApi): ImagesApiProviderInternal | undefined {
 	return imagesApiProviderRegistry.get(api)?.provider;
 }
-
-export function getImagesApiProviders(): ImagesApiProviderInternal[] {
-	return Array.from(imagesApiProviderRegistry.values(), (entry) => entry.provider);
-}
-
-export function unregisterImagesApiProviders(sourceId: string): void {
-	for (const [api, entry] of imagesApiProviderRegistry.entries()) {
-		if (entry.sourceId === sourceId) {
-			imagesApiProviderRegistry.delete(api);
-		}
-	}
-}
-
-export function clearImagesApiProviders(): void {
-	imagesApiProviderRegistry.clear();
-}

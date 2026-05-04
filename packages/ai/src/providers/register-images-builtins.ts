@@ -1,4 +1,4 @@
-import { clearImagesApiProviders, registerImagesApiProvider } from "../images-api-registry.js";
+import { registerImagesApiProvider } from "../images-api-registry.js";
 import type {
 	AssistantImages,
 	AssistantImagesEvent,
@@ -70,11 +70,6 @@ export function registerBuiltInImagesApiProviders(): void {
 		api: "openrouter-images",
 		images: imagesOpenRouter,
 	});
-}
-
-export function resetImagesApiProviders(): void {
-	clearImagesApiProviders();
-	registerBuiltInImagesApiProviders();
 }
 
 registerBuiltInImagesApiProviders();
