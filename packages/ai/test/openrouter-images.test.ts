@@ -65,7 +65,7 @@ describe("openrouter images", () => {
 			headers: { "HTTP-Referer": "https://example.com" },
 		};
 		const context: ImagesContext = {
-			input: [{ type: "text", text: "Generate a cat" }],
+			input: [{ type: "text", text: "Generate a dog" }],
 		};
 
 		const result = images(model, context, { apiKey: "test" });
@@ -87,7 +87,7 @@ describe("openrouter images", () => {
 		};
 		expect(params.stream).toBe(false);
 		expect(params.modalities).toEqual(["image", "text"]);
-		expect(params.messages?.[0]?.content?.[0]).toMatchObject({ type: "text", text: "Generate a cat" });
+		expect(params.messages?.[0]?.content?.[0]).toMatchObject({ type: "text", text: "Generate a dog" });
 	});
 
 	it("completeImages resolves the final assistant images result", async () => {
@@ -102,7 +102,7 @@ describe("openrouter images", () => {
 			cost: { input: 0.015, output: 0.03, cacheRead: 0, cacheWrite: 0 },
 		};
 		const context: ImagesContext = {
-			input: [{ type: "text", text: "Generate a cat" }],
+			input: [{ type: "text", text: "Generate a dog" }],
 		};
 
 		const output = await completeImages(model, context, { apiKey: "test" });
