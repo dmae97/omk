@@ -3,6 +3,7 @@ export { Type } from "typebox";
 
 export * from "./api-registry.js";
 export * from "./env-api-keys.js";
+export * from "./image-models.js";
 export * from "./images.js";
 export * from "./images-api-registry.js";
 export * from "./models.js";

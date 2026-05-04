@@ -1262,10 +1262,11 @@ Create a new provider file (for example `amazon-bedrock.ts`) that exports:
 - Add credential detection in `env-api-keys.ts` for the new provider
 - Ensure `streamSimple` handles auth lookup via `getEnvApiKey()` or provider-specific auth
 
-#### 4. Model Generation (`scripts/generate-models.ts`)
+#### 4. Model Generation (`scripts/generate-models.ts`, `scripts/generate-image-models.ts`)
 
 - Add logic to fetch and parse models from the provider's source (e.g., models.dev API)
-- Map provider model data to the standardized `Model` interface
+- Map chat/tool-capable provider model data to the standardized `Model` interface via `scripts/generate-models.ts`
+- Map image-generation provider model data to the standardized `ImagesModel` interface via `scripts/generate-image-models.ts`
 - Handle provider-specific quirks (pricing format, capability flags, model ID transformations)
 
 #### 5. Tests (`test/`)
