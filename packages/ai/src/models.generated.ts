@@ -5819,24 +5819,6 @@ export const MODELS = {
 		} satisfies Model<"openai-completions">,
 	},
 	"kimi-coding": {
-		"k2p6": {
-			id: "k2p6",
-			name: "Kimi K2.6",
-			api: "anthropic-messages",
-			provider: "kimi-coding",
-			baseUrl: "https://api.kimi.com/coding",
-			headers: {"User-Agent":"KimiCLI/1.5"},
-			reasoning: true,
-			input: ["text", "image"],
-			cost: {
-				input: 0,
-				output: 0,
-				cacheRead: 0,
-				cacheWrite: 0,
-			},
-			contextWindow: 262144,
-			maxTokens: 32768,
-		} satisfies Model<"anthropic-messages">,
 		"kimi-for-coding": {
 			id: "kimi-for-coding",
 			name: "Kimi For Coding",
