@@ -1,47 +1,108 @@
 import { parse } from "yaml";
 import type { ExecutionEnv, FileInfo, PromptTemplate } from "./types.js";
 
+/** Warning produced while loading prompt templates. */
+export interface PromptTemplateDiagnostic {
+	/** Diagnostic severity. Currently only warnings are emitted. */
+	type: "warning";
+	/** Human-readable diagnostic message. */
+	message: string;
+	/** Path associated with the diagnostic. */
+	path: string;
+}
+
 interface PromptTemplateFrontmatter {
 	description?: string;
 	"argument-hint"?: string;
 	[key: string]: unknown;
 }
 
-export async function loadPromptTemplates(env: ExecutionEnv, paths: string | string[]): Promise<PromptTemplate[]> {
-	const templates: PromptTemplate[] = [];
+/**
+ * Load prompt templates from one or more paths.
+ *
+ * Directory inputs load direct `.md` children non-recursively. File inputs load explicit `.md` files. Missing paths and
+ * non-markdown files are skipped. Read and parse failures are returned as diagnostics.
+ */
+export async function loadPromptTemplates(
+	env: ExecutionEnv,
+	paths: string | string[],
+): Promise<{ promptTemplates: PromptTemplate[]; diagnostics: PromptTemplateDiagnostic[] }> {
+	const promptTemplates: PromptTemplate[] = [];
+	const diagnostics: PromptTemplateDiagnostic[] = [];
 	for (const path of Array.isArray(paths) ? paths : [paths]) {
 		const info = await safeFileInfo(env, path);
 		if (!info) continue;
 		const kind = await resolveKind(env, info);
 		if (kind === "directory") {
-			templates.push(...(await loadTemplatesFromDir(env, info.path)));
+			const result = await loadTemplatesFromDir(env, info.path);
+			promptTemplates.push(...result.promptTemplates);
+			diagnostics.push(...result.diagnostics);
 		} else if (kind === "file" && info.name.endsWith(".md")) {
-			const template = await loadTemplateFromFile(env, info.path);
-			if (template) templates.push(template);
+			const result = await loadTemplateFromFile(env, info.path);
+			if (result.promptTemplate) promptTemplates.push(result.promptTemplate);
+			diagnostics.push(...result.diagnostics);
 		}
 	}
-	return templates;
+	return { promptTemplates, diagnostics };
 }
 
-async function loadTemplatesFromDir(env: ExecutionEnv, dir: string): Promise<PromptTemplate[]> {
-	const templates: PromptTemplate[] = [];
+/**
+ * Load prompt templates from source-tagged paths.
+ *
+ * Source values are preserved exactly and attached to every loaded prompt template and diagnostic. The agent package does
+ * not interpret source values; applications define their own provenance shape.
+ */
+export async function loadSourcedPromptTemplates<TSource>(
+	env: ExecutionEnv,
+	inputs: Array<{ path: string; source: TSource }>,
+): Promise<{
+	promptTemplates: Array<{ promptTemplate: PromptTemplate; source: TSource }>;
+	diagnostics: Array<PromptTemplateDiagnostic & { source: TSource }>;
+}> {
+	const promptTemplates: Array<{ promptTemplate: PromptTemplate; source: TSource }> = [];
+	const diagnostics: Array<PromptTemplateDiagnostic & { source: TSource }> = [];
+	for (const input of inputs) {
+		const result = await loadPromptTemplates(env, input.path);
+		for (const promptTemplate of result.promptTemplates)
+			promptTemplates.push({ promptTemplate, source: input.source });
+		for (const diagnostic of result.diagnostics) diagnostics.push({ ...diagnostic, source: input.source });
+	}
+	return { promptTemplates, diagnostics };
+}
+
+async function loadTemplatesFromDir(
+	env: ExecutionEnv,
+	dir: string,
+): Promise<{ promptTemplates: PromptTemplate[]; diagnostics: PromptTemplateDiagnostic[] }> {
+	const promptTemplates: PromptTemplate[] = [];
+	const diagnostics: PromptTemplateDiagnostic[] = [];
 	let entries: FileInfo[];
 	try {
 		entries = await env.listDir(dir);
-	} catch {
-		return templates;
+	} catch (error) {
+		diagnostics.push({
+			type: "warning",
+			message: errorMessage(error, "failed to list prompt template directory"),
+			path: dir,
+		});
+		return { promptTemplates, diagnostics };
 	}
 
 	for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
 		const kind = await resolveKind(env, entry);
 		if (kind !== "file" || !entry.name.endsWith(".md")) continue;
-		const template = await loadTemplateFromFile(env, entry.path);
-		if (template) templates.push(template);
+		const result = await loadTemplateFromFile(env, entry.path);
+		if (result.promptTemplate) promptTemplates.push(result.promptTemplate);
+		diagnostics.push(...result.diagnostics);
 	}
-	return templates;
+	return { promptTemplates, diagnostics };
 }
 
-async function loadTemplateFromFile(env: ExecutionEnv, filePath: string): Promise<PromptTemplate | null> {
+async function loadTemplateFromFile(
+	env: ExecutionEnv,
+	filePath: string,
+): Promise<{ promptTemplate: PromptTemplate | null; diagnostics: PromptTemplateDiagnostic[] }> {
+	const diagnostics: PromptTemplateDiagnostic[] = [];
 	try {
 		const rawContent = await env.readTextFile(filePath);
 		const { frontmatter, body } = parseFrontmatter<PromptTemplateFrontmatter>(rawContent);
@@ -52,12 +113,20 @@ async function loadTemplateFromFile(env: ExecutionEnv, filePath: string): Promis
 			if (firstLine.length > 60) description += "...";
 		}
 		return {
-			name: basenameEnvPath(filePath).replace(/\.md$/i, ""),
-			description,
-			content: body,
+			promptTemplate: {
+				name: basenameEnvPath(filePath).replace(/\.md$/i, ""),
+				description,
+				content: body,
+			},
+			diagnostics,
 		};
-	} catch {
-		return null;
+	} catch (error) {
+		diagnostics.push({
+			type: "warning",
+			message: errorMessage(error, "failed to load prompt template"),
+			path: filePath,
+		});
+		return { promptTemplate: null, diagnostics };
 	}
 }
 
@@ -96,6 +165,11 @@ function basenameEnvPath(path: string): string {
 	return slashIndex === -1 ? normalized : normalized.slice(slashIndex + 1);
 }
 
+function errorMessage(error: unknown, fallback: string): string {
+	return error instanceof Error ? error.message : fallback;
+}
+
+/** Parse slash-command arguments using simple shell-style single and double quotes. */
 export function parseCommandArgs(argsString: string): string[] {
 	const args: string[] = [];
 	let current = "";
@@ -121,6 +195,7 @@ export function parseCommandArgs(argsString: string): string[] {
 	return args;
 }
 
+/** Substitute prompt template placeholders (`$1`, `$@`, `$ARGUMENTS`, `${@:N}`, `${@:N:L}`) with command arguments. */
 export function substituteArgs(content: string, args: string[]): string {
 	let result = content;
 	result = result.replace(/\$(\d+)/g, (_, num: string) => args[parseInt(num, 10) - 1] ?? "");
@@ -136,6 +211,7 @@ export function substituteArgs(content: string, args: string[]): string {
 	return result;
 }
 
+/** Expand `/template args` text using the matching prompt template, or return the original text when no template matches. */
 export function expandPromptTemplate(text: string, templates: PromptTemplate[]): string {
 	if (!text.startsWith("/")) return text;
 	const spaceIndex = text.indexOf(" ");

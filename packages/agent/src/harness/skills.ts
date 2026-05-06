@@ -8,9 +8,13 @@ const IGNORE_FILE_NAMES = [".gitignore", ".ignore", ".fdignore"];
 
 type IgnoreMatcher = ReturnType<typeof ignore>;
 
+/** Warning produced while loading skills. */
 export interface SkillDiagnostic {
+	/** Diagnostic severity. Currently only warnings are emitted. */
 	type: "warning";
+	/** Human-readable diagnostic message. */
 	message: string;
+	/** Path associated with the diagnostic. */
 	path: string;
 }
 
@@ -21,11 +25,13 @@ interface SkillFrontmatter {
 	[key: string]: unknown;
 }
 
-export async function loadSkills(env: ExecutionEnv, dirs: string | string[]): Promise<Skill[]> {
-	return (await loadSkillsWithDiagnostics(env, dirs)).skills;
-}
-
-export async function loadSkillsWithDiagnostics(
+/**
+ * Load skills from one or more directories.
+ *
+ * Traverses directories recursively, loads `SKILL.md` files, loads direct root `.md` files as skills, honors ignore files,
+ * and returns diagnostics for invalid skill files. Missing input directories are skipped.
+ */
+export async function loadSkills(
 	env: ExecutionEnv,
 	dirs: string | string[],
 ): Promise<{ skills: Skill[]; diagnostics: SkillDiagnostic[] }> {
@@ -37,6 +43,29 @@ export async function loadSkillsWithDiagnostics(
 		const result = await loadSkillsFromDirInternal(env, rootInfo.path, true, ignore(), rootInfo.path);
 		skills.push(...result.skills);
 		diagnostics.push(...result.diagnostics);
+	}
+	return { skills, diagnostics };
+}
+
+/**
+ * Load skills from source-tagged directories.
+ *
+ * Source values are preserved exactly and attached to every loaded skill and diagnostic. The agent package does not
+ * interpret source values; applications define their own provenance shape.
+ */
+export async function loadSourcedSkills<TSource>(
+	env: ExecutionEnv,
+	inputs: Array<{ path: string; source: TSource }>,
+): Promise<{
+	skills: Array<{ skill: Skill; source: TSource }>;
+	diagnostics: Array<SkillDiagnostic & { source: TSource }>;
+}> {
+	const skills: Array<{ skill: Skill; source: TSource }> = [];
+	const diagnostics: Array<SkillDiagnostic & { source: TSource }> = [];
+	for (const input of inputs) {
+		const result = await loadSkills(env, input.path);
+		for (const skill of result.skills) skills.push({ skill, source: input.source });
+		for (const diagnostic of result.diagnostics) diagnostics.push({ ...diagnostic, source: input.source });
 	}
 	return { skills, diagnostics };
 }
