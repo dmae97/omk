@@ -43,6 +43,7 @@ export async function selectConfig(options: ConfigSelectorOptions): Promise<void
 				process.exit(0);
 			},
 			() => ui.requestRender(),
+			ui.terminal.rows,
 		);
 
 		ui.addChild(selector);
