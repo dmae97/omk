@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import type { ImageContent, Model } from "@mariozechner/pi-ai";
+import type { AssistantMessage, ImageContent, Model } from "@mariozechner/pi-ai";
 import { Agent } from "../agent.js";
 import type { AgentEvent, AgentMessage, AgentTool, ThinkingLevel } from "../types.js";
 import { collectEntriesForBranchSummary, generateBranchSummary } from "./compaction/branch-summarization.js";
@@ -8,7 +8,6 @@ import { compact, DEFAULT_COMPACTION_SETTINGS, prepareCompaction } from "./compa
 import { expandPromptTemplate } from "./prompt-templates.js";
 import type {
 	AbortResult,
-	AgentHarness,
 	AgentHarnessContext,
 	AgentHarnessConversationState,
 	AgentHarnessEvent,
@@ -50,7 +49,7 @@ function createUserMessage(text: string, images?: ImageContent[]): AgentMessage 
 	return { role: "user", content, timestamp: Date.now() };
 }
 
-export class DefaultAgentHarness implements AgentHarness {
+export class AgentHarness {
 	readonly agent: Agent;
 	readonly env: ExecutionEnv;
 	readonly conversation: AgentHarnessConversationState;
@@ -284,8 +283,9 @@ export class DefaultAgentHarness implements AgentHarness {
 		}
 	}
 
-	async prompt(text: string, options?: { images?: ImageContent[] }): Promise<void> {
+	async prompt(text: string, options?: { images?: ImageContent[] }): Promise<AssistantMessage> {
 		if (!this.operation.idle) throw new Error("AgentHarness is busy");
+		const beforeLength = this.agent.state.messages.length;
 		this.operation.idle = false;
 		this.operation.liveOperationId = randomUUID();
 		const expanded = this.expandSkillCommand(expandPromptTemplate(text, this.promptTemplates));
@@ -310,15 +310,26 @@ export class DefaultAgentHarness implements AgentHarness {
 		if (beforeResult?.messages) messages = [...beforeResult.messages, ...messages];
 		if (beforeResult?.systemPrompt) this.agent.state.systemPrompt = beforeResult.systemPrompt;
 		await this.agent.prompt(messages);
+		let response: AssistantMessage | undefined;
+		const newMessages = this.agent.state.messages.slice(beforeLength);
+		for (let i = newMessages.length - 1; i >= 0; i--) {
+			const message = newMessages[i]!;
+			if (message.role === "assistant") {
+				response = message;
+				break;
+			}
+		}
+		if (!response) throw new Error("AgentHarness prompt completed without an assistant message");
+		return response;
 	}
 
-	async skill(name: string, args?: string): Promise<void> {
+	async skill(name: string, args?: string): Promise<AssistantMessage> {
 		const skill = this.skills.find((candidate) => candidate.name === name);
 		if (!skill) throw new Error(`Unknown skill: ${name}`);
 		let content = readFileSync(skill.filePath, "utf8");
 		content = content.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, "").trim();
 		const prompt = args ? `${content}\n\n${args}` : content;
-		await this.prompt(prompt);
+		return await this.prompt(prompt);
 	}
 
 	steer(message: AgentMessage): void {

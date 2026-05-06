@@ -1,3 +1,4 @@
+import { getModel } from "@mariozechner/pi-ai";
 import { describe, expect, it } from "vitest";
 import { NodeExecutionEnv } from "../../src/harness/execution-env.js";
 import { createAgentHarness, createSession } from "../../src/harness/factory.js";
@@ -16,7 +17,7 @@ describe("harness factories", () => {
 	it("creates agent harnesses", () => {
 		const session = createSession(new InMemorySessionStorage());
 		const env = new NodeExecutionEnv({ cwd: process.cwd() });
-		const harness = createAgentHarness({ env, session });
+		const harness = createAgentHarness({ env, session, initialModel: getModel("anthropic", "claude-sonnet-4-5") });
 		expect(harness.env).toBe(env);
 		expect(harness.conversation.session).toBe(session);
 	});

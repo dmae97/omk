@@ -1,5 +1,5 @@
 import type { ImageContent, Model, TextContent } from "@mariozechner/pi-ai";
-import type { Agent, AgentEvent, AgentMessage, ThinkingLevel } from "../index.js";
+import type { AgentEvent, AgentMessage, ThinkingLevel } from "../index.js";
 import type { Session } from "./session/session.js";
 
 export type SourceScope = "user" | "project" | "temporary";
@@ -524,60 +524,10 @@ export interface AgentHarnessOptions {
 	promptTemplates?: PromptTemplate[];
 	skills?: Skill[];
 	requestAuth?: (model: Model<any>) => Promise<{ apiKey: string; headers?: Record<string, string> } | undefined>;
-	initialModel?: Model<any>;
+	initialModel: Model<any>;
 	initialThinkingLevel?: ThinkingLevel;
 	initialActiveToolNames?: string[];
 	initialSystemPromptInputs?: SystemPromptInputs;
 }
 
-export interface AgentHarness {
-	readonly agent: Agent;
-	readonly env: ExecutionEnv;
-	readonly conversation: AgentHarnessConversationState;
-	readonly operation: AgentHarnessOperationState;
-
-	prompt(text: string, options?: AgentHarnessPromptOptions): Promise<void>;
-	skill(name: string, args?: string): Promise<void>;
-
-	steer(message: AgentMessage): void;
-	followUp(message: AgentMessage): void;
-	nextTurn(message: AgentMessage): void;
-
-	appendMessage(message: AgentMessage): Promise<void>;
-
-	shell(
-		command: string,
-		options?: {
-			cwd?: string;
-			env?: Record<string, string>;
-			timeout?: number;
-			signal?: AbortSignal;
-			onStdout?: (chunk: string) => void;
-			onStderr?: (chunk: string) => void;
-		},
-	): Promise<{ stdout: string; stderr: string; exitCode: number }>;
-
-	compact(customInstructions?: string): Promise<CompactResult>;
-	navigateTree(
-		targetId: string,
-		options?: { summarize?: boolean; customInstructions?: string; replaceInstructions?: boolean; label?: string },
-	): Promise<NavigateTreeResult>;
-
-	setModel(model: Model<any>): Promise<void>;
-	setThinkingLevel(level: ThinkingLevel): Promise<void>;
-	setActiveTools(toolNames: string[]): Promise<void>;
-	setSystemPromptInputs(inputs: SystemPromptInputs): Promise<void>;
-
-	abort(): Promise<AbortResult>;
-	waitForIdle(): Promise<void>;
-
-	subscribe(listener: (event: AgentHarnessEvent, signal?: AbortSignal) => Promise<void> | void): () => void;
-
-	on<TType extends keyof AgentHarnessEventResultMap>(
-		type: TType,
-		handler: (
-			event: Extract<AgentHarnessEvent, { type: TType }>,
-			ctx: AgentHarnessContext,
-		) => Promise<AgentHarnessEventResultMap[TType]> | AgentHarnessEventResultMap[TType],
-	): () => void;
-}
+export type { AgentHarness } from "./agent-harness.js";
