@@ -129,7 +129,54 @@ export function getProjectRoot(): string {
 }
 
 export function getUserHome(env: NodeJS.ProcessEnv = process.env): string {
-  return env.OMK_ORIGINAL_HOME ?? env.HOME ?? env.USERPROFILE ?? homedir();
+  return (
+    normalizeUserHomePath(env.OMK_ORIGINAL_HOME)
+    ?? normalizeUserHomePath(env.HOME)
+    ?? normalizeUserHomePath(env.USERPROFILE)
+    ?? normalizeUserHomePath(homedir())
+    ?? homedir()
+  );
+}
+
+export function normalizeUserHomePath(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const trimmed = stripWrappingQuotes(value.trim());
+  if (!trimmed) return undefined;
+
+  const wslPath = normalizeWslUncPath(trimmed);
+  return stripKimiConfigSuffix(wslPath ?? trimmed);
+}
+
+function stripWrappingQuotes(value: string): string {
+  if (value.length < 2) return value;
+  const first = value[0];
+  const last = value[value.length - 1];
+  if ((first === "\"" && last === "\"") || (first === "'" && last === "'")) {
+    return value.slice(1, -1);
+  }
+  return value;
+}
+
+function normalizeWslUncPath(value: string): string | undefined {
+  const slashPath = value.replace(/\\/g, "/");
+  const match = slashPath.match(/^\/\/wsl(?:\.localhost|\$)\/[^/]+(?:\/(.*))?$/i);
+  if (!match) return undefined;
+  const distroRelative = match[1] ?? "";
+  return `/${distroRelative}`.replace(/\/+/g, "/");
+}
+
+function stripKimiConfigSuffix(value: string): string {
+  const slashPath = value.replace(/\\/g, "/");
+  const lower = slashPath.toLowerCase();
+  for (const suffix of ["/.kimi/mcp.json", "/.kimi/config.toml", "/.kimi/skills"]) {
+    if (lower.endsWith(suffix)) {
+      return value.slice(0, value.length - suffix.length);
+    }
+  }
+  if (lower.endsWith("/.kimi")) {
+    return value.slice(0, value.length - "/.kimi".length);
+  }
+  return value;
 }
 
 export function getOmkPath(subPath?: string): string {
@@ -580,29 +627,30 @@ export async function syncAllKimiGlobals(
   }
 }
 
-/** .omk/mcp.json + .kimi/mcp.json + ~/.kimi/mcp.json 수집 */
+/** Canonical .kimi/mcp.json + optional ~/.kimi/mcp.json 수집 */
 export async function collectMcpConfigs(scope: OmkRuntimeScope = "project"): Promise<string[]> {
   const configs: string[] = [];
   if (scope === "none") return configs;
 
-  const omkMcp = getOmkPath("mcp.json");
-  const kimiMcp = join(getProjectRoot(), ".kimi", "mcp.json");
+  const root = getProjectRoot();
+  const omkMcp = join(root, ".omk", "mcp.json");
+  const kimiMcp = join(root, ".kimi", "mcp.json");
   const globalMcp = join(getUserHome(), ".kimi", "mcp.json");
 
   if (scope === "all") {
-    // syncKimiMcpGlobal() already merges project configs into ~/.kimi/mcp.json.
-    // Passing only the global file avoids duplicate/overlapping configs that
-    // can confuse Kimi CLI into loading only the last (or first) file.
     if (await pathExists(globalMcp)) configs.push(globalMcp);
-  } else {
-    const [omkMcpExists, kimiMcpExists] = await Promise.all([
-      pathExists(omkMcp),
-      pathExists(kimiMcp),
-    ]);
-    if (omkMcpExists) configs.push(omkMcp);
-    if (kimiMcpExists) configs.push(kimiMcp);
   }
-  return configs;
+
+  const [kimiMcpExists, omkMcpExists] = await Promise.all([
+    pathExists(kimiMcp),
+    pathExists(omkMcp),
+  ]);
+  // .kimi/mcp.json is the Kimi-native source of truth. .omk/mcp.json remains
+  // a legacy fallback for older projects that have not rerun `omk init`.
+  if (kimiMcpExists) configs.push(kimiMcp);
+  else if (omkMcpExists) configs.push(omkMcp);
+
+  return [...new Set(configs)];
 }
 
 /** 프로젝트의 .kimi/skills 디렉토리 경로 */

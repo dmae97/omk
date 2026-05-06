@@ -13,6 +13,10 @@ function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function toWslUncPath(absPath, distro = "Ubuntu-24.04") {
+  return `\\\\wsl.localhost\\${distro}${absPath.replace(/\//g, "\\")}`;
+}
+
 function runInit(projectRoot, homeRoot, options = {}) {
   const initOptions = { profile: "default", ...options };
   const script = `import { initCommand } from ${JSON.stringify(INIT_MODULE_URL)}; await initCommand(${JSON.stringify(initOptions)});`;
@@ -39,6 +43,7 @@ async function runInitDirect(projectRoot, homeRoot, options = {}) {
     OMK_INIT_PROMPTS: process.env.OMK_INIT_PROMPTS,
     OMK_INIT_DEEPSEEK_PROMPT: process.env.OMK_INIT_DEEPSEEK_PROMPT,
     OMK_INIT_IMPORT_USER_SKILLS: process.env.OMK_INIT_IMPORT_USER_SKILLS,
+    OMK_INIT_LOCAL_USER: process.env.OMK_INIT_LOCAL_USER,
     CI: process.env.CI,
     GITHUB_ACTIONS: process.env.GITHUB_ACTIONS,
   };
@@ -49,6 +54,7 @@ async function runInitDirect(projectRoot, homeRoot, options = {}) {
     OMK_RENDER_LOGO: "0",
     OMK_STAR_PROMPT: "force",
     OMK_INIT_IMPORT_USER_SKILLS: "",
+    OMK_INIT_LOCAL_USER: "",
     CI: "",
     GITHUB_ACTIONS: "",
   };
@@ -122,7 +128,10 @@ test("init omk-project MCP avoids ephemeral package paths", async () => {
   });
 
   assert.equal(server.command, "bash");
+  assert.match(server.args[1], /command -v omk/);
+  assert.match(server.args[1], /command -v oh-my-kimi/);
   assert.match(server.args[1], /command -v omk-project-mcp/);
+  assert.match(server.args[1], /omk-project-server\.js/);
   assert.match(server.args[1], new RegExp(escapeRegex(realpathSync(process.execPath))));
   assert.equal(server.env.OMK_PROJECT_ROOT, "/workspace/app");
   assert.equal(server.args.join(" ").includes("omk-smoke-local-abc"), false);
@@ -139,6 +148,8 @@ test("init omk-project MCP pins the current real Node executable on Unix", async
   assert.match(server.args[1], new RegExp(escapeRegex(realpathSync(process.execPath))));
   assert.doesNotMatch(server.args[1], /\bexec node\b/);
   assert.match(server.args[1], /omk-project-server\.js/);
+  assert.match(server.args[1], /command -v omk/);
+  assert.doesNotMatch(server.args[1], /\/opt\/oh-my-kimi/);
 });
 
 test("init preserves an existing custom project MCP config", async () => {
@@ -167,8 +178,43 @@ test("init preserves an existing custom project MCP config", async () => {
     const projectMcpRaw = await readFile(join(projectRoot, ".kimi", "mcp.json"), "utf-8");
     const projectMcp = JSON.parse(projectMcpRaw);
     assert.ok(projectMcp.mcpServers.local);
+    assert.ok(projectMcp.mcpServers["omk-project"]);
+    assert.match(projectMcp.mcpServers["omk-project"].args.join(" "), /command -v omk/);
     assert.equal(projectMcp.mcpServers.secret, undefined);
     assert.doesNotMatch(projectMcpRaw, /SHOULD_NOT_COPY/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("init refreshes an existing stale omk-project MCP entry", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-init-refresh-project-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-init-refresh-home-"));
+
+  try {
+    await mkdir(join(projectRoot, ".kimi"), { recursive: true });
+    await writeFile(join(projectRoot, ".kimi", "mcp.json"), JSON.stringify({
+      _comment: "custom project config",
+      mcpServers: {
+        local: { command: "node", args: ["local-server.js"] },
+        "omk-project": {
+          command: "bash",
+          args: ["-lc", "exec node /tmp/omk-home-stale/dist/mcp/omk-project-server.js"],
+          env: { OMK_PROJECT_ROOT: "/tmp/old-project" },
+        },
+      },
+    }, null, 2), "utf-8");
+
+    const result = runInit(projectRoot, homeRoot);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const projectMcpRaw = await readFile(join(projectRoot, ".kimi", "mcp.json"), "utf-8");
+    const projectMcp = JSON.parse(projectMcpRaw);
+    assert.ok(projectMcp.mcpServers.local);
+    assert.equal(projectMcp.mcpServers["omk-project"].env.OMK_PROJECT_ROOT, projectRoot);
+    assert.match(projectMcp.mcpServers["omk-project"].args.join(" "), /command -v omk/);
+    assert.doesNotMatch(projectMcpRaw, /omk-home-stale|\/tmp\/old-project/);
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(homeRoot, { recursive: true, force: true });
@@ -304,6 +350,85 @@ test("init imports personal skills only with explicit trusted opt-in", async () 
     );
     assert.equal(result.stdout.includes(fakeSecret), false);
     assert.match(result.stdout, /trusted local opt-in/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("init recognizes WSL UNC ~/.kimi/mcp.json as the user home when importing trusted skills", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-init-wsl-unc-project-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-init-wsl-unc-home-"));
+
+  try {
+    const skillRoot = join(homeRoot, ".kimi", "skills", "safe-wsl-skill");
+    await mkdir(skillRoot, { recursive: true });
+    await writeFile(join(skillRoot, "SKILL.md"), "---\nname: safe-wsl-skill\n---\nPortable WSL skill.\n", "utf-8");
+    await mkdir(join(homeRoot, ".kimi"), { recursive: true });
+    await writeFile(join(homeRoot, ".kimi", "mcp.json"), JSON.stringify({
+      mcpServers: {
+        global: { command: "node", args: ["global-server.js"] },
+      },
+    }), "utf-8");
+
+    const result = runInit(projectRoot, homeRoot, {
+      homeDir: toWslUncPath(join(homeRoot, ".kimi", "mcp.json")),
+      importUserSkills: true,
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const importedSkill = await readFile(
+      join(projectRoot, ".kimi", "skills", "safe-wsl-skill", "SKILL.md"),
+      "utf-8"
+    );
+    assert.match(importedSkill, /Portable WSL skill/);
+
+    const projectMcpRaw = await readFile(join(projectRoot, ".kimi", "mcp.json"), "utf-8");
+    const projectMcp = JSON.parse(projectMcpRaw);
+    assert.ok(projectMcp.mcpServers["omk-project"]);
+    assert.equal(projectMcp.mcpServers.global, undefined);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("init local-user mode uses WSL UNC ~/.kimi/skills at runtime without copying personal files", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-init-local-user-project-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-init-local-user-home-"));
+
+  try {
+    const skillRoot = join(homeRoot, ".kimi", "skills", "private-wsl-skill");
+    await mkdir(skillRoot, { recursive: true });
+    await writeFile(join(skillRoot, "SKILL.md"), "---\nname: private-wsl-skill\n---\nPrivate WSL skill.\n", "utf-8");
+    await mkdir(join(homeRoot, ".kimi"), { recursive: true });
+    await writeFile(join(homeRoot, ".kimi", "mcp.json"), JSON.stringify({
+      mcpServers: {
+        "private-global": { command: "node", args: ["private-global.js"] },
+      },
+    }), "utf-8");
+
+    const result = runInit(projectRoot, homeRoot, {
+      homeDir: toWslUncPath(join(homeRoot, ".kimi", "skills")),
+      localUser: true,
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const configToml = await readFile(join(projectRoot, ".omk", "config.toml"), "utf-8");
+    assert.match(configToml, /mcp_scope = "all"/);
+    assert.match(configToml, /skills_scope = "all"/);
+    assert.match(result.stdout, /Local user runtime enabled/);
+
+    const projectMcpRaw = await readFile(join(projectRoot, ".kimi", "mcp.json"), "utf-8");
+    const projectMcp = JSON.parse(projectMcpRaw);
+    assert.ok(projectMcp.mcpServers["omk-project"]);
+    assert.equal(projectMcp.mcpServers["private-global"], undefined);
+
+    await assert.rejects(
+      readFile(join(projectRoot, ".kimi", "skills", "private-wsl-skill", "SKILL.md"), "utf-8"),
+      /ENOENT/
+    );
+    await readFile(join(projectRoot, ".kimi", "skills", "omk-kimi-runtime", "SKILL.md"), "utf-8");
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(homeRoot, { recursive: true, force: true });

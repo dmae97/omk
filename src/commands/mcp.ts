@@ -1,8 +1,9 @@
-import { readFile, writeFile } from "fs/promises";
+import { mkdir, readFile, writeFile } from "fs/promises";
 
 import { join, isAbsolute } from "path";
 import { runShell, which } from "../util/shell.js";
-import { getProjectRoot, pathExists, getUserHome } from "../util/fs.js";
+import { collectMcpConfigs, getProjectRoot, pathExists, getUserHome } from "../util/fs.js";
+import { getOmkResourceSettings } from "../util/resource-profile.js";
 import { style, header, status, bullet, label } from "../util/theme.js";
 
 interface McpServerConfig {
@@ -113,8 +114,11 @@ export async function mcpListCommand(): Promise<void> {
 export async function mcpDoctorCommand(): Promise<void> {
   const sources = await resolveAllConfigs();
   const servers = collectServers(sources);
+  const resources = await getOmkResourceSettings();
+  const activePaths = new Set(await collectMcpConfigs(resources.mcpScope));
 
   console.log(header("MCP Doctor"));
+  console.log(style.gray(`Active MCP scope: ${resources.mcpScope}`));
 
   let issues = 0;
 
@@ -140,10 +144,17 @@ export async function mcpDoctorCommand(): Promise<void> {
   console.log("");
   for (const [name, info] of servers) {
     console.log(label("Server", name));
+    const activeDuplicateSources = info.sources.filter((source) => activePaths.has(source));
 
-    if (info.sources.length > 1) {
-      console.log(`  ${style.skin("⚠ duplicate definition in:")} ${info.sources.join(", ")}`);
-      issues++;
+    if (activeDuplicateSources.length > 1) {
+      if (name === "omk-project") {
+        console.log(`  ${style.gray("ℹ managed omk-project mirror duplicate:")} ${activeDuplicateSources.join(", ")}`);
+      } else {
+        console.log(`  ${style.skin("⚠ active duplicate definition in:")} ${activeDuplicateSources.join(", ")}`);
+        issues++;
+      }
+    } else if (info.sources.length > 1) {
+      console.log(`  ${style.gray("ℹ duplicate mirror outside active scope:")} ${info.sources.join(", ")}`);
     }
 
     const server = info.server;
@@ -450,7 +461,7 @@ export async function mcpRemoveCommand(serverName: string): Promise<void> {
 export async function mcpAddCommand(serverName: string): Promise<void> {
   const root = getProjectRoot();
   const globalPath = join(getUserHome(), ".kimi", "mcp.json");
-  const omkPath = join(root, ".omk", "mcp.json");
+  const projectMcpPath = join(root, ".kimi", "mcp.json");
 
   const globalSource = await loadConfig(globalPath);
   if (!globalSource.parsed || !globalSource.config.mcpServers || !(serverName in globalSource.config.mcpServers)) {
@@ -458,19 +469,22 @@ export async function mcpAddCommand(serverName: string): Promise<void> {
     process.exit(1);
   }
 
-  const omkSource = await loadConfig(omkPath);
-  const omkServers = omkSource.parsed && omkSource.config.mcpServers ? { ...omkSource.config.mcpServers } : {};
+  const projectMcpSource = await loadConfig(projectMcpPath);
+  const projectMcpServers = projectMcpSource.parsed && projectMcpSource.config.mcpServers
+    ? { ...projectMcpSource.config.mcpServers }
+    : {};
 
-  if (serverName in omkServers) {
-    console.log(status.error(`Server "${serverName}" already exists in ${omkPath}`));
+  if (serverName in projectMcpServers) {
+    console.log(status.error(`Server "${serverName}" already exists in ${projectMcpPath}`));
     process.exit(1);
   }
 
-  omkServers[serverName] = globalSource.config.mcpServers[serverName];
-  await writeFile(omkPath, JSON.stringify({ mcpServers: omkServers }, null, 2) + "\n", "utf-8");
+  projectMcpServers[serverName] = globalSource.config.mcpServers[serverName];
+  await mkdir(join(root, ".kimi"), { recursive: true });
+  await writeFile(projectMcpPath, JSON.stringify({ mcpServers: projectMcpServers }, null, 2) + "\n", "utf-8");
 
   console.log(header("MCP Add"));
-  console.log(status.ok(`Added "${serverName}" to ${omkPath}`));
+  console.log(status.ok(`Added "${serverName}" to ${projectMcpPath}`));
 }
 
 export async function mcpInstallCommand(
@@ -480,23 +494,26 @@ export async function mcpInstallCommand(
   options: { env?: string[] } = {}
 ): Promise<void> {
   const root = getProjectRoot();
-  const omkPath = join(root, ".omk", "mcp.json");
+  const projectMcpPath = join(root, ".kimi", "mcp.json");
 
-  const omkSource = await loadConfig(omkPath);
-  const omkServers = omkSource.parsed && omkSource.config.mcpServers ? { ...omkSource.config.mcpServers } : {};
+  const projectMcpSource = await loadConfig(projectMcpPath);
+  const projectMcpServers = projectMcpSource.parsed && projectMcpSource.config.mcpServers
+    ? { ...projectMcpSource.config.mcpServers }
+    : {};
 
-  if (name in omkServers) {
-    console.log(status.error(`Server "${name}" already exists in ${omkPath}`));
+  if (name in projectMcpServers) {
+    console.log(status.error(`Server "${name}" already exists in ${projectMcpPath}`));
     process.exit(1);
   }
 
   const server = createInstallServer(name, command, args, options);
 
-  omkServers[name] = server;
-  await writeFile(omkPath, JSON.stringify({ mcpServers: omkServers }, null, 2) + "\n", "utf-8");
+  projectMcpServers[name] = server;
+  await mkdir(join(root, ".kimi"), { recursive: true });
+  await writeFile(projectMcpPath, JSON.stringify({ mcpServers: projectMcpServers }, null, 2) + "\n", "utf-8");
 
   console.log(header("MCP Install"));
-  console.log(status.ok(`Installed "${name}" into ${omkPath}`));
+  console.log(status.ok(`Installed "${name}" into ${projectMcpPath}`));
   if (server.url) {
     console.log(label("URL", server.url));
   } else {

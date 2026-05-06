@@ -1,12 +1,11 @@
 import { realpathSync } from "node:fs";
 import type { Dirent } from "node:fs";
 import { mkdir, writeFile, readFile, copyFile, readdir, stat } from "fs/promises";
-import { basename, join, dirname, sep } from "path";
-import { tmpdir } from "os";
+import { basename, join, dirname } from "path";
 import { fileURLToPath } from "node:url";
 import { confirm, password } from "@inquirer/prompts";
 import { ExitPromptError } from "@inquirer/core";
-import { getProjectRoot, getUserHome, pathExists } from "../util/fs.js";
+import { getProjectRoot, getUserHome, normalizeUserHomePath, pathExists } from "../util/fs.js";
 import { getOmkVersionSync } from "../util/version.js";
 
 import { style, header, status } from "../util/theme.js";
@@ -25,6 +24,8 @@ interface McpServerDefinition {
   env?: Record<string, string>;
 }
 
+type JsonObject = Record<string, unknown>;
+
 interface InitTtyLike {
   isTTY?: boolean;
 }
@@ -33,6 +34,7 @@ export interface InitCommandOptions {
   profile: string;
   interactiveSetup?: boolean;
   importUserSkills?: boolean;
+  localUser?: boolean;
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
   stdin?: InitTtyLike;
@@ -697,12 +699,13 @@ command = ".omk/hooks/stop-verify.sh"
 timeout = 30
 `;
 
+const DEFAULT_PROJECT_MCP_COMMENT =
+  "Project-local MCP config. Global MCP servers remain in ~/.kimi/mcp.json; import explicitly only after secret review.";
+
 export function createOmkProjectMcpServer(
   projectRoot: string,
   options: { packageRoot?: string; platform?: NodeJS.Platform } = {}
 ): McpServerDefinition {
-  const root = options.packageRoot ?? packageRoot;
-  const serverPath = join(root, "dist/mcp/omk-project-server.js");
   // Use the concrete Node executable that launched init instead of a bare
   // `node` lookup. MCP clients often run with a reduced/isolated PATH, which
   // can accidentally pick a different Node ABI than the one used by npm install
@@ -711,19 +714,45 @@ export function createOmkProjectMcpServer(
   const env = { OMK_PROJECT_ROOT: projectRoot };
   const node = stableNodeExecutable();
 
-  if (isEphemeralPackageRoot(root)) {
-    return {
-      command: isWin ? "omk-project-mcp" : "bash",
-      args: isWin ? [] : ["-lc", `mcp_bin="$(command -v omk-project-mcp)" && exec ${shellQuote(node)} "$mcp_bin"`],
-      env,
-    };
-  }
-
   return {
-    command: isWin ? "node" : "bash",
-    args: isWin ? [serverPath] : ["-lc", `exec ${shellQuote(node)} ${shellQuote(serverPath)}`],
+    command: isWin ? "omk" : "bash",
+    args: isWin ? ["mcp", "serve", "omk-project"] : ["-lc", createUnixOmkProjectMcpScript(node)],
     env,
   };
+}
+
+function createUnixOmkProjectMcpScript(node: string): string {
+  const quotedNode = shellQuote(node);
+  const resolveBundledMcpScript = [
+    "const fs=require('fs')",
+    "const path=require('path')",
+    "const bin=fs.realpathSync(process.argv[1])",
+    "const candidates=[path.join(path.dirname(bin),'mcp','omk-project-server.js'),path.join(path.dirname(path.dirname(bin)),'dist','mcp','omk-project-server.js')]",
+    "const server=candidates.find((candidate)=>fs.existsSync(candidate))",
+    "if(!server)process.exit(2)",
+    "process.stdout.write(server)",
+  ].join(";");
+  const resolveRealpathScript = "const fs=require('fs');process.stdout.write(fs.realpathSync(process.argv[1]))";
+
+  return [
+    "set -e",
+    'omk_bin="$(command -v omk 2>/dev/null || command -v oh-my-kimi 2>/dev/null || true)"',
+    'if [ -n "$omk_bin" ]; then',
+    `  mcp_js="$(${quotedNode} -e ${shellQuote(resolveBundledMcpScript)} "$omk_bin" 2>/dev/null || true)"`,
+    '  if [ -n "$mcp_js" ]; then',
+    `    exec ${quotedNode} "$mcp_js"`,
+    "  fi",
+    "fi",
+    'mcp_bin="$(command -v omk-project-mcp 2>/dev/null || true)"',
+    'if [ -n "$mcp_bin" ]; then',
+    `  mcp_js="$(${quotedNode} -e ${shellQuote(resolveRealpathScript)} "$mcp_bin" 2>/dev/null || true)"`,
+    '  if [ -n "$mcp_js" ]; then',
+    `    exec ${quotedNode} "$mcp_js"`,
+    "  fi",
+    "fi",
+    'echo "omk-project MCP server not found; install @oh-my-kimi/cli or rerun omk init" >&2',
+    "exit 127",
+  ].join("\n");
 }
 
 function stableNodeExecutable(): string {
@@ -748,13 +777,40 @@ function createMcpJson(projectRoot: string): { mcpServers: Record<string, McpSer
   };
 }
 
-function isEphemeralPackageRoot(root: string): boolean {
-  const normalizedRoot = root.replace(/\\/g, "/");
-  const normalizedTmp = tmpdir().replace(/\\/g, "/").replace(/\/+$/, "");
-  return normalizedRoot === normalizedTmp || normalizedRoot.startsWith(`${normalizedTmp}/`) || root.includes(`${sep}_npx${sep}`);
+function mergeProjectMcpConfig(existingRaw: string | null, omkProjectServer: McpServerDefinition): JsonObject {
+  const existing = parseProjectMcpConfig(existingRaw);
+  const next: JsonObject = { ...existing };
+  const existingServers = isJsonObject(existing.mcpServers) ? existing.mcpServers : {};
+  next._comment = typeof next._comment === "string" && next._comment.trim() ? next._comment : DEFAULT_PROJECT_MCP_COMMENT;
+  next.mcpServers = {
+    ...existingServers,
+    "omk-project": omkProjectServer,
+  };
+  return next;
 }
 
-const CONFIG_TOML = `# oh-my-kimi project settings
+function parseProjectMcpConfig(raw: string | null): JsonObject {
+  if (raw === null || !raw.trim()) return {};
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (isJsonObject(parsed)) return parsed;
+  } catch {
+    // Fall through to a safe project-local MCP scaffold. Global MCPs are never
+    // imported here, so an invalid project file cannot leak user secrets.
+  }
+  return {};
+}
+
+function isJsonObject(value: unknown): value is JsonObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+type RuntimeScope = "all" | "project";
+
+function getConfigToml(options: { mcpScope: RuntimeScope; skillsScope: RuntimeScope }): string {
+  const { mcpScope, skillsScope } = options;
+  return `# oh-my-kimi project settings
 [project]
 name = "my-project"
 description = ""
@@ -768,8 +824,8 @@ yolo_mode = false                # safe guards still block secrets/destructive s
 [runtime]
 # auto chooses lite on <=18GB RAM hosts to make 16GB laptops usable.
 resource_profile = "auto"        # auto | lite | standard
-mcp_scope = "project"            # all | project | none — fresh projects use omk-project only
-skills_scope = "project"         # all | project | none — fresh projects use packaged project skills only
+mcp_scope = "${mcpScope}"            # all | project | none — project keeps only omk-project in .kimi/mcp.json
+skills_scope = "${skillsScope}"         # all | project | none — all reads user ~/.kimi/skills without copying them
 max_workers = 1                  # can override with OMK_MAX_WORKERS
 max_output_mb = 4                # cap buffered shell/quality output
 wire_output_mb = 1               # cap per-task retained wire output
@@ -818,6 +874,7 @@ default_model = "kimi-k2.6"
 research_thinking = "disabled"
 coding_thinking = "enabled"
 `;
+}
 
 const MEMORY_FILES: Record<string, string> = {
   "project.md": "# Project Memory\n\nThe project-local ontology graph (.omk/memory/graph-state.json) is the source of truth; this file is a human-readable mirror.\n",
@@ -828,7 +885,8 @@ const MEMORY_FILES: Record<string, string> = {
 
 export async function initCommand(options: InitCommandOptions): Promise<void> {
   const root = getProjectRoot();
-  const initHomeDir = options.homeDir ?? getUserHome(options.env ?? process.env);
+  const initHomeDir = normalizeUserHomePath(options.homeDir) ?? getUserHome(options.env ?? process.env);
+  const localUserRuntime = shouldUseLocalUserRuntime(options);
   const mcpJson = createMcpJson(root);
   console.log(header(`oh-my-kimi init (profile: ${options.profile})`));
 
@@ -963,29 +1021,21 @@ export async function initCommand(options: InitCommandOptions): Promise<void> {
   );
 
   // 8. Write configs
-  await writeFile(join(root, ".omk/config.toml"), CONFIG_TOML);
+  await writeFile(join(root, ".omk/config.toml"), getConfigToml({
+    mcpScope: localUserRuntime ? "all" : "project",
+    skillsScope: localUserRuntime ? "all" : "project",
+  }));
   await writeFile(join(root, ".omk/kimi.config.toml"), KIMI_CONFIG_TOML);
   await writeFile(join(root, ".omk/mcp.json"), JSON.stringify(mcpJson, null, 2) + "\n");
 
   // Project-local MCP config must not import global server definitions by default:
   // global configs can contain inline headers/env secrets that should stay in the user scope.
   const projectMcpPath = join(root, ".kimi", "mcp.json");
-  const projectMcpServers: Record<string, unknown> = {
-    "omk-project": mcpJson.mcpServers["omk-project"],
-  };
   const existingProjectMcp = await readFile(projectMcpPath, "utf-8").catch(() => null);
-  const shouldWriteProjectMcp =
-    existingProjectMcp === null ||
-    existingProjectMcp.includes("Merged from ~/.kimi/mcp.json + omk-project");
-  if (shouldWriteProjectMcp) {
-    await writeFile(
-      projectMcpPath,
-      JSON.stringify({
-        _comment: "Project-local MCP config. Global MCP servers remain in ~/.kimi/mcp.json; import explicitly only after secret review.",
-        mcpServers: projectMcpServers,
-      }, null, 2) + "\n"
-    );
-  }
+  await writeFile(
+    projectMcpPath,
+    JSON.stringify(mergeProjectMcpConfig(existingProjectMcp, mcpJson.mcpServers["omk-project"]), null, 2) + "\n"
+  );
   await writeFile(join(root, ".omk/lsp.json"), defaultLspConfigJson());
 
   const bundledLogoPath = join(packageRoot, "kimicat.png");
@@ -1060,11 +1110,16 @@ export async function initCommand(options: InitCommandOptions): Promise<void> {
   console.log("- Todo list is required for multi-step work.");
   console.log("- Subagents are required for non-trivial work.");
   console.log("- Project skills are auto-discovered from .kimi/skills and .agents/skills.");
-  console.log("- Project MCP defaults to omk-project only; remote/global MCPs are explicit opt-in.");
+  if (localUserRuntime) {
+    console.log("- Local user runtime enabled: global ~/.kimi/mcp.json and ~/.kimi/skills are used at runtime.");
+    console.log("- Personal/global MCP servers and skills are not copied into the project.");
+  } else {
+    console.log("- Project MCP defaults to omk-project only; remote/global MCPs are explicit opt-in.");
+  }
   console.log("- Built-in tools: SearchWeb, FetchURL (no config required).");
 
   console.log(style.gray("  Fresh init does not copy user-global skills or MCP servers into the project."));
-  console.log(style.gray("  Trusted local users can add --import-user-skills to import personal skills after secret review."));
+  console.log(style.gray("  Trusted local users can add --local-user for runtime-only global MCP/skills, or --import-user-skills to copy reviewed personal skills."));
 
   await runInitInteractiveSetup(options, initHomeDir);
 
@@ -1096,6 +1151,14 @@ function isEnabledEnvValue(value: string | undefined): boolean {
 function shouldImportUserSkills(options: InitCommandOptions): boolean {
   const env = options.env ?? process.env;
   return Boolean(options.importUserSkills) || isEnabledEnvValue(env.OMK_INIT_IMPORT_USER_SKILLS);
+}
+
+function shouldUseLocalUserRuntime(options: InitCommandOptions): boolean {
+  const env = options.env ?? process.env;
+  const profile = options.profile?.trim().toLowerCase() ?? "";
+  return Boolean(options.localUser)
+    || isEnabledEnvValue(env.OMK_INIT_LOCAL_USER)
+    || ["local", "personal", "trusted-local"].includes(profile);
 }
 
 function isInitInteractiveSetupEligible(options: InitCommandOptions): boolean {

@@ -383,6 +383,7 @@ program
   .description(t("cmd.initDesc"))
   .option("--profile <profile>", t("cmd.initProfileOption"), "fullstack")
   .option("--no-interactive-setup", t("cmd.initNoInteractiveSetupOption"))
+  .option("--local-user", "Use global ~/.kimi MCP/skills at runtime without copying personal files into the project")
   .option("--import-user-skills", "Import personal/global skills into this project (trusted local use only)")
   .action(async (options) => {
     const { initCommand } = await import("./commands/init.js");
@@ -1211,14 +1212,14 @@ mcp
   });
 mcp
   .command("add <server>")
-  .description("Copy an MCP server from global ~/.kimi/mcp.json into project .omk/mcp.json")
+  .description("Copy an MCP server from global ~/.kimi/mcp.json into project .kimi/mcp.json")
   .action(async (server) => {
     const { mcpAddCommand } = await import("./commands/mcp.js");
     await mcpAddCommand(server);
   });
 mcp
   .command("install <name> [args...]")
-  .description("Install a new MCP server into project .omk/mcp.json")
+  .description("Install a new MCP server into project .kimi/mcp.json")
   .option("-e, --env <pair>", "Environment variable (KEY=VALUE)", (val: string, prev: string[]) => [...prev, val], [])
   .action(async (name, args, options) => {
     const { mcpInstallCommand } = await import("./commands/mcp.js");

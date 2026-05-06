@@ -1,7 +1,7 @@
-import { lstat, mkdtemp, mkdir, symlink, rm, writeFile } from "fs/promises";
+import { lstat, mkdtemp, mkdir, symlink, rm } from "fs/promises";
 import { dirname, join } from "path";
 import { tmpdir } from "os";
-import { pathExists, readTextFile, getProjectRoot, getUserHome } from "../util/fs.js";
+import { pathExists, getProjectRoot, getUserHome } from "../util/fs.js";
 
 export interface IsolatedKimiHomeOptions {
   originalHome?: string;
@@ -52,8 +52,12 @@ const TRUSTED_LOCAL_TERMINAL_AUTH_PATHS = [
 ] as const;
 
 /**
- * Create a temporary HOME directory that isolates Kimi's global MCP config
- * while preserving credentials and skills.
+ * Create a temporary HOME directory while preserving Kimi auth and local agent
+ * credentials. MCP configs are intentionally *not* synthesized inside this
+ * temporary HOME: OMK runtime passes explicit --mcp-config-file arguments that
+ * point at the real project .kimi/mcp.json and, for all-scope runs, the real
+ * user ~/.kimi/mcp.json through OMK_ORIGINAL_HOME. This keeps Kimi from
+ * reporting or depending on disposable /tmp MCP config paths.
  */
 export async function prepareIsolatedKimiHome(options: IsolatedKimiHomeOptions = {}): Promise<string> {
   const env = options.env ?? process.env;
@@ -87,44 +91,7 @@ export async function prepareIsolatedKimiHome(options: IsolatedKimiHomeOptions =
     await inheritLocalTerminalAuth(originalHome, tmpHome, env);
   }
 
-  // Build sanitized mcp.json: copy global servers unless the user explicitly
-  // deny-lists them for this isolated-home launch.
-  const mcpServers: Record<string, unknown> = {};
-  const deniedGlobalMcpServers = getDeniedGlobalMcpServers(env);
-  const globalMcpPath = join(originalKimi, "mcp.json");
-  if (await pathExists(globalMcpPath)) {
-    try {
-      const content = await readTextFile(globalMcpPath, "{}");
-      const parsed = JSON.parse(content) as {
-        mcpServers?: Record<string, unknown>;
-      };
-      for (const [name, cfg] of Object.entries(parsed.mcpServers ?? {})) {
-        if (deniedGlobalMcpServers.has(name)) continue;
-        mcpServers[name] = cfg;
-      }
-    } catch {
-      /* ignore parse errors */
-    }
-  }
-
-  // Merge project-local MCP config
-  const projectMcpPath = join(projectRoot, ".kimi", "mcp.json");
-  if (await pathExists(projectMcpPath)) {
-    try {
-      const content = await readTextFile(projectMcpPath, "{}");
-      const parsed = JSON.parse(content) as {
-        mcpServers?: Record<string, unknown>;
-      };
-      Object.assign(mcpServers, parsed.mcpServers ?? {});
-    } catch {
-      /* ignore parse errors */
-    }
-  }
-
-  await writeFile(
-    join(tmpKimi, "mcp.json"),
-    JSON.stringify({ mcpServers }, null, 2)
-  );
+  await ensureNoSyntheticTmpMcpConfig(tmpKimi, projectRoot);
 
   // Symlink config.toml if present
   const originalConfig = join(originalKimi, "config.toml");
@@ -169,8 +136,12 @@ function localTerminalAuthPaths(env: NodeJS.ProcessEnv = process.env): readonly 
   return DEFAULT_LOCAL_TERMINAL_AUTH_PATHS;
 }
 
-function getDeniedGlobalMcpServers(env: NodeJS.ProcessEnv): Set<string> {
-  return new Set(parseListEnv(env.OMK_ISOLATED_HOME_MCP_DENYLIST ?? env.OMK_DISABLED_GLOBAL_MCP_SERVERS));
+async function ensureNoSyntheticTmpMcpConfig(tmpKimi: string, projectRoot: string): Promise<void> {
+  const projectMcpPath = join(projectRoot, ".kimi", "mcp.json");
+  if (!(await pathExists(projectMcpPath))) return;
+  // Deliberately no temp mcp.json creation. Remove stale leftovers if this
+  // helper is ever called with a reused temp directory in tests.
+  await rm(join(tmpKimi, "mcp.json"), { force: true }).catch(() => {});
 }
 
 function parseListEnv(value: string | undefined): string[] {

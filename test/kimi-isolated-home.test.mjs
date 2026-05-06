@@ -78,15 +78,20 @@ test("isolated Kimi HOME supports trusted opt-in for broad local auth paths", as
   }
 });
 
-test("isolated Kimi HOME preserves global firecrawl MCP unless explicitly deny-listed", async () => {
+test("isolated Kimi HOME does not synthesize temporary MCP config", async () => {
   const originalHome = await mkdtemp(join(tmpdir(), "omk-original-home-"));
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-project-root-"));
   let isolatedHome;
   try {
     await mkdir(join(originalHome, ".kimi"), { recursive: true });
+    await mkdir(join(projectRoot, ".kimi"), { recursive: true });
     await writeFile(
       join(originalHome, ".kimi", "mcp.json"),
       JSON.stringify({ mcpServers: { firecrawl: { command: "firecrawl" }, ok: { command: "ok" } } })
+    );
+    await writeFile(
+      join(projectRoot, ".kimi", "mcp.json"),
+      JSON.stringify({ mcpServers: { "omk-project": { command: "omk-project-mcp" } } })
     );
 
     isolatedHome = await prepareIsolatedKimiHome({
@@ -96,19 +101,7 @@ test("isolated Kimi HOME preserves global firecrawl MCP unless explicitly deny-l
       env: {},
     });
 
-    const parsed = JSON.parse(await readFile(join(isolatedHome, ".kimi", "mcp.json"), "utf-8"));
-    assert.deepEqual(Object.keys(parsed.mcpServers).sort(), ["firecrawl", "ok"]);
-    await cleanupIsolatedKimiHome(isolatedHome);
-
-    isolatedHome = await prepareIsolatedKimiHome({
-      originalHome,
-      projectRoot,
-      inheritLocalAuth: false,
-      env: { OMK_ISOLATED_HOME_MCP_DENYLIST: "firecrawl" },
-    });
-
-    const denylisted = JSON.parse(await readFile(join(isolatedHome, ".kimi", "mcp.json"), "utf-8"));
-    assert.deepEqual(Object.keys(denylisted.mcpServers), ["ok"]);
+    await assert.rejects(() => readFile(join(isolatedHome, ".kimi", "mcp.json"), "utf-8"), /ENOENT/);
   } finally {
     if (isolatedHome) await cleanupIsolatedKimiHome(isolatedHome);
     await rm(originalHome, { recursive: true, force: true });

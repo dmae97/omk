@@ -2,6 +2,7 @@ import type { DagContextBudget, DagNode, DagNodeDefinition, DagNodeRouting } fro
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { join, resolve } from "path";
+import { normalizeUserHomePath } from "../util/fs.js";
 
 type RouteKind = "skill" | "mcp" | "tool";
 type RouteSource = "project" | "global" | "builtin";
@@ -495,7 +496,12 @@ function getRoutingProjectRoot(): string {
 }
 
 function getRoutingUserHome(): string {
-  return process.env.OMK_ORIGINAL_HOME ?? process.env.HOME ?? homedir();
+  return (
+    normalizeUserHomePath(process.env.OMK_ORIGINAL_HOME)
+    ?? normalizeUserHomePath(process.env.HOME)
+    ?? normalizeUserHomePath(homedir())
+    ?? homedir()
+  );
 }
 
 function skillDirs(root: string, scope: RoutingInventory["skillsScope"]): Array<{ path: string; source: RouteSource }> {

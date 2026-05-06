@@ -11,11 +11,15 @@ import { createExecutor } from "../dist/orchestration/executor.js";
 import { estimateRunProgress } from "../dist/orchestration/eta.js";
 import { createRoutedRunState, refreshRunStateEstimate, routeRunState, createExecutableDagFromState } from "../dist/orchestration/run-state.js";
 import { discoverRoutingInventory, resetRoutingInventoryCache } from "../dist/orchestration/routing.js";
-import { collectMcpConfigs } from "../dist/util/fs.js";
+import { collectMcpConfigs, getUserHome, normalizeUserHomePath } from "../dist/util/fs.js";
 import { resetTimeoutPresetCache, resolveTimeoutMs } from "../dist/util/timeout-config.js";
 
 async function tempWorktree() {
   return mkdtemp(join(tmpdir(), "omk-ensemble-"));
+}
+
+function toWslUncPath(absPath, distro = "Ubuntu-24.04") {
+  return `\\\\wsl.localhost\\${distro}${absPath.replace(/\//g, "\\")}`;
 }
 
 async function withRoutingSkills(skills, fn) {
@@ -143,10 +147,8 @@ test("project MCP scope excludes global Kimi MCP config", async () => {
 
     const configs = await collectMcpConfigs("project");
 
-    assert.deepEqual(configs.sort(), [
-      join(projectRoot, ".kimi", "mcp.json"),
-      join(projectRoot, ".omk", "mcp.json"),
-    ].sort());
+    assert.deepEqual(configs, [join(projectRoot, ".kimi", "mcp.json")]);
+    assert.equal(configs.includes(join(projectRoot, ".omk", "mcp.json")), false);
     assert.equal(configs.some((path) => path.startsWith(join(homedir(), ".kimi"))), false);
   } finally {
     restoreEnv("OMK_PROJECT_ROOT", previousRoot);
@@ -167,8 +169,10 @@ test("global MCP and skills resolve through OMK_ORIGINAL_HOME when HOME is isola
   try {
     await mkdir(join(originalHome, ".kimi"), { recursive: true });
     await mkdir(join(originalHome, ".kimi", "skills", "global-skill"), { recursive: true });
+    await mkdir(join(projectRoot, ".kimi"), { recursive: true });
     await writeFile(join(originalHome, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: { "global-original": { command: "node" } } }));
     await writeFile(join(originalHome, ".kimi", "skills", "global-skill", "SKILL.md"), "# global skill\n");
+    await writeFile(join(projectRoot, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: { "omk-project": { command: "omk-project-mcp" } } }));
 
     process.env.OMK_PROJECT_ROOT = projectRoot;
     process.env.HOME = isolatedHome;
@@ -178,11 +182,69 @@ test("global MCP and skills resolve through OMK_ORIGINAL_HOME when HOME is isola
     resetRoutingInventoryCache();
 
     const configs = await collectMcpConfigs("all");
-    assert.deepEqual(configs, [join(originalHome, ".kimi", "mcp.json")]);
+    assert.deepEqual(configs, [
+      join(originalHome, ".kimi", "mcp.json"),
+      join(projectRoot, ".kimi", "mcp.json"),
+    ]);
+    assert.equal(configs.some((path) => path.startsWith(isolatedHome)), false);
 
     const inventory = discoverRoutingInventory(projectRoot);
     assert.equal(inventory.mcpServers.get("global-original"), "global");
+    assert.equal(inventory.mcpServers.get("omk-project"), "project");
     assert.equal(inventory.skills.get("global-skill"), "global");
+  } finally {
+    resetRoutingInventoryCache();
+    restoreEnv("OMK_PROJECT_ROOT", previousRoot);
+    restoreEnv("HOME", previousHome);
+    restoreEnv("OMK_ORIGINAL_HOME", previousOriginalHome);
+    restoreEnv("OMK_MCP_SCOPE", previousMcpScope);
+    restoreEnv("OMK_SKILLS_SCOPE", previousSkillsScope);
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(originalHome, { recursive: true, force: true });
+    await rm(isolatedHome, { recursive: true, force: true });
+  }
+});
+
+test("global MCP resolves WSL UNC ~/.kimi/mcp.json paths through the native home", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-wsl-unc-project-"));
+  const originalHome = await mkdtemp(join(tmpdir(), "omk-wsl-unc-home-"));
+  const isolatedHome = await mkdtemp(join(tmpdir(), "omk-wsl-unc-isolated-"));
+  const previousRoot = process.env.OMK_PROJECT_ROOT;
+  const previousHome = process.env.HOME;
+  const previousOriginalHome = process.env.OMK_ORIGINAL_HOME;
+  const previousMcpScope = process.env.OMK_MCP_SCOPE;
+  const previousSkillsScope = process.env.OMK_SKILLS_SCOPE;
+
+  try {
+    await mkdir(join(originalHome, ".kimi", "skills", "global-wsl-skill"), { recursive: true });
+    await mkdir(join(projectRoot, ".kimi"), { recursive: true });
+    await writeFile(join(originalHome, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: { "global-wsl": { command: "node" } } }));
+    await writeFile(join(originalHome, ".kimi", "skills", "global-wsl-skill", "SKILL.md"), "# global WSL skill\n");
+    await writeFile(join(projectRoot, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: { "omk-project": { command: "omk-project-mcp" } } }));
+
+    const uncMcpPath = toWslUncPath(join(originalHome, ".kimi", "mcp.json"));
+    const uncSkillsPath = toWslUncPath(join(originalHome, ".kimi", "skills"));
+    process.env.OMK_PROJECT_ROOT = projectRoot;
+    process.env.HOME = isolatedHome;
+    process.env.OMK_ORIGINAL_HOME = uncMcpPath;
+    process.env.OMK_MCP_SCOPE = "all";
+    process.env.OMK_SKILLS_SCOPE = "all";
+    resetRoutingInventoryCache();
+
+    assert.equal(normalizeUserHomePath(uncMcpPath), originalHome);
+    assert.equal(normalizeUserHomePath(uncSkillsPath), originalHome);
+    assert.equal(getUserHome(), originalHome);
+
+    const configs = await collectMcpConfigs("all");
+    assert.deepEqual(configs, [
+      join(originalHome, ".kimi", "mcp.json"),
+      join(projectRoot, ".kimi", "mcp.json"),
+    ]);
+
+    const inventory = discoverRoutingInventory(projectRoot);
+    assert.equal(inventory.mcpServers.get("global-wsl"), "global");
+    assert.equal(inventory.mcpServers.get("omk-project"), "project");
+    assert.equal(inventory.skills.get("global-wsl-skill"), "global");
   } finally {
     resetRoutingInventoryCache();
     restoreEnv("OMK_PROJECT_ROOT", previousRoot);

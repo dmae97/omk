@@ -30,6 +30,12 @@ test("parallel command exposes --timeout-preset", () => {
   assert.match(result.stdout, /--timeout-preset <preset>/);
 });
 
+test("init command exposes local-user runtime scope option", () => {
+  const result = runHelp("init");
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /--local-user/);
+});
+
 test("graph view command exposes ontology viewer options", () => {
   const result = spawnSync(process.execPath, [CLI, "graph", "view", "--help"], {
     cwd: process.cwd(),

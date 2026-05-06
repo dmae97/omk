@@ -660,8 +660,8 @@ async function mcpSkillsChecks(root: string): Promise<CheckResult[]> {
 
   const kimiSkillsDir = join(root, ".kimi", "skills");
   const agentsSkillsDir = join(root, ".agents", "skills");
-  const [omkMcpExists, kimiSkillsCount, agentsSkillsCount] = await Promise.all([
-    pathExists(join(root, ".omk", "mcp.json")),
+  const [projectKimiMcpExists, kimiSkillsCount, agentsSkillsCount] = await Promise.all([
+    pathExists(join(root, ".kimi", "mcp.json")),
     (async () => {
       if (!(await pathExists(kimiSkillsDir))) return 0;
       try {
@@ -680,9 +680,9 @@ async function mcpSkillsChecks(root: string): Promise<CheckResult[]> {
     })(),
   ]);
   results.push({
-    name: "OMK MCP",
-    status: omkMcpExists ? "ok" : "info",
-    message: omkMcpExists ? t("doctor.mcpExists") : t("doctor.mcpMissing"),
+    name: "Project MCP",
+    status: projectKimiMcpExists ? "ok" : "info",
+    message: projectKimiMcpExists ? t("doctor.mcpExists") : t("doctor.mcpMissing"),
   });
   results.push({
     name: ".kimi/skills",

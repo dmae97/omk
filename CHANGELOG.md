@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Kimi-native MCP lookup for initialized projects** — OMK no longer synthesizes a temporary `/tmp` `.kimi/mcp.json` inside isolated Kimi homes. Runtime MCP flags now point at the real project `.kimi/mcp.json` and, for all-scope runs, the original user `~/.kimi/mcp.json`; `omk mcp add/install` also writes to project `.kimi/mcp.json`.
+
 ## v1.1.5 — Node 24 Actions release pipeline hardening (2026-05-06)
 
 ### Fixed
