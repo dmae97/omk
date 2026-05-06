@@ -46,7 +46,10 @@ export function detectCapabilities(): TerminalCapabilities {
 	// sequences differently). Force hyperlinks off whenever we detect them, even
 	// when the outer terminal would otherwise support OSC 8. Image protocols are
 	// also unreliable under tmux/screen, so leave `images: null` for safety.
-	const inTmuxOrScreen = !!process.env.TMUX || term.startsWith("tmux") || term.startsWith("screen");
+	// cmux currently also gets this conservative fallback due to image corruption:
+	// https://github.com/badlogic/pi-mono/issues/4208
+	const inTmuxOrScreen =
+		!!process.env.TMUX || !!process.env.CMUX_WORKSPACE_ID || term.startsWith("tmux") || term.startsWith("screen");
 	if (inTmuxOrScreen) {
 		const trueColor = colorTerm === "truecolor" || colorTerm === "24bit";
 		return { images: null, trueColor, hyperlinks: false };
