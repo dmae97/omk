@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const OMK_ROOT = process.cwd();
@@ -183,19 +183,27 @@ test("mcp test exercises an omk CLI connection through tools/call id 3", async (
         },
       },
     });
-    const omkWrapper = join(binRoot, "omk");
-    await writeFile(
-      omkWrapper,
-      `#!/usr/bin/env bash\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(OMK_CLI)} "$@"\n`,
-      "utf-8"
-    );
-    await chmod(omkWrapper, 0o755);
+    if (process.platform === "win32") {
+      await writeFile(
+        join(binRoot, "omk.cmd"),
+        `@echo off\r\n"${process.execPath}" "${OMK_CLI}" %*\r\n`,
+        "utf-8"
+      );
+    } else {
+      const omkWrapper = join(binRoot, "omk");
+      await writeFile(
+        omkWrapper,
+        `#!/usr/bin/env bash\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(OMK_CLI)} "$@"\n`,
+        "utf-8"
+      );
+      await chmod(omkWrapper, 0o755);
+    }
 
     const result = runMcpScript(projectRoot, homeRoot, `
       await mcpTestCommand("omk-cli");
       console.log("MCP_TEST_OK");
     `, {
-      PATH: `${binRoot}:${process.env.PATH ?? ""}`,
+      PATH: `${binRoot}${delimiter}${process.env.PATH ?? ""}`,
     });
 
     assert.equal(result.status, 0, result.stderr || result.stdout);

@@ -205,7 +205,9 @@ test("global MCP and skills resolve through OMK_ORIGINAL_HOME when HOME is isola
   }
 });
 
-test("global MCP resolves WSL UNC ~/.kimi/mcp.json paths through the native home", async () => {
+test("global MCP resolves WSL UNC ~/.kimi/mcp.json paths through the native home", {
+  skip: process.platform === "win32" ? "WSL UNC normalization is validated from WSL/POSIX runtimes" : false,
+}, async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-wsl-unc-project-"));
   const originalHome = await mkdtemp(join(tmpdir(), "omk-wsl-unc-home-"));
   const isolatedHome = await mkdtemp(join(tmpdir(), "omk-wsl-unc-isolated-"));

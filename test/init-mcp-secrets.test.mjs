@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const INIT_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "commands", "init.js")).href;
+const POSIX_EXECUTABLE_BITS_SUPPORTED = process.platform !== "win32";
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -15,6 +16,11 @@ function escapeRegex(value) {
 
 function toWslUncPath(absPath, distro = "Ubuntu-24.04") {
   return `\\\\wsl.localhost\\${distro}${absPath.replace(/\//g, "\\")}`;
+}
+
+function assertExecutableModeIfSupported(fileStat, message) {
+  if (!POSIX_EXECUTABLE_BITS_SUPPORTED) return;
+  assert.ok((fileStat.mode & 0o111) !== 0, message);
 }
 
 function runInit(projectRoot, homeRoot, options = {}) {
@@ -185,7 +191,7 @@ test("init installs an OMK-safe awesome-agent-skills UserPromptSubmit router hoo
     assert.match(hookBody, /Do not auto-install third-party skills/);
 
     const hookStat = await stat(hookPath);
-    assert.ok((hookStat.mode & 0o111) !== 0, "generated hook should be executable");
+    assertExecutableModeIfSupported(hookStat, "generated hook should be executable");
 
     const hookResult = spawnSync("bash", [hookPath], {
       cwd: projectRoot,
@@ -248,7 +254,7 @@ test("init installs OMK lifecycle hooks and release guard", async () => {
     for (const [scriptName, eventName, contextPattern] of hooks) {
       const hookPath = join(projectRoot, ".omk", "hooks", scriptName);
       const hookStat = await stat(hookPath);
-      assert.ok((hookStat.mode & 0o111) !== 0, `${scriptName} should be executable`);
+      assertExecutableModeIfSupported(hookStat, `${scriptName} should be executable`);
 
       const hookResult = spawnSync("bash", [hookPath], {
         cwd: projectRoot,
@@ -347,7 +353,12 @@ test("init preserves an existing custom project MCP config", async () => {
     const projectMcp = JSON.parse(projectMcpRaw);
     assert.ok(projectMcp.mcpServers.local);
     assert.ok(projectMcp.mcpServers["omk-project"]);
-    assert.match(projectMcp.mcpServers["omk-project"].args.join(" "), /command -v omk/);
+    if (process.platform === "win32") {
+      assert.equal(projectMcp.mcpServers["omk-project"].command, "omk");
+      assert.deepEqual(projectMcp.mcpServers["omk-project"].args, ["mcp", "serve", "omk-project"]);
+    } else {
+      assert.match(projectMcp.mcpServers["omk-project"].args.join(" "), /command -v omk/);
+    }
     assert.equal(projectMcp.mcpServers.secret, undefined);
     assert.doesNotMatch(projectMcpRaw, /SHOULD_NOT_COPY/);
   } finally {
@@ -381,7 +392,12 @@ test("init refreshes an existing stale omk-project MCP entry", async () => {
     const projectMcp = JSON.parse(projectMcpRaw);
     assert.ok(projectMcp.mcpServers.local);
     assert.equal(projectMcp.mcpServers["omk-project"].env.OMK_PROJECT_ROOT, projectRoot);
-    assert.match(projectMcp.mcpServers["omk-project"].args.join(" "), /command -v omk/);
+    if (process.platform === "win32") {
+      assert.equal(projectMcp.mcpServers["omk-project"].command, "omk");
+      assert.deepEqual(projectMcp.mcpServers["omk-project"].args, ["mcp", "serve", "omk-project"]);
+    } else {
+      assert.match(projectMcp.mcpServers["omk-project"].args.join(" "), /command -v omk/);
+    }
     assert.doesNotMatch(projectMcpRaw, /omk-home-stale|\/tmp\/old-project/);
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
