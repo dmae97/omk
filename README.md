@@ -1,6 +1,6 @@
 <div align="center">
 [![MseeP.ai Security Assessment Badge](https://mseep.net/pr/dmae97-oh-my-kimi-badge.png)](https://mseep.ai/app/dmae97-oh-my-kimi)
-<div align="center">
+
 <div align="center">
 
 <!-- Open Graph -->
