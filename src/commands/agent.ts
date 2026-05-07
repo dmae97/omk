@@ -4,7 +4,7 @@ import YAML from "yaml";
 import { getOmkPath, pathExists } from "../util/fs.js";
 import { style, header, status, label, bullet } from "../util/theme.js";
 
-const STABLE_AGENTS = new Set(["planner", "coder", "reviewer", "qa", "security"]);
+const STABLE_AGENTS = new Set(["explorer", "planner", "coder", "reviewer", "qa", "security"]);
 
 interface AgentMeta {
   id: string;

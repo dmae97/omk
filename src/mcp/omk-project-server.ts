@@ -36,6 +36,16 @@ interface JsonRpcResponse {
   error?: { code: number; message: string; data?: unknown };
 }
 
+interface McpTextContent {
+  type: "text";
+  text: string;
+}
+
+interface McpToolResult {
+  content: McpTextContent[];
+  isError?: boolean;
+}
+
 interface Tool {
   name: string;
   description: string;
@@ -78,6 +88,64 @@ const MEMORY_STORE = new MemoryStore(OMK_MEMORY_DIR, {
 });
 const GOAL_PERSISTER = createGoalPersister(OMK_GOALS_DIR);
 const STATE_PERSISTER = createStatePersister(OMK_RUNS_DIR);
+
+// ─── JSON-RPC / MCP error helpers ───────────────────────────────────────
+
+const JSON_RPC_METHOD_NOT_FOUND = -32601;
+const JSON_RPC_INVALID_PARAMS = -32602;
+const JSON_RPC_OMK_SERVER_ERROR = -32000;
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function errorName(err: unknown): string {
+  return err instanceof Error ? err.name : typeof err;
+}
+
+function writeDiagnostic(message: string, data: Record<string, unknown>): void {
+  const payload = JSON.stringify({ message, ...data });
+  process.stderr.write(`[omk-project-mcp] ${payload}\n`);
+}
+
+function buildErrorData(
+  req: JsonRpcRequest,
+  err: unknown,
+  context: Record<string, unknown> = {}
+): Record<string, unknown> {
+  return {
+    requestId: req.id,
+    method: req.method,
+    errorName: errorName(err),
+    ...context,
+  };
+}
+
+function formatToolErrorText(toolName: string, err: unknown): string {
+  return JSON.stringify({
+    ok: false,
+    source: "omk-project-mcp",
+    tool: toolName,
+    error: {
+      message: errorMessage(err),
+      name: errorName(err),
+    },
+    hint: "This is an OMK tool-level failure, not a JSON-RPC transport failure. Fix the input or inspect the referenced OMK project state, then retry the tool.",
+  }, null, 2);
+}
+
+function toolResultFromValue(result: unknown): McpToolResult {
+  return {
+    content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+  };
+}
+
+function toolErrorResult(toolName: string, err: unknown): McpToolResult {
+  return {
+    isError: true,
+    content: [{ type: "text", text: formatToolErrorText(toolName, err) }],
+  };
+}
 
 // ─── Security helpers ───────────────────────────────────────────────────
 
@@ -1364,7 +1432,7 @@ async function handleRequest(req: JsonRpcRequest): Promise<void> {
       const resourceParams = req.params as { uri?: string } | undefined;
       const uri = resourceParams?.uri;
       if (!uri || typeof uri !== "string") {
-        sendError(req.id, -32602, "Invalid params: missing 'uri'");
+        sendError(req.id, JSON_RPC_INVALID_PARAMS, "Invalid params: missing 'uri'");
         return;
       }
       try {
@@ -1378,7 +1446,7 @@ async function handleRequest(req: JsonRpcRequest): Promise<void> {
         } else if (uri === "omk://ontology/project") {
           result = await handleReadOntologyResource();
         } else {
-          sendError(req.id, -32602, `Resource not found: ${uri}`);
+          sendError(req.id, JSON_RPC_INVALID_PARAMS, `Resource not found: ${uri}`);
           return;
         }
         sendResult(req.id, {
@@ -1391,8 +1459,9 @@ async function handleRequest(req: JsonRpcRequest): Promise<void> {
           ],
         });
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        sendError(req.id, -32603, `Resource read error: ${message}`);
+        const data = buildErrorData(req, err, { uri });
+        writeDiagnostic("resource_read_failed", data);
+        sendError(req.id, JSON_RPC_OMK_SERVER_ERROR, `OMK MCP resource read failed: ${errorMessage(err)}`, data);
       }
       return;
     }
@@ -1407,7 +1476,7 @@ async function handleRequest(req: JsonRpcRequest): Promise<void> {
       const promptName = promptParams?.name;
       const promptArgs = promptParams?.arguments ?? {};
       if (!promptName || typeof promptName !== "string") {
-        sendError(req.id, -32602, "Invalid params: missing 'name'");
+        sendError(req.id, JSON_RPC_INVALID_PARAMS, "Invalid params: missing 'name'");
         return;
       }
       try {
@@ -1423,13 +1492,14 @@ async function handleRequest(req: JsonRpcRequest): Promise<void> {
             result = handleGetQualityGatePrompt(promptArgs);
             break;
           default:
-            sendError(req.id, -32602, `Prompt not found: ${promptName}`);
+            sendError(req.id, JSON_RPC_INVALID_PARAMS, `Prompt not found: ${promptName}`);
             return;
         }
         sendResult(req.id, result);
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        sendError(req.id, -32603, `Prompt get error: ${message}`);
+        const data = buildErrorData(req, err, { promptName });
+        writeDiagnostic("prompt_get_failed", data);
+        sendError(req.id, JSON_RPC_OMK_SERVER_ERROR, `OMK MCP prompt get failed: ${errorMessage(err)}`, data);
       }
       return;
     }
@@ -1444,21 +1514,21 @@ async function handleRequest(req: JsonRpcRequest): Promise<void> {
       const toolName = params?.name;
       const toolArgs = params?.arguments ?? {};
       if (!toolName || typeof toolName !== "string") {
-        sendError(req.id, -32602, "Invalid params: missing 'name'");
+        sendError(req.id, JSON_RPC_INVALID_PARAMS, "Invalid params: missing 'name'");
         return;
       }
       try {
         const result = await handleToolCall(toolName, toolArgs);
-        sendResult(req.id, { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] });
+        sendResult(req.id, toolResultFromValue(result));
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        sendError(req.id, -32603, `Tool execution error: ${message}`);
+        writeDiagnostic("tool_call_failed", buildErrorData(req, err, { toolName }));
+        sendResult(req.id, toolErrorResult(toolName, err));
       }
       return;
     }
 
     default: {
-      sendError(req.id, -32601, `Method not found: ${req.method}`);
+      sendError(req.id, JSON_RPC_METHOD_NOT_FOUND, `Method not found: ${req.method}`);
       return;
     }
   }
@@ -1489,8 +1559,9 @@ async function main(): Promise<void> {
     try {
       await handleRequest(req);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      sendError(req.id, -32603, `Internal error: ${message}`);
+      const data = buildErrorData(req, err);
+      writeDiagnostic("request_failed", data);
+      sendError(req.id, JSON_RPC_OMK_SERVER_ERROR, `OMK MCP request failed while handling ${req.method}: ${errorMessage(err)}`, data);
     }
   }
 

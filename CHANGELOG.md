@@ -2,9 +2,24 @@
 
 ## Unreleased
 
+_No unreleased changes._
+
+## v1.1.6 — Open Design OMK bridge, MCP diagnostics, and README asset refresh (2026-05-07)
+
+### New
+
+- **Open Design OMK CLI bridge** — `omk design open-design` now registers an `OMK CLI` local agent in the upstream Open Design checkout, persists `OMK_BIN`, adds an OMK visual label/icon, and defaults the local checkout to `agentId: omk`.
+- **`omk open-design-agent`** — new local connection point for Open Design. Smoke tests return `ok` immediately without launching Kimi ACP, while real prompts are handed to Kimi print mode through OMK's isolated runtime.
+- **Generated hook set** — `omk init` now includes session-context, awesome-agent-skills advisory routing, precompact checkpointing, subagent-stop audit, release guard, secret guard, post-format, and stop-verification hooks.
+- **Open Design slash skill** — `open-design` is included at the top of the OMK Core skill pack so `/skills` exposes localhost design first.
+- **README assets** — refreshed Open Design localhost, generated hooks, generated skills, skill packs, HUD, cockpit, and status-line screenshots under `readmeasset/`.
+
 ### Fixed
 
 - **Kimi-native MCP lookup for initialized projects** — OMK no longer synthesizes a temporary `/tmp` `.kimi/mcp.json` inside isolated Kimi homes. Runtime MCP flags now point at the real project `.kimi/mcp.json` and, for all-scope runs, the original user `~/.kimi/mcp.json`; `omk mcp add/install` also writes to project `.kimi/mcp.json`.
+- **MCP JSON-RPC internal errors** — `omk mcp test` and the project MCP server return tool-level failures instead of opaque `json-rpc id 3: Internal error` crashes.
+- **Open Design localhost routes** — OMK patches the local Open Design app route shape so `/` and deep links like `/projects/test` return the SPA instead of 404/500 in dev mode.
+- **DeepSeek advisory participation** — goal progress and file-affecting nodes can invoke DeepSeek advisory metadata while Kimi remains the writer/merge authority.
 
 ## v1.1.5 — Node 24 Actions release pipeline hardening (2026-05-06)
 

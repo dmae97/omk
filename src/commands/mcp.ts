@@ -29,6 +29,16 @@ interface ConfigSource {
 }
 
 const RAILWAY_REMOTE_MCP_URL = "https://mcp.railway.com";
+const JSON_RPC_INTERNAL_ERROR_CODE = -32603;
+
+interface JsonRpcProbeResponse {
+  id?: string | number;
+  result?: unknown;
+  error?: {
+    code?: number;
+    message?: string;
+  };
+}
 
 async function loadConfig(filePath: string): Promise<ConfigSource> {
   if (!(await pathExists(filePath))) {
@@ -386,6 +396,12 @@ export async function mcpTestCommand(serverName: string): Promise<void> {
     env: server.env ? { ...process.env, ...server.env } as Record<string, string> : process.env as Record<string, string>,
     input: initializePayload,
   });
+  const handshakeResponses = parseJsonRpcResponses(handshakeResult.stdout);
+  const internalHandshakeError = findInternalJsonRpcError(handshakeResponses);
+  if (internalHandshakeError) {
+    console.error(status.error(`JSON-RPC initialize returned Internal error: ${internalHandshakeError.error?.message ?? "unknown"}`));
+    process.exit(1);
+  }
   if (!handshakeResult.failed && handshakeResult.stdout.includes("\"serverInfo\"")) {
     console.log(style.mint("JSON-RPC initialize succeeded"));
   } else if (!handshakeResult.failed) {
@@ -395,6 +411,124 @@ export async function mcpTestCommand(serverName: string): Promise<void> {
   } else {
     console.log(style.gray(`Handshake result: ${handshakeResult.stderr}`));
   }
+
+  if (shouldRunOmkProjectProbe(serverName, server)) {
+    await runOmkProjectToolProbe(command, smokeArgs, server.env);
+  }
+}
+
+function shouldRunOmkProjectProbe(serverName: string, server: McpServerConfig): boolean {
+  const target = serverTargetText(server);
+  return serverName === "omk-project" || /\bomk-project\b/.test(target);
+}
+
+async function runOmkProjectToolProbe(
+  command: string,
+  args: string[],
+  env?: Record<string, string>
+): Promise<void> {
+  console.log("");
+  console.log(style.gray("JSON-RPC OMK tools/call id 3 probe..."));
+  const payload = [
+    {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2024-11-05",
+        capabilities: {},
+        clientInfo: { name: "omk-mcp-test", version: "0.0.0" },
+      },
+    },
+    {
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/list",
+    },
+    {
+      jsonrpc: "2.0",
+      id: 3,
+      method: "tools/call",
+      params: {
+        name: "omk_goal_show",
+        arguments: { goalId: "missing-goal" },
+      },
+    },
+  ].map((message) => JSON.stringify(message)).join("\n") + "\n";
+  const probeResult = await runShell(command, args, {
+    timeout: 10000,
+    env: env ? { ...process.env, ...env } as Record<string, string> : process.env as Record<string, string>,
+    input: payload,
+  });
+  const responses = parseJsonRpcResponses(probeResult.stdout);
+  const internalError = findInternalJsonRpcError(responses);
+  if (internalError) {
+    console.error(status.error(`JSON-RPC id ${String(internalError.id ?? "?")} returned Internal error: ${internalError.error?.message ?? "unknown"}`));
+    if (probeResult.stderr.trim()) console.error(style.gray(probeResult.stderr.trim()));
+    process.exit(1);
+  }
+  const toolResponse = responses.find((response) => response.id === 3);
+  if (!toolResponse) {
+    console.error(status.error("JSON-RPC tools/call id 3 did not return a response"));
+    if (probeResult.stderr.trim()) console.error(style.gray(probeResult.stderr.trim()));
+    process.exit(1);
+  }
+  if (toolResponse.error) {
+    console.error(status.error(`JSON-RPC id 3 returned error ${toolResponse.error.code ?? "unknown"}: ${toolResponse.error.message ?? "unknown"}`));
+    process.exit(1);
+  }
+  const toolText = stringifyToolResultContent(toolResponse.result);
+  if (!isRecord(toolResponse.result) || toolResponse.result.isError !== true || !toolText.includes("OMK tool-level failure")) {
+    console.error(status.error("JSON-RPC id 3 did not return an OMK tool-level error result"));
+    process.exit(1);
+  }
+  console.log(status.ok("JSON-RPC tools/call id 3 returned OMK tool-level error without -32603"));
+}
+
+function parseJsonRpcResponses(stdout: string): JsonRpcProbeResponse[] {
+  const responses: JsonRpcProbeResponse[] = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("{")) continue;
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (isRecord(parsed)) {
+        const response: JsonRpcProbeResponse = {};
+        if (typeof parsed.id === "string" || typeof parsed.id === "number") response.id = parsed.id;
+        if ("result" in parsed) response.result = parsed.result;
+        if (isRecord(parsed.error)) {
+          response.error = {};
+          if (typeof parsed.error.code === "number") response.error.code = parsed.error.code;
+          if (typeof parsed.error.message === "string") response.error.message = parsed.error.message;
+        }
+        responses.push(response);
+      }
+    } catch {
+      // Ignore non-JSON logs from MCP child processes.
+    }
+  }
+  return responses;
+}
+
+function findInternalJsonRpcError(responses: JsonRpcProbeResponse[]): JsonRpcProbeResponse | undefined {
+  return responses.find((response) =>
+    response.error?.code === JSON_RPC_INTERNAL_ERROR_CODE ||
+    /internal error/i.test(response.error?.message ?? "")
+  );
+}
+
+function stringifyToolResultContent(result: unknown): string {
+  if (!isRecord(result) || !Array.isArray(result.content)) return "";
+  return result.content
+    .map((item) => {
+      if (isRecord(item) && typeof item.text === "string") return item.text;
+      return "";
+    })
+    .join("\n");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 async function testRemoteMcpServer(serverName: string, url: string): Promise<void> {

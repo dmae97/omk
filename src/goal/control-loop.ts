@@ -5,10 +5,20 @@ import { scoreGoal } from "./scoring.js";
 import { checkGoalEvidence } from "./evidence.js";
 import { getProjectRoot } from "../util/fs.js";
 import { MemoryStore } from "../memory/memory-store.js";
-import { evaluateEnsembleDecision } from "../orchestration/ensemble-decision.js";
+import {
+  evaluateEnsembleDecision,
+  type EnsembleDecisionCandidateVote,
+} from "../orchestration/ensemble-decision.js";
 import { evaluateMissingCriteria, suggestNextAction } from "./eval-criteria.js";
 import { saveEnsembleDecision } from "./ensemble-memory.js";
 import { renderPromptDigest } from "./prompt-digest.js";
+import {
+  checkDeepSeekBalance,
+  DeepSeekClient,
+  DEEPSEEK_V4_PRO_MODEL,
+  getDeepSeekProviderStatus,
+  resolveDeepSeekApiKey,
+} from "../providers/index.js";
 
 
 
@@ -48,6 +58,31 @@ export interface EnsembleGoalProgress extends GoalProgress {
   ensemble: ReturnType<typeof evaluateEnsembleDecision>;
 }
 
+export interface DeepSeekGoalDecisionContext {
+  goal: GoalSpec;
+  runState: RunState;
+  evidence: GoalEvidence[];
+  score: import("../contracts/goal.js").GoalScore;
+}
+
+export type DeepSeekGoalDecisionAdvisor = (
+  context: DeepSeekGoalDecisionContext
+) => Promise<EnsembleDecisionCandidateVote | undefined>;
+
+export interface DeepSeekGoalDecisionOptions {
+  enabled?: boolean;
+  weight?: number;
+  timeoutMs?: number;
+  maxTokens?: number;
+  env?: NodeJS.ProcessEnv;
+  fetchImpl?: typeof fetch;
+  advisor?: DeepSeekGoalDecisionAdvisor;
+}
+
+export interface GoalProgressEnsembleOptions {
+  deepseek?: false | DeepSeekGoalDecisionOptions;
+}
+
 export function evaluateLoopGuard(runState: RunState): { shouldStop: boolean; reason?: string } {
   const { iterationCount, maxIterations } = runState;
   if (
@@ -69,11 +104,13 @@ export function evaluateLoopGuard(runState: RunState): { shouldStop: boolean; re
 export async function evaluateGoalProgressEnsemble(
   goal: GoalSpec,
   runState: RunState,
-  iterationContext?: { iterationCount: number; maxIterations: number }
+  iterationContext?: { iterationCount: number; maxIterations: number },
+  options: GoalProgressEnsembleOptions = {}
 ): Promise<EnsembleGoalProgress> {
   const root = getProjectRoot();
   const evidence = await checkGoalEvidence(goal, { root, runState });
   const score = scoreGoal(goal, evidence);
+  const deepseekVote = await resolveDeepSeekGoalDecisionVote(goal, runState, evidence, score, options.deepseek);
 
   // Loop guard check
   const effectiveState: RunState = iterationContext
@@ -86,6 +123,7 @@ export async function evaluateGoalProgressEnsemble(
     const ensemble = evaluateEnsembleDecision(goal, runState, evidence, {
       enabled: true,
       quorumRatio: 0.5,
+      extraVotes: deepseekVote ? [deepseekVote] : undefined,
     });
     return {
       status: goal.status,
@@ -99,6 +137,7 @@ export async function evaluateGoalProgressEnsemble(
   const ensemble = evaluateEnsembleDecision(goal, runState, evidence, {
     enabled: true,
     quorumRatio: 0.5,
+    extraVotes: deepseekVote ? [deepseekVote] : undefined,
   });
 
   // If ensemble has high confidence (>0.7), trust it; otherwise fall back to basic logic
@@ -128,6 +167,208 @@ export async function evaluateGoalProgressEnsemble(
     nextAction,
     ensemble,
   };
+}
+
+async function resolveDeepSeekGoalDecisionVote(
+  goal: GoalSpec,
+  runState: RunState,
+  evidence: GoalEvidence[],
+  score: import("../contracts/goal.js").GoalScore,
+  options: GoalProgressEnsembleOptions["deepseek"]
+): Promise<EnsembleDecisionCandidateVote | undefined> {
+  if (options === false) return undefined;
+  const env = options?.env ?? process.env;
+  if (options?.enabled === false || parseOptionalBoolean(env.OMK_DEEPSEEK_GOAL_ENSEMBLE) === false) {
+    return undefined;
+  }
+
+  const context: DeepSeekGoalDecisionContext = { goal, runState, evidence, score };
+  if (options?.advisor) {
+    const vote = await options.advisor(context).catch((err: unknown) =>
+      deepseekUnavailableVote(`advisor failed: ${sanitizeDeepSeekMessage(err)}`, options.weight)
+    );
+    return vote ? normalizeDeepSeekDecisionVote(vote, options.weight) : undefined;
+  }
+
+  const status = await getDeepSeekProviderStatus({ env }).catch(() => undefined);
+  if (!status?.enabled || !status.apiKeySet) return undefined;
+
+  const resolved = await resolveDeepSeekApiKey({ env }).catch(() => undefined);
+  if (!resolved?.apiKey) return undefined;
+
+  const health = await checkDeepSeekBalance({
+    apiKey: resolved.apiKey,
+    env,
+    fetchImpl: options?.fetchImpl,
+    timeoutMs: Math.min(options?.timeoutMs ?? 10_000, 20_000),
+  });
+  if (!health.available) {
+    return deepseekUnavailableVote(health.reason ?? "preflight unavailable", options?.weight);
+  }
+
+  const client = new DeepSeekClient({
+    apiKey: resolved.apiKey,
+    env,
+    fetchImpl: options?.fetchImpl,
+    model: DEEPSEEK_V4_PRO_MODEL,
+    reasoningEffort: "max",
+    timeoutMs: options?.timeoutMs ?? 45_000,
+  });
+
+  try {
+    const content = await client.complete({
+      messages: [
+        {
+          role: "system",
+          content: [
+            "You are DeepSeek inside the OMK goal-progress ensemble.",
+            "Kimi remains the orchestrator and final authority.",
+            "You have no file, shell, MCP, secret, or merge authority.",
+            "Return JSON only with action, confidence, and reason.",
+            "Allowed action values: continue, replan, block, handoff, close.",
+          ].join(" "),
+        },
+        { role: "user", content: buildDeepSeekGoalDecisionPrompt(goal, runState, evidence, score) },
+      ],
+      maxTokens: options?.maxTokens ?? 512,
+      thinking: "disabled",
+    });
+
+    return normalizeDeepSeekDecisionVote(parseDeepSeekDecisionVote(content, options?.weight), options?.weight);
+  } catch (err) {
+    return deepseekUnavailableVote(`chat failed: ${sanitizeDeepSeekMessage(err)}`, options?.weight);
+  }
+}
+
+function buildDeepSeekGoalDecisionPrompt(
+  goal: GoalSpec,
+  runState: RunState,
+  evidence: GoalEvidence[],
+  score: import("../contracts/goal.js").GoalScore
+): string {
+  const missing = evaluateMissingCriteria(goal, evidence);
+  const nodes = describeNodes(runState.nodes, 10);
+  const nodeEvidence = describeNodeEvidence(runState, 10);
+  const providerAttempts = describeProviderAttempts(runState, 10);
+  const goalEvidence = evidence.slice(-10).map((item) => {
+    const message = item.message ? ` — ${truncateLine(item.message, 160)}` : "";
+    const ref = item.ref ? ` (${item.ref})` : "";
+    return `- ${item.criterionId}: ${item.passed ? "passed" : "failed"}${ref}${message}`;
+  });
+
+  return [
+    "# OMK Goal Progress Snapshot",
+    `Goal: ${goal.title}`,
+    renderPromptDigest("Objective digest", goal.objective, { maxKeywords: 18, maxPhrases: 3 }),
+    `Risk level: ${goal.riskLevel}`,
+    `Score: ${score.overall} required=${score.requiredPassed}/${score.requiredTotal} optional=${score.optionalScore.toFixed(2)} qualityGate=${score.qualityGatePassed}`,
+    "",
+    "Missing criteria:",
+    ...(missing.length > 0 ? missing.slice(0, 10).map((item) => `- ${item.criterionId}: ${item.description} (${item.requirement})`) : ["- none"]),
+    "",
+    "Run nodes:",
+    ...(nodes.length > 0 ? nodes : ["- none"]),
+    "",
+    "Node evidence:",
+    ...(nodeEvidence.length > 0 ? nodeEvidence : ["- none"]),
+    "",
+    "Goal evidence:",
+    ...(goalEvidence.length > 0 ? goalEvidence : ["- none"]),
+    "",
+    "Provider attempts:",
+    ...(providerAttempts.length > 0 ? providerAttempts : ["- none"]),
+    "",
+    "Choose the next action for the Kimi control loop.",
+    "Return compact JSON only, e.g. {\"action\":\"continue\",\"confidence\":0.82,\"reason\":\"...\"}.",
+  ].join("\n");
+}
+
+function parseDeepSeekDecisionVote(content: string, fallbackWeight: number | undefined): EnsembleDecisionCandidateVote {
+  const parsed = parseJsonObject(content);
+  const action = isNextAction(parsed?.action) ? parsed.action : "continue";
+  const confidence = clampConfidence(Number(parsed?.confidence));
+  const reason = typeof parsed?.reason === "string" && parsed.reason.trim()
+    ? parsed.reason
+    : content;
+  return {
+    id: "deepseek-v4-pro",
+    action,
+    weight: Math.max(0.1, (fallbackWeight ?? 0.9) * confidence),
+    reason: `DeepSeek advisory: ${truncateLine(reason, 180)}`,
+  };
+}
+
+function parseJsonObject(content: string): Record<string, unknown> | undefined {
+  const trimmed = content.trim();
+  const candidates = [
+    trimmed,
+    trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim(),
+    trimmed.match(/\{[\s\S]*\}/)?.[0],
+  ].filter((value): value is string => Boolean(value));
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as unknown;
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+  return undefined;
+}
+
+function normalizeDeepSeekDecisionVote(
+  vote: EnsembleDecisionCandidateVote,
+  fallbackWeight: number | undefined
+): EnsembleDecisionCandidateVote | undefined {
+  if (!isNextAction(vote.action)) return undefined;
+  const weight = Number.isFinite(vote.weight) && vote.weight > 0
+    ? vote.weight
+    : fallbackWeight ?? 0.9;
+  return {
+    id: vote.id || "deepseek-v4-pro",
+    action: vote.action,
+    weight,
+    reason: truncateLine(vote.reason || "DeepSeek advisory", 220),
+  };
+}
+
+function deepseekUnavailableVote(reason: string, fallbackWeight: number | undefined): EnsembleDecisionCandidateVote {
+  return {
+    id: "deepseek-v4-pro",
+    action: "continue",
+    weight: Math.min(0.2, fallbackWeight ?? 0.2),
+    reason: `DeepSeek advisory unavailable: ${truncateLine(reason, 180)}`,
+  };
+}
+
+function parseOptionalBoolean(value: string | undefined): boolean | undefined {
+  if (value === undefined) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  return undefined;
+}
+
+function isNextAction(value: unknown): value is NextAction {
+  return value === "continue" || value === "replan" || value === "block" || value === "handoff" || value === "close";
+}
+
+function clampConfidence(value: number): number {
+  if (!Number.isFinite(value)) return 0.6;
+  return Math.max(0.1, Math.min(1, value));
+}
+
+function sanitizeDeepSeekMessage(value: unknown): string {
+  const message = value instanceof Error ? value.message : String(value);
+  return message
+    .replace(/Bearer\s+[A-Za-z0-9._-]+/g, "Bearer ***")
+    .replace(/sk-[A-Za-z0-9_-]+/g, "sk-***")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 240);
 }
 
 export interface NextPromptResult {

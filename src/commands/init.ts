@@ -86,9 +86,15 @@ agent:
     explorer:
       path: ./roles/explorer.yaml
       description: "Read-only repository exploration and context mapping"
+    explore:
+      path: ./roles/explorer.yaml
+      description: "Alias for explorer; kept for compatibility with older OMK instructions"
     planner:
       path: ./roles/planner.yaml
       description: "Architecture, refactor, migration, and implementation planning"
+    plan:
+      path: ./roles/planner.yaml
+      description: "Alias for planner; kept for compatibility with older OMK instructions"
     coder:
       path: ./roles/coder.yaml
       description: "Scoped implementation in the current project"
@@ -341,8 +347,8 @@ For non-trivial tasks:
 1. Read project instructions.
 2. Create todos.
 3. Launch an appropriate subagent:
-   - explore for repository discovery
-   - plan for architecture/refactor/risky work
+   - explorer for repository discovery
+   - planner for architecture/refactor/risky work
    - coder for implementation
 4. Read relevant skills.
 5. Use MCP if useful.
@@ -546,6 +552,275 @@ async function copySafeSkillRoot(src: string, dest: string): Promise<SkillCopySt
 }
 
 const HOOK_SCRIPTS: Record<string, string> = {
+  "session-context.sh": `#!/usr/bin/env bash
+# OMK SessionStart Context — keeps high-value local workflows visible
+set -euo pipefail
+
+if ! command -v node &>/dev/null; then
+  echo '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"OMK session started. Read project rules, use graph-view for memory relationships, use open-design for localhost design, and verify before final."}}'
+  exit 0
+fi
+
+node <<'NODE'
+const context = [
+  'OMK session startup context.',
+  '- Read AGENTS.md and .kimi/AGENTS.md before edits; read DESIGN.md before UI/frontend/visual work.',
+  '- For local design iteration, use /open-design or omk design open-design --open to launch localhost.',
+  '- For memory/risk/file relationships, use /graph-view or omk graph view --open before broad repo edits.',
+  '- Treat release, push, publish, and deployment as not done unless the exact command ran and fresh evidence was collected.',
+  '- Final reports should list changed files, commands run, pass/fail/not-run status, and remaining risk.',
+].join('\\n');
+
+process.stdout.write(JSON.stringify({
+  hookSpecificOutput: {
+    hookEventName: 'SessionStart',
+    additionalContext: context,
+  },
+}) + '\\n');
+NODE
+`,
+  "awesome-agent-skills-router.sh": `#!/usr/bin/env bash
+# Awesome Agent Skills Router — curated OMK hints from VoltAgent/awesome-agent-skills
+set -euo pipefail
+
+# This hook is advisory only: no network access, no third-party skill install,
+# and no prompt blocking. It maps common awesome-agent-skills domains to the
+# already-installed OMK skills/workflows that are safe to consider.
+if ! command -v node &>/dev/null; then
+  exit 0
+fi
+
+INPUT_FILE="$(mktemp)"
+trap 'rm -f "$INPUT_FILE"' EXIT
+cat > "$INPUT_FILE"
+
+node - "$INPUT_FILE" <<'NODE'
+const fs = require('node:fs');
+
+function readPayload(filePath) {
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8').trim();
+    if (!raw) return {};
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+function textFrom(value) {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    return value.map(textFrom).filter(Boolean).join('\\n');
+  }
+  if (value && typeof value === 'object') {
+    for (const key of ['prompt', 'user_prompt', 'message', 'input', 'text', 'content', 'command_args']) {
+      const found = textFrom(value[key]);
+      if (found) return found;
+    }
+  }
+  return '';
+}
+
+const payload = readPayload(process.argv[2]);
+const prompt = textFrom(payload.prompt)
+  || textFrom(payload.user_prompt)
+  || textFrom(payload.message)
+  || textFrom(payload.input)
+  || textFrom(payload.command_args)
+  || textFrom(payload.tool_input)
+  || textFrom(payload);
+
+const normalized = prompt.toLowerCase();
+if (normalized.trim().length < 3) {
+  process.exit(0);
+}
+
+const routes = [
+  {
+    id: 'design-ui',
+    patterns: [
+      'design', 'ui', 'ux', 'frontend', 'front-end', 'figma', 'stitch', 'open-design',
+      'prototype', 'landing', 'component', 'visual', 'screenshot', 'responsive', 'accessibility',
+      '디자인', '화면', '프론트', '랜딩', '컴포넌트', '시각', '스크린샷', '반응형', '접근성', '프로토타입',
+    ],
+    skills: ['open-design', 'omk-design-md', 'omk-flow-design-to-code', 'omk-multimodal-ui-review'],
+    note: 'For visual work, read DESIGN.md, reuse tokens, and launch localhost with omk design open-design when interactive design is useful.',
+  },
+  {
+    id: 'bugfix-debug',
+    patterns: [
+      'bug', 'error', 'failed', 'failure', 'traceback', 'exception', 'fix', 'regression', 'broken', 'debug',
+      '버그', '에러', '오류', '실패', '고쳐', '수정', '안됨', '안돼', '문제', '디버그',
+    ],
+    skills: ['omk-flow-bugfix', 'omk-quality-gate'],
+    note: 'For failures, isolate root cause first, keep the patch small, and rerun the failing command plus the quality gate.',
+  },
+  {
+    id: 'feature-build',
+    patterns: [
+      'implement', 'build', 'add ', 'create', 'scaffold', 'generate', 'feature', 'new command',
+      '구현', '추가', '만들', '생성', '기능', '신규',
+    ],
+    skills: ['omk-plan-first', 'omk-flow-feature-dev', 'omk-quality-gate'],
+    note: 'For new capability work, plan the smallest reversible diff and include regression coverage before completion.',
+  },
+  {
+    id: 'review-security',
+    patterns: [
+      'review', 'audit', 'security', 'vulnerability', 'secret', 'token', 'auth', 'permission', 'xss', 'sql injection', 'ssrf',
+      '리뷰', '검토', '보안', '취약', '시크릿', '토큰', '인증', '권한',
+    ],
+    skills: ['omk-code-review', 'omk-quality-gate'],
+    note: 'For security-sensitive work, do not print secrets, review trust boundaries, and run the project secret scan when available.',
+  },
+  {
+    id: 'release-git',
+    patterns: [
+      'release', 'publish', 'npm', 'version', 'changelog', 'commit', 'pull request', ' pr ', 'pr로', 'push', 'tag',
+      '배포', '릴리즈', '버전', '변경로그', '커밋', '푸시',
+    ],
+    skills: ['omk-flow-release', 'omk-flow-pr-review', 'omk-quality-gate'],
+    note: 'For release or PR work, verify build/test/package evidence before reporting publish or PR readiness.',
+  },
+  {
+    id: 'spec-planning',
+    patterns: [
+      'spec', 'prd', 'requirements', 'acceptance', 'tasks', 'speckit', 'plan', 'architecture',
+      '명세', '요구사항', '수락기준', '계획', '아키텍처',
+    ],
+    skills: ['omk-plan-first', 'speckit-specify', 'speckit-plan', 'speckit-tasks'],
+    note: 'For specification work, produce acceptance criteria and a test shape before implementation.',
+  },
+  {
+    id: 'refactor-cleanup',
+    patterns: [
+      'refactor', 'cleanup', 'simplify', 'deslop', 'debt', 'migration',
+      '리팩토', '정리', '단순화', '마이그레이션',
+    ],
+    skills: ['omk-flow-refactor', 'omk-quality-gate'],
+    note: 'For refactors, preserve behavior with tests first and avoid unrelated rewrites.',
+  },
+  {
+    id: 'ontology-graph',
+    patterns: [
+      'ontology', 'graph', 'graph-view', 'node', 'nodes', 'edge', 'edges', 'relationship',
+      'memory graph', 'risk map', 'decision graph', 'trace map',
+      '온톨로지', '그래프', '노드', '엣지', '관계', '메모리 그래프', '리스크맵', '결정 그래프',
+    ],
+    skills: ['graph-view', 'omk-kimi-runtime', 'omk-quality-gate'],
+    note: 'For graph or memory-relationship work, inspect .omk/memory/graph-state.json with omk graph view --open or /graph-view before changing code.',
+  },
+  {
+    id: 'agent-orchestration',
+    patterns: [
+      'agent', 'subagent', 'multi-agent', 'orchestration', 'workflow', 'mcp', 'hook', 'hooks', 'skill', 'skills', 'memory',
+      '에이전트', '서브에이전트', '워크플로', '훅', '스킬', '메모리',
+    ],
+    skills: ['omk-task-router', 'omk-project-rules', 'omk-kimi-runtime', 'omk-flow-team-run'],
+    note: 'For agent or hook work, keep routing advisory, avoid installing unreviewed external skills, and verify generated config locally.',
+  },
+  {
+    id: 'tests-quality',
+    patterns: [
+      'test', 'tests', 'qa', 'quality', 'lint', 'typecheck', 'playwright', 'e2e', 'coverage',
+      '테스트', '검증', '품질', '타입체크', '커버리지',
+    ],
+    skills: ['omk-quality-gate'],
+    note: 'For validation requests, run the actual project scripts and report exact pass/fail evidence.',
+  },
+  {
+    id: 'docs-research',
+    patterns: [
+      'docs', 'documentation', 'readme', 'research', 'verify', 'official docs', 'look up',
+      '문서', '조사', '검증', '검색', '찾아',
+    ],
+    skills: ['omk-plan-first', 'omk-quality-gate'],
+    note: 'For docs or external references, prefer official/current sources and cite or record what was verified.',
+  },
+];
+
+const matched = routes.filter((route) => route.patterns.some((pattern) => normalized.includes(pattern)));
+if (matched.length === 0) {
+  process.exit(0);
+}
+
+const skills = [];
+for (const route of matched) {
+  for (const skill of route.skills) {
+    if (!skills.includes(skill)) skills.push(skill);
+  }
+}
+
+if (!skills.includes('omk-quality-gate')) {
+  skills.push('omk-quality-gate');
+}
+
+const context = [
+  'OMK awesome-agent-skills routing hint (curated from VoltAgent/awesome-agent-skills; advisory only).',
+  'Matched domains: ' + matched.map((route) => route.id).join(', '),
+  'Prefer installed OMK skills/workflows: ' + skills.map((skill) => '/' + skill).join(', '),
+  'Do not auto-install third-party skills from awesome-agent-skills. Review source, license, and security before adoption.',
+  ...matched.slice(0, 4).map((route) => route.note),
+].join('\\n');
+
+process.stdout.write(JSON.stringify({
+  hookSpecificOutput: {
+    hookEventName: 'UserPromptSubmit',
+    additionalContext: context,
+  },
+}) + '\\n');
+NODE
+`,
+  "precompact-checkpoint.sh": `#!/usr/bin/env bash
+# OMK PreCompact Checkpoint — compact without losing recovery state
+set -euo pipefail
+
+if ! command -v node &>/dev/null; then
+  echo '{"hookSpecificOutput":{"hookEventName":"PreCompact","additionalContext":"Before compaction: record goal, changed files, verification state, blockers, and next action. Never store secrets."}}'
+  exit 0
+fi
+
+node <<'NODE'
+const context = [
+  'OMK pre-compaction checkpoint.',
+  '- Preserve current goal, changed files, verification state, blockers, and intended next action.',
+  '- If available, write concise notes to .omx/notepad.md or project-local memory; never store secrets.',
+  '- After compaction, refresh from the checkpoint before editing or claiming completion.',
+].join('\\n');
+
+process.stdout.write(JSON.stringify({
+  hookSpecificOutput: {
+    hookEventName: 'PreCompact',
+    additionalContext: context,
+  },
+}) + '\\n');
+NODE
+`,
+  "subagent-stop-audit.sh": `#!/usr/bin/env bash
+# OMK SubagentStop Audit — leader must verify delegated work
+set -euo pipefail
+
+if ! command -v node &>/dev/null; then
+  echo '{"hookSpecificOutput":{"hookEventName":"SubagentStop","additionalContext":"Subagent finished. Leader must review changed files, integrate results, and run relevant quality gates before final."}}'
+  exit 0
+fi
+
+node <<'NODE'
+const context = [
+  'OMK subagent completion audit.',
+  '- Do not claim success from a subagent report alone.',
+  '- Review the concrete files changed, reconcile conflicts, and keep unrelated user edits intact.',
+  '- Run the relevant quality gates locally and report pass/fail/not-run evidence.',
+].join('\\n');
+
+process.stdout.write(JSON.stringify({
+  hookSpecificOutput: {
+    hookEventName: 'SubagentStop',
+    additionalContext: context,
+  },
+}) + '\\n');
+NODE
+`,
   "pre-shell-guard.sh": `#!/usr/bin/env bash
 # PreShellUse Guard — blocks dangerous commands
 set -e
@@ -591,6 +866,25 @@ BLOCKED=(
 for pattern in "\${BLOCKED[@]}"; do
   if [[ "$FULL" == *"$pattern"* ]]; then
     echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Potentially destructive command blocked by pre-shell-guard"}}'
+    exit 0
+  fi
+done
+
+# Release/deploy guard. These commands are not destructive like rm -rf, but
+# they can publish external state. Require explicit opt-in plus fresh evidence.
+RELEASE_GUARDED=(
+  "git push"
+  "npm publish"
+  "pnpm publish"
+  "yarn npm publish"
+  "gh release create"
+  "gh workflow run"
+  "npm version"
+)
+
+for pattern in "\${RELEASE_GUARDED[@]}"; do
+  if [[ "$FULL" == *"$pattern"* ]] && [[ "\${OMK_ALLOW_RELEASE:-0}" != "1" ]]; then
+    echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Release/deploy command blocked by OMK release guard. Re-run with OMK_ALLOW_RELEASE=1 only after an explicit user request and fresh verification evidence."}}'
     exit 0
   fi
 done
@@ -666,14 +960,55 @@ echo '{"hookSpecificOutput":{"hookEventName":"PostToolUse","permissionDecision":
 `,
   "stop-verify.sh": `#!/usr/bin/env bash
 # Final verification on Stop
-set -e
+set -euo pipefail
 
-echo '{"hookSpecificOutput":{"hookEventName":"Stop","permissionDecision":"allow"}}'
+if ! command -v node &>/dev/null; then
+  echo '{"hookSpecificOutput":{"hookEventName":"Stop","permissionDecision":"allow","additionalContext":"Before final: list changed files, commands run, passed, failed, not run, and remaining risk. Do not claim deploy/publish unless verified."}}'
+  exit 0
+fi
+
+node <<'NODE'
+const context = [
+  'OMK final response checklist.',
+  '- Changed files: list authored files and note any ignored local runtime files refreshed.',
+  '- Commands run: include exact verification commands and pass/fail/not-run status.',
+  '- Deployment status: do not claim push, release, npm publish, or production deploy unless that command actually ran and evidence was read.',
+  '- Remaining risk: state known gaps instead of saying complete without evidence.',
+].join('\\n');
+
+process.stdout.write(JSON.stringify({
+  hookSpecificOutput: {
+    hookEventName: 'Stop',
+    permissionDecision: 'allow',
+    additionalContext: context,
+  },
+}) + '\\n');
+NODE
 `,
 };
 
 const KIMI_CONFIG_TOML = `# oh-my-kimi generated Kimi config
 # Lifecycle hook settings
+
+[[hooks]]
+event = "SessionStart"
+command = ".omk/hooks/session-context.sh"
+timeout = 5
+
+[[hooks]]
+event = "UserPromptSubmit"
+command = ".omk/hooks/awesome-agent-skills-router.sh"
+timeout = 5
+
+[[hooks]]
+event = "PreCompact"
+command = ".omk/hooks/precompact-checkpoint.sh"
+timeout = 5
+
+[[hooks]]
+event = "SubagentStop"
+command = ".omk/hooks/subagent-stop-audit.sh"
+timeout = 5
 
 [[hooks]]
 event = "PreToolUse"
@@ -723,24 +1058,15 @@ export function createOmkProjectMcpServer(
 
 function createUnixOmkProjectMcpScript(node: string): string {
   const quotedNode = shellQuote(node);
-  const resolveBundledMcpScript = [
-    "const fs=require('fs')",
-    "const path=require('path')",
-    "const bin=fs.realpathSync(process.argv[1])",
-    "const candidates=[path.join(path.dirname(bin),'mcp','omk-project-server.js'),path.join(path.dirname(path.dirname(bin)),'dist','mcp','omk-project-server.js')]",
-    "const server=candidates.find((candidate)=>fs.existsSync(candidate))",
-    "if(!server)process.exit(2)",
-    "process.stdout.write(server)",
-  ].join(";");
   const resolveRealpathScript = "const fs=require('fs');process.stdout.write(fs.realpathSync(process.argv[1]))";
 
   return [
     "set -e",
     'omk_bin="$(command -v omk 2>/dev/null || command -v oh-my-kimi 2>/dev/null || true)"',
     'if [ -n "$omk_bin" ]; then',
-    `  mcp_js="$(${quotedNode} -e ${shellQuote(resolveBundledMcpScript)} "$omk_bin" 2>/dev/null || true)"`,
-    '  if [ -n "$mcp_js" ]; then',
-    `    exec ${quotedNode} "$mcp_js"`,
+    `  omk_cli="$(${quotedNode} -e ${shellQuote(resolveRealpathScript)} "$omk_bin" 2>/dev/null || true)"`,
+    '  if [ -n "$omk_cli" ]; then',
+    `    exec ${quotedNode} "$omk_cli" mcp serve omk-project`,
     "  fi",
     "fi",
     'mcp_bin="$(command -v omk-project-mcp 2>/dev/null || true)"',

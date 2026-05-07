@@ -8,8 +8,8 @@ Use Kimi native tools aggressively:
 
 - Use `SetTodoList` for multi-step work.
 - Use `Agent` for non-trivial work.
-- Use `explore` before modifying unfamiliar code.
-- Use `plan` before architecture, refactor, migration, or risky edits.
+- Use the `explorer` subagent before modifying unfamiliar code.
+- Use the `planner` subagent before architecture, refactor, migration, or risky edits.
 - Use `coder` for scoped implementation.
 - Use `ReadMediaFile` for screenshots, mockups, videos, and UI debugging.
 - Use `SearchWeb` / `FetchURL` only when current external information is needed.
@@ -22,8 +22,8 @@ Use Kimi native tools aggressively:
 For any task involving code changes, use at least one of:
 
 ```txt
-explore
-plan
+explorer
+planner
 coder
 reviewer
 ```

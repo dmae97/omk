@@ -94,8 +94,3 @@ coverage/
 *.zip
 *.tgz
 *.tar.gz
-
-# PNG assets not referenced in README.md
-kimiagent.png
-omk-hud-dev-screenshot.png
-parallelmod.png

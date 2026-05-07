@@ -84,8 +84,8 @@ Use the `Agent` tool for all non-trivial tasks.
 
 Minimum policy:
 
-* Use `explore` for repository discovery.
-* Use `plan` for architecture, refactor, migration, or risky changes.
+* Use the `explorer` subagent for repository discovery.
+* Use the `planner` subagent for architecture, refactor, migration, or risky changes.
 * Use `coder` for implementation tasks.
 * Use a reviewer agent or review workflow before final completion.
 
@@ -96,13 +96,13 @@ Subagent routing:
 ```txt
 Task type                       Required subagent
 -------------------------------------------------
-Repo exploration                explore
-Architecture / refactor plan    plan
+Repo exploration                explorer
+Architecture / refactor plan    planner
 Implementation                  coder
-Bug investigation               explore -> plan -> coder
+Bug investigation               explorer -> planner -> coder
 Code review                     reviewer skill or review agent
-UI / design work                explore -> coder + design skill
-Security-sensitive changes      plan + security review
+UI / design work                explorer -> coder + design skill
+Security-sensitive changes      planner + security review
 ```
 
 When using subagents, give each subagent a focused prompt with:
@@ -437,4 +437,3 @@ Do not repeat AGENTS.md rules.
 Do not overclaim.
 
 If something failed, say exactly what failed and what remains.
-

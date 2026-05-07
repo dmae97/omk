@@ -15,8 +15,9 @@ const PACKS: SkillPack[] = [
   {
     id: "omk-core",
     name: "OMK Core",
-    description: "Essential OMK orchestration skills",
+    description: "Essential OMK orchestration skills plus localhost design entrypoints",
     skills: [
+      "open-design",
       "omk-global-rules",
       "omk-project-rules",
       "omk-kimi-runtime",
@@ -94,6 +95,7 @@ const SLASH_COMMAND_SKILLS = new Set([
   "deepseek-enable",
   "deepseekset",
   "graph-view",
+  "open-design",
 ]);
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");

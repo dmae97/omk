@@ -487,6 +487,19 @@ program
   });
 
 program
+  .command("open-design-agent")
+  .description("Open Design local CLI bridge for OMK")
+  .option("--cwd <path>", "Workspace directory passed by Open Design")
+  .option("--model <model>", "Model override from Open Design")
+  .option("--smoke", "Return the Open Design smoke-test response without launching Kimi")
+  .option("--stdio", "Read the Open Design prompt from stdin")
+  .option("--timeout-ms <ms>", "Maximum Kimi print-mode runtime", "1200000")
+  .action(async (options: { cwd?: string; model?: string; smoke?: boolean; stdio?: boolean; timeoutMs?: string }) => {
+    const { openDesignAgentCommand } = await import("./commands/open-design-agent.js");
+    await openDesignAgentCommand(options);
+  });
+
+program
   .command("cockpit")
   .description(t("cmd.cockpitDesc"))
   .option("--run-id <id>", t("cmd.cockpitRunIdOption"))
@@ -811,6 +824,23 @@ design
   .action(async (keyword) => {
     const { designSearchCommand } = await import("./commands/design.js");
     await designSearchCommand(keyword);
+  });
+design
+  .command("open-design")
+  .alias("od")
+  .description(t("cmd.designOpenDesignDesc"))
+  .option("--dir <path>", "Open Design checkout directory (default: .omk/open-design)")
+  .option("--branch <branch>", "Open Design git branch or tag", "main")
+  .option("--daemon-port <port>", "Open Design daemon localhost port", "7457")
+  .option("--web-port <port>", "Open Design web localhost port", "5175")
+  .option("--foreground", "Run tools-dev in the foreground")
+  .option("--no-install", "Skip pnpm install")
+  .option("--update", "Run git pull --ff-only when the checkout already exists")
+  .option("--open", "Open the localhost URL in the default browser")
+  .option("--print-only", "Print the launch plan without cloning, installing, or starting")
+  .action(async (options) => {
+    const { designOpenDesignCommand } = await import("./commands/design.js");
+    await designOpenDesignCommand(options);
   });
 design
   .command("lint [file]")

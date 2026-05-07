@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { normalizeGoal, updateGoalStatus } from "../dist/goal/intake.js";
 import { createGoalPersister } from "../dist/goal/persistence.js";
 import { compileGoalToDagNodes, attachGoalToRunState } from "../dist/goal/compiler.js";
-import { generateNextPrompt } from "../dist/goal/control-loop.js";
+import { evaluateGoalProgressEnsemble, generateNextPrompt } from "../dist/goal/control-loop.js";
 import { scoreGoal } from "../dist/goal/scoring.js";
 import { createRoutedRunState } from "../dist/orchestration/run-state.js";
 import { createDag } from "../dist/orchestration/dag.js";
@@ -279,4 +279,86 @@ test("generateNextPrompt synthesizes current context instead of repeating the or
   assert.match(result.prompt, /Goal continuation preserves completed work/);
   assert.match(result.prompt, /Previous run already wired DeepSeek context/);
   assert.match(result.prompt, /fallbackFrom=deepseek/);
+});
+
+test("goal progress ensemble calls DeepSeek advisory when a key is configured", async () => {
+  const homeRoot = await tempGoalDir();
+  const spec = normalizeGoal({
+    rawPrompt: "Verify DeepSeek goal ensemble participation",
+    title: "DeepSeek ensemble probe",
+    objective: "Verify that a configured DeepSeek API key participates in the goal progress ensemble",
+  });
+  spec.successCriteria = [
+    { id: "c1", description: "DeepSeek advisory vote is present", requirement: "required", weight: 1, inferred: false },
+  ];
+
+  const runState = createRoutedRunState({
+    runId: "deepseek-goal-ensemble",
+    startedAt: new Date().toISOString(),
+    nodes: [
+      { id: "goal-review", name: "Review goal progress", role: "reviewer", dependsOn: [], maxRetries: 1 },
+    ],
+    workerCount: 1,
+  });
+  runState.nodes[0].status = "failed";
+  runState.nodes[0].blockedReason = "Needs another review pass";
+
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    const href = String(url);
+    const headers = init.headers ?? {};
+    calls.push({
+      href,
+      hasAuthorization: Boolean(headers.Authorization ?? headers.authorization),
+      body: init.body ? JSON.parse(String(init.body)) : undefined,
+    });
+    if (href.endsWith("/user/balance")) {
+      return new Response(JSON.stringify({ is_available: true, balance_infos: [] }), { status: 200 });
+    }
+    if (href.endsWith("/chat/completions")) {
+      return new Response(JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                action: "replan",
+                confidence: 0.84,
+                reason: "Failed reviewer node should be replanned with a narrower verification pass",
+              }),
+            },
+          },
+        ],
+      }), { status: 200 });
+    }
+    return new Response("not found", { status: 404 });
+  };
+
+  try {
+    const result = await evaluateGoalProgressEnsemble(spec, runState, undefined, {
+      deepseek: {
+        env: {
+          DEEPSEEK_API_KEY: "fake-deepseek-key-for-test",
+          HOME: homeRoot,
+          OMK_PROVIDER_CONFIG_PATH: join(homeRoot, "providers.json"),
+          OMK_SECRETS_ENV_PATH: join(homeRoot, "secrets.env"),
+          OPENCODE_SECRETS_ENV_PATH: join(homeRoot, "opencode-secrets.env"),
+        },
+        fetchImpl,
+        timeoutMs: 5_000,
+      },
+    });
+
+    assert.deepEqual(calls.map((call) => call.href.replace(/^https:\/\/api\.deepseek\.com/, "")), [
+      "/user/balance",
+      "/chat/completions",
+    ]);
+    assert.equal(calls.every((call) => call.hasAuthorization), true);
+    assert.equal(calls[1].body.model, "deepseek-v4-pro");
+    const deepseekVote = result.ensemble.candidateVotes.find((vote) => vote.id === "deepseek-v4-pro");
+    assert.ok(deepseekVote);
+    assert.equal(deepseekVote.action, "replan");
+    assert.match(deepseekVote.reason, /DeepSeek advisory/);
+  } finally {
+    await rm(homeRoot, { recursive: true, force: true });
+  }
 });

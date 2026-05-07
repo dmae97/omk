@@ -1,25 +1,28 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const OMK_ROOT = process.cwd();
 const MCP_MODULE_URL = pathToFileURL(join(OMK_ROOT, "dist", "commands", "mcp.js")).href;
+const OMK_PROJECT_SERVER = join(OMK_ROOT, "dist", "mcp", "omk-project-server.js");
+const OMK_CLI = join(OMK_ROOT, "dist", "cli.js");
 
-function runMcpScript(projectRoot, homeRoot, scriptBody) {
+function runMcpScript(projectRoot, homeRoot, scriptBody, extraEnv = {}) {
   return spawnSync(process.execPath, ["--input-type=module"], {
     input: `
       import { mkdir, readFile, writeFile } from "node:fs/promises";
       import { join } from "node:path";
-      import { mcpDoctorCommand, mcpInstallCommand } from ${JSON.stringify(MCP_MODULE_URL)};
+      import { mcpDoctorCommand, mcpInstallCommand, mcpTestCommand } from ${JSON.stringify(MCP_MODULE_URL)};
       ${scriptBody}
     `,
     cwd: projectRoot,
     env: {
       ...process.env,
+      ...extraEnv,
       HOME: homeRoot,
       OMK_PROJECT_ROOT: projectRoot,
     },
@@ -84,6 +87,127 @@ test("mcp doctor accepts remote URL MCP servers without requiring command", asyn
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("omk-project MCP returns tool-level errors instead of JSON-RPC internal errors", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-tool-error-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+
+  try {
+    const input = [
+      {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "omk-mcp-test", version: "0.0.0" },
+        },
+      },
+      {
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/list",
+      },
+      {
+        jsonrpc: "2.0",
+        id: 3,
+        method: "tools/call",
+        params: {
+          name: "omk_goal_show",
+          arguments: { goalId: "missing-goal" },
+        },
+      },
+      {
+        jsonrpc: "2.0",
+        id: 4,
+        method: "resources/read",
+        params: {
+          uri: "omk://goal/missing-goal",
+        },
+      },
+    ].map((message) => JSON.stringify(message)).join("\n") + "\n";
+
+    const result = spawnSync(process.execPath, [OMK_PROJECT_SERVER], {
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        HOME: homeRoot,
+        OMK_PROJECT_ROOT: projectRoot,
+      },
+      input,
+      encoding: "utf-8",
+      timeout: 10000,
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const responses = result.stdout
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+    const toolResponse = responses.find((response) => response.id === 3);
+    const resourceResponse = responses.find((response) => response.id === 4);
+
+    assert.ok(toolResponse, "expected response for tools/call id 3");
+    assert.equal(toolResponse.error, undefined);
+    assert.equal(toolResponse.result.isError, true);
+    assert.match(toolResponse.result.content[0].text, /OMK tool-level failure/);
+    assert.match(toolResponse.result.content[0].text, /Goal not found: missing-goal/);
+    assert.doesNotMatch(toolResponse.result.content[0].text, /Internal error/);
+    assert.ok(resourceResponse, "expected response for resources/read id 4");
+    assert.equal(resourceResponse.error.code, -32000);
+    assert.doesNotMatch(resourceResponse.error.message, /Internal error/);
+    assert.match(result.stderr, /tool_call_failed/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("mcp test exercises an omk CLI connection through tools/call id 3", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-cli-connection-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+  const binRoot = await mkdtemp(join(tmpdir(), "omk-mcp-bin-"));
+
+  try {
+    await writeEmptyConfigs(projectRoot, homeRoot, {
+      mcpServers: {
+        "omk-cli": {
+          command: "omk",
+          args: ["mcp", "serve", "omk-project"],
+          env: { OMK_PROJECT_ROOT: projectRoot },
+        },
+      },
+    });
+    const omkWrapper = join(binRoot, "omk");
+    await writeFile(
+      omkWrapper,
+      `#!/usr/bin/env bash\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(OMK_CLI)} "$@"\n`,
+      "utf-8"
+    );
+    await chmod(omkWrapper, 0o755);
+
+    const result = runMcpScript(projectRoot, homeRoot, `
+      await mcpTestCommand("omk-cli");
+      console.log("MCP_TEST_OK");
+    `, {
+      PATH: `${binRoot}:${process.env.PATH ?? ""}`,
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /MCP Test: omk-cli/);
+    assert.match(result.stdout, /JSON-RPC initialize succeeded/);
+    assert.match(result.stdout, /tools\/call id 3 returned OMK tool-level error without -32603/);
+    assert.match(result.stdout, /MCP_TEST_OK/);
+    assert.doesNotMatch(result.stdout + result.stderr, /Internal error/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+    await rm(binRoot, { recursive: true, force: true });
   }
 });
 

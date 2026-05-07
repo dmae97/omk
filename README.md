@@ -3,7 +3,7 @@
 <!-- Open Graph -->
 <meta property="og:image" content="https://raw.githubusercontent.com/dmae97/oh-my-kimi/main/readmeasset/kimicat.png" />
 <meta property="og:title" content="oh-my-kimi" />
-<meta property="og:description" content="Kimi CLI, but better." />
+<meta property="og:description" content="Kimi Code CLI, but orchestrated: OMK turns one prompt into a verified multi-agent workflow." />
 
 <!-- Twitter -->
 <meta name="twitter:card" content="summary_large_image" />
@@ -16,7 +16,7 @@
 
 <p>
   <strong>Kimi-native multi-agent orchestration harness for the Kimi Code CLI</strong><br/>
-  <sub>Turn one prompt into a planned, reviewable project. Parallel agents, live quality gates, DESIGN.md-aware UI, and zero-config safety hooks.</sub>
+  <sub>Kimi-native orchestration with Open Design localhost, graph memory, DeepSeek advisory routing, verified MCP, release guards, and zero-config safety hooks.</sub>
 </p>
 
 <p>
@@ -30,7 +30,7 @@
   <code># omk demo  # Coming soon — try the examples below</code>
 </p>
 
-> ✅ <strong>Stable Release</strong> — v1.1.4 is ready for daily use. Core orchestration, chat harness, and quality gates are solid. Some advanced features (<code>parallel</code>, <code>goal</code>) may still evolve.
+> ✅ <strong>Stable Release</strong> — v1.1.6 is ready for daily use. Open Design now connects through OMK CLI, MCP JSON-RPC failures are surfaced cleanly, generated hooks/skills are documented, and the release gate is fully verified.
 
 
 <p>
@@ -66,6 +66,8 @@
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+- [Open Design localhost workflow](#open-design-localhost-workflow-omk--kimi)
+- [OMK Ontology Graph](#omk-ontology-graph)
 - [Examples](#examples)
 - [GitHub Release Snapshot](#github-release-snapshot)
 - [Repository Topics](#repository-topics)
@@ -100,6 +102,100 @@ omk deepseek doctor --soft
 omk run "Build a Next.js landing page with dark mode and contact form"
 ```
 
+## Open Design localhost workflow (OMK + Kimi)
+
+Use this when you want OMK/Kimi to work through a local visual design surface instead of only a terminal prompt. OMK launches [nexu-io/Open Design](https://github.com/nexu-io/open-design) on localhost and registers an OMK CLI adapter, then you use the web UI to generate or iterate design artifacts with **OMK CLI** selected as the local agent.
+
+<img src="./readmeasset/open-design-localhost.png" alt="Open Design localhost launched from OMK" width="720" />
+
+### How it works
+
+1. OMK clones or reuses Open Design under `.omk/open-design`.
+2. OMK installs the Open Design pnpm workspace with Corepack.
+3. OMK starts the local daemon and web app:
+   - Web UI: `http://localhost:5175`
+   - Daemon: `http://localhost:7457`
+4. In the Open Design UI, select **OMK CLI** if it is not selected automatically. OMK injects a local bridge that avoids the old Kimi ACP smoke-test timeout.
+5. Describe the screen, landing page, deck, or prototype you want. Use `DESIGN.md` as the visual source of truth.
+6. Bring the output back to OMK for implementation/review with `/omk-flow-design-to-code`, `/omk-multimodal-ui-review`, or the normal quality gate.
+
+> Korean quick note: “로컬호스트로 불러서 OMK가 붙는다”는 뜻은 OMK가 Open Design daemon/web을 로컬에서 띄우고, Open Design UI에서 OMK CLI를 선택해 디자인 산출물을 만들도록 연결한다는 의미입니다. 최종 코드화는 OMK의 DESIGN.md-aware 스킬과 품질 게이트가 이어받습니다.
+
+### License note
+
+Open Design is upstream [Apache-2.0](https://github.com/nexu-io/open-design/blob/main/LICENSE) licensed (`.omk/open-design/LICENSE` after launch). OMK remains [MIT](./LICENSE); the `omk design open-design` command launches a local upstream checkout and does not relicense Open Design. Keep the upstream Apache-2.0 license/notice intact when redistributing Open Design source or modifications.
+
+### Commands
+
+```bash
+# Requirements for Open Design itself
+node -v          # Open Design requires Node.js 24.x
+corepack --version
+git --version
+
+# Preview the launch plan without cloning/installing/starting anything
+omk design open-design --print-only
+
+# First real launch: clone, install, start daemon + web, then open localhost
+omk design open-design --open
+
+# In Kimi chat, the slash skill does the same thing
+/open-design
+```
+
+Useful options:
+
+```bash
+# Use different ports if 5175 / 7457 are busy
+omk design open-design --web-port 5176 --daemon-port 7458 --open
+
+# Reuse or update the checkout
+omk design open-design --dir .omk/open-design --update --open
+
+# Keep logs in the foreground while debugging startup
+omk design open-design --foreground
+
+# Check Open Design status/logs manually
+cd .omk/open-design
+corepack pnpm tools-dev status
+corepack pnpm tools-dev check web
+corepack pnpm tools-dev logs
+corepack pnpm tools-dev stop web
+```
+
+On WSL, `--open` prefers `wslview` when installed and otherwise falls back to `cmd.exe /c start`, so the localhost URL opens in the Windows browser instead of failing through Linux `xdg-open`.
+
+If an existing project does not have the slash skill yet, run:
+
+```bash
+omk skill sync
+```
+
+## OMK Ontology Graph
+
+Use this when the project feels too large to reason about from file names alone. OMK renders its project-local memory into an interactive graph so you can see which files, risks, decisions, goals, and evidence are connected before asking Kimi to change code.
+
+<img src="./readmeasset/omk_ontology.png" alt="OMK ontology graph viewer showing nodes and relationships" width="720" />
+
+### What it shows
+
+- **Nodes**: files, decisions, risks, goals, evidence, commands, and generated summaries.
+- **Edges**: relationships such as `PART_OF`, `DEPENDS_ON`, `TOUCHES_FILE`, `EVIDENCED_BY`, and `RELATES_TO`.
+- **Filters**: type or label filters for quickly narrowing a dense graph to the area Kimi should inspect.
+- **Counts**: node/edge totals so you can tell whether the current memory snapshot is populated.
+
+### Commands
+
+```bash
+# Build and open the interactive graph from .omk/memory/graph-state.json
+omk graph view --open
+
+# In Kimi chat, the slash skill triggers the same inspection workflow
+/graph-view
+```
+
+> Korean quick note: 위 스크린샷처럼 “노드/엣지로 보는 OMK 기억 지도”를 띄운 뒤, Kimi에게 “이 리스크맵 기준으로 관련 파일만 고쳐줘”처럼 지시하면 불필요한 전체 레포 탐색을 줄일 수 있습니다.
+
 ## Examples
 
 Case studies with reproducible prompts, actual outputs, and honest limitations.
@@ -122,12 +218,19 @@ Each example includes:
 
 ## GitHub Release Snapshot
 
-> **Current GitHub-ready version:** `1.1.4`
+> **Current GitHub-ready version:** `1.1.6`
 
-### What's New in v1.1.4
+### What's New in v1.1.6
 
 | **Area** | **GitHub-visible update** | **Why it matters** |
 |----------|---------------------------|--------------------|
+| **Open Design** | `omk design open-design` now patches the local Open Design checkout with an **OMK CLI** adapter, `OMK_BIN` setting, Kimicat icon, and root/deep-link route fix | Localhost design testing no longer hits the Kimi ACP 45 s smoke-test timeout; `/api/test/connection` returns `ok` through OMK in about 4 s |
+| **CLI Bridge** | New `omk open-design-agent` connection point with fast smoke response and Kimi print-mode handoff for real prompts | Open Design has a stable local CLI endpoint that keeps OMK as the integration boundary |
+| **MCP Reliability** | `omk mcp test` and `omk-project` return tool-level JSON-RPC errors instead of opaque `json-rpc id 3: Internal error` crashes | MCP debugging becomes actionable and safe for local/remote connection tests |
+| **Generated Hooks** | `omk init` now ships session context, awesome-agent-skills advisory routing, precompact checkpointing, subagent completion audit, release guard, secret guard, formatter, and stop verification hooks | New projects start with stronger workflow routing and deploy-proof final reports |
+| **Skill Surface** | OMK Core skill pack puts `open-design` first and includes graph-view plus DeepSeek controls | `/skills` exposes the most useful local design and graph workflows first |
+| **DeepSeek Hybrid** | Goal progress and file-affecting nodes can use DeepSeek advisory while Kimi keeps write/merge authority | API keys are useful immediately without handing edits to the advisory model |
+| **README Assets** | Refreshed Open Design localhost, hooks, skills, skill-pack, HUD, cockpit, and status-line screenshots under `readmeasset/` | GitHub/npm pages now show the current v1.1.6 product surface |
 | **Automation** | `omk cron` — `list`, `run`, `logs`, `enable`, `disable` for scheduled DAG workflows, with validated job names and persisted run logs | Run repeatable DAG jobs without an external cron daemon |
 | **Timeouts** | `--timeout-preset` for `omk run` / `omk parallel`, per-node `timeoutPreset`, and custom `[timeouts.<name>]` config | Keep quick tasks fast while allowing long-running agent work safely |
 | **Safety & Quality** | `omk init` keeps global MCP secrets in user scope and preserves custom project `.kimi/mcp.json`; generated docs ignore is narrowed | Prevent accidental token leaks and avoid hiding authored documentation |
@@ -138,7 +241,7 @@ Each example includes:
 | **Performance** | Parallel I/O optimization across `cockpit`, `doctor`, `hud`, `ensemble`, `dag`, `run`, and MCP server | Faster dashboard refresh and lower latency on every command |
 | **UI/UX** | `omk cockpit` — Real-time compact dashboard with parallel TODO/agent rendering, git changes, and history | Monitor your multi-agent run from a tmux side panel |
 | **UI/UX** | `omk hud` — Full terminal dashboard with goal scoring, ETA estimation, and state-error recovery hints | Understand run health at a glance and know the next action |
-| **Safety & Quality** | Strict lint, typecheck, **253 tests**, smoke test, package audit, and secret scan all green | Production-grade reliability for daily use |
+| **Safety & Quality** | Strict lint, typecheck, full `npm test`, smoke test, package audit, and secret scan gates | Production-grade reliability for daily use |
 | **Orchestration** | DAG scheduler with retry, skip-on-failure, fallback roles, evidence gates, and ensemble candidates | Robust multi-agent execution with failure recovery |
 | **DeepSeek Hybrid** | `omk deepseek api` stores the official API key locally, automatically enables hybrid routing, and uses deterministic Flash/Pro workers with Kimi as writer/merger | Add low-risk DeepSeek review/QA/advisory help without giving up Kimi authority |
 | **Memory** | Local graph memory (default) and embedded Kuzu backends | Choose the right graph store for your project size |
@@ -179,7 +282,7 @@ Each example includes:
 | **Safety & Quality** | `stop-verify.sh` comprehensive verification + eslint + hardened path validation | Even in `yolo` mode, destructive commands and credential exposure are blocked |
 | **Safety & Quality** | `runtime.resource_profile = "auto"` selects lite profile on 16 GB machines | Keeps OMK usable on 16 GB laptops and WSL environments |
 | **Safety & Quality** | `npm run check`, `npm test`, `npm run lint`, `npm run build` wired into CI | GitHub contributors can verify changes before PRs |
-| **Assets** | 5 new PNG screenshots: `omk-hud-1.png`, `omk-hud-screenshot.png`, `omk-statusline-gauge.png`, `omk-statusline-reset.png`, `readme-in.png` | Rich visual documentation for the GitHub landing page |
+| **Assets** | refreshed PNG screenshots: Open Design localhost, generated hooks, generated skills, skill packs, HUD, cockpit, and status-line gauges | Rich visual documentation for the GitHub landing page |
 
 </details>
 
@@ -191,19 +294,25 @@ Each example includes:
 - [x] README logo PNG display width increased to `720 px` for a stronger GitHub landing page.
 - [x] Screenshots for HUD, parallel UI, and status-line gauges are embedded with alt text.
 - [x] I18n utilities and multi-language README sections are present.
-- [x] New PNG assets (`omk-hud-1.png`, `omk-statusline-gauge.png`, `readme-in.png`, etc.) are included in the repo.
+- [x] Current PNG assets (`open-design-localhost.png`, `omk-v1.1.6-generated-hooks.png`, `omk-v1.1.6-generated-skills.png`, HUD, cockpit, and status-line captures) are included in the repo.
+
+### README asset refresh (v1.1.6)
+
+The README screenshots are regenerated from the current local package and Open Design localhost flow. They are intentionally static PNGs so GitHub and npm render them quickly.
+
+<p align="center">
+  <img src="./readmeasset/omk-v1.1.6-generated-hooks.png" alt="OMK v1.1.6 generated hook coverage" width="720" />
+</p>
+<p align="center">
+  <img src="./readmeasset/omk-v1.1.6-generated-skills.png" alt="OMK v1.1.6 packaged skills" width="720" />
+</p>
+<p align="center">
+  <img src="./readmeasset/omk-v1.1.6-skill-packs.png" alt="OMK v1.1.6 skill packs" width="720" />
+</p>
 
 ### Ontology Graph Viewer
 
-OMK can render its project-local ontology memory into an interactive graph:
-
-```bash
-omk graph view --open
-```
-
-The viewer reads `.omk/memory/graph-state.json`, materializes relationships such as `PART_OF`, `DEPENDS_ON`, `TOUCHES_FILE`, and `EVIDENCED_BY`, then writes `.omk/memory/graph-view.html`. In Kimi chat, use `/graph-view` for the same inspection workflow.
-
-<img src="./readmeasset/omk_ontology.png" alt="OMK ontology graph viewer" width="720" />
+See [OMK Ontology Graph](#omk-ontology-graph) for the interactive memory graph workflow and screenshot.
 
 ## Repository Topics
 
@@ -250,7 +359,7 @@ kimi, kimi-cli, kimi-code, kimi-k2, ai-agent, coding-agent, multi-agent, agentic
 
 <h2 id="korean">Korean</h2>
 
-> ✅ <strong>Stable Release v1.1.4</strong> — Kimi Code CLI를 <strong>worktree 기반 코딩 팀</strong>으로 변환하세요. DESIGN.md 기반 UI 생성, AGENTS.md 호환성, 실시간 품질 게이트, 병렬 HUD를 제공합니다.
+> ✅ <strong>Stable Release v1.1.6</strong> — Kimi Code CLI를 <strong>worktree 기반 코딩 팀</strong>으로 변환하세요. DESIGN.md 기반 UI 생성, AGENTS.md 호환성, 실시간 품질 게이트, 병렬 HUD를 제공합니다.
 
 ### Features
 
@@ -271,14 +380,18 @@ kimi, kimi-cli, kimi-code, kimi-k2, ai-agent, coding-agent, multi-agent, agentic
 | Approval Policy | 기본값은 `approval_policy = "auto"` (안전 모드); 필요시 `yolo`로 전환 가능 |
 | Safety Hooks | yolo mode에서도 파괴적 명령어 및 비밀 유출 방지 기본 제공 |
 
-### 🆕 v1.1.4 Highlights (Stable)
+### 🆕 v1.1.6 Highlights (Stable)
 
+- **Open Design + OMK CLI** — `omk design open-design --open` registers OMK CLI locally and avoids the 45 s Kimi ACP smoke-test timeout
+- **MCP JSON-RPC stability** — `json-rpc id 3: Internal error` paths now surface actionable tool-level errors
+- **Hooks/Skills refreshed** — `/open-design`, `/graph-view`, awesome-agent-skills advisory routing, release guard, and stop verification are included in generated projects
+- **README assets refreshed** — v1.1.6 package captures plus current localhost screenshots are committed under `readmeasset/`
 - **`omk chat`** — 오케스트레이션 경로, 퇴장 배너(Run ID, 재개, workers, MCP, skills), cockpit/tmux 지원이 포함된 인터랙티브 Kimi 세션
 - **Chat 전용 first-run star prompt** (`OMK_STAR_PROMPT`) — cockpit 자식 프로세스 중복 제거
 - **성능** — `cockpit`, `doctor`, `hud`, `ensemble`, `dag`, `run`, MCP 서버 전반에 병렬 I/O 최적화 적용
 - **`omk cockpit`** — 병렬 TODO/에이전트 렌더링, git 변경사항, 히스토리를 포함한 실시간 컴팩트 대시보드
 - **`omk hud`** — 목표 점수, ETA 예측, 상태 오류 복구 힌트가 포함한 풀 터미널 대시보드
-- **안전 및 품질** — 엄격한 lint, typecheck, **253 tests**, smoke test, 패키지 감사, 시크릿 스캔 전부 통과
+- **안전 및 품질** — 엄격한 lint, typecheck, 전체 `npm test`, smoke test, 패키지 감사, 시크릿 스캔 게이트 통과
 - **오케스트레이션** — 재시도, 실패 시 건너뛰기, 폴백 역할, 증거 게이트, 앙상블 후보가 포함된 DAG 스케줄러
 - **DeepSeek Hybrid** — 공식 API 키 입력 시 하이브리드 기능 자동 활성화; Flash/Pro 60/40 라우팅과 파일 변경 노드의 Pro 자문을 지원
 - **메모리** — 로컬 그래프 메모리(기본값), 내장 Kuzu 백엔드
@@ -312,7 +425,7 @@ kimi, kimi-cli, kimi-code, kimi-k2, ai-agent, coding-agent, multi-agent, agentic
 - **로컬 그래프 메모리** — `.omk/memory/graph-state.json` 온톨로지 그래프 + mindmap/GraphQL-lite
 - **내장 LSP** — `omk lsp typescript`로 TypeScript language server 바로 실행
 - **품질 게이트 강화** — `npm run check/test/lint/build`를 CI와 릴리스 체크에 연동
-- **신규 PNG 에셋** — HUD, 상태줄 게이지, 대시보드 스크린샷 등 5종 추가
+- **README 에셋** — Open Design localhost, 생성 hooks/skills, skill packs, HUD, 상태줄 게이지, 대시보드 최신화
 
 ### Install
 
@@ -517,10 +630,14 @@ graph TD
 기본 훅은 파괴적 명령과 비밀 유출을 차단합니다:
 
 - `.omk/config.toml`의 기본 approval policy는 `auto`이며, `yolo_mode = false`입니다.
-- `pre-shell-guard.sh` — `rm -rf /`, `sudo`, `git push --force` 등 차단
+- `session-context.sh` — 시작 시 Open Design, ontology graph, 배포 상태 확인 규칙 주입
+- `awesome-agent-skills-router.sh` — 프롬프트를 OMK 스킬/워크플로로 advisory 라우팅
+- `precompact-checkpoint.sh` — 컨텍스트 압축 전 목표/파일/검증/블로커 체크포인트 안내
+- `subagent-stop-audit.sh` — 서브에이전트 종료 후 리더 검토/품질 게이트 요구
+- `pre-shell-guard.sh` — `rm -rf /`, `sudo`, `git push --force`, 검증 없는 release/publish 등 차단
 - `protect-secrets.sh` — `.env` 편집 및 비밀 유출 차단
 - `post-format.sh` — 수정된 파일 자동 포맷
-- `stop-verify.sh` — 종료 시 최종 검증
+- `stop-verify.sh` — 종료 시 최종 검증/배포 과대보고 방지 체크리스트
 
 ### 🔌 내장 LSP
 
@@ -536,11 +653,13 @@ omk lsp typescript
 
 [MIT](./LICENSE)
 
+Open Design 연동은 upstream [nexu-io/Open Design](https://github.com/nexu-io/open-design)을 사용하며, 해당 프로젝트는 Apache-2.0 라이선스입니다. OMK 본체는 계속 MIT 라이선스입니다.
+
 ---
 
 <h2 id="english">English</h2>
 
-> ✅ <strong>Stable Release v1.1.4</strong> — Turn Kimi Code CLI into a <strong>meme-tier multi-agent coding team</strong>. This is a Kimi-native wrapper — not a generic AI tool. DESIGN.md-aware UI, live quality gates, parallel HUD, AGENTS.md compatible.
+> ✅ <strong>Stable Release v1.1.6</strong> — Turn Kimi Code CLI into a <strong>meme-tier multi-agent coding team</strong>. This is a Kimi-native wrapper — not a generic AI tool. DESIGN.md-aware UI, live quality gates, parallel HUD, AGENTS.md compatible.
 
 ### Features
 
@@ -559,14 +678,18 @@ omk lsp typescript
 | Parallel DAG | `omk parallel <goal>` (alpha) runs coordinator → worker fan-out → reviewer with live UI and ETA tracking |
 | Safety Hooks | Default protection against destructive commands and secret leakage |
 
-### 🆕 v1.1.4 Highlights (Stable)
+### 🆕 v1.1.6 Highlights (Stable)
 
+- **Open Design + OMK CLI** — `omk design open-design --open` registers OMK CLI locally and avoids the 45 s Kimi ACP smoke-test timeout
+- **MCP JSON-RPC stability** — opaque internal errors now become actionable tool-level failures
+- **Hooks/Skills refreshed** — generated projects include advisory routing, release guard, stop verification, `/open-design`, and `/graph-view`
+- **README assets refreshed** — v1.1.6 package captures plus current localhost screenshots are committed under `readmeasset/`
 - **`omk chat`** — Interactive Kimi session with orchestrated path, exit banner (Run ID, resume, workers, MCP, skills), and cockpit/tmux support
 - **Chat-dedicated first-run star prompt** (`OMK_STAR_PROMPT`) with cockpit-child deduplication
 - **Performance** — Parallel I/O optimization across `cockpit`, `doctor`, `hud`, `ensemble`, `dag`, `run`, and MCP server
 - **`omk cockpit`** — Real-time compact dashboard with parallel TODO/agent rendering, git changes, and history
 - **`omk hud`** — Full terminal dashboard with goal scoring, ETA estimation, and state-error recovery hints
-- **Safety & Quality** — Strict lint, typecheck, **253 tests**, smoke test, package audit, and secret scan all green
+- **Safety & Quality** — Strict lint, typecheck, full `npm test`, smoke test, package audit, and secret scan gates
 - **Orchestration** — DAG scheduler with retry, skip-on-failure, fallback roles, evidence gates, and ensemble candidates
 - **DeepSeek Hybrid** — Official API key setup automatically enables hybrid mode with deterministic Flash/Pro 60/40 routing and Pro advisory on file-affecting nodes
 - **Memory** — Local graph memory (default) and embedded Kuzu backends
@@ -600,7 +723,7 @@ omk lsp typescript
 - **Local graph memory** — Ontology graph in `.omk/memory/graph-state.json` with mindmap and GraphQL-lite recall
 - **Built-in LSP** — `omk lsp typescript` bundles TypeScript language server out of the box
 - **Quality gates wired to CI** — `npm run check / test / lint / build` enforced in CI and release checks
-- **New PNG assets** — 5 screenshots added: HUD, status-line gauges, dashboard, and more
+- **README assets** — Open Design localhost, generated hooks/skills, skill packs, HUD, status-line gauges, dashboard, and more
 
 ### Install
 
@@ -757,20 +880,26 @@ graph TD
 
 Default hooks block destructive commands and secret leakage:
 
-- `pre-shell-guard.sh` — Blocks `rm -rf /`, `sudo`, `git push --force`, etc.
+- `session-context.sh` — Injects startup reminders for Open Design, ontology graph, and deployment claims
+- `awesome-agent-skills-router.sh` — Advisory-routes prompts to installed OMK skills/workflows
+- `precompact-checkpoint.sh` — Reminds agents to checkpoint goal, files, verification, and blockers before compaction
+- `subagent-stop-audit.sh` — Requires leader review and quality gates after subagent completion
+- `pre-shell-guard.sh` — Blocks `rm -rf /`, `sudo`, `git push --force`, unverified release/publish commands, etc.
 - `protect-secrets.sh` — Blocks `.env` edits and secret leakage
 - `post-format.sh` — Auto-formats modified files
-- `stop-verify.sh` — Final verification on stop
+- `stop-verify.sh` — Final verification checklist and anti-overclaim reminder on stop
 
 ### 📄 License
 
 [MIT](./LICENSE)
 
+Open Design integration uses [nexu-io/Open Design](https://github.com/nexu-io/open-design), which is licensed under Apache-2.0 upstream. OMK itself remains MIT licensed.
+
 ---
 
 <h2 id="chinese">Chinese</h2>
 
-> ✅ <strong>Stable Release v1.1.4</strong> — 将 Kimi Code CLI 转变为一个<strong>基于 worktree 的编码团队</strong>。支持 DESIGN.md 感知 UI 生成、AGENTS.md 兼容性、实时质量门禁以及并行 HUD。
+> ✅ <strong>Stable Release v1.1.6</strong> — 将 Kimi Code CLI 转变为一个<strong>基于 worktree 的编码团队</strong>。支持 DESIGN.md 感知 UI 生成、AGENTS.md 兼容性、实时质量门禁以及并行 HUD。
 
 ### Features
 
@@ -788,14 +917,18 @@ Default hooks block destructive commands and secret leakage:
 | 并行 DAG | `omk parallel <goal>` (alpha) 执行 coordinator → worker 扇出 → reviewer，带实时 UI 与 ETA 追踪 |
 | 安全钩子 | 默认防止破坏性命令与密钥泄漏 |
 
-### 🆕 v1.0.0 更新亮点 (Stable)
+### 🆕 v1.1.6 更新亮点 (Stable)
 
+- **Open Design + OMK CLI** — localhost 设计桥接现在使用 OMK CLI，避免 45 秒 Kimi ACP smoke-test timeout
+- **MCP JSON-RPC 稳定性** — internal error 会以可处理的 tool-level failure 呈现
+- **Hooks/Skills 刷新** — 生成项目包含 release guard、stop verification、`/open-design`、`/graph-view`
+- **README assets 刷新** — v1.1.6 package captures 已加入 `readmeasset/`
 - **`omk chat`** — 带编排路径、退出横幅（Run ID、恢复、workers、MCP、skills）及 cockpit/tmux 支持的交互式 Kimi 会话
 - **Chat 专用首次运行 star prompt** (`OMK_STAR_PROMPT`) — cockpit 子进程去重
 - **性能** — 对 `cockpit`、`doctor`、`hud`、`ensemble`、`dag`、`run` 及 MCP 服务器进行并行 I/O 优化
 - **`omk cockpit`** — 实时紧凑仪表盘，支持并行 TODO/Agent 渲染、git 变更与历史记录
 - **`omk hud`** — 完整终端仪表盘，支持目标评分、ETA 估算与状态错误恢复提示
-- **安全与质量** — 严格的 lint、typecheck、**234 项测试**、smoke test、包审计、密钥扫描全部通过
+- **安全与质量** — 严格的 lint、typecheck、完整 `npm test`、smoke test、包审计、密钥扫描门禁
 - **编排** — 支持重试、失败跳过、回退角色、证据门控与候选集成的 DAG 调度器
 - **记忆** — 本地图记忆（默认）和嵌入式 Kuzu 后端
 
@@ -987,20 +1120,26 @@ graph TD
 
 默认钩子阻止破坏性命令和密钥泄漏：
 
-- `pre-shell-guard.sh` — 阻止 `rm -rf /`、`sudo`、`git push --force` 等
+- `session-context.sh` — 启动时注入 Open Design、ontology graph、部署声明检查提醒
+- `awesome-agent-skills-router.sh` — 将提示词 advisory 路由到已安装的 OMK skills/workflows
+- `precompact-checkpoint.sh` — 压缩上下文前提醒记录目标、文件、验证和阻塞项
+- `subagent-stop-audit.sh` — 子代理结束后要求 leader 复核并运行质量门禁
+- `pre-shell-guard.sh` — 阻止 `rm -rf /`、`sudo`、`git push --force`、未验证 release/publish 等
 - `protect-secrets.sh` — 阻止 `.env` 编辑及密钥泄漏
 - `post-format.sh` — 自动格式化修改的文件
-- `stop-verify.sh` — 停止时的最终验证
+- `stop-verify.sh` — 停止时的最终验证清单并防止夸大部署状态
 
 ### 📄 许可证
 
 [MIT](./LICENSE)
 
+Open Design 集成使用上游 [nexu-io/Open Design](https://github.com/nexu-io/open-design)，其许可证为 Apache-2.0；OMK 本身仍使用 MIT 许可证。
+
 ---
 
 <h2 id="japanese">Japanese</h2>
 
-> ✅ <strong>Stable Release v1.1.4</strong> — Kimi Code CLI を <strong>worktree ベースのコーディングチーム</strong>に変換します。DESIGN.md 対応の UI 生成、AGENTS.md 互換性、ライブ品質ゲート、並列 HUD を提供します。
+> ✅ <strong>Stable Release v1.1.6</strong> — Kimi Code CLI を <strong>worktree ベースのコーディングチーム</strong>に変換します。DESIGN.md 対応の UI 生成、AGENTS.md 互換性、ライブ品質ゲート、並列 HUD を提供します。
 
 ### Features
 
@@ -1018,14 +1157,18 @@ graph TD
 | 並列 DAG | `omk parallel <goal>` (alpha) は coordinator → worker ファンアウト → reviewer を実行。ライブ UI と ETA 追跡付き |
 | 安全フック | 破壊的コマンドとシークレット漏洩をデフォルトで防止 |
 
-### 🆕 v1.0.0 の主な更新 (Stable)
+### 🆕 v1.1.6 の主な更新 (Stable)
 
+- **Open Design + OMK CLI** — localhost デザインブリッジが OMK CLI を使用し、45 秒の Kimi ACP smoke-test timeout を回避
+- **MCP JSON-RPC stability** — internal error を actionable な tool-level failure として表示
+- **Hooks/Skills refreshed** — release guard、stop verification、`/open-design`、`/graph-view` を生成プロジェクトに同梱
+- **README assets refreshed** — v1.1.6 package captures を `readmeasset/` に追加
 - **`omk chat`** — オーケストレーションパス、退出バナー（Run ID、再開、workers、MCP、skills）、cockpit/tmux 対応のインタラクティブ Kimi セッション
 - **Chat 専用 first-run star prompt** (`OMK_STAR_PROMPT`) — cockpit 子プロセスの重複排除
 - **パフォーマンス** — `cockpit`、`doctor`、`hud`、`ensemble`、`dag`、`run`、MCP サーバー全体に並列 I/O 最適化を適用
 - **`omk cockpit`** — 並列 TODO/エージェントレンダリング、git 変更履歴、ヒストリーを含むリアルタイムコンパクトダッシュボード
 - **`omk hud`** — 目標スコアリング、ETA 推定、状態エラー回復ヒントを含むフルターミナルダッシュボード
-- **安全性と品質** — 厳格な lint、typecheck、**234 テスト**、smoke test、パッケージ監査、シークレットスキャンすべて合格
+- **安全性と品質** — 厳格な lint、typecheck、完全な `npm test`、smoke test、パッケージ監査、シークレットスキャンのゲート
 - **オーケストレーション** — リトライ、失敗時スキップ、フォールバックロール、エビデンスゲート、アンサンブル候補を備えた DAG スケジューラ
 - **メモリ** — ローカルグラフメモリ（デフォルト）と組み込み Kuzu バックエンド
 
@@ -1217,14 +1360,20 @@ graph TD
 
 デフォルトのフックは破壊的コマンドとシークレットの漏洩をブロックします：
 
-- `pre-shell-guard.sh` — `rm -rf /`、`sudo`、`git push --force` などをブロック
+- `session-context.sh` — 起動時に Open Design、ontology graph、デプロイ状態確認の注意を注入
+- `awesome-agent-skills-router.sh` — プロンプトをインストール済み OMK skills/workflows へ advisory ルーティング
+- `precompact-checkpoint.sh` — コンテキスト圧縮前に目標、ファイル、検証、ブロッカーの記録を促す
+- `subagent-stop-audit.sh` — サブエージェント終了後の leader レビューと品質ゲートを要求
+- `pre-shell-guard.sh` — `rm -rf /`、`sudo`、`git push --force`、未検証の release/publish などをブロック
 - `protect-secrets.sh` — `.env` の編集とシークレットの漏洩をブロック
 - `post-format.sh` — 変更ファイルの自動フォーマット
-- `stop-verify.sh` — 停止時の最終検証
+- `stop-verify.sh` — 停止時の最終検証チェックリストと過大報告防止
 
 ### 📄 ライセンス
 
 [MIT](./LICENSE)
+
+Open Design 連携は upstream の [nexu-io/Open Design](https://github.com/nexu-io/open-design) を使用し、同プロジェクトは Apache-2.0 ライセンスです。OMK 本体は引き続き MIT ライセンスです。
 
 ---
 

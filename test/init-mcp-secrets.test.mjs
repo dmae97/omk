@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -44,6 +44,10 @@ async function runInitDirect(projectRoot, homeRoot, options = {}) {
     OMK_INIT_DEEPSEEK_PROMPT: process.env.OMK_INIT_DEEPSEEK_PROMPT,
     OMK_INIT_IMPORT_USER_SKILLS: process.env.OMK_INIT_IMPORT_USER_SKILLS,
     OMK_INIT_LOCAL_USER: process.env.OMK_INIT_LOCAL_USER,
+    OMK_PROVIDER_CONFIG_PATH: process.env.OMK_PROVIDER_CONFIG_PATH,
+    OMK_SECRETS_ENV_PATH: process.env.OMK_SECRETS_ENV_PATH,
+    OPENCODE_SECRETS_ENV_PATH: process.env.OPENCODE_SECRETS_ENV_PATH,
+    DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
     CI: process.env.CI,
     GITHUB_ACTIONS: process.env.GITHUB_ACTIONS,
   };
@@ -58,7 +62,19 @@ async function runInitDirect(projectRoot, homeRoot, options = {}) {
     CI: "",
     GITHUB_ACTIONS: "",
   };
+  const isolatedEnvKeys = [
+    "OMK_PROVIDER_CONFIG_PATH",
+    "OMK_SECRETS_ENV_PATH",
+    "OPENCODE_SECRETS_ENV_PATH",
+    "DEEPSEEK_API_KEY",
+  ];
+  for (const key of isolatedEnvKeys) {
+    delete env[key];
+  }
 
+  for (const key of isolatedEnvKeys) {
+    delete process.env[key];
+  }
   Object.assign(process.env, env);
   process.chdir(projectRoot);
   try {
@@ -107,13 +123,165 @@ test("init does not copy secret-bearing global MCP entries into project config",
     assert.deepEqual(Object.keys(projectMcp.mcpServers), ["omk-project"]);
     assert.ok(projectMcp.mcpServers["omk-project"]);
     assert.equal(projectMcp.mcpServers["omk-project"].env.OMK_PROJECT_ROOT, projectRoot);
-    assert.match(projectMcp.mcpServers["omk-project"].args.join(" "), /omk-project-server\.js|omk-project-mcp/);
+    assert.match(projectMcp.mcpServers["omk-project"].args.join(" "), /mcp serve omk-project|omk-project-mcp/);
     assert.equal(projectMcp.mcpServers.remote, undefined);
     assert.doesNotMatch(projectMcpRaw, /SHOULD_NOT_COPY|Authorization|API_TOKEN|Bearer|headers/);
 
     const configToml = await readFile(join(projectRoot, ".omk", "config.toml"), "utf-8");
     assert.match(configToml, /mcp_scope = "project"/);
     assert.match(configToml, /skills_scope = "project"/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("init scaffolds Kimi subagent names that match generated role aliases", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-init-subagents-project-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-init-subagents-home-"));
+
+  try {
+    const result = runInit(projectRoot, homeRoot);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const agentsMd = await readFile(join(projectRoot, "AGENTS.md"), "utf-8");
+    const kimiAgentsMd = await readFile(join(projectRoot, ".kimi", "AGENTS.md"), "utf-8");
+    const rootPrompt = await readFile(join(projectRoot, ".omk", "prompts", "root.md"), "utf-8");
+    const rootAgentYaml = await readFile(join(projectRoot, ".omk", "agents", "root.yaml"), "utf-8");
+
+    assert.match(agentsMd, /Repo exploration\s+explorer/);
+    assert.doesNotMatch(agentsMd, /Repo exploration\s+explore(?!r)/);
+    assert.match(kimiAgentsMd, /explorer\nplanner\ncoder\nreviewer/);
+    assert.doesNotMatch(kimiAgentsMd, /^explore$/m);
+    assert.match(rootPrompt, /- explorer for repository discovery/);
+    assert.match(rootPrompt, /- planner for architecture\/refactor\/risky work/);
+    assert.doesNotMatch(rootPrompt, /- explore for repository discovery/);
+    assert.match(rootAgentYaml, /\n    explorer:\n      path: \.\/roles\/explorer\.yaml/);
+    assert.match(rootAgentYaml, /\n    explore:\n      path: \.\/roles\/explorer\.yaml/);
+    assert.match(rootAgentYaml, /\n    planner:\n      path: \.\/roles\/planner\.yaml/);
+    assert.match(rootAgentYaml, /\n    plan:\n      path: \.\/roles\/planner\.yaml/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("init installs an OMK-safe awesome-agent-skills UserPromptSubmit router hook", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-init-awesome-skills-project-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-init-awesome-skills-home-"));
+
+  try {
+    const result = runInit(projectRoot, homeRoot);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const configToml = await readFile(join(projectRoot, ".omk", "kimi.config.toml"), "utf-8");
+    assert.match(configToml, /event = "UserPromptSubmit"/);
+    assert.match(configToml, /awesome-agent-skills-router\.sh/);
+
+    const hookPath = join(projectRoot, ".omk", "hooks", "awesome-agent-skills-router.sh");
+    const hookBody = await readFile(hookPath, "utf-8");
+    assert.match(hookBody, /VoltAgent\/awesome-agent-skills/);
+    assert.match(hookBody, /omk-flow-design-to-code/);
+    assert.match(hookBody, /Do not auto-install third-party skills/);
+
+    const hookStat = await stat(hookPath);
+    assert.ok((hookStat.mode & 0o111) !== 0, "generated hook should be executable");
+
+    const hookResult = spawnSync("bash", [hookPath], {
+      cwd: projectRoot,
+      encoding: "utf-8",
+      input: JSON.stringify({
+        hook_event_name: "UserPromptSubmit",
+        prompt: "디자인 UI prototype 만들고 playwright 테스트도 해줘",
+      }),
+    });
+    assert.equal(hookResult.status, 0, hookResult.stderr || hookResult.stdout);
+
+    const hookOutput = JSON.parse(hookResult.stdout);
+    assert.equal(hookOutput.hookSpecificOutput.hookEventName, "UserPromptSubmit");
+    assert.match(hookOutput.hookSpecificOutput.additionalContext, /awesome-agent-skills routing hint/);
+    assert.match(hookOutput.hookSpecificOutput.additionalContext, /\/open-design/);
+    assert.match(hookOutput.hookSpecificOutput.additionalContext, /\/omk-design-md/);
+    assert.match(hookOutput.hookSpecificOutput.additionalContext, /\/omk-quality-gate/);
+
+    const graphHookResult = spawnSync("bash", [hookPath], {
+      cwd: projectRoot,
+      encoding: "utf-8",
+      input: JSON.stringify({
+        hook_event_name: "UserPromptSubmit",
+        prompt: "온톨로지 그래프 관계를 보고 리스크맵 확인",
+      }),
+    });
+    assert.equal(graphHookResult.status, 0, graphHookResult.stderr || graphHookResult.stdout);
+
+    const graphHookOutput = JSON.parse(graphHookResult.stdout);
+    assert.match(graphHookOutput.hookSpecificOutput.additionalContext, /ontology-graph/);
+    assert.match(graphHookOutput.hookSpecificOutput.additionalContext, /\/graph-view/);
+    assert.match(graphHookOutput.hookSpecificOutput.additionalContext, /\/omk-kimi-runtime/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("init installs OMK lifecycle hooks and release guard", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-init-lifecycle-hooks-project-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-init-lifecycle-hooks-home-"));
+
+  try {
+    const result = runInit(projectRoot, homeRoot);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const configToml = await readFile(join(projectRoot, ".omk", "kimi.config.toml"), "utf-8");
+    assert.match(configToml, /event = "SessionStart"[\s\S]*session-context\.sh/);
+    assert.match(configToml, /event = "PreCompact"[\s\S]*precompact-checkpoint\.sh/);
+    assert.match(configToml, /event = "SubagentStop"[\s\S]*subagent-stop-audit\.sh/);
+    assert.match(configToml, /event = "Stop"[\s\S]*stop-verify\.sh/);
+
+    const hooks = [
+      ["session-context.sh", "SessionStart", /open-design[\s\S]*graph-view/],
+      ["precompact-checkpoint.sh", "PreCompact", /verification state/],
+      ["subagent-stop-audit.sh", "SubagentStop", /quality gates/],
+      ["stop-verify.sh", "Stop", /Deployment status/],
+    ];
+
+    for (const [scriptName, eventName, contextPattern] of hooks) {
+      const hookPath = join(projectRoot, ".omk", "hooks", scriptName);
+      const hookStat = await stat(hookPath);
+      assert.ok((hookStat.mode & 0o111) !== 0, `${scriptName} should be executable`);
+
+      const hookResult = spawnSync("bash", [hookPath], {
+        cwd: projectRoot,
+        encoding: "utf-8",
+        input: "{}",
+      });
+      assert.equal(hookResult.status, 0, hookResult.stderr || hookResult.stdout);
+
+      const output = JSON.parse(hookResult.stdout);
+      assert.equal(output.hookSpecificOutput.hookEventName, eventName);
+      assert.match(output.hookSpecificOutput.additionalContext, contextPattern);
+    }
+
+    const guardPath = join(projectRoot, ".omk", "hooks", "pre-shell-guard.sh");
+    const blockedPush = spawnSync("bash", [guardPath], {
+      cwd: projectRoot,
+      encoding: "utf-8",
+      input: JSON.stringify({ tool_input: { command: "git push origin main", args: "" } }),
+    });
+    assert.equal(blockedPush.status, 0, blockedPush.stderr || blockedPush.stdout);
+    const blockedPushOutput = JSON.parse(blockedPush.stdout);
+    assert.equal(blockedPushOutput.hookSpecificOutput.permissionDecision, "deny");
+    assert.match(blockedPushOutput.hookSpecificOutput.permissionDecisionReason, /Release\/deploy command blocked/);
+
+    const allowedPush = spawnSync("bash", [guardPath], {
+      cwd: projectRoot,
+      encoding: "utf-8",
+      input: JSON.stringify({ tool_input: { command: "git push origin main", args: "" } }),
+      env: { ...process.env, OMK_ALLOW_RELEASE: "1" },
+    });
+    assert.equal(allowedPush.status, 0, allowedPush.stderr || allowedPush.stdout);
+    const allowedPushOutput = JSON.parse(allowedPush.stdout);
+    assert.equal(allowedPushOutput.hookSpecificOutput.permissionDecision, "allow");
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(homeRoot, { recursive: true, force: true });
@@ -131,7 +299,7 @@ test("init omk-project MCP avoids ephemeral package paths", async () => {
   assert.match(server.args[1], /command -v omk/);
   assert.match(server.args[1], /command -v oh-my-kimi/);
   assert.match(server.args[1], /command -v omk-project-mcp/);
-  assert.match(server.args[1], /omk-project-server\.js/);
+  assert.match(server.args[1], /mcp serve omk-project/);
   assert.match(server.args[1], new RegExp(escapeRegex(realpathSync(process.execPath))));
   assert.equal(server.env.OMK_PROJECT_ROOT, "/workspace/app");
   assert.equal(server.args.join(" ").includes("omk-smoke-local-abc"), false);
@@ -147,7 +315,7 @@ test("init omk-project MCP pins the current real Node executable on Unix", async
   assert.equal(server.command, "bash");
   assert.match(server.args[1], new RegExp(escapeRegex(realpathSync(process.execPath))));
   assert.doesNotMatch(server.args[1], /\bexec node\b/);
-  assert.match(server.args[1], /omk-project-server\.js/);
+  assert.match(server.args[1], /mcp serve omk-project/);
   assert.match(server.args[1], /command -v omk/);
   assert.doesNotMatch(server.args[1], /\/opt\/oh-my-kimi/);
 });

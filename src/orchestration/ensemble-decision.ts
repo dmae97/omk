@@ -15,6 +15,7 @@ export interface EnsembleDecisionPolicy {
   maxCandidates?: number;
   quorumRatio?: number;
   candidates?: DecisionCandidate[];
+  extraVotes?: EnsembleDecisionCandidateVote[];
 }
 
 export interface EnsembleDecisionResult {
@@ -26,6 +27,13 @@ export interface EnsembleDecisionResult {
   nextPrompt?: string;
 }
 
+export interface EnsembleDecisionCandidateVote {
+  id: string;
+  action: NextAction;
+  weight: number;
+  reason: string;
+}
+
 const DEFAULT_CANDIDATES: DecisionCandidate[] = [
   { id: "progress-analyst", perspective: "Evaluate success-criteria completion rate and blocker severity", weight: 1.0 },
   { id: "risk-evaluator", perspective: "Assess failure modes, retry exhaustion, and rollback risk", weight: 0.9 },
@@ -33,12 +41,7 @@ const DEFAULT_CANDIDATES: DecisionCandidate[] = [
   { id: "quality-assessor", perspective: "Check evidence-gate pass rate, review coverage, and test results", weight: 0.8 },
 ];
 
-interface CandidateVote {
-  id: string;
-  action: NextAction;
-  weight: number;
-  reason: string;
-}
+type CandidateVote = EnsembleDecisionCandidateVote;
 
 function runDecisionCandidate(candidate: DecisionCandidate, goal: GoalSpec, runState: RunState, evidence: GoalEvidence[]): CandidateVote {
   const missing = evaluateMissingCriteria(goal, evidence);
@@ -194,7 +197,10 @@ function buildAutoPrompt(goal: GoalSpec, runState: RunState, evidence: GoalEvide
 
 export function evaluateEnsembleDecision(goal: GoalSpec, runState: RunState, evidence: GoalEvidence[], policy: EnsembleDecisionPolicy = {}): EnsembleDecisionResult {
   const candidates = (policy.candidates ?? DEFAULT_CANDIDATES).slice(0, policy.maxCandidates ?? DEFAULT_CANDIDATES.length);
-  const votes = candidates.map((candidate) => runDecisionCandidate(candidate, goal, runState, evidence));
+  const votes = [
+    ...candidates.map((candidate) => runDecisionCandidate(candidate, goal, runState, evidence)),
+    ...(policy.extraVotes ?? []).map(normalizeExtraVote).filter((vote): vote is CandidateVote => Boolean(vote)),
+  ];
   const actionScores = new Map<NextAction, number>();
   for (const vote of votes) {
     actionScores.set(vote.action, (actionScores.get(vote.action) ?? 0) + vote.weight);
@@ -220,4 +226,20 @@ export function evaluateEnsembleDecision(goal: GoalSpec, runState: RunState, evi
     shouldContinue,
     nextPrompt: shouldContinue ? buildAutoPrompt(goal, runState, evidence, bestAction) : undefined,
   };
+}
+
+function normalizeExtraVote(vote: EnsembleDecisionCandidateVote): CandidateVote | undefined {
+  if (!isNextAction(vote.action)) return undefined;
+  const weight = Number(vote.weight);
+  if (!Number.isFinite(weight) || weight <= 0) return undefined;
+  return {
+    id: String(vote.id || "external-candidate").slice(0, 80),
+    action: vote.action,
+    weight: Math.min(3, weight),
+    reason: String(vote.reason || "external ensemble vote").replace(/\s+/g, " ").trim().slice(0, 240),
+  };
+}
+
+function isNextAction(value: string): value is NextAction {
+  return value === "continue" || value === "replan" || value === "block" || value === "handoff" || value === "close";
 }
