@@ -552,6 +552,238 @@ describe("openai-completions tool_choice", () => {
 		expect(toolCall).not.toHaveProperty("partialArgs");
 	});
 
+	it("accumulates mixed content, reasoning, and parallel tool call deltas independently", async () => {
+		mockState.chunks = [
+			{
+				id: "chatcmpl-mixed-deltas",
+				choices: [
+					{
+						delta: {
+							content: "answer 1",
+							reasoning_content: "think 1",
+							tool_calls: [
+								{
+									index: 0,
+									id: "tc_read_initial",
+									type: "function",
+									function: { name: "read", arguments: '{"path":"README' },
+								},
+								{
+									index: 1,
+									id: "tc_grep_initial",
+									type: "function",
+									function: { name: "grep", arguments: '{"pattern":"TODO' },
+								},
+								{
+									id: "tc_list_no_index",
+									type: "function",
+									function: { name: "list", arguments: '{"path":"packages' },
+								},
+								{
+									id: "tc_write_no_index",
+									type: "function",
+									function: { name: "write", arguments: '{"path":"out' },
+								},
+							],
+						},
+						finish_reason: null,
+					},
+				],
+			},
+			{
+				id: "chatcmpl-mixed-deltas",
+				choices: [
+					{
+						delta: {
+							content: " answer 2",
+							tool_calls: [
+								{
+									index: 1,
+									id: "tc_grep_changed",
+									type: "function",
+									function: { arguments: '","path":"src' },
+								},
+								{
+									id: "tc_write_no_index",
+									type: "function",
+									function: { arguments: '.txt","content":"ok"}' },
+								},
+								{
+									id: "tc_list_no_index",
+									type: "function",
+									function: { arguments: '/ai"}' },
+								},
+							],
+						},
+						finish_reason: null,
+					},
+				],
+			},
+			{
+				id: "chatcmpl-mixed-deltas",
+				choices: [
+					{
+						delta: {
+							content: "\n",
+							reasoning_content: " think 2",
+							tool_calls: [
+								{
+									index: 0,
+									id: "tc_read_changed",
+									type: "function",
+									function: { arguments: '.md"}' },
+								},
+								{
+									index: 1,
+									type: "function",
+									function: { arguments: '"}' },
+								},
+							],
+						},
+						finish_reason: "tool_calls",
+					},
+				],
+				usage: {
+					prompt_tokens: 10,
+					completion_tokens: 8,
+					prompt_tokens_details: { cached_tokens: 0 },
+					completion_tokens_details: { reasoning_tokens: 2 },
+				},
+			},
+		];
+
+		const { compat: _compat, ...baseModel } = getModel("openai", "gpt-4o-mini")!;
+		const model = { ...baseModel, api: "openai-completions" } as const;
+		const tools: Tool[] = [
+			{
+				name: "read",
+				description: "Read a file",
+				parameters: Type.Object({ path: Type.String() }),
+			},
+			{
+				name: "grep",
+				description: "Search a file",
+				parameters: Type.Object({ pattern: Type.String(), path: Type.String() }),
+			},
+			{
+				name: "list",
+				description: "List a directory",
+				parameters: Type.Object({ path: Type.String() }),
+			},
+			{
+				name: "write",
+				description: "Write a file",
+				parameters: Type.Object({ path: Type.String(), content: Type.String() }),
+			},
+		];
+		const s = streamSimple(
+			model,
+			{
+				messages: [
+					{
+						role: "user",
+						content: "Think, answer, and use tools.",
+						timestamp: Date.now(),
+					},
+				],
+				tools,
+			},
+			{ apiKey: "test" },
+		);
+
+		const eventTypes: string[] = [];
+		const toolEventsByContentIndex = new Map<number, string[]>();
+		for await (const event of s) {
+			eventTypes.push(event.type);
+			if (event.type === "toolcall_start" || event.type === "toolcall_delta" || event.type === "toolcall_end") {
+				const events = toolEventsByContentIndex.get(event.contentIndex) ?? [];
+				events.push(event.type);
+				toolEventsByContentIndex.set(event.contentIndex, events);
+			}
+		}
+
+		const response = await s.result();
+		expect(response.stopReason).toBe("toolUse");
+		expect(eventTypes.filter((type) => type === "text_start")).toHaveLength(1);
+		expect(eventTypes.filter((type) => type === "text_delta")).toHaveLength(3);
+		expect(eventTypes.filter((type) => type === "text_end")).toHaveLength(1);
+		expect(eventTypes.filter((type) => type === "thinking_start")).toHaveLength(1);
+		expect(eventTypes.filter((type) => type === "thinking_delta")).toHaveLength(2);
+		expect(eventTypes.filter((type) => type === "thinking_end")).toHaveLength(1);
+		expect(eventTypes.filter((type) => type === "toolcall_start")).toHaveLength(4);
+		expect(eventTypes.filter((type) => type === "toolcall_delta")).toHaveLength(9);
+		expect(eventTypes.filter((type) => type === "toolcall_end")).toHaveLength(4);
+		expect(toolEventsByContentIndex.get(2)).toEqual([
+			"toolcall_start",
+			"toolcall_delta",
+			"toolcall_delta",
+			"toolcall_end",
+		]);
+		expect(toolEventsByContentIndex.get(3)).toEqual([
+			"toolcall_start",
+			"toolcall_delta",
+			"toolcall_delta",
+			"toolcall_delta",
+			"toolcall_end",
+		]);
+		expect(toolEventsByContentIndex.get(4)).toEqual([
+			"toolcall_start",
+			"toolcall_delta",
+			"toolcall_delta",
+			"toolcall_end",
+		]);
+		expect(toolEventsByContentIndex.get(5)).toEqual([
+			"toolcall_start",
+			"toolcall_delta",
+			"toolcall_delta",
+			"toolcall_end",
+		]);
+
+		expect(response.content).toHaveLength(6);
+		expect(response.content[0]).toEqual({ type: "text", text: "answer 1 answer 2\n" });
+		expect(response.content[1]).toEqual({
+			type: "thinking",
+			thinking: "think 1 think 2",
+			thinkingSignature: "reasoning_content",
+		});
+		const readCall = response.content[2];
+		const grepCall = response.content[3];
+		const listCall = response.content[4];
+		const writeCall = response.content[5];
+		expect(readCall.type).toBe("toolCall");
+		expect(grepCall.type).toBe("toolCall");
+		expect(listCall.type).toBe("toolCall");
+		expect(writeCall.type).toBe("toolCall");
+		if (
+			readCall.type !== "toolCall" ||
+			grepCall.type !== "toolCall" ||
+			listCall.type !== "toolCall" ||
+			writeCall.type !== "toolCall"
+		) {
+			throw new Error("Expected toolCall content");
+		}
+		expect(readCall.id).toBe("tc_read_initial");
+		expect(readCall.name).toBe("read");
+		expect(readCall.arguments).toEqual({ path: "README.md" });
+		expect(readCall).not.toHaveProperty("streamIndex");
+		expect(readCall).not.toHaveProperty("partialArgs");
+		expect(grepCall.id).toBe("tc_grep_initial");
+		expect(grepCall.name).toBe("grep");
+		expect(grepCall.arguments).toEqual({ pattern: "TODO", path: "src" });
+		expect(grepCall).not.toHaveProperty("streamIndex");
+		expect(grepCall).not.toHaveProperty("partialArgs");
+		expect(listCall.id).toBe("tc_list_no_index");
+		expect(listCall.name).toBe("list");
+		expect(listCall.arguments).toEqual({ path: "packages/ai" });
+		expect(listCall).not.toHaveProperty("streamIndex");
+		expect(listCall).not.toHaveProperty("partialArgs");
+		expect(writeCall.id).toBe("tc_write_no_index");
+		expect(writeCall.name).toBe("write");
+		expect(writeCall.arguments).toEqual({ path: "out.txt", content: "ok" });
+		expect(writeCall).not.toHaveProperty("streamIndex");
+		expect(writeCall).not.toHaveProperty("partialArgs");
+	});
+
 	it("does not double-count reasoning tokens in completion usage", async () => {
 		mockState.chunks = [
 			{
