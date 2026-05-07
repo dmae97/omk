@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { Text, type TUI } from "@earendil-works/pi-tui";
 import stripAnsi from "strip-ansi";
 import { Type } from "typebox";
@@ -342,10 +342,18 @@ describe("ToolExecutionComponent parity", () => {
 		},
 		{
 			title: "AGENTS.md",
-			path: join(process.cwd(), "AGENTS.md"),
+			path: join(process.cwd(), ".pi", "AGENTS.md"),
 			content: "Hidden resource instructions",
-			compact: "read resource AGENTS.md",
+			compact: "read resource .pi/AGENTS.md",
 			hidden: "Hidden resource instructions",
+			absent: undefined,
+		},
+		{
+			title: "outside AGENTS.md",
+			path: resolve(process.cwd(), "..", "AGENTS.md"),
+			content: "Hidden outside resource instructions",
+			compact: `read resource ${resolve(process.cwd(), "..", "AGENTS.md").replace(/\\/g, "/")}`,
+			hidden: "Hidden outside resource instructions",
 			absent: undefined,
 		},
 		{

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { canonicalizePath, isLocalPath } from "../src/utils/paths.js";
+import { canonicalizePath, getCwdRelativePath, isLocalPath } from "../src/utils/paths.js";
 
 let tempDir: string;
 
@@ -58,6 +58,18 @@ describe("canonicalizePath", () => {
 		symlinkSync(target, link);
 		// realpathSync would throw, so canonicalizePath returns the link path.
 		expect(canonicalizePath(link)).toBe(link);
+	});
+});
+
+describe("getCwdRelativePath", () => {
+	it("keeps cwd-relative names that start with dots", () => {
+		const cwd = join(tmpdir(), "pi-paths-cwd");
+		expect(getCwdRelativePath(join(cwd, "..config", "AGENTS.md"), cwd)).toBe(join("..config", "AGENTS.md"));
+	});
+
+	it("rejects parent-directory traversals", () => {
+		const cwd = join(tmpdir(), "pi-paths-cwd");
+		expect(getCwdRelativePath(join(cwd, "..", "AGENTS.md"), cwd)).toBeUndefined();
 	});
 });
 

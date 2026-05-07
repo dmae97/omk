@@ -10,6 +10,7 @@ import { keyHint, keyText } from "../../modes/interactive/components/keybinding-
 import { getLanguageFromPath, highlightCode, type Theme } from "../../modes/interactive/theme/theme.js";
 import { formatDimensionNote, resizeImage } from "../../utils/image-resize.js";
 import { detectSupportedImageMimeTypeFromFile } from "../../utils/mime.js";
+import { formatPathRelativeToCwdOrAbsolute } from "../../utils/paths.js";
 import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.js";
 import { resolveReadPath } from "./path-utils.js";
 import { getTextOutput, invalidArgText, replaceTabs, shortenPath, str } from "./render-utils.js";
@@ -133,7 +134,7 @@ function getCompactReadClassification(
 	if (docsClassification) return docsClassification;
 
 	if (COMPACT_RESOURCE_FILE_NAMES.has(fileName)) {
-		return { kind: "resource", label: fileName };
+		return { kind: "resource", label: formatPathRelativeToCwdOrAbsolute(absolutePath, cwd) };
 	}
 
 	return undefined;

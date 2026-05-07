@@ -85,6 +85,7 @@ import { getChangelogPath, getNewEntries, parseChangelog } from "../../utils/cha
 import { copyToClipboard } from "../../utils/clipboard.js";
 import { extensionForImageMimeType, readClipboardImage } from "../../utils/clipboard-image.js";
 import { parseGitUrl } from "../../utils/git.js";
+import { getCwdRelativePath } from "../../utils/paths.js";
 import { getPiUserAgent } from "../../utils/pi-user-agent.js";
 import { killTrackedDetachedChildren } from "../../utils/shell.js";
 import { ensureTool } from "../../utils/tools-manager.js";
@@ -911,15 +912,9 @@ export class InteractiveMode {
 	private formatContextPath(p: string): string {
 		const cwd = path.resolve(this.sessionManager.getCwd());
 		const absolutePath = path.isAbsolute(p) ? path.resolve(p) : path.resolve(cwd, p);
-		const relativePath = path.relative(cwd, absolutePath);
-		const isInsideCwd =
-			relativePath === "" ||
-			(!relativePath.startsWith("..") &&
-				!relativePath.startsWith(`..${path.sep}`) &&
-				!path.isAbsolute(relativePath));
-
-		if (isInsideCwd) {
-			return relativePath || ".";
+		const relativePath = getCwdRelativePath(absolutePath, cwd);
+		if (relativePath !== undefined) {
+			return relativePath;
 		}
 
 		return this.formatDisplayPath(absolutePath);
