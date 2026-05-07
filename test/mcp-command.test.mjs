@@ -31,6 +31,12 @@ function runMcpScript(projectRoot, homeRoot, scriptBody, extraEnv = {}) {
   });
 }
 
+function buildPrependPathEnv(directory) {
+  const currentPath = process.env.PATH ?? process.env.Path ?? process.env.path ?? "";
+  const value = `${directory}${delimiter}${currentPath}`;
+  return process.platform === "win32" ? { PATH: value, Path: value } : { PATH: value };
+}
+
 async function writeEmptyConfigs(projectRoot, homeRoot, omkConfig) {
   await mkdir(join(projectRoot, ".omk"), { recursive: true });
   await mkdir(join(projectRoot, ".kimi"), { recursive: true });
@@ -202,9 +208,7 @@ test("mcp test exercises an omk CLI connection through tools/call id 3", async (
     const result = runMcpScript(projectRoot, homeRoot, `
       await mcpTestCommand("omk-cli");
       console.log("MCP_TEST_OK");
-    `, {
-      PATH: `${binRoot}${delimiter}${process.env.PATH ?? ""}`,
-    });
+    `, buildPrependPathEnv(binRoot));
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, /MCP Test: omk-cli/);
