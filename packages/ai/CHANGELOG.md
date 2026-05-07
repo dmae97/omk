@@ -2,10 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added OAuth login flow metadata so clients can present interactive provider choices during login ([#4190](https://github.com/earendil-works/pi-mono/pull/4190) by [@mitsuhiko](https://github.com/mitsuhiko)).
+
 ### Fixed
 
 - Fixed OpenAI Responses reasoning text streaming for LM Studio and other compatible providers that emit `response.reasoning_text.delta` events ([#4191](https://github.com/badlogic/pi-mono/pull/4191) by [@yaanfpv](https://github.com/yaanfpv)).
 - Fixed OpenAI Codex OAuth refresh failures writing directly to stderr while the TUI is active ([#4141](https://github.com/badlogic/pi-mono/issues/4141)).
+- Fixed OpenAI-compatible chat completion streams that interleave content and tool-call deltas in the same choice.
+- Fixed the Kimi K2 P6 model alias to normalize to `kimi-for-coding` ([#4218](https://github.com/earendil-works/pi-mono/issues/4218)).
+- Fixed OpenAI Codex Responses requests to send a non-empty system prompt ([#4184](https://github.com/earendil-works/pi-mono/issues/4184)).
 
 ## [0.73.0] - 2026-05-04
 
