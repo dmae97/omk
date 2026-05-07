@@ -1,6 +1,6 @@
-# @mariozechner/pi-web-ui
+# @earendil-works/pi-web-ui
 
-Reusable web UI components for building AI chat interfaces powered by [@mariozechner/pi-ai](../ai) and [@mariozechner/pi-agent-core](../agent).
+Reusable web UI components for building AI chat interfaces powered by [@earendil-works/pi-ai](../ai) and [@earendil-works/pi-agent-core](../agent).
 
 Built with [mini-lit](https://github.com/badlogic/mini-lit) web components and Tailwind CSS v4.
 
@@ -17,7 +17,7 @@ Built with [mini-lit](https://github.com/badlogic/mini-lit) web components and T
 ## Installation
 
 ```bash
-npm install @mariozechner/pi-web-ui @mariozechner/pi-agent-core @mariozechner/pi-ai
+npm install @earendil-works/pi-web-ui @earendil-works/pi-agent-core @earendil-works/pi-ai
 ```
 
 ## Quick Start
@@ -25,8 +25,8 @@ npm install @mariozechner/pi-web-ui @mariozechner/pi-agent-core @mariozechner/pi
 See the [example](./example) directory for a complete working application.
 
 ```typescript
-import { Agent } from '@mariozechner/pi-agent-core';
-import { getModel } from '@mariozechner/pi-ai';
+import { Agent } from '@earendil-works/pi-agent-core';
+import { getModel } from '@earendil-works/pi-ai';
 import {
   ChatPanel,
   AppStorage,
@@ -37,8 +37,8 @@ import {
   setAppStorage,
   defaultConvertToLlm,
   ApiKeyPromptDialog,
-} from '@mariozechner/pi-web-ui';
-import '@mariozechner/pi-web-ui/app.css';
+} from '@earendil-works/pi-web-ui';
+import '@earendil-works/pi-web-ui/app.css';
 
 // Set up storage
 const settings = new SettingsStore();
@@ -169,7 +169,7 @@ Properties:
 ### Agent (from pi-agent-core)
 
 ```typescript
-import { Agent } from '@mariozechner/pi-agent-core';
+import { Agent } from '@earendil-works/pi-agent-core';
 
 const agent = new Agent({
   initialState: {
@@ -259,7 +259,7 @@ interface SystemNotification {
   timestamp: string;
 }
 
-declare module '@mariozechner/pi-agent-core' {
+declare module '@earendil-works/pi-agent-core' {
   interface CustomAgentMessages {
     'system-notification': SystemNotification;
   }
@@ -287,7 +287,7 @@ function myConvertToLlm(messages: AgentMessage[]): Message[] {
 `convertToLlm` transforms app messages to LLM-compatible format:
 
 ```typescript
-import { defaultConvertToLlm, convertAttachments } from '@mariozechner/pi-web-ui';
+import { defaultConvertToLlm, convertAttachments } from '@earendil-works/pi-web-ui';
 
 // defaultConvertToLlm handles:
 // - UserMessageWithAttachments → user message with image/text content blocks
@@ -302,7 +302,7 @@ import { defaultConvertToLlm, convertAttachments } from '@mariozechner/pi-web-ui
 Execute JavaScript in a sandboxed browser environment:
 
 ```typescript
-import { createJavaScriptReplTool } from '@mariozechner/pi-web-ui';
+import { createJavaScriptReplTool } from '@earendil-works/pi-web-ui';
 
 const replTool = createJavaScriptReplTool();
 
@@ -320,7 +320,7 @@ agent.state.tools = [replTool];
 Extract text from documents at URLs:
 
 ```typescript
-import { createExtractDocumentTool } from '@mariozechner/pi-web-ui';
+import { createExtractDocumentTool } from '@earendil-works/pi-web-ui';
 
 const extractTool = createExtractDocumentTool();
 extractTool.corsProxyUrl = 'https://corsproxy.io/?';
@@ -343,7 +343,7 @@ agent.state.tools = [artifactsPanel.tool];
 ### Custom Tool Renderers
 
 ```typescript
-import { registerToolRenderer, type ToolRenderer } from '@mariozechner/pi-web-ui';
+import { registerToolRenderer, type ToolRenderer } from '@earendil-works/pi-web-ui';
 
 const myRenderer: ToolRenderer = {
   render(params, result, isStreaming) {
@@ -371,7 +371,7 @@ import {
   CustomProvidersStore,
   setAppStorage,
   getAppStorage,
-} from '@mariozechner/pi-web-ui';
+} from '@earendil-works/pi-web-ui';
 
 // Create stores
 const settings = new SettingsStore();
@@ -466,7 +466,7 @@ const all = await storage.customProviders.getAll();
 Load and process files:
 
 ```typescript
-import { loadAttachment, type Attachment } from '@mariozechner/pi-web-ui';
+import { loadAttachment, type Attachment } from '@earendil-works/pi-web-ui';
 
 // From File input
 const file = inputElement.files[0];
@@ -498,7 +498,7 @@ Supported formats: PDF, DOCX, XLSX, PPTX, images, text files.
 For browser environments with CORS restrictions:
 
 ```typescript
-import { createStreamFn, shouldUseProxyForProvider, isCorsError } from '@mariozechner/pi-web-ui';
+import { createStreamFn, shouldUseProxyForProvider, isCorsError } from '@earendil-works/pi-web-ui';
 
 // AgentInterface auto-configures proxy from settings
 // For manual setup:
@@ -517,7 +517,7 @@ agent.streamFn = createStreamFn(async () => {
 ### SettingsDialog
 
 ```typescript
-import { SettingsDialog, ProvidersModelsTab, ProxyTab, ApiKeysTab } from '@mariozechner/pi-web-ui';
+import { SettingsDialog, ProvidersModelsTab, ProxyTab, ApiKeysTab } from '@earendil-works/pi-web-ui';
 
 SettingsDialog.open([
   new ProvidersModelsTab(), // Custom providers + model list
@@ -529,7 +529,7 @@ SettingsDialog.open([
 ### SessionListDialog
 
 ```typescript
-import { SessionListDialog } from '@mariozechner/pi-web-ui';
+import { SessionListDialog } from '@earendil-works/pi-web-ui';
 
 SessionListDialog.open(
   async (sessionId) => { /* load session */ },
@@ -540,7 +540,7 @@ SessionListDialog.open(
 ### ApiKeyPromptDialog
 
 ```typescript
-import { ApiKeyPromptDialog } from '@mariozechner/pi-web-ui';
+import { ApiKeyPromptDialog } from '@earendil-works/pi-web-ui';
 
 const success = await ApiKeyPromptDialog.prompt('anthropic');
 ```
@@ -548,7 +548,7 @@ const success = await ApiKeyPromptDialog.prompt('anthropic');
 ### ModelSelector
 
 ```typescript
-import { ModelSelector } from '@mariozechner/pi-web-ui';
+import { ModelSelector } from '@earendil-works/pi-web-ui';
 
 ModelSelector.open(currentModel, (selectedModel) => {
   agent.state.model = selectedModel;
@@ -560,7 +560,7 @@ ModelSelector.open(currentModel, (selectedModel) => {
 Import the pre-built CSS:
 
 ```typescript
-import '@mariozechner/pi-web-ui/app.css';
+import '@earendil-works/pi-web-ui/app.css';
 ```
 
 Or use Tailwind with custom config:
@@ -575,7 +575,7 @@ Or use Tailwind with custom config:
 ## Internationalization
 
 ```typescript
-import { i18n, setLanguage, translations } from '@mariozechner/pi-web-ui';
+import { i18n, setLanguage, translations } from '@earendil-works/pi-web-ui';
 
 // Add translations
 translations.de = {

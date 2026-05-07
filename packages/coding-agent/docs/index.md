@@ -7,7 +7,7 @@ Pi is a minimal terminal coding harness. It is designed to stay small at the cor
 Install pi with npm:
 
 ```bash
-npm install -g @mariozechner/pi-coding-agent
+npm install -g @earendil-works/pi-coding-agent
 ```
 
 Then run it in a project directory:

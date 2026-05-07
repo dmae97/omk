@@ -5,7 +5,7 @@ import { streamSimple } from "../src/stream.js";
 // Empty tools arrays must NOT be serialized as `tools: []` — some OpenAI-compatible
 // backends (e.g. DashScope / Aliyun Qwen via compatible-mode) reject the request with
 // `"[] is too short - 'tools'"` (HTTP 400) when `--no-tools` produces an empty array.
-// Regression for https://github.com/badlogic/pi-mono/issues/<issue-number>
+// Regression for https://github.com/earendil-works/pi-mono/issues/<issue-number>
 
 const mockState = vi.hoisted(() => ({
 	lastParams: undefined as unknown,

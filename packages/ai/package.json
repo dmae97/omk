@@ -1,5 +1,5 @@
 {
-	"name": "@mariozechner/pi-ai",
+	"name": "@earendil-works/pi-ai",
 	"version": "0.73.0",
 	"description": "Unified LLM API with automatic model discovery and provider configuration",
 	"type": "module",
@@ -94,7 +94,7 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/badlogic/pi-mono.git",
+		"url": "git+https://github.com/earendil-works/pi-mono.git",
 		"directory": "packages/ai"
 	},
 	"engines": {

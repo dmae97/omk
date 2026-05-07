@@ -1,5 +1,5 @@
 {
-	"name": "@mariozechner/pi-agent-core",
+	"name": "@earendil-works/pi-agent-core",
 	"version": "0.73.0",
 	"description": "General-purpose agent with transport abstraction, state management, and attachment support",
 	"type": "module",
@@ -17,7 +17,7 @@
 		"prepublishOnly": "npm run clean && npm run build"
 	},
 	"dependencies": {
-		"@mariozechner/pi-ai": "^0.73.0",
+		"@earendil-works/pi-ai": "^0.73.0",
 		"typebox": "^1.1.24"
 	},
 	"keywords": [
@@ -31,7 +31,7 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/badlogic/pi-mono.git",
+		"url": "git+https://github.com/earendil-works/pi-mono.git",
 		"directory": "packages/agent"
 	},
 	"engines": {
