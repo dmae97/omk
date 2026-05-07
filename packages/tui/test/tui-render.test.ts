@@ -1,6 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import type { Terminal as XtermTerminalType } from "@xterm/headless";
+import { deleteKittyImage, encodeKitty } from "../src/terminal-image.js";
 import { type Component, TUI } from "../src/tui.js";
 import { VirtualTerminal } from "./virtual-terminal.js";
 
@@ -62,6 +63,87 @@ function getCellItalic(terminal: VirtualTerminal, row: number, col: number): num
 	assert.ok(cell, `Missing cell at row ${row} col ${col}`);
 	return cell.isItalic();
 }
+
+describe("TUI Kitty image cleanup", () => {
+	it("deletes changed image ids before drawing moved placements", async () => {
+		const terminal = new LoggingVirtualTerminal(40, 10);
+		const tui = new TUI(terminal);
+		const component = new TestComponent();
+		tui.addChild(component);
+
+		const oldImage = encodeKitty("AAAA", { columns: 2, rows: 2, imageId: 42, moveCursor: false });
+		component.lines = ["top", oldImage];
+		tui.start();
+		await terminal.waitForRender();
+		terminal.clearWrites();
+
+		const newImage = encodeKitty("BBBB", { columns: 2, rows: 1, imageId: 42, moveCursor: false });
+		component.lines = [newImage, ""];
+		tui.requestRender();
+		await terminal.waitForRender();
+
+		const writes = terminal.getWrites();
+		const deleteIndex = writes.indexOf(deleteKittyImage(42));
+		const drawIndex = writes.indexOf(newImage);
+		assert.ok(deleteIndex >= 0, "changed old image should be deleted");
+		assert.ok(drawIndex >= 0, "new image should be drawn");
+		assert.ok(deleteIndex < drawIndex, "old image must be deleted before the new placement is drawn");
+
+		tui.stop();
+	});
+
+	it("redraws image lines when an earlier reserved image row changes", async () => {
+		const terminal = new LoggingVirtualTerminal(40, 10);
+		const tui = new TUI(terminal);
+		const component = new TestComponent();
+		tui.addChild(component);
+
+		const image = encodeKitty("AAAA", { columns: 2, rows: 2, imageId: 88, moveCursor: false });
+		component.lines = ["", image];
+		tui.start();
+		await terminal.waitForRender();
+		terminal.clearWrites();
+
+		component.lines = ["covered", image];
+		tui.requestRender();
+		await terminal.waitForRender();
+
+		const writes = terminal.getWrites();
+		const deleteIndex = writes.indexOf(deleteKittyImage(88));
+		const drawIndex = writes.indexOf(image);
+		assert.ok(deleteIndex >= 0, "image should be deleted when a reserved row changes");
+		assert.ok(drawIndex >= 0, "unchanged image line should be redrawn after deleting the placement");
+		assert.ok(deleteIndex < drawIndex, "old placement must be deleted before the image line is redrawn");
+		assert.ok(!writes.includes("\x1b[2J"), "reserved row changes should not force a full redraw");
+
+		tui.stop();
+	});
+
+	it("deletes previously rendered image ids during full redraws", async () => {
+		const terminal = new LoggingVirtualTerminal(40, 10);
+		const tui = new TUI(terminal);
+		const component = new TestComponent();
+		tui.addChild(component);
+
+		component.lines = [encodeKitty("AAAA", { columns: 2, rows: 2, imageId: 77, moveCursor: false })];
+		tui.start();
+		await terminal.waitForRender();
+		terminal.clearWrites();
+
+		component.lines = ["plain text"];
+		tui.requestRender(true);
+		await terminal.waitForRender();
+
+		const writes = terminal.getWrites();
+		const deleteIndex = writes.indexOf(deleteKittyImage(77));
+		const clearIndex = writes.indexOf("\x1b[2J");
+		assert.ok(deleteIndex >= 0, "previous image should be deleted during full redraw");
+		assert.ok(clearIndex >= 0, "full redraw should clear the screen");
+		assert.ok(deleteIndex < clearIndex, "old image should be deleted before the screen is cleared");
+
+		tui.stop();
+	});
+});
 
 describe("TUI resize handling", () => {
 	it("triggers full re-render when terminal height changes", async () => {
