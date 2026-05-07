@@ -4,7 +4,19 @@
 
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { detectCapabilities, hyperlink, isImageLine } from "../src/terminal-image.js";
+import { Image } from "../src/components/image.js";
+import {
+	deleteAllKittyImages,
+	deleteKittyImage,
+	detectCapabilities,
+	encodeKitty,
+	hyperlink,
+	isImageLine,
+	renderImage,
+	resetCapabilitiesCache,
+	setCapabilities,
+	setCellDimensions,
+} from "../src/terminal-image.js";
 
 const ENV_KEYS = [
 	"TERM",
@@ -15,6 +27,7 @@ const ENV_KEYS = [
 	"GHOSTTY_RESOURCES_DIR",
 	"WEZTERM_PANE",
 	"ITERM_SESSION_ID",
+	"CMUX_WORKSPACE_ID",
 ] as const;
 
 function withEnv(overrides: Record<string, string | undefined>, fn: () => void): void {
@@ -223,6 +236,14 @@ describe("detectCapabilities", () => {
 		});
 	});
 
+	it("does not disable Ghostty images solely because cmux is present", () => {
+		withEnv({ TERM_PROGRAM: "ghostty", CMUX_WORKSPACE_ID: "workspace" }, () => {
+			const caps = detectCapabilities();
+			assert.strictEqual(caps.images, "kitty");
+			assert.strictEqual(caps.hyperlinks, true);
+		});
+	});
+
 	it("enables hyperlinks for Kitty", () => {
 		withEnv({ KITTY_WINDOW_ID: "1" }, () => {
 			const caps = detectCapabilities();
@@ -249,6 +270,71 @@ describe("detectCapabilities", () => {
 			const caps = detectCapabilities();
 			assert.strictEqual(caps.hyperlinks, true);
 		});
+	});
+});
+
+describe("Kitty image cursor movement", () => {
+	it("can request no terminal-side cursor movement", () => {
+		const sequence = encodeKitty("AAAA", { columns: 2, rows: 2, moveCursor: false });
+		assert.ok(sequence.startsWith("\x1b_Ga=T,f=100,q=2,C=1,c=2,r=2;"));
+	});
+
+	it("suppresses Kitty replies for delete commands", () => {
+		assert.strictEqual(deleteKittyImage(42), "\x1b_Ga=d,d=I,i=42,q=2\x1b\\");
+		assert.strictEqual(deleteAllKittyImages(), "\x1b_Ga=d,d=A,q=2\x1b\\");
+	});
+
+	it("preserves renderImage's default terminal-side cursor movement", () => {
+		setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
+		setCellDimensions({ widthPx: 10, heightPx: 10 });
+		try {
+			const result = renderImage("AAAA", { widthPx: 20, heightPx: 20 }, { maxWidthCells: 2 });
+			assert.ok(result);
+			assert.ok(!result.sequence.includes(",C=1,"));
+			assert.strictEqual(result.rows, 2);
+		} finally {
+			resetCapabilitiesCache();
+			setCellDimensions({ widthPx: 9, heightPx: 18 });
+		}
+	});
+
+	it("can opt renderImage into no terminal-side cursor movement", () => {
+		setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
+		setCellDimensions({ widthPx: 10, heightPx: 10 });
+		try {
+			const result = renderImage("AAAA", { widthPx: 20, heightPx: 20 }, { maxWidthCells: 2, moveCursor: false });
+			assert.ok(result);
+			assert.ok(result.sequence.includes(",C=1,"));
+			assert.strictEqual(result.rows, 2);
+		} finally {
+			resetCapabilitiesCache();
+			setCellDimensions({ widthPx: 9, heightPx: 18 });
+		}
+	});
+
+	it("restores the cursor to the reserved image row after Kitty rendering", () => {
+		setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
+		setCellDimensions({ widthPx: 10, heightPx: 10 });
+		try {
+			const image = new Image(
+				"AAAA",
+				"image/png",
+				{ fallbackColor: (value) => value },
+				{ maxWidthCells: 2 },
+				{ widthPx: 20, heightPx: 20 },
+			);
+			const lines = image.render(4);
+			const imageId = image.getImageId();
+			assert.strictEqual(typeof imageId, "number");
+			assert.deepStrictEqual(lines.slice(0, -1), [""]);
+			assert.ok(lines[1].startsWith("\x1b[1A\x1b_G"));
+			assert.ok(lines[1].includes(",C=1,"));
+			assert.ok(lines[1].includes(`,i=${imageId}`));
+			assert.ok(lines[1].endsWith("\x1b[1B"));
+		} finally {
+			resetCapabilitiesCache();
+			setCellDimensions({ widthPx: 9, heightPx: 18 });
+		}
 	});
 });
 
