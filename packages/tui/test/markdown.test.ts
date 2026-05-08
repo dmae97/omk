@@ -31,8 +31,12 @@ function getCellUnderline(terminal: VirtualTerminal, row: number, col: number): 
 	return cell.isUnderline();
 }
 
+function stripAnsi(line: string): string {
+	return line.replace(/\x1b\[[0-9;]*m/g, "");
+}
+
 describe("Markdown component", () => {
-	describe("Nested lists", () => {
+	describe("Lists", () => {
 		it("should render simple nested list", () => {
 			const markdown = new Markdown(
 				`- Item 1
@@ -54,8 +58,8 @@ describe("Markdown component", () => {
 
 			// Check structure
 			assert.ok(plainLines.some((line) => line.includes("- Item 1")));
-			assert.ok(plainLines.some((line) => line.includes("  - Nested 1.1")));
-			assert.ok(plainLines.some((line) => line.includes("  - Nested 1.2")));
+			assert.ok(plainLines.some((line) => line.includes("    - Nested 1.1")));
+			assert.ok(plainLines.some((line) => line.includes("    - Nested 1.2")));
 			assert.ok(plainLines.some((line) => line.includes("- Item 2")));
 		});
 
@@ -75,9 +79,9 @@ describe("Markdown component", () => {
 
 			// Check proper indentation
 			assert.ok(plainLines.some((line) => line.includes("- Level 1")));
-			assert.ok(plainLines.some((line) => line.includes("  - Level 2")));
-			assert.ok(plainLines.some((line) => line.includes("    - Level 3")));
-			assert.ok(plainLines.some((line) => line.includes("      - Level 4")));
+			assert.ok(plainLines.some((line) => line.includes("    - Level 2")));
+			assert.ok(plainLines.some((line) => line.includes("        - Level 3")));
+			assert.ok(plainLines.some((line) => line.includes("            - Level 4")));
 		});
 
 		it("should render ordered nested list", () => {
@@ -95,8 +99,8 @@ describe("Markdown component", () => {
 			const plainLines = lines.map((line) => line.replace(/\x1b\[[0-9;]*m/g, ""));
 
 			assert.ok(plainLines.some((line) => line.includes("1. First")));
-			assert.ok(plainLines.some((line) => line.includes("  1. Nested first")));
-			assert.ok(plainLines.some((line) => line.includes("  2. Nested second")));
+			assert.ok(plainLines.some((line) => line.includes("    1. Nested first")));
+			assert.ok(plainLines.some((line) => line.includes("    2. Nested second")));
 			assert.ok(plainLines.some((line) => line.includes("2. Second")));
 		});
 
@@ -116,7 +120,7 @@ describe("Markdown component", () => {
 			const plainLines = lines.map((line) => line.replace(/\x1b\[[0-9;]*m/g, ""));
 
 			assert.ok(plainLines.some((line) => line.includes("1. Ordered item")));
-			assert.ok(plainLines.some((line) => line.includes("  - Unordered nested")));
+			assert.ok(plainLines.some((line) => line.includes("    - Unordered nested")));
 			assert.ok(plainLines.some((line) => line.includes("2. Second ordered")));
 		});
 
@@ -155,6 +159,67 @@ describe("Markdown component", () => {
 			assert.ok(numberedLines[0].startsWith("1."), `First item should be "1.", got: ${numberedLines[0]}`);
 			assert.ok(numberedLines[1].startsWith("2."), `Second item should be "2.", got: ${numberedLines[1]}`);
 			assert.ok(numberedLines[2].startsWith("3."), `Third item should be "3.", got: ${numberedLines[2]}`);
+		});
+
+		it("should indent wrapped unordered list lines", () => {
+			const markdown = new Markdown("- alpha beta gamma delta epsilon", 0, 0, defaultMarkdownTheme);
+
+			const lines = markdown.render(20).map((line) => stripAnsi(line).trimEnd());
+
+			assert.deepStrictEqual(lines, ["- alpha beta gamma", "  delta epsilon"]);
+		});
+
+		it("should indent wrapped ordered list lines", () => {
+			const markdown = new Markdown("1. alpha beta gamma delta epsilon", 0, 0, defaultMarkdownTheme);
+
+			const lines = markdown.render(20).map((line) => stripAnsi(line).trimEnd());
+
+			assert.deepStrictEqual(lines, ["1. alpha beta gamma", "   delta epsilon"]);
+		});
+
+		it("should indent wrapped ordered list lines with multi-digit markers", () => {
+			const markdown = new Markdown("10. alpha beta gamma delta epsilon", 0, 0, defaultMarkdownTheme);
+
+			const lines = markdown.render(21).map((line) => stripAnsi(line).trimEnd());
+
+			assert.deepStrictEqual(lines, ["10. alpha beta gamma", "    delta epsilon"]);
+		});
+
+		it("should indent wrapped nested list lines", () => {
+			const markdown = new Markdown(`- parent\n  - alpha beta gamma delta epsilon`, 0, 0, defaultMarkdownTheme);
+
+			const lines = markdown.render(24).map((line) => stripAnsi(line).trimEnd());
+
+			assert.deepStrictEqual(lines, ["- parent", "    - alpha beta gamma", "      delta epsilon"]);
+		});
+
+		it("should indent wrapped nested list lines under ordered parents", () => {
+			const markdown = new Markdown(`1. parent\n   - alpha beta gamma delta epsilon`, 0, 0, defaultMarkdownTheme);
+
+			const lines = markdown.render(24).map((line) => stripAnsi(line).trimEnd());
+
+			assert.deepStrictEqual(lines, ["1. parent", "    - alpha beta gamma", "      delta epsilon"]);
+		});
+
+		it("should render and wrap blockquotes inside list items", () => {
+			const markdown = new Markdown("- > alpha beta gamma delta epsilon zeta", 0, 0, defaultMarkdownTheme);
+
+			const lines = markdown.render(24).map((line) => stripAnsi(line).trimEnd());
+
+			assert.deepStrictEqual(lines, ["- │ alpha beta gamma", "  │ delta epsilon zeta"]);
+		});
+
+		it("should render and wrap code blocks inside list items", () => {
+			const markdown = new Markdown(
+				"- ```ts\n  alpha beta gamma delta epsilon zeta\n  ```",
+				0,
+				0,
+				defaultMarkdownTheme,
+			);
+
+			const lines = markdown.render(24).map((line) => stripAnsi(line).trimEnd());
+
+			assert.deepStrictEqual(lines, ["- ```ts", "    alpha beta gamma", "  delta epsilon zeta", "  ```"]);
 		});
 	});
 
@@ -507,7 +572,7 @@ describe("Markdown component", () => {
 			assert.ok(plainLines.some((line) => line.includes("Test Document")));
 			// Check list
 			assert.ok(plainLines.some((line) => line.includes("- Item 1")));
-			assert.ok(plainLines.some((line) => line.includes("  - Nested item")));
+			assert.ok(plainLines.some((line) => line.includes("    - Nested item")));
 			// Check table
 			assert.ok(plainLines.some((line) => line.includes("Col1")));
 			assert.ok(plainLines.some((line) => line.includes("│")));
