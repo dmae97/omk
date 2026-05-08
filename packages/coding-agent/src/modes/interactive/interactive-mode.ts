@@ -33,6 +33,8 @@ import {
 	type Component,
 	Container,
 	fuzzyFilter,
+	getCapabilities,
+	hyperlink,
 	Loader,
 	type LoaderIndicatorOptions,
 	Markdown,
@@ -3515,11 +3517,11 @@ export class InteractiveMode {
 	showNewVersionNotification(newVersion: string): void {
 		const action = theme.fg("accent", `${APP_NAME} update`);
 		const updateInstruction = theme.fg("muted", `New version ${newVersion} is available. Run `) + action;
-		const changelogUrl = theme.fg(
-			"accent",
-			"https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/CHANGELOG.md",
-		);
-		const changelogLine = theme.fg("muted", "Changelog: ") + changelogUrl;
+		const changelogUrl = "https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/CHANGELOG.md";
+		const changelogLink = getCapabilities().hyperlinks
+			? hyperlink(theme.fg("accent", "open changelog"), changelogUrl)
+			: theme.fg("accent", changelogUrl);
+		const changelogLine = theme.fg("muted", "Changelog: ") + changelogLink;
 
 		this.chatContainer.addChild(new Spacer(1));
 		this.chatContainer.addChild(new DynamicBorder((text) => theme.fg("warning", text)));
