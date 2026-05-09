@@ -1,7 +1,7 @@
 # OMK Command Maturity Matrix
 
 Last updated: 2026-05-09
-Current public version: v1.1.8
+Current public version: v1.1.9
 
 | Level | Meaning |
 |-------|---------|

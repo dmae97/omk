@@ -1,6 +1,6 @@
 {
   "name": "@oh-my-kimi/cli",
-  "version": "1.1.8",
+  "version": "1.1.9",
   "description": "Multi-agent orchestration harness for the Kimi Code CLI. Parallel coding teams, live quality gates, DESIGN.md-aware UI, and zero-config safety hooks on top of Kimi K2.6.",
   "type": "module",
   "bin": {

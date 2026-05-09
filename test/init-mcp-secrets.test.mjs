@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const INIT_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "commands", "init.js")).href;
@@ -22,6 +22,19 @@ function toWslUncPath(absPath, distro = "Ubuntu-24.04") {
 function assertExecutableModeIfSupported(fileStat, message) {
   if (!POSIX_EXECUTABLE_BITS_SUPPORTED) return;
   assert.ok((fileStat.mode & 0o111) !== 0, message);
+}
+
+
+async function writeOmkShim(binDir) {
+  await mkdir(binDir, { recursive: true });
+  if (process.platform === "win32") {
+    const cmdPath = join(binDir, "omk.cmd");
+    await writeFile(cmdPath, `@echo off\r\n"${process.execPath}" "${CLI}" %*\r\n`, "utf-8");
+    return;
+  }
+  const shimPath = join(binDir, "omk");
+  await writeFile(shimPath, `#!/bin/sh\nexec "${process.execPath}" "${CLI}" "$@"\n`, "utf-8");
+  await chmod(shimPath, 0o755);
 }
 
 function runInit(projectRoot, homeRoot, options = {}) {
@@ -612,11 +625,16 @@ test("init local-user mode uses WSL UNC ~/.kimi/mcp.json with omk-project at run
     assert.ok(projectMcp.mcpServers["omk-project"]);
     assert.equal(projectMcp.mcpServers["private-global"], undefined);
 
+    const shimBin = join(projectRoot, "bin");
+    await writeOmkShim(shimBin);
+
     const doctor = spawnSync(process.execPath, [CLI, "mcp", "doctor"], {
       cwd: projectRoot,
       encoding: "utf-8",
       env: {
         ...process.env,
+        PATH: `${shimBin}${delimiter}${process.env.PATH ?? ""}`,
+        Path: `${shimBin}${delimiter}${process.env.Path ?? process.env.PATH ?? ""}`,
         HOME: doctorHome,
         OMK_ORIGINAL_HOME: uncMcpPath,
         OMK_PROJECT_ROOT: projectRoot,

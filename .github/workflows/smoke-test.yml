@@ -44,6 +44,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts
+      - run: npm rebuild
       - run: npm run yaml:check
       - run: npm run build:clean
       - run: npm test

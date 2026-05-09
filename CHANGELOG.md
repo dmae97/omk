@@ -1,5 +1,12 @@
 # Changelog
 
+
+## v1.1.9 — CI smoke parity hardening (2026-05-09)
+
+- Fixed smoke workflow parity by rebuilding native npm dependencies after `npm ci --ignore-scripts` before test execution.
+- Hardened Windows MCP doctor command discovery for absolute executable paths and source-tree `omk` shim tests.
+- Stabilized Windows Rust safety harness tests by allowing first-run Cargo compilation to complete.
+
 ## v1.1.8 — Release smoke hardening (2026-05-09)
 
 ### Fixed

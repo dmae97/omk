@@ -30,7 +30,7 @@ test("native safety loader computes platform-arch keys and binary names", () => 
   assert.equal(getNativePlatformArchKey("win32", "x64"), "win32-x64");
   assert.equal(getOmkSafetyBinaryName("linux"), "omk-safety");
   assert.equal(getOmkSafetyBinaryName("win32"), "omk-safety.exe");
-  assert.match(getBundledOmkSafetyBinaryPath("/pkg", "linux", "x64"), /\/pkg\/dist\/native\/linux-x64\/omk-safety$/);
+  assert.match(getBundledOmkSafetyBinaryPath("/pkg", "linux", "x64").replace(/\\/g, "/"), /\/pkg\/dist\/native\/linux-x64\/omk-safety$/);
 });
 
 test("native safety loader env override wins over bundled and target", async () => {

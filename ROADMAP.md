@@ -1,9 +1,9 @@
 # Roadmap
 
-Current public version: v1.1.8
+Current public version: v1.1.9
 Last updated: 2026-05-09
 
-## v1.1.8 reality
+## v1.1.9 reality
 
 Provider routing and graph viewing are no longer purely future work:
 
@@ -18,7 +18,7 @@ Provider routing and graph viewing are no longer purely future work:
 ### P0: release and contract gates
 
 - Done: YAML validation now runs in local `verify` plus CI/smoke workflows.
-- Done: package dry-pack, package audit, tarball smoke, native safety build, and release matrix gates were re-verified against v1.1.8 artifacts.
+- Done: package dry-pack, package audit, tarball smoke, native safety build, and release matrix gates were re-verified against v1.1.9 artifacts.
 - Done: provider/deepseek and screenshot JSON command contracts gained hermetic regression tests.
 - Remaining: lock broader provider fallback metadata with tests for rate limit, timeout, and Kimi fallback variants.
 - Remaining: define minimum machine-readable CLI envelopes for the rest of the automation-critical commands.
@@ -61,4 +61,4 @@ Provider routing and graph viewing are no longer purely future work:
 | v0.4 | Google DESIGN.md integration, Stitch skills installer, screenshot UI review, Spec Kit planning + DAG execution, agent registry, project index, run summary |
 | v0.5 | MCP project server, plugin pack, CI agent mode |
 | v1.1.6 | provider/deepseek commands, provider policy flags, graph view, goal lifecycle, expanded run history and update JSON |
-| v1.1.8 | chat harness manifest, capability DAG lanes, Rust native safety loader, Windows clipboard screenshot bridge, release native matrix |
+| v1.1.9 | chat harness manifest, capability DAG lanes, Rust native safety loader, Windows clipboard screenshot bridge, release native matrix |

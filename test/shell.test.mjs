@@ -13,6 +13,14 @@ test("which resolves node on PATH", async () => {
   assert.match(result.stdout, /node/i);
 });
 
+
+test("checkCommand and which accept absolute executable paths", async () => {
+  assert.equal(await checkCommand(process.execPath), true);
+  const result = await which(process.execPath);
+  assert.equal(result.failed, false, result.stderr || result.stdout);
+  assert.equal(result.stdout, process.execPath);
+});
+
 test("checkCommand returns false for missing commands", async () => {
   assert.equal(await checkCommand("omk-command-that-should-not-exist"), false);
 });

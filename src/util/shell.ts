@@ -1,7 +1,7 @@
 import { execa, type ExecaError } from "execa";
-import { createWriteStream } from "fs";
-import { mkdir } from "fs/promises";
-import { dirname } from "path";
+import { constants, createWriteStream } from "fs";
+import { access, mkdir } from "fs/promises";
+import { dirname, isAbsolute } from "path";
 import { CappedOutputBuffer } from "./output-buffer.js";
 import { getOmkResourceSettings } from "./resource-profile.js";
 
@@ -169,7 +169,34 @@ export async function runShellStreaming(
   }
 }
 
+function okShellResult(stdout: string): ShellResult {
+  return { stdout, stderr: "", exitCode: 0, failed: false };
+}
+
+function failedShellResult(stderr: string): ShellResult {
+  return { stdout: "", stderr, exitCode: 1, failed: true };
+}
+
+function includesPathSeparator(command: string): boolean {
+  return command.includes("/") || command.includes("\\");
+}
+
+async function commandPathExists(command: string): Promise<boolean> {
+  try {
+    await access(command, process.platform === "win32" ? constants.F_OK : constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function which(command: string): Promise<ShellResult> {
+  if (isAbsolute(command) || includesPathSeparator(command)) {
+    return await commandPathExists(command)
+      ? okShellResult(command)
+      : failedShellResult(`command not found: ${command}`);
+  }
+
   const isWindows = process.platform === "win32";
   return isWindows
     ? runShell("where.exe", [command], { timeout: 5000 })
@@ -178,6 +205,9 @@ export async function which(command: string): Promise<ShellResult> {
 
 export async function checkCommand(command: string): Promise<boolean> {
   try {
+    if (isAbsolute(command) || includesPathSeparator(command)) {
+      return await commandPathExists(command);
+    }
     const isWindows = process.platform === "win32";
     const result = isWindows
       ? await runShell("where.exe", [command], { timeout: 5000 })

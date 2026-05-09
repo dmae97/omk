@@ -11,7 +11,7 @@ function runSafety(args) {
   return spawnSync("cargo", ["run", "-q", "-p", "omk-safety", "--", ...args], {
     cwd: process.cwd(),
     encoding: "utf-8",
-    timeout: 30000,
+    timeout: 120000,
   });
 }
 

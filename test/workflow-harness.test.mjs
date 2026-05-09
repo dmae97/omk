@@ -38,6 +38,7 @@ test("release workflow runs YAML, package audit, and install smoke gates", () =>
 test("smoke workflow tests before packaging and audits the produced tarball", () => {
   const workflow = read(".github/workflows/smoke-test.yml");
   assert.match(workflow, /npm run yaml:check/);
+  assert.match(workflow, /npm rebuild/);
   assert.match(workflow, /npm run build:clean/);
   assert.match(workflow, /npm test/);
   assert.match(workflow, /native:/);
