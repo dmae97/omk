@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { basename, delimiter, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const INIT_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "commands", "init.js")).href;
@@ -644,7 +644,7 @@ test("init local-user mode uses WSL UNC ~/.kimi/mcp.json with omk-project at run
     });
     assert.equal(doctor.status, 0, doctor.stderr || doctor.stdout);
     assert.match(doctor.stdout, /Active MCP scope: all/);
-    assert.match(doctor.stdout, new RegExp(escapeRegex(join(homeRoot, ".kimi", "mcp.json"))));
+    assert.match(doctor.stdout, new RegExp(`${escapeRegex(basename(homeRoot))}.*\\.kimi[\\\\/]mcp\\.json`));
     assert.match(doctor.stdout, /Server: private-global/);
     assert.match(doctor.stdout, /Server: omk-project/);
 
