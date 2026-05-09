@@ -2,9 +2,14 @@ import type { ImageContent, Model, TextContent } from "@earendil-works/pi-ai";
 import type { AgentEvent, AgentMessage, AgentTool, ThinkingLevel } from "../index.js";
 import type { Session } from "./session/session.js";
 
-/** Model-visible skill loaded from a `SKILL.md` file or provided by an application. */
+/**
+ * Skill loaded from a `SKILL.md` file or provided by an application.
+ *
+ * `name`, `description`, and `filePath` are inserted into the system prompt in an XML-formatted block as suggested by agentskills.io.
+ * Use {@link formatSkillsForSystemPrompt} to generate the spec-compatible system prompt block.
+ */
 export interface Skill {
-	/** Skill command name. */
+	/** Stable skill name used for lookup and model-visible listings. */
 	name: string;
 	/** Short model-visible description of when to use the skill. */
 	description: string;
@@ -16,19 +21,19 @@ export interface Skill {
 	disableModelInvocation?: boolean;
 }
 
-/** Prompt template that can expand slash-command text before a prompt is sent. */
+/** Prompt template that can be formatted into a prompt for explicit invocation. */
 export interface PromptTemplate {
-	/** Slash-command name without the leading `/`. */
+	/** Stable template name used for lookup or application command routing. */
 	name: string;
 	/** Optional description for command lists or autocomplete. */
 	description?: string;
-	/** Template content. Argument placeholders are expanded by `formatPromptTemplateInvocation`. */
+	/** Template content. Argument placeholders are formatted by `formatPromptTemplateInvocation`. */
 	content: string;
 }
 
-/** Resources made available to harness prompt expansion and system-prompt callbacks. */
+/** Resources made available to explicit invocation methods and system-prompt callbacks. */
 export interface AgentHarnessResources {
-	/** Prompt templates used to expand `/template args` input. */
+	/** Prompt templates available for explicit invocation. */
 	promptTemplates?: PromptTemplate[];
 	/** Skills available to the model and explicit skill invocation. */
 	skills?: Skill[];
