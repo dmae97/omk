@@ -53,6 +53,8 @@ jobs:
           pattern: native-*
           path: dist/native
           merge-multiple: true
+      - name: Normalize native safety artifact modes
+        run: npm run native:normalize
       - run: npm run audit:package
       - run: npm pack --ignore-scripts --json
       - name: Upload tarball

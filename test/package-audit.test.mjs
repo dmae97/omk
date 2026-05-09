@@ -16,6 +16,7 @@ import {
   validateMarkdownLinks,
   validateSizeBudgets,
   validateNativeSafety,
+  modeFromTarPermissions,
   nativePlatformArch,
   nativeBinaryName,
   expectedNativeSafetyPath,
@@ -50,7 +51,7 @@ describe("resolveTarballArg", () => {
   it("resolves a single literal glob without shell expansion", () => {
     const root = mkdtempSync(join(tmpdir(), "omk-tarball-glob-"));
     try {
-      const tarball = join(root, "oh-my-kimi-cli-1.1.7.tgz");
+      const tarball = join(root, "oh-my-kimi-cli-1.1.8.tgz");
       writeFileSync(tarball, "fixture", "utf-8");
       assert.equal(resolveTarballArg("oh-my-kimi-cli-*.tgz", root), tarball);
     } finally {
@@ -107,6 +108,11 @@ describe("readTarballMetadata", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it("parses executable tar permission strings", () => {
+    assert.equal(modeFromTarPermissions("-rwxr-xr-x"), 0o755);
+    assert.equal(modeFromTarPermissions("-rw-r--r--"), 0o644);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -128,8 +134,8 @@ function makePack(files = [], overrides = {}) {
   ];
 }
 
-function makeFile(path, size = 100) {
-  return { path, size };
+function makeFile(path, size = 100, mode = 0o644) {
+  return { path, size, mode };
 }
 
 // ---------------------------------------------------------------------------
@@ -299,9 +305,15 @@ describe("validateNativeSafety", () => {
   });
 
   it("passes when current platform native binary is packed", () => {
-    const files = [makeFile("dist/native/linux-x64/omk-safety")];
+    const files = [makeFile("dist/native/linux-x64/omk-safety", 100, 0o755)];
     const result = validateNativeSafety(files, "linux", "x64");
     assert.strictEqual(result.errors.length, 0);
+  });
+
+  it("fails when non-Windows native binary is not executable", () => {
+    const files = [makeFile("dist/native/linux-x64/omk-safety", 100, 0o644)];
+    const result = validateNativeSafety(files, "linux", "x64");
+    assert.ok(result.errors.some((e) => e.includes("not executable")));
   });
 
   it("fails when current platform native binary is missing", () => {
@@ -312,8 +324,8 @@ describe("validateNativeSafety", () => {
 
   it("rejects unexpected native layout entries", () => {
     const files = [
-      makeFile("dist/native/linux-x64/omk-safety"),
-      makeFile("dist/native/omk-safety"),
+      makeFile("dist/native/linux-x64/omk-safety", 100, 0o755),
+      makeFile("dist/native/omk-safety", 100, 0o755),
     ];
     const result = validateNativeSafety(files, "linux", "x64");
     assert.ok(result.errors.some((e) => e.includes("Unexpected native safety layout")));

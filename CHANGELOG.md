@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.1.8 — Release smoke hardening (2026-05-09)
+
+### Fixed
+- Normalized downloaded Rust native safety artifact modes before release packing so Linux/macOS install smoke runs execute bundled `omk-safety` correctly.
+- Added package audit coverage for non-Windows native executable bits to prevent artifact-permission regressions.
+
+### Release
+- Supersedes the failed v1.1.7 tag run; npm publication should use v1.1.8 to avoid rewriting the remote tag.
+
 ## Unreleased
 
 _No unreleased changes._

@@ -327,10 +327,15 @@ export function validateNativeSafety(files, platform = process.platform, arch = 
     errors.push(`Native safety binary missing for current platform: ${expected}. Run npm run native:build before packing.`);
   }
 
-  const nativeEntries = [...pathSet].filter((p) => p.startsWith("dist/native/"));
-  for (const entry of nativeEntries) {
+  const nativeEntries = files.filter((f) => toPosix(f.path || "").startsWith("dist/native/"));
+  for (const file of nativeEntries) {
+    const entry = toPosix(file.path || "");
     if (!/^dist\/native\/[^/]+-[^/]+\/omk-safety(?:\.exe)?$/.test(entry)) {
       errors.push(`Unexpected native safety layout: ${entry}`);
+      continue;
+    }
+    if (!entry.endsWith(".exe") && typeof file.mode === "number" && (file.mode & 0o111) === 0) {
+      errors.push(`Native safety binary not executable: ${entry}. Run npm run native:normalize before packing downloaded artifacts.`);
     }
   }
 
@@ -570,6 +575,20 @@ export function resolveTarballArg(pattern, cwd = process.cwd()) {
   return join(dir, files[0]);
 }
 
+
+export function modeFromTarPermissions(permissions) {
+  if (!/^[bcdlps-][rwxstST-]{9}$/.test(permissions)) return 0o644;
+  let mode = 0;
+  const triplets = [permissions.slice(1, 4), permissions.slice(4, 7), permissions.slice(7, 10)];
+  for (const triplet of triplets) {
+    mode <<= 3;
+    if (triplet[0] === "r") mode |= 4;
+    if (triplet[1] === "w") mode |= 2;
+    if (["x", "s", "t"].includes(triplet[2])) mode |= 1;
+  }
+  return mode;
+}
+
 export function readTarballMetadata(tarballPath) {
   // Extract package.json from tarball without shell interpolation.
   const pkgJson = execFileSync("tar", ["-xzf", tarballPath, "-O", "package/package.json"], {
@@ -578,21 +597,22 @@ export function readTarballMetadata(tarballPath) {
   });
   const pkg = JSON.parse(pkgJson);
 
-  // List all entries without shell interpolation.
-  const listOutput = execFileSync("tar", ["-tzf", tarballPath], {
+  // List all entries with permissions without shell interpolation.
+  const listOutput = execFileSync("tar", ["-tvzf", tarballPath], {
     encoding: "utf8",
     maxBuffer: 10 * 1024 * 1024,
   });
-  const entries = listOutput
+  const files = listOutput
     .split("\n")
     .map((l) => l.trim())
-    .filter((l) => l && !l.endsWith("/"));
-
-  const files = entries
-    .filter((e) => e.startsWith("package/"))
-    .map((e) => {
-      const path = e.slice("package/".length);
-      return { path, size: 0, mode: 420 };
+    .filter((l) => l)
+    .flatMap((line) => {
+      const pathIndex = line.indexOf(" package/");
+      if (pathIndex === -1) return [];
+      const pathPart = line.slice(pathIndex + 1).replace(/ -> .+$/, "");
+      if (!pathPart.startsWith("package/") || pathPart.endsWith("/")) return [];
+      const permissions = line.split(/\s+/, 1)[0] || "";
+      return [{ path: pathPart.slice("package/".length), size: 0, mode: modeFromTarPermissions(permissions) }];
     });
 
   return [{

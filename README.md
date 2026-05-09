@@ -33,7 +33,7 @@
   <code># omk demo  # Coming soon — try the examples below</code>
 </p>
 
-> ✅ <strong>Stable Release</strong> — v1.1.7 is ready for daily use. OMK now adds a manifest-backed chat agent harness, bounded capability workers, Rust native safety loader, Windows clipboard capture, and a CI-backed release matrix.
+> ✅ <strong>Stable Release</strong> — v1.1.8 is ready for daily use. OMK now adds a manifest-backed chat agent harness, bounded capability workers, Rust native safety loader, Windows clipboard capture, and a CI-backed release matrix.
 
 
 <p>
@@ -221,9 +221,9 @@ Each example includes:
 
 ## GitHub Release Snapshot
 
-> **Current GitHub-ready version:** `1.1.7`
+> **Current GitHub-ready version:** `1.1.8`
 
-### What's New in v1.1.7
+### What's New in v1.1.8
 
 | **Area** | **GitHub-visible update** | **Why it matters** |
 |----------|---------------------------|--------------------|
@@ -368,7 +368,7 @@ kimi, kimi-cli, kimi-code, kimi-k2, ai-agent, coding-agent, multi-agent, agentic
 
 <h2 id="korean">Korean</h2>
 
-> ✅ <strong>Stable Release v1.1.7</strong> — Kimi Code CLI를 <strong>worktree 기반 코딩 팀</strong>으로 변환하세요. DESIGN.md 기반 UI 생성, AGENTS.md 호환성, 실시간 품질 게이트, 병렬 HUD를 제공합니다.
+> ✅ <strong>Stable Release v1.1.8</strong> — Kimi Code CLI를 <strong>worktree 기반 코딩 팀</strong>으로 변환하세요. DESIGN.md 기반 UI 생성, AGENTS.md 호환성, 실시간 품질 게이트, 병렬 HUD를 제공합니다.
 
 ### Features
 
@@ -389,7 +389,7 @@ kimi, kimi-cli, kimi-code, kimi-k2, ai-agent, coding-agent, multi-agent, agentic
 | Approval Policy | 기본값은 `approval_policy = "auto"` (안전 모드); 필요시 `yolo`로 전환 가능 |
 | Safety Hooks | yolo mode에서도 파괴적 명령어 및 비밀 유출 방지 기본 제공 |
 
-### 🆕 v1.1.7 Highlights (Stable)
+### 🆕 v1.1.8 Highlights (Stable)
 
 - **Chat agent harness** — `omk chat` creates a run-scoped manifest/contract/agent file so MCP, skills, hooks, workers, and gates are bounded and visible
 - **Rust native safety** — `dist/native/<platform-arch>/omk-safety` loader with TypeScript fallback protects run IDs and artifact paths across platforms
@@ -677,7 +677,7 @@ Open Design 연동은 upstream [nexu-io/Open Design](https://github.com/nexu-io/
 
 <h2 id="english">English</h2>
 
-> ✅ <strong>Stable Release v1.1.7</strong> — Turn Kimi Code CLI into a <strong>meme-tier multi-agent coding team</strong>. This is a Kimi-native wrapper — not a generic AI tool. DESIGN.md-aware UI, live quality gates, parallel HUD, AGENTS.md compatible.
+> ✅ <strong>Stable Release v1.1.8</strong> — Turn Kimi Code CLI into a <strong>meme-tier multi-agent coding team</strong>. This is a Kimi-native wrapper — not a generic AI tool. DESIGN.md-aware UI, live quality gates, parallel HUD, AGENTS.md compatible.
 
 ### Features
 
@@ -917,7 +917,7 @@ Open Design integration uses [nexu-io/Open Design](https://github.com/nexu-io/op
 
 <h2 id="chinese">Chinese</h2>
 
-> ✅ <strong>Stable Release v1.1.7</strong> — 将 Kimi Code CLI 转变为一个<strong>基于 worktree 的编码团队</strong>。支持 DESIGN.md 感知 UI 生成、AGENTS.md 兼容性、实时质量门禁以及并行 HUD。
+> ✅ <strong>Stable Release v1.1.8</strong> — 将 Kimi Code CLI 转变为一个<strong>基于 worktree 的编码团队</strong>。支持 DESIGN.md 感知 UI 生成、AGENTS.md 兼容性、实时质量门禁以及并行 HUD。
 
 ### Features
 
@@ -935,7 +935,7 @@ Open Design integration uses [nexu-io/Open Design](https://github.com/nexu-io/op
 | 并行 DAG | `omk parallel <goal>` (alpha) 执行 coordinator → worker 扇出 → reviewer，带实时 UI 与 ETA 追踪 |
 | 安全钩子 | 默认防止破坏性命令与密钥泄漏 |
 
-### 🆕 v1.1.7 更新亮点 (Stable)
+### 🆕 v1.1.8 更新亮点 (Stable)
 
 - **Chat agent harness** — `omk chat` 生成运行级 manifest/contract/agent 文件，使 MCP、skills、hooks、workers 和 gates 可见且有边界
 - **Rust native safety** — `dist/native/<platform-arch>/omk-safety` 加载器带 TypeScript fallback，跨平台保护 run ID 与 artifact path
@@ -1165,7 +1165,7 @@ Open Design 集成使用上游 [nexu-io/Open Design](https://github.com/nexu-io/
 
 <h2 id="japanese">Japanese</h2>
 
-> ✅ <strong>Stable Release v1.1.7</strong> — Kimi Code CLI を <strong>worktree ベースのコーディングチーム</strong>に変換します。DESIGN.md 対応の UI 生成、AGENTS.md 互換性、ライブ品質ゲート、並列 HUD を提供します。
+> ✅ <strong>Stable Release v1.1.8</strong> — Kimi Code CLI を <strong>worktree ベースのコーディングチーム</strong>に変換します。DESIGN.md 対応の UI 生成、AGENTS.md 互換性、ライブ品質ゲート、並列 HUD を提供します。
 
 ### Features
 
@@ -1183,7 +1183,7 @@ Open Design 集成使用上游 [nexu-io/Open Design](https://github.com/nexu-io/
 | 並列 DAG | `omk parallel <goal>` (alpha) は coordinator → worker ファンアウト → reviewer を実行。ライブ UI と ETA 追跡付き |
 | 安全フック | 破壊的コマンドとシークレット漏洩をデフォルトで防止 |
 
-### 🆕 v1.1.7 の主な更新 (Stable)
+### 🆕 v1.1.8 の主な更新 (Stable)
 
 - **Chat agent harness** — `omk chat` が run-scoped manifest/contract/agent ファイルを生成し、MCP・skills・hooks・workers・gates を境界付きで可視化
 - **Rust native safety** — `dist/native/<platform-arch>/omk-safety` ローダーと TypeScript fallback で run ID / artifact path を保護
