@@ -18,10 +18,21 @@ describe("harness factories", () => {
 		const session = createSession(new InMemorySessionStorage());
 		const env = new NodeExecutionEnv({ cwd: process.cwd() });
 		const initialModel = getModel("anthropic", "claude-sonnet-4-5");
-		const harness = createAgentHarness({ env, session, model: initialModel, systemPrompt: "You are helpful." });
+		const harness = createAgentHarness({
+			env,
+			session,
+			model: initialModel,
+			systemPrompt: "You are helpful.",
+			steeringMode: "all",
+			followUpMode: "all",
+		});
 		expect(harness.env).toBe(env);
-		expect(harness.conversation.session).toBe(session);
-		expect(harness.conversation.model).toBe(initialModel);
 		expect(harness.agent.state.model).toBe(initialModel);
+		expect(harness.steeringMode).toBe("all");
+		expect(harness.followUpMode).toBe("all");
+		harness.steeringMode = "one-at-a-time";
+		harness.followUpMode = "one-at-a-time";
+		expect(harness.agent.steeringMode).toBe("one-at-a-time");
+		expect(harness.agent.followUpMode).toBe("one-at-a-time");
 	});
 });

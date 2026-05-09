@@ -1,4 +1,5 @@
 import type { ImageContent, Model, TextContent } from "@earendil-works/pi-ai";
+import type { QueueMode } from "../agent.js";
 import type { AgentEvent, AgentMessage, AgentTool, ThinkingLevel } from "../index.js";
 import type { Session } from "./session/session.js";
 
@@ -286,43 +287,22 @@ export interface JsonlSessionListOptions {
 export interface JsonlSessionRepoApi
 	extends SessionRepo<JsonlSessionMetadata, JsonlSessionCreateOptions, JsonlSessionListOptions> {}
 
-export interface AgentHarnessPendingMutations {
-	appendMessages: AgentMessage[];
-	model?: Model<any>;
-	thinkingLevel?: ThinkingLevel;
-	activeToolNames?: string[];
-}
+export type AgentHarnessPhase = "idle" | "turn" | "compaction" | "branch_summary" | "retry";
 
-export interface AgentHarnessConversationState {
-	session: Session;
+export type PendingSessionWrite = SessionTreeEntry extends infer TEntry
+	? TEntry extends SessionTreeEntry
+		? Omit<TEntry, "id" | "parentId" | "timestamp">
+		: never
+	: never;
+
+export interface AgentHarnessTurnState {
+	messages: AgentMessage[];
+	resources: AgentHarnessResources;
+	systemPrompt: string;
 	model: Model<any>;
 	thinkingLevel: ThinkingLevel;
-	activeToolNames: string[];
-	nextTurnQueue: AgentMessage[];
-}
-
-export interface AgentHarnessOperationState {
-	idle: boolean;
-	liveOperationId?: string;
-	abortRequested: boolean;
-	steerQueue: AgentMessage[];
-	followUpQueue: AgentMessage[];
-	pendingMutations: AgentHarnessPendingMutations;
-}
-
-export interface SavePointSnapshot {
-	messages: AgentMessage[];
-	model: Model<any> | undefined;
-	thinkingLevel: ThinkingLevel;
-	activeToolNames: string[];
-	systemPrompt: string;
-}
-
-export interface AgentHarnessContext {
-	env: ExecutionEnv;
-	conversation: AgentHarnessConversationState;
-	operation: AgentHarnessOperationState;
-	abortSignal?: AbortSignal;
+	tools: AgentTool[];
+	activeTools: AgentTool[];
 }
 
 export interface QueueUpdateEvent {
@@ -334,7 +314,6 @@ export interface QueueUpdateEvent {
 
 export interface SavePointEvent {
 	type: "save_point";
-	liveOperationId: string;
 	hadPendingMutations: boolean;
 }
 
@@ -586,9 +565,7 @@ export interface AgentHarnessOptions {
 	env: ExecutionEnv;
 	session: Session;
 	tools?: AgentTool[];
-	resources?:
-		| AgentHarnessResources
-		| ((context: AgentHarnessContext) => AgentHarnessResources | Promise<AgentHarnessResources>);
+	resources?: AgentHarnessResources | (() => AgentHarnessResources | Promise<AgentHarnessResources>);
 	systemPrompt?:
 		| string
 		| ((context: {
@@ -599,10 +576,14 @@ export interface AgentHarnessOptions {
 				activeTools: AgentTool[];
 				resources: AgentHarnessResources;
 		  }) => string | Promise<string>);
-	requestAuth?: (model: Model<any>) => Promise<{ apiKey: string; headers?: Record<string, string> } | undefined>;
+	getApiKeyAndHeaders?: (
+		model: Model<any>,
+	) => Promise<{ apiKey: string; headers?: Record<string, string> } | undefined>;
 	model: Model<any>;
 	thinkingLevel?: ThinkingLevel;
 	activeToolNames?: string[];
+	steeringMode?: QueueMode;
+	followUpMode?: QueueMode;
 }
 
 export type { AgentHarness } from "./agent-harness.js";
