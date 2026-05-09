@@ -368,3 +368,9 @@ The v1.1.9 release line includes package audit, smoke-pack checks, Rust native a
 ## Acknowledgements
 
 OMK is part of the broader oh-my agent harness family and is built specifically for Kimi Code users who want stronger execution state, verification, memory, and operator visibility without giving up Kimi as the primary coding authority.
+
+---
+
+## Star history
+
+[![Star History Chart](https://api.star-history.com/svg?repos=dmae97/oh-my-kimi&type=Date)](https://www.star-history.com/#dmae97/oh-my-kimi&Date)
