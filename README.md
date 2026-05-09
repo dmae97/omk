@@ -7,7 +7,7 @@
 <!-- Open Graph -->
 <meta property="og:image" content="https://raw.githubusercontent.com/dmae97/oh-my-kimi/main/readmeasset/kimicat.png" />
 <meta property="og:title" content="oh-my-kimi" />
-<meta property="og:description" content="Verified agent runtime for Kimi Code: DAG execution, evidence gates, local graph memory, and live operator control." />
+<meta property="og:description" content="Verified agent runtime for Kimi Code: DAG execution, evidence gates, graph memory, live HUD/cockpit, and zero-config safety hooks." />
 
 <!-- Twitter -->
 <meta name="twitter:card" content="summary_large_image" />
@@ -17,10 +17,8 @@
 
 <h1>oh-my-kimi</h1>
 
-<p>
-  <strong>Verified agent runtime for Kimi Code.</strong><br/>
-  <sub>Kimi writes. OMK coordinates, verifies, remembers, and guards.</sub>
-</p>
+<p><strong>Verified agent runtime for Kimi Code.</strong></p>
+<p><sub>Kimi writes. OMK coordinates, verifies, remembers, and guards.</sub></p>
 
 <p>
   <a href="https://github.com/dmae97/oh-my-kimi/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/dmae97/oh-my-kimi/ci.yml?branch=main&amp;style=for-the-badge&amp;logo=githubactions&amp;label=CI" alt="GitHub CI" /></a>
@@ -46,9 +44,9 @@
 
 OMK turns Kimi Code CLI into a bounded coding team with isolated worktrees, DAG-based execution, evidence gates before completion, local graph memory, and a live HUD/cockpit for operator control.
 
-It is not a prompt pack.<br/>
-It is not a model buffet.<br/>
-It is a Kimi-native control plane for shipping code with verification.
+- Not a prompt pack.
+- Not a model buffet.
+- A Kimi-native control plane for shipping code with verification.
 
 ```bash
 npm install -g @oh-my-kimi/cli
