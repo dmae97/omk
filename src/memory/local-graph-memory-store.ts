@@ -122,6 +122,7 @@ export const ONTOLOGY: MemoryOntology = {
     "Session",
     "Memory",
     "MemoryVersion",
+    "Run",
     "Goal",
     "Topic",
     "Decision",
@@ -133,6 +134,7 @@ export const ONTOLOGY: MemoryOntology = {
     "Provider",
     "ProviderRoute",
     "ProviderFallback",
+    "AuditLink",
     "Constraint",
     "Question",
     "Answer",
@@ -141,6 +143,7 @@ export const ONTOLOGY: MemoryOntology = {
   relationTypes: [
     "HAS_SESSION",
     "HAS_MEMORY",
+    "HAS_RUN",
     "WROTE",
     "UPDATES",
     "HAS_GOAL",
@@ -156,6 +159,8 @@ export const ONTOLOGY: MemoryOntology = {
     "ROUTES_TO",
     "FALLS_BACK_TO",
     "HAS_PROVIDER_FALLBACK",
+    "HAS_AUDIT_LINK",
+    "LINKS_TO",
     "HAS_CONSTRAINT",
     "HAS_QUESTION",
     "HAS_ANSWER",
@@ -170,6 +175,7 @@ export const ONTOLOGY: MemoryOntology = {
 };
 
 const GENERATED_TYPES = new Set([
+  "Run",
   "Goal",
   "Topic",
   "Decision",
@@ -181,6 +187,7 @@ const GENERATED_TYPES = new Set([
   "Provider",
   "ProviderRoute",
   "ProviderFallback",
+  "AuditLink",
   "Constraint",
   "Question",
   "Answer",
@@ -194,12 +201,14 @@ const CANONICAL_NODE_TYPES = new Set([
   "Risk",
   "Evidence",
   "Goal",
+  "Run",
   "Task",
   "MCPServer",
   "Skill",
   "Provider",
   "ProviderRoute",
   "ProviderFallback",
+  "AuditLink",
 ]);
 
 export class LocalGraphMemoryStore {
@@ -591,7 +600,7 @@ export class LocalGraphMemoryStore {
       });
 
       const ownerId = concept.parentIndex === undefined ? memoryId : conceptIds[concept.parentIndex] ?? memoryId;
-      const relation = ownerId === memoryId ? concept.relation : "HAS_CONCEPT";
+      const relation = ownerId === memoryId ? concept.relation : nestedRelationForType(concept.type, concept.relation);
       this.upsertEdge(state, ownerId, conceptId, relation, now, { generatedFrom: memoryId });
       this.upsertEdge(state, conceptId, memoryId, "PART_OF", now, { generatedFrom: memoryId });
 
@@ -802,6 +811,9 @@ export function extractConcepts(content: string): ExtractedConcept[] {
 
 function classify(text: string, isBullet: boolean): string {
   const lower = text.toLowerCase();
+  if (/\b(audit link|audit trail|report link|evidence link|검증 링크|감사 링크)\b/i.test(text)) return "AuditLink";
+  if (/\[[^\]]+\]\((?:\.omk\/runs\/|\.omk\/goals\/|[^)]+(?:report|summary|evidence)[^)]*\.md)[^)]*\)/i.test(text)) return "AuditLink";
+  if (/\b(run\s*id|runid|run)\b/i.test(text) && /\b[\w.-]*run[\w.-]*\b|\.omk\/runs\//i.test(text)) return "Run";
   if (/\b(goal|objective|목표|비전|north star)\b/i.test(text)) return "Goal";
   if (/\b(decision|decide|chosen|결정|선택|합의)\b/i.test(text)) return "Decision";
   if (/\b(todo|task|해야|할 일|next|action|implement|구현|작업)\b/i.test(text)) return "Task";
@@ -821,6 +833,8 @@ function relationForType(type: string): string {
   switch (type) {
     case "Goal":
       return "HAS_GOAL";
+    case "Run":
+      return "HAS_RUN";
     case "Topic":
       return "HAS_TOPIC";
     case "Decision":
@@ -839,6 +853,8 @@ function relationForType(type: string): string {
       return "HAS_PROVIDER_ROUTE";
     case "ProviderFallback":
       return "HAS_PROVIDER_FALLBACK";
+    case "AuditLink":
+      return "HAS_AUDIT_LINK";
     case "Constraint":
       return "HAS_CONSTRAINT";
     case "Question":
@@ -852,13 +868,23 @@ function relationForType(type: string): string {
   }
 }
 
+function nestedRelationForType(type: string, relation: string): string {
+  if (["Run", "AuditLink", "ProviderRoute", "ProviderFallback", "Evidence"].includes(type)) {
+    return relation;
+  }
+  return "HAS_CONCEPT";
+}
+
 function isCommandLike(text: string): boolean {
   return /^(\$\s*)?(npm|pnpm|yarn|node|tsx|tsc|git|omk|kimi|python|python3|uv|pytest|ruff|docker|docker-compose|kubectl)\b/.test(text);
 }
 
 function extractFilePaths(text: string): string[] {
-  const matches = text.match(/(?:[A-Za-z0-9_.-]+\/)+(?:[A-Za-z0-9_.-]+)|(?:^|\s)(?:[A-Za-z0-9_.-]+\.(?:ts|tsx|js|mjs|cjs|json|md|toml|yaml|yml|py|sh|mjs))/g) ?? [];
-  return [...new Set(matches.map((match) => match.trim()).filter(Boolean))].slice(0, 10);
+  const markdownLinks = [...text.matchAll(/\]\(([^)]+)\)/g)]
+    .map((match) => match[1].trim())
+    .filter((target) => target && !/^[a-z][a-z0-9+.-]*:/i.test(target));
+  const matches = text.match(/(?:\.?[A-Za-z0-9_.-]+\/)+(?:[A-Za-z0-9_.-]+)|(?:^|\s)(?:[A-Za-z0-9_.-]+\.(?:ts|tsx|js|mjs|cjs|json|md|toml|yaml|yml|py|sh|mjs))/g) ?? [];
+  return [...new Set([...markdownLinks, ...matches.map((match) => match.trim())].filter(Boolean))].slice(0, 10);
 }
 
 function tagsFor(text: string): string[] {
@@ -895,7 +921,7 @@ function truncate(value: string, max: number): string {
 }
 
 function sortRank(type: string): number {
-  const order = ["Project", "Session", "Memory", "Goal", "Topic", "Decision", "Task", "Risk", "Evidence", "Provider", "ProviderRoute", "ProviderFallback", "Constraint", "Command", "File", "Concept"];
+  const order = ["Project", "Session", "Memory", "Goal", "Run", "Topic", "Decision", "Task", "Risk", "Evidence", "Provider", "ProviderRoute", "ProviderFallback", "AuditLink", "Constraint", "Command", "File", "Concept"];
   const index = order.indexOf(type);
   return index === -1 ? order.length : index;
 }

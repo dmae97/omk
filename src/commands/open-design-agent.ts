@@ -1,4 +1,5 @@
-import { resolve } from "path";
+import { readdir, stat } from "fs/promises";
+import { relative, resolve } from "path";
 
 import { injectKimiGlobals, pathExists } from "../util/fs.js";
 import { runShellStreaming } from "../util/shell.js";
@@ -6,6 +7,15 @@ import { cleanupIsolatedKimiHome, prepareIsolatedKimiHome, resolveOriginalHome }
 
 const OPEN_DESIGN_SMOKE_PROMPT = "Reply with only: ok";
 const DEFAULT_TIMEOUT_MS = 20 * 60 * 1000;
+const DEFAULT_ARTIFACT_SETTLE_MS = 5 * 1000;
+const ARTIFACT_SCAN_DEPTH = 3;
+const ARTIFACT_SCAN_IGNORES = new Set([".git", "node_modules", ".next", "dist", "build"]);
+
+export interface OpenDesignGeneratedArtifact {
+  path: string;
+  size: number;
+  modifiedAt: number;
+}
 
 export interface OpenDesignAgentOptions {
   cwd?: string;
@@ -49,6 +59,7 @@ function buildBridgePrompt(prompt: string): string {
   return [
     "You are OMK CLI connected as the local agent inside Open Design.",
     "Follow the repository AGENTS.md and DESIGN.md rules before editing.",
+    "For named visual references, use VoltAgent awesome-design-md through `omk design list`, `omk design search <keyword>`, and `omk design apply <name>`; adapt templates instead of cloning brands.",
     "Keep responses focused on actionable design/code changes and cite files you inspect.",
     "When writing or modifying files, keep diffs small and verify where possible.",
     "",
@@ -56,9 +67,103 @@ function buildBridgePrompt(prompt: string): string {
   ].join("\n");
 }
 
+export function sanitizeOpenDesignAgentOutput(output: string): string {
+  return output
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*<choice>[^<]*<\/choice>\s*$/.test(line))
+    .filter((line) => !/^\s*To resume this session:\s*kimi\s+-r\s+[0-9a-f-]+\s*$/i.test(line))
+    .join("\n")
+    .trim();
+}
+
+function parseArtifactSettleMs(value: string | undefined): number {
+  if (value === undefined) return DEFAULT_ARTIFACT_SETTLE_MS;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_ARTIFACT_SETTLE_MS;
+  return Math.min(parsed, 60_000);
+}
+
+function hasFatalBridgeError(stderr: string): boolean {
+  const normalized = stderr.trim();
+  if (!normalized) return false;
+  if (/timed?\s*out|timeout|sigterm|killed/i.test(normalized)) return false;
+  return /invalid authentication|unauthorized|http\s*40[13]|permission denied|eacces|enoent|enospc|traceback|syntaxerror|typeerror|referenceerror|cannot find module|unhandled|npm err!/i.test(
+    normalized
+  );
+}
+
+async function collectGeneratedArtifacts(root: string, sinceMs: number, nowMs = Date.now(), depth = ARTIFACT_SCAN_DEPTH): Promise<OpenDesignGeneratedArtifact[]> {
+  const artifacts: OpenDesignGeneratedArtifact[] = [];
+  const settleMs = parseArtifactSettleMs(process.env.OMK_OPEN_DESIGN_ARTIFACT_SETTLE_MS);
+
+  async function walk(dir: string, remainingDepth: number): Promise<void> {
+    if (remainingDepth < 0) return;
+    let entries: Array<{
+      name: string | Buffer;
+      isDirectory(): boolean;
+      isFile(): boolean;
+    }>;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      const name = String(entry.name);
+      if (ARTIFACT_SCAN_IGNORES.has(name)) continue;
+      const fullPath = resolve(dir, name);
+      if (entry.isDirectory()) {
+        await walk(fullPath, remainingDepth - 1);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      try {
+        const info = await stat(fullPath);
+        if (info.size <= 0) continue;
+        if (info.mtimeMs + 1000 < sinceMs) continue;
+        if (nowMs - info.mtimeMs < settleMs) continue;
+        artifacts.push({
+          path: relative(root, fullPath) || name,
+          size: info.size,
+          modifiedAt: info.mtimeMs,
+        });
+      } catch {
+        // Ignore files that vanish while the agent is still writing.
+      }
+    }
+  }
+
+  await walk(root, depth);
+  return artifacts.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+export function shouldTreatOpenDesignBridgeAsSuccess(input: {
+  failed: boolean;
+  exitCode: number | null | undefined;
+  cleanStdout: string;
+  cleanStderr: string;
+  generatedArtifacts: OpenDesignGeneratedArtifact[];
+}): boolean {
+  if (!input.failed && (input.exitCode ?? 0) === 0) return true;
+  if (hasFatalBridgeError(input.cleanStderr)) return false;
+  return input.cleanStdout.length > 0 || input.generatedArtifacts.length > 0;
+}
+
+function formatGeneratedArtifactMessage(artifacts: OpenDesignGeneratedArtifact[]): string {
+  const shown = artifacts.slice(0, 5).map((artifact) => artifact.path).join(", ");
+  const suffix = artifacts.length > 5 ? ` +${artifacts.length - 5} more` : "";
+  return `Generated Open Design artifact${artifacts.length === 1 ? "" : "s"}: ${shown}${suffix}`;
+}
+
 export async function openDesignAgentCommand(options: OpenDesignAgentOptions = {}): Promise<void> {
+  if (options.smoke) {
+    process.stdout.write("ok\n");
+    return;
+  }
+
   const prompt = await readStdinText();
-  if (options.smoke || isOpenDesignSmokePrompt(prompt)) {
+  if (isOpenDesignSmokePrompt(prompt)) {
     process.stdout.write("ok\n");
     return;
   }
@@ -71,9 +176,9 @@ export async function openDesignAgentCommand(options: OpenDesignAgentOptions = {
   }
 
   const args: string[] = [];
-  await injectKimiGlobals(args, { role: "designer" });
+  await injectKimiGlobals(args, { role: "designer", mcpScope: "none" });
   setModelArg(args, options.model);
-  args.push("--prompt", buildBridgePrompt(prompt), "--print");
+  args.push("--prompt", buildBridgePrompt(prompt), "--quiet");
 
   const baseEnv: Record<string, string> = {
     ...(process.env as Record<string, string>),
@@ -91,15 +196,40 @@ export async function openDesignAgentCommand(options: OpenDesignAgentOptions = {
   };
 
   try {
+    const startedAt = Date.now();
+    let stdout = "";
+    let stderr = "";
     const result = await runShellStreaming("kimi", args, {
       cwd,
       env,
       timeout: parseTimeoutMs(options.timeoutMs),
       input: "",
-      onStdout: (chunk) => process.stdout.write(chunk),
-      onStderr: (chunk) => process.stderr.write(chunk),
+      onStdout: (chunk) => {
+        stdout += chunk;
+      },
+      onStderr: (chunk) => {
+        stderr += chunk;
+      },
     });
-    if (result.failed || result.exitCode !== 0) {
+    const cleanStdout = sanitizeOpenDesignAgentOutput(stdout);
+    const cleanStderr = sanitizeOpenDesignAgentOutput(stderr);
+    const generatedArtifacts = await collectGeneratedArtifacts(cwd, startedAt);
+    const bridgeSucceeded = shouldTreatOpenDesignBridgeAsSuccess({
+      failed: result.failed,
+      exitCode: result.exitCode,
+      cleanStdout,
+      cleanStderr,
+      generatedArtifacts,
+    });
+    if (cleanStdout) {
+      process.stdout.write(`${cleanStdout}\n`);
+    } else if (generatedArtifacts.length > 0) {
+      process.stdout.write(`${formatGeneratedArtifactMessage(generatedArtifacts)}\n`);
+    } else if (bridgeSucceeded) {
+      process.stdout.write("Done.\n");
+    }
+    if (cleanStderr) process.stderr.write(`${cleanStderr}\n`);
+    if (!bridgeSucceeded && (result.failed || result.exitCode !== 0)) {
       process.exitCode = result.exitCode || 1;
     }
   } finally {

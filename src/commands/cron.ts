@@ -1,6 +1,6 @@
 import { readFile } from "fs/promises";
 import { extname, isAbsolute, join } from "path";
-import { getOmkPath, getProjectRoot, getRunsDir, pathExists } from "../util/fs.js";
+import { getOmkPath, getProjectRoot, getRunsDir, pathExists, sanitizeRunId } from "../util/fs.js";
 import { style, status, label, header } from "../util/theme.js";
 import { loadCronJobs, createCronEngine, validateCronJobName } from "../util/cron-engine.js";
 import { createDag, type DagNodeDefinition } from "../orchestration/dag.js";
@@ -86,7 +86,7 @@ export async function executeCronDag(
   }
 
   const dag = createDag(await loadDagDefinition(dagPath));
-  const runId = sanitizeRunId(options.runId ?? `cron-${job.name}-${Date.now()}`);
+  const runId = sanitizeRunId(options.runId ?? `cron-${job.name}-${Date.now()}`, "cron");
   const workers = Math.max(1, options.workers ?? 1);
   const approvalPolicy = options.approvalPolicy ?? await loadCronApprovalPolicy(root);
   const resources = await getOmkResourceSettings();
@@ -172,11 +172,6 @@ async function loadCronApprovalPolicy(root: string): Promise<ApprovalPolicy> {
     // ignore missing config
   }
   return "auto";
-}
-
-function sanitizeRunId(raw: string): string {
-  const sanitized = raw.replace(/[^a-zA-Z0-9_.-]/g, "-").replace(/\.\./g, "-");
-  return sanitized.length > 0 ? sanitized : `cron-${Date.now()}`;
 }
 
 export async function cronLogsCommand(jobName: string): Promise<void> {

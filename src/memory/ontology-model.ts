@@ -10,6 +10,7 @@ export const ONTOLOGY_SCHEMA_VERSION = 1;
 export const ONTOLOGY_NODE_TYPES = [
   "Project",
   "Session",
+  "Run",
   "Goal",
   "Criterion",
   "Evidence",
@@ -27,12 +28,14 @@ export const ONTOLOGY_NODE_TYPES = [
   "Provider",
   "ProviderRoute",
   "ProviderFallback",
+  "AuditLink",
 ] as const;
 
 export type OntologyNodeType = (typeof ONTOLOGY_NODE_TYPES)[number];
 
 export const ONTOLOGY_RELATIONSHIP_TYPES = [
   "HAS_GOAL",
+  "HAS_RUN",
   "HAS_CRITERION",
   "HAS_EVIDENCE",
   "HAS_DECISION",
@@ -51,6 +54,8 @@ export const ONTOLOGY_RELATIONSHIP_TYPES = [
   "ROUTES_TO",
   "FALLS_BACK_TO",
   "HAS_PROVIDER_FALLBACK",
+  "HAS_AUDIT_LINK",
+  "LINKS_TO",
 ] as const;
 
 export type OntologyRelationshipType = (typeof ONTOLOGY_RELATIONSHIP_TYPES)[number];
@@ -83,6 +88,13 @@ export interface SessionNode extends OntologyNodeBase {
   key: string;
   sessionId: string;
   projectKey: string;
+}
+
+/** Runtime/run node used to link plans, evidence, reports, and provider attempts. */
+export interface RunNode extends OntologyNodeBase {
+  runId: string;
+  status: string;
+  startedAt: string;
 }
 
 /** Memory node managed by graph memory stores. */
@@ -199,6 +211,14 @@ export interface ProviderFallbackNode extends OntologyNodeBase {
   reason: string;
 }
 
+/** Audit link node connecting reports/evidence to runs, goals, files, or providers. */
+export interface AuditLinkNode extends OntologyNodeBase {
+  linkId: string;
+  label: string;
+  target: string;
+  targetType: string;
+}
+
 /** Minimal executor interface accepted by {@link createOntologyConstraints}. */
 export interface OntologyConstraintExecutor {
   executeQuery(query: string, params?: Record<string, unknown>, options?: { database?: string }): Promise<unknown>;
@@ -253,10 +273,13 @@ export function buildKuzuOntologySchema(): KuzuOntologySchema {
     `CREATE NODE TABLE OmkProvider (${baseProps}, providerId STRING, role STRING, description STRING)`,
     `CREATE NODE TABLE OmkProviderRoute (${baseProps}, routeId STRING, nodeId STRING, requestedProvider STRING, actualProvider STRING, reason STRING, confidence DOUBLE)`,
     `CREATE NODE TABLE OmkProviderFallback (${baseProps}, fallbackId STRING, nodeId STRING, fromProvider STRING, toProvider STRING, reason STRING)`,
+    `CREATE NODE TABLE OmkRun (${baseProps}, runId STRING, status STRING, startedAt STRING)`,
+    `CREATE NODE TABLE OmkAuditLink (${baseProps}, linkId STRING, label STRING, target STRING, targetType STRING)`,
   ];
 
   const relTables: string[] = [
     `CREATE REL TABLE HAS_GOAL (FROM OmkProject TO OmkGoal)`,
+    `CREATE REL TABLE HAS_RUN (FROM OmkProject TO OmkRun)`,
     `CREATE REL TABLE HAS_CRITERION (FROM OmkGoal TO OmkCriterion)`,
     `CREATE REL TABLE HAS_EVIDENCE (FROM OmkCriterion TO OmkEvidence)`,
     `CREATE REL TABLE HAS_DECISION (FROM OmkProject TO OmkDecision)`,
@@ -275,6 +298,8 @@ export function buildKuzuOntologySchema(): KuzuOntologySchema {
     `CREATE REL TABLE ROUTES_TO (FROM OmkProviderRoute TO OmkProvider)`,
     `CREATE REL TABLE FALLS_BACK_TO (FROM OmkProviderRoute TO OmkProvider)`,
     `CREATE REL TABLE HAS_PROVIDER_FALLBACK (FROM OmkTask TO OmkProviderFallback)`,
+    `CREATE REL TABLE HAS_AUDIT_LINK (FROM OmkProject TO OmkAuditLink)`,
+    `CREATE REL TABLE LINKS_TO (FROM OmkAuditLink TO OmkFile)`,
   ];
 
   return { nodeTables, relTables };

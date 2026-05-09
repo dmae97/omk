@@ -5,10 +5,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   validateRunId,
+  sanitizeRunId,
+  validateRunArtifactPath,
   getRunPath,
+  getRunArtifactPath,
   getRunsDir,
   listValidRunIds,
   RUN_ID_MAX_LENGTH,
+  RUN_ARTIFACT_PATH_MAX_LENGTH,
 } from "../dist/util/run-store.js";
 
 function makeLongRunId(length) {
@@ -68,6 +72,18 @@ describe("validateRunId", () => {
   });
 });
 
+describe("sanitizeRunId", () => {
+  it("sanitizes generated IDs before run-store path construction", () => {
+    assert.strictEqual(sanitizeRunId("cron:nightly/job", "cron"), "cron-nightly-job");
+    assert.strictEqual(sanitizeRunId("a..b", "run"), "a-b");
+  });
+
+  it("falls back to a valid prefixed ID for reserved or empty values", () => {
+    assert.match(sanitizeRunId("latest", "cron"), /^cron-\d{4}-\d{2}-\d{2}T/);
+    assert.match(sanitizeRunId("", "latest"), /^run-\d{4}-\d{2}-\d{2}T/);
+  });
+});
+
 describe("getRunPath", () => {
   it("returns path under .omk/runs", () => {
     const root = mkdtempSync(join(tmpdir(), "omk-run-test-"));
@@ -80,11 +96,58 @@ describe("getRunPath", () => {
     assert.throws(() => getRunPath("..", "state.json", root), /dot-only/);
   });
 
+  it("rejects artifact traversal before path construction", () => {
+    const root = mkdtempSync(join(tmpdir(), "omk-run-test-"));
+    assert.throws(() => getRunPath("my-run", "../state.json", root), /dot-only/);
+    assert.throws(() => getRunPath("my-run", "/etc/passwd", root), /absolute/);
+    assert.throws(() => getRunPath("my-run", "logs\\state.json", root), /backslash/);
+  });
+
   it("returns directory path when artifact omitted", () => {
     const root = mkdtempSync(join(tmpdir(), "omk-run-test-"));
     const p = getRunPath("my-run", undefined, root);
     assert.ok(p.includes(join(".omk", "runs", "my-run")));
     assert.ok(!p.endsWith("state.json"));
+  });
+});
+
+describe("validateRunArtifactPath", () => {
+  it("accepts safe run artifact paths", () => {
+    const valid = ["state.json", "summary.md", "logs/node-1.log", "evidence_v1/report-2.json"];
+    for (const artifact of valid) {
+      assert.strictEqual(validateRunArtifactPath(artifact), artifact);
+    }
+  });
+
+  it("rejects traversal, absolute, drive, UNC, empty, and malformed paths", () => {
+    const invalid = [
+      "",
+      ".",
+      "..",
+      "../state.json",
+      "logs/../state.json",
+      "/etc/passwd",
+      "C:\\tmp",
+      "\\\\server\\share",
+      "logs\\state.json",
+      "logs//state.json",
+      "bad:name.json",
+      "space name.txt",
+    ];
+    for (const artifact of invalid) {
+      assert.throws(() => validateRunArtifactPath(artifact), /Invalid run artifact path/);
+    }
+  });
+
+  it("rejects artifact paths exceeding max length", () => {
+    assert.throws(() => validateRunArtifactPath("a".repeat(RUN_ARTIFACT_PATH_MAX_LENGTH + 1)), /exceeds/);
+  });
+
+  it("validates run artifact helper inputs", () => {
+    const root = mkdtempSync(join(tmpdir(), "omk-run-test-"));
+    assert.ok(getRunArtifactPath("run-1", "logs/node-1.log", root).includes(join(".omk", "runs", "run-1", "logs", "node-1.log")));
+    assert.throws(() => getRunArtifactPath("latest", "state.json", root), /reserved/);
+    assert.throws(() => getRunArtifactPath("run-1", "../state.json", root), /dot-only/);
   });
 });
 

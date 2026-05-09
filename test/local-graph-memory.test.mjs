@@ -69,7 +69,7 @@ test("local graph memory writes ontology mindmaps and GraphQL-lite results", asy
   try {
     await store.write(
       "project.md",
-      `# Goal: local graph memory\n\n- Decision: keep memory in .omk/memory/graph-state.json\n- Task: expose omk_graph_query\n- Risk: never store secrets\n\n\`\`\`bash\nnpm run check\n\`\`\``
+      `# Goal: local graph memory\n\n- Decision: keep memory in .omk/memory/graph-state.json\n- Task: expose omk_graph_query\n- Run ID: graph-audit-run\n- Audit link: [run report](.omk/runs/graph-audit-run/report.md)\n- Provider attempts: kimi=1, deepseek=1\n- Evidence gate: review-pass\n- Risk: never store secrets\n\n\`\`\`bash\nnpm run check\n\`\`\``
     );
 
     assert.equal(existsSync(graphPath), true);
@@ -78,11 +78,22 @@ test("local graph memory writes ontology mindmaps and GraphQL-lite results", asy
     const ontology = await store.ontology();
     assert.ok(ontology?.classes.includes("Decision"));
     assert.ok(ontology?.classes.includes("ProviderRoute"));
+    assert.ok(ontology?.classes.includes("Run"));
+    assert.ok(ontology?.classes.includes("AuditLink"));
     assert.ok(ontology?.relationTypes.includes("HAS_PROVIDER_ROUTE"));
+    assert.ok(ontology?.relationTypes.includes("HAS_RUN"));
+    assert.ok(ontology?.relationTypes.includes("HAS_AUDIT_LINK"));
 
     const mindmap = await store.mindmap("Decision", 20);
     assert.ok(mindmap?.nodes.some((node) => node.type === "Decision"));
     assert.ok(mindmap?.edges.some((edge) => edge.type === "HAS_DECISION" || edge.type === "HAS_CONCEPT"));
+
+    const auditMindmap = await store.mindmap("graph-audit-run", 30);
+    assert.ok(auditMindmap.nodes.some((node) => node.type === "Run"));
+    assert.ok(auditMindmap.nodes.some((node) => node.type === "AuditLink"));
+    assert.ok(auditMindmap.nodes.some((node) => node.path === ".omk/runs/graph-audit-run/report.md"));
+    assert.ok(auditMindmap.edges.some((edge) => edge.type === "HAS_RUN"));
+    assert.ok(auditMindmap.edges.some((edge) => edge.type === "HAS_AUDIT_LINK"));
 
     const graphQuery = await store.graphQuery('query { mindmap(query: "Task", limit: 10) { nodes edges } ontology { classes } }');
     assert.equal(graphQuery.extensions.dialect, "omk-graphql-lite-v1");
@@ -98,9 +109,16 @@ test("Kuzu ontology schema includes provider routing and fallback tables", () =>
   assert.ok(ONTOLOGY_NODE_TYPES.includes("Provider"));
   assert.ok(ONTOLOGY_NODE_TYPES.includes("ProviderRoute"));
   assert.ok(ONTOLOGY_NODE_TYPES.includes("ProviderFallback"));
+  assert.ok(ONTOLOGY_NODE_TYPES.includes("Run"));
+  assert.ok(ONTOLOGY_NODE_TYPES.includes("AuditLink"));
   assert.ok(ONTOLOGY_RELATIONSHIP_TYPES.includes("USES_PROVIDER"));
   assert.ok(ONTOLOGY_RELATIONSHIP_TYPES.includes("HAS_PROVIDER_FALLBACK"));
+  assert.ok(ONTOLOGY_RELATIONSHIP_TYPES.includes("HAS_RUN"));
+  assert.ok(ONTOLOGY_RELATIONSHIP_TYPES.includes("HAS_AUDIT_LINK"));
   assert.ok(schema.nodeTables.some((ddl) => ddl.includes("CREATE NODE TABLE OmkProviderRoute")));
+  assert.ok(schema.nodeTables.some((ddl) => ddl.includes("CREATE NODE TABLE OmkRun")));
+  assert.ok(schema.nodeTables.some((ddl) => ddl.includes("CREATE NODE TABLE OmkAuditLink")));
   assert.ok(schema.relTables.some((ddl) => ddl.includes("ROUTES_TO")));
   assert.ok(schema.relTables.some((ddl) => ddl.includes("FALLS_BACK_TO")));
+  assert.ok(schema.relTables.some((ddl) => ddl.includes("HAS_AUDIT_LINK")));
 });

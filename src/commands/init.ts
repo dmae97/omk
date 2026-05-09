@@ -42,6 +42,7 @@ export interface InitCommandOptions {
   argv?: string[];
   promptGitHubStar?: (repoUrl: string) => Promise<boolean>;
   starRepo?: (repoUrl: string) => Promise<void> | void;
+  promptLocalUserRuntime?: (context: { homeDir: string }) => Promise<boolean>;
   promptDeepSeekSetup?: () => Promise<boolean>;
   promptDeepSeekApiKey?: () => Promise<string>;
 }
@@ -643,8 +644,8 @@ const routes = [
       'prototype', 'landing', 'component', 'visual', 'screenshot', 'responsive', 'accessibility',
       '디자인', '화면', '프론트', '랜딩', '컴포넌트', '시각', '스크린샷', '반응형', '접근성', '프로토타입',
     ],
-    skills: ['open-design', 'omk-design-md', 'omk-flow-design-to-code', 'omk-multimodal-ui-review'],
-    note: 'For visual work, read DESIGN.md, reuse tokens, and launch localhost with omk design open-design when interactive design is useful.',
+    skills: ['open-design', 'awesome-design-md', 'omk-design-md', 'omk-flow-design-to-code', 'omk-multimodal-ui-review'],
+    note: 'For visual work, read DESIGN.md, reuse tokens, use awesome-design-md references when a named style is requested, and launch localhost with omk design open-design when interactive design is useful.',
   },
   {
     id: 'bugfix-debug',
@@ -1150,7 +1151,7 @@ yolo_mode = false                # safe guards still block secrets/destructive s
 [runtime]
 # auto chooses lite on <=18GB RAM hosts to make 16GB laptops usable.
 resource_profile = "auto"        # auto | lite | standard
-mcp_scope = "${mcpScope}"            # all | project | none — project keeps only omk-project in .kimi/mcp.json
+mcp_scope = "${mcpScope}"            # all | project | none — all also reads user ~/.kimi/mcp.json at runtime
 skills_scope = "${skillsScope}"         # all | project | none — all reads user ~/.kimi/skills without copying them
 max_workers = 1                  # can override with OMK_MAX_WORKERS
 max_output_mb = 4                # cap buffered shell/quality output
@@ -1212,9 +1213,9 @@ const MEMORY_FILES: Record<string, string> = {
 export async function initCommand(options: InitCommandOptions): Promise<void> {
   const root = getProjectRoot();
   const initHomeDir = normalizeUserHomePath(options.homeDir) ?? getUserHome(options.env ?? process.env);
-  const localUserRuntime = shouldUseLocalUserRuntime(options);
   const mcpJson = createMcpJson(root);
   console.log(header(`oh-my-kimi init (profile: ${options.profile})`));
+  const localUserRuntime = await resolveLocalUserRuntime(options, initHomeDir);
 
   // 1. Create directories (parallel)
   const dirs = [
@@ -1445,7 +1446,7 @@ export async function initCommand(options: InitCommandOptions): Promise<void> {
   console.log("- Built-in tools: SearchWeb, FetchURL (no config required).");
 
   console.log(style.gray("  Fresh init does not copy user-global skills or MCP servers into the project."));
-  console.log(style.gray("  Trusted local users can add --local-user for runtime-only global MCP/skills, or --import-user-skills to copy reviewed personal skills."));
+  console.log(style.gray("  Trusted local users can add --local-user --home-dir <~/.kimi/mcp.json> for runtime-only global MCP/skills, or --import-user-skills to copy reviewed personal skills."));
 
   await runInitInteractiveSetup(options, initHomeDir);
 
@@ -1479,12 +1480,44 @@ function shouldImportUserSkills(options: InitCommandOptions): boolean {
   return Boolean(options.importUserSkills) || isEnabledEnvValue(env.OMK_INIT_IMPORT_USER_SKILLS);
 }
 
-function shouldUseLocalUserRuntime(options: InitCommandOptions): boolean {
+function explicitLocalUserRuntime(options: InitCommandOptions): boolean | undefined {
   const env = options.env ?? process.env;
   const profile = options.profile?.trim().toLowerCase() ?? "";
-  return Boolean(options.localUser)
+  if (Boolean(options.localUser)
     || isEnabledEnvValue(env.OMK_INIT_LOCAL_USER)
-    || ["local", "personal", "trusted-local"].includes(profile);
+    || ["local", "personal", "trusted-local"].includes(profile)) {
+    return true;
+  }
+  if (isDisabledEnvValue(env.OMK_INIT_LOCAL_USER)) return false;
+  return undefined;
+}
+
+async function resolveLocalUserRuntime(options: InitCommandOptions, homeDir: string): Promise<boolean> {
+  const explicit = explicitLocalUserRuntime(options);
+  if (explicit !== undefined) return explicit;
+  if (!isInitInteractiveSetupEligible(options)) return false;
+  return askLocalUserRuntimeDuringInit(options, homeDir);
+}
+
+async function askLocalUserRuntimeDuringInit(options: InitCommandOptions, homeDir: string): Promise<boolean> {
+  try {
+    const useLocalGlobal = options.promptLocalUserRuntime
+      ? await options.promptLocalUserRuntime({ homeDir })
+      : await confirm({
+          message: "MCP 설정: 기존 로컬 글로벌 ~/.kimi MCP/skills를 그대로 사용할까요? (No = omk-project만 시작하고 여기서 MCP를 추가)",
+          default: false,
+        });
+    if (useLocalGlobal) {
+      console.log(status.ok("Init MCP mode: using local/global ~/.kimi MCP and skills at runtime."));
+    } else {
+      console.log(style.gray("Init MCP mode: project only; start with omk-project and add MCPs here later."));
+    }
+    return useLocalGlobal;
+  } catch (error) {
+    if (error instanceof ExitPromptError) return false;
+    console.log(status.warn(`MCP runtime prompt failed; falling back to project-only mode: ${redactSecretishText(error)}`));
+    return false;
+  }
 }
 
 function isInitInteractiveSetupEligible(options: InitCommandOptions): boolean {

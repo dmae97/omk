@@ -11,8 +11,10 @@ import { scoreGoal } from "../goal/scoring.js";
 import { createStatePersister } from "../orchestration/state-persister.js";
 import { generateNextPrompt } from "../goal/control-loop.js";
 import { orchestratePrompt } from "../orchestration/orchestrate-prompt.js";
+import { compileGoalToDagNodes } from "../goal/compiler.js";
 import type { GoalSpec, GoalEvidence } from "../contracts/goal.js";
 import type { RunState } from "../contracts/orchestration.js";
+import type { DagNodeDefinition } from "../orchestration/dag.js";
 
 function getGoalBasePath(): string {
   return join(getProjectRoot(), ".omk", "goals");
@@ -193,21 +195,79 @@ export async function goalPlanCommand(goalId: string): Promise<void> {
   await persister.appendHistory(goalId, {
     at: new Date().toISOString(),
     action: "plan",
-    detail: { planRevision: updated.planRevision },
+    detail: { planRevision: updated.planRevision, plannerNode: "goal-coordinator" },
   });
 
-  // Write plan.md stub
+  const nodes = compileGoalToDagNodes(updated);
   const mirrorDir = join(getGoalBasePath(), goalId);
   await mkdir(mirrorDir, { recursive: true });
-  await writeFile(
-    join(mirrorDir, "plan.md"),
-    [`# Plan: ${updated.title}`, "", `**Objective:** ${updated.objective}`, "", "## Steps", "", "1. (to be planned)"].join("\n")
-  );
+  await writeFile(join(mirrorDir, "plan.md"), renderGoalPlan(updated, nodes), "utf-8");
 
   console.log(header("Goal Planned"));
   console.log(label("ID", updated.goalId));
   console.log(label("Status", updated.status));
   console.log(label("Plan revision", String(updated.planRevision)));
+  console.log(label("Planner", "goal-coordinator (planner)"));
+}
+
+function renderGoalPlan(spec: GoalSpec, nodes: DagNodeDefinition[]): string {
+  const lines: string[] = [
+    `# Plan: ${spec.title}`,
+    "",
+    `**Objective:** ${spec.objective}`,
+    `**Risk:** ${spec.riskLevel}`,
+    `**Plan revision:** ${spec.planRevision}`,
+    "",
+    "## Planner",
+    "",
+    "- `goal-coordinator` uses the `planner` role and writes `plan.md` before implementation nodes run.",
+    "",
+    "## Execution DAG",
+    "",
+    "| Step | Node | Role | Depends on | Evidence gate |",
+    "|------|------|------|------------|---------------|",
+  ];
+
+  for (const [index, node] of nodes.entries()) {
+    const gate = node.outputs?.map((output) => output.gate ?? "summary").join(", ") || "summary";
+    lines.push(`| ${index + 1} | ${node.id} | ${node.role} | ${node.dependsOn.join(", ") || "—"} | ${gate} |`);
+  }
+
+  lines.push("", "## Acceptance Criteria", "");
+  for (const criterion of spec.successCriteria) {
+    lines.push(`- [ ] **${criterion.id}** (${criterion.requirement}): ${criterion.description}`);
+  }
+
+  if (spec.expectedArtifacts.length > 0) {
+    lines.push("", "## Expected Artifacts", "");
+    for (const artifact of spec.expectedArtifacts) {
+      lines.push(`- ${artifact.name}${artifact.path ? ` → \`${artifact.path}\`` : ""}${artifact.gate ? ` (${artifact.gate})` : ""}`);
+    }
+  }
+
+  if (spec.constraints.length > 0) {
+    lines.push("", "## Constraints", "");
+    for (const constraint of spec.constraints) {
+      lines.push(`- ${constraint.description}`);
+    }
+  }
+
+  if (spec.nonGoals.length > 0) {
+    lines.push("", "## Non-goals", "");
+    for (const nonGoal of spec.nonGoals) {
+      lines.push(`- ${nonGoal}`);
+    }
+  }
+
+  lines.push("", "## Evidence Gates", "");
+  for (const node of nodes) {
+    for (const output of node.outputs ?? []) {
+      lines.push(`- ${node.id}: ${output.name}${output.ref ? ` → \`${output.ref}\`` : ""} (${output.gate ?? "summary"})`);
+    }
+  }
+  lines.push("");
+
+  return lines.join("\n");
 }
 
 export async function goalRunCommand(

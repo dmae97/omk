@@ -67,6 +67,37 @@ test("materializeEdges preserves explicit graph-state edges and adds derived edg
   assert.ok(edges.some((edge) => edge.source === "memory" && edge.target === "file" && edge.type === "TOUCHES_FILE"));
 });
 
+test("materializeEdges expands audit trail links to runs and reports", () => {
+  const state = sampleGraphState();
+  state.nodes.push(
+    { id: "run", type: "Run", label: "graph-audit-run" },
+    {
+      id: "run-relation",
+      type: "Topic",
+      label: "Run ID: graph-audit-run",
+      properties: { generatedFrom: "memory" },
+    },
+    {
+      id: "audit-link",
+      type: "AuditLink",
+      label: "Audit link: .omk/runs/graph-audit-run/report.md",
+      properties: { generatedFrom: "memory" },
+    },
+    {
+      id: "report",
+      type: "File",
+      label: ".omk/runs/graph-audit-run/report.md",
+      path: ".omk/runs/graph-audit-run/report.md",
+    }
+  );
+
+  const edges = materializeEdges(state, state.nodes.filter((node) => node.type !== "MemoryVersion"));
+
+  assert.ok(edges.some((edge) => edge.source === "memory" && edge.target === "run" && edge.type === "HAS_RUN"));
+  assert.ok(edges.some((edge) => edge.source === "memory" && edge.target === "audit-link" && edge.type === "HAS_AUDIT_LINK"));
+  assert.ok(edges.some((edge) => edge.source === "memory" && edge.target === "report" && edge.type === "HAS_AUDIT_LINK"));
+});
+
 test("omk graph view CLI generates the requested output file", async () => {
   const dir = await mkdtemp(join(tmpdir(), "omk-graph-cli-"));
   const inputPath = join(dir, "graph-state.json");

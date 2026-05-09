@@ -45,6 +45,7 @@ export function routeProvider(input: ProviderRouteInput): ProviderRouteDecision 
   const role = input.role.toLowerCase();
   const seed = `${input.nodeId ?? ""}:${role}:${input.taskType}`;
   const directDeepSeekAllowed = canUseDirectDeepSeek(role, input);
+  const dedicatedDeepSeekAgent = isDedicatedDeepSeekAgent(input);
   const withRouteEnsemble = (
     decision: Omit<ProviderRouteDecision, "routeEnsemble">,
     winner: ProviderRouteEnsembleCandidate["id"]
@@ -97,11 +98,17 @@ export function routeProvider(input: ProviderRouteInput): ProviderRouteDecision 
     if (!directDeepSeekAllowed) {
       return withRouteEnsemble(kimiDecision("Explicit DeepSeek hint rejected for non-read-only provider role", 0.9), "safety-gate");
     }
-    if (input.complexity === "complex") {
+    if (input.complexity === "complex" && !dedicatedDeepSeekAgent) {
       return withRouteEnsemble(kimiDecision("Complex read-only judgment stays with Kimi despite DeepSeek hint", 0.85), "kimi-authority");
     }
     return withRouteEnsemble(
-      deepseekDecision("Explicit low-risk DeepSeek route", 0.9, selectDeepSeekDirectPlan(seed)),
+      deepseekDecision(
+        dedicatedDeepSeekAgent
+          ? `Dedicated DeepSeek ${input.preferredDeepSeekTier?.toUpperCase()} model agent route`
+          : "Explicit low-risk DeepSeek route",
+        dedicatedDeepSeekAgent ? 0.93 : 0.9,
+        selectDeepSeekDirectPlan(seed, input.preferredDeepSeekTier)
+      ),
       "deepseek-direct"
     );
   }
@@ -152,8 +159,10 @@ export function selectDeepSeekModelTier(seed: string): { tier: DeepSeekModelTier
   };
 }
 
-function selectDeepSeekDirectPlan(seed: string): DeepSeekRoutePlan {
-  const selected = selectDeepSeekModelTier(seed);
+function selectDeepSeekDirectPlan(seed: string, preferredTier?: DeepSeekModelTier): DeepSeekRoutePlan {
+  const selected = preferredTier
+    ? { tier: preferredTier, ratioBucket: preferredTier === "flash" ? 0 : 9 }
+    : selectDeepSeekModelTier(seed);
   return {
     provider: "deepseek",
     model: selected.tier === "flash" ? DEEPSEEK_V4_FLASH_MODEL : DEEPSEEK_V4_PRO_MODEL,
@@ -162,6 +171,10 @@ function selectDeepSeekDirectPlan(seed: string): DeepSeekRoutePlan {
     reasoningEffort: "max",
     ratioBucket: selected.ratioBucket,
   };
+}
+
+function isDedicatedDeepSeekAgent(input: ProviderRouteInput): boolean {
+  return input.providerHint === "deepseek" && Boolean(input.preferredDeepSeekTier);
 }
 
 function canUseDeepSeekProAdvisory(role: string, input: ProviderRouteInput): boolean {
@@ -186,12 +199,13 @@ function buildProviderRouteEnsemble(options: {
   const { input, role, decision, winner, directDeepSeekAllowed } = options;
   const advisoryAllowed = input.risk === "write" && canUseDeepSeekProAdvisory(role, input);
   const safetyReason = providerSafetyReason(input, role);
+  const dedicatedDeepSeekAgent = isDedicatedDeepSeekAgent(input);
   const directCandidateAllowed =
     !safetyReason &&
     input.deepseekAvailable &&
     directDeepSeekAllowed &&
     input.risk === "read" &&
-    input.complexity !== "complex" &&
+    (input.complexity !== "complex" || dedicatedDeepSeekAgent) &&
     !input.needsMcp &&
     !input.needsToolCalling;
   const advisoryCandidateAllowed = !safetyReason && advisoryAllowed && input.deepseekAvailable;
@@ -211,7 +225,9 @@ function buildProviderRouteEnsemble(options: {
       participation: "direct",
       score: directCandidateAllowed ? scoreDeepSeekDirect(input) : 0,
       reason: directCandidateAllowed
-        ? "Read-only, no-tool node can be evaluated by DeepSeek as an independent worker"
+        ? dedicatedDeepSeekAgent
+          ? "Dedicated read-only DeepSeek model agent selected during initial orchestration"
+          : "Read-only, no-tool node can be evaluated by DeepSeek as an independent worker"
         : safetyReason ?? directDeepSeekRejectionReason(input, role),
       selected: winner === "deepseek-direct",
       veto: !directCandidateAllowed,
@@ -282,6 +298,7 @@ function scoreKimiAuthority(input: ProviderRouteInput, role: string): number {
 }
 
 function scoreDeepSeekDirect(input: ProviderRouteInput): number {
+  if (isDedicatedDeepSeekAgent(input)) return 0.93;
   if (input.estimatedTokens > 120_000) return 0.7;
   return input.providerHint === "deepseek" ? 0.9 : 0.8;
 }
@@ -290,7 +307,7 @@ function directDeepSeekRejectionReason(input: ProviderRouteInput, role: string):
   if (!input.deepseekAvailable) return "DeepSeek is unavailable";
   if (input.risk !== "read") return "Direct DeepSeek is limited to read-only risk";
   if (!canUseDirectDeepSeek(role, input)) return "Role is not read-only safe for direct DeepSeek";
-  if (input.complexity === "complex") return "Complex read-only judgment stays with Kimi";
+  if (input.complexity === "complex" && !isDedicatedDeepSeekAgent(input)) return "Complex read-only judgment stays with Kimi";
   if (input.needsMcp || input.needsToolCalling) return "MCP/tool-calling requirements stay with Kimi";
   return "Direct DeepSeek candidate did not win this route";
 }

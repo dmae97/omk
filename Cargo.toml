@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/omk-safety"]
+resolver = "3"

@@ -37,6 +37,13 @@ npx @google/design.md diff DESIGN.md DESIGN.next.md
 npx @google/design.md export --format tailwind DESIGN.md > tailwind.theme.json
 ```
 
+7. When a named visual reference is requested, use the bundled `awesome-design-md` skill and OMK catalog commands:
+
+```bash
+omk design search <keyword>
+omk design apply <name>
+```
+
 ## Output
 
 ```txt

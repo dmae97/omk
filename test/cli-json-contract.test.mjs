@@ -5,7 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { goalListCommand, goalShowCommand, goalVerifyCommand } from "../dist/commands/goal.js";
+import { providerDeepSeekDisableCommand, providerDoctorCommand } from "../dist/commands/provider.js";
+import { mcpDoctorCommand } from "../dist/commands/mcp.js";
 import { runsCommand } from "../dist/commands/runs.js";
+import { screenshotDirCommand, screenshotListCommand } from "../dist/commands/screenshot.js";
 import { verifyCommand } from "../dist/commands/verify.js";
 import { reviewCommand } from "../dist/commands/workflow.js";
 import { CliError } from "../dist/util/cli-contract.js"; 
@@ -14,6 +17,22 @@ async function tempCwd() {
   const dir = await mkdtemp(join(tmpdir(), "omk-cli-"));
   await mkdir(join(dir, ".omk"), { recursive: true });
   return dir;
+}
+
+
+function setEnv(name, value) {
+  const previous = process.env[name];
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+  return () => {
+    if (previous === undefined) delete process.env[name];
+    else process.env[name] = previous;
+  };
+}
+
+function parseSingleStdoutJson(cap) {
+  assert.equal(cap.stdout.length, 1, "should emit exactly one stdout line");
+  return JSON.parse(cap.stdout[0]);
 }
 
 function captureOutput() {
@@ -104,6 +123,139 @@ test("goal verify --json on missing goal emits JSON error to stdout and stderr",
   assert.equal(cap.stderr.length, 1, "should emit to stderr");
 });
 
+
+// ── provider/deepseek --json contract ────────────────────────
+
+test("provider deepseek disable --json emits parseable JSON without stderr", async () => {
+  const cwd = await tempCwd();
+  const restoreConfig = setEnv("OMK_PROVIDER_CONFIG_PATH", join(cwd, ".config", "omk", "providers.json"));
+  const restoreSecrets = setEnv("OMK_SECRETS_ENV_PATH", join(cwd, ".config", "omk", "secrets.env"));
+  const restoreOpenCodeSecrets = setEnv("OPENCODE_SECRETS_ENV_PATH", join(cwd, ".config", "opencode", "secrets.env"));
+  const restoreDeepSeekKey = setEnv("DEEPSEEK_API_KEY", undefined);
+  const cap = captureOutput();
+
+  try {
+    await providerDeepSeekDisableCommand("contract test", { json: true });
+  } finally {
+    cap.restore();
+    restoreDeepSeekKey();
+    restoreOpenCodeSecrets();
+    restoreSecrets();
+    restoreConfig();
+  }
+
+  const parsed = parseSingleStdoutJson(cap);
+  assert.equal(parsed.provider, "deepseek");
+  assert.equal(parsed.enabled, false);
+  assert.equal(parsed.disabledReason, "contract test");
+  assert.equal(parsed.disabledBy, "user");
+  assert.equal(cap.stderr.length, 0, "should not emit to stderr");
+});
+
+test("provider doctor deepseek --json --soft is hermetic when disabled", async () => {
+  const cwd = await tempCwd();
+  const restoreConfig = setEnv("OMK_PROVIDER_CONFIG_PATH", join(cwd, ".config", "omk", "providers.json"));
+  const restoreSecrets = setEnv("OMK_SECRETS_ENV_PATH", join(cwd, ".config", "omk", "secrets.env"));
+  const restoreOpenCodeSecrets = setEnv("OPENCODE_SECRETS_ENV_PATH", join(cwd, ".config", "opencode", "secrets.env"));
+  const restoreDeepSeekKey = setEnv("DEEPSEEK_API_KEY", undefined);
+  const previousExitCode = process.exitCode;
+  const cap = captureOutput();
+
+  try {
+    await providerDeepSeekDisableCommand("offline contract test", { json: false });
+    cap.stdout.length = 0;
+    cap.stderr.length = 0;
+    await providerDoctorCommand("deepseek", { json: true, soft: true });
+  } finally {
+    cap.restore();
+    process.exitCode = previousExitCode;
+    restoreDeepSeekKey();
+    restoreOpenCodeSecrets();
+    restoreSecrets();
+    restoreConfig();
+  }
+
+  const parsed = parseSingleStdoutJson(cap);
+  assert.equal(parsed.provider, "deepseek");
+  assert.equal(parsed.available, false);
+  assert.equal(parsed.enabled, false);
+  assert.equal(parsed.reason, "offline contract test");
+  assert.equal(parsed.apiKeySet, false);
+  assert.equal(cap.stderr.length, 0, "should not emit to stderr");
+});
+
+// ── screenshot --json contract ───────────────────────────────
+
+test("screenshot dir --json emits project-local directory without stderr", async () => {
+  const cwd = await tempCwd();
+  const restoreRoot = setEnv("OMK_PROJECT_ROOT", cwd);
+  const cap = captureOutput();
+
+  try {
+    await screenshotDirCommand({ json: true });
+  } finally {
+    cap.restore();
+    restoreRoot();
+  }
+
+  const parsed = parseSingleStdoutJson(cap);
+  assert.equal(parsed.dir, join(cwd, ".omk", "screenshots"));
+  assert.equal(cap.stderr.length, 0, "should not emit to stderr");
+});
+
+test("screenshot list --json emits saved screenshot metadata without stderr", async () => {
+  const cwd = await tempCwd();
+  const shotDir = join(cwd, ".omk", "screenshots", "2026-05-08");
+  await mkdir(shotDir, { recursive: true });
+  await writeFile(join(shotDir, "sample.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  const restoreRoot = setEnv("OMK_PROJECT_ROOT", cwd);
+  const cap = captureOutput();
+
+  try {
+    await screenshotListCommand({ json: true });
+  } finally {
+    cap.restore();
+    restoreRoot();
+  }
+
+  const parsed = parseSingleStdoutJson(cap);
+  assert.equal(parsed.entries.length, 1);
+  assert.equal(parsed.entries[0].relativePath, ".omk/screenshots/2026-05-08/sample.png");
+  assert.equal(parsed.entries[0].size, 4);
+  assert.equal(cap.stderr.length, 0, "should not emit to stderr");
+});
+
+// ── mcp doctor --json contract ───────────────────────────────
+
+test("mcp doctor --json emits common machine-readable fields", async () => {
+  const cwd = await tempCwd();
+  await mkdir(join(cwd, ".kimi"), { recursive: true });
+  await writeFile(join(cwd, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: {} }), "utf-8");
+  const restoreRoot = setEnv("OMK_PROJECT_ROOT", cwd);
+  const restoreHome = setEnv("HOME", cwd);
+  const restoreOriginalHome = setEnv("OMK_ORIGINAL_HOME", cwd);
+  const cap = captureOutput();
+  const previousExitCode = process.exitCode;
+
+  try {
+    await mcpDoctorCommand({ json: true });
+  } finally {
+    cap.restore();
+    process.exitCode = previousExitCode;
+    restoreOriginalHome();
+    restoreHome();
+    restoreRoot();
+  }
+
+  const parsed = parseSingleStdoutJson(cap);
+  assert.equal(parsed.command, "mcp doctor");
+  assert.match(parsed.checkedAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.ok(Array.isArray(parsed.errors));
+  assert.ok(Array.isArray(parsed.warnings));
+  assert.equal(parsed.data.activeScope, parsed.activeScope);
+  assert.equal(cap.stderr.length, 0, "should not emit to stderr");
+});
+
 // ── runs --json contract ──────────────────────────────────────
 
 test("runs --json on fresh project emits empty JSON array", async () => {
@@ -180,6 +332,40 @@ test("verify --json with missing run-id env emits JSON error to stdout and stder
   const parsed = JSON.parse(cap.stdout[0]);
   assert.ok(parsed.error, "should contain error field");
   assert.equal(cap.stderr.length, 1, "should emit to stderr");
+});
+
+test("verify --json emits common machine-readable fields for a valid run", async () => {
+  const cwd = await tempCwd();
+  const runId = "json-contract-run";
+  const runDir = join(cwd, ".omk", "runs", runId);
+  await mkdir(runDir, { recursive: true });
+  await writeFile(join(runDir, "state.json"), JSON.stringify({
+    schemaVersion: 1,
+    runId,
+    status: "done",
+    startedAt: "2026-05-08T00:00:00.000Z",
+    completedAt: "2026-05-08T00:00:01.000Z",
+    nodes: [],
+  }), "utf-8");
+  const prevCwd = process.cwd();
+  process.chdir(cwd);
+  const cap = captureOutput();
+
+  try {
+    await verifyCommand({ run: runId, json: true });
+  } finally {
+    cap.restore();
+    process.chdir(prevCwd);
+  }
+
+  const parsed = parseSingleStdoutJson(cap);
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.command, "verify");
+  assert.match(parsed.checkedAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.deepEqual(parsed.errors, []);
+  assert.deepEqual(parsed.warnings, []);
+  assert.equal(parsed.data.runId, runId);
+  assert.equal(cap.stderr.length, 0, "should not emit to stderr");
 });
 
 // ── review --soft contract ────────────────────────────────────

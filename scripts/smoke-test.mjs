@@ -174,6 +174,31 @@ const KNOWN_SOFT_ISSUES = new Set([
   "Global Memory",
 ]);
 
+
+function expectedNativePlatformArch() {
+  return `${platform()}-${process.arch}`;
+}
+
+function assertNativeSafety(parsed, label) {
+  const rustSafety = parsed?.data?.rustSafety ?? parsed?.rustSafety;
+  if (typeof rustSafety !== "object" || rustSafety === null) {
+    throw new Error(`${label} missing rustSafety doctor data`);
+  }
+  const native = String(rustSafety.native ?? "");
+  if (!native.includes("self-test passed")) {
+    throw new Error(`${label} native safety self-test not passing: ${native}`);
+  }
+  if (rustSafety.nativeSource !== "bundled") {
+    throw new Error(`${label} native safety did not resolve from bundled binary: ${rustSafety.nativeSource}`);
+  }
+  const expected = expectedNativePlatformArch();
+  if (rustSafety.nativePlatformArch !== expected) {
+    throw new Error(`${label} native safety platform mismatch: ${rustSafety.nativePlatformArch} !== ${expected}`);
+  }
+}
+
+const NATIVE_SMOKE_ENV = { OMK_SAFETY_BIN: "" };
+
 function assertNoUnexpectedIssues(parsed, label) {
   const errors = Array.isArray(parsed.errors) ? parsed.errors : [];
   const unexpectedErrors = errors.filter((e) => {
@@ -188,24 +213,26 @@ function assertNoUnexpectedIssues(parsed, label) {
 }
 
 try {
-  const raw = run(localOmkCmd("doctor --json --soft"), installDir);
+  const raw = run(localOmkCmd("doctor --json --soft"), installDir, NATIVE_SMOKE_ENV);
   const parsed = JSON.parse(raw);
   if (typeof parsed !== "object" || parsed === null) {
     throw new Error("doctor output is not a JSON object");
   }
   assertNoUnexpectedIssues(parsed, "local omk");
+  assertNativeSafety(parsed, "local omk");
   logPass("Local omk doctor --json --soft");
 } catch (err) {
   logFail("Local omk doctor --json --soft", err);
 }
 
 try {
-  const raw = run(localOhCmd("doctor --json --soft"), installDir);
+  const raw = run(localOhCmd("doctor --json --soft"), installDir, NATIVE_SMOKE_ENV);
   const parsed = JSON.parse(raw);
   if (typeof parsed !== "object" || parsed === null) {
     throw new Error("doctor output is not a JSON object");
   }
   assertNoUnexpectedIssues(parsed, "local oh-my-kimi");
+  assertNativeSafety(parsed, "local oh-my-kimi");
   logPass("Local oh-my-kimi doctor --json --soft");
 } catch (err) {
   logFail("Local oh-my-kimi doctor --json --soft", err);
@@ -276,6 +303,7 @@ try {
   const raw = run(localOmkCmd("update check --json --refresh"), installDir, {
     ...isolatedEnv,
     PATH: isolatedPath,
+    OMK_SAFETY_BIN: "",
   });
   const parsed = JSON.parse(raw);
   if (typeof parsed !== "object" || parsed === null) {
@@ -297,12 +325,14 @@ try {
   const raw = run(localOmkCmd("doctor --json --soft"), installDir, {
     ...isolatedEnv,
     PATH: isolatedPath,
+    OMK_SAFETY_BIN: "",
   });
   const parsed = JSON.parse(raw);
   if (typeof parsed !== "object" || parsed === null) {
     throw new Error("doctor output is not a JSON object");
   }
   assertNoUnexpectedIssues(parsed, "isolated-home");
+  assertNativeSafety(parsed, "isolated-home");
   logPass("Doctor soft smoke under isolated HOME");
 } catch (err) {
   logFail("Doctor soft smoke under isolated HOME", err);
@@ -366,12 +396,13 @@ const projectDir = mkdtempSync(join(tmpdir(), "omk-smoke-project-"));
 try {
   runSilently("git init", projectDir);
   run(localOmkCmd("init"), projectDir);
-  const raw = run(localOmkCmd("doctor --json --soft"), projectDir);
+  const raw = run(localOmkCmd("doctor --json --soft"), projectDir, NATIVE_SMOKE_ENV);
   const parsed = JSON.parse(raw);
   if (typeof parsed !== "object" || parsed === null) {
     throw new Error("doctor output is not a JSON object");
   }
   assertNoUnexpectedIssues(parsed, "Project");
+  assertNativeSafety(parsed, "Project");
   logPass("Fresh project init smoke");
 } catch (err) {
   logFail("Fresh project init smoke", err);

@@ -184,7 +184,15 @@ export function getOmkPath(subPath?: string): string {
   return subPath ? join(root, ".omk", subPath) : join(root, ".omk");
 }
 
-export { validateRunId, getRunsDir, getRunPath, listValidRunIds } from "./run-store.js";
+export {
+  validateRunId,
+  sanitizeRunId,
+  validateRunArtifactPath,
+  getRunsDir,
+  getRunPath,
+  getRunArtifactPath,
+  listValidRunIds,
+} from "./run-store.js";
 
 export function getKimiConfigPath(): string {
   return join(getUserHome(), ".kimi", "config.toml");

@@ -5,7 +5,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { skillInstallCommand, skillPackCommand, skillSyncCommand } from "../dist/commands/skill.js";
+import { getSkillCatalog, skillCatalogCommand, skillInstallCommand, skillPackCommand, skillSyncCommand } from "../dist/commands/skill.js";
 
 async function withTempProject(fn) {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-skill-project-"));
@@ -37,12 +37,43 @@ async function captureConsoleLog(fn) {
   }
 }
 
-test("skill pack lists open-design first in OMK core", async () => {
+test("skill pack lists Open Design and awesome-design-md in OMK core", async () => {
   const output = await captureConsoleLog(async () => {
     await skillPackCommand();
   });
 
-  assert.match(output, /Skills:\s*open-design, omk-global-rules/);
+  assert.match(output, /Skills:\s*open-design, awesome-design-md, omk-global-rules/);
+});
+
+test("skill catalog exposes OMX-style status metadata", async () => {
+  await withTempProject(async (projectRoot) => {
+    const catalog = await getSkillCatalog(projectRoot);
+    const core = catalog.packs.find((pack) => pack.id === "omk-core");
+    const awesomeDesign = catalog.skills.find((skill) => skill.name === "awesome-design-md");
+
+    assert.equal(core?.lifecycle, "active");
+    assert.equal(core?.installed, false);
+    assert.equal(awesomeDesign?.lifecycle, "active");
+    assert.equal(awesomeDesign?.slashCommand, true);
+    assert.equal(awesomeDesign?.templateAvailable, true);
+    assert.ok(awesomeDesign?.packs.includes("omk-core"));
+  });
+});
+
+test("skill catalog --json emits common machine-readable fields", async () => {
+  await withTempProject(async () => {
+    const output = await captureConsoleLog(async () => {
+      await skillCatalogCommand({ json: true });
+    });
+    const parsed = JSON.parse(output);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.command, "skill catalog");
+    assert.match(parsed.checkedAt, /^\d{4}-\d{2}-\d{2}T/);
+    assert.ok(Array.isArray(parsed.data.packs));
+    assert.ok(Array.isArray(parsed.data.skills));
+    assert.deepEqual(parsed.errors, []);
+  });
 });
 
 test("skill install generates slash commands from packaged templates outside the repo root", async () => {
@@ -50,6 +81,7 @@ test("skill install generates slash commands from packaged templates outside the
     await skillInstallCommand("omk-core");
 
     const openDesign = await readFile(join(projectRoot, ".kimi", "skills", "open-design", "SKILL.md"), "utf-8");
+    const awesomeDesignMd = await readFile(join(projectRoot, ".kimi", "skills", "awesome-design-md", "SKILL.md"), "utf-8");
     const graphView = await readFile(join(projectRoot, ".kimi", "skills", "graph-view", "SKILL.md"), "utf-8");
     const deepseekApi = await readFile(join(projectRoot, ".kimi", "skills", "deepseek-api", "SKILL.md"), "utf-8");
     const deepseekEnable = await readFile(join(projectRoot, ".kimi", "skills", "deepseek-enable", "SKILL.md"), "utf-8");
@@ -57,6 +89,8 @@ test("skill install generates slash commands from packaged templates outside the
 
     assert.match(openDesign, /^# \/open-design/m);
     assert.match(openDesign, /omk design open-design --open/);
+    assert.match(awesomeDesignMd, /^# \/awesome-design-md/m);
+    assert.match(awesomeDesignMd, /omk design search <keyword>/);
     assert.match(graphView, /^# \/graph-view/m);
     assert.match(deepseekApi, /^# \/deepseek-api/m);
     assert.match(deepseekApi, /omk deepseek api/);

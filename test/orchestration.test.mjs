@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -104,9 +104,11 @@ test("routing inventory discovers project skills and MCP without global scope", 
   const previousRoot = process.env.OMK_PROJECT_ROOT;
   const previousSkillsScope = process.env.OMK_SKILLS_SCOPE;
   const previousMcpScope = process.env.OMK_MCP_SCOPE;
+  const previousHooksScope = process.env.OMK_HOOKS_SCOPE;
   process.env.OMK_PROJECT_ROOT = projectRoot;
   process.env.OMK_SKILLS_SCOPE = "project";
   process.env.OMK_MCP_SCOPE = "project";
+  process.env.OMK_HOOKS_SCOPE = "project";
   resetRoutingInventoryCache();
 
   try {
@@ -116,20 +118,29 @@ test("routing inventory discovers project skills and MCP without global scope", 
     await writeFile(join(projectRoot, ".agents", "skills", "omk-repo-explorer", "SKILL.md"), "# repo explorer\n");
     await writeFile(join(projectRoot, ".kimi", "skills", "omk-task-router", "SKILL.md"), "# task router\n");
     await writeFile(join(projectRoot, ".omk", "mcp.json"), JSON.stringify({ mcpServers: { "omk-project": { command: "node" } } }));
+    await writeFile(join(projectRoot, ".omk", "kimi.config.toml"), [
+      "[[hooks]]",
+      "event = \"SubagentStop\"",
+      "command = \".omk/hooks/subagent-stop-audit.sh\"",
+      "",
+    ].join("\n"));
 
     const inventory = discoverRoutingInventory(projectRoot);
 
     assert.equal(inventory.skills.get("omk-repo-explorer"), "project");
     assert.equal(inventory.skills.get("omk-task-router"), "project");
     assert.equal(inventory.mcpServers.get("omk-project"), "project");
+    assert.equal(inventory.hooks.get("subagent-stop-audit.sh"), "project");
     assert.equal(inventory.tools.has("omk_run_quality_gate"), true);
     assert.equal(inventory.skillsScope, "project");
     assert.equal(inventory.mcpScope, "project");
+    assert.equal(inventory.hooksScope, "project");
   } finally {
     resetRoutingInventoryCache();
     restoreEnv("OMK_PROJECT_ROOT", previousRoot);
     restoreEnv("OMK_SKILLS_SCOPE", previousSkillsScope);
     restoreEnv("OMK_MCP_SCOPE", previousMcpScope);
+    restoreEnv("OMK_HOOKS_SCOPE", previousHooksScope);
     await rm(projectRoot, { recursive: true, force: true });
   }
 });
@@ -606,6 +617,7 @@ test("executor records agent timings and passes ETA environment", async () => {
     assert.ok(result.state.nodes.every((node) => node.attempts?.length === 1));
     assert.ok(seenEnv.every((env) => typeof env.OMK_ETA_REMAINING_MS === "string"));
     assert.ok(seenEnv.every((env) => typeof env.OMK_SKILL_HINTS === "string"));
+    assert.ok(seenEnv.every((env) => typeof env.OMK_HOOK_HINTS === "string"));
     assert.ok(seenEnv.some((env) => env.OMK_SKILL_HINTS.includes("omk-industrial-control-loop")));
     assert.ok(seenEnv.some((env) => env.OMK_SKILL_HINTS.includes("omk-typescript-strict")));
     assert.ok(savedStates.some((state) => state.estimate?.runningNodes === 1));
@@ -684,6 +696,61 @@ test("executor times out hanging node and marks it failed", async () => {
   assert.equal(slowNode?.status, "failed");
   assert.ok(slowNode?.attempts?.[0]?.status === "failed");
   assert.ok(slowResult?.stderr?.includes("timed out"));
+});
+
+test("executor waits for running siblings before terminal failure resolution", async () => {
+  const executor = createExecutor({ ensemble: false });
+  const dag = createDag({
+    nodes: [
+      { id: "fail-fast", name: "Fail fast", role: "coder", dependsOn: [], maxRetries: 1 },
+      { id: "slow-sibling", name: "Slow sibling", role: "coder", dependsOn: [], maxRetries: 1 },
+    ],
+  });
+  let slowCompleted = false;
+  const runner = {
+    async run(node, _env) {
+      if (node.id === "fail-fast") {
+        return { success: false, stdout: "", stderr: "boom" };
+      }
+      await new Promise((resolve) => setTimeout(resolve, 75));
+      slowCompleted = true;
+      return { success: true, stdout: "", stderr: "" };
+    },
+  };
+
+  const result = await executor.execute(dag, runner, {
+    runId: "terminal-sibling-race-test",
+    workers: 2,
+    approvalPolicy: "yolo",
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(slowCompleted, true);
+  assert.equal(result.state.nodes.find((node) => node.id === "fail-fast")?.status, "failed");
+  assert.equal(result.state.nodes.find((node) => node.id === "slow-sibling")?.status, "done");
+});
+
+test("executor rejects fractional worker counts", async () => {
+  const executor = createExecutor({ ensemble: false });
+  const dag = createDag({
+    nodes: [
+      { id: "plan", name: "Plan", role: "planner", dependsOn: [], maxRetries: 1 },
+    ],
+  });
+  const runner = {
+    async run() {
+      return { success: true, stdout: "", stderr: "" };
+    },
+  };
+
+  await assert.rejects(
+    () => executor.execute(dag, runner, {
+      runId: "fractional-workers-test",
+      workers: 1.5,
+      approvalPolicy: "yolo",
+    }),
+    /positive integer/
+  );
 });
 
 test("executor node timeout preset overrides run preset and default node timeout", async () => {
@@ -915,6 +982,54 @@ test("executor runs fallback node when terminal failure has fallbackRole", async
   assert.equal(result.success, true);
 });
 
+
+test("executor fallback node inherits evidence gates and blocks dependents on missing artifacts", async () => {
+  const executor = createExecutor({ ensemble: false });
+  const tmpDir = await mkdtemp(join(tmpdir(), "omk-fallback-evidence-"));
+  const dag = createDag({
+    nodes: [
+      {
+        id: "plan",
+        name: "Plan",
+        role: "planner",
+        dependsOn: [],
+        maxRetries: 1,
+        outputs: [{ name: "artifact", ref: "artifact.txt", gate: "file-exists" }],
+        failurePolicy: { fallbackRole: "coder" },
+      },
+      { id: "code", name: "Code", role: "coder", dependsOn: ["plan"], maxRetries: 1 },
+    ],
+  });
+  const runner = {
+    async run(node, _env) {
+      if (node.role === "planner") {
+        return { success: false, stdout: "", stderr: "plan failed" };
+      }
+      return { success: true, stdout: "fallback ok", stderr: "" };
+    },
+  };
+
+  try {
+    const result = await executor.execute(dag, runner, {
+      runId: "fallback-evidence-test",
+      workers: 1,
+      approvalPolicy: "yolo",
+      worktreeRoot: tmpDir,
+    });
+
+    const fallbackNode = result.state.nodes.find((n) => n.id === "plan--fallback");
+    assert.ok(fallbackNode, "fallback node should exist");
+    assert.equal(fallbackNode.status, "failed");
+    assert.equal(fallbackNode.outputs?.[0]?.gate, "file-exists");
+    assert.equal(fallbackNode.evidence?.[0]?.passed, false);
+    assert.match(fallbackNode.evidence?.[0]?.message ?? "", /File does not exist/);
+    assert.equal(result.state.nodes.find((n) => n.id === "code")?.status, "blocked");
+    assert.equal(result.success, false);
+  } finally {
+    await rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test("executor respects AbortSignal and cancels pending nodes", async () => {
   const ac = new AbortController();
   const executor = createExecutor({ ensemble: false, signal: ac.signal });
@@ -1032,6 +1147,91 @@ test("evidence gate fails node when file-exists gate misses", async () => {
   const buildNode = result.state.nodes.find((n) => n.id === "build");
   assert.equal(buildNode?.status, "failed");
   assert.ok(buildNode?.evidence?.some((e) => e.gate === "file-exists" && !e.passed));
+});
+
+test("evidence gate blocks file-exists refs outside worktree", async () => {
+  const root = await mkdtemp(join(tmpdir(), "omk-evidence-boundary-"));
+  const worktree = join(root, "worktree");
+  await mkdir(worktree, { recursive: true });
+  await writeFile(join(root, "outside.txt"), "outside");
+
+  try {
+    const executor = createExecutor({ ensemble: false });
+    const dag = createDag({
+      nodes: [
+        {
+          id: "artifact",
+          name: "Artifact",
+          role: "coder",
+          dependsOn: [],
+          maxRetries: 1,
+          outputs: [{ name: "outside", gate: "file-exists", ref: "../outside.txt" }],
+        },
+      ],
+    });
+    const runner = {
+      async run() {
+        return { success: true, stdout: "built", stderr: "" };
+      },
+    };
+
+    const result = await executor.execute(dag, runner, {
+      runId: "evidence-boundary-test",
+      workers: 1,
+      approvalPolicy: "yolo",
+      worktreeRoot: worktree,
+    });
+
+    assert.equal(result.success, false);
+    const artifactNode = result.state.nodes.find((node) => node.id === "artifact");
+    assert.equal(artifactNode?.status, "failed");
+    assert.ok(artifactNode?.evidence?.some((e) => e.gate === "file-exists" && !e.passed && e.message?.includes("outside workspace")));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("evidence gate blocks file-exists symlink escapes outside worktree", async () => {
+  const root = await mkdtemp(join(tmpdir(), "omk-evidence-symlink-"));
+  const worktree = join(root, "worktree");
+  await mkdir(worktree, { recursive: true });
+  await writeFile(join(root, "outside.txt"), "outside");
+  await symlink(join(root, "outside.txt"), join(worktree, "artifact.txt"));
+
+  try {
+    const executor = createExecutor({ ensemble: false });
+    const dag = createDag({
+      nodes: [
+        {
+          id: "artifact",
+          name: "Artifact",
+          role: "coder",
+          dependsOn: [],
+          maxRetries: 1,
+          outputs: [{ name: "artifact", gate: "file-exists", ref: "artifact.txt" }],
+        },
+      ],
+    });
+    const runner = {
+      async run() {
+        return { success: true, stdout: "built", stderr: "" };
+      },
+    };
+
+    const result = await executor.execute(dag, runner, {
+      runId: "evidence-symlink-test",
+      workers: 1,
+      approvalPolicy: "yolo",
+      worktreeRoot: worktree,
+    });
+
+    assert.equal(result.success, false);
+    const artifactNode = result.state.nodes.find((node) => node.id === "artifact");
+    assert.equal(artifactNode?.status, "failed");
+    assert.ok(artifactNode?.evidence?.some((e) => e.gate === "file-exists" && !e.passed && e.message?.includes("outside workspace")));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 

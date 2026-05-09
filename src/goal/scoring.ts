@@ -1,13 +1,14 @@
 import type { GoalEvidence, GoalScore, GoalSpec } from "../contracts/goal.js";
 
 export function scoreGoal(goal: GoalSpec, evidence: GoalEvidence[]): GoalScore {
+  const evidenceByCriterion = latestEvidenceByCriterion(evidence);
   const requiredCriteria = goal.successCriteria.filter((c) => c.requirement === "required");
   const optionalCriteria = goal.successCriteria.filter((c) => c.requirement === "optional");
 
   let requiredPassed = 0;
   let requiredFailed = 0;
   for (const criterion of requiredCriteria) {
-    const ev = evidence.find((e) => e.criterionId === criterion.id);
+    const ev = evidenceByCriterion.get(criterion.id);
     if (ev?.passed) {
       requiredPassed++;
     } else if (ev && !ev.passed) {
@@ -18,7 +19,7 @@ export function scoreGoal(goal: GoalSpec, evidence: GoalEvidence[]): GoalScore {
   let optionalWeightedSum = 0;
   let optionalWeightTotal = 0;
   for (const criterion of optionalCriteria) {
-    const ev = evidence.find((e) => e.criterionId === criterion.id);
+    const ev = evidenceByCriterion.get(criterion.id);
     optionalWeightTotal += criterion.weight;
     if (ev?.passed) {
       optionalWeightedSum += criterion.weight;
@@ -28,7 +29,7 @@ export function scoreGoal(goal: GoalSpec, evidence: GoalEvidence[]): GoalScore {
   const optionalScore = optionalWeightTotal > 0 ? optionalWeightedSum / optionalWeightTotal : 0;
 
   // Quality gate: all artifact gates must pass
-  const artifactEvidence = evidence.filter((e) => e.criterionId.startsWith("artifact:"));
+  const artifactEvidence = [...evidenceByCriterion.values()].filter((e) => e.criterionId.startsWith("artifact:"));
   const qualityGatePassed = artifactEvidence.length === 0 || artifactEvidence.every((e) => e.passed);
 
   let overall: GoalScore["overall"];
@@ -53,4 +54,20 @@ export function scoreGoal(goal: GoalSpec, evidence: GoalEvidence[]): GoalScore {
     qualityGatePassed,
     overall,
   };
+}
+
+function latestEvidenceByCriterion(evidence: GoalEvidence[]): Map<string, GoalEvidence> {
+  const latest = new Map<string, GoalEvidence>();
+  for (const ev of evidence) {
+    const previous = latest.get(ev.criterionId);
+    if (!previous || evidenceCheckedAt(ev) >= evidenceCheckedAt(previous)) {
+      latest.set(ev.criterionId, ev);
+    }
+  }
+  return latest;
+}
+
+function evidenceCheckedAt(evidence: GoalEvidence): number {
+  const timestamp = Date.parse(evidence.checkedAt);
+  return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
 }

@@ -11,6 +11,30 @@ interface SkillPack {
   skills: string[]; // directory names under templates/skills/kimi/
 }
 
+export interface SkillCatalogPack {
+  id: string;
+  name: string;
+  description: string;
+  lifecycle: "active";
+  installed: boolean;
+  skills: string[];
+}
+
+export interface SkillCatalogSkill {
+  name: string;
+  lifecycle: "active";
+  slashCommand: boolean;
+  templateAvailable: boolean;
+  installed: boolean;
+  packs: string[];
+}
+
+export interface SkillCatalog {
+  packs: SkillCatalogPack[];
+  skills: SkillCatalogSkill[];
+  templateDir: string | null;
+}
+
 const PACKS: SkillPack[] = [
   {
     id: "omk-core",
@@ -18,6 +42,7 @@ const PACKS: SkillPack[] = [
     description: "Essential OMK orchestration skills plus localhost design entrypoints",
     skills: [
       "open-design",
+      "awesome-design-md",
       "omk-global-rules",
       "omk-project-rules",
       "omk-kimi-runtime",
@@ -96,6 +121,7 @@ const SLASH_COMMAND_SKILLS = new Set([
   "deepseekset",
   "graph-view",
   "open-design",
+  "awesome-design-md",
 ]);
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -115,6 +141,52 @@ async function getInstalledPacks(root: string): Promise<string[]> {
   } catch {
     return [];
   }
+}
+
+async function listDirectoryNames(dir: string): Promise<Set<string>> {
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    return new Set(entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name));
+  } catch {
+    return new Set();
+  }
+}
+
+export async function getSkillCatalog(root = getProjectRoot()): Promise<SkillCatalog> {
+  const [installedPacks, templatesDir] = await Promise.all([getInstalledPacks(root), getTemplatesDir()]);
+  const templateNames = templatesDir ? await listDirectoryNames(templatesDir) : new Set<string>();
+  const installedSkillNames = await listDirectoryNames(join(root, ".kimi", "skills"));
+  const packIdsBySkill = new Map<string, string[]>();
+
+  for (const pack of PACKS) {
+    for (const skillName of pack.skills) {
+      const packIds = packIdsBySkill.get(skillName) ?? [];
+      packIds.push(pack.id);
+      packIdsBySkill.set(skillName, packIds);
+    }
+  }
+
+  const skillNames = [...new Set([...templateNames, ...packIdsBySkill.keys(), ...installedSkillNames])].sort();
+
+  return {
+    templateDir: templatesDir,
+    packs: PACKS.map((pack) => ({
+      id: pack.id,
+      name: pack.name,
+      description: pack.description,
+      lifecycle: "active",
+      installed: installedPacks.includes(pack.id),
+      skills: [...pack.skills],
+    })),
+    skills: skillNames.map((skillName) => ({
+      name: skillName,
+      lifecycle: "active",
+      slashCommand: SLASH_COMMAND_SKILLS.has(skillName),
+      templateAvailable: templateNames.has(skillName),
+      installed: installedSkillNames.has(skillName),
+      packs: packIdsBySkill.get(skillName) ?? [],
+    })),
+  };
 }
 
 async function saveInstalledPacks(root: string, packs: string[]): Promise<void> {
@@ -221,6 +293,46 @@ export async function skillPackCommand(): Promise<void> {
 
   if (!templatesDir) {
     console.log(status.warn("Template directory not found. Is OMK installed globally?"));
+  }
+}
+
+export async function skillCatalogCommand(options: { json?: boolean } = {}): Promise<void> {
+  const catalog = await getSkillCatalog();
+  const missingTemplates = catalog.skills.filter((skill) => skill.packs.length > 0 && !skill.templateAvailable);
+  const output = {
+    ok: missingTemplates.length === 0,
+    command: "skill catalog",
+    checkedAt: new Date().toISOString(),
+    data: catalog,
+    warnings: missingTemplates.map((skill) => ({
+      name: skill.name,
+      message: `Skill is referenced by ${skill.packs.join(", ")} but template is missing`,
+    })),
+    errors: [],
+  };
+
+  if (options.json) {
+    console.log(JSON.stringify(output, null, 2));
+    return;
+  }
+
+  console.log(header("Skill Catalog"));
+  console.log("");
+  console.log(label("Packs", String(catalog.packs.length)));
+  console.log(label("Skills", String(catalog.skills.length)));
+  console.log(label("Templates", catalog.templateDir ?? "not found"));
+  console.log("");
+
+  for (const pack of catalog.packs) {
+    const marker = pack.installed ? style.mint("✓") : style.gray("○");
+    console.log(`${marker} ${style.cream(pack.id)} ${style.gray(`[${pack.lifecycle}]`)} — ${pack.skills.length} skills`);
+  }
+
+  if (output.warnings.length > 0) {
+    console.log("");
+    for (const warning of output.warnings) {
+      console.log(status.warn(`${warning.name}: ${warning.message}`));
+    }
   }
 }
 

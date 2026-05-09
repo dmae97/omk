@@ -2,7 +2,7 @@
 /**
  * Package truth audit — cross-platform (Windows / Linux / macOS)
  * Validates the tarball that npm would publish using npm pack --dry-run --json.
- * No shell pipes, grep, head, or tar.
+ * No shell pipes, grep, head, or shell-interpolated tar commands.
  * Does NOT rebuild or repack the artifact — only audits what npm pack reports.
  *
  * Hard-fail checks:
@@ -18,7 +18,7 @@
  *   - size budgets (tarball, unpacked, entryCount, single file, readmeasset, dist)
  *   - markdown local link integrity (README.md + docs\/\/*\/ links point to packed files)
  */
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import {
   readFileSync,
   appendFileSync,
@@ -26,7 +26,7 @@ import {
   statSync,
   existsSync,
 } from "node:fs";
-import { join, relative, extname, dirname, resolve } from "node:path";
+import { basename, join, relative, extname, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // ---------------------------------------------------------------------------
@@ -75,10 +75,10 @@ export const FORBIDDEN_PATTERNS = [
 export const SIZE_BUDGETS = {
   tarballMb: 35,
   unpackedMb: 40,
-  entryCount: 650,
+  entryCount: 680,
   singleFileMb: 20,
   readmeassetMb: 30,
-  distMb: 5,
+  distMb: 20,
 };
 
 export const MEDIA_EXTENSIONS = new Set([
@@ -306,6 +306,37 @@ export function validateFilesAllowlist(localFiles, pathSet) {
   return { errors };
 }
 
+
+export function nativePlatformArch(platform = process.platform, arch = process.arch) {
+  return `${platform}-${arch}`;
+}
+
+export function nativeBinaryName(platform = process.platform) {
+  return platform === "win32" ? "omk-safety.exe" : "omk-safety";
+}
+
+export function expectedNativeSafetyPath(platform = process.platform, arch = process.arch) {
+  return `dist/native/${nativePlatformArch(platform, arch)}/${nativeBinaryName(platform)}`;
+}
+
+export function validateNativeSafety(files, platform = process.platform, arch = process.arch) {
+  const errors = [];
+  const pathSet = new Set(files.map((f) => toPosix(f.path || "")));
+  const expected = expectedNativeSafetyPath(platform, arch);
+  if (!pathSet.has(expected)) {
+    errors.push(`Native safety binary missing for current platform: ${expected}. Run npm run native:build before packing.`);
+  }
+
+  const nativeEntries = [...pathSet].filter((p) => p.startsWith("dist/native/"));
+  for (const entry of nativeEntries) {
+    if (!/^dist\/native\/[^/]+-[^/]+\/omk-safety(?:\.exe)?$/.test(entry)) {
+      errors.push(`Unexpected native safety layout: ${entry}`);
+    }
+  }
+
+  return { errors };
+}
+
 export function validateBinTruth(binEntries, pathSet) {
   const errors = [];
   for (const [name, target] of binEntries) {
@@ -439,16 +470,20 @@ export function validateSizeBudgets(files, pkg) {
     );
   }
 
-  let largestFiles = [];
+  const largestFiles = [];
+  const groupSizes = new Map();
   for (const f of files) {
     const path = toPosix(f.path || "");
-    const fileSizeMb = (f.size || 0) / (1024 * 1024);
+    const size = f.size || 0;
+    const fileSizeMb = size / (1024 * 1024);
     if (fileSizeMb > SIZE_BUDGETS.singleFileMb) {
       errors.push(
         `Oversized single file: ${path} ${fileSizeMb.toFixed(2)} MB`
       );
     }
-    largestFiles.push({ path, size: f.size || 0, sizeMb: fileSizeMb });
+    largestFiles.push({ path, size, sizeMb: fileSizeMb });
+    const group = path.includes("/") ? path.split("/")[0] + "/" : "(root)";
+    groupSizes.set(group, (groupSizes.get(group) ?? 0) + size);
   }
 
   let readmeassetTotal = 0;
@@ -472,7 +507,14 @@ export function validateSizeBudgets(files, pkg) {
     );
   }
 
-  return { errors, largestFiles };
+  const sizeDrivers = {
+    groups: [...groupSizes.entries()]
+      .map(([path, size]) => ({ path, size, sizeMb: size / (1024 * 1024) }))
+      .sort((a, b) => b.size - a.size),
+    largestFiles: largestFiles.slice().sort((a, b) => b.size - a.size),
+  };
+
+  return { errors, largestFiles, sizeDrivers };
 }
 
 // ---------------------------------------------------------------------------
@@ -504,16 +546,40 @@ function runValidator(label, result, ciPrefix) {
   return failed;
 }
 
-function readTarballMetadata(tarballPath) {
-  // Extract package.json from tarball
-  const pkgJson = execSync(`tar -xzf "${tarballPath}" -O package/package.json`, {
+
+export function resolveTarballArg(pattern, cwd = process.cwd()) {
+  if (!pattern.includes("*") && !pattern.includes("?")) {
+    const p = resolve(cwd, pattern);
+    if (!existsSync(p)) throw new Error(`Tarball not found: ${p}`);
+    return p;
+  }
+
+  const absolutePattern = resolve(cwd, pattern);
+  const dir = dirname(absolutePattern) || cwd;
+  const base = basename(absolutePattern);
+  const regex = new RegExp(
+    "^" + base
+      .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+      .replace(/\*/g, ".*")
+      .replace(/\?/g, ".") + "$"
+  );
+  const files = readdirSync(dir).filter((f) => regex.test(f)).sort();
+
+  if (files.length === 0) throw new Error(`No tarball matches glob: ${pattern}`);
+  if (files.length > 1) throw new Error(`Ambiguous tarball glob ${pattern}: ${files.join(", ")}`);
+  return join(dir, files[0]);
+}
+
+export function readTarballMetadata(tarballPath) {
+  // Extract package.json from tarball without shell interpolation.
+  const pkgJson = execFileSync("tar", ["-xzf", tarballPath, "-O", "package/package.json"], {
     encoding: "utf8",
     maxBuffer: 10 * 1024 * 1024,
   });
   const pkg = JSON.parse(pkgJson);
 
-  // List all entries
-  const listOutput = execSync(`tar -tzf "${tarballPath}"`, {
+  // List all entries without shell interpolation.
+  const listOutput = execFileSync("tar", ["-tzf", tarballPath], {
     encoding: "utf8",
     maxBuffer: 10 * 1024 * 1024,
   });
@@ -532,7 +598,7 @@ function readTarballMetadata(tarballPath) {
   return [{
     name: pkg.name,
     version: pkg.version,
-    filename: tarballPath.split("/").pop() || tarballPath,
+    filename: basename(tarballPath),
     size: statSync(tarballPath).size,
     unpackedSize: 0,
     entryCount: files.length,
@@ -548,10 +614,7 @@ export function main(tarballPath) {
   let packResult;
   try {
     if (tarballPath) {
-      if (!existsSync(tarballPath)) {
-        throw new Error(`Tarball not found: ${tarballPath}`);
-      }
-      packResult = readTarballMetadata(tarballPath);
+      packResult = readTarballMetadata(resolveTarballArg(tarballPath));
     } else {
       const stdout = execSync("npm pack --dry-run --ignore-scripts --json", {
         encoding: "utf8",
@@ -603,6 +666,7 @@ export function main(tarballPath) {
     ? Object.entries(localPkg.bin)
     : [];
   failed = runValidator("BIN", validateBinTruth(binEntries, pathSet), "BIN") || failed;
+  failed = runValidator("NATIVE_SAFETY", validateNativeSafety(files), "NATIVE_SAFETY") || failed;
 
   // Dist drift
   if (existsSync("src") && existsSync("dist")) {
@@ -636,6 +700,13 @@ export function main(tarballPath) {
       ciAnnotation("error", err);
     }
     failed = true;
+    const groups = sizeResult.sizeDrivers?.groups ?? [];
+    if (groups.length > 0) {
+      console.log("\n📦 Top size drivers by package directory:");
+      for (const group of groups.slice(0, 8)) {
+        console.log(`   ${group.sizeMb.toFixed(2)} MB  ${group.path}`);
+      }
+    }
     sizeResult.largestFiles.sort((a, b) => b.size - a.size);
     console.log("\n📦 Top 10 largest files in tarball:");
     for (const f of sizeResult.largestFiles.slice(0, 10)) {
@@ -658,6 +729,7 @@ export function main(tarballPath) {
     `- Size: ${sizeMb.toFixed(2)} MB (compressed) / ${unpackedMb.toFixed(2)} MB (unpacked)`,
     `- Entries: ${entryCount}`,
     `- Required: ${REQUIRED_ENTRIES.join(", ")}`,
+    `- Native safety: ${expectedNativeSafetyPath()}`,
     `- Forbidden patterns: ${FORBIDDEN_PATTERNS.length} rules`,
     `- Result: ${failed ? "FAILED" : "PASSED"}`,
   ];

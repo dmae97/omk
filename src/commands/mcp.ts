@@ -28,6 +28,57 @@ interface ConfigSource {
   error?: string;
 }
 
+export interface McpDoctorOptions {
+  json?: boolean;
+}
+
+type McpDoctorSeverity = "ok" | "info" | "warn" | "error";
+
+export interface McpDoctorCheck {
+  severity: McpDoctorSeverity;
+  kind: string;
+  message: string;
+}
+
+export interface McpDoctorSourceReport {
+  path: string;
+  parsed: boolean;
+  status: "ok" | "empty" | "error";
+  serverCount: number;
+  error?: string;
+}
+
+export interface McpDoctorServerReport {
+  name: string;
+  status: "ok" | "warn" | "error";
+  active: boolean;
+  sources: string[];
+  activeSources: string[];
+  transport: "remote" | "stdio" | "invalid";
+  url?: string;
+  command?: string;
+  resolvedCommand?: string;
+  timeoutSec?: number;
+  checks: McpDoctorCheck[];
+}
+
+export interface McpDoctorReport {
+  ok: boolean;
+  command: "mcp doctor";
+  checkedAt: string;
+  activeScope: string;
+  issueCount: number;
+  errors: string[];
+  warnings: string[];
+  sources: McpDoctorSourceReport[];
+  servers: McpDoctorServerReport[];
+  data: {
+    activeScope: string;
+    sourceCount: number;
+    serverCount: number;
+  };
+}
+
 const RAILWAY_REMOTE_MCP_URL = "https://mcp.railway.com";
 const JSON_RPC_INTERNAL_ERROR_CODE = -32603;
 
@@ -121,141 +172,235 @@ export async function mcpListCommand(): Promise<void> {
   }
 }
 
-export async function mcpDoctorCommand(): Promise<void> {
+export async function mcpDoctorCommand(options: McpDoctorOptions = {}): Promise<void> {
+  const report = await buildMcpDoctorReport();
+
+  if (options.json) {
+    console.log(JSON.stringify(report, null, 2));
+    if (!report.ok) process.exitCode = 1;
+    return;
+  }
+
+  emitMcpDoctorText(report);
+  if (!report.ok) process.exitCode = 1;
+}
+
+export async function buildMcpDoctorReport(): Promise<McpDoctorReport> {
   const sources = await resolveAllConfigs();
   const servers = collectServers(sources);
   const resources = await getOmkResourceSettings();
   const activePaths = new Set(await collectMcpConfigs(resources.mcpScope));
 
+  const sourceReports: McpDoctorSourceReport[] = sources.map((src) => {
+    const serverCount = src.parsed ? Object.keys(src.config.mcpServers ?? {}).length : 0;
+    const sourceReport: McpDoctorSourceReport = {
+      path: src.path,
+      parsed: src.parsed,
+      status: !src.parsed ? "error" : serverCount === 0 ? "empty" : "ok",
+      serverCount,
+      error: src.error,
+    };
+    return sourceReport;
+  });
+
+  const serverReports: McpDoctorServerReport[] = [];
+  for (const [name, info] of servers) {
+    const server = info.server;
+    const checks: McpDoctorCheck[] = [];
+    const activeSources = info.sources.filter((source) => activePaths.has(source));
+    const active = activeSources.length > 0;
+    let resolvedCommand: string | undefined;
+
+    if (activeSources.length > 1) {
+      if (name === "omk-project") {
+        checks.push({
+          severity: "info",
+          kind: "managed-duplicate",
+          message: `managed omk-project mirror duplicate: ${activeSources.join(", ")}`,
+        });
+      } else {
+        checks.push({
+          severity: "error",
+          kind: "active-duplicate",
+          message: `active duplicate definition in: ${activeSources.join(", ")}`,
+        });
+      }
+    } else if (info.sources.length > 1) {
+      checks.push({
+        severity: "info",
+        kind: "inactive-duplicate",
+        message: `duplicate mirror outside active scope: ${info.sources.join(", ")}`,
+      });
+    }
+
+    if (server.url) {
+      const urlCheck = validateRemoteMcpUrl(server.url);
+      if (urlCheck.ok) {
+        checks.push({ severity: "ok", kind: "url", message: `url: ${server.url}` });
+      } else {
+        checks.push({ severity: "error", kind: "invalid-url", message: `invalid url: ${urlCheck.message}` });
+      }
+    } else if (!server.command) {
+      checks.push({ severity: "error", kind: "missing-command", message: "missing command" });
+    } else {
+      const resolved = await which(server.command);
+      if (resolved.failed) {
+        checks.push({ severity: "error", kind: "command-not-found", message: `command not found: ${server.command}` });
+      } else {
+        resolvedCommand = resolved.stdout.trim();
+        checks.push({ severity: "ok", kind: "command", message: `command: ${resolvedCommand}` });
+      }
+    }
+
+    if (!server.url && server.args) {
+      for (const [index, arg] of server.args.entries()) {
+        if (!shouldValidateArgPath(server, arg, index)) continue;
+        if (!isAbsolute(arg) && !arg.includes("/") && !arg.includes("\\")) continue;
+        const exists = await pathExists(arg);
+        checks.push(exists
+          ? { severity: "ok", kind: "arg-path", message: `arg path: ${arg}` }
+          : { severity: "error", kind: "arg-path-not-found", message: `arg path not found: ${arg}` });
+      }
+    }
+
+    if (server.env) {
+      for (const [key, value] of Object.entries(server.env)) {
+        if (value.startsWith("${") && value.endsWith("}")) {
+          const envName = value.slice(2, -1);
+          if (!process.env[envName]) {
+            checks.push({ severity: "warn", kind: "env-reference-undefined", message: `env reference undefined: ${key} → ${envName}` });
+          }
+        }
+      }
+    }
+
+    const stabilityHints = stabilityHintsForServer(name, server);
+    for (const hint of stabilityHints) {
+      checks.push({ severity: "info", kind: "stability", message: `stability: ${hint}` });
+    }
+
+    const hasError = checks.some((check) => check.severity === "error");
+    const hasWarn = checks.some((check) => check.severity === "warn");
+
+    serverReports.push({
+      name,
+      status: hasError ? "error" : hasWarn ? "warn" : "ok",
+      active,
+      sources: info.sources,
+      activeSources,
+      transport: server.url ? "remote" : server.command ? "stdio" : "invalid",
+      url: server.url,
+      command: server.command,
+      resolvedCommand,
+      timeoutSec: server.startup_timeout_sec,
+      checks,
+    });
+  }
+
+  const errors = [
+    ...sourceReports
+      .filter((source) => source.status === "error")
+      .map((source) => `${source.path}: ${source.error ?? "invalid MCP config"}`),
+    ...serverReports.flatMap((server) =>
+      server.checks
+        .filter((check) => check.severity === "error")
+        .map((check) => `${server.name}: ${check.message}`)
+    ),
+  ];
+  const warnings = serverReports.flatMap((server) =>
+    server.checks
+      .filter((check) => check.severity === "warn")
+      .map((check) => `${server.name}: ${check.message}`)
+  );
+
+  return {
+    ok: errors.length === 0,
+    command: "mcp doctor",
+    checkedAt: new Date().toISOString(),
+    activeScope: resources.mcpScope,
+    issueCount: errors.length,
+    errors,
+    warnings,
+    sources: sourceReports,
+    servers: serverReports,
+    data: {
+      activeScope: resources.mcpScope,
+      sourceCount: sourceReports.length,
+      serverCount: serverReports.length,
+    },
+  };
+}
+
+function emitMcpDoctorText(report: McpDoctorReport): void {
   console.log(header("MCP Doctor"));
-  console.log(style.gray(`Active MCP scope: ${resources.mcpScope}`));
+  console.log(style.gray(`Active MCP scope: ${report.activeScope}`));
 
-  let issues = 0;
-
-  // Config file checks
-  for (const src of sources) {
-    if (!src.parsed) {
+  for (const src of report.sources) {
+    if (src.status === "error") {
       console.log(status.error(`${src.path}: ${src.error}`));
-      issues++;
-    } else if (!src.config.mcpServers || Object.keys(src.config.mcpServers).length === 0) {
+    } else if (src.status === "empty") {
       console.log(style.gray(`${src.path}: no mcpServers defined`));
     } else {
       console.log(status.ok(`${src.path}`));
     }
   }
 
-  if (servers.size === 0) {
+  if (report.servers.length === 0) {
     console.log("\n" + style.gray("No servers to diagnose."));
-    process.exitCode = issues > 0 ? 1 : 0;
-    return;
-  }
-
-  // Server checks
-  console.log("");
-  for (const [name, info] of servers) {
-    console.log(label("Server", name));
-    const activeDuplicateSources = info.sources.filter((source) => activePaths.has(source));
-
-    if (activeDuplicateSources.length > 1) {
-      if (name === "omk-project") {
-        console.log(`  ${style.gray("ℹ managed omk-project mirror duplicate:")} ${activeDuplicateSources.join(", ")}`);
-      } else {
-        console.log(`  ${style.skin("⚠ active duplicate definition in:")} ${activeDuplicateSources.join(", ")}`);
-        issues++;
-      }
-    } else if (info.sources.length > 1) {
-      console.log(`  ${style.gray("ℹ duplicate mirror outside active scope:")} ${info.sources.join(", ")}`);
-    }
-
-    const server = info.server;
-
-    // Transport check
-    if (server.url) {
-      const urlCheck = validateRemoteMcpUrl(server.url);
-      if (urlCheck.ok) {
-        console.log(`  ${style.mint("✓ url:")} ${server.url}`);
-      } else {
-        console.log(`  ${style.pink("✗ invalid url:")} ${urlCheck.message}`);
-        issues++;
-      }
-    } else if (!server.command) {
-      console.log(`  ${style.pink("✗ missing command")}`);
-      issues++;
-    } else {
-      const resolved = await which(server.command);
-      if (resolved.failed) {
-        console.log(`  ${style.pink("✗ command not found:")} ${server.command}`);
-        issues++;
-      } else {
-        console.log(`  ${style.mint("✓ command:")} ${resolved.stdout.trim()}`);
-      }
-    }
-
-    // args check
-    if (!server.url && server.args) {
-      for (const [index, arg] of server.args.entries()) {
-        // Check if arg looks like a file path and exists
-        if (shouldValidateArgPath(server, arg, index)) {
-          if (isAbsolute(arg) || arg.includes("/") || arg.includes("\\")) {
-            const exists = await pathExists(arg);
-            if (!exists) {
-              console.log(`  ${style.pink("✗ arg path not found:")} ${arg}`);
-              issues++;
-            } else {
-              console.log(`  ${style.mint("✓ arg path:")} ${arg}`);
-            }
-          }
-        }
-      }
-    }
-
-    // env check (static — flag if referenced env vars are empty in current process)
-    if (server.env) {
-      for (const [key, value] of Object.entries(server.env)) {
-        if (value.startsWith("${") && value.endsWith("}")) {
-          const envName = value.slice(2, -1);
-          if (!process.env[envName]) {
-            console.log(`  ${style.skin("⚠ env reference undefined:")} ${key} → ${envName}`);
-          }
-        }
-      }
-    }
-
-    // Stability hints for slow-starting or failed servers
-    if (server.command || server.url) {
-      const stabilityHints: string[] = [];
-      const target = serverTargetText(server);
-      if ((server.command?.includes("npx") ?? false) || (server.command?.includes("npm") ?? false)) {
-        stabilityHints.push("npx-based servers may take >10s to start on first run. Consider installing globally or pinning the package.");
-      }
-      if (isRailwayMcpServer(name, server)) {
-        if (server.url?.includes("mcp.railway.com")) {
-          stabilityHints.push("Railway remote MCP uses OAuth over HTTP and avoids local npx/CLI token files; the first tool call may open browser auth.");
-        } else if (target.includes("@railway/mcp-server")) {
-          stabilityHints.push(`Railway local MCP depends on Railway CLI auth and npx cold starts. Prefer the remote OAuth preset: omk mcp install railway or Codex: codex mcp add railway --url ${RAILWAY_REMOTE_MCP_URL}.`);
-        } else {
-          stabilityHints.push(`Railway MCP is most stable as a remote OAuth server at ${RAILWAY_REMOTE_MCP_URL}; avoid committing API tokens into MCP JSON.`);
-        }
-      }
-      if (name === "promptfoo") {
-        stabilityHints.push("promptfoo can be slow to initialize. Ensure NODE_OPTIONS does not limit memory, or run 'omk mcp test promptfoo' with a longer timeout.");
-      }
-      if (name === "obsidian") {
-        stabilityHints.push("obsidian MCP requires an active Obsidian vault and the Local REST API plugin. If the vault is closed, the server will fail.");
-      }
-      if (stabilityHints.length > 0) {
-        console.log(`  ${style.skin("ℹ stability:")} ${stabilityHints.join(" ")}`);
+  } else {
+    console.log("");
+    for (const server of report.servers) {
+      console.log(label("Server", server.name));
+      for (const check of server.checks) {
+        console.log(`  ${formatMcpDoctorCheck(check)}`);
       }
     }
   }
 
   console.log("");
-  if (issues === 0) {
+  if (report.ok) {
     console.log(status.ok("All checks passed"));
   } else {
-    console.log(status.error(`${issues} issue(s) found`));
-    process.exitCode = 1;
+    console.log(status.error(`${report.issueCount} issue(s) found`));
   }
+}
+
+function formatMcpDoctorCheck(check: McpDoctorCheck): string {
+  switch (check.severity) {
+    case "ok":
+      return `${style.mint("✓")} ${check.message}`;
+    case "warn":
+      return `${style.skin("⚠")} ${check.message}`;
+    case "error":
+      return `${style.pink("✗")} ${check.message}`;
+    default:
+      return `${style.gray("ℹ")} ${check.message}`;
+  }
+}
+
+function stabilityHintsForServer(name: string, server: McpServerConfig): string[] {
+  if (!server.command && !server.url) return [];
+  const hints: string[] = [];
+  const target = serverTargetText(server);
+  if ((server.command?.includes("npx") ?? false) || (server.command?.includes("npm") ?? false)) {
+    hints.push("npx-based servers may take >10s to start on first run. Consider installing globally or pinning the package.");
+  }
+  if (isRailwayMcpServer(name, server)) {
+    if (server.url?.includes("mcp.railway.com")) {
+      hints.push("Railway remote MCP uses OAuth over HTTP and avoids local npx/CLI token files; the first tool call may open browser auth.");
+    } else if (target.includes("@railway/mcp-server")) {
+      hints.push(`Railway local MCP depends on Railway CLI auth and npx cold starts. Prefer the remote OAuth preset: omk mcp install railway or Codex: codex mcp add railway --url ${RAILWAY_REMOTE_MCP_URL}.`);
+    } else {
+      hints.push(`Railway MCP is most stable as a remote OAuth server at ${RAILWAY_REMOTE_MCP_URL}; avoid committing API tokens into MCP JSON.`);
+    }
+  }
+  if (name === "promptfoo") {
+    hints.push("promptfoo can be slow to initialize. Ensure NODE_OPTIONS does not limit memory, or run 'omk mcp test promptfoo' with a longer timeout.");
+  }
+  if (name === "obsidian") {
+    hints.push("obsidian MCP requires an active Obsidian vault and the Local REST API plugin. If the vault is closed, the server will fail.");
+  }
+  return hints;
 }
 
 function shouldValidateArgPath(server: McpServerConfig, arg: string, index: number): boolean {

@@ -1,13 +1,16 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import { mkdtempSync, writeFileSync, mkdirSync, existsSync, utimesSync } from "node:fs";
-import { tmpdir } from "os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   getScreenshotDir,
   listScreenshots,
   cleanScreenshots,
   validateMagicBytes,
+  buildWindowsClipboardImageScript,
+  getWindowsClipboardImageCommands,
+  isWslEnvironment,
   SCREENSHOT_DIR,
   MAX_SIZE_BYTES,
 } from "../dist/util/screenshot-store.js";
@@ -40,6 +43,34 @@ describe("validateMagicBytes", () => {
   it("rejects invalid data", () => {
     const r = validateMagicBytes(Buffer.from("not an image"));
     assert.strictEqual(r.ok, false);
+  });
+});
+
+
+describe("Windows clipboard image bridge", () => {
+  it("builds a PowerShell script that handles Snipping Tool image formats", () => {
+    const script = buildWindowsClipboardImageScript();
+    assert.match(script, /GetDataPresent\(\$format\)/);
+    assert.match(script, /'PNG'/);
+    assert.match(script, /DataFormats]::FileDrop/);
+    assert.match(script, /Clipboard]::ContainsImage\(\)/);
+    assert.match(script, /ImageFormat]::Png/);
+  });
+
+  it("prefers an explicit Windows PowerShell path and otherwise has WSL interop fallbacks", () => {
+    assert.deepStrictEqual(getWindowsClipboardImageCommands({ OMK_WINDOWS_POWERSHELL_PATH: "C:/pwsh/powershell.exe" }), [
+      "C:/pwsh/powershell.exe",
+    ]);
+    const defaults = getWindowsClipboardImageCommands({});
+    assert.ok(defaults.includes("powershell.exe"));
+    assert.ok(defaults.includes("/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"));
+  });
+
+  it("detects WSL across bash and zsh environments", () => {
+    assert.strictEqual(isWslEnvironment({ WSL_DISTRO_NAME: "Ubuntu-24.04" }, ""), true);
+    assert.strictEqual(isWslEnvironment({ WSL_INTEROP: "/run/WSL/123_interop" }, ""), true);
+    assert.strictEqual(isWslEnvironment({}, "Linux version 6.6.87.2-microsoft-standard-WSL2"), true);
+    assert.strictEqual(isWslEnvironment({}, "Linux version 6.6.0-generic"), false);
   });
 });
 

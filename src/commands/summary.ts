@@ -1,4 +1,4 @@
-import { readFile, writeFile, readdir } from "fs/promises";
+import { readFile, writeFile, readdir, stat } from "fs/promises";
 import { join } from "path";
 import type { RunState } from "../contracts/orchestration.js";
 import { getProjectRoot, pathExists, getRunsDir, getRunPath } from "../util/fs.js";
@@ -22,6 +22,16 @@ interface RunSummary {
   pending: number;
   running: number;
   successRate: number;
+  providerRouting: {
+    attempts: number;
+    byProvider: Record<string, number>;
+    fallbacks: Array<{
+      nodeId: string;
+      from: string;
+      to: string;
+      reason?: string;
+    }>;
+  };
   nodes: Array<{
     id: string;
     name: string;
@@ -34,16 +44,53 @@ interface RunSummary {
   }>;
 }
 
+function computeProviderRouting(nodes: RunState["nodes"]): RunSummary["providerRouting"] {
+  const byProvider: Record<string, number> = {};
+  const fallbacks: RunSummary["providerRouting"]["fallbacks"] = [];
+  let attempts = 0;
+
+  for (const node of nodes) {
+    for (const attempt of node.attempts ?? []) {
+      if (!attempt.provider && !attempt.requestedProvider && !attempt.fallbackFrom) continue;
+      attempts += 1;
+      const provider = attempt.provider ?? attempt.requestedProvider ?? "unknown";
+      byProvider[provider] = (byProvider[provider] ?? 0) + 1;
+      if (attempt.fallbackFrom) {
+        fallbacks.push({
+          nodeId: node.id,
+          from: attempt.fallbackFrom,
+          to: attempt.provider ?? "unknown",
+          reason: attempt.fallbackReason,
+        });
+      }
+    }
+  }
+
+  return { attempts, byProvider, fallbacks };
+}
+
 async function findLatestRunId(root: string): Promise<string | null> {
   const dir = getRunsDir(root);
   if (!(await pathExists(dir))) return null;
   const entries = await readdir(dir, { withFileTypes: true });
-  const runs = entries
+  const runs = await Promise.all(entries
     .filter((e) => e.isDirectory() && e.name !== "latest")
-    .map((e) => e.name)
-    .sort()
-    .reverse();
-  return runs[0] ?? null;
+    .map(async (e) => {
+      const runDir = join(dir, e.name);
+      const state = await loadRunState(root, e.name);
+      const timestamp = newestRunTimestamp(state) ?? (await stat(runDir).catch(() => null))?.mtimeMs ?? 0;
+      return { id: e.name, timestamp };
+    }));
+  runs.sort((a, b) => b.timestamp - a.timestamp || b.id.localeCompare(a.id));
+  return runs[0]?.id ?? null;
+}
+
+function newestRunTimestamp(state: RunState | null): number | null {
+  if (!state) return null;
+  const candidates = [state.completedAt, state.startedAt]
+    .map((value) => value ? Date.parse(value) : Number.NaN)
+    .filter((value) => Number.isFinite(value));
+  return candidates.length > 0 ? Math.max(...candidates) : null;
 }
 
 async function loadRunState(root: string, runId: string): Promise<RunState | null> {
@@ -84,6 +131,7 @@ function computeSummary(state: RunState): RunSummary {
     pending,
     running,
     successRate,
+    providerRouting: computeProviderRouting(nodes),
     nodes: nodes.map((n) => ({
       id: n.id,
       name: n.name,
@@ -123,6 +171,26 @@ function generateSummaryMd(s: RunSummary): string {
     `| Pending | ${s.pending} |`,
     `| Success rate | ${s.successRate}% |`,
     "",
+    "## Provider Routing",
+    "",
+    `| Metric | Value |`,
+    `|--------|-------|`,
+    `| Provider attempts | ${s.providerRouting.attempts} |`,
+    `| Provider fallbacks | ${s.providerRouting.fallbacks.length} |`,
+    ...Object.entries(s.providerRouting.byProvider)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([provider, count]) => `| ${provider} attempts | ${count} |`),
+    "",
+    ...(s.providerRouting.fallbacks.length > 0
+      ? [
+          `| Node | From | To | Reason |`,
+          `|------|------|----|--------|`,
+          ...s.providerRouting.fallbacks.map(
+            (fallback) => `| ${fallback.nodeId} | ${fallback.from} | ${fallback.to} | ${fallback.reason ?? "—"} |`
+          ),
+          "",
+        ]
+      : []),
     "## Nodes",
     "",
     `| ID | Name | Role | Status | Duration | Retries |`,
@@ -167,6 +235,22 @@ function generateReportMd(s: RunSummary): string {
   }
 
   lines.push("");
+
+  if (s.providerRouting.attempts > 0) {
+    const providerCounts = Object.entries(s.providerRouting.byProvider)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([provider, count]) => `${provider}=${count}`)
+      .join(", ");
+    lines.push("## Provider Routing");
+    lines.push("");
+    lines.push(`- Attempts: ${s.providerRouting.attempts}`);
+    lines.push(`- Provider counts: ${providerCounts || "none"}`);
+    lines.push(`- Fallbacks: ${s.providerRouting.fallbacks.length}`);
+    for (const fallback of s.providerRouting.fallbacks) {
+      lines.push(`  - ${fallback.nodeId}: ${fallback.from} → ${fallback.to}${fallback.reason ? ` (${fallback.reason})` : ""}`);
+    }
+    lines.push("");
+  }
 
   if (s.goalSnapshot && s.goalSnapshot.successCriteria.length > 0) {
     lines.push("## Goal Success Criteria");
@@ -259,6 +343,10 @@ export async function summaryLatestCommand(): Promise<void> {
   console.log(label("Run ID", summary.runId));
   console.log(label("Duration", formatDuration(summary.durationMs)));
   console.log(label("Nodes", `${summary.done}/${summary.totalNodes} done`));
+  if (summary.providerRouting.attempts > 0) {
+    console.log(label("Provider attempts", String(summary.providerRouting.attempts)));
+    console.log(label("Provider fallbacks", String(summary.providerRouting.fallbacks.length)));
+  }
   if (summary.failed > 0) console.log(label("Failed", String(summary.failed)));
   if (summary.blocked > 0) console.log(label("Blocked", String(summary.blocked)));
   console.log("");
@@ -294,6 +382,14 @@ export async function summaryShowCommand(runId?: string): Promise<void> {
   console.log(label("Blocked", String(summary.blocked)));
   console.log(label("Running", String(summary.running)));
   console.log(label("Pending", String(summary.pending)));
+  if (summary.providerRouting.attempts > 0) {
+    const providers = Object.entries(summary.providerRouting.byProvider)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([provider, count]) => `${provider}=${count}`)
+      .join(", ");
+    console.log(label("Provider attempts", `${summary.providerRouting.attempts}${providers ? ` (${providers})` : ""}`));
+    console.log(label("Provider fallbacks", String(summary.providerRouting.fallbacks.length)));
+  }
   console.log("");
   console.log(style.purpleBold("Nodes"));
   for (const n of summary.nodes) {

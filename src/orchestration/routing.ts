@@ -4,7 +4,7 @@ import { homedir } from "os";
 import { join, resolve } from "path";
 import { normalizeUserHomePath } from "../util/fs.js";
 
-type RouteKind = "skill" | "mcp" | "tool";
+type RouteKind = "skill" | "mcp" | "tool" | "hook";
 type RouteSource = "project" | "global" | "builtin";
 type WriteRisk = "none" | "low" | "high";
 
@@ -31,6 +31,7 @@ type RoutingInput = Pick<DagNodeDefinition, "id" | "name" | "role" | "inputs" | 
 const MAX_SKILLS = 3;
 const MAX_MCP_SERVERS = 2;
 const MAX_TOOLS = 4;
+const MAX_HOOKS = 4;
 const OMK_PROJECT_TOOLS = [
   "omk_search_memory",
   "omk_read_memory",
@@ -50,9 +51,11 @@ const OMK_PROJECT_TOOLS = [
 export interface RoutingInventory {
   skills: Map<string, RouteSource>;
   mcpServers: Map<string, RouteSource>;
+  hooks: Map<string, RouteSource>;
   tools: Set<string>;
   skillsScope: "project" | "all" | "none";
   mcpScope: "project" | "all" | "none";
+  hooksScope: "project" | "all" | "none";
 }
 
 let inventoryCache: { key: string; value: RoutingInventory } | undefined;
@@ -245,6 +248,72 @@ const ROUTE_CANDIDATES: RouteCandidate[] = [
     contextCost: 2,
     capabilities: ["source-reading"],
   },
+  {
+    kind: "hook",
+    id: "awesome-agent-skills-router.sh",
+    source: "project",
+    roles: ["router", "orchestrator", "planner"],
+    keywords: ["prompt", "route", "skill", "agent", "orchestration", "hook", "프롬프트", "라우팅", "에이전트"],
+    readOnly: true,
+    writeRisk: "none",
+    contextCost: 1,
+    capabilities: ["prompt-routing", "skill-activation"],
+  },
+  {
+    kind: "hook",
+    id: "subagent-stop-audit.sh",
+    source: "project",
+    roles: ["reviewer", "qa", "verifier", "orchestrator"],
+    keywords: ["subagent", "agent", "audit", "review", "verify", "parallel", "병렬", "검증"],
+    readOnly: true,
+    writeRisk: "none",
+    contextCost: 1,
+    capabilities: ["subagent-audit", "completion-check"],
+  },
+  {
+    kind: "hook",
+    id: "stop-verify.sh",
+    source: "project",
+    roles: ["reviewer", "qa", "verifier"],
+    keywords: ["stop", "verify", "quality", "gate", "test", "검증", "테스트"],
+    readOnly: true,
+    writeRisk: "none",
+    contextCost: 1,
+    capabilities: ["stop-verification", "quality-gate"],
+  },
+  {
+    kind: "hook",
+    id: "protect-secrets.sh",
+    source: "project",
+    roles: ["security", "reviewer", "coder"],
+    keywords: ["secret", "token", "credential", "env", "write", "edit", "보안", "시크릿"],
+    readOnly: false,
+    writeRisk: "low",
+    contextCost: 1,
+    capabilities: ["secret-protection"],
+  },
+  {
+    kind: "hook",
+    id: "pre-shell-guard.sh",
+    source: "project",
+    roles: ["security", "coder", "qa"],
+    keywords: ["shell", "command", "guard", "danger", "rm", "security", "명령", "보안"],
+    readOnly: false,
+    writeRisk: "low",
+    contextCost: 1,
+    capabilities: ["shell-guard"],
+  },
+  {
+    kind: "hook",
+    id: "post-format.sh",
+    source: "project",
+    roles: ["coder", "qa", "reviewer"],
+    keywords: ["format", "write", "edit", "typescript", "lint", "코드", "수정"],
+    readOnly: false,
+    writeRisk: "low",
+    contextCost: 1,
+    capabilities: ["post-format"],
+  },
 ];
 
 export function selectTaskRouting(input: RoutingInput): DagNodeRouting {
@@ -274,9 +343,11 @@ export function selectTaskRouting(input: RoutingInput): DagNodeRouting {
   const skills = unique(scored.filter((item) => item.candidate.kind === "skill").map((item) => item.candidate.id)).slice(0, limitForBudget(contextBudget, MAX_SKILLS));
   const mcpServers = unique(scored.filter((item) => item.candidate.kind === "mcp").map((item) => item.candidate.id)).slice(0, limitForBudget(contextBudget, MAX_MCP_SERVERS));
   const tools = unique(scored.filter((item) => item.candidate.kind === "tool").map((item) => item.candidate.id)).slice(0, limitForBudget(contextBudget, MAX_TOOLS));
+  const hooks = unique(scored.filter((item) => item.candidate.kind === "hook").map((item) => item.candidate.id)).slice(0, limitForBudget(contextBudget, MAX_HOOKS));
 
   if (skills.length === 0 && readOnly) skills.push("omk-repo-explorer");
   if (skills.length === 0) skills.push("omk-context-broker");
+  addDefaultHookHints(hooks, inventory, input.role, readOnly, evidenceRequired);
 
   return {
     provider: "auto",
@@ -285,6 +356,7 @@ export function selectTaskRouting(input: RoutingInput): DagNodeRouting {
     skills,
     mcpServers,
     tools,
+    hooks,
     contextBudget,
     readOnly,
     evidenceRequired,
@@ -305,9 +377,14 @@ export function mergeDagNodeRouting(auto: DagNodeRouting, override: DagNodeRouti
     provider: override.provider ?? auto.provider,
     fallbackProvider: override.fallbackProvider ?? auto.fallbackProvider,
     providerReason: override.providerReason ?? auto.providerReason,
+    providerModelTier: override.providerModelTier ?? auto.providerModelTier,
+    autoSpawned: override.autoSpawned ?? auto.autoSpawned,
+    spawnReason: override.spawnReason ?? auto.spawnReason,
+    routeSource: override.routeSource ?? auto.routeSource,
     skills: override.skills ? unique(override.skills) : auto.skills,
     mcpServers: override.mcpServers ? unique(override.mcpServers) : auto.mcpServers,
     tools: override.tools ? unique(override.tools) : auto.tools,
+    hooks: override.hooks ? unique(override.hooks) : auto.hooks,
     rejected: override.rejected ?? auto.rejected,
   };
 }
@@ -319,11 +396,16 @@ export function dagNodeRoutingEnv(node: DagNode): Record<string, string> {
     OMK_SKILL_HINTS: (routing.skills ?? []).join(","),
     OMK_MCP_HINTS: (routing.mcpServers ?? []).join(","),
     OMK_TOOL_HINTS: (routing.tools ?? []).join(","),
+    OMK_HOOK_HINTS: (routing.hooks ?? []).join(","),
+    OMK_ROUTE_SOURCE: routing.routeSource ?? "",
+    OMK_ROUTE_AUTO_SPAWNED: String(routing.autoSpawned ?? false),
+    OMK_ROUTE_SPAWN_REASON: routing.spawnReason ?? "",
     OMK_CONTEXT_BUDGET: routing.contextBudget ?? "small",
     OMK_ROUTE_READ_ONLY: String(routing.readOnly ?? false),
     OMK_ROUTE_EVIDENCE_REQUIRED: String(routing.evidenceRequired ?? false),
     OMK_ROUTE_RATIONALE: routing.rationale ?? "",
     OMK_PROVIDER_HINT: routing.provider ?? "auto",
+    OMK_PROVIDER_MODEL_TIER: routing.providerModelTier ?? "",
     OMK_PROVIDER_FALLBACK: routing.fallbackProvider ?? "kimi",
     OMK_PROVIDER_REASON: routing.providerReason ?? "",
     OMK_ROUTE_REQUIRES_MCP: String(routing.requiresMcp ?? false),
@@ -366,7 +448,8 @@ export function discoverRoutingInventory(projectRoot = getRoutingProjectRoot()):
   const config = readFlatConfig(root);
   const skillsScope = normalizeScope(process.env.OMK_SKILLS_SCOPE ?? config["runtime.skills_scope"], "project");
   const mcpScope = normalizeScope(process.env.OMK_MCP_SCOPE ?? config["runtime.mcp_scope"], "project");
-  const key = [root, skillsScope, mcpScope].join("|");
+  const hooksScope = normalizeScope(process.env.OMK_HOOKS_SCOPE ?? config["runtime.hooks_scope"] ?? config["runtime.skills_scope"], "project");
+  const key = [root, skillsScope, mcpScope, hooksScope].join("|");
   if (inventoryCache?.key === key) return inventoryCache.value;
 
   const skills = new Map<string, RouteSource>();
@@ -388,7 +471,12 @@ export function discoverRoutingInventory(projectRoot = getRoutingProjectRoot()):
     for (const tool of OMK_PROJECT_TOOLS) tools.add(tool);
   }
 
-  const value = { skills, mcpServers, tools, skillsScope, mcpScope };
+  const hooks = new Map<string, RouteSource>();
+  for (const hook of readActiveHookNames(root, hooksScope)) {
+    if (!hooks.has(hook.name)) hooks.set(hook.name, hook.source);
+  }
+
+  const value = { skills, mcpServers, hooks, tools, skillsScope, mcpScope, hooksScope };
   inventoryCache = { key, value };
   return value;
 }
@@ -401,7 +489,10 @@ function routeCandidates(inventory: RoutingInventory): RouteCandidate[] {
   const dynamicMcps: RouteCandidate[] = [...inventory.mcpServers.entries()]
     .filter(([id]) => !staticIds.has(`mcp:${id}`))
     .map(([id, source]) => dynamicMcpCandidate(id, source));
-  return [...ROUTE_CANDIDATES, ...dynamicSkills, ...dynamicMcps];
+  const dynamicHooks: RouteCandidate[] = [...inventory.hooks.entries()]
+    .filter(([id]) => !staticIds.has(`hook:${id}`))
+    .map(([id, source]) => dynamicHookCandidate(id, source));
+  return [...ROUTE_CANDIDATES, ...dynamicSkills, ...dynamicMcps, ...dynamicHooks];
 }
 
 function dynamicSkillCandidate(id: string, source: RouteSource): RouteCandidate {
@@ -435,11 +526,27 @@ function dynamicMcpCandidate(id: string, source: RouteSource): RouteCandidate {
   };
 }
 
+function dynamicHookCandidate(id: string, source: RouteSource): RouteCandidate {
+  const keywords = keywordsFromId(id.replace(/\.(sh|js|mjs|ts)$/i, ""));
+  return {
+    kind: "hook",
+    id,
+    source,
+    roles: rolesFromKeywords(keywords),
+    keywords: [...keywords, "hook"],
+    readOnly: !keywords.some((keyword) => ["write", "format", "shell", "guard", "secret"].includes(keyword)),
+    writeRisk: keywords.some((keyword) => ["write", "format", "shell", "guard", "secret"].includes(keyword)) ? "low" : "none",
+    contextCost: 1,
+    capabilities: keywords,
+  };
+}
+
 function rejectionReason(candidate: RouteCandidate, readOnly: boolean, budget: DagContextBudget, inventory: RoutingInventory): string | undefined {
   if (readOnly && candidate.writeRisk === "high") return "read-only node excludes high-risk write route";
   if (budget === "tiny" && candidate.contextCost === 3) return "tiny context budget excludes high-context route";
   if (candidate.kind === "skill" && !inventory.skills.has(candidate.id)) return `skill not installed in ${inventory.skillsScope} scope`;
   if (candidate.kind === "mcp" && !inventory.mcpServers.has(candidate.id)) return `MCP server not installed in ${inventory.mcpScope} scope`;
+  if (candidate.kind === "hook" && !inventory.hooks.has(candidate.id)) return `hook not active in ${inventory.hooksScope} scope`;
   if (candidate.kind === "tool" && !inventory.tools.has(candidate.id)) return "tool unavailable from discovered MCP/builtin inventory";
   return undefined;
 }
@@ -471,6 +578,32 @@ function limitForBudget(budget: DagContextBudget, max: number): number {
 function renderRationale(scored: ScoredRoute[], budget: DagContextBudget): string {
   const summary = scored.map((item) => `${item.candidate.id}(${item.reason})`).join("; ");
   return `budget=${budget}; selected=${summary || "direct"}`;
+}
+
+function addDefaultHookHints(
+  hooks: string[],
+  inventory: RoutingInventory,
+  role: string,
+  readOnly: boolean,
+  evidenceRequired: boolean
+): void {
+  const maybePush = (id: string): void => {
+    if (hooks.length >= MAX_HOOKS) return;
+    if (inventory.hooks.has(id) && !hooks.includes(id)) hooks.push(id);
+  };
+  if (["router", "orchestrator", "planner"].includes(role)) {
+    maybePush("awesome-agent-skills-router.sh");
+    maybePush("session-context.sh");
+  }
+  if (evidenceRequired || ["reviewer", "qa", "verifier"].includes(role)) {
+    maybePush("subagent-stop-audit.sh");
+    maybePush("stop-verify.sh");
+  }
+  if (!readOnly) {
+    maybePush("protect-secrets.sh");
+    maybePush("post-format.sh");
+    maybePush("pre-shell-guard.sh");
+  }
 }
 
 function normalizeText(text: string): string {
@@ -520,6 +653,34 @@ function skillDirs(root: string, scope: RoutingInventory["skillsScope"]): Array<
     );
   }
   return dirs;
+}
+
+function readActiveHookNames(root: string, scope: RoutingInventory["hooksScope"]): Array<{ name: string; source: RouteSource }> {
+  if (scope === "none") return [];
+  const files: Array<{ path: string; source: RouteSource }> = [
+    { path: join(root, ".omk", "kimi.config.toml"), source: "project" },
+    { path: join(root, ".kimi", "kimi.config.toml"), source: "project" },
+  ];
+  if (scope === "all") {
+    const userHome = getRoutingUserHome();
+    files.unshift(
+      { path: join(userHome, ".kimi", "kimi.config.toml"), source: "global" },
+      { path: join(userHome, ".codex", "kimi.config.toml"), source: "global" },
+    );
+  }
+  const result: Array<{ name: string; source: RouteSource }> = [];
+  for (const file of files) {
+    try {
+      const content = readFileSync(file.path, "utf-8");
+      for (const match of content.matchAll(/^\s*command\s*=\s*["']([^"']*hooks\/([^/"']+))["']/gm)) {
+        const name = match[2]?.trim();
+        if (name) result.push({ name, source: file.source });
+      }
+    } catch {
+      // ignore missing or invalid hook config
+    }
+  }
+  return result;
 }
 
 const SECRET_PATTERNS = ["apikey", "token", "password", "secret", "authorization"];

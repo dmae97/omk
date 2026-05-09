@@ -1,6 +1,6 @@
 import { TaskDagGraph } from "./task-graph.js";
 import { mergeDagNodeRouting, selectTaskRouting } from "./routing.js";
-import type { ProviderId } from "../providers/types.js";
+import type { DeepSeekModelTier, DeepSeekParticipation, ProviderId } from "../providers/types.js";
 
 export type TaskStatus = "pending" | "running" | "done" | "failed" | "blocked" | "skipped";
 export type DagContextBudget = "tiny" | "small" | "normal";
@@ -24,6 +24,10 @@ export interface DagNodeRouting {
   provider?: "auto" | ProviderId;
   fallbackProvider?: "kimi";
   providerReason?: string;
+  providerModelTier?: DeepSeekModelTier;
+  autoSpawned?: boolean;
+  spawnReason?: string;
+  routeSource?: "skill" | "mcp" | "hook" | "provider";
   /**
    * Skills/MCP/tools are routing hints for the Kimi runtime by default.
    * Set these booleans only when a node cannot run without live MCP/tool
@@ -34,6 +38,7 @@ export interface DagNodeRouting {
   skills?: string[];
   mcpServers?: string[];
   tools?: string[];
+  hooks?: string[];
   contextBudget?: DagContextBudget;
   readOnly?: boolean;
   evidenceRequired?: boolean;
@@ -65,6 +70,9 @@ export interface DagNodeAttempt {
   requestedProvider?: ProviderId;
   fallbackFrom?: ProviderId;
   fallbackReason?: string;
+  providerModel?: string;
+  providerModelTier?: DeepSeekModelTier;
+  providerParticipation?: DeepSeekParticipation;
 }
 
 export interface DagNode {

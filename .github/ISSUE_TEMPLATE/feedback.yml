@@ -1,46 +1,46 @@
 name: Feedback
- description: Share your experience installing or running oh-my-kimi.
- title: "[Feedback] "
- labels: ["feedback", "triage"]
- body:
-   - type: markdown
-     attributes:
-       value: |
-         Thanks for trying oh-my-kimi! Your feedback helps us improve.
-   - type: input
-     id: os
-     attributes:
-       label: Operating System
-       placeholder: "e.g. macOS 14, Ubuntu 22.04, Windows 11"
-   - type: input
-     id: node
-     attributes:
-       label: Node.js version
-       placeholder: "node --version"
-   - type: input
-     id: omk
-     attributes:
-       label: oh-my-kimi version
-       placeholder: "npm list -g @oh-my-kimi/cli"
-   - type: textarea
-     id: install
-     attributes:
-       label: Install experience
-       placeholder: "Did npm install -g @oh-my-kimi/cli work smoothly?"
-   - type: textarea
-     id: doctor
-     attributes:
-       label: omk doctor results
-       placeholder: "Paste the output of omk doctor here"
-   - type: textarea
-     id: worked
-     attributes:
-       label: What worked well?
-   - type: textarea
-     id: broke
-     attributes:
-       label: What broke or confused you?
-   - type: textarea
-     id: fix
-     attributes:
-       label: What should v1.1.1 fix first?
+description: Share your experience installing or running oh-my-kimi.
+title: "[Feedback] "
+labels: ["feedback", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying oh-my-kimi! Your feedback helps us improve.
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      placeholder: "e.g. macOS 14, Ubuntu 22.04, Windows 11"
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version
+      placeholder: "node --version"
+  - type: input
+    id: omk
+    attributes:
+      label: oh-my-kimi version
+      placeholder: "npm list -g @oh-my-kimi/cli"
+  - type: textarea
+    id: install
+    attributes:
+      label: Install experience
+      placeholder: "Did npm install -g @oh-my-kimi/cli work smoothly?"
+  - type: textarea
+    id: doctor
+    attributes:
+      label: omk doctor results
+      placeholder: "Paste the output of omk doctor here"
+  - type: textarea
+    id: worked
+    attributes:
+      label: What worked well?
+  - type: textarea
+    id: broke
+    attributes:
+      label: What broke or confused you?
+  - type: textarea
+    id: fix
+    attributes:
+      label: What should the next release fix first?

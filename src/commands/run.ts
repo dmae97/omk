@@ -6,6 +6,7 @@ import { style, header, status, label } from "../util/theme.js";
 import { getOmkResourceSettings } from "../util/resource-profile.js";
 import { t } from "../util/i18n.js";
 import { createRoutedRunState, refreshRunStateEstimate } from "../orchestration/run-state.js";
+import { buildCapabilityAgentNodes, isCapabilityAgentNode } from "../orchestration/capability-agents.js";
 import type { RunState } from "../contracts/orchestration.js";
 import { orchestratePrompt } from "../orchestration/orchestrate-prompt.js";
 import type { ProviderPolicy } from "../providers/types.js";
@@ -179,10 +180,12 @@ export async function runCommand(
   }
 }
 
-function normalizeWorkerCount(value: string | undefined, fallback: number): number {
-  if (!value || value === "auto") return fallback;
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+export function normalizeWorkerCount(value: string | undefined, fallback: number): number {
+  const effective = (value ?? process.env.OMK_WORKERS)?.trim();
+  if (!effective || effective === "auto") return fallback;
+  if (!/^\d+$/.test(effective)) return fallback;
+  const parsed = Number(effective);
+  if (!Number.isInteger(parsed) || parsed < 1) return fallback;
   return Math.min(parsed, 6);
 }
 
@@ -199,6 +202,21 @@ function createInteractiveRunState(input: {
   goalId?: string;
   goalSnapshot?: RunState["goalSnapshot"];
 }): RunState {
+  const capabilityAgentNodes = input.workerCount > 1
+    ? buildCapabilityAgentNodes({
+      goal: input.goal,
+      dependsOn: ["root-coordinator"],
+      maxAgents: 3,
+      seedId: "run-capability-routing-seed",
+      seedName: `Route active MCP, skills, and hooks for: ${input.goal}`,
+    })
+    : [];
+  const capabilityInputs = capabilityAgentNodes.map((node) => ({
+    name: node.outputs?.[0]?.name ?? node.name,
+    ref: "state.json",
+    from: node.id,
+    required: !isCapabilityAgentNode(node),
+  }));
   const state = createRoutedRunState({
     runId: input.runId,
     startedAt: input.startedAt,
@@ -233,13 +251,14 @@ function createInteractiveRunState(input: {
         inputs: [{ name: "worker plan", ref: "plan.md", from: "root-coordinator" }],
         outputs: [{ name: "worker outputs", gate: "summary" }],
       },
+      ...capabilityAgentNodes,
       {
         id: "review-merge",
         name: "Review, verify, and merge outputs",
         role: "reviewer",
-        dependsOn: ["worker-fanout"],
+        dependsOn: ["worker-fanout", ...capabilityAgentNodes.map((node) => node.id)],
         maxRetries: 1,
-        inputs: [{ name: "worker outputs", ref: "state.json", from: "worker-fanout" }],
+        inputs: [{ name: "worker outputs", ref: "state.json", from: "worker-fanout" }, ...capabilityInputs],
         outputs: [{ name: "verified result", gate: "review-pass" }],
       },
     ],

@@ -4,21 +4,30 @@
  * All images are saved under .omk/screenshots/YYYY-MM-DD/ so they stay
  * gitignored and organized by date.
  */
-import { execFileSync } from "child_process";
-import { writeFileSync, mkdirSync, readFileSync, readdirSync, statSync, existsSync, rmSync } from "fs";
-import { tmpdir } from "os";
-import { join, relative } from "path";
-import { createHash } from "crypto";
+import { execFileSync } from "node:child_process";
+import { writeFileSync, mkdirSync, readFileSync, readdirSync, statSync, existsSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative } from "node:path";
+import { createHash } from "node:crypto";
 import { getProjectRoot } from "./fs.js";
 
 export const SCREENSHOT_DIR = ".omk/screenshots";
 export const MAX_SIZE_BYTES = 20 * 1024 * 1024;
+const CLIPBOARD_TIMEOUT_MS = 5000;
+const CLIPBOARD_MAX_BUFFER_BYTES = MAX_SIZE_BYTES * 2;
 
 export interface ScreenshotResult {
   ok: boolean;
   path?: string;
   relativePath?: string;
   error?: string;
+}
+
+export interface PasteScreenshotOptions {
+  platform?: NodeJS.Platform | string;
+  env?: NodeJS.ProcessEnv;
+  timeoutMs?: number;
+  procVersion?: string;
 }
 
 const IMAGE_MAGIC = new Map<string, number[]>([
@@ -67,41 +76,106 @@ function saveScreenshot(data: Buffer, ext: string, projectRoot: string): Screens
 // Windows provider
 // ---------------------------------------------------------------------------
 
-function readWindowsClipboard(projectRoot: string): ScreenshotResult {
-  try {
-    const ps = `
-      Add-Type -Assembly System.Windows.Forms;
-      $img = [Windows.Forms.Clipboard]::GetImage();
-      if ($img -eq $null) { exit 1 };
-      $ms = New-Object IO.MemoryStream;
-      $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png);
-      [Convert]::ToBase64String($ms.ToArray());
-    `;
-    const encoded = Buffer.from(ps, "utf16le").toString("base64");
-    const b64 = execFileSync(
-      "powershell.exe",
-      ["-NoProfile", "-STA", "-EncodedCommand", encoded],
-      { encoding: "utf-8", timeout: 5000, windowsHide: true }
-    ).trim();
-    const buf = Buffer.from(b64, "base64");
-    if (buf.length === 0) {
-      return { ok: false, error: "No image in clipboard" };
+export function buildWindowsClipboardImageScript(): string {
+  return `
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
+function Emit-Bytes([byte[]]$Bytes) {
+  if ($null -eq $Bytes -or $Bytes.Length -eq 0) { exit 1 }
+  [Console]::Out.Write([Convert]::ToBase64String($Bytes))
+  exit 0
+}
+
+$data = [System.Windows.Forms.Clipboard]::GetDataObject()
+if ($null -ne $data) {
+  foreach ($format in @('PNG', 'image/png')) {
+    if ($data.GetDataPresent($format)) {
+      $raw = $data.GetData($format)
+      if ($raw -is [System.IO.MemoryStream]) { Emit-Bytes $raw.ToArray() }
+      if ($raw -is [byte[]]) { Emit-Bytes $raw }
     }
-    return saveScreenshot(buf, "png", projectRoot);
-  } catch (e) {
-    return { ok: false, error: (e as Error).message };
   }
+
+  if ($data.GetDataPresent([System.Windows.Forms.DataFormats]::FileDrop)) {
+    $files = [string[]]$data.GetData([System.Windows.Forms.DataFormats]::FileDrop)
+    foreach ($file in $files) {
+      if ($file -match '[.](png|jpg|jpeg|webp|gif)$' -and [System.IO.File]::Exists($file)) {
+        Emit-Bytes ([System.IO.File]::ReadAllBytes($file))
+      }
+    }
+  }
+}
+
+if ([System.Windows.Forms.Clipboard]::ContainsImage()) {
+  $img = [System.Windows.Forms.Clipboard]::GetImage()
+  if ($null -ne $img) {
+    $ms = New-Object System.IO.MemoryStream
+    try {
+      $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+      Emit-Bytes $ms.ToArray()
+    } finally {
+      $ms.Dispose()
+      $img.Dispose()
+    }
+  }
+}
+
+exit 1
+`;
+}
+
+export function getWindowsClipboardImageCommands(env: NodeJS.ProcessEnv = process.env): string[] {
+  const explicit = env.OMK_WINDOWS_POWERSHELL_PATH?.trim();
+  const candidates = explicit
+    ? [explicit]
+    : [
+        "powershell.exe",
+        "pwsh.exe",
+        "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
+      ];
+  return [...new Set(candidates.filter((cmd) => cmd.length > 0))];
+}
+
+function execWindowsClipboardScript(command: string, options: PasteScreenshotOptions = {}): string {
+  const encoded = Buffer.from(buildWindowsClipboardImageScript(), "utf16le").toString("base64");
+  return execFileSync(command, ["-NoProfile", "-STA", "-EncodedCommand", encoded], {
+    encoding: "utf-8",
+    timeout: options.timeoutMs ?? CLIPBOARD_TIMEOUT_MS,
+    maxBuffer: CLIPBOARD_MAX_BUFFER_BYTES,
+    windowsHide: true,
+    env: options.env ? { ...process.env, ...options.env } : process.env,
+  }).trim();
+}
+
+function readWindowsClipboard(projectRoot: string, options: PasteScreenshotOptions = {}): ScreenshotResult {
+  let lastError = "No image in clipboard";
+  for (const command of getWindowsClipboardImageCommands(options.env)) {
+    try {
+      const b64 = execWindowsClipboardScript(command, options);
+      const buf = Buffer.from(b64, "base64");
+      if (buf.length === 0) {
+        lastError = "No image in clipboard";
+        continue;
+      }
+      return saveScreenshot(buf, "png", projectRoot);
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e);
+    }
+  }
+  return { ok: false, error: lastError };
 }
 
 // ---------------------------------------------------------------------------
 // macOS provider
 // ---------------------------------------------------------------------------
 
-function readMacOSClipboard(projectRoot: string): ScreenshotResult {
+function readMacOSClipboard(projectRoot: string, options: PasteScreenshotOptions = {}): ScreenshotResult {
   // Try pngpaste first (more reliable)
   try {
     const tmpPath = join(tmpdir(), `omk-screenshot-${Date.now()}.png`);
-    execFileSync("pngpaste", [tmpPath], { timeout: 5000 });
+    execFileSync("pngpaste", [tmpPath], { timeout: options.timeoutMs ?? CLIPBOARD_TIMEOUT_MS });
     const buf = readFileSync(tmpPath);
     if (buf.length === 0) {
       return { ok: false, error: "No image in clipboard" };
@@ -117,7 +191,7 @@ function readMacOSClipboard(projectRoot: string): ScreenshotResult {
         write pngData to f
         close access f
       `;
-      execFileSync("osascript", ["-e", script], { encoding: "utf-8", timeout: 5000 });
+      execFileSync("osascript", ["-e", script], { encoding: "utf-8", timeout: options.timeoutMs ?? CLIPBOARD_TIMEOUT_MS });
       const buf = readFileSync(tmpPath);
       if (buf.length === 0) {
         return { ok: false, error: "No image in clipboard" };
@@ -133,47 +207,49 @@ function readMacOSClipboard(projectRoot: string): ScreenshotResult {
 // Linux / WSL provider
 // ---------------------------------------------------------------------------
 
-function readLinuxClipboard(projectRoot: string): ScreenshotResult {
-  // WSL2: try Windows clipboard via powershell.exe first
-  if (process.env.WSL_DISTRO_NAME || process.env.WSLENV) {
+export function isWslEnvironment(env: NodeJS.ProcessEnv = process.env, procVersion?: string): boolean {
+  if (env.WSL_DISTRO_NAME || env.WSLENV || env.WSL_INTEROP) return true;
+  const version = procVersion ?? (() => {
     try {
-      const ps = `
-        Add-Type -Assembly System.Windows.Forms;
-        $img = [Windows.Forms.Clipboard]::GetImage();
-        if ($img -eq $null) { exit 1 };
-        $ms = New-Object IO.MemoryStream;
-        $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png);
-        [Convert]::ToBase64String($ms.ToArray());
-      `;
-      const encoded = Buffer.from(ps, "utf16le").toString("base64");
-      const b64 = execFileSync(
-        "powershell.exe",
-        ["-NoProfile", "-STA", "-EncodedCommand", encoded],
-        { encoding: "utf-8", timeout: 5000, windowsHide: true }
-      ).trim();
-      const buf = Buffer.from(b64, "base64");
-      if (buf.length === 0) {
-        return { ok: false, error: "No image in clipboard" };
-      }
-      return saveScreenshot(buf, "png", projectRoot);
+      return readFileSync("/proc/version", "utf-8");
     } catch {
-      // fall through to native Linux tools
+      return "";
     }
+  })();
+  return /microsoft|wsl/i.test(version);
+}
+
+function readLinuxClipboard(projectRoot: string, options: PasteScreenshotOptions = {}): ScreenshotResult {
+  let wslError: string | undefined;
+  if (isWslEnvironment(options.env, options.procVersion)) {
+    const windowsResult = readWindowsClipboard(projectRoot, options);
+    if (windowsResult.ok) return windowsResult;
+    wslError = windowsResult.error;
   }
 
   try {
     let buf: Buffer;
     try {
-      buf = execFileSync("wl-paste", ["--type", "image/png"], { timeout: 5000, encoding: "buffer" });
+      buf = execFileSync("wl-paste", ["--type", "image/png"], {
+        timeout: options.timeoutMs ?? CLIPBOARD_TIMEOUT_MS,
+        encoding: "buffer",
+        maxBuffer: CLIPBOARD_MAX_BUFFER_BYTES,
+      });
     } catch {
-      buf = execFileSync("xclip", ["-selection", "clipboard", "-t", "image/png", "-o"], { timeout: 5000, encoding: "buffer" });
+      buf = execFileSync("xclip", ["-selection", "clipboard", "-t", "image/png", "-o"], {
+        timeout: options.timeoutMs ?? CLIPBOARD_TIMEOUT_MS,
+        encoding: "buffer",
+        maxBuffer: CLIPBOARD_MAX_BUFFER_BYTES,
+      });
     }
     if (buf.length === 0) {
       return { ok: false, error: "No image in clipboard" };
     }
     return saveScreenshot(buf, "png", projectRoot);
   } catch (e) {
-    return { ok: false, error: (e as Error).message };
+    const linuxError = e instanceof Error ? e.message : String(e);
+    const error = wslError ? `Windows clipboard unavailable (${wslError}); Linux clipboard unavailable (${linuxError})` : linuxError;
+    return { ok: false, error };
   }
 }
 
@@ -181,15 +257,16 @@ function readLinuxClipboard(projectRoot: string): ScreenshotResult {
 // Public API
 // ---------------------------------------------------------------------------
 
-export function pasteScreenshot(projectRoot?: string): ScreenshotResult {
+export function pasteScreenshot(projectRoot?: string, options: PasteScreenshotOptions = {}): ScreenshotResult {
   const root = projectRoot ?? getProjectRoot();
-  if (process.platform === "win32") {
-    return readWindowsClipboard(root);
+  const platform = options.platform ?? process.platform;
+  if (platform === "win32") {
+    return readWindowsClipboard(root, options);
   }
-  if (process.platform === "darwin") {
-    return readMacOSClipboard(root);
+  if (platform === "darwin") {
+    return readMacOSClipboard(root, options);
   }
-  return readLinuxClipboard(root);
+  return readLinuxClipboard(root, options);
 }
 
 export function getScreenshotDir(projectRoot?: string): string {

@@ -56,6 +56,34 @@ test("DeepSeek direct routing uses deterministic 60 flash / 40 pro tier buckets"
   assert.match(flashRoute.deepseek?.model ?? "", /^deepseek-v4-(flash|pro)$/);
 });
 
+test("dedicated DeepSeek model agents honor explicit Flash and Pro tiers on complex read-only routes", () => {
+  const flash = routeProvider(baseRoute({
+    nodeId: "deepseek-flash-agent",
+    role: "planner",
+    complexity: "complex",
+    providerHint: "deepseek",
+    preferredDeepSeekTier: "flash",
+  }));
+  const pro = routeProvider(baseRoute({
+    nodeId: "deepseek-pro-agent",
+    role: "reviewer",
+    complexity: "complex",
+    providerHint: "deepseek",
+    preferredDeepSeekTier: "pro",
+  }));
+
+  assert.equal(flash.provider, "deepseek");
+  assert.equal(flash.deepseek?.model, "deepseek-v4-flash");
+  assert.equal(flash.deepseek?.tier, "flash");
+  assert.equal(flash.deepseek?.ratioBucket, 0);
+  assert.equal(flash.routeEnsemble.winner, "deepseek-direct");
+  assert.equal(pro.provider, "deepseek");
+  assert.equal(pro.deepseek?.model, "deepseek-v4-pro");
+  assert.equal(pro.deepseek?.tier, "pro");
+  assert.equal(pro.deepseek?.ratioBucket, 9);
+  assert.equal(pro.routeEnsemble.winner, "deepseek-direct");
+});
+
 test("provider health disables DeepSeek for the remainder of a run", () => {
   const health = new ProviderHealthRegistry();
   assert.equal(health.isDeepSeekAvailable(), true);
@@ -212,6 +240,56 @@ test("provider task runner routes real auto-routed reviewer nodes through DeepSe
   assert.equal(result.metadata.providerRouteEnsemble.winner, "deepseek-direct");
 });
 
+test("provider task runner invokes dedicated DeepSeek Pro model agents as real direct workers", async () => {
+  const calls = [];
+  const deepseekRunner = {
+    async run(_node, env) {
+      calls.push({ provider: "deepseek", env });
+      return {
+        success: true,
+        exitCode: 0,
+        stdout: "DeepSeek Pro critique",
+        stderr: "",
+      };
+    },
+  };
+  const kimiRunner = {
+    async run(_node, env) {
+      calls.push({ provider: "kimi", env });
+      return {
+        success: true,
+        exitCode: 0,
+        stdout: "Kimi fallback should not run",
+        stderr: "",
+      };
+    },
+  };
+
+  const runner = createProviderTaskRunner({ kimiRunner, deepseekRunner });
+  const result = await runner.run({
+    ...providerNode(),
+    id: "deepseek-pro-agent",
+    name: "DeepSeek Pro critical model review",
+    role: "reviewer",
+    routing: {
+      provider: "deepseek",
+      providerModelTier: "pro",
+      readOnly: true,
+      requiresMcp: false,
+      requiresToolCalling: false,
+    },
+  }, { OMK_TASK_TYPE: "implement", OMK_COMPLEXITY: "complex" });
+
+  assert.equal(result.success, true);
+  assert.deepEqual(calls.map((call) => call.provider), ["deepseek"]);
+  assert.equal(calls[0].env.OMK_DEEPSEEK_MODEL, "deepseek-v4-pro");
+  assert.equal(calls[0].env.OMK_DEEPSEEK_MODEL_TIER, "pro");
+  assert.equal(calls[0].env.OMK_DEEPSEEK_PARTICIPATION, "direct");
+  assert.equal(result.metadata.provider, "deepseek");
+  assert.equal(result.metadata.providerModel, "deepseek-v4-pro");
+  assert.equal(result.metadata.providerModelTier, "pro");
+});
+
 test("provider task runner runs DeepSeek advisory for real auto-routed coder nodes before Kimi", async () => {
   const dag = createDag({
     nodes: [
@@ -349,6 +427,9 @@ test("executor stores provider route and fallback evidence on node attempts", as
         metadata: {
           provider: "kimi",
           requestedProvider: "deepseek",
+          providerModel: "deepseek-v4-pro",
+          providerModelTier: "pro",
+          providerParticipation: "direct",
           providerFallback: {
             from: "deepseek",
             to: "kimi",
@@ -370,6 +451,9 @@ test("executor stores provider route and fallback evidence on node attempts", as
   assert.equal(attempt?.provider, "kimi");
   assert.equal(attempt?.requestedProvider, "deepseek");
   assert.equal(attempt?.fallbackFrom, "deepseek");
+  assert.equal(attempt?.providerModel, "deepseek-v4-pro");
+  assert.equal(attempt?.providerModelTier, "pro");
+  assert.equal(attempt?.providerParticipation, "direct");
   assert.match(attempt?.fallbackReason ?? "", /402/);
 });
 

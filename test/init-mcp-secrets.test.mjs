@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const INIT_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "commands", "init.js")).href;
+const CLI = join(process.cwd(), "dist", "cli.js");
 const POSIX_EXECUTABLE_BITS_SUPPORTED = process.platform !== "win32";
 
 function escapeRegex(value) {
@@ -207,6 +208,7 @@ test("init installs an OMK-safe awesome-agent-skills UserPromptSubmit router hoo
     assert.equal(hookOutput.hookSpecificOutput.hookEventName, "UserPromptSubmit");
     assert.match(hookOutput.hookSpecificOutput.additionalContext, /awesome-agent-skills routing hint/);
     assert.match(hookOutput.hookSpecificOutput.additionalContext, /\/open-design/);
+    assert.match(hookOutput.hookSpecificOutput.additionalContext, /\/awesome-design-md/);
     assert.match(hookOutput.hookSpecificOutput.additionalContext, /\/omk-design-md/);
     assert.match(hookOutput.hookSpecificOutput.additionalContext, /\/omk-quality-gate/);
 
@@ -577,9 +579,10 @@ test("init recognizes WSL UNC ~/.kimi/mcp.json as the user home when importing t
   }
 });
 
-test("init local-user mode uses WSL UNC ~/.kimi/skills at runtime without copying personal files", async () => {
+test("init local-user mode uses WSL UNC ~/.kimi/mcp.json with omk-project at runtime", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-init-local-user-project-"));
   const homeRoot = await mkdtemp(join(tmpdir(), "omk-init-local-user-home-"));
+  const doctorHome = await mkdtemp(join(tmpdir(), "omk-init-local-user-doctor-home-"));
 
   try {
     const skillRoot = join(homeRoot, ".kimi", "skills", "private-wsl-skill");
@@ -588,12 +591,13 @@ test("init local-user mode uses WSL UNC ~/.kimi/skills at runtime without copyin
     await mkdir(join(homeRoot, ".kimi"), { recursive: true });
     await writeFile(join(homeRoot, ".kimi", "mcp.json"), JSON.stringify({
       mcpServers: {
-        "private-global": { command: "node", args: ["private-global.js"] },
+        "private-global": { command: process.execPath, args: ["--version"] },
       },
     }), "utf-8");
+    const uncMcpPath = toWslUncPath(join(homeRoot, ".kimi", "mcp.json"));
 
     const result = runInit(projectRoot, homeRoot, {
-      homeDir: toWslUncPath(join(homeRoot, ".kimi", "skills")),
+      homeDir: uncMcpPath,
       localUser: true,
     });
     assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -608,6 +612,24 @@ test("init local-user mode uses WSL UNC ~/.kimi/skills at runtime without copyin
     assert.ok(projectMcp.mcpServers["omk-project"]);
     assert.equal(projectMcp.mcpServers["private-global"], undefined);
 
+    const doctor = spawnSync(process.execPath, [CLI, "mcp", "doctor"], {
+      cwd: projectRoot,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        HOME: doctorHome,
+        OMK_ORIGINAL_HOME: uncMcpPath,
+        OMK_PROJECT_ROOT: projectRoot,
+        OMK_RENDER_LOGO: "0",
+        OMK_STAR_PROMPT: "0",
+      },
+    });
+    assert.equal(doctor.status, 0, doctor.stderr || doctor.stdout);
+    assert.match(doctor.stdout, /Active MCP scope: all/);
+    assert.match(doctor.stdout, new RegExp(escapeRegex(join(homeRoot, ".kimi", "mcp.json"))));
+    assert.match(doctor.stdout, /Server: private-global/);
+    assert.match(doctor.stdout, /Server: omk-project/);
+
     await assert.rejects(
       readFile(join(projectRoot, ".kimi", "skills", "private-wsl-skill", "SKILL.md"), "utf-8"),
       /ENOENT/
@@ -616,6 +638,7 @@ test("init local-user mode uses WSL UNC ~/.kimi/skills at runtime without copyin
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(homeRoot, { recursive: true, force: true });
+    await rm(doctorHome, { recursive: true, force: true });
   }
 });
 
@@ -624,6 +647,7 @@ test("init interactive setup asks for GitHub star and saves DeepSeek key to user
   const homeRoot = await mkdtemp(join(tmpdir(), "omk-init-interactive-home-"));
   const fakeKey = `deepseek-test-${"x".repeat(24)}`;
   const starredRepos = [];
+  let localUserRuntimeAsked = 0;
   let deepseekSetupAsked = 0;
   let deepseekKeyAsked = 0;
 
@@ -634,6 +658,10 @@ test("init interactive setup asks for GitHub star and saves DeepSeek key to user
       promptGitHubStar: async () => true,
       starRepo: async (repoUrl) => {
         starredRepos.push(repoUrl);
+      },
+      promptLocalUserRuntime: async () => {
+        localUserRuntimeAsked += 1;
+        return false;
       },
       promptDeepSeekSetup: async () => {
         deepseekSetupAsked += 1;
@@ -646,6 +674,7 @@ test("init interactive setup asks for GitHub star and saves DeepSeek key to user
     });
 
     assert.equal(starredRepos.length, 1);
+    assert.equal(localUserRuntimeAsked, 1);
     assert.equal(deepseekSetupAsked, 1);
     assert.equal(deepseekKeyAsked, 1);
 
@@ -673,6 +702,52 @@ test("init interactive setup asks for GitHub star and saves DeepSeek key to user
   }
 });
 
+test("init interactive setup can opt into local global MCP runtime without copying global MCP servers", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-init-interactive-local-mcp-project-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-init-interactive-local-mcp-home-"));
+  let localUserRuntimeAsked = 0;
+
+  try {
+    await mkdir(join(homeRoot, ".kimi"), { recursive: true });
+    await writeFile(join(homeRoot, ".kimi", "mcp.json"), JSON.stringify({
+      mcpServers: {
+        "private-global": {
+          command: process.execPath,
+          args: ["--version"],
+          env: { API_TOKEN: "SHOULD_NOT_COPY" },
+        },
+      },
+    }), "utf-8");
+
+    await runInitDirect(projectRoot, homeRoot, {
+      stdin: { isTTY: true },
+      stdout: { isTTY: true },
+      promptGitHubStar: async () => false,
+      promptLocalUserRuntime: async ({ homeDir }) => {
+        localUserRuntimeAsked += 1;
+        assert.equal(homeDir, homeRoot);
+        return true;
+      },
+      promptDeepSeekSetup: async () => false,
+    });
+
+    assert.equal(localUserRuntimeAsked, 1);
+
+    const configToml = await readFile(join(projectRoot, ".omk", "config.toml"), "utf-8");
+    assert.match(configToml, /mcp_scope = "all"/);
+    assert.match(configToml, /skills_scope = "all"/);
+
+    const projectMcpRaw = await readFile(join(projectRoot, ".kimi", "mcp.json"), "utf-8");
+    const projectMcp = JSON.parse(projectMcpRaw);
+    assert.ok(projectMcp.mcpServers["omk-project"]);
+    assert.equal(projectMcp.mcpServers["private-global"], undefined);
+    assert.equal(projectMcpRaw.includes("SHOULD_NOT_COPY"), false);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
 test("init interactive setup is skipped in non-TTY mode", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-init-nontty-project-"));
   const homeRoot = await mkdtemp(join(tmpdir(), "omk-init-nontty-home-"));
@@ -683,6 +758,9 @@ test("init interactive setup is skipped in non-TTY mode", async () => {
       stdout: { isTTY: false },
       promptGitHubStar: async () => {
         throw new Error("GitHub star prompt should not run in non-TTY mode");
+      },
+      promptLocalUserRuntime: async () => {
+        throw new Error("MCP runtime prompt should not run in non-TTY mode");
       },
       promptDeepSeekSetup: async () => {
         throw new Error("DeepSeek setup prompt should not run in non-TTY mode");

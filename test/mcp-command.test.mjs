@@ -16,7 +16,8 @@ function runMcpScript(projectRoot, homeRoot, scriptBody, extraEnv = {}) {
     input: `
       import { mkdir, readFile, writeFile } from "node:fs/promises";
       import { join } from "node:path";
-      import { mcpDoctorCommand, mcpInstallCommand, mcpTestCommand } from ${JSON.stringify(MCP_MODULE_URL)};
+      import { mcpDoctorCommand, mcpInstallCommand, mcpListCommand, mcpTestCommand } from ${JSON.stringify(MCP_MODULE_URL)};
+      import { doctorCommand } from ${JSON.stringify(pathToFileURL(join(OMK_ROOT, "dist", "commands", "doctor.js")).href)};
       ${scriptBody}
     `,
     cwd: projectRoot,
@@ -90,6 +91,71 @@ test("mcp doctor accepts remote URL MCP servers without requiring command", asyn
     assert.match(result.stdout, /DOCTOR_OK/);
     assert.match(result.stdout, /url:.*https:\/\/mcp\.railway\.com/);
     assert.doesNotMatch(result.stdout, /missing command/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("mcp doctor --json emits structured status without leaking secrets", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-doctor-json-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+
+  try {
+    await writeEmptyConfigs(projectRoot, homeRoot, {
+      mcpServers: {
+        railway: {
+          url: "https://mcp.railway.com",
+          env: { RAILWAY_TOKEN: "${RAILWAY_TOKEN}" },
+        },
+      },
+    });
+
+    const result = runMcpScript(projectRoot, homeRoot, `
+      await mcpDoctorCommand({ json: true });
+    `);
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const parsed = JSON.parse(result.stdout);
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.activeScope, "project");
+    assert.equal(parsed.issueCount, 0);
+    assert.equal(parsed.servers[0].name, "railway");
+    assert.equal(parsed.servers[0].transport, "remote");
+    assert.equal(parsed.servers[0].url, "https://mcp.railway.com");
+    assert.ok(parsed.servers[0].checks.some((check) => check.kind === "url" && check.severity === "ok"));
+    assert.doesNotMatch(result.stdout + result.stderr, /super-secret|Bearer|RAILWAY_TOKEN=/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+
+test("MCP diagnostics report invalid JSON without leaking config contents", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-invalid-json-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+
+  try {
+    await mkdir(join(projectRoot, ".omk"), { recursive: true });
+    await mkdir(join(projectRoot, ".kimi"), { recursive: true });
+    await mkdir(join(homeRoot, ".kimi"), { recursive: true });
+    await writeFile(join(projectRoot, ".omk", "mcp.json"), JSON.stringify({ mcpServers: {} }), "utf-8");
+    await writeFile(join(projectRoot, ".kimi", "mcp.json"), `{ "mcpServers": { "bad": { "env": { "API_TOKEN": "super-secret-value" } } }`, "utf-8");
+    await writeFile(join(homeRoot, ".kimi", "mcp.json"), `{ "mcpServers": { "global": { "env": { "PASSWORD": "global-secret" } } }`, "utf-8");
+
+    const result = runMcpScript(projectRoot, homeRoot, `
+      await mcpListCommand();
+      await mcpDoctorCommand();
+      await doctorCommand({ soft: true });
+      console.log("INVALID_JSON_DIAGNOSTICS_OK");
+    `);
+
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    assert.match(result.stdout, /Invalid JSON/);
+    assert.match(result.stdout, /MCP JSON/);
+    assert.match(result.stdout, /INVALID_JSON_DIAGNOSTICS_OK/);
+    assert.doesNotMatch(result.stdout + result.stderr, /super-secret-value|global-secret/);
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(homeRoot, { recursive: true, force: true });

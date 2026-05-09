@@ -4,6 +4,28 @@
 
 _No unreleased changes._
 
+## v1.1.7 — Harness manifest, native safety, and release matrix (2026-05-09)
+
+### New
+
+- **Chat agent harness manifest** — `omk chat` writes a run-scoped prompt, contract, generated agent file, and `chat-agent-harness.json` with MCP, skills, hooks, workers, gates, provider policy, and stop conditions.
+- **Capability-aware orchestration lanes** — parallel DAG setup can expose optional MCP/skills/hooks/DeepSeek advisory workers while Kimi keeps final write/merge authority. Worker counts are clamped to a safe 1–6 range.
+- **Rust native safety loader** — `omk-safety` is built from the Rust crate and selected from `dist/native/<platform-arch>/omk-safety`, with a TypeScript fallback when no bundled binary exists.
+- **Windows clipboard screenshot bridge** — WSL/bash/zsh users can store Ctrl+C Snipping Tool captures through `omk screenshot` without manually saving files.
+- **Awesome Design.md skill** — OMK Core now includes the packaged `awesome-design-md` skill template alongside Open Design.
+
+### Improved
+
+- **Release matrix** — GitHub Release now builds native safety artifacts on Ubuntu, Windows, and macOS before tarball audit, install smoke, GitHub Release, and npm publish.
+- **Harness evidence** — the test runner records MCP/skill/hook harness resource counts without leaking names or secrets.
+- **Cockpit and DeepSeek visibility** — cockpit keeps its current layout while exposing more run/deepseek usage context in a long responsive view.
+- **Init and MCP defaults** — init flows keep project-only MCP as the safe default while offering trusted local/global runtime reuse without copying personal servers into the repo.
+
+### Fixed
+
+- **Invalid worker budgets** — chat/parallel harness generation now rejects empty or runaway worker DAGs by normalizing invalid and excessive worker counts.
+- **Stale dist release checks** — package audit and tests run after clean builds so generated dist drift is caught before tagging.
+
 ## v1.1.6 — Open Design OMK bridge, MCP diagnostics, and README asset refresh (2026-05-07)
 
 ### New

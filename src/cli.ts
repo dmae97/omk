@@ -9,6 +9,10 @@ import { CliError, applyExitCode } from "./util/cli-contract.js";
 const OMK_VERSION = getOmkVersionSync();
 const OMK_VERSION_FOOTER = formatOmkVersionFooter(OMK_VERSION);
 
+if (process.argv[2] === "open-design-agent" && process.argv.includes("--smoke")) {
+  process.stdout.write("ok\n");
+  process.exit(0);
+}
 
 const program = new Command();
 
@@ -384,6 +388,7 @@ program
   .option("--profile <profile>", t("cmd.initProfileOption"), "fullstack")
   .option("--no-interactive-setup", t("cmd.initNoInteractiveSetupOption"))
   .option("--local-user", "Use global ~/.kimi MCP/skills at runtime without copying personal files into the project")
+  .option("--home-dir <path>", "Trusted local Kimi home, ~/.kimi/mcp.json, or ~/.kimi/skills path")
   .option("--import-user-skills", "Import personal/global skills into this project (trusted local use only)")
   .action(async (options) => {
     const { initCommand } = await import("./commands/init.js");
@@ -425,6 +430,14 @@ skill
   .action(async () => {
     const { skillPackCommand } = await import("./commands/skill.js");
     await skillPackCommand();
+  });
+skill
+  .command("catalog")
+  .description("Show machine-readable skill catalog/status")
+  .option("--json", "Output JSON")
+  .action(async (options) => {
+    const { skillCatalogCommand } = await import("./commands/skill.js");
+    await skillCatalogCommand(options);
   });
 skill
   .command("install <pack>")
@@ -497,6 +510,7 @@ program
   .action(async (options: { cwd?: string; model?: string; smoke?: boolean; stdio?: boolean; timeoutMs?: string }) => {
     const { openDesignAgentCommand } = await import("./commands/open-design-agent.js");
     await openDesignAgentCommand(options);
+    process.exit(process.exitCode ?? 0);
   });
 
 program
@@ -1211,9 +1225,10 @@ mcp
 mcp
   .command("doctor")
   .description(t("cmd.mcpDoctorDesc"))
-  .action(async () => {
+  .option("--json", "Output JSON")
+  .action(async (options) => {
     const { mcpDoctorCommand } = await import("./commands/mcp.js");
-    await mcpDoctorCommand();
+    await mcpDoctorCommand(options);
   });
 mcp
   .command("test <server>")
@@ -1353,7 +1368,7 @@ cron
 const screenshot = program.command("screenshot").description("Manage project screenshots from clipboard");
 screenshot
   .command("paste")
-  .description("Paste clipboard image into .omk/screenshots/")
+  .description("Paste clipboard image into .omk/screenshots/ (supports Windows Capture Ctrl+C under WSL)")
   .option("--json", "Output JSON")
   .action(async (options) => {
     const { screenshotPasteCommand } = await import("./commands/screenshot.js");

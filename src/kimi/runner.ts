@@ -135,20 +135,28 @@ export async function runKimiInteractive(
   const handleStdinData = (data: string | Buffer): void => {
     const text = typeof data === "string" ? data : data.toString("utf8");
 
-    // Ctrl+V (0x16) — default: pass-through to Kimi native paste.
-    // Only intercept when OMK_IMAGE_PASTE_MODE=managed is set.
-    if (text.includes("\x16") && process.env.OMK_IMAGE_PASTE_MODE === "managed") {
+    // Ctrl+V (0x16) — auto-attach a clipboard image if Windows Capture/Snipping Tool
+    // copied one via Ctrl+C. Text paste still falls through to Kimi unchanged.
+    // Set OMK_IMAGE_PASTE_MODE=native/off to disable, or managed to show clipboard errors.
+    if (text.includes("\x16")) {
+      const mode = (process.env.OMK_IMAGE_PASTE_MODE ?? "auto").toLowerCase();
       const remaining = text.replace(/\x16/g, "");
-      const result = pasteScreenshot(getProjectRoot());
-      if (result.ok && result.relativePath) {
-        // Insert path but do NOT auto-submit; user must press Enter.
-        ptyProcess.write(`Image file: ${result.relativePath}`);
-      } else if (remaining.trim().length === 0) {
-        ptyProcess.write(`[Clipboard: ${result.error ?? "no image found"}]`);
+      if (!["native", "off", "disabled", "0"].includes(mode)) {
+        const result = pasteScreenshot(getProjectRoot());
+        if (result.ok && result.relativePath) {
+          // Insert path but do NOT auto-submit; user must press Enter.
+          ptyProcess.write(`Image file: ${result.relativePath}`);
+          if (remaining) {
+            ptyProcess.write(remaining);
+          }
+          return;
+        }
+        if (mode === "managed" && remaining.trim().length === 0) {
+          ptyProcess.write(`[Clipboard: ${result.error ?? "no image found"}]`);
+          return;
+        }
       }
-      if (remaining) {
-        ptyProcess.write(remaining);
-      }
+      ptyProcess.write(text);
       return;
     }
 
@@ -443,6 +451,8 @@ function buildNodeMessage(
       : undefined,
     [
       "Instructions:",
+      "- Treat the prompt prefix as the active Kimi orchestration contract; turn it into concrete node work, not a repeated summary.",
+      "- Preserve completed work and continue only the unresolved scope named by this node.",
       "- Keep context small and read only the files needed for this node.",
       "- Use the listed skills/MCP/tools when they fit the node.",
       "- Produce concrete evidence, changed files, blockers, and verification result.",

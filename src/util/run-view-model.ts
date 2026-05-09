@@ -52,6 +52,12 @@ export interface RunViewModelProgress {
   settled: number;
 }
 
+export interface RunViewModelProviderRouting {
+  attempts: number;
+  fallbackCount: number;
+  byProvider: Record<string, number>;
+}
+
 export interface RunViewModelBlockerItem {
   nodeId: string;
   reason: string;
@@ -82,6 +88,10 @@ export interface RunViewModel {
   maxIterations?: number;
   /** Confidence level of the ETA estimate. */
   etaConfidence?: "low" | "medium" | "high";
+  /** Provider route/fallback metrics collected from node attempts. */
+  providerRouting: RunViewModelProviderRouting;
+  /** Team/tmux runtime snapshot when the run was created by `omk team`. */
+  teamRuntime?: RunState["teamRuntime"];
 }
 
 export interface BuildRunViewModelOptions {
@@ -175,6 +185,7 @@ export function buildRunViewModel(
       stateError: "missing",
       runId: null,
       workers: [],
+      providerRouting: { attempts: 0, fallbackCount: 0, byProvider: {} },
     };
   }
 
@@ -188,6 +199,7 @@ export function buildRunViewModel(
   const total = nodes.length;
   const settled = done.length + skipped.length + failed.length + blocked.length;
   const percent = total > 0 ? Math.round((settled / total) * 100) : 0;
+  const providerRouting = computeProviderRouting(nodes);
 
   let health: RunHealth = "ok";
   if (failed.length > 0) health = "failed";
@@ -320,5 +332,25 @@ export function buildRunViewModel(
     lastActivityAt: state.lastActivityAt,
     iterationCount: state.iterationCount,
     maxIterations: state.maxIterations,
+    providerRouting,
+    teamRuntime: state.teamRuntime,
   };
+}
+
+function computeProviderRouting(nodes: RunState["nodes"]): RunViewModelProviderRouting {
+  const byProvider: Record<string, number> = {};
+  let attempts = 0;
+  let fallbackCount = 0;
+
+  for (const node of nodes) {
+    for (const attempt of node.attempts ?? []) {
+      if (!attempt.provider && !attempt.requestedProvider && !attempt.fallbackFrom) continue;
+      attempts += 1;
+      const provider = attempt.provider ?? attempt.requestedProvider ?? "unknown";
+      byProvider[provider] = (byProvider[provider] ?? 0) + 1;
+      if (attempt.fallbackFrom) fallbackCount += 1;
+    }
+  }
+
+  return { attempts, fallbackCount, byProvider };
 }

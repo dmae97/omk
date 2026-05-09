@@ -36,6 +36,44 @@ test("HUD sidebar renders run TODOs and changed files", () => {
   assert.match(sidebar, /src\/commands\/hud\.ts/);
 });
 
+test("HUD sidebar renders provider route and fallback metrics", () => {
+  const sidebar = buildHudSidebar(
+    {
+      schemaVersion: 1,
+      runId: "provider-run",
+      startedAt: new Date(0).toISOString(),
+      nodes: [
+        {
+          id: "review",
+          name: "Review provider route",
+          role: "reviewer",
+          dependsOn: [],
+          status: "done",
+          retries: 0,
+          maxRetries: 1,
+          attempts: [
+            {
+              attempt: 1,
+              startedAt: new Date(0).toISOString(),
+              status: "done",
+              provider: "kimi",
+              requestedProvider: "deepseek",
+              fallbackFrom: "deepseek",
+              fallbackReason: "provider unavailable",
+            },
+          ],
+        },
+      ],
+    },
+    []
+  );
+
+  assert.match(sidebar, /provider/);
+  assert.match(sidebar, /1 attempt/);
+  assert.match(sidebar, /kimi=1/);
+  assert.match(sidebar, /fallback 1/);
+});
+
 test("HUD layout can place sidebar beside main panels on wide terminals", () => {
   const layout = renderHudColumns(["LEFT"], "RIGHT", 120);
   assert.match(layout, /LEFT\s+RIGHT/);

@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 import readline from "readline";
 
-import { getOmkPath, getProjectRoot, getRunPath } from "../util/fs.js";
+import { getOmkPath, getProjectRoot, getRunPath, sanitizeRunId } from "../util/fs.js";
 import { style, header, status, label, kimicatCliHero, bullet } from "../util/theme.js";
 import { t } from "../util/i18n.js";
 import { createOmkSessionEnv } from "../util/session.js";
@@ -10,6 +10,7 @@ import { getOmkResourceSettings } from "../util/resource-profile.js";
 import { createRoutedRunState, createDagFromRunState, refreshRunStateEstimate, routeRunState } from "../orchestration/run-state.js";
 import { createExecutor } from "../orchestration/executor.js";
 import { createStatePersister } from "../orchestration/state-persister.js";
+import { buildCapabilityAgentNodes, isCapabilityAgentNode } from "../orchestration/capability-agents.js";
 
 import { ParallelLiveRenderer, renderCompactParallelFrame, type ParallelViewMode } from "../orchestration/parallel-ui.js";
 import { formatOmkVersionFooter } from "../util/version.js";
@@ -19,8 +20,9 @@ import {
   createProviderBackedTaskRunner,
   type ProviderPolicy,
 } from "../providers/index.js";
+import type { DeepSeekModelTier } from "../providers/types.js";
 import type { RunState, UserIntent } from "../contracts/orchestration.js";
-import type { Dag } from "../orchestration/dag.js";
+import type { Dag, DagNodeDefinition } from "../orchestration/dag.js";
 
 export interface ParallelCommandOptions {
   workers?: string;
@@ -57,8 +59,8 @@ export async function parallelCommand(
   }
 
   const approvalPolicy = normalizeApprovalPolicy(options.approvalPolicy, resources.profile);
-  const runId = options.runId ?? new Date().toISOString().replace(/[:.]/g, "-");
-  const sanitized = runId.replace(/[^a-zA-Z0-9_.-]/g, "-").replace(/\.\./g, "");
+  const runId = sanitizeRunId(options.runId ?? new Date().toISOString().replace(/[:.]/g, "-"), "parallel");
+  const sanitized = runId;
   const runDir = getRunPath(sanitized);
   const startedAt = new Date().toISOString();
 
@@ -327,11 +329,12 @@ export async function parallelCommand(
   return { runId, success: result.success };
 }
 
-function normalizeWorkerCount(value: string | undefined, fallback: number): number {
-  const effective = value || process.env.OMK_WORKERS;
+export function normalizeWorkerCount(value: string | undefined, fallback: number): number {
+  const effective = (value ?? process.env.OMK_WORKERS)?.trim();
   if (!effective || effective === "auto") return fallback;
-  const parsed = Number.parseInt(effective, 10);
-  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  if (!/^\d+$/.test(effective)) return fallback;
+  const parsed = Number(effective);
+  if (!Number.isInteger(parsed) || parsed < 1) return fallback;
   return Math.min(parsed, 6);
 }
 
@@ -358,7 +361,14 @@ function buildPromptText(
 ): string {
   const taskType = intent?.taskType ?? "general";
   const lines: string[] = [
-    `Goal: ${goal}`,
+    `# Kimi DAG Execution Envelope`,
+    ``,
+    `Kimi must transform the orchestration context into node-level action. Do not echo the prompt, restart completed work, or ask for generic continuation.`,
+    ``,
+    `## Orchestrated Goal Context`,
+    goal.trim(),
+    ``,
+    `## Run Metadata`,
     `Run ID: ${runId}`,
     `Resource profile: ${profile}`,
     `Worker budget: ${workerCount}`,
@@ -452,7 +462,8 @@ function buildDeepSeekPromptPrefix(
 ): string {
   const taskType = intent?.taskType ?? "general";
   const lines = [
-    `OMK DeepSeek opportunistic worker.`,
+    `OMK DeepSeek model-agent worker.`,
+    `Initial Kimi orchestration may spawn dedicated DeepSeek Flash/Pro read-only agents; opportunistic routing may also offload low-risk workers.`,
     `Direct mode is read-only. For file-affecting advisory mode, propose patch strategy only; Kimi owns actual edits, merge authority, and final synthesis.`,
     `Do not repeat or restart the user's original goal. Read the current Kimi/goal context below and answer only for the assigned DAG node.`,
     ``,
@@ -518,6 +529,14 @@ function buildWorkerLabels(state: RunState): Record<string, string> {
       labels[n.id] = `${role}-${roleCounts[role]}`;
     }
   });
+  for (const node of state.nodes.filter((n) => n.id.startsWith("deepseek-"))) {
+    labels[node.id] = node.routing?.providerModelTier
+      ? `deepseek-${node.routing.providerModelTier}`
+      : "deepseek";
+  }
+  for (const node of state.nodes.filter((n) => isCapabilityAgentNode(n))) {
+    labels[node.id] = node.routing?.routeSource ? `capability-${node.routing.routeSource}` : "capability";
+  }
   return labels;
 }
 
@@ -533,7 +552,9 @@ function createInteractiveRunState(input: {
   intent?: UserIntent;
 }): RunState {
   const intent = input.intent;
-  const effectiveWorkers = intent?.estimatedWorkers ?? input.workerCount;
+  const effectiveWorkers = intent?.estimatedWorkers === undefined
+    ? input.workerCount
+    : normalizeWorkerCount(String(intent.estimatedWorkers), input.workerCount);
 
   // Build dynamic nodes based on intent
   const nodes = buildDynamicNodes({
@@ -567,7 +588,7 @@ function createInteractiveRunState(input: {
   return refreshRunStateEstimate(state, effectiveWorkers);
 }
 
-interface DynamicNodeBuildInput {
+export interface DynamicNodeBuildInput {
   flow: string;
   goal: string;
   startedAt: string;
@@ -575,12 +596,13 @@ interface DynamicNodeBuildInput {
   intent?: UserIntent;
 }
 
-function buildDynamicNodes(input: DynamicNodeBuildInput): import("../orchestration/dag.js").DagNodeDefinition[] {
+export function buildDynamicNodes(input: DynamicNodeBuildInput): DagNodeDefinition[] {
   const { flow, goal, startedAt, workerCount, intent } = input;
   const taskType = intent?.taskType ?? "general";
   const roles = intent?.requiredRoles ?? ["planner", "coder", "reviewer"];
+  const effectiveWorkerCount = normalizeWorkerCount(String(workerCount), 1);
 
-  const bootstrap: import("../orchestration/dag.js").DagNodeDefinition = {
+  const bootstrap: DagNodeDefinition = {
     id: "bootstrap",
     name: `Prepare ${flow} run`,
     role: "omk",
@@ -592,7 +614,7 @@ function buildDynamicNodes(input: DynamicNodeBuildInput): import("../orchestrati
 
   // Determine coordinator / planner node based on task type
   const coordinatorRole = taskType === "plan" || taskType === "migrate" || taskType === "security" ? "architect" : "orchestrator";
-  const coordinator: import("../orchestration/dag.js").DagNodeDefinition = {
+  const coordinator: DagNodeDefinition = {
     id: "root-coordinator",
     name: `Coordinate: ${goal}`,
     role: coordinatorRole,
@@ -606,8 +628,24 @@ function buildDynamicNodes(input: DynamicNodeBuildInput): import("../orchestrati
   const workerRoles = roles.filter((r) => r !== "planner" && r !== "orchestrator" && r !== "architect" && r !== "router");
   if (workerRoles.length === 0) workerRoles.push("coder");
 
-  const workerNodes: import("../orchestration/dag.js").DagNodeDefinition[] = Array.from(
-    { length: Math.min(workerCount, 6) },
+  const deepseekAgentNodes = buildDeepSeekAgentNodes({
+    goal,
+    taskType,
+    intent,
+  });
+  const capabilityAgentNodes = shouldSpawnCapabilityAgents(effectiveWorkerCount, taskType, intent)
+    ? buildCapabilityAgentNodes({
+      goal,
+      dependsOn: ["root-coordinator"],
+      maxAgents: 3,
+      seedId: "parallel-capability-routing-seed",
+      seedRole: coordinatorRole,
+      seedName: `Route active MCP, skills, and hooks for: ${goal}`,
+    })
+    : [];
+
+  const workerNodes: DagNodeDefinition[] = Array.from(
+    { length: effectiveWorkerCount },
     (_, index) => {
       const role = workerRoles[index % workerRoles.length];
       const taskName =
@@ -634,21 +672,23 @@ function buildDynamicNodes(input: DynamicNodeBuildInput): import("../orchestrati
   );
 
   // Build tail nodes based on task type
-  const tailNodes: import("../orchestration/dag.js").DagNodeDefinition[] = [];
-  const workerIds = workerNodes.map((w) => w.id);
+  const tailNodes: DagNodeDefinition[] = [];
+  const synthesisInputNodes = [...deepseekAgentNodes, ...capabilityAgentNodes, ...workerNodes];
+  const synthesisInputIds = synthesisInputNodes.map((node) => node.id);
 
   // Review / aggregator node
   const reviewRole = taskType === "review" ? "aggregator" : "reviewer";
-  const reviewNode: import("../orchestration/dag.js").DagNodeDefinition = {
+  const reviewNode: DagNodeDefinition = {
     id: "review-merge",
     name: taskType === "review" ? "Aggregate review findings" : "Review, verify, and merge outputs",
     role: reviewRole,
-    dependsOn: workerIds,
+    dependsOn: synthesisInputIds,
     maxRetries: 1,
-    inputs: workerNodes.map((w) => ({
-      name: w.outputs?.[0]?.name ?? w.name,
+    inputs: synthesisInputNodes.map((node) => ({
+      name: node.outputs?.[0]?.name ?? node.name,
       ref: "state.json",
-      from: w.id,
+      from: node.id,
+      required: !node.id.startsWith("deepseek-") && !isCapabilityAgentNode(node),
     })),
     outputs: [{ name: "verified result", gate: taskType === "review" ? "summary" : "review-pass" }],
   };
@@ -695,7 +735,85 @@ function buildDynamicNodes(input: DynamicNodeBuildInput): import("../orchestrati
     });
   }
 
-  return [bootstrap, coordinator, ...workerNodes, ...tailNodes];
+  return [bootstrap, coordinator, ...deepseekAgentNodes, ...capabilityAgentNodes, ...workerNodes, ...tailNodes];
+}
+
+function shouldSpawnCapabilityAgents(workerCount: number, taskType: string, intent?: UserIntent): boolean {
+  if (workerCount < 2) return false;
+  if (intent?.parallelizable === true) return true;
+  if (intent?.complexity && intent.complexity !== "simple") return true;
+  return ["bugfix", "implement", "migrate", "plan", "refactor", "review", "security", "test", "general"].includes(taskType);
+}
+
+function buildDeepSeekAgentNodes(input: {
+  goal: string;
+  taskType: string;
+  intent?: UserIntent;
+}): DagNodeDefinition[] {
+  if (!shouldSpawnDeepSeekModelAgents(input.taskType, input.intent)) return [];
+
+  return [
+    createDeepSeekAgentNode({
+      id: "deepseek-flash-agent",
+      name: `DeepSeek Flash quick decomposition: ${input.goal}`,
+      role: "planner",
+      tier: "flash",
+      outputName: "deepseek flash decomposition",
+      rationale: "Flash handles fast first-pass context slicing from the original user input before Kimi synthesis.",
+    }),
+    createDeepSeekAgentNode({
+      id: "deepseek-pro-agent",
+      name: `DeepSeek Pro critical model review: ${input.goal}`,
+      role: "reviewer",
+      tier: "pro",
+      outputName: "deepseek pro critique",
+      rationale: "Pro handles deeper read-only critique and risk detection from the original user input before Kimi synthesis.",
+    }),
+  ];
+}
+
+function shouldSpawnDeepSeekModelAgents(taskType: string, intent?: UserIntent): boolean {
+  if (intent?.isReadOnly === true) return true;
+  if (intent?.parallelizable === true) return true;
+  if (intent?.complexity && intent.complexity !== "simple") return true;
+  return ["bugfix", "implement", "migrate", "plan", "refactor", "review", "security", "test"].includes(taskType);
+}
+
+function createDeepSeekAgentNode(input: {
+  id: string;
+  name: string;
+  role: string;
+  tier: DeepSeekModelTier;
+  outputName: string;
+  rationale: string;
+}): DagNodeDefinition {
+  return {
+    id: input.id,
+    name: input.name,
+    role: input.role,
+    dependsOn: ["root-coordinator"],
+    maxRetries: 1,
+    priority: 2,
+    cost: input.tier === "pro" ? 2 : 1,
+    failurePolicy: { retryable: true, blockDependents: false, skipOnFailure: true },
+    inputs: [{ name: "worker plan", ref: "plan.md", from: "root-coordinator" }],
+    outputs: [{ name: input.outputName, gate: "none", required: false }],
+    routing: {
+      provider: "deepseek",
+      fallbackProvider: "kimi",
+      providerModelTier: input.tier,
+      providerReason: `Dedicated DeepSeek ${input.tier} model agent spawned from initial orchestration input`,
+      requiresMcp: false,
+      requiresToolCalling: false,
+      readOnly: true,
+      evidenceRequired: false,
+      contextBudget: input.tier === "pro" ? "small" : "tiny",
+      skills: ["omk-repo-explorer", "omk-context-broker"],
+      mcpServers: [],
+      tools: [],
+      rationale: input.rationale,
+    },
+  };
 }
 
 function createExecutableDagFromState(state: RunState): Dag {

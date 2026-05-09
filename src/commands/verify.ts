@@ -206,7 +206,16 @@ export async function verifyCommand(options: { run?: string; json?: boolean } = 
   }
 
   if (options.json) {
+    const errors = [
+      ...failed.map((f) => `${f.nodeId}: ${f.gate}${f.ref ? ` (${f.ref})` : ""} — ${f.message}`),
+      ...missing.map((m) => m.message),
+    ];
     const output: VerifyJsonOutput & Record<string, unknown> = {
+      ok: errors.length === 0,
+      command: "verify",
+      checkedAt: new Date().toISOString(),
+      errors,
+      warnings: [],
       runId,
       schemaVersion: SCHEMA_VERSION,
       gates,
@@ -214,6 +223,13 @@ export async function verifyCommand(options: { run?: string; json?: boolean } = 
       passed,
       failed,
       missing,
+      data: {
+        runId,
+        gates: gates.length,
+        passed: passed.length,
+        failed: failed.length,
+        missing: missing.length,
+      },
     };
     if (goalEvidence.length > 0) {
       output.goalEvidence = goalEvidence;

@@ -1,6 +1,7 @@
 import { join } from "path";
 import { execSync } from "child_process";
 import { checkCommand, getKimiVersion, runShell } from "../util/shell.js";
+import { runOmkSafetySelfTest } from "../util/native-safety.js";
 import { getKimiCapabilities } from "../kimi/capability.js";
 import { pathExists, getKimiConfigPath, readTextFile, getProjectRoot, getUserHome } from "../util/fs.js";
 import { isGitAvailable, getCurrentBranch, getGitStatus } from "../util/git.js";
@@ -30,11 +31,19 @@ interface CheckResult {
   name: string;
   status: "ok" | "warn" | "fail" | "info";
   message: string;
+  metadata?: Record<string, unknown>;
 }
 
 interface CheckCategory {
   title: string;
   checks: () => Promise<CheckResult[]>;
+}
+
+interface JsonFileDiagnostic {
+  path: string;
+  exists: boolean;
+  valid: boolean;
+  error?: string;
 }
 
 const SECRET_KEY_SUBSTRINGS = ["apikey", "token", "password", "secret", "authorization", "bearer", "key"];
@@ -57,6 +66,18 @@ function redactSecrets(obj: unknown): unknown {
     }
   }
   return result;
+}
+
+async function inspectJsonFile(filePath: string): Promise<JsonFileDiagnostic> {
+  if (!(await pathExists(filePath))) return { path: filePath, exists: false, valid: false };
+
+  try {
+    JSON.parse(await readTextFile(filePath, "{}"));
+    return { path: filePath, exists: true, valid: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { path: filePath, exists: true, valid: false, error: `Invalid JSON: ${message}` };
+  }
 }
 
 export async function doctorCommand(options: { json?: boolean; soft?: boolean } = {}): Promise<void> {
@@ -91,6 +112,7 @@ export async function doctorCommand(options: { json?: boolean; soft?: boolean } 
     const find = (name: string) => allResults.find((r) => r.name === name);
     const findMsg = (name: string) => find(name)?.message ?? null;
     const findOk = (name: string) => find(name)?.status === "ok";
+    const findMeta = (name: string, key: string) => find(name)?.metadata?.[key] ?? null;
 
     const warnings = allResults
       .filter((r) => r.status === "warn")
@@ -99,7 +121,7 @@ export async function doctorCommand(options: { json?: boolean; soft?: boolean } 
       .filter((r) => r.status === "fail")
       .map((r) => ({ name: r.name, message: r.message }));
 
-    const output = {
+    const data = {
       environment: {
         platform: process.platform,
         arch: process.arch,
@@ -160,6 +182,23 @@ export async function doctorCommand(options: { json?: boolean; soft?: boolean } 
       security: {
         dangerousConfig: findMsg("Dangerous Config"),
       },
+      rustSafety: {
+        cargo: findMsg("Rust Cargo"),
+        rustc: findMsg("Rust Compiler"),
+        crate: findMsg("Rust Safety Crate"),
+        native: findMsg("Rust Safety Native"),
+        nativeSource: findMeta("Rust Safety Native", "source"),
+        nativePlatformArch: findMeta("Rust Safety Native", "platformArch"),
+        nativeBuiltFromSource: findMeta("Rust Safety Native", "builtFromSource"),
+        nativePath: findMeta("Rust Safety Native", "path"),
+      },
+    };
+    const output = {
+      ok: errors.length === 0,
+      command: "doctor",
+      checkedAt: new Date().toISOString(),
+      data,
+      ...data,
       warnings,
       errors,
     };
@@ -311,10 +350,13 @@ async function runtimeChecks(resources: Awaited<ReturnType<typeof getOmkResource
 // ── Toolchain ─────────────────────────────────────────────────
 
 async function toolchainChecks(root: string): Promise<CheckResult[]> {
-  const [gitAvailable, jqExists, tmuxExists] = await Promise.all([
+  const [gitAvailable, jqExists, tmuxExists, cargoExists, rustcExists, rustSafetyCrateExists] = await Promise.all([
     isGitAvailable(),
     checkCommand("jq"),
     checkCommand("tmux"),
+    checkCommand("cargo"),
+    checkCommand("rustc"),
+    pathExists(join(root, "crates", "omk-safety", "Cargo.toml")),
   ]);
 
   const results: CheckResult[] = [];
@@ -404,6 +446,26 @@ async function toolchainChecks(root: string): Promise<CheckResult[]> {
     message: tmuxExists ? t("doctor.tmuxInstalled") : t("doctor.tmuxRecommend"),
   });
 
+  results.push({
+    name: "Rust Cargo",
+    status: cargoExists ? "ok" : "info",
+    message: cargoExists ? "cargo available" : "cargo not found — Rust safety harness checks will be skipped",
+  });
+
+  results.push({
+    name: "Rust Compiler",
+    status: rustcExists ? "ok" : "info",
+    message: rustcExists ? "rustc available" : "rustc not found — Rust safety harness checks will be skipped",
+  });
+
+  results.push({
+    name: "Rust Safety Crate",
+    status: rustSafetyCrateExists ? "ok" : "info",
+    message: rustSafetyCrateExists ? "crates/omk-safety configured" : "no Rust safety crate configured",
+  });
+
+  results.push(await rustSafetyNativeCheck(root));
+
   const pkgMgr = detectPackageManager(root);
   results.push({ name: "Pkg Manager", status: "ok", message: `${pkgMgr} detected` });
 
@@ -415,6 +477,22 @@ async function toolchainChecks(root: string): Promise<CheckResult[]> {
   });
 
   return results;
+}
+
+async function rustSafetyNativeCheck(root: string): Promise<CheckResult> {
+  const result = await runOmkSafetySelfTest({ root });
+  return {
+    name: "Rust Safety Native",
+    status: result.status,
+    message: result.message,
+    metadata: {
+      source: result.source,
+      platformArch: result.platformArch,
+      builtFromSource: result.builtFromSource,
+      path: result.path,
+      checks: result.checks,
+    },
+  };
 }
 
 // ── Kimi CLI ──────────────────────────────────────────────────
@@ -660,8 +738,13 @@ async function mcpSkillsChecks(root: string): Promise<CheckResult[]> {
 
   const kimiSkillsDir = join(root, ".kimi", "skills");
   const agentsSkillsDir = join(root, ".agents", "skills");
-  const [projectKimiMcpExists, kimiSkillsCount, agentsSkillsCount] = await Promise.all([
-    pathExists(join(root, ".kimi", "mcp.json")),
+  const projectKimiMcpPath = join(root, ".kimi", "mcp.json");
+  const omkMcpPath = join(root, ".omk", "mcp.json");
+  const globalMcpPath = join(getUserHome(), ".kimi", "mcp.json");
+  const [projectKimiMcp, omkMcp, globalMcp, kimiSkillsCount, agentsSkillsCount] = await Promise.all([
+    inspectJsonFile(projectKimiMcpPath),
+    inspectJsonFile(omkMcpPath),
+    inspectJsonFile(globalMcpPath),
     (async () => {
       if (!(await pathExists(kimiSkillsDir))) return 0;
       try {
@@ -681,9 +764,17 @@ async function mcpSkillsChecks(root: string): Promise<CheckResult[]> {
   ]);
   results.push({
     name: "Project MCP",
-    status: projectKimiMcpExists ? "ok" : "info",
-    message: projectKimiMcpExists ? t("doctor.mcpExists") : t("doctor.mcpMissing"),
+    status: projectKimiMcp.exists ? "ok" : "info",
+    message: projectKimiMcp.exists ? t("doctor.mcpExists") : t("doctor.mcpMissing"),
   });
+  for (const diagnostic of [omkMcp, projectKimiMcp, globalMcp]) {
+    if (!diagnostic.exists || diagnostic.valid) continue;
+    results.push({
+      name: "MCP JSON",
+      status: "fail",
+      message: `${diagnostic.path}: ${diagnostic.error ?? "Invalid JSON"}`,
+    });
+  }
   results.push({
     name: ".kimi/skills",
     status: kimiSkillsCount > 0 ? "ok" : "warn",
@@ -721,33 +812,29 @@ async function mcpSkillsChecks(root: string): Promise<CheckResult[]> {
       : t("doctor.lspMissing"),
   });
 
-  const globalMcpPath = join(getUserHome(), ".kimi", "mcp.json");
-  const globalMcpExists = await pathExists(globalMcpPath);
   let globalMcpCount = 0;
   const stdioMcpServers: string[] = [];
   const npxMcpServers: string[] = [];
-  if (globalMcpExists) {
-    try {
-      const content = await readTextFile(globalMcpPath, "{}");
-      const parsed = redactSecrets(JSON.parse(content)) as {
-        mcpServers?: Record<string, { command?: string; type?: string }>;
-      };
-      const servers: Record<string, { command?: string; type?: string }> = parsed.mcpServers ?? {};
-      globalMcpCount = Object.keys(servers).length;
-      for (const [name, cfg] of Object.entries(servers)) {
-        if (cfg.type === "stdio" || !cfg.type) {
-          stdioMcpServers.push(name);
-          if (cfg.command?.includes("npx") || cfg.command?.includes("npm")) {
-            npxMcpServers.push(name);
-          }
+  if (globalMcp.valid) {
+    const content = await readTextFile(globalMcpPath, "{}");
+    const parsed = redactSecrets(JSON.parse(content)) as {
+      mcpServers?: Record<string, { command?: string; type?: string }>;
+    };
+    const servers: Record<string, { command?: string; type?: string }> = parsed.mcpServers ?? {};
+    globalMcpCount = Object.keys(servers).length;
+    for (const [name, cfg] of Object.entries(servers)) {
+      if (cfg.type === "stdio" || !cfg.type) {
+        stdioMcpServers.push(name);
+        if (cfg.command?.includes("npx") || cfg.command?.includes("npm")) {
+          npxMcpServers.push(name);
         }
       }
-    } catch { /* ignore */ }
+    }
   }
   results.push({
     name: "Global MCP",
-    status: globalMcpCount > 0 ? "ok" : "warn",
-    message: globalMcpCount > 0 ? t("doctor.globalMcpSynced", globalMcpCount) : t("doctor.globalMcpMissing"),
+    status: globalMcp.valid && globalMcpCount > 0 ? "ok" : "warn",
+    message: globalMcp.valid && globalMcpCount > 0 ? t("doctor.globalMcpSynced", globalMcpCount) : t("doctor.globalMcpMissing"),
   });
   if (stdioMcpServers.length > 0) {
     results.push({

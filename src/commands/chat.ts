@@ -103,6 +103,7 @@ import { runKimiInteractive } from "../kimi/runner.js";
 import { t } from "../util/i18n.js";
 import { detectTmux, launchChatCockpit, isCockpitChild, ensureChatRunState } from "../util/chat-cockpit.js";
 import { ensureChatStartupArtifacts } from "../util/chat-startup.js";
+import { prepareChatAgentModeAgent } from "../util/chat-agent-mode.js";
 import {
   queueChatStatePatch,
   updateChatHeartbeat as enqueueChatHeartbeat,
@@ -243,6 +244,49 @@ export async function chatCommand(options: {
   // Ensure run state exists before launching cockpit so right pane can read it
   await ensureChatRunState(root, effectiveRunId);
 
+  let effectiveAgentFile = agentFile;
+  if (!options.agentFile) {
+    try {
+      const resources = await getOmkResourceSettings();
+      const [mcpNames, skillNames, hookNames] = await Promise.all([
+        getActiveMcpNames(resources.mcpScope),
+        getActiveSkillNames(resources.skillsScope),
+        getActiveHookNames(root),
+      ]);
+      const prepared = await prepareChatAgentModeAgent({
+        root,
+        runId: effectiveRunId,
+        baseAgentFile: agentFile,
+        basePromptPath: getOmkPath("prompts/root.md"),
+        mode: currentMode,
+        resources: {
+          workers: options.workers ?? resources.maxWorkers.toString(),
+          maxStepsPerTurn: options.maxStepsPerTurn,
+          resourceProfile: resources.profile,
+          approvalPolicy: "interactive",
+          providerPolicy: "auto",
+          ensembleDefaultEnabled: resources.ensembleDefaultEnabled,
+          mcpScope: resources.mcpScope,
+          skillsScope: resources.skillsScope,
+          hooksScope: process.env.OMK_HOOKS_SCOPE ?? resources.skillsScope,
+          mcpNames,
+          skillNames,
+          hookNames,
+        },
+      });
+      effectiveAgentFile = prepared.agentFile;
+      await queueChatStatePatch(effectiveRunId, {
+        lastActivityAt: new Date().toISOString(),
+      }).catch(() => {});
+    } catch (err) {
+      effectiveAgentFile = agentFile;
+      if (!isCockpitChild() && layout !== "plain") {
+        const detail = process.env.OMK_DEBUG === "1" && err instanceof Error ? `: ${err.name}` : "";
+        console.log(status.warn(`Chat agent harness unavailable; using base agent${detail}`));
+      }
+    }
+  }
+
   // ── tmux layout: delegate to cockpit launcher ──
   if (layout === "tmux") {
     const hasTmux = await detectTmux();
@@ -255,7 +299,7 @@ export async function chatCommand(options: {
       console.error(status.error("tmux layout requires a TTY"));
       process.exit(1);
     }
-    await launchChatCockpit({ runId: effectiveRunId, brand, cwd: root, agentFile: options.agentFile, workers: options.workers, maxStepsPerTurn: options.maxStepsPerTurn, cockpitRefresh: options.cockpitRefresh, cockpitRedraw: options.cockpitRedraw, cockpitHistory: options.cockpitHistory, cockpitSideWidth: options.cockpitSideWidth, cockpitHeight: options.cockpitHeight });
+    await launchChatCockpit({ runId: effectiveRunId, brand, cwd: root, agentFile: effectiveAgentFile, workers: options.workers, maxStepsPerTurn: options.maxStepsPerTurn, cockpitRefresh: options.cockpitRefresh, cockpitRedraw: options.cockpitRedraw, cockpitHistory: options.cockpitHistory, cockpitSideWidth: options.cockpitSideWidth, cockpitHeight: options.cockpitHeight });
     return;
   }
 
@@ -263,7 +307,7 @@ export async function chatCommand(options: {
   if (layout === "auto") {
     const hasTmux = await detectTmux();
     if (hasTmux && process.stdout.isTTY) {
-      await launchChatCockpit({ runId: effectiveRunId, brand, cwd: root, agentFile: options.agentFile, workers: options.workers, maxStepsPerTurn: options.maxStepsPerTurn, cockpitRefresh: options.cockpitRefresh, cockpitRedraw: options.cockpitRedraw, cockpitHistory: options.cockpitHistory, cockpitSideWidth: options.cockpitSideWidth, cockpitHeight: options.cockpitHeight });
+      await launchChatCockpit({ runId: effectiveRunId, brand, cwd: root, agentFile: effectiveAgentFile, workers: options.workers, maxStepsPerTurn: options.maxStepsPerTurn, cockpitRefresh: options.cockpitRefresh, cockpitRedraw: options.cockpitRedraw, cockpitHistory: options.cockpitHistory, cockpitSideWidth: options.cockpitSideWidth, cockpitHeight: options.cockpitHeight });
       return;
     }
     // fall through to inline
@@ -275,7 +319,7 @@ export async function chatCommand(options: {
   if (!isPlain && !isCockpitChild()) {
     const resources = await getOmkResourceSettings();
     const trust = `${resources.mcpScope} MCP / ${resources.skillsScope} skills`;
-    const agentDisplay = relative(root, agentFile);
+    const agentDisplay = relative(root, effectiveAgentFile);
     const { getModePreset } = await import("../util/mode-preset.js");
     const modePreset = getModePreset(currentMode);
     const modeDisplay = modePreset ? `${modePreset.icon} ${modePreset.label}` : currentMode;
@@ -382,7 +426,7 @@ export async function chatCommand(options: {
 
     // ── Fallback: direct Kimi interactive session ──
     const args: string[] = [];
-    args.push("--agent-file", agentFile);
+    args.push("--agent-file", effectiveAgentFile);
     await injectKimiGlobals(args);
     if (process.env.OMK_DEBUG === "1") {
       console.error("[OMK_DEBUG] chat args:", args);
@@ -559,6 +603,15 @@ async function getActiveSkillNames(skillsScope: "all" | "project" | "none"): Pro
     })
   );
   return [...new Set(results.flat())];
+}
+
+async function getActiveHookNames(root: string): Promise<string[]> {
+  try {
+    const { discoverRoutingInventory } = await import("../orchestration/routing.js");
+    return [...discoverRoutingInventory(root).hooks.keys()];
+  } catch {
+    return [];
+  }
 }
 
 async function printChatExitBanner(options: {

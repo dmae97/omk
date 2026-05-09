@@ -5,7 +5,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 
 // ESM dynamic import so we can test env-sensitive behavior
-const { isCockpitChild, detectTmux, shellQuote, buildLeftPaneCommand } = await import("../dist/util/chat-cockpit.js");
+const { isCockpitChild, detectTmux, shellQuote, buildLeftPaneCommand, buildRightPaneCommand } = await import("../dist/util/chat-cockpit.js");
 const { ensureChatRunState } = await import("../dist/util/chat-cockpit.js");
 const { updateChatHeartbeat, updateChatThinking, finalizeChatRunState } = await import("../dist/commands/chat.js");
 const { buildRunViewModel, parseRunStateResult } = await import("../dist/util/run-view-model.js");
@@ -295,6 +295,28 @@ describe("tmux lifecycle commands", () => {
       session: "omk-chat-session-b",
     });
     assert.strictEqual(cmd1, cmd2, "session should not affect command output — cleanup is handled by tmux set-hook");
+  });
+
+  it("buildRightPaneCommand defaults to auto-height cockpit output", () => {
+    const cmd = buildRightPaneCommand({
+      nodeCmd: "node",
+      cliCmd: "omk",
+      runId: "run-auto",
+      refreshMs: 2000,
+    });
+    assert.ok(cmd.includes("cockpit --run-id 'run-auto' --watch --refresh 2000"));
+    assert.ok(!cmd.includes("--height"), "height should be omitted so cockpit can auto-expand vertically");
+  });
+
+  it("buildRightPaneCommand preserves explicit fixed height when requested", () => {
+    const cmd = buildRightPaneCommand({
+      nodeCmd: "node",
+      cliCmd: "omk",
+      runId: "run-fixed",
+      refreshMs: 2000,
+      height: 48,
+    });
+    assert.ok(cmd.includes("--height 48"));
   });
 
   it("dist source contains switch-client for nested tmux sessions", async () => {

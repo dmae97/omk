@@ -80,12 +80,15 @@ function parseCockpitSideWidth(value?: string): number {
   return Math.min(80, Math.max(20, parsed));
 }
 
-function parseCockpitHeight(value?: string): number {
-  const defaultHeight = 18;
-  if (value === undefined) return defaultHeight;
+const DEFAULT_CHAT_COCKPIT_HEIGHT = 32;
+const MIN_CHAT_COCKPIT_HEIGHT = 14;
+const MAX_CHAT_COCKPIT_HEIGHT = 96;
+
+function parseCockpitHeight(value?: string): number | undefined {
+  if (value === undefined) return undefined;
   const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed)) return defaultHeight;
-  return Math.min(40, Math.max(14, parsed));
+  if (!Number.isFinite(parsed)) return undefined;
+  return Math.min(MAX_CHAT_COCKPIT_HEIGHT, Math.max(MIN_CHAT_COCKPIT_HEIGHT, parsed));
 }
 
 export function buildRightPaneCommand(options: {
@@ -147,6 +150,7 @@ export async function launchChatCockpit(options: LaunchChatCockpitOptions = {}):
 
   const leftCmd = buildLeftPaneCommand({ nodeCmd, cliCmd, runId, brand, agentFile: options.agentFile, workers: options.workers, maxStepsPerTurn: options.maxStepsPerTurn });
   const cockpitHeight = parseCockpitHeight(options.cockpitHeight);
+  const historyTopHeight = cockpitHeight ?? DEFAULT_CHAT_COCKPIT_HEIGHT;
   const rightTopCmd = buildRightPaneCommand({ nodeCmd, cliCmd, runId, refreshMs, redraw, height: cockpitHeight });
   const rightBottomCmd = `${nodeCmd} ${cliCmd} runs --watch --limit 15 --refresh 5000`;
 
@@ -209,10 +213,10 @@ export async function launchChatCockpit(options: LaunchChatCockpitOptions = {}):
   const terminalWidth = process.stdout.columns ?? 0;
   const terminalHeight = process.stdout.rows ?? 0;
   const minHistoryPaneHeight = 5;
-  if (history === "watch" && terminalWidth >= 80 && terminalHeight >= cockpitHeight + minHistoryPaneHeight && rightTopPaneId) {
+  if (history === "watch" && terminalWidth >= 80 && terminalHeight >= historyTopHeight + minHistoryPaneHeight && rightTopPaneId) {
     let bottomSplitResult = await runShell(
       "tmux",
-      ["split-window", "-v", "-P", "-F", "#{pane_id}", "-t", rightTopPaneId, "-l", String(cockpitHeight), rightBottomCmd],
+      ["split-window", "-v", "-P", "-F", "#{pane_id}", "-t", rightTopPaneId, "-l", String(historyTopHeight), rightBottomCmd],
       { cwd, timeout: 5000 }
     );
     if (bottomSplitResult.failed) {

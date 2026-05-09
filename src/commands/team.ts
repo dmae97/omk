@@ -1,11 +1,11 @@
 import { runShell, checkCommand } from "../util/shell.js";
-import { getProjectRoot } from "../util/fs.js";
+import { getProjectRoot, getRunPath } from "../util/fs.js";
 import { style, header, status, bullet, label } from "../util/theme.js";
 import { getOmkResourceSettings } from "../util/resource-profile.js";
 import { t } from "../util/i18n.js";
-import { mkdir, writeFile } from "fs/promises";
+import { mkdir, readFile, writeFile } from "fs/promises";
 import { join } from "path";
-import type { RunState } from "../contracts/orchestration.js";
+import type { RunState, TeamRuntimeStatus } from "../contracts/orchestration.js";
 import { createRoutedRunState, refreshRunStateEstimate } from "../orchestration/run-state.js";
 
 export async function teamCommand(options: { workers?: string; runId?: string } = {}): Promise<void> {
@@ -30,7 +30,15 @@ export async function teamCommand(options: { workers?: string; runId?: string } 
   if (sessionExists) {
     console.log(style.purpleBold(t("team.attachSession", session)));
     const existingRunId = await getTeamRunId(session);
+    const existingWorkerCount = await getTeamWorkerCount(session) ?? workerCount;
     await ensureCoordinatorHudPane(session, root, existingRunId ?? options.runId);
+    if (existingRunId) {
+      const existingStatePath = getRunPath(existingRunId, "state.json", root);
+      const runtime = await collectTeamRuntimeStatus(session, existingStatePath, existingWorkerCount, "attached");
+      await persistTeamRuntimeState(existingStatePath, runtime);
+      console.log(label("Runtime", formatTeamRuntimeSummary(runtime)));
+      console.log(label("State", existingStatePath));
+    }
     console.log(style.gray(t("team.detachHint")));
     await runShell("tmux", ["attach", "-t", session], { timeout: 0, stdio: "inherit" });
     return;
@@ -68,8 +76,12 @@ export async function teamCommand(options: { workers?: string; runId?: string } 
 
   // Split coordinator window vertically and keep a live HUD visible on the right.
   await ensureCoordinatorHudPane(session, root, runId);
+  const runtime = await collectTeamRuntimeStatus(session, statePath, workerCount, "ready");
+  await persistTeamRuntimeState(statePath, runtime);
 
   console.log(status.ok(t("team.sessionReady")));
+  console.log(label("Runtime", formatTeamRuntimeSummary(runtime)));
+  console.log(label("State", statePath));
   console.log(bullet(t("team.coordinator"), "purple"));
   console.log(bullet(t("team.hudPane"), "blue"));
   console.log(bullet(workerCount === 1 ? t("team.workerSingular") : t("team.workerPlural", workerCount), "mint"));
@@ -103,6 +115,15 @@ async function getTeamRunId(session: string): Promise<string | null> {
   if (result.failed) return null;
   const match = result.stdout.trim().match(/^OMK_RUN_ID=(.+)$/);
   return match?.[1] ?? null;
+}
+
+async function getTeamWorkerCount(session: string): Promise<number | null> {
+  const result = await runShell("tmux", ["show-environment", "-t", session, "OMK_WORKERS"], { timeout: 5000 });
+  if (result.failed) return null;
+  const match = result.stdout.trim().match(/^OMK_WORKERS=(\d+)$/);
+  if (!match) return null;
+  const parsed = Number.parseInt(match[1], 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 async function ensureCoordinatorHudPane(session: string, root: string, runId?: string): Promise<void> {
@@ -152,9 +173,10 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
-async function writeTeamRunState(root: string, runId: string, workerCount: number): Promise<string> {
+export async function writeTeamRunState(root: string, runId: string, workerCount: number, session = "omk-team"): Promise<string> {
   const startedAt = new Date().toISOString();
   const runDir = join(root, ".omk", "runs", runId);
+  const statePath = join(runDir, "state.json");
   const state: RunState = createRoutedRunState({
     runId,
     startedAt,
@@ -198,12 +220,113 @@ async function writeTeamRunState(root: string, runId: string, workerCount: numbe
     coordinator.status = "running";
     coordinator.startedAt = startedAt;
   }
+  state.teamRuntime = buildExpectedTeamRuntimeStatus(session, statePath, workerCount, "starting");
+  state.updatedAt = startedAt;
+  state.lastActivityAt = startedAt;
   refreshRunStateEstimate(state, workerCount);
 
   await mkdir(runDir, { recursive: true });
   await writeFile(join(runDir, "goal.md"), "# Goal\n\nTeam runtime session\n", "utf-8");
   await writeFile(join(runDir, "plan.md"), `# Plan\n\nTeam workers: ${workerCount}\n`, "utf-8");
-  const statePath = join(runDir, "state.json");
   await writeFile(statePath, JSON.stringify(state, null, 2), "utf-8");
   return statePath;
+}
+
+export function buildExpectedTeamRuntimeStatus(
+  session: string,
+  statePath: string,
+  workerCount: number,
+  runtimeStatus: TeamRuntimeStatus["status"],
+  presentWindows = new Map<string, number>()
+): TeamRuntimeStatus {
+  const windows: TeamRuntimeStatus["windows"] = [
+    {
+      index: 0,
+      name: "coordinator",
+      role: "coordinator",
+      nodeId: "coordinator",
+      status: presentWindows.has("coordinator") ? "present" : "expected",
+      paneCount: presentWindows.get("coordinator"),
+    },
+    ...Array.from({ length: workerCount }, (_, index) => {
+      const name = `worker-${index + 1}`;
+      return {
+        index: index + 1,
+        name,
+        role: "worker" as const,
+        nodeId: name,
+        status: presentWindows.has(name) ? "present" as const : "expected" as const,
+        paneCount: presentWindows.get(name),
+      };
+    }),
+    {
+      index: workerCount + 1,
+      name: "reviewer",
+      role: "reviewer",
+      nodeId: "reviewer",
+      status: presentWindows.has("reviewer") ? "present" : "expected",
+      paneCount: presentWindows.get("reviewer"),
+    },
+  ];
+
+  return {
+    session,
+    status: runtimeStatus,
+    workerCount,
+    reviewerCount: 1,
+    coordinatorPanes: presentWindows.get("coordinator") ?? 0,
+    statePath,
+    windows,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+async function collectTeamRuntimeStatus(
+  session: string,
+  statePath: string,
+  workerCount: number,
+  runtimeStatus: TeamRuntimeStatus["status"],
+): Promise<TeamRuntimeStatus> {
+  const windows = await runShell("tmux", ["list-windows", "-t", session, "-F", "#{window_index}\t#{window_name}\t#{window_panes}"], { timeout: 5000 });
+  if (windows.failed) {
+    const missing = buildExpectedTeamRuntimeStatus(session, statePath, workerCount, "missing");
+    missing.windows = missing.windows.map((window) => ({ ...window, status: "missing" }));
+    return missing;
+  }
+
+  const present = new Map<string, number>();
+  for (const line of windows.stdout.split(/\r?\n/)) {
+    const [indexRaw, name, panesRaw] = line.split("\t");
+    if (!name) continue;
+    const paneCount = Number.parseInt(panesRaw ?? "", 10);
+    present.set(name.trim(), Number.isFinite(paneCount) ? paneCount : Number.parseInt(indexRaw ?? "", 10));
+  }
+
+  const runtime = buildExpectedTeamRuntimeStatus(session, statePath, workerCount, runtimeStatus, present);
+  runtime.windows = runtime.windows.map((window) => ({
+    ...window,
+    status: present.has(window.name) ? "present" : "missing",
+  }));
+  runtime.coordinatorPanes = present.get("coordinator") ?? 0;
+  runtime.status = runtime.windows.some((window) => window.status === "missing") ? "missing" : runtimeStatus;
+  runtime.updatedAt = new Date().toISOString();
+  return runtime;
+}
+
+async function persistTeamRuntimeState(statePath: string, runtime: TeamRuntimeStatus): Promise<void> {
+  try {
+    const state = JSON.parse(await readFile(statePath, "utf-8")) as RunState;
+    state.teamRuntime = runtime;
+    state.updatedAt = runtime.updatedAt;
+    await writeFile(statePath, JSON.stringify(state, null, 2), "utf-8");
+  } catch {
+    // Team/HUD startup should not fail solely because a legacy state file is absent or corrupt.
+  }
+}
+
+function formatTeamRuntimeSummary(runtime: TeamRuntimeStatus): string {
+  const present = runtime.windows.filter((window) => window.status === "present").length;
+  const missing = runtime.windows.filter((window) => window.status === "missing").length;
+  const suffix = missing > 0 ? `, ${missing} missing` : "";
+  return `${runtime.status}: ${present}/${runtime.windows.length} windows, ${runtime.coordinatorPanes} coordinator pane(s)${suffix}`;
 }

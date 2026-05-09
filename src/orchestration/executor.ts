@@ -10,7 +10,7 @@ import { checkEvidenceGates } from "./evidence-gate.js";
 import { invalidateTaskDagGraph } from "./task-graph.js";
 import { resolveTimeoutMs } from "../util/timeout-config.js";
 import { createNodeMonitorEngine } from "./node-monitor.js";
-import type { ProviderId } from "../providers/types.js";
+import type { DeepSeekModelTier, DeepSeekParticipation, ProviderId } from "../providers/types.js";
 
 export interface ExecutorOptions {
   persister?: StatePersister;
@@ -165,6 +165,11 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
     const requestedProvider = metadata.requestedProvider;
     if (isProviderId(provider)) latestAttempt.provider = provider;
     if (isProviderId(requestedProvider)) latestAttempt.requestedProvider = requestedProvider;
+    if (typeof metadata.providerModel === "string") latestAttempt.providerModel = metadata.providerModel;
+    if (isDeepSeekModelTier(metadata.providerModelTier)) latestAttempt.providerModelTier = metadata.providerModelTier;
+    if (isDeepSeekParticipation(metadata.providerParticipation)) {
+      latestAttempt.providerParticipation = metadata.providerParticipation;
+    }
 
     const fallback = metadata.providerFallback;
     if (isProviderFallback(fallback)) {
@@ -394,7 +399,7 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
     },
 
     async execute(dag: Dag, runner: TaskRunner, options: RunOptions): Promise<RunResult> {
-      if (!Number.isFinite(options.workers) || options.workers < 1) {
+      if (!Number.isInteger(options.workers) || options.workers < 1) {
         throw new TypeError(`options.workers must be a positive integer, got ${options.workers}`);
       }
       const effectiveRunner = executorOptions.ensemble === false
@@ -430,10 +435,17 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
       const donePromise = new Promise<RunResult>((resolve) => {
         resolveDone = resolve;
       });
+      let settled = false;
+      function resolveOnce(result: RunResult): void {
+        if (settled) return;
+        settled = true;
+        resolveDone(result);
+      }
 
       const fallbackNodes = new Map<string, DagNode>();
 
       async function tick(): Promise<void> {
+        if (settled) return;
         // Handle fallback nodes FIRST, before isFailed check, so that a
         // terminal failure with a fallbackRole does not immediately fail the run.
         let fallbackCreated = false;
@@ -448,13 +460,17 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
               id: fallbackId,
               name: `${node.name} (fallback)`,
               role: node.failurePolicy.fallbackRole,
-              dependsOn: node.dependsOn,
+              dependsOn: [...node.dependsOn],
               status: "pending",
               retries: 0,
               maxRetries: 1,
+              timeoutMs: node.timeoutMs,
+              timeoutPreset: node.timeoutPreset,
               priority: node.priority,
               cost: node.cost,
-              routing: node.routing,
+              inputs: node.inputs?.map((input) => ({ ...input })),
+              outputs: node.outputs?.map((output) => ({ ...output })),
+              routing: node.routing ? { ...node.routing } : undefined,
               failurePolicy: { retryable: false, blockDependents: true },
             };
             dag.nodes.push(fallbackNode);
@@ -504,27 +520,29 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
           refreshState(state, dag, options);
           await commitState(state);
           monitor.dispose();
-          resolveDone({ state, success: false });
+          resolveOnce({ state, success: false });
           return;
         }
 
-        if (scheduler.isComplete(dag)) {
+        if (runningMap.size === 0 && scheduler.isComplete(dag)) {
           state.completedAt = new Date().toISOString();
           refreshState(state, dag, options);
           await commitState(state);
           monitor.dispose();
-          resolveDone({ state, success: true });
+          resolveOnce({ state, success: true });
           return;
         }
 
-        if (scheduler.isFailed(dag)) {
+        if (runningMap.size === 0 && scheduler.isFailed(dag)) {
           state.completedAt = new Date().toISOString();
           refreshState(state, dag, options);
           await commitState(state);
           monitor.dispose();
-          resolveDone({ state, success: false });
+          resolveOnce({ state, success: false });
           return;
         }
+
+        if (scheduler.isFailed(dag)) return;
 
         const runnable = scheduler.getRunnableNodes(dag);
         const availableSlots = Math.max(0, options.workers - runningMap.size);
@@ -551,7 +569,7 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
           refreshState(state, dag, options);
           await commitState(state);
           monitor.dispose();
-          resolveDone({ state, success: false });
+          resolveOnce({ state, success: false });
         }
       }
 
@@ -563,6 +581,14 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
 
 function isProviderId(value: unknown): value is ProviderId {
   return value === "kimi" || value === "deepseek";
+}
+
+function isDeepSeekModelTier(value: unknown): value is DeepSeekModelTier {
+  return value === "flash" || value === "pro";
+}
+
+function isDeepSeekParticipation(value: unknown): value is DeepSeekParticipation {
+  return value === "direct" || value === "advisory";
 }
 
 function isProviderFallback(value: unknown): value is { from: ProviderId; reason: string } {

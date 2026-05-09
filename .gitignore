@@ -6,6 +6,7 @@ node_modules/
 # Build outputs
 dist/
 dist.old/
+target/
 *.tsbuildinfo
 .eslintcache
 

@@ -33,7 +33,7 @@
   <code># omk demo  # Coming soon — try the examples below</code>
 </p>
 
-> ✅ <strong>Stable Release</strong> — v1.1.6 is ready for daily use. Open Design now connects through OMK CLI, MCP JSON-RPC failures are surfaced cleanly, generated hooks/skills are documented, and the release gate is fully verified.
+> ✅ <strong>Stable Release</strong> — v1.1.7 is ready for daily use. OMK now adds a manifest-backed chat agent harness, bounded capability workers, Rust native safety loader, Windows clipboard capture, and a CI-backed release matrix.
 
 
 <p>
@@ -221,12 +221,18 @@ Each example includes:
 
 ## GitHub Release Snapshot
 
-> **Current GitHub-ready version:** `1.1.6`
+> **Current GitHub-ready version:** `1.1.7`
 
-### What's New in v1.1.6
+### What's New in v1.1.7
 
 | **Area** | **GitHub-visible update** | **Why it matters** |
 |----------|---------------------------|--------------------|
+| **Chat Agent Harness** | `omk chat` now writes a run-scoped `chat-agent-harness.json`, compact contract, prompt, and generated agent file | Kimi starts with a bounded orchestration contract instead of an oversized MCP/skills prompt blob |
+| **Capability Workers** | Parallel DAG generation now clamps worker budgets to 1–6 and can add optional MCP/skills/hooks/DeepSeek advisory lanes | Bad worker counts cannot create empty or runaway DAGs; active tools become explicit non-blocking lanes |
+| **Rust Native Safety** | `omk-safety` is built as a Rust crate and loaded from `dist/native/<platform-arch>/omk-safety` with TS fallback | Run-id and artifact-path safety contracts are checked by a native binary when available and remain portable when not |
+| **CI Release Matrix** | Release workflow builds native safety artifacts on Ubuntu, Windows, and macOS, then audits and smoke-tests the packed tarball | Published packages include the right native layout and are tested across OS/Node combinations before npm publish |
+| **Windows Screenshot Bridge** | WSL/bash/zsh clipboard capture stores Snipping Tool images through `omk screenshot` | Windows users can Ctrl+C a capture and attach/store it from OMK without manual file juggling |
+| **Harness Evidence** | Test runner summaries now record MCP/skill/hook harness resources without leaking names or secrets | Release reports prove which harness surfaces were present while keeping private config out of artifacts |
 | **Open Design** | `omk design open-design` now patches the local Open Design checkout with an **OMK CLI** adapter, `OMK_BIN` setting, Kimicat icon, and root/deep-link route fix | Localhost design testing no longer hits the Kimi ACP 45 s smoke-test timeout; `/api/test/connection` returns `ok` through OMK in about 4 s |
 | **CLI Bridge** | New `omk open-design-agent` connection point with fast smoke response and Kimi print-mode handoff for real prompts | Open Design has a stable local CLI endpoint that keeps OMK as the integration boundary |
 | **MCP Reliability** | `omk mcp test` and `omk-project` return tool-level JSON-RPC errors instead of opaque `json-rpc id 3: Internal error` crashes | MCP debugging becomes actionable and safe for local/remote connection tests |
@@ -362,7 +368,7 @@ kimi, kimi-cli, kimi-code, kimi-k2, ai-agent, coding-agent, multi-agent, agentic
 
 <h2 id="korean">Korean</h2>
 
-> ✅ <strong>Stable Release v1.1.6</strong> — Kimi Code CLI를 <strong>worktree 기반 코딩 팀</strong>으로 변환하세요. DESIGN.md 기반 UI 생성, AGENTS.md 호환성, 실시간 품질 게이트, 병렬 HUD를 제공합니다.
+> ✅ <strong>Stable Release v1.1.7</strong> — Kimi Code CLI를 <strong>worktree 기반 코딩 팀</strong>으로 변환하세요. DESIGN.md 기반 UI 생성, AGENTS.md 호환성, 실시간 품질 게이트, 병렬 HUD를 제공합니다.
 
 ### Features
 
@@ -382,6 +388,15 @@ kimi, kimi-cli, kimi-code, kimi-k2, ai-agent, coding-agent, multi-agent, agentic
 | OAuth Usage Badge | Kimi `context:` 상태줄 옆에 masked 계정, 5h/weekly quota 표시; `OMK_KIMI_STATUS_GAUGES=1`로 시각적 게이지 활성화 |
 | Approval Policy | 기본값은 `approval_policy = "auto"` (안전 모드); 필요시 `yolo`로 전환 가능 |
 | Safety Hooks | yolo mode에서도 파괴적 명령어 및 비밀 유출 방지 기본 제공 |
+
+### 🆕 v1.1.7 Highlights (Stable)
+
+- **Chat agent harness** — `omk chat` creates a run-scoped manifest/contract/agent file so MCP, skills, hooks, workers, and gates are bounded and visible
+- **Rust native safety** — `dist/native/<platform-arch>/omk-safety` loader with TypeScript fallback protects run IDs and artifact paths across platforms
+- **Windows clipboard capture** — WSL/bash/zsh screenshot bridge stores Ctrl+C Snipping Tool images through `omk screenshot`
+- **Release matrix** — CI builds native safety artifacts on Ubuntu, Windows, and macOS before tarball audit, smoke test, GitHub Release, and npm publish
+- **Capability DAG lanes** — optional MCP/skills/hooks/DeepSeek advisory workers are non-blocking and worker counts are clamped to 1–6
+- **Harness evidence** — test summaries include MCP/skill/hook resource counts without exposing private names or secrets
 
 ### 🆕 v1.1.6 Highlights (Stable)
 
@@ -662,7 +677,7 @@ Open Design 연동은 upstream [nexu-io/Open Design](https://github.com/nexu-io/
 
 <h2 id="english">English</h2>
 
-> ✅ <strong>Stable Release v1.1.6</strong> — Turn Kimi Code CLI into a <strong>meme-tier multi-agent coding team</strong>. This is a Kimi-native wrapper — not a generic AI tool. DESIGN.md-aware UI, live quality gates, parallel HUD, AGENTS.md compatible.
+> ✅ <strong>Stable Release v1.1.7</strong> — Turn Kimi Code CLI into a <strong>meme-tier multi-agent coding team</strong>. This is a Kimi-native wrapper — not a generic AI tool. DESIGN.md-aware UI, live quality gates, parallel HUD, AGENTS.md compatible.
 
 ### Features
 
@@ -902,7 +917,7 @@ Open Design integration uses [nexu-io/Open Design](https://github.com/nexu-io/op
 
 <h2 id="chinese">Chinese</h2>
 
-> ✅ <strong>Stable Release v1.1.6</strong> — 将 Kimi Code CLI 转变为一个<strong>基于 worktree 的编码团队</strong>。支持 DESIGN.md 感知 UI 生成、AGENTS.md 兼容性、实时质量门禁以及并行 HUD。
+> ✅ <strong>Stable Release v1.1.7</strong> — 将 Kimi Code CLI 转变为一个<strong>基于 worktree 的编码团队</strong>。支持 DESIGN.md 感知 UI 生成、AGENTS.md 兼容性、实时质量门禁以及并行 HUD。
 
 ### Features
 
@@ -919,6 +934,14 @@ Open Design integration uses [nexu-io/Open Design](https://github.com/nexu-io/op
 | Local Graph Memory | 将项目/会话记忆存入 `.omk/memory/graph-state.json` 本地本体图，并提供 mindmap/GraphQL-lite |
 | 并行 DAG | `omk parallel <goal>` (alpha) 执行 coordinator → worker 扇出 → reviewer，带实时 UI 与 ETA 追踪 |
 | 安全钩子 | 默认防止破坏性命令与密钥泄漏 |
+
+### 🆕 v1.1.7 更新亮点 (Stable)
+
+- **Chat agent harness** — `omk chat` 生成运行级 manifest/contract/agent 文件，使 MCP、skills、hooks、workers 和 gates 可见且有边界
+- **Rust native safety** — `dist/native/<platform-arch>/omk-safety` 加载器带 TypeScript fallback，跨平台保护 run ID 与 artifact path
+- **Windows clipboard capture** — WSL/bash/zsh 桥接可将 Ctrl+C 截图保存到 `omk screenshot`
+- **Release matrix** — CI 在 Ubuntu、Windows、macOS 构建 native safety artifact，然后执行 tarball audit、smoke test、GitHub Release 与 npm publish
+- **Capability DAG lanes** — MCP/skills/hooks/DeepSeek advisory workers 作为可选非阻塞 lane，worker 数限制为 1–6
 
 ### 🆕 v1.1.6 更新亮点 (Stable)
 
@@ -1142,7 +1165,7 @@ Open Design 集成使用上游 [nexu-io/Open Design](https://github.com/nexu-io/
 
 <h2 id="japanese">Japanese</h2>
 
-> ✅ <strong>Stable Release v1.1.6</strong> — Kimi Code CLI を <strong>worktree ベースのコーディングチーム</strong>に変換します。DESIGN.md 対応の UI 生成、AGENTS.md 互換性、ライブ品質ゲート、並列 HUD を提供します。
+> ✅ <strong>Stable Release v1.1.7</strong> — Kimi Code CLI を <strong>worktree ベースのコーディングチーム</strong>に変換します。DESIGN.md 対応の UI 生成、AGENTS.md 互換性、ライブ品質ゲート、並列 HUD を提供します。
 
 ### Features
 
@@ -1159,6 +1182,14 @@ Open Design 集成使用上游 [nexu-io/Open Design](https://github.com/nexu-io/
 | Local Graph Memory | プロジェクト/セッション記憶を `.omk/memory/graph-state.json` のローカル ontology graph に保存し、mindmap/GraphQL-lite を提供 |
 | 並列 DAG | `omk parallel <goal>` (alpha) は coordinator → worker ファンアウト → reviewer を実行。ライブ UI と ETA 追跡付き |
 | 安全フック | 破壊的コマンドとシークレット漏洩をデフォルトで防止 |
+
+### 🆕 v1.1.7 の主な更新 (Stable)
+
+- **Chat agent harness** — `omk chat` が run-scoped manifest/contract/agent ファイルを生成し、MCP・skills・hooks・workers・gates を境界付きで可視化
+- **Rust native safety** — `dist/native/<platform-arch>/omk-safety` ローダーと TypeScript fallback で run ID / artifact path を保護
+- **Windows clipboard capture** — WSL/bash/zsh から Ctrl+C した Snipping Tool 画像を `omk screenshot` に保存
+- **Release matrix** — Ubuntu、Windows、macOS で native safety artifact を作成し、tarball audit / smoke / GitHub Release / npm publish へ接続
+- **Capability DAG lanes** — MCP/skills/hooks/DeepSeek advisory worker は optional non-blocking lane、worker 数は 1–6 に制限
 
 ### 🆕 v1.1.6 の主な更新 (Stable)
 

@@ -48,6 +48,7 @@ export interface ProviderRouteInput {
   deepseekAvailable: boolean;
   providerHint?: "auto" | ProviderId;
   providerPolicy?: ProviderPolicy;
+  preferredDeepSeekTier?: DeepSeekModelTier;
 }
 
 export interface ProviderRouteDecision {

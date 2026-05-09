@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -11,6 +11,7 @@ import { evaluateGoalProgressEnsemble, generateNextPrompt } from "../dist/goal/c
 import { scoreGoal } from "../dist/goal/scoring.js";
 import { createRoutedRunState } from "../dist/orchestration/run-state.js";
 import { createDag } from "../dist/orchestration/dag.js";
+import { goalCreateCommand, goalPlanCommand } from "../dist/commands/goal.js";
 
 async function tempGoalDir() {
   return mkdtemp(join(tmpdir(), "omk-goal-"));
@@ -138,9 +139,49 @@ test("compileGoalToDagNodes produces valid DAG with bootstrap, coordinator, and 
   assert.ok(dag.nodes.some((n) => n.id === "goal-coordinator"));
   assert.ok(dag.nodes.some((n) => n.id === "artifact-1"));
   assert.ok(dag.nodes.some((n) => n.id === "goal-verify"));
+  const coordinator = dag.nodes.find((n) => n.id === "goal-coordinator");
+  assert.equal(coordinator?.role, "planner");
+  assert.equal(coordinator?.outputs?.[0]?.ref, "plan.md");
 
   const verify = dag.nodes.find((n) => n.id === "goal-verify");
   assert.ok(verify?.dependsOn.includes("artifact-1"));
+});
+
+test("goal plan writes actionable planner DAG instead of placeholder", async () => {
+  const root = await tempGoalDir();
+  const previousRoot = process.env.OMK_PROJECT_ROOT;
+  const previousAlpha = process.env.OMK_GOAL_ALPHA;
+  process.env.OMK_PROJECT_ROOT = root;
+  process.env.OMK_GOAL_ALPHA = "1";
+  const output = [];
+  const originalLog = console.log;
+  console.log = (...args) => output.push(args.join(" "));
+
+  try {
+    await goalCreateCommand("Build a release checklist", {
+      title: "Release checklist",
+      objective: "Create an actionable release checklist",
+      risk: "low",
+    });
+    const goalsDir = join(root, ".omk", "goals");
+    const goalIds = await (await import("node:fs/promises")).readdir(goalsDir);
+    await goalPlanCommand(goalIds[0]);
+    const plan = await readFile(join(goalsDir, goalIds[0], "plan.md"), "utf-8");
+
+    assert.match(plan, /## Planner/);
+    assert.match(plan, /goal-coordinator.*planner/);
+    assert.match(plan, /## Execution DAG/);
+    assert.match(plan, /## Acceptance Criteria/);
+    assert.doesNotMatch(plan, /to be planned/);
+    assert.match(output.join("\n"), /Planner/);
+  } finally {
+    console.log = originalLog;
+    if (previousRoot === undefined) delete process.env.OMK_PROJECT_ROOT;
+    else process.env.OMK_PROJECT_ROOT = previousRoot;
+    if (previousAlpha === undefined) delete process.env.OMK_GOAL_ALPHA;
+    else process.env.OMK_GOAL_ALPHA = previousAlpha;
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("compileGoalToDagNodes verify depends on coordinator when no artifacts", () => {
@@ -211,6 +252,25 @@ test("scoreGoal computes incomplete when no evidence for required", () => {
   const evidence = [];
   const score = scoreGoal(spec, evidence);
   assert.equal(score.overall, "incomplete");
+});
+
+test("scoreGoal uses latest evidence for duplicate criterion IDs", () => {
+  const spec = normalizeGoal({ rawPrompt: "Score me" });
+  spec.successCriteria = [
+    { id: "c1", description: "Must pass", requirement: "required", weight: 1, inferred: false },
+    { id: "c2", description: "Nice to have", requirement: "optional", weight: 1, inferred: false },
+  ];
+
+  const score = scoreGoal(spec, [
+    { criterionId: "c1", passed: true, checkedAt: "2026-05-08T00:00:00.000Z" },
+    { criterionId: "c2", passed: false, checkedAt: "2026-05-08T00:00:00.000Z" },
+    { criterionId: "c1", passed: false, checkedAt: "2026-05-08T00:01:00.000Z" },
+    { criterionId: "c2", passed: true, checkedAt: "2026-05-08T00:01:00.000Z" },
+  ]);
+
+  assert.equal(score.overall, "fail");
+  assert.equal(score.requiredPassed, 0);
+  assert.equal(score.optionalScore, 1);
 });
 
 test("old RunState without schemaVersion or goalId is tolerated", () => {

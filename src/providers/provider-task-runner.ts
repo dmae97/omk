@@ -97,6 +97,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
         nodeId: node.id,
         providerHint: node.routing?.provider,
         providerPolicy: options.providerPolicy ?? "auto",
+        preferredDeepSeekTier: node.routing?.providerModelTier,
       });
       const invocationKey = buildProviderInvocationKey(node, decision);
       const traceEnv = providerTraceEnv(decision, invocationKey);

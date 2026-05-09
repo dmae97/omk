@@ -1,12 +1,12 @@
 import { mkdir, writeFile } from "fs/promises";
 import { join } from "path";
-import { getProjectRoot, getRunPath } from "../util/fs.js";
+import { getProjectRoot, getRunPath, sanitizeRunId } from "../util/fs.js";
 import { getOmkResourceSettings } from "../util/resource-profile.js";
 import { normalizeGoal, analyzeUserIntent } from "../goal/intake.js";
 import { createGoalPersister } from "../goal/persistence.js";
 import { evaluateGoalProgressEnsemble } from "../goal/control-loop.js";
 import { renderPromptDigest } from "../goal/prompt-digest.js";
-import type { UserIntent } from "../contracts/orchestration.js";
+import type { NextAction, RunState, UserIntent } from "../contracts/orchestration.js";
 import { style, status } from "../util/theme.js";
 import { MemoryStore } from "../memory/memory-store.js";
 import type { ParallelCommandOptions } from "../commands/parallel.js";
@@ -23,8 +23,12 @@ export interface OrchestrateOptions {
   goalId?: string;
   timeoutPreset?: string;
   provider?: "auto" | "kimi";
+  maxAutoContinueIterations?: string | number;
   sourceCommand: "chat" | "run" | "parallel" | "goal-run" | "goal-continue" | "default";
 }
+
+const DEFAULT_AUTO_CONTINUE_ITERATIONS = 3;
+const HARD_MAX_AUTO_CONTINUE_ITERATIONS = 8;
 
 const ADMIN_COMMANDS = new Set([
   "doctor",
@@ -71,6 +75,27 @@ function looksLikeAdminCommand(rawPrompt: string): boolean {
     .join(" ")
     .toLowerCase();
   return ADMIN_COMMANDS.has(first) || ADMIN_COMMANDS.has(firstTwo);
+}
+
+export function resolveAutoContinueMaxIterations(value: string | number | undefined): number {
+  if (value === undefined || value === null || String(value).trim() === "") {
+    return DEFAULT_AUTO_CONTINUE_ITERATIONS;
+  }
+  const normalized = String(value).trim().toLowerCase();
+  if (["0", "false", "off", "no", "disabled"].includes(normalized)) return 0;
+  const parsed = Math.floor(Number(normalized));
+  if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_AUTO_CONTINUE_ITERATIONS;
+  return Math.min(parsed, HARD_MAX_AUTO_CONTINUE_ITERATIONS);
+}
+
+export function buildAutoContinueRunId(baseRunId: string, iteration: number, now = new Date()): string {
+  const base = sanitizeRunId(baseRunId || "parallel", "parallel").slice(0, 80);
+  const stamp = now.toISOString().replace(/[:.]/g, "-");
+  return sanitizeRunId(`${base}-auto-${iteration}-${stamp}`, "parallel-auto");
+}
+
+function shouldAutoContinue(action: NextAction, prompt: string | undefined): boolean {
+  return (action === "continue" || action === "replan") && Boolean(prompt?.trim());
 }
 
 export async function orchestratePrompt(
@@ -232,7 +257,7 @@ export async function orchestratePrompt(
   };
 
   const { runId: generatedRunId } = await parallelCommand(enrichedPrompt, parallelOpts);
-  const effectiveRunId = options.runId ?? generatedRunId;
+  const effectiveRunId = generatedRunId;
 
   // Persist runId on goal so goal continue/verify can locate the latest run
   if (!goal.runIds.includes(effectiveRunId)) {
@@ -242,63 +267,121 @@ export async function orchestratePrompt(
 
   // ── Ensemble auto-decision: evaluate progress and auto-continue/replan/close ──
   const { readFile } = await import("fs/promises");
-  const runStatePath = getRunPath(effectiveRunId, "state.json", root);
+  const maxAutoContinueIterations = resolveAutoContinueMaxIterations(
+    options.maxAutoContinueIterations ?? process.env.OMK_AUTO_CONTINUE_MAX_ITERATIONS
+  );
+  const decisionHistory: Array<{
+    iteration: number;
+    runId: string;
+    action: NextAction;
+    confidence: number;
+    rationale: string;
+    candidateVotes: unknown;
+    timestamp: string;
+  }> = [];
+  const rememberRunId = async (runId: string): Promise<void> => {
+    if (!goal.runIds.includes(runId)) {
+      goal = { ...goal, runIds: [...goal.runIds, runId], updatedAt: new Date().toISOString() };
+      await goalPersister.save(goal);
+    }
+  };
+
+  let currentRunId = effectiveRunId;
   try {
-    const stateRaw = await readFile(runStatePath, "utf-8");
-    const runState = JSON.parse(stateRaw);
-    const progress = await evaluateGoalProgressEnsemble(goal, runState);
+    for (let iteration = 0; iteration <= maxAutoContinueIterations; iteration += 1) {
+      const runStatePath = getRunPath(currentRunId, "state.json", root);
+      const stateRaw = await readFile(runStatePath, "utf-8");
+      const runState = JSON.parse(stateRaw) as RunState;
+      const progress = await evaluateGoalProgressEnsemble(goal, runState, {
+        iterationCount: iteration,
+        maxIterations: maxAutoContinueIterations,
+      });
+      const decision = {
+        iteration,
+        runId: currentRunId,
+        action: progress.nextAction,
+        confidence: progress.ensemble.confidence,
+        rationale: progress.ensemble.rationale,
+        candidateVotes: progress.ensemble.candidateVotes,
+        timestamp: new Date().toISOString(),
+      };
+      decisionHistory.push(decision);
 
-    // Persist ensemble decision to goal directory
-    await writeFile(
-      join(goalDir, "ensemble-decision.json"),
-      JSON.stringify(
-        {
-          action: progress.nextAction,
-          confidence: progress.ensemble.confidence,
-          rationale: progress.ensemble.rationale,
-          candidateVotes: progress.ensemble.candidateVotes,
-          timestamp: new Date().toISOString(),
-        },
-        null,
-        2
-      )
-    );
+      await writeFile(
+        join(goalDir, "ensemble-decision.json"),
+        JSON.stringify(decision, null, 2)
+      );
+      await writeFile(
+        join(goalDir, "ensemble-decisions.json"),
+        JSON.stringify(decisionHistory, null, 2)
+      );
 
-    if (progress.nextAction === "close") {
-      console.log(status.ok("Ensemble decision: goal complete — closing run"));
-      goal = { ...goal, status: "done", updatedAt: new Date().toISOString() };
-      await goalPersister.save(goal);
-      return;
-    }
-
-    if (progress.nextAction === "block") {
-      console.log(status.error("Ensemble decision: run blocked — manual intervention required"));
-      console.log(style.gray(progress.ensemble.rationale));
-      goal = { ...goal, status: "blocked", updatedAt: new Date().toISOString() };
-      await goalPersister.save(goal);
-      return;
-    }
-
-    if (progress.nextAction === "handoff" || progress.nextAction === "continue" || progress.nextAction === "replan") {
-      const autoPrompt = progress.ensemble.nextPrompt;
-      if (autoPrompt) {
-        const actionLabel = progress.nextAction === "replan" ? "🔄 Replanning" : "➡️ Continuing";
-        console.log(style.purpleBold(`${actionLabel} with auto-generated prompt (confidence=${progress.ensemble.confidence.toFixed(2)})`));
-        await writeFile(join(goalDir, "next-prompt.md"), autoPrompt);
-        // Re-invoke parallel command with the auto-generated prompt
-        const followUp = await parallelCommand(autoPrompt, {
-          ...parallelOpts,
-          goalId,
-        });
-        if (followUp?.runId && !goal.runIds.includes(followUp.runId)) {
-          goal = {
-            ...goal,
-            runIds: [...goal.runIds, followUp.runId],
-            updatedAt: new Date().toISOString(),
-          };
-          await goalPersister.save(goal);
-        }
+      if (progress.nextAction === "close") {
+        console.log(status.ok("Ensemble decision: goal complete — closing run"));
+        goal = { ...goal, status: "done", updatedAt: new Date().toISOString() };
+        await goalPersister.save(goal);
+        return;
       }
+
+      if (progress.nextAction === "block") {
+        console.log(status.error("Ensemble decision: run blocked — manual intervention required"));
+        console.log(style.gray(progress.ensemble.rationale));
+        goal = { ...goal, status: "blocked", updatedAt: new Date().toISOString() };
+        await goalPersister.save(goal);
+        return;
+      }
+
+      const autoPrompt = progress.ensemble.nextPrompt;
+      if (!shouldAutoContinue(progress.nextAction, autoPrompt)) {
+        if (progress.nextAction === "handoff") {
+          console.log(style.gray("Ensemble decision: handoff — auto-continue stopped."));
+        }
+        return;
+      }
+
+      if (iteration >= maxAutoContinueIterations) {
+        console.log(style.gray(`Auto-continue guard reached (${maxAutoContinueIterations}); stopping with handoff.`));
+        await writeFile(
+          join(goalDir, "ensemble-decision.json"),
+          JSON.stringify(
+            {
+              ...decision,
+              action: "handoff",
+              reason: "max-auto-continue-iterations-reached",
+            },
+            null,
+            2
+          )
+        );
+        return;
+      }
+
+      const nextIteration = iteration + 1;
+      const followUpPrompt = buildOrchestratedPrompt({
+        goal,
+        memorySummary,
+        sourceCommand: "goal-continue",
+        workers: options.workers ?? String(resources.maxWorkers),
+        intent,
+        currentPrompt: autoPrompt ?? "",
+        isContinuation: true,
+        autoContinue: {
+          iteration: nextIteration,
+          maxIterations: maxAutoContinueIterations,
+          action: progress.nextAction,
+          previousRunId: currentRunId,
+        },
+      });
+      const actionLabel = progress.nextAction === "replan" ? "🔄 Replanning" : "➡️ Continuing";
+      console.log(style.purpleBold(`${actionLabel} iteration ${nextIteration}/${maxAutoContinueIterations} (confidence=${progress.ensemble.confidence.toFixed(2)})`));
+      await writeFile(join(goalDir, "next-prompt.md"), followUpPrompt);
+      const followUp = await parallelCommand(followUpPrompt, {
+        ...parallelOpts,
+        runId: buildAutoContinueRunId(effectiveRunId, nextIteration),
+        goalId,
+      });
+      currentRunId = followUp.runId;
+      await rememberRunId(currentRunId);
     }
   } catch (err) {
     // If ensemble evaluation fails, silently continue (do not block the user)
@@ -315,16 +398,33 @@ interface BuildPromptInput {
   intent: UserIntent;
   currentPrompt: string;
   isContinuation: boolean;
+  autoContinue?: {
+    iteration: number;
+    maxIterations: number;
+    action: NextAction;
+    previousRunId: string;
+  };
 }
 
-function buildOrchestratedPrompt(input: BuildPromptInput): string {
+export function buildOrchestratedPrompt(input: BuildPromptInput): string {
   const currentPrompt = input.currentPrompt.trim();
   const hasDistinctContinuationContext = input.isContinuation &&
     currentPrompt.length > 0 &&
     normalizePromptForComparison(currentPrompt) !== normalizePromptForComparison(input.goal.objective);
 
   const lines: string[] = [
-    `# Goal: ${input.goal.title}`,
+    `# Kimi Orchestration Prompt: ${input.goal.title}`,
+    ``,
+    `## Kimi Prompt Adapter`,
+    `- Treat the original user input as intent/NLP source, not text to echo back.`,
+    `- Convert that intent into a Kimi-native execution contract: inspect, plan, edit, verify, and report evidence.`,
+    `- Kimi owns orchestration, merge decisions, tool/MCP routing, and final synthesis.`,
+    `- Continue automatically while evidence says action=continue/replan and stop only on close/block/handoff/max-iteration guard.`,
+    ``,
+    `## Source NLP Intake`,
+    `- Source command: ${input.sourceCommand}`,
+    `- Continuation: ${input.isContinuation ? "yes" : "no"}`,
+    `- Workers requested: ${input.workers}`,
     ``,
     `## Goal Reference (non-verbatim)`,
     renderPromptDigest("Original objective digest", input.goal.objective),
@@ -342,6 +442,19 @@ function buildOrchestratedPrompt(input: BuildPromptInput): string {
       `Preserve completed work and focus the DAG on unresolved criteria, failed gates, or blocked nodes.`,
       ``,
       renderPromptDigest("Current execution context digest", currentPrompt, { maxKeywords: 18, maxPhrases: 3 }),
+      ``,
+      ...renderBoundedContext("Current follow-up context", currentPrompt),
+      ``
+    );
+  }
+
+  if (input.autoContinue) {
+    lines.push(
+      `## Auto-Continue Loop`,
+      `- Iteration: ${input.autoContinue.iteration}/${input.autoContinue.maxIterations}`,
+      `- Previous run: ${input.autoContinue.previousRunId}`,
+      `- Ensemble action: ${input.autoContinue.action}`,
+      `- Re-evaluate after this DAG run; do not ask the user to continue unless blocked, destructive, or max iterations are reached.`,
       ``
     );
   }
@@ -415,4 +528,12 @@ function normalizePromptForComparison(value: string): string {
     .trim()
     .replace(/\s+/g, " ")
     .toLowerCase();
+}
+
+function renderBoundedContext(title: string, value: string, maxChars = 6000): string[] {
+  const sanitized = value.replace(/```/g, "'''").trim();
+  const clipped = sanitized.length > maxChars
+    ? `${sanitized.slice(0, maxChars)}\n...[truncated ${sanitized.length - maxChars} chars]`
+    : sanitized;
+  return [`### ${title}`, "```text", clipped, "```"];
 }

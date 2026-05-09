@@ -110,6 +110,26 @@ export interface RunProgressEstimate {
   updatedAt: string;
 }
 
+export interface TeamRuntimeWindowStatus {
+  index: number;
+  name: string;
+  role: "coordinator" | "worker" | "reviewer" | "hud" | "unknown";
+  nodeId?: string;
+  status: "expected" | "present" | "missing";
+  paneCount?: number;
+}
+
+export interface TeamRuntimeStatus {
+  session: string;
+  status: "starting" | "ready" | "attached" | "detached" | "missing";
+  workerCount: number;
+  reviewerCount: number;
+  coordinatorPanes: number;
+  statePath: string;
+  windows: TeamRuntimeWindowStatus[];
+  updatedAt: string;
+}
+
 export interface RunState {
   schemaVersion: 1;
   runId: string;
@@ -133,6 +153,8 @@ export interface RunState {
   lastHeartbeatAt?: string;
   /** Monotonically-increasing sequence number for activity ordering. */
   activitySeq?: number;
+  /** tmux/team runtime status snapshot for `omk team` and HUD reporting. */
+  teamRuntime?: TeamRuntimeStatus;
 }
 
 export interface RunResult {

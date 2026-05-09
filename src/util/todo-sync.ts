@@ -1,6 +1,6 @@
 import { writeFile, readFile } from "fs/promises";
 import { join } from "path";
-import { getRunPath, pathExists, ensureDir } from "./fs.js";
+import { getRunPath, pathExists, ensureDir, validateRunId } from "./fs.js";
 
 export type TodoStatus = "pending" | "in_progress" | "done" | "failed" | "blocked" | "skipped";
 
@@ -17,14 +17,6 @@ export interface TodoItem {
 }
 
 const LIFECYCLE_NODE_IDS = new Set(["bootstrap", "root-coordinator", "review-merge"]);
-
-function sanitizeRunId(runId: string): string {
-  const sanitized = runId.replace(/[^a-zA-Z0-9_.-]/g, "");
-  if (sanitized !== runId || sanitized.length === 0 || sanitized.length > 128) {
-    throw new Error(`Invalid runId: ${runId}`);
-  }
-  return sanitized;
-}
 
 function normalizeTodoStatus(status: string): TodoStatus {
   const s = status.toLowerCase();
@@ -47,7 +39,7 @@ function normalizeTodoStatus(status: string): TodoStatus {
 }
 
 export async function writeTodos(runId: string, todos: TodoItem[]): Promise<void> {
-  const sanitized = sanitizeRunId(runId);
+  const sanitized = validateRunId(runId);
   const dir = getRunPath(sanitized);
   await ensureDir(dir);
   const todosPath = join(dir, "todos.json");
@@ -55,7 +47,7 @@ export async function writeTodos(runId: string, todos: TodoItem[]): Promise<void
 }
 
 export async function readTodos(runId: string): Promise<TodoItem[] | null> {
-  const sanitized = sanitizeRunId(runId);
+  const sanitized = validateRunId(runId);
   const todosPath = join(getRunPath(sanitized), "todos.json");
   if (!(await pathExists(todosPath))) return null;
   try {
@@ -92,7 +84,7 @@ export async function updateTodoStatus(runId: string, title: string, status: Tod
 }
 
 export async function deriveTodosFromState(runId: string): Promise<TodoItem[] | null> {
-  const sanitized = sanitizeRunId(runId);
+  const sanitized = validateRunId(runId);
   const statePath = join(getRunPath(sanitized), "state.json");
   try {
     const content = await readFile(statePath, "utf-8");

@@ -24,9 +24,17 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
-      - run: npm run lint
-      - run: npm run secret:scan
-      - run: npm run check
-      - run: npm run build
-      - run: npm test
+      - run: npm run verify
+      - run: npm run native:build
       - run: npm run audit:package
+
+  release-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run release:check

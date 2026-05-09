@@ -1,6 +1,6 @@
-import { access } from "fs/promises";
+import { access, realpath } from "fs/promises";
 import { constants } from "fs";
-import { resolve } from "path";
+import { isAbsolute, relative, resolve } from "path";
 import type { DagNodeEvidence } from "./dag.js";
 import { runShell } from "../util/shell.js";
 
@@ -34,6 +34,16 @@ function resolveSafeCommand(command: string): { cmd: string; args: string[] } | 
   }
   if (parts.length >= 2 && PACKAGE_MANAGERS.has(parts[0]) && SCRIPT_NAME_PATTERN.test(parts[1] ?? "")) {
     return { cmd: parts[0], args: ["run", parts[1]] };
+  }
+  return null;
+}
+
+function resolveWorkspacePath(cwd: string, path: string): string | null {
+  const root = resolve(cwd);
+  const resolvedPath = resolve(root, path);
+  const relativePath = relative(root, resolvedPath);
+  if (relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath))) {
+    return resolvedPath;
   }
   return null;
 }
@@ -80,6 +90,16 @@ export async function checkEvidenceGates(
   return { passed: allPassed, evidence, warnings };
 }
 
+async function resolveWorkspaceRealPath(cwd: string, resolvedPath: string): Promise<string | null> {
+  const root = await realpath(resolve(cwd));
+  const candidate = await realpath(resolvedPath);
+  const relativePath = relative(root, candidate);
+  if (relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath))) {
+    return candidate;
+  }
+  return null;
+}
+
 async function checkSingleGate(
   gate: EvidenceGate,
   context: EvidenceCheckContext
@@ -93,14 +113,31 @@ async function checkSingleGate(
           message: `Missing "path" for file-exists gate`,
         };
       }
-      const resolvedPath = resolve(context.cwd, gate.path);
+      const resolvedPath = resolveWorkspacePath(context.cwd, gate.path);
+      if (!resolvedPath) {
+        return {
+          gate: gate.type,
+          passed: false,
+          ref: gate.path,
+          message: `Blocked file-exists path outside workspace: ${gate.path}`,
+        };
+      }
       try {
         await access(resolvedPath, constants.F_OK);
+        const realPath = await resolveWorkspaceRealPath(context.cwd, resolvedPath);
+        if (!realPath) {
+          return {
+            gate: gate.type,
+            passed: false,
+            ref: gate.path,
+            message: `Blocked file-exists path outside workspace: ${gate.path}`,
+          };
+        }
         return {
           gate: gate.type,
           passed: true,
-          ref: resolvedPath,
-          message: `File exists: ${resolvedPath}`,
+          ref: realPath,
+          message: `File exists: ${realPath}`,
         };
       } catch {
         return {

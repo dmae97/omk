@@ -198,6 +198,20 @@ function healthColor(health: RunHealth): (s: string) => string {
   }
 }
 
+function formatProviderCounts(metrics: RunViewModel["providerRouting"]): string {
+  return Object.entries(metrics.byProvider)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([provider, count]) => `${provider}=${count}`)
+    .join(", ");
+}
+
+function formatProviderMetricLine(metrics: RunViewModel["providerRouting"]): string | null {
+  if (metrics.attempts <= 0) return null;
+  const counts = formatProviderCounts(metrics);
+  const fallback = metrics.fallbackCount > 0 ? ` · fallback ${metrics.fallbackCount}` : "";
+  return `${metrics.attempts} attempt${metrics.attempts === 1 ? "" : "s"}${counts ? ` · ${counts}` : ""}${fallback}`;
+}
+
 function todoItemMarker(statusValue: TodoItem["status"]): string {
   switch (statusValue) {
     case "in_progress": return style.purpleBold("▶");
@@ -331,6 +345,10 @@ export function buildHudSidebar(
     }
     if (vm.health !== "ok") {
       lines.push(`  ${style.gray("health")} ${healthColor(vm.health)(vm.health.toUpperCase())}`);
+    }
+    const providerLine = formatProviderMetricLine(vm.providerRouting);
+    if (providerLine) {
+      lines.push(`  ${style.gray("provider")} ${style.cream(providerLine)}`);
     }
     lines.push("");
   } else if (state) {
@@ -674,6 +692,7 @@ async function buildLatestRunPanel(
       // ── Top summary bar: Run / Goal / Health / Progress / ETA / Stale count ──
       const staleWorkers = vm.workers.filter((w) => w.state === "running" && (w.lastActivityAgeMs ?? 0) > 90_000).length;
       const chatBadge = sessionMeta?.type === "chat" ? ` ${style.cream("💬 Chat")}` : "";
+      const providerLine = formatProviderMetricLine(vm.providerRouting);
       runLines = [
         "",
         `  ${style.gray("Run:")}    ${style.creamBold(latestRunName)}${chatBadge}`,
@@ -681,6 +700,9 @@ async function buildLatestRunPanel(
         `  ${style.gray("Health:")}  ${healthColor(vm.health)(vm.health.toUpperCase())}`,
         `  ${style.gray("Progress:")} ${style.mintBold(`${vm.progress.settled}/${vm.progress.total}`)} ${style.gray(`(${vm.progress.percent}%)`)}`,
       ];
+      if (providerLine) {
+        runLines.push(`  ${style.gray("Provider:")} ${style.cream(providerLine)}`);
+      }
       if (vm.eta) {
         runLines.push(`  ${style.gray("ETA:")}     ${style.cream(vm.eta)}`);
       }
@@ -710,6 +732,22 @@ async function buildLatestRunPanel(
       } else if (vm.goalTitle) {
         if (vm.goalScore != null) {
           runLines.push(`  ${style.gray("Score:")}     ${style.mintBold(`${vm.goalScore}%`)}`);
+        }
+        runLines.push("");
+      }
+
+      if (vm.teamRuntime) {
+        const team = vm.teamRuntime;
+        const presentWindows = team.windows.filter((w) => w.status === "present").length;
+        const missingWindows = team.windows.filter((w) => w.status === "missing").length;
+        runLines.push(`  ${style.pinkBold("Team Runtime")}`);
+        runLines.push(`    ${style.gray("session")} ${style.cream(team.session)} ${style.gray("status")} ${healthColor(missingWindows > 0 ? "warn" : "ok")(team.status)}`);
+        runLines.push(`    ${style.gray("windows")} ${style.mintBold(`${presentWindows}/${team.windows.length}`)} ${style.gray(`present · workers ${team.workerCount} · reviewer ${team.reviewerCount}`)}`);
+        if (team.coordinatorPanes > 0) {
+          runLines.push(`    ${style.gray("coordinator panes")} ${style.mint(String(team.coordinatorPanes))}`);
+        }
+        if (missingWindows > 0) {
+          runLines.push(`    ${style.orange(`${missingWindows} expected window(s) missing`)}`);
         }
         runLines.push("");
       }

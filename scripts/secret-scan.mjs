@@ -6,6 +6,7 @@ import { basename, join } from "node:path";
 const SKIP_PREFIXES = [
   "node_modules/",
   "dist/",
+  "target/",
   ".git/",
   ".omk/worktrees/",
   ".omk/runs/",

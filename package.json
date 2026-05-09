@@ -1,6 +1,6 @@
 {
   "name": "@oh-my-kimi/cli",
-  "version": "1.1.6",
+  "version": "1.1.7",
   "description": "Multi-agent orchestration harness for the Kimi Code CLI. Parallel coding teams, live quality gates, DESIGN.md-aware UI, and zero-config safety hooks on top of Kimi K2.6.",
   "type": "module",
   "bin": {
@@ -17,11 +17,17 @@
     "check": "tsc --noEmit",
     "test": "node scripts/run-tests.mjs",
     "secret:scan": "node scripts/secret-scan.mjs",
-    "verify": "npm run lint && npm run secret:scan && npm run check && npm run build:clean && npm test",
+    "verify": "npm run yaml:check && npm run lint && npm run secret:scan && npm run check && npm run build:clean && npm test",
     "pack:dry": "npm pack --dry-run --ignore-scripts --json",
     "audit:package": "node scripts/package-audit.mjs",
     "smoke": "node scripts/smoke-test.mjs",
-    "prepare": "npm run build"
+    "smoke:pack": "node scripts/pack-smoke.mjs",
+    "prepare": "npm run build",
+    "yaml:check": "node scripts/validate-yaml.mjs",
+    "release:check": "npm run verify && npm run native:build && npm run pack:dry && npm run audit:package && npm run smoke:pack",
+    "rust:check": "node scripts/rust-safety-check.mjs",
+    "rust:build": "cargo build -p omk-safety",
+    "native:build": "node scripts/build-native.mjs"
   },
   "keywords": [
     "agent",

@@ -218,6 +218,37 @@ export default function Page() {
 }
 `;
 
+const OPEN_DESIGN_AWESOME_DESIGN_MD_PROMPT_TEMPLATE = {
+  id: "awesome-design-md-web-ui",
+  surface: "image",
+  title: "Awesome DESIGN.md Web UI Reference (OMK)",
+  summary: "OMK prompt template that turns a VoltAgent awesome-design-md catalog entry into an adapted web UI or prototype direction.",
+  category: "Design Systems",
+  tags: ["awesome-design-md", "design-md", "omk", "web-ui", "prototype"],
+  model: "omk",
+  aspect: "16:9",
+  prompt: `Use VoltAgent awesome-design-md as the design-system reference for this Open Design task.
+
+Inputs:
+- DESIGN.md catalog name: {argument name="design-md name" default="vercel"}
+- Product or page context: {argument name="product context" default="AI agent operations dashboard"}
+- Artifact to create: {argument name="artifact" default="responsive landing page hero, feature cards, and CTA section"}
+
+OMK instructions:
+1. Read the workspace DESIGN.md first if it exists.
+2. If a catalog style is requested, use "omk design search <name>" to confirm the entry.
+3. Use "omk design apply <name>" only when the user wants the workspace DESIGN.md replaced; otherwise create or describe a DESIGN.next.md adaptation.
+4. Adapt the selected template's palette, typography, spacing, density, components, and responsive rules to the local product.
+5. Do not clone trademarks, logos, proprietary copy, private data, or exact brand pages. Treat the catalog entry as a reference system.
+6. Produce concrete file changes or an artifact prompt, then report selected template, files touched, and checks run.`,
+  source: {
+    repo: "VoltAgent/awesome-design-md",
+    license: "MIT",
+    author: "VoltAgent",
+    url: "https://github.com/voltagent/awesome-design-md",
+  },
+} as const;
+
 const OPEN_DESIGN_FALLBACK_ROUTE_PAGE_SOURCE = `import { ClientApp } from './client-app';
 
 export default function Page() {
@@ -294,6 +325,15 @@ async function writeOpenDesignRelativeFileIfChanged(
   await writeFileSafe(target, contents);
   changedFiles.push(relativePath);
   return true;
+}
+
+async function ensureOpenDesignAwesomeDesignMdPromptTemplate(checkoutDir: string, changedFiles: string[]): Promise<void> {
+  await writeOpenDesignRelativeFileIfChanged(
+    checkoutDir,
+    "prompt-templates/image/awesome-design-md-web-ui.json",
+    `${JSON.stringify(OPEN_DESIGN_AWESOME_DESIGN_MD_PROMPT_TEMPLATE, null, 2)}\n`,
+    changedFiles
+  );
 }
 
 async function ensureOpenDesignSpaRoutes(checkoutDir: string, changedFiles: string[]): Promise<void> {
@@ -405,6 +445,7 @@ export async function ensureOpenDesignOmkBridge(checkoutDir: string): Promise<Op
   await patchOpenDesignFile(checkoutDir, "apps/web/src/components/AgentIcon.tsx", patchOpenDesignAgentIconSource, changedFiles);
   await ensureOpenDesignSpaRoutes(checkoutDir, changedFiles);
   await patchOpenDesignI18n(checkoutDir, changedFiles);
+  await ensureOpenDesignAwesomeDesignMdPromptTemplate(checkoutDir, changedFiles);
   const omkBin = await resolveCurrentOmkBin();
   const appConfigPath = await writeOpenDesignOmkAppConfig(checkoutDir, omkBin);
   return { changedFiles, appConfigPath, omkBin };

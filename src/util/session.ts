@@ -1,6 +1,6 @@
 import { writeFile, readdir, readFile } from "fs/promises";
 import { join } from "path";
-import { getRunPath, getOmkPath, pathExists, ensureDir } from "./fs.js";
+import { getRunPath, getOmkPath, pathExists, ensureDir, validateRunId } from "./fs.js";
 
 export function createOmkSessionId(prefix: "chat" | "plan" | "run" | "team" | "session" | "feature" | "bugfix" | "refactor" | "review" = "session"): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -26,23 +26,15 @@ export interface SessionMeta {
   todoDoneCount: number;
 }
 
-function sanitizeRunId(runId: string): string {
-  const sanitized = runId.replace(/[^a-zA-Z0-9_.-]/g, "");
-  if (sanitized !== runId || sanitized.length === 0 || sanitized.length > 128) {
-    throw new Error(`Invalid runId: ${runId}`);
-  }
-  return sanitized;
-}
-
 export async function ensureSessionDir(runId: string): Promise<string> {
-  const sanitized = sanitizeRunId(runId);
+  const sanitized = validateRunId(runId);
   const dir = getRunPath(sanitized);
   await ensureDir(dir);
   return dir;
 }
 
 export async function writeSessionMeta(runId: string, meta: SessionMeta): Promise<void> {
-  const sanitized = sanitizeRunId(runId);
+  const sanitized = validateRunId(runId);
   const dir = await ensureSessionDir(sanitized);
   const metaPath = join(dir, "session.json");
   const payload: SessionMeta = {
@@ -54,7 +46,7 @@ export async function writeSessionMeta(runId: string, meta: SessionMeta): Promis
 }
 
 export async function readSessionMeta(runId: string): Promise<SessionMeta | null> {
-  const sanitized = sanitizeRunId(runId);
+  const sanitized = validateRunId(runId);
   const metaPath = join(getRunPath(sanitized), "session.json");
   if (!(await pathExists(metaPath))) return null;
   try {
