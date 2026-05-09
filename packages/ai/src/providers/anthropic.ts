@@ -165,9 +165,16 @@ const FINE_GRAINED_TOOL_STREAMING_BETA = "fine-grained-tool-streaming-2025-05-14
 const INTERLEAVED_THINKING_BETA = "interleaved-thinking-2025-05-14";
 
 function getAnthropicCompat(model: Model<"anthropic-messages">): Required<AnthropicMessagesCompat> {
+	// Auto-detect session affinity and cache control support from provider
+	const isFireworks = model.provider === "fireworks";
+	const isCloudflareAiGatewayAnthropic =
+		model.provider === "cloudflare-ai-gateway" && model.baseUrl.includes("anthropic");
 	return {
-		supportsEagerToolInputStreaming: model.compat?.supportsEagerToolInputStreaming ?? true,
-		supportsLongCacheRetention: model.compat?.supportsLongCacheRetention ?? true,
+		supportsEagerToolInputStreaming: model.compat?.supportsEagerToolInputStreaming ?? !isFireworks,
+		supportsLongCacheRetention: model.compat?.supportsLongCacheRetention ?? !isFireworks,
+		sendSessionAffinityHeaders:
+			model.compat?.sendSessionAffinityHeaders ?? !!(isFireworks || isCloudflareAiGatewayAnthropic),
+		supportsCacheControlOnTools: model.compat?.supportsCacheControlOnTools ?? !isFireworks,
 	};
 }
 
@@ -463,6 +470,9 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 					});
 				}
 
+				const cacheRetention = options?.cacheRetention ?? resolveCacheRetention();
+				const cacheSessionId = cacheRetention === "none" ? undefined : options?.sessionId;
+
 				const created = createClient(
 					model,
 					apiKey,
@@ -470,6 +480,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 					shouldUseFineGrainedToolStreamingBeta(model, context),
 					options?.headers,
 					copilotDynamicHeaders,
+					cacheSessionId,
 				);
 				client = created.client;
 				isOAuth = created.isOAuthToken;
@@ -766,6 +777,7 @@ function createClient(
 	useFineGrainedToolStreamingBeta: boolean,
 	optionsHeaders?: Record<string, string>,
 	dynamicHeaders?: Record<string, string>,
+	sessionId?: string,
 ): { client: Anthropic; isOAuthToken: boolean } {
 	// Adaptive thinking models (Opus 4.6, Sonnet 4.6) have interleaved thinking built-in.
 	// The beta header is deprecated on Opus 4.6 and redundant on Sonnet 4.6, so skip it.
@@ -847,6 +859,8 @@ function createClient(
 	}
 
 	// API key auth
+	const sessionAffinityHeaders: Record<string, string | null> =
+		sessionId && getAnthropicCompat(model).sendSessionAffinityHeaders ? { "x-session-affinity": sessionId } : {};
 	const client = new Anthropic({
 		apiKey,
 		baseURL: model.baseUrl,
@@ -857,6 +871,7 @@ function createClient(
 				"anthropic-dangerous-direct-browser-access": "true",
 				...(betaFeatures.length > 0 ? { "anthropic-beta": betaFeatures.join(",") } : {}),
 			},
+			sessionAffinityHeaders,
 			model.headers,
 			optionsHeaders,
 		),
@@ -912,11 +927,12 @@ function buildParams(
 	}
 
 	if (context.tools && context.tools.length > 0) {
+		const compat = getAnthropicCompat(model);
 		params.tools = convertTools(
 			context.tools,
 			isOAuthToken,
-			getAnthropicCompat(model).supportsEagerToolInputStreaming,
-			cacheControl,
+			compat.supportsEagerToolInputStreaming,
+			compat.supportsCacheControlOnTools ? cacheControl : undefined,
 		);
 	}
 

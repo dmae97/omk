@@ -3614,6 +3614,12 @@ export const MODELS = {
 			},
 			contextWindow: 163840,
 			maxTokens: 163840,
+			compat: {
+				sendSessionAffinityHeaders: true,
+				supportsEagerToolInputStreaming: false,
+				supportsCacheControlOnTools: false,
+				supportsLongCacheRetention: false,
+			},
 		} satisfies Model<"anthropic-messages">,
 		"accounts/fireworks/models/deepseek-v3p2": {
 			id: "accounts/fireworks/models/deepseek-v3p2",
@@ -3631,6 +3637,12 @@ export const MODELS = {
 			},
 			contextWindow: 160000,
 			maxTokens: 160000,
+			compat: {
+				sendSessionAffinityHeaders: true,
+				supportsEagerToolInputStreaming: false,
+				supportsCacheControlOnTools: false,
+				supportsLongCacheRetention: false,
+			},
 		} satisfies Model<"anthropic-messages">,
 		"accounts/fireworks/models/deepseek-v4-pro": {
 			id: "accounts/fireworks/models/deepseek-v4-pro",
@@ -3648,6 +3660,12 @@ export const MODELS = {
 			},
 			contextWindow: 1000000,
 			maxTokens: 384000,
+			compat: {
+				sendSessionAffinityHeaders: true,
+				supportsEagerToolInputStreaming: false,
+				supportsCacheControlOnTools: false,
+				supportsLongCacheRetention: false,
+			},
 		} satisfies Model<"anthropic-messages">,
 		"accounts/fireworks/models/glm-4p5": {
 			id: "accounts/fireworks/models/glm-4p5",
@@ -3665,6 +3683,12 @@ export const MODELS = {
 			},
 			contextWindow: 131072,
 			maxTokens: 131072,
+			compat: {
+				sendSessionAffinityHeaders: true,
+				supportsEagerToolInputStreaming: false,
+				supportsCacheControlOnTools: false,
+				supportsLongCacheRetention: false,
+			},
 		} satisfies Model<"anthropic-messages">,
 		"accounts/fireworks/models/glm-4p5-air": {
 			id: "accounts/fireworks/models/glm-4p5-air",
@@ -3682,6 +3706,12 @@ export const MODELS = {
 			},
 			contextWindow: 131072,
 			maxTokens: 131072,
+			compat: {
+				sendSessionAffinityHeaders: true,
+				supportsEagerToolInputStreaming: false,
+				supportsCacheControlOnTools: false,
+				supportsLongCacheRetention: false,
+			},
 		} satisfies Model<"anthropic-messages">,
 		"accounts/fireworks/models/glm-4p7": {
 			id: "accounts/fireworks/models/glm-4p7",
@@ -3699,6 +3729,12 @@ export const MODELS = {
 			},
 			contextWindow: 198000,
 			maxTokens: 198000,
+			compat: {
+				sendSessionAffinityHeaders: true,
+				supportsEagerToolInputStreaming: false,
+				supportsCacheControlOnTools: false,
+				supportsLongCacheRetention: false,
+			},
 		} satisfies Model<"anthropic-messages">,
 		"accounts/fireworks/models/glm-5": {
 			id: "accounts/fireworks/models/glm-5",
@@ -3716,6 +3752,12 @@ export const MODELS = {
 			},
 			contextWindow: 202752,
 			maxTokens: 131072,
+			compat: {
+				sendSessionAffinityHeaders: true,
+				supportsEagerToolInputStreaming: false,
+				supportsCacheControlOnTools: false,
+				supportsLongCacheRetention: false,
+			},
 		} satisfies Model<"anthropic-messages">,
 		"accounts/fireworks/models/glm-5p1": {
 			id: "accounts/fireworks/models/glm-5p1",
@@ -3733,6 +3775,12 @@ export const MODELS = {
 			},
 			contextWindow: 202800,
 			maxTokens: 131072,
+			compat: {
+				sendSessionAffinityHeaders: true,
+				supportsEagerToolInputStreaming: false,
+				supportsCacheControlOnTools: false,
+				supportsLongCacheRetention: false,
+			},
 		} satisfies Model<"anthropic-messages">,
 		"accounts/fireworks/models/gpt-oss-120b": {
 			id: "accounts/fireworks/models/gpt-oss-120b",
@@ -3750,6 +3798,12 @@ export const MODELS = {
 			},
 			contextWindow: 131072,
 			maxTokens: 32768,
+			compat: {
+				sendSessionAffinityHeaders: true,
+				supportsEagerToolInputStreaming: false,
+				supportsCacheControlOnTools: false,
+				supportsLongCacheRetention: false,
+			},
 		} satisfies Model<"anthropic-messages">,
 		"accounts/fireworks/models/gpt-oss-20b": {
 			id: "accounts/fireworks/models/gpt-oss-20b",
@@ -3767,6 +3821,12 @@ export const MODELS = {
 			},
 			contextWindow: 131072,
 			maxTokens: 32768,
+			compat: {
+				sendSessionAffinityHeaders: true,
+				supportsEagerToolInputStreaming: false,
+				supportsCacheControlOnTools: false,
+				supportsLongCacheRetention: false,
+			},
 		} satisfies Model<"anthropic-messages">,
 		"accounts/fireworks/models/kimi-k2-instruct": {
 			id: "accounts/fireworks/models/kimi-k2-instruct",
@@ -3784,6 +3844,12 @@ export const MODELS = {
 			},
 			contextWindow: 128000,
 			maxTokens: 16384,
+			compat: {
+				sendSessionAffinityHeaders: true,
+				supportsEagerToolInputStreaming: false,
+				supportsCacheControlOnTools: false,
+				supportsLongCacheRetention: false,
+			},
 		} satisfies Model<"anthropic-messages">,
 		"accounts/fireworks/models/kimi-k2-thinking": {
 			id: "accounts/fireworks/models/kimi-k2-thinking",
@@ -3801,6 +3867,12 @@ export const MODELS = {
 			},
 			contextWindow: 256000,
 			maxTokens: 256000,
+			compat: {
+				sendSessionAffinityHeaders: true,
+				supportsEagerToolInputStreaming: false,
+				supportsCacheControlOnTools: false,
+				supportsLongCacheRetention: false,
+			},
 		} satisfies Model<"anthropic-messages">,
 		"accounts/fireworks/models/kimi-k2p5": {
 			id: "accounts/fireworks/models/kimi-k2p5",
@@ -3818,6 +3890,12 @@ export const MODELS = {
 			},
 			contextWindow: 256000,
 			maxTokens: 256000,
+			compat: {
+				sendSessionAffinityHeaders: true,
+				supportsEagerToolInputStreaming: false,
+				supportsCacheControlOnTools: false,
+				supportsLongCacheRetention: false,
+			},
 		} satisfies Model<"anthropic-messages">,
 		"accounts/fireworks/models/kimi-k2p6": {
 			id: "accounts/fireworks/models/kimi-k2p6",
@@ -3835,6 +3913,12 @@ export const MODELS = {
 			},
 			contextWindow: 262000,
 			maxTokens: 262000,
+			compat: {
+				sendSessionAffinityHeaders: true,
+				supportsEagerToolInputStreaming: false,
+				supportsCacheControlOnTools: false,
+				supportsLongCacheRetention: false,
+			},
 		} satisfies Model<"anthropic-messages">,
 		"accounts/fireworks/models/minimax-m2p1": {
 			id: "accounts/fireworks/models/minimax-m2p1",
@@ -3852,6 +3936,12 @@ export const MODELS = {
 			},
 			contextWindow: 200000,
 			maxTokens: 200000,
+			compat: {
+				sendSessionAffinityHeaders: true,
+				supportsEagerToolInputStreaming: false,
+				supportsCacheControlOnTools: false,
+				supportsLongCacheRetention: false,
+			},
 		} satisfies Model<"anthropic-messages">,
 		"accounts/fireworks/models/minimax-m2p5": {
 			id: "accounts/fireworks/models/minimax-m2p5",
@@ -3869,6 +3959,12 @@ export const MODELS = {
 			},
 			contextWindow: 196608,
 			maxTokens: 196608,
+			compat: {
+				sendSessionAffinityHeaders: true,
+				supportsEagerToolInputStreaming: false,
+				supportsCacheControlOnTools: false,
+				supportsLongCacheRetention: false,
+			},
 		} satisfies Model<"anthropic-messages">,
 		"accounts/fireworks/models/minimax-m2p7": {
 			id: "accounts/fireworks/models/minimax-m2p7",
@@ -3886,6 +3982,12 @@ export const MODELS = {
 			},
 			contextWindow: 196608,
 			maxTokens: 196608,
+			compat: {
+				sendSessionAffinityHeaders: true,
+				supportsEagerToolInputStreaming: false,
+				supportsCacheControlOnTools: false,
+				supportsLongCacheRetention: false,
+			},
 		} satisfies Model<"anthropic-messages">,
 		"accounts/fireworks/models/qwen3p6-plus": {
 			id: "accounts/fireworks/models/qwen3p6-plus",
@@ -3903,6 +4005,12 @@ export const MODELS = {
 			},
 			contextWindow: 128000,
 			maxTokens: 8192,
+			compat: {
+				sendSessionAffinityHeaders: true,
+				supportsEagerToolInputStreaming: false,
+				supportsCacheControlOnTools: false,
+				supportsLongCacheRetention: false,
+			},
 		} satisfies Model<"anthropic-messages">,
 		"accounts/fireworks/routers/kimi-k2p5-turbo": {
 			id: "accounts/fireworks/routers/kimi-k2p5-turbo",
@@ -3920,6 +4028,12 @@ export const MODELS = {
 			},
 			contextWindow: 256000,
 			maxTokens: 256000,
+			compat: {
+				sendSessionAffinityHeaders: true,
+				supportsEagerToolInputStreaming: false,
+				supportsCacheControlOnTools: false,
+				supportsLongCacheRetention: false,
+			},
 		} satisfies Model<"anthropic-messages">,
 	},
 	"github-copilot": {
