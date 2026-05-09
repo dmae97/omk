@@ -211,7 +211,7 @@ export function substituteArgs(content: string, args: string[]): string {
 	return result;
 }
 
-/** Expand a prompt template with positional command arguments. */
-export function expandPromptTemplate(template: PromptTemplate, args: string[] = []): string {
+/** Format a prompt template invocation with positional arguments. */
+export function formatPromptTemplateInvocation(template: PromptTemplate, args: string[] = []): string {
 	return substituteArgs(template.content, args);
 }

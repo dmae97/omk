@@ -4,8 +4,8 @@ import { Agent } from "../agent.js";
 import type { AgentEvent, AgentMessage, AgentTool, ThinkingLevel } from "../types.js";
 import { collectEntriesForBranchSummary, generateBranchSummary } from "./compaction/branch-summarization.js";
 import { compact, DEFAULT_COMPACTION_SETTINGS, prepareCompaction } from "./compaction/compaction.js";
-import { expandPromptTemplate } from "./prompt-templates.js";
-import { expandSkillCommand } from "./skills.js";
+import { formatPromptTemplateInvocation } from "./prompt-templates.js";
+import { formatSkillInvocation } from "./skills.js";
 import type {
 	AbortResult,
 	AgentHarnessContext,
@@ -335,14 +335,14 @@ export class AgentHarness {
 		const resources = await this.resolveResources();
 		const skill = (resources.skills ?? []).find((candidate) => candidate.name === name);
 		if (!skill) throw new Error(`Unknown skill: ${name}`);
-		return await this.prompt(expandSkillCommand(skill, additionalInstructions));
+		return await this.prompt(formatSkillInvocation(skill, additionalInstructions));
 	}
 
 	async promptFromTemplate(name: string, args: string[] = []): Promise<AssistantMessage> {
 		const resources = await this.resolveResources();
 		const template = (resources.promptTemplates ?? []).find((candidate) => candidate.name === name);
 		if (!template) throw new Error(`Unknown prompt template: ${name}`);
-		return await this.prompt(expandPromptTemplate(template, args));
+		return await this.prompt(formatPromptTemplateInvocation(template, args));
 	}
 
 	steer(message: AgentMessage): void {

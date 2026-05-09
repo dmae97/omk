@@ -22,7 +22,7 @@ export interface PromptTemplate {
 	name: string;
 	/** Optional description for command lists or autocomplete. */
 	description?: string;
-	/** Template content. Argument placeholders are expanded by `expandPromptTemplate`. */
+	/** Template content. Argument placeholders are expanded by `formatPromptTemplateInvocation`. */
 	content: string;
 }
 

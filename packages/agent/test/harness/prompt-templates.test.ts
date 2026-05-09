@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { NodeExecutionEnv } from "../../src/harness/execution-env.js";
 import {
-	expandPromptTemplate,
+	formatPromptTemplateInvocation,
 	loadPromptTemplates,
 	loadSourcedPromptTemplates,
 } from "../../src/harness/prompt-templates.js";
@@ -80,10 +80,10 @@ describe("loadPromptTemplates", () => {
 	});
 });
 
-describe("expandPromptTemplate", () => {
+describe("formatPromptTemplateInvocation", () => {
 	it("substitutes command arguments", () => {
 		const content = "$1 $" + "{@:2} $ARGUMENTS";
-		expect(expandPromptTemplate({ name: "one", content }, ["hello world", "test"])).toBe(
+		expect(formatPromptTemplateInvocation({ name: "one", content }, ["hello world", "test"])).toBe(
 			"hello world test hello world test",
 		);
 	});

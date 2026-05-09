@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { expandPromptTemplate } from "../../src/harness/prompt-templates.js";
-import { expandSkillCommand } from "../../src/harness/skills.js";
+import { formatPromptTemplateInvocation } from "../../src/harness/prompt-templates.js";
+import { formatSkillInvocation } from "../../src/harness/skills.js";
 
-describe("resource expansion helpers", () => {
-	it("expands skills with additional instructions", () => {
+describe("resource formatting helpers", () => {
+	it("formats skill invocations with additional instructions", () => {
 		const skill = {
 			name: "inspect",
 			description: "Inspect things",
@@ -11,14 +11,14 @@ describe("resource expansion helpers", () => {
 			filePath: "/project/.pi/skills/inspect/SKILL.md",
 		};
 
-		expect(expandSkillCommand(skill, "Check errors.")).toBe(
+		expect(formatSkillInvocation(skill, "Check errors.")).toBe(
 			'<skill name="inspect" location="/project/.pi/skills/inspect/SKILL.md">\nReferences are relative to /project/.pi/skills/inspect.\n\nUse inspection tools.\n</skill>\n\nCheck errors.',
 		);
 	});
 
-	it("expands prompt templates with positional arguments", () => {
-		expect(expandPromptTemplate({ name: "review", content: "Review $1 with $ARGUMENTS" }, ["a.ts", "care"])).toBe(
-			"Review a.ts with a.ts care",
-		);
+	it("formats prompt template invocations with positional arguments", () => {
+		expect(
+			formatPromptTemplateInvocation({ name: "review", content: "Review $1 with $ARGUMENTS" }, ["a.ts", "care"]),
+		).toBe("Review a.ts with a.ts care");
 	});
 });
