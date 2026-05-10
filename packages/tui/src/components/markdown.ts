@@ -556,8 +556,10 @@ export class Markdown implements Component {
 		for (let i = 0; i < token.items.length; i++) {
 			const item = token.items[i];
 			const bullet = token.ordered ? `${startNumber + i}. ` : "- ";
-			const firstPrefix = indent + this.theme.listBullet(bullet);
-			const continuationPrefix = indent + " ".repeat(visibleWidth(bullet));
+			const taskMarker = item.task ? `[${item.checked ? "x" : " "}] ` : "";
+			const marker = bullet + taskMarker;
+			const firstPrefix = indent + this.theme.listBullet(marker);
+			const continuationPrefix = indent + " ".repeat(visibleWidth(marker));
 			const itemWidth = Math.max(1, width - visibleWidth(firstPrefix));
 			let renderedAnyLine = false;
 

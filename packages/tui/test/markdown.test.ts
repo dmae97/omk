@@ -124,6 +124,14 @@ describe("Markdown component", () => {
 			assert.ok(plainLines.some((line) => line.includes("2. Second ordered")));
 		});
 
+		it("should render task list markers", () => {
+			const markdown = new Markdown("- [ ] beep\n- [x] boop", 0, 0, defaultMarkdownTheme);
+
+			const lines = markdown.render(80).map((line) => stripAnsi(line).trimEnd());
+
+			assert.deepStrictEqual(lines, ["- [ ] beep", "- [x] boop"]);
+		});
+
 		it("should maintain numbering when code blocks are not indented (LLM output)", () => {
 			// When code blocks aren't indented, marked parses each item as a separate list.
 			// We use token.start to preserve the original numbering.
