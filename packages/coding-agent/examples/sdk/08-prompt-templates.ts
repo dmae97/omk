@@ -43,9 +43,9 @@ for (const template of discovered) {
 	console.log(`  /${template.name}: ${template.description}`);
 }
 
-await createAgentSession({
+const { session } = await createAgentSession({
 	resourceLoader: loader,
 	sessionManager: SessionManager.inMemory(),
 });
-
 console.log(`Session created with ${discovered.length + 1} prompt templates`);
+session.dispose();

@@ -30,15 +30,19 @@ const { session: session1 } = await createAgentSession({
 	sessionManager: SessionManager.inMemory(),
 });
 
-session1.subscribe((event) => {
-	if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
-		process.stdout.write(event.assistantMessageEvent.delta);
-	}
-});
+try {
+	session1.subscribe((event) => {
+		if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
+			process.stdout.write(event.assistantMessageEvent.delta);
+		}
+	});
 
-console.log("=== Replace prompt ===");
-await session1.prompt("What is 2 + 2?");
-console.log("\n");
+	console.log("=== Replace prompt ===");
+	await session1.prompt("What is 2 + 2?");
+	console.log("\n");
+} finally {
+	session1.dispose();
+}
 
 // Option 2: Append instructions to the default prompt
 const loader2 = new DefaultResourceLoader({
@@ -56,12 +60,16 @@ const { session: session2 } = await createAgentSession({
 	sessionManager: SessionManager.inMemory(),
 });
 
-session2.subscribe((event) => {
-	if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
-		process.stdout.write(event.assistantMessageEvent.delta);
-	}
-});
+try {
+	session2.subscribe((event) => {
+		if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
+			process.stdout.write(event.assistantMessageEvent.delta);
+		}
+	});
 
-console.log("=== Modify prompt ===");
-await session2.prompt("List 3 benefits of TypeScript.");
-console.log();
+	console.log("=== Modify prompt ===");
+	await session2.prompt("List 3 benefits of TypeScript.");
+	console.log();
+} finally {
+	session2.dispose();
+}

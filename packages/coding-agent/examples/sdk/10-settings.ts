@@ -19,12 +19,12 @@ settingsManager.applyOverrides({
 	retry: { enabled: true, maxRetries: 5, baseDelayMs: 1000 },
 });
 
-await createAgentSession({
+const { session: customSettingsSession } = await createAgentSession({
 	settingsManager,
 	sessionManager: SessionManager.inMemory(),
 });
-
 console.log("Session created with custom settings");
+customSettingsSession.dispose();
 
 // Setters update memory immediately and queue persistence writes.
 // Call flush() when you need a durability boundary.
@@ -45,9 +45,9 @@ const inMemorySettings = SettingsManager.inMemory({
 	retry: { enabled: false },
 });
 
-await createAgentSession({
+const { session: testSession } = await createAgentSession({
 	settingsManager: inMemorySettings,
 	sessionManager: SessionManager.inMemory(),
 });
-
 console.log("Test session created with in-memory settings");
+testSession.dispose();

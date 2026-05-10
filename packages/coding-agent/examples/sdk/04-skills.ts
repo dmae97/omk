@@ -47,9 +47,9 @@ if (diagnostics.length > 0) {
 	console.log("Warnings:", diagnostics);
 }
 
-await createAgentSession({
+const { session } = await createAgentSession({
 	resourceLoader: loader,
 	sessionManager: SessionManager.inMemory(),
 });
-
 console.log("Session created with filtered skills");
+session.dispose();

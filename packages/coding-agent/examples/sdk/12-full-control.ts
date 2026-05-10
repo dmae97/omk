@@ -63,11 +63,15 @@ const { session } = await createAgentSession({
 	settingsManager,
 });
 
-session.subscribe((event) => {
-	if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
-		process.stdout.write(event.assistantMessageEvent.delta);
-	}
-});
+try {
+	session.subscribe((event) => {
+		if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
+			process.stdout.write(event.assistantMessageEvent.delta);
+		}
+	});
 
-await session.prompt("List files in the current directory.");
-console.log();
+	await session.prompt("List files in the current directory.");
+	console.log();
+} finally {
+	session.dispose();
+}
