@@ -466,7 +466,7 @@ const { session } = await createAgentSession({ resourceLoader: loader });
 
 ### Tools
 
-Use tool names, not imported tool instances.
+Specify which built-in tools to enable:
 
 - Built-in tool names: `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`
 - Default built-ins: `read`, `bash`, `edit`, `write`
