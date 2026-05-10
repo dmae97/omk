@@ -1,7 +1,7 @@
 import type { DagContextBudget, DagNode, DagNodeDefinition, DagNodeRouting } from "./dag.js";
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { homedir } from "os";
-import { join, resolve } from "path";
+import { isAbsolute, join, relative, resolve, sep } from "path";
 import { normalizeUserHomePath } from "../util/fs.js";
 
 type RouteKind = "skill" | "mcp" | "tool" | "hook";
@@ -824,11 +824,18 @@ function createMcpConfigDiagnostic(
 function formatRoutingPath(root: string, path: string): string {
   const resolvedPath = resolve(path);
   const resolvedRoot = resolve(root);
-  if (resolvedPath === resolvedRoot) return ".";
-  if (resolvedPath.startsWith(`${resolvedRoot}/`)) return resolvedPath.slice(resolvedRoot.length + 1);
-  const home = getRoutingUserHome();
-  if (resolvedPath.startsWith(`${home}/`)) return `~/${resolvedPath.slice(home.length + 1)}`;
+  const rootRelative = relative(resolvedRoot, resolvedPath);
+  if (rootRelative === "") return ".";
+  if (isRelativeChildPath(rootRelative)) return rootRelative;
+  const home = resolve(getRoutingUserHome());
+  const homeRelative = relative(home, resolvedPath);
+  if (homeRelative === "") return "~";
+  if (isRelativeChildPath(homeRelative)) return `~/${homeRelative.split(sep).join("/")}`;
   return resolvedPath;
+}
+
+function isRelativeChildPath(path: string): boolean {
+  return path !== "" && path !== ".." && !path.startsWith(`..${sep}`) && !path.startsWith("../") && !isAbsolute(path);
 }
 
 function mcpConfigErrorMessage(err: unknown): string {

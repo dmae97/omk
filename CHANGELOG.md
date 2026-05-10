@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.1.11 — Windows CI and path diagnostics fixes (2026-05-10)
+
+### Fixed
+
+- **Windows CI doctor false positive** — `.json:Zone.Identifier` Kimi home files no longer leave their base `eggup-*.json` file flagged as global pollution on Windows runners.
+- **Windows MCP diagnostic paths** — invalid project MCP diagnostics now report project-relative `.omk/mcp.json` paths on Windows instead of absolute temp paths.
+- **Post-release CI closure** — fixes the Windows `npm run verify` failures observed after the v1.1.10 tag while preserving the already-passed release publish flow.
+- **MCP CLI smoke stability** — `omk mcp test` gives OMK project stdio probes more time under loaded CI runners and reports timeout hints when `tools/call` has no response.
+- **Release harness timeout stability** — cross-platform release checks now give slow full-init smoke files enough headroom on loaded runners instead of timing out after valid progress.
+
+### Verification
+
+- Passed `npm run build:clean`, `node test/cli-json-contract.test.mjs`, `node test/orchestration.test.mjs`, `node test/mcp-command.test.mjs`, `node test/init-mcp-secrets.test.mjs`, `npm run check`, and full `npm run release:check`.
+
 ## v1.1.10 — Init scaffold and release-safety fixes (2026-05-10)
 
 ### Fixed

@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { performance } from "node:perf_hooks";
 
 const TEST_DIR = "test";
-const TIMEOUT_MS = 120_000;
+const TIMEOUT_MS = 180_000;
 const FAILED_LOG = "failed-tests.txt";
 const SUMMARY_LOG = "test-summary.json";
 const SCHEMA_VERSION = 1;

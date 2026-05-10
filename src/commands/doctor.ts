@@ -99,6 +99,7 @@ function isExpectedGlobalKimiFile(name: string): boolean {
     expected.has(name)
     || /^config\.toml\.bak(?:[-_].*)?$/.test(name)
     || /^mcp(?:\.manifest)?\.json\.bak(?:[-_].*)?$/.test(name)
+    || /^eggup-\d+\.json$/i.test(name)
     || /\.json:Zone\.Identifier$/i.test(name)
   );
 }

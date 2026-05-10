@@ -28,7 +28,7 @@ function runMcpScript(projectRoot, homeRoot, scriptBody, extraEnv = {}) {
       OMK_PROJECT_ROOT: projectRoot,
     },
     encoding: "utf-8",
-    timeout: 30000,
+    timeout: 60000,
   });
 }
 

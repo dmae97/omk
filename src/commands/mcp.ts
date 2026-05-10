@@ -537,7 +537,7 @@ export async function mcpTestCommand(serverName: string): Promise<void> {
     },
   }) + "\n";
   const handshakeResult = await runShell(command, smokeArgs, {
-    timeout: 8000,
+    timeout: 20000,
     env: server.env ? { ...process.env, ...server.env } as Record<string, string> : process.env as Record<string, string>,
     input: initializePayload,
   });
@@ -601,7 +601,7 @@ async function runOmkProjectToolProbe(
     },
   ].map((message) => JSON.stringify(message)).join("\n") + "\n";
   const probeResult = await runShell(command, args, {
-    timeout: 10000,
+    timeout: 20000,
     env: env ? { ...process.env, ...env } as Record<string, string> : process.env as Record<string, string>,
     input: payload,
   });
@@ -614,7 +614,10 @@ async function runOmkProjectToolProbe(
   }
   const toolResponse = responses.find((response) => response.id === 3);
   if (!toolResponse) {
-    console.error(status.error("JSON-RPC tools/call id 3 did not return a response"));
+    const timeoutHint = probeResult.stderr.includes("timeout") || probeResult.stderr.includes("ETIMEDOUT")
+      ? " before the probe timeout"
+      : "";
+    console.error(status.error(`JSON-RPC tools/call id 3 did not return a response${timeoutHint}`));
     if (probeResult.stderr.trim()) console.error(style.gray(probeResult.stderr.trim()));
     process.exit(1);
   }

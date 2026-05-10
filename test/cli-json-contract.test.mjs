@@ -370,6 +370,7 @@ test("doctor --json classifies normal Kimi home files separately from pollution"
     "AGENTS.md",
     "setup.md",
     "user.md",
+    "eggup-493323.json",
     "eggup-493323.json:Zone.Identifier",
   ]) {
     await writeFile(join(home, ".kimi", name), "ok", "utf-8");
