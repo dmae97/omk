@@ -1,0 +1,6 @@
+version: 1
+agent:
+  extend: ../okabe.yaml  # Okabe-compatible base adds SendDMail/D-Mail checkpoints
+  name: omk-explorer
+  system_prompt_args:
+    OMK_ROLE: "explorer"

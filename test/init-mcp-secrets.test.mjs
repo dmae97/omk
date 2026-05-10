@@ -156,6 +156,59 @@ test("init does not copy secret-bearing global MCP entries into project config",
   }
 });
 
+test("init does not generate a project PNG logo and reports all core scaffold groups", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-init-no-png-project-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-init-no-png-home-"));
+
+  try {
+    const result = runInit(projectRoot, homeRoot);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    await assert.rejects(readFile(join(projectRoot, "kimicat.png"), "utf-8"), /ENOENT/);
+    assert.doesNotMatch(result.stdout, /kimicat\.png|bundle missing|ASCII theme/i);
+
+    const configToml = await readFile(join(projectRoot, ".omk", "config.toml"), "utf-8");
+    assert.doesNotMatch(configToml, /^logo_image\s*=/m);
+    assert.match(configToml, /^# logo_image = "assets\/omk-logo\.png"$/m);
+
+    const expectedFiles = [
+      ".omk/agents/root.yaml",
+      ".omk/agents/roles/coder.yaml",
+      ".omk/prompts/root.md",
+      ".omk/config.toml",
+      ".omk/kimi.config.toml",
+      ".omk/hooks/pre-shell-guard.sh",
+      ".omk/lsp.json",
+      ".kimi/mcp.json",
+      ".omk/mcp.json",
+      ".omk/memory/project.md",
+      ".omk/templates/spec-kit-omk-preset/preset.yml",
+    ];
+    for (const relativePath of expectedFiles) {
+      await readFile(join(projectRoot, relativePath), "utf-8");
+    }
+
+    for (const createdLine of [
+      "- .omk/agents/root.yaml",
+      "- .omk/agents/roles/",
+      "- .omk/prompts/root.md",
+      "- .omk/config.toml",
+      "- .omk/kimi.config.toml",
+      "- .omk/hooks/",
+      "- .omk/lsp.json",
+      "- .kimi/mcp.json",
+      "- .omk/mcp.json",
+      "- .omk/memory/",
+      "- .omk/templates/spec-kit-omk-preset/",
+    ]) {
+      assert.match(result.stdout, new RegExp(escapeRegex(createdLine)));
+    }
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
 test("init scaffolds Kimi subagent names that match generated role aliases", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-init-subagents-project-"));
   const homeRoot = await mkdtemp(join(tmpdir(), "omk-init-subagents-home-"));

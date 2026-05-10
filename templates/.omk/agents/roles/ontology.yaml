@@ -1,0 +1,11 @@
+version: 1
+agent:
+  extend: ../okabe.yaml
+  name: omk-ontology
+  system_prompt_args:
+    OMK_ROLE: "ontology"
+  description: >
+    Kuzu-backed ontology curator. Creates ontology node/relationship tables,
+    ingests project concepts, and answers Cypher/GraphQL-lite queries against
+    the local graph. Use omk_graph_query, omk_memory_ontology, and
+    omk_memory_mindmap tools to inspect and evolve the project ontology.

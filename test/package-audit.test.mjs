@@ -14,6 +14,7 @@ import {
   validateDistDrift,
   validateSourcemapPaths,
   validateMarkdownLinks,
+  validateTemplateAgentReferences,
   validateSizeBudgets,
   validateNativeSafety,
   modeFromTarPermissions,
@@ -220,6 +221,35 @@ describe("validateRequiredEntries", () => {
     );
     const result = validateRequiredEntries(files, REQUIRED_ENTRIES);
     assert.ok(result.errors.some((e) => e.includes("dist/cli.js")));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateTemplateAgentReferences
+// ---------------------------------------------------------------------------
+
+describe("validateTemplateAgentReferences", () => {
+  it("passes when template root subagent paths are packed", () => {
+    const pathSet = new Set([
+      "templates/.omk/agents/root.yaml",
+      "templates/.omk/agents/roles/explorer.yaml",
+      "templates/.omk/agents/roles/planner.yaml",
+      "templates/.omk/agents/roles/coder.yaml",
+      "templates/.omk/agents/roles/reviewer.yaml",
+      "templates/.omk/agents/roles/qa.yaml",
+    ]);
+    const result = validateTemplateAgentReferences(pathSet);
+    assert.strictEqual(result.errors.length, 0);
+  });
+
+  it("fails when a template root subagent path is not packed", () => {
+    const pathSet = new Set([
+      "templates/.omk/agents/root.yaml",
+      "templates/.omk/agents/roles/planner.yaml",
+      "templates/.omk/agents/roles/reviewer.yaml",
+    ]);
+    const result = validateTemplateAgentReferences(pathSet);
+    assert.ok(result.errors.some((e) => e.includes("roles/explorer.yaml")));
   });
 });
 

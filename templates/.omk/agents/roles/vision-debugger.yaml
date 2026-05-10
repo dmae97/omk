@@ -1,0 +1,6 @@
+version: 1
+agent:
+  extend: ../okabe.yaml  # Okabe-compatible base adds SendDMail/D-Mail checkpoints
+  name: omk-vision-debugger
+  system_prompt_args:
+    OMK_ROLE: "vision-debugger"
