@@ -2,10 +2,6 @@ version: 1
 agent:
   extend: ./okabe.yaml  # Okabe-compatible base adds SendDMail/D-Mail checkpoints
   name: omk-root
-  tools:
-    - "kimi_cli.tools.agent:Agent"
-    - "kimi_cli.tools.web:SearchWeb"
-    - "kimi_cli.tools.web:FetchURL"
   system_prompt_path: ../prompts/root.md
   system_prompt_args:
     OMK_ROLE: "root-coordinator"
@@ -13,9 +9,15 @@ agent:
     explorer:
       path: ./roles/explorer.yaml
       description: "Read-only repository exploration and context mapping"
+    explore:
+      path: ./roles/explorer.yaml
+      description: "Alias for explorer; kept for compatibility with older OMK instructions"
     planner:
       path: ./roles/planner.yaml
       description: "Architecture, refactor, migration, and implementation planning"
+    plan:
+      path: ./roles/planner.yaml
+      description: "Alias for planner; kept for compatibility with older OMK instructions"
     coder:
       path: ./roles/coder.yaml
       description: "Scoped implementation in the current project"

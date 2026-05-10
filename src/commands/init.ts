@@ -1190,11 +1190,11 @@ query = "graphql-lite"
 language = "en"
 
 [theme]
-# Custom logo image path for terminal welcome banner
-# Relative paths are resolved from project root; absolute paths also work
-# Example: logo_image = "kimicat.png"  or  logo_image = "M:\\oh-my-kimi\\kimicat.png"
-# Supported formats: PNG, JPEG, GIF (high-res on iTerm/Konsole, else ANSI block)
-logo_image = "kimicat.png"
+# Optional custom logo image path for terminal welcome banner.
+# omk init does not create or copy image assets; add your own asset first, then uncomment.
+# Relative paths are resolved from project root; absolute paths require OMK_TRUST_ABSOLUTE_LOGO_PATH=1.
+# Supported formats: PNG, JPEG, GIF, WEBP (high-res on iTerm/Konsole, else ANSI block).
+# logo_image = "assets/omk-logo.png"
 
 [router]
 default_model = "kimi-k2.6"
@@ -1365,18 +1365,6 @@ export async function initCommand(options: InitCommandOptions): Promise<void> {
   );
   await writeFile(join(root, ".omk/lsp.json"), defaultLspConfigJson());
 
-  const bundledLogoPath = join(packageRoot, "kimicat.png");
-  const projectLogoPath = join(root, "kimicat.png");
-  if (await pathExists(bundledLogoPath)) {
-    if (await pathExists(projectLogoPath)) {
-      console.log(t("init.kimicatPngExists"));
-    } else {
-      await copyFile(bundledLogoPath, projectLogoPath);
-    }
-  } else {
-    console.log(status.warn(t("init.kimicatPngMissing")));
-  }
-
   // 9. Write memory files (parallel)
   await Promise.all(
     Object.entries(MEMORY_FILES).map(([name, content]) =>
@@ -1424,9 +1412,15 @@ export async function initCommand(options: InitCommandOptions): Promise<void> {
   console.log("- .kimi/AGENTS.md");
   console.log("- DESIGN.md");
   console.log("- .omk/agents/root.yaml");
+  console.log("- .omk/agents/roles/");
+  console.log("- .omk/prompts/root.md");
+  console.log("- .omk/config.toml");
+  console.log("- .omk/kimi.config.toml");
   console.log("- .omk/lsp.json");
-  console.log("- kimicat.png");
+  console.log("- .omk/hooks/");
+  console.log("- .omk/snippets/");
   console.log("- .kimi/mcp.json");
+  console.log("- .omk/mcp.json");
   console.log("- .kimi/skills/");
   console.log("- .agents/skills/");
   console.log("- .omk/memory/");

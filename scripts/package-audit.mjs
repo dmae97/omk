@@ -40,7 +40,20 @@ export const REQUIRED_ENTRIES = [
   "dist/cli.js",
   "templates/AGENTS.md",
   "templates/.kimi/AGENTS.md",
+  "templates/.omk/agents/okabe.yaml",
   "templates/.omk/agents/root.yaml",
+  "templates/.omk/agents/roles/architect.yaml",
+  "templates/.omk/agents/roles/coder.yaml",
+  "templates/.omk/agents/roles/explorer.yaml",
+  "templates/.omk/agents/roles/integrator.yaml",
+  "templates/.omk/agents/roles/interviewer.yaml",
+  "templates/.omk/agents/roles/ontology.yaml",
+  "templates/.omk/agents/roles/planner.yaml",
+  "templates/.omk/agents/roles/qa.yaml",
+  "templates/.omk/agents/roles/researcher.yaml",
+  "templates/.omk/agents/roles/reviewer.yaml",
+  "templates/.omk/agents/roles/vision-debugger.yaml",
+  "templates/.omk/prompts/root.md",
   "readmeasset/kimicat.png",
 ];
 
@@ -448,6 +461,33 @@ export function validateMarkdownLinks(markdownFiles, pathSet) {
   return { errors };
 }
 
+export function validateTemplateAgentReferences(pathSet, rootPath = "templates/.omk/agents/root.yaml") {
+  const errors = [];
+  if (!pathSet.has(rootPath)) return { errors };
+
+  let content;
+  try {
+    content = readFileSync(rootPath, "utf-8");
+  } catch (error) {
+    errors.push(`Template agent root missing locally: ${rootPath}: ${error.message}`);
+    return { errors };
+  }
+
+  for (const match of content.matchAll(/^\s*path:\s*([^#\s]+)\s*$/gm)) {
+    const rawPath = match[1].replace(/^["']|["']$/g, "");
+    if (rawPath.startsWith("/") || /^[A-Za-z]:[\\/]/.test(rawPath)) {
+      errors.push(`Template agent path must be relative: ${rootPath} -> ${rawPath}`);
+      continue;
+    }
+    const resolved = resolveLink(rootPath, rawPath);
+    if (!pathSet.has(resolved)) {
+      errors.push(`Broken template agent path in ${rootPath}: ${rawPath} -> ${resolved}`);
+    }
+  }
+
+  return { errors };
+}
+
 export function validateSizeBudgets(files, pkg) {
   const errors = [];
   const tarballSizeBytes = typeof pkg.size === "number" ? pkg.size : 0;
@@ -681,6 +721,7 @@ export function main(tarballPath) {
   failed = runValidator("REQUIRED", validateRequiredEntries(files, REQUIRED_ENTRIES), "REQUIRED") || failed;
   failed = runValidator("FORBIDDEN", validateForbiddenEntries(files, FORBIDDEN_PATTERNS), "FORBIDDEN") || failed;
   failed = runValidator("FILES_ALLOWLIST", validateFilesAllowlist(localPkg.files || [], pathSet), "FILES_ALLOWLIST") || failed;
+  failed = runValidator("TEMPLATE_AGENT_REFS", validateTemplateAgentReferences(pathSet), "TEMPLATE_AGENT_REFS") || failed;
 
   const binEntries = localPkg.bin && typeof localPkg.bin === "object"
     ? Object.entries(localPkg.bin)

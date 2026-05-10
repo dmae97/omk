@@ -1,0 +1,10 @@
+version: 1
+agent:
+  extend: ../okabe.yaml  # Okabe-compatible base adds SendDMail/D-Mail checkpoints
+  name: omk-architect
+  system_prompt_args:
+    OMK_ROLE: "architect"
+  exclude_tools:
+    - "kimi_cli.tools.file:WriteFile"
+    - "kimi_cli.tools.file:StrReplaceFile"
+    - "kimi_cli.tools.shell:Shell"

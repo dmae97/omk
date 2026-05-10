@@ -19,6 +19,8 @@ lerna-debug.log*
 
 # OMK runtime / local data (NEVER commit)
 .omk/
+!templates/.omk/
+!templates/.omk/**
 
 # Local spec outputs
 .specify/
@@ -34,6 +36,10 @@ specs/
 # Kimi / Agent local user settings
 .kimi/
 .agents/
+!templates/.kimi/
+!templates/.kimi/**
+!templates/skills/agents/
+!templates/skills/agents/**
 
 # Environment / local config
 .env
