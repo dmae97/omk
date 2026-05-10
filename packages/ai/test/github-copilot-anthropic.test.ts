@@ -91,7 +91,7 @@ describe("Copilot Claude via Anthropic Messages", () => {
 		expect(Array.isArray(params.messages)).toBe(true);
 	});
 
-	it("includes interleaved-thinking beta when reasoning is enabled", async () => {
+	it("omits interleaved-thinking beta for adaptive-thinking models", async () => {
 		const model = getModel("github-copilot", "claude-sonnet-4.6");
 		const s = streamAnthropic(model, context, {
 			apiKey: "tid_copilot_session_test_token",
@@ -102,6 +102,6 @@ describe("Copilot Claude via Anthropic Messages", () => {
 		}
 
 		const headers = mockState.constructorOpts!.defaultHeaders as Record<string, string>;
-		expect(headers["anthropic-beta"]).toContain("interleaved-thinking-2025-05-14");
+		expect(headers["anthropic-beta"] ?? "").not.toContain("interleaved-thinking-2025-05-14");
 	});
 });
