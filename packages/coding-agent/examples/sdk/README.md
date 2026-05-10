@@ -12,7 +12,7 @@ The runtime example shows how to build a recreate function that closes over proc
 | `02-custom-model.ts` | Select model and thinking level |
 | `03-custom-prompt.ts` | Replace or modify system prompt |
 | `04-skills.ts` | Discover, filter, or replace skills |
-| `05-tools.ts` | Built-in tools, custom tools |
+| `05-tools.ts` | Built-in tool allowlists |
 | `06-extensions.ts` | Logging, blocking, result modification |
 | `07-context-files.ts` | AGENTS.md context files |
 | `08-slash-commands.ts` | File-based slash commands |
@@ -114,7 +114,7 @@ await session.prompt("Hello");
 | `agentDir` | `~/.pi/agent` | Config directory |
 | `model` | From settings/first available | Model to use |
 | `thinkingLevel` | From settings/"off" | off, low, medium, high |
-| `tools` | `["read", "grep", "find", "ls", "bash", "edit", "write"]` | Built-in tools |
+| `tools` | `["read", "bash", "edit", "write"]` built-ins | Allowlist tool names across built-in, extension, and custom tools |
 | `customTools` | `[]` | Additional tool definitions |
 | `resourceLoader` | DefaultResourceLoader | Resource loader for extensions, skills, prompts, themes |
 | `sessionManager` | `SessionManager.create(cwd)` | Persistence |
