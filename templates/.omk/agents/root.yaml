@@ -2,6 +2,10 @@ version: 1
 agent:
   extend: ./okabe.yaml  # Okabe-compatible base adds SendDMail/D-Mail checkpoints
   name: omk-root
+  tools:
+    - "kimi_cli.tools.agent:Agent"
+    - "kimi_cli.tools.web:SearchWeb"
+    - "kimi_cli.tools.web:FetchURL"
   system_prompt_path: ../prompts/root.md
   system_prompt_args:
     OMK_ROLE: "root-coordinator"

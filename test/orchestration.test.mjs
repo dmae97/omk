@@ -145,6 +145,38 @@ test("routing inventory discovers project skills and MCP without global scope", 
   }
 });
 
+test("routing inventory reports invalid MCP JSON without dropping valid project MCP", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-routing-invalid-mcp-"));
+  const previousRoot = process.env.OMK_PROJECT_ROOT;
+  const previousMcpScope = process.env.OMK_MCP_SCOPE;
+  process.env.OMK_PROJECT_ROOT = projectRoot;
+  process.env.OMK_MCP_SCOPE = "project";
+  resetRoutingInventoryCache();
+
+  try {
+    await mkdir(join(projectRoot, ".omk"), { recursive: true });
+    await mkdir(join(projectRoot, ".kimi"), { recursive: true });
+    await writeFile(join(projectRoot, ".omk", "mcp.json"), "{ invalid json", "utf-8");
+    await writeFile(join(projectRoot, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: { "omk-project": { command: "node" } } }), "utf-8");
+
+    const inventory = discoverRoutingInventory(projectRoot);
+
+    assert.equal(inventory.mcpServers.get("omk-project"), "project");
+    assert.equal(inventory.diagnostics.length, 1);
+    assert.deepEqual(inventory.diagnostics[0], {
+      kind: "mcp-config",
+      source: "project",
+      path: join(".omk", "mcp.json"),
+      message: "invalid JSON",
+    });
+  } finally {
+    resetRoutingInventoryCache();
+    restoreEnv("OMK_PROJECT_ROOT", previousRoot);
+    restoreEnv("OMK_MCP_SCOPE", previousMcpScope);
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
 test("project MCP scope excludes global Kimi MCP config", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-scope-"));
   const previousRoot = process.env.OMK_PROJECT_ROOT;

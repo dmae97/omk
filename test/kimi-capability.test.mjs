@@ -41,6 +41,15 @@ test("parseKimiCapabilityFlags detects extended flags when present", () => {
   assert.strictEqual(caps.swarmStatus, "unknown");
 });
 
+test("parseKimiCapabilityFlags does not treat the web subcommand as SearchWeb availability", () => {
+  const help = `
+ Commands:
+   web      Run Kimi Code CLI web interface.
+`;
+  const caps = parseKimiCapabilityFlags(help, "kimi, version 1.41.0");
+  assert.strictEqual(caps.webTools, false);
+});
+
 test("parseKimiCapabilityFlags extracts version from help fallback", () => {
   const caps = parseKimiCapabilityFlags("", "kimi, version 2.0.0");
   assert.strictEqual(caps.version, "2.0.0");

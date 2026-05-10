@@ -1,4 +1,4 @@
-import { join } from "path";
+import { basename, join } from "path";
 import { execSync } from "child_process";
 import { checkCommand, getKimiVersion, runShell } from "../util/shell.js";
 import { runOmkSafetySelfTest } from "../util/native-safety.js";
@@ -46,6 +46,12 @@ interface JsonFileDiagnostic {
   error?: string;
 }
 
+interface AgentToolDeclarations {
+  hasAgentTool: boolean;
+  hasSearchWeb: boolean;
+  hasFetchURL: boolean;
+}
+
 const SECRET_KEY_SUBSTRINGS = ["apikey", "token", "password", "secret", "authorization", "bearer", "key"];
 
 function isSecretKey(key: string): boolean {
@@ -68,6 +74,35 @@ function redactSecrets(obj: unknown): unknown {
   return result;
 }
 
+function isNpmLauncherCommand(command: string | undefined): boolean {
+  if (!command) return false;
+  const executable = command.trim().split(/\s+/)[0];
+  if (!executable) return false;
+  const name = basename(executable).toLowerCase();
+  return ["npm", "npx", "npm.cmd", "npx.cmd", "npm.exe", "npx.exe"].includes(name);
+}
+
+function isExpectedGlobalKimiFile(name: string): boolean {
+  const expected = new Set([
+    "AGENTS.md",
+    "config.toml",
+    "device_id",
+    "kimi.json",
+    "latest_version.txt",
+    "mcp.json",
+    "mcp.manifest.json",
+    "omk.memory.toml",
+    "setup.md",
+    "user.md",
+  ]);
+  return (
+    expected.has(name)
+    || /^config\.toml\.bak(?:[-_].*)?$/.test(name)
+    || /^mcp(?:\.manifest)?\.json\.bak(?:[-_].*)?$/.test(name)
+    || /\.json:Zone\.Identifier$/i.test(name)
+  );
+}
+
 async function inspectJsonFile(filePath: string): Promise<JsonFileDiagnostic> {
   if (!(await pathExists(filePath))) return { path: filePath, exists: false, valid: false };
 
@@ -78,6 +113,17 @@ async function inspectJsonFile(filePath: string): Promise<JsonFileDiagnostic> {
     const message = err instanceof Error ? err.message : String(err);
     return { path: filePath, exists: true, valid: false, error: `Invalid JSON: ${message}` };
   }
+}
+
+async function readAgentToolDeclarations(root: string): Promise<AgentToolDeclarations | null> {
+  const rootYamlPath = join(root, ".omk", "agents", "root.yaml");
+  if (!(await pathExists(rootYamlPath))) return null;
+  const rootYaml = await readTextFile(rootYamlPath, "");
+  return {
+    hasAgentTool: /\bAgent\b/.test(rootYaml),
+    hasSearchWeb: /\bSearchWeb\b/.test(rootYaml),
+    hasFetchURL: /\bFetchURL\b/.test(rootYaml),
+  };
 }
 
 export async function doctorCommand(options: { json?: boolean; soft?: boolean } = {}): Promise<void> {
@@ -500,6 +546,8 @@ async function rustSafetyNativeCheck(root: string): Promise<CheckResult> {
 async function kimiChecks(root: string): Promise<CheckResult[]> {
   const results: CheckResult[] = [];
   const kimiExists = await checkCommand("kimi");
+  const agentTools = await readAgentToolDeclarations(root);
+  const agentYamlDeclaresWebTools = Boolean(agentTools?.hasSearchWeb && agentTools.hasFetchURL);
 
   if (kimiExists) {
     const version = await getKimiVersion();
@@ -569,10 +617,15 @@ async function kimiChecks(root: string): Promise<CheckResult[]> {
       message: caps.agentFile ? "--agent-file supported" : "--agent-file not detected — update Kimi CLI",
     });
 
+    const webToolStatus = caps.webTools ? "ok" : agentYamlDeclaresWebTools ? "info" : "warn";
     results.push({
       name: "Kimi Web Tools",
-      status: caps.webTools ? "ok" : "warn",
-      message: caps.webTools ? "SearchWeb / FetchURL available" : "web search tools not detected — may be unavailable",
+      status: webToolStatus,
+      message: caps.webTools
+        ? "SearchWeb / FetchURL available"
+        : agentYamlDeclaresWebTools
+          ? "web tool declarations present; CLI help does not expose tool availability"
+          : "web search tools not detected — may be unavailable",
     });
 
     results.push({
@@ -587,12 +640,8 @@ async function kimiChecks(root: string): Promise<CheckResult[]> {
   }
 
   // Agent YAML tools check
-  const rootYamlPath = join(root, ".omk", "agents", "root.yaml");
-  if (await pathExists(rootYamlPath)) {
-    const rootYaml = await readTextFile(rootYamlPath, "");
-    const hasAgentTool = /\bAgent\b/.test(rootYaml);
-    const hasSearchWeb = /\bSearchWeb\b/.test(rootYaml);
-    const hasFetchURL = /\bFetchURL\b/.test(rootYaml);
+  if (agentTools) {
+    const { hasAgentTool, hasSearchWeb, hasFetchURL } = agentTools;
     const agentToolStatus = hasAgentTool && hasSearchWeb && hasFetchURL ? "ok" : "warn";
     results.push({
       name: "Agent YAML Tools",
@@ -825,7 +874,7 @@ async function mcpSkillsChecks(root: string): Promise<CheckResult[]> {
     for (const [name, cfg] of Object.entries(servers)) {
       if (cfg.type === "stdio" || !cfg.type) {
         stdioMcpServers.push(name);
-        if (cfg.command?.includes("npx") || cfg.command?.includes("npm")) {
+        if (isNpmLauncherCommand(cfg.command)) {
           npxMcpServers.push(name);
         }
       }
@@ -918,7 +967,7 @@ async function memoryChecks(): Promise<CheckResult[]> {
     try {
       const fs = await import("fs/promises");
       const entries = await fs.readdir(globalKimiDir, { withFileTypes: true });
-      const unexpected = entries.filter((e) => e.isFile() && !e.name.match(/^(config\.toml|mcp\.json|omk\.memory\.toml)$/)).map((e) => e.name);
+      const unexpected = entries.filter((e) => e.isFile() && !isExpectedGlobalKimiFile(e.name)).map((e) => e.name);
       if (unexpected.length > 0) globalPollution = true;
     } catch { /* ignore */ }
   }

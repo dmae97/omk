@@ -1,5 +1,5 @@
-import { access, constants } from "fs/promises";
-import { join } from "path";
+import { access, constants, realpath } from "fs/promises";
+import { isAbsolute, relative, resolve } from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import type { GoalEvidence, GoalSpec, SuccessCriterion, ArtifactEvidence } from "../contracts/goal.js";
@@ -23,6 +23,42 @@ interface ValidatedCommand {
 interface BlockedCommand {
   ok: false;
   reason: string;
+}
+
+interface ContainedPath {
+  ok: true;
+  path: string;
+}
+
+interface BlockedPath {
+  ok: false;
+  reason: string;
+}
+
+function resolveContainedArtifactPath(root: string, artifactPath: string): ContainedPath | BlockedPath {
+  const trimmed = artifactPath.trim();
+  if (!trimmed) {
+    return { ok: false, reason: "empty artifact path" };
+  }
+  if (isAbsolute(trimmed)) {
+    return { ok: false, reason: "absolute artifact paths are not allowed" };
+  }
+  const rootPath = resolve(root);
+  const fullPath = resolve(rootPath, trimmed);
+  const rel = relative(rootPath, fullPath);
+  if (rel === ".." || rel.startsWith("../") || rel.startsWith("..\\") || isAbsolute(rel)) {
+    return { ok: false, reason: "artifact path must stay inside the project root" };
+  }
+  return { ok: true, path: fullPath };
+}
+
+async function checkRealpathContainment(root: string, fullPath: string): Promise<BlockedPath | { ok: true }> {
+  const [rootReal, targetReal] = await Promise.all([realpath(root), realpath(fullPath)]);
+  const rel = relative(rootReal, targetReal);
+  if (rel === ".." || rel.startsWith("../") || rel.startsWith("..\\") || isAbsolute(rel)) {
+    return { ok: false, reason: "artifact realpath escapes the project root" };
+  }
+  return { ok: true };
 }
 
 function validateArtifactCommand(path: string): ValidatedCommand | BlockedCommand {
@@ -118,8 +154,16 @@ async function checkArtifactGate(
 
   switch (artifact.gate) {
     case "file-exists": {
+      const resolved = resolveContainedArtifactPath(root, artifact.path);
+      if (!resolved.ok) {
+        return { passed: false, message: `File blocked: ${artifact.path} — ${resolved.reason}` };
+      }
       try {
-        await access(join(root, artifact.path), constants.F_OK);
+        await access(resolved.path, constants.F_OK);
+        const contained = await checkRealpathContainment(root, resolved.path);
+        if (!contained.ok) {
+          return { passed: false, message: `File blocked: ${artifact.path} — ${contained.reason}` };
+        }
         return { passed: true, message: `File exists: ${artifact.path}` };
       } catch {
         return { passed: false, message: `File missing: ${artifact.path}` };
@@ -265,8 +309,28 @@ export async function checkArtifactEvidence(
     let message = providedEvidence.message;
 
     if (providedEvidence.filePath) {
+      const resolved = resolveContainedArtifactPath(root, providedEvidence.filePath);
+      if (!resolved.ok) {
+        return {
+          ...providedEvidence,
+          artifactName: artifact.name,
+          passed: false,
+          message: `Artifact file blocked: ${providedEvidence.filePath} — ${resolved.reason}`,
+          checkedAt,
+        };
+      }
       try {
-        await access(join(root, providedEvidence.filePath), constants.F_OK);
+        await access(resolved.path, constants.F_OK);
+        const contained = await checkRealpathContainment(root, resolved.path);
+        if (!contained.ok) {
+          return {
+            ...providedEvidence,
+            artifactName: artifact.name,
+            passed: false,
+            message: `Artifact file blocked: ${providedEvidence.filePath} — ${contained.reason}`,
+            checkedAt,
+          };
+        }
         passed = true;
         message = `Artifact file verified: ${providedEvidence.filePath}`;
       } catch {

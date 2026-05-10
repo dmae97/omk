@@ -4,14 +4,17 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { normalizeGoal, updateGoalStatus } from "../dist/goal/intake.js";
+import { createGoalSpec, normalizeGoal, updateGoalStatus } from "../dist/goal/intake.js";
 import { createGoalPersister } from "../dist/goal/persistence.js";
 import { compileGoalToDagNodes, attachGoalToRunState } from "../dist/goal/compiler.js";
 import { evaluateGoalProgressEnsemble, generateNextPrompt } from "../dist/goal/control-loop.js";
 import { scoreGoal } from "../dist/goal/scoring.js";
+import { checkGoalEvidence } from "../dist/goal/evidence.js";
+import { evaluateMissingCriteria, suggestNextAction } from "../dist/goal/eval-criteria.js";
 import { createRoutedRunState } from "../dist/orchestration/run-state.js";
 import { createDag } from "../dist/orchestration/dag.js";
-import { goalCreateCommand, goalPlanCommand } from "../dist/commands/goal.js";
+import { goalCloseCommand, goalCreateCommand, goalPlanCommand } from "../dist/commands/goal.js";
+import { CliError } from "../dist/util/cli-contract.js";
 
 async function tempGoalDir() {
   return mkdtemp(join(tmpdir(), "omk-goal-"));
@@ -43,6 +46,44 @@ test("normalizeGoal accepts explicit title and objective", () => {
   assert.equal(spec.title, "My Custom Title");
   assert.equal(spec.objective, "Custom objective text");
   assert.equal(spec.riskLevel, "low");
+});
+
+test("createGoalSpec parses structured English and Korean goal sections", () => {
+  const spec = createGoalSpec(`
+Implement goal automation
+
+Success Criteria:
+1. Planner JSON is parseable
+2. Verification suggests the next action
+
+제약:
+- 절대 시크릿을 출력하지 않는다
+
+비목표:
+- 배포는 하지 않는다
+
+리스크:
+- stale evidence can mislead continuation
+
+산출물:
+- Plan file: \`docs/goal-plan.md\`
+`);
+
+  assert.deepEqual(spec.successCriteria.map((c) => c.description), [
+    "Planner JSON is parseable",
+    "Verification suggests the next action",
+  ]);
+  assert.equal(spec.constraints[0].description, "절대 시크릿을 출력하지 않는다");
+  assert.equal(spec.nonGoals[0], "배포는 하지 않는다");
+  assert.equal(spec.risks[0].description, "stale evidence can mislead continuation");
+  assert.deepEqual(spec.expectedArtifacts[0], { name: "Plan file", path: "docs/goal-plan.md" });
+});
+
+test("createGoalSpec falls back to inferred criteria when no criteria section exists", () => {
+  const spec = createGoalSpec("Add a strict goal planner JSON contract");
+
+  assert.ok(spec.successCriteria.length > 0);
+  assert.ok(spec.successCriteria.some((criterion) => criterion.inferred));
 });
 
 test("updateGoalStatus updates status and timestamps", () => {
@@ -184,6 +225,42 @@ test("goal plan writes actionable planner DAG instead of placeholder", async () 
   }
 });
 
+test("goal plan json emits a machine-readable planner contract", async () => {
+  const root = await tempGoalDir();
+  const previousRoot = process.env.OMK_PROJECT_ROOT;
+  const previousAlpha = process.env.OMK_GOAL_ALPHA;
+  process.env.OMK_PROJECT_ROOT = root;
+  process.env.OMK_GOAL_ALPHA = "1";
+  const output = [];
+  const originalLog = console.log;
+  console.log = (...args) => output.push(args.join(" "));
+
+  try {
+    await goalCreateCommand("Build a JSON goal plan", {
+      title: "JSON plan",
+      objective: "Create a machine-readable plan output",
+      risk: "low",
+    });
+    const goalsDir = join(root, ".omk", "goals");
+    const goalIds = await (await import("node:fs/promises")).readdir(goalsDir);
+    output.length = 0;
+    await goalPlanCommand(goalIds[0], { json: true });
+    const parsed = JSON.parse(output[0]);
+
+    assert.equal(parsed.goalId, goalIds[0]);
+    assert.equal(parsed.status, "planned");
+    assert.equal(parsed.planner, "goal-coordinator");
+    assert.ok(parsed.nodes.some((node) => node.id === "goal-verify"));
+  } finally {
+    console.log = originalLog;
+    if (previousRoot === undefined) delete process.env.OMK_PROJECT_ROOT;
+    else process.env.OMK_PROJECT_ROOT = previousRoot;
+    if (previousAlpha === undefined) delete process.env.OMK_GOAL_ALPHA;
+    else process.env.OMK_GOAL_ALPHA = previousAlpha;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("compileGoalToDagNodes verify depends on coordinator when no artifacts", () => {
   const spec = normalizeGoal({ rawPrompt: "Simple task" });
   const nodes = compileGoalToDagNodes(spec);
@@ -271,6 +348,78 @@ test("scoreGoal uses latest evidence for duplicate criterion IDs", () => {
   assert.equal(score.overall, "fail");
   assert.equal(score.requiredPassed, 0);
   assert.equal(score.optionalScore, 1);
+});
+
+test("goal continuation helpers use latest evidence for missing criteria and artifacts", () => {
+  const spec = normalizeGoal({ rawPrompt: "Score me" });
+  spec.successCriteria = [
+    { id: "c1", description: "Must pass", requirement: "required", weight: 1, inferred: false },
+  ];
+  spec.expectedArtifacts = [{ name: "report", path: "report.md", gate: "file-exists" }];
+
+  const evidence = [
+    { criterionId: "c1", passed: false, checkedAt: "2026-05-08T00:00:00.000Z" },
+    { criterionId: "artifact:report", passed: false, checkedAt: "2026-05-08T00:00:00.000Z" },
+    { criterionId: "c1", passed: true, checkedAt: "2026-05-08T00:01:00.000Z" },
+    { criterionId: "artifact:report", passed: true, checkedAt: "2026-05-08T00:01:00.000Z" },
+  ];
+
+  assert.deepEqual(evaluateMissingCriteria(spec, evidence), []);
+  assert.equal(suggestNextAction(spec, evidence).type, "close");
+});
+
+test("goal artifact evidence blocks traversal outside the project root", async () => {
+  const root = await tempGoalDir();
+  const spec = normalizeGoal({ rawPrompt: "Artifact containment" });
+  spec.expectedArtifacts = [
+    { name: "outside", path: "../outside.txt", gate: "file-exists" },
+  ];
+
+  try {
+    const evidence = await checkGoalEvidence(spec, {
+      root,
+      runState: { schemaVersion: 1, runId: "none", nodes: [], startedAt: new Date().toISOString() },
+    });
+    const artifactEvidence = evidence.find((entry) => entry.criterionId === "artifact:outside");
+
+    assert.equal(artifactEvidence?.passed, false);
+    assert.match(artifactEvidence?.message ?? "", /blocked|inside the project root/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("goal close rejects without process.exit when evidence is missing", async () => {
+  const root = await tempGoalDir();
+  const previousRoot = process.env.OMK_PROJECT_ROOT;
+  const previousAlpha = process.env.OMK_GOAL_ALPHA;
+  const originalError = console.error;
+  const originalExit = process.exit;
+  process.env.OMK_PROJECT_ROOT = root;
+  process.env.OMK_GOAL_ALPHA = "1";
+  console.error = () => {};
+  process.exit = (code) => {
+    throw new Error(`process.exit called with ${code}`);
+  };
+
+  try {
+    const persister = createGoalPersister(join(root, ".omk", "goals"));
+    const spec = normalizeGoal({ rawPrompt: "Close me without evidence" });
+    await persister.save(spec);
+
+    await assert.rejects(
+      () => goalCloseCommand(spec.goalId, {}),
+      (err) => err instanceof CliError && err.name === "VerificationError"
+    );
+  } finally {
+    console.error = originalError;
+    process.exit = originalExit;
+    if (previousRoot === undefined) delete process.env.OMK_PROJECT_ROOT;
+    else process.env.OMK_PROJECT_ROOT = previousRoot;
+    if (previousAlpha === undefined) delete process.env.OMK_GOAL_ALPHA;
+    else process.env.OMK_GOAL_ALPHA = previousAlpha;
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("old RunState without schemaVersion or goalId is tolerated", () => {

@@ -53,9 +53,17 @@ export interface RoutingInventory {
   mcpServers: Map<string, RouteSource>;
   hooks: Map<string, RouteSource>;
   tools: Set<string>;
+  diagnostics: RoutingDiagnostic[];
   skillsScope: "project" | "all" | "none";
   mcpScope: "project" | "all" | "none";
   hooksScope: "project" | "all" | "none";
+}
+
+export interface RoutingDiagnostic {
+  kind: "mcp-config";
+  source: "project" | "global";
+  path: string;
+  message: string;
 }
 
 let inventoryCache: { key: string; value: RoutingInventory } | undefined;
@@ -328,7 +336,12 @@ export function selectTaskRouting(input: RoutingInput): DagNodeRouting {
   const readOnly = inferReadOnly(input, text);
   const evidenceRequired = inferEvidenceRequired(input, text);
   const contextBudget = inferContextBudget(input, readOnly, evidenceRequired);
-  const rejected: Array<{ id: string; reason: string }> = [];
+  const rejected: Array<{ id: string; reason: string }> = inventory.diagnostics
+    .slice(0, 3)
+    .map((diagnostic) => ({
+      id: `mcp-config:${diagnostic.source}`,
+      reason: `${diagnostic.path}: ${diagnostic.message}`,
+    }));
 
   const scored = routeCandidates(inventory).flatMap((candidate): ScoredRoute[] => {
     const rejectReason = rejectionReason(candidate, readOnly, contextBudget, inventory);
@@ -476,7 +489,7 @@ export function discoverRoutingInventory(projectRoot = getRoutingProjectRoot()):
     if (!hooks.has(hook.name)) hooks.set(hook.name, hook.source);
   }
 
-  const value = { skills, mcpServers, hooks, tools, skillsScope, mcpScope, hooksScope };
+  const value = { skills, mcpServers, hooks, tools, diagnostics: mergedMcp.diagnostics, skillsScope, mcpScope, hooksScope };
   inventoryCache = { key, value };
   return value;
 }
@@ -733,18 +746,20 @@ export function redactMcpConfig(cfg: unknown): unknown {
 function loadMergedMcpConfigSync(
   projectRoot: string,
   scope: "project" | "all" | "none"
-): { servers: Record<string, unknown>; sources: Map<string, "project" | "global"> } {
+): { servers: Record<string, unknown>; sources: Map<string, "project" | "global">; diagnostics: RoutingDiagnostic[] } {
   const root = resolve(projectRoot);
   const servers: Record<string, unknown> = {};
   const sources = new Map<string, "project" | "global">();
+  const diagnostics: RoutingDiagnostic[] = [];
 
   if (scope === "none") {
-    return { servers, sources };
+    return { servers, sources, diagnostics };
   }
 
   const globalFiles = scope === "all" ? [join(getRoutingUserHome(), ".kimi", "mcp.json")] : [];
 
   for (const path of globalFiles) {
+    if (!existsSync(path)) continue;
     try {
       const parsed = JSON.parse(readFileSync(path, "utf-8")) as { mcpServers?: Record<string, unknown> };
       for (const [name, cfg] of Object.entries(parsed.mcpServers ?? {})) {
@@ -753,8 +768,8 @@ function loadMergedMcpConfigSync(
           sources.set(name, "global");
         }
       }
-    } catch {
-      // ignore missing or invalid global config
+    } catch (err) {
+      diagnostics.push(createMcpConfigDiagnostic(root, "global", path, err));
     }
   }
 
@@ -764,6 +779,7 @@ function loadMergedMcpConfigSync(
   ];
 
   for (const path of projectFiles) {
+    if (!existsSync(path)) continue;
     try {
       const parsed = JSON.parse(readFileSync(path, "utf-8")) as { mcpServers?: Record<string, unknown> };
       for (const [name, cfg] of Object.entries(parsed.mcpServers ?? {})) {
@@ -776,19 +792,51 @@ function loadMergedMcpConfigSync(
           sources.set(name, "project");
         }
       }
-    } catch {
-      // ignore missing or invalid project config
+    } catch (err) {
+      diagnostics.push(createMcpConfigDiagnostic(root, "project", path, err));
     }
   }
 
-  return { servers, sources };
+  return { servers, sources, diagnostics };
 }
 
 export function loadMergedMcpConfig(
   projectRoot: string,
   scope: "project" | "all" | "none"
-): Promise<{ servers: Record<string, unknown>; sources: Map<string, "project" | "global"> }> {
+): Promise<{ servers: Record<string, unknown>; sources: Map<string, "project" | "global">; diagnostics: RoutingDiagnostic[] }> {
   return Promise.resolve(loadMergedMcpConfigSync(projectRoot, scope));
+}
+
+function createMcpConfigDiagnostic(
+  root: string,
+  source: "project" | "global",
+  path: string,
+  err: unknown
+): RoutingDiagnostic {
+  return {
+    kind: "mcp-config",
+    source,
+    path: formatRoutingPath(root, path),
+    message: mcpConfigErrorMessage(err),
+  };
+}
+
+function formatRoutingPath(root: string, path: string): string {
+  const resolvedPath = resolve(path);
+  const resolvedRoot = resolve(root);
+  if (resolvedPath === resolvedRoot) return ".";
+  if (resolvedPath.startsWith(`${resolvedRoot}/`)) return resolvedPath.slice(resolvedRoot.length + 1);
+  const home = getRoutingUserHome();
+  if (resolvedPath.startsWith(`${home}/`)) return `~/${resolvedPath.slice(home.length + 1)}`;
+  return resolvedPath;
+}
+
+function mcpConfigErrorMessage(err: unknown): string {
+  if (err instanceof SyntaxError) return "invalid JSON";
+  if (err && typeof err === "object" && "code" in err && typeof (err as { code?: unknown }).code === "string") {
+    return `unreadable MCP config (${(err as { code: string }).code})`;
+  }
+  return "invalid MCP config";
 }
 
 function readSkillNames(dir: string): string[] {

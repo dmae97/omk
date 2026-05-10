@@ -57,6 +57,42 @@ function cleanStaleArtifacts() {
   }
 }
 
+function listSourceFiles(dir) {
+  const files = [];
+  if (!existsSync(dir)) return files;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...listSourceFiles(path));
+    } else if ((entry.name.endsWith(".ts") || entry.name.endsWith(".tsx")) && !entry.name.endsWith(".d.ts")) {
+      files.push(path);
+    }
+  }
+  return files;
+}
+
+function expectedDistPath(sourcePath) {
+  const relative = normalize(sourcePath).slice(`src${sep}`.length);
+  return join("dist", relative.replace(/\.(tsx|ts)$/u, ".js"));
+}
+
+function checkDistFreshness() {
+  if (process.env.OMK_SKIP_DIST_FRESHNESS === "1") return undefined;
+  if (!existsSync("src")) return undefined;
+  for (const source of listSourceFiles("src")) {
+    const dist = expectedDistPath(source);
+    if (!existsSync(dist)) {
+      return `dist artifact missing for ${source}: expected ${dist}; run npm run build:clean before npm test`;
+    }
+    const sourceMtime = statSync(source).mtimeMs;
+    const distMtime = statSync(dist).mtimeMs;
+    if (sourceMtime > distMtime + 1000) {
+      return `dist is stale: ${source} is newer than ${dist}; run npm run build:clean before npm test`;
+    }
+  }
+  return undefined;
+}
+
 function classifyResult(result) {
   if (result.error?.code === "ETIMEDOUT") return "timeout";
   if (result.signal) return "signal";
@@ -154,13 +190,28 @@ function filterTestFiles(files, options) {
 }
 
 function countMcpServers(configPath) {
+  return inspectMcpConfig(configPath).servers;
+}
+
+function inspectMcpConfig(configPath) {
+  if (!existsSync(configPath)) {
+    return { servers: [], diagnostics: [] };
+  }
   try {
     const raw = JSON.parse(readFileSync(configPath, "utf-8"));
     const servers = raw?.mcpServers ?? raw?.servers;
-    if (!servers || typeof servers !== "object" || Array.isArray(servers)) return [];
-    return Object.keys(servers);
-  } catch {
-    return [];
+    if (!servers || typeof servers !== "object" || Array.isArray(servers)) return { servers: [], diagnostics: [] };
+    return { servers: Object.keys(servers), diagnostics: [] };
+  } catch (err) {
+    const code = err && typeof err === "object" && "code" in err ? String(err.code) : undefined;
+    return {
+      servers: [],
+      diagnostics: [{
+        source: "mcp-config",
+        path: configPath,
+        message: code ? `unreadable MCP config (${code})` : "invalid MCP config JSON",
+      }],
+    };
   }
 }
 
@@ -208,7 +259,9 @@ function collectHarnessResources() {
   const mcpConfigPaths = [join(".omk", "mcp.json"), join(".kimi", "mcp.json")];
   const skillDirs = [join(".agents", "skills"), join(".kimi", "skills"), join(".omk", "skills")];
   const hookDirs = [join(".omk", "hooks"), join(".kimi", "hooks")];
-  const mcpServers = new Set(mcpConfigPaths.flatMap(countMcpServers));
+  const mcpInspections = mcpConfigPaths.map(inspectMcpConfig);
+  const mcpServers = new Set(mcpInspections.flatMap((inspection) => inspection.servers));
+  const mcpDiagnostics = mcpInspections.flatMap((inspection) => inspection.diagnostics);
   const skills = new Set(skillDirs.flatMap(countSkillDirs));
   const hooks = new Set(hookDirs.flatMap(countHookFiles));
   const hookEvents = new Set([join(".omk", "kimi.config.toml"), join(".kimi", "settings.toml")].flatMap(countHookEvents));
@@ -221,6 +274,11 @@ function collectHarnessResources() {
       mcpConfigs: mcpConfigPaths.filter(existsSync).length,
       skillDirs: existingDirs(skillDirs),
       hookDirs: existingDirs(hookDirs),
+    },
+    diagnostics: {
+      mcpConfigs: mcpDiagnostics.length,
+      invalidMcpConfigs: mcpDiagnostics.filter((item) => item.message.includes("invalid")).length,
+      unreadableMcpConfigs: mcpDiagnostics.filter((item) => item.message.includes("unreadable")).length,
     },
   };
 }
@@ -235,6 +293,15 @@ cleanStaleArtifacts();
 if (!existsSync(TEST_DIR)) {
   const summary = baseSummary(startedAt, startedMs, [], options);
   summary.error = `Test directory not found: ${TEST_DIR}`;
+  writeSummary(options.summaryPath ?? SUMMARY_LOG, summary);
+  console.error(summary.error);
+  process.exit(1);
+}
+
+const distFreshnessError = checkDistFreshness();
+if (distFreshnessError) {
+  const summary = baseSummary(startedAt, startedMs, discoverTestFiles(), options);
+  summary.error = distFreshnessError;
   writeSummary(options.summaryPath ?? SUMMARY_LOG, summary);
   console.error(summary.error);
   process.exit(1);

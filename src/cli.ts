@@ -1118,10 +1118,11 @@ goal
 goal
   .command("plan <goal-id>")
   .description(t("cmd.goalPlanDesc"))
-  .action(async (goalId) => {
+  .option("--json", t("cmd.goalJsonOption"))
+  .action(async (goalId, options) => {
     const { goalPlanCommand } = await import("./commands/goal.js");
     try {
-      await goalPlanCommand(goalId);
+      await goalPlanCommand(goalId, options);
     } catch (err) {
       if (err instanceof CliError) {
         if (process.exitCode === undefined) process.exitCode = err.exitCode;
@@ -1168,6 +1169,7 @@ goal
   .description(t("cmd.goalCloseDesc"))
   .option("--force", t("cmd.goalForceOption"))
   .option("--reason <text>", t("cmd.goalReasonOption"))
+  .option("--json", t("cmd.goalJsonOption"))
   .action(async (goalId, options) => {
     const { goalCloseCommand } = await import("./commands/goal.js");
     try {
@@ -1184,6 +1186,7 @@ goal
   .command("block <goal-id>")
   .description(t("cmd.goalBlockDesc"))
   .requiredOption("--reason <text>", t("cmd.goalReasonOption"))
+  .option("--json", t("cmd.goalJsonOption"))
   .action(async (goalId, options) => {
     const { goalBlockCommand } = await import("./commands/goal.js");
     try {

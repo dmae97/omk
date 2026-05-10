@@ -196,7 +196,7 @@ export async function dagReplayCommand(
   const flowMatch = planText.match(/Flow:\s*(.+)/m);
   const flow = flowMatch ? flowMatch[1].trim() : null;
   const workersMatch = planText.match(/Workers:\s*(\d+)/m);
-  const workerCount = workersMatch ? Math.max(1, parseInt(workersMatch[1], 10)) : 1;
+  const workerCount = normalizeReplayWorkerCount(workersMatch?.[1]);
 
   // Determine which nodes to reset
   const nodesToReset = new Set<string>();
@@ -422,6 +422,13 @@ export async function dagReplayCommand(
 }
 
 // ── Helpers ──
+
+export function normalizeReplayWorkerCount(value: string | undefined): number {
+  if (!value || !/^\d+$/.test(value)) return 1;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return 1;
+  return Math.min(parsed, 6);
+}
 
 async function resolveLatestRunId(runsDir: string): Promise<string | null> {
   try {

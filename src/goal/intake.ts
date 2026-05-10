@@ -130,20 +130,20 @@ export function normalizeGoalPrompt(rawPrompt: string): ParsedGoalPrompt {
 
   // Extract sections by common headers or labels
   const successCriteria = extractListSection(rawPrompt, [
-    /(?:^|\n)(?:#{1,3}\s*)?(?:success\s*criteria|acceptance\s*criteria|criteria)(?:\s*[:-])?\s*\n?/i,
-    /(?:^|\n)(?:success\s*criteria|acceptance\s*criteria):\s*/i,
+    /(?:^|\n)(?:#{1,3}\s*)?(?:success\s*criteria|acceptance\s*criteria|criteria|성공\s*기준|완료\s*기준|수용\s*기준)(?:\s*[:-])?\s*\n?/i,
+    /(?:^|\n)(?:success\s*criteria|acceptance\s*criteria|성공\s*기준|완료\s*기준|수용\s*기준):\s*/i,
   ]);
 
   const nonGoals = extractListSection(rawPrompt, [
-    /(?:^|\n)(?:#{1,3}\s*)?(?:non[-\s]?goals|out of scope|exclusions)(?:\s*[:-])?\s*\n?/i,
+    /(?:^|\n)(?:#{1,3}\s*)?(?:non[-\s]?goals|out of scope|exclusions|비목표|범위\s*제외|제외\s*사항)(?:\s*[:-])?\s*\n?/i,
   ]);
 
   const risks = extractListSection(rawPrompt, [
-    /(?:^|\n)(?:#{1,3}\s*)?(?:risks|risk factors|concerns)(?:\s*[:-])?\s*\n?/i,
+    /(?:^|\n)(?:#{1,3}\s*)?(?:risks|risk factors|concerns|위험|리스크|우려\s*사항)(?:\s*[:-])?\s*\n?/i,
   ]);
 
   const constraints = extractListSection(rawPrompt, [
-    /(?:^|\n)(?:#{1,3}\s*)?(?:constraints|limitations|restrictions)(?:\s*[:-])?\s*\n?/i,
+    /(?:^|\n)(?:#{1,3}\s*)?(?:constraints|limitations|restrictions|제약|제한|필수\s*조건)(?:\s*[:-])?\s*\n?/i,
   ]);
 
   const expectedArtifacts = extractArtifactSection(rawPrompt);
@@ -172,7 +172,7 @@ function extractListSection(text: string, headerPatterns: RegExp[]): string[] {
       let m: RegExpExecArray | null;
       while ((m = lineRe.exec(remainder)) !== null) {
         const line = m[0];
-        if (/^#{1,3}\s/.test(line) || (lines.length > 0 && /^\s*$/.test(line) && !/^\s*[-*d]/.test(remainder.slice(lineRe.lastIndex)))) {
+        if (/^#{1,3}\s/.test(line) || (lines.length > 0 && /^\s*$/.test(line) && !/^\s*(?:[-*]|\d+[.)])/.test(remainder.slice(lineRe.lastIndex)))) {
           break;
         }
         const trimmed = line.trim();
@@ -181,7 +181,7 @@ function extractListSection(text: string, headerPatterns: RegExp[]): string[] {
         if (lines.length > 0 && /^[A-Z][a-zA-Z\s]+[:-]\s*$/.test(trimmed)) {
           break;
         }
-        const listItem = trimmed.replace(/^[-*d]+[.)]?\s*/, "").trim();
+        const listItem = trimmed.replace(/^(?:[-*]|\d+[.)])\s*/, "").trim();
         if (listItem.length > 0) {
           lines.push(listItem);
         }
@@ -196,7 +196,7 @@ function extractListSection(text: string, headerPatterns: RegExp[]): string[] {
 function extractArtifactSection(text: string): Array<{ name: string; path?: string }> {
   const artifacts: Array<{ name: string; path?: string }> = [];
   const headerPatterns = [
-    /(?:^|\n)(?:#{1,3}\s*)?(?:artifacts|expected artifacts|deliverables|outputs)(?:\s*[:-])?\s*\n?/i,
+    /(?:^|\n)(?:#{1,3}\s*)?(?:artifacts|expected artifacts|deliverables|outputs|산출물|결과물|출력)(?:\s*[:-])?\s*\n?/i,
   ];
   for (const pattern of headerPatterns) {
     const match = pattern.exec(text);
@@ -212,7 +212,7 @@ function extractArtifactSection(text: string): Array<{ name: string; path?: stri
         const trimmed = line.trim();
         if (trimmed.length === 0) continue;
         if (/^[A-Z][a-zA-Z\s]+[:-]\s*$/.test(trimmed)) break;
-        const cleaned = trimmed.replace(/^[-*d]+[.)]?\s*/, "").trim();
+        const cleaned = trimmed.replace(/^(?:[-*]|\d+[.)])\s*/, "").trim();
         // Try to extract a file path like `src/foo.ts` or `path/to/file.md`
         const pathMatch = cleaned.match(/`([^`]+\.[a-zA-Z0-9]+)`/);
         const name = cleaned.split(/[:-]/)[0].trim();
@@ -263,17 +263,20 @@ export function normalizeGoal(input: NormalizedGoalInput): GoalSpec {
  */
 export function createGoalSpec(rawPrompt: string, overrides?: Partial<Omit<NormalizedGoalInput, "rawPrompt">>): GoalSpec {
   const parsed = normalizeGoalPrompt(rawPrompt);
+  const parsedSuccessCriteria = parsed.successCriteria.length > 0
+    ? parsed.successCriteria.map((desc, i) => ({
+      id: `criterion-${i + 1}`,
+      description: desc,
+      requirement: i === 0 ? "required" as const : "optional" as const,
+      weight: i === 0 ? 1.0 : 0.5,
+      inferred: false,
+    }))
+    : undefined;
   return normalizeGoal({
     rawPrompt,
     title: overrides?.title ?? deriveTitle(rawPrompt),
     objective: overrides?.objective ?? parsed.objective,
-    successCriteria: overrides?.successCriteria ?? parsed.successCriteria.map((desc, i) => ({
-      id: `criterion-${i + 1}`,
-      description: desc,
-      requirement: i === 0 ? "required" : "optional",
-      weight: i === 0 ? 1.0 : 0.5,
-      inferred: false,
-    })),
+    successCriteria: overrides?.successCriteria ?? parsedSuccessCriteria,
     constraints: overrides?.constraints ?? parsed.constraints,
     nonGoals: overrides?.nonGoals ?? parsed.nonGoals,
     risks: overrides?.risks ?? parsed.risks.map((desc, i) => ({

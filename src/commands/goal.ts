@@ -5,11 +5,11 @@ import { style, header, status, label } from "../util/theme.js";
 import { NotFoundError, VerificationError, emitError } from "../util/cli-contract.js";
 
 import { createGoalPersister } from "../goal/persistence.js";
-import { normalizeGoal, updateGoalStatus } from "../goal/intake.js";
+import { createGoalSpec, updateGoalStatus } from "../goal/intake.js";
 import { checkGoalEvidence } from "../goal/evidence.js";
 import { scoreGoal } from "../goal/scoring.js";
 import { createStatePersister } from "../orchestration/state-persister.js";
-import { generateNextPrompt } from "../goal/control-loop.js";
+import { evaluateGoalProgressIncremental, generateNextPrompt } from "../goal/control-loop.js";
 import { orchestratePrompt } from "../orchestration/orchestrate-prompt.js";
 import { compileGoalToDagNodes } from "../goal/compiler.js";
 import type { GoalSpec, GoalEvidence } from "../contracts/goal.js";
@@ -101,8 +101,7 @@ export async function goalCreateCommand(
   const root = getProjectRoot();
   await mkdir(join(root, ".omk", "goals"), { recursive: true });
 
-  const spec = normalizeGoal({
-    rawPrompt,
+  const spec = createGoalSpec(rawPrompt, {
     title: options.title,
     objective: options.objective,
     riskLevel: options.risk as GoalSpec["riskLevel"] | undefined,
@@ -179,14 +178,14 @@ export async function goalShowCommand(goalId: string, options: { json?: boolean 
   console.log(renderGoalDetail(spec));
 }
 
-export async function goalPlanCommand(goalId: string): Promise<void> {
-  printAlphaWarning();
+export async function goalPlanCommand(goalId: string, options: { json?: boolean } = {}): Promise<void> {
+  printAlphaWarning(options.json);
   const persister = createPersister();
   const spec = await persister.load(goalId);
 
   if (!spec) {
     const msg = `Goal not found: ${goalId}`;
-    console.error(status.error(msg));
+    emitError(msg, Boolean(options.json));
     throw new NotFoundError(msg);
   }
 
@@ -202,6 +201,23 @@ export async function goalPlanCommand(goalId: string): Promise<void> {
   const mirrorDir = join(getGoalBasePath(), goalId);
   await mkdir(mirrorDir, { recursive: true });
   await writeFile(join(mirrorDir, "plan.md"), renderGoalPlan(updated, nodes), "utf-8");
+
+  if (options.json) {
+    console.log(JSON.stringify({
+      goalId: updated.goalId,
+      status: updated.status,
+      planRevision: updated.planRevision,
+      planner: "goal-coordinator",
+      planPath: join(mirrorDir, "plan.md"),
+      nodes: nodes.map((node) => ({
+        id: node.id,
+        role: node.role,
+        dependsOn: node.dependsOn,
+        evidenceGates: (node.outputs ?? []).map((output) => output.gate ?? "summary"),
+      })),
+    }, null, 2));
+    return;
+  }
 
   console.log(header("Goal Planned"));
   console.log(label("ID", updated.goalId));
@@ -342,6 +358,7 @@ export async function goalVerifyCommand(goalId: string, options: { json?: boolea
 
   const evidence = await checkGoalEvidence(updated, { root, runState: runState ?? { schemaVersion: 1, runId: "none", nodes: [], startedAt: new Date().toISOString() } });
   const score = scoreGoal(updated, evidence);
+  const suggestion = evaluateGoalProgressIncremental(updated, evidence).suggestion;
 
   let finalStatus: GoalSpec["status"];
   let verifyFailed = false;
@@ -360,11 +377,11 @@ export async function goalVerifyCommand(goalId: string, options: { json?: boolea
   await persister.appendHistory(goalId, {
     at: new Date().toISOString(),
     action: "verify",
-    detail: { score, status: finalStatus },
+    detail: { score, status: finalStatus, suggestion },
   });
 
   if (options.json) {
-    console.log(JSON.stringify({ goalId, score, status: closed.status, evidence }, null, 2));
+    console.log(JSON.stringify({ goalId, score, status: closed.status, evidence, suggestion }, null, 2));
   } else {
     console.log(header("Goal Verification"));
     console.log(label("ID", closed.goalId));
@@ -381,6 +398,10 @@ export async function goalVerifyCommand(goalId: string, options: { json?: boolea
       const icon = ev.passed ? style.mint("✓") : style.pink("✗");
       console.log(`  ${icon} ${ev.criterionId}: ${ev.message ?? ""}`);
     }
+    if (score.overall !== "pass") {
+      console.log("");
+      console.log(label("Next action", `${suggestion.type}: ${suggestion.description}`));
+    }
   }
 
   if (verifyFailed) {
@@ -390,15 +411,15 @@ export async function goalVerifyCommand(goalId: string, options: { json?: boolea
 
 export async function goalCloseCommand(
   goalId: string,
-  options: { force?: boolean; reason?: string }
+  options: { force?: boolean; reason?: string; json?: boolean }
 ): Promise<void> {
-  printAlphaWarning();
+  printAlphaWarning(options.json);
   const persister = createPersister();
   const spec = await persister.load(goalId);
 
   if (!spec) {
     const msg = `Goal not found: ${goalId}`;
-    console.error(status.error(msg));
+    emitError(msg, Boolean(options.json));
     throw new NotFoundError(msg);
   }
 
@@ -406,12 +427,9 @@ export async function goalCloseCommand(
   const hasPassedEvidence = evidence.some((e: GoalEvidence) => e.passed);
 
   if (spec.status !== "done" && !hasPassedEvidence && !options.force) {
-    console.error(
-      status.error(
-        `⚠️  No passed evidence gates found for this goal. Use --force to close anyway.`
-      )
-    );
-    process.exit(1);
+    const msg = "No passed evidence gates found for this goal. Use --force to close anyway.";
+    emitError(msg, Boolean(options.json), { goalId, status: spec.status });
+    throw new VerificationError(msg, [`goalId: ${goalId}`, `status: ${spec.status}`]);
   }
 
   const updated = updateGoalStatus(spec, "closed");
@@ -422,22 +440,31 @@ export async function goalCloseCommand(
     detail: { reason: options.reason, force: options.force },
   });
 
-  console.log(header("Goal Closed"));
-  console.log(label("ID", updated.goalId));
-  console.log(label("Status", updated.status));
-  if (options.reason) {
-    console.log(label("Reason", options.reason));
+  if (options.json) {
+    console.log(JSON.stringify({
+      goalId: updated.goalId,
+      status: updated.status,
+      reason: options.reason ?? null,
+      force: Boolean(options.force),
+    }, null, 2));
+  } else {
+    console.log(header("Goal Closed"));
+    console.log(label("ID", updated.goalId));
+    console.log(label("Status", updated.status));
+    if (options.reason) {
+      console.log(label("Reason", options.reason));
+    }
   }
 }
 
-export async function goalBlockCommand(goalId: string, options: { reason: string }): Promise<void> {
-  printAlphaWarning();
+export async function goalBlockCommand(goalId: string, options: { reason: string; json?: boolean }): Promise<void> {
+  printAlphaWarning(options.json);
   const persister = createPersister();
   const spec = await persister.load(goalId);
 
   if (!spec) {
     const msg = `Goal not found: ${goalId}`;
-    console.error(status.error(msg));
+    emitError(msg, Boolean(options.json));
     throw new NotFoundError(msg);
   }
 
@@ -449,9 +476,13 @@ export async function goalBlockCommand(goalId: string, options: { reason: string
     detail: { reason: options.reason },
   });
 
-  console.log(header("Goal Blocked"));
-  console.log(label("ID", updated.goalId));
-  console.log(label("Reason", options.reason));
+  if (options.json) {
+    console.log(JSON.stringify({ goalId: updated.goalId, status: updated.status, reason: options.reason }, null, 2));
+  } else {
+    console.log(header("Goal Blocked"));
+    console.log(label("ID", updated.goalId));
+    console.log(label("Reason", options.reason));
+  }
 }
 
 export async function goalContinueCommand(

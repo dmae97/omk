@@ -11,6 +11,7 @@ const DESIGN_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "commands", 
 const OPEN_DESIGN_AGENT_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "commands", "open-design-agent.js")).href;
 const RUN_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "commands", "run.js")).href;
 const PARALLEL_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "commands", "parallel.js")).href;
+const DAG_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "commands", "dag.js")).href;
 
 function runHelp(command) {
   return spawnSync(process.execPath, [CLI, command, "--help"], {
@@ -399,6 +400,7 @@ test("parallel keeps the historical ten-minute node timeout when no preset is re
 test("worker count parsing rejects malformed values and shares OMK_WORKERS fallback", async () => {
   const runMod = await import(RUN_MODULE_URL);
   const parallelMod = await import(PARALLEL_MODULE_URL);
+  const dagMod = await import(DAG_MODULE_URL);
   const previousWorkers = process.env.OMK_WORKERS;
   try {
     delete process.env.OMK_WORKERS;
@@ -418,6 +420,9 @@ test("worker count parsing rejects malformed values and shares OMK_WORKERS fallb
     process.env.OMK_WORKERS = "2abc";
     assert.equal(runMod.normalizeWorkerCount(undefined, 5), 5);
     assert.equal(parallelMod.normalizeWorkerCount(undefined, 5), 5);
+    assert.equal(dagMod.normalizeReplayWorkerCount("999"), 6);
+    assert.equal(dagMod.normalizeReplayWorkerCount("0"), 1);
+    assert.equal(dagMod.normalizeReplayWorkerCount(undefined), 1);
   } finally {
     if (previousWorkers === undefined) {
       delete process.env.OMK_WORKERS;

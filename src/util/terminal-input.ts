@@ -20,6 +20,7 @@ export interface TerminalInputState {
   readonly wasTTY: boolean;
   readonly rawMode?: boolean;
   readonly readableFlowing: boolean | null;
+  readonly dataListenerCount: number;
 }
 
 export function captureTerminalInputState(input: TerminalInputLike = process.stdin): TerminalInputState {
@@ -27,6 +28,7 @@ export function captureTerminalInputState(input: TerminalInputLike = process.std
     wasTTY: Boolean(input.isTTY),
     rawMode: input.isTTY ? Boolean(input.isRaw) : undefined,
     readableFlowing: input.readableFlowing,
+    dataListenerCount: input.listenerCount("data"),
   };
 }
 
@@ -43,14 +45,15 @@ export function restoreTerminalInputState(
   input: TerminalInputLike = process.stdin,
   state: TerminalInputState
 ): void {
-  if (state.wasTTY && typeof input.setRawMode === "function") {
+  const externalDataOwnerAttached = input.listenerCount("data") > state.dataListenerCount;
+  if (!externalDataOwnerAttached && state.wasTTY && typeof input.setRawMode === "function") {
     input.setRawMode(state.rawMode ?? false);
   }
 
   // Only pause stdin when this owner started it and no other data consumer is
   // still attached. Pausing shared stdin after readline/PTY cleanup is a common
   // cause of apparently "disappearing" keyboard input in nested WSL terminals.
-  if (state.readableFlowing !== true && input.listenerCount("data") === 0) {
+  if (state.readableFlowing !== true && !externalDataOwnerAttached && input.listenerCount("data") === 0) {
     input.pause();
   }
 }

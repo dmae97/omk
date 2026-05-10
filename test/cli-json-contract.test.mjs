@@ -6,12 +6,14 @@ import { join } from "node:path";
 
 import { goalListCommand, goalShowCommand, goalVerifyCommand } from "../dist/commands/goal.js";
 import { providerDeepSeekDisableCommand, providerDoctorCommand } from "../dist/commands/provider.js";
+import { doctorCommand } from "../dist/commands/doctor.js";
 import { mcpDoctorCommand } from "../dist/commands/mcp.js";
 import { runsCommand } from "../dist/commands/runs.js";
 import { screenshotDirCommand, screenshotListCommand } from "../dist/commands/screenshot.js";
 import { verifyCommand } from "../dist/commands/verify.js";
 import { reviewCommand } from "../dist/commands/workflow.js";
 import { CliError } from "../dist/util/cli-contract.js"; 
+import { resetKimiCapabilities } from "../dist/kimi/capability.js";
 
 async function tempCwd() {
   const dir = await mkdtemp(join(tmpdir(), "omk-cli-"));
@@ -253,6 +255,174 @@ test("mcp doctor --json emits common machine-readable fields", async () => {
   assert.ok(Array.isArray(parsed.errors));
   assert.ok(Array.isArray(parsed.warnings));
   assert.equal(parsed.data.activeScope, parsed.activeScope);
+  assert.equal(cap.stderr.length, 0, "should not emit to stderr");
+});
+
+test("doctor --json does not flag absolute npm-global MCP binaries as npx launchers", async () => {
+  const cwd = await tempCwd();
+  const home = await mkdtemp(join(tmpdir(), "omk-doctor-home-"));
+  await mkdir(join(home, ".kimi"), { recursive: true });
+  await writeFile(
+    join(home, ".kimi", "mcp.json"),
+    JSON.stringify({
+      mcpServers: {
+        "page-design-guide": {
+          command: join(home, ".npm-global", "bin", "page-design-guide"),
+          args: [],
+        },
+      },
+    }),
+    "utf-8",
+  );
+  await writeFile(join(home, ".kimi", "config.toml"), "default_model = \"kimi\"\n# >>> omk managed hooks\n", "utf-8");
+  const restoreHome = setEnv("HOME", home);
+  const restoreOriginalHome = setEnv("OMK_ORIGINAL_HOME", home);
+  const prevCwd = process.cwd();
+  const previousExitCode = process.exitCode;
+  const cap = captureOutput();
+
+  process.chdir(cwd);
+  try {
+    await doctorCommand({ json: true, soft: true });
+  } finally {
+    cap.restore();
+    process.exitCode = previousExitCode;
+    process.chdir(prevCwd);
+    restoreOriginalHome();
+    restoreHome();
+  }
+
+  const parsed = parseSingleStdoutJson(cap);
+  assert.equal(parsed.globalSync.globalMcp, "1 MCPs synced (~/.kimi/mcp.json)");
+  assert.equal(parsed.warnings.some((warning) => /npx-based/.test(warning.message)), false);
+  assert.ok(!parsed.warnings.some((warning) => warning.name === "Global MCP (stdio)"));
+  assert.equal(cap.stderr.length, 0, "should not emit to stderr");
+});
+
+test("doctor --json downgrades Kimi web-tools warning when agent YAML declares tools", async () => {
+  const cwd = await tempCwd();
+  const home = await mkdtemp(join(tmpdir(), "omk-doctor-web-home-"));
+  const bin = join(home, "bin");
+  await mkdir(join(cwd, ".omk", "agents"), { recursive: true });
+  await mkdir(join(home, ".kimi"), { recursive: true });
+  await mkdir(bin, { recursive: true });
+  await writeFile(join(cwd, ".omk", "agents", "root.yaml"), `
+version: 1
+agent:
+  name: test
+  tools:
+    - "kimi_cli.tools.web:SearchWeb"
+    - "kimi_cli.tools.web:FetchURL"
+`, "utf-8");
+  await writeFile(join(home, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: {} }), "utf-8");
+  await writeFile(join(home, ".kimi", "config.toml"), "default_model = \"kimi\"\n# >>> omk managed hooks\n", "utf-8");
+  await writeFile(join(bin, "kimi"), `#!/usr/bin/env sh
+if [ "$1" = "--version" ]; then
+  echo "kimi, version 1.41.0"
+else
+  echo "Usage: kimi [OPTIONS] COMMAND [ARGS]..."
+  echo "  --agent-file FILE"
+  echo "  web      Run Kimi Code CLI web interface."
+fi
+`, { mode: 0o755 });
+  const restoreHome = setEnv("HOME", home);
+  const restoreOriginalHome = setEnv("OMK_ORIGINAL_HOME", home);
+  const restorePath = setEnv("PATH", `${bin}:${process.env.PATH ?? ""}`);
+  const prevCwd = process.cwd();
+  const previousExitCode = process.exitCode;
+  const cap = captureOutput();
+
+  resetKimiCapabilities();
+  process.chdir(cwd);
+  try {
+    await doctorCommand({ json: true, soft: true });
+  } finally {
+    cap.restore();
+    process.exitCode = previousExitCode;
+    process.chdir(prevCwd);
+    restorePath();
+    restoreOriginalHome();
+    restoreHome();
+    resetKimiCapabilities();
+  }
+
+  const parsed = parseSingleStdoutJson(cap);
+  assert.equal(parsed.kimi.webTools, false);
+  assert.ok(!parsed.warnings.some((warning) => warning.name === "Kimi Web Tools"));
+  assert.equal(cap.stderr.length, 0, "should not emit to stderr");
+});
+
+test("doctor --json classifies normal Kimi home files separately from pollution", async () => {
+  const cwd = await tempCwd();
+  const home = await mkdtemp(join(tmpdir(), "omk-doctor-pollution-home-"));
+  await mkdir(join(home, ".kimi"), { recursive: true });
+  for (const name of [
+    "config.toml",
+    "config.toml.bak",
+    "mcp.json",
+    "mcp.json.bak-20260508-102923",
+    "mcp.manifest.json",
+    "mcp.manifest.json.bak_stable_profile_20260507_094002",
+    "omk.memory.toml",
+    "kimi.json",
+    "device_id",
+    "latest_version.txt",
+    "AGENTS.md",
+    "setup.md",
+    "user.md",
+    "eggup-493323.json:Zone.Identifier",
+  ]) {
+    await writeFile(join(home, ".kimi", name), "ok", "utf-8");
+  }
+  const restoreHome = setEnv("HOME", home);
+  const restoreOriginalHome = setEnv("OMK_ORIGINAL_HOME", home);
+  const prevCwd = process.cwd();
+  const previousExitCode = process.exitCode;
+  const cap = captureOutput();
+
+  process.chdir(cwd);
+  try {
+    await doctorCommand({ json: true, soft: true });
+  } finally {
+    cap.restore();
+    process.exitCode = previousExitCode;
+    process.chdir(prevCwd);
+    restoreOriginalHome();
+    restoreHome();
+  }
+
+  const parsed = parseSingleStdoutJson(cap);
+  assert.equal(parsed.globalSync.globalPollution, "~/.kimi clean");
+  assert.ok(!parsed.warnings.some((warning) => warning.name === "Global Pollution"));
+  assert.equal(cap.stderr.length, 0, "should not emit to stderr");
+});
+
+test("doctor --json still warns for unexpected Kimi home pollution", async () => {
+  const cwd = await tempCwd();
+  const home = await mkdtemp(join(tmpdir(), "omk-doctor-polluted-home-"));
+  await mkdir(join(home, ".kimi"), { recursive: true });
+  await writeFile(join(home, ".kimi", "config.toml"), "default_model = \"kimi\"\n", "utf-8");
+  await writeFile(join(home, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: {} }), "utf-8");
+  await writeFile(join(home, ".kimi", "debug-output.txt"), "unexpected", "utf-8");
+  const restoreHome = setEnv("HOME", home);
+  const restoreOriginalHome = setEnv("OMK_ORIGINAL_HOME", home);
+  const prevCwd = process.cwd();
+  const previousExitCode = process.exitCode;
+  const cap = captureOutput();
+
+  process.chdir(cwd);
+  try {
+    await doctorCommand({ json: true, soft: true });
+  } finally {
+    cap.restore();
+    process.exitCode = previousExitCode;
+    process.chdir(prevCwd);
+    restoreOriginalHome();
+    restoreHome();
+  }
+
+  const parsed = parseSingleStdoutJson(cap);
+  assert.ok(parsed.warnings.some((warning) => warning.name === "Global Pollution"));
   assert.equal(cap.stderr.length, 0, "should not emit to stderr");
 });
 
