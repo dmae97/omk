@@ -24,7 +24,7 @@ jobs:
       - run: npm run lint
       - run: npm run secret:scan
       - run: npm run check
-      - uses: dtolnay/rust-action@stable
+      - uses: dtolnay/rust-toolchain@stable
       - run: npm run rust:check
       - name: Run tests
         run: |
@@ -52,7 +52,7 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm rebuild
-      - uses: dtolnay/rust-action@stable
+      - uses: dtolnay/rust-toolchain@stable
       - run: npm run native:build
       - name: Upload native safety artifact
         uses: actions/upload-artifact@v7
