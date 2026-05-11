@@ -26,6 +26,7 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm rebuild
+      - uses: dtolnay/rust-action@stable
       - run: npm run native:build
       - name: Upload native safety artifact
         uses: actions/upload-artifact@v7

@@ -359,11 +359,12 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
         scheduler.updateNodeStatus(dag, node.id, "failed", options.runId);
       }
     } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       result = {
         success: false,
         exitCode: 1,
-        stdout: "",
-        stderr: error instanceof Error ? error.message : String(error),
+        stdout: `[ERROR] ${errorMessage}`,
+        stderr: errorMessage,
       };
       recordProviderAttempt(node, result);
       markNodeFinished(node, "failed");
@@ -535,7 +536,7 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
           }
           state.completedAt = new Date().toISOString();
           refreshState(state, dag, options);
-          await commitState(state);
+          await commitState(state, { mustPersist: true });
           monitor.dispose();
           resolveOnce({ state, success: false });
           return;
@@ -544,7 +545,7 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
         if (runningMap.size === 0 && scheduler.isComplete(dag)) {
           state.completedAt = new Date().toISOString();
           refreshState(state, dag, options);
-          await commitState(state);
+          await commitState(state, { mustPersist: true });
           monitor.dispose();
           resolveOnce({ state, success: true });
           return;
@@ -553,7 +554,7 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
         if (runningMap.size === 0 && scheduler.isFailed(dag)) {
           state.completedAt = new Date().toISOString();
           refreshState(state, dag, options);
-          await commitState(state);
+          await commitState(state, { mustPersist: true });
           monitor.dispose();
           resolveOnce({ state, success: false });
           return;
@@ -584,7 +585,7 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
           // Deadlock or nothing to do — treat as failure
           state.completedAt = new Date().toISOString();
           refreshState(state, dag, options);
-          await commitState(state);
+          await commitState(state, { mustPersist: true });
           monitor.dispose();
           resolveOnce({ state, success: false });
         }

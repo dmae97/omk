@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from "fs/promises";
-import { existsSync, statSync, writeFileSync, mkdirSync } from "fs";
+
 import { dirname, join, relative } from "path";
 import { MemoryStore } from "../memory/memory-store.js";
 import { pathExists } from "./fs.js";
@@ -58,19 +58,6 @@ export function formatChatStartupDate(date: Date): string {
 }
 
 export async function ensureChatStartupArtifacts(options: ChatStartupOptions): Promise<ChatStartupReport> {
-  const omkDir = join(process.env.HOME ?? "", ".omk");
-  const markerPath = join(omkDir, ".startup-artifacts-marker");
-  try {
-    if (existsSync(markerPath)) {
-      const stat = statSync(markerPath);
-      if (Date.now() - stat.mtimeMs < 3_600_000) {
-        return { date: formatChatStartupDate(options.now ?? new Date()), docsDir: join(options.root, "docs", formatChatStartupDate(options.now ?? new Date())), graphPath: join(options.root, ".omk", "memory", "graph-state.json"), created: [], existing: [] };
-      }
-    }
-  } catch {
-    // continue with full startup
-  }
-
   const date = formatChatStartupDate(options.now ?? new Date());
   const docsDir = join(options.root, "docs", date);
   const graphPath = join(options.root, ".omk", "memory", "graph-state.json");
@@ -113,13 +100,6 @@ export async function ensureChatStartupArtifacts(options: ChatStartupOptions): P
     docs,
     env: options.env,
   });
-
-  try {
-    mkdirSync(omkDir, { recursive: true });
-    writeFileSync(markerPath, new Date().toISOString());
-  } catch {
-    // non-fatal
-  }
 
   return report;
 }

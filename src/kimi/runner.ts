@@ -459,6 +459,15 @@ export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskR
             )
           );
         }
+        if (result.stderr.includes("text content is empty")) {
+          process.stderr.write(
+            style.red(
+              `[omk] Kimi API returned 400 "text content is empty" in node ${node.id}.\n` +
+                `      This is a known Kimi CLI bug (fixed in v1.39.0, 2026-04-24).\n` +
+                `      Upgrade Kimi CLI: npm i -g @anthropic-ai/kimi-code\n`
+            )
+          );
+        }
       }
 
       const prefix = `[${node.id}:${node.role}] `;

@@ -22,6 +22,19 @@ export function createKimiPrintRuntime(options: KimiPrintRuntimeOptions = {}): A
     },
 
     async runNode(capsule: ContextCapsule, signal: AbortSignal): Promise<AgentRunResult> {
+      // Validate capsule task is not empty to prevent LLM provider errors
+      if (!capsule.task || capsule.task.trim().length === 0) {
+        const errorMsg = `Empty task for node ${capsule.nodeId}`;
+        process.stderr.write(`[omk] ${errorMsg}\n`);
+        return {
+          success: false,
+          exitCode: 1,
+          stdout: `[ERROR] ${errorMsg}`,
+          stderr: errorMsg,
+          metadata: { runtime: "kimi-print", error: errorMsg },
+        };
+      }
+
       const runner = createKimiTaskRunner(options);
 
       const env: Record<string, string> = {
@@ -64,12 +77,13 @@ export function createKimiPrintRuntime(options: KimiPrintRuntimeOptions = {}): A
           },
         };
       } catch (err) {
+        const errorMsg = String(err);
         return {
           success: false,
           exitCode: 1,
-          stdout: "",
-          stderr: String(err),
-          metadata: { runtime: "kimi-print", error: String(err) },
+          stdout: `[ERROR] ${errorMsg}`,
+          stderr: errorMsg,
+          metadata: { runtime: "kimi-print", error: errorMsg },
         };
       }
     },

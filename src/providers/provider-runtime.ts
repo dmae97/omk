@@ -135,7 +135,10 @@ export async function createProviderBackedTaskRunner(
         } finally {
           clearTimeout(timer);
         }
-      } catch {
+      } catch (err) {
+        // Log runtime router error for debugging before falling back to base runner
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`[omk] RuntimeRouter failed for node ${node.id}: ${errorMsg}\n`);
         // Fallback to base runner (existing Kimi/DeepSeek provider routing)
         return baseRunner.run(node, env);
       }

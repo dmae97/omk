@@ -25,6 +25,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run verify
+      - uses: dtolnay/rust-action@stable
       - run: npm run native:build
       - run: npm run audit:package
 

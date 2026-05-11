@@ -178,6 +178,11 @@ export function createContextBroker(options: ContextBrokerOptions = {}) {
       .filter(Boolean)
       .join("\n");
 
+    // Guard against empty task content
+    if (!task || task.trim().length === 0) {
+      throw new Error(`ContextBroker: unable to build non-empty task for node ${node.id}`);
+    }
+
     // Load actual file content for adjustment.addFiles
     let relevantFiles: readonly FileSlice[] = [];
     if (adjustment?.addFiles?.length) {

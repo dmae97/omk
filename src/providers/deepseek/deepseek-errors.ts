@@ -12,7 +12,9 @@ const AVAILABILITY_PATTERNS = [
 ];
 
 const TRANSIENT_PATTERNS = [
-  "text content is empty", // DeepSeek rejects empty content — retry with fallback
+  // NOTE: "text content is empty" was removed — it is a Moonshot (Kimi) API error,
+  // not a DeepSeek error. It occurs when Kimi CLI < 1.39.0 sends assistant messages
+  // with tool_calls but empty content. See Kimi CLI changelog 2026-04-24.
   "rate limit",
   "429",
   "server overloaded",

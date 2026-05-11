@@ -145,11 +145,12 @@ export class BannerReplacer {
     const trimmed = clean.trim();
     if (trimmed.length === 0) return true;
     if (this.hasWelcomeLine(clean) || this.hasMetaLines(clean)) return true;
+    // Prompt-like lines should pass through immediately.
+    if (/^kimi❯/.test(trimmed)) return false;
+    if (clean.split(/\r?\n/).some((line) => /^kimi❯/.test(line.trim()))) return false;
     // Keep buffering when box frame is detected but welcome/meta text
     // hasn't arrived yet — process() will trigger replacement when complete.
     if (this.hasCompleteBox(clean)) return true;
-    // Prompt-like lines should pass through immediately.
-    if (/^kimi❯/.test(trimmed)) return false;
     return true;
   }
 

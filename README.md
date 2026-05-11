@@ -322,15 +322,16 @@ Do not commit provider keys. Keep secrets in environment variables, local keycha
 
 | Area | Commands |
 | --- | --- |
-| Bootstrap | `omk init`, `omk doctor`, `omk menu`, `omk update` |
+| Bootstrap | `omk init`, `omk doctor`, `omk menu`, `omk update`, `omk star` |
 | Kimi execution | `omk chat`, `omk plan`, `omk parallel`, `omk run` |
 | Verification | `omk verify`, `omk review`, `npm run verify`, `npm run release:check` |
-| Operator UI | `omk hud`, `omk cockpit`, `omk runs`, `omk summary-show` |
+| Operator UI | `omk hud`, `omk cockpit`, `omk runs`, `omk summary`, `omk summary-show` |
 | Replay & diff | `omk replay`, `omk inspect`, `omk diff-runs` |
 | Context | `omk index`, `omk graph`, `omk sync`, `omk skill` |
 | Providers | `omk provider`, `omk deepseek`, `omk research` |
 | Design | `omk design`, `omk design open-design --open`, `omk open-design-agent` |
-| Advanced | `omk goal`, `omk dag`, `omk team`, `omk merge`, `omk screenshot` |
+| Advanced | `omk goal`, `omk dag`, `omk team`, `omk merge`, `omk screenshot`, `omk cron`, `omk specify` |
+| Workflow presets | `omk feature`, `omk bugfix`, `omk refactor` |
 
 ---
 
@@ -338,10 +339,10 @@ Do not commit provider keys. Keep secrets in environment variables, local keycha
 
 OMK is designed for daily use with explicit maturity labels:
 
-- **Stable / daily-use core:** init, doctor, chat, plan, runs, cockpit, HUD, design, LSP, and project inspection surfaces.
-- **Advanced inspection:** graph, MCP, sync, screenshots, provider diagnostics, and design bridges are inspectable but may depend on local project assets.
-- **Alpha orchestration:** parallel, run, verify, review, goal, and long-running evidence-gated flows.
-- **Experimental surfaces:** tmux team mode, merge automation, agent registry, skill manager, spec/DAG, cron, and provider-routing integrations.
+- **Stable / daily-use core:** init, doctor, chat, plan, runs, cockpit, HUD, design, LSP, index, star, update, google, and project inspection surfaces.
+- **Advanced inspection:** graph, MCP, replay, inspect, diff-runs, screenshots, provider diagnostics, and design bridges are inspectable but may depend on local project assets.
+- **Alpha orchestration:** parallel, run, verify, review, goal, sync, summary, and long-running evidence-gated flows.
+- **Experimental surfaces:** tmux team mode, merge automation, agent registry, skill manager, feature/bugfix/refactor workflows, spec/DAG/cron, open-design-agent, and provider-routing integrations.
 
 Release confidence is built from local and CI gates:
 

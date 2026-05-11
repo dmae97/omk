@@ -226,7 +226,7 @@ async function resolveDeepSeekGoalDecisionVote(
             "You have no file, shell, MCP, secret, or merge authority.",
             "Return JSON only with action, confidence, and reason.",
             "Allowed action values: continue, replan, block, handoff, close.",
-          ].join(" "),
+          ].join(" ") || "You are DeepSeek inside OMK. Return JSON with action, confidence, and reason.",
         },
         { role: "user", content: buildDeepSeekGoalDecisionPrompt(goal, runState, evidence, score) },
       ],

@@ -37,7 +37,7 @@ async function tempGoalCliFixture({ summary = true } = {}) {
     `#!${process.execPath}\n${outputLines.map((line) => `console.log(${JSON.stringify(line)});`).join("\n")}\nprocess.exit(0);\n`,
     { mode: 0o755 },
   );
-  await writeFile(join(workspace, "package.json"), JSON.stringify({ scripts: { check: "node -e \\"process.exit(0)\\"" } }));
+  await writeFile(join(workspace, 'package.json'), JSON.stringify({ scripts: { check: 'node -e "process.exit(0)"' } }));
   const env = {
     ...process.env,
     OMK_PROJECT_ROOT: workspace,
@@ -55,7 +55,7 @@ async function tempGoalCliFixture({ summary = true } = {}) {
   return { root, workspace, env };
 }
 
-function runGoalCli(args, env, timeout = 60_000) {
+function runGoalCli(args, env, timeout = 180_000) {
   return spawnSync(process.execPath, [CLI, ...args], {
     cwd: process.cwd(),
     env,

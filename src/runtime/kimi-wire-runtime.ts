@@ -89,6 +89,9 @@ export function createKimiWireRuntime(options: KimiWireRuntimeOptions = {}): Age
         }
 
         const prompt = promptParts.filter(Boolean).join("\n\n");
+        if (!prompt.trim()) {
+          throw new Error("[omk] KimiWireRuntime refused to send an empty prompt to the wire client.");
+        }
 
         const result = await client.prompt(prompt);
         offEvent();

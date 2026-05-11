@@ -370,7 +370,7 @@ function buildPromptText(
     `Kimi must transform the orchestration context into node-level action. Do not echo the prompt, restart completed work, or ask for generic continuation.`,
     ``,
     `## Orchestrated Goal Context`,
-    goal.trim(),
+    limitPromptSection(goal.trim(), 16_000),
     ``,
     `## Run Metadata`,
     `Run ID: ${runId}`,

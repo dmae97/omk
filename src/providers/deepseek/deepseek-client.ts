@@ -51,7 +51,7 @@ export class DeepSeekClient {
   constructor(options: DeepSeekClientOptions = {}) {
     this.apiKeyEnv = options.apiKeyEnv ?? "DEEPSEEK_API_KEY";
     this.baseUrl = (options.baseUrl ?? "https://api.deepseek.com").replace(/\/+$/, "");
-    this.model = options.model ?? "deepseek-v4-pro";
+    this.model = options.model ?? "deepseek-v4-flash";
     this.thinking = options.thinking ?? "enabled";
     this.reasoningEffort = options.reasoningEffort ?? "max";
     this.timeoutMs = options.timeoutMs ?? 60_000;
@@ -97,15 +97,37 @@ export class DeepSeekClient {
     }
   }
 
+  // Extract text content from various content formats (string, array, object)
+  // Handles: string, [{type: "text", text: "..."}], {text: "..."}, null/undefined
+  private extractTextContent(content: unknown): string {
+    if (typeof content === "string") return content.trim();
+    if (content == null) return "";
+    if (Array.isArray(content)) {
+      return content
+        .map((part) => {
+          if (typeof part === "string") return part.trim();
+          if (part && typeof part === "object" && "text" in part) {
+            const textPart = part as { type?: string; text?: unknown };
+            return typeof textPart.text === "string" ? textPart.text.trim() : "";
+          }
+          return "";
+        })
+        .filter((text) => text.length > 0)
+        .join(" ");
+    }
+    // Fallback: coerce to string
+    return String(content ?? "").trim();
+  }
+
   private buildRequestBody(options: DeepSeekCompleteOptions): Record<string, unknown> {
     const thinking = options.thinking ?? this.thinking;
 
-    // SANITIZE: Remove messages with empty content to prevent DeepSeek 400 "text content is empty"
-    // This can happen when upstream filters strip out text parts, leaving an empty content array.
+    // SANITIZE: Remove messages with empty content to prevent DeepSeek 400 errors.
+    // Handles both string content and content array formats (e.g., [{type: "text", text: ""}]).
     const sanitizedMessages = options.messages
       .map((msg) => ({
         ...msg,
-        content: msg.content?.trim() ?? "",
+        content: this.extractTextContent(msg.content),
       }))
       .filter((msg) => msg.content.length > 0);
 

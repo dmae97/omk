@@ -60,7 +60,7 @@ export function createDeepSeekReadOnlyTaskRunner(
                   ? "For this file-affecting node, provide advisory patch strategy only; Kimi will perform actual file edits."
                   : "",
                 "Return concise findings, evidence, risks, and recommended Kimi follow-up.",
-              ].filter(Boolean).join(" "),
+              ].filter(Boolean).join(" ") || "You are a DeepSeek read-only worker. Provide analysis for the given node.",
             },
             { role: "user", content: buildDeepSeekNodePrompt(node, env, options.promptPrefix) },
           ],
