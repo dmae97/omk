@@ -15,6 +15,10 @@ const SKIP_PREFIXES = [
   ".nyc_output/",
 ];
 
+const SYNTHETIC_SECRET_FIXTURE_FILES = new Set([
+  "test/secret-scanner.test.mjs",
+]);
+
 const PROTECTED_FILE_PATTERNS = [
   /^\.env(?:\..*)?$/,
   /^\.npmrc$/,
@@ -86,7 +90,7 @@ const files = new Set([
 const findings = [];
 
 for (const file of [...files].sort()) {
-  if (shouldSkip(file) || !existsSync(file) || !statSync(file).isFile()) continue;
+  if (shouldSkip(file) || SYNTHETIC_SECRET_FIXTURE_FILES.has(file) || !existsSync(file) || !statSync(file).isFile()) continue;
 
   const base = basename(file);
   if (PROTECTED_FILE_PATTERNS.some((pattern) => pattern.test(base))) {
