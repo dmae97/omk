@@ -141,6 +141,99 @@ test("provider task runner falls back from DeepSeek to Kimi and records metadata
   assert.equal(calls[1].env.OMK_PROVIDER_FALLBACK_FROM, "deepseek");
 });
 
+test("provider task runner records transient fallback metadata for rate limit and timeout failures", async () => {
+  for (const { stderr, expectedReason } of [
+    { stderr: "DeepSeek 429 rate limit exceeded", expectedReason: /rate limit/ },
+    { stderr: "DeepSeek request timed out", expectedReason: /timed out/ },
+  ]) {
+    const calls = [];
+    const health = new ProviderHealthRegistry();
+    const deepseekRunner = {
+      async run(_node, env) {
+        calls.push({ provider: "deepseek", env });
+        return {
+          success: false,
+          exitCode: 1,
+          stdout: "",
+          stderr,
+        };
+      },
+    };
+    const kimiRunner = {
+      async run(_node, env) {
+        calls.push({ provider: "kimi", env });
+        return {
+          success: true,
+          exitCode: 0,
+          stdout: "Kimi handled transient fallback",
+          stderr: "",
+        };
+      },
+    };
+
+    const runner = createProviderTaskRunner({
+      kimiRunner,
+      deepseekRunner,
+      providerHealth: health,
+      deepseekMaxRetries: 0,
+    });
+    const result = await runner.run(providerNode(), { OMK_TASK_TYPE: "review" });
+
+    assert.equal(result.success, true);
+    assert.deepEqual(calls.map((call) => call.provider), ["deepseek", "kimi"]);
+    assert.equal(health.isDeepSeekAvailable(), false);
+    assert.equal(result.metadata.provider, "kimi");
+    assert.equal(result.metadata.requestedProvider, "deepseek");
+    assert.equal(result.metadata.providerAttemptCount, 1);
+    assert.equal(result.metadata.providerFallback.from, "deepseek");
+    assert.equal(result.metadata.providerFallback.to, "kimi");
+    assert.equal(result.metadata.providerFallback.attempts, 1);
+    assert.equal(result.metadata.providerFallback.failureKind, "transient");
+    assert.match(result.metadata.providerFallback.reason, expectedReason);
+    assert.equal(calls[1].env.OMK_PROVIDER_FALLBACK_FROM, "deepseek");
+    assert.match(calls[1].env.OMK_PROVIDER_FALLBACK_REASON, expectedReason);
+  }
+});
+
+test("provider task runner preserves fallback metadata when Kimi fallback fails", async () => {
+  const calls = [];
+  const deepseekRunner = {
+    async run(_node, env) {
+      calls.push({ provider: "deepseek", env });
+      return {
+        success: false,
+        exitCode: 1,
+        stdout: "",
+        stderr: "DeepSeek 429 rate limit exceeded",
+      };
+    },
+  };
+  const kimiRunner = {
+    async run(_node, env) {
+      calls.push({ provider: "kimi", env });
+      return {
+        success: false,
+        exitCode: 1,
+        stdout: "",
+        stderr: "Kimi fallback failed",
+      };
+    },
+  };
+
+  const runner = createProviderTaskRunner({ kimiRunner, deepseekRunner, deepseekMaxRetries: 0 });
+  const result = await runner.run(providerNode(), { OMK_TASK_TYPE: "review" });
+
+  assert.equal(result.success, false);
+  assert.deepEqual(calls.map((call) => call.provider), ["deepseek", "kimi"]);
+  assert.equal(result.metadata.provider, "kimi");
+  assert.equal(result.metadata.requestedProvider, "deepseek");
+  assert.equal(result.metadata.providerFallback.from, "deepseek");
+  assert.equal(result.metadata.providerFallback.to, "kimi");
+  assert.equal(result.metadata.providerFallback.failureKind, "transient");
+  assert.match(result.metadata.providerFallback.reason, /rate limit/);
+  assert.equal(calls[1].env.OMK_PROVIDER_FALLBACK_FROM, "deepseek");
+});
+
 test("provider task runner retries transient DeepSeek failures before returning success", async () => {
   const calls = [];
   const deepseekRunner = {

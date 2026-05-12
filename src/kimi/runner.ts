@@ -71,6 +71,7 @@ export async function runKimiInteractive(
     USERPROFILE: tmpHome,
     HOMEDRIVE: "",
     HOMEPATH: tmpHome,
+    PWD: options?.cwd ?? process.cwd(),
   };
 
 
@@ -386,6 +387,7 @@ export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskR
       const baseEnv: Record<string, string> = { ...(process.env as Record<string, string>), ...(env ?? {}), ...nodeEnv };
       const originalHome = resolveOriginalHome(baseEnv);
       const tmpHome = await prepareIsolatedKimiHome({ originalHome, env: baseEnv });
+      const worktree = node.worktree ?? cwd;
       const mergedEnv: Record<string, string> = {
         ...baseEnv,
         OMK_ORIGINAL_HOME: originalHome,
@@ -393,6 +395,7 @@ export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskR
         USERPROFILE: tmpHome,
         HOMEDRIVE: "",
         HOMEPATH: tmpHome,
+        PWD: worktree ?? process.cwd(),
       };
       const args: string[] = [];
       await injectKimiGlobals(args, { mcpScope, skillsScope, role: node.role });
@@ -407,7 +410,6 @@ export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskR
       args.push("--prompt", buildNodeMessage(node, mergedEnv, promptPrefix));
       args.push("--print");
 
-      const worktree = node.worktree ?? cwd;
       if (worktree) {
         await ensureDir(worktree);
       }

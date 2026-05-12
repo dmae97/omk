@@ -104,6 +104,22 @@ export async function prepareIsolatedKimiHome(options: IsolatedKimiHomeOptions =
     }
 }
 
+  // Symlink shell profile files so MCP servers spawned via bash inherit
+  // the user's shell environment (aliases, PATH, env vars) instead of
+  // starting with an empty /tmp home.
+  const SHELL_PROFILES = [".bashrc", ".bash_profile", ".profile", ".zshrc", ".zprofile"];
+  for (const name of SHELL_PROFILES) {
+    const src = join(originalHome, name);
+    const dst = join(tmpHome, name);
+    if (await pathExists(src)) {
+      try {
+        await symlink(src, dst);
+      } catch (err) {
+        console.warn(`[omk] Failed to symlink ~/${name} to isolated HOME: ${(err as Error).message ?? err}`);
+      }
+    }
+  }
+
   return tmpHome;
 }
 
