@@ -512,6 +512,7 @@ export async function mcpTestCommand(serverName: string): Promise<void> {
   const smokeArgs = [...(server.args ?? [])];
   console.log(style.gray("Smoke test: starting process (5s timeout)..."));
   const smokeResult = await runShell(command, smokeArgs, {
+    cwd: getProjectRoot(),
     timeout: 5000,
     env: server.env ? { ...process.env, ...server.env } as Record<string, string> : process.env as Record<string, string>,
   });
@@ -545,6 +546,7 @@ export async function mcpTestCommand(serverName: string): Promise<void> {
     },
   }) + "\n";
   const handshakeResult = await runShell(command, smokeArgs, {
+    cwd: getProjectRoot(),
     timeout: 20000,
     env: server.env ? { ...process.env, ...server.env } as Record<string, string> : process.env as Record<string, string>,
     input: initializePayload,
@@ -609,6 +611,7 @@ async function runOmkProjectToolProbe(
     },
   ].map((message) => JSON.stringify(message)).join("\n") + "\n";
   const probeResult = await runShell(command, args, {
+    cwd: getProjectRoot(),
     timeout: 20000,
     env: env ? { ...process.env, ...env } as Record<string, string> : process.env as Record<string, string>,
     input: payload,
