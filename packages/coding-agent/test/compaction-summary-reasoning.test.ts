@@ -1,7 +1,7 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, Model } from "@earendil-works/pi-ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { generateSummary } from "../src/core/compaction/index.js";
+import { type CompactionPreparation, compact, generateSummary } from "../src/core/compaction/index.js";
 
 const { completeSimpleMock } = vi.hoisted(() => ({
 	completeSimpleMock: vi.fn(),
@@ -15,7 +15,7 @@ vi.mock("@earendil-works/pi-ai", async (importOriginal) => {
 	};
 });
 
-function createModel(reasoning: boolean): Model<"anthropic-messages"> {
+function createModel(reasoning: boolean, maxTokens = 8192): Model<"anthropic-messages"> {
 	return {
 		id: reasoning ? "reasoning-model" : "non-reasoning-model",
 		name: reasoning ? "Reasoning Model" : "Non-reasoning Model",
@@ -26,7 +26,7 @@ function createModel(reasoning: boolean): Model<"anthropic-messages"> {
 		input: ["text"],
 		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 		contextWindow: 200000,
-		maxTokens: 8192,
+		maxTokens,
 	};
 }
 
@@ -114,5 +114,21 @@ describe("generateSummary reasoning options", () => {
 			apiKey: "test-key",
 		});
 		expect(completeSimpleMock.mock.calls[0][2]).not.toHaveProperty("reasoning");
+	});
+
+	it("clamps compaction summary maxTokens to the model output cap", async () => {
+		const preparation: CompactionPreparation = {
+			firstKeptEntryId: "entry-keep",
+			messagesToSummarize: messages,
+			turnPrefixMessages: messages,
+			isSplitTurn: true,
+			tokensBefore: 600000,
+			fileOps: { read: new Set(), written: new Set(), edited: new Set() },
+			settings: { enabled: true, reserveTokens: 500000, keepRecentTokens: 20000 },
+		};
+
+		await compact(preparation, createModel(false, 128000), "test-key");
+
+		expect(completeSimpleMock.mock.calls.map((call) => call[2]?.maxTokens)).toEqual([128000, 128000]);
 	});
 });

@@ -8,6 +8,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+	type CompactionPreparation,
 	calculateContextTokens,
 	compact,
 	DEFAULT_COMPACTION_SETTINGS,
@@ -113,14 +114,17 @@ function createModelChangeEntry(provider: string, modelId: string, parentId: str
 	};
 }
 
-function createFauxModel(reasoning: boolean): { faux: FauxProviderRegistration; model: Model<string> } {
+function createFauxModel(
+	reasoning: boolean,
+	maxTokens = 8192,
+): { faux: FauxProviderRegistration; model: Model<string> } {
 	const faux = registerFauxProvider({
 		models: [
 			{
 				id: reasoning ? "reasoning-model" : "non-reasoning-model",
 				reasoning,
 				contextWindow: 200000,
-				maxTokens: 8192,
+				maxTokens,
 			},
 		],
 	});
@@ -283,6 +287,35 @@ describe("harness compaction", () => {
 			"medium",
 		);
 		expect(seenOptions[2]).not.toHaveProperty("reasoning");
+	});
+
+	it("clamps compaction summary maxTokens to the model output cap", async () => {
+		const messages: AgentMessage[] = [createUserMessage("Summarize this.")];
+		const seenOptions: Array<Record<string, unknown> | undefined> = [];
+		const { faux, model } = createFauxModel(false, 128000);
+		faux.setResponses([
+			(_context, options) => {
+				seenOptions.push(options as Record<string, unknown> | undefined);
+				return fauxAssistantMessage("## Goal\nTest summary");
+			},
+			(_context, options) => {
+				seenOptions.push(options as Record<string, unknown> | undefined);
+				return fauxAssistantMessage("## Goal\nTest summary");
+			},
+		]);
+		const preparation: CompactionPreparation = {
+			firstKeptEntryId: "entry-keep",
+			messagesToSummarize: messages,
+			turnPrefixMessages: messages,
+			isSplitTurn: true,
+			tokensBefore: 600000,
+			fileOps: { read: new Set(), written: new Set(), edited: new Set() },
+			settings: { enabled: true, reserveTokens: 500000, keepRecentTokens: 20000 },
+		};
+
+		await compact(preparation, model, "test-key");
+
+		expect(seenOptions.map((options) => options?.maxTokens)).toEqual([128000, 128000]);
 	});
 
 	it("returns a compaction result with file details", async () => {
