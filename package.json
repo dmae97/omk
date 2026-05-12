@@ -6,7 +6,9 @@
   "bin": {
     "omk": "dist/cli.js",
     "oh-my-kimi": "dist/cli.js",
-    "omk-project-mcp": "dist/mcp/omk-project-server.js"
+    "omk-project-mcp": "dist/mcp/omk-project-server.js",
+    "omk-acp": "dist/mcp/acp-server.js",
+    "omk-mcp-host": "dist/mcp/host.js"
   },
   "scripts": {
     "clean:dist": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
@@ -17,7 +19,7 @@
     "check": "tsc --noEmit",
     "test": "node scripts/run-tests.mjs",
     "secret:scan": "node scripts/secret-scan.mjs",
-    "verify": "npm run yaml:check && npm run lint && npm run secret:scan && npm run check && npm run build:clean && npm test",
+    "verify": "npm run yaml:check && npm run lint && npm run secret:scan && npm run check && npm run build:clean && npm run test",
     "pack:dry": "npm pack --dry-run --ignore-scripts --json",
     "audit:package": "node scripts/package-audit.mjs",
     "smoke": "node scripts/smoke-test.mjs",
@@ -31,59 +33,7 @@
     "native:normalize": "node scripts/normalize-native-artifacts.mjs"
   },
   "keywords": [
-    "agent",
-    "agent-ensemble",
-    "agent-orchestration",
-    "agentic-coding",
-    "ai",
-    "ai-agent",
-    "ai-agents",
-    "ai-coding",
-    "ai-devtools",
-    "autonomous-agents",
-    "cli",
-    "cli-tool",
-    "code-assistant",
-    "code-generation",
-    "code-review-automation",
-    "coding",
-    "coding-agent",
-    "dag",
-    "design-md",
-    "developer-experience",
-    "developer-tools",
-    "ensemble",
-    "git-worktree",
-    "graph-memory",
-    "k2.6",
-    "kimi",
-    "kimi-cli",
-    "kimi-code",
-    "kimi-k2",
-    "kimi-k2.6",
-    "language-server-protocol",
-    "large-language-model",
-    "llm",
-    "local-first",
-    "lsp",
-    "mcp",
-    "model-context-protocol",
-    "moonshot",
-    "multi-agent",
-    "multi-agent-orchestration",
-    "nodejs",
-    "oh-my-kimi",
-    "orchestration",
-    "parallel-execution",
-    "quality-gates",
-    "scheduler",
-    "task-graph",
-    "task-scheduler",
-    "tmux",
-    "typescript",
-    "workflow-automation",
-    "worktree",
-    "yolo-mode"
+    "agent","agent-ensemble","agent-orchestration","agentic-coding","ai","ai-agent","ai-agents","ai-coding","ai-devtools","autonomous-agents","cli","cli-tool","code-assistant","code-generation","code-review-automation","coding","coding-agent","dag","design-md","developer-experience","developer-tools","ensemble","git-worktree","graph-memory","k2.6","kimi","kimi-cli","kimi-code","kimi-k2","kimi-k2.6","language-server-protocol","large-language-model","llm","local-first","lsp","mcp","model-context-protocol","moonshot","multi-agent","multi-agent-orchestration","nodejs","oh-my-kimi","orchestration","parallel-execution","quality-gates","scheduler","task-graph","task-scheduler","tmux","typescript","workflow-automation","worktree","yolo-mode"
   ],
   "author": "dmae97",
   "license": "MIT",
@@ -109,22 +59,7 @@
     "typescript-eslint": "^8.0.0"
   },
   "files": [
-    "dist",
-    "templates",
-    "docs",
-    "readmeasset",
-    "CHANGELOG.md",
-    "MATURITY.md",
-    "README.md",
-    "AGENTS.md",
-    "SECURITY.md",
-    "ROADMAP.md",
-    "DESIGN.md",
-    "WORKER_MANIFEST.md",
-    "CLAUDE.md",
-    "GEMINI.md",
-    "LICENSE",
-    "llms.txt"
+    "dist","templates","docs","readmeasset","CHANGELOG.md","MATURITY.md","README.md","AGENTS.md","SECURITY.md","ROADMAP.md","DESIGN.md","WORKER_MANIFEST.md","CLAUDE.md","GEMINI.md","LICENSE","llms.txt"
   ],
   "repository": {
     "type": "git",
@@ -136,7 +71,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "homepage": "https://github.com/dmae97/oh-my-kimi#readme",
+  "homepage": "https://oh-my-kimi.sbs/",
   "engines": {
     "node": ">=20.0.0"
   },
