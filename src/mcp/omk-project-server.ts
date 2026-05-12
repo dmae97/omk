@@ -1565,8 +1565,10 @@ async function handleRequest(req: JsonRpcRequest): Promise<void> {
 async function main(): Promise<void> {
   // Ensure synchronous stdout in piped environments (MCP stdio)
   try {
-    // @ts-expect-error Node internal API not in types
-    process.stdout._handle?.setBlocking?.(true);
+    const stdoutWithHandle = process.stdout as NodeJS.WriteStream & {
+      _handle?: { setBlocking?: (blocking: boolean) => void };
+    };
+    stdoutWithHandle._handle?.setBlocking?.(true);
   } catch {
     // ignore if unavailable
   }
