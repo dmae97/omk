@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.1.13 — Bundled MCP server release readiness (2026-05-12)
+
+### New
+
+- **Bundled MCP entrypoints** — package metadata now exposes `omk-project-mcp`, `omk-acp`, and `omk-mcp-host` bins for npm-installed MCP usage.
+- **ACP and host groundwork** — added ACP session server, host gateway runtime, client transport adapters, and consent-aware permission flow foundations.
+- **Secret scanning guards** — added shared secret pattern registry integration and release scan handling for synthetic fixture files.
+
+### Improved
+
+- **Deployment-ready package metadata** — README, package homepage, Open Graph metadata, and social preview now point to the public landing site.
+- **Provider execution isolation** — provider execution paths use isolated runtime homes to avoid leaking local Kimi/global state into release workflows.
+- **TypeScript release hygiene** — removed unused imports, unsafe internal stdout suppression comments, and redundant variables from MCP server code.
+
+### Verification
+
+- Local release gate run for this tag: `npm run release:check`.
+
 ## v1.1.12 — Replay system, skill assigner, and decision trace coverage (2026-05-11)
 
 ### New
@@ -68,13 +86,6 @@
 
 ### Release
 - Supersedes the failed v1.1.7 tag run; npm publication should use v1.1.8 to avoid rewriting the remote tag.
-
-## Unreleased
-
-### Improved
-
-- **Deployment-ready README branding** — added the public site link (`https://oh-my-kimi.sbs/`) to the README hero, package homepage metadata, and Open Graph metadata, with a 1200×630 PNG social preview under `readmeasset/`.
-- **Release-readiness docs** — aligned README verification commands and maturity notes around the existing CI/package gates without claiming a new publish or deploy result.
 
 ## v1.1.7 — Harness manifest, native safety, and release matrix (2026-05-09)
 

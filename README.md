@@ -68,7 +68,7 @@ omk summary-show
 omk cockpit
 ```
 
-> Current stable package: **v1.1.12**. Stable daily-use core with alpha/experimental orchestration surfaces clearly labelled in CLI help and docs.
+> Current stable package: **v1.1.13**. Stable daily-use core with alpha/experimental orchestration surfaces clearly labelled in CLI help and docs.
 
 ---
 
@@ -378,7 +378,7 @@ npm run smoke:pack
 npm run release:check
 ```
 
-The v1.1.12 release line includes package audit, smoke-pack checks, Rust native artifact normalization, replay/inspect/diff-runs, skill assigner, decision trace coverage, and CI release gates.
+The v1.1.13 release line includes bundled MCP server entrypoints, ACP/host transport groundwork, package audit, smoke-pack checks, Rust native artifact normalization, replay/inspect/diff-runs, skill assigner, decision trace coverage, and CI release gates.
 
 ---
 
