@@ -29,12 +29,20 @@ export function registerMcpDagCronScreenshotCommands(program: Command): void {
     .command("serve <server>")
     .description("Run a bundled MCP server over stdio")
     .action(async (server: string) => {
-      if (server !== "omk-project") {
-        console.error(`Unknown bundled MCP server: ${server}`);
-        process.exitCode = 1;
-        return;
+      switch (server) {
+        case "omk-project":
+          await import("../mcp/omk-project-server.js");
+          break;
+        case "omk-acp":
+          await import("../mcp/acp-server.js");
+          break;
+        case "omk-mcp-host":
+          await import("../mcp/host.js");
+          break;
+        default:
+          console.error(`Unknown bundled MCP server: ${server}`);
+          process.exitCode = 1;
       }
-      await import("../mcp/omk-project-server.js");
     });
   mcp
     .command("remove <server>")
