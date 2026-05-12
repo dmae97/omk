@@ -5,13 +5,14 @@
 [![MseeP.ai Security Assessment Badge](https://mseep.net/pr/dmae97-oh-my-kimi-badge.png)](https://mseep.ai/app/dmae97-oh-my-kimi)
 
 <!-- Open Graph -->
-<meta property="og:image" content="https://raw.githubusercontent.com/dmae97/oh-my-kimi/main/readmeasset/kimicat.png" />
+<meta property="og:image" content="https://raw.githubusercontent.com/dmae97/oh-my-kimi/main/readmeasset/omk-social-preview.png" />
 <meta property="og:title" content="oh-my-kimi" />
+<meta property="og:url" content="https://oh-my-kimi.sbs/" />
 <meta property="og:description" content="Verified agent runtime for Kimi Code: DAG execution, evidence gates, graph memory, live HUD/cockpit, and zero-config safety hooks." />
 
 <!-- Twitter -->
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:image" content="https://raw.githubusercontent.com/dmae97/oh-my-kimi/main/readmeasset/kimicat.png" />
+<meta name="twitter:image" content="https://raw.githubusercontent.com/dmae97/oh-my-kimi/main/readmeasset/omk-social-preview.png" />
 
 <img src="./readmeasset/kimicat.gif" alt="oh-my-kimi mascot and CLI demo" width="720" />
 
@@ -19,6 +20,7 @@
 
 <p><strong>Verified agent runtime for Kimi Code.</strong></p>
 <p><sub>Kimi writes. OMK coordinates, verifies, remembers, and guards.</sub></p>
+<p><a href="https://oh-my-kimi.sbs/"><strong>oh-my-kimi.sbs</strong></a> · <a href="https://github.com/dmae97/oh-my-kimi">GitHub</a> · <a href="https://www.npmjs.com/package/@oh-my-kimi/cli">npm</a></p>
 
 <p>
   <a href="https://github.com/dmae97/oh-my-kimi/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/dmae97/oh-my-kimi/ci.yml?branch=main&amp;style=for-the-badge&amp;logo=githubactions&amp;label=CI" alt="GitHub CI" /></a>
@@ -54,6 +56,8 @@ omk init
 omk doctor
 omk chat
 ```
+
+Public site and install landing page: **[oh-my-kimi.sbs](https://oh-my-kimi.sbs/)**.
 
 Need the full agent harness?
 
@@ -101,6 +105,10 @@ omk cockpit
 
 <img src="./readmeasset/open-design-localhost.png" alt="Open Design localhost launched from OMK" width="720" />
 
+### Parallel execution
+
+<img src="./readmeasset/parallelmod.png" alt="OMK parallel execution showing worker lanes and progress" width="720" />
+
 ---
 
 ## Current CLI shape
@@ -113,12 +121,14 @@ Start Here
   omk chat       Kimi interactive execution
   omk plan       Plan-only execution
   omk hud        Execution status and system usage HUD
+  omk mode       Switch execution presets (agent, plan, chat, debug, review)
 
 Stable / daily-use
   omk cockpit    Sidecar cockpit for run state, TODOs, and ETA
   omk design     DESIGN.md and Open Design integration
   omk lsp        Built-in TypeScript LSP run/config output
   omk runs       List past OMK runs with status and dates
+  omk history    Alias for runs with filters and export
 
 Advanced / inspectable
   omk graph      Inspect OMK ontology graph
@@ -126,6 +136,8 @@ Advanced / inspectable
   omk replay     Timeline-based run replay from artifacts
   omk inspect    Forensic run inspection with deep-dive flags
   omk diff-runs  Structural diff between two runs for reproducibility
+  omk agent      Agent role listing/show/create/doctor
+  omk snip       Snippet save/get/list/search/delete
 
 Alpha / Experimental
   omk parallel   Parallel Kimi coordinator + workers + reviewer
@@ -133,6 +145,8 @@ Alpha / Experimental
   omk verify     Evidence-gate verification for a run
   omk goal       Goal lifecycle management
   omk team       tmux-based multi-agent team execution
+  omk research   Kimi-native web research wrapper
+  omk spec       GitHub Spec Kit bridge
 ```
 
 Stable and daily-use commands are the normal operator path. Advanced, alpha, and experimental commands expose stronger orchestration primitives without pretending every surface has the same maturity level.
@@ -163,7 +177,7 @@ OMK is built around Kimi Code instead of treating Kimi as a generic backend. Pro
 
 ### 2. DAG execution
 
-A request can become a task graph instead of a single linear prompt. Nodes can carry roles, dependencies, retries, fallback routing, and evidence requirements. This makes long-running work explicit enough to inspect, resume, verify, or block.
+A request can become a task graph instead of a single linear prompt. Nodes can carry roles, dependencies, retries, fallback routing, timeout presets, heartbeat monitoring, and evidence requirements. This makes long-running work explicit enough to inspect, resume, verify, or block.
 
 ### 3. Evidence gates
 
@@ -180,15 +194,19 @@ If evidence fails, the runtime can retry, skip, block dependents, or route to fa
 
 Every policy decision — routing, context brokering, repair, scheduling, provider selection, ensemble decisions, and skill assignment — is recorded in `.omk/runs/<runId>/decisions.jsonl`. This makes runs inspectable and reproducible rather than opaque.
 
-### 5. Local graph memory
+### 5. Context brokering and budget optimization
+
+OMK manages context as bounded capsules rather than unbounded conversation history. The context broker shapes what each agent receives based on role and task, while the budget optimizer estimates tokens before expensive calls to prevent runaway context accumulation.
+
+### 6. Local graph memory
 
 OMK stores durable project memory as a graph: goals, decisions, risks, tasks, commands, files, evidence, and concepts. The graph gives Kimi a smaller, safer context target before it edits a large repository.
 
-### 6. Worktree isolation
+### 7. Worktree isolation
 
 Parallel lanes can run in isolated Git worktrees. That keeps experiments reversible and makes review/merge a deliberate step instead of a side effect of several agents editing the same files at once.
 
-### 7. Skills, hooks, MCP, and agents as runtime inputs
+### 8. Skills, hooks, MCP, and agents as runtime inputs
 
 OMK treats project instructions, agent skills, generated hooks, and MCP servers as part of the control plane:
 
@@ -199,23 +217,27 @@ OMK treats project instructions, agent skills, generated hooks, and MCP servers 
 - `omk mcp` inspects project and user MCP configuration.
 - `omk doctor` checks Kimi, Git, hooks, MCP, skills, and runtime health.
 
-### 8. Live operator visibility
+### 9. Ensemble decisions and repair policy
+
+When multiple agents can work on the same node, the ensemble runner evaluates progress, risk, resource utilization, and quality across weighted analytical perspectives. If evidence fails, the repair policy decides whether to retry with context, skip, block dependents, or route to fallback handling — all recorded in decision traces.
+
+### 10. Live operator visibility
 
 `omk hud` and `omk cockpit` expose active work instead of hiding agent state inside logs. The goal is simple: humans should see what is running, what changed, what is blocked, and what still needs proof.
 
-### 9. Advisory provider lanes
+### 11. Advisory provider lanes
 
 OMK can route research, review, QA, or risk analysis through provider lanes such as DeepSeek, but the run stays bounded. Kimi keeps write/merge authority, and external model output is advisory evidence rather than uncontrolled patch authority.
 
-### 10. Open Design bridge
+### 12. Open Design bridge
 
 `omk design open-design --open` launches a local Open Design workflow and connects it back to OMK. Use it when the task needs a visual design surface, then bring the output through DESIGN.md-aware implementation and quality gates.
 
-### 11. Run replay and inspection
+### 13. Run replay and inspection
 
 `omk replay`, `omk inspect`, and `omk diff-runs` turn run artifacts into an inspectable timeline. Replay reconstructs chronology; inspect deep-dives into context, evidence, decisions, and repair chains; diff-runs compares two manifests for reproducibility debugging.
 
-### 12. Native safety path
+### 14. Native safety path
 
 OMK includes a Rust native safety loader path and CI-backed artifact matrix. JavaScript remains the CLI surface; native safety helpers are selected when available and fall back safely when they are not.
 
@@ -331,6 +353,7 @@ Do not commit provider keys. Keep secrets in environment variables, local keycha
 | Providers | `omk provider`, `omk deepseek`, `omk research` |
 | Design | `omk design`, `omk design open-design --open`, `omk open-design-agent` |
 | Advanced | `omk goal`, `omk dag`, `omk team`, `omk merge`, `omk screenshot`, `omk cron`, `omk specify` |
+| Tools & presets | `omk mode`, `omk snip`, `omk agent` |
 | Workflow presets | `omk feature`, `omk bugfix`, `omk refactor` |
 
 ---
@@ -339,10 +362,10 @@ Do not commit provider keys. Keep secrets in environment variables, local keycha
 
 OMK is designed for daily use with explicit maturity labels:
 
-- **Stable / daily-use core:** init, doctor, chat, plan, runs, cockpit, HUD, design, LSP, index, star, update, google, and project inspection surfaces.
-- **Advanced inspection:** graph, MCP, replay, inspect, diff-runs, screenshots, provider diagnostics, and design bridges are inspectable but may depend on local project assets.
+- **Stable / daily-use core:** init, doctor, chat, plan, mode, runs, history, index-show, cockpit, HUD, design, LSP, index, star, update, google, and project inspection surfaces.
+- **Advanced inspection:** graph, MCP, replay, inspect, diff-runs, snip, screenshots, provider diagnostics, and design bridges are inspectable but may depend on local project assets.
 - **Alpha orchestration:** parallel, run, verify, review, goal, sync, summary, and long-running evidence-gated flows.
-- **Experimental surfaces:** tmux team mode, merge automation, agent registry, skill manager, feature/bugfix/refactor workflows, spec/DAG/cron, open-design-agent, and provider-routing integrations.
+- **Experimental surfaces:** tmux team mode, merge automation, agent registry, skill manager, research, feature/bugfix/refactor workflows, spec/DAG/cron, open-design-agent, and provider-routing integrations.
 
 Release confidence is built from local and CI gates:
 
@@ -352,6 +375,7 @@ npm run native:build
 npm run pack:dry
 npm run audit:package
 npm run smoke:pack
+npm run release:check
 ```
 
 The v1.1.12 release line includes package audit, smoke-pack checks, Rust native artifact normalization, replay/inspect/diff-runs, skill assigner, decision trace coverage, and CI release gates.

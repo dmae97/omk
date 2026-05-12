@@ -71,7 +71,10 @@
 
 ## Unreleased
 
-_No unreleased changes._
+### Improved
+
+- **Deployment-ready README branding** — added the public site link (`https://oh-my-kimi.sbs/`) to the README hero, package homepage metadata, and Open Graph metadata, with a 1200×630 PNG social preview under `readmeasset/`.
+- **Release-readiness docs** — aligned README verification commands and maturity notes around the existing CI/package gates without claiming a new publish or deploy result.
 
 ## v1.1.7 — Harness manifest, native safety, and release matrix (2026-05-09)
 

@@ -1,7 +1,7 @@
 # Roadmap
 
-Current public version: v1.1.9
-Last updated: 2026-05-09
+Current public version: v1.1.12
+Last updated: 2026-05-11
 
 ## v1.1.9 reality
 
@@ -62,3 +62,4 @@ Provider routing and graph viewing are no longer purely future work:
 | v0.5 | MCP project server, plugin pack, CI agent mode |
 | v1.1.6 | provider/deepseek commands, provider policy flags, graph view, goal lifecycle, expanded run history and update JSON |
 | v1.1.9 | chat harness manifest, capability DAG lanes, Rust native safety loader, Windows clipboard screenshot bridge, release native matrix |
+| v1.1.12 | Replay system, skill assigner, decision trace coverage, evidence gates, and repair policy |
