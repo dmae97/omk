@@ -205,6 +205,29 @@ function extractCompleteSequences(buffer: string): { sequences: string[]; remain
 				const status = isCompleteSequence(candidate);
 
 				if (status === "complete") {
+					// WezTerm with enable_kitty_keyboard sends the Escape key press as a
+					// raw '\x1b' byte (simple text path in encode_kitty, ignoring
+					// DISAMBIGUATE_ESCAPE_CODES) and the release as a full Kitty CSI-u
+					// sequence. These arrive concatenated as '\x1b\x1b[27;...u'.
+					// The buffer would normally treat '\x1b\x1b' as a complete meta-key
+					// sequence (ESC + single char), leaving '[27;...u' to be typed as
+					// plain text. If the character immediately following '\x1b\x1b'
+					// would begin a new escape sequence, emit only the first ESC and
+					// restart from the second.
+					if (candidate === "\x1b\x1b") {
+						const nextChar = remaining[seqEnd];
+						if (
+							nextChar === "[" || // CSI
+							nextChar === "]" || // OSC
+							nextChar === "O" || // SS3
+							nextChar === "P" || // DCS
+							nextChar === "_" // APC
+						) {
+							sequences.push(ESC);
+							pos += 1;
+							break;
+						}
+					}
 					sequences.push(candidate);
 					pos += seqEnd;
 					break;
