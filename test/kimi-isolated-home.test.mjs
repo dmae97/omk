@@ -1,10 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { lstat, mkdir, mkdtemp, readFile, readlink, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { cleanupIsolatedKimiHome, prepareIsolatedKimiHome, resolveOriginalHome } from "../dist/kimi/isolated-home.js";
+
+const execFileAsync = promisify(execFile);
 
 test("original HOME resolution preserves the user's terminal home before isolation", () => {
   assert.equal(resolveOriginalHome({ HOME: "/terminal/home" }), "/terminal/home");
@@ -125,6 +129,57 @@ test("isolated Kimi HOME can disable local terminal auth inheritance", async () 
     });
 
     await assert.rejects(() => lstat(join(isolatedHome, ".codex")));
+  } finally {
+    if (isolatedHome) await cleanupIsolatedKimiHome(isolatedHome);
+    await rm(originalHome, { recursive: true, force: true });
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("isolated Kimi HOME bridges shell profiles with original HOME", async () => {
+  const originalHome = await mkdtemp(join(tmpdir(), "omk-original-home-"));
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-project-root-"));
+  let isolatedHome;
+  try {
+    await mkdir(join(originalHome, ".local", "bin"), { recursive: true });
+    await mkdir(join(originalHome, ".cargo"), { recursive: true });
+    await writeFile(join(originalHome, ".local", "bin", "env"), 'export OMK_LOCAL_BIN_ENV_HOME="$HOME"\n');
+    await writeFile(join(originalHome, ".cargo", "env"), 'export OMK_CARGO_ENV_HOME="$HOME"\n');
+    await writeFile(
+      join(originalHome, ".profile"),
+      [
+        '. "$HOME/.local/bin/env"',
+        '. "$HOME/.cargo/env"',
+        'export OMK_PROFILE_FINAL_HOME="$HOME"',
+        "",
+      ].join("\n")
+    );
+
+    isolatedHome = await prepareIsolatedKimiHome({
+      originalHome,
+      projectRoot,
+      env: {},
+    });
+
+    const profilePath = join(isolatedHome, ".profile");
+    const profileStat = await lstat(profilePath);
+    assert.equal(profileStat.isSymbolicLink(), false);
+    assert.match(await readFile(profilePath, "utf-8"), /OMK isolated HOME shell profile bridge/);
+
+    const { stdout, stderr } = await execFileAsync(
+      "bash",
+      ["-lc", 'printf "%s|%s|%s|%s" "$HOME" "$OMK_LOCAL_BIN_ENV_HOME" "$OMK_CARGO_ENV_HOME" "$OMK_PROFILE_FINAL_HOME"'],
+      {
+        env: {
+          HOME: isolatedHome,
+          OMK_ORIGINAL_HOME: originalHome,
+          PATH: process.env.PATH ?? "",
+        },
+      }
+    );
+
+    assert.equal(stderr, "");
+    assert.equal(stdout, `${isolatedHome}|${originalHome}|${originalHome}|${originalHome}`);
   } finally {
     if (isolatedHome) await cleanupIsolatedKimiHome(isolatedHome);
     await rm(originalHome, { recursive: true, force: true });

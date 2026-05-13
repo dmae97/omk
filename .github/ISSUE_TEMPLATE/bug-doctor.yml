@@ -12,7 +12,7 @@ body:
     attributes:
       label: OMK version
       description: Run `omk --version` if available.
-      placeholder: "e.g. 1.1.14"
+      placeholder: "e.g. 1.1.15"
     validations:
       required: true
   - type: input

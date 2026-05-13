@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.15 — Isolated HOME MCP startup hotfix (2026-05-13)
+
+- Fixes isolated Kimi HOME shell-profile bridging so bash-based MCP servers source the real user profile with the real HOME before restoring the temporary HOME.
+- Moves the local fetch MCP setup to a persistent executable path to avoid repeated `uvx` dependency resolution inside disposable `/tmp/omk-home-*` sessions.
+- Adds regression coverage for profile lines that source `$HOME/.local/bin/env` and `$HOME/.cargo/env`.
+
 ## v1.1.14 — Current harness docs and workflow skills (2026-05-13)
 
 ### New
