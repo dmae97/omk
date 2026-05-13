@@ -10,6 +10,19 @@ Do not restate this file unless the user explicitly asks for project rules.
 
 ---
 
+## Current OMK Runtime Surface
+
+Keep these surfaces aligned when editing init/runtime docs:
+
+- Init markdown: `AGENTS.md`, `.kimi/AGENTS.md`, `.omk/prompts/root.md`, plus generated companion docs `DESIGN.md`, `GEMINI.md`, `CLAUDE.md`, `ROADMAP.md`, and `SECURITY.md`.
+- Skills: project portable skills live in `.agents/skills`; Kimi runtime skills live in `.kimi/skills`; init templates live under `templates/skills/agents` and `templates/skills/kimi`.
+- MCP: fresh init is project-scoped and writes only local `omk-project` into `.kimi/mcp.json` / `.omk/mcp.json`. `omk init --local-user` or `OMK_MCP_SCOPE=all OMK_SKILLS_SCOPE=all` reads user `~/.kimi/mcp.json` and `~/.kimi/skills` at runtime without copying personal/global files. `--import-user-skills` is a trusted local opt-in copy path.
+- Agents: generated agents extend the Okabe-compatible base with `SendDMail`. Default root aliases are `explorer`/`explore`, `planner`/`plan`, `coder`, `reviewer`, and `qa`; role files also include `architect`, `integrator`, `interviewer`, `ontology`, `researcher`, and `vision-debugger`. Use additional local roles such as `coordinator`, `docs`, `merger`, `release`, `security`, or `tester` only when the current `.omk/agents/root.yaml` or harness exposes them.
+- Harness: chat agent mode writes `.omk/runs/<run-id>/chat-agent-harness.json`. Prompts carry compact MCP/skills/hooks counts; read the harness manifest for the full inventory, worker limits, authority boundaries, virtual DAG, and gate list.
+- Evidence: `scripts/run-tests.mjs` and OMK verification surfaces record sanitized MCP/skill/hook resource metadata. Do not emit resource secrets, headers, or raw env values.
+
+---
+
 ## Core Operating Rules
 
 1. Read this file before planning or editing.
@@ -51,9 +64,9 @@ The final response should be concise and factual.
 
 ## Todo Policy
 
-For every task with more than one step, call `SetTodoList` immediately.
+For every task with more than one step, call `SetTodoList` immediately when available.
 
-Use 3–8 todos.
+Use 3-8 todos.
 
 Each todo must be action-oriented and verifiable.
 
@@ -80,14 +93,14 @@ Never leave the final todo list inconsistent with the actual result.
 
 ## Agent / Subagent Policy
 
-Use the `Agent` tool for all non-trivial tasks.
+Use the `Agent` tool or the available OMK/Codex subagent interface for all non-trivial tasks.
 
 Minimum policy:
 
 * Use the `explorer` subagent for repository discovery.
 * Use the `planner` subagent for architecture, refactor, migration, or risky changes.
-* Use `coder` for implementation tasks.
-* Use a reviewer agent or review workflow before final completion.
+* Use `coder` for scoped implementation tasks.
+* Use `reviewer`, `qa`, or a review workflow before final completion.
 
 Do not use subagents for trivial one-line answers or simple command explanations.
 
@@ -101,6 +114,8 @@ Architecture / refactor plan    planner
 Implementation                  coder
 Bug investigation               explorer -> planner -> coder
 Code review                     reviewer skill or review agent
+Quality-gate analysis           qa or omk-quality-gate
+Docs/release work               docs/release role if exposed, else reviewer
 UI / design work                explorer -> coder + design skill
 Security-sensitive changes      planner + security review
 ```
@@ -115,7 +130,7 @@ Constraints:
 Expected output:
 ```
 
-Do not ask subagents to modify unrelated files.
+Do not ask subagents to modify unrelated files. Workers are not alone in the codebase: they must preserve concurrent edits and avoid reverting unrelated changes.
 
 ### Parallel Agent Limits
 
@@ -123,7 +138,7 @@ When `OMK_WORKERS` is set (e.g. via `omk chat --workers <n>`):
 
 - Respect the worker count. Do not spawn more parallel agents than `OMK_WORKERS`.
 - When `OMK_WORKERS=1`, run agents sequentially.
-- When `OMK_WORKERS=auto`, use the resource profile default (usually 2–4).
+- When `OMK_WORKERS=auto`, use the resource profile default (usually 2-4).
 
 When `--max-steps-per-turn` is set (e.g. via `omk chat --max-steps-per-turn <n>`):
 
@@ -137,24 +152,40 @@ When `--max-steps-per-turn` is set (e.g. via `omk chat --max-steps-per-turn <n>`
 
 Before starting, inspect the loaded skills list.
 
-Use relevant skills when they match the task.
+Use relevant skills when they match the task. Read only the matching `SKILL.md` entrypoints and directly referenced assets.
 
-Common oh-my-kimi skills:
+Project portable skills currently packaged in `.agents/skills` include:
 
 ```txt
-omk-kimi-runtime
-omk-project-rules
-omk-repo-explorer
-omk-plan-first
-omk-context-broker
-omk-quality-gate
+claude-for-legal
+agentmemory
+andrej-karpathy-skills
+matt-pocock-skills
+multica
+react-doctor
+omk-backend-api-review
 omk-code-review
-omk-test-debug-loop
-omk-security-review
-omk-design-md
-omk-worktree-team
+omk-context-broker
+omk-design-system
+omk-docs-release
+omk-frontend-implementation
+omk-frontend-ui-review
 omk-git-commit-pr
+omk-industrial-control-loop
+omk-project-rules
+omk-python-typing
+omk-quality-gate
+omk-repo-explorer
+omk-research-verify
+omk-secret-guard
+omk-security-review
+omk-test-debug-loop
+omk-troubleshooting
+omk-typescript-strict
+omk-worktree-team
 ```
+
+Packaged Kimi skill templates include OMK runtime/flow skills (`omk-kimi-runtime`, `omk-plan-first`, `omk-task-router`, `omk-global-rules`, `omk-flow-*`), design/visual skills (`omk-design-md`, `omk-multimodal-ui-review`, `open-design`, `awesome-design-md`), graph/spec skills (`graph-view`, `speckit-*`), legal workflow support (`claude-for-legal`), external-inspired agent workflow skills (`agentmemory`, `andrej-karpathy-skills`, `matt-pocock-skills`, `multica`, `react-doctor`), and DeepSeek helpers (`deepseek-*`). Local `.kimi/skills` may expose extra user/runtime skills such as `kb-retriever`, `gpt-image-2`, `diagram-design`, or web presentation helpers; use them only when present in the loaded skills list. Skill packs advertised by `omk skill pack` include `omk-core`, `omk-spec-driven`, `omk-typescript`, `omk-security`, `omk-review`, and `omk-release`.
 
 Rules:
 
@@ -162,7 +193,9 @@ Rules:
 * Do not read every skill blindly.
 * Do not mention internal skill selection unless it affects the final result.
 * If a project-specific skill conflicts with a global skill, project-specific rules win.
-* If `DESIGN.md` exists, use `omk-design-md` for UI/frontend tasks.
+* If `DESIGN.md` exists, use `omk-design-md`, `omk-design-system`, or the current design skill for UI/frontend tasks.
+* For legal-domain Claude workflow requests, use `claude-for-legal` as a workflow skill; it is not a substitute for legal advice.
+* For memory, alignment/TDD, React diagnostics, managed-agent teamwork, or surgical-coding requests, use the matching external-inspired workflow skill before implementation.
 
 ---
 
@@ -173,12 +206,19 @@ Use configured MCP tools actively when they provide better context than local gu
 Preferred MCP usage:
 
 ```txt
+Project memory/task state       omk-project MCP if configured
 Library/API documentation       context7 or official-doc MCP
 Browser/UI debugging            chrome-devtools MCP
 GitHub issues/PRs               github MCP
 Design/token workflow           design-md or stitch-related MCP if configured
-Project memory/task state       omk-project MCP if configured
 ```
+
+Runtime scope rules:
+
+* Default project scope reads project `.kimi/mcp.json` and `.omk/mcp.json`; the generated safe default is `omk-project` only.
+* All scope may read user `~/.kimi/mcp.json` at runtime; do not copy or print global MCP secrets.
+* The managed `omk-project` mirror may appear in both project files; treat it as informational unless health checks fail.
+* Use `omk mcp doctor`, `omk mcp list`, or `omk mcp test <server>` for MCP verification when the task depends on MCP behavior.
 
 Rules:
 
@@ -187,6 +227,16 @@ Rules:
 * If an MCP server is unavailable, continue with local tools and clearly report the limitation.
 * Do not send secrets to MCP tools.
 * Do not use remote MCP tools for private code unless the user configured and approved them.
+
+---
+
+## Harness / Evidence Policy
+
+- If a prompt, contract, or run directory references `chat-agent-harness.json`, read it before assuming which MCP servers, skills, hooks, gates, or workers are active.
+- Treat compact prompt inventory counts as a summary only; the harness manifest is the source of truth for full inventory.
+- Keep evidence artifacts under `.omk/runs/<run-id>/`, `.omk/goals/<goal-id>/`, or the command-specific output path.
+- `omk verify --json`, replay/cockpit artifacts, test summaries, and secret scans are stronger completion evidence than narrative claims.
+- Do not paste large skill/MCP inventories into prompts or final reports.
 
 ---
 
@@ -327,10 +377,12 @@ Before saying a task is complete, run available checks.
 Preferred commands:
 
 ```bash
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
+npm run yaml:check
+npm run lint
+npm run secret:scan
+npm run check
+npm run build:clean
+npm test
 ```
 
 Use actual project scripts when different.

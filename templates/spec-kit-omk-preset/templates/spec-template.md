@@ -15,11 +15,14 @@ description: "OMK Feature Specification template with agent-oriented requirement
 <!--
   Write requirements as tasks an agent can execute.
   Each requirement should be verifiable by an evidence gate.
+  Use roles exposed by .omk/agents/root.yaml or chat-agent-harness.json.
 -->
 
 ### Requirement 1 - [Brief Title] (Priority: P1)
 
 **Agent**: coder / architect
+**Skills**: [Relevant skill names, e.g. omk-typescript-strict, omk-security-review]
+**MCP**: [omk-project or specific configured server, if needed]
 **Evidence Gate**: file-exists + command-pass
 **Risk**: medium
 
@@ -28,7 +31,7 @@ description: "OMK Feature Specification template with agent-oriented requirement
 
 **Acceptance**:
 1. File `src/.../xxx.ts` exists and exports `yyy`
-2. Running `npm test -- --grep "xxx"` passes
+2. Running `npm test -- --match xxx` passes
 3. Running `npm run lint` reports no errors in new files
 
 ---
@@ -36,6 +39,7 @@ description: "OMK Feature Specification template with agent-oriented requirement
 ### Requirement 2 - [Brief Title] (Priority: P2)
 
 **Agent**: coder
+**Skills**: [Relevant skill names]
 **Evidence Gate**: command-pass
 **Risk**: low
 
@@ -52,22 +56,25 @@ description: "OMK Feature Specification template with agent-oriented requirement
 -->
 
 - `src/[module]/[file].ts` — [purpose]
-- `tests/[module]/[file].test.ts` — [test coverage]
+- `test/[module].test.mjs` — [test coverage]
 - `docs/[feature].md` — [documentation]
 
 ## Verification Commands
 
 <!--
-  OMK runs these after each phase as quality gates.
-  Keep commands fast and deterministic.
+  Keep commands fast, deterministic, and safe for agents.
 -->
 
+- `npm run yaml:check` — YAML/template validation
 - `npm run lint` — static analysis
-- `npm run typecheck` — TypeScript check
-- `npm test` — full test suite
-- `npm run build` — production build
+- `npm run check` — TypeScript check
+- `npm run secret:scan` — no secret leakage
+- `npm run build:clean` — clean build
+- `npm test` — test harness
+- `omk verify --json` — evidence summary when available
 
 ## Assumptions
 
 - [Assumption about environment]
 - [Assumption about existing code]
+- [Assumption about MCP/skills scope]

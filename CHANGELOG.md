@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.1.14 — Current harness docs and workflow skills (2026-05-13)
+
+### New
+
+- **External-inspired workflow skills** — packaged OMK skills for `agentmemory`, `andrej-karpathy-skills`, `matt-pocock-skills`, `multica`, and `react-doctor` across Kimi and portable agent templates.
+- **Skill pack routing** — `omk-core`, `omk-typescript`, and `omk-review` now surface the new skills through `omk skill catalog/install/sync`.
+
+### Improved
+
+- **Current AGENTS/init guidance** — refreshed AGENTS, `.kimi/AGENTS`, root prompt, init routing hook, and spec-kit preset templates for the current skills/MCP/agents/harness surface.
+- **Release-safe public language** — kept public positioning on the verified daily-use core with alpha orchestration surfaces; no unsupported readiness overclaiming.
+- **Verified-run demo path** — kept the demo bundle as an explicit evidence skeleton with raw prompt, diff, verify JSON, cockpit/replay proof, video plan, and known limitation slots.
+
+### Verification
+
+- Passed `npm run yaml:check`, `npm run lint`, `npm run secret:scan`, `npm run check`, `npm run build:clean`, `npm test`, `npm run native:build`, `npm run audit:package`, and `git diff --check` before release preparation.
+
 ## v1.1.13 — Bundled MCP server release readiness (2026-05-12)
 
 ### New

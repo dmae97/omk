@@ -1,5 +1,7 @@
 # Getting Started
 
+Current package: `@oh-my-kimi/cli@1.1.14`.
+
 ## Install
 
 ```bash
@@ -16,6 +18,7 @@ This creates:
 - `AGENTS.md`, `GEMINI.md`, `CLAUDE.md`, `DESIGN.md`
 - `.kimi/skills/` (Kimi-specific skills)
 - `.agents/skills/` (portable skills)
+- packaged workflow skills such as `agentmemory`, `react-doctor`, and `multica`
 - `.omk/` (config, hooks, memory, agents)
 
 ## Run

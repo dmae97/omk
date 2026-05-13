@@ -11,7 +11,7 @@ body:
     id: omk-version
     attributes:
       label: OMK version
-      placeholder: "e.g. 1.1.13"
+      placeholder: "e.g. 1.1.14"
     validations:
       required: true
   - type: input

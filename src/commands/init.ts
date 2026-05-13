@@ -245,8 +245,9 @@ const GEMINI_MD = `# GEMINI.md
 @./AGENTS.md
 @./DESIGN.md
 
-Use AGENTS.md as the canonical project instruction source.
+Use AGENTS.md as the canonical project instruction source, including current OMK skills, MCP, agents, and harness policy.
 Use DESIGN.md as the canonical visual identity source.
+Do not duplicate runtime inventories; follow AGENTS.md and \`chat-agent-harness.json\` when present.
 `;
 
 const CLAUDE_MD = `# CLAUDE.md
@@ -254,38 +255,77 @@ const CLAUDE_MD = `# CLAUDE.md
 @./AGENTS.md
 @./DESIGN.md
 
-Use AGENTS.md as the canonical project instruction source.
+Use AGENTS.md as the canonical project instruction source, including current OMK skills, MCP, agents, and harness policy.
 Use DESIGN.md for UI/frontend work.
+Do not duplicate runtime inventories; follow AGENTS.md and \`chat-agent-harness.json\` when present.
 `;
 
 const ROADMAP_MD = `# Roadmap
 
-## v0.1
-- init / doctor / chat / team
-- P0 skills
-- AGENTS.md / DESIGN.md generation
-- quality gate hooks
+Current public version: v1.1.13
+Last updated: 2026-05-13
 
-## v0.2
-- Wire controller
-- HUD
-- run state
-- worker logs
+## v1.1.9 reality
 
-## v0.3
-- worktree team
-- merge queue
-- reviewer / qa / integrator agents
+Provider routing and graph viewing are no longer purely future work:
 
-## v0.4
-- Google DESIGN.md integration
-- Stitch skills installer
-- screenshot UI review
+- \`omk run\`, \`omk parallel\`, and DAG replay expose \`--provider auto|kimi\`.
+- \`omk provider\` / \`omk deepseek\` manage DeepSeek enablement, key setup, availability checks, and Kimi-only fallback.
+- DeepSeek is an opportunistic read-only/advisory worker; Kimi remains the orchestrator, writer, merger, and final authority.
+- \`omk graph view\` generates an HTML view from \`.omk/memory/graph-state.json\`.
+- \`omk goal\` has a persisted lifecycle, continue loop, generated plan/evidence criteria, and verification flow.
 
-## v0.5
-- MCP project server
-- plugin pack
-- CI agent mode
+## v1.2 — Hardening the current surface
+
+### P0: release and contract gates
+
+- Done: YAML validation now runs in local \`verify\` plus CI/smoke workflows.
+- Done: package dry-pack, package audit, tarball smoke, native safety build, and release matrix gates were re-verified against v1.1.13 artifacts.
+- Done: provider/deepseek and screenshot JSON command contracts gained hermetic regression tests.
+- Remaining: lock broader provider fallback metadata with tests for rate limit, timeout, and Kimi fallback variants.
+- Remaining: define minimum machine-readable CLI envelopes for the rest of the automation-critical commands.
+
+### P1: observability and diagnostics
+
+- Done: provider route/fallback counts are now emitted in run summaries/reports and summary terminal output.
+- Done: invalid MCP JSON is reported as a visible diagnostic without leaking secret-like config values.
+- Done: \`omk mcp doctor --json\` exposes structured server status, command resolution, timeout, permission, and config-source fields.
+- Expand JSON output for graph, DAG, summary, and workflow commands where CI or agents consume results.
+- Link graph nodes back to runs, goals, providers, and evidence so \`omk graph view\` becomes audit evidence, not only visualization.
+
+### P2: execution depth and planner quality
+
+- Deepen \`omk team\` runtime reporting: worker state, pane/session health, artifacts, and verification handoff.
+- Done: replace the \`omk goal plan\` stub with a planner that emits steps, acceptance criteria, risks, and evidence gates.
+- Add provider-quality gates before broader non-Kimi worker pools.
+- Keep Kimi-only execution as the safe fallback path for every run.
+
+## Later tracks
+
+### Provider routing maturity
+
+- Keep Kimi as the main orchestrator, planner, merger, and final synthesis runtime.
+- Use provider hints for explorer, reviewer, QA, planner, and documentation roles only when preflight is healthy and task risk is low.
+- Record provider attempts, route confidence, fallback reason, and final authority in run evidence.
+
+### Graph and memory maturity
+
+- Materialize provider routes, fallback events, goals, evidence gates, and run artifacts in the local graph/Kuzu ontology.
+- Keep \`omk graph view\` local-first and safe for private repositories.
+
+### Historical milestones
+
+| Version | Focus |
+|---------|-------|
+| v0.1 | init / doctor / chat, P0 skills, AGENTS.md / DESIGN.md generation, quality gate hooks |
+| v0.2 | wire controller, HUD, run state, worker logs |
+| v0.3 | worktree team, merge queue, reviewer / QA / integrator agents |
+| v0.4 | Google DESIGN.md integration, Stitch skills installer, screenshot UI review, Spec Kit planning + DAG execution, agent registry, project index, run summary |
+| v0.5 | MCP project server, plugin pack, CI agent mode |
+| v1.1.6 | provider/deepseek commands, provider policy flags, graph view, goal lifecycle, expanded run history and update JSON |
+| v1.1.9 | chat harness manifest, capability DAG lanes, Rust native safety loader, Windows clipboard screenshot bridge, release native matrix |
+| v1.1.12 | Replay system, skill assigner, decision trace coverage, evidence gates, and repair policy |
+| v1.1.13 | Bundled MCP server entrypoints, ACP/host transport groundwork, deployment-ready package metadata |
 `;
 
 const SECURITY_MD = `# Security Policy
@@ -297,6 +337,13 @@ Please report security issues via GitHub Issues with the \`security\` label.
 ## Built-in Protections
 
 oh-my-kimi includes default hooks to block destructive commands and secret leakage.
+
+## MCP and Harness Secret Handling
+
+- Fresh init writes project-local \`omk-project\` MCP only; user/global MCP and skills are runtime-only unless explicitly imported by a trusted local user.
+- Never print, commit, or summarize MCP \`env\`, headers, tokens, or provider keys.
+- Treat \`chat-agent-harness.json\` as private run metadata: use it for inventory/gates, but do not paste large inventories or secret-like values into prompts, memory, or reports.
+- Prefer sanitized \`omk mcp doctor --json\`, \`omk verify --json\`, test summaries, and secret scans as shareable evidence.
 
 ## Best Practices
 
@@ -334,6 +381,13 @@ You must operate as a Kimi-native coding orchestrator.
 - Verify before completion.
 - Never claim tests passed unless they were run.
 
+## Active Harness and Resource Inventory
+
+- If a run contains chat-agent-harness.json, read it for the full MCP/skills/hooks inventory, virtual DAG, authority boundaries, worker limits, and gate list.
+- Treat compact prompt resource counts as summaries only.
+- Default runtime scope is project MCP/skills; all-scope may read user ~/.kimi resources at runtime without copying personal files.
+- Do not paste huge global MCP/skill inventories or secret-bearing env/header values into prompts, memory, or final reports.
+
 ## Kimi-native Context Tools
 
 - Root and generated role agents inherit an Okabe-compatible base that keeps default tools and adds SendDMail for checkpoint rollback scenarios.
@@ -351,6 +405,7 @@ For non-trivial tasks:
    - explorer for repository discovery
    - planner for architecture/refactor/risky work
    - coder for implementation
+   - reviewer or qa for review and gate analysis
 4. Read relevant skills.
 5. Use MCP if useful.
 6. Implement minimal changes.
@@ -642,9 +697,10 @@ const routes = [
     patterns: [
       'design', 'ui', 'ux', 'frontend', 'front-end', 'figma', 'stitch', 'open-design',
       'prototype', 'landing', 'component', 'visual', 'screenshot', 'responsive', 'accessibility',
+      'react', 'next.js', 'vite', 'expo', 'react native',
       '디자인', '화면', '프론트', '랜딩', '컴포넌트', '시각', '스크린샷', '반응형', '접근성', '프로토타입',
     ],
-    skills: ['open-design', 'awesome-design-md', 'omk-design-md', 'omk-flow-design-to-code', 'omk-multimodal-ui-review'],
+    skills: ['open-design', 'awesome-design-md', 'omk-design-md', 'omk-flow-design-to-code', 'omk-multimodal-ui-review', 'react-doctor'],
     note: 'For visual work, read DESIGN.md, reuse tokens, use awesome-design-md references when a named style is requested, and launch localhost with omk design open-design when interactive design is useful.',
   },
   {
@@ -653,7 +709,7 @@ const routes = [
       'bug', 'error', 'failed', 'failure', 'traceback', 'exception', 'fix', 'regression', 'broken', 'debug',
       '버그', '에러', '오류', '실패', '고쳐', '수정', '안됨', '안돼', '문제', '디버그',
     ],
-    skills: ['omk-flow-bugfix', 'omk-quality-gate'],
+    skills: ['omk-flow-bugfix', 'andrej-karpathy-skills', 'matt-pocock-skills', 'omk-quality-gate'],
     note: 'For failures, isolate root cause first, keep the patch small, and rerun the failing command plus the quality gate.',
   },
   {
@@ -662,7 +718,7 @@ const routes = [
       'implement', 'build', 'add ', 'create', 'scaffold', 'generate', 'feature', 'new command',
       '구현', '추가', '만들', '생성', '기능', '신규',
     ],
-    skills: ['omk-plan-first', 'omk-flow-feature-dev', 'omk-quality-gate'],
+    skills: ['omk-plan-first', 'omk-flow-feature-dev', 'matt-pocock-skills', 'andrej-karpathy-skills', 'omk-quality-gate'],
     note: 'For new capability work, plan the smallest reversible diff and include regression coverage before completion.',
   },
   {
@@ -698,7 +754,7 @@ const routes = [
       'refactor', 'cleanup', 'simplify', 'deslop', 'debt', 'migration',
       '리팩토', '정리', '단순화', '마이그레이션',
     ],
-    skills: ['omk-flow-refactor', 'omk-quality-gate'],
+    skills: ['omk-flow-refactor', 'andrej-karpathy-skills', 'matt-pocock-skills', 'omk-quality-gate'],
     note: 'For refactors, preserve behavior with tests first and avoid unrelated rewrites.',
   },
   {
@@ -717,7 +773,7 @@ const routes = [
       'agent', 'subagent', 'multi-agent', 'orchestration', 'workflow', 'mcp', 'hook', 'hooks', 'skill', 'skills', 'memory',
       '에이전트', '서브에이전트', '워크플로', '훅', '스킬', '메모리',
     ],
-    skills: ['omk-task-router', 'omk-project-rules', 'omk-kimi-runtime', 'omk-flow-team-run'],
+    skills: ['omk-task-router', 'omk-project-rules', 'omk-kimi-runtime', 'omk-flow-team-run', 'agentmemory', 'multica', 'andrej-karpathy-skills'],
     note: 'For agent or hook work, keep routing advisory, avoid installing unreviewed external skills, and verify generated config locally.',
   },
   {
@@ -1204,10 +1260,10 @@ coding_thinking = "enabled"
 }
 
 const MEMORY_FILES: Record<string, string> = {
-  "project.md": "# Project Memory\n\nThe project-local ontology graph (.omk/memory/graph-state.json) is the source of truth; this file is a human-readable mirror.\n",
-  "decisions.md": "# Decisions\n\nRecord important architecture/design decisions. Also decomposed into Decision nodes in the local graph memory.\n",
-  "commands.md": "# Frequently Used Commands\n\nCommand mirror maintained alongside the local graph memory.\n\n```bash\n# example\n```\n",
-  "risks.md": "# Known Risks\n\n- \n",
+  "project.md": "# Project Memory\n\nProject-local graph memory is the source of truth; this file is a human-readable mirror.\n\n## Runtime Surfaces\n\n- Follow AGENTS.md and .kimi/AGENTS.md for active agent policy.\n- Use chat-agent-harness.json when present for MCP/skills/hooks inventory, worker limits, authority boundaries, and gates.\n- Keep .omk/memory mirrors free of secrets and private user data.\n",
+  "decisions.md": "# Decisions\n\nRecord durable architecture, release, runtime, and safety decisions.\n\nFor each decision, include:\n\n- date and short title\n- affected files or surfaces\n- evidence commands or artifacts\n- rollback or revisit trigger\n\nNever store secrets, raw MCP env, tokens, or private user data.\n",
+  "commands.md": "# Frequently Used Commands\n\nCommand mirror maintained alongside the local graph memory.\n\n```bash\nnpm run yaml:check\nnpm run lint\nnpm run secret:scan\nnpm run check\nnpm run build:clean\nnpm test\nnpm run audit:package\nnpm run pack:dry\nomk mcp doctor --json\nomk verify --json\n```\n\nUse targeted `npm test -- --match <pattern>` for focused regression loops before the full gate.\n",
+  "risks.md": "# Known Risks\n\n- Do not store secrets, API keys, tokens, credentials, MCP env/header values, or private user data in memory.\n- `--local-user` and all-scope MCP/skills are runtime-only; do not copy global resources unless the user explicitly opts into `--import-user-skills`.\n- `chat-agent-harness.json` can contain private run inventory; summarize counts and gates, not full global inventories.\n- Working trees can contain unrelated edits; inspect `git status --short` before changes and avoid reverting user work.\n- Completion claims require evidence: tests, `omk verify --json`, replay/cockpit artifacts, or an explicit not-run reason.\n",
 };
 
 export async function initCommand(options: InitCommandOptions): Promise<void> {

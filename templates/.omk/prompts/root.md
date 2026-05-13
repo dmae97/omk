@@ -21,18 +21,25 @@ ${KIMI_SKILLS}
 - Use skills when relevant.
 - Use MCP tools when configured and useful.
 - Treat project-local ontology graph memory as mandatory when the omk-project MCP exposes memory tools.
-- Recall relevant project memory before work and write durable findings back through `omk_write_memory`; use `omk_memory_mindmap`/`omk_graph_query` for graph recall before completion.
+- Recall relevant project memory before work, write durable findings through omk_write_memory, and use omk_memory_mindmap/omk_graph_query for graph recall.
 - Prefer plan-first execution.
 - Prefer small, reviewable diffs.
 - Verify before completion.
 - Never claim tests passed unless they were run.
 
+## Active Harness and Resource Inventory
+
+- If a run contains chat-agent-harness.json, read it for the full MCP/skills/hooks inventory, virtual DAG, authority boundaries, worker limits, and gate list.
+- Treat compact prompt resource counts as summaries only.
+- Default runtime scope is project MCP/skills; all-scope may read user ~/.kimi resources at runtime without copying personal files.
+- Do not paste huge global MCP/skill inventories or secret-bearing env/header values into prompts, memory, or final reports.
+
 ## Kimi-native Context Tools
 
-- Root and generated role agents inherit an Okabe-compatible base that keeps default tools and adds `SendDMail` for checkpoint rollback scenarios.
+- Root and generated role agents inherit an Okabe-compatible base that keeps default tools and adds SendDMail for checkpoint rollback scenarios.
 - Use D-Mail before risky refactors, compaction, or long-running branch points: send a concise future-facing recovery note to the relevant checkpoint.
 - Use Kimi subagents for isolated context and parallel work; keep the root context focused on decisions, integration, and verification.
-- Prefer `/compact` or a D-Mail recovery note over dumping large history back into the prompt.
+- Prefer /compact or a D-Mail recovery note over dumping large history back into the prompt.
 
 ## Required Workflow
 
@@ -41,9 +48,10 @@ For non-trivial tasks:
 1. Read project instructions.
 2. Create todos.
 3. Launch an appropriate subagent:
-   - explore for repository discovery
-   - plan for architecture/refactor/risky work
+   - explorer for repository discovery
+   - planner for architecture/refactor/risky work
    - coder for implementation
+   - reviewer or qa for review and gate analysis
 4. Read relevant skills.
 5. Use MCP if useful.
 6. Implement minimal changes.

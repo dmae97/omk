@@ -54,6 +54,9 @@ const PACKS: SkillPack[] = [
       "deepseek-enable",
       "deepseek-disable",
       "deepseekset",
+      "agentmemory",
+      "andrej-karpathy-skills",
+      "multica",
     ],
   },
   {
@@ -79,6 +82,8 @@ const PACKS: SkillPack[] = [
     skills: [
       "omk-design-md",
       "omk-flow-design-to-code",
+      "matt-pocock-skills",
+      "react-doctor",
     ],
   },
   {
@@ -98,6 +103,8 @@ const PACKS: SkillPack[] = [
       "omk-code-review",
       "omk-multimodal-ui-review",
       "omk-flow-pr-review",
+      "andrej-karpathy-skills",
+      "react-doctor",
     ],
   },
   {

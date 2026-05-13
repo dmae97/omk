@@ -69,7 +69,7 @@ omk summary-show
 omk cockpit
 ```
 
-> Current stable package: **v1.1.13**. Stable daily-use core with alpha orchestration surfaces; release-gated and evidence-gated flows are labelled in CLI help and docs.
+> Current stable package: **v1.1.14**. Stable daily-use core with alpha orchestration surfaces; release-gated and evidence-gated flows are labelled in CLI help and docs.
 
 > **Share your verified run:** open a **Verified run** issue with your raw prompt, generated diff, `omk verify --json`, replay screenshot, and known limitation so others can inspect real evidence.
 
@@ -85,6 +85,7 @@ omk cockpit
 | Kimi needs operator visibility | HUD and cockpit expose run state, TODOs, ETA, usage, workers, and changed files. |
 | Extra models create chaos | Kimi keeps write/merge authority; provider lanes stay advisory, review, QA, or research scoped. |
 | Hooks, MCP, and skills drift | `omk doctor`, `omk skill`, `omk mcp`, and generated project assets make the runtime inspectable. |
+| Repeated agent workflows stay ad hoc | Packaged OMK skills now cover memory, surgical coding, alignment/TDD, React diagnostics, managed-agent teamwork, legal workflows, quality gates, and release review. |
 
 **Mental model:** Kimi writes. OMK coordinates, verifies, remembers, and guards.
 
@@ -381,7 +382,7 @@ npm run smoke:pack
 npm run release:check
 ```
 
-The v1.1.13 release line is release-gated and evidence-gated: bundled MCP server entrypoints, ACP/host transport groundwork, package audit, smoke-pack checks, Rust native artifact normalization, replay/inspect/diff-runs, skill assigner, decision trace coverage, and CI release gates.
+The v1.1.14 release line is release-gated and evidence-gated: current AGENTS/init templates, packaged external-inspired workflow skills, bundled MCP server entrypoints, ACP/host transport groundwork, package audit, smoke-pack checks, Rust native artifact normalization, replay/inspect/diff-runs, skill assigner, decision trace coverage, and CI release gates.
 
 ---
 
@@ -389,6 +390,7 @@ The v1.1.13 release line is release-gated and evidence-gated: bundled MCP server
 
 - [Getting started](./docs/getting-started.md)
 - [Verified-run demo evidence skeleton](./docs/demo/verified-run/README.md)
+- [Current workflow skills](./templates/skills/kimi/agentmemory/SKILL.md)
 - [Local graph memory](./docs/local-graph-memory.md)
 - [HUD and parallel UX](./docs/hud-and-parallel-ux.md)
 - [Design and Open Design workflow](./docs/design-md.md)
