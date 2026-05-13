@@ -1,6 +1,6 @@
 # Roadmap
 
-Current public version: v1.1.14
+Current public version: v1.1.15
 Last updated: 2026-05-13
 
 ## v1.1.9 reality
@@ -18,7 +18,7 @@ Provider routing and graph viewing are no longer purely future work:
 ### P0: release and contract gates
 
 - Done: YAML validation now runs in local `verify` plus CI/smoke workflows.
-- Done: package dry-pack, package audit, tarball smoke, native safety build, and release matrix gates were re-verified against v1.1.14 artifacts.
+- Done: package dry-pack, package audit, tarball smoke, native safety build, and release matrix gates were re-verified against v1.1.15 artifacts.
 - Done: provider/deepseek and screenshot JSON command contracts gained hermetic regression tests.
 - Done: current AGENTS/init templates and packaged workflow skills were aligned with the active skills/MCP/agents/harness surface.
 - Remaining: lock broader provider fallback metadata with tests for rate limit, timeout, and Kimi fallback variants.
@@ -65,4 +65,5 @@ Provider routing and graph viewing are no longer purely future work:
 | v1.1.9 | chat harness manifest, capability DAG lanes, Rust native safety loader, Windows clipboard screenshot bridge, release native matrix |
 | v1.1.12 | Replay system, skill assigner, decision trace coverage, evidence gates, and repair policy |
 | v1.1.13 | Bundled MCP server entrypoints, ACP/host transport groundwork, deployment-ready package metadata |
+| v1.1.15 | Isolated HOME MCP shell-profile hotfix and persistent fetch MCP entrypoint |
 | v1.1.14 | Current harness docs, external-inspired workflow skills, and release-safe public wording |

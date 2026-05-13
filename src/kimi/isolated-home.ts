@@ -1,4 +1,4 @@
-import { lstat, mkdtemp, mkdir, symlink, rm } from "fs/promises";
+import { lstat, mkdtemp, mkdir, symlink, rm, writeFile } from "fs/promises";
 import { dirname, join } from "path";
 import { tmpdir } from "os";
 import { pathExists, getProjectRoot, getUserHome } from "../util/fs.js";
@@ -104,19 +104,14 @@ export async function prepareIsolatedKimiHome(options: IsolatedKimiHomeOptions =
     }
 }
 
-  // Symlink shell profile files so MCP servers spawned via bash inherit
-  // the user's shell environment (aliases, PATH, env vars) instead of
-  // starting with an empty /tmp home.
+  // Bridge shell profile files so MCP servers spawned via bash inherit the
+  // user's shell environment without evaluating ~/.profile against /tmp HOME.
   const SHELL_PROFILES = [".bashrc", ".bash_profile", ".profile", ".zshrc", ".zprofile"];
   for (const name of SHELL_PROFILES) {
     const src = join(originalHome, name);
     const dst = join(tmpHome, name);
     if (await pathExists(src)) {
-      try {
-        await symlink(src, dst);
-      } catch (err) {
-        console.warn(`[omk] Failed to symlink ~/${name} to isolated HOME: ${(err as Error).message ?? err}`);
-      }
+      await writeIsolatedShellProfileBridge(src, dst, originalHome, name);
     }
   }
 
@@ -185,4 +180,38 @@ async function symlinkIfExists(src: string, dst: string, label: string): Promise
   await symlink(src, dst, type).catch((err) => {
     console.warn(`[omk] Failed to symlink local auth path ${label} to isolated HOME: ${(err as Error).message ?? err}`);
   });
+}
+
+async function writeIsolatedShellProfileBridge(src: string, dst: string, originalHome: string, label: string): Promise<void> {
+  await mkdir(dirname(dst), { recursive: true });
+  await writeFile(
+    dst,
+    [
+      "# OMK isolated HOME shell profile bridge.",
+      "# Source the real profile with the real HOME, then restore isolated HOME.",
+      "if [ \"${OMK_SHELL_PROFILE_BRIDGE_ACTIVE:-}\" = \"1\" ]; then",
+      "  return 0 2>/dev/null || exit 0",
+      "fi",
+      `__omk_isolated_home="$HOME"`,
+      `__omk_original_home=\${OMK_ORIGINAL_HOME:-${shellQuote(originalHome)}}`,
+      "OMK_SHELL_PROFILE_BRIDGE_ACTIVE=1",
+      "export OMK_SHELL_PROFILE_BRIDGE_ACTIVE",
+      'HOME="$__omk_original_home"',
+      "export HOME",
+      `. ${shellQuote(src)}`,
+      "__omk_bridge_status=$?",
+      'HOME="$__omk_isolated_home"',
+      "export HOME",
+      "unset OMK_SHELL_PROFILE_BRIDGE_ACTIVE __omk_original_home __omk_isolated_home",
+      "return \"$__omk_bridge_status\" 2>/dev/null || exit \"$__omk_bridge_status\"",
+      "",
+    ].join("\n"),
+    { mode: 0o600 }
+  ).catch((err) => {
+    console.warn(`[omk] Failed to bridge ~/${label} into isolated HOME: ${(err as Error).message ?? err}`);
+  });
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
 }

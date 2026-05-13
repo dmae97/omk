@@ -69,7 +69,7 @@ omk summary-show
 omk cockpit
 ```
 
-> Current stable package: **v1.1.14**. Stable daily-use core with alpha orchestration surfaces; release-gated and evidence-gated flows are labelled in CLI help and docs.
+> Current stable package: **v1.1.15**. Stable daily-use core with alpha orchestration surfaces; release-gated and evidence-gated flows are labelled in CLI help and docs.
 
 > **Share your verified run:** open a **Verified run** issue with your raw prompt, generated diff, `omk verify --json`, replay screenshot, and known limitation so others can inspect real evidence.
 
@@ -382,7 +382,7 @@ npm run smoke:pack
 npm run release:check
 ```
 
-The v1.1.14 release line is release-gated and evidence-gated: current AGENTS/init templates, packaged external-inspired workflow skills, bundled MCP server entrypoints, ACP/host transport groundwork, package audit, smoke-pack checks, Rust native artifact normalization, replay/inspect/diff-runs, skill assigner, decision trace coverage, and CI release gates.
+The v1.1.15 release line is release-gated and evidence-gated: it hotfixes isolated HOME shell-profile bridging for bash-based MCP servers, keeps fetch on a persistent local MCP entrypoint, and preserves the current AGENTS/init templates, packaged external-inspired workflow skills, bundled MCP server entrypoints, package audit, smoke-pack checks, native safety normalization, replay/inspect/diff-runs, skill assigner, decision trace coverage, and CI release gates.
 
 ---
 
