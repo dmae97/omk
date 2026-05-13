@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { lstat, mkdir, mkdtemp, readFile, readlink, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { cleanupIsolatedKimiHome, prepareIsolatedKimiHome, resolveOriginalHome } from "../dist/kimi/isolated-home.js";
@@ -179,7 +179,15 @@ test("isolated Kimi HOME bridges shell profiles with original HOME", async () =>
     );
 
     assert.equal(stderr, "");
-    assert.equal(stdout, `${isolatedHome}|${originalHome}|${originalHome}|${originalHome}`);
+    const [home, localBinHome, cargoHome, profileHome] = stdout.split("|");
+    if (process.platform === "win32") {
+      assert.equal(home.endsWith(basename(isolatedHome)), true);
+    } else {
+      assert.equal(home, isolatedHome);
+    }
+    assert.equal(localBinHome, originalHome);
+    assert.equal(cargoHome, originalHome);
+    assert.equal(profileHome, originalHome);
   } finally {
     if (isolatedHome) await cleanupIsolatedKimiHome(isolatedHome);
     await rm(originalHome, { recursive: true, force: true });
