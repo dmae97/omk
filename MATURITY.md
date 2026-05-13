@@ -1,7 +1,7 @@
 # OMK Command Maturity Matrix
 
-Last updated: 2026-05-12
-Current public version: v1.1.12
+Last updated: 2026-05-13
+Current public version: v1.1.13
 
 | Level | Meaning |
 |-------|---------|
@@ -70,5 +70,5 @@ Current public version: v1.1.12
 | JSON output | Present on `doctor`, `runs/history`, `update`, `verify`, `goal` read/verify commands, provider commands, and screenshot subcommands; provider/screenshot JSON contracts are now regression-tested. | Expand consistent JSON to MCP diagnostics, graph, DAG, summary, and workflow entrypoints. |
 | Provider routing | DeepSeek opportunistic worker routing exists for low-risk/read-heavy paths; Kimi remains orchestrator and fallback; run summaries/reports now include provider attempt and fallback totals. | Add HUD provider route metrics and broader release-gate tests for fallback/metadata contracts. |
 | MCP diagnostics | `mcp list/doctor/test` exist; invalid project/global MCP JSON now fails visibly through diagnostics without exposing config contents. | Add machine-readable MCP JSON and structured failure categories for command resolution, timeout, permission, and server health. |
-| Release docs and site | README, CHANGELOG, MATURITY, package audit, and release-gate commands now document the v1.1.12 daily-use core, alpha/experimental surfaces, and public site at `https://oh-my-kimi.sbs/`. | Treat `npm run release:check` and CI release workflow evidence as the publish/deploy gate before claiming a new release. |
+| Release docs and site | README, CHANGELOG, MATURITY, package audit, and release-gate commands now document the v1.1.13 daily-use core, alpha/experimental surfaces, and public site at `https://oh-my-kimi.sbs/`. | Treat `npm run release:check` and CI release workflow evidence as the publish/deploy gate before claiming a new release. |
 | Goal planner | Goal lifecycle exists, including continue, generated plan/evidence criteria, and verification. | Expand planner quality scoring and release evidence. |

@@ -1,0 +1,63 @@
+name: "Bug: install"
+description: Report an install, upgrade, or command-not-found issue.
+title: "[Install] "
+labels: ["bug: install"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting an install issue. Redact tokens, private paths, and private repo data before pasting logs.
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: "e.g. macOS 15 / Ubuntu 24.04 WSL2 / Windows 11, Node 22, npm 10"
+    validations:
+      required: true
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Install method
+      options:
+        - npm global install
+        - npm local install
+        - npx / direct run
+        - source checkout
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command run
+      placeholder: "Paste the exact install or upgrade command."
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Error output
+      description: Paste the relevant redacted output.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      placeholder: "What should have happened?"
+    validations:
+      required: true
+  - type: textarea
+    id: attempted
+    attributes:
+      label: Workarounds tried
+      placeholder: "e.g. npm cache clean, reinstall, PATH check, fresh shell."
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed secrets, tokens, private keys, and private user data from this report.
+          required: true

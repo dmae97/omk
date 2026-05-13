@@ -1,0 +1,64 @@
+name: I used OMK on my repo
+description: Tell us how OMK worked on a real repository.
+title: "[Used OMK] "
+labels: ["showcase"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for validating OMK on a real repo. Redact secrets and private customer data before submitting.
+  - type: input
+    id: repo-type
+    attributes:
+      label: Repo type
+      placeholder: "e.g. TypeScript CLI, Next.js app, Python service, private monorepo"
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: Result
+      options:
+        - Worked end-to-end
+        - Worked with minor issues
+        - Blocked by setup
+        - Blocked during runtime
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Workflow tried
+      placeholder: "What command, workflow, or task did you run?"
+    validations:
+      required: true
+  - type: textarea
+    id: what-worked
+    attributes:
+      label: What worked
+      placeholder: "Install, doctor, MCP, agent flow, tests, docs, etc."
+    validations:
+      required: true
+  - type: textarea
+    id: what-did-not-work
+    attributes:
+      label: What did not work
+      placeholder: "Anything confusing, slow, broken, or missing."
+  - type: input
+    id: omk-version
+    attributes:
+      label: OMK version
+      placeholder: "e.g. omk --version"
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence or artifacts
+      placeholder: "Optional redacted logs, screenshots, PR links, or release links."
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed secrets, tokens, private keys, and private user data from this report.
+          required: true

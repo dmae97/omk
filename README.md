@@ -8,7 +8,7 @@
 <meta property="og:image" content="https://raw.githubusercontent.com/dmae97/oh-my-kimi/main/readmeasset/omk-social-preview.png" />
 <meta property="og:title" content="oh-my-kimi" />
 <meta property="og:url" content="https://oh-my-kimi.sbs/" />
-<meta property="og:description" content="Verified agent runtime for Kimi Code: DAG execution, evidence gates, graph memory, live HUD/cockpit, and zero-config safety hooks." />
+<meta property="og:description" content="Verified agent runtime for Kimi Code. Stable daily-use core with alpha orchestration surfaces." />
 
 <!-- Twitter -->
 <meta name="twitter:card" content="summary_large_image" />
@@ -19,6 +19,7 @@
 <h1>oh-my-kimi</h1>
 
 <p><strong>Verified agent runtime for Kimi Code.</strong></p>
+<p><sub>Stable daily-use core with alpha orchestration surfaces.</sub></p>
 <p><sub>Kimi writes. OMK coordinates, verifies, remembers, and guards.</sub></p>
 <p><a href="https://oh-my-kimi.sbs/"><strong>oh-my-kimi.sbs</strong></a> · <a href="https://github.com/dmae97/oh-my-kimi">GitHub</a> · <a href="https://www.npmjs.com/package/@oh-my-kimi/cli">npm</a></p>
 
@@ -68,7 +69,9 @@ omk summary-show
 omk cockpit
 ```
 
-> Current stable package: **v1.1.13**. Stable daily-use core with alpha/experimental orchestration surfaces clearly labelled in CLI help and docs.
+> Current stable package: **v1.1.13**. Stable daily-use core with alpha orchestration surfaces; release-gated and evidence-gated flows are labelled in CLI help and docs.
+
+> **Share your verified run:** open a **Verified run** issue with your raw prompt, generated diff, `omk verify --json`, replay screenshot, and known limitation so others can inspect real evidence.
 
 ---
 
@@ -360,7 +363,7 @@ Do not commit provider keys. Keep secrets in environment variables, local keycha
 
 ## Safety and maturity
 
-OMK is designed for daily use with explicit maturity labels:
+OMK has a stable daily-use core, with advanced surfaces explicitly labelled by maturity:
 
 - **Stable / daily-use core:** init, doctor, chat, plan, mode, runs, history, index-show, cockpit, HUD, design, LSP, index, star, update, google, and project inspection surfaces.
 - **Advanced inspection:** graph, MCP, replay, inspect, diff-runs, snip, screenshots, provider diagnostics, and design bridges are inspectable but may depend on local project assets.
@@ -378,13 +381,14 @@ npm run smoke:pack
 npm run release:check
 ```
 
-The v1.1.13 release line includes bundled MCP server entrypoints, ACP/host transport groundwork, package audit, smoke-pack checks, Rust native artifact normalization, replay/inspect/diff-runs, skill assigner, decision trace coverage, and CI release gates.
+The v1.1.13 release line is release-gated and evidence-gated: bundled MCP server entrypoints, ACP/host transport groundwork, package audit, smoke-pack checks, Rust native artifact normalization, replay/inspect/diff-runs, skill assigner, decision trace coverage, and CI release gates.
 
 ---
 
 ## Documentation
 
 - [Getting started](./docs/getting-started.md)
+- [Verified-run demo evidence skeleton](./docs/demo/verified-run/README.md)
 - [Local graph memory](./docs/local-graph-memory.md)
 - [HUD and parallel UX](./docs/hud-and-parallel-ux.md)
 - [Design and Open Design workflow](./docs/design-md.md)

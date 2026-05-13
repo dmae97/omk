@@ -1,0 +1,47 @@
+name: Showcase
+description: Share a successful OMK workflow, integration, or project result.
+title: "[Showcase] "
+labels: ["showcase"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Showcases help the community understand where OMK works well. Share only public-safe details.
+  - type: input
+    id: project
+    attributes:
+      label: Project or repo
+      placeholder: "Public URL or a private/internal description"
+    validations:
+      required: true
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      placeholder: "What did you use OMK for?"
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      placeholder: "What changed, shipped, or improved?"
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      placeholder: "Optional links, screenshots, logs, PRs, releases, or metrics."
+  - type: textarea
+    id: setup
+    attributes:
+      label: Setup notes
+      placeholder: "OS, package manager, MCPs, model/runtime, or repo type."
+  - type: checkboxes
+    id: permission
+    attributes:
+      label: Permission
+      options:
+        - label: This showcase is safe to reference publicly, or I clearly marked what must stay private.
+          required: true

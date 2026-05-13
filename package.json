@@ -1,7 +1,7 @@
 {
   "name": "@oh-my-kimi/cli",
   "version": "1.1.13",
-  "description": "Verified agent runtime for Kimi Code: DAG execution, evidence gates, graph memory, live HUD/cockpit, and zero-config safety hooks.",
+  "description": "Verified agent runtime for Kimi Code. Stable daily-use core with alpha orchestration surfaces.",
   "type": "module",
   "bin": {
     "omk": "dist/cli.js",

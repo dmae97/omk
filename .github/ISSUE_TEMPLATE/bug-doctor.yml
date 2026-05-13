@@ -1,0 +1,65 @@
+name: "Bug: doctor"
+description: Report an `omk doctor` failure or incorrect diagnostic.
+title: "[Doctor] "
+labels: ["bug: doctor"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a doctor issue. Redact tokens, paths with secrets, and private repo data before pasting output.
+  - type: input
+    id: omk-version
+    attributes:
+      label: OMK version
+      description: Run `omk --version` if available.
+      placeholder: "e.g. 1.1.13"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: "e.g. macOS 15 / Ubuntu 24.04 WSL2 / Windows 11, Node 22"
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: Doctor command
+      placeholder: "e.g. omk doctor --scope user"
+    validations:
+      required: true
+  - type: textarea
+    id: doctor-output
+    attributes:
+      label: Doctor output
+      description: Paste the relevant redacted output.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      placeholder: "What should doctor have reported?"
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      placeholder: "What was wrong, missing, or confusing?"
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Relevant context
+      placeholder: "MCP provider, shell, package manager, or prior setup steps."
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed secrets, tokens, private keys, and private user data from this report.
+          required: true

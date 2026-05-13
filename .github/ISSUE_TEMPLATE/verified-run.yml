@@ -1,0 +1,58 @@
+name: Verified run
+description: Submit a reproducible OMK run with validation evidence.
+title: "[Verified run] "
+labels: ["verified-run"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when you can share concrete validation evidence for an OMK run.
+  - type: input
+    id: omk-version
+    attributes:
+      label: OMK version
+      placeholder: "e.g. 1.1.13"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: "OS, shell, Node.js, package manager"
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command or workflow
+      description: Paste the command or high-level workflow used.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation evidence
+      description: Include redacted command output, test results, screenshot links, PR links, or release links.
+      placeholder: "What proves the run completed successfully?"
+    validations:
+      required: true
+  - type: textarea
+    id: repo-context
+    attributes:
+      label: Repo context
+      placeholder: "Repo type, size, stack, and whether it was public or private."
+    validations:
+      required: true
+  - type: textarea
+    id: caveats
+    attributes:
+      label: Caveats
+      placeholder: "Anything flaky, manual, slow, skipped, or private."
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed secrets, tokens, private keys, and private user data from this report.
+          required: true
