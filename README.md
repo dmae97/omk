@@ -384,6 +384,14 @@ npm run release:check
 
 The v1.1.15 release line is release-gated and evidence-gated: it hotfixes isolated HOME shell-profile bridging for bash-based MCP servers, keeps fetch on a persistent local MCP entrypoint, and preserves the current AGENTS/init templates, packaged external-inspired workflow skills, bundled MCP server entrypoints, package audit, smoke-pack checks, native safety normalization, replay/inspect/diff-runs, skill assigner, decision trace coverage, and CI release gates.
 
+**MCP fetch startup note:** if your personal Kimi config still starts fetch with `uvx mcp-server-fetch`, each disposable or isolated Kimi HOME may re-resolve Python dependencies before MCP tools appear. Prefer a persistent entrypoint:
+
+```bash
+uv tool install mcp-server-fetch
+```
+
+Then set `~/.kimi/mcp.json` to an absolute command such as `/home/you/.local/bin/mcp-server-fetch`. Keep project `.kimi/mcp.json` files from redefining the same `fetch` server unless the project intentionally overrides the user-level server.
+
 ---
 
 ## Documentation
