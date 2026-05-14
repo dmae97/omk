@@ -46,7 +46,7 @@ done
 # Validate platform if specified
 if [[ -n "$PLATFORM" ]]; then
     case "$PLATFORM" in
-        darwin-arm64|darwin-x64|linux-x64|linux-arm64|windows-x64)
+        darwin-arm64|darwin-x64|linux-x64|linux-arm64|windows-x64|windows-arm64)
             ;;
         *)
             echo "Invalid platform: $PLATFORM"
@@ -65,13 +65,13 @@ if [[ "$SKIP_DEPS" == "false" ]]; then
     # We need all platform bindings for bun cross-compilation
     # Use --force to bypass platform checks (os/cpu restrictions in package.json)
     # Install all in one command to avoid npm removing packages from previous installs
-    npm install --no-save --force \
-        @mariozechner/clipboard-darwin-arm64@0.3.0 \
-        @mariozechner/clipboard-darwin-x64@0.3.0 \
-        @mariozechner/clipboard-linux-x64-gnu@0.3.0 \
-        @mariozechner/clipboard-linux-arm64-gnu@0.3.0 \
-        @mariozechner/clipboard-win32-x64-msvc@0.3.0 \
-        @mariozechner/clipboard-win32-arm64-msvc@0.3.0 \
+    npm install --no-save --force --ignore-scripts \
+        @mariozechner/clipboard-darwin-arm64@0.3.2 \
+        @mariozechner/clipboard-darwin-x64@0.3.2 \
+        @mariozechner/clipboard-linux-x64-gnu@0.3.2 \
+        @mariozechner/clipboard-linux-arm64-gnu@0.3.2 \
+        @mariozechner/clipboard-win32-x64-msvc@0.3.2 \
+        @mariozechner/clipboard-win32-arm64-msvc@0.3.2 \
         @img/sharp-darwin-arm64@0.34.5 \
         @img/sharp-darwin-x64@0.34.5 \
         @img/sharp-linux-x64@0.34.5 \
@@ -179,5 +179,9 @@ ls -lh *.tar.gz *.zip 2>/dev/null || true
 echo ""
 echo "Extracted directories for testing:"
 for platform in "${PLATFORMS[@]}"; do
-    echo "  binaries/$platform/pi"
+    if [[ "$platform" == windows-* ]]; then
+        echo "  binaries/$platform/pi.exe"
+    else
+        echo "  binaries/$platform/pi"
+    fi
 done
