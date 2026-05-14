@@ -1,3 +1,10 @@
-export { NodeExecutionEnv } from "./env/nodejs.js";
-export type { ExecutionEnv, ExecutionEnvExecOptions, FileErrorCode, FileInfo, FileKind } from "./types.js";
-export { FileError } from "./types.js";
+export type {
+	ExecutionEnv,
+	ExecutionEnvExecOptions,
+	ExecutionErrorCode,
+	FileErrorCode,
+	FileInfo,
+	FileKind,
+	Result,
+} from "./types.js";
+export { ExecutionError, err, FileError, getOrThrow, getOrUndefined, ok } from "./types.js";

@@ -18,6 +18,12 @@ The intended rule is:
 
 A final lifecycle hardening pass should prove these guarantees with a broad listener/hook reentrancy test suite.
 
+## Error handling
+
+The target error-handling model is `Result<TValue, TError>` for fallible harness operations instead of thrown exceptions. Implementations should catch backend/provider/filesystem exceptions at the boundary and normalize them into typed error results; callers should inspect returned results instead of relying on thrown exceptions.
+
+This is currently implemented for `ExecutionEnv`, `NodeExecutionEnv`, shell-output capture, and skill/prompt-template resource loading. Older harness/session/compaction APIs still throw in several paths; finishing that migration is tracked in the cleanup todo.
+
 ## State model
 
 The harness separates state into four categories.
@@ -90,7 +96,7 @@ Structural operations require `phase === "idle"` and synchronously set the phase
 - `compact`
 - `navigateTree`
 
-Starting another structural operation while the harness is not idle throws.
+Starting another structural operation while the harness is not idle currently throws. This should become a typed result failure as part of the error-handling cleanup.
 
 The following operations are allowed during a turn where appropriate:
 
@@ -141,7 +147,7 @@ The low-level loop converts harness `ThinkingLevel` to provider `reasoning` at t
 
 No state refresh is needed on `agent_end` except flushing leftover pending session writes and clearing the operation phase. The exact `settled` event timing is still under review.
 
-If the system-prompt callback throws while starting `prompt`, `skill`, or `promptFromTemplate`, the operation throws and the harness returns to idle. If it throws from the save-point snapshot created by `prepareNextTurn`, the low-level agent run records an assistant error message.
+If the system-prompt callback throws while starting `prompt`, `skill`, or `promptFromTemplate`, the operation currently throws and the harness returns to idle. This should become a typed result failure as part of the error-handling cleanup. If it throws from the save-point snapshot created by `prepareNextTurn`, the low-level agent run records an assistant error message.
 
 ## Hooks and events
 
@@ -307,7 +313,7 @@ Implemented so far:
 
 - `setTools(tools, activeToolNames?)`
 - `setActiveTools(toolNames)`
-- invalid active tool names throw
+- invalid active tool names currently throw; convert to result errors
 - generic common app tool shape via `AgentHarness<TSkill, TPromptTemplate, TTool>`
 - `QueueMode` exported from `Agent`
 - `AgentHarnessOptions.steeringMode` / `followUpMode`
@@ -355,7 +361,33 @@ Still needed:
 - Document or change timing for model/thinking/stream-option events that may fire before queued session entries persist while busy.
 - Audit `abort()` barrier semantics.
 
-### 7. Later coding-agent migration plan
+### 7. Complete `Result`/non-throwing harness cleanup
+
+Started.
+
+Implemented so far:
+
+- Added generic `Result<TValue, TError>` plus helpers.
+- Updated `ExecutionEnv` and `NodeExecutionEnv` to return typed results for filesystem/process operations.
+- Added `ExecutionEnv.appendFile()` for streaming append use cases.
+- Updated skill and prompt-template loaders to consume `ExecutionEnv` results.
+- Updated shell output capture to return a result and use `ExecutionEnv` instead of Node APIs directly, including full-output spill via `appendFile()`.
+- Removed `NodeExecutionEnv` from the browser-safe `execution-env.ts` re-export; Node-specific callers import from `harness/env/nodejs.js`.
+- Expanded `NodeExecutionEnv` tests for file operations, exec errors, aborts, callbacks, timeouts, and shell-output full-output spill.
+
+Still needed:
+
+- Remove remaining throws from `src/harness` APIs and helpers, except explicit adapter/test helpers such as `getOrThrow()`.
+- Convert session storage/repo/session APIs to typed result returns.
+- Convert structural `AgentHarness` operations to typed result returns for busy, missing-resource, auth, compaction, and branch-summary failures.
+- Convert compaction helpers to typed result returns.
+- Keep Node-specific APIs isolated under `src/harness/env/nodejs.ts` and Node-backed storage/session implementations, or move those implementations behind explicit Node-only entry points.
+- Replace Node globals in generic harness utilities, especially `Buffer` usage in truncation utilities, with runtime-neutral implementations.
+- Audit package exports so browser/generic-JS imports do not pull Node-only modules such as `NodeExecutionEnv` or JSONL storage.
+- Keep expanding `ExecutionEnv` and shell-output contract tests as the API evolves, especially for non-Node implementations.
+- Add tests proving harness APIs return `ok: false` instead of throwing for expected failure paths.
+
+### 8. Later coding-agent migration plan
 
 Not started.
 
@@ -367,7 +399,7 @@ Still needed:
 - Preserve UI/session behavior outside core.
 - Move coding-agent stream/auth/retry/header behavior onto the harness stream configuration and provider hooks.
 
-### 8. Final lifecycle hardening suite
+### 9. Final lifecycle hardening suite
 
 Before treating `AgentHarness` as migration-ready, add a broad test suite that exercises listeners and hooks closing over the harness and calling public APIs during every relevant event.
 

@@ -1,7 +1,7 @@
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider, type StreamOptions } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
 import { AgentHarness } from "../../src/harness/agent-harness.js";
-import { NodeExecutionEnv } from "../../src/harness/execution-env.js";
+import { NodeExecutionEnv } from "../../src/harness/env/nodejs.js";
 import { Session } from "../../src/harness/session/session.js";
 import { InMemorySessionStorage } from "../../src/harness/session/storage/memory.js";
 import { calculateTool } from "../utils/calculate.js";
