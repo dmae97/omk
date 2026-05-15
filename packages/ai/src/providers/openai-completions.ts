@@ -165,6 +165,7 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions", OpenA
 
 			let textBlock: TextContent | null = null;
 			let thinkingBlock: ThinkingContent | null = null;
+			let hasFinishReason = false;
 			const toolCallBlocksByIndex = new Map<number, StreamingToolCallBlock>();
 			const toolCallBlocksById = new Map<string, StreamingToolCallBlock>();
 			const blocks = output.content as StreamingBlock[];
@@ -288,6 +289,7 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions", OpenA
 					if (finishReasonResult.errorMessage) {
 						output.errorMessage = finishReasonResult.errorMessage;
 					}
+					hasFinishReason = true;
 				}
 
 				if (choice.delta) {
@@ -389,6 +391,9 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions", OpenA
 			}
 			if (output.stopReason === "error") {
 				throw new Error(output.errorMessage || "Provider returned an error stop reason");
+			}
+			if (!hasFinishReason) {
+				throw new Error("Stream ended without finish_reason");
 			}
 
 			stream.push({ type: "done", reason: output.stopReason, message: output });
