@@ -303,9 +303,9 @@ def finalized_pr_comment() -> str:
     return _load("finalized_pr_comment.md").strip()
 
 
-
 def bare_mention_reply() -> str:
     return "What would you like me to do?"
+
 
 __all__ = [
     "classify_next_step",

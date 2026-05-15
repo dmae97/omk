@@ -922,6 +922,31 @@ def _allowlist(monkeypatch: pytest.MonkeyPatch, repos: str) -> None:
     reset_settings_cache()
 
 
+def _issue_payload(
+    number: int,
+    title: str,
+    *,
+    state: str = "open",
+    author: str = "alice",
+    labels: list[dict] | None = None,
+    comments: int = 0,
+    updated_at: str = "2026-05-14T10:00:00Z",
+    created_at: str = "2026-05-01T10:00:00Z",
+    repo: str = "octo/widget",
+) -> dict:
+    return {
+        "number": number,
+        "title": title,
+        "state": state,
+        "user": {"login": author},
+        "labels": labels or [],
+        "comments": comments,
+        "updated_at": updated_at,
+        "created_at": created_at,
+        "html_url": f"https://github.com/{repo}/issues/{number}",
+    }
+
+
 def _make_issues_handler(
     by_repo: dict[str, list[dict]],
     *,
@@ -1050,6 +1075,103 @@ def test_browse_fans_out_across_allowlist_and_filters_prs(env, monkeypatch: pyte
     assert first["labels"] == ["bug"]
     assert first["comments"] == 3
     assert first["html_url"].endswith("/issues/7")
+
+
+def test_browse_reuses_cache_until_forced_refresh(env, monkeypatch: pytest.MonkeyPatch) -> None:
+    token = _enable_replay(monkeypatch)
+    cfg = Settings()  # type: ignore[call-arg]
+    cfg.ensure_paths()
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        assert request.method == "GET"
+        assert request.url.path == "/repos/octo/widget/issues"
+        calls += 1
+        title = "initial" if calls == 1 else "refreshed"
+        updated_at = "2026-05-14T10:00:00Z" if calls == 1 else "2026-05-14T11:00:00Z"
+        return httpx.Response(200, json=[_issue_payload(1, title, updated_at=updated_at)])
+
+    app = create_app(cfg)
+    with TestClient(app) as client:
+        _install_github_mock(app, httpx.MockTransport(handler))
+        first = client.get(
+            "/api/github/issues?state=open&limit=20",
+            headers={"X-Robomp-Replay-Token": token},
+        )
+        second = client.get(
+            "/api/github/issues?state=open&limit=20",
+            headers={"X-Robomp-Replay-Token": token},
+        )
+        forced = client.get(
+            "/api/github/issues?state=open&limit=20&refresh=1",
+            headers={"X-Robomp-Replay-Token": token},
+        )
+    close_database()
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert forced.status_code == 200
+    assert calls == 2
+    assert first.json()["cache"]["hit"] is False
+    assert first.json()["issues"][0]["title"] == "initial"
+    assert second.json()["cache"]["hit"] is True
+    assert second.json()["issues"][0]["title"] == "initial"
+    assert forced.json()["cache"]["hit"] is False
+    assert forced.json()["issues"][0]["title"] == "refreshed"
+
+
+def test_browse_cache_updates_from_issue_webhook(env, monkeypatch: pytest.MonkeyPatch) -> None:
+    token = _enable_replay(monkeypatch)
+    cfg = Settings()  # type: ignore[call-arg]
+    cfg.ensure_paths()
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        assert request.url.path == "/repos/octo/widget/issues"
+        calls += 1
+        return httpx.Response(200, json=[_issue_payload(4, "before", comments=1)])
+
+    app = create_app(cfg)
+    with TestClient(app) as client:
+        _install_github_mock(app, httpx.MockTransport(handler))
+        first = client.get(
+            "/api/github/issues?state=open&limit=20",
+            headers={"X-Robomp-Replay-Token": token},
+        )
+        assert first.status_code == 200
+
+        edited = {
+            "action": "edited",
+            "issue": _issue_payload(
+                4,
+                "after",
+                labels=[{"name": "bug"}],
+                comments=3,
+                updated_at="2026-05-14T12:00:00Z",
+            ),
+            "repository": {"full_name": "octo/widget"},
+        }
+        raw = json.dumps(edited).encode()
+        webhook_resp = client.post(
+            "/webhook/github",
+            content=raw,
+            headers=_signed_headers("test-webhook-secret", raw, event="issues", delivery="cache-edit"),
+        )
+        after = client.get(
+            "/api/github/issues?state=open&limit=20",
+            headers={"X-Robomp-Replay-Token": token},
+        )
+    close_database()
+
+    assert webhook_resp.status_code == 202
+    assert calls == 1
+    body = after.json()
+    assert body["cache"]["hit"] is True
+    assert body["issues"][0]["title"] == "after"
+    assert body["issues"][0]["comments"] == 3
+    assert body["issues"][0]["labels"] == ["bug"]
 
 
 def test_browse_per_repo_failure_does_not_take_down_panel(env, monkeypatch: pytest.MonkeyPatch) -> None:

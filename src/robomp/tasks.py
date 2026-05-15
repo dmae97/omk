@@ -491,7 +491,9 @@ async def handle_pr_conversation(
     # being present tells us a mention happened. Reply cheaply without omp.
     if directive is None and payload.get("_robomp_directive") is not None:
         comment = _comment_from_payload(payload)
-        log.info("bare mention, prompting for request", extra={"repo": repo_full, "pr": pr_number, "author": comment.author})
+        log.info(
+            "bare mention, prompting for request", extra={"repo": repo_full, "pr": pr_number, "author": comment.author}
+        )
         try:
             await github.post_comment(repo_full, pr_number, persona.bare_mention_reply())
         except GitHubError as exc:

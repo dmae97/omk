@@ -542,12 +542,13 @@ let browseCache = { issues: [], errors: [], repos: [], when: 0 };
 
 function authHeaders() { return { ...AUTH_HEADERS }; }
 
-async function loadBrowse() {
+async function loadBrowse(forceRefresh = false) {
   const state = $("b-state").value;
   $("b-meta").textContent = "loading…";
   try {
-    const resp = await fetch("api/github/issues?state=" + encodeURIComponent(state) + "&limit=50",
-      { headers: authHeaders() });
+    const url = "api/github/issues?state=" + encodeURIComponent(state) + "&limit=50" +
+      (forceRefresh ? "&refresh=1" : "");
+    const resp = await fetch(url, { headers: authHeaders() });
     if (!resp.ok) {
       let detail = resp.statusText;
       try { detail = (await resp.json()).detail || detail; } catch (_) {}
@@ -556,7 +557,9 @@ async function loadBrowse() {
       return;
     }
     browseCache = await resp.json();
-    browseCache.when = Date.now();
+    browseCache.when = browseCache.cache && browseCache.cache.fetched_at
+      ? browseCache.cache.fetched_at * 1000
+      : Date.now();
     renderBrowse();
   } catch (err) {
     $("b-meta").textContent = "network error: " + err.message;
@@ -599,11 +602,12 @@ function renderBrowse() {
   }
   const repoLabel = repos.length ? repos.join(", ") : "(allowlist empty)";
   const age = browseCache.when ? fmtDuration((Date.now() - browseCache.when) / 1000) + " ago" : "";
-  $("b-meta").textContent = `${filtered.length}/${issues.length} from ${repoLabel}${age ? " · loaded " + age : ""}`;
+  const source = browseCache.cache && browseCache.cache.hit ? "cached" : "loaded";
+  $("b-meta").textContent = `${filtered.length}/${issues.length} from ${repoLabel}${age ? " · " + source + " " + age : ""}`;
 }
 
-$("b-refresh").addEventListener("click", loadBrowse);
-$("b-state").addEventListener("change", loadBrowse);
+$("b-refresh").addEventListener("click", () => loadBrowse(true));
+$("b-state").addEventListener("change", () => loadBrowse());
 $("b-filter").addEventListener("input", renderBrowse);
 $("b-list").addEventListener("click", (ev) => {
   const tri = ev.target.closest("button[data-triage]");

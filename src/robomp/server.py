@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import Body, FastAPI, Header, HTTPException, Request, status
@@ -25,7 +26,7 @@ from robomp.db import (
     issue_key as make_issue_key,
 )
 from robomp.github_backend import GitHubBackend
-from robomp.github_client import GitHubError
+from robomp.github_client import GitHubError, IssueSummary
 from robomp.manual_triage import (
     InvalidIssueRef,
     ManualTriageConflict,
@@ -38,6 +39,174 @@ from robomp.queue import WorkerPool
 from robomp.sandbox import SandboxManager
 
 log = logging.getLogger(__name__)
+
+
+@dataclass(slots=True)
+class _IssueBrowseCacheEntry:
+    repos: tuple[str, ...]
+    issues: list[IssueSummary]
+    errors: list[dict[str, str]]
+    fetched_at: float
+
+
+class _IssueBrowseCache:
+    """In-process cache for the dashboard's GitHub issue browser.
+
+    The browse panel is a convenience picker. It should not hit GitHub's
+    `/issues` endpoint on every browser reload because that endpoint returns PRs
+    mixed into the issue list. Webhooks keep warmed entries fresh; the dashboard
+    Refresh button can still force a live pull when an operator wants one.
+    """
+
+    def __init__(self) -> None:
+        self._entries: dict[tuple[str, int, tuple[str, ...]], _IssueBrowseCacheEntry] = {}
+        self._lock = asyncio.Lock()
+
+    async def get_or_fetch(
+        self,
+        *,
+        state: str,
+        limit: int,
+        repos: tuple[str, ...],
+        force: bool,
+        fetch: Callable[[], Awaitable[tuple[list[IssueSummary], list[dict[str, str]]]]],
+    ) -> tuple[_IssueBrowseCacheEntry, bool]:
+        key = (state, limit, repos)
+        async with self._lock:
+            if not force and (entry := self._entries.get(key)) is not None:
+                return entry, True
+
+        issues, errors = await fetch()
+        issues.sort(key=lambda s: s.updated_at, reverse=True)
+        entry = _IssueBrowseCacheEntry(
+            repos=repos,
+            issues=issues[:limit],
+            errors=errors,
+            fetched_at=time.time(),
+        )
+        async with self._lock:
+            if not force and (current := self._entries.get(key)) is not None:
+                return current, True
+            self._entries[key] = entry
+            return entry, False
+
+    async def apply_webhook(
+        self,
+        *,
+        event_type: str,
+        payload: Mapping[str, Any],
+        allowlist: frozenset[str],
+    ) -> None:
+        mutation = _issue_cache_mutation(event_type, payload, allowlist)
+        if mutation is None:
+            return
+        repo, number, summary = mutation
+        async with self._lock:
+            for (state, limit, repos), entry in self._entries.items():
+                if repo not in repos:
+                    continue
+                entry.issues = [item for item in entry.issues if not (item.repo == repo and item.number == number)]
+                if summary is not None and _cache_state_includes(state, summary.state):
+                    entry.issues.append(summary)
+                    entry.issues.sort(key=lambda s: s.updated_at, reverse=True)
+                    del entry.issues[limit:]
+
+
+def _cache_state_includes(cache_state: str, issue_state: str) -> bool:
+    return cache_state == "all" or issue_state == cache_state
+
+
+def _repo_full_name(payload: Mapping[str, Any]) -> str | None:
+    repo = payload.get("repository")
+    if isinstance(repo, Mapping):
+        full_name = repo.get("full_name")
+        if isinstance(full_name, str) and full_name:
+            return full_name
+    return None
+
+
+def _label_names(raw: Any) -> tuple[str, ...]:
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    return tuple(str(label.get("name") or "") if isinstance(label, Mapping) else str(label) for label in raw)
+
+
+def _issue_summary_from_payload(repo: str, issue: Mapping[str, Any]) -> IssueSummary | None:
+    number = issue.get("number")
+    if not isinstance(number, int):
+        return None
+    user = issue.get("user")
+    state = str(issue.get("state") or "open").lower()
+    if state not in {"open", "closed"}:
+        state = "open"
+    comments = issue.get("comments")
+    if not isinstance(comments, int):
+        comments = 0
+    return IssueSummary(
+        repo=repo,
+        number=number,
+        title=str(issue.get("title") or ""),
+        state=state,
+        author=str(user.get("login") or "") if isinstance(user, Mapping) else "",
+        labels=_label_names(issue.get("labels")),
+        comments=comments,
+        updated_at=str(issue.get("updated_at") or issue.get("created_at") or ""),
+        created_at=str(issue.get("created_at") or ""),
+        html_url=str(issue.get("html_url") or f"https://github.com/{repo}/issues/{number}"),
+    )
+
+
+def _issue_cache_mutation(
+    event_type: str,
+    payload: Mapping[str, Any],
+    allowlist: frozenset[str],
+) -> tuple[str, int, IssueSummary | None] | None:
+    if event_type not in {"issues", "issue_comment"}:
+        return None
+    repo = _repo_full_name(payload)
+    if repo is None or repo.lower() not in allowlist:
+        return None
+    issue = payload.get("issue")
+    if not isinstance(issue, Mapping):
+        return None
+    number = issue.get("number")
+    if not isinstance(number, int):
+        return None
+    if "pull_request" in issue:
+        return repo, number, None
+    if str(payload.get("action") or "") == "deleted":
+        return repo, number, None
+    summary = _issue_summary_from_payload(repo, issue)
+    if summary is None:
+        return None
+    return repo, number, summary
+
+
+def _issue_browse_payload(
+    *,
+    entry: _IssueBrowseCacheEntry,
+    cache_hit: bool,
+) -> dict[str, Any]:
+    return {
+        "issues": [
+            {
+                "repo": s.repo,
+                "number": s.number,
+                "title": s.title,
+                "state": s.state,
+                "author": s.author,
+                "labels": list(s.labels),
+                "comments": s.comments,
+                "updated_at": s.updated_at,
+                "created_at": s.created_at,
+                "html_url": s.html_url,
+            }
+            for s in entry.issues
+        ],
+        "errors": [dict(error) for error in entry.errors],
+        "repos": list(entry.repos),
+        "cache": {"hit": cache_hit, "fetched_at": entry.fetched_at},
+    }
 
 
 def _require_proxy_mode(cfg: Settings) -> tuple[str, bytes]:
@@ -73,6 +242,7 @@ def _build_state(settings: Settings) -> dict[str, Any]:
         "git_transport": git_transport,
         "sandbox": sandbox,
         "pool": pool,
+        "issue_browse_cache": _IssueBrowseCache(),
     }
 
 
@@ -130,6 +300,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"invalid json: {exc}") from exc
 
         db: Database = bag["db"]
+        issue_cache: _IssueBrowseCache = bag["issue_browse_cache"]
+        await issue_cache.apply_webhook(
+            event_type=x_github_event,
+            payload=payload,
+            allowlist=cfg.repo_allowlist,
+        )
 
         def _resolve(repo_full: str, pr_number: int) -> str | None:
             row = db.find_issue_by_pr(repo_full, pr_number)
@@ -266,12 +442,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request: Request,
         state: str = "open",
         limit: int = 30,
+        refresh: bool = False,
         x_robomp_token: str | None = Header(None, alias="X-Robomp-Replay-Token"),
     ) -> dict[str, Any]:
         """Browse issues across `ROBOMP_REPO_ALLOWLIST` for the trigger picker.
 
-        Token-gated identically to `/api/trigger`: this hits the live GitHub API
-        with the bot's PAT and would otherwise leak titles from private repos.
+        Token-gated identically to `/api/trigger`: this can expose titles from
+        private repos. Normal dashboard loads use the server cache; only cache
+        misses and explicit refreshes hit GitHub.
         """
         bag = request.app.state.bag
         cfg: Settings = bag["settings"]
@@ -281,48 +459,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(400, "state must be open|closed|all")
         capped = max(1, min(int(limit), 100))
         github: GitHubBackend = bag["github"]
-        repos = sorted(cfg.repo_allowlist)
+        issue_cache: _IssueBrowseCache = bag["issue_browse_cache"]
+        repos = tuple(sorted(cfg.repo_allowlist))
         if not repos:
-            return {"issues": [], "errors": [], "repos": []}
+            return {"issues": [], "errors": [], "repos": [], "cache": {"hit": False, "fetched_at": time.time()}}
 
-        # Fan out across allowlisted repos; per-repo failures don't take down the panel.
-        async def _one(repo: str) -> tuple[str, list, str | None]:
-            try:
-                items = await github.list_issues(repo, state=state, limit=capped)
-                return repo, items, None
-            except Exception as exc:  # GitHubError, network, etc.
-                log.warning("list_issues failed", extra={"repo": repo, "err": str(exc)})
-                return repo, [], str(exc)
+        async def _fetch() -> tuple[list[IssueSummary], list[dict[str, str]]]:
+            # Fan out across allowlisted repos; per-repo failures don't take down the panel.
+            async def _one(repo: str) -> tuple[str, list[IssueSummary], str | None]:
+                try:
+                    items = await github.list_issues(repo, state=state, limit=capped)
+                    return repo, items, None
+                except Exception as exc:  # GitHubError, network, etc.
+                    log.warning("list_issues failed", extra={"repo": repo, "err": str(exc)})
+                    return repo, [], str(exc)
 
-        results = await asyncio.gather(*(_one(r) for r in repos))
-        merged = []
-        errors = []
-        for repo, items, err in results:
-            if err is not None:
-                errors.append({"repo": repo, "error": err})
-            merged.extend(items)
-        # Newest-updated first across all repos.
-        merged.sort(key=lambda s: s.updated_at, reverse=True)
-        merged = merged[:capped]
-        return {
-            "issues": [
-                {
-                    "repo": s.repo,
-                    "number": s.number,
-                    "title": s.title,
-                    "state": s.state,
-                    "author": s.author,
-                    "labels": list(s.labels),
-                    "comments": s.comments,
-                    "updated_at": s.updated_at,
-                    "created_at": s.created_at,
-                    "html_url": s.html_url,
-                }
-                for s in merged
-            ],
-            "errors": errors,
-            "repos": repos,
-        }
+            results = await asyncio.gather(*(_one(r) for r in repos))
+            merged: list[IssueSummary] = []
+            errors: list[dict[str, str]] = []
+            for repo, items, err in results:
+                if err is not None:
+                    errors.append({"repo": repo, "error": err})
+                merged.extend(items)
+            return merged, errors
+
+        entry, cache_hit = await issue_cache.get_or_fetch(
+            state=state,
+            limit=capped,
+            repos=repos,
+            force=refresh,
+            fetch=_fetch,
+        )
+        return _issue_browse_payload(entry=entry, cache_hit=cache_hit)
 
     @app.post("/api/trigger")
     async def api_trigger(
