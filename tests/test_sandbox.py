@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from robomp.sandbox import SandboxManager, make_branch, workspace_key
+from robomp.sandbox import SandboxManager, _chown_workspace, make_branch, workspace_key
 
 
 def _git(args: list[str], cwd: Path) -> None:
@@ -81,6 +81,80 @@ def test_ensure_workspace_creates_worktree(tmp_path: Path, upstream_repo: Path) 
     assert ws.artifacts_dir.is_dir()
 
 
+def test_chown_workspace_noops_when_not_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[list[str], bool]] = []
+
+    monkeypatch.setattr("robomp.sandbox.platform.system", lambda: "Linux")
+    monkeypatch.setattr("robomp.sandbox.os.geteuid", lambda: 1000)
+    monkeypatch.setattr(
+        "robomp.sandbox.subprocess.run",
+        lambda cmd, *, check: calls.append((cmd, check)),
+    )
+
+    _chown_workspace(tmp_path, 2001)
+
+    assert calls == []
+
+
+def test_chown_workspace_noops_off_linux(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[list[str], bool]] = []
+
+    monkeypatch.setattr("robomp.sandbox.platform.system", lambda: "Darwin")
+    monkeypatch.setattr("robomp.sandbox.os.geteuid", lambda: 0)
+    monkeypatch.setattr(
+        "robomp.sandbox.subprocess.run",
+        lambda cmd, *, check: calls.append((cmd, check)),
+    )
+
+    _chown_workspace(tmp_path, 2001)
+
+    assert calls == []
+
+
+def test_chown_workspace_runs_chown_and_chmod_as_root_on_linux(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[list[str], bool]] = []
+
+    monkeypatch.setattr("robomp.sandbox.platform.system", lambda: "Linux")
+    monkeypatch.setattr("robomp.sandbox.os.geteuid", lambda: 0)
+    monkeypatch.setattr(
+        "robomp.sandbox.subprocess.run",
+        lambda cmd, *, check: calls.append((cmd, check)),
+    )
+
+    _chown_workspace(tmp_path, 2001)
+
+    # 2001 is the slot-private GID matching the slot UID, not the shared omp group.
+    assert calls == [
+        (["chown", "-R", "0:2001", str(tmp_path)], True),
+        (["chmod", "-R", "u=rwX,g=rwX,o=", str(tmp_path)], True),
+    ]
+
+
+def test_ensure_workspace_invokes_slot_chown(
+    tmp_path: Path, upstream_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[tuple[Path, int | None]] = []
+
+    def record_chown(ws_root: Path, slot_uid: int | None) -> None:
+        calls.append((ws_root, slot_uid))
+
+    monkeypatch.setattr("robomp.sandbox._chown_workspace", record_chown)
+    mgr = SandboxManager(tmp_path / "workspaces")
+
+    ws = mgr.ensure_workspace(
+        repo="octo/widget",
+        number=43,
+        title="something is wrong",
+        clone_url=str(upstream_repo),
+        default_branch="main",
+        slot_uid=2001,
+        author_name="robomp-bot",
+        author_email="robomp-bot@example.invalid",
+    )
+
+    assert calls == [(ws.root, 2001)]
+
+
 def test_ensure_workspace_is_idempotent(tmp_path: Path, upstream_repo: Path) -> None:
     mgr = SandboxManager(tmp_path / "workspaces")
     ws1 = mgr.ensure_workspace(
@@ -153,6 +227,7 @@ def test_git_command_error_redacts_url_in_args_and_stderr(tmp_path: Path) -> Non
     assert "bot" not in text or "https://bot:" not in text
     assert "***" in text or "example.invalid" in text
 
+
 def test_ensure_workspace_rewrites_credentialed_origin(tmp_path: Path, upstream_repo: Path) -> None:
     """A pool clone created by an older deploy with `https://user:pass@…` in
     `.git/config` must have its `origin` URL rewritten to the credential-free
@@ -163,7 +238,7 @@ def test_ensure_workspace_rewrites_credentialed_origin(tmp_path: Path, upstream_
     pool = mgr.pool_path("octo/widget")
     pool.parent.mkdir(parents=True, exist_ok=True)
     _git(["clone", "--filter=blob:none", str(upstream_repo), str(pool)], cwd=tmp_path)
-    credentialed = f"https://bot:ghp_seekrit@example.invalid/octo/widget.git"
+    credentialed = "https://bot:ghp_seekrit@example.invalid/octo/widget.git"
     _git(["-C", str(pool), "remote", "set-url", "origin", credentialed], cwd=tmp_path)
     config = (pool / ".git" / "config").read_text()
     assert "ghp_seekrit" in config  # sanity: precondition
@@ -217,7 +292,9 @@ def test_push_force_with_lease_succeeds_after_local_amend(tmp_path: Path, upstre
     _git(["-C", str(work), "commit", "--amend", "--no-edit"], cwd=tmp_path)
     amended = subprocess.run(
         ["git", "-C", str(work), "rev-parse", "HEAD"],
-        capture_output=True, text=True, check=True,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout.strip()
     result = git_push(work, branch="farm/abc/topic", expected_head=None, token=None)
     assert result.head == amended
@@ -225,7 +302,9 @@ def test_push_force_with_lease_succeeds_after_local_amend(tmp_path: Path, upstre
     # Origin's branch ref now matches the amended SHA.
     on_origin = subprocess.run(
         ["git", "-C", str(upstream_repo), "rev-parse", "refs/heads/farm/abc/topic"],
-        capture_output=True, text=True, check=True,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout.strip()
     assert on_origin == amended
 
@@ -269,7 +348,10 @@ def test_push_force_with_lease_refuses_when_origin_moved(tmp_path: Path, upstrea
     _git(["-C", str(work), "commit", "--amend", "--no-edit"], cwd=tmp_path)
     with pytest.raises(GitCommandError) as exc:
         git_push(work, branch="farm/abc/topic", expected_head=None, token=None)
-    assert "stale info" in (exc.value.stderr + exc.value.stdout).lower() or "rejected" in (exc.value.stderr + exc.value.stdout).lower()
+    assert (
+        "stale info" in (exc.value.stderr + exc.value.stdout).lower()
+        or "rejected" in (exc.value.stderr + exc.value.stdout).lower()
+    )
 
 
 def test_run_git_kills_hung_child(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

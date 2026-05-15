@@ -78,7 +78,7 @@ _SEEDED_PHASES = [
 
 
 def _make_inputs(
-    tmp_path: Path, settings: Settings, *, session_has_jsonl: bool
+    tmp_path: Path, settings: Settings, *, session_has_jsonl: bool, slot_uid: int | None = None
 ) -> tuple[worker.TaskInputs, SimpleNamespace]:
     session_dir = tmp_path / "session"
     session_dir.mkdir()
@@ -108,6 +108,7 @@ def _make_inputs(
         workspace=workspace,  # type: ignore[arg-type]
         delivery_id="d-test",
         attempts=0,
+        slot_uid=slot_uid,
     )
     bindings = SimpleNamespace(
         workspace=workspace,
@@ -155,7 +156,13 @@ async def test_run_rpc_passes_continue_when_session_jsonl_present(tmp_path: Path
 
 
 @pytest.mark.asyncio
-async def test_run_rpc_omits_continue_when_session_empty(tmp_path: Path, settings: Settings) -> None:
+async def test_run_rpc_omits_continue_when_session_empty(
+    tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    agent_home = tmp_path / "agent-home"
+    agent_home.mkdir()
+    monkeypatch.setattr(worker, "_AGENT_HOME", agent_home)
+
     inputs, bindings = _make_inputs(tmp_path, settings, session_has_jsonl=False)
     loop = asyncio.new_event_loop()
     try:
@@ -169,7 +176,41 @@ async def test_run_rpc_omits_continue_when_session_empty(tmp_path: Path, setting
     finally:
         loop.close()
     assert _FakeRpcClient.instances[0].kwargs["extra_args"] == ()
+    client_kwargs = _FakeRpcClient.instances[0].kwargs
+    assert client_kwargs["env"]["HOME"] == str(agent_home)
+    assert client_kwargs["env"]["GITHUB_TOKEN"] == ""
+    assert client_kwargs["env"]["GITHUB_WEBHOOK_SECRET"] == ""
+    assert client_kwargs["env"]["ROBOMP_REPLAY_TOKEN"] == ""
+    assert client_kwargs["env"]["ROBOMP_GH_PROXY_HMAC_KEY"] == ""
+    assert client_kwargs["user"] is None
+    assert client_kwargs["group"] is None
+    assert client_kwargs["extra_groups"] is None
 
+
+@pytest.mark.asyncio
+async def test_run_rpc_omits_home_when_agent_home_absent(
+    tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(worker, "_AGENT_HOME", tmp_path / "missing-agent-home")
+
+    inputs, bindings = _make_inputs(tmp_path, settings, session_has_jsonl=False)
+    loop = asyncio.new_event_loop()
+    try:
+        worker._run_rpc_blocking(
+            inputs,
+            task_kind="triage_issue",
+            prompt="x",
+            loop=loop,
+            bindings=bindings,  # type: ignore[arg-type]
+        )
+    finally:
+        loop.close()
+    client_kwargs = _FakeRpcClient.instances[0].kwargs
+    assert "HOME" not in client_kwargs["env"]
+    assert client_kwargs["env"]["GITHUB_TOKEN"] == ""
+    assert client_kwargs["env"]["GITHUB_WEBHOOK_SECRET"] == ""
+    assert client_kwargs["env"]["ROBOMP_REPLAY_TOKEN"] == ""
+    assert client_kwargs["env"]["ROBOMP_GH_PROXY_HMAC_KEY"] == ""
 
 @pytest.mark.asyncio
 async def test_run_rpc_skips_set_todos_on_resumed_triage(tmp_path: Path, settings: Settings) -> None:
@@ -225,3 +266,25 @@ async def test_run_rpc_merges_todos_on_followup_with_resume(tmp_path: Path, sett
     assert client.get_todos_calls == 1
     assert len(client.set_todos_calls) == 1
     assert len(client.set_todos_calls[0]) == len(_SEEDED_PHASES)
+
+
+@pytest.mark.asyncio
+async def test_run_rpc_passes_slot_uid_user_slot_group_and_omp_extra_group(
+    tmp_path: Path, settings: Settings
+) -> None:
+    inputs, bindings = _make_inputs(tmp_path, settings, session_has_jsonl=False, slot_uid=2001)
+    loop = asyncio.new_event_loop()
+    try:
+        worker._run_rpc_blocking(
+            inputs,
+            task_kind="triage_issue",
+            prompt="x",
+            loop=loop,
+            bindings=bindings,  # type: ignore[arg-type]
+        )
+    finally:
+        loop.close()
+    client_kwargs = _FakeRpcClient.instances[0].kwargs
+    assert client_kwargs["user"] == 2001
+    assert client_kwargs["group"] == 2001
+    assert client_kwargs["extra_groups"] == ["omp"]

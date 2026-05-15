@@ -16,6 +16,7 @@ import pytest
 from robomp.config import Settings
 from robomp.db import Database, EventRow
 from robomp.queue import WorkerPool
+from robomp.slot_pool import SlotPool
 
 
 class _StubGitHub:
@@ -37,6 +38,7 @@ def _make_pool(settings: Settings, db: Database) -> WorkerPool:
         github=_StubGitHub(),  # type: ignore[arg-type]
         sandbox=_StubSandbox(),  # type: ignore[arg-type]
         git_transport=_StubGitTransport(),  # type: ignore[arg-type]
+        slot_pool=SlotPool(),
     )
 
 
@@ -52,6 +54,61 @@ def _row(delivery: str = "d1") -> EventRow:
         attempts=1,
         last_error=None,
     )
+
+@pytest.mark.asyncio
+async def test_non_root_fallback_semaphore_caps_dispatch_concurrency(
+    settings: Settings, db: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings.max_concurrency = 1
+    monkeypatch.setattr("robomp.queue.os.geteuid", lambda: 501)
+
+    pool = WorkerPool(
+        settings=settings,
+        db=db,
+        github=_StubGitHub(),  # type: ignore[arg-type]
+        sandbox=_StubSandbox(),  # type: ignore[arg-type]
+        git_transport=_StubGitTransport(),  # type: ignore[arg-type]
+    )
+
+    db.record_event(
+        delivery_id="d-one",
+        event_type="issues",
+        repo="octo/widget",
+        issue_key="octo/widget#1",
+        payload={"action": "opened"},
+        state="running",
+    )
+    db.record_event(
+        delivery_id="d-two",
+        event_type="issues",
+        repo="octo/widget",
+        issue_key="octo/widget#2",
+        payload={"action": "opened"},
+        state="running",
+    )
+
+    dispatch_started = asyncio.Event()
+    release_dispatch = asyncio.Event()
+    started: list[str] = []
+
+    async def blocked_dispatch(self: WorkerPool, row: EventRow, *, slot_uid: int | None = None) -> None:
+        assert slot_uid is None
+        started.append(row.delivery_id)
+        dispatch_started.set()
+        await release_dispatch.wait()
+
+    monkeypatch.setattr(WorkerPool, "_dispatch", blocked_dispatch)
+
+    first = asyncio.create_task(pool._run_event(_row("d-one")))  # noqa: SLF001
+    await asyncio.wait_for(dispatch_started.wait(), timeout=1.0)
+
+    second = asyncio.create_task(pool._run_event(_row("d-two")))  # noqa: SLF001
+    await asyncio.sleep(0)
+    assert started == ["d-one"]
+
+    release_dispatch.set()
+    await asyncio.wait_for(asyncio.gather(first, second), timeout=1.0)
+    assert started == ["d-one", "d-two"]
 
 
 @pytest.mark.asyncio
@@ -130,7 +187,7 @@ async def test_run_event_skips_mark_event_when_shutting_down(
         state="running",
     )
 
-    async def fake_dispatch(self: WorkerPool, r: EventRow) -> None:
+    async def fake_dispatch(self: WorkerPool, r: EventRow, *, slot_uid: int | None = None) -> None:
         raise RuntimeError("omp died")
 
     monkeypatch.setattr(WorkerPool, "_dispatch", fake_dispatch)
@@ -208,7 +265,7 @@ async def test_run_event_marks_failed_for_unrelated_failure_during_drain(
         state="running",
     )
 
-    async def fake_dispatch(self: WorkerPool, r: EventRow) -> None:
+    async def fake_dispatch(self: WorkerPool, r: EventRow, *, slot_uid: int | None = None) -> None:
         raise RuntimeError("genuine bug, not shutdown")
 
     monkeypatch.setattr(WorkerPool, "_dispatch", fake_dispatch)

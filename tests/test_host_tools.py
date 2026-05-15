@@ -1652,10 +1652,16 @@ def test_gh_open_pr_refuses_dirty_worktree_before_fix(
     for cmd in (
         ["git", "-C", str(seed), "add", "."],
         [
-            "git", "-C", str(seed),
-            "-c", "user.email=robomp-bot@example.invalid",
-            "-c", "user.name=robomp-bot",
-            "commit", "-m", "init",
+            "git",
+            "-C",
+            str(seed),
+            "-c",
+            "user.email=robomp-bot@example.invalid",
+            "-c",
+            "user.name=robomp-bot",
+            "commit",
+            "-m",
+            "init",
         ],
         ["git", "-C", str(seed), "remote", "add", "origin", str(bare)],
         ["git", "-C", str(seed), "push", "origin", "main"],
@@ -1694,20 +1700,31 @@ def test_gh_open_pr_refuses_dirty_worktree_before_fix(
     (ws.repo_dir / "src.txt").write_text("clean\n")
     subprocess.run(
         ["git", "-C", str(ws.repo_dir), "add", "package.json", "src.txt"],
-        check=True, capture_output=True,
+        check=True,
+        capture_output=True,
     )
     subprocess.run(
         [
-            "git", "-C", str(ws.repo_dir),
-            "-c", "user.email=robomp-bot@example.invalid",
-            "-c", "user.name=robomp-bot",
-            "commit", "-m", "feat: committed work",
+            "git",
+            "-C",
+            str(ws.repo_dir),
+            "-c",
+            "user.email=robomp-bot@example.invalid",
+            "-c",
+            "user.name=robomp-bot",
+            "commit",
+            "-m",
+            "feat: committed work",
         ],
-        check=True, capture_output=True, env=env,
+        check=True,
+        capture_output=True,
+        env=env,
     )
     head_before = subprocess.run(
         ["git", "-C", str(ws.repo_dir), "rev-parse", "HEAD"],
-        capture_output=True, text=True, check=True,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout.strip()
     # Now plant the stowaway edit that the agent forgot.
     (ws.repo_dir / "src.txt").write_text("STOWAWAY uncommitted edit\n")
@@ -1721,8 +1738,14 @@ def test_gh_open_pr_refuses_dirty_worktree_before_fix(
             git_transport=LocalGitTransport(token=None),
             repo=_stub_repo(),
             issue=IssueInfo(
-                repo="octo/widget", number=42, title="t", body="",
-                state="open", author="alice", labels=(), is_pull_request=False,
+                repo="octo/widget",
+                number=42,
+                title="t",
+                body="",
+                state="open",
+                author="alice",
+                labels=(),
+                is_pull_request=False,
             ),
             workspace=ws,
             loop=loop,
@@ -1730,8 +1753,12 @@ def test_gh_open_pr_refuses_dirty_worktree_before_fix(
             author_email="robomp-bot@example.invalid",
         )
         db.upsert_issue(
-            key=bindings.issue_key, repo="octo/widget", number=42,
-            state="reproducing", branch=ws.branch, session_dir=str(ws.session_dir),
+            key=bindings.issue_key,
+            repo="octo/widget",
+            number=42,
+            state="reproducing",
+            branch=ws.branch,
+            session_dir=str(ws.session_dir),
         )
         push_tool = next(x for x in build(bindings) if x.name == "gh_push_branch")
         with pytest.raises(RpcCommandError) as exc:
@@ -1749,25 +1776,33 @@ def test_gh_open_pr_refuses_dirty_worktree_before_fix(
     # HEAD is unchanged: the unrelated edit was NEVER committed.
     head_after = subprocess.run(
         ["git", "-C", str(ws.repo_dir), "rev-parse", "HEAD"],
-        capture_output=True, text=True, check=True,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout.strip()
     assert head_after == head_before
     # The stowaway edit is still sitting uncommitted in the worktree.
     status = subprocess.run(
         ["git", "-C", str(ws.repo_dir), "status", "--porcelain"],
-        capture_output=True, text=True, check=True,
+        capture_output=True,
+        text=True,
+        check=True,
     )
     assert "src.txt" in status.stdout
     # No commit named "style: bun run fix" exists.
     log = subprocess.run(
         ["git", "-C", str(ws.repo_dir), "log", "--format=%s"],
-        capture_output=True, text=True, check=True,
+        capture_output=True,
+        text=True,
+        check=True,
     )
     assert "style: bun run fix" not in log.stdout
     # Origin's farm/* branch was never created — push refused before reaching the network.
     refs = subprocess.run(
         ["git", "-C", str(bare), "for-each-ref", "--format=%(refname)"],
-        capture_output=True, text=True, check=True,
+        capture_output=True,
+        text=True,
+        check=True,
     )
     assert not any(r.startswith("refs/heads/farm/") for r in refs.stdout.splitlines())
 

@@ -21,6 +21,7 @@ from robomp.cancellation import (
 from robomp.config import Settings
 from robomp.db import Database, EventRow
 from robomp.queue import WorkerPool
+from robomp.slot_pool import SlotPool
 
 
 class _StubGitHub:
@@ -42,6 +43,7 @@ def _make_pool(settings: Settings, db: Database) -> WorkerPool:
         github=_StubGitHub(),  # type: ignore[arg-type]
         sandbox=_StubSandbox(),  # type: ignore[arg-type]
         git_transport=_StubGitTransport(),  # type: ignore[arg-type]
+        slot_pool=SlotPool(),
     )
 
 
@@ -134,7 +136,7 @@ async def test_dispatch_marks_cancelled_event_failed_with_marker(
     )
     row = _row("d3")
 
-    async def fake_dispatch(self: WorkerPool, r: EventRow) -> None:
+    async def fake_dispatch(self: WorkerPool, r: EventRow, *, slot_uid: int | None = None) -> None:
         # Simulate cancellation hitting mid-task and the omp subprocess raising.
         await pool.cancel_event(r.delivery_id)
         raise RuntimeError("subprocess died")
@@ -167,7 +169,7 @@ async def test_non_cancelled_failure_keeps_real_traceback(
     )
     row = _row("d4")
 
-    async def fake_dispatch(self: WorkerPool, r: EventRow) -> None:
+    async def fake_dispatch(self: WorkerPool, r: EventRow, *, slot_uid: int | None = None) -> None:
         raise ValueError("boom 42")
 
     monkeypatch.setattr(WorkerPool, "_dispatch", fake_dispatch)
@@ -198,7 +200,7 @@ async def test_run_event_marks_failed_when_not_shutting_down(
     )
     row = _row("d5")
 
-    async def fake_dispatch(self: WorkerPool, r: EventRow) -> None:
+    async def fake_dispatch(self: WorkerPool, r: EventRow, *, slot_uid: int | None = None) -> None:
         raise RuntimeError("regular failure")
 
     monkeypatch.setattr(WorkerPool, "_dispatch", fake_dispatch)

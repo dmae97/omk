@@ -1214,6 +1214,7 @@ class _RecordingSandbox:
         existing_branch=None,
         author_name: str = "",
         author_email: str = "",
+        slot_uid: int | None = None,
     ):
         self.ensure_calls.append(
             {
@@ -1222,6 +1223,7 @@ class _RecordingSandbox:
                 "title": title,
                 "default_branch": default_branch,
                 "existing_branch": existing_branch,
+                "slot_uid": slot_uid,
             }
         )
         # Mimic Workspace shape — only the attributes ensure_workspace's
