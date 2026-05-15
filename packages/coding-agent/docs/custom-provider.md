@@ -23,6 +23,7 @@ See these complete provider examples:
 - [Unregister Provider](#unregister-provider)
 - [OAuth Support](#oauth-support)
 - [Custom Streaming API](#custom-streaming-api)
+- [Context Overflow Errors](#context-overflow-errors)
 - [Testing Your Implementation](#testing-your-implementation)
 - [Config Reference](#config-reference)
 - [Model Definition Reference](#model-definition-reference)
@@ -505,6 +506,60 @@ output.usage.totalTokens = output.usage.input + output.usage.output +
                            output.usage.cacheRead + output.usage.cacheWrite;
 calculateCost(model, output.usage);
 ```
+
+### Context Overflow Errors
+
+When a request exceeds the model's context window, pi can recover automatically by compacting the conversation and retrying. This recovery only kicks in if pi recognizes the failure as an overflow.
+
+Detection runs on the finalized assistant message:
+
+- `stopReason === "error"`
+- `errorMessage` matches one of pi's known overflow patterns (see [`packages/ai/src/utils/overflow.ts`](https://github.com/earendil-works/pi-mono/blob/main/packages/ai/src/utils/overflow.ts))
+
+If your provider returns overflow errors with a message pi does not recognize, normalize the error from the same extension that registers the provider. Use a `message_end` handler to rewrite the assistant message so its `errorMessage` starts with a phrase pi recognizes. The generic fallback `context_length_exceeded` is the safest choice.
+
+```typescript
+const MY_PROVIDER_OVERFLOW_PATTERN = /your provider's overflow phrase/i;
+
+export default function (pi: ExtensionAPI) {
+  pi.registerProvider("my-provider", { /* ... */ });
+
+  pi.on("message_end", (event, ctx) => {
+    const message = event.message;
+    if (message.role !== "assistant") return;
+    if (message.stopReason !== "error") return;
+    if (
+      message.provider !== "my-provider" &&
+      ctx.model?.provider !== "my-provider"
+    )
+      return;
+
+    const errorMessage = message.errorMessage ?? "";
+    if (errorMessage.includes("context_length_exceeded")) return;
+    if (!MY_PROVIDER_OVERFLOW_PATTERN.test(errorMessage)) return;
+
+    return {
+      message: {
+        ...message,
+        errorMessage: `context_length_exceeded: ${errorMessage}`,
+      },
+    };
+  });
+}
+```
+
+`message_end` runs before pi tracks the assistant message for auto-compaction, so the rewritten `errorMessage` is what pi checks. With this in place, pi will:
+
+1. Detect the overflow from `errorMessage`.
+2. Drop the failed assistant message from live context.
+3. Run compaction.
+4. Retry the request once.
+
+Guard the rewrite carefully:
+
+- Scope it to your provider (`message.provider` and `ctx.model?.provider`) so unrelated errors from other providers are untouched.
+- Match a provider-specific pattern, not pi's generic overflow patterns. Rewriting rate-limit or throttling errors (`rate limit`, `too many requests`) would falsely trigger compaction instead of pi's normal retry-with-backoff path.
+- Skip when `errorMessage` already includes `context_length_exceeded` so the handler is idempotent.
 
 ### Registration
 
