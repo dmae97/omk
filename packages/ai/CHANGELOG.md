@@ -4,12 +4,16 @@
 
 ### Added
 
+- Added image generation APIs, image model metadata, and built-in OpenRouter image generation support ([#3887](https://github.com/earendil-works/pi-mono/pull/3887) by [@cristinaponcela](https://github.com/cristinaponcela)).
 - Added Together AI as a built-in OpenAI-compatible provider with generated model metadata and `TOGETHER_API_KEY` authentication ([#3624](https://github.com/earendil-works/pi-mono/pull/3624) by [@Nutlope](https://github.com/Nutlope)).
 
 ### Fixed
 
 - Fixed GitHub Copilot model availability to ignore generic `GH_TOKEN` and `GITHUB_TOKEN` environment variables, requiring OAuth login or `COPILOT_GITHUB_TOKEN` instead ([#4485](https://github.com/earendil-works/pi/issues/4485)).
 - Fixed `openai-completions` streams to surface an error when the stream ends before any terminal `finish_reason`, so truncated responses can retry instead of being accepted as success ([#4345](https://github.com/earendil-works/pi/issues/4345)).
+- Fixed Fireworks provider caching compatibility by adding session affinity headers and model metadata compat settings ([#4358](https://github.com/earendil-works/pi-mono/pull/4358) by [@yanirz](https://github.com/yanirz)).
+- Fixed OpenAI Codex WebSocket transport to respect proxy environment variables under Bun ([#4354](https://github.com/earendil-works/pi-mono/pull/4354) by [@haoqixu](https://github.com/haoqixu)).
+- Fixed OpenRouter cache usage normalization to preserve cached-token semantics without treating cached tokens as cache writes.
 - Fixed Bedrock proxy handling to preserve `NO_PROXY` exclusions while using HTTP(S)-only proxy agents.
 - Fixed compiled Bun binaries failing to start outside the repo when Bedrock proxy support tried to resolve `proxy-from-env` from external `node_modules` ([#4513](https://github.com/earendil-works/pi/issues/4513)).
 - Fixed GitHub Copilot Claude test coverage to use the current Claude Sonnet 4.6 model ID.
