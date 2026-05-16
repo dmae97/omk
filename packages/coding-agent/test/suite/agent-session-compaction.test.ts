@@ -1,4 +1,9 @@
-import { type AssistantMessage, fauxAssistantMessage, type Model } from "@earendil-works/pi-ai";
+import {
+	type AssistantMessage,
+	createAssistantMessageEventStream,
+	fauxAssistantMessage,
+	type Model,
+} from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHarness, type Harness } from "./harness.js";
 
@@ -39,6 +44,43 @@ function createAssistant(
 		model: model.id,
 		usage: createUsage(options.totalTokens ?? 0),
 	};
+}
+
+function useSummaryStreamFn(harness: Harness, summary: string): () => number {
+	let callCount = 0;
+	harness.session.agent.streamFn = (model) => {
+		callCount++;
+		const stream = createAssistantMessageEventStream();
+		queueMicrotask(() => {
+			const message: AssistantMessage = {
+				...fauxAssistantMessage(summary),
+				api: model.api,
+				provider: model.provider,
+				model: model.id,
+				usage: createUsage(10),
+			};
+			stream.push({ type: "done", reason: "stop", message });
+		});
+		return stream;
+	};
+	return () => callCount;
+}
+
+function seedCompactableSession(harness: Harness): void {
+	const now = Date.now();
+	harness.sessionManager.appendMessage({
+		role: "user",
+		content: [{ type: "text", text: "message to compact" }],
+		timestamp: now - 1000,
+	});
+	harness.sessionManager.appendMessage(
+		createAssistant(harness, {
+			stopReason: "stop",
+			totalTokens: 100,
+			timestamp: now - 500,
+		}),
+	);
+	harness.session.agent.state.messages = harness.sessionManager.buildSessionContext().messages;
 }
 
 describe("AgentSession compaction characterization", () => {
@@ -93,6 +135,32 @@ describe("AgentSession compaction characterization", () => {
 		harnesses.push(harness);
 
 		await expect(harness.session.compact()).rejects.toThrow(`No API key found for ${harness.getModel().provider}.`);
+	});
+
+	it("manually compacts with a custom streamFn when registry auth is absent", async () => {
+		const harness = await createHarness({ withConfiguredAuth: false });
+		harnesses.push(harness);
+		seedCompactableSession(harness);
+		const getStreamCallCount = useSummaryStreamFn(harness, "summary from custom stream");
+
+		const result = await harness.session.compact();
+
+		expect(result.summary).toBe("summary from custom stream");
+		expect(getStreamCallCount()).toBe(1);
+	});
+
+	it("auto-compacts with a custom streamFn when registry auth is absent", async () => {
+		const harness = await createHarness({ withConfiguredAuth: false });
+		harnesses.push(harness);
+		seedCompactableSession(harness);
+		const getStreamCallCount = useSummaryStreamFn(harness, "auto summary from custom stream");
+		const sessionInternals = harness.session as unknown as SessionWithCompactionInternals;
+
+		await sessionInternals._runAutoCompaction("threshold", false);
+
+		const compactionEntries = harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction");
+		expect(compactionEntries).toHaveLength(1);
+		expect(getStreamCallCount()).toBe(1);
 	});
 
 	it("cancels in-progress manual compaction when abortCompaction is called", async () => {
