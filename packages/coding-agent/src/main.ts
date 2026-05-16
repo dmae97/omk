@@ -651,7 +651,6 @@ export async function main(args: string[], options?: MainOptions) {
 		await showDeprecationWarnings(deprecationWarnings);
 	}
 
-	const scopedModels = [...session.scopedModels];
 	time("resolveModelScope");
 	reportDiagnostics(runtime.diagnostics);
 	if (runtime.diagnostics.some((diagnostic) => diagnostic.type === "error")) {
@@ -674,16 +673,6 @@ export async function main(args: string[], options?: MainOptions) {
 		printTimings();
 		await runRpcMode(runtime);
 	} else if (appMode === "interactive") {
-		if (scopedModels.length > 0 && (parsed.verbose || !settingsManager.getQuietStartup())) {
-			const modelList = scopedModels
-				.map((sm) => {
-					const thinkingStr = sm.thinkingLevel ? `:${sm.thinkingLevel}` : "";
-					return `${sm.model.id}${thinkingStr}`;
-				})
-				.join(", ");
-			console.log(chalk.dim(`Model scope: ${modelList} ${chalk.gray("(Ctrl+P to cycle)")}`));
-		}
-
 		const interactiveMode = new InteractiveMode(runtime, {
 			migratedProviders,
 			modelFallbackMessage,
