@@ -1,5 +1,35 @@
 # Changelog
 
+## v1.1.16 — Runtime orchestration and release smoke hardening (2026-05-17)
+
+### Fixed
+
+- **Doctor pack-smoke readiness** — uninitialized package install directories now report project agent YAML as not initialized instead of failing `omk doctor --json --soft`; partial agent scaffolds and explicit agent-file validation still fail.
+- **IntentFrame/ActionAtom non-repetition** — execution DAGs, worker prompts, and continuation prompts now use sanitized digest/action contracts instead of replaying raw user input.
+- **Chat startup schema preflight** — generated agent YAML prompt args and root aliases are validated before launching Kimi, with startup-failure artifacts for invalid schemas.
+- **MCP/init duplicate policy** — legacy MCP migration, duplicate handling, and package-arg preservation were hardened for project/global scopes.
+- **Agent capability propagation** — generated/root/run-scoped agents receive MCP, skills, hooks, and tool hints through sanitized harness inventory digests.
+
+### Known Limitations & Remaining Issues
+
+- **P0 — Provider fallback metadata**: rate-limit, timeout, and Kimi-fallback variant tests are scaffolded but not yet locked in CI.
+- **P0 — Machine-readable CLI envelopes**: JSON output contracts for `omk graph`, `omk summary`, and `omk workflow` are partial; consumers should pin to the current surface.
+- **P1 — Graph audit evidence**: `omk graph view` links nodes to runs/goals/providers only when the graph backend has explicitly ingested them; automatic back-linking is pending.
+- **P2 — `omk team` runtime reporting**: tmux pane health, artifact sync, and verification handoff are manual; automated worker-start inside panes is not yet implemented.
+- **P2 — Provider-quality gates**: DeepSeek preflight health checks exist but do not yet block non-Kimi worker pools.
+
+### Init Global User Notes
+
+When running `omk init --global`:
+- Prompts for MCP server installation may appear; press **Enter** to accept defaults.
+- Some npx-based MCP servers require a one-time dependency resolution; wait for the **MCP timeout** (default 15s) rather than interrupting.
+- The global `~/.kimi/mcp.json` is no longer modified for `omk-project`; it is injected at runtime automatically.
+
+### Verification
+
+- Release readiness requires `npm run release:check` plus tarball install smoke before publish or tag.
+- Local gate run: `npm run verify && npm run native:build && npm run audit:package`.
+
 ## v1.1.15 — Isolated HOME MCP startup hotfix (2026-05-13)
 
 - Fixes isolated Kimi HOME shell-profile bridging so bash-based MCP servers source the real user profile with the real HOME before restoring the temporary HOME.

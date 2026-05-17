@@ -5,7 +5,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { createGraphView, materializeEdges } from "../dist/memory/graph-viewer.js";
+import { createGraphView, materializeEdges, resolveGraphBrowserOpener } from "../dist/memory/graph-viewer.js";
 
 const CLI = join(process.cwd(), "dist", "cli.js");
 
@@ -125,6 +125,21 @@ test("omk graph view CLI generates the requested output file", async () => {
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("graph browser opener falls back from missing WSL helpers to xdg-open", async () => {
+  const checked = [];
+  const opener = await resolveGraphBrowserOpener("file:///tmp/graph-view.html", {
+    platform: "linux",
+    env: { WSL_DISTRO_NAME: "Ubuntu" },
+    commandExists: async (command) => {
+      checked.push(command);
+      return command === "xdg-open";
+    },
+  });
+
+  assert.deepEqual(checked, ["wslview", "cmd.exe", "xdg-open"]);
+  assert.deepEqual(opener, { command: "xdg-open", args: ["file:///tmp/graph-view.html"] });
 });
 
 test("graph-view slash command template is packaged", async () => {

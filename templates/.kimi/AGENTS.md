@@ -20,10 +20,11 @@ Use Kimi native tools aggressively:
 
 ## Current Runtime Surface
 
-- Fresh init exposes root aliases `explorer`, `explore`, `planner`, `plan`, `coder`, `reviewer`, and `qa` from `.omk/agents/root.yaml`.
-- Role files also include `architect`, `integrator`, `interviewer`, `ontology`, `researcher`, and `vision-debugger`; use them only when the current root agent or harness exposes them.
-- This repo may add local roles such as `coordinator`, `docs`, `merger`, `release`, `security`, and `tester`; verify `.omk/agents/root.yaml` before invoking them.
+- Fresh init exposes root aliases `explorer`, `explore`, `planner`, `plan`, `architect`, `coder`, `reviewer`, `qa`, `tester`, `researcher`, `integrator`, `aggregator`, `interviewer`, `ontology`, and `vision-debugger` from `.omk/agents/root.yaml`.
+- These generated role files are scaffolded with MCP, skills, and hooks enabled through the Okabe-compatible base.
+- This repo may add local roles such as `coordinator`, `docs`, `merger`, `release`, and `security`; verify `.omk/agents/root.yaml` before invoking them.
 - Project skills are loaded from `.kimi/skills` and `.agents/skills`; read only the matching `SKILL.md` files.
+- Default runtime preset is `omk-core-verified`; use it as the baseline safe loop for ordinary coding, refactor, and debugging work. Use `omk-ts-product` for TypeScript/React/Next/Nest product work, `omk-worktree-team` for parallel worker lanes in isolated Git worktrees, and `omk-release-guard` for secret/security/release evidence gates with narrowed MCP authority, strong hooks, and no auto-publish authority.
 - Packaged external-inspired workflow skills include `agentmemory`, `andrej-karpathy-skills`, `matt-pocock-skills`, `multica`, and `react-doctor`; use them for memory, surgical coding, alignment/TDD, managed-agent teamwork, and React diagnostics respectively.
 - Default MCP scope is project-only `omk-project`. All-scope reads user `~/.kimi/mcp.json` and `~/.kimi/skills` at runtime without copying them.
 

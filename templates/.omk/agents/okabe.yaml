@@ -2,6 +2,9 @@ version: 1
 agent:
   extend: default
   name: omk-okabe-base
+  # Kimi requires an explicit non-empty tools list for custom --agent-file configs.
+  # Keep the full OMK native tool surface, including Agent for parallel subagents
+  # and SendDMail for Okabe checkpoints; MCP/skills/hooks are injected by runtime config.
   tools:
     - "kimi_cli.tools.agent:Agent"
     - "kimi_cli.tools.ask_user:AskUserQuestion"
@@ -21,3 +24,7 @@ agent:
     - "kimi_cli.tools.background:TaskOutput"
     - "kimi_cli.tools.background:TaskStop"
     - "kimi_cli.tools.dmail:SendDMail"
+  system_prompt_args:
+    OMK_MCP_ENABLED: "true"
+    OMK_SKILLS_ENABLED: "true"
+    OMK_HOOKS_ENABLED: "true"

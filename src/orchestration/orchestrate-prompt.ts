@@ -1,16 +1,22 @@
 import { mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 import { getProjectRoot, getRunPath, sanitizeRunId } from "../util/fs.js";
-import { getOmkResourceSettings } from "../util/resource-profile.js";
+import { getOmkResourceSettings, type OmkRuntimeScope } from "../util/resource-profile.js";
+import { parseRuntimeScopeOption } from "../util/runtime-scope.js";
 import { normalizeGoal, analyzeUserIntent } from "../goal/intake.js";
 import { createGoalPersister } from "../goal/persistence.js";
 import { evaluateGoalProgressEnsemble } from "../goal/control-loop.js";
 import { renderPromptDigest } from "../goal/prompt-digest.js";
 import type { NextAction, RunState, UserIntent } from "../contracts/orchestration.js";
+import {
+  buildIntentFrameFromGoal,
+  buildNextActionContract,
+  renderActionDigest,
+} from "../goal/intent-frame.js";
 import { style, status } from "../util/theme.js";
 import { MemoryStore } from "../memory/memory-store.js";
 import type { ParallelCommandOptions } from "../commands/parallel.js";
-import type { GoalSpec } from "../contracts/goal.js";
+import type { GoalSpec, IntentFrame } from "../contracts/goal.js";
 import { getCurrentMode } from "../util/mode-preset.js";
 import { t } from "../util/i18n.js";
 import { VerificationError } from "../util/cli-contract.js";
@@ -25,6 +31,7 @@ export interface OrchestrateOptions {
   goalId?: string;
   timeoutPreset?: string;
   provider?: "auto" | "kimi";
+  mcpScope?: string;
   maxAutoContinueIterations?: string | number;
   failOnDagFailure?: boolean;
   sourceCommand: "chat" | "run" | "parallel" | "goal-run" | "goal-continue" | "default";
@@ -107,6 +114,7 @@ export async function orchestratePrompt(
 ): Promise<void> {
   const root = getProjectRoot();
   const resources = await getOmkResourceSettings();
+  const mcpScope = parseRuntimeScopeOption(options.mcpScope, resources.mcpScope, "--mcp-scope");
 
   if (looksLikeAdminCommand(rawPrompt)) {
     throw new Error(
@@ -137,6 +145,17 @@ export async function orchestratePrompt(
     await goalPersister.save(goal);
     goalId = goal.goalId;
   }
+
+  const intentFrame = goal.intentFrame ?? buildIntentFrameFromGoal(goal);
+  if (!goal.intentFrame || !goal.actionAtoms) {
+    goal = { ...goal, intentFrame, actionAtoms: intentFrame.actionAtoms, updatedAt: new Date().toISOString() };
+    await goalPersister.save(goal);
+  }
+  goalId = goalId ?? goal.goalId;
+  const goalDir = join(goalBasePath, goalId);
+  await mkdir(goalDir, { recursive: true });
+  await writeFile(join(goalDir, "intent-frame.json"), `${JSON.stringify(intentFrame, null, 2)}\n`);
+  await writeFile(join(goalDir, "action-atoms.json"), `${JSON.stringify(intentFrame.actionAtoms, null, 2)}\n`);
 
   // ── NLP Intent Analysis ──
   const intent = analyzeUserIntent(rawPrompt);
@@ -182,14 +201,14 @@ export async function orchestratePrompt(
     memorySummary,
     sourceCommand: options.sourceCommand,
     workers: options.workers ?? String(resources.maxWorkers),
+    mcpScope,
     intent,
+    intentFrame,
     currentPrompt: rawPrompt,
     isContinuation: options.sourceCommand === "goal-continue",
   });
 
   // ── Persist next-prompt to goal directory ──
-  const goalDir = join(goalBasePath, goalId);
-  await mkdir(goalDir, { recursive: true });
   await writeFile(join(goalDir, "next-prompt.md"), enrichedPrompt);
 
   // ── Mode-aware execution ──
@@ -202,6 +221,7 @@ export async function orchestratePrompt(
     await chatCommand({
       runId: goalId,
       workers: options.workers,
+      mcpScope,
     });
     return;
   }
@@ -257,6 +277,8 @@ export async function orchestratePrompt(
     intent,
     timeoutPreset: options.timeoutPreset,
     provider: options.provider,
+    mcpScope,
+    intentFrame,
   };
 
   const { runId: generatedRunId, success: dagSucceeded } = await parallelCommand(enrichedPrompt, parallelOpts);
@@ -340,6 +362,9 @@ export async function orchestratePrompt(
         join(goalDir, "ensemble-decisions.json"),
         JSON.stringify(decisionHistory, null, 2)
       );
+      if (progress.noveltyReport) {
+        await writeFile(join(goalDir, "novelty-report.json"), `${JSON.stringify(progress.noveltyReport, null, 2)}\n`);
+      }
 
       if (progress.nextAction === "close") {
         console.log(status.ok("Ensemble decision: goal complete — closing run"));
@@ -390,7 +415,9 @@ export async function orchestratePrompt(
         memorySummary,
         sourceCommand: "goal-continue",
         workers: options.workers ?? String(resources.maxWorkers),
+        mcpScope,
         intent,
+        intentFrame,
         currentPrompt: autoPrompt ?? "",
         isContinuation: true,
         autoContinue: {
@@ -431,7 +458,9 @@ interface BuildPromptInput {
   memorySummary: string;
   sourceCommand: string;
   workers: string;
+  mcpScope?: OmkRuntimeScope;
   intent: UserIntent;
+  intentFrame?: IntentFrame;
   currentPrompt: string;
   isContinuation: boolean;
   autoContinue?: {
@@ -444,12 +473,25 @@ interface BuildPromptInput {
 
 export function buildOrchestratedPrompt(input: BuildPromptInput): string {
   const currentPrompt = input.currentPrompt.trim();
+  const mcpScope = input.mcpScope ?? "project";
+  const intentFrame = input.intentFrame ?? buildIntentFrameFromGoal(input.goal);
+  const contractAtom = input.autoContinue?.action === "replan"
+    ? intentFrame.actionAtoms.find((atom) => atom.label.startsWith("plan-"))
+    : intentFrame.actionAtoms.find((atom) =>
+      ["implement-change", "inspect-context", "test-scenario", "document-result", "produce-artifact", "verify-evidence"].includes(atom.label)
+    );
+  const actionContract = buildNextActionContract(
+    input.autoContinue?.action ?? "continue",
+    contractAtom?.id ?? intentFrame.actionAtoms[0]?.id ?? "atom-plan",
+    contractAtom?.doneCondition ?? "Execute the next evidence-backed action",
+    intentFrame
+  );
   const hasDistinctContinuationContext = input.isContinuation &&
     currentPrompt.length > 0 &&
     normalizePromptForComparison(currentPrompt) !== normalizePromptForComparison(input.goal.objective);
 
   const lines: string[] = [
-    `# Kimi Orchestration Prompt: ${input.goal.title}`,
+    `# Kimi Orchestration Prompt: strict-action-dag`,
     ``,
     `## Kimi Prompt Adapter`,
     `- Treat the original user input as intent/NLP source, not text to echo back.`,
@@ -461,6 +503,17 @@ export function buildOrchestratedPrompt(input: BuildPromptInput): string {
     `- Source command: ${input.sourceCommand}`,
     `- Continuation: ${input.isContinuation ? "yes" : "no"}`,
     `- Workers requested: ${input.workers}`,
+    `- MCP scope: ${mcpScope}`,
+    ``,
+    `## Strict Intent / Action Digest`,
+    renderActionDigest(intentFrame),
+    ``,
+    `## Next Action Contract`,
+    `- Action: ${actionContract.action}`,
+    `- Target: ${actionContract.targetId}`,
+    `- Description: ${actionContract.description}`,
+    `- Evidence target: ${actionContract.evidenceTarget}`,
+    `- Done condition: ${actionContract.doneCondition}`,
     ``,
     `## Goal Reference (non-verbatim)`,
     renderPromptDigest("Original objective digest", input.goal.objective),
@@ -479,7 +532,11 @@ export function buildOrchestratedPrompt(input: BuildPromptInput): string {
       ``,
       renderPromptDigest("Current execution context digest", currentPrompt, { maxKeywords: 18, maxPhrases: 3 }),
       ``,
-      ...renderBoundedContext("Current follow-up context", currentPrompt),
+      `### Current follow-up context`,
+      `- Full follow-up text is audit-only; execution uses the digest and ActionAtom contract above.`,
+      `- Selected atom: ${actionContract.actionAtom?.label ?? actionContract.targetId}`,
+      `- Evidence target: ${actionContract.evidenceTarget}`,
+      `- Done condition: ${actionContract.doneCondition}`,
       ``
     );
   }
@@ -522,6 +579,7 @@ export function buildOrchestratedPrompt(input: BuildPromptInput): string {
     `## Orchestration Instructions`,
     `- Source command: ${input.sourceCommand}`,
     `- Workers: ${input.workers}`,
+    `- MCP scope: ${mcpScope}`,
     `- Execution mode: parallel DAG (always)`,
     ``,
     `### DAG Structure (minimum)`,
@@ -540,8 +598,12 @@ export function buildOrchestratedPrompt(input: BuildPromptInput): string {
     `### Mandatory Rules`,
     `- Before planning, the coordinator MUST call omk_memory_mindmap or omk_search_memory to load relevant project context.`,
     `- Workers MUST only use skills and MCP servers relevant to their assigned role (routing hints).`,
-    `- Use MCP servers (omk-project, memory, quality-gate) when they fit the task.`,
-    `- Prefer omk-project MCP tools for checkpoint, memory, and run-state operations.`,
+    mcpScope === "none"
+      ? `- MCP scope is none: do not launch MCP servers in this DAG; rely on local tools plus skills/hooks.`
+      : mcpScope === "project"
+        ? `- MCP scope is project: use only project-local/builtin MCP servers such as omk-project; do not load global MCP inventory.`
+        : `- MCP scope is all: global MCP servers may be available; never expose raw env, tokens, or config.`,
+    `- Prefer omk-project MCP tools for checkpoint, memory, and run-state operations when MCP is enabled.`,
     `- Use SearchWeb / FetchURL for external docs, official APIs, or citations.`,
     `- Kimi remains the main orchestrator, planner, merger, and final synthesis runtime.`,
     `- DeepSeek may only be hinted for low-risk read/review/QA/documentation nodes; never assign it merge, destructive shell, MCP, secret, or write authority.`,
@@ -564,12 +626,4 @@ function normalizePromptForComparison(value: string): string {
     .trim()
     .replace(/\s+/g, " ")
     .toLowerCase();
-}
-
-function renderBoundedContext(title: string, value: string, maxChars = 6000): string[] {
-  const sanitized = value.replace(/```/g, "'''").trim();
-  const clipped = sanitized.length > maxChars
-    ? `${sanitized.slice(0, maxChars)}\n...[truncated ${sanitized.length - maxChars} chars]`
-    : sanitized;
-  return [`### ${title}`, "```text", clipped, "```"];
 }

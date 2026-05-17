@@ -1,6 +1,6 @@
 # Getting Started
 
-Current package: `@oh-my-kimi/cli@1.1.15`.
+Current package: `@oh-my-kimi/cli@1.1.16`.
 
 ## Install
 

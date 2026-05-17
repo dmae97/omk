@@ -12,6 +12,7 @@ const OPEN_DESIGN_AGENT_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "
 const RUN_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "commands", "run.js")).href;
 const PARALLEL_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "commands", "parallel.js")).href;
 const DAG_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "commands", "dag.js")).href;
+const RUNTIME_SCOPE_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "util", "runtime-scope.js")).href;
 
 function runHelp(command) {
   return spawnSync(process.execPath, [CLI, command, "--help"], {
@@ -35,6 +36,44 @@ test("parallel command exposes --timeout-preset", () => {
   const result = runHelp("parallel");
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /--timeout-preset <preset>/);
+});
+
+test("chat, run, and parallel commands expose per-run MCP scope", () => {
+  for (const command of ["chat", "run", "parallel"]) {
+    const result = runHelp(command);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /--mcp-scope <all\|project\|none>/);
+  }
+});
+
+test("goal run and continue expose per-run MCP scope", () => {
+  for (const args of [["goal", "run", "--help"], ["goal", "continue", "--help"]]) {
+    const result = spawnSync(process.execPath, [CLI, ...args], {
+      cwd: process.cwd(),
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        OMK_STAR_PROMPT: "0",
+        OMK_RENDER_LOGO: "0",
+      },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /--mcp-scope <all\|project\|none>/);
+  }
+});
+
+test("mcp command exposes prewarm for cache-first startup", () => {
+  const result = spawnSync(process.execPath, [CLI, "mcp", "--help"], {
+    cwd: process.cwd(),
+    encoding: "utf-8",
+    env: {
+      ...process.env,
+      OMK_STAR_PROMPT: "0",
+      OMK_RENDER_LOGO: "0",
+    },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /prewarm/);
 });
 
 test("init command exposes local-user runtime scope option", () => {
@@ -104,6 +143,47 @@ test("design open-design print-only shows localhost tools-dev launch plan", () =
   assert.match(result.stdout, /corepack pnpm tools-dev start web --daemon-port 7457 --web-port 5175/);
 });
 
+test("top-level open-design aliases forward to the localhost launch plan", () => {
+  for (const command of ["open-design", "opendesign"]) {
+    const result = spawnSync(process.execPath, [
+      CLI,
+      command,
+      "--print-only",
+      "--dir",
+      ".omk/open-design-test",
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        OMK_STAR_PROMPT: "0",
+        OMK_RENDER_LOGO: "0",
+      },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Open Design localhost/);
+    assert.match(result.stdout, /Agent: OMK CLI/);
+  }
+});
+
+test("open-design Node runtime can use an explicit Node 24 binary while OMK runs on older Node", async () => {
+  const { resolveOpenDesignNodeRuntime } = await import(DESIGN_MODULE_URL);
+  const runtime = resolveOpenDesignNodeRuntime({
+    nodeVersion: "v22.22.3",
+    env: {
+      PATH: "/usr/bin",
+      OMK_OPEN_DESIGN_NODE24: "/opt/node-v24/bin/node",
+    },
+    pathExistsSync: (path) => path === "/opt/node-v24/bin/node",
+    platform: "linux",
+  });
+
+  assert.equal(runtime?.corepackCommand, "/opt/node-v24/bin/corepack");
+  assert.equal(runtime?.nodeCommand, "/opt/node-v24/bin/node");
+  assert.equal(runtime?.env?.PATH, `/opt/node-v24/bin${delimiter}/usr/bin`);
+});
+
 test("design open-design bridge installs awesome-design-md prompt template", async () => {
   const { ensureOpenDesignOmkBridge } = await import(DESIGN_MODULE_URL);
   const root = mkdtempSync(join(tmpdir(), "omk-open-design-bridge-"));
@@ -117,6 +197,80 @@ test("design open-design bridge installs awesome-design-md prompt template", asy
     assert.match(template.prompt, /omk design search <name>/);
     assert.match(template.prompt, /DESIGN\.md/);
     assert.equal(result.changedFiles.includes("prompt-templates/image/awesome-design-md-web-ui.json"), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("design open-design bridge supports current Open Design runtime registry layout", async () => {
+  const { ensureOpenDesignOmkBridge } = await import(DESIGN_MODULE_URL);
+  const root = mkdtempSync(join(tmpdir(), "omk-open-design-runtime-"));
+  try {
+    mkdirSync(join(root, "apps/daemon/src/runtimes/defs"), { recursive: true });
+    mkdirSync(join(root, "apps/web/src/components"), { recursive: true });
+    mkdirSync(join(root, "apps/web/src/utils"), { recursive: true });
+    mkdirSync(join(root, "apps/web/src/i18n/locales"), { recursive: true });
+
+    writeFileSync(join(root, "apps/daemon/src/runtimes/registry.ts"), [
+      "import { claudeAgentDef } from './defs/claude.js';",
+      "import { codexAgentDef } from './defs/codex.js';",
+      "import { kimiAgentDef } from './defs/kimi.js';",
+      "import type { RuntimeAgentDef } from './types.js';",
+      "",
+      "export const AGENT_DEFS: RuntimeAgentDef[] = [",
+      "  claudeAgentDef,",
+      "  codexAgentDef,",
+      "  kimiAgentDef,",
+      "];",
+      "",
+    ].join("\n"));
+    writeFileSync(join(root, "apps/daemon/src/runtimes/executables.ts"), [
+      "const AGENT_BIN_ENV_KEYS = new Map<string, string>([",
+      "  ['claude', 'CLAUDE_BIN'],",
+      "  ['codex', 'CODEX_BIN'],",
+      "  ['kimi', 'KIMI_BIN'],",
+      "]);",
+      "",
+    ].join("\n"));
+    writeFileSync(join(root, "apps/daemon/src/app-config.ts"), [
+      "const AGENT_CLI_ENV_KEYS = new Map([",
+      "  ['claude', new Set(['CLAUDE_BIN'])],",
+      "  ['codex', new Set(['CODEX_HOME', 'CODEX_BIN', 'OPENAI_BASE_URL', 'OPENAI_API_KEY'])],",
+      "  ['kimi', new Set(['KIMI_BIN'])],",
+      "]);",
+      "",
+    ].join("\n"));
+    writeFileSync(join(root, "apps/web/src/components/SettingsDialog.tsx"), [
+      "const AGENT_CLI_ENV_FIELDS = [",
+      "  {",
+      "    agentId: 'codex',",
+      "    envKey: 'CODEX_BIN',",
+      "    labelKey: 'settings.cliEnvCodexBin',",
+      "    placeholder: '/absolute/path/to/codex',",
+      "  },",
+      "];",
+      "",
+    ].join("\n"));
+    writeFileSync(join(root, "apps/web/src/utils/agentLabels.ts"), [
+      "const AGENT_LABELS: Record<string, string> = {",
+      "  codex: 'Codex',",
+      "};",
+      "const AGENT_ALIASES: Record<string, string> = {",
+      "  'codex cli': 'codex',",
+      "};",
+      "",
+    ].join("\n"));
+    writeFileSync(join(root, "apps/web/src/components/AgentIcon.tsx"), "const ICON_EXT: Record<string, 'svg' | 'png'> = {};\n");
+
+    const result = await ensureOpenDesignOmkBridge(root);
+    const registry = readFileSync(join(root, "apps/daemon/src/runtimes/registry.ts"), "utf-8");
+    const executables = readFileSync(join(root, "apps/daemon/src/runtimes/executables.ts"), "utf-8");
+    const appConfig = readFileSync(join(root, "apps/daemon/src/app-config.ts"), "utf-8");
+
+    assert.match(registry, /omkAgentDef/);
+    assert.match(executables, /\['omk', 'OMK_BIN'\]/);
+    assert.match(appConfig, /\['omk', new Set\(\['OMK_BIN'\]\)\]/);
+    assert.equal(result.changedFiles.includes("apps/daemon/src/runtimes/defs/omk.ts"), true);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -430,4 +584,15 @@ test("worker count parsing rejects malformed values and shares OMK_WORKERS fallb
       process.env.OMK_WORKERS = previousWorkers;
     }
   }
+});
+
+test("runtime scope option parser accepts clean MCP aliases and rejects typos", async () => {
+  const { parseRuntimeScopeOption } = await import(RUNTIME_SCOPE_MODULE_URL);
+  assert.equal(parseRuntimeScopeOption(undefined, "project"), "project");
+  assert.equal(parseRuntimeScopeOption("none", "project"), "none");
+  assert.equal(parseRuntimeScopeOption("off", "project"), "none");
+  assert.equal(parseRuntimeScopeOption("project", "all"), "project");
+  assert.equal(parseRuntimeScopeOption("local", "all"), "project");
+  assert.equal(parseRuntimeScopeOption("global", "project"), "all");
+  assert.throws(() => parseRuntimeScopeOption("everything", "project"), /Invalid --mcp-scope/);
 });

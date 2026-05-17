@@ -62,7 +62,7 @@ export interface ProviderRouteDecision {
   trace?: import("../contracts/replay.js").DecisionTraceEntry[];
 }
 
-export type ProviderFailureKind = "availability" | "transient" | "policy" | "unknown";
+export type ProviderFailureKind = "availability" | "transient" | "policy" | "quota" | "unknown";
 
 export interface ProviderAvailability {
   provider: ProviderId;
@@ -79,7 +79,7 @@ export interface AgentProvider {
 
 export interface ProviderFallbackMetadata {
   from: ProviderId;
-  to: "kimi";
+  to: ProviderId;
   reason: string;
   attempts?: number;
   failureKind?: ProviderFailureKind;

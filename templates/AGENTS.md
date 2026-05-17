@@ -16,8 +16,9 @@ Keep these surfaces aligned when editing init/runtime docs:
 
 - Init markdown: `AGENTS.md`, `.kimi/AGENTS.md`, `.omk/prompts/root.md`, plus generated companion docs `DESIGN.md`, `GEMINI.md`, `CLAUDE.md`, `ROADMAP.md`, and `SECURITY.md`.
 - Skills: project portable skills live in `.agents/skills`; Kimi runtime skills live in `.kimi/skills`; init templates live under `templates/skills/agents` and `templates/skills/kimi`.
+- Default runtime preset: `.omk/runtime-preset.json` uses `omk-core-verified` as the baseline skills/hooks/MCP loop for general coding, refactor, and debugging work; `.omk/runtime-presets.json` also includes `omk-ts-product` for strict TS/React/Next/Nest product work, `omk-worktree-team` for isolated parallel worktree lanes before merge, and `omk-release-guard` for secret/security/release evidence gates with narrowed MCP authority, strong hooks, and no auto-publish authority.
 - MCP: fresh init is project-scoped and writes only local `omk-project` into `.kimi/mcp.json` / `.omk/mcp.json`. `omk init --local-user` or `OMK_MCP_SCOPE=all OMK_SKILLS_SCOPE=all` reads user `~/.kimi/mcp.json` and `~/.kimi/skills` at runtime without copying personal/global files. `--import-user-skills` is a trusted local opt-in copy path.
-- Agents: generated agents extend the Okabe-compatible base with `SendDMail`. Default root aliases are `explorer`/`explore`, `planner`/`plan`, `coder`, `reviewer`, and `qa`; role files also include `architect`, `integrator`, `interviewer`, `ontology`, `researcher`, and `vision-debugger`. Use additional local roles such as `coordinator`, `docs`, `merger`, `release`, `security`, or `tester` only when the current `.omk/agents/root.yaml` or harness exposes them.
+- Agents: generated agents extend the Okabe-compatible base with `SendDMail`. Default root aliases are `explorer`/`explore`, `planner`/`plan`, `architect`, `coder`, `reviewer`, `qa`, `tester`, `researcher`, `integrator`, `aggregator`, `interviewer`, `ontology`, and `vision-debugger`; each is scaffolded with MCP, skills, and hooks enabled. Use additional local roles such as `coordinator`, `docs`, `merger`, `release`, or `security` only when the current `.omk/agents/root.yaml` or harness exposes them.
 - Harness: chat agent mode writes `.omk/runs/<run-id>/chat-agent-harness.json`. Prompts carry compact MCP/skills/hooks counts; read the harness manifest for the full inventory, worker limits, authority boundaries, virtual DAG, and gate list.
 - Evidence: `scripts/run-tests.mjs` and OMK verification surfaces record sanitized MCP/skill/hook resource metadata. Do not emit resource secrets, headers, or raw env values.
 
@@ -164,14 +165,18 @@ matt-pocock-skills
 multica
 react-doctor
 omk-backend-api-review
+omk-adaptorch-orchestration-review
 omk-code-review
 omk-context-broker
+omk-control-loop-debugger
 omk-design-system
 omk-docs-release
+omk-evidence-contract
 omk-frontend-implementation
 omk-frontend-ui-review
 omk-git-commit-pr
 omk-industrial-control-loop
+omk-plan-first
 omk-project-rules
 omk-python-typing
 omk-quality-gate
@@ -185,7 +190,7 @@ omk-typescript-strict
 omk-worktree-team
 ```
 
-Packaged Kimi skill templates include OMK runtime/flow skills (`omk-kimi-runtime`, `omk-plan-first`, `omk-task-router`, `omk-global-rules`, `omk-flow-*`), design/visual skills (`omk-design-md`, `omk-multimodal-ui-review`, `open-design`, `awesome-design-md`), graph/spec skills (`graph-view`, `speckit-*`), legal workflow support (`claude-for-legal`), external-inspired agent workflow skills (`agentmemory`, `andrej-karpathy-skills`, `matt-pocock-skills`, `multica`, `react-doctor`), and DeepSeek helpers (`deepseek-*`). Local `.kimi/skills` may expose extra user/runtime skills such as `kb-retriever`, `gpt-image-2`, `diagram-design`, or web presentation helpers; use them only when present in the loaded skills list. Skill packs advertised by `omk skill pack` include `omk-core`, `omk-spec-driven`, `omk-typescript`, `omk-security`, `omk-review`, and `omk-release`.
+Packaged Kimi skill templates include OMK runtime/flow skills (`omk-kimi-runtime`, `omk-plan-first`, `omk-task-router`, `omk-global-rules`, `omk-flow-*`), custom orchestration/evidence/control-loop skills (`omk-adaptorch-orchestration-review`, `omk-evidence-contract`, `omk-control-loop-debugger`), design/visual skills (`omk-design-md`, `omk-multimodal-ui-review`, `open-design`, `awesome-design-md`), graph/spec skills (`graph-view`, `speckit-*`), legal workflow support (`claude-for-legal`), external-inspired agent workflow skills (`agentmemory`, `andrej-karpathy-skills`, `matt-pocock-skills`, `multica`, `react-doctor`), and DeepSeek helpers (`deepseek-*`). Local `.kimi/skills` may expose extra user/runtime skills such as `kb-retriever`, `gpt-image-2`, `diagram-design`, or web presentation helpers; use them only when present in the loaded skills list. Skill packs advertised by `omk skill pack` include `omk-priority`, `omk-agentic-ops`, `omk-core`, `omk-spec-driven`, `omk-typescript`, `omk-security`, `omk-review`, and `omk-release`.
 
 Rules:
 

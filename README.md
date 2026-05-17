@@ -8,7 +8,7 @@
 <meta property="og:image" content="https://raw.githubusercontent.com/dmae97/oh-my-kimi/main/readmeasset/omk-social-preview.png" />
 <meta property="og:title" content="oh-my-kimi" />
 <meta property="og:url" content="https://oh-my-kimi.sbs/" />
-<meta property="og:description" content="Verified agent runtime for Kimi Code. Stable daily-use core with alpha orchestration surfaces." />
+<meta property="og:description" content="Verified agent runtime for Kimi Code. Stable daily-use core with orchestration surfaces." />
 
 <!-- Twitter -->
 <meta name="twitter:card" content="summary_large_image" />
@@ -19,7 +19,7 @@
 <h1>oh-my-kimi</h1>
 
 <p><strong>Verified agent runtime for Kimi Code.</strong></p>
-<p><sub>Stable daily-use core with alpha orchestration surfaces.</sub></p>
+<p><sub>Stable daily-use core with orchestration surfaces.</sub></p>
 <p><sub>Kimi writes. OMK coordinates, verifies, remembers, and guards.</sub></p>
 <p><a href="https://oh-my-kimi.sbs/"><strong>oh-my-kimi.sbs</strong></a> · <a href="https://github.com/dmae97/oh-my-kimi">GitHub</a> · <a href="https://www.npmjs.com/package/@oh-my-kimi/cli">npm</a></p>
 
@@ -69,7 +69,7 @@ omk summary-show
 omk cockpit
 ```
 
-> Current stable package: **v1.1.15**. Stable daily-use core with alpha orchestration surfaces; release-gated and evidence-gated flows are labelled in CLI help and docs.
+> Current stable package: **v1.1.16**. Stable daily-use core with orchestration surfaces; release-gated and evidence-gated flows are labelled in CLI help and docs.
 
 > **Share your verified run:** open a **Verified run** issue with your raw prompt, generated diff, `omk verify --json`, replay screenshot, and known limitation so others can inspect real evidence.
 
@@ -142,8 +142,9 @@ Advanced / inspectable
   omk diff-runs  Structural diff between two runs for reproducibility
   omk agent      Agent role listing/show/create/doctor
   omk snip       Snippet save/get/list/search/delete
+  omk servarr    Optional Radarr/Sonarr/Lidarr read-only adapter
 
-Alpha / Experimental
+Orchestration
   omk parallel   Parallel Kimi coordinator + workers + reviewer
   omk run        DAG-based long-running task execution
   omk verify     Evidence-gate verification for a run
@@ -153,7 +154,7 @@ Alpha / Experimental
   omk spec       GitHub Spec Kit bridge
 ```
 
-Stable and daily-use commands are the normal operator path. Advanced, alpha, and experimental commands expose stronger orchestration primitives without pretending every surface has the same maturity level.
+Stable and daily-use commands are the normal operator path. Advanced and orchestration commands expose stronger orchestration primitives without pretending every surface has the same maturity level.
 
 ---
 
@@ -216,8 +217,14 @@ OMK treats project instructions, agent skills, generated hooks, and MCP servers 
 
 - `AGENTS.md` and `DESIGN.md` define project behavior and UI taste.
 - `.omk/` stores run state, memory, plans, reports, and generated runtime assets.
+- Default preset `omk-core-verified` records the core loop: repo/context/control-loop skills, shell/secret/stop/subagent/format hooks, and `omk-project`, `context7`, `github`, `fetch` MCP hints.
+- Product preset `omk-ts-product` adds strict TypeScript, React/Next/Nest, API DTO/domain/persistence, UI review/design-system skills, typecheck/eslint hooks, and `playwright` MCP for UI verification.
+- Team preset `omk-worktree-team` routes parallel worker lanes into isolated Git worktrees with branch snapshots, subagent audit, merge-quality gates, GitHub/memory, and read-only filesystem MCP hints.
+- Release preset `omk-release-guard` narrows release/security work to secret and security review skills, guarded shell/publish hooks, audit/checklist evidence, and GitHub/OMK/fetch/Context7 MCP hints; it treats reference MCP servers as advisory examples rather than production-ready trust boundaries and does not auto-publish.
+- Top-priority skill pack `omk-priority` installs the 12 repeatable SKILL.md workflows for context capsules, targeted repo discovery, control-loop planning, plan-first execution, quality gates, test debugging, code/security/secret review, TypeScript/Python typing, and isolated worktree teams. These are advertised as skills, not always-loaded prompt body.
+- Agentic operations skill pack `omk-agentic-ops` installs the custom AdaptOrch/OMK orchestration review, task evidence contract, and control-loop debugger skills for DAG runtime, evidence-gate, and repair-policy analysis.
 - `omk skill` manages Kimi-facing skills and slash workflows.
-- **Skill Assigner** automatically matches skills, MCP servers, tools, and hooks to DAG nodes based on intent and role (14 rules covering web-design, diagram-design, code-review, security-audit, debugging, and more).
+- **Skill Assigner** automatically matches skills, MCP servers, tools, and hooks to DAG nodes based on intent and role (17 rules covering core/product/team presets, web-design, diagram-design, code-review, security-audit, debugging, and more).
 - `omk mcp` inspects project and user MCP configuration.
 - `omk doctor` checks Kimi, Git, hooks, MCP, skills, and runtime health.
 
@@ -368,8 +375,8 @@ OMK has a stable daily-use core, with advanced surfaces explicitly labelled by m
 
 - **Stable / daily-use core:** init, doctor, chat, plan, mode, runs, history, index-show, cockpit, HUD, design, LSP, index, star, update, google, and project inspection surfaces.
 - **Advanced inspection:** graph, MCP, replay, inspect, diff-runs, snip, screenshots, provider diagnostics, and design bridges are inspectable but may depend on local project assets.
-- **Alpha orchestration:** parallel, run, verify, review, goal, sync, summary, and long-running evidence-gated flows.
-- **Experimental surfaces:** tmux team mode, merge automation, agent registry, skill manager, research, feature/bugfix/refactor workflows, spec/DAG/cron, open-design-agent, and provider-routing integrations.
+- **Orchestration:** parallel, run, verify, review, goal, sync, summary, and long-running evidence-gated flows.
+- **Advanced surfaces:** tmux team mode, merge automation, agent registry, skill manager, research, feature/bugfix/refactor workflows, spec/DAG/cron, open-design-agent, and provider-routing integrations.
 
 Release confidence is built from local and CI gates:
 
@@ -382,7 +389,7 @@ npm run smoke:pack
 npm run release:check
 ```
 
-The v1.1.15 release line is release-gated and evidence-gated: it hotfixes isolated HOME shell-profile bridging for bash-based MCP servers, keeps fetch on a persistent local MCP entrypoint, and preserves the current AGENTS/init templates, packaged external-inspired workflow skills, bundled MCP server entrypoints, package audit, smoke-pack checks, native safety normalization, replay/inspect/diff-runs, skill assigner, decision trace coverage, and CI release gates.
+The v1.1.16 release line is release-gated and evidence-gated: it stabilizes deterministic IntentFrame/ActionAtom orchestration, chat startup schema preflight, MCP duplicate handling, agent MCP/skills/hooks propagation, and doctor/init/pack smoke behavior while preserving package audit, smoke-pack checks, native safety normalization, replay/inspect/diff-runs, skill assigner, decision trace coverage, and CI release gates.
 
 **MCP fetch startup note:** if your personal Kimi config still starts fetch with `uvx mcp-server-fetch`, each disposable or isolated Kimi HOME may re-resolve Python dependencies before MCP tools appear. Prefer a persistent entrypoint:
 
@@ -391,6 +398,8 @@ uv tool install mcp-server-fetch
 ```
 
 Then set `~/.kimi/mcp.json` to an absolute command such as `/home/you/.local/bin/mcp-server-fetch`. Keep project `.kimi/mcp.json` files from redefining the same `fetch` server unless the project intentionally overrides the user-level server.
+
+**MCP PDF startup note:** `@modelcontextprotocol/server-pdf` defaults to Streamable HTTP and may print `MCP server listening on http://localhost:3001/mcp` to stdout, which breaks stdio JSON-RPC clients. OMK installs it with `--stdio`; existing configs should add that arg or configure PDF as a remote URL.
 
 ---
 

@@ -41,6 +41,14 @@ export interface DagNodeRouting {
   evidenceRequired?: boolean;
   rationale?: string;
   rejected?: Array<{ id: string; reason: string }>;
+  actionAtom?: {
+    id: string;
+    label: string;
+    verb: string;
+    object?: string;
+    evidenceTarget: string;
+    doneCondition: string;
+  };
 }
 
 export interface DagNodeFailurePolicy {

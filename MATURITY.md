@@ -1,7 +1,7 @@
 # OMK Command Maturity Matrix
 
-Last updated: 2026-05-13
-Current public version: v1.1.15
+Last updated: 2026-05-17
+Current public version: v1.1.16
 
 | Level | Meaning |
 |-------|---------|
@@ -71,5 +71,5 @@ Current public version: v1.1.15
 | Provider routing | DeepSeek opportunistic worker routing exists for low-risk/read-heavy paths; Kimi remains orchestrator and fallback; run summaries/reports now include provider attempt and fallback totals. | Add HUD provider route metrics and broader release-gate tests for fallback/metadata contracts. |
 | MCP diagnostics | `mcp list/doctor/test` exist; invalid project/global MCP JSON now fails visibly through diagnostics without exposing config contents. | Add machine-readable MCP JSON and structured failure categories for command resolution, timeout, permission, and server health. |
 | Skills and harness templates | `omk skill` exposes current core/TypeScript/review packs, while init templates document project MCP scope, Kimi skills, portable `.agents/skills`, and run-scoped harness manifests. | Keep external-inspired skills compact, source-linked, and non-vendored; verify install/sync through `skill-command` tests and package audit. |
-| Release docs and site | README, CHANGELOG, MATURITY, package audit, and release-gate commands now document the v1.1.15 daily-use core, alpha/experimental surfaces, current harness templates, packaged workflow skills, isolated HOME MCP hotfix, and public site at `https://oh-my-kimi.sbs/`. | Treat `npm run release:check` and CI release workflow evidence as the publish/deploy gate before claiming a new release. |
+| Release docs and site | README, CHANGELOG, MATURITY, package audit, and release-gate commands now document the v1.1.16 daily-use core, alpha/experimental surfaces, IntentFrame/ActionAtom orchestration hardening, current harness templates, packaged workflow skills, doctor/init/pack smoke fixes, and public site at `https://oh-my-kimi.sbs/`. | Treat `npm run release:check` and CI release workflow evidence as the publish/deploy gate before claiming a new release. |
 | Goal planner | Goal lifecycle exists, including continue, generated plan/evidence criteria, and verification. | Expand planner quality scoring and release evidence. |

@@ -1,16 +1,20 @@
-import { lstat, mkdtemp, mkdir, symlink, rm, writeFile } from "fs/promises";
+import { lstat, mkdtemp, mkdir, symlink, rm, writeFile, readFile } from "fs/promises";
 import { dirname, join } from "path";
 import { tmpdir } from "os";
-import { pathExists, getProjectRoot, getUserHome } from "../util/fs.js";
+import { pathExists, getProjectRoot, getUserHome, extractHooksBlocks } from "../util/fs.js";
+
+type RuntimeScope = "all" | "project" | "none";
 
 export interface IsolatedKimiHomeOptions {
   originalHome?: string;
   projectRoot?: string;
   inheritLocalAuth?: boolean;
+  skillsScope?: RuntimeScope;
+  hooksScope?: RuntimeScope;
   env?: NodeJS.ProcessEnv;
 }
 
-const KIMI_INHERITED_DIRS = ["credentials", "skills", "agents", "logs"];
+const KIMI_BASE_INHERITED_DIRS = ["credentials", "agents", "logs"] as const;
 
 /**
  * Local agent/OMK auth paths that should remain visible when OMK gives Kimi a
@@ -66,10 +70,19 @@ export async function prepareIsolatedKimiHome(options: IsolatedKimiHomeOptions =
   const tmpHome = await mkdtemp(join(tmpdir(), "omk-home-"));
   const originalKimi = join(originalHome, ".kimi");
   const tmpKimi = join(tmpHome, ".kimi");
+  const skillsScope = normalizeRuntimeScope(options.skillsScope ?? env.OMK_SKILLS_SCOPE, "project");
+  const hooksScope = normalizeRuntimeScope(options.hooksScope ?? env.OMK_HOOKS_SCOPE, "project");
   await mkdir(tmpKimi, { recursive: true });
 
-  // Symlink directories that Kimi CLI needs (credentials, skills, etc.)
-  for (const name of KIMI_INHERITED_DIRS) {
+  // Symlink only scoped global directories. Skills/hooks are intentionally not
+  // inherited for project/none scopes; explicit --skills-dir and merged hook
+  // config below are the source of truth for those capabilities.
+  const inheritedDirs = [
+    ...KIMI_BASE_INHERITED_DIRS,
+    ...(skillsScope === "all" ? ["skills"] : []),
+    ...(hooksScope === "all" ? ["hooks"] : []),
+  ];
+  for (const name of inheritedDirs) {
     const src = join(originalKimi, name);
     const dst = join(tmpKimi, name);
     if (await pathExists(src)) {
@@ -93,16 +106,40 @@ export async function prepareIsolatedKimiHome(options: IsolatedKimiHomeOptions =
 
   await ensureNoSyntheticTmpMcpConfig(tmpKimi, projectRoot);
 
-  // Symlink config.toml if present
+  // Merge hooks from project config into isolated HOME config.toml so that
+  // project-specific hooks are active even when the global config hasn't been
+  // synced yet. We copy (not symlink) so we can append missing hooks safely.
   const originalConfig = join(originalKimi, "config.toml");
   const tmpConfig = join(tmpKimi, "config.toml");
-  if (await pathExists(originalConfig)) {
-    try {
-      await symlink(originalConfig, tmpConfig);
-    } catch (err) {
-      console.warn(`[omk] Failed to symlink ~/.kimi/config.toml to isolated HOME: ${(err as Error).message ?? err}`);
+  const projectHookConfigs = [
+    join(projectRoot, ".omk", "kimi.config.toml"),
+    join(projectRoot, ".kimi", "kimi.config.toml"),
+  ];
+  const originalConfigContent = await pathExists(originalConfig)
+    ? await readFile(originalConfig, "utf-8").catch(() => "")
+    : "";
+  const globalConfigContent = hooksScope === "all"
+    ? originalConfigContent
+    : stripHooksBlocks(originalConfigContent);
+  const missingHookBlocks: string[] = [];
+  if (hooksScope !== "none") {
+    for (const projectHookConfig of projectHookConfigs) {
+      if (!(await pathExists(projectHookConfig))) continue;
+      const content = await readFile(projectHookConfig, "utf-8").catch(() => "");
+      const hooksBlock = extractHooksBlocks(content);
+      if (hooksBlock && !globalConfigContent.includes(hooksBlock.trim())) {
+        missingHookBlocks.push(hooksBlock);
+      }
     }
-}
+  }
+  try {
+    if (globalConfigContent || missingHookBlocks.length > 0) {
+      const mergedConfig = [globalConfigContent.trimEnd(), ...missingHookBlocks].filter(Boolean).join("\n\n") + "\n";
+      await writeFile(tmpConfig, mergedConfig, { mode: 0o600 });
+    }
+  } catch (err) {
+    console.warn(`[omk] Failed to write merged config.toml to isolated HOME: ${(err as Error).message ?? err}`);
+  }
 
   // Bridge shell profile files so MCP servers spawned via bash inherit the
   // user's shell environment without evaluating ~/.profile against /tmp HOME.
@@ -138,6 +175,31 @@ function shouldInheritLocalAuth(optionValue: boolean | undefined, env: NodeJS.Pr
   if (typeof optionValue === "boolean") return optionValue;
   const value = env.OMK_ISOLATED_HOME_INHERIT_AUTH ?? env.OMK_INHERIT_LOCAL_AUTH;
   return !value || !["0", "false", "no", "off"].includes(value.toLowerCase());
+}
+
+function normalizeRuntimeScope(value: string | undefined, fallback: RuntimeScope): RuntimeScope {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === "none" || normalized === "off" || normalized === "disabled") return "none";
+  if (normalized === "all" || normalized === "global" || normalized === "local-user" || normalized === "local_user" || normalized === "personal" || normalized === "user") return "all";
+  if (normalized === "project" || normalized === "local") return "project";
+  return fallback;
+}
+
+function stripHooksBlocks(content: string): string {
+  const result: string[] = [];
+  let skippingHookBlock = false;
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("[[hooks]]")) {
+      skippingHookBlock = true;
+      continue;
+    }
+    if (skippingHookBlock && /^\[[^\]]+]/.test(trimmed)) {
+      skippingHookBlock = false;
+    }
+    if (!skippingHookBlock) result.push(line);
+  }
+  return result.join("\n").trimEnd();
 }
 
 function localTerminalAuthPaths(env: NodeJS.ProcessEnv = process.env): readonly string[] {

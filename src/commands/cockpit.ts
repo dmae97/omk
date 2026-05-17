@@ -73,7 +73,7 @@ export interface CockpitCache {
 
 export interface CockpitResourceEntry {
   name: string;
-  source: "project" | "global";
+  source: "project" | "global" | "builtin";
 }
 
 export interface CockpitResourceSnapshot {
@@ -117,38 +117,79 @@ const PANEL_HORIZONTAL_OVERHEAD = 4;
 const MIN_COCKPIT_FRAME_WIDTH = 20;
 const MAX_COCKPIT_FRAME_WIDTH = 60;
 
+function isCombiningCodePoint(codePoint: number): boolean {
+  return (
+    codePoint === 0x200d ||
+    (codePoint >= 0x0300 && codePoint <= 0x036f) ||
+    (codePoint >= 0x1ab0 && codePoint <= 0x1aff) ||
+    (codePoint >= 0x1dc0 && codePoint <= 0x1dff) ||
+    (codePoint >= 0x20d0 && codePoint <= 0x20ff) ||
+    (codePoint >= 0xfe00 && codePoint <= 0xfe0f) ||
+    (codePoint >= 0xfe20 && codePoint <= 0xfe2f)
+  );
+}
+
+function isWideCodePoint(codePoint: number): boolean {
+  return (
+    (codePoint >= 0x1100 && codePoint <= 0x115f) ||
+    codePoint === 0x2329 ||
+    codePoint === 0x232a ||
+    (codePoint >= 0x2e80 && codePoint <= 0xa4cf && codePoint !== 0x303f) ||
+    (codePoint >= 0xac00 && codePoint <= 0xd7a3) ||
+    (codePoint >= 0xf900 && codePoint <= 0xfaff) ||
+    (codePoint >= 0xfe10 && codePoint <= 0xfe19) ||
+    (codePoint >= 0xfe30 && codePoint <= 0xfe6f) ||
+    (codePoint >= 0xff00 && codePoint <= 0xff60) ||
+    (codePoint >= 0xffe0 && codePoint <= 0xffe6) ||
+    (codePoint >= 0x1f300 && codePoint <= 0x1faff) ||
+    (codePoint >= 0x2600 && codePoint <= 0x27bf)
+  );
+}
+
+function terminalCharWidth(char: string): number {
+  const codePoint = char.codePointAt(0);
+  if (codePoint === undefined) return 0;
+  if (codePoint === 0 || codePoint < 0x20 || (codePoint >= 0x7f && codePoint < 0xa0)) return 0;
+  if (isCombiningCodePoint(codePoint)) return 0;
+  return isWideCodePoint(codePoint) ? 2 : 1;
+}
+
+export function visibleTerminalWidth(value: string): number {
+  return [...sanitizeTerminalText(value)].reduce((width, char) => width + terminalCharWidth(char), 0);
+}
+
 /** Truncate visible text while preserving ANSI escape sequences. */
 function truncateLine(line: string, maxWidth: number): string {
-  const clean = sanitizeTerminalText(line);
-  if (clean.length <= maxWidth) return line;
+  if (maxWidth <= 0) return "";
+  if (visibleTerminalWidth(line) <= maxWidth) return line;
 
-  let visibleCount = 0;
+  const ellipsis = style.gray("…");
+  const limit = Math.max(0, maxWidth - 1);
+  let currentWidth = 0;
   let result = "";
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
+  const appendText = (text: string): boolean => {
+    for (const char of text) {
+      const charWidth = terminalCharWidth(char);
+      if (currentWidth + charWidth > limit) return false;
+      result += char;
+      currentWidth += charWidth;
+    }
+    return true;
+  };
+
   ANSI_REGEX.lastIndex = 0;
   while ((match = ANSI_REGEX.exec(line)) !== null) {
     const textBefore = line.slice(lastIndex, match.index);
-    for (const char of textBefore) {
-      if (visibleCount >= maxWidth - 1) {
-        return result + style.gray("…");
-      }
-      result += char;
-      visibleCount++;
-    }
+    if (!appendText(textBefore)) return result + ellipsis;
     result += match[0];
     lastIndex = ANSI_REGEX.lastIndex;
   }
 
   const remaining = line.slice(lastIndex);
-  for (const char of remaining) {
-    if (visibleCount >= maxWidth - 1) {
-      return result + style.gray("…");
-    }
-    result += char;
-    visibleCount++;
-  }
+  if (!appendText(remaining)) return result + ellipsis;
 
   return result;
 }
@@ -162,7 +203,7 @@ function truncateText(value: string, maxLength: number): string {
 }
 
 function padEndVisible(value: string, targetWidth: number): string {
-  return value + " ".repeat(Math.max(0, targetWidth - sanitizeTerminalText(value).length));
+  return value + " ".repeat(Math.max(0, targetWidth - visibleTerminalWidth(value)));
 }
 
 function renderCockpitPanel(lines: string[], innerWidth: number): string {
@@ -354,7 +395,7 @@ function getCacheEntry<T>(entry: CacheEntry<T> | undefined, ttlMs: number, now: 
 
 async function getCockpitResources(root = getProjectRoot()): Promise<CockpitResourceSnapshot> {
   const [mcp, skills, hooks] = await Promise.all([
-    loadMergedMcpConfig(root, "all").catch(() => ({ servers: {}, sources: new Map<string, "project" | "global">() })),
+    loadMergedMcpConfig(root, "all").catch(() => ({ servers: {}, sources: new Map<string, CockpitResourceEntry["source"]>() })),
     collectSkillEntries(root),
     collectHookEntries(root),
   ]);
@@ -428,7 +469,8 @@ function upsertResource(byName: Map<string, CockpitResourceEntry>, entry: Cockpi
 }
 
 function compareResourceEntries(a: CockpitResourceEntry, b: CockpitResourceEntry): number {
-  const sourceRank = (a.source === "project" ? 0 : 1) - (b.source === "project" ? 0 : 1);
+  const rank = (source: CockpitResourceEntry["source"]): number => source === "project" ? 0 : source === "builtin" ? 1 : 2;
+  const sourceRank = rank(a.source) - rank(b.source);
   return sourceRank || a.name.localeCompare(b.name);
 }
 

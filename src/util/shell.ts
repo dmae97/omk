@@ -218,8 +218,12 @@ export async function checkCommand(command: string): Promise<boolean> {
   }
 }
 
+export function resolveKimiBin(): string {
+  return process.env.KIMI_BIN ?? "kimi";
+}
+
 export async function getKimiVersion(): Promise<string | null> {
-  const result = await runShell("kimi", ["--version"], { timeout: 10000 });
+  const result = await runShell(resolveKimiBin(), ["--version"], { timeout: 10000 });
   if (result.failed) return null;
   return result.stdout.trim();
 }

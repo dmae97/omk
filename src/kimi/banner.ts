@@ -24,9 +24,9 @@ export class BannerReplacer {
   private strippedCache = "";
   private cacheDirty = true;
   private timeout: ReturnType<typeof setTimeout> | null = null;
-  private readonly MAX_LINES = 60; // banner may include model info / ascii art
-  private readonly TIMEOUT_MS = 800; // allow slower terminals / ssh latency
-  private readonly MAX_BYTES = 16384; // accommodate larger ascii art banners
+  private readonly MAX_LINES = 120; // banner may include model info / ascii art / MCP status
+  private readonly TIMEOUT_MS = 3000; // allow slower terminals / ssh latency / MCP connection status
+  private readonly MAX_BYTES = 32768; // accommodate larger ascii art banners
 
   constructor(private onReplace: (meta: BannerMeta) => void) {}
 

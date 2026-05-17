@@ -7,6 +7,27 @@ import { join } from "node:path";
 
 import { getSkillCatalog, skillCatalogCommand, skillInstallCommand, skillPackCommand, skillSyncCommand } from "../dist/commands/skill.js";
 
+const TOP_PRIORITY_SKILLS = [
+  "omk-context-broker",
+  "omk-repo-explorer",
+  "omk-industrial-control-loop",
+  "omk-plan-first",
+  "omk-quality-gate",
+  "omk-test-debug-loop",
+  "omk-code-review",
+  "omk-security-review",
+  "omk-secret-guard",
+  "omk-typescript-strict",
+  "omk-python-typing",
+  "omk-worktree-team",
+];
+
+const AGENTIC_OPS_SKILLS = [
+  "omk-adaptorch-orchestration-review",
+  "omk-evidence-contract",
+  "omk-control-loop-debugger",
+];
+
 async function withTempProject(fn) {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-skill-project-"));
   const previousProjectRoot = process.env.OMK_PROJECT_ROOT;
@@ -49,14 +70,54 @@ test("skill catalog exposes OMX-style status metadata", async () => {
   await withTempProject(async (projectRoot) => {
     const catalog = await getSkillCatalog(projectRoot);
     const core = catalog.packs.find((pack) => pack.id === "omk-core");
+    const priority = catalog.packs.find((pack) => pack.id === "omk-priority");
+    const agenticOps = catalog.packs.find((pack) => pack.id === "omk-agentic-ops");
     const awesomeDesign = catalog.skills.find((skill) => skill.name === "awesome-design-md");
 
     assert.equal(core?.lifecycle, "active");
     assert.equal(core?.installed, false);
+    assert.deepEqual(priority?.skills, TOP_PRIORITY_SKILLS);
+    assert.deepEqual(agenticOps?.skills, AGENTIC_OPS_SKILLS);
+    for (const skillName of TOP_PRIORITY_SKILLS) {
+      const skill = catalog.skills.find((entry) => entry.name === skillName);
+      assert.equal(skill?.templateAvailable, true, `${skillName} should have a Kimi skill template`);
+      assert.ok(skill?.packs.includes("omk-priority"), `${skillName} should belong to omk-priority`);
+    }
+    for (const skillName of AGENTIC_OPS_SKILLS) {
+      const skill = catalog.skills.find((entry) => entry.name === skillName);
+      assert.equal(skill?.templateAvailable, true, `${skillName} should have a Kimi skill template`);
+      assert.ok(skill?.packs.includes("omk-agentic-ops"), `${skillName} should belong to omk-agentic-ops`);
+    }
     assert.equal(awesomeDesign?.lifecycle, "active");
     assert.equal(awesomeDesign?.slashCommand, true);
     assert.equal(awesomeDesign?.templateAvailable, true);
     assert.ok(awesomeDesign?.packs.includes("omk-core"));
+  });
+});
+
+test("skill install omk-priority copies the top 12 repeatable workflow skills", async () => {
+  await withTempProject(async (projectRoot) => {
+    await skillInstallCommand("omk-priority");
+
+    for (const skillName of TOP_PRIORITY_SKILLS) {
+      const skill = await readFile(join(projectRoot, ".kimi", "skills", skillName, "SKILL.md"), "utf-8");
+      assert.match(skill, new RegExp(`^name:\\s*${skillName}$`, "m"));
+    }
+    const installed = JSON.parse(await readFile(join(projectRoot, ".omk", "installed-skill-packs.json"), "utf-8"));
+    assert.deepEqual(installed.packs, ["omk-priority"]);
+  });
+});
+
+test("skill install omk-agentic-ops copies orchestration evidence and control-loop skills", async () => {
+  await withTempProject(async (projectRoot) => {
+    await skillInstallCommand("omk-agentic-ops");
+
+    for (const skillName of AGENTIC_OPS_SKILLS) {
+      const skill = await readFile(join(projectRoot, ".kimi", "skills", skillName, "SKILL.md"), "utf-8");
+      assert.match(skill, new RegExp(`^name:\\s*${skillName}$`, "m"));
+    }
+    const installed = JSON.parse(await readFile(join(projectRoot, ".omk", "installed-skill-packs.json"), "utf-8"));
+    assert.deepEqual(installed.packs, ["omk-agentic-ops"]);
   });
 });
 

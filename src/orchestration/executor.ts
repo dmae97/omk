@@ -6,6 +6,7 @@ import { createStatePersister } from "./state-persister.js";
 import { createEnsembleTaskRunner, type EnsemblePolicy } from "./ensemble.js";
 import { estimateRunProgress } from "./eta.js";
 import { dagNodeRoutingEnv } from "./routing.js";
+import { getOmkResourceSettings } from "../util/resource-profile.js";
 import { checkEvidenceGates } from "./evidence-gate.js";
 import { invalidateTaskDagGraph } from "./task-graph.js";
 import { resolveTimeoutMs } from "../util/timeout-config.js";
@@ -277,11 +278,15 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
     await commitState(state);
     emitNodeStart(node);
 
+    const resources = await getOmkResourceSettings();
     const env: Record<string, string> = {
       OMK_NODE_ID: node.id,
       OMK_RUN_ID: options.runId,
       OMK_ROLE: node.role,
-      ...dagNodeRoutingEnv(node),
+      OMK_MCP_ENABLED: resources.mcpScope === "none" ? "false" : "true",
+      OMK_SKILLS_ENABLED: resources.skillsScope === "none" ? "false" : "true",
+      OMK_HOOKS_ENABLED: resources.hooksScope === "none" ? "false" : "true",
+      ...dagNodeRoutingEnv(node, dag),
       ...etaEnv(state.estimate),
     };
 

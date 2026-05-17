@@ -1,6 +1,6 @@
 import { realpathSync } from "node:fs";
 import type { Dirent } from "node:fs";
-import { mkdir, writeFile, readFile, copyFile, readdir, stat } from "fs/promises";
+import { mkdir, writeFile, readFile, copyFile, readdir, stat, rename } from "fs/promises";
 import { basename, join, dirname } from "path";
 import { fileURLToPath } from "node:url";
 import { confirm, password } from "@inquirer/prompts";
@@ -13,6 +13,13 @@ import { defaultLspConfigJson } from "../lsp/default-config.js";
 import { t } from "../util/i18n.js";
 import { maybeAskForGitHubStar } from "../util/first-run-star.js";
 import { getDeepSeekProviderStatus, setDeepSeekApiKey } from "../providers/deepseek/deepseek-config.js";
+import { OMK_CORE_VERIFIED_PRESET, OMK_RUNTIME_PRESETS } from "../runtime/core-verified-preset.js";
+import {
+  RECOMMENDED_MCP_SERVERS,
+  getDefaultSelections,
+  type McpCatalogEntry,
+} from "../mcp/server-catalog.js";
+import { mcpBulkInstallCommand } from "./mcp.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -24,7 +31,6 @@ interface McpServerDefinition {
   env?: Record<string, string>;
 }
 
-type JsonObject = Record<string, unknown>;
 
 interface InitTtyLike {
   isTTY?: boolean;
@@ -47,10 +53,41 @@ export interface InitCommandOptions {
   promptDeepSeekApiKey?: () => Promise<string>;
 }
 
+function createThemeJson(): string {
+  return JSON.stringify({
+    banner: {
+      title: "oh-my-kimi",
+      subtitle: "Kimi CLI, but better.",
+      style: "default",
+      enabled: true,
+    },
+    colors: {
+      primary: "#7B5BF5",
+      accent: "#EC4899",
+      success: "#14B8A6",
+      warning: "#FB923C",
+      danger: "#F87171",
+      info: "#60A5FA",
+      muted: "#94A3B8",
+    },
+    metaBox: true,
+  }, null, 2) + "\n";
+}
+
+function createRuntimePresetsJson(): string {
+  return JSON.stringify({
+    defaultPresetId: OMK_CORE_VERIFIED_PRESET.id,
+    presets: OMK_RUNTIME_PRESETS,
+  }, null, 2) + "\n";
+}
+
 const OKABE_AGENT_YAML = `version: 1
 agent:
   extend: default
   name: omk-okabe-base
+  # Kimi requires an explicit non-empty tools list for custom --agent-file configs.
+  # Keep the full OMK native tool surface, including Agent for parallel subagents
+  # and SendDMail for Okabe checkpoints; MCP/skills/hooks are injected by runtime config.
   tools:
     - "kimi_cli.tools.agent:Agent"
     - "kimi_cli.tools.ask_user:AskUserQuestion"
@@ -69,51 +106,84 @@ agent:
     - "kimi_cli.tools.background:TaskList"
     - "kimi_cli.tools.background:TaskOutput"
     - "kimi_cli.tools.background:TaskStop"
-    # D-Mail checkpoints: real save/restore substance via MCP tools
-    #   omk_save_checkpoint   -> capture git diff + todos + state
-    #   omk_list_checkpoints  -> browse saved checkpoints
-    #   omk_restore_checkpoint -> apply patch and restore run files
     - "kimi_cli.tools.dmail:SendDMail"
+  system_prompt_args:
+    OMK_MCP_ENABLED: "true"
+    OMK_SKILLS_ENABLED: "true"
+    OMK_HOOKS_ENABLED: "true"
 `;
 
 const ROOT_AGENT_YAML = `version: 1
 agent:
-  extend: ./okabe.yaml  # Okabe-compatible base adds SendDMail/D-Mail checkpoints
+  extend: ./okabe.yaml  # Inherits the unrestricted default Kimi tool surface plus MCP/skills/hooks flags
   name: omk-root
   system_prompt_path: ../prompts/root.md
   system_prompt_args:
     OMK_ROLE: "root-coordinator"
+    OMK_MCP_ENABLED: "true"
+    OMK_SKILLS_ENABLED: "true"
+    OMK_HOOKS_ENABLED: "true"
   subagents:
     explorer:
       path: ./roles/explorer.yaml
-      description: "Read-only repository exploration and context mapping"
+      description: "Read-only repository exploration and context mapping with scoped MCP, skills, and hooks access when enabled by runtime scope"
     explore:
       path: ./roles/explorer.yaml
       description: "Alias for explorer; kept for compatibility with older OMK instructions"
     planner:
       path: ./roles/planner.yaml
-      description: "Architecture, refactor, migration, and implementation planning"
+      description: "Architecture, refactor, migration, and implementation planning with scoped MCP, skills, and hooks access when enabled by runtime scope"
     plan:
       path: ./roles/planner.yaml
       description: "Alias for planner; kept for compatibility with older OMK instructions"
+    architect:
+      path: ./roles/architect.yaml
+      description: "Read-only architecture and migration design with scoped MCP, skills, and hooks access when enabled by runtime scope"
     coder:
       path: ./roles/coder.yaml
-      description: "Scoped implementation in the current project"
+      description: "Scoped implementation in the current project with scoped MCP, skills, and hooks access when enabled by runtime scope"
     reviewer:
       path: ./roles/reviewer.yaml
-      description: "Adversarial code review and risk detection"
+      description: "Adversarial code review and risk detection with scoped MCP, skills, and hooks access when enabled by runtime scope"
+    security:
+      path: ./roles/security.yaml
+      description: "Security, secret, permission, and trust-boundary review with scoped MCP, skills, and hooks access when enabled by runtime scope"
     qa:
       path: ./roles/qa.yaml
-      description: "Run and analyze lint, typecheck, test, and build results"
+      description: "Run and analyze lint, typecheck, test, and build results with scoped MCP, skills, and hooks access when enabled by runtime scope"
+    tester:
+      path: ./roles/tester.yaml
+      description: "Focused regression and edge-case testing with scoped MCP, skills, and hooks access when enabled by runtime scope"
+    researcher:
+      path: ./roles/researcher.yaml
+      description: "Reference-backed research and external documentation checks with scoped MCP, skills, and hooks access when enabled by runtime scope"
+    integrator:
+      path: ./roles/integrator.yaml
+      description: "Merge coordination and final synthesis with scoped MCP, skills, and hooks access when enabled by runtime scope"
+    aggregator:
+      path: ./roles/aggregator.yaml
+      description: "Parallel-lane result aggregation with scoped MCP, skills, and hooks access when enabled by runtime scope"
+    interviewer:
+      path: ./roles/interviewer.yaml
+      description: "Requirement clarification and acceptance criteria discovery with scoped MCP, skills, and hooks access when enabled by runtime scope"
+    ontology:
+      path: ./roles/ontology.yaml
+      description: "Project graph memory and ontology curation with scoped MCP, skills, and hooks access when enabled by runtime scope"
+    vision-debugger:
+      path: ./roles/vision-debugger.yaml
+      description: "Screenshot and multimodal debugging with scoped MCP, skills, and hooks access when enabled by runtime scope"
 `;
 
 const ROLE_YAMLS: Record<string, string> = {
   interviewer: `version: 1
 agent:
-  extend: ../okabe.yaml  # Okabe-compatible base adds SendDMail/D-Mail checkpoints
+  extend: ../okabe.yaml  # Inherits unrestricted default Kimi tools plus MCP/skills/hooks flags
   name: omk-interviewer
   system_prompt_args:
     OMK_ROLE: "interviewer"
+    OMK_MCP_ENABLED: "true"
+    OMK_SKILLS_ENABLED: "true"
+    OMK_HOOKS_ENABLED: "true"
   exclude_tools:
     - "kimi_cli.tools.file:WriteFile"
     - "kimi_cli.tools.file:StrReplaceFile"
@@ -121,10 +191,13 @@ agent:
 `,
   architect: `version: 1
 agent:
-  extend: ../okabe.yaml  # Okabe-compatible base adds SendDMail/D-Mail checkpoints
+  extend: ../okabe.yaml  # Inherits unrestricted default Kimi tools plus MCP/skills/hooks flags
   name: omk-architect
   system_prompt_args:
     OMK_ROLE: "architect"
+    OMK_MCP_ENABLED: "true"
+    OMK_SKILLS_ENABLED: "true"
+    OMK_HOOKS_ENABLED: "true"
   exclude_tools:
     - "kimi_cli.tools.file:WriteFile"
     - "kimi_cli.tools.file:StrReplaceFile"
@@ -132,10 +205,13 @@ agent:
 `,
   planner: `version: 1
 agent:
-  extend: ../okabe.yaml  # Okabe-compatible base adds SendDMail/D-Mail checkpoints
+  extend: ../okabe.yaml  # Inherits unrestricted default Kimi tools plus MCP/skills/hooks flags
   name: omk-planner
   system_prompt_args:
     OMK_ROLE: "planner"
+    OMK_MCP_ENABLED: "true"
+    OMK_SKILLS_ENABLED: "true"
+    OMK_HOOKS_ENABLED: "true"
   exclude_tools:
     - "kimi_cli.tools.file:WriteFile"
     - "kimi_cli.tools.file:StrReplaceFile"
@@ -143,49 +219,122 @@ agent:
 `,
   explorer: `version: 1
 agent:
-  extend: ../okabe.yaml  # Okabe-compatible base adds SendDMail/D-Mail checkpoints
+  extend: ../okabe.yaml  # Inherits unrestricted default Kimi tools plus MCP/skills/hooks flags
   name: omk-explorer
   system_prompt_args:
     OMK_ROLE: "explorer"
-`,
-  coder: `version: 1
-agent:
-  extend: ../okabe.yaml  # Okabe-compatible base adds SendDMail/D-Mail checkpoints
-  name: omk-coder
-  system_prompt_args:
-    OMK_ROLE: "coder"
-`,
-  reviewer: `version: 1
-agent:
-  extend: ../okabe.yaml  # Okabe-compatible base adds SendDMail/D-Mail checkpoints
-  name: omk-reviewer
-  system_prompt_args:
-    OMK_ROLE: "reviewer"
+    OMK_MCP_ENABLED: "true"
+    OMK_SKILLS_ENABLED: "true"
+    OMK_HOOKS_ENABLED: "true"
   exclude_tools:
     - "kimi_cli.tools.file:WriteFile"
     - "kimi_cli.tools.file:StrReplaceFile"
     - "kimi_cli.tools.shell:Shell"
 `,
+  coder: `version: 1
+agent:
+  extend: ../okabe.yaml  # Inherits unrestricted default Kimi tools plus MCP/skills/hooks flags
+  name: omk-coder
+  system_prompt_args:
+    OMK_ROLE: "coder"
+    OMK_MCP_ENABLED: "true"
+    OMK_SKILLS_ENABLED: "true"
+    OMK_HOOKS_ENABLED: "true"
+`,
+  reviewer: `version: 1
+agent:
+  extend: ../okabe.yaml  # Inherits unrestricted default Kimi tools plus MCP/skills/hooks flags
+  name: omk-reviewer
+  system_prompt_args:
+    OMK_ROLE: "reviewer"
+    OMK_MCP_ENABLED: "true"
+    OMK_SKILLS_ENABLED: "true"
+    OMK_HOOKS_ENABLED: "true"
+  exclude_tools:
+    - "kimi_cli.tools.file:WriteFile"
+    - "kimi_cli.tools.file:StrReplaceFile"
+    - "kimi_cli.tools.shell:Shell"
+`,
+  security: `version: 1
+agent:
+  extend: ../okabe.yaml  # Inherits unrestricted default Kimi tools plus MCP/skills/hooks flags
+  name: omk-security
+  system_prompt_args:
+    OMK_ROLE: "security"
+    OMK_MCP_ENABLED: "true"
+    OMK_SKILLS_ENABLED: "true"
+    OMK_HOOKS_ENABLED: "true"
+  exclude_tools:
+    - "kimi_cli.tools.file:WriteFile"
+    - "kimi_cli.tools.file:StrReplaceFile"
+`,
   qa: `version: 1
 agent:
-  extend: ../okabe.yaml  # Okabe-compatible base adds SendDMail/D-Mail checkpoints
+  extend: ../okabe.yaml  # Inherits unrestricted default Kimi tools plus MCP/skills/hooks flags
   name: omk-qa
   system_prompt_args:
     OMK_ROLE: "qa"
+    OMK_MCP_ENABLED: "true"
+    OMK_SKILLS_ENABLED: "true"
+    OMK_HOOKS_ENABLED: "true"
+  exclude_tools:
+    - "kimi_cli.tools.file:WriteFile"
+    - "kimi_cli.tools.file:StrReplaceFile"
+`,
+  tester: `version: 1
+agent:
+  extend: ../okabe.yaml  # Inherits unrestricted default Kimi tools plus MCP/skills/hooks flags
+  name: omk-tester
+  system_prompt_args:
+    OMK_ROLE: "tester"
+    OMK_MCP_ENABLED: "true"
+    OMK_SKILLS_ENABLED: "true"
+    OMK_HOOKS_ENABLED: "true"
+  exclude_tools:
+    - "kimi_cli.tools.file:WriteFile"
+    - "kimi_cli.tools.file:StrReplaceFile"
 `,
   integrator: `version: 1
 agent:
-  extend: ../okabe.yaml  # Okabe-compatible base adds SendDMail/D-Mail checkpoints
+  extend: ../okabe.yaml  # Inherits unrestricted default Kimi tools plus MCP/skills/hooks flags
   name: omk-integrator
   system_prompt_args:
     OMK_ROLE: "integrator"
+    OMK_MCP_ENABLED: "true"
+    OMK_SKILLS_ENABLED: "true"
+    OMK_HOOKS_ENABLED: "true"
+  exclude_tools:
+    - "kimi_cli.tools.file:WriteFile"
+    - "kimi_cli.tools.file:StrReplaceFile"
+    - "kimi_cli.tools.shell:Shell"
+`,
+  aggregator: `version: 1
+agent:
+  extend: ../okabe.yaml  # Inherits unrestricted default Kimi tools plus MCP/skills/hooks flags
+  name: omk-aggregator
+  system_prompt_args:
+    OMK_ROLE: "aggregator"
+    OMK_MCP_ENABLED: "true"
+    OMK_SKILLS_ENABLED: "true"
+    OMK_HOOKS_ENABLED: "true"
+  exclude_tools:
+    - "kimi_cli.tools.file:WriteFile"
+    - "kimi_cli.tools.file:StrReplaceFile"
+    - "kimi_cli.tools.shell:Shell"
 `,
   researcher: `version: 1
 agent:
-  extend: ../okabe.yaml  # Okabe-compatible base adds SendDMail/D-Mail checkpoints
+  extend: ../okabe.yaml  # Inherits unrestricted default Kimi tools plus MCP/skills/hooks flags
   name: omk-researcher
   system_prompt_args:
     OMK_ROLE: "researcher"
+    OMK_MCP_ENABLED: "true"
+    OMK_SKILLS_ENABLED: "true"
+    OMK_HOOKS_ENABLED: "true"
+  exclude_tools:
+    - "kimi_cli.tools.file:WriteFile"
+    - "kimi_cli.tools.file:StrReplaceFile"
+    - "kimi_cli.tools.shell:Shell"
 `,
   ontology: `version: 1
 agent:
@@ -193,18 +342,25 @@ agent:
   name: omk-ontology
   system_prompt_args:
     OMK_ROLE: "ontology"
-  description: >
-    Kuzu-backed ontology curator. Creates ontology node/relationship tables,
-    ingests project concepts, and answers Cypher/GraphQL-lite queries against
-    the local graph. Use omk_graph_query, omk_memory_ontology, and
-    omk_memory_mindmap tools to inspect and evolve the project ontology.
+    OMK_MCP_ENABLED: "true"
+    OMK_SKILLS_ENABLED: "true"
+    OMK_HOOKS_ENABLED: "true"
+  exclude_tools:
+    - "kimi_cli.tools.file:WriteFile"
+    - "kimi_cli.tools.file:StrReplaceFile"
 `,
   "vision-debugger": `version: 1
 agent:
-  extend: ../okabe.yaml  # Okabe-compatible base adds SendDMail/D-Mail checkpoints
+  extend: ../okabe.yaml  # Inherits unrestricted default Kimi tools plus MCP/skills/hooks flags
   name: omk-vision-debugger
   system_prompt_args:
     OMK_ROLE: "vision-debugger"
+    OMK_MCP_ENABLED: "true"
+    OMK_SKILLS_ENABLED: "true"
+    OMK_HOOKS_ENABLED: "true"
+  exclude_tools:
+    - "kimi_cli.tools.file:WriteFile"
+    - "kimi_cli.tools.file:StrReplaceFile"
 `,
 };
 
@@ -373,7 +529,7 @@ You must operate as a Kimi-native coding orchestrator.
 - Use SetTodoList for multi-step tasks.
 - Use Agent tool for non-trivial tasks.
 - Use skills when relevant.
-- Use MCP tools when configured and useful.
+- Use MCP tools when configured and useful. All subagents inherit scoped MCP server inventory, skills, and hooks when enabled by runtime scope. Do not hesitate to invoke available capabilities.
 - Treat project-local ontology graph memory as mandatory when the omk-project MCP exposes memory tools.
 - Recall relevant project memory before work, write durable findings through omk_write_memory, and use omk_memory_mindmap/omk_graph_query for graph recall.
 - Prefer plan-first execution.
@@ -390,7 +546,7 @@ You must operate as a Kimi-native coding orchestrator.
 
 ## Kimi-native Context Tools
 
-- Root and generated role agents inherit an Okabe-compatible base that keeps default tools and adds SendDMail for checkpoint rollback scenarios.
+- Root and generated role agents inherit an Okabe-compatible base that keeps the default Kimi tool surface unrestricted while enabling scoped MCP, skills, and hooks.
 - Use D-Mail before risky refactors, compaction, or long-running branch points: send a concise future-facing recovery note to the relevant checkpoint.
 - Use Kimi subagents for isolated context and parallel work; keep the root context focused on decisions, integration, and verification.
 - Prefer /compact or a D-Mail recovery note over dumping large history back into the prompt.
@@ -401,7 +557,7 @@ For non-trivial tasks:
 
 1. Read project instructions.
 2. Create todos.
-3. Launch an appropriate subagent:
+3. Launch appropriate subagents in parallel when their scopes are independent:
    - explorer for repository discovery
    - planner for architecture/refactor/risky work
    - coder for implementation
@@ -431,6 +587,14 @@ function hasErrorCode(error: unknown, code: string): boolean {
     "code" in error &&
     (error as { code?: unknown }).code === code
   );
+}
+
+async function readTemplateFile(relativePath: string, fallback: string): Promise<string> {
+  try {
+    return await readFile(join(packageRoot, "templates", relativePath), "utf8");
+  } catch {
+    return fallback;
+  }
 }
 
 async function getCopyEntryKind(srcPath: string, entry: Dirent): Promise<"directory" | "file" | null> {
@@ -878,6 +1042,43 @@ process.stdout.write(JSON.stringify({
 }) + '\\n');
 NODE
 `,
+  "branch-diff-snapshot.sh": `#!/usr/bin/env bash
+# OMK Branch Diff Snapshot — records merge-review metadata without full diff contents
+set +e
+
+SNAP_DIR=".omk/runs/_branch-snapshots"
+mkdir -p "$SNAP_DIR" >/dev/null 2>&1
+
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo '{"hookSpecificOutput":{"hookEventName":"SubagentStop","additionalContext":"Branch diff snapshot skipped: not inside a git worktree."}}'
+  exit 0
+fi
+
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+commit="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+safe_branch="$(printf '%s' "$branch" | tr -c 'A-Za-z0-9._-' '-')"
+stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+snapshot="$SNAP_DIR/$stamp-$safe_branch.md"
+
+{
+  echo "# OMK branch diff snapshot"
+  echo
+  echo "- branch: $branch"
+  echo "- commit: $commit"
+  echo "- captured_at: $stamp"
+  echo
+  echo "## Status"
+  git status --short 2>/dev/null || true
+  echo
+  echo "## Diff stat"
+  git diff --stat 2>/dev/null || true
+  echo
+  echo "## Changed files"
+  git diff --name-only 2>/dev/null || true
+} > "$snapshot"
+
+printf '{"hookSpecificOutput":{"hookEventName":"SubagentStop","additionalContext":"Branch diff snapshot saved: %s"}}\\n' "$snapshot"
+`,
   "pre-shell-guard.sh": `#!/usr/bin/env bash
 # PreShellUse Guard — blocks dangerous commands
 set -e
@@ -928,25 +1129,301 @@ for pattern in "\${BLOCKED[@]}"; do
 done
 
 # Release/deploy guard. These commands are not destructive like rm -rf, but
-# they can publish external state. Require explicit opt-in plus fresh evidence.
-RELEASE_GUARDED=(
-  "git push"
-  "npm publish"
-  "pnpm publish"
-  "yarn npm publish"
-  "gh release create"
-  "gh workflow run"
-  "npm version"
-)
+# they can publish external state. Parse tokens so common option/shell-wrapper
+# variants cannot bypass the guard.
+INPUT_JSON="$INPUT" "$PY" <<'PY'
+import json
+import os
+import posixpath
+import shlex
+import sys
 
-for pattern in "\${RELEASE_GUARDED[@]}"; do
-  if [[ "$FULL" == *"$pattern"* ]] && [[ "\${OMK_ALLOW_RELEASE:-0}" != "1" ]]; then
-    echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Release/deploy command blocked by OMK release guard. Re-run with OMK_ALLOW_RELEASE=1 only after an explicit user request and fresh verification evidence."}}'
-    exit 0
-  fi
-done
+def respond(permission, reason=None):
+    payload = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": permission}}
+    if reason:
+        payload["hookSpecificOutput"]["permissionDecisionReason"] = reason
+    print(json.dumps(payload, separators=(",", ":")))
+    sys.exit(0)
 
-echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}'
+def as_tokens(value):
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    if isinstance(value, str) and value.strip():
+        return shlex.split(value, comments=True, posix=True)
+    return []
+
+def expand_shell_wrappers(root_tokens):
+    result = []
+    queue = [root_tokens]
+    while queue and len(result) < 8:
+        current = queue.pop(0)
+        result.append(current)
+        for idx, token in enumerate(current):
+            if posixpath.basename(token) not in {"bash", "sh", "zsh", "dash"}:
+                continue
+            j = idx + 1
+            while j < len(current):
+                opt = current[j]
+                if opt == "--":
+                    j += 1
+                    break
+                if opt in {"-c", "-lc"} or (opt.startswith("-") and not opt.startswith("--") and "c" in opt):
+                    if j + 1 < len(current):
+                        try:
+                            queue.append(as_tokens(current[j + 1]))
+                        except ValueError as exc:
+                            respond("deny", f"Unable to parse shell-wrapped release/deploy command safely: {exc}")
+                    break
+                if opt.startswith("-"):
+                    j += 1
+                    continue
+                break
+    return result
+
+def skip_flags(tokens, index):
+    value_flags = {
+        "-C", "-c", "--config-env", "--git-dir", "--work-tree", "--namespace",
+        "--registry", "--userconfig", "--prefix", "--cache", "--filter", "--workspace",
+        "--cwd", "--repo", "-R", "--ref", "--field", "-f", "--json", "--jq",
+    }
+    i = index
+    while i < len(tokens):
+        token = tokens[i]
+        if token == "--":
+            return i + 1
+        if token in value_flags and i + 1 < len(tokens):
+            i += 2
+            continue
+        if any(token.startswith(prefix + "=") for prefix in value_flags if prefix.startswith("--")):
+            i += 1
+            continue
+        if token.startswith("-"):
+            i += 1
+            continue
+        return i
+    return i
+
+def has_token_after(tokens, index, wanted):
+    return any(token in wanted for token in tokens[index:])
+
+def is_release_command(tokens):
+    i = 0
+    while i < len(tokens):
+        exe = posixpath.basename(tokens[i])
+        if exe == "git":
+            command_index = skip_flags(tokens, i + 1)
+            if command_index < len(tokens) and tokens[command_index] == "push":
+                return True
+            i = max(command_index + 1, i + 1)
+            continue
+        if exe == "npm":
+            command_index = skip_flags(tokens, i + 1)
+            if command_index < len(tokens) and tokens[command_index] in {"publish", "version"}:
+                return True
+            if has_token_after(tokens, i + 1, {"publish", "version"}):
+                return True
+            i += 1
+            continue
+        if exe == "pnpm":
+            if has_token_after(tokens, i + 1, {"publish"}):
+                return True
+            i += 1
+            continue
+        if exe == "yarn":
+            rest = tokens[i + 1:]
+            if "publish" in rest:
+                return True
+            if len(rest) >= 2 and rest[0] == "npm" and rest[1] == "publish":
+                return True
+            i += 1
+            continue
+        if exe == "gh":
+            command_index = skip_flags(tokens, i + 1)
+            if command_index + 1 < len(tokens):
+                pair = (tokens[command_index], tokens[command_index + 1])
+                if pair in {("release", "create"), ("workflow", "run")}:
+                    return True
+            i += 1
+            continue
+        i += 1
+    return False
+
+try:
+    data = json.loads(os.environ.get("INPUT_JSON", "{}"))
+    tool_input = data.get("tool_input", {})
+    tokens = as_tokens(tool_input.get("command", "")) + as_tokens(tool_input.get("args", ""))
+except Exception as exc:
+    respond("deny", f"Unable to parse release/deploy command safely: {exc}")
+
+if os.environ.get("OMK_ALLOW_RELEASE") == "1":
+    respond("allow")
+
+for expanded in expand_shell_wrappers(tokens):
+    if is_release_command(expanded):
+        respond("deny", "Release/deploy command blocked by OMK release guard. Re-run with OMK_ALLOW_RELEASE=1 only after an explicit user request and fresh verification evidence.")
+
+respond("allow")
+PY
+`,
+  "worktree-create-guard.sh": `#!/usr/bin/env bash
+# OMK Worktree Create Guard — keeps worker lanes under .omk/worktrees by default
+set -e
+
+if command -v python3 &>/dev/null; then
+  PY=python3
+elif command -v python &>/dev/null; then
+  PY=python
+else
+  echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"python3 not installed — worktree-create-guard cannot validate commands"}}'
+  exit 0
+fi
+
+INPUT=$(cat)
+INPUT_JSON="$INPUT" "$PY" <<'PY'
+import json
+import os
+import posixpath
+import shlex
+import sys
+
+def respond(permission, reason=None):
+    payload = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": permission}}
+    if reason:
+        payload["hookSpecificOutput"]["permissionDecisionReason"] = reason
+    print(json.dumps(payload, separators=(",", ":")))
+    sys.exit(0)
+
+def as_tokens(value):
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    if isinstance(value, str) and value.strip():
+        return shlex.split(value, comments=True, posix=True)
+    return []
+
+try:
+    data = json.loads(os.environ.get("INPUT_JSON", "{}"))
+except Exception:
+    respond("allow")
+
+tool_input = data.get("tool_input", {})
+raw_full = f"{tool_input.get('command', '')} {tool_input.get('args', '')}"
+try:
+    initial_tokens = as_tokens(tool_input.get("command", "")) + as_tokens(tool_input.get("args", ""))
+except ValueError as exc:
+    if "git" in raw_full and "worktree" in raw_full:
+        respond("deny", f"Unable to parse git worktree command safely: {exc}")
+    respond("allow")
+
+project_root = os.path.abspath(os.environ.get("OMK_PROJECT_ROOT") or os.getcwd())
+allowed_root = os.path.abspath(os.path.join(project_root, ".omk", "worktrees"))
+options_with_values = {
+    "-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env",
+    "-b", "-B", "--reason", "--lock", "--orphan",
+}
+
+def path_within_allowed(path_arg, base_dir):
+    base = os.path.abspath(base_dir)
+    actual = os.path.abspath(path_arg if os.path.isabs(path_arg) else os.path.join(base, path_arg))
+    try:
+        return os.path.commonpath([allowed_root, actual]) == allowed_root
+    except ValueError:
+        return False
+
+def skip_git_globals(index):
+    base_dir = os.getcwd()
+    i = index
+    while i < len(tokens):
+        token = tokens[i]
+        if token == "-C" and i + 1 < len(tokens):
+            next_dir = tokens[i + 1]
+            base_dir = os.path.abspath(next_dir if os.path.isabs(next_dir) else os.path.join(base_dir, next_dir))
+            i += 2
+        elif token.startswith("-C") and len(token) > 2:
+            next_dir = token[2:]
+            base_dir = os.path.abspath(next_dir if os.path.isabs(next_dir) else os.path.join(base_dir, next_dir))
+            i += 1
+        elif token in {"-c", "--git-dir", "--work-tree", "--namespace", "--config-env"} and i + 1 < len(tokens):
+            i += 2
+        elif token.startswith(("--git-dir=", "--work-tree=", "--namespace=", "--config-env=")):
+            i += 1
+        elif token == "--":
+            i += 1
+            break
+        elif token.startswith("-"):
+            i += 1
+        else:
+            break
+    return i, base_dir
+
+def find_worktree_path(index):
+    i = index
+    while i < len(tokens):
+        token = tokens[i]
+        if token == "--":
+            i += 1
+            break
+        if token in options_with_values and i + 1 < len(tokens):
+            i += 2
+            continue
+        if any(token.startswith(prefix) for prefix in ("--reason=", "--orphan=")):
+            i += 1
+            continue
+        if token.startswith("-"):
+            i += 1
+            continue
+        return token
+    return tokens[i] if i < len(tokens) else None
+
+def expand_shell_wrappers(root_tokens):
+    result = []
+    queue = [root_tokens]
+    while queue and len(result) < 8:
+        current = queue.pop(0)
+        result.append(current)
+        for idx, token in enumerate(current):
+            if posixpath.basename(token) not in {"bash", "sh", "zsh", "dash"}:
+                continue
+            j = idx + 1
+            while j < len(current):
+                opt = current[j]
+                if opt == "--":
+                    j += 1
+                    break
+                if opt in {"-c", "-lc"} or (opt.startswith("-") and not opt.startswith("--") and "c" in opt):
+                    if j + 1 < len(current):
+                        try:
+                            queue.append(as_tokens(current[j + 1]))
+                        except ValueError as exc:
+                            if "git" in current[j + 1] and "worktree" in current[j + 1]:
+                                respond("deny", f"Unable to parse shell-wrapped git worktree command safely: {exc}")
+                    break
+                if opt.startswith("-"):
+                    j += 1
+                    continue
+                break
+    return result
+
+for tokens in expand_shell_wrappers(initial_tokens):
+    i = 0
+    while i < len(tokens):
+        if posixpath.basename(tokens[i]) != "git":
+            i += 1
+            continue
+        command_index, base_dir = skip_git_globals(i + 1)
+        if command_index + 1 >= len(tokens) or tokens[command_index] != "worktree":
+            i += 1
+            continue
+        action = tokens[command_index + 1]
+        if action in {"remove", "prune"} and os.environ.get("OMK_ALLOW_WORKTREE_DELETE") != "1":
+            respond("deny", "Worktree delete/prune blocked unless OMK_ALLOW_WORKTREE_DELETE=1 is set after review.")
+        if action == "add" and os.environ.get("OMK_ALLOW_EXTERNAL_WORKTREE") != "1":
+            path_arg = find_worktree_path(command_index + 2)
+            if not path_arg or not path_within_allowed(path_arg, base_dir):
+                respond("deny", "Worktree lanes must be created under .omk/worktrees/ unless OMK_ALLOW_EXTERNAL_WORKTREE=1 is set.")
+        i = command_index + 2
+
+respond("allow")
+PY
 `,
   "protect-secrets.sh": `#!/usr/bin/env bash
 # Secret/environment variable protection
@@ -1015,6 +1492,94 @@ fi
 
 echo '{"hookSpecificOutput":{"hookEventName":"PostToolUse","permissionDecision":"allow"}}'
 `,
+  "typecheck-after-edit.sh": `#!/usr/bin/env bash
+# TypeScript product preset: run project typecheck after TS edits when available.
+set +e
+
+if command -v python3 &>/dev/null; then
+  PY=python3
+elif command -v python &>/dev/null; then
+  PY=python
+else
+  echo '{"hookSpecificOutput":{"hookEventName":"PostToolUse","permissionDecision":"allow"}}'
+  exit 0
+fi
+
+INPUT=$(cat)
+FILEPATH=$(echo "$INPUT" | $PY -c 'import sys,json; d=json.load(sys.stdin); print(d.get("tool_input",{}).get("file_path",""))')
+
+case "$FILEPATH" in
+  *.ts|*.tsx|*.mts|*.cts) ;;
+  *) echo '{"hookSpecificOutput":{"hookEventName":"PostToolUse","permissionDecision":"allow"}}'; exit 0 ;;
+esac
+
+if [ ! -f "package.json" ] || ! command -v npm &>/dev/null; then
+  echo '{"hookSpecificOutput":{"hookEventName":"PostToolUse","permissionDecision":"allow"}}'
+  exit 0
+fi
+
+node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts.check ? 0 : 1)" >/dev/null 2>&1
+if [ $? -ne 0 ]; then
+  echo '{"hookSpecificOutput":{"hookEventName":"PostToolUse","permissionDecision":"allow"}}'
+  exit 0
+fi
+
+TMP=$(mktemp)
+npm run check >"$TMP" 2>&1
+STATUS=$?
+if [ $STATUS -eq 0 ]; then
+  rm -f "$TMP"
+  echo '{"hookSpecificOutput":{"hookEventName":"PostToolUse","permissionDecision":"allow"}}'
+  exit 0
+fi
+
+tail -n 40 "$TMP" | $PY -c 'import json,sys; print(json.dumps({"hookSpecificOutput":{"hookEventName":"PostToolUse","permissionDecision":"allow","additionalContext":"Typecheck failed after edit. Inspect npm run check output:\\n"+sys.stdin.read()}}))'
+rm -f "$TMP"
+`,
+  "eslint-after-edit.sh": `#!/usr/bin/env bash
+# TypeScript product preset: run project lint after JS/TS edits when available.
+set +e
+
+if command -v python3 &>/dev/null; then
+  PY=python3
+elif command -v python &>/dev/null; then
+  PY=python
+else
+  echo '{"hookSpecificOutput":{"hookEventName":"PostToolUse","permissionDecision":"allow"}}'
+  exit 0
+fi
+
+INPUT=$(cat)
+FILEPATH=$(echo "$INPUT" | $PY -c 'import sys,json; d=json.load(sys.stdin); print(d.get("tool_input",{}).get("file_path",""))')
+
+case "$FILEPATH" in
+  *.js|*.jsx|*.mjs|*.cjs|*.ts|*.tsx|*.mts|*.cts) ;;
+  *) echo '{"hookSpecificOutput":{"hookEventName":"PostToolUse","permissionDecision":"allow"}}'; exit 0 ;;
+esac
+
+if [ ! -f "package.json" ] || ! command -v npm &>/dev/null; then
+  echo '{"hookSpecificOutput":{"hookEventName":"PostToolUse","permissionDecision":"allow"}}'
+  exit 0
+fi
+
+node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts.lint ? 0 : 1)" >/dev/null 2>&1
+if [ $? -ne 0 ]; then
+  echo '{"hookSpecificOutput":{"hookEventName":"PostToolUse","permissionDecision":"allow"}}'
+  exit 0
+fi
+
+TMP=$(mktemp)
+npm run lint >"$TMP" 2>&1
+STATUS=$?
+if [ $STATUS -eq 0 ]; then
+  rm -f "$TMP"
+  echo '{"hookSpecificOutput":{"hookEventName":"PostToolUse","permissionDecision":"allow"}}'
+  exit 0
+fi
+
+tail -n 40 "$TMP" | $PY -c 'import json,sys; print(json.dumps({"hookSpecificOutput":{"hookEventName":"PostToolUse","permissionDecision":"allow","additionalContext":"ESLint failed after edit. Inspect npm run lint output:\\n"+sys.stdin.read()}}))'
+rm -f "$TMP"
+`,
   "stop-verify.sh": `#!/usr/bin/env bash
 # Final verification on Stop
 set -euo pipefail
@@ -1042,6 +1607,118 @@ process.stdout.write(JSON.stringify({
 }) + '\\n');
 NODE
 `,
+  "release-check-before-stop.sh": `#!/usr/bin/env bash
+# OMK Release Guard — final checklist reminder for release/security work
+set +e
+
+if ! command -v node &>/dev/null; then
+  echo '{"hookSpecificOutput":{"hookEventName":"Stop","permissionDecision":"allow","additionalContext":"OMK release guard: verify secret scan, security review, quality gate, changelog/PR evidence, and do not publish/deploy without exact command evidence."}}'
+  exit 0
+fi
+
+node <<'NODE'
+const { execSync } = require('node:child_process');
+
+function shell(command) {
+  try {
+    return execSync(command, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    return '';
+  }
+}
+
+const changed = [
+  shell('git diff --name-only HEAD 2>/dev/null'),
+  shell('git diff --cached --name-only 2>/dev/null'),
+  shell('git ls-files --others --exclude-standard 2>/dev/null'),
+].filter(Boolean).join('\\n');
+
+const releaseTouched = /(^|\\n)(package\\.json|package-lock\\.json|pnpm-lock\\.yaml|yarn\\.lock|CHANGELOG\\.md|SECURITY\\.md|\\.npmrc|\\.github\\/workflows\\/release\\.ya?ml)(\\n|$)/.test(changed);
+const context = releaseTouched
+  ? 'OMK release guard: release/security files changed. Before final or publish, collect secret scan, security review, quality gate, npm audit summary, changelog/PR evidence, and do not publish/deploy without explicit user request.'
+  : 'OMK release guard: no release file changes detected. Still do not claim push, release, npm publish, or production deploy without exact command evidence.';
+
+process.stdout.write(JSON.stringify({
+  hookSpecificOutput: {
+    hookEventName: 'Stop',
+    permissionDecision: 'allow',
+    additionalContext: context,
+  },
+}) + '\\n');
+NODE
+`,
+  "npm-audit-summary.sh": `#!/usr/bin/env bash
+# OMK Release Guard — optional npm audit summary for release gates
+set +e
+
+if [ ! -f "package.json" ]; then
+  echo '{"hookSpecificOutput":{"hookEventName":"Stop","permissionDecision":"allow","additionalContext":"OMK npm audit summary: skipped because package.json is absent."}}'
+  exit 0
+fi
+
+if [ "$OMK_RUN_NPM_AUDIT_SUMMARY" != "1" ]; then
+  echo '{"hookSpecificOutput":{"hookEventName":"Stop","permissionDecision":"allow","additionalContext":"OMK npm audit summary: not run automatically. For release/security claims, run npm audit or set OMK_RUN_NPM_AUDIT_SUMMARY=1 and capture the result."}}'
+  exit 0
+fi
+
+if ! command -v npm &>/dev/null || ! command -v node &>/dev/null; then
+  echo '{"hookSpecificOutput":{"hookEventName":"Stop","permissionDecision":"allow","additionalContext":"OMK npm audit summary: skipped because npm or node is unavailable."}}'
+  exit 0
+fi
+
+TMP="$(mktemp)"
+npm audit --audit-level=high --omit=dev --json > "$TMP" 2>&1
+STATUS=$?
+
+node - "$TMP" "$STATUS" <<'NODE'
+const fs = require('node:fs');
+const filePath = process.argv[2];
+const status = Number(process.argv[3] || 0);
+let raw = '';
+try {
+  raw = fs.readFileSync(filePath, 'utf8');
+} catch {}
+
+let context;
+try {
+  const parsed = JSON.parse(raw);
+  const total = parsed.metadata?.vulnerabilities?.total ?? 'unknown';
+  const high = parsed.metadata?.vulnerabilities?.high ?? 'unknown';
+  const critical = parsed.metadata?.vulnerabilities?.critical ?? 'unknown';
+  context = status === 0
+    ? 'OMK npm audit summary: passed for high+ prod dependencies. total=' + total + ', high=' + high + ', critical=' + critical + '.'
+    : 'OMK npm audit summary: attention required. total=' + total + ', high=' + high + ', critical=' + critical + '. Inspect npm audit output before release.';
+} catch {
+  context = status === 0
+    ? 'OMK npm audit summary: command completed but JSON could not be parsed.'
+    : 'OMK npm audit summary: npm audit failed or returned non-JSON output; inspect command output before release.';
+}
+
+process.stdout.write(JSON.stringify({
+  hookSpecificOutput: {
+    hookEventName: 'Stop',
+    permissionDecision: 'allow',
+    additionalContext: context,
+  },
+}) + '\\n');
+NODE
+rm -f "$TMP"
+`,
+  "post-init-mcp.sh": `#!/usr/bin/env bash
+# Post-init MCP validation — non-blocking health check after omk init
+set -uo pipefail
+
+LOG_DIR=".omk/logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/mcp-init-check.json"
+
+# Run doctor silently and capture JSON output if available
+if command -v omk &>/dev/null; then
+  omk mcp doctor --json 2>/dev/null > "$LOG_FILE" || true
+else
+  echo '{"note":"omk not in PATH during hook execution"}' > "$LOG_FILE"
+fi
+`,
 };
 
 const KIMI_CONFIG_TOML = `# oh-my-kimi generated Kimi config
@@ -1068,9 +1745,20 @@ command = ".omk/hooks/subagent-stop-audit.sh"
 timeout = 5
 
 [[hooks]]
+event = "SubagentStop"
+command = ".omk/hooks/branch-diff-snapshot.sh"
+timeout = 10
+
+[[hooks]]
 event = "PreToolUse"
 matcher = "Shell"
 command = ".omk/hooks/pre-shell-guard.sh"
+timeout = 5
+
+[[hooks]]
+event = "PreToolUse"
+matcher = "Shell"
+command = ".omk/hooks/worktree-create-guard.sh"
 timeout = 5
 
 [[hooks]]
@@ -1089,10 +1777,20 @@ timeout = 20
 event = "Stop"
 command = ".omk/hooks/stop-verify.sh"
 timeout = 30
+
+[[hooks]]
+event = "Stop"
+command = ".omk/hooks/release-check-before-stop.sh"
+timeout = 10
+
+[[hooks]]
+event = "Stop"
+command = ".omk/hooks/npm-audit-summary.sh"
+timeout = 60
 `;
 
 const DEFAULT_PROJECT_MCP_COMMENT =
-  "Project-local MCP config. Global MCP servers remain in ~/.kimi/mcp.json; import explicitly only after secret review.";
+  "Project-local MCP config. omk-project is virtual runtime MCP injected; global MCP servers remain in ~/.kimi/mcp.json and must be imported explicitly only after secret review.";
 
 export function createOmkProjectMcpServer(
   projectRoot: string,
@@ -1150,49 +1848,41 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
-function createMcpJson(projectRoot: string): { mcpServers: Record<string, McpServerDefinition> } {
+function createMcpJson(_projectRoot: string): { mcpServers: Record<string, McpServerDefinition> } {
   return {
     mcpServers: {
-      // Safe default for open-source scaffolds: local project server only.
-      // Remote MCPs that require API keys should be added explicitly by the user.
-      "omk-project": createOmkProjectMcpServer(projectRoot),
+      // omk-project is now auto-injected at runtime by injectKimiGlobals.
+      // Project-local .omk/mcp.json only needs to hold user-added MCP servers.
     },
   };
 }
 
-function mergeProjectMcpConfig(existingRaw: string | null, omkProjectServer: McpServerDefinition): JsonObject {
-  const existing = parseProjectMcpConfig(existingRaw);
-  const next: JsonObject = { ...existing };
-  const existingServers = isJsonObject(existing.mcpServers) ? existing.mcpServers : {};
-  next._comment = typeof next._comment === "string" && next._comment.trim() ? next._comment : DEFAULT_PROJECT_MCP_COMMENT;
-  next.mcpServers = {
-    ...existingServers,
-    "omk-project": omkProjectServer,
-  };
-  return next;
-}
-
-function parseProjectMcpConfig(raw: string | null): JsonObject {
-  if (raw === null || !raw.trim()) return {};
+async function ensureProjectMcpConfig(
+  path: string,
+  fallback: Record<string, unknown>,
+  options: { removeRuntimeManagedOmkProject?: boolean } = {}
+): Promise<void> {
+  const existing = await readFile(path, "utf-8").catch(() => null);
+  if (!existing) {
+    await writeFile(path, JSON.stringify(fallback, null, 2) + "\n");
+    return;
+  }
 
   try {
-    const parsed: unknown = JSON.parse(raw);
-    if (isJsonObject(parsed)) return parsed;
+    const parsed = JSON.parse(existing) as { mcpServers?: Record<string, unknown> };
+    if (options.removeRuntimeManagedOmkProject && parsed.mcpServers?.["omk-project"]) {
+      delete parsed.mcpServers["omk-project"];
+      await writeFile(path, JSON.stringify(parsed, null, 2) + "\n");
+    }
   } catch {
-    // Fall through to a safe project-local MCP scaffold. Global MCPs are never
-    // imported here, so an invalid project file cannot leak user secrets.
+    // Preserve malformed user-owned MCP config rather than overwriting custom entries.
   }
-  return {};
-}
-
-function isJsonObject(value: unknown): value is JsonObject {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 type RuntimeScope = "all" | "project";
 
-function getConfigToml(options: { mcpScope: RuntimeScope; skillsScope: RuntimeScope }): string {
-  const { mcpScope, skillsScope } = options;
+function getConfigToml(options: { mcpScope: RuntimeScope; skillsScope: RuntimeScope; hooksScope: RuntimeScope }): string {
+  const { mcpScope, skillsScope, hooksScope } = options;
   return `# oh-my-kimi project settings
 [project]
 name = "my-project"
@@ -1209,7 +1899,8 @@ yolo_mode = false                # safe guards still block secrets/destructive s
 resource_profile = "auto"        # auto | lite | standard
 mcp_scope = "${mcpScope}"            # all | project | none — all also reads user ~/.kimi/mcp.json at runtime
 skills_scope = "${skillsScope}"         # all | project | none — all reads user ~/.kimi/skills without copying them
-max_workers = 1                  # can override with OMK_MAX_WORKERS
+hooks_scope = "${hooksScope}"          # all | project | none — all reads user ~/.kimi hooks without copying them
+max_workers = 2                  # can override with OMK_MAX_WORKERS
 max_output_mb = 4                # cap buffered shell/quality output
 wire_output_mb = 1               # cap per-task retained wire output
 
@@ -1325,16 +2016,19 @@ export async function initCommand(options: InitCommandOptions): Promise<void> {
       console.log(status.ok(t("init.rootYamlMigrated")));
     }
   } else {
-    await writeFile(rootYamlPath, ROOT_AGENT_YAML);
+    const rootAgentYaml = await readTemplateFile(join(".omk", "agents", "root.yaml"), ROOT_AGENT_YAML);
+    await writeFile(rootYamlPath, rootAgentYaml);
   }
   await Promise.all(
-    Object.entries(ROLE_YAMLS).map(([name, content]) =>
-      writeFile(join(root, ".omk/agents/roles", `${name}.yaml`), content)
-    )
+    Object.entries(ROLE_YAMLS).map(async ([name, content]) => {
+      const roleYaml = await readTemplateFile(join(".omk", "agents", "roles", `${name}.yaml`), content);
+      await writeFile(join(root, ".omk/agents/roles", `${name}.yaml`), roleYaml);
+    })
   );
 
   // 4. Write prompts
-  await writeFile(join(root, ".omk/prompts/root.md"), ROOT_PROMPT_MD);
+  const rootPromptMd = await readTemplateFile(join(".omk", "prompts", "root.md"), ROOT_PROMPT_MD);
+  await writeFile(join(root, ".omk/prompts/root.md"), rootPromptMd);
 
   // 5+6. Copy package skill templates by default.
   // Fresh open-source init should reference only the maintainer-packaged OMK
@@ -1407,17 +2101,21 @@ export async function initCommand(options: InitCommandOptions): Promise<void> {
   await writeFile(join(root, ".omk/config.toml"), getConfigToml({
     mcpScope: localUserRuntime ? "all" : "project",
     skillsScope: localUserRuntime ? "all" : "project",
+    hooksScope: localUserRuntime ? "all" : "project",
   }));
   await writeFile(join(root, ".omk/kimi.config.toml"), KIMI_CONFIG_TOML);
-  await writeFile(join(root, ".omk/mcp.json"), JSON.stringify(mcpJson, null, 2) + "\n");
+  await ensureProjectMcpConfig(join(root, ".omk/mcp.json"), mcpJson, { removeRuntimeManagedOmkProject: true });
+  await writeFile(join(root, ".omk/theme.json"), createThemeJson());
+  await writeFile(join(root, ".omk/runtime-preset.json"), JSON.stringify(OMK_CORE_VERIFIED_PRESET, null, 2) + "\n");
+  await writeFile(join(root, ".omk/runtime-presets.json"), createRuntimePresetsJson());
 
   // Project-local MCP config must not import global server definitions by default:
   // global configs can contain inline headers/env secrets that should stay in the user scope.
   const projectMcpPath = join(root, ".kimi", "mcp.json");
-  const existingProjectMcp = await readFile(projectMcpPath, "utf-8").catch(() => null);
-  await writeFile(
+  await ensureProjectMcpConfig(
     projectMcpPath,
-    JSON.stringify(mergeProjectMcpConfig(existingProjectMcp, mcpJson.mcpServers["omk-project"]), null, 2) + "\n"
+    { _comment: DEFAULT_PROJECT_MCP_COMMENT, mcpServers: {} },
+    { removeRuntimeManagedOmkProject: true }
   );
   await writeFile(join(root, ".omk/lsp.json"), defaultLspConfigJson());
 
@@ -1477,6 +2175,9 @@ export async function initCommand(options: InitCommandOptions): Promise<void> {
   console.log("- .omk/snippets/");
   console.log("- .kimi/mcp.json");
   console.log("- .omk/mcp.json");
+  console.log("- .omk/theme.json");
+  console.log("- .omk/runtime-preset.json");
+  console.log("- .omk/runtime-presets.json");
   console.log("- .kimi/skills/");
   console.log("- .agents/skills/");
   console.log("- .omk/memory/");
@@ -1487,11 +2188,12 @@ export async function initCommand(options: InitCommandOptions): Promise<void> {
   console.log("- Todo list is required for multi-step work.");
   console.log("- Subagents are required for non-trivial work.");
   console.log("- Project skills are auto-discovered from .kimi/skills and .agents/skills.");
+  console.log("- Runtime presets include omk-core-verified, omk-ts-product, omk-worktree-team, and omk-release-guard.");
   if (localUserRuntime) {
     console.log("- Local user runtime enabled: global ~/.kimi/mcp.json and ~/.kimi/skills are used at runtime.");
     console.log("- Personal/global MCP servers and skills are not copied into the project.");
   } else {
-    console.log("- Project MCP defaults to omk-project only; remote/global MCPs are explicit opt-in.");
+    console.log("- omk-project is virtual runtime MCP injected; project MCP files are for user-added servers, remote/global MCPs are explicit opt-in.");
   }
   console.log("- Built-in tools: SearchWeb, FetchURL (no config required).");
 
@@ -1581,6 +2283,58 @@ function isInitInteractiveSetupEligible(options: InitCommandOptions): boolean {
   return Boolean(stdin.isTTY && stdout.isTTY);
 }
 
+async function runMcpServerSelectionDuringInit(options: InitCommandOptions): Promise<void> {
+  if (!isInitInteractiveSetupEligible(options)) return;
+  const env = options.env ?? process.env;
+  if (isDisabledEnvValue(env.OMK_INIT_MCP_SERVERS)) return;
+
+  try {
+    const defaultSelections = getDefaultSelections();
+    const choices = RECOMMENDED_MCP_SERVERS.map((server) => ({
+      name: `${server.name} — ${server.description} [${server.category}]`,
+      value: server,
+      checked: defaultSelections.includes(server.name),
+    }));
+
+    const { checkbox: checkboxPrompt } = await import("@inquirer/prompts");
+    const selected = await checkboxPrompt({
+      message: "Select additional MCP servers to install (Space to toggle, Enter to confirm):",
+      choices,
+    });
+
+    if (!selected || selected.length === 0) {
+      console.log(style.gray("No additional MCP servers selected."));
+      return;
+    }
+
+    console.log(style.purple(`   📦 Installing ${selected.length} MCP server(s) in parallel...`));
+
+    const root = getProjectRoot();
+    const entries = selected.map((server: McpCatalogEntry) => ({
+      name: server.name,
+      command: server.command,
+      args: server.args.map((arg) => arg.replace("${PROJECT_ROOT}", root).replace("${DB_PATH}", join(root, ".omk", "memory", "graph.db"))),
+      env: server.env,
+      startupTimeoutSec: server.startupTimeoutSec,
+    }));
+
+    const result = await mcpBulkInstallCommand(entries);
+
+    for (const name of result.installed) {
+      console.log(status.ok(`Installed MCP server: ${name}`));
+    }
+    for (const name of result.skipped) {
+      console.log(style.gray(`Skipped (already exists): ${name}`));
+    }
+    for (const { name, error } of result.failed) {
+      console.log(status.warn(`Failed to install ${name}: ${error}`));
+    }
+  } catch (error) {
+    if (error instanceof ExitPromptError) return;
+    console.log(status.warn(`MCP server selection failed: ${redactSecretishText(error)}`));
+  }
+}
+
 async function runInitInteractiveSetup(options: InitCommandOptions, homeDir: string): Promise<void> {
   if (!isInitInteractiveSetupEligible(options)) return;
 
@@ -1595,6 +2349,8 @@ async function runInitInteractiveSetup(options: InitCommandOptions, homeDir: str
     prompt: options.promptGitHubStar,
     starRepo: options.starRepo,
   });
+
+  await runMcpServerSelectionDuringInit(options);
 
   await maybeAskForDeepSeekApiKeyDuringInit(options, homeDir);
 }
@@ -1667,7 +2423,9 @@ export OMK_RENDER_LOGO=1
     try {
       const content = await readFile(rcFile, "utf-8");
       if (content.includes("omk shell integration")) continue;
-      await writeFile(rcFile, content.trimEnd() + "\n\n" + omkAliasBlock + "\n");
+      const tmpRc = rcFile + ".omk.tmp";
+      await writeFile(tmpRc, content.trimEnd() + "\n\n" + omkAliasBlock + "\n");
+      await rename(tmpRc, rcFile);
       console.log(status.ok(`Shell integration added: ${rcFile}`));
     } catch {
       // ignore

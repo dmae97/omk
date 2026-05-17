@@ -2,7 +2,7 @@ import { readdir, stat } from "fs/promises";
 import { relative, resolve } from "path";
 
 import { injectKimiGlobals, pathExists } from "../util/fs.js";
-import { runShellStreaming } from "../util/shell.js";
+import { runShellStreaming, resolveKimiBin } from "../util/shell.js";
 import { cleanupIsolatedKimiHome, prepareIsolatedKimiHome, resolveOriginalHome } from "../kimi/isolated-home.js";
 
 const OPEN_DESIGN_SMOKE_PROMPT = "Reply with only: ok";
@@ -176,7 +176,7 @@ export async function openDesignAgentCommand(options: OpenDesignAgentOptions = {
   }
 
   const args: string[] = [];
-  await injectKimiGlobals(args, { role: "designer", mcpScope: "none" });
+  await injectKimiGlobals(args, { role: "designer", mcpScope: "project", skillsScope: "project" });
   setModelArg(args, options.model);
   args.push("--prompt", buildBridgePrompt(prompt), "--quiet");
 
@@ -199,7 +199,7 @@ export async function openDesignAgentCommand(options: OpenDesignAgentOptions = {
     const startedAt = Date.now();
     let stdout = "";
     let stderr = "";
-    const result = await runShellStreaming("kimi", args, {
+    const result = await runShellStreaming(resolveKimiBin(), args, {
       cwd,
       env,
       timeout: parseTimeoutMs(options.timeoutMs),
@@ -232,6 +232,10 @@ export async function openDesignAgentCommand(options: OpenDesignAgentOptions = {
     if (!bridgeSucceeded && (result.failed || result.exitCode !== 0)) {
       process.exitCode = result.exitCode || 1;
     }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[omk] Open Design bridge error: ${message}\n`);
+    process.exitCode = 1;
   } finally {
     await cleanupIsolatedKimiHome(tmpHome);
   }

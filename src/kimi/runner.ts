@@ -1,7 +1,7 @@
-import pty from "node-pty";
+import type { IPty } from "node-pty";
 import { BannerReplacer } from "./banner.js";
 import { KimiBugFilter } from "./bug-filter.js";
-import { kimicatBanner, style } from "../util/theme.js";
+import { kimicatBanner, style, loadThemeConfig } from "../util/theme.js";
 import { ensureDir, injectKimiGlobals, getProjectRoot, pathExists } from "../util/fs.js";
 import { pasteScreenshot } from "../util/screenshot-store.js";
 import { join } from "path";
@@ -14,7 +14,111 @@ import { KimiStatusLineEnhancer } from "./statusline.js";
 import { formatOmkVersionFooter } from "../util/version.js";
 import { prepareIsolatedKimiHome, cleanupIsolatedKimiHome, resolveOriginalHome } from "./isolated-home.js";
 import { enableRawTerminalInput, restoreTerminalInputState } from "../util/terminal-input.js";
-import { checkCommand } from "../util/shell.js";
+import { checkCommand, resolveKimiBin } from "../util/shell.js";
+import { defaultScopedRoleAgentFile, writeScopedAgentFile } from "../util/scoped-agent-file.js";
+
+export type KimiProviderFailureKind = "monthly-quota" | "rate-limit" | "provider";
+
+export interface KimiProviderFailureDiagnosis {
+  kind: KimiProviderFailureKind;
+  title: string;
+  remediation: string[];
+}
+
+export function classifyKimiProviderFailure(output: string): KimiProviderFailureDiagnosis | null {
+  const normalized = output.toLowerCase();
+  const isMonthlyQuota =
+    normalized.includes("exceeded_current_quota_error") ||
+    normalized.includes("monthly usage limit") ||
+    (normalized.includes("billing cycle") && (normalized.includes("quota") || normalized.includes("usage limit"))) ||
+    (normalized.includes("quota") && normalized.includes("refreshed in the next cycle"));
+  const isRateLimit =
+    normalized.includes("error code: 429") ||
+    normalized.includes("rate limit") ||
+    (/\b429\b/.test(normalized) &&
+      (normalized.includes("llm") || normalized.includes("provider") || normalized.includes("kimi") || normalized.includes("moonshot")));
+  const isProviderError =
+    normalized.includes("llm provider error") ||
+    normalized.includes("provider error") ||
+    isMonthlyQuota ||
+    isRateLimit;
+  if (!isProviderError) return null;
+
+  if (isMonthlyQuota) {
+    return {
+      kind: "monthly-quota",
+      title: "Kimi monthly quota exhausted",
+      remediation: [
+        "Login/auth can be valid while the Kimi account's monthly provider quota is exhausted.",
+        "This is a provider quota/billing limit, not an MCP or repository failure.",
+        "Use a non-Kimi provider/profile until the quota refreshes, or upgrade Kimi Code quota.",
+        "For this repo, try: omk provider deepseek enable (if configured) or rerun with a non-Kimi provider.",
+        "If Kimi support asks for diagnostics, run: kimi export — keep the exported file private.",
+      ],
+    };
+  }
+
+  if (isRateLimit) {
+    return {
+      kind: "rate-limit",
+      title: "Kimi provider rate limit reached",
+      remediation: [
+        "Wait and retry later, reduce parallel workers, or switch to a configured fallback provider.",
+        "For worker runs, reduce concurrency with --workers 1 or OMK_WORKERS=1.",
+      ],
+    };
+  }
+
+  return {
+    kind: "provider",
+    title: "Kimi provider unavailable",
+    remediation: [
+      "Check Kimi account/provider status and retry, or switch to a configured fallback provider.",
+    ],
+  };
+}
+
+export function formatKimiProviderFailureHint(output: string): string | null {
+  const diagnosis = classifyKimiProviderFailure(output);
+  if (!diagnosis) return null;
+  const lines = [
+    `[omk] ${diagnosis.title}.`,
+    ...diagnosis.remediation.map((line) => `      - ${line}`),
+  ];
+  return lines.join("\n") + "\n";
+}
+
+export interface KimiStartupExitDiagnosis {
+  elapsedMs: number;
+  thresholdMs: number;
+  message: string;
+}
+
+const DEFAULT_KIMI_FAST_EXIT_MS = 1500;
+
+function resolveKimiFastExitThresholdMs(env: Record<string, string | undefined>): number {
+  const raw = env.OMK_CHAT_FAST_EXIT_MS;
+  if (!raw) return DEFAULT_KIMI_FAST_EXIT_MS;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_KIMI_FAST_EXIT_MS;
+  return Math.max(0, parsed);
+}
+
+export function classifyKimiStartupExit(
+  exitCode: number,
+  elapsedMs: number,
+  env: Record<string, string | undefined> = process.env
+): KimiStartupExitDiagnosis | null {
+  const allowFastExit = /^(1|true|yes)$/i.test(env.OMK_ALLOW_FAST_CHAT_EXIT ?? "");
+  if (allowFastExit || exitCode !== 0) return null;
+  const thresholdMs = resolveKimiFastExitThresholdMs(env);
+  if (thresholdMs <= 0 || elapsedMs > thresholdMs) return null;
+  return {
+    elapsedMs,
+    thresholdMs,
+    message: `Kimi exited immediately after ${elapsedMs}ms before an interactive chat could start.`,
+  };
+}
 
 /** args 배열에서 --mcp-config-file 경로들을 찾아 존재 여부 검증 (fail-fast, 3s timeout) */
 async function preflightMcpConfigs(args: string[]): Promise<void> {
@@ -53,8 +157,11 @@ export async function runKimiInteractive(
     process.stderr.write(`[omk-debug] runKimiInteractive args: ${JSON.stringify(args)}\n`);
   }
 
+  const noBanner = process.env.OMK_CHAT_NO_BANNER === "1";
+  const theme = await loadThemeConfig();
   const replacer = new BannerReplacer((meta) => {
-    writeStdout(kimicatBanner(meta, formatOmkVersionFooter()) + "\n");
+    if (noBanner) return;
+    writeStdout(kimicatBanner(meta, formatOmkVersionFooter(), theme ?? undefined) + "\n");
     options?.onMeta?.(meta);
   });
   const bugFilter = new KimiBugFilter();
@@ -62,7 +169,12 @@ export async function runKimiInteractive(
 
   const baseEnv = { ...(process.env as Record<string, string>), ...(options?.env ?? {}) };
   const originalHome = resolveOriginalHome(baseEnv);
-  const tmpHome = await prepareIsolatedKimiHome({ originalHome, env: baseEnv });
+  const tmpHome = await prepareIsolatedKimiHome({
+    originalHome,
+    env: baseEnv,
+    skillsScope: resources.skillsScope,
+    hooksScope: resources.hooksScope,
+  });
   const env = {
     ...baseEnv,
     OMK_RESOURCE_PROFILE_EFFECTIVE: resources.profile,
@@ -75,8 +187,10 @@ export async function runKimiInteractive(
   };
 
 
+  const kimiBin = resolveKimiBin();
+
   // Binary resolution guard: verify `kimi` is reachable before spawn
-  const kimiAvailable = await checkCommand("kimi");
+  const kimiAvailable = await checkCommand(kimiBin);
   if (!kimiAvailable) {
     await cleanupIsolatedKimiHome(tmpHome);
     throw new Error(
@@ -89,9 +203,24 @@ export async function runKimiInteractive(
   // MCP preflight: verify config files exist before spawn
   await preflightMcpConfigs(args);
 
-  let ptyProcess: ReturnType<typeof pty.spawn>;
+  let ptyModule: typeof import("node-pty");
   try {
-    ptyProcess = pty.spawn("kimi", args, {
+    ptyModule = await import("node-pty");
+  } catch (err) {
+    await cleanupIsolatedKimiHome(tmpHome);
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      "[omk] Failed to load node-pty native module. " +
+        `(${message})\n` +
+        "This usually happens when installed with --ignore-scripts.\n" +
+        "Fix: npm rebuild -g @oh-my-kimi/cli\n" +
+        "Or reinstall: npm uninstall -g @oh-my-kimi/cli && npm install -g @oh-my-kimi/cli"
+    );
+  }
+
+  let ptyProcess: IPty;
+  try {
+    ptyProcess = ptyModule.spawn(kimiBin, args, {
       name: "xterm-256color",
       cols: process.stdout.columns || 80,
       rows: process.stdout.rows || 24,
@@ -102,13 +231,15 @@ export async function runKimiInteractive(
     await cleanupIsolatedKimiHome(tmpHome);
     throw err;
   }
+  const spawnedAt = Date.now();
 
   // ── Signal handlers registered inside Promise below ──
 
   // ── Backpressure-safe stdout writer (circular buffer) ──
   // Prevents process.stdout.write from blocking the event loop when the
   // TTY is slow, which in turn starves stdin keypress handlers.
-  const MAX_STDOUT_LINES = Math.max(1000, Math.min(20000, parseInt(process.env.OMK_MAX_STDOUT_LINES ?? "10000", 10)));
+  const rawMaxLines = parseInt(process.env.OMK_MAX_STDOUT_LINES ?? "10000", 10);
+  const MAX_STDOUT_LINES = Number.isNaN(rawMaxLines) ? 10000 : Math.max(1000, Math.min(20000, rawMaxLines));
   const MAX_CHUNK_BYTES = 65536; // cap individual chunks to avoid memory spikes
   const stdoutQueue: string[] = [];
   let stdoutHead = 0;
@@ -163,9 +294,15 @@ export async function runKimiInteractive(
     }
   }
 
+  let recentProviderOutput = "";
+  const rememberProviderOutput = (chunk: string): void => {
+    recentProviderOutput = (recentProviderOutput + chunk).slice(-8000);
+  };
+
   // stdout → 터미널 (버그 필터 → 배너 필터링 적용)
   ptyProcess.onData((data) => {
     options?.onData?.(data);
+    rememberProviderOutput(data);
     // Strip terminal sequences that break scrollback / native mouse scrolling:
     // - alternate-screen buffer enter/exit (1049, legacy 47)
     // - mouse tracking (1000, 1002, 1006)
@@ -274,6 +411,7 @@ export async function runKimiInteractive(
     process.once("SIGTERM", signalHandler as NodeJS.SignalsListener);
 
     ptyProcess.onExit(({ exitCode }) => {
+      const elapsedMs = Date.now() - spawnedAt;
       const bugRest = bugFilter.forceFlush();
       if (bugRest) writeStdout(statusLine.process(bugRest));
       const replacerRest = replacer.forceFlush();
@@ -282,12 +420,24 @@ export async function runKimiInteractive(
         const message = err instanceof Error ? err.message : String(err);
         process.stderr.write(`[omk] PTY cleanup warning: ${message}\n`);
       });
-      if (exitCode !== 0) {
-        const runId = options?.env?.OMK_RUN_ID;
-        const resumeHint = runId ? ` • resume: omk chat --run-id ${runId}` : "";
+      const runId = options?.env?.OMK_RUN_ID;
+      const resumeHint = runId ? ` • resume: omk chat --run-id ${runId}` : "";
+      const startupExit = classifyKimiStartupExit(exitCode, elapsedMs, env);
+      if (startupExit) {
+        process.stderr.write(style.red(`[omk] ${startupExit.message}${resumeHint}\n`));
+        process.stderr.write(
+          style.orange(
+            `[omk] Treating this as a startup failure so OMK does not silently close the chat.\n` +
+              `      Run 'kimi' directly or 'omk doctor --fix' to diagnose startup configuration.\n`
+          )
+        );
+      } else if (exitCode !== 0) {
         process.stderr.write(style.red(`[omk] kimi exited with code ${exitCode}${resumeHint}\n`));
         // Detect MCP connection failures from stderr that was buffered in PTY
-        if (exitCode === 1) {
+        const providerHint = formatKimiProviderFailureHint(recentProviderOutput);
+        if (providerHint) {
+          process.stderr.write(style.orange(providerHint));
+        } else if (exitCode === 1) {
           process.stderr.write(
             style.orange(
               `[omk] If this was caused by MCP server connection failure, run 'omk doctor' to diagnose.\n` +
@@ -296,7 +446,7 @@ export async function runKimiInteractive(
           );
         }
       }
-      resolve(exitCode);
+      resolve(startupExit ? 1 : exitCode);
 });
   });
 }
@@ -309,6 +459,7 @@ export interface KimiTaskRunnerOptions {
   promptPrefix?: string;
   mcpScope?: OmkRuntimeScope;
   skillsScope?: OmkRuntimeScope;
+  hooksScope?: OmkRuntimeScope;
   onThinking?: (thinking: string) => void;
   /** If true, automatically pick .omk/agents/{role}.yaml per node role */
   roleAgentFiles?: boolean;
@@ -360,15 +511,21 @@ async function resolveAgentFileForRole(role: string, fallback?: string): Promise
     join(projectRoot, ".omk", "agents", "roles", `${role}.yaml`),
     join(projectRoot, ".omk", "agents", "roles", `${role}.yml`),
     join(projectRoot, ".kimi", "agents", `${role}.yaml`),
+    join(projectRoot, ".kimi", "agents", `${role}.yml`),
+    join(projectRoot, ".kimi", "agents", "roles", `${role}.yaml`),
+    join(projectRoot, ".kimi", "agents", "roles", `${role}.yml`),
   ];
   for (const candidate of candidates) {
     if (await pathExists(candidate)) return candidate;
+  }
+  if (fallback) {
+    console.warn(`[omk] No agent file found for role "${role}"; falling back to ${fallback}`);
   }
   return fallback;
 }
 
 export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskRunner {
-  const { cwd, timeout = 120000, env, agentFile, promptPrefix, mcpScope, skillsScope, onThinking, roleAgentFiles } = options;
+  const { cwd, timeout = 120000, env, agentFile, promptPrefix, mcpScope, skillsScope, hooksScope, onThinking, roleAgentFiles } = options;
   let currentOnThinking = onThinking;
 
   const runner: TaskRunner = {
@@ -385,8 +542,17 @@ export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskR
 
     async run(node: DagNode, nodeEnv: Record<string, string>): Promise<TaskResult> {
       const baseEnv: Record<string, string> = { ...(process.env as Record<string, string>), ...(env ?? {}), ...nodeEnv };
+      const resources = await getOmkResourceSettings();
+      const effectiveMcpScope = mcpScope ?? resources.mcpScope;
+      const effectiveSkillsScope = skillsScope ?? resources.skillsScope;
+      const effectiveHooksScope = hooksScope ?? resources.hooksScope;
       const originalHome = resolveOriginalHome(baseEnv);
-      const tmpHome = await prepareIsolatedKimiHome({ originalHome, env: baseEnv });
+      const tmpHome = await prepareIsolatedKimiHome({
+        originalHome,
+        env: baseEnv,
+        skillsScope: effectiveSkillsScope,
+        hooksScope: effectiveHooksScope,
+      });
       const worktree = node.worktree ?? cwd;
       const mergedEnv: Record<string, string> = {
         ...baseEnv,
@@ -398,14 +564,27 @@ export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskR
         PWD: worktree ?? process.cwd(),
       };
       const args: string[] = [];
-      await injectKimiGlobals(args, { mcpScope, skillsScope, role: node.role });
+      const mcpAllowlist = nodeEnv.OMK_MCP_HINTS
+        ? nodeEnv.OMK_MCP_HINTS.split(",").map((s) => s.trim()).filter(Boolean)
+        : undefined;
+      await injectKimiGlobals(args, { mcpScope: effectiveMcpScope, skillsScope: effectiveSkillsScope, hooksScope: effectiveHooksScope, role: node.role, mcpAllowlist });
       await preflightMcpConfigs(args);
 
       const resolvedAgentFile = roleAgentFiles
         ? await resolveAgentFileForRole(node.role, agentFile)
         : agentFile;
       if (resolvedAgentFile) {
-        args.push("--agent-file", resolvedAgentFile);
+        const scopedAgentFile = await writeScopedAgentFile({
+          baseAgentFile: resolvedAgentFile,
+          outputFile: defaultScopedRoleAgentFile(getProjectRoot(), mergedEnv.OMK_RUN_ID ?? mergedEnv.OMK_SESSION_ID, node.role),
+          role: node.role,
+          resources: {
+            mcpScope: effectiveMcpScope,
+            skillsScope: effectiveSkillsScope,
+            hooksScope: effectiveHooksScope,
+          },
+        });
+        args.push("--agent-file", scopedAgentFile);
       }
       args.push("--prompt", buildNodeMessage(node, mergedEnv, promptPrefix));
       args.push("--print");
@@ -470,6 +649,18 @@ export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskR
             )
           );
         }
+        const providerHint = formatKimiProviderFailureHint(`${result.stderr}\n${result.stdout}`);
+        if (providerHint) {
+          process.stderr.write(style.orange(providerHint));
+        }
+      }
+
+      const providerHint = formatKimiProviderFailureHint(`${result.stderr}\n${result.stdout}`);
+      if (providerHint && !result.stderr.includes("[omk] Kimi monthly quota exhausted")) {
+        result = {
+          ...result,
+          stderr: result.stderr ? `${result.stderr}\n${providerHint}` : providerHint,
+        };
       }
 
       const prefix = `[${node.id}:${node.role}] `;
@@ -518,6 +709,18 @@ function buildNodeMessage(
     mandatoryRouting.push(`- Rationale: ${routing.rationale}`);
   }
   const deepseekAdvisory = env.OMK_DEEPSEEK_ADVISORY?.trim();
+  const actionAtom = routing?.actionAtom;
+  const actionAtomSection = actionAtom
+    ? [
+        "ActionAtom contract (source of truth for this node):",
+        `- id: ${actionAtom.id}`,
+        `- label: ${actionAtom.label}`,
+        `- verb: ${actionAtom.verb}`,
+        `- object: ${actionAtom.object ?? "assigned scope"}`,
+        `- evidence target: ${actionAtom.evidenceTarget}`,
+        `- done condition: ${actionAtom.doneCondition}`,
+      ].join("\n")
+    : undefined;
 
   const sections = [
     promptPrefix?.trim(),
@@ -530,6 +733,7 @@ function buildNodeMessage(
       `Context budget: ${routing?.contextBudget ?? env.OMK_CONTEXT_BUDGET ?? "small"}`,
       `Evidence required: ${String(routing?.evidenceRequired ?? env.OMK_ROUTE_EVIDENCE_REQUIRED ?? false)}`,
     ].join("\n"),
+    actionAtomSection,
     mandatoryRouting.length > 0
       ? [
           "Routing directives (MANDATORY — activate these skills/MCP/tools explicitly):",

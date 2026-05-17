@@ -6,7 +6,8 @@ import { getOmkPath, getProjectRoot, getRunPath, sanitizeRunId } from "../util/f
 import { style, header, status, label, kimicatCliHero, bullet } from "../util/theme.js";
 import { t } from "../util/i18n.js";
 import { createOmkSessionEnv } from "../util/session.js";
-import { getOmkResourceSettings } from "../util/resource-profile.js";
+import { getOmkResourceSettings, type OmkRuntimeScope } from "../util/resource-profile.js";
+import { parseRuntimeScopeOption } from "../util/runtime-scope.js";
 import { createRoutedRunState, createDagFromRunState, refreshRunStateEstimate, routeRunState } from "../orchestration/run-state.js";
 import { createExecutor } from "../orchestration/executor.js";
 import { createStatePersister } from "../orchestration/state-persister.js";
@@ -22,8 +23,16 @@ import {
 } from "../providers/index.js";
 import type { DeepSeekModelTier } from "../providers/types.js";
 import { SUPER_OMK_DEFAULTS, isSuperOmkEnabled } from "../providers/deepseek/deepseek-super-config.js";
+import type { IntentFrame } from "../contracts/goal.js";
 import type { RunState, UserIntent } from "../contracts/orchestration.js";
 import type { Dag, DagNodeDefinition } from "../orchestration/dag.js";
+import {
+  actionAtomRouting,
+  buildIntentFrame,
+  makeActionAtom,
+  renderActionDigest,
+} from "../goal/intent-frame.js";
+import { renderPromptDigest } from "../goal/prompt-digest.js";
 
 export interface ParallelCommandOptions {
   workers?: string;
@@ -40,6 +49,8 @@ export interface ParallelCommandOptions {
   goalId?: string;
   timeoutPreset?: string;
   provider?: ProviderPolicy;
+  mcpScope?: string;
+  intentFrame?: IntentFrame;
   /** Analyzed user intent for dynamic DAG construction and role routing. */
   intent?: UserIntent;
 }
@@ -52,6 +63,7 @@ export async function parallelCommand(
   const resources = await getOmkResourceSettings();
   const workerCount = normalizeWorkerCount(options.workers, resources.maxWorkers);
   const providerPolicy = normalizeProviderPolicy(options.provider);
+  const mcpScope = parseRuntimeScopeOption(options.mcpScope, resources.mcpScope, "--mcp-scope");
 
   const hasFromSpec = Boolean(options.fromSpec);
 
@@ -68,11 +80,12 @@ export async function parallelCommand(
   await mkdir(runDir, { recursive: true });
   await writeFile(
     join(runDir, "plan.md"),
-    `# Plan\n\nFlow: parallel\nWorkers: ${workerCount}\nResource profile: ${resources.profile}\nApproval policy: ${approvalPolicy}\nProvider policy: ${providerPolicy}\n`
+    `# Plan\n\nFlow: parallel\nWorkers: ${workerCount}\nResource profile: ${resources.profile}\nMCP scope: ${mcpScope}\nApproval policy: ${approvalPolicy}\nProvider policy: ${providerPolicy}\n`
   );
 
   let runState: RunState;
   let effectiveGoal = goal ?? "";
+  let intentFrame: IntentFrame | undefined = options.intentFrame;
 
   let goalId: string | undefined;
   let goalSnapshot: RunState["goalSnapshot"] | undefined;
@@ -94,6 +107,11 @@ export async function parallelCommand(
       if (!effectiveGoal) {
         effectiveGoal = goalSpec.objective;
       }
+      intentFrame = goalSpec.intentFrame ?? buildIntentFrame(goalSpec.rawPrompt || goalSpec.objective || goalSpec.title, {
+        constraints: goalSpec.constraints.map((constraint) => constraint.description),
+        successCriteria: goalSpec.successCriteria.map((criterion) => criterion.description),
+        expectedArtifacts: goalSpec.expectedArtifacts,
+      });
     }
   }
 
@@ -101,6 +119,7 @@ export async function parallelCommand(
     const { loadSpecDag } = await import("./dag-from-spec.js");
     const specDag = await loadSpecDag(options.fromSpec!, { parallel: true });
     effectiveGoal = goal ?? `spec: ${specDag.nodes[0]?.name ?? options.fromSpec!}`;
+    intentFrame = buildIntentFrame(effectiveGoal);
 
     const specNodes = specDag.nodes.map((node) => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -117,10 +136,12 @@ export async function parallelCommand(
       goalSnapshot,
     });
   } else {
+    intentFrame = intentFrame ?? buildIntentFrame(effectiveGoal);
     runState = createInteractiveRunState({
       runId,
       flow: "parallel",
       goal: effectiveGoal,
+      intentFrame,
       workerCount,
       startedAt,
       approvalPolicy,
@@ -133,6 +154,8 @@ export async function parallelCommand(
   }
 
   await writeFile(join(runDir, "goal.md"), `# Goal\n\n${effectiveGoal}\n`);
+  await writeFile(join(runDir, "intent-frame.json"), `${JSON.stringify(intentFrame, null, 2)}\n`);
+  await writeFile(join(runDir, "action-atoms.json"), `${JSON.stringify(intentFrame.actionAtoms, null, 2)}\n`);
   await writeFile(join(runDir, "state.json"), JSON.stringify(runState, null, 2));
 
   console.log(header("Parallel Execution"));
@@ -140,11 +163,12 @@ export async function parallelCommand(
   console.log(label("Goal", effectiveGoal));
   console.log(label("Workers", String(workerCount)));
   console.log(label("Resource profile", `${resources.profile} (${resources.reason})`));
+  console.log(label("MCP scope", mcpScope));
   console.log(label("Approval policy", approvalPolicy) + "\n");
   console.log(label("Provider policy", providerPolicy));
 
   const agentFile = getOmkPath("agents/root.yaml");
-  const promptText = buildPromptText(effectiveGoal, runId, resources.profile, workerCount, options.intent);
+  const promptText = buildPromptText(effectiveGoal, runId, resources.profile, workerCount, mcpScope, options.intent, intentFrame);
   const statePath = join(runDir, "state.json");
 
   const routedState = routeRunState(runState, workerCount);
@@ -245,25 +269,26 @@ export async function parallelCommand(
 
   const runner = await createProviderBackedTaskRunner({
     providerPolicy,
-    deepseekPromptPrefix: buildDeepSeekPromptPrefix(effectiveGoal, runId, workerCount, options.intent),
+    deepseekPromptPrefix: buildDeepSeekPromptPrefix(effectiveGoal, runId, workerCount, options.intent, intentFrame),
     allowDeepSeekAdvisoryFileNodes: true,
     kimi: {
       cwd: root,
       timeout: 0,
       agentFile,
       promptPrefix: promptText,
-      mcpScope: resources.mcpScope,
+      mcpScope,
       skillsScope: resources.skillsScope,
       roleAgentFiles: true,
       env: {
         ...createOmkSessionEnv(root, runId),
         OMK_RUN_ID: runId,
         OMK_FLOW: "parallel",
-        OMK_GOAL: effectiveGoal,
+        OMK_GOAL: intentFrame.desiredOutcome,
+        OMK_GOAL_CONTEXT: renderActionDigest(intentFrame),
         OMK_WORKERS: String(workerCount),
         OMK_DAG_ROUTING: "1",
         OMK_DAG_STATE_PATH: statePath,
-        OMK_MCP_SCOPE: resources.mcpScope,
+        OMK_MCP_SCOPE: mcpScope,
         OMK_SKILLS_SCOPE: resources.skillsScope,
         OMK_APPROVAL_POLICY: approvalPolicy,
       },
@@ -361,7 +386,9 @@ function buildPromptText(
   runId: string,
   profile: string,
   workerCount: number,
-  intent?: UserIntent
+  mcpScope: OmkRuntimeScope,
+  intent?: UserIntent,
+  intentFrame: IntentFrame = buildIntentFrame(goal)
 ): string {
   const taskType = intent?.taskType ?? "general";
   const lines: string[] = [
@@ -369,13 +396,18 @@ function buildPromptText(
     ``,
     `Kimi must transform the orchestration context into node-level action. Do not echo the prompt, restart completed work, or ask for generic continuation.`,
     ``,
-    `## Orchestrated Goal Context`,
-    limitPromptSection(goal.trim(), 16_000),
+    `## Strict Intent / Action Digest`,
+    renderActionDigest(intentFrame),
+    ``,
+    `## Non-verbatim Source Digest`,
+    renderPromptDigest("Execution envelope digest", goal, { maxKeywords: 18, maxPhrases: 3 }),
+    `- raw prompt text: audit-only in run artifacts; not available for worker prompts.`,
     ``,
     `## Run Metadata`,
     `Run ID: ${runId}`,
     `Resource profile: ${profile}`,
     `Worker budget: ${workerCount}`,
+    `MCP scope: ${mcpScope}`,
     `Task type: ${taskType}`,
   ];
 
@@ -450,8 +482,12 @@ function buildPromptText(
     ``,
     `SKILLS & MCP USAGE (MANDATORY):`,
     `- Activate relevant skills from the routing hints for each node.`,
-    `- Use MCP servers (omk-project, memory, quality-gate, etc.) when they fit the task.`,
-    `- Prefer omk-project MCP tools for checkpoint, memory, and run-state operations.`,
+    mcpScope === "none"
+      ? `- MCP scope is none for this run: do not launch MCP servers; rely on local tools and skills/hooks.`
+      : mcpScope === "project"
+        ? `- MCP scope is project for this run: use only project-local/builtin MCP servers such as omk-project.`
+        : `- MCP scope is all for this run: global and project MCP servers may be available; never expose secrets or raw config.`,
+    `- Prefer omk-project MCP tools for checkpoint, memory, and run-state operations when MCP is enabled.`,
     `- Use SearchWeb / FetchURL for external docs, official APIs, or citations.`
   );
 
@@ -462,7 +498,8 @@ function buildDeepSeekPromptPrefix(
   goalContext: string,
   runId: string,
   workerCount: number,
-  intent?: UserIntent
+  intent?: UserIntent,
+  intentFrame: IntentFrame = buildIntentFrame(goalContext)
 ): string {
   const taskType = intent?.taskType ?? "general";
   const lines = [
@@ -489,17 +526,15 @@ function buildDeepSeekPromptPrefix(
 
   lines.push(
     ``,
-    `## Current Kimi/Goal Context`,
-    limitPromptSection(goalContext, 8_000)
+    `## Current Kimi/Goal Action Digest`,
+    renderActionDigest(intentFrame, { maxAtoms: 6 }),
+    ``,
+    `## Non-verbatim Context Digest`,
+    renderPromptDigest("DeepSeek context digest", goalContext, { maxKeywords: 12, maxPhrases: 2 }),
+    `- raw prompt text: unavailable to DeepSeek/model-advisory lanes.`
   );
 
   return lines.join("\n");
-}
-
-function limitPromptSection(value: string, maxChars: number): string {
-  const trimmed = value.trim();
-  if (trimmed.length <= maxChars) return trimmed;
-  return `${trimmed.slice(0, maxChars)}\n\n[truncated: ${trimmed.length - maxChars} chars omitted]`;
 }
 
 function buildWorkerLabels(state: RunState): Record<string, string> {
@@ -548,6 +583,7 @@ function createInteractiveRunState(input: {
   runId: string;
   flow: string;
   goal: string;
+  intentFrame?: IntentFrame;
   workerCount: number;
   startedAt: string;
   approvalPolicy: string;
@@ -566,6 +602,7 @@ function createInteractiveRunState(input: {
   const nodes = buildDynamicNodes({
     flow: input.flow,
     goal: input.goal,
+    intentFrame: input.intentFrame,
     startedAt: input.startedAt,
     workerCount: effectiveWorkers,
     intent,
@@ -599,6 +636,7 @@ function createInteractiveRunState(input: {
 export interface DynamicNodeBuildInput {
   flow: string;
   goal: string;
+  intentFrame?: IntentFrame;
   startedAt: string;
   workerCount: number;
   intent?: UserIntent;
@@ -608,6 +646,8 @@ export interface DynamicNodeBuildInput {
 
 export function buildDynamicNodes(input: DynamicNodeBuildInput): DagNodeDefinition[] {
   const { flow, goal, startedAt, workerCount, intent, profile, providerPolicy } = input;
+  const intentFrame = input.intentFrame ?? buildIntentFrame(goal);
+  const actionDigest = renderActionDigest(intentFrame, { maxAtoms: 6 });
   const taskType = intent?.taskType ?? "general";
   const roles = intent?.requiredRoles ?? ["planner", "coder", "reviewer"];
   const effectiveWorkerCount = normalizeWorkerCount(String(workerCount), 1);
@@ -628,40 +668,77 @@ export function buildDynamicNodes(input: DynamicNodeBuildInput): DagNodeDefiniti
     maxRetries: 1,
     startedAt,
     completedAt: startedAt,
+    routing: {
+      actionAtom: actionAtomRouting(makeActionAtom({
+        id: "atom-bootstrap",
+        label: "bootstrap",
+        verb: "bootstrap",
+        object: "parallel runtime",
+        evidenceTarget: "state.json",
+        doneCondition: "Run state is initialized",
+        source: "runtime",
+      })),
+    },
   };
 
   // Determine coordinator / planner node based on task type
   const coordinatorRole = taskType === "plan" || taskType === "migrate" || taskType === "security" ? "architect" : "orchestrator";
   const coordinator: DagNodeDefinition = {
     id: "root-coordinator",
-    name: `Coordinate: ${goal}`,
+    name: "Coordinate strict intent DAG",
     role: coordinatorRole,
     dependsOn: ["bootstrap"],
     maxRetries: 1,
     startedAt,
     outputs: [{ name: "worker plan", gate: "summary" }],
+    routing: {
+      actionAtom: actionAtomRouting(makeActionAtom({
+        id: "atom-coordinate",
+        label: "coordinate-intent-dag",
+        verb: "coordinate",
+        object: "strict intent DAG",
+        evidenceTarget: "plan.md",
+        doneCondition: "Coordinator assigns scoped action atoms before delegation",
+        source: "runtime",
+      })),
+    },
   };
 
   // Create worker nodes with role specialization
   const workerRoles = roles.filter((r) => r !== "planner" && r !== "orchestrator" && r !== "architect" && r !== "router");
   if (workerRoles.length === 0) workerRoles.push("coder");
 
+  const capabilitySeed = intentFrame.actionAtoms.map((atom) => atom.label).join(", ");
   const deepseekAgentNodes = providerPolicy === "kimi"
     ? []
     : buildDeepSeekAgentNodes({
-      goal,
+      goal: actionDigest,
       taskType,
       intent,
     });
   const capabilityAgentNodes = shouldSpawnCapabilityAgents(effectiveWorkerCount, taskType, intent)
     ? buildCapabilityAgentNodes({
-      goal,
+      goal: capabilitySeed || actionDigest,
       dependsOn: ["root-coordinator"],
       maxAgents: 3,
       seedId: "parallel-capability-routing-seed",
       seedRole: coordinatorRole,
-      seedName: `Route active MCP, skills, and hooks for: ${goal}`,
-    })
+      seedName: "Route active MCP, skills, and hooks for action atoms",
+    }).map((node) => ({
+      ...node,
+      routing: {
+        ...node.routing,
+        actionAtom: actionAtomRouting(makeActionAtom({
+          id: `atom-${node.id}`,
+          label: node.routing?.routeSource ? `route-${node.routing.routeSource}` : "route-capabilities",
+          verb: "route",
+          object: "active capability inventory",
+          evidenceTarget: node.outputs?.[0]?.name ?? "capability routing plan",
+          doneCondition: "Relevant MCP, skills, and hooks are bounded to the current action atom",
+          source: "runtime",
+        })),
+      },
+    }))
     : [];
 
   const kimiWorkerNodes: DagNodeDefinition[] = Array.from(
@@ -687,6 +764,9 @@ export function buildDynamicNodes(input: DynamicNodeBuildInput): DagNodeDefiniti
         failurePolicy: { retryable: true, blockDependents: false, skipOnFailure: true },
         inputs: [{ name: "worker plan", ref: "plan.md", from: "root-coordinator" }],
         outputs: [{ name: `worker-${index + 1} output`, gate: "none" }],
+        routing: {
+          actionAtom: actionAtomRouting(intentFrame.actionAtoms[(index + 2) % intentFrame.actionAtoms.length] ?? intentFrame.actionAtoms[0]),
+        },
       };
     }
   );
@@ -728,6 +808,15 @@ export function buildDynamicNodes(input: DynamicNodeBuildInput): DagNodeDefiniti
           mcpServers: [],
           tools: [],
           rationale: `DeepSeek V4 Pro handles ${type} in super co-orchestration mode`,
+          actionAtom: actionAtomRouting(makeActionAtom({
+            id: `atom-deepseek-worker-${index + 1}`,
+            label: `deepseek-${type}`,
+            verb: type === "review" ? "review" : type === "research" ? "research" : type === "debug" ? "inspect" : "plan",
+            object: "read-only auxiliary action",
+            evidenceTarget: `deepseek-worker-${index + 1} output`,
+            doneCondition: "DeepSeek advisory lane reports bounded findings",
+            source: "runtime",
+          })),
         },
       };
     }
@@ -755,6 +844,17 @@ export function buildDynamicNodes(input: DynamicNodeBuildInput): DagNodeDefiniti
       required: !node.id.startsWith("deepseek-") && !isCapabilityAgentNode(node),
     })),
     outputs: [{ name: "verified result", gate: taskType === "review" ? "summary" : "review-pass" }],
+    routing: {
+      actionAtom: actionAtomRouting(makeActionAtom({
+        id: "atom-review-merge",
+        label: "review-merge",
+        verb: "review",
+        object: "worker outputs",
+        evidenceTarget: "verified result",
+        doneCondition: "Worker outputs are reviewed and merged into a verified result",
+        source: "runtime",
+      })),
+    },
   };
   tailNodes.push(reviewNode);
 
@@ -769,6 +869,17 @@ export function buildDynamicNodes(input: DynamicNodeBuildInput): DagNodeDefiniti
       maxRetries: 1,
       outputs: [{ name: "quality result", gate: taskType === "test" ? "test-pass" : "command-pass", ref: "npm run check" }],
       failurePolicy: { blockDependents: false },
+      routing: {
+        actionAtom: actionAtomRouting(makeActionAtom({
+          id: "atom-quality-check",
+          label: "quality-check",
+          verb: "verify",
+          object: "quality gates",
+          evidenceTarget: "quality result",
+          doneCondition: "Required checks prove the DAG output is safe to report",
+          source: "runtime",
+        })),
+      },
     });
   }
 
@@ -782,6 +893,17 @@ export function buildDynamicNodes(input: DynamicNodeBuildInput): DagNodeDefiniti
       maxRetries: 1,
       outputs: [{ name: "security result", gate: "review-pass" }],
       failurePolicy: { blockDependents: true },
+      routing: {
+        actionAtom: actionAtomRouting(makeActionAtom({
+          id: "atom-security-audit",
+          label: "security-audit",
+          verb: "review",
+          object: "security boundaries",
+          evidenceTarget: "security result",
+          doneCondition: "Security-sensitive risks are reviewed before completion",
+          source: "runtime",
+        })),
+      },
     });
   }
 
@@ -796,6 +918,17 @@ export function buildDynamicNodes(input: DynamicNodeBuildInput): DagNodeDefiniti
       maxRetries: 1,
       outputs: [{ name: "design result", gate: "summary" }],
       failurePolicy: { blockDependents: false },
+      routing: {
+        actionAtom: actionAtomRouting(makeActionAtom({
+          id: "atom-design-review",
+          label: "design-review",
+          verb: "review",
+          object: "design consistency",
+          evidenceTarget: "design result",
+          doneCondition: "Design/system constraints are checked when applicable",
+          source: "runtime",
+        })),
+      },
     });
   }
 
@@ -819,7 +952,7 @@ function buildDeepSeekAgentNodes(input: {
   return [
     createDeepSeekAgentNode({
       id: "deepseek-flash-agent",
-      name: `DeepSeek Flash quick decomposition: ${input.goal}`,
+      name: "DeepSeek Flash action decomposition",
       role: "planner",
       tier: "flash",
       outputName: "deepseek flash decomposition",
@@ -827,7 +960,7 @@ function buildDeepSeekAgentNodes(input: {
     }),
     createDeepSeekAgentNode({
       id: "deepseek-pro-agent",
-      name: `DeepSeek Pro critical model review: ${input.goal}`,
+      name: "DeepSeek Pro action critique",
       role: "reviewer",
       tier: "pro",
       outputName: "deepseek pro critique",
@@ -876,6 +1009,15 @@ function createDeepSeekAgentNode(input: {
       mcpServers: [],
       tools: [],
       rationale: input.rationale,
+      actionAtom: actionAtomRouting(makeActionAtom({
+        id: `atom-${input.id}`,
+        label: input.tier === "flash" ? "deepseek-action-decomposition" : "deepseek-action-critique",
+        verb: input.role === "reviewer" ? "review" : "plan",
+        object: "read-only model-agent lane",
+        evidenceTarget: input.outputName,
+        doneCondition: "Read-only model-agent output is available for Kimi synthesis",
+        source: "runtime",
+      })),
     },
   };
 }

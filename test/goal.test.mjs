@@ -9,6 +9,7 @@ import { createGoalSpec, normalizeGoal, updateGoalStatus } from "../dist/goal/in
 import { createGoalPersister } from "../dist/goal/persistence.js";
 import { compileGoalToDagNodes, attachGoalToRunState } from "../dist/goal/compiler.js";
 import { evaluateGoalProgressEnsemble, generateNextPrompt } from "../dist/goal/control-loop.js";
+import { buildIntentFrame, evaluatePromptNovelty } from "../dist/goal/intent-frame.js";
 import { scoreGoal } from "../dist/goal/scoring.js";
 import { checkGoalEvidence } from "../dist/goal/evidence.js";
 import { evaluateMissingCriteria, suggestNextAction } from "../dist/goal/eval-criteria.js";
@@ -49,6 +50,7 @@ async function tempGoalCliFixture({ summary = true } = {}) {
     OMK_RENDER_LOGO: "0",
     OMK_STAR_PROMPT: "0",
     OMK_AUTO_CONTINUE_MAX_ITERATIONS: "0",
+    OMK_DEEPSEEK_GOAL_ENSEMBLE: "false",
     OMK_ISOLATED_HOME_INHERIT_AUTH: "0",
     PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
   };
@@ -68,6 +70,35 @@ async function readJson(path) {
   return JSON.parse(await readFile(path, "utf-8"));
 }
 
+
+test("IntentFrameV2 redacts secrets, extracts directives, and emits capability hints", () => {
+  const rawPrompt = [
+    "READ-ONLY scope: src/goal/intent-frame.ts",
+    "expected output: novelty-report.json",
+    "Use MCP skills hooks but no edits.",
+    "OPENAI_API_KEY=sk-proj-secretsecretsecretsecret",
+  ].join("\n");
+  const frame = buildIntentFrame(rawPrompt, {
+    constraints: ["Do not modify files"],
+    successCriteria: ["Intent frame is deterministic"],
+  });
+
+  assert.equal(frame.schemaVersion, 2);
+  assert.equal(frame.strict, true);
+  assert.match(frame.rawPromptDigest, /^[a-f0-9]{12}$/);
+  assert.ok(frame.directives.some((directive) => directive.kind === "read-only"));
+  assert.ok(frame.directives.some((directive) => directive.kind === "scope"));
+  assert.ok(frame.directives.some((directive) => directive.kind === "expected-output"));
+  assert.equal(frame.capabilityHints.needsMcp, true);
+  assert.equal(frame.capabilityHints.needsSkills, true);
+  assert.equal(frame.capabilityHints.needsHooks, true);
+  assert.equal(frame.capabilityHints.readOnly, true);
+  assert.ok(frame.diagnostics.some((diagnostic) => diagnostic.kind === "redaction"));
+  assert.doesNotMatch(JSON.stringify(frame), /sk-proj-secretsecret/);
+  assert.ok(frame.actionAtoms.some((atom) => atom.label === "inspect-read-only-scope"));
+  assert.ok(frame.actionAtoms.some((atom) => atom.label === "verify-evidence"));
+});
+
 test("normalizeGoal creates a GoalSpec with inferred success criteria", () => {
   const spec = normalizeGoal({ rawPrompt: "Add a user authentication feature to the API" });
 
@@ -81,6 +112,10 @@ test("normalizeGoal creates a GoalSpec with inferred success criteria", () => {
   assert.equal(spec.status, "draft");
   assert.equal(spec.planRevision, 0);
   assert.deepEqual(spec.runIds, []);
+  assert.ok(spec.intentFrame);
+  assert.ok(spec.actionAtoms.length >= 3);
+  assert.equal(spec.intentFrame.strict, true);
+  assert.ok(spec.actionAtoms.some((atom) => atom.label === "implement-change"));
 });
 
 test("normalizeGoal accepts explicit title and objective", () => {
@@ -234,6 +269,57 @@ test("compileGoalToDagNodes produces valid DAG with bootstrap, coordinator, and 
 
   const verify = dag.nodes.find((n) => n.id === "goal-verify");
   assert.ok(verify?.dependsOn.includes("artifact-1"));
+});
+
+
+test("PromptNoveltyReportV2 forces replan on replay risk without evidence delta", () => {
+  const rawPrompt = "Do not replay this exact objective; replan with a narrower ActionAtom";
+  const spec = normalizeGoal({ rawPrompt, title: "Replay guard", objective: rawPrompt });
+  const repeatedAtom = spec.intentFrame.actionAtoms.find((atom) => atom.label.startsWith("plan-")) ?? spec.intentFrame.actionAtoms[0];
+  const runState = createRoutedRunState({
+    runId: "novelty-v2",
+    startedAt: new Date().toISOString(),
+    nodes: [1, 2, 3].map((index) => ({
+      id: `repeat-${index}`,
+      name: rawPrompt,
+      role: "planner",
+      dependsOn: [],
+      maxRetries: 1,
+      routing: { actionAtom: repeatedAtom },
+    })),
+    workerCount: 1,
+  });
+
+  const report = evaluatePromptNovelty({
+    goal: spec,
+    runState,
+    previousPrompt: rawPrompt,
+    evidence: [],
+    action: "continue",
+    targetAtomId: repeatedAtom.id,
+  });
+
+  assert.equal(report.schemaVersion, 2);
+  assert.equal(report.recommendation, "replan");
+  assert.equal(report.replayRisk, true);
+  assert.equal(report.oscillation, true);
+  assert.equal(report.evidenceDelta, 0);
+  assert.equal(report.progressDelta, 0);
+  assert.equal(report.targetAtomId, repeatedAtom.id);
+});
+
+test("compileGoalToDagNodes uses ActionAtom labels instead of replaying raw Korean input", () => {
+  const rawPrompt = "한국어 원문을 DAG 노드 이름으로 반복하지 말고 IntentFrame ActionAtom 기반으로 실행해줘";
+  const spec = normalizeGoal({ rawPrompt, title: "Strict DAG", objective: rawPrompt });
+
+  const nodes = compileGoalToDagNodes(spec);
+  const nodeText = nodes.map((node) => `${node.name} ${node.routing?.actionAtom?.label ?? ""}`).join("\n");
+
+  assert.ok(nodes.every((node) => node.routing?.actionAtom));
+  assert.match(nodeText, /bootstrap/);
+  assert.match(nodeText, /plan-intent-dag|plan-execution/);
+  assert.match(nodeText, /verify-evidence/);
+  assert.doesNotMatch(nodeText, new RegExp(rawPrompt.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
 test("goal plan writes actionable planner DAG instead of placeholder", async () => {
@@ -525,6 +611,9 @@ test("generateNextPrompt synthesizes current context instead of repeating the or
   );
 
   assert.match(result.prompt, /Kimi Context Synthesis/);
+  assert.match(result.prompt, /Strict Intent \/ Action Digest/);
+  assert.match(result.prompt, /Next Action Contract/);
+  assert.match(result.prompt, /Novelty Guard/);
   assert.match(result.prompt, /Do not repeat the original goal verbatim/);
   assert.match(result.prompt, /Goal Reference \(non-verbatim\)/);
   assert.match(result.prompt, /Original objective digest/);
@@ -536,6 +625,29 @@ test("generateNextPrompt synthesizes current context instead of repeating the or
   assert.match(result.prompt, /Goal continuation preserves completed work/);
   assert.match(result.prompt, /Previous run already wired DeepSeek context/);
   assert.match(result.prompt, /fallbackFrom=deepseek/);
+  assert.equal(result.nextActionContract.action, "replan");
+  assert.equal(result.noveltyReport.recommendation, "replan");
+});
+
+
+test("generateNextPrompt omits raw Korean and English objectives while keeping action contracts", async () => {
+  const raws = [
+    "한국어 원문 전체를 다음 프롬프트에 그대로 반복하지 말고 ActionAtom 증거 대상으로만 계속해줘",
+    "Do not include this exact English objective sentence in any next prompt body",
+  ];
+
+  for (const rawPrompt of raws) {
+    const spec = normalizeGoal({ rawPrompt, title: "Non repetition", objective: rawPrompt });
+    spec.successCriteria = [
+      { id: "c1", description: "Follow-up prompt uses digest and ActionAtom contract", requirement: "required", weight: 1, inferred: false },
+    ];
+    const result = await generateNextPrompt(spec, [], undefined, "");
+    assert.match(result.prompt, /Goal Reference \(non-verbatim\)/);
+    assert.match(result.prompt, /Original objective digest/);
+    assert.match(result.prompt, /Strict Intent \/ Action Digest/);
+    assert.match(result.prompt, /Next Action Contract/);
+    assert.doesNotMatch(result.prompt, new RegExp(rawPrompt.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
 });
 
 test("goal progress ensemble calls DeepSeek advisory when a key is configured", async () => {

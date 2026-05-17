@@ -104,7 +104,8 @@ export function updateChatActivity(runId: string, thinking?: string, root?: stri
  */
 export function finalizeChatState(runId: string, success: boolean, _exitCode?: number, root?: string): Promise<void> {
   const projectRoot = root ?? getProjectRoot();
-  const now = new Date().toISOString();
+  const completedAt = new Date();
+  const now = completedAt.toISOString();
   return enqueue(runId, (state) => {
     state.status = success ? "done" : "failed";
     if (state.nodes) {
@@ -114,7 +115,7 @@ export function finalizeChatState(runId: string, success: boolean, _exitCode?: n
         chatNode.completedAt = now;
         const started = Date.parse(chatNode.startedAt ?? "");
         if (!Number.isNaN(started)) {
-          chatNode.durationMs = Date.now() - started;
+          chatNode.durationMs = Math.max(1, completedAt.getTime() - started);
         }
       }
     }

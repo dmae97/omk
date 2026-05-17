@@ -1,7 +1,9 @@
 import { spawn } from "child_process";
+import { readFileSync } from "fs";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import { dirname } from "path";
 import { pathToFileURL } from "url";
+import { checkCommand } from "../util/shell.js";
 
 export interface GraphState {
   ontology?: {
@@ -61,6 +63,18 @@ export interface GraphViewResult {
   outputPath: string;
   nodeCount: number;
   edgeCount: number;
+}
+
+export interface GraphBrowserOpener {
+  command: string;
+  args: string[];
+}
+
+export interface GraphBrowserOpenerOptions {
+  platform?: NodeJS.Platform;
+  env?: NodeJS.ProcessEnv;
+  procVersionText?: string;
+  commandExists?: (command: string) => boolean | Promise<boolean>;
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -338,18 +352,44 @@ function renderGraphHtml(
 
 async function openFileInBrowser(path: string): Promise<void> {
   const url = pathToFileURL(path).href;
-  const candidates: Array<{ command: string; args: string[] }> = process.platform === "win32"
-    ? [{ command: "cmd.exe", args: ["/c", "start", "", url] }]
-    : process.platform === "darwin"
-      ? [{ command: "open", args: [url] }]
-      : [
-          { command: "wslview", args: [url] },
-          { command: "xdg-open", args: [url] },
-        ];
-
-  for (const candidate of candidates) {
-    if (trySpawnDetached(candidate.command, candidate.args)) return;
+  const opener = await resolveGraphBrowserOpener(url);
+  if (!opener) {
+    console.warn(`Graph HTML generated. Open manually: ${path}`);
+    return;
   }
+  if (!trySpawnDetached(opener.command, opener.args)) {
+    console.warn(`Graph HTML generated. Open manually: ${path}`);
+  }
+}
+
+export function isWslRuntime(options: Pick<GraphBrowserOpenerOptions, "env" | "platform" | "procVersionText"> = {}): boolean {
+  const platform = options.platform ?? process.platform;
+  if (platform !== "linux") return false;
+  const env = options.env ?? process.env;
+  if (env.WSL_DISTRO_NAME || env.WSL_INTEROP) return true;
+  try {
+    const version = options.procVersionText ?? readFileSync("/proc/version", "utf-8");
+    return /microsoft|wsl/i.test(version);
+  } catch {
+    return false;
+  }
+}
+
+export async function resolveGraphBrowserOpener(
+  url: string,
+  options: GraphBrowserOpenerOptions = {}
+): Promise<GraphBrowserOpener | null> {
+  const platform = options.platform ?? process.platform;
+  if (platform === "win32") return { command: "cmd.exe", args: ["/c", "start", "", url] };
+  if (platform === "darwin") return { command: "open", args: [url] };
+
+  const commandExists = options.commandExists ?? checkCommand;
+  if (isWslRuntime(options)) {
+    if (await commandExists("wslview")) return { command: "wslview", args: [url] };
+    if (await commandExists("cmd.exe")) return { command: "cmd.exe", args: ["/c", "start", "", url] };
+  }
+  if (await commandExists("xdg-open")) return { command: "xdg-open", args: [url] };
+  return null;
 }
 
 function trySpawnDetached(command: string, args: string[]): boolean {

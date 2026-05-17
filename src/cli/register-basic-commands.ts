@@ -207,6 +207,8 @@ export function registerBasicCommands(program: Command): void {
     .description(t("cmd.doctorDesc"))
     .option("--json", t("cmd.doctorJsonOption"))
     .option("--soft", "Soft mode: do not fail on missing tools")
+    .option("--fix", "Apply safe local repairs before reporting")
+    .option("--global", "With --fix, also attempt explicit global Kimi/git repairs")
     .action(async (options) => {
       const { doctorCommand } = await import("../commands/doctor.js");
       await doctorCommand(options);
@@ -282,6 +284,7 @@ export function registerBasicCommands(program: Command): void {
     .description(t("cmd.chatDesc"))
     .option("--agent-file <path>", t("cmd.chatAgentOption"))
     .option("--workers <n>", t("cmd.chatWorkersOption"), "auto")
+    .option("--mcp-scope <all|project|none>", "MCP scope for this chat session (all | project | none)")
     .option("--max-steps-per-turn <n>", t("cmd.chatMaxStepsOption"))
     .option("--layout <auto|tmux|inline|plain>", t("cmd.chatLayoutOption"), "auto")
     .option("--brand <kimicat|minimal|plain>", t("cmd.chatBrandOption"), "kimicat")
@@ -291,6 +294,8 @@ export function registerBasicCommands(program: Command): void {
     .option("--cockpit-history <off|static|watch>", "Cockpit history pane mode", "static")
     .option("--cockpit-side-width <percent>", "Cockpit side pane width percentage", "40")
     .option("--cockpit-height <rows>", "Cockpit fixed height in rows", "18")
+    .option("--smoke", "Run chat startup preflight and runtime MCP merge checks without launching Kimi")
+    .option("--json", "With --smoke, output machine-readable JSON")
     .action(async (options) => {
       const globalOpts = program.opts();
       const { chatCommand } = await import("../commands/chat.js");
@@ -304,6 +309,24 @@ export function registerBasicCommands(program: Command): void {
     .action(async (query, options) => {
       const { researchCommand } = await import("../commands/research.js");
       await researchCommand({ query, agentFile: options.agentFile });
+    });
+
+  program
+    .command("open-design")
+    .alias("opendesign")
+    .description(t("cmd.designOpenDesignDesc"))
+    .option("--dir <path>", "Open Design checkout directory (default: .omk/open-design)")
+    .option("--branch <branch>", "Open Design git branch or tag", "main")
+    .option("--daemon-port <port>", "Open Design daemon localhost port", "7457")
+    .option("--web-port <port>", "Open Design web localhost port", "5175")
+    .option("--foreground", "Run tools-dev in the foreground")
+    .option("--no-install", "Skip pnpm install")
+    .option("--update", "Run git pull --ff-only when the checkout already exists")
+    .option("--open", "Open the localhost URL in the default browser")
+    .option("--print-only", "Print the launch plan without cloning, installing, or starting")
+    .action(async (options) => {
+      const { designOpenDesignCommand } = await import("../commands/design.js");
+      await designOpenDesignCommand(options);
     });
 
   program

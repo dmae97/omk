@@ -37,6 +37,35 @@ export interface SkillCatalog {
 
 const PACKS: SkillPack[] = [
   {
+    id: "omk-priority",
+    name: "OMK Top Priority",
+    description: "Top 12 OMK skills for context, planning, quality gates, review, security, typing, and worktree teamwork",
+    skills: [
+      "omk-context-broker",
+      "omk-repo-explorer",
+      "omk-industrial-control-loop",
+      "omk-plan-first",
+      "omk-quality-gate",
+      "omk-test-debug-loop",
+      "omk-code-review",
+      "omk-security-review",
+      "omk-secret-guard",
+      "omk-typescript-strict",
+      "omk-python-typing",
+      "omk-worktree-team",
+    ],
+  },
+  {
+    id: "omk-agentic-ops",
+    name: "OMK Agentic Ops",
+    description: "Custom skills for DAG orchestration review, evidence contracts, and control-loop debugging",
+    skills: [
+      "omk-adaptorch-orchestration-review",
+      "omk-evidence-contract",
+      "omk-control-loop-debugger",
+    ],
+  },
+  {
     id: "omk-core",
     name: "OMK Core",
     description: "Essential OMK orchestration skills plus localhost design entrypoints",
@@ -162,7 +191,10 @@ async function listDirectoryNames(dir: string): Promise<Set<string>> {
 export async function getSkillCatalog(root = getProjectRoot()): Promise<SkillCatalog> {
   const [installedPacks, templatesDir] = await Promise.all([getInstalledPacks(root), getTemplatesDir()]);
   const templateNames = templatesDir ? await listDirectoryNames(templatesDir) : new Set<string>();
-  const installedSkillNames = await listDirectoryNames(join(root, ".kimi", "skills"));
+  const installedSkillNames = new Set([
+    ...(await listDirectoryNames(join(root, ".kimi", "skills"))),
+    ...(await listDirectoryNames(join(root, ".agents", "skills"))),
+  ]);
   const packIdsBySkill = new Map<string, string[]>();
 
   for (const pack of PACKS) {

@@ -11,7 +11,7 @@
 //
 // Re-exports and extends the patterns from governance.ts redactSecrets().
 
-import { readFile, readdir, stat } from "node:fs/promises";
+import { readFile, readdir, lstat } from "node:fs/promises";
 import { join, extname } from "node:path";
 import { EventEmitter } from "node:events";
 import { SECRET_KEY_NAMES } from "./shared-secret-registry.js";
@@ -727,7 +727,8 @@ export class SecretScanner extends EventEmitter {
 
   private async readFileSafe(filePath: string): Promise<string | null> {
     try {
-      const fileStat = await stat(filePath);
+      const fileStat = await lstat(filePath);
+      if (fileStat.isSymbolicLink()) return null;
       if (fileStat.size > this.maxFileSize) return null;
 
       const ext = extname(filePath).toLowerCase();

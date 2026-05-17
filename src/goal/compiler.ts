@@ -1,53 +1,101 @@
 import type { DagNodeDefinition } from "../orchestration/dag.js";
 import { buildCapabilityAgentNodes, isCapabilityAgentNode } from "../orchestration/capability-agents.js";
 import type { RunState } from "../contracts/orchestration.js";
-import type { GoalSpec } from "../contracts/goal.js";
+import type { ActionAtom, GoalSpec } from "../contracts/goal.js";
+import { actionAtomRouting, buildIntentFrameFromGoal, makeActionAtom } from "./intent-frame.js";
 
 export function compileGoalToDagNodes(goal: GoalSpec): DagNodeDefinition[] {
+  const intentFrame = buildIntentFrameFromGoal(goal);
+  const bootstrapAtom = intentFrame.actionAtoms.find((atom) => atom.label === "bootstrap") ?? makeActionAtom({
+    id: "atom-bootstrap",
+    label: "bootstrap",
+    verb: "bootstrap",
+    object: "goal runtime",
+    evidenceTarget: "state.json",
+    doneCondition: "Goal runtime state is initialized",
+  });
+  const planAtom = intentFrame.actionAtoms.find((atom) => atom.label === "plan-intent-dag" || atom.label === "plan-execution") ?? makeActionAtom({
+    id: "atom-plan",
+    label: "plan-intent-dag",
+    verb: "plan",
+    object: "intent DAG",
+    evidenceTarget: "plan.md",
+    doneCondition: "Planner decomposes the intent into evidence-backed actions",
+  });
+  const verifyAtom = intentFrame.actionAtoms.find((atom) => atom.label === "verify-evidence") ?? makeActionAtom({
+    id: "atom-verify",
+    label: "verify-evidence",
+    verb: "verify",
+    object: "goal evidence",
+    evidenceTarget: "verification report",
+    doneCondition: "Success criteria are verified",
+  });
   const nodes: DagNodeDefinition[] = [
     {
       id: "bootstrap",
-      name: `Prepare goal run: ${goal.title}`,
+      name: "Prepare goal runtime",
       role: "omk",
       dependsOn: [],
       maxRetries: 1,
+      routing: { actionAtom: actionAtomRouting(bootstrapAtom) },
     },
     {
       id: "goal-coordinator",
-      name: `Plan goal execution: ${goal.title}`,
+      name: "Plan strict intent DAG",
       role: "planner",
       dependsOn: ["bootstrap"],
       maxRetries: 1,
       outputs: [{ name: "planner execution plan", ref: "plan.md", gate: "summary" }],
-      routing: { evidenceRequired: true, contextBudget: "normal" },
+      routing: { evidenceRequired: true, contextBudget: "normal", actionAtom: actionAtomRouting(planAtom) },
     },
   ];
 
+  const capabilitySeed = intentFrame.actionAtoms.map((atom) => atom.label).join(", ");
   const capabilityAgentNodes = buildCapabilityAgentNodes({
-    goal: `${goal.title}: ${goal.objective}`,
+    goal: capabilitySeed || "strict intent action digest",
     dependsOn: ["goal-coordinator"],
     maxAgents: 3,
     seedId: "goal-capability-routing-seed",
     seedRole: "planner",
-    seedName: `Route active MCP, skills, and hooks for goal: ${goal.title}`,
-  });
+    seedName: "Route active MCP, skills, and hooks for intent actions",
+  }).map((node) => withActionAtomRouting(node, makeActionAtom({
+    id: `atom-${node.id}`,
+    label: node.routing?.routeSource ? `route-${node.routing.routeSource}` : "route-capabilities",
+    verb: "route",
+    object: "active capability inventory",
+    evidenceTarget: node.outputs?.[0]?.name ?? "capability routing plan",
+    doneCondition: "Relevant MCP, skills, and hooks are bounded to the current action atom",
+    source: "runtime",
+  })));
 
   // Map expected artifacts to artifact nodes
-  const artifactNodes: DagNodeDefinition[] = goal.expectedArtifacts.map((artifact, index) => ({
-    id: `artifact-${index + 1}`,
-    name: `Produce artifact: ${artifact.name}`,
-    role: "coder",
-    dependsOn: ["goal-coordinator"],
-    maxRetries: 2,
-    outputs: [
-      {
-        name: artifact.name,
-        ref: artifact.path,
-        gate: artifact.gate ?? "summary",
-      },
-    ],
-    routing: { evidenceRequired: true },
-  }));
+  const artifactNodes: DagNodeDefinition[] = goal.expectedArtifacts.map((artifact, index) => {
+    const atom = makeActionAtom({
+      id: `atom-artifact-${index + 1}`,
+      label: "produce-artifact",
+      verb: "modify",
+      object: artifact.name,
+      evidenceTarget: artifact.path ?? artifact.name,
+      doneCondition: `Artifact ${artifact.name} exists or has summary evidence`,
+      source: "artifact",
+      roleHint: "coder",
+    });
+    return {
+      id: `artifact-${index + 1}`,
+      name: `Produce artifact ${index + 1}`,
+      role: "coder",
+      dependsOn: ["goal-coordinator"],
+      maxRetries: 2,
+      outputs: [
+        {
+          name: artifact.name,
+          ref: artifact.path,
+          gate: artifact.gate ?? "summary",
+        },
+      ],
+      routing: { evidenceRequired: true, actionAtom: actionAtomRouting(atom) },
+    };
+  });
 
   if (artifactNodes.length > 0) {
     nodes.push(...artifactNodes);
@@ -66,7 +114,7 @@ export function compileGoalToDagNodes(goal: GoalSpec): DagNodeDefinition[] {
   }));
   nodes.push({
     id: "goal-verify",
-    name: `Verify goal success criteria: ${goal.title}`,
+    name: "Verify goal evidence",
     role: "reviewer",
     dependsOn: [...verifyBaseDeps, ...capabilityAgentNodes.map((node) => node.id)],
     maxRetries: 1,
@@ -75,10 +123,20 @@ export function compileGoalToDagNodes(goal: GoalSpec): DagNodeDefinition[] {
       ...capabilityInputs,
     ],
     outputs: [{ name: "verification report", gate: "review-pass" }],
-    routing: { evidenceRequired: true },
+    routing: { evidenceRequired: true, actionAtom: actionAtomRouting(verifyAtom) },
   });
 
   return nodes;
+}
+
+function withActionAtomRouting(node: DagNodeDefinition, atom: ActionAtom): DagNodeDefinition {
+  return {
+    ...node,
+    routing: {
+      ...(node.routing ?? {}),
+      actionAtom: actionAtomRouting(atom),
+    },
+  };
 }
 
 export function attachGoalToRunState(runState: RunState, goal: GoalSpec): RunState {

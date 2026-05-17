@@ -7,6 +7,8 @@ import { style, header, status, label, separator } from "../util/theme.js";
 import { t } from "../util/i18n.js";
 import { runQualityGate } from "../mcp/quality-gate.js";
 import { readTextFile } from "../util/fs.js";
+import { getOmkResourceSettings } from "../util/resource-profile.js";
+import { defaultScopedRoleAgentFile, writeScopedAgentFile } from "../util/scoped-agent-file.js";
 
 interface MergeOptions {
   run?: string;
@@ -220,8 +222,20 @@ async function scoreDiff(
   }
 
   const prompt = `Score this diff from 0-100. Return ONLY a JSON object like {"score": 85, "reason": "concise reason"}.\n\n--- DIFF from ${workerName} ---\n${diff.slice(0, 8000)}\n--- END DIFF ---`;
-  const args = ["--print", "--output-format=stream-json", "--agent-file", agentFile];
-  await injectKimiGlobals(args, { role: "reviewer" });
+  const resources = await getOmkResourceSettings();
+  const scopedAgentFile = await writeScopedAgentFile({
+    baseAgentFile: agentFile,
+    outputFile: defaultScopedRoleAgentFile(root, undefined, "reviewer"),
+    role: "reviewer",
+    resources,
+  });
+  const args = ["--print", "--output-format=stream-json", "--agent-file", scopedAgentFile];
+  await injectKimiGlobals(args, {
+    role: "reviewer",
+    mcpScope: resources.mcpScope,
+    skillsScope: resources.skillsScope,
+    hooksScope: resources.hooksScope,
+  });
   args.push("-p", prompt);
 
   const result = await runShell("kimi", args, { cwd: root, timeout: 60_000 });

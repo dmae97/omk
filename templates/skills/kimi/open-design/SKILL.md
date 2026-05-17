@@ -33,13 +33,14 @@ omk design open-design --web-port 5175 --daemon-port 7457
 omk design open-design --dir .omk/open-design --update
 omk design open-design --foreground
 omk design open-design --print-only
+omk open-design --print-only
 ```
 
 ## Rules
 
 - Keep secrets out of prompts, logs, and generated artifacts.
 - Treat `awesome-design-md` entries as references; adapt the visual system instead of cloning a trademarked site.
-- Use Node.js 24.x; Open Design enforces this in its package metadata.
+- Use Node.js 24.x; OMK auto-detects NVM Node 24 when available, or set `OMK_OPEN_DESIGN_NODE24=/absolute/path/to/node`.
 - On WSL, `--open` should open the Windows browser via `wslview` or `cmd.exe /c start`; if that is blocked, open the printed URL manually.
 - If localhost does not open, report the printed URL plus:
   - `cd .omk/open-design && corepack pnpm tools-dev status`

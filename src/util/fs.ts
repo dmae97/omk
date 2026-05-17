@@ -3,14 +3,18 @@ import {
   writeFile,
   readFile,
   access,
+  chmod,
   constants,
   readdir,
+  stat,
   symlink,
   rm,
   unlink,
   lstat,
   copyFile,
+  realpath,
 } from "fs/promises";
+import { rmSync } from "fs";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "path";
 import { homedir } from "os";
 import { execSync } from "child_process";
@@ -19,6 +23,35 @@ import { SyncManifestEntry, sha256, simpleDiff } from "./sync-manifest.js";
 import { getOmkResourceSettings, type OmkRuntimeScope } from "./resource-profile.js";
 import { getKimiCapabilities } from "../kimi/capability.js";
 import { resolveRuntimeProfile, buildProfileArgs } from "./runtime-profile.js";
+
+type KimiGlobalSyncStepName = "hooks" | "mcp" | "skills" | "memory";
+
+export interface KimiGlobalSyncOptions {
+  dryRun?: boolean;
+  diff?: boolean;
+  quiet?: boolean;
+  manifest?: SyncManifestEntry[];
+  timestamp?: string;
+}
+
+export interface KimiGlobalSyncStepReport {
+  name: KimiGlobalSyncStepName;
+  changed: boolean;
+  blocked: boolean;
+  skipped: boolean;
+  error?: string;
+  manifest: SyncManifestEntry[];
+}
+
+export interface KimiGlobalSyncReport {
+  changed: boolean;
+  blocked: boolean;
+  steps: KimiGlobalSyncStepReport[];
+  actions: string[];
+  skipped: string[];
+  errors: string[];
+  manifest: SyncManifestEntry[];
+}
 
 export async function ensureDir(path: string): Promise<void> {
   await mkdir(path, { recursive: true });
@@ -38,8 +71,20 @@ export async function pathExists(path: string): Promise<boolean> {
   }
 }
 
+export interface RuntimeMcpPruneDiagnostic {
+  name: string;
+  kind: string;
+  message: string;
+}
+
+export interface RuntimeMcpNormalization {
+  name: string;
+  kind: string;
+  message: string;
+}
+
 function isGlobalWriteAllowed(): boolean {
-  return process.env.OMK_MCP_ALLOW_WRITE_CONFIG === "1";
+  return /^(?:1|true|yes|on)$/i.test(process.env.OMK_MCP_ALLOW_WRITE_CONFIG ?? "");
 }
 
 function shouldRewriteMcpArgPath(server: Record<string, unknown>, arg: unknown, index: number): arg is string {
@@ -47,7 +92,8 @@ function shouldRewriteMcpArgPath(server: Record<string, unknown>, arg: unknown, 
   if (arg.startsWith("/") || arg.startsWith("http") || arg.startsWith("-")) return false;
   if (isShellInlineMcpArg(server, index)) return false;
   if (/[\s;"'|&<>]/.test(arg)) return false;
-  return true;
+  if (isPackageManagerMcpServer(server) && isNpmPackageSpecifierArg(arg)) return false;
+  return isExplicitRelativeMcpPathArg(arg, server, index);
 }
 
 function isShellInlineMcpArg(server: Record<string, unknown>, index: number): boolean {
@@ -61,12 +107,39 @@ function isShellInlineMcpArg(server: Record<string, unknown>, index: number): bo
   return previous === "-c" || previous === "-lc" || previous === "/c" || previous === "--command";
 }
 
+function isPackageManagerMcpServer(server: Record<string, unknown>): boolean {
+  const command = typeof server.command === "string" ? server.command : "";
+  const commandName = command.replace(/\\/g, "/").split("/").pop()?.toLowerCase() ?? command.toLowerCase();
+  return PACKAGE_MANAGER_COMMANDS.has(commandName);
+}
+
+function isNpmPackageSpecifierArg(arg: string): boolean {
+  if (arg.startsWith(".") || arg.startsWith("/") || arg.includes("\\") || arg.includes(":")) return false;
+  return /^(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+(?:@[a-z0-9._~+-]+)?$/i.test(arg);
+}
+
+function isExplicitRelativeMcpPathArg(arg: string, server: Record<string, unknown>, index: number): boolean {
+  const args = Array.isArray(server.args) ? server.args : [];
+  const previous = args[index - 1];
+  if (typeof previous === "string" && /^(?:--?(?:config|file|path|root|dir|directory|cwd|database|db|schema|mount|workspace)|--(?:config|file|path|root|dir|directory|cwd|database|db|schema|mount|workspace)=)$/i.test(previous)) {
+    return true;
+  }
+  if (arg.startsWith("./") || arg.startsWith("../")) return true;
+  if (arg.includes("/") || arg.includes("\\")) return true;
+  return /\.(?:[cm]?[jt]s|json|toml|ya?ml|py|sh|db|sqlite3?|wasm|bin)$/i.test(arg);
+}
+
 export function getManifestPath(): string {
   return getOmkPath("sync-manifest.json");
 }
 
 export function getBackupDir(timestamp: string): string {
-  return getOmkPath(join("sync-backups", timestamp));
+  return getOmkPath(join("sync-backups", sanitizeBackupTimestamp(timestamp)));
+}
+
+function sanitizeBackupTimestamp(timestamp: string): string {
+  const sanitized = timestamp.replace(/[^a-zA-Z0-9._-]/g, "-").replace(/-+/g, "-");
+  return sanitized.replace(/^-|-$/g, "") || "backup";
 }
 
 export async function readManifest(): Promise<SyncManifestEntry[]> {
@@ -207,7 +280,7 @@ const OMK_END_MARKER = "# >>> end omk managed hooks";
  */
 export async function mergeKimiHooks(
   omkConfigPath: string,
-  options: { dryRun?: boolean; diff?: boolean; manifest?: SyncManifestEntry[]; timestamp?: string } = {}
+  options: KimiGlobalSyncOptions = {}
 ): Promise<boolean> {
   const manifest = options.manifest ?? [];
   const timestamp = options.timestamp ?? new Date().toISOString();
@@ -246,7 +319,9 @@ export async function mergeKimiHooks(
   if (previousContent === kimiContent) return false;
 
   if (!isGlobalWriteAllowed()) {
-    console.warn(`⚠️  Skipping global write to ${kimiConfigPath} (set OMK_MCP_ALLOW_WRITE_CONFIG=1 to allow)`);
+    if (!options.quiet) {
+      console.warn(`⚠️  Skipping global write to ${kimiConfigPath} (set OMK_MCP_ALLOW_WRITE_CONFIG=1 to allow)`);
+    }
     manifest.push({
       path: kimiConfigPath,
       scope: "global",
@@ -306,7 +381,7 @@ function resolveHookPaths(content: string, root: string): string {
   );
 }
 
-function extractHooksBlocks(content: string): string {
+export function extractHooksBlocks(content: string): string {
   const lines = content.split("\n");
   const result: string[] = [];
   let foundHooks = false;
@@ -323,7 +398,7 @@ function extractHooksBlocks(content: string): string {
 
 /** 프로젝트의 .omk/mcp.json + .kimi/mcp.json → ~/.kimi/mcp.json 병합 */
 export async function syncKimiMcpGlobal(
-  options: { dryRun?: boolean; diff?: boolean; manifest?: SyncManifestEntry[]; timestamp?: string } = {}
+  options: KimiGlobalSyncOptions = {}
 ): Promise<boolean> {
   const manifest = options.manifest ?? [];
   const timestamp = options.timestamp ?? new Date().toISOString();
@@ -383,7 +458,9 @@ export async function syncKimiMcpGlobal(
   if (previousContent === newContent) return false;
 
   if (!isGlobalWriteAllowed()) {
-    console.warn(`⚠️  Skipping global write to ${globalMcpPath} (set OMK_MCP_ALLOW_WRITE_CONFIG=1 to allow)`);
+    if (!options.quiet) {
+      console.warn(`⚠️  Skipping global write to ${globalMcpPath} (set OMK_MCP_ALLOW_WRITE_CONFIG=1 to allow)`);
+    }
     manifest.push({
       path: globalMcpPath,
       scope: "global",
@@ -435,7 +512,7 @@ export async function syncKimiMcpGlobal(
 
 /** 프로젝트의 .kimi/skills/* → ~/.kimi/skills/ 심링크 */
 export async function syncKimiSkillsGlobal(
-  options: { dryRun?: boolean; manifest?: SyncManifestEntry[]; timestamp?: string } = {}
+  options: KimiGlobalSyncOptions = {}
 ): Promise<boolean> {
   const projectSkillsDir = join(getProjectRoot(), ".kimi", "skills");
   const globalSkillsDir = join(getUserHome(), ".kimi", "skills");
@@ -462,7 +539,9 @@ export async function syncKimiSkillsGlobal(
   }
 
   if (!isGlobalWriteAllowed()) {
-    console.warn(`⚠️  Skipping global skills sync to ${globalSkillsDir} (set OMK_MCP_ALLOW_WRITE_CONFIG=1 to allow)`);
+    if (!options.quiet) {
+      console.warn(`⚠️  Skipping global skills sync to ${globalSkillsDir} (set OMK_MCP_ALLOW_WRITE_CONFIG=1 to allow)`);
+    }
     for (const dir of skillDirs) {
       options.manifest?.push({
         path: join(globalSkillsDir, dir.name),
@@ -542,7 +621,7 @@ async function copyDir(src: string, dest: string): Promise<void> {
 
 /** local graph memory policy를 ~/.kimi/omk.memory.toml 에 동기화 */
 export async function syncKimiMemoryGlobal(
-  options: { dryRun?: boolean; diff?: boolean; manifest?: SyncManifestEntry[]; timestamp?: string } = {}
+  options: KimiGlobalSyncOptions = {}
 ): Promise<boolean> {
   const manifest = options.manifest ?? [];
   const timestamp = options.timestamp ?? new Date().toISOString();
@@ -553,7 +632,9 @@ export async function syncKimiMemoryGlobal(
   if (previousContent === newContent) return false;
 
   if (!isGlobalWriteAllowed()) {
-    console.warn(`⚠️  Skipping global write to ${memoryPath} (set OMK_MCP_ALLOW_WRITE_CONFIG=1 to allow)`);
+    if (!options.quiet) {
+      console.warn(`⚠️  Skipping global write to ${memoryPath} (set OMK_MCP_ALLOW_WRITE_CONFIG=1 to allow)`);
+    }
     manifest.push({
       path: memoryPath,
       scope: "global",
@@ -605,34 +686,71 @@ export async function syncKimiMemoryGlobal(
 
 /** Sync hooks + MCP + skills to ~/.kimi/ at once */
 export async function syncAllKimiGlobals(
-  options: { dryRun?: boolean; diff?: boolean; manifest?: SyncManifestEntry[]; timestamp?: string } = {}
-): Promise<void> {
-  const configFile = getOmkPath("kimi.config.toml");
-  if (await pathExists(configFile)) {
+  options: KimiGlobalSyncOptions = {}
+): Promise<KimiGlobalSyncReport> {
+  const manifest = options.manifest ?? [];
+  const steps: KimiGlobalSyncStepReport[] = [];
+  const actions: string[] = [];
+  const skipped: string[] = [];
+  const errors: string[] = [];
+
+  async function runStep(name: KimiGlobalSyncStepName, fn: () => Promise<boolean>): Promise<void> {
+    const before = manifest.length;
     try {
-      await mergeKimiHooks(configFile, options);
+      const changed = await fn();
+      const stepManifest = manifest.slice(before);
+      const blockedEntries = stepManifest.filter((entry) => entry.action === "blocked");
+      const blocked = blockedEntries.length > 0;
+      const step: KimiGlobalSyncStepReport = {
+        name,
+        changed: changed && !blocked,
+        blocked,
+        skipped: !changed,
+        manifest: stepManifest,
+      };
+      steps.push(step);
+      if (blocked) {
+        skipped.push(`${name}: global write blocked for ${blockedEntries.map((entry) => entry.path).join(", ")}`);
+      } else if (changed) {
+        actions.push(`${name}: synced`);
+      }
     } catch (err) {
-      console.warn("⚠️  hooks sync failed:", (err as Error).message);
+      const message = err instanceof Error ? err.message : String(err);
+      if (!options.quiet) {
+        console.warn(`⚠️  ${name} global sync failed:`, message);
+      }
+      errors.push(`${name}: ${message}`);
+      steps.push({
+        name,
+        changed: false,
+        blocked: false,
+        skipped: true,
+        error: message,
+        manifest: manifest.slice(before),
+      });
     }
   }
 
-  try {
-    await syncKimiMcpGlobal(options);
-  } catch (err) {
-    console.warn("⚠️  MCP global sync failed:", (err as Error).message);
+  const configFile = getOmkPath("kimi.config.toml");
+  if (await pathExists(configFile)) {
+    await runStep("hooks", () => mergeKimiHooks(configFile, { ...options, manifest }));
+  } else {
+    steps.push({ name: "hooks", changed: false, blocked: false, skipped: true, manifest: [] });
   }
 
-  try {
-    await syncKimiSkillsGlobal(options);
-  } catch (err) {
-    console.warn("⚠️  skills global sync failed:", (err as Error).message);
-  }
+  await runStep("mcp", () => syncKimiMcpGlobal({ ...options, manifest }));
+  await runStep("skills", () => syncKimiSkillsGlobal({ ...options, manifest }));
+  await runStep("memory", () => syncKimiMemoryGlobal({ ...options, manifest }));
 
-  try {
-    await syncKimiMemoryGlobal(options);
-  } catch (err) {
-    console.warn("⚠️  local graph memory global sync failed:", (err as Error).message);
-  }
+  return {
+    changed: actions.length > 0,
+    blocked: steps.some((step) => step.blocked),
+    steps,
+    actions,
+    skipped,
+    errors,
+    manifest,
+  };
 }
 
 /** Canonical .kimi/mcp.json + optional ~/.kimi/mcp.json 수집 */
@@ -661,30 +779,512 @@ export async function collectMcpConfigs(scope: OmkRuntimeScope = "project"): Pro
   return [...new Set(configs)];
 }
 
-/** MCP config 파일들에서 중복 서버 이름을 감지하고 경고 출력 */
-async function warnDuplicateMcpServers(configPaths: string[]): Promise<void> {
-  const serverNames = new Map<string, string>(); // name → first config path
-  for (const configPath of configPaths) {
-    try {
-      const content = await readFile(configPath, "utf-8");
-      const parsed = JSON.parse(content);
-      const servers = parsed?.mcpServers ?? parsed?.mcp_servers ?? {};
-      for (const name of Object.keys(servers)) {
-        const existing = serverNames.get(name);
-        if (existing) {
-          console.warn(
-            `[omk] ⚠️  MCP server "${name}" is defined in both:\n` +
-            `  ${existing}\n` +
-            `  ${configPath}\n` +
-            `The second definition will override the first. Remove duplicates to avoid confusion.`
-          );
-        } else {
-          serverNames.set(name, configPath);
-        }
-      }
-    } catch {
-      // Skip unreadable configs — other validation handles this
+async function readMcpServersForRuntime(configPath: string): Promise<Record<string, unknown>> {
+  try {
+    const content = await readFile(configPath, "utf-8");
+    const parsed = JSON.parse(content) as { mcpServers?: unknown; mcp_servers?: unknown };
+    const servers = parsed.mcpServers ?? parsed.mcp_servers;
+    if (servers && typeof servers === "object" && !Array.isArray(servers)) {
+      return servers as Record<string, unknown>;
     }
+  } catch {
+    // Existing doctor/preflight paths report invalid config details. Runtime merge
+    // skips unreadable files so Kimi does not receive partial/broken JSON.
+  }
+  return {};
+}
+
+const SHELL_BUILTIN_MCP_COMMANDS = new Set([
+  "set",
+  "source",
+  "export",
+  "alias",
+  "cd",
+  "copy",
+  "del",
+  "dir",
+  "move",
+  "start",
+]);
+
+const WINDOWS_SYSTEM32_SET_RE = /(?:^|\/)mnt\/[a-z]\/windows\/system32\/set(?:\.exe)?(?:\s|$|[;&|])/i;
+const POSIX_HOME_REF_RE = /\/home\/([A-Za-z0-9._-]+)(?:\/|$)/g;
+const NODE_PACKAGE_MANAGER_COMMANDS = new Set([
+  "npm",
+  "npx",
+  "pnpm",
+  "yarn",
+  "bun",
+  "bunx",
+  "npm.cmd",
+  "npx.cmd",
+  "pnpm.cmd",
+  "yarn.cmd",
+  "bun.cmd",
+  "bunx.cmd",
+  "npm.exe",
+  "npx.exe",
+  "pnpm.exe",
+  "yarn.exe",
+  "bun.exe",
+  "bunx.exe",
+]);
+const PYTHON_PACKAGE_MANAGER_COMMANDS = new Set([
+  "uv",
+  "uvx",
+  "pip",
+  "pip3",
+  "pipx",
+  "poetry",
+  "rye",
+  "uv.exe",
+  "uvx.exe",
+  "pip.exe",
+  "pip3.exe",
+  "pipx.exe",
+  "poetry.exe",
+  "rye.exe",
+]);
+const PACKAGE_MANAGER_COMMANDS = new Set([
+  ...NODE_PACKAGE_MANAGER_COMMANDS,
+  ...PYTHON_PACKAGE_MANAGER_COMMANDS,
+]);
+const PYTHON_RUNTIME_COMMANDS = new Set(["python", "python3", "py", "python.exe", "python3.exe", "py.exe"]);
+const INLINE_PACKAGE_MANAGER_RE = /(?:^|[\s/])(npm|npx|pnpm|yarn|bun|bunx|uv|uvx|pip|pip3|pipx|poetry|rye)(?:\.(?:cmd|exe))?(?:\s|$)/i;
+const INLINE_PYTHON_PACKAGE_MANAGER_RE = /(?:^|[\s/])(?:python(?:3)?|py)(?:\.exe)?\s+-m\s+(?:pip|pip3|uv)(?:\s|$)/i;
+const STDIO_INCOMPATIBLE_HTTP_MCP_COMMANDS = new Set(["page-design-guide", "mcp-pdf-server"]);
+const PDF_MCP_SERVER_RE = /(?:^|\s)(?:@modelcontextprotocol\/server-pdf|mcp-pdf-server)(?:\s|$)/i;
+const EXPLICIT_STDIO_TRANSPORT_RE = /(?:^|\s)(?:--stdio|--transport(?:=|\s+)stdio)(?:\s|$)/i;
+const EXPLICIT_HTTP_TRANSPORT_RE = /(?:^|\s)--transport(?:=|\s+)(?:http|sse|streamable-http)(?:\s|$)/i;
+const HOST_HOME = homedir();
+
+export const STALE_PACKAGE_NAMES: Record<string, string> = {
+  "@supabase/mcp-server@latest": "@supabase/mcp-server-supabase@latest",
+};
+
+const QUIET_PACKAGE_MANAGER_ENV: Record<string, string> = {
+  npm_config_loglevel: "error",
+  NPM_CONFIG_LOGLEVEL: "error",
+  npm_config_progress: "false",
+  NPM_CONFIG_PROGRESS: "false",
+  npm_config_update_notifier: "false",
+  NPM_CONFIG_UPDATE_NOTIFIER: "false",
+  NO_UPDATE_NOTIFIER: "1",
+  NODE_NO_WARNINGS: "1",
+  UV_NO_PROGRESS: "1",
+  PIP_DISABLE_PIP_VERSION_CHECK: "1",
+  PIP_NO_INPUT: "1",
+  PIP_NO_PYTHON_VERSION_WARNING: "1",
+  PIP_PROGRESS_BAR: "off",
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function basenameOfRuntimeCommand(command: string): string {
+  return command.replace(/\\/g, "/").split("/").pop()?.toLowerCase() ?? command.toLowerCase();
+}
+
+function isRuntimePathLike(value: string): boolean {
+  return value.startsWith("/")
+    || value.startsWith("~/")
+    || /^[A-Za-z]:[\\/]/.test(value)
+    || value.startsWith("\\\\");
+}
+
+function expandRuntimeUserPath(value: string): string {
+  if (value === "~") return getUserHome();
+  if (value.startsWith("~/")) return join(getUserHome(), value.slice(2));
+  return value;
+}
+
+function allowedRuntimeHomes(): string[] {
+  return [getUserHome(), HOST_HOME, homedir(), posixHomeRoot(process.execPath)]
+    .map((home) => home.replace(/\\/g, "/").replace(/\/+$/, ""))
+    .filter((home, index, homes) => home.length > 0 && homes.indexOf(home) === index);
+}
+
+function posixHomeRoot(value: string | undefined): string {
+  const match = value?.replace(/\\/g, "/").match(/^\/home\/[A-Za-z0-9._-]+(?:\/|$)/);
+  return match ? match[0].replace(/\/$/, "") : "";
+}
+
+function containsStaleHomeReference(value: string): boolean {
+  const normalized = value.replace(/\\/g, "/");
+  for (const match of normalized.matchAll(POSIX_HOME_REF_RE)) {
+    const referencedHome = `/home/${match[1]}`;
+    const allowed = allowedRuntimeHomes().some((home) => {
+      const normalizedHome = home.replace(/\\/g, "/").replace(/\/+$/, "");
+      return normalizedHome === referencedHome || normalizedHome.startsWith(`${referencedHome}/`);
+    });
+    if (!allowed) return true;
+  }
+  return false;
+}
+
+function shouldValidateRuntimeMcpArgPath(server: Record<string, unknown>, arg: unknown, index: number): arg is string {
+  if (typeof arg !== "string") return false;
+  if (!arg || arg.startsWith("-") || arg.startsWith("$") || /^https?:\/\//i.test(arg)) return false;
+  if (isShellInlineMcpArg(server, index)) return false;
+  if (/[ \t\r\n;"'|&<>]/.test(arg)) return false;
+  return isRuntimePathLike(arg);
+}
+
+function runtimeShellInlineScripts(server: Record<string, unknown>): string[] {
+  const args = Array.isArray(server.args) ? server.args : [];
+  return args.filter((arg, index): arg is string => typeof arg === "string" && isShellInlineMcpArg(server, index));
+}
+
+function runtimeCommandText(server: Record<string, unknown>): string {
+  const command = typeof server.command === "string" ? server.command : "";
+  const args = Array.isArray(server.args)
+    ? server.args.filter((arg): arg is string => typeof arg === "string")
+    : [];
+  return [command, ...args, ...runtimeShellInlineScripts(server)].join(" ");
+}
+
+function hasExplicitStdioTransport(server: Record<string, unknown>): boolean {
+  return EXPLICIT_STDIO_TRANSPORT_RE.test(runtimeCommandText(server));
+}
+
+function hasHttpTransportMismatch(name: string, server: Record<string, unknown>): boolean {
+  if (hasExplicitStdioTransport(server)) return false;
+  const command = typeof server.command === "string" ? basenameOfRuntimeCommand(server.command) : "";
+  const targetText = runtimeCommandText(server);
+  if (PDF_MCP_SERVER_RE.test(targetText)) return true;
+  if (STDIO_INCOMPATIBLE_HTTP_MCP_COMMANDS.has(command) || STDIO_INCOMPATIBLE_HTTP_MCP_COMMANDS.has(name)) {
+    return true;
+  }
+  return EXPLICIT_HTTP_TRANSPORT_RE.test(targetText);
+}
+
+function findInlineScriptPaths(script: string): string[] {
+  const paths = new Set<string>();
+  const re = /(?:^|[\s"'`=:(])((?:~|\/)[^\s"'`|&;<>:]+?\.(?:cjs|mjs|js|py))(?:$|[\s"'`),;|&<>:])/gi;
+  for (const match of script.matchAll(re)) {
+    const candidate = match[1];
+    if (!candidate || /[*?[\]{}$]/.test(candidate)) continue;
+    paths.add(candidate);
+  }
+  return [...paths];
+}
+
+export async function diagnoseRuntimeMcpServer(
+  name: string,
+  server: unknown
+): Promise<RuntimeMcpPruneDiagnostic[]> {
+  const diagnostics: RuntimeMcpPruneDiagnostic[] = [];
+  if (!isRecord(server)) {
+    return [{ name, kind: "invalid-server", message: "server definition must be an object" }];
+  }
+  if (server.enabled === false) {
+    return [{ name, kind: "disabled-server", message: "server is disabled" }];
+  }
+  if (typeof server.url === "string" && server.url.trim()) {
+    return diagnostics;
+  }
+
+  const command = typeof server.command === "string" ? server.command.trim() : "";
+  if (!command) {
+    return [{ name, kind: "missing-command", message: "stdio server has no command" }];
+  }
+
+  const commandName = basenameOfRuntimeCommand(command);
+  if (SHELL_BUILTIN_MCP_COMMANDS.has(commandName)) {
+    diagnostics.push({
+      name,
+      kind: "shell-builtin-command",
+      message: "shell built-in was configured as the MCP command; wrap it in a shell or move values to env",
+    });
+  }
+  if (hasHttpTransportMismatch(name, server)) {
+    diagnostics.push({
+      name,
+      kind: "stdio-http-transport",
+      message: "stdio MCP config starts an HTTP MCP server that writes startup logs to stdout; configure it as a remote url or use stdio transport",
+    });
+  }
+
+  if (isRuntimePathLike(command)) {
+    const commandPath = expandRuntimeUserPath(command);
+    if (containsStaleHomeReference(commandPath)) {
+      diagnostics.push({ name, kind: "stale-home-reference", message: "MCP config references a different user home path" });
+    }
+    if (!(await pathExists(commandPath))) {
+      diagnostics.push({ name, kind: "command-path-not-found", message: "configured command path does not exist" });
+    }
+  }
+
+  for (const script of runtimeShellInlineScripts(server)) {
+    if (containsStaleHomeReference(script)) {
+      diagnostics.push({ name, kind: "stale-home-reference", message: "MCP config references a different user home path" });
+    }
+    if (WINDOWS_SYSTEM32_SET_RE.test(script.replace(/\\/g, "/"))) {
+      diagnostics.push({
+        name,
+        kind: "windows-set-inline",
+        message: "Windows System32 set was embedded in a shell MCP command and cannot be launched from WSL",
+      });
+    }
+    for (const candidate of findInlineScriptPaths(script)) {
+      const expanded = expandRuntimeUserPath(candidate);
+      if (containsStaleHomeReference(expanded)) {
+        diagnostics.push({ name, kind: "stale-home-reference", message: "MCP config references a different user home path" });
+      }
+      if (!(await pathExists(expanded))) {
+        diagnostics.push({ name, kind: "inline-script-path-not-found", message: "inline MCP script references a missing local script" });
+      }
+    }
+  }
+
+  const args = Array.isArray(server.args) ? server.args : [];
+  for (const [index, arg] of args.entries()) {
+    if (!shouldValidateRuntimeMcpArgPath(server, arg, index)) continue;
+    const argPath = expandRuntimeUserPath(arg);
+    if (containsStaleHomeReference(argPath)) {
+      diagnostics.push({ name, kind: "stale-home-reference", message: "MCP config references a different user home path" });
+    }
+    if (!(await pathExists(argPath))) {
+      diagnostics.push({ name, kind: "arg-path-not-found", message: "MCP argument path does not exist" });
+    }
+  }
+
+  // Detect known renamed/broken npm package names in MCP server args
+  for (const arg of args) {
+    if (typeof arg !== "string") continue;
+    for (const [stale, current] of Object.entries(STALE_PACKAGE_NAMES)) {
+      if (arg.includes(stale)) {
+        diagnostics.push({
+          name,
+          kind: "stale-package-name",
+          message: `MCP server package was renamed: ${stale} → ${current}. Run \`omk mcp migrate\` to auto-fix, or update the config manually.`,
+        });
+      }
+    }
+  }
+
+  return diagnostics;
+}
+
+function isPackageManagerRuntimeServer(server: Record<string, unknown>): boolean {
+  const command = typeof server.command === "string" ? basenameOfRuntimeCommand(server.command) : "";
+  if (PACKAGE_MANAGER_COMMANDS.has(command)) return true;
+  if (PYTHON_RUNTIME_COMMANDS.has(command)) {
+    const args = Array.isArray(server.args)
+      ? server.args.filter((arg): arg is string => typeof arg === "string")
+      : [];
+    for (let index = 0; index < args.length - 1; index += 1) {
+      if (args[index] === "-m" && PYTHON_PACKAGE_MANAGER_COMMANDS.has(basenameOfRuntimeCommand(args[index + 1]))) {
+        return true;
+      }
+    }
+  }
+  return runtimeShellInlineScripts(server).some((script) => {
+    const normalized = script.replace(/\\/g, "/");
+    return INLINE_PACKAGE_MANAGER_RE.test(normalized) || INLINE_PYTHON_PACKAGE_MANAGER_RE.test(normalized);
+  });
+}
+
+function normalizeRuntimeMcpServer(
+  name: string,
+  server: unknown
+): { server: unknown; normalizations: RuntimeMcpNormalization[] } {
+  if (!isRecord(server) || typeof server.url === "string" || !hasHttpTransportMismatch(name, server)) {
+    return { server, normalizations: [] };
+  }
+  const args = Array.isArray(server.args) ? [...server.args] : [];
+  let changed = false;
+  for (const [index, arg] of args.entries()) {
+    if (typeof arg !== "string" || !isShellInlineMcpArg(server, index) || !PDF_MCP_SERVER_RE.test(arg)) continue;
+    args[index] = `${arg.trimEnd()} --stdio`;
+    changed = true;
+  }
+  if (!changed && PDF_MCP_SERVER_RE.test(runtimeCommandText(server))) {
+    args.push("--stdio");
+    changed = true;
+  }
+  if (!changed) return { server, normalizations: [] };
+  return {
+    server: { ...server, args },
+    normalizations: [{
+      name,
+      kind: "runtime-stdio-normalized",
+      message: "runtime MCP config was normalized to stdio transport before startup; run `omk mcp doctor --fix` to persist the repair",
+    }],
+  };
+}
+
+function prepareRuntimeMcpServer(server: unknown): unknown {
+  if (!isRecord(server) || typeof server.url === "string" || !isPackageManagerRuntimeServer(server)) {
+    return server;
+  }
+  const existingEnv = isRecord(server.env) ? server.env : {};
+  const env = { ...QUIET_PACKAGE_MANAGER_ENV, ...existingEnv };
+  return { ...server, env };
+}
+
+export async function pruneRuntimeMcpServers(
+  servers: Record<string, unknown>
+): Promise<{
+  servers: Record<string, unknown>;
+  diagnostics: RuntimeMcpPruneDiagnostic[];
+  normalizations: RuntimeMcpNormalization[];
+}> {
+  const pruned: Record<string, unknown> = {};
+  const diagnostics: RuntimeMcpPruneDiagnostic[] = [];
+  const normalizations: RuntimeMcpNormalization[] = [];
+  for (const [name, server] of Object.entries(servers)) {
+    const normalized = normalizeRuntimeMcpServer(name, server);
+    const normalizedServer = normalized.server;
+    const serverDiagnostics = await diagnoseRuntimeMcpServer(name, normalizedServer);
+    if (serverDiagnostics.length > 0) {
+      diagnostics.push(...serverDiagnostics);
+      continue;
+    }
+    normalizations.push(...normalized.normalizations);
+    pruned[name] = prepareRuntimeMcpServer(normalizedServer);
+  }
+  return { servers: pruned, diagnostics, normalizations };
+}
+
+function emitRuntimeMcpNormalizationNotice(normalizations: RuntimeMcpNormalization[]): void {
+  if (normalizations.length === 0 || process.env.OMK_MCP_SUPPRESS_PRUNE_WARNINGS === "1") return;
+  const names = [...new Set(normalizations.map((diagnostic) => diagnostic.name))];
+  const shown = names.slice(0, 5).join(", ");
+  const suffix = names.length > 5 ? `, +${names.length - 5} more` : "";
+  console.warn(
+    `[omk] normalized ${names.length} MCP server(s) for Kimi startup: ${shown}${suffix}. `
+    + "Run `omk mcp doctor --fix` to persist the repair."
+  );
+}
+
+function emitRuntimeMcpPruneWarning(diagnostics: RuntimeMcpPruneDiagnostic[]): void {
+  if (diagnostics.length === 0 || process.env.OMK_MCP_SUPPRESS_PRUNE_WARNINGS === "1") return;
+  const names = [...new Set(diagnostics.map((diagnostic) => diagnostic.name))];
+  const shown = names.slice(0, 5).join(", ");
+  const suffix = names.length > 5 ? `, +${names.length - 5} more` : "";
+  console.warn(
+    `[omk] skipped ${names.length} broken MCP server(s) before Kimi startup: ${shown}${suffix}. `
+    + "Run `omk mcp doctor` to repair stale global MCP config."
+  );
+}
+
+export async function writeRuntimeMcpConfig(
+  configPaths: string[],
+  allowlist?: readonly string[]
+): Promise<string | null> {
+  const uniquePaths = [...new Set(configPaths)];
+  const mergedServers: Record<string, unknown> = {};
+  for (const configPath of uniquePaths) {
+    Object.assign(mergedServers, await readMcpServersForRuntime(configPath));
+  }
+  let targetServers = mergedServers;
+  if (allowlist && allowlist.length > 0) {
+    const allowed = new Set(allowlist);
+    const missing = allowlist.filter((name) => !mergedServers[name]);
+    if (missing.length > 0) {
+      console.warn(`[omk] MCP allowlist contains servers not found in config: ${missing.join(", ")}`);
+    }
+    targetServers = Object.fromEntries(
+      Object.entries(mergedServers).filter(([name]) => allowed.has(name))
+    );
+  }
+  const { servers: runtimeServers, diagnostics, normalizations } = await pruneRuntimeMcpServers(targetServers);
+  emitRuntimeMcpPruneWarning(diagnostics);
+  emitRuntimeMcpNormalizationNotice(normalizations);
+  if (Object.keys(runtimeServers).length === 0) return null;
+
+  const root = getProjectRoot();
+  const cacheDir = join(root, ".omk", "cache");
+  await ensureDir(cacheDir);
+  await chmod(cacheDir, 0o700).catch(() => undefined);
+
+  // Eagerly remove stale runtime configs left by prior crashed/killed processes
+  await cleanupStaleRuntimeMcpConfigs(cacheDir);
+
+  const runtimeConfigPath = join(cacheDir, `mcp-runtime-merged-${process.pid}-${Date.now()}.json`);
+  await writeFile(runtimeConfigPath, JSON.stringify({ mcpServers: runtimeServers }, null, 2) + "\n", { mode: 0o600 });
+  registerRuntimeMcpCleanupPath(runtimeConfigPath);
+  return runtimeConfigPath;
+}
+
+async function cleanupStaleRuntimeMcpConfigs(cacheDir: string): Promise<void> {
+  const now = Date.now();
+  try {
+    const entries = await readdir(cacheDir);
+    const stale = entries.filter((name) => name.startsWith("mcp-runtime-merged-") && name.endsWith(".json"));
+    for (const name of stale) {
+      const fullPath = join(cacheDir, name);
+      if (!(await shouldCleanupRuntimeMcpConfig(fullPath, name, now))) continue;
+      try {
+        await rm(fullPath, { force: true });
+      } catch {
+        // Best-effort cleanup
+      }
+    }
+  } catch {
+    // Directory may not exist or be unreadable
+  }
+}
+
+async function shouldCleanupRuntimeMcpConfig(fullPath: string, fileName: string, now: number): Promise<boolean> {
+  const match = /^mcp-runtime-merged-(\d+)-(\d+)\.json$/.exec(fileName);
+  if (match) {
+    const ownerPid = Number.parseInt(match[1], 10);
+    if (Number.isFinite(ownerPid) && ownerPid > 0 && isProcessAlive(ownerPid)) {
+      return false;
+    }
+    return true;
+  }
+
+  try {
+    const info = await stat(fullPath);
+    return now - info.mtimeMs > 24 * 60 * 60 * 1000;
+  } catch {
+    return false;
+  }
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err: unknown) {
+    return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+const runtimeMcpCleanupPaths = new Set<string>();
+let runtimeMcpCleanupRegistered = false;
+let runtimeMcpSignalCleanupRegistered = false;
+
+function cleanupRuntimeMcpFiles(): void {
+  for (const path of runtimeMcpCleanupPaths) {
+    try {
+      rmSync(path, { force: true });
+    } catch {
+      // Best-effort cleanup for a local runtime cache that may contain MCP env.
+    }
+  }
+}
+
+function registerRuntimeMcpCleanupPath(runtimeConfigPath: string): void {
+  runtimeMcpCleanupPaths.add(runtimeConfigPath);
+  if (!runtimeMcpCleanupRegistered) {
+    runtimeMcpCleanupRegistered = true;
+    process.once("exit", cleanupRuntimeMcpFiles);
+  }
+  if (!runtimeMcpSignalCleanupRegistered) {
+    runtimeMcpSignalCleanupRegistered = true;
+    process.once("SIGINT", () => {
+      cleanupRuntimeMcpFiles();
+      process.exit(130);
+    });
+    process.once("SIGTERM", () => {
+      cleanupRuntimeMcpFiles();
+      process.exit(143);
+    });
   }
 }
 
@@ -786,14 +1386,60 @@ function isWebp(bytes: Uint8Array): boolean {
   return riff === "RIFF" && webp === "WEBP";
 }
 
+/**
+ * Auto-generate a built-in omk-project MCP config so users never need to
+ * define it manually in ~/.kimi/mcp.json or .kimi/mcp.json.
+ * The config uses the currently-running omk CLI path and sets OMK_PROJECT_ROOT
+ * to the current project root.
+ */
+export async function writeBuiltinMcpConfig(): Promise<string | null> {
+  const root = getProjectRoot();
+  const cacheDir = join(root, ".omk", "cache");
+  await ensureDir(cacheDir);
+  await chmod(cacheDir, 0o700).catch(() => undefined);
+
+  let omkCliPath: string;
+  try {
+    omkCliPath = await realpath(process.argv[1] ?? "");
+  } catch {
+    omkCliPath = process.argv[1] ?? "omk";
+  }
+
+  const autoConfigPath = join(cacheDir, `mcp-auto-omk-project-${process.pid}-${Date.now()}.json`);
+  const config = {
+    mcpServers: {
+      "omk-project": {
+        command: process.argv[0] || "node",
+        args: [omkCliPath, "mcp", "serve", "omk-project"],
+        env: {
+          OMK_PROJECT_ROOT: root,
+          npm_config_loglevel: "error",
+          NODE_NO_WARNINGS: "1",
+        },
+      },
+    },
+  };
+
+  await writeFile(autoConfigPath, JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
+  registerRuntimeMcpCleanupPath(autoConfigPath);
+  return autoConfigPath;
+}
+
 /** Kimi CLI 실행 인자에 model + MCP + Skills 주입 (전역 동기화는 별도) */
 export async function injectKimiGlobals(
   args: string[],
-  options: { mcpScope?: OmkRuntimeScope; skillsScope?: OmkRuntimeScope; role?: string } = {}
+  options: {
+    mcpScope?: OmkRuntimeScope;
+    skillsScope?: OmkRuntimeScope;
+    hooksScope?: OmkRuntimeScope;
+    role?: string;
+    mcpAllowlist?: readonly string[];
+  } = {}
 ): Promise<void> {
   const resources = await getOmkResourceSettings();
   const mcpScope = options.mcpScope ?? resources.mcpScope;
   const skillsScope = options.skillsScope ?? resources.skillsScope;
+  const hooksScope = options.hooksScope ?? resources.hooksScope;
 
   // Resolve role-based runtime profile and inject supported flags
   let injectedModel: string | undefined;
@@ -819,13 +1465,29 @@ export async function injectKimiGlobals(
     }
   }
 
-  const mcpConfigs = await collectMcpConfigs(mcpScope);
-  // MCP config dedup guard: detect duplicate server names across config files
-  if (mcpConfigs.length > 1) {
-    await warnDuplicateMcpServers(mcpConfigs);
-  }
-  for (const mcp of mcpConfigs) {
-    args.push("--mcp-config-file", mcp);
+  if (mcpScope !== "none") {
+    const mcpConfigs = await collectMcpConfigs(mcpScope);
+    // Auto-inject built-in omk-project MCP server so it never needs user config.
+    // Merge runtime configs before passing them to Kimi: Kimi warns on duplicate
+    // server names across multiple --mcp-config-file values and then overrides
+    // silently. A single merged config preserves the same precedence (global first,
+    // project second, built-in omk-project last) without duplicate startup noise.
+    const builtinMcp = await writeBuiltinMcpConfig();
+    const allowlist = options.mcpAllowlist?.length ? [...options.mcpAllowlist, "omk-project"] : undefined;
+    const runtimeMcp = await writeRuntimeMcpConfig(
+      builtinMcp ? [...mcpConfigs, builtinMcp] : mcpConfigs,
+      allowlist
+    );
+    if (runtimeMcp) {
+      args.push("--mcp-config-file", runtimeMcp);
+    } else if (allowlist && allowlist.length > 0) {
+      console.warn(
+        `[omk] MCP allowlist resulted in zero available servers. ` +
+          `Allowed: ${allowlist.join(", ")}. ` +
+          `Check that the allowlist matches actual MCP server names in your config. ` +
+          `MCP config will not be passed to Kimi.`
+      );
+    }
   }
 
   const globalSkillsDir = join(getUserHome(), ".kimi", "skills");
@@ -851,6 +1513,8 @@ export async function injectKimiGlobals(
       skillDirs,
       mcpScope,
       skillsScope,
+      hooksScope,
+      mcpAllowlist: options.mcpAllowlist ?? null,
     });
   }
 }

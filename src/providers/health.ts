@@ -14,6 +14,29 @@ export class ProviderHealthRegistry {
     return this.kimi;
   }
 
+  isKimiAvailable(): boolean {
+    return this.kimi.available !== false && this.kimi.disableForRun !== true;
+  }
+
+  markKimiUnavailable(reason: string): void {
+    this.kimi = {
+      provider: "kimi",
+      available: false,
+      checkedAt: Date.now(),
+      reason,
+      disableForRun: true,
+    };
+  }
+
+  markKimiAvailable(): void {
+    this.kimi = {
+      provider: "kimi",
+      available: true,
+      checkedAt: Date.now(),
+      disableForRun: false,
+    };
+  }
+
   getDeepSeek(): ProviderAvailability | undefined {
     return this.deepseek;
   }

@@ -31,13 +31,16 @@ test("chat agent mode contract captures mode and active runtime resources", () =
   });
 
   assert.match(contract, /Mode: agent/);
-  assert.match(contract, /Active MCP \(1\): omk-project/);
-  assert.match(contract, /Active skills \(1\): omk-repo-explorer/);
-  assert.match(contract, /Active hooks \(1\): subagent-stop-audit\.sh/);
+  assert.match(contract, /Active MCP \(1\): count=1; digest=[a-f0-9]{12}; full=chat-agent-harness\.json/);
+  assert.match(contract, /Active skills \(1\): count=1; digest=[a-f0-9]{12}; full=chat-agent-harness\.json/);
+  assert.match(contract, /Active hooks \(1\): count=1; digest=[a-f0-9]{12}; full=chat-agent-harness\.json/);
   assert.match(contract, /Harness manifest: \.\/chat-agent-harness\.json/);
   assert.match(contract, /Treat every non-trivial user prompt as an orchestration request/);
+  assert.match(contract, /IntentFrame and ActionAtoms/);
   assert.match(contract, /delegate bounded subagents/);
   assert.match(contract, /Injected parallel DAG algorithm/);
+  assert.match(contract, /Raw Input -> IntentFrame -> ActionAtoms -> Evidence DAG -> Novelty Guard -> Replan\/Continue/);
+  assert.match(contract, /raw input in audit\/digest artifacts only/);
   assert.match(contract, /bootstrap\(done\) -> root-coordinator -> model\/capability\/worker lanes -> review-merge -> quality\/security\/design gates/);
   assert.match(contract, /DeepSeek direct lanes are read-only/);
   assert.match(contract, /default command-pass gate is `npm run check`/);
@@ -61,6 +64,8 @@ test("parallel algorithm injection mirrors the parallel DAG routing contract", (
   });
 
   assert.equal(injection.workerCap, 6);
+  assert.match(injection.text, /Progressive intent algorithm/);
+  assert.match(injection.text, /Strict action DAG/);
   assert.match(injection.text, /Intent schema to infer before delegation: taskType, complexity, estimatedWorkers/);
   assert.match(injection.text, /Capability-agent routing: when workers>=2/);
   assert.match(injection.text, /spawn read-only Flash quick-decomposition and Pro critique lanes/);
@@ -74,7 +79,7 @@ test("chat agent harness manifest captures full inventory and safe worker limits
     mode: "agent",
     runId: "chat-agent-harness",
     resources: {
-      workers: "2abc",
+      workers: "4",
       resourceProfile: "standard",
       approvalPolicy: "interactive",
       providerPolicy: "auto",
@@ -89,8 +94,8 @@ test("chat agent harness manifest captures full inventory and safe worker limits
   });
 
   assert.equal(manifest.schemaVersion, 1);
-  assert.equal(manifest.resources.workerBudget, 1);
-  assert.equal(manifest.resources.workerCap, 1);
+  assert.equal(manifest.resources.workerBudget, 4);
+  assert.equal(manifest.resources.workerCap, 4);
   assert.deepEqual(manifest.resources.active.mcp, ["omk-project"]);
   assert.equal(manifest.resources.active.skills.length, 32);
   assert.equal(manifest.capabilityPolicy.useMcp, true);
@@ -98,6 +103,94 @@ test("chat agent harness manifest captures full inventory and safe worker limits
   assert.equal(manifest.capabilityPolicy.useHooks, true);
   assert.ok(manifest.virtualDag.nodes.some((node) => node.id === "capability-skill-agent"));
   assert.ok(manifest.virtualDag.nodes.some((node) => node.id === "review-merge"));
+  const sharedLaneCount = manifest.virtualDag.nodes.filter((node) => ["provider", "capability", "worker"].includes(node.source)).length;
+  assert.ok(sharedLaneCount <= manifest.resources.workerCap);
+});
+
+test("chat agent harness budget 4 reserves one capability lane and keeps three worker lanes", () => {
+  const manifest = buildChatAgentHarnessManifest({
+    mode: "agent",
+    runId: "chat-agent-budget-four",
+    resources: {
+      workers: "4",
+      resourceProfile: "standard",
+      approvalPolicy: "interactive",
+      providerPolicy: "auto",
+      ensembleDefaultEnabled: true,
+      mcpScope: "project",
+      skillsScope: "all",
+      hooksScope: "project",
+      mcpNames: ["omk-project"],
+      skillNames: ["omk-test-debug-loop", "omk-quality-gate"],
+      hookNames: ["pre-shell-guard.sh"],
+    },
+  });
+
+  const capabilityNodes = manifest.virtualDag.nodes.filter((node) => node.source === "capability");
+  const workerNodes = manifest.virtualDag.nodes.filter((node) => node.source === "worker");
+  assert.equal(manifest.resources.workerBudget, 4);
+  assert.equal(capabilityNodes.length, 1);
+  assert.equal(workerNodes.length, 3);
+  assert.equal(manifest.capabilityPolicy.maxCapabilityAgents, 1);
+  assert.equal(manifest.capabilityPolicy.useMcp, true);
+  assert.equal(manifest.capabilityPolicy.useSkills, true);
+  assert.equal(manifest.capabilityPolicy.useHooks, true);
+});
+
+test("chat agent harness budget 4 uses four worker lanes when no capability inventory is active", () => {
+  const manifest = buildChatAgentHarnessManifest({
+    mode: "agent",
+    runId: "chat-agent-budget-four-workers",
+    resources: {
+      workers: "4",
+      resourceProfile: "standard",
+      approvalPolicy: "interactive",
+      providerPolicy: "auto",
+      ensembleDefaultEnabled: true,
+      mcpScope: "none",
+      skillsScope: "none",
+      hooksScope: "none",
+      mcpNames: [],
+      skillNames: [],
+      hookNames: [],
+    },
+  });
+
+  assert.equal(manifest.virtualDag.nodes.filter((node) => node.source === "capability").length, 0);
+  assert.equal(manifest.virtualDag.nodes.filter((node) => node.source === "worker").length, 4);
+});
+
+test("chat agent harness resolves auto workers and keeps optional lanes inside the shared budget", () => {
+  const previousMaxWorkers = process.env.OMK_MAX_WORKERS;
+  try {
+    process.env.OMK_MAX_WORKERS = "3";
+    const manifest = buildChatAgentHarnessManifest({
+      mode: "agent",
+      runId: "chat-agent-auto-workers",
+      resources: {
+        workers: "auto",
+        resourceProfile: "standard",
+        approvalPolicy: "interactive",
+        providerPolicy: "auto",
+        ensembleDefaultEnabled: true,
+        mcpScope: "project",
+        skillsScope: "project",
+        hooksScope: "project",
+        mcpNames: ["omk-project"],
+        skillNames: ["omk-context-broker"],
+        hookNames: ["subagent-stop-audit.sh"],
+      },
+    });
+
+    assert.equal(manifest.resources.workerBudget, 3);
+    assert.equal(manifest.resources.workerCap, 3);
+    const sharedLanes = manifest.virtualDag.nodes.filter((node) => ["provider", "capability", "worker"].includes(node.source));
+    assert.ok(sharedLanes.length <= 3);
+    assert.ok(sharedLanes.some((node) => node.source === "worker"));
+  } finally {
+    if (previousMaxWorkers === undefined) delete process.env.OMK_MAX_WORKERS;
+    else process.env.OMK_MAX_WORKERS = previousMaxWorkers;
+  }
 });
 
 test("prepareChatAgentModeAgent writes run-scoped wrapper agent and prompt", async () => {
@@ -105,12 +198,22 @@ test("prepareChatAgentModeAgent writes run-scoped wrapper agent and prompt", asy
   try {
     const agentDir = join(root, ".omk", "agents");
     const promptDir = join(root, ".omk", "prompts");
-    await mkdir(agentDir, { recursive: true });
+    await mkdir(join(agentDir, "roles"), { recursive: true });
     await mkdir(promptDir, { recursive: true });
 
     const baseAgentFile = join(agentDir, "root.yaml");
     const basePromptPath = join(promptDir, "root.md");
-    await writeFile(baseAgentFile, "version: 1\nagent:\n  name: root\n", "utf-8");
+    await writeFile(baseAgentFile, [
+      "version: 1",
+      "agent:",
+      "  name: root",
+      "  subagents:",
+      "    explorer:",
+      "      path: ./roles/explorer.yaml",
+      "      description: Explore repo",
+      "",
+    ].join("\n"), "utf-8");
+    await writeFile(join(agentDir, "roles", "explorer.yaml"), "version: 1\nagent:\n  name: explorer\n", "utf-8");
     await writeFile(basePromptPath, "# Base Root Prompt\n", "utf-8");
 
     const prepared = await prepareChatAgentModeAgent({
@@ -143,12 +246,19 @@ test("prepareChatAgentModeAgent writes run-scoped wrapper agent and prompt", asy
     assert.match(yaml, /extend: /);
     assert.match(yaml, /system_prompt_path: \.\/chat-agent-prompt\.md/);
     assert.match(yaml, /OMK_ROLE: "root-coordinator"/);
+    assert.match(yaml, /OMK_MCP_ENABLED: "true"/);
+    assert.match(yaml, /OMK_SKILLS_ENABLED: "true"/);
+    assert.match(yaml, /OMK_HOOKS_ENABLED: "true"/);
+    assert.match(yaml, /OMK_SKILL_HINTS: "count=1;digest=[a-f0-9]{12};top=omk-test-debug-loop"/);
+    assert.match(yaml, /OMK_MCP_HINTS: "count=0;digest=000000000000"/);
+    assert.match(yaml, /OMK_HOOK_HINTS: "count=0;digest=000000000000"/);
+    assert.match(yaml, /OMK_CONTEXT_BUDGET: "normal"/);
 
     const prompt = await readFile(prepared.promptPath, "utf-8");
     assert.match(prompt, /# Base Root Prompt/);
     assert.match(prompt, /# OMK Chat Agent Runtime Contract/);
     assert.match(prompt, /Mode: debugging/);
-    assert.match(prompt, /Active skills \(1\): omk-test-debug-loop/);
+    assert.match(prompt, /Active skills \(1\): count=1; digest=[a-f0-9]{12}; full=chat-agent-harness\.json/);
     assert.match(prompt, /Injected parallel DAG algorithm/);
     assert.match(prompt, /profile=lite; approval=interactive; provider=auto; ensemble=disabled; workerCap=2/);
 
@@ -160,6 +270,74 @@ test("prepareChatAgentModeAgent writes run-scoped wrapper agent and prompt", asy
     assert.equal(harness.mode, "debugging");
     assert.deepEqual(harness.resources.active.skills, ["omk-test-debug-loop"]);
     assert.ok(harness.gates.includes("run npm run check before final implementation claims"));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("prepareChatAgentModeAgent reflects disabled capability scopes in wrapper agent", async () => {
+  const root = await mkdtemp(join(tmpdir(), "omk-chat-agent-disabled-scopes-"));
+  try {
+    const agentDir = join(root, ".omk", "agents");
+    const promptDir = join(root, ".omk", "prompts");
+    await mkdir(join(agentDir, "roles"), { recursive: true });
+    await mkdir(promptDir, { recursive: true });
+
+    const baseAgentFile = join(agentDir, "root.yaml");
+    const basePromptPath = join(promptDir, "root.md");
+    await writeFile(baseAgentFile, [
+      "version: 1",
+      "agent:",
+      "  name: root",
+      "  subagents:",
+      "    explorer:",
+      "      path: ./roles/explorer.yaml",
+      "      description: Explore repo",
+      "",
+    ].join("\n"), "utf-8");
+    await writeFile(join(agentDir, "roles", "explorer.yaml"), "version: 1\nagent:\n  name: explorer\n", "utf-8");
+    await writeFile(basePromptPath, "# Base Root Prompt\n", "utf-8");
+
+    const prepared = await prepareChatAgentModeAgent({
+      root,
+      runId: "chat-agent-disabled",
+      baseAgentFile,
+      basePromptPath,
+      mode: "agent",
+      resources: {
+        workers: "1",
+        mcpScope: "none",
+        skillsScope: "none",
+        hooksScope: "none",
+        mcpNames: [],
+        skillNames: [],
+        hookNames: [],
+      },
+    });
+
+    const yaml = await readFile(prepared.agentFile, "utf-8");
+    assert.match(yaml, /OMK_MCP_ENABLED: "false"/);
+    assert.match(yaml, /OMK_SKILLS_ENABLED: "false"/);
+    assert.match(yaml, /OMK_HOOKS_ENABLED: "false"/);
+    assert.match(yaml, /explorer:\n      path: "\.\/roles\/explorer\.yaml"/);
+
+    const roleYaml = await readFile(join(root, ".omk", "runs", "chat-agent-disabled", "roles", "explorer.yaml"), "utf-8");
+    assert.match(roleYaml, /extend: "\.\.\/\.\.\/\.\.\/agents\/roles\/explorer\.yaml"/);
+    assert.match(roleYaml, /OMK_MCP_ENABLED: "false"/);
+    assert.match(roleYaml, /OMK_SKILLS_ENABLED: "false"/);
+    assert.match(roleYaml, /OMK_HOOKS_ENABLED: "false"/);
+    assert.match(roleYaml, /OMK_MCP_HINTS: "disabled"/);
+    assert.match(roleYaml, /OMK_SKILL_HINTS: "disabled"/);
+    assert.match(roleYaml, /OMK_HOOK_HINTS: "disabled"/);
+
+    const harness = JSON.parse(await readFile(prepared.harnessPath, "utf-8"));
+    assert.deepEqual(harness.resources.scopes, { mcp: "none", skills: "none", hooks: "none" });
+    assert.equal(harness.capabilityPolicy.useMcp, false);
+    assert.equal(harness.capabilityPolicy.useSkills, false);
+    assert.equal(harness.capabilityPolicy.useHooks, false);
+    assert.equal(harness.virtualDag.nodes.some((node) => node.id === "capability-mcp-agent"), false);
+    assert.equal(harness.virtualDag.nodes.some((node) => node.id === "capability-skill-agent"), false);
+    assert.equal(harness.virtualDag.nodes.some((node) => node.id === "capability-hook-agent"), false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

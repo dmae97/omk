@@ -1,29 +1,59 @@
 version: 1
 agent:
-  extend: ./okabe.yaml  # Okabe-compatible base adds SendDMail/D-Mail checkpoints
+  extend: ./okabe.yaml  # Inherits the unrestricted default Kimi tool surface plus MCP/skills/hooks flags
   name: omk-root
   system_prompt_path: ../prompts/root.md
   system_prompt_args:
     OMK_ROLE: "root-coordinator"
+    OMK_MCP_ENABLED: "true"
+    OMK_SKILLS_ENABLED: "true"
+    OMK_HOOKS_ENABLED: "true"
   subagents:
     explorer:
       path: ./roles/explorer.yaml
-      description: "Read-only repository exploration and context mapping"
+      description: "Read-only repository exploration and context mapping with scoped MCP, skills, and hooks access when enabled by runtime scope"
     explore:
       path: ./roles/explorer.yaml
       description: "Alias for explorer; kept for compatibility with older OMK instructions"
     planner:
       path: ./roles/planner.yaml
-      description: "Architecture, refactor, migration, and implementation planning"
+      description: "Architecture, refactor, migration, and implementation planning with scoped MCP, skills, and hooks access when enabled by runtime scope"
     plan:
       path: ./roles/planner.yaml
       description: "Alias for planner; kept for compatibility with older OMK instructions"
+    architect:
+      path: ./roles/architect.yaml
+      description: "Read-only architecture and migration design with scoped MCP, skills, and hooks access when enabled by runtime scope"
     coder:
       path: ./roles/coder.yaml
-      description: "Scoped implementation in the current project"
+      description: "Scoped implementation in the current project with scoped MCP, skills, and hooks access when enabled by runtime scope"
     reviewer:
       path: ./roles/reviewer.yaml
-      description: "Adversarial code review and risk detection"
+      description: "Adversarial code review and risk detection with scoped MCP, skills, and hooks access when enabled by runtime scope"
+    security:
+      path: ./roles/security.yaml
+      description: "Security, secret, permission, and trust-boundary review with scoped MCP, skills, and hooks access when enabled by runtime scope"
     qa:
       path: ./roles/qa.yaml
-      description: "Run and analyze lint, typecheck, test, and build results"
+      description: "Run and analyze lint, typecheck, test, and build results with scoped MCP, skills, and hooks access when enabled by runtime scope"
+    tester:
+      path: ./roles/tester.yaml
+      description: "Focused regression and edge-case testing with scoped MCP, skills, and hooks access when enabled by runtime scope"
+    researcher:
+      path: ./roles/researcher.yaml
+      description: "Reference-backed research and external documentation checks with scoped MCP, skills, and hooks access when enabled by runtime scope"
+    integrator:
+      path: ./roles/integrator.yaml
+      description: "Merge coordination and final synthesis with scoped MCP, skills, and hooks access when enabled by runtime scope"
+    aggregator:
+      path: ./roles/aggregator.yaml
+      description: "Parallel-lane result aggregation with scoped MCP, skills, and hooks access when enabled by runtime scope"
+    interviewer:
+      path: ./roles/interviewer.yaml
+      description: "Requirement clarification and acceptance criteria discovery with scoped MCP, skills, and hooks access when enabled by runtime scope"
+    ontology:
+      path: ./roles/ontology.yaml
+      description: "Project graph memory and ontology curation with scoped MCP, skills, and hooks access when enabled by runtime scope"
+    vision-debugger:
+      path: ./roles/vision-debugger.yaml
+      description: "Screenshot and multimodal debugging with scoped MCP, skills, and hooks access when enabled by runtime scope"

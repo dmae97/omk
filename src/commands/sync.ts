@@ -8,7 +8,7 @@ import {
   getUserHome,
 } from "../util/fs.js";
 import { mkdir, writeFile, copyFile, rm } from "fs/promises";
-import { dirname, join, relative } from "path";
+import { dirname, join, relative, sep } from "path";
 import { header, status } from "../util/theme.js";
 import { t } from "../util/i18n.js";
 
@@ -137,6 +137,9 @@ async function rollbackSync(): Promise<void> {
 
 function isAllowedRollbackPath(p: string): boolean {
   const allowed = [join(getUserHome(), ".kimi"), getOmkPath()];
-  return allowed.some((a) => p.startsWith(a));
+  return allowed.some((a) => {
+    const prefix = a.endsWith(sep) ? a : a + sep;
+    return p.startsWith(prefix) || p === a;
+  });
 }
 }

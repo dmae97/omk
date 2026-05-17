@@ -65,6 +65,7 @@ test("resource settings default MCP and skills scopes to project", async () => {
     OMK_PROJECT_ROOT: process.env.OMK_PROJECT_ROOT,
     OMK_MCP_SCOPE: process.env.OMK_MCP_SCOPE,
     OMK_SKILLS_SCOPE: process.env.OMK_SKILLS_SCOPE,
+    OMK_HOOKS_SCOPE: process.env.OMK_HOOKS_SCOPE,
   };
 
   try {
@@ -73,11 +74,52 @@ test("resource settings default MCP and skills scopes to project", async () => {
     process.env.OMK_PROJECT_ROOT = projectRoot;
     delete process.env.OMK_MCP_SCOPE;
     delete process.env.OMK_SKILLS_SCOPE;
+    delete process.env.OMK_HOOKS_SCOPE;
     resetOmkResourceSettingsCache();
 
     const settings = await getOmkResourceSettings();
     assert.equal(settings.mcpScope, "project");
     assert.equal(settings.skillsScope, "project");
+    assert.equal(settings.hooksScope, "project");
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+    resetOmkResourceSettingsCache();
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("resource settings do not inherit hooks scope from skills scope", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-resource-hooks-scope-"));
+  const previous = {
+    OMK_PROJECT_ROOT: process.env.OMK_PROJECT_ROOT,
+    OMK_MCP_SCOPE: process.env.OMK_MCP_SCOPE,
+    OMK_SKILLS_SCOPE: process.env.OMK_SKILLS_SCOPE,
+    OMK_HOOKS_SCOPE: process.env.OMK_HOOKS_SCOPE,
+  };
+
+  try {
+    await mkdir(join(projectRoot, ".omk"), { recursive: true });
+    await writeFile(join(projectRoot, ".omk", "config.toml"), [
+      "[runtime]",
+      "resource_profile = \"standard\"",
+      "skills_scope = \"all\"",
+      "",
+    ].join("\n"), "utf-8");
+    process.env.OMK_PROJECT_ROOT = projectRoot;
+    delete process.env.OMK_MCP_SCOPE;
+    delete process.env.OMK_SKILLS_SCOPE;
+    delete process.env.OMK_HOOKS_SCOPE;
+    resetOmkResourceSettingsCache();
+
+    const settings = await getOmkResourceSettings();
+    assert.equal(settings.skillsScope, "all");
+    assert.equal(settings.hooksScope, "project");
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) {

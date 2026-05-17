@@ -4,7 +4,23 @@ import YAML from "yaml";
 import { getOmkPath, pathExists } from "../util/fs.js";
 import { style, header, status, label, bullet } from "../util/theme.js";
 
-const STABLE_AGENTS = new Set(["explorer", "planner", "coder", "reviewer", "qa", "security"]);
+const STABLE_AGENTS = new Set([
+  "aggregator",
+  "architect",
+  "coder",
+  "explorer",
+  "integrator",
+  "interviewer",
+  "ontology",
+  "planner",
+  "qa",
+  "researcher",
+  "reviewer",
+  "security",
+  "tester",
+  "vision-debugger",
+]);
+const CAPABILITY_FLAGS = ["OMK_MCP_ENABLED", "OMK_SKILLS_ENABLED", "OMK_HOOKS_ENABLED"] as const;
 
 interface AgentMeta {
   id: string;
@@ -15,6 +31,9 @@ interface AgentMeta {
   excludeTools?: string[];
   filePath: string;
   stable: boolean;
+  mcpServers?: string[];
+  skills?: string[];
+  hooks?: string[];
 }
 
 async function loadAgentMeta(id: string): Promise<AgentMeta | null> {
@@ -25,15 +44,20 @@ async function loadAgentMeta(id: string): Promise<AgentMeta | null> {
   const doc = YAML.parse(content) as Record<string, unknown>;
   const agent = (doc?.agent ?? {}) as Record<string, unknown>;
 
+  const promptArgs = (agent.system_prompt_args as Record<string, unknown> | undefined) ?? {};
+
   return {
     id,
     name: (agent.name as string | undefined) ?? id,
-    role: ((agent.system_prompt_args as Record<string, unknown> | undefined)?.OMK_ROLE as string | undefined) ?? id,
+    role: (promptArgs.OMK_ROLE as string | undefined) ?? id,
     extend: agent.extend as string | undefined,
     description: (agent.description as string | undefined) ?? (agent.prompt as string | undefined)?.replace(/\s+/g, " ").slice(0, 200),
     excludeTools: agent.exclude_tools as string[] | undefined,
     filePath,
     stable: STABLE_AGENTS.has(id),
+    mcpServers: parseTopFromHint(promptArgs.OMK_MCP_HINTS as string | undefined),
+    skills: parseTopFromHint(promptArgs.OMK_SKILL_HINTS as string | undefined),
+    hooks: parseTopFromHint(promptArgs.OMK_HOOK_HINTS as string | undefined),
   };
 }
 
@@ -105,9 +129,12 @@ export async function agentShowCommand(id: string): Promise<void> {
   if (meta.excludeTools && meta.excludeTools.length > 0) {
     console.log(label("Excluded tools", String(meta.excludeTools.length)));
     for (const tool of meta.excludeTools) {
-      console.log(`  ${bullet} ${style.gray(tool)}`);
+      console.log(bullet(style.gray(tool)));
     }
   }
+  console.log(label("MCP Servers", meta.mcpServers?.join(", ") ?? style.gray("default")));
+  console.log(label("Skills", meta.skills?.join(", ") ?? style.gray("default")));
+  console.log(label("Hooks", meta.hooks?.join(", ") ?? style.gray("default")));
   if (meta.description) {
     console.log("");
     console.log(style.gray(meta.description));
@@ -143,6 +170,9 @@ export async function agentCreateCommand(name: string, options: { from?: string 
       system_prompt_args: {
         ...(agent.system_prompt_args as Record<string, unknown> | undefined),
         OMK_ROLE: name,
+        OMK_MCP_ENABLED: "true",
+        OMK_SKILLS_ENABLED: "true",
+        OMK_HOOKS_ENABLED: "true",
       },
     },
   };
@@ -155,6 +185,58 @@ export async function agentCreateCommand(name: string, options: { from?: string 
 export async function agentDoctorCommand(): Promise<void> {
   const agents = await listAllAgents();
   const issues: string[] = [];
+  const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
+
+  const okabePath = getOmkPath("agents/okabe.yaml");
+  const rootPath = getOmkPath("agents/root.yaml");
+  let okabeHealthy = false;
+
+  if (!(await pathExists(okabePath))) {
+    issues.push("Missing Okabe base agent: .omk/agents/okabe.yaml");
+  } else {
+    const okabeContent = await readFile(okabePath, "utf-8");
+    const okabeDoc = YAML.parse(okabeContent) as Record<string, unknown>;
+    const okabeAgent = (okabeDoc?.agent ?? {}) as Record<string, unknown>;
+    const okabeTools = Array.isArray(okabeAgent.tools) ? okabeAgent.tools.map(String) : [];
+    okabeHealthy =
+      okabeTools.some((tool) => tool.includes("kimi_cli.tools.agent:Agent")) &&
+      okabeTools.some((tool) => tool.includes("kimi_cli.tools.dmail:SendDMail"));
+    if (!okabeHealthy) {
+      issues.push("okabe: missing required Agent/SendDMail tools");
+    }
+    for (const issue of missingCapabilityFlagIssues("okabe", okabeAgent)) {
+      issues.push(issue);
+    }
+    // Note: hints are injected at runtime by scoped-agent-file.ts; skip for base agent
+  }
+
+  if (!(await pathExists(rootPath))) {
+    issues.push("Missing root agent: .omk/agents/root.yaml");
+  } else {
+    const rootContent = await readFile(rootPath, "utf-8");
+    const rootDoc = YAML.parse(rootContent) as Record<string, unknown>;
+    const rootAgent = (rootDoc?.agent ?? {}) as Record<string, unknown>;
+    if (String(rootAgent.extend ?? "") !== "./okabe.yaml") {
+      issues.push("root: expected extend: ./okabe.yaml");
+    }
+    for (const issue of missingCapabilityFlagIssues("root", rootAgent)) {
+      issues.push(issue);
+    }
+    // Note: hints are injected at runtime by scoped-agent-file.ts; skip for root agent
+    const subagents = (rootAgent.subagents ?? {}) as Record<string, unknown>;
+    for (const [alias, value] of Object.entries(subagents)) {
+      const ref = value as Record<string, unknown>;
+      const path = typeof ref.path === "string" ? ref.path : "";
+      const match = path.match(/\.\/roles\/([^/]+)\.yaml$/);
+      if (!match) {
+        issues.push(`root subagent ${alias}: invalid role path ${path || "(missing)"}`);
+        continue;
+      }
+      if (!agentsById.has(match[1])) {
+        issues.push(`root subagent ${alias}: missing role agent ${match[1]}`);
+      }
+    }
+  }
 
   for (const a of agents) {
     const content = await readFile(a.filePath, "utf-8");
@@ -164,6 +246,16 @@ export async function agentDoctorCommand(): Promise<void> {
     if (!a.role) {
       issues.push(`${a.id}: missing OMK_ROLE in system_prompt_args`);
     }
+    const doc = YAML.parse(content) as Record<string, unknown>;
+    const agent = (doc?.agent ?? {}) as Record<string, unknown>;
+    if (okabeHealthy && String(agent.extend ?? "") !== "../okabe.yaml") {
+      issues.push(`${a.id}: expected extend: ../okabe.yaml`);
+    }
+    for (const issue of missingCapabilityFlagIssues(a.id, agent)) {
+      issues.push(issue);
+    }
+    // Note: role agents do not have static hints; hints are injected at runtime
+    // by scoped-agent-file.ts based on preset/skill assignment. Skip hint checks.
   }
 
   // Check for stable agents
@@ -183,7 +275,27 @@ export async function agentDoctorCommand(): Promise<void> {
     console.log("");
     console.log(status.warn(`${issues.length} issue(s) found:`));
     for (const issue of issues) {
-      console.log(`  ${bullet} ${issue}`);
+      console.log(bullet(issue));
     }
   }
+}
+
+function missingCapabilityFlagIssues(id: string, agent: Record<string, unknown>): string[] {
+  const issues: string[] = [];
+  const promptArgs = (agent.system_prompt_args ?? {}) as Record<string, unknown>;
+  for (const flag of CAPABILITY_FLAGS) {
+    if (String(promptArgs[flag]) !== "true") {
+      issues.push(`${id}: missing ${flag}=true in system_prompt_args`);
+    }
+  }
+  return issues;
+}
+
+function parseTopFromHint(hint: string | undefined): string[] | undefined {
+  if (!hint) return undefined;
+  const topMatch = hint.match(/top=([^;]*)/);
+  if (!topMatch) return undefined;
+  const top = topMatch[1].trim();
+  if (!top) return undefined;
+  return top.split("|").filter(Boolean);
 }

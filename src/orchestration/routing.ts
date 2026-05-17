@@ -4,6 +4,11 @@ import { homedir } from "os";
 import { isAbsolute, join, relative, resolve, sep } from "path";
 import { normalizeUserHomePath } from "../util/fs.js";
 import { assignSkills } from "./skill-assigner.js";
+import {
+  OMK_RELEASE_GUARD_PRESET,
+  OMK_TS_PRODUCT_PRESET,
+  OMK_WORKTREE_TEAM_PRESET,
+} from "../runtime/core-verified-preset.js";
 
 type RouteKind = "skill" | "mcp" | "tool" | "hook";
 type RouteSource = "project" | "global" | "builtin";
@@ -27,7 +32,7 @@ interface ScoredRoute {
   reason: string;
 }
 
-export type RoutingInput = Pick<DagNodeDefinition, "id" | "name" | "role" | "inputs" | "outputs" | "cost">;
+export type RoutingInput = Pick<DagNodeDefinition, "id" | "name" | "role" | "inputs" | "outputs" | "cost" | "routing">;
 
 const MAX_SKILLS = 3;
 const MAX_MCP_SERVERS = 2;
@@ -359,16 +364,66 @@ export function selectTaskRouting(input: RoutingInput): DagNodeRouting {
   const tools = unique(scored.filter((item) => item.candidate.kind === "tool").map((item) => item.candidate.id)).slice(0, limitForBudget(contextBudget, MAX_TOOLS));
   const hooks = unique(scored.filter((item) => item.candidate.kind === "hook").map((item) => item.candidate.id)).slice(0, limitForBudget(contextBudget, MAX_HOOKS));
 
-  if (skills.length === 0 && readOnly) skills.push("omk-repo-explorer");
-  if (skills.length === 0) skills.push("omk-context-broker");
+  if (skills.length === 0 && readOnly && inventory.skills.has("omk-repo-explorer")) skills.push("omk-repo-explorer");
+  if (skills.length === 0 && inventory.skills.has("omk-context-broker")) skills.push("omk-context-broker");
   addDefaultHookHints(hooks, inventory, input.role, readOnly, evidenceRequired);
 
   // Merge with skill-assigner auto-assignment
   const autoAssignment = assignSkills(input);
-  const mergedSkills = unique([...skills, ...autoAssignment.skills]).slice(0, limitForBudget(contextBudget, MAX_SKILLS));
-  const mergedMcpServers = unique([...mcpServers, ...autoAssignment.mcpServers]).slice(0, limitForBudget(contextBudget, MAX_MCP_SERVERS));
+  const scopedAutoSkills = autoAssignment.skills.filter((skill) => inventory.skills.has(skill));
+  const scopedAutoMcpServers = autoAssignment.mcpServers.filter((server) => inventory.mcpServers.has(server));
+  const scopedAutoHooks = autoAssignment.hooks.filter((hook) => inventory.hooks.has(hook));
+  const releaseGuardRequired = autoAssignment.rationale.includes(`[${OMK_RELEASE_GUARD_PRESET.id}]`);
+  const tsProductRequired = autoAssignment.rationale.includes(`[${OMK_TS_PRODUCT_PRESET.id}]`);
+  const worktreeRequired = autoAssignment.rationale.includes(`[${OMK_WORKTREE_TEAM_PRESET.id}]`);
+
+  function requiredPresetSkills(): readonly string[] | undefined {
+    const presets: string[][] = [];
+    if (releaseGuardRequired) presets.push(OMK_RELEASE_GUARD_PRESET.skills);
+    if (tsProductRequired) presets.push(OMK_TS_PRODUCT_PRESET.skills);
+    if (worktreeRequired) presets.push(OMK_WORKTREE_TEAM_PRESET.skills);
+    const active = unique(presets.flat()).filter((skill) => inventory.skills.has(skill));
+    return active.length > 0 ? active : undefined;
+  }
+  function requiredPresetMcpServers(): readonly string[] | undefined {
+    const presets: string[][] = [];
+    if (releaseGuardRequired) presets.push(OMK_RELEASE_GUARD_PRESET.mcpServers);
+    if (tsProductRequired) presets.push(OMK_TS_PRODUCT_PRESET.mcpServers);
+    if (worktreeRequired) presets.push(OMK_WORKTREE_TEAM_PRESET.mcpServers);
+    const active = unique(presets.flat()).filter((server) => inventory.mcpServers.has(server));
+    return active.length > 0 ? active : undefined;
+  }
+  function requiredPresetHooks(): readonly string[] | undefined {
+    const presets: string[][] = [];
+    if (releaseGuardRequired) presets.push(OMK_RELEASE_GUARD_PRESET.hooks);
+    if (tsProductRequired) presets.push(OMK_TS_PRODUCT_PRESET.hooks);
+    if (worktreeRequired) presets.push(OMK_WORKTREE_TEAM_PRESET.hooks);
+    const active = unique(presets.flat()).filter((hook) => inventory.hooks.has(hook));
+    return active.length > 0 ? active : undefined;
+  }
+
+  const mergedSkills = mergeBoundedRoutes(
+    skills,
+    scopedAutoSkills,
+    contextBudget,
+    MAX_SKILLS,
+    requiredPresetSkills()
+  );
+  const mergedMcpServers = mergeBoundedRoutes(
+    mcpServers,
+    scopedAutoMcpServers,
+    contextBudget,
+    MAX_MCP_SERVERS,
+    requiredPresetMcpServers()
+  );
   const mergedTools = unique([...tools, ...autoAssignment.tools]).slice(0, limitForBudget(contextBudget, MAX_TOOLS));
-  const mergedHooks = unique([...hooks, ...autoAssignment.hooks]).slice(0, limitForBudget(contextBudget, MAX_HOOKS));
+  const mergedHooks = mergeBoundedRoutes(
+    hooks,
+    scopedAutoHooks,
+    contextBudget,
+    MAX_HOOKS,
+    requiredPresetHooks()
+  );
 
   const mergedRationale = autoAssignment.skills.length > 0
     ? `${renderRationale(scored.slice(0, 3), contextBudget)} | Auto: ${autoAssignment.rationale}`
@@ -387,6 +442,8 @@ export function selectTaskRouting(input: RoutingInput): DagNodeRouting {
     evidenceRequired,
     rationale: mergedRationale,
     rejected: rejected.slice(0, 6),
+    requiresMcp: input.routing?.requiresMcp ?? false,
+    requiresToolCalling: input.routing?.requiresToolCalling ?? false,
   };
 }
 
@@ -414,14 +471,31 @@ export function mergeDagNodeRouting(auto: DagNodeRouting, override: DagNodeRouti
   };
 }
 
-export function dagNodeRoutingEnv(node: DagNode): Record<string, string> {
+export function dagNodeRoutingEnv(node: DagNode, dag?: import("./dag.js").Dag): Record<string, string> {
   const routing = node.routing;
   if (!routing) return {};
+
+  const skillHints = new Set<string>(routing.skills ?? []);
+  const mcpHints = new Set<string>(routing.mcpServers ?? []);
+  const toolHints = new Set<string>(routing.tools ?? []);
+  const hookHints = new Set<string>(routing.hooks ?? []);
+
+  if (dag) {
+    for (const parentId of node.dependsOn) {
+      const parent = dag.nodes.find((n) => n.id === parentId);
+      if (!parent?.routing) continue;
+      for (const s of parent.routing.skills ?? []) skillHints.add(s);
+      for (const m of parent.routing.mcpServers ?? []) mcpHints.add(m);
+      for (const t of parent.routing.tools ?? []) toolHints.add(t);
+      for (const h of parent.routing.hooks ?? []) hookHints.add(h);
+    }
+  }
+
   return {
-    OMK_SKILL_HINTS: (routing.skills ?? []).join(","),
-    OMK_MCP_HINTS: (routing.mcpServers ?? []).join(","),
-    OMK_TOOL_HINTS: (routing.tools ?? []).join(","),
-    OMK_HOOK_HINTS: (routing.hooks ?? []).join(","),
+    OMK_SKILL_HINTS: Array.from(skillHints).join(","),
+    OMK_MCP_HINTS: Array.from(mcpHints).join(","),
+    OMK_TOOL_HINTS: Array.from(toolHints).join(","),
+    OMK_HOOK_HINTS: Array.from(hookHints).join(","),
     OMK_ROUTE_SOURCE: routing.routeSource ?? "",
     OMK_ROUTE_AUTO_SPAWNED: String(routing.autoSpawned ?? false),
     OMK_ROUTE_SPAWN_REASON: routing.spawnReason ?? "",
@@ -473,7 +547,7 @@ export function discoverRoutingInventory(projectRoot = getRoutingProjectRoot()):
   const config = readFlatConfig(root);
   const skillsScope = normalizeScope(process.env.OMK_SKILLS_SCOPE ?? config["runtime.skills_scope"], "project");
   const mcpScope = normalizeScope(process.env.OMK_MCP_SCOPE ?? config["runtime.mcp_scope"], "project");
-  const hooksScope = normalizeScope(process.env.OMK_HOOKS_SCOPE ?? config["runtime.hooks_scope"] ?? config["runtime.skills_scope"], "project");
+  const hooksScope = normalizeScope(process.env.OMK_HOOKS_SCOPE ?? config["runtime.hooks_scope"], "project");
   const key = [root, skillsScope, mcpScope, hooksScope].join("|");
   if (inventoryCache?.key === key) return inventoryCache.value;
 
@@ -578,13 +652,13 @@ function rejectionReason(candidate: RouteCandidate, readOnly: boolean, budget: D
 
 function inferReadOnly(input: RoutingInput, text: string): boolean {
   if ((input.outputs ?? []).some((output) => output.gate && output.gate !== "none")) return false;
-  if (["explorer", "researcher", "reviewer", "architect", "planner", "router"].includes(input.role)) return true;
+  if (["explorer", "researcher", "reviewer", "architect", "planner", "router", "aggregator", "interviewer", "ontology", "vision-debugger"].includes(input.role)) return true;
   return !/\b(write|edit|implement|fix|create|delete|modify|코드작성|수정|구현)\b/.test(text);
 }
 
 function inferEvidenceRequired(input: RoutingInput, text: string): boolean {
   return (input.outputs ?? []).some((output) => output.gate && output.gate !== "none")
-    || ["qa", "reviewer", "verifier"].includes(input.role)
+    || ["qa", "tester", "reviewer", "verifier", "aggregator"].includes(input.role)
     || /\b(test|verify|evidence|quality|gate|citation|검증|테스트|근거)\b/.test(text);
 }
 
@@ -598,6 +672,28 @@ function limitForBudget(budget: DagContextBudget, max: number): number {
   if (budget === "tiny") return Math.max(1, Math.min(max, 2));
   if (budget === "small") return Math.max(1, max);
   return max;
+}
+
+function mergeBoundedRoutes(
+  discovered: readonly string[],
+  autoAssigned: readonly string[],
+  budget: DagContextBudget,
+  defaultMax: number,
+  requiredPreset?: readonly string[]
+): string[] {
+  const merged = unique([...discovered, ...autoAssigned]);
+  if (!requiredPreset || requiredPreset.length === 0) {
+    return merged.slice(0, limitForBudget(budget, defaultMax));
+  }
+  const budgetLimit = limitForBudget(budget, defaultMax);
+  const missing = requiredPreset.filter((id) => !merged.includes(id));
+  // Preserve top discovered items within their budget limit, then append all
+  // required preset items (both those already present in merged and any missing).
+  const discoveredKept = merged.filter(
+    (id, idx) => idx < budgetLimit && !requiredPreset.includes(id)
+  );
+  const presetInMerged = merged.filter((id) => requiredPreset.includes(id));
+  return unique([...discoveredKept, ...presetInMerged, ...missing]);
 }
 
 function renderRationale(scored: ScoredRoute[], budget: DagContextBudget): string {
@@ -620,7 +716,7 @@ function addDefaultHookHints(
     maybePush("awesome-agent-skills-router.sh");
     maybePush("session-context.sh");
   }
-  if (evidenceRequired || ["reviewer", "qa", "verifier"].includes(role)) {
+  if (evidenceRequired || ["reviewer", "qa", "tester", "verifier", "aggregator"].includes(role)) {
     maybePush("subagent-stop-audit.sh");
     maybePush("stop-verify.sh");
   }
@@ -758,10 +854,10 @@ export function redactMcpConfig(cfg: unknown): unknown {
 function loadMergedMcpConfigSync(
   projectRoot: string,
   scope: "project" | "all" | "none"
-): { servers: Record<string, unknown>; sources: Map<string, "project" | "global">; diagnostics: RoutingDiagnostic[] } {
+): { servers: Record<string, unknown>; sources: Map<string, RouteSource>; diagnostics: RoutingDiagnostic[] } {
   const root = resolve(projectRoot);
   const servers: Record<string, unknown> = {};
-  const sources = new Map<string, "project" | "global">();
+  const sources = new Map<string, RouteSource>();
   const diagnostics: RoutingDiagnostic[] = [];
 
   if (scope === "none") {
@@ -809,13 +905,18 @@ function loadMergedMcpConfigSync(
     }
   }
 
+  if (!sources.has("omk-project")) {
+    servers["omk-project"] = { type: "builtin", command: "omk", args: ["mcp", "serve", "omk-project"] };
+    sources.set("omk-project", "builtin");
+  }
+
   return { servers, sources, diagnostics };
 }
 
 export function loadMergedMcpConfig(
   projectRoot: string,
   scope: "project" | "all" | "none"
-): Promise<{ servers: Record<string, unknown>; sources: Map<string, "project" | "global">; diagnostics: RoutingDiagnostic[] }> {
+): Promise<{ servers: Record<string, unknown>; sources: Map<string, RouteSource>; diagnostics: RoutingDiagnostic[] }> {
   return Promise.resolve(loadMergedMcpConfigSync(projectRoot, scope));
 }
 
@@ -909,7 +1010,7 @@ function normalizeConfigValue(value: string): string {
 function normalizeScope(value: string | undefined, fallback: RoutingInventory["skillsScope"]): RoutingInventory["skillsScope"] {
   const normalized = value?.trim().toLowerCase();
   if (normalized === "none" || normalized === "off" || normalized === "disabled") return "none";
-  if (normalized === "all" || normalized === "global") return "all";
+  if (normalized === "all" || normalized === "global" || normalized === "local-user" || normalized === "local_user" || normalized === "personal" || normalized === "user") return "all";
   if (normalized === "project" || normalized === "local") return "project";
   return fallback;
 }

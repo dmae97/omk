@@ -5,7 +5,7 @@ import type { DagNode } from "../orchestration/dag.js";
 import { CappedOutputBuffer } from "../util/output-buffer.js";
 import { getOmkResourceSettings } from "../util/resource-profile.js";
 import { getOmkVersionSync } from "../util/version.js";
-import { checkCommand } from "../util/shell.js";
+import { checkCommand, resolveKimiBin } from "../util/shell.js";
 
 export interface JsonRpcRequest<TParams = unknown> {
   jsonrpc: "2.0";
@@ -98,8 +98,10 @@ export class KimiWireClient {
   }
 
   async start(): Promise<void> {
+    const kimiBin = resolveKimiBin();
+
     // Binary resolution guard: verify `kimi` is reachable before spawn
-    const kimiAvailable = await checkCommand("kimi");
+    const kimiAvailable = await checkCommand(kimiBin);
     if (!kimiAvailable) {
       throw new Error(
         "[omk] `kimi` command not found in PATH. " +
@@ -113,7 +115,7 @@ export class KimiWireClient {
     if (this.options.configFile) args.push("--config-file", this.options.configFile);
     if (this.options.mcpConfigFile) args.push("--mcp-config-file", this.options.mcpConfigFile);
 
-    this.proc = spawn("kimi", args, {
+    this.proc = spawn(kimiBin, args, {
       cwd: this.options.cwd,
       env: this.options.env ?? process.env,
       stdio: ["pipe", "pipe", "pipe"],

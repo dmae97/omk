@@ -10,6 +10,8 @@ import { runQualityGate } from "../mcp/quality-gate.js";
 import { saveCheckpoint } from "../util/checkpoint.js";
 import { createWorktree } from "../util/worktree.js";
 import { successResult, failureResult, type CommandResult } from "../util/cli-contract.js";
+import { getOmkResourceSettings } from "../util/resource-profile.js";
+import { defaultScopedRoleAgentFile, writeScopedAgentFile } from "../util/scoped-agent-file.js";
 
 const root = getProjectRoot();
 
@@ -31,18 +33,32 @@ async function runAgentStep(
   if (!(await pathExists(agentFile))) {
     throw new Error(`Agent role not found: ${agentFile}`);
   }
+  const sessionEnv = createOmkSessionEnv(root, createOmkSessionId("run"));
+  const env = { ...sessionEnv, ...opts.env };
+  const resources = await getOmkResourceSettings();
+  const scopedAgentFile = await writeScopedAgentFile({
+    baseAgentFile: agentFile,
+    outputFile: defaultScopedRoleAgentFile(root, env.OMK_RUN_ID ?? env.OMK_SESSION_ID, role),
+    role,
+    resources,
+  });
   const args = [
     "--print",
     "--output-format=stream-json",
     "--agent-file",
-    agentFile,
+    scopedAgentFile,
   ];
-  await injectKimiGlobals(args, { role });
+  await injectKimiGlobals(args, {
+    role,
+    mcpScope: resources.mcpScope,
+    skillsScope: resources.skillsScope,
+    hooksScope: resources.hooksScope,
+  });
   args.push("-p", prompt);
   const result = await runShell("kimi", args, {
     cwd: opts.cwd ?? root,
     timeout: opts.timeout ?? 300_000,
-    env: { ...createOmkSessionEnv(root, createOmkSessionId("run")), ...opts.env },
+    env,
   });
   return result;
 }

@@ -1,8 +1,8 @@
 import { runShell, checkCommand } from "../util/shell.js";
 import { getProjectRoot, pathExists, writeFileSafe, readTextFile } from "../util/fs.js";
-import { dirname, isAbsolute, join, resolve } from "path";
+import { delimiter, dirname, isAbsolute, join, resolve } from "path";
 import { mkdir, readdir, rm } from "fs/promises";
-import { readFileSync } from "fs";
+import { existsSync, readFileSync, readdirSync } from "fs";
 import { style, header, status } from "../util/theme.js";
 import { t } from "../util/i18n.js";
 
@@ -39,6 +39,21 @@ interface OpenDesignResolvedOptions {
   printOnly: boolean;
   update: boolean;
   webPort: string;
+}
+
+interface OpenDesignNodeRuntime {
+  corepackCommand: string;
+  env?: Record<string, string>;
+  nodeCommand?: string;
+}
+
+interface OpenDesignNodeRuntimeOptions {
+  env?: NodeJS.ProcessEnv;
+  home?: string;
+  nodeVersion?: string;
+  pathExistsSync?: (path: string) => boolean;
+  platform?: NodeJS.Platform;
+  readDirSync?: (path: string) => string[];
 }
 
 export interface OpenDesignBrowserOpener {
@@ -94,6 +109,79 @@ export function buildOpenDesignToolsDevArgs(options: Pick<OpenDesignResolvedOpti
   ];
 }
 
+function parseNodeMajor(version: string): number | null {
+  const match = /^v?(\d+)/.exec(version.trim());
+  if (!match) return null;
+  const major = Number(match[1]);
+  return Number.isInteger(major) ? major : null;
+}
+
+function nodeBinaryName(platform: NodeJS.Platform): string {
+  return platform === "win32" ? "node.exe" : "node";
+}
+
+function corepackBinaryName(platform: NodeJS.Platform): string {
+  return platform === "win32" ? "corepack.cmd" : "corepack";
+}
+
+function buildOpenDesignNodeRuntime(nodeCommand: string, env: NodeJS.ProcessEnv, platform: NodeJS.Platform): OpenDesignNodeRuntime {
+  const binDir = dirname(nodeCommand);
+  const pathKey = Object.keys(env).find((key) => key.toLowerCase() === "path") ?? "PATH";
+  const currentPath = env[pathKey] ?? "";
+  return {
+    corepackCommand: join(binDir, corepackBinaryName(platform)),
+    env: {
+      [pathKey]: currentPath ? `${binDir}${delimiter}${currentPath}` : binDir,
+    },
+    nodeCommand,
+  };
+}
+
+function findNvmNode24(options: Required<Pick<OpenDesignNodeRuntimeOptions, "env" | "home" | "pathExistsSync" | "platform" | "readDirSync">>): string | null {
+  const nvmDir = options.env.NVM_DIR ?? join(options.home, ".nvm");
+  const versionsDir = join(nvmDir, "versions", "node");
+  let entries: string[];
+  try {
+    entries = options.readDirSync(versionsDir);
+  } catch {
+    return null;
+  }
+
+  const nodeName = nodeBinaryName(options.platform);
+  const candidates = entries
+    .filter((entry) => parseNodeMajor(entry) === 24)
+    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+  for (const entry of candidates) {
+    const nodeCommand = join(versionsDir, entry, "bin", nodeName);
+    if (options.pathExistsSync(nodeCommand)) return nodeCommand;
+  }
+  return null;
+}
+
+export function resolveOpenDesignNodeRuntime(options: OpenDesignNodeRuntimeOptions = {}): OpenDesignNodeRuntime | null {
+  const env = options.env ?? process.env;
+  const platform = options.platform ?? process.platform;
+  const nodeVersion = options.nodeVersion ?? process.version;
+  if (parseNodeMajor(nodeVersion) === 24) {
+    return { corepackCommand: "corepack" };
+  }
+
+  const pathExists = options.pathExistsSync ?? existsSync;
+  const explicitNode = env.OMK_OPEN_DESIGN_NODE24;
+  if (explicitNode && pathExists(explicitNode)) {
+    return buildOpenDesignNodeRuntime(explicitNode, env, platform);
+  }
+
+  const nodeCommand = findNvmNode24({
+    env,
+    home: options.home ?? process.env.HOME ?? "",
+    pathExistsSync: pathExists,
+    platform,
+    readDirSync: options.readDirSync ?? readdirSync,
+  });
+  return nodeCommand ? buildOpenDesignNodeRuntime(nodeCommand, env, platform) : null;
+}
+
 const OPEN_DESIGN_OMK_AGENT_DEF = `  {
     id: 'omk',
     name: 'OMK CLI',
@@ -120,6 +208,37 @@ const OPEN_DESIGN_OMK_AGENT_DEF = `  {
     promptViaStdin: true,
     streamFormat: 'plain',
   },
+`;
+
+const OPEN_DESIGN_OMK_RUNTIME_AGENT_DEF = `import { DEFAULT_MODEL_OPTION } from './shared.js';
+import type { RuntimeAgentDef } from '../types.js';
+
+export const omkAgentDef = {
+    id: 'omk',
+    name: 'OMK CLI',
+    bin: 'omk',
+    versionArgs: ['--version'],
+    fallbackModels: [
+      DEFAULT_MODEL_OPTION,
+      { id: 'kimi-k2.6', label: 'Kimi K2.6 via OMK' },
+      { id: 'kimi-k2-turbo-preview', label: 'kimi-k2-turbo-preview via OMK' },
+    ],
+    buildArgs: (prompt, _imagePaths, _extra, options = {}, runtimeContext = {}) => {
+      const args = ['open-design-agent', '--stdio'];
+      if (runtimeContext.cwd) {
+        args.push('--cwd', runtimeContext.cwd);
+      }
+      if (options.model && options.model !== 'default') {
+        args.push('--model', options.model);
+      }
+      if (String(prompt || '').trim() === 'Reply with only: ok') {
+        args.push('--smoke');
+      }
+      return args;
+    },
+    promptViaStdin: true,
+    streamFormat: 'plain',
+} satisfies RuntimeAgentDef;
 `;
 
 const OPEN_DESIGN_OMK_SETTINGS_FIELD = `  {
@@ -167,10 +286,14 @@ function patchOpenDesignAgentsSource(source: string): string {
 function patchOpenDesignAppConfigSource(source: string): string {
   if (source.includes("['omk', new Set(['OMK_BIN'])]")) return source;
   const marker = "  ['codex', new Set(['CODEX_HOME', 'CODEX_BIN'])],";
-  if (!source.includes(marker)) {
+  if (source.includes(marker)) {
+    return source.replace(marker, `${marker}\n  ['omk', new Set(['OMK_BIN'])],`);
+  }
+  const codexAllowListLine = /^(\s*\['codex', new Set\(\[[^\n]+\]\)],)$/m;
+  if (!codexAllowListLine.test(source)) {
     throw new Error("Open Design app-config.ts agent env allow-list changed; cannot allow OMK_BIN safely.");
   }
-  return source.replace(marker, `${marker}\n  ['omk', new Set(['OMK_BIN'])],`);
+  return source.replace(codexAllowListLine, "$1\n  ['omk', new Set(['OMK_BIN'])],");
 }
 
 function patchOpenDesignSettingsSource(source: string): string {
@@ -184,9 +307,14 @@ function patchOpenDesignSettingsSource(source: string): string {
   },
 `;
     if (!next.includes(marker)) {
-      throw new Error("Open Design SettingsDialog.tsx CLI env field layout changed; cannot add OMK_BIN field safely.");
+      const codexBinField = /(\s*\{\n\s*agentId: 'codex',\n\s*envKey: 'CODEX_BIN',\n\s*labelKey: 'settings\.cliEnvCodexBin',\n\s*placeholder: '\/absolute\/path\/to\/codex',\n\s*\},\n)/;
+      if (!codexBinField.test(next)) {
+        throw new Error("Open Design SettingsDialog.tsx CLI env field layout changed; cannot add OMK_BIN field safely.");
+      }
+      next = next.replace(codexBinField, `$1${OPEN_DESIGN_OMK_SETTINGS_FIELD}`);
+    } else {
+      next = next.replace(marker, `${marker}${OPEN_DESIGN_OMK_SETTINGS_FIELD}`);
     }
-    next = next.replace(marker, `${marker}${OPEN_DESIGN_OMK_SETTINGS_FIELD}`);
   }
   return next;
 }
@@ -204,11 +332,40 @@ function patchOpenDesignAgentLabelsSource(source: string): string {
 
 function patchOpenDesignAgentIconSource(source: string): string {
   if (source.includes("OMK — Kimicat")) return source;
+  if (source.includes("const ICON_EXT: Record<string, 'svg' | 'png'>")) return source;
   const marker = "  // Gemini — Google blue/purple with diamond spark.";
   if (!source.includes(marker)) {
     throw new Error("Open Design AgentIcon.tsx visual marker changed; cannot add OMK visual safely.");
   }
   return source.replace(marker, `${OPEN_DESIGN_OMK_VISUAL}${marker}`);
+}
+
+function patchOpenDesignRuntimeRegistrySource(source: string): string {
+  let next = source;
+  if (!next.includes("omkAgentDef")) {
+    const importMarker = "import { codexAgentDef } from './defs/codex.js';";
+    if (!next.includes(importMarker)) {
+      throw new Error("Open Design runtime registry import layout changed; cannot register OMK adapter safely.");
+    }
+    next = next.replace(importMarker, `${importMarker}\nimport { omkAgentDef } from './defs/omk.js';`);
+  }
+  if (!next.includes("  omkAgentDef,")) {
+    const defMarker = "  codexAgentDef,";
+    if (!next.includes(defMarker)) {
+      throw new Error("Open Design runtime registry agent list changed; cannot register OMK adapter safely.");
+    }
+    next = next.replace(defMarker, `${defMarker}\n  omkAgentDef,`);
+  }
+  return next;
+}
+
+function patchOpenDesignRuntimeExecutablesSource(source: string): string {
+  if (source.includes("['omk', 'OMK_BIN']")) return source;
+  const marker = "  ['codex', 'CODEX_BIN'],";
+  if (!source.includes(marker)) {
+    throw new Error("Open Design runtime executables env-key layout changed; cannot register OMK_BIN safely.");
+  }
+  return source.replace(marker, `${marker}\n  ['omk', 'OMK_BIN'],`);
 }
 
 const OPEN_DESIGN_ROOT_PAGE_SOURCE = `import { ClientApp } from './[...slug]/client-app';
@@ -336,6 +493,31 @@ async function ensureOpenDesignAwesomeDesignMdPromptTemplate(checkoutDir: string
   );
 }
 
+async function ensureOpenDesignRuntimeRegistry(checkoutDir: string, changedFiles: string[]): Promise<boolean> {
+  const registryPath = join(checkoutDir, "apps/daemon/src/runtimes/registry.ts");
+  if (!(await pathExists(registryPath))) return false;
+
+  await writeOpenDesignRelativeFileIfChanged(
+    checkoutDir,
+    "apps/daemon/src/runtimes/defs/omk.ts",
+    OPEN_DESIGN_OMK_RUNTIME_AGENT_DEF,
+    changedFiles
+  );
+  await patchOpenDesignFile(
+    checkoutDir,
+    "apps/daemon/src/runtimes/registry.ts",
+    patchOpenDesignRuntimeRegistrySource,
+    changedFiles
+  );
+  await patchOpenDesignFile(
+    checkoutDir,
+    "apps/daemon/src/runtimes/executables.ts",
+    patchOpenDesignRuntimeExecutablesSource,
+    changedFiles
+  );
+  return true;
+}
+
 async function ensureOpenDesignSpaRoutes(checkoutDir: string, changedFiles: string[]): Promise<void> {
   const optionalRouteDir = join(checkoutDir, "apps/web/app/[[...slug]]");
   const optionalClientPath = join(optionalRouteDir, "client-app.tsx");
@@ -438,7 +620,10 @@ async function writeOpenDesignOmkAppConfig(checkoutDir: string, omkBin: string |
 
 export async function ensureOpenDesignOmkBridge(checkoutDir: string): Promise<OpenDesignOmkBridgeResult> {
   const changedFiles: string[] = [];
-  await patchOpenDesignFile(checkoutDir, "apps/daemon/src/agents.ts", patchOpenDesignAgentsSource, changedFiles);
+  const usesRuntimeRegistry = await ensureOpenDesignRuntimeRegistry(checkoutDir, changedFiles);
+  if (!usesRuntimeRegistry) {
+    await patchOpenDesignFile(checkoutDir, "apps/daemon/src/agents.ts", patchOpenDesignAgentsSource, changedFiles);
+  }
   await patchOpenDesignFile(checkoutDir, "apps/daemon/src/app-config.ts", patchOpenDesignAppConfigSource, changedFiles);
   await patchOpenDesignFile(checkoutDir, "apps/web/src/components/SettingsDialog.tsx", patchOpenDesignSettingsSource, changedFiles);
   await patchOpenDesignFile(checkoutDir, "apps/web/src/utils/agentLabels.ts", patchOpenDesignAgentLabelsSource, changedFiles);
@@ -481,11 +666,18 @@ async function requireCommand(command: string, hint: string): Promise<void> {
   process.exit(1);
 }
 
-function requireNode24(): void {
-  const major = Number(process.versions.node.split(".")[0]);
-  if (major === 24) return;
+function requireOpenDesignNodeRuntime(): OpenDesignNodeRuntime {
+  const runtime = resolveOpenDesignNodeRuntime();
+  if (runtime) {
+    if (runtime.nodeCommand) {
+      console.log(status.warn(`Using Node.js 24 runtime for Open Design: ${runtime.nodeCommand}`));
+    }
+    return runtime;
+  }
+
   console.error(status.error(`Open Design requires Node.js 24.x; current Node is ${process.version}.`));
   console.error(style.gray("  Example: fnm install 24 && fnm use 24"));
+  console.error(style.gray("  Or set OMK_OPEN_DESIGN_NODE24=/absolute/path/to/node"));
   process.exit(1);
 }
 
@@ -528,7 +720,7 @@ async function ensureOpenDesignCheckout(options: OpenDesignResolvedOptions): Pro
   }
 }
 
-async function installOpenDesignDependencies(options: OpenDesignResolvedOptions): Promise<void> {
+async function installOpenDesignDependencies(options: OpenDesignResolvedOptions, runtime: OpenDesignNodeRuntime): Promise<void> {
   if (!options.install) {
     console.log(status.warn("Skipping pnpm install because --no-install was passed."));
     return;
@@ -541,8 +733,9 @@ async function installOpenDesignDependencies(options: OpenDesignResolvedOptions)
   }
 
   console.log(style.gray("Installing Open Design dependencies with Corepack/pnpm…"));
-  const install = await runShell("corepack", ["pnpm", "install", "--frozen-lockfile"], {
+  const install = await runShell(runtime.corepackCommand, ["pnpm", "install", "--frozen-lockfile"], {
     cwd: options.dir,
+    env: runtime.env,
     timeout: 900000,
     stdio: "inherit",
   });
@@ -816,18 +1009,18 @@ export async function designOpenDesignCommand(options: DesignOpenDesignOptions =
     return;
   }
 
-  requireNode24();
+  const nodeRuntime = requireOpenDesignNodeRuntime();
   await requireCommand("git", "Install git, then rerun: omk design open-design");
-  await requireCommand("corepack", "Install/enable Node Corepack, then rerun: corepack enable");
+  await requireCommand(nodeRuntime.corepackCommand, "Install/enable Node Corepack, then rerun: corepack enable");
 
-  const corepack = await runShell("corepack", ["enable"], { timeout: 60000 });
+  const corepack = await runShell(nodeRuntime.corepackCommand, ["enable"], { env: nodeRuntime.env, timeout: 60000 });
   if (corepack.failed) {
     console.log(status.warn("corepack enable failed; continuing because Corepack may already be active."));
   }
 
   await ensureOpenDesignCheckout(resolved);
   const bridge = await ensureOpenDesignOmkBridge(resolved.dir);
-  await installOpenDesignDependencies(resolved);
+  await installOpenDesignDependencies(resolved, nodeRuntime);
 
   const webUrl = `http://localhost:${resolved.webPort}`;
   const args = buildOpenDesignToolsDevArgs(resolved);
@@ -841,10 +1034,11 @@ export async function designOpenDesignCommand(options: DesignOpenDesignOptions =
   console.log(style.gray(`Default local agent: OMK CLI${bridge.omkBin ? ` (${bridge.omkBin})` : ""}`));
   console.log(style.gray(`App config: ${bridge.appConfigPath}`));
   console.log(style.gray(`Starting local Open Design daemon + web at ${webUrl}…`));
-  console.log(style.gray(`Command: ${formatCommand("corepack", args)}`));
+  console.log(style.gray(`Command: ${formatCommand(nodeRuntime.corepackCommand, args)}`));
 
-  const launch = await runShell("corepack", args, {
+  const launch = await runShell(nodeRuntime.corepackCommand, args, {
     cwd: resolved.dir,
+    env: nodeRuntime.env,
     timeout: resolved.foreground ? 0 : 180000,
     stdio: resolved.foreground ? "inherit" : "pipe",
   });

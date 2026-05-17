@@ -14,6 +14,7 @@ export function registerMcpDagCronScreenshotCommands(program: Command): void {
     .command("doctor")
     .description(t("cmd.mcpDoctorDesc"))
     .option("--json", "Output JSON")
+    .option("--fix", "Apply safe project-local MCP repairs before reporting")
     .action(async (options) => {
       const { mcpDoctorCommand } = await import("../commands/mcp.js");
       await mcpDoctorCommand(options);
@@ -24,6 +25,13 @@ export function registerMcpDagCronScreenshotCommands(program: Command): void {
     .action(async (server) => {
       const { mcpTestCommand } = await import("../commands/mcp.js");
       await mcpTestCommand(server);
+    });
+  mcp
+    .command("prewarm <server>")
+    .description("Pre-start an MCP server outside chat to warm package-manager caches")
+    .action(async (server) => {
+      const { mcpPrewarmCommand } = await import("../commands/mcp.js");
+      await mcpPrewarmCommand(server);
     });
   mcp
     .command("serve <server>")
@@ -38,6 +46,9 @@ export function registerMcpDagCronScreenshotCommands(program: Command): void {
           break;
         case "omk-mcp-host":
           await import("../mcp/host.js");
+          break;
+        case "filesystem-readonly":
+          await import("../mcp/filesystem-readonly-server.js");
           break;
         default:
           console.error(`Unknown bundled MCP server: ${server}`);
@@ -75,6 +86,15 @@ export function registerMcpDagCronScreenshotCommands(program: Command): void {
     .action(async (options) => {
       const { mcpSyncGlobalCommand } = await import("../commands/mcp.js");
       await mcpSyncGlobalCommand(options);
+    });
+  mcp
+    .command("migrate")
+    .description("Auto-fix known stale/renamed MCP server package names in config files")
+    .option("-g, --global", "Migrate global ~/.kimi/mcp.json instead of project-local configs")
+    .option("--dry-run", "Show what would be changed without writing")
+    .action(async (options) => {
+      const { mcpMigrateCommand } = await import("../commands/mcp.js");
+      await mcpMigrateCommand({ global: Boolean(options.global), dryRun: Boolean(options.dryRun) });
     });
 
   const dag = program.command("dag").description(t("cli.dagDesc"));

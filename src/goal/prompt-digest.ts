@@ -109,8 +109,20 @@ function sketchPromptIntent(value: string, maxPhrases: number): string[] {
 }
 
 function normalizePromptText(value: string): string {
+  return redactPromptSecrets(
+    value
+      .normalize("NFKC")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
+}
+
+function redactPromptSecrets(value: string): string {
   return value
-    .normalize("NFKC")
-    .replace(/\s+/g, " ")
-    .trim();
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]{12,}/gi, "Bearer [REDACTED_TOKEN]")
+    .replace(/sk-[A-Za-z0-9_-]{16,}/g, "[REDACTED_API_KEY]")
+    .replace(/(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{16,}/g, "[REDACTED_GITHUB_TOKEN]")
+    .replace(/AKIA[0-9A-Z]{16}/g, "[REDACTED_AWS_KEY]")
+    .replace(/[A-Z][A-Z0-9_]*(?:SECRET|TOKEN|KEY|PASSWORD)\s*=\s*[^\s`'"]{6,}/g, "[REDACTED_ENV_SECRET]")
+    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, "[REDACTED_PRIVATE_KEY]");
 }

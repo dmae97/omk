@@ -1,5 +1,6 @@
 import type { GoalSpec, GoalRisk, RiskLevel, SuccessCriterion } from "../contracts/goal.js";
 import type { UserIntent, TaskType } from "../contracts/orchestration.js";
+import { buildIntentFrame } from "./intent-frame.js";
 
 function generateGoalId(): string {
   return new Date().toISOString().replace(/[:.]/g, "-");
@@ -119,6 +120,7 @@ export interface ParsedGoalPrompt {
   risks: string[];
   expectedArtifacts: Array<{ name: string; path?: string }>;
   constraints: string[];
+  intentFrame: import("../contracts/goal.js").IntentFrame;
 }
 
 /**
@@ -148,6 +150,12 @@ export function normalizeGoalPrompt(rawPrompt: string): ParsedGoalPrompt {
 
   const expectedArtifacts = extractArtifactSection(rawPrompt);
 
+  const intentFrame = buildIntentFrame(rawPrompt, {
+    constraints,
+    successCriteria,
+    expectedArtifacts,
+  });
+
   return {
     rawPrompt,
     objective,
@@ -156,6 +164,7 @@ export function normalizeGoalPrompt(rawPrompt: string): ParsedGoalPrompt {
     risks,
     expectedArtifacts,
     constraints,
+    intentFrame,
   };
 }
 
@@ -237,6 +246,13 @@ export function normalizeGoal(input: NormalizedGoalInput): GoalSpec {
   const criteria = input.successCriteria ?? inferSuccessCriteria(objective);
   const riskLevel = input.riskLevel ?? deriveRiskLevel(objective);
   const goalId = `${slugifyTitle(title)}-${generateGoalId()}`;
+  const constraints = input.constraints ?? [];
+  const expectedArtifacts = input.expectedArtifacts ?? [];
+  const intentFrame = buildIntentFrame(input.rawPrompt, {
+    constraints,
+    successCriteria: criteria.map((criterion) => criterion.description),
+    expectedArtifacts,
+  });
 
   return {
     schemaVersion: 1,
@@ -245,16 +261,18 @@ export function normalizeGoal(input: NormalizedGoalInput): GoalSpec {
     rawPrompt: input.rawPrompt,
     objective,
     successCriteria: criteria.map((c) => ({ ...c, inferred: c.inferred ?? false })),
-    constraints: (input.constraints ?? []).map((c, i) => ({ id: `constraint-${i + 1}`, description: c })),
+    constraints: constraints.map((c, i) => ({ id: `constraint-${i + 1}`, description: c })),
     nonGoals: input.nonGoals ?? [],
     risks: input.risks ?? [],
-    expectedArtifacts: (input.expectedArtifacts ?? []).map((a) => ({ name: a.name, path: a.path })),
+    expectedArtifacts: expectedArtifacts.map((a) => ({ name: a.name, path: a.path })),
     status: "draft",
     riskLevel,
     planRevision: 0,
     createdAt: now,
     updatedAt: now,
     runIds: [],
+    intentFrame,
+    actionAtoms: intentFrame.actionAtoms,
   };
 }
 
