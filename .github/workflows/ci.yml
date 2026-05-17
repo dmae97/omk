@@ -48,6 +48,16 @@ jobs:
           exit $exit_code
         env:
           OMK_SKIP_DIST_FRESHNESS: "1"
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-outputs-${{ matrix.os }}-${{ matrix.node-version }}
+          path: |
+            test-output.txt
+            failed-tests.txt
+            test-summary.json
+          if-no-files-found: ignore
       - uses: dtolnay/rust-toolchain@stable
       - run: npm run native:build
       - run: npm run audit:package
