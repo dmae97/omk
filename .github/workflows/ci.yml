@@ -31,6 +31,13 @@ jobs:
       - run: npm run check
       - run: npm run build:clean
       - run: npm run test
+      - name: Print test failures
+        if: failure()
+        run: |
+          echo "=== failed-tests.txt ==="
+          cat failed-tests.txt 2>/dev/null || true
+          echo "=== test-summary.json ==="
+          cat test-summary.json 2>/dev/null || true
       - uses: dtolnay/rust-toolchain@stable
       - run: npm run native:build
       - run: npm run audit:package
