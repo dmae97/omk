@@ -49,6 +49,16 @@ jobs:
       - run: npm run yaml:check
       - run: npm run build:clean
       - run: OMK_SKIP_DIST_FRESHNESS=1 npm test
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-outputs
+          path: |
+            test-output.txt
+            failed-tests.txt
+            test-summary.json
+          if-no-files-found: ignore
       - name: Download native safety artifacts
         uses: actions/download-artifact@v8
         with:
