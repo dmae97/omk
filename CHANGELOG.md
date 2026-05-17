@@ -1,5 +1,34 @@
 # Changelog
 
+## v1.1.17 — Full agent MCP/skills/hooks enablement and parallel orchestration (2026-05-18)
+
+### New
+- **Every OMK agent now has MCP, skills, and hooks** — All 15 generated subagent roles (explorer, planner, architect, coder, reviewer, security, qa, tester, researcher, integrator, aggregator, interviewer, ontology, vision-debugger, plus explore/plan aliases) now inherit `OMK_MCP_ENABLED`, `OMK_SKILLS_ENABLED`, and `OMK_HOOKS_ENABLED` through the Okabe base agent. Runtime scope controls actual availability; agents receive sanitized harness digests instead of raw inventory dumps.
+- **Parallel subagent orchestration** — Root coordinator explicitly manages parallel worker lanes with independent context, each subagent receiving scoped MCP/skills/hooks when runtime scope permits. Worker lanes are isolated until review/merge.
+
+### Improved
+- **Global init UX clarity** — `omk init --global` documentation now explicitly notes: press Enter to accept defaults on input prompts, and wait for the MCP timeout (default 15s) instead of interrupting npx-based server resolution.
+- **README maturity labeling** — Added explicit Global MCP instability warning; all agent capabilities documented; parallel orchestration emphasized.
+
+### Known Limitations & Remaining Issues
+- **P0 — Global MCP instability**: `omk init --global` can fail or hang when global MCP servers require dependency resolution. Workaround: use `omk init` (project-local) which is stable, or manually configure `~/.kimi/mcp.json` after init.
+- **P0 — Provider fallback metadata**: rate-limit, timeout, and Kimi-fallback variant tests are scaffolded but not yet locked in CI.
+- **P0 — Machine-readable CLI envelopes**: JSON output contracts for `omk graph`, `omk summary`, and `omk workflow` are partial; consumers should pin to the current surface.
+- **P1 — Graph audit evidence**: `omk graph view` links nodes to runs/goals/providers only when the graph backend has explicitly ingested them; automatic back-linking is pending.
+- **P2 — `omk team` runtime reporting**: tmux pane health, artifact sync, and verification handoff are manual; automated worker-start inside panes is not yet implemented.
+- **P2 — Provider-quality gates**: DeepSeek preflight health checks exist but do not yet block non-Kimi worker pools.
+
+### Init Global User Notes
+When running `omk init --global`:
+- Prompts for MCP server installation may appear; press **Enter** to accept defaults.
+- Some npx-based MCP servers require a one-time dependency resolution; wait for the **MCP timeout** (default 15s) rather than interrupting.
+- The global `~/.kimi/mcp.json` is no longer modified for `omk-project`; it is injected at runtime automatically.
+- **Known issue**: Global MCP initialization can be unstable. If it hangs, cancel with Ctrl+C and run `omk init` (project-local) instead, then configure MCP manually.
+
+### Verification
+- Release readiness requires `npm run release:check` plus tarball install smoke before publish or tag.
+- Local gate run: `npm run verify && npm run native:build && npm run audit:package`.
+
 ## v1.1.16 — Runtime orchestration and release smoke hardening (2026-05-17)
 
 ### Fixed
