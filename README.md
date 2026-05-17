@@ -69,9 +69,14 @@ omk summary-show
 omk cockpit
 ```
 
-> Current stable package: **v1.1.16**. Stable daily-use core with orchestration surfaces; release-gated and evidence-gated flows are labelled in CLI help and docs.
+> Current stable package: **v1.1.17**. Stable daily-use core with orchestration surfaces; release-gated and evidence-gated flows are labelled in CLI help and docs.
 
 > **Share your verified run:** open a **Verified run** issue with your raw prompt, generated diff, `omk verify --json`, replay screenshot, and known limitation so others can inspect real evidence.
+
+> ⚠️ **Global MCP instability warning:** `omk init --global` can be unstable due to global MCP server dependency resolution.
+> - Input prompts during init: just press **Enter** to accept defaults.
+> - Some `npx`-based MCP servers require a timeout wait (default 15s) — **do not interrupt**.
+> - Global `~/.kimi/mcp.json` is injected at runtime, not modified directly.
 
 ---
 
@@ -212,6 +217,10 @@ OMK stores durable project memory as a graph: goals, decisions, risks, tasks, co
 Parallel lanes can run in isolated Git worktrees. That keeps experiments reversible and makes review/merge a deliberate step instead of a side effect of several agents editing the same files at once.
 
 ### 8. Skills, hooks, MCP, and agents as runtime inputs
+
+**Every OMK agent comes with MCP, skills, and hooks enabled by default.** Every generated subagent — `explorer`, `planner`, `coder`, `reviewer`, `qa`, `tester`, `researcher`, `security`, `integrator`, `aggregator`, `interviewer`, `ontology`, `vision-debugger`, `architect` — inherits scoped MCP, skills, and hooks access when enabled by runtime scope.
+
+**Parallel subagent orchestration:** the root coordinator can summon parallel subagents with independent context lanes, each with their own MCP/skills/hooks scope. Workers do not share mutable context; they operate in isolated lanes until evidence is reviewed and merged.
 
 OMK treats project instructions, agent skills, generated hooks, and MCP servers as part of the control plane:
 
@@ -389,7 +398,7 @@ npm run smoke:pack
 npm run release:check
 ```
 
-The v1.1.16 release line is release-gated and evidence-gated: it stabilizes deterministic IntentFrame/ActionAtom orchestration, chat startup schema preflight, MCP duplicate handling, agent MCP/skills/hooks propagation, and doctor/init/pack smoke behavior while preserving package audit, smoke-pack checks, native safety normalization, replay/inspect/diff-runs, skill assigner, decision trace coverage, and CI release gates.
+The v1.1.17 release line is release-gated and evidence-gated: it stabilizes deterministic IntentFrame/ActionAtom orchestration, chat startup schema preflight, MCP duplicate handling, agent MCP/skills/hooks propagation, and doctor/init/pack smoke behavior while preserving package audit, smoke-pack checks, native safety normalization, replay/inspect/diff-runs, skill assigner, decision trace coverage, and CI release gates.
 
 **MCP fetch startup note:** if your personal Kimi config still starts fetch with `uvx mcp-server-fetch`, each disposable or isolated Kimi HOME may re-resolve Python dependencies before MCP tools appear. Prefer a persistent entrypoint:
 
