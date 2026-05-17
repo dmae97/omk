@@ -18,10 +18,12 @@ function withTempProject(fn) {
 }
 
 function runHarness(root, args = [], env = {}) {
+  const baseEnv = { ...process.env, NO_COLOR: "1" };
+  delete baseEnv.OMK_SKIP_DIST_FRESHNESS;
   return spawnSync(process.execPath, [RUN_TESTS, ...args], {
     cwd: root,
     encoding: "utf-8",
-    env: { ...process.env, NO_COLOR: "1", ...env },
+    env: { ...baseEnv, ...env },
   });
 }
 
