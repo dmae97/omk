@@ -269,6 +269,14 @@ test("chat smoke validates startup without launching Kimi", async () => {
       env,
     });
 
+    if (result.status !== 0) {
+      console.log("=== chat smoke stdout ===");
+      console.log(result.stdout);
+      console.log("=== chat smoke stderr ===");
+      console.log(result.stderr);
+      console.log("=== chat smoke env (relevant) ===");
+      console.log({ HOME: env.HOME, OMK_PROJECT_ROOT: env.OMK_PROJECT_ROOT });
+    }
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(existsSync(markerPath), false, "Kimi should not launch during chat smoke");
     const report = JSON.parse(result.stdout);

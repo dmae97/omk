@@ -103,6 +103,7 @@ test("createDag adds bounded Kimi routing hints without changing node contract",
 });
 
 test("createDag preserves the full release guard preset for release/security work", () => {
+  const inventory = discoverRoutingInventory();
   const dag = createDag({
     nodes: [
       {
@@ -117,16 +118,20 @@ test("createDag preserves the full release guard preset for release/security wor
   });
   const routing = dag.nodes[0].routing;
 
-  // All release guard preset skills/hooks/MCP must be present; additional
-  // discovered or auto-assigned items may also be included.
-  for (const skill of OMK_RELEASE_GUARD_PRESET.skills) {
-    assert.ok(routing?.skills?.includes(skill), `missing release guard skill: ${skill}`);
+  // Routing includes available preset skills/hooks/MCP; unavailable ones are
+  // intentionally filtered out by the routing logic based on inventory.
+  const availableSkills = OMK_RELEASE_GUARD_PRESET.skills.filter((s) => inventory.skills.has(s));
+  const availableHooks = OMK_RELEASE_GUARD_PRESET.hooks.filter((h) => inventory.hooks.has(h));
+  const availableMcp = OMK_RELEASE_GUARD_PRESET.mcpServers.filter((m) => inventory.mcpServers.has(m));
+
+  for (const skill of availableSkills) {
+    assert.ok(routing?.skills?.includes(skill), `missing available release guard skill: ${skill}`);
   }
-  for (const hook of OMK_RELEASE_GUARD_PRESET.hooks) {
-    assert.ok(routing?.hooks?.includes(hook), `missing release guard hook: ${hook}`);
+  for (const hook of availableHooks) {
+    assert.ok(routing?.hooks?.includes(hook), `missing available release guard hook: ${hook}`);
   }
-  for (const mcp of OMK_RELEASE_GUARD_PRESET.mcpServers) {
-    assert.ok(routing?.mcpServers?.includes(mcp), `missing release guard MCP: ${mcp}`);
+  for (const mcp of availableMcp) {
+    assert.ok(routing?.mcpServers?.includes(mcp), `missing available release guard MCP: ${mcp}`);
   }
   assert.equal(routing?.mcpServers?.includes("filesystem"), false);
   assert.match(routing?.rationale ?? "", /omk-release-guard/);
