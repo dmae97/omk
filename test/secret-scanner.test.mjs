@@ -275,12 +275,38 @@ describe("SecretScanner: Arg Sanitization", () => {
     assert.equal(outer.name, "test");
   });
 
+  it("redacts Servarr API key aliases and headers", () => {
+    const scanner = new SecretScanner();
+    const result = scanner.sanitizeArgs({
+      sonarrApiKey: "syntheticservarrapikey1234567890",
+      radarrApiKey: "syntheticradarrapikey1234567890",
+      servarr_api_key: "syntheticgenericapikey1234567890",
+      xApiKey: "syntheticxapikey1234567890",
+      headers: {
+        "X-Api-Key": "syntheticheaderapikey1234567890",
+        Authorization: "Bearer syntheticbearertoken1234567890",
+      },
+      baseUrl: "http://localhost:7878",
+    });
+
+    const serialized = JSON.stringify(result);
+    assert.ok(!serialized.includes("syntheticservarrapikey"));
+    assert.ok(!serialized.includes("syntheticradarrapikey"));
+    assert.ok(!serialized.includes("syntheticgenericapikey"));
+    assert.ok(!serialized.includes("syntheticxapikey"));
+    assert.ok(!serialized.includes("syntheticheaderapikey"));
+    assert.ok(!serialized.includes("syntheticbearertoken"));
+    assert.equal(result.baseUrl, "http://localhost:7878");
+  });
+
   it("SECRET_KEY_NAMES includes expected keys", () => {
     assert.ok(SECRET_KEY_NAMES.has("password"));
     assert.ok(SECRET_KEY_NAMES.has("api_key"));
     assert.ok(SECRET_KEY_NAMES.has("access_token"));
     assert.ok(SECRET_KEY_NAMES.has("private_key"));
     assert.ok(SECRET_KEY_NAMES.has("client_secret"));
+    assert.ok(SECRET_KEY_NAMES.has("xapikey"));
+    assert.ok(SECRET_KEY_NAMES.has("servarrapikey"));
   });
 });
 

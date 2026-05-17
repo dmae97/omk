@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -222,6 +222,43 @@ describe("validateRequiredEntries", () => {
     const result = validateRequiredEntries(files, REQUIRED_ENTRIES);
     assert.ok(result.errors.some((e) => e.includes("dist/cli.js")));
   });
+
+  it("locks root base and canonical OMK role templates into required package entries", () => {
+    const canonicalRoles = [
+      "aggregator",
+      "architect",
+      "coder",
+      "explorer",
+      "integrator",
+      "interviewer",
+      "ontology",
+      "planner",
+      "qa",
+      "researcher",
+      "reviewer",
+      "security",
+      "tester",
+      "vision-debugger",
+    ];
+    for (const template of [
+      "templates/.omk/agents/okabe.yaml",
+      "templates/.omk/agents/root.yaml",
+    ]) {
+      assert.ok(REQUIRED_ENTRIES.includes(template), `missing required package agent template: ${template}`);
+      const content = readFileSync(template, "utf-8");
+      assert.match(content, /OMK_MCP_ENABLED: "true"/);
+      assert.match(content, /OMK_SKILLS_ENABLED: "true"/);
+      assert.match(content, /OMK_HOOKS_ENABLED: "true"/);
+    }
+    for (const role of canonicalRoles) {
+      const template = `templates/.omk/agents/roles/${role}.yaml`;
+      assert.ok(REQUIRED_ENTRIES.includes(template), `missing required package role template: ${role}`);
+      const content = readFileSync(template, "utf-8");
+      assert.match(content, /OMK_MCP_ENABLED: "true"/);
+      assert.match(content, /OMK_SKILLS_ENABLED: "true"/);
+      assert.match(content, /OMK_HOOKS_ENABLED: "true"/);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -232,11 +269,20 @@ describe("validateTemplateAgentReferences", () => {
   it("passes when template root subagent paths are packed", () => {
     const pathSet = new Set([
       "templates/.omk/agents/root.yaml",
+      "templates/.omk/agents/roles/aggregator.yaml",
+      "templates/.omk/agents/roles/architect.yaml",
       "templates/.omk/agents/roles/explorer.yaml",
       "templates/.omk/agents/roles/planner.yaml",
       "templates/.omk/agents/roles/coder.yaml",
       "templates/.omk/agents/roles/reviewer.yaml",
+      "templates/.omk/agents/roles/security.yaml",
       "templates/.omk/agents/roles/qa.yaml",
+      "templates/.omk/agents/roles/tester.yaml",
+      "templates/.omk/agents/roles/researcher.yaml",
+      "templates/.omk/agents/roles/integrator.yaml",
+      "templates/.omk/agents/roles/interviewer.yaml",
+      "templates/.omk/agents/roles/ontology.yaml",
+      "templates/.omk/agents/roles/vision-debugger.yaml",
     ]);
     const result = validateTemplateAgentReferences(pathSet);
     assert.strictEqual(result.errors.length, 0);

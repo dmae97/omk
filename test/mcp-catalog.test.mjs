@@ -1,0 +1,61 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import { getDefaultSelections, RECOMMENDED_MCP_SERVERS } from "../dist/mcp/server-catalog.js";
+
+test("MCP catalog default selections match omk-core-verified external MCPs", () => {
+  assert.deepEqual(getDefaultSelections().sort(), ["context7", "fetch", "github"].sort());
+});
+
+test("MCP catalog uses secret-free commands for core verified defaults", () => {
+  const defaults = new Set(getDefaultSelections());
+  const entries = RECOMMENDED_MCP_SERVERS.filter((server) => defaults.has(server.name));
+
+  assert.equal(entries.length, 3);
+  for (const entry of entries) {
+    const serialized = JSON.stringify(entry);
+    assert.doesNotMatch(serialized, /PERSONAL_ACCESS_TOKEN|Bearer|API_KEY|PASSWORD|SECRET/);
+  }
+
+  const github = entries.find((entry) => entry.name === "github");
+  assert.equal(github?.command, "https://api.githubcopilot.com/mcp/");
+  assert.deepEqual(github?.args, []);
+});
+
+test("MCP catalog includes Playwright for ts product preset without making it a core default", () => {
+  const playwright = RECOMMENDED_MCP_SERVERS.find((entry) => entry.name === "playwright");
+
+  assert.equal(playwright?.command, "npx");
+  assert.deepEqual(playwright?.args, ["-y", "@playwright/mcp@latest"]);
+  assert.equal(playwright?.bundled, undefined);
+  assert.equal(getDefaultSelections().includes("playwright"), false);
+});
+
+test("MCP catalog includes filesystem-readonly for worktree review lanes without making it a core default", () => {
+  const filesystemReadonly = RECOMMENDED_MCP_SERVERS.find((entry) => entry.name === "filesystem-readonly");
+
+  assert.equal(filesystemReadonly?.command, "omk");
+  assert.deepEqual(filesystemReadonly?.args, ["mcp", "serve", "filesystem-readonly"]);
+  assert.equal(filesystemReadonly?.env?.OMK_MCP_MODE, "readonly");
+  assert.equal(filesystemReadonly?.bundled, undefined);
+  assert.equal(getDefaultSelections().includes("filesystem-readonly"), false);
+});
+
+test("MCP catalog includes memory for worktree team lanes without making it a core default", () => {
+  const memory = RECOMMENDED_MCP_SERVERS.find((entry) => entry.name === "memory");
+
+  assert.equal(memory?.command, "npx");
+  assert.deepEqual(memory?.args, ["-y", "@modelcontextprotocol/server-memory"]);
+  assert.equal(memory?.category, "memory");
+  assert.equal(memory?.bundled, undefined);
+  assert.equal(getDefaultSelections().includes("memory"), false);
+});
+
+test("MCP catalog runs PDF server in stdio mode to avoid JSON-RPC stdout pollution", () => {
+  const pdf = RECOMMENDED_MCP_SERVERS.find((entry) => entry.name === "pdf");
+
+  assert.equal(pdf?.command, "npx");
+  assert.deepEqual(pdf?.args, ["-y", "@modelcontextprotocol/server-pdf", "--stdio"]);
+  assert.equal(pdf?.bundled, undefined);
+  assert.equal(getDefaultSelections().includes("pdf"), false);
+});

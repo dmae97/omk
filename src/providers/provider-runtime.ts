@@ -20,7 +20,6 @@ import type { AgentRuntime } from "../runtime/agent-runtime.js";
 import { createKimiPrintRuntime } from "../runtime/kimi-print-runtime.js";
 import { createKimiWireRuntime } from "../runtime/kimi-wire-runtime.js";
 import { createRuntimeRouter } from "../runtime/runtime-router.js";
-import { toTaskResult } from "../runtime/agent-runtime.js";
 export interface ProviderBackedTaskRunnerOptions {
   kimi: KimiTaskRunnerOptions;
   providerPolicy?: ProviderPolicy;
@@ -109,39 +108,28 @@ export async function createProviderBackedTaskRunner(
     },
   });
 
-  // Wrap with RuntimeRouter integration
-  // The wrapped runner builds a ContextCapsule and routes through RuntimeRouter,
-  // falling back to the base runner if no runtime supports the node.
+  // Wrap provider routing with ContextBroker budget metadata. Provider routing
+  // remains authoritative: RuntimeRouter failures are result values, not always
+  // thrown exceptions, so running it first can bypass provider fallback metadata.
   const contextBroker = createContextBroker({ projectRoot: options.kimi.cwd });
 
   const wrappedRunner: TaskRunner = {
     onThinking: baseRunner.onThinking,
     fork: baseRunner.fork,
     async run(node, env) {
-      // Try runtime router first
+      let budgetReport: unknown;
       try {
-        const { capsule, report } = await contextBroker.buildCapsule(node);
-        // Attach report for executor token recording
-        (capsule as unknown as Record<string, unknown>)._budgetReport = report;
-        const controller = new AbortController();
-        const timeoutMs = node.timeoutMs ?? 120_000;
-        const timer = setTimeout(() => controller.abort(), timeoutMs);
-        try {
-          const runtimeResult = await runtimeRouter.runNode(capsule, controller.signal);
-          const taskResult = toTaskResult(runtimeResult);
-          // Attach budget report for executor token recording
-          (taskResult.metadata as Record<string, unknown>)._budgetReport = report;
-          return taskResult;
-        } finally {
-          clearTimeout(timer);
-        }
+        budgetReport = (await contextBroker.buildCapsule(node)).report;
       } catch (err) {
-        // Log runtime router error for debugging before falling back to base runner
         const errorMsg = err instanceof Error ? err.message : String(err);
-        process.stderr.write(`[omk] RuntimeRouter failed for node ${node.id}: ${errorMsg}\n`);
-        // Fallback to base runner (existing Kimi/DeepSeek provider routing)
-        return baseRunner.run(node, env);
+        process.stderr.write(`[omk] ContextBroker failed for node ${node.id}: ${errorMsg}\n`);
       }
+      const taskResult = await baseRunner.run(node, env);
+      taskResult.metadata = {
+        ...(taskResult.metadata ?? {}),
+        ...(budgetReport ? { _budgetReport: budgetReport } : {}),
+      };
+      return taskResult;
     },
   };
 

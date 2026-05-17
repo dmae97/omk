@@ -18,6 +18,7 @@ export interface OmkResourceSettings {
   renderLogo: boolean;
   mcpScope: OmkRuntimeScope;
   skillsScope: OmkRuntimeScope;
+  hooksScope: OmkRuntimeScope;
   ensembleDefaultEnabled: boolean;
   localeLanguage: string;
 }
@@ -80,6 +81,7 @@ async function loadOmkResourceSettings(): Promise<OmkResourceSettings> {
 
   const mcpScope = normalizeScope(env.OMK_MCP_SCOPE ?? config["runtime.mcp_scope"], "project");
   const skillsScope = normalizeScope(env.OMK_SKILLS_SCOPE ?? config["runtime.skills_scope"], "project");
+  const hooksScope = normalizeScope(env.OMK_HOOKS_SCOPE ?? config["runtime.hooks_scope"], "project");
 
   const localeLanguage = normalizeLocaleLanguage(env.OMK_LANGUAGE ?? config["locale.language"]) ?? "en";
 
@@ -94,6 +96,7 @@ async function loadOmkResourceSettings(): Promise<OmkResourceSettings> {
     renderLogo,
     mcpScope,
     skillsScope,
+    hooksScope,
     ensembleDefaultEnabled: profile !== "lite",
     localeLanguage,
   };
@@ -194,7 +197,7 @@ function normalizeScope(value: string | undefined, fallback: OmkRuntimeScope): O
   const normalized = value?.trim().toLowerCase();
   if (normalized === "none" || normalized === "off" || normalized === "disabled") return "none";
   if (normalized === "project" || normalized === "local") return "project";
-  if (normalized === "all" || normalized === "global") return "all";
+  if (normalized === "all" || normalized === "global" || normalized === "local-user" || normalized === "local_user" || normalized === "personal" || normalized === "user") return "all";
   return fallback;
 }
 

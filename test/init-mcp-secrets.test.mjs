@@ -8,6 +8,7 @@ import { basename, delimiter, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const INIT_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "commands", "init.js")).href;
+const RESOURCE_PROFILE_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "util", "resource-profile.js")).href;
 const CLI = join(process.cwd(), "dist", "cli.js");
 const POSIX_EXECUTABLE_BITS_SUPPORTED = process.platform !== "win32";
 
@@ -46,11 +47,71 @@ function runInit(projectRoot, homeRoot, options = {}) {
     env: {
       ...process.env,
       HOME: homeRoot,
+      OMK_ORIGINAL_HOME: "",
       OMK_PROJECT_ROOT: projectRoot,
+      OMK_MCP_SCOPE: "",
+      OMK_SKILLS_SCOPE: "",
+      OMK_HOOKS_SCOPE: "",
       OMK_RENDER_LOGO: "0",
       OMK_STAR_PROMPT: "0",
     },
   });
+}
+
+function runCli(projectRoot, homeRoot, args, extraEnv = {}) {
+  return spawnSync(process.execPath, [CLI, ...args], {
+    cwd: projectRoot,
+    encoding: "utf-8",
+    env: {
+      ...process.env,
+      HOME: homeRoot,
+      OMK_ORIGINAL_HOME: homeRoot,
+      OMK_PROJECT_ROOT: projectRoot,
+      OMK_MCP_SCOPE: "",
+      OMK_SKILLS_SCOPE: "",
+      OMK_HOOKS_SCOPE: "",
+      OMK_RENDER_LOGO: "0",
+      OMK_STAR_PROMPT: "0",
+      ...extraEnv,
+    },
+  });
+}
+
+async function writeFakeKimi(binDir) {
+  await mkdir(binDir, { recursive: true });
+  const kimiPath = join(binDir, "kimi");
+  await writeFile(kimiPath, `#!/usr/bin/env sh
+if [ "$1" = "--version" ]; then
+  echo "kimi, version 1.41.0"
+else
+  echo "Usage: kimi [OPTIONS] COMMAND [ARGS...]"
+  echo "  --agent-file FILE"
+  echo "  --model MODEL"
+  echo "  SearchWeb FetchURL"
+fi
+`, "utf-8");
+  await chmod(kimiPath, 0o755);
+}
+
+function readRuntimeScopes(projectRoot, homeRoot) {
+  const script = [
+    `import { getOmkResourceSettings } from ${JSON.stringify(RESOURCE_PROFILE_MODULE_URL)};`,
+    "const resources = await getOmkResourceSettings();",
+    "console.log(JSON.stringify({ mcpScope: resources.mcpScope, skillsScope: resources.skillsScope, hooksScope: resources.hooksScope }));",
+  ].join(" ");
+  const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
+    cwd: projectRoot,
+    encoding: "utf-8",
+    env: {
+      ...process.env,
+      HOME: homeRoot,
+      OMK_ORIGINAL_HOME: homeRoot,
+      OMK_PROJECT_ROOT: projectRoot,
+      OMK_RENDER_LOGO: "0",
+    },
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  return JSON.parse(result.stdout);
 }
 
 async function runInitDirect(projectRoot, homeRoot, options = {}) {
@@ -79,6 +140,7 @@ async function runInitDirect(projectRoot, homeRoot, options = {}) {
     OMK_STAR_PROMPT: "force",
     OMK_INIT_IMPORT_USER_SKILLS: "",
     OMK_INIT_LOCAL_USER: "",
+    OMK_INIT_MCP_SERVERS: "0",
     CI: "",
     GITHUB_ACTIONS: "",
   };
@@ -140,16 +202,14 @@ test("init does not copy secret-bearing global MCP entries into project config",
 
     const projectMcpRaw = await readFile(join(projectRoot, ".kimi", "mcp.json"), "utf-8");
     const projectMcp = JSON.parse(projectMcpRaw);
-    assert.deepEqual(Object.keys(projectMcp.mcpServers), ["omk-project"]);
-    assert.ok(projectMcp.mcpServers["omk-project"]);
-    assert.equal(projectMcp.mcpServers["omk-project"].env.OMK_PROJECT_ROOT, projectRoot);
-    assert.match(projectMcp.mcpServers["omk-project"].args.join(" "), /mcp serve omk-project|omk-project-mcp/);
+    assert.deepEqual(Object.keys(projectMcp.mcpServers), []);
     assert.equal(projectMcp.mcpServers.remote, undefined);
     assert.doesNotMatch(projectMcpRaw, /SHOULD_NOT_COPY|Authorization|API_TOKEN|Bearer|headers/);
 
     const configToml = await readFile(join(projectRoot, ".omk", "config.toml"), "utf-8");
     assert.match(configToml, /mcp_scope = "project"/);
     assert.match(configToml, /skills_scope = "project"/);
+    assert.match(configToml, /hooks_scope = "project"/);
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(homeRoot, { recursive: true, force: true });
@@ -178,15 +238,84 @@ test("init does not generate a project PNG logo and reports all core scaffold gr
       ".omk/config.toml",
       ".omk/kimi.config.toml",
       ".omk/hooks/pre-shell-guard.sh",
+      ".omk/hooks/worktree-create-guard.sh",
+      ".omk/hooks/branch-diff-snapshot.sh",
+      ".omk/hooks/release-check-before-stop.sh",
+      ".omk/hooks/npm-audit-summary.sh",
+      ".omk/hooks/typecheck-after-edit.sh",
+      ".omk/hooks/eslint-after-edit.sh",
       ".omk/lsp.json",
       ".kimi/mcp.json",
       ".omk/mcp.json",
+      ".omk/runtime-preset.json",
+      ".omk/runtime-presets.json",
       ".omk/memory/project.md",
       ".omk/templates/spec-kit-omk-preset/preset.yml",
     ];
     for (const relativePath of expectedFiles) {
       await readFile(join(projectRoot, relativePath), "utf-8");
     }
+
+    const runtimePreset = JSON.parse(await readFile(join(projectRoot, ".omk", "runtime-preset.json"), "utf-8"));
+    assert.equal(runtimePreset.id, "omk-core-verified");
+    assert.deepEqual(runtimePreset.mcpServers, ["omk-project", "context7", "github", "fetch"]);
+    const runtimePresets = JSON.parse(await readFile(join(projectRoot, ".omk", "runtime-presets.json"), "utf-8"));
+    assert.equal(runtimePresets.defaultPresetId, "omk-core-verified");
+    assert.deepEqual(runtimePresets.presets.map((preset) => preset.id), [
+      "omk-core-verified",
+      "omk-ts-product",
+      "omk-worktree-team",
+      "omk-release-guard",
+    ]);
+
+    const worktreeTeam = runtimePresets.presets.find((preset) => preset.id === "omk-worktree-team");
+    assert.ok(worktreeTeam);
+    assert.deepEqual(worktreeTeam.skills, [
+      "omk-worktree-team",
+      "omk-task-router",
+      "omk-context-broker",
+      "omk-quality-gate",
+      "omk-git-commit-pr",
+    ]);
+    assert.deepEqual(worktreeTeam.hooks, [
+      "worktree-create-guard.sh",
+      "subagent-stop-audit.sh",
+      "branch-diff-snapshot.sh",
+      "stop-verify.sh",
+    ]);
+    assert.deepEqual(worktreeTeam.mcpServers, [
+      "omk-project",
+      "github",
+      "memory",
+      "filesystem-readonly",
+    ]);
+    assert.match(worktreeTeam.purpose, /isolated parallel worker lanes|branch snapshots|quality evidence/i);
+
+    const releaseGuard = runtimePresets.presets.find((preset) => preset.id === "omk-release-guard");
+    assert.ok(releaseGuard);
+    assert.deepEqual(releaseGuard.skills, [
+      "omk-secret-guard",
+      "omk-security-review",
+      "omk-quality-gate",
+      "omk-docs-release",
+      "omk-git-commit-pr",
+      "omk-research-verify",
+    ]);
+    assert.deepEqual(releaseGuard.hooks, [
+      "protect-secrets.sh",
+      "pre-shell-guard.sh",
+      "release-check-before-stop.sh",
+      "npm-audit-summary.sh",
+      "stop-verify.sh",
+    ]);
+    assert.deepEqual(releaseGuard.mcpServers, [
+      "github",
+      "omk-project",
+      "fetch",
+      "context7",
+    ]);
+    assert.match(releaseGuard.purpose, /secret scanning|destructive-shell|audit summaries|checklist evidence/i);
+    assert.match(releaseGuard.purpose, /reference MCP servers|not production-ready|narrow MCP authority/i);
 
     for (const createdLine of [
       "- .omk/agents/root.yaml",
@@ -198,6 +327,8 @@ test("init does not generate a project PNG logo and reports all core scaffold gr
       "- .omk/lsp.json",
       "- .kimi/mcp.json",
       "- .omk/mcp.json",
+      "- .omk/runtime-preset.json",
+      "- .omk/runtime-presets.json",
       "- .omk/memory/",
       "- .omk/templates/spec-kit-omk-preset/",
     ]) {
@@ -206,6 +337,55 @@ test("init does not generate a project PNG logo and reports all core scaffold gr
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("init output converges after doctor --fix without global config writes", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-init-doctor-project-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-init-doctor-home-"));
+  const binRoot = await mkdtemp(join(tmpdir(), "omk-init-doctor-bin-"));
+
+  try {
+    await writeFakeKimi(binRoot);
+    await mkdir(join(homeRoot, ".kimi"), { recursive: true });
+    await writeFile(join(homeRoot, ".kimi", "config.toml"), "default_model = \"kimi\"\n# >>> omk managed hooks\n", "utf-8");
+
+    const env = { PATH: `${binRoot}${delimiter}${process.env.PATH ?? ""}` };
+    const init = runInit(projectRoot, homeRoot);
+    const before = runCli(projectRoot, homeRoot, ["doctor", "--json", "--soft"], env);
+    const fix = runCli(projectRoot, homeRoot, ["doctor", "--fix", "--json", "--soft"], env);
+    const after = runCli(projectRoot, homeRoot, ["doctor", "--json", "--soft"], env);
+
+    assert.equal(init.status, 0, init.stderr || init.stdout);
+    assert.equal(before.status, 0, before.stderr || before.stdout);
+    assert.equal(fix.status, 0, fix.stderr || fix.stdout);
+    assert.equal(after.status, 0, after.stderr || after.stdout);
+    assert.equal(before.stderr, "");
+    assert.equal(fix.stderr, "");
+    assert.equal(after.stderr, "");
+
+    const beforeJson = JSON.parse(before.stdout);
+    const fixJson = JSON.parse(fix.stdout);
+    const afterJson = JSON.parse(after.stdout);
+    assert.equal(beforeJson.scaffold.initialized, true);
+    assert.equal(afterJson.scaffold.initialized, true);
+    assert.equal(afterJson.scaffold.rootYaml, true);
+    assert.ok(Array.isArray(fixJson.fixes.actions));
+    assert.ok(Array.isArray(fixJson.fixes.skipped));
+    assert.equal(afterJson.errors.length, 0);
+    assert.equal(afterJson.warnings.some((warning) => warning.name === "Global MCP"), false);
+    assert.equal(afterJson.warnings.some((warning) => warning.name === "Global Memory"), false);
+    assert.equal(
+      afterJson.errors.every((err) => !/root\.yaml|okabe|OMK_MCP_ENABLED|OMK_SKILLS_ENABLED|OMK_HOOKS_ENABLED/.test(err.message)),
+      true
+    );
+
+    const homeMcpRaw = await readFile(join(homeRoot, ".kimi", "mcp.json"), "utf-8").catch(() => "{\"mcpServers\":{}}");
+    assert.doesNotMatch(homeMcpRaw, /SHOULD_NOT_COPY|Bearer|API_TOKEN|Authorization/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+    await rm(binRoot, { recursive: true, force: true });
   }
 });
 
@@ -221,6 +401,7 @@ test("init scaffolds Kimi subagent names that match generated role aliases", asy
     const kimiAgentsMd = await readFile(join(projectRoot, ".kimi", "AGENTS.md"), "utf-8");
     const rootPrompt = await readFile(join(projectRoot, ".omk", "prompts", "root.md"), "utf-8");
     const rootAgentYaml = await readFile(join(projectRoot, ".omk", "agents", "root.yaml"), "utf-8");
+    const okabeAgentYaml = await readFile(join(projectRoot, ".omk", "agents", "okabe.yaml"), "utf-8");
 
     assert.match(agentsMd, /Repo exploration\s+explorer/);
     assert.doesNotMatch(agentsMd, /Repo exploration\s+explore(?!r)/);
@@ -233,6 +414,57 @@ test("init scaffolds Kimi subagent names that match generated role aliases", asy
     assert.match(rootAgentYaml, /\n    explore:\n      path: \.\/roles\/explorer\.yaml/);
     assert.match(rootAgentYaml, /\n    planner:\n      path: \.\/roles\/planner\.yaml/);
     assert.match(rootAgentYaml, /\n    plan:\n      path: \.\/roles\/planner\.yaml/);
+    assert.match(rootAgentYaml, /OMK_ROLE: "root-coordinator"/);
+    assert.match(rootAgentYaml, /OMK_MCP_ENABLED: "true"/);
+    assert.match(rootAgentYaml, /OMK_SKILLS_ENABLED: "true"/);
+    assert.match(rootAgentYaml, /OMK_HOOKS_ENABLED: "true"/);
+    assert.match(okabeAgentYaml, /extend: default/);
+    assert.match(okabeAgentYaml, /kimi_cli\.tools\.agent:Agent/);
+    assert.match(okabeAgentYaml, /kimi_cli\.tools\.dmail:SendDMail/);
+    assert.match(okabeAgentYaml, /OMK_MCP_ENABLED: "true"/);
+    assert.match(okabeAgentYaml, /OMK_SKILLS_ENABLED: "true"/);
+    assert.match(okabeAgentYaml, /OMK_HOOKS_ENABLED: "true"/);
+    for (const role of [
+      "architect",
+      "coder",
+      "reviewer",
+      "qa",
+      "tester",
+      "researcher",
+      "integrator",
+      "aggregator",
+      "interviewer",
+      "ontology",
+      "vision-debugger",
+    ]) {
+      assert.match(
+        rootAgentYaml,
+        new RegExp(`\\n    ${escapeRegex(role)}:\\n      path: \\.\\/roles\\/${escapeRegex(role)}\\.yaml`)
+      );
+    }
+    for (const role of [
+      "explorer",
+      "planner",
+      "architect",
+      "coder",
+      "reviewer",
+      "qa",
+      "tester",
+      "researcher",
+      "integrator",
+      "aggregator",
+      "interviewer",
+      "ontology",
+      "vision-debugger",
+    ]) {
+      const roleYaml = await readFile(join(projectRoot, ".omk", "agents", "roles", `${role}.yaml`), "utf-8");
+      assert.match(roleYaml, /extend: \.\.\/okabe\.yaml/);
+      assert.match(roleYaml, new RegExp(`name: omk-${escapeRegex(role)}`));
+      assert.match(roleYaml, new RegExp(`OMK_ROLE: "${escapeRegex(role)}"`));
+      assert.match(roleYaml, /OMK_MCP_ENABLED: "true"/);
+      assert.match(roleYaml, /OMK_SKILLS_ENABLED: "true"/);
+      assert.match(roleYaml, /OMK_HOOKS_ENABLED: "true"/);
+    }
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(homeRoot, { recursive: true, force: true });
@@ -311,12 +543,16 @@ test("init installs OMK lifecycle hooks and release guard", async () => {
     assert.match(configToml, /event = "PreCompact"[\s\S]*precompact-checkpoint\.sh/);
     assert.match(configToml, /event = "SubagentStop"[\s\S]*subagent-stop-audit\.sh/);
     assert.match(configToml, /event = "Stop"[\s\S]*stop-verify\.sh/);
+    assert.match(configToml, /event = "Stop"[\s\S]*release-check-before-stop\.sh/);
+    assert.match(configToml, /event = "Stop"[\s\S]*npm-audit-summary\.sh/);
 
     const hooks = [
       ["session-context.sh", "SessionStart", /open-design[\s\S]*graph-view/],
       ["precompact-checkpoint.sh", "PreCompact", /verification state/],
       ["subagent-stop-audit.sh", "SubagentStop", /quality gates/],
       ["stop-verify.sh", "Stop", /Deployment status/],
+      ["release-check-before-stop.sh", "Stop", /release guard/],
+      ["npm-audit-summary.sh", "Stop", /npm audit summary/],
     ];
 
     for (const [scriptName, eventName, contextPattern] of hooks) {
@@ -336,16 +572,57 @@ test("init installs OMK lifecycle hooks and release guard", async () => {
       assert.match(output.hookSpecificOutput.additionalContext, contextPattern);
     }
 
+    for (const scriptName of ["typecheck-after-edit.sh", "eslint-after-edit.sh"]) {
+      const hookPath = join(projectRoot, ".omk", "hooks", scriptName);
+      const hookStat = await stat(hookPath);
+      assertExecutableModeIfSupported(hookStat, `${scriptName} should be executable`);
+
+      const hookResult = spawnSync("bash", [hookPath], {
+        cwd: projectRoot,
+        encoding: "utf-8",
+        input: JSON.stringify({ tool_input: { file_path: "src/app.ts" } }),
+      });
+      assert.equal(hookResult.status, 0, hookResult.stderr || hookResult.stdout);
+
+      const output = JSON.parse(hookResult.stdout);
+      assert.equal(output.hookSpecificOutput.hookEventName, "PostToolUse");
+      assert.equal(output.hookSpecificOutput.permissionDecision, "allow");
+    }
+
     const guardPath = join(projectRoot, ".omk", "hooks", "pre-shell-guard.sh");
-    const blockedPush = spawnSync("bash", [guardPath], {
+    for (const command of [
+      "git push origin main",
+      "npm publish",
+      "pnpm publish",
+      "yarn npm publish",
+      "gh release create v1.2.3",
+      "gh workflow run release.yml",
+      "npm version patch",
+      "git -c user.name=x push origin main",
+      "npm --registry=https://registry.npmjs.org publish",
+      "pnpm --filter pkg publish",
+      "bash -lc 'git -c user.name=x push origin main'",
+      "gh --repo owner/repo release create v1.2.3",
+    ]) {
+      const blocked = spawnSync("bash", [guardPath], {
+        cwd: projectRoot,
+        encoding: "utf-8",
+        input: JSON.stringify({ tool_input: { command, args: "" } }),
+      });
+      assert.equal(blocked.status, 0, blocked.stderr || blocked.stdout);
+      const blockedOutput = JSON.parse(blocked.stdout);
+      assert.equal(blockedOutput.hookSpecificOutput.permissionDecision, "deny");
+      assert.match(blockedOutput.hookSpecificOutput.permissionDecisionReason, /OMK release guard/);
+    }
+
+    const allowedShell = spawnSync("bash", [guardPath], {
       cwd: projectRoot,
       encoding: "utf-8",
-      input: JSON.stringify({ tool_input: { command: "git push origin main", args: "" } }),
+      input: JSON.stringify({ tool_input: { command: "npm test", args: "" } }),
     });
-    assert.equal(blockedPush.status, 0, blockedPush.stderr || blockedPush.stdout);
-    const blockedPushOutput = JSON.parse(blockedPush.stdout);
-    assert.equal(blockedPushOutput.hookSpecificOutput.permissionDecision, "deny");
-    assert.match(blockedPushOutput.hookSpecificOutput.permissionDecisionReason, /Release\/deploy command blocked/);
+    assert.equal(allowedShell.status, 0, allowedShell.stderr || allowedShell.stdout);
+    const allowedShellOutput = JSON.parse(allowedShell.stdout);
+    assert.equal(allowedShellOutput.hookSpecificOutput.permissionDecision, "allow");
 
     const allowedPush = spawnSync("bash", [guardPath], {
       cwd: projectRoot,
@@ -420,15 +697,40 @@ test("init preserves an existing custom project MCP config", async () => {
     const projectMcpRaw = await readFile(join(projectRoot, ".kimi", "mcp.json"), "utf-8");
     const projectMcp = JSON.parse(projectMcpRaw);
     assert.ok(projectMcp.mcpServers.local);
-    assert.ok(projectMcp.mcpServers["omk-project"]);
-    if (process.platform === "win32") {
-      assert.equal(projectMcp.mcpServers["omk-project"].command, "omk");
-      assert.deepEqual(projectMcp.mcpServers["omk-project"].args, ["mcp", "serve", "omk-project"]);
-    } else {
-      assert.match(projectMcp.mcpServers["omk-project"].args.join(" "), /command -v omk/);
-    }
     assert.equal(projectMcp.mcpServers.secret, undefined);
     assert.doesNotMatch(projectMcpRaw, /SHOULD_NOT_COPY/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("init preserves existing .omk MCP config while removing stale managed omk-project mirror", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-init-existing-omk-mcp-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-init-existing-omk-mcp-home-"));
+
+  try {
+    await mkdir(join(projectRoot, ".omk"), { recursive: true });
+    await writeFile(join(projectRoot, ".omk", "mcp.json"), JSON.stringify({
+      _comment: "legacy project config",
+      mcpServers: {
+        local: { command: "node", args: ["legacy-server.js"] },
+        "omk-project": {
+          command: "bash",
+          args: ["-lc", "exec node /tmp/stale/omk-project-server.js"],
+          env: { OMK_PROJECT_ROOT: "/tmp/stale-project" },
+        },
+      },
+    }, null, 2), "utf-8");
+
+    const result = runInit(projectRoot, homeRoot);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const raw = await readFile(join(projectRoot, ".omk", "mcp.json"), "utf-8");
+    const parsed = JSON.parse(raw);
+    assert.ok(parsed.mcpServers.local);
+    assert.equal(parsed.mcpServers["omk-project"], undefined);
+    assert.doesNotMatch(raw, /stale-project|\/tmp\/stale/);
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(homeRoot, { recursive: true, force: true });
@@ -459,14 +761,45 @@ test("init refreshes an existing stale omk-project MCP entry", async () => {
     const projectMcpRaw = await readFile(join(projectRoot, ".kimi", "mcp.json"), "utf-8");
     const projectMcp = JSON.parse(projectMcpRaw);
     assert.ok(projectMcp.mcpServers.local);
-    assert.equal(projectMcp.mcpServers["omk-project"].env.OMK_PROJECT_ROOT, projectRoot);
-    if (process.platform === "win32") {
-      assert.equal(projectMcp.mcpServers["omk-project"].command, "omk");
-      assert.deepEqual(projectMcp.mcpServers["omk-project"].args, ["mcp", "serve", "omk-project"]);
-    } else {
-      assert.match(projectMcp.mcpServers["omk-project"].args.join(" "), /command -v omk/);
-    }
-    assert.doesNotMatch(projectMcpRaw, /omk-home-stale|\/tmp\/old-project/);
+    assert.equal(projectMcp.mcpServers["omk-project"], undefined);
+    assert.doesNotMatch(projectMcpRaw, /omk-home-stale|old-project/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("worktree guard blocks git global option and comment spoof bypasses", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-init-worktree-guard-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-init-worktree-home-"));
+
+  try {
+    const result = runInit(projectRoot, homeRoot);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const hookPath = join(projectRoot, ".omk", "hooks", "worktree-create-guard.sh");
+    const runHook = (command) => spawnSync("bash", [hookPath], {
+      cwd: projectRoot,
+      encoding: "utf-8",
+      input: JSON.stringify({ tool_input: { command } }),
+      env: { ...process.env, OMK_PROJECT_ROOT: projectRoot },
+    });
+
+    const allowed = runHook("git worktree add .omk/worktrees/feature");
+    assert.equal(allowed.status, 0, allowed.stderr);
+    assert.match(allowed.stdout, /"permissionDecision":"allow"/);
+
+    const globalOptionBypass = runHook("git -C . worktree add /tmp/outside");
+    assert.equal(globalOptionBypass.status, 0, globalOptionBypass.stderr);
+    assert.match(globalOptionBypass.stdout, /"permissionDecision":"deny"/);
+
+    const commentSpoofBypass = runHook("git worktree add /tmp/outside # .omk/worktrees/spoof");
+    assert.equal(commentSpoofBypass.status, 0, commentSpoofBypass.stderr);
+    assert.match(commentSpoofBypass.stdout, /"permissionDecision":"deny"/);
+
+    const shellWrapperBypass = runHook("bash -lc 'git worktree add /tmp/outside'");
+    assert.equal(shellWrapperBypass.status, 0, shellWrapperBypass.stderr);
+    assert.match(shellWrapperBypass.stdout, /"permissionDecision":"deny"/);
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(homeRoot, { recursive: true, force: true });
@@ -637,7 +970,6 @@ test("init recognizes WSL UNC ~/.kimi/mcp.json as the user home when importing t
 
     const projectMcpRaw = await readFile(join(projectRoot, ".kimi", "mcp.json"), "utf-8");
     const projectMcp = JSON.parse(projectMcpRaw);
-    assert.ok(projectMcp.mcpServers["omk-project"]);
     assert.equal(projectMcp.mcpServers.global, undefined);
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
@@ -671,11 +1003,16 @@ test("init local-user mode uses WSL UNC ~/.kimi/mcp.json with omk-project at run
     const configToml = await readFile(join(projectRoot, ".omk", "config.toml"), "utf-8");
     assert.match(configToml, /mcp_scope = "all"/);
     assert.match(configToml, /skills_scope = "all"/);
+    assert.match(configToml, /hooks_scope = "all"/);
     assert.match(result.stdout, /Local user runtime enabled/);
+    assert.deepEqual(readRuntimeScopes(projectRoot, homeRoot), {
+      mcpScope: "all",
+      skillsScope: "all",
+      hooksScope: "all",
+    });
 
     const projectMcpRaw = await readFile(join(projectRoot, ".kimi", "mcp.json"), "utf-8");
     const projectMcp = JSON.parse(projectMcpRaw);
-    assert.ok(projectMcp.mcpServers["omk-project"]);
     assert.equal(projectMcp.mcpServers["private-global"], undefined);
 
     const shimBin = join(projectRoot, "bin");
@@ -700,6 +1037,7 @@ test("init local-user mode uses WSL UNC ~/.kimi/mcp.json with omk-project at run
     assert.match(doctor.stdout, new RegExp(`${escapeRegex(basename(homeRoot))}.*\\.kimi[\\\\/]mcp\\.json`));
     assert.match(doctor.stdout, /Server: private-global/);
     assert.match(doctor.stdout, /Server: omk-project/);
+    assert.match(doctor.stdout, /virtual runtime MCP injected/);
 
     await assert.rejects(
       readFile(join(projectRoot, ".kimi", "skills", "private-wsl-skill", "SKILL.md"), "utf-8"),
@@ -807,10 +1145,15 @@ test("init interactive setup can opt into local global MCP runtime without copyi
     const configToml = await readFile(join(projectRoot, ".omk", "config.toml"), "utf-8");
     assert.match(configToml, /mcp_scope = "all"/);
     assert.match(configToml, /skills_scope = "all"/);
+    assert.match(configToml, /hooks_scope = "all"/);
+    assert.deepEqual(readRuntimeScopes(projectRoot, homeRoot), {
+      mcpScope: "all",
+      skillsScope: "all",
+      hooksScope: "all",
+    });
 
     const projectMcpRaw = await readFile(join(projectRoot, ".kimi", "mcp.json"), "utf-8");
     const projectMcp = JSON.parse(projectMcpRaw);
-    assert.ok(projectMcp.mcpServers["omk-project"]);
     assert.equal(projectMcp.mcpServers["private-global"], undefined);
     assert.equal(projectMcpRaw.includes("SHOULD_NOT_COPY"), false);
   } finally {

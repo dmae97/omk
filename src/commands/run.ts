@@ -4,6 +4,7 @@ import { join } from "path";
 import { getOmkPath, getProjectRoot, pathExists, getRunPath } from "../util/fs.js";
 import { style, header, status, label } from "../util/theme.js";
 import { getOmkResourceSettings } from "../util/resource-profile.js";
+import { parseRuntimeScopeOption } from "../util/runtime-scope.js";
 import { t } from "../util/i18n.js";
 import { createRoutedRunState, refreshRunStateEstimate } from "../orchestration/run-state.js";
 import { buildCapabilityAgentNodes, isCapabilityAgentNode } from "../orchestration/capability-agents.js";
@@ -14,12 +15,13 @@ import type { ProviderPolicy } from "../providers/types.js";
 export async function runCommand(
   flow: string | undefined,
   goal: string | undefined,
-  options: { workers?: string; runId?: string; goalId?: string; timeoutPreset?: string; provider?: ProviderPolicy }
+  options: { workers?: string; runId?: string; goalId?: string; timeoutPreset?: string; provider?: ProviderPolicy; mcpScope?: string }
 ): Promise<void> {
   const root = getProjectRoot();
   const resources = await getOmkResourceSettings();
   const workerCount = normalizeWorkerCount(options.workers, resources.maxWorkers);
   const providerPolicy = normalizeProviderPolicy(options.provider);
+  const mcpScope = parseRuntimeScopeOption(options.mcpScope, resources.mcpScope, "--mcp-scope");
 
   let resolvedFlow = flow;
   let resolvedGoal = goal;
@@ -87,7 +89,7 @@ export async function runCommand(
       await writeFile(join(runDir, "goal.md"), `# Goal\n\n${resolvedGoal}\n`);
     }
     if (flow) {
-      await writeFile(join(runDir, "plan.md"), `# Plan\n\nFlow: ${resolvedFlow}\nWorkers: ${workerCount}\nResource profile: ${resources.profile}\nProvider policy: ${providerPolicy}\n`);
+      await writeFile(join(runDir, "plan.md"), `# Plan\n\nFlow: ${resolvedFlow}\nWorkers: ${workerCount}\nResource profile: ${resources.profile}\nMCP scope: ${mcpScope}\nProvider policy: ${providerPolicy}\n`);
     }
   } else {
     if (!resolvedFlow || !resolvedGoal) {
@@ -133,7 +135,7 @@ export async function runCommand(
     await mkdir(runDir, { recursive: true });
     startedAt = new Date().toISOString();
     await writeFile(join(runDir, "goal.md"), `# Goal\n\n${resolvedGoal}\n`);
-    await writeFile(join(runDir, "plan.md"), `# Plan\n\nFlow: ${resolvedFlow}\nWorkers: ${workerCount}\nResource profile: ${resources.profile}\nProvider policy: ${providerPolicy}\n`);
+    await writeFile(join(runDir, "plan.md"), `# Plan\n\nFlow: ${resolvedFlow}\nWorkers: ${workerCount}\nResource profile: ${resources.profile}\nMCP scope: ${mcpScope}\nProvider policy: ${providerPolicy}\n`);
     const runState = createInteractiveRunState({
       runId,
       flow: resolvedFlow,
@@ -151,8 +153,9 @@ export async function runCommand(
   console.log(label("Flow", resolvedFlow));
   console.log(label("Goal", resolvedGoal ?? t("run.useExistingGoal")));
   console.log(label("Workers", String(workerCount)));
-  console.log(label("Resource profile", `${resources.profile} (${resources.reason})`) + "\n");
-  console.log(label("Provider policy", providerPolicy));
+  console.log(label("Resource profile", `${resources.profile} (${resources.reason})`));
+  console.log(label("MCP scope", mcpScope));
+  console.log(label("Provider policy", providerPolicy) + "\n");
 
   // Delegate execution to orchestratePrompt
   const rawPrompt = resolvedGoal ?? "";
@@ -173,6 +176,7 @@ export async function runCommand(
       goalId: options.goalId,
       timeoutPreset: options.timeoutPreset,
       provider: providerPolicy,
+      mcpScope,
     });
   } catch (err) {
     console.error(status.error(String(err)));

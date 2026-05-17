@@ -1,7 +1,14 @@
+import { createHash } from "crypto";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import { dirname, relative, resolve } from "path";
 import type { OmkMode } from "./mode-preset.js";
 import { getRunPath } from "./fs.js";
+import type { OmkRuntimeScope } from "./resource-profile.js";
+import {
+  readRootAgentSubagents,
+  writeScopedAgentFile,
+  type ScopedSubagentRef,
+} from "./scoped-agent-file.js";
 
 export interface ChatAgentModeResources {
   workers: string;
@@ -10,9 +17,9 @@ export interface ChatAgentModeResources {
   approvalPolicy?: string;
   providerPolicy?: string;
   ensembleDefaultEnabled?: boolean;
-  mcpScope: string;
-  skillsScope: string;
-  hooksScope?: string;
+  mcpScope: OmkRuntimeScope;
+  skillsScope: OmkRuntimeScope;
+  hooksScope?: OmkRuntimeScope;
   mcpNames: string[];
   skillNames: string[];
   hookNames: string[];
@@ -89,6 +96,12 @@ export interface ChatAgentHarnessNode {
   condition?: string;
 }
 
+interface SharedLanePlan {
+  providerNodes: ChatAgentHarnessNode[];
+  capabilityNodes: ChatAgentHarnessNode[];
+  workerNodes: ChatAgentHarnessNode[];
+}
+
 export function buildChatAgentModeContract(input: {
   mode: OmkMode;
   runId: string;
@@ -124,6 +137,7 @@ export function buildChatAgentModeContract(input: {
     "## Agent-mode orchestration rules",
     "- Treat every non-trivial user prompt as an orchestration request unless the user explicitly asks for plain chat.",
     "- Classify the request first: direct answer, plan-only, implement, debug, review, docs, or security.",
+    "- Convert raw user input into an IntentFrame and ActionAtoms before delegation; raw prompt text is audit-only and must not be reused as worker prompts or lane names.",
     "- For implement/debug/review/security work: create todos, use the relevant skills, activate useful MCP tools, and delegate bounded subagents when the task is non-trivial.",
     "- Keep the root chat context focused on decisions, integration, and verification; send repo exploration, coding, review, or QA details to subagents.",
     "- Do not ask for permission for safe local reversible inspect/edit/test loops; ask only for destructive, credential-gated, external-production, or materially branching actions.",
@@ -139,33 +153,9 @@ export function buildChatAgentHarnessManifest(input: {
   resources: ChatAgentModeResources;
 }): ChatAgentHarnessManifest {
   const resources = normalizeHarnessResources(input.resources);
-  const maxCapabilityAgents = Math.min(3, Math.max(0, resources.workerCap - 1));
-  const capabilityNodes = buildCapabilityHarnessNodes(resources);
-  const providerNodes = [
-    {
-      id: "deepseek-flash-agent",
-      role: "planner",
-      source: "provider" as const,
-      dependsOn: ["root-coordinator"],
-      required: false,
-      condition: "DeepSeek available and task is read-only, parallelizable, non-simple, or implementation/review/security/test shaped",
-    },
-    {
-      id: "deepseek-pro-agent",
-      role: "reviewer",
-      source: "provider" as const,
-      dependsOn: ["root-coordinator"],
-      required: false,
-      condition: "DeepSeek available and task needs deeper critique or risk detection",
-    },
-  ];
-  const workerNodes = Array.from({ length: resources.workerCap }, (_, index) => ({
-    id: `worker-${index + 1}`,
-    role: "intent-selected",
-    source: "worker" as const,
-    dependsOn: ["root-coordinator"],
-    required: true,
-  }));
+  const lanePlan = buildSharedLanePlan(resources);
+  const maxCapabilityAgents = lanePlan.capabilityNodes.length;
+  const { providerNodes, capabilityNodes, workerNodes } = lanePlan;
   const synthesisInputs = [...providerNodes, ...capabilityNodes, ...workerNodes].map((node) => node.id);
 
   return {
@@ -228,10 +218,13 @@ export function buildChatAgentHarnessManifest(input: {
 export function buildParallelAlgorithmInjection(resources: ChatAgentModeResources): {
   text: string;
   workerCap: number;
+  workerLanes: number;
+  capabilityLanes: number;
+  providerLanes: number;
 } {
   const normalized = normalizeHarnessResources(resources);
   const workerCap = normalized.workerCap;
-  const capabilityAgents = Math.min(3, Math.max(0, workerCap - 1));
+  const lanePlan = buildSharedLanePlan(normalized);
   const providerPolicy = normalized.providerPolicy;
   const approvalPolicy = normalized.approvalPolicy;
   const resourceProfile = normalized.resourceProfile;
@@ -239,16 +232,21 @@ export function buildParallelAlgorithmInjection(resources: ChatAgentModeResource
 
   return {
     workerCap,
+    workerLanes: lanePlan.workerNodes.length,
+    capabilityLanes: lanePlan.capabilityNodes.length,
+    providerLanes: lanePlan.providerNodes.length,
     text: [
       "## Injected parallel DAG algorithm",
       "- Treat OMK Chat agent mode as the interactive front-door for the same planning model used by `omk parallel`.",
+      "- Progressive intent algorithm: Raw Input -> IntentFrame -> ActionAtoms -> Evidence DAG -> Novelty Guard -> Replan/Continue.",
+      "- Strict action DAG: keep raw input in audit/digest artifacts only; worker/capability/model lanes receive role, scope, input evidence, expected output, and done condition from ActionAtoms.",
       "- For every non-trivial prompt, synthesize a virtual DAG before acting: bootstrap(done) -> root-coordinator -> model/capability/worker lanes -> review-merge -> quality/security/design gates.",
-      `- Runtime defaults: profile=${resourceProfile}; approval=${approvalPolicy}; provider=${providerPolicy}; ensemble=${ensembleDefault}; workerCap=${workerCap}.`,
+      `- Runtime defaults: profile=${resourceProfile}; approval=${approvalPolicy}; provider=${providerPolicy}; ensemble=${ensembleDefault}; workerCap=${workerCap}; workerLanes=${lanePlan.workerNodes.length}; capabilityLanes=${lanePlan.capabilityNodes.length}; providerLanes=${lanePlan.providerNodes.length}.`,
       "- Intent schema to infer before delegation: taskType, complexity, estimatedWorkers, requiredRoles, isReadOnly, needsResearch, needsSecurityReview, needsTesting, needsDesignReview, parallelizable, rationale.",
-      "- Effective workers: use intent.estimatedWorkers when reliable, otherwise the worker budget; create at most 6 worker lanes; never create zero lanes for implementation-like tasks.",
+      "- Effective lanes: use the shared OMK_WORKERS budget for model, capability, and worker lanes together; create at least one worker lane when the budget is non-zero.",
       "- Coordinator role: use architect for plan/migrate/security; otherwise use orchestrator. Coordinator owns plan, lane boundaries, conflict control, and final synthesis.",
       "- Worker role selection: remove planner/orchestrator/architect/router from requiredRoles; cycle remaining roles across worker-N lanes; default to coder when no worker role remains.",
-      `- Capability-agent routing: when workers>=2 and intent is parallelizable, non-simple, or taskType is bugfix/implement/migrate/plan/refactor/review/security/test/general, allocate up to ${capabilityAgents} lanes to active MCP, skills, and hooks routing.`,
+      `- Capability-agent routing: when workers>=2 and intent is parallelizable, non-simple, or taskType is bugfix/implement/migrate/plan/refactor/review/security/test/general, allocate up to ${lanePlan.capabilityNodes.length} lanes to active MCP, skills, and hooks routing within the shared lane cap.`,
       "- DeepSeek model-agent routing: for read-only, parallelizable, non-simple, or bugfix/implement/migrate/plan/refactor/review/security/test tasks, spawn read-only Flash quick-decomposition and Pro critique lanes when DeepSeek is available.",
       "- DeepSeek authority boundary: DeepSeek direct lanes are read-only; file-affecting DeepSeek output is advisory only; Kimi/OMK chat owns edits, merge authority, and final verification.",
       "- Worker failure policy: worker/deepseek/capability lanes are retryable and may be skipped without blocking synthesis; security-audit blocks dependents; QA/design report risks without widening scope.",
@@ -293,6 +291,7 @@ export async function prepareChatAgentModeAgent(input: PrepareChatAgentModeInput
   const contractPath = resolve(runDir, "chat-agent-contract.md");
   const harnessPath = resolve(runDir, "chat-agent-harness.json");
   const agentFile = resolve(runDir, "chat-agent.yaml");
+  const roleWrappersDir = resolve(runDir, "roles");
   const baseAgentRel = relative(dirname(agentFile), input.baseAgentFile) || input.baseAgentFile;
   const harness = buildChatAgentHarnessManifest({
     mode: input.mode,
@@ -303,7 +302,13 @@ export async function prepareChatAgentModeAgent(input: PrepareChatAgentModeInput
   await writeFile(promptPath, prompt, "utf-8");
   await writeFile(contractPath, `${contract}\n`, "utf-8");
   await writeFile(harnessPath, `${JSON.stringify(harness, null, 2)}\n`, "utf-8");
-  await writeFile(agentFile, renderChatAgentYaml(baseAgentRel), "utf-8");
+  const subagents = await writeRunScopedSubagentWrappers({
+    baseAgentFile: input.baseAgentFile,
+    roleWrappersDir,
+    agentFile,
+    resources: input.resources,
+  });
+  await writeFile(agentFile, renderChatAgentYaml(baseAgentRel, input.resources, subagents), "utf-8");
 
   return { agentFile, promptPath, contractPath, harnessPath };
 }
@@ -364,7 +369,37 @@ function normalizeHarnessResources(resources: ChatAgentModeResources): ChatAgent
   };
 }
 
-function buildCapabilityHarnessNodes(resources: ChatAgentHarnessManifest["resources"]): ChatAgentHarnessNode[] {
+function buildSharedLanePlan(resources: ChatAgentHarnessManifest["resources"]): SharedLanePlan {
+  const capabilityCandidates = buildCapabilityHarnessNodeCandidates(resources);
+  const providerNodes: ChatAgentHarnessNode[] = [];
+  const capabilityNodes: ChatAgentHarnessNode[] = [];
+  const workerNodes: ChatAgentHarnessNode[] = [];
+  let remaining = resources.workerCap;
+
+  if (remaining > 0 && capabilityCandidates.length > 0) {
+    capabilityNodes.push(capabilityCandidates[0]);
+    remaining -= 1;
+  }
+
+  while (remaining > 0) {
+    workerNodes.push(createWorkerHarnessNode(workerNodes.length + 1));
+    remaining -= 1;
+  }
+
+  return { providerNodes, capabilityNodes, workerNodes };
+}
+
+function createWorkerHarnessNode(index: number): ChatAgentHarnessNode {
+  return {
+    id: `worker-${index}`,
+    role: "intent-selected",
+    source: "worker",
+    dependsOn: ["root-coordinator"],
+    required: true,
+  };
+}
+
+function buildCapabilityHarnessNodeCandidates(resources: ChatAgentHarnessManifest["resources"]): ChatAgentHarnessNode[] {
   const nodes: ChatAgentHarnessNode[] = [];
   if (resources.active.skills.length > 0) {
     nodes.push({
@@ -401,9 +436,19 @@ function buildCapabilityHarnessNodes(resources: ChatAgentHarnessManifest["resour
 
 function formatInventoryList(values: string[]): string {
   if (values.length === 0) return "none";
-  const visible = values.slice(0, 5);
-  const suffix = values.length > visible.length ? `, +${values.length - visible.length} more (see chat-agent-harness.json)` : "";
-  return `${visible.join(", ")}${suffix}`;
+  const normalized = normalizeNameList(values);
+  return `count=${normalized.length}; digest=${inventoryDigest(normalized)}; full=chat-agent-harness.json`;
+}
+
+function renderInventoryHint(values: string[], scope: OmkRuntimeScope): string {
+  if (scope === "none") return "disabled";
+  const normalized = normalizeNameList(values);
+  if (normalized.length === 0) return "count=0;digest=000000000000";
+  return `count=${normalized.length};digest=${inventoryDigest(normalized)};top=${normalized.slice(0, 3).join("|")}`;
+}
+
+function inventoryDigest(values: string[]): string {
+  return createHash("sha256").update(values.join("\n")).digest("hex").slice(0, 12);
 }
 
 function normalizeNameList(values: string[]): string[] {
@@ -412,13 +457,56 @@ function normalizeNameList(values: string[]): string[] {
 
 function parseWorkerBudget(value: string): number {
   const trimmed = value.trim();
+  if (trimmed.toLowerCase() === "auto") {
+    return parseWorkerBudget(process.env.OMK_MAX_WORKERS ?? "1");
+  }
   if (!/^[1-9]\d*$/.test(trimmed)) return 1;
   const parsed = Number(trimmed);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 1;
 }
 
-function renderChatAgentYaml(baseAgentRel: string): string {
-  return [
+async function writeRunScopedSubagentWrappers(input: {
+  baseAgentFile: string;
+  roleWrappersDir: string;
+  agentFile: string;
+  resources: ChatAgentModeResources;
+}): Promise<ScopedSubagentRef[]> {
+  const refs = await readRootAgentSubagents(input.baseAgentFile);
+  const outputs = new Map<string, string>();
+  for (const ref of refs) {
+    if (outputs.has(ref.role)) continue;
+    const outputFile = resolve(input.roleWrappersDir, `${ref.role}.yaml`);
+    outputs.set(ref.role, outputFile);
+    await writeScopedAgentFile({
+      baseAgentFile: ref.baseAgentFile,
+      outputFile,
+      role: ref.role,
+      resources: {
+        mcpScope: input.resources.mcpScope,
+        skillsScope: input.resources.skillsScope,
+        hooksScope: input.resources.hooksScope ?? "project",
+        mcpNames: input.resources.mcpNames,
+        skillNames: input.resources.skillNames,
+        hookNames: input.resources.hookNames,
+      },
+    });
+  }
+  return refs.map((ref) => {
+    const outputFile = outputs.get(ref.role) ?? ref.baseAgentFile;
+    const relPath = relative(dirname(input.agentFile), outputFile).replace(/\\/g, "/");
+    return {
+      alias: ref.alias,
+      path: relPath.startsWith(".") ? relPath : `./${relPath}`,
+      description: ref.description,
+    };
+  });
+}
+
+function renderChatAgentYaml(baseAgentRel: string, resources: ChatAgentModeResources, subagents: ScopedSubagentRef[] = []): string {
+  const mcpEnabled = resources.mcpScope === "none" ? "false" : "true";
+  const skillsEnabled = resources.skillsScope === "none" ? "false" : "true";
+  const hooksEnabled = resources.hooksScope === "none" ? "false" : "true";
+  const lines = [
     "version: 1",
     "agent:",
     `  extend: ${JSON.stringify(baseAgentRel)}`,
@@ -426,8 +514,28 @@ function renderChatAgentYaml(baseAgentRel: string): string {
     "  system_prompt_path: ./chat-agent-prompt.md",
     "  system_prompt_args:",
     "    OMK_ROLE: \"root-coordinator\"",
-    "",
-  ].join("\n");
+    `    OMK_MCP_ENABLED: "${mcpEnabled}"`,
+    `    OMK_SKILLS_ENABLED: "${skillsEnabled}"`,
+    `    OMK_HOOKS_ENABLED: "${hooksEnabled}"`,
+    `    OMK_MCP_HINTS: ${JSON.stringify(renderInventoryHint(resources.mcpNames, resources.mcpScope))}`,
+    `    OMK_SKILL_HINTS: ${JSON.stringify(renderInventoryHint(resources.skillNames, resources.skillsScope))}`,
+    `    OMK_TOOL_HINTS: "count=0;digest=000000000000"`,
+    `    OMK_HOOK_HINTS: ${JSON.stringify(renderInventoryHint(resources.hookNames, resources.hooksScope ?? "project"))}`,
+    `    OMK_CONTEXT_BUDGET: "normal"`,
+    `    OMK_ROUTE_READ_ONLY: "false"`,
+  ];
+  if (subagents.length) {
+    lines.push("  subagents:");
+    for (const subagent of subagents) {
+      lines.push(`    ${subagent.alias}:`);
+      lines.push(`      path: ${JSON.stringify(subagent.path)}`);
+      if (subagent.description) {
+        lines.push(`      description: ${JSON.stringify(subagent.description)}`);
+      }
+    }
+  }
+  lines.push("");
+  return lines.join("\n");
 }
 
 function defaultRootPrompt(): string {

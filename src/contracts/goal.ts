@@ -42,6 +42,116 @@ export interface ExpectedArtifact {
   gate?: "file-exists" | "command-pass" | "summary";
 }
 
+export type ActionAtomVerb =
+  | "bootstrap"
+  | "inspect"
+  | "plan"
+  | "modify"
+  | "verify"
+  | "integrate"
+  | "document"
+  | "research"
+  | "review"
+  | "test"
+  | "coordinate"
+  | "route";
+
+export interface ActionAtom {
+  id: string;
+  label: string;
+  verb: ActionAtomVerb;
+  object: string;
+  evidenceTarget: string;
+  doneCondition: string;
+  roleHint?: string;
+  source: "heuristic" | "criterion" | "artifact" | "runtime" | "directive";
+}
+
+export type IntentDirectiveKind =
+  | "read-only"
+  | "no-edits"
+  | "scope"
+  | "expected-output"
+  | "constraint";
+
+export interface IntentDirective {
+  kind: IntentDirectiveKind;
+  value: string;
+  source: "explicit" | "heuristic";
+}
+
+export interface IntentCapabilityHints {
+  skills: string[];
+  mcpServers: string[];
+  tools: string[];
+  hooks: string[];
+  readOnly: boolean;
+  needsMcp: boolean;
+  needsSkills: boolean;
+  needsHooks: boolean;
+}
+
+export interface IntentConfidence {
+  overall: number;
+  primaryAction: number;
+  directives: number;
+  notes: string[];
+}
+
+export interface IntentDiagnostic {
+  kind: "redaction" | "directive" | "normalization" | "low-confidence" | "rewrite";
+  message: string;
+  count?: number;
+}
+
+export interface IntentRewrite {
+  summary: string;
+  accepted: boolean;
+  reason: string;
+}
+
+export interface IntentFrame {
+  schemaVersion: 2;
+  rawPromptDigest: string;
+  problem: string;
+  desiredOutcome: string;
+  constraints: string[];
+  entities: string[];
+  successCriteria: string[];
+  actionAtoms: ActionAtom[];
+  strict: true;
+  directives: IntentDirective[];
+  confidence: IntentConfidence;
+  capabilityHints: IntentCapabilityHints;
+  diagnostics: IntentDiagnostic[];
+  rewrite?: IntentRewrite;
+}
+
+export interface PromptNoveltyReport {
+  schemaVersion: 2;
+  action: "continue" | "replan" | "block" | "handoff" | "close";
+  recommendation: "continue" | "replan" | "block" | "handoff" | "close";
+  reason: string;
+  similarityToOriginal: number;
+  similarityToPrevious: number;
+  repeatedNodeNames: string[];
+  hasNewEvidence: boolean;
+  evidenceDelta: number;
+  progressDelta: number;
+  replayRisk: boolean;
+  oscillation: boolean;
+  targetAtomId?: string;
+}
+
+export interface NextActionContract {
+  action: "continue" | "replan" | "block" | "handoff" | "close";
+  targetId: string;
+  description: string;
+  evidenceTarget: string;
+  doneCondition: string;
+  actionAtom?: ActionAtom;
+}
+
 export interface GoalSpec {
   schemaVersion: 1;
   goalId: string;
@@ -59,6 +169,8 @@ export interface GoalSpec {
   createdAt: string;
   updatedAt: string;
   runIds: string[];
+  intentFrame?: IntentFrame;
+  actionAtoms?: ActionAtom[];
 }
 
 export interface GoalEvidence {

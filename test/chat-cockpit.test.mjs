@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { mkdtemp, rm, readFile } from "fs/promises";
+import { mkdtemp, rm, readFile, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 
@@ -8,6 +8,7 @@ import { tmpdir } from "os";
 const { isCockpitChild, detectTmux, shellQuote, buildLeftPaneCommand, buildRightPaneCommand } = await import("../dist/util/chat-cockpit.js");
 const { ensureChatRunState } = await import("../dist/util/chat-cockpit.js");
 const { updateChatHeartbeat, updateChatThinking, finalizeChatRunState } = await import("../dist/commands/chat.js");
+const { finalizeChatState } = await import("../dist/util/chat-state.js");
 const { buildRunViewModel, parseRunStateResult } = await import("../dist/util/run-view-model.js");
 
 describe("chat-cockpit utilities", () => {
@@ -152,6 +153,25 @@ describe("chat heartbeat lifecycle", () => {
     assert.ok(state.nodes[0].durationMs > 0);
   });
 
+  it("active chat finalizer clamps duration for future timestamps", async () => {
+    tmpRoot = await mkdtemp(join(tmpdir(), "omk-chat-test-"));
+    const runId = "chat-fin-active-001";
+    await ensureChatRunState(tmpRoot, runId);
+
+    const statePath = join(tmpRoot, ".omk", "runs", runId, "state.json");
+    const rawBefore = await readFile(statePath, "utf8");
+    const before = JSON.parse(rawBefore);
+    before.nodes[0].startedAt = new Date(Date.now() + 60_000).toISOString();
+    await writeFile(statePath, JSON.stringify(before, null, 2));
+
+    await finalizeChatState(runId, true, 0, tmpRoot);
+
+    const raw = await readFile(statePath, "utf8");
+    const state = JSON.parse(raw);
+    assert.strictEqual(state.nodes[0].status, "done");
+    assert.ok(state.nodes[0].durationMs > 0);
+  });
+
   it("finalize marks chat node failed on error", async () => {
     tmpRoot = await mkdtemp(join(tmpdir(), "omk-chat-test-"));
     const runId = "chat-fin-002";
@@ -257,6 +277,17 @@ describe("tmux lifecycle commands", () => {
       session: "omk-chat-run-456",
     });
     assert.ok(!cmd.includes("exec "), "must not contain 'exec ' to prevent orphaned panes");
+  });
+
+  it("buildLeftPaneCommand forwards clean MCP scope to the plain chat child", () => {
+    const cmd = buildLeftPaneCommand({
+      nodeCmd: "node",
+      cliCmd: "omk",
+      runId: "run-clean-mcp",
+      brand: "plain",
+      mcpScope: "none",
+    });
+    assert.ok(cmd.includes("--mcp-scope 'none'"), "chat child should inherit the requested MCP scope");
   });
 
   it("buildLeftPaneCommand properly quotes values containing single quotes", () => {

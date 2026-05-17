@@ -10,6 +10,7 @@ import { doctorCommand } from "../dist/commands/doctor.js";
 import { mcpDoctorCommand } from "../dist/commands/mcp.js";
 import { runsCommand } from "../dist/commands/runs.js";
 import { screenshotDirCommand, screenshotListCommand } from "../dist/commands/screenshot.js";
+import { servarrConfigPathCommand, servarrInstancesCommand } from "../dist/integrations/servarr/commands.js";
 import { verifyCommand } from "../dist/commands/verify.js";
 import { reviewCommand } from "../dist/commands/workflow.js";
 import { CliError } from "../dist/util/cli-contract.js"; 
@@ -127,6 +128,48 @@ test("goal verify --json on missing goal emits JSON error to stdout and stderr",
 
 
 // ── provider/deepseek --json contract ────────────────────────
+
+test("servarr config-path --json emits parseable stdout-only JSON", async () => {
+  const cwd = await tempCwd();
+  const prevCwd = process.cwd();
+  process.chdir(cwd);
+  const cap = captureOutput();
+
+  try {
+    await servarrConfigPathCommand({ json: true });
+  } finally {
+    cap.restore();
+    process.chdir(prevCwd);
+  }
+
+  const parsed = parseSingleStdoutJson(cap);
+  assert.equal(parsed.ok, true);
+  assert.match(parsed.path, /\.omk\/servarr\.yml$/u);
+  assert.equal(cap.stderr.length, 0, "should not emit to stderr");
+});
+
+test("servarr instances --json with missing config is stdout-pure and secret-free", async () => {
+  const cwd = await tempCwd();
+  const prevCwd = process.cwd();
+  const prevExitCode = process.exitCode;
+  process.chdir(cwd);
+  process.exitCode = undefined;
+  const cap = captureOutput();
+
+  try {
+    await servarrInstancesCommand({ json: true });
+  } finally {
+    cap.restore();
+    process.chdir(prevCwd);
+    process.exitCode = prevExitCode;
+  }
+
+  const parsed = parseSingleStdoutJson(cap);
+  assert.equal(parsed.ok, false);
+  assert.match(parsed.error, /Servarr config not found/u);
+  assert.equal(cap.stderr.length, 0, "should not emit to stderr");
+  assert.doesNotMatch(cap.stdout[0], /api[_-]?key|token.*[A-Za-z0-9]{10}/iu);
+});
 
 test("provider deepseek disable --json emits parseable JSON without stderr", async () => {
   const cwd = await tempCwd();
@@ -368,7 +411,14 @@ test("doctor --json classifies normal Kimi home files separately from pollution"
     "device_id",
     "latest_version.txt",
     "AGENTS.md",
+    "ENI.md",
+    "Jailbreak.md",
+    "PARALLEL_AGENTS.md",
+    "User.md",
+    "agent.yaml",
+    "mcp-web-search.sh",
     "setup.md",
+    "system.md",
     "user.md",
     "eggup-493323.json",
     "eggup-493323.json:Zone.Identifier",
@@ -519,13 +569,17 @@ test("verify --json emits common machine-readable fields for a valid run", async
     nodes: [],
   }), "utf-8");
   const prevCwd = process.cwd();
+  const prevProjectRoot = process.env.OMK_PROJECT_ROOT;
   process.chdir(cwd);
+  delete process.env.OMK_PROJECT_ROOT;
   const cap = captureOutput();
 
   try {
     await verifyCommand({ run: runId, json: true });
   } finally {
     cap.restore();
+    if (prevProjectRoot !== undefined) process.env.OMK_PROJECT_ROOT = prevProjectRoot;
+    else delete process.env.OMK_PROJECT_ROOT;
     process.chdir(prevCwd);
   }
 

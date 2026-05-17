@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { createDag } from "../dist/orchestration/dag.js";
 import { createExecutor } from "../dist/orchestration/executor.js";
@@ -8,12 +11,15 @@ import {
   DeepSeekClient,
   checkDeepSeekBalance,
   createDeepSeekReadOnlyTaskRunner,
+  createProviderBackedTaskRunner,
   createProviderTaskRunner,
   isDeepSeekPaymentOrAvailabilityFailure,
   isDeepSeekTransientFailure,
   routeProvider,
   selectDeepSeekModelTier,
 } from "../dist/providers/index.js";
+
+const monthlyQuotaError = `LLM provider error: Error code: 429 - {'error': {'message': "You've reached kimi monthly usage limit for this billing cycle. Your quota will be refreshed in the next cycle.", 'type': 'exceeded_current_quota_error'}}`;
 
 test("provider router keeps Kimi in authority and offloads only low-risk read roles", () => {
   assert.equal(routeProvider(baseRoute({ role: "orchestrator" })).provider, "kimi");
@@ -92,6 +98,17 @@ test("provider health disables DeepSeek for the remainder of a run", () => {
 
   assert.equal(health.isDeepSeekAvailable(), false);
   assert.equal(health.getDeepSeek()?.disableForRun, true);
+});
+
+test("provider health tracks Kimi monthly quota exhaustion for the run", () => {
+  const health = new ProviderHealthRegistry();
+  assert.equal(health.isKimiAvailable(), true);
+
+  health.markKimiUnavailable("Kimi monthly quota exhausted");
+
+  assert.equal(health.isKimiAvailable(), false);
+  assert.equal(health.getKimi().disableForRun, true);
+  assert.match(health.getKimi().reason ?? "", /monthly quota/i);
 });
 
 test("provider task runner falls back from DeepSeek to Kimi and records metadata", async () => {
@@ -232,6 +249,132 @@ test("provider task runner preserves fallback metadata when Kimi fallback fails"
   assert.equal(result.metadata.providerFallback.failureKind, "transient");
   assert.match(result.metadata.providerFallback.reason, /rate limit/);
   assert.equal(calls[1].env.OMK_PROVIDER_FALLBACK_FROM, "deepseek");
+});
+
+test("provider task runner recovers Kimi monthly quota with read-only DeepSeek fallback", async () => {
+  const calls = [];
+  const health = new ProviderHealthRegistry();
+  const kimiRunner = {
+    async run(_node, env) {
+      calls.push({ provider: "kimi", env });
+      return {
+        success: false,
+        exitCode: 1,
+        stdout: "",
+        stderr: monthlyQuotaError,
+      };
+    },
+  };
+  const deepseekRunner = {
+    async run(_node, env) {
+      calls.push({ provider: "deepseek", env });
+      return {
+        success: true,
+        exitCode: 0,
+        stdout: "DeepSeek read-only fallback result",
+        stderr: "",
+      };
+    },
+  };
+
+  const runner = createProviderTaskRunner({ kimiRunner, deepseekRunner, providerHealth: health });
+  const result = await runner.run({
+    ...providerNode(),
+    id: "quota-analyst",
+    role: "analyst",
+    routing: { provider: "auto", readOnly: true, requiresMcp: false, requiresToolCalling: false },
+  }, { OMK_TASK_TYPE: "review", OMK_COMPLEXITY: "complex" });
+
+  assert.equal(result.success, true);
+  assert.deepEqual(calls.map((call) => call.provider), ["kimi", "deepseek"]);
+  assert.equal(health.isKimiAvailable(), false);
+  assert.equal(result.metadata.provider, "deepseek");
+  assert.equal(result.metadata.requestedProvider, "kimi");
+  assert.equal(result.metadata.providerFallback.from, "kimi");
+  assert.equal(result.metadata.providerFallback.to, "deepseek");
+  assert.equal(result.metadata.providerFallback.failureKind, "quota");
+  assert.match(result.metadata.providerFallback.reason, /monthly quota/i);
+  assert.equal(calls[1].env.OMK_PROVIDER_FALLBACK_FROM, "kimi");
+  assert.equal(calls[1].env.OMK_KIMI_FAILURE_KIND, "monthly-quota");
+});
+
+test("provider task runner does not grant DeepSeek write fallback on Kimi quota exhaustion", async () => {
+  const calls = [];
+  const health = new ProviderHealthRegistry();
+  const deepseekRunner = {
+    async run(_node, env) {
+      calls.push({ provider: "deepseek", env });
+      return {
+        success: true,
+        exitCode: 0,
+        stdout: "DeepSeek advisory only",
+        stderr: "",
+      };
+    },
+  };
+  const kimiRunner = {
+    async run(_node, env) {
+      calls.push({ provider: "kimi", env });
+      return {
+        success: false,
+        exitCode: 1,
+        stdout: "",
+        stderr: monthlyQuotaError,
+      };
+    },
+  };
+
+  const runner = createProviderTaskRunner({ kimiRunner, deepseekRunner, providerHealth: health });
+  const result = await runner.run({
+    ...providerNode(),
+    id: "quota-coder",
+    role: "coder",
+    routing: { provider: "auto", readOnly: false, requiresMcp: false, requiresToolCalling: false },
+  }, { OMK_TASK_TYPE: "implementation", OMK_COMPLEXITY: "complex" });
+
+  assert.equal(result.success, false);
+  assert.deepEqual(calls.map((call) => call.provider), ["deepseek", "kimi"]);
+  assert.equal(health.isKimiAvailable(), false);
+  assert.equal(result.metadata.provider, "kimi");
+  assert.equal(result.metadata.providerFailure.kind, "monthly-quota");
+  assert.match(result.stderr, /Login\/auth can be valid/);
+  assert.equal(calls.some((call) => call.env.OMK_PROVIDER_FALLBACK_FROM === "kimi"), false);
+});
+
+test("provider-backed runner keeps provider metadata when Kimi runtime is unavailable", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-provider-backed-"));
+  const previousPath = process.env.PATH;
+  const previousPathUpper = process.env.Path;
+
+  try {
+    process.env.PATH = join(projectRoot, "empty-bin");
+    process.env.Path = process.env.PATH;
+
+    const runner = await createProviderBackedTaskRunner({
+      providerPolicy: "kimi",
+      kimi: {
+        cwd: projectRoot,
+        timeout: 1000,
+        mcpScope: "none",
+        skillsScope: "none",
+      },
+    });
+
+    const result = await runner.run(providerNode(), { OMK_TASK_TYPE: "review" });
+
+    assert.equal(result.success, false);
+    assert.equal(result.metadata.provider, "kimi");
+    assert.equal(result.metadata.requestedProvider, "kimi");
+    assert.ok(result.metadata._budgetReport);
+    assert.equal(result.metadata.runtime, undefined);
+    assert.match(result.stderr, /kimi.*not found/i);
+  } finally {
+    if (previousPath === undefined) delete process.env.PATH;
+    else process.env.PATH = previousPath;
+    if (previousPathUpper === undefined) delete process.env.Path;
+    else process.env.Path = previousPathUpper;
+    await rm(projectRoot, { recursive: true, force: true });
+  }
 });
 
 test("provider task runner retries transient DeepSeek failures before returning success", async () => {

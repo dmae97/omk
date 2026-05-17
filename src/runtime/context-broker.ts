@@ -170,6 +170,7 @@ export function createContextBroker(options: ContextBrokerOptions = {}) {
       `Execute DAG node: ${node.id}`,
       `Name: ${node.name}`,
       `Role: ${node.role}`,
+      node.routing?.actionAtom ? `ActionAtom: ${node.routing.actionAtom.id} | ${node.routing.actionAtom.label} | ${node.routing.actionAtom.verb} ${node.routing.actionAtom.object ?? "assigned scope"} | evidence=${node.routing.actionAtom.evidenceTarget} | done=${node.routing.actionAtom.doneCondition}` : undefined,
       node.routing?.skills?.length ? `Skills: ${node.routing.skills.join(", ")}` : undefined,
       node.routing?.mcpServers?.length ? `MCP: ${node.routing.mcpServers.join(", ")}` : undefined,
       node.routing?.tools?.length ? `Tools: ${node.routing.tools.join(", ")}` : undefined,

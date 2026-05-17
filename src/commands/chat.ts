@@ -1,5 +1,5 @@
 import { getOmkPath, getProjectRoot, pathExists, injectKimiGlobals, collectMcpConfigs, getKimiSkillsDir, getRunPath, getUserHome } from "../util/fs.js";
-import { style, status, box, label, separator } from "../util/theme.js";
+import { style, status, box, label, separator, header } from "../util/theme.js";
 import { runShell } from "../util/shell.js";
 import { readFile, writeFile, readdir } from "fs/promises";
 import { dirname, join, isAbsolute, relative } from "path";
@@ -55,9 +55,11 @@ export async function finalizeChatRunState(root: string, runId: string, success:
     const chatNode = state.nodes.find((n: any) => n.id === "chat");
     if (!chatNode) return;
     chatNode.status = success ? "done" : "failed";
-    chatNode.completedAt = new Date().toISOString();
+    const completedAt = new Date();
+    chatNode.completedAt = completedAt.toISOString();
     const started = Date.parse(chatNode.startedAt);
-    chatNode.durationMs = Date.now() - (Number.isNaN(started) ? Date.now() : started);
+    const durationMs = completedAt.getTime() - (Number.isNaN(started) ? completedAt.getTime() : started);
+    chatNode.durationMs = Math.max(1, durationMs);
     state.status = success ? "done" : "failed";
     state.updatedAt = new Date().toISOString();
     await writeFile(statePath, JSON.stringify(state, null, 2));
@@ -100,10 +102,13 @@ function mergeTodos(existing: TodoItem[], incoming: TodoItem[]): TodoItem[] {
 import YAML from "yaml";
 import { initCommand } from "./init.js";
 import { runKimiInteractive } from "../kimi/runner.js";
+import { checkCommand, resolveKimiBin } from "../util/shell.js";
 import { t } from "../util/i18n.js";
 import { detectTmux, launchChatCockpit, isCockpitChild, ensureChatRunState } from "../util/chat-cockpit.js";
 import { ensureChatStartupArtifacts } from "../util/chat-startup.js";
 import { prepareChatAgentModeAgent } from "../util/chat-agent-mode.js";
+import { parseRuntimeScopeOption } from "../util/runtime-scope.js";
+import { formatAgentYamlIssues, validateAgentYamlFile } from "../util/agent-schema.js";
 import {
   queueChatStatePatch,
   updateChatHeartbeat as enqueueChatHeartbeat,
@@ -128,6 +133,158 @@ async function verifyAgentPrompt(agentFile: string): Promise<boolean> {
   }
 }
 
+const CHAT_STARTUP_FAILURE_OUTPUT_LIMIT = 4000;
+
+function appendRecentChatOutput(current: string, data: string): string {
+  const next = current + data;
+  return next.length > CHAT_STARTUP_FAILURE_OUTPUT_LIMIT
+    ? next.slice(-CHAT_STARTUP_FAILURE_OUTPUT_LIMIT)
+    : next;
+}
+
+function sanitizeChatStartupFailureOutput(output: string): string {
+  return output
+    .replace(/\u001b\[[0-9;]*m/g, "")
+    .replace(/(authorization|api[_-]?key|token|secret|password)\s*[:=]\s*[^\s"'`]+/gi, "$1=***")
+    .replace(/bearer\s+[A-Za-z0-9._~+/-]+/gi, "Bearer ***");
+}
+
+async function writeChatStartupFailureArtifact(options: {
+  root: string;
+  runId: string;
+  exitCode: number;
+  agentFile: string;
+  recentOutput: string;
+  resources: Awaited<ReturnType<typeof getOmkResourceSettings>>;
+  reason?: string;
+  schemaIssues?: string[];
+}): Promise<void> {
+  const artifactPath = getRunPath(options.runId, "chat-startup-failure.json", options.root);
+  const artifact = {
+    runId: options.runId,
+    exitCode: options.exitCode,
+    capturedAt: new Date().toISOString(),
+    agentFile: relative(options.root, options.agentFile),
+    mcpScope: options.resources.mcpScope,
+    skillsScope: options.resources.skillsScope,
+    hooksScope: options.resources.hooksScope,
+    reason: options.reason,
+    schemaIssues: options.schemaIssues ?? [],
+    recentOutput: sanitizeChatStartupFailureOutput(options.recentOutput).slice(-CHAT_STARTUP_FAILURE_OUTPUT_LIMIT),
+  };
+  await writeFile(artifactPath, JSON.stringify(artifact, null, 2) + "\n", "utf-8");
+}
+
+async function failChatBeforeLaunch(options: {
+  root: string;
+  runId: string;
+  agentFile: string;
+  resources: Awaited<ReturnType<typeof getOmkResourceSettings>>;
+  message: string;
+  schemaIssues?: string[];
+}): Promise<never> {
+  const detail = options.schemaIssues?.length ? `\n${options.schemaIssues.slice(0, 8).map((item) => `  - ${item}`).join("\n")}` : "";
+  console.error(status.error(`[omk] ${options.message}`));
+  if (detail) console.error(detail);
+  console.error(style.gray("Fix: run `omk doctor --fix`, then retry `omk chat`."));
+  await writeChatStartupFailureArtifact({
+    root: options.root,
+    runId: options.runId,
+    exitCode: 1,
+    agentFile: options.agentFile,
+    recentOutput: `${options.message}${detail}`,
+    resources: options.resources,
+    reason: options.message,
+    schemaIssues: options.schemaIssues,
+  }).catch(() => {});
+  await finalizeChatState(options.runId, false).catch(() => {});
+  const now = new Date().toISOString();
+  await writeSessionMeta(options.runId, {
+    runId: options.runId,
+    type: "chat",
+    status: "failed",
+    startedAt: now,
+    endedAt: now,
+    updatedAt: now,
+    todoCount: 0,
+    todoDoneCount: 0,
+  }).catch(() => {});
+  process.exit(1);
+}
+
+interface ChatSmokeReport {
+  ok: boolean;
+  command: "chat smoke";
+  runId: string;
+  agentFile: string;
+  schemaOk: boolean;
+  mcpScope: "all" | "project" | "none";
+  skillsScope: "all" | "project" | "none";
+  hooksScope: "all" | "project" | "none";
+  runtimeMcpConfig: {
+    injected: boolean;
+    path: string | null;
+    exists: boolean;
+  };
+  startupFailureArtifactExists: boolean;
+  checks: Array<{ name: string; status: "ok" | "fail"; message: string }>;
+}
+
+async function buildChatSmokeReport(options: {
+  root: string;
+  runId: string;
+  agentFile: string;
+  schemaOk: boolean;
+  resources: Awaited<ReturnType<typeof getOmkResourceSettings>>;
+  mcpScope: "all" | "project" | "none";
+}): Promise<ChatSmokeReport> {
+  const args: string[] = ["--agent-file", options.agentFile];
+  await injectKimiGlobals(args, { role: "coordinator", mcpScope: options.mcpScope });
+  const mcpArgIndex = args.indexOf("--mcp-config-file");
+  const runtimeMcpPath = mcpArgIndex >= 0 ? args[mcpArgIndex + 1] ?? null : null;
+  const runtimeMcpExists = runtimeMcpPath ? await pathExists(runtimeMcpPath) : false;
+  const failurePath = getRunPath(options.runId, "chat-startup-failure.json", options.root);
+  const startupFailureArtifactExists = await pathExists(failurePath);
+  const checks: ChatSmokeReport["checks"] = [
+    {
+      name: "agent schema",
+      status: options.schemaOk ? "ok" : "fail",
+      message: options.schemaOk ? "agent YAML schema is valid" : "agent YAML schema is invalid",
+    },
+    {
+      name: "runtime MCP merge",
+      status: options.mcpScope === "none" || runtimeMcpExists ? "ok" : "fail",
+      message: runtimeMcpPath
+        ? `runtime MCP config: ${relative(options.root, runtimeMcpPath)}`
+        : options.mcpScope === "none"
+          ? "MCP disabled by scope none"
+          : "runtime MCP config was not generated",
+    },
+    {
+      name: "startup failure artifact",
+      status: startupFailureArtifactExists ? "fail" : "ok",
+      message: startupFailureArtifactExists ? "chat-startup-failure.json exists" : "no startup failure artifact",
+    },
+  ];
+  return {
+    ok: checks.every((check) => check.status === "ok"),
+    command: "chat smoke",
+    runId: options.runId,
+    agentFile: relative(options.root, options.agentFile),
+    schemaOk: options.schemaOk,
+    mcpScope: options.mcpScope,
+    skillsScope: options.resources.skillsScope,
+    hooksScope: options.resources.hooksScope,
+    runtimeMcpConfig: {
+      injected: Boolean(runtimeMcpPath),
+      path: runtimeMcpPath ? relative(options.root, runtimeMcpPath) : null,
+      exists: runtimeMcpExists,
+    },
+    startupFailureArtifactExists,
+    checks,
+  };
+}
+
 type ChatLayout = "auto" | "tmux" | "inline" | "plain";
 type ChatBrand = "kimicat" | "minimal" | "plain";
 
@@ -136,6 +293,14 @@ function resolveLayout(requested: ChatLayout | undefined): ChatLayout {
   // Already inside a tmux cockpit pane — never launch tmux again
   if (isCockpitChild()) return "inline";
   return "auto";
+}
+
+function resolveChatWorkerCount(requested: string | undefined, fallback: number): string {
+  const trimmed = requested?.trim();
+  if (!trimmed || trimmed.toLowerCase() === "auto") {
+    return String(Math.max(1, fallback));
+  }
+  return trimmed;
 }
 
 function renderChatIntro(
@@ -187,6 +352,9 @@ export async function chatCommand(options: {
   cockpitHistory?: "off" | "static" | "watch";
   cockpitSideWidth?: string;
   cockpitHeight?: string;
+  mcpScope?: string;
+  smoke?: boolean;
+  json?: boolean;
 }): Promise<void> {
   const root = getProjectRoot();
   const { getCurrentMode, isValidMode } = await import("../util/mode-preset.js");
@@ -210,6 +378,38 @@ export async function chatCommand(options: {
   const effectiveRunId = runId ?? sessionId;
   const layout = resolveLayout(options.layout);
   const brand = options.brand ?? "kimicat";
+  const resources = await getOmkResourceSettings();
+  const mcpScope = parseRuntimeScopeOption(options.mcpScope, resources.mcpScope, "--mcp-scope");
+  const effectiveResources = { ...resources, mcpScope };
+  const effectiveWorkers = resolveChatWorkerCount(options.workers, resources.maxWorkers);
+
+  // Dependency preflight: fail-fast before project auto-init if Kimi or node-pty is missing
+  const kimiBin = resolveKimiBin();
+  const kimiAvailable = await checkCommand(kimiBin);
+  if (!kimiAvailable) {
+    console.error(
+      status.error(
+        `[omk] \`${kimiBin}\` command not found in PATH. ` +
+          "Install Kimi CLI first: npm i -g @anthropic-ai/kimi-code\n" +
+          "If already installed, check your PATH or set KIMI_BIN env var."
+      )
+    );
+    process.exit(1);
+  }
+  try {
+    await import("node-pty");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      status.error(
+        `[omk] Failed to load node-pty native module. (${message})\n` +
+          "This usually happens when installed with --ignore-scripts.\n" +
+          "Fix: npm rebuild -g @oh-my-kimi/cli\n" +
+          "Or reinstall: npm uninstall -g @oh-my-kimi/cli && npm install -g @oh-my-kimi/cli"
+      )
+    );
+    process.exit(1);
+  }
 
   const promptOk = await verifyAgentPrompt(agentFile);
   if (!promptOk) {
@@ -247,9 +447,8 @@ export async function chatCommand(options: {
   let effectiveAgentFile = agentFile;
   if (!options.agentFile) {
     try {
-      const resources = await getOmkResourceSettings();
       const [mcpNames, skillNames, hookNames] = await Promise.all([
-        getActiveMcpNames(resources.mcpScope),
+        getActiveMcpNames(effectiveResources.mcpScope),
         getActiveSkillNames(resources.skillsScope),
         getActiveHookNames(root),
       ]);
@@ -260,15 +459,15 @@ export async function chatCommand(options: {
         basePromptPath: getOmkPath("prompts/root.md"),
         mode: currentMode,
         resources: {
-          workers: options.workers ?? resources.maxWorkers.toString(),
+          workers: effectiveWorkers,
           maxStepsPerTurn: options.maxStepsPerTurn,
-          resourceProfile: resources.profile,
+          resourceProfile: effectiveResources.profile,
           approvalPolicy: "interactive",
           providerPolicy: "auto",
-          ensembleDefaultEnabled: resources.ensembleDefaultEnabled,
-          mcpScope: resources.mcpScope,
-          skillsScope: resources.skillsScope,
-          hooksScope: process.env.OMK_HOOKS_SCOPE ?? resources.skillsScope,
+          ensembleDefaultEnabled: effectiveResources.ensembleDefaultEnabled,
+          mcpScope: effectiveResources.mcpScope,
+          skillsScope: effectiveResources.skillsScope,
+          hooksScope: effectiveResources.hooksScope,
           mcpNames,
           skillNames,
           hookNames,
@@ -287,6 +486,41 @@ export async function chatCommand(options: {
     }
   }
 
+  const agentSchema = await validateAgentYamlFile(effectiveAgentFile, root);
+  if (!agentSchema.ok) {
+    const schemaIssues = agentSchema.issues.map((item) => `${item.file}: ${item.message}`);
+    await failChatBeforeLaunch({
+      root,
+      runId: effectiveRunId,
+      agentFile: effectiveAgentFile,
+      resources: effectiveResources,
+      message: `invalid agent YAML schema for ${relative(root, effectiveAgentFile)}: ${formatAgentYamlIssues(agentSchema, 4)}`,
+      schemaIssues,
+    });
+  }
+
+  if (options.smoke) {
+    const report = await buildChatSmokeReport({
+      root,
+      runId: effectiveRunId,
+      agentFile: effectiveAgentFile,
+      schemaOk: agentSchema.ok,
+      resources: effectiveResources,
+      mcpScope,
+    });
+    if (options.json) {
+      console.log(JSON.stringify(report, null, 2));
+    } else {
+      console.log(header("OMK Chat Smoke"));
+      for (const check of report.checks) {
+        const line = `${check.name}: ${check.message}`;
+        console.log(check.status === "ok" ? status.ok(line) : status.error(line));
+      }
+    }
+    if (!report.ok) process.exitCode = 1;
+    return;
+  }
+
   // ── tmux layout: delegate to cockpit launcher ──
   if (layout === "tmux") {
     const hasTmux = await detectTmux();
@@ -299,7 +533,7 @@ export async function chatCommand(options: {
       console.error(status.error("tmux layout requires a TTY"));
       process.exit(1);
     }
-    await launchChatCockpit({ runId: effectiveRunId, brand, cwd: root, agentFile: effectiveAgentFile, workers: options.workers, maxStepsPerTurn: options.maxStepsPerTurn, cockpitRefresh: options.cockpitRefresh, cockpitRedraw: options.cockpitRedraw, cockpitHistory: options.cockpitHistory, cockpitSideWidth: options.cockpitSideWidth, cockpitHeight: options.cockpitHeight });
+    await launchChatCockpit({ runId: effectiveRunId, brand, cwd: root, agentFile: effectiveAgentFile, workers: options.workers ? effectiveWorkers : undefined, maxStepsPerTurn: options.maxStepsPerTurn, mcpScope, cockpitRefresh: options.cockpitRefresh, cockpitRedraw: options.cockpitRedraw, cockpitHistory: options.cockpitHistory, cockpitSideWidth: options.cockpitSideWidth, cockpitHeight: options.cockpitHeight });
     return;
   }
 
@@ -307,7 +541,7 @@ export async function chatCommand(options: {
   if (layout === "auto") {
     const hasTmux = await detectTmux();
     if (hasTmux && process.stdout.isTTY) {
-      await launchChatCockpit({ runId: effectiveRunId, brand, cwd: root, agentFile: effectiveAgentFile, workers: options.workers, maxStepsPerTurn: options.maxStepsPerTurn, cockpitRefresh: options.cockpitRefresh, cockpitRedraw: options.cockpitRedraw, cockpitHistory: options.cockpitHistory, cockpitSideWidth: options.cockpitSideWidth, cockpitHeight: options.cockpitHeight });
+      await launchChatCockpit({ runId: effectiveRunId, brand, cwd: root, agentFile: effectiveAgentFile, workers: options.workers ? effectiveWorkers : undefined, maxStepsPerTurn: options.maxStepsPerTurn, mcpScope, cockpitRefresh: options.cockpitRefresh, cockpitRedraw: options.cockpitRedraw, cockpitHistory: options.cockpitHistory, cockpitSideWidth: options.cockpitSideWidth, cockpitHeight: options.cockpitHeight });
       return;
     }
     // fall through to inline
@@ -317,8 +551,7 @@ export async function chatCommand(options: {
   const isPlain = layout === "plain";
 
   if (!isPlain && !isCockpitChild()) {
-    const resources = await getOmkResourceSettings();
-    const trust = `${resources.mcpScope} MCP / ${resources.skillsScope} skills`;
+    const trust = `${effectiveResources.mcpScope} MCP / ${effectiveResources.skillsScope} skills`;
     const agentDisplay = relative(root, effectiveAgentFile);
     const { getModePreset } = await import("../util/mode-preset.js");
     const modePreset = getModePreset(currentMode);
@@ -428,24 +661,31 @@ export async function chatCommand(options: {
     // ── Fallback: direct Kimi interactive session ──
     const args: string[] = [];
     args.push("--agent-file", effectiveAgentFile);
-    await injectKimiGlobals(args);
+    await injectKimiGlobals(args, {
+      role: "coordinator",
+      mcpScope,
+      skillsScope: effectiveResources.skillsScope,
+      hooksScope: effectiveResources.hooksScope,
+    });
     if (process.env.OMK_DEBUG === "1") {
       console.error("[OMK_DEBUG] chat args:", args);
     }
 
     const env = createOmkSessionEnv(root, sessionId);
-    if (options.workers) {
-      env.OMK_WORKERS = options.workers;
-    }
+    env.OMK_WORKERS = effectiveWorkers;
     if (options.maxStepsPerTurn) {
       args.push("--max-steps-per-turn", options.maxStepsPerTurn);
     }
 
     env.OMK_RUN_ID = effectiveRunId;
     env.OMK_MODE = currentMode;
+    env.OMK_MCP_SCOPE = mcpScope;
+    env.OMK_SKILLS_SCOPE = effectiveResources.skillsScope;
+    env.OMK_HOOKS_SCOPE = effectiveResources.hooksScope;
 
     let lastThinking = "";
     let exitCode = 0;
+    let recentChatOutput = "";
     // Chunk-array buffer to avoid repeated large string copies during todo parsing
     const pendingChunks: string[] = [];
     let pendingLength = 0;
@@ -498,6 +738,7 @@ export async function chatCommand(options: {
         cwd: root,
         env,
         onData: (data) => {
+          recentChatOutput = appendRecentChatOutput(recentChatOutput, data);
           // Lightweight activity sampling: extract short tool/thinking snippets
           const lines = data.split("\n");
           for (const raw of lines) {
@@ -536,7 +777,10 @@ export async function chatCommand(options: {
           }
         },
       });
-    } catch {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      recentChatOutput = appendRecentChatOutput(recentChatOutput, `\n[omk] chat failed: ${message}\n`);
+      console.error(`\n[omk] chat failed: ${message}\n`);
       exitCode = 1;
     } finally {
       clearInterval(heartbeat);
@@ -545,6 +789,16 @@ export async function chatCommand(options: {
         pendingUpdates.add(pendingTodoSync);
       }
       await Promise.all(pendingUpdates);
+      if (exitCode !== 0) {
+        await writeChatStartupFailureArtifact({
+          root,
+          runId: effectiveRunId,
+          exitCode,
+          agentFile: effectiveAgentFile,
+          recentOutput: recentChatOutput,
+          resources: effectiveResources,
+        }).catch(() => {});
+      }
       await finalizeChatState(effectiveRunId, exitCode === 0);
       // Update session.json
       try {
@@ -566,6 +820,7 @@ export async function chatCommand(options: {
         sessionId,
         workers: options.workers,
         root,
+        mcpScope,
       });
       if (isCockpitChild()) {
         const sanitized = effectiveRunId.replace(/[^a-zA-Z0-9]/g, "-");
@@ -630,18 +885,20 @@ async function printChatExitBanner(options: {
   sessionId: string;
   workers?: string;
   root: string;
+  mcpScope?: "all" | "project" | "none";
 }): Promise<void> {
   const { runId, sessionId, workers } = options;
   const { getOmkResourceSettings } = await import("../util/resource-profile.js");
   const resources = await getOmkResourceSettings();
+  const mcpScope = options.mcpScope ?? resources.mcpScope;
 
   // Parallel discovery of MCP + skills
   const [mcpNames, skillNames] = await Promise.all([
-    getActiveMcpNames(resources.mcpScope),
+    getActiveMcpNames(mcpScope),
     getActiveSkillNames(resources.skillsScope),
   ]);
 
-  const mcpText = formatResourceCount(mcpNames.length, resources.mcpScope);
+  const mcpText = formatResourceCount(mcpNames.length, mcpScope);
   const skillText = formatResourceCount(skillNames.length, resources.skillsScope);
   const workersText = workers ?? resources.maxWorkers.toString();
 

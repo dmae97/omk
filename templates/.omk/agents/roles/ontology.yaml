@@ -4,6 +4,9 @@ agent:
   name: omk-ontology
   system_prompt_args:
     OMK_ROLE: "ontology"
+    OMK_MCP_ENABLED: "true"
+    OMK_SKILLS_ENABLED: "true"
+    OMK_HOOKS_ENABLED: "true"
   description: >
     Kuzu-backed ontology curator. Creates ontology node/relationship tables,
     ingests project concepts, and answers Cypher/GraphQL-lite queries against

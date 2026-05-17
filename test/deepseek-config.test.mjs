@@ -107,6 +107,7 @@ test("official deepseek api command accepts stdin without echoing the key", asyn
       env: {
         ...process.env,
         HOME: homeRoot,
+        OMK_ORIGINAL_HOME: homeRoot,
         OMK_STAR_PROMPT: "0",
         OMK_RENDER_LOGO: "0",
         DEEPSEEK_API_KEY: "",

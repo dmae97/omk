@@ -6,6 +6,8 @@ import { createOmkSessionEnv, createOmkSessionId } from "../util/session.js";
 import { t } from "../util/i18n.js";
 import { detectSpecKitContext, injectSpecKitPrompt } from "./spec.js";
 import { resolveSpecifyCli } from "./specify.js";
+import { getOmkResourceSettings } from "../util/resource-profile.js";
+import { defaultScopedRoleAgentFile, writeScopedAgentFile } from "../util/scoped-agent-file.js";
 
 export async function planCommand(
   goal: string,
@@ -88,17 +90,29 @@ export async function planCommand(
   console.log(header(t("plan.header")));
   console.log(label(t("plan.goalLabel"), goal) + "\n");
 
-  const args = ["--print", "--output-format=stream-json"];
-  args.push("--agent-file", agentFile);
-
-  await injectKimiGlobals(args, { role: "architect" });
-
-  args.push("-p", promptText);
-
   const env = createOmkSessionEnv(root, sessionId);
   if (options.runId) {
     env.OMK_RUN_ID = options.runId;
   }
+  const resources = await getOmkResourceSettings();
+  const scopedAgentFile = await writeScopedAgentFile({
+    baseAgentFile: agentFile,
+    outputFile: defaultScopedRoleAgentFile(root, env.OMK_RUN_ID ?? sessionId, "architect"),
+    role: "architect",
+    resources,
+  });
+
+  const args = ["--print", "--output-format=stream-json"];
+  args.push("--agent-file", scopedAgentFile);
+
+  await injectKimiGlobals(args, {
+    role: "architect",
+    mcpScope: resources.mcpScope,
+    skillsScope: resources.skillsScope,
+    hooksScope: resources.hooksScope,
+  });
+
+  args.push("-p", promptText);
 
   const result = await runShell("kimi", args, {
     timeout: 120000,

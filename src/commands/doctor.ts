@@ -1,9 +1,12 @@
-import { basename, join } from "path";
+import { chmod, copyFile, mkdir, readdir, stat as fsStat, writeFile } from "fs/promises";
+import { basename, dirname, isAbsolute, join, resolve } from "path";
+import { fileURLToPath } from "node:url";
+import YAML from "yaml";
 import { execSync } from "child_process";
 import { checkCommand, getKimiVersion, runShell } from "../util/shell.js";
 import { runOmkSafetySelfTest } from "../util/native-safety.js";
 import { getKimiCapabilities } from "../kimi/capability.js";
-import { pathExists, getKimiConfigPath, readTextFile, getProjectRoot, getUserHome } from "../util/fs.js";
+import { pathExists, getKimiConfigPath, readTextFile, getProjectRoot, getUserHome, syncAllKimiGlobals, type KimiGlobalSyncReport } from "../util/fs.js";
 import { isGitAvailable, getCurrentBranch, getGitStatus } from "../util/git.js";
 import { style, status, header, separator } from "../util/theme.js";
 import { getGlobalMemoryConfigPath, isGraphMemoryBackend, loadMemorySettings, usesLocalGraphBackend, usesKuzuBackend } from "../memory/memory-config.js";
@@ -14,6 +17,16 @@ import { getOmkVersionSync } from "../util/version.js";
 import { resolveBundledLspBinary } from "./lsp.js";
 import { detectPackageManager } from "../mcp/quality-gate.js";
 import { discoverRoutingInventory } from "../orchestration/routing.js";
+import { buildMcpDoctorReport, repairMcpDoctorIssues, type McpDoctorFixReport } from "./mcp.js";
+import {
+  formatAgentYamlIssues,
+  repairProjectAgentPromptArgStrings,
+  validateProjectAgentYaml,
+} from "../util/agent-schema.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const packageRoot = join(__dirname, "..", "..");
 
 function semverGt(a: string, b: string): boolean {
   const pa = a.split(".").map((n) => Number.parseInt(n, 10));
@@ -50,7 +63,25 @@ interface AgentToolDeclarations {
   hasAgentTool: boolean;
   hasSearchWeb: boolean;
   hasFetchURL: boolean;
+  usesDefaultToolSurface: boolean;
 }
+
+interface DoctorOptions {
+  json?: boolean;
+  soft?: boolean;
+  fix?: boolean;
+  global?: boolean;
+}
+
+interface DoctorFixReport {
+  changed: boolean;
+  actions: string[];
+  skipped: string[];
+  mcp?: McpDoctorFixReport;
+  globalSync?: KimiGlobalSyncReport;
+}
+
+type OmkResourceSettings = Awaited<ReturnType<typeof getOmkResourceSettings>>;
 
 const SECRET_KEY_SUBSTRINGS = ["apikey", "token", "password", "secret", "authorization", "bearer", "key"];
 
@@ -85,14 +116,21 @@ function isNpmLauncherCommand(command: string | undefined): boolean {
 function isExpectedGlobalKimiFile(name: string): boolean {
   const expected = new Set([
     "AGENTS.md",
+    "ENI.md",
+    "Jailbreak.md",
+    "PARALLEL_AGENTS.md",
+    "User.md",
+    "agent.yaml",
     "config.toml",
     "device_id",
     "kimi.json",
     "latest_version.txt",
+    "mcp-web-search.sh",
     "mcp.json",
     "mcp.manifest.json",
     "omk.memory.toml",
     "setup.md",
+    "system.md",
     "user.md",
   ]);
   return (
@@ -116,30 +154,80 @@ async function inspectJsonFile(filePath: string): Promise<JsonFileDiagnostic> {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 async function readAgentToolDeclarations(root: string): Promise<AgentToolDeclarations | null> {
   const rootYamlPath = join(root, ".omk", "agents", "root.yaml");
   if (!(await pathExists(rootYamlPath))) return null;
-  const rootYaml = await readTextFile(rootYamlPath, "");
+  const tools = new Set<string>();
+  const visited = new Set<string>();
+  let rawChain = "";
+  let sawExplicitTools = false;
+
+  const addTool = (value: string): void => {
+    tools.add(value);
+    const tail = value.split(/[.:]/).pop();
+    if (tail) tools.add(tail);
+  };
+
+  const visitAgentFile = async (filePath: string): Promise<void> => {
+    const resolved = resolve(filePath);
+    if (visited.has(resolved) || !(await pathExists(resolved))) return;
+    visited.add(resolved);
+
+    const raw = await readTextFile(resolved, "");
+    rawChain += `\n${raw}`;
+
+    let parsed: unknown;
+    try {
+      parsed = YAML.parse(raw);
+    } catch {
+      return;
+    }
+    const agent = isRecord(parsed) && isRecord(parsed.agent) ? parsed.agent : null;
+    if (!agent) return;
+
+    const declaredTools = agent.tools;
+    if (Array.isArray(declaredTools)) {
+      sawExplicitTools = true;
+      for (const tool of declaredTools) {
+        if (typeof tool === "string") addTool(tool);
+      }
+    }
+
+    const extend = typeof agent.extend === "string" ? agent.extend : undefined;
+    if (!extend || extend === "default") return;
+    const nextPath = isAbsolute(extend) ? extend : resolve(dirname(resolved), extend);
+    await visitAgentFile(nextPath);
+  };
+
+  await visitAgentFile(rootYamlPath);
+  const usesDefaultToolSurface = !sawExplicitTools;
   return {
-    hasAgentTool: /\bAgent\b/.test(rootYaml),
-    hasSearchWeb: /\bSearchWeb\b/.test(rootYaml),
-    hasFetchURL: /\bFetchURL\b/.test(rootYaml),
+    usesDefaultToolSurface,
+    hasAgentTool: usesDefaultToolSurface || tools.has("Agent") || /\bAgent\b/.test(rawChain),
+    hasSearchWeb: usesDefaultToolSurface || tools.has("SearchWeb") || /\bSearchWeb\b/.test(rawChain),
+    hasFetchURL: usesDefaultToolSurface || tools.has("FetchURL") || /\bFetchURL\b/.test(rawChain),
   };
 }
 
-export async function doctorCommand(options: { json?: boolean; soft?: boolean } = {}): Promise<void> {
-  const resources = await getOmkResourceSettings();
+export async function doctorCommand(options: DoctorOptions = {}): Promise<void> {
   const root = getProjectRoot();
+  const fixes = options.fix ? await applyDoctorFixes(root, options) : undefined;
+  const resources = await getOmkResourceSettings();
 
   // Categories run in parallel (omk-style)
   const categories: CheckCategory[] = [
     { title: "Runtime", checks: () => runtimeChecks(resources) },
     { title: "Toolchain", checks: () => toolchainChecks(root) },
-    { title: "Kimi CLI", checks: () => kimiChecks(root) },
+    { title: "Kimi CLI", checks: () => kimiChecks(root, resources) },
     { title: "Project", checks: () => projectChecks(root) },
     { title: "OMK Scaffold", checks: () => omkChecks(root) },
-    { title: "MCP & Skills", checks: () => mcpSkillsChecks(root) },
-    { title: "Memory", checks: () => memoryChecks() },
+    { title: "Agent YAML", checks: () => agentYamlChecks(root) },
+    { title: "MCP & Skills", checks: () => mcpSkillsChecks(root, resources) },
+    { title: "Memory", checks: () => memoryChecks(root) },
     { title: "Security", checks: () => securityChecks(root) },
   ];
 
@@ -166,6 +254,9 @@ export async function doctorCommand(options: { json?: boolean; soft?: boolean } 
       .map((r) => ({ name: r.name, message: r.message }));
     const errors = allResults
       .filter((r) => r.status === "fail")
+      .map((r) => ({ name: r.name, message: r.message }));
+    const info = allResults
+      .filter((r) => r.status === "info")
       .map((r) => ({ name: r.name, message: r.message }));
 
     const data = {
@@ -248,6 +339,8 @@ export async function doctorCommand(options: { json?: boolean; soft?: boolean } 
       ...data,
       warnings,
       errors,
+      info,
+      fixes,
     };
     console.log(JSON.stringify(output, null, 2));
     if (errors.length > 0 && !options.soft) process.exit(1);
@@ -262,6 +355,19 @@ export async function doctorCommand(options: { json?: boolean; soft?: boolean } 
     for (const r of results) {
       const icon = r.status === "ok" ? "✅" : r.status === "warn" ? "⚠️" : r.status === "fail" ? "❌" : "ℹ️";
       console.log(`    ${icon} ${r.name.padEnd(16)} ${r.message}`);
+    }
+  }
+
+  if (fixes) {
+    console.log(style.purpleBold("\n  Fixes"));
+    if (fixes.actions.length === 0 && fixes.skipped.length === 0) {
+      console.log(`    ${style.gray("ℹ")} no safe repairs were needed`);
+    }
+    for (const action of fixes.actions) {
+      console.log(`    ${style.mint("✓")} ${action}`);
+    }
+    for (const item of fixes.skipped) {
+      console.log(`    ${style.skin("⚠")} ${item}`);
     }
   }
 
@@ -315,6 +421,298 @@ export async function doctorCommand(options: { json?: boolean; soft?: boolean } 
   }
 }
 
+async function applyDoctorFixes(root: string, options: DoctorOptions): Promise<DoctorFixReport> {
+  const actions: string[] = [];
+  const skipped: string[] = [];
+  const allowGlobalFixes = shouldRunDoctorGlobalFixes(options);
+
+  await ensureLocalScaffold(root, actions, skipped);
+  await repairHookExecutables(root, actions, skipped);
+  if (allowGlobalFixes) {
+    await repairGitSafeDirectory(root, actions, skipped);
+  } else {
+    await reportSkippedGitSafeDirectoryRepair(root, skipped);
+  }
+
+  const mcp = await repairMcpDoctorIssues();
+  actions.push(...mcp.actions.map((action) => `mcp: ${action}`));
+  skipped.push(...mcp.skipped.map((item) => `mcp: ${item}`));
+
+  const globalSync = allowGlobalFixes
+    ? await syncAllKimiGlobals({
+        manifest: [],
+        timestamp: new Date().toISOString(),
+        quiet: true,
+      })
+    : createSkippedGlobalSyncReport();
+  if (allowGlobalFixes) {
+    actions.push(...globalSync.actions.map((action) => `global sync: ${action}`));
+    for (const step of globalSync.steps) {
+      if (step.blocked) {
+        skipped.push(`global sync: ${step.name} blocked (set OMK_MCP_ALLOW_WRITE_CONFIG=1 to repair global Kimi config)`);
+      }
+      if (step.error) {
+        skipped.push(`global sync failed: ${step.name}: ${step.error}`);
+      }
+    }
+    for (const item of globalSync.skipped) {
+      if (!/global write blocked/i.test(item)) skipped.push(`global sync: ${item}`);
+    }
+    skipped.push(...globalSync.errors.map((item) => `global sync failed: ${item}`));
+  } else {
+    skipped.push("global sync skipped (safe default; pass `omk doctor --fix --global` or set OMK_DOCTOR_FIX_GLOBAL=1 / OMK_MCP_ALLOW_WRITE_CONFIG=1 to sync global Kimi config)");
+  }
+
+  return {
+    changed: actions.length > 0,
+    actions,
+    skipped,
+    mcp,
+    globalSync,
+  };
+}
+
+function shouldRunDoctorGlobalFixes(options: DoctorOptions): boolean {
+  return (
+    options.global === true ||
+    /^(?:1|true|yes|on)$/i.test(process.env.OMK_DOCTOR_FIX_GLOBAL ?? "") ||
+    /^(?:1|true|yes|on)$/i.test(process.env.OMK_MCP_ALLOW_WRITE_CONFIG ?? "")
+  );
+}
+
+function createSkippedGlobalSyncReport(): KimiGlobalSyncReport {
+  const steps: KimiGlobalSyncReport["steps"] = (["hooks", "mcp", "skills", "memory"] as const).map((name) => ({
+    name,
+    changed: false,
+    blocked: false,
+    skipped: true,
+    manifest: [],
+  }));
+  return {
+    changed: false,
+    blocked: false,
+    steps,
+    actions: [],
+    skipped: ["global sync skipped by doctor safe-local repair mode"],
+    errors: [],
+    manifest: [],
+  };
+}
+
+async function ensureLocalScaffold(root: string, actions: string[], skipped: string[]): Promise<void> {
+  const dirs = [
+    ".omk/agents/roles",
+    ".omk/hooks",
+    ".omk/prompts",
+    ".omk/memory",
+    ".kimi/skills",
+    ".agents/skills",
+  ];
+  for (const dir of dirs) {
+    const fullPath = join(root, dir);
+    if (await pathExists(fullPath)) continue;
+    await mkdir(fullPath, { recursive: true });
+    actions.push(`created ${dir}`);
+  }
+
+  await copyMissingTemplateFile(root, "AGENTS.md", actions, skipped);
+  await copyMissingTemplateFile(root, join(".kimi", "AGENTS.md"), actions, skipped);
+  await copyMissingTemplateFile(root, join(".omk", "agents", "okabe.yaml"), actions, skipped);
+  await copyMissingTemplateFile(root, join(".omk", "agents", "root.yaml"), actions, skipped);
+  await copyMissingTemplateFile(root, join(".omk", "prompts", "root.md"), actions, skipped);
+  await copyMissingTemplateTree(root, join("skills", "kimi"), join(".kimi", "skills"), actions, skipped);
+  await copyMissingTemplateTree(root, join("skills", "agents"), join(".agents", "skills"), actions, skipped);
+  await copyMissingTemplateTree(root, join(".omk", "agents", "roles"), join(".omk", "agents", "roles"), actions, skipped);
+  await ensureAgentCapabilityFlags(root, actions, skipped);
+  await ensureAgentPromptArgStrings(root, actions, skipped);
+  await ensureRootSubagentAliases(root, actions, skipped);
+}
+
+async function ensureRootSubagentAliases(root: string, actions: string[], skipped: string[]): Promise<void> {
+  const rootYamlPath = join(root, ".omk", "agents", "root.yaml");
+  const templateYamlPath = join(packageRoot, "templates", ".omk", "agents", "root.yaml");
+  if (!(await pathExists(rootYamlPath)) || !(await pathExists(templateYamlPath))) return;
+
+  try {
+    const current = YAML.parse(await readTextFile(rootYamlPath, "")) as unknown;
+    const template = YAML.parse(await readTextFile(templateYamlPath, "")) as unknown;
+    if (!isRecord(current) || !isRecord(template)) return;
+    const currentAgent = isRecord(current.agent) ? current.agent : null;
+    const templateAgent = isRecord(template.agent) ? template.agent : null;
+    if (!currentAgent || !templateAgent || !isRecord(templateAgent.subagents)) return;
+
+    if (!isRecord(currentAgent.subagents)) currentAgent.subagents = {};
+    const currentSubagents = currentAgent.subagents as Record<string, unknown>;
+    let added = 0;
+    for (const [name, value] of Object.entries(templateAgent.subagents)) {
+      if (Object.prototype.hasOwnProperty.call(currentSubagents, name)) continue;
+      currentSubagents[name] = value;
+      added += 1;
+    }
+    if (added === 0) return;
+    await writeFile(rootYamlPath, YAML.stringify(current), "utf-8");
+    actions.push(`merged ${added} missing root subagent alias(es) into .omk/agents/root.yaml`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    skipped.push(`root subagent alias merge skipped: ${message}`);
+  }
+}
+
+async function copyMissingTemplateFile(
+  root: string,
+  relativePath: string,
+  actions: string[],
+  skipped: string[]
+): Promise<void> {
+  const src = join(packageRoot, "templates", relativePath);
+  const dest = join(root, relativePath);
+  if (await pathExists(dest)) return;
+  if (!(await pathExists(src))) {
+    skipped.push(`template missing: templates/${relativePath}`);
+    return;
+  }
+  await mkdir(dirname(dest), { recursive: true });
+  await copyFile(src, dest);
+  actions.push(`restored ${relativePath} from template`);
+}
+
+async function copyMissingTemplateTree(
+  root: string,
+  templateRelativePath: string,
+  destRelativePath: string,
+  actions: string[],
+  skipped: string[]
+): Promise<void> {
+  const src = join(packageRoot, "templates", templateRelativePath);
+  const dest = join(root, destRelativePath);
+  if (!(await pathExists(src))) {
+    skipped.push(`template dir missing: templates/${templateRelativePath}`);
+    return;
+  }
+  const copied = await copyTreeMissingOnly(src, dest);
+  if (copied > 0) actions.push(`restored ${copied} missing file(s) under ${destRelativePath}`);
+}
+
+async function copyTreeMissingOnly(src: string, dest: string): Promise<number> {
+  const entries = await readdir(src, { withFileTypes: true });
+  let copied = 0;
+  await mkdir(dest, { recursive: true });
+  for (const entry of entries) {
+    const srcPath = join(src, entry.name);
+    const destPath = join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copied += await copyTreeMissingOnly(srcPath, destPath);
+      continue;
+    }
+    if (!entry.isFile() || await pathExists(destPath)) continue;
+    await mkdir(dirname(destPath), { recursive: true });
+    await copyFile(srcPath, destPath);
+    copied++;
+  }
+  return copied;
+}
+
+const AGENT_CAPABILITY_FLAGS = ["OMK_MCP_ENABLED", "OMK_SKILLS_ENABLED", "OMK_HOOKS_ENABLED"] as const;
+
+async function ensureAgentCapabilityFlags(root: string, actions: string[], skipped: string[]): Promise<void> {
+  const agentFiles = [
+    join(root, ".omk", "agents", "root.yaml"),
+    join(root, ".omk", "agents", "okabe.yaml"),
+  ];
+  const rolesDir = join(root, ".omk", "agents", "roles");
+  if (await pathExists(rolesDir)) {
+    try {
+      const entries = await readdir(rolesDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isFile() && entry.name.endsWith(".yaml")) {
+          agentFiles.push(join(rolesDir, entry.name));
+        }
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      skipped.push(`agent role scan skipped: ${message}`);
+    }
+  }
+
+  for (const filePath of agentFiles) {
+    if (!(await pathExists(filePath))) continue;
+    const content = await readTextFile(filePath, "");
+    const next = withAgentCapabilityFlags(content);
+    if (next === content) continue;
+    await writeFile(filePath, next, "utf-8");
+    actions.push(`enabled MCP/skills/hooks flags in ${filePath}`);
+  }
+}
+
+async function ensureAgentPromptArgStrings(root: string, actions: string[], skipped: string[]): Promise<void> {
+  const report = await repairProjectAgentPromptArgStrings(root);
+  if (report.convertedArgs > 0) {
+    actions.push(`converted ${report.convertedArgs} agent system_prompt_args value(s) to strings`);
+  }
+  for (const filePath of report.changedFiles) {
+    actions.push(`normalized agent prompt args in ${filePath}`);
+  }
+  for (const item of report.skipped) {
+    skipped.push(`agent prompt arg repair skipped: ${item}`);
+  }
+}
+
+function withAgentCapabilityFlags(content: string): string {
+  const missing = AGENT_CAPABILITY_FLAGS.filter((flag) =>
+    !new RegExp(`^\\s*${flag}:\\s*["']?true["']?\\s*$`, "m").test(content)
+  );
+  if (missing.length === 0) return content;
+  const lines = content.split(/\r?\n/);
+  const insertAt = lines.findIndex((line) => /^\s*system_prompt_args:\s*$/.test(line));
+  const flagLines = missing.map((flag) => `    ${flag}: "true"`);
+  if (insertAt >= 0) {
+    lines.splice(insertAt + 1, 0, ...flagLines);
+    return lines.join("\n");
+  }
+  const agentAt = lines.findIndex((line) => /^\s*agent:\s*$/.test(line));
+  if (agentAt >= 0) {
+    lines.splice(agentAt + 1, 0, "  system_prompt_args:", ...flagLines);
+    return lines.join("\n");
+  }
+  return content;
+}
+
+async function repairHookExecutables(root: string, actions: string[], skipped: string[]): Promise<void> {
+  const hooksDir = join(root, ".omk", "hooks");
+  if (!(await pathExists(hooksDir))) return;
+  try {
+    const entries = await readdir(hooksDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith(".sh")) continue;
+      const hookPath = join(hooksDir, entry.name);
+      const stats = await fsStat(hookPath);
+      if ((stats.mode & 0o111) !== 0) continue;
+      await chmod(hookPath, stats.mode | 0o755);
+      actions.push(`made hook executable: ${hookPath}`);
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    skipped.push(`hook executable repair skipped: ${message}`);
+  }
+}
+
+async function repairGitSafeDirectory(root: string, actions: string[], skipped: string[]): Promise<void> {
+  const repoCheck = await runShell("git", ["rev-parse", "--git-dir"], { cwd: root, timeout: 5000 });
+  if (!repoCheck.failed || !repoCheck.stderr.includes("safe.directory")) return;
+  const result = await runShell("git", ["config", "--global", "--add", "safe.directory", root], { timeout: 5000 });
+  if (result.failed) {
+    skipped.push(`git safe.directory repair failed: ${result.stderr.trim() || result.stdout.trim()}`);
+    return;
+  }
+  actions.push(`added git safe.directory for ${root}`);
+}
+
+async function reportSkippedGitSafeDirectoryRepair(root: string, skipped: string[]): Promise<void> {
+  const repoCheck = await runShell("git", ["rev-parse", "--git-dir"], { cwd: root, timeout: 5000 });
+  if (!repoCheck.failed || !repoCheck.stderr.includes("safe.directory")) return;
+  skipped.push("git safe.directory repair skipped (safe default; pass `omk doctor --fix --global` or set OMK_DOCTOR_FIX_GLOBAL=1)");
+}
+
 // ── Runtime ───────────────────────────────────────────────────
 
 async function runtimeChecks(resources: Awaited<ReturnType<typeof getOmkResourceSettings>>): Promise<CheckResult[]> {
@@ -327,6 +725,18 @@ async function runtimeChecks(resources: Awaited<ReturnType<typeof getOmkResource
     status: nodeMajor >= 20 ? "ok" : "warn",
     message: nodeMajor >= 20 ? `${nodeVersion}` : `${nodeVersion} ${t("doctor.nodeRecommend")}`,
   });
+
+  try {
+    const npmVersion = execSync("npm --version", { encoding: "utf-8", stdio: ["pipe", "pipe", "ignore"], timeout: 5000 }).trim();
+    const npmMajor = parseInt(npmVersion.split(".")[0], 10);
+    results.push({
+      name: "npm",
+      status: npmMajor >= 10 ? "ok" : "warn",
+      message: npmMajor >= 10 ? `v${npmVersion}` : `v${npmVersion} — npm 10+ recommended`,
+    });
+  } catch {
+    results.push({ name: "npm", status: "warn", message: "Unable to detect npm version" });
+  }
 
   try {
     // npm 10+ removed `npm bin -g`; use `npm prefix -g` exclusively
@@ -544,7 +954,7 @@ async function rustSafetyNativeCheck(root: string): Promise<CheckResult> {
 
 // ── Kimi CLI ──────────────────────────────────────────────────
 
-async function kimiChecks(root: string): Promise<CheckResult[]> {
+async function kimiChecks(root: string, resources: OmkResourceSettings): Promise<CheckResult[]> {
   const results: CheckResult[] = [];
   const kimiExists = await checkCommand("kimi");
   const agentTools = await readAgentToolDeclarations(root);
@@ -589,10 +999,12 @@ async function kimiChecks(root: string): Promise<CheckResult[]> {
   if (kimiConfigExists) {
     const kimiContent = await readTextFile(kimiConfigPath, "");
     const hasOmkHooks = kimiContent.includes("# >>> omk managed hooks");
+    const projectHooksConfig = await readTextFile(join(root, ".omk", "kimi.config.toml"), "");
+    const hasProjectHooks = resources.hooksScope !== "none" && /\[\[hooks\]\]/.test(projectHooksConfig);
     results.push({
       name: "OMK Hooks",
-      status: hasOmkHooks ? "ok" : "warn",
-      message: hasOmkHooks ? t("doctor.hooksSynced") : t("doctor.hooksRecommendSync"),
+      status: hasOmkHooks || hasProjectHooks ? "ok" : "warn",
+      message: hasOmkHooks ? t("doctor.hooksSynced") : hasProjectHooks ? `project hooks active (${resources.hooksScope})` : t("doctor.hooksRecommendSync"),
     });
   }
 
@@ -642,14 +1054,16 @@ async function kimiChecks(root: string): Promise<CheckResult[]> {
 
   // Agent YAML tools check
   if (agentTools) {
-    const { hasAgentTool, hasSearchWeb, hasFetchURL } = agentTools;
+    const { hasAgentTool, hasSearchWeb, hasFetchURL, usesDefaultToolSurface } = agentTools;
     const agentToolStatus = hasAgentTool && hasSearchWeb && hasFetchURL ? "ok" : "warn";
     results.push({
       name: "Agent YAML Tools",
       status: agentToolStatus,
       message: hasAgentTool && hasSearchWeb && hasFetchURL
-        ? "root.yaml includes Agent, SearchWeb, FetchURL"
-        : `root.yaml missing tools: ${[!hasAgentTool && "Agent", !hasSearchWeb && "SearchWeb", !hasFetchURL && "FetchURL"].filter(Boolean).join(", ")}`,
+        ? usesDefaultToolSurface
+          ? "agent inheritance includes Agent, SearchWeb, FetchURL via default tool surface"
+          : "agent inheritance includes Agent, SearchWeb, FetchURL"
+        : `agent inheritance missing tools: ${[!hasAgentTool && "Agent", !hasSearchWeb && "SearchWeb", !hasFetchURL && "FetchURL"].filter(Boolean).join(", ")}`,
     });
   }
 
@@ -711,15 +1125,18 @@ async function omkChecks(root: string): Promise<CheckResult[]> {
     message: rootYamlExists ? t("doctor.rootYamlExists") : t("doctor.rootYamlMissing"),
   });
 
-  const agentYamlPaths = [
-    join(omkDir, "agents", "root.yaml"),
-    join(omkDir, "agents", "roles", "architect.yaml"),
-    join(omkDir, "agents", "roles", "coder.yaml"),
-    join(omkDir, "agents", "roles", "explorer.yaml"),
-    join(omkDir, "agents", "roles", "planner.yaml"),
-    join(omkDir, "agents", "roles", "qa.yaml"),
-    join(omkDir, "agents", "roles", "reviewer.yaml"),
-  ];
+  const agentYamlPaths = [join(omkDir, "agents", "root.yaml")];
+  const rolesDir = join(omkDir, "agents", "roles");
+  if (await pathExists(rolesDir)) {
+    try {
+      const entries = await readdir(rolesDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isFile() && entry.name.endsWith(".yaml")) {
+          agentYamlPaths.push(join(rolesDir, entry.name));
+        }
+      }
+    } catch { /* ignore */ }
+  }
   const agentChecks = await Promise.all(
     agentYamlPaths.map(async (agentPath) => {
       if (!(await pathExists(agentPath))) return { exists: false, extendsOkabe: false };
@@ -731,12 +1148,15 @@ async function omkChecks(root: string): Promise<CheckResult[]> {
   const totalAgentCount = agentChecks.filter((c) => c.exists).length;
   const okabeAgentCount = agentChecks.filter((c) => c.extendsOkabe).length;
   const okabeBase = await readTextFile(join(omkDir, "agents", "okabe.yaml"), "");
-  const okabeBaseHasDMail = okabeBase.includes("kimi_cli.tools.dmail:SendDMail");
+  const okabeBaseHasRequiredTools =
+    okabeBase.includes("kimi_cli.tools.agent:Agent") &&
+    okabeBase.includes("kimi_cli.tools.dmail:SendDMail") &&
+    /^\s*tools:\s*$/m.test(okabeBase);
   results.push({
     name: "Okabe Agents",
-    status: totalAgentCount > 0 && okabeAgentCount === totalAgentCount && okabeBaseHasDMail ? "ok" : "warn",
-    message: totalAgentCount > 0 && okabeBaseHasDMail
-      ? `${okabeAgentCount}/${totalAgentCount} agents inherit okabe.yaml (SendDMail)`
+    status: totalAgentCount > 0 && okabeAgentCount === totalAgentCount && okabeBaseHasRequiredTools ? "ok" : "warn",
+    message: totalAgentCount > 0 && okabeBaseHasRequiredTools
+      ? `${okabeAgentCount}/${totalAgentCount} agents inherit okabe.yaml (Agent + SendDMail)`
       : t("doctor.okabeMissing"),
   });
 
@@ -781,9 +1201,48 @@ async function omkChecks(root: string): Promise<CheckResult[]> {
   return results;
 }
 
+async function agentYamlChecks(root: string): Promise<CheckResult[]> {
+  const report = await validateProjectAgentYaml(root);
+  if (report.errors.length > 0) {
+    return [{
+      name: "Agent YAML Schema",
+      status: "fail",
+      message: formatAgentYamlIssues(report),
+      metadata: {
+        errors: report.errors.map((item) => `${item.file}: ${item.message}`),
+        warnings: report.warnings.map((item) => `${item.file}: ${item.message}`),
+      },
+    }];
+  }
+  if (
+    report.warnings.length === 1 &&
+    report.warnings[0]?.code === "project-agents-not-initialized"
+  ) {
+    return [{
+      name: "Agent YAML Schema",
+      status: "info",
+      message: report.warnings[0].message,
+      metadata: {
+        warnings: report.warnings.map((item) => `${item.file}: ${item.message}`),
+      },
+    }];
+  }
+  if (report.warnings.length > 0) {
+    return [{
+      name: "Agent YAML Schema",
+      status: "warn",
+      message: formatAgentYamlIssues(report),
+      metadata: {
+        warnings: report.warnings.map((item) => `${item.file}: ${item.message}`),
+      },
+    }];
+  }
+  return [{ name: "Agent YAML Schema", status: "ok", message: "agent YAML schema is valid" }];
+}
+
 // ── MCP & Skills ──────────────────────────────────────────────
 
-async function mcpSkillsChecks(root: string): Promise<CheckResult[]> {
+async function mcpSkillsChecks(root: string, resources: OmkResourceSettings): Promise<CheckResult[]> {
   const results: CheckResult[] = [];
 
   const kimiSkillsDir = join(root, ".kimi", "skills");
@@ -817,12 +1276,27 @@ async function mcpSkillsChecks(root: string): Promise<CheckResult[]> {
     status: projectKimiMcp.exists ? "ok" : "info",
     message: projectKimiMcp.exists ? t("doctor.mcpExists") : t("doctor.mcpMissing"),
   });
-  for (const diagnostic of [omkMcp, projectKimiMcp, globalMcp]) {
+  results.push({
+    name: "OMK MCP",
+    status: resources.mcpScope === "none" ? "info" : "ok",
+    message: resources.mcpScope === "none"
+      ? "omk-project virtual runtime MCP injection disabled by MCP scope none"
+      : "omk-project virtual runtime MCP injected at chat/runtime startup (not written to project/global MCP files)",
+  });
+  const activeDiagnostics = resources.mcpScope === "all" ? [omkMcp, projectKimiMcp, globalMcp] : [omkMcp, projectKimiMcp];
+  for (const diagnostic of activeDiagnostics) {
     if (!diagnostic.exists || diagnostic.valid) continue;
     results.push({
       name: "MCP JSON",
       status: "fail",
       message: `${diagnostic.path}: ${diagnostic.error ?? "Invalid JSON"}`,
+    });
+  }
+  if (globalMcp.exists && !globalMcp.valid && resources.mcpScope !== "all") {
+    results.push({
+      name: "Global MCP JSON",
+      status: "info",
+      message: `${globalMcp.path}: invalid but inactive in project MCP scope`,
     });
   }
   results.push({
@@ -883,8 +1357,12 @@ async function mcpSkillsChecks(root: string): Promise<CheckResult[]> {
   }
   results.push({
     name: "Global MCP",
-    status: globalMcp.valid && globalMcpCount > 0 ? "ok" : "warn",
-    message: globalMcp.valid && globalMcpCount > 0 ? t("doctor.globalMcpSynced", globalMcpCount) : t("doctor.globalMcpMissing"),
+    status: globalMcp.valid && globalMcpCount > 0 ? "ok" : resources.mcpScope === "all" ? "warn" : "info",
+    message: globalMcp.valid && globalMcpCount > 0
+      ? t("doctor.globalMcpSynced", globalMcpCount)
+      : resources.mcpScope === "all"
+        ? t("doctor.globalMcpMissing")
+        : `${t("doctor.globalMcpMissing")} (optional in project MCP scope)`,
   });
   if (stdioMcpServers.length > 0) {
     results.push({
@@ -914,6 +1392,20 @@ async function mcpSkillsChecks(root: string): Promise<CheckResult[]> {
     message: globalSkillCount > 0 ? t("doctor.globalSkillsSynced", globalSkillCount) : t("doctor.globalSkillsMissing"),
   });
 
+  try {
+    const mcpDoctor = await buildMcpDoctorReport();
+    results.push({
+      name: "MCP Doctor",
+      status: mcpDoctor.ok ? "ok" : "fail",
+      message: mcpDoctor.ok
+        ? `activeScope=${mcpDoctor.activeScope}, servers=${mcpDoctor.servers.length}`
+        : `${mcpDoctor.issueCount} issue(s): ${mcpDoctor.errors[0] ?? "MCP diagnostics failed"}`,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    results.push({ name: "MCP Doctor", status: "fail", message });
+  }
+
   // Advanced: routing inventory discovery (uses skills + mcp)
   try {
     const inventory = discoverRoutingInventory(root);
@@ -934,21 +1426,25 @@ async function mcpSkillsChecks(root: string): Promise<CheckResult[]> {
 
 // ── Memory ────────────────────────────────────────────────────
 
-async function memoryChecks(): Promise<CheckResult[]> {
+async function memoryChecks(root: string): Promise<CheckResult[]> {
   const results: CheckResult[] = [];
 
   const globalMemoryConfigPath = getGlobalMemoryConfigPath();
   const globalKimiDir = join(getUserHome(), ".kimi");
   const [globalMemoryConfigExists, memorySettings, globalKimiDirExists] = await Promise.all([
     pathExists(globalMemoryConfigPath),
-    loadMemorySettings(process.cwd()),
+    loadMemorySettings(root),
     pathExists(globalKimiDir),
   ]);
 
   results.push({
     name: "Global Memory",
-    status: globalMemoryConfigExists ? "ok" : "warn",
-    message: globalMemoryConfigExists ? t("doctor.memorySynced") : t("doctor.memoryMissing"),
+    status: globalMemoryConfigExists ? "ok" : isGraphMemoryBackend(memorySettings.backend) ? "info" : "warn",
+    message: globalMemoryConfigExists
+      ? t("doctor.memorySynced")
+      : isGraphMemoryBackend(memorySettings.backend)
+        ? `${t("doctor.memoryMissing")} (optional with ${memorySettings.backend} backend)`
+        : t("doctor.memoryMissing"),
   });
 
   results.push({

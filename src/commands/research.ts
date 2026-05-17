@@ -1,7 +1,9 @@
 import { runShell } from "../util/shell.js";
-import { getProjectRoot } from "../util/fs.js";
+import { getProjectRoot, injectKimiGlobals } from "../util/fs.js";
 import { join } from "path";
 import { style } from "../util/theme.js";
+import { getOmkResourceSettings } from "../util/resource-profile.js";
+import { defaultScopedRoleAgentFile, writeScopedAgentFile } from "../util/scoped-agent-file.js";
 
 export interface ResearchOptions {
   query: string;
@@ -24,14 +26,28 @@ export async function researchCommand(options: ResearchOptions): Promise<void> {
     process.exit(1);
   }
 
+  const resources = await getOmkResourceSettings();
+  const scopedAgentFile = await writeScopedAgentFile({
+    baseAgentFile: agentFile,
+    outputFile: defaultScopedRoleAgentFile(root, undefined, "researcher"),
+    role: "researcher",
+    resources,
+  });
+
   const args = [
     "--print",
-    "--agent-file", agentFile,
-    "--prompt", options.query,
+    "--agent-file", scopedAgentFile,
   ];
+  await injectKimiGlobals(args, {
+    role: "researcher",
+    mcpScope: resources.mcpScope,
+    skillsScope: resources.skillsScope,
+    hooksScope: resources.hooksScope,
+  });
+  args.push("--prompt", options.query);
 
   console.log(style.gray(`Running Kimi researcher with query: ${options.query}`));
-  console.log(style.gray(`Agent file: ${agentFile}`));
+  console.log(style.gray(`Agent file: ${scopedAgentFile}`));
   console.log();
 
   const result = await runShell("kimi", args, {

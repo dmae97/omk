@@ -9,9 +9,10 @@ import { buildCapabilityAgentNodes } from "../dist/orchestration/capability-agen
 import { resetRoutingInventoryCache } from "../dist/orchestration/routing.js";
 
 test("initial orchestration spawns dedicated DeepSeek Flash and Pro model-agent nodes", () => {
+  const rawGoal = "고도화 된 첫 input -> orchestration DeepSeek 실제 모델 에이전트";
   const nodes = buildDynamicNodes({
     flow: "parallel",
-    goal: "고도화 된 첫 input -> orchestration DeepSeek 실제 모델 에이전트",
+    goal: rawGoal,
     startedAt: "2026-05-09T00:00:00.000Z",
     workerCount: 2,
     intent: {
@@ -39,6 +40,11 @@ test("initial orchestration spawns dedicated DeepSeek Flash and Pro model-agent 
   assert.equal(flash.routing?.providerModelTier, "flash");
   assert.equal(pro.routing?.provider, "deepseek");
   assert.equal(pro.routing?.providerModelTier, "pro");
+  assert.equal(flash.name, "DeepSeek Flash action decomposition");
+  assert.equal(pro.name, "DeepSeek Pro action critique");
+  assert.ok(flash.routing?.actionAtom?.label);
+  assert.ok(pro.routing?.actionAtom?.label);
+  assert.doesNotMatch(nodes.map((node) => node.name).join("\n"), new RegExp(rawGoal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.equal(flash.routing?.requiresMcp, false);
   assert.equal(pro.routing?.requiresToolCalling, false);
   assert.equal(flash.outputs?.[0]?.required, false);
@@ -50,6 +56,7 @@ test("initial orchestration spawns dedicated DeepSeek Flash and Pro model-agent 
 });
 
 test("initial orchestration auto-spawns active skill, MCP, and hook capability agents", async () => {
+  const rawGoal = "사용자가 요청하지 않아도 mcp skills hooks 를 병렬 subagent로 자동 활성화";
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-capability-agents-"));
   const previousRoot = process.env.OMK_PROJECT_ROOT;
   const previousSkillsScope = process.env.OMK_SKILLS_SCOPE;
@@ -81,7 +88,7 @@ test("initial orchestration auto-spawns active skill, MCP, and hook capability a
 
     const nodes = buildDynamicNodes({
       flow: "parallel",
-      goal: "사용자가 요청하지 않아도 mcp skills hooks 를 병렬 subagent로 자동 활성화",
+      goal: rawGoal,
       startedAt: "2026-05-09T00:00:00.000Z",
       workerCount: 3,
       intent: {
@@ -107,6 +114,10 @@ test("initial orchestration auto-spawns active skill, MCP, and hook capability a
     assert.ok(skillAgent);
     assert.ok(mcpAgent);
     assert.ok(hookAgent);
+    assert.ok(skillAgent.routing?.actionAtom?.label);
+    assert.ok(mcpAgent.routing?.actionAtom?.label);
+    assert.ok(hookAgent.routing?.actionAtom?.label);
+    assert.doesNotMatch(nodes.map((node) => node.name).join("\n"), new RegExp(rawGoal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     assert.equal(skillAgent.routing?.autoSpawned, true);
     assert.equal(mcpAgent.routing?.requiresMcp, true);
     assert.equal(mcpAgent.routing?.mcpServers?.includes("omk-project"), true);

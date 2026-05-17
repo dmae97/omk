@@ -19,7 +19,7 @@ ${KIMI_SKILLS}
 - Use SetTodoList for multi-step tasks.
 - Use Agent tool for non-trivial tasks.
 - Use skills when relevant.
-- Use MCP tools when configured and useful.
+- Use MCP tools when configured and useful. All subagents inherit scoped MCP server inventory, skills, and hooks when enabled by runtime scope. Do not hesitate to invoke available capabilities.
 - Treat project-local ontology graph memory as mandatory when the omk-project MCP exposes memory tools.
 - Recall relevant project memory before work, write durable findings through omk_write_memory, and use omk_memory_mindmap/omk_graph_query for graph recall.
 - Prefer plan-first execution.
@@ -36,7 +36,7 @@ ${KIMI_SKILLS}
 
 ## Kimi-native Context Tools
 
-- Root and generated role agents inherit an Okabe-compatible base that keeps default tools and adds SendDMail for checkpoint rollback scenarios.
+- Root and generated role agents inherit an Okabe-compatible base that keeps the default Kimi tool surface unrestricted while enabling scoped MCP, skills, and hooks.
 - Use D-Mail before risky refactors, compaction, or long-running branch points: send a concise future-facing recovery note to the relevant checkpoint.
 - Use Kimi subagents for isolated context and parallel work; keep the root context focused on decisions, integration, and verification.
 - Prefer /compact or a D-Mail recovery note over dumping large history back into the prompt.
@@ -47,7 +47,7 @@ For non-trivial tasks:
 
 1. Read project instructions.
 2. Create todos.
-3. Launch an appropriate subagent:
+3. Launch appropriate subagents in parallel when their scopes are independent:
    - explorer for repository discovery
    - planner for architecture/refactor/risky work
    - coder for implementation

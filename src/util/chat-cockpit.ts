@@ -21,6 +21,7 @@ export interface LaunchChatCockpitOptions {
   agentFile?: string;
   workers?: string;
   maxStepsPerTurn?: string;
+  mcpScope?: string;
   cockpitRefresh?: string;
   cockpitRedraw?: "diff" | "full" | "append";
   cockpitHistory?: "off" | "static" | "watch";
@@ -148,7 +149,7 @@ export async function launchChatCockpit(options: LaunchChatCockpitOptions = {}):
   const redraw = options.cockpitRedraw ?? "diff";
   const history = options.cockpitHistory ?? "static";
 
-  const leftCmd = buildLeftPaneCommand({ nodeCmd, cliCmd, runId, brand, agentFile: options.agentFile, workers: options.workers, maxStepsPerTurn: options.maxStepsPerTurn });
+  const leftCmd = buildLeftPaneCommand({ nodeCmd, cliCmd, runId, brand, agentFile: options.agentFile, workers: options.workers, maxStepsPerTurn: options.maxStepsPerTurn, mcpScope: options.mcpScope });
   const cockpitHeight = parseCockpitHeight(options.cockpitHeight);
   const historyTopHeight = cockpitHeight ?? DEFAULT_CHAT_COCKPIT_HEIGHT;
   const rightTopCmd = buildRightPaneCommand({ nodeCmd, cliCmd, runId, refreshMs, redraw, height: cockpitHeight });
@@ -288,12 +289,14 @@ export function buildLeftPaneCommand(options: {
   agentFile?: string;
   workers?: string;
   maxStepsPerTurn?: string;
+  mcpScope?: string;
 }): string {
-  const { nodeCmd, cliCmd, runId, brand, agentFile, workers, maxStepsPerTurn } = options;
+  const { nodeCmd, cliCmd, runId, brand, agentFile, workers, maxStepsPerTurn, mcpScope } = options;
   let cmd = `${nodeCmd} ${cliCmd} chat --layout plain --run-id ${shellQuote(runId)} --brand ${shellQuote(brand)}`;
   if (agentFile) cmd += ` --agent-file ${shellQuote(agentFile)}`;
   if (workers) cmd += ` --workers ${shellQuote(workers)}`;
   if (maxStepsPerTurn) cmd += ` --max-steps-per-turn ${shellQuote(maxStepsPerTurn)}`;
+  if (mcpScope) cmd += ` --mcp-scope ${shellQuote(mcpScope)}`;
   return cmd;
 }
 

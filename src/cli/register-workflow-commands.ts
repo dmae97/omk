@@ -64,6 +64,7 @@ export function registerWorkflowCommands(program: Command): void {
     .command("run [flow] [goal]")
     .description(t("cmd.runDesc"))
     .option("--workers <n>", t("cmd.runWorkersOption"), "auto")
+    .option("--mcp-scope <all|project|none>", "MCP scope for this orchestration run (all | project | none)")
     .option("--timeout-preset <preset>", t("cmd.runTimeoutPresetOption"))
     .option("--provider <auto|kimi>", "provider policy (auto | kimi)", "auto")
     .action(async (flow, goal, options) => {
@@ -86,6 +87,7 @@ export function registerWorkflowCommands(program: Command): void {
     .command("parallel [goal]")
     .description(t("cmd.parallelDesc"))
     .option("--workers <n>", t("cmd.parallelWorkersOption"), "auto")
+    .option("--mcp-scope <all|project|none>", "MCP scope for this parallel DAG run (all | project | none)")
     .option("--timeout-preset <preset>", t("cmd.parallelTimeoutPresetOption"))
     .option("--provider <auto|kimi>", "provider policy (auto | kimi)", "auto")
     .option("--approval-policy <policy>", t("cmd.parallelApprovalOption"), "interactive")

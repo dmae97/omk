@@ -27,7 +27,7 @@ export function buildCapabilityAgentNodes(input: CapabilityAgentBuildInput): Dag
 
   const seed: DagNodeDefinition = {
     id: input.seedId ?? "capability-routing-seed",
-    name: input.seedName ?? `Route active capabilities for: ${input.goal}`,
+    name: input.seedName ?? "Route active capabilities for action digest",
     role: input.seedRole ?? "router",
     dependsOn: input.dependsOn,
     maxRetries: 1,
@@ -70,7 +70,7 @@ function buildCapabilityLanes(goal: string, routing: DagNodeRouting): Capability
   if (skills.length > 0) {
     lanes.push({
       id: "capability-skill-agent",
-      name: `Activate relevant skills: ${goal}`,
+      name: "Activate relevant skills for action digest",
       role: "explorer",
       source: "skill",
       outputName: "skill activation handoff",
@@ -87,9 +87,9 @@ function buildCapabilityLanes(goal: string, routing: DagNodeRouting): Capability
         evidenceRequired: false,
         contextBudget: "tiny",
         skills,
-        mcpServers: [],
-        tools: [],
-        hooks: [],
+        mcpServers,
+        tools,
+        hooks,
         rationale: `skills=${skills.join(",")}`,
       },
     });
@@ -98,7 +98,7 @@ function buildCapabilityLanes(goal: string, routing: DagNodeRouting): Capability
   if (mcpServers.length > 0 || tools.length > 0) {
     lanes.push({
       id: "capability-mcp-agent",
-      name: `Use active MCP/tools: ${goal}`,
+      name: "Use active MCP/tools for action digest",
       role: "researcher",
       source: "mcp",
       outputName: "mcp tool handoff",
@@ -114,10 +114,10 @@ function buildCapabilityLanes(goal: string, routing: DagNodeRouting): Capability
         readOnly: true,
         evidenceRequired: false,
         contextBudget: "tiny",
-        skills: [],
+        skills,
         mcpServers,
         tools,
-        hooks: [],
+        hooks,
         rationale: `mcp=${mcpServers.join(",")}; tools=${tools.join(",")}`,
       },
     });
@@ -126,7 +126,7 @@ function buildCapabilityLanes(goal: string, routing: DagNodeRouting): Capability
   if (hooks.length > 0) {
     lanes.push({
       id: "capability-hook-agent",
-      name: `Apply active hook constraints: ${goal}`,
+      name: "Apply active hook constraints for action digest",
       role: "reviewer",
       source: "hook",
       outputName: "hook constraint handoff",
@@ -142,9 +142,9 @@ function buildCapabilityLanes(goal: string, routing: DagNodeRouting): Capability
         readOnly: true,
         evidenceRequired: false,
         contextBudget: "tiny",
-        skills: [],
-        mcpServers: [],
-        tools: [],
+        skills,
+        mcpServers,
+        tools,
         hooks,
         rationale: `hooks=${hooks.join(",")}`,
       },

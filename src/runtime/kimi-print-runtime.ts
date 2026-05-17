@@ -8,6 +8,8 @@
 import type { AgentRuntime, AgentRunResult } from "./agent-runtime.js";
 import type { ContextCapsule } from "./context-capsule.js";
 import type { DagNode } from "../orchestration/dag.js";
+import { dagNodeRoutingEnv } from "../orchestration/routing.js";
+import { getOmkResourceSettings } from "../util/resource-profile.js";
 import { createKimiTaskRunner, type KimiTaskRunnerOptions } from "../kimi/runner.js";
 
 export type KimiPrintRuntimeOptions = KimiTaskRunnerOptions;
@@ -37,11 +39,17 @@ export function createKimiPrintRuntime(options: KimiPrintRuntimeOptions = {}): A
 
       const runner = createKimiTaskRunner(options);
 
+      const resources = await getOmkResourceSettings();
       const env: Record<string, string> = {
         OMK_RUN_ID: capsule.runId,
         OMK_NODE_ID: capsule.nodeId,
+        OMK_ROLE: capsule.node?.role ?? "",
+        OMK_MCP_ENABLED: resources.mcpScope === "none" ? "false" : "true",
+        OMK_SKILLS_ENABLED: resources.skillsScope === "none" ? "false" : "true",
+        OMK_HOOKS_ENABLED: resources.hooksScope === "none" ? "false" : "true",
         OMK_CONTEXT_BUDGET: capsule.budget.compression,
         OMK_TOTAL_TOKENS: String(capsule.budget.maxInputTokens),
+        ...(capsule.node ? dagNodeRoutingEnv(capsule.node) : {}),
       };
 
       const node: DagNode = {

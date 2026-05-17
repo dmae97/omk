@@ -154,8 +154,8 @@ export const SECRET_PATTERNS: SecretPattern[] = [
 const SECRET_KEY_ENTRIES: SecretKeyEntry[] = [
   { key: 'password', aliases: ['passwd', 'pwd'], category: 'credential' },
   { key: 'secret', aliases: ['client_secret', 'clientSecret', 'signing_key', 'signingKey', 'encryption_key', 'encryptionKey', 'master_key', 'masterKey'], category: 'secret' },
-  { key: 'token', aliases: ['access_token', 'accessToken', 'refresh_token', 'refreshToken'], category: 'token' },
-  { key: 'apikey', aliases: ['api_key', 'api-key'], category: 'api-key' },
+  { key: 'token', aliases: ['access_token', 'accessToken', 'refresh_token', 'refreshToken', 'apitoken', 'api_token'], category: 'token' },
+  { key: 'apikey', aliases: ['api_key', 'api-key', 'xapikey', 'radarrapikey', 'sonarrapikey', 'lidarrapikey', 'servarrapikey'], category: 'api-key' },
   { key: 'auth', aliases: ['authorization'], category: 'auth' },
   { key: 'credential', aliases: ['credentials'], category: 'credential' },
   { key: 'privatekey', aliases: ['private_key'], category: 'private-key' },

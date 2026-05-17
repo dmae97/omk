@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -11,7 +11,8 @@ import { createExecutor } from "../dist/orchestration/executor.js";
 import { estimateRunProgress } from "../dist/orchestration/eta.js";
 import { createRoutedRunState, refreshRunStateEstimate, routeRunState, createExecutableDagFromState } from "../dist/orchestration/run-state.js";
 import { discoverRoutingInventory, resetRoutingInventoryCache } from "../dist/orchestration/routing.js";
-import { collectMcpConfigs, getUserHome, normalizeUserHomePath } from "../dist/util/fs.js";
+import { OMK_RELEASE_GUARD_PRESET } from "../dist/runtime/core-verified-preset.js";
+import { collectMcpConfigs, getUserHome, injectKimiGlobals, normalizeUserHomePath, pruneRuntimeMcpServers } from "../dist/util/fs.js";
 import { resetTimeoutPresetCache, resolveTimeoutMs } from "../dist/util/timeout-config.js";
 
 async function tempWorktree() {
@@ -92,11 +93,43 @@ test("createDag adds bounded Kimi routing hints without changing node contract",
 
     assert.ok(routing?.skills?.includes("omk-research-verify"));
     assert.ok(routing?.tools?.includes("SearchWeb"));
-    assert.ok((routing?.skills?.length ?? 0) <= 3);
+    // Budget limits are expanded when a routing preset is triggered so its
+    // essential skills are not silently dropped; assert a reasonable upper bound.
+    assert.ok((routing?.skills?.length ?? 0) <= 10);
     assert.ok((routing?.tools?.length ?? 0) <= 4);
     assert.equal(routing?.contextBudget, "small");
     assert.equal(routing?.evidenceRequired, true);
   });
+});
+
+test("createDag preserves the full release guard preset for release/security work", () => {
+  const dag = createDag({
+    nodes: [
+      {
+        id: "publish-release",
+        name: "Publish npm release with changelog, provenance, audit summary, and GitHub release",
+        role: "coder",
+        dependsOn: [],
+        maxRetries: 1,
+        outputs: [{ name: "release evidence", gate: "summary" }],
+      },
+    ],
+  });
+  const routing = dag.nodes[0].routing;
+
+  // All release guard preset skills/hooks/MCP must be present; additional
+  // discovered or auto-assigned items may also be included.
+  for (const skill of OMK_RELEASE_GUARD_PRESET.skills) {
+    assert.ok(routing?.skills?.includes(skill), `missing release guard skill: ${skill}`);
+  }
+  for (const hook of OMK_RELEASE_GUARD_PRESET.hooks) {
+    assert.ok(routing?.hooks?.includes(hook), `missing release guard hook: ${hook}`);
+  }
+  for (const mcp of OMK_RELEASE_GUARD_PRESET.mcpServers) {
+    assert.ok(routing?.mcpServers?.includes(mcp), `missing release guard MCP: ${mcp}`);
+  }
+  assert.equal(routing?.mcpServers?.includes("filesystem"), false);
+  assert.match(routing?.rationale ?? "", /omk-release-guard/);
 });
 
 test("routing inventory discovers project skills and MCP without global scope", async () => {
@@ -135,6 +168,111 @@ test("routing inventory discovers project skills and MCP without global scope", 
     assert.equal(inventory.skillsScope, "project");
     assert.equal(inventory.mcpScope, "project");
     assert.equal(inventory.hooksScope, "project");
+  } finally {
+    resetRoutingInventoryCache();
+    restoreEnv("OMK_PROJECT_ROOT", previousRoot);
+    restoreEnv("OMK_SKILLS_SCOPE", previousSkillsScope);
+    restoreEnv("OMK_MCP_SCOPE", previousMcpScope);
+    restoreEnv("OMK_HOOKS_SCOPE", previousHooksScope);
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("routing inventory exposes virtual omk-project for fresh empty MCP configs", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-routing-virtual-mcp-"));
+  const previousRoot = process.env.OMK_PROJECT_ROOT;
+  const previousMcpScope = process.env.OMK_MCP_SCOPE;
+  process.env.OMK_PROJECT_ROOT = projectRoot;
+  process.env.OMK_MCP_SCOPE = "project";
+  resetRoutingInventoryCache();
+
+  try {
+    await mkdir(join(projectRoot, ".kimi"), { recursive: true });
+    await writeFile(join(projectRoot, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: {} }), "utf-8");
+
+    const inventory = discoverRoutingInventory(projectRoot);
+
+    assert.equal(inventory.mcpServers.get("omk-project"), "builtin");
+    assert.equal(inventory.tools.has("omk_read_memory"), true);
+    assert.equal(inventory.tools.has("omk_run_quality_gate"), true);
+  } finally {
+    resetRoutingInventoryCache();
+    restoreEnv("OMK_PROJECT_ROOT", previousRoot);
+    restoreEnv("OMK_MCP_SCOPE", previousMcpScope);
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("routing does not emit skill MCP or hook hints when scopes are none", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-routing-none-scope-"));
+  const previousRoot = process.env.OMK_PROJECT_ROOT;
+  const previousSkillsScope = process.env.OMK_SKILLS_SCOPE;
+  const previousMcpScope = process.env.OMK_MCP_SCOPE;
+  const previousHooksScope = process.env.OMK_HOOKS_SCOPE;
+  process.env.OMK_PROJECT_ROOT = projectRoot;
+  process.env.OMK_SKILLS_SCOPE = "none";
+  process.env.OMK_MCP_SCOPE = "none";
+  process.env.OMK_HOOKS_SCOPE = "none";
+  resetRoutingInventoryCache();
+
+  try {
+    const dag = createDag({
+      nodes: [
+        {
+          id: "scoped-review",
+          name: "Review implementation and report evidence",
+          role: "reviewer",
+          dependsOn: [],
+          maxRetries: 1,
+        },
+      ],
+    });
+
+    const routing = dag.nodes[0].routing;
+    assert.deepEqual(routing?.skills, []);
+    assert.deepEqual(routing?.mcpServers, []);
+    assert.deepEqual(routing?.hooks, []);
+  } finally {
+    resetRoutingInventoryCache();
+    restoreEnv("OMK_PROJECT_ROOT", previousRoot);
+    restoreEnv("OMK_SKILLS_SCOPE", previousSkillsScope);
+    restoreEnv("OMK_MCP_SCOPE", previousMcpScope);
+    restoreEnv("OMK_HOOKS_SCOPE", previousHooksScope);
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("routing preset requirements do not bypass disabled scopes", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-routing-none-release-"));
+  const previousRoot = process.env.OMK_PROJECT_ROOT;
+  const previousSkillsScope = process.env.OMK_SKILLS_SCOPE;
+  const previousMcpScope = process.env.OMK_MCP_SCOPE;
+  const previousHooksScope = process.env.OMK_HOOKS_SCOPE;
+  process.env.OMK_PROJECT_ROOT = projectRoot;
+  process.env.OMK_SKILLS_SCOPE = "none";
+  process.env.OMK_MCP_SCOPE = "none";
+  process.env.OMK_HOOKS_SCOPE = "none";
+  resetRoutingInventoryCache();
+
+  try {
+    const dag = createDag({
+      nodes: [
+        {
+          id: "publish-release",
+          name: "Publish npm release with changelog, provenance, audit summary, and GitHub release",
+          role: "coder",
+          dependsOn: [],
+          maxRetries: 1,
+          outputs: [{ name: "release evidence", gate: "summary" }],
+        },
+      ],
+    });
+
+    const routing = dag.nodes[0].routing;
+    assert.deepEqual(routing?.skills, []);
+    assert.deepEqual(routing?.mcpServers, []);
+    assert.deepEqual(routing?.hooks, []);
+    assert.match(routing?.rationale ?? "", /omk-release-guard/);
   } finally {
     resetRoutingInventoryCache();
     restoreEnv("OMK_PROJECT_ROOT", previousRoot);
@@ -195,6 +333,192 @@ test("project MCP scope excludes global Kimi MCP config", async () => {
     assert.equal(configs.some((path) => path.startsWith(join(homedir(), ".kimi"))), false);
   } finally {
     restoreEnv("OMK_PROJECT_ROOT", previousRoot);
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+
+test("injectKimiGlobals passes one merged MCP config to Kimi to avoid duplicate server warnings", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-merged-mcp-project-"));
+  const originalHome = await mkdtemp(join(tmpdir(), "omk-merged-mcp-home-"));
+  const previousRoot = process.env.OMK_PROJECT_ROOT;
+  const previousHome = process.env.HOME;
+  const previousOriginalHome = process.env.OMK_ORIGINAL_HOME;
+  const previousMcpScope = process.env.OMK_MCP_SCOPE;
+  const previousSkillsScope = process.env.OMK_SKILLS_SCOPE;
+
+  try {
+    await mkdir(join(originalHome, ".kimi"), { recursive: true });
+    await mkdir(join(projectRoot, ".kimi"), { recursive: true });
+    await writeFile(join(originalHome, ".kimi", "mcp.json"), JSON.stringify({
+      mcpServers: {
+        memory: { command: "global-memory" },
+        github: { command: "global-github" },
+      },
+    }));
+    await writeFile(join(projectRoot, ".kimi", "mcp.json"), JSON.stringify({
+      mcpServers: {
+        memory: { command: "project-memory" },
+        filesystem: { command: "project-filesystem" },
+      },
+    }));
+
+    process.env.OMK_PROJECT_ROOT = projectRoot;
+    process.env.HOME = originalHome;
+    process.env.OMK_ORIGINAL_HOME = originalHome;
+    process.env.OMK_MCP_SCOPE = "all";
+    process.env.OMK_SKILLS_SCOPE = "none";
+
+    const args = [];
+    await injectKimiGlobals(args, { mcpScope: "all", skillsScope: "none" });
+
+    const configArgs = args.filter((arg, index) => args[index - 1] === "--mcp-config-file");
+    assert.equal(configArgs.length, 1);
+    assert.match(configArgs[0], /mcp-runtime-merged-\d+-\d+\.json$/);
+
+    const merged = JSON.parse(await readFile(configArgs[0], "utf-8"));
+    assert.equal(merged.mcpServers.memory.command, "project-memory");
+    assert.equal(merged.mcpServers.github.command, "global-github");
+    assert.equal(merged.mcpServers.filesystem.command, "project-filesystem");
+    assert.ok(merged.mcpServers["omk-project"], "built-in omk-project should remain available");
+    if (process.platform !== "win32") {
+      const mode = (await stat(configArgs[0])).mode & 0o777;
+      assert.equal(mode, 0o600);
+    }
+  } finally {
+    restoreEnv("OMK_PROJECT_ROOT", previousRoot);
+    restoreEnv("HOME", previousHome);
+    restoreEnv("OMK_ORIGINAL_HOME", previousOriginalHome);
+    restoreEnv("OMK_MCP_SCOPE", previousMcpScope);
+    restoreEnv("OMK_SKILLS_SCOPE", previousSkillsScope);
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(originalHome, { recursive: true, force: true });
+  }
+});
+
+test("injectKimiGlobals prunes stale global MCP startup entries before Kimi restore", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-pruned-mcp-project-"));
+  const originalHome = await mkdtemp(join(tmpdir(), "omk-pruned-mcp-home-"));
+  const previousRoot = process.env.OMK_PROJECT_ROOT;
+  const previousHome = process.env.HOME;
+  const previousOriginalHome = process.env.OMK_ORIGINAL_HOME;
+  const previousMcpScope = process.env.OMK_MCP_SCOPE;
+  const previousSkillsScope = process.env.OMK_SKILLS_SCOPE;
+  const previousSuppressWarnings = process.env.OMK_MCP_SUPPRESS_PRUNE_WARNINGS;
+
+  try {
+    const missingProxy = join(originalHome, ".kimi", "scripts", "remote_mcp_proxy.py");
+    const missingNodeModule = join(originalHome, ".npm-global", "lib", "node_modules", "broken-mcp", "index.js");
+    await mkdir(join(originalHome, ".kimi"), { recursive: true });
+    await mkdir(join(projectRoot, ".kimi"), { recursive: true });
+    await writeFile(join(originalHome, ".kimi", "mcp.json"), JSON.stringify({
+      mcpServers: {
+        "windows-set": { command: "bash", args: ["-lc", "/mnt/c/WINDOWS/System32/set -a; exec node"] },
+        "remote-proxy": { command: "python3", args: [missingProxy] },
+        "missing-node-module": { command: "node", args: [missingNodeModule] },
+        "stale-sqlite": { command: "npx", args: ["-y", "sqlite-mcp", "/home/not-current/.opencode/data.db"] },
+        "page-design-guide": { command: "page-design-guide" },
+        "http-transport": { command: "example-mcp", args: ["--transport", "http"] },
+        "stdio-page-design-guide": { command: "page-design-guide", args: ["--stdio"] },
+        "pdf": { command: "npx", args: ["-y", "@modelcontextprotocol/server-pdf"] },
+        "pdf-shell": { command: "bash", args: ["-lc", "exec npx -y @modelcontextprotocol/server-pdf"] },
+        "quiet-npx": { command: "npx", args: ["-y", "@example/mcp-server"] },
+        "quiet-uvx": { command: "uvx", args: ["mcp-server-fetch"] },
+        "quiet-python-pip": { command: "python3", args: ["-m", "pip", "install", "example-mcp"] },
+        "quiet-shell-uvx": { command: "bash", args: ["-lc", "exec uvx mcp-server-fetch"] },
+        "custom-uvx": { command: "uvx", args: ["custom-mcp"], env: { UV_NO_PROGRESS: "0", CUSTOM_TOKEN_FILE: "/tmp/fake-token" } },
+        "ok-remote": { url: "https://mcp.example.test" },
+        "ok-shell": { command: "bash", args: ["-lc", "exec node --version"] },
+      },
+    }));
+    const prunedPdf = await pruneRuntimeMcpServers({
+      pdf: { command: "npx", args: ["-y", "@modelcontextprotocol/server-pdf"] },
+    });
+    assert.deepEqual(prunedPdf.servers.pdf.args, ["-y", "@modelcontextprotocol/server-pdf", "--stdio"]);
+    assert.equal(prunedPdf.diagnostics.length, 0);
+    assert.deepEqual(prunedPdf.normalizations.map((entry) => entry.kind), ["runtime-stdio-normalized"]);
+    await writeFile(join(projectRoot, ".kimi", "mcp.json"), JSON.stringify({
+      mcpServers: {
+        "project-local": { command: "node", args: [process.execPath] },
+      },
+    }));
+
+    process.env.OMK_PROJECT_ROOT = projectRoot;
+    process.env.HOME = originalHome;
+    process.env.OMK_ORIGINAL_HOME = originalHome;
+    process.env.OMK_MCP_SCOPE = "all";
+    process.env.OMK_SKILLS_SCOPE = "none";
+    process.env.OMK_MCP_SUPPRESS_PRUNE_WARNINGS = "1";
+
+    const args = [];
+    await injectKimiGlobals(args, { mcpScope: "all", skillsScope: "none" });
+
+    const configArgs = args.filter((arg, index) => args[index - 1] === "--mcp-config-file");
+    assert.equal(configArgs.length, 1);
+    const merged = JSON.parse(await readFile(configArgs[0], "utf-8"));
+    assert.equal(merged.mcpServers["windows-set"], undefined);
+    assert.equal(merged.mcpServers["remote-proxy"], undefined);
+    assert.equal(merged.mcpServers["missing-node-module"], undefined);
+    assert.equal(merged.mcpServers["stale-sqlite"], undefined);
+    assert.equal(merged.mcpServers["page-design-guide"], undefined);
+    assert.equal(merged.mcpServers["http-transport"], undefined);
+    assert.equal(merged.mcpServers["stdio-page-design-guide"].command, "page-design-guide");
+    assert.deepEqual(merged.mcpServers.pdf.args, ["-y", "@modelcontextprotocol/server-pdf", "--stdio"]);
+    assert.equal(merged.mcpServers.pdf.env.npm_config_loglevel, "error");
+    assert.equal(merged.mcpServers["pdf-shell"].args[1], "exec npx -y @modelcontextprotocol/server-pdf --stdio");
+    assert.equal(merged.mcpServers["quiet-npx"].env.npm_config_loglevel, "error");
+    assert.equal(merged.mcpServers["quiet-npx"].env.NPM_CONFIG_PROGRESS, "false");
+    assert.equal(merged.mcpServers["quiet-npx"].env.NODE_NO_WARNINGS, "1");
+    assert.equal(merged.mcpServers["quiet-uvx"].env.UV_NO_PROGRESS, "1");
+    assert.equal(merged.mcpServers["quiet-uvx"].env.PIP_DISABLE_PIP_VERSION_CHECK, "1");
+    assert.equal(merged.mcpServers["quiet-python-pip"].env.PIP_PROGRESS_BAR, "off");
+    assert.equal(merged.mcpServers["quiet-shell-uvx"].env.UV_NO_PROGRESS, "1");
+    assert.equal(merged.mcpServers["custom-uvx"].env.UV_NO_PROGRESS, "0");
+    assert.equal(merged.mcpServers["custom-uvx"].env.CUSTOM_TOKEN_FILE, "/tmp/fake-token");
+    assert.equal(merged.mcpServers["ok-remote"].url, "https://mcp.example.test");
+    assert.equal(merged.mcpServers["ok-shell"].command, "bash");
+    assert.equal(merged.mcpServers["project-local"].command, "node");
+    assert.ok(merged.mcpServers["omk-project"], "built-in omk-project should remain available");
+    const globalConfigAfterRuntimeMerge = JSON.parse(await readFile(join(originalHome, ".kimi", "mcp.json"), "utf-8"));
+    assert.equal(globalConfigAfterRuntimeMerge.mcpServers["quiet-uvx"].env, undefined);
+  } finally {
+    restoreEnv("OMK_PROJECT_ROOT", previousRoot);
+    restoreEnv("HOME", previousHome);
+    restoreEnv("OMK_ORIGINAL_HOME", previousOriginalHome);
+    restoreEnv("OMK_MCP_SCOPE", previousMcpScope);
+    restoreEnv("OMK_SKILLS_SCOPE", previousSkillsScope);
+    restoreEnv("OMK_MCP_SUPPRESS_PRUNE_WARNINGS", previousSuppressWarnings);
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(originalHome, { recursive: true, force: true });
+  }
+});
+
+test("injectKimiGlobals does not inject MCP config when mcpScope is none", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-no-mcp-project-"));
+  const previousRoot = process.env.OMK_PROJECT_ROOT;
+  const previousMcpScope = process.env.OMK_MCP_SCOPE;
+  const previousSkillsScope = process.env.OMK_SKILLS_SCOPE;
+
+  try {
+    await mkdir(join(projectRoot, ".kimi"), { recursive: true });
+    await writeFile(join(projectRoot, ".kimi", "mcp.json"), JSON.stringify({
+      mcpServers: {
+        memory: { command: "project-memory" },
+      },
+    }));
+
+    process.env.OMK_PROJECT_ROOT = projectRoot;
+    process.env.OMK_MCP_SCOPE = "none";
+    process.env.OMK_SKILLS_SCOPE = "none";
+
+    const args = [];
+    await injectKimiGlobals(args, { mcpScope: "none", skillsScope: "none" });
+
+    assert.equal(args.includes("--mcp-config-file"), false);
+  } finally {
+    restoreEnv("OMK_PROJECT_ROOT", previousRoot);
+    restoreEnv("OMK_MCP_SCOPE", previousMcpScope);
+    restoreEnv("OMK_SKILLS_SCOPE", previousSkillsScope);
     await rm(projectRoot, { recursive: true, force: true });
   }
 });

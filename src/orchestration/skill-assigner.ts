@@ -10,6 +10,16 @@ import type { DagNode, DagNodeRouting } from "./dag.js";
 import type { NodeIntent } from "../runtime/runtime-router.js";
 import { createDecisionTraceStore } from "../evidence/decision-trace.js";
 import type { RoutingInput } from "./routing.js";
+import {
+  OMK_CORE_VERIFIED_PRESET,
+  OMK_RELEASE_GUARD_PRESET,
+  OMK_TS_PRODUCT_PRESET,
+  OMK_WORKTREE_TEAM_PRESET,
+  isCoreVerifiedIntent,
+  isReleaseGuardIntent,
+  isTsProductIntent,
+  isWorktreeTeamIntent,
+} from "../runtime/core-verified-preset.js";
 
 export interface SkillAssignment {
   readonly skills: readonly string[];
@@ -27,7 +37,68 @@ interface AssignmentRule {
   readonly rationale: string;
 }
 
+const ROLE_DEFAULTS: Record<string, Partial<Pick<DagNodeRouting, "skills" | "mcpServers" | "tools" | "hooks">>> = {
+  explorer: { skills: ["omk-repo-explorer", "omk-context-broker", "omk-research-verify"], mcpServers: ["omk-project"], hooks: ["subagent-stop-audit.sh"] },
+  researcher: { skills: ["omk-repo-explorer", "omk-research-verify", "omk-context-broker", "omk-plan-first"], mcpServers: ["omk-project", "context7"], hooks: ["subagent-stop-audit.sh"] },
+  planner: { skills: ["omk-plan-first", "omk-context-broker", "omk-industrial-control-loop", "speckit-plan", "speckit-specify"], mcpServers: ["omk-project"], hooks: ["subagent-stop-audit.sh"] },
+  architect: { skills: ["omk-plan-first", "omk-design-system", "omk-context-broker", "omk-industrial-control-loop"], mcpServers: ["omk-project", "context7"], hooks: ["subagent-stop-audit.sh"] },
+  coder: { skills: ["omk-test-debug-loop", "omk-typescript-strict", "omk-python-typing", "omk-frontend-implementation", "matt-pocock-skills", "andrej-karpathy-skills", "omk-flow-feature-dev", "omk-flow-refactor"], mcpServers: ["omk-project"], hooks: ["protect-secrets.sh", "pre-shell-guard.sh", "post-format.sh"] },
+  reviewer: { skills: ["omk-code-review", "omk-security-review", "omk-frontend-ui-review", "omk-backend-api-review", "omk-evidence-contract", "omk-multimodal-ui-review"], mcpServers: ["omk-project"], hooks: ["subagent-stop-audit.sh", "stop-verify.sh"] },
+  security: { skills: ["omk-security-review", "omk-secret-guard", "omk-code-review", "omk-evidence-contract"], mcpServers: ["omk-project"], hooks: ["protect-secrets.sh", "pre-shell-guard.sh", "stop-verify.sh"] },
+  qa: { skills: ["omk-quality-gate", "omk-test-debug-loop", "omk-typescript-strict", "omk-python-typing", "omk-evidence-contract"], mcpServers: ["omk-project"], hooks: ["stop-verify.sh", "pre-shell-guard.sh"] },
+  tester: { skills: ["omk-quality-gate", "omk-test-debug-loop", "omk-flow-bugfix", "omk-evidence-contract"], mcpServers: ["omk-project"], hooks: ["stop-verify.sh", "pre-shell-guard.sh"] },
+  integrator: { skills: ["omk-git-commit-pr", "omk-context-broker", "omk-evidence-contract"], mcpServers: ["omk-project"], hooks: ["branch-diff-snapshot.sh", "subagent-stop-audit.sh", "stop-verify.sh"] },
+  aggregator: { skills: ["omk-code-review", "omk-context-broker", "omk-evidence-contract", "omk-industrial-control-loop"], mcpServers: ["omk-project"], hooks: ["subagent-stop-audit.sh", "stop-verify.sh"] },
+  interviewer: { skills: ["omk-context-broker", "speckit-clarify", "speckit-checklist", "omk-plan-first"], mcpServers: ["omk-project"], hooks: ["subagent-stop-audit.sh"] },
+  "vision-debugger": { skills: ["omk-multimodal-ui-review", "omk-design-md"], mcpServers: ["omk-project"], hooks: ["pre-shell-guard.sh"] },
+  ontology: { skills: ["omk-context-broker", "graph-view", "agentmemory"], mcpServers: ["omk-project"], hooks: ["subagent-stop-audit.sh"] },
+};
+
 const SKILL_RULES: readonly AssignmentRule[] = [
+  {
+    id: OMK_CORE_VERIFIED_PRESET.id,
+    match: (_node, intent) => isCoreVerifiedIntent(intent),
+    assign: {
+      skills: [...OMK_CORE_VERIFIED_PRESET.skills],
+      mcpServers: [...OMK_CORE_VERIFIED_PRESET.mcpServers],
+      hooks: [...OMK_CORE_VERIFIED_PRESET.hooks],
+    },
+    priority: 10,
+    rationale: OMK_CORE_VERIFIED_PRESET.purpose,
+  },
+  {
+    id: OMK_TS_PRODUCT_PRESET.id,
+    match: (node, intent) => isTsProductIntent(intent, `${node.id} ${node.name} ${node.role}`),
+    assign: {
+      skills: [...OMK_TS_PRODUCT_PRESET.skills],
+      mcpServers: [...OMK_TS_PRODUCT_PRESET.mcpServers],
+      hooks: [...OMK_TS_PRODUCT_PRESET.hooks],
+    },
+    priority: 20,
+    rationale: OMK_TS_PRODUCT_PRESET.purpose,
+  },
+  {
+    id: OMK_WORKTREE_TEAM_PRESET.id,
+    match: (node, intent) => isWorktreeTeamIntent(intent, `${node.id} ${node.name} ${node.role}`),
+    assign: {
+      skills: [...OMK_WORKTREE_TEAM_PRESET.skills],
+      mcpServers: [...OMK_WORKTREE_TEAM_PRESET.mcpServers],
+      hooks: [...OMK_WORKTREE_TEAM_PRESET.hooks],
+    },
+    priority: 25,
+    rationale: OMK_WORKTREE_TEAM_PRESET.purpose,
+  },
+  {
+    id: OMK_RELEASE_GUARD_PRESET.id,
+    match: (node, intent) => isReleaseGuardIntent(intent, `${node.id} ${node.name} ${node.role}`),
+    assign: {
+      skills: [...OMK_RELEASE_GUARD_PRESET.skills],
+      mcpServers: [...OMK_RELEASE_GUARD_PRESET.mcpServers],
+      hooks: [...OMK_RELEASE_GUARD_PRESET.hooks],
+    },
+    priority: 92,
+    rationale: OMK_RELEASE_GUARD_PRESET.purpose,
+  },
   {
     id: "web-design",
     match: (_node, intent) =>
@@ -149,9 +220,9 @@ const SKILL_RULES: readonly AssignmentRule[] = [
   {
     id: "mcp-required",
     match: (_node) => _node.routing?.requiresMcp === true,
-    assign: { mcpServers: ["context7", "fetch", "filesystem"] },
+    assign: { mcpServers: ["context7", "fetch", "filesystem-readonly"] },
     priority: 100,
-    rationale: "Node explicitly requires MCP authority",
+    rationale: "Node explicitly requires MCP authority with read-only filesystem by default",
   },
   {
     id: "tool-calling",
@@ -227,7 +298,7 @@ function doAssignSkills(
     .filter((rule) => rule.match(node, intent))
     .sort((a, b) => b.priority - a.priority);
 
-  return buildAssignment(matched, intent, nodeText, node.routing, runId, attemptId, node.id);
+  return buildAssignment(matched, intent, nodeText, node.routing, runId, attemptId, node.id, ROLE_DEFAULTS[node.role]);
 }
 
 function doAssignSkillsForRoutingInput(
@@ -247,14 +318,14 @@ function doAssignSkillsForRoutingInput(
     status: "pending",
     retries: 0,
     maxRetries: 3,
-    routing: {},
+    routing: input.routing ?? {},
   };
 
   const matched = SKILL_RULES
     .filter((rule) => rule.match(adaptedNode, intent))
     .sort((a, b) => b.priority - a.priority);
 
-  return buildAssignment(matched, intent, nodeText, undefined, runId, attemptId, input.id);
+  return buildAssignment(matched, intent, nodeText, undefined, runId, attemptId, input.id, ROLE_DEFAULTS[input.role]);
 }
 
 function buildAssignment(
@@ -264,13 +335,31 @@ function buildAssignment(
   routing: DagNodeRouting | undefined,
   runId: string | undefined,
   attemptId: string | undefined,
-  nodeId: string
+  nodeId: string,
+  roleDefaults?: Partial<Pick<DagNodeRouting, "skills" | "mcpServers" | "tools" | "hooks">>
 ): SkillAssignment {
   const skills = new Set<string>();
   const mcpServers = new Set<string>();
   const tools = new Set<string>();
   const hooks = new Set<string>();
   const rationales: string[] = [];
+
+  // Apply role defaults first (lowest priority; intent-specific rules override)
+  if (roleDefaults) {
+    if (roleDefaults.skills) {
+      for (const s of roleDefaults.skills) skills.add(s);
+    }
+    if (roleDefaults.mcpServers) {
+      for (const m of roleDefaults.mcpServers) mcpServers.add(m);
+    }
+    if (roleDefaults.tools) {
+      for (const t of roleDefaults.tools) tools.add(t);
+    }
+    if (roleDefaults.hooks) {
+      for (const h of roleDefaults.hooks) hooks.add(h);
+    }
+    rationales.push(`[role-default] Default capability set for ${nodeText.split(" ")[2] ?? ""}`);
+  }
 
   for (const rule of matched) {
     if (rule.assign.skills) {

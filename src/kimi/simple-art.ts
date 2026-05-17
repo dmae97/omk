@@ -6,9 +6,9 @@
  * narrow terminals and in logs that do not handle image-style ANSI art.
  */
 export const KIMICAT_SIMPLE_ASCII_ART = [
-  "       /\\_/\\  ♡",
-  "    ฅ( ˶• ᴗ •˶ )ฅ  Plan first. Ship small. Stay safe!",
-  "      / づ☕        kimi❯ chocomint ready",
-  "     /| hoodie |\\   purple paws · mint checks",
-  "  ── violet terminal · cozy agent mode ──",
+  "        /\\_/\\   ♡",
+  "      ฅ( ˶• ᴗ •˶ )ฅ",
+  "       /| hoodie |\\    Plan first. Ship small. Stay safe!",
+  "       /_|_______|_\\   kimi❯ chocomint ready",
+  "    ── violet terminal · purple paws · mint checks ──",
 ].join("\n");

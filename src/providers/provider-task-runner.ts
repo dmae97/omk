@@ -1,7 +1,14 @@
 import type { TaskResult, TaskRunner } from "../contracts/orchestration.js";
 import type { DagNode } from "../orchestration/dag.js";
 import { ProviderHealthRegistry } from "./health.js";
-import { inferNodeRisk, normalizeProviderComplexity, routeProvider } from "./router.js";
+import {
+  DEEPSEEK_V4_FLASH_MODEL,
+  DEEPSEEK_V4_PRO_MODEL,
+  inferNodeRisk,
+  normalizeProviderComplexity,
+  routeProvider,
+  selectDeepSeekModelTier,
+} from "./router.js";
 import type {
   DeepSeekRoutePlan,
   ProviderAssistMetadata,
@@ -16,6 +23,11 @@ import {
   isDeepSeekTransientFailure,
 } from "./deepseek/deepseek-errors.js";
 import { createDecisionTraceStore } from "../evidence/decision-trace.js";
+import {
+  classifyKimiProviderFailure,
+  formatKimiProviderFailureHint,
+  type KimiProviderFailureDiagnosis,
+} from "../kimi/runner.js";
 
 export interface ProviderTaskRunnerOptions {
   kimiRunner: TaskRunner;
@@ -36,6 +48,7 @@ export interface DeepSeekDisableEvent {
 
 export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): TaskRunner {
   const providerHealth = options.providerHealth ?? new ProviderHealthRegistry();
+  let deepSeekDisabledCalled = false;
 
   const runWith = async (
     provider: "kimi" | "deepseek",
@@ -58,6 +71,64 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
       requestedProvider,
       providerRouteReason: routeReason,
       ...metadata,
+    });
+  };
+
+  const recoverFromKimiProviderFailure = async (
+    kimiResult: TaskResult,
+    node: DagNode,
+    env: Record<string, string>,
+    decision: ProviderRouteDecision,
+    traceEnv: Record<string, string>,
+    traceMetadata: Partial<ProviderTaskMetadata>
+  ): Promise<TaskResult> => {
+    const diagnosis = diagnoseKimiProviderFailure(kimiResult);
+    if (!diagnosis) return kimiResult;
+
+    const annotatedKimiResult = withKimiProviderFailure(kimiResult, diagnosis);
+    if (diagnosis.kind !== "monthly-quota") return annotatedKimiResult;
+
+    providerHealth.markKimiUnavailable(diagnosis.title);
+    if (!canFallbackKimiQuotaToDeepSeek(node, options.providerPolicy, options.deepseekRunner, providerHealth)) {
+      return annotatedKimiResult;
+    }
+
+    const fallbackPlan = buildKimiQuotaDeepSeekFallbackPlan(node, env);
+    const fallbackReason = `${diagnosis.title}; using read-only DeepSeek fallback`;
+    const fallback = await runWith(
+      "deepseek",
+      options.deepseekRunner!,
+      node,
+      {
+        ...env,
+        ...traceEnv,
+        ...deepseekRouteEnv(fallbackPlan),
+        OMK_PROVIDER_FALLBACK_FROM: "kimi",
+        OMK_PROVIDER_FALLBACK_REASON: fallbackReason,
+        OMK_KIMI_FAILURE_KIND: diagnosis.kind,
+      },
+      fallbackReason,
+      "kimi",
+      {
+        ...traceMetadata,
+        ...deepseekMetadata(fallbackPlan),
+      }
+    );
+
+    return withProviderMetadata(fallback, {
+      provider: "deepseek",
+      requestedProvider: "kimi",
+      providerRouteReason: decision.reason,
+      ...traceMetadata,
+      providerAttemptCount: 1,
+      ...deepseekMetadata(fallbackPlan),
+      providerFallback: {
+        from: "kimi",
+        to: "deepseek",
+        reason: fallbackReason,
+        attempts: 1,
+        failureKind: "quota",
+      },
     });
   };
 
@@ -132,7 +203,8 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
       };
 
       if (decision.provider === "deepseek" && options.deepseekRunner) {
-        const maxRetries = Math.max(0, Math.floor(options.deepseekMaxRetries ?? 1));
+        const rawMaxRetries = Number(options.deepseekMaxRetries ?? 1);
+        const maxRetries = Math.max(0, Math.floor(Number.isFinite(rawMaxRetries) ? rawMaxRetries : 1));
         const failures: TaskResult[] = [];
         let result: TaskResult | undefined;
 
@@ -185,13 +257,16 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
         const failureKind = lastFailure ? classifyDeepSeekFailure(lastFailure) : "unknown";
         if (lastFailure && isDeepSeekPaymentOrAvailabilityFailure(lastFailure)) {
           providerHealth.markDeepSeekUnavailable(fallbackReason || "DeepSeek provider availability failure");
-          await options.onDeepSeekDisabled?.({
-            nodeId: node.id,
-            nodeRole: node.role,
-            reason: fallbackReason || "DeepSeek provider availability failure",
-            failureKind: "availability",
-            forced: true,
-          });
+          if (!deepSeekDisabledCalled) {
+            deepSeekDisabledCalled = true;
+            await options.onDeepSeekDisabled?.({
+              nodeId: node.id,
+              nodeRole: node.role,
+              reason: fallbackReason || "DeepSeek provider availability failure",
+              failureKind: "availability",
+              forced: true,
+            });
+          }
         } else if (lastFailure && isDeepSeekTransientFailure(lastFailure)) {
           providerHealth.markDeepSeekUnavailable(fallbackReason || "DeepSeek transient provider failure");
         }
@@ -211,7 +286,8 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
           traceMetadata
         );
 
-        return withProviderMetadata(fallback, {
+        const annotatedFallback = withKimiProviderFailureIfNeeded(fallback, providerHealth);
+        return withProviderMetadata(annotatedFallback, {
           provider: "kimi",
           requestedProvider: "deepseek",
           providerRouteReason: decision.reason,
@@ -241,13 +317,16 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
 
         if (!advisory.success && isDeepSeekPaymentOrAvailabilityFailure(advisory.result)) {
           providerHealth.markDeepSeekUnavailable(advisory.failureReason || "DeepSeek provider availability failure");
-          await options.onDeepSeekDisabled?.({
-            nodeId: node.id,
-            nodeRole: node.role,
-            reason: advisory.failureReason || "DeepSeek provider availability failure",
-            failureKind: "availability",
-            forced: true,
-          });
+          if (!deepSeekDisabledCalled) {
+            deepSeekDisabledCalled = true;
+            await options.onDeepSeekDisabled?.({
+              nodeId: node.id,
+              nodeRole: node.role,
+              reason: advisory.failureReason || "DeepSeek provider availability failure",
+              failureKind: "availability",
+              forced: true,
+            });
+          }
         } else if (!advisory.success && isDeepSeekTransientFailure(advisory.result)) {
           providerHealth.markDeepSeekUnavailable(advisory.failureReason || "DeepSeek transient provider failure");
         }
@@ -270,8 +349,19 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
             providerAssist: advisory.metadata,
           }
         );
+        const recoveredKimiResult = await recoverFromKimiProviderFailure(
+          kimiResult,
+          node,
+          env,
+          decision,
+          traceEnv,
+          traceMetadata
+        );
+        if (recoveredKimiResult.metadata?.provider === "deepseek") {
+          return recoveredKimiResult;
+        }
 
-        return withProviderMetadata(kimiResult, {
+        return withProviderMetadata(recoveredKimiResult, {
           provider: "kimi",
           requestedProvider: "kimi",
           providerRouteReason: decision.reason,
@@ -280,11 +370,96 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
         });
       }
 
-      return runWith("kimi", options.kimiRunner, node, { ...env, ...traceEnv }, decision.reason, decision.provider, traceMetadata);
+      const kimiResult = await runWith(
+        "kimi",
+        options.kimiRunner,
+        node,
+        { ...env, ...traceEnv },
+        decision.reason,
+        decision.provider,
+        traceMetadata
+      );
+      return recoverFromKimiProviderFailure(kimiResult, node, env, decision, traceEnv, traceMetadata);
     },
   };
 
   return providerRunner;
+}
+
+function diagnoseKimiProviderFailure(result: TaskResult): KimiProviderFailureDiagnosis | null {
+  if (result.success) return null;
+  return classifyKimiProviderFailure(`${result.stderr}\n${result.stdout}`);
+}
+
+function withKimiProviderFailureIfNeeded(
+  result: TaskResult,
+  providerHealth: ProviderHealthRegistry
+): TaskResult {
+  const diagnosis = diagnoseKimiProviderFailure(result);
+  if (!diagnosis) return result;
+  if (diagnosis.kind === "monthly-quota") {
+    providerHealth.markKimiUnavailable(diagnosis.title);
+  }
+  return withKimiProviderFailure(result, diagnosis);
+}
+
+function withKimiProviderFailure(
+  result: TaskResult,
+  diagnosis: KimiProviderFailureDiagnosis
+): TaskResult {
+  const providerHint = formatKimiProviderFailureHint(`${result.stderr}\n${result.stdout}`);
+  const stderr = providerHint && !result.stderr.includes(`[omk] ${diagnosis.title}.`)
+    ? result.stderr
+      ? `${result.stderr}\n${providerHint}`
+      : providerHint
+    : result.stderr;
+  return {
+    ...result,
+    stderr,
+    metadata: {
+      ...(result.metadata ?? {}),
+      providerFailure: {
+        provider: "kimi",
+        kind: diagnosis.kind,
+        title: diagnosis.title,
+      },
+    },
+  };
+}
+
+function canFallbackKimiQuotaToDeepSeek(
+  node: DagNode,
+  providerPolicy: ProviderPolicy | undefined,
+  deepseekRunner: TaskRunner | undefined,
+  providerHealth: ProviderHealthRegistry
+): boolean {
+  if (!deepseekRunner || !providerHealth.isDeepSeekAvailable()) return false;
+  if (providerPolicy === "kimi" || node.routing?.provider === "kimi") return false;
+  if (inferNodeRisk(node) !== "read") return false;
+  if (node.routing?.readOnly !== true) return false;
+  if (node.routing?.requiresMcp === true || node.routing?.requiresToolCalling === true) return false;
+  return true;
+}
+
+function buildKimiQuotaDeepSeekFallbackPlan(
+  node: DagNode,
+  env: Record<string, string>
+): DeepSeekRoutePlan {
+  const selected = selectDeepSeekModelTier([
+    "kimi-quota-fallback",
+    env.OMK_RUN_ID ?? "",
+    node.id,
+    node.role,
+    env.OMK_TASK_TYPE ?? "general",
+  ].join(":"));
+  return {
+    provider: "deepseek",
+    model: selected.tier === "flash" ? DEEPSEEK_V4_FLASH_MODEL : DEEPSEEK_V4_PRO_MODEL,
+    tier: selected.tier,
+    participation: "direct",
+    reasoningEffort: "max",
+    ratioBucket: selected.ratioBucket,
+  };
 }
 
 async function runDeepSeekAdvisory(options: {

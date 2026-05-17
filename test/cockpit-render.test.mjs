@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-const { renderCockpit } = await import("../dist/commands/cockpit.js");
+const { renderCockpit, visibleTerminalWidth } = await import("../dist/commands/cockpit.js");
 
 function stripAnsi(str) {
   return str.replace(/\x1b\[[0-9;]*m/g, "");
@@ -12,7 +12,7 @@ function stripAnsi(str) {
 
 function maxVisibleWidth(output) {
   return output.split("\n").reduce((max, line) => {
-    const len = stripAnsi(line).length;
+    const len = visibleTerminalWidth(line);
     return len > max ? len : max;
   }, 0);
 }
@@ -43,6 +43,46 @@ describe("renderCockpit", () => {
       assert.ok(maxWidth <= width, `terminalWidth=${width} produced max visible width ${maxWidth}`);
       assert.equal(visibleLines[0].length, maxWidth, `terminalWidth=${width} top border should define frame width`);
       assert.equal(visibleLines.at(-1).length, maxWidth, `terminalWidth=${width} bottom border should match top border`);
+    }
+  });
+
+  it("keeps Korean and emoji cockpit rows within the requested width", async () => {
+    const root = await mkdtemp(join(tmpdir(), "omk-cockpit-wide-"));
+    const previousRoot = process.env.OMK_PROJECT_ROOT;
+    process.env.OMK_PROJECT_ROOT = root;
+    try {
+      const runId = "wide-run";
+      const runDir = join(root, ".omk", "runs", runId);
+      await mkdir(runDir, { recursive: true });
+      await writeFile(join(runDir, "state.json"), JSON.stringify({
+        schemaVersion: 1,
+        runId,
+        status: "running",
+        startedAt: "2026-05-09T00:00:00.000Z",
+        updatedAt: "2026-05-09T00:00:01.000Z",
+        nodes: [{
+          id: "chat",
+          name: "코더🚀가 긴 한국어 상태를 처리합니다",
+          role: "chat",
+          dependsOn: [],
+          status: "running",
+          retries: 0,
+          maxRetries: 0,
+          thinking: "도구 실행 중 🔧",
+        }],
+      }, null, 2));
+
+      const output = await renderCockpit({ runId, terminalWidth: 40, height: 18, quick: true });
+      const widths = output.split("\n").map((line) => visibleTerminalWidth(line));
+      assert.ok(Math.max(...widths) <= 40, `wide output exceeded requested width: ${Math.max(...widths)}`);
+      assert.equal(widths[0], widths.at(-1), "top and bottom borders should align");
+    } finally {
+      if (previousRoot === undefined) {
+        delete process.env.OMK_PROJECT_ROOT;
+      } else {
+        process.env.OMK_PROJECT_ROOT = previousRoot;
+      }
+      await rm(root, { recursive: true, force: true });
     }
   });
 

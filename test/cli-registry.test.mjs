@@ -16,6 +16,10 @@ function commandNames(command) {
   return command.commands.map((subcommand) => subcommand.name());
 }
 
+function optionFlags(command) {
+  return command.options.flatMap((option) => [option.short, option.long].filter(Boolean));
+}
+
 function findCommand(command, name) {
   const found = command.commands.find((subcommand) => subcommand.name() === name);
   assert.ok(found, `missing command: ${name}`);
@@ -49,6 +53,7 @@ test("sliced CLI registry preserves ordered top-level commands", () => {
     "summary-show",
     "chat",
     "research",
+    "open-design",
     "open-design-agent",
     "cockpit",
     "replay",
@@ -78,6 +83,7 @@ test("sliced CLI registry preserves ordered top-level commands", () => {
     "agent",
     "verify",
     "goal",
+    "servarr",
     "mcp",
     "dag",
     "cron",
@@ -96,9 +102,37 @@ test("sliced CLI registry preserves ordered nested command groups", () => {
   assert.deepEqual(commandNames(deepseek), ["api", "enable", "disable", "doctor"]);
   assert.deepEqual(commandNames(findCommand(program, "design")), ["init", "list", "apply", "search", "open-design", "lint", "diff", "export"]);
   assert.deepEqual(commandNames(findCommand(program, "goal")), ["create", "list", "show", "plan", "run", "verify", "close", "block", "continue"]);
-  assert.deepEqual(commandNames(findCommand(program, "mcp")), ["list", "doctor", "test", "serve", "remove", "add", "install", "sync-global"]);
+  assert.deepEqual(commandNames(findCommand(program, "servarr")), [
+    "config-path",
+    "instances",
+    "status",
+    "health",
+    "logs",
+    "tasks",
+    "list",
+    "search",
+  ]);
+  assert.deepEqual(commandNames(findCommand(program, "mcp")), [
+    "list",
+    "doctor",
+    "test",
+    "prewarm",
+    "serve",
+    "remove",
+    "add",
+    "install",
+    "sync-global",
+    "migrate",
+  ]);
   assert.deepEqual(commandNames(findCommand(program, "dag")), ["from-spec", "validate", "show", "replay"]);
   assert.deepEqual(commandNames(findCommand(program, "screenshot")), ["paste", "dir", "list", "clean"]);
+});
+
+test("sliced CLI registry exposes doctor fix options", () => {
+  const program = createOmkProgram();
+
+  assert.ok(optionFlags(findCommand(program, "doctor")).includes("--fix"));
+  assert.ok(optionFlags(findCommand(findCommand(program, "mcp"), "doctor")).includes("--fix"));
 });
 
 test("sliced CLI registry preserves public aliases", () => {
@@ -106,6 +140,7 @@ test("sliced CLI registry preserves public aliases", () => {
   const design = findCommand(program, "design");
   const deepseek = findCommand(program, "deepseek");
 
+  assert.deepEqual(findCommand(program, "open-design").aliases(), ["opendesign"]);
   assert.deepEqual(findCommand(design, "open-design").aliases(), ["od"]);
   assert.deepEqual(findCommand(deepseek, "api").aliases(), ["set"]);
   assert.deepEqual(findCommand(deepseek, "doctor").aliases(), ["status"]);

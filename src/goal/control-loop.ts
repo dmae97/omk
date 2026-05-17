@@ -1,6 +1,13 @@
 import { join } from "path";
 import type { RunState, NextAction } from "../contracts/orchestration.js";
-import type { GoalSpec, GoalEvidence, MissingCriterion, NextActionSuggestion } from "../contracts/goal.js";
+import type {
+  GoalSpec,
+  GoalEvidence,
+  MissingCriterion,
+  NextActionSuggestion,
+  NextActionContract,
+  PromptNoveltyReport,
+} from "../contracts/goal.js";
 import { scoreGoal } from "./scoring.js";
 import { checkGoalEvidence } from "./evidence.js";
 import { getProjectRoot } from "../util/fs.js";
@@ -12,6 +19,12 @@ import {
 import { evaluateMissingCriteria, suggestNextAction } from "./eval-criteria.js";
 import { saveEnsembleDecision } from "./ensemble-memory.js";
 import { renderPromptDigest } from "./prompt-digest.js";
+import {
+  buildIntentFrameFromGoal,
+  buildNextActionContract,
+  evaluatePromptNovelty,
+  renderActionDigest,
+} from "./intent-frame.js";
 import {
   checkDeepSeekBalance,
   DeepSeekClient,
@@ -56,6 +69,7 @@ export async function evaluateGoalProgress(
 
 export interface EnsembleGoalProgress extends GoalProgress {
   ensemble: ReturnType<typeof evaluateEnsembleDecision>;
+  noveltyReport?: PromptNoveltyReport;
 }
 
 export interface DeepSeekGoalDecisionContext {
@@ -130,11 +144,18 @@ export async function evaluateGoalProgressEnsemble(
       score,
       nextAction: forcedNextAction,
       ensemble,
+      noveltyReport: evaluatePromptNovelty({
+        goal,
+        runState: effectiveState,
+        previousPrompt: ensemble.nextPrompt,
+        evidence,
+        action: forcedNextAction,
+      }),
     };
   }
 
   // Run ensemble decision engine
-  const ensemble = evaluateEnsembleDecision(goal, runState, evidence, {
+  let ensemble = evaluateEnsembleDecision(goal, runState, evidence, {
     enabled: true,
     quorumRatio: 0.5,
     extraVotes: deepseekVote ? [deepseekVote] : undefined,
@@ -153,6 +174,26 @@ export async function evaluateGoalProgressEnsemble(
   } else {
     nextAction = "continue";
   }
+  let noveltyReport = evaluatePromptNovelty({
+    goal,
+    runState,
+    previousPrompt: ensemble.nextPrompt,
+    evidence,
+    action: nextAction,
+  });
+  if (nextAction === "continue" && noveltyReport.recommendation === "replan") {
+    nextAction = "replan";
+    ensemble = {
+      ...ensemble,
+      action: "replan",
+      shouldContinue: true,
+      rationale: `${ensemble.rationale}\nNovelty guard: ${noveltyReport.reason}`,
+      nextPrompt: ensemble.nextPrompt
+        ? `${ensemble.nextPrompt}\n\n## Novelty Guard\n- Recommendation: replan\n- Reason: ${noveltyReport.reason}`
+        : `Replan from the strict action DAG because ${noveltyReport.reason}.`,
+    };
+    noveltyReport = { ...noveltyReport, recommendation: "replan" };
+  }
 
   // Persist important ensemble decisions to the configured graph memory backend.
   if (ensemble.confidence >= 0.5) {
@@ -166,6 +207,7 @@ export async function evaluateGoalProgressEnsemble(
     score,
     nextAction,
     ensemble,
+    noveltyReport,
   };
 }
 
@@ -375,6 +417,8 @@ export interface NextPromptResult {
   prompt: string;
   missingCriteria: MissingCriterion[];
   suggestion: NextActionSuggestion;
+  nextActionContract: NextActionContract;
+  noveltyReport: PromptNoveltyReport;
   memorySummary: string;
   recommendedCommands: string[];
   recommendedSkills: string[];
@@ -439,6 +483,7 @@ export async function generateNextPrompt(
 
   const missingCriteria = evaluateMissingCriteria(goal, evidence);
   const suggestion = suggestNextAction(goal, evidence);
+  const intentFrame = buildIntentFrameFromGoal(goal);
 
   const completedCriteria = goal.successCriteria.filter((c) => {
     const ev = evidence.find((e) => e.criterionId === c.id);
@@ -450,9 +495,35 @@ export async function generateNextPrompt(
   const runningNodes = runState?.nodes.filter((n) => n.status === "running") ?? [];
   const pendingNodes = runState?.nodes.filter((n) => n.status === "pending") ?? [];
   const successNodes = runState?.nodes.filter((n) => n.status === "done") ?? [];
+  const proposedAction: NextAction = suggestion.type === "close"
+    ? "close"
+    : failedNodes.length > 0 || blockedNodes.length > 0
+      ? "replan"
+      : "continue";
+  const noveltyReport = evaluatePromptNovelty({
+    goal,
+    runState,
+    previousPrompt: [
+      suggestion.description,
+      ...describeNodes([...(failedNodes.length > 0 ? failedNodes : pendingNodes)], 4),
+    ].join("\n"),
+    evidence,
+    action: proposedAction,
+  });
+  const contractAtom = noveltyReport.recommendation === "replan"
+    ? intentFrame.actionAtoms.find((atom) => atom.label.startsWith("plan-"))
+    : intentFrame.actionAtoms.find((atom) =>
+      ["implement-change", "inspect-context", "test-scenario", "document-result", "produce-artifact", "verify-evidence"].includes(atom.label)
+    );
+  const nextActionContract = buildNextActionContract(
+    noveltyReport.recommendation,
+    contractAtom?.id ?? intentFrame.actionAtoms[0]?.id ?? "atom-plan",
+    suggestion.description,
+    intentFrame
+  );
 
   const lines: string[] = [
-    `# Context-Aware Goal Follow-up: ${goal.title}`,
+    `# Context-Aware Goal Follow-up: strict-action-dag`,
     ``,
     `## Kimi Context Synthesis`,
     `Treat this document as context for the next action, not as text to repeat verbatim.`,
@@ -461,6 +532,28 @@ export async function generateNextPrompt(
     ``,
     `## Goal Reference (non-verbatim)`,
     renderPromptDigest("Original objective digest", goal.objective),
+    ``,
+    `## Strict Intent / Action Digest`,
+    renderActionDigest(intentFrame),
+    ``,
+    `## Next Action Contract`,
+    `- Action: ${nextActionContract.action}`,
+    `- Target: ${nextActionContract.targetId}`,
+    `- Description: ${nextActionContract.description}`,
+    `- Evidence target: ${nextActionContract.evidenceTarget}`,
+    `- Done condition: ${nextActionContract.doneCondition}`,
+    ``,
+    `## Novelty Guard`,
+    `- Recommendation: ${noveltyReport.recommendation}`,
+    `- Reason: ${noveltyReport.reason}`,
+    `- Similarity to original: ${noveltyReport.similarityToOriginal}`,
+    `- Similarity to previous: ${noveltyReport.similarityToPrevious}`,
+    `- Evidence delta: ${noveltyReport.evidenceDelta}`,
+    `- Progress delta: ${noveltyReport.progressDelta}`,
+    `- Replay risk: ${noveltyReport.replayRisk}`,
+    `- Oscillation: ${noveltyReport.oscillation}`,
+    `- Target atom: ${noveltyReport.targetAtomId ?? "auto"}`,
+    `- New evidence: ${noveltyReport.hasNewEvidence}`,
     ``,
     `## Immediate Focus`,
     `- Type: ${suggestion.type}`,
@@ -569,6 +662,8 @@ export async function generateNextPrompt(
     prompt,
     missingCriteria,
     suggestion,
+    nextActionContract,
+    noveltyReport,
     memorySummary: resolvedMemorySummary,
     recommendedCommands,
     recommendedSkills,

@@ -12,6 +12,7 @@ import { createStatePersister } from "../orchestration/state-persister.js";
 import { evaluateGoalProgressIncremental, generateNextPrompt } from "../goal/control-loop.js";
 import { orchestratePrompt } from "../orchestration/orchestrate-prompt.js";
 import { compileGoalToDagNodes } from "../goal/compiler.js";
+import { buildIntentFrameFromGoal, renderActionDigest } from "../goal/intent-frame.js";
 import type { GoalSpec, GoalEvidence } from "../contracts/goal.js";
 import type { RunState } from "../contracts/orchestration.js";
 import type { DagNodeDefinition } from "../orchestration/dag.js";
@@ -25,6 +26,7 @@ interface GoalExecutionOptions {
   watch?: boolean;
   view?: string;
   timeoutPreset?: string;
+  mcpScope?: string;
   maxAutoContinueIterations?: string;
 }
 
@@ -133,6 +135,9 @@ export async function goalCreateCommand(
     join(mirrorDir, "goal.md"),
     [`# Goal: ${spec.title}`, "", spec.objective, "", `**Status:** ${spec.status}`, `**Risk:** ${spec.riskLevel}`].join("\n")
   );
+  const intentFrame = buildIntentFrameFromGoal(spec);
+  await writeFile(join(mirrorDir, "intent-frame.json"), `${JSON.stringify(intentFrame, null, 2)}\n`);
+  await writeFile(join(mirrorDir, "action-atoms.json"), `${JSON.stringify(intentFrame.actionAtoms, null, 2)}\n`);
 
   if (options.json) {
     console.log(JSON.stringify(spec, null, 2));
@@ -216,6 +221,9 @@ export async function goalPlanCommand(goalId: string, options: { json?: boolean 
   const nodes = compileGoalToDagNodes(updated);
   const mirrorDir = join(getGoalBasePath(), goalId);
   await mkdir(mirrorDir, { recursive: true });
+  const intentFrame = buildIntentFrameFromGoal(updated);
+  await writeFile(join(mirrorDir, "intent-frame.json"), `${JSON.stringify(intentFrame, null, 2)}\n`);
+  await writeFile(join(mirrorDir, "action-atoms.json"), `${JSON.stringify(intentFrame.actionAtoms, null, 2)}\n`);
   await writeFile(join(mirrorDir, "plan.md"), renderGoalPlan(updated, nodes), "utf-8");
 
   if (options.json) {
@@ -243,10 +251,14 @@ export async function goalPlanCommand(goalId: string, options: { json?: boolean 
 }
 
 function renderGoalPlan(spec: GoalSpec, nodes: DagNodeDefinition[]): string {
+  const intentFrame = buildIntentFrameFromGoal(spec);
   const lines: string[] = [
-    `# Plan: ${spec.title}`,
+    `# Plan: Strict action DAG`,
     "",
-    `**Objective:** ${spec.objective}`,
+    "## Intent / Action Digest",
+    "",
+    renderActionDigest(intentFrame),
+    "",
     `**Risk:** ${spec.riskLevel}`,
     `**Plan revision:** ${spec.planRevision}`,
     "",
@@ -256,13 +268,13 @@ function renderGoalPlan(spec: GoalSpec, nodes: DagNodeDefinition[]): string {
     "",
     "## Execution DAG",
     "",
-    "| Step | Node | Role | Depends on | Evidence gate |",
-    "|------|------|------|------------|---------------|",
+    "| Step | Node | Action atom | Role | Depends on | Evidence gate |",
+    "|------|------|-------------|------|------------|---------------|",
   ];
 
   for (const [index, node] of nodes.entries()) {
     const gate = node.outputs?.map((output) => output.gate ?? "summary").join(", ") || "summary";
-    lines.push(`| ${index + 1} | ${node.id} | ${node.role} | ${node.dependsOn.join(", ") || "—"} | ${gate} |`);
+    lines.push(`| ${index + 1} | ${node.id} | ${node.routing?.actionAtom?.label ?? "—"} | ${node.role} | ${node.dependsOn.join(", ") || "—"} | ${gate} |`);
   }
 
   lines.push("", "## Acceptance Criteria", "");
@@ -321,10 +333,10 @@ export async function goalRunCommand(
   await persister.appendHistory(goalId, {
     at: new Date().toISOString(),
     action: "run",
-    detail: { workers: options.workers },
+    detail: { workers: options.workers, mcpScope: options.mcpScope },
   });
 
-  const initialPrompt = updated.objective || updated.rawPrompt || updated.title;
+  const initialPrompt = renderActionDigest(buildIntentFrameFromGoal(updated));
 
   await orchestratePrompt(initialPrompt, {
     sourceCommand: "goal-run",
@@ -336,6 +348,7 @@ export async function goalRunCommand(
     watch: options.watch,
     view: options.view,
     timeoutPreset: options.timeoutPreset,
+    mcpScope: options.mcpScope,
     maxAutoContinueIterations: options.maxAutoContinueIterations,
     failOnDagFailure: true,
   });
@@ -533,6 +546,8 @@ export async function goalContinueCommand(
   await mkdir(goalDir, { recursive: true });
   const nextPromptPath = join(goalDir, "next-prompt.md");
   await writeFile(nextPromptPath, nextResult.prompt);
+  await writeFile(join(goalDir, "novelty-report.json"), `${JSON.stringify(nextResult.noveltyReport, null, 2)}\n`);
+  await writeFile(join(goalDir, "next-action-contract.json"), `${JSON.stringify(nextResult.nextActionContract, null, 2)}\n`);
 
   // Print summary
   console.log(header("Goal Continue"));
@@ -551,7 +566,7 @@ export async function goalContinueCommand(
   await persister.appendHistory(effectiveGoalId, {
     at: new Date().toISOString(),
     action: "continue",
-    detail: { contextRunId, nextRunId: options.runId, workers: options.workers },
+    detail: { contextRunId, nextRunId: options.runId, workers: options.workers, mcpScope: options.mcpScope },
   });
 
   // Delegate to orchestration with generated prompt as goal text
@@ -565,6 +580,7 @@ export async function goalContinueCommand(
     watch: options.watch,
     view: options.view,
     timeoutPreset: options.timeoutPreset,
+    mcpScope: options.mcpScope,
     maxAutoContinueIterations: options.maxAutoContinueIterations,
     failOnDagFailure: true,
   });
