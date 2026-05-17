@@ -18,7 +18,7 @@ test("CI exposes the local release:check gate", () => {
   const workflow = read(".github/workflows/ci.yml");
   assert.match(workflow, /release-check:/);
   assert.match(workflow, /npm run release:check/);
-  assert.match(workflow, /npm run verify/);
+  assert.match(workflow, /npm run test/);
   assert.match(workflow, /npm run native:build/);
   assert.match(workflow, /npm run audit:package/);
 });
