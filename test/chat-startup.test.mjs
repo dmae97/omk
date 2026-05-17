@@ -98,6 +98,7 @@ test("chat command fails loudly when Kimi exits immediately with code 0", async 
         OMK_MCP_SCOPE: "",
         OMK_SKILLS_SCOPE: "",
         OMK_HOOKS_SCOPE: "",
+        OMK_MCP_SUPPRESS_PRUNE_WARNINGS: "1",
         OMK_RENDER_LOGO: "0",
         OMK_STAR_PROMPT: "0",
         OMK_CHAT_NO_BANNER: "1",
