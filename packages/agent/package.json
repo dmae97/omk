@@ -50,7 +50,7 @@
 		"directory": "packages/agent"
 	},
 	"engines": {
-		"node": ">=20.0.0"
+		"node": ">=22.19.0"
 	},
 	"devDependencies": {
 		"@types/node": "^24.3.0",
