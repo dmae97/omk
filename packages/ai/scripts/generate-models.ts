@@ -1546,18 +1546,6 @@ async function generateModels() {
 			maxTokens: CODEX_MAX_TOKENS,
 		},
 		{
-			id: "gpt-5.4-fast",
-			name: "GPT-5.4 Fast",
-			api: "openai-codex-responses",
-			provider: "openai-codex",
-			baseUrl: CODEX_BASE_URL,
-			reasoning: true,
-			input: ["text", "image"],
-			cost: { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 0 },
-			contextWindow: CODEX_CONTEXT,
-			maxTokens: CODEX_MAX_TOKENS,
-		},
-		{
 			id: "gpt-5.4-mini",
 			name: "GPT-5.4 mini",
 			api: "openai-codex-responses",
@@ -1566,18 +1554,6 @@ async function generateModels() {
 			reasoning: true,
 			input: ["text", "image"],
 			cost: { input: 0.75, output: 4.5, cacheRead: 0.075, cacheWrite: 0 },
-			contextWindow: CODEX_CONTEXT,
-			maxTokens: CODEX_MAX_TOKENS,
-		},
-		{
-			id: "gpt-5.4-mini-fast",
-			name: "GPT-5.4 mini Fast",
-			api: "openai-codex-responses",
-			provider: "openai-codex",
-			baseUrl: CODEX_BASE_URL,
-			reasoning: true,
-			input: ["text", "image"],
-			cost: { input: 1.5, output: 9, cacheRead: 0.15, cacheWrite: 0 },
 			contextWindow: CODEX_CONTEXT,
 			maxTokens: CODEX_MAX_TOKENS,
 		},
@@ -1593,23 +1569,11 @@ async function generateModels() {
 			contextWindow: CODEX_CONTEXT,
 			maxTokens: CODEX_MAX_TOKENS,
 		},
-		{
-			id: "gpt-5.5-fast",
-			name: "GPT-5.5 Fast",
-			api: "openai-codex-responses",
-			provider: "openai-codex",
-			baseUrl: CODEX_BASE_URL,
-			reasoning: true,
-			input: ["text", "image"],
-			cost: { input: 12.5, output: 75, cacheRead: 1.25, cacheWrite: 0 },
-			contextWindow: CODEX_CONTEXT,
-			maxTokens: CODEX_MAX_TOKENS,
-		},
 	];
 	allModels.push(...codexModels);
 
 	// Add missing Grok models
-	const missingGrokModels: Model[] = [
+	const missingGrokModels: Model<"openai-completions">[] = [
 		{
 			id: "grok-3",
 			name: "Grok 3",
