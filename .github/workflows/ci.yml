@@ -23,8 +23,14 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
+      - run: node --version && npm --version
       - run: npm ci
-      - run: npm run verify
+      - run: npm run yaml:check
+      - run: npm run lint
+      - run: npm run secret:scan
+      - run: npm run check
+      - run: npm run build:clean
+      - run: npm run test
       - uses: dtolnay/rust-toolchain@stable
       - run: npm run native:build
       - run: npm run audit:package
@@ -37,5 +43,6 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
       - run: npm run release:check
