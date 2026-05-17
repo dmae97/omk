@@ -8,6 +8,8 @@
 
 ### Fixed
 
+- Fixed OpenAI Codex generated model metadata to use the current upstream model list ([#4603](https://github.com/earendil-works/pi-mono/pull/4603) by [@mattiacerutti](https://github.com/mattiacerutti)).
+- Fixed GitHub Copilot GPT model thinking metadata to map unsupported minimal thinking to low ([#4622](https://github.com/earendil-works/pi-mono/pull/4622) by [@mattiacerutti](https://github.com/mattiacerutti)).
 - Fixed `streamSimple()` defaults for models whose advertised output limit is effectively their full context window to avoid impossible default requests ([#4614](https://github.com/earendil-works/pi/issues/4614)).
 
 ## [0.74.1] - 2026-05-16
