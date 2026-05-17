@@ -23,7 +23,16 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
-          cache: npm
+      - name: Pre-build diagnostics
+        run: |
+          echo "=== Environment Diagnostics ==="
+          node --version && npm --version
+          env | grep -iE 'omk|kimi|node|home' || true
+          echo "=== HOME contents ==="
+          ls -la ~/
+          echo "=== node-pty load test ==="
+          node -e "try { require('node-pty'); console.log('node-pty: OK'); } catch(e) { console.log('node-pty: FAIL', e.message); }"
+          echo "=== Cache cleared for clean install ==="
       - run: node --version && npm --version
       - run: npm ci
       - run: npm rebuild
@@ -40,7 +49,9 @@ jobs:
           set -e
           if [ $exit_code -ne 0 ]; then
             echo "=== TEST FAILED (exit $exit_code) ==="
-            tail -n 300 test-output.txt
+            head -n 200 test-output.txt
+            echo "... [truncated] ..."
+            tail -n 200 test-output.txt
             echo "=== DIAGNOSTICS ==="
             npm ls node-pty || true
             node -e "try { require('node-pty'); console.log('node-pty OK'); } catch(e) { console.log('node-pty FAIL:', e.message); }" || true
