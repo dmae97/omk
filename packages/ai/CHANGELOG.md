@@ -5,6 +5,7 @@
 ### Fixed
 
 - Fixed Xiaomi MiMo model metadata to use the OpenAI-compatible endpoints and `openai-completions` API, restoring multi-turn thinking/tool-call sessions ([#4505](https://github.com/earendil-works/pi/issues/4505)).
+- Fixed OpenCode Go Kimi reasoning replay by normalizing streamed `reasoning` fields back to `reasoning_content` for OpenCode Go only ([#4251](https://github.com/earendil-works/pi/issues/4251)).
 
 ## [0.75.0] - 2026-05-17
 
