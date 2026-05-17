@@ -1131,7 +1131,8 @@ done
 # Release/deploy guard. These commands are not destructive like rm -rf, but
 # they can publish external state. Parse tokens so common option/shell-wrapper
 # variants cannot bypass the guard.
-INPUT_JSON="$INPUT" "$PY" <<'PY'
+SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+INPUT_JSON="$INPUT" SCRIPT_DIR="$SCRIPT_DIR" "$PY" <<'PY'
 import json
 import os
 import posixpath
@@ -1256,6 +1257,11 @@ except Exception as exc:
     respond("deny", f"Unable to parse release/deploy command safely: {exc}")
 
 if os.environ.get("OMK_ALLOW_RELEASE") == "1":
+    respond("allow")
+
+# File-based override for environments where env vars don't propagate to hooks
+allow_release_path = os.path.join(os.environ.get("SCRIPT_DIR", ""), ".allow-release")
+if os.path.exists(allow_release_path):
     respond("allow")
 
 for expanded in expand_shell_wrappers(tokens):
