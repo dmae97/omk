@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Fixed Amazon Bedrock message conversion to skip unknown content blocks instead of failing the stream ([#4223](https://github.com/earendil-works/pi/issues/4223)).
 - Fixed Azure OpenAI Responses and OpenAI Responses error formatting to prefix HTTP status codes onto `errorMessage`, so transient 5xx and 429 errors are correctly matched by the agent-level auto-retry classifier ([#4232](https://github.com/earendil-works/pi/issues/4232)).
 - Fixed Xiaomi MiMo model metadata to use the OpenAI-compatible endpoints and `openai-completions` API, restoring multi-turn thinking/tool-call sessions ([#4505](https://github.com/earendil-works/pi/issues/4505)).
 - Fixed OpenCode Go Kimi reasoning replay by normalizing streamed `reasoning` fields back to `reasoning_content` for OpenCode Go only ([#4251](https://github.com/earendil-works/pi/issues/4251)).
