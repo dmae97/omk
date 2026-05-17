@@ -36,7 +36,7 @@ pi update npm:@foo/bar      # update one package
 pi update --extension npm:@foo/bar
 ```
 
-By default, `install` and `remove` write to global settings (`~/.pi/agent/settings.json`). Use `-l` to write to project settings (`.pi/settings.json`) instead. Project settings can be shared with your team, and pi installs any missing packages automatically on startup.
+By default, `install` and `remove` write to user settings (`~/.pi/agent/settings.json`). Use `-l` to write to project settings (`.pi/settings.json`) instead. Project settings can be shared with your team, and pi installs any missing packages automatically on startup.
 
 To try a package without installing it, use `--extension` or `-e`. This installs to a temporary directory for the current run only:
 
@@ -57,7 +57,7 @@ npm:pkg
 ```
 
 - Versioned specs are pinned and skipped by package updates (`pi update`, `pi update --extensions`).
-- Global installs use `npm install -g`.
+- User installs go under `~/.pi/agent/npm/`.
 - Project installs go under `.pi/npm/`.
 - Set `npmCommand` in `settings.json` to pin npm package lookup and install operations to a specific wrapper command such as `mise` or `asdf`.
 

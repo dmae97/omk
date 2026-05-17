@@ -645,7 +645,28 @@ Content`,
 
 			expect(runCommandSpy).toHaveBeenCalledWith(
 				"mise",
-				["exec", "node@20", "--", "npm", "install", "-g", "@scope/pkg"],
+				["exec", "node@20", "--", "npm", "install", "@scope/pkg", "--prefix", join(agentDir, "npm")],
+				undefined,
+			);
+		});
+
+		it("should use bun --cwd for npm package installs", async () => {
+			settingsManager = SettingsManager.inMemory({
+				npmCommand: ["mise", "exec", "bun@1", "--", "bun"],
+			});
+			packageManager = new DefaultPackageManager({
+				cwd: tempDir,
+				agentDir,
+				settingsManager,
+			});
+
+			const runCommandSpy = vi.spyOn(packageManager as any, "runCommand").mockResolvedValue(undefined);
+
+			await packageManager.install("npm:@scope/pkg");
+
+			expect(runCommandSpy).toHaveBeenCalledWith(
+				"mise",
+				["exec", "bun@1", "--", "bun", "install", "@scope/pkg", "--cwd", join(agentDir, "npm")],
 				undefined,
 			);
 		});
@@ -799,7 +820,7 @@ Content`,
 			expect(runCommandSyncSpy).toHaveBeenNthCalledWith(2, "mise", ["exec", "node@22", "--", "npm", "root", "-g"]);
 		});
 
-		it("should resolve pnpm global package paths from pnpm list output", async () => {
+		it("should install user npm packages into the pi-managed npm root", async () => {
 			settingsManager = SettingsManager.inMemory({
 				npmCommand: ["pnpm"],
 				packages: ["npm:pnpm-pkg"],
@@ -810,38 +831,25 @@ Content`,
 				settingsManager,
 			});
 
-			const pnpmRoot = join(tempDir, "pnpm", "global", "v11");
-			const packagePath = join(pnpmRoot, "20-hash", "node_modules", "pnpm-pkg");
-			let installed = false;
-
-			vi.spyOn(packageManager as any, "runCommandSync").mockImplementation((...callArgs: unknown[]) => {
-				const [command, args] = callArgs as [string, string[]];
-				if (command !== "pnpm") {
-					throw new Error(`unexpected command ${command}`);
-				}
-				if (args.join(" ") === "list -g --depth 0 --json") {
-					return JSON.stringify([
-						{
-							path: pnpmRoot,
-							dependencies: installed ? { "pnpm-pkg": { version: "1.0.0", path: packagePath } } : {},
-						},
-					]);
-				}
-				if (args.join(" ") === "root -g") {
-					return pnpmRoot;
-				}
-				throw new Error(`unexpected args ${args.join(" ")}`);
+			const packagePath = join(agentDir, "npm", "node_modules", "pnpm-pkg");
+			vi.spyOn(packageManager as any, "runCommandSync").mockImplementation(() => {
+				throw new Error("legacy lookup unavailable");
 			});
 			const runCommandSpy = vi
 				.spyOn(packageManager as any, "runCommand")
 				.mockImplementation(async (...callArgs: unknown[]) => {
 					const [command, args] = callArgs as [string, string[]];
 					expect(command).toBe("pnpm");
-					expect(args).toEqual(["install", "-g", "pnpm-pkg"]);
+					expect(args).toEqual([
+						"install",
+						"pnpm-pkg",
+						"--prefix",
+						join(agentDir, "npm"),
+						"--config.strict-dep-builds=false",
+					]);
 					mkdirSync(join(packagePath, "extensions"), { recursive: true });
 					writeFileSync(join(packagePath, "package.json"), JSON.stringify({ name: "pnpm-pkg", version: "1.0.0" }));
 					writeFileSync(join(packagePath, "extensions", "index.ts"), "export default function() {};");
-					installed = true;
 				});
 
 			const first = await packageManager.resolve();
@@ -854,6 +862,49 @@ Content`,
 				second.extensions.some((r) => r.path === join(packagePath, "extensions", "index.ts") && r.enabled),
 			).toBe(true);
 			expect(runCommandSpy).toHaveBeenCalledTimes(1);
+			expect(packageManager.getInstalledPath("npm:pnpm-pkg", "user")).toBe(packagePath);
+		});
+
+		it("should load legacy pnpm global package paths from pnpm list output", async () => {
+			settingsManager = SettingsManager.inMemory({
+				npmCommand: ["pnpm"],
+				packages: ["npm:pnpm-pkg"],
+			});
+			packageManager = new DefaultPackageManager({
+				cwd: tempDir,
+				agentDir,
+				settingsManager,
+			});
+
+			const pnpmRoot = join(tempDir, "pnpm", "global", "v11");
+			const packagePath = join(pnpmRoot, "20-hash", "node_modules", "pnpm-pkg");
+			mkdirSync(join(packagePath, "extensions"), { recursive: true });
+			writeFileSync(join(packagePath, "package.json"), JSON.stringify({ name: "pnpm-pkg", version: "1.0.0" }));
+			writeFileSync(join(packagePath, "extensions", "index.ts"), "export default function() {};");
+
+			vi.spyOn(packageManager as any, "runCommandSync").mockImplementation((...callArgs: unknown[]) => {
+				const [command, args] = callArgs as [string, string[]];
+				if (command !== "pnpm") {
+					throw new Error(`unexpected command ${command}`);
+				}
+				if (args.join(" ") === "list -g --depth 0 --json") {
+					return JSON.stringify([
+						{
+							path: pnpmRoot,
+							dependencies: { "pnpm-pkg": { version: "1.0.0", path: packagePath } },
+						},
+					]);
+				}
+				throw new Error(`unexpected args ${args.join(" ")}`);
+			});
+			const runCommandSpy = vi.spyOn(packageManager as any, "runCommand").mockResolvedValue(undefined);
+
+			const result = await packageManager.resolve();
+
+			expect(
+				result.extensions.some((r) => r.path === join(packagePath, "extensions", "index.ts") && r.enabled),
+			).toBe(true);
+			expect(runCommandSpy).not.toHaveBeenCalled();
 			expect(packageManager.getInstalledPath("npm:pnpm-pkg", "user")).toBe(packagePath);
 		});
 
@@ -883,7 +934,7 @@ Content`,
 			expect(packageManager.getInstalledPath("npm:pnpm-pkg", "user")).toBe(packagePath);
 		});
 
-		it("should fail when pnpm global package list is malformed", () => {
+		it("should ignore malformed legacy pnpm global package lists", () => {
 			settingsManager = SettingsManager.inMemory({
 				npmCommand: ["pnpm"],
 			});
@@ -895,7 +946,7 @@ Content`,
 
 			vi.spyOn(packageManager as any, "runCommandSync").mockReturnValue("not json");
 
-			expect(() => packageManager.getInstalledPath("npm:pnpm-pkg", "user")).toThrow();
+			expect(packageManager.getInstalledPath("npm:pnpm-pkg", "user")).toBeUndefined();
 		});
 	});
 
@@ -1829,12 +1880,42 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 			expect(runCommandSpy).not.toHaveBeenCalled();
 		});
 
-		it("should batch npm updates per scope and run git updates in parallel while skipping pinned and current packages", async () => {
-			vi.spyOn(packageManager as any, "getGlobalNpmRoot").mockReturnValue(join(agentDir, "node_modules"));
+		it("should migrate legacy user npm installs into the managed npm root during update", async () => {
+			const legacyRoot = join(tempDir, "legacy-global", "node_modules");
+			const legacyPath = join(legacyRoot, "legacy-pkg");
+			const managedPath = join(agentDir, "npm", "node_modules", "legacy-pkg");
+			mkdirSync(legacyPath, { recursive: true });
+			writeFileSync(join(legacyPath, "package.json"), JSON.stringify({ name: "legacy-pkg", version: "1.0.0" }));
+			settingsManager.setPackages(["npm:legacy-pkg"]);
 
-			const userOldPath = join(agentDir, "node_modules", "user-old");
-			const userCurrentPath = join(agentDir, "node_modules", "user-current");
-			const userUnknownPath = join(agentDir, "node_modules", "user-unknown");
+			vi.spyOn(packageManager as any, "getGlobalNpmRoot").mockReturnValue(legacyRoot);
+			const runCommandCaptureSpy = vi.spyOn(packageManager as any, "runCommandCapture").mockResolvedValue('"1.0.0"');
+			const runCommandSpy = vi
+				.spyOn(packageManager as any, "runCommand")
+				.mockImplementation(async (...callArgs: unknown[]) => {
+					const [command, args] = callArgs as [string, string[]];
+					expect(command).toBe("npm");
+					expect(args).toEqual(["install", "legacy-pkg@latest", "--prefix", join(agentDir, "npm")]);
+					mkdirSync(managedPath, { recursive: true });
+					writeFileSync(
+						join(managedPath, "package.json"),
+						JSON.stringify({ name: "legacy-pkg", version: "1.0.0" }),
+					);
+				});
+
+			expect(packageManager.getInstalledPath("npm:legacy-pkg", "user")).toBe(legacyPath);
+
+			await packageManager.update("npm:legacy-pkg");
+
+			expect(runCommandCaptureSpy).not.toHaveBeenCalled();
+			expect(runCommandSpy).toHaveBeenCalledTimes(1);
+			expect(packageManager.getInstalledPath("npm:legacy-pkg", "user")).toBe(managedPath);
+		});
+
+		it("should batch npm updates per scope and run git updates in parallel while skipping pinned and current packages", async () => {
+			const userOldPath = join(agentDir, "npm", "node_modules", "user-old");
+			const userCurrentPath = join(agentDir, "npm", "node_modules", "user-current");
+			const userUnknownPath = join(agentDir, "npm", "node_modules", "user-unknown");
 			const projectOldPath = join(tempDir, ".pi", "npm", "node_modules", "project-old");
 			const projectCurrentPath = join(tempDir, ".pi", "npm", "node_modules", "project-current");
 			const installPaths = [userOldPath, userCurrentPath, userUnknownPath, projectOldPath, projectCurrentPath];
@@ -1924,7 +2005,7 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 			expect(runCommandSpy).toHaveBeenNthCalledWith(
 				1,
 				"npm",
-				["install", "-g", "user-old@latest", "user-unknown@latest"],
+				["install", "user-old@latest", "user-unknown@latest", "--prefix", join(agentDir, "npm")],
 				undefined,
 			);
 			expect(runCommandSpy).toHaveBeenNthCalledWith(

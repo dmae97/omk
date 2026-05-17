@@ -183,8 +183,8 @@ describe("Responses API tool result images", () => {
 		);
 	});
 
-	describe("OpenAI Codex Responses Provider (gpt-5.2-codex)", () => {
-		const model = getModel("openai-codex", "gpt-5.2-codex");
+	describe("OpenAI Codex Responses Provider (gpt-5.5)", () => {
+		const model = getModel("openai-codex", "gpt-5.5");
 
 		it.skipIf(!openaiCodexToken)(
 			"should send tool result images in function_call_output",

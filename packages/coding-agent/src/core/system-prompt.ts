@@ -59,11 +59,12 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 
 		// Append project context files
 		if (contextFiles.length > 0) {
-			prompt += "\n\n# Project Context\n\n";
+			prompt += "\n\n<project_context>\n\n";
 			prompt += "Project-specific instructions and guidelines:\n\n";
 			for (const { path: filePath, content } of contextFiles) {
-				prompt += `## ${filePath}\n\n${content}\n\n`;
+				prompt += `<project_instructions path="${filePath}">\n${content}\n</project_instructions>\n\n`;
 			}
+			prompt += "</project_context>\n";
 		}
 
 		// Append skills section (only if read tool is available)

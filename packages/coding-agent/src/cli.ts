@@ -5,7 +5,7 @@
  *
  * Test with: npx tsx src/cli-new.ts [args...]
  */
-import { EnvHttpProxyAgent, setGlobalDispatcher, fetch as undiciFetch } from "undici";
+import { EnvHttpProxyAgent, setGlobalDispatcher } from "undici";
 import { APP_NAME } from "./config.js";
 import { main } from "./main.js";
 
@@ -17,15 +17,6 @@ process.emitWarning = (() => {}) as typeof process.emitWarning;
 // (e.g. vLLM buffering a large tool call) exceed that and abort the SSE stream
 // with UND_ERR_BODY_TIMEOUT. Disable both — provider SDKs enforce their own
 // AbortController-based deadlines via retry.provider.timeoutMs.
-// Node 26 uses an internal undici for globalThis.fetch that does not honor npm
-// undici's global dispatcher, so route global fetch through npm undici as well.
-const dispatcher = new EnvHttpProxyAgent({ bodyTimeout: 0, headersTimeout: 0 });
-setGlobalDispatcher(dispatcher);
-const fetchWithDispatcher = undiciFetch as unknown as typeof fetch;
-globalThis.fetch = (input, init) =>
-	fetchWithDispatcher(input, {
-		...init,
-		dispatcher,
-	} as unknown as RequestInit);
+setGlobalDispatcher(new EnvHttpProxyAgent({ bodyTimeout: 0, headersTimeout: 0 }));
 
 main(process.argv.slice(2));

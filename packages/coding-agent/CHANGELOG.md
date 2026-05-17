@@ -2,9 +2,16 @@
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Raised the minimum supported Node.js version to 22.19.0.
+
 ### Fixed
 
 - Fixed compaction summary calls to use custom agent stream functions, preserving proxy-backed LLM routing ([#4484](https://github.com/earendil-works/pi/issues/4484)).
+- Fixed user-scoped npm pi packages to install under `~/.pi/agent/npm/` instead of npm's global package root, avoiding permission errors with system-managed Node installs ([#4587](https://github.com/earendil-works/pi/issues/4587)).
+- Fixed Mistral requests failing after the global fetch proxy/timeout workaround by removing the custom fetch override and using undici 8 dispatcher support instead ([#4619](https://github.com/earendil-works/pi/issues/4619)).
+- Fixed default output token requests for models whose advertised output limit is effectively their full context window, avoiding impossible provider requests inherited from `@earendil-works/pi-ai` ([#4614](https://github.com/earendil-works/pi/issues/4614)).
 
 ## [0.74.1] - 2026-05-16
 

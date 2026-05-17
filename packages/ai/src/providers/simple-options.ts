@@ -1,9 +1,19 @@
 import type { Api, Model, SimpleStreamOptions, StreamOptions, ThinkingBudgets, ThinkingLevel } from "../types.js";
 
+const DEFAULT_MAX_OUTPUT_TOKENS = 32000;
+const CONTEXT_WINDOW_OUTPUT_TOLERANCE = 1024;
+
 export function buildBaseOptions(model: Model<Api>, options?: SimpleStreamOptions, apiKey?: string): StreamOptions {
+	const defaultMaxTokens =
+		model.maxTokens > 0
+			? model.maxTokens >= model.contextWindow - CONTEXT_WINDOW_OUTPUT_TOLERANCE
+				? Math.min(model.maxTokens, DEFAULT_MAX_OUTPUT_TOKENS)
+				: model.maxTokens
+			: undefined;
+
 	return {
 		temperature: options?.temperature,
-		maxTokens: options?.maxTokens ?? (model.maxTokens > 0 ? model.maxTokens : undefined),
+		maxTokens: options?.maxTokens ?? defaultMaxTokens,
 		signal: options?.signal,
 		apiKey: apiKey || options?.apiKey,
 		transport: options?.transport,
