@@ -218,6 +218,7 @@ export function truncateTail(content: string, options: TruncationOptions = {}): 
 
 	const totalBytes = utf8ByteLength(content);
 	const lines = content.split("\n");
+	if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
 	const totalLines = lines.length;
 
 	// Check if no truncation needed

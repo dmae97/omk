@@ -102,6 +102,17 @@ describe("truncate utilities", () => {
 		expect(result.outputBytes).toBe(5);
 	});
 
+	it("truncates an oversized single line with a trailing newline", () => {
+		const input = `${"X".repeat(300_000)}\n`;
+		const result = truncateTail(input, { maxBytes: 1024, maxLines: 100 });
+
+		expect(result.content).toBe("X".repeat(1024));
+		expect(result.outputBytes).toBe(1024);
+		expect(result.outputLines).toBe(1);
+		expect(result.lastLinePartial).toBe(true);
+		expect(result.truncatedBy).toBe("bytes");
+	});
+
 	it("drops an oversized trailing character when it cannot fit in tail byte limit", () => {
 		const result = truncateTail("abc🙂", { maxBytes: 3, maxLines: 10 });
 
