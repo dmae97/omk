@@ -96,11 +96,15 @@ function readRuntimeScopes(projectRoot, homeRoot) {
     "const resources = await getOmkResourceSettings();",
     "console.log(JSON.stringify({ mcpScope: resources.mcpScope, skillsScope: resources.skillsScope, hooksScope: resources.hooksScope }));",
   ].join(" ");
+  const env = { ...process.env };
+  delete env.OMK_MCP_SCOPE;
+  delete env.OMK_SKILLS_SCOPE;
+  delete env.OMK_HOOKS_SCOPE;
   const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
     cwd: projectRoot,
     encoding: "utf-8",
     env: {
-      ...process.env,
+      ...env,
       HOME: homeRoot,
       OMK_ORIGINAL_HOME: homeRoot,
       OMK_PROJECT_ROOT: projectRoot,
@@ -1058,11 +1062,15 @@ test("init local-user mode uses WSL UNC ~/.kimi/mcp.json with omk-project at run
     const shimBin = join(projectRoot, "bin");
     await writeOmkShim(shimBin);
 
+    const doctorEnv = { ...process.env };
+    delete doctorEnv.OMK_MCP_SCOPE;
+    delete doctorEnv.OMK_SKILLS_SCOPE;
+    delete doctorEnv.OMK_HOOKS_SCOPE;
     const doctor = spawnSync(process.execPath, [CLI, "mcp", "doctor"], {
       cwd: projectRoot,
       encoding: "utf-8",
       env: {
-        ...process.env,
+        ...doctorEnv,
         PATH: `${shimBin}${delimiter}${process.env.PATH ?? ""}`,
         Path: `${shimBin}${delimiter}${process.env.Path ?? process.env.PATH ?? ""}`,
         HOME: doctorHome,

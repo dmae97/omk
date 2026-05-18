@@ -357,21 +357,24 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
       });
       const HARD_MAX_TIMEOUT_MS = 1_800_000; // 30 minutes
       const runPromise = nodeRunner.run(node, env);
-      let hardMaxHandle: ReturnType<typeof setTimeout>;
+      let hardMaxHandle: ReturnType<typeof setTimeout> | undefined;
       const hardMaxPromise = new Promise<never>((_, reject) => {
         hardMaxHandle = setTimeout(() => reject(new Error(`Node ${node.id} exceeded hard maximum timeout`)), HARD_MAX_TIMEOUT_MS);
       });
-      if (nodeTimeoutMs > 0) {
-        let timeoutHandle: ReturnType<typeof setTimeout>;
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          timeoutHandle = setTimeout(() => reject(new Error(`Node ${node.id} timed out after ${nodeTimeoutMs}ms`)), nodeTimeoutMs);
-        });
-        result = await Promise.race([runPromise, timeoutPromise, hardMaxPromise]);
-        clearTimeout(timeoutHandle!);
-      } else {
-        result = await Promise.race([runPromise, hardMaxPromise]);
+      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+      try {
+        if (nodeTimeoutMs > 0) {
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            timeoutHandle = setTimeout(() => reject(new Error(`Node ${node.id} timed out after ${nodeTimeoutMs}ms`)), nodeTimeoutMs);
+          });
+          result = await Promise.race([runPromise, timeoutPromise, hardMaxPromise]);
+        } else {
+          result = await Promise.race([runPromise, hardMaxPromise]);
+        }
+      } finally {
+        clearTimeout(hardMaxHandle);
+        clearTimeout(timeoutHandle);
       }
-      clearTimeout(hardMaxHandle!);
       recordProviderAttempt(node, result);
       if (result.success) {
         const evidenceCheck = await checkNodeEvidence(node, result, options);
