@@ -43,6 +43,7 @@ jobs:
       - run: npm run check
       - run: npm run build:clean
       - name: Run tests with diagnostics
+        shell: bash
         run: |
           set +e
           node scripts/run-tests.mjs > test-output.txt 2>&1

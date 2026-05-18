@@ -1552,7 +1552,9 @@ test("evidence gate blocks file-exists refs outside worktree", async () => {
   }
 });
 
-test("evidence gate blocks file-exists symlink escapes outside worktree", async () => {
+test("evidence gate blocks file-exists symlink escapes outside worktree", {
+  skip: process.platform === "win32" ? "Symlinks require admin privileges on Windows" : false,
+}, async () => {
   const root = await mkdtemp(join(tmpdir(), "omk-evidence-symlink-"));
   const worktree = join(root, "worktree");
   await mkdir(worktree, { recursive: true });
