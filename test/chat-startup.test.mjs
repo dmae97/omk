@@ -3,11 +3,25 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
-import { join } from "node:path";
+import { join, delimiter } from "node:path";
 import { tmpdir } from "node:os";
 
 const { ensureChatStartupArtifacts, formatChatStartupDate } = await import("../dist/util/chat-startup.js");
 const CLI = join(process.cwd(), "dist", "cli.js");
+
+async function createFakeKimi(binRoot, scriptBody) {
+  if (process.platform === "win32") {
+    const jsPath = join(binRoot, "kimi.js");
+    await writeFile(jsPath, scriptBody, "utf-8");
+    const cmdPath = join(binRoot, "kimi.cmd");
+    await writeFile(cmdPath, `@echo off\r\n"${process.execPath}" "${jsPath}" %*\r\n`, "utf-8");
+    return cmdPath;
+  }
+  const binPath = join(binRoot, "kimi");
+  await writeFile(binPath, `#!${process.execPath}\n${scriptBody}\n`, "utf-8");
+  await chmod(binPath, 0o755);
+  return binPath;
+}
 
 test("chat startup creates dated docs and local ontology graph", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-chat-startup-"));
@@ -78,13 +92,15 @@ test("chat command fails loudly when Kimi exits immediately with code 0", async 
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-chat-fast-exit-project-"));
   const homeRoot = await mkdtemp(join(tmpdir(), "omk-chat-fast-exit-home-"));
   const binRoot = await mkdtemp(join(tmpdir(), "omk-chat-fast-exit-bin-"));
-  const kimiBin = join(binRoot, "kimi");
   const runId = "immediate-exit";
 
   try {
     await mkdir(binRoot, { recursive: true });
-    await writeFile(kimiBin, "#!/usr/bin/env sh\necho 'fake kimi started'\nexit 0\n", "utf-8");
-    await chmod(kimiBin, 0o755);
+    const kimiBin = await createFakeKimi(binRoot, [
+      `console.log("fake kimi started");`,
+      `process.exit(0);`,
+      ``,
+    ].join("\n"));
 
     const result = spawnSync(process.execPath, [CLI, "chat", "--layout", "plain", "--brand", "plain", "--run-id", runId], {
       cwd: projectRoot,
@@ -134,7 +150,6 @@ test("chat command fails preflight before launching Kimi when agent YAML schema 
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-chat-invalid-agent-project-"));
   const homeRoot = await mkdtemp(join(tmpdir(), "omk-chat-invalid-agent-home-"));
   const binRoot = await mkdtemp(join(tmpdir(), "omk-chat-invalid-agent-bin-"));
-  const kimiBin = join(binRoot, "kimi");
   const markerPath = join(projectRoot, "kimi-launched.marker");
   const runId = "invalid-agent-yaml";
 
@@ -144,14 +159,15 @@ test("chat command fails preflight before launching Kimi when agent YAML schema 
     await mkdir(join(projectRoot, ".kimi"), { recursive: true });
     await mkdir(join(homeRoot, ".kimi"), { recursive: true });
     await mkdir(binRoot, { recursive: true });
-    await writeFile(kimiBin, [
-      "#!/usr/bin/env sh",
-      "if [ \"$1\" = \"--version\" ]; then echo 'kimi 1.0.0'; exit 0; fi",
-      `printf launched > ${JSON.stringify(markerPath)}`,
-      "exit 0",
-      "",
-    ].join("\n"), "utf-8");
-    await chmod(kimiBin, 0o755);
+    const kimiBin = await createFakeKimi(binRoot, [
+      `if (process.argv[2] === "--version") {`,
+      `  console.log("kimi 1.0.0");`,
+      `  process.exit(0);`,
+      `}`,
+      `require("fs").writeFileSync(${JSON.stringify(markerPath)}, "launched");`,
+      `process.exit(0);`,
+      ``,
+    ].join("\n"));
     await writeFile(join(homeRoot, ".kimi", "config.toml"), "default_model = \"kimi-k2.6\"\n", "utf-8");
     await writeFile(join(projectRoot, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: {} }), "utf-8");
     await writeFile(join(projectRoot, ".omk", "prompts", "root.md"), "# Root\n", "utf-8");
@@ -218,20 +234,20 @@ test("chat smoke validates startup without launching Kimi", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-chat-smoke-project-"));
   const homeRoot = await mkdtemp(join(tmpdir(), "omk-chat-smoke-home-"));
   const binRoot = await mkdtemp(join(tmpdir(), "omk-chat-smoke-bin-"));
-  const kimiBin = join(binRoot, "kimi");
   const markerPath = join(projectRoot, "kimi-launched.marker");
   const runId = "chat-smoke";
 
   try {
     await mkdir(binRoot, { recursive: true });
-    await writeFile(kimiBin, [
-      "#!/usr/bin/env sh",
-      "if [ \"$1\" = \"--version\" ]; then echo 'kimi 1.0.0'; exit 0; fi",
-      `printf launched > ${JSON.stringify(markerPath)}`,
-      "exit 0",
-      "",
-    ].join("\n"), "utf-8");
-    await chmod(kimiBin, 0o755);
+    const kimiBin = await createFakeKimi(binRoot, [
+      `if (process.argv[2] === "--version") {`,
+      `  console.log("kimi 1.0.0");`,
+      `  process.exit(0);`,
+      `}`,
+      `require("fs").writeFileSync(${JSON.stringify(markerPath)}, "launched");`,
+      `process.exit(0);`,
+      ``,
+    ].join("\n"));
 
     const env = {
       ...process.env,

@@ -11,6 +11,7 @@ const INIT_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "commands", "i
 const RESOURCE_PROFILE_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "util", "resource-profile.js")).href;
 const CLI = join(process.cwd(), "dist", "cli.js");
 const POSIX_EXECUTABLE_BITS_SUPPORTED = process.platform !== "win32";
+const IS_WINDOWS = process.platform === "win32";
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -79,17 +80,13 @@ function runCli(projectRoot, homeRoot, args, extraEnv = {}) {
 
 async function writeFakeKimi(binDir) {
   await mkdir(binDir, { recursive: true });
+  if (IS_WINDOWS) {
+    const kimiPath = join(binDir, "kimi.cmd");
+    await writeFile(kimiPath, `@echo off\nif "%~1"=="--version" (\n  echo kimi, version 1.41.0\n) else (\n  echo Usage: kimi [OPTIONS] COMMAND [ARGS...]\n  echo   --agent-file FILE\n  echo   --model MODEL\n  echo   SearchWeb FetchURL\n)\n`, "utf-8");
+    return;
+  }
   const kimiPath = join(binDir, "kimi");
-  await writeFile(kimiPath, `#!/usr/bin/env sh
-if [ "$1" = "--version" ]; then
-  echo "kimi, version 1.41.0"
-else
-  echo "Usage: kimi [OPTIONS] COMMAND [ARGS...]"
-  echo "  --agent-file FILE"
-  echo "  --model MODEL"
-  echo "  SearchWeb FetchURL"
-fi
-`, "utf-8");
+  await writeFile(kimiPath, `#!/usr/bin/env sh\nif [ "$1" = "--version" ]; then\n  echo "kimi, version 1.41.0"\nelse\n  echo "Usage: kimi [OPTIONS] COMMAND [ARGS...]"\n  echo "  --agent-file FILE"\n  echo "  --model MODEL"\n  echo "  SearchWeb FetchURL"\nfi\n`, "utf-8");
   await chmod(kimiPath, 0o755);
 }
 
@@ -492,38 +489,51 @@ test("init installs an OMK-safe awesome-agent-skills UserPromptSubmit router hoo
     const hookStat = await stat(hookPath);
     assertExecutableModeIfSupported(hookStat, "generated hook should be executable");
 
-    const hookResult = spawnSync("bash", [hookPath], {
-      cwd: projectRoot,
-      encoding: "utf-8",
-      input: JSON.stringify({
-        hook_event_name: "UserPromptSubmit",
-        prompt: "디자인 UI prototype 만들고 playwright 테스트도 해줘",
-      }),
-    });
-    assert.equal(hookResult.status, 0, hookResult.stderr || hookResult.stdout);
+    if (!IS_WINDOWS) {
+      const hookResult = spawnSync("bash", [hookPath], {
+        cwd: projectRoot,
+        encoding: "utf-8",
+        input: JSON.stringify({
+          hook_event_name: "UserPromptSubmit",
+          prompt: "디자인 UI prototype 만들고 playwright 테스트도 해줘",
+        }),
+      });
+      assert.equal(hookResult.status, 0, hookResult.stderr || hookResult.stdout);
 
-    const hookOutput = JSON.parse(hookResult.stdout);
-    assert.equal(hookOutput.hookSpecificOutput.hookEventName, "UserPromptSubmit");
-    assert.match(hookOutput.hookSpecificOutput.additionalContext, /awesome-agent-skills routing hint/);
-    assert.match(hookOutput.hookSpecificOutput.additionalContext, /\/open-design/);
-    assert.match(hookOutput.hookSpecificOutput.additionalContext, /\/awesome-design-md/);
-    assert.match(hookOutput.hookSpecificOutput.additionalContext, /\/omk-design-md/);
-    assert.match(hookOutput.hookSpecificOutput.additionalContext, /\/omk-quality-gate/);
+      const hookOutput = JSON.parse(hookResult.stdout);
+      assert.equal(hookOutput.hookSpecificOutput.hookEventName, "UserPromptSubmit");
+      assert.match(hookOutput.hookSpecificOutput.additionalContext, /awesome-agent-skills routing hint/);
+      assert.match(hookOutput.hookSpecificOutput.additionalContext, /\/open-design/);
+      assert.match(hookOutput.hookSpecificOutput.additionalContext, /\/awesome-design-md/);
+      assert.match(hookOutput.hookSpecificOutput.additionalContext, /\/omk-design-md/);
+      assert.match(hookOutput.hookSpecificOutput.additionalContext, /\/omk-quality-gate/);
 
-    const graphHookResult = spawnSync("bash", [hookPath], {
-      cwd: projectRoot,
-      encoding: "utf-8",
-      input: JSON.stringify({
-        hook_event_name: "UserPromptSubmit",
-        prompt: "온톨로지 그래프 관계를 보고 리스크맵 확인",
-      }),
-    });
-    assert.equal(graphHookResult.status, 0, graphHookResult.stderr || graphHookResult.stdout);
+      const graphHookResult = spawnSync("bash", [hookPath], {
+        cwd: projectRoot,
+        encoding: "utf-8",
+        input: JSON.stringify({
+          hook_event_name: "UserPromptSubmit",
+          prompt: "온톨로지 그래프 관계를 보고 리스크맵 확인",
+        }),
+      });
+      assert.equal(graphHookResult.status, 0, graphHookResult.stderr || graphHookResult.stdout);
 
-    const graphHookOutput = JSON.parse(graphHookResult.stdout);
-    assert.match(graphHookOutput.hookSpecificOutput.additionalContext, /ontology-graph/);
-    assert.match(graphHookOutput.hookSpecificOutput.additionalContext, /\/graph-view/);
-    assert.match(graphHookOutput.hookSpecificOutput.additionalContext, /\/omk-kimi-runtime/);
+      const graphHookOutput = JSON.parse(graphHookResult.stdout);
+      assert.match(graphHookOutput.hookSpecificOutput.additionalContext, /ontology-graph/);
+      assert.match(graphHookOutput.hookSpecificOutput.additionalContext, /\/graph-view/);
+      assert.match(graphHookOutput.hookSpecificOutput.additionalContext, /\/omk-kimi-runtime/);
+    } else {
+      const hookBody = await readFile(hookPath, "utf-8");
+      assert.match(hookBody, /UserPromptSubmit/);
+      assert.match(hookBody, /awesome-agent-skills routing hint/);
+      assert.match(hookBody, /\/open-design/);
+      assert.match(hookBody, /\/awesome-design-md/);
+      assert.match(hookBody, /\/omk-design-md/);
+      assert.match(hookBody, /\/omk-quality-gate/);
+      assert.match(hookBody, /ontology-graph/);
+      assert.match(hookBody, /\/graph-view/);
+      assert.match(hookBody, /\/omk-kimi-runtime/);
+    }
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(homeRoot, { recursive: true, force: true });
@@ -560,16 +570,22 @@ test("init installs OMK lifecycle hooks and release guard", async () => {
       const hookStat = await stat(hookPath);
       assertExecutableModeIfSupported(hookStat, `${scriptName} should be executable`);
 
-      const hookResult = spawnSync("bash", [hookPath], {
-        cwd: projectRoot,
-        encoding: "utf-8",
-        input: "{}",
-      });
-      assert.equal(hookResult.status, 0, hookResult.stderr || hookResult.stdout);
+      if (!IS_WINDOWS) {
+        const hookResult = spawnSync("bash", [hookPath], {
+          cwd: projectRoot,
+          encoding: "utf-8",
+          input: "{}",
+        });
+        assert.equal(hookResult.status, 0, hookResult.stderr || hookResult.stdout);
 
-      const output = JSON.parse(hookResult.stdout);
-      assert.equal(output.hookSpecificOutput.hookEventName, eventName);
-      assert.match(output.hookSpecificOutput.additionalContext, contextPattern);
+        const output = JSON.parse(hookResult.stdout);
+        assert.equal(output.hookSpecificOutput.hookEventName, eventName);
+        assert.match(output.hookSpecificOutput.additionalContext, contextPattern);
+      } else {
+        const hookBody = await readFile(hookPath, "utf-8");
+        assert.match(hookBody, new RegExp(eventName));
+        assert.match(hookBody, contextPattern);
+      }
     }
 
     for (const scriptName of ["typecheck-after-edit.sh", "eslint-after-edit.sh"]) {
@@ -577,62 +593,75 @@ test("init installs OMK lifecycle hooks and release guard", async () => {
       const hookStat = await stat(hookPath);
       assertExecutableModeIfSupported(hookStat, `${scriptName} should be executable`);
 
-      const hookResult = spawnSync("bash", [hookPath], {
-        cwd: projectRoot,
-        encoding: "utf-8",
-        input: JSON.stringify({ tool_input: { file_path: "src/app.ts" } }),
-      });
-      assert.equal(hookResult.status, 0, hookResult.stderr || hookResult.stdout);
+      if (!IS_WINDOWS) {
+        const hookResult = spawnSync("bash", [hookPath], {
+          cwd: projectRoot,
+          encoding: "utf-8",
+          input: JSON.stringify({ tool_input: { file_path: "src/app.ts" } }),
+        });
+        assert.equal(hookResult.status, 0, hookResult.stderr || hookResult.stdout);
 
-      const output = JSON.parse(hookResult.stdout);
-      assert.equal(output.hookSpecificOutput.hookEventName, "PostToolUse");
-      assert.equal(output.hookSpecificOutput.permissionDecision, "allow");
+        const output = JSON.parse(hookResult.stdout);
+        assert.equal(output.hookSpecificOutput.hookEventName, "PostToolUse");
+        assert.equal(output.hookSpecificOutput.permissionDecision, "allow");
+      } else {
+        const hookBody = await readFile(hookPath, "utf-8");
+        assert.match(hookBody, /PostToolUse/);
+        assert.match(hookBody, /allow/);
+      }
     }
 
     const guardPath = join(projectRoot, ".omk", "hooks", "pre-shell-guard.sh");
-    for (const command of [
-      "git push origin main",
-      "npm publish",
-      "pnpm publish",
-      "yarn npm publish",
-      "gh release create v1.2.3",
-      "gh workflow run release.yml",
-      "npm version patch",
-      "git -c user.name=x push origin main",
-      "npm --registry=https://registry.npmjs.org publish",
-      "pnpm --filter pkg publish",
-      "bash -lc 'git -c user.name=x push origin main'",
-      "gh --repo owner/repo release create v1.2.3",
-    ]) {
-      const blocked = spawnSync("bash", [guardPath], {
+    if (!IS_WINDOWS) {
+      for (const command of [
+        "git push origin main",
+        "npm publish",
+        "pnpm publish",
+        "yarn npm publish",
+        "gh release create v1.2.3",
+        "gh workflow run release.yml",
+        "npm version patch",
+        "git -c user.name=x push origin main",
+        "npm --registry=https://registry.npmjs.org publish",
+        "pnpm --filter pkg publish",
+        "bash -lc 'git -c user.name=x push origin main'",
+        "gh --repo owner/repo release create v1.2.3",
+      ]) {
+        const blocked = spawnSync("bash", [guardPath], {
+          cwd: projectRoot,
+          encoding: "utf-8",
+          input: JSON.stringify({ tool_input: { command, args: "" } }),
+        });
+        assert.equal(blocked.status, 0, blocked.stderr || blocked.stdout);
+        const blockedOutput = JSON.parse(blocked.stdout);
+        assert.equal(blockedOutput.hookSpecificOutput.permissionDecision, "deny");
+        assert.match(blockedOutput.hookSpecificOutput.permissionDecisionReason, /OMK release guard/);
+      }
+
+      const allowedShell = spawnSync("bash", [guardPath], {
         cwd: projectRoot,
         encoding: "utf-8",
-        input: JSON.stringify({ tool_input: { command, args: "" } }),
+        input: JSON.stringify({ tool_input: { command: "npm test", args: "" } }),
       });
-      assert.equal(blocked.status, 0, blocked.stderr || blocked.stdout);
-      const blockedOutput = JSON.parse(blocked.stdout);
-      assert.equal(blockedOutput.hookSpecificOutput.permissionDecision, "deny");
-      assert.match(blockedOutput.hookSpecificOutput.permissionDecisionReason, /OMK release guard/);
+      assert.equal(allowedShell.status, 0, allowedShell.stderr || allowedShell.stdout);
+      const allowedShellOutput = JSON.parse(allowedShell.stdout);
+      assert.equal(allowedShellOutput.hookSpecificOutput.permissionDecision, "allow");
+
+      const allowedPush = spawnSync("bash", [guardPath], {
+        cwd: projectRoot,
+        encoding: "utf-8",
+        input: JSON.stringify({ tool_input: { command: "git push origin main", args: "" } }),
+        env: { ...process.env, OMK_ALLOW_RELEASE: "1" },
+      });
+      assert.equal(allowedPush.status, 0, allowedPush.stderr || allowedPush.stdout);
+      const allowedPushOutput = JSON.parse(allowedPush.stdout);
+      assert.equal(allowedPushOutput.hookSpecificOutput.permissionDecision, "allow");
+    } else {
+      const guardBody = await readFile(guardPath, "utf-8");
+      assert.match(guardBody, /deny/);
+      assert.match(guardBody, /OMK release guard/);
+      assert.match(guardBody, /allow/);
     }
-
-    const allowedShell = spawnSync("bash", [guardPath], {
-      cwd: projectRoot,
-      encoding: "utf-8",
-      input: JSON.stringify({ tool_input: { command: "npm test", args: "" } }),
-    });
-    assert.equal(allowedShell.status, 0, allowedShell.stderr || allowedShell.stdout);
-    const allowedShellOutput = JSON.parse(allowedShell.stdout);
-    assert.equal(allowedShellOutput.hookSpecificOutput.permissionDecision, "allow");
-
-    const allowedPush = spawnSync("bash", [guardPath], {
-      cwd: projectRoot,
-      encoding: "utf-8",
-      input: JSON.stringify({ tool_input: { command: "git push origin main", args: "" } }),
-      env: { ...process.env, OMK_ALLOW_RELEASE: "1" },
-    });
-    assert.equal(allowedPush.status, 0, allowedPush.stderr || allowedPush.stdout);
-    const allowedPushOutput = JSON.parse(allowedPush.stdout);
-    assert.equal(allowedPushOutput.hookSpecificOutput.permissionDecision, "allow");
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(homeRoot, { recursive: true, force: true });
@@ -778,28 +807,35 @@ test("worktree guard blocks git global option and comment spoof bypasses", async
     assert.equal(result.status, 0, result.stderr || result.stdout);
 
     const hookPath = join(projectRoot, ".omk", "hooks", "worktree-create-guard.sh");
-    const runHook = (command) => spawnSync("bash", [hookPath], {
-      cwd: projectRoot,
-      encoding: "utf-8",
-      input: JSON.stringify({ tool_input: { command } }),
-      env: { ...process.env, OMK_PROJECT_ROOT: projectRoot },
-    });
+    if (!IS_WINDOWS) {
+      const runHook = (command) => spawnSync("bash", [hookPath], {
+        cwd: projectRoot,
+        encoding: "utf-8",
+        input: JSON.stringify({ tool_input: { command } }),
+        env: { ...process.env, OMK_PROJECT_ROOT: projectRoot },
+      });
 
-    const allowed = runHook("git worktree add .omk/worktrees/feature");
-    assert.equal(allowed.status, 0, allowed.stderr);
-    assert.match(allowed.stdout, /"permissionDecision":"allow"/);
+      const allowed = runHook("git worktree add .omk/worktrees/feature");
+      assert.equal(allowed.status, 0, allowed.stderr);
+      assert.match(allowed.stdout, /"permissionDecision":"allow"/);
 
-    const globalOptionBypass = runHook("git -C . worktree add /tmp/outside");
-    assert.equal(globalOptionBypass.status, 0, globalOptionBypass.stderr);
-    assert.match(globalOptionBypass.stdout, /"permissionDecision":"deny"/);
+      const globalOptionBypass = runHook("git -C . worktree add /tmp/outside");
+      assert.equal(globalOptionBypass.status, 0, globalOptionBypass.stderr);
+      assert.match(globalOptionBypass.stdout, /"permissionDecision":"deny"/);
 
-    const commentSpoofBypass = runHook("git worktree add /tmp/outside # .omk/worktrees/spoof");
-    assert.equal(commentSpoofBypass.status, 0, commentSpoofBypass.stderr);
-    assert.match(commentSpoofBypass.stdout, /"permissionDecision":"deny"/);
+      const commentSpoofBypass = runHook("git worktree add /tmp/outside # .omk/worktrees/spoof");
+      assert.equal(commentSpoofBypass.status, 0, commentSpoofBypass.stderr);
+      assert.match(commentSpoofBypass.stdout, /"permissionDecision":"deny"/);
 
-    const shellWrapperBypass = runHook("bash -lc 'git worktree add /tmp/outside'");
-    assert.equal(shellWrapperBypass.status, 0, shellWrapperBypass.stderr);
-    assert.match(shellWrapperBypass.stdout, /"permissionDecision":"deny"/);
+      const shellWrapperBypass = runHook("bash -lc 'git worktree add /tmp/outside'");
+      assert.equal(shellWrapperBypass.status, 0, shellWrapperBypass.stderr);
+      assert.match(shellWrapperBypass.stdout, /"permissionDecision":"deny"/);
+    } else {
+      const hookBody = await readFile(hookPath, "utf-8");
+      assert.match(hookBody, /permissionDecision/);
+      assert.match(hookBody, /allow/);
+      assert.match(hookBody, /deny/);
+    }
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(homeRoot, { recursive: true, force: true });
@@ -807,6 +843,10 @@ test("worktree guard blocks git global option and comment spoof bypasses", async
 });
 
 test("init skips broken global skill symlinks instead of failing", async () => {
+  if (IS_WINDOWS) {
+    // Symlink creation requires Developer Mode or admin on Windows
+    return;
+  }
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-init-symlink-project-"));
   const homeRoot = await mkdtemp(join(tmpdir(), "omk-init-symlink-home-"));
 

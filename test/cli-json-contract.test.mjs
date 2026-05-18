@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 
 import { goalListCommand, goalShowCommand, goalVerifyCommand } from "../dist/commands/goal.js";
 import { providerDeepSeekDisableCommand, providerDoctorCommand } from "../dist/commands/provider.js";
@@ -359,18 +359,15 @@ agent:
 `, "utf-8");
   await writeFile(join(home, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: {} }), "utf-8");
   await writeFile(join(home, ".kimi", "config.toml"), "default_model = \"kimi\"\n# >>> omk managed hooks\n", "utf-8");
-  await writeFile(join(bin, "kimi"), `#!/usr/bin/env sh
-if [ "$1" = "--version" ]; then
-  echo "kimi, version 1.41.0"
-else
-  echo "Usage: kimi [OPTIONS] COMMAND [ARGS]..."
-  echo "  --agent-file FILE"
-  echo "  web      Run Kimi Code CLI web interface."
-fi
-`, { mode: 0o755 });
+  if (process.platform === "win32") {
+    await writeFile(join(bin, "kimi.cmd"), `@echo off\r\nif "%1"=="--version" (echo kimi, version 1.41.0) else (\r\necho Usage: kimi [OPTIONS] COMMAND [ARGS]...\r\necho   --agent-file FILE\r\necho   web      Run Kimi Code CLI web interface.\r\n)\r\n`, "utf-8");
+  } else {
+    await writeFile(join(bin, "kimi"), `#!/usr/bin/env sh\nif [ "$1" = "--version" ]; then\n  echo "kimi, version 1.41.0"\nelse\n  echo "Usage: kimi [OPTIONS] COMMAND [ARGS]..."\n  echo "  --agent-file FILE"\n  echo "  web      Run Kimi Code CLI web interface."\nfi\n`, "utf-8");
+    await chmod(join(bin, "kimi"), 0o755);
+  }
   const restoreHome = setEnv("HOME", home);
   const restoreOriginalHome = setEnv("OMK_ORIGINAL_HOME", home);
-  const restorePath = setEnv("PATH", `${bin}:${process.env.PATH ?? ""}`);
+  const restorePath = setEnv("PATH", `${bin}${delimiter}${process.env.PATH ?? ""}`);
   const prevCwd = process.cwd();
   const previousExitCode = process.exitCode;
   const cap = captureOutput();

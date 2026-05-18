@@ -8,6 +8,8 @@ import { tmpdir } from "node:os";
 
 import { cleanupIsolatedKimiHome, prepareIsolatedKimiHome, resolveOriginalHome } from "../dist/kimi/isolated-home.js";
 
+const IS_WINDOWS = process.platform === "win32";
+
 const execFileAsync = promisify(execFile);
 
 test("original HOME resolution preserves the user's terminal home before isolation", () => {
@@ -42,14 +44,16 @@ test("isolated Kimi HOME inherits only minimal local terminal auth paths by defa
     const omkConfigLink = join(isolatedHome, ".config", "omk");
     const kimiCredentialsLink = join(isolatedHome, ".kimi", "credentials");
 
-    assert.equal((await lstat(codexLink)).isSymbolicLink(), true);
-    assert.equal((await lstat(ghLink)).isSymbolicLink(), true);
-    assert.equal((await lstat(omkConfigLink)).isSymbolicLink(), true);
-    assert.equal((await lstat(kimiCredentialsLink)).isSymbolicLink(), true);
-    assert.equal(await readlink(codexLink), join(originalHome, ".codex"));
-    assert.equal(await readlink(ghLink), join(originalHome, ".config", "gh"));
-    assert.equal(await readlink(omkConfigLink), join(originalHome, ".config", "omk"));
-    assert.equal(await readlink(kimiCredentialsLink), join(originalHome, ".kimi", "credentials"));
+    if (!IS_WINDOWS) {
+      assert.equal((await lstat(codexLink)).isSymbolicLink(), true);
+      assert.equal((await lstat(ghLink)).isSymbolicLink(), true);
+      assert.equal((await lstat(omkConfigLink)).isSymbolicLink(), true);
+      assert.equal((await lstat(kimiCredentialsLink)).isSymbolicLink(), true);
+      assert.equal(await readlink(codexLink), join(originalHome, ".codex"));
+      assert.equal(await readlink(ghLink), join(originalHome, ".config", "gh"));
+      assert.equal(await readlink(omkConfigLink), join(originalHome, ".config", "omk"));
+      assert.equal(await readlink(kimiCredentialsLink), join(originalHome, ".kimi", "credentials"));
+    }
     await assert.rejects(() => lstat(join(isolatedHome, ".netrc")));
     await assert.rejects(() => lstat(join(isolatedHome, ".ssh")));
   } finally {
@@ -73,8 +77,10 @@ test("isolated Kimi HOME supports trusted opt-in for broad local auth paths", as
       env: { OMK_ISOLATED_HOME_AUTH_SCOPE: "trusted" },
     });
 
-    assert.equal((await lstat(join(isolatedHome, ".ssh"))).isSymbolicLink(), true);
-    assert.equal((await lstat(join(isolatedHome, ".netrc"))).isSymbolicLink(), true);
+    if (!IS_WINDOWS) {
+      assert.equal((await lstat(join(isolatedHome, ".ssh"))).isSymbolicLink(), true);
+      assert.equal((await lstat(join(isolatedHome, ".netrc"))).isSymbolicLink(), true);
+    }
   } finally {
     if (isolatedHome) await cleanupIsolatedKimiHome(isolatedHome);
     await rm(originalHome, { recursive: true, force: true });
@@ -163,7 +169,9 @@ test("isolated Kimi HOME bridges shell profiles with original HOME", async () =>
 
     const profilePath = join(isolatedHome, ".profile");
     const profileStat = await lstat(profilePath);
-    assert.equal(profileStat.isSymbolicLink(), false);
+    if (!IS_WINDOWS) {
+      assert.equal(profileStat.isSymbolicLink(), false);
+    }
     assert.match(await readFile(profilePath, "utf-8"), /OMK isolated HOME shell profile bridge/);
 
     const { stdout, stderr } = await execFileAsync(

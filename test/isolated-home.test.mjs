@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { discoverRoutingInventory, resetRoutingInventoryCache } from "../dist/orchestration/routing.js";
+
+const IS_WINDOWS = process.platform === "win32";
 import { cleanupIsolatedKimiHome, prepareIsolatedKimiHome } from "../dist/kimi/isolated-home.js";
 import { getOmkResourceSettings, resetOmkResourceSettingsCache } from "../dist/util/resource-profile.js";
 
@@ -51,7 +53,9 @@ test("isolated Kimi HOME respects project skills/hooks scope", async () => {
 
     await assert.rejects(lstat(join(tmpHome, ".kimi", "skills")), /ENOENT/);
     await assert.rejects(lstat(join(tmpHome, ".kimi", "hooks")), /ENOENT/);
-    assert.equal((await lstat(join(tmpHome, ".kimi", "credentials"))).isSymbolicLink(), true);
+    if (!IS_WINDOWS) {
+      assert.equal((await lstat(join(tmpHome, ".kimi", "credentials"))).isSymbolicLink(), true);
+    }
 
     const config = await readFile(join(tmpHome, ".kimi", "config.toml"), "utf-8");
     assert.match(config, /default_model = "kimi-k2\.6"/);
