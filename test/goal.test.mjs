@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
@@ -30,8 +30,15 @@ async function tempGoalCliFixture({ summary = true } = {}) {
   const workspace = join(root, "workspace");
   await mkdir(bin, { recursive: true });
   await mkdir(workspace, { recursive: true });
+  // Copy agent files so runner can resolve scoped role agents in the temp workspace
+  await mkdir(join(workspace, ".omk", "agents"), { recursive: true });
+  try {
+    await copyFile(join(process.cwd(), ".omk", "agents", "root.yaml"), join(workspace, ".omk", "agents", "root.yaml"));
+  } catch {
+    // ignore if source file is missing
+  }
   const outputLines = summary
-    ? ["## Summary", "OMK goal execution completed with verification evidence.", "## Verification", "- npm run check passed"]
+    ? ["## Summary", "## Evidence", "OMK goal execution completed with verification evidence.", "## Verification", "- npm run check passed"]
     : ["short"];
   await writeFile(
     join(bin, "kimi"),
