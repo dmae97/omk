@@ -3,7 +3,7 @@
  * Supports Ctrl+G for external editor.
  */
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -110,7 +110,7 @@ export class ExtensionEditorComponent extends Container implements Focusable {
 		this.editor.handleInput(keyData);
 	}
 
-	private openExternalEditor(): void {
+	private async openExternalEditor(): Promise<void> {
 		const editorCmd = process.env.VISUAL || process.env.EDITOR;
 		if (!editorCmd) {
 			return;
@@ -124,12 +124,21 @@ export class ExtensionEditorComponent extends Container implements Focusable {
 			this.tui.stop();
 
 			const [editor, ...editorArgs] = editorCmd.split(" ");
-			const result = spawnSync(editor, [...editorArgs, tmpFile], {
-				stdio: "inherit",
-				shell: process.platform === "win32",
+			process.stdout.write(`Launching external editor: ${editorCmd}\nPi will resume when the editor exits.\n`);
+
+			// Do not use spawnSync here. On Windows, synchronous child_process calls can keep
+			// Node/libuv's console input read active after tui.stop() pauses stdin, racing
+			// vim/nvim for the console input buffer until Ctrl+C cancels the pending read.
+			const status = await new Promise<number | null>((resolve) => {
+				const child = spawn(editor, [...editorArgs, tmpFile], {
+					stdio: "inherit",
+					shell: process.platform === "win32",
+				});
+				child.on("error", () => resolve(null));
+				child.on("close", (code) => resolve(code));
 			});
 
-			if (result.status === 0) {
+			if (status === 0) {
 				const newContent = fs.readFileSync(tmpFile, "utf-8").replace(/\n$/, "");
 				this.editor.setText(newContent);
 			}
