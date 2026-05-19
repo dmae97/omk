@@ -6,6 +6,7 @@ import { CappedOutputBuffer } from "../util/output-buffer.js";
 import { getOmkResourceSettings } from "../util/resource-profile.js";
 import { getOmkVersionSync } from "../util/version.js";
 import { checkCommand, resolveKimiBin } from "../util/shell.js";
+import { buildSafeKimiChildEnv } from "./runner.js";
 
 export interface JsonRpcRequest<TParams = unknown> {
   jsonrpc: "2.0";
@@ -115,9 +116,14 @@ export class KimiWireClient {
     if (this.options.configFile) args.push("--config-file", this.options.configFile);
     if (this.options.mcpConfigFile) args.push("--mcp-config-file", this.options.mcpConfigFile);
 
+    const childEnv = buildSafeKimiChildEnv(process.env, this.options.env ?? {}, {}, {
+      warnExplicitSecrets: true,
+      explicitEnvContext: "Kimi wire client env",
+    });
+
     this.proc = spawn(kimiBin, args, {
       cwd: this.options.cwd,
-      env: this.options.env ?? process.env,
+      env: childEnv,
       stdio: ["pipe", "pipe", "pipe"],
     });
 

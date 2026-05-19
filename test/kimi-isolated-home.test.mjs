@@ -164,7 +164,7 @@ test("isolated Kimi HOME bridges shell profiles with original HOME", async () =>
     isolatedHome = await prepareIsolatedKimiHome({
       originalHome,
       projectRoot,
-      env: {},
+      env: { OMK_ISOLATED_HOME_BRIDGE_SHELL_PROFILES: "1" },
     });
 
     const profilePath = join(isolatedHome, ".profile");

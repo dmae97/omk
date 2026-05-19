@@ -18,6 +18,50 @@ function restoreEnv(name, value) {
   }
 }
 
+test("isolated Kimi HOME does not bridge shell profiles by default", async () => {
+  const originalHome = await mkdtemp(join(tmpdir(), "omk-isolated-original-profile-"));
+  let tmpHome;
+
+  try {
+    await mkdir(join(originalHome, ".kimi", "credentials"), { recursive: true });
+    await writeFile(join(originalHome, ".bashrc"), "export SHOULD_NOT_REACH_KIMI=secret\n");
+
+    tmpHome = await prepareIsolatedKimiHome({
+      originalHome,
+      inheritLocalAuth: false,
+      env: {},
+    });
+
+    await assert.rejects(lstat(join(tmpHome, ".bashrc")));
+  } finally {
+    if (tmpHome) await cleanupIsolatedKimiHome(tmpHome);
+    await rm(originalHome, { recursive: true, force: true });
+  }
+});
+
+test("isolated Kimi HOME bridges shell profiles only with trusted opt-in", async () => {
+  const originalHome = await mkdtemp(join(tmpdir(), "omk-isolated-original-profile-optin-"));
+  let tmpHome;
+
+  try {
+    await mkdir(join(originalHome, ".kimi", "credentials"), { recursive: true });
+    await writeFile(join(originalHome, ".zshrc"), "export TRUSTED_PROFILE_VALUE=ok\n");
+
+    tmpHome = await prepareIsolatedKimiHome({
+      originalHome,
+      inheritLocalAuth: false,
+      env: { OMK_ISOLATED_HOME_BRIDGE_SHELL_PROFILES: "1" },
+    });
+
+    const bridged = await readFile(join(tmpHome, ".zshrc"), "utf8");
+    assert.match(bridged, /OMK isolated HOME shell profile bridge/);
+    assert.match(bridged, /\.zshrc/);
+  } finally {
+    if (tmpHome) await cleanupIsolatedKimiHome(tmpHome);
+    await rm(originalHome, { recursive: true, force: true });
+  }
+});
+
 test("isolated Kimi HOME respects project skills/hooks scope", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-isolated-project-scope-"));
   const originalHome = await mkdtemp(join(tmpdir(), "omk-isolated-original-scope-"));
@@ -60,6 +104,8 @@ test("isolated Kimi HOME respects project skills/hooks scope", async () => {
     const config = await readFile(join(tmpHome, ".kimi", "config.toml"), "utf-8");
     assert.match(config, /default_model = "kimi-k2\.6"/);
     assert.match(config, /subagent-stop-audit\.sh/);
+    assert.match(config, new RegExp(escapeRegExp(join(projectRoot, ".omk", "hooks", "subagent-stop-audit.sh"))));
+    assert.doesNotMatch(config, /command = "\.omk\/hooks\/subagent-stop-audit\.sh"/);
     assert.doesNotMatch(config, /\/global\/hooks\/stop\.sh/);
   } finally {
     if (tmpHome) await cleanupIsolatedKimiHome(tmpHome);
@@ -67,6 +113,10 @@ test("isolated Kimi HOME respects project skills/hooks scope", async () => {
     await rm(originalHome, { recursive: true, force: true });
   }
 });
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 test("isolated Kimi HOME disables skills and hooks when scopes are none", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-isolated-none-scope-project-"));

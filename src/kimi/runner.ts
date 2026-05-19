@@ -17,6 +17,109 @@ import { enableRawTerminalInput, restoreTerminalInputState } from "../util/termi
 import { checkCommand, resolveKimiBin } from "../util/shell.js";
 import { defaultScopedRoleAgentFile, writeScopedAgentFile } from "../util/scoped-agent-file.js";
 
+const REQUIRED_KIMI_ENV_KEYS = new Set([
+  "PATH",
+  "HOME",
+  "USERPROFILE",
+  "HOMEDRIVE",
+  "HOMEPATH",
+  "SHELL",
+  "TERM",
+  "COLORTERM",
+  "TMP",
+  "TMPDIR",
+  "TEMP",
+  "USER",
+  "LOGNAME",
+  "PWD",
+  "LANG",
+  "LC_ALL",
+]);
+
+const SECRET_ENV_KEY_PATTERN =
+  /(?:SECRET|TOKEN|PASSWORD|PASSWD|API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY|CREDENTIAL|AUTH|COOKIE|SESSION|BEARER|DATABASE[_-]?URL|REDIS[_-]?URL|MONGO(?:DB)?[_-]?URI|CONNECTION[_-]?STRING|DSN)/i;
+
+const TRUSTED_KIMI_EXPLICIT_SECRET_ENV_PATTERN = /^(1|true|yes)$/i;
+const KIMI_EXPLICIT_SECRET_ENV_WARNED = new Set<string>();
+
+function isAllowedInheritedKimiEnvKey(key: string): boolean {
+  if (SECRET_ENV_KEY_PATTERN.test(key)) return false;
+  return REQUIRED_KIMI_ENV_KEYS.has(key) || key.startsWith("LC_") || key.startsWith("KIMI_") || key.startsWith("OMK_");
+}
+
+export function isSecretLikeKimiEnvKey(key: string): boolean {
+  return SECRET_ENV_KEY_PATTERN.test(key);
+}
+
+function isTrustedExplicitSecretEnvEnabled(env: Record<string, string | undefined>): boolean {
+  return TRUSTED_KIMI_EXPLICIT_SECRET_ENV_PATTERN.test(env.OMK_TRUST_KIMI_EXPLICIT_SECRET_ENV ?? "");
+}
+
+function isStrictExplicitSecretEnvEnabled(env: Record<string, string | undefined>): boolean {
+  return TRUSTED_KIMI_EXPLICIT_SECRET_ENV_PATTERN.test(env.OMK_STRICT_KIMI_EXPLICIT_ENV ?? "");
+}
+
+function warnExplicitSecretLikeKimiEnvKey(
+  key: string,
+  context: string,
+  onWarning: (message: string) => void
+): void {
+  const warningKey = `${context}:${key}`;
+  if (KIMI_EXPLICIT_SECRET_ENV_WARNED.has(warningKey)) return;
+  KIMI_EXPLICIT_SECRET_ENV_WARNED.add(warningKey);
+  onWarning(
+    `[omk] Warning: explicit Kimi child env includes secret-like key "${key}" in ${context}; ` +
+      "explicit env is trusted input. Set OMK_STRICT_KIMI_EXPLICIT_ENV=1 to drop secret-like explicit keys unless " +
+      "OMK_TRUST_KIMI_EXPLICIT_SECRET_ENV=1 is also set."
+  );
+}
+
+export interface KimiChildEnvOptions {
+  warnExplicitSecrets?: boolean;
+  explicitEnvContext?: string;
+  onWarning?: (message: string) => void;
+}
+
+export function buildSafeKimiChildEnv(
+  inheritedEnv: Record<string, string | undefined> = process.env,
+  explicitEnv: Record<string, string | undefined> = {},
+  forcedEnv: Record<string, string | undefined> = {},
+  options: KimiChildEnvOptions = {}
+): Record<string, string> {
+  const safeEnv: Record<string, string> = {};
+  for (const [key, value] of Object.entries(inheritedEnv)) {
+    if (value !== undefined && isAllowedInheritedKimiEnvKey(key)) {
+      safeEnv[key] = value;
+    }
+  }
+  const trustedExplicitSecretEnv = isTrustedExplicitSecretEnvEnabled({ ...inheritedEnv, ...explicitEnv, ...forcedEnv });
+  const strictExplicitSecretEnv = isStrictExplicitSecretEnvEnabled({ ...inheritedEnv, ...explicitEnv, ...forcedEnv });
+  const explicitEnvContext = options.explicitEnvContext ?? "kimi child env";
+  const onWarning = options.onWarning ?? ((message: string) => process.stderr.write(`${message}\n`));
+
+  for (const [key, value] of Object.entries(explicitEnv)) {
+    if (value === undefined) {
+      delete safeEnv[key];
+      continue;
+    }
+    if (isSecretLikeKimiEnvKey(key) && !trustedExplicitSecretEnv) {
+      if (options.warnExplicitSecrets) {
+        warnExplicitSecretLikeKimiEnvKey(key, explicitEnvContext, onWarning);
+      }
+      if (strictExplicitSecretEnv) {
+        delete safeEnv[key];
+        continue;
+      }
+    }
+    safeEnv[key] = value;
+  }
+  for (const [key, value] of Object.entries(forcedEnv)) {
+    if (value === undefined) delete safeEnv[key];
+    else safeEnv[key] = value;
+  }
+  return safeEnv;
+}
+
 export type KimiProviderFailureKind = "monthly-quota" | "rate-limit" | "provider";
 
 export interface KimiProviderFailureDiagnosis {
@@ -167,7 +270,10 @@ export async function runKimiInteractive(
   const bugFilter = new KimiBugFilter();
   const statusLine = await KimiStatusLineEnhancer.create();
 
-  const baseEnv = { ...(process.env as Record<string, string>), ...(options?.env ?? {}) };
+  const baseEnv = buildSafeKimiChildEnv(process.env, options?.env ?? {}, {}, {
+    warnExplicitSecrets: true,
+    explicitEnvContext: "interactive Kimi options.env",
+  });
   const originalHome = resolveOriginalHome(baseEnv);
   const tmpHome = await prepareIsolatedKimiHome({
     originalHome,
@@ -175,8 +281,7 @@ export async function runKimiInteractive(
     skillsScope: resources.skillsScope,
     hooksScope: resources.hooksScope,
   });
-  const env = {
-    ...baseEnv,
+  const env = buildSafeKimiChildEnv({}, baseEnv, {
     OMK_RESOURCE_PROFILE_EFFECTIVE: resources.profile,
     OMK_ORIGINAL_HOME: originalHome,
     HOME: tmpHome,
@@ -184,10 +289,10 @@ export async function runKimiInteractive(
     HOMEDRIVE: "",
     HOMEPATH: tmpHome,
     PWD: options?.cwd ?? process.cwd(),
-  };
+  });
 
 
-  const kimiBin = resolveKimiBin();
+  const kimiBin = resolveKimiBin(env);
 
   // Binary resolution guard: verify `kimi` is reachable before spawn
   const kimiAvailable = await checkCommand(kimiBin);
@@ -544,8 +649,11 @@ export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskR
       return createKimiTaskRunner({ ...options, onThinking: newOnThinking });
     },
 
-    async run(node: DagNode, nodeEnv: Record<string, string>): Promise<TaskResult> {
-      const baseEnv: Record<string, string> = { ...(process.env as Record<string, string>), ...(env ?? {}), ...nodeEnv };
+    async run(node: DagNode, nodeEnv: Record<string, string>, signal?: AbortSignal): Promise<TaskResult> {
+      const baseEnv = buildSafeKimiChildEnv(process.env, { ...(env ?? {}), ...nodeEnv }, {}, {
+        warnExplicitSecrets: true,
+        explicitEnvContext: "Kimi DAG env/nodeEnv",
+      });
       const resources = await getOmkResourceSettings();
       const effectiveMcpScope = mcpScope ?? resources.mcpScope;
       const effectiveSkillsScope = skillsScope ?? resources.skillsScope;
@@ -558,15 +666,14 @@ export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskR
         hooksScope: effectiveHooksScope,
       });
       const worktree = node.worktree ?? cwd;
-      const mergedEnv: Record<string, string> = {
-        ...baseEnv,
+      const mergedEnv = buildSafeKimiChildEnv({}, baseEnv, {
         OMK_ORIGINAL_HOME: originalHome,
         HOME: tmpHome,
         USERPROFILE: tmpHome,
         HOMEDRIVE: "",
         HOMEPATH: tmpHome,
         PWD: worktree ?? process.cwd(),
-      };
+      });
       const args: string[] = [];
       const mcpAllowlist = nodeEnv.OMK_MCP_HINTS
         ? nodeEnv.OMK_MCP_HINTS.split(",").map((s) => s.trim()).filter(Boolean)
@@ -611,24 +718,26 @@ export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskR
       const effectiveTimeout = await resolveTimeoutMs({ timeoutMs: timeout, timeoutPreset: node.timeoutPreset });
 
       // Binary resolution guard for DAG mode
-      const kimiAvailable = await checkCommand("kimi");
+      const kimiBin = resolveKimiBin(mergedEnv);
+      const kimiAvailable = await checkCommand(kimiBin);
       if (!kimiAvailable) {
         return {
           success: false,
           exitCode: 1,
           stdout: "",
-          stderr: "[omk] `kimi` command not found in PATH. Install Kimi CLI first.",
+          stderr: `[omk] Kimi CLI not found: ${kimiBin}. Install Kimi CLI or set KIMI_BIN to an executable path.`,
         };
       }
       let result: Awaited<ReturnType<typeof runShellStreaming>>;
       try {
-        result = await runShellStreaming("kimi", args, {
+        result = await runShellStreaming(kimiBin, args, {
           cwd: worktree,
           timeout: effectiveTimeout,
           env: mergedEnv,
           logPath,
           input: "",
           onStdout: thinkingHandler,
+          signal,
         });
       } finally {
         await cleanupIsolatedKimiHome(tmpHome);

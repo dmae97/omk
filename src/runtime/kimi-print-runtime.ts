@@ -60,7 +60,7 @@ export function createKimiPrintRuntime(options: KimiPrintRuntimeOptions = {}): A
       const startedAt = Date.now();
 
       try {
-        const result = await runner.run(node, env);
+        const result = await runner.run(node, env, signal);
 
         if (signal.aborted) {
           return {

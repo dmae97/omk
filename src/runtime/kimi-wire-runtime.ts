@@ -18,15 +18,18 @@ export interface KimiWireRuntimeOptions {
   readonly cwd?: string;
   readonly env?: NodeJS.ProcessEnv;
   readonly timeoutMs?: number;
+  readonly enabled?: boolean;
 }
 
 export function createKimiWireRuntime(options: KimiWireRuntimeOptions = {}): AgentRuntime {
+  const env = options.env ?? process.env;
+  const enabled = options.enabled === true || /^(1|true|yes)$/i.test(env.OMK_ENABLE_KIMI_WIRE ?? "");
   return {
     id: "kimi-wire",
     priority: 90,
 
     supports(_capsule: ContextCapsule): boolean {
-      return true;
+      return enabled;
     },
 
     async runNode(capsule: ContextCapsule, signal: AbortSignal): Promise<AgentRunResult> {

@@ -1,5 +1,5 @@
 import { lstat, mkdtemp, mkdir, symlink, rm, writeFile, readFile } from "fs/promises";
-import { dirname, join } from "path";
+import { dirname, isAbsolute, join } from "path";
 import { tmpdir } from "os";
 import { pathExists, getProjectRoot, getUserHome, extractHooksBlocks } from "../util/fs.js";
 
@@ -126,7 +126,7 @@ export async function prepareIsolatedKimiHome(options: IsolatedKimiHomeOptions =
     for (const projectHookConfig of projectHookConfigs) {
       if (!(await pathExists(projectHookConfig))) continue;
       const content = await readFile(projectHookConfig, "utf-8").catch(() => "");
-      const hooksBlock = extractHooksBlocks(content);
+      const hooksBlock = rewriteProjectHookCommands(extractHooksBlocks(content), projectRoot);
       if (hooksBlock && !globalConfigContent.includes(hooksBlock.trim())) {
         missingHookBlocks.push(hooksBlock);
       }
@@ -141,14 +141,16 @@ export async function prepareIsolatedKimiHome(options: IsolatedKimiHomeOptions =
     console.warn(`[omk] Failed to write merged config.toml to isolated HOME: ${(err as Error).message ?? err}`);
   }
 
-  // Bridge shell profile files so MCP servers spawned via bash inherit the
-  // user's shell environment without evaluating ~/.profile against /tmp HOME.
-  const SHELL_PROFILES = [".bashrc", ".bash_profile", ".profile", ".zshrc", ".zprofile"];
-  for (const name of SHELL_PROFILES) {
-    const src = join(originalHome, name);
-    const dst = join(tmpHome, name);
-    if (await pathExists(src)) {
-      await writeIsolatedShellProfileBridge(src, dst, originalHome, name);
+  // Shell profile bridging can re-export arbitrary local secrets. Keep it off
+  // by default and require a trusted-local opt-in.
+  if (shouldBridgeShellProfiles(env)) {
+    const SHELL_PROFILES = [".bashrc", ".bash_profile", ".profile", ".zshrc", ".zprofile"];
+    for (const name of SHELL_PROFILES) {
+      const src = join(originalHome, name);
+      const dst = join(tmpHome, name);
+      if (await pathExists(src)) {
+        await writeIsolatedShellProfileBridge(src, dst, originalHome, name);
+      }
     }
   }
 
@@ -177,6 +179,11 @@ function shouldInheritLocalAuth(optionValue: boolean | undefined, env: NodeJS.Pr
   return !value || !["0", "false", "no", "off"].includes(value.toLowerCase());
 }
 
+function shouldBridgeShellProfiles(env: NodeJS.ProcessEnv): boolean {
+  const value = env.OMK_ISOLATED_HOME_BRIDGE_SHELL_PROFILES ?? env.OMK_BRIDGE_SHELL_PROFILES;
+  return value ? ["1", "true", "yes", "on"].includes(value.trim().toLowerCase()) : false;
+}
+
 function normalizeRuntimeScope(value: string | undefined, fallback: RuntimeScope): RuntimeScope {
   const normalized = value?.trim().toLowerCase();
   if (normalized === "none" || normalized === "off" || normalized === "disabled") return "none";
@@ -200,6 +207,18 @@ function stripHooksBlocks(content: string): string {
     if (!skippingHookBlock) result.push(line);
   }
   return result.join("\n").trimEnd();
+}
+
+function rewriteProjectHookCommands(content: string, projectRoot: string): string {
+  return content.replace(/^(\s*command\s*=\s*)"([^"]+)"/gm, (line, prefix: string, command: string) => {
+    if (!isProjectHookCommand(command)) return line;
+    const absoluteCommand = isAbsolute(command) ? command : join(projectRoot, command);
+    return `${prefix}${JSON.stringify(absoluteCommand)}`;
+  });
+}
+
+function isProjectHookCommand(command: string): boolean {
+  return command.startsWith(".omk/hooks/") || command.startsWith(".kimi/hooks/");
 }
 
 function localTerminalAuthPaths(env: NodeJS.ProcessEnv = process.env): readonly string[] {
