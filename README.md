@@ -218,7 +218,7 @@ Parallel lanes can run in isolated Git worktrees. That keeps experiments reversi
 
 ### 8. Skills, hooks, MCP, and agents as runtime inputs
 
-**Every OMK agent comes with MCP, skills, and hooks enabled by default.** Every generated subagent — `explorer`, `planner`, `coder`, `reviewer`, `qa`, `tester`, `researcher`, `security`, `integrator`, `aggregator`, `interviewer`, `ontology`, `vision-debugger`, `architect` — inherits scoped MCP, skills, and hooks access when enabled by runtime scope.
+**Every OMK generated agent carries MCP, skills, and hooks capability flags, but availability is scoped by runtime and harness policy.** Every generated subagent — `explorer`, `planner`, `coder`, `reviewer`, `qa`, `tester`, `researcher`, `security`, `integrator`, `aggregator`, `interviewer`, `ontology`, `vision-debugger`, `architect` — inherits scoped MCP, skills, and hooks access when enabled by runtime scope.
 
 **Parallel subagent orchestration:** the root coordinator can summon parallel subagents with independent context lanes, each with their own MCP/skills/hooks scope. Workers do not share mutable context; they operate in isolated lanes until evidence is reviewed and merged.
 
@@ -226,7 +226,7 @@ OMK treats project instructions, agent skills, generated hooks, and MCP servers 
 
 - `AGENTS.md` and `DESIGN.md` define project behavior and UI taste.
 - `.omk/` stores run state, memory, plans, reports, and generated runtime assets.
-- Default preset `omk-core-verified` records the core loop: repo/context/control-loop skills, shell/secret/stop/subagent/format hooks, and `omk-project`, `context7`, `github`, `fetch` MCP hints.
+- Default preset `omk-core-verified` is the current conservative core loop: repo/context/control-loop/plan/quality/review/test/Python-typing skills, shell/secret/stop/subagent/format hooks, and project-local `omk-project` MCP as the baseline hint. Broader MCP surfaces stay opt-in through product/team/release/high-trust presets or explicit local-user scope.
 - Product preset `omk-ts-product` adds strict TypeScript, React/Next/Nest, API DTO/domain/persistence, UI review/design-system skills, typecheck/eslint hooks, and `playwright` MCP for UI verification.
 - Team preset `omk-worktree-team` routes parallel worker lanes into isolated Git worktrees with branch snapshots, subagent audit, merge-quality gates, GitHub/memory, and read-only filesystem MCP hints.
 - Release preset `omk-release-guard` narrows release/security work to secret and security review skills, guarded shell/publish hooks, audit/checklist evidence, and GitHub/OMK/fetch/Context7 MCP hints; it treats reference MCP servers as advisory examples rather than production-ready trust boundaries and does not auto-publish.
@@ -387,6 +387,8 @@ OMK has a stable daily-use core, with advanced surfaces explicitly labelled by m
 - **Orchestration:** parallel, run, verify, review, goal, sync, summary, and long-running evidence-gated flows.
 - **Advanced surfaces:** tmux team mode, merge automation, agent registry, skill manager, research, feature/bugfix/refactor workflows, spec/DAG/cron, open-design-agent, and provider-routing integrations.
 
+Release asset policy: `public/assets/**` is source-only reference material and is intentionally ignored and forbidden from npm package audit until license/provenance is recorded. Existing `readmeasset/` and `docs/assets/` files remain the package-safe documentation asset locations.
+
 Release confidence is built from local and CI gates:
 
 ```bash
@@ -398,7 +400,7 @@ npm run smoke:pack
 npm run release:check
 ```
 
-The v1.1.17 source target is release-gated and evidence-gated: it stabilizes deterministic IntentFrame/ActionAtom orchestration, chat startup schema preflight, MCP duplicate handling, agent MCP/skills/hooks propagation, and doctor/init/pack smoke behavior while preserving package audit, smoke-pack checks, native safety normalization, replay/inspect/diff-runs, skill assigner, decision trace coverage, and CI release gates.
+The v1.1.17 source target is release-gated and evidence-gated: it stabilizes deterministic IntentFrame/ActionAtom orchestration, chat startup schema preflight, MCP duplicate handling, scoped agent MCP/skills/hooks propagation, and doctor/init/pack smoke behavior while preserving package audit, smoke-pack checks, native safety normalization, replay/inspect/diff-runs, skill assigner, decision trace coverage, and CI release gates.
 
 **MCP fetch startup note:** if your personal Kimi config still starts fetch with `uvx mcp-server-fetch`, each disposable or isolated Kimi HOME may re-resolve Python dependencies before MCP tools appear. Prefer a persistent entrypoint:
 
