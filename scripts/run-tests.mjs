@@ -5,7 +5,7 @@
  * and exits with non-zero if any test file failed.
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { isAbsolute, join, normalize, sep } from "node:path";
+import { isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 import { performance } from "node:perf_hooks";
 
@@ -101,9 +101,20 @@ function classifyResult(result) {
 }
 
 function writeSummary(path, summary) {
-  const parent = path.split(/[\\/]/).slice(0, -1).join(sep);
+  const resolvedPath = resolveContainedOutputPath(path);
+  const parent = resolvedPath.split(/[\\/]/).slice(0, -1).join(sep);
   if (parent) mkdirSync(parent, { recursive: true });
-  writeFileSync(path, `${JSON.stringify(summary, null, 2)}\n`, "utf-8");
+  writeFileSync(resolvedPath, `${JSON.stringify(summary, null, 2)}\n`, "utf-8");
+}
+
+function resolveContainedOutputPath(path) {
+  const root = resolve(process.cwd());
+  const resolvedPath = resolve(root, path);
+  const relativePath = relative(root, resolvedPath);
+  if (relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath))) {
+    return resolvedPath;
+  }
+  throw new Error(`Refusing to write summary outside project: ${path}`);
 }
 
 function baseSummary(startedAt, startedMs, files = [], options = {}) {

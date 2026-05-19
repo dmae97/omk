@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
 import { chmodSync, copyFileSync, existsSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
+import { homedir } from "node:os";
 
 const SUPPORTED_PLATFORMS = new Set(["linux", "darwin", "win32"]);
 const SUPPORTED_ARCHES = new Set(["x64", "arm64"]);
@@ -14,12 +15,34 @@ function binaryName(platform = process.platform) {
   return platform === "win32" ? "omk-safety.exe" : "omk-safety";
 }
 
+function cargoBinDir() {
+  return join(homedir(), ".cargo", "bin");
+}
+
+function resolveCargoCommand() {
+  const name = process.platform === "win32" ? "cargo.exe" : "cargo";
+  const homeCargo = join(cargoBinDir(), name);
+  return existsSync(homeCargo) ? homeCargo : "cargo";
+}
+
+function buildEnv() {
+  const cargoDir = cargoBinDir();
+  const pathKey = Object.keys(process.env).find((key) => key.toLowerCase() === "path") ?? "PATH";
+  const currentPath = process.env[pathKey] ?? "";
+  return {
+    ...process.env,
+    [pathKey]: currentPath.split(delimiter).includes(cargoDir)
+      ? currentPath
+      : `${cargoDir}${delimiter}${currentPath}`,
+  };
+}
+
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: process.cwd(),
     stdio: options.stdio ?? "inherit",
     encoding: "utf-8",
-    env: process.env,
+    env: buildEnv(),
   });
   if (result.error) {
     throw result.error;
@@ -35,7 +58,7 @@ if (!SUPPORTED_PLATFORMS.has(process.platform) || !SUPPORTED_ARCHES.has(process.
   throw new Error(`Unsupported native safety target: ${key}`);
 }
 
-run("cargo", ["build", "-p", "omk-safety", "--release"]);
+run(resolveCargoCommand(), ["build", "-p", "omk-safety", "--release"]);
 
 const name = binaryName();
 const source = join(process.cwd(), "target", "release", name);

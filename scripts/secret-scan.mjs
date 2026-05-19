@@ -17,7 +17,25 @@ const SKIP_PREFIXES = [
 
 const SYNTHETIC_SECRET_FIXTURE_FILES = new Set([
   "test/secret-scanner.test.mjs",
+  "test/secret-scan-runtime.test.mjs",
 ]);
+
+const RUNTIME_TRUST_BOUNDARY_FILES = [
+  ".omk/config.toml",
+  ".omk/kimi.config.toml",
+  ".omk/mcp.json",
+  ".omk/runtime-preset.json",
+  ".omk/runtime-presets.json",
+  ".kimi/config.toml",
+  ".kimi/kimi.config.toml",
+  ".kimi/mcp.json",
+  ".kimi/settings.json",
+];
+
+const RUNTIME_TRUST_BOUNDARY_DIRS = [
+  ".omk/hooks",
+  ".kimi/hooks",
+];
 
 const PROTECTED_FILE_PATTERNS = [
   /^\.env(?:\..*)?$/,
@@ -78,6 +96,19 @@ function shouldSkip(path) {
   return SKIP_PREFIXES.some((prefix) => path.startsWith(prefix));
 }
 
+function collectRuntimeTrustBoundaryFiles() {
+  const results = [];
+  for (const file of RUNTIME_TRUST_BOUNDARY_FILES) {
+    if (existsSync(file) && statSync(file).isFile()) results.push(file);
+  }
+  for (const dir of RUNTIME_TRUST_BOUNDARY_DIRS) {
+    if (existsSync(dir) && statSync(dir).isDirectory()) {
+      results.push(...walkDirectory(dir, dir));
+    }
+  }
+  return results;
+}
+
 function isLikelyBinary(buffer) {
   return buffer.includes(0);
 }
@@ -85,6 +116,7 @@ function isLikelyBinary(buffer) {
 const files = new Set([
   ...gitList(["ls-files", "-z"]),
   ...gitList(["ls-files", "--others", "--exclude-standard", "-z"]),
+  ...(process.argv.includes("--runtime") ? collectRuntimeTrustBoundaryFiles() : []),
 ]);
 
 const findings = [];

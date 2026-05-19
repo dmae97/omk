@@ -339,6 +339,12 @@ describe("validateForbiddenEntries", () => {
     const result = validateForbiddenEntries(files, FORBIDDEN_PATTERNS);
     assert.ok(result.errors.some((e) => e.includes("test/smoke.test.mjs")));
   });
+
+  it("fails on source-only public assets", () => {
+    const files = [makeFile("public/assets/cat-judge.png")];
+    const result = validateForbiddenEntries(files, FORBIDDEN_PATTERNS);
+    assert.ok(result.errors.some((e) => e.includes("public/assets/cat-judge.png")));
+  });
 });
 
 // ---------------------------------------------------------------------------

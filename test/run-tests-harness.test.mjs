@@ -78,6 +78,23 @@ test("run-tests fails actionably when no test files are present", () => {
   });
 });
 
+test("run-tests rejects summary paths outside the project", () => {
+  withTempProject((root) => {
+    const outside = join(root, "..", "outside-summary.json");
+    writeFileSync(join(root, "test", "pass.test.mjs"), 'import test from "node:test"; test("ok", () => {});\n', "utf-8");
+
+    const relativeResult = runHarness(root, ["--summary-json", "../outside-summary.json"]);
+    assert.equal(relativeResult.status, 1);
+    assert.match(relativeResult.stderr, /Refusing to write summary outside project/);
+    assert.equal(existsSync(outside), false);
+
+    const absoluteResult = runHarness(root, ["--summary-json", outside]);
+    assert.equal(absoluteResult.status, 1);
+    assert.match(absoluteResult.stderr, /Refusing to write summary outside project/);
+    assert.equal(existsSync(outside), false);
+  });
+});
+
 test("run-tests rejects stale dist before executing dist-backed tests", () => {
   withTempProject((root) => {
     mkdirSync(join(root, "src", "util"), { recursive: true });
