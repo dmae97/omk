@@ -82,7 +82,7 @@ function blockDependents(dag: Dag, failedId: string, reason: string): void {
   while (queue.length > 0) {
     const { id, blockerId } = queue.shift()!;
     const node = nodeById.get(id);
-    if (!node || node.status === "done" || node.status === "running" || node.status === "blocked") continue;
+    if (!node || node.status === "done" || node.status === "running" || node.status === "blocked" || node.status === "skipped") continue;
     if (node.failurePolicy?.blockDependents === false) continue;
     if (!dependsOnRequiredOutput(node, blockerId)) continue;
     node.status = "blocked";

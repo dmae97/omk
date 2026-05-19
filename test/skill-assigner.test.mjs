@@ -64,7 +64,7 @@ test("skill assigner keeps specialized debugging skills alongside core baseline"
 
   assert.ok(assignment.skills.includes("omk-test-debug-loop"));
   assert.ok(assignment.skills.includes("omk-flow-bugfix"));
-  assert.ok(assignment.mcpServers.includes("context7"));
+  assert.ok(assignment.mcpServers.includes("omk-project"));
 });
 
 test("skill assigner prefers filesystem-readonly for generic MCP-required lanes", () => {
@@ -87,6 +87,7 @@ test("skill assigner gives every exposed OMK role MCP, skills, and hooks", () =>
     "architect",
     "coder",
     "reviewer",
+    "security",
     "qa",
     "tester",
     "integrator",

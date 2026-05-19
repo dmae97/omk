@@ -81,8 +81,8 @@ const ROUTE_CANDIDATES: RouteCandidate[] = [
     source: "project",
     roles: ["explorer", "researcher", "architect", "planner"],
     keywords: ["repo", "repository", "file", "symbol", "grep", "search", "map", "inspect", "discover", "코드", "검색", "탐색"],
-    readOnly: true,
-    writeRisk: "none",
+    readOnly: false,
+    writeRisk: "low",
     contextCost: 1,
     capabilities: ["repo-map", "symbol-search", "small-context"],
   },
@@ -864,7 +864,7 @@ function loadMergedMcpConfigSync(
     return { servers, sources, diagnostics };
   }
 
-  const globalFiles = scope === "all" ? [join(getRoutingUserHome(), ".kimi", "mcp.json")] : [];
+  const globalFiles = scope === "all" ? [join(getRoutingUserHome(), ".kimi", "mcp.json"), join(getRoutingUserHome(), ".omk", "mcp.json")] : [];
 
   for (const path of globalFiles) {
     if (!existsSync(path)) continue;
@@ -985,7 +985,7 @@ function parseSimpleToml(content: string): Record<string, string> {
   const result: Record<string, string> = {};
   let section = "";
   for (const rawLine of content.split(/\r?\n/)) {
-    const line = rawLine.replace(/#.*$/, "").trim();
+    const line = stripComment(rawLine).trim();
     if (!line) continue;
     const sectionMatch = line.match(/^\[([^\]]+)]$/);
     if (sectionMatch) {
@@ -998,6 +998,24 @@ function parseSimpleToml(content: string): Record<string, string> {
     result[key] = normalizeConfigValue(kv[2].trim());
   }
   return result;
+}
+
+function stripComment(line: string): string {
+  let inString = false;
+  let quote = "";
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+    if ((char === "\"" || char === "'") && line[i - 1] !== "\\") {
+      if (!inString) {
+        inString = true;
+        quote = char;
+      } else if (quote === char) {
+        inString = false;
+      }
+    }
+    if (char === "#" && !inString) return line.slice(0, i);
+  }
+  return line;
 }
 
 function normalizeConfigValue(value: string): string {

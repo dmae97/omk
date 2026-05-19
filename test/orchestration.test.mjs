@@ -445,8 +445,15 @@ test("injectKimiGlobals prunes stale global MCP startup entries before Kimi rest
     await writeFile(join(projectRoot, ".kimi", "mcp.json"), JSON.stringify({
       mcpServers: {
         "project-local": { command: "node", args: [process.execPath] },
+        "project-relative": { command: "./server.js", args: ["--config", "./mcp/config.json"] },
+        "project-npx": { command: "npx", args: ["-y", "@scope/pkg"] },
+        "project-shell": { command: "bash", args: ["-lc", "source ./mcp/env.sh; exec npx -y @scope/pkg"] },
       },
     }));
+    await mkdir(join(projectRoot, "mcp"), { recursive: true });
+    await writeFile(join(projectRoot, "server.js"), "process.exit(0);\n");
+    await writeFile(join(projectRoot, "mcp", "env.sh"), "export OK=1\n");
+    await writeFile(join(projectRoot, "mcp", "config.json"), "{}\n");
 
     process.env.OMK_PROJECT_ROOT = projectRoot;
     process.env.HOME = originalHome;
@@ -483,6 +490,10 @@ test("injectKimiGlobals prunes stale global MCP startup entries before Kimi rest
     assert.equal(merged.mcpServers["ok-remote"].url, "https://mcp.example.test");
     assert.equal(merged.mcpServers["ok-shell"].command, "bash");
     assert.equal(merged.mcpServers["project-local"].command, "node");
+    assert.equal(merged.mcpServers["project-relative"].command, join(projectRoot, "server.js"));
+    assert.deepEqual(merged.mcpServers["project-relative"].args, ["--config", join(projectRoot, "mcp", "config.json")]);
+    assert.deepEqual(merged.mcpServers["project-npx"].args, ["-y", "@scope/pkg"]);
+    assert.equal(merged.mcpServers["project-shell"].args[1], `source ${join(projectRoot, "mcp", "env.sh")}; exec npx -y @scope/pkg`);
     assert.ok(merged.mcpServers["omk-project"], "built-in omk-project should remain available");
     const globalConfigAfterRuntimeMerge = JSON.parse(await readFile(join(originalHome, ".kimi", "mcp.json"), "utf-8"));
     assert.equal(globalConfigAfterRuntimeMerge.mcpServers["quiet-uvx"].env, undefined);
@@ -1057,6 +1068,50 @@ test("executor times out hanging node and marks it failed", async () => {
   assert.equal(slowNode?.status, "failed");
   assert.ok(slowNode?.attempts?.[0]?.status === "failed");
   assert.ok(slowResult?.stderr?.includes("timed out"));
+});
+
+test("executor aborts runner signal on timeout to prevent late side effects", async () => {
+  const executor = createExecutor({ ensemble: false });
+  const sideEffectDir = await mkdtemp(join(tmpdir(), "omk-timeout-abort-"));
+  const sideEffectPath = join(sideEffectDir, "late-write.txt");
+  const dag = createDag({
+    nodes: [
+      { id: "slow", name: "Slow", role: "coder", dependsOn: [], maxRetries: 1 },
+    ],
+  });
+  let signalSeen = false;
+
+  const runner = {
+    async run(_node, _env, signal) {
+      signalSeen = signal instanceof AbortSignal;
+      await new Promise((resolve) => {
+        const timer = setTimeout(async () => {
+          await writeFile(sideEffectPath, "late");
+          resolve();
+        }, 100);
+        signal?.addEventListener("abort", () => {
+          clearTimeout(timer);
+        }, { once: true });
+      });
+      return { success: true, stdout: "", stderr: "" };
+    },
+  };
+
+  try {
+    const result = await executor.execute(dag, runner, {
+      runId: "timeout-abort-test",
+      workers: 1,
+      approvalPolicy: "yolo",
+      nodeTimeoutMs: 30,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    assert.equal(result.success, false);
+    assert.equal(signalSeen, true);
+    await assert.rejects(readFile(sideEffectPath, "utf-8"), /ENOENT/);
+  } finally {
+    await rm(sideEffectDir, { recursive: true, force: true });
+  }
 });
 
 test("executor waits for running siblings before terminal failure resolution", async () => {

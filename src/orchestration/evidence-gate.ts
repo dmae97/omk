@@ -4,6 +4,7 @@ import { isAbsolute, relative, resolve } from "path";
 import type { DagNodeEvidence } from "./dag.js";
 import { runShell } from "../util/shell.js";
 import { createDecisionTraceStore } from "../evidence/decision-trace.js";
+import { redactSecrets as redactSecretText } from "../mcp/secret-scanner.js";
 
 export type EvidenceFailureKind =
   | "build_error"
@@ -29,9 +30,13 @@ const TAIL_LINES = 30;
 const MAX_DIAGNOSTIC_LEN = 2000;
 
 function tailLines(text: string, n = TAIL_LINES): string {
-  const lines = text.split("\n");
+  const lines = redactSecretText(text).redacted.split("\n");
   const tail = lines.slice(-n).join("\n");
   return tail.length > MAX_DIAGNOSTIC_LEN ? tail.slice(0, MAX_DIAGNOSTIC_LEN) : tail;
+}
+
+function redactDiagnosticText(text: string): string {
+  return redactSecretText(text).redacted;
 }
 
 function classifyFailure(command: string | undefined, exitCode: number | undefined, stderr: string): EvidenceFailureKind {
@@ -501,7 +506,10 @@ async function checkSingleGate(
           message: `Command passed: ${gate.command}`,
         };
       }
-      const diag = compressDiagnostic(gate.command, result.exitCode, result.stdout, result.stderr);
+      const safeStdout = redactDiagnosticText(result.stdout);
+      const safeStderr = redactDiagnosticText(result.stderr);
+      const diag = compressDiagnostic(gate.command, result.exitCode, safeStdout, safeStderr);
+      const safeDiagnosis = redactDiagnosticText(diag.diagnosis);
       return {
         gate: gate.type,
         passed: false,
@@ -509,10 +517,10 @@ async function checkSingleGate(
         ref: gate.command,
         command: gate.command,
         exitCode: result.exitCode,
-        stdoutTail: tailLines(result.stdout, 10),
-        stderrTail: tailLines(result.stderr),
-        evidenceText: diag.diagnosis,
-        message: diag.diagnosis,
+        stdoutTail: tailLines(safeStdout, 10),
+        stderrTail: tailLines(safeStderr),
+        evidenceText: safeDiagnosis,
+        message: safeDiagnosis,
       };
     }
 
@@ -535,7 +543,7 @@ async function checkSingleGate(
         gate: gate.type,
         passed: false,
         failureKind: "no_diff",
-        message: `Failed to check git diff: ${result.stderr || result.stdout || "unknown error"}`,
+        message: `Failed to check git diff: ${redactDiagnosticText(result.stderr || result.stdout || "unknown error")}`,
       };
     }
 

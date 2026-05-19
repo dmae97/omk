@@ -29,7 +29,7 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
   let commitQueue: Promise<void> = Promise.resolve();
   let commitQueueSize = 0;
   const MAX_COMMIT_QUEUE = 10;
-  const activeTimers = new Map<string, { progress: ReturnType<typeof setInterval>; persist: ReturnType<typeof setInterval> }>();
+  const activeTimers = new Map<string, { progress: ReturnType<typeof setInterval>; persist: ReturnType<typeof setInterval>; heartbeat: ReturnType<typeof setInterval> }>();
   let aborting = false;
   let activeDag: Dag | undefined;
   let activeTick: (() => Promise<void>) | undefined;
@@ -288,7 +288,8 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
     dag: Dag,
     runner: TaskRunner,
     options: RunOptions,
-    state: RunState
+    state: RunState,
+    signal?: AbortSignal
   ): Promise<void> {
     scheduler.updateNodeStatus(dag, node.id, "running", options.runId);
     markNodeStarted(node);
@@ -339,8 +340,6 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
       void commitState(state);
     }, 2000);
 
-    activeTimers.set(node.id, { progress: progressTimer, persist: persistTimer });
-
     monitor.register(node.id, options.runId);
     const heartbeatTimer = setInterval(() => {
       if (node.status === "running") {
@@ -348,6 +347,7 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
         state.lastHeartbeatAt = new Date().toISOString();
       }
     }, 30_000);
+    activeTimers.set(node.id, { progress: progressTimer, persist: persistTimer, heartbeat: heartbeatTimer });
 
     try {
       const timeoutPreset = node.timeoutPreset ?? options.timeoutPreset;
@@ -356,24 +356,65 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
         timeoutPreset,
       });
       const HARD_MAX_TIMEOUT_MS = 1_800_000; // 30 minutes
-      const runPromise = nodeRunner.run(node, env);
+      const nodeAbortController = new AbortController();
+      const abortNode = (): void => {
+        if (!nodeAbortController.signal.aborted) {
+          nodeAbortController.abort();
+        }
+      };
+      const runPromise = nodeRunner.run(node, env, nodeAbortController.signal);
       let hardMaxHandle: ReturnType<typeof setTimeout> | undefined;
       const hardMaxPromise = new Promise<never>((_, reject) => {
-        hardMaxHandle = setTimeout(() => reject(new Error(`Node ${node.id} exceeded hard maximum timeout`)), HARD_MAX_TIMEOUT_MS);
+        hardMaxHandle = setTimeout(() => {
+          abortNode();
+          reject(new Error(`Node ${node.id} exceeded hard maximum timeout`));
+        }, HARD_MAX_TIMEOUT_MS);
       });
       let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+      let abortHandler: (() => void) | undefined;
       try {
+        const racePromises: Promise<unknown>[] = [runPromise, hardMaxPromise];
         if (nodeTimeoutMs > 0) {
           const timeoutPromise = new Promise<never>((_, reject) => {
-            timeoutHandle = setTimeout(() => reject(new Error(`Node ${node.id} timed out after ${nodeTimeoutMs}ms`)), nodeTimeoutMs);
+            timeoutHandle = setTimeout(() => {
+              abortNode();
+              reject(new Error(`Node ${node.id} timed out after ${nodeTimeoutMs}ms`));
+            }, nodeTimeoutMs);
           });
-          result = await Promise.race([runPromise, timeoutPromise, hardMaxPromise]);
-        } else {
-          result = await Promise.race([runPromise, hardMaxPromise]);
+          racePromises.push(timeoutPromise);
         }
-      } finally {
-        clearTimeout(hardMaxHandle);
-        clearTimeout(timeoutHandle);
+        if (signal) {
+          const abortPromise = new Promise<never>((_, reject) => {
+            abortHandler = () => {
+              abortNode();
+              reject(new Error(`Node ${node.id} aborted`));
+            };
+            signal.addEventListener('abort', abortHandler, { once: true });
+          });
+          racePromises.push(abortPromise);
+        }
+        try {
+          result = await Promise.race(racePromises) as TaskResult;
+        } finally {
+          clearTimeout(hardMaxHandle);
+          clearTimeout(timeoutHandle);
+          if (signal && abortHandler) signal.removeEventListener("abort", abortHandler);
+        }
+      } catch (error: unknown) {
+        if (signal?.aborted) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          result = {
+            success: false,
+            exitCode: 1,
+            stdout: "",
+            stderr: errorMessage,
+          };
+          recordProviderAttempt(node, result);
+          markNodeFinished(node, "failed");
+          scheduler.updateNodeStatus(dag, node.id, "failed", options.runId);
+        } else {
+          throw error;
+        }
       }
       recordProviderAttempt(node, result);
       if (result.success) {
@@ -484,6 +525,7 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
       await commitState(state);
 
       const runningMap = new Map<string, Promise<void>>();
+      const runAbortController = new AbortController();
       let resolveDone: (value: RunResult) => void;
       const donePromise = new Promise<RunResult>((resolve) => {
         resolveDone = resolve;
@@ -537,7 +579,7 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
             // Redirect dependents from original node to fallback node
             for (const dep of dag.nodes) {
               if (dep.dependsOn.includes(node.id)) {
-                if (dep.status === "blocked") {
+                if (dep.status === "blocked" || dep.status === "skipped") {
                   dep.status = "pending";
                   dep.blockedReason = undefined;
                 }
@@ -559,9 +601,11 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
 
         if (executorOptions.signal?.aborted) {
           aborting = true;
+          runAbortController.abort();
           for (const [, timers] of activeTimers) {
             clearInterval(timers.progress);
             clearInterval(timers.persist);
+            clearInterval(timers.heartbeat);
           }
           activeTimers.clear();
           for (const node of dag.nodes) {
@@ -605,7 +649,7 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
           .slice(0, availableSlots);
 
         for (const node of toRun) {
-          const promise = runNode(node, dag, effectiveRunner, options, state)
+          const promise = runNode(node, dag, effectiveRunner, options, state, runAbortController.signal)
             .catch(() => {
               // runNode already marks node as failed on runner errors;
               // swallow persist/emit errors to allow tick() to continue

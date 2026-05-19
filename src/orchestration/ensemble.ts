@@ -3,7 +3,8 @@ import type { DagNode } from "./dag.js";
 import { getOmkResourceSettings, type OmkResourceSettings } from "../util/resource-profile.js";
 import { getOmkPath, readTextFile, ensureDir } from "../util/fs.js";
 import { join, dirname, relative } from "path";
-import { readdir, copyFile, readFile, rm } from "fs/promises";
+import { getWorktreesRoot, removeWorktreeDirectory, resolveSafeWorktreePath, validateWorktreeId } from "../util/worktree.js";
+import { readdir, copyFile, readFile } from "fs/promises";
 
 export interface EnsembleCandidate {
   id: string;
@@ -95,7 +96,7 @@ export function createEnsembleTaskRunner(baseRunner: TaskRunner, policy: Ensembl
       return createEnsembleTaskRunner(forkedBase, policy);
     },
 
-    async run(node: DagNode, env: Record<string, string>): Promise<TaskResult> {
+    async run(node: DagNode, env: Record<string, string>, signal?: AbortSignal): Promise<TaskResult> {
       const resources = await getOmkResourceSettings();
       const config = await getEnsembleConfig();
       const effectivePolicy = normalizePolicy(policy, resources, config);
@@ -106,7 +107,7 @@ export function createEnsembleTaskRunner(baseRunner: TaskRunner, policy: Ensembl
           ...env,
           OMK_ENSEMBLE: "off",
           OMK_ENSEMBLE_CANDIDATE_ID: candidates[0]?.id ?? "solo",
-        });
+        }, signal);
       }
 
       const progressMap = new Map<string, string>();
@@ -120,6 +121,7 @@ export function createEnsembleTaskRunner(baseRunner: TaskRunner, policy: Ensembl
 
       node.thinking = `🧠 ensemble preparing ${total} candidate${total > 1 ? "s" : ""}…`;
 
+      const createdWorktrees = new Set<string>();
       const candidateResults = await mapWithConcurrency(
         candidates,
         effectivePolicy.maxParallel,
@@ -127,7 +129,7 @@ export function createEnsembleTaskRunner(baseRunner: TaskRunner, policy: Ensembl
           progressMap.set(candidate.id, "starting");
           updateThinking();
 
-          const r = await runCandidate(baseRunner, node, env, candidate);
+          const r = await runCandidate(baseRunner, node, env, candidate, createdWorktrees, signal);
 
           progressMap.set(candidate.id, r.result.success ? "ok" : "fail");
           updateThinking();
@@ -136,7 +138,16 @@ export function createEnsembleTaskRunner(baseRunner: TaskRunner, policy: Ensembl
       );
 
       node.thinking = `🧠 ensemble aggregating ${total} result${total > 1 ? "s" : ""}…`;
-      return aggregateCandidateResults(node, candidateResults, effectivePolicy);
+      try {
+        return await aggregateCandidateResults(node, candidateResults, effectivePolicy);
+      } catch (err) {
+        await Promise.all(
+          candidateResults
+            .filter((item) => item.worktree && item.worktree !== (node.worktree ?? process.cwd()))
+            .map((item) => cleanupWorktree(item.worktree!))
+        );
+        throw err;
+      }
     },
   };
 }
@@ -258,7 +269,9 @@ async function runCandidate(
   baseRunner: TaskRunner,
   node: DagNode,
   env: Record<string, string>,
-  candidate: EnsembleCandidate
+  candidate: EnsembleCandidate,
+  worktreeTracker?: Set<string>,
+  signal?: AbortSignal
 ): Promise<EnsembleCandidateResult> {
   const baseCwd = node.worktree ?? process.cwd();
   let candidateWorktree: string | undefined;
@@ -266,7 +279,10 @@ async function runCandidate(
 
   try {
     if (!node.worktree) {
-      candidateWorktree = getOmkPath(join("worktrees", "ensemble", node.id, candidate.id));
+      const safeNodeId = validateWorktreeId(node.id, "nodeId");
+      const safeCandidateId = validateWorktreeId(candidate.id, "candidateId");
+      candidateWorktree = await resolveSafeWorktreePath(join(getWorktreesRoot(), "ensemble", safeNodeId, safeCandidateId));
+      worktreeTracker?.add(candidateWorktree);
       try {
         await copyWorktreeBase(baseCwd, candidateWorktree);
       } catch {
@@ -294,7 +310,7 @@ async function runCandidate(
       OMK_ENSEMBLE_ORIGINAL_NODE_ID: node.id,
       OMK_ENSEMBLE_CANDIDATE_ID: candidate.id,
       OMK_ENSEMBLE_PERSPECTIVE: candidate.perspective,
-    }).catch((error: unknown): TaskResult => ({
+    }, signal).catch((error: unknown): TaskResult => ({
       success: false,
       exitCode: 1,
       stdout: "",
@@ -367,7 +383,7 @@ async function mergeWinnerWorktree(winnerWorktree: string, baseCwd: string): Pro
 
 async function cleanupWorktree(worktree: string): Promise<void> {
   try {
-    await rm(worktree, { recursive: true, force: true });
+    await removeWorktreeDirectory(worktree);
   } catch {
     // ignore cleanup errors for debugging
   }
@@ -482,17 +498,24 @@ async function mapWithConcurrency<T, R>(
   mapper: (item: T) => Promise<R>
 ): Promise<R[]> {
   const results: R[] = new Array(items.length);
+  const errors: unknown[] = new Array(items.length);
   let next = 0;
 
   async function worker(): Promise<void> {
     while (next < items.length) {
       const index = next;
       next += 1;
-      results[index] = await mapper(items[index]);
+      try {
+        results[index] = await mapper(items[index]);
+      } catch (err) {
+        errors[index] = err;
+      }
     }
   }
 
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+  const firstError = errors.find((e) => e !== undefined);
+  if (firstError) throw firstError;
   return results;
 }
 

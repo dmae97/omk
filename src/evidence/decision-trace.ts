@@ -5,7 +5,7 @@
  *   .omk/runs/<runId>/decisions.jsonl   — DecisionTraceEntry lines
  */
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from "fs";
 import { join, dirname } from "path";
 import type { DecisionTraceEntry } from "../contracts/replay.js";
 
@@ -37,6 +37,13 @@ export function createDecisionTraceStore(runsDir: string = ".omk/runs"): Decisio
     };
     const path = decisionsPath(runId);
     ensureDir(dirname(path));
+    const MAX_DECISION_TRACE_SIZE = 50 * 1024 * 1024;
+    if (existsSync(path)) {
+      try {
+        const stats = statSync(path);
+        if (stats.size > MAX_DECISION_TRACE_SIZE) return;
+      } catch { /* ignore stat errors */ }
+    }
     appendFileSync(path, JSON.stringify(full) + "\n", "utf-8");
   }
 

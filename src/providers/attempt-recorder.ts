@@ -2,6 +2,7 @@ import { appendFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import type { ProviderAttemptRecord } from "./provider.js";
 import type { AttemptRecord } from "../evidence/attempt-record.js";
+import { redactSecrets } from "../orchestration/state-persister.js";
 
 export interface AttemptRecorderOptions {
   runsDir?: string;
@@ -16,7 +17,7 @@ export function createAttemptRecorder(options?: AttemptRecorderOptions) {
       mkdirSync(dir, { recursive: true });
     }
     const filePath = join(dir, "attempts.jsonl");
-    const line = JSON.stringify(attempt) + "\n";
+    const line = JSON.stringify(redactSecrets(attempt)) + "\n";
     appendFileSync(filePath, line, "utf-8");
   }
 

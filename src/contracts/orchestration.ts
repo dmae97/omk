@@ -163,7 +163,7 @@ export interface RunResult {
 }
 
 export interface TaskRunner {
-  run(node: DagNode, env: Record<string, string>): Promise<TaskResult>;
+  run(node: DagNode, env: Record<string, string>, signal?: AbortSignal): Promise<TaskResult>;
   /** Optional live-thinking callback so the executor can surface runner progress. */
   onThinking?: (thinking: string) => void;
   /** Create a new runner with an isolated onThinking callback (parallel-safe). */

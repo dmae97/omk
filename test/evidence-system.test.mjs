@@ -1,5 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 // ContextBudgetOptimizer
 import {
@@ -13,7 +16,7 @@ import {
 import { decideRepair } from "../dist/orchestration/repair-policy.js";
 
 // EvidenceGate v2
-import { compressDiagnostic } from "../dist/orchestration/evidence-gate.js";
+import { checkEvidenceGates, compressDiagnostic } from "../dist/orchestration/evidence-gate.js";
 
 // ─── ContextBudgetOptimizer ─────────────────────────────────────────────────
 
@@ -209,5 +212,35 @@ describe("EvidenceGate v2", () => {
       assert.ok(result.failureKind);
       assert.ok(result.diagnosis.length > 0);
     });
+  });
+
+  it("redacts secret-looking stdout and stderr tails from command-pass failures", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "omk-evidence-redaction-"));
+    const fakeToken = ["sk", "123456789012345678901234"].join("-");
+    try {
+      await writeFile(join(projectRoot, "package.json"), JSON.stringify({
+        scripts: {
+          leak: `node -e "console.log('${fakeToken}'); console.error('TOKEN=${fakeToken}'); process.exit(1)"`,
+        },
+      }));
+
+      const result = await checkEvidenceGates([
+        { type: "command-pass", command: "npm run leak" },
+      ], {
+        cwd: projectRoot,
+        stdout: "",
+        nodeId: "redaction-test",
+      });
+
+      assert.equal(result.passed, false);
+      const evidence = result.evidence[0];
+      const serialized = JSON.stringify(evidence);
+      assert.doesNotMatch(serialized, new RegExp(fakeToken));
+      assert.match(serialized, /REDACTED/);
+      assert.match(evidence.stdoutTail ?? "", /REDACTED/);
+      assert.match(evidence.stderrTail ?? "", /REDACTED/);
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true });
+    }
   });
 });

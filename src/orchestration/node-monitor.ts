@@ -80,23 +80,14 @@ export function createNodeMonitorEngine(options: MonitorOptions = {}): NodeMonit
     heartbeat(nodeId: string, runId: string): void {
       const k = key(nodeId, runId);
       const monitor = monitors.get(k);
+      if (!monitor) return;
       const now = new Date().toISOString();
-      if (monitor) {
-        monitor.lastHeartbeatAt = now;
-        if (monitor.status === "stalled") {
-          monitor.status = "recovered";
-          options.onRecover?.(monitor);
-        } else {
-          monitor.status = "healthy";
-        }
+      monitor.lastHeartbeatAt = now;
+      if (monitor.status === "stalled") {
+        monitor.status = "recovered";
+        options.onRecover?.(monitor);
       } else {
-        monitors.set(k, {
-          nodeId,
-          runId,
-          lastHeartbeatAt: now,
-          stallThresholdMs: heartbeatIntervalMs * stallThresholdMultiplier,
-          status: "healthy",
-        });
+        monitor.status = "healthy";
       }
     },
 

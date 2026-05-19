@@ -10,6 +10,7 @@
 import { appendFileSync, mkdirSync, writeFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import type { AttemptRecord, EvidenceResult } from "./attempt-record.js";
+import { redactSecrets } from "../orchestration/state-persister.js";
 
 export interface EvidenceRecorderOptions {
   runsDir?: string;
@@ -33,12 +34,12 @@ export function createEvidenceRecorder(options?: EvidenceRecorderOptions): Evide
 
   function appendJsonl(filePath: string, data: unknown): void {
     ensureDir(dirname(filePath));
-    appendFileSync(filePath, JSON.stringify(data) + "\n", "utf-8");
+    appendFileSync(filePath, JSON.stringify(redactSecrets(data)) + "\n", "utf-8");
   }
 
   function writeJson(filePath: string, data: unknown): void {
     ensureDir(dirname(filePath));
-    writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
+    writeFileSync(filePath, JSON.stringify(redactSecrets(data), null, 2), "utf-8");
   }
 
   function recordAttempt(record: AttemptRecord): void {

@@ -57,7 +57,8 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
     env: Record<string, string>,
     routeReason: string,
     requestedProvider = provider,
-    metadata: Partial<ProviderTaskMetadata> = {}
+    metadata: Partial<ProviderTaskMetadata> = {},
+    signal?: AbortSignal
   ): Promise<TaskResult> => {
     const result = await runner.run(node, {
       ...env,
@@ -65,7 +66,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
       OMK_PROVIDER_REQUESTED: requestedProvider,
       OMK_PROVIDER_FALLBACK: "kimi",
       OMK_PROVIDER_ROUTE_REASON: routeReason,
-    });
+    }, signal);
     return withProviderMetadata(result, {
       provider,
       requestedProvider,
@@ -80,7 +81,8 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
     env: Record<string, string>,
     decision: ProviderRouteDecision,
     traceEnv: Record<string, string>,
-    traceMetadata: Partial<ProviderTaskMetadata>
+    traceMetadata: Partial<ProviderTaskMetadata>,
+    signal?: AbortSignal
   ): Promise<TaskResult> => {
     const diagnosis = diagnoseKimiProviderFailure(kimiResult);
     if (!diagnosis) return kimiResult;
@@ -112,7 +114,8 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
       {
         ...traceMetadata,
         ...deepseekMetadata(fallbackPlan),
-      }
+      },
+      signal
     );
 
     return withProviderMetadata(fallback, {
@@ -150,7 +153,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
       });
     },
 
-    async run(node: DagNode, env: Record<string, string>): Promise<TaskResult> {
+    async run(node: DagNode, env: Record<string, string>, signal?: AbortSignal): Promise<TaskResult> {
       const runId = env.OMK_RUN_ID;
       const attemptNumber = (node.attempts?.length ?? 0) + 1;
       const attemptId = `${node.id}__${attemptNumber}`;
@@ -225,7 +228,8 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
             {
               ...traceMetadata,
               ...deepseekMetadata(decision.deepseek),
-            }
+            },
+            signal
           );
 
           if (result.success) {
@@ -283,7 +287,8 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
           },
           `Fallback from DeepSeek: ${fallbackReason || "unknown failure"}`,
           "deepseek",
-          traceMetadata
+          traceMetadata,
+          signal
         );
 
         const annotatedFallback = withKimiProviderFailureIfNeeded(fallback, providerHealth);
@@ -313,6 +318,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
           plan: decision.deepseek,
           invocationKey,
           traceEnv,
+          signal,
         });
 
         if (!advisory.success && isDeepSeekPaymentOrAvailabilityFailure(advisory.result)) {
@@ -347,7 +353,8 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
           {
             ...traceMetadata,
             providerAssist: advisory.metadata,
-          }
+          },
+          signal
         );
         const recoveredKimiResult = await recoverFromKimiProviderFailure(
           kimiResult,
@@ -355,7 +362,8 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
           env,
           decision,
           traceEnv,
-          traceMetadata
+          traceMetadata,
+          signal
         );
         if (recoveredKimiResult.metadata?.provider === "deepseek") {
           return recoveredKimiResult;
@@ -377,9 +385,10 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
         { ...env, ...traceEnv },
         decision.reason,
         decision.provider,
-        traceMetadata
+        traceMetadata,
+        signal
       );
-      return recoverFromKimiProviderFailure(kimiResult, node, env, decision, traceEnv, traceMetadata);
+      return recoverFromKimiProviderFailure(kimiResult, node, env, decision, traceEnv, traceMetadata, signal);
     },
   };
 
@@ -470,6 +479,7 @@ async function runDeepSeekAdvisory(options: {
   plan: DeepSeekRoutePlan;
   invocationKey: string;
   traceEnv: Record<string, string>;
+  signal?: AbortSignal;
 }): Promise<{ success: boolean; result: TaskResult; summary: string; failureReason?: string; metadata: ProviderAssistMetadata }> {
   const result = await options.deepseekRunner.run(options.node, {
     ...options.env,
@@ -479,7 +489,7 @@ async function runDeepSeekAdvisory(options: {
     OMK_PROVIDER_REQUESTED: "deepseek",
     OMK_PROVIDER_FALLBACK: "kimi",
     OMK_PROVIDER_ROUTE_REASON: options.routeReason,
-  });
+  }, options.signal);
   const success = result.success;
   const summary = success
     ? summarizeAdvisory(result.stdout)

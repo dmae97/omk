@@ -104,7 +104,7 @@ const SKILL_RULES: readonly AssignmentRule[] = [
     match: (_node, intent) =>
       ["coding", "documentation", "planning"].includes(intent) &&
       /web|page|landing|dashboard|prototype|ui|mockup|slide|deck|animation|visual|html|css|react/i.test(
-        `${_node.name} ${_node.role} ${_node.name}`
+        `${_node.name} ${_node.role}`
       ),
     assign: { skills: ["web-design-engineer"] },
     priority: 90,
@@ -114,7 +114,7 @@ const SKILL_RULES: readonly AssignmentRule[] = [
     id: "diagram-design",
     match: (_node, _intent) =>
       /diagram|chart|flowchart|architecture|timeline|swimlane|quadrant|tree|layer|venn|pyramid|er\s*diagram/i.test(
-        `${_node.name} ${_node.role} ${_node.name}`
+        `${_node.name} ${_node.role}`
       ),
     assign: { skills: ["diagram-design"] },
     priority: 95,
@@ -125,7 +125,7 @@ const SKILL_RULES: readonly AssignmentRule[] = [
     match: (_node, intent) =>
       ["research", "planning"].includes(intent) &&
       /knowledge|kb|retrieve|search|pdf|excel|document|report/i.test(
-        `${_node.name} ${_node.role} ${_node.name}`
+        `${_node.name} ${_node.role}`
       ),
     assign: { skills: ["kb-retriever"] },
     priority: 85,
@@ -136,7 +136,7 @@ const SKILL_RULES: readonly AssignmentRule[] = [
     match: (_node, intent) =>
       intent === "review" ||
       /review|audit|check|validate|verify|pr\s*review/i.test(
-        `${_node.name} ${_node.role} ${_node.name}`
+        `${_node.name} ${_node.role}`
       ),
     assign: { skills: ["omk-code-review", "omk-multimodal-ui-review"] },
     priority: 90,
@@ -147,7 +147,7 @@ const SKILL_RULES: readonly AssignmentRule[] = [
     match: (_node, intent) =>
       ["planning", "coding"].includes(intent) &&
       /spec|specify|plan|architecture|design.*doc|constitution/i.test(
-        `${_node.name} ${_node.role} ${_node.name}`
+        `${_node.name} ${_node.role}`
       ),
     assign: { skills: ["speckit-specify", "speckit-plan", "omk-plan-first"] },
     priority: 80,
@@ -158,7 +158,7 @@ const SKILL_RULES: readonly AssignmentRule[] = [
     match: (_node, intent) =>
       intent === "review" &&
       /security|audit|secret|vulnerability|auth|permission/i.test(
-        `${_node.name} ${_node.role} ${_node.name}`
+        `${_node.name} ${_node.role}`
       ),
     assign: { skills: ["omk-flow-bugfix", "omk-code-review"] },
     priority: 95,
@@ -169,7 +169,7 @@ const SKILL_RULES: readonly AssignmentRule[] = [
     match: (_node, intent) =>
       intent === "debugging" ||
       /debug|fix|error|failure|bug|trace|investigate/i.test(
-        `${_node.name} ${_node.role} ${_node.name}`
+        `${_node.name} ${_node.role}`
       ),
     assign: { skills: ["omk-flow-bugfix"] },
     priority: 85,

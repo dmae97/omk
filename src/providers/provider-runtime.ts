@@ -116,7 +116,7 @@ export async function createProviderBackedTaskRunner(
   const wrappedRunner: TaskRunner = {
     onThinking: baseRunner.onThinking,
     fork: baseRunner.fork,
-    async run(node, env) {
+    async run(node, env, signal) {
       let budgetReport: unknown;
       try {
         budgetReport = (await contextBroker.buildCapsule(node)).report;
@@ -124,7 +124,7 @@ export async function createProviderBackedTaskRunner(
         const errorMsg = err instanceof Error ? err.message : String(err);
         process.stderr.write(`[omk] ContextBroker failed for node ${node.id}: ${errorMsg}\n`);
       }
-      const taskResult = await baseRunner.run(node, env);
+      const taskResult = await baseRunner.run(node, env, signal);
       taskResult.metadata = {
         ...(taskResult.metadata ?? {}),
         ...(budgetReport ? { _budgetReport: budgetReport } : {}),
