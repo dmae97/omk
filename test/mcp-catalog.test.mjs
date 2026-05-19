@@ -26,7 +26,7 @@ test("MCP catalog includes Playwright for ts product preset without making it a 
   const playwright = RECOMMENDED_MCP_SERVERS.find((entry) => entry.name === "playwright");
 
   assert.equal(playwright?.command, "npx");
-  assert.deepEqual(playwright?.args, ["-y", "@playwright/mcp@latest"]);
+  assert.deepEqual(playwright?.args, ["-y", "@playwright/mcp@0.0.75"]);
   assert.equal(playwright?.bundled, undefined);
   assert.equal(getDefaultSelections().includes("playwright"), false);
 });
@@ -45,7 +45,7 @@ test("MCP catalog includes memory for worktree team lanes without making it a co
   const memory = RECOMMENDED_MCP_SERVERS.find((entry) => entry.name === "memory");
 
   assert.equal(memory?.command, "npx");
-  assert.deepEqual(memory?.args, ["-y", "@modelcontextprotocol/server-memory"]);
+  assert.deepEqual(memory?.args, ["-y", "@modelcontextprotocol/server-memory@2026.1.26"]);
   assert.equal(memory?.category, "memory");
   assert.equal(memory?.bundled, undefined);
   assert.equal(getDefaultSelections().includes("memory"), false);
@@ -55,7 +55,16 @@ test("MCP catalog runs PDF server in stdio mode to avoid JSON-RPC stdout polluti
   const pdf = RECOMMENDED_MCP_SERVERS.find((entry) => entry.name === "pdf");
 
   assert.equal(pdf?.command, "npx");
-  assert.deepEqual(pdf?.args, ["-y", "@modelcontextprotocol/server-pdf", "--stdio"]);
+  assert.deepEqual(pdf?.args, ["-y", "@modelcontextprotocol/server-pdf@1.7.2", "--stdio"]);
   assert.equal(pdf?.bundled, undefined);
   assert.equal(getDefaultSelections().includes("pdf"), false);
+});
+
+test("MCP catalog pins all npx packages and avoids latest tags", () => {
+  for (const server of RECOMMENDED_MCP_SERVERS.filter((entry) => entry.command === "npx")) {
+    const packageArg = server.args.find((arg) => arg.startsWith("@") || /^[a-z0-9._-]+@/i.test(arg));
+    assert.ok(packageArg, `${server.name} should include an npm package arg`);
+    assert.doesNotMatch(packageArg, /@latest$/);
+    assert.match(packageArg, /@[^/]+$/);
+  }
 });

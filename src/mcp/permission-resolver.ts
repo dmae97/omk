@@ -156,6 +156,15 @@ export class UnifiedPermissionResolver extends EventEmitter {
       }
     }
 
+    if (resolved.permission === ToolPermissionLevel.ASK) {
+      return {
+        level: ToolPermissionLevel.DENY,
+        source: 'default',
+        reason: 'Consent required but consent flow is disabled',
+        matchedRule: resolved.matchedRule ?? undefined,
+      };
+    }
+
     // Step 3: Default policy
     return {
       level: this.defaultLevel,

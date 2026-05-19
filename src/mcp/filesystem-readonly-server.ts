@@ -250,14 +250,26 @@ async function handleToolCall(name: string, rawArgs: unknown): Promise<unknown> 
 
 type Matcher = (text: string) => boolean;
 
+function isSafeRegex(inner: string): boolean {
+  // Reject patterns with nested quantifiers or excessive repetition
+  if (/\(\?[:=!]|\(\*|\(\+|\(\?\{|\*\*|\+\+|\?\?|\{[0-9]+,/.test(inner)) return false;
+  // Reject very long patterns
+  if (inner.length > 200) return false;
+  return true;
+}
+
 function toMatcher(pattern: string): Matcher {
   if (pattern.startsWith("/") && pattern.endsWith("/") && pattern.length >= 2) {
     const inner = pattern.slice(1, -1);
-    try {
-      const regex = new RegExp(inner, "i");
-      return (text: string) => regex.test(text);
-    } catch {
+    if (!isSafeRegex(inner)) {
       // fall through to literal
+    } else {
+      try {
+        const regex = new RegExp(inner, "i");
+        return (text: string) => regex.test(text);
+      } catch {
+        // fall through to literal
+      }
     }
   }
   const literal = pattern.toLowerCase();
