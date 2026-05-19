@@ -5,7 +5,13 @@ import { readFile, writeFile, readdir, access, realpath } from "fs/promises";
 import { join, resolve, relative } from "path";
 import { execFileSync } from "child_process";
 import { MemoryStore } from "../memory/memory-store.js";
-import { canWriteConfig, configWriteDeniedMessage } from "./config-permissions.js";
+import {
+  canCallMcpTool,
+  canWriteConfig,
+  configWriteDeniedMessage,
+  filterAllowedMcpTools,
+  mcpToolDeniedMessage,
+} from "./config-permissions.js";
 import { runQualityGate, type QualityGateResults } from "./quality-gate.js";
 import { saveCheckpoint, listCheckpoints, restoreCheckpoint } from "../util/checkpoint.js";
 import { getOmkVersionSync } from "../util/version.js";
@@ -16,7 +22,7 @@ import { checkGoalEvidence, checkGoalConstraints } from "../goal/evidence.js";
 import { scoreGoal } from "../goal/scoring.js";
 import { suggestNextAction, evaluateMissingCriteria } from "../goal/eval-criteria.js";
 import type { MemoryOntology, MemoryMindmap } from "../memory/local-graph-memory-store.js";
-import { createStatePersister } from "../orchestration/state-persister.js";
+import { createStatePersister, redactSecrets } from "../orchestration/state-persister.js";
 import { writeTodos, type TodoItem } from "../util/todo-sync.js";
 import { listActiveSessions, readSessionMeta, type SessionMeta } from "../util/session.js";
 let clientDisconnected = false;
@@ -107,7 +113,7 @@ function errorName(err: unknown): string {
 
 function writeDiagnostic(message: string, data: Record<string, unknown>): void {
   if (clientDisconnected) return;
-  const payload = JSON.stringify({ message, ...data });
+  const payload = JSON.stringify(redactSecrets({ message, ...data }));
   try {
     process.stderr.write(`[omk-project-mcp] ${payload}\n`);
   } catch {
@@ -256,7 +262,7 @@ function sanitizeMemoryQuery(query: string): string {
 async function handleReadGoalResource(goalId: string): Promise<{ content: string }> {
   const goal = await GOAL_PERSISTER.load(sanitizeGoalId(goalId));
   if (!goal) throw new Error(`Goal not found: ${goalId}`);
-  return { content: JSON.stringify(goal, null, 2) };
+  return { content: JSON.stringify(redactSecrets(goal), null, 2) };
 }
 
 async function handleReadRunResource(runId: string): Promise<{ content: string }> {
@@ -789,6 +795,9 @@ async function handleWriteConfig(args: { content: string }): Promise<{ success: 
   if (!canWriteConfig()) {
     throw new Error(configWriteDeniedMessage());
   }
+  if (!args.content || args.content.length > 100_000) {
+    throw new Error("Invalid config content: empty or exceeds 100KB");
+  }
   await writeFile(OMK_CONFIG_PATH, args.content, "utf-8");
   return { success: true };
 }
@@ -931,8 +940,8 @@ async function handleListCheckpoints(args: { runId?: string }): Promise<{ checkp
   return { checkpoints };
 }
 
-async function handleRestoreCheckpoint(args: { checkpointId: string; runId: string }): Promise<{ success: boolean; restoredFiles: string[]; message: string }> {
-  return restoreCheckpoint(args.checkpointId, args.runId);
+async function handleRestoreCheckpoint(args: { checkpointId: string; runId: string; force?: boolean }): Promise<{ success: boolean; restoredFiles: string[]; message: string }> {
+  return restoreCheckpoint(args.checkpointId, args.runId, { force: args.force === true });
 }
 
 // ─── Tool handlers (Session / TODO) ─────────────────────────────────────
@@ -1313,6 +1322,9 @@ const TOOLS: Tool[] = [
 ];
 
 async function handleToolCall(name: string, args: unknown): Promise<unknown> {
+  if (!canCallMcpTool(name)) {
+    throw new Error(mcpToolDeniedMessage(name));
+  }
   switch (name) {
     // Goal lifecycle
     case "omk_goal_create":
@@ -1400,7 +1412,7 @@ async function handleToolCall(name: string, args: unknown): Promise<unknown> {
     case "omk_list_checkpoints":
       return handleListCheckpoints(args as { runId?: string });
     case "omk_restore_checkpoint":
-      return handleRestoreCheckpoint(args as { checkpointId: string; runId: string });
+      return handleRestoreCheckpoint(args as { checkpointId: string; runId: string; force?: boolean });
     case "omk_save_snippet":
       return saveSnippet((args as { name: string; content: string; tags?: string[] }).name, (args as { name: string; content: string; tags?: string[] }).content, (args as { name: string; content: string; tags?: string[] }).tags);
     case "omk_search_snippets":
@@ -1533,7 +1545,7 @@ async function handleRequest(req: JsonRpcRequest): Promise<void> {
     }
 
     case "tools/list": {
-      sendResult(req.id, { tools: TOOLS });
+      sendResult(req.id, { tools: filterAllowedMcpTools(TOOLS) });
       return;
     }
 

@@ -16,10 +16,11 @@
 
 import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
+import { pathToFileURL } from "node:url";
 
 import { McpClientSession } from "./client.js";
 import { getOmkVersionSync } from "../util/version.js";
-import { ToolGovernor, type ToolGovernancePolicy, type GovernedToolResult, type AuditRecord } from "./governance.js";
+import { ToolGovernor, ToolPermissionLevel, type GovernanceRule, type ToolGovernancePolicy, type GovernedToolResult, type AuditRecord } from "./governance.js";
 import { UnifiedPermissionResolver } from "./permission-resolver.js";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -119,13 +120,23 @@ interface PermissionPolicy {
   toolAllowPatterns?: string[] | null; // null = allow all tools
   toolDenyPatterns?: string[];
   governance?: Partial<ToolGovernancePolicy>;
-  }
+  permissionRules?: GovernanceRule[];
+  defaultToolPermission?: ToolPermissionLevel;
+}
 
 // ─── JSON-RPC helpers ───────────────────────────────────────────────────────
 
 const JSON_RPC_METHOD_NOT_FOUND = -32601;
 const JSON_RPC_INVALID_PARAMS = -32602;
 const MCP_HOST_ERROR = -32000;
+const DEFAULT_HOST_PERMISSION_RULES: GovernanceRule[] = [
+  { pattern: "*shell*", permission: ToolPermissionLevel.DENY, reason: "Shell-capable MCP tools require explicit host permission", priority: 100 },
+  { pattern: "*exec*", permission: ToolPermissionLevel.DENY, reason: "Exec-capable MCP tools require explicit host permission", priority: 100 },
+  { pattern: "*command*", permission: ToolPermissionLevel.DENY, reason: "Command-capable MCP tools require explicit host permission", priority: 100 },
+  { pattern: "*write*", permission: ToolPermissionLevel.DENY, reason: "Write-capable MCP tools require explicit host permission", priority: 90 },
+  { pattern: "*delete*", permission: ToolPermissionLevel.DENY, reason: "Delete-capable MCP tools require explicit host permission", priority: 90 },
+  { pattern: "*remove*", permission: ToolPermissionLevel.DENY, reason: "Remove-capable MCP tools require explicit host permission", priority: 90 },
+];
 
 function sendResponse(res: JsonRpcResponse): void {
   const data = JSON.stringify(res) + "\n";
@@ -181,9 +192,14 @@ export class McpHost extends EventEmitter {
       denyTools: permissionPolicy?.toolDenyPatterns ?? [],
       ...permissionPolicy?.governance,
     });
-    this.permissionResolver = new UnifiedPermissionResolver([], {
-      enableConsent: permissionPolicy?.requireConsentFor?.length ? true : false,
-    });
+    this.permissionResolver = new UnifiedPermissionResolver(
+      permissionPolicy?.permissionRules ?? DEFAULT_HOST_PERMISSION_RULES,
+      {
+        enableConsent: permissionPolicy?.requireConsentFor?.length ? true : false,
+        defaultLevel: permissionPolicy?.defaultToolPermission ?? ToolPermissionLevel.DENY,
+        defaultReason: "No host permission rule matched",
+      }
+    );
 
     // Forward governance audit events
     this.toolGovernor.on("audit:entry", (record: AuditRecord) => {
@@ -392,7 +408,7 @@ export class McpHost extends EventEmitter {
     }
 
     // Permission check
-    if (!this.checkPermission(targetServer, "tools/call")) {
+    if (!(await this.checkPermission(targetServer, "tools/call", name, args))) {
       throw new Error(`Permission denied: tools/call on server "${targetServer}"`);
     }
 
@@ -528,7 +544,7 @@ export class McpHost extends EventEmitter {
       throw new Error(`Resource not found on any connected server: ${uri}`);
     }
 
-    if (!this.checkPermission(targetServer, "resources/read")) {
+    if (!(await this.checkPermission(targetServer, "resources/read"))) {
       throw new Error(`Permission denied: resources/read on server "${targetServer}"`);
     }
 
@@ -578,7 +594,7 @@ export class McpHost extends EventEmitter {
       throw new Error(`Prompt not found on any connected server: ${name}`);
     }
 
-    if (!this.checkPermission(targetServer, "prompts/get")) {
+    if (!(await this.checkPermission(targetServer, "prompts/get"))) {
       throw new Error(`Permission denied: prompts/get on server "${targetServer}"`);
     }
 
@@ -787,8 +803,11 @@ async function handleHostRequest(req: JsonRpcRequest, host: McpHost): Promise<vo
         sendError(req.id, JSON_RPC_INVALID_PARAMS, "Missing tool name");
         return;
       }
-      const result = await host.callTool(params.name, params.arguments ?? {}, params._serverHint);
-      sendResult(req.id, result);
+      const governed = await host.governedCallTool(params.name, params.arguments ?? {}, params._serverHint);
+      sendResult(req.id, {
+        content: governed.evidence.content,
+        isError: governed.evidence.isError,
+      });
       return;
     }
 
@@ -881,12 +900,14 @@ async function handleHostRequest(req: JsonRpcRequest, host: McpHost): Promise<vo
   }
 }
 
-main().catch((err) => {
-  const code = (err as NodeJS.ErrnoException).code;
-  if (code === "EPIPE") return;
-  try {
-    console.error("Fatal error:", err);
-  } catch {
-    // stderr unavailable
-  }
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EPIPE") return;
+    try {
+      console.error("Fatal error:", err);
+    } catch {
+      // stderr unavailable
+    }
+  });
+}

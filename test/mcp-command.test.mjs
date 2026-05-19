@@ -776,6 +776,62 @@ test("omk-project MCP returns tool-level errors instead of JSON-RPC internal err
   }
 });
 
+test("omk-project MCP hides and denies write-capable tools by default", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-permission-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+
+  try {
+    const input = [
+      {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "omk-mcp-test", version: "0.0.0" },
+        },
+      },
+      { jsonrpc: "2.0", id: 2, method: "tools/list" },
+      {
+        jsonrpc: "2.0",
+        id: 3,
+        method: "tools/call",
+        params: {
+          name: "omk_memory_write",
+          arguments: { path: "project.md", content: "blocked" },
+        },
+      },
+    ].map((message) => JSON.stringify(message)).join("\n") + "\n";
+
+    const result = spawnSync(process.execPath, [OMK_PROJECT_SERVER], {
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        HOME: homeRoot,
+        OMK_PROJECT_ROOT: projectRoot,
+        OMK_MCP_PERMISSION_PROFILE: "",
+      },
+      input,
+      encoding: "utf-8",
+      timeout: 10000,
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const responses = result.stdout.trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
+    const listResponse = responses.find((response) => response.id === 2);
+    const writeResponse = responses.find((response) => response.id === 3);
+    const toolNames = listResponse.result.tools.map((tool) => tool.name);
+    assert.equal(toolNames.includes("omk_memory_read"), true);
+    assert.equal(toolNames.includes("omk_memory_write"), false);
+    assert.equal(writeResponse.result.isError, true);
+    assert.match(writeResponse.result.content[0].text, /permission profile 'default'/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
 test("filesystem-readonly MCP exposes read tools and denies write tool calls", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-readonly-"));
   const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));

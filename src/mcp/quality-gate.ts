@@ -3,6 +3,7 @@ import { existsSync } from "fs";
 import { readFile, writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { getOmkResourceSettings } from "../util/resource-profile.js";
+import { redactSecrets as redactSecretText } from "./secret-scanner.js";
 
 export type QualityGateName = "lint" | "typecheck" | "test" | "build";
 export type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
@@ -56,6 +57,10 @@ function debugLog(...args: unknown[]): void {
   if (DEBUG) {
     console.error("[quality-gate]", ...args);
   }
+}
+
+function redactQualityText(text: string): string {
+  return redactSecretText(text).redacted;
 }
 
 export function detectPackageManager(projectRoot: string): PackageManager {
@@ -227,7 +232,7 @@ async function runResolvedQualityCommand(
       shell: process.platform === "win32",
     });
 
-    const stdoutStr = stdout ?? "";
+    const stdoutStr = redactQualityText(stdout ?? "");
 
     const result: QualityGateResult = {
       command: command.command,
@@ -241,8 +246,8 @@ async function runResolvedQualityCommand(
     return result;
   } catch (err: unknown) {
     const e = err as { stdout?: string | Buffer; stderr?: string | Buffer; status?: number; signal?: string; code?: string };
-    const stdoutStr = String(e.stdout ?? "");
-    const stderrStr = String(e.stderr ?? "");
+    const stdoutStr = redactQualityText(String(e.stdout ?? ""));
+    const stderrStr = redactQualityText(String(e.stderr ?? ""));
     const signal = e.signal ? `\nterminated by signal: ${e.signal}` : "";
 
     let status: QualityGateStatus = "failed";
@@ -261,7 +266,7 @@ async function runResolvedQualityCommand(
       command: command.command,
       exitCode: e.status ?? 1,
       stdout: stdoutStr,
-      stderr: `${stderrStr}${signal}`,
+      stderr: redactQualityText(`${stderrStr}${signal}`),
       status,
       failureType,
     };
@@ -285,9 +290,9 @@ async function saveQualityGateLog(projectRoot: string, gateName: QualityGateName
       `failureType: ${result.failureType ?? "none"}`,
       `exitCode: ${result.exitCode}`,
       `--- stdout ---`,
-      result.stdout || "(empty)",
+      redactQualityText(result.stdout || "(empty)"),
       `--- stderr ---`,
-      result.stderr || "(empty)",
+      redactQualityText(result.stderr || "(empty)"),
     ].join("\n");
 
     await writeFile(logPath, logContent, "utf-8");

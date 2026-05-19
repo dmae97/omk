@@ -28,10 +28,22 @@ export interface McpCatalogEntry {
 /**
  * Recommended MCP servers for OMK agentic coding workflows.
  *
- * All entries use `npx` so no global npm installation is required.
+ * All npx entries pin package versions so MCP startup is reproducible and
+ * cannot silently drift to a new package release during trusted workflows.
  * Servers with `bundled: true` are pre-selected hints for OMK users.
  */
 const SILENT_NPX_ENV = { npm_config_loglevel: "error", NODE_NO_WARNINGS: "1" };
+const MCP_NPM_PACKAGES = {
+  sequentialThinking: "@modelcontextprotocol/server-sequential-thinking@2025.12.18",
+  memory: "@modelcontextprotocol/server-memory@2026.1.26",
+  context7: "@upstash/context7-mcp@2.2.5",
+  pdf: "@modelcontextprotocol/server-pdf@1.7.2",
+  puppeteer: "@modelcontextprotocol/server-puppeteer@2025.5.12",
+  playwright: "@playwright/mcp@0.0.75",
+  filesystem: "@modelcontextprotocol/server-filesystem@2026.1.14",
+  supabase: "@supabase/mcp-server-supabase@0.8.1",
+  railway: "@jasontanswe/railway-mcp@1.3.0",
+} as const;
 
 export const RECOMMENDED_MCP_SERVERS: McpCatalogEntry[] = [
   // ── Reasoning ──
@@ -39,7 +51,7 @@ export const RECOMMENDED_MCP_SERVERS: McpCatalogEntry[] = [
     name: "sequential-thinking",
     description: "Sequential thinking and structured problem-solving tools",
     command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+    args: ["-y", MCP_NPM_PACKAGES.sequentialThinking],
     category: "reasoning",
     env: SILENT_NPX_ENV,
     startupTimeoutSec: 15,
@@ -50,7 +62,7 @@ export const RECOMMENDED_MCP_SERVERS: McpCatalogEntry[] = [
     name: "memory",
     description: "Persistent knowledge-graph memory across sessions",
     command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-memory"],
+    args: ["-y", MCP_NPM_PACKAGES.memory],
     category: "memory",
     env: SILENT_NPX_ENV,
     startupTimeoutSec: 15,
@@ -61,7 +73,7 @@ export const RECOMMENDED_MCP_SERVERS: McpCatalogEntry[] = [
     name: "context7",
     description: "Current library/API documentation via Context7 MCP",
     command: "npx",
-    args: ["-y", "@upstash/context7-mcp"],
+    args: ["-y", MCP_NPM_PACKAGES.context7],
     category: "docs",
     env: SILENT_NPX_ENV,
     startupTimeoutSec: 15,
@@ -71,7 +83,7 @@ export const RECOMMENDED_MCP_SERVERS: McpCatalogEntry[] = [
     name: "pdf",
     description: "Load and extract text from PDF files with pagination",
     command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-pdf", "--stdio"],
+    args: ["-y", MCP_NPM_PACKAGES.pdf, "--stdio"],
     category: "docs",
     env: SILENT_NPX_ENV,
     startupTimeoutSec: 15,
@@ -91,7 +103,7 @@ export const RECOMMENDED_MCP_SERVERS: McpCatalogEntry[] = [
     name: "puppeteer",
     description: "Browser automation via Puppeteer (screenshots, navigation, DOM)",
     command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-puppeteer"],
+    args: ["-y", MCP_NPM_PACKAGES.puppeteer],
     category: "web",
     env: SILENT_NPX_ENV,
     startupTimeoutSec: 20,
@@ -100,7 +112,7 @@ export const RECOMMENDED_MCP_SERVERS: McpCatalogEntry[] = [
     name: "playwright",
     description: "Official Microsoft Playwright MCP server for browser UI verification",
     command: "npx",
-    args: ["-y", "@playwright/mcp@latest"],
+    args: ["-y", MCP_NPM_PACKAGES.playwright],
     category: "web",
     env: SILENT_NPX_ENV,
     startupTimeoutSec: 20,
@@ -120,7 +132,7 @@ export const RECOMMENDED_MCP_SERVERS: McpCatalogEntry[] = [
     name: "filesystem",
     description: "Project-local filesystem access (read, write, list, search)",
     command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-filesystem", "${PROJECT_ROOT}"],
+    args: ["-y", MCP_NPM_PACKAGES.filesystem, "${PROJECT_ROOT}"],
     category: "devtools",
     env: SILENT_NPX_ENV,
     startupTimeoutSec: 10,
@@ -141,7 +153,7 @@ export const RECOMMENDED_MCP_SERVERS: McpCatalogEntry[] = [
     name: "supabase",
     description: "Supabase MCP server for database management, edge functions, and project operations (requires SUPABASE_ACCESS_TOKEN or SUPABASE_PROJECT_REF)",
     command: "npx",
-    args: ["-y", "@supabase/mcp-server-supabase@latest"],
+    args: ["-y", MCP_NPM_PACKAGES.supabase],
     category: "ops",
     env: SILENT_NPX_ENV,
     startupTimeoutSec: 15,
@@ -150,7 +162,7 @@ export const RECOMMENDED_MCP_SERVERS: McpCatalogEntry[] = [
     name: "railway-unofficial",
     description: "Unofficial Railway MCP server by jason-tan-swe that calls the Railway GraphQL API directly (requires RAILWAY_API_TOKEN; does not need Railway CLI)",
     command: "npx",
-    args: ["-y", "@jasontanswe/railway-mcp"],
+    args: ["-y", MCP_NPM_PACKAGES.railway],
     category: "ops",
     env: SILENT_NPX_ENV,
     startupTimeoutSec: 20,

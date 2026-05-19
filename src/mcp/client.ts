@@ -66,11 +66,18 @@ export interface McpServerConfig {
   env?: Record<string, string>;
   headers?: Record<string, string>;
   startupTimeoutMs?: number;
+  requestTimeoutMs?: number;
 }
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
   id: string | number;
+  method: string;
+  params?: unknown;
+}
+
+interface JsonRpcNotification {
+  jsonrpc: "2.0";
   method: string;
   params?: unknown;
 }
@@ -82,21 +89,42 @@ interface JsonRpcResponse {
   error?: { code: number; message: string; data?: unknown };
 }
 
+interface PendingRequest {
+  resolve: (v: unknown) => void;
+  reject: (e: Error) => void;
+  timeout: NodeJS.Timeout;
+  abort: () => void;
+}
+
+const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 300_000;
+
+function normalizeTimeoutMs(value: number | undefined, fallback: number): number {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return Math.max(1, Math.floor(value));
+  }
+  return fallback;
+}
+
 // ─── MCP Client Session ─────────────────────────────────────────────────────
 
 export class McpClientSession {
   private config: McpServerConfig;
   private transport: Transport | null = null;
   private requestIdCounter = 0;
-  private pendingRequests = new Map<string | number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
+  private pendingRequests = new Map<string | number, PendingRequest>();
   private initialized = false;
   private notificationHandlers = new Map<string, Set<(params: unknown) => void>>();
   private closed = false;
+  private readonly startupTimeoutMs: number;
+  private readonly requestTimeoutMs: number;
 
   serverInfo: { name: string; version: string } | undefined;
 
   constructor(config: McpServerConfig) {
     this.config = config;
+    this.startupTimeoutMs = normalizeTimeoutMs(config.startupTimeoutMs, DEFAULT_STARTUP_TIMEOUT_MS);
+    this.requestTimeoutMs = normalizeTimeoutMs(config.requestTimeoutMs, DEFAULT_REQUEST_TIMEOUT_MS);
   }
 
   private async createTransport(): Promise<Transport> {
@@ -129,20 +157,30 @@ export class McpClientSession {
   async close(): Promise<void> {
     this.closed = true;
     this.initialized = false;
-    // Resolve all pending requests with a close error
-    for (const [, { reject }] of this.pendingRequests) {
-      reject(new Error("Session closed"));
-    }
-    this.pendingRequests.clear();
+    this.rejectAllPending(new Error("Session closed"));
     await this.transport?.close?.();
   }
 
   private handleTransportError(err: Error): void {
-    // Reject all pending requests
-    for (const [, { reject }] of this.pendingRequests) {
-      reject(err);
+    this.rejectAllPending(err);
+  }
+
+  private rejectAllPending(err: Error): void {
+    for (const [, pending] of this.pendingRequests) {
+      clearTimeout(pending.timeout);
+      pending.abort();
+      pending.reject(err);
     }
     this.pendingRequests.clear();
+  }
+
+  private rejectPendingRequest(id: string | number, err: Error): void {
+    const pending = this.pendingRequests.get(id);
+    if (!pending) return;
+    clearTimeout(pending.timeout);
+    pending.abort();
+    this.pendingRequests.delete(id);
+    pending.reject(err);
   }
 
   // ── Message handling ──────────────────────────────────────────────────
@@ -156,7 +194,8 @@ export class McpClientSession {
     }
 
     if (msg.id !== undefined && this.pendingRequests.has(msg.id)) {
-      const { resolve, reject } = this.pendingRequests.get(msg.id)!;
+      const { resolve, reject, timeout } = this.pendingRequests.get(msg.id)!;
+      clearTimeout(timeout);
       this.pendingRequests.delete(msg.id);
 
       if (msg.error) {
@@ -182,30 +221,35 @@ export class McpClientSession {
 
   // ── JSON-RPC request/response ─────────────────────────────────────────
 
-  private sendRequest(method: string, params?: unknown): Promise<unknown> {
+  private sendRequest(method: string, params?: unknown, timeoutMs = this.requestTimeoutMs): Promise<unknown> {
     if (this.closed) return Promise.reject(new Error("Session is closed"));
+    if (!this.transport) return Promise.reject(new Error("Session is not connected"));
+    const transport = this.transport;
 
     const id = ++this.requestIdCounter;
     return new Promise((resolve, reject) => {
-      this.pendingRequests.set(id, { resolve, reject });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => {
+        this.rejectPendingRequest(id, new Error(`MCP request timed out: ${method}`));
+      }, timeoutMs);
+      this.pendingRequests.set(id, { resolve, reject, timeout, abort: () => controller.abort() });
       const payload: JsonRpcRequest = { jsonrpc: "2.0", id, method, params };
-      this.transport!.send(JSON.stringify(payload) + "\n").catch((err) => {
-        this.pendingRequests.delete(id);
-        reject(err);
+      transport.send(JSON.stringify(payload) + "\n", { signal: controller.signal }).catch((err) => {
+        this.rejectPendingRequest(id, err instanceof Error ? err : new Error(String(err)));
       });
     });
   }
 
   private sendNotification(method: string, params?: unknown): void {
-    if (this.closed) return;
-    const payload: JsonRpcRequest = { jsonrpc: "2.0", id: 0, method, params };
-    this.transport!.send(JSON.stringify(payload) + "\n").catch(() => {});
+    if (this.closed || !this.transport) return;
+    const payload: JsonRpcNotification = { jsonrpc: "2.0", method, params };
+    this.transport.send(JSON.stringify(payload) + "\n").catch(() => {});
   }
 
   // ── MCP protocol methods ──────────────────────────────────────────────
 
   async initialize(params: InitializeParams): Promise<InitializeResult> {
-    const result = (await this.sendRequest("initialize", params)) as InitializeResult;
+    const result = (await this.sendRequest("initialize", params, this.startupTimeoutMs)) as InitializeResult;
     this.initialized = true;
     this.serverInfo = result.serverInfo;
 

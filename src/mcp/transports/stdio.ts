@@ -4,7 +4,51 @@
 import { spawn } from "node:child_process";
 import { Writable } from "node:stream";
 
-import type { Transport } from "./transport.js";
+import type { Transport, TransportSendOptions } from "./transport.js";
+
+const SAFE_ENV_NAMES = new Set([
+  "CI",
+  "COLORTERM",
+  "ComSpec",
+  "FORCE_COLOR",
+  "HOME",
+  "HOMEDRIVE",
+  "HOMEPATH",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "NODE_ENV",
+  "NO_COLOR",
+  "PATH",
+  "PATHEXT",
+  "Path",
+  "SystemRoot",
+  "TEMP",
+  "TERM",
+  "TMP",
+  "TMPDIR",
+  "USERPROFILE",
+  "windir",
+]);
+
+function isSafeInheritedEnvName(name: string): boolean {
+  return SAFE_ENV_NAMES.has(name) || /^LC_[A-Z0-9_]+$/.test(name);
+}
+
+function buildSubprocessEnv(
+  inheritedEnv: Record<string, string | undefined>,
+  serverEnv: Record<string, string>
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(inheritedEnv)) {
+    if (value === undefined || !isSafeInheritedEnvName(key)) continue;
+    result[key] = value;
+  }
+  for (const [key, value] of Object.entries(serverEnv)) {
+    result[key] = value;
+  }
+  return result;
+}
 
 export class StdioTransport implements Transport {
   private process: ReturnType<typeof spawn> | null = null;
@@ -12,6 +56,7 @@ export class StdioTransport implements Transport {
   private notificationHandlers: Set<(method: string, params: unknown) => void> = new Set();
   private errorHandlers: Set<(err: Error) => void> = new Set();
   private buffer = "";
+  private closing = false;
 
   constructor(
     private command: string,
@@ -23,7 +68,7 @@ export class StdioTransport implements Transport {
     return new Promise((resolve, reject) => {
       this.process = spawn(this.command, this.args, {
         stdio: ["pipe", "pipe", "pipe"],
-        env: { ...process.env, ...this.env },
+        env: buildSubprocessEnv(process.env, this.env),
       });
 
       this.process.on("error", (err) => {
@@ -31,11 +76,12 @@ export class StdioTransport implements Transport {
         reject(err);
       });
 
-      this.process.on("close", (code) => {
-        if (code !== 0 && code !== null) {
-          const err = new Error(`MCP server exited with code ${code}`);
-          for (const h of this.errorHandlers) h(err);
-        }
+      this.process.on("close", (code, signal) => {
+        this.process = null;
+        if (this.closing) return;
+        const reason = signal ? `signal ${signal}` : `code ${code ?? "unknown"}`;
+        const err = new Error(`MCP server exited with ${reason}`);
+        for (const h of this.errorHandlers) h(err);
       });
 
       if (!this.process.stdout) {
@@ -67,7 +113,7 @@ export class StdioTransport implements Transport {
       if (!trimmed) continue;
       try {
         const msg = JSON.parse(trimmed);
-        if (msg.id === undefined || msg.id === 0 || msg.id === null) {
+        if (msg.id === undefined) {
           // Notification
           for (const h of this.notificationHandlers) {
             h(msg.method, msg.params);
@@ -84,7 +130,8 @@ export class StdioTransport implements Transport {
     }
   }
 
-  async send(message: string): Promise<void> {
+  async send(message: string, options: TransportSendOptions = {}): Promise<void> {
+    if (options.signal?.aborted) throw new Error("Send aborted");
     if (!this.process?.stdin) throw new Error("Process stdin not available");
     return new Promise((resolve, reject) => {
       (this.process!.stdin as Writable).write(message, (err) => {
@@ -107,9 +154,22 @@ export class StdioTransport implements Transport {
   }
 
   async close(): Promise<void> {
-    if (this.process) {
-      this.process.kill();
-      this.process = null;
-    }
+    const child = this.process;
+    if (!child) return;
+    this.closing = true;
+    this.process = null;
+    child.stdin?.end();
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => {
+        child.kill("SIGKILL");
+        resolve();
+      }, 1000);
+      child.once("close", () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+      child.kill("SIGTERM");
+    });
   }
 }
