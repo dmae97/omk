@@ -32,11 +32,13 @@ function formatTokens(count: number): string {
  */
 export class FooterComponent implements Component {
 	private autoCompactEnabled = true;
+	private session: AgentSession;
+	private footerData: ReadonlyFooterDataProvider;
 
-	constructor(
-		private session: AgentSession,
-		private footerData: ReadonlyFooterDataProvider,
-	) {}
+	constructor(session: AgentSession, footerData: ReadonlyFooterDataProvider) {
+		this.session = session;
+		this.footerData = footerData;
+	}
 
 	setSession(session: AgentSession): void {
 		this.session = session;

@@ -67,14 +67,25 @@ function extractUserMessageText(content: string | Array<{ type: string; text?: s
 export class AgentSessionRuntime {
 	private rebindSession?: (session: AgentSession) => Promise<void>;
 	private beforeSessionInvalidate?: () => void;
+	private _session: AgentSession;
+	private _services: AgentSessionServices;
+	private readonly createRuntime: CreateAgentSessionRuntimeFactory;
+	private _diagnostics: AgentSessionRuntimeDiagnostic[];
+	private _modelFallbackMessage?: string;
 
 	constructor(
-		private _session: AgentSession,
-		private _services: AgentSessionServices,
-		private readonly createRuntime: CreateAgentSessionRuntimeFactory,
-		private _diagnostics: AgentSessionRuntimeDiagnostic[] = [],
-		private _modelFallbackMessage?: string,
-	) {}
+		_session: AgentSession,
+		_services: AgentSessionServices,
+		createRuntime: CreateAgentSessionRuntimeFactory,
+		_diagnostics: AgentSessionRuntimeDiagnostic[] = [],
+		_modelFallbackMessage?: string,
+	) {
+		this._session = _session;
+		this._services = _services;
+		this.createRuntime = createRuntime;
+		this._diagnostics = _diagnostics;
+		this._modelFallbackMessage = _modelFallbackMessage;
+	}
 
 	get services(): AgentSessionServices {
 		return this._services;

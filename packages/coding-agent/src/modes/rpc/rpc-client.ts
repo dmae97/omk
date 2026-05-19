@@ -59,8 +59,11 @@ export class RpcClient {
 		new Map();
 	private requestId = 0;
 	private stderr = "";
+	private options: RpcClientOptions;
 
-	constructor(private options: RpcClientOptions = {}) {}
+	constructor(options: RpcClientOptions = {}) {
+		this.options = options;
+	}
 
 	/**
 	 * Start the RPC agent process.

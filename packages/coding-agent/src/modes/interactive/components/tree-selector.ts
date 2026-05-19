@@ -1056,7 +1056,11 @@ class TreeList implements Component {
 
 /** Component that displays the current search query */
 class SearchLine implements Component {
-	constructor(private treeList: TreeList) {}
+	private treeList: TreeList;
+
+	constructor(treeList: TreeList) {
+		this.treeList = treeList;
+	}
 
 	invalidate(): void {}
 

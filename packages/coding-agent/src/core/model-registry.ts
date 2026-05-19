@@ -334,11 +334,12 @@ export class ModelRegistry {
 	private modelRequestHeaders: Map<string, Record<string, string>> = new Map();
 	private registeredProviders: Map<string, ProviderConfigInput> = new Map();
 	private loadError: string | undefined = undefined;
+	readonly authStorage: AuthStorage;
+	private modelsJsonPath: string | undefined;
 
-	private constructor(
-		readonly authStorage: AuthStorage,
-		private modelsJsonPath: string | undefined,
-	) {
+	private constructor(authStorage: AuthStorage, modelsJsonPath: string | undefined) {
+		this.authStorage = authStorage;
+		this.modelsJsonPath = modelsJsonPath;
 		this.loadModels();
 	}
 

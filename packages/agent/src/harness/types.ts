@@ -120,16 +120,16 @@ export type FileErrorCode =
 
 /** Error returned by {@link FileSystem} file operations. */
 export class FileError extends Error {
-	constructor(
-		/** Backend-independent error code. */
-		public code: FileErrorCode,
-		message: string,
-		/** Absolute addressed path associated with the failure, when available. */
-		public path?: string,
-		cause?: Error,
-	) {
+	/** Backend-independent error code. */
+	public code: FileErrorCode;
+	/** Absolute addressed path associated with the failure, when available. */
+	public path?: string;
+
+	constructor(code: FileErrorCode, message: string, path?: string, cause?: Error) {
 		super(message, cause === undefined ? undefined : { cause });
 		this.name = "FileError";
+		this.code = code;
+		this.path = path;
 	}
 }
 
@@ -144,14 +144,13 @@ export type ExecutionErrorCode =
 
 /** Error returned by {@link ExecutionEnv.exec}. */
 export class ExecutionError extends Error {
-	constructor(
-		/** Backend-independent error code. */
-		public code: ExecutionErrorCode,
-		message: string,
-		cause?: Error,
-	) {
+	/** Backend-independent error code. */
+	public code: ExecutionErrorCode;
+
+	constructor(code: ExecutionErrorCode, message: string, cause?: Error) {
 		super(message, cause === undefined ? undefined : { cause });
 		this.name = "ExecutionError";
+		this.code = code;
 	}
 }
 
@@ -160,14 +159,13 @@ export type CompactionErrorCode = "aborted" | "summarization_failed" | "invalid_
 
 /** Error returned by compaction helpers. */
 export class CompactionError extends Error {
-	constructor(
-		/** Backend-independent error code. */
-		public code: CompactionErrorCode,
-		message: string,
-		cause?: Error,
-	) {
+	/** Backend-independent error code. */
+	public code: CompactionErrorCode;
+
+	constructor(code: CompactionErrorCode, message: string, cause?: Error) {
 		super(message, cause === undefined ? undefined : { cause });
 		this.name = "CompactionError";
+		this.code = code;
 	}
 }
 
@@ -176,14 +174,13 @@ export type BranchSummaryErrorCode = "aborted" | "summarization_failed" | "inval
 
 /** Error returned by branch summarization helpers. */
 export class BranchSummaryError extends Error {
-	constructor(
-		/** Backend-independent error code. */
-		public code: BranchSummaryErrorCode,
-		message: string,
-		cause?: Error,
-	) {
+	/** Backend-independent error code. */
+	public code: BranchSummaryErrorCode;
+
+	constructor(code: BranchSummaryErrorCode, message: string, cause?: Error) {
 		super(message, cause === undefined ? undefined : { cause });
 		this.name = "BranchSummaryError";
+		this.code = code;
 	}
 }
 
@@ -197,14 +194,13 @@ export type SessionErrorCode =
 
 /** Error thrown by session storage, repositories, and session tree operations. */
 export class SessionError extends Error {
-	constructor(
-		/** Session subsystem error code. */
-		public code: SessionErrorCode,
-		message: string,
-		cause?: Error,
-	) {
+	/** Session subsystem error code. */
+	public code: SessionErrorCode;
+
+	constructor(code: SessionErrorCode, message: string, cause?: Error) {
 		super(message, cause === undefined ? undefined : { cause });
 		this.name = "SessionError";
+		this.code = code;
 	}
 }
 
@@ -221,13 +217,12 @@ export type AgentHarnessErrorCode =
 
 /** Public AgentHarness failure with a stable top-level classification. */
 export class AgentHarnessError extends Error {
-	constructor(
-		public code: AgentHarnessErrorCode,
-		message: string,
-		cause?: Error,
-	) {
+	public code: AgentHarnessErrorCode;
+
+	constructor(code: AgentHarnessErrorCode, message: string, cause?: Error) {
 		super(message, cause === undefined ? undefined : { cause });
 		this.name = "AgentHarnessError";
+		this.code = code;
 	}
 }
 
