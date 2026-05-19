@@ -65,6 +65,12 @@ specs/
 Thumbs.db
 desktop.ini
 
+
+# Source-only public reference assets (provenance required before packaging/commit)
+/public/assets/**
+!/public/assets/
+!/public/assets/.gitkeep
+
 # Local screenshot captures
 화면 캡처*.png
 Screenshot *.png

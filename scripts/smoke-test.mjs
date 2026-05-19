@@ -121,7 +121,7 @@ const installDir = mkdtempSync(join(tmpdir(), "omk-smoke-local-"));
 
 try {
   runSilently("npm init -y", installDir);
-  runSilently(`npm install "${tarballPath}"`, installDir);
+  runSilently('npm install ' + JSON.stringify(tarballPath), installDir);
   logPass("Local install tarball");
 } catch (err) {
   logFail("Local install tarball", err);

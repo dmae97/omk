@@ -70,6 +70,7 @@ export const FORBIDDEN_PATTERNS = [
   ".agents/**",
   ".specify/**",
   "specs/**",
+  "public/assets/**",
   "dist.old/**",
   "node_modules/**",
   "package-lock.json",

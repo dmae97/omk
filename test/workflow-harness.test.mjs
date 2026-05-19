@@ -58,6 +58,7 @@ test("pack-smoke evidence includes pack, audit, and install smoke phases", () =>
 
 test("package release:check composes the full local gate", () => {
   const pkg = JSON.parse(read("package.json"));
+  assert.match(pkg.scripts.verify, /npm run secret:scan:runtime/);
   assert.match(pkg.scripts["release:check"], /npm run verify/);
   assert.match(pkg.scripts["release:check"], /npm run native:build/);
   assert.match(pkg.scripts["release:check"], /npm run audit:package/);
