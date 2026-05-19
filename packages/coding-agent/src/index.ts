@@ -349,5 +349,6 @@ export {
 // Clipboard utilities
 export { copyToClipboard } from "./utils/clipboard.js";
 export { parseFrontmatter, stripFrontmatter } from "./utils/frontmatter.js";
+export { formatDimensionNote, type ResizedImage, resizeImage } from "./utils/image-resize.js";
 // Shell utilities
 export { getShellConfig } from "./utils/shell.js";
