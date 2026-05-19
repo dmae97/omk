@@ -6,7 +6,7 @@ Analyze GitHub issue(s): $ARGUMENTS
 
 For each issue:
 
-1. Add the `inprogress` label to the issue via GitHub CLI before analysis starts. If adding the label fails, report that explicitly and continue.
+1. Add the `inprogress` label to the issue via GitHub CLI and assign the issue to the local `gh` user before analysis starts. If either action fails, report that explicitly and continue.
 2. Read the issue in full, including all comments and linked issues/PRs.
 3. Do not trust analysis written in the issue. Independently verify behavior and derive your own analysis from the code and execution path.
 
