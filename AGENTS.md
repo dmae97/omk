@@ -190,13 +190,23 @@ Create provider file exporting:
 
 1. **Update CHANGELOGs**: Ensure all changes since last release are documented in the `[Unreleased]` section of each affected package's CHANGELOG.md
 
-2. **Run release script**:
+2. **Soft gate: local release smoke test**: Before running the real release script, build an unpublished local release and manually smoke test it from outside the repository so it cannot accidentally resolve workspace files:
+   ```bash
+   npm run release:local -- --out /tmp/pi-local-release --force
+   cd /tmp
+   /tmp/pi-local-release/bin/pi --help
+   /tmp/pi-local-release/bin/pi --version
+   /tmp/pi-local-release/bin/pi
+   ```
+   In the interactive smoke test, verify startup, model/account listing, and at least one real prompt with the intended default provider. Treat failures as release blockers unless the user explicitly accepts the risk.
+
+3. **Run release script**:
    ```bash
    npm run release:patch    # Fixes and additions
    npm run release:minor    # API breaking changes
    ```
 
-The script handles: version bump, CHANGELOG finalization, commit, tag, publish, and adding new `[Unreleased]` sections.
+The release script handles: version bump, CHANGELOG finalization, commit, tag, publish, and adding new `[Unreleased]` sections.
 
 ## **CRITICAL** Git Rules for Parallel Agents **CRITICAL**
 
