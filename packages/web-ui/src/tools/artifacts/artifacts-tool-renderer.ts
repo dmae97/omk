@@ -2,14 +2,14 @@ import "@mariozechner/mini-lit/dist/CodeBlock.js";
 import type { ToolResultMessage } from "@earendil-works/pi-ai";
 import { createRef, ref } from "lit/directives/ref.js";
 import { FileCode2 } from "lucide";
-import "../../components/ConsoleBlock.js";
+import "../../components/ConsoleBlock.ts";
 import { Diff } from "@mariozechner/mini-lit/dist/Diff.js";
 import { html, type TemplateResult } from "lit";
-import { i18n } from "../../utils/i18n.js";
-import { renderCollapsibleHeader, renderHeader } from "../renderer-registry.js";
-import type { ToolRenderer, ToolRenderResult } from "../types.js";
-import { ArtifactPill } from "./ArtifactPill.js";
-import type { ArtifactsPanel, ArtifactsParams } from "./artifacts.js";
+import { i18n } from "../../utils/i18n.ts";
+import { renderCollapsibleHeader, renderHeader } from "../renderer-registry.ts";
+import type { ToolRenderer, ToolRenderResult } from "../types.ts";
+import { ArtifactPill } from "./ArtifactPill.ts";
+import type { ArtifactsPanel, ArtifactsParams } from "./artifacts.ts";
 
 // Helper to extract text from content blocks
 function getTextOutput(result: ToolResultMessage<any> | undefined): string {
@@ -60,7 +60,11 @@ function getLanguageFromFilename(filename?: string): string {
 }
 
 export class ArtifactsToolRenderer implements ToolRenderer<ArtifactsParams, undefined> {
-	constructor(public artifactsPanel?: ArtifactsPanel) {}
+	artifactsPanel?: ArtifactsPanel;
+
+	constructor(artifactsPanel?: ArtifactsPanel) {
+		this.artifactsPanel = artifactsPanel;
+	}
 
 	render(
 		params: ArtifactsParams | undefined,

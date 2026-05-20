@@ -2,8 +2,8 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import {
 	ARTIFACTS_RUNTIME_PROVIDER_DESCRIPTION_RO,
 	ARTIFACTS_RUNTIME_PROVIDER_DESCRIPTION_RW,
-} from "../../prompts/prompts.js";
-import type { SandboxRuntimeProvider } from "./SandboxRuntimeProvider.js";
+} from "../../prompts/prompts.ts";
+import type { SandboxRuntimeProvider } from "./SandboxRuntimeProvider.ts";
 
 // Define minimal interface for ArtifactsPanel to avoid circular dependencies
 interface ArtifactsPanelLike {
@@ -25,11 +25,15 @@ interface AgentLike {
  * Supports both online (extension) and offline (downloaded HTML) modes.
  */
 export class ArtifactsRuntimeProvider implements SandboxRuntimeProvider {
-	constructor(
-		private artifactsPanel: ArtifactsPanelLike,
-		private agent?: AgentLike,
-		private readWrite: boolean = true,
-	) {}
+	private artifactsPanel: ArtifactsPanelLike;
+	private agent?: AgentLike;
+	private readWrite: boolean;
+
+	constructor(artifactsPanel: ArtifactsPanelLike, agent?: AgentLike, readWrite: boolean = true) {
+		this.artifactsPanel = artifactsPanel;
+		this.agent = agent;
+		this.readWrite = readWrite;
+	}
 
 	getData(): Record<string, any> {
 		// Inject artifact snapshot for offline mode

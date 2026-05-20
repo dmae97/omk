@@ -3,17 +3,17 @@ import { i18n } from "@mariozechner/mini-lit";
 import { Select } from "@mariozechner/mini-lit/dist/Select.js";
 import { html, type TemplateResult } from "lit";
 import { customElement, state } from "lit/decorators.js";
-import "../components/CustomProviderCard.js";
-import "../components/ProviderKeyInput.js";
-import { getAppStorage } from "../storage/app-storage.js";
+import "../components/CustomProviderCard.ts";
+import "../components/ProviderKeyInput.ts";
+import { getAppStorage } from "../storage/app-storage.ts";
 import type {
 	AutoDiscoveryProviderType,
 	CustomProvider,
 	CustomProviderType,
-} from "../storage/stores/custom-providers-store.js";
-import { discoverModels } from "../utils/model-discovery.js";
-import { CustomProviderDialog } from "./CustomProviderDialog.js";
-import { SettingsTab } from "./SettingsDialog.js";
+} from "../storage/stores/custom-providers-store.ts";
+import { discoverModels } from "../utils/model-discovery.ts";
+import { CustomProviderDialog } from "./CustomProviderDialog.ts";
+import { SettingsTab } from "./SettingsDialog.ts";
 
 @customElement("providers-models-tab")
 export class ProvidersModelsTab extends SettingsTab {

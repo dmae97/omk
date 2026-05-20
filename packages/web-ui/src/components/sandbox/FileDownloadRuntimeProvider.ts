@@ -1,4 +1,4 @@
-import type { SandboxRuntimeProvider } from "./SandboxRuntimeProvider.js";
+import type { SandboxRuntimeProvider } from "./SandboxRuntimeProvider.ts";
 
 export interface DownloadableFile {
 	fileName: string;

@@ -8,27 +8,27 @@ import { customElement, property, state } from "lit/decorators.js";
 import { createRef, type Ref, ref } from "lit/directives/ref.js";
 import { X } from "lucide";
 import { type Static, Type } from "typebox";
-import type { ArtifactMessage } from "../../components/Messages.js";
-import { ArtifactsRuntimeProvider } from "../../components/sandbox/ArtifactsRuntimeProvider.js";
-import { AttachmentsRuntimeProvider } from "../../components/sandbox/AttachmentsRuntimeProvider.js";
-import type { SandboxRuntimeProvider } from "../../components/sandbox/SandboxRuntimeProvider.js";
+import type { ArtifactMessage } from "../../components/Messages.ts";
+import { ArtifactsRuntimeProvider } from "../../components/sandbox/ArtifactsRuntimeProvider.ts";
+import { AttachmentsRuntimeProvider } from "../../components/sandbox/AttachmentsRuntimeProvider.ts";
+import type { SandboxRuntimeProvider } from "../../components/sandbox/SandboxRuntimeProvider.ts";
 import {
 	ARTIFACTS_RUNTIME_PROVIDER_DESCRIPTION_RO,
 	ARTIFACTS_TOOL_DESCRIPTION,
 	ATTACHMENTS_RUNTIME_DESCRIPTION,
-} from "../../prompts/prompts.js";
-import type { Attachment } from "../../utils/attachment-utils.js";
-import { i18n } from "../../utils/i18n.js";
-import type { ArtifactElement } from "./ArtifactElement.js";
-import { DocxArtifact } from "./DocxArtifact.js";
-import { ExcelArtifact } from "./ExcelArtifact.js";
-import { GenericArtifact } from "./GenericArtifact.js";
-import { HtmlArtifact } from "./HtmlArtifact.js";
-import { ImageArtifact } from "./ImageArtifact.js";
-import { MarkdownArtifact } from "./MarkdownArtifact.js";
-import { PdfArtifact } from "./PdfArtifact.js";
-import { SvgArtifact } from "./SvgArtifact.js";
-import { TextArtifact } from "./TextArtifact.js";
+} from "../../prompts/prompts.ts";
+import type { Attachment } from "../../utils/attachment-utils.ts";
+import { i18n } from "../../utils/i18n.ts";
+import type { ArtifactElement } from "./ArtifactElement.ts";
+import { DocxArtifact } from "./DocxArtifact.ts";
+import { ExcelArtifact } from "./ExcelArtifact.ts";
+import { GenericArtifact } from "./GenericArtifact.ts";
+import { HtmlArtifact } from "./HtmlArtifact.ts";
+import { ImageArtifact } from "./ImageArtifact.ts";
+import { MarkdownArtifact } from "./MarkdownArtifact.ts";
+import { PdfArtifact } from "./PdfArtifact.ts";
+import { SvgArtifact } from "./SvgArtifact.ts";
+import { TextArtifact } from "./TextArtifact.ts";
 
 // Simple artifact model
 export interface Artifact {

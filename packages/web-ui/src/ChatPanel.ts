@@ -1,16 +1,16 @@
 import { Badge } from "@mariozechner/mini-lit/dist/Badge.js";
 import { html, LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
-import "./components/AgentInterface.js";
+import "./components/AgentInterface.ts";
 import type { Agent, AgentTool } from "@earendil-works/pi-agent-core";
-import type { AgentInterface } from "./components/AgentInterface.js";
-import { ArtifactsRuntimeProvider } from "./components/sandbox/ArtifactsRuntimeProvider.js";
-import { AttachmentsRuntimeProvider } from "./components/sandbox/AttachmentsRuntimeProvider.js";
-import type { SandboxRuntimeProvider } from "./components/sandbox/SandboxRuntimeProvider.js";
-import { ArtifactsPanel, ArtifactsToolRenderer } from "./tools/artifacts/index.js";
-import { registerToolRenderer } from "./tools/renderer-registry.js";
-import type { Attachment } from "./utils/attachment-utils.js";
-import { i18n } from "./utils/i18n.js";
+import type { AgentInterface } from "./components/AgentInterface.ts";
+import { ArtifactsRuntimeProvider } from "./components/sandbox/ArtifactsRuntimeProvider.ts";
+import { AttachmentsRuntimeProvider } from "./components/sandbox/AttachmentsRuntimeProvider.ts";
+import type { SandboxRuntimeProvider } from "./components/sandbox/SandboxRuntimeProvider.ts";
+import { ArtifactsPanel, ArtifactsToolRenderer } from "./tools/artifacts/index.ts";
+import { registerToolRenderer } from "./tools/renderer-registry.ts";
+import type { Attachment } from "./utils/attachment-utils.ts";
+import { i18n } from "./utils/i18n.ts";
 
 const BREAKPOINT = 800; // px - switch between overlay and side-by-side
 

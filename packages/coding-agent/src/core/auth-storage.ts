@@ -17,8 +17,8 @@ import { getOAuthApiKey, getOAuthProvider, getOAuthProviders } from "@earendil-w
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import lockfile from "proper-lockfile";
-import { getAgentDir } from "../config.js";
-import { resolveConfigValue } from "./resolve-config-value.js";
+import { getAgentDir } from "../config.ts";
+import { resolveConfigValue } from "./resolve-config-value.ts";
 
 export type ApiKeyCredential = {
 	type: "api_key";

@@ -1,9 +1,9 @@
 import type { ToolResultMessage } from "@earendil-works/pi-ai";
 import { html } from "lit";
 import { SquareTerminal } from "lucide";
-import { i18n } from "../../utils/i18n.js";
-import { renderHeader } from "../renderer-registry.js";
-import type { ToolRenderer, ToolRenderResult } from "../types.js";
+import { i18n } from "../../utils/i18n.ts";
+import { renderHeader } from "../renderer-registry.ts";
+import type { ToolRenderer, ToolRenderResult } from "../types.ts";
 
 interface BashParams {
 	command: string;

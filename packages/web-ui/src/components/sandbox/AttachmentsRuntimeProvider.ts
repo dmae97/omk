@@ -1,6 +1,6 @@
-import { ATTACHMENTS_RUNTIME_DESCRIPTION } from "../../prompts/prompts.js";
-import type { Attachment } from "../../utils/attachment-utils.js";
-import type { SandboxRuntimeProvider } from "./SandboxRuntimeProvider.js";
+import { ATTACHMENTS_RUNTIME_DESCRIPTION } from "../../prompts/prompts.ts";
+import type { Attachment } from "../../utils/attachment-utils.ts";
+import type { SandboxRuntimeProvider } from "./SandboxRuntimeProvider.ts";
 
 /**
  * Attachments Runtime Provider
@@ -10,7 +10,11 @@ import type { SandboxRuntimeProvider } from "./SandboxRuntimeProvider.js";
  * Attachments are read-only snapshot data - no messaging needed.
  */
 export class AttachmentsRuntimeProvider implements SandboxRuntimeProvider {
-	constructor(private attachments: Attachment[]) {}
+	private attachments: Attachment[];
+
+	constructor(attachments: Attachment[]) {
+		this.attachments = attachments;
+	}
 
 	getData(): Record<string, any> {
 		const attachmentsData = this.attachments.map((a) => ({

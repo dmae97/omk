@@ -2,8 +2,8 @@ import { DownloadButton } from "@mariozechner/mini-lit/dist/DownloadButton.js";
 import { renderAsync } from "docx-preview";
 import { html, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { i18n } from "../../utils/i18n.js";
-import { ArtifactElement } from "./ArtifactElement.js";
+import { i18n } from "../../utils/i18n.ts";
+import { ArtifactElement } from "./ArtifactElement.ts";
 
 @customElement("docx-artifact")
 export class DocxArtifact extends ArtifactElement {

@@ -23,7 +23,7 @@ if (typeof process !== "undefined" && (process.versions?.node || process.version
 	});
 }
 
-import type { KnownProvider } from "./types.js";
+import type { KnownProvider } from "./types.ts";
 
 let _procEnvCache: Map<string, string> | null = null;
 
