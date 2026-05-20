@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { getModel } from "../src/models.js";
-import { streamSimple } from "../src/stream.js";
-import type { Context, Model, SimpleStreamOptions } from "../src/types.js";
+import { getModel } from "../src/models.ts";
+import { streamSimple } from "../src/stream.ts";
+import type { Context, Model, SimpleStreamOptions } from "../src/types.ts";
 
 interface AnthropicThinkingPayload {
 	thinking?: { type: string; budget_tokens?: number; display?: string };
 	output_config?: { effort?: string };
+}
+
+class PayloadCaptured extends Error {
+	constructor() {
+		super("payload captured");
+		this.name = "PayloadCaptured";
+	}
 }
 
 function makePayloadCaptureContext(): Context {
@@ -29,7 +36,7 @@ async function capturePayload(
 		apiKey: "fake-key",
 		onPayload: (payload) => {
 			capturedPayload = payload as AnthropicThinkingPayload;
-			return payload;
+			throw new PayloadCaptured();
 		},
 	});
 

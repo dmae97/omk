@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { getModel } from "../src/models.js";
-import { type BedrockOptions, streamBedrock } from "../src/providers/amazon-bedrock.js";
-import type { Context, Model } from "../src/types.js";
+import { getModel } from "../src/models.ts";
+import { type BedrockOptions, streamBedrock } from "../src/providers/amazon-bedrock.ts";
+import type { Context, Model } from "../src/types.ts";
 
 interface BedrockThinkingPayload {
 	additionalModelRequestFields?: {
@@ -9,6 +9,13 @@ interface BedrockThinkingPayload {
 		output_config?: { effort?: string };
 		anthropic_beta?: string[];
 	};
+}
+
+class PayloadCaptured extends Error {
+	constructor() {
+		super("payload captured");
+		this.name = "PayloadCaptured";
+	}
 }
 
 function makeContext(): Context {
@@ -25,10 +32,9 @@ async function capturePayload(
 	const s = streamBedrock(model, makeContext(), {
 		...options,
 		reasoning: options?.reasoning ?? "high",
-		signal: AbortSignal.abort(),
 		onPayload: (payload) => {
 			capturedPayload = payload as BedrockThinkingPayload;
-			return payload;
+			throw new PayloadCaptured();
 		},
 	});
 
@@ -137,10 +143,9 @@ describe("Application inference profile support", () => {
 				messages: [{ role: "user", content: "Hello", timestamp: Date.now() }],
 			},
 			{
-				signal: AbortSignal.abort(),
 				onPayload: (payload) => {
 					capturedPayload = payload;
-					return payload;
+					throw new PayloadCaptured();
 				},
 			},
 		);

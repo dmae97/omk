@@ -7,8 +7,8 @@ import {
 	resetOpenAICodexWebSocketDebugStats,
 	streamOpenAICodexResponses,
 	streamSimpleOpenAICodexResponses,
-} from "../src/providers/openai-codex-responses.js";
-import type { Context, Model } from "../src/types.js";
+} from "../src/providers/openai-codex-responses.ts";
+import type { Context, Model } from "../src/types.ts";
 
 const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
 
@@ -173,7 +173,7 @@ describe("openai-codex streaming", () => {
 			messages: [{ role: "user", content: "Say hello", timestamp: Date.now() }],
 		};
 
-		const streamResult = streamOpenAICodexResponses(model, context, { apiKey: token });
+		const streamResult = streamOpenAICodexResponses(model, context, { apiKey: token, transport: "sse" });
 		let sawTextDelta = false;
 		let sawDone = false;
 
@@ -407,7 +407,7 @@ describe("openai-codex streaming", () => {
 			messages: [{ role: "user", content: "Say hello", timestamp: Date.now() }],
 		};
 
-		const streamResult = streamOpenAICodexResponses(model, context, { apiKey: token, sessionId });
+		const streamResult = streamOpenAICodexResponses(model, context, { apiKey: token, sessionId, transport: "sse" });
 		await streamResult.result();
 	});
 
@@ -513,7 +513,11 @@ describe("openai-codex streaming", () => {
 			messages: [{ role: "user", content: "Say hello", timestamp: Date.now() }],
 		};
 
-		await streamSimpleOpenAICodexResponses(model, context, { apiKey: token, reasoning: "xhigh" }).result();
+		await streamSimpleOpenAICodexResponses(model, context, {
+			apiKey: token,
+			reasoning: "xhigh",
+			transport: "sse",
+		}).result();
 
 		expect(requestedReasoning).toEqual({ effort: "xhigh", summary: "auto" });
 	});
@@ -559,6 +563,7 @@ describe("openai-codex streaming", () => {
 			})}`,
 		].join("\n\n")}\n\n`;
 
+		let requestedReasoning: unknown;
 		const encoder = new TextEncoder();
 		const stream = new ReadableStream<Uint8Array>({
 			start(controller) {
@@ -577,7 +582,7 @@ describe("openai-codex streaming", () => {
 			}
 			if (url === "https://chatgpt.com/backend-api/codex/responses") {
 				const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : null;
-				expect(body?.reasoning).toEqual({ effort: "low", summary: "auto" });
+				requestedReasoning = body?.reasoning;
 
 				return new Response(stream, {
 					status: 200,
@@ -596,6 +601,7 @@ describe("openai-codex streaming", () => {
 			provider: "openai-codex",
 			baseUrl: "https://chatgpt.com/backend-api",
 			reasoning: true,
+			thinkingLevelMap: { minimal: "low" },
 			input: ["text"],
 			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 			contextWindow: 400000,
@@ -610,8 +616,10 @@ describe("openai-codex streaming", () => {
 		const streamResult = streamOpenAICodexResponses(model, context, {
 			apiKey: token,
 			reasoningEffort: "minimal",
+			transport: "sse",
 		});
 		await streamResult.result();
+		expect(requestedReasoning).toEqual({ effort: "low", summary: "auto" });
 	});
 
 	it.each([
@@ -701,7 +709,11 @@ describe("openai-codex streaming", () => {
 				messages: [{ role: "user", content: "Say hello", timestamp: Date.now() }],
 			};
 
-			const result = await streamOpenAICodexResponses(model, context, { apiKey: token, serviceTier }).result();
+			const result = await streamOpenAICodexResponses(model, context, {
+				apiKey: token,
+				serviceTier,
+				transport: "sse",
+			}).result();
 
 			expect(result.usage.cost.input).toBe(1 * multiplier);
 			expect(result.usage.cost.output).toBe(2 * multiplier);
@@ -801,7 +813,7 @@ describe("openai-codex streaming", () => {
 		};
 
 		// No sessionId provided
-		const streamResult = streamOpenAICodexResponses(model, context, { apiKey: token });
+		const streamResult = streamOpenAICodexResponses(model, context, { apiKey: token, transport: "sse" });
 		await streamResult.result();
 	});
 	it("forwards auto transport from streamSimple options and uses cached websocket context", async () => {
