@@ -292,12 +292,11 @@ export class AgentSessionRuntime {
 				return { cancelled: false, selectedText };
 			}
 
-			const sourceManager = SessionManager.open(currentSessionFile, sessionDir);
-			const forkedSessionPath = sourceManager.createBranchedSession(targetLeafId);
+			const sessionManager = SessionManager.open(currentSessionFile, sessionDir);
+			const forkedSessionPath = sessionManager.createBranchedSession(targetLeafId);
 			if (!forkedSessionPath) {
 				throw new Error("Failed to create forked session");
 			}
-			const sessionManager = SessionManager.open(forkedSessionPath, sessionDir);
 			await this.teardownCurrent("fork", sessionManager.getSessionFile());
 			this.apply(
 				await this.createRuntime({

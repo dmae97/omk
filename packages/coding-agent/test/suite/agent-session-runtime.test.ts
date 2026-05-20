@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, parse } from "node:path";
 import { fauxAssistantMessage, registerFauxProvider } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -274,6 +274,8 @@ describe("AgentSessionRuntime characterization", () => {
 			{ type: "session_shutdown", reason: "fork", targetSessionFile: runtime.session.sessionFile },
 			{ type: "session_start", reason: "fork", previousSessionFile },
 		]);
+		const sessionFileName = parse(runtime.session.sessionFile!).name;
+		expect(sessionFileName.endsWith(`_${runtime.session.sessionId}`)).toBe(true);
 
 		events.length = 0;
 		cancelNextFork = true;
