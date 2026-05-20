@@ -9,6 +9,7 @@
 
 // Anthropic
 export { anthropicOAuthProvider, loginAnthropic, refreshAnthropicToken } from "./anthropic.ts";
+export * from "./device-code.ts";
 // GitHub Copilot
 export {
 	getGitHubCopilotBaseUrl,

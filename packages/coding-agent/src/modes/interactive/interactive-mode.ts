@@ -4823,11 +4823,13 @@ export class InteractiveMode {
 									manualCodeReject = undefined;
 								}
 							});
-					} else if (providerId === "github-copilot") {
-						// GitHub Copilot polls after onAuth
-						dialog.showWaiting("Waiting for browser authentication...");
 					}
 					// For Anthropic: onPrompt is called immediately after
+				},
+
+				onDeviceCode: (info) => {
+					dialog.showDeviceCode(info);
+					dialog.showWaiting("Waiting for authentication...");
 				},
 
 				onPrompt: async (prompt: { message: string; placeholder?: string }) => {

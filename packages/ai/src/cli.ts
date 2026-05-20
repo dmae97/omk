@@ -42,6 +42,11 @@ async function login(providerId: OAuthProviderId): Promise<void> {
 				if (info.instructions) console.log(info.instructions);
 				console.log();
 			},
+			onDeviceCode: (info) => {
+				console.log(`\nOpen this URL in your browser:\n${info.verificationUri}`);
+				console.log(`Enter code: ${info.userCode}`);
+				console.log();
+			},
 			onPrompt: async (p) => {
 				return await promptFn(`${p.message}${p.placeholder ? ` (${p.placeholder})` : ""}:`);
 			},

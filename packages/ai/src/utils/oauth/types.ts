@@ -23,6 +23,13 @@ export type OAuthAuthInfo = {
 	instructions?: string;
 };
 
+export type OAuthDeviceCodeInfo = {
+	userCode: string;
+	verificationUri: string;
+	intervalSeconds?: number;
+	expiresInSeconds?: number;
+};
+
 export type OAuthSelectOption = {
 	id: string;
 	label: string;
@@ -35,6 +42,7 @@ export type OAuthSelectPrompt = {
 
 export interface OAuthLoginCallbacks {
 	onAuth: (info: OAuthAuthInfo) => void;
+	onDeviceCode?: (info: OAuthDeviceCodeInfo) => void;
 	onPrompt: (prompt: OAuthPrompt) => Promise<string>;
 	onProgress?: (message: string) => void;
 	onManualCodeInput?: () => Promise<string>;

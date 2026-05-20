@@ -32,6 +32,7 @@ export * from "./utils/json-parse.ts";
 export type {
 	OAuthAuthInfo,
 	OAuthCredentials,
+	OAuthDeviceCodeInfo,
 	OAuthLoginCallbacks,
 	OAuthPrompt,
 	OAuthProvider,
