@@ -60,22 +60,22 @@
 	],
 	"scripts": {
 		"clean": "shx rm -rf dist",
-		"generate-models": "npx tsx scripts/generate-models.ts",
-		"generate-image-models": "npx tsx scripts/generate-image-models.ts",
+		"generate-models": "node scripts/generate-models.ts",
+		"generate-image-models": "node scripts/generate-image-models.ts",
 		"build": "npm run generate-models && npm run generate-image-models && tsgo -p tsconfig.build.json",
 		"test": "vitest --run",
 		"prepublishOnly": "npm run clean && npm run build"
 	},
 	"dependencies": {
-		"@anthropic-ai/sdk": "^0.91.1",
-		"@aws-sdk/client-bedrock-runtime": "^3.1030.0",
-		"@google/genai": "^1.40.0",
-		"@mistralai/mistralai": "^2.2.0",
-		"http-proxy-agent": "^7.0.2",
-		"https-proxy-agent": "^7.0.6",
+		"@anthropic-ai/sdk": "0.91.1",
+		"@aws-sdk/client-bedrock-runtime": "3.1048.0",
+		"@google/genai": "1.52.0",
+		"@mistralai/mistralai": "2.2.1",
+		"http-proxy-agent": "7.0.2",
+		"https-proxy-agent": "7.0.6",
 		"openai": "6.26.0",
-		"partial-json": "^0.1.7",
-		"typebox": "^1.1.24"
+		"partial-json": "0.1.7",
+		"typebox": "1.1.38"
 	},
 	"keywords": [
 		"ai",
@@ -98,8 +98,8 @@
 		"node": ">=22.19.0"
 	},
 	"devDependencies": {
-		"@types/node": "^24.3.0",
-		"canvas": "^3.2.0",
-		"vitest": "^3.2.4"
+		"@types/node": "24.12.4",
+		"canvas": "3.2.3",
+		"vitest": "3.2.4"
 	}
 }

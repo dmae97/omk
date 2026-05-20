@@ -1,11 +1,11 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { NodeExecutionEnv } from "../../src/harness/env/nodejs.js";
-import { JsonlSessionStorage, loadJsonlSessionMetadata } from "../../src/harness/session/jsonl-storage.js";
-import { InMemorySessionStorage } from "../../src/harness/session/memory-storage.js";
-import { type MessageEntry, ok, type SessionMetadata } from "../../src/harness/types.js";
-import { createAssistantMessage, createTempDir, createUserMessage } from "./session-test-utils.js";
+import { NodeExecutionEnv } from "../../src/harness/env/nodejs.ts";
+import { JsonlSessionStorage, loadJsonlSessionMetadata } from "../../src/harness/session/jsonl-storage.ts";
+import { InMemorySessionStorage } from "../../src/harness/session/memory-storage.ts";
+import { type MessageEntry, ok, type SessionMetadata } from "../../src/harness/types.ts";
+import { createAssistantMessage, createTempDir, createUserMessage } from "./session-test-utils.ts";
 
 describe("InMemorySessionStorage", () => {
 	it("returns configured session metadata", async () => {

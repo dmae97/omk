@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { matchesKey } from "../src/keys.js";
-import { ProcessTerminal } from "../src/terminal.js";
-import { type Component, TUI } from "../src/tui.js";
+import { matchesKey } from "../src/keys.ts";
+import { ProcessTerminal } from "../src/terminal.ts";
+import { type Component, TUI } from "../src/tui.ts";
 
 /**
  * Simple key code logger component

@@ -1,13 +1,13 @@
 import { fauxAssistantMessage, fauxToolCall, getModel, registerFauxProvider } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
-import { AgentHarness } from "../../src/harness/agent-harness.js";
-import { NodeExecutionEnv } from "../../src/harness/env/nodejs.js";
-import { InMemorySessionStorage } from "../../src/harness/session/memory-storage.js";
-import { Session } from "../../src/harness/session/session.js";
-import type { PromptTemplate, Skill } from "../../src/harness/types.js";
-import type { AgentMessage, AgentTool } from "../../src/types.js";
-import { calculateTool } from "../utils/calculate.js";
-import { getCurrentTimeTool } from "../utils/get-current-time.js";
+import { AgentHarness } from "../../src/harness/agent-harness.ts";
+import { NodeExecutionEnv } from "../../src/harness/env/nodejs.ts";
+import { InMemorySessionStorage } from "../../src/harness/session/memory-storage.ts";
+import { Session } from "../../src/harness/session/session.ts";
+import type { PromptTemplate, Skill } from "../../src/harness/types.ts";
+import type { AgentMessage, AgentTool } from "../../src/types.ts";
+import { calculateTool } from "../utils/calculate.ts";
+import { getCurrentTimeTool } from "../utils/get-current-time.ts";
 
 interface AppSkill extends Skill {
 	source: "project" | "user";

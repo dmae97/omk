@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { AssistantMessage } from "../src/types.js";
-import { isContextOverflow } from "../src/utils/overflow.js";
+import type { AssistantMessage } from "../src/types.ts";
+import { isContextOverflow } from "../src/utils/overflow.ts";
 
 function createErrorMessage(errorMessage: string): AssistantMessage {
 	return {

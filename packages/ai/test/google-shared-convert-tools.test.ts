@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { convertTools } from "../src/providers/google-shared.js";
-import type { Tool } from "../src/types.js";
+import { convertTools } from "../src/providers/google-shared.ts";
+import type { Tool } from "../src/types.ts";
 
 function makeTool(parameters: Record<string, unknown>): Tool {
 	return {

@@ -1,10 +1,10 @@
 import { readFileSync } from "fs";
-import { Image } from "../src/components/image.js";
-import { Spacer } from "../src/components/spacer.js";
-import { Text } from "../src/components/text.js";
-import { ProcessTerminal } from "../src/terminal.js";
-import { getCapabilities, getImageDimensions } from "../src/terminal-image.js";
-import { TUI } from "../src/tui.js";
+import { Image } from "../src/components/image.ts";
+import { Spacer } from "../src/components/spacer.ts";
+import { Text } from "../src/components/text.ts";
+import { ProcessTerminal } from "../src/terminal.ts";
+import { getCapabilities, getImageDimensions } from "../src/terminal-image.ts";
+import { TUI } from "../src/tui.ts";
 
 const testImagePath = process.argv[2] || "/tmp/test-image.png";
 

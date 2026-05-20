@@ -1,8 +1,8 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { getModel } from "@earendil-works/pi-ai";
-import { NodeExecutionEnv } from "../../src/harness/env/nodejs.js";
-import { InMemorySessionStorage } from "../../src/harness/session/memory-storage.js";
+import { NodeExecutionEnv } from "../../src/harness/env/nodejs.ts";
+import { InMemorySessionStorage } from "../../src/harness/session/memory-storage.ts";
 import {
 	AgentHarness,
 	formatSkillsForSystemPrompt,
@@ -11,13 +11,14 @@ import {
 	type PromptTemplate,
 	Session,
 	type Skill,
-} from "../../src/index.js";
+} from "../../src/index.ts";
 
 type Source = { type: "project" | "user" | "path"; dir: string };
 type SourcedSkill = Skill & { source: Source };
 type SourcedPromptTemplate = PromptTemplate & { source: Source };
 
 const env = new NodeExecutionEnv({ cwd: process.cwd() });
+
 const source = (type: Source["type"], dir: string) => ({ path: dir, source: { type, dir } });
 const { skills: sourcedSkills } = await loadSourcedSkills<Source, SourcedSkill>(
 	env,

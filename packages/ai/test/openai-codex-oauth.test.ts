@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { refreshOpenAICodexToken } from "../src/utils/oauth/openai-codex.js";
+import { refreshOpenAICodexToken } from "../src/utils/oauth/openai-codex.ts";
 
 describe("OpenAI Codex OAuth", () => {
 	afterEach(() => {

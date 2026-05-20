@@ -1,10 +1,10 @@
 import { access, chmod, realpath, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { NodeExecutionEnv } from "../../src/harness/env/nodejs.js";
-import { FileError, getOrThrow } from "../../src/harness/types.js";
-import { executeShellWithCapture } from "../../src/harness/utils/shell-output.js";
-import { createTempDir } from "./session-test-utils.js";
+import { NodeExecutionEnv } from "../../src/harness/env/nodejs.ts";
+import { FileError, getOrThrow } from "../../src/harness/types.ts";
+import { executeShellWithCapture } from "../../src/harness/utils/shell-output.ts";
+import { createTempDir } from "./session-test-utils.ts";
 
 const chmodRestorePaths: string[] = [];
 

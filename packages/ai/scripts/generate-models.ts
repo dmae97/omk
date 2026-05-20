@@ -1,4 +1,4 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env node
 
 import { writeFileSync } from "fs";
 import { join, dirname } from "path";
@@ -8,14 +8,8 @@ import {
 	CLOUDFLARE_AI_GATEWAY_COMPAT_BASE_URL,
 	CLOUDFLARE_AI_GATEWAY_OPENAI_BASE_URL,
 	CLOUDFLARE_WORKERS_AI_BASE_URL,
-} from "../src/providers/cloudflare.js";
-import {
-	Api,
-	type AnthropicMessagesCompat,
-	KnownProvider,
-	Model,
-	type OpenAICompletionsCompat,
-} from "../src/types.js";
+} from "../src/providers/cloudflare.ts";
+import type { AnthropicMessagesCompat, Api, KnownProvider, Model, OpenAICompletionsCompat } from "../src/types.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

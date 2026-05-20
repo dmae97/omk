@@ -1,9 +1,9 @@
 import { symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { NodeExecutionEnv } from "../../src/harness/env/nodejs.js";
-import { loadSkills, loadSourcedSkills } from "../../src/harness/skills.js";
-import { createTempDir } from "./session-test-utils.js";
+import { NodeExecutionEnv } from "../../src/harness/env/nodejs.ts";
+import { loadSkills, loadSourcedSkills } from "../../src/harness/skills.ts";
+import { createTempDir } from "./session-test-utils.ts";
 
 describe("loadSkills", () => {
 	it("loads SKILL.md files through the execution environment", async () => {

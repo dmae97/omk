@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { getImageModel } from "../src/image-models.js";
-import { generateImages } from "../src/images.js";
-import type { ImageContent, ImagesContext, ImagesModel, ProviderImagesOptions } from "../src/types.js";
+import { getImageModel } from "../src/image-models.ts";
+import { generateImages } from "../src/images.ts";
+import type { ImageContent, ImagesContext, ImagesModel, ProviderImagesOptions } from "../src/types.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

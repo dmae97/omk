@@ -30,9 +30,9 @@
 	},
 	"dependencies": {
 		"@earendil-works/pi-ai": "^0.75.3",
-		"ignore": "^7.0.5",
-		"typebox": "^1.1.24",
-		"yaml": "^2.8.2"
+		"ignore": "7.0.5",
+		"typebox": "1.1.38",
+		"yaml": "2.9.0"
 	},
 	"keywords": [
 		"ai",
@@ -52,9 +52,9 @@
 		"node": ">=22.19.0"
 	},
 	"devDependencies": {
-		"@types/node": "^24.3.0",
-		"@vitest/coverage-v8": "^3.2.4",
-		"typescript": "^5.7.3",
-		"vitest": "^3.2.4"
+		"@types/node": "24.12.4",
+		"@vitest/coverage-v8": "3.2.4",
+		"typescript": "5.9.3",
+		"vitest": "3.2.4"
 	}
 }

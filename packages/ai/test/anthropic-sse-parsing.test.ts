@@ -1,9 +1,9 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
-import { getModel } from "../src/models.js";
-import { streamAnthropic } from "../src/providers/anthropic.js";
-import type { Context, ToolCall } from "../src/types.js";
+import { getModel } from "../src/models.ts";
+import { streamAnthropic } from "../src/providers/anthropic.ts";
+import type { Context, ToolCall } from "../src/types.ts";
 
 function createSseResponse(events: Array<{ event: string; data: string }>): Response {
 	const body = events.map(({ event, data }) => `event: ${event}\ndata: ${data}\n`).join("\n");

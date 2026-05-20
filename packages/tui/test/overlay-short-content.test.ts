@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { type Component, TUI } from "../src/tui.js";
-import { VirtualTerminal } from "./virtual-terminal.js";
+import { type Component, TUI } from "../src/tui.ts";
+import { VirtualTerminal } from "./virtual-terminal.ts";
 
 class SimpleContent implements Component {
 	private lines: string[];

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { getModel } from "../src/models.js";
-import { streamSimple } from "../src/stream.js";
-import type { Api, Context, Model, SimpleStreamOptions } from "../src/types.js";
+import { getModel } from "../src/models.ts";
+import { streamSimple } from "../src/stream.ts";
+import type { Api, Context, Model, SimpleStreamOptions } from "../src/types.ts";
 
 type SimpleOptionsWithExtras = SimpleStreamOptions & Record<string, unknown>;
 

@@ -14,13 +14,13 @@
 import type { ChildProcess } from "child_process";
 import { execSync, spawn } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { getModel } from "../src/models.js";
-import { complete } from "../src/stream.js";
-import type { AssistantMessage, Context, Model, Usage } from "../src/types.js";
-import { isContextOverflow } from "../src/utils/overflow.js";
-import { hasAzureOpenAICredentials } from "./azure-utils.js";
-import { hasBedrockCredentials } from "./bedrock-utils.js";
-import { resolveApiKey } from "./oauth.js";
+import { getModel } from "../src/models.ts";
+import { complete } from "../src/stream.ts";
+import type { AssistantMessage, Context, Model, Usage } from "../src/types.ts";
+import { isContextOverflow } from "../src/utils/overflow.ts";
+import { hasAzureOpenAICredentials } from "./azure-utils.ts";
+import { hasBedrockCredentials } from "./bedrock-utils.ts";
+import { resolveApiKey } from "./oauth.ts";
 
 // Resolve OAuth tokens at module level (async, runs before tests)
 const oauthTokens = await Promise.all([resolveApiKey("github-copilot"), resolveApiKey("openai-codex")]);

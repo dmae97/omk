@@ -4,7 +4,7 @@
 
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { Image } from "../src/components/image.js";
+import { Image } from "../src/components/image.ts";
 import {
 	deleteAllKittyImages,
 	deleteKittyImage,
@@ -16,7 +16,7 @@ import {
 	resetCapabilitiesCache,
 	setCapabilities,
 	setCellDimensions,
-} from "../src/terminal-image.js";
+} from "../src/terminal-image.ts";
 
 const ENV_KEYS = [
 	"TERM",

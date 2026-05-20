@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getModel } from "../src/models.js";
-import { streamOpenAICompletions } from "../src/providers/openai-completions.js";
-import type { Model } from "../src/types.js";
+import { getModel } from "../src/models.ts";
+import { streamOpenAICompletions } from "../src/providers/openai-completions.ts";
+import type { Model } from "../src/types.ts";
 
 interface FakeOpenAIClientOptions {
 	apiKey: string;

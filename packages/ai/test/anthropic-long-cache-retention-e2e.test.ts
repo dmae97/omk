@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { getEnvApiKey } from "../src/env-api-keys.js";
-import { getModels, getProviders } from "../src/models.js";
-import { complete } from "../src/stream.js";
-import type { Api, KnownProvider, Model, ProviderStreamOptions } from "../src/types.js";
-import { resolveApiKey } from "./oauth.js";
+import { getEnvApiKey } from "../src/env-api-keys.ts";
+import { getModels, getProviders } from "../src/models.ts";
+import { complete } from "../src/stream.ts";
+import type { Api, KnownProvider, Model, ProviderStreamOptions } from "../src/types.ts";
+import { resolveApiKey } from "./oauth.ts";
 
 const githubCopilotToken = await resolveApiKey("github-copilot");
 

@@ -2,10 +2,10 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
-import { findEnvKeys, getEnvApiKey } from "../src/env-api-keys.js";
-import { getModel } from "../src/models.js";
-import { streamAnthropic } from "../src/providers/anthropic.js";
-import type { Context, Model, Tool } from "../src/types.js";
+import { findEnvKeys, getEnvApiKey } from "../src/env-api-keys.ts";
+import { getModel } from "../src/models.ts";
+import { streamAnthropic } from "../src/providers/anthropic.ts";
+import type { Context, Model, Tool } from "../src/types.ts";
 
 const originalFireworksApiKey = process.env.FIREWORKS_API_KEY;
 
