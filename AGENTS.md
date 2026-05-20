@@ -202,13 +202,20 @@ Create provider file exporting:
    ```
    In the interactive smoke test, verify startup, model/account listing, and at least one real prompt with the intended default provider. Treat failures as release blockers unless the user explicitly accepts the risk.
 
-3. **Run release script**:
+3. **Run release script until npm publish**:
    ```bash
    npm run release:patch    # Fixes and additions
    npm run release:minor    # API breaking changes
    ```
 
-The release script handles: version bump, CHANGELOG finalization, commit, tag, publish, and adding new `[Unreleased]` sections.
+   npm publishing requires the maintainer's npm WebAuthn/security-key 2FA and cannot be completed by an agent alone. If the release script stops at `npm publish` with an npm browser authentication URL, the maintainer must run or approve `npm run publish` locally. Do not rerun the version bump.
+
+4. **After publish succeeds, finish release bookkeeping**:
+   - Add fresh `## [Unreleased]` sections to package changelogs.
+   - Commit with `Add [Unreleased] section for next cycle`.
+   - Push `main` and the release tag.
+
+The release script handles the full flow when npm publish auth is already satisfied. If npm requires WebAuthn during publish, continue manually from the existing release commit/tag using the steps above.
 
 ## **CRITICAL** Git Rules for Parallel Agents **CRITICAL**
 
