@@ -123,6 +123,43 @@ describe("ToolExecutionComponent parity", () => {
 		await promise;
 	});
 
+	test("bash renderer does not duplicate final full output truncation details", async () => {
+		const operations: BashOperations = {
+			exec: async (_command, _cwd, { onData }) => {
+				for (let i = 1; i <= 4000; i++) {
+					onData(Buffer.from(`line-${String(i).padStart(4, "0")}\n`));
+				}
+				return { exitCode: 0 };
+			},
+		};
+		const tool = createBashToolDefinition(process.cwd(), { operations });
+		const result = await tool.execute(
+			"tool-bash-1b",
+			{ command: "generate output" },
+			undefined,
+			undefined,
+			{} as never,
+		);
+		const component = new ToolExecutionComponent(
+			"bash",
+			"tool-bash-1b",
+			{ command: "generate output" },
+			{},
+			tool,
+			createFakeTui(),
+			process.cwd(),
+		);
+		component.setExpanded(true);
+		component.updateResult({ ...result, isError: false }, false);
+
+		const rendered = stripAnsi(component.render(200).join("\n"));
+		expect(rendered.match(/Full output:/g)?.length ?? 0).toBe(1);
+		expect(rendered).toMatch(/line-4000[^\n]*\n[^\S\n]*\n \[Full output:/);
+		expect(rendered).not.toMatch(/line-4000[^\n]*\n[^\S\n]*\n[^\S\n]*\n \[Full output:/);
+		expect(rendered).toContain("Truncated: showing 2000 of 4001 lines");
+		expect(rendered).not.toContain("[Showing lines 2002-4001 of 4001. Full output:");
+	});
+
 	test("does not duplicate built-in headers when passed the active built-in definition", () => {
 		const component = new ToolExecutionComponent(
 			"read",
