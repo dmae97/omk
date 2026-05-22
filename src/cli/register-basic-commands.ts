@@ -195,7 +195,7 @@ export function registerBasicCommands(program: Command): void {
     .option("--profile <profile>", t("cmd.initProfileOption"), "fullstack")
     .option("--no-interactive-setup", t("cmd.initNoInteractiveSetupOption"))
     .option("--local-user", "Use global ~/.kimi MCP/skills at runtime without copying personal files into the project")
-    .option("--home-dir <path>", "Trusted local Kimi home, ~/.kimi/mcp.json, or ~/.kimi/skills path")
+    .option("--home-dir <path>", "Trusted local home, ~/.kimi/mcp.json, or ~/.kimi/skills path")
     .option("--import-user-skills", "Import personal/global skills into this project (trusted local use only)")
     .action(async (options) => {
       const { initCommand } = await import("../commands/init.js");

@@ -118,7 +118,7 @@ export function registerMcpDagCronScreenshotCommands(program: Command): void {
     });
   mcp
     .command("sync-global")
-    .description("Import global Kimi MCP servers into project-local config")
+    .description("Import global MCP servers into project-local config")
     .option("--overwrite", "Overwrite existing local definitions with global ones")
     .option("--omk", "Write to .omk/mcp.json instead of .kimi/mcp.json")
     .action(async (options) => {

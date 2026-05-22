@@ -178,6 +178,7 @@ try {
 // Local doctor soft smoke
 const KNOWN_SOFT_ISSUES = new Set([
   "jq",
+  "Primary CLI",
   "Kimi CLI",
   "Kimi CLI version",
   "Git Clean",
