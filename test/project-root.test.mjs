@@ -49,8 +49,8 @@ test("OMK_PROJECT_ROOT overrides HOME git repo and OMK_DEFAULT_PROJECT_ROOT", as
     process.env.OMK_PROJECT_ROOT = projectRoot;
     process.env.OMK_DEFAULT_PROJECT_ROOT = defaultRoot;
 
-    assert.equal(getProjectRoot(), canonical(projectRoot));
-    assert.equal(getResourceProjectRoot(), canonical(projectRoot));
+    assert.equal(canonical(getProjectRoot()), canonical(projectRoot));
+    assert.equal(canonical(getResourceProjectRoot()), canonical(projectRoot));
   } finally {
     process.chdir(previousCwd);
     restoreEnv("OMK_PROJECT_ROOT", previousProjectRoot);
@@ -77,7 +77,7 @@ test("OMK_DEFAULT_PROJECT_ROOT applies when cwd is HOME git repo", async () => {
     };
 
     const resolution = resolveProjectRoot({ cwd: homeRoot, home: homeRoot, env });
-    assert.equal(resolution.root, canonical(projectRoot));
+    assert.equal(canonical(resolution.root), canonical(projectRoot));
     assert.equal(resolution.source, "default-env");
     assert.equal(resolution.homeIsGitRepo, true);
   } finally {
@@ -100,7 +100,7 @@ test("user config default_project_root applies for HOME git repo", async () => {
       home: homeRoot,
       env: { HOME: homeRoot, OMK_ORIGINAL_HOME: homeRoot },
     });
-    assert.equal(resolution.root, canonical(projectRoot));
+    assert.equal(canonical(resolution.root), canonical(projectRoot));
     assert.equal(resolution.source, "default-config");
   } finally {
     await rm(homeRoot, { recursive: true, force: true });
@@ -120,7 +120,7 @@ test("normal non-HOME git repo remains the project root", async () => {
       home: homeRoot,
       env: { HOME: homeRoot, OMK_ORIGINAL_HOME: homeRoot },
     });
-    assert.equal(resolution.root, canonical(repoRoot));
+    assert.equal(canonical(resolution.root), canonical(repoRoot));
     assert.equal(resolution.source, "git");
   } finally {
     await rm(homeRoot, { recursive: true, force: true });
@@ -144,7 +144,7 @@ test("strong OMK markers under HOME beat HOME git root", async () => {
       home: homeRoot,
       env: { HOME: homeRoot, OMK_ORIGINAL_HOME: homeRoot },
     });
-    assert.equal(resolution.root, canonical(projectRoot));
+    assert.equal(canonical(resolution.root), canonical(projectRoot));
     assert.equal(resolution.source, "strong-marker");
     assert.equal(resolution.marker, ".omk/agents/root.yaml");
   } finally {

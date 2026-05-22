@@ -10,15 +10,15 @@ const { ensureChatStartupArtifacts, formatChatStartupDate } = await import("../d
 const CLI = join(process.cwd(), "dist", "cli.js");
 
 async function createFakeKimi(binRoot, scriptBody) {
+  const jsPath = join(binRoot, "kimi.mjs");
+  await writeFile(jsPath, scriptBody, "utf-8");
   if (process.platform === "win32") {
-    const jsPath = join(binRoot, "kimi.js");
-    await writeFile(jsPath, scriptBody, "utf-8");
     const cmdPath = join(binRoot, "kimi.cmd");
     await writeFile(cmdPath, `@echo off\r\n"${process.execPath}" "${jsPath}" %*\r\n`, "utf-8");
     return cmdPath;
   }
   const binPath = join(binRoot, "kimi");
-  await writeFile(binPath, `#!${process.execPath}\n${scriptBody}\n`, "utf-8");
+  await writeFile(binPath, `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(jsPath)} "$@"\n`, "utf-8");
   await chmod(binPath, 0o755);
   return binPath;
 }
@@ -306,6 +306,7 @@ test("chat smoke validates startup without launching Kimi", async () => {
       OMK_RENDER_LOGO: "0",
       OMK_STAR_PROMPT: "0",
       OMK_CHAT_NO_BANNER: "1",
+      OMK_MCP_SUPPRESS_PRUNE_WARNINGS: "",
       OMK_UPDATE_PROMPT: "force",
       KIMI_BIN: kimiBin,
     };
@@ -404,6 +405,7 @@ test("chat smoke uses OMK_DEFAULT_PROJECT_ROOT when launched from HOME git repo"
       OMK_STAR_PROMPT: "0",
       OMK_CHAT_NO_BANNER: "1",
       KIMI_BIN: kimiBin,
+      OMK_MCP_SUPPRESS_PRUNE_WARNINGS: "",
     };
     const init = spawnSync(process.execPath, [CLI, "init"], {
       cwd: projectRoot,

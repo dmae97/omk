@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
@@ -77,6 +77,8 @@ async function tempGoalCliFixture({ summary = true } = {}) {
   await mkdir(join(workspace, ".omk", "agents"), { recursive: true });
   try {
     await copyFile(join(process.cwd(), ".omk", "agents", "root.yaml"), join(workspace, ".omk", "agents", "root.yaml"));
+    await copyFile(join(process.cwd(), ".omk", "agents", "okabe.yaml"), join(workspace, ".omk", "agents", "okabe.yaml"));
+    await cp(join(process.cwd(), ".omk", "agents", "roles"), join(workspace, ".omk", "agents", "roles"), { recursive: true });
   } catch {
     // ignore if source file is missing
   }
@@ -90,7 +92,9 @@ async function tempGoalCliFixture({ summary = true } = {}) {
     await writeFile(fakeKimiScript, fakeKimiSource, "utf-8");
     await writeFile(kimiBin, `@echo off\r\n"${process.execPath}" "${fakeKimiScript}" %*\r\n`, "utf-8");
   } else {
-    await writeFile(kimiBin, `#!${process.execPath}\n${fakeKimiSource}`, { mode: 0o755 });
+    const fakeKimiScript = join(bin, "kimi.mjs");
+    await writeFile(fakeKimiScript, fakeKimiSource, "utf-8");
+    await writeFile(kimiBin, `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(fakeKimiScript)} "$@"\n`, { mode: 0o755 });
   }
   await writeFile(join(workspace, 'package.json'), JSON.stringify({ scripts: { check: 'node -e "process.exit(0)"' } }));
   const env = {

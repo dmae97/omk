@@ -688,9 +688,11 @@ export function readTarballMetadata(tarballPath) {
       if (pathIndex === -1) return [];
       const pathPart = line.slice(pathIndex + 1).replace(/ -> .+$/, "");
       if (!pathPart.startsWith("package/") || pathPart.endsWith("/")) return [];
-      const columns = line.slice(0, pathIndex).trim().split(/\s+/);
-      const permissions = line.split(/\s+/, 1)[0] || "";
-      const parsedSize = Number.parseInt(columns[2] || "0", 10);
+      const prefix = line.slice(0, pathIndex).trim();
+      const columns = prefix.split(/\s+/);
+      const permissions = columns[0] || "";
+      const sizeMatch = /\s(\d+)\s+(?:\d{4}-\d{2}-\d{2}|[A-Za-z]{3}\s+\d{1,2}\s+\d{2}:)/.exec(prefix);
+      const parsedSize = Number.parseInt(sizeMatch?.[1] ?? columns[2] ?? "0", 10);
       const size = Number.isFinite(parsedSize) ? parsedSize : 0;
       return [{ path: pathPart.slice("package/".length), size, mode: modeFromTarPermissions(permissions) }];
     });

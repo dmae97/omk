@@ -53,7 +53,7 @@ const HOME_ROOT_WARNING = "effective OMK project root is HOME; set OMK_PROJECT_R
 const HOME_GIT_WARNING = "git root resolves to HOME and is not used as the default OMK project root";
 
 function normalizeHome(env: NodeJS.ProcessEnv, explicitHome?: string): string {
-  return canonicalizePath(explicitHome ?? env.OMK_ORIGINAL_HOME ?? env.HOME ?? env.USERPROFILE ?? homedir());
+  return resolve(explicitHome ?? env.OMK_ORIGINAL_HOME ?? env.HOME ?? env.USERPROFILE ?? homedir());
 }
 
 function hasControlChars(value: string): boolean {
@@ -162,7 +162,7 @@ function validateDefaultProjectRoot(value: string | undefined): { root?: string;
   try {
     const info = statSync(resolved);
     if (!info.isDirectory()) return { error: "configured default_project_root is not a directory" };
-    return { root: realpathSync.native(resolved) };
+    return { root: resolved };
   } catch {
     return { error: "configured default_project_root does not exist" };
   }
@@ -195,7 +195,7 @@ function gitRootSync(cwd: string): string | undefined {
       stdio: ["pipe", "pipe", "ignore"],
       timeout: 3000,
     }).trim();
-    return gitRoot ? canonicalizePath(gitRoot) : undefined;
+    return gitRoot ? resolve(gitRoot) : undefined;
   } catch {
     return undefined;
   }
@@ -210,7 +210,7 @@ async function gitRootAsync(cwd: string): Promise<string | undefined> {
       timeout: 3000,
     });
     const gitRoot = result.stdout.trim();
-    return gitRoot ? canonicalizePath(gitRoot) : undefined;
+    return gitRoot ? resolve(gitRoot) : undefined;
   } catch {
     return undefined;
   }
@@ -227,10 +227,10 @@ function createResolution(args: {
   warning?: string;
   recommendation?: string;
 }): ProjectRootResolution {
-  const root = canonicalizePath(args.root);
-  const home = canonicalizePath(args.home);
-  const cwd = canonicalizePath(args.cwd);
-  const gitRoot = args.gitRoot ? canonicalizePath(args.gitRoot) : undefined;
+  const root = resolve(args.root);
+  const home = resolve(args.home);
+  const cwd = resolve(args.cwd);
+  const gitRoot = args.gitRoot ? resolve(args.gitRoot) : undefined;
   return {
     root,
     source: args.source,
@@ -327,7 +327,7 @@ function resolveAfterGitRoot(args: {
 
 export function resolveProjectRoot(options: ResolveProjectRootOptions = {}): ProjectRootResolution {
   const env = options.env ?? process.env;
-  const cwd = canonicalizePath(options.cwd ?? process.cwd());
+  const cwd = resolve(options.cwd ?? process.cwd());
   const home = normalizeHome(env, options.home);
 
   if (env.OMK_PROJECT_ROOT) {
@@ -353,7 +353,7 @@ export function resolveProjectRoot(options: ResolveProjectRootOptions = {}): Pro
 
 export async function resolveProjectRootAsync(options: ResolveProjectRootOptions = {}): Promise<ProjectRootResolution> {
   const env = options.env ?? process.env;
-  const cwd = canonicalizePath(options.cwd ?? process.cwd());
+  const cwd = resolve(options.cwd ?? process.cwd());
   const home = normalizeHome(env, options.home);
 
   if (env.OMK_PROJECT_ROOT) {
@@ -391,8 +391,8 @@ export function getProjectRootDiagnostics(): ProjectRootResolution {
 
 export function displayProjectRootPath(path: string | undefined, home = normalizeHome(process.env)): string | null {
   if (!path) return null;
-  const resolved = canonicalizePath(path);
-  const resolvedHome = canonicalizePath(home);
+  const resolved = resolve(path);
+  const resolvedHome = resolve(home);
   if (isSamePath(resolved, resolvedHome)) return "~";
   const rel = relative(resolvedHome, resolved);
   if (rel && !rel.startsWith("..") && !isAbsolute(rel)) return `~/${rel.replace(/\\/g, "/")}`;
