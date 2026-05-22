@@ -2,15 +2,12 @@ import type { TaskResult } from "../contracts/orchestration.js";
 import type { DagNode } from "../orchestration/dag.js";
 import type {
   ProviderId,
+  ProviderKind,
   ProviderRisk,
   ProviderComplexity,
 } from "./types.js";
 
-export type ProviderKind =
-  | "kimi-native"
-  | "openai-compatible"
-  | "anthropic-compatible"
-  | "local";
+export type { ProviderKind };
 
 export interface AgentRunInput {
   node: DagNode;

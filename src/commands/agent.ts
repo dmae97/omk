@@ -16,6 +16,7 @@ const STABLE_AGENTS = new Set([
   "qa",
   "researcher",
   "reviewer",
+  "router",
   "security",
   "tester",
   "vision-debugger",

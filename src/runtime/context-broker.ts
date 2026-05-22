@@ -21,7 +21,7 @@ import {
 } from './context-capsule.js';
 import { getProjectRoot } from "../util/fs.js";
 import { join } from "path";
-import { readFile } from "fs/promises";
+import { mkdir, readFile, stat, writeFile } from "fs/promises";
 import type { ContextAdjustment } from "../evidence/attempt-record.js";
 import { createContextBudgetOptimizer, type ContextBudgetReport } from "./context-budget-optimizer.js";
 import { createDecisionTraceStore } from "../evidence/decision-trace.js";
@@ -75,36 +75,151 @@ function collectEvidenceRequirements(node: DagNode): EvidenceSpec[] {
     }));
 }
 
+const GRAPH_MEMORY_PARSE_TIMEOUT_MS = 750;
+const GRAPH_MEMORY_PARSE_MAX_BYTES = 2 * 1024 * 1024;
+const GRAPH_MEMORY_CACHE_FACT_LIMIT = 250;
+
+interface GraphMemoryParseCacheEntry {
+  mtimeMs: number;
+  size: number;
+  facts: MemoryFact[];
+}
+
+const graphMemoryParseCache = new Map<string, GraphMemoryParseCacheEntry>();
+
 async function loadGraphMemory(maxFacts: number, memoryPath?: string): Promise<MemoryFact[]> {
   const filePath = memoryPath ?? join(getProjectRoot(), '.omk', 'memory', 'graph-state.json');
+  const safeMaxFacts = Math.max(1, Math.floor(maxFacts) || 1);
   try {
-    const raw = await readFile(filePath, 'utf-8');
-    const data = JSON.parse(raw) as Record<string, unknown>;
-    const nodes = (data.nodes ?? []) as Array<Record<string, unknown>>;
-    const facts: MemoryFact[] = [];
-    for (const n of nodes) {
-      if (facts.length >= maxFacts) break;
-      const type = n.type as string | undefined;
-      const kind = mapGraphTypeToKind(type);
-      if (!kind) continue;
-      const label = String(n.label ?? n.id ?? '');
-      const summary = String(n.summary ?? n.content ?? '');
-      if (!summary) continue;
-      facts.push({
-        kind,
-        subject: label,
-        predicate: summarizePredicate(kind),
-        object: summary,
-        confidence: 0.8,
-        key: label,
-        value: summary,
-        category: kind,
-      });
+    const graphStat = await stat(filePath);
+    if (!graphStat.isFile()) return [];
+    const cached = graphMemoryParseCache.get(filePath);
+    if (cached && cached.mtimeMs === graphStat.mtimeMs && cached.size === graphStat.size) {
+      return cached.facts.slice(0, safeMaxFacts);
     }
-    return facts;
-  } catch {
-    return [];
+    if (graphStat.size > GRAPH_MEMORY_PARSE_MAX_BYTES) {
+      if (cached) return cached.facts.slice(0, safeMaxFacts);
+      return [
+        createGraphMemorySummaryFact(
+          `Graph memory state is ${formatBytes(graphStat.size)}, above the ${formatBytes(GRAPH_MEMORY_PARSE_MAX_BYTES)} context-broker parse limit; using fail-soft summary.`
+        ),
+      ];
+    }
+    const facts = await withTimeout(
+      readGraphMemoryFacts(filePath, Math.max(safeMaxFacts, GRAPH_MEMORY_CACHE_FACT_LIMIT)),
+      GRAPH_MEMORY_PARSE_TIMEOUT_MS,
+      `ContextBroker graph memory parse timed out after ${GRAPH_MEMORY_PARSE_TIMEOUT_MS}ms`
+    );
+    graphMemoryParseCache.set(filePath, { mtimeMs: graphStat.mtimeMs, size: graphStat.size, facts });
+    return facts.slice(0, safeMaxFacts);
+  } catch (err) {
+    if (errorCode(err) === "ENOENT") return [];
+    const cached = graphMemoryParseCache.get(filePath);
+    if (cached) return cached.facts.slice(0, safeMaxFacts);
+    return [createGraphMemorySummaryFact(`Graph memory unavailable: ${redactMemoryText(errorMessage(err))}`)];
   }
+}
+
+async function readGraphMemoryFacts(filePath: string, maxFacts: number): Promise<MemoryFact[]> {
+  const raw = await readFile(filePath, 'utf-8');
+  const data = JSON.parse(raw) as Record<string, unknown>;
+  const rawNodes = data.nodes;
+  const nodes = Array.isArray(rawNodes) ? rawNodes.filter(isRecord) : [];
+  const facts: MemoryFact[] = [];
+  for (const n of nodes) {
+    if (facts.length >= maxFacts) break;
+    const type = typeof n.type === "string" ? n.type : undefined;
+    const kind = mapGraphTypeToKind(type);
+    if (!kind) continue;
+    const label = String(n.label ?? n.id ?? '');
+    const summary = String(n.summary ?? n.content ?? '');
+    if (!summary) continue;
+    facts.push({
+      kind,
+      subject: label,
+      predicate: summarizePredicate(kind),
+      object: summary,
+      confidence: 0.8,
+      key: label,
+      value: summary,
+      category: kind,
+    });
+  }
+  return facts;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function createGraphMemorySummaryFact(message: string): MemoryFact {
+  return {
+    kind: "project_constraint",
+    subject: "graph-memory",
+    predicate: "summarized_as",
+    object: message,
+    confidence: 0.5,
+    key: "graph-memory",
+    value: message,
+    category: "project_constraint",
+  };
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KiB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MiB`;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function errorCode(err: unknown): string | undefined {
+  if (typeof err !== "object" || err === null || !("code" in err)) return undefined;
+  const code = (err as { code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
+}
+
+async function writeContextBrokerMemoryRecallArtifact(input: {
+  projectRoot: string;
+  runId: string | undefined;
+  nodeId: string;
+  graphMemory: readonly MemoryFact[];
+}): Promise<void> {
+  if (!input.runId || input.runId.startsWith("local-")) return;
+  const runDir = join(input.projectRoot, ".omk", "runs", input.runId);
+  await mkdir(runDir, { recursive: true });
+  const summary = [
+    "# Context Broker Memory Recall",
+    "",
+    `Run ID: ${input.runId}`,
+    `Node ID: ${input.nodeId}`,
+    `Facts: ${input.graphMemory.length}`,
+    "",
+    ...input.graphMemory.slice(0, 12).map((fact) => `- ${fact.kind}: ${redactMemoryText(fact.key)} -> ${redactMemoryText(fact.value).slice(0, 180)}`),
+    "",
+  ].join("\n");
+  await writeFile(join(runDir, `context-broker-memory-recall-${input.nodeId}.md`), summary, "utf-8");
+}
+
+function redactMemoryText(value: string): string {
+  return value
+    .replace(/sk-[A-Za-z0-9_-]{12,}/g, "sk-***")
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]{12,}/gi, "Bearer ***")
+    .replace(/(api[_-]?key|token|secret|password)\s*[:=]\s*[^\s,;]+/gi, "$1=***");
 }
 
 function mapGraphTypeToKind(type: string | undefined): MemoryFactKind | undefined {
@@ -165,6 +280,12 @@ export function createContextBroker(options: ContextBrokerOptions = {}) {
     const priorAttempts = collectPriorAttempts(node);
     const evidenceRequirements = collectEvidenceRequirements(node);
     const graphMemory = await loadGraphMemory(resolveBudget(node).maxMemoryFacts, options.graphMemoryPath);
+    await writeContextBrokerMemoryRecallArtifact({
+      projectRoot,
+      runId: state?.runId,
+      nodeId: node.id,
+      graphMemory,
+    }).catch(() => {});
 
     const task = [
       `Execute DAG node: ${node.id}`,

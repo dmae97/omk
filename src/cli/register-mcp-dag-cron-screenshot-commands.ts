@@ -15,6 +15,8 @@ export function registerMcpDagCronScreenshotCommands(program: Command): void {
     .description(t("cmd.mcpDoctorDesc"))
     .option("--json", "Output JSON")
     .option("--fix", "Apply safe project-local MCP repairs before reporting")
+    .option("--dry-run", "Preview MCP doctor fixes without writing configs")
+    .option("--global", "Allow MCP doctor fixes to mutate ~/.kimi/mcp.json")
     .action(async (options) => {
       const { mcpDoctorCommand } = await import("../commands/mcp.js");
       await mcpDoctorCommand(options);
@@ -27,11 +29,30 @@ export function registerMcpDagCronScreenshotCommands(program: Command): void {
       await mcpTestCommand(server);
     });
   mcp
-    .command("prewarm <server>")
-    .description("Pre-start an MCP server outside chat to warm package-manager caches")
-    .action(async (server) => {
+    .command("prewarm [server]")
+    .description("Compatibility alias for MCP startup/preflight checks")
+    .option("--all", "Check all active MCP servers")
+    .action(async (server, options) => {
       const { mcpPrewarmCommand } = await import("../commands/mcp.js");
-      await mcpPrewarmCommand(server);
+      if (!server && !options.all) {
+        console.error("Provide a server name or use --all");
+        process.exitCode = 1;
+        return;
+      }
+      await mcpPrewarmCommand(server, { all: Boolean(options.all) });
+    });
+  mcp
+    .command("check [server]")
+    .description("Run MCP startup/preflight checks without launching chat")
+    .option("--all", "Check all active MCP servers")
+    .action(async (server, options) => {
+      const { mcpPrewarmCommand } = await import("../commands/mcp.js");
+      if (!server && !options.all) {
+        console.error("Provide a server name or use --all");
+        process.exitCode = 1;
+        return;
+      }
+      await mcpPrewarmCommand(server, { all: Boolean(options.all), label: "check" });
     });
   mcp
     .command("serve <server>")
@@ -49,6 +70,9 @@ export function registerMcpDagCronScreenshotCommands(program: Command): void {
           break;
         case "filesystem-readonly":
           await import("../mcp/filesystem-readonly-server.js");
+          break;
+        case "omk-web-bridge":
+          await import("../mcp/omk-web-bridge-server.js");
           break;
         default:
           console.error(`Unknown bundled MCP server: ${server}`);
@@ -77,6 +101,20 @@ export function registerMcpDagCronScreenshotCommands(program: Command): void {
     .action(async (name, args, options) => {
       const { mcpInstallCommand } = await import("../commands/mcp.js");
       await mcpInstallCommand(name, args[0] ?? name, args.slice(1), { env: options.env });
+    });
+  mcp
+    .command("import-codex")
+    .description("Secret-safe import of Codex CLI MCP servers into project .kimi/mcp.json")
+    .option("--dry-run", "Preview the import without writing")
+    .option("--project", "Write to project-local .kimi/mcp.json (default)")
+    .option("--config <path>", "Codex config.toml path")
+    .option("--home-dir <path>", "Codex home directory containing .codex/config.toml")
+    .option("--openai-docs", "Also add the read-only OpenAI Developer Docs MCP remote")
+    .option("--overwrite", "Overwrite existing project MCP definitions with imported definitions")
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const { mcpImportCodexCommand } = await import("../commands/codex.js");
+      await mcpImportCodexCommand(options);
     });
   mcp
     .command("sync-global")
@@ -138,7 +176,8 @@ export function registerMcpDagCronScreenshotCommands(program: Command): void {
     .option("--node <id>", t("cmd.dagReplayNodeOption"))
     .option("--from-failure", t("cmd.dagReplayFromFailureOption"))
     .option("--dry-run", t("cmd.dagReplayDryRunOption"))
-    .option("--provider <auto|kimi>", "provider policy (auto | kimi)", "auto")
+    .option("--provider <provider>", "provider policy (auto | kimi | deepseek | codex | qwen)", "auto")
+    .option("--model <model>", "provider model or provider/model override")
     .action(async (runId, target, subtarget, options) => {
       const { dagReplayCommand } = await import("../commands/dag.js");
       await dagReplayCommand(runId, target, subtarget, options);

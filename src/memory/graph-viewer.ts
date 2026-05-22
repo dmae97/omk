@@ -1,6 +1,6 @@
 import { spawn } from "child_process";
 import { readFileSync } from "fs";
-import { mkdir, readFile, writeFile } from "fs/promises";
+import { mkdir, readFile, writeFile, stat } from "fs/promises";
 import { dirname } from "path";
 import { pathToFileURL } from "url";
 import { checkCommand } from "../util/shell.js";
@@ -147,7 +147,15 @@ const REL_PREFIXES: Record<string, string> = {
   CONCEPT: "HAS_CONCEPT",
 };
 
+const MAX_GRAPH_INPUT_BYTES = 50 * 1024 * 1024;
+
 export async function createGraphView(options: GraphViewOptions): Promise<GraphViewResult> {
+  const inputStat = await stat(options.inputPath);
+  if (inputStat.size > MAX_GRAPH_INPUT_BYTES) {
+    throw new Error(
+      `Graph input file too large (${inputStat.size} bytes); maximum allowed is ${MAX_GRAPH_INPUT_BYTES} bytes`
+    );
+  }
   const raw = await readFile(options.inputPath, "utf-8");
   const state = JSON.parse(raw) as GraphState;
   if (!Array.isArray(state.nodes)) {

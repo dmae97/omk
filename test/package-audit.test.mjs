@@ -8,6 +8,7 @@ import {
   validatePackStructure,
   validateMetadata,
   validateRequiredEntries,
+  validateNonEmptyTextEntries,
   validateForbiddenEntries,
   validateFilesAllowlist,
   validateBinTruth,
@@ -104,7 +105,9 @@ describe("readTarballMetadata", () => {
       assert.equal(metadata.version, "1.0.0");
       assert.equal(metadata.filename, "space path package.tgz");
       assert.ok(metadata.files.some((f) => f.path === "package.json"));
-      assert.ok(metadata.files.some((f) => f.path === "README.md"));
+      const readme = metadata.files.find((f) => f.path === "README.md");
+      assert.ok(readme);
+      assert.ok(readme.size > 0);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -236,6 +239,7 @@ describe("validateRequiredEntries", () => {
       "qa",
       "researcher",
       "reviewer",
+      "router",
       "security",
       "tester",
       "vision-debugger",
@@ -259,6 +263,45 @@ describe("validateRequiredEntries", () => {
       assert.match(content, /OMK_HOOKS_ENABLED: "true"/);
     }
   });
+
+  it("locks OMK web bridge Chrome extension templates into required package entries", () => {
+    for (const template of [
+      "templates/web-bridge/chrome-extension/manifest.json",
+      "templates/web-bridge/chrome-extension/background.js",
+      "templates/web-bridge/chrome-extension/content-script.js",
+      "templates/web-bridge/chrome-extension/README.md",
+    ]) {
+      assert.ok(REQUIRED_ENTRIES.includes(template), `missing required web bridge template: ${template}`);
+      const content = readFileSync(template, "utf-8");
+      assert.doesNotMatch(content, /sk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{20,}|Bearer\s+[A-Za-z0-9._-]{10,}/);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateNonEmptyTextEntries
+// ---------------------------------------------------------------------------
+
+describe("validateNonEmptyTextEntries", () => {
+  it("fails when a required text entry is packed at zero bytes", () => {
+    const files = [makeFile("AGENTS.md", 0)];
+    const result = validateNonEmptyTextEntries(files, ["AGENTS.md"]);
+    assert.ok(result.errors.some((e) => e.includes("AGENTS.md")));
+  });
+
+  it("passes when required text entries are non-empty in pack metadata", () => {
+    const files = [
+      makeFile("AGENTS.md", 1),
+      makeFile("templates/AGENTS.md", 2),
+      makeFile("templates/.kimi/AGENTS.md", 3),
+    ];
+    const result = validateNonEmptyTextEntries(files, [
+      "AGENTS.md",
+      "templates/AGENTS.md",
+      "templates/.kimi/AGENTS.md",
+    ]);
+    assert.strictEqual(result.errors.length, 0);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -275,6 +318,7 @@ describe("validateTemplateAgentReferences", () => {
       "templates/.omk/agents/roles/planner.yaml",
       "templates/.omk/agents/roles/coder.yaml",
       "templates/.omk/agents/roles/reviewer.yaml",
+      "templates/.omk/agents/roles/router.yaml",
       "templates/.omk/agents/roles/security.yaml",
       "templates/.omk/agents/roles/qa.yaml",
       "templates/.omk/agents/roles/tester.yaml",

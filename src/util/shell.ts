@@ -3,6 +3,7 @@ import { constants, createWriteStream } from "fs";
 import { access, appendFile, mkdir } from "fs/promises";
 import { dirname, isAbsolute } from "path";
 import { CappedOutputBuffer } from "./output-buffer.js";
+import { managedChildProcessOptions, terminateProcessTree, type ProcessTreeTarget } from "./process-tree.js";
 import { getOmkResourceSettings } from "./resource-profile.js";
 import { redactSecrets as redactSecretText } from "../mcp/secret-scanner.js";
 
@@ -91,6 +92,83 @@ function redactShellText(text: string): string {
   return redactSecretText(text).redacted;
 }
 
+function shellTerminationMessage(reason: "timeout" | "abort", timeout?: number): string {
+  return reason === "timeout" ? `timed out after ${timeout ?? 0}ms` : "aborted";
+}
+
+function destroyProcessStreams(subprocess: ProcessTreeTarget): void {
+  const streams = subprocess as ProcessTreeTarget & {
+    stdout?: { destroy(error?: Error): void };
+    stderr?: { destroy(error?: Error): void };
+  };
+  try {
+    streams.stdout?.destroy(new Error("process tree terminated"));
+  } catch {
+    // ignore stream cleanup failures
+  }
+  try {
+    streams.stderr?.destroy(new Error("process tree terminated"));
+  } catch {
+    // ignore stream cleanup failures
+  }
+}
+
+function cleanupProcessTreeOnParentExit(subprocess: ProcessTreeTarget): void {
+  subprocess.once("exit", () => {
+    void terminateProcessTree(subprocess);
+  });
+}
+
+function createShellTerminator(
+  subprocess: ProcessTreeTarget,
+  timeout: number,
+  signal: AbortSignal | undefined
+): {
+  termination: Promise<never>;
+  reason: () => string | undefined;
+  clear: () => void;
+} {
+  let terminationReason: string | undefined;
+  let rejectTermination: ((error: Error) => void) | undefined;
+  const termination = new Promise<never>((_, reject) => {
+    rejectTermination = reject;
+  });
+  let terminationStarted: Promise<void> | undefined;
+
+  const requestTermination = (reason: string): void => {
+    if (!terminationReason) terminationReason = reason;
+    if (!terminationStarted) {
+      destroyProcessStreams(subprocess);
+      terminationStarted = terminateProcessTree(subprocess);
+      void terminationStarted.finally(() => {
+        rejectTermination?.(new Error(terminationReason ?? reason));
+      });
+    }
+  };
+
+  const timeoutTimer = timeout > 0
+    ? setTimeout(() => {
+      requestTermination(shellTerminationMessage("timeout", timeout));
+    }, timeout)
+    : undefined;
+  timeoutTimer?.unref?.();
+
+  const abortHandler = (): void => {
+    requestTermination(shellTerminationMessage("abort"));
+  };
+  if (signal?.aborted) abortHandler();
+  signal?.addEventListener("abort", abortHandler, { once: true });
+
+  return {
+    termination,
+    reason: () => terminationReason,
+    clear: () => {
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      signal?.removeEventListener("abort", abortHandler);
+    },
+  };
+}
+
 async function appendRedactedLog(logPath: string | undefined, stdout: string, stderr: string): Promise<void> {
   if (!logPath) return;
   await mkdir(dirname(logPath), { recursive: true });
@@ -110,44 +188,46 @@ export async function runShell(
   const resources = await getOmkResourceSettings();
   const { cwd, env, timeout = 30000, maxBuffer = resources.shellMaxBufferBytes, stdio = "pipe", logPath, input, sudo, signal, inheritEnv } = options;
   const [cmd, cmdArgs] = applySudo(command, args, sudo);
-  let logStream: ReturnType<typeof createWriteStream> | undefined;
+  const subprocess = execa(cmd, cmdArgs, {
+    cwd,
+    env: buildShellEnv(env, inheritEnv),
+    extendEnv: false,
+    timeout: 0,
+    maxBuffer,
+    buffer: stdio !== "inherit",
+    stdio: stdio === "inherit" ? "inherit" : "pipe",
+    reject: false,
+    stripFinalNewline: false,
+    input,
+    ...managedChildProcessOptions(),
+  });
+
+  const terminator = createShellTerminator(subprocess, timeout, signal);
+  cleanupProcessTreeOnParentExit(subprocess);
 
   try {
-    const subprocess = execa(cmd, cmdArgs, {
-      cwd,
-      env: buildShellEnv(env, inheritEnv),
-      extendEnv: false,
-      timeout,
-      maxBuffer,
-      buffer: stdio !== "inherit",
-      stdio: stdio === "inherit" ? "inherit" : "pipe",
-      reject: false,
-      stripFinalNewline: false,
-      input,
-    });
-    const abortHandler = (): void => {
-      subprocess.kill("SIGTERM");
-    };
-    if (signal?.aborted) abortHandler();
-    signal?.addEventListener("abort", abortHandler, { once: true });
-
-    const result = await subprocess;
-    signal?.removeEventListener("abort", abortHandler);
-    logStream?.end();
+    const result = await Promise.race([subprocess, terminator.termination]);
     const stdout = redactShellText(String(result.stdout ?? ""));
-    const stderr = redactShellText(String(result.stderr ?? ""));
+    const terminationReason = terminator.reason();
+    const stderr = redactShellText([
+      String(result.stderr ?? ""),
+      terminationReason,
+    ].filter(Boolean).join("\n"));
     await appendRedactedLog(logPath, stdout, stderr);
     return {
       stdout,
       stderr,
       exitCode: result.exitCode ?? 1,
-      failed: result.failed ?? result.exitCode !== 0,
+      failed: terminationReason ? true : result.failed ?? result.exitCode !== 0,
     };
   } catch (err) {
-    logStream?.end();
+    const terminationReason = terminator.reason();
     if (isExecaError(err)) {
       const stdout = redactShellText(String(err.stdout ?? ""));
-      const stderr = redactShellText(String(err.stderr ?? "") || (err instanceof Error ? err.message : String(err)));
+      const stderr = redactShellText([
+        String(err.stderr ?? "") || (err instanceof Error ? err.message : String(err)),
+        terminationReason,
+      ].filter(Boolean).join("\n"));
       await appendRedactedLog(logPath, stdout, stderr);
       return {
         stdout,
@@ -156,15 +236,16 @@ export async function runShell(
         failed: true,
       };
     }
-    const stderr = redactShellText(err instanceof Error ? err.message : String(err));
+    const stderr = redactShellText(terminationReason ?? (err instanceof Error ? err.message : String(err)));
     await appendRedactedLog(logPath, "", stderr);
-    // ExecaError가 아닌 경우 (spawn 실패 등)
     return {
       stdout: "",
       stderr,
       exitCode: 1,
       failed: true,
     };
+  } finally {
+    terminator.clear();
   }
 }
 
@@ -180,71 +261,90 @@ export async function runShellStreaming(
   const stdoutBuffer = new CappedOutputBuffer(maxBuffer, "stdout");
   const stderrBuffer = new CappedOutputBuffer(maxBuffer, "stderr");
 
+  // Set up log stream before spawning so data handlers can write to it
+  // immediately, avoiding any race between spawn and listener attachment.
+  if (logPath) {
+    await mkdir(dirname(logPath), { recursive: true });
+    logStream = createWriteStream(logPath, { flags: "a" });
+  }
+
+  const subprocess = execa(cmd, cmdArgs, {
+    cwd,
+    env: buildShellEnv(env, inheritEnv),
+    extendEnv: false,
+    timeout: 0,
+    buffer: false,
+    stdio: stdio === "inherit" ? "inherit" : "pipe",
+    reject: false,
+    stripFinalNewline: false,
+    input,
+    ...managedChildProcessOptions(),
+  });
+
+  // Attach data listeners IMMEDIATELY after execa() returns.
+  // Execa v9 with buffer:false schedules a setImmediate that calls
+  // resumeStream() if readableFlowing === null. If we yield to the event
+  // loop before attaching listeners (e.g. an await), that resumeStream()
+  // discards all stdout/stderr data because no consumer is present.
+  // By attaching synchronously here, readableFlowing becomes true before
+  // the setImmediate fires, so execa's internal resume is a no-op.
+  subprocess.stdout?.on("data", (chunk: Buffer) => {
+    const line = chunk.toString("utf-8");
+    const redactedLine = redactShellText(line);
+    stdoutBuffer.append(redactedLine);
+    logStream?.write(redactedLine);
+    onStdout?.(redactedLine);
+  });
+
+  subprocess.stderr?.on("data", (chunk: Buffer) => {
+    const line = chunk.toString("utf-8");
+    const redactedLine = redactShellText(line);
+    stderrBuffer.append(redactedLine);
+    logStream?.write(redactedLine);
+    onStderr?.(redactedLine);
+  });
+
+  const terminator = createShellTerminator(subprocess, timeout, signal);
+  cleanupProcessTreeOnParentExit(subprocess);
+
   try {
-    const subprocess = execa(cmd, cmdArgs, {
-      cwd,
-      env: buildShellEnv(env, inheritEnv),
-      extendEnv: false,
-      timeout,
-      buffer: false,
-      stdio: stdio === "inherit" ? "inherit" : "pipe",
-      reject: false,
-      stripFinalNewline: false,
-      input,
-    });
-    const abortHandler = (): void => {
-      subprocess.kill("SIGTERM");
-    };
-    if (signal?.aborted) abortHandler();
-    signal?.addEventListener("abort", abortHandler, { once: true });
-
-    if (logPath) {
-      await mkdir(dirname(logPath), { recursive: true });
-      logStream = createWriteStream(logPath, { flags: "a" });
-    }
-
-    subprocess.stdout?.on("data", (chunk: Buffer) => {
-      const line = chunk.toString("utf-8");
-      const redactedLine = redactShellText(line);
-      stdoutBuffer.append(redactedLine);
-      logStream?.write(redactedLine);
-      onStdout?.(redactedLine);
-    });
-
-    subprocess.stderr?.on("data", (chunk: Buffer) => {
-      const line = chunk.toString("utf-8");
-      const redactedLine = redactShellText(line);
-      stderrBuffer.append(redactedLine);
-      logStream?.write(redactedLine);
-      onStderr?.(redactedLine);
-    });
-
-    const result = await subprocess;
-    signal?.removeEventListener("abort", abortHandler);
-    logStream?.end();
+    const result = await Promise.race([subprocess, terminator.termination]);
+    // Execa v9 resolves on the 'exit' event, which can fire before stdio
+    // streams have fully drained. Yield to the event loop so any pending
+    // 'data' events on stdout/stderr are processed before we read the buffers.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const terminationReason = terminator.reason();
+    if (terminationReason) stderrBuffer.append(`\n${terminationReason}`);
     return {
       stdout: stdoutBuffer.toString(),
       stderr: stderrBuffer.toString(),
       exitCode: result.exitCode ?? 1,
-      failed: result.failed ?? result.exitCode !== 0,
+      failed: terminationReason ? true : result.failed ?? result.exitCode !== 0,
     };
   } catch (err) {
-    logStream?.end();
+    await new Promise<void>((resolve) => setImmediate(resolve)).catch(() => {});
+    const terminationReason = terminator.reason();
     if (isExecaError(err)) {
       return {
         stdout: stdoutBuffer.toString() || redactShellText(String(err.stdout ?? "")),
-        stderr: stderrBuffer.toString() || redactShellText(String(err.stderr ?? "") || (err instanceof Error ? err.message : String(err))),
+        stderr: [
+          stderrBuffer.toString() || redactShellText(String(err.stderr ?? "") || (err instanceof Error ? err.message : String(err))),
+          terminationReason,
+        ].filter(Boolean).join("\n"),
         exitCode: err.exitCode ?? 1,
         failed: true,
       };
     }
-    const stderr = redactShellText(err instanceof Error ? err.message : String(err));
+    const stderr = redactShellText(terminationReason ?? (err instanceof Error ? err.message : String(err)));
     return {
       stdout: "",
       stderr,
       exitCode: 1,
       failed: true,
     };
+  } finally {
+    terminator.clear();
+    logStream?.end();
   }
 }
 

@@ -3,6 +3,7 @@
 
 export interface TransportSendOptions {
   signal?: AbortSignal;
+  timeoutMs?: number;
 }
 
 export interface Transport {
@@ -20,6 +21,9 @@ export interface Transport {
 
   /** Register handler for transport errors */
   onError(handler: (err: Error) => void): void;
+
+  /** Process ID, if the transport uses a local child process */
+  pid?: number;
 
   /** Close the transport connection */
   close?(): Promise<void>;

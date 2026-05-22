@@ -117,6 +117,15 @@ export const RECOMMENDED_MCP_SERVERS: McpCatalogEntry[] = [
     env: SILENT_NPX_ENV,
     startupTimeoutSec: 20,
   },
+  {
+    name: "omk-web-bridge",
+    description: "OMK bundled read-only Chrome extension/native-host bridge for active tab text, selection, DOM metadata, and screenshots",
+    command: "omk",
+    args: ["mcp", "serve", "omk-web-bridge"],
+    category: "web",
+    env: { OMK_WEB_BRIDGE_MODE: "readonly" },
+    startupTimeoutSec: 10,
+  },
 
   // ── DevTools ──
   {

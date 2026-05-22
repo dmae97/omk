@@ -22,6 +22,8 @@ export interface SessionMeta {
   updatedAt: string;
   endedAt?: string;
   goalTitle?: string;
+  omkSessionId?: string;
+  kimiSessionId?: string;
   todoCount: number;
   todoDoneCount: number;
 }
@@ -91,6 +93,8 @@ function isSessionMeta(value: unknown): value is SessionMeta {
     typeof v.todoCount === "number" &&
     typeof v.todoDoneCount === "number" &&
     (v.endedAt === undefined || typeof v.endedAt === "string") &&
-    (v.goalTitle === undefined || typeof v.goalTitle === "string")
+    (v.goalTitle === undefined || typeof v.goalTitle === "string") &&
+    (v.omkSessionId === undefined || typeof v.omkSessionId === "string") &&
+    (v.kimiSessionId === undefined || typeof v.kimiSessionId === "string")
   );
 }

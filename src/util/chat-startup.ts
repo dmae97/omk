@@ -17,8 +17,22 @@ export interface ChatStartupReport {
   date: string;
   docsDir: string;
   graphPath: string;
+  memoryRecallPath: string;
+  memoryRecallJsonPath: string;
+  memoryRecallSummary: string;
   created: string[];
   existing: string[];
+}
+
+export interface MemoryRecallSummary {
+  runId: string;
+  query: string;
+  graphPath: string;
+  summaryPath: string;
+  jsonPath: string;
+  mindmapCount: number;
+  searchCount: number;
+  summary: string;
 }
 
 interface InitArtifact {
@@ -65,6 +79,9 @@ export async function ensureChatStartupArtifacts(options: ChatStartupOptions): P
     date,
     docsDir,
     graphPath,
+    memoryRecallPath: join(options.root, ".omk", "runs", options.runId, "memory-recall-summary.md"),
+    memoryRecallJsonPath: join(options.root, ".omk", "runs", options.runId, "memory-recall-summary.json"),
+    memoryRecallSummary: "",
     created: [],
     existing: [],
   };
@@ -101,7 +118,95 @@ export async function ensureChatStartupArtifacts(options: ChatStartupOptions): P
     env: options.env,
   });
 
+  const memoryRecall = await writeMemoryRecallSummary({
+    root: options.root,
+    runId: options.runId,
+    query: options.runId,
+    graphPath,
+    env: options.env,
+  });
+  report.memoryRecallPath = memoryRecall.summaryPath;
+  report.memoryRecallJsonPath = memoryRecall.jsonPath;
+  report.memoryRecallSummary = memoryRecall.summary;
+
   return report;
+}
+
+export async function writeMemoryRecallSummary(options: {
+  root: string;
+  runId: string;
+  query?: string;
+  graphPath?: string;
+  env?: NodeJS.ProcessEnv;
+}): Promise<MemoryRecallSummary> {
+  const graphPath = options.graphPath ?? join(options.root, ".omk", "memory", "graph-state.json");
+  const runDir = join(options.root, ".omk", "runs", options.runId);
+  const summaryPath = join(runDir, "memory-recall-summary.md");
+  const jsonPath = join(runDir, "memory-recall-summary.json");
+  const query = options.query?.trim() || options.runId;
+  const store = new MemoryStore(join(options.root, ".omk", "memory"), {
+    projectRoot: options.root,
+    sessionId: options.runId,
+    source: "omk-memory-recall",
+    env: {
+      ...(options.env ?? process.env),
+      OMK_MEMORY_BACKEND: "local_graph",
+      OMK_MEMORY_FORCE: "0",
+      OMK_MEMORY_STRICT: "false",
+      OMK_MEMORY_MIRROR_FILES: "false",
+      OMK_LOCAL_GRAPH_PATH: graphPath,
+    },
+  });
+
+  let mindmapItems: string[] = [];
+  let searchItems: string[] = [];
+  try {
+    const mindmap = await store.mindmap(query, 40);
+    mindmapItems = (mindmap?.nodes ?? [])
+      .filter((node) => ["Goal", "Task", "Decision", "Evidence", "Risk", "Memory"].includes(String(node.type)))
+      .slice(0, 12)
+      .map((node) => `- ${redactMemoryText(String(node.label ?? node.id ?? "memory"))} (${node.type})`);
+  } catch {
+    mindmapItems = [];
+  }
+  try {
+    const search = await store.search(query, 10);
+    searchItems = search
+      .slice(0, 8)
+      .map((result) => `- ${redactMemoryText(result.path)}: ${redactMemoryText(result.content).slice(0, 180)}`);
+  } catch {
+    searchItems = [];
+  }
+
+  const summary = [
+    `# Memory Recall Summary`,
+    "",
+    `Run ID: ${options.runId}`,
+    `Query: ${redactMemoryText(query)}`,
+    `Graph: ${relativePath(options.root, graphPath)}`,
+    "",
+    "## Mindmap",
+    ...(mindmapItems.length ? mindmapItems : ["- No relevant mindmap nodes found."]),
+    "",
+    "## Search",
+    ...(searchItems.length ? searchItems : ["- No relevant search results found."]),
+    "",
+  ].join("\n");
+
+  const payload: MemoryRecallSummary = {
+    runId: options.runId,
+    query: redactMemoryText(query),
+    graphPath,
+    summaryPath,
+    jsonPath,
+    mindmapCount: mindmapItems.length,
+    searchCount: searchItems.length,
+    summary,
+  };
+  await mkdir(runDir, { recursive: true });
+  await writeFile(summaryPath, summary, "utf-8");
+  await writeFile(jsonPath, `${JSON.stringify(payload, null, 2)}\n`, "utf-8");
+  return payload;
 }
 
 async function ensureDirectories(root: string, date: string, report: ChatStartupReport): Promise<void> {
@@ -301,4 +406,11 @@ function relativePath(root: string, path: string): string {
 
 function normalizePath(path: string): string {
   return path.replace(/\\/g, "/");
+}
+
+function redactMemoryText(value: string): string {
+  return value
+    .replace(/sk-[A-Za-z0-9_-]{12,}/g, "sk-***")
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]{12,}/gi, "Bearer ***")
+    .replace(/(api[_-]?key|token|secret|password)\s*[:=]\s*[^\s,;]+/gi, "$1=***");
 }

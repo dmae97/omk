@@ -14,13 +14,16 @@ export interface SavedEnsembleDecision {
   candidateVotes: Array<{ id: string; action: string; weight: number; reason: string }>;
   rationale: string;
   nextPrompt?: string;
+  divergence?: boolean;
+  confidenceTrend?: "rising" | "falling" | "stable";
 }
 
 export async function saveEnsembleDecision(
   goal: GoalSpec,
   runState: RunState,
   ensemble: EnsembleDecisionResult,
-  root: string
+  root: string,
+  meta?: { divergence?: boolean; confidenceTrend?: "rising" | "falling" | "stable" }
 ): Promise<void> {
   const memoryStore = new MemoryStore(join(root, ".omk", "memory"), {
     projectRoot: root,
@@ -38,6 +41,8 @@ export async function saveEnsembleDecision(
     candidateVotes: ensemble.candidateVotes,
     rationale: ensemble.rationale,
     nextPrompt: ensemble.nextPrompt,
+    divergence: meta?.divergence ?? ensemble.divergence,
+    confidenceTrend: meta?.confidenceTrend,
   };
 
   const content = JSON.stringify(payload, null, 2);

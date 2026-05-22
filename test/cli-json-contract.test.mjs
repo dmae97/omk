@@ -1,11 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
 import { goalListCommand, goalShowCommand, goalVerifyCommand } from "../dist/commands/goal.js";
-import { providerDeepSeekDisableCommand, providerDoctorCommand } from "../dist/commands/provider.js";
+import {
+  providerAuthCommand,
+  providerDeepSeekDisableCommand,
+  providerDisableCommand,
+  providerDoctorCommand,
+  providerEnableCommand,
+  providerListCommand,
+  providerOAuthCommand,
+  providerProfilesCommand,
+  providerSetCommand,
+} from "../dist/commands/provider.js";
 import { doctorCommand } from "../dist/commands/doctor.js";
 import { mcpDoctorCommand } from "../dist/commands/mcp.js";
 import { runsCommand } from "../dist/commands/runs.js";
@@ -229,6 +240,131 @@ test("provider doctor deepseek --json --soft is hermetic when disabled", async (
   assert.equal(cap.stderr.length, 0, "should not emit to stderr");
 });
 
+test("provider generic list/set/enable/disable/doctor --json stays secret-free", async () => {
+  const cwd = await tempCwd();
+  const restoreConfig = setEnv("OMK_PROVIDER_CONFIG_PATH", join(cwd, ".config", "omk", "providers.json"));
+  const restoreQwenKey = setEnv("QWEN_JSON_CONTRACT_KEY", "secret-value-that-must-not-print");
+  const previousExitCode = process.exitCode;
+  const cap = captureOutput();
+
+  try {
+    await providerSetCommand("qwen", {
+      model: "Qwen 3.7 MAX",
+      baseUrl: "https://dashscope.example/compatible-mode/v1",
+      apiKeyEnv: "QWEN_JSON_CONTRACT_KEY",
+      json: true,
+    });
+    const configured = JSON.parse(cap.stdout.pop());
+    assert.equal(configured.provider, "qwen");
+    assert.equal(configured.enabled, true);
+    assert.equal(configured.defaultModel, "qwen3-max");
+    assert.equal(configured.apiKeyEnv, "QWEN_JSON_CONTRACT_KEY");
+
+    await providerDoctorCommand("qwen", { json: true, soft: true });
+    const doctor = JSON.parse(cap.stdout.pop());
+    assert.equal(doctor.provider, "qwen");
+    assert.equal(doctor.available, true);
+    assert.equal(doctor.apiKeySet, true);
+
+    await providerDisableCommand("qwen", "contract disable", { json: true });
+    const disabled = JSON.parse(cap.stdout.pop());
+    assert.equal(disabled.provider, "qwen");
+    assert.equal(disabled.enabled, false);
+    assert.equal(disabled.disabledReason, "contract disable");
+
+    await providerEnableCommand("qwen", { json: true });
+    const enabled = JSON.parse(cap.stdout.pop());
+    assert.equal(enabled.provider, "qwen");
+    assert.equal(enabled.enabled, true);
+
+    await providerListCommand({ json: true });
+    const listed = JSON.parse(cap.stdout.pop());
+    assert.ok(listed.providers.some((entry) => entry.provider === "qwen" && entry.defaultModel === "qwen3-max"));
+  } finally {
+    cap.restore();
+    process.exitCode = previousExitCode;
+    restoreQwenKey();
+    restoreConfig();
+  }
+
+  assert.equal(cap.stderr.length, 0, "should not emit to stderr");
+  assert.doesNotMatch(cap.stdout.join("\n"), /secret-value-that-must-not-print/u);
+});
+
+test("provider oauth --json emits instructions only without reading or storing secrets", async () => {
+  const cwd = await tempCwd();
+  const restoreRoot = setEnv("OMK_PROJECT_ROOT", cwd);
+  const restoreToken = setEnv("CODEX_OAUTH_TOKEN", "oauth-token-that-must-not-print-1234567890");
+  const cap = captureOutput();
+
+  try {
+    await providerOAuthCommand("codex", { json: true });
+  } finally {
+    cap.restore();
+    restoreToken();
+    restoreRoot();
+  }
+
+  const parsed = parseSingleStdoutJson(cap);
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.command, "provider oauth");
+  assert.equal(parsed.provider, "codex");
+  assert.equal(parsed.exchangePerformed, false);
+  assert.equal(parsed.authBypass, false);
+  assert.equal(parsed.authJsonRead, false);
+  assert.equal(parsed.tokenFilesRead, false);
+  assert.equal(parsed.secretValuesPrinted, false);
+  assert.equal(parsed.secretsStored, false);
+  assert.equal(parsed.projectFilesWritten, false);
+  assert.equal(parsed.tokensRead, false);
+  assert.match(parsed.nextActions.join("\n"), /codex login/);
+  assert.equal(cap.stderr.length, 0, "should not emit to stderr");
+  assert.doesNotMatch(cap.stdout[0], /oauth-token-that-must-not-print/u);
+});
+
+test("provider auth/profiles/openrouter oauth --json stays metadata-only and secret-free", async () => {
+  const cwd = await tempCwd();
+  const restoreRoot = setEnv("OMK_PROJECT_ROOT", cwd);
+  const restoreConfig = setEnv("OMK_PROVIDER_CONFIG_PATH", join(cwd, ".config", "omk", "providers.json"));
+  const restoreOpenRouterKey = setEnv("OPENROUTER_API_KEY", "openrouter-secret-value-that-must-not-print");
+  const cap = captureOutput();
+
+  try {
+    await providerAuthCommand("openrouter", {
+      method: "oauth",
+      apiKeyEnv: "OPENROUTER_API_KEY",
+      json: true,
+    });
+    await providerProfilesCommand({ json: true });
+    await providerOAuthCommand("openrouter", { json: true });
+  } finally {
+    cap.restore();
+    restoreOpenRouterKey();
+    restoreConfig();
+    restoreRoot();
+  }
+
+  assert.equal(cap.stderr.length, 0, "should not emit to stderr");
+  assert.equal(cap.stdout.length, 3);
+  const auth = JSON.parse(cap.stdout[0]);
+  assert.equal(auth.ok, true);
+  assert.equal(auth.command, "provider auth");
+  assert.equal(auth.provider, "openrouter");
+  assert.equal(auth.authMethod, "oauth");
+  assert.equal(auth.apiKeyEnv, "OPENROUTER_API_KEY");
+  assert.equal(auth.secretValuesPrinted, false);
+  const profiles = JSON.parse(cap.stdout[1]);
+  assert.equal(profiles.command, "provider profiles");
+  assert.ok(profiles.profiles.some((profile) => profile.id === "openrouter-credits"));
+  assert.ok(profiles.profiles.some((profile) => profile.id === "codex-chatgpt-plan"));
+  const oauth = JSON.parse(cap.stdout[2]);
+  assert.equal(oauth.provider, "openrouter");
+  assert.equal(oauth.oauthAvailable, true);
+  assert.equal(oauth.exchangePerformed, false);
+  assert.equal(oauth.apiKeyEnv, "OPENROUTER_API_KEY");
+  assert.doesNotMatch(cap.stdout.join("\n"), /openrouter-secret-value-that-must-not-print/u);
+});
+
 // ── screenshot --json contract ───────────────────────────────
 
 test("screenshot dir --json emits project-local directory without stderr", async () => {
@@ -299,6 +435,239 @@ test("mcp doctor --json emits common machine-readable fields", async () => {
   assert.ok(Array.isArray(parsed.warnings));
   assert.equal(parsed.data.activeScope, parsed.activeScope);
   assert.equal(cap.stderr.length, 0, "should not emit to stderr");
+});
+
+test("doctor --json includes sanitized project root diagnostics for HOME git fallback", async () => {
+  const home = await mkdtemp(join(tmpdir(), "omk-doctor-root-home-"));
+  const project = join(home, "work", "app");
+  await mkdir(join(project, ".omk"), { recursive: true });
+  await mkdir(join(project, ".kimi"), { recursive: true });
+  await writeFile(join(project, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: {} }), "utf-8");
+  const git = spawnSync("git", ["init"], { cwd: home, encoding: "utf-8" });
+  assert.equal(git.status, 0, git.stderr || git.stdout);
+
+  const restoreRoot = setEnv("OMK_PROJECT_ROOT", undefined);
+  const restoreDefault = setEnv("OMK_DEFAULT_PROJECT_ROOT", project);
+  const restoreHome = setEnv("HOME", home);
+  const restoreOriginalHome = setEnv("OMK_ORIGINAL_HOME", home);
+  const previousCwd = process.cwd();
+  const cap = captureOutput();
+  const previousExitCode = process.exitCode;
+
+  try {
+    process.chdir(home);
+    await doctorCommand({ json: true, soft: true });
+  } finally {
+    cap.restore();
+    process.exitCode = previousExitCode;
+    process.chdir(previousCwd);
+    restoreOriginalHome();
+    restoreHome();
+    restoreDefault();
+    restoreRoot();
+  }
+
+  const parsed = parseSingleStdoutJson(cap);
+  assert.equal(parsed.data.root.source, "default-env");
+  assert.equal(parsed.data.root.activeCwd, "~");
+  assert.equal(parsed.data.root.detectedGitRoot, "~");
+  assert.equal(parsed.data.root.effectiveProjectRoot, "~/work/app");
+  assert.equal(parsed.data.root.homeIsGitRepo, true);
+  assert.equal(cap.stderr.length, 0, "should not emit to stderr");
+});
+
+test("doctor flags empty AGENTS files and --fix restores them from templates", async () => {
+  const home = await mkdtemp(join(tmpdir(), "omk-doctor-empty-agents-home-"));
+  const project = join(home, "work", "app");
+  await mkdir(join(project, ".omk"), { recursive: true });
+  await mkdir(join(project, ".kimi"), { recursive: true });
+  await writeFile(join(project, "AGENTS.md"), "", "utf-8");
+  await writeFile(join(project, ".kimi", "AGENTS.md"), "", "utf-8");
+  await writeFile(join(project, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: {} }), "utf-8");
+
+  const restoreRoot = setEnv("OMK_PROJECT_ROOT", project);
+  const restoreHome = setEnv("HOME", home);
+  const restoreOriginalHome = setEnv("OMK_ORIGINAL_HOME", home);
+  const previousCwd = process.cwd();
+  const previousExitCode = process.exitCode;
+
+  try {
+    process.chdir(project);
+    const cap = captureOutput();
+    try {
+      await doctorCommand({ json: true, soft: true });
+    } finally {
+      cap.restore();
+      process.exitCode = previousExitCode;
+    }
+    const report = parseSingleStdoutJson(cap);
+    assert.ok(report.errors.some((error) => error.name === "AGENTS.md" && /empty/.test(error.message)));
+    assert.ok(report.errors.some((error) => error.name === ".kimi/AGENTS.md" && /empty/.test(error.message)));
+
+    const fixCap = captureOutput();
+    try {
+      await doctorCommand({ json: true, soft: true, fix: true });
+    } finally {
+      fixCap.restore();
+      process.exitCode = previousExitCode;
+    }
+    const fixed = parseSingleStdoutJson(fixCap);
+    assert.ok(fixed.fixes.actions.some((action) => /restored AGENTS\.md from template/.test(action)));
+    assert.ok(fixed.fixes.actions.some((action) => /restored \.kimi[\\/]AGENTS\.md from template/.test(action)));
+    assert.ok((await readFile(join(project, "AGENTS.md"), "utf-8")).trim().length > 0);
+    assert.ok((await readFile(join(project, ".kimi", "AGENTS.md"), "utf-8")).trim().length > 0);
+  } finally {
+    process.chdir(previousCwd);
+    process.exitCode = previousExitCode;
+    restoreOriginalHome();
+    restoreHome();
+    restoreRoot();
+  }
+});
+
+test("doctor --fix --set-default-project-root supports dry-run and sanitized backup", async () => {
+  const home = await mkdtemp(join(tmpdir(), "omk-doctor-set-default-home-"));
+  const project = join(home, "work", "app");
+  await mkdir(project, { recursive: true });
+  await mkdir(join(home, ".omk"), { recursive: true });
+  await writeFile(join(home, ".omk", "config.toml"), "api_token = \"SHOULD_NOT_LEAK\"\n", "utf-8");
+  const git = spawnSync("git", ["init"], { cwd: home, encoding: "utf-8" });
+  assert.equal(git.status, 0, git.stderr || git.stdout);
+
+  const restoreRoot = setEnv("OMK_PROJECT_ROOT", undefined);
+  const restoreDefault = setEnv("OMK_DEFAULT_PROJECT_ROOT", undefined);
+  const restoreHome = setEnv("HOME", home);
+  const restoreOriginalHome = setEnv("OMK_ORIGINAL_HOME", home);
+  const previousCwd = process.cwd();
+
+  try {
+    process.chdir(home);
+    const dryCap = captureOutput();
+    try {
+      await doctorCommand({ json: true, soft: true, fix: true, dryRun: true, setDefaultProjectRoot: project });
+    } finally {
+      dryCap.restore();
+    }
+    const dryReport = parseSingleStdoutJson(dryCap);
+    assert.equal(dryReport.fixes.dryRun, true);
+    assert.ok(dryReport.fixes.actions.some((action) => /would set user default_project_root/.test(action)));
+    assert.doesNotMatch(await readFile(join(home, ".omk", "config.toml"), "utf-8"), /default_project_root/);
+
+    const cap = captureOutput();
+    try {
+      await doctorCommand({ json: true, soft: true, fix: true, setDefaultProjectRoot: project });
+    } finally {
+      cap.restore();
+    }
+    const report = parseSingleStdoutJson(cap);
+    assert.ok(report.fixes.actions.some((action) => /set user default_project_root/.test(action)));
+    assert.equal(report.fixes.backups.length, 1);
+    assert.match(await readFile(join(home, ".omk", "config.toml"), "utf-8"), /default_project_root/);
+    assert.doesNotMatch(await readFile(report.fixes.backups[0], "utf-8"), /SHOULD_NOT_LEAK/);
+  } finally {
+    process.chdir(previousCwd);
+    restoreOriginalHome();
+    restoreHome();
+    restoreDefault();
+    restoreRoot();
+  }
+});
+
+test("doctor --fix --dry-run emits typed fixPlan without writing safe repairs", async () => {
+  const home = await mkdtemp(join(tmpdir(), "omk-doctor-plan-dry-home-"));
+  const project = join(home, "work", "app");
+  await mkdir(join(project, ".omk", "memory"), { recursive: true });
+  await writeFile(join(project, ".omk", "runtime-preset.json"), JSON.stringify({ id: "omk-core-verified" }), "utf-8");
+  await writeFile(join(project, ".omk", "config.toml"), "[runtime]\nmcp_scope = \"bad\"\n[memory]\nbackend = \"bad\"\n", "utf-8");
+
+  const restoreRoot = setEnv("OMK_PROJECT_ROOT", project);
+  const restoreHome = setEnv("HOME", home);
+  const restoreOriginalHome = setEnv("OMK_ORIGINAL_HOME", home);
+  const previousCwd = process.cwd();
+  const previousExitCode = process.exitCode;
+
+  try {
+    process.chdir(project);
+    const cap = captureOutput();
+    try {
+      await doctorCommand({ json: true, soft: true, fix: true, dryRun: true, verifyFix: false });
+    } finally {
+      cap.restore();
+      process.exitCode = previousExitCode;
+    }
+    const report = parseSingleStdoutJson(cap);
+    assert.equal(report.fixes.dryRun, true);
+    assert.equal(report.fixes.fixPlan.dryRun, true);
+    assert.equal(report.fixes.fixPlan.changed, false);
+    const operations = report.fixes.fixPlan.operations;
+    assert.ok(operations.some((op) => op.id === "runtime-preset-default" && op.status === "planned"));
+    assert.ok(operations.some((op) => op.id === "project-config-safe-defaults" && op.status === "planned"));
+    assert.ok(operations.some((op) => op.id === "lsp-config" && op.status === "planned"));
+    assert.ok(operations.some((op) => op.id === "memory-graph-state" && op.status === "planned"));
+    assert.doesNotMatch(await readFile(join(project, ".omk", "runtime-preset.json"), "utf-8"), /omk-parallel-orchestrator/);
+    assert.match(await readFile(join(project, ".omk", "config.toml"), "utf-8"), /mcp_scope = "bad"/);
+    await assert.rejects(readFile(join(project, ".omk", "lsp.json"), "utf-8"));
+    await assert.rejects(readFile(join(project, ".omk", "memory", "graph-state.json"), "utf-8"));
+  } finally {
+    process.chdir(previousCwd);
+    process.exitCode = previousExitCode;
+    restoreOriginalHome();
+    restoreHome();
+    restoreRoot();
+  }
+});
+
+test("doctor --fix repairs safe runtime scaffold and includes post-check summary", async () => {
+  const home = await mkdtemp(join(tmpdir(), "omk-doctor-plan-fix-home-"));
+  const project = join(home, "work", "app");
+  await mkdir(join(project, ".omk", "memory"), { recursive: true });
+  await writeFile(join(project, ".omk", "runtime-preset.json"), JSON.stringify({ id: "omk-core-verified" }), "utf-8");
+  await writeFile(join(project, ".omk", "runtime-presets.json"), JSON.stringify({ defaultPresetId: "omk-core-verified", presets: [] }), "utf-8");
+  await writeFile(
+    join(project, ".omk", "config.toml"),
+    "[orchestration]\nexecution_prompt = \"bad\"\n[runtime]\nmcp_scope = \"bad\"\nskills_scope = \"bad\"\nhooks_scope = \"bad\"\n[memory]\nbackend = \"bad\"\n[local_graph]\nontology = \"bad\"\n",
+    "utf-8"
+  );
+  await writeFile(join(project, ".omk", "lsp.json"), "{bad json", "utf-8");
+  await writeFile(join(project, ".omk", "memory", "graph-state.json"), "{bad json", "utf-8");
+
+  const restoreRoot = setEnv("OMK_PROJECT_ROOT", project);
+  const restoreHome = setEnv("HOME", home);
+  const restoreOriginalHome = setEnv("OMK_ORIGINAL_HOME", home);
+  const previousCwd = process.cwd();
+  const previousExitCode = process.exitCode;
+
+  try {
+    process.chdir(project);
+    const cap = captureOutput();
+    try {
+      await doctorCommand({ json: true, soft: true, fix: true, verifyFix: true });
+    } finally {
+      cap.restore();
+      process.exitCode = previousExitCode;
+    }
+    const report = parseSingleStdoutJson(cap);
+    assert.equal(report.fixes.fixPlan.dryRun, false);
+    assert.equal(report.fixes.fixPlan.changed, true);
+    assert.ok(report.fixes.fixPlan.postCheck);
+    assert.ok(report.fixes.fixPlan.postCheck.before.warnings + report.fixes.fixPlan.postCheck.before.errors >= report.fixes.fixPlan.postCheck.after.warnings + report.fixes.fixPlan.postCheck.after.errors);
+    assert.ok(report.fixes.fixPlan.operations.some((op) => op.id === "runtime-preset-default" && op.status === "applied"));
+    assert.ok(report.fixes.actions.some((action) => /repaired \.omk\/runtime-preset\.json/.test(action)));
+    assert.match(await readFile(join(project, ".omk", "runtime-preset.json"), "utf-8"), /omk-parallel-orchestrator/);
+    assert.match(await readFile(join(project, ".omk", "runtime-presets.json"), "utf-8"), /"defaultPresetId": "omk-parallel-orchestrator"/);
+    const config = await readFile(join(project, ".omk", "config.toml"), "utf-8");
+    assert.match(config, /execution_prompt = "ask"/);
+    assert.match(config, /mcp_scope = "project"/);
+    assert.match(config, /backend = "local_graph"/);
+    assert.equal(JSON.parse(await readFile(join(project, ".omk", "lsp.json"), "utf-8")).enabled, true);
+    assert.equal(JSON.parse(await readFile(join(project, ".omk", "memory", "graph-state.json"), "utf-8")).version, 1);
+  } finally {
+    process.chdir(previousCwd);
+    process.exitCode = previousExitCode;
+    restoreOriginalHome();
+    restoreHome();
+    restoreRoot();
+  }
 });
 
 test("doctor --json does not flag absolute npm-global MCP binaries as npx launchers", async () => {

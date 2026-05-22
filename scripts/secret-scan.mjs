@@ -9,6 +9,7 @@ const SKIP_PREFIXES = [
   "target/",
   ".git/",
   ".omk/worktrees/",
+  ".omk/images/",
   ".omk/runs/",
   ".omx/",
   "coverage/",
@@ -18,6 +19,7 @@ const SKIP_PREFIXES = [
 const SYNTHETIC_SECRET_FIXTURE_FILES = new Set([
   "test/secret-scanner.test.mjs",
   "test/secret-scan-runtime.test.mjs",
+  "test/cockpit-render.test.mjs",
 ]);
 
 const RUNTIME_TRUST_BOUNDARY_FILES = [
@@ -30,10 +32,13 @@ const RUNTIME_TRUST_BOUNDARY_FILES = [
   ".kimi/kimi.config.toml",
   ".kimi/mcp.json",
   ".kimi/settings.json",
+  ".omk/images/metadata.json",
 ];
 
 const RUNTIME_TRUST_BOUNDARY_DIRS = [
   ".omk/hooks",
+  ".omk/images",
+  ".omk/runs",
   ".kimi/hooks",
 ];
 
@@ -58,21 +63,24 @@ const LITERAL_PATTERNS = [
   ["aws_access_key", /AKIA[0-9A-Z]{16}/],
   ["github_pat", /gh[pousr]_[A-Za-z0-9_]{20,}/],
   ["gitlab_pat", /glpat-[A-Za-z0-9\-_]{20,}/],
-  ["openai_key", /\bsk-[A-Za-z0-9]{20,}\b/],
+  ["openai_key", /\bsk-(?:proj|svcacct)-[A-Za-z0-9_-]{16,}\b|\bsk-[A-Za-z0-9_-]{20,}\b/],
+  ["oauth_session_token", /\b(?:oauth|session|refresh|access)[_-]?token\b["']?\s*[:=]\s*["']?[A-Za-z0-9._~+/=-]{20,}/i],
   ["stripe_key", /\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9]{16,}\b/],
   ["maintainer_private_path", /\.config\/opencode\/secrets\.env|\/home\/dmae|\/mnt\/m\/oh-my-kimi/],
 ];
 
-const GENERIC_ASSIGNMENT = /\b(api[_-]?key|secret|token|password|private[_-]?key)\b\s*[:=]\s*["']?([^"'\s;,]{20,})/i;
+const GENERIC_ASSIGNMENT = /\b(api[_-]?key|secret|token|password|private[_-]?key)\b["']?\s*[:=]\s*["']?([^"'\s;,}]{20,})/i;
 const GENERIC_ALLOWLIST = /\$\{|<|YOUR_|REPLACE_|NPM_TOKEN|GITHUB_TOKEN|NODE_AUTH_TOKEN|process\.env|env\.|readSetting|parseOptional|parsed\.password|\*\*\*|placeholder|example|sample|redacted|maintainer-local|secret leakage|secret leak|secrets? from|Do not store secrets|Do not send secrets|credentialCache/i;
 
-function walkDirectory(dir, prefix = "") {
+const runtimeMode = process.argv.includes("--runtime");
+
+function walkDirectory(dir, prefix = "", options = {}) {
   const results = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
-    if (shouldSkip(relPath)) continue;
+    if (shouldSkip(relPath, options)) continue;
     if (entry.isDirectory()) {
-      results.push(...walkDirectory(join(dir, entry.name), relPath));
+      results.push(...walkDirectory(join(dir, entry.name), relPath, options));
     } else if (entry.isFile()) {
       results.push(relPath);
     }
@@ -92,7 +100,12 @@ function gitList(args) {
   }
 }
 
-function shouldSkip(path) {
+function isRuntimeTrustBoundaryPath(path) {
+  return path.startsWith(".omk/runs/") || path.startsWith(".omk/images/");
+}
+
+function shouldSkip(path, options = {}) {
+  if (options.runtime && isRuntimeTrustBoundaryPath(path)) return false;
   return SKIP_PREFIXES.some((prefix) => path.startsWith(prefix));
 }
 
@@ -103,7 +116,7 @@ function collectRuntimeTrustBoundaryFiles() {
   }
   for (const dir of RUNTIME_TRUST_BOUNDARY_DIRS) {
     if (existsSync(dir) && statSync(dir).isDirectory()) {
-      results.push(...walkDirectory(dir, dir));
+      results.push(...walkDirectory(dir, dir, { runtime: true }));
     }
   }
   return results;
@@ -116,13 +129,13 @@ function isLikelyBinary(buffer) {
 const files = new Set([
   ...gitList(["ls-files", "-z"]),
   ...gitList(["ls-files", "--others", "--exclude-standard", "-z"]),
-  ...(process.argv.includes("--runtime") ? collectRuntimeTrustBoundaryFiles() : []),
+  ...(runtimeMode ? collectRuntimeTrustBoundaryFiles() : []),
 ]);
 
 const findings = [];
 
 for (const file of [...files].sort()) {
-  if (shouldSkip(file) || SYNTHETIC_SECRET_FIXTURE_FILES.has(file) || !existsSync(file) || !statSync(file).isFile()) continue;
+  if (shouldSkip(file, { runtime: runtimeMode }) || SYNTHETIC_SECRET_FIXTURE_FILES.has(file) || !existsSync(file) || !statSync(file).isFile()) continue;
 
   const base = basename(file);
   if (PROTECTED_FILE_PATTERNS.some((pattern) => pattern.test(base))) {

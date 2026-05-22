@@ -17,12 +17,31 @@ import {
 import { rmSync } from "fs";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "path";
 import { homedir } from "os";
-import { execSync } from "child_process";
+import { execa } from "execa";
 import { GLOBAL_MEMORY_CONFIG_TOML, getGlobalMemoryConfigPath } from "../memory/memory-config.js";
 import { SyncManifestEntry, sha256, simpleDiff } from "./sync-manifest.js";
 import { getOmkResourceSettings, type OmkRuntimeScope } from "./resource-profile.js";
 import { getKimiCapabilities } from "../kimi/capability.js";
 import { resolveRuntimeProfile, buildProfileArgs } from "./runtime-profile.js";
+import {
+  getProjectRoot as resolveProjectRootSync,
+  getProjectRootAsync as resolveProjectRootAsyncPath,
+  getProjectRootDiagnostics,
+  resolveProjectRoot,
+  resolveProjectRootAsync,
+  displayProjectRootPath,
+  type ProjectRootResolution,
+  type ProjectRootSource,
+} from "./project-root.js";
+
+export {
+  getProjectRootDiagnostics,
+  resolveProjectRoot,
+  resolveProjectRootAsync,
+  displayProjectRootPath,
+  type ProjectRootResolution,
+  type ProjectRootSource,
+};
 
 type KimiGlobalSyncStepName = "hooks" | "mcp" | "skills" | "memory";
 
@@ -186,19 +205,11 @@ export async function readTextFile(path: string, defaultValue = ""): Promise<str
 }
 
 export function getProjectRoot(): string {
-  if (process.env.OMK_PROJECT_ROOT) return resolve(process.env.OMK_PROJECT_ROOT);
-  // Git 저장소 루트를 우선 찾고, 실패 시 cwd 폴백
-  try {
-    const gitRoot = execSync("git rev-parse --show-toplevel", {
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "ignore"],
-      timeout: 3000,
-    }).trim();
-    if (gitRoot) return gitRoot;
-  } catch {
-    // ignore — git 없거나非저장소
-  }
-  return process.cwd();
+  return resolveProjectRootSync();
+}
+
+export async function getProjectRootAsync(): Promise<string> {
+  return resolveProjectRootAsyncPath();
 }
 
 export function getUserHome(env: NodeJS.ProcessEnv = process.env): string {
@@ -288,7 +299,7 @@ export async function mergeKimiHooks(
   const omkContent = await readTextFile(omkConfigPath, "");
   if (!omkContent.trim()) return false;
 
-  const root = getProjectRoot();
+  const root = await getProjectRootAsync();
   const resolvedContent = resolveHookPaths(omkContent, root);
 
   const hooksContent = extractHooksBlocks(resolvedContent);
@@ -403,7 +414,8 @@ export async function syncKimiMcpGlobal(
   const manifest = options.manifest ?? [];
   const timestamp = options.timestamp ?? new Date().toISOString();
   const globalMcpPath = join(getUserHome(), ".kimi", "mcp.json");
-  const projectConfigs = [getOmkPath("mcp.json"), join(getProjectRoot(), ".kimi", "mcp.json")];
+  const root = await getProjectRootAsync();
+  const projectConfigs = [join(root, ".omk", "mcp.json"), join(root, ".kimi", "mcp.json")];
 
   const mergedServers: Record<string, unknown> = {};
   let hasAny = false;
@@ -414,7 +426,7 @@ export async function syncKimiMcpGlobal(
       const content = await readTextFile(p, "{}");
       const parsed = JSON.parse(content);
       if (parsed.mcpServers && typeof parsed.mcpServers === "object") {
-        const root = getProjectRoot();
+        const root = await getProjectRootAsync();
         for (const [name, server] of Object.entries(parsed.mcpServers)) {
           const s = server as Record<string, unknown>;
           // args의 상대 경로를 MCP 설정 파일 기준 절대 경로로 변환.
@@ -514,7 +526,8 @@ export async function syncKimiMcpGlobal(
 export async function syncKimiSkillsGlobal(
   options: KimiGlobalSyncOptions = {}
 ): Promise<boolean> {
-  const projectSkillsDir = join(getProjectRoot(), ".kimi", "skills");
+  const root = await getProjectRootAsync();
+  const projectSkillsDir = join(root, ".kimi", "skills");
   const globalSkillsDir = join(getUserHome(), ".kimi", "skills");
 
   if (!(await pathExists(projectSkillsDir))) return false;
@@ -753,26 +766,28 @@ export async function syncAllKimiGlobals(
   };
 }
 
-/** Canonical .kimi/mcp.json + optional ~/.kimi/mcp.json 수집 */
+/** Canonical OMK-first MCP config collection with Kimi files kept as compatibility input. */
 export async function collectMcpConfigs(scope: OmkRuntimeScope = "project"): Promise<string[]> {
   const configs: string[] = [];
   if (scope === "none") return configs;
 
-  const root = getProjectRoot();
+  const root = await getProjectRootAsync();
   const omkMcp = join(root, ".omk", "mcp.json");
   const kimiMcp = join(root, ".kimi", "mcp.json");
   const globalMcp = join(getUserHome(), ".kimi", "mcp.json");
+  const globalOmkMcp = join(getUserHome(), ".omk", "mcp.json");
 
   if (scope === "all") {
     if (await pathExists(globalMcp)) configs.push(globalMcp);
+    if (await pathExists(globalOmkMcp)) configs.push(globalOmkMcp);
   }
 
   const [kimiMcpExists, omkMcpExists] = await Promise.all([
     pathExists(kimiMcp),
     pathExists(omkMcp),
   ]);
-  // .kimi/mcp.json is the Kimi-native source of truth. .omk/mcp.json remains
-  // a legacy fallback for older projects that have not rerun `omk init`.
+  // .kimi/mcp.json remains the Kimi-native project source of truth.
+  // .omk/mcp.json is a compatibility fallback/mirror for older projects.
   if (kimiMcpExists) configs.push(kimiMcp);
   else if (omkMcpExists) configs.push(omkMcp);
 
@@ -934,6 +949,20 @@ const QUIET_PACKAGE_MANAGER_ENV: Record<string, string> = {
   NPM_CONFIG_LOGLEVEL: "error",
   npm_config_progress: "false",
   NPM_CONFIG_PROGRESS: "false",
+  npm_config_audit: "false",
+  NPM_CONFIG_AUDIT: "false",
+  npm_config_fund: "false",
+  NPM_CONFIG_FUND: "false",
+  npm_config_prefer_offline: "true",
+  NPM_CONFIG_PREFER_OFFLINE: "true",
+  npm_config_fetch_retries: "0",
+  NPM_CONFIG_FETCH_RETRIES: "0",
+  npm_config_fetch_retry_mintimeout: "1000",
+  NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "1000",
+  npm_config_fetch_retry_maxtimeout: "1000",
+  NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "1000",
+  npm_config_maxsockets: "3",
+  NPM_CONFIG_MAXSOCKETS: "3",
   npm_config_update_notifier: "false",
   NPM_CONFIG_UPDATE_NOTIFIER: "false",
   NO_UPDATE_NOTIFIER: "1",
@@ -1153,6 +1182,359 @@ function isPackageManagerRuntimeServer(server: Record<string, unknown>): boolean
   });
 }
 
+export type RuntimeMcpPreflightMode = "warn-skip" | "strict" | "off";
+export type RuntimeMcpPreflightFailureReason = "timeout" | "exit";
+export type RuntimeMcpPreflightEntryStatus = "ok" | "failed" | "skipped";
+
+export interface RuntimeMcpPreflightOptions {
+  timeoutMs: number;
+  concurrency: number;
+}
+
+export interface RuntimeMcpPreflightEntry {
+  name: string;
+  status: RuntimeMcpPreflightEntryStatus;
+  reason?: RuntimeMcpPreflightFailureReason | "not-npm-family" | "no-package-spec";
+  detail?: string;
+  packageSpec?: string;
+}
+
+export interface RuntimeMcpPreflightResult {
+  failed: Set<string>;
+  details: Map<string, { reason: RuntimeMcpPreflightFailureReason; detail: string }>;
+  entries: RuntimeMcpPreflightEntry[];
+}
+
+export function resolveRuntimeMcpPreflightMode(
+  env: Record<string, string | undefined> = process.env
+): RuntimeMcpPreflightMode {
+  const raw = env.OMK_MCP_PREFLIGHT?.trim();
+  if (!raw) return "off";
+  if (raw === "strict" || raw === "warn-skip") return raw;
+  return "off";
+}
+
+function resolvePreflightTimeout(env: Record<string, string | undefined> = process.env): number {
+  const raw = env.OMK_MCP_PREFLIGHT_TIMEOUT_MS;
+  if (!raw) return 5000;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : 5000;
+}
+
+function resolvePreflightConcurrency(env: Record<string, string | undefined> = process.env): number {
+  const raw = env.OMK_MCP_PREFLIGHT_CONCURRENCY;
+  if (!raw) return 3;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : 3;
+}
+
+export function resolveRuntimeMcpPreflightOptions(
+  env: Record<string, string | undefined> = process.env
+): RuntimeMcpPreflightOptions & { mode: RuntimeMcpPreflightMode } {
+  return {
+    mode: resolveRuntimeMcpPreflightMode(env),
+    timeoutMs: resolvePreflightTimeout(env),
+    concurrency: resolvePreflightConcurrency(env),
+  };
+}
+
+interface PreflightProbe {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  packageSpec: string;
+}
+
+const NPM_FAMILY_RUNTIME_COMMANDS = new Set([
+  "npm",
+  "npx",
+  "pnpm",
+  "yarn",
+  "bun",
+  "bunx",
+  "npm.cmd",
+  "npx.cmd",
+  "pnpm.cmd",
+  "yarn.cmd",
+  "bun.cmd",
+  "bunx.cmd",
+  "npm.exe",
+  "npx.exe",
+  "pnpm.exe",
+  "yarn.exe",
+  "bun.exe",
+  "bunx.exe",
+]);
+
+const PACKAGE_ARG_OPTIONS_WITH_VALUE = new Set([
+  "-p",
+  "--package",
+  "--package-name",
+  "--registry",
+  "--cache",
+  "--userconfig",
+  "--prefix",
+]);
+
+const PACKAGE_ARG_FLAGS = new Set([
+  "-y",
+  "--yes",
+  "--quiet",
+  "--silent",
+  "--no",
+  "--no-install",
+  "--ignore-existing",
+  "--prefer-offline",
+  "--offline",
+]);
+
+function isRuntimePackageSpecifier(value: string): boolean {
+  if (!value || value.startsWith("-") || value === "--") return false;
+  if (/^(?:https?|git\+ssh|git\+https?):/i.test(value)) return false;
+  if (value.startsWith(".") || value.startsWith("/") || value.startsWith("~") || value.includes("\\") || value.includes(":")) return false;
+  return /^(?:@[a-z0-9._~-]+\/)?[a-z0-9._~-]+(?:@[a-z0-9._~+-]+)?$/i.test(value);
+}
+
+function findPackageSpecifier(args: string[], commandName: string): string | null {
+  let start = 0;
+  if (commandName === "npm" && ["exec", "x", "dlx"].includes(args[0] ?? "")) start = 1;
+  if (commandName === "pnpm" && ["dlx", "exec"].includes(args[0] ?? "")) start = 1;
+  if (commandName === "yarn" && ["dlx", "exec"].includes(args[0] ?? "")) start = 1;
+  if (commandName === "bun" && ["x", "runx"].includes(args[0] ?? "")) start = 1;
+
+  for (let i = start; i < args.length; i += 1) {
+    const arg = args[i];
+    if (!arg || arg === "--") break;
+    if (arg.startsWith("--package=")) {
+      const value = arg.slice("--package=".length);
+      return isRuntimePackageSpecifier(value) ? value : null;
+    }
+    if (PACKAGE_ARG_OPTIONS_WITH_VALUE.has(arg)) {
+      const value = args[i + 1];
+      if (arg === "-p" || arg === "--package" || arg === "--package-name") {
+        return value && isRuntimePackageSpecifier(value) ? value : null;
+      }
+      i += 1;
+      continue;
+    }
+    if (PACKAGE_ARG_FLAGS.has(arg)) continue;
+    if (arg.startsWith("-")) continue;
+    return isRuntimePackageSpecifier(arg) ? arg : null;
+  }
+
+  return null;
+}
+
+function runtimeNpmPreflightEnv(concurrency: number): Record<string, string> {
+  const maxSockets = String(Math.max(1, Math.min(16, concurrency)));
+  return {
+    ...QUIET_PACKAGE_MANAGER_ENV,
+    npm_config_maxsockets: maxSockets,
+    NPM_CONFIG_MAXSOCKETS: maxSockets,
+  };
+}
+
+function isSafeNpmPreflightEnvKey(key: string): boolean {
+  const lower = key.toLowerCase();
+  if (/(?:token|secret|password|passwd|credential|auth|cookie|key)/i.test(key)) return false;
+  if (["http_proxy", "https_proxy", "no_proxy"].includes(lower)) return true;
+  if (!lower.startsWith("npm_config_")) return false;
+  const npmKey = lower.slice("npm_config_".length).replace(/-/g, "_");
+  return [
+    "registry",
+    "proxy",
+    "https_proxy",
+    "http_proxy",
+    "noproxy",
+    "no_proxy",
+    "strict_ssl",
+    "cafile",
+    "userconfig",
+    "cache",
+  ].includes(npmKey);
+}
+
+function runtimeNpmPreflightServerEnv(server: Record<string, unknown>): Record<string, string> {
+  const env = isRecord(server.env) ? server.env : {};
+  const safe: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (!isSafeNpmPreflightEnvKey(key)) continue;
+    if (typeof value === "string") {
+      safe[key] = value;
+    }
+  }
+  return safe;
+}
+
+function isNpmFamilyRuntimeServer(server: Record<string, unknown>): boolean {
+  const command = typeof server.command === "string" ? basenameOfRuntimeCommand(server.command) : "";
+  return NPM_FAMILY_RUNTIME_COMMANDS.has(command);
+}
+
+function buildPreflightProbeCommand(server: Record<string, unknown>, concurrency: number): PreflightProbe | null {
+  const command = typeof server.command === "string" ? server.command : "";
+  if (!command) return null;
+  const commandName = basenameOfRuntimeCommand(command);
+  if (!NPM_FAMILY_RUNTIME_COMMANDS.has(commandName)) return null;
+  if (runtimeShellInlineScripts(server).length > 0) return null;
+
+  const args = Array.isArray(server.args)
+    ? server.args.filter((arg): arg is string => typeof arg === "string")
+    : [];
+  const packageSpec = findPackageSpecifier(args, commandName);
+  if (!packageSpec) return null;
+
+  return {
+    command: "npm",
+    args: [
+      "view",
+      packageSpec,
+      "version",
+      "--json",
+      "--prefer-offline",
+      "--no-audit",
+      "--no-fund",
+      "--progress=false",
+      "--loglevel=error",
+      "--fetch-retries=0",
+      "--fetch-retry-mintimeout=1000",
+      "--fetch-retry-maxtimeout=1000",
+      `--maxsockets=${Math.max(1, Math.min(16, concurrency))}`,
+    ],
+    env: {
+      ...runtimeNpmPreflightEnv(concurrency),
+      ...runtimeNpmPreflightServerEnv(server),
+    },
+    packageSpec,
+  };
+}
+
+function sanitizeRuntimeMcpPreflightText(value: string): string {
+  return value
+    .replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, "$1***")
+    .replace(/(--(?:api-)?(?:token|key|secret|password)(?:=|\s+))[^"'`\s;]+/gi, "$1***")
+    .replace(/([A-Za-z_][A-Za-z0-9_]*(?:SECRET|TOKEN|KEY|PASSWORD|CREDENTIAL|AUTH)[A-Za-z0-9_]*\s*=\s*)[^"'`\s;]+/gi, "$1***")
+    .replace(/([?&](?:token|api[-_]?key|key|secret|password|auth|credential|session|bearer|access[-_]?token|refresh[-_]?token|client[-_]?secret|x[-_]?auth[-_]?token|signature|sig)=)[^&#\s]+/gi, "$1***");
+}
+
+function formatPreflightFailureDetail(
+  reason: RuntimeMcpPreflightFailureReason | undefined,
+  detail: string | undefined
+): string {
+  if (reason === "timeout") return "timeout";
+  return sanitizeRuntimeMcpPreflightText(detail ?? "failed");
+}
+
+function safePreflightProcessEnv(): Record<string, string> {
+  const safe: Record<string, string> = {};
+  for (const key of ["PATH", "Path", "HOME", "USERPROFILE", "TMP", "TMPDIR", "TEMP", "SystemRoot", "ComSpec"]) {
+    const value = process.env[key];
+    if (value !== undefined) safe[key] = value;
+  }
+  return safe;
+}
+
+async function runPreflightProbe(
+  probe: PreflightProbe,
+  timeoutMs: number
+): Promise<{ failed: boolean; reason?: RuntimeMcpPreflightFailureReason; detail?: string }> {
+  try {
+    const result = await execa(probe.command, probe.args, {
+      env: { ...safePreflightProcessEnv(), ...probe.env },
+      extendEnv: false,
+      timeout: timeoutMs,
+      reject: false,
+      stdio: "pipe",
+    });
+    if (result.timedOut) {
+      return { failed: true, reason: "timeout", detail: `timeout after ${timeoutMs}ms` };
+    }
+    if (result.exitCode !== 0) {
+      return { failed: true, reason: "exit", detail: `exit ${result.exitCode}` };
+    }
+    return { failed: false };
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    return { failed: true, reason: "exit", detail: code ? `spawn failed (${code})` : "spawn failed" };
+  }
+}
+
+export async function preflightRuntimeMcpServers(
+  servers: Record<string, unknown>,
+  options: RuntimeMcpPreflightOptions
+): Promise<RuntimeMcpPreflightResult> {
+  const entries = Object.entries(servers);
+  const failed = new Set<string>();
+  const details = new Map<string, { reason: RuntimeMcpPreflightFailureReason; detail: string }>();
+  const results: RuntimeMcpPreflightEntry[] = [];
+
+  async function probeOne([name, server]: [string, unknown]): Promise<void> {
+    if (!isRecord(server) || typeof server.url === "string" || !isNpmFamilyRuntimeServer(server)) {
+      results.push({ name, status: "skipped", reason: "not-npm-family" });
+      return;
+    }
+    const probe = buildPreflightProbeCommand(server, options.concurrency);
+    if (!probe) {
+      results.push({ name, status: "skipped", reason: "no-package-spec" });
+      return;
+    }
+    const result = await runPreflightProbe(probe, options.timeoutMs);
+    if (result.failed) {
+      failed.add(name);
+      if (result.reason && result.detail) {
+        details.set(name, { reason: result.reason, detail: result.detail });
+      }
+      results.push({
+        name,
+        status: "failed",
+        reason: result.reason ?? "exit",
+        detail: formatPreflightFailureDetail(result.reason, result.detail),
+        packageSpec: probe.packageSpec,
+      });
+      return;
+    }
+    results.push({ name, status: "ok", packageSpec: probe.packageSpec });
+  }
+
+  const concurrency = Math.max(1, options.concurrency);
+  for (let i = 0; i < entries.length; i += concurrency) {
+    const batch = entries.slice(i, i + concurrency);
+    await Promise.all(batch.map(probeOne));
+  }
+
+  const order = new Map(entries.map(([name], index) => [name, index]));
+  results.sort((a, b) => (order.get(a.name) ?? 0) - (order.get(b.name) ?? 0));
+  return { failed, details, entries: results };
+}
+
+function emitPreflightSummary(result: RuntimeMcpPreflightResult, removedNames: Set<string> = result.failed): void {
+  if (result.failed.size === 0 || process.env.OMK_MCP_SUPPRESS_PRUNE_WARNINGS === "1") return;
+  const parts: string[] = [];
+  for (const name of result.failed) {
+    const detail = result.details.get(name);
+    if (detail) {
+      parts.push(`${sanitizeRuntimeMcpPreflightText(name)} (${formatPreflightFailureDetail(detail.reason, detail.detail)})`);
+    } else {
+      parts.push(sanitizeRuntimeMcpPreflightText(name));
+    }
+  }
+  const shown = parts.slice(0, 5).join(", ");
+  const suffix = parts.length > 5 ? `, +${parts.length - 5} more` : "";
+  const removedCount = removedNames.size;
+  const keptCount = Math.max(0, result.failed.size - removedCount);
+  const action = removedCount > 0
+    ? `Removed ${removedCount} exit-failed server(s)`
+    : "No servers were removed";
+  const kept = keptCount > 0
+    ? ` Kept ${keptCount} timeout server(s) as prewarm-needed.`
+    : "";
+  console.warn(
+    `[omk] MCP preflight found ${result.failed.size} npm-family issue(s): ${shown}${suffix}. ` +
+    `${action}.${kept} Run \`omk mcp check --all\` (or \`omk mcp prewarm --all\`) to check caches, ` +
+    "or `omk mcp doctor --fix` for durable repairs."
+  );
+}
+
 function normalizeRuntimeMcpServer(
   name: string,
   server: unknown
@@ -1260,9 +1642,44 @@ export async function writeRuntimeMcpConfig(
   const { servers: runtimeServers, diagnostics, normalizations } = await pruneRuntimeMcpServers(targetServers);
   emitRuntimeMcpPruneWarning(diagnostics);
   emitRuntimeMcpNormalizationNotice(normalizations);
+
+  const preflightOptions = resolveRuntimeMcpPreflightOptions();
+  const preflightMode = preflightOptions.mode;
+  if (preflightMode !== "off") {
+    const preflightResult = await preflightRuntimeMcpServers(runtimeServers, preflightOptions);
+    const removedByPreflight = new Set<string>();
+    for (const name of Object.keys(runtimeServers)) {
+      if (preflightResult.failed.has(name)) {
+        if (preflightMode === "strict") {
+          const parts: string[] = [];
+          for (const failedName of preflightResult.failed) {
+            const detail = preflightResult.details.get(failedName);
+            parts.push(
+              `${sanitizeRuntimeMcpPreflightText(failedName)} (${formatPreflightFailureDetail(detail?.reason, detail?.detail)})`
+            );
+          }
+          throw new Error(
+            `[omk] MCP preflight strict mode: server "${name}" failed probe. ` +
+            parts.join(", ")
+          );
+        }
+        const detail = preflightResult.details.get(name);
+        if (detail?.reason === "timeout") {
+          // Timeout-only failures are kept as prewarm-needed; do not delete.
+          continue;
+        }
+        delete runtimeServers[name];
+        removedByPreflight.add(name);
+      }
+    }
+    if (preflightResult.failed.size > 0) {
+      emitPreflightSummary(preflightResult, removedByPreflight);
+    }
+  }
+
   if (Object.keys(runtimeServers).length === 0) return null;
 
-  const root = getProjectRoot();
+  const root = await getProjectRootAsync();
   const cacheDir = join(root, ".omk", "cache");
   await ensureDir(cacheDir);
   await chmod(cacheDir, 0o700).catch(() => undefined);
@@ -1371,7 +1788,7 @@ export async function getOmkLogoImagePath(): Promise<string | null> {
     const match = content.match(/^\s*logo_image\s*=\s*["']([^"']+)["']/m);
     if (!match) return null;
     const p = match[1].trim();
-    const root = getProjectRoot();
+    const root = await getProjectRootAsync();
     const absoluteInput = isAbsolute(p) || p.startsWith("\\") || /^[A-Za-z]:/.test(p);
     if (absoluteInput && !isTrustedLocalFlag(process.env.OMK_TRUST_ABSOLUTE_LOGO_PATH)) {
       return null;
@@ -1528,7 +1945,9 @@ export async function injectKimiGlobals(
     // silently. A single merged config preserves the same precedence (global first,
     // project second, built-in omk-project last) without duplicate startup noise.
     const builtinMcp = await writeBuiltinMcpConfig();
-    const allowlist = options.mcpAllowlist?.length ? [...options.mcpAllowlist, "omk-project"] : undefined;
+    const allowlist = options.mcpAllowlist !== undefined
+      ? [...new Set([...options.mcpAllowlist, "omk-project"].map((name) => name.trim()).filter(Boolean))]
+      : undefined;
     const runtimeMcp = await writeRuntimeMcpConfig(
       builtinMcp ? [...mcpConfigs, builtinMcp] : mcpConfigs,
       allowlist

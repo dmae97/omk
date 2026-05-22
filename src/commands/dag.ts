@@ -323,6 +323,7 @@ export async function dagReplayCommand(
   const executor = createExecutor({
     persister: createStatePersister(getRunsDir(root)),
     resumeFromState: routedState,
+    eventRunDir: runDir,
   });
 
   // Wire event logging

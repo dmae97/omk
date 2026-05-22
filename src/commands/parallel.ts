@@ -17,14 +17,23 @@ import { ParallelLiveRenderer, renderCompactParallelFrame, type ParallelViewMode
 import { formatOmkVersionFooter } from "../util/version.js";
 import { UsageError } from "../util/cli-contract.js";
 import { captureTerminalInputState, restoreTerminalInputState } from "../util/terminal-input.js";
+import { writeMemoryRecallSummary } from "../util/chat-startup.js";
 import {
   createProviderBackedTaskRunner,
   type ProviderPolicy,
 } from "../providers/index.js";
+import { normalizeProviderPolicy, parseProviderModelArg } from "../providers/model-registry.js";
 import type { DeepSeekModelTier } from "../providers/types.js";
 import { SUPER_OMK_DEFAULTS, isSuperOmkEnabled } from "../providers/deepseek/deepseek-super-config.js";
+import {
+  EXECUTION_PROMPT_CHOICES,
+  parseExecutionPromptPolicy,
+  resolveExecutionSelectionDecision,
+  resolvePromptExecutionDecision,
+} from "../util/execution-selection.js";
+import { analyzeUserIntent } from "../goal/intake.js";
 import type { IntentFrame } from "../contracts/goal.js";
-import type { RunState, UserIntent } from "../contracts/orchestration.js";
+import type { ExecutionPromptPolicy, ExecutionSelectionDecision, ExecutionStrategy, RunState, UserIntent } from "../contracts/orchestration.js";
 import type { Dag, DagNodeDefinition } from "../orchestration/dag.js";
 import {
   actionAtomRouting,
@@ -49,10 +58,15 @@ export interface ParallelCommandOptions {
   goalId?: string;
   timeoutPreset?: string;
   provider?: ProviderPolicy;
+  model?: string;
   mcpScope?: string;
+  execution?: string;
+  executionStrategy?: ExecutionStrategy;
+  executionDecision?: ExecutionSelectionDecision;
   intentFrame?: IntentFrame;
   /** Analyzed user intent for dynamic DAG construction and role routing. */
   intent?: UserIntent;
+  signal?: AbortSignal;
 }
 
 export async function parallelCommand(
@@ -61,9 +75,10 @@ export async function parallelCommand(
 ): Promise<{ runId: string; success: boolean }> {
   const root = getProjectRoot();
   const resources = await getOmkResourceSettings();
-  const workerCount = normalizeWorkerCount(options.workers, resources.maxWorkers);
-  const providerPolicy = normalizeProviderPolicy(options.provider);
+  const modelArg = parseProviderModelArg(options.model);
+  const requestedProviderPolicy = normalizeProviderPolicy(options.provider ?? modelArg.provider);
   const mcpScope = parseRuntimeScopeOption(options.mcpScope, resources.mcpScope, "--mcp-scope");
+  const requestedExecutionPrompt = parseExecutionPromptPolicy(options.execution, "--execution");
 
   const hasFromSpec = Boolean(options.fromSpec);
 
@@ -78,10 +93,6 @@ export async function parallelCommand(
   const startedAt = new Date().toISOString();
 
   await mkdir(runDir, { recursive: true });
-  await writeFile(
-    join(runDir, "plan.md"),
-    `# Plan\n\nFlow: parallel\nWorkers: ${workerCount}\nResource profile: ${resources.profile}\nMCP scope: ${mcpScope}\nApproval policy: ${approvalPolicy}\nProvider policy: ${providerPolicy}\n`
-  );
 
   let runState: RunState;
   let effectiveGoal = goal ?? "";
@@ -115,18 +126,65 @@ export async function parallelCommand(
     }
   }
 
+  let specNodes: DagNodeDefinition[] | undefined;
   if (hasFromSpec) {
     const { loadSpecDag } = await import("./dag-from-spec.js");
     const specDag = await loadSpecDag(options.fromSpec!, { parallel: true });
     effectiveGoal = goal ?? `spec: ${specDag.nodes[0]?.name ?? options.fromSpec!}`;
     intentFrame = buildIntentFrame(effectiveGoal);
 
-    const specNodes = specDag.nodes.map((node) => {
+    specNodes = specDag.nodes.map((node) => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { status, retries, ...def } = node;
       return def;
     });
+  } else {
+    intentFrame = intentFrame ?? buildIntentFrame(effectiveGoal);
+  }
 
+  const resolvedIntent = options.intent ?? analyzeUserIntent(effectiveGoal);
+  const executionDecision = options.executionDecision ?? await resolveParallelCommandExecutionDecision({
+    requestedPolicy: requestedExecutionPrompt,
+    configPolicy: resources.executionPrompt,
+    strategyOverride: options.executionStrategy,
+    intent: resolvedIntent,
+    isTTY: Boolean(process.stdout.isTTY && process.stdin.isTTY),
+  });
+  await writeFile(join(runDir, "execution-selection.json"), `${JSON.stringify(executionDecision, null, 2)}\n`);
+  const executionPrompt = executionDecision.policy;
+
+  if (executionDecision.strategy === "prompt") {
+    throw new Error("Execution selection prompt did not resolve to a runnable strategy.");
+  }
+
+  const providerPolicy = executionDecision.strategy === "sequential" ? "kimi" : requestedProviderPolicy;
+
+  if (executionDecision.strategy === "plan-only") {
+    await writeFile(
+      join(runDir, "plan.md"),
+      `# Plan\n\nFlow: parallel\nWorkers: 0\nResource profile: ${resources.profile}\nMCP scope: ${mcpScope}\nExecution policy: ${executionPrompt}\nExecution strategy: plan-only\nApproval policy: ${approvalPolicy}\nProvider policy: ${providerPolicy}\n`
+    );
+    await writeFile(join(runDir, "goal.md"), `# Goal\n\n${effectiveGoal}\n`);
+    await writeFile(join(runDir, "intent-frame.json"), `${JSON.stringify(intentFrame, null, 2)}\n`);
+    await writeFile(join(runDir, "action-atoms.json"), `${JSON.stringify(intentFrame.actionAtoms, null, 2)}\n`);
+    console.log(header("Plan Saved"));
+    console.log(label("Run ID", runId));
+    console.log(label("Goal", effectiveGoal));
+    console.log(status.ok(`Plan saved to: ${join(runDir, "plan.md")}`));
+    return { runId, success: true };
+  }
+
+  const executionStrategy = executionDecision.strategy;
+  const workerCount = executionStrategy === "sequential"
+    ? 1
+    : normalizeWorkerCount(options.workers, resources.maxWorkers);
+
+  await writeFile(
+    join(runDir, "plan.md"),
+    `# Plan\n\nFlow: parallel\nWorkers: ${workerCount}\nResource profile: ${resources.profile}\nMCP scope: ${mcpScope}\nExecution policy: ${executionPrompt}\nExecution strategy: ${executionStrategy}\nApproval policy: ${approvalPolicy}\nProvider policy: ${providerPolicy}\n`
+  );
+
+  if (specNodes) {
     runState = createRoutedRunState({
       runId,
       startedAt,
@@ -147,18 +205,20 @@ export async function parallelCommand(
       approvalPolicy,
       goalId,
       goalSnapshot,
-      intent: options.intent,
+      intent: resolvedIntent,
       profile: resources.profile,
       providerPolicy,
+      executionStrategy,
     });
   }
 
   await writeFile(join(runDir, "goal.md"), `# Goal\n\n${effectiveGoal}\n`);
+  const memoryRecall = await writeMemoryRecallSummary({ root, runId, query: effectiveGoal });
   await writeFile(join(runDir, "intent-frame.json"), `${JSON.stringify(intentFrame, null, 2)}\n`);
   await writeFile(join(runDir, "action-atoms.json"), `${JSON.stringify(intentFrame.actionAtoms, null, 2)}\n`);
   await writeFile(join(runDir, "state.json"), JSON.stringify(runState, null, 2));
 
-  console.log(header("Parallel Execution"));
+  console.log(header(executionStrategy === "sequential" ? "Sequential Execution" : "Parallel Execution"));
   console.log(label("Run ID", runId));
   console.log(label("Goal", effectiveGoal));
   console.log(label("Workers", String(workerCount)));
@@ -168,7 +228,7 @@ export async function parallelCommand(
   console.log(label("Provider policy", providerPolicy));
 
   const agentFile = getOmkPath("agents/root.yaml");
-  const promptText = buildPromptText(effectiveGoal, runId, resources.profile, workerCount, mcpScope, options.intent, intentFrame);
+  const promptText = buildPromptText(effectiveGoal, runId, resources.profile, workerCount, mcpScope, resolvedIntent, intentFrame, memoryRecall.summary, executionStrategy);
   const statePath = join(runDir, "state.json");
 
   const routedState = routeRunState(runState, workerCount);
@@ -176,6 +236,9 @@ export async function parallelCommand(
 
   const dag = createExecutableDagFromState(routedState);
   const abortController = new AbortController();
+  if (options.signal) {
+    options.signal.addEventListener("abort", () => abortController.abort(), { once: true });
+  }
   let shuttingDown = false;
   let forceExitTimer: ReturnType<typeof setTimeout> | undefined;
   function handleSignal(): void {
@@ -270,7 +333,7 @@ export async function parallelCommand(
   const activePreset = await getActiveRuntimePreset();
   const runner = await createProviderBackedTaskRunner({
     providerPolicy,
-    deepseekPromptPrefix: buildDeepSeekPromptPrefix(effectiveGoal, runId, workerCount, options.intent, intentFrame),
+    deepseekPromptPrefix: buildDeepSeekPromptPrefix(effectiveGoal, runId, workerCount, resolvedIntent, intentFrame),
     allowDeepSeekAdvisoryFileNodes: true,
     kimi: {
       cwd: root,
@@ -296,6 +359,7 @@ export async function parallelCommand(
         OMK_MCP_SCOPE: mcpScope,
         OMK_SKILLS_SCOPE: resources.skillsScope,
         OMK_APPROVAL_POLICY: approvalPolicy,
+        ...(modelArg.model ? { OMK_PROVIDER_MODEL: modelArg.model } : {}),
       },
     },
   });
@@ -363,6 +427,60 @@ export async function parallelCommand(
   return { runId, success: result.success };
 }
 
+async function resolveParallelCommandExecutionDecision(input: {
+  requestedPolicy: ExecutionPromptPolicy | undefined;
+  configPolicy: ExecutionPromptPolicy;
+  strategyOverride: ExecutionStrategy | undefined;
+  intent: UserIntent;
+  isTTY: boolean;
+}): Promise<ExecutionSelectionDecision> {
+  if (input.strategyOverride && input.strategyOverride !== "prompt") {
+    return {
+      policy: input.requestedPolicy ?? input.configPolicy,
+      source: input.requestedPolicy ? "cli" : "config",
+      strategy: input.strategyOverride,
+      reason: "caller supplied an execution strategy override",
+      isTTY: input.isTTY,
+      isNonTrivial: input.intent.complexity !== "simple" || input.intent.estimatedWorkers > 1 || input.intent.parallelizable,
+    };
+  }
+
+  if (!input.requestedPolicy) {
+    return {
+      policy: "parallel",
+      source: "default",
+      strategy: "parallel",
+      reason: "direct omk parallel preserves historical parallel execution unless --execution is supplied",
+      isTTY: input.isTTY,
+      isNonTrivial: input.intent.complexity !== "simple" || input.intent.estimatedWorkers > 1 || input.intent.parallelizable,
+    };
+  }
+
+  const base = resolveExecutionSelectionDecision({
+    cliValue: input.requestedPolicy,
+    intent: input.intent,
+    isTTY: input.isTTY,
+  });
+  if (base.strategy !== "prompt") return base;
+
+  const { select } = await import("@inquirer/prompts");
+  const selected = await select(
+    {
+      message: "이 작업은 병렬 처리에 적합합니다. Parallel agents로 나눌까요, one by one으로 진행할까요?",
+      choices: EXECUTION_PROMPT_CHOICES.map((choice) => ({
+        name: choice === "parallel"
+          ? "Parallel agents (Recommended)"
+          : choice === "sequential"
+            ? "One by one"
+            : "Plan only",
+        value: choice,
+      })),
+    },
+    { signal: AbortSignal.timeout(60_000) }
+  );
+  return resolvePromptExecutionDecision(base, selected as Exclude<ExecutionStrategy, "prompt">);
+}
+
 export function normalizeWorkerCount(value: string | undefined, fallback: number): number {
   const effective = (value ?? process.env.OMK_WORKERS)?.trim();
   if (!effective || effective === "auto") return fallback;
@@ -382,10 +500,6 @@ function normalizeApprovalPolicy(
   return "interactive";
 }
 
-function normalizeProviderPolicy(value: string | undefined): ProviderPolicy {
-  return value === "kimi" ? "kimi" : "auto";
-}
-
 function buildPromptText(
   goal: string,
   runId: string,
@@ -393,7 +507,9 @@ function buildPromptText(
   workerCount: number,
   mcpScope: OmkRuntimeScope,
   intent?: UserIntent,
-  intentFrame: IntentFrame = buildIntentFrame(goal)
+  intentFrame: IntentFrame = buildIntentFrame(goal),
+  memorySummary?: string,
+  executionStrategy: ExecutionStrategy = "parallel"
 ): string {
   const taskType = intent?.taskType ?? "general";
   const lines: string[] = [
@@ -413,8 +529,17 @@ function buildPromptText(
     `Resource profile: ${profile}`,
     `Worker budget: ${workerCount}`,
     `MCP scope: ${mcpScope}`,
+    `Execution strategy: ${executionStrategy}`,
     `Task type: ${taskType}`,
   ];
+
+  if (memorySummary?.trim()) {
+    lines.push(
+      ``,
+      `## Initial Memory Recall Summary`,
+      memorySummary.trim().slice(0, 2_000),
+    );
+  }
 
   if (intent) {
     lines.push(
@@ -426,13 +551,23 @@ function buildPromptText(
     );
   }
 
-  lines.push(
-    `Execute the goal using parallel agents.`,
-    `- The coordinator plans and delegates.`,
-    `- Workers execute scoped sub-tasks in parallel.`,
-    `- The reviewer verifies and merges outputs.`,
-    `- Produce concrete evidence, changed files, and verification results.`
-  );
+  if (executionStrategy === "sequential") {
+    lines.push(
+      `Execute the goal one by one with a single Kimi-owned worker lane.`,
+      `- The coordinator plans the next scoped action before execution.`,
+      `- Do not spawn parallel subagent, DeepSeek, or capability fanout lanes.`,
+      `- The reviewer verifies the sequential output before final reporting.`,
+      `- Produce concrete evidence, changed files, and verification results.`
+    );
+  } else {
+    lines.push(
+      `Execute the goal using parallel agents.`,
+      `- The coordinator plans and delegates.`,
+      `- Workers execute scoped sub-tasks in parallel.`,
+      `- The reviewer verifies and merges outputs.`,
+      `- Produce concrete evidence, changed files, and verification results.`
+    );
+  }
 
   // Task-type specific guidance
   if (taskType === "explore" || taskType === "research") {
@@ -482,7 +617,7 @@ function buildPromptText(
   lines.push(
     ``,
     `MEMORY RECALL (MANDATORY):`,
-    `- Before planning, the coordinator MUST call omk_memory_mindmap or omk_search_memory to load relevant project context.`,
+    `- Before planning, the coordinator MUST read memory-recall-summary.md and call omk_memory_mindmap or omk_search_memory when more detail is needed.`,
     `- Workers MUST only use skills and MCP servers relevant to their assigned role.`,
     ``,
     `SKILLS & MCP USAGE (MANDATORY):`,
@@ -597,9 +732,12 @@ function createInteractiveRunState(input: {
   intent?: UserIntent;
   profile?: string;
   providerPolicy?: ProviderPolicy;
+  executionStrategy?: ExecutionStrategy;
 }): RunState {
   const intent = input.intent;
-  const effectiveWorkers = intent?.estimatedWorkers === undefined
+  const effectiveWorkers = input.executionStrategy === "sequential"
+    ? 1
+    : intent?.estimatedWorkers === undefined
     ? input.workerCount
     : normalizeWorkerCount(String(intent.estimatedWorkers), input.workerCount);
 
@@ -613,6 +751,7 @@ function createInteractiveRunState(input: {
     intent,
     profile: input.profile,
     providerPolicy: input.providerPolicy,
+    executionStrategy: input.executionStrategy,
   });
 
   const state = createRoutedRunState({
@@ -647,17 +786,20 @@ export interface DynamicNodeBuildInput {
   intent?: UserIntent;
   profile?: string;
   providerPolicy?: ProviderPolicy;
+  executionStrategy?: ExecutionStrategy;
 }
 
 export function buildDynamicNodes(input: DynamicNodeBuildInput): DagNodeDefinition[] {
-  const { flow, goal, startedAt, workerCount, intent, profile, providerPolicy } = input;
+  const { flow, goal, startedAt, workerCount, intent, profile, executionStrategy } = input;
+  const providerPolicy = input.providerPolicy ?? "auto";
   const intentFrame = input.intentFrame ?? buildIntentFrame(goal);
   const actionDigest = renderActionDigest(intentFrame, { maxAtoms: 6 });
   const taskType = intent?.taskType ?? "general";
   const roles = intent?.requiredRoles ?? ["planner", "coder", "reviewer"];
-  const effectiveWorkerCount = normalizeWorkerCount(String(workerCount), 1);
+  const isSequential = executionStrategy === "sequential";
+  const effectiveWorkerCount = isSequential ? 1 : normalizeWorkerCount(String(workerCount), 1);
 
-  const isSuper = isSuperOmkEnabled() || profile === "super";
+  const isSuper = !isSequential && (isSuperOmkEnabled() || profile === "super");
   const kimiWorkerCount = isSuper
     ? Math.min(SUPER_OMK_DEFAULTS.kimiWorkerCap, effectiveWorkerCount)
     : effectiveWorkerCount;
@@ -714,14 +856,14 @@ export function buildDynamicNodes(input: DynamicNodeBuildInput): DagNodeDefiniti
   if (workerRoles.length === 0) workerRoles.push("coder");
 
   const capabilitySeed = intentFrame.actionAtoms.map((atom) => atom.label).join(", ");
-  const deepseekAgentNodes = providerPolicy === "kimi"
+  const deepseekAgentNodes = providerPolicy === "kimi" || isSequential || (providerPolicy !== "auto" && providerPolicy !== "deepseek")
     ? []
     : buildDeepSeekAgentNodes({
       goal: actionDigest,
       taskType,
       intent,
     });
-  const capabilityAgentNodes = shouldSpawnCapabilityAgents(effectiveWorkerCount, taskType, intent)
+  const capabilityAgentNodes = !isSequential && shouldSpawnCapabilityAgents(effectiveWorkerCount, taskType, intent)
     ? buildCapabilityAgentNodes({
       goal: capabilitySeed || actionDigest,
       dependsOn: ["root-coordinator"],
@@ -770,6 +912,17 @@ export function buildDynamicNodes(input: DynamicNodeBuildInput): DagNodeDefiniti
         inputs: [{ name: "worker plan", ref: "plan.md", from: "root-coordinator" }],
         outputs: [{ name: `worker-${index + 1} output`, gate: "none" }],
         routing: {
+          assignedProvider: role === "coder" || providerPolicy === "auto" ? "kimi" : providerPolicy,
+          candidateProviders: role === "coder" || providerPolicy === "auto" ? ["kimi"] : [providerPolicy, "kimi"],
+          assignedModel: providerPolicy === "qwen"
+            ? "qwen3-max"
+            : providerPolicy === "codex"
+            ? "codex-cli"
+            : providerPolicy === "deepseek"
+            ? "deepseek-v4-flash"
+            : "auto",
+          assignedProviderAuthority: role === "coder" ? "authority" : "advisory",
+          assignedProviderCapabilities: role === "coder" ? ["write", "shell", "mcp"] : ["read", "review", "advisory"],
           actionAtom: actionAtomRouting(intentFrame.actionAtoms[(index + 2) % intentFrame.actionAtoms.length] ?? intentFrame.actionAtoms[0]),
         },
       };
@@ -794,6 +947,7 @@ export function buildDynamicNodes(input: DynamicNodeBuildInput): DagNodeDefiniti
         role,
         dependsOn: ["root-coordinator"],
         maxRetries: 1,
+        timeoutMs: 30_000,
         priority: 2,
         cost: 1,
         failurePolicy: { retryable: true, blockDependents: false, skipOnFailure: true },
@@ -802,7 +956,13 @@ export function buildDynamicNodes(input: DynamicNodeBuildInput): DagNodeDefiniti
         routing: {
           provider: "deepseek",
           fallbackProvider: "kimi",
+          providerModel: "deepseek-v4-pro",
           providerModelTier: "pro",
+          assignedProvider: "deepseek",
+          candidateProviders: ["deepseek", "kimi"],
+          assignedModel: "deepseek-v4-pro",
+          assignedProviderAuthority: "direct",
+          assignedProviderCapabilities: ["read", "review", "qa"],
           providerReason: `Super OMK DeepSeek worker for ${type}`,
           requiresMcp: false,
           requiresToolCalling: false,
@@ -941,7 +1101,7 @@ export function buildDynamicNodes(input: DynamicNodeBuildInput): DagNodeDefiniti
 }
 
 function shouldSpawnCapabilityAgents(workerCount: number, taskType: string, intent?: UserIntent): boolean {
-  if (workerCount < 2) return false;
+  void workerCount;
   if (intent?.parallelizable === true) return true;
   if (intent?.complexity && intent.complexity !== "simple") return true;
   return ["bugfix", "implement", "migrate", "plan", "refactor", "review", "security", "test", "general"].includes(taskType);
@@ -995,6 +1155,7 @@ function createDeepSeekAgentNode(input: {
     role: input.role,
     dependsOn: ["root-coordinator"],
     maxRetries: 1,
+    timeoutMs: input.tier === "flash" ? 15_000 : 30_000,
     priority: 2,
     cost: input.tier === "pro" ? 2 : 1,
     failurePolicy: { retryable: true, blockDependents: false, skipOnFailure: true },
@@ -1003,7 +1164,13 @@ function createDeepSeekAgentNode(input: {
     routing: {
       provider: "deepseek",
       fallbackProvider: "kimi",
+      providerModel: input.tier === "flash" ? "deepseek-v4-flash" : "deepseek-v4-pro",
       providerModelTier: input.tier,
+      assignedProvider: "deepseek",
+      candidateProviders: ["deepseek", "kimi"],
+      assignedModel: input.tier === "flash" ? "deepseek-v4-flash" : "deepseek-v4-pro",
+      assignedProviderAuthority: "direct",
+      assignedProviderCapabilities: ["read", "plan", "review"],
       providerReason: `Dedicated DeepSeek ${input.tier} model agent spawned from initial orchestration input`,
       requiresMcp: false,
       requiresToolCalling: false,

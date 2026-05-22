@@ -34,6 +34,16 @@ export interface InitializeResult {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function hasValidServerInfo(result: unknown): result is InitializeResult & { serverInfo: { name: string; version: string } } {
+  if (!isRecord(result) || !isRecord(result.serverInfo)) return false;
+  return typeof result.serverInfo.name === "string" && result.serverInfo.name.trim().length > 0
+    && typeof result.serverInfo.version === "string" && result.serverInfo.version.trim().length > 0;
+}
+
 export interface McpTool {
   name: string;
   description: string;
@@ -65,6 +75,7 @@ export interface McpServerConfig {
   url?: string;
   env?: Record<string, string>;
   headers?: Record<string, string>;
+  http_headers?: Record<string, string>;
   startupTimeoutMs?: number;
   requestTimeoutMs?: number;
 }
@@ -94,6 +105,7 @@ interface PendingRequest {
   reject: (e: Error) => void;
   timeout: NodeJS.Timeout;
   abort: () => void;
+  createdAt: number;
 }
 
 const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
@@ -104,6 +116,16 @@ function normalizeTimeoutMs(value: number | undefined, fallback: number): number
     return Math.max(1, Math.floor(value));
   }
   return fallback;
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); }
+    );
+  });
 }
 
 // ─── MCP Client Session ─────────────────────────────────────────────────────
@@ -118,6 +140,10 @@ export class McpClientSession {
   private closed = false;
   private readonly startupTimeoutMs: number;
   private readonly requestTimeoutMs: number;
+  private malformedMessageCount = 0;
+  private cleanupTimer: NodeJS.Timeout | null = null;
+  private static readonly MAX_MALFORMED_MESSAGES = 3;
+  private static readonly CLOSE_TIMEOUT_MS = 10_000;
 
   serverInfo: { name: string; version: string } | undefined;
 
@@ -131,7 +157,10 @@ export class McpClientSession {
     const config = this.config;
     if (config.url) {
       const { StreamableHttpTransport } = await import("./transports/streamable-http.js");
-      return new StreamableHttpTransport(config.url, config.headers ?? {});
+      return new StreamableHttpTransport(config.url, {
+        ...(config.http_headers ?? {}),
+        ...(config.headers ?? {}),
+      });
     }
     if (config.command) {
       const { StdioTransport } = await import("./transports/stdio.js");
@@ -146,19 +175,46 @@ export class McpClientSession {
     if (this.initialized) return;
 
     this.transport = await this.createTransport();
-    await this.transport.connect();
+    try {
+      await withTimeout(
+        this.transport.connect(),
+        this.startupTimeoutMs,
+        `MCP transport connect timed out after ${this.startupTimeoutMs}ms`
+      );
+    } catch (err) {
+      await this.transport.close?.().catch(() => {});
+      this.transport = null;
+      throw err;
+    }
 
     // Start listening for incoming messages
     this.transport.onMessage((raw) => this.handleIncoming(raw));
     this.transport.onNotification((method, params) => this.handleNotification(method, params));
     this.transport.onError((err) => this.handleTransportError(err));
+
+    this.startCleanupTimer();
+  }
+
+  get transportPid(): number | undefined {
+    return this.transport?.pid;
   }
 
   async close(): Promise<void> {
     this.closed = true;
     this.initialized = false;
     this.rejectAllPending(new Error("Session closed"));
-    await this.transport?.close?.();
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
+    }
+    if (this.transport) {
+      await withTimeout(
+        Promise.resolve(this.transport.close?.()),
+        McpClientSession.CLOSE_TIMEOUT_MS,
+        `MCP transport close timed out after ${McpClientSession.CLOSE_TIMEOUT_MS}ms`
+      ).catch(() => {});
+    }
+    this.transport = null;
   }
 
   private handleTransportError(err: Error): void {
@@ -183,25 +239,50 @@ export class McpClientSession {
     pending.reject(err);
   }
 
+  private startCleanupTimer(): void {
+    if (this.cleanupTimer) return;
+    this.cleanupTimer = setInterval(() => {
+      if (this.pendingRequests.size === 0) return;
+      if (this.closed || !this.transport) {
+        this.rejectAllPending(new Error("MCP session no longer active"));
+        return;
+      }
+      const now = Date.now();
+      for (const [id, pending] of this.pendingRequests) {
+        if (now - pending.createdAt > this.requestTimeoutMs) {
+          this.rejectPendingRequest(id, new Error(`MCP request stale: ${id}`));
+        }
+      }
+    }, 30_000);
+    this.cleanupTimer.unref?.();
+  }
+
   // ── Message handling ──────────────────────────────────────────────────
 
   private handleIncoming(raw: string): void {
     let msg: JsonRpcResponse;
     try {
       msg = JSON.parse(raw);
+      this.malformedMessageCount = 0;
     } catch {
-      return; // ignore malformed messages
+      this.malformedMessageCount++;
+      if (this.malformedMessageCount > McpClientSession.MAX_MALFORMED_MESSAGES) {
+        this.rejectAllPending(new Error("MCP server sent too many malformed JSON messages"));
+        this.malformedMessageCount = 0;
+      }
+      return;
     }
 
     if (msg.id !== undefined && this.pendingRequests.has(msg.id)) {
-      const { resolve, reject, timeout } = this.pendingRequests.get(msg.id)!;
-      clearTimeout(timeout);
+      const pending = this.pendingRequests.get(msg.id)!;
+      clearTimeout(pending.timeout);
+      pending.abort();
       this.pendingRequests.delete(msg.id);
 
       if (msg.error) {
-        reject(new Error(msg.error.message ?? `JSON-RPC error ${msg.error.code}`));
+        pending.reject(new Error(msg.error.message ?? `JSON-RPC error ${msg.error.code}`));
       } else {
-        resolve(msg.result);
+        pending.resolve(msg.result);
       }
     }
   }
@@ -221,20 +302,53 @@ export class McpClientSession {
 
   // ── JSON-RPC request/response ─────────────────────────────────────────
 
-  private sendRequest(method: string, params?: unknown, timeoutMs = this.requestTimeoutMs): Promise<unknown> {
+  private sendRequest(
+    method: string,
+    params?: unknown,
+    timeoutMs = this.requestTimeoutMs,
+    signal?: AbortSignal
+  ): Promise<unknown> {
     if (this.closed) return Promise.reject(new Error("Session is closed"));
     if (!this.transport) return Promise.reject(new Error("Session is not connected"));
+    if (signal?.aborted) return Promise.reject(signal.reason ?? new Error("Request aborted"));
     const transport = this.transport;
 
     const id = ++this.requestIdCounter;
     return new Promise((resolve, reject) => {
+      const onAbort = () => {
+        this.rejectPendingRequest(id, signal!.reason ?? new Error("Request aborted"));
+      };
+      signal?.addEventListener("abort", onAbort, { once: true });
+
       const controller = new AbortController();
       const timeout = setTimeout(() => {
+        controller.abort();
         this.rejectPendingRequest(id, new Error(`MCP request timed out: ${method}`));
       }, timeoutMs);
-      this.pendingRequests.set(id, { resolve, reject, timeout, abort: () => controller.abort() });
+
+      this.pendingRequests.set(id, {
+        resolve,
+        reject: (e: Error) => {
+          signal?.removeEventListener("abort", onAbort);
+          reject(e);
+        },
+        timeout,
+        abort: () => {
+          controller.abort();
+          signal?.removeEventListener("abort", onAbort);
+        },
+        createdAt: Date.now(),
+      });
+
       const payload: JsonRpcRequest = { jsonrpc: "2.0", id, method, params };
-      transport.send(JSON.stringify(payload) + "\n", { signal: controller.signal }).catch((err) => {
+
+      const sendTimeoutMs = timeoutMs;
+      withTimeout(
+        transport.send(JSON.stringify(payload) + "\n", { signal: controller.signal, timeoutMs }),
+        sendTimeoutMs,
+        `MCP transport send timed out after ${sendTimeoutMs}ms: ${method}`
+      ).catch((err) => {
+        controller.abort();
         this.rejectPendingRequest(id, err instanceof Error ? err : new Error(String(err)));
       });
     });
@@ -243,20 +357,34 @@ export class McpClientSession {
   private sendNotification(method: string, params?: unknown): void {
     if (this.closed || !this.transport) return;
     const payload: JsonRpcNotification = { jsonrpc: "2.0", method, params };
-    this.transport.send(JSON.stringify(payload) + "\n").catch(() => {});
+    const timeoutMs = Math.min(this.requestTimeoutMs, 30_000);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    this.transport.send(JSON.stringify(payload) + "\n", {
+      signal: controller.signal,
+      timeoutMs,
+    }).catch(() => {}).finally(() => clearTimeout(timeout));
   }
 
   // ── MCP protocol methods ──────────────────────────────────────────────
 
   async initialize(params: InitializeParams): Promise<InitializeResult> {
-    const result = (await this.sendRequest("initialize", params, this.startupTimeoutMs)) as InitializeResult;
-    this.initialized = true;
-    this.serverInfo = result.serverInfo;
+    try {
+      const result = (await this.sendRequest("initialize", params, this.startupTimeoutMs)) as InitializeResult;
+      if (!hasValidServerInfo(result)) {
+        throw new Error("MCP initialize response missing serverInfo.name/version");
+      }
+      this.initialized = true;
+      this.serverInfo = result.serverInfo;
 
-    // Send initialized notification
-    this.sendNotification("notifications/initialized", {});
+      // Send initialized notification
+      this.sendNotification("notifications/initialized", {});
 
-    return result;
+      return result;
+    } catch (err) {
+      await this.close().catch(() => {});
+      throw err;
+    }
   }
 
   async listTools(): Promise<{ tools: McpTool[] }> {

@@ -143,7 +143,7 @@ test("doctor detects and fixes non-string agent prompt args plus missing root al
     assert.ok(before.errors.some((item) => item.name === "Agent YAML Schema"));
     assert.match(JSON.stringify(before.errors), /OMK_MAX_WORKERS must be a string/);
     assert.match(JSON.stringify(before.errors), /missing canonical alias/);
-    assert.match(JSON.stringify(before.errors), /security.*tester.*aggregator/);
+    assert.match(JSON.stringify(before.errors), /router.*security.*tester.*aggregator/);
 
     const fixed = await captureDoctorJson(root, home, { fix: true });
     assert.ok(fixed.fixes.actions.some((item) => /converted .*system_prompt_args/.test(item)));
@@ -152,9 +152,12 @@ test("doctor detects and fixes non-string agent prompt args plus missing root al
 
     const rootYaml = YAML.parse(await readFile(join(root, ".omk", "agents", "root.yaml"), "utf-8"));
     assert.equal(rootYaml.agent.system_prompt_args.OMK_MAX_WORKERS, "4");
-    for (const alias of ["security", "tester", "aggregator"]) {
+    for (const alias of ["router", "security", "tester", "aggregator"]) {
       assert.ok(rootYaml.agent.subagents[alias], `${alias} alias should be merged`);
     }
+    const routerRoleYaml = await readFile(join(rolesDir, "router.yaml"), "utf-8");
+    assert.match(routerRoleYaml, /name: omk-router/);
+    assert.match(routerRoleYaml, /OMK_ROLE: "router"/);
   } finally {
     await rm(root, { recursive: true, force: true });
     await rm(home, { recursive: true, force: true });

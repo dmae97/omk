@@ -6,7 +6,17 @@ import { execSync } from "child_process";
 import { checkCommand, getKimiVersion, runShell } from "../util/shell.js";
 import { runOmkSafetySelfTest } from "../util/native-safety.js";
 import { getKimiCapabilities } from "../kimi/capability.js";
-import { pathExists, getKimiConfigPath, readTextFile, getProjectRoot, getUserHome, syncAllKimiGlobals, type KimiGlobalSyncReport } from "../util/fs.js";
+import {
+  pathExists,
+  getKimiConfigPath,
+  readTextFile,
+  getProjectRootDiagnostics,
+  getUserHome,
+  syncAllKimiGlobals,
+  displayProjectRootPath,
+  type KimiGlobalSyncReport,
+  type ProjectRootResolution,
+} from "../util/fs.js";
 import { isGitAvailable, getCurrentBranch, getGitStatus } from "../util/git.js";
 import { style, status, header, separator } from "../util/theme.js";
 import { getGlobalMemoryConfigPath, isGraphMemoryBackend, loadMemorySettings, usesLocalGraphBackend, usesKuzuBackend } from "../memory/memory-config.js";
@@ -15,9 +25,13 @@ import { t } from "../util/i18n.js";
 import { formatBytes } from "../util/output-buffer.js";
 import { getOmkVersionSync } from "../util/version.js";
 import { resolveBundledLspBinary } from "./lsp.js";
+import { defaultLspConfigJson } from "../lsp/default-config.js";
 import { detectPackageManager } from "../mcp/quality-gate.js";
+import { MemoryStore } from "../memory/memory-store.js";
 import { discoverRoutingInventory } from "../orchestration/routing.js";
+import { OMK_PARALLEL_ORCHESTRATOR_PRESET, OMK_RUNTIME_PRESETS } from "../runtime/core-verified-preset.js";
 import { buildMcpDoctorReport, repairMcpDoctorIssues, type McpDoctorFixReport } from "./mcp.js";
+import { maybePromptForOmkUpdate } from "../util/update-check.js";
 import {
   formatAgentYamlIssues,
   repairProjectAgentPromptArgStrings,
@@ -71,6 +85,51 @@ interface DoctorOptions {
   soft?: boolean;
   fix?: boolean;
   global?: boolean;
+  dryRun?: boolean;
+  fixLevel?: DoctorFixLevel;
+  verifyFix?: boolean;
+  setDefaultProjectRoot?: string;
+}
+
+type DoctorFixSeverity = "info" | "warn" | "error";
+type DoctorFixLevel = "safe" | "recommended" | "aggressive";
+type DoctorFixSafetyTier = DoctorFixLevel | "global";
+type DoctorFixOperationStatus = "planned" | "applied" | "skipped" | "blocked" | "failed";
+
+interface DoctorFixOperation {
+  id: string;
+  category: string;
+  severity: DoctorFixSeverity;
+  safetyTier: DoctorFixSafetyTier;
+  status: DoctorFixOperationStatus;
+  before?: unknown;
+  after?: unknown;
+  backupPath?: string;
+  verifyCheck?: string;
+  reason?: string;
+}
+
+interface DoctorCheckSummary {
+  warnings: number;
+  errors: number;
+}
+
+interface DoctorPostFixCheck {
+  before: DoctorCheckSummary;
+  after: DoctorCheckSummary;
+  fixed: number;
+  remainingWarnings: number;
+  remainingErrors: number;
+  requiresManualAction: boolean;
+}
+
+interface DoctorFixPlan {
+  operations: DoctorFixOperation[];
+  changed: boolean;
+  dryRun: boolean;
+  backups: string[];
+  manualActions: string[];
+  postCheck?: DoctorPostFixCheck;
 }
 
 interface DoctorFixReport {
@@ -79,9 +138,158 @@ interface DoctorFixReport {
   skipped: string[];
   mcp?: McpDoctorFixReport;
   globalSync?: KimiGlobalSyncReport;
+  backups?: string[];
+  dryRun?: boolean;
+  fixPlan: DoctorFixPlan;
 }
 
 type OmkResourceSettings = Awaited<ReturnType<typeof getOmkResourceSettings>>;
+
+interface DoctorCheckRun {
+  categoryResults: Array<{ title: string; results: CheckResult[] }>;
+  allResults: CheckResult[];
+}
+
+interface DoctorFixContext {
+  dryRun: boolean;
+  fixLevel: DoctorFixLevel;
+  plan: DoctorFixPlan;
+}
+
+function createDoctorFixPlan(dryRun: boolean): DoctorFixPlan {
+  return {
+    operations: [],
+    changed: false,
+    dryRun,
+    backups: [],
+    manualActions: [],
+  };
+}
+
+function addDoctorFixOperation(ctx: DoctorFixContext, operation: DoctorFixOperation): void {
+  ctx.plan.operations.push(operation);
+  if (operation.status === "applied") ctx.plan.changed = true;
+  if (operation.backupPath && !ctx.plan.backups.includes(operation.backupPath)) {
+    ctx.plan.backups.push(operation.backupPath);
+  }
+  if ((operation.status === "blocked" || operation.status === "failed") && operation.reason) {
+    ctx.plan.manualActions.push(operation.reason);
+  }
+}
+
+function recordDoctorFix(
+  ctx: DoctorFixContext,
+  operation: Omit<DoctorFixOperation, "status" | "severity" | "safetyTier"> & {
+    status?: DoctorFixOperationStatus;
+    severity?: DoctorFixSeverity;
+    safetyTier?: DoctorFixSafetyTier;
+  }
+): void {
+  const requestedStatus = operation.status ?? "applied";
+  const status = ctx.dryRun && requestedStatus === "applied" ? "planned" : requestedStatus;
+  addDoctorFixOperation(ctx, {
+    severity: operation.severity ?? "info",
+    safetyTier: operation.safetyTier ?? ctx.fixLevel,
+    ...operation,
+    status,
+  });
+}
+
+function operationToAction(operation: DoctorFixOperation): string | null {
+  if (operation.status !== "applied" && operation.status !== "planned") return null;
+  return operation.reason ?? `${operation.id} ${operation.status}`;
+}
+
+function operationToSkipped(operation: DoctorFixOperation): string | null {
+  if (operation.status !== "skipped" && operation.status !== "blocked" && operation.status !== "failed") return null;
+  return operation.reason ?? `${operation.id} ${operation.status}`;
+}
+
+function createDoctorFixReport(
+  ctx: DoctorFixContext,
+  mcp?: McpDoctorFixReport,
+  globalSync?: KimiGlobalSyncReport
+): DoctorFixReport {
+  const actions = ctx.plan.operations
+    .map(operationToAction)
+    .filter((message): message is string => typeof message === "string");
+  const skipped = ctx.plan.operations
+    .map(operationToSkipped)
+    .filter((message): message is string => typeof message === "string");
+  return {
+    changed: ctx.plan.changed,
+    actions,
+    skipped,
+    mcp,
+    globalSync,
+    backups: ctx.plan.backups,
+    dryRun: ctx.dryRun,
+    fixPlan: ctx.plan,
+  };
+}
+
+function summarizeDoctorChecks(results: CheckResult[]): DoctorCheckSummary {
+  return {
+    warnings: results.filter((r) => r.status === "warn").length,
+    errors: results.filter((r) => r.status === "fail").length,
+  };
+}
+
+function buildDoctorPostFixCheck(beforeResults: CheckResult[], afterResults: CheckResult[], plan: DoctorFixPlan): DoctorPostFixCheck {
+  const before = summarizeDoctorChecks(beforeResults);
+  const after = summarizeDoctorChecks(afterResults);
+  const beforeTotal = before.warnings + before.errors;
+  const afterTotal = after.warnings + after.errors;
+  return {
+    before,
+    after,
+    fixed: Math.max(0, beforeTotal - afterTotal),
+    remainingWarnings: after.warnings,
+    remainingErrors: after.errors,
+    requiresManualAction: plan.manualActions.length > 0 || after.errors > 0,
+  };
+}
+
+function shouldVerifyDoctorFix(options: DoctorOptions): boolean {
+  return options.fix === true && options.dryRun !== true && options.verifyFix !== false;
+}
+
+function buildDoctorCategories(
+  root: string,
+  rootResolution: ProjectRootResolution,
+  resources: OmkResourceSettings
+): CheckCategory[] {
+  return [
+    { title: "Project Root", checks: async () => rootChecks(rootResolution) },
+    { title: "Runtime", checks: () => runtimeChecks(resources) },
+    { title: "Toolchain", checks: () => toolchainChecks(root) },
+    { title: "Kimi CLI", checks: () => kimiChecks(root, resources) },
+    { title: "Project", checks: () => projectChecks(root) },
+    { title: "OMK Scaffold", checks: () => omkChecks(root) },
+    { title: "Agent YAML", checks: () => agentYamlChecks(root) },
+    { title: "MCP & Skills", checks: () => mcpSkillsChecks(root, resources) },
+    { title: "Memory", checks: () => memoryChecks(root) },
+    { title: "Security", checks: () => securityChecks(root) },
+  ];
+}
+
+async function runDoctorChecks(
+  root: string,
+  rootResolution: ProjectRootResolution,
+  resources: OmkResourceSettings
+): Promise<DoctorCheckRun> {
+  const categories = buildDoctorCategories(root, rootResolution, resources);
+  const categoryResults = await Promise.all(
+    categories.map(async (cat) => {
+      const results = await cat.checks();
+      return { title: cat.title, results };
+    })
+  );
+  return {
+    categoryResults,
+    allResults: categoryResults.flatMap(({ results }) => results),
+  };
+}
 
 const SECRET_KEY_SUBSTRINGS = ["apikey", "token", "password", "secret", "authorization", "bearer", "key"];
 
@@ -158,6 +366,47 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function rootDiagnosticData(resolution: ProjectRootResolution): Record<string, unknown> {
+  return {
+    activeCwd: displayProjectRootPath(resolution.cwd, resolution.home),
+    detectedGitRoot: displayProjectRootPath(resolution.gitRoot, resolution.home),
+    effectiveProjectRoot: displayProjectRootPath(resolution.root, resolution.home),
+    source: resolution.source,
+    marker: resolution.marker ?? null,
+    homeIsGitRepo: resolution.homeIsGitRepo,
+    isHomeRoot: resolution.isHomeRoot,
+    defaultProjectRoot: displayProjectRootPath(resolution.configuredDefaultProjectRoot, resolution.home),
+    defaultProjectRootError: resolution.defaultProjectRootError ?? null,
+    warning: resolution.warning ?? null,
+    recommendation: resolution.recommendation ?? null,
+    fixCommand: resolution.isHomeRoot && resolution.homeIsGitRepo
+      ? "omk doctor --fix --set-default-project-root /path/to/project"
+      : null,
+  };
+}
+
+function rootChecks(resolution: ProjectRootResolution): CheckResult[] {
+  const data = rootDiagnosticData(resolution);
+  const result: CheckResult = {
+    name: "Project Root",
+    status: resolution.warning ? "warn" : "ok",
+    message: `${data.effectiveProjectRoot ?? resolution.root} (source: ${resolution.source})`,
+    metadata: data,
+  };
+  const checks = [result];
+  if (resolution.defaultProjectRootError) {
+    checks.push({
+      name: "Project Root Default",
+      status: "warn",
+      message: resolution.defaultProjectRootError,
+      metadata: {
+        source: process.env.OMK_DEFAULT_PROJECT_ROOT ? "OMK_DEFAULT_PROJECT_ROOT" : "user-config",
+      },
+    });
+  }
+  return checks;
+}
+
 async function readAgentToolDeclarations(root: string): Promise<AgentToolDeclarations | null> {
   const rootYamlPath = join(root, ".omk", "agents", "root.yaml");
   if (!(await pathExists(rootYamlPath))) return null;
@@ -214,33 +463,17 @@ async function readAgentToolDeclarations(root: string): Promise<AgentToolDeclara
 }
 
 export async function doctorCommand(options: DoctorOptions = {}): Promise<void> {
-  const root = getProjectRoot();
-  const fixes = options.fix ? await applyDoctorFixes(root, options) : undefined;
+  const rootResolution = getProjectRootDiagnostics();
+  const root = rootResolution.root;
   const resources = await getOmkResourceSettings();
-
-  // Categories run in parallel (omk-style)
-  const categories: CheckCategory[] = [
-    { title: "Runtime", checks: () => runtimeChecks(resources) },
-    { title: "Toolchain", checks: () => toolchainChecks(root) },
-    { title: "Kimi CLI", checks: () => kimiChecks(root, resources) },
-    { title: "Project", checks: () => projectChecks(root) },
-    { title: "OMK Scaffold", checks: () => omkChecks(root) },
-    { title: "Agent YAML", checks: () => agentYamlChecks(root) },
-    { title: "MCP & Skills", checks: () => mcpSkillsChecks(root, resources) },
-    { title: "Memory", checks: () => memoryChecks(root) },
-    { title: "Security", checks: () => securityChecks(root) },
-  ];
-
-  const categoryResults = await Promise.all(
-    categories.map(async (cat) => {
-      const results = await cat.checks();
-      return { title: cat.title, results };
-    })
-  );
-
-  const allResults: CheckResult[] = [];
-  for (const { results } of categoryResults) {
-    allResults.push(...results);
+  const preFixRun = shouldVerifyDoctorFix(options)
+    ? await runDoctorChecks(root, rootResolution, resources)
+    : undefined;
+  const fixes = options.fix ? await applyDoctorFixes(root, options, rootResolution) : undefined;
+  const postFixResources = options.fix ? await getOmkResourceSettings() : resources;
+  const { categoryResults, allResults } = await runDoctorChecks(root, rootResolution, postFixResources);
+  if (fixes?.fixPlan && preFixRun) {
+    fixes.fixPlan.postCheck = buildDoctorPostFixCheck(preFixRun.allResults, allResults, fixes.fixPlan);
   }
 
   if (options.json) {
@@ -260,6 +493,7 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<void> 
       .map((r) => ({ name: r.name, message: r.message }));
 
     const data = {
+      root: rootDiagnosticData(rootResolution),
       environment: {
         platform: process.platform,
         arch: process.arch,
@@ -384,92 +618,254 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<void> 
     console.log(status.ok(t("doctor.allPassed")));
   }
 
-  // ── Interactive update prompt for OMK Version ──
   const omkVersionResult = allResults.find((r) => r.name === "OMK Version");
-  if (omkVersionResult?.status === "warn" && process.stdin.isTTY && process.stdout.isTTY && !options.json) {
-    try {
-      const { select } = await import("@inquirer/prompts");
-      const answer = await select(
-        {
-          message: `A new version of oh-my-kimi is available. Update now?`,
-          choices: [
-            { name: "YES — run npm i -g @oh-my-kimi/cli", value: "yes" },
-            { name: "NO — skip this update", value: "no" },
-          ],
-        },
-        { signal: AbortSignal.timeout(30_000) }
-      );
-      if (answer === "yes") {
-        console.log(style.gray("Running update…"));
-        const updateResult = await runShell("npm", ["i", "-g", "@oh-my-kimi/cli"], { timeout: 120_000 });
-        if (updateResult.failed) {
-          console.log(status.error(`Update failed: ${updateResult.stderr.trim() || updateResult.stdout.trim()}`));
-          process.exit(1);
-        } else {
-          console.log(status.ok("Update completed successfully. Restart your terminal to use the new version."));
-        }
-      } else {
-        console.log(style.gray("Update skipped."));
-      }
-    } catch (err) {
-      if (err instanceof Error && err.name === "ExitPromptError") {
-        console.log(style.gray("Update prompt cancelled."));
-        process.exit(0);
-      }
-      // Non-TTY or timeout — silently skip
-    }
+  if (omkVersionResult?.status === "warn" && !options.json) {
+    const updatePrompt = await maybePromptForOmkUpdate();
+    if (updatePrompt.shouldExit) process.exit(updatePrompt.exitCode ?? 0);
   }
 }
 
-async function applyDoctorFixes(root: string, options: DoctorOptions): Promise<DoctorFixReport> {
-  const actions: string[] = [];
-  const skipped: string[] = [];
+async function applyDoctorFixes(root: string, options: DoctorOptions, rootResolution: ProjectRootResolution): Promise<DoctorFixReport> {
+  const dryRun = Boolean(options.dryRun);
+  const ctx: DoctorFixContext = {
+    dryRun,
+    fixLevel: normalizeDoctorFixLevel(options.fixLevel),
+    plan: createDoctorFixPlan(dryRun),
+  };
   const allowGlobalFixes = shouldRunDoctorGlobalFixes(options);
 
-  await ensureLocalScaffold(root, actions, skipped);
-  await repairHookExecutables(root, actions, skipped);
+  await applyDefaultProjectRootFix(options, rootResolution, ctx);
+  await repairRuntimePresetFiles(root, ctx);
+  await repairProjectConfigToml(root, ctx);
+  await repairLspConfig(root, ctx);
+  await bootstrapLocalGraphMemory(root, ctx);
+  await ensureLocalScaffold(root, ctx);
+  await repairHookExecutables(root, ctx);
+  await verifyWebBridgePackageEntries(ctx);
   if (allowGlobalFixes) {
-    await repairGitSafeDirectory(root, actions, skipped);
+    await repairGitSafeDirectory(root, ctx);
   } else {
-    await reportSkippedGitSafeDirectoryRepair(root, skipped);
+    await reportSkippedGitSafeDirectoryRepair(root, ctx);
   }
 
-  const mcp = await repairMcpDoctorIssues();
-  actions.push(...mcp.actions.map((action) => `mcp: ${action}`));
-  skipped.push(...mcp.skipped.map((item) => `mcp: ${item}`));
+  const mcp = await repairMcpDoctorIssues({ dryRun, global: allowGlobalFixes });
+  for (const [index, action] of mcp.actions.entries()) {
+    recordDoctorFix(ctx, {
+      id: `mcp-${index + 1}`,
+      category: "mcp",
+      safetyTier: allowGlobalFixes ? "global" : "safe",
+      before: "mcp doctor issue",
+      after: "mcp doctor repair",
+      reason: `mcp: ${action}`,
+      verifyCheck: "MCP Doctor",
+    });
+  }
+  for (const backupPath of mcp.backups) {
+    if (!ctx.plan.backups.includes(backupPath)) ctx.plan.backups.push(backupPath);
+  }
+  for (const [index, item] of mcp.skipped.entries()) {
+    recordDoctorFix(ctx, {
+      id: `mcp-skipped-${index + 1}`,
+      category: "mcp",
+      severity: "warn",
+      safetyTier: allowGlobalFixes ? "global" : "safe",
+      status: /blocked/i.test(item) ? "blocked" : "skipped",
+      reason: `mcp: ${item}`,
+      verifyCheck: "MCP Doctor",
+    });
+  }
 
-  const globalSync = allowGlobalFixes
+  const globalSync = allowGlobalFixes && !dryRun
     ? await syncAllKimiGlobals({
         manifest: [],
         timestamp: new Date().toISOString(),
         quiet: true,
       })
     : createSkippedGlobalSyncReport();
-  if (allowGlobalFixes) {
-    actions.push(...globalSync.actions.map((action) => `global sync: ${action}`));
+  if (allowGlobalFixes && dryRun) {
+    recordDoctorFix(ctx, {
+      id: "global-sync",
+      category: "global-sync",
+      safetyTier: "global",
+      reason: "global sync: would sync global Kimi config (dry-run)",
+      verifyCheck: "Global MCP",
+    });
+  } else if (allowGlobalFixes) {
+    for (const [index, action] of globalSync.actions.entries()) {
+      recordDoctorFix(ctx, {
+        id: `global-sync-${index + 1}`,
+        category: "global-sync",
+        safetyTier: "global",
+        reason: `global sync: ${action}`,
+        verifyCheck: "Global MCP",
+      });
+    }
     for (const step of globalSync.steps) {
       if (step.blocked) {
-        skipped.push(`global sync: ${step.name} blocked (set OMK_MCP_ALLOW_WRITE_CONFIG=1 to repair global Kimi config)`);
+        recordDoctorFix(ctx, {
+          id: `global-sync-blocked-${step.name}`,
+          category: "global-sync",
+          severity: "warn",
+          safetyTier: "global",
+          status: "blocked",
+          reason: `global sync: ${step.name} blocked (set OMK_MCP_ALLOW_WRITE_CONFIG=1 to repair global Kimi config)`,
+          verifyCheck: "Global MCP",
+        });
       }
       if (step.error) {
-        skipped.push(`global sync failed: ${step.name}: ${step.error}`);
+        recordDoctorFix(ctx, {
+          id: `global-sync-failed-${step.name}`,
+          category: "global-sync",
+          severity: "error",
+          safetyTier: "global",
+          status: "failed",
+          reason: `global sync failed: ${step.name}: ${step.error}`,
+          verifyCheck: "Global MCP",
+        });
       }
     }
-    for (const item of globalSync.skipped) {
-      if (!/global write blocked/i.test(item)) skipped.push(`global sync: ${item}`);
+    for (const [index, item] of globalSync.skipped.entries()) {
+      if (/global write blocked/i.test(item)) continue;
+      recordDoctorFix(ctx, {
+        id: `global-sync-skipped-${index + 1}`,
+        category: "global-sync",
+        severity: "warn",
+        safetyTier: "global",
+        status: "skipped",
+        reason: `global sync: ${item}`,
+        verifyCheck: "Global MCP",
+      });
     }
-    skipped.push(...globalSync.errors.map((item) => `global sync failed: ${item}`));
+    for (const [index, item] of globalSync.errors.entries()) {
+      recordDoctorFix(ctx, {
+        id: `global-sync-error-${index + 1}`,
+        category: "global-sync",
+        severity: "error",
+        safetyTier: "global",
+        status: "failed",
+        reason: `global sync failed: ${item}`,
+        verifyCheck: "Global MCP",
+      });
+    }
   } else {
-    skipped.push("global sync skipped (safe default; pass `omk doctor --fix --global` or set OMK_DOCTOR_FIX_GLOBAL=1 / OMK_MCP_ALLOW_WRITE_CONFIG=1 to sync global Kimi config)");
+    recordDoctorFix(ctx, {
+      id: "global-sync-skipped-safe-default",
+      category: "global-sync",
+      severity: "warn",
+      safetyTier: "global",
+      status: "skipped",
+      reason: "global sync skipped (safe default; pass `omk doctor --fix --global` or set OMK_DOCTOR_FIX_GLOBAL=1 / OMK_MCP_ALLOW_WRITE_CONFIG=1 to sync global Kimi config)",
+      verifyCheck: "Global MCP",
+    });
   }
 
-  return {
-    changed: actions.length > 0,
-    actions,
-    skipped,
-    mcp,
-    globalSync,
-  };
+  return createDoctorFixReport(ctx, mcp, globalSync);
+}
+
+function normalizeDoctorFixLevel(level: DoctorOptions["fixLevel"]): DoctorFixLevel {
+  return level === "recommended" || level === "aggressive" ? level : "safe";
+}
+
+async function applyDefaultProjectRootFix(
+  options: DoctorOptions,
+  resolution: ProjectRootResolution,
+  ctx: DoctorFixContext
+): Promise<void> {
+  if (!options.setDefaultProjectRoot) {
+    if (resolution.isHomeRoot && resolution.homeIsGitRepo) {
+      recordDoctorFix(ctx, {
+        id: "default-project-root-needed",
+        category: "project-root",
+        severity: "warn",
+        safetyTier: "recommended",
+        status: "skipped",
+        reason: "project root is HOME; pass `omk doctor --fix --set-default-project-root /path/to/project` to persist an explicit default",
+        verifyCheck: "Project Root",
+      });
+    }
+    return;
+  }
+
+  const targetRoot = resolve(options.setDefaultProjectRoot);
+  const info = await fsStat(targetRoot).catch(() => null);
+  if (!info?.isDirectory()) {
+    recordDoctorFix(ctx, {
+      id: "default-project-root-invalid",
+      category: "project-root",
+      severity: "warn",
+      safetyTier: "recommended",
+      status: "skipped",
+      reason: `default_project_root not set: ${targetRoot} is not a directory`,
+      verifyCheck: "Project Root Default",
+    });
+    return;
+  }
+
+  const home = getUserHome();
+  const configDir = join(home, ".omk");
+  const configPath = join(configDir, "config.toml");
+  const displayTarget = displayProjectRootPath(targetRoot, home) ?? targetRoot;
+  if (ctx.dryRun) {
+    recordDoctorFix(ctx, {
+      id: "set-default-project-root",
+      category: "project-root",
+      safetyTier: "recommended",
+      before: resolution.configuredDefaultProjectRoot ?? null,
+      after: displayTarget,
+      reason: `would set user default_project_root to ${displayTarget}`,
+      verifyCheck: "Project Root",
+    });
+    return;
+  }
+
+  await mkdir(configDir, { recursive: true });
+  const existing = await readTextFile(configPath, "");
+  let backupPath: string | undefined;
+  if (existing) {
+    backupPath = join(configDir, `config.toml.bak-${new Date().toISOString().replace(/[:.]/g, "-")}`);
+    await writeFile(backupPath, sanitizeConfigBackup(existing), { mode: 0o600 });
+    if (!ctx.plan.backups.includes(backupPath)) ctx.plan.backups.push(backupPath);
+  }
+  await writeFile(configPath, setDefaultProjectRootToml(existing, targetRoot), { mode: 0o600 });
+  recordDoctorFix(ctx, {
+    id: "set-default-project-root",
+    category: "project-root",
+    safetyTier: "recommended",
+    before: resolution.configuredDefaultProjectRoot ?? null,
+    after: displayTarget,
+    backupPath,
+    reason: `set user default_project_root to ${displayTarget}`,
+    verifyCheck: "Project Root",
+  });
+}
+
+function sanitizeConfigBackup(content: string): string {
+  return content.replace(
+    /^(\s*[A-Za-z0-9_.-]*(?:token|secret|password|apikey|api_key|authorization|bearer|credential)[A-Za-z0-9_.-]*\s*=\s*).+$/gim,
+    "$1\"***\""
+  );
+}
+
+function setDefaultProjectRootToml(content: string, root: string): string {
+  const line = `default_project_root = ${JSON.stringify(root)}`;
+  const lines = content.split(/\r?\n/);
+  let section = "";
+  let replaced = false;
+  const result = lines.map((original) => {
+    const trimmed = original.trim();
+    const sectionMatch = /^\[([^\]]+)]$/.exec(trimmed);
+    if (sectionMatch) {
+      section = sectionMatch[1].trim();
+      return original;
+    }
+    if (!section && /^default_project_root\s*=/.test(trimmed)) {
+      replaced = true;
+      return line;
+    }
+    return original;
+  });
+  if (!replaced) result.unshift(line);
+  return result.join("\n").replace(/\n*$/, "\n");
 }
 
 function shouldRunDoctorGlobalFixes(options: DoctorOptions): boolean {
@@ -499,7 +895,282 @@ function createSkippedGlobalSyncReport(): KimiGlobalSyncReport {
   };
 }
 
-async function ensureLocalScaffold(root: string, actions: string[], skipped: string[]): Promise<void> {
+function safeOperationId(prefix: string, value: string): string {
+  const suffix = value.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase();
+  return suffix ? `${prefix}-${suffix}` : prefix;
+}
+
+async function readJsonValue(filePath: string): Promise<{ exists: boolean; valid: boolean; value?: unknown; error?: string }> {
+  if (!(await pathExists(filePath))) return { exists: false, valid: false };
+  try {
+    return { exists: true, valid: true, value: JSON.parse(await readTextFile(filePath, "{}")) as unknown };
+  } catch (err: unknown) {
+    return {
+      exists: true,
+      valid: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+async function repairRuntimePresetFiles(root: string, ctx: DoctorFixContext): Promise<void> {
+  const runtimePresetPath = join(root, ".omk", "runtime-preset.json");
+  const runtimePresetsPath = join(root, ".omk", "runtime-presets.json");
+  const desiredPreset = OMK_PARALLEL_ORCHESTRATOR_PRESET;
+  const currentPreset = await readJsonValue(runtimePresetPath);
+  const presetNeedsRepair = !isRecord(currentPreset.value) || currentPreset.value.id !== desiredPreset.id;
+  if (presetNeedsRepair) {
+    if (!ctx.dryRun) {
+      await mkdir(dirname(runtimePresetPath), { recursive: true });
+      await writeFile(runtimePresetPath, `${JSON.stringify(desiredPreset, null, 2)}\n`, "utf-8");
+    }
+    recordDoctorFix(ctx, {
+      id: "runtime-preset-default",
+      category: "runtime",
+      before: currentPreset.exists ? currentPreset.value ?? "invalid JSON" : "missing",
+      after: desiredPreset.id,
+      reason: `${ctx.dryRun ? "would repair" : "repaired"} .omk/runtime-preset.json default preset to ${desiredPreset.id}`,
+      verifyCheck: "OMK Runtime",
+    });
+  }
+
+  const currentPresets = await readJsonValue(runtimePresetsPath);
+  let nextPresets: Record<string, unknown> = {
+    defaultPresetId: OMK_PARALLEL_ORCHESTRATOR_PRESET.id,
+    presets: OMK_RUNTIME_PRESETS,
+  };
+  if (isRecord(currentPresets.value)) {
+    const desiredIds = new Set<string>(OMK_RUNTIME_PRESETS.map((preset) => preset.id));
+    const extras = Array.isArray(currentPresets.value.presets)
+      ? currentPresets.value.presets.filter((preset) => isRecord(preset) && typeof preset.id === "string" && !desiredIds.has(preset.id))
+      : [];
+    nextPresets = {
+      ...currentPresets.value,
+      defaultPresetId: OMK_PARALLEL_ORCHESTRATOR_PRESET.id,
+      presets: [...OMK_RUNTIME_PRESETS, ...extras],
+    };
+  }
+  if (JSON.stringify(currentPresets.value) !== JSON.stringify(nextPresets)) {
+    if (!ctx.dryRun) {
+      await mkdir(dirname(runtimePresetsPath), { recursive: true });
+      await writeFile(runtimePresetsPath, `${JSON.stringify(nextPresets, null, 2)}\n`, "utf-8");
+    }
+    recordDoctorFix(ctx, {
+      id: "runtime-presets-default",
+      category: "runtime",
+      before: currentPresets.exists ? currentPresets.value ?? "invalid JSON" : "missing",
+      after: { defaultPresetId: OMK_PARALLEL_ORCHESTRATOR_PRESET.id },
+      reason: `${ctx.dryRun ? "would repair" : "repaired"} .omk/runtime-presets.json defaultPresetId to ${OMK_PARALLEL_ORCHESTRATOR_PRESET.id}`,
+      verifyCheck: "OMK Runtime",
+    });
+  }
+}
+
+const DEFAULT_SAFE_CONFIG_TOML = `# oh-my-kimi project settings
+[orchestration]
+execution_prompt = "ask"
+
+[runtime]
+mcp_scope = "project"
+skills_scope = "project"
+hooks_scope = "project"
+
+[memory]
+backend = "local_graph"
+scope = "project-session"
+strict = true
+mirror_files = true
+migrate_files = true
+
+[local_graph]
+path = ".omk/memory/graph-state.json"
+ontology = "omk-ontology-mindmap-v1"
+query = "graphql-lite"
+`;
+
+interface TomlStringRepairSpec {
+  section: string;
+  key: string;
+  value: string;
+  validValues?: readonly string[];
+  allowCustomNonEmpty?: boolean;
+}
+
+function parseTomlStringValue(line: string): string | null {
+  const match = /^[A-Za-z0-9_.-]+\s*=\s*(?:"([^"]*)"|'([^']*)'|([^#\s]+))/.exec(line.trim());
+  return match?.[1] ?? match?.[2] ?? match?.[3] ?? null;
+}
+
+function repairTomlStringKey(content: string, spec: TomlStringRepairSpec): { content: string; changed: boolean; before?: string | null } {
+  const lines = content.replace(/\s*$/, "\n").split(/\r?\n/);
+  let sectionStart = -1;
+  let sectionEnd = lines.length;
+  for (let index = 0; index < lines.length; index++) {
+    const sectionMatch = /^\s*\[([^\]]+)]\s*$/.exec(lines[index]);
+    if (!sectionMatch) continue;
+    if (sectionMatch[1] !== spec.section) continue;
+    sectionStart = index;
+    for (let next = index + 1; next < lines.length; next++) {
+      if (/^\s*\[[^\]]+]\s*$/.test(lines[next])) {
+        sectionEnd = next;
+        break;
+      }
+    }
+    break;
+  }
+  const desiredLine = `${spec.key} = ${JSON.stringify(spec.value)}`;
+  if (sectionStart === -1) {
+    if (lines.length > 0 && lines[lines.length - 1] !== "") lines.push("");
+    lines.push(`[${spec.section}]`, desiredLine);
+    return { content: lines.join("\n").replace(/\n*$/, "\n"), changed: true, before: null };
+  }
+  for (let index = sectionStart + 1; index < sectionEnd; index++) {
+    if (!new RegExp(`^\\s*${spec.key}\\s*=`).test(lines[index])) continue;
+    const before = parseTomlStringValue(lines[index]);
+    const valid = spec.allowCustomNonEmpty
+      ? typeof before === "string" && before.trim().length > 0
+      : spec.validValues?.includes(before ?? "") ?? before === spec.value;
+    if (valid) return { content, changed: false, before };
+    lines[index] = desiredLine;
+    return { content: lines.join("\n").replace(/\n*$/, "\n"), changed: true, before };
+  }
+  lines.splice(sectionStart + 1, 0, desiredLine);
+  return { content: lines.join("\n").replace(/\n*$/, "\n"), changed: true, before: null };
+}
+
+function repairProjectConfigTomlContent(content: string): { content: string; changes: Array<{ key: string; before?: string | null; after: string }> } {
+  if (content.trim().length === 0) {
+    return {
+      content: DEFAULT_SAFE_CONFIG_TOML,
+      changes: [
+        { key: "orchestration.execution_prompt", before: null, after: "ask" },
+        { key: "runtime.mcp_scope", before: null, after: "project" },
+        { key: "runtime.skills_scope", before: null, after: "project" },
+        { key: "runtime.hooks_scope", before: null, after: "project" },
+        { key: "memory.backend", before: null, after: "local_graph" },
+      ],
+    };
+  }
+  const specs: TomlStringRepairSpec[] = [
+    { section: "orchestration", key: "execution_prompt", value: "ask", validValues: ["ask", "auto", "parallel", "sequential"] },
+    { section: "runtime", key: "mcp_scope", value: "project", validValues: ["all", "project", "none"] },
+    { section: "runtime", key: "skills_scope", value: "project", validValues: ["all", "project", "none"] },
+    { section: "runtime", key: "hooks_scope", value: "project", validValues: ["all", "project", "none"] },
+    { section: "memory", key: "backend", value: "local_graph", validValues: ["local_graph", "kuzu"] },
+    { section: "local_graph", key: "path", value: ".omk/memory/graph-state.json", allowCustomNonEmpty: true },
+    { section: "local_graph", key: "ontology", value: "omk-ontology-mindmap-v1", validValues: ["omk-ontology-mindmap-v1"] },
+    { section: "local_graph", key: "query", value: "graphql-lite", validValues: ["graphql-lite"] },
+  ];
+  let next = content;
+  const changes: Array<{ key: string; before?: string | null; after: string }> = [];
+  for (const spec of specs) {
+    const repaired = repairTomlStringKey(next, spec);
+    next = repaired.content;
+    if (repaired.changed) {
+      changes.push({ key: `${spec.section}.${spec.key}`, before: repaired.before, after: spec.value });
+    }
+  }
+  return { content: next, changes };
+}
+
+async function repairProjectConfigToml(root: string, ctx: DoctorFixContext): Promise<void> {
+  const configPath = join(root, ".omk", "config.toml");
+  const existing = await readTextFile(configPath, "");
+  const repaired = repairProjectConfigTomlContent(existing);
+  if (repaired.changes.length === 0) return;
+  if (!ctx.dryRun) {
+    await mkdir(dirname(configPath), { recursive: true });
+    await writeFile(configPath, repaired.content, "utf-8");
+  }
+  recordDoctorFix(ctx, {
+    id: "project-config-safe-defaults",
+    category: "runtime",
+    before: repaired.changes.map((change) => ({ key: change.key, value: change.before ?? null })),
+    after: repaired.changes.map((change) => ({ key: change.key, value: change.after })),
+    reason: `${ctx.dryRun ? "would repair" : "repaired"} .omk/config.toml safe runtime/memory defaults`,
+    verifyCheck: "Dangerous Config",
+  });
+}
+
+async function repairLspConfig(root: string, ctx: DoctorFixContext): Promise<void> {
+  const lspConfigPath = join(root, ".omk", "lsp.json");
+  const current = await readJsonValue(lspConfigPath);
+  const parsed = isRecord(current.value) ? current.value : null;
+  const valid = parsed?.enabled === true && isRecord(parsed.servers) && isRecord(parsed.servers.typescript);
+  if (valid) return;
+  if (!ctx.dryRun) {
+    await mkdir(dirname(lspConfigPath), { recursive: true });
+    await writeFile(lspConfigPath, defaultLspConfigJson(), "utf-8");
+  }
+  recordDoctorFix(ctx, {
+    id: "lsp-config",
+    category: "scaffold",
+    before: current.exists ? current.value ?? "invalid JSON" : "missing",
+    after: "default TypeScript LSP config",
+    reason: `${ctx.dryRun ? "would restore" : "restored"} .omk/lsp.json default TypeScript LSP config`,
+    verifyCheck: "Built-in LSP",
+  });
+}
+
+async function bootstrapLocalGraphMemory(root: string, ctx: DoctorFixContext): Promise<void> {
+  const graphPath = join(root, ".omk", "memory", "graph-state.json");
+  const current = await readJsonValue(graphPath);
+  const parsed = isRecord(current.value) ? current.value : null;
+  const valid = parsed?.version === 1 && Array.isArray(parsed.nodes) && Array.isArray(parsed.edges);
+  if (valid) return;
+  if (!ctx.dryRun) {
+    const store = new MemoryStore(join(root, ".omk", "memory"), {
+      projectRoot: root,
+      sessionId: "doctor-fix",
+      source: "omk-doctor-fix",
+      env: {
+        ...process.env,
+        OMK_MEMORY_BACKEND: "local_graph",
+        OMK_MEMORY_FORCE: "0",
+        OMK_MEMORY_STRICT: "false",
+        OMK_MEMORY_MIRROR_FILES: "false",
+        OMK_LOCAL_GRAPH_PATH: graphPath,
+      },
+    });
+    await store.ensureGraphState();
+  }
+  recordDoctorFix(ctx, {
+    id: "memory-graph-state",
+    category: "memory",
+    before: current.exists ? current.value ?? "invalid JSON" : "missing",
+    after: ".omk/memory/graph-state.json local graph bootstrap",
+    reason: `${ctx.dryRun ? "would bootstrap" : "bootstrapped"} .omk/memory/graph-state.json local graph memory`,
+    verifyCheck: "Graph Memory",
+  });
+}
+
+async function verifyWebBridgePackageEntries(ctx: DoctorFixContext): Promise<void> {
+  const requiredPackageFiles = [
+    "package.json",
+    join("templates", "web-bridge", "chrome-extension", "manifest.json"),
+    join("templates", "web-bridge", "chrome-extension", "background.js"),
+    join("templates", "web-bridge", "chrome-extension", "content-script.js"),
+    join("templates", "web-bridge", "chrome-extension", "popup.html"),
+    join("templates", "web-bridge", "chrome-extension", "popup.js"),
+  ];
+  const missing: string[] = [];
+  for (const relativePath of requiredPackageFiles) {
+    if (!(await pathExists(join(packageRoot, relativePath)))) missing.push(relativePath);
+  }
+  if (missing.length === 0) return;
+  recordDoctorFix(ctx, {
+    id: "web-bridge-package-templates",
+    category: "web-bridge",
+    severity: "warn",
+    status: "blocked",
+    before: { missing },
+    after: "package templates present",
+    reason: `web bridge package templates missing; reinstall or rebuild OMK package: ${missing.join(", ")}`,
+    verifyCheck: "web-bridge doctor",
+  });
+}
+
+async function ensureLocalScaffold(root: string, ctx: DoctorFixContext): Promise<void> {
   const dirs = [
     ".omk/agents/roles",
     ".omk/hooks",
@@ -511,24 +1182,33 @@ async function ensureLocalScaffold(root: string, actions: string[], skipped: str
   for (const dir of dirs) {
     const fullPath = join(root, dir);
     if (await pathExists(fullPath)) continue;
-    await mkdir(fullPath, { recursive: true });
-    actions.push(`created ${dir}`);
+    if (!ctx.dryRun) {
+      await mkdir(fullPath, { recursive: true });
+    }
+    recordDoctorFix(ctx, {
+      id: safeOperationId("create-dir", dir),
+      category: "scaffold",
+      before: "missing",
+      after: dir,
+      reason: `${ctx.dryRun ? "would create" : "created"} ${dir}`,
+      verifyCheck: ".omk dir",
+    });
   }
 
-  await copyMissingTemplateFile(root, "AGENTS.md", actions, skipped);
-  await copyMissingTemplateFile(root, join(".kimi", "AGENTS.md"), actions, skipped);
-  await copyMissingTemplateFile(root, join(".omk", "agents", "okabe.yaml"), actions, skipped);
-  await copyMissingTemplateFile(root, join(".omk", "agents", "root.yaml"), actions, skipped);
-  await copyMissingTemplateFile(root, join(".omk", "prompts", "root.md"), actions, skipped);
-  await copyMissingTemplateTree(root, join("skills", "kimi"), join(".kimi", "skills"), actions, skipped);
-  await copyMissingTemplateTree(root, join("skills", "agents"), join(".agents", "skills"), actions, skipped);
-  await copyMissingTemplateTree(root, join(".omk", "agents", "roles"), join(".omk", "agents", "roles"), actions, skipped);
-  await ensureAgentCapabilityFlags(root, actions, skipped);
-  await ensureAgentPromptArgStrings(root, actions, skipped);
-  await ensureRootSubagentAliases(root, actions, skipped);
+  await copyMissingTemplateFile(root, "AGENTS.md", ctx);
+  await copyMissingTemplateFile(root, join(".kimi", "AGENTS.md"), ctx);
+  await copyMissingTemplateFile(root, join(".omk", "agents", "okabe.yaml"), ctx);
+  await copyMissingTemplateFile(root, join(".omk", "agents", "root.yaml"), ctx);
+  await copyMissingTemplateFile(root, join(".omk", "prompts", "root.md"), ctx);
+  await copyMissingTemplateTree(root, join("skills", "kimi"), join(".kimi", "skills"), ctx);
+  await copyMissingTemplateTree(root, join("skills", "agents"), join(".agents", "skills"), ctx);
+  await copyMissingTemplateTree(root, join(".omk", "agents", "roles"), join(".omk", "agents", "roles"), ctx);
+  await ensureAgentCapabilityFlags(root, ctx);
+  await ensureAgentPromptArgStrings(root, ctx);
+  await ensureRootSubagentAliases(root, ctx);
 }
 
-async function ensureRootSubagentAliases(root: string, actions: string[], skipped: string[]): Promise<void> {
+async function ensureRootSubagentAliases(root: string, ctx: DoctorFixContext): Promise<void> {
   const rootYamlPath = join(root, ".omk", "agents", "root.yaml");
   const templateYamlPath = join(packageRoot, "templates", ".omk", "agents", "root.yaml");
   if (!(await pathExists(rootYamlPath)) || !(await pathExists(templateYamlPath))) return;
@@ -550,63 +1230,116 @@ async function ensureRootSubagentAliases(root: string, actions: string[], skippe
       added += 1;
     }
     if (added === 0) return;
-    await writeFile(rootYamlPath, YAML.stringify(current), "utf-8");
-    actions.push(`merged ${added} missing root subagent alias(es) into .omk/agents/root.yaml`);
+    if (!ctx.dryRun) {
+      await writeFile(rootYamlPath, YAML.stringify(current), "utf-8");
+    }
+    recordDoctorFix(ctx, {
+      id: "root-subagent-aliases",
+      category: "scaffold",
+      before: "missing aliases",
+      after: `${added} aliases`,
+      reason: `${ctx.dryRun ? "would merge" : "merged"} ${added} missing root subagent alias(es) into .omk/agents/root.yaml`,
+      verifyCheck: "root.yaml",
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    skipped.push(`root subagent alias merge skipped: ${message}`);
+    recordDoctorFix(ctx, {
+      id: "root-subagent-aliases-skipped",
+      category: "scaffold",
+      severity: "warn",
+      status: "skipped",
+      reason: `root subagent alias merge skipped: ${message}`,
+      verifyCheck: "root.yaml",
+    });
   }
 }
 
 async function copyMissingTemplateFile(
   root: string,
   relativePath: string,
-  actions: string[],
-  skipped: string[]
+  ctx: DoctorFixContext
 ): Promise<void> {
   const src = join(packageRoot, "templates", relativePath);
   const dest = join(root, relativePath);
-  if (await pathExists(dest)) return;
+  if (await pathExists(dest)) {
+    const current = await readTextFile(dest, "");
+    if (current.trim().length > 0) return;
+  }
   if (!(await pathExists(src))) {
-    skipped.push(`template missing: templates/${relativePath}`);
+    recordDoctorFix(ctx, {
+      id: safeOperationId("template-missing", relativePath),
+      category: "scaffold",
+      severity: "warn",
+      status: "skipped",
+      reason: `template missing: templates/${relativePath}`,
+      verifyCheck: "OMK Scaffold",
+    });
     return;
   }
-  await mkdir(dirname(dest), { recursive: true });
-  await copyFile(src, dest);
-  actions.push(`restored ${relativePath} from template`);
+  if (!ctx.dryRun) {
+    await mkdir(dirname(dest), { recursive: true });
+    await copyFile(src, dest);
+  }
+  recordDoctorFix(ctx, {
+    id: safeOperationId("restore-template", relativePath),
+    category: "scaffold",
+    before: "missing or empty",
+    after: relativePath,
+    reason: `${ctx.dryRun ? "would restore" : "restored"} ${relativePath} from template`,
+    verifyCheck: "OMK Scaffold",
+  });
 }
 
 async function copyMissingTemplateTree(
   root: string,
   templateRelativePath: string,
   destRelativePath: string,
-  actions: string[],
-  skipped: string[]
+  ctx: DoctorFixContext
 ): Promise<void> {
   const src = join(packageRoot, "templates", templateRelativePath);
   const dest = join(root, destRelativePath);
   if (!(await pathExists(src))) {
-    skipped.push(`template dir missing: templates/${templateRelativePath}`);
+    recordDoctorFix(ctx, {
+      id: safeOperationId("template-dir-missing", templateRelativePath),
+      category: "scaffold",
+      severity: "warn",
+      status: "skipped",
+      reason: `template dir missing: templates/${templateRelativePath}`,
+      verifyCheck: "OMK Scaffold",
+    });
     return;
   }
-  const copied = await copyTreeMissingOnly(src, dest);
-  if (copied > 0) actions.push(`restored ${copied} missing file(s) under ${destRelativePath}`);
+  const copied = await copyTreeMissingOnly(src, dest, ctx.dryRun);
+  if (copied > 0) {
+    recordDoctorFix(ctx, {
+      id: safeOperationId("restore-template-tree", destRelativePath),
+      category: "scaffold",
+      before: "missing files",
+      after: `${copied} file(s)`,
+      reason: `${ctx.dryRun ? "would restore" : "restored"} ${copied} missing file(s) under ${destRelativePath}`,
+      verifyCheck: "OMK Scaffold",
+    });
+  }
 }
 
-async function copyTreeMissingOnly(src: string, dest: string): Promise<number> {
+async function copyTreeMissingOnly(src: string, dest: string, dryRun: boolean): Promise<number> {
   const entries = await readdir(src, { withFileTypes: true });
   let copied = 0;
-  await mkdir(dest, { recursive: true });
+  if (!dryRun) {
+    await mkdir(dest, { recursive: true });
+  }
   for (const entry of entries) {
     const srcPath = join(src, entry.name);
     const destPath = join(dest, entry.name);
     if (entry.isDirectory()) {
-      copied += await copyTreeMissingOnly(srcPath, destPath);
+      copied += await copyTreeMissingOnly(srcPath, destPath, dryRun);
       continue;
     }
     if (!entry.isFile() || await pathExists(destPath)) continue;
-    await mkdir(dirname(destPath), { recursive: true });
-    await copyFile(srcPath, destPath);
+    if (!dryRun) {
+      await mkdir(dirname(destPath), { recursive: true });
+      await copyFile(srcPath, destPath);
+    }
     copied++;
   }
   return copied;
@@ -614,7 +1347,7 @@ async function copyTreeMissingOnly(src: string, dest: string): Promise<number> {
 
 const AGENT_CAPABILITY_FLAGS = ["OMK_MCP_ENABLED", "OMK_SKILLS_ENABLED", "OMK_HOOKS_ENABLED"] as const;
 
-async function ensureAgentCapabilityFlags(root: string, actions: string[], skipped: string[]): Promise<void> {
+async function ensureAgentCapabilityFlags(root: string, ctx: DoctorFixContext): Promise<void> {
   const agentFiles = [
     join(root, ".omk", "agents", "root.yaml"),
     join(root, ".omk", "agents", "okabe.yaml"),
@@ -630,7 +1363,14 @@ async function ensureAgentCapabilityFlags(root: string, actions: string[], skipp
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      skipped.push(`agent role scan skipped: ${message}`);
+      recordDoctorFix(ctx, {
+        id: "agent-role-scan-skipped",
+        category: "scaffold",
+        severity: "warn",
+        status: "skipped",
+        reason: `agent role scan skipped: ${message}`,
+        verifyCheck: "Agent YAML Schema",
+      });
     }
   }
 
@@ -639,21 +1379,52 @@ async function ensureAgentCapabilityFlags(root: string, actions: string[], skipp
     const content = await readTextFile(filePath, "");
     const next = withAgentCapabilityFlags(content);
     if (next === content) continue;
-    await writeFile(filePath, next, "utf-8");
-    actions.push(`enabled MCP/skills/hooks flags in ${filePath}`);
+    if (!ctx.dryRun) {
+      await writeFile(filePath, next, "utf-8");
+    }
+    recordDoctorFix(ctx, {
+      id: safeOperationId("agent-capability-flags", filePath),
+      category: "scaffold",
+      before: "missing MCP/skills/hooks flags",
+      after: "OMK_MCP_ENABLED/OMK_SKILLS_ENABLED/OMK_HOOKS_ENABLED",
+      reason: `${ctx.dryRun ? "would enable" : "enabled"} MCP/skills/hooks flags in ${filePath}`,
+      verifyCheck: "Agent YAML Schema",
+    });
   }
 }
 
-async function ensureAgentPromptArgStrings(root: string, actions: string[], skipped: string[]): Promise<void> {
+async function ensureAgentPromptArgStrings(root: string, ctx: DoctorFixContext): Promise<void> {
+  if (ctx.dryRun) return;
   const report = await repairProjectAgentPromptArgStrings(root);
   if (report.convertedArgs > 0) {
-    actions.push(`converted ${report.convertedArgs} agent system_prompt_args value(s) to strings`);
+    recordDoctorFix(ctx, {
+      id: "agent-prompt-args",
+      category: "scaffold",
+      before: "non-string system_prompt_args",
+      after: `${report.convertedArgs} converted`,
+      reason: `converted ${report.convertedArgs} agent system_prompt_args value(s) to strings`,
+      verifyCheck: "Agent YAML Schema",
+    });
   }
   for (const filePath of report.changedFiles) {
-    actions.push(`normalized agent prompt args in ${filePath}`);
+    recordDoctorFix(ctx, {
+      id: safeOperationId("agent-prompt-args", filePath),
+      category: "scaffold",
+      before: "non-string system_prompt_args",
+      after: "string system_prompt_args",
+      reason: `normalized agent prompt args in ${filePath}`,
+      verifyCheck: "Agent YAML Schema",
+    });
   }
   for (const item of report.skipped) {
-    skipped.push(`agent prompt arg repair skipped: ${item}`);
+    recordDoctorFix(ctx, {
+      id: safeOperationId("agent-prompt-args-skipped", item),
+      category: "scaffold",
+      severity: "warn",
+      status: "skipped",
+      reason: `agent prompt arg repair skipped: ${item}`,
+      verifyCheck: "Agent YAML Schema",
+    });
   }
 }
 
@@ -677,7 +1448,7 @@ function withAgentCapabilityFlags(content: string): string {
   return content;
 }
 
-async function repairHookExecutables(root: string, actions: string[], skipped: string[]): Promise<void> {
+async function repairHookExecutables(root: string, ctx: DoctorFixContext): Promise<void> {
   const hooksDir = join(root, ".omk", "hooks");
   if (!(await pathExists(hooksDir))) return;
   try {
@@ -687,30 +1458,82 @@ async function repairHookExecutables(root: string, actions: string[], skipped: s
       const hookPath = join(hooksDir, entry.name);
       const stats = await fsStat(hookPath);
       if ((stats.mode & 0o111) !== 0) continue;
-      await chmod(hookPath, stats.mode | 0o755);
-      actions.push(`made hook executable: ${hookPath}`);
+      if (!ctx.dryRun) {
+        await chmod(hookPath, stats.mode | 0o755);
+      }
+      recordDoctorFix(ctx, {
+        id: safeOperationId("hook-executable", hookPath),
+        category: "hooks",
+        before: stats.mode,
+        after: stats.mode | 0o755,
+        reason: `${ctx.dryRun ? "would make" : "made"} hook executable: ${hookPath}`,
+        verifyCheck: "Hooks Exec",
+      });
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    skipped.push(`hook executable repair skipped: ${message}`);
+    recordDoctorFix(ctx, {
+      id: "hook-executable-skipped",
+      category: "hooks",
+      severity: "warn",
+      status: "skipped",
+      reason: `hook executable repair skipped: ${message}`,
+      verifyCheck: "Hooks Exec",
+    });
   }
 }
 
-async function repairGitSafeDirectory(root: string, actions: string[], skipped: string[]): Promise<void> {
+async function repairGitSafeDirectory(root: string, ctx: DoctorFixContext): Promise<void> {
   const repoCheck = await runShell("git", ["rev-parse", "--git-dir"], { cwd: root, timeout: 5000 });
   if (!repoCheck.failed || !repoCheck.stderr.includes("safe.directory")) return;
-  const result = await runShell("git", ["config", "--global", "--add", "safe.directory", root], { timeout: 5000 });
-  if (result.failed) {
-    skipped.push(`git safe.directory repair failed: ${result.stderr.trim() || result.stdout.trim()}`);
+  if (ctx.dryRun) {
+    recordDoctorFix(ctx, {
+      id: "git-safe-directory",
+      category: "git",
+      safetyTier: "global",
+      before: "safe.directory missing",
+      after: root,
+      reason: `would add git safe.directory for ${root}`,
+      verifyCheck: "Git Safe Directory",
+    });
     return;
   }
-  actions.push(`added git safe.directory for ${root}`);
+  const result = await runShell("git", ["config", "--global", "--add", "safe.directory", root], { timeout: 5000 });
+  if (result.failed) {
+    recordDoctorFix(ctx, {
+      id: "git-safe-directory-failed",
+      category: "git",
+      severity: "error",
+      safetyTier: "global",
+      status: "failed",
+      reason: `git safe.directory repair failed: ${result.stderr.trim() || result.stdout.trim()}`,
+      verifyCheck: "Git Safe Directory",
+    });
+    return;
+  }
+  recordDoctorFix(ctx, {
+    id: "git-safe-directory",
+    category: "git",
+    safetyTier: "global",
+    before: "safe.directory missing",
+    after: root,
+    reason: `added git safe.directory for ${root}`,
+    verifyCheck: "Git Safe Directory",
+  });
 }
 
-async function reportSkippedGitSafeDirectoryRepair(root: string, skipped: string[]): Promise<void> {
+async function reportSkippedGitSafeDirectoryRepair(root: string, ctx: DoctorFixContext): Promise<void> {
   const repoCheck = await runShell("git", ["rev-parse", "--git-dir"], { cwd: root, timeout: 5000 });
   if (!repoCheck.failed || !repoCheck.stderr.includes("safe.directory")) return;
-  skipped.push("git safe.directory repair skipped (safe default; pass `omk doctor --fix --global` or set OMK_DOCTOR_FIX_GLOBAL=1)");
+  recordDoctorFix(ctx, {
+    id: "git-safe-directory-skipped",
+    category: "git",
+    severity: "warn",
+    safetyTier: "global",
+    status: "skipped",
+    reason: "git safe.directory repair skipped (safe default; pass `omk doctor --fix --global` or set OMK_DOCTOR_FIX_GLOBAL=1)",
+    verifyCheck: "Git Safe Directory",
+  });
 }
 
 // ── Runtime ───────────────────────────────────────────────────
@@ -1075,19 +1898,33 @@ async function kimiChecks(root: string, resources: OmkResourceSettings): Promise
 async function projectChecks(root: string): Promise<CheckResult[]> {
   const results: CheckResult[] = [];
 
-  const [agentsMdExists, kimiAgentsMdExists] = await Promise.all([
-    pathExists(join(root, "AGENTS.md")),
-    pathExists(join(root, ".kimi", "AGENTS.md")),
+  const agentsMdPath = join(root, "AGENTS.md");
+  const kimiAgentsMdPath = join(root, ".kimi", "AGENTS.md");
+  const [agentsMdExists, kimiAgentsMdExists, agentsMdContent, kimiAgentsMdContent] = await Promise.all([
+    pathExists(agentsMdPath),
+    pathExists(kimiAgentsMdPath),
+    readTextFile(agentsMdPath, ""),
+    readTextFile(kimiAgentsMdPath, ""),
   ]);
+  const agentsMdNonEmpty = agentsMdContent.trim().length > 0;
+  const kimiAgentsMdNonEmpty = kimiAgentsMdContent.trim().length > 0;
   results.push({
     name: "AGENTS.md",
-    status: agentsMdExists ? "ok" : "warn",
-    message: agentsMdExists ? t("doctor.agentsMdExists") : t("doctor.agentsMdMissing"),
+    status: agentsMdNonEmpty ? "ok" : agentsMdExists ? "fail" : "warn",
+    message: agentsMdNonEmpty
+      ? t("doctor.agentsMdExists")
+      : agentsMdExists
+        ? "AGENTS.md is empty"
+        : t("doctor.agentsMdMissing"),
   });
   results.push({
     name: ".kimi/AGENTS.md",
-    status: kimiAgentsMdExists ? "ok" : "warn",
-    message: kimiAgentsMdExists ? t("doctor.kimiAgentsMdExists") : t("doctor.kimiAgentsMdMissing"),
+    status: kimiAgentsMdNonEmpty ? "ok" : kimiAgentsMdExists ? "fail" : "warn",
+    message: kimiAgentsMdNonEmpty
+      ? t("doctor.kimiAgentsMdExists")
+      : kimiAgentsMdExists
+        ? ".kimi/AGENTS.md is empty"
+        : t("doctor.kimiAgentsMdMissing"),
   });
 
   return results;

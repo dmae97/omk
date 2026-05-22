@@ -18,7 +18,7 @@
  *   - size budgets (tarball, unpacked, entryCount, single file, readmeasset, dist)
  *   - markdown local link integrity (README.md + docs\/\/*\/ links point to packed files)
  */
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import {
   readFileSync,
   appendFileSync,
@@ -33,13 +33,24 @@ import { fileURLToPath } from "node:url";
 // Configuration
 // ---------------------------------------------------------------------------
 
+const COMMAND_TIMEOUT_MS = Math.max(
+  5_000,
+  Number.parseInt(process.env.OMK_PACKAGE_AUDIT_TIMEOUT_MS || "120000", 10) || 120_000
+);
+const LINUX_TMPDIR = process.platform !== "win32" ? "/tmp" : undefined;
+
 export const REQUIRED_ENTRIES = [
   "package.json",
   "README.md",
   "LICENSE",
+  "AGENTS.md",
   "dist/cli.js",
   "templates/AGENTS.md",
   "templates/.kimi/AGENTS.md",
+  "templates/web-bridge/chrome-extension/manifest.json",
+  "templates/web-bridge/chrome-extension/background.js",
+  "templates/web-bridge/chrome-extension/content-script.js",
+  "templates/web-bridge/chrome-extension/README.md",
   "templates/.omk/agents/okabe.yaml",
   "templates/.omk/agents/root.yaml",
   "templates/.omk/agents/roles/aggregator.yaml",
@@ -53,11 +64,18 @@ export const REQUIRED_ENTRIES = [
   "templates/.omk/agents/roles/qa.yaml",
   "templates/.omk/agents/roles/researcher.yaml",
   "templates/.omk/agents/roles/reviewer.yaml",
+  "templates/.omk/agents/roles/router.yaml",
   "templates/.omk/agents/roles/security.yaml",
   "templates/.omk/agents/roles/tester.yaml",
   "templates/.omk/agents/roles/vision-debugger.yaml",
   "templates/.omk/prompts/root.md",
   "readmeasset/kimicat.png",
+];
+
+export const NON_EMPTY_TEXT_ENTRIES = [
+  "AGENTS.md",
+  "templates/AGENTS.md",
+  "templates/.kimi/AGENTS.md",
 ];
 
 export const FORBIDDEN_PATTERNS = [
@@ -284,6 +302,19 @@ export function validateRequiredEntries(files, required) {
     if (!pathSet.has(req)) {
       errors.push(`Required entry missing: ${req}`);
     }
+  }
+  return { errors };
+}
+
+export function validateNonEmptyTextEntries(files, required) {
+  const errors = [];
+  const fileByPath = new Map(files.map((f) => [toPosix(f.path || ""), f]));
+  for (const entry of required) {
+    const file = fileByPath.get(entry);
+    if (!file) continue;
+    const packedSize = typeof file.size === "number" ? file.size : 0;
+    if (packedSize > 0) continue;
+    errors.push(`Required text entry is empty: ${entry}`);
   }
   return { errors };
 }
@@ -638,6 +669,7 @@ export function readTarballMetadata(tarballPath) {
   const pkgJson = execFileSync("tar", ["-xzf", tarballPath, "-O", "package/package.json"], {
     encoding: "utf8",
     maxBuffer: 10 * 1024 * 1024,
+    timeout: COMMAND_TIMEOUT_MS,
   });
   const pkg = JSON.parse(pkgJson);
 
@@ -645,6 +677,7 @@ export function readTarballMetadata(tarballPath) {
   const listOutput = execFileSync("tar", ["-tvzf", tarballPath], {
     encoding: "utf8",
     maxBuffer: 10 * 1024 * 1024,
+    timeout: COMMAND_TIMEOUT_MS,
   });
   const files = listOutput
     .split("\n")
@@ -655,8 +688,11 @@ export function readTarballMetadata(tarballPath) {
       if (pathIndex === -1) return [];
       const pathPart = line.slice(pathIndex + 1).replace(/ -> .+$/, "");
       if (!pathPart.startsWith("package/") || pathPart.endsWith("/")) return [];
+      const columns = line.slice(0, pathIndex).trim().split(/\s+/);
       const permissions = line.split(/\s+/, 1)[0] || "";
-      return [{ path: pathPart.slice("package/".length), size: 0, mode: modeFromTarPermissions(permissions) }];
+      const parsedSize = Number.parseInt(columns[2] || "0", 10);
+      const size = Number.isFinite(parsedSize) ? parsedSize : 0;
+      return [{ path: pathPart.slice("package/".length), size, mode: modeFromTarPermissions(permissions) }];
     });
 
   return [{
@@ -680,9 +716,20 @@ export function main(tarballPath) {
     if (tarballPath) {
       packResult = readTarballMetadata(resolveTarballArg(tarballPath));
     } else {
-      const stdout = execSync("npm pack --dry-run --ignore-scripts --json", {
+      const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+      const smokeTmpDir = process.env.OMK_SMOKE_TMPDIR || LINUX_TMPDIR;
+      const env = {
+        ...process.env,
+        ...(smokeTmpDir ? { TMPDIR: smokeTmpDir, TMP: smokeTmpDir, TEMP: smokeTmpDir } : {}),
+        ...(process.env.npm_config_cache || smokeTmpDir
+          ? { npm_config_cache: process.env.npm_config_cache || `${smokeTmpDir}/omk-npm-cache` }
+          : {}),
+      };
+      const stdout = execFileSync(npmCmd, ["pack", "--dry-run", "--ignore-scripts", "--json"], {
         encoding: "utf8",
         maxBuffer: 10 * 1024 * 1024,
+        timeout: COMMAND_TIMEOUT_MS,
+        env,
       });
       const jsonStart = stdout.indexOf("[");
       if (jsonStart === -1) throw new Error("No JSON array found in npm pack output");
@@ -723,6 +770,7 @@ export function main(tarballPath) {
 
   failed = runValidator("METADATA", validateMetadata(localPkg, pkg), "METADATA") || failed;
   failed = runValidator("REQUIRED", validateRequiredEntries(files, REQUIRED_ENTRIES), "REQUIRED") || failed;
+  failed = runValidator("NON_EMPTY_TEXT", validateNonEmptyTextEntries(files, NON_EMPTY_TEXT_ENTRIES), "NON_EMPTY_TEXT") || failed;
   failed = runValidator("FORBIDDEN", validateForbiddenEntries(files, FORBIDDEN_PATTERNS), "FORBIDDEN") || failed;
   failed = runValidator("FILES_ALLOWLIST", validateFilesAllowlist(localPkg.files || [], pathSet), "FILES_ALLOWLIST") || failed;
   failed = runValidator("TEMPLATE_AGENT_REFS", validateTemplateAgentReferences(pathSet), "TEMPLATE_AGENT_REFS") || failed;

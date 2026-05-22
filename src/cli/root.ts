@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { style, status as themeStatus, kimicatCliHero } from "../util/theme.js";
+import { style, kimicatCliHero } from "../util/theme.js";
 import { t, initI18n } from "../util/i18n.js";
 import { buildCustomHelp } from "../util/help-text.js";
 
@@ -58,15 +58,9 @@ export function configureRootProgram(program: Command, OMK_VERSION: string, OMK_
 
       const updatePromise = (async () => {
         try {
-          const { checkUpdates } = await import("../util/update-check.js");
+          const { checkUpdates, formatStartupUpdateBanner } = await import("../util/update-check.js");
           const updateStatus = await checkUpdates();
-          let banner = "";
-          if (updateStatus.omk.outdated) {
-            banner += `\n  ${style.orange("!")} omk ${updateStatus.omk.current} → ${updateStatus.omk.latest}  |  ${style.gray(updateStatus.omk.installCmd)}`;
-          }
-          if (updateStatus.kimi.outdated) {
-            banner += `\n  ${style.orange("!")} kimi ${updateStatus.kimi.installed} → ${updateStatus.kimi.latest}  |  ${style.gray("omk update kimi")}`;
-          }
+          const banner = formatStartupUpdateBanner(updateStatus);
           return { banner, status: updateStatus };
         } catch {
           return { banner: "", status: null };
@@ -81,7 +75,10 @@ export function configureRootProgram(program: Command, OMK_VERSION: string, OMK_
       if (!hasTty) {
         const c = (k: string) => t(k).replace(/^.*? — /, "");
         console.log(style.gray(`
-    💡 omk chat  — ${c("cli.suggestionChat")}`));
+    💡 omk parallel "<prompt>" — Run the parallel subagent orchestrator`));
+        console.log(style.gray(`  💡 omk run <flow> "<goal>" — Run a named workflow`));
+        console.log(style.gray(`  💡 omk chat --mode agent --execution ask — Interactive agent orchestrator`));
+        console.log(style.gray(`  💡 omk chat --mode chat — ${c("cli.suggestionChat")}`));
         console.log(style.gray(`  💡 omk hud   — ${c("cli.suggestionHud")}`));
         console.log(style.gray(`  💡 omk menu  — Show interactive menu`));
         console.log(style.gray(`  💡 omk --help — ${c("cli.suggestionHelp")}`));
@@ -90,37 +87,9 @@ export function configureRootProgram(program: Command, OMK_VERSION: string, OMK_
 
       // Interactive update prompt when omk is outdated
       if (status && status.omk.outdated) {
-        try {
-          const { select } = await import("@inquirer/prompts");
-          const answer = await select(
-            {
-              message: `A new version of oh-my-kimi is available (${status.omk.current} → ${status.omk.latest}). Update now?`,
-              choices: [
-                { name: `YES — run ${status.omk.installCmd}`, value: "yes" },
-                { name: "NO — skip this update", value: "no" },
-              ],
-            },
-            { signal: AbortSignal.timeout(30_000) }
-          );
-          if (answer === "yes") {
-            console.log(style.gray("Running update…"));
-            const { runShell } = await import("../util/shell.js");
-            const updateResult = await runShell("npm", ["i", "-g", "@oh-my-kimi/cli"], { timeout: 120_000 });
-            if (updateResult.failed) {
-              console.log(style.red(`✖ Update failed: ${updateResult.stderr.trim() || updateResult.stdout.trim()}`));
-              process.exit(1);
-            } else {
-              console.log(themeStatus.success("Update completed successfully. Restart your terminal to use the new version."));
-              process.exit(0);
-            }
-          }
-        } catch (err) {
-          if (err instanceof Error && err.name === "ExitPromptError") {
-            console.log(style.gray("Update prompt cancelled."));
-            process.exit(0);
-          }
-          // Non-TTY or timeout — silently continue to chat
-        }
+        const { maybePromptForOmkUpdate } = await import("../util/update-check.js");
+        const result = await maybePromptForOmkUpdate({ status, isTTY: hasTty, source: "root" });
+        if (result.shouldExit) process.exit(result.exitCode ?? 0);
       }
 
       // ── Mode selector: Tab to cycle, Enter to confirm ──
@@ -141,11 +110,28 @@ export function configureRootProgram(program: Command, OMK_VERSION: string, OMK_
         if (result.status && result.status !== 0) {
           process.exitCode = result.status;
         }
+      } else if (launchCmd === "parallel") {
+        const { input } = await import("@inquirer/prompts");
+        const prompt = await input({
+          message: "What should the parallel agent team do?",
+        });
+        if (!prompt.trim()) {
+          console.log(style.gray("No prompt entered. Use `omk parallel \"<prompt>\"`, `omk run`, or `omk menu`."));
+          return;
+        }
+        const parallelArgs = [process.argv[1]!, "parallel", prompt.trim()];
+        if (globalOpts.runId) parallelArgs.push("--run-id", globalOpts.runId);
+        if (globalOpts.workers) parallelArgs.push("--workers", globalOpts.workers);
+        const result = spawnSync(process.execPath, parallelArgs, { stdio: "inherit" });
+        if (result.status && result.status !== 0) {
+          process.exitCode = result.status;
+        }
       } else if (launchCmd === "chat") {
         const chatArgs = [process.argv[1]!, "chat", "--layout", "auto", "--brand", "kimicat"];
         if (globalOpts.runId) chatArgs.push("--run-id", globalOpts.runId);
         if (globalOpts.workers) chatArgs.push("--workers", globalOpts.workers);
         chatArgs.push("--mode", selectedMode);
+        if (selectedMode !== "chat") chatArgs.push("--execution", "ask");
         const result = spawnSync(process.execPath, chatArgs, { stdio: "inherit" });
         if (result.status && result.status !== 0) {
           process.exitCode = result.status;

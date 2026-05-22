@@ -187,7 +187,7 @@ export interface MCPServerNode extends OntologyNodeBase {
 
 /** Provider node for Kimi-first multi-provider orchestration. */
 export interface ProviderNode extends OntologyNodeBase {
-  providerId: "kimi" | "deepseek";
+  providerId: string;
   role: "primary" | "opportunistic";
   description: string;
 }

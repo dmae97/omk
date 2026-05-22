@@ -17,7 +17,7 @@ function commandNames(command) {
 }
 
 function optionFlags(command) {
-  return command.options.flatMap((option) => [option.short, option.long].filter(Boolean));
+  return command.options.map((option) => option.flags);
 }
 
 function findCommand(command, name) {
@@ -46,6 +46,7 @@ test("sliced CLI registry preserves ordered top-level commands", () => {
     "history",
     "init",
     "doctor",
+    "web-bridge",
     "index",
     "index-show",
     "skill",
@@ -70,6 +71,9 @@ test("sliced CLI registry preserves ordered top-level commands", () => {
     "provider",
     "deepseek",
     "deepseekset",
+    "codex",
+    "openai",
+    "image",
     "graph",
     "hud",
     "merge",
@@ -96,10 +100,13 @@ test("sliced CLI registry preserves ordered nested command groups", () => {
 
   assert.deepEqual(commandNames(findCommand(program, "skill")), ["pack", "catalog", "install", "sync"]);
   const provider = findCommand(program, "provider");
-  assert.deepEqual(commandNames(provider), ["doctor", "deepseek"]);
+  assert.deepEqual(commandNames(provider), ["list", "doctor", "oauth", "auth", "profiles", "set", "enable", "disable", "deepseek"]);
   assert.deepEqual(commandNames(findCommand(provider, "deepseek")), ["enable", "disable", "set"]);
   const deepseek = findCommand(program, "deepseek");
   assert.deepEqual(commandNames(deepseek), ["api", "enable", "disable", "doctor"]);
+  assert.deepEqual(commandNames(findCommand(program, "codex")), ["auth"]);
+  assert.deepEqual(commandNames(findCommand(program, "openai")), ["setup"]);
+  assert.deepEqual(commandNames(findCommand(program, "image")), ["generate", "edit"]);
   assert.deepEqual(commandNames(findCommand(program, "design")), ["init", "list", "apply", "search", "open-design", "lint", "diff", "export"]);
   assert.deepEqual(commandNames(findCommand(program, "goal")), ["create", "list", "show", "plan", "run", "verify", "close", "block", "continue"]);
   assert.deepEqual(commandNames(findCommand(program, "servarr")), [
@@ -117,13 +124,16 @@ test("sliced CLI registry preserves ordered nested command groups", () => {
     "doctor",
     "test",
     "prewarm",
+    "check",
     "serve",
     "remove",
     "add",
     "install",
+    "import-codex",
     "sync-global",
     "migrate",
   ]);
+  assert.deepEqual(commandNames(findCommand(program, "web-bridge")), ["doctor", "status", "install-host", "native-host"]);
   assert.deepEqual(commandNames(findCommand(program, "dag")), ["from-spec", "validate", "show", "replay"]);
   assert.deepEqual(commandNames(findCommand(program, "screenshot")), ["paste", "dir", "list", "clean"]);
 });
@@ -131,8 +141,15 @@ test("sliced CLI registry preserves ordered nested command groups", () => {
 test("sliced CLI registry exposes doctor fix options", () => {
   const program = createOmkProgram();
 
-  assert.ok(optionFlags(findCommand(program, "doctor")).includes("--fix"));
-  assert.ok(optionFlags(findCommand(findCommand(program, "mcp"), "doctor")).includes("--fix"));
+  const doctorFlags = optionFlags(findCommand(program, "doctor"));
+  assert.ok(doctorFlags.includes("--fix"));
+  assert.ok(doctorFlags.includes("--fix-level <level>"));
+  assert.ok(doctorFlags.includes("--verify-fix"));
+  assert.ok(doctorFlags.includes("--no-verify-fix"));
+  const mcpDoctorFlags = optionFlags(findCommand(findCommand(program, "mcp"), "doctor"));
+  assert.ok(mcpDoctorFlags.includes("--fix"));
+  assert.ok(mcpDoctorFlags.includes("--dry-run"));
+  assert.ok(mcpDoctorFlags.includes("--global"));
 });
 
 test("sliced CLI registry preserves public aliases", () => {
@@ -142,6 +159,7 @@ test("sliced CLI registry preserves public aliases", () => {
 
   assert.deepEqual(findCommand(program, "open-design").aliases(), ["opendesign"]);
   assert.deepEqual(findCommand(design, "open-design").aliases(), ["od"]);
+  assert.deepEqual(findCommand(findCommand(program, "provider"), "oauth").aliases(), ["login"]);
   assert.deepEqual(findCommand(deepseek, "api").aliases(), ["set"]);
   assert.deepEqual(findCommand(deepseek, "doctor").aliases(), ["status"]);
 });

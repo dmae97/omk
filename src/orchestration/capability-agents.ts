@@ -1,4 +1,6 @@
 import type { DagNodeDefinition, DagNodeRouting } from "./dag.js";
+import type { RunState } from "../contracts/orchestration.js";
+import type { EnsembleDecisionCandidateVote } from "./ensemble-decision.js";
 import { selectTaskRouting } from "./routing.js";
 
 export interface CapabilityAgentBuildInput {
@@ -65,6 +67,7 @@ function buildCapabilityLanes(goal: string, routing: DagNodeRouting): Capability
   const skills = routing.skills ?? [];
   const mcpServers = routing.mcpServers ?? [];
   const tools = routing.tools ?? [];
+  const scopedTools = tools.filter((tool) => tool !== "SearchWeb" && tool !== "FetchURL");
   const hooks = routing.hooks ?? [];
 
   if (skills.length > 0) {
@@ -81,21 +84,27 @@ function buildCapabilityLanes(goal: string, routing: DagNodeRouting): Capability
         autoSpawned: true,
         spawnReason: "active skill inventory matched the orchestration goal",
         routeSource: "skill",
+        assignedCapabilities: {
+          skills,
+          mcpServers: [],
+          tools: [],
+          hooks: [],
+        },
         requiresMcp: false,
         requiresToolCalling: false,
         readOnly: true,
         evidenceRequired: false,
         contextBudget: "tiny",
         skills,
-        mcpServers,
-        tools,
-        hooks,
+        mcpServers: [],
+        tools: [],
+        hooks: [],
         rationale: `skills=${skills.join(",")}`,
       },
     });
   }
 
-  if (mcpServers.length > 0 || tools.length > 0) {
+  if (mcpServers.length > 0 || scopedTools.length > 0) {
     lanes.push({
       id: "capability-mcp-agent",
       name: "Use active MCP/tools for action digest",
@@ -109,16 +118,22 @@ function buildCapabilityLanes(goal: string, routing: DagNodeRouting): Capability
         autoSpawned: true,
         spawnReason: "active MCP/tool inventory matched the orchestration goal",
         routeSource: "mcp",
+        assignedCapabilities: {
+          skills: [],
+          mcpServers,
+          tools: scopedTools,
+          hooks: [],
+        },
         requiresMcp: mcpServers.length > 0,
-        requiresToolCalling: tools.length > 0,
+        requiresToolCalling: scopedTools.length > 0,
         readOnly: true,
         evidenceRequired: false,
         contextBudget: "tiny",
-        skills,
+        skills: [],
         mcpServers,
-        tools,
-        hooks,
-        rationale: `mcp=${mcpServers.join(",")}; tools=${tools.join(",")}`,
+        tools: scopedTools,
+        hooks: [],
+        rationale: `mcp=${mcpServers.join(",")}; tools=${scopedTools.join(",")}`,
       },
     });
   }
@@ -137,14 +152,20 @@ function buildCapabilityLanes(goal: string, routing: DagNodeRouting): Capability
         autoSpawned: true,
         spawnReason: "active hook inventory matched the orchestration goal",
         routeSource: "hook",
+        assignedCapabilities: {
+          skills: [],
+          mcpServers: [],
+          tools: [],
+          hooks,
+        },
         requiresMcp: false,
         requiresToolCalling: false,
         readOnly: true,
         evidenceRequired: false,
         contextBudget: "tiny",
-        skills,
-        mcpServers,
-        tools,
+        skills: [],
+        mcpServers: [],
+        tools: [],
         hooks,
         rationale: `hooks=${hooks.join(",")}`,
       },
@@ -152,4 +173,50 @@ function buildCapabilityLanes(goal: string, routing: DagNodeRouting): Capability
   }
 
   return lanes;
+}
+
+export function buildCapabilityVotes(
+  capabilityNodes: RunState["nodes"],
+  runState: RunState
+): EnsembleDecisionCandidateVote[] {
+  const votes: EnsembleDecisionCandidateVote[] = [];
+  const pendingNodes = runState.nodes.filter((n) => n.status === "pending" || n.status === "running");
+
+  for (const node of capabilityNodes) {
+    if (node.status === "failed") {
+      votes.push({
+        id: node.id,
+        action: "replan",
+        weight: 0.7,
+        reason: `Capability lane ${node.id} failed`,
+      });
+      continue;
+    }
+    if (node.status === "done") {
+      votes.push({
+        id: node.id,
+        action: "continue",
+        weight: 0.5,
+        reason: `Capability lane ${node.id} is ready`,
+      });
+      continue;
+    }
+    if (pendingNodes.length > 0) {
+      const hasRouting = node.routing && (
+        (node.routing.skills && node.routing.skills.length > 0) ||
+        (node.routing.mcpServers && node.routing.mcpServers.length > 0) ||
+        (node.routing.hooks && node.routing.hooks.length > 0)
+      );
+      votes.push({
+        id: node.id,
+        action: hasRouting ? "continue" : "replan",
+        weight: 0.6,
+        reason: hasRouting
+          ? `Capability lane ${node.id} has scoped routing for pending work`
+          : `Capability lane ${node.id} lacks routing hints for pending work`,
+      });
+    }
+  }
+
+  return votes;
 }

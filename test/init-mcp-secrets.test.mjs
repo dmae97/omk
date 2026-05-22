@@ -241,6 +241,7 @@ test("init does not generate a project PNG logo and reports all core scaffold gr
     const expectedFiles = [
       ".omk/agents/root.yaml",
       ".omk/agents/roles/coder.yaml",
+      ".omk/agents/roles/router.yaml",
       ".omk/prompts/root.md",
       ".omk/config.toml",
       ".omk/kimi.config.toml",
@@ -264,10 +265,10 @@ test("init does not generate a project PNG logo and reports all core scaffold gr
     }
 
     const runtimePreset = JSON.parse(await readFile(join(projectRoot, ".omk", "runtime-preset.json"), "utf-8"));
-    assert.equal(runtimePreset.id, "omk-core-verified");
-    assert.deepEqual(runtimePreset.mcpServers, ["omk-project"]);
+    assert.equal(runtimePreset.id, "omk-parallel-orchestrator");
+    assert.ok(runtimePreset.mcpServers.includes("omk-project"));
     const runtimePresets = JSON.parse(await readFile(join(projectRoot, ".omk", "runtime-presets.json"), "utf-8"));
-    assert.equal(runtimePresets.defaultPresetId, "omk-core-verified");
+    assert.equal(runtimePresets.defaultPresetId, "omk-parallel-orchestrator");
     assert.deepEqual(runtimePresets.presets.map((preset) => preset.id), [
       "omk-core-verified",
       "omk-parallel-orchestrator",
@@ -422,6 +423,7 @@ test("init scaffolds Kimi subagent names that match generated role aliases", asy
     assert.match(rootAgentYaml, /\n    explore:\n      path: \.\/roles\/explorer\.yaml/);
     assert.match(rootAgentYaml, /\n    planner:\n      path: \.\/roles\/planner\.yaml/);
     assert.match(rootAgentYaml, /\n    plan:\n      path: \.\/roles\/planner\.yaml/);
+    assert.match(rootAgentYaml, /\n    router:\n      path: \.\/roles\/router\.yaml/);
     assert.match(rootAgentYaml, /OMK_ROLE: "root-coordinator"/);
     assert.match(rootAgentYaml, /OMK_MCP_ENABLED: "true"/);
     assert.match(rootAgentYaml, /OMK_SKILLS_ENABLED: "true"/);
@@ -445,6 +447,7 @@ test("init scaffolds Kimi subagent names that match generated role aliases", asy
       "interviewer",
       "ontology",
       "vision-debugger",
+      "router",
     ];
     const generatedRoleNames = [
       "explorer",
@@ -452,8 +455,8 @@ test("init scaffolds Kimi subagent names that match generated role aliases", asy
       ...rootRoleNames,
     ];
 
-    assert.equal(rootRoleNames.length, 12);
-    assert.equal(generatedRoleNames.length, 14);
+    assert.equal(rootRoleNames.length, 13);
+    assert.equal(generatedRoleNames.length, 15);
 
     for (const role of rootRoleNames) {
       assert.match(
@@ -482,6 +485,7 @@ test("init scaffolds Kimi subagent names that match generated role aliases", asy
     const initSource = await readFile(join(process.cwd(), "src", "commands", "init.ts"), "utf-8");
     const ontologyFallback = initSource.match(/  ontology: `version: 1\n[\s\S]*?\n`,\n  "vision-debugger":/)?.[0] ?? "";
     const securityFallback = initSource.match(/  security: `version: 1\n[\s\S]*?\n`,\n  qa:/)?.[0] ?? "";
+    assert.match(initSource, /\n  router: `version: 1\n[\s\S]*?OMK_ROLE: "router"[\s\S]*?`,\n  explorer:/);
     assert.match(ontologyFallback, /exclude_tools:[\s\S]*kimi_cli\.tools\.shell:Shell/);
     assert.doesNotMatch(securityFallback, /kimi_cli\.tools\.shell:Shell/);
   } finally {

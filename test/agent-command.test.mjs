@@ -18,6 +18,7 @@ const GENERATED_ROLES = [
   "qa",
   "researcher",
   "reviewer",
+  "router",
   "security",
   "tester",
   "vision-debugger",

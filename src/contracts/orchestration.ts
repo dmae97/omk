@@ -58,6 +58,7 @@ export interface RunOptions {
   nodeTimeoutMs?: number;
   timeoutPreset?: string;
   heartbeatIntervalMs?: number;
+  runTimeoutMs?: number;
 }
 
 export type TaskType =
@@ -75,6 +76,19 @@ export type TaskType =
   | "general";
 
 export type NextAction = "continue" | "replan" | "block" | "handoff" | "close";
+
+export type ExecutionPromptPolicy = "ask" | "auto" | "parallel" | "sequential";
+export type ExecutionStrategy = "parallel" | "sequential" | "plan-only" | "prompt";
+export type ExecutionSelectionSource = "cli" | "config" | "default" | "prompt" | "auto";
+
+export interface ExecutionSelectionDecision {
+  policy: ExecutionPromptPolicy;
+  source: ExecutionSelectionSource;
+  strategy: ExecutionStrategy;
+  reason: string;
+  isTTY: boolean;
+  isNonTrivial: boolean;
+}
 
 export interface UserIntent {
   taskType: TaskType;

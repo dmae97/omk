@@ -258,6 +258,21 @@ describe("session and todo-sync utilities", () => {
     assert.ok(!titles.includes("Bootstrap"));
   });
 
+  it("loadTodos treats an empty todos.json as canonical no TODOs", async () => {
+    const runId = "test-empty-todos-canonical";
+    const dir = join(projectRoot, ".omk", "runs", runId);
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "todos.json"), JSON.stringify([]));
+    await writeFile(join(dir, "state.json"), JSON.stringify({
+      nodes: [
+        { id: "node-1", name: "Should stay in AGENTS", status: "running" },
+      ],
+    }));
+
+    const todos = await loadTodos(runId);
+    assert.deepStrictEqual(todos, []);
+  });
+
   it("deriveTodosFromState returns null when state.json is missing", async () => {
     const result = await deriveTodosFromState("test-missing-state-99999");
     assert.strictEqual(result, null);

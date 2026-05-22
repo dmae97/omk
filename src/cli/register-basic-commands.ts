@@ -209,9 +209,55 @@ export function registerBasicCommands(program: Command): void {
     .option("--soft", "Soft mode: do not fail on missing tools")
     .option("--fix", "Apply safe local repairs before reporting")
     .option("--global", "With --fix, also attempt explicit global Kimi/git repairs")
+    .option("--dry-run", "Preview doctor fixes without writing")
+    .option("--fix-level <level>", "Doctor fix safety level: safe | recommended | aggressive", "safe")
+    .option("--verify-fix", "Run doctor checks again after applying fixes", true)
+    .option("--no-verify-fix", "Skip post-fix doctor verification")
+    .option("--set-default-project-root <path>", "With --fix, set user default_project_root for HOME shell launches")
     .action(async (options) => {
       const { doctorCommand } = await import("../commands/doctor.js");
       await doctorCommand(options);
+    });
+
+  const webBridge = program.command("web-bridge").description("Manage the local OMK Chrome Web Bridge");
+  webBridge
+    .command("doctor")
+    .description("Check Chrome extension/native-host/MCP readiness")
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const { webBridgeDoctorCommand } = await import("../commands/web-bridge.js");
+      await webBridgeDoctorCommand({ json: Boolean(options.json) });
+    });
+  webBridge
+    .command("status")
+    .description("Show Web Bridge status for harness/cockpit visibility")
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const { webBridgeStatusCommand } = await import("../commands/web-bridge.js");
+      await webBridgeStatusCommand({ json: Boolean(options.json) });
+    });
+  webBridge
+    .command("install-host")
+    .description("Print or write local Chrome native messaging host setup")
+    .option("--json", "Output JSON")
+    .option("--extension-id <id>", "Chrome extension ID to allow in the native-host manifest")
+    .option("--browser <chrome|chromium|brave>", "Native host browser target", "chrome")
+    .option("--write", "Write the local wrapper and native-host manifest")
+    .action(async (options) => {
+      const { webBridgeInstallHostCommand } = await import("../commands/web-bridge.js");
+      await webBridgeInstallHostCommand({
+        json: Boolean(options.json),
+        extensionId: options.extensionId,
+        browser: options.browser,
+        write: Boolean(options.write),
+      });
+    });
+  webBridge
+    .command("native-host")
+    .description("Run the OMK Web Bridge Chrome native messaging host over stdio")
+    .action(async () => {
+      const { webBridgeNativeHostCommand } = await import("../commands/web-bridge.js");
+      await webBridgeNativeHostCommand();
     });
 
   program
@@ -285,6 +331,9 @@ export function registerBasicCommands(program: Command): void {
     .option("--agent-file <path>", t("cmd.chatAgentOption"))
     .option("--workers <n>", t("cmd.chatWorkersOption"), "auto")
     .option("--mcp-scope <all|project|none>", "MCP scope for this chat session (all | project | none)")
+    .option("--execution <ask|auto|parallel|sequential>", "Execution selection policy (ask | auto | parallel | sequential)")
+    .option("--provider <provider>", "provider policy (auto | kimi | deepseek | codex | qwen)", "auto")
+    .option("--model <model>", "provider model or provider/model override")
     .option("--max-steps-per-turn <n>", t("cmd.chatMaxStepsOption"))
     .option("--layout <auto|tmux|inline|plain>", t("cmd.chatLayoutOption"), "auto")
     .option("--brand <kimicat|minimal|plain>", t("cmd.chatBrandOption"), "kimicat")
@@ -292,8 +341,8 @@ export function registerBasicCommands(program: Command): void {
     .option("--cockpit-refresh <ms>", "Cockpit refresh interval in milliseconds", "2000")
     .option("--cockpit-redraw <diff|full|append>", "Cockpit redraw mode", "diff")
     .option("--cockpit-history <off|static|watch>", "Cockpit history pane mode", "static")
-    .option("--cockpit-side-width <percent>", "Cockpit side pane width percentage", "40")
-    .option("--cockpit-height <rows>", "Cockpit fixed height in rows", "18")
+    .option("--cockpit-side-width <percent>", "Cockpit side pane width percentage (default: auto, about 45-50%)")
+    .option("--cockpit-height <rows>", "Cockpit fixed height in rows (default: auto)")
     .option("--smoke", "Run chat startup preflight and runtime MCP merge checks without launching Kimi")
     .option("--json", "With --smoke, output machine-readable JSON")
     .action(async (options) => {
@@ -317,13 +366,16 @@ export function registerBasicCommands(program: Command): void {
     .description(t("cmd.designOpenDesignDesc"))
     .option("--dir <path>", "Open Design checkout directory (default: .omk/open-design)")
     .option("--branch <branch>", "Open Design git branch or tag", "main")
+    .option("--ref <ref>", "Open Design git ref/branch/tag/SHA (or OMK_OPEN_DESIGN_REF)")
     .option("--daemon-port <port>", "Open Design daemon localhost port", "7457")
     .option("--web-port <port>", "Open Design web localhost port", "5175")
+    .option("--doctor", "Check Open Design bridge readiness without cloning, installing, or starting")
     .option("--foreground", "Run tools-dev in the foreground")
     .option("--no-install", "Skip pnpm install")
     .option("--update", "Run git pull --ff-only when the checkout already exists")
     .option("--open", "Open the localhost URL in the default browser")
     .option("--print-only", "Print the launch plan without cloning, installing, or starting")
+    .option("--json", "With --doctor, output machine-readable JSON")
     .action(async (options) => {
       const { designOpenDesignCommand } = await import("../commands/design.js");
       await designOpenDesignCommand(options);
@@ -332,14 +384,25 @@ export function registerBasicCommands(program: Command): void {
   program
     .command("open-design-agent")
     .description("Open Design local CLI bridge for OMK")
+    .option("--artifact-dir <path>", "Directory where generated Open Design artifacts must be written")
     .option("--cwd <path>", "Workspace directory passed by Open Design")
+    .option("--diagnose", "Run bounded bridge diagnostics without reading stdin or launching Kimi")
+    .option("--image <path>", "Image/screenshot path passed by Open Design; repeatable", (value: string, previous: string[]) => {
+      previous.push(value);
+      return previous;
+    }, [])
+    .option("--json", "Output diagnose/bridge status as JSON")
     .option("--model <model>", "Model override from Open Design")
+    .option("--run-id <id>", "Stable Open Design bridge run id for artifacts")
     .option("--smoke", "Return the Open Design smoke-test response without launching Kimi")
     .option("--stdio", "Read the Open Design prompt from stdin")
+    .option("--stdin-idle-ms <ms>", "Maximum idle time while reading Open Design stdin", "3000")
+    .option("--stdin-max-bytes <bytes>", "Maximum Open Design prompt size", "524288")
+    .option("--stdin-timeout-ms <ms>", "Maximum total time while reading Open Design stdin", "30000")
     .option("--timeout-ms <ms>", "Maximum Kimi print-mode runtime", "1200000")
-    .action(async (options: { cwd?: string; model?: string; smoke?: boolean; stdio?: boolean; timeoutMs?: string }) => {
+    .action(async (options: { artifactDir?: string; cwd?: string; diagnose?: boolean; image?: string[]; json?: boolean; model?: string; runId?: string; smoke?: boolean; stdio?: boolean; stdinIdleMs?: string; stdinMaxBytes?: string; stdinTimeoutMs?: string; timeoutMs?: string }) => {
       const { openDesignAgentCommand } = await import("../commands/open-design-agent.js");
-      await openDesignAgentCommand(options);
+      await openDesignAgentCommand({ ...options, runId: options.runId ?? program.opts().runId });
       process.exit(process.exitCode ?? 0);
     });
 
@@ -351,6 +414,8 @@ export function registerBasicCommands(program: Command): void {
     .option("--refresh <ms>", t("cmd.cockpitRefreshOption"), "1500")
     .option("--redraw <diff|full|append>", "Redraw mode", "diff")
     .option("--height <rows>", "Cockpit fixed height in rows", "18")
+    .option("--section <agents|todos|mcp|all>", "Cockpit section to render", "all")
+    .option("--events <on|off>", "Use events.jsonl telemetry when available", "on")
     .option("--no-clear", "Do not clear screen between refreshes")
     .option("--pause", "Start paused")
     .action(async (options) => {
@@ -361,6 +426,9 @@ export function registerBasicCommands(program: Command): void {
         runId: globalOpts.runId ?? options.runId,
         refreshMs: options.refresh ? Number.parseInt(options.refresh, 10) : undefined,
         height: options.height ? Number.parseInt(options.height, 10) : undefined,
+        redraw: options.redraw,
+        section: options.section,
+        events: options.events,
       });
     });
 

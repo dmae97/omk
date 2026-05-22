@@ -479,13 +479,14 @@ export function dagNodeRoutingEnv(node: DagNode, dag?: import("./dag.js").Dag): 
   const mcpHints = new Set<string>(routing.mcpServers ?? []);
   const toolHints = new Set<string>(routing.tools ?? []);
   const hookHints = new Set<string>(routing.hooks ?? []);
+  const parentMcpHints = new Set<string>();
 
   if (dag) {
     for (const parentId of node.dependsOn) {
       const parent = dag.nodes.find((n) => n.id === parentId);
       if (!parent?.routing) continue;
       for (const s of parent.routing.skills ?? []) skillHints.add(s);
-      for (const m of parent.routing.mcpServers ?? []) mcpHints.add(m);
+      for (const m of parent.routing.mcpServers ?? []) parentMcpHints.add(m);
       for (const t of parent.routing.tools ?? []) toolHints.add(t);
       for (const h of parent.routing.hooks ?? []) hookHints.add(h);
     }
@@ -494,6 +495,7 @@ export function dagNodeRoutingEnv(node: DagNode, dag?: import("./dag.js").Dag): 
   return {
     OMK_SKILL_HINTS: Array.from(skillHints).join(","),
     OMK_MCP_HINTS: Array.from(mcpHints).join(","),
+    OMK_PARENT_MCP_HINTS: Array.from(parentMcpHints).join(","),
     OMK_TOOL_HINTS: Array.from(toolHints).join(","),
     OMK_HOOK_HINTS: Array.from(hookHints).join(","),
     OMK_ROUTE_SOURCE: routing.routeSource ?? "",
@@ -545,9 +547,9 @@ function scoreRoute(
 export function discoverRoutingInventory(projectRoot = getRoutingProjectRoot()): RoutingInventory {
   const root = resolve(projectRoot);
   const config = readFlatConfig(root);
-  const skillsScope = normalizeScope(process.env.OMK_SKILLS_SCOPE ?? config["runtime.skills_scope"], "project");
-  const mcpScope = normalizeScope(process.env.OMK_MCP_SCOPE ?? config["runtime.mcp_scope"], "project");
-  const hooksScope = normalizeScope(process.env.OMK_HOOKS_SCOPE ?? config["runtime.hooks_scope"], "project");
+  const skillsScope = normalizeScope(config["runtime.skills_scope"] ?? process.env.OMK_SKILLS_SCOPE, "project");
+  const mcpScope = normalizeScope(config["runtime.mcp_scope"] ?? process.env.OMK_MCP_SCOPE, "project");
+  const hooksScope = normalizeScope(config["runtime.hooks_scope"] ?? process.env.OMK_HOOKS_SCOPE, "project");
   const key = [root, skillsScope, mcpScope, hooksScope].join("|");
   if (inventoryCache?.key === key) return inventoryCache.value;
 

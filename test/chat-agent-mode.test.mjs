@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  buildChatAgentRuntimeMcpAllowlist,
   buildChatAgentHarnessManifest,
   buildChatAgentModeContract,
   buildParallelAlgorithmInjection,
@@ -36,6 +37,8 @@ test("chat agent mode contract captures mode and active runtime resources", () =
   assert.match(contract, /Active hooks \(1\): count=1; digest=[a-f0-9]{12}; full=chat-agent-harness\.json/);
   assert.match(contract, /Harness manifest: \.\/chat-agent-harness\.json/);
   assert.match(contract, /Treat every non-trivial user prompt as an orchestration request/);
+  assert.match(contract, /Hard gate: in non-chat modes, every non-trivial user prompt MUST ask parallel agents vs one-by-one/);
+  assert.match(contract, /root MUST spawn bounded Agent-tool lanes in parallel: explorer, planner, coder, reviewer, qa/);
   assert.match(contract, /IntentFrame and ActionAtoms/);
   assert.match(contract, /delegate bounded subagents/);
   assert.match(contract, /Injected parallel DAG algorithm/);
@@ -67,7 +70,7 @@ test("parallel algorithm injection mirrors the parallel DAG routing contract", (
   assert.match(injection.text, /Progressive intent algorithm/);
   assert.match(injection.text, /Strict action DAG/);
   assert.match(injection.text, /Intent schema to infer before delegation: taskType, complexity, estimatedWorkers/);
-  assert.match(injection.text, /Capability-agent routing: when workers>=2/);
+  assert.match(injection.text, /Capability-agent routing: when active inventory exists/);
   assert.match(injection.text, /spawn read-only Flash quick-decomposition and Pro critique lanes/);
   assert.match(injection.text, /review-merge depends on every model, capability, and worker lane/);
   assert.match(injection.text, /read `chat-agent-harness\.json` for the full MCP\/skills\/hooks inventory/);
@@ -96,20 +99,165 @@ test("chat agent harness manifest captures full inventory and safe worker limits
   assert.equal(manifest.schemaVersion, 1);
   assert.equal(manifest.resources.workerBudget, 4);
   assert.equal(manifest.resources.workerCap, 4);
+  assert.equal(manifest.resources.providerPolicy, "auto");
+  assert.equal(manifest.resources.providerModel, "auto");
   assert.deepEqual(manifest.resources.active.mcp, ["omk-project"]);
   assert.equal(manifest.resources.active.skills.length, 32);
   assert.equal(manifest.capabilityPolicy.useMcp, true);
   assert.equal(manifest.capabilityPolicy.useSkills, true);
   assert.equal(manifest.capabilityPolicy.useHooks, true);
+  assert.deepEqual(manifest.execution.allowed, ["ask", "auto", "parallel", "sequential"]);
+  assert.equal(manifest.execution.policy, "ask");
+  assert.equal(manifest.hardGateContract.requiresPromptBeforeNonTrivialTTY, true);
+  assert.ok(manifest.hardGateContract.parallelKeywords.includes("병렬"));
+  assert.ok(manifest.laneCapabilityAssignments.some((lane) => lane.laneId === "explorer" && lane.mcpServers.includes("omk-project")));
+  assert.ok(manifest.laneCapabilityAssignments.some((lane) => lane.laneId === "qa"));
   assert.ok(manifest.virtualDag.nodes.some((node) => node.id === "capability-skill-agent"));
   assert.ok(manifest.virtualDag.nodes.some((node) => node.id === "capability-mcp-agent"));
   assert.ok(manifest.virtualDag.nodes.some((node) => node.id === "capability-hook-agent"));
   assert.ok(manifest.virtualDag.nodes.some((node) => node.id === "review-merge"));
-  const sharedLaneCount = manifest.virtualDag.nodes.filter((node) => ["provider", "capability", "worker"].includes(node.source)).length;
-  assert.ok(sharedLaneCount <= manifest.resources.workerCap);
+  assert.equal(manifest.virtualDag.nodes.find((node) => node.id === "capability-skill-agent")?.assignedCapabilities.skills.length, 32);
+  assert.deepEqual(manifest.virtualDag.nodes.find((node) => node.id === "capability-mcp-agent")?.assignedCapabilities.mcp, ["omk-project"]);
+  assert.deepEqual(manifest.virtualDag.nodes.find((node) => node.id === "capability-hook-agent")?.assignedCapabilities.hooks, ["pre-shell-guard.sh"]);
+  assert.deepEqual(manifest.virtualDag.nodes.find((node) => node.id === "worker-1")?.assignedProviderCapabilities, ["write", "shell", "mcp", "merge"]);
+  assert.deepEqual(manifest.virtualDag.nodes.find((node) => node.id === "capability-skill-agent")?.candidateProviders, ["deepseek", "qwen", "openrouter", "kimi"]);
+  const explorerLane = manifest.laneCapabilityAssignments.find((lane) => lane.laneId === "explorer");
+  assert.equal(explorerLane?.assignedProvider, "deepseek");
+  assert.deepEqual(explorerLane?.candidateProviders, ["deepseek", "qwen", "openrouter", "kimi"]);
+  assert.equal(explorerLane?.assignedModel, "deepseek-v4-flash");
+  assert.deepEqual(explorerLane?.assignedCapabilities, ["read", "research", "web"]);
+  const coderLane = manifest.laneCapabilityAssignments.find((lane) => lane.laneId === "coder");
+  assert.equal(coderLane?.assignedProvider, "kimi");
+  assert.equal(coderLane?.assignedModel, "kimi-k2.6");
+  assert.deepEqual(coderLane?.assignedCapabilities, ["write", "shell", "mcp", "merge"]);
+  assert.equal(manifest.memoryRecall.requiredBeforePlanning, true);
 });
 
-test("chat agent harness budget 4 routes all capability lanes and keeps one worker lane", () => {
+test("chat agent harness records explicit provider and model assignments per lane", () => {
+  const manifest = buildChatAgentHarnessManifest({
+    mode: "agent",
+    runId: "chat-agent-provider-lanes",
+    resources: {
+      workers: "3",
+      resourceProfile: "standard",
+      approvalPolicy: "interactive",
+      providerPolicy: "qwen",
+      providerModel: "qwen3-max",
+      ensembleDefaultEnabled: true,
+      mcpScope: "project",
+      skillsScope: "project",
+      hooksScope: "project",
+      mcpNames: ["omk-project", "omk-web-bridge"],
+      skillNames: ["omk-repo-explorer", "omk-quality-gate"],
+      hookNames: ["protect-secrets.sh"],
+    },
+  });
+
+  assert.equal(manifest.resources.providerPolicy, "qwen");
+  assert.equal(manifest.resources.providerModel, "qwen3-max");
+  const byLane = new Map(manifest.laneCapabilityAssignments.map((lane) => [lane.laneId, lane]));
+  assert.equal(byLane.get("explorer")?.assignedProvider, "qwen");
+  assert.deepEqual(byLane.get("explorer")?.candidateProviders, ["qwen", "kimi"]);
+  assert.equal(byLane.get("explorer")?.assignedModel, "qwen3-max");
+  assert.deepEqual(byLane.get("explorer")?.assignedCapabilities, ["read", "research", "review", "qa", "advisory"]);
+  assert.equal(byLane.get("coder")?.assignedProvider, "kimi");
+  assert.deepEqual(byLane.get("coder")?.assignedCapabilities, ["write", "shell", "mcp", "merge"]);
+  assert.equal(byLane.get("security")?.assignedProvider, "qwen");
+  assert.deepEqual(byLane.get("security")?.candidateProviders, ["qwen", "kimi"]);
+  assert.deepEqual(byLane.get("security")?.assignedCapabilities, ["read", "review", "security"]);
+
+  const worker = manifest.virtualDag.nodes.find((node) => node.id === "worker-1");
+  assert.equal(worker?.assignedProvider, "kimi");
+  assert.deepEqual(worker?.candidateProviders, ["kimi"]);
+  assert.equal(worker?.assignedProviderAuthority, "authority");
+  assert.deepEqual(worker?.assignedProviderCapabilities, ["write", "shell", "mcp", "merge"]);
+});
+
+test("chat agent hard gate follows execution policy and chat exemption", () => {
+  const baseResources = {
+    workers: "2",
+    resourceProfile: "standard",
+    approvalPolicy: "interactive",
+    providerPolicy: "auto",
+    ensembleDefaultEnabled: true,
+    mcpScope: "project",
+    skillsScope: "project",
+    hooksScope: "project",
+    mcpNames: ["omk-project"],
+    skillNames: ["omk-plan-first"],
+    hookNames: ["subagent-stop-audit.sh"],
+  };
+
+  const askAgent = buildChatAgentHarnessManifest({
+    mode: "agent",
+    runId: "chat-agent-hard-gate-ask",
+    resources: { ...baseResources, executionPrompt: "ask", executionPromptSource: "config" },
+  });
+  assert.equal(askAgent.hardGateContract.requiresPromptBeforeNonTrivialTTY, true);
+  assert.equal(askAgent.hardGateContract.nonTTYAutoParallelForComplex, true);
+
+  const sequentialAgent = buildChatAgentHarnessManifest({
+    mode: "agent",
+    runId: "chat-agent-hard-gate-sequential",
+    resources: { ...baseResources, executionPrompt: "sequential", executionPromptSource: "cli" },
+  });
+  assert.equal(sequentialAgent.hardGateContract.requiresPromptBeforeNonTrivialTTY, false);
+  assert.equal(sequentialAgent.hardGateContract.nonTTYAutoParallelForComplex, false);
+
+  const chatMode = buildChatAgentHarnessManifest({
+    mode: "chat",
+    runId: "chat-agent-hard-gate-chat",
+    resources: { ...baseResources, executionPrompt: "ask", executionPromptSource: "config" },
+  });
+  assert.equal(chatMode.hardGateContract.requiresPromptBeforeNonTrivialTTY, false);
+  assert.equal(chatMode.hardGateContract.nonTTYAutoParallelForComplex, false);
+});
+
+test("chat mode contract omits agent orchestration injection", () => {
+  const contract = buildChatAgentModeContract({
+    mode: "chat",
+    runId: "chat-only-contract",
+    resources: {
+      workers: "2",
+      executionPrompt: "ask",
+      mcpScope: "project",
+      skillsScope: "project",
+      hooksScope: "project",
+      mcpNames: ["omk-project"],
+      skillNames: ["omk-repo-explorer"],
+      hookNames: ["subagent-stop-audit.sh"],
+    },
+  });
+
+  assert.match(contract, /Chat-only guardrails/);
+  assert.match(contract, /do not run the execution-choice hard gate/);
+  assert.doesNotMatch(contract, /Treat every non-trivial user prompt as an orchestration request/);
+  assert.doesNotMatch(contract, /Injected parallel DAG algorithm/);
+});
+
+test("chat agent runtime MCP allowlist is bounded to assigned lane MCPs", () => {
+  const resources = {
+    workers: "2",
+    mcpScope: "all",
+    skillsScope: "project",
+    hooksScope: "project",
+    mcpNames: ["omk-project", "omk-web-bridge", "github", "unrelated-remote"],
+    skillNames: ["omk-repo-explorer"],
+    hookNames: ["subagent-stop-audit.sh"],
+  };
+
+  const agentAllowlist = buildChatAgentRuntimeMcpAllowlist({ mode: "agent", resources });
+  assert.ok(agentAllowlist?.includes("omk-project"));
+  assert.ok(agentAllowlist?.includes("omk-web-bridge"));
+  assert.ok(agentAllowlist?.includes("github"));
+  assert.equal(agentAllowlist?.includes("unrelated-remote"), false);
+
+  const chatAllowlist = buildChatAgentRuntimeMcpAllowlist({ mode: "chat", resources });
+  assert.ok(chatAllowlist?.includes("omk-project"));
+  assert.equal(chatAllowlist?.includes("omk-web-bridge"), false);
+});
+
+test("chat agent harness budget 4 routes all capability lanes and keeps four worker lanes", () => {
   const manifest = buildChatAgentHarnessManifest({
     mode: "agent",
     runId: "chat-agent-budget-four",
@@ -136,7 +284,7 @@ test("chat agent harness budget 4 routes all capability lanes and keeps one work
     "capability-mcp-agent",
     "capability-hook-agent",
   ]);
-  assert.equal(workerNodes.length, 1);
+  assert.equal(workerNodes.length, 4);
   assert.equal(manifest.capabilityPolicy.maxCapabilityAgents, 3);
   assert.equal(manifest.capabilityPolicy.useMcp, true);
   assert.equal(manifest.capabilityPolicy.useSkills, true);
@@ -166,7 +314,7 @@ test("chat agent harness budget 4 uses four worker lanes when no capability inve
   assert.equal(manifest.virtualDag.nodes.filter((node) => node.source === "worker").length, 4);
 });
 
-test("chat agent harness resolves auto workers and keeps optional lanes inside the shared budget", () => {
+test("chat agent harness resolves auto workers and keeps capability lanes independent from workers", () => {
   const previousMaxWorkers = process.env.OMK_MAX_WORKERS;
   try {
     process.env.OMK_MAX_WORKERS = "3";
@@ -190,13 +338,51 @@ test("chat agent harness resolves auto workers and keeps optional lanes inside t
 
     assert.equal(manifest.resources.workerBudget, 3);
     assert.equal(manifest.resources.workerCap, 3);
-    const sharedLanes = manifest.virtualDag.nodes.filter((node) => ["provider", "capability", "worker"].includes(node.source));
-    assert.ok(sharedLanes.length <= 3);
-    assert.ok(sharedLanes.some((node) => node.source === "worker"));
+    const capabilityLanes = manifest.virtualDag.nodes.filter((node) => node.source === "capability");
+    const workerLanes = manifest.virtualDag.nodes.filter((node) => node.source === "worker");
+    assert.equal(capabilityLanes.length, 3);
+    assert.equal(workerLanes.length, 3);
   } finally {
     if (previousMaxWorkers === undefined) delete process.env.OMK_MAX_WORKERS;
     else process.env.OMK_MAX_WORKERS = previousMaxWorkers;
   }
+});
+
+test("chat agent harness routes web bridge MCP only to browser-relevant lanes by default", () => {
+  const manifest = buildChatAgentHarnessManifest({
+    mode: "agent",
+    runId: "chat-agent-web-bridge",
+    resources: {
+      workers: "2",
+      resourceProfile: "standard",
+      approvalPolicy: "interactive",
+      providerPolicy: "auto",
+      ensembleDefaultEnabled: true,
+      mcpScope: "project",
+      skillsScope: "project",
+      hooksScope: "project",
+      mcpNames: ["omk-web-bridge", "omk-project"],
+      skillNames: ["omk-research-verify", "omk-frontend-ui-review"],
+      hookNames: ["protect-secrets.sh"],
+    },
+  });
+
+  const byLane = new Map(manifest.laneCapabilityAssignments.map((lane) => [lane.laneId, lane]));
+  assert.ok(byLane.get("explorer")?.mcpServers.includes("omk-web-bridge"));
+  assert.ok(byLane.get("researcher")?.mcpServers.includes("omk-web-bridge"));
+  assert.ok(byLane.get("qa")?.mcpServers.includes("omk-web-bridge"));
+  assert.ok(byLane.get("vision-debugger")?.mcpServers.includes("omk-web-bridge"));
+  assert.equal(byLane.get("coder")?.mcpServers.includes("omk-web-bridge"), false);
+  assert.equal(byLane.get("planner")?.mcpServers.includes("omk-web-bridge"), false);
+  assert.match(buildParallelAlgorithmInjection({
+    workers: "2",
+    mcpScope: "project",
+    skillsScope: "project",
+    hooksScope: "project",
+    mcpNames: ["omk-web-bridge"],
+    skillNames: [],
+    hookNames: [],
+  }).text, /Web bridge: route `omk-web-bridge`/);
 });
 
 test("prepareChatAgentModeAgent writes run-scoped wrapper agent and prompt", async () => {
@@ -262,7 +448,7 @@ test("prepareChatAgentModeAgent writes run-scoped wrapper agent and prompt", asy
 
     const prompt = await readFile(prepared.promptPath, "utf-8");
     assert.match(prompt, /# Base Root Prompt/);
-    assert.match(prompt, /# OMK Chat Agent Runtime Contract/);
+    assert.match(prompt, /# OMK Interactive Orchestrator Runtime Contract/);
     assert.match(prompt, /Mode: debugging/);
     assert.match(prompt, /Active skills \(1\): count=1; digest=[a-f0-9]{12}; full=chat-agent-harness\.json/);
     assert.match(prompt, /Injected parallel DAG algorithm/);

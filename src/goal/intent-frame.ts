@@ -111,7 +111,7 @@ export function renderActionDigest(frame: IntentFrame, options: { maxAtoms?: num
     `Problem: ${frame.problem}`,
     `Desired outcome: ${frame.desiredOutcome}`,
     `Directives: ${directiveText}`,
-    `Capability hints: skills=${hints.skills.length}; mcp=${hints.mcpServers.length}; tools=${hints.tools.length}; hooks=${hints.hooks.length}; readOnly=${hints.readOnly}`,
+    `Capability hints: skills=${hints.skills.length}; mcp=${hints.mcpServers.length}; tools=${hints.tools.length}; hooks=${hints.hooks.length}; readOnly=${hints.readOnly}; voters=${hints.ensembleVoters.length}`,
     `Entities: ${frame.entities.length > 0 ? frame.entities.join(", ") : "none"}`,
     "ActionAtoms:",
     ...frame.actionAtoms.slice(0, maxAtoms).map((atom) =>
@@ -294,6 +294,7 @@ function buildCapabilityHints(text: string, directives: IntentDirective[], prima
   const needsMcp = /\bmcp\b|tool|도구|memory|browser|playwright|github|supabase|filesystem/u.test(lowered);
   const needsSkills = /\bskill|skills\b|스킬|workflow|품질|quality|security|review/u.test(lowered);
   const needsHooks = /\bhook|hooks\b|가드|guard|stop-hook|userpromptsubmit/u.test(lowered);
+  const ensembleVoters = inferEnsembleVoters(lowered, primary, { needsMcp, needsSkills, needsHooks });
   return {
     skills: needsSkills ? inferSkillHints(lowered) : [],
     mcpServers: needsMcp ? inferMcpHints(lowered) : [],
@@ -303,6 +304,7 @@ function buildCapabilityHints(text: string, directives: IntentDirective[], prima
     needsMcp,
     needsSkills,
     needsHooks,
+    ensembleVoters,
   };
 }
 
@@ -338,6 +340,19 @@ function inferHookHints(lowered: string): string[] {
   if (/subagent|worker|서브에이전트/.test(lowered)) hints.push("SubagentStop");
   if (/secret|보안|guard/.test(lowered)) hints.push("secret-guard");
   return uniqueStrings(hints).slice(0, 8);
+}
+
+function inferEnsembleVoters(lowered: string, primary: ActionAtomVerb, hints: { needsMcp: boolean; needsSkills: boolean; needsHooks: boolean }): string[] {
+  const voters: string[] = [];
+  if (/security|secret|보안/.test(lowered)) voters.push("security-evaluator");
+  if (/test|검증|quality|품질/.test(lowered) || primary === "test") voters.push("test-evaluator");
+  if (hints.needsMcp || /\bmcp\b|tool|도구|memory|browser|playwright|github|supabase|filesystem/u.test(lowered)) voters.push("capability-mcp");
+  if (hints.needsHooks || /\bhook|hooks\b|가드|guard|stop-hook|userpromptsubmit/u.test(lowered)) voters.push("capability-hook");
+  if (/review|audit|검토|리뷰|점검/.test(lowered) || primary === "review") voters.push("quality-assessor");
+  if (/plan|design|architecture|설계|계획/.test(lowered) || primary === "plan") voters.push("progress-analyst");
+  if (/risk|위험|rollback/.test(lowered)) voters.push("risk-evaluator");
+  if (/resource|worker|utilization|병렬|parallel/.test(lowered)) voters.push("resource-optimizer");
+  return uniqueStrings(voters).slice(0, 8);
 }
 
 function buildConfidence(primary: PrimaryAction, directives: IntentDirective[], redactionCount: number, keywordCount: number): IntentConfidence {

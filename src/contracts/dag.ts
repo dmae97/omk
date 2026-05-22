@@ -30,6 +30,11 @@ export interface DagNodeRouting {
   autoSpawned?: boolean;
   spawnReason?: string;
   routeSource?: "skill" | "mcp" | "hook" | "provider";
+  /**
+   * Skills/MCP/tools are routing hints for the Kimi runtime by default.
+   * Set these booleans only when a node cannot run without live MCP/tool
+   * authority; opportunistic providers can still advise from the hint list.
+   */
   requiresMcp?: boolean;
   requiresToolCalling?: boolean;
   skills?: string[];
@@ -40,6 +45,12 @@ export interface DagNodeRouting {
   readOnly?: boolean;
   evidenceRequired?: boolean;
   rationale?: string;
+  replanHint?: {
+    criterionId?: string;
+    artifactRef?: string;
+    targetAtomId?: string;
+    preserveEvidence?: boolean;
+  };
   rejected?: Array<{ id: string; reason: string }>;
   actionAtom?: {
     id: string;
@@ -104,6 +115,7 @@ export interface DagNode {
   failurePolicy?: DagNodeFailurePolicy;
   blockedReason?: string;
   evidence?: DagNodeEvidence[];
+  /** Live "thinking" text exposed while the node is running (e.g. ensemble progress). */
   thinking?: string;
 }
 

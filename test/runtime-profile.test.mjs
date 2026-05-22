@@ -132,3 +132,47 @@ test("resource settings do not inherit hooks scope from skills scope", async () 
     await rm(projectRoot, { recursive: true, force: true });
   }
 });
+
+test("resource settings resolve execution prompt from config and env", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-resource-execution-"));
+  const previous = {
+    OMK_PROJECT_ROOT: process.env.OMK_PROJECT_ROOT,
+    OMK_EXECUTION_PROMPT: process.env.OMK_EXECUTION_PROMPT,
+  };
+
+  try {
+    await mkdir(join(projectRoot, ".omk"), { recursive: true });
+    await writeFile(join(projectRoot, ".omk", "config.toml"), [
+      "[runtime]",
+      "resource_profile = \"standard\"",
+      "",
+      "[orchestration]",
+      "execution_prompt = \"sequential\"",
+      "",
+    ].join("\n"), "utf-8");
+    process.env.OMK_PROJECT_ROOT = projectRoot;
+    delete process.env.OMK_EXECUTION_PROMPT;
+    resetOmkResourceSettingsCache();
+    let settings = await getOmkResourceSettings();
+    assert.equal(settings.executionPrompt, "sequential");
+
+    process.env.OMK_EXECUTION_PROMPT = "parallel";
+    resetOmkResourceSettingsCache();
+    settings = await getOmkResourceSettings();
+    assert.equal(settings.executionPrompt, "parallel");
+
+    process.env.OMK_EXECUTION_PROMPT = "sequental";
+    resetOmkResourceSettingsCache();
+    await assert.rejects(getOmkResourceSettings(), /Invalid OMK_EXECUTION_PROMPT/);
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+    resetOmkResourceSettingsCache();
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});

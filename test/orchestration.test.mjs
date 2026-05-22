@@ -10,10 +10,62 @@ import { createEnsembleTaskRunner } from "../dist/orchestration/ensemble.js";
 import { createExecutor } from "../dist/orchestration/executor.js";
 import { estimateRunProgress } from "../dist/orchestration/eta.js";
 import { createRoutedRunState, refreshRunStateEstimate, routeRunState, createExecutableDagFromState } from "../dist/orchestration/run-state.js";
-import { discoverRoutingInventory, resetRoutingInventoryCache } from "../dist/orchestration/routing.js";
+import { dagNodeRoutingEnv, discoverRoutingInventory, resetRoutingInventoryCache } from "../dist/orchestration/routing.js";
 import { OMK_RELEASE_GUARD_PRESET } from "../dist/runtime/core-verified-preset.js";
 import { collectMcpConfigs, getUserHome, injectKimiGlobals, normalizeUserHomePath, pruneRuntimeMcpServers } from "../dist/util/fs.js";
+import { runShellStreaming } from "../dist/util/shell.js";
 import { resetTimeoutPresetCache, resolveTimeoutMs } from "../dist/util/timeout-config.js";
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForFile(path, timeoutMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      return await readFile(path, "utf-8");
+    } catch {
+      await sleep(25);
+    }
+  }
+  throw new Error(`timed out waiting for ${path}`);
+}
+
+async function isPidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+  } catch {
+    return false;
+  }
+  if (process.platform === "linux") {
+    try {
+      const statContent = await readFile(`/proc/${pid}/stat`, "utf-8");
+      const state = statContent.slice(statContent.lastIndexOf(")") + 2).split(" ")[0];
+      if (state === "Z") return false;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+async function waitForPidExit(pid, timeoutMs = 3000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!(await isPidAlive(pid))) return;
+    await sleep(50);
+  }
+  assert.fail(`process ${pid} is still alive`);
+}
+
+function bestEffortKill(pid) {
+  try {
+    process.kill(pid, "SIGKILL");
+  } catch {
+    // already gone
+  }
+}
 
 async function tempWorktree() {
   return mkdtemp(join(tmpdir(), "omk-ensemble-"));
@@ -401,6 +453,103 @@ test("injectKimiGlobals passes one merged MCP config to Kimi to avoid duplicate 
   }
 });
 
+test("injectKimiGlobals enforces explicit MCP allowlist while keeping omk-project", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-allowlisted-mcp-project-"));
+  const originalHome = await mkdtemp(join(tmpdir(), "omk-allowlisted-mcp-home-"));
+  const previousRoot = process.env.OMK_PROJECT_ROOT;
+  const previousHome = process.env.HOME;
+  const previousOriginalHome = process.env.OMK_ORIGINAL_HOME;
+  const previousMcpScope = process.env.OMK_MCP_SCOPE;
+  const previousSkillsScope = process.env.OMK_SKILLS_SCOPE;
+  const previousMcpPreflight = process.env.OMK_MCP_PREFLIGHT;
+
+  try {
+    await mkdir(join(originalHome, ".kimi"), { recursive: true });
+    await mkdir(join(projectRoot, ".kimi"), { recursive: true });
+    await writeFile(join(originalHome, ".kimi", "mcp.json"), JSON.stringify({
+      mcpServers: {
+        github: { command: "global-github" },
+      },
+    }));
+    await writeFile(join(projectRoot, ".kimi", "mcp.json"), JSON.stringify({
+      mcpServers: {
+        filesystem: { command: "project-filesystem" },
+        memory: { command: "project-memory" },
+      },
+    }));
+
+    process.env.OMK_PROJECT_ROOT = projectRoot;
+    process.env.HOME = originalHome;
+    process.env.OMK_ORIGINAL_HOME = originalHome;
+    process.env.OMK_MCP_SCOPE = "all";
+    process.env.OMK_SKILLS_SCOPE = "none";
+    process.env.OMK_MCP_PREFLIGHT = "off";
+
+    const args = [];
+    await injectKimiGlobals(args, {
+      mcpScope: "all",
+      skillsScope: "none",
+      mcpAllowlist: ["filesystem"],
+    });
+
+    const configArgs = args.filter((arg, index) => args[index - 1] === "--mcp-config-file");
+    assert.equal(configArgs.length, 1);
+    const merged = JSON.parse(await readFile(configArgs[0], "utf-8"));
+    assert.deepEqual(Object.keys(merged.mcpServers).sort(), ["filesystem", "omk-project"]);
+
+    const emptyArgs = [];
+    await injectKimiGlobals(emptyArgs, {
+      mcpScope: "all",
+      skillsScope: "none",
+      mcpAllowlist: [],
+    });
+    const emptyConfigArgs = emptyArgs.filter((arg, index) => emptyArgs[index - 1] === "--mcp-config-file");
+    assert.equal(emptyConfigArgs.length, 1);
+    const emptyMerged = JSON.parse(await readFile(emptyConfigArgs[0], "utf-8"));
+    assert.deepEqual(Object.keys(emptyMerged.mcpServers), ["omk-project"]);
+  } finally {
+    restoreEnv("OMK_PROJECT_ROOT", previousRoot);
+    restoreEnv("HOME", previousHome);
+    restoreEnv("OMK_ORIGINAL_HOME", previousOriginalHome);
+    restoreEnv("OMK_MCP_SCOPE", previousMcpScope);
+    restoreEnv("OMK_SKILLS_SCOPE", previousSkillsScope);
+    restoreEnv("OMK_MCP_PREFLIGHT", previousMcpPreflight);
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(originalHome, { recursive: true, force: true });
+  }
+});
+
+test("dagNodeRoutingEnv keeps node MCP allowlist separate from parent MCP context", () => {
+  const dag = createDag({
+    nodes: [
+      {
+        id: "parent",
+        name: "Parent",
+        role: "explorer",
+        prompt: "parent",
+        dependsOn: [],
+        maxRetries: 1,
+        routing: { mcpServers: ["parent-mcp"], skills: ["parent-skill"], hooks: ["parent-hook"] },
+      },
+      {
+        id: "child",
+        name: "Child",
+        role: "coder",
+        prompt: "child",
+        dependsOn: ["parent"],
+        maxRetries: 1,
+        routing: { mcpServers: ["child-mcp"], skills: ["child-skill"], hooks: ["child-hook"] },
+      },
+    ],
+  });
+
+  const child = dag.nodes.find((node) => node.id === "child");
+  assert.ok(child);
+  const env = dagNodeRoutingEnv(child, dag);
+  assert.equal(env.OMK_MCP_HINTS, "child-mcp");
+  assert.equal(env.OMK_PARENT_MCP_HINTS, "parent-mcp");
+});
+
 test("injectKimiGlobals prunes stale global MCP startup entries before Kimi restore", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-pruned-mcp-project-"));
   const originalHome = await mkdtemp(join(tmpdir(), "omk-pruned-mcp-home-"));
@@ -410,6 +559,7 @@ test("injectKimiGlobals prunes stale global MCP startup entries before Kimi rest
   const previousMcpScope = process.env.OMK_MCP_SCOPE;
   const previousSkillsScope = process.env.OMK_SKILLS_SCOPE;
   const previousSuppressWarnings = process.env.OMK_MCP_SUPPRESS_PRUNE_WARNINGS;
+  const previousMcpPreflight = process.env.OMK_MCP_PREFLIGHT;
 
   try {
     const missingProxy = join(originalHome, ".kimi", "scripts", "remote_mcp_proxy.py");
@@ -461,6 +611,7 @@ test("injectKimiGlobals prunes stale global MCP startup entries before Kimi rest
     process.env.OMK_MCP_SCOPE = "all";
     process.env.OMK_SKILLS_SCOPE = "none";
     process.env.OMK_MCP_SUPPRESS_PRUNE_WARNINGS = "1";
+    process.env.OMK_MCP_PREFLIGHT = "off";
 
     const args = [];
     await injectKimiGlobals(args, { mcpScope: "all", skillsScope: "none" });
@@ -504,6 +655,7 @@ test("injectKimiGlobals prunes stale global MCP startup entries before Kimi rest
     restoreEnv("OMK_MCP_SCOPE", previousMcpScope);
     restoreEnv("OMK_SKILLS_SCOPE", previousSkillsScope);
     restoreEnv("OMK_MCP_SUPPRESS_PRUNE_WARNINGS", previousSuppressWarnings);
+    restoreEnv("OMK_MCP_PREFLIGHT", previousMcpPreflight);
     await rm(projectRoot, { recursive: true, force: true });
     await rm(originalHome, { recursive: true, force: true });
   }
@@ -747,6 +899,36 @@ test("scheduler keeps transitive optional dependents runnable after a blocker", 
   assert.deepEqual(scheduler.getRunnableNodes(dag).map((node) => node.id), ["report"]);
 });
 
+test("scheduler allows review-merge after required deps finish while optional deps are pending or running", () => {
+  const dag = createDag({
+    nodes: [
+      { id: "worker", name: "Worker", role: "coder", dependsOn: [], maxRetries: 1 },
+      { id: "optional-blocker", name: "Optional blocker", role: "researcher", dependsOn: [], maxRetries: 1 },
+      { id: "optional-pending", name: "Optional pending", role: "researcher", dependsOn: ["optional-blocker"], maxRetries: 1 },
+      { id: "optional-running", name: "Optional running", role: "reviewer", dependsOn: [], maxRetries: 1 },
+      {
+        id: "review-merge",
+        name: "Review merge",
+        role: "reviewer",
+        dependsOn: ["worker", "optional-pending", "optional-running"],
+        maxRetries: 1,
+        inputs: [
+          { name: "worker output", ref: "state.json", from: "worker" },
+          { name: "pending advisory", ref: "state.json", from: "optional-pending", required: false },
+          { name: "running advisory", ref: "state.json", from: "optional-running", required: false },
+        ],
+      },
+    ],
+  });
+  const scheduler = createScheduler();
+
+  scheduler.updateNodeStatus(dag, "worker", "done");
+  scheduler.updateNodeStatus(dag, "optional-running", "running");
+
+  const runnable = scheduler.getRunnableNodes(dag).map((node) => node.id);
+  assert.ok(runnable.includes("review-merge"));
+});
+
 test("createDag rejects hidden input dependencies", () => {
   assert.throws(
     () => createDag({
@@ -810,6 +992,9 @@ test("ensemble runner calls role-specific candidates and aggregates quorum", asy
         success: env.OMK_ENSEMBLE_CANDIDATE_ID !== "edge-cases",
         stdout: `candidate=${env.OMK_ENSEMBLE_CANDIDATE_ID}\nconfidence: 0.9`,
         stderr: "",
+        metadata: env.OMK_ENSEMBLE_CANDIDATE_ID === "implement"
+          ? { provider: "deepseek", requestedProvider: "deepseek", providerModel: "deepseek-v4-pro" }
+          : { provider: "kimi", requestedProvider: "kimi" },
       };
     },
   };
@@ -830,6 +1015,8 @@ test("ensemble runner calls role-specific candidates and aggregates quorum", asy
   assert.deepEqual(calls.map((call) => call.env.OMK_ENSEMBLE_CANDIDATE_ID), ["implement", "edge-cases"]);
   assert.match(result.stdout, /OMK Ensemble Result/);
   assert.equal(result.metadata.ensemble.winner, "implement");
+  assert.equal(result.metadata.provider, "deepseek");
+  assert.equal(result.metadata.providerModel, "deepseek-v4-pro");
 });
 
 test("ensemble runner tolerates one candidate throwing when quorum still passes", async () => {
@@ -860,6 +1047,43 @@ test("ensemble runner tolerates one candidate throwing when quorum still passes"
   assert.equal(result.success, true);
   assert.match(result.stderr, /\[edge-cases] candidate crashed/);
   assert.equal(result.metadata.ensemble.winner, "implement");
+});
+
+test("ensemble runner propagates abort signals into candidate runners", async () => {
+  const controller = new AbortController();
+  const seenSignals = [];
+  const baseRunner = {
+    async run(node, env, signal) {
+      seenSignals.push({ id: env.OMK_ENSEMBLE_CANDIDATE_ID, signal });
+      if (env.OMK_ENSEMBLE_CANDIDATE_ID === "implement") {
+        controller.abort(new Error("stop ensemble"));
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      return {
+        success: true,
+        stdout: `candidate=${env.OMK_ENSEMBLE_CANDIDATE_ID}`,
+        stderr: "",
+      };
+    },
+  };
+  const runner = createEnsembleTaskRunner(baseRunner, {
+    enabled: true,
+    maxCandidatesPerNode: 2,
+    maxParallel: 1,
+    quorumRatio: 0.5,
+  });
+  const worktree = await tempWorktree();
+
+  await assert.rejects(
+    () => runner.run(
+      { id: "node-abort", name: "Implement", role: "coder", dependsOn: [], status: "pending", retries: 0, maxRetries: 1, worktree },
+      { OMK_RUN_ID: "test" },
+      controller.signal,
+    ),
+    /stop ensemble/,
+  );
+  assert.equal(seenSignals[0].signal instanceof AbortSignal, true);
+  assert.equal(seenSignals[0].signal.aborted, true);
 });
 
 test("router ensemble candidates preserve routing metadata and use route-specific roles", async () => {
@@ -900,6 +1124,44 @@ test("router ensemble candidates preserve routing metadata and use route-specifi
   assert.deepEqual(calls.map((call) => call.env.OMK_ENSEMBLE_CANDIDATE_ID), ["skill-fit", "safety-budget"]);
   assert.deepEqual(calls.map((call) => call.node.role), ["planner", "reviewer"]);
   assert.equal(calls[0].node.routing.skills[0], "omk-repo-explorer");
+});
+
+test("orchestrator ensemble keeps Kimi context candidate on router role", async () => {
+  const calls = [];
+  const baseRunner = {
+    async run(node, env) {
+      calls.push({ node, env });
+      return {
+        success: true,
+        stdout: `candidate=${env.OMK_ENSEMBLE_CANDIDATE_ID}\nconfidence: 0.9`,
+        stderr: "",
+      };
+    },
+  };
+  const runner = createEnsembleTaskRunner(baseRunner, {
+    enabled: true,
+    maxCandidatesPerNode: 2,
+    maxParallel: 1,
+    quorumRatio: 0.5,
+  });
+
+  const result = await runner.run(
+    {
+      id: "orchestrator-1",
+      name: "Coordinate parallel lanes",
+      role: "orchestrator",
+      dependsOn: [],
+      status: "pending",
+      retries: 0,
+      maxRetries: 1,
+      worktree: await tempWorktree(),
+    },
+    { OMK_RUN_ID: "test" }
+  );
+
+  assert.equal(result.success, true);
+  assert.deepEqual(calls.map((call) => call.env.OMK_ENSEMBLE_CANDIDATE_ID), ["critical-path", "kimi-context"]);
+  assert.deepEqual(calls.map((call) => call.node.role), ["planner", "router"]);
 });
 
 test("ETA estimator uses completed durations and worker count", () => {
@@ -994,6 +1256,63 @@ test("executor records agent timings and passes ETA environment", async () => {
     assert.ok(seenEnv.some((env) => env.OMK_SKILL_HINTS.includes("omk-typescript-strict")));
     assert.ok(savedStates.some((state) => state.estimate?.runningNodes === 1));
   });
+});
+
+test("executor emits telemetry events without faking activity from progress timer", async () => {
+  const tempRoot = await mkdtemp(join(tmpdir(), "omk-executor-events-"));
+  const runId = "executor-events";
+  const runDir = join(tempRoot, runId);
+  await mkdir(runDir, { recursive: true });
+  try {
+    const savedStates = [];
+    const executor = createExecutor({
+      ensemble: false,
+      eventRunDir: runDir,
+      persister: {
+        async load() {
+          return null;
+        },
+        async save(state) {
+          savedStates.push(JSON.parse(JSON.stringify(state)));
+        },
+      },
+    });
+    const dag = createDag({
+      nodes: [
+        { id: "work", name: "Work", role: "worker", dependsOn: [], maxRetries: 1 },
+      ],
+    });
+    const runner = {
+      fork(onThinking) {
+        return {
+          async run() {
+            onThinking?.("real activity");
+            await sleep(900);
+            return { success: true, stdout: "", stderr: "" };
+          },
+        };
+      },
+      async run() {
+        return { success: true, stdout: "", stderr: "" };
+      },
+    };
+
+    const result = await executor.execute(dag, runner, {
+      runId,
+      workers: 1,
+      approvalPolicy: "yolo",
+    });
+
+    assert.equal(result.success, true);
+    const lines = (await readFile(join(runDir, "events.jsonl"), "utf-8")).trim().split("\n").map((line) => JSON.parse(line));
+    assert.deepEqual(lines.map((line) => line.seq), [1, 2, 3]);
+    assert.equal(lines.some((line) => line.type === "lane.started"), true);
+    assert.equal(lines.some((line) => line.type === "lane.activity"), true);
+    assert.equal(lines.some((line) => line.type === "lane.completed"), true);
+    assert.ok(savedStates.some((state) => state.nodes?.[0]?.status === "running"));
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
 });
 
 function restoreEnv(name, value) {
@@ -1114,6 +1433,51 @@ test("executor aborts runner signal on timeout to prevent late side effects", as
   }
 });
 
+test("executor node timeout cleans real shell descendant process tree", { skip: process.platform === "win32" }, async () => {
+  const executor = createExecutor({ ensemble: false });
+  const tempDir = await mkdtemp(join(tmpdir(), "omk-executor-timeout-tree-"));
+  const pidPath = join(tempDir, "child.pid");
+  let childPid;
+  const dag = createDag({
+    nodes: [
+      { id: "shell-tree", name: "Shell tree", role: "coder", dependsOn: [], maxRetries: 1 },
+    ],
+  });
+  const script = `
+    const { spawn } = require("node:child_process");
+    const { writeFileSync } = require("node:fs");
+    const child = spawn(process.execPath, ["--eval", "setInterval(() => {}, 1000);"], { stdio: "ignore" });
+    child.unref();
+    writeFileSync(${JSON.stringify(pidPath)}, String(child.pid));
+    setInterval(() => {}, 1000);
+  `;
+  const runner = {
+    async run(_node, _env, signal) {
+      return runShellStreaming(process.execPath, ["--eval", script], {
+        timeout: 5000,
+        signal,
+      });
+    },
+  };
+
+  try {
+    const result = await executor.execute(dag, runner, {
+      runId: "timeout-tree-test",
+      workers: 1,
+      approvalPolicy: "yolo",
+      nodeTimeoutMs: 250,
+    });
+    childPid = Number((await waitForFile(pidPath)).trim());
+    assert.equal(result.success, false);
+    const node = result.state.nodes.find((entry) => entry.id === "shell-tree");
+    assert.equal(node?.status, "failed");
+    await waitForPidExit(childPid);
+  } finally {
+    if (childPid) bestEffortKill(childPid);
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("executor waits for running siblings before terminal failure resolution", async () => {
   const executor = createExecutor({ ensemble: false });
   const dag = createDag({
@@ -1144,6 +1508,123 @@ test("executor waits for running siblings before terminal failure resolution", a
   assert.equal(slowCompleted, true);
   assert.equal(result.state.nodes.find((node) => node.id === "fail-fast")?.status, "failed");
   assert.equal(result.state.nodes.find((node) => node.id === "slow-sibling")?.status, "done");
+});
+
+test("executor does not let optional advisory lanes monopolize the single core worker slot", async () => {
+  const executor = createExecutor({ ensemble: false });
+  const started = [];
+  const dag = createDag({
+    nodes: [
+      {
+        id: "advisory",
+        name: "DeepSeek advisory",
+        role: "reviewer",
+        dependsOn: [],
+        maxRetries: 1,
+        priority: 100,
+        failurePolicy: { retryable: true, blockDependents: false, skipOnFailure: true },
+        outputs: [{ name: "advisory output", gate: "none", required: false }],
+        routing: {
+          assignedProvider: "deepseek",
+          assignedProviderAuthority: "advisory",
+          assignedProviderCapabilities: ["read", "review"],
+          readOnly: true,
+        },
+      },
+      {
+        id: "worker",
+        name: "Required worker",
+        role: "coder",
+        dependsOn: [],
+        maxRetries: 1,
+        outputs: [{ name: "worker output", gate: "none" }],
+      },
+      {
+        id: "review-merge",
+        name: "Review merge",
+        role: "reviewer",
+        dependsOn: ["worker", "advisory"],
+        maxRetries: 1,
+        inputs: [
+          { name: "worker output", ref: "state.json", from: "worker" },
+          { name: "advisory output", ref: "state.json", from: "advisory", required: false },
+        ],
+        outputs: [{ name: "verified result", gate: "none" }],
+      },
+    ],
+  });
+  const runner = {
+    async run(node) {
+      started.push(node.id);
+      if (node.id === "advisory") {
+        return new Promise(() => {});
+      }
+      await sleep(5);
+      return { success: true, stdout: "## Evidence\nok", stderr: "" };
+    },
+  };
+
+  const result = await executor.execute(dag, runner, {
+    runId: "single-worker-optional-slot-test",
+    workers: 1,
+    approvalPolicy: "yolo",
+    runTimeoutMs: 500,
+  });
+
+  assert.equal(result.success, true);
+  assert.deepEqual(started, ["worker", "review-merge"]);
+  assert.equal(result.state.nodes.find((node) => node.id === "advisory")?.status, "skipped");
+  assert.equal(result.state.nodes.find((node) => node.id === "worker")?.status, "done");
+  assert.equal(result.state.nodes.find((node) => node.id === "review-merge")?.status, "done");
+});
+
+test("executor bypasses ensemble fanout for optional DeepSeek provider lanes", async () => {
+  const executor = createExecutor({
+    ensemble: { enabled: true, maxCandidatesPerNode: 2, maxParallel: 2, quorumRatio: 0.5 },
+  });
+  const calls = [];
+  const dag = createDag({
+    nodes: [
+      {
+        id: "deepseek-flash-agent",
+        name: "DeepSeek Flash optional lane",
+        role: "reviewer",
+        dependsOn: [],
+        maxRetries: 1,
+        failurePolicy: { retryable: true, blockDependents: false, skipOnFailure: true },
+        outputs: [{ name: "deepseek output", gate: "none", required: false }],
+        routing: {
+          provider: "deepseek",
+          assignedProvider: "deepseek",
+          assignedProviderAuthority: "direct",
+          readOnly: true,
+        },
+      },
+    ],
+  });
+  const runner = {
+    async run(node, env) {
+      calls.push({ node, env });
+      return {
+        success: true,
+        stdout: "DeepSeek optional output",
+        stderr: "",
+        metadata: { provider: "deepseek", requestedProvider: "deepseek", providerParticipation: "direct" },
+      };
+    },
+  };
+
+  const result = await executor.execute(dag, runner, {
+    runId: "optional-deepseek-no-ensemble-fanout-test",
+    workers: 1,
+    approvalPolicy: "yolo",
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].env.OMK_ENSEMBLE, undefined);
+  assert.equal(result.state.nodes[0].attempts.at(-1)?.provider, "deepseek");
+  assert.equal(result.state.nodes[0].attempts.at(-1)?.providerParticipation, "direct");
 });
 
 test("executor rejects fractional worker counts", async () => {
@@ -1334,6 +1815,11 @@ test("state persister writes atomically via temp file", async () => {
   await rm(tmpDir, { recursive: true, force: true });
 });
 
+test("executor commit queue decrements once after persist completion", async () => {
+  const source = await readFile(join(process.cwd(), "dist", "orchestration", "executor.js"), "utf-8");
+  assert.match(source, /commitQueueSize = Math\.max\(0, commitQueueSize - 1\)/);
+  assert.doesNotMatch(source, /\.catch\(\(err\)[\s\S]{0,160}commitQueueSize--/);
+});
 
 test("skipNode propagates skip to dependents", () => {
   const dag = createDag({
@@ -1396,6 +1882,40 @@ test("executor runs fallback node when terminal failure has fallbackRole", async
   assert.equal(fallbackNode.status, "done");
   assert.equal(result.state.nodes.find((n) => n.id === "code")?.status, "done");
   assert.equal(result.success, true);
+});
+
+test("executor rewrites dependent inputs when fallback node replaces failed dependency", async () => {
+  const executor = createExecutor({ ensemble: false });
+  const dag = createDag({
+    nodes: [
+      { id: "plan", name: "Plan", role: "planner", dependsOn: [], maxRetries: 1, failurePolicy: { fallbackRole: "coder" } },
+      {
+        id: "code",
+        name: "Code",
+        role: "coder",
+        dependsOn: ["plan"],
+        maxRetries: 1,
+        inputs: [{ name: "plan output", ref: "plan.md", from: "plan" }],
+      },
+    ],
+  });
+  const runner = {
+    async run(node) {
+      if (node.id === "plan") return { success: false, stdout: "", stderr: "plan failed" };
+      return { success: true, stdout: "ok", stderr: "" };
+    },
+  };
+
+  const result = await executor.execute(dag, runner, {
+    runId: "fallback-input-rewrite-test",
+    workers: 1,
+    approvalPolicy: "yolo",
+  });
+
+  assert.equal(result.success, true);
+  const codeNode = result.state.nodes.find((node) => node.id === "code");
+  assert.equal(codeNode?.dependsOn.includes("plan--fallback"), true);
+  assert.equal(codeNode?.inputs?.[0]?.from, "plan--fallback");
 });
 
 
@@ -1475,6 +1995,153 @@ test("executor respects AbortSignal and cancels pending nodes", async () => {
 
   assert.equal(result.success, false);
   assert.ok(result.state.nodes.some((n) => n.status === "blocked" && n.blockedReason === "cancelled"));
+});
+
+test("executor external AbortSignal resolves even when running node ignores signal", async () => {
+  const ac = new AbortController();
+  const executor = createExecutor({ ensemble: false, signal: ac.signal });
+  const dag = createDag({
+    nodes: [
+      { id: "hang", name: "Hang", role: "coder", dependsOn: [], maxRetries: 1 },
+      { id: "after", name: "After", role: "coder", dependsOn: ["hang"], maxRetries: 1 },
+    ],
+  });
+  const runner = {
+    async run() {
+      return new Promise(() => {});
+    },
+  };
+
+  setTimeout(() => ac.abort(), 10);
+  const startedAt = Date.now();
+  const result = await executor.execute(dag, runner, {
+    runId: "external-abort-hanging-node-test",
+    workers: 1,
+    approvalPolicy: "yolo",
+  });
+
+  assert.equal(result.success, false);
+  assert.ok(Date.now() - startedAt < 1000);
+  assert.ok(result.state.nodes.some((n) => n.status === "blocked" && n.blockedReason === "cancelled"));
+});
+
+test("executor resets shutdown flags between execute calls on the same instance", async () => {
+  const executor = createExecutor({ ensemble: false });
+  const firstDag = createDag({
+    nodes: [
+      { id: "hang", name: "Hang", role: "coder", dependsOn: [], maxRetries: 1 },
+    ],
+  });
+  const abortAwareRunner = {
+    async run(_node, _env, signal) {
+      return await new Promise((resolve) => {
+        signal?.addEventListener("abort", () => {
+          resolve({ success: false, stdout: "", stderr: "aborted" });
+        }, { once: true });
+      });
+    },
+  };
+
+  const first = await executor.execute(firstDag, abortAwareRunner, {
+    runId: "reset-shutdown-first",
+    workers: 1,
+    approvalPolicy: "yolo",
+    runTimeoutMs: 30,
+  });
+  assert.equal(first.success, false);
+
+  const secondDag = createDag({
+    nodes: [
+      { id: "fast", name: "Fast", role: "coder", dependsOn: [], maxRetries: 1 },
+    ],
+  });
+  const second = await executor.execute(secondDag, {
+    async run() {
+      return { success: true, stdout: "ok", stderr: "" };
+    },
+  }, {
+    runId: "reset-shutdown-second",
+    workers: 1,
+    approvalPolicy: "yolo",
+  });
+
+  assert.equal(second.success, true);
+  assert.equal(second.state.nodes[0].status, "done");
+});
+
+test("executor records evidence when runner ignores abort after node timeout", async () => {
+  const executor = createExecutor({ ensemble: false });
+  const dag = createDag({
+    nodes: [
+      { id: "ignore-abort", name: "Ignore abort", role: "coder", dependsOn: [], maxRetries: 1 },
+    ],
+  });
+  let sawAbort = false;
+  const runner = {
+    async run(_node, _env, signal) {
+      signal?.addEventListener("abort", () => {
+        sawAbort = true;
+      }, { once: true });
+      return new Promise(() => {});
+    },
+  };
+
+  const startedAt = Date.now();
+  const result = await executor.execute(dag, runner, {
+    runId: "ignored-abort-evidence-test",
+    workers: 1,
+    approvalPolicy: "yolo",
+    nodeTimeoutMs: 30,
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(sawAbort, true);
+  assert.ok(Date.now() - startedAt < 3500);
+  const node = result.state.nodes.find((entry) => entry.id === "ignore-abort");
+  assert.equal(node?.status, "failed");
+  assert.ok(node?.evidence?.some((entry) =>
+    entry.gate === "runner-abort" &&
+    entry.passed === false &&
+    /did not settle/.test(entry.message ?? "")
+  ));
+});
+
+test("executor runTimeoutMs persists terminal blocked state before resolving", async () => {
+  const savedStates = [];
+  const executor = createExecutor({
+    ensemble: false,
+    persister: {
+      async load() {
+        return null;
+      },
+      async save(state) {
+        savedStates.push(JSON.parse(JSON.stringify(state)));
+      },
+    },
+  });
+  const dag = createDag({
+    nodes: [
+      { id: "hang", name: "Hang", role: "coder", dependsOn: [], maxRetries: 1 },
+    ],
+  });
+  const runner = {
+    async run() {
+      return new Promise(() => {});
+    },
+  };
+
+  const result = await executor.execute(dag, runner, {
+    runId: "run-timeout-persist-test",
+    workers: 1,
+    approvalPolicy: "yolo",
+    runTimeoutMs: 30,
+  });
+
+  assert.equal(result.success, false);
+  const finalSaved = savedStates.at(-1);
+  assert.ok(finalSaved.completedAt);
+  assert.equal(finalSaved.nodes[0].status, "blocked");
+  assert.equal(finalSaved.nodes[0].blockedReason, "run timeout");
 });
 
 test("executor resumes from persisted state and skips done nodes", async () => {

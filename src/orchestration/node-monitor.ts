@@ -54,7 +54,7 @@ export function createNodeMonitorEngine(options: MonitorOptions = {}): NodeMonit
       if (monitor.status === "stalled") continue;
       const lastHeartbeat = Date.parse(monitor.lastHeartbeatAt);
       const threshold = monitor.stallThresholdMs;
-      if (now - lastHeartbeat > threshold) {
+      if (Number.isNaN(lastHeartbeat) || now - lastHeartbeat > threshold) {
         monitor.status = "stalled";
         stalled.push(monitor);
         options.onKill?.(monitor);
@@ -67,6 +67,12 @@ export function createNodeMonitorEngine(options: MonitorOptions = {}): NodeMonit
     register(nodeId: string, runId: string): void {
       const k = key(nodeId, runId);
       const now = new Date().toISOString();
+      const existing = monitors.get(k);
+      if (existing) {
+        existing.lastHeartbeatAt = now;
+        existing.status = "healthy";
+        return;
+      }
       monitors.set(k, {
         nodeId,
         runId,

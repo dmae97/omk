@@ -8,7 +8,15 @@ import { delimiter, join } from "node:path";
 import { createGoalSpec, normalizeGoal, updateGoalStatus } from "../dist/goal/intake.js";
 import { createGoalPersister } from "../dist/goal/persistence.js";
 import { compileGoalToDagNodes, attachGoalToRunState } from "../dist/goal/compiler.js";
-import { evaluateGoalProgressEnsemble, generateNextPrompt } from "../dist/goal/control-loop.js";
+import {
+  cleanupControlLoopRun,
+  evaluateAdaptiveLoopGuard,
+  evaluateGoalProgressDelta,
+  evaluateGoalProgressEnsemble,
+  generateNextPrompt,
+  getControlLoopCacheStats,
+  pruneControlLoopRunCaches,
+} from "../dist/goal/control-loop.js";
 import { buildIntentFrame, evaluatePromptNovelty } from "../dist/goal/intent-frame.js";
 import { scoreGoal } from "../dist/goal/scoring.js";
 import { checkGoalEvidence } from "../dist/goal/evidence.js";
@@ -23,6 +31,41 @@ const CLI = join(process.cwd(), "dist", "cli.js");
 async function tempGoalDir() {
   return mkdtemp(join(tmpdir(), "omk-goal-"));
 }
+
+test("control-loop run caches are bounded and can be cleaned after completion", () => {
+  const progressDelta = {
+    value: 0,
+    newlyPassedCriteria: [],
+    newlyPassedOptionalCriteria: [],
+    newlyValidArtifacts: [],
+    newlyFailedCriteria: [],
+    failedCriteria: [],
+    missingRequiredCriteria: [],
+    blockedNodes: [],
+    repeatedFailures: [],
+    recommendation: "continue",
+    reason: "test",
+    preserveEvidence: true,
+  };
+  const ensemble = { confidence: 0.5, action: "continue" };
+
+  for (let index = 0; index < 140; index += 1) {
+    evaluateAdaptiveLoopGuard({
+      runId: `cache-run-${index}`,
+      startedAt: new Date().toISOString(),
+      nodes: [],
+      workerCount: 1,
+      iterationCount: 1,
+      maxIterations: 10,
+    }, progressDelta, ensemble);
+  }
+
+  assert.ok(getControlLoopCacheStats().trackedRuns <= 128);
+  cleanupControlLoopRun("cache-run-139");
+  assert.ok(getControlLoopCacheStats().trackedRuns < 128);
+  pruneControlLoopRunCaches(Date.now() + 25 * 60 * 60 * 1000);
+  assert.equal(getControlLoopCacheStats().trackedRuns, 0);
+});
 
 async function tempGoalCliFixture({ summary = true } = {}) {
   const root = await tempGoalDir();
@@ -83,7 +126,7 @@ test("IntentFrameV2 redacts secrets, extracts directives, and emits capability h
     "READ-ONLY scope: src/goal/intent-frame.ts",
     "expected output: novelty-report.json",
     "Use MCP skills hooks but no edits.",
-    "OPENAI_API_KEY=sk-proj-secretsecretsecretsecret",
+    `OPENAI_API_KEY=${["sk", "proj", "secretsecretsecretsecret"].join("-")}`,
   ].join("\n");
   const frame = buildIntentFrame(rawPrompt, {
     constraints: ["Do not modify files"],
@@ -315,6 +358,72 @@ test("PromptNoveltyReportV2 forces replan on replay risk without evidence delta"
   assert.equal(report.targetAtomId, repeatedAtom.id);
 });
 
+test("Evidence-Delta Adaptive Replan distinguishes missing evidence from hard failure", () => {
+  const spec = normalizeGoal({
+    rawPrompt: "Advance goal DAG automation loop",
+    title: "EDAR",
+    objective: "Advance goal DAG automation loop",
+  });
+  spec.successCriteria = [
+    { id: "c1", description: "Replan contract exists", requirement: "required", weight: 1, inferred: false },
+  ];
+
+  const runState = createRoutedRunState({
+    runId: "edar-delta",
+    startedAt: new Date().toISOString(),
+    nodes: [
+      { id: "planner", name: "Plan delta loop", role: "planner", dependsOn: [], maxRetries: 1 },
+    ],
+    workerCount: 1,
+  });
+  const delta = evaluateGoalProgressDelta(
+    spec,
+    [{
+      criterionId: "c1",
+      passed: false,
+      message: "Required criterion missing evidence: Replan contract exists",
+      checkedAt: new Date().toISOString(),
+      evidenceType: "criterion",
+    }],
+    runState,
+  );
+
+  assert.equal(delta.value, 0);
+  assert.deepEqual(delta.failedCriteria, []);
+  assert.deepEqual(delta.missingRequiredCriteria, ["c1"]);
+  assert.equal(delta.recommendation, "continue");
+});
+
+test("goal progress ensemble replans stalled replay loops with evidence-delta context", async () => {
+  const rawPrompt = "Do not replay this exact objective; replan goal DAG automation with a narrower ActionAtom";
+  const spec = normalizeGoal({ rawPrompt, title: "EDAR replay", objective: rawPrompt });
+  spec.successCriteria = [
+    { id: "c1", description: "A narrower replan target is selected", requirement: "required", weight: 1, inferred: false },
+  ];
+  const repeatedAtom = spec.intentFrame.actionAtoms.find((atom) => atom.label.startsWith("plan-")) ?? spec.intentFrame.actionAtoms[0];
+  const runState = createRoutedRunState({
+    runId: "edar-replay",
+    startedAt: new Date().toISOString(),
+    nodes: [1, 2, 3].map((index) => ({
+      id: `repeat-${index}`,
+      name: rawPrompt,
+      role: "planner",
+      dependsOn: [],
+      maxRetries: 1,
+      routing: { actionAtom: repeatedAtom },
+    })),
+    workerCount: 1,
+  });
+
+  const result = await evaluateGoalProgressEnsemble(spec, runState, undefined, { deepseek: false });
+
+  assert.equal(result.nextAction, "replan");
+  assert.equal(result.progressDelta.value, 0);
+  assert.equal(result.noveltyReport?.recommendation, "replan");
+  assert.match(result.ensemble.nextPrompt ?? "", /Evidence Delta Replan/);
+  assert.match(result.ensemble.nextPrompt ?? "", /Keep MCP, skills, hooks/);
+});
+
 test("compileGoalToDagNodes uses ActionAtom labels instead of replaying raw Korean input", () => {
   const rawPrompt = "한국어 원문을 DAG 노드 이름으로 반복하지 말고 IntentFrame ActionAtom 기반으로 실행해줘";
   const spec = normalizeGoal({ rawPrompt, title: "Strict DAG", objective: rawPrompt });
@@ -327,6 +436,43 @@ test("compileGoalToDagNodes uses ActionAtom labels instead of replaying raw Kore
   assert.match(nodeText, /plan-intent-dag|plan-execution/);
   assert.match(nodeText, /verify-evidence/);
   assert.doesNotMatch(nodeText, new RegExp(rawPrompt.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
+test("compileGoalToDagNodes promotes action atoms, criteria, and scoped capability hints", () => {
+  const spec = createGoalSpec(`
+READ-ONLY scope: src/goal
+expected output: goal-dag-findings.md
+Use MCP skills hooks for OMK goal DAG orchestration with subagent routing.
+
+Success Criteria:
+1. Evidence delta replan contract is explicit
+2. MCP skills hooks are scoped per action atom
+
+산출물:
+- Findings report: docs/goal-dag-findings.md
+`);
+
+  const nodes = compileGoalToDagNodes(spec);
+  const labels = nodes.map((node) => node.routing?.actionAtom?.label);
+
+  assert.ok(labels.includes("inspect-read-only-scope"));
+  assert.ok(labels.includes("satisfy-expected-output"));
+  assert.equal(nodes.some((node) => node.role === "coder"), false);
+
+  const artifact = nodes.find((node) => node.id === "artifact-1");
+  assert.equal(artifact?.role, "researcher");
+  assert.equal(artifact?.outputs?.[0]?.gate, "summary");
+  assert.equal(artifact?.routing?.readOnly, true);
+
+  const criterionNodes = nodes.filter((node) => node.id.startsWith("criterion-"));
+  assert.equal(criterionNodes.length, spec.successCriteria.length);
+  assert.ok(criterionNodes.every((node) => node.routing?.replanHint?.criterionId));
+
+  const inspectNode = nodes.find((node) => node.routing?.actionAtom?.label === "inspect-read-only-scope");
+  assert.equal(inspectNode?.routing?.readOnly, true);
+  assert.ok(inspectNode?.routing?.skills?.includes("omk-adaptorch-orchestration-review"));
+  assert.ok(inspectNode?.routing?.mcpServers?.includes("omk-project"));
+  assert.ok(inspectNode?.routing?.hooks?.includes("SubagentStop"));
 });
 
 test("goal plan writes actionable planner DAG instead of placeholder", async () => {
@@ -621,6 +767,7 @@ test("generateNextPrompt synthesizes current context instead of repeating the or
   assert.match(result.prompt, /Strict Intent \/ Action Digest/);
   assert.match(result.prompt, /Next Action Contract/);
   assert.match(result.prompt, /Novelty Guard/);
+  assert.match(result.prompt, /Evidence Delta Replan/);
   assert.match(result.prompt, /Do not repeat the original goal verbatim/);
   assert.match(result.prompt, /Goal Reference \(non-verbatim\)/);
   assert.match(result.prompt, /Original objective digest/);
@@ -634,6 +781,7 @@ test("generateNextPrompt synthesizes current context instead of repeating the or
   assert.match(result.prompt, /fallbackFrom=deepseek/);
   assert.equal(result.nextActionContract.action, "replan");
   assert.equal(result.noveltyReport.recommendation, "replan");
+  assert.equal(result.progressDelta.value, 3);
 });
 
 

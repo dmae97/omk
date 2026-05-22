@@ -196,6 +196,17 @@ export class KuzuMemoryStore {
     if (!this.conn) return "";
     const projectKey = this.escapeString(this.settings.project.key);
     const memoryKey = this.escapeString(this.memoryKey(path));
+    const escapedPath = this.escapeString(path);
+    try {
+      const result = await this.runQuery(
+        `MATCH (v:OmkMemoryVersion {path: "${escapedPath}", projectKey: "${projectKey}"}) RETURN v.content AS content, v.createdAt AS createdAt ORDER BY v.createdAt DESC LIMIT 1`
+      );
+      const rows = (await result.getAll()) as Array<Record<string, unknown>>;
+      const content = rows[0]?.content;
+      if (typeof content === "string") return content;
+    } catch {
+      // Fallback below reads the legacy summary field.
+    }
     try {
       const result = await this.runQuery(
         `MATCH (m:OmkMemory {path: "${memoryKey}", projectKey: "${projectKey}"}) RETURN m.content AS content`
@@ -221,6 +232,7 @@ export class KuzuMemoryStore {
     const sessionId = this.escapeString(this.settings.session.id);
     const escapedPath = this.escapeString(path);
     const escapedContent = this.escapeString(content.length <= 1000 ? content : `${content.slice(0, 999)}…`);
+    const escapedVersionContent = this.escapeString(content);
     const source = this.escapeString(this.source);
 
     // Upsert project
@@ -279,7 +291,7 @@ export class KuzuMemoryStore {
 
     // Create version node
     await this.conn.query(
-      `CREATE (v:OmkMemoryVersion {versionKey: "${versionKey}", path: "${escapedPath}", content: "${escapedContent}", projectKey: "${projectKey}", sessionId: "${sessionId}", source: "${source}", createdAt: "${now}"})`
+      `CREATE (v:OmkMemoryVersion {versionKey: "${versionKey}", path: "${escapedPath}", content: "${escapedVersionContent}", projectKey: "${projectKey}", sessionId: "${sessionId}", source: "${source}", createdAt: "${now}"})`
     );
 
     // Link session -> version

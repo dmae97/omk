@@ -2,7 +2,7 @@
  * Mode-preset system for oh-my-kimi.
  *
  * Three tabs/modes:
- *   - default : full orchestration (intake → plan → execute → review)
+ *   - agent   : interactive orchestrator (execution choice → plan → execute/review)
  *   - plan    : plan-only mode — generates enriched prompt & plan, waits for user approval
  *   - chat    : chat-only mode — GPT-like conversation without code modification
  */
@@ -26,14 +26,14 @@ export interface ModePreset {
     useDag: boolean;
   };
   /** Default CLI command launched when this mode is selected from the TTY selector. */
-  launchCommand: "chat" | "menu" | "review" | "doctor";
+  launchCommand: "chat" | "parallel" | "menu" | "review" | "doctor";
 }
 
 const PRESETS: ModePreset[] = [
   {
     name: "agent",
-    label: "Agent",
-    description: "Full orchestration: intake → plan → execute → review → quality gate",
+    label: "Agent Orchestrator",
+    description: "Interactive orchestrator: asks parallel vs one-by-one, then coordinates plan/run/review",
     icon: "🤖",
     behavior: {
       autoExecute: true,

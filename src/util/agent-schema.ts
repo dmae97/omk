@@ -30,6 +30,7 @@ export const CANONICAL_ROOT_SUBAGENT_ALIASES = [
   "explore",
   "planner",
   "plan",
+  "router",
   "architect",
   "coder",
   "reviewer",

@@ -23,6 +23,7 @@ jobs:
       - run: npm run build
       - run: npm run lint
       - run: npm run secret:scan
+      - run: npm run secret:scan:runtime
       - run: npm run check
       - uses: dtolnay/rust-toolchain@stable
       - run: npm run rust:check
@@ -84,6 +85,11 @@ jobs:
       - run: npm run audit:package
       - name: Pack tarball
         run: npm pack --ignore-scripts --json
+        env:
+          TMPDIR: /tmp
+          TMP: /tmp
+          TEMP: /tmp
+          npm_config_cache: /tmp/omk-npm-cache
       - name: Upload tarball
         uses: actions/upload-artifact@v4
         with:

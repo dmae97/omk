@@ -116,13 +116,16 @@ export function registerToolCommands(program: Command): void {
     .description(t("cmd.designOpenDesignDesc"))
     .option("--dir <path>", "Open Design checkout directory (default: .omk/open-design)")
     .option("--branch <branch>", "Open Design git branch or tag", "main")
+    .option("--ref <ref>", "Open Design git ref/branch/tag/SHA (or OMK_OPEN_DESIGN_REF)")
     .option("--daemon-port <port>", "Open Design daemon localhost port", "7457")
     .option("--web-port <port>", "Open Design web localhost port", "5175")
+    .option("--doctor", "Check Open Design bridge readiness without cloning, installing, or starting")
     .option("--foreground", "Run tools-dev in the foreground")
     .option("--no-install", "Skip pnpm install")
     .option("--update", "Run git pull --ff-only when the checkout already exists")
     .option("--open", "Open the localhost URL in the default browser")
     .option("--print-only", "Print the launch plan without cloning, installing, or starting")
+    .option("--json", "With --doctor, output machine-readable JSON")
     .action(async (options) => {
       const { designOpenDesignCommand } = await import("../commands/design.js");
       await designOpenDesignCommand(options);

@@ -26,7 +26,7 @@ export function createDeepSeekReadOnlyTaskRunner(
       forked.onThinking = onThinking;
       return forked;
     },
-    async run(node: DagNode, env: Record<string, string>): Promise<TaskResult> {
+    async run(node: DagNode, env: Record<string, string>, signal?: AbortSignal): Promise<TaskResult> {
       const risk = inferNodeRisk(node);
       const advisoryFileMode = options.allowAdvisoryFileNodes === true &&
         env.OMK_DEEPSEEK_PARTICIPATION === "advisory" &&
@@ -67,6 +67,7 @@ export function createDeepSeekReadOnlyTaskRunner(
           maxTokens: 4096,
           thinking: options.thinking,
           reasoningEffort: options.reasoningEffort,
+          signal,
         });
         return {
           success: true,

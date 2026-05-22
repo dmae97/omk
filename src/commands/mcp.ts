@@ -1,10 +1,22 @@
-import { mkdir, readFile, writeFile } from "fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "fs/promises";
 
 import { dirname, join, isAbsolute } from "path";
 import { runShell, which } from "../util/shell.js";
-import { collectMcpConfigs, diagnoseRuntimeMcpServer, getProjectRoot, pathExists, getUserHome, STALE_PACKAGE_NAMES } from "../util/fs.js";
+import {
+  collectMcpConfigs,
+  diagnoseRuntimeMcpServer,
+  getProjectRoot,
+  pathExists,
+  getUserHome,
+  preflightRuntimeMcpServers,
+  resolveRuntimeMcpPreflightOptions,
+  STALE_PACKAGE_NAMES,
+} from "../util/fs.js";
 import { getOmkResourceSettings } from "../util/resource-profile.js";
 import { style, header, status, bullet, label } from "../util/theme.js";
+import { maskSensitiveText } from "../util/secret-mask.js";
+import { buildSubprocessEnv } from "../mcp/transports/stdio.js";
+import { McpClientSession } from "../mcp/client.js";
 
 interface McpServerConfig {
   url?: string;
@@ -38,12 +50,15 @@ interface CollectedMcpServer {
 interface MutableMcpConfigSource {
   path: string;
   config: McpConfig & Record<string, unknown>;
+  originalConfig: McpConfig & Record<string, unknown>;
   changed: boolean;
 }
 
 export interface McpDoctorOptions {
   json?: boolean;
   fix?: boolean;
+  dryRun?: boolean;
+  global?: boolean;
 }
 
 type McpDoctorSeverity = "ok" | "info" | "warn" | "error";
@@ -98,8 +113,11 @@ export interface McpDoctorReport {
 
 export interface McpDoctorFixReport {
   changed: boolean;
+  dryRun: boolean;
+  global: boolean;
   actions: string[];
   skipped: string[];
+  backups: string[];
 }
 
 const RAILWAY_REMOTE_MCP_URL = "https://mcp.railway.com";
@@ -145,6 +163,7 @@ async function resolveAllConfigs(): Promise<ConfigSource[]> {
     join(root, ".omk", "mcp.json"),
     join(root, ".kimi", "mcp.json"),
     join(getUserHome(), ".kimi", "mcp.json"),
+    join(getUserHome(), ".omk", "mcp.json"),
   ];
   const results: ConfigSource[] = [];
   for (const p of paths) {
@@ -156,9 +175,14 @@ async function resolveAllConfigs(): Promise<ConfigSource[]> {
 async function ensureMcpConfigFile(
   filePath: string,
   config: McpConfig & Record<string, unknown>,
-  actions: string[]
+  actions: string[],
+  options: { dryRun?: boolean } = {}
 ): Promise<void> {
   if (await pathExists(filePath)) return;
+  if (options.dryRun) {
+    actions.push(`would create MCP config ${filePath}`);
+    return;
+  }
   await mkdir(dirname(filePath), { recursive: true });
   await writeFile(filePath, JSON.stringify(config, null, 2) + "\n", "utf-8");
   actions.push(`created MCP config ${filePath}`);
@@ -181,7 +205,8 @@ async function readParsedMcpConfig(filePath: string): Promise<(McpConfig & Recor
 async function migrateLegacyOmkMcpBeforeEnsure(
   omkMcpPath: string,
   projectMcpPath: string,
-  actions: string[]
+  actions: string[],
+  options: { dryRun?: boolean; backups?: string[] } = {}
 ): Promise<void> {
   const legacyConfig = await readParsedMcpConfig(omkMcpPath);
   if (!hasConfiguredMcpServers(legacyConfig)) return;
@@ -189,14 +214,72 @@ async function migrateLegacyOmkMcpBeforeEnsure(
   const projectConfig = await readParsedMcpConfig(projectMcpPath);
   if (projectConfig && hasConfiguredMcpServers(projectConfig)) return;
 
+  if (options.dryRun) {
+    actions.push(`would migrate legacy MCP servers from ${omkMcpPath} to ${projectMcpPath}`);
+    return;
+  }
+
   const migratedConfig: McpConfig & Record<string, unknown> = {
     ...(projectConfig ?? {}),
     _comment: "Project-local MCP config migrated from legacy .omk/mcp.json; review secrets before sharing.",
     mcpServers: { ...(legacyConfig?.mcpServers ?? {}) },
   };
+  if (projectConfig) {
+    await createSanitizedMcpBackup(projectMcpPath, projectConfig, options.backups ?? [], actions);
+  }
   await mkdir(dirname(projectMcpPath), { recursive: true });
   await writeFile(projectMcpPath, JSON.stringify(migratedConfig, null, 2) + "\n", "utf-8");
   actions.push(`migrated legacy MCP servers from ${omkMcpPath} to ${projectMcpPath}`);
+}
+
+function cloneMcpConfig(config: McpConfig & Record<string, unknown>): McpConfig & Record<string, unknown> {
+  return JSON.parse(JSON.stringify(config)) as McpConfig & Record<string, unknown>;
+}
+
+function timestampForBackup(): string {
+  return new Date().toISOString().replace(/[:.]/g, "-");
+}
+
+async function createSanitizedMcpBackup(
+  filePath: string,
+  config: McpConfig & Record<string, unknown>,
+  backups: string[],
+  actions: string[]
+): Promise<void> {
+  if (!(await pathExists(filePath))) return;
+  const backupPath = `${filePath}.omk-backup-${timestampForBackup()}-${backups.length + 1}.json`;
+  const dir = dirname(filePath);
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  await chmod(dir, 0o700).catch(() => undefined);
+  await writeFile(
+    backupPath,
+    JSON.stringify(sanitizeMcpConfigForBackup(config), null, 2) + "\n",
+    { encoding: "utf-8", mode: 0o600 }
+  );
+  await chmod(backupPath, 0o600).catch(() => undefined);
+  backups.push(backupPath);
+  actions.push(`created sanitized MCP backup ${backupPath}`);
+}
+
+function sanitizeMcpConfigForBackup(config: McpConfig & Record<string, unknown>): McpConfig & Record<string, unknown> {
+  const cleaned = cloneMcpConfig(config);
+  if (cleaned.mcpServers && typeof cleaned.mcpServers === "object") {
+    cleaned.mcpServers = Object.fromEntries(
+      Object.entries(cleaned.mcpServers).map(([name, server]) => [name, sanitizeMcpServerForProject(server)])
+    );
+  }
+  const disabled = cleaned._omkDisabledMcpServers;
+  if (disabled && typeof disabled === "object" && !Array.isArray(disabled)) {
+    cleaned._omkDisabledMcpServers = Object.fromEntries(
+      Object.entries(disabled as Record<string, unknown>).map(([name, server]) => [
+        name,
+        server && typeof server === "object" && !Array.isArray(server)
+          ? sanitizeMcpServerForProject(server as McpServerConfig)
+          : server,
+      ])
+    );
+  }
+  return cleaned;
 }
 
 function repairMcpServerConfig(name: string, server: McpServerConfig): string[] {
@@ -297,7 +380,7 @@ export async function mcpListCommand(): Promise<void> {
     const marker = activePaths.has(src.path) ? style.mint(" [active]") : style.gray(" [inactive]");
     const missing = !src.exists ? style.gray(" (not found)") : "";
     console.log(`${icon} ${src.path}${marker}${missing}`);
-    if (src.error) console.log(`  ${style.gray(src.error)}`);
+    if (src.error) console.log(`  ${style.gray(maskSensitiveText(src.error))}`);
   }
 
   if (servers.size === 0) {
@@ -318,7 +401,7 @@ export async function mcpListCommand(): Promise<void> {
       console.log(`  ${style.gray("url:")} ${sanitizeMcpUrlForDisplay(server.url)}`);
     }
     if (server.command || !server.url) {
-      console.log(`  ${style.gray("command:")} ${server.command ?? style.pink("missing")}`);
+      console.log(`  ${style.gray("command:")} ${server.command ? maskSensitiveText(server.command) : style.pink("missing")}`);
     }
     if (server.args && server.args.length > 0) {
       console.log(`  ${style.gray("args:")} ${formatArgsForDisplay(server.args)}`);
@@ -339,7 +422,12 @@ export async function mcpListCommand(): Promise<void> {
 }
 
 export async function mcpDoctorCommand(options: McpDoctorOptions = {}): Promise<void> {
-  const fixes = options.fix ? await repairMcpDoctorIssues() : undefined;
+  const fixes = options.fix
+    ? await repairMcpDoctorIssues({
+        dryRun: Boolean(options.dryRun),
+        global: Boolean(options.global),
+      })
+    : undefined;
   const report = await buildMcpDoctorReport();
   if (fixes) report.fixes = fixes;
 
@@ -353,26 +441,33 @@ export async function mcpDoctorCommand(options: McpDoctorOptions = {}): Promise<
   if (!report.ok) process.exitCode = 1;
 }
 
-export async function repairMcpDoctorIssues(): Promise<McpDoctorFixReport> {
+export async function repairMcpDoctorIssues(
+  options: { dryRun?: boolean; global?: boolean } = {}
+): Promise<McpDoctorFixReport> {
   const root = getProjectRoot();
   const projectOmkDir = join(root, ".omk");
   const projectKimiDir = join(root, ".kimi");
   const omkMcpPath = join(projectOmkDir, "mcp.json");
   const projectMcpPath = join(projectKimiDir, "mcp.json");
+  const dryRun = Boolean(options.dryRun);
+  const includeGlobal = Boolean(options.global);
   const actions: string[] = [];
   const skipped: string[] = [];
+  const backups: string[] = [];
 
-  await Promise.all([
-    mkdir(projectOmkDir, { recursive: true }),
-    mkdir(projectKimiDir, { recursive: true }),
-  ]);
+  if (!dryRun) {
+    await Promise.all([
+      mkdir(projectOmkDir, { recursive: true }),
+      mkdir(projectKimiDir, { recursive: true }),
+    ]);
+  }
 
-  await migrateLegacyOmkMcpBeforeEnsure(omkMcpPath, projectMcpPath, actions);
-  await ensureMcpConfigFile(omkMcpPath, { mcpServers: {} }, actions);
+  await migrateLegacyOmkMcpBeforeEnsure(omkMcpPath, projectMcpPath, actions, { dryRun, backups });
+  await ensureMcpConfigFile(omkMcpPath, { mcpServers: {} }, actions, { dryRun });
   await ensureMcpConfigFile(projectMcpPath, {
     _comment: "Project-local MCP config. omk-project is virtual runtime MCP injected; global MCP servers remain in ~/.kimi/mcp.json and must be imported explicitly only after secret review.",
     mcpServers: {},
-  }, actions);
+  }, actions, { dryRun });
 
   const sources = await resolveAllConfigs();
   const resources = await getOmkResourceSettings();
@@ -388,12 +483,17 @@ export async function repairMcpDoctorIssues(): Promise<McpDoctorFixReport> {
       skipped.push(`invalid JSON left unchanged: ${source.path}`);
       continue;
     }
+    const clonedConfig = cloneMcpConfig(source.config as McpConfig & Record<string, unknown>);
     mutableSources.set(source.path, {
       path: source.path,
-      config: { ...source.config, mcpServers: { ...(source.config.mcpServers ?? {}) } },
+      config: clonedConfig,
+      originalConfig: cloneMcpConfig(source.config as McpConfig & Record<string, unknown>),
       changed: false,
     });
   }
+
+  const writableConfigPaths = new Set([omkMcpPath, projectMcpPath]);
+  if (includeGlobal) writableConfigPaths.add(globalMcpPath);
 
   const servers = collectServers(sources);
   for (const [name, info] of servers) {
@@ -410,6 +510,10 @@ export async function repairMcpDoctorIssues(): Promise<McpDoctorFixReport> {
       ? activeSources.filter((sourcePath) => sourcePath !== globalMcpPath)
       : activeSources.filter((sourcePath) => sourcePath !== activePreferredPath);
     for (const sourcePath of removableSources) {
+      if (!writableConfigPaths.has(sourcePath)) {
+        skipped.push(`duplicate MCP "${name}" not modified outside requested repair scope: ${sourcePath}`);
+        continue;
+      }
       const source = mutableSources.get(sourcePath);
       if (!source?.config.mcpServers?.[name]) continue;
       delete source.config.mcpServers[name];
@@ -421,9 +525,8 @@ export async function repairMcpDoctorIssues(): Promise<McpDoctorFixReport> {
     }
   }
 
-  const projectConfigPaths = new Set([omkMcpPath, projectMcpPath]);
   for (const source of mutableSources.values()) {
-    if (!projectConfigPaths.has(source.path)) continue;
+    if (!writableConfigPaths.has(source.path)) continue;
     const serversByName = source.config.mcpServers ?? {};
     for (const [name, server] of Object.entries(serversByName)) {
       const serverActions = repairMcpServerConfig(name, server);
@@ -443,13 +546,18 @@ export async function repairMcpDoctorIssues(): Promise<McpDoctorFixReport> {
 
   for (const source of mutableSources.values()) {
     if (!source.changed) continue;
+    if (dryRun) continue;
+    await createSanitizedMcpBackup(source.path, source.originalConfig, backups, actions);
     await writeFile(source.path, JSON.stringify(source.config, null, 2) + "\n", "utf-8");
   }
 
   return {
-    changed: actions.length > 0,
-    actions,
-    skipped,
+    changed: !dryRun && actions.length > 0,
+    dryRun,
+    global: includeGlobal,
+    actions: actions.map(maskSensitiveText),
+    skipped: skipped.map(maskSensitiveText),
+    backups,
   };
 }
 
@@ -460,6 +568,25 @@ export async function buildMcpDoctorReport(): Promise<McpDoctorReport> {
   const activePathOrder = await collectMcpConfigs(resources.mcpScope);
   const activePaths = new Set(activePathOrder);
   const globalMcpPath = join(getUserHome(), ".kimi", "mcp.json");
+  const preflightEntriesByName = new Map<string, {
+    status: string;
+    reason?: string;
+    detail?: string;
+    packageSpec?: string;
+  }>();
+  const preflightOptions = resolveRuntimeMcpPreflightOptions();
+  if (preflightOptions.mode !== "off") {
+    const activeServersForPreflight: Record<string, unknown> = {};
+    for (const [name, info] of servers) {
+      const activeSources = info.sources.filter((source) => activePaths.has(source));
+      if (activeSources.length === 0) continue;
+      activeServersForPreflight[name] = selectEffectiveServer(info, activePathOrder);
+    }
+    const preflight = await preflightRuntimeMcpServers(activeServersForPreflight, preflightOptions);
+    for (const entry of preflight.entries) {
+      preflightEntriesByName.set(entry.name, entry);
+    }
+  }
 
   const sourceReports: McpDoctorSourceReport[] = sources.map((src) => {
     const serverCount = src.parsed ? Object.keys(src.config.mcpServers ?? {}).length : 0;
@@ -470,7 +597,7 @@ export async function buildMcpDoctorReport(): Promise<McpDoctorReport> {
         parsed: src.parsed,
         status: !src.parsed ? "error" : !src.exists || serverCount === 0 ? "empty" : "ok",
         serverCount,
-        error: src.error,
+        error: src.error ? maskSensitiveText(src.error) : undefined,
     };
     return sourceReport;
   });
@@ -520,7 +647,7 @@ export async function buildMcpDoctorReport(): Promise<McpDoctorReport> {
         activeSources,
         transport: server.url ? "remote" : server.command ? "stdio" : "invalid",
         url: server.url ? sanitizeMcpUrlForDisplay(server.url) : undefined,
-        command: server.command,
+        command: server.command ? maskSensitiveText(server.command) : undefined,
         resolvedCommand,
         timeoutSec: server.startup_timeout_sec,
         checks,
@@ -533,17 +660,17 @@ export async function buildMcpDoctorReport(): Promise<McpDoctorReport> {
       if (urlCheck.ok) {
         checks.push({ severity: "ok", kind: "url", message: `url: ${sanitizeMcpUrlForDisplay(server.url)}` });
       } else {
-        checks.push({ severity: "error", kind: "invalid-url", message: `invalid url: ${urlCheck.message}` });
+        checks.push({ severity: "error", kind: "invalid-url", message: `invalid url: ${maskSensitiveText(urlCheck.message)}` });
       }
     } else if (!server.command) {
       checks.push({ severity: "error", kind: "missing-command", message: "missing command" });
     } else {
       const resolved = await which(server.command);
       if (resolved.failed) {
-        checks.push({ severity: "error", kind: "command-not-found", message: `command not found: ${server.command}` });
+        checks.push({ severity: "error", kind: "command-not-found", message: `command not found: ${maskSensitiveText(server.command)}` });
       } else {
         resolvedCommand = resolved.stdout.trim();
-        checks.push({ severity: "ok", kind: "command", message: `command: ${resolvedCommand}` });
+        checks.push({ severity: "ok", kind: "command", message: `command: ${maskSensitiveText(resolvedCommand)}` });
       }
     }
 
@@ -552,9 +679,10 @@ export async function buildMcpDoctorReport(): Promise<McpDoctorReport> {
         if (!shouldValidateArgPath(server, arg, index)) continue;
         if (!isAbsolute(arg) && !arg.includes("/") && !arg.includes("\\")) continue;
         const exists = await pathExists(arg);
+        const displayArg = maskSensitiveText(arg);
         checks.push(exists
-          ? { severity: "ok", kind: "arg-path", message: `arg path: ${arg}` }
-          : { severity: "error", kind: "arg-path-not-found", message: `arg path not found: ${arg}` });
+          ? { severity: "ok", kind: "arg-path", message: `arg path: ${displayArg}` }
+          : { severity: "error", kind: "arg-path-not-found", message: `arg path not found: ${displayArg}` });
       }
     }
 
@@ -588,6 +716,11 @@ export async function buildMcpDoctorReport(): Promise<McpDoctorReport> {
       checks.push({ severity: "info", kind: "stability", message: `stability: ${hint}` });
     }
 
+    const preflightEntry = preflightEntriesByName.get(name);
+    if (preflightEntry?.status === "failed") {
+      checks.push(...preflightChecksForDoctor(preflightEntry));
+    }
+
     const hasError = checks.some((check) => check.severity === "error");
     const hasWarn = checks.some((check) => check.severity === "warn");
 
@@ -599,7 +732,7 @@ export async function buildMcpDoctorReport(): Promise<McpDoctorReport> {
       activeSources,
       transport: server.url ? "remote" : server.command ? "stdio" : "invalid",
       url: server.url ? sanitizeMcpUrlForDisplay(server.url) : undefined,
-      command: server.command,
+      command: server.command ? maskSensitiveText(server.command) : undefined,
       resolvedCommand,
       timeoutSec: server.startup_timeout_sec,
       checks,
@@ -626,17 +759,17 @@ export async function buildMcpDoctorReport(): Promise<McpDoctorReport> {
   const errors = [
     ...sourceReports
       .filter((source) => source.status === "error" && activePaths.has(source.path))
-      .map((source) => `${source.path}: ${source.error ?? "invalid MCP config"}`),
+      .map((source) => maskSensitiveText(`${source.path}: ${source.error ?? "invalid MCP config"}`)),
     ...serverReports.flatMap((server) =>
       server.checks
         .filter((check) => check.severity === "error")
-        .map((check) => `${server.name}: ${check.message}`)
+        .map((check) => maskSensitiveText(`${server.name}: ${check.message}`))
     ),
   ];
   const warnings = serverReports.flatMap((server) =>
     server.checks
       .filter((check) => check.severity === "warn")
-      .map((check) => `${server.name}: ${check.message}`)
+      .map((check) => maskSensitiveText(`${server.name}: ${check.message}`))
   );
 
   return {
@@ -685,6 +818,20 @@ function emitMcpDoctorText(report: McpDoctorReport): void {
     }
   }
 
+  if (report.fixes) {
+    console.log("");
+    console.log(label("Fix mode", report.fixes.dryRun ? "dry-run" : report.fixes.global ? "project+global" : "project-local"));
+    for (const action of report.fixes.actions) {
+      console.log(`  ${report.fixes.dryRun ? style.skin("•") : style.mint("✓")} ${action}`);
+    }
+    for (const backup of report.fixes.backups) {
+      console.log(`  ${style.gray("backup:")} ${backup}`);
+    }
+    for (const item of report.fixes.skipped) {
+      console.log(`  ${style.gray("skipped:")} ${item}`);
+    }
+  }
+
   console.log("");
   if (report.ok) {
     console.log(status.ok("All checks passed"));
@@ -705,6 +852,27 @@ function formatMcpDoctorCheck(check: McpDoctorCheck): string {
     default:
       return `${style.gray("ℹ")} ${check.message}`;
   }
+}
+
+function preflightChecksForDoctor(entry: {
+  reason?: string;
+  detail?: string;
+  packageSpec?: string;
+}): McpDoctorCheck[] {
+  const packageNote = entry.packageSpec ? ` (${maskSensitiveText(entry.packageSpec)})` : "";
+  const detail = entry.detail ? `: ${maskSensitiveText(entry.detail)}` : "";
+  const failureKind = entry.reason === "timeout" ? "preflight-timeout" : "preflight-package-unavailable";
+  const failureMessage = entry.reason === "timeout"
+    ? `warn: handshake-timeout/package preflight timed out${packageNote}; run \`omk mcp check --all\` (or \`omk mcp prewarm --all\`) to check caches`
+    : `npm-family package resolution failed${packageNote}${detail}; run \`omk mcp check --all\` (or \`omk mcp prewarm --all\`) to check caches`;
+  return [
+    { severity: "warn", kind: failureKind, message: failureMessage },
+    {
+      severity: "warn",
+      kind: "prewarm-needed",
+      message: "preflight check recommended before chat startup; for one server run `omk mcp check <server-name>`",
+    },
+  ];
 }
 
 function stabilityHintsForServer(name: string, server: McpServerConfig): string[] {
@@ -757,6 +925,7 @@ function shouldValidateArgPath(server: McpServerConfig, arg: string, index: numb
   if (typeof arg !== "string" || arg.startsWith("-") || arg.startsWith("$")) return false;
   if (isShellInlineScript(server, index)) return false;
   if (isNpxPackageSpecifier(server, arg)) return false;
+  if (isHttpUrl(arg)) return false;
   // Shell snippets, inline commands, and arguments with whitespace are not
   // standalone filesystem paths. Validating them as paths creates false MCP
   // doctor failures for commands like `bash -lc "exec node /path/server.js"`.
@@ -802,7 +971,7 @@ function validateRemoteMcpUrl(url: string): { ok: true } | { ok: false; message:
   }
 }
 
-const SECRET_QUERY_KEYS = /^(token|api[-_]?key|key|secret|password|auth|credential|session|bearer|access[-_]?token|refresh[-_]?token)$/i;
+const SECRET_QUERY_KEYS = /^(token|api[-_]?key|key|secret|password|auth|credential|session|bearer|access[-_]?token|refresh[-_]?token|client[-_]?secret|x[-_]?auth[-_]?token|signature|sig|jwt|private[-_]?key|pat|dsn)$/i;
 
 function sanitizeMcpUrlForDisplay(url: string): string {
   try {
@@ -818,6 +987,10 @@ function sanitizeMcpUrlForDisplay(url: string): string {
         parsed.searchParams.set(key, "***");
         changed = true;
       }
+    }
+    if (parsed.hash) {
+      parsed.hash = "#***";
+      changed = true;
     }
     return changed ? parsed.toString() : url;
   } catch {
@@ -838,14 +1011,7 @@ function isSupabaseMcpServer(name: string, server: McpServerConfig): boolean {
 }
 
 function formatArgsForDisplay(args: string[]): string {
-  return args.map(maskSensitiveText).join(" ");
-}
-
-function maskSensitiveText(value: string): string {
-  return value
-    .replace(/(Bearer\s+)[A-Za-z0-9._-]+/g, "$1***")
-    .replace(/(--(?:api-)?token(?:=|\s+))[^"'`\s;]+/gi, "$1***")
-    .replace(/([A-Za-z_][A-Za-z0-9_]*(?:SECRET|TOKEN|KEY|PASSWORD|CREDENTIAL)[A-Za-z0-9_]*\s*=\s*)[^"'`\s;]+/gi, "$1***");
+  return sanitizeMcpArgsForProject(args).join(" ");
 }
 
 export async function mcpTestCommand(serverName: string): Promise<void> {
@@ -876,7 +1042,7 @@ export async function mcpTestCommand(serverName: string): Promise<void> {
   console.log(header(`MCP Test: ${serverName}`));
   if (server.url) {
     console.log(label("URL", sanitizeMcpUrlForDisplay(server.url)));
-    await testRemoteMcpServer(serverName, server.url);
+    await testRemoteMcpServer(serverName, server);
     return;
   }
 
@@ -886,17 +1052,18 @@ export async function mcpTestCommand(serverName: string): Promise<void> {
     process.exit(1);
   }
 
-  console.log(label("Command", command));
+  console.log(label("Command", maskSensitiveText(command)));
   if (server.args) console.log(label("Args", formatArgsForDisplay(server.args)));
   console.log("");
+  const testEnv = buildSubprocessEnv(process.env, server.env ?? {});
 
   // Test 1: executable exists
   const resolved = await which(command);
   if (resolved.failed) {
-    console.error(status.error(`Executable not found: ${command}`));
+    console.error(status.error(`Executable not found: ${maskSensitiveText(command)}`));
     process.exit(1);
   }
-  console.log(status.ok(`Executable: ${resolved.stdout.trim()}`));
+  console.log(status.ok(`Executable: ${maskSensitiveText(resolved.stdout.trim())}`));
 
   // Test 2: try to run with a 5s timeout as a basic smoke test
   const smokeArgs = [...(server.args ?? [])];
@@ -904,7 +1071,7 @@ export async function mcpTestCommand(serverName: string): Promise<void> {
   const smokeResult = await runShell(command, smokeArgs, {
     cwd: getProjectRoot(),
     timeout: 5000,
-    env: server.env ? { ...process.env, ...server.env } as Record<string, string> : process.env as Record<string, string>,
+    env: testEnv,
   });
   const smokePollution = findNonJsonStdoutLines(smokeResult.stdout);
   if (smokePollution.length > 0) {
@@ -919,10 +1086,10 @@ export async function mcpTestCommand(serverName: string): Promise<void> {
   } else if (!smokeResult.stderr.trim()) {
     console.log(status.ok(`Process started and exited without stderr (code ${smokeResult.exitCode})`));
   } else if (smokeResult.stderr.includes("ENOENT")) {
-    console.error(status.error(`Failed to start: ${smokeResult.stderr}`));
+    console.error(status.error(`Failed to start: ${maskSensitiveText(smokeResult.stderr)}`));
     process.exit(1);
   } else {
-    console.log(style.gray(`Process exited with error (may be OK for stdio servers): ${smokeResult.stderr}`));
+    console.log(style.gray(`Process exited with error (may be OK for stdio servers): ${maskSensitiveText(smokeResult.stderr)}`));
   }
 
   // Test 3: JSON-RPC initialize handshake
@@ -941,10 +1108,11 @@ export async function mcpTestCommand(serverName: string): Promise<void> {
       },
     },
   }) + "\n";
+  const handshakeTimeoutMs = Math.max(1000, Math.min((server.startup_timeout_sec ?? 20) * 1000, 20_000));
   const handshakeResult = await runShell(command, smokeArgs, {
     cwd: getProjectRoot(),
-    timeout: 20000,
-    env: server.env ? { ...process.env, ...server.env } as Record<string, string> : process.env as Record<string, string>,
+    timeout: handshakeTimeoutMs,
+    env: testEnv,
     input: initializePayload,
   });
   const stdoutPollution = findNonJsonStdoutLines(handshakeResult.stdout);
@@ -956,18 +1124,24 @@ export async function mcpTestCommand(serverName: string): Promise<void> {
   const handshakeResponses = parseJsonRpcResponses(handshakeResult.stdout);
   const internalHandshakeError = findInternalJsonRpcError(handshakeResponses);
   if (internalHandshakeError) {
-    console.error(status.error(`JSON-RPC initialize returned Internal error: ${internalHandshakeError.error?.message ?? "unknown"}`));
+    console.error(status.error(`JSON-RPC initialize returned Internal error: ${maskSensitiveText(internalHandshakeError.error?.message ?? "unknown")}`));
     process.exit(1);
   }
-  if (!handshakeResult.failed && handshakeResult.stdout.includes("\"serverInfo\"")) {
+  const initializeResponse = findJsonRpcResponseById(handshakeResponses, 1);
+  const serverInfo = extractInitializeServerInfo(initializeResponse);
+  if (serverInfo) {
     console.log(style.mint("JSON-RPC initialize succeeded"));
   } else if (!handshakeResult.failed) {
-    console.error(status.error(`Server exited without initialize response (exit code ${handshakeResult.exitCode})`));
+    const detail = initializeResponse ? "initialize response missing serverInfo" : `server exited without initialize response (exit code ${handshakeResult.exitCode})`;
+    console.error(status.error(`JSON-RPC initialize failed: ${detail}`));
     process.exit(1);
-  } else if (handshakeResult.stderr.includes("timeout") || handshakeResult.stderr.includes("ETIMEDOUT")) {
-    console.log(style.mint("Server stayed alive long enough — stdio MCP server looks healthy"));
+  } else if (/timed?\s*out|timeout|ETIMEDOUT/i.test(handshakeResult.stderr)) {
+    console.error(status.error("JSON-RPC initialize timed out before serverInfo was received"));
+    if (handshakeResult.stderr.trim()) console.error(style.gray(maskSensitiveText(handshakeResult.stderr.trim())));
+    process.exit(1);
   } else {
-    console.log(style.gray(`Handshake result: ${handshakeResult.stderr}`));
+    console.error(status.error(`JSON-RPC initialize failed: ${maskSensitiveText(handshakeResult.stderr || "unknown error")}`));
+    process.exit(1);
   }
 
   if (shouldRunOmkProjectProbe(serverName, server)) {
@@ -975,9 +1149,87 @@ export async function mcpTestCommand(serverName: string): Promise<void> {
   }
 }
 
-export async function mcpPrewarmCommand(serverName: string): Promise<void> {
-  console.log(header(`MCP Prewarm: ${serverName}`));
-  console.log(style.gray("Runs the MCP startup probe outside chat so package-manager caches warm before Kimi starts."));
+export async function mcpPrewarmCommand(
+  serverName: string | undefined,
+  options: { all?: boolean; label?: "prewarm" | "check" } = {}
+): Promise<void> {
+  const isCheck = options.label === "check";
+  if (options.all) {
+    console.log(header(isCheck ? "MCP Check All" : "MCP Preflight Check All"));
+    console.log(style.gray("Bounded npm-family dependency-resolution check for active MCP servers; this does not force-install packages."));
+
+    const resources = await getOmkResourceSettings();
+    const activePathOrder = await collectMcpConfigs(resources.mcpScope);
+    const activePaths = new Set(activePathOrder);
+
+    const sources = await resolveAllConfigs();
+    const servers = collectServers(sources);
+
+    if (servers.size === 0) {
+      console.log(style.gray("No MCP servers configured."));
+      return;
+    }
+
+    const activeServers: Record<string, unknown> = {};
+    const inactive = new Set<string>();
+    for (const [name, info] of servers) {
+      const activeSources = info.sources.filter((source) => activePaths.has(source));
+      if (activeSources.length === 0) {
+        inactive.add(name);
+        continue;
+      }
+      activeServers[name] = selectEffectiveServer(info, activePathOrder);
+    }
+
+    const preflightOptions = resolveRuntimeMcpPreflightOptions();
+    const preflight = await preflightRuntimeMcpServers(activeServers, preflightOptions);
+    const entriesByName = new Map(preflight.entries.map((entry) => [entry.name, entry]));
+
+    let okCount = 0;
+    let failCount = 0;
+    let skipCount = inactive.size;
+
+    for (const [name] of servers) {
+      if (inactive.has(name)) {
+        console.log(`${style.gray("-")} ${style.gray(name)} ${style.gray("[inactive]")}`);
+        continue;
+      }
+
+      const entry = entriesByName.get(name);
+      if (!entry || entry.status === "skipped") {
+        skipCount++;
+        const reason = entry?.reason === "no-package-spec" ? "no package spec" : "not npm-family";
+        console.log(`${style.gray("-")} ${name} ${style.gray(`[skipped: ${reason}]`)}`);
+        continue;
+      }
+      if (entry.status === "ok") {
+        okCount++;
+        const packageNote = entry.packageSpec ? ` (${entry.packageSpec})` : "";
+        console.log(`${style.mint("✓")} ${name}${style.gray(packageNote)}`);
+        continue;
+      }
+
+      failCount++;
+      console.log(`${style.pink("✗")} ${name}: ${maskSensitiveText(entry.detail ?? "failed")}`);
+    }
+
+    console.log("");
+    if (failCount === 0) {
+      console.log(status.ok(`Checked ${okCount} server(s); ${skipCount} skipped`));
+    } else {
+      process.exitCode = 1;
+      console.log(status.error(`${failCount} failure(s), ${okCount} ok, ${skipCount} skipped`));
+    }
+    return;
+  }
+
+  if (!serverName) {
+    console.error(status.error("Provide a server name or use --all"));
+    process.exit(1);
+  }
+
+  console.log(header(`${isCheck ? "MCP Check" : "MCP Prewarm/Check"}: ${serverName}`));
+  console.log(style.gray("Runs the MCP startup probe outside chat; package-manager caches may warm as a side effect."));
   console.log(style.gray("For a zero-global-noise session, run chat/goal/parallel with `--mcp-scope project` or `--mcp-scope none`."));
   await mcpTestCommand(serverName);
 }
@@ -1023,14 +1275,14 @@ async function runOmkProjectToolProbe(
   const probeResult = await runShell(command, args, {
     cwd: getProjectRoot(),
     timeout: 20000,
-    env: env ? { ...process.env, ...env } as Record<string, string> : process.env as Record<string, string>,
+    env: buildSubprocessEnv(process.env, env ?? {}),
     input: payload,
   });
   const responses = parseJsonRpcResponses(probeResult.stdout);
   const internalError = findInternalJsonRpcError(responses);
   if (internalError) {
     console.error(status.error(`JSON-RPC id ${String(internalError.id ?? "?")} returned Internal error: ${internalError.error?.message ?? "unknown"}`));
-    if (probeResult.stderr.trim()) console.error(style.gray(probeResult.stderr.trim()));
+    if (probeResult.stderr.trim()) console.error(style.gray(maskSensitiveText(probeResult.stderr.trim())));
     process.exit(1);
   }
   const toolResponse = responses.find((response) => response.id === 3);
@@ -1039,7 +1291,7 @@ async function runOmkProjectToolProbe(
       ? " before the probe timeout"
       : "";
     console.error(status.error(`JSON-RPC tools/call id 3 did not return a response${timeoutHint}`));
-    if (probeResult.stderr.trim()) console.error(style.gray(probeResult.stderr.trim()));
+    if (probeResult.stderr.trim()) console.error(style.gray(maskSensitiveText(probeResult.stderr.trim())));
     process.exit(1);
   }
   if (toolResponse.error) {
@@ -1106,6 +1358,20 @@ function findInternalJsonRpcError(responses: JsonRpcProbeResponse[]): JsonRpcPro
   );
 }
 
+function findJsonRpcResponseById(responses: JsonRpcProbeResponse[], id: string | number): JsonRpcProbeResponse | undefined {
+  return responses.find((response) => response.id === id);
+}
+
+function extractInitializeServerInfo(response: JsonRpcProbeResponse | undefined): { name: string; version: string } | undefined {
+  if (!response || !isRecord(response.result)) return undefined;
+  const serverInfo = response.result.serverInfo;
+  if (!isRecord(serverInfo)) return undefined;
+  return typeof serverInfo.name === "string" && serverInfo.name.trim().length > 0
+    && typeof serverInfo.version === "string" && serverInfo.version.trim().length > 0
+    ? { name: serverInfo.name, version: serverInfo.version }
+    : undefined;
+}
+
 function stringifyToolResultContent(result: unknown): string {
   if (!isRecord(result) || !Array.isArray(result.content)) return "";
   return result.content
@@ -1120,74 +1386,89 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-async function testRemoteMcpServer(serverName: string, url: string): Promise<void> {
+async function testRemoteMcpServer(serverName: string, server: McpServerConfig): Promise<void> {
   console.log("");
+  const url = server.url;
+  if (!url) {
+    console.error(status.error(`Remote MCP server ${serverName} has no URL`));
+    process.exit(1);
+  }
   const urlCheck = validateRemoteMcpUrl(url);
   if (!urlCheck.ok) {
     console.error(status.error(`Invalid remote MCP URL for ${serverName}: ${urlCheck.message}`));
     process.exit(1);
   }
 
-  console.log(style.gray("Remote HTTP reachability test (5s timeout)..."));
+  const timeoutMs = Math.max(1000, Math.min((server.startup_timeout_sec ?? 20) * 1000, 20_000));
+  console.log(style.gray(`Remote MCP JSON-RPC initialize test (${timeoutMs}ms timeout)...`));
+  const session = new McpClientSession({
+    name: serverName,
+    transport: "streamable-http",
+    url,
+    headers: server.headers,
+    http_headers: server.http_headers,
+    startupTimeoutMs: timeoutMs,
+    requestTimeoutMs: timeoutMs,
+  });
   try {
-    const response = await fetch(url, {
-      method: "GET",
-      redirect: "manual",
-      signal: AbortSignal.timeout(5000),
+    await session.connect();
+    const result = await session.initialize({
+      protocolVersion: "2024-11-05",
+      capabilities: {},
+      clientInfo: {
+        name: "omk-mcp-test",
+        version: "0.0.0",
+      },
     });
-
-    if (response.status >= 200 && response.status < 300) {
-      console.log(status.ok(`Remote endpoint reachable (HTTP ${response.status})`));
-      if (serverName === "railway") {
-        console.log(style.gray("Railway may prompt OAuth on first tool call; no API token is required in MCP config."));
-      }
-      return;
+    console.log(status.ok(`Remote MCP initialize succeeded: ${maskSensitiveText(result.serverInfo?.name ?? "unknown")} ${maskSensitiveText(result.serverInfo?.version ?? "")}`.trim()));
+    if (serverName === "railway") {
+      console.log(style.gray("Railway may prompt OAuth on first tool call; no API token is required in MCP config."));
     }
-
-    if (response.status >= 300 && response.status < 400) {
-      console.log(status.warn(`Remote endpoint returned redirect (HTTP ${response.status}). Check the configured URL.`));
-      return;
-    }
-
-    if (response.status === 401) {
-      console.log(status.error(`Remote endpoint requires authentication (HTTP 401). Token may be expired or missing.`));
-      if (serverName === "railway") {
-        console.log(style.gray("Railway OAuth may need re-authentication. Run the server locally or re-authorize via browser."));
-      } else if (serverName === "supabase") {
-        console.log(style.gray("Supabase token may be expired. Generate a new access token in the Supabase account dashboard and update your global MCP env."));
-      } else if (serverName === "github") {
-        console.log(style.gray("GitHub token may be expired or lack required scopes. Check your token at https://github.com/settings/tokens."));
-      }
-      throw new Error(`MCP test failed: ${serverName} returned HTTP 401 (authentication required)`);
-    }
-
-    if (response.status === 403) {
-      console.log(status.error(`Remote endpoint forbidden (HTTP 403). Check token permissions.`));
-      if (serverName === "railway") {
-        console.log(style.gray("Railway OAuth may need re-authentication. Run the server locally or re-authorize via browser."));
-      } else if (serverName === "supabase") {
-        console.log(style.gray("Supabase token may be expired. Generate a new access token in the Supabase account dashboard and update your global MCP env."));
-      } else if (serverName === "github") {
-        console.log(style.gray("GitHub token may be expired or lack required scopes. Check your token at https://github.com/settings/tokens."));
-      }
-      throw new Error(`MCP test failed: ${serverName} returned HTTP 403 (forbidden)`);
-    }
-
-    if (response.status === 404) {
-      console.log(status.warn(`Remote endpoint not found (HTTP 404). Check the configured URL or provider status.`));
-      return;
-    }
-
-    if (response.status >= 400 && response.status < 500) {
-      console.log(status.warn(`Remote endpoint responded with client error (HTTP ${response.status}). Check the configured URL or MCP server health.`));
-      return;
-    }
-
-    console.log(style.skin(`Remote endpoint responded with HTTP ${response.status}; retry later or check provider status.`));
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.log(style.skin(`Remote endpoint reachability inconclusive: ${message}`));
-    throw new Error(`MCP test failed: ${message}`);
+    const message = maskSensitiveText(err instanceof Error ? err.message : String(err));
+    if (/HTTP\s*401|unauthorized/i.test(message)) {
+      console.error(status.error("Remote MCP initialize failed: authentication required (HTTP 401)."));
+      if (serverName === "railway") {
+        console.error(style.gray("Railway OAuth may need re-authentication. Run the server locally or re-authorize via browser."));
+      } else if (serverName === "supabase") {
+        console.error(style.gray("Supabase token may be expired. Generate a new access token in the Supabase account dashboard and update your global MCP env."));
+      } else if (serverName === "github") {
+        console.error(style.gray("GitHub token may be expired or lack required scopes. Check your token at https://github.com/settings/tokens."));
+      }
+      process.exit(1);
+    }
+    if (/HTTP\s*403|forbidden/i.test(message)) {
+      console.error(status.error("Remote MCP initialize failed: forbidden (HTTP 403). Check token permissions."));
+      if (serverName === "railway") {
+        console.error(style.gray("Railway OAuth may need re-authentication. Run the server locally or re-authorize via browser."));
+      } else if (serverName === "supabase") {
+        console.error(style.gray("Supabase token may be expired. Generate a new access token in the Supabase account dashboard and update your global MCP env."));
+      } else if (serverName === "github") {
+        console.error(style.gray("GitHub token may be expired or lack required scopes. Check your token at https://github.com/settings/tokens."));
+      }
+      process.exit(1);
+    }
+    if (/HTTP\s*404|not found/i.test(message)) {
+      console.error(status.error("Remote MCP initialize failed: endpoint not found (HTTP 404)."));
+      process.exit(1);
+    }
+    if (/HTTP\s*405|method not allowed/i.test(message)) {
+      console.error(status.error("Remote MCP initialize failed: method not allowed (HTTP 405). The endpoint may not support MCP over HTTP."));
+      process.exit(1);
+    }
+    if (/HTTP\s*400|bad request/i.test(message)) {
+      console.error(status.error("Remote MCP initialize failed: bad request (HTTP 400). Check URL and headers."));
+      process.exit(1);
+    }
+    if (/timed?\s*out|timeout|ETIMEDOUT|MCP request timed out|MCP transport send timed out|MCP initialize response missing serverInfo/i.test(message)) {
+      console.error(status.error(`Remote MCP initialize failed: ${message}`));
+      console.error(style.gray("The endpoint may not be an MCP server, or it may require different headers or a different URL path."));
+      process.exit(1);
+    }
+    console.error(status.error(`Remote MCP initialize failed: ${message}`));
+    process.exit(1);
+  } finally {
+    await session.close().catch(() => {});
   }
 }
 
@@ -1278,7 +1559,7 @@ export async function mcpInstallCommand(
     process.exit(1);
   }
 
-  const server = createInstallServer(name, command, args, options);
+  const server = sanitizeMcpServerForProject(createInstallServer(name, command, args, options));
 
   projectMcpServers[name] = server;
   await mkdir(join(root, ".kimi"), { recursive: true });
@@ -1289,8 +1570,8 @@ export async function mcpInstallCommand(
   if (server.url) {
     console.log(label("URL", sanitizeMcpUrlForDisplay(server.url)));
   } else {
-    console.log(label("Command", command));
-    if (args.length > 0) console.log(label("Args", formatArgsForDisplay(args)));
+    console.log(label("Command", maskSensitiveText(server.command ?? command)));
+    if (args.length > 0) console.log(label("Args", formatArgsForDisplay(server.args ?? args)));
   }
 }
 
@@ -1304,21 +1585,24 @@ function createInstallServer(
     return { url: RAILWAY_REMOTE_MCP_URL };
   }
   if (isHttpUrl(command) && args.length === 0) {
-    return { url: command };
+    return { url: sanitizeMcpUrlForDisplay(command) };
   }
 
-  const server: McpServerConfig = { command, args };
+  const server: McpServerConfig = { command, args: [...args] };
   if (options.env) {
     server.env = {};
     if (Array.isArray(options.env)) {
       for (const pair of options.env) {
         const idx = pair.indexOf("=");
         if (idx > 0) {
-          server.env[pair.slice(0, idx)] = pair.slice(idx + 1);
+          const key = pair.slice(0, idx);
+          server.env[key] = sanitizeInstallEnvValue(key, pair.slice(idx + 1));
         }
       }
     } else {
-      Object.assign(server.env, options.env);
+      for (const [key, value] of Object.entries(options.env)) {
+        server.env[key] = sanitizeInstallEnvValue(key, value);
+      }
     }
   }
   if (Number.isFinite(options.startupTimeoutSec) && options.startupTimeoutSec && options.startupTimeoutSec > 0) {
@@ -1327,8 +1611,24 @@ function createInstallServer(
   return server;
 }
 
+function sanitizeInstallEnvValue(key: string, value: string): string {
+  if (!isSecretEnvName(key)) return value;
+  const trimmed = value.trim();
+  if (/^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/.test(trimmed)) return trimmed;
+  return `\${${key}}`;
+}
+
 function sanitizeMcpServerForProject(server: McpServerConfig): McpServerConfig {
   const cleaned = JSON.parse(JSON.stringify(server)) as McpServerConfig & Record<string, unknown>;
+  if (typeof cleaned.url === "string") {
+    cleaned.url = sanitizeMcpUrlForDisplay(cleaned.url);
+  }
+  if (typeof cleaned.command === "string") {
+    cleaned.command = maskSensitiveText(cleaned.command);
+  }
+  if (Array.isArray(cleaned.args)) {
+    cleaned.args = sanitizeMcpArgsForProject(cleaned.args);
+  }
   if (cleaned.env && typeof cleaned.env === "object") {
     const env: Record<string, string> = {};
     for (const [key, value] of Object.entries(cleaned.env)) {
@@ -1362,6 +1662,27 @@ function sanitizeMcpServerForProject(server: McpServerConfig): McpServerConfig {
     }
   }
   return cleaned;
+}
+
+function sanitizeMcpArgsForProject(args: string[]): string[] {
+  return args.map((arg, index) => {
+    if (typeof arg !== "string") return arg;
+    const previous = index > 0 ? args[index - 1] : "";
+    if (typeof previous === "string" && isSplitSecretCliOption(previous)) return "[REDACTED]";
+    if (isSecretCliOption(arg)) {
+      const eq = arg.indexOf("=");
+      return eq > 0 ? `${arg.slice(0, eq + 1)}[REDACTED]` : arg;
+    }
+    return maskSensitiveText(arg);
+  });
+}
+
+function isSplitSecretCliOption(value: string): boolean {
+  return value.indexOf("=") === -1 && isSecretCliOption(value);
+}
+
+function isSecretCliOption(value: string): boolean {
+  return /^--?(?:api[-_]?key|api[-_]?token|token|key|secret|password|passwd|client[-_]?secret|x[-_]?auth[-_]?token|auth|authorization|credential|cookie|session|jwt|private[-_]?key)(?:=.*)?$/i.test(value);
 }
 
 function isRailwayInstallPreset(
@@ -1412,10 +1733,10 @@ export async function mcpBulkInstallCommand(entries: BulkInstallEntry[]): Promis
           results.skipped.push(entry.name);
           return;
         }
-        const server = createInstallServer(entry.name, entry.command, entry.args, {
+        const server = sanitizeMcpServerForProject(createInstallServer(entry.name, entry.command, entry.args, {
           env: entry.env,
           startupTimeoutSec: entry.startupTimeoutSec,
-        });
+        }));
         projectMcpServers[entry.name] = server;
         results.installed.push(entry.name);
       } catch (err: unknown) {
@@ -1460,44 +1781,7 @@ export async function mcpSyncGlobalCommand(options: { overwrite?: boolean; omk?:
       skipped++;
       continue;
     }
-    let redacted = { ...server };
-    if ((server as Record<string, unknown>).env && typeof (server as Record<string, unknown>).env === "object") {
-      const env = (server as Record<string, unknown>).env as Record<string, string>;
-      const cleaned: Record<string, string> = {};
-      for (const [k, v] of Object.entries(env)) {
-        cleaned[k] = isSecretEnvName(k) ? `\${${k}}` : v;
-      }
-      redacted = { ...redacted, env: cleaned };
-    }
-    if ((server as Record<string, unknown>).headers && typeof (server as Record<string, unknown>).headers === "object") {
-      const hdr = (server as Record<string, unknown>).headers as Record<string, string>;
-      const cleaned: Record<string, string> = {};
-      for (const [k, v] of Object.entries(hdr)) {
-        cleaned[k] = isSecretHeaderName(k) ? "[REDACTED]" : v;
-      }
-      redacted = { ...redacted, headers: cleaned };
-    }
-    if ((server as Record<string, unknown>).http_headers && typeof (server as Record<string, unknown>).http_headers === "object") {
-      const hdr = (server as Record<string, unknown>).http_headers as Record<string, string>;
-      const cleaned: Record<string, string> = {};
-      for (const [k, v] of Object.entries(hdr)) {
-        cleaned[k] = isSecretHeaderName(k) ? "[REDACTED]" : v;
-      }
-      redacted = { ...redacted, http_headers: cleaned };
-    }
-    if ((server as Record<string, unknown>).config) {
-      const cfg = { ...(server as Record<string, unknown>).config as Record<string, unknown> };
-      if (cfg.env && typeof cfg.env === "object") {
-        const env = cfg.env as Record<string, string>;
-        const cleaned: Record<string, string> = {};
-        for (const [k, v] of Object.entries(env)) {
-          cleaned[k] = isSecretEnvName(k) ? `\${${k}}` : v;
-        }
-        cfg.env = cleaned;
-      }
-      redacted = { ...(redacted as Record<string, unknown>), config: cfg } as McpServerConfig;
-    }
-    merged[name] = redacted as McpServerConfig;
+    merged[name] = sanitizeMcpServerForProject(server);
     imported++;
   }
 
@@ -1578,9 +1862,9 @@ export async function mcpMigrateCommand(options: { global?: boolean; dryRun?: bo
 }
 
 function isSecretEnvName(name: string): boolean {
-  return /(?:SECRET|TOKEN|KEY|PASSWORD|CREDENTIAL)$/i.test(name);
+  return /(?:SECRET|TOKEN|KEY|PASSWORD|PASSWD|CREDENTIAL|AUTH|COOKIE|SESSION|PRIVATE|DATABASE_URL|DATABASE_URI|CONNECTION_STRING|CONNECTION_URI|MONGO(?:DB)?_URI|REDIS_URL|POSTGRES(?:QL)?_URL|MYSQL_URL|DSN|PAT|JWT|BEARER|OAUTH)/i.test(name);
 }
 
 function isSecretHeaderName(name: string): boolean {
-  return /authorization|x-api-key|cookie/i.test(name);
+  return /authorization|x-api-key|api-key|cookie|set-cookie|x-auth-token|token|secret|signature/i.test(name);
 }

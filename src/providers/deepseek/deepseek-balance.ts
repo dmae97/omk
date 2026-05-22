@@ -26,6 +26,7 @@ export interface CheckDeepSeekBalanceOptions {
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
   env?: NodeJS.ProcessEnv;
+  signal?: AbortSignal;
 }
 
 export async function checkDeepSeekBalance(
@@ -44,6 +45,9 @@ export async function checkDeepSeekBalance(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 10_000);
   timeout.unref?.();
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, controller.signal])
+    : controller.signal;
 
   try {
     const response = await fetchImpl(`${baseUrl}/user/balance`, {
@@ -52,7 +56,7 @@ export async function checkDeepSeekBalance(
         Authorization: `Bearer ${apiKey}`,
         Accept: "application/json",
       },
-      signal: controller.signal,
+      signal,
     });
     if (!response.ok) {
       const reason = deepseekStatusReason(response.status);

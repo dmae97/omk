@@ -1,7 +1,7 @@
 # Roadmap
 
-Current source version: v1.1.17
-Last updated: 2026-05-18
+Current source version: v1.1.18
+Last updated: 2026-05-22
 
 ## v1.1.9 reality
 
@@ -19,6 +19,7 @@ Provider routing and graph viewing are no longer purely future work:
 
 - Done: YAML validation now runs in local `verify` plus CI/smoke workflows.
 - Done: package dry-pack, package audit, tarball smoke, native safety build, and release matrix gates were re-verified against v1.1.17 artifacts.
+- Required before v1.1.18 publish/tag: regenerate the native safety binary, pass package audit, pass smoke-pack/tarball install smoke, and pass `npm run release:check` on the exact intended release diff.
 - Done: provider/deepseek and screenshot JSON command contracts gained hermetic regression tests.
 - Done: current AGENTS/init templates and packaged workflow skills were aligned with the active skills/MCP/agents/harness surface, including all generated agent MCP/skills/hooks flags and parallel subagent orchestration guidance.
 - Remaining: lock broader provider fallback metadata with tests for rate limit, timeout, and Kimi fallback variants.
@@ -69,3 +70,4 @@ Provider routing and graph viewing are no longer purely future work:
 | v1.1.15 | Isolated HOME MCP shell-profile hotfix and persistent fetch MCP entrypoint |
 | v1.1.16 | Deterministic IntentFrame/ActionAtom orchestration, chat schema preflight, MCP duplicate policy, agent capability propagation, and doctor/init/pack smoke fixes |
 | v1.1.17 | Full generated-agent MCP/skills/hooks enablement, parallel subagent orchestration emphasis, and v1.1.17 release docs |
+| v1.1.18 | Package source version alignment, latest-published v1.1.17 caveat, native safety package gate, typed doctor repair plans, startup update prompt UX, and parallel subagent orchestration release-doc alignment |

@@ -63,7 +63,7 @@ test("buildOrchestratedPrompt adapts initial NLP input into a Kimi contract", ()
   assert.match(prompt, /ActionAtoms:/);
   assert.match(prompt, /## Next Action Contract/);
   assert.match(prompt, /## Intent Analysis/);
-  assert.match(prompt, /Execution mode: parallel DAG/);
+  assert.match(prompt, /Execution mode: selected before execution/);
   assert.match(prompt, /verbatim source: omitted/);
 });
 

@@ -1,6 +1,6 @@
 import { realpathSync } from "node:fs";
 import type { Dirent } from "node:fs";
-import { mkdir, writeFile, readFile, copyFile, readdir, stat, rename } from "fs/promises";
+import { mkdir, writeFile, readFile, copyFile, readdir, stat, rename, symlink } from "fs/promises";
 import { basename, join, dirname } from "path";
 import { fileURLToPath } from "node:url";
 import { confirm, password } from "@inquirer/prompts";
@@ -13,7 +13,7 @@ import { defaultLspConfigJson } from "../lsp/default-config.js";
 import { t } from "../util/i18n.js";
 import { maybeAskForGitHubStar } from "../util/first-run-star.js";
 import { getDeepSeekProviderStatus, setDeepSeekApiKey } from "../providers/deepseek/deepseek-config.js";
-import { OMK_CORE_VERIFIED_PRESET, OMK_RUNTIME_PRESETS } from "../runtime/core-verified-preset.js";
+import { OMK_PARALLEL_ORCHESTRATOR_PRESET, OMK_RUNTIME_PRESETS } from "../runtime/core-verified-preset.js";
 import {
   RECOMMENDED_MCP_SERVERS,
   getDefaultSelections,
@@ -76,7 +76,7 @@ function createThemeJson(): string {
 
 function createRuntimePresetsJson(): string {
   return JSON.stringify({
-    defaultPresetId: OMK_CORE_VERIFIED_PRESET.id,
+    defaultPresetId: OMK_PARALLEL_ORCHESTRATOR_PRESET.id,
     presets: OMK_RUNTIME_PRESETS,
   }, null, 2) + "\n";
 }
@@ -136,6 +136,9 @@ agent:
     plan:
       path: ./roles/planner.yaml
       description: "Alias for planner; kept for compatibility with older OMK instructions"
+    router:
+      path: ./roles/router.yaml
+      description: "Task routing, skill/MCP/hook fit, context budgeting, and parallel/sequential lane decisions with scoped MCP, skills, and hooks access when enabled by runtime scope"
     architect:
       path: ./roles/architect.yaml
       description: "Read-only architecture and migration design with scoped MCP, skills, and hooks access when enabled by runtime scope"
@@ -209,6 +212,20 @@ agent:
   name: omk-planner
   system_prompt_args:
     OMK_ROLE: "planner"
+    OMK_MCP_ENABLED: "true"
+    OMK_SKILLS_ENABLED: "true"
+    OMK_HOOKS_ENABLED: "true"
+  exclude_tools:
+    - "kimi_cli.tools.file:WriteFile"
+    - "kimi_cli.tools.file:StrReplaceFile"
+    - "kimi_cli.tools.shell:Shell"
+`,
+  router: `version: 1
+agent:
+  extend: ../okabe.yaml  # Inherits unrestricted default Kimi tools plus MCP/skills/hooks flags
+  name: omk-router
+  system_prompt_args:
+    OMK_ROLE: "router"
     OMK_MCP_ENABLED: "true"
     OMK_SKILLS_ENABLED: "true"
     OMK_HOOKS_ENABLED: "true"
@@ -533,7 +550,7 @@ You must operate as a Kimi-native coding orchestrator with scoped MCP, skills, a
 - Apply AGENTS.md silently.
 - Do not repeat boilerplate.
 - Use SetTodoList for multi-step tasks.
-- Use Agent tool for non-trivial tasks. All 14 role agents (explorer, planner, architect, coder, reviewer, security, qa, tester, researcher, integrator, aggregator, interviewer, ontology, vision-debugger) are available with MCP, skills, and hooks capability flags.
+- Use Agent tool for non-trivial tasks. All 15 role agents (explorer, planner, router, architect, coder, reviewer, security, qa, tester, researcher, integrator, aggregator, interviewer, ontology, vision-debugger) are available with MCP, skills, and hooks capability flags.
 - Use skills when relevant.
 - Use MCP tools when configured and useful. All subagents inherit scoped MCP server inventory, skills, and hooks when enabled by runtime scope. Do not hesitate to invoke available capabilities.
 - Treat project-local ontology graph memory as mandatory when the omk-project MCP exposes memory tools.
@@ -1780,7 +1797,7 @@ const { execSync } = require('node:child_process');
 
 function shell(command) {
   try {
-    return execSync(command, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    return execSync(command, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 }).trim();
   } catch {
     return '';
   }
@@ -2051,6 +2068,7 @@ description = ""
 default_workers = 4
 max_retries = 3
 approval_policy = "auto"         # safe default: safe tools auto, destructive ask
+execution_prompt = "ask"         # ask | auto | parallel | sequential
 yolo_mode = false                # safe guards still block secrets/destructive shell hooks
 
 [runtime]
@@ -2234,10 +2252,29 @@ export async function initCommand(options: InitCommandOptions): Promise<void> {
     }
   }
 
-  if (await pathExists(kimiSkillsSrc)) {
+  // Global skills symlink for local-user init
+  let globalSkillsSymlinked = false;
+  if (localUserRuntime && initHomeDir) {
+    const globalKimiSkills = join(initHomeDir, ".kimi", "skills");
+    if (await pathExists(globalKimiSkills)) {
+      const dest = join(root, ".kimi", "skills");
+      if (!(await pathExists(dest))) {
+        console.log(style.purple("   📦 Symlinking global ~/.kimi/skills..."));
+        await mkdir(dirname(dest), { recursive: true });
+        try {
+          await symlink(globalKimiSkills, dest, "dir");
+          globalSkillsSymlinked = true;
+        } catch (err) {
+          console.warn(status.warn(`Failed to symlink global skills: ${(err as Error).message}`));
+        }
+      }
+    }
+  }
+
+  if (!globalSkillsSymlinked && await pathExists(kimiSkillsSrc)) {
     console.log(style.purple(t("init.copyKimiSkills")));
     skillCopies.push(copySafeSkillRoot(kimiSkillsSrc, join(root, ".kimi", "skills")).then(() => undefined));
-  } else {
+  } else if (!globalSkillsSymlinked) {
     console.log(status.warn(t("init.kimiSkillsMissing")));
   }
   if (await pathExists(agentsSkillsSrc)) {
@@ -2258,23 +2295,48 @@ export async function initCommand(options: InitCommandOptions): Promise<void> {
 
   // 8. Write configs
   const runtimeScope: RuntimeScope = localUserRuntime ? "all" : "project";
-  await writeFile(join(root, ".omk/config.toml"), getConfigToml({
+  let configTomlContent = getConfigToml({
     mcpScope: runtimeScope,
     skillsScope: runtimeScope,
     hooksScope: runtimeScope,
-  }));
-  await writeFile(join(root, ".omk/kimi.config.toml"), KIMI_CONFIG_TOML);
+  });
+  if (localUserRuntime && initHomeDir) {
+    const globalConfigPath = join(initHomeDir, ".omk", "config.toml");
+    const globalConfig = await readFile(globalConfigPath, "utf-8").catch(() => null);
+    if (globalConfig) {
+      configTomlContent = globalConfig
+        .replace(/^mcp_scope\s*=.*$/gm, `mcp_scope = "${runtimeScope}"`)
+        .replace(/^skills_scope\s*=.*$/gm, `skills_scope = "${runtimeScope}"`)
+        .replace(/^hooks_scope\s*=.*$/gm, `hooks_scope = "${runtimeScope}"`);
+      console.log(style.purple("   📦 Inheriting global .omk/config.toml defaults..."));
+    }
+  }
+  await writeFile(join(root, ".omk/config.toml"), configTomlContent);
+  let kimiConfigContent = KIMI_CONFIG_TOML;
+  if (localUserRuntime && initHomeDir) {
+    const globalKimiConfigPath = join(initHomeDir, ".kimi", "config.toml");
+    const globalKimiConfig = await readFile(globalKimiConfigPath, "utf-8").catch(() => null);
+    if (globalKimiConfig) {
+      kimiConfigContent = globalKimiConfig;
+      console.log(style.purple("   📦 Inheriting global ~/.kimi/config.toml..."));
+    }
+  }
+  await writeFile(join(root, ".omk/kimi.config.toml"), kimiConfigContent);
   await ensureProjectMcpConfig(join(root, ".omk/mcp.json"), mcpJson, { removeRuntimeManagedOmkProject: true });
   await writeFile(join(root, ".omk/theme.json"), createThemeJson());
-  await writeFile(join(root, ".omk/runtime-preset.json"), JSON.stringify(OMK_CORE_VERIFIED_PRESET, null, 2) + "\n");
+  await writeFile(join(root, ".omk/runtime-preset.json"), JSON.stringify(OMK_PARALLEL_ORCHESTRATOR_PRESET, null, 2) + "\n");
   await writeFile(join(root, ".omk/runtime-presets.json"), createRuntimePresetsJson());
 
-  // Project-local MCP config must not import global server definitions by default:
-  // global configs can contain inline headers/env secrets that should stay in the user scope.
+  // Project-local server config must not import global definitions by default.
   const projectMcpPath = join(root, ".kimi", "mcp.json");
+  const globalMcpPath = join(initHomeDir, ".kimi", "mcp.json");
+  const hasGlobalMcp = localUserRuntime && initHomeDir && await pathExists(globalMcpPath);
+  const mcpComment = hasGlobalMcp
+    ? "Project-local server config. Global entries are inherited from ~/.kimi/mcp.json at runtime when scope = 'all'."
+    : DEFAULT_PROJECT_MCP_COMMENT;
   await ensureProjectMcpConfig(
     projectMcpPath,
-    { _comment: DEFAULT_PROJECT_MCP_COMMENT, mcpServers: {} },
+    { _comment: mcpComment, mcpServers: {} },
     { removeRuntimeManagedOmkProject: true }
   );
   await writeFile(join(root, ".omk/lsp.json"), defaultLspConfigJson());
@@ -2361,6 +2423,14 @@ export async function initCommand(options: InitCommandOptions): Promise<void> {
   console.log(style.gray("  Trusted local users can add --local-user --home-dir <~/.kimi/mcp.json> for runtime-only global MCP/skills, or --import-user-skills to copy reviewed personal skills."));
 
   await runInitInteractiveSetup(options, initHomeDir);
+
+  // Warn about environment variable files — OMK prefers config.toml for stability
+  for (const envFile of [".env", ".env.local", ".env.development"]) {
+    if (await pathExists(join(root, envFile))) {
+      console.log(style.orange(`⚠️  Found ${envFile}. OMK recommends using .omk/config.toml instead of environment variable files for stability.`));
+      break;
+    }
+  }
 
   // ── Shell integration & PATH check ──
   const pathCheck = await checkOmkInPath();

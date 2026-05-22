@@ -3,6 +3,14 @@ import type { Command } from "commander";
 export function registerProviderCommands(program: Command): void {
   const provider = program.command("provider").description("Provider routing and availability utilities");
   provider
+    .command("list")
+    .description("List configured model providers without exposing secrets")
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const { providerListCommand } = await import("../commands/provider.js");
+      await providerListCommand(options);
+    });
+  provider
     .command("doctor [provider]")
     .description("Check provider availability without exposing credentials")
     .option("--json", "Output JSON")
@@ -10,6 +18,63 @@ export function registerProviderCommands(program: Command): void {
     .action(async (target, options) => {
       const { providerDoctorCommand } = await import("../commands/provider.js");
       await providerDoctorCommand(target, options);
+    });
+  provider
+    .command("oauth [provider]")
+    .alias("login")
+    .description("Show provider OAuth/login guidance without reading or storing tokens")
+    .option("--api-key-env <name>", "Environment variable name for API-key based providers")
+    .option("--json", "Output JSON")
+    .action(async (target, options) => {
+      const { providerOAuthCommand } = await import("../commands/provider.js");
+      await providerOAuthCommand(target, options);
+    });
+  provider
+    .command("auth <provider>")
+    .description("Configure provider authentication metadata without reading or storing token values")
+    .requiredOption("--method <method>", "Auth method: api-key-env | oauth | external-cli | none")
+    .option("--api-key-env <name>", "Environment variable name for API-key based providers")
+    .option("--json", "Output JSON")
+    .action(async (target, options) => {
+      const { providerAuthCommand } = await import("../commands/provider.js");
+      await providerAuthCommand(target, options);
+    });
+  provider
+    .command("profiles")
+    .description("List provider compatibility profiles without reading credentials")
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const { providerProfilesCommand } = await import("../commands/provider.js");
+      await providerProfilesCommand(options);
+    });
+  provider
+    .command("set <provider>")
+    .description("Set provider model/base URL/API key env metadata without storing secret values")
+    .option("--model <model>", "Default model or alias target")
+    .option("--base-url <url>", "OpenAI-compatible base URL")
+    .option("--api-key-env <name>", "Environment variable name for the provider API key")
+    .option("--kind <kind>", "Provider kind: kimi-native | openai-compatible | external-cli | codex-cli | local")
+    .option("--auth-method <method>", "Auth method metadata: api-key-env | oauth | external-cli | none")
+    .option("--json", "Output JSON")
+    .action(async (target, options) => {
+      const { providerSetCommand } = await import("../commands/provider.js");
+      await providerSetCommand(target, options);
+    });
+  provider
+    .command("enable <provider>")
+    .description("Enable a provider for routing while keeping Kimi as final authority")
+    .option("--json", "Output JSON")
+    .action(async (target, options) => {
+      const { providerEnableCommand } = await import("../commands/provider.js");
+      await providerEnableCommand(target, options);
+    });
+  provider
+    .command("disable <provider> [reason]")
+    .description("Disable a provider and force Kimi fallback")
+    .option("--json", "Output JSON")
+    .action(async (target, reason, options) => {
+      const { providerDisableCommand } = await import("../commands/provider.js");
+      await providerDisableCommand(target, reason, options);
     });
   const deepseekProvider = provider.command("deepseek").description("Manage DeepSeek opportunistic workers");
   deepseekProvider

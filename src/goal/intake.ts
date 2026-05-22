@@ -335,7 +335,7 @@ interface TaskTypeRule {
 }
 
 const TASK_TYPE_RULES: TaskTypeRule[] = [
-  { type: "explore", keywords: ["find", "search", "where", "how does", "what is", "explain", "understand", "map", "discover", "trace", "locate", "탐색", "찾기", "어디", "뭔지", "설명"], weight: 1 },
+  { type: "explore", keywords: ["find", "search", "where", "how does", "what is", "explain", "understand", "map", "discover", "trace", "locate", "browser", "current page", "web page", "active tab", "dom", "chrome", "탐색", "찾기", "어디", "뭔지", "설명"], weight: 1 },
   { type: "implement", keywords: ["add", "implement", "create", "build", "introduce", "support", "feature", "develop", "write", "구현", "추가", "만들기", "작성", "개발"], weight: 1 },
   { type: "bugfix", keywords: ["fix", "bug", "error", "crash", "broken", "issue", "regression", "fails", "not working", "버그", "오류", "수정", "고장", "실패"], weight: 1 },
   { type: "refactor", keywords: ["refactor", "clean", "restructure", "rename", "extract", "simplify", "organize", "move", "리팩토링", "정리", "단순화"], weight: 1 },
@@ -365,7 +365,7 @@ const ROLE_TEMPLATES: Record<TaskType, string[]> = {
 
 const WRITE_KEYWORDS = ["write", "edit", "implement", "fix", "create", "delete", "modify", "add", "build", "change", "update", "patch", "migrate", "refactor", "rename", "move", "extract", "코드작성", "수정", "구현", "추가", "삭제", "변경"];
 
-const RESEARCH_KEYWORDS = ["docs", "official", "paper", "api", "reference", "current", "latest", "version", "release notes", "changelog", "specification", "rfc", "documentation", "문서", "공식", "최신", "버전", "스펙"];
+const RESEARCH_KEYWORDS = ["docs", "official", "paper", "api", "reference", "current", "latest", "version", "release notes", "changelog", "specification", "rfc", "documentation", "browser", "current page", "web page", "active tab", "dom", "chrome", "문서", "공식", "최신", "버전", "스펙"];
 
 const SECURITY_KEYWORDS = ["security", "secret", "auth", "permission", "vulnerability", "credential", "token", "encrypt", "sanitize", "xss", "csrf", "injection", "password", "api key", "보안", "인증", "권한", "취약점", "토큰"];
 

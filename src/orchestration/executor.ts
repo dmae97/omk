@@ -1,4 +1,4 @@
-import type { Dag, DagNode } from "./dag.js";
+import type { Dag, DagNode, DagNodeEvidence } from "./dag.js";
 import type { DagExecutor, RunOptions, RunProgressEstimate, RunResult, RunState, TaskRunner, TaskResult } from "../contracts/orchestration.js";
 import { createScheduler } from "./scheduler.js";
 import type { StatePersister } from "./state-persister.js";
@@ -12,12 +12,14 @@ import { invalidateTaskDagGraph } from "./task-graph.js";
 import { resolveTimeoutMs } from "../util/timeout-config.js";
 import { createNodeMonitorEngine } from "./node-monitor.js";
 import type { DeepSeekModelTier, DeepSeekParticipation, ProviderId } from "../providers/types.js";
+import { appendEvent } from "../util/events-logger.js";
 
 export interface ExecutorOptions {
   persister?: StatePersister;
   ensemble?: false | EnsemblePolicy;
   signal?: AbortSignal;
   resumeFromState?: RunState;
+  eventRunDir?: string;
 }
 
 export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecutor {
@@ -29,20 +31,73 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
   let commitQueue: Promise<void> = Promise.resolve();
   let commitQueueSize = 0;
   const MAX_COMMIT_QUEUE = 10;
+  const COMMIT_SAVE_TIMEOUT_MS = 10_000;
+  const RUNNER_ABORT_DRAIN_MS = 2_000;
   const activeTimers = new Map<string, { progress: ReturnType<typeof setInterval>; persist: ReturnType<typeof setInterval>; heartbeat: ReturnType<typeof setInterval> }>();
+  const nodeAbortRegistry = new Map<string, () => void>();
   let aborting = false;
+  let isShuttingDown = false;
   let activeDag: Dag | undefined;
   let activeTick: (() => Promise<void>) | undefined;
   let activeRunOptions: RunOptions | undefined;
+  let lastTerminalChangeAt = Date.now();
+  function emitTelemetry(event: Parameters<typeof appendEvent>[1]): void {
+    if (!executorOptions.eventRunDir) return;
+    void appendEvent(executorOptions.eventRunDir, event).catch(() => {});
+  }
+  function bumpTerminalActivity(): void {
+    lastTerminalChangeAt = Date.now();
+  }
+
+  function clearActiveTimers(): void {
+    for (const [, timers] of activeTimers) {
+      clearInterval(timers.progress);
+      clearInterval(timers.persist);
+      clearInterval(timers.heartbeat);
+    }
+    activeTimers.clear();
+  }
+
+  function markOpenNodesBlocked(dag: Dag, reason: string): void {
+    for (const node of dag.nodes) {
+      if (node.status === "running" || node.status === "pending") {
+        node.status = "blocked";
+        node.blockedReason = reason;
+      }
+    }
+  }
+
+  function rewriteNodeInputFrom(node: DagNode, fromId: string, toId: string): void {
+    if (!node.inputs) return;
+    node.inputs = node.inputs.map((input) =>
+      input.from === fromId ? { ...input, from: toId } : input
+    );
+  }
 
   const monitor = createNodeMonitorEngine({
     heartbeatIntervalMs: 30_000,
     stallThresholdMultiplier: 3,
     onStall: (m) => {
       process.stderr.write(`[omk] node ${m.nodeId} stalled (no heartbeat for ${m.stallThresholdMs}ms)\n`);
+      emitTelemetry({
+        type: "lane.stalled",
+        runId: m.runId,
+        nodeId: m.nodeId,
+        laneId: m.nodeId,
+        data: { stallThresholdMs: m.stallThresholdMs },
+      });
     },
     onKill: (m) => {
       process.stderr.write(`[omk] node ${m.nodeId} killed (no heartbeat for ${m.stallThresholdMs}ms)\n`);
+      // Forcibly abort the underlying child process so it does not hang.
+      const abortFn = nodeAbortRegistry.get(m.nodeId);
+      if (abortFn) {
+        try {
+          abortFn();
+        } catch {
+          // ignore abort errors
+        }
+      }
       if (activeDag && activeRunOptions) {
         try {
           const node = activeDag.nodes.find((n) => n.id === m.nodeId);
@@ -135,11 +190,20 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
     const snap = latestSnapshot;
     commitQueue = commitQueue
       .then(async () => {
-        commitQueueSize--;
-        await persister.save(snap);
+        let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([
+            persister.save(snap),
+            new Promise<never>((_, reject) => {
+              timeoutHandle = setTimeout(() => reject(new Error(`state persist timed out after ${COMMIT_SAVE_TIMEOUT_MS}ms`)), COMMIT_SAVE_TIMEOUT_MS);
+            }),
+          ]);
+        } finally {
+          if (timeoutHandle) clearTimeout(timeoutHandle);
+          commitQueueSize = Math.max(0, commitQueueSize - 1);
+        }
       })
       .catch((err: unknown) => {
-        commitQueueSize--;
         const message = err instanceof Error ? err.message : String(err);
         process.stderr.write(`[omk] state persist warning: ${message}
 `);
@@ -289,12 +353,15 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
     runner: TaskRunner,
     options: RunOptions,
     state: RunState,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    outAbort?: { abort: () => void }
   ): Promise<void> {
     scheduler.updateNodeStatus(dag, node.id, "running", options.runId);
     markNodeStarted(node);
+    bumpActivity(state);
     refreshState(state, dag, options);
     await commitState(state);
+    emitTelemetry({ type: "lane.started", runId: options.runId, nodeId: node.id, laneId: node.id, data: { role: node.role, name: node.name } });
     emitNodeStart(node);
 
     const resources = await getOmkResourceSettings();
@@ -310,6 +377,7 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
     };
 
     let result: TaskResult;
+    let ignoredAbortEvidence: DagNodeEvidence | undefined;
     node.thinking = undefined;
 
     // Use fork() if available for parallel-safe isolated thinking callbacks.
@@ -327,12 +395,23 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
 
     // Sync thinking back to state.nodes periodically so the live UI
     // can show ensemble / runner progress while the node is running.
+    let lastEmittedThinking: string | undefined;
     const progressTimer = setInterval(() => {
       if (node.status !== "running") return;
       const stateNode = state.nodes.find((sn) => sn.id === node.id);
       if (stateNode) stateNode.thinking = node.thinking;
-      bumpActivity(state);
-      emit(cloneState(state));
+      if (node.thinking && node.thinking !== lastEmittedThinking) {
+        lastEmittedThinking = node.thinking;
+        bumpActivity(state);
+        emitTelemetry({
+          type: "lane.activity",
+          runId: options.runId,
+          nodeId: node.id,
+          laneId: node.id,
+          data: { phase: node.thinking },
+        });
+        emit(cloneState(state));
+      }
     }, 500);
 
     // Persist live activity to disk less frequently to avoid I/O thrash.
@@ -345,6 +424,7 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
       if (node.status === "running") {
         monitor.heartbeat(node.id, options.runId);
         state.lastHeartbeatAt = new Date().toISOString();
+        emitTelemetry({ type: "lane.heartbeat", runId: options.runId, nodeId: node.id, laneId: node.id });
       }
     }, 30_000);
     activeTimers.set(node.id, { progress: progressTimer, persist: persistTimer, heartbeat: heartbeatTimer });
@@ -357,28 +437,38 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
       });
       const HARD_MAX_TIMEOUT_MS = 1_800_000; // 30 minutes
       const nodeAbortController = new AbortController();
-      const abortNode = (): void => {
+      let abortReason: string | undefined;
+      const abortNode = (reason?: string | Error): void => {
+        if (reason) abortReason = reason instanceof Error ? reason.message : reason;
         if (!nodeAbortController.signal.aborted) {
-          nodeAbortController.abort();
+          nodeAbortController.abort(reason);
         }
       };
-      const runPromise = nodeRunner.run(node, env, nodeAbortController.signal);
+      nodeAbortRegistry.set(node.id, abortNode);
+      if (outAbort) {
+        outAbort.abort = abortNode;
+      }
+      let runPromiseSettled = false;
+      const runPromise = nodeRunner.run(node, env, nodeAbortController.signal).finally(() => {
+        runPromiseSettled = true;
+      });
       let hardMaxHandle: ReturnType<typeof setTimeout> | undefined;
       const hardMaxPromise = new Promise<never>((_, reject) => {
         hardMaxHandle = setTimeout(() => {
-          abortNode();
-          reject(new Error(`Node ${node.id} exceeded hard maximum timeout`));
+          const error = new Error(`Node ${node.id} exceeded hard maximum timeout`);
+          abortNode(error);
+          reject(error);
         }, HARD_MAX_TIMEOUT_MS);
       });
       let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
       let abortHandler: (() => void) | undefined;
-      try {
-        const racePromises: Promise<unknown>[] = [runPromise, hardMaxPromise];
+      const racePromises: Promise<unknown>[] = [runPromise, hardMaxPromise];
         if (nodeTimeoutMs > 0) {
           const timeoutPromise = new Promise<never>((_, reject) => {
             timeoutHandle = setTimeout(() => {
-              abortNode();
-              reject(new Error(`Node ${node.id} timed out after ${nodeTimeoutMs}ms`));
+              const error = new Error(`Node ${node.id} timed out after ${nodeTimeoutMs}ms`);
+              abortNode(error);
+              reject(error);
             }, nodeTimeoutMs);
           });
           racePromises.push(timeoutPromise);
@@ -386,8 +476,9 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
         if (signal) {
           const abortPromise = new Promise<never>((_, reject) => {
             abortHandler = () => {
-              abortNode();
-              reject(new Error(`Node ${node.id} aborted`));
+              const reason = signal.reason instanceof Error ? signal.reason : new Error(`Node ${node.id} aborted`);
+              abortNode(reason);
+              reject(reason);
             };
             signal.addEventListener('abort', abortHandler, { once: true });
           });
@@ -399,24 +490,30 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
           clearTimeout(hardMaxHandle);
           clearTimeout(timeoutHandle);
           if (signal && abortHandler) signal.removeEventListener("abort", abortHandler);
+          // If the race rejected (timeout/abort), runPromise may still be alive
+          // with a dangling child process. Wait for it to settle so we don't
+          // leak subprocesses or keep the event loop alive indefinitely.
+          const drained = await Promise.race([
+            runPromise.then(() => true, () => true),
+            new Promise<false>((resolve) => {
+              const drainTimer = setTimeout(() => resolve(false), RUNNER_ABORT_DRAIN_MS);
+              drainTimer.unref?.();
+            }),
+          ]);
+          if (!drained && abortReason && !runPromiseSettled) {
+            ignoredAbortEvidence = {
+              gate: "runner-abort",
+              passed: false,
+              failureKind: "runner-abort-ignored",
+              message: `Runner did not settle within ${RUNNER_ABORT_DRAIN_MS}ms after abort: ${abortReason}`,
+            };
+            process.stderr.write(`[omk] run ${options.runId} node ${node.id} runner did not settle within ${RUNNER_ABORT_DRAIN_MS}ms after abort\n`);
+          }
         }
-      } catch (error: unknown) {
-        if (signal?.aborted) {
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          result = {
-            success: false,
-            exitCode: 1,
-            stdout: "",
-            stderr: errorMessage,
-          };
-          recordProviderAttempt(node, result);
-          markNodeFinished(node, "failed");
-          scheduler.updateNodeStatus(dag, node.id, "failed", options.runId);
-        } else {
-          throw error;
-        }
-      }
       recordProviderAttempt(node, result);
+      if (aborting && (node.status === "blocked" || node.status === "skipped")) {
+        return;
+      }
       if (result.success) {
         const evidenceCheck = await checkNodeEvidence(node, result, options);
         node.evidence = evidenceCheck.evidence;
@@ -439,6 +536,12 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
         stdout: `[ERROR] ${errorMessage}`,
         stderr: errorMessage,
       };
+      if (ignoredAbortEvidence) {
+        node.evidence = [...(node.evidence ?? []), ignoredAbortEvidence];
+      }
+      if (aborting && (node.status === "blocked" || node.status === "skipped")) {
+        return;
+      }
       recordProviderAttempt(node, result);
       markNodeFinished(node, "failed");
       scheduler.updateNodeStatus(dag, node.id, "failed", options.runId);
@@ -448,11 +551,13 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
       clearInterval(heartbeatTimer);
       monitor.unregister(node.id, options.runId);
       activeTimers.delete(node.id);
+      nodeAbortRegistry.delete(node.id);
       const stateNode = state.nodes.find((sn) => sn.id === node.id);
       if (stateNode) stateNode.thinking = node.thinking;
       bumpActivity(state);
     }
 
+    bumpTerminalActivity();
     if (aborting) {
       // Skip final emit/persist so the abort state is not overwritten
       // by a late-finishing node after execute() has already returned.
@@ -460,6 +565,24 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
     }
 
     emitNodeComplete(node, result);
+    emitTelemetry({
+      type: result.success ? "lane.completed" : "lane.failed",
+      runId: options.runId,
+      nodeId: node.id,
+      laneId: node.id,
+      status: node.status,
+      data: { success: result.success, exitCode: result.exitCode },
+    });
+    for (const evidence of node.evidence ?? []) {
+      emitTelemetry({
+        type: "evidence.result",
+        runId: options.runId,
+        nodeId: node.id,
+        laneId: node.id,
+        status: evidence.passed ? "passed" : "failed",
+        data: { ...evidence },
+      });
+    }
     refreshState(state, dag, options);
     await commitState(state);
   }
@@ -493,12 +616,16 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
       if (!Number.isInteger(options.workers) || options.workers < 1) {
         throw new TypeError(`options.workers must be a positive integer, got ${options.workers}`);
       }
+      aborting = false;
+      isShuttingDown = false;
+      activeTick = undefined;
       const effectiveRunner = executorOptions.ensemble === false
         ? runner
         : createEnsembleTaskRunner(runner, executorOptions.ensemble ?? {});
 
       activeDag = dag;
       activeRunOptions = options;
+      lastTerminalChangeAt = Date.now();
 
       let state: RunState;
       if (executorOptions.resumeFromState) {
@@ -524,8 +651,30 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
       }
       await commitState(state);
 
-      const runningMap = new Map<string, Promise<void>>();
+      const runningMap = new Map<string, { promise: Promise<void>; abort: () => void }>();
       const runAbortController = new AbortController();
+      const runningCoreCount = (): number => [...runningMap.keys()]
+        .filter((nodeId) => {
+          const node = dag.nodes.find((entry) => entry.id === nodeId);
+          return node ? !isOptionalExecutionLane(dag, node) : true;
+        })
+        .length;
+      const hasOpenRequiredNodes = (): boolean => dag.nodes.some((node) => (
+        !isOptionalExecutionLane(dag, node) && (node.status === "pending" || node.status === "running")
+      ));
+      const skipOpenOptionalLanes = (reason: string): void => {
+        for (const node of dag.nodes) {
+          if (!isOptionalExecutionLane(dag, node)) continue;
+          if (node.status !== "pending" && node.status !== "running") continue;
+          node.status = "skipped";
+          node.blockedReason = reason;
+          try {
+            runningMap.get(node.id)?.abort();
+          } catch {
+            // ignore optional-lane abort errors
+          }
+        }
+      };
       let resolveDone: (value: RunResult) => void;
       const donePromise = new Promise<RunResult>((resolve) => {
         resolveDone = resolve;
@@ -534,141 +683,224 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
       function resolveOnce(result: RunResult): void {
         if (settled) return;
         settled = true;
+        if (runTimeoutHandle) {
+          clearInterval(runTimeoutHandle);
+          runTimeoutHandle = undefined;
+        }
+        if (executorOptions.signal) {
+          executorOptions.signal.removeEventListener("abort", externalAbortHandler);
+        }
         resolveDone(result);
+      }
+
+      async function finalizeRunFailure(reason: string, logMessage?: string): Promise<void> {
+        if (settled) return;
+        if (logMessage) process.stderr.write(logMessage);
+        aborting = true;
+        isShuttingDown = true;
+        runAbortController.abort();
+        for (const [, running] of runningMap) {
+          try {
+            running.abort();
+          } catch {
+            // ignore abort errors
+          }
+        }
+        clearActiveTimers();
+        markOpenNodesBlocked(dag, reason);
+        bumpTerminalActivity();
+        state.completedAt = new Date().toISOString();
+        refreshState(state, dag, options);
+        await commitState(state, { mustPersist: true });
+        monitor.dispose();
+        resolveOnce({ state, success: false });
+      }
+
+      function externalAbortHandler(): void {
+        void finalizeRunFailure("cancelled");
+      }
+      if (executorOptions.signal) {
+        if (executorOptions.signal.aborted) {
+          void finalizeRunFailure("cancelled");
+        } else {
+          executorOptions.signal.addEventListener("abort", externalAbortHandler, { once: true });
+        }
       }
 
       const fallbackNodes = new Map<string, DagNode>();
 
       async function tick(): Promise<void> {
-        activeTick = tick;
-        if (settled) return;
-        // Handle fallback nodes FIRST, before isFailed check, so that a
-        // terminal failure with a fallbackRole does not immediately fail the run.
-        let fallbackCreated = false;
-        for (const node of dag.nodes) {
-          if (node.status === "failed" && node.retries >= node.maxRetries && node.failurePolicy?.fallbackRole && !fallbackNodes.has(node.id)) {
-            let fallbackId = `${node.id}--fallback`;
-            let fallbackCounter = 1;
-            while (dag.nodes.some((n) => n.id === fallbackId)) {
-              fallbackId = `${node.id}--fallback-${fallbackCounter++}`;
-            }
-            const fallbackNode: DagNode = {
-              id: fallbackId,
-              name: `${node.name} (fallback)`,
-              role: node.failurePolicy.fallbackRole,
-              dependsOn: [...node.dependsOn],
-              status: "pending",
-              retries: 0,
-              maxRetries: 1,
-              timeoutMs: node.timeoutMs,
-              timeoutPreset: node.timeoutPreset,
-              priority: node.priority,
-              cost: node.cost,
-              inputs: node.inputs?.map((input) => ({ ...input })),
-              outputs: node.outputs?.map((output) => ({ ...output })),
-              routing: node.routing ? { ...node.routing } : undefined,
-              failurePolicy: { retryable: false, blockDependents: true },
-            };
-            dag.nodes.push(fallbackNode);
-            fallbackNodes.set(node.id, fallbackNode);
-            state.nodes.push({ ...fallbackNode });
-            // Mark original node as skipped so dependents can proceed via fallback
-            node.status = "skipped";
-            node.blockedReason = `fallback created: ${fallbackId}`;
-            invalidateTaskDagGraph(dag);
-            // Redirect dependents from original node to fallback node
-            for (const dep of dag.nodes) {
-              if (dep.dependsOn.includes(node.id)) {
-                if (dep.status === "blocked" || dep.status === "skipped") {
-                  dep.status = "pending";
-                  dep.blockedReason = undefined;
-                }
-                dep.dependsOn = dep.dependsOn.filter((id) => id !== node.id);
-                if (!dep.dependsOn.includes(fallbackId)) {
-                  dep.dependsOn.push(fallbackId);
+        try {
+          activeTick = tick;
+          if (settled) return;
+          // Handle fallback nodes FIRST, before isFailed check, so that a
+          // terminal failure with a fallbackRole does not immediately fail the run.
+          let fallbackCreated = false;
+          for (const node of dag.nodes) {
+            if (node.status === "failed" && node.retries >= node.maxRetries && node.failurePolicy?.fallbackRole && !fallbackNodes.has(node.id)) {
+              let fallbackId = `${node.id}--fallback`;
+              let fallbackCounter = 1;
+              while (dag.nodes.some((n) => n.id === fallbackId)) {
+                fallbackId = `${node.id}--fallback-${fallbackCounter++}`;
+              }
+              const fallbackNode: DagNode = {
+                id: fallbackId,
+                name: `${node.name} (fallback)`,
+                role: node.failurePolicy.fallbackRole,
+                dependsOn: [...node.dependsOn],
+                status: "pending",
+                retries: 0,
+                maxRetries: 1,
+                timeoutMs: node.timeoutMs,
+                timeoutPreset: node.timeoutPreset,
+                priority: node.priority,
+                cost: node.cost,
+                inputs: node.inputs?.map((input) => ({ ...input })),
+                outputs: node.outputs?.map((output) => ({ ...output })),
+                routing: node.routing ? { ...node.routing } : undefined,
+                failurePolicy: { retryable: false, blockDependents: true },
+              };
+              dag.nodes.push(fallbackNode);
+              fallbackNodes.set(node.id, fallbackNode);
+              state.nodes.push({ ...fallbackNode });
+              // Mark original node as skipped so dependents can proceed via fallback
+              node.status = "skipped";
+              node.blockedReason = `fallback created: ${fallbackId}`;
+              invalidateTaskDagGraph(dag);
+              // Redirect dependents from original node to fallback node
+              for (const dep of dag.nodes) {
+                if (dep.dependsOn.includes(node.id)) {
+                  if (dep.status === "blocked" || dep.status === "skipped") {
+                    dep.status = "pending";
+                    dep.blockedReason = undefined;
+                  }
+                  dep.dependsOn = dep.dependsOn.filter((id) => id !== node.id);
+                  if (!dep.dependsOn.includes(fallbackId)) {
+                    dep.dependsOn.push(fallbackId);
+                  }
+                  rewriteNodeInputFrom(dep, node.id, fallbackId);
                 }
               }
+              fallbackCreated = true;
             }
-            fallbackCreated = true;
           }
-        }
-        if (fallbackCreated) {
-          refreshState(state, dag, options);
-          await commitState(state);
-          tick().catch(() => {});
-          return;
-        }
+          if (fallbackCreated) {
+            bumpTerminalActivity();
+            refreshState(state, dag, options);
+            await commitState(state);
+            tick().catch(() => {});
+            return;
+          }
 
-        if (executorOptions.signal?.aborted) {
+          if (executorOptions.signal?.aborted) {
+            await finalizeRunFailure("cancelled");
+            return;
+          }
+
+          if (runningMap.size === 0 && scheduler.isComplete(dag)) {
+            state.completedAt = new Date().toISOString();
+            refreshState(state, dag, options);
+            await commitState(state, { mustPersist: true });
+            monitor.dispose();
+            resolveOnce({ state, success: true });
+            return;
+          }
+
+          if (runningMap.size === 0 && scheduler.isFailed(dag)) {
+            state.completedAt = new Date().toISOString();
+            refreshState(state, dag, options);
+            await commitState(state, { mustPersist: true });
+            monitor.dispose();
+            resolveOnce({ state, success: false });
+            return;
+          }
+
+          if (scheduler.isFailed(dag)) return;
+
+          if (runningCoreCount() === 0 && isRequiredDagComplete(dag)) {
+            aborting = true;
+            isShuttingDown = true;
+            skipOpenOptionalLanes("optional lane skipped after required DAG completed");
+            clearActiveTimers();
+            state.completedAt = new Date().toISOString();
+            refreshState(state, dag, options);
+            await commitState(state, { mustPersist: true });
+            monitor.dispose();
+            resolveOnce({ state, success: true });
+            return;
+          }
+
+          const runnable = scheduler.getRunnableNodes(dag);
+          const eligible = runnable
+            .filter((node) => !runningMap.has(node.id) && !fallbackNodes.has(node.id));
+          const coreRunnable = eligible.filter((node) => !isOptionalExecutionLane(dag, node));
+          const optionalRunnable = eligible.filter((node) => isOptionalExecutionLane(dag, node));
+          const availableCoreSlots = Math.max(0, options.workers - runningCoreCount());
+          const coreToRun = coreRunnable.slice(0, availableCoreSlots);
+          const optionalSlots = options.workers > 1
+            ? Math.max(0, options.workers - runningMap.size - coreToRun.length)
+            : (coreToRun.length === 0 && !hasOpenRequiredNodes() && runningMap.size === 0 ? 1 : 0);
+          const toRun = [
+            ...coreToRun,
+            ...optionalRunnable.slice(0, optionalSlots),
+          ];
+
+          for (const node of toRun) {
+            if (isShuttingDown) break;
+            const nodeAbortRef: { abort: () => void } = { abort: () => {} };
+            const runnerForNode = isOptionalExecutionLane(dag, node) ? runner : effectiveRunner;
+            const promise = runNode(node, dag, runnerForNode, options, state, runAbortController.signal, nodeAbortRef)
+              .catch(() => {
+                // runNode already marks node as failed on runner errors;
+                // swallow persist/emit errors to allow tick() to continue
+              })
+              .finally(() => {
+                runningMap.delete(node.id);
+                tick().catch(() => {});
+              });
+            runningMap.set(node.id, { promise, abort: () => nodeAbortRef.abort() });
+          }
+
+          if (runningMap.size === 0 && toRun.length === 0 && runnable.length === 0) {
+            // Deadlock or nothing to do — treat as failure
+            state.completedAt = new Date().toISOString();
+            refreshState(state, dag, options);
+            await commitState(state, { mustPersist: true });
+            monitor.dispose();
+            resolveOnce({ state, success: false });
+          }
+        } catch (error: unknown) {
+          if (settled) return;
+          const message = error instanceof Error ? error.message : String(error);
+          process.stderr.write(`[omk] executor tick crashed: ${message}\n`);
           aborting = true;
+          isShuttingDown = true;
           runAbortController.abort();
-          for (const [, timers] of activeTimers) {
-            clearInterval(timers.progress);
-            clearInterval(timers.persist);
-            clearInterval(timers.heartbeat);
+          clearActiveTimers();
+          markOpenNodesBlocked(dag, "executor crash");
+          state.completedAt = new Date().toISOString();
+          try {
+            refreshState(state, dag, options);
+            await commitState(state, { mustPersist: true });
+          } catch {
+            // ignore
           }
-          activeTimers.clear();
-          for (const node of dag.nodes) {
-            if (node.status === "running" || node.status === "pending") {
-              node.status = "blocked";
-              node.blockedReason = "cancelled";
-            }
+          monitor.dispose();
+          resolveOnce({ state, success: false });
+        }
+      }
+
+      let runTimeoutHandle: ReturnType<typeof setInterval> | undefined;
+      if (options.runTimeoutMs && options.runTimeoutMs > 0) {
+        runTimeoutHandle = setInterval(() => {
+          if (settled) return;
+          if (Date.now() - lastTerminalChangeAt > options.runTimeoutMs!) {
+            void finalizeRunFailure(
+              "run timeout",
+              `[omk] run ${options.runId} timed out after ${options.runTimeoutMs}ms with no terminal state change\n`
+            );
           }
-          state.completedAt = new Date().toISOString();
-          refreshState(state, dag, options);
-          await commitState(state, { mustPersist: true });
-          monitor.dispose();
-          resolveOnce({ state, success: false });
-          return;
-        }
-
-        if (runningMap.size === 0 && scheduler.isComplete(dag)) {
-          state.completedAt = new Date().toISOString();
-          refreshState(state, dag, options);
-          await commitState(state, { mustPersist: true });
-          monitor.dispose();
-          resolveOnce({ state, success: true });
-          return;
-        }
-
-        if (runningMap.size === 0 && scheduler.isFailed(dag)) {
-          state.completedAt = new Date().toISOString();
-          refreshState(state, dag, options);
-          await commitState(state, { mustPersist: true });
-          monitor.dispose();
-          resolveOnce({ state, success: false });
-          return;
-        }
-
-        if (scheduler.isFailed(dag)) return;
-
-        const runnable = scheduler.getRunnableNodes(dag);
-        const availableSlots = Math.max(0, options.workers - runningMap.size);
-        const toRun = runnable
-          .filter((node) => !runningMap.has(node.id) && !fallbackNodes.has(node.id))
-          .slice(0, availableSlots);
-
-        for (const node of toRun) {
-          const promise = runNode(node, dag, effectiveRunner, options, state, runAbortController.signal)
-            .catch(() => {
-              // runNode already marks node as failed on runner errors;
-              // swallow persist/emit errors to allow tick() to continue
-            })
-            .finally(() => {
-              runningMap.delete(node.id);
-              tick().catch(() => {});
-            });
-          runningMap.set(node.id, promise);
-        }
-
-        if (runningMap.size === 0 && toRun.length === 0 && runnable.length === 0) {
-          // Deadlock or nothing to do — treat as failure
-          state.completedAt = new Date().toISOString();
-          refreshState(state, dag, options);
-          await commitState(state, { mustPersist: true });
-          monitor.dispose();
-          resolveOnce({ state, success: false });
-        }
+        }, Math.min(options.runTimeoutMs, 30_000));
       }
 
       tick().catch(() => {});
@@ -677,8 +909,51 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
   };
 }
 
+function isRequiredDagComplete(dag: Dag): boolean {
+  const requiredNodes = dag.nodes.filter((node) => !isOptionalExecutionLane(dag, node));
+  return requiredNodes.length > 0 && requiredNodes.every(isTerminalForRequiredCompletion);
+}
+
+function isTerminalForRequiredCompletion(node: DagNode): boolean {
+  return node.status === "done" ||
+    node.status === "skipped" ||
+    (node.status === "failed" && Boolean(node.failurePolicy?.fallbackRole));
+}
+
+function isOptionalExecutionLane(dag: Dag, node: DagNode): boolean {
+  if (hasRequiredDependent(dag, node)) return false;
+  const outputs = node.outputs ?? [];
+  if (outputs.length > 0 && outputs.every((output) => output.required === false)) return true;
+  if (hasOptionalDependent(dag, node)) return true;
+  return node.routing?.autoSpawned === true || node.routing?.assignedProviderAuthority === "advisory";
+}
+
+function hasRequiredDependent(dag: Dag, node: DagNode): boolean {
+  return dag.nodes.some((dependent) => (
+    dependent.dependsOn.includes(node.id) && isRequiredReadinessDependency(dependent, node)
+  ));
+}
+
+function hasOptionalDependent(dag: Dag, node: DagNode): boolean {
+  return dag.nodes.some((dependent) => (
+    dependent.dependsOn.includes(node.id) && !isRequiredReadinessDependency(dependent, node)
+  ));
+}
+
+function isRequiredReadinessDependency(dependent: DagNode, predecessor: DagNode): boolean {
+  const inputsFromPredecessor = dependent.inputs?.filter((input) => input.from === predecessor.id) ?? [];
+  if (inputsFromPredecessor.length > 0) {
+    return inputsFromPredecessor.some((input) => input.required !== false);
+  }
+  const outputs = predecessor.outputs ?? [];
+  if (outputs.length > 0 && outputs.every((output) => output.required === false)) {
+    return false;
+  }
+  return dependent.dependsOn.includes(predecessor.id);
+}
+
 function isProviderId(value: unknown): value is ProviderId {
-  return value === "kimi" || value === "deepseek";
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 function isDeepSeekModelTier(value: unknown): value is DeepSeekModelTier {

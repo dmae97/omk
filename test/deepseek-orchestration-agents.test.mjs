@@ -119,6 +119,9 @@ test("initial orchestration auto-spawns active skill, MCP, and hook capability a
     assert.ok(hookAgent.routing?.actionAtom?.label);
     assert.doesNotMatch(nodes.map((node) => node.name).join("\n"), new RegExp(rawGoal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     assert.equal(skillAgent.routing?.autoSpawned, true);
+    assert.deepEqual(skillAgent.routing?.assignedCapabilities?.skills, skillAgent.routing?.skills);
+    assert.deepEqual(mcpAgent.routing?.assignedCapabilities?.mcpServers, mcpAgent.routing?.mcpServers);
+    assert.deepEqual(hookAgent.routing?.assignedCapabilities?.hooks, hookAgent.routing?.hooks);
     assert.equal(mcpAgent.routing?.requiresMcp, true);
     assert.equal(mcpAgent.routing?.mcpServers?.includes("omk-project"), true);
     assert.equal(hookAgent.routing?.hooks?.includes("subagent-stop-audit.sh"), true);
@@ -127,8 +130,63 @@ test("initial orchestration auto-spawns active skill, MCP, and hook capability a
     assert.ok(review?.dependsOn.includes("capability-skill-agent"));
     assert.ok(review?.dependsOn.includes("capability-mcp-agent"));
     assert.ok(review?.dependsOn.includes("capability-hook-agent"));
+    for (const node of [skillAgent, mcpAgent, hookAgent]) {
+      assert.deepEqual(node?.dependsOn, ["root-coordinator"]);
+      assert.equal(node?.failurePolicy?.skipOnFailure, true);
+      assert.equal(node?.routing?.readOnly, true);
+    }
+    assert.equal(review?.inputs?.find((input) => input.from === "capability-skill-agent")?.required, false);
     assert.equal(review?.inputs?.find((input) => input.from === "capability-mcp-agent")?.required, false);
     assert.equal(review?.inputs?.find((input) => input.from === "capability-hook-agent")?.required, false);
+  } finally {
+    resetRoutingInventoryCache();
+    restoreEnv("OMK_PROJECT_ROOT", previousRoot);
+    restoreEnv("OMK_SKILLS_SCOPE", previousSkillsScope);
+    restoreEnv("OMK_MCP_SCOPE", previousMcpScope);
+    restoreEnv("OMK_HOOKS_SCOPE", previousHooksScope);
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("parallel capability agents are independent from worker budget", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-capability-budget-independent-"));
+  const previousRoot = process.env.OMK_PROJECT_ROOT;
+  const previousSkillsScope = process.env.OMK_SKILLS_SCOPE;
+  const previousMcpScope = process.env.OMK_MCP_SCOPE;
+  const previousHooksScope = process.env.OMK_HOOKS_SCOPE;
+
+  try {
+    process.env.OMK_PROJECT_ROOT = projectRoot;
+    process.env.OMK_SKILLS_SCOPE = "project";
+    process.env.OMK_MCP_SCOPE = "none";
+    process.env.OMK_HOOKS_SCOPE = "none";
+    await mkdir(join(projectRoot, ".agents", "skills", "omk-quality-gate"), { recursive: true });
+    await writeFile(join(projectRoot, ".agents", "skills", "omk-quality-gate", "SKILL.md"), "# quality\n");
+    resetRoutingInventoryCache();
+
+    const nodes = buildDynamicNodes({
+      flow: "parallel",
+      goal: "single worker still routes active skills",
+      startedAt: "2026-05-09T00:00:00.000Z",
+      workerCount: 1,
+      intent: {
+        taskType: "implement",
+        complexity: "moderate",
+        estimatedWorkers: 1,
+        requiredRoles: ["coder"],
+        isReadOnly: false,
+        needsResearch: false,
+        needsSecurityReview: false,
+        needsTesting: true,
+        needsDesignReview: false,
+        parallelizable: false,
+        rationale: "Capability lane should not consume worker budget.",
+      },
+    });
+
+    assert.equal(nodes.filter((node) => node.id.startsWith("worker-")).length, 1);
+    assert.ok(nodes.find((node) => node.id === "capability-skill-agent"));
+    assert.ok(nodes.find((node) => node.id === "review-merge")?.dependsOn.includes("capability-skill-agent"));
   } finally {
     resetRoutingInventoryCache();
     restoreEnv("OMK_PROJECT_ROOT", previousRoot);
@@ -172,6 +230,34 @@ test("parallel algorithm clamps invalid and excessive worker budgets", () => {
     workerCount: 99,
   });
   assert.equal(tooManyWorkers.filter((node) => node.id.startsWith("worker-")).length, 6);
+});
+
+test("sequential execution strategy suppresses parallel model and capability fanout", () => {
+  const nodes = buildDynamicNodes({
+    flow: "parallel",
+    goal: "sequential execution should stay one by one",
+    startedAt: "2026-05-09T00:00:00.000Z",
+    workerCount: 6,
+    executionStrategy: "sequential",
+    intent: {
+      taskType: "implement",
+      complexity: "complex",
+      estimatedWorkers: 6,
+      requiredRoles: ["planner", "coder", "reviewer", "tester"],
+      isReadOnly: false,
+      needsResearch: false,
+      needsSecurityReview: false,
+      needsTesting: true,
+      needsDesignReview: false,
+      parallelizable: true,
+      rationale: "sequential choice must override parallel intent estimates",
+    },
+  });
+
+  assert.equal(nodes.filter((node) => node.id.startsWith("worker-")).length, 1);
+  assert.equal(nodes.some((node) => node.id.startsWith("deepseek-")), false);
+  assert.equal(nodes.some((node) => node.id.startsWith("capability-")), false);
+  assert.ok(nodes.find((node) => node.id === "review-merge")?.dependsOn.includes("worker-1"));
 });
 
 test("capability agent builder respects maxAgents and empty dependency guards", () => {

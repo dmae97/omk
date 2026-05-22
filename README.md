@@ -69,7 +69,7 @@ omk summary-show
 omk cockpit
 ```
 
-> Current source target: **v1.1.17**. Stable daily-use core with orchestration surfaces; release-gated and evidence-gated flows are labelled in CLI help and docs.
+> Current source target: **v1.1.18**. Latest published release remains **v1.1.17** until release gates pass. Release-prep candidate with parallel orchestration, typed doctor repair plans, startup update prompts, and native safety packaging gates; publish/tag remains gated on `npm run release:check`.
 
 > **Share your verified run:** open a **Verified run** issue with your raw prompt, generated diff, `omk verify --json`, replay screenshot, and known limitation so others can inspect real evidence.
 
@@ -218,7 +218,7 @@ Parallel lanes can run in isolated Git worktrees. That keeps experiments reversi
 
 ### 8. Skills, hooks, MCP, and agents as runtime inputs
 
-**Every OMK generated agent carries MCP, skills, and hooks capability flags, but availability is scoped by runtime and harness policy.** Every generated subagent — `explorer`, `planner`, `coder`, `reviewer`, `qa`, `tester`, `researcher`, `security`, `integrator`, `aggregator`, `interviewer`, `ontology`, `vision-debugger`, `architect` — inherits scoped MCP, skills, and hooks access when enabled by runtime scope.
+**Every OMK generated agent carries MCP, skills, and hooks capability flags, but availability is scoped by runtime and harness policy.** Every generated subagent — `explorer`, `planner`, `router`, `coder`, `reviewer`, `qa`, `tester`, `researcher`, `security`, `integrator`, `aggregator`, `interviewer`, `ontology`, `vision-debugger`, `architect` — inherits scoped MCP, skills, and hooks access when enabled by runtime scope.
 
 **Parallel subagent orchestration:** the root coordinator can summon parallel subagents with independent context lanes, each with their own MCP/skills/hooks scope. Workers do not share mutable context; they operate in isolated lanes until evidence is reviewed and merged.
 
@@ -252,6 +252,8 @@ OMK can route research, review, QA, or risk analysis through provider lanes such
 ### 12. Open Design bridge
 
 `omk design open-design --open` launches a local Open Design workflow and connects it back to OMK. Use it when the task needs a visual design surface, then bring the output through DESIGN.md-aware implementation and quality gates.
+
+Use `omk design open-design --doctor --json` for a side-effect-free readiness check. The bridge supports `--ref <branch|tag|sha>` / `OMK_OPEN_DESIGN_REF` for reproducible upstream checkouts; current tested Open Design main is `3f7a05e7462f097bf38b7cbac0d4a4593deecd80`. Image/screenshot inputs are forwarded as local `--image` paths, and timeout success is limited to `.omk/open-design-artifacts/<run-id>/` or an explicit `--artifact-dir`.
 
 ### 13. Run replay and inspection
 
@@ -358,6 +360,10 @@ omk deepseek doctor --soft
 
 Do not commit provider keys. Keep secrets in environment variables, local keychains, or ignored local config.
 
+OpenAI image generation uses a Platform project API key, not Codex/ChatGPT OAuth. For `omk image generate/edit`, inject an ephemeral `OPENAI_API_KEY` for one command, then unset it; see [OpenAI Platform keys for image generation](./docs/openai-platform-image-keys.md).
+
+The Open Design bridge does not pass inherited `OPENAI_API_KEY`, OAuth tokens, `*_TOKEN`, `*_SECRET`, or `*_KEY` env vars to its Kimi child process by default. Only set `OMK_OPEN_DESIGN_TRUST_SECRET_ENV=1` for a trusted local run that intentionally needs secret env inheritance.
+
 ---
 
 ## Command map
@@ -400,7 +406,7 @@ npm run smoke:pack
 npm run release:check
 ```
 
-The v1.1.17 source target is release-gated and evidence-gated: it stabilizes deterministic IntentFrame/ActionAtom orchestration, chat startup schema preflight, MCP duplicate handling, scoped agent MCP/skills/hooks propagation, and doctor/init/pack smoke behavior while preserving package audit, smoke-pack checks, native safety normalization, replay/inspect/diff-runs, skill assigner, decision trace coverage, and CI release gates.
+The v1.1.18 source target is release-gated and evidence-gated: it strengthens parallel subagent orchestration, typed `omk doctor --fix` repair plans with dry-run and post-fix verification, shared startup update prompts, memory/capability harness summaries, and native safety package readiness while preserving package audit, smoke-pack checks, native safety normalization, replay/inspect/diff-runs, skill assigner, decision trace coverage, and CI release gates. Do not claim v1.1.18 as published until native safety packaging, package audit, smoke-pack, tarball install smoke, and `npm run release:check` evidence pass; latest published release remains v1.1.17 until then.
 
 **MCP fetch startup note:** if your personal Kimi config still starts fetch with `uvx mcp-server-fetch`, each disposable or isolated Kimi HOME may re-resolve Python dependencies before MCP tools appear. Prefer a persistent entrypoint:
 

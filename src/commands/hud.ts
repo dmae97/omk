@@ -15,6 +15,7 @@ import {
   parseRunStateResult,
   buildRunViewModel,
   renderRunSummary,
+  sanitizeForDisplay,
   type RunViewModel,
   type RunHealth,
 } from "../util/run-view-model.js";
@@ -97,7 +98,7 @@ function formatUptime(seconds: number): string {
 
 function getDiskUsage(): { used: number; total: number; percent: number } | null {
   try {
-    const raw = execSync("df -k .", { encoding: "utf-8", stdio: ["pipe", "pipe", "ignore"] });
+    const raw = execSync("df -k .", { encoding: "utf-8", stdio: ["pipe", "pipe", "ignore"], timeout: 5000 });
     const line = raw.trim().split("\n").pop();
     if (!line) return null;
     const parts = line.trim().split(/\s+/);
@@ -331,7 +332,7 @@ function buildStateErrorPanel(
 export function buildHudSidebar(
   state: RunState | null,
   changes: HudGitChange[],
-  options: { maxTodos?: number; maxFiles?: number; viewModel?: RunViewModel; maxWidth?: number } = {}
+  options: { maxTodos?: number; maxFiles?: number; viewModel?: RunViewModel; maxWidth?: number; todos?: TodoItem[] | null } = {}
 ): string {
   const maxTodos = options.maxTodos ?? 9;
   const maxFiles = options.maxFiles ?? 12;
@@ -370,17 +371,48 @@ export function buildHudSidebar(
   }
 
   lines.push(`  ${style.pinkBold("TODO")}`);
-  if (nodes.length === 0) {
+  if (options.todos) {
+    const todos = [...options.todos].sort((a, b) => statusRank(a.status) - statusRank(b.status));
+    if (todos.length === 0) {
+      lines.push(`  ${style.gray("TODO 없음")}`);
+    } else {
+      for (const todo of todos.slice(0, maxTodos)) {
+        const role = todo.role ? style.gray(`[${truncateText(sanitizeForDisplay(todo.role), 9)}]`) : "";
+        const name = truncateText(sanitizeForDisplay(todo.title), 30);
+        lines.push(`  ${todoItemMarker(todo.status)} ${role} ${name}`.replace(/\s+/g, " ").trimEnd());
+      }
+      if (todos.length > maxTodos) {
+        lines.push(`  ${style.gray(`… ${todos.length - maxTodos} more todos`)}`);
+      }
+    }
+  } else if (nodes.length === 0) {
     lines.push(`  ${style.gray(t("hud.noActiveRun"))}`);
     lines.push(`  ${style.gray(t("hud.runToSeeTodos"))}`);
   } else {
     for (const node of nodes.slice(0, maxTodos)) {
-      const role = style.gray(`[${truncateText(node.role, 9)}]`);
-      const name = truncateText(node.name || node.id, 30);
+      const role = style.gray(`[${truncateText(sanitizeForDisplay(node.role), 9)}]`);
+      const name = truncateText(sanitizeForDisplay(node.name || node.id), 30);
       lines.push(`  ${todoMarker(node.status)} ${role} ${name}`);
     }
     if (nodes.length > maxTodos) {
       lines.push(`  ${style.gray(`… ${nodes.length - maxTodos} more tasks`)}`);
+    }
+  }
+
+  if (vm && vm.workers.length > 0) {
+    lines.push("", `  ${style.pinkBold("AGENTS")}`);
+    for (const worker of vm.workers.slice(0, Math.max(1, Math.min(5, maxTodos)))) {
+      const stateTag = worker.state === "running"
+        ? style.purple("▶")
+        : worker.state === "done"
+          ? style.mint("✓")
+          : worker.state === "failed"
+            ? style.red("✕")
+            : worker.state === "skipped"
+              ? style.gray("⊘")
+              : style.gray("□");
+      const live = worker.liveStatus && worker.liveStatus !== worker.state ? style.gray(` ${worker.liveStatus}`) : "";
+      lines.push(`  ${stateTag}${live} ${truncateText(sanitizeForDisplay(worker.label), 32)}`);
     }
   }
 
@@ -896,7 +928,7 @@ async function renderCompactDashboard(options: HudRenderOptions): Promise<string
     output.push("");
   }
 
-  const sidebar = buildHudSidebar(null, gitChanges, { viewModel: vm, maxWidth: effectiveWidth });
+  const sidebar = buildHudSidebar(null, gitChanges, { viewModel: vm, maxWidth: effectiveWidth, todos });
   output.push(sidebar);
   output.push("");
 
@@ -957,7 +989,7 @@ async function renderMediumDashboard(options: HudRenderOptions): Promise<string>
     mainPanels.push(buildStateErrorPanel(stateError, latestRunName));
   }
 
-  const sidebar = buildHudSidebar(null, gitChanges, { viewModel: vm });
+  const sidebar = buildHudSidebar(null, gitChanges, { viewModel: vm, todos });
   output.push(renderHudColumns(mainPanels, sidebar, width));
   output.push("");
 
@@ -1019,7 +1051,7 @@ async function renderFullDashboard(options: HudRenderOptions): Promise<string> {
     mainPanels.push(buildStateErrorPanel(stateError, latestRunName));
   }
 
-  const sidebar = buildHudSidebar(null, gitChanges, { viewModel: vm });
+  const sidebar = buildHudSidebar(null, gitChanges, { viewModel: vm, todos });
   output.push(renderHudColumns(mainPanels, sidebar, width));
   output.push("");
 
@@ -1078,7 +1110,7 @@ async function renderSectionDashboard(options: HudRenderOptions): Promise<string
         output.push(buildStateErrorPanel(stateError, latestRunName));
         output.push("");
       }
-      const sidebar = buildHudSidebar(null, gitChanges, { viewModel: vm });
+      const sidebar = buildHudSidebar(null, gitChanges, { viewModel: vm, todos });
       output.push(sidebar);
       break;
     }

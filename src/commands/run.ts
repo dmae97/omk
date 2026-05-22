@@ -11,16 +11,18 @@ import { buildCapabilityAgentNodes, isCapabilityAgentNode } from "../orchestrati
 import type { RunState } from "../contracts/orchestration.js";
 import { orchestratePrompt } from "../orchestration/orchestrate-prompt.js";
 import type { ProviderPolicy } from "../providers/types.js";
+import { normalizeProviderPolicy, parseProviderModelArg } from "../providers/model-registry.js";
 
 export async function runCommand(
   flow: string | undefined,
   goal: string | undefined,
-  options: { workers?: string; runId?: string; goalId?: string; timeoutPreset?: string; provider?: ProviderPolicy; mcpScope?: string }
+  options: { workers?: string; runId?: string; goalId?: string; timeoutPreset?: string; provider?: ProviderPolicy; model?: string; mcpScope?: string; execution?: string }
 ): Promise<void> {
   const root = getProjectRoot();
   const resources = await getOmkResourceSettings();
   const workerCount = normalizeWorkerCount(options.workers, resources.maxWorkers);
-  const providerPolicy = normalizeProviderPolicy(options.provider);
+  const modelArg = parseProviderModelArg(options.model);
+  const providerPolicy = normalizeProviderPolicy(options.provider ?? modelArg.provider);
   const mcpScope = parseRuntimeScopeOption(options.mcpScope, resources.mcpScope, "--mcp-scope");
 
   let resolvedFlow = flow;
@@ -168,6 +170,21 @@ export async function runCommand(
     process.env.OMK_NODE_TIMEOUT_PRESET = options.timeoutPreset;
   }
 
+  const abortController = new AbortController();
+  let shuttingDown = false;
+  let forceExitTimer: ReturnType<typeof setTimeout> | undefined;
+  function handleSignal(): void {
+    if (shuttingDown) {
+      process.exit(1);
+    }
+    shuttingDown = true;
+    abortController.abort();
+    forceExitTimer = setTimeout(() => process.exit(1), 10_000);
+    forceExitTimer.unref?.();
+  }
+  process.once("SIGINT", handleSignal);
+  process.once("SIGTERM", handleSignal);
+
   try {
     await orchestratePrompt(rawPrompt, {
       sourceCommand: "run",
@@ -176,11 +193,16 @@ export async function runCommand(
       goalId: options.goalId,
       timeoutPreset: options.timeoutPreset,
       provider: providerPolicy,
+      model: modelArg.model,
       mcpScope,
+      execution: options.execution,
+      signal: abortController.signal,
     });
   } catch (err) {
     console.error(status.error(String(err)));
     process.exitCode = 1;
+  } finally {
+    if (forceExitTimer) clearTimeout(forceExitTimer);
   }
 }
 
@@ -191,10 +213,6 @@ export function normalizeWorkerCount(value: string | undefined, fallback: number
   const parsed = Number(effective);
   if (!Number.isInteger(parsed) || parsed < 1) return fallback;
   return Math.min(parsed, 6);
-}
-
-function normalizeProviderPolicy(value: string | undefined): ProviderPolicy {
-  return value === "kimi" ? "kimi" : "auto";
 }
 
 function createInteractiveRunState(input: {

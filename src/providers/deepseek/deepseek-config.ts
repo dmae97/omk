@@ -8,15 +8,41 @@ export interface DeepSeekProviderConfig {
   enabled?: boolean;
   disabledAt?: string;
   disabledReason?: string;
-  disabledBy?: DeepSeekDisabledBy;
+  disabledBy?: DeepSeekDisabledBy | string;
   updatedAt?: string;
   apiKeyEnv?: string;
   model?: string;
+  kind?: "openai-compatible";
+  baseUrl?: string;
+  defaultModel?: string;
+  aliases?: Record<string, string>;
+  capabilities?: string[];
+}
+
+export interface GenericProviderConfig {
+  enabled?: boolean;
+  kind?: "kimi-native" | "openai-compatible" | "external-cli" | "codex-cli" | "local";
+  baseUrl?: string;
+  apiKeyEnv?: string;
+  defaultModel?: string;
+  model?: string;
+  aliases?: Record<string, string>;
+  capabilities?: string[];
+  wireApi?: string;
+  auth?: { method?: string };
+  profileType?: string;
+  planKind?: string;
+  routing?: string;
+  headers?: Record<string, string>;
+  disabledAt?: string;
+  disabledReason?: string;
+  disabledBy?: string;
+  updatedAt?: string;
 }
 
 export interface OmkProvidersConfig {
   version: 1;
-  providers: {
+  providers: Record<string, GenericProviderConfig | undefined> & {
     deepseek?: DeepSeekProviderConfig;
   };
 }
@@ -72,9 +98,7 @@ export async function readOmkProvidersConfig(
     const parsed = JSON.parse(raw) as Partial<OmkProvidersConfig>;
     return {
       version: 1,
-      providers: {
-        deepseek: normalizeDeepSeekProviderConfig(parsed.providers?.deepseek),
-      },
+      providers: normalizeProvidersConfig(parsed.providers),
     };
   } catch {
     return emptyProvidersConfig();
@@ -192,7 +216,7 @@ export async function getDeepSeekProviderStatus(
     provider: "deepseek",
     enabled,
     disabledReason: deepseek.disabledReason,
-    disabledBy: deepseek.disabledBy,
+    disabledBy: isDeepSeekDisabledBy(deepseek.disabledBy) ? deepseek.disabledBy : undefined,
     apiKeySet: Boolean(key.apiKey),
     apiKeySource: key.source,
     configPath: getDeepSeekProviderConfigPath(options),
@@ -219,17 +243,67 @@ function emptyProvidersConfig(): OmkProvidersConfig {
   };
 }
 
+function normalizeProvidersConfig(value: unknown): OmkProvidersConfig["providers"] {
+  if (!isRecord(value)) return {};
+  const providers: Record<string, GenericProviderConfig> = {};
+  for (const [id, raw] of Object.entries(value)) {
+    if (id === "deepseek") {
+      providers[id] = normalizeDeepSeekProviderConfig(raw);
+    } else {
+      providers[id] = normalizeGenericProviderConfig(raw);
+    }
+  }
+  return providers as OmkProvidersConfig["providers"];
+}
+
 function normalizeDeepSeekProviderConfig(value: unknown): DeepSeekProviderConfig {
   if (!isRecord(value)) return {};
   return {
     enabled: typeof value.enabled === "boolean" ? value.enabled : undefined,
     disabledAt: typeof value.disabledAt === "string" ? value.disabledAt : undefined,
     disabledReason: typeof value.disabledReason === "string" ? value.disabledReason : undefined,
-    disabledBy: isDeepSeekDisabledBy(value.disabledBy) ? value.disabledBy : undefined,
+    disabledBy: typeof value.disabledBy === "string" && value.disabledBy.trim() ? value.disabledBy : undefined,
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : undefined,
     apiKeyEnv: typeof value.apiKeyEnv === "string" && value.apiKeyEnv.trim() ? value.apiKeyEnv : undefined,
     model: typeof value.model === "string" && value.model.trim() ? value.model : undefined,
+    kind: value.kind === "openai-compatible" ? value.kind : undefined,
+    baseUrl: typeof value.baseUrl === "string" && value.baseUrl.trim() ? value.baseUrl : undefined,
+    defaultModel: typeof value.defaultModel === "string" && value.defaultModel.trim() ? value.defaultModel : undefined,
+    aliases: normalizeStringMap(value.aliases),
+    capabilities: normalizeStringList(value.capabilities),
   };
+}
+
+function normalizeGenericProviderConfig(value: unknown): GenericProviderConfig {
+  if (!isRecord(value)) return {};
+  return {
+    enabled: typeof value.enabled === "boolean" ? value.enabled : undefined,
+    kind: isProviderKind(value.kind) ? value.kind : undefined,
+    baseUrl: typeof value.baseUrl === "string" && value.baseUrl.trim() ? value.baseUrl : undefined,
+    apiKeyEnv: typeof value.apiKeyEnv === "string" && value.apiKeyEnv.trim() ? value.apiKeyEnv : undefined,
+    defaultModel: typeof value.defaultModel === "string" && value.defaultModel.trim() ? value.defaultModel : undefined,
+    model: typeof value.model === "string" && value.model.trim() ? value.model : undefined,
+    aliases: normalizeStringMap(value.aliases),
+    capabilities: normalizeStringList(value.capabilities),
+    disabledAt: typeof value.disabledAt === "string" ? value.disabledAt : undefined,
+    disabledReason: typeof value.disabledReason === "string" ? value.disabledReason : undefined,
+    disabledBy: typeof value.disabledBy === "string" && value.disabledBy.trim() ? value.disabledBy : undefined,
+    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : undefined,
+  };
+}
+
+function normalizeStringMap(value: unknown): Record<string, string> | undefined {
+  if (!isRecord(value)) return undefined;
+  const entries = Object.entries(value)
+    .filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].trim().length > 0);
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function normalizeStringList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const list = value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    .map((item) => item.trim());
+  return list.length > 0 ? [...new Set(list)] : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -238,6 +312,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isDeepSeekDisabledBy(value: unknown): value is DeepSeekDisabledBy {
   return value === "user" || value === "provider-402" || value === "provider-availability";
+}
+
+function isProviderKind(value: unknown): value is GenericProviderConfig["kind"] {
+  return value === "kimi-native" || value === "openai-compatible" || value === "codex-cli" || value === "local";
 }
 
 async function upsertEnvFileValue(path: string, name: string, value: string): Promise<void> {

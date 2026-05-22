@@ -1,7 +1,29 @@
 import { readFile } from "fs/promises";
 import { totalmem } from "os";
-import { join, resolve } from "path";
-import { execSync } from "child_process";
+import { join } from "path";
+import {
+  getProjectRoot,
+  getProjectRootAsync,
+  getProjectRootDiagnostics,
+  resolveProjectRoot,
+  resolveProjectRootAsync,
+  displayProjectRootPath,
+  type ProjectRootResolution,
+  type ProjectRootSource,
+} from "./project-root.js";
+import { parseExecutionPromptPolicy } from "./execution-selection.js";
+import type { ExecutionPromptPolicy } from "../contracts/orchestration.js";
+
+export {
+  getProjectRoot,
+  getProjectRootAsync,
+  getProjectRootDiagnostics,
+  resolveProjectRoot,
+  resolveProjectRootAsync,
+  displayProjectRootPath,
+  type ProjectRootResolution,
+  type ProjectRootSource,
+};
 
 export type OmkResourceProfile = "lite" | "standard" | "super";
 export type OmkResourceProfileRequest = OmkResourceProfile | "auto";
@@ -19,6 +41,7 @@ export interface OmkResourceSettings {
   mcpScope: OmkRuntimeScope;
   skillsScope: OmkRuntimeScope;
   hooksScope: OmkRuntimeScope;
+  executionPrompt: ExecutionPromptPolicy;
   ensembleDefaultEnabled: boolean;
   localeLanguage: string;
 }
@@ -42,7 +65,7 @@ export interface OmkActivePreset {
 
 export async function getActiveRuntimePreset(): Promise<OmkActivePreset | undefined> {
   try {
-    const content = await readFile(join(getProjectRoot(), ".omk", "runtime-preset.json"), "utf-8");
+    const content = await readFile(join(await getProjectRootAsync(), ".omk", "runtime-preset.json"), "utf-8");
     const parsed = JSON.parse(content) as unknown;
     if (parsed && typeof parsed === "object") {
       const record = parsed as Record<string, unknown>;
@@ -65,7 +88,7 @@ export async function getOmkResourceSettings(): Promise<OmkResourceSettings> {
 
 async function loadOmkResourceSettings(): Promise<OmkResourceSettings> {
   const env = process.env;
-  const projectRoot = getProjectRoot();
+  const projectRoot = await getProjectRootAsync();
   const config = await readSimpleToml(join(projectRoot, ".omk", "config.toml"));
   const totalMemoryGb = Number((totalmem() / 1024 / 1024 / 1024).toFixed(1));
 
@@ -106,6 +129,13 @@ async function loadOmkResourceSettings(): Promise<OmkResourceSettings> {
   const mcpScope = normalizeScope(env.OMK_MCP_SCOPE ?? config["runtime.mcp_scope"], "project");
   const skillsScope = normalizeScope(env.OMK_SKILLS_SCOPE ?? config["runtime.skills_scope"], "project");
   const hooksScope = normalizeScope(env.OMK_HOOKS_SCOPE ?? config["runtime.hooks_scope"], "project");
+  const rawExecutionPrompt = env.OMK_EXECUTION_PROMPT ?? config["orchestration.execution_prompt"];
+  const executionPromptSource = env.OMK_EXECUTION_PROMPT !== undefined
+    ? "OMK_EXECUTION_PROMPT"
+    : config["orchestration.execution_prompt"] !== undefined
+      ? ".omk/config.toml orchestration.execution_prompt"
+      : "orchestration.execution_prompt";
+  const executionPrompt = parseExecutionPromptPolicy(rawExecutionPrompt, executionPromptSource) ?? "ask";
 
   const localeLanguage = normalizeLocaleLanguage(env.OMK_LANGUAGE ?? config["locale.language"]) ?? "en";
 
@@ -121,24 +151,10 @@ async function loadOmkResourceSettings(): Promise<OmkResourceSettings> {
     mcpScope,
     skillsScope,
     hooksScope,
+    executionPrompt,
     ensembleDefaultEnabled: profile !== "lite",
     localeLanguage,
   };
-}
-
-export function getProjectRoot(): string {
-  if (process.env.OMK_PROJECT_ROOT) return resolve(process.env.OMK_PROJECT_ROOT);
-  try {
-    const gitRoot = execSync("git rev-parse --show-toplevel", {
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "ignore"],
-      timeout: 3000,
-    }).trim();
-    if (gitRoot) return gitRoot;
-  } catch {
-    // ignore
-  }
-  return resolve(process.cwd());
 }
 
 export async function readSimpleToml(path: string): Promise<FlatToml> {

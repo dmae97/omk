@@ -7,6 +7,7 @@ import { getOmkResourceSettings } from "../util/resource-profile.js";
 import { getOmkVersionSync } from "../util/version.js";
 import { checkCommand, resolveKimiBin } from "../util/shell.js";
 import { buildSafeKimiChildEnv } from "./runner.js";
+import { terminateProcessTree, type ProcessTreeTarget } from "../util/process-tree.js";
 
 export interface JsonRpcRequest<TParams = unknown> {
   jsonrpc: "2.0";
@@ -62,6 +63,19 @@ export type WireEvent =
 let requestId = 0;
 function nextId(): string {
   return `omk-${++requestId}`;
+}
+
+function wireProcTarget(proc: ChildProcess): ProcessTreeTarget {
+  return {
+    pid: proc.pid,
+    get exitCode() { return proc.exitCode ?? null; },
+    get signalCode() { return (proc.signalCode as NodeJS.Signals | null) ?? null; },
+    kill(signal?: NodeJS.Signals | number) { return proc.kill(signal); },
+    once(event: "exit" | "close" | "error", listener: (...args: unknown[]) => void) {
+      proc.once(event, listener);
+      return undefined;
+    },
+  };
 }
 
 export class KimiWireClient {
@@ -172,11 +186,13 @@ export class KimiWireClient {
       this.pending.clear();
     });
 
-    await this.call("initialize", {
-      protocol_version: "2025-03-11",
-      client: { name: "oh-my-kimi", version: getOmkVersionSync() },
-      capabilities: { supports_question: true, supports_plan_mode: true },
-      external_tools: [
+    await this.call(
+      "initialize",
+      {
+        protocol_version: "2025-03-11",
+        client: { name: "oh-my-kimi", version: getOmkVersionSync() },
+        capabilities: { supports_question: true, supports_plan_mode: true },
+        external_tools: [
         {
           name: "omk_claim_task",
           description: "Receive a DAG node task assignment",
@@ -231,25 +247,37 @@ export class KimiWireClient {
           },
         },
       ],
-    });
+      },
+      undefined,
+      30000
+    );
   }
 
-  private async call<TParams, TResult>(method: string, params?: TParams): Promise<TResult> {
+  private async call<TParams, TResult>(method: string, params?: TParams, signal?: AbortSignal, timeoutMs?: number): Promise<TResult> {
     if (!this.proc?.stdin) throw new Error("Wire client not started");
     if (this.pending.size >= KimiWireClient.MAX_PENDING_RPCS) {
       throw new Error(`Too many pending RPCs (${this.pending.size}), max is ${KimiWireClient.MAX_PENDING_RPCS}`);
     }
+    if (signal?.aborted) {
+      throw new Error(`Wire RPC aborted: ${method}`);
+    }
     const id = nextId();
     const req: JsonRpcRequest<TParams> = { jsonrpc: "2.0", id, method, params };
-    const timeoutMs = Number(process.env.OMK_WIRE_TIMEOUT_MS || "120000");
+    const effectiveTimeoutMs = timeoutMs ?? Number(process.env.OMK_WIRE_TIMEOUT_MS || "120000");
     let timer: NodeJS.Timeout | undefined;
     const promise = new Promise<JsonRpcResponse>((resolve, reject) => {
       timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`Wire RPC timeout: ${method} (id: ${id}, timeout: ${timeoutMs}ms)`));
-      }, timeoutMs);
+        reject(new Error(`Wire RPC timeout: ${method} (id: ${id}, timeout: ${effectiveTimeoutMs}ms)`));
+      }, effectiveTimeoutMs);
+      timer.unref();
       this.pending.set(id, { resolve, reject, timer });
     });
+    if (signal?.aborted) {
+      this.pending.delete(id);
+      clearTimeout(timer);
+      throw new Error(`Wire RPC aborted: ${method} (id: ${id})`);
+    }
     try {
       if (this.proc.stdin.destroyed || this.proc.stdin.writableEnded) {
         throw new Error("Kimi process stdin is closed");
@@ -260,7 +288,23 @@ export class KimiWireClient {
       clearTimeout(timer);
       throw err;
     }
-    const res = await promise;
+    const res = await (signal
+      ? Promise.race([
+          promise,
+          new Promise<never>((_, reject) => {
+            const onAbort = () => {
+              this.pending.delete(id);
+              clearTimeout(timer);
+              reject(new Error(`Wire RPC aborted: ${method} (id: ${id})`));
+            };
+            if (signal.aborted) {
+              onAbort();
+            } else {
+              signal.addEventListener("abort", onAbort, { once: true });
+            }
+          }),
+        ])
+      : promise);
     if (res.error) throw new Error(res.error.message);
     return res.result as TResult;
   }
@@ -319,8 +363,9 @@ export class KimiWireClient {
       this.rl = undefined;
     }
     if (this.proc) {
-      this.proc.kill("SIGTERM");
+      const proc = this.proc;
       this.proc = undefined;
+      await terminateProcessTree(wireProcTarget(proc), { graceMs: 1000, waitMs: 5000 });
     }
   }
 }

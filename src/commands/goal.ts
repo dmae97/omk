@@ -22,6 +22,7 @@ interface GoalExecutionOptions {
   workers?: string;
   runId?: string;
   provider?: ProviderPolicy;
+  model?: string;
   approvalPolicy?: string;
   watch?: boolean;
   view?: string;
@@ -344,6 +345,7 @@ export async function goalRunCommand(
     workers: options.workers,
     goalId,
     provider: options.provider ?? "kimi",
+    model: options.model,
     approvalPolicy: options.approvalPolicy,
     watch: options.watch,
     view: options.view,
@@ -576,6 +578,7 @@ export async function goalContinueCommand(
     workers: options.workers,
     goalId: effectiveGoalId,
     provider: options.provider ?? "kimi",
+    model: options.model,
     approvalPolicy: options.approvalPolicy,
     watch: options.watch,
     view: options.view,

@@ -9,9 +9,11 @@ export * from "./deepseek/deepseek-errors.js";
 export * from "./deepseek/deepseek-provider.js";
 export * from "./deepseek/deepseek-super-config.js";
 export * from "./provider-runtime.js";
+export * from "./model-registry.js";
+export * from "./openai-compatible-runner.js";
+export * from "./codex-cli-runner.js";
 // New provider system (provider.ts) — explicit exports to avoid conflicts with types.ts
 export {
-  type ProviderKind,
   type AgentRunInput,
   type AgentRunResult,
   type CostEstimate,

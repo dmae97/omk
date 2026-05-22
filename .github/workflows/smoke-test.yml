@@ -48,7 +48,7 @@ jobs:
       - run: npm rebuild
       - run: npm run yaml:check
       - run: npm run build:clean
-      - run: OMK_SKIP_DIST_FRESHNESS=1 npm test 2>&1 | tee test-output.txt
+      - run: npm test 2>&1 | tee test-output.txt
       - name: Upload test artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -69,6 +69,11 @@ jobs:
         run: npm run native:normalize
       - run: npm run audit:package
       - run: npm pack --ignore-scripts --json
+        env:
+          TMPDIR: /tmp
+          TMP: /tmp
+          TEMP: /tmp
+          npm_config_cache: /tmp/omk-npm-cache
       - name: Upload tarball
         uses: actions/upload-artifact@v4
         with:

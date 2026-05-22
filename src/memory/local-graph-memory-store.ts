@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import { mkdir, readFile, writeFile } from "fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "fs/promises";
 import { dirname, resolve } from "path";
 import {
   loadMemorySettings,
@@ -211,6 +211,55 @@ const CANONICAL_NODE_TYPES = new Set([
   "AuditLink",
 ]);
 
+interface InvalidGraphStateRepair {
+  backupPath: string;
+  signalPath: string;
+  reason: string;
+}
+
+const graphWriteQueues = new Map<string, Promise<void>>();
+
+function enqueueGraphWrite<T>(graphPath: string, operation: () => Promise<T>): Promise<T> {
+  const previous = graphWriteQueues.get(graphPath) ?? Promise.resolve();
+  const running = previous.catch(() => undefined).then(operation);
+  const release = running.then(
+    () => undefined,
+    () => undefined
+  );
+  graphWriteQueues.set(graphPath, release);
+  return running.finally(() => {
+    if (graphWriteQueues.get(graphPath) === release) {
+      graphWriteQueues.delete(graphPath);
+    }
+  });
+}
+
+function errorCode(err: unknown): string | undefined {
+  if (typeof err !== "object" || err === null || !("code" in err)) return undefined;
+  const code = (err as { code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function timestampForPath(date = new Date()): string {
+  return date.toISOString().replace(/[:.]/g, "-");
+}
+
+async function writeFileAtomic(path: string, payload: string): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  const tempPath = `${path}.${process.pid}.${Date.now()}.${hash(payload).slice(0, 8)}.tmp`;
+  try {
+    await writeFile(tempPath, payload, "utf-8");
+    await rename(tempPath, path);
+  } catch (err) {
+    await rm(tempPath, { force: true }).catch(() => {});
+    throw err;
+  }
+}
+
 export class LocalGraphMemoryStore {
   constructor(
     private readonly settings: MemorySettings,
@@ -244,13 +293,16 @@ export class LocalGraphMemoryStore {
 
   async read(path: string): Promise<string> {
     const state = await this.loadState();
-    const memory = this.findMemoryNode(state, path);
-    return memory?.content ?? "";
+    return this.readFromState(state, path);
   }
 
   async write(path: string, content: string): Promise<void> {
-    const state = await this.loadState();
-    const now = new Date().toISOString();
+    await this.mutateState((state, now) => {
+      this.applyMemoryWrite(state, path, content, now);
+    });
+  }
+
+  private applyMemoryWrite(state: LocalGraphState, path: string, content: string, now: string): void {
     state.updatedAt = now;
     state.project = { ...this.settings.project };
     state.ontology = ONTOLOGY;
@@ -337,10 +389,6 @@ export class LocalGraphMemoryStore {
     this.upsertEdge(state, versionId, memoryId, "UPDATES", now);
 
     this.replaceGeneratedMindmap(state, memoryId, content, path, now);
-    await this.saveState(state);
-    if (this.settings.mirrorFiles) {
-      await this.writeMirrorFiles(state);
-    }
   }
 
   async writeMirrorFiles(state: LocalGraphState): Promise<void> {
@@ -376,8 +424,10 @@ export class LocalGraphMemoryStore {
   }
 
   async append(path: string, content: string): Promise<void> {
-    const existing = await this.read(path);
-    await this.write(path, existing ? `${existing}\n${content}` : content);
+    await this.mutateState((state, now) => {
+      const existing = this.readFromState(state, path);
+      this.applyMemoryWrite(state, path, existing ? `${existing}\n${content}` : content, now);
+    });
   }
 
   async search(query: string, limit = 10): Promise<MemorySearchResult[]> {
@@ -387,8 +437,9 @@ export class LocalGraphMemoryStore {
     return state.nodes
       .filter((node) => node.type === "Memory")
       .filter((node) => {
+        const content = this.readFromState(state, node.path ?? node.label);
         if (!normalizedQuery) return true;
-        return [node.path, node.label, node.summary, node.content]
+        return [node.path, node.label, node.summary, content]
           .filter((value): value is string => typeof value === "string")
           .some((value) => value.toLowerCase().includes(normalizedQuery));
       })
@@ -396,7 +447,7 @@ export class LocalGraphMemoryStore {
       .slice(0, safeLimit)
       .map((node) => ({
         path: node.path ?? node.label,
-        content: node.content ?? "",
+        content: this.readFromState(state, node.path ?? node.label),
         sessionId: String(node.properties.sessionId ?? ""),
         updatedAt: node.updatedAt,
         source: String(node.properties.source ?? this.source),
@@ -474,7 +525,8 @@ export class LocalGraphMemoryStore {
         .filter((node) => !type || node.type === type)
         .filter((node) => {
           if (!searchQuery) return true;
-          return [node.label, node.path, node.summary, node.content, ...node.tags]
+          const content = node.type === "Memory" ? this.readFromState(state, node.path ?? node.label) : node.content;
+          return [node.label, node.path, node.summary, content, ...node.tags]
             .filter((value): value is string => typeof value === "string")
             .some((value) => value.toLowerCase().includes(searchQuery));
         })
@@ -499,8 +551,20 @@ export class LocalGraphMemoryStore {
   }
 
   private async loadState(): Promise<LocalGraphState> {
+    let raw: string;
     try {
-      const raw = await readFile(this.settings.localGraph.path, "utf-8");
+      raw = await readFile(this.settings.localGraph.path, "utf-8");
+    } catch (err) {
+      if (errorCode(err) === "ENOENT") return this.emptyState();
+      if (this.settings.strict) throw err;
+      return this.emptyState();
+    }
+
+    if (raw.trim().length === 0) {
+      return this.handleInvalidState(raw, "state file is empty");
+    }
+
+    try {
       const parsed = JSON.parse(raw) as Partial<LocalGraphState>;
       if (parsed.version === 1 && Array.isArray(parsed.nodes) && Array.isArray(parsed.edges)) {
         return {
@@ -512,9 +576,13 @@ export class LocalGraphMemoryStore {
           edges: parsed.edges,
         };
       }
-    } catch {
-      // Missing or invalid state starts a fresh local graph.
+      return this.handleInvalidState(raw, "state JSON is missing version=1, nodes[], or edges[]");
+    } catch (err) {
+      return this.handleInvalidState(raw, `invalid JSON: ${errorMessage(err)}`);
     }
+  }
+
+  private emptyState(): LocalGraphState {
     const now = new Date().toISOString();
     return {
       version: 1,
@@ -527,16 +595,83 @@ export class LocalGraphMemoryStore {
   }
 
   private async saveState(state: LocalGraphState): Promise<void> {
-    await mkdir(dirname(this.settings.localGraph.path), { recursive: true });
     const payload = `${JSON.stringify(state, null, 2)}\n`;
-    await writeFile(this.settings.localGraph.path, payload, "utf-8");
+    await writeFileAtomic(this.settings.localGraph.path, payload);
 
     // Hardcoded fallback: always persist to the canonical path as the source of truth
     const fallbackPath = resolve(this.settings.project.root, ".omk/memory/graph-state.json");
     if (fallbackPath !== this.settings.localGraph.path) {
-      await mkdir(dirname(fallbackPath), { recursive: true });
-      await writeFile(fallbackPath, payload, "utf-8");
+      await writeFileAtomic(fallbackPath, payload);
     }
+  }
+
+  private async handleInvalidState(raw: string, reason: string): Promise<LocalGraphState> {
+    const repair = await this.writeInvalidStateRepair(raw, reason).catch(() => undefined);
+    if (this.settings.strict) {
+      const repairText = repair
+        ? ` Backup: ${repair.backupPath}; repair signal: ${repair.signalPath}.`
+        : " Backup/repair signal could not be written.";
+      throw new Error(
+        `Local graph memory state is invalid; refusing to overwrite in strict mode.${repairText} Reason: ${reason}`
+      );
+    }
+    return this.emptyState();
+  }
+
+  private async writeInvalidStateRepair(raw: string, reason: string): Promise<InvalidGraphStateRepair> {
+    const statePath = this.settings.localGraph.path;
+    const suffix = `${timestampForPath()}-${hash(raw).slice(0, 8)}`;
+    const backupPath = `${statePath}.invalid-${suffix}.bak`;
+    const signalPath = `${statePath}.repair.json`;
+    const signal = {
+      schemaVersion: 1,
+      status: "repair-required",
+      statePath,
+      backupPath,
+      reason,
+      strict: this.settings.strict,
+      createdAt: new Date().toISOString(),
+    };
+    await mkdir(dirname(statePath), { recursive: true });
+    await writeFile(backupPath, raw, "utf-8");
+    await writeFileAtomic(signalPath, `${JSON.stringify(signal, null, 2)}\n`);
+    return { backupPath, signalPath, reason };
+  }
+
+  private async mutateState(mutator: (state: LocalGraphState, now: string) => void): Promise<void> {
+    await enqueueGraphWrite(this.settings.localGraph.path, async () => {
+      const state = await this.loadState();
+      mutator(state, new Date().toISOString());
+      await this.saveState(state);
+      if (this.settings.mirrorFiles) {
+        await this.writeMirrorFiles(state);
+      }
+    });
+  }
+
+  private readFromState(state: LocalGraphState, path: string): string {
+    const memory = this.findMemoryNode(state, path);
+    const version = this.findLatestMemoryVersionNode(state, path, memory?.id);
+    return version?.content ?? memory?.content ?? "";
+  }
+
+  private findLatestMemoryVersionNode(
+    state: LocalGraphState,
+    path: string,
+    memoryId: string | undefined
+  ): LocalGraphNode | undefined {
+    const updateIds = memoryId
+      ? new Set(state.edges.filter((edge) => edge.type === "UPDATES" && edge.to === memoryId).map((edge) => edge.from))
+      : undefined;
+    return state.nodes
+      .filter((node) => node.type === "MemoryVersion" && node.path === path)
+      .filter((node) => !updateIds || updateIds.size === 0 || updateIds.has(node.id))
+      .sort(
+        (a, b) =>
+          b.updatedAt.localeCompare(a.updatedAt) ||
+          b.createdAt.localeCompare(a.createdAt) ||
+          b.id.localeCompare(a.id)
+      )[0];
   }
 
   private findMemoryNode(state: LocalGraphState, path: string): LocalGraphNode | undefined {

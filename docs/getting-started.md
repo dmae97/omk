@@ -1,6 +1,6 @@
 # Getting Started
 
-Release target: `@oh-my-kimi/cli@1.1.17`.
+Source release target: `@oh-my-kimi/cli@1.1.18`. Latest published npm release remains `1.1.17` until release gates pass.
 
 ## Install
 

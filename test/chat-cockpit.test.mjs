@@ -355,4 +355,27 @@ describe("tmux lifecycle commands", () => {
     assert.ok(src.includes("switch-client"), "should use switch-client when inside tmux");
     assert.ok(src.includes("process.env.TMUX"), "should check TMUX env var");
   });
+
+  it("buildRightPaneCommand passes --height correctly for explicit height", () => {
+    const cmd = buildRightPaneCommand({
+      nodeCmd: "node",
+      cliCmd: "omk",
+      runId: "run-height",
+      refreshMs: 2000,
+      height: 32,
+    });
+    assert.ok(cmd.includes("--height 32"), "should include --height with the exact value");
+  });
+
+  it("source uses -p 50 for bottom split fallback to avoid stealing cockpit space", async () => {
+    const src = await readFile(new URL("../dist/util/chat-cockpit.js", import.meta.url), "utf8");
+    assert.ok(src.includes('-p", "50"'), "should use -p 50 for proportional bottom split");
+  });
+
+  it("dist source passes cockpitPaneHeight to buildRightPaneCommand and splits bottom without -l historyTopHeight", async () => {
+    const src = await readFile(new URL("../dist/util/chat-cockpit.js", import.meta.url), "utf8");
+    assert.ok(src.includes("cockpitPaneHeight"), "should calculate cockpitPaneHeight");
+    assert.ok(src.includes("height: cockpitPaneHeight"), "should pass cockpitPaneHeight to buildRightPaneCommand");
+    assert.ok(!src.includes("-l String(historyTopHeight)"), "should not use -l with historyTopHeight for bottom split");
+  });
 });

@@ -13,6 +13,7 @@ const RUN_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "commands", "ru
 const PARALLEL_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "commands", "parallel.js")).href;
 const DAG_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "commands", "dag.js")).href;
 const RUNTIME_SCOPE_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "util", "runtime-scope.js")).href;
+const MODE_PRESET_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "util", "mode-preset.js")).href;
 
 function runHelp(command) {
   return spawnSync(process.execPath, [CLI, command, "--help"], {
@@ -46,6 +47,21 @@ test("chat, run, and parallel commands expose per-run MCP scope", () => {
   }
 });
 
+test("chat, run, and parallel commands expose execution selection policy", () => {
+  for (const command of ["chat", "run", "parallel"]) {
+    const result = runHelp(command);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /--execution <ask\|auto\|parallel\|sequential>/);
+  }
+});
+
+test("agent mode preset launches interactive orchestrator chat surface", async () => {
+  const { getModePreset } = await import(MODE_PRESET_MODULE_URL);
+  assert.equal(getModePreset("agent")?.launchCommand, "chat");
+  assert.match(getModePreset("agent")?.description ?? "", /parallel vs one-by-one/);
+  assert.equal(getModePreset("chat")?.launchCommand, "chat");
+});
+
 test("goal run and continue expose per-run MCP scope", () => {
   for (const args of [["goal", "run", "--help"], ["goal", "continue", "--help"]]) {
     const result = spawnSync(process.execPath, [CLI, ...args], {
@@ -74,6 +90,86 @@ test("mcp command exposes prewarm for cache-first startup", () => {
   });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /prewarm/);
+  assert.match(result.stdout, /check/);
+});
+
+test("mcp prewarm exposes --all and requires server or all", () => {
+  const help = spawnSync(process.execPath, [CLI, "mcp", "prewarm", "--help"], {
+    cwd: process.cwd(),
+    encoding: "utf-8",
+    env: {
+      ...process.env,
+      OMK_STAR_PROMPT: "0",
+      OMK_RENDER_LOGO: "0",
+    },
+  });
+  assert.equal(help.status, 0, help.stderr);
+  assert.match(help.stdout, /--all/);
+
+  const missing = spawnSync(process.execPath, [CLI, "mcp", "prewarm"], {
+    cwd: process.cwd(),
+    encoding: "utf-8",
+    env: {
+      ...process.env,
+      OMK_STAR_PROMPT: "0",
+      OMK_RENDER_LOGO: "0",
+    },
+  });
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr + missing.stdout, /Provide a server name or use --all/);
+});
+
+test("mcp check exposes --all and requires server or all", () => {
+  const help = spawnSync(process.execPath, [CLI, "mcp", "check", "--help"], {
+    cwd: process.cwd(),
+    encoding: "utf-8",
+    env: {
+      ...process.env,
+      OMK_STAR_PROMPT: "0",
+      OMK_RENDER_LOGO: "0",
+    },
+  });
+  assert.equal(help.status, 0, help.stderr);
+  assert.match(help.stdout, /--all/);
+
+  const missing = spawnSync(process.execPath, [CLI, "mcp", "check"], {
+    cwd: process.cwd(),
+    encoding: "utf-8",
+    env: {
+      ...process.env,
+      OMK_STAR_PROMPT: "0",
+      OMK_RENDER_LOGO: "0",
+    },
+  });
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr + missing.stdout, /Provide a server name or use --all/);
+});
+
+test("mcp doctor exposes fix safety flags", () => {
+  const result = spawnSync(process.execPath, [CLI, "mcp", "doctor", "--help"], {
+    cwd: process.cwd(),
+    encoding: "utf-8",
+    env: {
+      ...process.env,
+      OMK_STAR_PROMPT: "0",
+      OMK_RENDER_LOGO: "0",
+    },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /--fix/);
+  assert.match(result.stdout, /--dry-run/);
+  assert.match(result.stdout, /--global/);
+});
+
+test("top-level doctor exposes default project root repair flags", () => {
+  const result = runHelp("doctor");
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /--fix/);
+  assert.match(result.stdout, /--dry-run/);
+  assert.match(result.stdout, /--fix-level <level>/);
+  assert.match(result.stdout, /--verify-fix/);
+  assert.match(result.stdout, /--no-verify-fix/);
+  assert.match(result.stdout, /--set-default-project-root <path>/);
 });
 
 test("init command exposes local-user runtime scope option", () => {
@@ -114,6 +210,8 @@ test("design open-design command exposes localhost launcher options", () => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /--web-port <port>/);
   assert.match(result.stdout, /--daemon-port <port>/);
+  assert.match(result.stdout, /--ref <ref>/);
+  assert.match(result.stdout, /--doctor/);
   assert.match(result.stdout, /--open/);
   assert.match(result.stdout, /--print-only/);
 });
@@ -138,9 +236,39 @@ test("design open-design print-only shows localhost tools-dev launch plan", () =
 
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /http:\/\/localhost:5175/);
+  assert.match(result.stdout, /Ref:\s+main \(tested: 3f7a05e7462f097bf38b7cbac0d4a4593deecd80\)/);
   assert.match(result.stdout, /Agent: OMK CLI/);
   assert.match(result.stdout, /git clone --depth 1 --branch main https:\/\/github\.com\/nexu-io\/open-design\.git/);
   assert.match(result.stdout, /corepack pnpm tools-dev start web --daemon-port 7457 --web-port 5175/);
+});
+
+test("design open-design doctor emits JSON readiness checks without starting Open Design", () => {
+  const dir = join(tmpdir(), `omk-open-design-doctor-${Date.now()}`);
+  const result = spawnSync(process.execPath, [
+    CLI,
+    "design",
+    "open-design",
+    "--doctor",
+    "--json",
+    "--dir",
+    dir,
+  ], {
+    cwd: process.cwd(),
+    encoding: "utf-8",
+    env: {
+      ...process.env,
+      OMK_STAR_PROMPT: "0",
+      OMK_RENDER_LOGO: "0",
+    },
+  });
+
+  assert.doesNotThrow(() => JSON.parse(result.stdout), result.stderr || result.stdout);
+  const parsed = JSON.parse(result.stdout);
+  assert.equal(parsed.command, "design open-design --doctor");
+  assert.equal(parsed.testedRef, "3f7a05e7462f097bf38b7cbac0d4a4593deecd80");
+  assert.equal(parsed.ref, "main");
+  assert.ok(parsed.checks.some((check) => check.id === "node24"));
+  assert.ok(parsed.checks.some((check) => check.id === "checkout-package"));
 });
 
 test("top-level open-design aliases forward to the localhost launch plan", () => {
@@ -266,10 +394,15 @@ test("design open-design bridge supports current Open Design runtime registry la
     const registry = readFileSync(join(root, "apps/daemon/src/runtimes/registry.ts"), "utf-8");
     const executables = readFileSync(join(root, "apps/daemon/src/runtimes/executables.ts"), "utf-8");
     const appConfig = readFileSync(join(root, "apps/daemon/src/app-config.ts"), "utf-8");
+    const omkDef = readFileSync(join(root, "apps/daemon/src/runtimes/defs/omk.ts"), "utf-8");
+    const agentIcon = readFileSync(join(root, "apps/web/src/components/AgentIcon.tsx"), "utf-8");
 
     assert.match(registry, /omkAgentDef/);
     assert.match(executables, /\['omk', 'OMK_BIN'\]/);
     assert.match(appConfig, /\['omk', new Set\(\['OMK_BIN'\]\)\]/);
+    assert.match(omkDef, /--image/);
+    assert.match(agentIcon, /omk: 'svg'/);
+    assert.match(readFileSync(join(root, "apps/web/public/agent-icons/omk.svg"), "utf-8"), /<svg/);
     assert.equal(result.changedFiles.includes("apps/daemon/src/runtimes/defs/omk.ts"), true);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -293,6 +426,58 @@ test("open-design-agent smoke exits through OMK without launching Kimi ACP", () 
   assert.equal(result.stdout.trim(), "ok");
 });
 
+test("open-design-agent help exposes bounded diagnose and stdio controls", () => {
+  const result = spawnSync(process.execPath, [CLI, "open-design-agent", "--help"], {
+    cwd: process.cwd(),
+    encoding: "utf-8",
+    env: {
+      ...process.env,
+      OMK_STAR_PROMPT: "0",
+      OMK_RENDER_LOGO: "0",
+    },
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /--diagnose/);
+  assert.match(result.stdout, /--stdio/);
+  assert.match(result.stdout, /--stdin-idle-ms/);
+  assert.match(result.stdout, /--stdin-max-bytes/);
+  assert.match(result.stdout, /--timeout-ms/);
+});
+
+test("open-design-agent diagnose emits JSON without launching Kimi", () => {
+  const workspace = mkdtempSync(join(tmpdir(), "omk-open-design-diagnose-"));
+  try {
+    const result = spawnSync(process.execPath, [
+      CLI,
+      "open-design-agent",
+      "--diagnose",
+      "--json",
+      "--cwd",
+      workspace,
+      "--run-id",
+      "diagnose",
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf-8",
+      timeout: 5000,
+      env: {
+        ...process.env,
+        OMK_STAR_PROMPT: "0",
+        OMK_RENDER_LOGO: "0",
+      },
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const parsed = JSON.parse(result.stdout);
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.command, "open-design-agent --diagnose");
+    assert.equal(parsed.runId, "diagnose");
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
 test("open-design-agent sanitizes Kimi control-only bridge output", async () => {
   const mod = await import(OPEN_DESIGN_AGENT_MODULE_URL);
   assert.equal(
@@ -303,6 +488,109 @@ test("open-design-agent sanitizes Kimi control-only bridge output", async () => 
     mod.sanitizeOpenDesignAgentOutput("Created artifact\n<choice>STOP</choice>\n"),
     "Created artifact",
   );
+  const modernKey = `sk-proj-${"A".repeat(24)}`;
+  const oauthToken = `oauth_token=${"B".repeat(24)}`;
+  const sanitized = mod.sanitizeOpenDesignAgentOutput(`key ${modernKey}\n${oauthToken}\nBearer ${"C".repeat(24)}`);
+  assert.equal(sanitized.includes(modernKey), false);
+  assert.equal(sanitized.includes("B".repeat(24)), false);
+  assert.equal(sanitized.includes("C".repeat(24)), false);
+  assert.match(sanitized, /sk-\*\*\*/);
+});
+
+test("open-design-agent filters secret-like child env and annotates images in prompt", async () => {
+  const mod = await import(OPEN_DESIGN_AGENT_MODULE_URL);
+  const env = mod.buildSafeOpenDesignKimiEnv({
+    PATH: "/bin",
+    HOME: "/home/example",
+    KIMI_BIN: "/bin/kimi",
+    OPENAI_API_KEY: "sk-test",
+    CODEX_OAUTH_TOKEN: "oauth-token",
+    OMK_PROJECT_ROOT: "/repo",
+  });
+  assert.equal(env.PATH, "/bin");
+  assert.equal(env.KIMI_BIN, "/bin/kimi");
+  assert.equal(env.OMK_PROJECT_ROOT, "/repo");
+  assert.equal("OPENAI_API_KEY" in env, false);
+  assert.equal("CODEX_OAUTH_TOKEN" in env, false);
+
+  const prompt = mod.buildBridgePrompt("Review screenshot", {
+    artifactDir: "/tmp/od-artifacts",
+    imagePaths: ["/tmp/screenshot.png"],
+  });
+  assert.match(prompt, /ReadMediaFile/);
+  assert.match(prompt, /\/tmp\/screenshot\.png/);
+  assert.match(prompt, /gpt-image-2/);
+});
+
+test("open-design-agent isolated HOME does not inherit local auth directories by default", () => {
+  const root = mkdtempSync(join(tmpdir(), "omk-open-design-auth-isolation-"));
+  try {
+    const binDir = join(root, "bin");
+    const workspace = join(root, "workspace");
+    const homeRoot = join(root, "home");
+    mkdirSync(binDir, { recursive: true });
+    mkdirSync(workspace, { recursive: true });
+    mkdirSync(join(homeRoot, ".codex"), { recursive: true });
+    mkdirSync(join(homeRoot, ".config", "omk"), { recursive: true });
+    mkdirSync(join(homeRoot, ".config", "gh"), { recursive: true });
+
+    const fakeKimi = join(binDir, "fake-kimi.mjs");
+    writeFileSync(
+      fakeKimi,
+      [
+        "import { existsSync } from 'node:fs';",
+        "import { join } from 'node:path';",
+        "if (process.argv.includes('--help')) { console.log('kimi --model --thinking'); process.exit(0); }",
+        "if (process.argv.includes('--version')) { console.log('kimi, version 1.1.0'); process.exit(0); }",
+        "const leaked = ['.codex', '.config/omk', '.config/gh'].filter((entry) => existsSync(join(process.env.HOME, entry)));",
+        "if (leaked.length) { console.error('leaked-local-auth:' + leaked.join(',')); process.exit(31); }",
+        "console.log('OMK_OPEN_DESIGN_SUCCESS');",
+      ].join("\n"),
+    );
+
+    if (process.platform === "win32") {
+      writeFileSync(
+        join(binDir, "kimi.cmd"),
+        `@echo off\r\n"${process.execPath}" "${fakeKimi}" %*\r\n`,
+      );
+    } else {
+      writeFileSync(
+        join(binDir, "kimi"),
+        `#!${process.execPath}\n${readFileSync(fakeKimi, "utf8")}\n`,
+      );
+      chmodSync(join(binDir, "kimi"), 0o755);
+    }
+
+    const result = spawnSync(process.execPath, [
+      CLI,
+      "open-design-agent",
+      "--cwd",
+      workspace,
+      "--run-id",
+      "auth-isolation",
+      "--stdio",
+      "--timeout-ms",
+      "5000",
+    ], {
+      cwd: process.cwd(),
+      input: "Check HOME isolation",
+      encoding: "utf-8",
+      timeout: 10000,
+      env: {
+        ...process.env,
+        HOME: homeRoot,
+        OMK_ORIGINAL_HOME: homeRoot,
+        PATH: `${binDir}${delimiter}${process.env.PATH || ""}`,
+        OMK_STAR_PROMPT: "0",
+        OMK_RENDER_LOGO: "0",
+      },
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.doesNotMatch(result.stderr + result.stdout, /leaked-local-auth/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("open-design-agent treats generated Open Design artifacts as success after Kimi timeout", () => {
@@ -317,10 +605,13 @@ test("open-design-agent treats generated Open Design artifacts as success after 
     writeFileSync(
       fakeKimi,
       [
-        "import { writeFileSync } from 'node:fs';",
+        "import { mkdirSync, writeFileSync } from 'node:fs';",
+        "import { join } from 'node:path';",
         "if (process.argv.includes('--help')) { console.log('kimi --model --thinking'); process.exit(0); }",
         "if (process.argv.includes('--version')) { console.log('kimi, version 1.1.0'); process.exit(0); }",
-        "writeFileSync('index.html', '<html>ok</html>');",
+        "const artifactDir = process.env.OMK_OPEN_DESIGN_ARTIFACT_DIR || '.';",
+        "mkdirSync(artifactDir, { recursive: true });",
+        "writeFileSync(join(artifactDir, 'index.html'), '<html>ok</html>');",
         "setTimeout(() => {}, 5000);",
       ].join("\n"),
     );
@@ -343,6 +634,9 @@ test("open-design-agent treats generated Open Design artifacts as success after 
       "open-design-agent",
       "--cwd",
       workspace,
+      "--run-id",
+      "timeout-artifact",
+      "--stdio",
       "--timeout-ms",
       "1000",
     ], {
@@ -360,11 +654,117 @@ test("open-design-agent treats generated Open Design artifacts as success after 
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /Generated Open Design artifact: index\.html/);
-    assert.equal(readFileSync(join(workspace, "index.html"), "utf8"), "<html>ok</html>");
+    assert.match(result.stdout, /Generated Open Design artifact: .*index\.html/);
+    assert.equal(readFileSync(join(workspace, ".omk", "open-design-artifacts", "timeout-artifact", "index.html"), "utf8"), "<html>ok</html>");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("open-design-agent timeout with stdout only is not success", () => {
+  const root = mkdtempSync(join(tmpdir(), "omk-open-design-stdout-timeout-"));
+  try {
+    const binDir = join(root, "bin");
+    const workspace = join(root, "workspace");
+    mkdirSync(binDir);
+    mkdirSync(workspace);
+
+    const fakeKimi = join(binDir, "fake-kimi.mjs");
+    writeFileSync(
+      fakeKimi,
+      [
+        "if (process.argv.includes('--help')) { console.log('kimi --model --thinking'); process.exit(0); }",
+        "if (process.argv.includes('--version')) { console.log('kimi, version 1.1.0'); process.exit(0); }",
+        "console.log('working');",
+        "setTimeout(() => {}, 5000);",
+      ].join("\n"),
+    );
+
+    if (process.platform === "win32") {
+      writeFileSync(
+        join(binDir, "kimi.cmd"),
+        `@echo off\r\n"${process.execPath}" "${fakeKimi}" %*\r\n`,
+      );
+    } else {
+      writeFileSync(
+        join(binDir, "kimi"),
+        `#!${process.execPath}\n${readFileSync(fakeKimi, "utf8")}\n`,
+      );
+      chmodSync(join(binDir, "kimi"), 0o755);
+    }
+
+    const result = spawnSync(process.execPath, [
+      CLI,
+      "open-design-agent",
+      "--cwd",
+      workspace,
+      "--run-id",
+      "stdout-timeout",
+      "--stdio",
+      "--json",
+      "--timeout-ms",
+      "1000",
+    ], {
+      cwd: process.cwd(),
+      input: "Generate an index.html artifact",
+      encoding: "utf-8",
+      timeout: 10000,
+      env: {
+        ...process.env,
+        PATH: `${binDir}${delimiter}${process.env.PATH || ""}`,
+        OMK_OPEN_DESIGN_ARTIFACT_SETTLE_MS: "0",
+        OMK_STAR_PROMPT: "0",
+        OMK_RENDER_LOGO: "0",
+      },
+    });
+
+    assert.notEqual(result.status, 0);
+    const parsed = JSON.parse(result.stdout);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.status, "timeout_no_artifact");
+    assert.deepEqual(parsed.artifacts, []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("open-design-agent exposes precise timeout artifact statuses", async () => {
+  const mod = await import(OPEN_DESIGN_AGENT_MODULE_URL);
+  assert.equal(mod.classifyOpenDesignBridgeResult({
+    failed: true,
+    exitCode: 1,
+    cleanStdout: "",
+    cleanStderr: "timed out after 1000ms",
+    generatedArtifacts: [{ path: ".omk/open-design-artifacts/run/index.html", size: 12, modifiedAt: Date.now() }],
+  }), "timeout_artifact_ok");
+  assert.equal(mod.classifyOpenDesignBridgeResult({
+    failed: true,
+    exitCode: 1,
+    cleanStdout: "working",
+    cleanStderr: "timed out after 1000ms",
+    generatedArtifacts: [],
+  }), "timeout_no_artifact");
+  assert.equal(mod.classifyOpenDesignBridgeResult({
+    failed: true,
+    exitCode: 1,
+    cleanStdout: "working",
+    cleanStderr: "",
+    generatedArtifacts: [],
+  }), "fatal");
+  assert.equal(mod.classifyOpenDesignBridgeResult({
+    failed: true,
+    exitCode: 1,
+    cleanStdout: "working",
+    cleanStderr: "",
+    generatedArtifacts: [{ path: ".omk/open-design-artifacts/run/index.html", size: 12, modifiedAt: Date.now() }],
+  }), "fatal");
+  assert.equal(mod.classifyOpenDesignBridgeResult({
+    failed: true,
+    exitCode: 1,
+    cleanStdout: "OMK_OPEN_DESIGN_SUCCESS",
+    cleanStderr: "",
+    generatedArtifacts: [{ path: ".omk/open-design-artifacts/run/index.html", size: 12, modifiedAt: Date.now() }],
+  }), "artifact_ok");
 });
 
 test("open-design-agent does not mask fatal Kimi errors as artifact success", async () => {
@@ -518,6 +918,7 @@ test("slash command templates are packaged", () => {
   const root = join(process.cwd(), "templates", "skills", "kimi");
   const openDesign = readFileSync(join(root, "open-design", "SKILL.md"), "utf-8");
   const awesomeDesignMd = readFileSync(join(root, "awesome-design-md", "SKILL.md"), "utf-8");
+  const provider = readFileSync(join(root, "provider", "SKILL.md"), "utf-8");
   const api = readFileSync(join(root, "deepseek-api", "SKILL.md"), "utf-8");
   const enable = readFileSync(join(root, "deepseek-enable", "SKILL.md"), "utf-8");
   const disable = readFileSync(join(root, "deepseek-disable", "SKILL.md"), "utf-8");
@@ -526,6 +927,8 @@ test("slash command templates are packaged", () => {
   assert.match(openDesign, /omk design open-design --open/);
   assert.equal(awesomeDesignMd.includes("# /awesome-design-md"), true);
   assert.match(awesomeDesignMd, /omk design search <keyword>/);
+  assert.equal(provider.includes("# /provider"), true);
+  assert.match(provider, /omk provider oauth <provider>/);
   assert.equal(api.includes("# /deepseek-api"), true);
   assert.match(api, /omk deepseek api/);
   assert.equal(enable.includes("# /deepseek-enable"), true);

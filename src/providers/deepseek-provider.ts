@@ -51,7 +51,7 @@ export function createDeepSeekProvider(options: DeepSeekProviderOptions): AgentP
       let lastError: unknown;
       for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
-          const result: TaskResult = await runner.run(input.node, input.env);
+          const result: TaskResult = await runner.run(input.node, input.env, input.signal);
           return {
             success: result.success,
             exitCode: result.exitCode,

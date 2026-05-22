@@ -33,13 +33,25 @@ export interface StatePersister {
   save(state: RunState): Promise<void>;
 }
 
+async function withTimeout<T>(promise: Promise<T>, ms: number, reason: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      const timer = setTimeout(() => reject(new Error(`Timeout after ${ms}ms: ${reason}`)), ms);
+      if (typeof (timer as unknown as NodeJS.Timeout).unref === "function") {
+        (timer as unknown as NodeJS.Timeout).unref();
+      }
+    }),
+  ]);
+}
+
 export function createStatePersister(basePath: string = ".omk/runs"): StatePersister {
   return {
     async load(runId: string): Promise<RunState | null> {
       const valid = validateRunId(runId);
       const filePath = join(basePath, valid, "state.json");
       try {
-        const content = await readFile(filePath, "utf-8");
+        const content = await withTimeout(readFile(filePath, "utf-8"), 10_000, `load ${filePath}`);
         const parsed = JSON.parse(content) as RunState;
         return redactSecrets(parsed) as RunState;
       } catch {
@@ -50,13 +62,19 @@ export function createStatePersister(basePath: string = ".omk/runs"): StatePersi
     async save(state: RunState): Promise<void> {
       const valid = validateRunId(state.runId);
       const filePath = join(basePath, valid, "state.json");
-      await mkdir(dirname(filePath), { recursive: true });
       const cloned = JSON.parse(JSON.stringify(state)) as RunState;
       const toSave: RunState = { ...(redactSecrets(cloned) as RunState), schemaVersion: 1 };
       const tempPath = `${filePath}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
       try {
-        await writeFile(tempPath, JSON.stringify(toSave, null, 2), "utf-8");
-        await rename(tempPath, filePath);
+        await withTimeout(
+          (async () => {
+            await mkdir(dirname(filePath), { recursive: true });
+            await writeFile(tempPath, JSON.stringify(toSave, null, 2), "utf-8");
+            await rename(tempPath, filePath);
+          })(),
+          30_000,
+          `save ${filePath}`
+        );
       } catch (err) {
         try { await unlink(tempPath); } catch { /* ignore cleanup error */ }
         throw err;

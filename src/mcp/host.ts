@@ -22,6 +22,7 @@ import { McpClientSession } from "./client.js";
 import { getOmkVersionSync } from "../util/version.js";
 import { ToolGovernor, ToolPermissionLevel, type GovernanceRule, type ToolGovernancePolicy, type GovernedToolResult, type AuditRecord } from "./governance.js";
 import { UnifiedPermissionResolver } from "./permission-resolver.js";
+import { maskSensitiveText } from "../util/secret-mask.js";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -53,6 +54,12 @@ export interface McpServerConfig {
   env?: Record<string, string>;
   headers?: Record<string, string>;
   startupTimeoutMs?: number;
+}
+
+export interface McpDegradedServer {
+  name: string;
+  consecutiveTimeouts: number;
+  lastError: string;
 }
 
 export interface McpServerInfo {
@@ -176,9 +183,13 @@ export class McpHost extends EventEmitter {
   private toolGovernor: ToolGovernor;
   private permissionResolver: UnifiedPermissionResolver;
   private auditSalt: string;
+  private degradedServers = new Map<string, { consecutiveTimeouts: number; lastError: string }>();
+  private preflightConcurrency: number;
+  private resourceExhausted = false;
 
-  constructor(permissionPolicy?: Partial<PermissionPolicy>) {
+  constructor(permissionPolicy?: Partial<PermissionPolicy>, options?: { preflightConcurrency?: number }) {
     super();
+    this.preflightConcurrency = Math.max(1, Math.min(8, options?.preflightConcurrency ?? 3));
     this.permissionPolicy = {
       allowServers: null,
       denyServers: [],
@@ -249,6 +260,16 @@ export class McpHost extends EventEmitter {
     if (!session) throw new Error(`Server not registered: ${name}`);
     if (session.connectedAt) return this.getServerInfo(name);
 
+    const degraded = this.degradedServers.get(name);
+    if (degraded && degraded.consecutiveTimeouts >= 2) {
+      const error = `MCP server degraded: ${name} (${degraded.lastError})`;
+      this.emit("server:degraded", { name, reason: degraded.lastError });
+      throw new Error(error);
+    }
+    if (this.resourceExhausted) {
+      throw new Error("MCP host in degraded mode: resource exhaustion (EAGAIN)");
+    }
+
     try {
       await session.client.connect();
 
@@ -275,32 +296,87 @@ export class McpHost extends EventEmitter {
       };
       session.client.serverInfo = initResult.serverInfo;
 
+      this.degradedServers.delete(name);
       this.aggregateCapabilities();
       this.emit("server:connected", { name, capabilities: session.capabilities });
 
       return this.getServerInfo(name);
     } catch (err) {
+      const rawError = err instanceof Error ? err.message : String(err);
+      const error = maskSensitiveText(rawError);
       session.capabilities = {};
-      this.emit("server:error", { name, error: err instanceof Error ? err.message : String(err) });
+
+      const isTimeout = /timed?\s*out|timeout|ETIMEDOUT/i.test(rawError);
+      const isResourceExhaustion = /EAGAIN|resource temporarily unavailable|EMFILE|ENFILE/i.test(rawError);
+
+      if (isResourceExhaustion) {
+        this.resourceExhausted = true;
+      }
+
+      const current = this.degradedServers.get(name);
+      if (isTimeout) {
+        this.degradedServers.set(name, {
+          consecutiveTimeouts: (current?.consecutiveTimeouts ?? 0) + 1,
+          lastError: error,
+        });
+        if ((this.degradedServers.get(name)?.consecutiveTimeouts ?? 0) >= 2) {
+          this.emit("server:degraded", { name, reason: error });
+        }
+      } else {
+        this.degradedServers.set(name, {
+          consecutiveTimeouts: 0,
+          lastError: error,
+        });
+      }
+
+      this.emit("server:error", { name, error });
       throw err;
     }
   }
 
   /**
-   * Connect all registered servers in parallel.
+   * Connect all registered servers with bounded concurrency.
    */
   async connectAll(): Promise<Array<{ name: string; ok: boolean; error?: string }>> {
-    const results = await Promise.allSettled(
-      Array.from(this.servers.keys()).map(async (name) => {
-        try {
-          await this.connectServer(name);
-          return { name, ok: true };
-        } catch (err) {
-          return { name, ok: false, error: err instanceof Error ? err.message : String(err) };
-        }
-      })
-    );
-    return results.map((r) => (r.status === "fulfilled" ? r.value : { name: r.reason?.name ?? "unknown", ok: false, error: String(r.reason) }));
+    const names = Array.from(this.servers.keys());
+    const results: Array<{ name: string; ok: boolean; error?: string }> = [];
+    const concurrency = this.preflightConcurrency;
+
+    for (let i = 0; i < names.length; i += concurrency) {
+      const batch = names.slice(i, i + concurrency);
+      const batchResults = await Promise.allSettled(
+        batch.map(async (name) => {
+          try {
+            await this.connectServer(name);
+            return { name, ok: true };
+          } catch (err) {
+            return { name, ok: false, error: maskSensitiveText(err instanceof Error ? err.message : String(err)) };
+          }
+        })
+      );
+      results.push(
+        ...batchResults.map((r) =>
+          r.status === "fulfilled"
+            ? r.value
+            : { name: r.reason?.name ?? "unknown", ok: false, error: String(r.reason) }
+        )
+      );
+    }
+    return results;
+  }
+
+  /** Get servers that have been marked degraded due to consecutive timeouts. */
+  getDegradedServers(): McpDegradedServer[] {
+    return Array.from(this.degradedServers.entries()).map(([name, state]) => ({
+      name,
+      consecutiveTimeouts: state.consecutiveTimeouts,
+      lastError: state.lastError,
+    }));
+  }
+
+  /** Whether the host has entered resource-exhaustion degraded mode. */
+  isResourceExhausted(): boolean {
+    return this.resourceExhausted;
   }
 
   /**
@@ -786,6 +862,17 @@ async function handleHostRequest(req: JsonRpcRequest, host: McpHost): Promise<vo
     case "mcpHost/server/list": {
       const servers = host.listServers();
       sendResult(req.id, { servers });
+      return;
+    }
+
+    case "mcpHost/degradedServers": {
+      const degraded = host.getDegradedServers();
+      sendResult(req.id, { degraded });
+      return;
+    }
+
+    case "mcpHost/resourceExhausted": {
+      sendResult(req.id, { exhausted: host.isResourceExhausted() });
       return;
     }
 

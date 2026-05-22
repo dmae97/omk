@@ -2,9 +2,9 @@ import type { IPty } from "node-pty";
 import { BannerReplacer } from "./banner.js";
 import { KimiBugFilter } from "./bug-filter.js";
 import { kimicatBanner, style, loadThemeConfig } from "../util/theme.js";
-import { ensureDir, injectKimiGlobals, getProjectRoot, pathExists } from "../util/fs.js";
+import { ensureDir, injectKimiGlobals, getProjectRoot, getUserHome, pathExists } from "../util/fs.js";
 import { pasteScreenshot } from "../util/screenshot-store.js";
-import { join } from "path";
+import { isAbsolute, join, relative, resolve } from "path";
 import type { TaskRunner, TaskResult } from "../contracts/orchestration.js";
 import type { DagNode } from "../orchestration/dag.js";
 import { runShellStreaming } from "../util/shell.js";
@@ -16,6 +16,7 @@ import { prepareIsolatedKimiHome, cleanupIsolatedKimiHome, resolveOriginalHome }
 import { enableRawTerminalInput, restoreTerminalInputState } from "../util/terminal-input.js";
 import { checkCommand, resolveKimiBin } from "../util/shell.js";
 import { defaultScopedRoleAgentFile, writeScopedAgentFile } from "../util/scoped-agent-file.js";
+import { terminateProcessTree, type ProcessTreeTarget } from "../util/process-tree.js";
 
 const REQUIRED_KIMI_ENV_KEYS = new Set([
   "PATH",
@@ -39,15 +40,25 @@ const REQUIRED_KIMI_ENV_KEYS = new Set([
 const SECRET_ENV_KEY_PATTERN =
   /(?:SECRET|TOKEN|PASSWORD|PASSWD|API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY|CREDENTIAL|AUTH|COOKIE|SESSION|BEARER|DATABASE[_-]?URL|REDIS[_-]?URL|MONGO(?:DB)?[_-]?URI|CONNECTION[_-]?STRING|DSN)/i;
 
+const NON_SECRET_KIMI_METADATA_ENV_KEYS = new Set([
+  "KIMI_SESSION_ID",
+  "OMK_RUN_ID",
+  "OMK_SESSION_ID",
+  "OMK_INHERIT_LOCAL_AUTH",
+  "OMK_ISOLATED_HOME_INHERIT_AUTH",
+]);
+
 const TRUSTED_KIMI_EXPLICIT_SECRET_ENV_PATTERN = /^(1|true|yes)$/i;
 const KIMI_EXPLICIT_SECRET_ENV_WARNED = new Set<string>();
 
 function isAllowedInheritedKimiEnvKey(key: string): boolean {
+  if (NON_SECRET_KIMI_METADATA_ENV_KEYS.has(key)) return true;
   if (SECRET_ENV_KEY_PATTERN.test(key)) return false;
   return REQUIRED_KIMI_ENV_KEYS.has(key) || key.startsWith("LC_") || key.startsWith("KIMI_") || key.startsWith("OMK_");
 }
 
 export function isSecretLikeKimiEnvKey(key: string): boolean {
+  if (NON_SECRET_KIMI_METADATA_ENV_KEYS.has(key)) return false;
   return SECRET_ENV_KEY_PATTERN.test(key);
 }
 
@@ -118,6 +129,34 @@ export function buildSafeKimiChildEnv(
     else safeEnv[key] = value;
   }
   return safeEnv;
+}
+
+function readFlagValue(args: string[], longName: string, shortName?: string): string | undefined {
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === longName || (shortName && arg === shortName)) {
+      return args[index + 1];
+    }
+    if (arg.startsWith(`${longName}=`)) {
+      return arg.slice(longName.length + 1);
+    }
+    if (shortName && arg.startsWith(`${shortName}=`)) {
+      return arg.slice(shortName.length + 1);
+    }
+  }
+  return undefined;
+}
+
+export function parseKimiLaunchMeta(
+  args: readonly string[],
+  env: Record<string, string | undefined> = process.env,
+  cwd: string = process.cwd()
+): { directory: string; session?: string; model?: string } {
+  return {
+    directory: cwd,
+    session: env.KIMI_SESSION_ID ?? env.OMK_SESSION_ID ?? env.OMK_RUN_ID,
+    model: readFlagValue([...args], "--model", "-m") ?? env.OMK_KIMI_MODEL ?? env.OMK_MODEL,
+  };
 }
 
 export type KimiProviderFailureKind = "monthly-quota" | "rate-limit" | "provider";
@@ -198,6 +237,7 @@ export interface KimiStartupExitDiagnosis {
 }
 
 const DEFAULT_KIMI_FAST_EXIT_MS = 1500;
+const DEFAULT_KIMI_STARTUP_TIMEOUT_MS = 45_000;
 
 function resolveKimiFastExitThresholdMs(env: Record<string, string | undefined>): number {
   const raw = env.OMK_CHAT_FAST_EXIT_MS;
@@ -205,6 +245,71 @@ function resolveKimiFastExitThresholdMs(env: Record<string, string | undefined>)
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed)) return DEFAULT_KIMI_FAST_EXIT_MS;
   return Math.max(0, parsed);
+}
+
+export function resolveKimiStartupTimeoutMs(env: Record<string, string | undefined>): number {
+  const raw = env.OMK_CHAT_STARTUP_TIMEOUT_MS;
+  if (raw === undefined || raw.trim() === "") return DEFAULT_KIMI_STARTUP_TIMEOUT_MS;
+  if (raw.trim() === "0") return 0;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1000) return DEFAULT_KIMI_STARTUP_TIMEOUT_MS;
+  return Math.min(parsed, 10 * 60_000);
+}
+
+function stripAnsiControls(value: string): string {
+  return value.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
+}
+
+function isKimiPromptReadyLine(line: string): boolean {
+  const trimmed = stripAnsiControls(line).trim();
+  return /(?:^|\s)(?:waiting for input|ready for input|enter your prompt|prompt ready)(?:\s|$)/i.test(trimmed)
+    || /^kimi[❯>›]\s*$/i.test(trimmed);
+}
+
+export function isKimiStartupReadyData(data: string): boolean {
+  const clean = stripAnsiControls(data);
+  if (/(?:^|\n)\s*(?:Kimi\s+)?Session(?:\s*ID)?\s*:/i.test(clean)) return true;
+  return clean.split(/\r?\n/).some(isKimiPromptReadyLine);
+}
+
+function createPtyProcessTreeTarget(ptyProcess: IPty): ProcessTreeTarget {
+  let exitCode: number | null = null;
+  const exitListeners = new Set<(...args: unknown[]) => void>();
+  const disposable = ptyProcess.onExit((event) => {
+    exitCode = event.exitCode;
+    for (const listener of exitListeners) {
+      listener(event.exitCode, event.signal);
+    }
+    exitListeners.clear();
+    disposable.dispose();
+  });
+
+  return {
+    pid: ptyProcess.pid,
+    get exitCode(): number | null {
+      return exitCode;
+    },
+    signalCode: null,
+    kill(signal?: NodeJS.Signals | number): boolean {
+      try {
+        ptyProcess.kill(typeof signal === "string" ? signal : undefined);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    once(event: "exit" | "close" | "error", listener: (...args: unknown[]) => void): unknown {
+      if (event === "error") return undefined;
+      if (exitCode !== null) {
+        queueMicrotask(() => listener(exitCode));
+        return undefined;
+      }
+      exitListeners.add(listener);
+      return {
+        dispose: () => exitListeners.delete(listener),
+      };
+    },
+  };
 }
 
 export function classifyKimiStartupExit(
@@ -250,6 +355,7 @@ export async function runKimiInteractive(
     cwd?: string;
     env?: Record<string, string>;
     onMeta?: (meta: { directory?: string; session?: string; model?: string }) => void;
+    onKimiMeta?: (meta: { directory?: string; session?: string; model?: string }) => void;
     onData?: (data: string) => void;
   }
 ): Promise<number> {
@@ -262,10 +368,28 @@ export async function runKimiInteractive(
 
   const noBanner = process.env.OMK_CHAT_NO_BANNER === "1";
   const theme = await loadThemeConfig();
+  const launchMeta = parseKimiLaunchMeta(args, { ...process.env, ...(options?.env ?? {}) }, options?.cwd ?? process.cwd());
+  let observedKimiSession: string | undefined;
+  let startupReady = false;
+  const markStartupReady = (): void => {
+    startupReady = true;
+  };
   const replacer = new BannerReplacer((meta) => {
     if (noBanner) return;
     writeStdout(kimicatBanner(meta, formatOmkVersionFooter(), theme ?? undefined) + "\n");
     options?.onMeta?.(meta);
+  }, true, (rawMeta) => {
+    const kimiSession = rawMeta.session?.trim();
+    if (!kimiSession || kimiSession === observedKimiSession) return;
+    observedKimiSession = kimiSession;
+    process.env.KIMI_SESSION_ID = kimiSession;
+    options?.onKimiMeta?.(rawMeta);
+    markStartupReady();
+    if (!noBanner) {
+      const omkSession = launchMeta.session;
+      const suffix = omkSession && omkSession !== kimiSession ? ` ${style.gray(`(OMK session: ${omkSession})`)}` : "";
+      writeStdout(`${style.gray("[omk] Kimi session:")} ${style.cream(kimiSession)}${suffix}\n`);
+    }
   });
   const bugFilter = new KimiBugFilter();
   const statusLine = await KimiStatusLineEnhancer.create();
@@ -282,6 +406,8 @@ export async function runKimiInteractive(
     hooksScope: resources.hooksScope,
   });
   const env = buildSafeKimiChildEnv({}, baseEnv, {
+    KIMI_HIDE_BANNER: "1",
+    KIMI_NO_BANNER: "1",
     OMK_RESOURCE_PROFILE_EFFECTIVE: resources.profile,
     OMK_ORIGINAL_HOME: originalHome,
     HOME: tmpHome,
@@ -289,6 +415,7 @@ export async function runKimiInteractive(
     HOMEDRIVE: "",
     HOMEPATH: tmpHome,
     PWD: options?.cwd ?? process.cwd(),
+    CODEX_HOME: join(tmpHome, ".codex"),
   });
 
 
@@ -307,38 +434,6 @@ export async function runKimiInteractive(
 
   // MCP preflight: verify config files exist before spawn
   await preflightMcpConfigs(args);
-
-  let ptyModule: typeof import("node-pty");
-  try {
-    ptyModule = await import("node-pty");
-  } catch (err) {
-    await cleanupIsolatedKimiHome(tmpHome);
-    const message = err instanceof Error ? err.message : String(err);
-    throw new Error(
-      "[omk] Failed to load node-pty native module. " +
-        `(${message})\n` +
-        "This usually happens when installed with --ignore-scripts.\n" +
-        "Fix: npm rebuild -g @oh-my-kimi/cli\n" +
-        "Or reinstall: npm uninstall -g @oh-my-kimi/cli && npm install -g @oh-my-kimi/cli"
-    );
-  }
-
-  let ptyProcess: IPty;
-  try {
-    ptyProcess = ptyModule.spawn(kimiBin, args, {
-      name: "xterm-256color",
-      cols: process.stdout.columns || 80,
-      rows: process.stdout.rows || 24,
-      cwd: options?.cwd ?? process.cwd(),
-      env,
-    });
-  } catch (err) {
-    await cleanupIsolatedKimiHome(tmpHome);
-    throw err;
-  }
-  const spawnedAt = Date.now();
-
-  // ── Signal handlers registered inside Promise below ──
 
   // ── Backpressure-safe stdout writer (circular buffer) ──
   // Prevents process.stdout.write from blocking the event loop when the
@@ -399,6 +494,46 @@ export async function runKimiInteractive(
     }
   }
 
+  // Print OMK banner BEFORE spawning Kimi
+  const meta = launchMeta;
+  if (!noBanner) {
+    writeStdout(kimicatBanner(meta, formatOmkVersionFooter(), theme ?? undefined) + "\n");
+  }
+  options?.onMeta?.(meta);
+
+  let ptyModule: typeof import("node-pty");
+  try {
+    ptyModule = await import("node-pty");
+  } catch (err) {
+    await cleanupIsolatedKimiHome(tmpHome);
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      "[omk] Failed to load node-pty native module. " +
+        `(${message})\n` +
+        "This usually happens when installed with --ignore-scripts.\n" +
+        "Fix: npm rebuild -g @oh-my-kimi/cli\n" +
+        "Or reinstall: npm uninstall -g @oh-my-kimi/cli && npm install -g @oh-my-kimi/cli"
+    );
+  }
+
+  let ptyProcess: IPty;
+  try {
+    ptyProcess = ptyModule.spawn(kimiBin, args, {
+      name: "xterm-256color",
+      cols: process.stdout.columns || 80,
+      rows: process.stdout.rows || 24,
+      cwd: options?.cwd ?? process.cwd(),
+      env,
+    });
+  } catch (err) {
+    await cleanupIsolatedKimiHome(tmpHome);
+    throw err;
+  }
+  const spawnedAt = Date.now();
+  const ptyTarget = createPtyProcessTreeTarget(ptyProcess);
+
+  // ── Signal handlers registered inside Promise below ──
+
   let recentProviderOutput = "";
   const rememberProviderOutput = (chunk: string): void => {
     recentProviderOutput = (recentProviderOutput + chunk).slice(-8000);
@@ -407,6 +542,7 @@ export async function runKimiInteractive(
   // stdout → 터미널 (버그 필터 → 배너 필터링 적용)
   ptyProcess.onData((data) => {
     options?.onData?.(data);
+    if (isKimiStartupReadyData(data)) markStartupReady();
     rememberProviderOutput(data);
     // Strip terminal sequences that break scrollback / native mouse scrolling:
     // - alternate-screen buffer enter/exit (1049, legacy 47)
@@ -486,12 +622,21 @@ export async function runKimiInteractive(
   // 종료 대기
   return new Promise<number>((resolve) => {
     let cleaned = false;
+    let settled = false;
+    let startupTimer: ReturnType<typeof setTimeout> | undefined;
+    let terminationStarted: Promise<void> | undefined;
+    const clearWatchdogs = (): void => {
+      if (startupTimer) clearTimeout(startupTimer);
+    };
     const cleanupRuntime = async (): Promise<void> => {
       if (cleaned) return;
       cleaned = true;
+      clearWatchdogs();
       try {
         process.stdin.off("data", handleStdinData);
         process.stdout.off("resize", handleStdoutResize);
+        process.removeListener("SIGINT", signalHandler as NodeJS.SignalsListener);
+        process.removeListener("SIGTERM", signalHandler as NodeJS.SignalsListener);
       } finally {
         try {
           statusLine.dispose();
@@ -501,58 +646,99 @@ export async function runKimiInteractive(
       }
       await cleanupIsolatedKimiHome(tmpHome);
     };
+    const resolveOnce = (code: number): void => {
+      if (settled) return;
+      settled = true;
+      clearWatchdogs();
+      resolve(code);
+    };
+    const forceTerminate = (exitCode: number): void => {
+      if (!terminationStarted) {
+        terminationStarted = terminateProcessTree(ptyTarget, { graceMs: 1000, waitMs: 5000 })
+          .catch((err: unknown) => {
+            const message = err instanceof Error ? err.message : String(err);
+            process.stderr.write(`[omk] PTY termination warning: ${message}\n`);
+            try {
+              process.kill(-ptyProcess.pid, "SIGKILL");
+            } catch {
+              try {
+                ptyProcess.kill("SIGKILL");
+              } catch { /* pty already dead */ }
+            }
+          });
+      }
+      terminationStarted
+        .then(() => cleanupRuntime())
+        .catch((err: unknown) => {
+          const message = err instanceof Error ? err.message : String(err);
+          process.stderr.write(`[omk] PTY cleanup warning: ${message}\n`);
+        })
+        .finally(() => resolveOnce(exitCode));
+    };
 
-    const signalHandler = async (signal: string): Promise<void> => {
+    const startupTimeoutMs = resolveKimiStartupTimeoutMs(env);
+    if (startupTimeoutMs > 0) {
+      startupTimer = setTimeout(() => {
+        if (startupReady || settled) return;
+        const runId = options?.env?.OMK_RUN_ID;
+        const resumeHint = runId ? ` • resume: omk chat --run-id ${runId}` : "";
+        process.stderr.write(style.red(`[omk] Kimi startup timed out after ${startupTimeoutMs}ms without session or prompt-ready signal${resumeHint}\n`));
+        forceTerminate(1);
+      }, startupTimeoutMs);
+      startupTimer.unref?.();
+    }
+
+    const signalHandler = (signal: string): void => {
       // Remove listeners first to prevent re-entry
       process.removeListener("SIGINT", signalHandler as NodeJS.SignalsListener);
       process.removeListener("SIGTERM", signalHandler as NodeJS.SignalsListener);
-      try {
-        ptyProcess.kill("SIGTERM");
-      } catch { /* pty already dead */ }
-      await cleanupRuntime();
       process.exitCode = signal === "SIGINT" ? 130 : 143; // 128+2, 128+15
+      forceTerminate(process.exitCode);
     };
     process.once("SIGINT", signalHandler as NodeJS.SignalsListener);
     process.once("SIGTERM", signalHandler as NodeJS.SignalsListener);
 
     ptyProcess.onExit(({ exitCode }) => {
-      const elapsedMs = Date.now() - spawnedAt;
-      const bugRest = bugFilter.forceFlush();
-      if (bugRest) writeStdout(statusLine.process(bugRest));
-      const replacerRest = replacer.forceFlush();
-      if (replacerRest) writeStdout(statusLine.process(replacerRest));
-      cleanupRuntime().catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err);
-        process.stderr.write(`[omk] PTY cleanup warning: ${message}\n`);
-      });
-      const runId = options?.env?.OMK_RUN_ID;
-      const resumeHint = runId ? ` • resume: omk chat --run-id ${runId}` : "";
-      const startupExit = classifyKimiStartupExit(exitCode, elapsedMs, env);
-      if (startupExit) {
-        process.stderr.write(style.red(`[omk] ${startupExit.message}${resumeHint}\n`));
-        process.stderr.write(
-          style.orange(
-            `[omk] Treating this as a startup failure so OMK does not silently close the chat.\n` +
-              `      Run 'kimi' directly or 'omk doctor --fix' to diagnose startup configuration.\n`
-          )
-        );
-      } else if (exitCode !== 0) {
-        process.stderr.write(style.red(`[omk] kimi exited with code ${exitCode}${resumeHint}\n`));
-        // Detect MCP connection failures from stderr that was buffered in PTY
-        const providerHint = formatKimiProviderFailureHint(recentProviderOutput);
-        if (providerHint) {
-          process.stderr.write(style.orange(providerHint));
-        } else if (exitCode === 1) {
+      if (settled) return;
+      void (async () => {
+        const elapsedMs = Date.now() - spawnedAt;
+        const bugRest = bugFilter.forceFlush();
+        if (bugRest) writeStdout(statusLine.process(bugRest));
+        const replacerRest = replacer.forceFlush();
+        if (replacerRest) writeStdout(statusLine.process(replacerRest));
+        await cleanupRuntime().catch((err: unknown) => {
+          const message = err instanceof Error ? err.message : String(err);
+          process.stderr.write(`[omk] PTY cleanup warning: ${message}\n`);
+        });
+        const runId = options?.env?.OMK_RUN_ID;
+        const resumeHint = runId ? ` • resume: omk chat --run-id ${runId}` : "";
+        const startupExit = classifyKimiStartupExit(exitCode, elapsedMs, env);
+        if (startupExit) {
+          process.stderr.write(style.red(`[omk] ${startupExit.message}${resumeHint}\n`));
           process.stderr.write(
             style.orange(
-              `[omk] If this was caused by MCP server connection failure, run 'omk doctor' to diagnose.\n` +
-                `      You can also try: OMK_MCP_SCOPE=none omk chat --provider kimi\n`
+              `[omk] Treating this as a startup failure so OMK does not silently close the chat.\n` +
+                `      Run 'kimi' directly or 'omk doctor --fix' to diagnose startup configuration.\n`
             )
           );
+        } else if (exitCode !== 0) {
+          process.stderr.write(style.red(`[omk] kimi exited with code ${exitCode}${resumeHint}\n`));
+          // Detect MCP connection failures from stderr that was buffered in PTY
+          const providerHint = formatKimiProviderFailureHint(recentProviderOutput);
+          if (providerHint) {
+            process.stderr.write(style.orange(providerHint));
+          } else if (exitCode === 1) {
+            process.stderr.write(
+              style.orange(
+                `[omk] If this was caused by MCP server connection failure, run 'omk doctor' to diagnose.\n` +
+                  `      You can also try: OMK_MCP_SCOPE=none omk chat --provider kimi\n`
+              )
+            );
+          }
         }
-      }
-      resolve(startupExit ? 1 : exitCode);
-});
+        resolveOnce(startupExit ? 1 : exitCode);
+      })();
+    });
   });
 }
 
@@ -612,7 +798,24 @@ function createLiveThinkingHandler(onThinking: ((thinking: string) => void) | un
   };
 }
 
-async function resolveAgentFileForRole(role: string, fallback?: string): Promise<string | undefined> {
+function isPathInside(parent: string, child: string): boolean {
+  const rel = relative(resolve(parent), resolve(child));
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+function formatFallbackAgentFilePath(fallback: string, projectRoot: string): string {
+  const normalizedFallback = resolve(fallback);
+  if (isPathInside(projectRoot, normalizedFallback)) {
+    return `project fallback ${relative(projectRoot, normalizedFallback).replace(/\\/g, "/") || "."}`;
+  }
+  const userHome = getUserHome();
+  if (isPathInside(userHome, normalizedFallback)) {
+    return `global fallback ~/${relative(userHome, normalizedFallback).replace(/\\/g, "/")}`;
+  }
+  return `external fallback ${fallback}`;
+}
+
+export async function resolveAgentFileForRole(role: string, fallback?: string): Promise<string | undefined> {
   const projectRoot = getProjectRoot();
   const candidates = [
     join(projectRoot, ".omk", "agents", `${role}.yaml`),
@@ -628,7 +831,12 @@ async function resolveAgentFileForRole(role: string, fallback?: string): Promise
     if (await pathExists(candidate)) return candidate;
   }
   if (fallback) {
-    console.warn(`[omk] No agent file found for role "${role}"; falling back to ${fallback}`);
+    const searched = candidates.map((candidate) => relative(projectRoot, candidate).replace(/\\/g, "/"));
+    console.warn(
+      `[omk] No agent file found for role "${role}" in ${searched.join(", ")}; ` +
+      `falling back to ${formatFallbackAgentFilePath(fallback, projectRoot)}. ` +
+      `Run "omk doctor --fix" to restore missing generated role files and root aliases.`
+    );
   }
   return fallback;
 }
@@ -673,11 +881,12 @@ export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskR
         HOMEDRIVE: "",
         HOMEPATH: tmpHome,
         PWD: worktree ?? process.cwd(),
+        CODEX_HOME: join(tmpHome, ".codex"),
       });
       const args: string[] = [];
-      const mcpAllowlist = nodeEnv.OMK_MCP_HINTS
+      const mcpAllowlist = nodeEnv.OMK_MCP_HINTS !== undefined
         ? nodeEnv.OMK_MCP_HINTS.split(",").map((s) => s.trim()).filter(Boolean)
-        : undefined;
+        : node.routing?.mcpServers ?? mcpNames;
       await injectKimiGlobals(args, { mcpScope: effectiveMcpScope, skillsScope: effectiveSkillsScope, hooksScope: effectiveHooksScope, role: node.role, mcpAllowlist });
       await preflightMcpConfigs(args);
 
@@ -693,10 +902,10 @@ export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskR
             mcpScope: effectiveMcpScope,
             skillsScope: effectiveSkillsScope,
             hooksScope: effectiveHooksScope,
-            mcpNames: mcpNames ?? [],
-            skillNames: skillNames ?? [],
-            hookNames: hookNames ?? [],
-            toolNames: toolNames ?? [],
+            mcpNames: node.routing?.mcpServers ?? mcpNames ?? [],
+            skillNames: node.routing?.skills ?? skillNames ?? [],
+            hookNames: node.routing?.hooks ?? hookNames ?? [],
+            toolNames: node.routing?.tools ?? toolNames ?? [],
           },
         });
         args.push("--agent-file", scopedAgentFile);

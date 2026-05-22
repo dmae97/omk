@@ -62,6 +62,7 @@ export class TaskDagGraph {
     return this.topologicalOrder()
       .filter((node) => (
         node.status === "pending" && this.predecessors(node.id).every((dep) => {
+          if (!this.isRequiredReadinessDependency(node, dep)) return true;
           if (dep.status === "done") return true;
           if (dep.status === "skipped") {
             return !dependsOnRequiredOutput(node, dep.id);
@@ -82,6 +83,18 @@ export class TaskDagGraph {
         })
       ))
       .sort((a, b) => this.compareRunnable(a.id, b.id));
+  }
+
+  private isRequiredReadinessDependency(dependent: DagNode, predecessor: DagNode): boolean {
+    const inputsFromPredecessor = dependent.inputs?.filter((input) => input.from === predecessor.id) ?? [];
+    if (inputsFromPredecessor.length > 0) {
+      return inputsFromPredecessor.some((input) => input.required !== false);
+    }
+    const outputs = predecessor.outputs ?? [];
+    if (outputs.length > 0 && outputs.every((output) => output.required === false)) {
+      return false;
+    }
+    return dependent.dependsOn.includes(predecessor.id);
   }
 
   private computeTopologicalIds(): string[] {
@@ -116,7 +129,7 @@ export class TaskDagGraph {
     return result;
   }
 
-  private findCycle(): string[] {
+  private _findCycleRaw(): string[] | null {
     const visiting = new Set<string>();
     const visited = new Set<string>();
     const stack: string[] = [];
@@ -143,7 +156,59 @@ export class TaskDagGraph {
       const cycle = visit(id);
       if (cycle) return cycle;
     }
-    return ["unknown"];
+    return null;
+  }
+
+  findCycle(): string[] {
+    const raw = this._findCycleRaw();
+    if (!raw) return ["unknown"];
+    return raw.map((id) => {
+      const node = this.nodeById.get(id);
+      return node ? `${node.name} (${id})` : id;
+    });
+  }
+
+  findAllCycles(limit = 20): string[][] {
+    const cycles: string[][] = [];
+    const seen = new Set<string>();
+
+    for (const startId of this.nodeById.keys()) {
+      const dfs = (id: string, path: string[], visited: Set<string>): void => {
+        if (visited.has(id)) {
+          if (id === startId && path.length > 0) {
+            const cycle = [...path, startId];
+            const key = cycle.join("->");
+            if (!seen.has(key)) {
+              seen.add(key);
+              cycles.push(cycle.map((cid) => {
+                const node = this.nodeById.get(cid);
+                return node ? `${node.name} (${cid})` : cid;
+              }));
+            }
+          }
+          return;
+        }
+        if (path.length > this.nodeById.size) return;
+
+        const newVisited = new Set(visited);
+        newVisited.add(id);
+        const newPath = [...path, id];
+
+        for (const nextId of this.successorIds.get(id) ?? []) {
+          if (cycles.length >= limit) return;
+          dfs(nextId, newPath, newVisited);
+        }
+      };
+
+      dfs(startId, [], new Set());
+      if (cycles.length >= limit) break;
+    }
+
+    return cycles;
+  }
+
+  getCriticalPathDepth(id: string): number {
+    return this.criticalPathDepth(id);
   }
 
   private compareOrder(a: string, b: string): number {
@@ -159,14 +224,25 @@ export class TaskDagGraph {
     if (!node) return 0;
     const explicitPriority = Number.isFinite(node.priority) ? node.priority ?? 0 : 0;
     const evidenceProducer = (node.outputs ?? []).some((output) => output.gate && output.gate !== "none") ? 1 : 0;
+    const evidenceRequiredBoost = node.routing?.evidenceRequired ? 2 : 0;
     const costPenalty = Math.max(0, (node.cost ?? 1) - 1);
+
+    const runningCost = [...this.nodeById.values()]
+      .filter((n) => n.status === "running")
+      .reduce((sum, n) => sum + (n.cost ?? 1), 0);
+    const threshold = 6;
+    const projectedCost = runningCost + (node.cost ?? 1);
+    const overBudgetPenalty = projectedCost > threshold ? (projectedCost - threshold) * 2 : 0;
+
     return (
       3 * this.criticalPathDepth(id)
       + 2 * this.downstreamCount(id)
       + 1.5 * evidenceProducer
+      + evidenceRequiredBoost
       + explicitPriority
       - node.retries
       - costPenalty
+      - overBudgetPenalty
     );
   }
 

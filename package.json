@@ -1,6 +1,6 @@
 {
   "name": "@oh-my-kimi/cli",
-  "version": "1.1.17",
+  "version": "1.1.18",
   "description": "Verified agent runtime for Kimi Code. Stable daily-use core with alpha orchestration surfaces.",
   "type": "module",
   "bin": {
@@ -21,7 +21,7 @@
     "secret:scan": "node scripts/secret-scan.mjs",
     "secret:scan:runtime": "node scripts/secret-scan.mjs --runtime",
     "verify": "npm run yaml:check && npm run lint && npm run secret:scan && npm run secret:scan:runtime && npm run check && npm run build:clean && npm run test",
-    "pack:dry": "npm pack --dry-run --ignore-scripts --json",
+    "pack:dry": "node scripts/pack-dry.mjs",
     "audit:package": "node scripts/package-audit.mjs",
     "smoke": "node scripts/smoke-test.mjs",
     "smoke:pack": "node scripts/pack-smoke.mjs",

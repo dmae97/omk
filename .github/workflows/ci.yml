@@ -40,6 +40,7 @@ jobs:
       - run: npm run yaml:check
       - run: npm run lint
       - run: npm run secret:scan
+      - run: npm run secret:scan:runtime
       - run: npm run check
       - run: npm run build:clean
       - name: Run tests with diagnostics
@@ -62,8 +63,6 @@ jobs:
             cat test-summary.json 2>/dev/null || true
           fi
           exit $exit_code
-        env:
-          OMK_SKIP_DIST_FRESHNESS: "1"
       - name: Upload test artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -90,5 +89,3 @@ jobs:
       - run: npm ci
       - run: npm rebuild
       - run: npm run release:check
-        env:
-          OMK_SKIP_DIST_FRESHNESS: "1"

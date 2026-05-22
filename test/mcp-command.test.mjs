@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -17,10 +17,11 @@ function runMcpScript(projectRoot, homeRoot, scriptBody, extraEnv = {}) {
       console.log = (...args) => writeSync(1, args.join(" ") + "\\n");
       console.error = (...args) => writeSync(2, args.join(" ") + "\\n");
       import { mkdir, readFile, writeFile } from "node:fs/promises";
+      import { createServer } from "node:http";
       import { join } from "node:path";
-      import { buildMcpDoctorReport, mcpDoctorCommand, mcpInstallCommand, mcpListCommand, mcpTestCommand } from ${JSON.stringify(MCP_MODULE_URL)};
+      import { buildMcpDoctorReport, mcpDoctorCommand, mcpInstallCommand, mcpListCommand, mcpPrewarmCommand, mcpSyncGlobalCommand, mcpTestCommand } from ${JSON.stringify(MCP_MODULE_URL)};
       import { doctorCommand } from ${JSON.stringify(pathToFileURL(join(OMK_ROOT, "dist", "commands", "doctor.js")).href)};
-      import { syncKimiMcpGlobal, writeRuntimeMcpConfig } from ${JSON.stringify(pathToFileURL(join(OMK_ROOT, "dist", "util", "fs.js")).href)};
+      import { resolveRuntimeMcpPreflightOptions, syncKimiMcpGlobal, writeRuntimeMcpConfig } from ${JSON.stringify(pathToFileURL(join(OMK_ROOT, "dist", "util", "fs.js")).href)};
       ${scriptBody}
     `;
   return spawnSync(process.execPath, ["--input-type=module", "--eval", evalScript], {
@@ -30,6 +31,7 @@ function runMcpScript(projectRoot, homeRoot, scriptBody, extraEnv = {}) {
       OMK_MCP_SCOPE: "",
       OMK_SKILLS_SCOPE: "",
       OMK_HOOKS_SCOPE: "",
+      OMK_MCP_PREFLIGHT: "off",
       ...extraEnv,
       HOME: homeRoot,
       OMK_ORIGINAL_HOME: homeRoot,
@@ -46,6 +48,19 @@ function buildPrependPathEnv(directory) {
   return process.platform === "win32" ? { PATH: value, Path: value } : { PATH: value };
 }
 
+async function writeFakeNpm(binDir, body) {
+  await mkdir(binDir, { recursive: true });
+  const scriptPath = join(binDir, "fake-npm.mjs");
+  await writeFile(scriptPath, body, "utf-8");
+  if (process.platform === "win32") {
+    await writeFile(join(binDir, "npm.cmd"), `@echo off\r\n"${process.execPath}" "${scriptPath}" %*\r\n`, "utf-8");
+    return;
+  }
+  const npmPath = join(binDir, "npm");
+  await writeFile(npmPath, `#!/usr/bin/env sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(scriptPath)} "$@"\n`, "utf-8");
+  await chmod(npmPath, 0o755);
+}
+
 async function writeEmptyConfigs(projectRoot, homeRoot, omkConfig) {
   await mkdir(join(projectRoot, ".omk"), { recursive: true });
   await mkdir(join(projectRoot, ".kimi"), { recursive: true });
@@ -54,6 +69,141 @@ async function writeEmptyConfigs(projectRoot, homeRoot, omkConfig) {
   await writeFile(join(projectRoot, ".kimi", "mcp.json"), JSON.stringify(omkConfig), "utf-8");
   await writeFile(join(homeRoot, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: {} }), "utf-8");
 }
+
+test("mcp test remote rejects plain HTTP 200 non-MCP endpoints", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-remote-plain-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+
+  try {
+    const result = runMcpScript(projectRoot, homeRoot, `
+      const server = createServer((_, res) => {
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.end("ok");
+      });
+      await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const port = server.address().port;
+      await mkdir(join(process.env.OMK_PROJECT_ROOT, ".omk"), { recursive: true });
+      await mkdir(join(process.env.OMK_PROJECT_ROOT, ".kimi"), { recursive: true });
+      await mkdir(join(process.env.OMK_ORIGINAL_HOME, ".kimi"), { recursive: true });
+      await writeFile(join(process.env.OMK_PROJECT_ROOT, ".omk", "mcp.json"), JSON.stringify({ mcpServers: {} }), "utf-8");
+      await writeFile(join(process.env.OMK_ORIGINAL_HOME, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: {} }), "utf-8");
+      await writeFile(join(process.env.OMK_PROJECT_ROOT, ".kimi", "mcp.json"), JSON.stringify({
+        mcpServers: { plain: { url: "http://127.0.0.1:" + port + "/mcp", startup_timeout_sec: 1 } },
+      }), "utf-8");
+      await mcpTestCommand("plain");
+    `);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Remote MCP initialize failed/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("mcp test remote performs JSON-RPC initialize with configured headers", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-remote-init-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+  let seenMethod = "";
+  let seenAuth = "";
+  let seenHttpHeader = "";
+
+  try {
+    const result = runMcpScript(projectRoot, homeRoot, `
+      let seenMethod = "";
+      let seenAuth = "";
+      let seenHttpHeader = "";
+      const server = createServer((req, res) => {
+        seenMethod = req.method ?? "";
+        seenAuth = String(req.headers.authorization ?? "");
+        seenHttpHeader = String(req.headers["x-omk-test"] ?? "");
+        let body = "";
+        req.setEncoding("utf8");
+        req.on("data", (chunk) => { body += chunk; });
+        req.on("end", () => {
+          const parsed = JSON.parse(body);
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({
+            jsonrpc: "2.0",
+            id: parsed.id,
+            result: {
+              protocolVersion: "2024-11-05",
+              capabilities: {},
+              serverInfo: { name: "remote-test", version: "1.0.0" },
+            },
+          }));
+        });
+      });
+      await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const port = server.address().port;
+      await mkdir(join(process.env.OMK_PROJECT_ROOT, ".omk"), { recursive: true });
+      await mkdir(join(process.env.OMK_PROJECT_ROOT, ".kimi"), { recursive: true });
+      await mkdir(join(process.env.OMK_ORIGINAL_HOME, ".kimi"), { recursive: true });
+      await writeFile(join(process.env.OMK_PROJECT_ROOT, ".omk", "mcp.json"), JSON.stringify({ mcpServers: {} }), "utf-8");
+      await writeFile(join(process.env.OMK_ORIGINAL_HOME, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: {} }), "utf-8");
+      await writeFile(join(process.env.OMK_PROJECT_ROOT, ".kimi", "mcp.json"), JSON.stringify({
+        mcpServers: {
+          remote: {
+            url: "http://127.0.0.1:" + port + "/mcp",
+            startup_timeout_sec: 5,
+            headers: { Authorization: "Bearer SHOULD_NOT_LEAK" },
+            http_headers: { "X-OMK-Test": "present" },
+          },
+        },
+      }), "utf-8");
+      await mcpTestCommand("remote");
+      console.log(JSON.stringify({ seenMethod, seenAuthOk: seenAuth === "Bearer SHOULD_NOT_LEAK", seenHttpHeader }));
+      await new Promise((resolve) => server.close(resolve));
+    `);
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const parsed = JSON.parse(result.stdout.trim().split("\n").at(-1));
+    seenMethod = parsed.seenMethod;
+    seenAuth = parsed.seenAuthOk;
+    seenHttpHeader = parsed.seenHttpHeader;
+    assert.equal(seenMethod, "POST");
+    assert.equal(seenAuth, true);
+    assert.equal(seenHttpHeader, "present");
+    assert.match(result.stdout, /Remote MCP initialize succeeded/);
+    assert.doesNotMatch(result.stdout + result.stderr, /SHOULD_NOT_LEAK|Bearer SHOULD/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("mcp list and test redact secret-like command strings", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-command-redact-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+  const secret = `sk-proj-${"A".repeat(24)}`;
+
+  try {
+    await writeEmptyConfigs(projectRoot, homeRoot, {
+      mcpServers: {
+        redacted: {
+          command: `missing-${secret}`,
+        },
+      },
+    });
+
+    const listResult = runMcpScript(projectRoot, homeRoot, `
+      await mcpListCommand();
+    `);
+    assert.equal(listResult.status, 0, listResult.stderr || listResult.stdout);
+    assert.doesNotMatch(listResult.stdout + listResult.stderr, new RegExp(secret));
+    assert.match(listResult.stdout, /sk-\*\*\*/);
+
+    const testResult = runMcpScript(projectRoot, homeRoot, `
+      await mcpTestCommand("redacted");
+    `);
+    assert.notEqual(testResult.status, 0);
+    assert.doesNotMatch(testResult.stdout + testResult.stderr, new RegExp(secret));
+    assert.match(testResult.stderr, /sk-\*\*\*/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
 
 test("runtime MCP cleanup does not delete active peer process configs", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-runtime-mcp-peer-"));
@@ -93,6 +243,278 @@ test("runtime MCP cleanup does not delete active peer process configs", async ()
   }
 });
 
+test("runtime MCP preflight keeps all-scope precedence and keeps timed-out npm-family servers as prewarm-needed", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-runtime-mcp-preflight-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-runtime-mcp-home-"));
+  const binDir = await mkdtemp(join(tmpdir(), "omk-runtime-mcp-bin-"));
+
+  try {
+    await writeFakeNpm(binDir, "process.stderr.write('API_TOKEN=SHOULD_NOT_LEAK\\n'); setTimeout(() => {}, 1000);");
+    await mkdir(join(projectRoot, ".kimi"), { recursive: true });
+    await mkdir(join(homeRoot, ".kimi"), { recursive: true });
+    await writeFile(join(homeRoot, ".kimi", "mcp.json"), JSON.stringify({
+      mcpServers: {
+        shared: {
+          command: "npx",
+          args: ["-y", "@scope/global-server"],
+          env: { API_TOKEN: "SHOULD_NOT_LEAK" },
+        },
+        badNpm: {
+          command: "npx",
+          args: ["-y", "@scope/bad-server", "--token=SHOULD_NOT_LEAK"],
+          env: { API_TOKEN: "SHOULD_NOT_LEAK" },
+        },
+        remote: {
+          url: "https://example.test/mcp?token=SHOULD_NOT_LEAK",
+          headers: { Authorization: "Bearer SHOULD_NOT_LEAK" },
+        },
+      },
+    }), "utf-8");
+    await writeFile(join(projectRoot, ".kimi", "mcp.json"), JSON.stringify({
+      mcpServers: {
+        shared: { command: "bash", args: ["-lc", "true"] },
+      },
+    }), "utf-8");
+
+    const result = runMcpScript(projectRoot, homeRoot, `
+      const runtimePath = await writeRuntimeMcpConfig([
+        join(process.env.OMK_ORIGINAL_HOME, ".kimi", "mcp.json"),
+        join(process.env.OMK_PROJECT_ROOT, ".kimi", "mcp.json"),
+      ]);
+      const parsed = JSON.parse(await readFile(runtimePath, "utf-8"));
+      console.log(JSON.stringify({
+        names: Object.keys(parsed.mcpServers).sort(),
+        sharedCommand: parsed.mcpServers.shared.command,
+        remoteKept: Boolean(parsed.mcpServers.remote),
+        badNpmKept: Boolean(parsed.mcpServers.badNpm),
+      }));
+    `, {
+      ...buildPrependPathEnv(binDir),
+      OMK_MCP_PREFLIGHT: "warn-skip",
+      OMK_MCP_PREFLIGHT_TIMEOUT_MS: "50",
+      OMK_MCP_PREFLIGHT_CONCURRENCY: "1",
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const parsed = JSON.parse(result.stdout.trim().split("\n").at(-1));
+    assert.deepEqual(parsed.names, ["badNpm", "remote", "shared"]);
+    assert.equal(parsed.sharedCommand, "bash");
+    assert.equal(parsed.remoteKept, true);
+    assert.equal(parsed.badNpmKept, true);
+    assert.match(result.stderr, /MCP preflight found 1 npm-family issue/);
+    assert.match(result.stderr, /Kept 1 timeout server/);
+    assert.doesNotMatch(result.stdout + result.stderr, /SHOULD_NOT_LEAK|Authorization|Bearer|API_TOKEN=/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+    await rm(binDir, { recursive: true, force: true });
+  }
+});
+
+test("runtime MCP preflight warn-skip removes exit-failed npm-family servers", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-runtime-mcp-preflight-exit-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-runtime-mcp-home-"));
+  const binDir = await mkdtemp(join(tmpdir(), "omk-runtime-mcp-bin-"));
+
+  try {
+    await writeFakeNpm(binDir, "process.stderr.write('Bearer SHOULD_NOT_LEAK\\n'); process.exit(42);");
+    await writeEmptyConfigs(projectRoot, homeRoot, {
+      mcpServers: {
+        maybeOkAtRuntime: {
+          command: "npx",
+          args: ["-y", "@scope/private-server", "--token=SHOULD_NOT_LEAK"],
+          env: { API_TOKEN: "SHOULD_NOT_LEAK" },
+        },
+      },
+    });
+
+    const result = runMcpScript(projectRoot, homeRoot, `
+      const runtimePath = await writeRuntimeMcpConfig([join(process.env.OMK_PROJECT_ROOT, ".kimi", "mcp.json")]);
+      const names = runtimePath ? Object.keys(JSON.parse(await readFile(runtimePath, "utf-8")).mcpServers) : [];
+      console.log(JSON.stringify(names));
+    `, {
+      ...buildPrependPathEnv(binDir),
+      OMK_MCP_PREFLIGHT: "warn-skip",
+      OMK_MCP_PREFLIGHT_TIMEOUT_MS: "1000",
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.deepEqual(JSON.parse(result.stdout.trim().split("\n").at(-1)), []);
+    assert.match(result.stderr, /MCP preflight found 1 npm-family issue/);
+    assert.match(result.stderr, /Removed 1 exit-failed server/);
+    assert.doesNotMatch(result.stdout + result.stderr, /SHOULD_NOT_LEAK|Bearer|API_TOKEN=/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+    await rm(binDir, { recursive: true, force: true });
+  }
+});
+
+test("runtime MCP preflight inherits safe registry and proxy env from server config", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-runtime-mcp-preflight-env-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-runtime-mcp-home-"));
+  const binDir = await mkdtemp(join(tmpdir(), "omk-runtime-mcp-bin-"));
+
+  try {
+    await writeFakeNpm(binDir, `
+      if (process.env.NPM_CONFIG_REGISTRY !== "https://registry.example.test/" || process.env.HTTPS_PROXY !== "http://proxy.example.test") {
+        process.exit(42);
+      }
+      process.stdout.write('"1.0.0"\\n');
+    `);
+    await writeEmptyConfigs(projectRoot, homeRoot, {
+      mcpServers: {
+        privateRegistry: {
+          command: "npx",
+          args: ["-y", "@scope/private-server"],
+          env: {
+            NPM_CONFIG_REGISTRY: "https://registry.example.test/",
+            HTTPS_PROXY: "http://proxy.example.test",
+            NPM_TOKEN: "SHOULD_NOT_LEAK",
+          },
+        },
+      },
+    });
+
+    const result = runMcpScript(projectRoot, homeRoot, `
+      const runtimePath = await writeRuntimeMcpConfig([join(process.env.OMK_PROJECT_ROOT, ".kimi", "mcp.json")]);
+      const parsed = JSON.parse(await readFile(runtimePath, "utf-8"));
+      console.log(JSON.stringify(Object.keys(parsed.mcpServers)));
+    `, {
+      ...buildPrependPathEnv(binDir),
+      OMK_MCP_PREFLIGHT: "warn-skip",
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.deepEqual(JSON.parse(result.stdout.trim().split("\n").at(-1)), ["privateRegistry"]);
+    assert.doesNotMatch(result.stderr, /MCP preflight found/);
+    assert.doesNotMatch(result.stdout + result.stderr, /SHOULD_NOT_LEAK|NPM_TOKEN/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+    await rm(binDir, { recursive: true, force: true });
+  }
+});
+
+test("runtime MCP preflight off keeps failed npm-family servers", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-runtime-mcp-preflight-off-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-runtime-mcp-home-"));
+  const binDir = await mkdtemp(join(tmpdir(), "omk-runtime-mcp-bin-"));
+
+  try {
+    await writeFakeNpm(binDir, "process.exit(42);");
+    await writeEmptyConfigs(projectRoot, homeRoot, {
+      mcpServers: {
+        badNpm: { command: "npx", args: ["-y", "@scope/bad-server"] },
+      },
+    });
+
+    const result = runMcpScript(projectRoot, homeRoot, `
+      const runtimePath = await writeRuntimeMcpConfig([join(process.env.OMK_PROJECT_ROOT, ".kimi", "mcp.json")]);
+      const parsed = JSON.parse(await readFile(runtimePath, "utf-8"));
+      console.log(JSON.stringify(Object.keys(parsed.mcpServers)));
+    `, {
+      ...buildPrependPathEnv(binDir),
+      OMK_MCP_PREFLIGHT: "off",
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.deepEqual(JSON.parse(result.stdout.trim().split("\n").at(-1)), ["badNpm"]);
+    assert.doesNotMatch(result.stderr, /MCP preflight skipped/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+    await rm(binDir, { recursive: true, force: true });
+  }
+});
+
+test("runtime MCP preflight strict fails without leaking secret-like values", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-runtime-mcp-preflight-strict-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-runtime-mcp-home-"));
+  const binDir = await mkdtemp(join(tmpdir(), "omk-runtime-mcp-bin-"));
+
+  try {
+    await writeFakeNpm(binDir, "process.stderr.write('Bearer SHOULD_NOT_LEAK\\n'); process.exit(42);");
+    await writeEmptyConfigs(projectRoot, homeRoot, {
+      mcpServers: {
+        badNpm: {
+          command: "npx",
+          args: ["-y", "@scope/bad-server", "--api-token=SHOULD_NOT_LEAK"],
+          env: { API_TOKEN: "SHOULD_NOT_LEAK" },
+        },
+      },
+    });
+
+    const result = runMcpScript(projectRoot, homeRoot, `
+      await writeRuntimeMcpConfig([join(process.env.OMK_PROJECT_ROOT, ".kimi", "mcp.json")]);
+    `, {
+      ...buildPrependPathEnv(binDir),
+      OMK_MCP_PREFLIGHT: "strict",
+      OMK_MCP_PREFLIGHT_TIMEOUT_MS: "1000",
+    });
+
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    assert.match(result.stderr, /MCP preflight strict mode/);
+    assert.doesNotMatch(result.stdout + result.stderr, /SHOULD_NOT_LEAK|Bearer|API_TOKEN=/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+    await rm(binDir, { recursive: true, force: true });
+  }
+});
+
+test("mcp prewarm --all reports active server results without leaking secrets", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-prewarm-all-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+  const binDir = await mkdtemp(join(tmpdir(), "omk-mcp-bin-"));
+
+  try {
+    await writeFakeNpm(binDir, "process.stdout.write('\"1.0.0\"\\n'); process.exit(0);");
+    await writeEmptyConfigs(projectRoot, homeRoot, {
+      mcpServers: {
+        npmOk: {
+          command: "npx",
+          args: ["-y", "@scope/ok-server"],
+          env: { API_TOKEN: "SHOULD_NOT_LEAK" },
+        },
+        local: {
+          command: "bash",
+          args: ["-lc", "true"],
+        },
+      },
+    });
+    await writeFile(join(homeRoot, ".kimi", "mcp.json"), JSON.stringify({
+      mcpServers: {
+        globalOnly: {
+          command: "npx",
+          args: ["-y", "@scope/global-server"],
+          env: { API_TOKEN: "SHOULD_NOT_LEAK" },
+        },
+      },
+    }), "utf-8");
+
+    const result = runMcpScript(projectRoot, homeRoot, `
+      await mcpPrewarmCommand(undefined, { all: true });
+    `, {
+      ...buildPrependPathEnv(binDir),
+      OMK_MCP_SCOPE: "project",
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /MCP Preflight Check All/);
+    assert.match(result.stdout, /npmOk/);
+    assert.match(result.stdout, /@scope\/ok-server/);
+    assert.match(result.stdout, /local .*skipped: not npm-family/);
+    assert.match(result.stdout, /globalOnly .*inactive/);
+    assert.match(result.stdout, /Checked 1 server/);
+    assert.doesNotMatch(result.stdout + result.stderr, /SHOULD_NOT_LEAK|Authorization|Bearer|API_TOKEN=/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+    await rm(binDir, { recursive: true, force: true });
+  }
+});
+
 test("mcp install railway writes the remote OAuth preset without local secrets", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-install-"));
   const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
@@ -111,6 +533,121 @@ test("mcp install railway writes the remote OAuth preset without local secrets",
     const parsed = JSON.parse(raw);
     assert.deepEqual(parsed.mcpServers.railway, { url: "https://mcp.railway.com" });
     assert.doesNotMatch(raw + result.stdout, /RAILWAY_TOKEN|API_KEY|Bearer|@railway\/mcp-server|secrets\.env/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("mcp install stores secret-like env values as runtime placeholders", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-install-env-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+
+  try {
+    await writeEmptyConfigs(projectRoot, homeRoot, { mcpServers: {} });
+
+    const result = runMcpScript(projectRoot, homeRoot, `
+      await mcpInstallCommand("secreted", "node", ["server.js"], {
+        env: [
+          "API_TOKEN=SHOULD_NOT_STORE",
+          "MONGO_URI=mongodb://user:pass@example/db",
+          "REDIS_URL=redis://:pass@example:6379",
+          "ERROR_DSN=https://dsn.example/secret",
+          "GITHUB_PAT=ghp_should_not_store",
+          "PLAIN=value",
+        ],
+      });
+    `);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const raw = await readFile(join(projectRoot, ".kimi", "mcp.json"), "utf-8");
+    const parsed = JSON.parse(raw);
+    assert.equal(parsed.mcpServers.secreted.env.API_TOKEN, "${API_TOKEN}");
+    assert.equal(parsed.mcpServers.secreted.env.MONGO_URI, "${MONGO_URI}");
+    assert.equal(parsed.mcpServers.secreted.env.REDIS_URL, "${REDIS_URL}");
+    assert.equal(parsed.mcpServers.secreted.env.ERROR_DSN, "${ERROR_DSN}");
+    assert.equal(parsed.mcpServers.secreted.env.GITHUB_PAT, "${GITHUB_PAT}");
+    assert.equal(parsed.mcpServers.secreted.env.PLAIN, "value");
+    assert.doesNotMatch(raw + result.stdout + result.stderr, /SHOULD_NOT_STORE|mongodb:\/\/|redis:\/\/|ghp_should_not_store|dsn\.example/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("mcp install sanitizes remote URL and split secret args before saving", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-install-url-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+
+  try {
+    await writeEmptyConfigs(projectRoot, homeRoot, { mcpServers: {} });
+    const result = runMcpScript(projectRoot, homeRoot, `
+      await mcpInstallCommand("remote", "https://mcp.example.test/sse?token=SHOULD_NOT_STORE#frag", [], {});
+      await mcpInstallCommand("cmd", "node --token=SHOULD_NOT_STORE", [], {});
+      await mcpInstallCommand("args", "node", ["server.js", "--api-key", "SHOULD_NOT_STORE", "--token=SHOULD_NOT_STORE"], {});
+    `);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const raw = await readFile(join(projectRoot, ".kimi", "mcp.json"), "utf-8");
+    const parsed = JSON.parse(raw);
+    assert.equal(parsed.mcpServers.remote.url, "https://mcp.example.test/sse?token=***#***");
+    assert.equal(parsed.mcpServers.cmd.command, "node --token=***");
+    assert.deepEqual(parsed.mcpServers.args.args, ["server.js", "--api-key", "[REDACTED]", "--token=[REDACTED]"]);
+    assert.doesNotMatch(raw + result.stdout + result.stderr, /SHOULD_NOT_STORE|#frag/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("mcp sync-global uses project sanitizer for URL args headers and env", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-sync-sanitize-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+
+  try {
+    await writeEmptyConfigs(projectRoot, homeRoot, { mcpServers: {} });
+    await writeFile(join(homeRoot, ".kimi", "mcp.json"), JSON.stringify({
+      mcpServers: {
+        secreted: {
+          url: "https://mcp.example.test/sse?token=SHOULD_NOT_STORE#frag",
+          command: "node",
+          args: ["server.js", "--api-key", "SHOULD_NOT_STORE"],
+          env: { GITHUB_PAT: "ghp_should_not_store", PLAIN: "value" },
+          headers: { Authorization: "Bearer SHOULD_NOT_STORE" },
+        },
+      },
+    }), "utf-8");
+
+    const result = runMcpScript(projectRoot, homeRoot, `
+      await mcpSyncGlobalCommand({});
+    `);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const raw = await readFile(join(projectRoot, ".kimi", "mcp.json"), "utf-8");
+    const parsed = JSON.parse(raw);
+    assert.equal(parsed.mcpServers.secreted.url, "https://mcp.example.test/sse?token=***#***");
+    assert.deepEqual(parsed.mcpServers.secreted.args, ["server.js", "--api-key", "[REDACTED]"]);
+    assert.equal(parsed.mcpServers.secreted.env.GITHUB_PAT, "${GITHUB_PAT}");
+    assert.equal(parsed.mcpServers.secreted.env.PLAIN, "value");
+    assert.equal(parsed.mcpServers.secreted.headers.Authorization, "[REDACTED]");
+    assert.doesNotMatch(raw + result.stdout + result.stderr, /SHOULD_NOT_STORE|ghp_should_not_store|#frag/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("runtime MCP preflight defaults off to avoid startup npm probe latency", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-preflight-default-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+
+  try {
+    await writeEmptyConfigs(projectRoot, homeRoot, { mcpServers: {} });
+    const result = runMcpScript(projectRoot, homeRoot, `
+      console.log(JSON.stringify(resolveRuntimeMcpPreflightOptions({})));
+    `, { OMK_MCP_PREFLIGHT: "" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(JSON.parse(result.stdout.trim()).mode, "off");
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(homeRoot, { recursive: true, force: true });
@@ -349,6 +886,211 @@ test("mcp doctor --fix migrates stale package references in active project confi
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("mcp doctor --fix --dry-run reports planned actions without writing backups or configs", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-doctor-dry-run-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+
+  try {
+    await mkdir(join(projectRoot, ".kimi"), { recursive: true });
+    await mkdir(join(homeRoot, ".kimi"), { recursive: true });
+    const projectPath = join(projectRoot, ".kimi", "mcp.json");
+    const original = JSON.stringify({
+      mcpServers: {
+        supabase: {
+          command: "npx",
+          args: ["-y", "@supabase/mcp-server@latest"],
+        },
+      },
+    });
+    await writeFile(projectPath, original, "utf-8");
+    await writeFile(join(homeRoot, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: {} }), "utf-8");
+
+    const result = runMcpScript(projectRoot, homeRoot, `
+      await mcpDoctorCommand({ fix: true, json: true, dryRun: true });
+    `);
+
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.fixes.dryRun, true);
+    assert.equal(report.fixes.changed, false);
+    assert.deepEqual(report.fixes.backups, []);
+    assert.ok(report.fixes.actions.some((action) => /replaced stale MCP package argument/.test(action)));
+    assert.equal(await readFile(projectPath, "utf-8"), original);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("mcp doctor --fix creates sanitized backup before project-local writes", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-doctor-backup-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+
+  try {
+    await mkdir(join(projectRoot, ".kimi"), { recursive: true });
+    await mkdir(join(homeRoot, ".kimi"), { recursive: true });
+    await writeFile(join(projectRoot, ".kimi", "mcp.json"), JSON.stringify({
+      mcpServers: {
+        supabase: {
+          command: "npx",
+          args: [
+            "-y",
+            "@supabase/mcp-server@latest",
+            "--api-token=SHOULD_NOT_LEAK",
+            "https://example.test/mcp?client_secret=SHOULD_NOT_LEAK#SHOULD_NOT_LEAK",
+          ],
+          env: { SUPABASE_ACCESS_TOKEN: "SHOULD_NOT_LEAK" },
+          headers: { Authorization: "Bearer SHOULD_NOT_LEAK" },
+        },
+      },
+    }), "utf-8");
+    await writeFile(join(homeRoot, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: {} }), "utf-8");
+
+    const result = runMcpScript(projectRoot, homeRoot, `
+      await mcpDoctorCommand({ fix: true, json: true });
+    `);
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.doesNotMatch(result.stdout + result.stderr, /SHOULD_NOT_LEAK|Bearer SHOULD_NOT_LEAK/);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.fixes.backups.length, 1);
+    const backupPath = report.fixes.backups[0];
+    const backupRaw = await readFile(backupPath, "utf-8");
+    assert.doesNotMatch(backupRaw, /SHOULD_NOT_LEAK|Bearer SHOULD_NOT_LEAK/);
+    assert.match(backupRaw, /client_secret=\\*\\*\\*/);
+    const mode = (await stat(backupPath)).mode & 0o777;
+    if (process.platform !== "win32") assert.equal(mode, 0o600);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("mcp doctor --fix --global explicitly mutates global MCP config and backs it up", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-doctor-global-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+
+  try {
+    await mkdir(join(projectRoot, ".kimi"), { recursive: true });
+    await mkdir(join(homeRoot, ".kimi"), { recursive: true });
+    await writeFile(join(projectRoot, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: {} }), "utf-8");
+    const globalPath = join(homeRoot, ".kimi", "mcp.json");
+    const globalOriginal = JSON.stringify({
+      mcpServers: {
+        globalUrl: {
+          command: "https://example.test/mcp?token=SHOULD_NOT_LEAK#SHOULD_NOT_LEAK",
+          args: [],
+        },
+      },
+    });
+    await writeFile(globalPath, globalOriginal, "utf-8");
+
+    const localOnly = runMcpScript(projectRoot, homeRoot, `
+      process.env.OMK_MCP_SCOPE = "all";
+      await mcpDoctorCommand({ fix: true, json: true });
+    `);
+    assert.equal(localOnly.status, 1, localOnly.stderr || localOnly.stdout);
+    assert.equal(await readFile(globalPath, "utf-8"), globalOriginal);
+
+    const globalFix = runMcpScript(projectRoot, homeRoot, `
+      process.env.OMK_MCP_SCOPE = "all";
+      await mcpDoctorCommand({ fix: true, json: true, global: true });
+    `);
+    assert.equal(globalFix.status, 0, globalFix.stderr || globalFix.stdout);
+    assert.doesNotMatch(globalFix.stdout + globalFix.stderr, /SHOULD_NOT_LEAK/);
+    const report = JSON.parse(globalFix.stdout);
+    assert.equal(report.fixes.global, true);
+    assert.equal(report.fixes.backups.length, 1);
+    const parsedGlobal = JSON.parse(await readFile(globalPath, "utf-8"));
+    assert.equal(parsedGlobal.mcpServers.globalUrl.url, "https://example.test/mcp?token=SHOULD_NOT_LEAK#SHOULD_NOT_LEAK");
+    assert.equal(parsedGlobal.mcpServers.globalUrl.command, undefined);
+    const backupRaw = await readFile(report.fixes.backups[0], "utf-8");
+    assert.doesNotMatch(backupRaw, /SHOULD_NOT_LEAK/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("mcp doctor reports preflight package failures as prewarm-needed without disabling servers", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-doctor-preflight-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+  const binDir = await mkdtemp(join(tmpdir(), "omk-mcp-bin-"));
+
+  try {
+    await writeFakeNpm(binDir, "process.stderr.write('Bearer SHOULD_NOT_LEAK\\n'); process.exit(42);");
+    await writeEmptyConfigs(projectRoot, homeRoot, {
+      mcpServers: {
+        badNpm: {
+          command: "npm",
+          args: ["exec", "--yes", "@scope/missing-server"],
+          env: { API_TOKEN: "SHOULD_NOT_LEAK" },
+        },
+      },
+    });
+
+    const result = runMcpScript(projectRoot, homeRoot, `
+      await mcpDoctorCommand({ fix: true, json: true });
+    `, {
+      ...buildPrependPathEnv(binDir),
+      OMK_MCP_PREFLIGHT: "warn-skip",
+      OMK_MCP_PREFLIGHT_TIMEOUT_MS: "1000",
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.doesNotMatch(result.stdout + result.stderr, /SHOULD_NOT_LEAK|Bearer SHOULD_NOT_LEAK|API_TOKEN=/);
+    const report = JSON.parse(result.stdout);
+    const badNpm = report.servers.find((server) => server.name === "badNpm");
+    assert.ok(badNpm.checks.some((check) => check.kind === "preflight-package-unavailable"));
+    assert.ok(badNpm.checks.some((check) => check.kind === "prewarm-needed"));
+    const projectConfig = JSON.parse(await readFile(join(projectRoot, ".kimi", "mcp.json"), "utf-8"));
+    assert.ok(projectConfig.mcpServers.badNpm);
+    assert.equal(projectConfig._omkDisabledMcpServers?.badNpm, undefined);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+    await rm(binDir, { recursive: true, force: true });
+  }
+});
+
+test("mcp doctor reports preflight timeouts separately from package failures", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-doctor-preflight-timeout-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+  const binDir = await mkdtemp(join(tmpdir(), "omk-mcp-bin-"));
+
+  try {
+    await writeFakeNpm(binDir, "setTimeout(() => {}, 1000);");
+    await writeEmptyConfigs(projectRoot, homeRoot, {
+      mcpServers: {
+        slowNpm: {
+          command: "npm",
+          args: ["exec", "--yes", "@scope/slow-server"],
+        },
+      },
+    });
+
+    const result = runMcpScript(projectRoot, homeRoot, `
+      await mcpDoctorCommand({ json: true });
+    `, {
+      ...buildPrependPathEnv(binDir),
+      OMK_MCP_PREFLIGHT: "warn-skip",
+      OMK_MCP_PREFLIGHT_TIMEOUT_MS: "50",
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const report = JSON.parse(result.stdout);
+    const slowNpm = report.servers.find((server) => server.name === "slowNpm");
+    assert.equal(slowNpm.status, "warn");
+    assert.ok(slowNpm.checks.some((check) => check.kind === "preflight-timeout"));
+    assert.ok(slowNpm.checks.some((check) => /warn: handshake-timeout/.test(check.message)));
+    assert.ok(slowNpm.checks.some((check) => check.kind === "prewarm-needed"));
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+    await rm(binDir, { recursive: true, force: true });
   }
 });
 
@@ -592,6 +1334,7 @@ test("doctor --fix merges missing root subagent aliases without replacing existi
     const parsed = JSON.parse(result.stdout);
     assert.ok(parsed.fixes.actions.some((item) => /missing root subagent alias/.test(item)));
     const rootYaml = await readFile(join(projectRoot, ".omk", "agents", "root.yaml"), "utf-8");
+    assert.match(rootYaml, /router:/);
     assert.match(rootYaml, /security:/);
     assert.match(rootYaml, /tester:/);
     assert.match(rootYaml, /aggregator:/);
@@ -832,6 +1575,99 @@ test("omk-project MCP hides and denies write-capable tools by default", async ()
   }
 });
 
+test("omk-project MCP exposes secret-free run telemetry tools", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-run-telemetry-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+
+  try {
+    const runId = "telemetry-run";
+    const runDir = join(projectRoot, ".omk", "runs", runId);
+    await mkdir(runDir, { recursive: true });
+    const token = ["sk", "123456789012345678901234"].join("-");
+    await writeFile(join(runDir, "state.json"), JSON.stringify({
+      schemaVersion: 1,
+      runId,
+      startedAt: "2026-05-09T00:00:00.000Z",
+      nodes: [],
+    }, null, 2));
+    await writeFile(join(runDir, "events.jsonl"), [
+      JSON.stringify({ schemaVersion: "telemetry.v1", seq: 1, type: "lane.started", timestamp: "2026-05-09T00:00:00.000Z", runId, nodeId: "n1", data: { summary: token } }),
+      JSON.stringify({ schemaVersion: "telemetry.v1", seq: 2, type: "lane.heartbeat", timestamp: "2026-05-09T00:00:01.000Z", runId, nodeId: "n1" }),
+    ].join("\n") + "\n");
+    await writeFile(join(runDir, "todos.json"), JSON.stringify([
+      { title: `Review ${token}`, status: "pending", evidence: `saw ${token}` },
+    ]));
+    await writeFile(join(runDir, "mcp-status.json"), JSON.stringify({
+      servers: [{ name: "omk-project", status: "connected", toolsCount: 3 }],
+      headers: { authorization: token },
+    }));
+
+    const input = [
+      {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "omk-mcp-test", version: "0.0.0" },
+        },
+      },
+      { jsonrpc: "2.0", id: 2, method: "tools/list" },
+      {
+        jsonrpc: "2.0",
+        id: 3,
+        method: "tools/call",
+        params: { name: "omk_tail_run_events", arguments: { runId, afterSeq: 1 } },
+      },
+      {
+        jsonrpc: "2.0",
+        id: 4,
+        method: "tools/call",
+        params: { name: "omk_read_runtime_status", arguments: { runId } },
+      },
+      {
+        jsonrpc: "2.0",
+        id: 5,
+        method: "tools/call",
+        params: { name: "omk_read_todos", arguments: { runId } },
+      },
+    ].map((message) => JSON.stringify(message)).join("\n") + "\n";
+
+    const result = spawnSync(process.execPath, [OMK_PROJECT_SERVER], {
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        HOME: homeRoot,
+        OMK_PROJECT_ROOT: projectRoot,
+      },
+      input,
+      encoding: "utf-8",
+      timeout: 10000,
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const responses = result.stdout.trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
+    const listResponse = responses.find((response) => response.id === 2);
+    const tailResponse = responses.find((response) => response.id === 3);
+    const statusResponse = responses.find((response) => response.id === 4);
+    const todoResponse = responses.find((response) => response.id === 5);
+    const toolNames = listResponse.result.tools.map((tool) => tool.name);
+    assert.equal(toolNames.includes("omk_tail_run_events"), true);
+    assert.equal(toolNames.includes("omk_read_run_state"), true);
+    assert.equal(toolNames.includes("omk_read_runtime_status"), true);
+    assert.equal(tailResponse.result.content[0].text.includes("lane.heartbeat"), true);
+    assert.equal(tailResponse.result.content[0].text.includes("lane.started"), false);
+    assert.doesNotMatch(statusResponse.result.content[0].text, new RegExp(token));
+    assert.doesNotMatch(todoResponse.result.content[0].text, new RegExp(token));
+    assert.match(statusResponse.result.content[0].text, /REDACTED|\*\*\*/);
+    assert.match(todoResponse.result.content[0].text, /REDACTED|\*\*\*/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
 test("filesystem-readonly MCP exposes read tools and denies write tool calls", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-readonly-"));
   const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
@@ -1000,6 +1836,143 @@ test("mcp test exercises an omk CLI connection through tools/call id 3", async (
   }
 });
 
+test("mcp test does not pass ambient secret env but expands explicit placeholders", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-test-env-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+
+  try {
+    const serverPath = join(projectRoot, "env-mcp.mjs");
+    await writeFile(serverPath, `
+      if (process.env.AMBIENT_TEST_SECRET) {
+        process.stdout.write("ambient leaked\\n");
+        process.exit(0);
+      }
+      let input = "";
+      process.stdin.setEncoding("utf8");
+      process.stdin.on("data", (chunk) => { input += chunk; });
+      process.stdin.on("end", () => {
+        if (process.env.API_TOKEN !== "explicit-secret") {
+          process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: 1, error: { code: -32603, message: "missing explicit env" } }) + "\\n");
+          return;
+        }
+        for (const line of input.split(/\\r?\\n/)) {
+          if (!line.trim()) continue;
+          const msg = JSON.parse(line);
+          if (msg.method === "initialize") {
+            process.stdout.write(JSON.stringify({
+              jsonrpc: "2.0",
+              id: msg.id,
+              result: {
+                protocolVersion: "2024-11-05",
+                capabilities: {},
+                serverInfo: { name: "env-safe", version: "0.0.0" }
+              }
+            }) + "\\n");
+          }
+        }
+      });
+    `, "utf-8");
+    await writeEmptyConfigs(projectRoot, homeRoot, {
+      mcpServers: {
+        "env-safe": {
+          command: process.execPath,
+          args: [serverPath],
+          env: { API_TOKEN: "${API_TOKEN}" },
+        },
+      },
+    });
+
+    const result = runMcpScript(projectRoot, homeRoot, `
+      await mcpTestCommand("env-safe");
+      console.log("MCP_TEST_ENV_OK");
+    `, {
+      API_TOKEN: "explicit-secret",
+      AMBIENT_TEST_SECRET: "ambient-leak",
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /MCP_TEST_ENV_OK/);
+    assert.doesNotMatch(result.stdout + result.stderr, /ambient leaked|ambient-leak|explicit-secret/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("mcp test fails when initialize response omits serverInfo", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-missing-server-info-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+
+  try {
+    const serverPath = join(projectRoot, "missing-server-info.mjs");
+    await writeFile(serverPath, `
+      let input = "";
+      process.stdin.setEncoding("utf8");
+      process.stdin.on("data", (chunk) => { input += chunk; });
+      process.stdin.on("end", () => {
+        for (const line of input.split(/\\r?\\n/)) {
+          if (!line.trim()) continue;
+          const msg = JSON.parse(line);
+          if (msg.method === "initialize") {
+            process.stdout.write(JSON.stringify({
+              jsonrpc: "2.0",
+              id: msg.id,
+              result: { protocolVersion: "2024-11-05", capabilities: {} }
+            }) + "\\n");
+          }
+        }
+      });
+    `, "utf-8");
+    await writeEmptyConfigs(projectRoot, homeRoot, {
+      mcpServers: {
+        "missing-info": { command: process.execPath, args: [serverPath] },
+      },
+    });
+
+    const result = runMcpScript(projectRoot, homeRoot, `
+      await mcpTestCommand("missing-info");
+    `);
+
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    assert.match(result.stderr, /missing serverInfo/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("mcp test fails when initialize times out before serverInfo", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-init-timeout-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+
+  try {
+    const serverPath = join(projectRoot, "init-timeout.mjs");
+    await writeFile(serverPath, `
+      let input = "";
+      process.stdin.setEncoding("utf8");
+      process.stdin.on("data", (chunk) => { input += chunk; });
+      process.stdin.on("end", () => {
+        if (input.includes('"initialize"')) setInterval(() => {}, 1000);
+      });
+    `, "utf-8");
+    await writeEmptyConfigs(projectRoot, homeRoot, {
+      mcpServers: {
+        "init-timeout": { command: process.execPath, args: [serverPath], startup_timeout_sec: 1 },
+      },
+    });
+
+    const result = runMcpScript(projectRoot, homeRoot, `
+      await mcpTestCommand("init-timeout");
+    `);
+
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    assert.match(result.stderr, /initialize timed out before serverInfo/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
 test("mcp doctor does not fail on inactive omk-project mirror duplicates", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-doctor-dupe-"));
   const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
@@ -1089,6 +2062,34 @@ test("mcp list displays the effective active server over stale .omk fallback", a
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, /command:\s+bash/);
     assert.doesNotMatch(result.stdout, /command:\s+stale-omk-command/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+test("mcp list includes global .omk source in all scope", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-list-global-omk-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+
+  try {
+    await mkdir(join(projectRoot, ".kimi"), { recursive: true });
+    await mkdir(join(homeRoot, ".kimi"), { recursive: true });
+    await mkdir(join(homeRoot, ".omk"), { recursive: true });
+    await writeFile(join(projectRoot, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: {} }), "utf-8");
+    await writeFile(join(homeRoot, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: {} }), "utf-8");
+    await writeFile(join(homeRoot, ".omk", "mcp.json"), JSON.stringify({
+      mcpServers: { globalOmk: { command: "bash", args: ["-lc", "true"] } },
+    }), "utf-8");
+
+    const result = runMcpScript(projectRoot, homeRoot, `
+      process.env.OMK_MCP_SCOPE = "all";
+      await mcpListCommand();
+    `);
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /\.omk[\\/]mcp\.json.*\[active\]/);
+    assert.match(result.stdout, /globalOmk/);
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(homeRoot, { recursive: true, force: true });

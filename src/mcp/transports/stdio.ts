@@ -4,6 +4,7 @@
 import { spawn } from "node:child_process";
 import { Writable } from "node:stream";
 
+import { managedChildProcessOptions, terminateProcessTree } from "../../util/process-tree.js";
 import type { Transport, TransportSendOptions } from "./transport.js";
 
 const SAFE_ENV_NAMES = new Set([
@@ -35,7 +36,14 @@ function isSafeInheritedEnvName(name: string): boolean {
   return SAFE_ENV_NAMES.has(name) || /^LC_[A-Z0-9_]+$/.test(name);
 }
 
-function buildSubprocessEnv(
+function resolveServerEnvValue(value: string, inheritedEnv: Record<string, string | undefined>): string {
+  const match = value.match(/^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/);
+  if (!match) return value;
+  const inherited = inheritedEnv[match[1]];
+  return inherited === undefined ? value : inherited;
+}
+
+export function buildSubprocessEnv(
   inheritedEnv: Record<string, string | undefined>,
   serverEnv: Record<string, string>
 ): Record<string, string> {
@@ -45,7 +53,7 @@ function buildSubprocessEnv(
     result[key] = value;
   }
   for (const [key, value] of Object.entries(serverEnv)) {
-    result[key] = value;
+    result[key] = resolveServerEnvValue(value, inheritedEnv);
   }
   return result;
 }
@@ -64,11 +72,16 @@ export class StdioTransport implements Transport {
     private env: Record<string, string>
   ) {}
 
+  get pid(): number | undefined {
+    return this.process?.pid ?? undefined;
+  }
+
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.process = spawn(this.command, this.args, {
         stdio: ["pipe", "pipe", "pipe"],
         env: buildSubprocessEnv(process.env, this.env),
+        ...managedChildProcessOptions(),
       });
 
       this.process.on("error", (err) => {
@@ -159,17 +172,6 @@ export class StdioTransport implements Transport {
     this.closing = true;
     this.process = null;
     child.stdin?.end();
-    if (child.exitCode !== null || child.signalCode !== null) return;
-    await new Promise<void>((resolve) => {
-      const timeout = setTimeout(() => {
-        child.kill("SIGKILL");
-        resolve();
-      }, 1000);
-      child.once("close", () => {
-        clearTimeout(timeout);
-        resolve();
-      });
-      child.kill("SIGTERM");
-    });
+    await terminateProcessTree(child);
   }
 }

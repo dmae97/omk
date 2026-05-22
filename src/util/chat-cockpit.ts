@@ -74,11 +74,18 @@ function parseCockpitRefreshMs(value?: string): number {
 }
 
 function parseCockpitSideWidth(value?: string): number {
-  const defaultPct = 40;
+  const defaultPct = defaultCockpitSideWidth();
   if (value === undefined) return defaultPct;
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed)) return defaultPct;
   return Math.min(80, Math.max(20, parsed));
+}
+
+function defaultCockpitSideWidth(): number {
+  const columns = process.stdout.columns ?? 0;
+  if (columns >= 180) return 50;
+  if (columns >= 120) return 45;
+  return 40;
 }
 
 const DEFAULT_CHAT_COCKPIT_HEIGHT = 32;
@@ -149,10 +156,14 @@ export async function launchChatCockpit(options: LaunchChatCockpitOptions = {}):
   const redraw = options.cockpitRedraw ?? "diff";
   const history = options.cockpitHistory ?? "static";
 
-  const leftCmd = buildLeftPaneCommand({ nodeCmd, cliCmd, runId, brand, agentFile: options.agentFile, workers: options.workers, maxStepsPerTurn: options.maxStepsPerTurn, mcpScope: options.mcpScope });
+  const terminalWidth = process.stdout.columns ?? 0;
+  const terminalHeight = process.stdout.rows ?? 0;
+  const minHistoryPaneHeight = 5;
   const cockpitHeight = parseCockpitHeight(options.cockpitHeight);
-  const historyTopHeight = cockpitHeight ?? DEFAULT_CHAT_COCKPIT_HEIGHT;
-  const rightTopCmd = buildRightPaneCommand({ nodeCmd, cliCmd, runId, refreshMs, redraw, height: cockpitHeight });
+  const cockpitPaneHeight = Math.min(cockpitHeight ?? DEFAULT_CHAT_COCKPIT_HEIGHT, terminalHeight - minHistoryPaneHeight);
+
+  const leftCmd = buildLeftPaneCommand({ nodeCmd, cliCmd, runId, brand, agentFile: options.agentFile, workers: options.workers, maxStepsPerTurn: options.maxStepsPerTurn, mcpScope: options.mcpScope });
+  const rightTopCmd = buildRightPaneCommand({ nodeCmd, cliCmd, runId, refreshMs, redraw, height: cockpitPaneHeight });
   const rightBottomCmd = `${nodeCmd} ${cliCmd} runs --watch --limit 15 --refresh 5000`;
 
   // 3. Create detached tmux session with left-pane command already running
@@ -211,19 +222,16 @@ export async function launchChatCockpit(options: LaunchChatCockpitOptions = {}):
   }
 
   // 6. Split right pane horizontally for bottom history pane only when there's enough space
-  const terminalWidth = process.stdout.columns ?? 0;
-  const terminalHeight = process.stdout.rows ?? 0;
-  const minHistoryPaneHeight = 5;
-  if (history === "watch" && terminalWidth >= 80 && terminalHeight >= historyTopHeight + minHistoryPaneHeight && rightTopPaneId) {
+  if (history === "watch" && terminalWidth >= 80 && terminalHeight >= cockpitPaneHeight + minHistoryPaneHeight && rightTopPaneId) {
     let bottomSplitResult = await runShell(
       "tmux",
-      ["split-window", "-v", "-P", "-F", "#{pane_id}", "-t", rightTopPaneId, "-l", String(historyTopHeight), rightBottomCmd],
+      ["split-window", "-v", "-P", "-F", "#{pane_id}", "-t", rightTopPaneId, "-p", "50", rightBottomCmd],
       { cwd, timeout: 5000 }
     );
     if (bottomSplitResult.failed) {
       bottomSplitResult = await runShell(
         "tmux",
-        ["split-window", "-v", "-P", "-F", "#{pane_id}", "-t", rightTopPaneId, "-p", "50", rightBottomCmd],
+        ["split-window", "-v", "-P", "-F", "#{pane_id}", "-t", rightTopPaneId, rightBottomCmd],
         { cwd, timeout: 5000 }
       );
     }

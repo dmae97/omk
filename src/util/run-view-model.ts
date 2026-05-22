@@ -3,6 +3,7 @@
  */
 
 import type { RunState } from "../contracts/orchestration.js";
+import type { TelemetryEvent } from "./events-logger.js";
 
 export type RunHealth = "ok" | "warn" | "blocked" | "failed";
 
@@ -10,6 +11,7 @@ export interface RunViewModelWorker {
   id: string;
   label: string;
   state: "idle" | "running" | "done" | "failed" | "blocked" | "skipped";
+  liveStatus?: "running-active" | "running-silent" | "waiting-input" | "stalled" | "orphaned" | "done" | "failed" | "blocked" | "skipped" | "idle";
   elapsedMs: number;
   retryCount: number;
   currentNode?: string;
@@ -20,6 +22,8 @@ export interface RunViewModelWorker {
   phase?: string;
   /** Milliseconds since last meaningful activity (thinking/node event). */
   lastActivityAgeMs?: number;
+  /** Milliseconds since latest heartbeat event/state update. */
+  lastHeartbeatAgeMs?: number;
 }
 
 export interface RunViewModelBlocker {
@@ -98,13 +102,42 @@ export interface BuildRunViewModelOptions {
   goalTitle?: string | null;
   changedFiles?: string[];
   workerLabels?: Record<string, string>;
+  telemetry?: TelemetryEvent[];
 }
 
-const SECRET_PATTERN = /\b(apiKey|token|password|secret|authorization|bearer|key)\s*[:=]\s*["']?[^\s"']{8,}["']?/gi;
+const SECRET_KEY_NAMES =
+  "apiKey|api_key|api-key|token|auth_token|auth-token|access_token|access-token|refresh_token|refresh-token|password|secret|client_secret|client-secret|authorization|bearer|private_key|private-key|key";
+
+const SECRET_PATTERN = new RegExp(
+  [
+    // Explicit key=value / key:"value" patterns
+    `\\b(?:${SECRET_KEY_NAMES})\\s*[:=]\\s*["']?[^\\s"']{8,}["']?`,
+    // Hex keys (32+ hex chars)
+    `\\b[a-f0-9]{32,}\\b`,
+    // Base64 keys (40+ base64 chars with optional padding)
+    `\\b[A-Za-z0-9+/]{40,}=?\\b`,
+    // GitHub personal access tokens
+    `\\bghp_[A-Za-z0-9]{36}\\b`,
+    // Railway tokens
+    `\\brw_[A-Za-z0-9]+\\b`,
+  ].join("|"),
+  "gi"
+);
+
+interface NodeTelemetryIndex {
+  activityAt?: string;
+  heartbeatAt?: string;
+  terminalAt?: string;
+  status?: string;
+  phase?: string;
+}
 
 export function sanitizeForDisplay(text: string): string {
   return text.replace(SECRET_PATTERN, (match) => {
-    const key = match.match(/\b(apiKey|token|password|secret|authorization|bearer|key)/i)?.[0] ?? "secret";
+    const keyMatch = match.match(
+      new RegExp(`\\b(?:${SECRET_KEY_NAMES})\\b`, "i")
+    );
+    const key = keyMatch?.[0] ?? "secret";
     return `${key}: ***REDACTED***`;
   });
 }
@@ -270,6 +303,7 @@ export function buildRunViewModel(
 
   const now = Date.now();
   const lastActivityMs = state.lastActivityAt ? Date.parse(state.lastActivityAt) : 0;
+  const nodeTelemetry = buildNodeTelemetryIndex(options.telemetry ?? []);
 
   const mapNodeToWorker = (n: (typeof nodes)[0]): RunViewModelWorker => {
     const elapsed = n.durationMs ?? (n.startedAt ? now - new Date(n.startedAt).getTime() : 0);
@@ -278,16 +312,33 @@ export function buildRunViewModel(
       n.status === "pending" ? "idle" :
       n.status === "skipped" ? "skipped" :
       n.status ?? "idle";
-    const nodeLastActivityMs = n.startedAt ? Math.max(lastActivityMs, new Date(n.startedAt).getTime()) : lastActivityMs;
-    const lastActivityAgeMs = n.status === "running" && nodeLastActivityMs > 0
+    const telemetry = nodeTelemetry.get(n.id);
+    const telemetryActivityMs = telemetry?.activityAt ? Date.parse(telemetry.activityAt) : 0;
+    const telemetryHeartbeatMs = telemetry?.heartbeatAt ? Date.parse(telemetry.heartbeatAt) : 0;
+    const stateHeartbeatMs = state.lastHeartbeatAt ? Date.parse(state.lastHeartbeatAt) : 0;
+    const nodeStartedMs = n.startedAt ? Date.parse(n.startedAt) : 0;
+    const nodeLastActivityMs = Math.max(lastActivityMs, telemetryActivityMs, nodeStartedMs);
+    const nodeLastHeartbeatMs = Math.max(telemetryHeartbeatMs, stateHeartbeatMs, nodeStartedMs);
+    const isChatIdle = n.id === "chat" && !n.thinking;
+    const lastActivityAgeMs = n.status === "running" && nodeLastActivityMs > 0 && !isChatIdle
       ? now - nodeLastActivityMs
       : undefined;
+    const lastHeartbeatAgeMs = n.status === "running" && nodeLastHeartbeatMs > 0 ? now - nodeLastHeartbeatMs : undefined;
     const thinking = n.status === "running" ? n.thinking : undefined;
-    const phase = thinking ? sanitizeForDisplay(thinking) : undefined;
+    const phase = thinking ? sanitizeForDisplay(thinking) : telemetry?.phase ? sanitizeForDisplay(telemetry.phase) : undefined;
+    const liveStatus = computeLiveStatus({
+      state: stateValue,
+      nodeId: n.id,
+      hasPhase: Boolean(phase || thinking),
+      lastActivityAgeMs,
+      lastHeartbeatAgeMs,
+      telemetryStatus: telemetry?.status,
+    });
     return {
       id: n.id,
       label: options.workerLabels?.[n.id] ?? n.name ?? n.id,
       state: stateValue,
+      liveStatus,
       elapsedMs: Math.max(0, elapsed),
       retryCount: n.attempts?.length ?? 0,
       currentNode: n.status === "running" ? (n.name || n.id) : undefined,
@@ -297,6 +348,7 @@ export function buildRunViewModel(
       thinking,
       phase,
       lastActivityAgeMs,
+      lastHeartbeatAgeMs,
     };
   };
 
@@ -335,6 +387,54 @@ export function buildRunViewModel(
     providerRouting,
     teamRuntime: state.teamRuntime,
   };
+}
+
+function buildNodeTelemetryIndex(events: TelemetryEvent[]): Map<string, NodeTelemetryIndex> {
+  const index = new Map<string, NodeTelemetryIndex>();
+  for (const event of events) {
+    const nodeId = event.nodeId ?? event.laneId;
+    if (!nodeId) continue;
+    const current = index.get(nodeId) ?? {};
+    if (event.type === "lane.activity" || event.type === "tool.started" || event.type === "tool.completed" || event.type === "provider.route") {
+      current.activityAt = event.timestamp;
+      const phase = event.data?.summary ?? event.data?.phase ?? event.data?.message;
+      if (typeof phase === "string") current.phase = phase;
+    }
+    if (event.type === "lane.started") {
+      current.activityAt = event.timestamp;
+      current.heartbeatAt = event.timestamp;
+      current.status = "running-active";
+    }
+    if (event.type === "lane.heartbeat") {
+      current.heartbeatAt = event.timestamp;
+    }
+    if (event.type === "lane.completed" || event.type === "lane.failed" || event.type === "lane.stalled") {
+      current.terminalAt = event.timestamp;
+      current.status =
+        event.type === "lane.completed" ? "done" :
+        event.type === "lane.failed" ? "failed" :
+        "stalled";
+    }
+    index.set(nodeId, current);
+  }
+  return index;
+}
+
+function computeLiveStatus(input: {
+  state: RunViewModelWorker["state"];
+  nodeId: string;
+  hasPhase: boolean;
+  lastActivityAgeMs?: number;
+  lastHeartbeatAgeMs?: number;
+  telemetryStatus?: string;
+}): NonNullable<RunViewModelWorker["liveStatus"]> {
+  if (input.state !== "running") return input.state;
+  if (input.telemetryStatus === "stalled") return "stalled";
+  if (input.nodeId === "chat" && !input.hasPhase) return "waiting-input";
+  const heartbeatFresh = input.lastHeartbeatAgeMs == null || input.lastHeartbeatAgeMs <= 90_000;
+  if (!heartbeatFresh) return "stalled";
+  if (input.lastActivityAgeMs != null && input.lastActivityAgeMs <= 30_000) return "running-active";
+  return "running-silent";
 }
 
 function computeProviderRouting(nodes: RunState["nodes"]): RunViewModelProviderRouting {

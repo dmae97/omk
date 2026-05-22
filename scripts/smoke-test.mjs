@@ -58,6 +58,13 @@ const RED = "\x1b[31m";
 const GREEN = "\x1b[32m";
 const RESET = "\x1b[0m";
 const isWindows = platform() === "win32";
+const DEFAULT_CMD_TIMEOUT_MS = 2 * 60 * 1000;
+const commandTimeoutMs = Number.parseInt(process.env.OMK_SMOKE_CMD_TIMEOUT_MS ?? "", 10) || DEFAULT_CMD_TIMEOUT_MS;
+const smokeTmpRoot = resolve(
+  process.env.OMK_SMOKE_TMPDIR
+    || (!isWindows && tmpdir().startsWith("/mnt/") ? "/tmp" : tmpdir())
+);
+mkdirSync(smokeTmpRoot, { recursive: true });
 
 let failed = false;
 
@@ -80,6 +87,7 @@ function run(cmd, cwd, env) {
     env: { ...process.env, ...env },
     encoding: "utf-8",
     stdio: ["pipe", "pipe", "pipe"],
+    timeout: commandTimeoutMs,
   });
 }
 
@@ -89,7 +97,12 @@ function runSilently(cmd, cwd, env) {
     env: env ? { ...process.env, ...env } : process.env,
     encoding: "utf-8",
     stdio: "pipe",
+    timeout: commandTimeoutMs,
   });
+}
+
+function smokeTmpPrefix(prefix) {
+  return join(smokeTmpRoot, prefix);
 }
 
 function localBinPath(installDir, name) {
@@ -117,7 +130,7 @@ function binCmd(shimPath) {
 // Local install smoke
 // ---------------------------------------------------------------------------
 
-const installDir = mkdtempSync(join(tmpdir(), "omk-smoke-local-"));
+const installDir = mkdtempSync(smokeTmpPrefix("omk-smoke-local-"));
 
 try {
   runSilently("npm init -y", installDir);
@@ -242,7 +255,7 @@ try {
 // Global-prefix install smoke
 // ---------------------------------------------------------------------------
 
-const prefixDir = mkdtempSync(join(tmpdir(), "omk-smoke-prefix-"));
+const prefixDir = mkdtempSync(smokeTmpPrefix("omk-smoke-prefix-"));
 
 try {
   runSilently(`npm install -g --prefix "${prefixDir}" --ignore-scripts "${tarballPath}"`, process.cwd());
@@ -288,12 +301,12 @@ try {
 // Kimi soft onboarding smoke (isolated HOME, no host kimi dependency)
 // ---------------------------------------------------------------------------
 
-const isolatedHome = mkdtempSync(join(tmpdir(), "omk-smoke-home-"));
+const isolatedHome = mkdtempSync(smokeTmpPrefix("omk-smoke-home-"));
 const isolatedEnv = isWindows
   ? { USERPROFILE: isolatedHome, HOME: isolatedHome }
   : { HOME: isolatedHome };
 
-const isolatedPathDir = mkdtempSync(join(tmpdir(), "omk-smoke-path-"));
+const isolatedPathDir = mkdtempSync(smokeTmpPrefix("omk-smoke-path-"));
 const isolatedPath = isWindows
   ? `${isolatedPathDir};${process.env.PATH || ""}`
   : `${isolatedPathDir}:${process.env.PATH || ""}`;
@@ -342,21 +355,21 @@ try {
 // Star fallback smoke (fake gh shim -> auth failure)
 // ---------------------------------------------------------------------------
 
-const fakeGhDir = mkdtempSync(join(tmpdir(), "omk-smoke-gh-"));
+const fakeGhDir = mkdtempSync(smokeTmpPrefix("omk-smoke-gh-"));
 const fakeGhPath = join(fakeGhDir, isWindows ? "gh.cmd" : "gh");
 
 if (isWindows) {
   writeFileSync(fakeGhPath, `@echo off\r\necho gh auth login required\r\nexit /b 1`, "utf-8");
 } else {
   writeFileSync(fakeGhPath, "#!/bin/sh\necho \"gh auth login required\"\nexit 1\n", "utf-8");
-  execSync(`chmod +x "${fakeGhPath}"`);
+  runSilently(`chmod +x "${fakeGhPath}"`, process.cwd());
 }
 
 const starPathEnv = isWindows
   ? `${fakeGhDir};${process.env.PATH || ""}`
   : `${fakeGhDir}:${process.env.PATH || ""}`;
 
-const starProjectDir = mkdtempSync(join(tmpdir(), "omk-smoke-star-"));
+const starProjectDir = mkdtempSync(smokeTmpPrefix("omk-smoke-star-"));
 runSilently("git init", starProjectDir);
 mkdirSync(join(starProjectDir, ".omk"), { recursive: true });
 
@@ -391,7 +404,7 @@ try {
 // Fresh project init smoke
 // ---------------------------------------------------------------------------
 
-const projectDir = mkdtempSync(join(tmpdir(), "omk-smoke-project-"));
+const projectDir = mkdtempSync(smokeTmpPrefix("omk-smoke-project-"));
 
 try {
   runSilently("git init", projectDir);

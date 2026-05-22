@@ -16,7 +16,7 @@ export interface BannerMeta {
   model?: string;
 }
 
-type ReplacerState = "buffering" | "passthrough" | "replaced";
+type ReplacerState = "buffering" | "passthrough" | "replaced" | "stripped";
 
 export class BannerReplacer {
   private state: ReplacerState = "buffering";
@@ -28,7 +28,11 @@ export class BannerReplacer {
   private readonly TIMEOUT_MS = 3000; // allow slower terminals / ssh latency / MCP connection status
   private readonly MAX_BYTES = 32768; // accommodate larger ascii art banners
 
-  constructor(private onReplace: (meta: BannerMeta) => void) {}
+  constructor(
+    private onReplace: (meta: BannerMeta) => void,
+    private stripOnly = false,
+    private onMeta?: (meta: BannerMeta) => void
+  ) {}
 
   private get buffer(): string {
     return this.chunks.join("");
@@ -44,7 +48,7 @@ export class BannerReplacer {
 
   /** 데이터 청크를 받아 배너 교체 또는 그대로 통과시킴 */
   process(data: string): string | null {
-    if (this.state === "replaced") {
+    if (this.state === "replaced" || this.state === "stripped") {
       const stripped = this.stripKimiBanner(data);
       return stripped.length > 0 ? stripped : null;
     }
@@ -197,11 +201,16 @@ export class BannerReplacer {
 
   private flushReplace(): string | null {
     if (this.state !== "buffering") return null;
-    this.state = "replaced";
     this.clearTimeout();
 
     const meta = this.extractMeta(this.buffer);
-    this.onReplace(meta);
+    this.onMeta?.(meta);
+    if (this.stripOnly) {
+      this.state = "stripped";
+    } else {
+      this.state = "replaced";
+      this.onReplace(meta);
+    }
 
     let after = this.extractAfterBanner(this.buffer);
     if (after === null) {
@@ -234,7 +243,7 @@ export class BannerReplacer {
       const stripped = line.replace(/[│║┃╔╗╚╝╭╮╰╯─═]/g, "").trim();
       const dirMatch = stripped.match(/Directory:\s*(.+)/);
       if (dirMatch) meta.directory = dirMatch[1].trim();
-      const sesMatch = stripped.match(/Session:\s*(.+)/);
+      const sesMatch = stripped.match(/(?:Kimi\s+)?Session(?:\s*ID)?\s*:\s*(.+)/i);
       if (sesMatch) meta.session = sesMatch[1].trim();
       const modelMatch = stripped.match(/Model:\s*(.+)/);
       if (modelMatch) meta.model = modelMatch[1].trim();

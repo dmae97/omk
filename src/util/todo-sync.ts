@@ -242,6 +242,6 @@ function parseTodoArray(value: unknown): TodoItem[] | null {
 export async function loadTodos(runId: string | null): Promise<TodoItem[] | null> {
   if (!runId) return null;
   const fromFile = await readTodos(runId);
-  if (fromFile && fromFile.length > 0) return fromFile;
+  if (fromFile !== null) return fromFile;
   return deriveTodosFromState(runId);
 }

@@ -20,7 +20,7 @@ Use Kimi native tools aggressively:
 
 ## Current Runtime Surface
 
-- Fresh init exposes root aliases `explorer`, `explore`, `planner`, `plan`, `architect`, `coder`, `reviewer`, `qa`, `tester`, `researcher`, `integrator`, `aggregator`, `interviewer`, `ontology`, and `vision-debugger` from `.omk/agents/root.yaml`.
+- Fresh init exposes root aliases `explorer`, `explore`, `planner`, `plan`, `router`, `architect`, `coder`, `reviewer`, `qa`, `tester`, `researcher`, `integrator`, `aggregator`, `interviewer`, `ontology`, and `vision-debugger` from `.omk/agents/root.yaml`.
 - These generated role files are scaffolded with MCP, skills, and hooks enabled through the Okabe-compatible base.
 - This repo may add local roles such as `coordinator`, `docs`, `merger`, `release`, and `security`; verify `.omk/agents/root.yaml` before invoking them.
 - Project skills are loaded from `.kimi/skills` and `.agents/skills`; read only the matching `SKILL.md` files.

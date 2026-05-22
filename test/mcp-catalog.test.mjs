@@ -31,6 +31,18 @@ test("MCP catalog includes Playwright for ts product preset without making it a 
   assert.equal(getDefaultSelections().includes("playwright"), false);
 });
 
+test("MCP catalog includes bundled OMK web bridge without making it a core default", () => {
+  const bridge = RECOMMENDED_MCP_SERVERS.find((entry) => entry.name === "omk-web-bridge");
+
+  assert.equal(bridge?.command, "omk");
+  assert.deepEqual(bridge?.args, ["mcp", "serve", "omk-web-bridge"]);
+  assert.equal(bridge?.category, "web");
+  assert.equal(bridge?.env?.OMK_WEB_BRIDGE_MODE, "readonly");
+  assert.equal(bridge?.bundled, undefined);
+  assert.equal(getDefaultSelections().includes("omk-web-bridge"), false);
+  assert.doesNotMatch(JSON.stringify(bridge), /TOKEN|SECRET|PASSWORD|Bearer/);
+});
+
 test("MCP catalog includes filesystem-readonly for worktree review lanes without making it a core default", () => {
   const filesystemReadonly = RECOMMENDED_MCP_SERVERS.find((entry) => entry.name === "filesystem-readonly");
 

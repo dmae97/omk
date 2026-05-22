@@ -12,8 +12,13 @@ import {
 import type {
   DeepSeekRoutePlan,
   ProviderAssistMetadata,
+  ProviderFailureKind,
+  ProviderId,
+  ProviderModelDefault,
+  ProviderModelRef,
   ProviderPolicy,
   ProviderRouteDecision,
+  ProviderRouteInput,
   ProviderTaskMetadata,
 } from "./types.js";
 import { withProviderMetadata } from "./types.js";
@@ -32,6 +37,8 @@ import {
 export interface ProviderTaskRunnerOptions {
   kimiRunner: TaskRunner;
   deepseekRunner?: TaskRunner;
+  providerRunners?: Partial<Record<ProviderId, TaskRunner>>;
+  providerModels?: Partial<Record<ProviderId, ProviderModelDefault>>;
   providerHealth?: ProviderHealthRegistry;
   providerPolicy?: ProviderPolicy;
   deepseekMaxRetries?: number;
@@ -51,12 +58,12 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
   let deepSeekDisabledCalled = false;
 
   const runWith = async (
-    provider: "kimi" | "deepseek",
+    provider: ProviderId,
     runner: TaskRunner,
     node: DagNode,
     env: Record<string, string>,
     routeReason: string,
-    requestedProvider = provider,
+    requestedProvider: ProviderId = provider,
     metadata: Partial<ProviderTaskMetadata> = {},
     signal?: AbortSignal
   ): Promise<TaskResult> => {
@@ -142,13 +149,23 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
     set onThinking(fn) {
       options.kimiRunner.onThinking = fn;
       if (options.deepseekRunner) options.deepseekRunner.onThinking = fn;
+      for (const runner of Object.values(options.providerRunners ?? {})) {
+        if (runner) runner.onThinking = fn;
+      }
     },
 
     fork(onThinking) {
+      const providerRunners = Object.fromEntries(
+        Object.entries(options.providerRunners ?? {}).map(([provider, runner]) => [
+          provider,
+          runner?.fork?.(onThinking) ?? runner,
+        ])
+      ) as Partial<Record<ProviderId, TaskRunner>>;
       return createProviderTaskRunner({
         ...options,
         kimiRunner: options.kimiRunner.fork?.(onThinking) ?? options.kimiRunner,
         deepseekRunner: options.deepseekRunner?.fork?.(onThinking) ?? options.deepseekRunner,
+        providerRunners,
         providerHealth,
       });
     },
@@ -164,7 +181,13 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
         providerHealth.isDeepSeekAvailable();
       const requiresToolCalling = node.routing?.requiresToolCalling === true;
       const requiresMcp = node.routing?.requiresMcp === true;
-      const decision = routeProvider({
+      const providerAvailability = providerAvailabilityForNode(
+        node,
+        options.providerPolicy ?? "auto",
+        deepseekAvailable,
+        options.providerRunners
+      );
+      const routeInput: ProviderRouteInput = {
         role: node.role,
         taskType: env.OMK_TASK_TYPE ?? "general",
         risk: inferNodeRisk(node),
@@ -174,11 +197,15 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
         readOnly: node.routing?.readOnly,
         estimatedTokens: Number(env.OMK_ESTIMATED_TOKENS ?? 0),
         deepseekAvailable,
+        providerAvailability,
+        providerModels: options.providerModels,
         nodeId: node.id,
         providerHint: node.routing?.provider,
         providerPolicy: options.providerPolicy ?? "auto",
+        preferredModel: node.routing?.providerModel ?? env.OMK_PROVIDER_MODEL ?? node.routing?.assignedModel,
         preferredDeepSeekTier: node.routing?.providerModelTier,
-      });
+      };
+      const decision = routeProvider(routeInput);
 
       // Record provider-router decision trace
       if (traceStore && runId) {
@@ -205,32 +232,66 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
         providerInvocationKey: invocationKey,
       };
 
+      const unavailableProviderSkip = resolveUnavailableSkippableProviderLane({
+        node,
+        routeInput,
+        decision,
+        providerPolicy: options.providerPolicy ?? "auto",
+        providerAvailability,
+      });
+      if (unavailableProviderSkip) {
+        return providerLaneSkipResult({
+          node,
+          provider: unavailableProviderSkip.provider,
+          requestedProvider: unavailableProviderSkip.provider,
+          decision,
+          reason: unavailableProviderSkip.reason,
+          failureKind: "availability",
+          attempts: 0,
+          traceMetadata,
+          providerModel: unavailableProviderSkip.providerModel ?? decision.providerModel,
+          deepseekPlan: unavailableProviderSkip.deepseekPlan ?? decision.deepseek,
+          baseResult: {
+            success: false,
+            exitCode: 1,
+            stdout: "",
+            stderr: unavailableProviderSkip.reason,
+          },
+        });
+      }
+
       if (decision.provider === "deepseek" && options.deepseekRunner) {
         const rawMaxRetries = Number(options.deepseekMaxRetries ?? 1);
-        const maxRetries = Math.max(0, Math.floor(Number.isFinite(rawMaxRetries) ? rawMaxRetries : 1));
+        const shouldSkipDeepSeekFallback = shouldSkipProviderFallback(node, "deepseek");
+        const maxRetries = shouldSkipDeepSeekFallback ? 0 : Math.max(0, Math.floor(Number.isFinite(rawMaxRetries) ? rawMaxRetries : 1));
         const failures: TaskResult[] = [];
         let result: TaskResult | undefined;
 
         for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-          result = await runWith(
-            "deepseek",
-            options.deepseekRunner,
-            node,
-            {
-              ...env,
-              OMK_PROVIDER_ATTEMPT: String(attempt + 1),
-              OMK_PROVIDER_MAX_RETRIES: String(maxRetries),
-              ...traceEnv,
-              ...deepseekRouteEnv(decision.deepseek),
-            },
-            decision.reason,
-            "deepseek",
-            {
-              ...traceMetadata,
-              ...deepseekMetadata(decision.deepseek),
-            },
-            signal
-          );
+          try {
+            result = await runWith(
+              "deepseek",
+              options.deepseekRunner,
+              node,
+              {
+                ...env,
+                OMK_PROVIDER_ATTEMPT: String(attempt + 1),
+                OMK_PROVIDER_MAX_RETRIES: String(maxRetries),
+                ...traceEnv,
+                ...deepseekRouteEnv(decision.deepseek),
+              },
+              decision.reason,
+              "deepseek",
+              {
+                ...traceMetadata,
+                ...deepseekMetadata(decision.deepseek),
+              },
+              signal
+            );
+          } catch (error: unknown) {
+            if (!shouldSkipDeepSeekFallback) throw error;
+            result = providerExceptionResult(error);
+          }
 
           if (result.success) {
             return withProviderMetadata(result, {
@@ -244,6 +305,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
           }
 
           failures.push(result);
+          if (signal?.aborted) break;
           if (!isDeepSeekTransientFailure(result)) break;
 
           // Abort-aware sleep with exponential backoff and full jitter
@@ -251,7 +313,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
             const baseMs = Math.min(1000 * Math.pow(2, attempt), 30000);
             const jitterMs = baseMs * Math.random();
             const delayMs = baseMs + jitterMs;
-            await new Promise((resolve) => setTimeout(resolve, delayMs));
+            await sleepWithAbort(delayMs, signal);
           }
           if (!isDeepSeekTransientFailure(result)) break;
         }
@@ -273,6 +335,21 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
           }
         } else if (lastFailure && isDeepSeekTransientFailure(lastFailure)) {
           providerHealth.markDeepSeekUnavailable(fallbackReason || "DeepSeek transient provider failure");
+        }
+
+        if (lastFailure && shouldSkipDeepSeekFallback) {
+          return providerLaneSkipResult({
+            node,
+            provider: "deepseek",
+            requestedProvider: "deepseek",
+            decision,
+            reason: fallbackReason || `${providerDisplayName("deepseek")} provider failed`,
+            failureKind,
+            attempts: failures.length,
+            traceMetadata,
+            deepseekPlan: decision.deepseek,
+            baseResult: lastFailure,
+          });
         }
 
         const fallback = await runWith(
@@ -309,6 +386,85 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
         });
       }
 
+      if (isExternalProvider(decision.provider)) {
+        const externalRunner = options.providerRunners?.[decision.provider];
+        if (externalRunner) {
+          let result: TaskResult;
+          try {
+            result = await runWith(
+              decision.provider,
+              externalRunner,
+              node,
+              { ...env, ...traceEnv, ...providerModelEnv(decision.providerModel) },
+              decision.reason,
+              decision.provider,
+              { ...traceMetadata, ...providerModelMetadata(decision.providerModel) },
+              signal
+            );
+          } catch (error: unknown) {
+            if (!shouldSkipProviderFallback(node, decision.provider)) throw error;
+            result = providerExceptionResult(error);
+          }
+          if (result.success) {
+            return withProviderMetadata(result, {
+              provider: decision.provider,
+              requestedProvider: decision.provider,
+              providerRouteReason: decision.reason,
+              ...traceMetadata,
+              ...providerModelMetadata(decision.providerModel),
+              providerAttemptCount: 1,
+            });
+          }
+
+          const fallbackReason = summarizeFailures([result]) || `${decision.provider} provider failed`;
+          if (shouldSkipProviderFallback(node, decision.provider)) {
+            return providerLaneSkipResult({
+              node,
+              provider: decision.provider,
+              requestedProvider: decision.provider,
+              decision,
+              reason: fallbackReason,
+              failureKind: "availability",
+              attempts: 1,
+              traceMetadata,
+              providerModel: decision.providerModel,
+              baseResult: result,
+            });
+          }
+
+          const fallback = await runWith(
+            "kimi",
+            options.kimiRunner,
+            node,
+            {
+              ...env,
+              ...traceEnv,
+              OMK_PROVIDER_FALLBACK_FROM: decision.provider,
+              OMK_PROVIDER_FALLBACK_REASON: fallbackReason,
+            },
+            `Fallback from ${decision.provider}: ${fallbackReason}`,
+            decision.provider,
+            traceMetadata,
+            signal
+          );
+          return withProviderMetadata(fallback, {
+            provider: "kimi",
+            requestedProvider: decision.provider,
+            providerRouteReason: decision.reason,
+            ...traceMetadata,
+            ...providerModelMetadata(decision.providerModel),
+            providerAttemptCount: 1,
+            providerFallback: {
+              from: decision.provider,
+              to: "kimi",
+              reason: fallbackReason,
+              attempts: 1,
+              failureKind: "availability",
+            },
+          });
+        }
+      }
+
       if (decision.deepseek?.participation === "advisory" && options.deepseekRunner) {
         const advisory = await runDeepSeekAdvisory({
           node,
@@ -335,6 +491,22 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
           }
         } else if (!advisory.success && isDeepSeekTransientFailure(advisory.result)) {
           providerHealth.markDeepSeekUnavailable(advisory.failureReason || "DeepSeek transient provider failure");
+        }
+
+        if (!advisory.success && shouldSkipProviderFallback(node, "deepseek")) {
+          return providerLaneSkipResult({
+            node,
+            provider: "deepseek",
+            requestedProvider: "deepseek",
+            decision,
+            reason: advisory.failureReason || `${providerDisplayName("deepseek")} advisory failed`,
+            failureKind: classifyDeepSeekFailure(advisory.result),
+            attempts: 1,
+            traceMetadata,
+            deepseekPlan: decision.deepseek,
+            providerAssist: advisory.metadata,
+            baseResult: advisory.result,
+          });
         }
 
         const kimiResult = await runWith(
@@ -378,14 +550,78 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
         });
       }
 
+      const genericAdvisoryProvider = genericAdvisoryProviderForDecision(decision);
+      if (genericAdvisoryProvider) {
+        const genericRunner = options.providerRunners?.[genericAdvisoryProvider];
+        if (genericRunner) {
+          const advisory = await runGenericProviderAdvisory({
+            node,
+            env,
+            runner: genericRunner,
+            routeReason: decision.reason,
+            modelRef: decision.providerModel,
+            invocationKey,
+            traceEnv,
+            signal,
+          });
+          if (!advisory.success && shouldSkipProviderFallback(node, genericAdvisoryProvider)) {
+            return providerLaneSkipResult({
+              node,
+              provider: genericAdvisoryProvider,
+              requestedProvider: genericAdvisoryProvider,
+              decision,
+              reason: advisory.failureReason || `${providerDisplayName(genericAdvisoryProvider)} advisory failed`,
+              failureKind: "availability",
+              attempts: 1,
+              traceMetadata,
+              providerModel: decision.providerModel,
+              providerAssist: advisory.metadata,
+              baseResult: advisory.result,
+            });
+          }
+          const kimiResult = await runWith(
+            "kimi",
+            options.kimiRunner,
+            node,
+            {
+              ...env,
+              ...traceEnv,
+              OMK_PROVIDER_ADVISORY_STATUS: advisory.success ? "success" : "failed",
+              OMK_PROVIDER_ADVISORY_PROVIDER: genericAdvisoryProvider,
+              OMK_PROVIDER_ADVISORY_MODEL: decision.providerModel?.model ?? "",
+              OMK_PROVIDER_ADVISORY: advisory.summary,
+            },
+            decision.reason,
+            "kimi",
+            {
+              ...traceMetadata,
+              providerAssist: advisory.metadata,
+              ...providerModelMetadata(decision.providerModel),
+            },
+            signal
+          );
+          return withProviderMetadata(kimiResult, {
+            provider: "kimi",
+            requestedProvider: "kimi",
+            providerRouteReason: decision.reason,
+            ...traceMetadata,
+            providerAssist: advisory.metadata,
+            ...providerModelMetadata(decision.providerModel),
+          });
+        }
+      }
+
       const kimiResult = await runWith(
         "kimi",
         options.kimiRunner,
         node,
         { ...env, ...traceEnv },
         decision.reason,
-        decision.provider,
-        traceMetadata,
+        requestedProviderForKimiDecision(decision),
+        {
+          ...traceMetadata,
+          ...providerModelMetadata(decision.providerModel),
+        },
         signal
       );
       return recoverFromKimiProviderFailure(kimiResult, node, env, decision, traceEnv, traceMetadata, signal);
@@ -471,6 +707,214 @@ function buildKimiQuotaDeepSeekFallbackPlan(
   };
 }
 
+function providerAvailabilityForNode(
+  node: DagNode,
+  providerPolicy: ProviderPolicy,
+  deepseekAvailable: boolean,
+  providerRunners: Partial<Record<ProviderId, TaskRunner>> | undefined
+): Partial<Record<ProviderId, boolean>> {
+  const availability: Partial<Record<ProviderId, boolean>> = {
+    ...Object.fromEntries(
+      Object.keys(providerRunners ?? {}).map((provider) => [provider, true])
+    ),
+    deepseek: deepseekAvailable,
+  };
+  for (const provider of [node.routing?.provider, providerPolicy]) {
+    if (!provider || provider === "auto" || provider === "kimi") continue;
+    if (availability[provider] !== undefined) continue;
+    availability[provider] = provider === "deepseek" ? deepseekAvailable : Boolean(providerRunners?.[provider]);
+  }
+  return availability;
+}
+
+function resolveUnavailableSkippableProviderLane(options: {
+  node: DagNode;
+  routeInput: ProviderRouteInput;
+  decision: ProviderRouteDecision;
+  providerPolicy: ProviderPolicy;
+  providerAvailability: Partial<Record<ProviderId, boolean>>;
+}): { provider: ProviderId; reason: string; providerModel?: ProviderModelRef; deepseekPlan?: DeepSeekRoutePlan } | undefined {
+  const explicitProvider = requestedProviderFromNodeOrPolicy(options.node, options.providerPolicy);
+  if (
+    explicitProvider &&
+    shouldSkipProviderFallback(options.node, explicitProvider) &&
+    !isProviderAvailableForSkip(explicitProvider, options.providerAvailability)
+  ) {
+    return {
+      provider: explicitProvider,
+      reason: `${providerDisplayName(explicitProvider)} unavailable; optional provider lane is skippable`,
+      providerModel: options.decision.providerModel,
+      deepseekPlan: explicitProvider === "deepseek"
+        ? options.decision.deepseek ?? deepseekPlanFromNode(options.node)
+        : undefined,
+    };
+  }
+
+  if (
+    options.providerPolicy === "auto" &&
+    !options.providerAvailability.deepseek &&
+    shouldSkipProviderFallback(options.node, "deepseek")
+  ) {
+    const optimisticDeepSeekDecision = routeProvider({
+      ...options.routeInput,
+      deepseekAvailable: true,
+      providerAvailability: {
+        ...(options.routeInput.providerAvailability ?? {}),
+        deepseek: true,
+      },
+    });
+    if (optimisticDeepSeekDecision.provider === "deepseek" || optimisticDeepSeekDecision.deepseek) {
+      return {
+        provider: "deepseek",
+        reason: "DeepSeek unavailable; optional provider lane is skippable",
+        providerModel: optimisticDeepSeekDecision.providerModel,
+        deepseekPlan: optimisticDeepSeekDecision.deepseek,
+      };
+    }
+  }
+
+  return undefined;
+}
+
+function requestedProviderFromNodeOrPolicy(
+  node: DagNode,
+  providerPolicy: ProviderPolicy
+): ProviderId | undefined {
+  const routingProvider = node.routing?.provider;
+  if (routingProvider && routingProvider !== "auto" && routingProvider !== "kimi") return routingProvider;
+  if (providerPolicy !== "auto" && providerPolicy !== "kimi") return providerPolicy;
+  return undefined;
+}
+
+function isProviderAvailableForSkip(
+  provider: ProviderId,
+  providerAvailability: Partial<Record<ProviderId, boolean>>
+): boolean {
+  if (provider === "deepseek") return providerAvailability.deepseek === true;
+  const explicit = providerAvailability[provider];
+  return explicit === undefined ? true : explicit;
+}
+
+function shouldSkipProviderFallback(node: DagNode, provider: ProviderId): boolean {
+  if (provider === "kimi") return false;
+  if (provider === "deepseek" && isDeepSeekLaneNode(node)) return true;
+  if (node.failurePolicy?.skipOnFailure === true) return true;
+  if (hasOnlyOptionalOutputs(node)) return true;
+  return false;
+}
+
+function isDeepSeekLaneNode(node: DagNode): boolean {
+  return node.id.toLowerCase().startsWith("deepseek-") || node.routing?.provider === "deepseek";
+}
+
+function hasOnlyOptionalOutputs(node: DagNode): boolean {
+  return Boolean(node.outputs?.length) && node.outputs!.every((output) => output.required === false);
+}
+
+function markProviderLaneSkippable(node: DagNode): void {
+  node.failurePolicy = {
+    ...(node.failurePolicy ?? {}),
+    skipOnFailure: true,
+  };
+}
+
+function providerLaneSkipResult(options: {
+  node: DagNode;
+  provider: ProviderId;
+  requestedProvider: ProviderId;
+  decision: ProviderRouteDecision;
+  reason: string;
+  failureKind: ProviderFailureKind;
+  attempts: number;
+  traceMetadata: Partial<ProviderTaskMetadata>;
+  providerModel?: ProviderModelRef;
+  deepseekPlan?: DeepSeekRoutePlan;
+  providerAssist?: ProviderAssistMetadata;
+  baseResult: TaskResult;
+}): TaskResult {
+  markProviderLaneSkippable(options.node);
+  const stdout = options.baseResult.stdout || `[omk] ${providerDisplayName(options.provider)} optional lane skipped: ${options.reason}\n`;
+  const stderr = options.baseResult.stderr || options.reason;
+  const metadata: ProviderTaskMetadata = {
+    provider: options.provider,
+    requestedProvider: options.requestedProvider,
+    providerRouteReason: options.decision.reason,
+    ...options.traceMetadata,
+    providerAttemptCount: options.attempts,
+    ...(options.provider === "deepseek"
+      ? deepseekMetadata(options.deepseekPlan)
+      : providerModelMetadata(options.providerModel)),
+    providerSkip: {
+      provider: options.provider,
+      reason: options.reason,
+      skippable: true,
+      attempts: options.attempts,
+      failureKind: options.failureKind,
+    },
+  };
+  if (options.providerAssist) {
+    metadata.providerAssist = options.providerAssist;
+  }
+
+  return withProviderMetadata({
+    ...options.baseResult,
+    success: false,
+    exitCode: options.baseResult.exitCode ?? 1,
+    stdout,
+    stderr,
+  }, metadata);
+}
+
+function providerExceptionResult(error: unknown): TaskResult {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    success: false,
+    exitCode: 1,
+    stdout: "",
+    stderr: message,
+  };
+}
+
+function deepseekPlanFromNode(node: DagNode): DeepSeekRoutePlan | undefined {
+  if (!isDeepSeekLaneNode(node)) return undefined;
+  const model = [node.routing?.providerModel, node.routing?.assignedModel]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ")
+    .toLowerCase();
+  const tier = node.routing?.providerModelTier
+    ?? (model.includes("pro") ? "pro" : model.includes("flash") ? "flash" : undefined);
+  if (!tier) return undefined;
+  return {
+    provider: "deepseek",
+    model: tier === "flash" ? DEEPSEEK_V4_FLASH_MODEL : DEEPSEEK_V4_PRO_MODEL,
+    tier,
+    participation: "direct",
+    reasoningEffort: "max",
+    ratioBucket: tier === "flash" ? 0 : 9,
+  };
+}
+
+function sleepWithAbort(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason ?? new Error("Aborted"));
+      return;
+    }
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(signal.reason ?? new Error("Aborted"));
+    }, { once: true });
+  });
+}
+
+function resolveDeepSeekAdvisoryTimeoutMs(env: Record<string, string | undefined> = process.env): number {
+  const raw = env.OMK_DEEPSEEK_ADVISORY_TIMEOUT_MS;
+  if (!raw) return 30_000;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 30_000;
+}
+
 async function runDeepSeekAdvisory(options: {
   node: DagNode;
   env: Record<string, string>;
@@ -481,7 +925,13 @@ async function runDeepSeekAdvisory(options: {
   traceEnv: Record<string, string>;
   signal?: AbortSignal;
 }): Promise<{ success: boolean; result: TaskResult; summary: string; failureReason?: string; metadata: ProviderAssistMetadata }> {
-  const result = await options.deepseekRunner.run(options.node, {
+  const advisoryTimeoutMs = resolveDeepSeekAdvisoryTimeoutMs();
+  const advisoryAbortController = new AbortController();
+  const advisorySignal = options.signal
+    ? AbortSignal.any([options.signal, advisoryAbortController.signal])
+    : advisoryAbortController.signal;
+
+  const advisoryPromise = options.deepseekRunner.run(options.node, {
     ...options.env,
     ...options.traceEnv,
     ...deepseekRouteEnv(options.plan),
@@ -489,7 +939,56 @@ async function runDeepSeekAdvisory(options: {
     OMK_PROVIDER_REQUESTED: "deepseek",
     OMK_PROVIDER_FALLBACK: "kimi",
     OMK_PROVIDER_ROUTE_REASON: options.routeReason,
-  }, options.signal);
+  }, advisorySignal);
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let abortListener: (() => void) | undefined;
+
+  const cleanup = (): void => {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      timer = undefined;
+    }
+    if (abortListener !== undefined) {
+      options.signal?.removeEventListener("abort", abortListener);
+      abortListener = undefined;
+    }
+  };
+
+  const timeoutPromise = new Promise<TaskResult>((_, reject) => {
+    if (options.signal?.aborted) {
+      reject(options.signal.reason ?? new Error("Aborted"));
+      return;
+    }
+    timer = setTimeout(() => {
+      const timeoutError = new Error(`DeepSeek advisory timed out after ${advisoryTimeoutMs}ms`);
+      advisoryAbortController.abort(timeoutError);
+      reject(timeoutError);
+    }, advisoryTimeoutMs);
+    abortListener = () => {
+      clearTimeout(timer);
+      const reason = options.signal!.reason ?? new Error("Aborted");
+      advisoryAbortController.abort(reason);
+      reject(reason);
+    };
+    options.signal?.addEventListener("abort", abortListener, { once: true });
+  });
+
+  let result: TaskResult;
+  try {
+    result = await Promise.race([advisoryPromise, timeoutPromise]);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    result = {
+      success: false,
+      exitCode: 1,
+      stdout: "",
+      stderr: message,
+    };
+  } finally {
+    cleanup();
+  }
+
   const success = result.success;
   const summary = success
     ? summarizeAdvisory(result.stdout)
@@ -513,6 +1012,51 @@ async function runDeepSeekAdvisory(options: {
   };
 }
 
+async function runGenericProviderAdvisory(options: {
+  node: DagNode;
+  env: Record<string, string>;
+  runner: TaskRunner;
+  routeReason: string;
+  modelRef?: ProviderModelRef;
+  invocationKey: string;
+  traceEnv: Record<string, string>;
+  signal?: AbortSignal;
+}): Promise<{ success: boolean; result: TaskResult; summary: string; failureReason?: string; metadata: ProviderAssistMetadata }> {
+  let result: TaskResult;
+  try {
+    result = await options.runner.run(options.node, {
+      ...options.env,
+      ...options.traceEnv,
+      ...providerModelEnv(options.modelRef),
+      OMK_PROVIDER: options.modelRef?.provider ?? "external",
+      OMK_PROVIDER_REQUESTED: options.modelRef?.provider ?? "external",
+      OMK_PROVIDER_FALLBACK: "kimi",
+      OMK_PROVIDER_ROUTE_REASON: options.routeReason,
+      OMK_PROVIDER_AUTHORITY: "advisory",
+    }, options.signal);
+  } catch (error: unknown) {
+    result = providerExceptionResult(error);
+  }
+  const success = result.success;
+  const summary = success ? summarizeAdvisory(result.stdout) : "";
+  const failureReason = success ? undefined : summarizeFailures([result]);
+  return {
+    success,
+    result,
+    summary,
+    failureReason,
+    metadata: {
+      provider: options.modelRef?.provider ?? "external",
+      model: options.modelRef?.model,
+      participation: "advisory",
+      invocationKey: options.invocationKey,
+      success,
+      summary,
+      failureReason,
+    },
+  };
+}
+
 function providerTraceEnv(decision: ProviderRouteDecision, invocationKey: string): Record<string, string> {
   const env: Record<string, string> = {
     OMK_PROVIDER_ROUTE_CONFIDENCE: decision.confidence.toFixed(2),
@@ -524,6 +1068,11 @@ function providerTraceEnv(decision: ProviderRouteDecision, invocationKey: string
   }
   if (decision.deepseek) {
     env.OMK_DEEPSEEK_INVOCATION_KEY = invocationKey;
+  }
+  if (decision.providerModel) {
+    env.OMK_PROVIDER_MODEL = decision.providerModel.model;
+    env.OMK_PROVIDER_AUTHORITY = decision.providerModel.authority;
+    env.OMK_PROVIDER_CAPABILITIES = decision.providerModel.capabilities.join(",");
   }
   return env;
 }
@@ -550,8 +1099,8 @@ function buildProviderInvocationKey(node: DagNode, decision: ProviderRouteDecisi
     node.id,
     node.role,
     decision.provider,
-    decision.deepseek?.model ?? "kimi",
-    decision.deepseek?.participation ?? "authoritative",
+    decision.deepseek?.model ?? decision.providerModel?.model ?? "kimi",
+    decision.deepseek?.participation ?? decision.providerModel?.authority ?? "authoritative",
     decision.reason,
   ].join(":");
   return `omk-${stableHash(seed).toString(16).padStart(8, "0")}`;
@@ -583,7 +1132,56 @@ function deepseekMetadata(plan: DeepSeekRoutePlan | undefined): Partial<Provider
     providerModel: plan.model,
     providerModelTier: plan.tier,
     providerParticipation: plan.participation,
+    providerAuthority: plan.participation,
   };
+}
+
+function providerModelEnv(modelRef: ProviderModelRef | undefined): Record<string, string> {
+  if (!modelRef) return {};
+  return {
+    OMK_PROVIDER_MODEL: modelRef.model,
+    OMK_PROVIDER_AUTHORITY: modelRef.authority,
+    OMK_PROVIDER_CAPABILITIES: modelRef.capabilities.join(","),
+  };
+}
+
+function providerModelMetadata(modelRef: ProviderModelRef | undefined): Partial<ProviderTaskMetadata> {
+  if (!modelRef) return {};
+  return {
+    providerModel: modelRef.model,
+    providerParticipation: modelRef.authority === "authority" || modelRef.authority === "veto" ? undefined : modelRef.authority,
+    providerAuthority: modelRef.authority,
+    providerModelRef: modelRef,
+  };
+}
+
+function providerDisplayName(provider: ProviderId): string {
+  if (provider === "deepseek") return "DeepSeek";
+  if (provider === "qwen") return "Qwen";
+  if (provider === "codex") return "Codex";
+  if (provider === "openrouter") return "OpenRouter";
+  if (provider === "kimi") return "Kimi";
+  return provider;
+}
+
+function isExternalProvider(provider: ProviderId): boolean {
+  return provider !== "kimi" && provider !== "deepseek";
+}
+
+function genericAdvisoryProviderForDecision(decision: ProviderRouteDecision): ProviderId | undefined {
+  const modelRef = decision.providerModel;
+  if (!modelRef) return undefined;
+  const provider = modelRef.provider;
+  if (isExternalProvider(provider) && modelRef.authority === "advisory") return provider;
+  return undefined;
+}
+
+function requestedProviderForKimiDecision(decision: ProviderRouteDecision): ProviderId {
+  const modelRef = decision.providerModel;
+  if (!modelRef) return decision.provider;
+  const provider = modelRef.provider;
+  if (isExternalProvider(provider) && modelRef.authority === "veto") return provider;
+  return decision.provider;
 }
 
 function summarizeAdvisory(stdout: string): string {

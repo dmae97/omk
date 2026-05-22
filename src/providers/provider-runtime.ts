@@ -1,6 +1,7 @@
 import type { TaskRunner } from "../contracts/orchestration.js";
 import { createKimiTaskRunner, type KimiTaskRunnerOptions } from "../kimi/runner.js";
 import { style, status } from "../util/theme.js";
+import { getProjectRoot } from "../util/fs.js";
 import { checkDeepSeekBalance } from "./deepseek/deepseek-balance.js";
 import { createDeepSeekReadOnlyTaskRunner } from "./deepseek/deepseek-provider.js";
 import {
@@ -10,11 +11,14 @@ import {
 } from "./deepseek/deepseek-config.js";
 import { ProviderHealthRegistry } from "./health.js";
 import { createProviderTaskRunner } from "./provider-task-runner.js";
-import type { ProviderPolicy } from "./types.js";
+import type { ProviderId, ProviderModelDefault, ProviderPolicy } from "./types.js";
 import { createKimiProvider } from "./kimi-provider.js";
 import { createDeepSeekProvider } from "./deepseek-provider.js";
 import { createProviderRouter } from "./provider-router.js";
 import type { AgentProvider } from "./provider.js";
+import { createOpenAICompatibleReadOnlyTaskRunner } from "./openai-compatible-runner.js";
+import { createCodexCliAdvisoryTaskRunner } from "./codex-cli-runner.js";
+import { providerDoctorStatus, readProviderRegistry, type ProviderRegistryEntry } from "./model-registry.js";
 import { createContextBroker } from "../runtime/context-broker.js";
 import type { AgentRuntime } from "../runtime/agent-runtime.js";
 import { createKimiPrintRuntime } from "../runtime/kimi-print-runtime.js";
@@ -39,12 +43,15 @@ export async function createProviderBackedTaskRunner(
   providers.push(kimiProvider);
 
   let deepseekRunnerRef: TaskRunner | undefined;
+  const providerRunners: Partial<Record<ProviderId, TaskRunner>> = {};
+  const providerModels: Partial<Record<ProviderId, ProviderModelDefault>> = {};
 
-  const deepseekStatus = providerPolicy === "auto" ? await getDeepSeekProviderStatus() : undefined;
-  const deepseekKey = providerPolicy === "auto" && deepseekStatus?.enabled
+  const allowDeepSeek = providerPolicy === "auto" || providerPolicy === "deepseek";
+  const deepseekStatus = allowDeepSeek ? await getDeepSeekProviderStatus() : undefined;
+  const deepseekKey = allowDeepSeek && deepseekStatus?.enabled
     ? await resolveDeepSeekApiKey()
     : undefined;
-  const deepseekCheck = providerPolicy === "auto" && deepseekStatus?.enabled && deepseekKey?.apiKey
+  const deepseekCheck = allowDeepSeek && deepseekStatus?.enabled && deepseekKey?.apiKey
     ? await checkDeepSeekBalance({ apiKey: deepseekKey.apiKey })
     : undefined;
 
@@ -65,10 +72,44 @@ export async function createProviderBackedTaskRunner(
       console.error(status.warn(`DeepSeek forced disabled: ${deepseekCheck.reason}`));
       console.error(style.gray("Kimi fallback is active. Run /deepseek-enable after topping up."));
     }
-  } else if (providerPolicy === "auto" && deepseekStatus?.enabled === false) {
+  } else if (allowDeepSeek && deepseekStatus?.enabled === false) {
     providerHealth.markDeepSeekUnavailable(deepseekStatus.disabledReason ?? "DeepSeek disabled");
     console.error(status.warn(`DeepSeek disabled: ${deepseekStatus.disabledReason ?? "disabled by user"}`));
     console.error(style.gray("Kimi-only fallback is active. Run /deepseek-enable to re-enable."));
+  }
+
+  const registry = await readProviderRegistry();
+  for (const entry of registry) {
+    if (!shouldUseOpenAICompatibleProvider(entry, providerPolicy)) continue;
+    const apiKey = entry.apiKeyEnv ? process.env[entry.apiKeyEnv] : undefined;
+    if (apiKey && entry.baseUrl) {
+      providerRunners[entry.id] = createOpenAICompatibleReadOnlyTaskRunner({
+        provider: entry.id,
+        baseUrl: entry.baseUrl,
+        apiKey,
+        apiKeyEnv: entry.apiKeyEnv,
+        model: entry.defaultModel,
+        promptPrefix: options.deepseekPromptPrefix,
+        headers: openAICompatibleHeaders(entry, process.env),
+      });
+      providerModels[entry.id] = providerModelDefault(entry);
+    } else if (providerPolicy === entry.id) {
+      console.error(status.warn(`${providerDisplayName(entry.id)} unavailable: missing ${entry.apiKeyEnv ?? "API key env"} or base URL. Kimi fallback is active.`));
+    }
+  }
+
+  const codex = registry.find((entry) => entry.id === "codex");
+  if (codex && codex.enabled && (providerPolicy === "auto" || providerPolicy === "codex")) {
+    const codexStatus = await providerDoctorStatus("codex");
+    if (codexStatus.available) {
+      providerRunners.codex = createCodexCliAdvisoryTaskRunner({
+        cwd: options.kimi.cwd ?? getProjectRoot(),
+        model: codex.defaultModel,
+      });
+      providerModels.codex = providerModelDefault(codex);
+    } else if (providerPolicy === "codex") {
+      console.error(status.warn("Codex unavailable or unauthenticated; Kimi fallback is active."));
+    }
   }
 
   const router = createProviderRouter({
@@ -97,6 +138,8 @@ export async function createProviderBackedTaskRunner(
   const baseRunner = createProviderTaskRunner({
     kimiRunner,
     deepseekRunner: deepseekRunnerRef,
+    providerRunners,
+    providerModels,
     providerPolicy,
     providerHealth,
     onDeepSeekDisabled: async (event) => {
@@ -140,4 +183,44 @@ export async function createProviderBackedTaskRunner(
   (wrappedRunner as unknown as Record<string, unknown>)._contextBroker = contextBroker;
 
   return wrappedRunner;
+}
+
+function shouldUseOpenAICompatibleProvider(entry: ProviderRegistryEntry, providerPolicy: ProviderPolicy): boolean {
+  if (entry.id === "deepseek") return false;
+  if (entry.kind !== "openai-compatible") return false;
+  if (!entry.enabled) return false;
+  return providerPolicy === "auto" || providerPolicy === entry.id;
+}
+
+function providerModelDefault(entry: ProviderRegistryEntry): ProviderModelDefault {
+  return {
+    model: entry.defaultModel,
+    capabilities: entry.capabilities,
+  };
+}
+
+function openAICompatibleHeaders(
+  entry: ProviderRegistryEntry,
+  env: NodeJS.ProcessEnv
+): Record<string, string> | undefined {
+  const headers: Record<string, string> = { ...(entry.headers ?? {}) };
+  if (entry.id === "openrouter") {
+    setHeaderFromEnv(headers, "HTTP-Referer", env.OPENROUTER_HTTP_REFERER ?? env.OPENROUTER_REFERER);
+    setHeaderFromEnv(headers, "X-OpenRouter-Title", env.OPENROUTER_X_TITLE ?? env.OPENROUTER_APP_TITLE);
+  }
+  return Object.keys(headers).length > 0 ? headers : undefined;
+}
+
+function setHeaderFromEnv(headers: Record<string, string>, name: string, value: string | undefined): void {
+  const trimmed = value?.trim();
+  if (trimmed) headers[name] = trimmed;
+}
+
+function providerDisplayName(provider: ProviderId): string {
+  if (provider === "deepseek") return "DeepSeek";
+  if (provider === "qwen") return "Qwen";
+  if (provider === "codex") return "Codex";
+  if (provider === "openrouter") return "OpenRouter";
+  if (provider === "kimi") return "Kimi";
+  return provider;
 }

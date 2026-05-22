@@ -1,9 +1,26 @@
 # Changelog
 
+## v1.1.18 — Release-prep hardening for parallel orchestration, doctor repair plans, and startup updates (2026-05-22)
+
+### New
+- **Parallel orchestration as the agent-first path** — Agent mode and chat-agent harnesses now make the root process an orchestrator that assigns worker, capability, review, QA, and security lanes with role-specific skills, hooks, MCP/tool hints, and memory recall context instead of treating all non-simple work as plain chat.
+- **Typed `omk doctor --fix` repair plans** — Doctor fixes now report structured operations with category, severity, safety tier, status, before/after metadata, backups, verify checks, and manual-action reasons while preserving the legacy `fixes.actions/skipped/backups` JSON fields for compatibility.
+- **Startup update prompt flow** — OMK startup update prompts use the shared Update now / Skip this version / Remind me later UX, with non-TTY, CI, JSON, smoke, and cockpit-child paths kept quiet and non-blocking.
+
+### Improved
+- **Safe local repair coverage** — `doctor --fix` safe tier can repair generated runtime preset drift, `.omk/config.toml` defaults, `.omk/lsp.json`, local graph-memory bootstrap, prompt/root scaffold gaps, hook executable modes, and web-bridge package/template presence without touching global/user secret-adjacent config by default.
+- **Post-fix verification evidence** — Non-dry-run doctor repairs can rerun doctor checks and include `before -> after` warning/error summaries, fixed counts, and remaining manual actions in JSON output.
+- **Native safety packaging gate** — Release prep now explicitly requires `npm run native:build` before package audit/smoke-pack so `dist/native/linux-x64/omk-safety` is present in the tarball and executable for install smoke.
+- **Release docs alignment** — README, maturity, roadmap, getting-started, and changelog wording now describe v1.1.18 as the source release target while keeping the latest-published v1.1.17 caveat and publish/tag readiness gated on `npm run release:check`.
+
+### Verification
+- Release readiness requires a clean pass of `npm run release:check`, which includes verify, native build, dry pack, package audit, and tarball smoke before npm publish or git tag.
+- This entry is a source release-prep note; do not treat v1.1.18 as published until the final release gate and publish step are completed.
+
 ## v1.1.17 — Full agent MCP/skills/hooks enablement and parallel orchestration (2026-05-18)
 
 ### New
-- **Every OMK agent now has MCP, skills, and hooks** — All 14 generated role files (explorer, planner, architect, coder, reviewer, security, qa, tester, researcher, integrator, aggregator, interviewer, ontology, vision-debugger) plus the explore/plan aliases now inherit `OMK_MCP_ENABLED`, `OMK_SKILLS_ENABLED`, and `OMK_HOOKS_ENABLED` through the Okabe base agent. Runtime scope controls actual availability; agents receive sanitized harness digests instead of raw inventory dumps.
+- **Every OMK agent now has MCP, skills, and hooks** — All 15 generated role files (explorer, planner, router, architect, coder, reviewer, security, qa, tester, researcher, integrator, aggregator, interviewer, ontology, vision-debugger) plus the explore/plan aliases now inherit `OMK_MCP_ENABLED`, `OMK_SKILLS_ENABLED`, and `OMK_HOOKS_ENABLED` through the Okabe base agent. Runtime scope controls actual availability; agents receive sanitized harness digests instead of raw inventory dumps.
 - **Parallel subagent orchestration** — Root coordinator explicitly manages parallel worker lanes with independent context, each subagent receiving scoped MCP/skills/hooks when runtime scope permits. Worker lanes are isolated until review/merge.
 
 ### Improved

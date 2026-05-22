@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createInterface } from "readline";
 import { writeSync } from "fs";
-import { readFile, writeFile, readdir, access, realpath } from "fs/promises";
+import { readFile, writeFile, readdir, access, realpath, stat } from "fs/promises";
 import { join, resolve, relative } from "path";
 import { execFileSync } from "child_process";
 import { MemoryStore } from "../memory/memory-store.js";
@@ -23,8 +23,9 @@ import { scoreGoal } from "../goal/scoring.js";
 import { suggestNextAction, evaluateMissingCriteria } from "../goal/eval-criteria.js";
 import type { MemoryOntology, MemoryMindmap } from "../memory/local-graph-memory-store.js";
 import { createStatePersister, redactSecrets } from "../orchestration/state-persister.js";
-import { writeTodos, type TodoItem } from "../util/todo-sync.js";
+import { loadTodos, readTodos, deriveTodosFromState, writeTodos, type TodoItem } from "../util/todo-sync.js";
 import { listActiveSessions, readSessionMeta, type SessionMeta } from "../util/session.js";
+import { readEvents, tailEvents } from "../util/events-logger.js";
 let clientDisconnected = false;
 
 
@@ -235,6 +236,14 @@ function sanitizeGoalId(goalId: string): string {
   const sanitized = goalId.replace(/[^a-zA-Z0-9_.-]/g, "");
   if (sanitized !== goalId || sanitized.length === 0 || sanitized.length > 128) {
     throw new Error(`Invalid goalId: ${goalId}`);
+  }
+  return sanitized;
+}
+
+function sanitizeRunId(runId: string): string {
+  const sanitized = runId.replace(/[^a-zA-Z0-9_.-]/g, "");
+  if (sanitized !== runId || sanitized.length === 0 || sanitized.length > 128) {
+    throw new Error(`Invalid runId: ${runId}`);
   }
   return sanitized;
 }
@@ -971,16 +980,67 @@ async function handleListSessions(args: { status?: string }): Promise<{ sessions
 }
 
 async function handleReadTodos(args: { runId: string }): Promise<{ todos: TodoItem[]; source: "todos.json" | "state.json" | null }> {
-  const { readTodos, deriveTodosFromState } = await import("../util/todo-sync.js");
   const fromFile = await readTodos(args.runId);
-  if (fromFile && fromFile.length > 0) {
-    return { todos: fromFile, source: "todos.json" };
+  if (fromFile !== null) {
+    return { todos: redactSecrets(fromFile) as TodoItem[], source: "todos.json" };
   }
   const fromState = await deriveTodosFromState(args.runId);
   if (fromState && fromState.length > 0) {
-    return { todos: fromState, source: "state.json" };
+    return { todos: redactSecrets(fromState) as TodoItem[], source: "state.json" };
   }
   return { todos: [], source: null };
+}
+
+async function handleTailRunEvents(args: { runId: string; afterSeq?: number; limit?: number }): Promise<{ events: unknown[]; source: "events.jsonl" }> {
+  const runId = sanitizeRunId(args.runId);
+  const runDir = join(OMK_RUNS_DIR, runId);
+  const events = await tailEvents(runDir, {
+    afterSeq: typeof args.afterSeq === "number" ? args.afterSeq : undefined,
+    limit: typeof args.limit === "number" ? Math.max(0, Math.min(500, args.limit)) : 200,
+  });
+  return { events: redactSecrets(events) as unknown[], source: "events.jsonl" };
+}
+
+async function handleReadRunState(args: { runId: string }): Promise<{ state: unknown; events: unknown[]; todos: TodoItem[] | null }> {
+  const runId = sanitizeRunId(args.runId);
+  const [state, events, todos] = await Promise.all([
+    STATE_PERSISTER.load(runId),
+    readEvents(join(OMK_RUNS_DIR, runId)).catch(() => []),
+    loadTodos(runId).catch(() => null),
+  ]);
+  return { state: redactSecrets(state), events: redactSecrets(events) as unknown[], todos: redactSecrets(todos) as TodoItem[] | null };
+}
+
+async function handleReadRuntimeStatus(args: { runId?: string } = {}): Promise<{ runId: string | null; state: unknown; events: unknown[]; todos: TodoItem[] | null; mcpStatus: unknown | null }> {
+  const runId = args.runId ? sanitizeRunId(args.runId) : await resolveLatestRunIdForMcp();
+  if (!runId) return { runId: null, state: null, events: [], todos: null, mcpStatus: null };
+  const mcpStatusPath = join(OMK_RUNS_DIR, runId, "mcp-status.json");
+  const [state, events, todos, mcpStatus] = await Promise.all([
+    STATE_PERSISTER.load(runId),
+    tailEvents(join(OMK_RUNS_DIR, runId), { limit: 200 }).catch(() => []),
+    loadTodos(runId).catch(() => null),
+    readFile(mcpStatusPath, "utf-8").then((raw) => redactSecrets(JSON.parse(raw) as unknown)).catch(() => null),
+  ]);
+  return { runId, state: redactSecrets(state), events: redactSecrets(events) as unknown[], todos: redactSecrets(todos) as TodoItem[] | null, mcpStatus };
+}
+
+async function resolveLatestRunIdForMcp(): Promise<string | null> {
+  if (!(await pathExists(OMK_RUNS_DIR))) return null;
+  const entries = await readdir(OMK_RUNS_DIR, { withFileTypes: true });
+  let best: { name: string; mtimeMs: number } | null = null;
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const statePath = join(OMK_RUNS_DIR, entry.name, "state.json");
+    try {
+      const real = await safePath(join(entry.name, "state.json"), OMK_RUNS_DIR);
+      if (real !== statePath && !real.endsWith(join(entry.name, "state.json"))) continue;
+      const stats = await stat(statePath);
+      if (!best || stats.mtimeMs > best.mtimeMs) best = { name: entry.name, mtimeMs: stats.mtimeMs };
+    } catch {
+      // ignore invalid run directories
+    }
+  }
+  return best?.name ?? null;
 }
 
 async function handleWriteTodos(args: { runId: string; todos: TodoItem[] }): Promise<{ written: number }> {
@@ -1156,6 +1216,40 @@ const TOOLS: Tool[] = [
       required: ["runId"],
     },
   },
+  {
+    name: "omk_tail_run_events",
+    description: "Tail append-only telemetry events for a run (secret-free summaries only)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        runId: { type: "string", description: "Run identifier" },
+        afterSeq: { type: "number", description: "Only return events with seq greater than this value" },
+        limit: { type: "number", description: "Maximum events to return (0-500, default 200)" },
+      },
+      required: ["runId"],
+    },
+  },
+  {
+    name: "omk_read_run_state",
+    description: "Read run state plus telemetry and canonical todos for a run",
+    inputSchema: {
+      type: "object",
+      properties: {
+        runId: { type: "string", description: "Run identifier" },
+      },
+      required: ["runId"],
+    },
+  },
+  {
+    name: "omk_read_runtime_status",
+    description: "Read latest or selected run state, telemetry, todos, and MCP status metadata",
+    inputSchema: {
+      type: "object",
+      properties: {
+        runId: { type: "string", description: "Optional run identifier; latest run is used when omitted" },
+      },
+    },
+  },
   // ── Quality gate ──
   {
     name: "omk_quality_gate",
@@ -1165,7 +1259,7 @@ const TOOLS: Tool[] = [
   // ── Memory ──
   {
     name: "omk_memory_read",
-    description: "Read project memory/ontology from the graph or filesystem mirror",
+    description: "Read canonical full project memory content from the graph or filesystem mirror",
     inputSchema: {
       type: "object",
       properties: {
@@ -1176,7 +1270,7 @@ const TOOLS: Tool[] = [
   },
   {
     name: "omk_memory_write",
-    description: "Write to project memory with validation (non-empty, JSON-checked)",
+    description: "Write canonical project memory with validation (non-empty, JSON-checked)",
     inputSchema: {
       type: "object",
       properties: {
@@ -1345,6 +1439,12 @@ async function handleToolCall(name: string, args: unknown): Promise<unknown> {
     // Run
     case "omk_run_state":
       return handleRunState(args as { runId: string });
+    case "omk_tail_run_events":
+      return handleTailRunEvents(args as { runId: string; afterSeq?: number; limit?: number });
+    case "omk_read_run_state":
+      return handleReadRunState(args as { runId: string });
+    case "omk_read_runtime_status":
+      return handleReadRuntimeStatus(args as { runId?: string });
     // Quality gate
     case "omk_quality_gate":
       return handleQualityGate();

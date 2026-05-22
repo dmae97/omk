@@ -89,6 +89,7 @@ export interface IntentCapabilityHints {
   needsMcp: boolean;
   needsSkills: boolean;
   needsHooks: boolean;
+  ensembleVoters: string[];
 }
 
 export interface IntentConfidence {

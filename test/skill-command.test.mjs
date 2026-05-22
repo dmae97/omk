@@ -73,6 +73,7 @@ test("skill catalog exposes OMX-style status metadata", async () => {
     const priority = catalog.packs.find((pack) => pack.id === "omk-priority");
     const agenticOps = catalog.packs.find((pack) => pack.id === "omk-agentic-ops");
     const awesomeDesign = catalog.skills.find((skill) => skill.name === "awesome-design-md");
+    const provider = catalog.skills.find((skill) => skill.name === "provider");
 
     assert.equal(core?.lifecycle, "active");
     assert.equal(core?.installed, false);
@@ -92,6 +93,9 @@ test("skill catalog exposes OMX-style status metadata", async () => {
     assert.equal(awesomeDesign?.slashCommand, true);
     assert.equal(awesomeDesign?.templateAvailable, true);
     assert.ok(awesomeDesign?.packs.includes("omk-core"));
+    assert.equal(provider?.slashCommand, true);
+    assert.equal(provider?.templateAvailable, true);
+    assert.ok(provider?.packs.includes("omk-core"));
   });
 });
 
@@ -144,6 +148,7 @@ test("skill install generates slash commands from packaged templates outside the
     const openDesign = await readFile(join(projectRoot, ".kimi", "skills", "open-design", "SKILL.md"), "utf-8");
     const awesomeDesignMd = await readFile(join(projectRoot, ".kimi", "skills", "awesome-design-md", "SKILL.md"), "utf-8");
     const graphView = await readFile(join(projectRoot, ".kimi", "skills", "graph-view", "SKILL.md"), "utf-8");
+    const provider = await readFile(join(projectRoot, ".kimi", "skills", "provider", "SKILL.md"), "utf-8");
     const deepseekApi = await readFile(join(projectRoot, ".kimi", "skills", "deepseek-api", "SKILL.md"), "utf-8");
     const deepseekEnable = await readFile(join(projectRoot, ".kimi", "skills", "deepseek-enable", "SKILL.md"), "utf-8");
     const installed = JSON.parse(await readFile(join(projectRoot, ".omk", "installed-skill-packs.json"), "utf-8"));
@@ -153,6 +158,8 @@ test("skill install generates slash commands from packaged templates outside the
     assert.match(awesomeDesignMd, /^# \/awesome-design-md/m);
     assert.match(awesomeDesignMd, /omk design search <keyword>/);
     assert.match(graphView, /^# \/graph-view/m);
+    assert.match(provider, /^# \/provider/m);
+    assert.match(provider, /omk provider oauth <provider>/);
     assert.match(deepseekApi, /^# \/deepseek-api/m);
     assert.match(deepseekApi, /omk deepseek api/);
     assert.match(deepseekEnable, /^# \/deepseek-enable/m);

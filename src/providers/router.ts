@@ -2,6 +2,8 @@ import type { DagNode } from "../orchestration/dag.js";
 import type {
   DeepSeekModelTier,
   DeepSeekRoutePlan,
+  ProviderId,
+  ProviderModelRef,
   ProviderComplexity,
   ProviderPolicy,
   ProviderRisk,
@@ -36,8 +38,22 @@ const DEEPSEEK_PRO_ADVISORY_FILE_ROLES = new Set([
   "refactorer",
 ]);
 
+const GENERIC_EXTERNAL_READ_ONLY_ROLES = new Set([
+  ...DEEPSEEK_READ_ONLY_ROLES,
+  "analyst",
+  "auditor",
+]);
+
+const GENERIC_EXTERNAL_ADVISORY_FILE_ROLES = new Set([
+  ...DEEPSEEK_PRO_ADVISORY_FILE_ROLES,
+  "planner",
+]);
+
 export const DEEPSEEK_V4_FLASH_MODEL = "deepseek-v4-flash";
 export const DEEPSEEK_V4_PRO_MODEL = "deepseek-v4-pro";
+export const QWEN_DEFAULT_MODEL = "qwen3-max";
+export const CODEX_CLI_DEFAULT_MODEL = "codex-cli";
+export const OPENROUTER_DEFAULT_MODEL = "openrouter/auto";
 const DEEPSEEK_FLASH_RATIO_OUT_OF_TEN = 6;
 
 export function routeProvider(input: ProviderRouteInput): ProviderRouteDecision {
@@ -68,6 +84,46 @@ export function routeProvider(input: ProviderRouteInput): ProviderRouteDecision 
     return withRouteEnsemble(kimiDecision("Core orchestration and merge authority stay with Kimi", 1), "safety-gate");
   }
 
+  const externalProvider = requestedExternalProvider(input);
+  if (externalProvider) {
+    if (!isProviderAvailable(input, externalProvider)) {
+      return withRouteEnsemble(
+        kimiDecision(`${providerLabel(externalProvider)} unavailable; using Kimi fallback`, 0.86, undefined, {
+          providerModel: genericProviderModelRef(input, externalProvider, "veto"),
+        }),
+        "safety-gate"
+      );
+    }
+
+    if (input.risk === "read" && canUseGenericDirectProvider(role, input)) {
+      return withRouteEnsemble(
+        genericDirectDecision(
+          externalProvider,
+          `${providerLabel(externalProvider)} read-only provider route`,
+          externalProvider === "codex" ? 0.74 : 0.78,
+          genericProviderModelRef(input, externalProvider, "direct")
+        ),
+        `${externalProvider}-direct`
+      );
+    }
+
+    if (input.risk === "write" && canUseGenericAdvisoryProvider(role, input)) {
+      return withRouteEnsemble(
+        kimiDecision(`Kimi keeps write authority with ${providerLabel(externalProvider)} advisory`, 0.8, undefined, {
+          providerModel: genericProviderModelRef(input, externalProvider, "advisory"),
+        }),
+        `${externalProvider}-advisory`
+      );
+    }
+
+    return withRouteEnsemble(
+      kimiDecision(`${providerLabel(externalProvider)} route rejected by authority boundary`, 0.88, undefined, {
+        providerModel: genericProviderModelRef(input, externalProvider, "veto"),
+      }),
+      "safety-gate"
+    );
+  }
+
   if (!input.deepseekAvailable) {
     return withRouteEnsemble(kimiDecision("DeepSeek unavailable; using Kimi fallback", 1), "safety-gate");
   }
@@ -94,7 +150,7 @@ export function routeProvider(input: ProviderRouteInput): ProviderRouteDecision 
     return withRouteEnsemble(kimiDecision("MCP/tool authority stays with Kimi in DeepSeek alpha", 0.85), "safety-gate");
   }
 
-  if (input.providerHint === "deepseek") {
+  if (isDeepSeekRequested(input)) {
     if (!directDeepSeekAllowed) {
       return withRouteEnsemble(kimiDecision("Explicit DeepSeek hint rejected for non-read-only provider role", 0.9), "safety-gate");
     }
@@ -174,7 +230,39 @@ function selectDeepSeekDirectPlan(seed: string, preferredTier?: DeepSeekModelTie
 }
 
 function isDedicatedDeepSeekAgent(input: ProviderRouteInput): boolean {
-  return input.providerHint === "deepseek" && Boolean(input.preferredDeepSeekTier);
+  return isDeepSeekRequested(input) && Boolean(input.preferredDeepSeekTier);
+}
+
+function isDeepSeekRequested(input: ProviderRouteInput): boolean {
+  return input.providerHint === "deepseek" || input.providerPolicy === "deepseek";
+}
+
+function requestedExternalProvider(input: ProviderRouteInput): ProviderId | undefined {
+  const policy = isGenericExternalProvider(input.providerPolicy) ? input.providerPolicy : undefined;
+  const hint = isGenericExternalProvider(input.providerHint) ? input.providerHint : undefined;
+  return hint ?? policy;
+}
+
+function isGenericExternalProvider(value: unknown): value is ProviderId {
+  return typeof value === "string" && value !== "auto" && value !== "kimi" && value !== "deepseek";
+}
+
+function isProviderAvailable(input: ProviderRouteInput, provider: ProviderId): boolean {
+  const explicit = input.providerAvailability?.[provider];
+  return explicit === undefined ? true : explicit;
+}
+
+function canUseGenericDirectProvider(role: string, input: ProviderRouteInput): boolean {
+  if (input.risk !== "read") return false;
+  if (input.needsMcp || input.needsToolCalling) return false;
+  return input.readOnly === true || GENERIC_EXTERNAL_READ_ONLY_ROLES.has(role);
+}
+
+function canUseGenericAdvisoryProvider(role: string, input: ProviderRouteInput): boolean {
+  if (!GENERIC_EXTERNAL_ADVISORY_FILE_ROLES.has(role)) return false;
+  if (input.complexity === "simple") return false;
+  if (input.needsMcp || input.needsToolCalling) return false;
+  return true;
 }
 
 function canUseDeepSeekProAdvisory(role: string, input: ProviderRouteInput): boolean {
@@ -200,6 +288,7 @@ function buildProviderRouteEnsemble(options: {
   const advisoryAllowed = input.risk === "write" && canUseDeepSeekProAdvisory(role, input);
   const safetyReason = providerSafetyReason(input, role);
   const dedicatedDeepSeekAgent = isDedicatedDeepSeekAgent(input);
+  const externalProvider = requestedExternalProvider(input);
   const directCandidateAllowed =
     !safetyReason &&
     input.deepseekAvailable &&
@@ -209,6 +298,8 @@ function buildProviderRouteEnsemble(options: {
     !input.needsMcp &&
     !input.needsToolCalling;
   const advisoryCandidateAllowed = !safetyReason && advisoryAllowed && input.deepseekAvailable;
+  const externalDirectAllowed = Boolean(externalProvider) && !safetyReason && canUseGenericDirectProvider(role, input);
+  const externalAdvisoryAllowed = Boolean(externalProvider) && !safetyReason && canUseGenericAdvisoryProvider(role, input);
 
   const candidates: ProviderRouteEnsembleCandidate[] = [
     {
@@ -254,6 +345,30 @@ function buildProviderRouteEnsemble(options: {
     },
   ];
 
+  if (externalProvider) {
+    candidates.splice(1, 0, {
+      id: `${externalProvider}-direct`,
+      provider: externalProvider,
+      participation: "direct",
+      score: externalDirectAllowed ? 0.78 : 0,
+      reason: externalDirectAllowed
+        ? `${providerLabel(externalProvider)} read-only lane has no write/shell/MCP authority`
+        : safetyReason ?? `${providerLabel(externalProvider)} direct lanes require read-only, no-tool scope`,
+      selected: winner === `${externalProvider}-direct`,
+      veto: !externalDirectAllowed,
+    }, {
+      id: `${externalProvider}-advisory`,
+      provider: externalProvider,
+      participation: "advisory",
+      score: externalAdvisoryAllowed ? 0.8 : 0,
+      reason: externalAdvisoryAllowed
+        ? `${providerLabel(externalProvider)} may advise while Kimi keeps write authority`
+        : safetyReason ?? `${providerLabel(externalProvider)} advisory lanes require bounded file-affecting scope`,
+      selected: winner === `${externalProvider}-advisory`,
+      veto: !externalAdvisoryAllowed,
+    });
+  }
+
   const normalized = candidates.map((candidate) => ({
     ...candidate,
     score: clampScore(candidate.selected ? decision.confidence : candidate.score),
@@ -271,12 +386,24 @@ function providerSafetyReason(input: ProviderRouteInput, role: string): string |
   const policy: ProviderPolicy = input.providerPolicy ?? "auto";
   if (policy === "kimi" || input.providerHint === "kimi") return "Kimi-only policy or explicit Kimi provider hint";
   if (role === "orchestrator" || role === "merger" || role === "integrator") return "Core orchestration and merge authority";
+  const externalProvider = requestedExternalProvider(input);
+  if (externalProvider) {
+    if (!isProviderAvailable(input, externalProvider)) return `${providerLabel(externalProvider)} unavailable for this run`;
+    if (input.risk !== "read" && !(input.risk === "write" && canUseGenericAdvisoryProvider(role, input))) {
+      return "External provider lanes cannot own non-read execution";
+    }
+    if (input.needsMcp || input.needsToolCalling) return "MCP or tool-calling authority stays with Kimi";
+    if (input.risk === "read" && !canUseGenericDirectProvider(role, input)) {
+      return `${providerLabel(externalProvider)} direct lane is not read-only safe for this role`;
+    }
+    return undefined;
+  }
   if (!input.deepseekAvailable) return "DeepSeek unavailable for this run";
   if (input.risk !== "read" && !(input.risk === "write" && canUseDeepSeekProAdvisory(role, input))) {
     return "Non-read execution requires Kimi authority";
   }
   if (input.needsMcp || input.needsToolCalling) return "MCP or tool-calling authority stays with Kimi";
-  if (input.providerHint === "deepseek" && !canUseDirectDeepSeek(role, input)) {
+  if (isDeepSeekRequested(input) && !canUseDirectDeepSeek(role, input)) {
     return "Explicit DeepSeek hint is not read-only safe for this role";
   }
   return undefined;
@@ -300,7 +427,7 @@ function scoreKimiAuthority(input: ProviderRouteInput, role: string): number {
 function scoreDeepSeekDirect(input: ProviderRouteInput): number {
   if (isDedicatedDeepSeekAgent(input)) return 0.93;
   if (input.estimatedTokens > 120_000) return 0.7;
-  return input.providerHint === "deepseek" ? 0.9 : 0.8;
+  return isDeepSeekRequested(input) ? 0.9 : 0.8;
 }
 
 function directDeepSeekRejectionReason(input: ProviderRouteInput, role: string): string {
@@ -337,13 +464,15 @@ function stableHash(value: string): number {
 function kimiDecision(
   reason: string,
   confidence: number,
-  deepseek?: DeepSeekRoutePlan
+  deepseek?: DeepSeekRoutePlan,
+  extra: { providerModel?: ProviderModelRef } = {}
 ): Omit<ProviderRouteDecision, "routeEnsemble"> {
   return {
     provider: "kimi",
     fallbackProvider: "kimi",
     confidence,
     reason,
+    providerModel: extra.providerModel,
     deepseek,
   };
 }
@@ -358,6 +487,72 @@ function deepseekDecision(
     fallbackProvider: "kimi",
     confidence,
     reason,
+    providerModel: {
+      provider: "deepseek",
+      model: deepseek.model,
+      authority: deepseek.participation,
+      capabilities: ["read", "review", "qa", deepseek.participation],
+    },
     deepseek,
   };
+}
+
+function genericDirectDecision(
+  provider: ProviderId,
+  reason: string,
+  confidence: number,
+  providerModel: ProviderModelRef
+): Omit<ProviderRouteDecision, "routeEnsemble"> {
+  return {
+    provider,
+    fallbackProvider: "kimi",
+    confidence,
+    reason,
+    providerModel,
+  };
+}
+
+function genericProviderModelRef(
+  input: ProviderRouteInput,
+  provider: ProviderId,
+  authority: ProviderModelRef["authority"]
+): ProviderModelRef {
+  const providerDefault = input.providerModels?.[provider];
+  return {
+    provider,
+    model: normalizeProviderModelAlias(input.preferredModel) ?? providerDefault?.model ?? defaultModelForExternalProvider(provider),
+    authority,
+    capabilities: providerDefault?.capabilities ?? capabilitiesForExternalProvider(provider),
+  };
+}
+
+function normalizeProviderModelAlias(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  const lower = trimmed.toLowerCase().replace(/[_\s]+/g, "-");
+  if (lower === "qwen-3.7-max" || lower === "qwen3.7-max" || lower === "qwen-3-7-max") return QWEN_DEFAULT_MODEL;
+  return trimmed;
+}
+
+function providerLabel(provider: ProviderId): string {
+  if (provider === "qwen") return "Qwen";
+  if (provider === "codex") return "Codex";
+  if (provider === "openrouter") return "OpenRouter";
+  if (provider === "deepseek") return "DeepSeek";
+  if (provider === "kimi") return "Kimi";
+  return provider;
+}
+
+function defaultModelForExternalProvider(provider: ProviderId): string {
+  if (provider === "qwen") return QWEN_DEFAULT_MODEL;
+  if (provider === "codex") return CODEX_CLI_DEFAULT_MODEL;
+  if (provider === "openrouter") return OPENROUTER_DEFAULT_MODEL;
+  return "default";
+}
+
+function capabilitiesForExternalProvider(provider: ProviderId): string[] {
+  if (provider === "codex") return ["read", "plan", "review", "advisory"];
+  if (provider === "openrouter") return ["read", "research", "review", "qa", "advisory"];
+  if (provider === "qwen") return ["read", "research", "review", "qa", "advisory"];
+  return ["read", "advisory"];
 }

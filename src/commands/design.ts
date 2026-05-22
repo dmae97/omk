@@ -1,14 +1,16 @@
 import { runShell, checkCommand } from "../util/shell.js";
 import { getProjectRoot, pathExists, writeFileSafe, readTextFile } from "../util/fs.js";
-import { delimiter, dirname, isAbsolute, join, resolve } from "path";
-import { mkdir, readdir, rm } from "fs/promises";
+import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "path";
+import { chmod, lstat, mkdir, readdir, rm } from "fs/promises";
 import { existsSync, readFileSync, readdirSync } from "fs";
+import { createServer } from "net";
 import { style, header, status } from "../util/theme.js";
 import { t } from "../util/i18n.js";
 
 const GITHUB_API_URL = "https://api.github.com/repos/voltagent/awesome-design-md/contents/design-md";
 const DESIGN_MD_RAW_URL = (name: string) => `https://getdesign.md/design-md/${name}/DESIGN.md`;
 const OPEN_DESIGN_REPO_URL = "https://github.com/nexu-io/open-design.git";
+export const OPEN_DESIGN_TESTED_REF = "3f7a05e7462f097bf38b7cbac0d4a4593deecd80";
 const OPEN_DESIGN_DEFAULT_WEB_PORT = "5175";
 const OPEN_DESIGN_DEFAULT_DAEMON_PORT = "7457";
 
@@ -21,10 +23,13 @@ export interface DesignOpenDesignOptions {
   branch?: string;
   daemonPort?: string | number;
   dir?: string;
+  doctor?: boolean;
   foreground?: boolean;
   install?: boolean;
+  json?: boolean;
   open?: boolean;
   printOnly?: boolean;
+  ref?: string;
   update?: boolean;
   webPort?: string | number;
 }
@@ -33,6 +38,7 @@ interface OpenDesignResolvedOptions {
   branch: string;
   daemonPort: string;
   dir: string;
+  ref: string;
   foreground: boolean;
   install: boolean;
   open: boolean;
@@ -83,10 +89,12 @@ export function resolveOpenDesignDir(rawDir?: string, projectRoot = getProjectRo
 }
 
 export function resolveOpenDesignOptions(options: DesignOpenDesignOptions = {}): OpenDesignResolvedOptions {
+  const branch = String(options.branch ?? "main");
   return {
-    branch: String(options.branch ?? "main"),
+    branch,
     daemonPort: normalizeOpenDesignPort(options.daemonPort, OPEN_DESIGN_DEFAULT_DAEMON_PORT, "--daemon-port"),
     dir: resolveOpenDesignDir(options.dir),
+    ref: String(options.ref ?? process.env.OMK_OPEN_DESIGN_REF ?? branch),
     foreground: options.foreground === true,
     install: options.install !== false,
     open: options.open === true,
@@ -192,10 +200,13 @@ const OPEN_DESIGN_OMK_AGENT_DEF = `  {
       { id: 'kimi-k2.6', label: 'Kimi K2.6 via OMK' },
       { id: 'kimi-k2-turbo-preview', label: 'kimi-k2-turbo-preview via OMK' },
     ],
-    buildArgs: (prompt, _imagePaths, _extra, options = {}, runtimeContext = {}) => {
+    buildArgs: (prompt, imagePaths, _extra, options = {}, runtimeContext = {}) => {
       const args = ['open-design-agent', '--stdio'];
       if (runtimeContext.cwd) {
         args.push('--cwd', runtimeContext.cwd);
+      }
+      for (const imagePath of imagePaths || []) {
+        if (imagePath) args.push('--image', String(imagePath));
       }
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
@@ -223,10 +234,13 @@ export const omkAgentDef = {
       { id: 'kimi-k2.6', label: 'Kimi K2.6 via OMK' },
       { id: 'kimi-k2-turbo-preview', label: 'kimi-k2-turbo-preview via OMK' },
     ],
-    buildArgs: (prompt, _imagePaths, _extra, options = {}, runtimeContext = {}) => {
+    buildArgs: (prompt, imagePaths, _extra, options = {}, runtimeContext = {}) => {
       const args = ['open-design-agent', '--stdio'];
       if (runtimeContext.cwd) {
         args.push('--cwd', runtimeContext.cwd);
+      }
+      for (const imagePath of imagePaths || []) {
+        if (imagePath) args.push('--image', String(imagePath));
       }
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
@@ -257,10 +271,25 @@ const OPEN_DESIGN_OMK_VISUAL = `  // OMK — Kimicat purple/mint bridge.
   },
 `;
 
+const OPEN_DESIGN_OMK_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="OMK">
+  <defs>
+    <linearGradient id="omk" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#241C32"/>
+      <stop offset=".58" stop-color="#7B5BF5"/>
+      <stop offset="1" stop-color="#14B8A6"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="18" fill="url(#omk)"/>
+  <path d="M20 35c0-8 5-14 12-14s12 6 12 14v7h-6v-7c0-5-2-8-6-8s-6 3-6 8v7h-6v-7Z" fill="#F3E8FF"/>
+  <path d="M17 20l4 3 4-3-3 5 3 5-4-3-4 3 3-5-3-5Zm25 0 4 3 4-3-3 5 3 5-4-3-4 3 3-5-3-5Z" fill="#FDE68A"/>
+</svg>
+`;
+
 interface OpenDesignOmkBridgeResult {
   changedFiles: string[];
   appConfigPath: string;
   omkBin: string | null;
+  compatibilityProfiles: OpenDesignCompatibilityProfile[];
 }
 
 function patchOpenDesignAgentsSource(source: string): string {
@@ -322,9 +351,15 @@ function patchOpenDesignSettingsSource(source: string): string {
 function patchOpenDesignAgentLabelsSource(source: string): string {
   let next = source;
   if (!next.includes("omk: 'OMK'")) {
+    if (!next.includes("  codex: 'Codex',")) {
+      throw new Error("Open Design agentLabels.ts label layout changed; cannot add OMK label safely.");
+    }
     next = next.replace("  codex: 'Codex',", "  codex: 'Codex',\n  omk: 'OMK',");
   }
   if (!next.includes("'omk cli': 'omk'")) {
+    if (!next.includes("  'codex cli': 'codex',")) {
+      throw new Error("Open Design agentLabels.ts alias layout changed; cannot add OMK alias safely.");
+    }
     next = next.replace("  'codex cli': 'codex',", "  'codex cli': 'codex',\n  'omk cli': 'omk',");
   }
   return next;
@@ -332,7 +367,18 @@ function patchOpenDesignAgentLabelsSource(source: string): string {
 
 function patchOpenDesignAgentIconSource(source: string): string {
   if (source.includes("OMK — Kimicat")) return source;
-  if (source.includes("const ICON_EXT: Record<string, 'svg' | 'png'>")) return source;
+  if (source.includes("const ICON_EXT: Record<string, 'svg' | 'png'>")) {
+    if (source.includes("omk: 'svg'")) return source;
+    const marker = "  kimi: 'svg',";
+    const emptyIconExt = /(const ICON_EXT: Record<string, 'svg' \| 'png'> = \{)\s*(\};)/m;
+    if (!source.includes(marker) && emptyIconExt.test(source)) {
+      return source.replace(emptyIconExt, "$1\n  omk: 'svg',\n$2");
+    }
+    if (!source.includes(marker)) {
+      throw new Error("Open Design AgentIcon.tsx ICON_EXT layout changed; cannot add OMK icon safely.");
+    }
+    return source.replace(marker, `${marker}\n  omk: 'svg',`);
+  }
   const marker = "  // Gemini — Google blue/purple with diamond spark.";
   if (!source.includes(marker)) {
     throw new Error("Open Design AgentIcon.tsx visual marker changed; cannot add OMK visual safely.");
@@ -438,6 +484,31 @@ function patchOpenDesignI18nTypesSource(source: string): string {
   return source.replace(marker, "  'settings.cliEnvOmkBin': string;\n" + marker);
 }
 
+function isContainedPath(root: string, target: string): boolean {
+  const rel = relative(resolve(root), resolve(target));
+  return rel === "" || Boolean(rel && !rel.startsWith("..") && !isAbsolute(rel));
+}
+
+async function assertNoExistingSymlinkInOpenDesignPath(checkoutDir: string, target: string): Promise<void> {
+  const root = resolve(checkoutDir);
+  const resolvedTarget = resolve(target);
+  if (!isContainedPath(root, resolvedTarget)) {
+    throw new Error(`Refusing to write outside Open Design checkout: ${target}`);
+  }
+
+  const rel = relative(root, resolvedTarget);
+  const parts = rel.split(sep).filter(Boolean);
+  let current = root;
+  for (const part of parts) {
+    current = join(current, part);
+    if (!(await pathExists(current))) continue;
+    const info = await lstat(current);
+    if (info.isSymbolicLink()) {
+      throw new Error(`Refusing to follow symlink inside Open Design checkout: ${relative(root, current)}`);
+    }
+  }
+}
+
 async function patchOpenDesignFile(
   checkoutDir: string,
   relativePath: string,
@@ -446,6 +517,7 @@ async function patchOpenDesignFile(
 ): Promise<void> {
   const target = join(checkoutDir, relativePath);
   if (!(await pathExists(target))) return;
+  await assertNoExistingSymlinkInOpenDesignPath(checkoutDir, target);
   const original = await readTextFile(target);
   const next = patcher(original);
   if (next !== original) {
@@ -477,6 +549,7 @@ async function writeOpenDesignRelativeFileIfChanged(
   changedFiles: string[]
 ): Promise<boolean> {
   const target = join(checkoutDir, relativePath);
+  await assertNoExistingSymlinkInOpenDesignPath(checkoutDir, target);
   const original = await pathExists(target) ? await readTextFile(target) : null;
   if (original === contents) return false;
   await writeFileSafe(target, contents);
@@ -489,6 +562,15 @@ async function ensureOpenDesignAwesomeDesignMdPromptTemplate(checkoutDir: string
     checkoutDir,
     "prompt-templates/image/awesome-design-md-web-ui.json",
     `${JSON.stringify(OPEN_DESIGN_AWESOME_DESIGN_MD_PROMPT_TEMPLATE, null, 2)}\n`,
+    changedFiles
+  );
+}
+
+async function ensureOpenDesignOmkIcon(checkoutDir: string, changedFiles: string[]): Promise<void> {
+  await writeOpenDesignRelativeFileIfChanged(
+    checkoutDir,
+    "apps/web/public/agent-icons/omk.svg",
+    OPEN_DESIGN_OMK_ICON_SVG,
     changedFiles
   );
 }
@@ -516,6 +598,64 @@ async function ensureOpenDesignRuntimeRegistry(checkoutDir: string, changedFiles
     changedFiles
   );
   return true;
+}
+
+type OpenDesignCompatibilityProfile = "runtime-registry" | "legacy-agents" | "route-shell";
+
+async function verifyPatchCompatibility(
+  checkoutDir: string,
+  relativePath: string,
+  patcher: (source: string) => string
+): Promise<boolean> {
+  const target = join(checkoutDir, relativePath);
+  if (!(await pathExists(target))) return false;
+  await assertNoExistingSymlinkInOpenDesignPath(checkoutDir, target);
+  patcher(await readTextFile(target));
+  return true;
+}
+
+async function requirePatchCompatibility(
+  checkoutDir: string,
+  relativePath: string,
+  patcher: (source: string) => string
+): Promise<void> {
+  if (!(await verifyPatchCompatibility(checkoutDir, relativePath, patcher))) {
+    throw new Error(`Open Design compatibility check failed: missing required file ${relativePath}.`);
+  }
+}
+
+async function assertOpenDesignCompatibility(checkoutDir: string): Promise<OpenDesignCompatibilityProfile[]> {
+  const packagePath = join(checkoutDir, "package.json");
+  const hasPackage = await pathExists(packagePath);
+  const hasDaemon = await pathExists(join(checkoutDir, "apps/daemon"));
+  if (!hasPackage && !hasDaemon) return [];
+
+  const packageName = hasPackage ? await readPackageName(packagePath) : null;
+  if (hasPackage && packageName !== "open-design") {
+    throw new Error(`Open Design compatibility check failed: expected package name "open-design", found "${packageName ?? "unknown"}".`);
+  }
+
+  const profiles: OpenDesignCompatibilityProfile[] = [];
+  const hasRuntimeRegistry = await verifyPatchCompatibility(
+    checkoutDir,
+    "apps/daemon/src/runtimes/registry.ts",
+    patchOpenDesignRuntimeRegistrySource
+  );
+  if (hasRuntimeRegistry) {
+    await requirePatchCompatibility(checkoutDir, "apps/daemon/src/runtimes/executables.ts", patchOpenDesignRuntimeExecutablesSource);
+    profiles.push("runtime-registry");
+  } else if (await verifyPatchCompatibility(checkoutDir, "apps/daemon/src/agents.ts", patchOpenDesignAgentsSource)) {
+    profiles.push("legacy-agents");
+  } else {
+    throw new Error("Open Design compatibility check failed: no supported runtime registry or legacy agents layout found.");
+  }
+
+  await requirePatchCompatibility(checkoutDir, "apps/daemon/src/app-config.ts", patchOpenDesignAppConfigSource);
+  await requirePatchCompatibility(checkoutDir, "apps/web/src/components/SettingsDialog.tsx", patchOpenDesignSettingsSource);
+  await requirePatchCompatibility(checkoutDir, "apps/web/src/utils/agentLabels.ts", patchOpenDesignAgentLabelsSource);
+  await requirePatchCompatibility(checkoutDir, "apps/web/src/components/AgentIcon.tsx", patchOpenDesignAgentIconSource);
+  profiles.push("route-shell");
+  return profiles;
 }
 
 async function ensureOpenDesignSpaRoutes(checkoutDir: string, changedFiles: string[]): Promise<void> {
@@ -554,13 +694,18 @@ async function ensureOpenDesignSpaRoutes(checkoutDir: string, changedFiles: stri
   ) || routeChanged;
 
   if (await pathExists(optionalRouteDir)) {
+    await assertNoExistingSymlinkInOpenDesignPath(checkoutDir, optionalRouteDir);
     await rm(optionalRouteDir, { recursive: true, force: true });
     changedFiles.push("apps/web/app/[[...slug]]/");
     routeChanged = true;
   }
 
   if (routeChanged) {
-    await rm(join(checkoutDir, ".tmp/tools-dev/default/web/next"), { recursive: true, force: true });
+    const tmpNextDir = join(checkoutDir, ".tmp/tools-dev/default/web/next");
+    if (await pathExists(tmpNextDir)) {
+      await assertNoExistingSymlinkInOpenDesignPath(checkoutDir, tmpNextDir);
+      await rm(tmpNextDir, { recursive: true, force: true });
+    }
   }
 }
 
@@ -612,14 +757,17 @@ async function writeOpenDesignOmkAppConfig(checkoutDir: string, omkBin: string |
 
   const before = JSON.stringify(existing, null, 2);
   const after = JSON.stringify(next, null, 2);
+  await assertNoExistingSymlinkInOpenDesignPath(checkoutDir, configPath);
   if (before !== after) {
     await writeFileSafe(configPath, `${after}\n`);
   }
+  await chmod(configPath, 0o600).catch(() => {});
   return configPath;
 }
 
 export async function ensureOpenDesignOmkBridge(checkoutDir: string): Promise<OpenDesignOmkBridgeResult> {
   const changedFiles: string[] = [];
+  const compatibilityProfiles = await assertOpenDesignCompatibility(checkoutDir);
   const usesRuntimeRegistry = await ensureOpenDesignRuntimeRegistry(checkoutDir, changedFiles);
   if (!usesRuntimeRegistry) {
     await patchOpenDesignFile(checkoutDir, "apps/daemon/src/agents.ts", patchOpenDesignAgentsSource, changedFiles);
@@ -628,12 +776,13 @@ export async function ensureOpenDesignOmkBridge(checkoutDir: string): Promise<Op
   await patchOpenDesignFile(checkoutDir, "apps/web/src/components/SettingsDialog.tsx", patchOpenDesignSettingsSource, changedFiles);
   await patchOpenDesignFile(checkoutDir, "apps/web/src/utils/agentLabels.ts", patchOpenDesignAgentLabelsSource, changedFiles);
   await patchOpenDesignFile(checkoutDir, "apps/web/src/components/AgentIcon.tsx", patchOpenDesignAgentIconSource, changedFiles);
+  await ensureOpenDesignOmkIcon(checkoutDir, changedFiles);
   await ensureOpenDesignSpaRoutes(checkoutDir, changedFiles);
   await patchOpenDesignI18n(checkoutDir, changedFiles);
   await ensureOpenDesignAwesomeDesignMdPromptTemplate(checkoutDir, changedFiles);
   const omkBin = await resolveCurrentOmkBin();
   const appConfigPath = await writeOpenDesignOmkAppConfig(checkoutDir, omkBin);
-  return { changedFiles, appConfigPath, omkBin };
+  return { changedFiles, appConfigPath, omkBin, compatibilityProfiles };
 }
 
 function shellQuote(arg: string): string {
@@ -643,6 +792,17 @@ function shellQuote(arg: string): string {
 
 function formatCommand(command: string, args: string[]): string {
   return [command, ...args].map(shellQuote).join(" ");
+}
+
+function formatOpenDesignClonePlan(options: OpenDesignResolvedOptions): string {
+  if (options.ref === options.branch) {
+    return formatCommand("git", ["clone", "--depth", "1", "--branch", options.branch, OPEN_DESIGN_REPO_URL, options.dir]);
+  }
+  return [
+    formatCommand("git", ["clone", "--depth", "1", OPEN_DESIGN_REPO_URL, options.dir]),
+    formatCommand("git", ["-C", options.dir, "fetch", "--depth", "1", "origin", options.ref]),
+    formatCommand("git", ["-C", options.dir, "checkout", "--detach", "FETCH_HEAD"]),
+  ].join(" && ");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -684,6 +844,11 @@ function requireOpenDesignNodeRuntime(): OpenDesignNodeRuntime {
 async function ensureOpenDesignCheckout(options: OpenDesignResolvedOptions): Promise<void> {
   const packagePath = join(options.dir, "package.json");
   if (await pathExists(packagePath)) {
+    const checkoutStat = await lstat(options.dir);
+    if (checkoutStat.isSymbolicLink()) {
+      console.error(status.error(`Refusing symlinked Open Design checkout: ${options.dir}`));
+      process.exit(1);
+    }
     const packageName = await readPackageName(packagePath);
     if (packageName !== "open-design") {
       console.error(status.error(`Existing directory is not an Open Design checkout: ${options.dir}`));
@@ -691,13 +856,33 @@ async function ensureOpenDesignCheckout(options: OpenDesignResolvedOptions): Pro
       process.exit(1);
     }
 
+    if (await pathExists(join(options.dir, ".git"))) {
+      const remote = await runShell("git", ["-C", options.dir, "remote", "get-url", "origin"], { timeout: 10000 });
+      if (!remote.failed && !/github\.com[:/]nexu-io\/open-design(?:\.git)?$/i.test(remote.stdout.trim())) {
+        const message = "Existing Open Design checkout origin is not nexu-io/open-design.";
+        console.error(process.env.OMK_OPEN_DESIGN_TRUST_CHECKOUT === "1" ? status.warn(message) : status.error(message));
+        console.error(style.gray("  Pass --dir to a trusted nexu-io/open-design checkout or set OMK_OPEN_DESIGN_TRUST_CHECKOUT=1."));
+        if (process.env.OMK_OPEN_DESIGN_TRUST_CHECKOUT !== "1") process.exit(1);
+      }
+    }
+
     if (options.update && await pathExists(join(options.dir, ".git"))) {
       console.log(style.gray("Updating Open Design checkout…"));
-      const pull = await runShell("git", ["-C", options.dir, "pull", "--ff-only"], { timeout: 120000 });
-      if (pull.failed) {
+      const update = options.ref === options.branch
+        ? await runShell("git", ["-C", options.dir, "pull", "--ff-only"], { timeout: 120000 })
+        : await runShell("git", ["-C", options.dir, "fetch", "--depth", "1", "origin", options.ref], { timeout: 120000 });
+      if (update.failed) {
         console.error(status.error("Open Design update failed."));
-        console.error(pull.stderr || pull.stdout);
-        process.exit(pull.exitCode);
+        console.error(update.stderr || update.stdout);
+        process.exit(update.exitCode);
+      }
+      if (options.ref !== options.branch) {
+        const checkout = await runShell("git", ["-C", options.dir, "checkout", "--detach", "FETCH_HEAD"], { timeout: 60000 });
+        if (checkout.failed) {
+          console.error(status.error("Open Design ref checkout failed."));
+          console.error(checkout.stderr || checkout.stdout);
+          process.exit(checkout.exitCode);
+        }
       }
     }
     return;
@@ -705,18 +890,25 @@ async function ensureOpenDesignCheckout(options: OpenDesignResolvedOptions): Pro
 
   await mkdir(dirname(options.dir), { recursive: true });
   console.log(style.gray(`Cloning Open Design into ${options.dir}…`));
-  const clone = await runShell("git", [
-    "clone",
-    "--depth",
-    "1",
-    "--branch",
-    options.branch,
-    OPEN_DESIGN_REPO_URL,
-    options.dir,
-  ], { timeout: 180000, stdio: "inherit" });
+  const cloneArgs = options.ref === options.branch
+    ? ["clone", "--depth", "1", "--branch", options.branch, OPEN_DESIGN_REPO_URL, options.dir]
+    : ["clone", "--depth", "1", OPEN_DESIGN_REPO_URL, options.dir];
+  const clone = await runShell("git", cloneArgs, { timeout: 180000, stdio: "inherit" });
   if (clone.failed) {
     console.error(status.error("Open Design clone failed."));
     process.exit(clone.exitCode);
+  }
+  if (options.ref !== options.branch) {
+    const fetch = await runShell("git", ["-C", options.dir, "fetch", "--depth", "1", "origin", options.ref], { timeout: 120000, stdio: "inherit" });
+    if (fetch.failed) {
+      console.error(status.error(`Open Design ref fetch failed: ${options.ref}`));
+      process.exit(fetch.exitCode);
+    }
+    const checkout = await runShell("git", ["-C", options.dir, "checkout", "--detach", "FETCH_HEAD"], { timeout: 60000, stdio: "inherit" });
+    if (checkout.failed) {
+      console.error(status.error(`Open Design ref checkout failed: ${options.ref}`));
+      process.exit(checkout.exitCode);
+    }
   }
 }
 
@@ -812,14 +1004,202 @@ async function openBrowser(url: string): Promise<void> {
   }
 }
 
+interface OpenDesignDoctorCheck {
+  id: string;
+  ok: boolean;
+  severity: "error" | "warn" | "info";
+  message: string;
+  fix?: string;
+}
+
+interface OpenDesignDoctorReport {
+  ok: boolean;
+  command: "design open-design --doctor";
+  testedRef: string;
+  ref: string;
+  dir: string;
+  webPort: string;
+  daemonPort: string;
+  checks: OpenDesignDoctorCheck[];
+}
+
+async function isLocalPortAvailable(port: string): Promise<boolean> {
+  return await new Promise<boolean>((resolvePort) => {
+    const server = createServer();
+    server.once("error", () => resolvePort(false));
+    server.once("listening", () => {
+      server.close(() => resolvePort(true));
+    });
+    server.listen(Number(port), "127.0.0.1");
+  });
+}
+
+function doctorCheck(checks: OpenDesignDoctorCheck[], check: OpenDesignDoctorCheck): void {
+  checks.push(check);
+}
+
+async function buildOpenDesignDoctorReport(options: OpenDesignResolvedOptions): Promise<OpenDesignDoctorReport> {
+  const checks: OpenDesignDoctorCheck[] = [];
+  const nodeRuntime = resolveOpenDesignNodeRuntime();
+  doctorCheck(checks, {
+    id: "node24",
+    ok: Boolean(nodeRuntime),
+    severity: "error",
+    message: nodeRuntime
+      ? `Node.js 24 runtime available${nodeRuntime.nodeCommand ? ` at ${nodeRuntime.nodeCommand}` : ""}.`
+      : `Open Design requires Node.js 24.x; current OMK Node is ${process.version}.`,
+    fix: nodeRuntime ? undefined : "Install Node 24 or set OMK_OPEN_DESIGN_NODE24=/absolute/path/to/node.",
+  });
+
+  doctorCheck(checks, {
+    id: "git",
+    ok: await checkCommand("git"),
+    severity: "error",
+    message: "git is required to clone or update nexu-io/open-design.",
+    fix: "Install git and rerun omk design open-design.",
+  });
+
+  const corepackCommand = nodeRuntime?.corepackCommand ?? "corepack";
+  const hasCorepack = await checkCommand(corepackCommand);
+  doctorCheck(checks, {
+    id: "corepack",
+    ok: hasCorepack,
+    severity: "error",
+    message: `Corepack command ${corepackCommand} is required for pnpm.`,
+    fix: "Enable Corepack with corepack enable, or use a Node 24 install that includes corepack.",
+  });
+  const pnpm = hasCorepack
+    ? await runShell(corepackCommand, ["pnpm", "--version"], { env: nodeRuntime?.env, timeout: 15000 })
+    : { failed: true, stdout: "", stderr: "", exitCode: 1 };
+  doctorCheck(checks, {
+    id: "pnpm",
+    ok: !pnpm.failed,
+    severity: "error",
+    message: !pnpm.failed ? `pnpm available through Corepack (${pnpm.stdout.trim()}).` : "pnpm is not available through Corepack.",
+    fix: !pnpm.failed ? undefined : "Run corepack enable, then corepack pnpm --version.",
+  });
+
+  for (const [id, port] of [["daemon-port", options.daemonPort], ["web-port", options.webPort]] as const) {
+    const available = await isLocalPortAvailable(port);
+    doctorCheck(checks, {
+      id,
+      ok: available,
+      severity: "error",
+      message: available ? `localhost:${port} is available.` : `localhost:${port} is already in use.`,
+      fix: available ? undefined : `Pass a free --${id} value or stop the process using port ${port}.`,
+    });
+  }
+
+  const packagePath = join(options.dir, "package.json");
+  if (await pathExists(packagePath)) {
+    const packageName = await readPackageName(packagePath);
+    doctorCheck(checks, {
+      id: "checkout-package",
+      ok: packageName === "open-design",
+      severity: "error",
+      message: packageName === "open-design" ? `Open Design checkout found at ${options.dir}.` : `Checkout package name is ${packageName ?? "unknown"}.`,
+      fix: packageName === "open-design" ? undefined : "Pass --dir to a nexu-io/open-design checkout or remove the invalid directory.",
+    });
+    try {
+      const profiles = await assertOpenDesignCompatibility(options.dir);
+      doctorCheck(checks, {
+        id: "upstream-layout",
+        ok: profiles.length > 0,
+        severity: "error",
+        message: profiles.length > 0 ? `Compatible layout profiles: ${profiles.join(", ")}.` : "Open Design layout not detected.",
+        fix: profiles.length > 0 ? undefined : "Use a supported nexu-io/open-design ref or update OMK patch anchors.",
+      });
+    } catch (err) {
+      doctorCheck(checks, {
+        id: "upstream-layout",
+        ok: false,
+        severity: "error",
+        message: err instanceof Error ? err.message : String(err),
+        fix: `Try --ref ${OPEN_DESIGN_TESTED_REF} or update OMK Open Design compatibility anchors.`,
+      });
+    }
+    const appConfigPath = join(options.dir, ".od", "app-config.json");
+    doctorCheck(checks, {
+      id: "app-config",
+      ok: await pathExists(appConfigPath),
+      severity: "warn",
+      message: await pathExists(appConfigPath) ? "Open Design app-config exists." : "Open Design app-config has not been written yet.",
+      fix: "Run omk design open-design once to register OMK in .od/app-config.json.",
+    });
+    const promptPath = join(options.dir, "prompt-templates/image/awesome-design-md-web-ui.json");
+    doctorCheck(checks, {
+      id: "prompt-template",
+      ok: await pathExists(promptPath),
+      severity: "warn",
+      message: await pathExists(promptPath) ? "OMK prompt template exists." : "OMK prompt template is not installed yet.",
+      fix: "Run omk design open-design once to install the template.",
+    });
+  } else {
+    doctorCheck(checks, {
+      id: "checkout-package",
+      ok: false,
+      severity: "warn",
+      message: `No Open Design checkout at ${options.dir}.`,
+      fix: "Run omk design open-design to clone it, or pass --dir to an existing checkout.",
+    });
+  }
+
+  const omkBin = await resolveCurrentOmkBin();
+  doctorCheck(checks, {
+    id: "omk-bin",
+    ok: Boolean(omkBin),
+    severity: "error",
+    message: omkBin ? `OMK_BIN resolves to ${omkBin}.` : "OMK executable could not be resolved.",
+    fix: omkBin ? undefined : "Set OMK_BIN=/absolute/path/to/omk or install omk on PATH.",
+  });
+  if (omkBin) {
+    const smoke = await runShell(omkBin, ["open-design-agent", "--smoke"], { timeout: 10000 });
+    doctorCheck(checks, {
+      id: "smoke-path",
+      ok: !smoke.failed && smoke.stdout.trim() === "ok",
+      severity: "error",
+      message: !smoke.failed && smoke.stdout.trim() === "ok" ? "open-design-agent --smoke returns ok." : "open-design-agent --smoke failed.",
+      fix: "Run omk open-design-agent --smoke and fix CLI installation/runtime errors.",
+    });
+  }
+
+  const ok = checks.every((check) => check.ok || check.severity !== "error");
+  return {
+    ok,
+    command: "design open-design --doctor",
+    testedRef: OPEN_DESIGN_TESTED_REF,
+    ref: options.ref,
+    dir: options.dir,
+    webPort: options.webPort,
+    daemonPort: options.daemonPort,
+    checks,
+  };
+}
+
+async function runOpenDesignDoctor(options: OpenDesignResolvedOptions, json = false): Promise<void> {
+  const report = await buildOpenDesignDoctorReport(options);
+  if (json) {
+    console.log(JSON.stringify(report, null, 2));
+  } else {
+    console.log(header("Open Design bridge doctor"));
+    for (const check of report.checks) {
+      const line = check.ok ? status.ok(check.message) : check.severity === "warn" ? status.warn(check.message) : status.error(check.message);
+      console.log(line);
+      if (!check.ok && check.fix) console.log(style.gray(`  Fix: ${check.fix}`));
+    }
+  }
+  if (!report.ok) process.exitCode = 1;
+}
+
 function printOpenDesignPlan(options: OpenDesignResolvedOptions): void {
   const args = buildOpenDesignToolsDevArgs(options);
   console.log(header("Open Design localhost"));
   console.log(style.gray("Launch plan (no changes made):"));
   console.log(`  Repo: ${options.dir}`);
+  console.log(`  Ref:  ${options.ref} (tested: ${OPEN_DESIGN_TESTED_REF})`);
   console.log(`  Web:  http://localhost:${options.webPort}`);
   console.log("  Agent: OMK CLI (local bridge; avoids Kimi ACP smoke-test timeout)");
-  console.log(`  Clone: ${formatCommand("git", ["clone", "--depth", "1", "--branch", options.branch, OPEN_DESIGN_REPO_URL, options.dir])}`);
+  console.log(`  Clone: ${formatOpenDesignClonePlan(options)}`);
   console.log(`  Install: ${formatCommand("corepack", ["pnpm", "install", "--frozen-lockfile"])}`);
   console.log(`  Start: ${formatCommand("corepack", args)}`);
 }
@@ -1004,6 +1384,11 @@ export async function designOpenDesignCommand(options: DesignOpenDesignOptions =
     process.exit(1);
   }
 
+  if (options.doctor) {
+    await runOpenDesignDoctor(resolved, options.json === true);
+    return;
+  }
+
   if (resolved.printOnly) {
     printOpenDesignPlan(resolved);
     return;
@@ -1032,6 +1417,7 @@ export async function designOpenDesignCommand(options: DesignOpenDesignOptions =
     console.log(status.ok("OMK CLI adapter already registered."));
   }
   console.log(style.gray(`Default local agent: OMK CLI${bridge.omkBin ? ` (${bridge.omkBin})` : ""}`));
+  console.log(style.gray(`Open Design ref: ${resolved.ref} (tested ${OPEN_DESIGN_TESTED_REF})`));
   console.log(style.gray(`App config: ${bridge.appConfigPath}`));
   console.log(style.gray(`Starting local Open Design daemon + web at ${webUrl}…`));
   console.log(style.gray(`Command: ${formatCommand(nodeRuntime.corepackCommand, args)}`));

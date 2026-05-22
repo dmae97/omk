@@ -5,6 +5,8 @@ const {
   classifyKimiProviderFailure,
   classifyKimiStartupExit,
   formatKimiProviderFailureHint,
+  isKimiStartupReadyData,
+  resolveKimiStartupTimeoutMs,
 } = await import("../dist/kimi/runner.js");
 
 const monthlyQuotaError = `LLM provider error: Error code: 429 - {'error': {'message': "You've reached kimi monthly usage limit for this billing cycle. Your quota will be refreshed in the next cycle. Upgrade to get more: https://www.kimi.com/code/console?from=quota-upgrade", 'type': 'exceeded_current_quota_error'}}
@@ -52,4 +54,19 @@ test("classifies a code-0 immediate Kimi exit as chat startup failure", () => {
 test("allows fast Kimi exit when explicit escape hatch is set", () => {
   assert.equal(classifyKimiStartupExit(0, 25, { OMK_ALLOW_FAST_CHAT_EXIT: "1" }), null);
   assert.equal(classifyKimiStartupExit(0, 25, { OMK_CHAT_FAST_EXIT_MS: "0" }), null);
+});
+
+test("chat startup watchdog defaults on and ignores arbitrary noisy output", () => {
+  assert.equal(resolveKimiStartupTimeoutMs({}), 45_000);
+  assert.equal(resolveKimiStartupTimeoutMs({ OMK_CHAT_STARTUP_TIMEOUT_MS: "0" }), 0);
+  assert.equal(resolveKimiStartupTimeoutMs({ OMK_CHAT_STARTUP_TIMEOUT_MS: "no" }), 45_000);
+  assert.equal(resolveKimiStartupTimeoutMs({ OMK_CHAT_STARTUP_TIMEOUT_MS: "off" }), 45_000);
+  assert.equal(resolveKimiStartupTimeoutMs({ OMK_CHAT_STARTUP_TIMEOUT_MS: "500" }), 45_000);
+
+  assert.equal(isKimiStartupReadyData("working\n"), false);
+  assert.equal(isKimiStartupReadyData(">\n"), false);
+  assert.equal(isKimiStartupReadyData("›\n"), false);
+  assert.equal(isKimiStartupReadyData("Kimi session: abc123\n"), true);
+  assert.equal(isKimiStartupReadyData("\x1b[32mready for input\x1b[0m\n"), true);
+  assert.equal(isKimiStartupReadyData("kimi❯ \n"), true);
 });

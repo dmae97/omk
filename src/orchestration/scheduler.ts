@@ -76,7 +76,7 @@ export function createScheduler(): Scheduler {
 function blockDependents(dag: Dag, failedId: string, reason: string): void {
   const nodeById = new Map(dag.nodes.map((node) => [node.id, node]));
   const queue: Array<{ id: string; blockerId: string }> = dag.nodes
-    .filter((node) => node.dependsOn.includes(failedId))
+    .filter((node) => node.dependsOn.includes(failedId) || node.inputs?.some((input) => input.from === failedId))
     .map((node) => ({ id: node.id, blockerId: failedId }));
 
   while (queue.length > 0) {
@@ -88,7 +88,9 @@ function blockDependents(dag: Dag, failedId: string, reason: string): void {
     node.status = "blocked";
     node.blockedReason = reason;
     for (const child of dag.nodes) {
-      if (child.dependsOn.includes(id)) queue.push({ id: child.id, blockerId: id });
+      if (child.dependsOn.includes(id) || child.inputs?.some((input) => input.from === id)) {
+        queue.push({ id: child.id, blockerId: id });
+      }
     }
   }
 }

@@ -45,6 +45,67 @@ test("Kimi banner replacement tolerates upstream welcome wording drift", () => {
   assert.equal(replaced, true);
 });
 
+test("Kimi banner strip-only mode removes raw banner without replacement callback", () => {
+  let replaced = false;
+  let rawMeta = null;
+  const replacer = new BannerReplacer(() => {
+    replaced = true;
+  }, true, (meta) => {
+    rawMeta = meta;
+  });
+
+  const output = replacer.process([
+    "╭─",
+    "Welcome to Kimi Code CLI!",
+    "Directory: /tmp/project",
+    "Session: abc",
+    "Model: kimi-k2.6",
+    "╰─",
+    "kimi❯ ready",
+  ].join("\n"));
+
+  assert.equal(replaced, false);
+  assert.deepEqual(rawMeta, {
+    directory: "/tmp/project",
+    session: "abc",
+    model: "kimi-k2.6",
+  });
+  assert.equal(output, "kimi❯ ready");
+});
+
+test("Kimi banner strip-only mode extracts Session ID metadata", () => {
+  let rawMeta = null;
+  const replacer = new BannerReplacer(() => {}, true, (meta) => {
+    rawMeta = meta;
+  });
+
+  const output = replacer.process([
+    "╭─",
+    "Welcome to Kimi Code CLI!",
+    "Directory: /tmp/project",
+    "Session ID: kimi-real-123",
+    "Model: kimi-k2.6",
+    "╰─",
+    "ready",
+  ].join("\n"));
+
+  assert.equal(output, "ready");
+  assert.equal(rawMeta?.session, "kimi-real-123");
+});
+
+test("Kimi banner strip-only mode preserves content after split ANSI banner", () => {
+  let replaced = false;
+  const replacer = new BannerReplacer(() => {
+    replaced = true;
+  }, true);
+
+  assert.equal(replacer.process("\x1b[32m╭─\r\nWelcome to Kimi CLI!\r\nDirectory: /tmp/project\r\n"), null);
+  const output = replacer.process("Session: abc\r\nModel: kimi-k2.6\r\n╰─\x1b[0m\r\nfirst real output\r\n");
+
+  assert.equal(replaced, false);
+  assert.equal(output, "first real output\n");
+});
+
 test("Kimi banner replacement passes through prompt output immediately", () => {
   let replaced = false;
   const replacer = new BannerReplacer(() => {

@@ -7,7 +7,7 @@ import { normalizeGoal, analyzeUserIntent } from "../goal/intake.js";
 import { createGoalPersister } from "../goal/persistence.js";
 import { evaluateGoalProgressEnsemble } from "../goal/control-loop.js";
 import { renderPromptDigest } from "../goal/prompt-digest.js";
-import type { NextAction, RunState, UserIntent } from "../contracts/orchestration.js";
+import type { ExecutionSelectionDecision, ExecutionStrategy, NextAction, RunState, UserIntent } from "../contracts/orchestration.js";
 import {
   buildIntentFrameFromGoal,
   buildNextActionContract,
@@ -21,6 +21,11 @@ import { getCurrentMode } from "../util/mode-preset.js";
 import { t } from "../util/i18n.js";
 import { VerificationError } from "../util/cli-contract.js";
 import { createDecisionTraceStore } from "../evidence/decision-trace.js";
+import type { ProviderPolicy } from "../providers/types.js";
+import {
+  resolveExecutionSelectionDecision,
+  resolvePromptExecutionDecision,
+} from "../util/execution-selection.js";
 
 export interface OrchestrateOptions {
   runId?: string;
@@ -30,11 +35,14 @@ export interface OrchestrateOptions {
   view?: string;
   goalId?: string;
   timeoutPreset?: string;
-  provider?: "auto" | "kimi";
+  provider?: ProviderPolicy;
+  model?: string;
   mcpScope?: string;
+  execution?: string;
   maxAutoContinueIterations?: string | number;
   failOnDagFailure?: boolean;
   sourceCommand: "chat" | "run" | "parallel" | "goal-run" | "goal-continue" | "default";
+  signal?: AbortSignal;
 }
 
 const DEFAULT_AUTO_CONTINUE_ITERATIONS = 3;
@@ -42,6 +50,7 @@ const HARD_MAX_AUTO_CONTINUE_ITERATIONS = 8;
 
 const ADMIN_COMMANDS = new Set([
   "doctor",
+  "web-bridge",
   "init",
   "hud",
   "sync",
@@ -108,6 +117,84 @@ function shouldAutoContinue(action: NextAction, prompt: string | undefined): boo
   return (action === "continue" || action === "replan") && Boolean(prompt?.trim());
 }
 
+async function promptForExecutionSelectionIfNeeded(
+  decision: ExecutionSelectionDecision
+): Promise<ExecutionSelectionDecision> {
+  if (decision.strategy !== "prompt") return decision;
+  const { select } = await import("@inquirer/prompts");
+  const choices: Array<{
+    name: string;
+    value: Exclude<ExecutionStrategy, "prompt">;
+    description: string;
+  }> = [
+    {
+      name: "Parallel agents (Recommended)",
+      value: "parallel",
+      description: "Split independent lanes across subagents, then synthesize and verify.",
+    },
+    {
+      name: "One by one",
+      value: "sequential",
+      description: "Run a single-worker sequential DAG/Kimi lane.",
+    },
+    {
+      name: "Plan only",
+      value: "plan-only",
+      description: "Save the plan and skip execution for now.",
+    },
+  ];
+  const strategy = await select(
+    {
+      message: "이 작업은 병렬 처리에 적합합니다. Parallel agents로 나눌까요, one by one으로 진행할까요?",
+      choices,
+    },
+    { signal: AbortSignal.timeout(120_000) }
+  );
+  return resolvePromptExecutionDecision(decision, strategy);
+}
+
+function annotatePromptForExecutionDecision(
+  prompt: string,
+  decision: ExecutionSelectionDecision
+): string {
+  const selectedLine = `- Selected execution strategy: ${decision.strategy} (${decision.reason})`;
+  let updated = prompt.includes("- Selected execution strategy:")
+    ? prompt.replace(/- Selected execution strategy:.*\n/, `${selectedLine}\n`)
+    : prompt.replace(
+      "- Execution mode: selected before execution (parallel agents, one-by-one, or plan-only)\n",
+      `- Execution mode: selected before execution (parallel agents, one-by-one, or plan-only)\n${selectedLine}\n`
+    );
+
+  if (decision.strategy === "sequential") {
+    updated = updated
+      .replace(
+        "4. **worker-N** – execute scoped sub-tasks in parallel",
+        "4. **worker-1** – execute scoped tasks one by one without parallel fanout"
+      )
+      .replace(
+        "Based on the intent analysis above, assign workers to these roles:",
+        "Based on the intent analysis above, sequence these roles through one Kimi-owned worker lane:"
+      );
+    updated += [
+      "",
+      "### Sequential Execution Override",
+      "- Do not spawn parallel subagents, DeepSeek model lanes, or capability fanout lanes.",
+      "- Execute discovery, planning, implementation, review, and QA one by one in a single lane.",
+      "",
+    ].join("\n");
+  } else if (decision.strategy === "parallel") {
+    updated += [
+      "",
+      "### Parallel Execution Selection",
+      "- Root orchestrator must assign bounded explorer/planner/coder/reviewer/qa lanes and add security only when risk is detected.",
+      "- Record each lane's skills, hooks, and MCP servers in the run harness/evidence.",
+      "",
+    ].join("\n");
+  }
+
+  return updated;
+}
+
 export async function orchestratePrompt(
   rawPrompt: string,
   options: OrchestrateOptions
@@ -159,6 +246,12 @@ export async function orchestratePrompt(
 
   // ── NLP Intent Analysis ──
   const intent = analyzeUserIntent(rawPrompt);
+  let executionDecision = resolveExecutionSelectionDecision({
+    cliValue: options.execution,
+    configValue: resources.executionPrompt,
+    intent,
+    isTTY: Boolean(process.stdout.isTTY && process.stdin.isTTY),
+  });
 
   // ── Memory recall: load relevant project context ──
   const memoryStore = new MemoryStore(join(root, ".omk", "memory"), {
@@ -222,6 +315,7 @@ export async function orchestratePrompt(
       runId: goalId,
       workers: options.workers,
       mcpScope,
+      execution: options.execution,
     });
     return;
   }
@@ -257,6 +351,17 @@ export async function orchestratePrompt(
     }
   }
 
+  executionDecision = await promptForExecutionSelectionIfNeeded(executionDecision);
+  await writeFile(join(goalDir, "execution-selection.json"), `${JSON.stringify(executionDecision, null, 2)}\n`);
+  if (executionDecision.strategy === "plan-only") {
+    await writeFile(join(goalDir, "next-prompt.md"), annotatePromptForExecutionDecision(enrichedPrompt, executionDecision));
+    console.log(status.ok(`Plan saved to: ${join(goalDir, "next-prompt.md")}`));
+    console.log(style.gray("Execution skipped by selection: plan-only."));
+    return;
+  }
+  const executionPromptForRun = annotatePromptForExecutionDecision(enrichedPrompt, executionDecision);
+  await writeFile(join(goalDir, "next-prompt.md"), executionPromptForRun);
+
   if (currentMode === "debugging") {
     console.log(style.purpleBold("🐛 Debugging mode — focused on reproduction, root-cause, and minimal fix"));
   } else if (currentMode === "review") {
@@ -265,10 +370,16 @@ export async function orchestratePrompt(
     console.log(style.purpleBold("🤖 Agent mode — full orchestration"));
   }
 
-  // ── Always execute via parallel DAG (default + approved plan) ──
+  // ── Execute via selected strategy ──
   const { parallelCommand } = await import("../commands/parallel.js");
+  const selectedWorkers = executionDecision.strategy === "sequential"
+    ? "1"
+    : options.workers ?? String(resources.maxWorkers);
+  const selectedProvider = executionDecision.strategy === "sequential"
+    ? "kimi"
+    : options.provider;
   const parallelOpts: ParallelCommandOptions = {
-    workers: options.workers ?? String(resources.maxWorkers),
+    workers: selectedWorkers,
     runId: options.runId,
     approvalPolicy: options.approvalPolicy ?? "interactive",
     watch: options.watch,
@@ -276,12 +387,17 @@ export async function orchestratePrompt(
     goalId,
     intent,
     timeoutPreset: options.timeoutPreset,
-    provider: options.provider,
+    provider: selectedProvider,
+    model: options.model,
     mcpScope,
     intentFrame,
+    execution: executionDecision.policy,
+    executionStrategy: executionDecision.strategy,
+    executionDecision,
+    signal: options.signal,
   };
 
-  const { runId: generatedRunId, success: dagSucceeded } = await parallelCommand(enrichedPrompt, parallelOpts);
+  const { runId: generatedRunId, success: dagSucceeded } = await parallelCommand(executionPromptForRun, parallelOpts);
   const effectiveRunId = generatedRunId;
 
   // Persist runId on goal so goal continue/verify can locate the latest run
@@ -323,6 +439,10 @@ export async function orchestratePrompt(
   let currentRunId = effectiveRunId;
   try {
     for (let iteration = 0; iteration <= maxAutoContinueIterations; iteration += 1) {
+      if (options.signal?.aborted) {
+        console.log(style.gray("Orchestration aborted by signal during auto-continue loop."));
+        break;
+      }
       const runStatePath = getRunPath(currentRunId, "state.json", root);
       const stateRaw = await readFile(runStatePath, "utf-8");
       const runState = JSON.parse(stateRaw) as RunState;
@@ -434,6 +554,7 @@ export async function orchestratePrompt(
         ...parallelOpts,
         runId: buildAutoContinueRunId(effectiveRunId, nextIteration),
         goalId,
+        signal: options.signal,
       });
       currentRunId = followUp.runId;
       await rememberRunId(currentRunId);
@@ -580,7 +701,7 @@ export function buildOrchestratedPrompt(input: BuildPromptInput): string {
     `- Source command: ${input.sourceCommand}`,
     `- Workers: ${input.workers}`,
     `- MCP scope: ${mcpScope}`,
-    `- Execution mode: parallel DAG (always)`,
+    `- Execution mode: selected before execution (parallel agents, one-by-one, or plan-only)`,
     ``,
     `### DAG Structure (minimum)`,
     `1. **intake** – parse and validate the goal`,

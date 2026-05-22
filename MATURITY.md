@@ -1,7 +1,7 @@
 # OMK Command Maturity Matrix
 
-Last updated: 2026-05-18
-Current source version: v1.1.17
+Last updated: 2026-05-22
+Current source version: v1.1.18
 
 | Level | Meaning |
 |-------|---------|
@@ -71,5 +71,5 @@ Current source version: v1.1.17
 | Provider routing | DeepSeek opportunistic worker routing exists for low-risk/read-heavy paths; Kimi remains orchestrator and fallback; run summaries/reports now include provider attempt and fallback totals. | Add HUD provider route metrics and broader release-gate tests for fallback/metadata contracts. |
 | MCP diagnostics | `mcp list/doctor/test` exist; invalid project/global MCP JSON now fails visibly through diagnostics without exposing config contents. | Add machine-readable MCP JSON and structured failure categories for command resolution, timeout, permission, and server health. |
 | Skills and harness templates | `omk skill` exposes current core/TypeScript/review packs, while init templates document project MCP scope, Kimi skills, portable `.agents/skills`, and run-scoped harness manifests. | Keep external-inspired skills compact, source-linked, and non-vendored; verify install/sync through `skill-command` tests and package audit. |
-| Release docs and site | README, CHANGELOG, MATURITY, package audit, and release-gate commands now document the v1.1.17 daily-use core, alpha/experimental surfaces, IntentFrame/ActionAtom orchestration hardening, agent MCP/skills/hooks propagation, parallel subagent orchestration, current harness templates, packaged workflow skills, doctor/init/pack smoke fixes, and public site at `https://oh-my-kimi.sbs/`. | Treat `npm run release:check` and CI release workflow evidence as the publish/deploy gate before claiming a new release. |
+| Release docs and site | README, CHANGELOG, MATURITY, ROADMAP, getting-started docs, package audit, and release-gate commands now distinguish the v1.1.18 source target from the latest published v1.1.17 release while documenting alpha/experimental surfaces, parallel subagent orchestration, typed doctor repair plans, startup update prompts, native safety package readiness, current harness templates, packaged workflow skills, and public site at `https://oh-my-kimi.sbs/`. | Treat `npm run release:check`, native safety packaging, tarball install smoke, and CI release workflow evidence as the publish/deploy gate before claiming v1.1.18 as released. |
 | Goal planner | Goal lifecycle exists, including continue, generated plan/evidence criteria, and verification. | Expand planner quality scoring and release evidence. |

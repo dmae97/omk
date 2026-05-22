@@ -122,31 +122,39 @@ export function createEnsembleTaskRunner(baseRunner: TaskRunner, policy: Ensembl
       node.thinking = `🧠 ensemble preparing ${total} candidate${total > 1 ? "s" : ""}…`;
 
       const createdWorktrees = new Set<string>();
-      const candidateResults = await mapWithConcurrency(
-        candidates,
-        effectivePolicy.maxParallel,
-        async (candidate) => {
-          progressMap.set(candidate.id, "starting");
-          updateThinking();
-
-          const r = await runCandidate(baseRunner, node, env, candidate, createdWorktrees, signal);
-
-          progressMap.set(candidate.id, r.result.success ? "ok" : "fail");
-          updateThinking();
-          return r;
-        }
-      );
-
-      node.thinking = `🧠 ensemble aggregating ${total} result${total > 1 ? "s" : ""}…`;
+      const nodeTimeoutMs = Number.parseInt(env.OMK_NODE_TIMEOUT_MS ?? "", 10);
+      const mapperTimeoutMs = (Number.isFinite(nodeTimeoutMs) && nodeTimeoutMs > 0 ? nodeTimeoutMs : 600_000) + 30_000;
+      const candidateControllers: AbortController[] = [];
       try {
-        return await aggregateCandidateResults(node, candidateResults, effectivePolicy);
-      } catch (err) {
-        await Promise.all(
-          candidateResults
-            .filter((item) => item.worktree && item.worktree !== (node.worktree ?? process.cwd()))
-            .map((item) => cleanupWorktree(item.worktree!))
+        const candidateResults = await mapWithConcurrency(
+          candidates,
+          effectivePolicy.maxParallel,
+          async (candidate, candidateSignal) => {
+            progressMap.set(candidate.id, "starting");
+            updateThinking();
+
+            const r = await runCandidate(baseRunner, node, env, candidate, createdWorktrees, candidateSignal);
+
+            progressMap.set(candidate.id, r.result.success ? "ok" : "fail");
+            updateThinking();
+            return r;
+          },
+          mapperTimeoutMs,
+          signal,
+          candidateControllers
         );
-        throw err;
+
+        node.thinking = `🧠 ensemble aggregating ${total} result${total > 1 ? "s" : ""}…`;
+        return await aggregateCandidateResults(node, candidateResults, effectivePolicy);
+      } finally {
+        for (const controller of candidateControllers) {
+          controller.abort(new Error("Ensemble runner cleaning up"));
+        }
+        await Promise.all(
+          Array.from(createdWorktrees)
+            .filter((worktree) => worktree !== (node.worktree ?? process.cwd()))
+            .map((worktree) => cleanupWorktree(worktree))
+        );
       }
     },
   };
@@ -163,13 +171,13 @@ export function selectCandidates(role: string, policy: Required<EnsemblePolicy>)
 }
 
 function normalizePolicy(policy: EnsemblePolicy, resources: OmkResourceSettings, config: EnsembleConfig): Required<EnsemblePolicy> {
-  const enabled = policy.enabled ?? parseOptionalBoolean(process.env.OMK_ENSEMBLE) ?? config.enabled ?? resources.ensembleDefaultEnabled;
+  const enabled = policy.enabled ?? config.enabled ?? parseOptionalBoolean(process.env.OMK_ENSEMBLE) ?? resources.ensembleDefaultEnabled;
   const envMaxCandidates = parsePositiveInt(process.env.OMK_ENSEMBLE_MAX_CANDIDATES);
   const envMaxParallel = parsePositiveInt(process.env.OMK_ENSEMBLE_MAX_PARALLEL);
   const envQuorumRatio = parsePositiveNumber(process.env.OMK_ENSEMBLE_QUORUM_RATIO);
-  const maxCandidatesPerNode = Math.max(1, Math.min(6, policy.maxCandidatesPerNode ?? envMaxCandidates ?? config.maxCandidatesPerNode ?? 2));
-  const maxParallel = Math.max(1, Math.min(maxCandidatesPerNode, policy.maxParallel ?? envMaxParallel ?? config.maxParallel ?? resources.maxWorkers));
-  const quorumRatio = Math.max(0.01, Math.min(1, policy.quorumRatio ?? envQuorumRatio ?? config.quorumRatio ?? 0.5));
+  const maxCandidatesPerNode = Math.max(1, Math.min(6, policy.maxCandidatesPerNode ?? config.maxCandidatesPerNode ?? envMaxCandidates ?? 2));
+  const maxParallel = Math.max(1, Math.min(maxCandidatesPerNode, policy.maxParallel ?? config.maxParallel ?? envMaxParallel ?? resources.maxWorkers));
+  const quorumRatio = Math.max(0.01, Math.min(1, policy.quorumRatio ?? config.quorumRatio ?? envQuorumRatio ?? 0.5));
 
   return {
     enabled,
@@ -244,8 +252,73 @@ function normalizeTomlValue(value: string): string {
 const SKIP_DIRS = new Set(["node_modules", ".git", ".omk"]);
 const SKIP_FILES = /(\.env(?:\..*)?|\.key$|\.pem$|\.secret$|credentials\.json$)/i;
 
-async function copyWorktreeBase(baseCwd: string, targetWorktree: string): Promise<void> {
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  signal?: AbortSignal,
+  onTimeout?: () => void
+): Promise<T> {
+  if (signal?.aborted) throw signal.reason ?? new Error("Aborted");
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let abortListener: (() => void) | undefined;
+
+  const cleanup = (): void => {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      timer = undefined;
+    }
+    if (abortListener !== undefined) {
+      signal?.removeEventListener("abort", abortListener);
+      abortListener = undefined;
+    }
+  };
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      onTimeout?.();
+      reject(new Error(`Timed out after ${ms}ms`));
+    }, ms);
+    abortListener = () => {
+      clearTimeout(timer);
+      reject(signal?.reason ?? new Error("Aborted"));
+    };
+    signal?.addEventListener("abort", abortListener, { once: true });
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    cleanup();
+  }
+}
+
+async function copyWorktreeBase(baseCwd: string, targetWorktree: string, signal?: AbortSignal): Promise<void> {
+  const COPY_TIMEOUT_MS = 60_000;
+  const COPY_CONCURRENCY = 8;
+
+  let running = 0;
+  const queue: (() => void)[] = [];
+
+  async function acquire(): Promise<void> {
+    if (running < COPY_CONCURRENCY) {
+      running++;
+      return;
+    }
+    return new Promise((resolve) => queue.push(resolve));
+  }
+
+  function release(): void {
+    running--;
+    const next = queue.shift();
+    if (next) {
+      running++;
+      next();
+    }
+  }
+
   async function walk(srcDir: string, destDir: string): Promise<void> {
+    if (signal?.aborted) throw signal.reason ?? new Error("Aborted");
     await ensureDir(destDir);
     const entries = await readdir(srcDir, { withFileTypes: true });
     await Promise.all(
@@ -257,12 +330,18 @@ async function copyWorktreeBase(baseCwd: string, targetWorktree: string): Promis
         if (entry.isDirectory()) {
           await walk(srcPath, destPath);
         } else {
-          await copyFile(srcPath, destPath);
+          await acquire();
+          try {
+            await copyFile(srcPath, destPath);
+          } finally {
+            release();
+          }
         }
       })
     );
   }
-  await walk(baseCwd, targetWorktree);
+
+  return withTimeout(walk(baseCwd, targetWorktree), COPY_TIMEOUT_MS, signal);
 }
 
 async function runCandidate(
@@ -284,7 +363,7 @@ async function runCandidate(
       candidateWorktree = await resolveSafeWorktreePath(join(getWorktreesRoot(), "ensemble", safeNodeId, safeCandidateId));
       worktreeTracker?.add(candidateWorktree);
       try {
-        await copyWorktreeBase(baseCwd, candidateWorktree);
+        await copyWorktreeBase(baseCwd, candidateWorktree, signal);
       } catch {
         await ensureDir(candidateWorktree);
       }
@@ -431,6 +510,7 @@ async function aggregateCandidateResults(
       .filter(Boolean)
       .join("\n"),
     metadata: {
+      ...(winner?.result.metadata ?? {}),
       ensemble: {
         successWeight,
         totalWeight,
@@ -495,25 +575,67 @@ function scoreResult(result: TaskResult, weight: number): number {
 async function mapWithConcurrency<T, R>(
   items: T[],
   concurrency: number,
-  mapper: (item: T) => Promise<R>
+  mapper: (item: T, signal: AbortSignal) => Promise<R>,
+  timeoutMs: number = 600_000,
+  signal?: AbortSignal,
+  outControllers?: AbortController[]
 ): Promise<R[]> {
   const results: R[] = new Array(items.length);
   const errors: unknown[] = new Array(items.length);
   let next = 0;
+  const activeControllers = new Set<AbortController>();
+  let stopped = false;
+
+  function abortAll(reason: unknown): void {
+    for (const controller of activeControllers) {
+      controller.abort(reason);
+    }
+  }
 
   async function worker(): Promise<void> {
     while (next < items.length) {
       const index = next;
       next += 1;
+      if (signal?.aborted || stopped) {
+        errors[index] = signal?.reason ?? new Error("Aborted");
+        continue;
+      }
+      const controller = new AbortController();
+      activeControllers.add(controller);
+      outControllers?.push(controller);
+      const candidateSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
       try {
-        results[index] = await mapper(items[index]);
+        results[index] = await withTimeout(
+          mapper(items[index], candidateSignal),
+          timeoutMs,
+          candidateSignal,
+          () => controller.abort(new Error(`Candidate timed out after ${timeoutMs}ms`))
+        );
       } catch (err) {
         errors[index] = err;
+        stopped = true;
+        abortAll(signal?.reason ?? new Error("Candidate failed, aborting remaining"));
+      } finally {
+        activeControllers.delete(controller);
+        controller.abort(new Error("Candidate finished"));
       }
     }
   }
 
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+  const abortHandler = (): void => {
+    stopped = true;
+    abortAll(signal?.reason ?? new Error("Aborted"));
+  };
+  signal?.addEventListener("abort", abortHandler, { once: true });
+
+  try {
+    await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+  } finally {
+    signal?.removeEventListener("abort", abortHandler);
+    stopped = true;
+    abortAll(new Error("mapWithConcurrency finished"));
+  }
+
   const firstError = errors.find((e) => e !== undefined);
   if (firstError) throw firstError;
   return results;

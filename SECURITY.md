@@ -15,6 +15,7 @@ oh-my-kimi includes scoped default hooks to block destructive commands and secre
 - `.kimi` is the Kimi-facing agent/MCP/hook surface; `.omk` is OMK runtime/evidence state. Do not treat the two generated trees as interchangeable.
 - Never print, commit, or summarize MCP `env`, headers, tokens, or provider keys.
 - Kimi child execution inherits a minimal allowlist from the parent process and drops inherited secret-like keys. Explicit `env` / DAG `nodeEnv` remains trusted local input so runtime variables such as `KIMI_BIN`, `PATH`, `HOME`, and non-secret `OMK_*` values keep working; secret-like explicit keys emit warnings. Set `OMK_STRICT_KIMI_EXPLICIT_ENV=1` to drop secret-like explicit keys unless the local trusted session also sets `OMK_TRUST_KIMI_EXPLICIT_SECRET_ENV=1`.
+- `omk image generate/edit` requires an OpenAI Platform project API key supplied as an ephemeral runtime env var such as `OPENAI_API_KEY`; Codex/ChatGPT OAuth tokens are never accepted as Images API credentials.
 - Isolated Kimi HOME shell-profile bridging is off by default because sourcing user profiles can re-export secrets; enable it only in trusted local sessions with `OMK_ISOLATED_HOME_BRIDGE_SHELL_PROFILES=1`.
 - Treat `chat-agent-harness.json` as private run metadata: use it for inventory/gates, but do not paste large inventories or secret-like values into prompts, memory, or reports.
 - Prefer sanitized `omk mcp doctor --json`, `omk verify --json`, test summaries, and secret scans as shareable evidence.

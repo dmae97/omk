@@ -23,6 +23,7 @@ export interface DeepSeekCompleteOptions {
   maxTokens?: number;
   thinking?: "enabled" | "disabled";
   reasoningEffort?: "high" | "max";
+  signal?: AbortSignal;
 }
 
 interface DeepSeekChatChoice {
@@ -60,14 +61,30 @@ export class DeepSeekClient {
     this.apiKey = options.apiKey ?? this.env[this.apiKeyEnv];
   }
 
-  async complete(options: DeepSeekCompleteOptions): Promise<string> {
+  async complete(options: DeepSeekCompleteOptions): Promise<string>;
+  async complete(messages: DeepSeekChatMessage[], signal?: AbortSignal): Promise<string>;
+  async complete(
+    optionsOrMessages: DeepSeekCompleteOptions | DeepSeekChatMessage[],
+    maybeSignal?: AbortSignal
+  ): Promise<string> {
+    const options: DeepSeekCompleteOptions = Array.isArray(optionsOrMessages)
+      ? { messages: optionsOrMessages, signal: maybeSignal }
+      : optionsOrMessages;
+
     if (!this.apiKey) {
       throw new Error(`${this.apiKeyEnv} is not set`);
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort(new Error(`DeepSeek request timed out after ${this.timeoutMs}ms`));
+    }, this.timeoutMs);
     timeout.unref?.();
+    const signal = options.signal
+      ? AbortSignal.any([options.signal, controller.signal])
+      : controller.signal;
 
     try {
       const response = await this.fetchImpl(`${this.baseUrl}/chat/completions`, {
@@ -78,7 +95,7 @@ export class DeepSeekClient {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(this.buildRequestBody(options)),
-        signal: controller.signal,
+        signal,
       });
 
       if (!response.ok) {
@@ -88,8 +105,11 @@ export class DeepSeekClient {
       const payload = await response.json() as DeepSeekChatResponse;
       return extractAssistantContent(payload);
     } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") {
+      if (timedOut || (err instanceof Error && err.name === "AbortError" && controller.signal.aborted)) {
         throw new Error(`DeepSeek request timed out after ${this.timeoutMs}ms`);
+      }
+      if (options.signal?.aborted) {
+        throw options.signal.reason ?? new Error("DeepSeek request aborted");
       }
       throw err;
     } finally {

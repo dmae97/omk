@@ -6,10 +6,11 @@ import { readFile, readdir, stat as fsStat } from "fs/promises";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { join } from "path";
-import { getProjectRoot, getUserHome, pathExists, getRunPath, getRunsDir } from "../util/fs.js";
+import { getProjectRootAsync, getUserHome, pathExists, getRunPath, getRunsDir } from "../util/fs.js";
 import {
   buildRunViewModel,
   parseRunStateResult,
+  sanitizeForDisplay,
   type RunViewModel,
   type RunHealth,
   type RunViewModelWorker,
@@ -22,9 +23,9 @@ import {
   sanitizeTerminalText,
   getSystemUsage,
 } from "../util/theme.js";
-import { getKimiUsage } from "../kimi/usage.js";
+import { getKimiUsage, type UsageStats } from "../kimi/usage.js";
 import { parseGitStatusPorcelain, listRunCandidates } from "./hud.js";
-import { readTodos, deriveTodosFromState } from "../util/todo-sync.js";
+import { loadTodos, type TodoItem } from "../util/todo-sync.js";
 import { readSessionMeta, type SessionMeta } from "../util/session.js";
 import { enableRawTerminalInput, restoreTerminalInputState, type TerminalInputState } from "../util/terminal-input.js";
 import { checkDeepSeekBalance } from "../providers/deepseek/deepseek-balance.js";
@@ -33,14 +34,25 @@ import {
   resolveDeepSeekApiKey,
 } from "../providers/deepseek/deepseek-config.js";
 import { loadMergedMcpConfig } from "../orchestration/routing.js";
+import { readEvents, type TelemetryEvent } from "../util/events-logger.js";
 
 const execFileAsync = promisify(execFile);
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms)),
+  ]);
+}
 
 export interface CockpitCommandOptions {
   runId?: string;
   watch?: boolean;
   refreshMs?: number;
   height?: number;
+  redraw?: "diff" | "full" | "append";
+  section?: "agents" | "todos" | "mcp" | "all";
+  events?: "on" | "off";
 }
 
 export interface CockpitRenderOptions {
@@ -52,6 +64,8 @@ export interface CockpitRenderOptions {
   height?: number;
   resourceProvider?: () => Promise<CockpitResourceSnapshot | null>;
   deepSeekProvider?: () => Promise<CockpitDeepSeekSnapshot | null>;
+  section?: "agents" | "todos" | "mcp" | "all";
+  events?: "on" | "off";
 }
 
 // ── Cache types ──
@@ -62,22 +76,25 @@ interface CacheEntry<T> {
 }
 
 export interface CockpitCache {
-  stateTodos?: CacheEntry<Awaited<ReturnType<typeof readTodos>> | null>;
+  stateTodos?: CacheEntry<Awaited<ReturnType<typeof loadTodos>> | null>;
   gitChanges?: CacheEntry<{ status: string; path: string }[] | null>;
   history?: CacheEntry<string[]>;
   kimiUsage?: CacheEntry<NonNullable<Awaited<ReturnType<typeof getKimiUsage>>> | null>;
   systemUsage?: CacheEntry<ReturnType<typeof getSystemUsage>>;
   resources?: CacheEntry<CockpitResourceSnapshot | null>;
   deepSeek?: CacheEntry<CockpitDeepSeekSnapshot | null>;
+  events?: CacheEntry<TelemetryEvent[]>;
 }
 
 export interface CockpitResourceEntry {
   name: string;
-  source: "project" | "global" | "builtin";
+  source: "project" | "global" | "builtin" | "run";
+  status?: "connected" | "connecting" | "failed" | "unknown";
+  toolsCount?: number;
 }
 
 export interface CockpitResourceSnapshot {
-  scope: "all";
+  scope: "run" | "all";
   mcpServers: CockpitResourceEntry[];
   skills: CockpitResourceEntry[];
   hooks: CockpitResourceEntry[];
@@ -110,12 +127,89 @@ interface CockpitDeepSeekRunUsage {
   byTier: Record<string, number>;
 }
 
+interface CockpitDashboardSnapshot {
+  pulse: {
+    runId: string | null;
+    type: "chat" | "run" | "--";
+    health: RunHealth;
+    elapsed: string;
+    activeLane: string | null;
+    lastActivity: string | null;
+    blocker: { reason: string; nodeId: string } | null;
+    eta: string | null;
+    goalTitle: string | null;
+    goalScore: number | null;
+    nextAction: string | null;
+    etaConfidence: "low" | "medium" | "high" | null;
+  };
+  workQueue: {
+    todosDone: number;
+    todosTotal: number;
+    activeItems: Array<{ title: string; status: string; agent?: string }>;
+    blockedItems: Array<{ title: string; status: string }>;
+    workerCounts: {
+      running: number;
+      done: number;
+      failed: number;
+      blocked: number;
+      skipped: number;
+      settled: number;
+      total: number;
+    };
+    workers: RunViewModelWorker[];
+    todos: TodoItem[];
+  };
+  runtimeContract: {
+    mcpCount: number;
+    skillCount: number;
+    hookCount: number;
+    scope: string;
+    workerCap: number | null;
+    maxStepsPerTurn: number | null;
+    gateCount: number;
+  } | null;
+  evidence: {
+    failedGates: number;
+    skippedGates: number;
+    latestVerification: string | null;
+  };
+  providers: {
+    kimi: {
+      source: string;
+      status: string;
+      account: string;
+      fiveHour: string;
+      weekly: string;
+    } | null;
+    deepSeek: {
+      status: string;
+      balance: string;
+      snapshot: CockpitDeepSeekSnapshot | null;
+    };
+  };
+  resources: CockpitResourceSnapshot | null;
+  deepSeekUsage: CockpitDeepSeekRunUsage;
+  worktree: {
+    totalChanged: number;
+    counts: { M: number; A: number; D: number; "?": number; R: number };
+    topPaths: string[];
+    changes: { status: string; path: string }[];
+  };
+  system: {
+    cpuPercent: number | null;
+    memPercent: number | null;
+    workerBudget: number | null;
+  };
+  stateError: RunViewModel["stateError"];
+  latestRunName: string | null;
+}
+
 // ── Local helpers ──
 
 const ANSI_REGEX = /\x1B(?:[@-Z\-_]|\[[0-?]*[ -/]*[@-~])/g;
 const PANEL_HORIZONTAL_OVERHEAD = 4;
 const MIN_COCKPIT_FRAME_WIDTH = 20;
-const MAX_COCKPIT_FRAME_WIDTH = 60;
+const MAX_COCKPIT_FRAME_WIDTH = 180;
 
 function isCombiningCodePoint(codePoint: number): boolean {
   return (
@@ -255,6 +349,15 @@ function gitMarker(changeStatus: string): string {
   return style.orange("M");
 }
 
+function gitStatusPriority(changeStatus: string): number {
+  const normalized = changeStatus.replace(/\s/g, "");
+  if (normalized === "??") return 3;
+  if (normalized.includes("D")) return 2;
+  if (normalized.includes("A")) return 1;
+  if (normalized.includes("R")) return 4;
+  return 0;
+}
+
 function healthColor(health: RunHealth): (s: string) => string {
   switch (health) {
     case "ok": return style.mint;
@@ -314,19 +417,100 @@ function miniProgressBar(done: number, total: number, width = 8): string {
   return style.mint("█".repeat(filled)) + style.gray("░".repeat(empty));
 }
 
+function looksLikeSecret(value: string): boolean {
+  if (/\b[a-f0-9]{16,}\b/i.test(value)) return true;
+  if (/(?:https?:\/\/|@)[^/\s:]+:[^/\s@]+@/.test(value)) return true;
+  if (/\bghp_[A-Za-z0-9]{36}\b/.test(value)) return true;
+  if (/\brw_[A-Za-z0-9]+\b/.test(value)) return true;
+  return false;
+}
+
+function redactResourceName(name: string): string {
+  return looksLikeSecret(name) ? "***REDACTED***" : name;
+}
+
 function formatResourceSummary(resources: CockpitResourceSnapshot | null, maxWidth: number): string {
-  if (!resources) return `${style.gray("routes")} ${style.gray("mcp:? skills:? hooks:? all")}`;
+  if (!resources) return `${style.gray("MCP")} ${style.gray("?:? connected · ? tools")}`;
+  const connected = resources.mcpServers.filter((r) => r.status === "connected" || r.status == null).length;
+  const connecting = resources.mcpServers.filter((r) => r.status === "connecting");
+  const failed = resources.mcpServers.filter((r) => r.status === "failed");
+  const toolsCount = resources.mcpServers.reduce((sum, r) => sum + (r.toolsCount ?? 0), 0);
+  const statusBits = [
+    `${style.mintBold(`${connected}/${resources.mcpServers.length}`)} connected`,
+    `${style.mintBold(String(toolsCount))} tools`,
+    connecting.length > 0 ? `connecting: ${sampleNamesPlain(connecting.map((r) => ({ ...r, name: redactResourceName(r.name) })), 3)}` : "",
+    failed.length > 0 ? `failed: ${sampleNamesPlain(failed.map((r) => ({ ...r, name: redactResourceName(r.name) })), 3)}` : "",
+  ].filter(Boolean);
   const sample = sampleNames([
-    ...resources.mcpServers.slice(0, 2),
-    ...resources.skills.slice(0, 2),
-    ...resources.hooks.slice(0, 2),
+    ...resources.mcpServers.slice(0, 2).map((r) => ({ ...r, name: redactResourceName(r.name) })),
+    ...resources.skills.slice(0, 2).map((r) => ({ ...r, name: redactResourceName(r.name) })),
+    ...resources.hooks.slice(0, 2).map((r) => ({ ...r, name: redactResourceName(r.name) })),
   ], 3);
-  const base = `${style.gray("routes")} ` +
+  const base = `${style.gray("MCP")} ${statusBits.join(" · ")} ` +
     `mcp:${style.mintBold(String(resources.mcpServers.length))} ` +
     `skills:${style.mintBold(String(resources.skills.length))} ` +
     `hooks:${style.mintBold(String(resources.hooks.length))} ` +
-    `${style.gray("scope:all")}`;
-  return sample ? `${base} ${style.gray(truncateText(sample, maxWidth - 32))}` : base;
+    `${style.gray(`scope:${resources.scope}`)}`;
+  const result = sample ? `${base} ${style.gray(truncateText(sample, maxWidth - 32))}` : base;
+  return visibleTerminalWidth(result) > maxWidth ? truncateLine(result, maxWidth) : result;
+}
+
+function formatRuntimeContract(contract: CockpitDashboardSnapshot["runtimeContract"], maxWidth: number): string {
+  if (!contract) return `${style.gray("contract")} ${style.gray("--")}`;
+  const base = `${style.gray("contract")} ` +
+    `mcp:${style.mintBold(String(contract.mcpCount))} ` +
+    `skills:${style.mintBold(String(contract.skillCount))} ` +
+    `hooks:${style.mintBold(String(contract.hookCount))} ` +
+    `${style.gray(`scope:${contract.scope}`)}`;
+  const workerPart = contract.workerCap != null ? ` workers:${style.mintBold(String(contract.workerCap))}` : "";
+  const stepsPart = contract.maxStepsPerTurn != null ? ` steps:${style.mintBold(String(contract.maxStepsPerTurn))}` : "";
+  const gatesPart = contract.gateCount > 0 ? ` gates:${style.mintBold(String(contract.gateCount))}` : "";
+  const result = base + workerPart + stepsPart + gatesPart;
+  if (visibleTerminalWidth(result) > maxWidth) {
+    return truncateLine(result, maxWidth);
+  }
+  return result;
+}
+
+function parseHarnessRuntimeContract(value: unknown): CockpitDashboardSnapshot["runtimeContract"] {
+  if (!isRecord(value)) return null;
+  const resources = isRecord(value.resources) ? value.resources : null;
+  const active = resources && isRecord(resources.active) ? resources.active : null;
+  const scopes = resources && isRecord(resources.scopes) ? resources.scopes : null;
+  const gates = Array.isArray(value.gates) ? value.gates : null;
+  const maxStepsRaw = resources?.maxStepsPerTurn ?? value.maxStepsPerTurn;
+  const maxStepsPerTurn = typeof maxStepsRaw === "number"
+    ? maxStepsRaw
+    : typeof maxStepsRaw === "string" && /^\d+$/.test(maxStepsRaw)
+      ? Number.parseInt(maxStepsRaw, 10)
+      : null;
+  const mcpCount = active && Array.isArray(active.mcp)
+    ? active.mcp.length
+    : typeof value.mcpCount === "number"
+      ? value.mcpCount
+      : 0;
+  const skillCount = active && Array.isArray(active.skills)
+    ? active.skills.length
+    : typeof value.skillCount === "number"
+      ? value.skillCount
+      : 0;
+  const hookCount = active && Array.isArray(active.hooks)
+    ? active.hooks.length
+    : typeof value.hookCount === "number"
+      ? value.hookCount
+      : 0;
+  const scope = scopes && typeof scopes.mcp === "string"
+    ? scopes.mcp
+    : typeof value.scope === "string"
+      ? value.scope
+      : "--";
+  const workerCap = typeof resources?.workerCap === "number"
+    ? resources.workerCap
+    : typeof value.workerCap === "number"
+      ? value.workerCap
+      : null;
+  const gateCount = gates ? gates.length : typeof value.gateCount === "number" ? value.gateCount : 0;
+  return { mcpCount, skillCount, hookCount, scope, workerCap, maxStepsPerTurn, gateCount };
 }
 
 function formatDeepSeekSummary(
@@ -342,7 +526,7 @@ function formatDeepSeekSummary(
       : style.gray("off");
   const balance = formatDeepSeekBalance(deepSeek);
   const modelPart = formatDeepSeekModelUsage(usage);
-  const reason = deepSeek.reason ? ` ${style.gray(truncateText(deepSeek.reason, Math.max(8, maxWidth - 56)))}` : "";
+  const reason = deepSeek.reason ? ` ${style.gray(truncateText(sanitizeForDisplay(deepSeek.reason), Math.max(8, maxWidth - 56)))}` : "";
   return `${style.gray("DeepSeek")} ${state} bal:${balance} use:${usage.attempts}${modelPart} ` +
     `d:${usage.directCount} a:${usage.advisoryCount} f:${usage.fallbackCount}${reason}`;
 }
@@ -350,6 +534,10 @@ function formatDeepSeekSummary(
 function sampleNames(entries: CockpitResourceEntry[], limit: number): string {
   const names = [...new Set(entries.map((entry) => entry.name))].slice(0, limit);
   return names.length > 0 ? `[${names.join(",")}]` : "";
+}
+
+function sampleNamesPlain(entries: CockpitResourceEntry[], limit: number): string {
+  return [...new Set(entries.map((entry) => entry.name))].slice(0, limit).join(",");
 }
 
 function formatDeepSeekBalance(snapshot: CockpitDeepSeekSnapshot): string {
@@ -379,6 +567,16 @@ function formatBalanceValue(value: string): string {
   return parsed.toFixed(parsed >= 100 ? 0 : 2);
 }
 
+function buildFooter(targetWidth: number, heightMode: string): string {
+  if (targetWidth < 40) {
+    return `[${style.gray("q")}]uit`;
+  }
+  if (targetWidth < 60) {
+    return `[${style.gray("q")}]uit [${style.gray("sp")}]ause ${style.gray(`h:${heightMode}`)}`;
+  }
+  return `[${style.gray("h")}]istory [${style.gray("+")}/${style.gray("-")}]height [${style.gray("a")}]auto [${style.gray("space")}]pause [${style.gray("q")}]uit ${style.gray(`height:${heightMode}`)}`;
+}
+
 function clearScreen(): void {
   // Clear screen + move cursor home, but PRESERVE scrollback so users can scroll up
   // to see previous code edits and output history.
@@ -393,21 +591,116 @@ function getCacheEntry<T>(entry: CacheEntry<T> | undefined, ttlMs: number, now: 
   return entry.value;
 }
 
-async function getCockpitResources(root = getProjectRoot()): Promise<CockpitResourceSnapshot> {
+async function getCockpitResources(root?: string, runId?: string | null): Promise<CockpitResourceSnapshot> {
+  const resolvedRoot = root ?? await getProjectRootAsync();
+  const harness = runId ? await readHarnessResources(runId).catch(() => null) : null;
+  if (harness) {
+    return applyMcpStatus(runId ?? null, harness);
+  }
   const [mcp, skills, hooks] = await Promise.all([
-    loadMergedMcpConfig(root, "all").catch(() => ({ servers: {}, sources: new Map<string, CockpitResourceEntry["source"]>() })),
-    collectSkillEntries(root),
-    collectHookEntries(root),
+    loadMergedMcpConfig(resolvedRoot, "all").catch(() => ({ servers: {}, sources: new Map<string, CockpitResourceEntry["source"]>() })),
+    collectSkillEntries(resolvedRoot),
+    collectHookEntries(resolvedRoot),
   ]);
   return {
     scope: "all",
     mcpServers: Object.keys(mcp.servers)
-      .map((name) => ({ name, source: mcp.sources.get(name) ?? "project" }))
+      .map((name) => ({ name, source: mcp.sources.get(name) ?? "project", status: "connected" as const }))
       .sort(compareResourceEntries),
     skills,
     hooks,
     checkedAt: Date.now(),
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+async function readHarnessResources(runId: string): Promise<CockpitResourceSnapshot | null> {
+  const raw = await readFile(getRunPath(runId, "chat-agent-harness.json"), "utf-8");
+  const parsed = JSON.parse(raw) as unknown;
+  if (!isRecord(parsed)) return null;
+  const resources = isRecord(parsed.resources) ? parsed.resources : null;
+  const active = resources && isRecord(resources.active) ? resources.active : null;
+  if (!active) return null;
+  return {
+    scope: "run",
+    mcpServers: normalizeResourceEntries(active.mcp, "run"),
+    skills: normalizeResourceEntries(active.skills, "run"),
+    hooks: normalizeResourceEntries(active.hooks, "run"),
+    checkedAt: Date.now(),
+  };
+}
+
+function normalizeResourceEntries(value: unknown, source: CockpitResourceEntry["source"]): CockpitResourceEntry[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry): CockpitResourceEntry | null => {
+      if (typeof entry === "string") {
+        return { name: entry, source, status: source === "run" ? "connected" : undefined };
+      }
+      if (!isRecord(entry)) return null;
+      const name = typeof entry.name === "string" ? entry.name : typeof entry.id === "string" ? entry.id : null;
+      if (!name) return null;
+      const statusValue = typeof entry.status === "string" ? entry.status : undefined;
+      const status = statusValue === "connected" || statusValue === "connecting" || statusValue === "failed" || statusValue === "unknown"
+        ? statusValue
+        : source === "run" ? "connected" : undefined;
+      const toolsCount = typeof entry.toolsCount === "number"
+        ? entry.toolsCount
+        : typeof entry.toolCount === "number"
+          ? entry.toolCount
+          : Array.isArray(entry.tools)
+            ? entry.tools.length
+            : undefined;
+      return { name, source, status, toolsCount };
+    })
+    .filter((entry): entry is CockpitResourceEntry => entry !== null)
+    .sort(compareResourceEntries);
+}
+
+async function applyMcpStatus(runId: string | null, snapshot: CockpitResourceSnapshot): Promise<CockpitResourceSnapshot> {
+  if (!runId) return snapshot;
+  const statusEntries = await readMcpStatusEntries(runId).catch(() => []);
+  if (statusEntries.length === 0) return snapshot;
+  const byName = new Map(statusEntries.map((entry) => [entry.name, entry]));
+  return {
+    ...snapshot,
+    mcpServers: snapshot.mcpServers.map((entry) => {
+      const live = byName.get(entry.name);
+      return live ? { ...entry, status: live.status ?? entry.status, toolsCount: live.toolsCount ?? entry.toolsCount } : entry;
+    }),
+    checkedAt: Date.now(),
+  };
+}
+
+async function readMcpStatusEntries(runId: string): Promise<CockpitResourceEntry[]> {
+  const raw = await readFile(getRunPath(runId, "mcp-status.json"), "utf-8");
+  const parsed = JSON.parse(raw) as unknown;
+  if (!isRecord(parsed)) return [];
+  const servers = parsed.servers ?? parsed.mcpServers;
+  if (Array.isArray(servers)) return normalizeResourceEntries(servers, "run");
+  if (isRecord(servers)) {
+    return Object.entries(servers)
+      .map(([name, value]): CockpitResourceEntry => {
+        const record = isRecord(value) ? value : {};
+        const statusValue = typeof record.status === "string" ? record.status : undefined;
+        const status = statusValue === "connected" || statusValue === "connecting" || statusValue === "failed" || statusValue === "unknown"
+          ? statusValue
+          : "unknown";
+        const toolsCount = typeof record.toolsCount === "number"
+          ? record.toolsCount
+          : typeof record.toolCount === "number"
+            ? record.toolCount
+            : Array.isArray(record.tools)
+              ? record.tools.length
+              : undefined;
+        return { name, source: "run", status, toolsCount };
+      })
+      .sort(compareResourceEntries);
+  }
+  return [];
 }
 
 async function collectSkillEntries(root: string): Promise<CockpitResourceEntry[]> {
@@ -469,7 +762,7 @@ function upsertResource(byName: Map<string, CockpitResourceEntry>, entry: Cockpi
 }
 
 function compareResourceEntries(a: CockpitResourceEntry, b: CockpitResourceEntry): number {
-  const rank = (source: CockpitResourceEntry["source"]): number => source === "project" ? 0 : source === "builtin" ? 1 : 2;
+  const rank = (source: CockpitResourceEntry["source"]): number => source === "run" ? 0 : source === "project" ? 1 : source === "builtin" ? 2 : 3;
   const sourceRank = rank(a.source) - rank(b.source);
   return sourceRank || a.name.localeCompare(b.name);
 }
@@ -581,13 +874,14 @@ export class CockpitRenderer {
       } else if (char === "r") {
         this.resized = true;
       } else if (char === "+") {
-        this.height = Math.min(MAX_COCKPIT_HEIGHT, (this.height ?? DEFAULT_COCKPIT_HEIGHT) + 1);
+        const max = process.stdout.rows ? Math.min(MAX_COCKPIT_HEIGHT, process.stdout.rows) : MAX_COCKPIT_HEIGHT;
+        this.height = Math.min(max, (this.height ?? DEFAULT_COCKPIT_HEIGHT) + 1);
         this.resized = true;
       } else if (char === "-") {
         this.height = Math.max(MIN_COCKPIT_HEIGHT, (this.height ?? DEFAULT_COCKPIT_HEIGHT) - 1);
         this.resized = true;
       } else if (char === "a") {
-        this.height = undefined;
+        this.height = normalizeCockpitFrameHeight(undefined);
         this.resized = true;
       } else if (char === "f") {
         this.mode = this.mode === "diff" ? "full" : this.mode === "full" ? "append" : "diff";
@@ -673,8 +967,15 @@ const MIN_COCKPIT_HEIGHT = 14;
 const MAX_COCKPIT_HEIGHT = 96;
 
 function normalizeCockpitFrameHeight(height?: number): number | undefined {
-  if (height == null || !Number.isFinite(height)) return undefined;
-  return Math.max(MIN_COCKPIT_HEIGHT, Math.min(MAX_COCKPIT_HEIGHT, Math.floor(height)));
+  const rows = process.stdout.rows;
+  if (height != null && Number.isFinite(height)) {
+    const max = rows && rows >= MIN_COCKPIT_HEIGHT ? rows : MAX_COCKPIT_HEIGHT;
+    return Math.max(MIN_COCKPIT_HEIGHT, Math.min(max, Math.floor(height)));
+  }
+  if (rows && rows >= MIN_COCKPIT_HEIGHT) {
+    return rows;
+  }
+  return undefined;
 }
 
 /** Ensure an array of lines exactly matches a target count (truncate or pad). */
@@ -684,28 +985,201 @@ function fitLines(lines: string[], count: number): string[] {
   return result;
 }
 
+async function buildCockpitSnapshot(
+  vm: RunViewModel,
+  todos: TodoItem[] | null,
+  kimiUsage: UsageStats | null,
+  resources: CockpitResourceSnapshot | null,
+  deepSeek: CockpitDeepSeekSnapshot | null,
+  deepSeekUsage: CockpitDeepSeekRunUsage,
+  sysUsage: ReturnType<typeof getSystemUsage> | null,
+  gitChanges: { status: string; path: string }[],
+  sessionMeta: SessionMeta | null,
+  stateError: RunViewModel["stateError"],
+  latestRunName: string | null,
+): Promise<CockpitDashboardSnapshot> {
+  let runtimeContract: CockpitDashboardSnapshot["runtimeContract"] = null;
+  if (latestRunName) {
+    try {
+      const harnessPath = getRunPath(latestRunName, "chat-agent-harness.json");
+      const raw = await readFile(harnessPath, "utf-8");
+      runtimeContract = parseHarnessRuntimeContract(JSON.parse(raw) as unknown);
+    } catch {
+      runtimeContract = null;
+    }
+  }
+
+  const worktreeCounts = { M: 0, A: 0, D: 0, "?": 0, R: 0 };
+  for (const change of gitChanges) {
+    const normalized = change.status.replace(/\s/g, "");
+    if (normalized.includes("M")) worktreeCounts.M++;
+    else if (normalized.includes("A")) worktreeCounts.A++;
+    else if (normalized.includes("D")) worktreeCounts.D++;
+    else if (normalized === "??") worktreeCounts["?"]++;
+    else if (normalized.includes("R")) worktreeCounts.R++;
+  }
+
+  const topPaths = [...gitChanges]
+    .sort((a, b) => gitStatusPriority(b.status) - gitStatusPriority(a.status))
+    .slice(0, 5)
+    .map((c) => c.path);
+
+  const sortedTodos = todos ? [...todos].sort((a, b) => statusRank(a.status) - statusRank(b.status)) : [];
+  const todosDone = sortedTodos.filter((t) => t.status === "done").length;
+  const todosTotal = sortedTodos.length;
+
+  const activeItems = sortedTodos
+    .filter((t) => t.status === "in_progress")
+    .map((t) => ({ title: t.title, status: t.status, agent: t.agent }));
+
+  const blockedItems = sortedTodos
+    .filter((t) => t.status === "blocked" || t.status === "failed")
+    .map((t) => ({ title: t.title, status: t.status }));
+
+  let failedGates = 0;
+  let skippedGates = 0;
+  let latestVerification: string | null = null;
+  for (const worker of vm.workers ?? []) {
+    if (worker.lastEvidence) {
+      if (!worker.lastEvidence.passed) failedGates++;
+      latestVerification = worker.lastEvidence.message || worker.lastEvidence.gate;
+    }
+    if (worker.state === "skipped") skippedGates++;
+  }
+
+  const kimiAccount = kimiUsage
+    ? kimiUsage.oauth.loggedIn
+      ? kimiUsage.oauth.displayId
+      : "/login"
+    : "";
+  const fiveHourPercent =
+    kimiUsage?.quota.fiveHour?.remainingPercent != null
+      ? Math.min(100, Math.max(0, 100 - kimiUsage.quota.fiveHour.remainingPercent))
+      : null;
+  const weeklyPercent =
+    kimiUsage?.quota.weekly?.remainingPercent != null
+      ? Math.min(100, Math.max(0, 100 - kimiUsage.quota.weekly.remainingPercent))
+      : null;
+  const fiveHour =
+    fiveHourPercent != null
+      ? `${fiveHourPercent}%`
+      : kimiUsage
+        ? `${Math.round(kimiUsage.totalSecondsLast5Hours / 60)}m`
+        : "--";
+  const weekly =
+    weeklyPercent != null
+      ? `${weeklyPercent}%`
+      : kimiUsage
+        ? `${Math.round(kimiUsage.totalSecondsWeek / 60)}m`
+        : "--";
+
+  const deepSeekStatus = deepSeek
+    ? deepSeek.available
+      ? "ok"
+      : deepSeek.enabled && deepSeek.apiKeySet
+        ? "warn"
+        : "off"
+    : "checking";
+
+  const type: CockpitDashboardSnapshot["pulse"]["type"] =
+    sessionMeta?.type === "chat" || (latestRunName ?? "").startsWith("chat-")
+      ? "chat"
+      : latestRunName
+        ? "run"
+        : "--";
+
+  let elapsed = "--";
+  if (vm.startedAt) {
+    const startedMs = Date.parse(vm.startedAt);
+    if (!Number.isNaN(startedMs)) {
+      elapsed = formatElapsed(Date.now() - startedMs);
+    }
+  }
+
+  return {
+    pulse: {
+      runId: latestRunName,
+      type,
+      health: vm.health,
+      elapsed,
+      activeLane: vm.activeNode?.name ?? null,
+      lastActivity: vm.lastActivityAt ?? null,
+      blocker: vm.blocker ? { reason: vm.blocker.reason, nodeId: vm.blocker.nodeId } : null,
+      eta: vm.eta ?? null,
+      goalTitle: vm.goalTitle,
+      goalScore: vm.goalScore,
+      nextAction: vm.nextAction,
+      etaConfidence: vm.etaConfidence ?? null,
+    },
+    workQueue: {
+      todosDone,
+      todosTotal,
+      activeItems,
+      blockedItems,
+      workerCounts: {
+        running: vm.progress.running,
+        done: vm.progress.done,
+        failed: vm.progress.failed,
+        blocked: vm.progress.blocked,
+        skipped: vm.progress.skipped,
+        settled: vm.progress.settled,
+        total: vm.progress.total,
+      },
+      workers: vm.workers ?? [],
+      todos: sortedTodos,
+    },
+    runtimeContract,
+    evidence: {
+      failedGates,
+      skippedGates,
+      latestVerification,
+    },
+    providers: {
+      kimi: kimiUsage
+        ? {
+            source: kimiUsage.oauth.loggedIn ? "oauth" : "none",
+            status: kimiUsage.oauth.loggedIn ? "logged-in" : "unavailable",
+            account: kimiAccount,
+            fiveHour,
+            weekly,
+          }
+        : null,
+      deepSeek: {
+        status: deepSeekStatus,
+        balance: deepSeek ? formatDeepSeekBalance(deepSeek) : "n/a",
+        snapshot: deepSeek,
+      },
+    },
+    resources,
+    deepSeekUsage,
+    worktree: {
+      totalChanged: gitChanges.length,
+      counts: worktreeCounts,
+      topPaths,
+      changes: gitChanges,
+    },
+    system: {
+      cpuPercent: sysUsage?.cpuPercent ?? null,
+      memPercent: sysUsage?.memPercent ?? null,
+      workerBudget: null,
+    },
+    stateError,
+    latestRunName,
+  };
+}
+
 export async function renderCockpit(options: CockpitRenderOptions = {}) {
   const width = getTerminalWidth(options.terminalWidth);
   const targetWidth = Math.max(1, width - PANEL_HORIZONTAL_OVERHEAD);
   const fixedFrameHeight = normalizeCockpitFrameHeight(options.height);
   const fixedBodyHeight = fixedFrameHeight != null ? fixedFrameHeight - 2 : undefined;
-  const root = getProjectRoot();
+  const root = await getProjectRootAsync();
   const now = Date.now();
   const cache = options.cache;
   const quick = options.quick ?? false;
   const showHistory = options.showHistory ?? true;
-
-  const resourcesPromise = options.resourceProvider
-    ? options.resourceProvider()
-    : quick
-      ? Promise.resolve(cache?.resources?.value ?? null)
-      : (async () => {
-          const cached = getCacheEntry(cache?.resources, 30_000, now);
-          if (cached !== undefined) return cached;
-          const value = await getCockpitResources(root).catch(() => null);
-          if (cache) cache.resources = { value, ts: now };
-          return value;
-        })();
+  const section = options.section ?? "all";
+  const useEvents = options.events !== "off";
 
   const deepSeekPromise = options.deepSeekProvider
     ? options.deepSeekProvider()
@@ -759,15 +1233,37 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
     }
     if (latestRunName) {
       const [sc, sm] = await Promise.all([
-        readFile(getRunPath(latestRunName, "state.json"), "utf-8").catch(() => null),
-        readSessionMeta(latestRunName).catch(() => null),
+        withTimeout(readFile(getRunPath(latestRunName, "state.json"), "utf-8"), 10000).catch(() => null),
+        withTimeout(readSessionMeta(latestRunName), 10000).catch(() => null),
       ]);
       stateContent = sc;
       sessionMeta = sm;
     }
   }
 
+  const eventsPromise = (async () => {
+    if (!latestRunName || !useEvents) return [] as TelemetryEvent[];
+    const cached = getCacheEntry(cache?.events, 750, now);
+    if (cached !== undefined) return cached;
+    const value = await readEvents(getRunPath(latestRunName)).catch(() => [] as TelemetryEvent[]);
+    if (cache) cache.events = { value, ts: now };
+    return value;
+  })();
+
+  const resourcesPromise = options.resourceProvider
+    ? options.resourceProvider()
+    : quick
+      ? Promise.resolve(cache?.resources?.value ?? null)
+      : (async () => {
+          const cached = getCacheEntry(cache?.resources, 30_000, now);
+          if (cached !== undefined) return cached;
+          const value = await getCockpitResources(root, latestRunName).catch(() => null);
+          if (cache) cache.resources = { value, ts: now };
+          return value;
+        })();
+
   const gitChanges = (await gitChangesPromise) ?? [];
+  const events = await eventsPromise;
 
   let vm = buildRunViewModel(null);
   let stateError: RunViewModel["stateError"] = "missing";
@@ -777,7 +1273,7 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
     const result = parseRunStateResult(stateContent);
     stateError = result.error;
     parsedState = result.state;
-    vm = buildRunViewModel(parsedState, { changedFiles: gitChanges.map((c) => c.path) });
+    vm = buildRunViewModel(parsedState, { changedFiles: gitChanges.map((c) => c.path), telemetry: events });
   }
 
   // ── Fetch todos (cached) ──
@@ -785,7 +1281,7 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
     if (!latestRunName) return null;
     const cached = getCacheEntry(cache?.stateTodos, 750, now);
     if (cached !== undefined) return cached;
-    const value = await readTodos(latestRunName).catch(() => null) ?? await deriveTodosFromState(latestRunName).catch(() => null);
+    const value = await loadTodos(latestRunName).catch(() => null);
     if (cache) cache.stateTodos = { value, ts: now };
     return value;
   })();
@@ -828,6 +1324,21 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
   } else {
     sysUsage = cache?.systemUsage?.value ?? null;
   }
+
+  // ── Normalize into snapshot ──
+  const snapshot = await buildCockpitSnapshot(
+    vm,
+    todos,
+    kimiUsage,
+    resources,
+    deepSeek,
+    deepSeekUsage,
+    sysUsage,
+    gitChanges,
+    sessionMeta,
+    stateError,
+    latestRunName
+  );
 
   // ── Build sections as separate arrays ──
 
@@ -876,7 +1387,10 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
   }
 
   infoLines.push(formatDeepSeekSummary(deepSeek, deepSeekUsage, targetWidth));
-  infoLines.push(formatResourceSummary(resources, targetWidth));
+  const mcpLines: string[] = [formatResourceSummary(resources, targetWidth)];
+  if (snapshot.runtimeContract) {
+    mcpLines.push(formatRuntimeContract(snapshot.runtimeContract, targetWidth));
+  }
 
   const goalLineParts: string[] = [];
   if (sessionMeta?.type === "chat") {
@@ -931,31 +1445,45 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
     return rank !== 0 ? rank : a.id.localeCompare(b.id);
   });
 
-  if (todos && todos.length > 0) {
-    const sortedTodos = [...todos].sort(
-      (a, b) => statusRank(a.status) - statusRank(b.status)
-    );
-    const doneCount = sessionMeta?.todoDoneCount ?? sortedTodos.filter((t) => t.status === "done").length;
-    const totalCount = sessionMeta?.todoCount ?? sortedTodos.length;
+  const sortedTodos = todos
+    ? [...todos].sort((a, b) => statusRank(a.status) - statusRank(b.status))
+    : null;
+  const chatPrefix = sessionMeta?.type === "chat" ? "💬 " : "";
+  if (sortedTodos) {
+    const doneCount = sortedTodos.filter((t) => t.status === "done").length;
+    const totalCount = sortedTodos.length;
     const pct = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
-    const chatPrefix = sessionMeta?.type === "chat" ? "💬 " : "";
     workerLines.push(
       `${style.pinkBold(`${chatPrefix}TODO`)} ${miniProgressBar(doneCount, totalCount)} ${style.creamBold(`${pct}%`)} ` +
         `${style.gray(`(${doneCount}/${totalCount})`)}`
     );
 
-    for (const todo of sortedTodos) {
-      const marker = todoMarker(todo.status);
-      const elapsed = todo.elapsedMs ? style.gray(formatElapsed(todo.elapsedMs)) : "";
-      const agentBadge = todo.agent ? style.gray(`[${truncateText(todo.agent, 8)}]`) : "";
-      const base = `${marker} ${agentBadge} ${truncateText(todo.title, targetWidth - 14)} ${elapsed}`.replace(/\s+/g, " ").trim();
-      workerLines.push(`  ${base}`);
+    if (sortedTodos.length === 0) {
+      workerLines.push(`  ${style.gray("TODO 없음")}`);
+    } else {
+      for (const todo of sortedTodos.slice(0, 6)) {
+        const marker = todoMarker(todo.status);
+        const elapsed = todo.elapsedMs ? style.gray(formatElapsed(todo.elapsedMs)) : "";
+        const agentBadge = todo.agent ? style.gray(`[${truncateText(sanitizeForDisplay(todo.agent), 8)}]`) : "";
+        const idleBadge = todo.agent === "chat" && todo.status === "in_progress"
+          ? style.gray("idle / waiting for input")
+          : "";
+        const base = `${marker} ${agentBadge} ${truncateText(sanitizeForDisplay(todo.title), targetWidth - 14)} ${idleBadge} ${elapsed}`.replace(/\s+/g, " ").trim();
+        workerLines.push(`  ${base}`);
+      }
+      if (sortedTodos.length > 6) {
+        workerLines.push(`  ${style.gray(`… ${sortedTodos.length} total`)}`);
+      }
     }
+  } else {
+    workerLines.push(`${style.pinkBold(`${chatPrefix}TODO`)} ${style.gray("not recorded")}`);
+  }
 
-    if (sortedTodos.length > 0) {
-      workerLines.push(`  ${style.gray(`\u2026 ${sortedTodos.length} total`)}`);
-    }
-  } else if (sortedNodes.length > 0) {
+  if (todos && todos.length > 0) {
+    workerLines.push("");
+  }
+
+  if (sortedNodes.length > 0) {
     const { done, total, running, failed, blocked, skipped, settled } = vm.progress;
     const pct = total > 0 ? Math.round((settled / total) * 100) : 0;
     workerLines.push(
@@ -965,22 +1493,31 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
 
     for (const node of sortedNodes) {
       const stateLabel = workerStateColor(node.state)(node.state.toUpperCase());
+      const liveBadge = node.liveStatus && node.liveStatus !== node.state
+        ? style.gray(` ${node.liveStatus}`)
+        : "";
       const elapsed = formatElapsed(node.elapsedMs);
-      const base = `${stateLabel} ${style.gray(elapsed)} ${truncateText(node.label || node.id, targetWidth - 16)}`;
+      const base = `${stateLabel}${liveBadge} ${style.gray(elapsed)} ${truncateText(sanitizeForDisplay(node.label || node.id), targetWidth - 16)}`;
 
       if (node.state === "running") {
+        const isChatInputWait = node.liveStatus === "waiting-input" || (node.id === "chat" && !node.phase && !node.thinking);
         workerLines.push(`  ${base}`);
-        if (node.phase) {
-          workerLines.push(`    ${style.gray("→")} ${truncateText(node.phase, targetWidth - 8)}`);
+        if (isChatInputWait) {
+          workerLines.push(`    ${style.gray("→")} ${style.gray("idle / waiting for input")}`);
+        } else if (node.phase) {
+          workerLines.push(`    ${style.gray("→")} ${truncateText(sanitizeForDisplay(node.phase), targetWidth - 8)}`);
         } else if (node.currentNode) {
-          workerLines.push(`    ${style.gray("→")} ${truncateText(node.currentNode, targetWidth - 8)}`);
+          workerLines.push(`    ${style.gray("→")} ${truncateText(sanitizeForDisplay(node.currentNode), targetWidth - 8)}`);
         }
-        if (node.lastActivityAgeMs != null && node.lastActivityAgeMs > 30_000) {
-          const staleText = `stale ${formatElapsed(node.lastActivityAgeMs)}`;
+        if (!isChatInputWait && node.liveStatus === "stalled") {
+          const staleText = `stalled ${formatElapsed(node.lastHeartbeatAgeMs ?? node.lastActivityAgeMs ?? 0)}`;
+          workerLines.push(`    ${style.orange("⚠")} ${style.orange(staleText)}`);
+        } else if (!isChatInputWait && node.lastActivityAgeMs != null && node.lastActivityAgeMs > 30_000) {
+          const staleText = `silent ${formatElapsed(node.lastActivityAgeMs)}`;
           workerLines.push(`    ${style.orange("⚠")} ${style.orange(staleText)}`);
         }
       } else if ((node.state === "failed" || node.state === "blocked") && node.lastEvidence) {
-        const evidence = truncateText(node.lastEvidence.message || node.lastEvidence.gate, targetWidth - 10);
+        const evidence = truncateText(sanitizeForDisplay(node.lastEvidence.message || node.lastEvidence.gate), targetWidth - 10);
         const retryBadge = node.retryCount > 0 ? style.orange(` [retry ${node.retryCount}]`) : "";
         workerLines.push(`  ${base}${retryBadge}`);
         workerLines.push(`    ${style.red("→")} ${evidence}`);
@@ -992,8 +1529,10 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
     if (sortedNodes.length > 0) {
       workerLines.push(`  ${style.gray(`\u2026 ${sortedNodes.length} total`)}`);
     }
-  } else {
-    workerLines.push(style.gray("No parallel agents active — waiting for work"));
+  }
+
+  if (sortedNodes.length === 0) {
+    workerLines.push("", `${style.pinkBold("AGENTS")} ${style.gray("No parallel agents active — waiting for work")}`);
   }
 
   // ── Changed / History / State section ──
@@ -1010,15 +1549,29 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
         : stateError === "corrupt"
           ? `omk run --run-id ${latestRunName ?? "<run-id>"}`
           : `omk verify --run ${latestRunName ?? "<run-id>"}`;
-    changedLines.push(`${style.gray("hint:")} ${style.cream(recovery)}`);
+    changedLines.push(`${style.gray("hint:")} ${style.cream(sanitizeForDisplay(recovery))}`);
   }
 
   if (gitChanges.length > 0) {
-    changedLines.push(style.pinkBold(`Changed (${gitChanges.length})`));
-    for (const change of gitChanges) {
-      changedLines.push(`  ${gitMarker(change.status)} ${truncateText(change.path, targetWidth - 6)}`);
+    const counts = snapshot.worktree.counts;
+    const countParts = [
+      counts.M > 0 ? `M:${counts.M}` : "",
+      counts.A > 0 ? `A:${counts.A}` : "",
+      counts.D > 0 ? `D:${counts.D}` : "",
+      counts["?"] > 0 ? `?:${counts["?"]}` : "",
+      counts.R > 0 ? `R:${counts.R}` : "",
+    ].filter(Boolean);
+    const countStr = countParts.join(" ");
+    changedLines.push(style.pinkBold(`Changed (${gitChanges.length})`) + (countStr ? ` ${style.gray(countStr)}` : ""));
+
+    const maxPaths = targetWidth >= 80 && fixedBodyHeight != null && fixedBodyHeight > 24 ? 8 : 5;
+    for (const path of snapshot.worktree.topPaths.slice(0, maxPaths)) {
+      const change = gitChanges.find((c) => c.path === path);
+      if (change) {
+        changedLines.push(`  ${gitMarker(change.status)} ${truncateText(sanitizeForDisplay(change.path), targetWidth - 6)}`);
+      }
     }
-    if (gitChanges.length > 0) {
+    if (gitChanges.length > maxPaths) {
       changedLines.push(`  ${style.gray(`\u2026 ${gitChanges.length} total`)}`);
     }
   } else if (stateError === "ok") {
@@ -1043,7 +1596,7 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
               sorted.map(async (c) => {
                 let st = style.gray("?");
                 try {
-                  const raw = await readFile(getRunPath(c.name, "state.json"), "utf-8");
+                  const raw = await withTimeout(readFile(getRunPath(c.name, "state.json"), "utf-8"), 10000);
                   const parsed = parseRunStateResult(raw);
                   if (parsed.state) {
                     const stateVm = buildRunViewModel(parsed.state);
@@ -1062,7 +1615,7 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
                 } catch { /* ignore */ }
                 let goalTitle = "";
                 try {
-                  const goalRaw = await readFile(getRunPath(c.name, "goal.md"), "utf-8");
+                  const goalRaw = await withTimeout(readFile(getRunPath(c.name, "goal.md"), "utf-8"), 10000);
                   const firstLine = goalRaw.split(/\r?\n/)[0]?.trim() ?? "";
                   goalTitle = firstLine.replace(/^#+\s*/, "").slice(0, 24);
                 } catch { /* ignore */ }
@@ -1088,7 +1641,18 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
   // ── Assemble responsive rectangle ──
   const sep = separator(targetWidth);
   const heightMode = fixedFrameHeight == null ? "auto" : `${fixedFrameHeight}`;
-  const footerLine = `[${style.gray("h")}]istory [${style.gray("+")}/${style.gray("-")}]height [${style.gray("a")}]auto [${style.gray("space")}]pause [${style.gray("q")}]uit ${style.gray(`height:${heightMode}`)}`;
+  const footerLine = buildFooter(targetWidth, heightMode);
+  const agentHeaderIndex = workerLines.findIndex((line) => sanitizeTerminalText(line).includes("AGENTS"));
+  const selectedWorkerLines = section === "todos"
+    ? (agentHeaderIndex >= 0 ? workerLines.slice(0, agentHeaderIndex).filter((line) => line.trim() !== "") : workerLines)
+    : section === "agents"
+      ? (agentHeaderIndex >= 0 ? workerLines.slice(agentHeaderIndex) : workerLines)
+      : section === "mcp"
+        ? []
+        : workerLines;
+  const selectedInfoLines = section === "all" ? infoLines : [];
+  const selectedMcpLines = section === "all" || section === "mcp" ? mcpLines : [];
+  const selectedChangedLines = section === "all" ? changedLines : [];
 
   let body: string[];
 
@@ -1098,17 +1662,66 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
     const sepRows = 2;
     const available = Math.max(0, fixedBodyHeight - headerRows - footerRows - sepRows);
 
-    const infoBudget = Math.max(4, Math.round(available * 0.45));
-    const todoBudget = Math.max(2, Math.round(available * 0.35));
-    const changedBudget = Math.max(2, available - infoBudget - todoBudget);
+    // Priority-based budget: critical info > active agents/TODO > MCP compact > changed/history
+    const infoMin = Math.min(selectedInfoLines.length, 3);
+    const workerMin = Math.min(selectedWorkerLines.length, section === "all" ? 5 : 8);
+    const mcpMin = Math.min(selectedMcpLines.length, 1);
+    const changedMin = Math.min(selectedChangedLines.length, 1);
+
+    let infoBudget = infoMin;
+    let workerBudget = workerMin;
+    let mcpBudget = mcpMin;
+    let changedBudget = changedMin;
+
+    let remaining = available - (infoBudget + workerBudget + mcpBudget + changedBudget);
+
+    if (remaining < 0) {
+      // Emergency shrink from lowest priority upward
+      changedBudget = Math.max(0, changedBudget + remaining);
+      remaining = available - (infoBudget + workerBudget + mcpBudget + changedBudget);
+      if (remaining < 0) {
+        mcpBudget = Math.max(0, mcpBudget + remaining);
+        remaining = available - (infoBudget + workerBudget + mcpBudget + changedBudget);
+        if (remaining < 0) {
+          workerBudget = Math.max(0, workerBudget + remaining);
+          remaining = available - (infoBudget + workerBudget + mcpBudget + changedBudget);
+          if (remaining < 0) {
+            infoBudget = Math.max(1, infoBudget + remaining);
+            remaining = 0;
+          }
+        }
+      }
+    }
+
+    // Distribute surplus to higher priorities
+    if (remaining > 0) {
+      const extraInfo = Math.min(remaining, selectedInfoLines.length - infoBudget);
+      infoBudget += extraInfo;
+      remaining -= extraInfo;
+    }
+    if (remaining > 0) {
+      const extraWorker = Math.min(remaining, selectedWorkerLines.length - workerBudget);
+      workerBudget += extraWorker;
+      remaining -= extraWorker;
+    }
+    if (remaining > 0) {
+      const extraMcp = Math.min(remaining, selectedMcpLines.length - mcpBudget);
+      mcpBudget += extraMcp;
+      remaining -= extraMcp;
+    }
+    if (remaining > 0) {
+      changedBudget += remaining;
+    }
 
     body = [
       ...headerLines,
-      ...fitLines(infoLines, infoBudget),
+      ...fitLines(selectedInfoLines, infoBudget),
       sep,
-      ...fitLines(workerLines, todoBudget),
+      ...fitLines(selectedWorkerLines, workerBudget),
       sep,
-      ...fitLines(changedLines, changedBudget),
+      ...fitLines(selectedMcpLines, mcpBudget),
+      sep,
+      ...fitLines(selectedChangedLines, changedBudget),
       footerLine,
     ];
 
@@ -1117,11 +1730,13 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
   } else {
     body = [
       ...headerLines,
-      ...infoLines,
+      ...selectedInfoLines,
       sep,
-      ...workerLines,
+      ...selectedWorkerLines,
       sep,
-      ...changedLines,
+      ...selectedMcpLines,
+      sep,
+      ...selectedChangedLines,
       footerLine,
     ];
 
@@ -1138,11 +1753,14 @@ export async function cockpitCommand(options: CockpitCommandOptions = {}): Promi
   const refreshMs = normalizeRefreshMs(options.refreshMs);
 
   if (!options.watch) {
-    console.log(await renderCockpit({ runId: options.runId, height: options.height }));
+    console.log(await renderCockpit({ runId: options.runId, height: options.height, section: options.section, events: options.events }));
     return;
   }
 
   const renderer = new CockpitRenderer(refreshMs, options.height);
+  if (options.redraw) {
+    renderer.mode = options.redraw;
+  }
   const cache: CockpitCache = {};
 
   const stop = (): void => {
@@ -1169,13 +1787,16 @@ export async function cockpitCommand(options: CockpitCommandOptions = {}): Promi
         quick: firstPaint,
         showHistory: renderer.showHistory,
         height: renderer.height,
+        section: options.section,
+        events: options.events,
       });
 
       if (firstPaint) {
         // Full clear on first paint so subsequent diff frames have a known baseline
+        const savedMode = renderer.mode;
         renderer.mode = "full";
         renderer.render(frame);
-        renderer.mode = "diff";
+        renderer.mode = savedMode;
         firstPaint = false;
       } else {
         renderer.render(frame);
