@@ -713,6 +713,19 @@ export function readTarballMetadata(tarballPath) {
   }];
 }
 
+export function resolveNpmPackCommand(env = process.env, platform = process.platform) {
+  if (env.npm_execpath) {
+    return {
+      command: process.execPath,
+      argsPrefix: [env.npm_execpath],
+    };
+  }
+  return {
+    command: platform === "win32" ? "npm.cmd" : "npm",
+    argsPrefix: [],
+  };
+}
+
 export function main(tarballPath) {
   const isCI = Boolean(process.env.CI);
   let failed = false;
@@ -723,7 +736,7 @@ export function main(tarballPath) {
     if (tarballPath) {
       packResult = readTarballMetadata(resolveTarballArg(tarballPath));
     } else {
-      const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+      const npmCmd = resolveNpmPackCommand(process.env, process.platform);
       const smokeTmpDir = process.env.OMK_SMOKE_TMPDIR || LINUX_TMPDIR;
       const env = {
         ...process.env,
@@ -732,7 +745,13 @@ export function main(tarballPath) {
           ? { npm_config_cache: process.env.npm_config_cache || `${smokeTmpDir}/omk-npm-cache` }
           : {}),
       };
-      const stdout = execFileSync(npmCmd, ["pack", "--dry-run", "--ignore-scripts", "--json"], {
+      const stdout = execFileSync(npmCmd.command, [
+        ...npmCmd.argsPrefix,
+        "pack",
+        "--dry-run",
+        "--ignore-scripts",
+        "--json",
+      ], {
         encoding: "utf8",
         maxBuffer: 10 * 1024 * 1024,
         timeout: COMMAND_TIMEOUT_MS,

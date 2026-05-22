@@ -30,6 +30,7 @@ import {
   SIZE_BUDGETS,
   readTarballMetadata,
   resolveTarballArg,
+  resolveNpmPackCommand,
 } from "../scripts/package-audit.mjs";
 
 
@@ -116,6 +117,19 @@ describe("readTarballMetadata", () => {
   it("parses executable tar permission strings", () => {
     assert.equal(modeFromTarPermissions("-rwxr-xr-x"), 0o755);
     assert.equal(modeFromTarPermissions("-rw-r--r--"), 0o644);
+  });
+});
+
+describe("resolveNpmPackCommand", () => {
+  it("uses npm_execpath under node to avoid Windows npm.cmd spawn issues", () => {
+    const command = resolveNpmPackCommand({ npm_execpath: "C:\\npm\\bin\\npm-cli.js" }, "win32");
+    assert.equal(command.command, process.execPath);
+    assert.deepEqual(command.argsPrefix, ["C:\\npm\\bin\\npm-cli.js"]);
+  });
+
+  it("falls back to npm shims when npm_execpath is unavailable", () => {
+    assert.deepEqual(resolveNpmPackCommand({}, "win32"), { command: "npm.cmd", argsPrefix: [] });
+    assert.deepEqual(resolveNpmPackCommand({}, "linux"), { command: "npm", argsPrefix: [] });
   });
 });
 
