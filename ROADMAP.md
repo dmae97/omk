@@ -8,8 +8,8 @@ Last updated: 2026-05-22
 Provider routing and graph viewing are no longer purely future work:
 
 - `omk run`, `omk parallel`, and DAG replay expose `--provider auto|kimi`.
-- `omk provider` / `omk deepseek` manage DeepSeek enablement, key setup, availability checks, and Kimi-only fallback.
-- DeepSeek is an opportunistic read-only/advisory worker; Kimi remains the orchestrator, writer, merger, and final authority.
+- `omk provider` / `omk deepseek` manage DeepSeek enablement, key setup, availability checks, and default fallback to the most mature adapter.
+- DeepSeek is an opportunistic read-only/advisory worker; Kimi remains the most mature adapter, orchestrator, writer, merger, and final authority.
 - `omk graph view` generates an HTML view from `.omk/memory/graph-state.json`.
 - `omk goal` has a persisted lifecycle, continue loop, generated plan/evidence criteria, and verification flow.
 
@@ -22,7 +22,7 @@ Provider routing and graph viewing are no longer purely future work:
 - Required before v1.1.18 publish/tag: regenerate the native safety binary, pass package audit, pass smoke-pack/tarball install smoke, and pass `npm run release:check` on the exact intended release diff.
 - Done: provider/deepseek and screenshot JSON command contracts gained hermetic regression tests.
 - Done: current AGENTS/init templates and packaged workflow skills were aligned with the active skills/MCP/agents/harness surface, including all generated agent MCP/skills/hooks flags and parallel subagent orchestration guidance.
-- Remaining: lock broader provider fallback metadata with tests for rate limit, timeout, and Kimi fallback variants.
+- Remaining: lock broader provider fallback metadata with tests for rate limit, timeout, and default fallback variants.
 - Remaining: define minimum machine-readable CLI envelopes for the rest of the automation-critical commands.
 
 ### P1: observability and diagnostics
@@ -38,13 +38,13 @@ Provider routing and graph viewing are no longer purely future work:
 - Deepen `omk team` runtime reporting: worker state, pane/session health, artifacts, and verification handoff.
 - Done: replace the `omk goal plan` stub with a planner that emits steps, acceptance criteria, risks, and evidence gates.
 - Add provider-quality gates before broader non-Kimi worker pools.
-- Keep Kimi-only execution as the safe fallback path for every run.
+- Keep Kimi execution as the safe fallback path for every run.
 
 ## Later tracks
 
 ### Provider routing maturity
 
-- Keep Kimi as the main orchestrator, planner, merger, and final synthesis runtime.
+- Keep Kimi as the most mature adapter and main orchestrator, planner, merger, and final synthesis runtime.
 - Use provider hints for explorer, reviewer, QA, planner, and documentation roles only when preflight is healthy and task risk is low.
 - Record provider attempts, route confidence, fallback reason, and final authority in run evidence.
 

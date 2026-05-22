@@ -1,4 +1,4 @@
-# oh-my-kimi (OMK)
+# OMK — Open Multi-agent Kit
 
 <div align="center">
 
@@ -8,7 +8,7 @@
 <meta property="og:image" content="https://raw.githubusercontent.com/dmae97/oh-my-kimi/main/readmeasset/omk-social-preview.png" />
 <meta property="og:title" content="oh-my-kimi" />
 <meta property="og:url" content="https://oh-my-kimi.sbs/" />
-<meta property="og:description" content="Verified agent runtime for Kimi Code. Stable daily-use core with orchestration surfaces." />
+<meta property="og:description" content="Provider-neutral agent runtime for coding workflows. Stable daily-use core with orchestration surfaces." />
 
 <!-- Twitter -->
 <meta name="twitter:card" content="summary_large_image" />
@@ -20,7 +20,7 @@
 
 <p><strong>Verified agent runtime for Kimi Code.</strong></p>
 <p><sub>Stable daily-use core with orchestration surfaces.</sub></p>
-<p><sub>Kimi writes. OMK coordinates, verifies, remembers, and guards.</sub></p>
+<p><sub>Your agents write. OMK coordinates, verifies, remembers, and guards.</sub></p>
 <p><a href="https://oh-my-kimi.sbs/"><strong>oh-my-kimi.sbs</strong></a> · <a href="https://github.com/dmae97/oh-my-kimi">GitHub</a> · <a href="https://www.npmjs.com/package/@oh-my-kimi/cli">npm</a></p>
 
 <p>
@@ -45,11 +45,11 @@
 
 ## The 10-second version
 
-OMK turns Kimi Code CLI into a bounded coding team with isolated worktrees, DAG-based execution, evidence gates before completion, local graph memory, and a live HUD/cockpit for operator control.
+OMK turns your agent CLI into a bounded coding team with isolated worktrees, DAG-based execution, evidence gates before completion, local graph memory, and a live HUD/cockpit for operator control. It works with Kimi, Codex, Gemini, Claude Code, OpenRouter, Qwen, DeepSeek, and local models.
 
 - Not a prompt pack.
 - Not a model buffet.
-- A Kimi-native control plane for shipping code with verification.
+- A provider-native control plane for shipping code with verification.
 
 ```bash
 npm install -g @oh-my-kimi/cli
@@ -87,12 +87,12 @@ omk cockpit
 | Agents say "done" too early | Evidence gates require files, diffs, summaries, or passing commands before completion is accepted. |
 | Parallel workers corrupt context | Run-scoped state and Git worktrees keep agent lanes isolated until review or merge. |
 | Long sessions lose memory | Local graph memory stores goals, decisions, risks, commands, files, evidence, and concepts. |
-| Kimi needs operator visibility | HUD and cockpit expose run state, TODOs, ETA, usage, workers, and changed files. |
-| Extra models create chaos | Kimi keeps write/merge authority; provider lanes stay advisory, review, QA, or research scoped. |
+| Agents need operator visibility | HUD and cockpit expose run state, TODOs, ETA, usage, workers, and changed files. |
+| Extra models create chaos | Write/merge authority stays bounded; provider lanes stay advisory, review, QA, or research scoped. |
 | Hooks, MCP, and skills drift | `omk doctor`, `omk skill`, `omk mcp`, and generated project assets make the runtime inspectable. |
 | Repeated agent workflows stay ad hoc | Packaged OMK skills now cover memory, surgical coding, alignment/TDD, React diagnostics, managed-agent teamwork, legal workflows, quality gates, and release review. |
 
-**Mental model:** Kimi writes. OMK coordinates, verifies, remembers, and guards.
+**Mental model:** Your agents write. OMK coordinates, verifies, remembers, and guards.
 
 ---
 
@@ -126,8 +126,8 @@ omk cockpit
 Start Here
   omk menu       Interactive OMK main menu
   omk init       Project scaffold: AGENTS.md, DESIGN.md, .omk/
-  omk doctor     Environment check: CLI, Git, hooks, MCP, skills
-  omk chat       Kimi interactive execution
+  omk doctor     Environment check: CLI, Git, hooks, MCP, skills, providers
+  omk chat       Agent interactive execution
   omk plan       Plan-only execution
   omk hud        Execution status and system usage HUD
   omk mode       Switch execution presets (agent, plan, chat, debug, review)
@@ -150,12 +150,12 @@ Advanced / inspectable
   omk servarr    Optional Radarr/Sonarr/Lidarr read-only adapter
 
 Orchestration
-  omk parallel   Parallel Kimi coordinator + workers + reviewer
+  omk parallel   Parallel coordinator + workers + reviewer
   omk run        DAG-based long-running task execution
   omk verify     Evidence-gate verification for a run
   omk goal       Goal lifecycle management
   omk team       tmux-based multi-agent team execution
-  omk research   Kimi-native web research wrapper
+  omk research   Web research wrapper
   omk spec       GitHub Spec Kit bridge
 ```
 
@@ -181,9 +181,9 @@ flowchart LR
   H --> U
 ```
 
-### 1. Kimi-native control plane
+### 1. Provider-native control plane
 
-OMK is built around Kimi Code instead of treating Kimi as a generic backend. Project rules, generated agents, hooks, slash skills, MCP configuration, and run state are shaped so Kimi remains the primary writer and merger.
+OMK is built around your agent provider instead of treating it as a generic backend. Project rules, generated agents, hooks, slash skills, MCP configuration, and run state are shaped so the primary writer remains bounded by OMK state, safety hooks, graph memory, and evidence gates.
 
 ### 2. DAG execution
 
@@ -210,7 +210,7 @@ OMK manages context as bounded capsules rather than unbounded conversation histo
 
 ### 6. Local graph memory
 
-OMK stores durable project memory as a graph: goals, decisions, risks, tasks, commands, files, evidence, and concepts. The graph gives Kimi a smaller, safer context target before it edits a large repository.
+OMK stores durable project memory as a graph: goals, decisions, risks, tasks, commands, files, evidence, and concepts. The graph gives the primary writer a smaller, safer context target before editing a large repository.
 
 ### 7. Worktree isolation
 
@@ -235,7 +235,7 @@ OMK treats project instructions, agent skills, generated hooks, and MCP servers 
 - `omk skill` manages Kimi-facing skills and slash workflows.
 - **Skill Assigner** automatically matches skills, MCP servers, tools, and hooks to DAG nodes based on intent and role (17 rules covering core/product/team presets, web-design, diagram-design, code-review, security-audit, debugging, and more).
 - `omk mcp` inspects project and user MCP configuration.
-- `omk doctor` checks Kimi, Git, hooks, MCP, skills, and runtime health.
+- `omk doctor` checks providers, Git, hooks, MCP, skills, and runtime health.
 
 ### 9. Ensemble decisions and repair policy
 
@@ -269,7 +269,7 @@ OMK includes a Rust native safety loader path and CI-backed artifact matrix. Jav
 
 | Ritual | Use when | Commands |
 | --- | --- | --- |
-| **Ship** | You want Kimi to implement with verification | `omk chat`, `omk parallel "..."`, `omk verify` |
+| **Ship** | You want an agent to implement with verification | `omk chat`, `omk parallel "..."`, `omk verify` |
 | **Inspect** | You need run history or current state | `omk runs`, `omk replay`, `omk inspect`, `omk diff-runs`, `omk summary-show`, `omk hud` |
 | **Design** | You need visual/product direction | `omk design`, `omk design open-design --open` |
 | **Remember** | You need durable project context | `omk graph view --open`, `omk index` |
@@ -291,7 +291,7 @@ omk summary-show
 Expected operator loop:
 
 1. OMK loads project rules, skills, hooks, MCP status, and current Git state.
-2. Kimi receives a shaped prompt with explicit constraints.
+2. The active agent receives a shaped prompt with explicit constraints.
 3. The scheduler creates bounded lanes for implementation, review, or QA.
 4. Evidence gates check required files, diffs, summaries, or commands.
 5. Graph memory records decisions, risks, files, and evidence for the next run.
@@ -320,9 +320,9 @@ OMK examples are intentionally honest: prompts, generated outputs, run reports, 
 | OMC | You live inside Claude Code | Team-first Claude Code orchestration |
 | OMX | You want a stronger Codex CLI workflow | Codex workflow layer with reusable modes |
 | OMO | You want open multi-model routing | Open multi-model agent team with aggressive routing |
-| OMK | You want Kimi Code with verification | Kimi-native DAG runtime with evidence gates and graph memory |
+| OMK | You want verified agent execution | Provider-neutral DAG runtime with evidence gates and graph memory |
 
-OMK is intentionally Kimi-first. Other models can advise, review, or QA, but the run remains bounded by OMK state, safety hooks, graph memory, and evidence gates.
+OMK is provider-neutral. Any supported model can advise, review, or QA, and the run remains bounded by OMK state, safety hooks, graph memory, and evidence gates.
 
 ---
 
@@ -338,7 +338,7 @@ Requirements:
 
 - Node.js 20+
 - Git
-- Kimi Code CLI installed and authenticated
+- At least one supported agent provider (Kimi, Codex, Gemini, Claude Code, OpenRouter, etc.) installed and authenticated
 - tmux for team/HUD workflows on Unix-like systems
 - Node.js 24 when launching upstream Open Design locally
 
@@ -371,7 +371,7 @@ The Open Design bridge does not pass inherited `OPENAI_API_KEY`, OAuth tokens, `
 | Area | Commands |
 | --- | --- |
 | Bootstrap | `omk init`, `omk doctor`, `omk menu`, `omk update`, `omk star` |
-| Kimi execution | `omk chat`, `omk plan`, `omk parallel`, `omk run` |
+| Agent execution | `omk chat`, `omk plan`, `omk parallel`, `omk run` |
 | Verification | `omk verify`, `omk review`, `npm run verify`, `npm run release:check` |
 | Operator UI | `omk hud`, `omk cockpit`, `omk runs`, `omk summary`, `omk summary-show` |
 | Replay & diff | `omk replay`, `omk inspect`, `omk diff-runs` |
@@ -437,13 +437,13 @@ Then set `~/.kimi/mcp.json` to an absolute command such as `/home/you/.local/bin
 
 ## Repository topics
 
-`kimi-code` · `verified-agent-runtime` · `dag-execution` · `evidence-gates` · `graph-memory` · `worktree-isolation` · `mcp` · `agent-skills` · `safety-hooks` · `open-design` · `deepseek-advisory`
+`agent-runtime` · `provider-neutral` · `coding-agents` · `dag-runtime` · `evidence-gates` · `multi-agent-orchestration` · `agent-supervisor` · `kimi-code` · `verified-agent-runtime` · `dag-execution` · `graph-memory` · `worktree-isolation` · `mcp` · `agent-skills` · `safety-hooks` · `open-design` · `deepseek-advisory`
 
 ---
 
 ## Acknowledgements
 
-OMK is part of the broader oh-my agent harness family and is built specifically for Kimi Code users who want stronger execution state, verification, memory, and operator visibility without giving up Kimi as the primary coding authority.
+OMK is part of the broader oh-my agent harness family. It is built for developers who want stronger execution state, verification, memory, and operator visibility from any supported coding agent, without giving up the primary writer as the bounded coding authority.
 
 ---
 

@@ -1,7 +1,7 @@
 {
   "name": "@oh-my-kimi/cli",
   "version": "1.1.18",
-  "description": "Verified agent runtime for Kimi Code. Stable daily-use core with alpha orchestration surfaces.",
+  "description": "Provider-neutral agent runtime for coding workflows. Verified DAG execution with evidence gates, worktree isolation, and local graph memory.",
   "type": "module",
   "bin": {
     "omk": "dist/cli.js",
@@ -34,6 +34,13 @@
     "native:normalize": "node scripts/normalize-native-artifacts.mjs"
   },
   "keywords": [
+    "agent-runtime",
+    "provider-neutral",
+    "coding-agents",
+    "dag-runtime",
+    "evidence-gates",
+    "multi-agent-orchestration",
+    "agent-supervisor",
     "agent",
     "agent-ensemble",
     "agent-orchestration",

@@ -412,14 +412,14 @@ export async function chatCommand(options: {
   const effectiveWorkers = resolveChatWorkerCount(options.workers, resources.maxWorkers);
   const executionPrompt = parseExecutionPromptPolicy(options.execution, "--execution") ?? resources.executionPrompt;
 
-  // Dependency preflight: fail-fast before project auto-init if Kimi or node-pty is missing
+  // Dependency preflight: fail-fast before project auto-init if primary CLI or node-pty is missing
   const kimiBin = resolveKimiBin();
   const kimiAvailable = await checkCommand(kimiBin);
   if (!kimiAvailable) {
     console.error(
       status.error(
         `[omk] \`${kimiBin}\` command not found in PATH. ` +
-          "Install Kimi CLI first: npm i -g @anthropic-ai/kimi-code\n" +
+          "Install the primary CLI first: npm i -g @anthropic-ai/kimi-code\n" +
           "If already installed, check your PATH or set KIMI_BIN env var."
       )
     );
@@ -990,7 +990,7 @@ async function printChatExitBanner(options: {
     separator(50),
     label("Run ID", runId),
     label("OMK Session", sessionId),
-    ...(kimiSessionId ? [label("Kimi Session", kimiSessionId)] : []),
+    ...(kimiSessionId ? [label("Primary Session", kimiSessionId)] : []),
     label("Resume", `omk runs`),
     label("Workers", workersText),
     label("MCP", mcpText),

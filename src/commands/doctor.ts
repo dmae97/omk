@@ -263,7 +263,7 @@ function buildDoctorCategories(
     { title: "Project Root", checks: async () => rootChecks(rootResolution) },
     { title: "Runtime", checks: () => runtimeChecks(resources) },
     { title: "Toolchain", checks: () => toolchainChecks(root) },
-    { title: "Kimi CLI", checks: () => kimiChecks(root, resources) },
+    { title: "Primary CLI", checks: () => kimiChecks(root, resources) },
     { title: "Project", checks: () => projectChecks(root) },
     { title: "OMK Scaffold", checks: () => omkChecks(root) },
     { title: "Agent YAML", checks: () => agentYamlChecks(root) },
@@ -506,16 +506,16 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<void> 
         npmGlobalBin: findMsg("npm global bin"),
       },
       kimi: {
-        installed: findOk("Kimi CLI"),
-        version: findMsg("Kimi CLI"),
-        runnable: findOk("Kimi Runnable"),
-        session: findMsg("Kimi Session"),
-        config: findOk("Kimi Config"),
+        installed: findOk("Primary CLI"),
+        version: findMsg("Primary CLI"),
+        runnable: findOk("Primary Runnable"),
+        session: findMsg("Primary Session"),
+        config: findOk("Primary Config"),
         hooks: findOk("OMK Hooks"),
-        capabilities: findMsg("Kimi Capabilities"),
-        agentFile: findOk("Kimi Agent File"),
-        webTools: findOk("Kimi Web Tools"),
-        swarmStatus: findMsg("Kimi Swarm"),
+        capabilities: findMsg("Primary Capabilities"),
+        agentFile: findOk("Primary Agent File"),
+        webTools: findOk("Primary Web Tools"),
+        swarmStatus: findMsg("Primary Swarm"),
         installGuide: "curl -LsSf https://code.kimi.com/install.sh | bash or see https://github.com/dmae97/oh-my-kimi#install",
       },
       git: {
@@ -687,7 +687,7 @@ async function applyDoctorFixes(root: string, options: DoctorOptions, rootResolu
       id: "global-sync",
       category: "global-sync",
       safetyTier: "global",
-      reason: "global sync: would sync global Kimi config (dry-run)",
+      reason: "global sync: would sync global config (dry-run)",
       verifyCheck: "Global MCP",
     });
   } else if (allowGlobalFixes) {
@@ -708,7 +708,7 @@ async function applyDoctorFixes(root: string, options: DoctorOptions, rootResolu
           severity: "warn",
           safetyTier: "global",
           status: "blocked",
-          reason: `global sync: ${step.name} blocked (set OMK_MCP_ALLOW_WRITE_CONFIG=1 to repair global Kimi config)`,
+          reason: `global sync: ${step.name} blocked (set OMK_MCP_ALLOW_WRITE_CONFIG=1 to repair global config)`,
           verifyCheck: "Global MCP",
         });
       }
@@ -754,7 +754,7 @@ async function applyDoctorFixes(root: string, options: DoctorOptions, rootResolu
       severity: "warn",
       safetyTier: "global",
       status: "skipped",
-      reason: "global sync skipped (safe default; pass `omk doctor --fix --global` or set OMK_DOCTOR_FIX_GLOBAL=1 / OMK_MCP_ALLOW_WRITE_CONFIG=1 to sync global Kimi config)",
+      reason: "global sync skipped (safe default; pass `omk doctor --fix --global` or set OMK_DOCTOR_FIX_GLOBAL=1 / OMK_MCP_ALLOW_WRITE_CONFIG=1 to sync global config)",
       verifyCheck: "Global MCP",
     });
   }
@@ -1785,9 +1785,9 @@ async function kimiChecks(root: string, resources: OmkResourceSettings): Promise
 
   if (kimiExists) {
     const version = await getKimiVersion();
-    results.push({ name: "Kimi CLI", status: "ok", message: version ?? t("doctor.kimiInstalled") });
+    results.push({ name: "Primary CLI", status: "ok", message: version ?? t("doctor.kimiInstalled") });
     results.push({
-      name: "Kimi Runnable",
+      name: "Primary Runnable",
       status: version ? "ok" : "warn",
       message: version ? t("doctor.kimiRunnable") : t("doctor.kimiRunFailed"),
     });
@@ -1798,23 +1798,23 @@ async function kimiChecks(root: string, resources: OmkResourceSettings): Promise
       const kimiConfig = await readTextFile(kimiConfigPath, "");
       const hasIndicators = /default_model|session|credential/.test(kimiConfig);
       results.push({
-        name: "Kimi Session",
+        name: "Primary Session",
         status: hasIndicators ? "ok" : "warn",
-        message: hasIndicators ? "config indicators present" : "kimi login may be required",
+        message: hasIndicators ? "config indicators present" : "provider login may be required",
       });
     } catch {
-      results.push({ name: "Kimi Session", status: "warn", message: "config read failed" });
+      results.push({ name: "Primary Session", status: "warn", message: "config read failed" });
     }
   } else {
-    results.push({ name: "Kimi CLI", status: "fail", message: t("doctor.kimiNotFound") });
-    results.push({ name: "Kimi Install Guide", status: "info", message: "curl -LsSf https://code.kimi.com/install.sh | bash or see https://github.com/dmae97/oh-my-kimi#install" });
-    results.push({ name: "Kimi Capabilities", status: "info", message: "unknown — kimi not installed" });
+    results.push({ name: "Primary CLI", status: "fail", message: t("doctor.kimiNotFound") });
+    results.push({ name: "Primary Install Guide", status: "info", message: "curl -LsSf https://code.kimi.com/install.sh | bash or see https://github.com/dmae97/oh-my-kimi#install" });
+    results.push({ name: "Primary Capabilities", status: "info", message: "unknown — primary CLI not installed" });
   }
 
   const kimiConfigPath = getKimiConfigPath();
   const kimiConfigExists = await pathExists(kimiConfigPath);
   results.push({
-    name: "Kimi Config",
+    name: "Primary Config",
     status: kimiConfigExists ? "ok" : "warn",
     message: kimiConfigExists ? t("doctor.kimiConfigExists") : t("doctor.kimiConfigMissing"),
   });
@@ -1842,20 +1842,20 @@ async function kimiChecks(root: string, resources: OmkResourceSettings): Promise
       caps.variant && "variant",
     ].filter(Boolean);
     results.push({
-      name: "Kimi Capabilities",
+      name: "Primary Capabilities",
       status: supported.length > 0 ? "ok" : "info",
       message: supported.length > 0 ? supported.join(", ") : "no extended sampling flags",
     });
 
     results.push({
-      name: "Kimi Agent File",
+      name: "Primary Agent File",
       status: caps.agentFile ? "ok" : "warn",
-      message: caps.agentFile ? "--agent-file supported" : "--agent-file not detected — update Kimi CLI",
+      message: caps.agentFile ? "--agent-file supported" : "--agent-file not detected — update primary CLI",
     });
 
     const webToolStatus = caps.webTools ? "ok" : agentYamlDeclaresWebTools ? "info" : "warn";
     results.push({
-      name: "Kimi Web Tools",
+      name: "Primary Web Tools",
       status: webToolStatus,
       message: caps.webTools
         ? "SearchWeb / FetchURL available"
@@ -1865,12 +1865,12 @@ async function kimiChecks(root: string, resources: OmkResourceSettings): Promise
     });
 
     results.push({
-      name: "Kimi Swarm",
+      name: "Primary Swarm",
       status: caps.swarmStatus === "available" ? "ok" : caps.swarmStatus === "unavailable" ? "info" : "warn",
       message: caps.swarmStatus === "available"
         ? "K2.6 Agent Swarm platform capability detected"
         : caps.swarmStatus === "unavailable"
-          ? "swarm APIs not available in this Kimi version"
+          ? "swarm APIs not available in this primary CLI version"
           : "unable to detect swarm capability from version",
     });
   }

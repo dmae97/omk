@@ -32,12 +32,12 @@ export function registerBasicCommands(program: Command): void {
 
   program
     .command("update")
-    .description("Check or run OMK and Kimi CLI updates")
+    .description("Check or run OMK and primary CLI updates")
     .argument("[action]", "check (default) | omk | kimi")
     .option("--json", "Output update status as JSON")
     .option("--refresh", "Force refresh update cache")
     .option("--yes", "Skip confirmation prompt")
-    .option("--install-script", "Print official Kimi install script (no execution)")
+    .option("--install-script", "Print official primary CLI install script (no execution)")
     .action(async (action, options) => {
       const { checkUpdates } = await import("../util/update-check.js");
       const actionMode = action ?? "check";
@@ -52,10 +52,10 @@ export function registerBasicCommands(program: Command): void {
             ? `${status.kimi.installed} → ${style.orange(status.kimi.latest ?? "?")}`
             : `${status.kimi.installed} ${style.gray("(latest)")}`)
           : style.red("not installed");
-        console.log(`  kimi: ${kimiLabel}`);
+        console.log(`  cli: ${kimiLabel}`);
         if (status.kimi.outdated) console.log(`  ℹ️  ${style.gray(status.kimi.installCmd)}`);
         if (status.omk.error) console.log(style.gray(`  omk error: ${status.omk.error}`));
-        if (status.kimi.error) console.log(style.gray(`  kimi error: ${status.kimi.error}`));
+        if (status.kimi.error) console.log(style.gray(`  cli error: ${status.kimi.error}`));
         if (status.cacheHit) console.log(style.gray(`
     (cached, checked ${status.checkedAt})`));
         console.log("");
@@ -93,7 +93,7 @@ export function registerBasicCommands(program: Command): void {
         const needsInstall = kimiCheck.failed;
 
         if (!options.yes && !needsInstall) {
-          console.log("Upgrade kimi-cli via: uv tool upgrade kimi-cli --no-cache");
+          console.log("Upgrade primary CLI via: uv tool upgrade kimi-cli --no-cache");
           console.log("Press Enter to continue or Ctrl+C to cancel...");
           const rl = (await import("readline")).createInterface({ input: process.stdin, output: process.stdout });
           await new Promise<void>((resolve) => rl.question("", () => { rl.close(); resolve(); }));
@@ -103,7 +103,7 @@ export function registerBasicCommands(program: Command): void {
           const script = process.platform === "win32"
             ? "Invoke-RestMethod https://code.kimi.com/install.ps1 | Invoke-Expression"
             : "curl -LsSf https://code.kimi.com/install.sh | bash";
-          console.log(`Kimi CLI not found. Installing via official script...`);
+          console.log(`Primary CLI not found. Installing via official script...`);
           if (process.platform === "win32") {
             console.error("Please run the following in PowerShell:");
             console.log(script);
@@ -208,7 +208,7 @@ export function registerBasicCommands(program: Command): void {
     .option("--json", t("cmd.doctorJsonOption"))
     .option("--soft", "Soft mode: do not fail on missing tools")
     .option("--fix", "Apply safe local repairs before reporting")
-    .option("--global", "With --fix, also attempt explicit global Kimi/git repairs")
+    .option("--global", "With --fix, also attempt explicit global CLI/git repairs")
     .option("--dry-run", "Preview doctor fixes without writing")
     .option("--fix-level <level>", "Doctor fix safety level: safe | recommended | aggressive", "safe")
     .option("--verify-fix", "Run doctor checks again after applying fixes", true)
@@ -343,7 +343,7 @@ export function registerBasicCommands(program: Command): void {
     .option("--cockpit-history <off|static|watch>", "Cockpit history pane mode", "static")
     .option("--cockpit-side-width <percent>", "Cockpit side pane width percentage (default: auto, about 45-50%)")
     .option("--cockpit-height <rows>", "Cockpit fixed height in rows (default: auto)")
-    .option("--smoke", "Run chat startup preflight and runtime MCP merge checks without launching Kimi")
+    .option("--smoke", "Run chat startup preflight and runtime MCP merge checks without launching the agent")
     .option("--json", "With --smoke, output machine-readable JSON")
     .action(async (options) => {
       const globalOpts = program.opts();
@@ -353,7 +353,7 @@ export function registerBasicCommands(program: Command): void {
 
   program
     .command("research <query>")
-    .description("Run a web research query via Kimi native SearchWeb/FetchURL")
+    .description("Run a web research query via native SearchWeb/FetchURL")
     .option("--agent-file <path>", "Custom researcher agent YAML")
     .action(async (query, options) => {
       const { researchCommand } = await import("../commands/research.js");
@@ -386,7 +386,7 @@ export function registerBasicCommands(program: Command): void {
     .description("Open Design local CLI bridge for OMK")
     .option("--artifact-dir <path>", "Directory where generated Open Design artifacts must be written")
     .option("--cwd <path>", "Workspace directory passed by Open Design")
-    .option("--diagnose", "Run bounded bridge diagnostics without reading stdin or launching Kimi")
+    .option("--diagnose", "Run bounded bridge diagnostics without reading stdin or launching the agent")
     .option("--image <path>", "Image/screenshot path passed by Open Design; repeatable", (value: string, previous: string[]) => {
       previous.push(value);
       return previous;
@@ -394,12 +394,12 @@ export function registerBasicCommands(program: Command): void {
     .option("--json", "Output diagnose/bridge status as JSON")
     .option("--model <model>", "Model override from Open Design")
     .option("--run-id <id>", "Stable Open Design bridge run id for artifacts")
-    .option("--smoke", "Return the Open Design smoke-test response without launching Kimi")
+    .option("--smoke", "Return the Open Design smoke-test response without launching the agent")
     .option("--stdio", "Read the Open Design prompt from stdin")
     .option("--stdin-idle-ms <ms>", "Maximum idle time while reading Open Design stdin", "3000")
     .option("--stdin-max-bytes <bytes>", "Maximum Open Design prompt size", "524288")
     .option("--stdin-timeout-ms <ms>", "Maximum total time while reading Open Design stdin", "30000")
-    .option("--timeout-ms <ms>", "Maximum Kimi print-mode runtime", "1200000")
+    .option("--timeout-ms <ms>", "Maximum agent print-mode runtime", "1200000")
     .action(async (options: { artifactDir?: string; cwd?: string; diagnose?: boolean; image?: string[]; json?: boolean; model?: string; runId?: string; smoke?: boolean; stdio?: boolean; stdinIdleMs?: string; stdinMaxBytes?: string; stdinTimeoutMs?: string; timeoutMs?: string }) => {
       const { openDesignAgentCommand } = await import("../commands/open-design-agent.js");
       await openDesignAgentCommand({ ...options, runId: options.runId ?? program.opts().runId });

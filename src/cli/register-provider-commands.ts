@@ -62,7 +62,7 @@ export function registerProviderCommands(program: Command): void {
     });
   provider
     .command("enable <provider>")
-    .description("Enable a provider for routing while keeping Kimi as final authority")
+    .description("Enable a provider for routing while keeping the primary provider as final authority")
     .option("--json", "Output JSON")
     .action(async (target, options) => {
       const { providerEnableCommand } = await import("../commands/provider.js");
@@ -70,7 +70,7 @@ export function registerProviderCommands(program: Command): void {
     });
   provider
     .command("disable <provider> [reason]")
-    .description("Disable a provider and force Kimi fallback")
+    .description("Disable a provider and force primary provider fallback")
     .option("--json", "Output JSON")
     .action(async (target, reason, options) => {
       const { providerDisableCommand } = await import("../commands/provider.js");
@@ -87,7 +87,7 @@ export function registerProviderCommands(program: Command): void {
     });
   deepseekProvider
     .command("disable [reason]")
-    .description("Disable DeepSeek workers and force Kimi-only fallback")
+    .description("Disable DeepSeek workers and force primary-only fallback")
     .option("--json", "Output JSON")
     .action(async (reason, options) => {
       const { providerDeepSeekDisableCommand } = await import("../commands/provider.js");
@@ -124,7 +124,7 @@ export function registerProviderCommands(program: Command): void {
     });
   deepseek
     .command("disable [reason]")
-    .description("Disable DeepSeek workers and force Kimi-only fallback")
+    .description("Disable DeepSeek workers and force primary-only fallback")
     .option("--json", "Output JSON")
     .action(async (reason, options) => {
       const { providerDeepSeekDisableCommand } = await import("../commands/provider.js");

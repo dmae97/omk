@@ -264,7 +264,7 @@ For web-heavy research, prefer a no-thinking research profile when the runtime s
 
 ## Okabe / D-Mail Policy
 
-This project is Kimi Code-native. Generated agents should inherit the Okabe-compatible base agent so the `SendDMail` tool is available. Use Okabe smart context management plus D-Mail checkpoints before risky refactors, context compaction, multi-agent handoffs, or rollback-prone work. D-Mail notes should be concise recovery records: current goal, changed files, verification state, blockers, and intended next action.
+This project is a provider-neutral agent runtime for coding workflows, originally built with deep Kimi integration. Generated agents should inherit the Okabe-compatible base agent so the `SendDMail` tool is available. Use Okabe smart context management plus D-Mail checkpoints before risky refactors, context compaction, multi-agent handoffs, or rollback-prone work. D-Mail notes should be concise recovery records: current goal, changed files, verification state, blockers, and intended next action.
 
 ## Context Policy
 
