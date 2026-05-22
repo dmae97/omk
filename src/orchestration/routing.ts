@@ -508,7 +508,7 @@ export function dagNodeRoutingEnv(node: DagNode, dag?: import("./dag.js").Dag): 
     OMK_ROUTE_RATIONALE: routing.rationale ?? "",
     OMK_PROVIDER_HINT: routing.provider ?? "auto",
     OMK_PROVIDER_MODEL_TIER: routing.providerModelTier ?? "",
-    OMK_PROVIDER_FALLBACK: routing.fallbackProvider ?? "kimi",
+    OMK_PROVIDER_FALLBACK: routing.fallbackProvider ?? DEFAULT_FALLBACK_PROVIDER,
     OMK_PROVIDER_REASON: routing.providerReason ?? "",
     OMK_ROUTE_REQUIRES_MCP: String(routing.requiresMcp ?? false),
     OMK_ROUTE_REQUIRES_TOOL_CALLING: String(routing.requiresToolCalling ?? false),
