@@ -41,9 +41,15 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
   let activeTick: (() => Promise<void>) | undefined;
   let activeRunOptions: RunOptions | undefined;
   let lastTerminalChangeAt = Date.now();
+  let telemetryQueue: Promise<void> = Promise.resolve();
   function emitTelemetry(event: Parameters<typeof appendEvent>[1]): void {
     if (!executorOptions.eventRunDir) return;
-    void appendEvent(executorOptions.eventRunDir, event).catch(() => {});
+    telemetryQueue = telemetryQueue
+      .then(() => appendEvent(executorOptions.eventRunDir!, event))
+      .catch(() => {});
+  }
+  async function flushTelemetry(): Promise<void> {
+    await telemetryQueue.catch(() => {});
   }
   function bumpTerminalActivity(): void {
     lastTerminalChangeAt = Date.now();
@@ -690,7 +696,7 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
         if (executorOptions.signal) {
           executorOptions.signal.removeEventListener("abort", externalAbortHandler);
         }
-        resolveDone(result);
+        void flushTelemetry().finally(() => resolveDone(result));
       }
 
       async function finalizeRunFailure(reason: string, logMessage?: string): Promise<void> {

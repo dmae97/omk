@@ -1,6 +1,6 @@
 import { runShell, checkCommand } from "../util/shell.js";
 import { getProjectRoot, pathExists, writeFileSafe, readTextFile } from "../util/fs.js";
-import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "path";
+import { dirname, isAbsolute, join, posix, relative, resolve, sep, win32 } from "path";
 import { chmod, lstat, mkdir, readdir, rm } from "fs/promises";
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { createServer } from "net";
@@ -133,13 +133,15 @@ function corepackBinaryName(platform: NodeJS.Platform): string {
 }
 
 function buildOpenDesignNodeRuntime(nodeCommand: string, env: NodeJS.ProcessEnv, platform: NodeJS.Platform): OpenDesignNodeRuntime {
-  const binDir = dirname(nodeCommand);
+  const pathModule = platform === "win32" ? win32 : posix;
+  const pathDelimiter = platform === "win32" ? ";" : ":";
+  const binDir = pathModule.dirname(nodeCommand);
   const pathKey = Object.keys(env).find((key) => key.toLowerCase() === "path") ?? "PATH";
   const currentPath = env[pathKey] ?? "";
   return {
-    corepackCommand: join(binDir, corepackBinaryName(platform)),
+    corepackCommand: pathModule.join(binDir, corepackBinaryName(platform)),
     env: {
-      [pathKey]: currentPath ? `${binDir}${delimiter}${currentPath}` : binDir,
+      [pathKey]: currentPath ? `${binDir}${pathDelimiter}${currentPath}` : binDir,
     },
     nodeCommand,
   };

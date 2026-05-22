@@ -82,7 +82,7 @@ test("root agent subagent parser resolves role aliases and base role files", asy
       ["explorer", "explorer"],
       ["explore", "explorer"],
     ]);
-    assert.ok(refs.every((ref) => ref.baseAgentFile.endsWith("/.omk/agents/roles/explorer.yaml")));
+    assert.ok(refs.every((ref) => ref.baseAgentFile.replace(/\\/g, "/").endsWith("/.omk/agents/roles/explorer.yaml")));
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -32,6 +32,7 @@ function runMcpScript(projectRoot, homeRoot, scriptBody, extraEnv = {}) {
       OMK_SKILLS_SCOPE: "",
       OMK_HOOKS_SCOPE: "",
       OMK_MCP_PREFLIGHT: "off",
+      OMK_MCP_SUPPRESS_PRUNE_WARNINGS: "",
       ...extraEnv,
       HOME: homeRoot,
       OMK_ORIGINAL_HOME: homeRoot,

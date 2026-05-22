@@ -98,7 +98,7 @@ describe("readTarballMetadata", () => {
       writeFileSync(join(packageDir, "README.md"), "# ok\n", "utf-8");
 
       const tarball = join(root, "space path package.tgz");
-      execFileSync("tar", ["-czf", tarball, "-C", fixture, "package"]);
+      execFileSync("tar", ["-czf", "space path package.tgz", "-C", "fixture", "package"], { cwd: root });
 
       const [metadata] = readTarballMetadata(tarball);
       assert.equal(metadata.name, "space-pkg");

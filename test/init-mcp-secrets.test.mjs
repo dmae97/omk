@@ -508,9 +508,10 @@ test("init installs an OMK-safe awesome-agent-skills UserPromptSubmit router hoo
 
     const hookPath = join(projectRoot, ".omk", "hooks", "awesome-agent-skills-router.sh");
     const hookBody = await readFile(hookPath, "utf-8");
-    assert.match(hookBody, /VoltAgent\/awesome-agent-skills/);
-    assert.match(hookBody, /omk-flow-design-to-code/);
-    assert.match(hookBody, /Do not auto-install third-party skills/);
+    const normalizedHookBody = hookBody.replace(/\\/g, "/");
+    assert.match(normalizedHookBody, /VoltAgent\/awesome-agent-skills/);
+    assert.match(normalizedHookBody, /omk-flow-design-to-code/);
+    assert.match(normalizedHookBody, /Do not auto-install third-party skills/);
 
     const hookStat = await stat(hookPath);
     assertExecutableModeIfSupported(hookStat, "generated hook should be executable");

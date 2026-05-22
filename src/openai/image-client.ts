@@ -352,8 +352,8 @@ export async function saveOpenAiImageResult(
   const stem = safeTimestamp(now);
   const imagePath = join(dir, `${stem}.${result.outputFormat}`);
   const metadataPath = join(dir, `${stem}.json`);
-  const relativeImagePath = relative(root, imagePath);
-  const relativeMetadataPath = relative(root, metadataPath);
+  const relativeImagePath = relative(root, imagePath).replace(/\\/g, "/");
+  const relativeMetadataPath = relative(root, metadataPath).replace(/\\/g, "/");
 
   await writeFile(imagePath, result.image);
   const metadata: OpenAiImageMetadata = {

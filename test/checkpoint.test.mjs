@@ -32,11 +32,11 @@ test("restoreCheckpoint refuses dirty worktree unless force is explicit", async 
     const blocked = await restoreCheckpoint(checkpoint.checkpointId, "run-1");
     assert.equal(blocked.success, false);
     assert.match(blocked.message, /dirty worktree/i);
-    assert.equal(await readFile(join(projectRoot, "app.txt"), "utf-8"), "base\n");
+    assert.equal((await readFile(join(projectRoot, "app.txt"), "utf-8")).replace(/\r\n/g, "\n"), "base\n");
 
     const forced = await restoreCheckpoint(checkpoint.checkpointId, "run-1", { force: true });
     assert.equal(forced.success, true, forced.message);
-    assert.equal(await readFile(join(projectRoot, "app.txt"), "utf-8"), "checkpoint\n");
+    assert.equal((await readFile(join(projectRoot, "app.txt"), "utf-8")).replace(/\r\n/g, "\n"), "checkpoint\n");
   } finally {
     if (previousProjectRoot === undefined) delete process.env.OMK_PROJECT_ROOT;
     else process.env.OMK_PROJECT_ROOT = previousProjectRoot;

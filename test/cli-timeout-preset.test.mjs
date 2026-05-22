@@ -15,6 +15,10 @@ const DAG_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "commands", "da
 const RUNTIME_SCOPE_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "util", "runtime-scope.js")).href;
 const MODE_PRESET_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "util", "mode-preset.js")).href;
 
+function removeTree(path) {
+  rmSync(path, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+}
+
 function runHelp(command) {
   return spawnSync(process.execPath, [CLI, command, "--help"], {
     cwd: process.cwd(),
@@ -309,7 +313,7 @@ test("open-design Node runtime can use an explicit Node 24 binary while OMK runs
 
   assert.equal(runtime?.corepackCommand, "/opt/node-v24/bin/corepack");
   assert.equal(runtime?.nodeCommand, "/opt/node-v24/bin/node");
-  assert.equal(runtime?.env?.PATH, `/opt/node-v24/bin${delimiter}/usr/bin`);
+  assert.equal(runtime?.env?.PATH, "/opt/node-v24/bin:/usr/bin");
 });
 
 test("design open-design bridge installs awesome-design-md prompt template", async () => {
@@ -326,7 +330,7 @@ test("design open-design bridge installs awesome-design-md prompt template", asy
     assert.match(template.prompt, /DESIGN\.md/);
     assert.equal(result.changedFiles.includes("prompt-templates/image/awesome-design-md-web-ui.json"), true);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTree(root);
   }
 });
 
@@ -405,7 +409,7 @@ test("design open-design bridge supports current Open Design runtime registry la
     assert.match(readFileSync(join(root, "apps/web/public/agent-icons/omk.svg"), "utf-8"), /<svg/);
     assert.equal(result.changedFiles.includes("apps/daemon/src/runtimes/defs/omk.ts"), true);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTree(root);
   }
 });
 
@@ -589,7 +593,7 @@ test("open-design-agent isolated HOME does not inherit local auth directories by
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.doesNotMatch(result.stderr + result.stdout, /leaked-local-auth/);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTree(root);
   }
 });
 
@@ -657,7 +661,7 @@ test("open-design-agent treats generated Open Design artifacts as success after 
     assert.match(result.stdout, /Generated Open Design artifact: .*index\.html/);
     assert.equal(readFileSync(join(workspace, ".omk", "open-design-artifacts", "timeout-artifact", "index.html"), "utf8"), "<html>ok</html>");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTree(root);
   }
 });
 
@@ -724,7 +728,7 @@ test("open-design-agent timeout with stdout only is not success", () => {
     assert.equal(parsed.status, "timeout_no_artifact");
     assert.deepEqual(parsed.artifacts, []);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTree(root);
   }
 });
 

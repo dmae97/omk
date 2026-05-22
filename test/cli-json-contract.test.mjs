@@ -155,7 +155,7 @@ test("servarr config-path --json emits parseable stdout-only JSON", async () => 
 
   const parsed = parseSingleStdoutJson(cap);
   assert.equal(parsed.ok, true);
-  assert.match(parsed.path, /\.omk\/servarr\.yml$/u);
+  assert.match(parsed.path.replace(/\\/g, "/"), /\.omk\/servarr\.yml$/u);
   assert.equal(cap.stderr.length, 0, "should not emit to stderr");
 });
 

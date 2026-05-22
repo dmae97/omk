@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, realpathSync, statSync } from "fs";
 import { homedir } from "os";
-import { dirname, join, resolve } from "path";
+import { dirname, isAbsolute, join, relative, resolve } from "path";
 import { execSync } from "child_process";
 import { execa } from "execa";
 
@@ -53,7 +53,7 @@ const HOME_ROOT_WARNING = "effective OMK project root is HOME; set OMK_PROJECT_R
 const HOME_GIT_WARNING = "git root resolves to HOME and is not used as the default OMK project root";
 
 function normalizeHome(env: NodeJS.ProcessEnv, explicitHome?: string): string {
-  return resolve(explicitHome ?? env.OMK_ORIGINAL_HOME ?? env.HOME ?? env.USERPROFILE ?? homedir());
+  return canonicalizePath(explicitHome ?? env.OMK_ORIGINAL_HOME ?? env.HOME ?? env.USERPROFILE ?? homedir());
 }
 
 function hasControlChars(value: string): boolean {
@@ -62,7 +62,21 @@ function hasControlChars(value: string): boolean {
 
 function isSamePath(left: string | undefined, right: string | undefined): boolean {
   if (!left || !right) return false;
-  return resolve(left) === resolve(right);
+  return comparablePath(left) === comparablePath(right);
+}
+
+function canonicalizePath(value: string): string {
+  const resolved = resolve(value);
+  try {
+    return realpathSync.native(resolved);
+  } catch {
+    return resolved;
+  }
+}
+
+function comparablePath(value: string): string {
+  const canonical = canonicalizePath(value);
+  return process.platform === "win32" ? canonical.toLowerCase() : canonical;
 }
 
 function projectRootRecommendation(): string {
@@ -148,7 +162,7 @@ function validateDefaultProjectRoot(value: string | undefined): { root?: string;
   try {
     const info = statSync(resolved);
     if (!info.isDirectory()) return { error: "configured default_project_root is not a directory" };
-    return { root: realpathSync(resolved) };
+    return { root: realpathSync.native(resolved) };
   } catch {
     return { error: "configured default_project_root does not exist" };
   }
@@ -181,7 +195,7 @@ function gitRootSync(cwd: string): string | undefined {
       stdio: ["pipe", "pipe", "ignore"],
       timeout: 3000,
     }).trim();
-    return gitRoot ? resolve(gitRoot) : undefined;
+    return gitRoot ? canonicalizePath(gitRoot) : undefined;
   } catch {
     return undefined;
   }
@@ -196,7 +210,7 @@ async function gitRootAsync(cwd: string): Promise<string | undefined> {
       timeout: 3000,
     });
     const gitRoot = result.stdout.trim();
-    return gitRoot ? resolve(gitRoot) : undefined;
+    return gitRoot ? canonicalizePath(gitRoot) : undefined;
   } catch {
     return undefined;
   }
@@ -213,14 +227,16 @@ function createResolution(args: {
   warning?: string;
   recommendation?: string;
 }): ProjectRootResolution {
-  const root = resolve(args.root);
-  const home = resolve(args.home);
+  const root = canonicalizePath(args.root);
+  const home = canonicalizePath(args.home);
+  const cwd = canonicalizePath(args.cwd);
+  const gitRoot = args.gitRoot ? canonicalizePath(args.gitRoot) : undefined;
   return {
     root,
     source: args.source,
-    cwd: args.cwd,
+    cwd,
     home,
-    gitRoot: args.gitRoot,
+    gitRoot,
     marker: args.marker,
     configuredDefaultProjectRoot: args.defaultCandidate?.value,
     defaultProjectRootError: args.defaultCandidate?.error,
@@ -311,7 +327,7 @@ function resolveAfterGitRoot(args: {
 
 export function resolveProjectRoot(options: ResolveProjectRootOptions = {}): ProjectRootResolution {
   const env = options.env ?? process.env;
-  const cwd = resolve(options.cwd ?? process.cwd());
+  const cwd = canonicalizePath(options.cwd ?? process.cwd());
   const home = normalizeHome(env, options.home);
 
   if (env.OMK_PROJECT_ROOT) {
@@ -337,7 +353,7 @@ export function resolveProjectRoot(options: ResolveProjectRootOptions = {}): Pro
 
 export async function resolveProjectRootAsync(options: ResolveProjectRootOptions = {}): Promise<ProjectRootResolution> {
   const env = options.env ?? process.env;
-  const cwd = resolve(options.cwd ?? process.cwd());
+  const cwd = canonicalizePath(options.cwd ?? process.cwd());
   const home = normalizeHome(env, options.home);
 
   if (env.OMK_PROJECT_ROOT) {
@@ -375,9 +391,10 @@ export function getProjectRootDiagnostics(): ProjectRootResolution {
 
 export function displayProjectRootPath(path: string | undefined, home = normalizeHome(process.env)): string | null {
   if (!path) return null;
-  const resolved = resolve(path);
-  const resolvedHome = resolve(home);
+  const resolved = canonicalizePath(path);
+  const resolvedHome = canonicalizePath(home);
   if (isSamePath(resolved, resolvedHome)) return "~";
-  if (resolved.startsWith(`${resolvedHome}/`)) return `~/${resolved.slice(resolvedHome.length + 1)}`;
+  const rel = relative(resolvedHome, resolved);
+  if (rel && !rel.startsWith("..") && !isAbsolute(rel)) return `~/${rel.replace(/\\/g, "/")}`;
   return resolved;
 }

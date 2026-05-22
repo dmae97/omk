@@ -102,11 +102,12 @@ test("isolated Kimi HOME respects project skills/hooks scope", async () => {
     }
 
     const config = await readFile(join(tmpHome, ".kimi", "config.toml"), "utf-8");
-    assert.match(config, /default_model = "kimi-k2\.6"/);
-    assert.match(config, /subagent-stop-audit\.sh/);
-    assert.match(config, new RegExp(escapeRegExp(join(projectRoot, ".omk", "hooks", "subagent-stop-audit.sh"))));
-    assert.doesNotMatch(config, /command = "\.omk\/hooks\/subagent-stop-audit\.sh"/);
-    assert.doesNotMatch(config, /\/global\/hooks\/stop\.sh/);
+    const normalizedConfig = config.replace(/\\\\/g, "\\");
+    assert.match(normalizedConfig, /default_model = "kimi-k2\.6"/);
+    assert.match(normalizedConfig, /subagent-stop-audit\.sh/);
+    assert.match(normalizedConfig, new RegExp(escapeRegExp(join(projectRoot, ".omk", "hooks", "subagent-stop-audit.sh"))));
+    assert.doesNotMatch(normalizedConfig, /command = "\.omk\/hooks\/subagent-stop-audit\.sh"/);
+    assert.doesNotMatch(normalizedConfig, /\/global\/hooks\/stop\.sh/);
   } finally {
     if (tmpHome) await cleanupIsolatedKimiHome(tmpHome);
     await rm(projectRoot, { recursive: true, force: true });

@@ -83,11 +83,15 @@ async function tempGoalCliFixture({ summary = true } = {}) {
   const outputLines = summary
     ? ["## Summary", "## Evidence", "OMK goal execution completed with verification evidence.", "## Verification", "- npm run check passed"]
     : ["short"];
-  await writeFile(
-    join(bin, "kimi"),
-    `#!${process.execPath}\n${outputLines.map((line) => `console.log(${JSON.stringify(line)});`).join("\n")}\nprocess.exit(0);\n`,
-    { mode: 0o755 },
-  );
+  const fakeKimiSource = `${outputLines.map((line) => `console.log(${JSON.stringify(line)});`).join("\n")}\nprocess.exit(0);\n`;
+  const kimiBin = join(bin, process.platform === "win32" ? "kimi.cmd" : "kimi");
+  if (process.platform === "win32") {
+    const fakeKimiScript = join(bin, "kimi.mjs");
+    await writeFile(fakeKimiScript, fakeKimiSource, "utf-8");
+    await writeFile(kimiBin, `@echo off\r\n"${process.execPath}" "${fakeKimiScript}" %*\r\n`, "utf-8");
+  } else {
+    await writeFile(kimiBin, `#!${process.execPath}\n${fakeKimiSource}`, { mode: 0o755 });
+  }
   await writeFile(join(workspace, 'package.json'), JSON.stringify({ scripts: { check: 'node -e "process.exit(0)"' } }));
   const env = {
     ...process.env,
@@ -102,6 +106,7 @@ async function tempGoalCliFixture({ summary = true } = {}) {
     OMK_AUTO_CONTINUE_MAX_ITERATIONS: "0",
     OMK_DEEPSEEK_GOAL_ENSEMBLE: "false",
     OMK_ISOLATED_HOME_INHERIT_AUTH: "0",
+    KIMI_BIN: kimiBin,
     PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
   };
   return { root, workspace, env };
