@@ -567,7 +567,7 @@ class ResourceList implements Component, Focusable {
 
 	private getResourcePattern(item: ResourceItem): string {
 		const scope = item.metadata.scope as "user" | "project";
-		const baseDir = this.getTopLevelBaseDir(scope);
+		const baseDir = item.metadata.baseDir ?? this.getTopLevelBaseDir(scope);
 		return relative(baseDir, item.path);
 	}
 
