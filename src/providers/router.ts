@@ -12,6 +12,7 @@ import type {
   ProviderRouteDecision,
   ProviderRouteInput,
 } from "./types.js";
+import { DEFAULT_FALLBACK_PROVIDER } from "./types.js";
 
 const DEEPSEEK_READ_ONLY_ROLES = new Set([
   "explorer",
@@ -469,7 +470,7 @@ function kimiDecision(
 ): Omit<ProviderRouteDecision, "routeEnsemble"> {
   return {
     provider: "kimi",
-    fallbackProvider: "kimi",
+    fallbackProvider: DEFAULT_FALLBACK_PROVIDER,
     confidence,
     reason,
     providerModel: extra.providerModel,
@@ -484,7 +485,7 @@ function deepseekDecision(
 ): Omit<ProviderRouteDecision, "routeEnsemble"> {
   return {
     provider: "deepseek",
-    fallbackProvider: "kimi",
+    fallbackProvider: DEFAULT_FALLBACK_PROVIDER,
     confidence,
     reason,
     providerModel: {
@@ -505,7 +506,7 @@ function genericDirectDecision(
 ): Omit<ProviderRouteDecision, "routeEnsemble"> {
   return {
     provider,
-    fallbackProvider: "kimi",
+    fallbackProvider: DEFAULT_FALLBACK_PROVIDER,
     confidence,
     reason,
     providerModel,

@@ -4,6 +4,7 @@ import { homedir } from "os";
 import { isAbsolute, join, relative, resolve, sep } from "path";
 import { normalizeUserHomePath } from "../util/fs.js";
 import { assignSkills } from "./skill-assigner.js";
+import { DEFAULT_FALLBACK_PROVIDER } from "../providers/types.js";
 import {
   OMK_RELEASE_GUARD_PRESET,
   OMK_TS_PRODUCT_PRESET,
@@ -431,7 +432,7 @@ export function selectTaskRouting(input: RoutingInput): DagNodeRouting {
 
   return {
     provider: "auto",
-    fallbackProvider: "kimi",
+    fallbackProvider: DEFAULT_FALLBACK_PROVIDER,
     providerReason: "Kimi-first provider router decides at node execution time",
     skills: mergedSkills,
     mcpServers: mergedMcpServers,

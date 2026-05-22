@@ -81,10 +81,12 @@ export interface ProviderRouteInput {
   preferredDeepSeekTier?: DeepSeekModelTier;
 }
 
+export const DEFAULT_FALLBACK_PROVIDER: ProviderId = "kimi";
+
 export interface ProviderRouteDecision {
   provider: ProviderId;
   reason: string;
-  fallbackProvider: "kimi";
+  fallbackProvider: ProviderId;
   confidence: number;
   providerModel?: ProviderModelRef;
   deepseek?: DeepSeekRoutePlan;

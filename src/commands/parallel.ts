@@ -23,7 +23,7 @@ import {
   type ProviderPolicy,
 } from "../providers/index.js";
 import { normalizeProviderPolicy, parseProviderModelArg } from "../providers/model-registry.js";
-import type { DeepSeekModelTier } from "../providers/types.js";
+import { DEFAULT_FALLBACK_PROVIDER, type DeepSeekModelTier } from "../providers/types.js";
 import { SUPER_OMK_DEFAULTS, isSuperOmkEnabled } from "../providers/deepseek/deepseek-super-config.js";
 import {
   EXECUTION_PROMPT_CHOICES,
@@ -955,7 +955,7 @@ export function buildDynamicNodes(input: DynamicNodeBuildInput): DagNodeDefiniti
         outputs: [{ name: `deepseek-worker-${index + 1} output`, gate: "none" }],
         routing: {
           provider: "deepseek",
-          fallbackProvider: "kimi",
+          fallbackProvider: DEFAULT_FALLBACK_PROVIDER,
           providerModel: "deepseek-v4-pro",
           providerModelTier: "pro",
           assignedProvider: "deepseek",
@@ -1163,7 +1163,7 @@ function createDeepSeekAgentNode(input: {
     outputs: [{ name: input.outputName, gate: "none", required: false }],
     routing: {
       provider: "deepseek",
-      fallbackProvider: "kimi",
+      fallbackProvider: DEFAULT_FALLBACK_PROVIDER,
       providerModel: input.tier === "flash" ? "deepseek-v4-flash" : "deepseek-v4-pro",
       providerModelTier: input.tier,
       assignedProvider: "deepseek",

@@ -24,7 +24,7 @@ export interface DagNodeOutput {
 
 export interface DagNodeRouting {
   provider?: "auto" | ProviderId;
-  fallbackProvider?: "kimi";
+  fallbackProvider?: ProviderId;
   providerReason?: string;
   providerModelTier?: DeepSeekModelTier;
   autoSpawned?: boolean;

@@ -340,7 +340,8 @@ export function resolveProjectRoot(options: ResolveProjectRootOptions = {}): Pro
   }
 
   const marker = findStrongMarkerRoot(cwd, home);
-  const gitRoot = gitRootSync(cwd);
+  const skipGitRoot = env.OMK_PREFER_CWD_ROOT === "1";
+  const gitRoot = skipGitRoot ? undefined : gitRootSync(cwd);
   return resolveAfterGitRoot({
     cwd,
     home,
@@ -366,7 +367,8 @@ export async function resolveProjectRootAsync(options: ResolveProjectRootOptions
   }
 
   const marker = findStrongMarkerRoot(cwd, home);
-  const gitRoot = await gitRootAsync(cwd);
+  const skipGitRoot = env.OMK_PREFER_CWD_ROOT === "1";
+  const gitRoot = skipGitRoot ? undefined : await gitRootAsync(cwd);
   return resolveAfterGitRoot({
     cwd,
     home,

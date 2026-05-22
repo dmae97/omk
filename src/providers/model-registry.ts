@@ -16,6 +16,7 @@ import type {
   ProviderProfileType,
   ProviderWireApi,
 } from "./types.js";
+import { DEFAULT_FALLBACK_PROVIDER } from "./types.js";
 
 export const KNOWN_PROVIDER_IDS = ["kimi", "deepseek", "qwen", "codex", "openrouter"] as const satisfies readonly KnownProviderId[];
 export const QWEN_DASHSCOPE_COMPAT_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
@@ -58,7 +59,7 @@ export interface ProviderDoctorStatus {
   profileType?: ProviderProfileType;
   planKind?: ProviderPlanKind;
   headers?: Record<string, string>;
-  fallbackProvider: "kimi";
+  fallbackProvider: ProviderId;
   reason?: string;
 }
 
@@ -340,7 +341,7 @@ export async function providerDoctorStatus(
       planKind: entry.planKind,
       codexCliAvailable,
       authority: "advisory",
-      fallbackProvider: "kimi",
+      fallbackProvider: DEFAULT_FALLBACK_PROVIDER,
       reason: available
         ? "Codex CLI available; OMK does not read ~/.codex/auth.json"
         : "Codex CLI missing/disabled or authentication not verified; Kimi fallback is active",
@@ -365,7 +366,7 @@ export async function providerDoctorStatus(
     planKind: entry.planKind,
     headers: entry.headers,
     authority: entry.id === "kimi" ? "authority" : "advisory",
-    fallbackProvider: "kimi",
+    fallbackProvider: DEFAULT_FALLBACK_PROVIDER,
     reason: available
       ? "Provider configured"
       : entry.enabled

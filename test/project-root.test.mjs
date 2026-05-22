@@ -128,6 +128,31 @@ test("normal non-HOME git repo remains the project root", async () => {
   }
 });
 
+test("OMK_PREFER_CWD_ROOT skips git root discovery for nested worktrees", async () => {
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-root-prefer-cwd-home-"));
+  const repoRoot = await mkdtemp(join(tmpdir(), "omk-root-prefer-cwd-repo-"));
+  const nested = join(repoRoot, "packages", "cli");
+
+  try {
+    gitInit(repoRoot);
+    await mkdir(nested, { recursive: true });
+    const env = { HOME: homeRoot, OMK_ORIGINAL_HOME: homeRoot, OMK_PREFER_CWD_ROOT: "1" };
+
+    const syncResolution = resolveProjectRoot({ cwd: nested, home: homeRoot, env });
+    assert.equal(canonical(syncResolution.root), canonical(nested));
+    assert.equal(syncResolution.source, "cwd");
+    assert.equal(syncResolution.gitRoot, undefined);
+
+    const asyncResolution = await resolveProjectRootAsync({ cwd: nested, home: homeRoot, env });
+    assert.equal(canonical(asyncResolution.root), canonical(nested));
+    assert.equal(asyncResolution.source, "cwd");
+    assert.equal(asyncResolution.gitRoot, undefined);
+  } finally {
+    await rm(homeRoot, { recursive: true, force: true });
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
 test("strong OMK markers under HOME beat HOME git root", async () => {
   const homeRoot = await mkdtemp(join(tmpdir(), "omk-root-marker-home-"));
   const projectRoot = join(homeRoot, "src", "app");
