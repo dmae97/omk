@@ -58,7 +58,7 @@ const RED = "\x1b[31m";
 const GREEN = "\x1b[32m";
 const RESET = "\x1b[0m";
 const isWindows = platform() === "win32";
-const DEFAULT_CMD_TIMEOUT_MS = 2 * 60 * 1000;
+const DEFAULT_CMD_TIMEOUT_MS = isWindows ? 5 * 60 * 1000 : 2 * 60 * 1000;
 const commandTimeoutMs = Number.parseInt(process.env.OMK_SMOKE_CMD_TIMEOUT_MS ?? "", 10) || DEFAULT_CMD_TIMEOUT_MS;
 const smokeTmpRoot = resolve(
   process.env.OMK_SMOKE_TMPDIR
@@ -78,6 +78,7 @@ function logFail(label, err) {
   if (err) {
     const msg = err.stderr?.toString() || err.stdout?.toString() || err.message;
     if (msg) console.error(msg);
+    if (err.message && !String(msg).includes(err.message)) console.error(err.message);
   }
 }
 
