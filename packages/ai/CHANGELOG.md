@@ -9,6 +9,7 @@
 ### Fixed
 
 - Fixed GitHub Copilot OAuth login to rely on the required device-code callback without a runtime callback availability guard.
+- Fixed Amazon Bedrock provider loading under strict package managers by declaring its direct `@smithy/node-http-handler` dependency ([#4842](https://github.com/earendil-works/pi/issues/4842)).
 - Fixed Amazon Bedrock Claude requests to send the model output token cap by default, matching Anthropic requests and avoiding Bedrock's 4096-token default truncation ([#4848](https://github.com/earendil-works/pi/issues/4848)).
 
 ## [0.75.4] - 2026-05-20
