@@ -14,13 +14,27 @@ const OMK_CLI = join(OMK_ROOT, "dist", "cli.js");
 function runMcpScript(projectRoot, homeRoot, scriptBody, extraEnv = {}) {
   const evalScript = `
       import { writeSync } from "node:fs";
+      const writeRetryCodes = new Set(["EAGAIN", "EINTR"]);
+      const writeWaitBuffer = new Int32Array(new SharedArrayBuffer(4));
       function writeAllSync(fd, value) {
         const buffer = Buffer.from(value);
         let offset = 0;
+        let retries = 0;
         while (offset < buffer.length) {
-          const written = writeSync(fd, buffer, offset, buffer.length - offset);
+          let written;
+          try {
+            written = writeSync(fd, buffer, offset, buffer.length - offset);
+          } catch (error) {
+            if (writeRetryCodes.has(error?.code) && retries < 1000) {
+              retries += 1;
+              Atomics.wait(writeWaitBuffer, 0, 0, 5);
+              continue;
+            }
+            throw error;
+          }
           if (written <= 0) throw new Error("writeSync made no progress");
           offset += written;
+          retries = 0;
         }
       }
       console.log = (...args) => writeAllSync(1, args.join(" ") + "\\n");
@@ -48,8 +62,38 @@ function runMcpScript(projectRoot, homeRoot, scriptBody, extraEnv = {}) {
       OMK_PROJECT_ROOT: projectRoot,
     },
     encoding: "utf-8",
+    maxBuffer: 10 * 1024 * 1024,
     timeout: 60000,
   });
+}
+
+const REMOVE_TREE_RETRY_CODES = new Set(["EBUSY", "EMFILE", "ENFILE", "ENOTEMPTY", "EPERM"]);
+const REMOVE_TREE_RETRY_DELAYS_MS = process.platform === "win32"
+  ? [0, 100, 250, 500, 1000, 1500]
+  : [0];
+
+function isRetryableRemoveTreeError(error) {
+  return error && typeof error === "object" && REMOVE_TREE_RETRY_CODES.has(error.code);
+}
+
+async function removeTree(path) {
+  let lastError;
+  for (const delayMs of REMOVE_TREE_RETRY_DELAYS_MS) {
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+    try {
+      await rm(path, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      return;
+    } catch (error) {
+      if (!isRetryableRemoveTreeError(error)) throw error;
+      lastError = error;
+    }
+  }
+  process.emitWarning(
+    `Temporary MCP test cleanup failed for ${path}: ${lastError?.code || lastError?.message || "unknown error"}`,
+    { code: "OMK_TEST_CLEANUP_RETRY" },
+  );
 }
 
 function buildPrependPathEnv(directory) {
@@ -106,8 +150,8 @@ test("mcp test remote rejects plain HTTP 200 non-MCP endpoints", async () => {
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /Remote MCP initialize failed/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -177,8 +221,8 @@ test("mcp test remote performs JSON-RPC initialize with configured headers", asy
     assert.match(result.stdout, /Remote MCP initialize succeeded/);
     assert.doesNotMatch(result.stdout + result.stderr, /SHOULD_NOT_LEAK|Bearer SHOULD/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -210,8 +254,8 @@ test("mcp list and test redact secret-like command strings", async () => {
     assert.doesNotMatch(testResult.stdout + testResult.stderr, new RegExp(secret));
     assert.match(testResult.stderr, /sk-\*\*\*/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -248,8 +292,8 @@ test("runtime MCP cleanup does not delete active peer process configs", async ()
     assert.equal(parsed.runtimeExists, true);
     assert.equal(parsed.hasRuntimePath, true);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -315,9 +359,9 @@ test("runtime MCP preflight keeps all-scope precedence and keeps timed-out npm-f
     assert.match(result.stderr, /Kept 1 timeout server/);
     assert.doesNotMatch(result.stdout + result.stderr, /SHOULD_NOT_LEAK|Authorization|Bearer|API_TOKEN=/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
-    await rm(binDir, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
+    await removeTree(binDir);
   }
 });
 
@@ -354,9 +398,9 @@ test("runtime MCP preflight warn-skip removes exit-failed npm-family servers", a
     assert.match(result.stderr, /Removed 1 exit-failed server/);
     assert.doesNotMatch(result.stdout + result.stderr, /SHOULD_NOT_LEAK|Bearer|API_TOKEN=/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
-    await rm(binDir, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
+    await removeTree(binDir);
   }
 });
 
@@ -400,9 +444,9 @@ test("runtime MCP preflight inherits safe registry and proxy env from server con
     assert.doesNotMatch(result.stderr, /MCP preflight found/);
     assert.doesNotMatch(result.stdout + result.stderr, /SHOULD_NOT_LEAK|NPM_TOKEN/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
-    await rm(binDir, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
+    await removeTree(binDir);
   }
 });
 
@@ -432,9 +476,9 @@ test("runtime MCP preflight off keeps failed npm-family servers", async () => {
     assert.deepEqual(JSON.parse(result.stdout.trim().split("\n").at(-1)), ["badNpm"]);
     assert.doesNotMatch(result.stderr, /MCP preflight skipped/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
-    await rm(binDir, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
+    await removeTree(binDir);
   }
 });
 
@@ -467,9 +511,9 @@ test("runtime MCP preflight strict fails without leaking secret-like values", as
     assert.match(result.stderr, /MCP preflight strict mode/);
     assert.doesNotMatch(result.stdout + result.stderr, /SHOULD_NOT_LEAK|Bearer|API_TOKEN=/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
-    await rm(binDir, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
+    await removeTree(binDir);
   }
 });
 
@@ -519,9 +563,9 @@ test("mcp prewarm --all reports active server results without leaking secrets", 
     assert.match(result.stdout, /Checked 1 server/);
     assert.doesNotMatch(result.stdout + result.stderr, /SHOULD_NOT_LEAK|Authorization|Bearer|API_TOKEN=/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
-    await rm(binDir, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
+    await removeTree(binDir);
   }
 });
 
@@ -544,8 +588,8 @@ test("mcp install railway writes the remote OAuth preset without local secrets",
     assert.deepEqual(parsed.mcpServers.railway, { url: "https://mcp.railway.com" });
     assert.doesNotMatch(raw + result.stdout, /RAILWAY_TOKEN|API_KEY|Bearer|@railway\/mcp-server|secrets\.env/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -580,8 +624,8 @@ test("mcp install stores secret-like env values as runtime placeholders", async 
     assert.equal(parsed.mcpServers.secreted.env.PLAIN, "value");
     assert.doesNotMatch(raw + result.stdout + result.stderr, /SHOULD_NOT_STORE|mongodb:\/\/|redis:\/\/|ghp_should_not_store|dsn\.example/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -605,8 +649,8 @@ test("mcp install sanitizes remote URL and split secret args before saving", asy
     assert.deepEqual(parsed.mcpServers.args.args, ["server.js", "--api-key", "[REDACTED]", "--token=[REDACTED]"]);
     assert.doesNotMatch(raw + result.stdout + result.stderr, /SHOULD_NOT_STORE|#frag/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -642,8 +686,8 @@ test("mcp sync-global uses project sanitizer for URL args headers and env", asyn
     assert.equal(parsed.mcpServers.secreted.headers.Authorization, "[REDACTED]");
     assert.doesNotMatch(raw + result.stdout + result.stderr, /SHOULD_NOT_STORE|ghp_should_not_store|#frag/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -659,8 +703,8 @@ test("runtime MCP preflight defaults off to avoid startup npm probe latency", as
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(JSON.parse(result.stdout.trim()).mode, "off");
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -685,8 +729,8 @@ test("mcp doctor accepts remote URL MCP servers without requiring command", asyn
     assert.match(result.stdout, /url:.*https:\/\/mcp\.railway\.com/);
     assert.doesNotMatch(result.stdout, /missing command/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -716,8 +760,8 @@ test("mcp doctor does not validate scoped npx package names as filesystem paths"
     assert.match(result.stdout, /DOCTOR_OK/);
     assert.doesNotMatch(result.stdout, /arg path not found: @modelcontextprotocol\/server-memory/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -739,8 +783,8 @@ test("mcp doctor reports omk-project as virtual runtime MCP injection", async ()
     assert.deepEqual(server.sources, ["runtime:auto-injected"]);
     assert.ok(server.checks.some((check) => check.kind === "virtual-runtime-injected" && /virtual runtime MCP injected/.test(check.message)));
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -773,8 +817,8 @@ test("mcp doctor flags PDF server command missing --stdio before Kimi JSON-RPC p
     assert.match(parsed.errors.join("\n"), /server-pdf defaults to HTTP/);
     assert.equal(parsed.pdfChecks.some((check) => check.kind === "stdio-protocol-mismatch"), true);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -809,8 +853,8 @@ test("mcp doctor flags Windows set and missing inline MCP scripts before runtime
     assert.match(result.stdout, /runtime startup blocker: MCP config references a different user home path/);
     assert.match(result.stdout, /runtime startup blocker: stdio MCP config starts an HTTP MCP server/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -852,8 +896,8 @@ test("mcp doctor --fix disables project MCP runtime startup blockers", async () 
     assert.ok(projectConfig._omkDisabledMcpServers.stale);
     assert.ok(projectConfig._omkDisabledMcpServers.pagedesign);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -894,8 +938,8 @@ test("mcp doctor --fix migrates stale package references in active project confi
     assert.deepEqual(parsed.home.mcpServers.globalSupabase.args, ["-y", "@supabase/mcp-server@latest"]);
     assert.doesNotMatch(result.stdout + result.stderr, /API_KEY|TOKEN|PASSWORD|SECRET|Bearer/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -930,8 +974,8 @@ test("mcp doctor --fix --dry-run reports planned actions without writing backups
     assert.ok(report.fixes.actions.some((action) => /replaced stale MCP package argument/.test(action)));
     assert.equal(await readFile(projectPath, "utf-8"), original);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -974,8 +1018,8 @@ test("mcp doctor --fix creates sanitized backup before project-local writes", as
     const mode = (await stat(backupPath)).mode & 0o777;
     if (process.platform !== "win32") assert.equal(mode, 0o600);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -1020,8 +1064,8 @@ test("mcp doctor --fix --global explicitly mutates global MCP config and backs i
     const backupRaw = await readFile(report.fixes.backups[0], "utf-8");
     assert.doesNotMatch(backupRaw, /SHOULD_NOT_LEAK/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -1060,9 +1104,9 @@ test("mcp doctor reports preflight package failures as prewarm-needed without di
     assert.ok(projectConfig.mcpServers.badNpm);
     assert.equal(projectConfig._omkDisabledMcpServers?.badNpm, undefined);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
-    await rm(binDir, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
+    await removeTree(binDir);
   }
 });
 
@@ -1098,9 +1142,9 @@ test("mcp doctor reports preflight timeouts separately from package failures", a
     assert.ok(slowNpm.checks.some((check) => /warn: handshake-timeout/.test(check.message)));
     assert.ok(slowNpm.checks.some((check) => check.kind === "prewarm-needed"));
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
-    await rm(binDir, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
+    await removeTree(binDir);
   }
 });
 
@@ -1134,8 +1178,8 @@ test("mcp doctor --fix migrates legacy .omk MCP servers before creating .kimi fa
     assert.match(result.stdout, /migrated legacy MCP servers/);
     assert.doesNotMatch(raw, /"mcpServers":\\s*\\{\\s*\\}/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -1171,8 +1215,8 @@ test("mcp doctor --fix keeps project duplicate overrides instead of deleting the
     const projectConfig = JSON.parse(await readFile(join(projectRoot, ".kimi", "mcp.json"), "utf-8"));
     assert.deepEqual(projectConfig.mcpServers.memory.args, ["-lc", "true"]);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -1201,8 +1245,8 @@ test("global MCP sync preserves scoped and bare npm package args while rewriting
     assert.deepEqual(parsed.mcpServers.bare.args, ["-y", "firecrawl-mcp"]);
     assert.equal(parsed.mcpServers.pathy.args[0], join(projectRoot, "./server.js"));
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -1238,8 +1282,8 @@ test("doctor --fix --json skips global sync by default without stderr or success
     assert.ok(parsed.fixes.skipped.some((item) => /global sync skipped/.test(item)));
     assert.equal(parsed.fixes.skipped.some((item) => /\.kimi[\\/]+skills[\\/]+demo/.test(item)), false);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -1273,8 +1317,8 @@ test("doctor --fix explicit global mode reports blocked global sync when write g
     assert.ok(parsed.fixes.skipped.some((item) => /global sync: .*blocked/.test(item)));
     assert.equal(parsed.fixes.actions.some((action) => /synced global/.test(action)), false);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -1312,8 +1356,8 @@ test("doctor follows root.yaml extend chain for inherited agent tools", async ()
     assert.match(result.stdout, /Agent YAML Tools/);
     assert.match(result.stdout, /agent inheritance includes Agent, SearchWeb, FetchURL/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -1350,8 +1394,8 @@ test("doctor --fix merges missing root subagent aliases without replacing existi
     assert.match(rootYaml, /aggregator:/);
     assert.match(rootYaml, /custom-coder\.yaml/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -1381,8 +1425,8 @@ test("mcp doctor ignores inactive global JSON and server errors in project scope
     assert.ok(homeSource, "expected home source to be present in sources");
     assert.equal(homeSource.active, false);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -1415,8 +1459,8 @@ test("mcp doctor --json emits structured status without leaking secrets", async 
     assert.ok(parsed.servers[0].checks.some((check) => check.kind === "url" && check.severity === "ok"));
     assert.doesNotMatch(result.stdout + result.stderr, /super-secret|Bearer|RAILWAY_TOKEN=/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -1446,8 +1490,8 @@ test("MCP diagnostics report invalid JSON without leaking config contents", asyn
     assert.match(result.stdout, /INVALID_JSON_DIAGNOSTICS_OK/);
     assert.doesNotMatch(result.stdout + result.stderr, /super-secret-value|global-secret/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -1524,8 +1568,8 @@ test("omk-project MCP returns tool-level errors instead of JSON-RPC internal err
     assert.doesNotMatch(resourceResponse.error.message, /Internal error/);
     assert.match(result.stderr, /tool_call_failed/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -1580,8 +1624,8 @@ test("omk-project MCP hides and denies write-capable tools by default", async ()
     assert.equal(writeResponse.result.isError, true);
     assert.match(writeResponse.result.content[0].text, /permission profile 'default'/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -1673,8 +1717,8 @@ test("omk-project MCP exposes secret-free run telemetry tools", async () => {
     assert.match(statusResponse.result.content[0].text, /REDACTED|\*\*\*/);
     assert.match(todoResponse.result.content[0].text, /REDACTED|\*\*\*/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -1792,8 +1836,8 @@ test("filesystem-readonly MCP exposes read tools and denies write tool calls", a
     assert.doesNotMatch(omkListResponse.result.content[0].text, /cache/);
     assert.doesNotMatch(searchResponse.result.content[0].text, /\.kimi|\.omk\/cache/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -1840,9 +1884,9 @@ test("mcp test exercises an omk CLI connection through tools/call id 3", async (
     assert.match(result.stdout, /MCP_TEST_OK/);
     assert.doesNotMatch(result.stdout + result.stderr, /Internal error/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
-    await rm(binRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
+    await removeTree(binRoot);
   }
 });
 
@@ -1904,8 +1948,8 @@ test("mcp test does not pass ambient secret env but expands explicit placeholder
     assert.match(result.stdout, /MCP_TEST_ENV_OK/);
     assert.doesNotMatch(result.stdout + result.stderr, /ambient leaked|ambient-leak|explicit-secret/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -1946,8 +1990,8 @@ test("mcp test fails when initialize response omits serverInfo", async () => {
     assert.equal(result.status, 1, result.stderr || result.stdout);
     assert.match(result.stderr, /missing serverInfo/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -1978,8 +2022,8 @@ test("mcp test fails when initialize times out before serverInfo", async () => {
     assert.equal(result.status, 1, result.stderr || result.stdout);
     assert.match(result.stderr, /initialize timed out before serverInfo/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -2013,8 +2057,8 @@ test("mcp doctor does not fail on inactive omk-project mirror duplicates", async
     assert.match(result.stdout, /DOCTOR_OK/);
     assert.doesNotMatch(result.stdout, /issue\\(s\\) found/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -2044,8 +2088,8 @@ test("mcp doctor validates the effective project MCP definition over stale .omk 
     assert.match(result.stdout, /DOCTOR_OK/);
     assert.doesNotMatch(result.stdout + result.stderr, /definitely-missing-omk-cmd/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -2073,8 +2117,8 @@ test("mcp list displays the effective active server over stale .omk fallback", a
     assert.match(result.stdout, /command:\s+bash/);
     assert.doesNotMatch(result.stdout, /command:\s+stale-omk-command/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -2101,8 +2145,8 @@ test("mcp list includes global .omk source in all scope", async () => {
     assert.match(result.stdout, /\.omk[\\/]mcp\.json.*\[active\]/);
     assert.match(result.stdout, /globalOmk/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -2137,8 +2181,8 @@ test("mcp doctor does not fail on active omk-project mirror duplicates in all sc
     assert.match(result.stdout, /DOCTOR_OK/);
     assert.doesNotMatch(result.stdout, /issue\\(s\\) found/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
@@ -2169,9 +2213,9 @@ setTimeout(() => process.exit(0), 20);
     assert.match(result.stderr, /non-JSON text to stdout/);
     assert.match(result.stderr, /MCP stdio servers must write only JSON-RPC frames to stdout/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
-    await rm(binDir, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
+    await removeTree(binDir);
   }
 });
 
@@ -2204,9 +2248,9 @@ setTimeout(() => process.exit(0), 20);
     assert.equal(result.status, 1, result.stderr || result.stdout);
     assert.match(result.stderr, /non-JSON text to stdout/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
-    await rm(binDir, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
+    await removeTree(binDir);
   }
 });
 
@@ -2239,8 +2283,8 @@ setTimeout(() => process.exit(0), 20);
     assert.equal(result.status, 1, result.stderr || result.stdout);
     assert.match(result.stderr, /non-JSON text to stdout/);
   } finally {
-    await rm(projectRoot, { recursive: true, force: true });
-    await rm(homeRoot, { recursive: true, force: true });
-    await rm(binDir, { recursive: true, force: true });
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
+    await removeTree(binDir);
   }
 });

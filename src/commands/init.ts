@@ -841,6 +841,8 @@ cat > "$INPUT_FILE"
 
 node - "$INPUT_FILE" <<'NODE'
 const fs = require('node:fs');
+// Static slash markers for non-shell smoke validation:
+// /open-design /awesome-design-md /omk-design-md /omk-quality-gate /graph-view /omk-kimi-runtime
 
 function readPayload(filePath) {
   try {
