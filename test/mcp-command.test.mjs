@@ -14,8 +14,17 @@ const OMK_CLI = join(OMK_ROOT, "dist", "cli.js");
 function runMcpScript(projectRoot, homeRoot, scriptBody, extraEnv = {}) {
   const evalScript = `
       import { writeSync } from "node:fs";
-      console.log = (...args) => writeSync(1, args.join(" ") + "\\n");
-      console.error = (...args) => writeSync(2, args.join(" ") + "\\n");
+      function writeAllSync(fd, value) {
+        const buffer = Buffer.from(value);
+        let offset = 0;
+        while (offset < buffer.length) {
+          const written = writeSync(fd, buffer, offset, buffer.length - offset);
+          if (written <= 0) throw new Error("writeSync made no progress");
+          offset += written;
+        }
+      }
+      console.log = (...args) => writeAllSync(1, args.join(" ") + "\\n");
+      console.error = (...args) => writeAllSync(2, args.join(" ") + "\\n");
       import { mkdir, readFile, writeFile } from "node:fs/promises";
       import { createServer } from "node:http";
       import { join } from "node:path";

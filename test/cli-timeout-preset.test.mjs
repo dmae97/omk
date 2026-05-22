@@ -15,8 +15,39 @@ const DAG_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "commands", "da
 const RUNTIME_SCOPE_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "util", "runtime-scope.js")).href;
 const MODE_PRESET_MODULE_URL = pathToFileURL(join(process.cwd(), "dist", "util", "mode-preset.js")).href;
 
+const WINDOWS_REMOVE_TREE_RETRY_CODES = new Set(["EBUSY", "EMFILE", "ENFILE", "ENOTEMPTY", "EPERM"]);
+const WINDOWS_REMOVE_TREE_RETRY_DELAYS_MS = [0, 100, 250, 500, 1000, 1500];
+
+function waitSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function isRetryableRemoveTreeError(error) {
+  return error && typeof error === "object" && WINDOWS_REMOVE_TREE_RETRY_CODES.has(error.code);
+}
+
 function removeTree(path) {
-  rmSync(path, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  if (process.platform !== "win32") {
+    rmSync(path, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    return;
+  }
+
+  let lastError;
+  for (const delayMs of WINDOWS_REMOVE_TREE_RETRY_DELAYS_MS) {
+    if (delayMs > 0) waitSync(delayMs);
+    try {
+      rmSync(path, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+      return;
+    } catch (error) {
+      if (!isRetryableRemoveTreeError(error)) throw error;
+      lastError = error;
+    }
+  }
+
+  process.emitWarning(
+    `Temporary test cleanup failed for ${path}: ${lastError?.code || lastError?.message || "unknown error"}`,
+    { code: "OMK_TEST_CLEANUP_RETRY" },
+  );
 }
 
 function runHelp(command) {

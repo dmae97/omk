@@ -665,8 +665,12 @@ export function modeFromTarPermissions(permissions) {
 }
 
 export function readTarballMetadata(tarballPath) {
+  const tarballDir = dirname(tarballPath);
+  const tarballName = basename(tarballPath);
+
   // Extract package.json from tarball without shell interpolation.
-  const pkgJson = execFileSync("tar", ["-xzf", tarballPath, "-O", "package/package.json"], {
+  const pkgJson = execFileSync("tar", ["-xzf", tarballName, "-O", "package/package.json"], {
+    cwd: tarballDir,
     encoding: "utf8",
     maxBuffer: 10 * 1024 * 1024,
     timeout: COMMAND_TIMEOUT_MS,
@@ -674,7 +678,8 @@ export function readTarballMetadata(tarballPath) {
   const pkg = JSON.parse(pkgJson);
 
   // List all entries with permissions without shell interpolation.
-  const listOutput = execFileSync("tar", ["-tvzf", tarballPath], {
+  const listOutput = execFileSync("tar", ["-tvzf", tarballName], {
+    cwd: tarballDir,
     encoding: "utf8",
     maxBuffer: 10 * 1024 * 1024,
     timeout: COMMAND_TIMEOUT_MS,

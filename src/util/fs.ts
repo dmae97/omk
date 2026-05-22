@@ -996,7 +996,14 @@ function expandRuntimeUserPath(value: string): string {
 }
 
 function allowedRuntimeHomes(): string[] {
-  return [getUserHome(), HOST_HOME, homedir(), posixHomeRoot(process.execPath)]
+  return [
+    getUserHome(),
+    HOST_HOME,
+    homedir(),
+    posixHomeRoot(process.execPath),
+    posixHomeRoot(process.argv[1]),
+    posixHomeRoot(getProjectRoot()),
+  ]
     .map((home) => home.replace(/\\/g, "/").replace(/\/+$/, ""))
     .filter((home, index, homes) => home.length > 0 && homes.indexOf(home) === index);
 }

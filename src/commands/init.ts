@@ -1461,33 +1461,39 @@ except ValueError as exc:
         respond("deny", f"Unable to parse git worktree command safely: {exc}")
     respond("allow")
 
-project_root = os.path.abspath(os.environ.get("OMK_PROJECT_ROOT") or os.getcwd())
-allowed_root = os.path.abspath(os.path.join(project_root, ".omk", "worktrees"))
+def canonical_path(path):
+    return os.path.realpath(os.path.abspath(path))
+
+def resolve_path(path_arg, base_dir):
+    return canonical_path(path_arg if os.path.isabs(path_arg) else os.path.join(base_dir, path_arg))
+
+project_root = canonical_path(os.environ.get("OMK_PROJECT_ROOT") or os.getcwd())
+allowed_root = canonical_path(os.path.join(project_root, ".omk", "worktrees"))
 options_with_values = {
     "-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env",
     "-b", "-B", "--reason", "--lock", "--orphan",
 }
 
 def path_within_allowed(path_arg, base_dir):
-    base = os.path.abspath(base_dir)
-    actual = os.path.abspath(path_arg if os.path.isabs(path_arg) else os.path.join(base, path_arg))
+    base = canonical_path(base_dir)
+    actual = resolve_path(path_arg, base)
     try:
         return os.path.commonpath([allowed_root, actual]) == allowed_root
     except ValueError:
         return False
 
 def skip_git_globals(index):
-    base_dir = os.getcwd()
+    base_dir = canonical_path(os.getcwd())
     i = index
     while i < len(tokens):
         token = tokens[i]
         if token == "-C" and i + 1 < len(tokens):
             next_dir = tokens[i + 1]
-            base_dir = os.path.abspath(next_dir if os.path.isabs(next_dir) else os.path.join(base_dir, next_dir))
+            base_dir = resolve_path(next_dir, base_dir)
             i += 2
         elif token.startswith("-C") and len(token) > 2:
             next_dir = token[2:]
-            base_dir = os.path.abspath(next_dir if os.path.isabs(next_dir) else os.path.join(base_dir, next_dir))
+            base_dir = resolve_path(next_dir, base_dir)
             i += 1
         elif token in {"-c", "--git-dir", "--work-tree", "--namespace", "--config-env"} and i + 1 < len(tokens):
             i += 2

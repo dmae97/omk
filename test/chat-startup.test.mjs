@@ -91,7 +91,9 @@ test("chat startup is idempotent and does not overwrite daily docs", async () =>
   }
 });
 
-test("chat command fails loudly when Kimi exits immediately with code 0", async () => {
+test("chat command fails loudly when Kimi exits immediately with code 0", {
+  skip: process.platform === "linux" ? false : "native node-pty fake-shell startup classification is covered on Linux",
+}, async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-chat-fast-exit-project-"));
   const homeRoot = await mkdtemp(join(tmpdir(), "omk-chat-fast-exit-home-"));
   const binRoot = await mkdtemp(join(tmpdir(), "omk-chat-fast-exit-bin-"));
@@ -149,7 +151,9 @@ test("chat command fails loudly when Kimi exits immediately with code 0", async 
   }
 });
 
-test("chat command startup watchdog fails a silent Kimi launch", async () => {
+test("chat command startup watchdog fails a silent Kimi launch", {
+  skip: process.platform === "linux" ? false : "native node-pty fake-shell startup classification is covered on Linux",
+}, async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-chat-silent-project-"));
   const homeRoot = await mkdtemp(join(tmpdir(), "omk-chat-silent-home-"));
   const binRoot = await mkdtemp(join(tmpdir(), "omk-chat-silent-bin-"));
@@ -318,6 +322,9 @@ test("chat smoke validates startup without launching Kimi", async () => {
       env,
     });
     assert.equal(init.status, 0, init.stderr || init.stdout);
+    await writeFile(join(projectRoot, ".kimi", "mcp.json"), JSON.stringify({
+      mcpServers: { "smoke-noop": { url: "http://127.0.0.1:9/mcp" } },
+    }), "utf-8");
 
     const result = spawnSync(process.execPath, [
       CLI,
@@ -355,7 +362,7 @@ test("chat smoke validates startup without launching Kimi", async () => {
     assert.equal(report.runtimeMcpConfig.injected, true);
     assert.equal(report.runtimeMcpConfig.exists, true);
     assert.equal(report.startupFailureArtifactExists, false);
-    assert.match(report.agentFile, /\.omk\/runs\/chat-smoke\/chat-agent\.yaml$/);
+    assert.match(report.agentFile.replace(/\\/g, "/"), /\.omk\/runs\/chat-smoke\/chat-agent\.yaml$/);
     const harness = JSON.parse(await readFile(join(projectRoot, ".omk", "runs", runId, "chat-agent-harness.json"), "utf-8"));
     assert.equal(harness.virtualDag.flow, "chat-agent-parallel-harness");
     assert.equal(harness.resources.providerPolicy, "auto");
@@ -414,6 +421,9 @@ test("chat smoke uses OMK_DEFAULT_PROJECT_ROOT when launched from HOME git repo"
       env: initEnv,
     });
     assert.equal(init.status, 0, init.stderr || init.stdout);
+    await writeFile(join(projectRoot, ".kimi", "mcp.json"), JSON.stringify({
+      mcpServers: { "smoke-noop": { url: "http://127.0.0.1:9/mcp" } },
+    }), "utf-8");
 
     const chatEnv = {
       ...initEnv,

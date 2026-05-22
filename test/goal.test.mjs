@@ -73,17 +73,34 @@ async function tempGoalCliFixture({ summary = true } = {}) {
   const workspace = join(root, "workspace");
   await mkdir(bin, { recursive: true });
   await mkdir(workspace, { recursive: true });
-  // Copy agent files so runner can resolve scoped role agents in the temp workspace
-  await mkdir(join(workspace, ".omk", "agents"), { recursive: true });
+  // Copy tracked agent templates so the fixture is hermetic in clean CI checkouts.
   try {
-    await copyFile(join(process.cwd(), ".omk", "agents", "root.yaml"), join(workspace, ".omk", "agents", "root.yaml"));
-    await copyFile(join(process.cwd(), ".omk", "agents", "okabe.yaml"), join(workspace, ".omk", "agents", "okabe.yaml"));
-    await cp(join(process.cwd(), ".omk", "agents", "roles"), join(workspace, ".omk", "agents", "roles"), { recursive: true });
+    await cp(join(process.cwd(), "templates", ".omk", "agents"), join(workspace, ".omk", "agents"), { recursive: true });
+    await mkdir(join(workspace, ".omk", "prompts"), { recursive: true });
+    await copyFile(
+      join(process.cwd(), "templates", ".omk", "prompts", "root.md"),
+      join(workspace, ".omk", "prompts", "root.md"),
+    );
+    await copyFile(
+      join(workspace, ".omk", "agents", "roles", "planner.yaml"),
+      join(workspace, ".omk", "agents", "roles", "orchestrator.yaml"),
+    );
   } catch {
     // ignore if source file is missing
   }
   const outputLines = summary
-    ? ["## Summary", "## Evidence", "OMK goal execution completed with verification evidence.", "## Verification", "- npm run check passed"]
+    ? [
+      "## Summary",
+      "OMK goal execution completed with verification evidence.",
+      "A scoped execution plan exists before worker delegation.",
+      "Documentation reflects the verified behavior.",
+      "The reported issue is reproduced, fixed, and verified with a regression test.",
+      "Success criteria and quality gates are verified.",
+      "## Evidence",
+      "- npm run check passed",
+      "## Verification",
+      "- all required criteria passed",
+    ]
     : ["short"];
   const fakeKimiSource = `${outputLines.map((line) => `console.log(${JSON.stringify(line)});`).join("\n")}\nprocess.exit(0);\n`;
   const kimiBin = join(bin, process.platform === "win32" ? "kimi.cmd" : "kimi");

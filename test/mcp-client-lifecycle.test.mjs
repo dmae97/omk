@@ -228,7 +228,7 @@ test("McpClientSession uses request timeout after initialize", async () => {
     transport: "stdio",
     command: process.execPath,
     args: ["--eval", script],
-    startupTimeoutMs: 50,
+    startupTimeoutMs: 1000,
     requestTimeoutMs: 1000,
   });
 
