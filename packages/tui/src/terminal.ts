@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { setKittyProtocolActive } from "./keys.ts";
+import { isNativeModifierPressed } from "./native-modifiers.ts";
 import { StdinBuffer } from "./stdin-buffer.ts";
 
 const cjsRequire = createRequire(import.meta.url);
@@ -10,6 +11,16 @@ const cjsRequire = createRequire(import.meta.url);
 const TERMINAL_PROGRESS_KEEPALIVE_MS = 1000;
 const TERMINAL_PROGRESS_ACTIVE_SEQUENCE = "\x1b]9;4;3\x07";
 const TERMINAL_PROGRESS_CLEAR_SEQUENCE = "\x1b]9;4;0;\x07";
+const APPLE_TERMINAL_SHIFT_ENTER_SEQUENCE = "\x1b[13;2u";
+
+export function isAppleTerminalSession(): boolean {
+	return process.platform === "darwin" && process.env.TERM_PROGRAM === "Apple_Terminal";
+}
+
+export function normalizeAppleTerminalInput(data: string, isAppleTerminal: boolean, isShiftPressed: boolean): string {
+	if (isAppleTerminal && data === "\r" && isShiftPressed) return APPLE_TERMINAL_SHIFT_ENTER_SEQUENCE;
+	return data;
+}
 
 /**
  * Minimal terminal interface for TUI
@@ -159,7 +170,13 @@ export class ProcessTerminal implements Terminal {
 			}
 
 			if (this.inputHandler) {
-				this.inputHandler(sequence);
+				const isAppleTerminal = sequence === "\r" && isAppleTerminalSession();
+				const input = normalizeAppleTerminalInput(
+					sequence,
+					isAppleTerminal,
+					isAppleTerminal && isNativeModifierPressed("shift"),
+				);
+				this.inputHandler(input);
 			}
 		});
 

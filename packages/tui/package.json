@@ -13,6 +13,7 @@
 	"files": [
 		"dist/**/*",
 		"native/win32/prebuilds/**/*.node",
+		"native/darwin/prebuilds/**/*.node",
 		"README.md"
 	],
 	"keywords": [

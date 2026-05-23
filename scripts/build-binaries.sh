@@ -178,7 +178,11 @@ for platform in "${PLATFORMS[@]}"; do
     cp -r ../../node_modules/@mariozechner/clipboard "$OUTPUT_DIR/$platform/node_modules/@mariozechner/"
     cp -r ../../node_modules/@mariozechner/$clipboard_native_package "$OUTPUT_DIR/$platform/node_modules/@mariozechner/"
 
-    # Copy Windows VT input native helper next to compiled Windows binaries.
+    # Copy terminal input native helpers next to compiled binaries.
+    if [[ "$platform" == darwin-* ]]; then
+        mkdir -p "$OUTPUT_DIR/$platform/native/darwin/prebuilds/$platform"
+        cp ../tui/native/darwin/prebuilds/$platform/darwin-modifiers.node "$OUTPUT_DIR/$platform/native/darwin/prebuilds/$platform/"
+    fi
     if [[ "$platform" == windows-* ]]; then
         if [[ "$platform" == "windows-arm64" ]]; then
             win32_arch_dir="win32-arm64"
