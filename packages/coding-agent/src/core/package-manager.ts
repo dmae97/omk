@@ -1047,14 +1047,15 @@ export class DefaultPackageManager implements PackageManager {
 
 		for (const entry of sources) {
 			const parsed = this.parseSource(entry.source);
-			if (parsed.type === "local" || parsed.pinned) {
-				continue;
-			}
+			// Pinned npm versions are fixed. Pinned git refs are configured checkout targets,
+			// so include them to reconcile an existing clone when the configured ref changes.
 			if (parsed.type === "npm") {
-				npmCandidates.push({ ...entry, parsed });
-				continue;
+				if (!parsed.pinned) {
+					npmCandidates.push({ ...entry, parsed });
+				}
+			} else if (parsed.type === "git") {
+				gitCandidates.push({ ...entry, parsed });
 			}
-			gitCandidates.push({ ...entry, parsed });
 		}
 
 		const npmCheckTasks = npmCandidates.map((entry) => async () => ({
@@ -1766,6 +1767,11 @@ export class DefaultPackageManager implements PackageManager {
 			return;
 		}
 
+		if (source.ref) {
+			await this.ensureGitRef(targetDir, ["fetch", "origin", source.ref], "FETCH_HEAD");
+			return;
+		}
+
 		const target = await this.getLocalGitUpdateTarget(targetDir);
 		await this.ensureGitRef(targetDir, target.fetchArgs, target.ref);
 	}
@@ -1778,7 +1784,8 @@ export class DefaultPackageManager implements PackageManager {
 			cwd: targetDir,
 			timeoutMs: NETWORK_TIMEOUT_MS,
 		});
-		const targetHead = await this.runCommandCapture("git", ["rev-parse", ref], {
+		const commitRef = `${ref}^{commit}`;
+		const targetHead = await this.runCommandCapture("git", ["rev-parse", commitRef], {
 			cwd: targetDir,
 			timeoutMs: NETWORK_TIMEOUT_MS,
 		});
@@ -1786,7 +1793,7 @@ export class DefaultPackageManager implements PackageManager {
 			return;
 		}
 
-		await this.runCommand("git", ["reset", "--hard", ref], { cwd: targetDir });
+		await this.runCommand("git", ["reset", "--hard", commitRef], { cwd: targetDir });
 
 		// Clean untracked files (extensions should be pristine)
 		await this.runCommand("git", ["clean", "-fdx"], { cwd: targetDir });

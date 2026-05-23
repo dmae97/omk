@@ -2,7 +2,7 @@
 
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const packages = [
@@ -131,48 +131,25 @@ function currentBinaryPlatform() {
 	throw new Error(`Unsupported binary platform: ${process.platform} ${process.arch}`);
 }
 
-function copyBinaryAssets(targetDirectory) {
-	const codingAgentDirectory = join(repoRoot, "packages", "coding-agent");
-	const distDirectory = join(codingAgentDirectory, "dist");
-	cpSync(join(codingAgentDirectory, "package.json"), join(targetDirectory, "package.json"));
-	cpSync(join(codingAgentDirectory, "README.md"), join(targetDirectory, "README.md"));
-	cpSync(join(codingAgentDirectory, "CHANGELOG.md"), join(targetDirectory, "CHANGELOG.md"));
-	cpSync(join(repoRoot, "node_modules", "@silvia-odwyer", "photon-node", "photon_rs_bg.wasm"), join(targetDirectory, "photon_rs_bg.wasm"));
-	cpSync(join(distDirectory, "modes", "interactive", "theme"), join(targetDirectory, "theme"), { recursive: true });
-	cpSync(join(distDirectory, "modes", "interactive", "assets"), join(targetDirectory, "assets"), { recursive: true });
-	cpSync(join(distDirectory, "core", "export-html"), join(targetDirectory, "export-html"), { recursive: true });
-	cpSync(join(codingAgentDirectory, "docs"), join(targetDirectory, "docs"), { recursive: true });
-	cpSync(join(codingAgentDirectory, "examples"), join(targetDirectory, "examples"), { recursive: true });
-}
-
-function copyWindowsConsoleModeHelper(targetDirectory, platform) {
-	if (!platform.startsWith("windows-")) return;
-	const win32Arch = platform === "windows-arm64" ? "win32-arm64" : "win32-x64";
-	const relativeNativePath = join("native", "win32", "prebuilds", win32Arch);
-	mkdirSync(join(targetDirectory, relativeNativePath), { recursive: true });
-	cpSync(
-		join(repoRoot, "packages", "tui", "native", "win32", "prebuilds", win32Arch, "win32-console-mode.node"),
-		join(targetDirectory, relativeNativePath, "win32-console-mode.node"),
-	);
-}
-
 function buildBunBinaryRelease(targetDirectory, archiveDirectory) {
 	if (!commandExists("bun")) {
 		throw new Error("Bun is required for the local binary release build.");
 	}
 	const platform = currentBinaryPlatform();
-	mkdirSync(targetDirectory, { recursive: true });
-	const executableName = platform.startsWith("windows-") ? "pi.exe" : "pi";
-	const executablePath = join(targetDirectory, executableName);
-	const target = `bun-${platform}`;
-	run("bun", ["build", "--compile", `--target=${target}`, join(repoRoot, "packages", "coding-agent", "dist", "bun", "cli.js"), "--outfile", executablePath]);
-	copyBinaryAssets(targetDirectory);
-	copyWindowsConsoleModeHelper(targetDirectory, platform);
-	if (platform.startsWith("windows-")) {
-		run("powershell", ["-NoProfile", "-Command", `Compress-Archive -Path '${join(targetDirectory, "*").replaceAll("'", "''")}' -DestinationPath '${join(archiveDirectory, `pi-${platform}.zip`).replaceAll("'", "''")}' -Force`]);
-	} else {
-		run("tar", ["-czf", join(archiveDirectory, `pi-${platform}.tar.gz`), "-C", targetDirectory, "."]);
-	}
+	const binaryBuildDirectory = join(archiveDirectory, "binary-build");
+	run("./scripts/build-binaries.sh", [
+		"--skip-install",
+		"--skip-deps",
+		"--skip-build",
+		"--platform",
+		platform,
+		"--out",
+		binaryBuildDirectory,
+	]);
+	rmSync(targetDirectory, { force: true, recursive: true });
+	cpSync(join(binaryBuildDirectory, platform), targetDirectory, { recursive: true });
+	const archiveName = platform.startsWith("windows-") ? `pi-${platform}.zip` : `pi-${platform}.tar.gz`;
+	cpSync(join(binaryBuildDirectory, archiveName), join(archiveDirectory, archiveName));
 	return platform;
 }
 
