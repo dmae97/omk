@@ -143,6 +143,16 @@ interface CockpitDeepSeekRunUsage {
   byTier: Record<string, number>;
 }
 
+interface CockpitDeepSeekRequest {
+  nodeId: string;
+  role: string;
+  kind: "direct" | "advisory" | "fallback";
+  tier?: string;
+  status: "running" | "completed" | "failed";
+  startedAt: number;
+  durationMs?: number;
+}
+
 interface CockpitDashboardSnapshot {
   pulse: {
     runId: string | null;
@@ -205,6 +215,7 @@ interface CockpitDashboardSnapshot {
   };
   resources: CockpitResourceSnapshot | null;
   deepSeekUsage: CockpitDeepSeekRunUsage;
+  deepSeekRequests: CockpitDeepSeekRequest[];
   worktree: {
     totalChanged: number;
     counts: { M: number; A: number; D: number; "?": number; R: number };
@@ -450,6 +461,7 @@ function parseHarnessRuntimeContract(value: unknown): CockpitDashboardSnapshot["
 function formatDeepSeekSummary(
   deepSeek: CockpitDeepSeekSnapshot | null,
   usage: CockpitDeepSeekRunUsage,
+  requests: CockpitDeepSeekRequest[],
   maxWidth: number
 ): string {
   if (!deepSeek) return `${style.gray("deepseek")} ${style.gray("checking")} use:${usage.attempts} fb:${usage.fallbackCount}`;
@@ -461,7 +473,15 @@ function formatDeepSeekSummary(
   const balance = formatDeepSeekBalance(deepSeek);
   const modelPart = formatDeepSeekModelUsage(usage);
   const reason = deepSeek.reason ? ` ${style.gray(truncateText(sanitizeForDisplay(deepSeek.reason), Math.max(8, maxWidth - 56)))}` : "";
-  return `${style.gray("DeepSeek")} ${state} bal:${balance} use:${usage.attempts}${modelPart} ` +
+  const running = requests.filter((r) => r.status === "running").length;
+  const completed = requests.filter((r) => r.status === "completed").length;
+  const failed = requests.filter((r) => r.status === "failed").length;
+  const liveParts: string[] = [];
+  if (running > 0) liveParts.push(`▶${running} running`);
+  if (completed > 0) liveParts.push(`${completed} completed`);
+  if (failed > 0) liveParts.push(`${failed} failed`);
+  const livePart = liveParts.length > 0 ? ` ${liveParts.join(" · ")}` : "";
+  return `${style.gray("DeepSeek")} ${state}${livePart} bal:${balance} use:${usage.attempts}${modelPart} ` +
     `d:${usage.directCount} a:${usage.advisoryCount} f:${usage.fallbackCount}${reason}`;
 }
 
@@ -774,6 +794,69 @@ function computeDeepSeekRunUsage(state: RunState | null): CockpitDeepSeekRunUsag
   return usage;
 }
 
+function computeDeepSeekRequests(events: TelemetryEvent[]): CockpitDeepSeekRequest[] {
+  const byNodeId = new Map<string, { kind: "request" | "advisory" | "both"; events: TelemetryEvent[] }>();
+  for (const event of events) {
+    if (!event.nodeId) continue;
+    if (
+      event.type !== "provider.request.started" &&
+      event.type !== "provider.request.completed" &&
+      event.type !== "provider.request.failed" &&
+      event.type !== "provider.advisory.started" &&
+      event.type !== "provider.advisory.completed" &&
+      event.type !== "provider.advisory.failed"
+    ) {
+      continue;
+    }
+    const kind = event.type.startsWith("provider.advisory.") ? "advisory" : "request";
+    const existing = byNodeId.get(event.nodeId);
+    if (!existing) {
+      byNodeId.set(event.nodeId, { kind, events: [event] });
+    } else {
+      existing.events.push(event);
+      if (existing.kind !== kind) {
+        existing.kind = "both";
+      }
+    }
+  }
+  const requests: CockpitDeepSeekRequest[] = [];
+  for (const [nodeId, nodeEvents] of byNodeId) {
+    const category: CockpitDeepSeekRequest["kind"] =
+      nodeEvents.kind === "both" ? "fallback" : nodeEvents.kind === "advisory" ? "advisory" : "direct";
+    let currentStarted: TelemetryEvent | null = null;
+    for (const event of nodeEvents.events) {
+      if (event.type.endsWith(".started")) {
+        currentStarted = event;
+      } else if ((event.type.endsWith(".completed") || event.type.endsWith(".failed")) && currentStarted) {
+        const startedAt = Date.parse(currentStarted.timestamp);
+        const endedAt = Date.parse(event.timestamp);
+        requests.push({
+          nodeId,
+          role: String(currentStarted.data?.role ?? currentStarted.agentId ?? ""),
+          kind: category,
+          tier: currentStarted.data?.tier ? String(currentStarted.data.tier) : undefined,
+          status: event.type.endsWith(".completed") ? "completed" : "failed",
+          startedAt: Number.isNaN(startedAt) ? 0 : startedAt,
+          durationMs: Number.isNaN(startedAt) || Number.isNaN(endedAt) ? undefined : endedAt - startedAt,
+        });
+        currentStarted = null;
+      }
+    }
+    if (currentStarted) {
+      const startedAt = Date.parse(currentStarted.timestamp);
+      requests.push({
+        nodeId,
+        role: String(currentStarted.data?.role ?? currentStarted.agentId ?? ""),
+        kind: category,
+        tier: currentStarted.data?.tier ? String(currentStarted.data.tier) : undefined,
+        status: "running",
+        startedAt: Number.isNaN(startedAt) ? 0 : startedAt,
+      });
+    }
+  }
+  return requests;
+}
+
 // ── Renderer ──
 
 export type RenderMode = "diff" | "full" | "append";
@@ -919,6 +1002,7 @@ async function buildCockpitSnapshot(
   resources: CockpitResourceSnapshot | null,
   deepSeek: CockpitDeepSeekSnapshot | null,
   deepSeekUsage: CockpitDeepSeekRunUsage,
+  deepSeekRequests: CockpitDeepSeekRequest[],
   sysUsage: ReturnType<typeof getSystemUsage> | null,
   gitChanges: { status: string; path: string }[],
   sessionMeta: SessionMeta | null,
@@ -1079,6 +1163,7 @@ async function buildCockpitSnapshot(
     },
     resources,
     deepSeekUsage,
+    deepSeekRequests,
     worktree: {
       totalChanged: gitChanges.length,
       counts: worktreeCounts,
@@ -1301,6 +1386,7 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
     deepSeekPromise,
   ]);
   const deepSeekUsage = computeDeepSeekRunUsage(parsedState);
+  const deepSeekRequests = computeDeepSeekRequests(events);
 
   // ── System usage (cached) ──
   let sysUsage: ReturnType<typeof getSystemUsage> | null = null;
@@ -1326,6 +1412,7 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
     resources,
     deepSeek,
     deepSeekUsage,
+    deepSeekRequests,
     sysUsage,
     gitChanges,
     sessionMeta,
@@ -1395,7 +1482,7 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
     infoLines.push(`${style.gray("primary")} ${style.gray("unavailable")}  ${sysPart}`.trimEnd());
   }
 
-  infoLines.push(formatDeepSeekSummary(deepSeek, deepSeekUsage, targetWidth));
+  infoLines.push(formatDeepSeekSummary(deepSeek, deepSeekUsage, snapshot.deepSeekRequests, targetWidth));
   const mcpLines: string[] = [formatResourceSummary(resources, targetWidth)];
   if (snapshot.runtimeContract) {
     mcpLines.push(formatRuntimeContract(snapshot.runtimeContract, targetWidth));
@@ -1527,9 +1614,11 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
         if (isChatInputWait) {
           workerLines.push(`    ${style.gray("→")} ${style.gray("idle / waiting for input")}`);
         } else if (node.phase) {
-          workerLines.push(`    ${style.gray("→")} ${truncateText(sanitizeForDisplay(node.phase), targetWidth - 8)}`);
+          const cleanPhase = sanitizeTerminalText(sanitizeForDisplay(node.phase));
+          workerLines.push(`    ${style.gray("→")} ${truncateText(cleanPhase, targetWidth - 8)}`);
         } else if (node.currentNode) {
-          workerLines.push(`    ${style.gray("→")} ${truncateText(sanitizeForDisplay(node.currentNode), targetWidth - 8)}`);
+          const cleanNode = sanitizeTerminalText(sanitizeForDisplay(node.currentNode));
+          workerLines.push(`    ${style.gray("→")} ${truncateText(cleanNode, targetWidth - 8)}`);
         }
         if (!isChatInputWait && node.liveStatus === "stalled") {
           const staleText = `stalled ${formatElapsed(node.lastHeartbeatAgeMs ?? node.lastActivityAgeMs ?? 0)}`;

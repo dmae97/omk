@@ -28,7 +28,6 @@ import { GLOBAL_MEMORY_CONFIG_TOML, getGlobalMemoryConfigPath } from "../memory/
 import { SyncManifestEntry, sha256, simpleDiff } from "./sync-manifest.js";
 import { getOmkResourceSettings, type OmkRuntimeScope } from "./resource-profile.js";
 import { getKimiCapabilities } from "../kimi/capability.js";
-import { resolveRuntimeProfile, buildProfileArgs } from "./runtime-profile.js";
 import {
   getProjectRoot as resolveProjectRootSync,
   getProjectRootAsync as resolveProjectRootAsyncPath,
@@ -40,6 +39,19 @@ import {
   type ProjectRootSource,
 } from "./project-root.js";
 
+import { resolveRuntimeProfile, buildProfileArgs } from "./runtime-profile.js";
+
+import {
+  resolveRuntimeMcpPreflightMode,
+  resolveRuntimeMcpPreflightOptions,
+  type RuntimeMcpPreflightMode,
+  type RuntimeMcpPreflightFailureReason,
+  type RuntimeMcpPreflightEntryStatus,
+  type RuntimeMcpPreflightOptions,
+  type RuntimeMcpPreflightEntry,
+  type RuntimeMcpPreflightResult,
+} from "./mcp-preflight.js";
+
 export {
   getProjectRootDiagnostics,
   resolveProjectRoot,
@@ -47,6 +59,17 @@ export {
   displayProjectRootPath,
   type ProjectRootResolution,
   type ProjectRootSource,
+  resolveRuntimeMcpPreflightMode,
+  resolveRuntimeMcpPreflightOptions,
+};
+
+export type {
+  RuntimeMcpPreflightMode,
+  RuntimeMcpPreflightFailureReason,
+  RuntimeMcpPreflightEntryStatus,
+  RuntimeMcpPreflightOptions,
+  RuntimeMcpPreflightEntry,
+  RuntimeMcpPreflightResult,
 };
 
 type KimiGlobalSyncStepName = "hooks" | "mcp" | "skills" | "memory";
@@ -950,7 +973,7 @@ export const STALE_PACKAGE_NAMES: Record<string, string> = {
   "@supabase/mcp-server@latest": "@supabase/mcp-server-supabase@latest",
 };
 
-const QUIET_PACKAGE_MANAGER_ENV: Record<string, string> = {
+export const QUIET_PACKAGE_MANAGER_ENV: Record<string, string> = {
   npm_config_loglevel: "error",
   NPM_CONFIG_LOGLEVEL: "error",
   npm_config_progress: "false",
@@ -980,11 +1003,11 @@ const QUIET_PACKAGE_MANAGER_ENV: Record<string, string> = {
   PIP_PROGRESS_BAR: "off",
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function basenameOfRuntimeCommand(command: string): string {
+export function basenameOfRuntimeCommand(command: string): string {
   return command.replace(/\\/g, "/").split("/").pop()?.toLowerCase() ?? command.toLowerCase();
 }
 
@@ -1040,7 +1063,7 @@ function shouldValidateRuntimeMcpArgPath(server: Record<string, unknown>, arg: u
   return isRuntimePathLike(arg);
 }
 
-function runtimeShellInlineScripts(server: Record<string, unknown>): string[] {
+export function runtimeShellInlineScripts(server: Record<string, unknown>): string[] {
   const args = Array.isArray(server.args) ? server.args : [];
   return args.filter((arg, index): arg is string => typeof arg === "string" && isShellInlineMcpArg(server, index));
 }
@@ -1193,62 +1216,6 @@ function isPackageManagerRuntimeServer(server: Record<string, unknown>): boolean
     const normalized = script.replace(/\\/g, "/");
     return INLINE_PACKAGE_MANAGER_RE.test(normalized) || INLINE_PYTHON_PACKAGE_MANAGER_RE.test(normalized);
   });
-}
-
-export type RuntimeMcpPreflightMode = "warn-skip" | "strict" | "off";
-export type RuntimeMcpPreflightFailureReason = "timeout" | "exit" | "missing-env" | "http-fail" | "stdio-fail";
-export type RuntimeMcpPreflightEntryStatus = "ok" | "failed" | "skipped";
-
-export interface RuntimeMcpPreflightOptions {
-  timeoutMs: number;
-  concurrency: number;
-}
-
-export interface RuntimeMcpPreflightEntry {
-  name: string;
-  status: RuntimeMcpPreflightEntryStatus;
-  reason?: RuntimeMcpPreflightFailureReason | "not-npm-family" | "no-package-spec";
-  detail?: string;
-  packageSpec?: string;
-}
-
-export interface RuntimeMcpPreflightResult {
-  failed: Set<string>;
-  details: Map<string, { reason: RuntimeMcpPreflightFailureReason; detail: string }>;
-  entries: RuntimeMcpPreflightEntry[];
-}
-
-export function resolveRuntimeMcpPreflightMode(
-  env: Record<string, string | undefined> = process.env
-): RuntimeMcpPreflightMode {
-  const raw = env.OMK_MCP_PREFLIGHT?.trim();
-  if (!raw) return "warn-skip";
-  if (raw === "strict" || raw === "warn-skip") return raw;
-  return "off";
-}
-
-function resolvePreflightTimeout(env: Record<string, string | undefined> = process.env): number {
-  const raw = env.OMK_MCP_PREFLIGHT_TIMEOUT_MS;
-  if (!raw) return 5000;
-  const n = Number.parseInt(raw, 10);
-  return Number.isFinite(n) && n > 0 ? n : 5000;
-}
-
-function resolvePreflightConcurrency(env: Record<string, string | undefined> = process.env): number {
-  const raw = env.OMK_MCP_PREFLIGHT_CONCURRENCY;
-  if (!raw) return 3;
-  const n = Number.parseInt(raw, 10);
-  return Number.isFinite(n) && n > 0 ? n : 3;
-}
-
-export function resolveRuntimeMcpPreflightOptions(
-  env: Record<string, string | undefined> = process.env
-): RuntimeMcpPreflightOptions & { mode: RuntimeMcpPreflightMode } {
-  return {
-    mode: resolveRuntimeMcpPreflightMode(env),
-    timeoutMs: resolvePreflightTimeout(env),
-    concurrency: resolvePreflightConcurrency(env),
-  };
 }
 
 interface PreflightProbe {

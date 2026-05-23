@@ -23,7 +23,7 @@ import {
   type ProviderPolicy,
 } from "../providers/index.js";
 import { normalizeProviderPolicy, parseProviderModelArg } from "../providers/model-registry.js";
-import { DEFAULT_FALLBACK_PROVIDER, type DeepSeekModelTier } from "../providers/types.js";
+import { resolveFallbackProvider, type DeepSeekModelTier } from "../providers/types.js";
 import { SUPER_OMK_DEFAULTS, isSuperOmkEnabled } from "../providers/deepseek/deepseek-super-config.js";
 import {
   EXECUTION_PROMPT_CHOICES,
@@ -134,8 +134,7 @@ export async function parallelCommand(
     intentFrame = buildIntentFrame(effectiveGoal);
 
     specNodes = specDag.nodes.map((node) => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { status, retries, ...def } = node;
+      const { status: _status, retries: _retries, ...def } = node;
       return def;
     });
   } else {
@@ -333,6 +332,7 @@ export async function parallelCommand(
   const activePreset = await getActiveRuntimePreset();
   const runner = await createProviderBackedTaskRunner({
     providerPolicy,
+    eventRunDir: runDir,
     deepseekPromptPrefix: buildDeepSeekPromptPrefix(effectiveGoal, runId, workerCount, resolvedIntent, intentFrame),
     allowDeepSeekAdvisoryFileNodes: true,
     kimi: {
@@ -513,9 +513,9 @@ function buildPromptText(
 ): string {
   const taskType = intent?.taskType ?? "general";
   const lines: string[] = [
-    `# Kimi DAG Execution Envelope`,
+    `# Primary provider DAG Execution Envelope`,
     ``,
-    `Kimi must transform the orchestration context into node-level action. Do not echo the prompt, restart completed work, or ask for generic continuation.`,
+    `Primary provider must transform the orchestration context into node-level action. Do not echo the prompt, restart completed work, or ask for generic continuation.`,
     ``,
     `## Strict Intent / Action Digest`,
     renderActionDigest(intentFrame),
@@ -553,7 +553,7 @@ function buildPromptText(
 
   if (executionStrategy === "sequential") {
     lines.push(
-      `Execute the goal one by one with a single Kimi-owned worker lane.`,
+      `Execute the goal one by one with a single primary provider worker lane.`,
       `- The coordinator plans the next scoped action before execution.`,
       `- Do not spawn parallel subagent, DeepSeek, or capability fanout lanes.`,
       `- The reviewer verifies the sequential output before final reporting.`,
@@ -644,9 +644,9 @@ function buildDeepSeekPromptPrefix(
   const taskType = intent?.taskType ?? "general";
   const lines = [
     `OMK DeepSeek model-agent worker.`,
-    `Initial Kimi orchestration may spawn dedicated DeepSeek Flash/Pro read-only agents; opportunistic routing may also offload low-risk workers.`,
-    `Direct mode is read-only. For file-affecting advisory mode, propose patch strategy only; Kimi owns actual edits, merge authority, and final synthesis.`,
-    `Do not repeat or restart the user's original goal. Read the current Kimi/goal context below and answer only for the assigned DAG node.`,
+    `Initial primary provider orchestration may spawn dedicated DeepSeek Flash/Pro read-only agents; opportunistic routing may also offload low-risk workers.`,
+    `Direct mode is read-only. For file-affecting advisory mode, propose patch strategy only; Authority provider owns actual edits, merge authority, and final synthesis.`,
+    `Do not repeat or restart the user's original goal. Read the current primary provider / goal context below and answer only for the assigned DAG node.`,
     ``,
     `## Current Run Context`,
     `- Run ID: ${runId}`,
@@ -666,7 +666,7 @@ function buildDeepSeekPromptPrefix(
 
   lines.push(
     ``,
-    `## Current Kimi/Goal Action Digest`,
+    `## Current Primary Provider Goal Action Digest`,
     renderActionDigest(intentFrame, { maxAtoms: 6 }),
     ``,
     `## Non-verbatim Context Digest`,
@@ -955,7 +955,7 @@ export function buildDynamicNodes(input: DynamicNodeBuildInput): DagNodeDefiniti
         outputs: [{ name: `deepseek-worker-${index + 1} output`, gate: "none" }],
         routing: {
           provider: "deepseek",
-          fallbackProvider: DEFAULT_FALLBACK_PROVIDER,
+          fallbackProvider: resolveFallbackProvider(["deepseek", "kimi"]),
           providerModel: "deepseek-v4-pro",
           providerModelTier: "pro",
           assignedProvider: "deepseek",
@@ -1163,7 +1163,7 @@ function createDeepSeekAgentNode(input: {
     outputs: [{ name: input.outputName, gate: "none", required: false }],
     routing: {
       provider: "deepseek",
-      fallbackProvider: DEFAULT_FALLBACK_PROVIDER,
+      fallbackProvider: resolveFallbackProvider(["deepseek", "kimi"]),
       providerModel: input.tier === "flash" ? "deepseek-v4-flash" : "deepseek-v4-pro",
       providerModelTier: input.tier,
       assignedProvider: "deepseek",

@@ -12,7 +12,9 @@ import {
 } from "./deepseek/deepseek-config.js";
 import { ProviderHealthRegistry } from "./health.js";
 import { createProviderTaskRunner } from "./provider-task-runner.js";
+import { loadProviderModelStats } from "./provider-stats.js";
 import type { ProviderId, ProviderModelDefault, ProviderPolicy } from "./types.js";
+import { resolveAuthorityProvider } from "./types.js";
 import { createKimiProvider } from "./kimi-provider.js";
 import { createDeepSeekProvider } from "./deepseek-provider.js";
 import { createProviderRouter } from "./provider-router.js";
@@ -23,78 +25,130 @@ import { providerDoctorStatus, readProviderRegistry, type ProviderRegistryEntry 
 import { createContextBroker } from "../runtime/context-broker.js";
 import type { AgentRuntime } from "../runtime/agent-runtime.js";
 import { createKimiPrintRuntime } from "../runtime/kimi-print-runtime.js";
-import { createKimiWireRuntime } from "../runtime/kimi-wire-runtime.js";
+import { createKimiApiRuntime } from "../runtime/kimi-wire-runtime.js";
 import { createRuntimeRouter } from "../runtime/runtime-router.js";
-export interface ProviderBackedTaskRunnerOptions {
-  /** Kimi runner options. If omitted or Kimi unavailable, Kimi is excluded. */
+
+export interface RuntimeRegistryOptions {
+  /** Explicitly injected runtimes. If provided, auto-discovery is skipped. */
+  runtimes?: AgentRuntime[];
+  /** Explicitly injected providers. If provided, auto-discovery is skipped for those IDs. */
+  providers?: AgentProvider[];
+  /** Kimi runner options (kept for backward compatibility). Used for auto-discovery when runtimes not injected. */
   kimi?: KimiTaskRunnerOptions;
+  /** Explicit working directory. Defaults to getProjectRoot() or kimi.cwd for backward compatibility. */
+  cwd?: string;
   providerPolicy?: ProviderPolicy;
   deepseekPromptPrefix?: string;
   allowDeepSeekAdvisoryFileNodes?: boolean;
-  /** Runtime fallback chain. Defaults to Kimi runtimes when available. */
+  /** Runtime fallback chain. Defaults to dynamically derived from available runtimes. */
   fallbackChain?: string[];
+  /** Directory to write telemetry events (e.g. runDir for events.jsonl). */
+  eventRunDir?: string;
 }
 
-export async function createProviderBackedTaskRunner(
-  options: ProviderBackedTaskRunnerOptions
-): Promise<TaskRunner> {
-  const providerPolicy = options.providerPolicy ?? "auto";
-  const providerHealth = new ProviderHealthRegistry();
+export { RuntimeRegistryOptions as ProviderBackedTaskRunnerOptions };
 
-  // Determine Kimi availability without failing hard
+async function discoverKimiRuntime(
+  options: RuntimeRegistryOptions
+): Promise<{ runner?: TaskRunner; provider?: AgentProvider; runtimes: AgentRuntime[] }> {
   const kimiEnabled = process.env.OMK_KIMI_ENABLED !== "0";
   const kimiBin = options.kimi
     ? resolveKimiBin({ ...process.env, ...(options.kimi.env ?? {}) })
     : resolveKimiBin(process.env);
-  const kimiAvailable = kimiEnabled && options.kimi != null && await checkCommand(kimiBin).catch(() => false);
+  const kimiAvailable =
+    kimiEnabled && options.kimi != null && (await checkCommand(kimiBin).catch(() => false));
+  if (!kimiAvailable) return { runtimes: [] };
+  const runner = createKimiTaskRunner(options.kimi!);
+  const provider = createKimiProvider({ runner });
+  const printRuntime = createKimiPrintRuntime(options.kimi!);
+  const apiRuntime = createKimiApiRuntime({
+    cwd: options.kimi!.cwd,
+    env: options.kimi!.env as NodeJS.ProcessEnv | undefined,
+  });
+  return { runner, provider, runtimes: [printRuntime, apiRuntime] };
+}
+
+export async function createProviderBackedTaskRunner(
+  options: RuntimeRegistryOptions
+): Promise<TaskRunner> {
+  const providerPolicy = options.providerPolicy ?? "auto";
+  const providerHealth = new ProviderHealthRegistry();
+  const projectRoot = options.cwd ?? options.kimi?.cwd ?? getProjectRoot();
 
   let kimiRunner: TaskRunner | undefined;
   const providers: AgentProvider[] = [];
-  if (kimiAvailable) {
-    kimiRunner = createKimiTaskRunner(options.kimi!);
-    const kimiProvider = createKimiProvider({ runner: kimiRunner });
-    providers.push(kimiProvider);
+  const runtimes: AgentRuntime[] = [];
+
+  // Collect explicitly injected provider IDs to skip auto-discovery
+  const explicitProviderIds = new Set(options.providers?.map((p) => p.id) ?? []);
+  if (options.providers) {
+    providers.push(...options.providers);
+  }
+
+  if (options.runtimes) {
+    // Explicit runtimes injected — skip runtime auto-discovery entirely
+    runtimes.push(...options.runtimes);
+  } else {
+    // Auto-discovery: Kimi
+    const kimiDiscovery = await discoverKimiRuntime(options);
+    if (kimiDiscovery.runner) kimiRunner = kimiDiscovery.runner;
+    if (kimiDiscovery.provider && !explicitProviderIds.has("kimi")) {
+      providers.push(kimiDiscovery.provider);
+      providerHealth.setAvailable("kimi");
+    } else if (!kimiDiscovery.provider) {
+      providerHealth.setUnavailable("kimi", "Kimi not discovered");
+    }
+    runtimes.push(...kimiDiscovery.runtimes);
   }
 
   let deepseekRunnerRef: TaskRunner | undefined;
   const providerRunners: Partial<Record<ProviderId, TaskRunner>> = {};
   const providerModels: Partial<Record<ProviderId, ProviderModelDefault>> = {};
 
-  const allowDeepSeek = providerPolicy === "auto" || providerPolicy === "deepseek";
-  const deepseekStatus = allowDeepSeek ? await getDeepSeekProviderStatus() : undefined;
-  const deepseekKey = allowDeepSeek && deepseekStatus?.enabled
-    ? await resolveDeepSeekApiKey()
-    : undefined;
-  const deepseekCheck = allowDeepSeek && deepseekStatus?.enabled && deepseekKey?.apiKey
-    ? await checkDeepSeekBalance({ apiKey: deepseekKey.apiKey })
-    : undefined;
+  // DeepSeek discovery (skip if explicitly injected)
+  if (!explicitProviderIds.has("deepseek")) {
+    providerHealth.register("deepseek");
+    const allowDeepSeek = providerPolicy === "auto" || providerPolicy === "deepseek";
+    const deepseekStatus = allowDeepSeek ? await getDeepSeekProviderStatus() : undefined;
+    const deepseekKey =
+      allowDeepSeek && deepseekStatus?.enabled ? await resolveDeepSeekApiKey() : undefined;
+    const deepseekCheck =
+      allowDeepSeek && deepseekStatus?.enabled && deepseekKey?.apiKey
+        ? await checkDeepSeekBalance({ apiKey: deepseekKey.apiKey })
+        : undefined;
 
-  if (deepseekCheck?.available) {
-    const deepseekRunner = createDeepSeekReadOnlyTaskRunner({
-      apiKey: deepseekKey?.apiKey,
-      allowAdvisoryFileNodes: options.allowDeepSeekAdvisoryFileNodes ?? true,
-      promptPrefix: options.deepseekPromptPrefix,
-    });
-    deepseekRunnerRef = deepseekRunner;
-    const deepseekProvider = createDeepSeekProvider({ runner: deepseekRunner });
-    providers.push(deepseekProvider);
-    providerHealth.markDeepSeekAvailable();
-  } else if (deepseekCheck) {
-    providerHealth.markDeepSeekUnavailable(deepseekCheck.reason ?? "DeepSeek unavailable");
-    if (deepseekCheck.reason?.includes("402")) {
-      await forceDisableDeepSeek(deepseekCheck.reason, { disabledBy: "provider-402" });
-      console.error(status.warn(`DeepSeek forced disabled: ${deepseekCheck.reason}`));
-      console.error(style.gray("Primary fallback is active. Run /deepseek-enable after topping up."));
+    if (deepseekCheck?.available) {
+      const deepseekRunner = createDeepSeekReadOnlyTaskRunner({
+        apiKey: deepseekKey?.apiKey,
+        allowAdvisoryFileNodes: options.allowDeepSeekAdvisoryFileNodes ?? true,
+        promptPrefix: options.deepseekPromptPrefix,
+      });
+      deepseekRunnerRef = deepseekRunner;
+      const deepseekProvider = createDeepSeekProvider({ runner: deepseekRunner });
+      providers.push(deepseekProvider);
+      providerHealth.setAvailable("deepseek");
+    } else if (deepseekCheck) {
+      providerHealth.setUnavailable("deepseek", deepseekCheck.reason ?? "DeepSeek unavailable");
+      if (deepseekCheck.reason?.includes("402")) {
+        await forceDisableDeepSeek(deepseekCheck.reason, { disabledBy: "provider-402" });
+        console.error(status.warn(`DeepSeek forced disabled: ${deepseekCheck.reason}`));
+        console.error(style.gray("Primary fallback is active. Run /deepseek-enable after topping up."));
+      }
+    } else if (allowDeepSeek && deepseekStatus?.enabled === false) {
+      providerHealth.setUnavailable("deepseek", deepseekStatus.disabledReason ?? "DeepSeek disabled");
+      console.error(
+        status.warn(`DeepSeek disabled: ${deepseekStatus.disabledReason ?? "disabled by user"}`)
+      );
+      console.error(style.gray("Primary fallback is active. Run /deepseek-enable to re-enable."));
     }
-  } else if (allowDeepSeek && deepseekStatus?.enabled === false) {
-    providerHealth.markDeepSeekUnavailable(deepseekStatus.disabledReason ?? "DeepSeek disabled");
-    console.error(status.warn(`DeepSeek disabled: ${deepseekStatus.disabledReason ?? "disabled by user"}`));
-    console.error(style.gray("Primary fallback is active. Run /deepseek-enable to re-enable."));
   }
 
+  // Registry discovery (skip if provider ID explicitly injected)
   const registry = await readProviderRegistry();
   for (const entry of registry) {
+    if (explicitProviderIds.has(entry.id)) continue;
     if (!shouldUseOpenAICompatibleProvider(entry, providerPolicy)) continue;
+    providerHealth.register(entry.id);
     const apiKey = entry.apiKeyEnv ? process.env[entry.apiKeyEnv] : undefined;
     if (apiKey && entry.baseUrl) {
       providerRunners[entry.id] = createOpenAICompatibleReadOnlyTaskRunner({
@@ -107,48 +161,59 @@ export async function createProviderBackedTaskRunner(
         headers: openAICompatibleHeaders(entry, process.env),
       });
       providerModels[entry.id] = providerModelDefault(entry);
-    } else if (providerPolicy === entry.id) {
-      console.error(status.warn(`${providerDisplayName(entry.id)} unavailable: missing ${entry.apiKeyEnv ?? "API key env"} or base URL. Primary fallback is active.`));
+      providerHealth.setAvailable(entry.id);
+    } else {
+      providerHealth.setUnavailable(entry.id, `missing ${entry.apiKeyEnv ?? "API key env"} or base URL`);
+      if (providerPolicy === entry.id) {
+        console.error(
+          status.warn(
+            `${providerDisplayName(entry.id)} unavailable: missing ${entry.apiKeyEnv ?? "API key env"} or base URL. Primary fallback is active.`
+          )
+        );
+      }
     }
   }
 
-  const codex = registry.find((entry) => entry.id === "codex");
-  if (codex && codex.enabled && (providerPolicy === "auto" || providerPolicy === "codex")) {
-    const codexStatus = await providerDoctorStatus("codex");
-    if (codexStatus.available) {
-      providerRunners.codex = createCodexCliAdvisoryTaskRunner({
-        cwd: options.kimi?.cwd ?? getProjectRoot(),
-        model: codex.defaultModel,
-      });
-      providerModels.codex = providerModelDefault(codex);
-    } else if (providerPolicy === "codex") {
-      console.error(status.warn("Codex unavailable or unauthenticated; Primary fallback is active."));
+  // Codex discovery (skip if explicitly injected)
+  if (!explicitProviderIds.has("codex")) {
+    const codex = registry.find((entry) => entry.id === "codex");
+    if (codex && codex.enabled && (providerPolicy === "auto" || providerPolicy === "codex")) {
+      providerHealth.register("codex");
+      const codexStatus = await providerDoctorStatus("codex");
+      if (codexStatus.available) {
+        providerRunners.codex = createCodexCliAdvisoryTaskRunner({
+          cwd: projectRoot,
+          model: codex.defaultModel,
+        });
+        providerModels.codex = providerModelDefault(codex);
+        providerHealth.setAvailable("codex");
+      } else {
+        providerHealth.setUnavailable("codex", "Codex unavailable or unauthenticated");
+        if (providerPolicy === "codex") {
+          console.error(status.warn("Codex unavailable or unauthenticated; Primary fallback is active."));
+        }
+      }
     }
   }
 
   const router = createProviderRouter({
     providers,
-    defaultStrategy: providerPolicy === "kimi" ? "kimi-first" : "cost-aware",
+    defaultStrategy: providerPolicy === "kimi" ? "priority-first" : "cost-aware",
   });
 
-  // Create runtime instances for the RuntimeRouter
-  const runtimes: AgentRuntime[] = [];
-  if (kimiAvailable) {
-    const kimiPrintRuntime = createKimiPrintRuntime(options.kimi!);
-    runtimes.push(kimiPrintRuntime);
-
-    // Wire runtime is available but lower priority (incomplete tool handling)
-    const kimiWireRuntime = createKimiWireRuntime({
-      cwd: options.kimi!.cwd,
-      env: options.kimi!.env as NodeJS.ProcessEnv | undefined,
-    });
-    runtimes.push(kimiWireRuntime);
-  }
+  // Build fallback chain dynamically from available runtimes
+  const fallbackChain = options.fallbackChain ?? runtimes.map((r) => r.id);
 
   const runtimeRouter = createRuntimeRouter({
     runtimes,
-    fallbackChain: options.fallbackChain ?? (kimiAvailable ? ["kimi-print", "kimi-wire"] : []),
+    fallbackChain,
   });
+
+  const providerModelStats = loadProviderModelStats();
+
+  // Determine authority provider from available providers (kimi-native is default authority)
+  const availableProviderIds = providers.map((p) => p.id);
+  const authorityProvider = resolveAuthorityProvider(availableProviderIds, "kimi");
 
   // Create the base task runner (existing provider-task-runner with Kimi/DeepSeek routing)
   const baseRunner = createProviderTaskRunner({
@@ -158,19 +223,26 @@ export async function createProviderBackedTaskRunner(
     providerModels,
     providerPolicy,
     providerHealth,
+    eventRunDir: options.eventRunDir,
+    providerModelStats,
+    authorityProvider,
     onDeepSeekDisabled: async (event) => {
       await forceDisableDeepSeek(event.reason, {
         disabledBy: event.reason.includes("402") ? "provider-402" : "provider-availability",
       });
       console.error(status.warn(`DeepSeek forced disabled: ${event.reason}`));
-      console.error(style.gray(`Node ${event.nodeId} fell back to primary runtime. Run /deepseek-enable after fixing balance/auth.`));
+      console.error(
+        style.gray(
+          `Node ${event.nodeId} fell back to primary runtime. Run /deepseek-enable after fixing balance/auth.`
+        )
+      );
     },
   });
 
   // Wrap provider routing with ContextBroker budget metadata. Provider routing
   // remains authoritative: RuntimeRouter failures are result values, not always
   // thrown exceptions, so running it first can bypass provider fallback metadata.
-  const contextBroker = createContextBroker({ projectRoot: options.kimi?.cwd ?? getProjectRoot() });
+  const contextBroker = createContextBroker({ projectRoot });
 
   const wrappedRunner: TaskRunner = {
     onThinking: baseRunner.onThinking,
@@ -201,7 +273,10 @@ export async function createProviderBackedTaskRunner(
   return wrappedRunner;
 }
 
-function shouldUseOpenAICompatibleProvider(entry: ProviderRegistryEntry, providerPolicy: ProviderPolicy): boolean {
+function shouldUseOpenAICompatibleProvider(
+  entry: ProviderRegistryEntry,
+  providerPolicy: ProviderPolicy
+): boolean {
   if (entry.id === "deepseek") return false;
   if (entry.kind !== "openai-compatible") return false;
   if (!entry.enabled) return false;
@@ -222,12 +297,20 @@ function openAICompatibleHeaders(
   const headers: Record<string, string> = { ...(entry.headers ?? {}) };
   if (entry.id === "openrouter") {
     setHeaderFromEnv(headers, "HTTP-Referer", env.OPENROUTER_HTTP_REFERER ?? env.OPENROUTER_REFERER);
-    setHeaderFromEnv(headers, "X-OpenRouter-Title", env.OPENROUTER_X_TITLE ?? env.OPENROUTER_APP_TITLE);
+    setHeaderFromEnv(
+      headers,
+      "X-OpenRouter-Title",
+      env.OPENROUTER_X_TITLE ?? env.OPENROUTER_APP_TITLE
+    );
   }
   return Object.keys(headers).length > 0 ? headers : undefined;
 }
 
-function setHeaderFromEnv(headers: Record<string, string>, name: string, value: string | undefined): void {
+function setHeaderFromEnv(
+  headers: Record<string, string>,
+  name: string,
+  value: string | undefined
+): void {
   const trimmed = value?.trim();
   if (trimmed) headers[name] = trimmed;
 }

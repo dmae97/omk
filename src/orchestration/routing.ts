@@ -4,7 +4,7 @@ import { homedir } from "os";
 import { isAbsolute, join, relative, resolve, sep } from "path";
 import { normalizeUserHomePath } from "../util/fs.js";
 import { assignSkills } from "./skill-assigner.js";
-import { DEFAULT_FALLBACK_PROVIDER } from "../providers/types.js";
+import { resolveFallbackProvider } from "../providers/types.js";
 import {
   OMK_RELEASE_GUARD_PRESET,
   OMK_TS_PRODUCT_PRESET,
@@ -432,8 +432,8 @@ export function selectTaskRouting(input: RoutingInput): DagNodeRouting {
 
   return {
     provider: "auto",
-    fallbackProvider: DEFAULT_FALLBACK_PROVIDER,
-    providerReason: "Kimi-first provider router decides at node execution time",
+    fallbackProvider: resolveFallbackProvider(["kimi"]),
+    providerReason: "Primary provider router decides at node execution time",
     skills: mergedSkills,
     mcpServers: mergedMcpServers,
     tools: mergedTools,
@@ -508,7 +508,7 @@ export function dagNodeRoutingEnv(node: DagNode, dag?: import("./dag.js").Dag): 
     OMK_ROUTE_RATIONALE: routing.rationale ?? "",
     OMK_PROVIDER_HINT: routing.provider ?? "auto",
     OMK_PROVIDER_MODEL_TIER: routing.providerModelTier ?? "",
-    OMK_PROVIDER_FALLBACK: routing.fallbackProvider ?? DEFAULT_FALLBACK_PROVIDER,
+    OMK_PROVIDER_FALLBACK: routing.fallbackProvider ?? resolveFallbackProvider(["kimi"]),
     OMK_PROVIDER_REASON: routing.providerReason ?? "",
     OMK_ROUTE_REQUIRES_MCP: String(routing.requiresMcp ?? false),
     OMK_ROUTE_REQUIRES_TOOL_CALLING: String(routing.requiresToolCalling ?? false),

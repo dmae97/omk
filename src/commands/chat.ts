@@ -7,17 +7,37 @@ import { writeTodos, readTodos, parseSetTodoListFromOutput, type TodoItem } from
 import { writeSessionMeta, readSessionMeta, createOmkSessionEnv, createOmkSessionId } from "../util/session.js";
 import type { OmkMode } from "../util/mode-preset.js";
 
+interface MutableChatNode {
+  id: string;
+  startedAt?: string;
+  durationMs?: number;
+  thinking?: string;
+  status?: string;
+  completedAt?: string;
+}
+
+interface MutableChatState {
+  nodes?: MutableChatNode[];
+  updatedAt?: string;
+  status?: string;
+}
+
+function parseMutableChatState(raw: string): MutableChatState | null {
+  const value = JSON.parse(raw) as unknown;
+  if (value === null || typeof value !== "object") return null;
+  const obj = value as Record<string, unknown>;
+  return { nodes: Array.isArray(obj.nodes) ? obj.nodes as MutableChatNode[] : undefined, updatedAt: typeof obj.updatedAt === "string" ? obj.updatedAt : undefined, status: typeof obj.status === "string" ? obj.status : undefined };
+}
+
 export async function updateChatHeartbeat(root: string, runId: string): Promise<void> {
   const statePath = getRunPath(runId, "state.json", root);
   try {
     const raw = await readFile(statePath, "utf8");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const state = JSON.parse(raw) as any;
-    if (!state.nodes?.length) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const chatNode = state.nodes.find((n: any) => n.id === "chat");
+    const state = parseMutableChatState(raw);
+    if (!state || !state.nodes?.length) return;
+    const chatNode = state.nodes.find((n) => n.id === "chat");
     if (!chatNode) return;
-    const started = Date.parse(chatNode.startedAt);
+    const started = Date.parse(chatNode.startedAt ?? "");
     chatNode.durationMs = Date.now() - (Number.isNaN(started) ? Date.now() : started);
     state.updatedAt = new Date().toISOString();
     await writeFile(statePath, JSON.stringify(state, null, 2));
@@ -30,11 +50,9 @@ export async function updateChatThinking(root: string, runId: string, thinking: 
   const statePath = getRunPath(runId, "state.json", root);
   try {
     const raw = await readFile(statePath, "utf8");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const state = JSON.parse(raw) as any;
-    if (!state.nodes?.length) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const chatNode = state.nodes.find((n: any) => n.id === "chat");
+    const state = parseMutableChatState(raw);
+    if (!state || !state.nodes?.length) return;
+    const chatNode = state.nodes.find((n) => n.id === "chat");
     if (!chatNode) return;
     chatNode.thinking = thinking;
     state.updatedAt = new Date().toISOString();
@@ -48,16 +66,14 @@ export async function finalizeChatRunState(root: string, runId: string, success:
   const statePath = getRunPath(runId, "state.json", root);
   try {
     const raw = await readFile(statePath, "utf8");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const state = JSON.parse(raw) as any;
-    if (!state.nodes?.length) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const chatNode = state.nodes.find((n: any) => n.id === "chat");
+    const state = parseMutableChatState(raw);
+    if (!state || !state.nodes?.length) return;
+    const chatNode = state.nodes.find((n) => n.id === "chat");
     if (!chatNode) return;
     chatNode.status = success ? "done" : "failed";
     const completedAt = new Date();
     chatNode.completedAt = completedAt.toISOString();
-    const started = Date.parse(chatNode.startedAt);
+    const started = Date.parse(chatNode.startedAt ?? "");
     const durationMs = completedAt.getTime() - (Number.isNaN(started) ? completedAt.getTime() : started);
     chatNode.durationMs = Math.max(1, durationMs);
     state.status = success ? "done" : "failed";
@@ -420,32 +436,36 @@ export async function chatCommand(options: {
   const effectiveWorkers = resolveChatWorkerCount(options.workers, resources.maxWorkers);
   const executionPrompt = parseExecutionPromptPolicy(options.execution, "--execution") ?? resources.executionPrompt;
 
-  // Dependency preflight: fail-fast before project auto-init if primary CLI or node-pty is missing
+  // Dependency preflight: kimi binary + node-pty only required for kimi/auto providers
   const kimiBin = resolveKimiBin();
-  const kimiAvailable = await checkCommand(kimiBin);
-  if (!kimiAvailable) {
-    console.error(
-      status.error(
-        `[omk] \`${kimiBin}\` command not found in PATH. ` +
-          "Install the primary CLI first: npm i -g @anthropic-ai/kimi-code\n" +
-          "If already installed, check your PATH or set KIMI_BIN env var."
-      )
-    );
-    process.exit(1);
-  }
-  try {
-    await import("node-pty");
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(
-      status.error(
-        `[omk] Failed to load node-pty native module. (${message})\n` +
-          "This usually happens when installed with --ignore-scripts.\n" +
-          "Fix: npm rebuild -g @oh-my-kimi/cli\n" +
-          "Or reinstall: npm uninstall -g @oh-my-kimi/cli && npm install -g @oh-my-kimi/cli"
-      )
-    );
-    process.exit(1);
+  const needsKimi = providerPolicy === "kimi" || providerPolicy === "auto";
+  if (needsKimi) {
+    const kimiAvailable = await checkCommand(kimiBin);
+    if (!kimiAvailable) {
+      console.error(
+        status.error(
+          `[omk] \`${kimiBin}\` command not found in PATH. ` +
+            "Install the primary CLI first: npm i -g @anthropic-ai/kimi-code\n" +
+            "If already installed, check your PATH or set KIMI_BIN env var.\n" +
+            "To use a non-Kimi provider: omk chat --provider deepseek (or codex, openrouter, qwen)"
+        )
+      );
+      process.exit(1);
+    }
+    try {
+      await import("node-pty");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(
+        status.error(
+          `[omk] Failed to load node-pty native module. (${message})\n` +
+            "This usually happens when installed with --ignore-scripts.\n" +
+            "Fix: npm rebuild -g @oh-my-kimi/cli\n" +
+            "Or reinstall: npm uninstall -g @oh-my-kimi/cli && npm install -g @oh-my-kimi/cli"
+        )
+      );
+      process.exit(1);
+    }
   }
 
   const promptOk = await verifyAgentPrompt(agentFile);
@@ -535,12 +555,23 @@ export async function chatCommand(options: {
   const agentSchema = await validateAgentYamlFile(effectiveAgentFile, root);
   if (!agentSchema.ok) {
     const schemaIssues = agentSchema.issues.map((item) => `${item.file}: ${item.message}`);
+    const okabeYamlPath = join(root, ".omk", "agents", "okabe.yaml");
+    let okabeOk = true;
+    try {
+      const okabeContent = await readFile(okabeYamlPath, "utf8");
+      okabeOk = okabeContent.trim().length > 0;
+    } catch {
+      okabeOk = false;
+    }
+    const repairHint = okabeOk
+      ? "Fix: run `omk doctor --fix`, then retry `omk chat`."
+      : "Fix: run `omk init` to regenerate agents, then retry `omk chat`.";
     await failChatBeforeLaunch({
       root,
       runId: effectiveRunId,
       agentFile: effectiveAgentFile,
       resources: effectiveResources,
-      message: `invalid agent YAML schema for ${relative(root, effectiveAgentFile)}: ${formatAgentYamlIssues(agentSchema, 4)}`,
+      message: `invalid agent YAML schema for ${relative(root, effectiveAgentFile)}: ${formatAgentYamlIssues(agentSchema, 4)}\n${repairHint}`,
       schemaIssues,
     });
   }
@@ -897,7 +928,8 @@ export async function chatCommand(options: {
               if (!line || line.length < 3) continue;
               if (/read_file|write_file|edit_file|search_files|glob|grep|ctx_read/i.test(line)) {
                 const m = line.match(/["']([^"']{1,60})["']/);
-                lastThinking = m ? `📄 ${m[1].split("/").pop() ?? m[1]}` : `🔧 ${line.slice(0, 60)}`;
+                const rawTool = m ? `📄 ${m[1].split("/").pop() ?? m[1]}` : `🔧 ${line.slice(0, 60)}`;
+                lastThinking = rawTool.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
                 track(updateChatActivity(effectiveRunId, lastThinking).catch(() => {}));
                 continue;
               }
@@ -996,7 +1028,8 @@ export async function chatCommand(options: {
             if (!line || line.length < 3) continue;
             if (/read_file|write_file|edit_file|search_files|glob|grep|ctx_read/i.test(line)) {
               const m = line.match(/["']([^"']{1,60})["']/);
-              lastThinking = m ? `📄 ${m[1].split("/").pop() ?? m[1]}` : `🔧 ${line.slice(0, 60)}`;
+              const rawTool = m ? `📄 ${m[1].split("/").pop() ?? m[1]}` : `🔧 ${line.slice(0, 60)}`;
+              lastThinking = rawTool.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
               track(updateChatActivity(effectiveRunId, lastThinking).catch(() => {}));
               continue;
             }

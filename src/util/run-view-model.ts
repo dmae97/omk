@@ -4,6 +4,7 @@
 
 import type { RunState } from "../contracts/orchestration.js";
 import type { TelemetryEvent } from "./events-logger.js";
+import { sanitizeTerminalText } from "./theme.js";
 
 export type RunHealth = "ok" | "warn" | "blocked" | "failed";
 
@@ -398,7 +399,7 @@ function buildNodeTelemetryIndex(events: TelemetryEvent[]): Map<string, NodeTele
     if (event.type === "lane.activity" || event.type === "tool.started" || event.type === "tool.completed" || event.type === "provider.route") {
       current.activityAt = event.timestamp;
       const phase = event.data?.summary ?? event.data?.phase ?? event.data?.message;
-      if (typeof phase === "string") current.phase = phase;
+      if (typeof phase === "string") current.phase = sanitizeTerminalText(phase);
     }
     if (event.type === "lane.started") {
       current.activityAt = event.timestamp;
@@ -449,6 +450,11 @@ function computeProviderRouting(nodes: RunState["nodes"]): RunViewModelProviderR
       const provider = attempt.provider ?? attempt.requestedProvider ?? "unknown";
       byProvider[provider] = (byProvider[provider] ?? 0) + 1;
       if (attempt.fallbackFrom) fallbackCount += 1;
+
+      if (attempt.providerAssist && attempt.providerAssist.provider !== attempt.provider) {
+        byProvider[attempt.providerAssist.provider] = (byProvider[attempt.providerAssist.provider] ?? 0) + 1;
+        attempts += 1;
+      }
     }
   }
 

@@ -80,11 +80,16 @@ export interface ProviderRouteInput {
   providerPolicy?: ProviderPolicy;
   preferredModel?: string;
   preferredDeepSeekTier?: DeepSeekModelTier;
+  providerModelStats?: Record<string, import("./provider-stats.js").ProviderModelStatsEntry>;
+  /** Configurable authority provider. Defaults to "kimi" for backward compatibility. */
+  authorityProvider?: ProviderId;
 }
 
-/** @deprecated Will be removed in v2.0.0. Use DEFAULT_FALLBACK_RUNTIME instead. */
+/** @deprecated Use resolveFallbackProvider() instead. */
 export const DEFAULT_FALLBACK_PROVIDER: ProviderId = "kimi";
+/** @deprecated Use resolveFallbackRuntime() instead. */
 export const DEFAULT_FALLBACK_RUNTIME: RuntimeId = "kimi-cli";
+/** @deprecated Use resolveRuntimeFallbackChain() instead. */
 export const DEFAULT_RUNTIME_FALLBACK_CHAIN: RuntimeId[] = [
   "opencode-cli",
   "codex-cli",
@@ -92,6 +97,44 @@ export const DEFAULT_RUNTIME_FALLBACK_CHAIN: RuntimeId[] = [
   "openrouter-api",
   "deepseek-api",
 ];
+
+export function resolveFallbackProvider(availableProviders: ProviderId[]): ProviderId {
+  // Priority: deepseek > codex > qwen > openrouter > kimi
+  const priority: ProviderId[] = ["deepseek", "codex", "qwen", "openrouter", "kimi"];
+  for (const p of priority) {
+    if (availableProviders.includes(p)) return p;
+  }
+  return availableProviders[0] ?? "kimi";
+}
+
+export function resolveFallbackRuntime(availableRuntimes: RuntimeId[]): RuntimeId {
+  // Priority: deepseek-api > codex-cli > qwen-api > openrouter-api > kimi-cli
+  const priority: RuntimeId[] = ["deepseek-api", "codex-cli", "qwen-api", "openrouter-api", "kimi-cli"];
+  for (const r of priority) {
+    if (availableRuntimes.includes(r)) return r;
+  }
+  return availableRuntimes[0] ?? "kimi-cli";
+}
+
+export function resolveRuntimeFallbackChain(availableRuntimes: RuntimeId[]): RuntimeId[] {
+  const priority: RuntimeId[] = ["deepseek-api", "codex-cli", "qwen-api", "openrouter-api", "kimi-cli", "kimi-print", "kimi-wire"];
+  const ordered = priority.filter((r) => availableRuntimes.includes(r));
+  const remainder = availableRuntimes.filter((r) => !ordered.includes(r));
+  return [...ordered, ...remainder];
+}
+
+/**
+ * Resolve the authority provider from available providers.
+ * Priority: explicit preferred > kimi-native runtime > first available > "kimi"
+ */
+export function resolveAuthorityProvider(
+  availableProviders: ProviderId[],
+  preferred?: ProviderId
+): ProviderId {
+  if (preferred && availableProviders.includes(preferred)) return preferred;
+  if (availableProviders.includes("kimi")) return "kimi";
+  return availableProviders[0] ?? "kimi";
+}
 
 export interface ProviderRouteDecision {
   provider: ProviderId;

@@ -44,9 +44,19 @@ export {
 } from "./tool-proxy.js";
 
 export {
+  type KimiApiRuntimeOptions,
+  createKimiApiRuntime,
+  /** @deprecated Use KimiApiRuntimeOptions instead */
   type KimiWireRuntimeOptions,
+  /** @deprecated Use createKimiApiRuntime instead */
   createKimiWireRuntime,
 } from "./kimi-wire-runtime.js";
+
+export {
+  type KimiWireProtocolRuntimeOptions,
+  createKimiWireProtocolRuntime,
+  KimiWireProtocolRuntime,
+} from "./kimi-wire-protocol-runtime.js";
 
 export {
   type KimiPrintRuntimeOptions,

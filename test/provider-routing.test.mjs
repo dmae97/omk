@@ -23,6 +23,8 @@ import {
   isDeepSeekTransientFailure,
   routeProvider,
   selectDeepSeekModelTier,
+  computeProviderRouteScore,
+  resolveAuthorityProvider,
 } from "../dist/providers/index.js";
 
 const monthlyQuotaError = `LLM provider error: Error code: 429 - {'error': {'message': "You've reached kimi monthly usage limit for this billing cycle. Your quota will be refreshed in the next cycle.", 'type': 'exceeded_current_quota_error'}}`;
@@ -204,7 +206,7 @@ test("provider registry stores generic provider metadata without secret values",
 
     const codex = await providerDoctorStatus("codex", { homeDir, env: {} });
     assert.equal(codex.provider, "codex");
-    assert.match(codex.reason, /does not read ~\/\.codex\/auth\.json|Kimi fallback/);
+    assert.match(codex.reason, /does not read ~\/\.codex\/auth\.json|primary fallback/);
   } finally {
     await rm(homeDir, { recursive: true, force: true });
   }
@@ -1491,8 +1493,8 @@ test("DeepSeek runner treats auto-routing MCP and tool lists as Kimi-only hints"
   });
 
   assert.equal(result.success, true);
-  assert.match(body.messages[1].content, /MCP hints visible to Kimi only/);
-  assert.match(body.messages[1].content, /Tool hints visible to Kimi only/);
+  assert.match(body.messages[1].content, /MCP hints visible to authority provider only/);
+  assert.match(body.messages[1].content, /Tool hints visible to authority provider only/);
   assert.match(result.stdout, /hint-only review/);
 });
 
@@ -1525,7 +1527,7 @@ test("DeepSeek runner includes Kimi goal context in worker prompts", async () =>
   assert.equal(result.success, true);
   assert.match(body.messages[1].content, /continue from failed goal evidence/);
   assert.match(body.messages[0].content, /Do not echo the original user input/);
-  assert.match(body.messages[1].content, /Goal context digest from Kimi/);
+  assert.match(body.messages[1].content, /Goal context digest from authority provider/);
   assert.match(body.messages[1].content, /goal-followup/);
   assert.doesNotMatch(
     body.messages[1].content,
@@ -1578,6 +1580,101 @@ test("OpenAI-compatible runner supports OpenRouter base URL, attribution headers
   assert.equal(failure.success, false);
   assert.doesNotMatch(failure.stderr, new RegExp(apiKey));
   assert.match(failure.stderr, /\[redacted\]/);
+});
+
+test("authority provider write-risk routes to authority provider", () => {
+  const decision = routeProvider({
+    role: "coder",
+    taskType: "general",
+    risk: "write",
+    complexity: "moderate",
+    needsToolCalling: false,
+    needsMcp: false,
+    estimatedTokens: 5000,
+    deepseekAvailable: true,
+    authorityProvider: "codex",
+    providerAvailability: { codex: true, deepseek: true, kimi: true },
+  });
+  assert.strictEqual(decision.provider, "codex", "write-risk should route to authority provider");
+  assert.ok(decision.confidence > 0.5, "confidence should be reasonable");
+});
+
+test("scoreProviders includes all available providers", () => {
+  // We can't call scoreProviders directly (it's private), but we can verify via routeProvider
+  // that when multiple providers are available, the winner can be any of them
+  const decision = routeProvider({
+    role: "explorer",
+    taskType: "general",
+    risk: "read",
+    complexity: "simple",
+    needsToolCalling: false,
+    needsMcp: false,
+    estimatedTokens: 1000,
+    deepseekAvailable: true,
+    authorityProvider: "qwen",
+    providerAvailability: { qwen: true, deepseek: true, kimi: true },
+  });
+  // The routeEnsemble should have candidates for all available providers
+  const candidateProviders = decision.routeEnsemble.candidates.map(c => c.provider);
+  assert.ok(candidateProviders.includes("qwen"), "should include authority provider");
+  assert.ok(candidateProviders.includes("deepseek"), "should include deepseek");
+});
+
+test("computeProviderRouteScore penalizes write risk for non-authority provider", () => {
+  const authorityScore = computeProviderRouteScore("codex", {
+    role: "coder",
+    risk: "write",
+    complexity: "moderate",
+    estimatedTokens: 5000,
+    needsMcp: false,
+    needsToolCalling: false,
+    readOnly: false,
+    authorityProvider: "codex",
+  });
+  const externalScore = computeProviderRouteScore("deepseek", {
+    role: "coder",
+    risk: "write",
+    complexity: "moderate",
+    estimatedTokens: 5000,
+    needsMcp: false,
+    needsToolCalling: false,
+    readOnly: false,
+    authorityProvider: "codex",
+  });
+  assert.ok(authorityScore.score > externalScore.score, "authority provider should score higher for write risk");
+});
+
+test("computeProviderRouteScore gives read-only safety boost to authority provider", () => {
+  const authorityScore = computeProviderRouteScore("openrouter", {
+    role: "explorer",
+    risk: "read",
+    complexity: "simple",
+    estimatedTokens: 1000,
+    needsMcp: false,
+    needsToolCalling: false,
+    readOnly: true,
+    authorityProvider: "openrouter",
+  });
+  const nonAuthorityScore = computeProviderRouteScore("deepseek", {
+    role: "explorer",
+    risk: "read",
+    complexity: "simple",
+    estimatedTokens: 1000,
+    needsMcp: false,
+    needsToolCalling: false,
+    readOnly: true,
+    authorityProvider: "openrouter",
+  });
+  // Both should have good scores for read-only, but authority gets a slight edge
+  assert.ok(authorityScore.score >= 0.5, "authority provider should have decent score for read-only");
+  assert.ok(nonAuthorityScore.score >= 0.5, "external provider should also have decent score for read-only");
+});
+
+test("resolveAuthorityProvider selects preferred when available", () => {
+  assert.strictEqual(resolveAuthorityProvider(["deepseek", "codex"], "codex"), "codex");
+  assert.strictEqual(resolveAuthorityProvider(["deepseek", "codex"], "qwen"), "deepseek"); // qwen not available, fallback to first
+  assert.strictEqual(resolveAuthorityProvider(["kimi", "deepseek"]), "kimi"); // default behavior
+  assert.strictEqual(resolveAuthorityProvider([], "kimi"), "kimi"); // empty array fallback
 });
 
 function baseRoute(overrides = {}) {

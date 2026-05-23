@@ -16,7 +16,7 @@ import type {
   ProviderProfileType,
   ProviderWireApi,
 } from "./types.js";
-import { DEFAULT_FALLBACK_PROVIDER } from "./types.js";
+import { resolveFallbackProvider } from "./types.js";
 
 export const KNOWN_PROVIDER_IDS = ["kimi", "deepseek", "qwen", "codex", "openrouter"] as const satisfies readonly KnownProviderId[];
 export const QWEN_DASHSCOPE_COMPAT_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
@@ -432,10 +432,10 @@ export async function providerDoctorStatus(
       planKind: entry.planKind,
       codexCliAvailable,
       authority: "advisory",
-      fallbackProvider: DEFAULT_FALLBACK_PROVIDER,
+      fallbackProvider: resolveFallbackProvider(["kimi"]),
       reason: available
         ? "Codex CLI available; OMK does not read ~/.codex/auth.json"
-        : "Codex CLI missing/disabled or authentication not verified; Kimi fallback is active",
+        : "Codex CLI missing/disabled or authentication not verified; primary fallback is active",
     };
   }
   const apiKeySet = entry.apiKeyEnv ? Boolean((options.env ?? process.env)[entry.apiKeyEnv]?.trim()) : undefined;
@@ -457,12 +457,12 @@ export async function providerDoctorStatus(
     planKind: entry.planKind,
     headers: entry.headers,
     authority: entry.id === "kimi" ? "authority" : "advisory",
-    fallbackProvider: DEFAULT_FALLBACK_PROVIDER,
+    fallbackProvider: resolveFallbackProvider(["kimi"]),
     reason: available
       ? "Provider configured"
       : entry.enabled
-        ? `Missing ${entry.apiKeyEnv ?? "provider"} environment variable; Kimi fallback is active`
-        : entry.disabledReason ?? "Provider disabled; Kimi fallback is active",
+        ? `Missing ${entry.apiKeyEnv ?? "provider"} environment variable; primary fallback is active`
+        : entry.disabledReason ?? "Provider disabled; primary fallback is active",
   };
 }
 

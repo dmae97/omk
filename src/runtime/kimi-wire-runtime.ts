@@ -1,5 +1,6 @@
 /**
- * KimiWireRuntime — Moonshot API runtime adapter.
+ * KimiApiRuntime — Moonshot API runtime adapter.
+ * Previously misnamed as KimiWireRuntime; this is an HTTP API adapter, not wire protocol.
  *
  * Calls https://api.moonshot.cn/v1/chat/completions directly.
  */
@@ -119,7 +120,7 @@ function mapToolCalls(
   });
 }
 
-export interface KimiWireRuntimeOptions {
+export interface KimiApiRuntimeOptions {
   apiKey?: string;
   model?: string;
   baseUrl?: string;
@@ -139,17 +140,23 @@ export interface KimiWireRuntimeOptions {
   enabled?: boolean;
 }
 
-export function createKimiWireRuntime(options: KimiWireRuntimeOptions = {}): AgentRuntime {
+/** @deprecated Use KimiApiRuntimeOptions instead */
+export type KimiWireRuntimeOptions = KimiApiRuntimeOptions;
+
+export function createKimiApiRuntime(options: KimiApiRuntimeOptions = {}): AgentRuntime {
   const env = options.env ?? process.env;
-  return new KimiWireRuntime({
+  return new KimiApiRuntime({
     apiKey: options.apiKey ?? env.KIMI_API_KEY,
     model: options.model ?? env.KIMI_MODEL,
     baseUrl: options.baseUrl ?? env.KIMI_BASE_URL,
   });
 }
 
-export class KimiWireRuntime implements AgentRuntime {
-  readonly id = "kimi-wire";
+/** @deprecated Use createKimiApiRuntime instead */
+export const createKimiWireRuntime = createKimiApiRuntime;
+
+export class KimiApiRuntime implements AgentRuntime {
+  readonly id = "kimi-api";
   readonly kind = "api";
   readonly priority = 90;
   readonly capabilities: RuntimeCapabilities = {
@@ -170,7 +177,7 @@ export class KimiWireRuntime implements AgentRuntime {
   private readonly model: string;
   private readonly baseUrl: string;
 
-  constructor(options: KimiWireRuntimeOptions = {}) {
+  constructor(options: KimiApiRuntimeOptions = {}) {
     this.apiKey = options.apiKey ?? process.env.KIMI_API_KEY;
     this.model = options.model ?? process.env.KIMI_MODEL ?? "kimi-k2-6";
     this.baseUrl = (options.baseUrl ?? "https://api.moonshot.cn/v1").replace(/\/+$/, "");
