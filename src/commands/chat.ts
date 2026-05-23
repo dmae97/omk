@@ -4,7 +4,7 @@ import { runShell } from "../util/shell.js";
 import { readFile, writeFile, readdir } from "fs/promises";
 import { dirname, join, isAbsolute, relative } from "path";
 import { writeTodos, readTodos, parseSetTodoListFromOutput, type TodoItem } from "../util/todo-sync.js";
-import { writeSessionMeta, readSessionMeta, createOmkSessionEnv, createOmkSessionId } from "../util/session.js";
+import { writeSessionMeta, readSessionMeta, createOmkSessionEnv, createOmkSessionId, type SessionMeta } from "../util/session.js";
 import type { OmkMode } from "../util/mode-preset.js";
 
 export async function updateChatHeartbeat(root: string, runId: string): Promise<void> {
@@ -296,6 +296,18 @@ async function buildChatSmokeReport(options: {
 type ChatLayout = "auto" | "tmux" | "inline" | "plain";
 type ChatBrand = "kimicat" | "minimal" | "plain";
 
+export function applyKimiSessionResumeArgs(
+  args: string[],
+  env: Record<string, string>,
+  meta: Pick<SessionMeta, "kimiSessionId"> | null | undefined
+): boolean {
+  const kimiSessionId = meta?.kimiSessionId?.trim();
+  if (!kimiSessionId) return false;
+  args.push("--session", kimiSessionId);
+  env.KIMI_SESSION_ID = kimiSessionId;
+  return true;
+}
+
 function resolveLayout(requested: ChatLayout | undefined): ChatLayout {
   if (requested && requested !== "auto") return requested;
   // Already inside a tmux cockpit pane — never launch tmux again
@@ -402,6 +414,7 @@ export async function chatCommand(options: {
   const sessionId = createOmkSessionId("chat");
   const runId = options.runId;
   const effectiveRunId = runId ?? sessionId;
+  const resumeSessionMeta = runId ? await readSessionMeta(effectiveRunId).catch(() => null) : null;
   const layout = resolveLayout(options.layout);
   const brand = options.brand ?? "kimicat";
   const resources = await getOmkResourceSettings();
@@ -723,6 +736,7 @@ export async function chatCommand(options: {
 
     const env = createOmkSessionEnv(root, sessionId);
     env.OMK_WORKERS = effectiveWorkers;
+    applyKimiSessionResumeArgs(args, env, resumeSessionMeta);
     if (options.maxStepsPerTurn) {
       args.push("--max-steps-per-turn", options.maxStepsPerTurn);
     }

@@ -230,6 +230,43 @@ export function formatKimiProviderFailureHint(output: string): string | null {
   return lines.join("\n") + "\n";
 }
 
+function retainKimiHomeSetting(env: Record<string, string | undefined>): "off" | "provider" | "all" {
+  const value = env.OMK_RETAIN_KIMI_HOME_ON_FAILURE?.trim().toLowerCase();
+  if (value && ["0", "false", "no", "off", "never"].includes(value)) return "off";
+  if (value && ["1", "true", "yes", "on", "all", "always"].includes(value)) return "all";
+  return "provider";
+}
+
+function retainedKimiHomeDecision(options: {
+  exitCode: number;
+  output: string;
+  env: Record<string, string | undefined>;
+  stoppedByController?: boolean;
+  startupFailure?: boolean;
+}): { retain: boolean; reason?: string } {
+  if (options.exitCode === 0 || options.stoppedByController || options.startupFailure) {
+    return { retain: false };
+  }
+  const setting = retainKimiHomeSetting(options.env);
+  if (setting === "off") return { retain: false };
+  const diagnosis = classifyKimiProviderFailure(options.output);
+  if (diagnosis) {
+    return { retain: true, reason: `${diagnosis.kind} provider failure` };
+  }
+  if (setting === "all") {
+    return { retain: true, reason: `kimi exited with code ${options.exitCode}` };
+  }
+  return { retain: false };
+}
+
+function formatRetainedKimiHomeHint(home: string, reason: string | undefined): string {
+  return [
+    `[omk] Preserved Kimi HOME for recovery: ${home}`,
+    `      Kimi sessions/subagents: ${join(home, ".kimi", "sessions")}`,
+    `      Reason: ${reason ?? "provider failure"}`,
+  ].join("\n") + "\n";
+}
+
 export interface KimiStartupExitDiagnosis {
   elapsedMs: number;
   thresholdMs: number;
@@ -628,7 +665,7 @@ export async function runKimiInteractive(
     const clearWatchdogs = (): void => {
       if (startupTimer) clearTimeout(startupTimer);
     };
-    const cleanupRuntime = async (): Promise<void> => {
+    const cleanupRuntime = async (cleanupOptions: { preserveHome?: boolean; reason?: string } = {}): Promise<void> => {
       if (cleaned) return;
       cleaned = true;
       clearWatchdogs();
@@ -644,7 +681,13 @@ export async function runKimiInteractive(
           restoreTerminalInputState(process.stdin, terminalInputState);
         }
       }
-      await cleanupIsolatedKimiHome(tmpHome);
+      const cleanup = await cleanupIsolatedKimiHome(tmpHome, {
+        preserve: cleanupOptions.preserveHome,
+        reason: cleanupOptions.reason,
+      });
+      if (cleanup.retained) {
+        process.stderr.write(style.orange(formatRetainedKimiHomeHint(tmpHome, cleanupOptions.reason)));
+      }
     };
     const resolveOnce = (code: number): void => {
       if (settled) return;
@@ -706,13 +749,19 @@ export async function runKimiInteractive(
         if (bugRest) writeStdout(statusLine.process(bugRest));
         const replacerRest = replacer.forceFlush();
         if (replacerRest) writeStdout(statusLine.process(replacerRest));
-        await cleanupRuntime().catch((err: unknown) => {
-          const message = err instanceof Error ? err.message : String(err);
-          process.stderr.write(`[omk] PTY cleanup warning: ${message}\n`);
-        });
         const runId = options?.env?.OMK_RUN_ID;
         const resumeHint = runId ? ` • resume: omk chat --run-id ${runId}` : "";
         const startupExit = classifyKimiStartupExit(exitCode, elapsedMs, env);
+        const retention = retainedKimiHomeDecision({
+          exitCode,
+          output: recentProviderOutput,
+          env,
+          startupFailure: Boolean(startupExit),
+        });
+        await cleanupRuntime({ preserveHome: retention.retain, reason: retention.reason }).catch((err: unknown) => {
+          const message = err instanceof Error ? err.message : String(err);
+          process.stderr.write(`[omk] PTY cleanup warning: ${message}\n`);
+        });
         if (startupExit) {
           process.stderr.write(style.red(`[omk] ${startupExit.message}${resumeHint}\n`));
           process.stderr.write(
@@ -930,6 +979,7 @@ export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskR
       const kimiBin = resolveKimiBin(mergedEnv);
       const kimiAvailable = await checkCommand(kimiBin);
       if (!kimiAvailable) {
+        await cleanupIsolatedKimiHome(tmpHome);
         return {
           success: false,
           exitCode: 1,
@@ -938,18 +988,33 @@ export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskR
         };
       }
       let result: Awaited<ReturnType<typeof runShellStreaming>>;
-      try {
-        result = await runShellStreaming(kimiBin, args, {
-          cwd: worktree,
-          timeout: effectiveTimeout,
-          env: mergedEnv,
-          logPath,
-          input: "",
-          onStdout: thinkingHandler,
-          signal,
-        });
-      } finally {
-        await cleanupIsolatedKimiHome(tmpHome);
+      result = await runShellStreaming(kimiBin, args, {
+        cwd: worktree,
+        timeout: effectiveTimeout,
+        env: mergedEnv,
+        logPath,
+        input: "",
+        onStdout: thinkingHandler,
+        signal,
+      });
+      const stoppedByController = Boolean(signal?.aborted) || /(?:^|\n)(?:aborted|timed out after \d+ms)(?:\n|$)/i.test(result.stderr);
+      const retention = retainedKimiHomeDecision({
+        exitCode: result.exitCode,
+        output: `${result.stderr}\n${result.stdout}`,
+        env: mergedEnv,
+        stoppedByController,
+      });
+      const cleanup = await cleanupIsolatedKimiHome(tmpHome, {
+        preserve: retention.retain,
+        reason: retention.reason,
+      });
+      if (cleanup.retained) {
+        result = {
+          ...result,
+          stderr: result.stderr
+            ? `${result.stderr}\n${formatRetainedKimiHomeHint(tmpHome, retention.reason)}`
+            : formatRetainedKimiHomeHint(tmpHome, retention.reason),
+        };
       }
 
       // Debug: log runner result so we can diagnose unexpected failures

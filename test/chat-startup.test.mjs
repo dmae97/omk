@@ -7,6 +7,7 @@ import { join, delimiter } from "node:path";
 import { tmpdir } from "node:os";
 
 const { ensureChatStartupArtifacts, formatChatStartupDate } = await import("../dist/util/chat-startup.js");
+const { applyKimiSessionResumeArgs } = await import("../dist/commands/chat.js");
 const CLI = join(process.cwd(), "dist", "cli.js");
 
 async function createFakeKimi(binRoot, scriptBody) {
@@ -91,6 +92,16 @@ test("chat startup is idempotent and does not overwrite daily docs", async () =>
   }
 });
 
+test("chat resume args restore recorded Kimi session id", () => {
+  const args = ["--agent-file", "root.yaml"];
+  const env = { OMK_RUN_ID: "resume-run" };
+  const applied = applyKimiSessionResumeArgs(args, env, { kimiSessionId: "kimi-session-existing-123" });
+
+  assert.equal(applied, true);
+  assert.deepEqual(args.slice(-2), ["--session", "kimi-session-existing-123"]);
+  assert.equal(env.KIMI_SESSION_ID, "kimi-session-existing-123");
+});
+
 test("chat command fails loudly when Kimi exits immediately with code 0", {
   skip: process.platform === "linux" ? false : "native node-pty fake-shell startup classification is covered on Linux",
 }, async () => {
@@ -144,6 +155,69 @@ test("chat command fails loudly when Kimi exits immediately with code 0", {
     assert.equal(failure.exitCode, 1);
     assert.equal(failure.mcpScope, "project");
     assert.match(failure.recentOutput, /fake kimi started/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+    await rm(binRoot, { recursive: true, force: true });
+  }
+});
+
+test("chat --run-id resumes recorded Kimi session id", {
+  skip: process.platform === "linux" ? false : "native node-pty fake-shell startup classification is covered on Linux",
+}, async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-chat-resume-session-project-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-chat-resume-session-home-"));
+  const binRoot = await mkdtemp(join(tmpdir(), "omk-chat-resume-session-bin-"));
+  const runId = "resume-kimi-session";
+  const kimiSessionId = "kimi-session-existing-123";
+  const argvPath = join(projectRoot, "kimi-argv.json");
+
+  try {
+    await mkdir(join(projectRoot, ".omk", "runs", runId), { recursive: true });
+    await writeFile(join(projectRoot, ".omk", "runs", runId, "session.json"), JSON.stringify({
+      runId,
+      type: "chat",
+      status: "failed",
+      startedAt: "2026-05-23T12:00:00.000Z",
+      updatedAt: "2026-05-23T12:00:00.000Z",
+      kimiSessionId,
+      todoCount: 0,
+      todoDoneCount: 0,
+    }, null, 2), "utf-8");
+
+    await mkdir(binRoot, { recursive: true });
+    const kimiBin = await createFakeKimi(binRoot, [
+      `require("fs").writeFileSync(${JSON.stringify(argvPath)}, JSON.stringify(process.argv.slice(2)));`,
+      `process.exit(0);`,
+      ``,
+    ].join("\n"));
+
+    const result = spawnSync(process.execPath, [CLI, "chat", "--layout", "plain", "--brand", "plain", "--run-id", runId], {
+      cwd: projectRoot,
+      encoding: "utf-8",
+      timeout: 20000,
+      env: {
+        ...process.env,
+        HOME: homeRoot,
+        OMK_ORIGINAL_HOME: homeRoot,
+        OMK_PROJECT_ROOT: projectRoot,
+        OMK_MCP_SCOPE: "",
+        OMK_SKILLS_SCOPE: "",
+        OMK_HOOKS_SCOPE: "",
+        OMK_MCP_SUPPRESS_PRUNE_WARNINGS: "1",
+        OMK_RENDER_LOGO: "0",
+        OMK_STAR_PROMPT: "0",
+        OMK_CHAT_NO_BANNER: "1",
+        OMK_CHAT_FAST_EXIT_MS: "5000",
+        KIMI_BIN: kimiBin,
+      },
+    });
+
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const argv = JSON.parse(await readFile(argvPath, "utf-8"));
+    const sessionArgIndex = argv.indexOf("--session");
+    assert.notEqual(sessionArgIndex, -1);
+    assert.equal(argv[sessionArgIndex + 1], kimiSessionId);
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(homeRoot, { recursive: true, force: true });

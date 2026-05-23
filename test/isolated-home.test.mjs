@@ -62,6 +62,76 @@ test("isolated Kimi HOME bridges shell profiles only with trusted opt-in", async
   }
 });
 
+test("isolated Kimi HOME uses stable run-scoped path and can be retained for recovery", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-isolated-persistent-project-"));
+  const originalHome = await mkdtemp(join(tmpdir(), "omk-isolated-persistent-home-"));
+  let kimiHome;
+
+  try {
+    await mkdir(join(originalHome, ".kimi", "credentials"), { recursive: true });
+
+    kimiHome = await prepareIsolatedKimiHome({
+      originalHome,
+      projectRoot,
+      inheritLocalAuth: false,
+      env: {
+        OMK_RUN_ID: "chat-2026-05-23T16-41-41-731Z-71375",
+        OMK_NODE_ID: "planner/subagent",
+      },
+    });
+
+    assert.equal(
+      kimiHome,
+      join(projectRoot, ".omk", "runs", "chat-2026-05-23T16-41-41-731Z-71375", "kimi-home", "planner-subagent")
+    );
+
+    await mkdir(join(kimiHome, ".kimi", "sessions", "session-1", "run-1", "subagents", "agent-1"), { recursive: true });
+    await writeFile(join(kimiHome, ".kimi", "sessions", "session-1", "run-1", "subagents", "agent-1", "meta.json"), "{}\n");
+
+    const cleanup = await cleanupIsolatedKimiHome(kimiHome, { preserve: true, reason: "rate-limit provider failure" });
+    assert.equal(cleanup.retained, true);
+    assert.equal(cleanup.removed, false);
+    assert.equal((await lstat(join(kimiHome, ".kimi", "sessions", "session-1", "run-1", "subagents", "agent-1", "meta.json"))).isFile(), true);
+
+    const marker = await readFile(join(kimiHome, ".omk-retained-kimi-home.json"), "utf8");
+    assert.match(marker, /rate-limit provider failure/);
+    assert.match(marker, /\.kimi/);
+  } finally {
+    if (kimiHome) await cleanupIsolatedKimiHome(kimiHome);
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(originalHome, { recursive: true, force: true });
+  }
+});
+
+test("persistent isolated Kimi HOME can be prepared repeatedly for the same run", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-isolated-persistent-reuse-project-"));
+  const originalHome = await mkdtemp(join(tmpdir(), "omk-isolated-persistent-reuse-home-"));
+  let firstHome;
+  let secondHome;
+
+  try {
+    await mkdir(join(originalHome, ".kimi", "credentials"), { recursive: true });
+    const options = {
+      originalHome,
+      projectRoot,
+      inheritLocalAuth: false,
+      env: { OMK_RUN_ID: "reuse-run", OMK_NODE_ID: "coder" },
+    };
+
+    firstHome = await prepareIsolatedKimiHome(options);
+    secondHome = await prepareIsolatedKimiHome(options);
+
+    assert.equal(secondHome, firstHome);
+    if (!IS_WINDOWS) {
+      assert.equal((await lstat(join(secondHome, ".kimi", "credentials"))).isSymbolicLink(), true);
+    }
+  } finally {
+    if (firstHome) await cleanupIsolatedKimiHome(firstHome);
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(originalHome, { recursive: true, force: true });
+  }
+});
+
 test("isolated Kimi HOME respects project skills/hooks scope", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-isolated-project-scope-"));
   const originalHome = await mkdtemp(join(tmpdir(), "omk-isolated-original-scope-"));

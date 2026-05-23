@@ -1,7 +1,7 @@
 import { lstat, mkdtemp, mkdir, symlink, rm, writeFile, readFile } from "fs/promises";
 import { dirname, isAbsolute, join } from "path";
 import { tmpdir } from "os";
-import { pathExists, getProjectRoot, getUserHome, extractHooksBlocks } from "../util/fs.js";
+import { pathExists, getProjectRoot, getUserHome, extractHooksBlocks, getRunPath, sanitizeRunId } from "../util/fs.js";
 
 type RuntimeScope = "all" | "project" | "none";
 
@@ -11,7 +11,21 @@ export interface IsolatedKimiHomeOptions {
   inheritLocalAuth?: boolean;
   skillsScope?: RuntimeScope;
   hooksScope?: RuntimeScope;
+  persistentHome?: boolean;
+  homeLabel?: string;
   env?: NodeJS.ProcessEnv;
+}
+
+export interface IsolatedKimiHomeCleanupOptions {
+  preserve?: boolean;
+  reason?: string;
+}
+
+export interface IsolatedKimiHomeCleanupResult {
+  path: string;
+  removed: boolean;
+  retained: boolean;
+  markerPath?: string;
 }
 
 const KIMI_BASE_INHERITED_DIRS = ["credentials", "agents", "logs"] as const;
@@ -67,7 +81,12 @@ export async function prepareIsolatedKimiHome(options: IsolatedKimiHomeOptions =
   const env = options.env ?? process.env;
   const originalHome = options.originalHome ?? resolveOriginalHome(env);
   const projectRoot = options.projectRoot ?? getProjectRoot();
-  const tmpHome = await mkdtemp(join(tmpdir(), "omk-home-"));
+  const tmpHome = await resolveIsolatedKimiHomePath({
+    projectRoot,
+    env,
+    persistentHome: options.persistentHome,
+    homeLabel: options.homeLabel,
+  });
   const originalKimi = join(originalHome, ".kimi");
   const tmpKimi = join(tmpHome, ".kimi");
   const skillsScope = normalizeRuntimeScope(options.skillsScope ?? env.OMK_SKILLS_SCOPE, "project");
@@ -86,6 +105,7 @@ export async function prepareIsolatedKimiHome(options: IsolatedKimiHomeOptions =
     const src = join(originalKimi, name);
     const dst = join(tmpKimi, name);
     if (await pathExists(src)) {
+      if (await pathExists(dst)) continue;
       if (name === "credentials") {
         try {
           await symlink(src, dst, "dir");
@@ -157,8 +177,13 @@ export async function prepareIsolatedKimiHome(options: IsolatedKimiHomeOptions =
   return tmpHome;
 }
 
-export async function cleanupIsolatedKimiHome(tmpHome: string): Promise<void> {
+export async function cleanupIsolatedKimiHome(tmpHome: string, options: IsolatedKimiHomeCleanupOptions = {}): Promise<IsolatedKimiHomeCleanupResult> {
+  if (options.preserve) {
+    const markerPath = await writeRetainedHomeMarker(tmpHome, options.reason);
+    return { path: tmpHome, removed: false, retained: true, markerPath };
+  }
   await rm(tmpHome, { recursive: true, force: true }).catch(() => {});
+  return { path: tmpHome, removed: true, retained: false };
 }
 
 export function resolveOriginalHome(env: NodeJS.ProcessEnv = process.env): string {
@@ -190,6 +215,45 @@ function normalizeRuntimeScope(value: string | undefined, fallback: RuntimeScope
   if (normalized === "all" || normalized === "global" || normalized === "local-user" || normalized === "local_user" || normalized === "personal" || normalized === "user") return "all";
   if (normalized === "project" || normalized === "local") return "project";
   return fallback;
+}
+
+async function resolveIsolatedKimiHomePath(options: {
+  projectRoot: string;
+  env: NodeJS.ProcessEnv;
+  persistentHome?: boolean;
+  homeLabel?: string;
+}): Promise<string> {
+  const runId = options.env.OMK_RUN_ID ?? options.env.OMK_SESSION_ID ?? options.env.KIMI_SESSION_ID;
+  const persistentEnabled = shouldUsePersistentHome(options.persistentHome, options.env);
+  if (!persistentEnabled || !runId) {
+    return await mkdtemp(join(tmpdir(), "omk-home-"));
+  }
+
+  const safeRunId = sanitizeRunId(runId, "run");
+  const rawLabel = options.homeLabel ?? options.env.OMK_NODE_ID ?? options.env.OMK_ROLE ?? "chat";
+  const safeLabel = sanitizeRunId(rawLabel, "kimi-home");
+  const persistentHome = join(getRunPath(safeRunId, undefined, options.projectRoot), "kimi-home", safeLabel);
+  await mkdir(persistentHome, { recursive: true });
+  return persistentHome;
+}
+
+function shouldUsePersistentHome(optionValue: boolean | undefined, env: NodeJS.ProcessEnv): boolean {
+  if (typeof optionValue === "boolean") return optionValue;
+  const value = env.OMK_PERSIST_KIMI_HOME;
+  if (!value) return true;
+  return !["0", "false", "no", "off", "tmp", "temporary"].includes(value.trim().toLowerCase());
+}
+
+async function writeRetainedHomeMarker(tmpHome: string, reason: string | undefined): Promise<string> {
+  const markerPath = join(tmpHome, ".omk-retained-kimi-home.json");
+  await mkdir(tmpHome, { recursive: true });
+  await writeFile(markerPath, JSON.stringify({
+    retainedAt: new Date().toISOString(),
+    reason: reason ?? "preserved for recovery",
+    home: tmpHome,
+    kimiSessions: join(tmpHome, ".kimi", "sessions"),
+  }, null, 2) + "\n", { mode: 0o600 });
+  return markerPath;
 }
 
 function stripHooksBlocks(content: string): string {
