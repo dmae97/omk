@@ -189,7 +189,7 @@ OMK supports multiple agent runtimes through a unified adapter interface:
 - **Codex CLI** — OpenAI Codex integration.
 - **Gemini CLI** — Google Gemini agent runtime.
 - **Claude Code** — Anthropic Claude Code adapter.
-- **Kimi CLI** — First-class adapter for MCP-heavy execution and Kimi Code users.
+- **Kimi CLI** — First-class adapter for MCP-heavy execution and Kimi users.
 - **OpenRouter** — OpenRouter API adapter for multi-model routing.
 - **Qwen** — Alibaba Qwen API adapter.
 - **DeepSeek** — DeepSeek advisory/read-only adapter.
@@ -450,7 +450,7 @@ Then set `~/.kimi/mcp.json` to an absolute command such as `/home/you/.local/bin
 
 ## Repository topics
 
-`agent-runtime` · `provider-neutral` · `coding-agents` · `dag-runtime` · `evidence-gates` · `multi-agent-orchestration` · `agent-supervisor` · `kimi-code` · `verified-agent-runtime` · `dag-execution` · `graph-memory` · `worktree-isolation` · `mcp` · `agent-skills` · `safety-hooks` · `open-design` · `deepseek-advisory`
+`agent-runtime` · `provider-neutral` · `coding-agents` · `dag-runtime` · `evidence-gates` · `multi-agent-orchestration` · `agent-supervisor` · `multi-provider` · `verified-agent-runtime` · `dag-execution` · `graph-memory` · `worktree-isolation` · `mcp` · `agent-skills` · `safety-hooks` · `open-design` · `deepseek-advisory`
 
 ---
 

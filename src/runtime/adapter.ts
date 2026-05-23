@@ -104,3 +104,22 @@ export interface RuntimeRouteDecision {
     reason: string;
   }>;
 }
+
+export function isRuntimeId(value: unknown): value is RuntimeId {
+  return typeof value === "string" && value.length > 0;
+}
+
+export function isRuntimeAdapter(value: unknown): value is RuntimeAdapter {
+  if (typeof value !== "object" || value === null) return false;
+  const r = value as Record<string, unknown>;
+  return (
+    typeof r.id === "string" &&
+    typeof r.displayName === "string" &&
+    typeof r.priority === "number" &&
+    typeof r.capabilities === "object" &&
+    r.capabilities !== null &&
+    typeof r.health === "function" &&
+    typeof r.supports === "function" &&
+    typeof r.runNode === "function"
+  );
+}

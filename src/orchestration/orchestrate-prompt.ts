@@ -15,7 +15,6 @@ import {
 } from "../goal/intent-frame.js";
 import { style, status } from "../util/theme.js";
 import { MemoryStore } from "../memory/memory-store.js";
-import type { ParallelCommandOptions } from "../commands/parallel.js";
 import type { GoalSpec, IntentFrame } from "../contracts/goal.js";
 import { getCurrentMode } from "../util/mode-preset.js";
 import { t } from "../util/i18n.js";
@@ -408,7 +407,7 @@ export async function orchestratePrompt(
   const selectedProvider = executionDecision.strategy === "sequential"
     ? "kimi"
     : options.provider;
-  const parallelOpts: ParallelCommandOptions = {
+  const parallelOpts = {
     workers: selectedWorkers,
     runId: options.runId,
     approvalPolicy: options.approvalPolicy ?? "interactive",

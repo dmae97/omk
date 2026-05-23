@@ -5,7 +5,7 @@ export type {
   HudRunCandidate,
   HudCommandOptions,
   HudRenderOptions,
-} from "../commands/hud.js";
+} from "./render.js";
 
 export {
   parseGitStatusPorcelain,
@@ -14,8 +14,7 @@ export {
   renderHudColumnsWithDetectedWidth,
   renderHudDashboard,
   selectLatestRunName,
-  hudCommand,
-} from "../commands/hud.js";
+} from "./render.js";
 
 export interface CreateLiveHudOptions {
   runId?: string;
@@ -25,7 +24,7 @@ export interface CreateLiveHudOptions {
 
 export async function createLiveHud(options: CreateLiveHudOptions = {}): Promise<void> {
   if (options.onRender) {
-    const { renderHudDashboard } = await import("../commands/hud.js");
+    const { renderHudDashboard } = await import("./render.js");
     options.onRender(await renderHudDashboard({ runId: options.runId }));
     return;
   }

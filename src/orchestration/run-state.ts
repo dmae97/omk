@@ -29,19 +29,17 @@ export function createRoutedRunState(input: {
 export function createDagFromRunState(state: RunState): Dag {
   return createDag({
     nodes: state.nodes.map((node): DagNodeDefinition => {
-      /* eslint-disable @typescript-eslint/no-unused-vars */
       const {
-        status,
-        retries,
-        startedAt,
-        completedAt,
-        durationMs,
-        attempts,
-        blockedReason,
-        evidence,
+        status: _status,
+        retries: _retries,
+        startedAt: _startedAt,
+        completedAt: _completedAt,
+        durationMs: _durationMs,
+        attempts: _attempts,
+        blockedReason: _blockedReason,
+        evidence: _evidence,
         ...definition
       } = node;
-      /* eslint-enable @typescript-eslint/no-unused-vars */
       return definition;
     }),
   });

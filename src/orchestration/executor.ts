@@ -11,7 +11,7 @@ import { checkEvidenceGates } from "./evidence-gate.js";
 import { invalidateTaskDagGraph } from "./task-graph.js";
 import { resolveTimeoutMs } from "../util/timeout-config.js";
 import { createNodeMonitorEngine } from "./node-monitor.js";
-import type { DeepSeekModelTier, DeepSeekParticipation, ProviderId } from "../providers/types.js";
+import type { DeepSeekModelTier, DeepSeekParticipation, ProviderAssistMetadata, ProviderId } from "../providers/types.js";
 import { appendEvent } from "../util/events-logger.js";
 
 export interface ExecutorOptions {
@@ -276,6 +276,11 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
     if (isProviderFallback(fallback)) {
       latestAttempt.fallbackFrom = fallback.from;
       latestAttempt.fallbackReason = fallback.reason;
+    }
+
+    const assist = result.metadata?.providerAssist as ProviderAssistMetadata | undefined;
+    if (assist && assist.participation === "advisory") {
+      latestAttempt.providerAssist = assist;
     }
   }
 

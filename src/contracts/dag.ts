@@ -2,7 +2,7 @@
 // Owner: Contract Worker (Phase 0)
 // Read-only for all other workers. Version-bump only via Integration Worker.
 
-import type { DeepSeekModelTier, DeepSeekParticipation, ProviderId } from "../providers/types.js";
+import type { DeepSeekModelTier, DeepSeekParticipation, ProviderAssistMetadata, ProviderId } from "../providers/types.js";
 import type { ProviderPolicy } from "../runtime/agent-runtime.js";
 
 export type TaskStatus = "pending" | "running" | "done" | "failed" | "blocked" | "skipped";
@@ -91,6 +91,7 @@ export interface DagNodeAttempt {
   providerModel?: string;
   providerModelTier?: DeepSeekModelTier;
   providerParticipation?: DeepSeekParticipation;
+  providerAssist?: ProviderAssistMetadata;
 }
 
 export interface DagNode {

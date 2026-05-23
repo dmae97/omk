@@ -41,13 +41,13 @@ export function createOpenAICompatibleReadOnlyTaskRunner(
       const risk = inferNodeRisk(node);
       const advisoryMode = env.OMK_PROVIDER_AUTHORITY === "advisory" && risk === "write";
       if (risk !== "read" && !advisoryMode) {
-        return deny(node, `${options.provider} runner is read-only/advisory; write/shell/merge authority stays on Kimi`);
+        return deny(node, `${options.provider} runner is read-only/advisory; write/shell/merge authority stays on authority provider`);
       }
       if (node.routing?.requiresToolCalling === true || node.routing?.requiresMcp === true) {
         return deny(node, `${options.provider} runner does not receive tool or MCP authority`);
       }
       if (!options.apiKey) {
-        return deny(node, `${options.provider} API key is missing (${options.apiKeyEnv ?? "provider env"}); Kimi fallback is required`);
+        return deny(node, `${options.provider} API key is missing (${options.apiKeyEnv ?? "provider env"}); primary fallback is required`);
       }
 
       const model = env.OMK_PROVIDER_MODEL || options.model;

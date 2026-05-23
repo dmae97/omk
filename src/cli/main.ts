@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { CliError } from "../util/cli-contract.js";
 import { formatOmkVersionFooter, getOmkVersionSync } from "../util/version.js";
-import { configureRootProgram } from "./root.js";
+import { configureRootProgram, runRootHudFlow } from "./root.js";
 import { registerCliCommands } from "./command-registry.js";
 
 export function createOmkProgram(): Command {
@@ -16,7 +16,18 @@ export function createOmkProgram(): Command {
 
 export async function runCli(argv: readonly string[] = process.argv): Promise<void> {
   const program = createOmkProgram();
+  const args = argv.slice(2);
   try {
+    // When no subcommand is given, bypass Commander's default help-and-exit
+    // behavior and run the root HUD flow directly.
+    if (args.length === 0) {
+      const globalOpts = program.opts();
+      if (globalOpts.runId) {
+        process.env.OMK_RUN_ID = globalOpts.runId;
+      }
+      await runRootHudFlow(program);
+      return;
+    }
     await program.parseAsync([...argv]);
   } catch (err) {
     handleCliError(err);

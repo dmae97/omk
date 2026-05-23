@@ -100,7 +100,7 @@ const PROVIDER_PROFILES: ProviderCompatibilityProfile[] = [
     routing: "advisory",
     authority: "read-only",
     credentialOwner: "omk-env",
-    notes: ["OpenAI-compatible custom providers are advisory/read-only unless Kimi performs the final action."],
+    notes: ["OpenAI-compatible custom providers are advisory/read-only unless primary provider performs the final action."],
   },
   {
     id: "codex-chatgpt-plan",
@@ -194,7 +194,7 @@ export async function providerDoctorCommand(
       if (payload.baseUrl) console.log(label("Base URL", payload.baseUrl));
       if (payload.apiKeyEnv) console.log(label("API key env", payload.apiKeySet ? `${payload.apiKeyEnv} (set)` : `${payload.apiKeyEnv} (missing)`));
       console.log(payload.available ? status.ok("Provider available") : status.warn(payload.reason ?? "Provider unavailable"));
-      console.log(style.gray("Fallback: Kimi remains the final authority."));
+      console.log(style.gray("Fallback: primary provider remains the final authority."));
     }
     if (!payload.available && !options.soft) process.exitCode = 1;
     return;
@@ -240,7 +240,7 @@ export async function providerDoctorCommand(
       if (!providerStatus.enabled) {
         console.log(style.gray("Run /deepseek-enable or `omk deepseek enable` after fixing the issue."));
       }
-      console.log(style.gray("Fallback: Kimi remains the primary provider for all nodes."));
+      console.log(style.gray("Fallback: primary provider remains the default for all nodes."));
     }
   }
 
@@ -442,7 +442,7 @@ export async function providerDeepSeekEnableCommand(options: ProviderJsonOptions
   } else {
     console.log(header("DeepSeek provider"));
     console.log(status.ok(payload.message));
-    console.log(style.gray("Kimi remains the orchestrator; DeepSeek is used only for safe read/review/QA/documentation nodes."));
+    console.log(style.gray("Primary provider remains the orchestrator; DeepSeek is used only for safe read/review/QA/documentation nodes."));
   }
 }
 
@@ -464,7 +464,7 @@ export async function providerDeepSeekDisableCommand(
     console.log(header("DeepSeek provider"));
     console.log(status.warn("DeepSeek forced disabled"));
     console.log(label("Reason", config.disabledReason ?? reason));
-    console.log(style.gray("Kimi-only fallback remains active."));
+    console.log(style.gray("Primary fallback remains active."));
   }
 }
 
@@ -564,7 +564,7 @@ export function buildProviderOAuthResult(
   const apiKeyEnv = normalizeOptionalApiKeyEnv(options.apiKeyEnv ?? defaultApiKeyEnvForProvider(target));
   const commonNotes = [
     "OMK does not read OAuth token files, print token values, or write provider secrets into project files.",
-    "Kimi remains the final authority/fallback for provider-routed work.",
+    "Primary provider remains the final authority for provider-routed work.",
   ];
 
   if (target === "kimi") {

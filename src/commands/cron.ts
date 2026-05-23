@@ -95,10 +95,10 @@ export async function executeCronDag(
   const runner = options.runner ?? await createProviderBackedTaskRunner({
     providerPolicy: "auto",
     deepseekPromptPrefix: [
-      `Kimi cron DAG context.`,
+      `Primary provider cron DAG context.`,
       promptPrefix,
       `DeepSeek is advisory/read-only unless selected for a low-risk read node.`,
-      `Kimi keeps write, shell, merge, MCP, and final synthesis authority.`,
+      `Authority provider keeps write, shell, merge, MCP, and final synthesis authority.`,
     ].join("\n"),
     allowDeepSeekAdvisoryFileNodes: true,
     kimi: {

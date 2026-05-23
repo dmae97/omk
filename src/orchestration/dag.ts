@@ -1,6 +1,6 @@
 import { TaskDagGraph } from "./task-graph.js";
 import { mergeDagNodeRouting, selectTaskRouting } from "./routing.js";
-import type { DeepSeekModelTier, DeepSeekParticipation, ProviderId } from "../providers/types.js";
+import type { DeepSeekModelTier, DeepSeekParticipation, ProviderAssistMetadata, ProviderId } from "../providers/types.js";
 
 export type TaskStatus = "pending" | "running" | "done" | "failed" | "blocked" | "skipped";
 export type DagContextBudget = "tiny" | "small" | "normal";
@@ -101,6 +101,7 @@ export interface DagNodeAttempt {
   providerModel?: string;
   providerModelTier?: DeepSeekModelTier;
   providerParticipation?: DeepSeekParticipation;
+  providerAssist?: ProviderAssistMetadata;
 }
 
 export interface DagNode {

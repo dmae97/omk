@@ -57,15 +57,15 @@ interface EvidenceHistoryEntry {
 }
 
 const INTENT_RUNTIME_PREFERENCES: Record<NodeIntent, string[]> = {
-  research: ["kimi-cli", "kimi-wire", "gemini-cli", "openrouter-api"],
-  planning: ["kimi-cli", "kimi-wire", "claude-code", "codex-cli"],
-  coding: ["kimi-cli", "kimi-wire", "codex-cli", "claude-code"],
-  debugging: ["kimi-cli", "kimi-wire", "codex-cli"],
-  refactor: ["kimi-cli", "kimi-wire", "codex-cli"],
+  research: ["kimi-cli", "kimi-api", "kimi-wire", "gemini-cli", "openrouter-api"],
+  planning: ["kimi-cli", "kimi-api", "kimi-wire", "claude-code", "codex-cli"],
+  coding: ["kimi-cli", "kimi-api", "kimi-wire", "codex-cli", "claude-code"],
+  debugging: ["kimi-cli", "kimi-api", "kimi-wire", "codex-cli"],
+  refactor: ["kimi-cli", "kimi-api", "kimi-wire", "codex-cli"],
   review: ["kimi-cli", "claude-code", "openrouter-api", "deepseek-api"],
-  "test-generation": ["kimi-cli", "kimi-wire", "codex-cli"],
+  "test-generation": ["kimi-cli", "kimi-api", "kimi-wire", "codex-cli"],
   documentation: ["kimi-cli", "gemini-cli", "openrouter-api"],
-  "shell-operation": ["kimi-cli", "kimi-wire"],
+  "shell-operation": ["kimi-cli", "kimi-api", "kimi-wire"],
 };
 
 export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {

@@ -29,3 +29,4 @@ export { createKimiProvider } from "./kimi-provider.js";
 export { createDeepSeekProvider } from "./deepseek-provider.js";
 export { createProviderRouter } from "./provider-router.js";
 export { createAttemptRecorder } from "./attempt-recorder.js";
+export * from "./provider-stats.js";

@@ -527,12 +527,12 @@ function buildReplayDeepSeekPromptPrefix(input: {
   targetNode?: string;
 }): string {
   return [
-    `Kimi DAG replay context.`,
+    `Primary provider DAG replay context.`,
     `Run ID: ${input.runId}`,
     `Replay mode: ${input.mode}`,
     input.targetNode ? `Target node: ${input.targetNode}` : "",
     `Goal: ${input.goalText}`,
     `DeepSeek is advisory/read-only unless the provider router selects a direct low-risk read node.`,
-    `Kimi keeps write, shell, merge, MCP, and final synthesis authority.`,
+    `Authority provider keeps write, shell, merge, MCP, and final synthesis authority.`,
   ].filter(Boolean).join("\n");
 }
