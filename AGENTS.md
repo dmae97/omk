@@ -137,7 +137,9 @@ Attribution:
    ```
    Verify both Node and Bun startup, model/account listing, interactive startup, and at least one real prompt with the intended default provider. The bare commands `/tmp/pi-local-release/node/pi` and `/tmp/pi-local-release/bun/pi` start interactive mode; run each in tmux, submit a prompt, and wait for the model reply before considering the interactive smoke test passed. Failures are release blockers unless the user explicitly accepts the risk.
 
-3. **Brief the user on the WebAuthn flow before running anything**. Print exactly the following message and then stop and wait for the user to confirm in their next message:
+3. **Verify npm authentication**: run `npm whoami` before starting the release script. If it fails, stop and tell the user to run `npm login` manually first, then retry after they confirm `npm whoami` succeeds.
+
+4. **Brief the user on the WebAuthn flow before running anything**. Print exactly the following message and then stop and wait for the user to confirm in their next message:
 
    ```
    Before I run the release script, read this carefully:
@@ -150,16 +152,16 @@ Attribution:
    Reply "ready" once you have read this and are watching the bash output. I will not run the release script until you do.
    ```
 
-   Do not proceed to step 4 until the user explicitly confirms.
+   Do not proceed to step 5 until the user explicitly confirms.
 
-4. **Run the release script**:
+5. **Run the release script**:
    ```bash
    npm run release:patch    # fixes + additions
    npm run release:minor    # breaking changes
    ```
    Do not pass a `timeout` to the bash tool for this call. If publish fails partway, stop and report to the user what happened (which package failed, the error output) along with possible solutions. Never rerun the version bump on your own.
 
-5. **After publish succeeds**:
+6. **After publish succeeds**:
    - Add fresh `## [Unreleased]` sections to package changelogs.
    - Commit with `Add [Unreleased] section for next cycle`.
    - Push `main` and the release tag.
