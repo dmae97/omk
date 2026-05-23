@@ -200,44 +200,36 @@ export function createWriteToolDefinition(
 		) {
 			const absolutePath = resolveToCwd(path, cwd);
 			const dir = dirname(absolutePath);
-			return withFileMutationQueue(
-				absolutePath,
-				() =>
-					new Promise<{ content: Array<{ type: "text"; text: string }>; details: undefined }>(
-						(resolve, reject) => {
-							if (signal?.aborted) {
-								reject(new Error("Operation aborted"));
-								return;
-							}
-							let aborted = false;
-							const onAbort = () => {
-								aborted = true;
-								reject(new Error("Operation aborted"));
-							};
-							signal?.addEventListener("abort", onAbort, { once: true });
-							(async () => {
-								try {
-									// Create parent directories if needed.
-									await ops.mkdir(dir);
-									if (aborted) return;
-									// Write the file contents.
-									await ops.writeFile(absolutePath, content);
-									if (aborted) return;
-									signal?.removeEventListener("abort", onAbort);
-									resolve({
-										content: [
-											{ type: "text", text: `Successfully wrote ${content.length} bytes to ${path}` },
-										],
-										details: undefined,
-									});
-								} catch (error: any) {
-									signal?.removeEventListener("abort", onAbort);
-									if (!aborted) reject(error);
-								}
-							})();
-						},
-					),
-			);
+			return withFileMutationQueue(absolutePath, async () => {
+				let aborted = signal?.aborted ?? false;
+				const onAbort = () => {
+					aborted = true;
+				};
+				const throwIfAborted = (): void => {
+					if (aborted || signal?.aborted) {
+						throw new Error("Operation aborted");
+					}
+				};
+
+				signal?.addEventListener("abort", onAbort, { once: true });
+				try {
+					throwIfAborted();
+					// Create parent directories if needed.
+					await ops.mkdir(dir);
+					throwIfAborted();
+
+					// Write the file contents.
+					await ops.writeFile(absolutePath, content);
+					throwIfAborted();
+
+					return {
+						content: [{ type: "text", text: `Successfully wrote ${content.length} bytes to ${path}` }],
+						details: undefined,
+					};
+				} finally {
+					signal?.removeEventListener("abort", onAbort);
+				}
+			});
 		},
 		renderCall(args, theme, context) {
 			const renderArgs = args as { path?: string; file_path?: string; content?: string } | undefined;

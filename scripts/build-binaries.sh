@@ -105,10 +105,13 @@ fi
 
 for platform in "${PLATFORMS[@]}"; do
     echo "Building for $platform..."
+    # Bun compiled executables only embed worker scripts when they are passed as
+    # explicit build entrypoints. The runtime can still use new URL(...), but the
+    # worker must be present in the compiled executable.
     if [[ "$platform" == windows-* ]]; then
-        bun build --compile --target=bun-$platform ./dist/bun/cli.js --outfile binaries/$platform/pi.exe
+        bun build --compile --target=bun-$platform ./dist/bun/cli.js ./dist/utils/image-resize-worker.js --outfile binaries/$platform/pi.exe
     else
-        bun build --compile --target=bun-$platform ./dist/bun/cli.js --outfile binaries/$platform/pi
+        bun build --compile --target=bun-$platform ./dist/bun/cli.js ./dist/utils/image-resize-worker.js --outfile binaries/$platform/pi
     fi
 done
 

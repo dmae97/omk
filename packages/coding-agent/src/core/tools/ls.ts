@@ -1,6 +1,7 @@
+import { constants } from "node:fs";
+import { access as fsAccess, readdir as fsReaddir, stat as fsStat } from "node:fs/promises";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Text } from "@earendil-works/pi-tui";
-import { existsSync, readdirSync, statSync } from "fs";
 import nodePath from "path";
 import { type Static, Type } from "typebox";
 import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
@@ -38,9 +39,16 @@ export interface LsOperations {
 }
 
 const defaultLsOperations: LsOperations = {
-	exists: existsSync,
-	stat: statSync,
-	readdir: readdirSync,
+	exists: async (absolutePath) => {
+		try {
+			await fsAccess(absolutePath, constants.F_OK);
+			return true;
+		} catch {
+			return false;
+		}
+	},
+	stat: fsStat,
+	readdir: fsReaddir,
 };
 
 export interface LsToolOptions {

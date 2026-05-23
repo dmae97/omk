@@ -1,8 +1,9 @@
+import { constants } from "node:fs";
+import { access as fsAccess } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Text } from "@earendil-works/pi-tui";
 import { spawn } from "child_process";
-import { existsSync } from "fs";
 import path from "path";
 import { type Static, Type } from "typebox";
 import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
@@ -46,7 +47,14 @@ export interface FindOperations {
 }
 
 const defaultFindOperations: FindOperations = {
-	exists: existsSync,
+	exists: async (absolutePath) => {
+		try {
+			await fsAccess(absolutePath, constants.F_OK);
+			return true;
+		} catch {
+			return false;
+		}
+	},
 	// This is a placeholder. Actual fd execution happens in execute() when no custom glob is provided.
 	glob: () => [],
 };

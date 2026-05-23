@@ -1,4 +1,5 @@
-import { existsSync } from "node:fs";
+import { constants } from "node:fs";
+import { access as fsAccess } from "node:fs/promises";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Container, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { spawn } from "child_process";
@@ -66,62 +67,70 @@ export function createLocalBashOperations(options?: { shellPath?: string }): Bas
 	return {
 		exec: (command, cwd, { onData, signal, timeout, env }) => {
 			return new Promise((resolve, reject) => {
-				const { shell, args } = getShellConfig(options?.shellPath);
-				if (!existsSync(cwd)) {
-					reject(new Error(`Working directory does not exist: ${cwd}\nCannot execute bash commands.`));
-					return;
-				}
-				const child = spawn(shell, [...args, command], {
-					cwd,
-					detached: process.platform !== "win32",
-					env: env ?? getShellEnv(),
-					stdio: ["ignore", "pipe", "pipe"],
-					windowsHide: true,
-				});
-				if (child.pid) trackDetachedChildPid(child.pid);
-				let timedOut = false;
-				let timeoutHandle: NodeJS.Timeout | undefined;
-				// Set timeout if provided.
-				if (timeout !== undefined && timeout > 0) {
-					timeoutHandle = setTimeout(() => {
-						timedOut = true;
-						if (child.pid) killProcessTree(child.pid);
-					}, timeout * 1000);
-				}
-				// Stream stdout and stderr.
-				child.stdout?.on("data", onData);
-				child.stderr?.on("data", onData);
-				// Handle abort signal by killing the entire process tree.
-				const onAbort = () => {
-					if (child.pid) killProcessTree(child.pid);
-				};
-				if (signal) {
-					if (signal.aborted) onAbort();
-					else signal.addEventListener("abort", onAbort, { once: true });
-				}
-				// Handle shell spawn errors and wait for the process to terminate without hanging
-				// on inherited stdio handles held by detached descendants.
-				waitForChildProcess(child)
-					.then((code) => {
-						if (child.pid) untrackDetachedChildPid(child.pid);
-						if (timeoutHandle) clearTimeout(timeoutHandle);
-						if (signal) signal.removeEventListener("abort", onAbort);
-						if (signal?.aborted) {
-							reject(new Error("aborted"));
-							return;
-						}
-						if (timedOut) {
-							reject(new Error(`timeout:${timeout}`));
-							return;
-						}
-						resolve({ exitCode: code });
-					})
-					.catch((err) => {
-						if (child.pid) untrackDetachedChildPid(child.pid);
-						if (timeoutHandle) clearTimeout(timeoutHandle);
-						if (signal) signal.removeEventListener("abort", onAbort);
-						reject(err);
+				void (async () => {
+					const { shell, args } = getShellConfig(options?.shellPath);
+					try {
+						await fsAccess(cwd, constants.F_OK);
+					} catch {
+						reject(new Error(`Working directory does not exist: ${cwd}\nCannot execute bash commands.`));
+						return;
+					}
+					if (signal?.aborted) {
+						reject(new Error("aborted"));
+						return;
+					}
+					const child = spawn(shell, [...args, command], {
+						cwd,
+						detached: process.platform !== "win32",
+						env: env ?? getShellEnv(),
+						stdio: ["ignore", "pipe", "pipe"],
+						windowsHide: true,
 					});
+					if (child.pid) trackDetachedChildPid(child.pid);
+					let timedOut = false;
+					let timeoutHandle: NodeJS.Timeout | undefined;
+					// Set timeout if provided.
+					if (timeout !== undefined && timeout > 0) {
+						timeoutHandle = setTimeout(() => {
+							timedOut = true;
+							if (child.pid) killProcessTree(child.pid);
+						}, timeout * 1000);
+					}
+					// Stream stdout and stderr.
+					child.stdout?.on("data", onData);
+					child.stderr?.on("data", onData);
+					// Handle abort signal by killing the entire process tree.
+					const onAbort = () => {
+						if (child.pid) killProcessTree(child.pid);
+					};
+					if (signal) {
+						if (signal.aborted) onAbort();
+						else signal.addEventListener("abort", onAbort, { once: true });
+					}
+					// Handle shell spawn errors and wait for the process to terminate without hanging
+					// on inherited stdio handles held by detached descendants.
+					waitForChildProcess(child)
+						.then((code) => {
+							if (child.pid) untrackDetachedChildPid(child.pid);
+							if (timeoutHandle) clearTimeout(timeoutHandle);
+							if (signal) signal.removeEventListener("abort", onAbort);
+							if (signal?.aborted) {
+								reject(new Error("aborted"));
+								return;
+							}
+							if (timedOut) {
+								reject(new Error(`timeout:${timeout}`));
+								return;
+							}
+							resolve({ exitCode: code });
+						})
+						.catch((err) => {
+							if (child.pid) untrackDetachedChildPid(child.pid);
+							if (timeoutHandle) clearTimeout(timeoutHandle);
+							if (signal) signal.removeEventListener("abort", onAbort);
+							reject(err);
+						});
+				})().catch((err: unknown) => reject(err instanceof Error ? err : new Error(String(err))));
 			});
 		},
 	};
