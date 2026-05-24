@@ -500,6 +500,26 @@ export async function runChatRuntime(
       recentChatOutput = appendRecentChatOutput(recentChatOutput, `\n${message}\n`);
       console.error(`\n${message}\n`);
       exitCode = 1;
+    } else if (bridgeSucceeded && providerPolicy !== "kimi") {
+      const { createInterface } = await import("readline");
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      process.once("SIGINT", () => rl.close());
+      for await (const input_ of rl) {
+        const line = input_.trim();
+        if (!line || line === "/exit" || line === "/quit") break;
+        const turnNode: DagNodeDefinition = {
+          id: "chat-turn", name: "Chat", role: "coordinator", dependsOn: [], maxRetries: 1,
+          routing: { provider: providerPolicy, mcpServers: chatRuntimeMcpAllowlist, contextBudget: "normal" as const, readOnly: false },
+          executionMode: "in-process",
+        } as unknown as DagNodeDefinition;
+        const turnOrch = new ParallelOrchestrator({ dag: createDag({ nodes: [turnNode] }), runId: effectiveRunId, maxWorkers: 1, cwd: root });
+        try {
+          const turnResult = await turnOrch.execute();
+          const w = turnResult.state.workers.find((d) => d.nodeId === "chat-turn");
+          if (w?.result?.stdout) process.stdout.write(w.result.stdout);
+        } catch {}
+      }
+      rl.close();
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
