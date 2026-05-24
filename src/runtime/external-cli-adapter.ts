@@ -10,6 +10,7 @@ import type {
   RuntimeHealth,
 } from "./agent-runtime.js";
 import type { ContextCapsule } from "./context-capsule.js";
+import type { AgentTask, AgentResult } from "./agent-runtime.js";
 import {
   checkCommand,
   runShellStreaming,
@@ -51,6 +52,44 @@ export function createExternalCliAdapter(
         available,
         reason: available ? undefined : `Command not found: ${options.bin}`,
         checkedAt: new Date().toISOString(),
+      };
+    },
+
+    async execute(task: AgentTask): Promise<AgentResult> {
+      const capsule: ContextCapsule = {
+        schemaVersion: 1,
+        runId: task.context.runId,
+        nodeId: task.context.nodeId,
+        goal: task.context.goal ?? task.prompt,
+        task: task.prompt,
+        system: task.context.system ?? "",
+        node: {
+          id: task.context.nodeId,
+          name: task.prompt,
+          role: task.context.role ?? "worker",
+          dependsOn: [],
+          status: "running",
+          retries: 0,
+          maxRetries: 1,
+          routing: {},
+        },
+        dependencySummaries: [],
+        relevantFiles: [],
+        graphMemory: [],
+        priorAttempts: [],
+        evidenceRequirements: [],
+        budget: {
+          maxInputTokens: task.capabilities.maxTokens ?? 16000,
+          compression: "normal",
+        },
+      } as unknown as ContextCapsule;
+      const result = await this.runNode(capsule, task.context.abortSignal ?? new AbortController().signal);
+      return {
+        output: result.stdout,
+        exitCode: result.exitCode ?? (result.success ? 0 : 1),
+        metadata: result.metadata,
+        toolCalls: result.toolCalls,
+        tokenUsage: result.tokenUsage,
       };
     },
 

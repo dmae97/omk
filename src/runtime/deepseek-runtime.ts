@@ -206,6 +206,12 @@ export class DeepSeekRuntime implements AgentRuntime {
     }
 
     try {
+      const timeoutMs = Number(process.env.OMK_PROVIDER_TIMEOUT_MS ?? "120000");
+      const timeoutSignal = AbortSignal.timeout(timeoutMs);
+      const signal = task.context.abortSignal
+        ? AbortSignal.any([task.context.abortSignal, timeoutSignal])
+        : timeoutSignal;
+
       const response = await fetch(`${this.baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
@@ -213,7 +219,7 @@ export class DeepSeekRuntime implements AgentRuntime {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(body),
-        signal: task.context.abortSignal,
+        signal,
       });
 
       if (!response.ok) {
