@@ -9,6 +9,8 @@ import { getOmkResourceSettings } from "../util/resource-profile.js";
 import { formatBytes } from "../util/output-buffer.js";
 import { formatOmkVersionFooter } from "../util/version.js";
 import { t } from "../util/i18n.js";
+import { OMK_MATRIX_ASCII_ART } from "../brand/omk-matrix-art.js";
+import { renderMatrixRain } from "../brand/matrix-rain.js";
 import type { RunState } from "../contracts/orchestration.js";
 import type { GoalSpec, GoalEvidence } from "../contracts/goal.js";
 import {
@@ -325,6 +327,14 @@ function buildStateErrorPanel(
   return panel(lines, gradient("Run State Warning"));
 }
 
+function renderMatrixRainHeader(runId: string): string {
+  const width = Math.min(60, process.stdout.columns ?? 80);
+  const rain = renderMatrixRain(runId, width, 3);
+  const rainStr = rain.split("\n").map((l) => style.phosphor(l)).join("\n");
+  const artStr = OMK_MATRIX_ASCII_ART.split("\n").map((l) => style.phosphor(l)).join("\n");
+  return `\n${rainStr}\n\n${artStr}\n`;
+}
+
 export function buildHudSidebar(
   state: RunState | null,
   changes: HudGitChange[],
@@ -438,18 +448,19 @@ export function renderHudColumns(mainPanels: string[], sidebar: string, terminal
   const rightLines = sidebar.split("\n");
   const leftWidth = blockWidth(left);
   const rightWidth = blockWidth(sidebar);
-  const gap = 3;
+  const gap = 2;
 
   if (terminalWidth < 100 || leftWidth + gap + rightWidth > terminalWidth) {
     return `${left}\n\n${sidebar}`;
   }
 
+  const panelWidth = Math.floor((terminalWidth - gap) / 2);
   const height = Math.max(leftLines.length, rightLines.length);
   const output: string[] = [];
   for (let i = 0; i < height; i += 1) {
     const leftLine = leftLines[i] ?? "";
     const rightLine = rightLines[i] ?? "";
-    output.push(`${padEndAnsi(leftLine, leftWidth)}${" ".repeat(gap)}${rightLine}`.trimEnd());
+    output.push(`${padEndAnsi(leftLine, panelWidth)}${" ".repeat(gap)}${padEndAnsi(rightLine, panelWidth)}`.trimEnd());
   }
   return output.join("\n");
 }
@@ -901,6 +912,7 @@ async function renderCompactDashboard(options: HudRenderOptions): Promise<string
   const goalTitle = vm.goalTitle ?? null;
   const output: string[] = [];
 
+  output.push(renderMatrixRainHeader(options.runId ?? "omk"));
   output.push(matrixHeader("OMK HUD"));
 
   const summary = buildSummaryBar(vm, stateError, goalTitle, effectiveWidth);
@@ -935,6 +947,7 @@ async function renderMediumDashboard(options: HudRenderOptions): Promise<string>
   const mainPanels: string[] = [];
   const output: string[] = [];
 
+  output.push(renderMatrixRainHeader(options.runId ?? "omk"));
   output.push(matrixHeader("OMK HUD"));
 
   const runsDir = getRunsDir();
@@ -996,6 +1009,7 @@ async function renderFullDashboard(options: HudRenderOptions): Promise<string> {
   const mainPanels: string[] = [];
   const output: string[] = [];
 
+  output.push(renderMatrixRainHeader(options.runId ?? "omk"));
   output.push(matrixHeader("OMK HUD"));
 
   const runsDir = getRunsDir();
@@ -1057,6 +1071,7 @@ async function renderSectionDashboard(options: HudRenderOptions): Promise<string
   const gitChanges = gitChangesResult ?? [];
   const output: string[] = [];
 
+  output.push(renderMatrixRainHeader(options.runId ?? "omk"));
   output.push(matrixHeader("OMK HUD"));
 
   const runsDir = getRunsDir();

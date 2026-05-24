@@ -6,7 +6,6 @@ import {
   clearScreen,
   enterAlternateScreen,
   leaveAlternateScreen,
-  type HudRenderOptions,
   type HudCommandOptions,
 } from "../hud/render.js";
 

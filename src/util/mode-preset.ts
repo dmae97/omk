@@ -1,5 +1,5 @@
 /**
- * Mode-preset system for oh-my-kimi.
+ * Mode-preset system for open_multi-agent_kit.
  *
  * Three tabs/modes:
  *   - agent   : interactive orchestrator (execution choice → plan → execute/review)

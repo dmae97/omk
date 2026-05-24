@@ -12,7 +12,7 @@ import type {
   ProviderRouteDecision,
   ProviderRouteInput,
 } from "./types.js";
-import { resolveFallbackProvider } from "./types.js";
+import { DEFAULT_AUTHORITY_PROVIDER, resolveFallbackProvider } from "./types.js";
 import {
   computeProviderRouteScore,
   buildProviderStatsKey,
@@ -62,9 +62,10 @@ export const QWEN_DEFAULT_MODEL = "qwen3-max";
 export const CODEX_CLI_DEFAULT_MODEL = "codex-cli";
 export const OPENROUTER_DEFAULT_MODEL = "openrouter/auto";
 const DEEPSEEK_FLASH_RATIO_OUT_OF_TEN = 6;
+const AUTHORITY_PROVIDER_CANDIDATE_ID = "authority-provider";
 
 export function routeProvider(input: ProviderRouteInput): ProviderRouteDecision {
-  const authorityProvider = input.authorityProvider ?? "kimi";
+  const authorityProvider = input.authorityProvider ?? DEFAULT_AUTHORITY_PROVIDER;
   const policy: ProviderPolicy = input.providerPolicy ?? "auto";
   const role = input.role.toLowerCase();
   const seed = `${input.nodeId ?? ""}:${role}:${input.taskType}`;
@@ -73,7 +74,7 @@ export function routeProvider(input: ProviderRouteInput): ProviderRouteDecision 
   const availableProviders = Object.entries(input.providerAvailability ?? {})
     .filter(([, v]) => v === true)
     .map(([k]) => k as ProviderId);
-  const fallbackProvider = resolveFallbackProvider(availableProviders.length > 0 ? availableProviders : ["kimi"]);
+  const fallbackProvider = resolveRouteFallbackProvider(authorityProvider, availableProviders);
   const withRouteEnsemble = (
     decision: Omit<ProviderRouteDecision, "routeEnsemble">,
     winner: ProviderRouteEnsembleCandidate["id"]
@@ -88,7 +89,7 @@ export function routeProvider(input: ProviderRouteInput): ProviderRouteDecision 
     }),
   });
 
-  if (policy === "kimi" || input.providerHint === authorityProvider) {
+  if (policy === "authority" || (policy === "kimi" && authorityProvider === "kimi") || input.providerHint === authorityProvider) {
     return withRouteEnsemble(authorityProviderDecision(authorityProvider, "Authority provider policy or explicit provider route", 1, undefined, {}, fallbackProvider), "safety-gate");
   }
 
@@ -174,7 +175,7 @@ export function routeProvider(input: ProviderRouteInput): ProviderRouteDecision 
       return withRouteEnsemble(authorityProviderDecision(authorityProvider, "Explicit DeepSeek hint rejected for non-read-only provider role", 0.9, undefined, {}, fallbackProvider), "safety-gate");
     }
     if (input.complexity === "complex" && !dedicatedDeepSeekAgent) {
-      return withRouteEnsemble(authorityProviderDecision(authorityProvider, "Complex read-only judgment stays with authority provider despite DeepSeek hint", 0.85, undefined, {}, fallbackProvider), "kimi-authority");
+      return withRouteEnsemble(authorityProviderDecision(authorityProvider, "Complex read-only judgment stays with authority provider despite DeepSeek hint", 0.85, undefined, {}, fallbackProvider), AUTHORITY_PROVIDER_CANDIDATE_ID);
     }
     return withRouteEnsemble(
       deepseekDecision(
@@ -194,7 +195,7 @@ export function routeProvider(input: ProviderRouteInput): ProviderRouteDecision 
   }
 
   if (AUTHORITY_ROLES.has(role)) {
-    return withRouteEnsemble(authorityProviderDecision(authorityProvider, "Role carries write, merge, or final-judgment authority", 0.85, undefined, {}, fallbackProvider), "kimi-authority");
+    return withRouteEnsemble(authorityProviderDecision(authorityProvider, "Role carries write, merge, or final-judgment authority", 0.85, undefined, {}, fallbackProvider), AUTHORITY_PROVIDER_CANDIDATE_ID);
   }
 
   // Score-based routing for flexible cases (read-only explorers, reviewers, simple tasks)
@@ -237,7 +238,7 @@ export function routeProvider(input: ProviderRouteInput): ProviderRouteDecision 
 
   return withRouteEnsemble(
     authorityProviderDecision(authorityProvider, winner.reason, winner.confidence, undefined, {}, fallbackProvider),
-    "kimi-authority"
+    AUTHORITY_PROVIDER_CANDIDATE_ID
   );
 }
 
@@ -423,13 +424,14 @@ function isDeepSeekRequested(input: ProviderRouteInput): boolean {
 }
 
 function requestedExternalProvider(input: ProviderRouteInput): ProviderId | undefined {
-  const policy = isGenericExternalProvider(input.providerPolicy) ? input.providerPolicy : undefined;
-  const hint = isGenericExternalProvider(input.providerHint) ? input.providerHint : undefined;
+  const authorityProvider = input.authorityProvider ?? DEFAULT_AUTHORITY_PROVIDER;
+  const policy = isGenericExternalProvider(input.providerPolicy, authorityProvider) ? input.providerPolicy : undefined;
+  const hint = isGenericExternalProvider(input.providerHint, authorityProvider) ? input.providerHint : undefined;
   return hint ?? policy;
 }
 
-function isGenericExternalProvider(value: unknown): value is ProviderId {
-  return typeof value === "string" && value !== "auto" && value !== "kimi" && value !== "deepseek";
+function isGenericExternalProvider(value: unknown, authorityProvider: ProviderId): value is ProviderId {
+  return typeof value === "string" && value !== "auto" && value !== "authority" && value !== authorityProvider && value !== "deepseek";
 }
 
 function isProviderAvailable(input: ProviderRouteInput, provider: ProviderId): boolean {
@@ -451,6 +453,7 @@ function canUseGenericAdvisoryProvider(role: string, input: ProviderRouteInput):
 }
 
 function canUseDeepSeekProAdvisory(role: string, input: ProviderRouteInput): boolean {
+  if (!input.deepseekAvailable) return false;
   if (!DEEPSEEK_PRO_ADVISORY_FILE_ROLES.has(role)) return false;
   if (input.complexity === "simple") return false;
   if (input.needsMcp || input.needsToolCalling) return false;
@@ -458,6 +461,7 @@ function canUseDeepSeekProAdvisory(role: string, input: ProviderRouteInput): boo
 }
 
 function canUseDirectDeepSeek(role: string, input: ProviderRouteInput): boolean {
+  if (!input.deepseekAvailable) return false;
   if (input.risk !== "read") return false;
   return input.readOnly === true || DEEPSEEK_READ_ONLY_ROLES.has(role);
 }
@@ -470,7 +474,7 @@ function buildProviderRouteEnsemble(options: {
   directDeepSeekAllowed: boolean;
 }): ProviderRouteEnsembleResult {
   const { input, role, decision, winner, directDeepSeekAllowed } = options;
-  const authorityProvider = input.authorityProvider ?? "kimi";
+  const authorityProvider = input.authorityProvider ?? DEFAULT_AUTHORITY_PROVIDER;
   const advisoryAllowed = input.risk === "write" && canUseDeepSeekProAdvisory(role, input);
   const safetyReason = providerSafetyReason(input, role);
   const dedicatedDeepSeekAgent = isDedicatedDeepSeekAgent(input);
@@ -493,12 +497,12 @@ function buildProviderRouteEnsemble(options: {
 
   const candidates: ProviderRouteEnsembleCandidate[] = [
     {
-      id: "kimi-authority",
+      id: AUTHORITY_PROVIDER_CANDIDATE_ID,
       provider: authorityProvider,
       participation: "authority",
-      score: winner === "kimi-authority" ? decision.confidence : scoreAuthorityProvider(input, role),
+      score: winner === AUTHORITY_PROVIDER_CANDIDATE_ID ? decision.confidence : scoreAuthorityProvider(input, role),
       reason: authorityProviderReason(input, role),
-      selected: winner === "kimi-authority",
+      selected: winner === AUTHORITY_PROVIDER_CANDIDATE_ID,
     },
     {
       id: "deepseek-direct",
@@ -580,8 +584,8 @@ function buildProviderRouteEnsemble(options: {
 
 function providerSafetyReason(input: ProviderRouteInput, role: string): string | undefined {
   const policy: ProviderPolicy = input.providerPolicy ?? "auto";
-  const authorityProvider = input.authorityProvider ?? "kimi";
-  if (policy === "kimi" || input.providerHint === authorityProvider) return "Authority provider policy or explicit authority provider hint";
+  const authorityProvider = input.authorityProvider ?? DEFAULT_AUTHORITY_PROVIDER;
+  if (policy === "authority" || (policy === "kimi" && authorityProvider === "kimi") || input.providerHint === authorityProvider) return "Authority provider policy or explicit authority provider hint";
   if (role === "orchestrator" || role === "merger" || role === "integrator") return "Core orchestration and merge authority";
   const externalProvider = requestedExternalProvider(input);
   if (externalProvider) {
@@ -641,7 +645,7 @@ function scoreProviders(input: ProviderRouteInput): Array<{
   confidence: number;
 }> {
   const scoreInput = toScoreInput(input);
-  const authorityProvider = input.authorityProvider ?? "kimi";
+  const authorityProvider = input.authorityProvider ?? DEFAULT_AUTHORITY_PROVIDER;
   const available = input.providerAvailability ?? {};
   const candidates: ProviderId[] = [authorityProvider];
   for (const [provider, isAvailable] of Object.entries(available)) {
@@ -660,7 +664,7 @@ function scoreProviders(input: ProviderRouteInput): Array<{
 }
 
 function scoreAuthorityProvider(input: ProviderRouteInput, role: string): number {
-  const authorityProvider = input.authorityProvider ?? "kimi";
+  const authorityProvider = input.authorityProvider ?? DEFAULT_AUTHORITY_PROVIDER;
   if (AUTHORITY_ROLES.has(role)) return 0.9;
   if (input.risk !== "read") return 0.86;
   if (input.complexity === "complex") return 0.82;
@@ -701,7 +705,7 @@ function authorityProviderDecision(
   confidence: number,
   deepseek?: DeepSeekRoutePlan,
   extra: { providerModel?: ProviderModelRef } = {},
-  fallbackProvider: ProviderId = resolveFallbackProvider(["kimi"])
+  fallbackProvider: ProviderId = resolveFallbackProvider([DEFAULT_AUTHORITY_PROVIDER])
 ): Omit<ProviderRouteDecision, "routeEnsemble"> {
   return {
     provider: authorityProvider,
@@ -711,6 +715,11 @@ function authorityProviderDecision(
     providerModel: extra.providerModel,
     deepseek,
   };
+}
+
+function resolveRouteFallbackProvider(authorityProvider: ProviderId, availableProviders: ProviderId[]): ProviderId {
+  if (availableProviders.includes(authorityProvider) || availableProviders.length === 0) return authorityProvider;
+  return resolveFallbackProvider([authorityProvider, ...availableProviders]);
 }
 
 function deepseekDecision(
@@ -739,7 +748,7 @@ function genericDirectDecision(
   reason: string,
   confidence: number,
   providerModel: ProviderModelRef,
-  fallbackProvider: ProviderId = resolveFallbackProvider(["kimi"])
+  fallbackProvider: ProviderId = resolveFallbackProvider([DEFAULT_AUTHORITY_PROVIDER])
 ): Omit<ProviderRouteDecision, "routeEnsemble"> {
   return {
     provider,

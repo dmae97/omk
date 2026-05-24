@@ -1,5 +1,4 @@
 export function stripAnsi(value: string): string {
-  // eslint-disable-next-line no-control-regex
   return value
     .replace(/\x1B\][\s\S]*?(?:\x07|\x1B\\)/g, "")
     .replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");

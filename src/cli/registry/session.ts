@@ -75,7 +75,7 @@ export function registerSessionCommands(program: Command): void {
     .option("--model <model>", "provider model or provider/model override")
     .option("--max-steps-per-turn <n>", t("cmd.chatMaxStepsOption"))
     .option("--layout <auto|tmux|inline|plain>", t("cmd.chatLayoutOption"), "auto")
-    .option("--brand <kimicat|minimal|plain>", t("cmd.chatBrandOption"), "minimal")
+    .option("--brand <omk|minimal|plain>", t("cmd.chatBrandOption"), "minimal")
     .option("--mode <agent|plan|chat|debugging|review>", "OMK execution mode")
     .option("--cockpit-refresh <ms>", "Cockpit refresh interval in milliseconds", "2000")
     .option("--cockpit-redraw <diff|full|append>", "Cockpit redraw mode", "diff")

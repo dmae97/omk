@@ -379,6 +379,7 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
     const env: Record<string, string> = {
       OMK_NODE_ID: node.id,
       OMK_RUN_ID: options.runId,
+      OMK_NODE_ROLE: node.role,
       OMK_ROLE: node.role,
       OMK_MCP_ENABLED: resources.mcpScope === "none" ? "false" : "true",
       OMK_SKILLS_ENABLED: resources.skillsScope === "none" ? "false" : "true",

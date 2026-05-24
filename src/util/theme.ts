@@ -59,6 +59,34 @@ export const style = {
   // Parallel UI extras
   orangeBold: (s: string) => esc("1;" + rgb(P.orange.r, P.orange.g, P.orange.b)) + s + esc("0"),
   redBold: (s: string) => esc("1;" + rgb(P.red.r, P.red.g, P.red.b)) + s + esc("0"),
+
+  // Matrix theme
+  phosphor: (s: string) => esc(rgb(P.matrixGreen.r, P.matrixGreen.g, P.matrixGreen.b)) + s + esc("0"),
+  phosphorBold: (s: string) => esc("1;" + rgb(P.matrixGreen.r, P.matrixGreen.g, P.matrixGreen.b)) + s + esc("0"),
+  phosphorDim: (s: string) => esc("2;" + rgb(P.matrixGreen.r, P.matrixGreen.g, P.matrixGreen.b)) + s + esc("0"),
+  matrixBlack: (s: string) => esc(rgb(0, 0, 0)) + s + esc("0"),
+  bgMatrix: (s: string) => esc(bgRgb(0, 8, 0) + ";" + rgb(P.matrixGreen.r, P.matrixGreen.g, P.matrixGreen.b)) + s + esc("0"),
+
+  // Metrics
+  cyan: (s: string) => esc(rgb(P.metricsCyan.r, P.metricsCyan.g, P.metricsCyan.b)) + s + esc("0"),
+  cyanBold: (s: string) => esc("1;" + rgb(P.metricsCyan.r, P.metricsCyan.g, P.metricsCyan.b)) + s + esc("0"),
+  navy: (s: string) => esc(rgb(P.metricsNavy.r, P.metricsNavy.g, P.metricsNavy.b)) + s + esc("0"),
+  slate: (s: string) => esc(rgb(P.metricsSlate.r, P.metricsSlate.g, P.metricsSlate.b)) + s + esc("0"),
+  silver: (s: string) => esc(rgb(P.metricsSilver.r, P.metricsSilver.g, P.metricsSilver.b)) + s + esc("0"),
+  white: (s: string) => esc(rgb(P.metricsWhite.r, P.metricsWhite.g, P.metricsWhite.b)) + s + esc("0"),
+  whiteBold: (s: string) => esc("1;" + rgb(P.metricsWhite.r, P.metricsWhite.g, P.metricsWhite.b)) + s + esc("0"),
+  amber: (s: string) => esc(rgb(P.metricsAmber.r, P.metricsAmber.g, P.metricsAmber.b)) + s + esc("0"),
+  green: (s: string) => esc(rgb(P.metricsGreen.r, P.metricsGreen.g, P.metricsGreen.b)) + s + esc("0"),
+  greenBold: (s: string) => esc("1;" + rgb(P.metricsGreen.r, P.metricsGreen.g, P.metricsGreen.b)) + s + esc("0"),
+  metricsRed: (s: string) => esc(rgb(P.metricsRed.r, P.metricsRed.g, P.metricsRed.b)) + s + esc("0"),
+  metricsBlue: (s: string) => esc(rgb(P.metricsBlue.r, P.metricsBlue.g, P.metricsBlue.b)) + s + esc("0"),
+  violet: (s: string) => esc(rgb(P.metricsViolet.r, P.metricsViolet.g, P.metricsViolet.b)) + s + esc("0"),
+
+  bgNavy: (s: string) => esc(bgRgb(P.metricsNavy.r, P.metricsNavy.g, P.metricsNavy.b) + ";" + rgb(P.metricsWhite.r, P.metricsWhite.g, P.metricsWhite.b)) + s + esc("0"),
+  bgSlate: (s: string) => esc(bgRgb(P.metricsSlate.r, P.metricsSlate.g, P.metricsSlate.b) + ";" + rgb(P.metricsSilver.r, P.metricsSilver.g, P.metricsSilver.b)) + s + esc("0"),
+
+  amberBold: (s: string) => esc("1;" + rgb(P.metricsAmber.r, P.metricsAmber.g, P.metricsAmber.b)) + s + esc("0"),
+  metricsRedBold: (s: string) => esc("1;" + rgb(P.metricsRed.r, P.metricsRed.g, P.metricsRed.b)) + s + esc("0"),
 };
 
 // ── Semantic helpers ─────────────────────────────────────────
@@ -75,9 +103,9 @@ export const status = {
 export function header(text: string): string {
   return [
     "",
-    style.purple("╔" + "═".repeat(2) + "✦" + "═".repeat(text.length + 2) + "✦" + "═".repeat(2) + "╗"),
-    style.purple("║") + "  " + style.pinkBold(text) + "  " + style.purple("║"),
-    style.purple("╚" + "═".repeat(2) + "✦" + "═".repeat(text.length + 2) + "✦" + "═".repeat(2) + "╝"),
+    style.phosphorDim("╔" + "═".repeat(2) + "✦" + "═".repeat(text.length + 2) + "✦" + "═".repeat(2) + "╗"),
+    style.phosphorDim("║") + "  " + style.phosphorBold(text) + "  " + style.phosphorDim("║"),
+    style.phosphorDim("╚" + "═".repeat(2) + "✦" + "═".repeat(text.length + 2) + "✦" + "═".repeat(2) + "╝"),
     "",
   ].join("\n");
 }
@@ -117,15 +145,15 @@ export function box(lines: string[], title?: string): string {
 
 // ── HUD primitives ───────────────────────────────────────────
 
-/** Generate a gradient text from purple to pink */
+/** Generate Matrix green text */
 export function gradient(text: string): string {
   const chars = [...text];
   const result: string[] = [];
   for (let i = 0; i < chars.length; i++) {
     const t = chars.length === 1 ? 0.5 : i / (chars.length - 1);
-    const r = Math.round(P.purple.r + (P.pink.r - P.purple.r) * t);
-    const g = Math.round(P.purple.g + (P.pink.g - P.purple.g) * t);
-    const b = Math.round(P.purple.b + (P.pink.b - P.purple.b) * t);
+    const r = Math.round(0 + (P.matrixGreen.r - 0) * t * 0.7);
+    const g = Math.round(50 + (P.matrixGreen.g - 50) * t);
+    const b = Math.round(0 + (P.matrixGreen.b - 0) * t * 0.7);
     result.push(esc(rgb(r, g, b)) + chars[i] + esc("0"));
   }
   return result.join("");
@@ -142,25 +170,26 @@ export function gauge(
   const filled = Math.round(ratio * width);
   const empty = width - filled;
 
-  let barColor = rgb(P.mint.r, P.mint.g, P.mint.b);
-  if (ratio > 0.7) barColor = rgb(P.orange.r, P.orange.g, P.orange.b);
-  if (ratio > 0.9) barColor = rgb(P.red.r, P.red.g, P.red.b);
+  let barColor = rgb(P.matrixGreen.r, P.matrixGreen.g, P.matrixGreen.b);
+  if (ratio > 0.7) barColor = rgb(P.metricsAmber.r, P.metricsAmber.g, P.metricsAmber.b);
+  if (ratio > 0.9) barColor = rgb(P.metricsRed.r, P.metricsRed.g, P.metricsRed.b);
 
-  const bar = esc(barColor) + "█".repeat(filled) + esc("0") + style.gray("░".repeat(empty));
-  const pct = style.creamBold(`${Math.round(ratio * 100)}%`.padStart(4));
+  const bar = esc(barColor) + "█".repeat(filled) + esc("0") + style.phosphorDim("░".repeat(empty));
+  const pct = style.phosphorBold(`${Math.round(ratio * 100)}%`.padStart(4));
   return `  ${style.gray(label.padStart(10))} ${bar} ${pct}`;
 }
 
-/** Render a multi-line panel with a title */
+/** Matrix green bordered panel with phosphor glow */
 export function panel(lines: string[], title?: string): string {
   const innerWidth = Math.max(...lines.map((l) => stripAnsi(l).length), title ? stripAnsi(title).length + 4 : 0);
   const width = innerWidth + 4;
+  const titleText = title ? gradient(title) : "";
   const top = title
-    ? style.darkPurple("┏" + "━".repeat(2) + " " + style.pinkBold(title) + " " + "━".repeat(Math.max(0, width - stripAnsi(title).length - 6)) + "┓")
-    : style.darkPurple("┏" + "━".repeat(width) + "┓");
-  const bottom = style.darkPurple("┗" + "━".repeat(width) + "┛");
+    ? style.phosphorDim("┏" + "━".repeat(2) + " ") + titleText + style.phosphorDim(" " + "━".repeat(Math.max(0, width - stripAnsi(title).length - 6)) + "┓")
+    : style.phosphorDim("┏" + "━".repeat(width) + "┓");
+  const bottom = style.phosphorDim("┗" + "━".repeat(width) + "┛");
   const body = lines.map((l) =>
-    style.darkPurple("┃ ") + padEndAnsi(l, innerWidth) + style.darkPurple(" ┃")
+    style.phosphorDim("┃ ") + padEndAnsi(l, innerWidth) + style.phosphorDim(" ┃")
   );
   return [top, ...body, bottom].join("\n");
 }
@@ -183,15 +212,91 @@ export function sparkleHeader(text: string): string {
 export function matrixHeader(text: string): string {
   return [
     "",
-    style.matrixGreen(text),
-    style.matrixDark("═".repeat(Math.min(visibleTerminalWidth(text), 56))),
+    style.phosphorBold(text),
+    style.phosphorDim("═".repeat(Math.min(visibleTerminalWidth(text), 56))),
     "",
   ].join("\n");
 }
 
 /** Single stat line: label + value + optional unit */
 export function stat(label: string, value: string, unit = ""): string {
-  return "  " + style.gray(label + ":") + " " + style.mintBold(value) + style.gray(unit);
+  return "  " + style.phosphorDim(label + ":") + " " + style.phosphorBold(value) + style.phosphorDim(unit);
+}
+
+// ── Metrics Theme Layout ──────────────────────────────────────
+
+export function metricsPanel(lines: string[], title?: string): string {
+  const innerWidth = Math.max(...lines.map((l) => stripAnsi(l).length), title ? stripAnsi(title).length + 4 : 0);
+  const width = innerWidth + 4;
+  const top = title
+    ? style.slate("╭" + "─".repeat(2) + " " + style.cyanBold(title) + " " + "─".repeat(Math.max(0, width - stripAnsi(title).length - 4)) + "╮")
+    : style.slate("╭" + "─".repeat(width) + "╮");
+  const bottom = style.slate("╰" + "─".repeat(width) + "╯");
+  const body = lines.map((l) =>
+    style.slate("│ ") + padEndAnsi(l, innerWidth) + style.slate(" │")
+  );
+  return [top, ...body, bottom].join("\n");
+}
+
+export function metricsGauge(
+  label: string,
+  value: number,
+  max: number,
+  width = 24
+): string {
+
+  const ratio = Math.min(Math.max(value / max, 0), 1);
+  const filled = Math.round(ratio * width);
+  const empty = width - filled;
+
+  let barColor = "38;2;34;197;94";
+  if (ratio > 0.7) barColor = "38;2;245;158;11";
+  if (ratio > 0.9) barColor = "38;2;239;68;68";
+
+  const bar = esc(barColor) + "█".repeat(filled) + esc("0") + style.silver("░".repeat(empty));
+  const pct = style.whiteBold(`${Math.round(ratio * 100)}%`.padStart(4));
+  return `  ${style.silver(label.padStart(10))} ${bar} ${pct}`;
+}
+
+export function metricsGradient(text: string): string {
+
+  const chars = [...text];
+  const result: string[] = [];
+  for (let i = 0; i < chars.length; i++) {
+    const t = chars.length === 1 ? 0.5 : i / (chars.length - 1);
+    const r = Math.round(P.metricsCyan.r + (P.metricsViolet.r - P.metricsCyan.r) * t);
+    const g = Math.round(P.metricsCyan.g + (P.metricsViolet.g - P.metricsCyan.g) * t);
+    const b = Math.round(P.metricsCyan.b + (P.metricsViolet.b - P.metricsCyan.b) * t);
+    result.push(esc("38;2;" + r + ";" + g + ";" + b + "m") + chars[i] + esc("0"));
+  }
+  return result.join("");
+}
+
+export function metricsHeader(text: string): string {
+
+  return [
+    "",
+    style.slate("╭" + "─".repeat(2) + "✦" + "─".repeat(text.length + 2) + "✦" + "─".repeat(2) + "╮"),
+    style.slate("│") + "  " + style.cyanBold(text) + "  " + style.slate("│"),
+    style.slate("╰" + "─".repeat(2) + "✦" + "─".repeat(text.length + 2) + "✦" + "─".repeat(2) + "╯"),
+    "",
+  ].join("\n");
+}
+
+export function metricsStat(label: string, value: string, unit = ""): string {
+
+  return "  " + style.silver(label + ":") + " " + style.cyanBold(value) + style.silver(unit);
+}
+
+export function metricsMatrixHeader(text: string): string {
+
+  return [
+    "",
+    style.cyanBold("╔══ " + text + " ═══════════════════════════════════════════════╗"),
+    style.cyan("║  ✦ OMK Metrics · real-time dashboard"),
+    style.slate("╚" + "═".repeat(Math.min(visibleTerminalWidth(text) + 20, 66)) + "╝"),
+    "",
+  ].join("\n");
 }
 
 /** Get system usage snapshot */
@@ -322,7 +427,7 @@ export const kimicatCliHero = omkCliHero;
 /** @deprecated use omkStatusChips */
 export const kimicatStatusChips = omkStatusChips;
 
-// ── Kimicat Custom Banner ───────────────────────────────────
+// ── OMK Custom Banner ───────────────────────────────────────
 export function omkMetaBox(meta?: { directory?: string; session?: string; model?: string }): string {
   const metaLines: string[] = [];
   if (meta?.directory) metaLines.push(label("Directory", meta.directory));

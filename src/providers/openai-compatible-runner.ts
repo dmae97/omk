@@ -61,10 +61,10 @@ export function createOpenAICompatibleReadOnlyTaskRunner(
               role: "system",
               content: [
                 `You are a ${options.provider} read-only/advisory worker inside OMK.`,
-                "Kimi/OMK is the root orchestrator and final authority.",
+                "OMK is the root orchestrator; the configured authority provider owns final write/merge decisions.",
                 "Do not claim file writes, shell execution, secret access, MCP access, or merge authority.",
                 advisoryMode ? "For this file-affecting node, provide advisory strategy only." : "",
-                "Return concise findings, evidence, risks, and recommended Kimi follow-up.",
+                "Return concise findings, evidence, risks, and recommended authority-provider follow-up.",
               ].filter(Boolean).join(" "),
             },
             { role: "user", content: buildNodePrompt(node, env, options) },
@@ -141,18 +141,18 @@ function buildNodePrompt(
     `Authority: ${env.OMK_PROVIDER_AUTHORITY ?? "direct"}`,
     `Provider route reason: ${env.OMK_PROVIDER_ROUTE_REASON ?? ""}`,
     `Routing rationale: ${node.routing?.rationale ?? ""}`,
-    renderPromptDigest("Goal context digest from Kimi", env.OMK_GOAL_CONTEXT ?? env.OMK_GOAL, {
+    renderPromptDigest("Goal context digest from OMK", env.OMK_GOAL_CONTEXT ?? env.OMK_GOAL, {
       maxKeywords: 18,
       maxPhrases: 3,
     }),
-    renderList("Skills visible to Kimi", node.routing?.skills ?? []),
-    renderList("MCP hints visible to Kimi only", node.routing?.mcpServers ?? [], { showWhenEmpty: true }),
-    renderList("Tool hints visible to Kimi only", node.routing?.tools ?? [], { showWhenEmpty: true }),
+    renderList("Skills visible to the authority provider", node.routing?.skills ?? []),
+    renderList("MCP hints reserved for the authority provider", node.routing?.mcpServers ?? [], { showWhenEmpty: true }),
+    renderList("Tool hints reserved for the authority provider", node.routing?.tools ?? [], { showWhenEmpty: true }),
     "Required output:",
     "- Summary",
     "- Evidence or file/symbol references if known",
     "- Risks/unknowns",
-    "- Recommended Kimi follow-up",
+    "- Recommended authority-provider follow-up",
   ].filter((section): section is string => Boolean(section)).join("\n").trim() || `Analyze DAG node ${node.id}.`;
 }
 

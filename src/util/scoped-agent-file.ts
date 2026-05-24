@@ -44,6 +44,10 @@ export function capabilityFlagValue(scope: OmkRuntimeScope): "true" | "false" {
   return scope === "none" ? "false" : "true";
 }
 
+function capabilityFlagValueFor(scope: OmkRuntimeScope, values: string[] | undefined): "true" | "false" {
+  return normalizeHintValues(values ?? []).length > 0 ? "true" : capabilityFlagValue(scope);
+}
+
 export async function resolveAgentCapabilityScopes(
   resources?: AgentCapabilityScopes
 ): Promise<AgentCapabilityScopes> {
@@ -100,9 +104,9 @@ export function renderScopedAgentYaml(options: {
   lines.push(
     "  system_prompt_args:",
     `    OMK_ROLE: ${JSON.stringify(options.role)}`,
-    `    OMK_MCP_ENABLED: "${capabilityFlagValue(options.resources.mcpScope)}"`,
-    `    OMK_SKILLS_ENABLED: "${capabilityFlagValue(options.resources.skillsScope)}"`,
-    `    OMK_HOOKS_ENABLED: "${capabilityFlagValue(options.resources.hooksScope)}"`,
+    `    OMK_MCP_ENABLED: "${capabilityFlagValueFor(options.resources.mcpScope, options.resources.mcpNames)}"`,
+    `    OMK_SKILLS_ENABLED: "${capabilityFlagValueFor(options.resources.skillsScope, options.resources.skillNames)}"`,
+    `    OMK_HOOKS_ENABLED: "${capabilityFlagValueFor(options.resources.hooksScope, options.resources.hookNames)}"`,
     `    OMK_MCP_HINTS: ${JSON.stringify(renderCapabilityHint(options.resources.mcpNames ?? [], options.resources.mcpScope))}`,
     `    OMK_SKILL_HINTS: ${JSON.stringify(renderCapabilityHint(options.resources.skillNames ?? [], options.resources.skillsScope))}`,
     `    OMK_TOOL_HINTS: ${JSON.stringify(renderCapabilityHint(options.resources.toolNames ?? [], "project"))}`,
@@ -132,8 +136,8 @@ export function renderScopedAgentYaml(options: {
 
 
 function renderCapabilityHint(values: string[], scope: OmkRuntimeScope): string {
-  if (scope === "none") return "disabled";
   const normalized = normalizeHintValues(values);
+  if (scope === "none" && normalized.length === 0) return "disabled";
   if (normalized.length === 0) return "count=0;digest=000000000000";
   return `count=${normalized.length};digest=${hintDigest(normalized)};top=${normalized.slice(0, 3).join("|")}`;
 }

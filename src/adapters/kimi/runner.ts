@@ -9,6 +9,7 @@ import { pasteScreenshot } from "../../util/screenshot-store.js";
 import { isAbsolute, join, relative, resolve } from "path";
 import type { TaskRunner, TaskResult } from "../../contracts/orchestration.js";
 import type { DagNode } from "../../orchestration/dag.js";
+import { capabilityScopesFromRouting } from "../../orchestration/capability-routing.js";
 import { runShellStreaming } from "../../util/shell.js";
 import { resolveTimeoutMs } from "../../util/timeout-config.js";
 import { getOmkResourceSettings, type OmkRuntimeScope } from "../../util/resource-profile.js";
@@ -514,8 +515,8 @@ export async function runKimiInteractive(
       "[omk] Failed to load node-pty native module. " +
         `(${message})\n` +
         "This usually happens when installed with --ignore-scripts.\n" +
-        "Fix: npm rebuild -g @oh-my-kimi/cli\n" +
-        "Or reinstall: npm uninstall -g @oh-my-kimi/cli && npm install -g @oh-my-kimi/cli"
+        "Fix: npm rebuild -g open-multi-agent-kit\n" +
+        "Or reinstall: npm uninstall -g open-multi-agent-kit && npm install -g open-multi-agent-kit"
     );
   }
 
@@ -921,6 +922,12 @@ export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskR
         ? await resolveAgentFileForRole(node.role, agentFile)
         : agentFile;
       if (resolvedAgentFile) {
+        const capabilityScopes = capabilityScopesFromRouting(node.routing, {
+          mcpServers: mcpNames ?? [],
+          skills: skillNames ?? [],
+          hooks: hookNames ?? [],
+          tools: toolNames ?? [],
+        });
         const scopedAgentFile = await writeScopedAgentFile({
           baseAgentFile: resolvedAgentFile,
           outputFile: defaultScopedRoleAgentFile(getProjectRoot(), mergedEnv.OMK_RUN_ID ?? mergedEnv.OMK_SESSION_ID, node.role, node.id),
@@ -929,10 +936,10 @@ export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskR
             mcpScope: effectiveMcpScope,
             skillsScope: effectiveSkillsScope,
             hooksScope: effectiveHooksScope,
-            mcpNames: node.routing?.mcpServers ?? mcpNames ?? [],
-            skillNames: node.routing?.skills ?? skillNames ?? [],
-            hookNames: node.routing?.hooks ?? hookNames ?? [],
-            toolNames: node.routing?.tools ?? toolNames ?? [],
+            mcpNames: [...capabilityScopes.mcpServers],
+            skillNames: [...capabilityScopes.skills],
+            hookNames: [...capabilityScopes.hooks],
+            toolNames: [...capabilityScopes.tools],
           },
         });
         args.push("--agent-file", scopedAgentFile);
@@ -1080,6 +1087,13 @@ function buildNodeMessage(
   if (routing?.tools?.length) {
     mandatoryRouting.push(`- Tools (MUST call when relevant): ${routing.tools.join(", ")}`);
   }
+  if (routing?.hooks?.length) {
+    mandatoryRouting.push(`- Hooks (active boundaries): ${routing.hooks.join(", ")}`);
+  }
+  const provider = routing?.assignedProvider ?? routing?.provider;
+  if (provider) {
+    mandatoryRouting.push(`- Provider route: ${provider}${routing?.assignedProviderAuthority ? ` (${routing.assignedProviderAuthority})` : ""}`);
+  }
   if (routing?.rationale) {
     mandatoryRouting.push(`- Rationale: ${routing.rationale}`);
   }
@@ -1123,12 +1137,12 @@ function buildNodeMessage(
           `- Status: ${env.OMK_DEEPSEEK_ADVISORY_STATUS ?? "success"}`,
           `- Model: ${env.OMK_DEEPSEEK_ADVISORY_MODEL ?? "deepseek-v4-pro"}`,
           deepseekAdvisory,
-          "Kimi remains responsible for actual file edits, shell execution, evidence, and final acceptance.",
+          "The OMK authority provider remains responsible for actual file edits, shell execution, evidence, and final acceptance.",
         ].join("\n")
       : undefined,
     [
       "Instructions:",
-      "- Treat the prompt prefix as the active Kimi orchestration contract; turn it into concrete node work, not a repeated summary.",
+      "- Treat the prompt prefix as the active OMK orchestration contract; turn it into concrete node work, not a repeated summary.",
       "- Preserve completed work and continue only the unresolved scope named by this node.",
       "- Keep context small and read only the files needed for this node.",
       "- Use the listed skills/MCP/tools when they fit the node.",

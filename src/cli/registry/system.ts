@@ -5,14 +5,14 @@ import { t } from "../../util/i18n.js";
 export function registerSystemCommands(program: Command): void {
   program
     .command("update")
-    .description("Check or run OMK and primary CLI updates")
-    .argument("[action]", "check (default) | omk | kimi")
+    .description("Check or run OMK package and optional provider adapter updates")
+    .argument("[action]", "check (default) | omk | kimi-adapter")
     .option("--json", "Output update status as JSON")
     .option("--refresh", "Force refresh update cache")
     .option("--yes", "Skip confirmation prompt")
     .option("--install-script", "Print official primary CLI install script (no execution)")
     .action(async (action, options) => {
-      const { checkUpdates } = await import("../../util/update-check.js");
+      const { checkUpdates, OMK_NPM_PACKAGE_NAME } = await import("../../util/update-check.js");
       const actionMode = action ?? "check";
       if (actionMode === "check") {
         const status = await checkUpdates(Boolean(options.refresh));
@@ -37,23 +37,24 @@ export function registerSystemCommands(program: Command): void {
 
         // install-script handled inside actionMode === "kimi" block
 
-      const isInstallScript = actionMode === "kimi" && options.installScript;
+      const isKimiAdapterAction = actionMode === "kimi-adapter" || actionMode === "kimi";
+      const isInstallScript = isKimiAdapterAction && options.installScript;
       if (!process.stdout.isTTY && !options.yes && !isInstallScript) {
         console.error("Interactive update requires a TTY. Use --yes to skip confirmation.");
         process.exit(1);
       }
       if (actionMode === "omk") {
         if (!options.yes) {
-          console.log("Upgrade omk via: npm i -g @oh-my-kimi/cli");
+          console.log(`Upgrade omk via: npm i -g ${OMK_NPM_PACKAGE_NAME}`);
           console.log("Press Enter to continue or Ctrl+C to cancel...");
           const rl = (await import("readline")).createInterface({ input: process.stdin, output: process.stdout });
           await new Promise<void>((resolve) => rl.question("", () => { rl.close(); resolve(); }));
         }
         const { runShell } = await import("../../util/shell.js");
-        const result = await runShell("npm", ["i", "-g", "@oh-my-kimi/cli"], { stdio: "inherit", timeout: 120_000 });
+        const result = await runShell("npm", ["i", "-g", OMK_NPM_PACKAGE_NAME], { stdio: "inherit", timeout: 120_000 });
         process.exit(result.failed ? (result.exitCode ?? 1) : 0);
       }
-      if (actionMode === "kimi") {
+      if (isKimiAdapterAction) {
         // --install-script is safe without TTY
         if (options.installScript) {
           const st = await checkUpdates();
@@ -66,7 +67,7 @@ export function registerSystemCommands(program: Command): void {
         const needsInstall = kimiCheck.failed;
 
         if (!options.yes && !needsInstall) {
-          console.log("Upgrade primary CLI via: uv tool upgrade kimi-cli --no-cache");
+          console.log("Upgrade Kimi adapter CLI via: uv tool upgrade kimi-cli --no-cache");
           console.log("Press Enter to continue or Ctrl+C to cancel...");
           const rl = (await import("readline")).createInterface({ input: process.stdin, output: process.stdout });
           await new Promise<void>((resolve) => rl.question("", () => { rl.close(); resolve(); }));
@@ -76,7 +77,7 @@ export function registerSystemCommands(program: Command): void {
           const script = process.platform === "win32"
             ? "Invoke-RestMethod https://code.kimi.com/install.ps1 | Invoke-Expression"
             : "curl -LsSf https://code.kimi.com/install.sh | bash";
-          console.log(`Primary CLI not found. Installing via official script...`);
+          console.log("Kimi adapter CLI not found. Installing via official script...");
           if (process.platform === "win32") {
             console.error("Please run the following in PowerShell:");
             console.log(script);

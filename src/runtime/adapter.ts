@@ -1,43 +1,25 @@
-export type RuntimeId = string;
+/**
+ * RuntimeAdapter — provider-routing interface.
+ *
+ * Used by the provider routing layer (src/providers/) to select candidate
+ * runtimes, check health, and dispatch AgentRunRequests.
+ *
+ * It is stricter than AgentRuntime: runNode operates on AgentRunRequest,
+ * and health()/supports()/runNode() are all mandatory.
+ *
+ * For the internal runtime implementation interface, see
+ * src/runtime/agent-runtime.ts (AgentRuntime).
+ */
 
-export type RuntimeKind =
-  | "cli"
-  | "api"
-  | "mcp"
-  | "local"
-  | "composite";
+import type {
+  RuntimeId,
+  RuntimeKind,
+  RuntimeAuthority,
+  RuntimeCapabilities,
+  RuntimeHealth,
+} from "./contracts/shared.js";
 
-export type RuntimeAuthority =
-  | "read"
-  | "write"
-  | "shell"
-  | "mcp"
-  | "patch"
-  | "review"
-  | "merge"
-  | "vision";
-
-export interface RuntimeCapabilities {
-  read: boolean;
-  write: boolean;
-  shell: boolean;
-  mcp: boolean;
-  patch: boolean;
-  review: boolean;
-  merge: boolean;
-  vision: boolean;
-  maxContextTokens?: number;
-  supportsStreaming?: boolean;
-  supportsStructuredOutput?: boolean;
-  supportsToolCalling?: boolean;
-}
-
-export interface RuntimeHealth {
-  runtimeId: RuntimeId;
-  available: boolean;
-  reason?: string;
-  checkedAt: string;
-}
+export type { RuntimeId, RuntimeKind, RuntimeAuthority, RuntimeCapabilities, RuntimeHealth };
 
 export interface AgentRunRequest {
   runId: string;

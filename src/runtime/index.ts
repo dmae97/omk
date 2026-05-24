@@ -50,7 +50,7 @@ export {
   type KimiWireRuntimeOptions,
   /** @deprecated Use createKimiApiRuntime instead */
   createKimiWireRuntime,
-} from "./kimi-wire-runtime.js";
+} from "./kimi-api-runtime.js";
 
 export {
   type KimiWireProtocolRuntimeOptions,

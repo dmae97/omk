@@ -5,6 +5,7 @@ import {
   type DeepSeekConfigPathOptions,
   type GenericProviderConfig,
 } from "./deepseek/deepseek-config.js";
+import { DEFAULT_AUTHORITY_PROVIDER } from "./types.js";
 import type {
   KnownProviderId,
   ProviderAuthMethod,
@@ -16,7 +17,6 @@ import type {
   ProviderProfileType,
   ProviderWireApi,
 } from "./types.js";
-import { resolveFallbackProvider } from "./types.js";
 
 export const KNOWN_PROVIDER_IDS = ["kimi", "deepseek", "qwen", "codex", "openrouter"] as const satisfies readonly KnownProviderId[];
 export const QWEN_DASHSCOPE_COMPAT_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
@@ -129,7 +129,7 @@ const DEFAULT_PROVIDER_CONFIGS: Record<KnownProviderId, Omit<ProviderRegistryEnt
     routing: "advisory",
   },
   codex: {
-    enabled: false,
+    enabled: true,
     kind: "codex-cli",
     defaultModel: "codex-cli",
     aliases: { default: "codex-cli", codex: "codex-cli", "codex-cli": "codex-cli", "openai-codex": "codex-cli", "gpt-4o-codex": "codex-cli", "codex-latest": "codex-cli", openai: "codex-cli" },
@@ -214,13 +214,15 @@ const DEFAULT_PROVIDER_CONFIGS: Record<KnownProviderId, Omit<ProviderRegistryEnt
     planKind: "openrouter-credits",
     routing: "advisory",
     headers: {
-      "HTTP-Referer": "https://github.com/dmae97/oh-my-kimi",
-      "X-OpenRouter-Title": "oh-my-kimi",
+      "HTTP-Referer": "https://github.com/dmae97/open_multi-agent_kit",
+      "X-OpenRouter-Title": "open_multi-agent_kit",
     },
   },
 };
 
 export function normalizeProviderPolicy(value: string | undefined): ProviderPolicy {
+  const normalizedText = value?.trim().toLowerCase();
+  if (normalizedText === "authority" || normalizedText === "primary" || normalizedText === "omk") return "authority";
   const normalized = normalizeProviderId(value);
   return normalized === "kimi" || normalized === "deepseek" || normalized === "codex" || normalized === "qwen" || normalized === "openrouter"
     ? normalized as ProviderPolicy
@@ -413,9 +415,10 @@ export function resolveProviderModelRef(
 
 export async function providerDoctorStatus(
   provider: ProviderId,
-  options: DeepSeekConfigPathOptions & { env?: NodeJS.ProcessEnv } = {}
+  options: DeepSeekConfigPathOptions & { env?: NodeJS.ProcessEnv; authorityProvider?: ProviderId } = {}
 ): Promise<ProviderDoctorStatus> {
   const entry = await getProviderRegistryEntry(provider, options);
+  const authorityProvider = resolveDoctorAuthorityProvider(options);
   if (entry.id === "codex") {
     const codexCliAvailable = await isCodexCliAvailable();
     const available = entry.enabled && codexCliAvailable;
@@ -431,8 +434,8 @@ export async function providerDoctorStatus(
       profileType: entry.profileType,
       planKind: entry.planKind,
       codexCliAvailable,
-      authority: "advisory",
-      fallbackProvider: resolveFallbackProvider(["kimi"]),
+      authority: entry.id === authorityProvider ? "authority" : "advisory",
+      fallbackProvider: authorityProvider,
       reason: available
         ? "Codex CLI available; OMK does not read ~/.codex/auth.json"
         : "Codex CLI missing/disabled or authentication not verified; primary fallback is active",
@@ -456,14 +459,22 @@ export async function providerDoctorStatus(
     profileType: entry.profileType,
     planKind: entry.planKind,
     headers: entry.headers,
-    authority: entry.id === "kimi" ? "authority" : "advisory",
-    fallbackProvider: resolveFallbackProvider(["kimi"]),
+    authority: entry.id === authorityProvider ? "authority" : "advisory",
+    fallbackProvider: authorityProvider,
     reason: available
       ? "Provider configured"
       : entry.enabled
         ? `Missing ${entry.apiKeyEnv ?? "provider"} environment variable; primary fallback is active`
         : entry.disabledReason ?? "Provider disabled; primary fallback is active",
   };
+}
+
+function resolveDoctorAuthorityProvider(
+  options: DeepSeekConfigPathOptions & { env?: NodeJS.ProcessEnv; authorityProvider?: ProviderId }
+): ProviderId {
+  if (options.authorityProvider) return options.authorityProvider;
+  const normalized = normalizeProviderId(options.env?.OMK_AUTHORITY_PROVIDER ?? process.env.OMK_AUTHORITY_PROVIDER);
+  return normalized === "auto" ? DEFAULT_AUTHORITY_PROVIDER : normalized;
 }
 
 function mergeProviderConfig(id: string, stored: GenericProviderConfig | undefined): ProviderRegistryEntry {

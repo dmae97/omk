@@ -18,14 +18,14 @@ import { resolveAuthorityProvider } from "./types.js";
 import { createKimiProvider } from "./kimi-provider.js";
 import { createDeepSeekProvider } from "./deepseek-provider.js";
 import { createProviderRouter } from "./provider-router.js";
-import type { AgentProvider } from "./provider.js";
+import { toTaskResult, type AgentProvider } from "./provider.js";
 import { createOpenAICompatibleReadOnlyTaskRunner } from "./openai-compatible-runner.js";
 import { createCodexCliAdvisoryTaskRunner } from "./codex-cli-runner.js";
-import { providerDoctorStatus, readProviderRegistry, type ProviderRegistryEntry } from "./model-registry.js";
+import { normalizeProviderId, providerDoctorStatus, readProviderRegistry, type ProviderRegistryEntry } from "./model-registry.js";
 import { createContextBroker } from "../runtime/context-broker.js";
 import type { AgentRuntime } from "../runtime/agent-runtime.js";
 import { createKimiPrintRuntime } from "../runtime/kimi-print-runtime.js";
-import { createKimiApiRuntime } from "../runtime/kimi-wire-runtime.js";
+import { createKimiApiRuntime } from "../runtime/kimi-api-runtime.js";
 import { createRuntimeRouter } from "../runtime/runtime-router.js";
 
 export interface RuntimeRegistryOptions {
@@ -76,6 +76,9 @@ export async function createProviderBackedTaskRunner(
   const projectRoot = options.cwd ?? options.kimi?.cwd ?? getProjectRoot();
 
   let kimiRunner: TaskRunner | undefined;
+  let deepseekRunnerRef: TaskRunner | undefined;
+  const providerRunners: Partial<Record<ProviderId, TaskRunner>> = {};
+  const providerModels: Partial<Record<ProviderId, ProviderModelDefault>> = {};
   const providers: AgentProvider[] = [];
   const runtimes: AgentRuntime[] = [];
 
@@ -83,6 +86,19 @@ export async function createProviderBackedTaskRunner(
   const explicitProviderIds = new Set(options.providers?.map((p) => p.id) ?? []);
   if (options.providers) {
     providers.push(...options.providers);
+    for (const provider of options.providers) {
+      const runner = taskRunnerFromAgentProvider(provider);
+      if (provider.id === "kimi") {
+        kimiRunner = runner;
+        providerHealth.setAvailable("kimi");
+      } else if (provider.id === "deepseek") {
+        deepseekRunnerRef = runner;
+        providerHealth.setAvailable("deepseek");
+      } else {
+        providerRunners[provider.id as ProviderId] = runner;
+        providerHealth.setAvailable(provider.id as ProviderId);
+      }
+    }
   }
 
   if (options.runtimes) {
@@ -100,10 +116,6 @@ export async function createProviderBackedTaskRunner(
     }
     runtimes.push(...kimiDiscovery.runtimes);
   }
-
-  let deepseekRunnerRef: TaskRunner | undefined;
-  const providerRunners: Partial<Record<ProviderId, TaskRunner>> = {};
-  const providerModels: Partial<Record<ProviderId, ProviderModelDefault>> = {};
 
   // DeepSeek discovery (skip if explicitly injected)
   if (!explicitProviderIds.has("deepseek")) {
@@ -211,12 +223,22 @@ export async function createProviderBackedTaskRunner(
 
   const providerModelStats = loadProviderModelStats();
 
-  // Determine authority provider from available providers (kimi-native is default authority)
-  const availableProviderIds = providers.map((p) => p.id);
-  const authorityProvider = resolveAuthorityProvider(availableProviderIds, "kimi");
+  // Determine authority provider from available providers. OMK policy/env owns authority;
+  // Kimi remains a compatibility provider only when explicitly selected or discovered.
+  const authorityPreference = resolveAuthorityPreference(providerPolicy, process.env);
+  const availableProviderIds = uniqueProviderIds([
+    ...providers.map((p) => p.id),
+    ...Object.keys(providerRunners) as ProviderId[],
+    ...(kimiRunner ? ["kimi" as ProviderId] : []),
+  ]);
+  const authorityProvider = resolveAuthorityProvider(availableProviderIds, authorityPreference);
+  const authorityRunner = authorityProvider === "kimi"
+    ? kimiRunner
+    : providerRunners[authorityProvider];
 
-  // Create the base task runner (existing provider-task-runner with Kimi/DeepSeek routing)
+  // Create the base task runner (provider routing with a configurable OMK authority lane)
   const baseRunner = createProviderTaskRunner({
+    authorityRunner,
     kimiRunner,
     deepseekRunner: deepseekRunnerRef,
     providerRunners,
@@ -322,6 +344,45 @@ function providerDisplayName(provider: ProviderId): string {
   if (provider === "openrouter") return "OpenRouter";
   if (provider === "kimi") return "Kimi";
   return provider;
+}
+
+function resolveAuthorityPreference(
+  providerPolicy: ProviderPolicy,
+  env: NodeJS.ProcessEnv
+): ProviderId | undefined {
+  const envAuthority = normalizeProviderId(env.OMK_AUTHORITY_PROVIDER);
+  if (envAuthority !== "auto") return envAuthority;
+  if (providerPolicy === "codex" || providerPolicy === "kimi") {
+    return providerPolicy;
+  }
+  return undefined;
+}
+
+function uniqueProviderIds(providers: ProviderId[]): ProviderId[] {
+  const seen = new Set<ProviderId>();
+  const out: ProviderId[] = [];
+  for (const provider of providers) {
+    if (seen.has(provider)) continue;
+    seen.add(provider);
+    out.push(provider);
+  }
+  return out;
+}
+
+function taskRunnerFromAgentProvider(provider: AgentProvider): TaskRunner {
+  return {
+    async run(node, env, signal) {
+      const fallbackSignal = new AbortController().signal;
+      const attempt = Number(env.OMK_PROVIDER_ATTEMPT ?? "1");
+      const result = await provider.run({
+        node,
+        env,
+        signal: signal ?? fallbackSignal,
+        attempt: Number.isFinite(attempt) && attempt > 0 ? Math.floor(attempt) : 1,
+      });
+      return toTaskResult(result);
+    },
+  };
 }
 
 export { createRuntimeBackedTaskRunner } from "../runtime/runtime-backed-task-runner.js";

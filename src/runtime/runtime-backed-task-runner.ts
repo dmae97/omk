@@ -8,7 +8,7 @@
  */
 
 import type { TaskRunner, TaskResult } from "../contracts/orchestration.js";
-import type { RuntimeId, AgentTask, AgentResult, AgentRunResult } from "./agent-runtime.js";
+import type { RuntimeId, AgentTask, AgentResult, AgentRunResult, CapabilityManifest } from "./agent-runtime.js";
 import { toTaskResult } from "./agent-runtime.js";
 import { createRuntimeRegistry, type RuntimeRegistry } from "./runtime-registry.js";
 import { createRuntimeRouter } from "./runtime-router.js";
@@ -34,18 +34,18 @@ async function createDefaultRuntimeRegistry(
 ): Promise<RuntimeRegistry> {
   const registry = createRuntimeRegistry();
 
-  // kimi-print
+  // codex-cli (legacy factory + new task-aware class)
+  if (await checkCommand("codex").catch(() => false)) {
+    registry.register(createCodexCliRuntime({ cwd: options.cwd }));
+    registry.register(new CodexRuntime({ cwd: options.cwd }));
+  }
+
+  // kimi-print adapter (compatibility runtime; authority is selected by OMK routing)
   const kimiBin = resolveKimiBin({ ...process.env, ...(options.env ?? {}) });
   if (await checkCommand(kimiBin).catch(() => false)) {
     registry.register(
       createKimiPrintRuntime({ cwd: options.cwd, env: options.env })
     );
-  }
-
-  // codex-cli (legacy factory + new task-aware class)
-  if (await checkCommand("codex").catch(() => false)) {
-    registry.register(createCodexCliRuntime({ cwd: options.cwd }));
-    registry.register(new CodexRuntime({ cwd: options.cwd }));
   }
 
   // deepseek-api
@@ -86,6 +86,17 @@ export async function createRuntimeBackedTaskRunner(
     async run(node, _env, signal): Promise<TaskResult> {
       const { capsule } = await contextBroker.buildCapsule(node);
       const abortSignal = signal ?? new AbortController().signal;
+      const capabilities = taskCapabilitiesFromNode(capsule.node);
+      const routing = capsule.node.routing;
+      const preferredProviders: string[] = [];
+      if (routing?.provider && routing.provider !== "auto") {
+        preferredProviders.push(routing.provider);
+      }
+      if (routing?.candidateProviders?.length) {
+        preferredProviders.push(...routing.candidateProviders);
+      }
+      const providerFallbackChain = options.fallbackChain
+        ?? (routing?.fallbackProvider ? [routing.fallbackProvider] : []);
 
       // Build AgentTask from capsule (inline conversion; TODO: import capsuleToTask when available)
       const task: AgentTask = {
@@ -112,19 +123,10 @@ export async function createRuntimeBackedTaskRunner(
         },
         providerPolicy: {
           strategy: "priority-first",
-          preferredProviders: [],
-          fallbackChain: options.fallbackChain ?? [],
+          preferredProviders,
+          fallbackChain: providerFallbackChain,
         },
-        capabilities: {
-          read: true,
-          write: true,
-          shell: true,
-          mcp: false,
-          patch: true,
-          review: false,
-          merge: false,
-          vision: false,
-        },
+        capabilities,
       };
 
       let taskResult: TaskResult;
@@ -153,7 +155,7 @@ export async function createRuntimeBackedTaskRunner(
       // Ensure routing metadata is present even if the router failed to attach it
       taskResult.metadata = {
         ...(taskResult.metadata ?? {}),
-        fallbackChain: options.fallbackChain,
+        fallbackChain: providerFallbackChain,
       };
 
       return taskResult;
@@ -166,4 +168,29 @@ export async function createRuntimeBackedTaskRunner(
   (runner as unknown as Record<string, unknown>)._registry = registry;
 
   return runner;
+}
+
+function taskCapabilitiesFromNode(node: {
+  role?: string;
+  outputs?: Array<{ gate?: string }>;
+  routing?: { requiresMcp?: boolean; requiresToolCalling?: boolean; mcpServers?: string[] };
+}): CapabilityManifest {
+  const role = node.role?.toLowerCase() ?? "";
+  const gates = node.outputs?.map((output) => output.gate).filter(Boolean) ?? [];
+  const merge = role === "merger" || role === "integrator" || role === "orchestrator";
+  const write = merge || role === "coder" || role === "executor" || role === "refactorer";
+  const shell = node.routing?.requiresToolCalling === true || gates.includes("command-pass") || gates.includes("test-pass");
+  const review = role === "reviewer" || role === "qa" || role === "tester" || gates.includes("review-pass");
+  const mcp = node.routing?.requiresMcp === true || (node.routing?.mcpServers?.length ?? 0) > 0;
+  return {
+    read: true,
+    write,
+    shell,
+    mcp,
+    patch: write,
+    review,
+    merge,
+    vision: false,
+    toolCalling: node.routing?.requiresToolCalling === true,
+  };
 }

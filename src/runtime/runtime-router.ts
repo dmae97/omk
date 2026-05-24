@@ -57,15 +57,15 @@ interface EvidenceHistoryEntry {
 }
 
 const INTENT_RUNTIME_PREFERENCES: Record<NodeIntent, string[]> = {
-  research: ["kimi-cli", "kimi-api", "kimi-wire", "gemini-cli", "openrouter-api"],
-  planning: ["kimi-cli", "kimi-api", "kimi-wire", "claude-code", "codex-cli"],
-  coding: ["kimi-cli", "kimi-api", "kimi-wire", "codex-cli", "claude-code"],
-  debugging: ["kimi-cli", "kimi-api", "kimi-wire", "codex-cli"],
-  refactor: ["kimi-cli", "kimi-api", "kimi-wire", "codex-cli"],
-  review: ["kimi-cli", "claude-code", "openrouter-api", "deepseek-api"],
-  "test-generation": ["kimi-cli", "kimi-api", "kimi-wire", "codex-cli"],
-  documentation: ["kimi-cli", "gemini-cli", "openrouter-api"],
-  "shell-operation": ["kimi-cli", "kimi-api", "kimi-wire"],
+  research: ["deepseek-api", "openrouter-api", "gemini-cli", "codex-cli", "kimi-api", "kimi-cli", "kimi-wire"],
+  planning: ["codex-cli", "openrouter-api", "claude-code", "kimi-api", "kimi-cli", "kimi-wire"],
+  coding: ["codex-cli", "claude-code", "kimi-api", "kimi-cli", "kimi-wire"],
+  debugging: ["codex-cli", "kimi-api", "kimi-cli", "kimi-wire"],
+  refactor: ["codex-cli", "claude-code", "kimi-api", "kimi-cli", "kimi-wire"],
+  review: ["deepseek-api", "openrouter-api", "claude-code", "codex-cli", "kimi-cli"],
+  "test-generation": ["codex-cli", "kimi-api", "kimi-cli", "kimi-wire"],
+  documentation: ["gemini-cli", "openrouter-api", "codex-cli", "kimi-cli"],
+  "shell-operation": ["codex-cli", "kimi-api", "kimi-cli", "kimi-wire"],
 };
 
 export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
@@ -210,8 +210,12 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
     history: EvidenceHistoryEntry[],
   ): RuntimeRouteDecision {
     const intent = classifyIntentFromTask(task);
+    const taskRuntimePreferences = runtimePreferencesFromTask(task);
     const sorted = [...runtimes].sort((a, b) => b.priority - a.priority);
-    const supporting = sorted.filter((r) => typeof r.execute === "function");
+    const candidateRuntimes = taskRuntimePreferences.length > 0
+      ? sorted.filter((r) => taskRuntimePreferences.includes(r.id))
+      : sorted;
+    const supporting = candidateRuntimes.filter((r) => typeof r.execute === "function" && runtimeSupportsTask(r, task));
 
     if (supporting.length === 0) {
       throw new Error(`No runtime supports task for node ${task.context.nodeId}`);
@@ -219,7 +223,9 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
 
     const scores = supporting.map((r) => computeScores(r, intent, history));
 
-    const preferred = fallbackChain ?? INTENT_RUNTIME_PREFERENCES[intent];
+    const preferred = taskRuntimePreferences.length > 0
+      ? taskRuntimePreferences
+      : fallbackChain ?? INTENT_RUNTIME_PREFERENCES[intent];
     const scored = supporting.map((r, i) => ({
       runtime: r,
       score: scores[i],
@@ -254,7 +260,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
     const preferred = fallbackChain ?? INTENT_RUNTIME_PREFERENCES[intent];
     const scored = supporting.map((r) => ({
       runtime: r,
-      composite: preferred.indexOf(r.id) >= 0 ? r.priority + 10 : r.priority,
+      composite: r.priority + preferenceRankBonus(preferred, r.id) * 100,
     }));
     scored.sort((a, b) => b.composite - a.composite);
 
@@ -437,7 +443,7 @@ function computeComposite(
   preferred: string[],
   runtimeId: string,
 ): number {
-  const preferenceBonus = preferred.indexOf(runtimeId) >= 0 ? 0.15 : 0;
+  const preferenceBonus = preferenceRankBonus(preferred, runtimeId);
   return (
     0.35 * score.qualityScore +
     0.25 * score.evidencePassRate +
@@ -446,4 +452,58 @@ function computeComposite(
     0.15 * (1 - score.recentFailurePenalty) +
     preferenceBonus
   );
+}
+
+function preferenceRankBonus(preferred: string[], runtimeId: string): number {
+  const preferredIndex = preferred.indexOf(runtimeId);
+  if (preferredIndex < 0) return 0;
+  return 0.15 * ((preferred.length - preferredIndex) / preferred.length);
+}
+
+function runtimeSupportsTask(runtime: AgentRuntime, task: AgentTask): boolean {
+  const capabilities = runtime.capabilities;
+  if (!capabilities) return true;
+  const requested = task.capabilities;
+  const capabilityKeys = ["read", "write", "shell", "mcp", "patch", "review", "merge", "vision"] as const;
+  for (const key of capabilityKeys) {
+    if (requested[key] && !capabilities[key]) return false;
+  }
+  if (requested.streaming && !capabilities.supportsStreaming) return false;
+  if (requested.structuredOutput && !capabilities.supportsStructuredOutput) return false;
+  if (requested.toolCalling && !capabilities.supportsToolCalling) return false;
+  return true;
+}
+
+function runtimePreferencesFromTask(task: AgentTask): string[] {
+  return uniqueStrings([
+    ...task.providerPolicy.preferredProviders,
+    ...task.providerPolicy.fallbackChain,
+  ].flatMap(runtimeIdsForProviderRef));
+}
+
+function runtimeIdsForProviderRef(value: string): string[] {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized || normalized === "auto" || normalized === "authority") return [];
+  if (normalized.endsWith("-cli") || normalized.endsWith("-api") || normalized === "kimi-wire" || normalized === "kimi-print") {
+    return [normalized];
+  }
+  if (normalized === "codex" || normalized === "openai-codex") return ["codex-cli"];
+  if (normalized === "deepseek" || normalized === "deepseek-v4" || normalized === "ds") return ["deepseek-api"];
+  if (normalized === "openrouter" || normalized === "openrouter-ai") return ["openrouter-api"];
+  if (normalized === "qwen" || normalized === "dashscope" || normalized === "qwen3" || normalized === "qwen-max") return ["qwen-api", "qwen-cli"];
+  if (normalized === "kimi" || normalized === "moonshot") return ["kimi-api", "kimi-cli", "kimi-wire", "kimi-print"];
+  if (normalized === "opencode") return ["opencode-cli"];
+  if (normalized === "commandcode") return ["commandcode-cli"];
+  return [normalized];
+}
+
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+  }
+  return out;
 }

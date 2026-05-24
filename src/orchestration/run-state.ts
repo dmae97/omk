@@ -29,18 +29,16 @@ export function createRoutedRunState(input: {
 export function createDagFromRunState(state: RunState): Dag {
   return createDag({
     nodes: state.nodes.map((node): DagNodeDefinition => {
-      const {
-        status: _status,
-        retries: _retries,
-        startedAt: _startedAt,
-        completedAt: _completedAt,
-        durationMs: _durationMs,
-        attempts: _attempts,
-        blockedReason: _blockedReason,
-        evidence: _evidence,
-        ...definition
-      } = node;
-      return definition;
+      const definition: Partial<typeof node> = { ...node };
+      delete definition.status;
+      delete definition.retries;
+      delete definition.startedAt;
+      delete definition.completedAt;
+      delete definition.durationMs;
+      delete definition.attempts;
+      delete definition.blockedReason;
+      delete definition.evidence;
+      return definition as DagNodeDefinition;
     }),
   });
 }

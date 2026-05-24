@@ -63,7 +63,7 @@ const DEFAULT_CANDIDATES: Record<string, EnsembleCandidate[]> = {
   ],
   orchestrator: [
     { id: "critical-path", perspective: "DAG critical path, dependency fanout, and unblock order", role: "planner", weight: 1 },
-    { id: "kimi-context", perspective: "Kimi small-context routing, concise evidence, and tool-call fit", role: "router", weight: 1 },
+    { id: "orchestrator-context", perspective: "OMK small-context routing, concise evidence, and tool-call fit", role: "router", weight: 1 },
     { id: "fallback", perspective: "agent failure recovery, retries, and blocked dependents", role: "reviewer", weight: 0.8 },
   ],
   qa: [

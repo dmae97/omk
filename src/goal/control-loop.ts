@@ -839,7 +839,7 @@ async function resolveDeepSeekGoalDecisionVote(
           role: "system",
           content: [
             "You are DeepSeek inside the OMK goal-progress ensemble.",
-            "Kimi remains the orchestrator and final authority.",
+            "OMK remains the orchestrator and the configured authority provider owns final action.",
             "You have no file, shell, MCP, secret, or merge authority.",
             "Return JSON only with action, confidence, and reason.",
             "Allowed action values: continue, replan, block, handoff, close.",
