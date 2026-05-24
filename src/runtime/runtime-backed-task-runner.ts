@@ -19,6 +19,7 @@ import { DeepSeekRuntime } from "./deepseek-runtime.js";
 import { CodexRuntime } from "./codex-runtime.js";
 import { createOpencodeCliAdapter } from "../adapters/opencode/opencode-cli-adapter.js";
 import { createCommandcodeCliAdapter } from "../adapters/commandcode/commandcode-cli-adapter.js";
+import { createChatAdvisoryRuntime } from "./chat-advisory-runtime.js";
 import { checkCommand, resolveKimiBin } from "../util/shell.js";
 
 export interface RuntimeBackedTaskRunnerOptions {
@@ -62,6 +63,11 @@ async function createDefaultRuntimeRegistry(
   // commandcode-cli
   if (await checkCommand("commandcode").catch(() => false)) {
     registry.register(createCommandcodeCliAdapter());
+  }
+
+  // chat advisory fallback — when no runtime is available, show setup guidance
+  if (registry.list().length === 0) {
+    registry.register(createChatAdvisoryRuntime());
   }
 
   return registry;
