@@ -6,6 +6,7 @@ import { runShell } from "../../util/shell.js";
 import type { DagNode } from "../../orchestration/dag.js";
 import { applyCapabilityInjectionToRouting, buildCapabilityInjection } from "../../runtime/capability-injection.js";
 import { buildPromptEnvelope, renderPromptEnvelope } from "../../runtime/prompt-envelope.js";
+import { resolveRuntimeBootstrap } from "../../runtime/runtime-bootstrap.js";
 
 export interface NativeRootLoopInput {
   bootstrap: RuntimeBootstrap;
@@ -30,6 +31,14 @@ interface SlashCommand {
   handler: (args: string) => void | Promise<void>;
 }
 
+export interface NativeRootSessionState {
+  bootstrap: RuntimeBootstrap;
+  provider: string;
+  model?: string;
+  approvalPolicy?: string;
+  updatedAt?: string;
+}
+
 function splitSlashArgs(args: string): string[] {
   return args.split(/\s+/).map((arg) => arg.trim()).filter(Boolean);
 }
@@ -40,8 +49,19 @@ function formatScopedNames(names: readonly string[] | undefined, empty = "none")
   return names.length > 8 ? `${preview}, … +${names.length - 8}` : preview;
 }
 
-function buildSlashCommands(input: NativeRootLoopInput): SlashCommand[] {
-  const b = input.bootstrap;
+export function createNativeRootSessionState(input: {
+  bootstrap: RuntimeBootstrap;
+  executionPrompt?: string;
+}): NativeRootSessionState {
+  return {
+    bootstrap: input.bootstrap,
+    provider: input.bootstrap.provider,
+    model: input.bootstrap.selectedModel,
+    approvalPolicy: input.executionPrompt,
+  };
+}
+
+function buildSlashCommands(input: NativeRootLoopInput, state: NativeRootSessionState): SlashCommand[] {
   return [
     { name: "/exit", aliases: ["/quit", ":q"], help: "Exit chat session", handler: () => {} },
     { name: "/help", aliases: ["/h", "/?"], help: "Show this help", handler: () => {
@@ -50,8 +70,11 @@ function buildSlashCommands(input: NativeRootLoopInput): SlashCommand[] {
       console.log(`  ${style.phosphor("/exit")} ${style.phosphorDim("/quit :q")}   — Exit chat session`);
       console.log(`  ${style.phosphor("/help")} ${style.phosphorDim("/h /?")}     — Show this help`);
       console.log(`  ${style.phosphor("/auth")}                — Show provider auth status`);
-      console.log(`  ${style.phosphor("/provider")} ${style.phosphorDim("<name>")}  — Switch provider (kimi/codex/deepseek)`);
-      console.log(`  ${style.phosphor("/model")} ${style.phosphorDim("<name>")}    — Set model`);
+      console.log(`  ${style.phosphor("/providers")}            — List providers`);
+      console.log(`  ${style.phosphor("/provider")} ${style.phosphorDim("<name>")}  — Switch provider for this session`);
+      console.log(`  ${style.phosphor("/models")}               — List model aliases`);
+      console.log(`  ${style.phosphor("/model")} ${style.phosphorDim("<name>")}    — Set session model`);
+      console.log(`  ${style.phosphor("/use")} ${style.phosphorDim("<ref>")}       — Switch provider/model from a ref`);
       console.log(`  ${style.phosphor("/mcp")} ${style.phosphorDim("[--all]")}     — Show MCP Tool Plane status`);
       console.log(`  ${style.phosphor("/tools")}              — Show scoped MCP/skills/hooks`);
       console.log(`  ${style.phosphor("/status")}              — Show session status`);
@@ -61,35 +84,59 @@ function buildSlashCommands(input: NativeRootLoopInput): SlashCommand[] {
       console.log(`  ${style.phosphor("/parallel")} ${style.phosphorDim("<prompt>")} — Run parallel orchestrator`);
       console.log(style.phosphorDim("  ─────────────────────────────────────────────\n"));
     }},
-    { name: "/auth", aliases: ["/login"], help: "Show auth status", handler: () => {
-      console.log(style.phosphorBold(`\n  Provider: ${b.provider}`));
-      console.log(`  Model: ${style.phosphor(b.selectedModel ?? "auto")}`);
-      console.log(`  Session: ${style.phosphorDim(b.sessionMode)}`);
-      console.log(`  Runtime: ${style.phosphorDim(b.selectedRuntimeId ?? "none")}`);
-      console.log(`  Auth OK: ${b.authOk ? style.green("✓") : style.metricsRed("✗")}\n`);
+    { name: "/auth", aliases: ["/login"], help: "Show auth status", handler: async (args) => {
+      const tokens = splitSlashArgs(args);
+      const target = tokens.find((token) => !token.startsWith("-"));
+      const { authCommand } = await import("../auth.js");
+      await authCommand(target, { setup: tokens.includes("--setup"), doctor: tokens.includes("--doctor"), soft: true });
     }},
-    { name: "/provider", aliases: ["/p"], help: "Switch provider", handler: (args) => {
+    { name: "/providers", aliases: [":providers"], help: "List providers", handler: async () => {
+      const { readProviderRegistry } = await import("../../providers/model-registry.js");
+      const providers = await readProviderRegistry({ env: input.env });
+      console.log(style.phosphorBold("\n  Providers:"));
+      for (const provider of providers) {
+        const current = provider.id === state.provider ? "*" : " ";
+        console.log(style.phosphorDim(`  ${current} ${provider.id.padEnd(12)} ${provider.enabled ? "enabled" : "disabled"} ${provider.defaultModel}`));
+      }
+      console.log("");
+    }},
+    { name: "/provider", aliases: ["/p"], help: "Switch provider", handler: async (args) => {
       const p = args.trim().toLowerCase();
-      const valid = ["kimi", "codex", "deepseek", "commandcode", "opencode", "auto"];
-      if (p && valid.includes(p)) {
-        console.log(style.phosphor(`\n  Provider '${p}' will apply after restart.\n`));
-        console.log(style.phosphorDim(`  Current session remains: ${b.provider}`));
-        console.log(style.phosphorDim(`  Restart: omk chat --provider ${p}\n`));
-      } else {
+      const { KNOWN_PROVIDER_IDS, normalizeProviderId } = await import("../../providers/model-registry.js");
+      const valid = ["auto", ...KNOWN_PROVIDER_IDS];
+      const normalized = normalizeProviderId(p);
+      if (!p || !valid.includes(normalized)) {
         console.log(style.phosphorDim(`\n  Available: ${valid.join(", ")}`));
         console.log(style.phosphorDim("  Usage: /provider codex\n"));
+        return;
       }
+      await applyProviderOverride(state, normalized, input);
     }},
-    { name: "/model", aliases: ["/m"], help: "Set model", handler: (args) => {
+    { name: "/models", aliases: [":models"], help: "List model aliases", handler: async () => {
+      const { listUserModelAliases } = await import("../../providers/model-registry.js");
+      const aliases = await listUserModelAliases({ env: input.env });
+      console.log(style.phosphorBold("\n  User Model Aliases:"));
+      const entries = Object.entries(aliases);
+      if (entries.length === 0) console.log(style.phosphorDim("    (none)"));
+      for (const [alias, target] of entries) console.log(style.phosphorDim(`    ${alias} -> ${target}`));
+      console.log(style.phosphorDim("  Use `omk model alias add fast deepseek/flash` to persist aliases.\n"));
+    }},
+    { name: "/model", aliases: ["/m"], help: "Set model", handler: async (args) => {
       const m = args.trim();
       if (m) {
-        console.log(style.phosphor(`\n  Model '${m}' will apply after restart.\n`));
-        console.log(style.phosphorDim(`  Current session remains: ${b.selectedModel ?? "auto"}`));
-        console.log(style.phosphorDim(`  Restart: omk chat --provider ${b.provider} --model ${m}\n`));
+        await applyModelOverride(state, m, input);
       } else {
-        console.log(style.phosphorDim(`\n  Current model: ${b.selectedModel ?? "auto"}`));
-        console.log(style.phosphorDim("  Usage: /model deepseek-chat\n"));
+        console.log(style.phosphorDim(`\n  Current model: ${state.model ?? "auto"}`));
+        console.log(style.phosphorDim("  Usage: /model codex/codex-cli\n"));
       }
+    }},
+    { name: "/use", aliases: [":use"], help: "Switch provider/model", handler: async (args) => {
+      const ref = args.trim();
+      if (!ref) {
+        console.log(style.phosphorDim("\n  Usage: /use codex/codex-cli or /use fast\n"));
+        return;
+      }
+      await applyModelOverride(state, ref, input);
     }},
     { name: "/mcp", aliases: [":mcp"], help: "Show MCP Tool Plane status", handler: async (args) => {
       const tokens = splitSlashArgs(args);
@@ -113,7 +160,7 @@ function buildSlashCommands(input: NativeRootLoopInput): SlashCommand[] {
       console.log(`  MCP:    ${style.phosphorDim(formatScopedNames(input.mcpAllowlist))}`);
       console.log(`  Skills: ${style.phosphorDim(formatScopedNames(input.skillNames))}`);
       console.log(`  Hooks:  ${style.phosphorDim(formatScopedNames(input.hookNames))}`);
-      console.log(`  Runtime: ${style.phosphorDim(b.selectedRuntimeId ?? "none")} (${b.provider})`);
+      console.log(`  Runtime: ${style.phosphorDim(state.bootstrap.selectedRuntimeId ?? "none")} (${state.provider})`);
       console.log(`  Safety: ${style.phosphorDim(`execution=${input.executionPrompt ?? "auto"}; provider metadata is scoped per turn`)}`);
       console.log(style.phosphorDim("  Use /mcp for MCP status or `omk mcp connect --json` for the full contract.\n"));
     }},
@@ -121,7 +168,7 @@ function buildSlashCommands(input: NativeRootLoopInput): SlashCommand[] {
       const uptime = process.uptime();
       const mem = process.memoryUsage();
       console.log(style.phosphorBold(`\n  Session: ${input.runId}`));
-      console.log(`  Provider: ${style.phosphor(b.provider)} | Model: ${style.phosphorDim(b.selectedModel ?? "auto")}`);
+      console.log(`  Provider: ${style.phosphor(state.provider)} | Model: ${style.phosphorDim(state.model ?? "auto")}`);
       console.log(`  Uptime: ${style.phosphorDim(Math.floor(uptime / 60) + "m " + Math.floor(uptime % 60) + "s")}`);
       console.log(`  Heap: ${style.phosphorDim((mem.heapUsed / 1024 / 1024).toFixed(1) + "M")} / ${style.phosphorDim((mem.heapTotal / 1024 / 1024).toFixed(1) + "M")}`);
       console.log(`  Layout: ${style.phosphorDim(input.layout)} | Root: ${style.phosphorDim(input.root)}\n`);
@@ -183,6 +230,57 @@ function buildSlashCommands(input: NativeRootLoopInput): SlashCommand[] {
       }
     }},
   ];
+}
+
+async function applyProviderOverride(
+  state: NativeRootSessionState,
+  provider: string,
+  input: NativeRootLoopInput,
+  model?: string
+): Promise<void> {
+  const bootstrap = await resolveRuntimeBootstrap({
+    provider,
+    model: model ?? state.model,
+    cwd: input.root,
+    env: input.env,
+  });
+  if (!bootstrap.ok) {
+    console.log(style.metricsRed(`\n  Provider not ready: ${provider}`));
+    if (bootstrap.reason) console.log(style.phosphorDim(`  ${bootstrap.reason}`));
+    for (const hint of bootstrap.setupHints.slice(0, 3)) console.log(style.phosphorDim(`  - ${hint}`));
+    console.log(style.phosphorDim(`  Restart/setup: omk auth ${provider} --setup\n`));
+    return;
+  }
+  state.bootstrap = bootstrap;
+  state.provider = bootstrap.provider;
+  state.model = bootstrap.selectedModel;
+  state.updatedAt = new Date().toISOString();
+  console.log(style.phosphor(`\n  Provider switched for this session: ${bootstrap.provider}`));
+  console.log(style.phosphorDim(`  Runtime: ${bootstrap.selectedRuntimeId ?? "auto"} | Model: ${bootstrap.selectedModel ?? "auto"}`));
+  console.log(style.phosphorDim("  Persistent default unchanged; use `omk provider use` to persist.\n"));
+}
+
+async function applyModelOverride(
+  state: NativeRootSessionState,
+  ref: string,
+  input: NativeRootLoopInput
+): Promise<void> {
+  const { resolveUserModelAlias } = await import("../../providers/model-registry.js");
+  const resolved = await resolveUserModelAlias(ref, { env: input.env });
+  if (resolved.provider && resolved.provider !== state.provider) {
+    await applyProviderOverride(state, resolved.provider, input, resolved.model);
+    if (state.provider !== resolved.provider) return;
+  } else {
+    state.bootstrap = {
+      ...state.bootstrap,
+      selectedModel: resolved.model,
+    };
+    state.model = resolved.model;
+    state.updatedAt = new Date().toISOString();
+  }
+  console.log(style.phosphor(`\n  Model override for this session: ${ref} → ${resolved.model}`));
+  if (resolved.provider) console.log(style.phosphorDim(`  Provider: ${resolved.provider}`));
+  console.log(style.phosphorDim("  Persistent default unchanged; use `omk model use` to persist.\n"));
 }
 
 export type NativeTurnRisk = "read" | "write" | "shell" | "merge";
@@ -273,10 +371,11 @@ export function buildNativeRootLoopTurnNode(input: {
 }
 
 export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<number> {
-  const { bootstrap, taskRunner, layout, onData } = input;
+  const { taskRunner, layout, onData } = input;
   const turnTimeoutMs = Number.parseInt(input.env.OMK_TURN_TIMEOUT_MS ?? "120000", 10);
   const safeTurnTimeoutMs = Number.isFinite(turnTimeoutMs) && turnTimeoutMs > 0 ? turnTimeoutMs : 120_000;
-  const commands = buildSlashCommands(input);
+  const state = createNativeRootSessionState({ bootstrap: input.bootstrap, executionPrompt: input.executionPrompt });
+  const commands = buildSlashCommands(input, state);
 
   if (layout !== "plain") {
     console.log(style.phosphor("Entering interactive mode. Type /help for commands.\n"));
@@ -359,12 +458,12 @@ export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<
 
     try {
       const node = buildNativeRootLoopTurnNode({
-        bootstrap,
+        bootstrap: state.bootstrap,
         prompt: line,
         mcpAllowlist: input.mcpAllowlist,
         skillNames: input.skillNames,
         hookNames: input.hookNames,
-        executionPrompt: input.executionPrompt,
+        executionPrompt: state.approvalPolicy,
       });
 
       const result = await taskRunner.run(node, input.env, abort.signal);

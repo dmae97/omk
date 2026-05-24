@@ -43,8 +43,8 @@ function runNativeLoopInput(input) {
     const calls = [];
     const taskRunner = {
       async run(node) {
-        calls.push(node.id);
-        return { success: true, stdout: "TASK_RUNNER_CALLED", stderr: "", exitCode: 0 };
+        calls.push(node);
+        return { success: true, stdout: "TASK_RUNNER_CALLED provider=" + node.routing?.provider + " model=" + node.routing?.providerModel, stderr: "", exitCode: 0 };
       }
     };
     const code = await runNativeOmkRootLoop({
@@ -164,13 +164,20 @@ test("/tools shows scoped tools and capability context without running a provide
   ok(/TASK_RUNNER_CALLS=0/.test(result.stdout));
 });
 
-test("/model reports restart-only behavior without claiming live mutation", () => {
-  const result = runNativeLoopInput("/model gpt-4.1\n/exit\n");
+test("/model applies a session model override without running a provider turn", () => {
+  const result = runNativeLoopInput("/model codex/codex-cli\n/exit\n");
 
   deepStrictEqual(result.status, 0, result.stderr);
-  ok(/will apply after restart/i.test(result.stdout));
-  ok(/omk chat --provider codex --model gpt-4\.1/.test(result.stdout));
-  ok(!/next turns/i.test(result.stdout));
+  ok(/Model override for this session/i.test(result.stdout));
+  ok(/codex\/codex-cli → codex-cli/.test(result.stdout));
+  ok(/TASK_RUNNER_CALLS=0/.test(result.stdout));
+});
+
+test("/auth reports provider status without running a provider turn", () => {
+  const result = runNativeLoopInput("/auth\n/exit\n");
+
+  deepStrictEqual(result.status, 0, result.stderr);
+  ok(/OMK Auth Center/i.test(result.stdout));
   ok(/TASK_RUNNER_CALLS=0/.test(result.stdout));
 });
 

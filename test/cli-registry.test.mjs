@@ -73,6 +73,7 @@ test("sliced CLI registry preserves ordered top-level commands", () => {
     "parallel",
     "orchestrate",
     "provider",
+    "model",
     "deepseek",
     "deepseekset",
     "codex",
@@ -108,7 +109,10 @@ test("sliced CLI registry preserves ordered nested command groups", () => {
 
   assert.deepEqual(commandNames(findCommand(program, "skill")), ["pack", "catalog", "install", "sync"]);
   const provider = findCommand(program, "provider");
-  assert.deepEqual(commandNames(provider), ["list", "doctor", "oauth", "auth", "profiles", "set", "enable", "disable", "deepseek"]);
+  assert.deepEqual(commandNames(provider), ["list", "doctor", "oauth", "auth", "profiles", "use", "set", "enable", "disable", "deepseek"]);
+  const model = findCommand(program, "model");
+  assert.deepEqual(commandNames(model), ["list", "aliases", "resolve", "use", "alias"]);
+  assert.deepEqual(commandNames(findCommand(model, "alias")), ["add", "remove"]);
   assert.deepEqual(commandNames(findCommand(provider, "deepseek")), ["enable", "disable", "set"]);
   const deepseek = findCommand(program, "deepseek");
   assert.deepEqual(commandNames(deepseek), ["api", "enable", "disable", "doctor"]);
@@ -168,6 +172,24 @@ test("sliced CLI registry exposes MCP connect control-plane options", () => {
   assert.ok(mcpConnectFlags.includes("--json"));
   assert.ok(mcpConnectFlags.includes("--all"));
   assert.ok(mcpConnectFlags.includes("--fix"));
+});
+
+test("sliced CLI registry exposes Auth Center and provider/model control-plane options", () => {
+  const program = createOmkProgram();
+  const authFlags = optionFlags(findCommand(program, "auth"));
+  const provider = findCommand(program, "provider");
+  const providerUseFlags = optionFlags(findCommand(provider, "use"));
+  const model = findCommand(program, "model");
+
+  assert.ok(authFlags.includes("--json"));
+  assert.ok(authFlags.includes("--doctor"));
+  assert.ok(authFlags.includes("--setup"));
+  assert.ok(authFlags.includes("--soft"));
+  assert.ok(providerUseFlags.includes("--model <model>"));
+  assert.ok(providerUseFlags.includes("--authority"));
+  assert.ok(providerUseFlags.includes("--json"));
+  assert.ok(optionFlags(findCommand(model, "resolve")).includes("--json"));
+  assert.ok(optionFlags(findCommand(findCommand(model, "alias"), "add")).includes("--json"));
 });
 
 test("sliced CLI registry preserves public aliases", () => {
