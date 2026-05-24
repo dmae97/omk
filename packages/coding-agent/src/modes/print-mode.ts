@@ -100,9 +100,9 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 		});
 
 		unsubscribe?.();
-		unsubscribe = session.subscribe(async (event) => {
+		unsubscribe = session.subscribe((event) => {
 			if (mode === "json") {
-				await writeRawStdout(`${JSON.stringify(event)}\n`);
+				writeRawStdout(`${JSON.stringify(event)}\n`);
 			}
 		});
 	};
@@ -111,7 +111,7 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 		if (mode === "json") {
 			const header = session.sessionManager.getHeader();
 			if (header) {
-				await writeRawStdout(`${JSON.stringify(header)}\n`);
+				writeRawStdout(`${JSON.stringify(header)}\n`);
 			}
 		}
 
@@ -137,7 +137,7 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 				} else {
 					for (const content of assistantMsg.content) {
 						if (content.type === "text") {
-							await writeRawStdout(`${content.text}\n`);
+							writeRawStdout(`${content.text}\n`);
 						}
 					}
 				}

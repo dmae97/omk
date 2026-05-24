@@ -50,14 +50,8 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 	let session = runtimeHost.session;
 	let unsubscribe: (() => void) | undefined;
 
-	const output = async (obj: RpcResponse | RpcExtensionUIRequest | object): Promise<void> => {
-		await writeRawStdout(serializeJsonLine(obj));
-	};
-
-	const outputDetached = (obj: RpcResponse | RpcExtensionUIRequest | object): void => {
-		void output(obj).catch((err: unknown) => {
-			process.stderr.write(`RPC output failed: ${err instanceof Error ? err.message : String(err)}\n`);
-		});
+	const output = (obj: RpcResponse | RpcExtensionUIRequest | object) => {
+		writeRawStdout(serializeJsonLine(obj));
 	};
 
 	const success = <T extends RpcCommand["type"]>(
@@ -87,30 +81,28 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 	const signalCleanupHandlers: Array<() => void> = [];
 
 	/** Helper for dialog methods with signal/timeout support */
-	async function createDialogPromise<T>(
+	function createDialogPromise<T>(
 		opts: ExtensionUIDialogOptions | undefined,
 		defaultValue: T,
 		request: Record<string, unknown>,
 		parseResponse: (response: RpcExtensionUIResponse) => T,
 	): Promise<T> {
-		if (opts?.signal?.aborted) return defaultValue;
+		if (opts?.signal?.aborted) return Promise.resolve(defaultValue);
 
 		const id = crypto.randomUUID();
-		let cleanup = () => {};
-		const responsePromise = new Promise<T>((resolve, reject) => {
+		return new Promise((resolve, reject) => {
 			let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
-			const onAbort = () => {
-				cleanup();
-				resolve(defaultValue);
-			};
-
-			cleanup = () => {
+			const cleanup = () => {
 				if (timeoutId) clearTimeout(timeoutId);
 				opts?.signal?.removeEventListener("abort", onAbort);
 				pendingExtensionRequests.delete(id);
 			};
 
+			const onAbort = () => {
+				cleanup();
+				resolve(defaultValue);
+			};
 			opts?.signal?.addEventListener("abort", onAbort, { once: true });
 
 			if (opts?.timeout) {
@@ -125,20 +117,10 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 					cleanup();
 					resolve(parseResponse(response));
 				},
-				reject: (error) => {
-					cleanup();
-					reject(error);
-				},
+				reject,
 			});
+			output({ type: "extension_ui_request", id, ...request } as RpcExtensionUIRequest);
 		});
-
-		try {
-			await output({ type: "extension_ui_request", id, ...request } as RpcExtensionUIRequest);
-		} catch (err) {
-			cleanup();
-			throw err;
-		}
-		return await responsePromise;
 	}
 
 	/**
@@ -162,7 +144,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 
 		notify(message: string, type?: "info" | "warning" | "error"): void {
 			// Fire and forget - no response needed
-			outputDetached({
+			output({
 				type: "extension_ui_request",
 				id: crypto.randomUUID(),
 				method: "notify",
@@ -178,7 +160,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 
 		setStatus(key: string, text: string | undefined): void {
 			// Fire and forget - no response needed
-			outputDetached({
+			output({
 				type: "extension_ui_request",
 				id: crypto.randomUUID(),
 				method: "setStatus",
@@ -206,7 +188,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 		setWidget(key: string, content: unknown, options?: ExtensionWidgetOptions): void {
 			// Only support string arrays in RPC mode - factory functions are ignored
 			if (content === undefined || Array.isArray(content)) {
-				outputDetached({
+				output({
 					type: "extension_ui_request",
 					id: crypto.randomUUID(),
 					method: "setWidget",
@@ -228,7 +210,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 
 		setTitle(title: string): void {
 			// Fire and forget - host can implement terminal title control
-			outputDetached({
+			output({
 				type: "extension_ui_request",
 				id: crypto.randomUUID(),
 				method: "setTitle",
@@ -248,7 +230,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 
 		setEditorText(text: string): void {
 			// Fire and forget - host can implement editor control
-			outputDetached({
+			output({
 				type: "extension_ui_request",
 				id: crypto.randomUUID(),
 				method: "set_editor_text",
@@ -264,14 +246,9 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 
 		async editor(title: string, prefill?: string): Promise<string | undefined> {
 			const id = crypto.randomUUID();
-			let cleanup = () => {};
-			const responsePromise = new Promise<string | undefined>((resolve, reject) => {
-				cleanup = () => {
-					pendingExtensionRequests.delete(id);
-				};
+			return new Promise((resolve, reject) => {
 				pendingExtensionRequests.set(id, {
 					resolve: (response: RpcExtensionUIResponse) => {
-						cleanup();
 						if ("cancelled" in response && response.cancelled) {
 							resolve(undefined);
 						} else if ("value" in response) {
@@ -280,25 +257,10 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 							resolve(undefined);
 						}
 					},
-					reject: (error) => {
-						cleanup();
-						reject(error);
-					},
+					reject,
 				});
+				output({ type: "extension_ui_request", id, method: "editor", title, prefill } as RpcExtensionUIRequest);
 			});
-			try {
-				await output({
-					type: "extension_ui_request",
-					id,
-					method: "editor",
-					title,
-					prefill,
-				} as RpcExtensionUIRequest);
-			} catch (err) {
-				cleanup();
-				throw err;
-			}
-			return await responsePromise;
 		},
 
 		addAutocompleteProvider(): void {
@@ -376,18 +338,13 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 				shutdownRequested = true;
 			},
 			onError: (err) => {
-				outputDetached({
-					type: "extension_error",
-					extensionPath: err.extensionPath,
-					event: err.event,
-					error: err.error,
-				});
+				output({ type: "extension_error", extensionPath: err.extensionPath, event: err.event, error: err.error });
 			},
 		});
 
 		unsubscribe?.();
-		unsubscribe = session.subscribe(async (event) => {
-			await output(event);
+		unsubscribe = session.subscribe((event) => {
+			output(event);
 		});
 	};
 
@@ -428,17 +385,16 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 						images: command.images,
 						streamingBehavior: command.streamingBehavior,
 						source: "rpc",
-						preflightResult: async (didSucceed) => {
+						preflightResult: (didSucceed) => {
 							if (didSucceed) {
-								await output(success(id, "prompt"));
 								preflightSucceeded = true;
+								output(success(id, "prompt"));
 							}
 						},
 					})
-					.catch((err: unknown) => {
+					.catch((e) => {
 						if (!preflightSucceeded) {
-							const message = err instanceof Error ? err.message : String(err);
-							outputDetached(error(id, "prompt", message));
+							output(error(id, "prompt", e.message));
 						}
 					});
 				return undefined;
@@ -734,7 +690,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 		try {
 			parsed = JSON.parse(line);
 		} catch (parseError: unknown) {
-			await output(
+			output(
 				error(
 					undefined,
 					"parse",
@@ -764,11 +720,11 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 		try {
 			const response = await handleCommand(command);
 			if (response) {
-				await output(response);
+				output(response);
 			}
 			await checkShutdownRequested();
 		} catch (commandError: unknown) {
-			await output(
+			output(
 				error(
 					command.id,
 					command.type,
@@ -785,9 +741,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 
 	detachInput = (() => {
 		const detachJsonl = attachJsonlLineReader(process.stdin, (line) => {
-			void handleInputLine(line).catch((err: unknown) => {
-				process.stderr.write(`RPC command handling failed: ${err instanceof Error ? err.message : String(err)}\n`);
-			});
+			void handleInputLine(line);
 		});
 		return () => {
 			detachJsonl();

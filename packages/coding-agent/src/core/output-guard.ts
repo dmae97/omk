@@ -1,5 +1,3 @@
-import { once } from "node:events";
-
 interface StdoutTakeoverState {
 	rawStdoutWrite: (chunk: string, callback?: (error?: Error | null) => void) => boolean;
 	rawStderrWrite: (chunk: string, callback?: (error?: Error | null) => void) => boolean;
@@ -48,11 +46,12 @@ export function isStdoutTakenOver(): boolean {
 	return stdoutTakeoverState !== undefined;
 }
 
-export async function writeRawStdout(text: string): Promise<void> {
-	const canContinue = stdoutTakeoverState ? stdoutTakeoverState.rawStdoutWrite(text) : process.stdout.write(text);
-	if (!canContinue) {
-		await once(process.stdout, "drain");
+export function writeRawStdout(text: string): void {
+	if (stdoutTakeoverState) {
+		stdoutTakeoverState.rawStdoutWrite(text);
+		return;
 	}
+	process.stdout.write(text);
 }
 
 export async function flushRawStdout(): Promise<void> {
