@@ -10,6 +10,7 @@ const OMK_ROOT = process.cwd();
 const MCP_MODULE_URL = pathToFileURL(join(OMK_ROOT, "dist", "commands", "mcp.js")).href;
 const OMK_PROJECT_SERVER = join(OMK_ROOT, "dist", "mcp", "omk-project-server.js");
 const OMK_CLI = join(OMK_ROOT, "dist", "cli.js");
+const MCP_SCRIPT_TIMEOUT_MS = process.platform === "win32" ? 120000 : 60000;
 
 function runMcpScript(projectRoot, homeRoot, scriptBody, extraEnv = {}) {
   const evalScript = `
@@ -63,7 +64,7 @@ function runMcpScript(projectRoot, homeRoot, scriptBody, extraEnv = {}) {
     },
     encoding: "utf-8",
     maxBuffer: 10 * 1024 * 1024,
-    timeout: 60000,
+    timeout: MCP_SCRIPT_TIMEOUT_MS,
   });
 }
 

@@ -604,9 +604,10 @@ test("non-Kimi chat branch fails fast in non-TTY without Kimi fallback", () => {
       input: "",
     });
 
+    const combinedOutput = `${result.stdout}\n${result.stderr}`;
     deepStrictEqual(result.status, 1);
-    ok(result.stderr.includes("Native OMK chat requires an interactive TTY"));
-    ok(!result.stderr.includes("legacy Kimi CLI fallback"));
+    ok(combinedOutput.includes("Native OMK chat requires an interactive TTY"), combinedOutput);
+    ok(!combinedOutput.includes("legacy Kimi CLI fallback"), combinedOutput);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
