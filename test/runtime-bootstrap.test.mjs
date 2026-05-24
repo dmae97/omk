@@ -37,6 +37,22 @@ test("resolveRuntimeBootstrap does not accept missing commandcode env binary", a
   assert.match(bootstrap.reason ?? "", /CLI not found/);
 });
 
+test("resolveRuntimeBootstrap resolves authority provider policy to concrete provider", async () => {
+  const codexBin = await fakeExecutable("codex");
+  const bootstrap = await resolveRuntimeBootstrap({
+    provider: "authority",
+    env: {
+      OMK_AUTHORITY_PROVIDER: "codex",
+      CODEX_BIN: codexBin,
+    },
+  });
+
+  assert.equal(bootstrap.ok, true);
+  assert.equal(bootstrap.providerPolicy, "authority");
+  assert.equal(bootstrap.selectedProvider, "codex");
+  assert.equal(bootstrap.selectedRuntimeId, codexBin);
+});
+
 test("resolveRuntimeBootstrap auto mode prefers Kimi when available", async () => {
   const kimiBin = await fakeExecutable("kimi");
   const bootstrap = await resolveRuntimeBootstrap({

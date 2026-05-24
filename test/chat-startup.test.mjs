@@ -386,6 +386,93 @@ test("chat smoke validates startup without launching Kimi", async () => {
   }
 });
 
+test("chat smoke report exposes sanitized tool-plane diagnostics", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-chat-smoke-mcp-diagnostics-project-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-chat-smoke-mcp-diagnostics-home-"));
+  const binRoot = await mkdtemp(join(tmpdir(), "omk-chat-smoke-mcp-diagnostics-bin-"));
+  const markerPath = join(projectRoot, "kimi-launched.marker");
+  const runId = "chat-smoke-mcp-diagnostics";
+
+  try {
+    await mkdir(binRoot, { recursive: true });
+    const kimiBin = await createFakeKimi(binRoot, [
+      `if (process.argv[2] === "--version") {`,
+      `  console.log("kimi 1.0.0");`,
+      `  process.exit(0);`,
+      `}`,
+      `require("fs").writeFileSync(${JSON.stringify(markerPath)}, "launched");`,
+      `process.exit(0);`,
+      ``,
+    ].join("\n"));
+
+    const env = {
+      ...process.env,
+      HOME: homeRoot,
+      OMK_ORIGINAL_HOME: homeRoot,
+      OMK_PROJECT_ROOT: projectRoot,
+      OMK_RENDER_LOGO: "0",
+      OMK_STAR_PROMPT: "0",
+      OMK_CHAT_NO_BANNER: "1",
+      OMK_MCP_SUPPRESS_PRUNE_WARNINGS: "",
+      OMK_UPDATE_PROMPT: "force",
+      OMK_MCP_SCOPE: "project",
+      OMK_MCP_PREFLIGHT: "off",
+      KIMI_BIN: kimiBin,
+    };
+
+    const init = spawnSync(process.execPath, [CLI, "init"], {
+      cwd: projectRoot,
+      encoding: "utf-8",
+      timeout: 30000,
+      env,
+    });
+    assert.equal(init.status, 0, init.stderr || init.stdout);
+    await writeFile(join(projectRoot, ".kimi", "mcp.json"), '{"mcpServers":{"github":{"env":{"TOKEN":"sk-proj-secret', "utf-8");
+
+    const result = spawnSync(process.execPath, [
+      CLI,
+      "chat",
+      "--smoke",
+      "--json",
+      "--layout",
+      "plain",
+      "--brand",
+      "plain",
+      "--run-id",
+      runId,
+    ], {
+      cwd: projectRoot,
+      encoding: "utf-8",
+      timeout: 30000,
+      env,
+    });
+
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    assert.equal(existsSync(markerPath), false, "Kimi should not launch during chat smoke");
+    assert.doesNotMatch(result.stdout + result.stderr, /sk-proj-secret|github/);
+
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.ok, false);
+    assert.deepEqual(report.diagnostics.toolPlane, [
+      {
+        level: "error",
+        code: "mcp_config_parse_failed",
+        path: ".kimi/mcp.json",
+        message: "invalid JSON",
+      },
+    ]);
+    assert.ok(report.checks.some((check) =>
+      check.name === "tool-plane diagnostics"
+      && check.status === "fail"
+      && check.message === "1 error(s), 0 warning(s)"
+    ));
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+    await rm(binRoot, { recursive: true, force: true });
+  }
+});
+
 test("chat smoke provider auto does not require Kimi preflight", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-chat-smoke-auto-no-kimi-project-"));
   const homeRoot = await mkdtemp(join(tmpdir(), "omk-chat-smoke-auto-no-kimi-home-"));

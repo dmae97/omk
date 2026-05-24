@@ -68,7 +68,7 @@ omk summary-show
 omk cockpit
 ```
 
-> Current source target: **v1.1.18**. Latest published release remains **v1.1.17** until release gates pass. Release-prep candidate with parallel orchestration, typed doctor repair plans, startup update prompts, and native safety packaging gates; publish/tag remains gated on `npm run release:check`.
+> Current source target: **v1.1.18**. Latest published release remains **v1.1.17** until release gates pass. Latest pushed `new-origin/main` during this hardening update is `6305e2b62185c11549f59e2340936769a3027cdd`: GitHub Smoke Test is green, GitHub CI is still red on Windows jobs, so publish/tag remains blocked even though local `npm run release:check` passed.
 
 > **Share your verified run:** open a **Verified run** issue with your raw prompt, generated diff, `omk verify --json`, replay screenshot, and known limitation so others can inspect real evidence.
 
@@ -194,6 +194,15 @@ OMK supports multiple agent runtimes through a unified adapter interface:
 - **Qwen** — Alibaba Qwen API adapter.
 - **DeepSeek** — DeepSeek advisory/read-only adapter.
 
+Current hardening stance:
+
+| Adapter | Authority boundary | Stable use |
+| --- | --- | --- |
+| Kimi CLI | Default writer, merger, and configured authority provider | MCP-heavy coding, write/shell work, final synthesis |
+| Codex CLI | Write/shell lane only when approval and sandbox policy are propagated | Coding lane after native runtime hardening gates pass |
+| DeepSeek | Read/review/advisory only by default | Research, review, risk analysis, no write/shell authority |
+| OpenRouter / Qwen / Gemini / Claude / OpenCode / CommandCode | Provider-specific adapter lanes | Use only when health preflight and capability match succeed |
+
 ### 1. Provider-native control plane
 
 OMK is built around your agent provider instead of treating it as a generic backend. Project rules, generated agents, hooks, slash skills, MCP configuration, and run state are shaped so the primary writer remains bounded by OMK state, safety hooks, graph memory, and evidence gates.
@@ -260,7 +269,9 @@ When multiple agents can work on the same node, the ensemble runner evaluates pr
 
 ### 11. Advisory provider lanes
 
-OMK can route research, review, QA, or risk analysis through provider lanes such as DeepSeek, but the run stays bounded. The primary writer keeps write/merge authority, and external model output is advisory evidence rather than uncontrolled patch authority.
+OMK can route research, review, QA, or risk analysis through provider lanes such as DeepSeek, but the run stays bounded. The authority provider keeps write/merge authority, and external model output is advisory evidence rather than uncontrolled patch authority.
+
+Every advisory route should preserve a route/evidence trail: requested capabilities, selected provider, approval policy, sandbox mode, fallback reason, and verification command or artifact. Write/shell/merge turns must not silently downgrade to advisory providers; they need an authority-capable provider or an explicit block/fallback message.
 
 ### 12. Open Design bridge
 
@@ -419,7 +430,7 @@ npm run smoke:pack
 npm run release:check
 ```
 
-The v1.1.18 source target is release-gated and evidence-gated: it strengthens parallel subagent orchestration, typed `omk doctor --fix` repair plans with dry-run and post-fix verification, shared startup update prompts, memory/capability harness summaries, and native safety package readiness while preserving package audit, smoke-pack checks, native safety normalization, replay/inspect/diff-runs, skill assigner, decision trace coverage, and CI release gates. Do not claim v1.1.18 as published until native safety packaging, package audit, smoke-pack, tarball install smoke, and `npm run release:check` evidence pass; latest published release remains v1.1.17 until then.
+The v1.1.18 source target is release-gated and evidence-gated: it strengthens parallel subagent orchestration, typed `omk doctor --fix` repair plans with dry-run and post-fix verification, shared startup update prompts, memory/capability harness summaries, and native safety package readiness while preserving package audit, smoke-pack checks, native safety normalization, replay/inspect/diff-runs, skill assigner, decision trace coverage, and CI release gates. Do not claim v1.1.18 as published until native safety packaging, package audit, smoke-pack, tarball install smoke, local `npm run release:check`, GitHub Smoke Test, and GitHub CI all pass on the exact target commit; latest published release remains v1.1.17 until then.
 
 **MCP fetch startup note:** if your personal agent config still starts fetch with `uvx mcp-server-fetch`, each disposable or isolated Kimi HOME may re-resolve Python dependencies before MCP tools appear. Prefer a persistent entrypoint:
 
@@ -445,6 +456,7 @@ Then set `~/.kimi/mcp.json` to an absolute command such as `/home/you/.local/bin
 - [Roadmap](./ROADMAP.md)
 - [Maturity](./MATURITY.md)
 - [Security](./SECURITY.md)
+- [Native root runtime hardening](./docs/native-root-runtime-hardening.md)
 
 ---
 

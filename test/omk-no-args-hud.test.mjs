@@ -14,18 +14,41 @@ function sleep(ms) {
 describe("omk with no arguments", () => {
   it("shows the HUD instead of crashing or exiting immediately", async () => {
     const tempDir = mkdtempSync(join(tmpdir(), "omk-no-args-hud-"));
+    const homeDir = mkdtempSync(join(tmpdir(), "omk-no-args-home-"));
     mkdirSync(join(tempDir, ".omk"), { recursive: true });
+    mkdirSync(join(tempDir, ".kimi"), { recursive: true });
+    mkdirSync(join(homeDir, ".kimi"), { recursive: true });
     writeFileSync(join(tempDir, ".omk", "config.toml"), "", "utf-8");
+    writeFileSync(join(tempDir, ".kimi", "mcp.json"), JSON.stringify({
+      mcpServers: {
+        "sample-local": {
+          command: process.execPath,
+          args: ["-e", "process.exit(0)"],
+          env: {
+            API_TOKEN: "super-secret-root-mcp-token",
+          },
+        },
+      },
+    }), "utf-8");
+    writeFileSync(join(homeDir, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: {} }), "utf-8");
+
+    const childEnv = { ...process.env };
+    delete childEnv.FORCE_COLOR;
+    delete childEnv.FORCE_COLORS;
 
     const child = spawn(process.execPath, [CLI], {
       cwd: tempDir,
       env: {
-        ...process.env,
+        ...childEnv,
         OMK_SKIP_UPDATE_CHECK: "1",
         NO_COLOR: "1",
         OMK_STAR_PROMPT: "0",
         OMK_RENDER_LOGO: "0",
-        FORCE_COLOR: "0",
+        OMK_MCP_SCOPE: "project",
+        OMK_MCP_PREFLIGHT: "strict",
+        OMK_PROJECT_ROOT: tempDir,
+        OMK_ORIGINAL_HOME: homeDir,
+        HOME: homeDir,
       },
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -98,6 +121,10 @@ describe("omk with no arguments", () => {
         foundAny,
         `expected HUD output not found. stdout: ${stdout}\nstderr: ${stderr}`
       );
+      assert.match(combined, /MCP: project scope .* fast\/offline/);
+      assert.match(combined, /omk-project virtual MCP available/);
+      assert.match(combined, /omk mcp doctor/);
+      assert.doesNotMatch(combined, /super-secret-root-mcp-token|API_TOKEN=/);
 
       // In TTY mode the process should stay alive for input (not exit immediately).
       // In non-TTY CI it exits quickly after printing suggestions, which is expected.
@@ -113,6 +140,7 @@ describe("omk with no arguments", () => {
         try { child.kill("SIGKILL"); } catch { /* already gone */ }
       }
       rmSync(tempDir, { recursive: true, force: true });
+      rmSync(homeDir, { recursive: true, force: true });
     }
   });
 });

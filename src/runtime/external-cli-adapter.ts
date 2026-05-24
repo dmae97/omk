@@ -13,6 +13,7 @@ import type {
   RuntimeHealth,
 } from "./agent-runtime.js";
 import type { ContextCapsule } from "./context-capsule.js";
+import type { DagNodeRouting } from "../contracts/dag.js";
 import type { AgentTask, AgentResult } from "./agent-runtime.js";
 import {
   checkCommand,
@@ -76,6 +77,7 @@ export function createExternalCliAdapter(
     },
 
     async execute(task: AgentTask): Promise<AgentResult> {
+      const routing = routingFromTask(task);
       const capsule: ContextCapsule = {
         schemaVersion: 1,
         runId: task.context.runId,
@@ -91,7 +93,7 @@ export function createExternalCliAdapter(
           status: "running",
           retries: 0,
           maxRetries: 1,
-          routing: {},
+          routing,
         },
         dependencySummaries: [],
         relevantFiles: [],
@@ -126,7 +128,7 @@ export function createExternalCliAdapter(
           exitCode: 1,
           stdout: `[ERROR] ${errorMsg}`,
           stderr: errorMsg,
-          metadata: { runtime: options.id, error: errorMsg },
+          metadata: { ...externalCliMetadata(capsule, options.id), error: errorMsg },
         };
       }
 
@@ -141,6 +143,7 @@ export function createExternalCliAdapter(
           nodeId: capsule.nodeId,
           role: capsule.node?.role,
         }),
+        ...runtimeSafetyEnv(capsule),
         ...(options.env ?? {}),
         ...(options.buildEnv ? options.buildEnv(capsule) : {}),
       };
@@ -181,12 +184,19 @@ export function createExternalCliAdapter(
             exitCode: 130,
             stdout: shellResult.stdout,
             stderr: "Aborted by signal",
-            metadata: { runtime: options.id, aborted: true },
+            metadata: { ...externalCliMetadata(capsule, options.id, shellResult.durationMs), aborted: true },
           };
         }
 
         if (options.parseResult) {
-          return options.parseResult(shellResult, capsule);
+          const parsed = options.parseResult(shellResult, capsule);
+          return {
+            ...parsed,
+            metadata: {
+              ...externalCliMetadata(capsule, options.id, shellResult.durationMs),
+              ...(parsed.metadata ?? {}),
+            },
+          };
         }
 
         return {
@@ -194,7 +204,7 @@ export function createExternalCliAdapter(
           exitCode: shellResult.exitCode,
           stdout: shellResult.stdout,
           stderr: shellResult.stderr,
-          metadata: { runtime: options.id, durationMs: shellResult.durationMs },
+          metadata: externalCliMetadata(capsule, options.id, shellResult.durationMs),
         };
       } catch (err) {
         const errorMsg = String(err);
@@ -203,7 +213,7 @@ export function createExternalCliAdapter(
           exitCode: 1,
           stdout: `[ERROR] ${errorMsg}`,
           stderr: errorMsg,
-          metadata: { runtime: options.id, error: errorMsg },
+          metadata: { ...externalCliMetadata(capsule, options.id), error: errorMsg },
         };
       } finally {
         if (promptTempDir) {
@@ -216,6 +226,74 @@ export function createExternalCliAdapter(
 
 function sanitizeTempName(value: string): string {
   return value.replace(/[^a-z0-9._-]+/giu, "_");
+}
+
+function routingFromTask(task: AgentTask): DagNodeRouting {
+  const toolNames = unique(task.tools.available.map((tool) => tool.name));
+  const mcpServers = unique(task.tools.mcpServers ?? []);
+  const skills = unique(task.tools.skills ?? []);
+  const hooks = unique(task.tools.hooks ?? []);
+  return {
+    risk: normalizeRisk(task.context.risk ?? task.context.env?.OMK_TASK_RISK),
+    approvalPolicy: task.context.approvalPolicy ?? task.context.env?.OMK_APPROVAL_POLICY,
+    sandboxMode: normalizeSandboxMode(task.context.sandboxMode ?? task.context.env?.OMK_SANDBOX_MODE),
+    assignedCapabilities: {
+      tools: toolNames,
+      mcpServers,
+      skills,
+      hooks,
+    },
+    tools: toolNames,
+    mcpServers,
+    skills,
+    hooks,
+  };
+}
+
+function runtimeSafetyEnv(capsule: ContextCapsule): Record<string, string | undefined> {
+  const routing = capsule.node.routing;
+  const assigned = routing?.assignedCapabilities;
+  return {
+    OMK_TASK_RISK: routing?.risk,
+    OMK_APPROVAL_POLICY: routing?.approvalPolicy ?? routing?.executionPrompt,
+    OMK_SANDBOX_MODE: routing?.sandboxMode,
+    OMK_MCP_SERVERS: joinList(routing?.mcpServers ?? assigned?.mcpServers),
+    OMK_SKILLS: joinList(routing?.skills ?? assigned?.skills),
+    OMK_HOOKS: joinList(routing?.hooks ?? assigned?.hooks),
+    OMK_TOOLS: joinList(routing?.tools ?? assigned?.tools),
+  };
+}
+
+function externalCliMetadata(
+  capsule: ContextCapsule,
+  runtime: string,
+  durationMs?: number
+): Record<string, unknown> {
+  const routing = capsule.node.routing;
+  return {
+    runtime,
+    durationMs,
+    risk: routing?.risk,
+    approvalPolicy: routing?.approvalPolicy ?? routing?.executionPrompt,
+    sandboxMode: routing?.sandboxMode,
+  };
+}
+
+function normalizeRisk(value: string | undefined): DagNodeRouting["risk"] | undefined {
+  return value === "read" || value === "write" || value === "shell" || value === "merge" ? value : undefined;
+}
+
+function normalizeSandboxMode(value: string | undefined): DagNodeRouting["sandboxMode"] | undefined {
+  return value === "read-only" || value === "workspace-write" ? value : undefined;
+}
+
+function joinList(values: readonly string[] | undefined): string | undefined {
+  const joined = unique(values ?? []).join(",");
+  return joined.length > 0 ? joined : undefined;
+}
+
+function unique(values: readonly string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
 function resolveExternalCliTimeoutMs(

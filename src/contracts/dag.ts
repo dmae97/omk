@@ -34,6 +34,10 @@ export interface DagNodeRouting {
   assignedModel?: string;
   assignedProviderAuthority?: "authority" | "direct" | "advisory" | "veto";
   assignedProviderCapabilities?: string[];
+  risk?: "read" | "write" | "shell" | "merge";
+  executionPrompt?: string;
+  approvalPolicy?: string;
+  sandboxMode?: "read-only" | "workspace-write";
   autoSpawned?: boolean;
   spawnReason?: string;
   routeSource?: "skill" | "mcp" | "hook" | "provider";

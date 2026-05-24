@@ -2,6 +2,54 @@ import type { Command } from "commander";
 import { style, omkCliHero } from "../util/theme.js";
 import { t, initI18n } from "../util/i18n.js";
 import { buildCustomHelp } from "../util/help-text.js";
+import type { McpDoctorReport } from "../commands/mcp.js";
+
+function isDisabledEnvValue(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "0" || normalized === "false" || normalized === "no" || normalized === "off";
+}
+
+export function formatRootMcpStatusLines(report: McpDoctorReport): string[] {
+  const activeServers = report.servers.filter((server) => server.active);
+  const readyCount = activeServers.filter((server) => server.status === "ok").length;
+  const warningCount = report.warnings.length;
+  const errorCount = report.errors.length;
+  const virtualProjectMcp = activeServers.some((server) =>
+    server.name === "omk-project" && server.sources.includes("runtime:auto-injected")
+  );
+
+  const statusLine = [
+    `MCP: ${report.activeScope} scope`,
+    `${activeServers.length} active`,
+    `${readyCount} ready`,
+    `${warningCount} warning`,
+    `${errorCount} error`,
+    "fast/offline",
+  ].join(" · ");
+
+  const detail = virtualProjectMcp
+    ? "  omk-project virtual MCP available; full validation: omk mcp doctor && omk mcp check --all"
+    : "  Full validation: omk mcp doctor && omk mcp check --all";
+
+  return [statusLine, detail];
+}
+
+async function buildRootMcpStatusLines(env: NodeJS.ProcessEnv = process.env): Promise<string[]> {
+  if (isDisabledEnvValue(env.OMK_ROOT_MCP_SUMMARY)) return [];
+
+  try {
+    const { buildMcpDoctorReport } = await import("../commands/mcp.js");
+    const report = await buildMcpDoctorReport({
+      env: {
+        ...env,
+        OMK_MCP_PREFLIGHT: "off",
+      },
+    });
+    return formatRootMcpStatusLines(report);
+  } catch {
+    return ["MCP: summary unavailable (run `omk mcp doctor`)"];
+  }
+}
 
 export async function runRootHudFlow(program: Command): Promise<void> {
   const globalOpts = program.opts();
@@ -36,7 +84,14 @@ export async function runRootHudFlow(program: Command): Promise<void> {
     }
   })();
 
+  const mcpStatusPromise = buildRootMcpStatusLines();
+
   console.log(await hudPromise);
+
+  const mcpStatusLines = await mcpStatusPromise;
+  if (mcpStatusLines.length > 0) {
+    console.log(style.gray(mcpStatusLines.join("\n")));
+  }
 
   const { banner: updateBanner, status } = await updatePromise;
   if (updateBanner) console.log(updateBanner);

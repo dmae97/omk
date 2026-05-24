@@ -11,6 +11,9 @@ export interface PromptEnvelopeInput {
   readonly role?: string;
   readonly nodeId?: string;
   readonly runId?: string;
+  readonly executionPrompt?: string;
+  readonly turnRisk?: "read" | "write" | "shell" | "merge";
+  readonly sandboxMode?: "read-only" | "workspace-write";
 }
 
 export interface PromptEnvelopeSection {
@@ -43,6 +46,9 @@ export function buildPromptEnvelope(input: PromptEnvelopeInput): PromptEnvelope 
         `Selected provider: ${input.bootstrap.selectedProvider}`,
         `Selected runtime: ${input.bootstrap.selectedRuntimeId ?? input.bootstrap.sessionMode}`,
         `Selected model: ${input.bootstrap.selectedModel ?? "auto"}`,
+        input.executionPrompt ? `Execution selection: ${input.executionPrompt}` : undefined,
+        input.turnRisk ? `Turn risk: ${input.turnRisk}` : undefined,
+        input.sandboxMode ? `Sandbox: ${input.sandboxMode}` : undefined,
       ].filter(isString),
     },
     {

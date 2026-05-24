@@ -32,7 +32,7 @@ function detectProvider(
       };
     case "codex":
       return {
-        bin: "codex",
+        bin: env.CODEX_BIN ?? "codex",
         sessionMode: "one-shot-cli",
         installHint: "npm install -g @openai/codex",
         authHint: "codex login",
@@ -75,15 +75,14 @@ function detectProvider(
 async function resolveAutoProvider(env: Record<string, string | undefined>): Promise<{ provider: string; runtimeId: string } | undefined> {
   const kimiBin = resolveKimiBin(env);
   if (await checkCommand(kimiBin).catch(() => false)) return { provider: "kimi", runtimeId: "kimi-print" };
-  if (await checkCommand("codex").catch(() => false)) return { provider: "codex", runtimeId: "codex-cli" };
+  const codexBin = env.CODEX_BIN ?? "codex";
+  if (await checkCommand(codexBin).catch(() => false)) return { provider: "codex", runtimeId: "codex-cli" };
 
   let commandcodeBin: string | undefined;
   if (env.COMMANDCODE_BIN) {
     commandcodeBin = await checkCommand(env.COMMANDCODE_BIN).catch(() => false) ? env.COMMANDCODE_BIN : undefined;
   } else if (await checkCommand("commandcode").catch(() => false)) {
     commandcodeBin = "commandcode";
-  } else if (await checkCommand("cmd").catch(() => false)) {
-    commandcodeBin = "cmd";
   }
   if (commandcodeBin) return { provider: "commandcode", runtimeId: "commandcode-cli" };
 
@@ -101,8 +100,10 @@ export async function resolveRuntimeBootstrap(options: {
 }): Promise<RuntimeBootstrap> {
   const providerPolicy = options.provider.trim().toLowerCase() || "auto";
   const env = options.env ?? process.env;
-  const autoSelection = providerPolicy === "auto" ? await resolveAutoProvider(env) : undefined;
-  const selectedProvider = autoSelection?.provider ?? providerPolicy;
+  const authorityProvider = resolveAuthorityProviderPolicy(providerPolicy, env);
+  const effectiveProviderPolicy = authorityProvider ?? providerPolicy;
+  const autoSelection = effectiveProviderPolicy === "auto" ? await resolveAutoProvider(env) : undefined;
+  const selectedProvider = autoSelection?.provider ?? effectiveProviderPolicy;
   const info = detectProvider(selectedProvider, env);
   const hints: string[] = [];
 
@@ -111,7 +112,7 @@ export async function resolveRuntimeBootstrap(options: {
   let modelOk = false;
   const reasons: string[] = [];
 
-  if (providerPolicy === "auto" && !autoSelection) {
+  if (effectiveProviderPolicy === "auto" && !autoSelection) {
     reasons.push("no runnable runtime detected for auto provider policy");
     hints.push("Install/login to a runtime: kimi, codex, commandcode, opencode, or deepseek");
     hints.push("Use an explicit provider, e.g. omk chat --provider kimi --mcp-scope none");
@@ -135,7 +136,7 @@ export async function resolveRuntimeBootstrap(options: {
 
   if (runtimeOk) modelOk = true;
 
-  if (!runtimeOk && providerPolicy !== "auto") {
+  if (!runtimeOk && effectiveProviderPolicy !== "auto") {
     hints.push(info.authHint);
     hints.push(`omk chat --provider ${selectedProvider} --model ${info.modelHint}`);
   }
@@ -156,4 +157,16 @@ export async function resolveRuntimeBootstrap(options: {
     reason: reasons.length > 0 ? reasons.join("; ") : undefined,
     setupHints: hints,
   };
+}
+
+function resolveAuthorityProviderPolicy(
+  providerPolicy: string,
+  env: Record<string, string | undefined>
+): string | undefined {
+  if (providerPolicy !== "authority" && providerPolicy !== "primary" && providerPolicy !== "omk") return undefined;
+  const configured = env.OMK_AUTHORITY_PROVIDER?.trim().toLowerCase()
+    || env.OMK_DEFAULT_PROVIDER?.trim().toLowerCase()
+    || "kimi";
+  if (configured === "authority" || configured === "primary" || configured === "omk") return "kimi";
+  return configured || "kimi";
 }

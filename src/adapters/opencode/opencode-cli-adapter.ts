@@ -45,7 +45,7 @@ export function createOpencodeCliAdapter(options: OpencodeCliAdapterOptions = {}
         "--print",
         "--file",
         promptFile,
-        "Read the attached prompt file exactly and execute the user request it contains.",
+        "Read the attached prompt file exactly and execute the user request it contains. Enforce OMK_TASK_RISK, OMK_APPROVAL_POLICY, and OMK_SANDBOX_MODE from the environment before any write or shell action.",
       ];
     },
   });

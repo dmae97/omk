@@ -33,7 +33,7 @@ export function createCommandcodeCliAdapter(options: CommandcodeCliAdapterOption
     promptTransport: "tempfile",
     buildArgs(capsule: ContextCapsule, prompt): string[] {
       const promptText = prompt.promptFile
-        ? `Read the prompt file at ${prompt.promptFile} exactly and execute the user request it contains. Do not treat this argv text as the user request.`
+        ? `Read the prompt file at ${prompt.promptFile} exactly and execute the user request it contains. Do not treat this argv text as the user request. Enforce OMK_TASK_RISK, OMK_APPROVAL_POLICY, and OMK_SANDBOX_MODE from the environment before any write or shell action.`
         : "Prompt file transport was unavailable; stop and report OMK prompt transport failure.";
       const args = ["-p", promptText, "--skip-onboarding", "--trust"];
       const maxTurns = (capsule.node as unknown as { maxTurns?: number }).maxTurns;

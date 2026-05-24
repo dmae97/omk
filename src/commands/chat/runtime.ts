@@ -105,6 +105,7 @@ function attachSelectedProviderEnv(
     add("DEEPSEEK_MODEL");
   }
   if (provider === "codex" || provider === "auto") {
+    add("CODEX_BIN");
     add("OPENAI_API_KEY");
     add("OPENAI_BASE_URL");
   }
@@ -312,6 +313,7 @@ export async function runChatRuntime(
           mcpAllowlist: toolPlane.mcpServers,
           skillNames: [...toolPlane.skills],
           hookNames: [...toolPlane.hooks],
+          executionPrompt: input.executionPrompt,
           onData: (data) => {
             recentChatOutput = appendRecentChatOutput(recentChatOutput, data);
           },
