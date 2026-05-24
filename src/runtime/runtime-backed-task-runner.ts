@@ -103,7 +103,7 @@ export async function createRuntimeBackedTaskRunner(
   });
 
   const runner: TaskRunner = {
-    async run(node, _env, signal): Promise<TaskResult> {
+    async run(node, env, signal): Promise<TaskResult> {
       const runState = options.runId
         ? {
             schemaVersion: 1 as const,
@@ -119,10 +119,11 @@ export async function createRuntimeBackedTaskRunner(
         ?? (routing?.fallbackProvider ? [routing.fallbackProvider] : []);
       const abortSignal = signal ?? new AbortController().signal;
 
+      const taskEnv = { ...(options.env ?? {}), ...(env ?? {}) };
       const task = await capsuleToTask(capsule, {
         signal: abortSignal,
         cwd: options.cwd,
-        env: options.env,
+        env: taskEnv,
         fallbackChain: providerFallbackChain,
       });
 

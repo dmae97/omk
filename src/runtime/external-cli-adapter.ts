@@ -237,6 +237,7 @@ function routingFromTask(task: AgentTask): DagNodeRouting {
     risk: normalizeRisk(task.context.risk ?? task.context.env?.OMK_TASK_RISK),
     approvalPolicy: task.context.approvalPolicy ?? task.context.env?.OMK_APPROVAL_POLICY,
     sandboxMode: normalizeSandboxMode(task.context.sandboxMode ?? task.context.env?.OMK_SANDBOX_MODE),
+    providerModel: task.context.providerModel ?? task.context.env?.OMK_PROVIDER_MODEL,
     assignedCapabilities: {
       tools: toolNames,
       mcpServers,
@@ -261,6 +262,7 @@ function runtimeSafetyEnv(capsule: ContextCapsule): Record<string, string | unde
     OMK_SKILLS: joinList(routing?.skills ?? assigned?.skills),
     OMK_HOOKS: joinList(routing?.hooks ?? assigned?.hooks),
     OMK_TOOLS: joinList(routing?.tools ?? assigned?.tools),
+    OMK_PROVIDER_MODEL: routing?.providerModel,
   };
 }
 
@@ -276,6 +278,7 @@ function externalCliMetadata(
     risk: routing?.risk,
     approvalPolicy: routing?.approvalPolicy ?? routing?.executionPrompt,
     sandboxMode: routing?.sandboxMode,
+    providerModel: routing?.providerModel,
   };
 }
 

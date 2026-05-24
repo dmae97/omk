@@ -203,7 +203,7 @@ export class DeepSeekRuntime implements AgentRuntime {
     const tools: DeepSeekTool[] = [];
 
     const body: Record<string, unknown> = {
-      model: this.model,
+      model: task.context.providerModel ?? task.context.env?.OMK_PROVIDER_MODEL ?? this.model,
       messages,
       stream: task.capabilities.streaming === true,
     };

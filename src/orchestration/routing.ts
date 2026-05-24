@@ -517,6 +517,7 @@ export function dagNodeRoutingEnv(node: DagNode, dag?: import("./dag.js").Dag): 
     OMK_NODE_PROVIDER_AUTHORITY: routing.assignedProviderAuthority ?? "",
     OMK_NODE_PROVIDER_CAPABILITIES: (routing.assignedProviderCapabilities ?? []).join(","),
     OMK_NODE_CANDIDATE_PROVIDERS: (routing.candidateProviders ?? []).join(","),
+    OMK_PROVIDER_MODEL: routing.providerModel ?? "",
     OMK_PROVIDER_MODEL_TIER: routing.providerModelTier ?? "",
     OMK_PROVIDER_FALLBACK: routing.fallbackProvider ?? resolveFallbackProvider([DEFAULT_AUTHORITY_PROVIDER]),
     OMK_PROVIDER_REASON: routing.providerReason ?? "",

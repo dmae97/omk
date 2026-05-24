@@ -32,6 +32,7 @@ export async function capsuleToTask(
     abortSignal: taskOptions.signal,
     cwd: taskOptions.cwd,
     env: taskOptions.env,
+    providerModel: routing?.providerModel,
     risk: routing?.risk,
     approvalPolicy: routing?.approvalPolicy ?? routing?.executionPrompt,
     sandboxMode: routing?.sandboxMode,

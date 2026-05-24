@@ -54,6 +54,7 @@ export function createKimiPrintRuntime(options: KimiPrintRuntimeOptions = {}): A
           maxRetries: 1,
           routing: {
             provider: "kimi",
+            providerModel: task.context.providerModel ?? task.context.env?.OMK_PROVIDER_MODEL,
             readOnly: !task.capabilities.write,
             mcpServers: task.tools.mcpServers,
             skills: task.tools.skills,
