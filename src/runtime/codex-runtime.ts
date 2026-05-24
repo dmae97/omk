@@ -17,6 +17,7 @@ import { capsuleToTask } from "./context-broker-converter.js";
 import { runShell, checkCommand } from "../util/shell.js";
 
 export interface CodexRuntimeOptions {
+  bin?: string;
   cwd?: string;
   model?: string;
   timeoutMs?: number;
@@ -41,11 +42,13 @@ export class CodexRuntime implements AgentRuntime {
   };
 
   private readonly cwd: string;
+  private readonly bin: string;
   private readonly model: string | undefined;
   private readonly timeoutMs: number;
 
   constructor(options: CodexRuntimeOptions = {}) {
     this.cwd = options.cwd ?? process.cwd();
+    this.bin = options.bin ?? process.env.CODEX_BIN ?? "codex";
     this.model = options.model;
     this.timeoutMs = options.timeoutMs ?? 120_000;
   }
@@ -55,7 +58,7 @@ export class CodexRuntime implements AgentRuntime {
   }
 
   async health(): Promise<RuntimeHealth> {
-    const available = await checkCommand("codex").catch(() => false);
+    const available = await checkCommand(this.bin).catch(() => false);
     return {
       runtimeId: this.id,
       available,
@@ -103,17 +106,24 @@ export class CodexRuntime implements AgentRuntime {
       OMK_NODE_MCP_SERVERS: task.tools.mcpServers?.join(",") ?? "",
       OMK_NODE_TOOLS: task.tools.available.map((tool) => tool.name).join(","),
       OMK_NODE_HOOKS: task.tools.hooks?.join(",") ?? "",
+      OMK_APPROVAL_POLICY: task.context.approvalPolicy ?? task.context.env?.OMK_APPROVAL_POLICY ?? "",
+      OMK_SANDBOX_MODE: task.context.sandboxMode ?? task.context.env?.OMK_SANDBOX_MODE ?? "",
+      OMK_TASK_RISK: task.context.risk ?? "",
     };
 
     const sandboxMode =
+      task.context.sandboxMode === "read-only" || task.context.sandboxMode === "workspace-write"
+        ? task.context.sandboxMode
+        :
       task.capabilities.write || task.capabilities.patch || task.capabilities.shell
         ? "workspace-write"
         : "read-only";
+    const approvalPolicy = codexApprovalPolicy(task.context.approvalPolicy ?? task.context.env?.OMK_APPROVAL_POLICY);
 
     const args = [
       "exec",
       "--sandbox", sandboxMode,
-      "--ask-for-approval", "never",
+      "--ask-for-approval", approvalPolicy,
       "--cd", this.cwd,
       "--color", "never",
       "-",
@@ -125,7 +135,7 @@ export class CodexRuntime implements AgentRuntime {
     }
 
     try {
-      const shellResult = await runShell("codex", args, {
+      const shellResult = await runShell(this.bin, args, {
         cwd: this.cwd,
         input: prompt,
         timeout: this.timeoutMs,
@@ -148,6 +158,7 @@ export class CodexRuntime implements AgentRuntime {
         metadata: {
           runtime: this.id,
           sandbox: sandboxMode,
+          approvalPolicy,
           stderr: shellResult.stderr,
           failed: shellResult.failed,
         },
@@ -195,4 +206,10 @@ export class CodexRuntime implements AgentRuntime {
 
     return parts.join("\n");
   }
+}
+
+function codexApprovalPolicy(value: string | undefined): "on-request" | "never" {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === "never" || normalized === "yolo") return "never";
+  return "on-request";
 }

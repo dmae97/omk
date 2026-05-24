@@ -8,6 +8,16 @@ Please report security issues via GitHub Issues with the `security` label.
 
 open_multi-agent_kit includes scoped default hooks to block destructive commands and secret leakage when the active runtime/harness enables them.
 
+## Native Runtime Safety Gates
+
+- Native chat turns should be default-safe: read/review prompts request read-only capability, edit prompts request write/patch, and shell capability is reserved for explicit command execution under the active approval policy.
+- `--execution ask|auto|never` must propagate into runtime routing and provider adapters. Do not treat `ask` as equivalent to provider-level `never`.
+- Provider policies such as `authority`, `primary`, and `omk` must resolve to a concrete healthy provider before execution; unresolved authority is a hard diagnostic, not an advisory-only fallback.
+- DeepSeek is read/review/advisory unless a future contract explicitly grants write/shell authority.
+- CLI provider bootstrap must not treat binary existence as authentication. Provider health should distinguish runtime availability, auth/session state, selected model support, and quota/rate-limit status.
+- Kimi/provider failure previews must be redacted and gated behind explicit debug mode such as `OMK_DEBUG=1`.
+- MCP, skills, and hooks parse/read failures should be visible in tool-plane diagnostics. Required runtime MCP failures should block execution rather than silently dropping all servers.
+
 ## MCP and Harness Secret Handling
 
 - Fresh init uses project scope by default: `omk-core-verified` treats project-local `omk-project` MCP as the baseline hint, while generated `.omk/mcp.json` / `.kimi/mcp.json` may stay minimal or empty until runtime materializes managed entries. User/global MCP and skills are runtime-only unless explicitly imported by a trusted local user.

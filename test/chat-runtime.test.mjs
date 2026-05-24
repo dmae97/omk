@@ -1,6 +1,6 @@
-import { deepStrictEqual, ok } from "node:assert";
+import { deepStrictEqual, ok, rejects } from "node:assert";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -10,6 +10,7 @@ const { buildNativeRootLoopTurnNode } = await import("../dist/commands/chat/nati
 const { buildCapabilityInjection, applyCapabilityInjectionToRouting } = await import("../dist/runtime/capability-injection.js");
 const { capsuleToTask } = await import("../dist/runtime/context-broker-converter.js");
 const { buildPromptEnvelope, renderPromptEnvelope } = await import("../dist/runtime/prompt-envelope.js");
+const { buildOmkToolPlaneManifest } = await import("../dist/runtime/tool-plane.js");
 
 const codexBootstrap = {
   ok: true,
@@ -71,7 +72,8 @@ test("buildNativeRootLoopTurnNode carries scoped MCP, skills, and hooks", () => 
   deepStrictEqual(node.routing?.requiresMcp, false);
   deepStrictEqual(node.routing?.skills, ["omk-repo-explorer"]);
   deepStrictEqual(node.routing?.hooks, ["protect-secrets.sh"]);
-  deepStrictEqual(node.routing?.assignedProviderCapabilities, ["write", "shell"]);
+  deepStrictEqual(node.routing?.assignedProviderCapabilities, ["read"]);
+  deepStrictEqual(node.routing?.readOnly, true);
   deepStrictEqual(node.routing?.assignedCapabilities?.mcpServers, ["github", "omk-project"]);
   deepStrictEqual(node.routing?.assignedCapabilities?.skills, ["omk-repo-explorer"]);
   ok(node.name.includes("Schema: omk.prompt-envelope/v1"));
@@ -80,7 +82,36 @@ test("buildNativeRootLoopTurnNode carries scoped MCP, skills, and hooks", () => 
   ok(node.routing?.rationale?.includes("native-root-loop"));
 });
 
-test("native coding turns request write, patch, and shell runtime authority", async () => {
+test("read-only native chat turns do not request write, patch, or shell authority", async () => {
+  const node = buildNativeRootLoopTurnNode({
+    bootstrap: codexBootstrap,
+    prompt: "summarize the current repository status without changing files",
+    nodeId: "turn-readonly-test",
+  });
+  const task = await capsuleToTask({
+    schemaVersion: 1,
+    runId: "local-chat-runtime-test",
+    nodeId: node.id,
+    goal: "native read-only turn",
+    task: node.name,
+    system: "",
+    node,
+    dependencySummaries: [],
+    relevantFiles: [],
+    graphMemory: [],
+    priorAttempts: [],
+    evidenceRequirements: [],
+    budget: { maxInputTokens: 16000, compression: "normal" },
+  });
+
+  deepStrictEqual(node.routing?.readOnly, true);
+  deepStrictEqual(node.routing?.assignedProviderCapabilities, ["read"]);
+  deepStrictEqual(task.capabilities.write, false);
+  deepStrictEqual(task.capabilities.patch, false);
+  deepStrictEqual(task.capabilities.shell, false);
+});
+
+test("native coding turns request write and patch without shell by default", async () => {
   const node = buildNativeRootLoopTurnNode({
     bootstrap: codexBootstrap,
     prompt: "implement a patch",
@@ -104,7 +135,84 @@ test("native coding turns request write, patch, and shell runtime authority", as
 
   deepStrictEqual(task.capabilities.write, true);
   deepStrictEqual(task.capabilities.patch, true);
+  deepStrictEqual(task.capabilities.shell, false);
+});
+
+test("native shell turns request shell runtime authority", async () => {
+  const node = buildNativeRootLoopTurnNode({
+    bootstrap: codexBootstrap,
+    prompt: "run npm test for this repository",
+    nodeId: "turn-shell-test",
+  });
+  const task = await capsuleToTask({
+    schemaVersion: 1,
+    runId: "local-chat-runtime-test",
+    nodeId: node.id,
+    goal: "native shell turn",
+    task: node.name,
+    system: "",
+    node,
+    dependencySummaries: [],
+    relevantFiles: [],
+    graphMemory: [],
+    priorAttempts: [],
+    evidenceRequirements: [],
+    budget: { maxInputTokens: 16000, compression: "normal" },
+  });
+
+  deepStrictEqual(task.capabilities.write, true);
+  deepStrictEqual(task.capabilities.patch, true);
   deepStrictEqual(task.capabilities.shell, true);
+});
+
+test("native prompt envelope preserves execution ask policy for selected runtime", () => {
+  const node = buildNativeRootLoopTurnNode({
+    bootstrap: codexBootstrap,
+    prompt: "implement a patch",
+    nodeId: "turn-execution-ask",
+    executionPrompt: "ask",
+  });
+
+  ok(node.name.includes("Execution selection: ask"));
+  deepStrictEqual(node.routing?.executionPrompt, "ask");
+  deepStrictEqual(node.routing?.approvalPolicy, "ask");
+});
+
+test("explicit DeepSeek native write prompts stay advisory/read-only", async () => {
+  const node = buildNativeRootLoopTurnNode({
+    bootstrap: {
+      ...codexBootstrap,
+      provider: "deepseek",
+      providerPolicy: "deepseek",
+      selectedProvider: "deepseek",
+      selectedRuntimeId: "deepseek-api",
+    },
+    prompt: "implement a patch",
+    nodeId: "turn-deepseek-write",
+  });
+  const task = await capsuleToTask({
+    schemaVersion: 1,
+    runId: "local-chat-runtime-test",
+    nodeId: node.id,
+    goal: "native deepseek advisory turn",
+    task: node.name,
+    system: "",
+    node,
+    dependencySummaries: [],
+    relevantFiles: [],
+    graphMemory: [],
+    priorAttempts: [],
+    evidenceRequirements: [],
+    budget: { maxInputTokens: 16000, compression: "normal" },
+  });
+
+  deepStrictEqual(node.routing?.provider, "deepseek");
+  deepStrictEqual(node.routing?.readOnly, true);
+  deepStrictEqual(node.routing?.assignedProviderCapabilities, ["read", "review"]);
+  deepStrictEqual(task.capabilities.write, false);
+  deepStrictEqual(task.capabilities.patch, false);
+  deepStrictEqual(task.capabilities.shell, false);
+  deepStrictEqual(task.capabilities.review, true);
 });
 
 test("buildCapabilityInjection normalizes provider-neutral capability metadata", () => {
@@ -134,6 +242,60 @@ test("buildCapabilityInjection can mark MCP as a hard runtime requirement", () =
   });
 
   deepStrictEqual(injection.requiresMcp, true);
+});
+
+test("tool-plane reports invalid MCP JSON without leaking config contents", async () => {
+  const root = mkdtempSync(join(tmpdir(), "omk-tool-plane-invalid-mcp-"));
+  const previousRoot = process.env.OMK_PROJECT_ROOT;
+  const previousPreflight = process.env.OMK_MCP_PREFLIGHT;
+  process.env.OMK_PROJECT_ROOT = root;
+  process.env.OMK_MCP_PREFLIGHT = "off";
+
+  try {
+    mkdirSync(join(root, ".kimi"), { recursive: true });
+    writeFileSync(join(root, ".kimi", "mcp.json"), '{"mcpServers":{"github":{"env":{"TOKEN":"sk-proj-secret', "utf-8");
+
+    const manifest = await buildOmkToolPlaneManifest({ mcpScope: "project" });
+    const serialized = JSON.stringify(manifest);
+
+    deepStrictEqual(manifest.diagnostics, [
+      {
+        level: "error",
+        code: "mcp_config_parse_failed",
+        path: ".kimi/mcp.json",
+        message: "invalid JSON",
+      },
+    ]);
+    ok(manifest.mcpServers.includes("omk-project"));
+    ok(!serialized.includes("github"));
+    ok(!serialized.includes("sk-proj-secret"));
+  } finally {
+    restoreEnv("OMK_PROJECT_ROOT", previousRoot);
+    restoreEnv("OMK_MCP_PREFLIGHT", previousPreflight);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("tool-plane hard fails invalid MCP JSON when runtime MCP is required", async () => {
+  const root = mkdtempSync(join(tmpdir(), "omk-tool-plane-required-mcp-"));
+  const previousRoot = process.env.OMK_PROJECT_ROOT;
+  const previousPreflight = process.env.OMK_MCP_PREFLIGHT;
+  process.env.OMK_PROJECT_ROOT = root;
+  process.env.OMK_MCP_PREFLIGHT = "off";
+
+  try {
+    mkdirSync(join(root, ".kimi"), { recursive: true });
+    writeFileSync(join(root, ".kimi", "mcp.json"), "{not-json", "utf-8");
+
+    await rejects(
+      () => buildOmkToolPlaneManifest({ mcpScope: "project", requiresRuntimeMcp: true }),
+      /Runtime MCP is required.*\.kimi\/mcp\.json: invalid JSON/
+    );
+  } finally {
+    restoreEnv("OMK_PROJECT_ROOT", previousRoot);
+    restoreEnv("OMK_MCP_PREFLIGHT", previousPreflight);
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("buildPromptEnvelope renders a provider-neutral native root turn payload", () => {
@@ -216,3 +378,11 @@ test("non-Kimi chat branch fails fast in non-TTY without Kimi fallback", () => {
     rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+function restoreEnv(name, value) {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+}

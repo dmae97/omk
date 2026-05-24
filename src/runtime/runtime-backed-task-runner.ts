@@ -38,8 +38,9 @@ async function createDefaultRuntimeRegistry(
   const registry = createRuntimeRegistry();
 
   // codex-cli task-aware class
-  if (await checkCommand("codex").catch(() => false)) {
-    registry.register(new CodexRuntime({ cwd: options.cwd }));
+  const codexBin = options.env?.CODEX_BIN ?? process.env.CODEX_BIN ?? "codex";
+  if (await checkCommand(codexBin).catch(() => false)) {
+    registry.register(new CodexRuntime({ bin: codexBin, cwd: options.cwd }));
   }
 
   // kimi-print adapter (compatibility runtime; authority is selected by OMK routing)
@@ -70,8 +71,6 @@ async function createDefaultRuntimeRegistry(
       : null;
   } else if (await checkCommand("commandcode").catch(() => false)) {
     commandcodeBin = "commandcode";
-  } else if (await checkCommand("cmd").catch(() => false)) {
-    commandcodeBin = "cmd";
   }
   if (commandcodeBin) {
     registry.register(createCommandcodeCliAdapter({ bin: commandcodeBin, cwd: options.cwd, env: options.env }));

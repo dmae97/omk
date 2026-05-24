@@ -18,6 +18,7 @@ export interface NativeRootLoopInput {
   mcpAllowlist?: readonly string[];
   skillNames?: readonly string[];
   hookNames?: readonly string[];
+  executionPrompt?: string;
   onData?: (data: string) => void;
   onTodoSync?: (output: string) => void;
 }
@@ -138,6 +139,42 @@ function buildSlashCommands(input: NativeRootLoopInput): SlashCommand[] {
   ];
 }
 
+export type NativeTurnRisk = "read" | "write" | "shell" | "merge";
+
+export function inferNativeTurnRisk(prompt: string): NativeTurnRisk {
+  const text = prompt.toLowerCase();
+  if (/\b(push|publish|release|merge|tag|deploy)\b|푸시|퍼블리시|릴리즈|머지|배포/.test(text)) return "merge";
+  if (/\b(run|test|build|exec|execute|shell|terminal|command|npm|pnpm|yarn|bun|pytest|cargo|go test|tsc|lint|verify|check)\b|테스트|빌드|실행|검증|쉘|터미널/.test(text)) return "shell";
+  if (/\b(fix|edit|write|implement|modify|patch|refactor|add|create|delete|update|change)\b|수정|구현|패치|리팩터|추가|삭제|변경/.test(text)) return "write";
+  return "read";
+}
+
+function nativeTurnRoutingPolicy(provider: string, risk: NativeTurnRisk): {
+  capabilities: string[];
+  readOnly: boolean;
+  sandboxMode: "read-only" | "workspace-write";
+  providerReasonSuffix?: string;
+} {
+  if (provider === "deepseek" && risk !== "read") {
+    return {
+      capabilities: ["read", "review"],
+      readOnly: true,
+      sandboxMode: "read-only",
+      providerReasonSuffix: `; DeepSeek is advisory/read-only for ${risk} intent`,
+    };
+  }
+  if (risk === "read") {
+    return { capabilities: ["read"], readOnly: true, sandboxMode: "read-only" };
+  }
+  if (risk === "write") {
+    return { capabilities: ["write", "patch"], readOnly: false, sandboxMode: "workspace-write" };
+  }
+  if (risk === "merge") {
+    return { capabilities: ["write", "patch", "shell", "merge"], readOnly: false, sandboxMode: "workspace-write" };
+  }
+  return { capabilities: ["write", "patch", "shell"], readOnly: false, sandboxMode: "workspace-write" };
+}
+
 export function buildNativeRootLoopTurnNode(input: {
   bootstrap: RuntimeBootstrap;
   prompt: string;
@@ -145,8 +182,11 @@ export function buildNativeRootLoopTurnNode(input: {
   mcpAllowlist?: readonly string[];
   skillNames?: readonly string[];
   hookNames?: readonly string[];
+  executionPrompt?: string;
 }): DagNode {
   const id = input.nodeId ?? `turn-${Date.now()}`;
+  const turnRisk = inferNativeTurnRisk(input.prompt);
+  const routingPolicy = nativeTurnRoutingPolicy(input.bootstrap.provider, turnRisk);
   const capabilityInjection = buildCapabilityInjection({
     mcpAllowlist: input.mcpAllowlist,
     skillNames: input.skillNames,
@@ -158,6 +198,9 @@ export function buildNativeRootLoopTurnNode(input: {
     capabilities: capabilityInjection,
     role: "root-coordinator",
     nodeId: id,
+    executionPrompt: input.executionPrompt,
+    turnRisk,
+    sandboxMode: routingPolicy.sandboxMode,
   });
   return {
     id,
@@ -170,10 +213,14 @@ export function buildNativeRootLoopTurnNode(input: {
     routing: applyCapabilityInjectionToRouting({
       provider: input.bootstrap.provider,
       providerModel: input.bootstrap.selectedModel,
-      providerReason: `native-root-loop selected ${input.bootstrap.selectedRuntimeId ?? input.bootstrap.sessionMode}`,
-      assignedProviderCapabilities: ["write", "shell"],
+      providerReason: `native-root-loop selected ${input.bootstrap.selectedRuntimeId ?? input.bootstrap.sessionMode}${routingPolicy.providerReasonSuffix ?? ""}`,
+      assignedProviderCapabilities: routingPolicy.capabilities,
       contextBudget: "normal",
-      readOnly: false,
+      readOnly: routingPolicy.readOnly,
+      risk: turnRisk,
+      executionPrompt: input.executionPrompt,
+      approvalPolicy: input.executionPrompt,
+      sandboxMode: routingPolicy.sandboxMode,
       rationale: "native-root-loop turn; OMK retains root orchestration and passes scoped MCP/skills/hooks metadata to the selected runtime",
     }, capabilityInjection),
   };
@@ -241,6 +288,7 @@ export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<
         mcpAllowlist: input.mcpAllowlist,
         skillNames: input.skillNames,
         hookNames: input.hookNames,
+        executionPrompt: input.executionPrompt,
       });
 
       const result = await taskRunner.run(node, input.env, abort.signal);

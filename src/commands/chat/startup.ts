@@ -5,6 +5,7 @@ import { writeSessionMeta } from "../../util/session.js";
 import { finalizeChatState } from "../../util/chat-state.js";
 import { getOmkResourceSettings } from "../../util/resource-profile.js";
 import { buildOmkToolPlaneManifest } from "../../runtime/tool-plane.js";
+import type { OmkToolPlaneDiagnostic } from "../../runtime/tool-plane.js";
 import {
   sanitizeChatStartupFailureOutput,
   CHAT_STARTUP_FAILURE_OUTPUT_LIMIT,
@@ -27,6 +28,9 @@ export interface ChatSmokeReport {
     path: string | null;
     exists: boolean;
   };
+  diagnostics: {
+    toolPlane: readonly OmkToolPlaneDiagnostic[];
+  };
   startupFailureArtifactExists: boolean;
   checks: Array<{ name: string; status: "ok" | "fail"; message: string }>;
 }
@@ -48,6 +52,8 @@ export async function buildChatSmokeReport(options: {
   const runtimeMcpExists = runtimeMcpPath ? await pathExists(runtimeMcpPath) : false;
   const failurePath = getRunPath(options.runId, "chat-startup-failure.json", options.root);
   const startupFailureArtifactExists = await pathExists(failurePath);
+  const toolPlaneErrorCount = toolPlane.diagnostics.filter((diagnostic) => diagnostic.level === "error").length;
+  const toolPlaneWarningCount = toolPlane.diagnostics.filter((diagnostic) => diagnostic.level === "warning").length;
   const checks: ChatSmokeReport["checks"] = [
     {
       name: "agent schema",
@@ -68,6 +74,13 @@ export async function buildChatSmokeReport(options: {
       status: startupFailureArtifactExists ? "fail" : "ok",
       message: startupFailureArtifactExists ? "chat-startup-failure.json exists" : "no startup failure artifact",
     },
+    {
+      name: "tool-plane diagnostics",
+      status: toolPlaneErrorCount > 0 ? "fail" : "ok",
+      message: toolPlane.diagnostics.length === 0
+        ? "no tool-plane diagnostics"
+        : `${toolPlaneErrorCount} error(s), ${toolPlaneWarningCount} warning(s)`,
+    },
   ];
   return {
     ok: checks.every((check) => check.status === "ok"),
@@ -82,6 +95,9 @@ export async function buildChatSmokeReport(options: {
       injected: Boolean(runtimeMcpPath),
       path: runtimeMcpPath ? relative(options.root, runtimeMcpPath) : null,
       exists: runtimeMcpExists,
+    },
+    diagnostics: {
+      toolPlane: toolPlane.diagnostics,
     },
     startupFailureArtifactExists,
     checks,

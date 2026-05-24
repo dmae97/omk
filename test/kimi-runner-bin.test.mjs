@@ -4,7 +4,13 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { buildSafeKimiChildEnv, createKimiTaskRunner, parseKimiLaunchMeta, resolveAgentFileForRole } from "../dist/kimi/runner.js";
+import {
+  buildSafeKimiChildEnv,
+  createKimiTaskRunner,
+  isSecretLikeKimiEnvKey,
+  parseKimiLaunchMeta,
+  resolveAgentFileForRole,
+} from "../dist/kimi/runner.js";
 
 test("Kimi child env builder drops inherited secret-like connection env", () => {
   const env = buildSafeKimiChildEnv(
@@ -25,6 +31,24 @@ test("Kimi child env builder drops inherited secret-like connection env", () => 
   assert.equal(env.GITHUB_TOKEN, undefined);
   assert.equal(env.OMK_SECRET_TOKEN, undefined);
   assert.equal(env.KIMI_AUTH_TOKEN, undefined);
+});
+
+test("Kimi env secret classifier treats runtime metadata keys as non-secret", () => {
+  assert.equal(isSecretLikeKimiEnvKey("KIMI_SESSION_ID"), false);
+  assert.equal(isSecretLikeKimiEnvKey("OMK_SESSION_ID"), false);
+  assert.equal(isSecretLikeKimiEnvKey("OMK_RUN_ID"), false);
+  assert.equal(isSecretLikeKimiEnvKey("OMK_INHERIT_LOCAL_AUTH"), false);
+  assert.equal(isSecretLikeKimiEnvKey("OMK_ISOLATED_HOME_INHERIT_AUTH"), false);
+  assert.equal(isSecretLikeKimiEnvKey("OMK_TOTAL_TOKENS"), false);
+  assert.equal(isSecretLikeKimiEnvKey("OMK_NODE_PROVIDER_AUTHORITY"), false);
+  assert.equal(isSecretLikeKimiEnvKey("OMK_VISIBLE_RUNTIME"), false);
+
+  assert.equal(isSecretLikeKimiEnvKey("OPENAI_API_KEY"), true);
+  assert.equal(isSecretLikeKimiEnvKey("GITHUB_TOKEN"), true);
+  assert.equal(isSecretLikeKimiEnvKey("AUTH_TOKEN"), true);
+  assert.equal(isSecretLikeKimiEnvKey("KIMI_AUTH_TOKEN"), true);
+  assert.equal(isSecretLikeKimiEnvKey("OMK_SECRET_TOKEN"), true);
+  assert.equal(isSecretLikeKimiEnvKey("DATABASE_URL"), true);
 });
 
 test("Kimi child env builder warns for explicit secret-like env and supports strict opt-in", () => {
@@ -85,6 +109,8 @@ test("Kimi child env builder treats runtime session ids as non-secret metadata",
       OMK_SESSION_ID: "omk-session-1",
       OMK_RUN_ID: "omk-run-1",
       OMK_ISOLATED_HOME_INHERIT_AUTH: "0",
+      OMK_TOTAL_TOKENS: "12345",
+      OMK_NODE_PROVIDER_AUTHORITY: "authority",
       KIMI_AUTH_TOKEN: "drop-me",
       OMK_SECRET_TOKEN: "drop-me",
     },
@@ -93,6 +119,8 @@ test("Kimi child env builder treats runtime session ids as non-secret metadata",
       OMK_SESSION_ID: "omk-session-2",
       OMK_RUN_ID: "omk-run-2",
       OMK_INHERIT_LOCAL_AUTH: "0",
+      OMK_TOTAL_TOKENS: "67890",
+      OMK_NODE_PROVIDER_AUTHORITY: "advisory",
     },
     {},
     {
@@ -107,9 +135,49 @@ test("Kimi child env builder treats runtime session ids as non-secret metadata",
   assert.equal(env.OMK_RUN_ID, "omk-run-2");
   assert.equal(env.OMK_INHERIT_LOCAL_AUTH, "0");
   assert.equal(env.OMK_ISOLATED_HOME_INHERIT_AUTH, "0");
+  assert.equal(env.OMK_TOTAL_TOKENS, "67890");
+  assert.equal(env.OMK_NODE_PROVIDER_AUTHORITY, "advisory");
   assert.equal(env.KIMI_AUTH_TOKEN, undefined);
   assert.equal(env.OMK_SECRET_TOKEN, undefined);
   assert.deepEqual(warnings, []);
+});
+
+test("Kimi child env builder keeps runtime metadata in strict explicit mode", () => {
+  const warnings = [];
+  const env = buildSafeKimiChildEnv(
+    { PATH: "/usr/bin" },
+    {
+      OMK_STRICT_KIMI_EXPLICIT_ENV: "1",
+      KIMI_SESSION_ID: "kimi-session-explicit",
+      OMK_SESSION_ID: "omk-session-explicit",
+      OMK_RUN_ID: "omk-run-explicit",
+      OMK_INHERIT_LOCAL_AUTH: "0",
+      OMK_ISOLATED_HOME_INHERIT_AUTH: "0",
+      OMK_TOTAL_TOKENS: "54321",
+      OMK_NODE_PROVIDER_AUTHORITY: "authority",
+      KIMI_AUTH_TOKEN: "drop-me",
+      OMK_SECRET_TOKEN: "drop-me",
+    },
+    {},
+    {
+      warnExplicitSecrets: true,
+      explicitEnvContext: "metadata env",
+      onWarning: (message) => warnings.push(message),
+    }
+  );
+
+  assert.equal(env.KIMI_SESSION_ID, "kimi-session-explicit");
+  assert.equal(env.OMK_SESSION_ID, "omk-session-explicit");
+  assert.equal(env.OMK_RUN_ID, "omk-run-explicit");
+  assert.equal(env.OMK_INHERIT_LOCAL_AUTH, "0");
+  assert.equal(env.OMK_ISOLATED_HOME_INHERIT_AUTH, "0");
+  assert.equal(env.OMK_TOTAL_TOKENS, "54321");
+  assert.equal(env.OMK_NODE_PROVIDER_AUTHORITY, "authority");
+  assert.equal(env.KIMI_AUTH_TOKEN, undefined);
+  assert.equal(env.OMK_SECRET_TOKEN, undefined);
+  assert.equal(warnings.length, 2);
+  assert.match(warnings[0], /KIMI_AUTH_TOKEN|OMK_SECRET_TOKEN/);
+  assert.match(warnings[1], /KIMI_AUTH_TOKEN|OMK_SECRET_TOKEN/);
 });
 
 test("Kimi launch meta parses model args and OMK session metadata", () => {

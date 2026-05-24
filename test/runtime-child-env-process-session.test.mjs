@@ -142,7 +142,7 @@ test("createExternalCliAdapter runs through process session with runtime metadat
     buildArgs() {
       return [
         "--eval",
-        "console.log(JSON.stringify({runtime:process.env.OMK_RUNTIME_ID,runId:process.env.OMK_RUN_ID,nodeId:process.env.OMK_NODE_ID,role:process.env.OMK_ROLE,goal:process.env.OMK_GOAL ?? null,explicit:process.env.EXPLICIT_VALUE}))",
+        "console.log(JSON.stringify({runtime:process.env.OMK_RUNTIME_ID,runId:process.env.OMK_RUN_ID,nodeId:process.env.OMK_NODE_ID,role:process.env.OMK_ROLE,goal:process.env.OMK_GOAL ?? null,explicit:process.env.EXPLICIT_VALUE,risk:process.env.OMK_TASK_RISK,approval:process.env.OMK_APPROVAL_POLICY,sandbox:process.env.OMK_SANDBOX_MODE,mcp:process.env.OMK_MCP_SERVERS,skills:process.env.OMK_SKILLS,hooks:process.env.OMK_HOOKS,tools:process.env.OMK_TOOLS}))",
       ];
     },
   });
@@ -161,7 +161,15 @@ test("createExternalCliAdapter runs through process session with runtime metadat
       status: "running",
       retries: 0,
       maxRetries: 1,
-      routing: {},
+      routing: {
+        risk: "shell",
+        approvalPolicy: "ask",
+        sandboxMode: "workspace-write",
+        mcpServers: ["omk-project"],
+        skills: ["omk-typescript-strict"],
+        hooks: ["secret-guard"],
+        tools: ["shell"],
+      },
     },
     dependencySummaries: [],
     relevantFiles: [],
@@ -185,7 +193,131 @@ test("createExternalCliAdapter runs through process session with runtime metadat
     role: "tester",
     goal: null,
     explicit: "adapter-env",
+    risk: "shell",
+    approval: "ask",
+    sandbox: "workspace-write",
+    mcp: "omk-project",
+    skills: "omk-typescript-strict",
+    hooks: "secret-guard",
+    tools: "shell",
   });
+});
+
+test("createExternalCliAdapter execute preserves AgentTask safety and capability metadata", async () => {
+  const adapter = createExternalCliAdapter({
+    id: "test-execute-cli",
+    displayName: "Test Execute CLI",
+    bin: process.execPath,
+    priority: 50,
+    capabilities: {
+      read: true,
+      write: true,
+      shell: true,
+      mcp: true,
+      patch: true,
+      review: false,
+      merge: false,
+      vision: false,
+    },
+    buildArgs() {
+      return [
+        "--eval",
+        `console.log(JSON.stringify({
+          risk: process.env.OMK_TASK_RISK,
+          approval: process.env.OMK_APPROVAL_POLICY,
+          sandbox: process.env.OMK_SANDBOX_MODE,
+          mcp: process.env.OMK_MCP_SERVERS,
+          skills: process.env.OMK_SKILLS,
+          hooks: process.env.OMK_HOOKS,
+          tools: process.env.OMK_TOOLS
+        }))`,
+      ];
+    },
+  });
+
+  const result = await adapter.execute({
+    prompt: "execute metadata marker",
+    context: {
+      runId: "run-execute",
+      nodeId: "node-execute",
+      role: "worker",
+      risk: "write",
+      approvalPolicy: "ask",
+      sandboxMode: "read-only",
+    },
+    tools: {
+      available: [{ name: "apply_patch", description: "", inputSchema: {} }],
+      mcpServers: ["omk-project"],
+      skills: ["omk-typescript-strict"],
+      hooks: ["secret-guard"],
+    },
+    providerPolicy: {
+      strategy: "priority-first",
+      preferredProviders: ["opencode"],
+      fallbackChain: [],
+    },
+    capabilities: {
+      read: true,
+      write: true,
+      shell: false,
+      mcp: true,
+      patch: true,
+      review: false,
+      merge: false,
+      vision: false,
+    },
+  });
+
+  assert.equal(result.exitCode, 0);
+  const snapshot = JSON.parse(result.output.trim());
+  assert.deepEqual(snapshot, {
+    risk: "write",
+    approval: "ask",
+    sandbox: "read-only",
+    mcp: "omk-project",
+    skills: "omk-typescript-strict",
+    hooks: "secret-guard",
+    tools: "apply_patch",
+  });
+  assert.equal(result.metadata?.risk, "write");
+  assert.equal(result.metadata?.approvalPolicy, "ask");
+  assert.equal(result.metadata?.sandboxMode, "read-only");
+});
+
+test("createExternalCliAdapter returns safety metadata on preflight errors", async () => {
+  const adapter = createExternalCliAdapter({
+    id: "test-empty-cli",
+    displayName: "Test Empty CLI",
+    bin: process.execPath,
+    priority: 50,
+    capabilities: {
+      read: true,
+      write: false,
+      shell: false,
+      mcp: false,
+      patch: false,
+      review: false,
+      merge: false,
+      vision: false,
+    },
+    buildArgs() {
+      return ["--eval", "console.log('should not run')"];
+    },
+  });
+
+  const result = await adapter.runNode(
+    capsuleFixture("empty-node", " ", "empty goal", {
+      risk: "read",
+      approvalPolicy: "ask",
+      sandboxMode: "read-only",
+    }),
+    new AbortController().signal
+  );
+
+  assert.equal(result.success, false);
+  assert.equal(result.metadata?.risk, "read");
+  assert.equal(result.metadata?.approvalPolicy, "ask");
+  assert.equal(result.metadata?.sandboxMode, "read-only");
 });
 
 test("createExternalCliAdapter sends prompt via stdin and omits OMK_GOAL", async () => {
@@ -346,7 +478,14 @@ fs.writeFileSync(process.env.OMK_CAPTURE_PATH, JSON.stringify({
   argv: process.argv.slice(2),
   promptHash: crypto.createHash("sha256").update(content).digest("hex"),
   promptFile: promptFile ?? null,
-  goal: process.env.OMK_GOAL ?? null
+  goal: process.env.OMK_GOAL ?? null,
+  risk: process.env.OMK_TASK_RISK,
+  approval: process.env.OMK_APPROVAL_POLICY,
+  sandbox: process.env.OMK_SANDBOX_MODE,
+  mcp: process.env.OMK_MCP_SERVERS,
+  skills: process.env.OMK_SKILLS,
+  hooks: process.env.OMK_HOOKS,
+  tools: process.env.OMK_TOOLS
 }));
 console.log("ok");
 `
@@ -375,7 +514,15 @@ console.log("ok");
 
     for (const scenario of scenarios) {
       const result = await scenario.adapter.runNode(
-        capsuleFixture(`${scenario.name}-node`, marker, marker),
+        capsuleFixture(`${scenario.name}-node`, marker, marker, {
+          risk: "write",
+          approvalPolicy: "ask",
+          sandboxMode: "workspace-write",
+          mcpServers: ["omk-project"],
+          skills: ["omk-typescript-strict"],
+          hooks: ["secret-guard"],
+          tools: ["apply_patch"],
+        }),
         new AbortController().signal
       );
 
@@ -386,6 +533,13 @@ console.log("ok");
       assert.equal(captured.argv.join(" ").includes(marker), false, scenario.name);
       assert.ok(captured.promptFile, scenario.name);
       assert.equal(captured.goal, null, scenario.name);
+      assert.equal(captured.risk, "write", scenario.name);
+      assert.equal(captured.approval, "ask", scenario.name);
+      assert.equal(captured.sandbox, "workspace-write", scenario.name);
+      assert.equal(captured.mcp, "omk-project", scenario.name);
+      assert.equal(captured.skills, "omk-typescript-strict", scenario.name);
+      assert.equal(captured.hooks, "secret-guard", scenario.name);
+      assert.equal(captured.tools, "apply_patch", scenario.name);
     }
   } finally {
     await rm(tempDir, { recursive: true, force: true });
@@ -429,7 +583,8 @@ function sha256(value) {
 function capsuleFixture(
   nodeId = "node-external",
   task = "execute child",
-  goal = "verify adapter env"
+  goal = "verify adapter env",
+  routing = {}
 ) {
   return {
     schemaVersion: 1,
@@ -446,7 +601,7 @@ function capsuleFixture(
       status: "running",
       retries: 0,
       maxRetries: 1,
-      routing: {},
+      routing,
     },
     dependencySummaries: [],
     relevantFiles: [],

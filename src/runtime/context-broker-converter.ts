@@ -32,6 +32,9 @@ export async function capsuleToTask(
     abortSignal: taskOptions.signal,
     cwd: taskOptions.cwd,
     env: taskOptions.env,
+    risk: routing?.risk,
+    approvalPolicy: routing?.approvalPolicy ?? routing?.executionPrompt,
+    sandboxMode: routing?.sandboxMode,
   };
 
   const toolNames =
