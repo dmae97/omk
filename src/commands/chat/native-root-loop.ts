@@ -2,7 +2,10 @@ import type { TaskRunner } from "../../contracts/orchestration.js";
 import type { RuntimeBootstrap } from "../../runtime/runtime-bootstrap.js";
 import type { ChatLayout } from "./utils.js";
 import { style } from "../../util/theme.js";
+import { runShell } from "../../util/shell.js";
 import type { DagNode } from "../../orchestration/dag.js";
+import { applyCapabilityInjectionToRouting, buildCapabilityInjection } from "../../runtime/capability-injection.js";
+import { buildPromptEnvelope, renderPromptEnvelope } from "../../runtime/prompt-envelope.js";
 
 export interface NativeRootLoopInput {
   bootstrap: RuntimeBootstrap;
@@ -12,6 +15,9 @@ export interface NativeRootLoopInput {
   env: Record<string, string>;
   layout: ChatLayout;
   agentFile: string;
+  mcpAllowlist?: readonly string[];
+  skillNames?: readonly string[];
+  hookNames?: readonly string[];
   onData?: (data: string) => void;
   onTodoSync?: (output: string) => void;
 }
@@ -83,7 +89,7 @@ function buildSlashCommands(input: NativeRootLoopInput): SlashCommand[] {
     }},
     { name: "/runs", aliases: ["/history"], help: "List recent runs", handler: async () => {
       try {
-        const { readdir, stat } = await import("fs/promises");
+        const { readdir } = await import("fs/promises");
         const { join } = await import("path");
         const runsDir = join(input.root, ".omk", "runs");
         const entries = await readdir(runsDir, { withFileTypes: true });
@@ -113,20 +119,70 @@ function buildSlashCommands(input: NativeRootLoopInput): SlashCommand[] {
       }
     }},
     { name: "/parallel", aliases: ["/pa"], help: "Run parallel orchestrator with prompt", handler: async (args) => {
-      if (!args.trim()) { console.log(style.phosphorDim("\n  Usage: /parallel <prompt>\n")); return; }
-      console.log(style.phosphorDim(`\n  Spawning parallel: "${args.trim()}"\n`));
-      try {
-        const { execSync } = await import("child_process");
-        execSync(`node dist/cli.js parallel "${args.trim().replace(/"/g, '\\"')}"`, {
-          cwd: input.root, stdio: "inherit", timeout: 300000,
-        });
-      } catch { /* parallel exits non-zero on some results */ }
+      const prompt = args.trim();
+      if (!prompt) {
+        console.log(style.phosphorDim("\n  Usage: /parallel <prompt>\n"));
+        return;
+      }
+      console.log(style.phosphorDim(`\n  Spawning parallel: "${prompt}"\n`));
+      const result = await runShell("node", ["dist/cli.js", "parallel", prompt], {
+        cwd: input.root,
+        env: input.env,
+        stdio: "inherit",
+        timeout: 300000,
+      });
+      if (result.failed) {
+        console.log(style.metricsRed(`Parallel exited with code ${result.exitCode}`));
+      }
     }},
   ];
 }
 
+export function buildNativeRootLoopTurnNode(input: {
+  bootstrap: RuntimeBootstrap;
+  prompt: string;
+  nodeId?: string;
+  mcpAllowlist?: readonly string[];
+  skillNames?: readonly string[];
+  hookNames?: readonly string[];
+}): DagNode {
+  const id = input.nodeId ?? `turn-${Date.now()}`;
+  const capabilityInjection = buildCapabilityInjection({
+    mcpAllowlist: input.mcpAllowlist,
+    skillNames: input.skillNames,
+    hookNames: input.hookNames,
+  });
+  const envelope = buildPromptEnvelope({
+    bootstrap: input.bootstrap,
+    prompt: input.prompt,
+    capabilities: capabilityInjection,
+    role: "root-coordinator",
+    nodeId: id,
+  });
+  return {
+    id,
+    name: renderPromptEnvelope(envelope),
+    role: "coordinator",
+    dependsOn: [],
+    status: "running",
+    retries: 0,
+    maxRetries: 1,
+    routing: applyCapabilityInjectionToRouting({
+      provider: input.bootstrap.provider,
+      providerModel: input.bootstrap.selectedModel,
+      providerReason: `native-root-loop selected ${input.bootstrap.selectedRuntimeId ?? input.bootstrap.sessionMode}`,
+      assignedProviderCapabilities: ["write", "shell"],
+      contextBudget: "normal",
+      readOnly: false,
+      rationale: "native-root-loop turn; OMK retains root orchestration and passes scoped MCP/skills/hooks metadata to the selected runtime",
+    }, capabilityInjection),
+  };
+}
+
 export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<number> {
   const { bootstrap, taskRunner, layout, onData } = input;
+  const turnTimeoutMs = Number.parseInt(input.env.OMK_TURN_TIMEOUT_MS ?? "120000", 10);
+  const safeTurnTimeoutMs = Number.isFinite(turnTimeoutMs) && turnTimeoutMs > 0 ? turnTimeoutMs : 120_000;
   const commands = buildSlashCommands(input);
 
   if (layout !== "plain") {
@@ -147,14 +203,19 @@ export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<
     const line = userInput.trim();
     if (!line) continue;
 
-    if (line.startsWith("/")) {
+    if (["exit", "quit", ":q", "/exit", "/quit"].includes(line.toLowerCase())) {
+      running = false;
+      break;
+    }
+
+    if (line.startsWith("/") || line.startsWith(":")) {
       const spaceIdx = line.indexOf(" ");
       const cmd = spaceIdx > 0 ? line.slice(0, spaceIdx) : line;
       const args = spaceIdx > 0 ? line.slice(spaceIdx + 1) : "";
       const handler = commands.find((c) => c.name === cmd || c.aliases.includes(cmd));
 
       if (handler) {
-        if (handler.name === "/exit" || handler.name === "/quit" || handler.name === ":q") {
+        if (handler.name === "/exit") {
           running = false;
           break;
         }
@@ -171,21 +232,16 @@ export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<
     }
 
     const abort = new AbortController();
-    const timeout = setTimeout(() => abort.abort(), 120_000);
+    const timeout = setTimeout(() => abort.abort(), safeTurnTimeoutMs);
 
     try {
-      const node: DagNode = {
-        id: `turn-${Date.now()}`,
-        name: line,
-        role: "coordinator",
-        dependsOn: [],
-        status: "running",
-        retries: 0,
-        maxRetries: 1,
-        routing: {
-          provider: bootstrap.provider,
-        },
-      } as DagNode;
+      const node = buildNativeRootLoopTurnNode({
+        bootstrap,
+        prompt: line,
+        mcpAllowlist: input.mcpAllowlist,
+        skillNames: input.skillNames,
+        hookNames: input.hookNames,
+      });
 
       const result = await taskRunner.run(node, input.env, abort.signal);
 
@@ -200,7 +256,11 @@ export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<
         input.onTodoSync(result.stdout);
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = abort.signal.aborted
+        ? `Turn timed out after ${safeTurnTimeoutMs}ms`
+        : err instanceof Error
+        ? err.message
+        : String(err);
       console.error(style.metricsRed(`Error: ${msg}`));
     } finally {
       clearTimeout(timeout);

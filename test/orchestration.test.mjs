@@ -404,6 +404,7 @@ test("injectKimiGlobals passes one merged MCP config to Kimi to avoid duplicate 
   const previousOriginalHome = process.env.OMK_ORIGINAL_HOME;
   const previousMcpScope = process.env.OMK_MCP_SCOPE;
   const previousSkillsScope = process.env.OMK_SKILLS_SCOPE;
+  const previousMcpPreflight = process.env.OMK_MCP_PREFLIGHT;
 
   try {
     await mkdir(join(originalHome, ".kimi"), { recursive: true });
@@ -426,6 +427,7 @@ test("injectKimiGlobals passes one merged MCP config to Kimi to avoid duplicate 
     process.env.OMK_ORIGINAL_HOME = originalHome;
     process.env.OMK_MCP_SCOPE = "all";
     process.env.OMK_SKILLS_SCOPE = "none";
+    process.env.OMK_MCP_PREFLIGHT = "off";
 
     const args = [];
     await injectKimiGlobals(args, { mcpScope: "all", skillsScope: "none" });
@@ -449,6 +451,7 @@ test("injectKimiGlobals passes one merged MCP config to Kimi to avoid duplicate 
     restoreEnv("OMK_ORIGINAL_HOME", previousOriginalHome);
     restoreEnv("OMK_MCP_SCOPE", previousMcpScope);
     restoreEnv("OMK_SKILLS_SCOPE", previousSkillsScope);
+    restoreEnv("OMK_MCP_PREFLIGHT", previousMcpPreflight);
     await rm(projectRoot, { recursive: true, force: true });
     await rm(originalHome, { recursive: true, force: true });
   }
@@ -562,7 +565,7 @@ test("dag routing exposes provider-neutral node capability contract", () => {
         maxRetries: 1,
         routing: {
           provider: "auto",
-          candidateProviders: ["codex", "qwen", "openrouter", "kimi"],
+          candidateProviders: ["kimi", "codex", "qwen", "openrouter"],
           assignedProviderAuthority: "authority",
           assignedProviderCapabilities: ["write", "shell", "mcp"],
           skills: ["omk-typescript-strict", "omk-typescript-strict"],
@@ -584,7 +587,7 @@ test("dag routing exposes provider-neutral node capability contract", () => {
   assert.equal(env.OMK_NODE_PROVIDER, "auto");
   assert.equal(env.OMK_NODE_PROVIDER_AUTHORITY, "authority");
   assert.equal(env.OMK_NODE_PROVIDER_CAPABILITIES, "write,shell,mcp");
-  assert.equal(env.OMK_NODE_CANDIDATE_PROVIDERS, "codex,qwen,openrouter,kimi");
+  assert.equal(env.OMK_NODE_CANDIDATE_PROVIDERS, "kimi,codex,qwen,openrouter");
   assert.equal(env.OMK_NODE_SKILLS, "omk-typescript-strict");
   assert.equal(env.OMK_NODE_MCP_SERVERS, "omk-project");
   assert.equal(env.OMK_NODE_TOOLS, "omk_run_quality_gate");
@@ -602,7 +605,7 @@ test("capability routing artifact records per-node provider and capability assig
         maxRetries: 1,
         routing: {
           provider: "auto",
-          candidateProviders: ["codex", "qwen", "openrouter", "kimi"],
+          candidateProviders: ["kimi", "codex", "qwen", "openrouter"],
           assignedProviderAuthority: "authority",
           skills: ["omk-typescript-strict"],
           mcpServers: ["omk-project"],
@@ -617,7 +620,7 @@ test("capability routing artifact records per-node provider and capability assig
   assert.equal(artifact.generatedAt, "2026-05-24T00:00:00.000Z");
   assert.equal(artifact.nodes[0].nodeId, "worker");
   assert.equal(artifact.nodes[0].provider, "auto");
-  assert.deepEqual(artifact.nodes[0].candidateProviders, ["codex", "qwen", "openrouter", "kimi"]);
+  assert.deepEqual(artifact.nodes[0].candidateProviders, ["kimi", "codex", "qwen", "openrouter"]);
   assert.deepEqual(artifact.nodes[0].skills, ["omk-typescript-strict"]);
   assert.deepEqual(artifact.nodes[0].mcpServers, ["omk-project"]);
   assert.deepEqual(artifact.nodes[0].hooks, ["protect-secrets.sh"]);

@@ -91,7 +91,11 @@ export async function chatCommand(options: {
   const brand = options.brand ?? "minimal";
   const resources = await getOmkResourceSettings();
   const modelArg = parseProviderModelArg(options.model);
-  const providerPolicy = normalizeProviderPolicy(options.provider ?? modelArg.provider);
+  const providerInput = options.provider
+    ?? modelArg.provider
+    ?? process.env.OMK_DEFAULT_PROVIDER
+    ?? "kimi";
+  const providerPolicy = normalizeProviderPolicy(providerInput);
   const mcpScope = parseRuntimeScopeOption(options.mcpScope, resources.mcpScope, "--mcp-scope");
   const effectiveResources = { ...resources, mcpScope };
   const effectiveWorkers = resolveChatWorkerCount(options.workers, resources.maxWorkers);

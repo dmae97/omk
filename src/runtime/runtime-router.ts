@@ -58,18 +58,18 @@ interface EvidenceHistoryEntry {
 
 const INTENT_RUNTIME_PREFERENCES: Record<NodeIntent, string[]> = {
   research: ["deepseek-api", "openrouter-api", "gemini-cli", "codex-cli", "kimi-api", "kimi-cli", "kimi-wire"],
-  planning: ["codex-cli", "openrouter-api", "claude-code", "kimi-api", "kimi-cli", "kimi-wire"],
-  coding: ["codex-cli", "claude-code", "kimi-api", "kimi-cli", "kimi-wire"],
-  debugging: ["codex-cli", "kimi-api", "kimi-cli", "kimi-wire"],
-  refactor: ["codex-cli", "claude-code", "kimi-api", "kimi-cli", "kimi-wire"],
+  planning: ["kimi-print", "kimi-cli", "kimi-api", "kimi-wire", "codex-cli", "openrouter-api", "claude-code"],
+  coding: ["kimi-print", "kimi-cli", "kimi-api", "kimi-wire", "codex-cli", "claude-code"],
+  debugging: ["kimi-print", "kimi-cli", "kimi-api", "kimi-wire", "codex-cli"],
+  refactor: ["kimi-print", "kimi-cli", "kimi-api", "kimi-wire", "codex-cli", "claude-code"],
   review: ["deepseek-api", "openrouter-api", "claude-code", "codex-cli", "kimi-cli"],
-  "test-generation": ["codex-cli", "kimi-api", "kimi-cli", "kimi-wire"],
+  "test-generation": ["kimi-print", "kimi-cli", "kimi-api", "kimi-wire", "codex-cli"],
   documentation: ["gemini-cli", "openrouter-api", "codex-cli", "kimi-cli"],
-  "shell-operation": ["codex-cli", "kimi-api", "kimi-cli", "kimi-wire"],
+  "shell-operation": ["kimi-print", "kimi-cli", "kimi-api", "kimi-wire", "codex-cli"],
 };
 
 export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
-  const runtimes = options.runtimes ?? [];
+  let runtimes = [...(options.runtimes ?? [])];
   const memoryPath = options.memoryPath;
   const fallbackChain = options.fallbackChain;
   let evidenceCache: EvidenceHistoryEntry[] | undefined;
@@ -426,6 +426,10 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
   }
 
   return {
+    setRuntimes(nextRuntimes: readonly AgentRuntime[]): void {
+      runtimes = [...nextRuntimes];
+      invalidateCache();
+    },
     select,
     selectByIntent,
     runNode,
@@ -491,7 +495,7 @@ function runtimeIdsForProviderRef(value: string): string[] {
   if (normalized === "deepseek" || normalized === "deepseek-v4" || normalized === "ds") return ["deepseek-api"];
   if (normalized === "openrouter" || normalized === "openrouter-ai") return ["openrouter-api"];
   if (normalized === "qwen" || normalized === "dashscope" || normalized === "qwen3" || normalized === "qwen-max") return ["qwen-api", "qwen-cli"];
-  if (normalized === "kimi" || normalized === "moonshot") return ["kimi-api", "kimi-cli", "kimi-wire", "kimi-print"];
+  if (normalized === "kimi" || normalized === "moonshot") return ["kimi-print", "kimi-cli", "kimi-api", "kimi-wire"];
   if (normalized === "opencode") return ["opencode-cli"];
   if (normalized === "commandcode") return ["commandcode-cli"];
   return [normalized];

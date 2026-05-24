@@ -23,6 +23,10 @@ import { LogStreamer, type LogEntry, type WorkerLogHandle } from "./log-streamer
 import { AgentWorker, createAgentWorker, type WorkerOutput } from "./agent-worker.js";
 import { createRuntimeRouter } from "../runtime/runtime-router.js";
 import type { ContextCapsule } from "../runtime/context-capsule.js";
+import { buildCapabilityInjection, applyCapabilityInjectionToRouting } from "../runtime/capability-injection.js";
+import { capabilityScopesFromRouting, mergeCapabilityScopes, type NodeCapabilityScopes } from "./capability-routing.js";
+import { assignSkills } from "./skill-assigner.js";
+import { dagNodeRoutingEnv } from "./routing.js";
 
 import { checkEvidenceGates, type EvidenceGate, type EvidenceResult } from "./evidence-gate.js";
 
@@ -57,6 +61,47 @@ export interface ParallelOrchestrationResult {
   executionPlan: ExecutionPlan;
   events: OrchestrationEvent[];
   error?: string;
+}
+
+export interface ParallelWorkerCapabilityContext {
+  readonly node: DagNode;
+  readonly scopes: NodeCapabilityScopes;
+  readonly assignment: {
+    skills: string[];
+    mcpServers: string[];
+    hooks: string[];
+  };
+  readonly env: Record<string, string>;
+}
+
+export function buildParallelWorkerCapabilityContext(node: DagNode, dag?: Dag): ParallelWorkerCapabilityContext {
+  const assigned = assignSkills(node);
+  const scopes = mergeCapabilityScopes(assigned, capabilityScopesFromRouting(node.routing));
+  const injection = buildCapabilityInjection({
+    mcpServers: scopes.mcpServers,
+    skills: scopes.skills,
+    tools: scopes.tools,
+    hooks: scopes.hooks,
+    requireMcp: node.routing?.requiresMcp,
+    requiresToolCalling: node.routing?.requiresToolCalling ?? scopes.tools.length > 0,
+  });
+  const routedNode: DagNode = {
+    ...node,
+    routing: applyCapabilityInjectionToRouting(node.routing ?? {}, injection),
+  };
+  return {
+    node: routedNode,
+    scopes,
+    assignment: {
+      skills: [...scopes.skills],
+      mcpServers: [...scopes.mcpServers],
+      hooks: [...scopes.hooks],
+    },
+    env: {
+      ...dagNodeRoutingEnv(routedNode, dag),
+      OMK_NODE_CAPABILITY_SUMMARY: injection.summary.rationale,
+    },
+  };
 }
 
 export class ParallelOrchestrator {
@@ -263,37 +308,37 @@ export class ParallelOrchestrator {
    */
   private async executeWorker(node: DagNode): Promise<void> {
     const logHandle = this.logStreamer.createWorkerHandle(node.id);
+    let workerNode = node;
 
     try {
+      const capabilityContext = buildParallelWorkerCapabilityContext(node, this.dag);
+      workerNode = capabilityContext.node;
+
       // Intent classification + runtime routing
       const capsule = {
-        nodeId: node.id,
-        goal: node.name,
-        task: node.name,
+        nodeId: workerNode.id,
+        goal: workerNode.name,
+        task: workerNode.name,
         system: "",
-        node,
+        node: workerNode,
       } as unknown as ContextCapsule;
 
       const decision = this.runtimeRouter.select(capsule);
       const intent = decision.intent;
       const selectedRuntime = decision.runtime.id;
-      this.logStreamer.log("info", `Node ${node.id} classified as intent: ${intent}, selected runtime: ${selectedRuntime}`);
-      this.nodeRuntimeMap.set(node.id, selectedRuntime);
-
-      // Capability manifest
-      const assignment = node.routing ? {
-        skills: [...(node.routing.skills ?? [])],
-        mcpServers: [...(node.routing.mcpServers ?? [])],
-        hooks: [...(node.routing.hooks ?? [])],
-      } : undefined;
+      this.logStreamer.log("info", `Node ${workerNode.id} classified as intent: ${intent}, selected runtime: ${selectedRuntime}`);
+      this.nodeRuntimeMap.set(workerNode.id, selectedRuntime);
 
       // Derive per-node ProviderPolicy and CapabilityManifest from execution plan
-      const nodeMeta = this.executionPlan.nodeMeta.get(node.id);
+      const nodeMeta = this.executionPlan.nodeMeta.get(workerNode.id);
       const providerPolicy = nodeMeta?.providerPolicy;
       const capabilities = nodeMeta?.capabilities;
 
       // Build worker env with policy and capabilities
-      const workerEnv: Record<string, string> = { ...process.env as Record<string, string> };
+      const workerEnv: Record<string, string> = {
+        ...(process.env as Record<string, string>),
+        ...capabilityContext.env,
+      };
       if (providerPolicy) {
         workerEnv.OMK_NODE_PROVIDER_POLICY = JSON.stringify(providerPolicy);
       }
@@ -302,40 +347,46 @@ export class ParallelOrchestrator {
       }
 
       // 워커 상태 업데이트: 실행 중
-      this.stateManager.startWorker(node.id, assignment);
+      this.stateManager.startWorker(workerNode.id, capabilityContext.assignment);
       this.stateManager.emitEvent({
         type: "worker_started",
-        nodeId: node.id,
+        nodeId: workerNode.id,
         timestamp: new Date().toISOString(),
-        data: { intent, selectedRuntime, providerPolicy, capabilities },
+        data: {
+          intent,
+          selectedRuntime,
+          providerPolicy,
+          capabilities,
+          capabilityScopes: capabilityContext.scopes,
+        },
       });
 
       // 워커 생성
       // TODO: Update AgentWorker/AgentWorkerOptions to accept providerPolicy and capabilities natively
-      const worker = await createAgentWorker(node, this.runId, logHandle, {
+      const worker = await createAgentWorker(workerNode, this.runId, logHandle, {
         cwd: this.cwd,
         env: workerEnv,
       });
 
-      this.activeWorkers.set(node.id, worker);
+      this.activeWorkers.set(workerNode.id, worker);
 
       // 워커 실행
       const output = await worker.execute();
 
       // 결과 처리
-      await this.handleWorkerResult(node, output, logHandle);
+      await this.handleWorkerResult(workerNode, output, logHandle);
 
       // 활성 워커 목록에서 제거
-      this.activeWorkers.delete(node.id);
+      this.activeWorkers.delete(workerNode.id);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logHandle.log("error", `Worker failed: ${message}`);
 
       // 실패 처리
-      await this.handleWorkerFailure(node, message, logHandle);
+      await this.handleWorkerFailure(workerNode, message, logHandle);
 
       // 활성 워커 목록에서 제거
-      this.activeWorkers.delete(node.id);
+      this.activeWorkers.delete(workerNode.id);
     } finally {
       logHandle.close();
     }

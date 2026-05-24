@@ -9,9 +9,9 @@ export function createChatAdvisoryRuntime(): AgentRuntime {
     supports: () => true,
     async runNode(_capsule: ContextCapsule, _signal: AbortSignal): Promise<AgentRunResult> {
       const available: string[] = [];
-      try { execSync("which codex", { stdio: "ignore" }); available.push("codex"); } catch {}
-      try { execSync("which opencode", { stdio: "ignore" }); available.push("opencode"); } catch {}
-      try { execSync("which commandcode", { stdio: "ignore" }); available.push("commandcode"); } catch {}
+      try { execSync("which codex", { stdio: "ignore" }); available.push("codex"); } catch { /* unavailable */ }
+      try { execSync("which opencode", { stdio: "ignore" }); available.push("opencode"); } catch { /* unavailable */ }
+      try { execSync("which commandcode", { stdio: "ignore" }); available.push("commandcode"); } catch { /* unavailable */ }
       if (process.env.DEEPSEEK_API_KEY) available.push("deepseek");
 
       const sep = "\n" + "─".repeat(60) + "\n";

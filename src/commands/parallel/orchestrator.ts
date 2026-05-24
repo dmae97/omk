@@ -5,7 +5,7 @@ import { buildCapabilityAgentNodes, isCapabilityAgentNode } from "../../orchestr
 import { resolveExecutionSelectionDecision, resolvePromptExecutionDecision, EXECUTION_PROMPT_CHOICES } from "../../util/execution-selection.js";
 import { buildIntentFrame, actionAtomRouting, makeActionAtom, renderActionDigest } from "../../goal/intent-frame.js";
 
-import { resolveFallbackProvider, type DeepSeekModelTier, type ProviderId } from "../../providers/types.js";
+import { DEFAULT_AUTHORITY_PROVIDER, resolveFallbackProvider, type DeepSeekModelTier, type ProviderId } from "../../providers/types.js";
 import { getSuperOmkConfig, isSuperOmkEnabled } from "../../providers/deepseek/deepseek-super-config.js";
 import type { ProviderPolicy } from "../../providers/index.js";
 import type { IntentFrame } from "../../contracts/goal.js";
@@ -255,7 +255,7 @@ export function buildDynamicNodes(input: DynamicNodeBuildInput): DagNodeDefiniti
         role,
         dependsOn: ["root-coordinator"],
         maxRetries: 1,
-        failurePolicy: { retryable: true, blockDependents: false, skipOnFailure: true },
+        failurePolicy: { retryable: true, blockDependents: true },
         inputs: [{ name: "worker plan", ref: "plan.md", from: "root-coordinator" }],
         outputs: [{ name: `worker-${index + 1} output`, gate: "none" }],
         routing: {
@@ -453,7 +453,7 @@ function shouldSpawnCapabilityAgents(workerCount: number, taskType: string, inte
 }
 
 function workerCandidateProviders(providerPolicy: ProviderPolicy): ProviderId[] {
-  const omkAuthorityCandidates: ProviderId[] = ["codex", "qwen", "openrouter"];
+  const omkAuthorityCandidates: ProviderId[] = [DEFAULT_AUTHORITY_PROVIDER, "codex", "qwen", "openrouter"];
   if (providerPolicy === "kimi") return ["kimi"];
   if (providerPolicy === "auto" || providerPolicy === "authority") return omkAuthorityCandidates;
   return [
@@ -468,7 +468,7 @@ function defaultModelForProviderPolicy(providerPolicy: ProviderPolicy): string {
   if (providerPolicy === "deepseek") return "deepseek-v4-flash";
   if (providerPolicy === "openrouter") return "openrouter/auto";
   if (providerPolicy === "kimi") return "kimi-cli";
-  return "auto";
+  return "kimi-cli";
 }
 
 function buildDeepSeekAgentNodes(input: {
@@ -527,11 +527,11 @@ function createDeepSeekAgentNode(input: {
     outputs: [{ name: input.outputName, gate: "none", required: false }],
     routing: {
       provider: "deepseek",
-      fallbackProvider: resolveFallbackProvider(["codex", "qwen", "openrouter"]),
+      fallbackProvider: resolveFallbackProvider([DEFAULT_AUTHORITY_PROVIDER, "codex", "qwen", "openrouter"]),
       providerModel: input.tier === "flash" ? "deepseek-v4-flash" : "deepseek-v4-pro",
       providerModelTier: input.tier,
       assignedProvider: "deepseek",
-      candidateProviders: ["deepseek", "codex", "qwen", "openrouter"],
+      candidateProviders: ["deepseek", DEFAULT_AUTHORITY_PROVIDER, "codex", "qwen", "openrouter"],
       assignedModel: input.tier === "flash" ? "deepseek-v4-flash" : "deepseek-v4-pro",
       assignedProviderAuthority: "direct",
       assignedProviderCapabilities: ["read", "plan", "review"],

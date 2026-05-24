@@ -36,7 +36,7 @@ test("chat agent mode contract captures mode and active runtime resources", () =
   assert.match(contract, /Active skills \(1\): count=1; digest=[a-f0-9]{12}; full=chat-agent-harness\.json/);
   assert.match(contract, /Active hooks \(1\): count=1; digest=[a-f0-9]{12}; full=chat-agent-harness\.json/);
   assert.match(contract, /Harness manifest: \.\/chat-agent-harness\.json/);
-  assert.match(contract, /Authority provider: auto/);
+  assert.match(contract, /Authority provider: kimi/);
   assert.match(contract, /Treat every non-trivial user prompt as an orchestration request/);
   assert.match(contract, /Hard gate: in non-chat modes, every non-trivial user prompt MUST ask parallel agents vs one-by-one/);
   assert.match(contract, /root MUST spawn bounded Agent-tool lanes in parallel: explorer, planner, coder, reviewer, qa/);
@@ -49,7 +49,7 @@ test("chat agent mode contract captures mode and active runtime resources", () =
   assert.match(contract, /DeepSeek direct lanes are read-only/);
   assert.doesNotMatch(contract, /Kimi keeps root\/integrator authority|Kimi\/OMK chat owns edits|integrator is Kimi-only/);
   assert.match(contract, /default command-pass gate is `npm run check`/);
-  assert.match(contract, /authority=auto; ensemble=enabled; workerCap=3/);
+  assert.match(contract, /authority=kimi; ensemble=enabled; workerCap=3/);
 });
 
 test("parallel algorithm injection mirrors the parallel DAG routing contract", () => {
@@ -102,7 +102,7 @@ test("chat agent harness manifest captures full inventory and safe worker limits
   assert.equal(manifest.resources.workerBudget, 4);
   assert.equal(manifest.resources.workerCap, 4);
   assert.equal(manifest.resources.providerPolicy, "auto");
-  assert.equal(manifest.resources.authorityProvider, "auto");
+  assert.equal(manifest.resources.authorityProvider, "kimi");
   assert.equal(manifest.resources.providerModel, "auto");
   assert.deepEqual(manifest.resources.active.mcp, ["omk-project"]);
   assert.equal(manifest.resources.active.skills.length, 32);
@@ -123,18 +123,18 @@ test("chat agent harness manifest captures full inventory and safe worker limits
   assert.deepEqual(manifest.virtualDag.nodes.find((node) => node.id === "capability-mcp-agent")?.assignedCapabilities.mcp, ["omk-project"]);
   assert.deepEqual(manifest.virtualDag.nodes.find((node) => node.id === "capability-hook-agent")?.assignedCapabilities.hooks, ["pre-shell-guard.sh"]);
   assert.deepEqual(manifest.virtualDag.nodes.find((node) => node.id === "worker-1")?.assignedProviderCapabilities, ["write", "shell", "mcp", "merge"]);
-  assert.deepEqual(manifest.virtualDag.nodes.find((node) => node.id === "capability-skill-agent")?.candidateProviders, ["deepseek", "qwen", "openrouter", "codex"]);
+  assert.deepEqual(manifest.virtualDag.nodes.find((node) => node.id === "capability-skill-agent")?.candidateProviders, ["deepseek", "qwen", "openrouter", "kimi"]);
   const explorerLane = manifest.laneCapabilityAssignments.find((lane) => lane.laneId === "explorer");
   assert.equal(explorerLane?.assignedProvider, "deepseek");
-  assert.deepEqual(explorerLane?.candidateProviders, ["deepseek", "qwen", "openrouter", "codex"]);
+  assert.deepEqual(explorerLane?.candidateProviders, ["deepseek", "qwen", "openrouter", "kimi"]);
   assert.equal(explorerLane?.assignedModel, "deepseek-v4-flash");
   assert.deepEqual(explorerLane?.assignedCapabilities, ["read", "research", "web"]);
   const coderLane = manifest.laneCapabilityAssignments.find((lane) => lane.laneId === "coder");
-  assert.equal(coderLane?.assignedProvider, "auto");
-  assert.equal(coderLane?.assignedModel, "auto");
+  assert.equal(coderLane?.assignedProvider, "kimi");
+  assert.equal(coderLane?.assignedModel, "kimi-k2.6");
   assert.deepEqual(coderLane?.assignedCapabilities, ["write", "shell", "mcp", "merge"]);
   assert.equal(manifest.memoryRecall.requiredBeforePlanning, true);
-  assert.ok(manifest.authority.some((line) => /auto is the configured OMK authority provider/.test(line)));
+  assert.ok(manifest.authority.some((line) => /kimi is the configured OMK authority provider/.test(line)));
   assert.equal(manifest.authority.some((line) => /Kimi\/OMK chat owns edits/.test(line)), false);
 });
 
@@ -162,18 +162,18 @@ test("chat agent harness records explicit provider and model assignments per lan
   assert.equal(manifest.resources.providerModel, "qwen3-max");
   const byLane = new Map(manifest.laneCapabilityAssignments.map((lane) => [lane.laneId, lane]));
   assert.equal(byLane.get("explorer")?.assignedProvider, "qwen");
-  assert.deepEqual(byLane.get("explorer")?.candidateProviders, ["qwen", "codex", "openrouter"]);
+  assert.deepEqual(byLane.get("explorer")?.candidateProviders, ["qwen", "kimi"]);
   assert.equal(byLane.get("explorer")?.assignedModel, "qwen3-max");
   assert.deepEqual(byLane.get("explorer")?.assignedCapabilities, ["read", "research", "review", "qa", "advisory"]);
-  assert.equal(byLane.get("coder")?.assignedProvider, "auto");
+  assert.equal(byLane.get("coder")?.assignedProvider, "kimi");
   assert.deepEqual(byLane.get("coder")?.assignedCapabilities, ["write", "shell", "mcp", "merge"]);
   assert.equal(byLane.get("security")?.assignedProvider, "qwen");
-  assert.deepEqual(byLane.get("security")?.candidateProviders, ["qwen", "codex", "openrouter"]);
+  assert.deepEqual(byLane.get("security")?.candidateProviders, ["qwen", "kimi"]);
   assert.deepEqual(byLane.get("security")?.assignedCapabilities, ["read", "review", "security"]);
 
   const worker = manifest.virtualDag.nodes.find((node) => node.id === "worker-1");
-  assert.equal(worker?.assignedProvider, "auto");
-  assert.deepEqual(worker?.candidateProviders, ["codex", "qwen", "openrouter"]);
+  assert.equal(worker?.assignedProvider, "kimi");
+  assert.deepEqual(worker?.candidateProviders, ["kimi"]);
   assert.equal(worker?.assignedProviderAuthority, "authority");
   assert.deepEqual(worker?.assignedProviderCapabilities, ["write", "shell", "mcp", "merge"]);
 });
@@ -485,16 +485,16 @@ test("prepareChatAgentModeAgent writes run-scoped wrapper agent and prompt", asy
     assert.match(yaml, /OMK_MCP_HINTS: "count=0;digest=000000000000"/);
     assert.match(yaml, /OMK_HOOK_HINTS: "count=0;digest=000000000000"/);
     assert.match(yaml, /OMK_CONTEXT_BUDGET: "normal"/);
-    assert.match(yaml, /OMK_PROVIDER_AUTHORITY: "auto"/);
+    assert.match(yaml, /OMK_PROVIDER_AUTHORITY: "kimi"/);
 
     const prompt = await readFile(prepared.promptPath, "utf-8");
     assert.match(prompt, /# Base Root Prompt/);
     assert.match(prompt, /# OMK Interactive Orchestrator Runtime Contract/);
     assert.match(prompt, /Mode: debugging/);
-    assert.match(prompt, /Authority provider: auto/);
+    assert.match(prompt, /Authority provider: kimi/);
     assert.match(prompt, /Active skills \(1\): count=1; digest=[a-f0-9]{12}; full=chat-agent-harness\.json/);
     assert.match(prompt, /Injected parallel DAG algorithm/);
-    assert.match(prompt, /profile=lite; approval=interactive; provider=auto; authority=auto; ensemble=disabled; workerCap=2/);
+    assert.match(prompt, /profile=lite; approval=interactive; provider=auto; authority=kimi; ensemble=disabled; workerCap=2/);
 
     const contract = await readFile(prepared.contractPath, "utf-8");
     assert.match(contract, /Debugging: reproduce or inspect the exact failing path/);

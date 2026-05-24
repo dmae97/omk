@@ -295,6 +295,7 @@ export function createContextBroker(options: ContextBrokerOptions = {}) {
       node.routing?.skills?.length ? `Skills: ${node.routing.skills.join(", ")}` : undefined,
       node.routing?.mcpServers?.length ? `MCP: ${node.routing.mcpServers.join(", ")}` : undefined,
       node.routing?.tools?.length ? `Tools: ${node.routing.tools.join(", ")}` : undefined,
+      node.routing?.hooks?.length ? `Hooks: ${node.routing.hooks.join(", ")}` : undefined,
       node.routing?.rationale ? `Rationale: ${node.routing.rationale}` : undefined,
     ]
       .filter(Boolean)

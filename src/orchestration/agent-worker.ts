@@ -64,7 +64,12 @@ export class AgentWorker {
       this.logHandle.log("info", `Executing node in-process: ${this.node.id}`);
 
       const { createRuntimeBackedTaskRunner } = await import("../runtime/runtime-backed-task-runner.js");
-      const runner = await createRuntimeBackedTaskRunner({ cwd: this.cwd, env: this.env });
+      const runner = await createRuntimeBackedTaskRunner({
+        cwd: this.cwd,
+        env: this.env,
+        runId: this.runId,
+        goal: this.node.name,
+      });
 
       const timeoutId =
         this.timeout > 0
@@ -102,6 +107,7 @@ export class AgentWorker {
             duration,
             nodeId: this.node.id,
             role: this.node.role,
+            capabilityScopes: capabilityScopesFromRouting(this.node.routing),
           },
         };
       } catch (error) {
