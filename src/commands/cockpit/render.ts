@@ -438,7 +438,9 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
   // Header (Matrix rain + title)
   const rainWidth = Math.min(targetWidth, 60);
   const rain = renderMatrixRain(latestRunName ?? "omk", rainWidth, 3);
-  const rainLines = rain.split("\n").map((l) => style.phosphor(l));
+  const rainLines = process.stdout.isTTY
+    ? rain.split("\n").map((l: string) => style.phosphor(l))
+    : [];
   const headerLines: string[] = ["", ...rainLines, gradient("OMK Cockpit"), ""];
 
   // Info section — compact priority-ordered lines

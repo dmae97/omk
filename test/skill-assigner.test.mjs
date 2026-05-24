@@ -79,6 +79,25 @@ test("skill assigner prefers filesystem-readonly for generic MCP-required lanes"
   assert.equal(assignment.mcpServers.includes("filesystem"), false);
 });
 
+test("skill assigner preserves routing input overrides in final capability assignment", () => {
+  const assignment = assignSkills({
+    id: "manual-capability-worker",
+    name: "Manual capability worker",
+    role: "coder",
+    routing: {
+      skills: ["custom-skill"],
+      mcpServers: ["custom-mcp"],
+      tools: ["custom-tool"],
+      hooks: ["custom-hook"],
+    },
+  });
+
+  assert.ok(assignment.skills.includes("custom-skill"));
+  assert.ok(assignment.mcpServers.includes("custom-mcp"));
+  assert.ok(assignment.tools.includes("custom-tool"));
+  assert.ok(assignment.hooks.includes("custom-hook"));
+});
+
 test("skill assigner gives every exposed OMK role MCP, skills, and hooks", () => {
   for (const role of [
     "explorer",

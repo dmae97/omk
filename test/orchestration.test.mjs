@@ -9,6 +9,7 @@ import { createScheduler } from "../dist/orchestration/scheduler.js";
 import { createEnsembleTaskRunner } from "../dist/orchestration/ensemble.js";
 import { createExecutor } from "../dist/orchestration/executor.js";
 import { estimateRunProgress } from "../dist/orchestration/eta.js";
+import { renderCapabilityRoutingArtifact } from "../dist/orchestration/capability-routing.js";
 import { createRoutedRunState, refreshRunStateEstimate, routeRunState, createExecutableDagFromState } from "../dist/orchestration/run-state.js";
 import { dagNodeRoutingEnv, discoverRoutingInventory, resetRoutingInventoryCache } from "../dist/orchestration/routing.js";
 import { OMK_RELEASE_GUARD_PRESET } from "../dist/runtime/core-verified-preset.js";
@@ -127,13 +128,13 @@ test("task graph ranks critical-path runnable nodes before low-impact siblings",
   assert.deepEqual(createScheduler().getRunnableNodes(dag).map((node) => node.id), ["root", "side"]);
 });
 
-test("createDag adds bounded Kimi routing hints without changing node contract", async () => {
+test("createDag adds bounded OMK routing hints without changing node contract", async () => {
   await withRoutingSkills(["omk-research-verify"], async () => {
     const dag = createDag({
       nodes: [
         {
           id: "route-research",
-          name: "Verify Kimi paper and official API docs before planner handoff",
+          name: "Verify provider paper and official API docs before planner handoff",
           role: "researcher",
           dependsOn: [],
           maxRetries: 1,
@@ -548,6 +549,78 @@ test("dagNodeRoutingEnv keeps node MCP allowlist separate from parent MCP contex
   const env = dagNodeRoutingEnv(child, dag);
   assert.equal(env.OMK_MCP_HINTS, "child-mcp");
   assert.equal(env.OMK_PARENT_MCP_HINTS, "parent-mcp");
+});
+
+test("dag routing exposes provider-neutral node capability contract", () => {
+  const dag = createDag({
+    nodes: [
+      {
+        id: "worker",
+        name: "Worker",
+        role: "coder",
+        dependsOn: [],
+        maxRetries: 1,
+        routing: {
+          provider: "auto",
+          candidateProviders: ["codex", "qwen", "openrouter", "kimi"],
+          assignedProviderAuthority: "authority",
+          assignedProviderCapabilities: ["write", "shell", "mcp"],
+          skills: ["omk-typescript-strict", "omk-typescript-strict"],
+          mcpServers: ["omk-project"],
+          tools: ["omk_run_quality_gate"],
+          hooks: ["protect-secrets.sh"],
+        },
+      },
+    ],
+  });
+  const [worker] = dag.nodes;
+
+  assert.deepEqual(worker.routing?.assignedCapabilities?.skills, ["omk-typescript-strict"]);
+  assert.deepEqual(worker.routing?.assignedCapabilities?.mcpServers, ["omk-project"]);
+  assert.deepEqual(worker.routing?.assignedCapabilities?.tools, ["omk_run_quality_gate"]);
+  assert.deepEqual(worker.routing?.assignedCapabilities?.hooks, ["protect-secrets.sh"]);
+
+  const env = dagNodeRoutingEnv(worker, dag);
+  assert.equal(env.OMK_NODE_PROVIDER, "auto");
+  assert.equal(env.OMK_NODE_PROVIDER_AUTHORITY, "authority");
+  assert.equal(env.OMK_NODE_PROVIDER_CAPABILITIES, "write,shell,mcp");
+  assert.equal(env.OMK_NODE_CANDIDATE_PROVIDERS, "codex,qwen,openrouter,kimi");
+  assert.equal(env.OMK_NODE_SKILLS, "omk-typescript-strict");
+  assert.equal(env.OMK_NODE_MCP_SERVERS, "omk-project");
+  assert.equal(env.OMK_NODE_TOOLS, "omk_run_quality_gate");
+  assert.equal(env.OMK_NODE_HOOKS, "protect-secrets.sh");
+});
+
+test("capability routing artifact records per-node provider and capability assignments", () => {
+  const dag = createDag({
+    nodes: [
+      {
+        id: "worker",
+        name: "Worker",
+        role: "coder",
+        dependsOn: [],
+        maxRetries: 1,
+        routing: {
+          provider: "auto",
+          candidateProviders: ["codex", "qwen", "openrouter", "kimi"],
+          assignedProviderAuthority: "authority",
+          skills: ["omk-typescript-strict"],
+          mcpServers: ["omk-project"],
+          hooks: ["protect-secrets.sh"],
+        },
+      },
+    ],
+  });
+
+  const artifact = renderCapabilityRoutingArtifact(dag.nodes, "2026-05-24T00:00:00.000Z");
+  assert.equal(artifact.schemaVersion, 1);
+  assert.equal(artifact.generatedAt, "2026-05-24T00:00:00.000Z");
+  assert.equal(artifact.nodes[0].nodeId, "worker");
+  assert.equal(artifact.nodes[0].provider, "auto");
+  assert.deepEqual(artifact.nodes[0].candidateProviders, ["codex", "qwen", "openrouter", "kimi"]);
+  assert.deepEqual(artifact.nodes[0].skills, ["omk-typescript-strict"]);
+  assert.deepEqual(artifact.nodes[0].mcpServers, ["omk-project"]);
+  assert.deepEqual(artifact.nodes[0].hooks, ["protect-secrets.sh"]);
 });
 
 test("injectKimiGlobals prunes stale global MCP startup entries before Kimi restore", async () => {
@@ -1126,7 +1199,7 @@ test("router ensemble candidates preserve routing metadata and use route-specifi
   assert.equal(calls[0].node.routing.skills[0], "omk-repo-explorer");
 });
 
-test("orchestrator ensemble keeps Kimi context candidate on router role", async () => {
+test("orchestrator ensemble keeps OMK context candidate on router role", async () => {
   const calls = [];
   const baseRunner = {
     async run(node, env) {
@@ -1160,7 +1233,7 @@ test("orchestrator ensemble keeps Kimi context candidate on router role", async 
   );
 
   assert.equal(result.success, true);
-  assert.deepEqual(calls.map((call) => call.env.OMK_ENSEMBLE_CANDIDATE_ID), ["critical-path", "kimi-context"]);
+  assert.deepEqual(calls.map((call) => call.env.OMK_ENSEMBLE_CANDIDATE_ID), ["critical-path", "orchestrator-context"]);
   assert.deepEqual(calls.map((call) => call.node.role), ["planner", "router"]);
 });
 

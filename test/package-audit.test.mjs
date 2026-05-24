@@ -54,9 +54,9 @@ describe("resolveTarballArg", () => {
   it("resolves a single literal glob without shell expansion", () => {
     const root = mkdtempSync(join(tmpdir(), "omk-tarball-glob-"));
     try {
-      const tarball = join(root, "oh-my-kimi-cli-1.1.9.tgz");
+      const tarball = join(root, "open-multi-agent-kit-1.1.9.tgz");
       writeFileSync(tarball, "fixture", "utf-8");
-      assert.equal(resolveTarballArg("oh-my-kimi-cli-*.tgz", root), tarball);
+      assert.equal(resolveTarballArg("open-multi-agent-kit-*.tgz", root), tarball);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

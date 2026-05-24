@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createKimiApiRuntime, createKimiWireRuntime } from "../dist/runtime/kimi-wire-runtime.js";
+import { createKimiApiRuntime, createKimiWireRuntime } from "../dist/runtime/kimi-api-runtime.js";
 
 function makeCapsule(overrides = {}) {
   return {

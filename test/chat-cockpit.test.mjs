@@ -290,6 +290,21 @@ describe("tmux lifecycle commands", () => {
     assert.ok(cmd.includes("--mcp-scope 'none'"), "chat child should inherit the requested MCP scope");
   });
 
+  it("buildLeftPaneCommand forwards provider, model, and execution policy to the plain chat child", () => {
+    const cmd = buildLeftPaneCommand({
+      nodeCmd: "node",
+      cliCmd: "omk",
+      runId: "run-provider",
+      brand: "plain",
+      provider: "codex",
+      model: "codex/gpt-5.3-codex",
+      execution: "parallel",
+    });
+    assert.ok(cmd.includes("--provider 'codex'"), "chat child should inherit the requested provider policy");
+    assert.ok(cmd.includes("--model 'codex/gpt-5.3-codex'"), "chat child should inherit the requested model");
+    assert.ok(cmd.includes("--execution 'parallel'"), "chat child should inherit the execution policy");
+  });
+
   it("buildLeftPaneCommand properly quotes values containing single quotes", () => {
     const runId = "it's-a-test";
     const cmd = buildLeftPaneCommand({

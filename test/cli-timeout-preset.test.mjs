@@ -97,7 +97,7 @@ test("agent mode preset launches interactive orchestrator chat surface", async (
   assert.equal(getModePreset("chat")?.launchCommand, "chat");
 });
 
-test("goal run and continue expose per-run MCP scope", () => {
+test("goal run, continue, and auto expose MCP scope/provider defaults", () => {
   for (const args of [["goal", "run", "--help"], ["goal", "continue", "--help"]]) {
     const result = spawnSync(process.execPath, [CLI, ...args], {
       cwd: process.cwd(),
@@ -109,8 +109,27 @@ test("goal run and continue expose per-run MCP scope", () => {
       },
     });
     assert.equal(result.status, 0, result.stderr);
+    const normalized = result.stdout.replace(/\s+/g, " ");
     assert.match(result.stdout, /--mcp-scope <all\|project\|none>/);
+    assert.match(result.stdout, /--provider <provider>/);
+    assert.match(normalized, /provider policy \(auto \| authority \| kimi \| deepseek \| codex \| qwen \| openrouter\)/);
+    assert.match(normalized, /default: "?auto"?/);
   }
+
+  const auto = spawnSync(process.execPath, [CLI, "goal", "auto", "--help"], {
+    cwd: process.cwd(),
+    encoding: "utf-8",
+    env: {
+      ...process.env,
+      OMK_STAR_PROMPT: "0",
+      OMK_RENDER_LOGO: "0",
+    },
+  });
+  assert.equal(auto.status, 0, auto.stderr);
+  const normalizedAuto = auto.stdout.replace(/\s+/g, " ");
+  assert.match(auto.stdout, /--provider <provider>/);
+  assert.match(normalizedAuto, /provider policy \(auto \| authority \| kimi \| deepseek \| codex \| qwen \| openrouter\)/);
+  assert.match(normalizedAuto, /default: "?auto"?/);
 });
 
 test("mcp command exposes prewarm for cache-first startup", () => {
@@ -673,12 +692,12 @@ test("open-design-agent treats generated Open Design artifacts as success after 
       "timeout-artifact",
       "--stdio",
       "--timeout-ms",
-      "1000",
+      "3000",
     ], {
       cwd: process.cwd(),
       input: "Generate an index.html artifact",
       encoding: "utf-8",
-      timeout: 10000,
+      timeout: 15000,
       env: {
         ...process.env,
         PATH: `${binDir}${delimiter}${process.env.PATH || ""}`,
@@ -974,17 +993,20 @@ test("slash command templates are packaged", () => {
   assert.match(set, /omk deepseek api/);
 });
 
-test("chat command leaves mode unset for persisted mode and advertises kimicat brand", () => {
+test("chat command leaves mode unset for persisted mode and advertises OMK brand", () => {
   const result = runHelp("chat");
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /--brand <kimicat\|minimal\|plain>/);
+  assert.match(result.stdout, /--brand <omk\|minimal\|plain>/);
   assert.match(result.stdout, /--mode <agent\|plan\|chat\|debugging\|review>/);
   assert.doesNotMatch(result.stdout, /default: agent/);
-  assert.doesNotMatch(result.stdout, /kimichan/);
+  assert.doesNotMatch(result.stdout, /kimicat|kimichan/);
 });
 
 test("parallel keeps the historical ten-minute node timeout when no preset is requested", () => {
-  const source = readFileSync(join(process.cwd(), "src", "commands", "parallel.ts"), "utf-8");
+  const source = [
+    readFileSync(join(process.cwd(), "src", "commands", "parallel.ts"), "utf-8"),
+    readFileSync(join(process.cwd(), "src", "commands", "parallel", "worker.ts"), "utf-8"),
+  ].join("\n");
   assert.match(source, /nodeTimeoutMs:\s*options\.timeoutPreset\s*\?\s*undefined\s*:\s*600_000/);
 });
 

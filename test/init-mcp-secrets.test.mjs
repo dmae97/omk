@@ -416,9 +416,12 @@ test("init scaffolds Kimi subagent names that match generated role aliases", asy
     assert.doesNotMatch(agentsMd, /Repo exploration\s+explore(?!r)/);
     assert.match(kimiAgentsMd, /explorer\nplanner\ncoder\nreviewer/);
     assert.doesNotMatch(kimiAgentsMd, /^explore$/m);
+    assert.match(rootPrompt, /# open_multi-agent_kit Root Agent/);
+    assert.match(rootPrompt, /provider-neutral OMK coding orchestrator/);
     assert.match(rootPrompt, /- explorer for repository discovery/);
     assert.match(rootPrompt, /- planner for architecture\/refactor\/risky work/);
     assert.doesNotMatch(rootPrompt, /- explore for repository discovery/);
+    assert.doesNotMatch(rootPrompt, /# oh-my-kimi Root Agent|oh-my-kimi root coordinator|Kimi-native/);
     assert.match(rootAgentYaml, /\n    explorer:\n      path: \.\/roles\/explorer\.yaml/);
     assert.match(rootAgentYaml, /\n    explore:\n      path: \.\/roles\/explorer\.yaml/);
     assert.match(rootAgentYaml, /\n    planner:\n      path: \.\/roles\/planner\.yaml/);
@@ -482,7 +485,7 @@ test("init scaffolds Kimi subagent names that match generated role aliases", asy
         assert.ok(!excludedTools.includes("kimi_cli.tools.shell:Shell"));
       }
     }
-    const initSource = await readFile(join(process.cwd(), "src", "commands", "init.ts"), "utf-8");
+    const initSource = await readFile(join(process.cwd(), "src", "commands", "init", "content.ts"), "utf-8");
     const ontologyFallback = initSource.match(/  ontology: `version: 1\n[\s\S]*?\n`,\n  "vision-debugger":/)?.[0] ?? "";
     const securityFallback = initSource.match(/  security: `version: 1\n[\s\S]*?\n`,\n  qa:/)?.[0] ?? "";
     assert.match(initSource, /\n  router: `version: 1\n[\s\S]*?OMK_ROLE: "router"[\s\S]*?`,\n  explorer:/);
@@ -751,13 +754,13 @@ test("init installs OMK lifecycle hooks and release guard", async () => {
 test("init omk-project MCP avoids ephemeral package paths", async () => {
   const { createOmkProjectMcpServer } = await import(INIT_MODULE_URL);
   const server = createOmkProjectMcpServer("/workspace/app", {
-    packageRoot: join(tmpdir(), "omk-smoke-local-abc", "node_modules", "@oh-my-kimi", "cli"),
+    packageRoot: join(tmpdir(), "omk-smoke-local-abc", "node_modules", "open-multi-agent-kit"),
     platform: "linux",
   });
 
   assert.equal(server.command, "bash");
   assert.match(server.args[1], /command -v omk/);
-  assert.match(server.args[1], /command -v oh-my-kimi/);
+  assert.match(server.args[1], /command -v open-multi-agent-kit/);
   assert.match(server.args[1], /command -v omk-project-mcp/);
   assert.match(server.args[1], /mcp serve omk-project/);
   assert.match(server.args[1], new RegExp(escapeRegex(realpathSync(process.execPath))));
@@ -768,7 +771,7 @@ test("init omk-project MCP avoids ephemeral package paths", async () => {
 test("init omk-project MCP pins the current real Node executable on Unix", async () => {
   const { createOmkProjectMcpServer } = await import(INIT_MODULE_URL);
   const server = createOmkProjectMcpServer("/workspace/app", {
-    packageRoot: "/opt/oh-my-kimi",
+    packageRoot: "/opt/open_multi-agent_kit",
     platform: "linux",
   });
 
@@ -777,7 +780,7 @@ test("init omk-project MCP pins the current real Node executable on Unix", async
   assert.doesNotMatch(server.args[1], /\bexec node\b/);
   assert.match(server.args[1], /mcp serve omk-project/);
   assert.match(server.args[1], /command -v omk/);
-  assert.doesNotMatch(server.args[1], /\/opt\/oh-my-kimi/);
+  assert.doesNotMatch(server.args[1], /\/opt\/open_multi-agent_kit/);
 });
 
 test("init preserves an existing custom project MCP config", async () => {

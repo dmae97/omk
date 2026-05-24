@@ -31,6 +31,29 @@ test("scoped agent wrapper renders capability flags from effective scopes", () =
   assert.doesNotMatch(yaml, /mcpServers|Authorization|API_TOKEN|skills_dir/i);
 });
 
+test("scoped agent wrapper enables explicit routed names even when global scope is none", () => {
+  const yaml = renderScopedAgentYaml({
+    baseAgentFile: "/repo/.omk/agents/roles/coder.yaml",
+    outputFile: "/repo/.omk/runs/run-1/agents/roles/coder.yaml",
+    role: "coder",
+    resources: {
+      mcpScope: "none",
+      skillsScope: "none",
+      hooksScope: "none",
+      mcpNames: ["omk-project"],
+      skillNames: ["omk-typescript-strict"],
+      hookNames: ["protect-secrets.sh"],
+    },
+  });
+
+  assert.match(yaml, /OMK_MCP_ENABLED: "true"/);
+  assert.match(yaml, /OMK_SKILLS_ENABLED: "true"/);
+  assert.match(yaml, /OMK_HOOKS_ENABLED: "true"/);
+  assert.match(yaml, /OMK_MCP_HINTS: "count=1;digest=[0-9a-f]+;top=omk-project"/);
+  assert.match(yaml, /OMK_SKILL_HINTS: "count=1;digest=[0-9a-f]+;top=omk-typescript-strict"/);
+  assert.match(yaml, /OMK_HOOK_HINTS: "count=1;digest=[0-9a-f]+;top=protect-secrets\.sh"/);
+});
+
 test("scoped agent wrapper writes custom agent safety flags", async () => {
   const root = await mkdtemp(join(tmpdir(), "omk-scoped-agent-"));
   try {

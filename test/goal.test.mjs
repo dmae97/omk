@@ -103,15 +103,34 @@ async function tempGoalCliFixture({ summary = true } = {}) {
     ]
     : ["short"];
   const fakeKimiSource = `${outputLines.map((line) => `console.log(${JSON.stringify(line)});`).join("\n")}\nprocess.exit(0);\n`;
+  const fakeCodexSource = [
+    "import { writeFileSync } from 'node:fs';",
+    "const args = process.argv.slice(2);",
+    "if (args.includes('--version')) { console.log('codex 0.0.0-test'); process.exit(0); }",
+    "const outputIndex = args.indexOf('--output-last-message');",
+    "const outputPath = outputIndex >= 0 ? args[outputIndex + 1] : undefined;",
+    `const output = ${JSON.stringify(outputLines.join("\n"))};`,
+    "if (outputPath) writeFileSync(outputPath, output + '\\n');",
+    "console.log(output);",
+    "process.exit(0);",
+    "",
+  ].join("\n");
   const kimiBin = join(bin, process.platform === "win32" ? "kimi.cmd" : "kimi");
+  const codexBin = join(bin, process.platform === "win32" ? "codex.cmd" : "codex");
   if (process.platform === "win32") {
     const fakeKimiScript = join(bin, "kimi.mjs");
+    const fakeCodexScript = join(bin, "codex.mjs");
     await writeFile(fakeKimiScript, fakeKimiSource, "utf-8");
+    await writeFile(fakeCodexScript, fakeCodexSource, "utf-8");
     await writeFile(kimiBin, `@echo off\r\n"${process.execPath}" "${fakeKimiScript}" %*\r\n`, "utf-8");
+    await writeFile(codexBin, `@echo off\r\n"${process.execPath}" "${fakeCodexScript}" %*\r\n`, "utf-8");
   } else {
     const fakeKimiScript = join(bin, "kimi.mjs");
+    const fakeCodexScript = join(bin, "codex.mjs");
     await writeFile(fakeKimiScript, fakeKimiSource, "utf-8");
+    await writeFile(fakeCodexScript, fakeCodexSource, "utf-8");
     await writeFile(kimiBin, `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(fakeKimiScript)} "$@"\n`, { mode: 0o755 });
+    await writeFile(codexBin, `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(fakeCodexScript)} "$@"\n`, { mode: 0o755 });
   }
   await writeFile(join(workspace, 'package.json'), JSON.stringify({ scripts: { check: 'node -e "process.exit(0)"' } }));
   const env = {
@@ -913,7 +932,7 @@ test("goal progress ensemble calls DeepSeek advisory when a key is configured", 
   }
 });
 
-test("goal run CLI honors run-id, uses Kimi-only DAG, and avoids first-run continuation wrapping", async () => {
+test("goal run CLI honors run-id, defaults to auto provider policy, and avoids first-run continuation wrapping", async () => {
   const { root, workspace, env } = await tempGoalCliFixture();
   try {
     const create = runGoalCli(["goal", "create", "Document critical issue execution", "--json"], env);
@@ -932,8 +951,15 @@ test("goal run CLI honors run-id, uses Kimi-only DAG, and avoids first-run conti
     assert.equal(run.status, 0, `${run.stderr}\n${run.stdout}`);
     const state = await readJson(join(workspace, ".omk", "runs", "repro-critical", "state.json"));
     assert.equal(state.runId, "repro-critical");
-    assert.ok(!state.nodes.some((node) => node.id.startsWith("deepseek-")));
-    assert.ok(state.nodes.every((node) => node.status === "done"));
+    const workerNodes = state.nodes.filter((node) => node.id.startsWith("worker-"));
+    assert.ok(workerNodes.length > 0);
+    assert.ok(workerNodes.every((node) => node.routing?.provider === "auto"));
+    assert.ok(workerNodes.every((node) => node.routing?.assignedProvider === undefined));
+    const requiredNodes = state.nodes.filter((node) => !node.id.startsWith("deepseek-") && !node.id.startsWith("capability-"));
+    assert.ok(requiredNodes.every((node) => node.status === "done"));
+
+    const plan = await readFile(join(workspace, ".omk", "runs", "repro-critical", "plan.md"), "utf-8");
+    assert.match(plan, /Provider policy: auto/);
 
     const goal = await readJson(join(workspace, ".omk", "goals", goalId, "goal.json"));
     assert.equal(goal.status, "done");
@@ -1009,7 +1035,7 @@ test("goal continue CLI reads a context run but writes a fresh next run", async 
       "--no-watch",
       "--view", "table",
       "--max-auto-continue-iterations", "0",
-    ], env);
+    ], { ...env, OMK_EXECUTION_PROMPT: "sequential" });
 
     assert.equal(run.status, 0, `${run.stderr}\n${run.stdout}`);
     assert.equal(await readFile(join(previousRunDir, "plan.md"), "utf-8"), "ORIGINAL CONTEXT PLAN");

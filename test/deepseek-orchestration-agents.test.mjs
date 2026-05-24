@@ -38,6 +38,8 @@ test("initial orchestration spawns dedicated DeepSeek Flash and Pro model-agent 
   assert.ok(pro);
   assert.equal(flash.routing?.provider, "deepseek");
   assert.equal(flash.routing?.providerModelTier, "flash");
+  assert.deepEqual(flash.routing?.candidateProviders, ["deepseek", "codex", "qwen", "openrouter"]);
+  assert.equal(flash.routing?.fallbackProvider, "codex");
   assert.equal(pro.routing?.provider, "deepseek");
   assert.equal(pro.routing?.providerModelTier, "pro");
   assert.equal(flash.name, "DeepSeek Flash action decomposition");
@@ -232,6 +234,38 @@ test("parallel algorithm clamps invalid and excessive worker budgets", () => {
   assert.equal(tooManyWorkers.filter((node) => node.id.startsWith("worker-")).length, 6);
 });
 
+test("parallel workers default to OMK provider-router authority instead of hard-coded Kimi", () => {
+  const nodes = buildDynamicNodes({
+    flow: "parallel",
+    goal: "provider-neutral workers",
+    startedAt: "2026-05-09T00:00:00.000Z",
+    workerCount: 2,
+    providerPolicy: "auto",
+    intent: {
+      taskType: "implement",
+      complexity: "moderate",
+      estimatedWorkers: 2,
+      requiredRoles: ["coder", "reviewer"],
+      isReadOnly: false,
+      needsResearch: false,
+      needsSecurityReview: false,
+      needsTesting: true,
+      needsDesignReview: false,
+      parallelizable: true,
+      rationale: "OMK should choose providers at node execution time.",
+    },
+  });
+
+  const worker = nodes.find((node) => node.id === "worker-1");
+  assert.ok(worker);
+  assert.equal(worker.routing?.provider, "auto");
+  assert.equal(worker.routing?.assignedProvider, undefined);
+  assert.equal(worker.routing?.assignedModel, "auto");
+  assert.deepEqual(worker.routing?.candidateProviders, ["codex", "qwen", "openrouter"]);
+  assert.equal(worker.routing?.fallbackProvider, "codex");
+  assert.match(worker.routing?.providerReason ?? "", /OMK provider router/);
+});
+
 test("sequential execution strategy suppresses parallel model and capability fanout", () => {
   const nodes = buildDynamicNodes({
     flow: "parallel",
@@ -257,6 +291,9 @@ test("sequential execution strategy suppresses parallel model and capability fan
   assert.equal(nodes.filter((node) => node.id.startsWith("worker-")).length, 1);
   assert.equal(nodes.some((node) => node.id.startsWith("deepseek-")), false);
   assert.equal(nodes.some((node) => node.id.startsWith("capability-")), false);
+  const worker = nodes.find((node) => node.id === "worker-1");
+  assert.equal(worker?.routing?.provider, "auto");
+  assert.equal(worker?.routing?.assignedProvider, undefined);
   assert.ok(nodes.find((node) => node.id === "review-merge")?.dependsOn.includes("worker-1"));
 });
 

@@ -1,21 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { kimicatCliHero, sanitizeTerminalText } from "../dist/util/theme.js";
-import { KIMICAT_SIMPLE_ASCII_ART } from "../dist/kimi/simple-art.js";
+import { omkCliHero, sanitizeTerminalText } from "../dist/util/theme.js";
+import { OMK_SIMPLE_ASCII_ART } from "../dist/kimi/simple-art.js";
 
-test("Kimicat CLI hero uses the compact mascot theme", () => {
-  const hero = kimicatCliHero();
+test("OMK CLI hero uses the compact mascot theme", () => {
+  const hero = omkCliHero();
 
   assert.match(hero, /OMK/);
   assert.match(hero, /Open Multi-agent Kit/);
   assert.match(hero, /Provider-neutral runtime for AI coding teams/);
 
-  const artLines = KIMICAT_SIMPLE_ASCII_ART.split("\n");
+  const artLines = OMK_SIMPLE_ASCII_ART.split("\n");
 
   assert.equal(artLines.length <= 5, true);
   assert.equal(artLines.every((line) => line.length <= 64), true);
-  assert.match(KIMICAT_SIMPLE_ASCII_ART, /\/_\|_______\|_\\/);
+  assert.match(OMK_SIMPLE_ASCII_ART, /\/_\|_______\|_\\/);
+  assert.doesNotMatch(OMK_SIMPLE_ASCII_ART, /kimi❯/);
 });
 
 test("terminal text sanitizer strips control sequences from display values", () => {

@@ -218,7 +218,7 @@ export async function runChatRuntime(
         (orchestrator as unknown as Record<string, unknown>).runtimeRouter = {
           select: () => ({
             runtime: {
-              id: "kimi-print",
+              id: "omk-chat-bypass",
               priority: 100,
               supports: () => true,
               runNode: async () => ({ success: true, exitCode: 0, stdout: "", stderr: "" }),

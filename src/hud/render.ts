@@ -328,6 +328,7 @@ function buildStateErrorPanel(
 }
 
 function renderMatrixRainHeader(runId: string): string {
+  if (!process.stdout.isTTY) return "";
   const width = Math.min(60, process.stdout.columns ?? 80);
   const rain = renderMatrixRain(runId, width, 3);
   const rainStr = rain.split("\n").map((l) => style.phosphor(l)).join("\n");

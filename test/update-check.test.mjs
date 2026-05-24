@@ -20,7 +20,7 @@ function fakeUpdateStatus(overrides = {}) {
       latest: "1.1.18",
       outdated: true,
       error: null,
-      installCmd: "npm i -g @oh-my-kimi/cli",
+      installCmd: "npm i -g open-multi-agent-kit",
       ...(overrides.omk ?? {}),
     },
     kimi: {
@@ -76,19 +76,19 @@ test("isOutdated handles local newer than latest", () => {
   assert.strictEqual(isOutdated("99.0.0", "1.0.0"), false);
 });
 
-test("formatStartupUpdateBanner renders omk and kimi update hints", () => {
+test("formatStartupUpdateBanner renders omk package and Kimi adapter update hints", () => {
   const omkBanner = formatStartupUpdateBanner(fakeUpdateStatus());
   assert.match(omkBanner, /omk 1\.1\.17 → 1\.1\.18/);
-  assert.match(omkBanner, /npm i -g @oh-my-kimi\/cli/);
+  assert.match(omkBanner, /npm i -g open-multi-agent-kit/);
   assert.doesNotMatch(omkBanner, /kimi 1\.0\.0/);
 
   const kimiBanner = formatStartupUpdateBanner(fakeUpdateStatus({
     omk: { outdated: false },
     kimi: { installed: "0.9.0", latest: "1.0.0", outdated: true },
   }));
-  assert.match(kimiBanner, /kimi 0\.9\.0 → 1\.0\.0/);
-  assert.match(kimiBanner, /omk update kimi/);
-  assert.doesNotMatch(kimiBanner, /npm i -g @oh-my-kimi\/cli/);
+  assert.match(kimiBanner, /kimi-cli 0\.9\.0 → 1\.0\.0/);
+  assert.match(kimiBanner, /omk update kimi-adapter/);
+  assert.doesNotMatch(kimiBanner, /npm i -g open-multi-agent-kit/);
 });
 
 test("resolveOmkUpdatePromptState respects skip, remind, off, and force", () => {
@@ -283,7 +283,7 @@ test("maybePromptForOmkUpdate executes update only on Update now", async () => {
   assert.equal(result.action, "updated");
   assert.equal(result.shouldExit, true);
   assert.equal(result.exitCode, 0);
-  assert.match(logs.join("\n"), /Running update: npm i -g @oh-my-kimi\/cli/);
+  assert.match(logs.join("\n"), /Running update: npm i -g open-multi-agent-kit/);
   assert.match(logs.join("\n"), /Restart omk chat/);
 });
 
@@ -303,7 +303,7 @@ test("maybePromptForOmkUpdate reports failed updates and manual command", async 
   assert.equal(result.shouldExit, true);
   assert.equal(result.exitCode, 1);
   assert.match(logs.join("\n"), /Update failed: registry denied/);
-  assert.match(logs.join("\n"), /Manual update command: npm i -g @oh-my-kimi\/cli/);
+  assert.match(logs.join("\n"), /Manual update command: npm i -g open-multi-agent-kit/);
 });
 
 test("maybePromptForOmkUpdate treats prompt cancellation as non-fatal", async () => {
@@ -353,7 +353,7 @@ test("maybePromptForOmkUpdate treats prompt timeout as non-fatal", async () => {
 test("root startup delegates OMK update prompting to shared helper", () => {
   const source = readFileSync(join(process.cwd(), "src", "cli", "root.ts"), "utf-8");
   assert.match(source, /maybePromptForOmkUpdate/);
-  assert.doesNotMatch(source, /A new version of oh-my-kimi is available/);
+  assert.doesNotMatch(source, /A new version of open_multi-agent_kit is available/);
   assert.doesNotMatch(source, /YES — run/);
 });
 
@@ -387,10 +387,10 @@ test("omk update check --json outputs valid JSON", () => {
   assert.strictEqual(typeof status.cacheHit, "boolean");
 });
 
-test("omk update kimi --install-script prints install script", () => {
+test("omk update kimi-adapter --install-script prints install script", () => {
   const tmpDir = mkdtempSync(join(tmpdir(), "omk-cli-test-"));
   const cliJs = join(process.cwd(), "dist", "cli.js");
-  const result = spawnSync("node", [cliJs, "update", "kimi", "--install-script", "--refresh"], {
+  const result = spawnSync("node", [cliJs, "update", "kimi-adapter", "--install-script", "--refresh"], {
     cwd: tmpDir,
     encoding: "utf-8",
     timeout: 30000,
@@ -403,10 +403,23 @@ test("omk update kimi --install-script prints install script", () => {
   );
 });
 
-test("omk update kimi non-TTY exits with error", () => {
+test("legacy omk update kimi --install-script remains an explicit adapter alias", () => {
   const tmpDir = mkdtempSync(join(tmpdir(), "omk-cli-test-"));
   const cliJs = join(process.cwd(), "dist", "cli.js");
-  const result = spawnSync("node", [cliJs, "update", "kimi"], {
+  const result = spawnSync("node", [cliJs, "update", "kimi", "--install-script", "--refresh"], {
+    cwd: tmpDir,
+    encoding: "utf-8",
+    timeout: 30000,
+    env: { ...process.env, OMK_NO_STAR: "1" },
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.ok(result.stdout.trim().length > 0);
+});
+
+test("omk update kimi-adapter non-TTY exits with error", () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), "omk-cli-test-"));
+  const cliJs = join(process.cwd(), "dist", "cli.js");
+  const result = spawnSync("node", [cliJs, "update", "kimi-adapter"], {
     cwd: tmpDir,
     encoding: "utf-8",
     timeout: 30000,
