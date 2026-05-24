@@ -129,6 +129,7 @@ test("sliced CLI registry preserves ordered nested command groups", () => {
   ]);
   assert.deepEqual(commandNames(findCommand(program, "mcp")), [
     "list",
+    "connect",
     "doctor",
     "test",
     "prewarm",

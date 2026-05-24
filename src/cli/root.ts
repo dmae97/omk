@@ -3,6 +3,11 @@ import { style, omkCliHero } from "../util/theme.js";
 import { t, initI18n } from "../util/i18n.js";
 import { buildCustomHelp } from "../util/help-text.js";
 import type { McpDoctorReport } from "../commands/mcp.js";
+import {
+  mapDoctorToAutoConnectReport,
+  renderMcpAutoConnectLines,
+  runMcpAutoConnect,
+} from "../mcp/autoconnect.js";
 
 function isDisabledEnvValue(value: string | undefined): boolean {
   const normalized = value?.trim().toLowerCase();
@@ -10,45 +15,28 @@ function isDisabledEnvValue(value: string | undefined): boolean {
 }
 
 export function formatRootMcpStatusLines(report: McpDoctorReport): string[] {
-  const activeServers = report.servers.filter((server) => server.active);
-  const readyCount = activeServers.filter((server) => server.status === "ok").length;
-  const warningCount = report.warnings.length;
-  const errorCount = report.errors.length;
-  const virtualProjectMcp = activeServers.some((server) =>
-    server.name === "omk-project" && server.sources.includes("runtime:auto-injected")
-  );
-
-  const statusLine = [
-    `MCP: ${report.activeScope} scope`,
-    `${activeServers.length} active`,
-    `${readyCount} ready`,
-    `${warningCount} warning`,
-    `${errorCount} error`,
-    "fast/offline",
-  ].join(" · ");
-
-  const detail = virtualProjectMcp
-    ? "  omk-project virtual MCP available; full validation: omk mcp doctor && omk mcp check --all"
-    : "  Full validation: omk mcp doctor && omk mcp check --all";
-
-  return [statusLine, detail];
+  return renderMcpAutoConnectLines(mapDoctorToAutoConnectReport(report, { preflight: "fast" }));
 }
 
 async function buildRootMcpStatusLines(env: NodeJS.ProcessEnv = process.env): Promise<string[]> {
   if (isDisabledEnvValue(env.OMK_ROOT_MCP_SUMMARY)) return [];
 
   try {
-    const { buildMcpDoctorReport } = await import("../commands/mcp.js");
-    const report = await buildMcpDoctorReport({
+    const report = await runMcpAutoConnect({
       env: {
         ...env,
         OMK_MCP_PREFLIGHT: "off",
       },
+      preflight: "fast",
     });
-    return formatRootMcpStatusLines(report);
+    return renderMcpAutoConnectLines(report);
   } catch {
-    return ["MCP: summary unavailable (run `omk mcp doctor`)"];
+    return ["MCP: AutoConnect summary unavailable (run `omk mcp connect`)"];
   }
+}
+
+export async function runRootOmkControlPlane(program: Command): Promise<void> {
+  await runRootHudFlow(program);
 }
 
 export async function runRootHudFlow(program: Command): Promise<void> {
@@ -101,6 +89,7 @@ export async function runRootHudFlow(program: Command): Promise<void> {
     console.log(style.gray(`
     💡 omk parallel "<prompt>" — Run the parallel subagent orchestrator`));
     console.log(style.gray(`  💡 omk run <flow> "<goal>" — Run a named workflow`));
+    console.log(style.gray(`  💡 omk mcp connect --all — Preflight the MCP tool plane`));
     console.log(style.gray(`  💡 omk chat --mode agent --execution ask — Interactive agent orchestrator`));
     console.log(style.gray(`  💡 omk chat --mode chat — ${c("cli.suggestionChat")}`));
     console.log(style.gray(`  💡 omk hud   — ${c("cli.suggestionHud")}`));
@@ -215,7 +204,7 @@ export function configureRootProgram(program: Command, OMK_VERSION: string, OMK_
         console.log(customHelp);
         process.exit(1);
       }
-      await runRootHudFlow(program);
+      await runRootOmkControlPlane(program);
     });
 
   program.hook("preAction", async (_thisCommand, _actionCommand) => {

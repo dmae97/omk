@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import { spawn } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -15,6 +15,7 @@ describe("omk with no arguments", () => {
   it("shows the HUD instead of crashing or exiting immediately", async () => {
     const tempDir = mkdtempSync(join(tmpdir(), "omk-no-args-hud-"));
     const homeDir = mkdtempSync(join(tmpdir(), "omk-no-args-home-"));
+    const markerPath = join(tempDir, "mcp-server-started.marker");
     mkdirSync(join(tempDir, ".omk"), { recursive: true });
     mkdirSync(join(tempDir, ".kimi"), { recursive: true });
     mkdirSync(join(homeDir, ".kimi"), { recursive: true });
@@ -23,7 +24,7 @@ describe("omk with no arguments", () => {
       mcpServers: {
         "sample-local": {
           command: process.execPath,
-          args: ["-e", "process.exit(0)"],
+          args: ["-e", `require("node:fs").writeFileSync(${JSON.stringify(markerPath)}, "started")`],
           env: {
             API_TOKEN: "super-secret-root-mcp-token",
           },
@@ -122,9 +123,12 @@ describe("omk with no arguments", () => {
         `expected HUD output not found. stdout: ${stdout}\nstderr: ${stderr}`
       );
       assert.match(combined, /MCP: project scope .* fast\/offline/);
+      assert.match(combined, /Offline summary only; no MCP servers were started/);
       assert.match(combined, /omk-project virtual MCP available/);
       assert.match(combined, /omk mcp doctor/);
+      assert.match(combined, /omk mcp connect --all/);
       assert.doesNotMatch(combined, /super-secret-root-mcp-token|API_TOKEN=/);
+      assert.equal(existsSync(markerPath), false, "root MCP summary must not start configured MCP servers");
 
       // In TTY mode the process should stay alive for input (not exit immediately).
       // In non-TTY CI it exits quickly after printing suggestions, which is expected.
