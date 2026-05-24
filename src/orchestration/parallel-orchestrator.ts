@@ -293,7 +293,7 @@ export class ParallelOrchestrator {
       const capabilities = nodeMeta?.capabilities;
 
       // Build worker env with policy and capabilities
-      const workerEnv: Record<string, string> = {};
+      const workerEnv: Record<string, string> = { ...process.env as Record<string, string> };
       if (providerPolicy) {
         workerEnv.OMK_NODE_PROVIDER_POLICY = JSON.stringify(providerPolicy);
       }

@@ -508,11 +508,15 @@ export async function runChatRuntime(
         const line = input_.trim();
         if (!line || line === "/exit" || line === "/quit") break;
         const turnNode: DagNodeDefinition = {
-          id: "chat-turn", name: "Chat", role: "coordinator", dependsOn: [], maxRetries: 1,
+          id: "chat-turn", name: line, role: "coordinator", dependsOn: [], maxRetries: 1,
           routing: { provider: providerPolicy, mcpServers: chatRuntimeMcpAllowlist, contextBudget: "normal" as const, readOnly: false },
           executionMode: "in-process",
+          inputs: [{ name: "prompt", ref: line, required: true }],
         } as unknown as DagNodeDefinition;
-        const turnOrch = new ParallelOrchestrator({ dag: createDag({ nodes: [turnNode] }), runId: effectiveRunId, maxWorkers: 1, cwd: root });
+        const turnOrch = new ParallelOrchestrator({
+          dag: createDag({ nodes: [turnNode] }),
+          runId: effectiveRunId, maxWorkers: 1, cwd: root,
+        });
         try {
           const turnResult = await turnOrch.execute();
           const w = turnResult.state.workers.find((d) => d.nodeId === "chat-turn");
