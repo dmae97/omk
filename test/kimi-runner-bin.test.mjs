@@ -166,6 +166,81 @@ test("Kimi DAG runner honors KIMI_BIN when kimi is not on PATH", async () => {
   }
 });
 
+test("Kimi DAG runner sends node prompt through stdin instead of argv", async () => {
+  if (process.platform === "win32") return;
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-kimi-stdin-prompt-project-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-kimi-stdin-prompt-home-"));
+  const binDir = join(projectRoot, "bin");
+  const kimiBin = join(binDir, "fake-kimi-stdin");
+  const fakeScript = join(projectRoot, "fake-kimi-stdin.js");
+  const marker = "kimi private prompt marker 92dd";
+  const previousProjectRoot = process.env.OMK_PROJECT_ROOT;
+  process.env.OMK_PROJECT_ROOT = projectRoot;
+  try {
+    await mkdir(binDir, { recursive: true });
+    await writeFile(fakeScript, `
+      const marker = ${JSON.stringify(marker)};
+      const argv = process.argv.slice(2);
+      let stdin = "";
+      process.stdin.setEncoding("utf8");
+      process.stdin.on("data", (chunk) => { stdin += chunk; });
+      process.stdin.on("end", () => {
+        if (argv.some((arg) => arg.includes(marker))) {
+          console.error("prompt leaked through argv");
+          process.exit(31);
+        }
+        if (argv.includes("--prompt")) {
+          console.error("legacy prompt argv transport used");
+          process.exit(32);
+        }
+        if (!argv.includes("--input-format")) {
+          console.error("stdin input format missing");
+          process.exit(33);
+        }
+        if (argv[argv.indexOf("--input-format") + 1] !== "text") {
+          console.error("stdin input format value mismatch");
+          process.exit(35);
+        }
+        if (!stdin.includes(marker)) {
+          console.error("prompt missing from stdin");
+          process.exit(34);
+        }
+        console.log("stdin-prompt-ok");
+      });
+    `, "utf-8");
+    await writeFile(kimiBin, `#!/usr/bin/env sh\nexec "${process.execPath}" "${fakeScript}" "$@"\n`, "utf-8");
+    await chmod(kimiBin, 0o755);
+
+    const runner = createKimiTaskRunner({
+      cwd: projectRoot,
+      mcpScope: "none",
+      skillsScope: "none",
+      hooksScope: "none",
+      env: {
+        HOME: homeRoot,
+        OMK_ORIGINAL_HOME: homeRoot,
+        OMK_PROJECT_ROOT: projectRoot,
+        KIMI_BIN: kimiBin,
+        PATH: "/usr/bin:/bin",
+      },
+      timeout: 5000,
+    });
+
+    const result = await runner.run(
+      { id: "n1", name: `node ${marker}`, role: "coder", dependsOn: [], status: "pending", retries: 0, maxRetries: 0 },
+      {}
+    );
+
+    assert.equal(result.success, true, result.stderr || result.stdout);
+    assert.match(result.stdout, /stdin-prompt-ok/);
+  } finally {
+    if (previousProjectRoot === undefined) delete process.env.OMK_PROJECT_ROOT;
+    else process.env.OMK_PROJECT_ROOT = previousProjectRoot;
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
 test("Kimi DAG runner auto-sends ENTER when fake Kimi CLI outputs continue prompt", async () => {
   if (process.platform === "win32") return;
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-kimi-continue-prompt-project-"));

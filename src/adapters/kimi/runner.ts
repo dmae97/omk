@@ -944,8 +944,8 @@ export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskR
         });
         args.push("--agent-file", scopedAgentFile);
       }
-      args.push("--prompt", buildNodeMessage(node, mergedEnv, promptPrefix));
-      args.push("--print");
+      const promptInput = buildNodeMessage(node, mergedEnv, promptPrefix);
+      args.push("--print", "--input-format", "text");
 
       if (worktree) {
         await ensureDir(worktree);
@@ -978,6 +978,7 @@ export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskR
           cwd: worktree,
           timeout: effectiveTimeout,
           env: mergedEnv,
+          input: promptInput,
           logPath,
           onStdout: (chunk, io) => {
             thinkingHandler?.(chunk);

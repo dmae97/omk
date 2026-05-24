@@ -11,6 +11,7 @@ import type { WorkerLogHandle } from "./log-streamer.js";
 import { renderScopedAgentYaml, type AgentCapabilityScopes } from "../util/scoped-agent-file.js";
 import { assignSkills, type SkillAssignment } from "./skill-assigner.js";
 import { capabilityScopesFromRouting } from "./capability-routing.js";
+import { buildChildEnv } from "../runtime/child-env.js";
 
 export interface AgentWorkerOptions {
   node: DagNode;
@@ -28,6 +29,21 @@ export interface WorkerOutput {
   stdout: string;
   stderr: string;
   metadata?: Record<string, unknown>;
+}
+
+export function buildAgentWorkerSpawnEnv(
+  workerEnv: Record<string, string>,
+  metadata: { readonly runId: string; readonly nodeId: string; readonly role: string }
+): Record<string, string> {
+  return buildChildEnv({
+    parentEnv: process.env,
+    overrideEnv: {
+      ...workerEnv,
+      OMK_RUN_ID: metadata.runId,
+      OMK_NODE_ID: metadata.nodeId,
+      OMK_NODE_ROLE: metadata.role,
+    },
+  });
 }
 
 export class AgentWorker {
@@ -139,13 +155,11 @@ export class AgentWorker {
       try {
         this.process = spawn(command, args, {
           cwd: this.cwd,
-          env: {
-            ...process.env,
-            ...this.env,
-            OMK_RUN_ID: this.runId,
-            OMK_NODE_ID: this.node.id,
-            OMK_NODE_ROLE: this.node.role,
-          },
+          env: buildAgentWorkerSpawnEnv(this.env, {
+            runId: this.runId,
+            nodeId: this.node.id,
+            role: this.node.role,
+          }),
           stdio: ["pipe", "pipe", "pipe"],
           signal: this.abortController!.signal,
         });

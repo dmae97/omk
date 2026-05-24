@@ -104,6 +104,23 @@ export function buildParallelWorkerCapabilityContext(node: DagNode, dag?: Dag): 
   };
 }
 
+export function buildParallelWorkerEnv(
+  capabilityContext: ParallelWorkerCapabilityContext,
+  providerPolicy?: unknown,
+  capabilities?: unknown
+): Record<string, string> {
+  const workerEnv: Record<string, string> = {
+    ...capabilityContext.env,
+  };
+  if (providerPolicy) {
+    workerEnv.OMK_NODE_PROVIDER_POLICY = JSON.stringify(providerPolicy);
+  }
+  if (capabilities) {
+    workerEnv.OMK_NODE_CAPABILITIES = JSON.stringify(capabilities);
+  }
+  return workerEnv;
+}
+
 export class ParallelOrchestrator {
   private dag: Dag;
   private runId: string;
@@ -334,17 +351,8 @@ export class ParallelOrchestrator {
       const providerPolicy = nodeMeta?.providerPolicy;
       const capabilities = nodeMeta?.capabilities;
 
-      // Build worker env with policy and capabilities
-      const workerEnv: Record<string, string> = {
-        ...(process.env as Record<string, string>),
-        ...capabilityContext.env,
-      };
-      if (providerPolicy) {
-        workerEnv.OMK_NODE_PROVIDER_POLICY = JSON.stringify(providerPolicy);
-      }
-      if (capabilities) {
-        workerEnv.OMK_NODE_CAPABILITIES = JSON.stringify(capabilities);
-      }
+      // Build worker env with only scoped policy/capability metadata.
+      const workerEnv = buildParallelWorkerEnv(capabilityContext, providerPolicy, capabilities);
 
       // 워커 상태 업데이트: 실행 중
       this.stateManager.startWorker(workerNode.id, capabilityContext.assignment);
