@@ -1,8 +1,8 @@
-# DESIGN.md — oh-my-kimi v1.2
+# DESIGN.md — open_multi-agent_kit v1.2
 
 ## Product Identity
 
-OMK is a Kimi Code-native verified agent runtime, not a generic multi-model dashboard.
+OMK is a provider-neutral verified agent runtime and root orchestrator, not a generic multi-model dashboard.
 
 Core sentence:
 

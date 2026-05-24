@@ -6,7 +6,7 @@ Please report security issues via GitHub Issues with the `security` label.
 
 ## Built-in Protections
 
-oh-my-kimi includes scoped default hooks to block destructive commands and secret leakage when the active runtime/harness enables them.
+open_multi-agent_kit includes scoped default hooks to block destructive commands and secret leakage when the active runtime/harness enables them.
 
 ## MCP and Harness Secret Handling
 

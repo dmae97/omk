@@ -2,17 +2,17 @@
 
 <div align="center">
 
-[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/dmae97-oh-my-kimi-badge.png)](https://mseep.ai/app/dmae97-oh-my-kimi)
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/dmae97-open_multi-agent_kit-badge.png)](https://mseep.ai/app/dmae97-open_multi-agent_kit)
 
 <!-- Open Graph -->
-<meta property="og:image" content="https://raw.githubusercontent.com/dmae97/oh-my-kimi/main/readmeasset/omk-social-preview.png" />
-<meta property="og:title" content="oh-my-kimi" />
-<meta property="og:url" content="https://oh-my-kimi.sbs/" />
+<meta property="og:image" content="https://raw.githubusercontent.com/dmae97/open_multi-agent_kit/main/readmeasset/omk-social-preview.png" />
+<meta property="og:title" content="open_multi-agent_kit" />
+<meta property="og:url" content="https://github.com/dmae97/open_multi-agent_kit/" />
 <meta property="og:description" content="Provider-neutral agent runtime for coding workflows. Stable daily-use core with orchestration surfaces." />
 
 <!-- Twitter -->
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:image" content="https://raw.githubusercontent.com/dmae97/oh-my-kimi/main/readmeasset/omk-social-preview.png" />
+<meta name="twitter:image" content="https://raw.githubusercontent.com/dmae97/open_multi-agent_kit/main/readmeasset/omk-social-preview.png" />
 
 <img src="./readmeasset/kimicat.gif" alt="OMK CLI demo" width="720" />
 
@@ -21,14 +21,14 @@
 <p><strong>Provider-neutral runtime for AI coding teams.</strong></p>
 <p><sub>Agent supervisor for coding agents: DAG scheduling, evidence gates, worktree isolation, replay, and memory.</sub></p>
 <p><sub>Your agents write. OMK coordinates, verifies, remembers, and guards.</sub></p>
-<p><a href="https://oh-my-kimi.sbs/"><strong>oh-my-kimi.sbs</strong></a> · <a href="https://github.com/dmae97/oh-my-kimi">GitHub</a> · <a href="https://www.npmjs.com/package/@oh-my-kimi/cli">npm</a></p>
+<p><a href="https://github.com/dmae97/open_multi-agent_kit/"><strong>github.com/dmae97/open_multi-agent_kit</strong></a> · <a href="https://github.com/dmae97/open_multi-agent_kit">GitHub</a> · <a href="https://www.npmjs.com/package/open-multi-agent-kit">npm</a></p>
 
 <p>
-  <a href="https://github.com/dmae97/oh-my-kimi/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/dmae97/oh-my-kimi/ci.yml?branch=main&amp;style=for-the-badge&amp;logo=githubactions&amp;label=CI" alt="GitHub CI" /></a>
-  <a href="https://github.com/dmae97/oh-my-kimi/releases"><img src="https://img.shields.io/github/package-json/v/dmae97/oh-my-kimi?style=for-the-badge&amp;logo=github&amp;label=GitHub%20version" alt="GitHub package version" /></a>
-  <a href="https://www.npmjs.com/package/@oh-my-kimi/cli"><img src="https://img.shields.io/npm/v/@oh-my-kimi/cli?style=for-the-badge&amp;color=cb3837&amp;logo=npm" alt="npm version" /></a>
-  <a href="https://www.npmjs.com/package/@oh-my-kimi/cli"><img src="https://img.shields.io/npm/dm/@oh-my-kimi/cli?style=for-the-badge&amp;color=brightgreen&amp;logo=npm" alt="npm downloads" /></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/npm/l/@oh-my-kimi/cli?style=for-the-badge&amp;color=blue" alt="license" /></a>
+  <a href="https://github.com/dmae97/open_multi-agent_kit/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/dmae97/open_multi-agent_kit/ci.yml?branch=main&amp;style=for-the-badge&amp;logo=githubactions&amp;label=CI" alt="GitHub CI" /></a>
+  <a href="https://github.com/dmae97/open_multi-agent_kit/releases"><img src="https://img.shields.io/github/package-json/v/dmae97/open_multi-agent_kit?style=for-the-badge&amp;logo=github&amp;label=GitHub%20version" alt="GitHub package version" /></a>
+  <a href="https://www.npmjs.com/package/open-multi-agent-kit"><img src="https://img.shields.io/npm/v/open-multi-agent-kit?style=for-the-badge&amp;color=cb3837&amp;logo=npm" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/open-multi-agent-kit"><img src="https://img.shields.io/npm/dm/open-multi-agent-kit?style=for-the-badge&amp;color=brightgreen&amp;logo=npm" alt="npm downloads" /></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/npm/l/open-multi-agent-kit?style=for-the-badge&amp;color=blue" alt="license" /></a>
 </p>
 
 <p>
@@ -51,13 +51,13 @@ OMK turns agent CLIs and model APIs into bounded, inspectable runtime lanes with
 - A provider-native control plane for shipping code with verification.
 
 ```bash
-npm install -g @oh-my-kimi/cli
+npm install -g open-multi-agent-kit
 omk init
 omk doctor
 omk chat
 ```
 
-Public site and install landing page: **[oh-my-kimi.sbs](https://oh-my-kimi.sbs/)**.
+Project repository and install landing page: **[github.com/dmae97/open_multi-agent_kit](https://github.com/dmae97/open_multi-agent_kit/)**.
 
 Need the full agent harness?
 
@@ -316,9 +316,9 @@ Expected operator loop:
 
 | Example | Prompt -> output | Artifact |
 | --- | --- | --- |
-| [One-prompt landing page](https://github.com/dmae97/oh-my-kimi/tree/main/examples/one-prompt-landing-page) | Next.js + Tailwind landing page from a single sentence | `RUN_REPORT.md`, video, known limitations |
-| [Neon Courier 2D](https://github.com/dmae97/oh-my-kimi/tree/main/examples/neon-courier-2d) | Browser 2D runner game in TypeScript | `RUN_REPORT.md`, source, known limitations |
-| [Neon Courier FPS](https://github.com/dmae97/oh-my-kimi/tree/main/examples/neon-courier-fps) | Three.js first-person prototype | `RUN_REPORT.md`, source, known limitations |
+| [One-prompt landing page](https://github.com/dmae97/open_multi-agent_kit/tree/main/examples/one-prompt-landing-page) | Next.js + Tailwind landing page from a single sentence | `RUN_REPORT.md`, video, known limitations |
+| [Neon Courier 2D](https://github.com/dmae97/open_multi-agent_kit/tree/main/examples/neon-courier-2d) | Browser 2D runner game in TypeScript | `RUN_REPORT.md`, source, known limitations |
+| [Neon Courier FPS](https://github.com/dmae97/open_multi-agent_kit/tree/main/examples/neon-courier-fps) | Three.js first-person prototype | `RUN_REPORT.md`, source, known limitations |
 
 <img src="./readmeasset/oneprompt.gif" alt="One-prompt landing page generated through OMK" width="720" />
 
@@ -342,7 +342,7 @@ OMK is provider-neutral. Any supported model can advise, review, or QA, and the 
 ## Installation
 
 ```bash
-npm install -g @oh-my-kimi/cli
+npm install -g open-multi-agent-kit
 omk --version
 omk doctor
 ```
@@ -462,4 +462,4 @@ OMK is part of the broader oh-my agent harness family. It is built for developer
 
 ## Star history
 
-[![Star History Chart](https://api.star-history.com/svg?repos=dmae97/oh-my-kimi&type=Date)](https://www.star-history.com/#dmae97/oh-my-kimi&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=dmae97/open_multi-agent_kit&type=Date)](https://www.star-history.com/#dmae97/open_multi-agent_kit&Date)
