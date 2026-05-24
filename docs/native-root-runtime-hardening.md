@@ -20,9 +20,22 @@ Fresh verification at the time of this update:
 - GitHub Actions Smoke Test for that commit completed successfully.
 - GitHub Actions CI for that commit failed on Windows test jobs, so v1.1.18 publish/tag remains blocked.
 
+For the LaTeX/paper-ready algorithm appendix and acceptance criteria, see
+[Native Root Runtime Algorithms](./native-root-runtime-algorithms.md). Treat
+that appendix as hardening criteria, not a stable-release proof, until the
+exact release diff passes CI, smoke, and local release gates.
+
 ## Runtime Safety Contract
 
+Related algorithm appendix:
+[Native Root Runtime Algorithms](./native-root-runtime-algorithms.md)
+documents the current acceptance criteria for turn construction, capsule
+conversion, runtime fallback, Kimi prompt transport, and scoped worker
+environment construction.
+
 ### Turn risk and capability routing
+
+Related: Algorithm 2.
 
 Native chat turns must be default-safe. A turn should request only the minimum capability needed:
 
@@ -37,6 +50,8 @@ DeepSeek remains an advisory/read/review lane unless an explicit future contract
 
 ### Approval and sandbox propagation
 
+Related: Algorithm 2, Algorithm 4, and Algorithm 7.
+
 `--execution ask|auto|never` must flow from chat command parsing into `AgentTask.safety`, runtime routing, and the final adapter invocation.
 
 | OMK execution | Runtime expectation |
@@ -48,6 +63,8 @@ DeepSeek remains an advisory/read/review lane unless an explicit future contract
 
 ### Authority provider resolution
 
+Related: Algorithm 5.
+
 `authority`, `primary`, and `omk` are policies, not executable providers. They must resolve to a concrete provider before bootstrap or routing:
 
 1. `OMK_AUTHORITY_PROVIDER`, if set and healthy.
@@ -57,6 +74,10 @@ DeepSeek remains an advisory/read/review lane unless an explicit future contract
 Unknown or unresolved authority must fail with remediation instead of silently degrading to advisory-only mode.
 
 ### Provider health probes
+
+Related: Algorithm 5. Current routing uses available registry, capability, and
+evidence metadata; uniform auth/model/quota health remains part of this
+hardening backlog.
 
 Provider bootstrap must distinguish:
 
@@ -68,6 +89,8 @@ Provider bootstrap must distinguish:
 Binary existence alone is not enough. CLI adapters should probe version and auth/session status where possible; API adapters should validate key presence and perform a cheap health/model check when safe.
 
 ### Tool-plane diagnostics
+
+Related: Algorithm 4 and Algorithm 7.
 
 MCP, skills, and hooks must not disappear silently. Runtime manifests should include diagnostics for parse/read failures, unknown names, and scope drops. If a task requires runtime MCP, invalid MCP config is a hard failure.
 

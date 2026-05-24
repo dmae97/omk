@@ -9,7 +9,7 @@ Latest pushed source on `new-origin/main` is `6305e2b62185c11549f59e2340936769a3
 
 - GitHub Actions Smoke Test is green on `6305e2b`.
 - GitHub Actions CI is red on Windows jobs on `6305e2b`; do not publish/tag v1.1.18 until this is fixed.
-- The active architecture backlog is now tracked in `docs/native-root-runtime-hardening.md` and `.omk/specs/native-orchestrator-phase1/`.
+- The active architecture backlog is now tracked in `docs/native-root-runtime-hardening.md`, `docs/native-root-runtime-algorithms.md`, and `.omk/specs/native-orchestrator-phase1/`.
 
 ## v1.1.9 reality
 
@@ -34,6 +34,9 @@ Provider routing and graph viewing are no longer purely future work:
 - Implement `AgentRuntime.execute` as the single entrypoint for all worker execution (chat, DAG node, inline tool call).
 - Model chat as a DAG: user message → IntentFrame → ActionAtom → worker node → evidence gate.
 - Ensure Kimi adapter remains the mature default while the bridge is provider-agnostic.
+- Use `docs/native-root-runtime-algorithms.md` Algorithms 3-5 as the
+  acceptance reference for context-capsule conversion, task execution, and
+  router fallback.
 
 ### Phase 2: Worker Capability Assignment
 
@@ -42,12 +45,16 @@ Provider routing and graph viewing are no longer purely future work:
 - Add preflight health checks and fallback chains for non-Kimi workers.
 - Make native chat turn capability default-safe: read-only for advisory/review prompts, write/patch for edit prompts, and shell only when command execution is intended and approval policy allows it.
 - Keep DeepSeek as read/review/advisory unless a future contract explicitly grants write/shell authority.
+- Use Algorithm 2 and Algorithm 7 as the acceptance reference for per-turn
+  capabilities and scoped worker environment construction.
 
 ### Phase 3: Root Coordinator Mode
 
 - Introduce native OMK agent loop with `IntentFrame` parsing and `ActionAtom` dispatch.
 - OMK becomes the root orchestrator; Kimi becomes one worker provider adapter among many.
 - Preserve D-Mail checkpoints and Okabe-compatible context management across provider handoffs.
+- Treat ActionAtom/Novelty Guard language as contract-level until concrete
+  runtime implementation and tests land.
 
 ### Phase 4: Docs & GA
 

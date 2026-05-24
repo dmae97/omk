@@ -182,6 +182,12 @@ flowchart LR
   H --> U
 ```
 
+For the paper/architecture form of this flow, see
+[Native root runtime algorithms](./docs/native-root-runtime-algorithms.md). It
+captures the native root turn loop, context-capsule conversion, runtime
+routing/fallback, secure Kimi stdin transport, and scoped worker environment
+acceptance criteria.
+
 ## Runtime adapters
 
 OMK supports multiple agent runtimes through a unified adapter interface:
@@ -202,6 +208,11 @@ Current hardening stance:
 | Codex CLI | Write/shell lane only when approval and sandbox policy are propagated | Coding lane after native runtime hardening gates pass |
 | DeepSeek | Read/review/advisory only by default | Research, review, risk analysis, no write/shell authority |
 | OpenRouter / Qwen / Gemini / Claude / OpenCode / CommandCode | Provider-specific adapter lanes | Use only when health preflight and capability match succeed |
+
+This stance maps to
+[Algorithm 2 and Algorithm 5](./docs/native-root-runtime-algorithms.md):
+turn-risk capability routing, provider selection, fallback, and DeepSeek
+advisory limits are hardening contracts, not blanket stability claims.
 
 ### 1. Provider-native control plane
 
@@ -286,6 +297,11 @@ Use `omk design open-design --doctor --json` for a side-effect-free readiness ch
 ### 14. Native safety path
 
 OMK includes a Rust native safety loader path and CI-backed artifact matrix. JavaScript remains the CLI surface; native safety helpers are selected when available and fall back safely when they are not.
+
+Runtime prompt/env safety is tracked in the
+[native root runtime algorithms](./docs/native-root-runtime-algorithms.md),
+especially Algorithm 6 for Kimi stdin prompt transport and Algorithm 7 for
+scoped worker environment construction.
 
 ---
 
@@ -457,6 +473,7 @@ Then set `~/.kimi/mcp.json` to an absolute command such as `/home/you/.local/bin
 - [Maturity](./MATURITY.md)
 - [Security](./SECURITY.md)
 - [Native root runtime hardening](./docs/native-root-runtime-hardening.md)
+- [Native root runtime algorithms](./docs/native-root-runtime-algorithms.md)
 
 ---
 
