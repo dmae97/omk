@@ -136,10 +136,10 @@ export function box(lines: string[], title?: string): string {
   const innerWidth = Math.min(rawInner, Math.max(termWidth - 4, 20));
   const width = innerWidth + 4;
   const top = title
-    ? style.purple("╔" + "═".repeat(2) + " " + title + " " + "═".repeat(Math.max(0, width - stripAnsi(title).length - 6)) + "╗")
-    : style.purple("╔" + "═".repeat(width) + "╗");
-  const bottom = style.purple("╚" + "═".repeat(width) + "╝");
-  const body = lines.map((l) => style.purple("║ ") + padEndAnsi(l, innerWidth) + style.purple(" ║"));
+    ? style.phosphorDim("╔" + "═".repeat(2) + " " + style.phosphorBold(title) + " " + "═".repeat(Math.max(0, width - stripAnsi(title).length - 6)) + "╗")
+    : style.phosphorDim("╔" + "═".repeat(width) + "╗");
+  const bottom = style.phosphorDim("╚" + "═".repeat(width) + "╝");
+  const body = lines.map((l) => style.phosphorDim("║ ") + padEndAnsi(l, innerWidth) + style.phosphorDim(" ║"));
   return [top, ...body, bottom].join("\n");
 }
 
@@ -406,9 +406,9 @@ export function omkStatusChips(): string {
 export function omkCliHero(footer?: string): string {
   const heroLines = [
     gradient("✦ OMK ✦"),
-    style.creamBold("Open Multi-agent Kit."),
-    style.matrixGreen("Provider-neutral runtime for AI coding teams."),
-    style.gray("DAG scheduling · evidence gates · worktree isolation · replay · memory"),
+    style.phosphorBold("Open Multi-agent Kit."),
+    style.phosphor("Provider-neutral runtime for AI coding teams."),
+    style.phosphorDim("DAG scheduling · evidence gates · worktree isolation · replay · memory"),
     "",
     ...OMK_MATRIX_ASCII_ART.split("\n").map((line) => style.matrixGreen(line)),
     "",
