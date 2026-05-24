@@ -96,7 +96,13 @@ export async function runRootHudFlow(program: Command): Promise<void> {
       process.exitCode = result.status;
     }
   } else if (launchCmd === "chat") {
-    const chatArgs = [process.argv[1]!, "chat", "--layout", "auto", "--brand", "minimal", "--provider", process.env.OMK_DEFAULT_PROVIDER ?? "auto"];
+    const chatArgs = [
+      process.argv[1]!,
+      "chat",
+      "--layout", "auto",
+      "--brand", "minimal",
+      "--provider", globalOpts.provider ?? process.env.OMK_DEFAULT_PROVIDER ?? "auto",
+    ];
     if (globalOpts.runId) chatArgs.push("--run-id", globalOpts.runId);
     if (globalOpts.workers) chatArgs.push("--workers", globalOpts.workers);
     chatArgs.push("--mode", selectedMode);
@@ -130,6 +136,7 @@ export function configureRootProgram(program: Command, OMK_VERSION: string, OMK_
     .option("-r, --run-id <id>", t("cli.runIdOption"))
     .option("--workers <n>", t("cmd.parallelWorkersOption"), "auto")
     .option("--sudo", t("cli.sudoOption"))
+    .option("--provider <provider>", "provider policy (auto | kimi | codex | deepseek | commandcode | opencode | qwen | openrouter)", "auto")
     .addHelpText("before", buildCustomHelp)
     .addHelpText("afterAll", `\n  ${style.gray(OMK_VERSION_FOOTER)}\n`)
     .configureOutput({

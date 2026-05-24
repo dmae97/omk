@@ -60,8 +60,13 @@ async function createDefaultRuntimeRegistry(
     registry.register(createOpencodeCliAdapter());
   }
 
-  // commandcode-cli
-  if (await checkCommand("commandcode").catch(() => false)) {
+  const commandcodeBin = await checkCommand(process.env.COMMANDCODE_BIN ?? "commandcode").catch(() => false)
+    ? process.env.COMMANDCODE_BIN ?? "commandcode"
+    : await checkCommand("cmd").catch(() => false)
+    ? "cmd"
+    : null;
+  if (commandcodeBin) {
+    process.env.COMMANDCODE_BIN = commandcodeBin;
     registry.register(createCommandcodeCliAdapter());
   }
 
@@ -187,7 +192,7 @@ function taskCapabilitiesFromNode(node: {
   const write = merge || role === "coder" || role === "executor" || role === "refactorer";
   const shell = node.routing?.requiresToolCalling === true || gates.includes("command-pass") || gates.includes("test-pass");
   const review = role === "reviewer" || role === "qa" || role === "tester" || gates.includes("review-pass");
-  const mcp = node.routing?.requiresMcp === true || (node.routing?.mcpServers?.length ?? 0) > 0;
+  const mcp = node.routing?.requiresMcp === true;
   return {
     read: true,
     write,
