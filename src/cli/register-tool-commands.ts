@@ -2,6 +2,13 @@ import type { Command } from "commander";
 import { t } from "../util/i18n.js";
 
 export function registerToolCommands(program: Command): void {
+  program.command("auth")
+    .description("Show provider authentication status and setup instructions")
+    .action(async () => {
+      const { authCommand } = await import("../commands/auth.js");
+      await authCommand();
+    });
+
   const graph = program.command("graph").description("Inspect OMK ontology graph");
   graph
     .command("view")
