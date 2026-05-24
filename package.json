@@ -1,11 +1,11 @@
 {
-  "name": "@oh-my-kimi/cli",
+  "name": "open-multi-agent-kit",
   "version": "1.1.18",
   "description": "Provider-neutral agent runtime for coding workflows. Verified DAG execution with evidence gates, worktree isolation, and local graph memory.",
   "type": "module",
   "bin": {
     "omk": "dist/cli.js",
-    "oh-my-kimi": "dist/cli.js",
+    "open-multi-agent-kit": "dist/cli.js",
     "omk-project-mcp": "dist/mcp/omk-project-server.js",
     "omk-acp": "dist/mcp/acp-server.js",
     "omk-mcp-host": "dist/mcp/host.js"
@@ -28,6 +28,10 @@
     "prepare": "npm run build",
     "yaml:check": "node scripts/validate-yaml.mjs",
     "release:check": "npm run verify && npm run native:build && npm run pack:dry && npm run audit:package && npm run smoke:pack",
+    "smoke:no-kimi:chat": "KIMI_BIN=/nonexistent/kimi OMK_LEGACY_CHAT=0 OMK_MCP_PREFLIGHT=off OMK_PROJECT_ROOT=\"$PWD\" node dist/cli.js chat --provider auto --mode agent --execution ask --layout plain --mcp-scope none --smoke --json",
+    "smoke:no-kimi:codex": "KIMI_BIN=/nonexistent/kimi OMK_LEGACY_CHAT=0 OMK_MCP_PREFLIGHT=off OMK_PROJECT_ROOT=\"$PWD\" node dist/cli.js chat --provider codex --mode agent --execution ask --layout plain --mcp-scope none --smoke --json",
+    "smoke:no-kimi:doctor": "KIMI_BIN=/nonexistent/kimi OMK_LEGACY_CHAT=0 OMK_PROJECT_ROOT=\"$PWD\" node dist/cli.js doctor --json",
+    "verify:no-kimi": "npm run build:clean && npm run smoke:no-kimi:doctor && npm run smoke:no-kimi:chat && npm run smoke:no-kimi:codex",
     "rust:check": "node scripts/rust-safety-check.mjs",
     "rust:build": "cargo build -p omk-safety",
     "native:build": "node scripts/build-native.mjs",
@@ -138,15 +142,15 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dmae97/oh-my-kimi.git"
+    "url": "git+https://github.com/dmae97/open_multi-agent_kit.git"
   },
   "bugs": {
-    "url": "https://github.com/dmae97/oh-my-kimi/issues"
+    "url": "https://github.com/dmae97/open_multi-agent_kit/issues"
   },
   "publishConfig": {
     "access": "public"
   },
-  "homepage": "https://oh-my-kimi.sbs/",
+  "homepage": "https://github.com/dmae97/open_multi-agent_kit#readme",
   "engines": {
     "node": ">=20.0.0",
     "npm": ">=10.0.0"
