@@ -420,7 +420,11 @@ test("createExternalCliAdapter writes 0600 temp prompt file and cleans it up", a
   assert.equal(result.exitCode, 0);
   const snapshot = JSON.parse(result.stdout.trim());
   assert.equal(snapshot.promptHash, sha256(marker));
-  assert.equal(snapshot.mode, "600");
+  if (process.platform === "win32") {
+    assert.match(snapshot.mode, /^[0-7]{3}$/);
+  } else {
+    assert.equal(snapshot.mode, "600");
+  }
   assert.equal(snapshot.argvText.includes(marker), false);
   assert.equal(snapshot.goal, null);
   assert.equal(snapshot.envFile, observedPromptFile);
