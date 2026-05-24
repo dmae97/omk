@@ -28,16 +28,16 @@ export class CodexRuntime implements AgentRuntime {
   readonly priority = 60;
   readonly capabilities: RuntimeCapabilities = {
     read: true,
-    write: false,
-    shell: false,
+    write: true,
+    shell: true,
     mcp: false,
-    patch: false,
+    patch: true,
     review: true,
     merge: false,
     vision: false,
     supportsStreaming: false,
     supportsStructuredOutput: false,
-    supportsToolCalling: false,
+    supportsToolCalling: true,
   };
 
   private readonly cwd: string;
@@ -99,11 +99,20 @@ export class CodexRuntime implements AgentRuntime {
       OMK_NODE_ID: task.context.nodeId,
       OMK_ROLE: task.context.role ?? "",
       OMK_GOAL: task.context.goal ?? "",
+      OMK_NODE_SKILLS: task.tools.skills?.join(",") ?? "",
+      OMK_NODE_MCP_SERVERS: task.tools.mcpServers?.join(",") ?? "",
+      OMK_NODE_TOOLS: task.tools.available.map((tool) => tool.name).join(","),
+      OMK_NODE_HOOKS: task.tools.hooks?.join(",") ?? "",
     };
+
+    const sandboxMode =
+      task.capabilities.write || task.capabilities.patch || task.capabilities.shell
+        ? "workspace-write"
+        : "read-only";
 
     const args = [
       "exec",
-      "--sandbox", "read-only",
+      "--sandbox", sandboxMode,
       "--ask-for-approval", "never",
       "--cd", this.cwd,
       "--color", "never",
@@ -121,7 +130,7 @@ export class CodexRuntime implements AgentRuntime {
         input: prompt,
         timeout: this.timeoutMs,
         signal: task.context.abortSignal,
-        inheritEnv: true,
+        inheritEnv: false,
         env,
       });
 
@@ -138,6 +147,7 @@ export class CodexRuntime implements AgentRuntime {
         exitCode: shellResult.exitCode,
         metadata: {
           runtime: this.id,
+          sandbox: sandboxMode,
           stderr: shellResult.stderr,
           failed: shellResult.failed,
         },

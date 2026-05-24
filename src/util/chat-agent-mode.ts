@@ -5,6 +5,7 @@ import type { OmkMode } from "./mode-preset.js";
 import { getRunPath } from "./fs.js";
 import type { OmkRuntimeScope } from "./resource-profile.js";
 import type { ExecutionPromptPolicy, ExecutionSelectionSource } from "../contracts/orchestration.js";
+import { DEFAULT_AUTHORITY_PROVIDER } from "../providers/types.js";
 import { normalizeProviderId } from "../providers/model-registry.js";
 import {
   readRootAgentSubagents,
@@ -728,7 +729,7 @@ function normalizeAuthorityProvider(resources: ChatAgentModeResources): string {
   if (explicit !== "auto") return explicit;
   const legacy = normalizeProviderId(process.env.OMK_PROVIDER_AUTHORITY);
   if (legacy !== "auto" && legacy !== "direct" && legacy !== "advisory") return legacy;
-  return "auto";
+  return DEFAULT_AUTHORITY_PROVIDER;
 }
 
 function withAuthorityFallback(candidates: string[], authorityProvider: string): string[] {
@@ -738,7 +739,7 @@ function withAuthorityFallback(candidates: string[], authorityProvider: string):
 function authorityProviderCandidates(authorityProvider: string): string[] {
   const legacyKimiFallback = process.env.OMK_LEGACY_CHAT === "1" || process.env.OMK_LEGACY_KIMI_FALLBACK === "1";
   if (authorityProvider === "auto") {
-    return uniqueProviderCandidates(["codex", "qwen", "openrouter", ...(legacyKimiFallback ? ["kimi"] : [])]);
+    return uniqueProviderCandidates([DEFAULT_AUTHORITY_PROVIDER, "codex", "qwen", "openrouter", ...(legacyKimiFallback ? ["kimi"] : [])]);
   }
   return uniqueProviderCandidates([authorityProvider, ...(legacyKimiFallback && authorityProvider !== "kimi" ? ["kimi"] : [])]);
 }

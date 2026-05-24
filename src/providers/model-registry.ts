@@ -18,7 +18,7 @@ import type {
   ProviderWireApi,
 } from "./types.js";
 
-export const KNOWN_PROVIDER_IDS = ["kimi", "deepseek", "qwen", "codex", "openrouter"] as const satisfies readonly KnownProviderId[];
+export const KNOWN_PROVIDER_IDS = ["kimi", "deepseek", "qwen", "codex", "opencode", "commandcode", "openrouter"] as const satisfies readonly KnownProviderId[];
 export const QWEN_DASHSCOPE_COMPAT_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
 export const OPENROUTER_COMPAT_BASE_URL = "https://openrouter.ai/api/v1";
 
@@ -140,6 +140,30 @@ const DEFAULT_PROVIDER_CONFIGS: Record<KnownProviderId, Omit<ProviderRegistryEnt
     planKind: "chatgpt-plan",
     routing: "external-cli",
   },
+  opencode: {
+    enabled: true,
+    kind: "external-cli",
+    defaultModel: "opencode-cli",
+    aliases: { default: "opencode-cli", opencode: "opencode-cli", "opencode-cli": "opencode-cli" },
+    capabilities: ["read", "write", "shell", "patch", "review"],
+    wireApi: "external-cli",
+    auth: { method: "external-cli" },
+    profileType: "runtime",
+    planKind: "external-cli",
+    routing: "external-cli",
+  },
+  commandcode: {
+    enabled: true,
+    kind: "external-cli",
+    defaultModel: "commandcode-cli",
+    aliases: { default: "commandcode-cli", commandcode: "commandcode-cli", cmd: "commandcode-cli", "commandcode-cli": "commandcode-cli" },
+    capabilities: ["read", "write", "shell", "patch", "review"],
+    wireApi: "external-cli",
+    auth: { method: "external-cli" },
+    profileType: "runtime",
+    planKind: "external-cli",
+    routing: "external-cli",
+  },
   qwen: {
     enabled: false,
     kind: "openai-compatible",
@@ -224,7 +248,7 @@ export function normalizeProviderPolicy(value: string | undefined): ProviderPoli
   const normalizedText = value?.trim().toLowerCase();
   if (normalizedText === "authority" || normalizedText === "primary" || normalizedText === "omk") return "authority";
   const normalized = normalizeProviderId(value);
-  return normalized === "kimi" || normalized === "deepseek" || normalized === "codex" || normalized === "qwen" || normalized === "openrouter"
+  return normalized === "kimi" || normalized === "deepseek" || normalized === "codex" || normalized === "qwen" || normalized === "openrouter" || normalized === "opencode" || normalized === "commandcode"
     ? normalized as ProviderPolicy
     : "auto";
 }
@@ -237,6 +261,8 @@ export function normalizeProviderId(value: string | undefined): ProviderId | "au
   if (lower === "kimi" || lower === "moonshot") return "kimi";
   if (lower === "deepseek" || lower === "deepseek-v4" || lower === "ds") return "deepseek";
   if (lower === "codex" || lower === "openai-codex") return "codex";
+  if (lower === "opencode" || lower === "open-code") return "opencode";
+  if (lower === "commandcode" || lower === "command-code" || lower === "cmd") return "commandcode";
   if (lower === "qwen" || lower === "dashscope" || lower === "qwen3" || lower === "qwen-max") return "qwen";
   if (lower === "openrouter" || lower === "openrouter-ai") return "openrouter";
   if (lower === "claude" || lower === "anthropic") return "openrouter";
@@ -535,6 +561,7 @@ function normalizePlanKind(value: string | undefined): ProviderPlanKind | undefi
     value === "chatgpt-plan" ||
     value === "claude-code-plan" ||
     value === "gemini-cli-plan" ||
+    value === "external-cli" ||
     value === "qwen-coding-plan" ||
     value === "openrouter-credits" ||
     value === "openrouter-byok"

@@ -1,0 +1,82 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { createAgentYaml } from "../dist/orchestration/agent-worker.js";
+import { buildParallelWorkerCapabilityContext } from "../dist/orchestration/parallel-orchestrator.js";
+
+test("parallel worker capability context merges role defaults with explicit routing", () => {
+  const node = workerNode();
+  const context = buildParallelWorkerCapabilityContext(node, { nodes: [node] });
+
+  assert.ok(context.scopes.skills.includes("omk-typescript-strict"));
+  assert.ok(context.scopes.skills.includes("custom-skill"));
+  assert.ok(context.scopes.mcpServers.includes("omk-project"));
+  assert.ok(context.scopes.mcpServers.includes("custom-mcp"));
+  assert.ok(context.scopes.tools.includes("custom-tool"));
+  assert.ok(context.scopes.hooks.includes("protect-secrets.sh"));
+  assert.ok(context.scopes.hooks.includes("custom-hook"));
+  assert.deepEqual(context.assignment.mcpServers, [...context.scopes.mcpServers]);
+  assert.equal(context.node.routing?.requiresMcp, true);
+  assert.equal(context.node.routing?.requiresToolCalling, true);
+  assert.match(context.env.OMK_NODE_SKILLS, /custom-skill/);
+  assert.match(context.env.OMK_NODE_MCP_SERVERS, /custom-mcp/);
+  assert.match(context.env.OMK_NODE_TOOLS, /custom-tool/);
+  assert.match(context.env.OMK_NODE_HOOKS, /custom-hook/);
+  assert.equal(context.env.OMK_ROUTE_REQUIRES_MCP, "true");
+  assert.match(context.env.OMK_NODE_CAPABILITY_SUMMARY, /mcp=/);
+});
+
+test("parallel worker scoped YAML carries capability hint digests without secrets", async () => {
+    const root = await mkdtemp(join(tmpdir(), "omk-parallel-capabilities-"));
+  try {
+    const outputDir = join(root, ".omk", "runs", "run-1", "agents");
+    await mkdir(join(root, ".omk", "agents"), { recursive: true });
+    await mkdir(outputDir, { recursive: true });
+    const context = buildParallelWorkerCapabilityContext(workerNode());
+    const yamlPath = await createAgentYaml(context.node, "run-1", {
+      skills: [],
+      mcpServers: [],
+      tools: [],
+      hooks: [],
+      rationale: "test",
+    }, outputDir);
+    const yaml = await readFile(yamlPath, "utf-8");
+
+    assert.match(yaml, /OMK_MCP_ENABLED: "true"/);
+    assert.match(yaml, /OMK_SKILLS_ENABLED: "true"/);
+    assert.match(yaml, /OMK_HOOKS_ENABLED: "true"/);
+    assert.match(yaml, /OMK_MCP_HINTS: "count=\d+;digest=[0-9a-f]+;top=[^"]*custom-mcp/);
+    assert.match(yaml, /OMK_SKILL_HINTS: "count=\d+;digest=[0-9a-f]+;/);
+    assert.match(yaml, /OMK_TOOL_HINTS: "count=\d+;digest=[0-9a-f]+;top=[^"]*custom-tool/);
+    assert.match(yaml, /OMK_HOOK_HINTS: "count=\d+;digest=[0-9a-f]+;/);
+    assert.doesNotMatch(yaml, /Authorization|API_TOKEN|SECRET|PASSWORD/i);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+function workerNode() {
+  return {
+    id: "worker-1",
+    name: "Implement parallel worker capability propagation",
+    role: "coder",
+    dependsOn: [],
+    status: "pending",
+    retries: 0,
+    maxRetries: 1,
+    routing: {
+      provider: "auto",
+      skills: ["custom-skill"],
+      mcpServers: ["custom-mcp"],
+      tools: ["custom-tool"],
+      hooks: ["custom-hook"],
+      requiresMcp: true,
+      requiresToolCalling: true,
+      readOnly: false,
+      contextBudget: "small",
+    },
+  };
+}

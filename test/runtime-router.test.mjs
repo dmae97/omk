@@ -1,13 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import { createRuntimeBackedTaskRunner } from "../dist/runtime/runtime-backed-task-runner.js";
 import { createRuntimeRouter } from "../dist/runtime/runtime-router.js";
 
-test("runtime router prefers Codex over Kimi for coding intent when both are available", async () => {
+test("runtime router prefers Kimi for coding intent when Kimi and Codex are available", async () => {
   const calls = [];
   const router = createRuntimeRouter({
     runtimes: [
-      fakeRuntime("kimi-cli", calls),
+      fakeRuntime("kimi-print", calls),
       fakeRuntime("codex-cli", calls),
     ],
   });
@@ -15,9 +16,9 @@ test("runtime router prefers Codex over Kimi for coding intent when both are ava
   const result = await router.execute(fakeTask({ prompt: "implement the provider-neutral routing patch" }));
 
   assert.equal(result.exitCode, 0);
-  assert.equal(result.metadata.selectedRuntime, "codex-cli");
-  assert.deepEqual(calls, ["codex-cli"]);
-  assert.deepEqual(result.metadata.fallbackChain, ["codex-cli", "kimi-cli"]);
+  assert.equal(result.metadata.selectedRuntime, "kimi-print");
+  assert.deepEqual(calls, ["kimi-print"]);
+  assert.deepEqual(result.metadata.fallbackChain, ["kimi-print", "codex-cli"]);
 });
 
 test("runtime router keeps Kimi as compatibility fallback when preferred runtimes are absent", async () => {
@@ -107,10 +108,52 @@ test("runtime router honors task provider policy and does not fall back to Kimi 
   assert.deepEqual(result.metadata.fallbackChain, ["codex-cli"]);
 });
 
+test("runtime-backed runner routes non-Kimi CLI turns without optional capability over-constraint", async () => {
+  const runner = await createRuntimeBackedTaskRunner({ cwd: process.cwd(), env: {}, runId: "local-runtime-backed" });
+  const registry = runner._registry;
+  registry.unregister("codex-cli");
+  registry.unregister("kimi-print");
+  registry.unregister("deepseek-api");
+  registry.unregister("opencode-cli");
+  registry.unregister("commandcode-cli");
+  registry.unregister("omk-advisory");
+
+  const calls = [];
+  registry.register(fakeRuntime("opencode-cli", calls, {
+    read: true,
+    write: true,
+    shell: true,
+    mcp: false,
+    patch: true,
+    review: true,
+    merge: false,
+    vision: false,
+  }));
+
+  const result = await runner.run({
+    id: "native-turn",
+    name: "Implement a small patch",
+    role: "coder",
+    dependsOn: [],
+    status: "running",
+    retries: 0,
+    maxRetries: 1,
+    routing: {
+      provider: "opencode",
+      readOnly: false,
+      contextBudget: "small",
+    },
+  }, {});
+
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(calls, ["opencode-cli"]);
+  assert.equal(result.metadata.selectedRuntime, "opencode-cli");
+});
+
 function fakeRuntime(id, calls, capabilities) {
   return {
     id,
-    priority: id === "kimi-cli" ? 100 : 60,
+    priority: id.startsWith("kimi-") ? 100 : 60,
     capabilities,
     supports: () => true,
     async runNode() {

@@ -1,10 +1,12 @@
-import { checkCommand } from "../util/shell.js";
+import { checkCommand, resolveKimiBin } from "../util/shell.js";
 
 export type RuntimeSessionMode = "interactive-tty" | "one-shot-cli" | "api-turn" | "advisory-only";
 
 export interface RuntimeBootstrap {
   ok: boolean;
   provider: string;
+  providerPolicy: string;
+  selectedProvider: string;
   selectedRuntimeId?: string;
   selectedModel?: string;
   sessionMode: RuntimeSessionMode;
@@ -16,12 +18,13 @@ export interface RuntimeBootstrap {
 }
 
 function detectProvider(
-  provider: string
+  provider: string,
+  env: Record<string, string | undefined>
 ): { bin?: string; envKey?: string; sessionMode: RuntimeSessionMode; installHint: string; authHint: string; modelHint: string } {
   switch (provider) {
     case "kimi":
       return {
-        bin: "kimi",
+        bin: resolveKimiBin(env),
         sessionMode: "interactive-tty",
         installHint: "npm install -g @anthropic-ai/kimi-code",
         authHint: "kimi login",
@@ -41,11 +44,11 @@ function detectProvider(
         sessionMode: "api-turn",
         installHint: "export DEEPSEEK_API_KEY=sk-...",
         authHint: "Set DEEPSEEK_API_KEY env var",
-        modelHint: process.env.DEEPSEEK_MODEL ?? "deepseek-chat",
+        modelHint: env.DEEPSEEK_MODEL ?? "deepseek-chat",
       };
     case "commandcode":
       return {
-        bin: process.env.COMMANDCODE_BIN ?? "commandcode",
+        bin: env.COMMANDCODE_BIN ?? "commandcode",
         sessionMode: "one-shot-cli",
         installHint: "npm install -g commandcode",
         authHint: "commandcode login",
@@ -53,7 +56,7 @@ function detectProvider(
       };
     case "opencode":
       return {
-        bin: "opencode",
+        bin: env.OPENCODE_BIN ?? "opencode",
         sessionMode: "one-shot-cli",
         installHint: "cargo install opencode",
         authHint: "opencode login",
@@ -69,13 +72,38 @@ function detectProvider(
   }
 }
 
+async function resolveAutoProvider(env: Record<string, string | undefined>): Promise<{ provider: string; runtimeId: string } | undefined> {
+  const kimiBin = resolveKimiBin(env);
+  if (await checkCommand(kimiBin).catch(() => false)) return { provider: "kimi", runtimeId: "kimi-print" };
+  if (await checkCommand("codex").catch(() => false)) return { provider: "codex", runtimeId: "codex-cli" };
+
+  let commandcodeBin: string | undefined;
+  if (env.COMMANDCODE_BIN) {
+    commandcodeBin = await checkCommand(env.COMMANDCODE_BIN).catch(() => false) ? env.COMMANDCODE_BIN : undefined;
+  } else if (await checkCommand("commandcode").catch(() => false)) {
+    commandcodeBin = "commandcode";
+  } else if (await checkCommand("cmd").catch(() => false)) {
+    commandcodeBin = "cmd";
+  }
+  if (commandcodeBin) return { provider: "commandcode", runtimeId: "commandcode-cli" };
+
+  const opencodeBin = env.OPENCODE_BIN ?? "opencode";
+  if (await checkCommand(opencodeBin).catch(() => false)) return { provider: "opencode", runtimeId: "opencode-cli" };
+  if (env.DEEPSEEK_API_KEY) return { provider: "deepseek", runtimeId: "deepseek-api" };
+  return undefined;
+}
+
 export async function resolveRuntimeBootstrap(options: {
   provider: string;
   model?: string;
   cwd?: string;
+  env?: Record<string, string | undefined>;
 }): Promise<RuntimeBootstrap> {
-  const provider = options.provider;
-  const info = detectProvider(provider);
+  const providerPolicy = options.provider.trim().toLowerCase() || "auto";
+  const env = options.env ?? process.env;
+  const autoSelection = providerPolicy === "auto" ? await resolveAutoProvider(env) : undefined;
+  const selectedProvider = autoSelection?.provider ?? providerPolicy;
+  const info = detectProvider(selectedProvider, env);
   const hints: string[] = [];
 
   let runtimeOk = false;
@@ -83,7 +111,11 @@ export async function resolveRuntimeBootstrap(options: {
   let modelOk = false;
   const reasons: string[] = [];
 
-  if (info.bin) {
+  if (providerPolicy === "auto" && !autoSelection) {
+    reasons.push("no runnable runtime detected for auto provider policy");
+    hints.push("Install/login to a runtime: kimi, codex, commandcode, opencode, or deepseek");
+    hints.push("Use an explicit provider, e.g. omk chat --provider kimi --mcp-scope none");
+  } else if (info.bin) {
     runtimeOk = await checkCommand(info.bin).catch(() => false);
     if (!runtimeOk) {
       reasons.push(`${info.bin} CLI not found`);
@@ -92,7 +124,7 @@ export async function resolveRuntimeBootstrap(options: {
       authOk = true;
     }
   } else if (info.envKey) {
-    runtimeOk = Boolean(process.env[info.envKey]);
+    runtimeOk = Boolean(env[info.envKey]);
     if (!runtimeOk) {
       reasons.push(`${info.envKey} is not set`);
       hints.push(info.installHint);
@@ -101,29 +133,21 @@ export async function resolveRuntimeBootstrap(options: {
     }
   }
 
-  if (runtimeOk && provider !== "kimi") {
-    modelOk = true;
-  } else if (provider === "kimi" && runtimeOk) {
-    modelOk = true;
-  }
+  if (runtimeOk) modelOk = true;
 
-  if (provider === "auto") {
-    runtimeOk = true;
-    authOk = true;
-    modelOk = true;
-  }
-
-  if (!runtimeOk) {
+  if (!runtimeOk && providerPolicy !== "auto") {
     hints.push(info.authHint);
-    hints.push(`omk chat --provider ${provider} --model ${info.modelHint}`);
+    hints.push(`omk chat --provider ${selectedProvider} --model ${info.modelHint}`);
   }
 
   const ok = runtimeOk && authOk && modelOk;
 
   return {
     ok,
-    provider,
-    selectedRuntimeId: info.bin ?? info.envKey ?? "auto",
+    provider: selectedProvider,
+    providerPolicy,
+    selectedProvider,
+    selectedRuntimeId: autoSelection?.runtimeId ?? info.bin ?? info.envKey ?? "auto",
     selectedModel: options.model ?? info.modelHint,
     sessionMode: info.sessionMode,
     authOk,

@@ -8,13 +8,13 @@
  */
 
 import type { TaskRunner, TaskResult } from "../contracts/orchestration.js";
-import type { RuntimeId, AgentTask, AgentResult, AgentRunResult, CapabilityManifest } from "./agent-runtime.js";
+import type { RuntimeId, AgentResult, AgentRunResult } from "./agent-runtime.js";
 import { toTaskResult } from "./agent-runtime.js";
+import { capsuleToTask } from "./context-broker-converter.js";
 import { createRuntimeRegistry, type RuntimeRegistry } from "./runtime-registry.js";
 import { createRuntimeRouter } from "./runtime-router.js";
 import { createContextBroker } from "./context-broker.js";
 import { createKimiPrintRuntime } from "./kimi-print-runtime.js";
-import { createCodexCliRuntime } from "./codex-cli-runtime.js";
 import { DeepSeekRuntime } from "./deepseek-runtime.js";
 import { CodexRuntime } from "./codex-runtime.js";
 import { createOpencodeCliAdapter } from "../adapters/opencode/opencode-cli-adapter.js";
@@ -28,6 +28,8 @@ export interface RuntimeBackedTaskRunnerOptions {
   defaultRuntime?: RuntimeId;
   fallbackChain?: string[];
   env?: Record<string, string>;
+  runId?: string;
+  goal?: string;
 }
 
 async function createDefaultRuntimeRegistry(
@@ -35,9 +37,8 @@ async function createDefaultRuntimeRegistry(
 ): Promise<RuntimeRegistry> {
   const registry = createRuntimeRegistry();
 
-  // codex-cli (legacy factory + new task-aware class)
+  // codex-cli task-aware class
   if (await checkCommand("codex").catch(() => false)) {
-    registry.register(createCodexCliRuntime({ cwd: options.cwd }));
     registry.register(new CodexRuntime({ cwd: options.cwd }));
   }
 
@@ -56,18 +57,24 @@ async function createDefaultRuntimeRegistry(
   }
 
   // opencode-cli
-  if (await checkCommand("opencode").catch(() => false)) {
-    registry.register(createOpencodeCliAdapter());
+  const opencodeBin = options.env?.OPENCODE_BIN ?? process.env.OPENCODE_BIN ?? "opencode";
+  if (await checkCommand(opencodeBin).catch(() => false)) {
+    registry.register(createOpencodeCliAdapter({ bin: opencodeBin, cwd: options.cwd, env: options.env }));
   }
 
-  const commandcodeBin = await checkCommand(process.env.COMMANDCODE_BIN ?? "commandcode").catch(() => false)
-    ? process.env.COMMANDCODE_BIN ?? "commandcode"
-    : await checkCommand("cmd").catch(() => false)
-    ? "cmd"
-    : null;
+  const configuredCommandcodeBin = options.env?.COMMANDCODE_BIN ?? process.env.COMMANDCODE_BIN;
+  let commandcodeBin: string | null = null;
+  if (configuredCommandcodeBin) {
+    commandcodeBin = await checkCommand(configuredCommandcodeBin).catch(() => false)
+      ? configuredCommandcodeBin
+      : null;
+  } else if (await checkCommand("commandcode").catch(() => false)) {
+    commandcodeBin = "commandcode";
+  } else if (await checkCommand("cmd").catch(() => false)) {
+    commandcodeBin = "cmd";
+  }
   if (commandcodeBin) {
-    process.env.COMMANDCODE_BIN = commandcodeBin;
-    registry.register(createCommandcodeCliAdapter());
+    registry.register(createCommandcodeCliAdapter({ bin: commandcodeBin, cwd: options.cwd, env: options.env }));
   }
 
   // chat advisory fallback — when no runtime is available, show setup guidance
@@ -88,6 +95,9 @@ export async function createRuntimeBackedTaskRunner(
     runtimes,
     fallbackChain: options.fallbackChain,
   });
+  registry.onChange((nextRuntimes) => {
+    runtimeRouter.setRuntimes(nextRuntimes);
+  });
 
   const contextBroker = createContextBroker({
     projectRoot: options.cwd,
@@ -95,50 +105,27 @@ export async function createRuntimeBackedTaskRunner(
 
   const runner: TaskRunner = {
     async run(node, _env, signal): Promise<TaskResult> {
-      const { capsule } = await contextBroker.buildCapsule(node);
-      const abortSignal = signal ?? new AbortController().signal;
-      const capabilities = taskCapabilitiesFromNode(capsule.node);
+      const runState = options.runId
+        ? {
+            schemaVersion: 1 as const,
+            runId: options.runId,
+            goalId: options.goal,
+            nodes: [node],
+            startedAt: new Date().toISOString(),
+          }
+        : undefined;
+      const { capsule } = await contextBroker.buildCapsule(node, runState);
       const routing = capsule.node.routing;
-      const preferredProviders: string[] = [];
-      if (routing?.provider && routing.provider !== "auto") {
-        preferredProviders.push(routing.provider);
-      }
-      if (routing?.candidateProviders?.length) {
-        preferredProviders.push(...routing.candidateProviders);
-      }
       const providerFallbackChain = options.fallbackChain
         ?? (routing?.fallbackProvider ? [routing.fallbackProvider] : []);
+      const abortSignal = signal ?? new AbortController().signal;
 
-      // Build AgentTask from capsule (inline conversion; TODO: import capsuleToTask when available)
-      const task: AgentTask = {
-        prompt: capsule.task,
-        context: {
-          runId: capsule.runId,
-          nodeId: capsule.nodeId,
-          role: capsule.node.role,
-          goal: capsule.goal,
-          system: capsule.system,
-          files: capsule.relevantFiles.map((f) => f.path),
-          memory: capsule.graphMemory.map((m) => ({
-            key: m.key,
-            source: m.sourceRunId ?? m.sourceNodeId ?? "unknown",
-            summary: m.value,
-          })),
-          cwd: options.cwd,
-          env: options.env,
-          abortSignal,
-        },
-        tools: {
-          available: [],
-          // TODO: populate from capsule/node tools once capsuleToTask is available
-        },
-        providerPolicy: {
-          strategy: "priority-first",
-          preferredProviders,
-          fallbackChain: providerFallbackChain,
-        },
-        capabilities,
-      };
+      const task = await capsuleToTask(capsule, {
+        signal: abortSignal,
+        cwd: options.cwd,
+        env: options.env,
+        fallbackChain: providerFallbackChain,
+      });
 
       let taskResult: TaskResult;
       if (typeof runtimeRouter.execute === "function") {
@@ -179,29 +166,4 @@ export async function createRuntimeBackedTaskRunner(
   (runner as unknown as Record<string, unknown>)._registry = registry;
 
   return runner;
-}
-
-function taskCapabilitiesFromNode(node: {
-  role?: string;
-  outputs?: Array<{ gate?: string }>;
-  routing?: { requiresMcp?: boolean; requiresToolCalling?: boolean; mcpServers?: string[] };
-}): CapabilityManifest {
-  const role = node.role?.toLowerCase() ?? "";
-  const gates = node.outputs?.map((output) => output.gate).filter(Boolean) ?? [];
-  const merge = role === "merger" || role === "integrator" || role === "orchestrator";
-  const write = merge || role === "coder" || role === "executor" || role === "refactorer";
-  const shell = node.routing?.requiresToolCalling === true || gates.includes("command-pass") || gates.includes("test-pass");
-  const review = role === "reviewer" || role === "qa" || role === "tester" || gates.includes("review-pass");
-  const mcp = node.routing?.requiresMcp === true;
-  return {
-    read: true,
-    write,
-    shell,
-    mcp,
-    patch: write,
-    review,
-    merge,
-    vision: false,
-    toolCalling: node.routing?.requiresToolCalling === true,
-  };
 }

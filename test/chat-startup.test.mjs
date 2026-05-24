@@ -375,7 +375,7 @@ test("chat smoke validates startup without launching Kimi", async () => {
     assert.ok(harness.virtualDag.nodes.some((node) => node.id === "root-coordinator" && node.required === true));
     assert.ok(harness.virtualDag.nodes.some((node) => node.id === "review-merge" && node.required === true));
     assert.ok(harness.virtualDag.failurePolicy.blockingLanes.includes("root-coordinator"));
-    assert.ok(harness.authority.some((line) => /auto is the configured OMK authority provider/.test(line)));
+    assert.ok(harness.authority.some((line) => /kimi is the configured OMK authority provider/.test(line)));
     assert.equal(harness.authority.some((line) => /Kimi\/OMK chat owns edits/.test(line)), false);
     assert.match(await readFile(join(projectRoot, ".omk", "runs", runId, "memory-recall-summary.md"), "utf-8"), /Memory Recall Summary/);
     assert.equal(existsSync(join(projectRoot, ".omk", "runs", runId, "chat-startup-failure.json")), false);
@@ -448,7 +448,8 @@ test("chat smoke provider auto does not require Kimi preflight", async () => {
 test("chat runtime direct Kimi fallback requires explicit Kimi policy or legacy opt-in", () => {
   assert.equal(shouldUseDirectKimiFallback("auto", {}), false);
   assert.equal(shouldUseDirectKimiFallback("qwen", {}), false);
-  assert.equal(shouldUseDirectKimiFallback("kimi", {}), true);
+  assert.equal(shouldUseDirectKimiFallback("kimi", {}), false);
+  assert.equal(shouldUseDirectKimiFallback("kimi", { OMK_LEGACY_CHAT: "1" }), true);
   assert.equal(shouldUseDirectKimiFallback("auto", { OMK_LEGACY_CHAT: "1" }), true);
 });
 

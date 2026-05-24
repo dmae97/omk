@@ -3,6 +3,9 @@
  * that delegate to an external CLI tool.
  */
 
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type {
   AgentRuntime,
   AgentRunResult,
@@ -13,17 +16,34 @@ import type { ContextCapsule } from "./context-capsule.js";
 import type { AgentTask, AgentResult } from "./agent-runtime.js";
 import {
   checkCommand,
-  runShellStreaming,
   type ShellResult,
 } from "../util/shell.js";
+import { runtimeMetadataEnv } from "./child-env.js";
+import { runProcessSession } from "./process-session.js";
+
+export type ExternalCliPromptTransport = "argv" | "stdin" | "tempfile";
+
+export interface ExternalCliPromptContext {
+  readonly promptFile?: string;
+  readonly promptEnvName: string;
+}
 
 export interface ExternalCliAdapterOptions {
   id: string;
   displayName: string;
   bin: string;
+  cwd?: string;
+  env?: Record<string, string>;
+  timeoutMs?: number;
   priority: number;
   capabilities: RuntimeCapabilities;
-  buildArgs: (capsule: ContextCapsule) => string[];
+  promptTransport?: ExternalCliPromptTransport;
+  promptFileEnvName?: string;
+  buildArgs: (
+    capsule: ContextCapsule,
+    promptContext: ExternalCliPromptContext
+  ) => string[];
+  buildInput?: (capsule: ContextCapsule) => string | undefined;
   buildEnv?: (capsule: ContextCapsule) => Record<string, string>;
   parseResult?: (
     shellResult: ShellResult,
@@ -110,15 +130,49 @@ export function createExternalCliAdapter(
         };
       }
 
-      const args = options.buildArgs(capsule);
-      const env = options.buildEnv ? options.buildEnv(capsule) : undefined;
-      const startedAt = Date.now();
+      const promptEnvName = options.promptFileEnvName ?? "OMK_PROMPT_FILE";
+      const promptTransport = options.promptTransport ?? "argv";
+      let promptTempDir: string | undefined;
+      let promptFile: string | undefined;
+      const env = {
+        ...runtimeMetadataEnv({
+          runtimeId: options.id,
+          runId: capsule.runId,
+          nodeId: capsule.nodeId,
+          role: capsule.node?.role,
+        }),
+        ...(options.env ?? {}),
+        ...(options.buildEnv ? options.buildEnv(capsule) : {}),
+      };
+      const timeoutMs = resolveExternalCliTimeoutMs(options.timeoutMs, env.OMK_TURN_TIMEOUT_MS);
 
       try {
-        const shellResult = await runShellStreaming(options.bin, args, {
+        if (promptTransport === "tempfile") {
+          promptTempDir = await mkdtemp(
+            join(tmpdir(), `omk-${sanitizeTempName(options.id)}-prompt-`)
+          );
+          promptFile = join(promptTempDir, "prompt.txt");
+          await writeFile(promptFile, capsule.task, { mode: 0o600 });
+          env[promptEnvName] = promptFile;
+        }
+
+        const args = options.buildArgs(capsule, {
+          promptFile,
+          promptEnvName,
+        });
+        const input =
+          promptTransport === "stdin"
+            ? options.buildInput?.(capsule) ?? capsule.task
+            : options.buildInput?.(capsule);
+
+        const shellResult = await runProcessSession({
+          command: options.bin,
+          args,
           env,
+          cwd: options.cwd,
+          timeoutMs,
+          input,
           signal,
-          inheritEnv: false,
         });
 
         if (signal.aborted) {
@@ -131,8 +185,6 @@ export function createExternalCliAdapter(
           };
         }
 
-        const durationMs = Date.now() - startedAt;
-
         if (options.parseResult) {
           return options.parseResult(shellResult, capsule);
         }
@@ -142,7 +194,7 @@ export function createExternalCliAdapter(
           exitCode: shellResult.exitCode,
           stdout: shellResult.stdout,
           stderr: shellResult.stderr,
-          metadata: { runtime: options.id, durationMs },
+          metadata: { runtime: options.id, durationMs: shellResult.durationMs },
         };
       } catch (err) {
         const errorMsg = String(err);
@@ -153,7 +205,25 @@ export function createExternalCliAdapter(
           stderr: errorMsg,
           metadata: { runtime: options.id, error: errorMsg },
         };
+      } finally {
+        if (promptTempDir) {
+          await rm(promptTempDir, { recursive: true, force: true }).catch(() => undefined);
+        }
       }
     },
   };
+}
+
+function sanitizeTempName(value: string): string {
+  return value.replace(/[^a-z0-9._-]+/giu, "_");
+}
+
+function resolveExternalCliTimeoutMs(
+  explicitTimeoutMs: number | undefined,
+  envTimeoutMs: string | undefined
+): number | undefined {
+  if (explicitTimeoutMs !== undefined) return explicitTimeoutMs;
+  if (!envTimeoutMs) return undefined;
+  const parsed = Number.parseInt(envTimeoutMs, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }

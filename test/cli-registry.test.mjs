@@ -76,6 +76,7 @@ test("sliced CLI registry preserves ordered top-level commands", () => {
     "codex",
     "openai",
     "image",
+    "auth",
     "graph",
     "hud",
     "merge",
