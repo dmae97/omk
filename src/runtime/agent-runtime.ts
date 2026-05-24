@@ -1,46 +1,26 @@
 /**
- * AgentRuntime — provider-neutral runtime adapter interface.
+ * AgentRuntime — internal runtime implementation interface.
+ *
+ * Concrete runtimes (KimiApiRuntime, DeepSeekRuntime, CodexRuntime,
+ * KimiWireProtocolRuntime, etc.) implement this interface.
+ *
+ * It is broader than RuntimeAdapter: runNode operates on ContextCapsule,
+ * and execute()/health() are optional extension hooks.
+ *
+ * For the provider-routing interface, see src/runtime/adapter.ts (RuntimeAdapter).
  */
-
 
 import type { TaskResult } from "../contracts/orchestration.js";
 import type { ContextCapsule } from "./context-capsule.js";
+import type {
+  RuntimeId,
+  RuntimeKind,
+  RuntimeAuthority,
+  RuntimeCapabilities,
+  RuntimeHealth,
+} from "./contracts/shared.js";
 
-export type RuntimeId = string;
-
-export type RuntimeKind = "cli" | "api" | "mcp" | "local" | "composite";
-
-export type RuntimeAuthority =
-  | "read"
-  | "write"
-  | "shell"
-  | "mcp"
-  | "patch"
-  | "review"
-  | "merge"
-  | "vision";
-
-export interface RuntimeCapabilities {
-  read: boolean;
-  write: boolean;
-  shell: boolean;
-  mcp: boolean;
-  patch: boolean;
-  review: boolean;
-  merge: boolean;
-  vision: boolean;
-  maxContextTokens?: number;
-  supportsStreaming?: boolean;
-  supportsStructuredOutput?: boolean;
-  supportsToolCalling?: boolean;
-}
-
-export interface RuntimeHealth {
-  runtimeId: RuntimeId;
-  available: boolean;
-  reason?: string;
-  checkedAt: string;
-}
+export type { RuntimeId, RuntimeKind, RuntimeAuthority, RuntimeCapabilities, RuntimeHealth };
 
 export interface TokenUsage {
   readonly inputTokens: number;

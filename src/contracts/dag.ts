@@ -27,12 +27,24 @@ export interface DagNodeRouting {
   provider?: "auto" | ProviderId;
   fallbackProvider?: ProviderId;
   providerReason?: string;
+  providerModel?: string;
   providerModelTier?: DeepSeekModelTier;
+  assignedProvider?: ProviderId;
+  candidateProviders?: ProviderId[];
+  assignedModel?: string;
+  assignedProviderAuthority?: "authority" | "direct" | "advisory" | "veto";
+  assignedProviderCapabilities?: string[];
   autoSpawned?: boolean;
   spawnReason?: string;
   routeSource?: "skill" | "mcp" | "hook" | "provider";
+  assignedCapabilities?: {
+    skills?: string[];
+    mcpServers?: string[];
+    tools?: string[];
+    hooks?: string[];
+  };
   /**
-   * Skills/MCP/tools are routing hints for the Kimi runtime by default.
+   * Skills/MCP/tools are routing hints for the selected provider adapter by default.
    * Set these booleans only when a node cannot run without live MCP/tool
    * authority; opportunistic providers can still advise from the hint list.
    */

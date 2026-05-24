@@ -1,7 +1,7 @@
 import { readFileSync, existsSync, mkdirSync } from "fs";
 import { writeFile } from "fs/promises";
 import { dirname, join } from "path";
-import type { ProviderId, ProviderComplexity, ProviderRisk } from "./types.js";
+import { DEFAULT_AUTHORITY_PROVIDER, type ProviderId, type ProviderComplexity, type ProviderRisk } from "./types.js";
 
 export interface ProviderStats {
   provider: ProviderId;
@@ -274,7 +274,7 @@ export function computeProviderRouteScore(
   provider: ProviderId,
   input: ProviderRouteScoreInput
 ): { score: number; reason: string; confidence: number } {
-  const authority = input.authorityProvider ?? "kimi";
+  const authority = input.authorityProvider ?? DEFAULT_AUTHORITY_PROVIDER;
   const stats = input.providerStats?.[provider];
   const granularKey = buildProviderStatsKey(
     provider === "deepseek" ? "pro" : provider,

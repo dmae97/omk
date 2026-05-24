@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { t } from "../util/i18n.js";
+import { t } from "../../util/i18n.js";
 
 export function registerVisualCommands(program: Command): void {
   program
@@ -19,7 +19,7 @@ export function registerVisualCommands(program: Command): void {
     .option("--print-only", "Print the launch plan without cloning, installing, or starting")
     .option("--json", "With --doctor, output machine-readable JSON")
     .action(async (options) => {
-      const { designOpenDesignCommand } = await import("../commands/design.js");
+      const { designOpenDesignCommand } = await import("../../commands/design.js");
       await designOpenDesignCommand(options);
     });
 
@@ -43,7 +43,7 @@ export function registerVisualCommands(program: Command): void {
     .option("--stdin-timeout-ms <ms>", "Maximum total time while reading Open Design stdin", "30000")
     .option("--timeout-ms <ms>", "Maximum agent print-mode runtime", "1200000")
     .action(async (options: { artifactDir?: string; cwd?: string; diagnose?: boolean; image?: string[]; json?: boolean; model?: string; runId?: string; smoke?: boolean; stdio?: boolean; stdinIdleMs?: string; stdinMaxBytes?: string; stdinTimeoutMs?: string; timeoutMs?: string }) => {
-      const { openDesignAgentCommand } = await import("../commands/open-design-agent.js");
+      const { openDesignAgentCommand } = await import("../../commands/open-design-agent.js");
       await openDesignAgentCommand({ ...options, runId: options.runId ?? program.opts().runId });
       process.exit(process.exitCode ?? 0);
     });
@@ -63,7 +63,7 @@ export function registerVisualCommands(program: Command): void {
     .option("--pause", "Start paused")
     .action(async (options) => {
       const globalOpts = program.opts();
-      const { cockpitCommand } = await import("../commands/cockpit.js");
+      const { cockpitCommand } = await import("../../commands/cockpit.js");
       await cockpitCommand({
         ...options,
         runId: globalOpts.runId ?? options.runId,
@@ -85,7 +85,7 @@ export function registerVisualCommands(program: Command): void {
     .option("--height <rows>", "Fixed height in rows")
     .action(async (options) => {
       const globalOpts = program.opts();
-      const { railCommand } = await import("../commands/rail.js");
+      const { railCommand } = await import("../../commands/rail.js");
       await railCommand({
         runId: globalOpts.runId ?? options.runId,
         watch: Boolean(options.watch),

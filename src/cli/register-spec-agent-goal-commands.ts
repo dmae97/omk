@@ -214,7 +214,7 @@ export function registerSpecAgentGoalCommands(program: Command): void {
     .option("--workers <n>", t("cmd.goalWorkersOption"), "auto")
     .option("--run-id <id>", t("cmd.goalRunIdOption"))
     .option("--mcp-scope <all|project|none>", "MCP scope for this goal DAG run (all | project | none)")
-    .option("--provider <provider>", "provider policy (auto | kimi | deepseek | codex | qwen)", "kimi")
+    .option("--provider <provider>", "provider policy (auto | authority | kimi | deepseek | codex | qwen | openrouter)", "auto")
     .option("--model <model>", "provider model or provider/model override")
     .option("--approval-policy <policy>", t("cmd.parallelApprovalOption"), "interactive")
     .option("--timeout-preset <preset>", t("cmd.runTimeoutPresetOption"))
@@ -297,7 +297,7 @@ export function registerSpecAgentGoalCommands(program: Command): void {
     .option("--run-id <id>", "Run ID")
     .option("--from-run-id <id>", "Run ID to read as continuation context")
     .option("--mcp-scope <all|project|none>", "MCP scope for this goal continuation DAG (all | project | none)")
-    .option("--provider <provider>", "provider policy (auto | kimi | deepseek | codex | qwen)", "kimi")
+    .option("--provider <provider>", "provider policy (auto | authority | kimi | deepseek | codex | qwen | openrouter)", "auto")
     .option("--model <model>", "provider model or provider/model override")
     .option("--approval-policy <policy>", t("cmd.parallelApprovalOption"), "interactive")
     .option("--timeout-preset <preset>", t("cmd.runTimeoutPresetOption"))
@@ -328,7 +328,7 @@ export function registerSpecAgentGoalCommands(program: Command): void {
     .option("--max-iterations <n>", "Maximum daemon iterations")
     .option("--max-hours <n>", "Maximum wall-clock hours")
     .option("--approval-policy <policy>", "Approval policy (auto | interactive)", "interactive")
-    .option("--provider <provider>", "provider policy (auto | kimi | deepseek | codex | qwen)", "kimi")
+    .option("--provider <provider>", "provider policy (auto | authority | kimi | deepseek | codex | qwen | openrouter)", "auto")
     .option("--json", t("cmd.goalJsonOption"))
     .action(async (goalId, options) => {
       const { goalAutoCommand } = await import("../commands/goal.js");

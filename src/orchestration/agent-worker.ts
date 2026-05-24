@@ -10,6 +10,7 @@ import type { DagNode } from "../contracts/dag.js";
 import type { WorkerLogHandle } from "./log-streamer.js";
 import { renderScopedAgentYaml, type AgentCapabilityScopes } from "../util/scoped-agent-file.js";
 import { assignSkills, type SkillAssignment } from "./skill-assigner.js";
+import { capabilityScopesFromRouting } from "./capability-routing.js";
 
 export interface AgentWorkerOptions {
   node: DagNode;
@@ -253,15 +254,16 @@ export async function createAgentYaml(
   outputDir: string
 ): Promise<string> {
   const yamlPath = join(outputDir, `${node.id}.yaml`);
+  const scopes = capabilityScopesFromRouting(node.routing, skills);
 
   const capabilities: AgentCapabilityScopes = {
     mcpScope: node.routing?.mcpServers?.length ? "none" : "project",
     skillsScope: node.routing?.skills?.length ? "none" : "project",
     hooksScope: node.routing?.hooks?.length ? "project" : "project",
-    skillNames: [...(node.routing?.skills ?? []), ...skills.skills],
-    mcpNames: [...(node.routing?.mcpServers ?? []), ...skills.mcpServers],
-    toolNames: [...(node.routing?.tools ?? []), ...skills.tools],
-    hookNames: [...(node.routing?.hooks ?? []), ...skills.hooks],
+    skillNames: [...scopes.skills],
+    mcpNames: [...scopes.mcpServers],
+    toolNames: [...scopes.tools],
+    hookNames: [...scopes.hooks],
   };
 
   const baseAgentFile = join(outputDir, "..", "..", "..", "..", ".omk", "agents", "root.yaml");
@@ -304,8 +306,10 @@ export async function createAgentWorker(
   const agentYamlPath = await createAgentYaml(node, runId, skills, outputDir);
 
   logHandle.log("info", `Created agent YAML: ${agentYamlPath}`);
-  logHandle.log("info", `Assigned skills: ${skills.skills.join(", ")}`);
-  logHandle.log("info", `Assigned MCP servers: ${skills.mcpServers.join(", ")}`);
+  const scopes = capabilityScopesFromRouting(node.routing, skills);
+  logHandle.log("info", `Assigned skills: ${scopes.skills.join(", ")}`);
+  logHandle.log("info", `Assigned MCP servers: ${scopes.mcpServers.join(", ")}`);
+  logHandle.log("info", `Assigned hooks: ${scopes.hooks.join(", ")}`);
   if (node.routing?.skills?.length) {
     logHandle.log("info", `Routing override skills: ${node.routing.skills.join(", ")}`);
   }

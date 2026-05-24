@@ -185,7 +185,7 @@ export interface MCPServerNode extends OntologyNodeBase {
   description: string;
 }
 
-/** Provider node for Kimi-first multi-provider orchestration. */
+/** Provider node for OMK-first multi-provider orchestration. */
 export interface ProviderNode extends OntologyNodeBase {
   providerId: string;
   role: "primary" | "opportunistic";

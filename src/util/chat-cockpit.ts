@@ -22,6 +22,9 @@ export interface LaunchChatCockpitOptions {
   workers?: string;
   maxStepsPerTurn?: string;
   mcpScope?: string;
+  provider?: string;
+  model?: string;
+  execution?: string;
   cockpitRefresh?: string;
   cockpitRedraw?: "diff" | "full" | "append";
   cockpitHistory?: "off" | "static" | "watch";
@@ -129,7 +132,7 @@ export async function launchChatCockpit(options: LaunchChatCockpitOptions = {}):
   await ensureChatRunState(cwd, runId);
   const sanitized = runId.replace(/[^a-zA-Z0-9]/g, "-");
   const session = `omk-chat-${sanitized}`;
-  const brand = options.brand ?? "kimicat";
+  const brand = options.brand ?? "omk";
   const omkCli = process.argv[1] ? resolve(process.argv[1]) : "omk";
   const nodeCmd = process.execPath ? shellQuote(process.execPath) : "node";
   const cliCmd = shellQuote(omkCli);
@@ -162,7 +165,19 @@ export async function launchChatCockpit(options: LaunchChatCockpitOptions = {}):
   const cockpitHeight = parseCockpitHeight(options.cockpitHeight);
   const cockpitPaneHeight = Math.min(cockpitHeight ?? DEFAULT_CHAT_COCKPIT_HEIGHT, terminalHeight - minHistoryPaneHeight);
 
-  const leftCmd = buildLeftPaneCommand({ nodeCmd, cliCmd, runId, brand, agentFile: options.agentFile, workers: options.workers, maxStepsPerTurn: options.maxStepsPerTurn, mcpScope: options.mcpScope });
+  const leftCmd = buildLeftPaneCommand({
+    nodeCmd,
+    cliCmd,
+    runId,
+    brand,
+    agentFile: options.agentFile,
+    workers: options.workers,
+    maxStepsPerTurn: options.maxStepsPerTurn,
+    mcpScope: options.mcpScope,
+    provider: options.provider,
+    model: options.model,
+    execution: options.execution,
+  });
   const rightTopCmd = buildRightPaneCommand({ nodeCmd, cliCmd, runId, refreshMs, redraw, height: cockpitPaneHeight });
   const rightBottomCmd = `${nodeCmd} ${cliCmd} runs --watch --limit 15 --refresh 5000`;
 
@@ -298,13 +313,19 @@ export function buildLeftPaneCommand(options: {
   workers?: string;
   maxStepsPerTurn?: string;
   mcpScope?: string;
+  provider?: string;
+  model?: string;
+  execution?: string;
 }): string {
-  const { nodeCmd, cliCmd, runId, brand, agentFile, workers, maxStepsPerTurn, mcpScope } = options;
+  const { nodeCmd, cliCmd, runId, brand, agentFile, workers, maxStepsPerTurn, mcpScope, provider, model, execution } = options;
   let cmd = `${nodeCmd} ${cliCmd} chat --layout plain --run-id ${shellQuote(runId)} --brand ${shellQuote(brand)}`;
   if (agentFile) cmd += ` --agent-file ${shellQuote(agentFile)}`;
   if (workers) cmd += ` --workers ${shellQuote(workers)}`;
   if (maxStepsPerTurn) cmd += ` --max-steps-per-turn ${shellQuote(maxStepsPerTurn)}`;
   if (mcpScope) cmd += ` --mcp-scope ${shellQuote(mcpScope)}`;
+  if (provider) cmd += ` --provider ${shellQuote(provider)}`;
+  if (model) cmd += ` --model ${shellQuote(model)}`;
+  if (execution) cmd += ` --execution ${shellQuote(execution)}`;
   return cmd;
 }
 

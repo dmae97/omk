@@ -1,11 +1,11 @@
 import type { DagNode } from "../../orchestration/dag.js";
 
 /**
- * Super OMK DeepSeek + Kimi Co-Orchestration Preset
+ * Super OMK DeepSeek + authority-provider Co-Orchestration Preset
  *
- * This preset maximizes DeepSeek V4 Pro utilization alongside Kimi:
+ * This preset maximizes DeepSeek V4 Pro utilization alongside the configured authority provider:
  * - DeepSeek handles: planning, review, analysis, reasoning-heavy tasks
- * - Kimi handles: file edits, shell execution, MCP/tools, final merge
+ * - Authority provider handles: file edits, shell execution, MCP/tools, final merge
  * - Parallel worker cap increased for DeepSeek advisory lanes
  */
 
@@ -13,18 +13,26 @@ export interface SuperOmkConfig {
   // Worker settings
   parallelWorkers: number;
   deepseekWorkerCap: number;
+  authorityWorkerCap: number;
+  /** @deprecated Use authorityWorkerCap. */
   kimiWorkerCap: number;
 
   // Routing rules: which node types go to which provider
   deepseekNodeTypes: string[];
+  authorityNodeTypes: string[];
+  /** @deprecated Use authorityNodeTypes. */
   kimiNodeTypes: string[];
 
   // Model config
   deepseekModel: string;
   deepseekReasoningEffort: "high" | "max";
+  authorityModel: string;
+  /** @deprecated Use authorityModel. */
   kimiModel: string;
 
   // Fallback behavior
+  deepseekFallbackToAuthority: boolean;
+  /** @deprecated Use deepseekFallbackToAuthority. */
   deepseekFallbackToKimi: boolean;
   retryEmptyContent: boolean;
 
@@ -36,12 +44,16 @@ export interface SuperOmkConfig {
 export const SUPER_OMK_DEFAULTS: SuperOmkConfig = {
   parallelWorkers: 4,
   deepseekWorkerCap: 3,
+  authorityWorkerCap: 2,
   kimiWorkerCap: 2,
   deepseekNodeTypes: ["plan", "review", "analyze", "research", "debug"],
+  authorityNodeTypes: ["implement", "edit", "shell", "test", "merge"],
   kimiNodeTypes: ["implement", "edit", "shell", "test", "merge"],
   deepseekModel: "deepseek-v4-pro",
   deepseekReasoningEffort: "max",
+  authorityModel: "auto",
   kimiModel: "kimi-k2-6",
+  deepseekFallbackToAuthority: true,
   deepseekFallbackToKimi: true,
   retryEmptyContent: true,
   deepseekAdvisoryEnabled: true,
@@ -56,14 +68,14 @@ const DEEPSEEK_TYPE_ALIASES: Record<string, string[]> = {
   debug: ["debugger", "tester", "qa"],
 };
 
-export function isSuperOmkEnabled(env?: Record<string, string>): boolean {
+export function isSuperOmkEnabled(env?: Record<string, string | undefined>): boolean {
   const profile = env?.OMK_RESOURCE_PROFILE ?? process.env.OMK_RESOURCE_PROFILE;
   if (profile === "super") return true;
   const enabled = env?.OMK_SUPER_OMK_ENABLED ?? process.env.OMK_SUPER_OMK_ENABLED;
   return enabled === "1" || enabled === "true";
 }
 
-export function getSuperOmkConfig(env?: Record<string, string>): SuperOmkConfig {
+export function getSuperOmkConfig(env?: Record<string, string | undefined>): SuperOmkConfig {
   const config: SuperOmkConfig = { ...SUPER_OMK_DEFAULTS };
   if (!env) return config;
 
@@ -87,27 +99,39 @@ export function getSuperOmkConfig(env?: Record<string, string>): SuperOmkConfig 
   const dsCap = parseIntEnv("OMK_DEEPSEEK_WORKER_CAP", 1);
   if (dsCap !== undefined) config.deepseekWorkerCap = dsCap;
 
-  const kmCap = parseIntEnv("OMK_KIMI_WORKER_CAP", 1);
-  if (kmCap !== undefined) config.kimiWorkerCap = kmCap;
+  const authorityCap = parseIntEnv("OMK_AUTHORITY_WORKER_CAP", 1) ?? parseIntEnv("OMK_KIMI_WORKER_CAP", 1);
+  if (authorityCap !== undefined) {
+    config.authorityWorkerCap = authorityCap;
+    config.kimiWorkerCap = authorityCap;
+  }
 
   if (env.OMK_DEEPSEEK_NODE_TYPES) {
     config.deepseekNodeTypes = env.OMK_DEEPSEEK_NODE_TYPES.split(",")
       .map((s) => s.trim())
       .filter(Boolean);
   }
-  if (env.OMK_KIMI_NODE_TYPES) {
-    config.kimiNodeTypes = env.OMK_KIMI_NODE_TYPES.split(",")
+  const authorityNodeTypes = env.OMK_AUTHORITY_NODE_TYPES ?? env.OMK_KIMI_NODE_TYPES;
+  if (authorityNodeTypes) {
+    config.authorityNodeTypes = authorityNodeTypes.split(",")
       .map((s) => s.trim())
       .filter(Boolean);
+    config.kimiNodeTypes = [...config.authorityNodeTypes];
   }
   if (env.OMK_DEEPSEEK_MODEL) config.deepseekModel = env.OMK_DEEPSEEK_MODEL;
   if (env.OMK_DEEPSEEK_REASONING_EFFORT === "high" || env.OMK_DEEPSEEK_REASONING_EFFORT === "max") {
     config.deepseekReasoningEffort = env.OMK_DEEPSEEK_REASONING_EFFORT;
   }
-  if (env.OMK_KIMI_MODEL) config.kimiModel = env.OMK_KIMI_MODEL;
+  const authorityModel = env.OMK_AUTHORITY_MODEL ?? env.OMK_KIMI_MODEL;
+  if (authorityModel) {
+    config.authorityModel = authorityModel;
+    config.kimiModel = authorityModel;
+  }
 
-  const fallback = env.OMK_DEEPSEEK_FALLBACK_TO_KIMI;
-  if (fallback !== undefined) config.deepseekFallbackToKimi = fallback === "1" || fallback === "true";
+  const fallback = env.OMK_DEEPSEEK_FALLBACK_TO_AUTHORITY ?? env.OMK_DEEPSEEK_FALLBACK_TO_KIMI;
+  if (fallback !== undefined) {
+    config.deepseekFallbackToAuthority = fallback === "1" || fallback === "true";
+    config.deepseekFallbackToKimi = config.deepseekFallbackToAuthority;
+  }
 
   const retry = env.OMK_RETRY_EMPTY_CONTENT;
   if (retry !== undefined) config.retryEmptyContent = retry === "1" || retry === "true";

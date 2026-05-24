@@ -116,7 +116,7 @@ export interface ExtractedConcept {
 export const ONTOLOGY: MemoryOntology = {
   version: "omk-ontology-mindmap-v1",
   description:
-    "Project-local ontology for Kimi/OMK memory. Memories are decomposed into mind-map nodes for goals, topics, decisions, tasks, risks, commands, files, evidence, provider routes, provider fallbacks, questions, answers, constraints, and concepts.",
+    "Project-local ontology for OMK memory. Memories are decomposed into mind-map nodes for goals, topics, decisions, tasks, risks, commands, files, evidence, provider routes, provider fallbacks, questions, answers, constraints, and concepts.",
   classes: [
     "Project",
     "Session",

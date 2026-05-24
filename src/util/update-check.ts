@@ -39,7 +39,8 @@ interface UpdateCache {
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_UPDATE_REMIND_HOURS = 24;
 const UPDATE_PROMPT_TIMEOUT_MS = 30_000;
-const OMK_UPDATE_INSTALL_CMD = "npm i -g @oh-my-kimi/cli";
+export const OMK_NPM_PACKAGE_NAME = "open-multi-agent-kit";
+const OMK_UPDATE_INSTALL_CMD = `npm i -g ${OMK_NPM_PACKAGE_NAME}`;
 
 const FALLBACK_INSTALL_SCRIPT = process.platform === "win32"
   ? "Invoke-Expression (New-Object System.Net.WebClient).DownloadString('https://code.kimi.com/install.ps1')"
@@ -229,7 +230,7 @@ export function formatStartupUpdateBanner(updateStatus: UpdateStatus): string {
     banner += `\n  ! omk ${updateStatus.omk.current} → ${updateStatus.omk.latest}  |  ${updateStatus.omk.installCmd}`;
   }
   if (updateStatus.kimi.outdated) {
-    banner += `\n  ! kimi ${updateStatus.kimi.installed} → ${updateStatus.kimi.latest}  |  omk update kimi`;
+    banner += `\n  ! kimi-cli ${updateStatus.kimi.installed} → ${updateStatus.kimi.latest}  |  omk update kimi-adapter`;
   }
   return banner;
 }
@@ -340,7 +341,7 @@ export async function maybePromptForOmkUpdate(options: OmkUpdatePromptOptions = 
   }
 
   log(`Running update: ${OMK_UPDATE_INSTALL_CMD}`);
-  const runUpdate = options.runUpdate ?? (() => runShell("npm", ["i", "-g", "@oh-my-kimi/cli"], { timeout: 120_000 }));
+  const runUpdate = options.runUpdate ?? (() => runShell("npm", ["i", "-g", OMK_NPM_PACKAGE_NAME], { timeout: 120_000 }));
   const updateResult = await runUpdate();
   if (updateResult.failed) {
     const detail = updateResult.stderr.trim() || updateResult.stdout.trim() || `exit ${updateResult.exitCode}`;
@@ -400,7 +401,7 @@ export function isOutdated(current: string, latest: string): boolean {
 
 async function fetchOmkLatest(): Promise<string | null> {
   try {
-    const result = await runShell("npm", ["view", "@oh-my-kimi/cli", "version"], {
+    const result = await runShell("npm", ["view", OMK_NPM_PACKAGE_NAME, "version"], {
       timeout: 8000,
     });
     if (result.failed) return null;

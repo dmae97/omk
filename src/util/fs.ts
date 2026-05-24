@@ -815,8 +815,8 @@ export async function collectMcpConfigs(scope: OmkRuntimeScope = "project"): Pro
     pathExists(kimiMcp),
     pathExists(omkMcp),
   ]);
-  // .kimi/mcp.json remains the Kimi-native project source of truth.
-  // .omk/mcp.json is a compatibility fallback/mirror for older projects.
+  // .kimi/mcp.json is a legacy Kimi-adapter MCP source.
+  // .omk/mcp.json is the provider-neutral OMK project MCP mirror/fallback.
   if (kimiMcpExists) configs.push(kimiMcp);
   else if (omkMcpExists) configs.push(omkMcp);
 

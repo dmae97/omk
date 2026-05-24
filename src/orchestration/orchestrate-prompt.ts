@@ -404,9 +404,7 @@ export async function orchestratePrompt(
   const selectedWorkers = executionDecision.strategy === "sequential"
     ? "1"
     : options.workers ?? String(resources.maxWorkers);
-  const selectedProvider = executionDecision.strategy === "sequential"
-    ? "kimi"
-    : options.provider;
+  const selectedProvider = options.provider;
   const parallelOpts = {
     workers: selectedWorkers,
     runId: options.runId,

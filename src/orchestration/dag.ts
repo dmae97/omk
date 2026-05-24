@@ -41,7 +41,7 @@ export interface DagNodeRouting {
     hooks?: string[];
   };
   /**
-   * Skills/MCP/tools are routing hints for the Kimi runtime by default.
+   * Skills/MCP/tools are routing hints for the selected provider adapter by default.
    * Set these booleans only when a node cannot run without live MCP/tool
    * authority; opportunistic providers can still advise from the hint list.
    */

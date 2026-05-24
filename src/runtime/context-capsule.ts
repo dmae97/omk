@@ -2,7 +2,7 @@
  * ContextCapsule — bounded per-node context for agent runtimes.
  *
  * OMK memory = canonical (graph-state.json, .omk/runs/).
- * Kimi memory = disposable (isolated HOME per node).
+ * Adapter-local memory = disposable (isolated HOME per node).
  */
 
 import type { DagNode } from "../orchestration/dag.js";

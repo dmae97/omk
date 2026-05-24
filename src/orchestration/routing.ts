@@ -1,10 +1,11 @@
 import type { DagContextBudget, DagNode, DagNodeDefinition, DagNodeRouting } from "./dag.js";
+import { attachAssignedCapabilities, capabilityScopesFromRouting } from "./capability-routing.js";
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { isAbsolute, join, relative, resolve, sep } from "path";
 import { normalizeUserHomePath } from "../util/fs.js";
 import { assignSkills } from "./skill-assigner.js";
-import { resolveFallbackProvider } from "../providers/types.js";
+import { DEFAULT_AUTHORITY_PROVIDER, resolveFallbackProvider } from "../providers/types.js";
 import {
   OMK_RELEASE_GUARD_PRESET,
   OMK_TS_PRODUCT_PRESET,
@@ -430,9 +431,9 @@ export function selectTaskRouting(input: RoutingInput): DagNodeRouting {
     ? `${renderRationale(scored.slice(0, 3), contextBudget)} | Auto: ${autoAssignment.rationale}`
     : renderRationale(scored.slice(0, 3), contextBudget);
 
-  return {
+  return attachAssignedCapabilities({
     provider: "auto",
-    fallbackProvider: resolveFallbackProvider(["kimi"]),
+    fallbackProvider: resolveFallbackProvider([DEFAULT_AUTHORITY_PROVIDER]),
     providerReason: "Primary provider router decides at node execution time",
     skills: mergedSkills,
     mcpServers: mergedMcpServers,
@@ -445,7 +446,7 @@ export function selectTaskRouting(input: RoutingInput): DagNodeRouting {
     rejected: rejected.slice(0, 6),
     requiresMcp: input.routing?.requiresMcp ?? false,
     requiresToolCalling: input.routing?.requiresToolCalling ?? false,
-  };
+  });
 }
 
 export function resetRoutingInventoryCache(): void {
@@ -453,8 +454,8 @@ export function resetRoutingInventoryCache(): void {
 }
 
 export function mergeDagNodeRouting(auto: DagNodeRouting, override: DagNodeRouting | undefined): DagNodeRouting {
-  if (!override) return auto;
-  return {
+  if (!override) return attachAssignedCapabilities(auto);
+  return attachAssignedCapabilities({
     ...auto,
     ...override,
     provider: override.provider ?? auto.provider,
@@ -469,17 +470,18 @@ export function mergeDagNodeRouting(auto: DagNodeRouting, override: DagNodeRouti
     tools: override.tools ? unique(override.tools) : auto.tools,
     hooks: override.hooks ? unique(override.hooks) : auto.hooks,
     rejected: override.rejected ?? auto.rejected,
-  };
+  });
 }
 
 export function dagNodeRoutingEnv(node: DagNode, dag?: import("./dag.js").Dag): Record<string, string> {
   const routing = node.routing;
   if (!routing) return {};
 
-  const skillHints = new Set<string>(routing.skills ?? []);
-  const mcpHints = new Set<string>(routing.mcpServers ?? []);
-  const toolHints = new Set<string>(routing.tools ?? []);
-  const hookHints = new Set<string>(routing.hooks ?? []);
+  const scopes = capabilityScopesFromRouting(routing);
+  const skillHints = new Set<string>(scopes.skills);
+  const mcpHints = new Set<string>(scopes.mcpServers);
+  const toolHints = new Set<string>(scopes.tools);
+  const hookHints = new Set<string>(scopes.hooks);
   const parentMcpHints = new Set<string>();
 
   if (dag) {
@@ -499,6 +501,10 @@ export function dagNodeRoutingEnv(node: DagNode, dag?: import("./dag.js").Dag): 
     OMK_PARENT_MCP_HINTS: Array.from(parentMcpHints).join(","),
     OMK_TOOL_HINTS: Array.from(toolHints).join(","),
     OMK_HOOK_HINTS: Array.from(hookHints).join(","),
+    OMK_NODE_SKILLS: scopes.skills.join(","),
+    OMK_NODE_MCP_SERVERS: scopes.mcpServers.join(","),
+    OMK_NODE_TOOLS: scopes.tools.join(","),
+    OMK_NODE_HOOKS: scopes.hooks.join(","),
     OMK_ROUTE_SOURCE: routing.routeSource ?? "",
     OMK_ROUTE_AUTO_SPAWNED: String(routing.autoSpawned ?? false),
     OMK_ROUTE_SPAWN_REASON: routing.spawnReason ?? "",
@@ -507,8 +513,12 @@ export function dagNodeRoutingEnv(node: DagNode, dag?: import("./dag.js").Dag): 
     OMK_ROUTE_EVIDENCE_REQUIRED: String(routing.evidenceRequired ?? false),
     OMK_ROUTE_RATIONALE: routing.rationale ?? "",
     OMK_PROVIDER_HINT: routing.provider ?? "auto",
+    OMK_NODE_PROVIDER: routing.assignedProvider ?? routing.provider ?? "auto",
+    OMK_NODE_PROVIDER_AUTHORITY: routing.assignedProviderAuthority ?? "",
+    OMK_NODE_PROVIDER_CAPABILITIES: (routing.assignedProviderCapabilities ?? []).join(","),
+    OMK_NODE_CANDIDATE_PROVIDERS: (routing.candidateProviders ?? []).join(","),
     OMK_PROVIDER_MODEL_TIER: routing.providerModelTier ?? "",
-    OMK_PROVIDER_FALLBACK: routing.fallbackProvider ?? resolveFallbackProvider(["kimi"]),
+    OMK_PROVIDER_FALLBACK: routing.fallbackProvider ?? resolveFallbackProvider([DEFAULT_AUTHORITY_PROVIDER]),
     OMK_PROVIDER_REASON: routing.providerReason ?? "",
     OMK_ROUTE_REQUIRES_MCP: String(routing.requiresMcp ?? false),
     OMK_ROUTE_REQUIRES_TOOL_CALLING: String(routing.requiresToolCalling ?? false),

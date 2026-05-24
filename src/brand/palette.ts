@@ -19,6 +19,19 @@ export const P = {
   skin: { r: 249, g: 211, b: 197 },         // #F9D3C5  Warm skin tone
   matrixGreen: { r: 0, g: 255, b: 65 },     // #00FF41  Matrix phosphor green
   matrixDark: { r: 0, g: 68, b: 0 },        // #004400  Matrix dark green
+
+  // ── Metrics theme (professional dashboard) ──
+  metricsCyan: { r: 6, g: 182, b: 212 },    // #06B6D4  Metrics primary
+  metricsTeal: { r: 20, g: 184, b: 166 },   // #14B8A6  Metrics secondary (same as mint)
+  metricsNavy: { r: 10, g: 25, b: 41 },     // #0A1929  Metrics bg dark
+  metricsSlate: { r: 30, g: 41, b: 59 },    // #1E293B  Metrics bg light
+  metricsSilver: { r: 203, g: 213, b: 225 }, // #CBD5E1  Metrics muted text
+  metricsWhite: { r: 241, g: 245, b: 249 }, // #F1F5F9  Metrics bright
+  metricsAmber: { r: 245, g: 158, b: 11 },  // #F59E0B  Metrics warning
+  metricsGreen: { r: 34, g: 197, b: 94 },   // #22C55E  Metrics success
+  metricsRed: { r: 239, g: 68, b: 68 },     // #EF4444  Metrics error
+  metricsBlue: { r: 59, g: 130, b: 246 },   // #3B82F6  Metrics info
+  metricsViolet: { r: 139, g: 92, b: 246 }, // #8B5CF6  Metrics highlight
 } as const;
 
 export function hexToRgb(hex: string): { r: number; g: number; b: number } | null {

@@ -2,7 +2,7 @@ import { readFileSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 
-export const OMK_REPO_URL = "https://github.com/dmae97/oh-my-kimi";
+export const OMK_REPO_URL = "https://github.com/dmae97/open_multi-agent_kit";
 
 let cachedVersion: string | undefined;
 

@@ -5,6 +5,7 @@ import type { OmkMode } from "./mode-preset.js";
 import { getRunPath } from "./fs.js";
 import type { OmkRuntimeScope } from "./resource-profile.js";
 import type { ExecutionPromptPolicy, ExecutionSelectionSource } from "../contracts/orchestration.js";
+import { normalizeProviderId } from "../providers/model-registry.js";
 import {
   readRootAgentSubagents,
   writeScopedAgentFile,
@@ -17,6 +18,7 @@ export interface ChatAgentModeResources {
   resourceProfile?: string;
   approvalPolicy?: string;
   providerPolicy?: string;
+  authorityProvider?: string;
   providerModel?: string;
   ensembleDefaultEnabled?: boolean;
   executionPrompt?: ExecutionPromptPolicy;
@@ -57,6 +59,7 @@ export interface ChatAgentHarnessManifest {
     resourceProfile: string;
     approvalPolicy: string;
     providerPolicy: string;
+    authorityProvider: string;
     providerModel: string;
     ensembleDefault: "enabled" | "disabled";
     scopes: {
@@ -203,8 +206,9 @@ export function buildChatAgentModeContract(input: {
     `- Max steps per turn: ${resources.maxStepsPerTurn ?? "runtime-default"}`,
     `- Resource profile: ${resources.resourceProfile ?? "runtime-default"}`,
     `- Approval policy: ${resources.approvalPolicy ?? "interactive"}`,
-    `- Provider policy: ${resources.providerPolicy ?? "auto"}`,
-    `- Provider model: ${resources.providerModel ?? "auto"}`,
+    `- Provider policy: ${harness.resources.providerPolicy}`,
+    `- Authority provider: ${harness.resources.authorityProvider}`,
+    `- Provider model: ${harness.resources.providerModel}`,
     `- Execution selection: ${harness.execution.policy} (${harness.execution.source})`,
     `- Ensemble default: ${resources.ensembleDefaultEnabled === false ? "disabled" : "enabled"}`,
     `- MCP scope: ${resources.mcpScope}`,
@@ -301,9 +305,9 @@ export function buildChatAgentHarnessManifest(input: {
       "report changed files, commands, pass/fail, not-run items, remaining risk",
     ],
     authority: [
-      "Kimi/OMK chat owns edits, merge, and final synthesis",
-      "DeepSeek/Qwen/Codex lanes are read-only or advisory unless explicitly configured otherwise",
-      "MCP/tool lanes may use live authority only through Kimi-owned guarded execution",
+      `${resources.authorityProvider} is the configured OMK authority provider for edits, merge, and final synthesis`,
+      "DeepSeek/Qwen/Codex lanes are read-only or advisory unless explicitly selected as authority",
+      "MCP/tool lanes may use live authority only through OMK-owned guarded execution",
       "Hooks are constraints and guardrails, not bypasses",
       "Secrets must never be printed, stored, or copied into artifacts",
     ],
@@ -328,6 +332,7 @@ export function buildParallelAlgorithmInjection(resources: ChatAgentModeResource
   const lanePlan = buildSharedLanePlan(normalized);
   const providerPolicy = normalized.providerPolicy;
   const providerModel = normalized.providerModel;
+  const authorityProvider = normalized.authorityProvider;
   const approvalPolicy = normalized.approvalPolicy;
   const resourceProfile = normalized.resourceProfile;
   const ensembleDefault = normalized.ensembleDefault;
@@ -343,16 +348,16 @@ export function buildParallelAlgorithmInjection(resources: ChatAgentModeResource
       "- Progressive intent algorithm: Raw Input -> IntentFrame -> ActionAtoms -> Evidence DAG -> Novelty Guard -> Replan/Continue.",
       "- Strict action DAG: keep raw input in audit/digest artifacts only; worker/capability/model lanes receive role, scope, input evidence, expected output, and done condition from ActionAtoms.",
       "- For every non-trivial prompt, synthesize a virtual DAG before acting: bootstrap(done) -> root-coordinator -> model/capability/worker lanes -> review-merge -> quality/security/design gates.",
-    `- Runtime defaults: profile=${resourceProfile}; approval=${approvalPolicy}; provider=${providerPolicy}; ensemble=${ensembleDefault}; workerCap=${workerCap}; model=${providerModel}; workerLanes=${lanePlan.workerNodes.length}; capabilityLanes=${lanePlan.capabilityNodes.length}; providerLanes=${lanePlan.providerNodes.length}.`,
+    `- Runtime defaults: profile=${resourceProfile}; approval=${approvalPolicy}; provider=${providerPolicy}; authority=${authorityProvider}; ensemble=${ensembleDefault}; workerCap=${workerCap}; model=${providerModel}; workerLanes=${lanePlan.workerNodes.length}; capabilityLanes=${lanePlan.capabilityNodes.length}; providerLanes=${lanePlan.providerNodes.length}.`,
       "- Intent schema to infer before delegation: taskType, complexity, estimatedWorkers, requiredRoles, isReadOnly, needsResearch, needsSecurityReview, needsTesting, needsDesignReview, parallelizable, rationale.",
       "- Effective lanes: use OMK_WORKERS for worker lanes; capability lanes are independent orchestration lanes and remain available when active inventory exists.",
       "- Coordinator role: use architect for plan/migrate/security; otherwise use orchestrator. Coordinator owns plan, lane boundaries, conflict control, and final synthesis.",
       "- Worker role selection: remove planner/orchestrator/architect/router from requiredRoles; cycle remaining roles across worker-N lanes; default to coder when no worker role remains.",
       `- Capability-agent routing: when active inventory exists and intent is parallelizable, non-simple, or taskType is bugfix/implement/migrate/plan/refactor/review/security/test/general, allocate up to ${lanePlan.capabilityNodes.length} independent lanes to active MCP, skills, and hooks routing.`,
       "- DeepSeek model-agent routing: for read-only, parallelizable, non-simple, or bugfix/implement/migrate/plan/refactor/review/security/test tasks, spawn read-only Flash quick-decomposition and Pro critique lanes when DeepSeek is available.",
-      "- Multi-provider model routing: lane assignments must name assignedProvider, assignedModel, assignedCapabilities, skills, hooks, and MCP; Kimi keeps root/integrator authority, external providers default read-only/advisory.",
-      "- Provider lane defaults: explorer may use Qwen/DeepSeek fast read-only; planner may use Codex advisory or Kimi; coder uses Kimi authority with external advisory only; reviewer/qa/security may fan out across DeepSeek/Qwen/Codex; integrator is Kimi-only.",
-    "- DeepSeek direct lanes are read-only; Qwen/Codex direct lanes are also read-only; file-affecting external output is advisory only; Kimi/OMK chat owns edits, merge authority, shell/MCP authority, and final verification.",
+      "- Multi-provider model routing: lane assignments must name assignedProvider, assignedModel, assignedCapabilities, skills, hooks, and MCP; the configured OMK authority provider keeps root/integrator authority, while external providers default read-only/advisory.",
+      "- Provider lane defaults: explorer may use Qwen/DeepSeek fast read-only; planner may use Codex or authority-provider advisory; coder uses the configured authority provider with external advisory only; reviewer/qa/security may fan out across DeepSeek/Qwen/Codex; integrator is authority-provider only.",
+      "- DeepSeek direct lanes are read-only; Qwen/Codex direct lanes are also read-only unless selected as authority; file-affecting external output is advisory only; OMK owns edits, merge authority, shell/MCP authority, and final verification through the configured authority provider.",
       "- Worker failure policy: worker/deepseek/capability lanes are retryable and may be skipped without blocking synthesis; security-audit blocks dependents; QA/design report risks without widening scope.",
       "- Synthesis: review-merge depends on every model, capability, and worker lane; DeepSeek/capability lane outputs are optional evidence, normal worker outputs are required unless explicitly marked unavailable.",
       "- Quality gate: for implement/bugfix/refactor/migrate/security/test/general, run the smallest proving check first; default command-pass gate is `npm run check`, then targeted tests, then full suite when risk warrants.",
@@ -460,6 +465,7 @@ function normalizeHarnessResources(resources: ChatAgentModeResources): ChatAgent
     resourceProfile: resources.resourceProfile ?? "runtime-default",
     approvalPolicy: resources.approvalPolicy ?? "interactive",
     providerPolicy: resources.providerPolicy ?? "auto",
+    authorityProvider: normalizeAuthorityProvider(resources),
     providerModel: resources.providerModel ?? "auto",
     ensembleDefault: resources.ensembleDefaultEnabled === false ? "disabled" : "enabled",
     scopes: {
@@ -654,32 +660,39 @@ function selectProviderForLane(
 ): HarnessProviderSelection {
   const roleKey = role.replace(/^worker-\d+$/, "coder");
   const requested = resources.providerPolicy;
+  const authorityProvider = resources.authorityProvider;
   const model = resources.providerModel === "auto" ? "" : resources.providerModel;
-  if (roleKey === "coder" || roleKey === "integrator" || roleKey === "orchestrator" || roleKey === "security") {
-    if (roleKey === "security" && requested !== "kimi" && requested !== "auto") {
-      return providerSelection(requested, model || defaultModelForProvider(requested), "read-only", ["read", "review", "security"], [requested, "kimi"]);
-    }
-    return providerSelection("kimi", model || "kimi-k2.6", "authority", ["write", "shell", "mcp", "merge"], ["kimi"]);
+  const authorityModel = model || defaultModelForProvider(authorityProvider);
+  const authorityCandidates = authorityProviderCandidates(authorityProvider);
+
+  if (roleKey === "coder" || roleKey === "integrator" || roleKey === "orchestrator") {
+    return providerSelection(authorityProvider, authorityModel, "authority", authorityCapabilitiesForProvider(authorityProvider), authorityCandidates);
   }
-  if (requested !== "auto" && requested !== "kimi") {
+  if (roleKey === "security") {
+    if (requested !== "auto" && requested !== "authority" && requested !== authorityProvider) {
+      return providerSelection(requested, model || defaultModelForProvider(requested), "read-only", ["read", "review", "security"], withAuthorityFallback([requested], authorityProvider));
+    }
+    return providerSelection(authorityProvider, authorityModel, "authority", authorityCapabilitiesForProvider(authorityProvider), authorityCandidates);
+  }
+  if (requested !== "auto" && requested !== "authority" && requested !== authorityProvider) {
     return providerSelection(
       requested,
       model || defaultModelForProvider(requested),
       roleKey === "planner" && requested === "codex" ? "advisory" : "read-only",
       capabilitiesForProvider(requested),
-      [requested, "kimi"]
+      withAuthorityFallback([requested], authorityProvider)
     );
   }
   if (roleKey === "explorer" || roleKey === "researcher" || roleKey === "vision-debugger") {
-    return providerSelection("deepseek", model || "deepseek-v4-flash", "read-only", ["read", "research", "web"], ["deepseek", "qwen", "openrouter", "kimi"]);
+    return providerSelection("deepseek", model || "deepseek-v4-flash", "read-only", ["read", "research", "web"], withAuthorityFallback(["deepseek", "qwen", "openrouter"], authorityProvider));
   }
   if (roleKey === "planner") {
-    return providerSelection("codex", model || "codex-cli", "advisory", ["plan", "review"], ["codex", "kimi"]);
+    return providerSelection("codex", model || "codex-cli", "advisory", ["plan", "review"], withAuthorityFallback(["codex"], authorityProvider));
   }
   if (roleKey === "reviewer" || roleKey === "qa" || roleKey === "tester") {
-    return providerSelection("deepseek", model || "deepseek-v4-pro", "read-only", ["review", "qa", "advisory"], ["deepseek", "qwen", "openrouter", "codex", "kimi"]);
+    return providerSelection("deepseek", model || "deepseek-v4-pro", "read-only", ["review", "qa", "advisory"], withAuthorityFallback(["deepseek", "qwen", "openrouter", "codex"], authorityProvider));
   }
-  return providerSelection("kimi", model || "kimi-k2.6", "authority", ["authority"], ["kimi"]);
+  return providerSelection(authorityProvider, authorityModel, "authority", ["authority"], authorityCandidates);
 }
 
 function providerSelection(
@@ -710,12 +723,38 @@ function uniqueProviderCandidates(values: string[]): string[] {
   return out;
 }
 
+function normalizeAuthorityProvider(resources: ChatAgentModeResources): string {
+  const explicit = normalizeProviderId(resources.authorityProvider ?? process.env.OMK_AUTHORITY_PROVIDER);
+  if (explicit !== "auto") return explicit;
+  const legacy = normalizeProviderId(process.env.OMK_PROVIDER_AUTHORITY);
+  if (legacy !== "auto" && legacy !== "direct" && legacy !== "advisory") return legacy;
+  return "auto";
+}
+
+function withAuthorityFallback(candidates: string[], authorityProvider: string): string[] {
+  return uniqueProviderCandidates([...candidates, ...authorityProviderCandidates(authorityProvider)]);
+}
+
+function authorityProviderCandidates(authorityProvider: string): string[] {
+  const legacyKimiFallback = process.env.OMK_LEGACY_CHAT === "1" || process.env.OMK_LEGACY_KIMI_FALLBACK === "1";
+  if (authorityProvider === "auto") {
+    return uniqueProviderCandidates(["codex", "qwen", "openrouter", ...(legacyKimiFallback ? ["kimi"] : [])]);
+  }
+  return uniqueProviderCandidates([authorityProvider, ...(legacyKimiFallback && authorityProvider !== "kimi" ? ["kimi"] : [])]);
+}
+
+function authorityCapabilitiesForProvider(_provider: string): string[] {
+  return ["write", "shell", "mcp", "merge"];
+}
+
 function defaultModelForProvider(provider: string): string {
+  if (provider === "auto") return "auto";
   if (provider === "deepseek") return "deepseek-v4-flash";
   if (provider === "qwen") return "qwen3-max";
   if (provider === "codex") return "codex-cli";
   if (provider === "openrouter") return "openrouter/auto";
-  return "kimi-k2.6";
+  if (provider === "kimi") return "kimi-k2.6";
+  return "auto";
 }
 
 function capabilitiesForProvider(provider: string): string[] {
@@ -892,6 +931,7 @@ function renderChatAgentYaml(baseAgentRel: string, resources: ChatAgentModeResou
     `    OMK_CONTEXT_BUDGET: "normal"`,
     `    OMK_ROUTE_READ_ONLY: "false"`,
     `    OMK_PROVIDER_POLICY: ${JSON.stringify(resources.providerPolicy ?? "auto")}`,
+    `    OMK_PROVIDER_AUTHORITY: ${JSON.stringify(normalizeAuthorityProvider(resources))}`,
     `    OMK_PROVIDER_MODEL: ${JSON.stringify(resources.providerModel ?? "auto")}`,
   ];
   if (subagents.length) {
@@ -910,9 +950,9 @@ function renderChatAgentYaml(baseAgentRel: string, resources: ChatAgentModeResou
 
 function defaultRootPrompt(): string {
   return [
-    "# oh-my-kimi Root Agent",
+    "# open_multi-agent_kit Root Agent",
     "",
-    "You are the oh-my-kimi root coordinator — the orchestration layer that turns OMK into a bounded coding team.",
+    "You are the OMK root orchestrator for open_multi-agent_kit — a provider-neutral orchestration layer that turns OMK into a bounded coding team.",
     "",
     "Apply AGENTS.md silently, keep MCP/skills/hooks scoped by runtime policy, launch independent subagents in parallel for non-trivial work, and verify before completion.",
   ].join("\n");

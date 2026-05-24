@@ -7,6 +7,7 @@
  */
 
 import type { DagNode, DagNodeRouting } from "./dag.js";
+import { attachAssignedCapabilities } from "./capability-routing.js";
 import type { NodeIntent } from "../runtime/runtime-router.js";
 import { createDecisionTraceStore } from "../evidence/decision-trace.js";
 import type { RoutingInput } from "./routing.js";
@@ -325,7 +326,7 @@ function doAssignSkillsForRoutingInput(
     .filter((rule) => rule.match(adaptedNode, intent))
     .sort((a, b) => b.priority - a.priority);
 
-  return buildAssignment(matched, intent, nodeText, undefined, runId, attemptId, input.id, ROLE_DEFAULTS[input.role]);
+  return buildAssignment(matched, intent, nodeText, input.routing, runId, attemptId, input.id, ROLE_DEFAULTS[input.role]);
 }
 
 function buildAssignment(
@@ -423,7 +424,7 @@ function buildAssignment(
 export function applySkillAssignment(node: DagNode, assignment: SkillAssignment): DagNode {
   return {
     ...node,
-    routing: {
+    routing: attachAssignedCapabilities({
       ...node.routing,
       skills: [...assignment.skills],
       mcpServers: [...assignment.mcpServers],
@@ -431,6 +432,6 @@ export function applySkillAssignment(node: DagNode, assignment: SkillAssignment)
       hooks: [...assignment.hooks],
       rationale: assignment.rationale,
       routeSource: "skill",
-    },
+    }),
   };
 }

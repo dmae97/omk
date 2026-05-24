@@ -20,6 +20,8 @@ import type { ProviderPolicy } from "../providers/types.js";
 import { defaultGoalDaemon } from "../goal/goal-daemon.js";
 import { loadWakePolicy, saveWakePolicy, createDefaultWakePolicy } from "../goal/wake-policy.js";
 
+const DEFAULT_GOAL_PROVIDER_POLICY: ProviderPolicy = "auto";
+
 interface GoalExecutionOptions {
   workers?: string;
   runId?: string;
@@ -346,7 +348,7 @@ export async function goalRunCommand(
     runId: options.runId,
     workers: options.workers,
     goalId,
-    provider: options.provider ?? "kimi",
+    provider: options.provider ?? DEFAULT_GOAL_PROVIDER_POLICY,
     model: options.model,
     approvalPolicy: options.approvalPolicy,
     watch: options.watch,
@@ -579,7 +581,7 @@ export async function goalContinueCommand(
     runId: options.runId,
     workers: options.workers,
     goalId: effectiveGoalId,
-    provider: options.provider ?? "kimi",
+    provider: options.provider ?? DEFAULT_GOAL_PROVIDER_POLICY,
     model: options.model,
     approvalPolicy: options.approvalPolicy,
     watch: options.watch,
@@ -632,7 +634,7 @@ export async function goalAutoCommand(
     maxWallClockHours: policy.budgets.maxWallClockHours,
     maxDailyCostUsd: policy.budgets.maxDailyCostUsd,
     maxConsecutiveFailures: policy.budgets.maxConsecutiveFailures,
-    provider: options.provider,
+    provider: options.provider ?? DEFAULT_GOAL_PROVIDER_POLICY,
     approvalPolicy: options.approvalPolicy,
     onVerify: async (gid: string) => {
       await goalVerifyCommand(gid, { json: true });
