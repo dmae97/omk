@@ -80,6 +80,7 @@ export interface AgentContext {
   memory?: Array<{ key: string; source: string; summary: string }>;
   cwd?: string;
   env?: Record<string, string>;
+  providerModel?: string;
   risk?: string;
   approvalPolicy?: string;
   sandboxMode?: string;

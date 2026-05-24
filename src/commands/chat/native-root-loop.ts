@@ -1,4 +1,4 @@
-import type { TaskRunner } from "../../contracts/orchestration.js";
+import type { TaskResult, TaskRunner } from "../../contracts/orchestration.js";
 import type { RuntimeBootstrap } from "../../runtime/runtime-bootstrap.js";
 import type { ChatLayout } from "./utils.js";
 import { style } from "../../util/theme.js";
@@ -7,6 +7,7 @@ import type { DagNode } from "../../orchestration/dag.js";
 import { applyCapabilityInjectionToRouting, buildCapabilityInjection } from "../../runtime/capability-injection.js";
 import { buildPromptEnvelope, renderPromptEnvelope } from "../../runtime/prompt-envelope.js";
 import { resolveRuntimeBootstrap } from "../../runtime/runtime-bootstrap.js";
+import { TerminalOwner } from "../../util/terminal-owner.js";
 
 export interface NativeRootLoopInput {
   bootstrap: RuntimeBootstrap;
@@ -47,6 +48,11 @@ function formatScopedNames(names: readonly string[] | undefined, empty = "none")
   if (!names || names.length === 0) return empty;
   const preview = names.slice(0, 8).join(", ");
   return names.length > 8 ? `${preview}, … +${names.length - 8}` : preview;
+}
+
+function isDisabledEnvValue(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "0" || normalized === "false" || normalized === "no" || normalized === "off";
 }
 
 export function createNativeRootSessionState(input: {
@@ -254,6 +260,11 @@ async function applyProviderOverride(
   state.bootstrap = bootstrap;
   state.provider = bootstrap.provider;
   state.model = bootstrap.selectedModel;
+  if (bootstrap.selectedModel) {
+    input.env.OMK_PROVIDER_MODEL = bootstrap.selectedModel;
+  } else {
+    delete input.env.OMK_PROVIDER_MODEL;
+  }
   state.updatedAt = new Date().toISOString();
   console.log(style.phosphor(`\n  Provider switched for this session: ${bootstrap.provider}`));
   console.log(style.phosphorDim(`  Runtime: ${bootstrap.selectedRuntimeId ?? "auto"} | Model: ${bootstrap.selectedModel ?? "auto"}`));
@@ -276,6 +287,7 @@ async function applyModelOverride(
       selectedModel: resolved.model,
     };
     state.model = resolved.model;
+    input.env.OMK_PROVIDER_MODEL = resolved.model;
     state.updatedAt = new Date().toISOString();
   }
   console.log(style.phosphor(`\n  Model override for this session: ${ref} → ${resolved.model}`));
@@ -370,6 +382,51 @@ export function buildNativeRootLoopTurnNode(input: {
   };
 }
 
+async function executeNativeRootTurn(input: {
+  taskRunner: TaskRunner;
+  node: DagNode;
+  env: Record<string, string>;
+  signal: AbortSignal;
+  heartbeatEnabled: boolean;
+}): Promise<TaskResult> {
+  const startedAt = Date.now();
+  const routing = input.node.routing;
+  if (input.heartbeatEnabled) {
+    process.stderr.write(style.phosphorDim(
+      `  routing: provider=${routing?.provider ?? "auto"} model=${routing?.providerModel ?? input.env.OMK_PROVIDER_MODEL ?? "auto"} risk=${routing?.risk ?? "read"} sandbox=${routing?.sandboxMode ?? "auto"}\n`
+    ));
+  }
+
+  let heartbeatPrinted = false;
+  let heartbeatLineClosed = false;
+  const heartbeat = input.heartbeatEnabled
+    ? setInterval(() => {
+        heartbeatPrinted = true;
+        const sec = Math.floor((Date.now() - startedAt) / 1000);
+        process.stderr.write(style.phosphorDim(
+          `\r  running ${sec}s · provider=${routing?.provider ?? "auto"} · model=${routing?.providerModel ?? input.env.OMK_PROVIDER_MODEL ?? "auto"}   `
+        ));
+      }, 3000)
+    : undefined;
+  heartbeat?.unref?.();
+
+  try {
+    const result = await input.taskRunner.run(input.node, input.env, input.signal);
+    if (input.heartbeatEnabled) {
+      const sec = ((Date.now() - startedAt) / 1000).toFixed(1);
+      if (heartbeatPrinted) {
+        process.stderr.write("\n");
+        heartbeatLineClosed = true;
+      }
+      process.stderr.write(style.phosphorDim(`  finished in ${sec}s · exit=${result.exitCode}\n`));
+    }
+    return result;
+  } finally {
+    if (heartbeat) clearInterval(heartbeat);
+    if (heartbeatPrinted && !heartbeatLineClosed) process.stderr.write("\n");
+  }
+}
+
 export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<number> {
   const { taskRunner, layout, onData } = input;
   const turnTimeoutMs = Number.parseInt(input.env.OMK_TURN_TIMEOUT_MS ?? "120000", 10);
@@ -383,43 +440,56 @@ export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<
 
   const { createInterface } = await import("readline");
   const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const terminalOwner = new TerminalOwner(process.stdin);
+  const releaseReadlineOwner = terminalOwner.claimReadline();
 
   let running = true;
   let readlineClosed = false;
+  let activeTurnAbort: AbortController | undefined;
+  const queuedLines: string[] = [];
+  let pendingLineResolve: ((value: string | undefined) => void) | undefined;
+  const resolveNextLine = (value: string | undefined): void => {
+    const resolve = pendingLineResolve;
+    pendingLineResolve = undefined;
+    resolve?.(value);
+  };
+  rl.on("line", (line) => {
+    rl.pause();
+    if (pendingLineResolve) {
+      resolveNextLine(line);
+    } else {
+      queuedLines.push(line);
+    }
+  });
   rl.once("close", () => {
     readlineClosed = true;
-    running = false;
+    if (queuedLines.length === 0) resolveNextLine(undefined);
   });
-  process.once("SIGINT", () => { running = false; rl.close(); });
+  const onSigint = (): void => {
+    if (activeTurnAbort && !activeTurnAbort.signal.aborted) {
+      activeTurnAbort.abort();
+      process.stderr.write(style.phosphorDim("\nTurn cancelled. Press Ctrl+C again to exit.\n"));
+      return;
+    }
+    running = false;
+    rl.close();
+  };
+  process.on("SIGINT", onSigint);
+
+  const readPromptLine = async (): Promise<string | undefined> => {
+    if (readlineClosed && queuedLines.length === 0) return undefined;
+    process.stdout.write(style.phosphorDim("omk> "));
+    const queued = queuedLines.shift();
+    if (queued !== undefined) return queued;
+    rl.resume();
+    return new Promise<string | undefined>((resolve) => {
+      pendingLineResolve = resolve;
+      if (readlineClosed) resolveNextLine(undefined);
+    });
+  };
 
   while (running) {
-    const userInput = await new Promise<string | undefined>((resolve, reject) => {
-      if (readlineClosed) {
-        resolve(undefined);
-        return;
-      }
-      let settled = false;
-      const finish = (value: string | undefined): void => {
-        if (settled) return;
-        settled = true;
-        rl.off("close", onClose);
-        resolve(value);
-      };
-      const onClose = (): void => {
-        finish(undefined);
-      };
-      rl.once("close", onClose);
-      try {
-        rl.question(style.phosphorDim("omk> "), finish);
-      } catch (err: unknown) {
-        if (err instanceof Error && "code" in err && err.code === "ERR_USE_AFTER_CLOSE") {
-          finish(undefined);
-          return;
-        }
-        rl.off("close", onClose);
-        reject(err);
-      }
-    });
+    const userInput = await readPromptLine();
     if (userInput === undefined) break;
 
     const line = userInput.trim();
@@ -442,7 +512,9 @@ export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<
           break;
         }
         try {
-          await handler.handler(args);
+          await terminalOwner.withChildProcess(rl, async () => {
+            await handler.handler(args);
+          });
         } catch (err: unknown) {
           const m = err instanceof Error ? err.message : String(err);
           console.error(style.metricsRed(`Command error: ${m}`));
@@ -454,6 +526,7 @@ export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<
     }
 
     const abort = new AbortController();
+    activeTurnAbort = abort;
     const timeout = setTimeout(() => abort.abort(), safeTurnTimeoutMs);
 
     try {
@@ -466,7 +539,13 @@ export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<
         executionPrompt: state.approvalPolicy,
       });
 
-      const result = await taskRunner.run(node, input.env, abort.signal);
+      const result = await terminalOwner.withChildProcess(rl, () => executeNativeRootTurn({
+        taskRunner,
+        node,
+        env: input.env,
+        signal: abort.signal,
+        heartbeatEnabled: !isDisabledEnvValue(input.env.OMK_TURN_HEARTBEAT),
+      }));
 
       if (result.stdout) {
         process.stdout.write(result.stdout + "\n");
@@ -474,6 +553,9 @@ export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<
       }
       if (result.stderr && result.exitCode !== 0) {
         process.stderr.write(style.metricsRed(result.stderr) + "\n");
+      }
+      if (!result.stdout && result.exitCode !== 0) {
+        process.stderr.write(style.metricsRed(`Turn exited with code ${result.exitCode}`) + "\n");
       }
       if (input.onTodoSync && result.stdout) {
         input.onTodoSync(result.stdout);
@@ -486,10 +568,13 @@ export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<
         : String(err);
       console.error(style.metricsRed(`Error: ${msg}`));
     } finally {
+      activeTurnAbort = undefined;
       clearTimeout(timeout);
     }
   }
 
+  process.off("SIGINT", onSigint);
+  releaseReadlineOwner();
   if (!readlineClosed) rl.close();
   console.log(style.phosphorDim("\nSession ended."));
   return 0;

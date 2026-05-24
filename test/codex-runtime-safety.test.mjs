@@ -19,7 +19,8 @@ writeFileSync(process.env.OMK_CAPTURE_PATH, JSON.stringify({
   env: {
     OMK_APPROVAL_POLICY: process.env.OMK_APPROVAL_POLICY,
     OMK_SANDBOX_MODE: process.env.OMK_SANDBOX_MODE,
-    OMK_TASK_RISK: process.env.OMK_TASK_RISK
+    OMK_TASK_RISK: process.env.OMK_TASK_RISK,
+    OMK_PROVIDER_MODEL: process.env.OMK_PROVIDER_MODEL
   },
   stdin
 }));
@@ -82,6 +83,49 @@ test("CodexRuntime propagates ask approval and read-only sandbox", async () => {
   assert.equal(capture.env.OMK_SANDBOX_MODE, "read-only");
   assert.equal(capture.env.OMK_TASK_RISK, "read");
   assert.match(capture.stdin, /summarize only/);
+});
+
+test("CodexRuntime prefers AgentContext providerModel over env and runtime defaults", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "omk-codex-runtime-model-"));
+  const { bin, capturePath } = await fakeCodexBin(dir);
+  const runtime = new CodexRuntime({ bin, cwd: dir, model: "runtime-default" });
+
+  const result = await runtime.execute({
+    prompt: "use selected model",
+    context: {
+      runId: "run-codex-model",
+      nodeId: "node-model",
+      role: "coder",
+      goal: "model propagation",
+      cwd: dir,
+      env: { OMK_CAPTURE_PATH: capturePath, OMK_PROVIDER_MODEL: "env-model" },
+      providerModel: "context-model",
+      approvalPolicy: "ask",
+      sandboxMode: "workspace-write",
+      risk: "write",
+    },
+    tools: { available: [] },
+    providerPolicy: {
+      strategy: "priority-first",
+      preferredProviders: ["codex"],
+      fallbackChain: [],
+    },
+    capabilities: {
+      read: true,
+      write: true,
+      shell: false,
+      mcp: false,
+      patch: true,
+      review: false,
+      merge: false,
+      vision: false,
+    },
+  });
+
+  assert.equal(result.exitCode, 0);
+  const capture = JSON.parse(await readFile(capturePath, "utf8"));
+  assert.deepEqual(capture.argv.slice(0, 3), ["exec", "--model", "context-model"]);
+  assert.equal(capture.env.OMK_PROVIDER_MODEL, "context-model");
 });
 
 test("DeepSeekRuntime rejects write and tool authority", async () => {

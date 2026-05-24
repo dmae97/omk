@@ -150,6 +150,66 @@ test("runtime-backed runner routes non-Kimi CLI turns without optional capabilit
   assert.equal(result.metadata.selectedRuntime, "opencode-cli");
 });
 
+test("runtime-backed runner forwards per-turn env and routing providerModel", async () => {
+  const runner = await createRuntimeBackedTaskRunner({ cwd: process.cwd(), env: { OMK_PROVIDER_MODEL: "initial-model" }, runId: "local-runtime-backed-model" });
+  const registry = runner._registry;
+  for (const runtime of [...registry.list()]) registry.unregister(runtime.id);
+
+  let seen;
+  registry.register({
+    id: "codex-cli",
+    priority: 100,
+    capabilities: {
+      read: true,
+      write: false,
+      shell: false,
+      mcp: false,
+      patch: false,
+      review: false,
+      merge: false,
+      vision: false,
+    },
+    supports: () => true,
+    async runNode() {
+      throw new Error("execute path expected");
+    },
+    async execute(task) {
+      seen = {
+        providerModel: task.context.providerModel,
+        envModel: task.context.env?.OMK_PROVIDER_MODEL,
+      };
+      return {
+        output: "ok",
+        exitCode: 0,
+        metadata: { runtime: "codex-cli" },
+      };
+    },
+  });
+
+  const result = await runner.run({
+    id: "native-model-turn",
+    name: "Summarize",
+    role: "coordinator",
+    dependsOn: [],
+    status: "running",
+    retries: 0,
+    maxRetries: 1,
+    routing: {
+      provider: "codex",
+      providerModel: "routing-model",
+      readOnly: true,
+      assignedProviderCapabilities: ["read"],
+      contextBudget: "small",
+    },
+  }, { OMK_PROVIDER_MODEL: "turn-env-model" });
+
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(seen, {
+    providerModel: "routing-model",
+    envModel: "turn-env-model",
+  });
+});
+
 function fakeRuntime(id, calls, capabilities) {
   return {
     id,

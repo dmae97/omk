@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import { style, omkCliHero } from "../util/theme.js";
 import { t, initI18n } from "../util/i18n.js";
 import { buildCustomHelp } from "../util/help-text.js";
+import type { OmkMode } from "../util/mode-preset.js";
 import type { McpDoctorReport } from "../commands/mcp.js";
 import {
   mapDoctorToAutoConnectReport,
@@ -107,8 +108,9 @@ export async function runRootHudFlow(program: Command): Promise<void> {
   }
 
   // ── Mode selector: Tab to cycle, Enter to confirm ──
-  const { promptModeCycle } = await import("../util/mode-selector.js");
-  const selectedMode = await promptModeCycle();
+  const selectedMode: OmkMode = isDisabledEnvValue(process.env.OMK_ROOT_MODE_SELECTOR)
+    ? "agent"
+    : await (await import("../util/mode-selector.js")).promptModeCycle();
 
   const { getModePreset } = await import("../util/mode-preset.js");
   const preset = getModePreset(selectedMode);

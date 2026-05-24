@@ -96,6 +96,7 @@ export class CodexRuntime implements AgentRuntime {
 
   async execute(task: AgentTask): Promise<AgentResult> {
     const prompt = this.buildPrompt(task);
+    const model = task.context.providerModel ?? task.context.env?.OMK_PROVIDER_MODEL ?? this.model ?? process.env.OMK_PROVIDER_MODEL;
     const env: Record<string, string> = {
       ...(task.context.env ?? {}),
       OMK_RUN_ID: task.context.runId,
@@ -109,6 +110,7 @@ export class CodexRuntime implements AgentRuntime {
       OMK_APPROVAL_POLICY: task.context.approvalPolicy ?? task.context.env?.OMK_APPROVAL_POLICY ?? "",
       OMK_SANDBOX_MODE: task.context.sandboxMode ?? task.context.env?.OMK_SANDBOX_MODE ?? "",
       OMK_TASK_RISK: task.context.risk ?? "",
+      ...(model ? { OMK_PROVIDER_MODEL: model } : {}),
     };
 
     const sandboxMode =
@@ -129,7 +131,6 @@ export class CodexRuntime implements AgentRuntime {
       "-",
     ];
 
-    const model = task.context.env?.OMK_PROVIDER_MODEL ?? this.model ?? process.env.OMK_PROVIDER_MODEL;
     if (model && model !== "codex-cli") {
       args.splice(1, 0, "--model", model);
     }
