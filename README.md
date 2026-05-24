@@ -1,4 +1,4 @@
-# OMK — Open Multi-agent Kit
+# OMK — MCP-native Agent Control Plane
 
 <div align="center">
 
@@ -8,7 +8,7 @@
 <meta property="og:image" content="https://raw.githubusercontent.com/dmae97/open_multi-agent_kit/main/readmeasset/omk-social-preview.png" />
 <meta property="og:title" content="open_multi-agent_kit" />
 <meta property="og:url" content="https://github.com/dmae97/open_multi-agent_kit/" />
-<meta property="og:description" content="Provider-neutral agent runtime for coding workflows. Stable daily-use core with orchestration surfaces." />
+<meta property="og:description" content="MCP-native agent control plane for coding workflows. One command boots an MCP-connected AI workspace with provider routing and evidence gates." />
 
 <!-- Twitter -->
 <meta name="twitter:card" content="summary_large_image" />
@@ -16,10 +16,10 @@
 
 <img src="./readmeasset/kimicat.gif" alt="OMK CLI demo" width="720" />
 
-<h1>OMK — Open Multi-agent Kit</h1>
+<h1>OMK — MCP-native Agent Control Plane</h1>
 
-<p><strong>Provider-neutral runtime for AI coding teams.</strong></p>
-<p><sub>Agent supervisor for coding agents: DAG scheduling, evidence gates, worktree isolation, replay, and memory.</sub></p>
+<p><strong>One command to boot an MCP-connected AI agent workspace.</strong></p>
+<p><sub>Local agent control plane: MCP AutoConnect, provider routing, DAG scheduling, evidence gates, worktree isolation, replay, and memory.</sub></p>
 <p><sub>Your agents write. OMK coordinates, verifies, remembers, and guards.</sub></p>
 <p><a href="https://github.com/dmae97/open_multi-agent_kit/"><strong>github.com/dmae97/open_multi-agent_kit</strong></a> · <a href="https://github.com/dmae97/open_multi-agent_kit">GitHub</a> · <a href="https://www.npmjs.com/package/open-multi-agent-kit">npm</a></p>
 
@@ -44,15 +44,27 @@
 
 ## The 10-second version
 
-OMK turns agent CLIs and model APIs into bounded, inspectable runtime lanes with isolated worktrees, DAG-based execution, evidence gates before completion, local graph memory, and a live HUD/cockpit for operator control. It works with Codex, Gemini, Claude Code, Kimi, OpenRouter, Qwen, DeepSeek, and local models.
+OMK turns any repository into an MCP-connected agent workspace. Run `omk`
+and it discovers the project MCP plane, mounts the built-in `omk-project`
+server, summarizes skills/hooks/providers, and starts a bounded local control
+plane for coding agents.
+
+OMK still routes work across agent CLIs and model APIs, but the product
+position is the control plane: provider routing, isolated worktrees,
+DAG-based execution, evidence gates before completion, local graph memory,
+and a live HUD/cockpit for operator control. It works with Codex, Gemini,
+Claude Code, Kimi, OpenRouter, Qwen, DeepSeek, and local models.
 
 - Not a prompt pack.
 - Not a model buffet.
-- A provider-native control plane for shipping code with verification.
+- Not another provider wrapper.
+- An MCP-native control plane for shipping code with verification.
 
 ```bash
 npm install -g open-multi-agent-kit
 omk init
+omk
+omk mcp connect --all
 omk doctor
 omk chat
 ```
@@ -92,6 +104,46 @@ omk cockpit
 | Repeated agent workflows stay ad hoc | Packaged OMK skills now cover memory, surgical coding, alignment/TDD, React diagnostics, managed-agent teamwork, legal workflows, quality gates, and release review. |
 
 **Mental model:** Your agents write. OMK coordinates, verifies, remembers, and guards.
+
+## MCP-native control plane
+
+OMK treats MCP as the workspace control plane, not as a hidden provider detail.
+The official MCP specification defines a host/client/server architecture where
+the host manages client lifecycles, permissions, security policy, authorization
+decisions, and context aggregation; MCP transports include stdio and Streamable
+HTTP. OMK maps to that shape:
+
+```txt
+OMK Host
+ ├─ MCP Client: omk-project
+ ├─ MCP Client: filesystem-readonly
+ ├─ MCP Client: github / railway / supabase
+ ├─ Runtime Adapter: Kimi
+ ├─ Runtime Adapter: Codex
+ ├─ Runtime Adapter: DeepSeek
+ └─ Root Coordinator: native OMK loop
+```
+
+`omk` uses **eager offline readiness + lazy connection**:
+
+- root startup summarizes the active MCP tool plane without spawning servers
+  or triggering OAuth/network flows;
+- `omk-project` is always shown as the built-in project MCP mount when MCP
+  scope is active;
+- optional MCP failures degrade the workspace instead of crashing the root
+  control plane;
+- explicit validation/connection stays under operator control:
+
+```bash
+omk mcp connect --all
+omk mcp doctor --fix
+```
+
+Auto-connect, not auto-destroy: destructive tools still require the active
+approval/sandbox policy.
+
+References: [MCP architecture](https://modelcontextprotocol.io/specification/2025-06-18/architecture),
+[MCP transports](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports).
 
 ---
 

@@ -83,7 +83,7 @@ const en: Record<string, string> = {
   "cli.menuExit": "exit     — Exit",
   "cli.menuUnavailable": "\n  (Cannot display menu in this environment. Type a command below.)\n",
   "cli.unknownChoice": "Unknown choice: {0}, proceeding to chat.",
-  "cli.description": "OMK: multi-agent orchestration harness for Code CLI",
+  "cli.description": "OMK: MCP-native agent control plane for coding workflows",
   "cli.runIdOption": "run ID (resume / reference)",
   "cli.sudoOption": "Run shell commands with sudo (admin privileges)",
 
@@ -517,7 +517,7 @@ const ko: Record<string, string> = {
   "cli.menuExit": "exit     — 종료",
   "cli.menuUnavailable": "\n  (메뉴를 표시할 수 없는 환경입니다. 아래 명령어를 직접 입력하세요.)\n",
   "cli.unknownChoice": "알 수 없는 선택: {0}, chat으로 진행합니다.",
-  "cli.description": "OMK: Code CLI용 multi-agent orchestration harness",
+  "cli.description": "OMK: 코딩 워크플로를 위한 MCP-native agent control plane",
   "cli.runIdOption": "run ID 지정 (resume / 참조)",
   "cli.sudoOption": "셸 명령어를 sudo로 실행 (관리자 권한)",
 

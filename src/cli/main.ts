@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { CliError } from "../util/cli-contract.js";
 import { formatOmkVersionFooter, getOmkVersionSync } from "../util/version.js";
-import { configureRootProgram, runRootHudFlow } from "./root.js";
+import { configureRootProgram, runRootOmkControlPlane } from "./root.js";
 import { registerCliCommands } from "./command-registry.js";
 
 export function createOmkProgram(): Command {
@@ -25,7 +25,7 @@ export async function runCli(argv: readonly string[] = process.argv): Promise<vo
       if (globalOpts.runId) {
         process.env.OMK_RUN_ID = globalOpts.runId;
       }
-      await runRootHudFlow(program);
+      await runRootOmkControlPlane(program);
       return;
     }
     await program.parseAsync([...argv]);

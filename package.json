@@ -1,7 +1,7 @@
 {
   "name": "open-multi-agent-kit",
   "version": "1.1.18",
-  "description": "Provider-neutral agent runtime for coding workflows. Verified DAG execution with evidence gates, worktree isolation, and local graph memory.",
+  "description": "MCP-native agent control plane for coding workflows. Boots MCP-connected workspaces with provider routing, evidence gates, worktree isolation, and local graph memory.",
   "type": "module",
   "bin": {
     "omk": "dist/cli.js",
@@ -84,7 +84,9 @@
     "local-first",
     "lsp",
     "mcp",
+    "mcp-native",
     "model-context-protocol",
+    "agent-control-plane",
     "multi-agent",
     "multi-agent-orchestration",
     "nodejs",

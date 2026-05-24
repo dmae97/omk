@@ -16,6 +16,11 @@ selection, and Algorithms 6-7 cover Kimi prompt transport and scoped worker
 environments in
 [`docs/native-root-runtime-algorithms.md`](./docs/native-root-runtime-algorithms.md).
 
+- Root `omk` startup must keep MCP AutoConnect offline/read-only: it may
+  summarize active MCP configs and the virtual `omk-project` mount, but it must
+  not spawn stdio servers, call remote MCP endpoints, run OAuth, or prewarm
+  package managers. Use explicit `omk mcp connect --all`, `omk mcp check --all`,
+  or `omk mcp test <server>` for active validation.
 - Native chat turns should be default-safe: read/review prompts request read-only capability, edit prompts request write/patch, and shell capability is reserved for explicit command execution under the active approval policy.
 - `--execution ask|auto|never` must propagate into runtime routing and provider adapters. Do not treat `ask` as equivalent to provider-level `never`.
 - Provider policies such as `authority`, `primary`, and `omk` must resolve to a concrete healthy provider before execution; unresolved authority is a hard diagnostic, not an advisory-only fallback.
