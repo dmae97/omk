@@ -11,6 +11,8 @@ const CLI_ENV = {
   OMK_STAR_PROMPT: "0",
   OMK_RENDER_LOGO: "0",
 };
+delete CLI_ENV.FORCE_COLOR;
+delete CLI_ENV.NO_COLOR;
 
 function commandNames(command) {
   return command.commands.map((subcommand) => subcommand.name());
