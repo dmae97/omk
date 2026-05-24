@@ -72,6 +72,19 @@ export interface ProviderConfigSetInput {
   authMethod?: ProviderAuthMethod;
 }
 
+export interface ProviderDefaults {
+  provider?: ProviderId;
+  model?: string;
+  authorityProvider?: ProviderId;
+}
+
+export interface ModelAliasResolution {
+  input: string;
+  provider?: ProviderId;
+  model: string;
+  source: "user-alias" | "provider-alias" | "builtin-normalizer" | "literal";
+}
+
 const DEFAULT_PROVIDER_CONFIGS: Record<KnownProviderId, Omit<ProviderRegistryEntry, "id" | "configured" | "updatedAt">> = {
   kimi: {
     enabled: true,
@@ -324,6 +337,95 @@ export function normalizeModelAlias(value: string): string {
   return trimmed;
 }
 
+export async function readProviderDefaults(options: DeepSeekConfigPathOptions = {}): Promise<ProviderDefaults> {
+  const config = await readOmkProvidersConfig(options);
+  const provider = normalizeProviderId(config.defaults?.provider);
+  const authorityProvider = normalizeProviderId(config.defaults?.authorityProvider);
+  return {
+    provider: provider === "auto" ? undefined : provider,
+    model: config.defaults?.model ? normalizeModelAlias(config.defaults.model) : undefined,
+    authorityProvider: authorityProvider === "auto" ? undefined : authorityProvider,
+  };
+}
+
+export async function setProviderDefaults(
+  input: ProviderDefaults,
+  options: DeepSeekConfigPathOptions = {}
+): Promise<{ defaults: ProviderDefaults; configPath: string }> {
+  const config = await readOmkProvidersConfig(options);
+  const provider = normalizeProviderId(input.provider);
+  const authorityProvider = normalizeProviderId(input.authorityProvider);
+  const defaults: ProviderDefaults = {
+    ...(config.defaults ?? {}),
+    provider: provider === "auto" ? config.defaults?.provider : provider,
+    model: input.model ? normalizeModelAlias(input.model) : config.defaults?.model,
+    authorityProvider: authorityProvider === "auto" ? config.defaults?.authorityProvider : authorityProvider,
+  };
+  const configPath = await writeOmkProvidersConfig({ ...config, defaults }, options);
+  return { defaults, configPath };
+}
+
+export async function listUserModelAliases(options: DeepSeekConfigPathOptions = {}): Promise<Record<string, string>> {
+  const config = await readOmkProvidersConfig(options);
+  return { ...(config.modelAliases ?? {}) };
+}
+
+export async function setUserModelAlias(
+  alias: string,
+  target: string,
+  options: DeepSeekConfigPathOptions = {}
+): Promise<{ aliases: Record<string, string>; key: string; value: string; configPath: string }> {
+  const key = normalizeUserModelAliasName(alias);
+  const parsed = parseProviderModelArg(target);
+  if (!parsed.model) throw new Error("Model alias target is required");
+  const value = parsed.provider ? `${parsed.provider}/${parsed.model}` : parsed.model;
+  const config = await readOmkProvidersConfig(options);
+  const aliases = { ...(config.modelAliases ?? {}), [key]: value };
+  const configPath = await writeOmkProvidersConfig({ ...config, modelAliases: aliases }, options);
+  return { aliases, key, value, configPath };
+}
+
+export async function removeUserModelAlias(
+  alias: string,
+  options: DeepSeekConfigPathOptions = {}
+): Promise<{ aliases: Record<string, string>; key: string; removed: boolean; configPath: string }> {
+  const key = normalizeUserModelAliasName(alias);
+  const config = await readOmkProvidersConfig(options);
+  const aliases = { ...(config.modelAliases ?? {}) };
+  const removed = Object.prototype.hasOwnProperty.call(aliases, key);
+  delete aliases[key];
+  const configPath = await writeOmkProvidersConfig({ ...config, modelAliases: aliases }, options);
+  return { aliases, key, removed, configPath };
+}
+
+export async function resolveUserModelAlias(
+  value: string,
+  options: DeepSeekConfigPathOptions = {}
+): Promise<ModelAliasResolution> {
+  const input = value.trim();
+  if (!input) throw new Error("Model name or alias is required");
+  const config = await readOmkProvidersConfig(options);
+  const userAlias = config.modelAliases?.[input.toLowerCase()];
+  if (userAlias) {
+    const parsed = parseProviderModelArg(userAlias);
+    if (!parsed.model) throw new Error(`Model alias '${input}' has an invalid target`);
+    return {
+      input,
+      provider: parsed.provider,
+      model: parsed.model,
+      source: "user-alias",
+    };
+  }
+  const parsed = parseProviderModelArg(input);
+  if (!parsed.model) throw new Error("Model name or alias is required");
+  return {
+    input,
+    provider: parsed.provider,
+    model: parsed.model,
+    source: parsed.provider ? "provider-alias" : parsed.model === input ? "literal" : "builtin-normalizer",
+  };
+}
+
 export async function readProviderRegistry(options: DeepSeekConfigPathOptions = {}): Promise<ProviderRegistryEntry[]> {
   const config = await readOmkProvidersConfig(options);
   const ids = new Set<string>([...KNOWN_PROVIDER_IDS, ...Object.keys(config.providers)]);
@@ -370,7 +472,7 @@ export async function setProviderConfig(
     updatedAt: new Date().toISOString(),
   };
   await writeOmkProvidersConfig({
-    version: 1,
+    ...config,
     providers: { ...config.providers, [id]: updated },
   }, options);
   return mergeProviderConfig(id, updated);
@@ -418,7 +520,7 @@ export async function setProviderEnabled(
     updatedAt: new Date().toISOString(),
   };
   await writeOmkProvidersConfig({
-    version: 1,
+    ...config,
     providers: { ...config.providers, [id]: updated },
   }, options);
   return mergeProviderConfig(id, updated);
@@ -572,6 +674,14 @@ function normalizePlanKind(value: string | undefined): ProviderPlanKind | undefi
 function normalizeRouting(value: string | undefined): "runtime" | "advisory" | "external-cli" | undefined {
   if (value === "runtime" || value === "advisory" || value === "external-cli") return value;
   return undefined;
+}
+
+function normalizeUserModelAliasName(value: string): string {
+  const key = value.trim().toLowerCase();
+  if (!/^[a-z][a-z0-9._-]{0,63}$/u.test(key)) {
+    throw new Error("Model alias must match /^[a-z][a-z0-9._-]{0,63}$/");
+  }
+  return key;
 }
 
 async function isCodexCliAvailable(): Promise<boolean> {
