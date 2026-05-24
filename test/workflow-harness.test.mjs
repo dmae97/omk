@@ -36,6 +36,8 @@ test("release workflow runs YAML, package audit, and install smoke gates", () =>
   assert.match(workflow, /npm run audit:package/);
   assert.match(workflow, /node scripts\/package-audit\.mjs --tarball/);
   assert.match(workflow, /node scripts\/smoke-test\.mjs --tarball/);
+  assert.match(workflow, /open-multi-agent-kit-\*\.tgz/);
+  assert.doesNotMatch(workflow, /oh-my-kimi-cli-\*\.tgz/);
 });
 
 test("smoke workflow tests before packaging and audits the produced tarball", () => {
@@ -51,6 +53,8 @@ test("smoke workflow tests before packaging and audits the produced tarball", ()
   assert.match(workflow, /npm run native:normalize/);
   assert.match(workflow, /npm run audit:package/);
   assert.match(workflow, /node scripts\/package-audit\.mjs --tarball/);
+  assert.match(workflow, /open-multi-agent-kit-\*\.tgz/);
+  assert.doesNotMatch(workflow, /oh-my-kimi-cli-\*\.tgz/);
 });
 
 test("pack-smoke evidence includes pack, audit, and install smoke phases", () => {
