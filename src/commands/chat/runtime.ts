@@ -184,7 +184,9 @@ export async function runChatRuntime(
   }
 
   try {
-    if (process.env.OMK_LEGACY_CHAT !== "1") {
+    if (providerPolicy === "kimi") {
+      bridgeSucceeded = false;
+    } else if (process.env.OMK_LEGACY_CHAT !== "1") {
       try {
         const chatNodeDef: DagNodeDefinition = {
           id: "chat",
@@ -400,7 +402,7 @@ export async function runChatRuntime(
       }
     }
 
-    if (!bridgeSucceeded && directKimiFallbackEnabled) {
+    if ((!bridgeSucceeded && directKimiFallbackEnabled) || providerPolicy === "kimi") {
       const args: string[] = ["--agent-file", effectiveAgentFile];
       await injectKimiGlobals(args, {
         role: "coordinator",
