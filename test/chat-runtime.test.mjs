@@ -199,14 +199,52 @@ test("buildNativeRootLoopTurnNode carries scoped MCP, skills, and hooks", () => 
   deepStrictEqual(node.routing?.requiresMcp, false);
   deepStrictEqual(node.routing?.skills, ["omk-repo-explorer"]);
   deepStrictEqual(node.routing?.hooks, ["protect-secrets.sh"]);
-  deepStrictEqual(node.routing?.assignedProviderCapabilities, ["read"]);
-  deepStrictEqual(node.routing?.readOnly, true);
+  deepStrictEqual(node.routing?.assignedProviderCapabilities, ["write", "patch"]);
+  deepStrictEqual(node.routing?.readOnly, false);
+  deepStrictEqual(node.routing?.risk, "write");
+  deepStrictEqual(node.routing?.sandboxMode, "workspace-write");
   deepStrictEqual(node.routing?.assignedCapabilities?.mcpServers, ["github", "omk-project"]);
   deepStrictEqual(node.routing?.assignedCapabilities?.skills, ["omk-repo-explorer"]);
   ok(node.name.includes("Schema: omk.prompt-envelope/v1"));
   ok(node.name.includes("Payload encoding: JSON string"));
   ok(node.name.includes(JSON.stringify("hello")));
   ok(node.routing?.rationale?.includes("native-root-loop"));
+});
+
+test("ambiguous native chat turns default to full orchestration authority", async () => {
+  for (const prompt of ["g", "ㅎ", "ㅎㅇ", "hello"]) {
+    const node = buildNativeRootLoopTurnNode({
+      bootstrap: codexBootstrap,
+      prompt,
+      nodeId: `turn-ambiguous-${prompt}`,
+    });
+    const task = await capsuleToTask({
+      schemaVersion: 1,
+      runId: "local-chat-runtime-test",
+      nodeId: node.id,
+      goal: "native ambiguous turn",
+      task: node.name,
+      system: "",
+      node,
+      dependencySummaries: [],
+      relevantFiles: [],
+      graphMemory: [],
+      priorAttempts: [],
+      evidenceRequirements: [],
+      budget: { maxInputTokens: 16000, compression: "normal" },
+    });
+
+    deepStrictEqual(node.routing?.risk, "write");
+    deepStrictEqual(node.routing?.readOnly, false);
+    deepStrictEqual(node.routing?.sandboxMode, "workspace-write");
+    deepStrictEqual(node.routing?.assignedProviderCapabilities, ["write", "patch"]);
+    ok(node.name.includes("Sandbox: workspace-write"));
+    deepStrictEqual(task.context.risk, "write");
+    deepStrictEqual(task.context.sandboxMode, "workspace-write");
+    deepStrictEqual(task.capabilities.write, true);
+    deepStrictEqual(task.capabilities.patch, true);
+    deepStrictEqual(task.capabilities.shell, false);
+  }
 });
 
 test("capsuleToTask carries native provider model into AgentContext", async () => {
@@ -270,6 +308,15 @@ test("/model applies a session model override to the next native turn", () => {
   const combinedOutput = `${result.stdout}\n${result.stderr}`;
   deepStrictEqual(result.status, 0, result.stderr);
   ok(/TASK_RUNNER_CALLED provider=codex model=codex-cli envModel=codex-cli/.test(combinedOutput), combinedOutput);
+  ok(/TASK_RUNNER_CALLS=1/.test(combinedOutput), combinedOutput);
+});
+
+test("native loop routes ambiguous Korean input as workspace-write orchestration", () => {
+  const result = runNativeLoopInput("ㅎㅇ\n/exit\n");
+
+  const combinedOutput = `${result.stdout}\n${result.stderr}`;
+  deepStrictEqual(result.status, 0, result.stderr);
+  ok(/routing: provider=codex model=codex-cli default risk=write sandbox=workspace-write/.test(combinedOutput), combinedOutput);
   ok(/TASK_RUNNER_CALLS=1/.test(combinedOutput), combinedOutput);
 });
 
