@@ -1418,14 +1418,27 @@ async function runPreflightProbe(
   probe: PreflightProbe,
   timeoutMs: number
 ): Promise<{ failed: boolean; reason?: RuntimeMcpPreflightFailureReason; detail?: string }> {
+  const timeoutMarker = Symbol("runtime-mcp-preflight-timeout");
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
   try {
-    const result = await execa(probe.command, probe.args, {
+    const subprocess = execa(probe.command, probe.args, {
       env: { ...safePreflightProcessEnv(), ...probe.env },
       extendEnv: false,
-      timeout: timeoutMs,
       reject: false,
-      stdio: "pipe",
+      stdio: "ignore",
     });
+    const result = await Promise.race([
+      subprocess,
+      new Promise<typeof timeoutMarker>((resolve) => {
+        timeout = setTimeout(() => resolve(timeoutMarker), timeoutMs);
+      }),
+    ]);
+    if (result === timeoutMarker) {
+      subprocess.kill("SIGTERM", new Error(`timeout after ${timeoutMs}ms`));
+      void subprocess.catch(() => {});
+      return { failed: true, reason: "timeout", detail: `timeout after ${timeoutMs}ms` };
+    }
     if (result.timedOut) {
       return { failed: true, reason: "timeout", detail: `timeout after ${timeoutMs}ms` };
     }
@@ -1436,6 +1449,8 @@ async function runPreflightProbe(
   } catch (err: unknown) {
     const code = (err as NodeJS.ErrnoException).code;
     return { failed: true, reason: "exit", detail: code ? `spawn failed (${code})` : "spawn failed" };
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
 }
 
