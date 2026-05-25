@@ -39,8 +39,16 @@ export class TerminalOwner {
     const previous = this.active;
     this.active = "child";
     try {
-      readline?.pause();
-      this.input.pause();
+      try {
+        readline?.pause();
+      } catch {
+        // Piped input can close readline before queued work finishes.
+      }
+      try {
+        this.input.pause();
+      } catch {
+        // Non-standard test streams may already be closed.
+      }
       return await fn();
     } finally {
       try {
