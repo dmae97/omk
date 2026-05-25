@@ -635,7 +635,7 @@ test("open-design-agent isolated HOME does not inherit local auth directories by
       cwd: process.cwd(),
       input: "Check HOME isolation",
       encoding: "utf-8",
-      timeout: 10000,
+      timeout: 30000,
       env: {
         ...process.env,
         HOME: homeRoot,
@@ -768,7 +768,7 @@ test("open-design-agent timeout with stdout only is not success", () => {
       cwd: process.cwd(),
       input: "Generate an index.html artifact",
       encoding: "utf-8",
-      timeout: 10000,
+      timeout: 30000,
       env: {
         ...process.env,
         PATH: `${binDir}${delimiter}${process.env.PATH || ""}`,

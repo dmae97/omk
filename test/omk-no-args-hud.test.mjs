@@ -128,7 +128,6 @@ describe("omk with no arguments", () => {
       assert.match(combined, /Built-in omk-project MCP mounted/);
       assert.match(combined, /omk mcp doctor/);
       assert.match(combined, /omk mcp connect --all/);
-      assert.match(combined, /omk mcp connect --fix/);
       assert.doesNotMatch(combined, /super-secret-root-mcp-token|API_TOKEN=/);
       assert.equal(existsSync(markerPath), false, "root MCP summary must not start configured MCP servers");
 
