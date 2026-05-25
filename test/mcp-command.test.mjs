@@ -304,7 +304,7 @@ test("runtime MCP preflight keeps all-scope precedence and keeps timed-out npm-f
   const binDir = await mkdtemp(join(tmpdir(), "omk-runtime-mcp-bin-"));
 
   try {
-    await writeFakeNpm(binDir, "process.stderr.write('API_TOKEN=SHOULD_NOT_LEAK\\n'); setTimeout(() => {}, 1000);");
+    await writeFakeNpm(binDir, "process.stderr.write('API_TOKEN=SHOULD_NOT_LEAK\\n'); setTimeout(() => process.exit(0), 250);");
     await mkdir(join(projectRoot, ".kimi"), { recursive: true });
     await mkdir(join(homeRoot, ".kimi"), { recursive: true });
     await writeFile(join(homeRoot, ".kimi", "mcp.json"), JSON.stringify({
