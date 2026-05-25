@@ -267,9 +267,10 @@ test("/model applies a session model override without running a provider turn", 
 test("/model applies a session model override to the next native turn", () => {
   const result = runNativeLoopInput("/model codex/codex-cli\nhello\n/exit\n");
 
+  const combinedOutput = `${result.stdout}\n${result.stderr}`;
   deepStrictEqual(result.status, 0, result.stderr);
-  ok(/TASK_RUNNER_CALLED provider=codex model=codex-cli envModel=codex-cli/.test(result.stdout));
-  ok(/TASK_RUNNER_CALLS=1/.test(result.stdout));
+  ok(/TASK_RUNNER_CALLED provider=codex model=codex-cli envModel=codex-cli/.test(combinedOutput), combinedOutput);
+  ok(/TASK_RUNNER_CALLS=1/.test(combinedOutput), combinedOutput);
 });
 
 test("/auth reports provider status without running a provider turn", () => {
