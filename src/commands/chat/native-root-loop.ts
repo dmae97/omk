@@ -335,12 +335,19 @@ async function applyModelOverride(
 
 export type NativeTurnRisk = "read" | "write" | "shell" | "merge";
 
+function hasExplicitReadOnlyIntent(text: string): boolean {
+  return /\b(read|inspect|look|show|list|summarize|explain|describe|review|audit|status|diagnose)\b/.test(text)
+    || /\b(without changing|without editing|do not change|don't change|do not edit|don't edit|no edits?|no file changes?)\b/.test(text)
+    || /읽기\s*전용|수정하지\s*말|변경하지\s*말|파일\s*(수정|변경)\s*(없이|하지\s*말)|요약|설명|상태|검토만|분석만|읽어|살펴/.test(text);
+}
+
 export function inferNativeTurnRisk(prompt: string): NativeTurnRisk {
   const text = prompt.toLowerCase();
   if (/\b(push|publish|release|merge|tag|deploy)\b|푸시|퍼블리시|릴리즈|머지|배포/.test(text)) return "merge";
   if (/\b(run|test|build|exec|execute|shell|terminal|command|npm|pnpm|yarn|bun|pytest|cargo|go test|tsc|lint|verify|check)\b|테스트|빌드|실행|검증|쉘|터미널/.test(text)) return "shell";
   if (/\b(fix|edit|write|implement|modify|patch|refactor|add|create|delete|update|change)\b|수정|구현|패치|리팩터|추가|삭제|변경/.test(text)) return "write";
-  return "read";
+  if (hasExplicitReadOnlyIntent(text)) return "read";
+  return "write";
 }
 
 function nativeTurnRoutingPolicy(provider: string, risk: NativeTurnRisk): {
