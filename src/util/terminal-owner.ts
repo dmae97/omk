@@ -43,8 +43,16 @@ export class TerminalOwner {
       this.input.pause();
       return await fn();
     } finally {
-      this.input.resume();
-      readline?.resume();
+      try {
+        this.input.resume();
+      } catch {
+        // EOF/non-TTY test harnesses can close stdin while a child-owned task is settling.
+      }
+      try {
+        readline?.resume();
+      } catch {
+        // Readline may already be closed after piped input EOF; ownership must still reset.
+      }
       this.active = previous;
     }
   }
