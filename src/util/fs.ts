@@ -1436,6 +1436,7 @@ async function runPreflightProbe(
     ]);
     if (result === timeoutMarker) {
       subprocess.kill("SIGTERM", new Error(`timeout after ${timeoutMs}ms`));
+      subprocess.unref();
       void subprocess.catch(() => {});
       return { failed: true, reason: "timeout", detail: `timeout after ${timeoutMs}ms` };
     }
