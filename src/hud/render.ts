@@ -60,6 +60,7 @@ export interface HudRenderOptions {
   showDisk?: boolean;
   showUptime?: boolean;
   systemRefreshMs?: number;
+  thinking?: import("./types.js").HudThinkingEntry[];
 }
 
 export interface HudCommandOptions extends HudRenderOptions {
@@ -969,7 +970,7 @@ async function renderCompactDashboard(options: HudRenderOptions): Promise<string
     output.push("");
   }
 
-  const sidebar = buildHudSidebar(null, gitChanges, { viewModel: vm, maxWidth: effectiveWidth, todos });
+  const sidebar = buildHudSidebar(null, gitChanges, { viewModel: vm, maxWidth: effectiveWidth, todos, thinking: options.thinking });
   output.push(sidebar);
   output.push("");
 
@@ -994,7 +995,7 @@ async function renderMediumDashboard(options: HudRenderOptions): Promise<string>
     mainPanels.push(buildStateErrorPanel(stateError, latestRunName));
   }
 
-  const sidebar = buildHudSidebar(null, gitChanges, { viewModel: vm, todos });
+  const sidebar = buildHudSidebar(null, gitChanges, { viewModel: vm, todos, thinking: options.thinking });
   output.push(renderHudColumns(mainPanels, sidebar, width));
   output.push("");
 
@@ -1021,7 +1022,7 @@ async function renderFullDashboard(options: HudRenderOptions): Promise<string> {
     mainPanels.push(buildStateErrorPanel(stateError, latestRunName));
   }
 
-  const sidebar = buildHudSidebar(null, gitChanges, { viewModel: vm, todos });
+  const sidebar = buildHudSidebar(null, gitChanges, { viewModel: vm, todos, thinking: options.thinking });
   output.push(renderHudColumns(mainPanels, sidebar, width));
   output.push("");
 
@@ -1046,7 +1047,7 @@ async function renderSectionDashboard(options: HudRenderOptions): Promise<string
         output.push(buildStateErrorPanel(stateError, latestRunName));
         output.push("");
       }
-      const sidebar = buildHudSidebar(null, gitChanges, { viewModel: vm, todos });
+      const sidebar = buildHudSidebar(null, gitChanges, { viewModel: vm, todos, thinking: options.thinking });
       output.push(sidebar);
       break;
     }
