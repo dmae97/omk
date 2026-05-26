@@ -21,21 +21,13 @@ import {
   type RunViewModel,
   type RunHealth,
 } from "../util/run-view-model.js";
-import {
-  style,
-  status,
-  panel,
-  gauge,
-  stat,
-  matrixHeader,
-  gradient,
-  getSystemUsage,
-  separator,
-  padEndAnsi,
-  sanitizeTerminalText,
-} from "../util/theme.js";
+import type { HudTheme } from "./types.js";
+import { hudTheme } from "../util/theme.js";
+
 import { loadTodos, type TodoItem } from "../util/todo-sync.js";
 import { readSessionMeta, type SessionMeta } from "../util/session.js";
+
+const theme: HudTheme = hudTheme;
 
 const execFileAsync = promisify(execFile);
 
@@ -76,6 +68,17 @@ export interface HudCommandOptions extends HudRenderOptions {
   clear?: boolean;
   noClear?: boolean;
   alternateScreen?: boolean;
+}
+
+interface HudDashboardData {
+  vm: RunViewModel;
+  stateError: RunViewModel["stateError"];
+  gitChangesResult: HudGitChange[] | null;
+  gitChanges: HudGitChange[];
+  latestRunName: string | null;
+  sessionMeta: SessionMeta | null;
+  todos: TodoItem[] | null;
+  goalTitle: string | null;
 }
 
 interface GoalData {
@@ -141,7 +144,7 @@ async function getGitChanges(root: string): Promise<HudGitChange[] | null> {
 }
 
 function lineWidth(line: string): number {
-  return sanitizeTerminalText(line).length;
+  return theme.sanitizeTerminalText(line).length;
 }
 
 function blockWidth(block: string): number {
@@ -149,7 +152,7 @@ function blockWidth(block: string): number {
 }
 
 function truncateText(value: string, maxLength: number): string {
-  const clean = sanitizeTerminalText(value).replace(/\s+/g, " ").trim();
+  const clean = theme.sanitizeTerminalText(value).replace(/\s+/g, " ").trim();
   const chars = [...clean];
   if (chars.length <= maxLength) return clean;
   return `${chars.slice(0, Math.max(1, maxLength - 1)).join("")}…`;
@@ -169,26 +172,26 @@ function statusRank(statusValue: string): number {
 
 function todoMarker(statusValue: string): string {
   switch (statusValue) {
-    case "running": return style.purpleBold("▶");
-    case "done": return style.mintBold("✓");
-    case "failed": return style.red("✕");
-    case "blocked": return style.orange("■");
-    case "skipped": return style.gray("⊘");
-    default: return style.gray("□");
+    case "running": return theme.style.purpleBold("▶");
+    case "done": return theme.style.mintBold("✓");
+    case "failed": return theme.style.red("✕");
+    case "blocked": return theme.style.orange("■");
+    case "skipped": return theme.style.gray("⊘");
+    default: return theme.style.gray("□");
   }
 }
 
 function gitMarker(changeStatus: string): string {
   const normalized = changeStatus.replace(/\s/g, "");
-  if (normalized === "??") return style.blue("?");
-  if (normalized.includes("D")) return style.red("D");
-  if (normalized.includes("A")) return style.mint("A");
-  if (normalized.includes("R")) return style.purple("R");
-  return style.orange("M");
+  if (normalized === "??") return theme.style.blue("?");
+  if (normalized.includes("D")) return theme.style.red("D");
+  if (normalized.includes("A")) return theme.style.mint("A");
+  if (normalized.includes("R")) return theme.style.purple("R");
+  return theme.style.orange("M");
 }
 
 function truncateLine(line: string, maxWidth: number): string {
-  const clean = sanitizeTerminalText(line);
+  const clean = theme.sanitizeTerminalText(line);
   if (clean.length <= maxWidth) return line;
   const visible = clean.slice(0, Math.max(1, maxWidth - 1));
   return visible + "…";
@@ -196,11 +199,11 @@ function truncateLine(line: string, maxWidth: number): string {
 
 function healthColor(health: RunHealth): (s: string) => string {
   switch (health) {
-    case "ok": return style.mint;
-    case "warn": return style.orange;
-    case "blocked": return style.orange;
-    case "failed": return style.red;
-    default: return style.gray;
+    case "ok": return theme.style.mint;
+    case "warn": return theme.style.orange;
+    case "blocked": return theme.style.orange;
+    case "failed": return theme.style.red;
+    default: return theme.style.gray;
   }
 }
 
@@ -220,23 +223,23 @@ function formatProviderMetricLine(metrics: RunViewModel["providerRouting"]): str
 
 function todoItemMarker(statusValue: TodoItem["status"]): string {
   switch (statusValue) {
-    case "in_progress": return style.purpleBold("▶");
-    case "done": return style.mintBold("✓");
-    case "failed": return style.red("✕");
-    case "blocked": return style.orange("■");
-    case "skipped": return style.gray("⊘");
-    case "pending": return style.gray("□");
-    default: return style.gray("□");
+    case "in_progress": return theme.style.purpleBold("▶");
+    case "done": return theme.style.mintBold("✓");
+    case "failed": return theme.style.red("✕");
+    case "blocked": return theme.style.orange("■");
+    case "skipped": return theme.style.gray("⊘");
+    case "pending": return theme.style.gray("□");
+    default: return theme.style.gray("□");
   }
 }
 
 function sessionStatusColor(statusValue: SessionMeta["status"]): (s: string) => string {
   switch (statusValue) {
-    case "active": return style.mint;
-    case "completed": return style.mintBold;
-    case "failed": return style.red;
-    case "idle": return style.gray;
-    default: return style.gray;
+    case "active": return theme.style.mint;
+    case "completed": return theme.style.mintBold;
+    case "failed": return theme.style.red;
+    case "idle": return theme.style.gray;
+    default: return theme.style.gray;
   }
 }
 
@@ -319,31 +322,31 @@ function buildStateErrorPanel(
   const recovery = stateErrorRecovery(stateError, runId);
   const lines = [
     "",
-    `  ${style.orangeBold("⚠ State:")} ${style.orange(stateError)}`,
-    `  ${style.gray("Suggested recovery:")}`,
-    recovery ? `    ${style.cream(recovery)}` : "",
+    `  ${theme.style.orangeBold("⚠ State:")} ${theme.style.orange(stateError)}`,
+    `  ${theme.style.gray("Suggested recovery:")}`,
+    recovery ? `    ${theme.style.cream(recovery)}` : "",
     "",
   ].filter(Boolean);
-  return panel(lines, gradient("Run State Warning"));
+  return theme.panel(lines, theme.gradient("Run State Warning"));
 }
 
 function renderMatrixRainHeader(runId: string): string {
   if (!process.stdout.isTTY) return "";
   const width = Math.min(60, process.stdout.columns ?? 80);
   const rain = renderMatrixRain(runId, width, 3);
-  const rainStr = rain.split("\n").map((l) => style.phosphor(l)).join("\n");
-  const artStr = OMK_MATRIX_ASCII_ART.split("\n").map((l) => style.phosphor(l)).join("\n");
+  const rainStr = rain.split("\n").map((l) => theme.style.phosphor(l)).join("\n");
+  const artStr = OMK_MATRIX_ASCII_ART.split("\n").map((l) => theme.style.phosphor(l)).join("\n");
   return `\n${rainStr}\n\n${artStr}\n`;
 }
 
 export function buildHudSidebar(
   state: RunState | null,
   changes: HudGitChange[],
-  options: { maxTodos?: number; maxFiles?: number; viewModel?: RunViewModel; maxWidth?: number; todos?: TodoItem[] | null } = {}
+  options: { maxTodos?: number; maxFiles?: number; viewModel?: RunViewModel; maxWidth?: number; todos?: TodoItem[] | null; thinking?: import("./types.js").HudThinkingEntry[] } = {}
 ): string {
   const maxTodos = options.maxTodos ?? 9;
   const maxFiles = options.maxFiles ?? 12;
-  const lines: string[] = ["", `  ${style.pinkBold("Right Rail")}`];
+  const lines: string[] = ["", `  ${theme.style.pinkBold("Right Rail")}`];
 
   const vm = options.viewModel ?? (state ? buildRunViewModel(state) : null);
 
@@ -353,17 +356,17 @@ export function buildHudSidebar(
   });
 
   if (vm) {
-    lines.push(`  ${style.gray("run")} ${style.creamBold(truncateText(vm.runId ?? "--", 34))}`);
-    lines.push(`  ${style.gray("progress")} ${style.mintBold(`${vm.progress.settled}/${vm.progress.total}`)} ${style.gray(`settled, ${vm.progress.running} active`)}`);
+    lines.push(`  ${theme.style.gray("run")} ${theme.style.creamBold(truncateText(vm.runId ?? "--", 34))}`);
+    lines.push(`  ${theme.style.gray("progress")} ${theme.style.mintBold(`${vm.progress.settled}/${vm.progress.total}`)} ${theme.style.gray(`settled, ${vm.progress.running} active`)}`);
     if (vm.progress.skipped > 0) {
-      lines.push(`  ${style.gray("skipped")} ${style.gray(`${vm.progress.skipped}`)}`);
+      lines.push(`  ${theme.style.gray("skipped")} ${theme.style.gray(`${vm.progress.skipped}`)}`);
     }
     if (vm.health !== "ok") {
-      lines.push(`  ${style.gray("health")} ${healthColor(vm.health)(vm.health.toUpperCase())}`);
+      lines.push(`  ${theme.style.gray("health")} ${healthColor(vm.health)(vm.health.toUpperCase())}`);
     }
     const providerLine = formatProviderMetricLine(vm.providerRouting);
     if (providerLine) {
-      lines.push(`  ${style.gray("provider")} ${style.cream(providerLine)}`);
+      lines.push(`  ${theme.style.gray("provider")} ${theme.style.cream(providerLine)}`);
     }
     lines.push("");
   } else if (state) {
@@ -372,66 +375,78 @@ export function buildHudSidebar(
     const failed = nodes.filter((node) => node.status === "failed").length;
     const blocked = nodes.filter((node) => node.status === "blocked").length;
     const active = nodes.filter((node) => node.status === "running").length;
-    lines.push(`  ${style.gray("run")} ${style.creamBold(truncateText(state.runId, 34))}`);
-    lines.push(`  ${style.gray("progress")} ${style.mintBold(`${done + skipped + failed + blocked}/${nodes.length}`)} ${style.gray(`settled, ${active} active`)}`);
+    lines.push(`  ${theme.style.gray("run")} ${theme.style.creamBold(truncateText(state.runId, 34))}`);
+    lines.push(`  ${theme.style.gray("progress")} ${theme.style.mintBold(`${done + skipped + failed + blocked}/${nodes.length}`)} ${theme.style.gray(`settled, ${active} active`)}`);
     lines.push("");
   }
 
-  lines.push(`  ${style.pinkBold("TODO")}`);
+  lines.push(`  ${theme.style.pinkBold("TODO")}`);
   if (options.todos) {
     const todos = [...options.todos].sort((a, b) => statusRank(a.status) - statusRank(b.status));
     if (todos.length === 0) {
-      lines.push(`  ${style.gray("TODO 없음")}`);
+      lines.push(`  ${theme.style.gray("TODO 없음")}`);
     } else {
       for (const todo of todos.slice(0, maxTodos)) {
-        const role = todo.role ? style.gray(`[${truncateText(sanitizeForDisplay(todo.role), 9)}]`) : "";
+        const role = todo.role ? theme.style.gray(`[${truncateText(sanitizeForDisplay(todo.role), 9)}]`) : "";
         const name = truncateText(sanitizeForDisplay(todo.title), 30);
         lines.push(`  ${todoItemMarker(todo.status)} ${role} ${name}`.replace(/\s+/g, " ").trimEnd());
       }
       if (todos.length > maxTodos) {
-        lines.push(`  ${style.gray(`… ${todos.length - maxTodos} more todos`)}`);
+        lines.push(`  ${theme.style.gray(`… ${todos.length - maxTodos} more todos`)}`);
       }
     }
   } else if (nodes.length === 0) {
-    lines.push(`  ${style.gray(t("hud.noActiveRun"))}`);
-    lines.push(`  ${style.gray(t("hud.runToSeeTodos"))}`);
+    lines.push(`  ${theme.style.gray(t("hud.noActiveRun"))}`);
+    lines.push(`  ${theme.style.gray(t("hud.runToSeeTodos"))}`);
   } else {
     for (const node of nodes.slice(0, maxTodos)) {
-      const role = style.gray(`[${truncateText(sanitizeForDisplay(node.role), 9)}]`);
+      const role = theme.style.gray(`[${truncateText(sanitizeForDisplay(node.role), 9)}]`);
       const name = truncateText(sanitizeForDisplay(node.name || node.id), 30);
       lines.push(`  ${todoMarker(node.status)} ${role} ${name}`);
     }
     if (nodes.length > maxTodos) {
-      lines.push(`  ${style.gray(`… ${nodes.length - maxTodos} more tasks`)}`);
+      lines.push(`  ${theme.style.gray(`… ${nodes.length - maxTodos} more tasks`)}`);
     }
   }
 
   if (vm && vm.workers.length > 0) {
-    lines.push("", `  ${style.pinkBold("AGENTS")}`);
+    lines.push("", `  ${theme.style.pinkBold("AGENTS")}`);
     for (const worker of vm.workers.slice(0, Math.max(1, Math.min(5, maxTodos)))) {
       const stateTag = worker.state === "running"
-        ? style.purple("▶")
+        ? theme.style.purple("▶")
         : worker.state === "done"
-          ? style.mint("✓")
+          ? theme.style.mint("✓")
           : worker.state === "failed"
-            ? style.red("✕")
+            ? theme.style.red("✕")
             : worker.state === "skipped"
-              ? style.gray("⊘")
-              : style.gray("□");
-      const live = worker.liveStatus && worker.liveStatus !== worker.state ? style.gray(` ${worker.liveStatus}`) : "";
+              ? theme.style.gray("⊘")
+              : theme.style.gray("□");
+      const live = worker.liveStatus && worker.liveStatus !== worker.state ? theme.style.gray(` ${worker.liveStatus}`) : "";
       lines.push(`  ${stateTag}${live} ${truncateText(sanitizeForDisplay(worker.label), 32)}`);
     }
   }
 
-  lines.push("", `  ${style.pinkBold("Changed Files")} ${style.gray(`(${changes.length})`)}`);
+  if (options.thinking && options.thinking.length > 0) {
+    lines.push("", `  ${theme.style.pinkBold("THINKING")}`);
+    for (const entry of options.thinking.slice(0, 5)) {
+      const statusTag = entry.status === "running"
+        ? theme.style.purple("▶")
+        : entry.status === "done"
+          ? theme.style.mint("✓")
+          : theme.style.red("✕");
+      lines.push(`  ${statusTag} ${truncateText(sanitizeForDisplay(entry.step), 32)} ${theme.style.gray(`[${entry.agentId}]`)}`);
+    }
+  }
+
+  lines.push("", `  ${theme.style.pinkBold("Changed Files")} ${theme.style.gray(`(${changes.length})`)}`);
   if (changes.length === 0) {
-    lines.push(`  ${style.mint("✓")} ${style.gray("clean worktree")}`);
+    lines.push(`  ${theme.style.mint("✓")} ${theme.style.gray("clean worktree")}`);
   } else {
     for (const change of changes.slice(0, maxFiles)) {
       lines.push(`  ${gitMarker(change.status)} ${truncateText(change.path, 38)}`);
     }
     if (changes.length > maxFiles) {
-      lines.push(`  ${style.gray(`… ${changes.length - maxFiles} more files`)}`);
+      lines.push(`  ${theme.style.gray(`… ${changes.length - maxFiles} more files`)}`);
     }
   }
   lines.push("");
@@ -440,7 +455,7 @@ export function buildHudSidebar(
     ? lines.map((l) => truncateLine(l, Math.max(1, options.maxWidth! - 4)))
     : lines;
 
-  return panel(contentLines, gradient("TODO / Changed Files"));
+  return theme.panel(contentLines, theme.gradient("TODO / Changed Files"));
 }
 
 export function renderHudColumns(mainPanels: string[], sidebar: string, terminalWidth = defaultHudTerminalWidth()): string {
@@ -461,7 +476,7 @@ export function renderHudColumns(mainPanels: string[], sidebar: string, terminal
   for (let i = 0; i < height; i += 1) {
     const leftLine = leftLines[i] ?? "";
     const rightLine = rightLines[i] ?? "";
-    output.push(`${padEndAnsi(leftLine, panelWidth)}${" ".repeat(gap)}${padEndAnsi(rightLine, panelWidth)}`.trimEnd());
+    output.push(`${theme.padEndAnsi(leftLine, panelWidth)}${" ".repeat(gap)}${theme.padEndAnsi(rightLine, panelWidth)}`.trimEnd());
   }
   return output.join("\n");
 }
@@ -487,15 +502,15 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function renderFooter(refreshMs?: number): string {
+function buildHudFooter(refreshMs?: number): string {
   const footerLines = [
-    separator(50),
-    style.mint(t("hud.hint")) + "  " + style.gray("omk chat") + " " + t("hud.interactive") + "  |  " + style.gray("omk plan") + " " + t("hud.plan") + "  |  " + style.gray("omk run") + " " + t("hud.execute") + "  |  " + style.gray("omk merge") + " " + t("hud.merge"),
+    theme.separator(50),
+    theme.style.mint(t("hud.hint")) + "  " + theme.style.gray("omk chat") + " " + t("hud.interactive") + "  |  " + theme.style.gray("omk plan") + " " + t("hud.plan") + "  |  " + theme.style.gray("omk run") + " " + t("hud.execute") + "  |  " + theme.style.gray("omk merge") + " " + t("hud.merge"),
   ];
   if (refreshMs) {
-    footerLines.push(style.gray(t("hud.liveRefresh", refreshMs)));
+    footerLines.push(theme.style.gray(t("hud.liveRefresh", refreshMs)));
   }
-  footerLines.push(style.gray("  " + formatOmkVersionFooter()), separator(50));
+  footerLines.push(theme.style.gray("  " + formatOmkVersionFooter()), theme.separator(50));
   return footerLines.join("\n");
 }
 
@@ -597,28 +612,28 @@ async function buildSystemPanel(options: HudRenderOptions = {}): Promise<string>
     return cachedSystemPanel;
   }
 
-  const usage = getSystemUsage();
+  const usage = theme.getSystemUsage();
   const disk = options.showDisk !== false ? getDiskUsage() : null;
   const resources = await getOmkResourceSettings();
 
   const sysLines: string[] = [
     "",
-    gauge("CPU Load", usage.cpuPercent, 100, 20),
-    gauge("Memory  ", usage.memPercent, 100, 20),
-    disk ? gauge("Disk    ", disk.percent, 100, 20) : "",
+    theme.gauge("CPU Load", usage.cpuPercent, 100, 20),
+    theme.gauge("Memory  ", usage.memPercent, 100, 20),
+    disk ? theme.gauge("Disk    ", disk.percent, 100, 20) : "",
     "",
-    stat("Load Avg", usage.loadAvg.map((v) => v.toFixed(2)).join(", "), ""),
-    stat("Memory", `${usage.memUsedGB} / ${usage.memTotalGB}`, " GB"),
-    options.showHeap !== false ? stat("Heap", `${usage.heapUsedMB} / ${usage.heapTotalMB}`, " MB") : "",
-    options.showHeap !== false ? stat("Heap Ext", `${usage.heapExternalMB}`, " MB") : "",
-    stat("Event Loop", `${usage.eventLoopLagMs.toFixed(1)}`, " ms"),
-    stat("OMK Buffer", formatBytes(resources.shellMaxBufferBytes), ""),
-    disk ? stat("Disk", `${(disk.used / 1024 / 1024 / 1024).toFixed(1)} / ${(disk.total / 1024 / 1024 / 1024).toFixed(1)}`, " GB") : "",
-    options.showUptime !== false ? stat("Uptime", formatUptime(usage.uptimeSeconds), "") : "",
+    theme.stat("Load Avg", usage.loadAvg.map((v) => v.toFixed(2)).join(", "), ""),
+    theme.stat("Memory", `${usage.memUsedGB} / ${usage.memTotalGB}`, " GB"),
+    options.showHeap !== false ? theme.stat("Heap", `${usage.heapUsedMB} / ${usage.heapTotalMB}`, " MB") : "",
+    options.showHeap !== false ? theme.stat("Heap Ext", `${usage.heapExternalMB}`, " MB") : "",
+    theme.stat("Event Loop", `${usage.eventLoopLagMs.toFixed(1)}`, " ms"),
+    theme.stat("OMK Buffer", formatBytes(resources.shellMaxBufferBytes), ""),
+    disk ? theme.stat("Disk", `${(disk.used / 1024 / 1024 / 1024).toFixed(1)} / ${(disk.total / 1024 / 1024 / 1024).toFixed(1)}`, " GB") : "",
+    options.showUptime !== false ? theme.stat("Uptime", formatUptime(usage.uptimeSeconds), "") : "",
     "",
   ].filter(Boolean);
 
-  const result = panel(sysLines, gradient("System Usage"));
+  const result = theme.panel(sysLines, theme.gradient("System Usage"));
   cachedSystemPanel = result;
   cachedSystemPanelTime = now;
   return result;
@@ -636,26 +651,26 @@ async function buildContextUsagePanel(kimiUsage?: UsageStats, fetchQuota = true)
     Math.min(100, Math.round((usage.totalSecondsWeek / (limitSeconds * 7)) * 100));
 
   const loginLine = vm.source === "missingAuth"
-    ? stat("OAuth Login", "login required; showing local sessions only", "")
-    : stat("OAuth Login", `${vm.accountLabel} (${vm.authStatus})`, "");
+    ? theme.stat("OAuth Login", "login required; showing local sessions only", "")
+    : theme.stat("OAuth Login", `${vm.accountLabel} (${vm.authStatus})`, "");
 
   const planLines: string[] = [
     "",
-    gauge("5h Window", fiveHourGaugePercent, 100, 20),
-    gauge("This Week", weekGaugePercent, 100, 20),
+    theme.gauge("5h Window", fiveHourGaugePercent, 100, 20),
+    theme.gauge("This Week", weekGaugePercent, 100, 20),
     "",
     loginLine,
-    stat("5h Usage", vm.fiveHour.label, ""),
-    stat("5h Sessions", `${usage.sessionCountLast5Hours}`, ""),
-    stat("Today Used", vm.today.label, ""),
-    stat("Today Sessions", `${vm.today.sessionCount}`, ""),
-    stat("Week Usage", vm.weekly.label, ""),
-    stat("Week Sessions", `${usage.sessionCountWeek}`, ""),
-    vm.error ? stat("Quota Source", `local fallback (${vm.error})`, "") : "",
+    theme.stat("5h Usage", vm.fiveHour.label, ""),
+    theme.stat("5h Sessions", `${usage.sessionCountLast5Hours}`, ""),
+    theme.stat("Today Used", vm.today.label, ""),
+    theme.stat("Today Sessions", `${vm.today.sessionCount}`, ""),
+    theme.stat("Week Usage", vm.weekly.label, ""),
+    theme.stat("Week Sessions", `${usage.sessionCountWeek}`, ""),
+    vm.error ? theme.stat("Quota Source", `local fallback (${vm.error})`, "") : "",
     "",
   ].filter(Boolean);
 
-  return panel(planLines, gradient("Context Usage"));
+  return theme.panel(planLines, theme.gradient("Context Usage"));
 }
 
 async function buildProjectStatusPanel(gitChangesResult: HudGitChange[] | null): Promise<string> {
@@ -664,7 +679,7 @@ async function buildProjectStatusPanel(gitChangesResult: HudGitChange[] | null):
   const projLines: string[] = [""];
 
   projLines.push(
-    `  ${style.purple("🌿 Git")}      ${gitChangesResult === null ? status.warn("unavailable") : gitChanges.length === 0 ? status.ok("clean") : status.warn(`${gitChanges.length} changes`)}`
+    `  ${theme.style.purple("🌿 Git")}      ${gitChangesResult === null ? theme.status.warn("unavailable") : gitChanges.length === 0 ? theme.status.ok("clean") : theme.status.warn(`${gitChanges.length} changes`)}`
   );
 
   const [omkExists, agentsMdExists, designMdExists] = await Promise.all([
@@ -672,20 +687,20 @@ async function buildProjectStatusPanel(gitChangesResult: HudGitChange[] | null):
     pathExists(join(root, "AGENTS.md")),
     pathExists(join(root, "DESIGN.md")),
   ]);
-  projLines.push(`  ${style.purple("📁 OMK")}      ${omkExists ? status.ok("initialized") : status.warn("omk init needed")}`);
-  projLines.push(`  ${style.purple("📝 AGENTS")}   ${agentsMdExists ? status.ok("exists") : status.warn("missing")}`);
-  projLines.push(`  ${style.purple("🎨 DESIGN")}   ${designMdExists ? status.ok("exists") : status.info("optional")}`);
+  projLines.push(`  ${theme.style.purple("📁 OMK")}      ${omkExists ? theme.status.ok("initialized") : theme.status.warn("omk init needed")}`);
+  projLines.push(`  ${theme.style.purple("📝 AGENTS")}   ${agentsMdExists ? theme.status.ok("exists") : theme.status.warn("missing")}`);
+  projLines.push(`  ${theme.style.purple("🎨 DESIGN")}   ${designMdExists ? theme.status.ok("exists") : theme.status.info("optional")}`);
 
   projLines.push("");
-  return panel(projLines, gradient("Project Status"));
+  return theme.panel(projLines, theme.gradient("Project Status"));
 }
 
 function workerLiveness(ageMs?: number): { label: string; color: (s: string) => string } {
-  if (ageMs === undefined) return { label: "active", color: style.mint };
-  if (ageMs > 180_000) return { label: "stale", color: style.red };
-  if (ageMs > 90_000) return { label: "quiet", color: style.orange };
-  if (ageMs > 30_000) return { label: "slow", color: style.cream };
-  return { label: "active", color: style.mint };
+  if (ageMs === undefined) return { label: "active", color: theme.style.mint };
+  if (ageMs > 180_000) return { label: "stale", color: theme.style.red };
+  if (ageMs > 90_000) return { label: "quiet", color: theme.style.orange };
+  if (ageMs > 30_000) return { label: "slow", color: theme.style.cream };
+  return { label: "active", color: theme.style.mint };
 }
 
 function formatDurationMs(ms: number): string {
@@ -749,47 +764,47 @@ async function buildLatestRunPanel(
       if (!goalTitle) goalTitle = "N/A";
 
       const staleWorkers = vm.workers.filter((w) => w.state === "running" && (w.lastActivityAgeMs ?? 0) > 90_000).length;
-      const chatBadge = sessionMeta?.type === "chat" ? ` ${style.cream("💬 Chat")}` : "";
+      const chatBadge = sessionMeta?.type === "chat" ? ` ${theme.style.cream("💬 Chat")}` : "";
       const providerLine = formatProviderMetricLine(vm.providerRouting);
       runLines = [
         "",
-        `  ${style.gray("Run:")}    ${style.creamBold(latestRunName)}${chatBadge}`,
-        `  ${style.gray("Goal:")}    ${style.cream(goalTitle)}`,
-        `  ${style.gray("Health:")}  ${healthColor(vm.health)(vm.health.toUpperCase())}`,
-        `  ${style.gray("Progress:")} ${style.mintBold(`${vm.progress.settled}/${vm.progress.total}`)} ${style.gray(`(${vm.progress.percent}%)`)}`,
+        `  ${theme.style.gray("Run:")}    ${theme.style.creamBold(latestRunName)}${chatBadge}`,
+        `  ${theme.style.gray("Goal:")}    ${theme.style.cream(goalTitle)}`,
+        `  ${theme.style.gray("Health:")}  ${healthColor(vm.health)(vm.health.toUpperCase())}`,
+        `  ${theme.style.gray("Progress:")} ${theme.style.mintBold(`${vm.progress.settled}/${vm.progress.total}`)} ${theme.style.gray(`(${vm.progress.percent}%)`)}`,
       ];
       if (providerLine) {
-        runLines.push(`  ${style.gray("Provider:")} ${style.cream(providerLine)}`);
+        runLines.push(`  ${theme.style.gray("Provider:")} ${theme.style.cream(providerLine)}`);
       }
       if (vm.eta) {
-        runLines.push(`  ${style.gray("ETA:")}     ${style.cream(vm.eta)}`);
+        runLines.push(`  ${theme.style.gray("ETA:")}     ${theme.style.cream(vm.eta)}`);
       }
       if (staleWorkers > 0) {
-        runLines.push(`  ${style.gray("Stale:")}   ${style.redBold(`${staleWorkers} worker${staleWorkers > 1 ? "s" : ""}`)}`);
+        runLines.push(`  ${theme.style.gray("Stale:")}   ${theme.style.redBold(`${staleWorkers} worker${staleWorkers > 1 ? "s" : ""}`)}`);
       }
       if (sessionMeta) {
         const statusColor = sessionStatusColor(sessionMeta.status);
-        runLines.push(`  ${style.gray("Session:")} ${statusColor(sessionMeta.status.toUpperCase())}`);
+        runLines.push(`  ${theme.style.gray("Session:")} ${statusColor(sessionMeta.status.toUpperCase())}`);
         if (sessionMeta.todoCount > 0) {
-          runLines.push(`  ${style.gray("Todos:")}   ${style.mintBold(`${sessionMeta.todoDoneCount}/${sessionMeta.todoCount}`)} ${style.gray("completed")}`);
+          runLines.push(`  ${theme.style.gray("Todos:")}   ${theme.style.mintBold(`${sessionMeta.todoDoneCount}/${sessionMeta.todoCount}`)} ${theme.style.gray("completed")}`);
         }
       }
       runLines.push("");
 
       if (goalData) {
         if (goalData.status) {
-          runLines.push(`  ${style.gray("Goal Status:")} ${style.creamBold(goalData.status)}`);
+          runLines.push(`  ${theme.style.gray("Goal Status:")} ${theme.style.creamBold(goalData.status)}`);
         }
         if (goalData.requiredTotal > 0) {
-          runLines.push(`  ${style.gray("Criteria:")}   ${style.mintBold(`${goalData.requiredPassed}/${goalData.requiredTotal}`)} ${style.gray("required passed")}`);
+          runLines.push(`  ${theme.style.gray("Criteria:")}   ${theme.style.mintBold(`${goalData.requiredPassed}/${goalData.requiredTotal}`)} ${theme.style.gray("required passed")}`);
         }
         if (goalData.firstUnmet) {
-          runLines.push(`  ${style.gray("Next Up:")}    ${style.orange(truncateText(goalData.firstUnmet.description, 50))}`);
+          runLines.push(`  ${theme.style.gray("Next Up:")}    ${theme.style.orange(truncateText(goalData.firstUnmet.description, 50))}`);
         }
         runLines.push("");
       } else if (vm.goalTitle) {
         if (vm.goalScore != null) {
-          runLines.push(`  ${style.gray("Score:")}     ${style.mintBold(`${vm.goalScore}%`)}`);
+          runLines.push(`  ${theme.style.gray("Score:")}     ${theme.style.mintBold(`${vm.goalScore}%`)}`);
         }
         runLines.push("");
       }
@@ -798,66 +813,66 @@ async function buildLatestRunPanel(
         const team = vm.teamRuntime;
         const presentWindows = team.windows.filter((w) => w.status === "present").length;
         const missingWindows = team.windows.filter((w) => w.status === "missing").length;
-        runLines.push(`  ${style.pinkBold("Team Runtime")}`);
-        runLines.push(`    ${style.gray("session")} ${style.cream(team.session)} ${style.gray("status")} ${healthColor(missingWindows > 0 ? "warn" : "ok")(team.status)}`);
-        runLines.push(`    ${style.gray("windows")} ${style.mintBold(`${presentWindows}/${team.windows.length}`)} ${style.gray(`present · workers ${team.workerCount} · reviewer ${team.reviewerCount}`)}`);
+        runLines.push(`  ${theme.style.pinkBold("Team Runtime")}`);
+        runLines.push(`    ${theme.style.gray("session")} ${theme.style.cream(team.session)} ${theme.style.gray("status")} ${healthColor(missingWindows > 0 ? "warn" : "ok")(team.status)}`);
+        runLines.push(`    ${theme.style.gray("windows")} ${theme.style.mintBold(`${presentWindows}/${team.windows.length}`)} ${theme.style.gray(`present · workers ${team.workerCount} · reviewer ${team.reviewerCount}`)}`);
         if (team.coordinatorPanes > 0) {
-          runLines.push(`    ${style.gray("coordinator panes")} ${style.mint(String(team.coordinatorPanes))}`);
+          runLines.push(`    ${theme.style.gray("coordinator panes")} ${theme.style.mint(String(team.coordinatorPanes))}`);
         }
         if (missingWindows > 0) {
-          runLines.push(`    ${style.orange(`${missingWindows} expected window(s) missing`)}`);
+          runLines.push(`    ${theme.style.orange(`${missingWindows} expected window(s) missing`)}`);
         }
         runLines.push("");
       }
 
       // ── Worker table ──
       if (vm.workers.length > 0) {
-        runLines.push(`  ${style.pinkBold("Workers")}`);
+        runLines.push(`  ${theme.style.pinkBold("Workers")}`);
         for (const w of vm.workers) {
           const live = workerLiveness(w.lastActivityAgeMs);
           const stateTag = w.state === "running"
             ? `${live.color("▶")} ${live.color(w.state)}`
             : w.state === "done"
-            ? `${style.mintBold("✓")} ${style.mint(w.state)}`
+            ? `${theme.style.mintBold("✓")} ${theme.style.mint(w.state)}`
             : w.state === "failed"
-            ? `${style.red("✕")} ${style.red(w.state)}`
+            ? `${theme.style.red("✕")} ${theme.style.red(w.state)}`
             : w.state === "skipped"
-            ? `${style.gray("⊘")} ${style.gray(w.state)}`
-            : `${style.gray("□")} ${style.gray(w.state)}`;
-          const elapsed = w.elapsedMs > 0 ? style.gray(` · ${formatDurationMs(w.elapsedMs)}`) : "";
+            ? `${theme.style.gray("⊘")} ${theme.style.gray(w.state)}`
+            : `${theme.style.gray("□")} ${theme.style.gray(w.state)}`;
+          const elapsed = w.elapsedMs > 0 ? theme.style.gray(` · ${formatDurationMs(w.elapsedMs)}`) : "";
           const activity = w.lastActivityAgeMs != null
-            ? style.gray(` · activity ${formatDurationMs(w.lastActivityAgeMs)} ago`)
+            ? theme.style.gray(` · activity ${formatDurationMs(w.lastActivityAgeMs)} ago`)
             : "";
-          const phaseLine = w.phase ? style.gray(` · ${truncateText(w.phase, 50)}`) : "";
+          const phaseLine = w.phase ? theme.style.gray(` · ${truncateText(w.phase, 50)}`) : "";
           runLines.push(`    ${stateTag}${elapsed}${activity}${phaseLine}`);
-          runLines.push(`      ${style.gray(truncateText(w.label, 40))}`);
+          runLines.push(`      ${theme.style.gray(truncateText(w.label, 40))}`);
         }
         runLines.push("");
       }
 
       if (vm.blocker) {
-        runLines.push(`  ${style.redBold("Blocker:")} ${style.red(vm.blocker.reason)}`);
-        runLines.push(`  ${style.gray("Action:")}  ${style.cream(vm.blocker.nextAction)}`);
+        runLines.push(`  ${theme.style.redBold("Blocker:")} ${theme.style.red(vm.blocker.reason)}`);
+        runLines.push(`  ${theme.style.gray("Action:")}  ${theme.style.cream(vm.blocker.nextAction)}`);
         runLines.push("");
       } else if (vm.nextAction && vm.nextAction !== "Ready") {
-        runLines.push(`  ${style.gray("Next:")}    ${style.cream(vm.nextAction)}`);
+        runLines.push(`  ${theme.style.gray("Next:")}    ${theme.style.cream(vm.nextAction)}`);
         runLines.push("");
       }
 
       if (plan) {
-        runLines.push(`  ${style.gray("Plan:")}    ${style.mint("✔ generated")}`);
+        runLines.push(`  ${theme.style.gray("Plan:")}    ${theme.style.mint("✔ generated")}`);
         runLines.push("");
       }
 
       if (!options.compact && todos && todos.length > 0) {
-        runLines.push(`  ${style.pinkBold("TODOs")}`);
+        runLines.push(`  ${theme.style.pinkBold("TODOs")}`);
         for (const todo of todos.slice(0, 5)) {
           const marker = todoItemMarker(todo.status);
           const title = truncateText(todo.title, 50);
           runLines.push(`    ${marker} ${title}`);
         }
         if (todos.length > 5) {
-          runLines.push(`    ${style.gray(`… ${todos.length - 5} more`)}`);
+          runLines.push(`    ${theme.style.gray(`… ${todos.length - 5} more`)}`);
         }
         runLines.push("");
       }
@@ -865,7 +880,7 @@ async function buildLatestRunPanel(
   }
 
   if (runLines.length === 0) {
-    runLines = ["", `  ${style.gray(t("hud.noRunHistory"))}`, ""];
+    runLines = ["", `  ${theme.style.gray(t("hud.noRunHistory"))}`, ""];
   }
 
   if (maxWidth) {
@@ -873,12 +888,10 @@ async function buildLatestRunPanel(
     runLines = runLines.map((l) => truncateLine(l, contentMaxWidth));
   }
 
-  return panel(runLines, gradient("Latest Run"));
+  return theme.panel(runLines, theme.gradient("Latest Run"));
 }
 
-async function renderCompactDashboard(options: HudRenderOptions): Promise<string> {
-  const width = options.terminalWidth ?? defaultHudTerminalWidth();
-  const effectiveWidth = Math.max(40, width - 4);
+async function fetchHudDashboardData(options: HudRenderOptions): Promise<HudDashboardData> {
   const root = getProjectRoot();
   const gitChangesResult = await getGitChanges(root);
   const gitChanges = gitChangesResult ?? [];
@@ -910,17 +923,42 @@ async function renderCompactDashboard(options: HudRenderOptions): Promise<string
     todos = await loadTodos(latestRunName).catch(() => null);
   }
 
-  const goalTitle = vm.goalTitle ?? null;
+  return {
+    vm,
+    stateError,
+    gitChangesResult,
+    gitChanges,
+    latestRunName,
+    sessionMeta,
+    todos,
+    goalTitle: vm.goalTitle ?? null,
+  };
+}
+
+function buildHudHeader(
+  options: HudRenderOptions,
+  vm: RunViewModel,
+  stateError: RunViewModel["stateError"],
+  goalTitle: string | null
+): string {
+  const width = options.terminalWidth ?? defaultHudTerminalWidth();
+  const lines: string[] = [];
+  lines.push(renderMatrixRainHeader(options.runId ?? "omk"));
+  lines.push(theme.matrixHeader("OMK HUD"));
+  lines.push(buildSummaryBar(vm, stateError, goalTitle, width - 4));
+  lines.push("");
+  return lines.join("\n");
+}
+
+async function renderCompactDashboard(options: HudRenderOptions): Promise<string> {
+  const data = await fetchHudDashboardData(options);
+  const { vm, stateError, gitChanges, latestRunName, sessionMeta, todos, goalTitle } = data;
+  const width = options.terminalWidth ?? defaultHudTerminalWidth();
+  const effectiveWidth = Math.max(40, width - 4);
   const output: string[] = [];
 
-  output.push(renderMatrixRainHeader(options.runId ?? "omk"));
-  output.push(matrixHeader("OMK HUD"));
-
-  const summary = buildSummaryBar(vm, stateError, goalTitle, effectiveWidth);
-  output.push(summary);
-  output.push("");
-  const systemPanel = await buildSystemPanel(options);
-  output.push(systemPanel);
+  output.push(buildHudHeader(options, vm, stateError, goalTitle));
+  output.push(await buildSystemPanel(options));
 
   const runPanel = await buildLatestRunPanel(options, vm, stateError, gitChanges, effectiveWidth, sessionMeta, todos);
   output.push(runPanel);
@@ -935,59 +973,22 @@ async function renderCompactDashboard(options: HudRenderOptions): Promise<string
   output.push(sidebar);
   output.push("");
 
-  output.push(renderFooter(options.footerRefreshMs));
+  output.push(buildHudFooter(options.footerRefreshMs));
   output.push("");
   return output.join("\n");
 }
 
 async function renderMediumDashboard(options: HudRenderOptions): Promise<string> {
+  const data = await fetchHudDashboardData(options);
+  const { vm, stateError, gitChangesResult, gitChanges, latestRunName, sessionMeta, todos, goalTitle } = data;
   const width = options.terminalWidth ?? defaultHudTerminalWidth();
-  const root = getProjectRoot();
-  const gitChangesResult = await getGitChanges(root);
-  const gitChanges = gitChangesResult ?? [];
   const mainPanels: string[] = [];
   const output: string[] = [];
 
-  output.push(renderMatrixRainHeader(options.runId ?? "omk"));
-  output.push(matrixHeader("OMK HUD"));
+  output.push(buildHudHeader(options, vm, stateError, goalTitle));
 
-  const runsDir = getRunsDir();
-  let vm: RunViewModel = buildRunViewModel(null);
-  let stateError: RunViewModel["stateError"] = "missing";
-  let latestRunName: string | null = options.runId ?? null;
-
-  if (await pathExists(runsDir)) {
-    if (!latestRunName) {
-      const candidates = await listRunCandidates(runsDir);
-      latestRunName = selectLatestRunName(candidates);
-    }
-    if (latestRunName) {
-      const stateContent = await readFile(getRunPath(latestRunName, "state.json"), "utf-8").catch(() => null);
-      if (stateContent) {
-        const result = parseRunStateResult(stateContent);
-        stateError = result.error;
-        vm = buildRunViewModel(result.state, { changedFiles: gitChanges.map((c) => c.path) });
-      }
-    }
-  }
-
-  let sessionMeta: SessionMeta | null = null;
-  let todos: TodoItem[] | null = null;
-  if (latestRunName) {
-    sessionMeta = await readSessionMeta(latestRunName).catch(() => null);
-    todos = await loadTodos(latestRunName).catch(() => null);
-  }
-
-  const goalTitle = vm.goalTitle ?? null;
-  const summary = buildSummaryBar(vm, stateError, goalTitle, width - 4);
-  output.push(summary);
-  output.push("");
-
-  const projPanel = await buildProjectStatusPanel(gitChangesResult);
-  mainPanels.push(projPanel);
-
-  const runPanel = await buildLatestRunPanel(options, vm, stateError, gitChanges, undefined, sessionMeta, todos);
-  mainPanels.push(runPanel);
+  mainPanels.push(await buildProjectStatusPanel(gitChangesResult));
+  mainPanels.push(await buildLatestRunPanel(options, vm, stateError, gitChanges, undefined, sessionMeta, todos));
 
   if (stateError !== "ok" && latestRunName) {
     mainPanels.push(buildStateErrorPanel(stateError, latestRunName));
@@ -997,60 +998,24 @@ async function renderMediumDashboard(options: HudRenderOptions): Promise<string>
   output.push(renderHudColumns(mainPanels, sidebar, width));
   output.push("");
 
-  output.push(renderFooter(options.footerRefreshMs));
+  output.push(buildHudFooter(options.footerRefreshMs));
   output.push("");
   return output.join("\n");
 }
 
 async function renderFullDashboard(options: HudRenderOptions): Promise<string> {
+  const data = await fetchHudDashboardData(options);
+  const { vm, stateError, gitChangesResult, gitChanges, latestRunName, sessionMeta, todos, goalTitle } = data;
   const width = options.terminalWidth ?? defaultHudTerminalWidth();
-  const root = getProjectRoot();
-  const gitChangesResult = await getGitChanges(root);
-  const gitChanges = gitChangesResult ?? [];
   const mainPanels: string[] = [];
   const output: string[] = [];
 
-  output.push(renderMatrixRainHeader(options.runId ?? "omk"));
-  output.push(matrixHeader("OMK HUD"));
-
-  const runsDir = getRunsDir();
-  let vm: RunViewModel = buildRunViewModel(null);
-  let stateError: RunViewModel["stateError"] = "missing";
-  let latestRunName: string | null = options.runId ?? null;
-
-  if (await pathExists(runsDir)) {
-    if (!latestRunName) {
-      const candidates = await listRunCandidates(runsDir);
-      latestRunName = selectLatestRunName(candidates);
-    }
-    if (latestRunName) {
-      const stateContent = await readFile(getRunPath(latestRunName, "state.json"), "utf-8").catch(() => null);
-      if (stateContent) {
-        const result = parseRunStateResult(stateContent);
-        stateError = result.error;
-        vm = buildRunViewModel(result.state, { changedFiles: gitChanges.map((c) => c.path) });
-      }
-    }
-  }
-
-  let sessionMeta: SessionMeta | null = null;
-  let todos: TodoItem[] | null = null;
-  if (latestRunName) {
-    sessionMeta = await readSessionMeta(latestRunName).catch(() => null);
-    todos = await loadTodos(latestRunName).catch(() => null);
-  }
-
-  const goalTitle = vm.goalTitle ?? null;
-  const summary = buildSummaryBar(vm, stateError, goalTitle, width - 4);
-  output.push(summary);
-  output.push("");
+  output.push(buildHudHeader(options, vm, stateError, goalTitle));
 
   mainPanels.push(await buildSystemPanel(options));
   mainPanels.push(await buildContextUsagePanel(options.kimiUsage, options.fetchQuota ?? true));
   mainPanels.push(await buildProjectStatusPanel(gitChangesResult));
-
-  const runPanel = await buildLatestRunPanel(options, vm, stateError, gitChanges, undefined, sessionMeta, todos);
-  mainPanels.push(runPanel);
+  mainPanels.push(await buildLatestRunPanel(options, vm, stateError, gitChanges, undefined, sessionMeta, todos));
 
   if (stateError !== "ok" && latestRunName) {
     mainPanels.push(buildStateErrorPanel(stateError, latestRunName));
@@ -1060,52 +1025,17 @@ async function renderFullDashboard(options: HudRenderOptions): Promise<string> {
   output.push(renderHudColumns(mainPanels, sidebar, width));
   output.push("");
 
-  output.push(renderFooter(options.footerRefreshMs));
+  output.push(buildHudFooter(options.footerRefreshMs));
   output.push("");
   return output.join("\n");
 }
 
 async function renderSectionDashboard(options: HudRenderOptions): Promise<string> {
-  const width = options.terminalWidth ?? defaultHudTerminalWidth();
-  const root = getProjectRoot();
-  const gitChangesResult = await getGitChanges(root);
-  const gitChanges = gitChangesResult ?? [];
+  const data = await fetchHudDashboardData(options);
+  const { vm, stateError, gitChangesResult, gitChanges, latestRunName, sessionMeta, todos, goalTitle } = data;
   const output: string[] = [];
 
-  output.push(renderMatrixRainHeader(options.runId ?? "omk"));
-  output.push(matrixHeader("OMK HUD"));
-
-  const runsDir = getRunsDir();
-  let vm: RunViewModel = buildRunViewModel(null);
-  let stateError: RunViewModel["stateError"] = "missing";
-  let latestRunName: string | null = options.runId ?? null;
-
-  if (await pathExists(runsDir)) {
-    if (!latestRunName) {
-      const candidates = await listRunCandidates(runsDir);
-      latestRunName = selectLatestRunName(candidates);
-    }
-    if (latestRunName) {
-      const stateContent = await readFile(getRunPath(latestRunName, "state.json"), "utf-8").catch(() => null);
-      if (stateContent) {
-        const result = parseRunStateResult(stateContent);
-        stateError = result.error;
-        vm = buildRunViewModel(result.state, { changedFiles: gitChanges.map((c) => c.path) });
-      }
-    }
-  }
-
-  let sessionMeta: SessionMeta | null = null;
-  let todos: TodoItem[] | null = null;
-  if (latestRunName) {
-    sessionMeta = await readSessionMeta(latestRunName).catch(() => null);
-    todos = await loadTodos(latestRunName).catch(() => null);
-  }
-
-  const goalTitle = vm.goalTitle ?? null;
-  const summary = buildSummaryBar(vm, stateError, goalTitle, width - 4);
-  output.push(summary);
-  output.push("");
+  output.push(buildHudHeader(options, vm, stateError, goalTitle));
 
   switch (options.section) {
     case "run": {
@@ -1121,8 +1051,7 @@ async function renderSectionDashboard(options: HudRenderOptions): Promise<string
       break;
     }
     case "project": {
-      const projPanel = await buildProjectStatusPanel(gitChangesResult);
-      output.push(projPanel);
+      output.push(await buildProjectStatusPanel(gitChangesResult));
       break;
     }
     case "resources": {
@@ -1134,7 +1063,7 @@ async function renderSectionDashboard(options: HudRenderOptions): Promise<string
   }
 
   output.push("");
-  output.push(renderFooter(options.footerRefreshMs));
+  output.push(buildHudFooter(options.footerRefreshMs));
   output.push("");
   return output.join("\n");
 }
