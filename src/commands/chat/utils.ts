@@ -182,7 +182,7 @@ export async function getActiveSkillNames(skillsScope: "all" | "project" | "none
 
 export async function getActiveHookNames(root: string): Promise<string[]> {
   try {
-    const { discoverRoutingInventory } = await import("../../orchestration/routing.js");
+    const { discoverRoutingInventory } = await import("../../orchestration/routing/inventory.js");
     return [...discoverRoutingInventory(root).hooks.keys()];
   } catch {
     return [];
