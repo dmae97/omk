@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   buildChatAgentRuntimeMcpAllowlist,
+  buildChatAgentRuntimeSkillAllowlist,
   buildChatAgentHarnessManifest,
   buildChatAgentModeContract,
   buildParallelAlgorithmInjection,
@@ -275,26 +276,30 @@ test("chat mode contract omits agent orchestration injection", () => {
   assert.doesNotMatch(contract, /Injected parallel DAG algorithm/);
 });
 
-test("chat agent runtime MCP allowlist is bounded to assigned lane MCPs", () => {
+test("chat agent runtime MCP allowlist is bounded to coordinator MCPs", () => {
   const resources = {
     workers: "2",
     mcpScope: "all",
     skillsScope: "project",
     hooksScope: "project",
     mcpNames: ["omk-project", "omk-web-bridge", "github", "unrelated-remote"],
-    skillNames: ["omk-repo-explorer"],
+    skillNames: ["omk-repo-explorer", "omk-project-rules", "omk-context-broker", "omk-security-review"],
     hookNames: ["subagent-stop-audit.sh"],
   };
 
   const agentAllowlist = buildChatAgentRuntimeMcpAllowlist({ mode: "agent", resources });
   assert.ok(agentAllowlist?.includes("omk-project"));
-  assert.ok(agentAllowlist?.includes("omk-web-bridge"));
-  assert.ok(agentAllowlist?.includes("github"));
+  assert.equal(agentAllowlist?.includes("omk-web-bridge"), false);
   assert.equal(agentAllowlist?.includes("unrelated-remote"), false);
 
   const chatAllowlist = buildChatAgentRuntimeMcpAllowlist({ mode: "chat", resources });
   assert.ok(chatAllowlist?.includes("omk-project"));
   assert.equal(chatAllowlist?.includes("omk-web-bridge"), false);
+
+  const skillAllowlist = buildChatAgentRuntimeSkillAllowlist({ mode: "agent", resources });
+  assert.ok(skillAllowlist?.includes("omk-project-rules"));
+  assert.ok(skillAllowlist?.includes("omk-context-broker"));
+  assert.equal(skillAllowlist?.includes("omk-security-review"), false);
 });
 
 test("chat agent harness budget 4 routes all capability lanes and keeps four worker lanes", () => {

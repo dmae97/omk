@@ -4,7 +4,7 @@
  */
 
 import type { DagNode } from "../../orchestration/dag.js";
-import type { DeepSeekRoutePlan, ProviderAssistMetadata, ProviderModelRef } from "../types.js";
+import type { DeepSeekRoutePlan, ProviderAssistMetadata } from "../types.js";
 import type { TaskResult } from "../../contracts/orchestration.js";
 import { DEEPSEEK_V4_FLASH_MODEL, DEEPSEEK_V4_PRO_MODEL } from "../router.js";
 import { summarizeAdvisory } from "./results.js";
@@ -57,7 +57,10 @@ export interface DeepSeekAdvisoryOutput {
   summary: string;
   suggestions: string[];
   confidence: number;
-}
+  findings?: string[];
+  risks?: string[];
+  questionsForAuthorityProvider?: string[];
+  }
 
 export function parseStructuredAdvisory(stdout: string): DeepSeekAdvisoryOutput {
   const result: DeepSeekAdvisoryOutput = { summary: "", suggestions: [], confidence: 0 };
@@ -67,6 +70,11 @@ export function parseStructuredAdvisory(stdout: string): DeepSeekAdvisoryOutput 
       const obj = json as Record<string, unknown>;
       if (typeof obj.summary === "string") result.summary = obj.summary;
       if (Array.isArray(obj.suggestions)) result.suggestions = obj.suggestions.filter((s): s is string => typeof s === "string");
+      if (Array.isArray(obj.findings)) result.findings = obj.findings.filter((s): s is string => typeof s === "string");
+      if (Array.isArray(obj.risks)) result.risks = obj.risks.filter((s): s is string => typeof s === "string");
+      if (Array.isArray(obj.questionsForAuthorityProvider)) {
+        result.questionsForAuthorityProvider = obj.questionsForAuthorityProvider.filter((s): s is string => typeof s === "string");
+      }
       if (typeof obj.confidence === "number") result.confidence = obj.confidence;
     }
   } catch {
@@ -87,8 +95,16 @@ export async function runDeepSeekAdvisory(options: {
   signal?: AbortSignal;
 }): Promise<{ success: boolean; result: TaskResult; summary: string; failureReason?: string; structured?: DeepSeekAdvisoryOutput; metadata: ProviderAssistMetadata }> {
   let result: TaskResult;
+  const controller = new AbortController();
+  const forwardAbort = (): void => {
+    controller.abort(options.signal?.reason ?? new Error("Aborted"));
+  };
+  if (options.signal?.aborted) forwardAbort();
+  else options.signal?.addEventListener("abort", forwardAbort, { once: true });
+  const timeoutMs = resolveDeepSeekAdvisoryTimeoutMs({ ...process.env, ...options.env });
+  let timeout: NodeJS.Timeout | undefined;
   try {
-    result = await options.runner.run(options.node, {
+    const runPromise = options.runner.run(options.node, {
       ...options.env,
       ...options.traceEnv,
       OMK_DEEPSEEK_MODEL: options.plan.model,
@@ -98,9 +114,20 @@ export async function runDeepSeekAdvisory(options: {
       OMK_PROVIDER_REQUESTED: "deepseek",
       OMK_PROVIDER_ROUTE_REASON: options.routeReason,
       OMK_PROVIDER_AUTHORITY: "advisory",
-    }, options.signal);
+    }, controller.signal);
+    const timeoutPromise = new Promise<TaskResult>((resolve) => {
+      timeout = setTimeout(() => {
+        const reason = new Error(`DeepSeek advisory timed out after ${timeoutMs}ms`);
+        controller.abort(reason);
+        resolve({ success: false, exitCode: 124, stdout: "", stderr: reason.message });
+      }, timeoutMs);
+    });
+    result = await Promise.race([runPromise, timeoutPromise]);
   } catch (error: unknown) {
     result = { success: false, exitCode: 1, stdout: "", stderr: String(error) };
+  } finally {
+    if (timeout) clearTimeout(timeout);
+    options.signal?.removeEventListener("abort", forwardAbort);
   }
 
   const success = result.success;

@@ -1,8 +1,8 @@
 import { providerDisplayName, isExternalProvider, genericAdvisoryProviderForDecision, requestedProviderForAuthorityDecision } from "./runner/helpers.js";
 import { runGenericProviderAdvisory } from "./runner/execution.js";
 import { providerTraceEnv, buildProviderInvocationKey, deepseekRouteEnv, deepseekMetadata, providerModelEnv, providerModelMetadata } from "./runner/env.js";
-import { markProviderLaneSkippable, providerLaneSkipResult, providerExceptionResult, summarizeAdvisory, summarizeFailures, authorityUnavailableResult } from "./runner/results.js";
-import { sleepWithAbort, runDeepSeekAdvisory, deepseekPlanFromNode, resolveDeepSeekAdvisoryTimeoutMs, parseStructuredAdvisory } from "./runner/deepseek-helpers.js";
+import { providerLaneSkipResult, providerExceptionResult, summarizeFailures, authorityUnavailableResult } from "./runner/results.js";
+import { sleepWithAbort, runDeepSeekAdvisory, deepseekPlanFromNode } from "./runner/deepseek-helpers.js";
 import type { TaskResult, TaskRunner } from "../contracts/orchestration.js";
 import type { DagNode } from "../orchestration/dag.js";
 import { ProviderHealthRegistry } from "./health.js";
@@ -17,8 +17,6 @@ import {
 } from "./router.js";
 import type {
   DeepSeekRoutePlan,
-  ProviderAssistMetadata,
-  ProviderFailureKind,
   ProviderId,
   ProviderModelDefault,
   ProviderModelRef,
@@ -634,7 +632,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
             OMK_DEEPSEEK_ADVISORY_MODEL: decision.deepseek.model,
             OMK_DEEPSEEK_ADVISORY: advisory.structured?.summary ?? advisory.summary,
             OMK_DEEPSEEK_ADVISORY_JSON: JSON.stringify(advisory.structured ?? { summary: advisory.summary, findings: [], risks: [], questionsForAuthorityProvider: [], confidence: 0 }),
-            OMK_DEEPSEEK_ADVISORY_FINDINGS_COUNT: String(advisory.structured?.findings.length ?? 0),
+            OMK_DEEPSEEK_ADVISORY_FINDINGS_COUNT: String(advisory.structured?.findings?.length ?? 0),
           },
           decision.reason,
           authorityProvider,
@@ -941,4 +939,3 @@ function isDeepSeekLaneNode(node: DagNode): boolean {
 function hasOnlyOptionalOutputs(node: DagNode): boolean {
   return Boolean(node.outputs?.length) && node.outputs!.every((output) => output.required === false);
 }
-

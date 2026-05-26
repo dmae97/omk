@@ -73,7 +73,7 @@ function validatePresets(data: unknown): data is SkillPresetsSchema {
   const d = data as Record<string, unknown>;
   if (typeof d.version !== "string") return false;
   if (typeof d.presets !== "object" || d.presets === null) return false;
-  for (const [role, preset] of Object.entries(d.presets)) {
+  for (const preset of Object.values(d.presets)) {
     if (typeof preset !== "object" || preset === null) return false;
     const p = preset as Record<string, unknown>;
     for (const key of ["skills", "mcpServers", "tools", "hooks"]) {
@@ -96,7 +96,7 @@ export async function loadRoleDefaults(force = false): Promise<Record<string, Sk
     _roleDefaults = parsed.presets;
     _presetsVersion = parsed.version;
     return _roleDefaults;
-  } catch (err) {
+  } catch {
     // Memory-injection safety: fall back to inline hard-coded defaults on any error
     _roleDefaults = ROLE_DEFAULTS_FALLBACK;
     _presetsVersion = "fallback";

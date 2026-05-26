@@ -5,9 +5,9 @@
 
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { homedir } from "os";
-import { isAbsolute, join, relative, resolve, sep } from "path";
+import { join, resolve } from "path";
 import { normalizeUserHomePath } from "../../util/fs.js";
-import type { RouteCandidate, RouteSource, RoutingInventory, RoutingDiagnostic } from "./types.js";
+import type { RouteCandidate, RouteSource, RoutingInventory } from "./types.js";
 import { loadMergedMcpConfigSync } from "./mcp-config.js";
 
 let inventoryCache: { key: string; value: RoutingInventory } | undefined;

@@ -38,6 +38,20 @@ export {
 } from './runtime-router.js';
 
 export {
+  type RequestIntent,
+  type RuntimeSidecar,
+  type SignalFrame,
+  type CapabilitySelection,
+  type DebloatedNlpCompileResult,
+  compileBloatToNlp,
+  classifyIntent,
+  selectCapabilities,
+  resolveFailurePolicy,
+  filterMcpConfigForRuntime,
+  renderUserFacingRoutingNlp,
+} from "./debloat-nlp.js";
+
+export {
   type ToolProxyOptions,
   type ToolResultCompression,
   createToolProxy,
@@ -101,3 +115,12 @@ export {
   type RuntimeBackedTaskRunnerOptions,
   createRuntimeBackedTaskRunner,
 } from "./runtime-backed-task-runner.js";
+
+export {
+  buildTaskRunContext,
+  buildWorkerManifestFromNode,
+  applyTaskRunContextToAgentTask,
+  envFromWorkerManifest,
+  type BuildTaskRunContextInput,
+  type WorkerToolPlaneInput,
+} from "./worker-manifest.js";

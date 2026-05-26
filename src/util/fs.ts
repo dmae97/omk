@@ -1854,7 +1854,7 @@ export async function writeRuntimeMcpConfig(
   const quarantinedNames = new Set(quarantineEntries.map((e) => e.name));
 
   let targetServers = mergedServers;
-  if (allowlist && allowlist.length > 0) {
+  if (allowlist !== undefined) {
     const allowed = new Set(allowlist);
     const missing = allowlist.filter((name) => !mergedServers[name]);
     if (missing.length > 0) {

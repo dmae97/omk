@@ -111,10 +111,12 @@ export function applyCapabilityInjectionToRouting(
 
 export function renderCapabilityInjectionSummary(injection: CapabilityInjection): string {
   return [
-    `MCP: ${formatCapabilityKind(injection.summary.mcp)}; live-required=${injection.requiresMcp ? "true" : "false"}`,
-    `Skills: ${formatCapabilityKind(injection.summary.skills)}`,
-    `Hooks: ${formatCapabilityKind(injection.summary.hooks)}`,
-    `Tools: ${formatCapabilityKind(injection.summary.tools)}; tool-calling-required=${injection.requiresToolCalling ? "true" : "false"}`,
+    `MCP selected: ${formatCapabilityKind(injection.summary.mcp)}; required=${injection.requiresMcp ? "true" : "false"}; failure-policy=${injection.requiresMcp ? "strict" : "required-only"}`,
+    `Skills selected: ${formatCapabilityKind(injection.summary.skills)}`,
+    `Hooks active: ${formatCapabilityKind(injection.summary.hooks)}`,
+    `Tools available: ${formatCapabilityKind(injection.summary.tools)}; tool-calling-required=${injection.requiresToolCalling ? "true" : "false"}`,
+    "Do not activate every available MCP server or skill; use only capabilities needed for this request.",
+    "Optional MCP failures are warnings unless MCP is explicitly required for this node.",
   ].join("\n");
 }
 

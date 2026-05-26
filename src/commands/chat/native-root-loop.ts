@@ -5,10 +5,13 @@ import { style } from "../../util/theme.js";
 import { runShell } from "../../util/shell.js";
 import type { DagNode } from "../../orchestration/dag.js";
 import { applyCapabilityInjectionToRouting, buildCapabilityInjection } from "../../runtime/capability-injection.js";
+import { compileBloatToNlp, type DebloatRisk } from "../../runtime/debloat-nlp.js";
 import { buildPromptEnvelope, renderPromptEnvelope } from "../../runtime/prompt-envelope.js";
 import { resolveRuntimeBootstrap } from "../../runtime/runtime-bootstrap.js";
+import { buildTaskRunContext } from "../../runtime/worker-manifest.js";
 import { TerminalOwner } from "../../util/terminal-owner.js";
 import type { CliRenderer } from "../../cli/ui/renderer.js";
+import type { TaskRunContext } from "../../contracts/worker-context.js";
 
 export interface NativeRootLoopInput {
   bootstrap: RuntimeBootstrap;
@@ -88,6 +91,18 @@ function formatScopedNames(names: readonly string[] | undefined, empty = "none")
   return names.length > 8 ? `${preview}, … +${names.length - 8}` : preview;
 }
 
+function buildTurnToolSummary(routing: import("../../contracts/dag.js").DagNodeRouting | undefined): string {
+  const parts: string[] = [];
+  if (routing?.provider) parts.push(routing.provider);
+  if (routing?.providerModel && routing.providerModel !== "auto") parts.push(routing.providerModel);
+  if (routing?.risk) parts.push(routing.risk);
+  const skills = routing?.skills;
+  const mcpServers = routing?.mcpServers;
+  if (skills && skills.length > 0) parts.push(`${skills.length} skills`);
+  if (mcpServers && mcpServers.length > 0) parts.push(`${mcpServers.length} mcp`);
+  return parts.join(" · ");
+}
+
 function isDisabledEnvValue(value: string | undefined): boolean {
   const normalized = value?.trim().toLowerCase();
   return normalized === "0" || normalized === "false" || normalized === "no" || normalized === "off";
@@ -109,24 +124,23 @@ function buildSlashCommands(input: NativeRootLoopInput, state: NativeRootSession
   return [
     { name: "/exit", aliases: ["/quit", ":q"], help: "Exit chat session", handler: () => {} },
     { name: "/help", aliases: ["/h", "/?"], help: "Show this help", handler: () => {
-      console.log(style.phosphorBold("\n  Slash Commands:"));
+      console.log(style.phosphorBold("\n  OMK Slash Commands:"));
       console.log(style.phosphorDim("  ─────────────────────────────────────────────"));
-      console.log(`  ${style.phosphor("/exit")} ${style.phosphorDim("/quit :q")}   — Exit chat session`);
-      console.log(`  ${style.phosphor("/help")} ${style.phosphorDim("/h /?")}     — Show this help`);
-      console.log(`  ${style.phosphor("/auth")}                — Show provider auth status`);
-      console.log(`  ${style.phosphor("/providers")}            — List providers`);
-      console.log(`  ${style.phosphor("/provider")} ${style.phosphorDim("<name>")}  — Switch provider for this session`);
-      console.log(`  ${style.phosphor("/models")}               — List model aliases`);
-      console.log(`  ${style.phosphor("/model")} ${style.phosphorDim("<name>")}    — Set session model`);
-      console.log(`  ${style.phosphor("/use")} ${style.phosphorDim("<ref>")}       — Switch provider/model from a ref`);
-      console.log(`  ${style.phosphor("/mcp")} ${style.phosphorDim("[--all]")}     — Show MCP Tool Plane status`);
-      console.log(`  ${style.phosphor("/tools")}              — Show scoped MCP/skills/hooks`);
-      console.log(`  ${style.phosphor("/status")}              — Show session status`);
-      console.log(`  ${style.phosphor("/clear")} ${style.phosphorDim("/cls")}    — Clear screen`);
-      console.log(`  ${style.phosphor("/runs")}                — List recent runs`);
-      console.log(`  ${style.phosphor("/doctor")}              — Run omk doctor`);
-      console.log(`  ${style.phosphor("/parallel")} ${style.phosphorDim("<prompt>")} — Run parallel orchestrator`);
-      console.log(style.phosphorDim("  ─────────────────────────────────────────────\n"));
+      console.log(`  ${style.phosphor("/exit")} ${style.phosphorDim("/quit :q")}     — Exit chat session`);
+      console.log(`  ${style.phosphor("/help")} ${style.phosphorDim("/h /?")}       — Show this help`);
+      console.log(`  ${style.phosphor("/auth")}                  — Show provider auth status`);
+      console.log(`  ${style.phosphor("/providers")}              — List available providers`);
+      console.log(`  ${style.phosphor("/provider")} ${style.phosphorDim("<name>")}    — Switch provider`);
+      console.log(`  ${style.phosphor("/model")} ${style.phosphorDim("<name>")}       — Set session model`);
+      console.log(`  ${style.phosphor("/use")} ${style.phosphorDim("<ref>")}          — Provider/model alias`);
+      console.log(`  ${style.phosphor("/mcp")} ${style.phosphorDim("[--all]")}        — MCP Tool Plane status`);
+      console.log(`  ${style.phosphor("/tools")}                 — Scoped MCP/skills/hooks`);
+      console.log(`  ${style.phosphor("/status")}                 — Session status`);
+      console.log(`  ${style.phosphor("/clear")} ${style.phosphorDim("/cls")}       — Clear screen`);
+      console.log(`  ${style.phosphor("/runs")}                   — Recent run history`);
+      console.log(`  ${style.phosphor("/doctor")}                 — Run omk doctor`);
+      console.log(`  ${style.phosphor("/parallel")} ${style.phosphorDim("<prompt>")}   — Parallel orchestrator`);
+      console.log(style.phosphorDim("\n  Any other input is routed to the AI agent.\n"));
     }},
     { name: "/auth", aliases: ["/login"], help: "Show auth status", handler: async (args) => {
       const tokens = splitSlashArgs(args);
@@ -208,14 +222,30 @@ function buildSlashCommands(input: NativeRootLoopInput, state: NativeRootSession
       console.log(`  Safety: ${style.phosphorDim(`execution=${input.executionPrompt ?? "auto"}; provider metadata is scoped per turn`)}`);
       console.log(style.phosphorDim("  Use /mcp for MCP status or `omk mcp connect --json` for the full contract.\n"));
     }},
-    { name: "/status", aliases: ["/s"], help: "Show session status", handler: () => {
+    { name: "/status", aliases: ["/s"], help: "Show session status", handler: async () => {
       const uptime = process.uptime();
       const mem = process.memoryUsage();
       console.log(style.phosphorBold(`\n  Session: ${input.runId}`));
       console.log(`  Provider: ${style.phosphor(state.provider)} | Model: ${style.phosphorDim(state.model ?? "auto")}`);
       console.log(`  Uptime: ${style.phosphorDim(Math.floor(uptime / 60) + "m " + Math.floor(uptime % 60) + "s")}`);
       console.log(`  Heap: ${style.phosphorDim((mem.heapUsed / 1024 / 1024).toFixed(1) + "M")} / ${style.phosphorDim((mem.heapTotal / 1024 / 1024).toFixed(1) + "M")}`);
-      console.log(`  Layout: ${style.phosphorDim(input.layout)} | Root: ${style.phosphorDim(input.root)}\n`);
+      console.log(`  Layout: ${style.phosphorDim(input.layout)} | Root: ${style.phosphorDim(input.root.slice(-40))}`);
+      console.log(`  MCP: ${style.phosphorDim(formatScopedNames(input.mcpAllowlist, "none"))}`);
+      console.log(`  Skills: ${style.phosphorDim(formatScopedNames(input.skillNames, "none"))}`);
+      console.log(`  Hooks: ${style.phosphorDim(formatScopedNames(input.hookNames, "none"))}`);
+      try {
+        const { readTodos } = await import("../../util/todo-sync.js");
+        const todos = await readTodos(input.runId).catch(() => null);
+        if (todos && todos.length > 0) {
+          const counts: Record<string, number> = { pending: 0, in_progress: 0, done: 0, failed: 0, blocked: 0, skipped: 0 };
+          for (const t of todos) counts[t.status] = (counts[t.status] ?? 0) + 1;
+          console.log(`  TODOs: ${style.mint(String(counts.in_progress))} active · ${style.phosphorDim(String(counts.pending))} pending · ${style.phosphorDim(String(counts.done))} done`);
+          for (const t of todos.filter(t => t.status === "in_progress").slice(0, 3)) {
+            console.log(style.phosphorDim(`    ▶ ${t.title.slice(0, 60)}`));
+          }
+        }
+      } catch { /* ignore */ }
+      console.log("");
     }},
     { name: "/clear", aliases: ["/cls"], help: "Clear screen", handler: () => {
       (input.renderer ? process.stderr : process.stdout).write("\x1b[2J\x1b[H");
@@ -376,6 +406,12 @@ function nativeTurnRoutingPolicy(provider: string, risk: NativeTurnRisk): {
   return { capabilities: ["write", "patch", "shell"], readOnly: false, sandboxMode: "workspace-write" };
 }
 
+function debloatRiskFromNativeTurnRisk(risk: NativeTurnRisk): DebloatRisk {
+  if (risk === "read") return "read";
+  if (risk === "write") return "write";
+  return "dangerous";
+}
+
 export function buildNativeRootLoopTurnNode(input: {
   bootstrap: RuntimeBootstrap;
   prompt: string;
@@ -403,9 +439,39 @@ export function buildNativeRootLoopTurnNode(input: {
     turnRisk,
     sandboxMode: routingPolicy.sandboxMode,
   });
+  const rawEnvelope = renderPromptEnvelope(envelope);
+  const compiled = compileBloatToNlp({
+    rawText: rawEnvelope,
+    provider: input.bootstrap.provider,
+    model: input.bootstrap.selectedModel ?? "auto",
+    userPayload: input.prompt,
+    risk: debloatRiskFromNativeTurnRisk(turnRisk),
+    sandbox: routingPolicy.sandboxMode,
+    executionSelection: input.executionPrompt,
+    role: "coordinator",
+    evidenceRequired: false,
+    capabilityEnvelope: {
+      mcpEnabled: capabilityInjection.mcpServers,
+      skillsEnabled: capabilityInjection.skills,
+      toolsEnabled: capabilityInjection.tools.length > 0,
+      liveRequired: capabilityInjection.requiresMcp,
+    },
+  });
+  const selectedMcp = [
+    ...compiled.runtimeSidecar.requiredMcp,
+    ...compiled.runtimeSidecar.optionalMcp,
+  ];
+  const selectedCapabilityInjection = buildCapabilityInjection({
+    mcpAllowlist: selectedMcp,
+    skillNames: compiled.runtimeSidecar.selectedSkills,
+    hookNames: input.hookNames,
+    tools: capabilityInjection.tools,
+    requireMcp: compiled.runtimeSidecar.requiredMcp.length > 0,
+    requiresToolCalling: capabilityInjection.requiresToolCalling,
+  });
   return {
     id,
-    name: renderPromptEnvelope(envelope),
+    name: compiled.modelPrompt,
     role: "coordinator",
     dependsOn: [],
     status: "running",
@@ -419,11 +485,19 @@ export function buildNativeRootLoopTurnNode(input: {
       contextBudget: "normal",
       readOnly: routingPolicy.readOnly,
       risk: turnRisk,
+      promptMode: "dnc-nlp",
+      runtimeSidecar: {
+        ...compiled.runtimeSidecar,
+        requiredMcp: [...compiled.runtimeSidecar.requiredMcp],
+        optionalMcp: [...compiled.runtimeSidecar.optionalMcp],
+        disabledMcp: [...compiled.runtimeSidecar.disabledMcp],
+        selectedSkills: [...compiled.runtimeSidecar.selectedSkills],
+      },
       executionPrompt: input.executionPrompt,
       approvalPolicy: input.executionPrompt,
       sandboxMode: routingPolicy.sandboxMode,
-      rationale: "native-root-loop turn; OMK retains root orchestration and passes scoped MCP/skills/hooks metadata to the selected runtime",
-    }, capabilityInjection),
+      rationale: `native-root-loop DNC intent=${compiled.runtimeSidecar.intent}; selected MCP=${selectedMcp.length}; selected skills=${compiled.runtimeSidecar.selectedSkills.length}; optional failures follow required-only policy`,
+    }, selectedCapabilityInjection),
   };
 }
 
@@ -437,6 +511,7 @@ async function executeNativeRootTurn(input: {
   mcpAllowlist?: readonly string[];
   skillNames?: readonly string[];
   hookNames?: readonly string[];
+  runContext?: TaskRunContext;
 }): Promise<TaskResult> {
   const startedAt = Date.now();
   const routing = input.node.routing;
@@ -482,7 +557,7 @@ async function executeNativeRootTurn(input: {
   heartbeat?.unref?.();
 
   try {
-    const result = await input.taskRunner.run(input.node, input.env, input.signal);
+    const result = await input.taskRunner.run(input.node, input.env, input.signal, input.runContext);
     if (input.heartbeatEnabled) {
       const sec = ((Date.now() - startedAt) / 1000).toFixed(1);
       if (input.renderer) {
@@ -520,7 +595,40 @@ export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<
   });
 
   if (layout !== "plain") {
-    console.log(style.phosphor("Entering interactive mode. Type /help for commands.\n"));
+    const scoped = formatScopedNames(input.mcpAllowlist, "none");
+    const skillNames = formatScopedNames(input.skillNames, "none");
+    const hookNames = formatScopedNames(input.hookNames, "none");
+    const provider = state.provider;
+    const model = state.model ?? "auto";
+    const providerDisplay = provider === "auto" ? "auto-detect" : provider;
+
+    console.log(style.phosphorBold("\n╭─ OMK Agent Console " + style.phosphorDim(`run ${input.runId.slice(0, 20)}…`) + " ───"));
+    console.log(style.phosphorDim(`│ `) + style.phosphorBold("Provider") + style.phosphorDim(`  ${providerDisplay} · ${model}`));
+    console.log(style.phosphorDim(`│ `) + style.phosphorBold("MCP") + style.phosphorDim(`       ${scoped}`));
+    console.log(style.phosphorDim(`│ `) + style.phosphorBold("Skills") + style.phosphorDim(`    ${skillNames}`));
+    console.log(style.phosphorDim(`│ `) + style.phosphorBold("Hooks") + style.phosphorDim(`     ${hookNames}`));
+
+    // Show TODO summary if available
+    let todoLine = "";
+    try {
+      const { readTodos } = await import("../../util/todo-sync.js");
+      const existingTodos = await readTodos(input.runId).catch(() => null);
+      if (existingTodos && existingTodos.length > 0) {
+        const pending = existingTodos.filter(t => t.status === "pending").length;
+        const active = existingTodos.filter(t => t.status === "in_progress").length;
+        const done = existingTodos.filter(t => t.status === "done").length;
+        const parts = [];
+        if (active > 0) parts.push(style.mint(`${active} active`));
+        if (pending > 0) parts.push(style.phosphorDim(`${pending} pending`));
+        if (done > 0) parts.push(style.phosphorDim(`${done} done`));
+        todoLine = style.phosphorDim(`│ `) + style.phosphorBold("TODO") + style.phosphorDim(`       ${parts.join(" · ")}`);
+      }
+    } catch { /* ignore */ }
+
+    if (todoLine) console.log(todoLine);
+
+    console.log(style.phosphorDim(`│ /help for commands · /exit to quit`));
+    console.log(style.phosphorDim("╰─────────────────────────────────────────────────\n"));
   }
 
   const { createInterface } = await import("readline");
@@ -637,6 +745,25 @@ export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<
         hookNames: input.hookNames,
         executionPrompt: state.approvalPolicy,
       });
+      const turnMcpAllowlist = node.routing?.mcpServers ?? input.mcpAllowlist;
+      const turnSkillNames = node.routing?.skills ?? input.skillNames;
+      const turnHookNames = node.routing?.hooks ?? input.hookNames;
+      const runContext = buildTaskRunContext({
+        runId: input.runId,
+        root: input.root,
+        node,
+        objective: line,
+        toolPlane: {
+          mcpServers: turnMcpAllowlist,
+          mcpConfigFile: input.env.OMK_MCP_CONFIG_FILE,
+          skills: turnSkillNames,
+          hooks: turnHookNames,
+          tools: node.routing?.tools,
+          requiresRuntimeMcp: node.routing?.requiresMcp,
+        },
+        selectedRuntimeId: state.bootstrap.selectedRuntimeId,
+        model: state.bootstrap.selectedModel,
+      });
 
       const turnStartedAt = Date.now();
       const result = await terminalOwner.withChildProcess(rl, () => executeNativeRootTurn({
@@ -646,16 +773,18 @@ export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<
         signal: abort.signal,
         heartbeatEnabled: !isDisabledEnvValue(input.env.OMK_TURN_HEARTBEAT),
         renderer,
-        mcpAllowlist: input.mcpAllowlist,
-        skillNames: input.skillNames,
-        hookNames: input.hookNames,
+        mcpAllowlist: turnMcpAllowlist,
+        skillNames: turnSkillNames,
+        hookNames: turnHookNames,
+        runContext,
       }));
 
       if (result.stdout) {
         if (renderer) {
           renderer.emit({ type: "assistant:final", text: result.stdout });
         } else {
-          process.stdout.write(result.stdout + "\n");
+          const toolSummary = buildTurnToolSummary(node.routing);
+          process.stdout.write(style.phosphorDim(`\n  ✓ Done · ${toolSummary}\n`));
         }
         onData?.(result.stdout);
       }
@@ -702,7 +831,7 @@ export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<
     renderer.emit({ type: "session:stop", exitCode: 0 });
     await renderer.stop();
   } else {
-    console.log(style.phosphorDim("\nSession ended."));
+    console.log(style.phosphorDim(`\n  Session ended. Run ${style.cream("omk runs")} to see history.\n`));
   }
   return 0;
 }

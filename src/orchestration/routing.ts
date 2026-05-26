@@ -1,12 +1,7 @@
 import type { DagContextBudget, DagNode, DagNodeDefinition, DagNodeRouting } from "./dag.js";
 import { attachAssignedCapabilities, capabilityScopesFromRouting } from "./capability-routing.js";
-import { loadMergedMcpConfig, redactMcpConfig } from "./routing/mcp-config.js";
-import { discoverRoutingInventory, resetRoutingInventoryCache, routeCandidates } from "./routing/inventory.js";
-import type { RouteCandidate, RouteSource, RoutingInventory, RoutingDiagnostic, ScoredRoute } from "./routing/types.js";
-import { existsSync, readdirSync, readFileSync } from "fs";
-import { homedir } from "os";
-import { isAbsolute, join, relative, resolve, sep } from "path";
-import { normalizeUserHomePath } from "../util/fs.js";
+import { discoverRoutingInventory, routeCandidates } from "./routing/inventory.js";
+import type { RouteCandidate, RoutingInventory, ScoredRoute } from "./routing/types.js";
 import { assignSkills } from "./skill-assigner.js";
 import { DEFAULT_AUTHORITY_PROVIDER, resolveFallbackProvider } from "../providers/types.js";
 import {
@@ -15,6 +10,10 @@ import {
   OMK_WORKTREE_TEAM_PRESET,
 } from "../runtime/core-verified-preset.js";
 
+export {
+  discoverRoutingInventory,
+  resetRoutingInventoryCache,
+} from "./routing/inventory.js";
 
 export type RoutingInput = Pick<DagNodeDefinition, "id" | "name" | "role" | "inputs" | "outputs" | "cost" | "routing">;
 
@@ -22,22 +21,6 @@ const MAX_SKILLS = 3;
 const MAX_MCP_SERVERS = 2;
 const MAX_TOOLS = 4;
 const MAX_HOOKS = 4;
-const OMK_PROJECT_TOOLS = [
-  "omk_search_memory",
-  "omk_read_memory",
-  "omk_memory_mindmap",
-  "omk_graph_query",
-  "omk_list_agents",
-  "omk_read_agent",
-  "omk_list_runs",
-  "omk_read_run",
-  "omk_run_quality_gate",
-  "omk_save_checkpoint",
-  "omk_list_checkpoints",
-  "omk_search_snippets",
-  "omk_get_snippet",
-];
-
 const ROUTE_CANDIDATES: RouteCandidate[] = [
   {
     kind: "skill",
@@ -618,89 +601,3 @@ function textMatchesKeyword(text: string, keyword: string): boolean {
 function unique(values: string[]): string[] {
   return [...new Set(values.filter((value) => value.trim().length > 0))];
 }
-
-function getRoutingProjectRoot(): string {
-  return process.env.OMK_PROJECT_ROOT ? resolve(process.env.OMK_PROJECT_ROOT) : process.cwd();
-}
-
-function getRoutingUserHome(): string {
-  return (
-    normalizeUserHomePath(process.env.OMK_ORIGINAL_HOME)
-    ?? normalizeUserHomePath(process.env.HOME)
-    ?? normalizeUserHomePath(homedir())
-    ?? homedir()
-  );
-}
-
-function skillDirs(root: string, scope: RoutingInventory["skillsScope"]): Array<{ path: string; source: RouteSource }> {
-  if (scope === "none") return [];
-  const dirs: Array<{ path: string; source: RouteSource }> = [
-    { path: join(root, ".agents", "skills"), source: "project" },
-    { path: join(root, ".kimi", "skills"), source: "project" },
-    { path: join(root, ".omk", "skills"), source: "project" },
-  ];
-  if (scope === "all") {
-    const userHome = getRoutingUserHome();
-    dirs.push(
-      { path: join(userHome, ".codex", "skills"), source: "global" },
-      { path: join(userHome, ".agents", "skills"), source: "global" },
-      { path: join(userHome, ".kimi", "skills"), source: "global" },
-    );
-  }
-  return dirs;
-}
-
-function readActiveHookNames(root: string, scope: RoutingInventory["hooksScope"]): Array<{ name: string; source: RouteSource }> {
-  if (scope === "none") return [];
-  const files: Array<{ path: string; source: RouteSource }> = [
-    { path: join(root, ".omk", "kimi.config.toml"), source: "project" },
-    { path: join(root, ".kimi", "kimi.config.toml"), source: "project" },
-  ];
-  if (scope === "all") {
-    const userHome = getRoutingUserHome();
-    files.unshift(
-      { path: join(userHome, ".kimi", "kimi.config.toml"), source: "global" },
-      { path: join(userHome, ".codex", "kimi.config.toml"), source: "global" },
-    );
-  }
-  const result: Array<{ name: string; source: RouteSource }> = [];
-  for (const file of files) {
-    try {
-      const content = readFileSync(file.path, "utf-8");
-      for (const match of content.matchAll(/^\s*command\s*=\s*["']([^"']*hooks\/([^/"']+))["']/gm)) {
-        const name = match[2]?.trim();
-        if (name) result.push({ name, source: file.source });
-      }
-    } catch {
-      // ignore missing or invalid hook config
-    }
-  }
-  return result;
-}
-
-const SECRET_PATTERNS = ["apikey", "token", "password", "secret", "authorization"];
-
-function isSecretKey(key: string): boolean {
-  const normalized = key.toLowerCase().replace(/[_-]/g, "");
-  return SECRET_PATTERNS.some((pattern) => normalized === pattern || normalized.endsWith(pattern));
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
-  const result: Record<string, unknown> = { ...target };
-  for (const key of Object.keys(source)) {
-    const sVal = source[key];
-    const tVal = result[key];
-    if (isPlainObject(sVal) && isPlainObject(tVal)) {
-      result[key] = deepMerge(tVal, sVal);
-    } else {
-      result[key] = sVal;
-    }
-  }
-  return result;
-}
-
-

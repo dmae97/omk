@@ -5,7 +5,7 @@
 
 import { totalmem, freemem, loadavg, cpus } from "os";
 import { P } from "../brand/palette.js";
-import { esc, rgb, stripAnsi, padEndAnsi, visibleTerminalWidth } from "./ansi.js";
+import { esc, stripAnsi, padEndAnsi, visibleTerminalWidth } from "./ansi.js";
 import { style } from "./colors.js";
 
 export function metricsPanel(lines: string[], title?: string): string {

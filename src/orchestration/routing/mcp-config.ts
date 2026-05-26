@@ -4,7 +4,9 @@
  */
 
 import { existsSync, readFileSync } from "fs";
+import { homedir } from "os";
 import { isAbsolute, join, relative, resolve, sep } from "path";
+import { normalizeUserHomePath } from "../../util/fs.js";
 import type { RouteSource } from "./types.js";
 import type { RoutingDiagnostic } from "./types.js";
 
@@ -56,8 +58,6 @@ export function redactMcpConfig(cfg: unknown): unknown {
 }
 
 function getRoutingUserHome(): string {
-  const { normalizeUserHomePath } = require("../../util/fs.js");
-  const { homedir } = require("os");
   return (
     normalizeUserHomePath(process.env.OMK_ORIGINAL_HOME)
     ?? normalizeUserHomePath(process.env.HOME)

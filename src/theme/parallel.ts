@@ -5,7 +5,7 @@
 
 import { OMK_MATRIX_ASCII_ART } from "../brand/omk-matrix-art.js";
 import { P, hexToRgb, colorFromHex } from "../brand/palette.js";
-import { esc, rgb, stripAnsi, padEndAnsi, sanitizeTerminalText, visibleTerminalWidth } from "./ansi.js";
+import { esc, rgb, stripAnsi, padEndAnsi } from "./ansi.js";
 import { style } from "./colors.js";
 import { box, gradient } from "./layout.js";
 import { label } from "./layout.js";

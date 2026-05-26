@@ -9,6 +9,7 @@ import { pathToFileURL } from "node:url";
 const { shouldUseDirectKimiFallback } = await import("../dist/commands/chat/runtime.js");
 const { buildNativeRootLoopTurnNode } = await import("../dist/commands/chat/native-root-loop.js");
 const { buildCapabilityInjection, applyCapabilityInjectionToRouting } = await import("../dist/runtime/capability-injection.js");
+const { compileBloatToNlp, filterMcpConfigForRuntime } = await import("../dist/runtime/debloat-nlp.js");
 const { capsuleToTask } = await import("../dist/runtime/context-broker-converter.js");
 const { buildPromptEnvelope, renderPromptEnvelope } = await import("../dist/runtime/prompt-envelope.js");
 const { buildOmkToolPlaneManifest } = await import("../dist/runtime/tool-plane.js");
@@ -42,8 +43,8 @@ function runNativeLoopInput(input) {
     const bootstrap = ${JSON.stringify(codexBootstrap)};
     const calls = [];
     const taskRunner = {
-      async run(node, env) {
-        calls.push({ node, env });
+      async run(node, env, signal, context) {
+        calls.push({ node, env, context });
         return { success: true, stdout: "TASK_RUNNER_CALLED provider=" + node.routing?.provider + " model=" + node.routing?.providerModel + " envModel=" + (env?.OMK_PROVIDER_MODEL ?? "none"), stderr: "", exitCode: 0 };
       }
     };
@@ -61,6 +62,13 @@ function runNativeLoopInput(input) {
       executionPrompt: "ask"
     });
     console.log("TASK_RUNNER_CALLS=" + calls.length);
+    if (calls[0]) {
+      console.log("TASK_RUNNER_CAPTURE=" + JSON.stringify({
+        routing: calls[0].node.routing,
+        envModel: calls[0].env?.OMK_PROVIDER_MODEL ?? null,
+        context: calls[0].context
+      }));
+    }
     process.exitCode = code;
   `;
   try {
@@ -183,7 +191,105 @@ test("shouldUseDirectKimiFallback: explicit non-Kimi provider ignores legacy Kim
   deepStrictEqual(shouldUseDirectKimiFallback("deepseek", { OMK_LEGACY_CHAT: "1" }), false);
 });
 
-test("buildNativeRootLoopTurnNode carries scoped MCP, skills, and hooks", () => {
+test("DNC compiles status request to minimal prompt and sidecar", () => {
+  const result = compileBloatToNlp({
+    rawText: [
+      "MCP selected: enabled (5) [omk-project, memory, reddit, playwright, omk-web-bridge]",
+      "Skills selected: enabled (3) [omk-context-broker, omk-project-rules, omk-security-review]",
+      "TurnBegin(id=1)",
+      "Failed to connect MCP servers: {'omk-web-bridge': McpError('Connection closed')}",
+      "User request: \"현재 상태는 어때\"",
+    ].join("\n"),
+    provider: "kimi",
+    model: "kimi-code default",
+    userPayload: "현재 상태는 어때",
+    risk: "read",
+    sandbox: "read-only",
+    capabilityEnvelope: {
+      mcpEnabled: ["omk-project", "memory", "reddit", "playwright", "omk-web-bridge"],
+      skillsEnabled: ["omk-context-broker", "omk-project-rules", "omk-security-review"],
+      toolsEnabled: false,
+      liveRequired: false,
+    },
+    runtimeStatus: {
+      failedMcpServers: ["omk-web-bridge"],
+      connectedMcpServers: ["omk-project", "memory"],
+    },
+  });
+
+  deepStrictEqual(result.runtimeSidecar.intent, "status");
+  deepStrictEqual(result.runtimeSidecar.requiredMcp, []);
+  deepStrictEqual(result.runtimeSidecar.optionalMcp, ["omk-project", "memory"]);
+  deepStrictEqual(result.runtimeSidecar.selectedSkills, ["omk-context-broker", "omk-project-rules"]);
+  deepStrictEqual(result.runtimeSidecar.disabledMcp, ["omk-web-bridge"]);
+  ok(result.diagnostics.warnings.includes("omk-web-bridge"));
+  ok(result.modelPrompt.length < 900, result.modelPrompt);
+  ok(!result.modelPrompt.includes("MUST activate"), result.modelPrompt);
+  ok(!result.modelPrompt.includes("reddit"), result.modelPrompt);
+  ok(!result.modelPrompt.includes("playwright"), result.modelPrompt);
+  ok(!result.modelPrompt.includes("TurnBegin"), result.modelPrompt);
+});
+
+test("DNC selects web and code-edit capabilities by intent", () => {
+  const web = compileBloatToNlp({
+    rawText: "",
+    provider: "kimi",
+    model: "kimi-code default",
+    userPayload: "X에서 최신 Claude Code 기능 찾아봐",
+    capabilityEnvelope: {
+      mcpEnabled: ["fetch", "web-reader", "playwright", "omk-project"],
+      skillsEnabled: ["omk-research-verify", "omk-typescript-strict"],
+      toolsEnabled: false,
+      liveRequired: false,
+    },
+  });
+  deepStrictEqual(web.runtimeSidecar.intent, "web_research");
+  deepStrictEqual(web.runtimeSidecar.requiredMcp, ["fetch"]);
+  ok(web.runtimeSidecar.optionalMcp.includes("web-reader"));
+
+  const edit = compileBloatToNlp({
+    rawText: "",
+    provider: "codex",
+    model: "codex-cli default",
+    userPayload: "CLI input parser 고쳐줘",
+    capabilityEnvelope: {
+      mcpEnabled: ["filesystem", "omk-project", "memory"],
+      skillsEnabled: ["omk-typescript-strict", "omk-quality-gate", "omk-test-debug-loop"],
+      toolsEnabled: false,
+      liveRequired: false,
+    },
+  });
+  deepStrictEqual(edit.runtimeSidecar.intent, "code_edit");
+  deepStrictEqual(edit.runtimeSidecar.requiredMcp, ["filesystem"]);
+  ok(edit.runtimeSidecar.selectedSkills.includes("omk-typescript-strict"));
+});
+
+test("filterMcpConfigForRuntime keeps only sidecar-selected servers", () => {
+  const filtered = filterMcpConfigForRuntime({
+    allMcpConfig: {
+      "omk-project": { command: "omk-project" },
+      memory: { command: "memory" },
+      reddit: { command: "reddit" },
+      "omk-web-bridge": { command: "bridge" },
+    },
+    sidecar: {
+      provider: "kimi",
+      model: "kimi-code default",
+      intent: "status",
+      risk: "read",
+      sandbox: "read-only",
+      requiredMcp: [],
+      optionalMcp: ["omk-project", "memory"],
+      disabledMcp: ["omk-web-bridge"],
+      selectedSkills: ["omk-context-broker"],
+      failurePolicy: "required-only",
+    },
+  });
+
+  deepStrictEqual(Object.keys(filtered.mcpServers), ["omk-project", "memory"]);
+});
+
+test("buildNativeRootLoopTurnNode compiles scoped MCP, skills, and hooks through DNC", () => {
   const node = buildNativeRootLoopTurnNode({
     bootstrap: codexBootstrap,
     prompt: "hello",
@@ -195,19 +301,23 @@ test("buildNativeRootLoopTurnNode carries scoped MCP, skills, and hooks", () => 
 
   deepStrictEqual(node.routing?.provider, "codex");
   deepStrictEqual(node.routing?.providerModel, "codex-cli default");
-  deepStrictEqual(node.routing?.mcpServers, ["github", "omk-project"]);
+  deepStrictEqual(node.routing?.mcpServers, ["omk-project"]);
   deepStrictEqual(node.routing?.requiresMcp, false);
-  deepStrictEqual(node.routing?.skills, ["omk-repo-explorer"]);
+  deepStrictEqual(node.routing?.skills, []);
   deepStrictEqual(node.routing?.hooks, ["protect-secrets.sh"]);
   deepStrictEqual(node.routing?.assignedProviderCapabilities, ["write", "patch"]);
   deepStrictEqual(node.routing?.readOnly, false);
   deepStrictEqual(node.routing?.risk, "write");
   deepStrictEqual(node.routing?.sandboxMode, "workspace-write");
-  deepStrictEqual(node.routing?.assignedCapabilities?.mcpServers, ["github", "omk-project"]);
-  deepStrictEqual(node.routing?.assignedCapabilities?.skills, ["omk-repo-explorer"]);
-  ok(node.name.includes("Schema: omk.prompt-envelope/v1"));
-  ok(node.name.includes("Payload encoding: JSON string"));
+  deepStrictEqual(node.routing?.assignedCapabilities?.mcpServers, ["omk-project"]);
+  deepStrictEqual(node.routing?.assignedCapabilities?.skills, []);
+  deepStrictEqual(node.routing?.promptMode, "dnc-nlp");
+  deepStrictEqual(node.routing?.runtimeSidecar?.intent, "chat");
+  ok(node.name.includes("You are the OMK root coordinator."));
   ok(node.name.includes(JSON.stringify("hello")));
+  ok(!node.name.includes("Schema: omk.prompt-envelope/v1"));
+  ok(!node.name.includes("github"));
+  ok(!node.name.includes("omk-repo-explorer"));
   ok(node.routing?.rationale?.includes("native-root-loop"));
 });
 
@@ -307,8 +417,12 @@ test("/model applies a session model override to the next native turn", () => {
 
   const combinedOutput = `${result.stdout}\n${result.stderr}`;
   deepStrictEqual(result.status, 0, result.stderr);
-  ok(/TASK_RUNNER_CALLED provider=codex model=codex-cli envModel=codex-cli/.test(combinedOutput), combinedOutput);
   ok(/TASK_RUNNER_CALLS=1/.test(combinedOutput), combinedOutput);
+  const captureMatch = combinedOutput.match(/TASK_RUNNER_CAPTURE=(.+)/);
+  ok(captureMatch, combinedOutput);
+  const capture = JSON.parse(captureMatch[1]);
+  deepStrictEqual(capture.routing.providerModel, "codex-cli");
+  deepStrictEqual(capture.envModel, "codex-cli");
 });
 
 test("native loop routes ambiguous Korean input as workspace-write orchestration", () => {
@@ -318,6 +432,28 @@ test("native loop routes ambiguous Korean input as workspace-write orchestration
   deepStrictEqual(result.status, 0, result.stderr);
   ok(/routing: provider=codex model=codex-cli default risk=write sandbox=workspace-write/.test(combinedOutput), combinedOutput);
   ok(/TASK_RUNNER_CALLS=1/.test(combinedOutput), combinedOutput);
+});
+
+test("native root loop passes OMK-owned scoped tool-plane assignment to TaskRunner.run", () => {
+  const result = runNativeLoopInput("hello\n/exit\n");
+
+  const combinedOutput = `${result.stdout}\n${result.stderr}`;
+  deepStrictEqual(result.status, 0, result.stderr);
+  ok(/TASK_RUNNER_CALLS=1/.test(combinedOutput), combinedOutput);
+  const captureMatch = combinedOutput.match(/TASK_RUNNER_CAPTURE=(.+)/);
+  ok(captureMatch, combinedOutput);
+  const capture = JSON.parse(captureMatch[1]);
+
+  deepStrictEqual(capture.routing.mcpServers, ["omk-project"]);
+  deepStrictEqual(capture.routing.skills, []);
+  deepStrictEqual(capture.routing.hooks, ["protect-secrets.sh"]);
+  deepStrictEqual(capture.routing.assignedCapabilities.mcpServers, ["omk-project"]);
+  deepStrictEqual(capture.routing.assignedCapabilities.skills, []);
+  deepStrictEqual(capture.routing.assignedCapabilities.hooks, ["protect-secrets.sh"]);
+  deepStrictEqual(capture.context.worker.owner, "omk");
+  deepStrictEqual(capture.context.worker.toolPlane.mcpServers, ["omk-project"]);
+  deepStrictEqual(capture.context.worker.toolPlane.skills, []);
+  deepStrictEqual(capture.context.worker.toolPlane.hooks, ["protect-secrets.sh"]);
 });
 
 test("/auth reports provider status without running a provider turn", () => {
@@ -539,6 +675,7 @@ test("tool-plane reports invalid MCP JSON without leaking config contents", asyn
     const manifest = await buildOmkToolPlaneManifest({ mcpScope: "project" });
     const serialized = JSON.stringify(manifest);
 
+    deepStrictEqual(manifest.owner, "omk");
     deepStrictEqual(manifest.diagnostics, [
       {
         level: "error",
@@ -597,7 +734,8 @@ test("buildPromptEnvelope renders a provider-neutral native root turn payload", 
   deepStrictEqual(envelope.schema, "omk.prompt-envelope/v1");
   ok(rendered.includes("Runtime surface: provider-neutral OMK root loop"));
   ok(rendered.includes("Selected provider: codex"));
-  ok(rendered.includes("MCP: enabled (1) [omk-project]; live-required=false"));
+  ok(rendered.includes("MCP selected: enabled (1) [omk-project]; required=false; failure-policy=required-only"));
+  ok(rendered.includes("Optional MCP failures are warnings unless MCP is explicitly required"));
   ok(rendered.includes("Payload encoding: JSON string"));
   ok(rendered.includes(JSON.stringify("Implement provider-neutral turn payloads")));
   ok(!/Kimi keeps root|Kimi\/OMK chat owns edits/.test(rendered));
