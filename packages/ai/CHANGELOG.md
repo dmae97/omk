@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Fixed OpenAI Codex Responses cache-affinity headers to send `session-id` instead of proxy-incompatible `session_id` ([#4967](https://github.com/earendil-works/pi/issues/4967)).
 - Fixed `openai-codex/gpt-5.3-codex-spark` generated metadata to use its 128k context window ([#4969](https://github.com/earendil-works/pi/issues/4969)).
 - Fixed OpenRouter/Poolside context overflow detection for `maximum allowed input length` errors ([#4943](https://github.com/earendil-works/pi/issues/4943)).
 

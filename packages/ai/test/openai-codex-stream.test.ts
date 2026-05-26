@@ -311,7 +311,7 @@ describe("openai-codex streaming", () => {
 		expect(result.stopReason).toBe("length");
 	});
 
-	it("sets session_id/x-client-request-id headers and prompt_cache_key when sessionId is provided", async () => {
+	it("sets session-id/x-client-request-id headers and prompt_cache_key when sessionId is provided", async () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "pi-codex-stream-"));
 		process.env.PI_CODING_AGENT_DIR = tempDir;
 
@@ -372,7 +372,8 @@ describe("openai-codex streaming", () => {
 			if (url === "https://chatgpt.com/backend-api/codex/responses") {
 				const headers = init?.headers instanceof Headers ? init.headers : undefined;
 				// Verify sessionId is set in headers
-				expect(headers?.get("session_id")).toBe(sessionId);
+				expect(headers?.get("session-id")).toBe(sessionId);
+				expect(headers?.has("session_id")).toBe(false);
 				expect(headers?.get("x-client-request-id")).toBe(sessionId);
 
 				// Verify sessionId is set in request body as prompt_cache_key
@@ -721,7 +722,7 @@ describe("openai-codex streaming", () => {
 		},
 	);
 
-	it("does not set session_id/x-client-request-id headers when sessionId is not provided", async () => {
+	it("does not set session-id/x-client-request-id headers when sessionId is not provided", async () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "pi-codex-stream-"));
 		process.env.PI_CODING_AGENT_DIR = tempDir;
 
@@ -781,6 +782,7 @@ describe("openai-codex streaming", () => {
 			if (url === "https://chatgpt.com/backend-api/codex/responses") {
 				const headers = init?.headers instanceof Headers ? init.headers : undefined;
 				// Verify headers are not set when sessionId is not provided
+				expect(headers?.has("session-id")).toBe(false);
 				expect(headers?.has("session_id")).toBe(false);
 				expect(headers?.has("x-client-request-id")).toBe(false);
 
@@ -819,6 +821,7 @@ describe("openai-codex streaming", () => {
 	it("forwards auto transport from streamSimple options and uses cached websocket context", async () => {
 		const token = mockToken();
 		const sentBodies: unknown[] = [];
+		let capturedWebSocketHeaders: Record<string, string> | undefined;
 
 		const fetchMock = vi.fn(async () => new Response("unexpected fetch", { status: 500 }));
 		vi.stubGlobal("fetch", fetchMock);
@@ -826,7 +829,10 @@ describe("openai-codex streaming", () => {
 		class MockWebSocket {
 			private listeners = new Map<string, Set<(event: unknown) => void>>();
 
-			constructor(_url: string, _protocols?: string | string[] | { headers?: Record<string, string> }) {
+			constructor(_url: string, protocols?: string | string[] | { headers?: Record<string, string> }) {
+				if (protocols && typeof protocols === "object" && !Array.isArray(protocols)) {
+					capturedWebSocketHeaders = protocols.headers;
+				}
 				queueMicrotask(() => this.dispatch("open", {}));
 			}
 
@@ -917,6 +923,9 @@ describe("openai-codex streaming", () => {
 		}).result();
 
 		expect(sentBodies).toHaveLength(1);
+		expect(capturedWebSocketHeaders?.["session-id"]).toBe("session-auto");
+		expect(capturedWebSocketHeaders?.session_id).toBeUndefined();
+		expect(capturedWebSocketHeaders?.["x-client-request-id"]).toBe("session-auto");
 		expect(global.fetch).not.toHaveBeenCalled();
 		expect(getOpenAICodexWebSocketDebugStats("session-auto")).toMatchObject({
 			cachedContextRequests: 1,
