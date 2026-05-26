@@ -9,7 +9,7 @@ import { normalizeProviderPolicy, parseProviderModelArg } from "../../providers/
 import { validateAgentYamlFile, formatAgentYamlIssues } from "../../util/agent-schema.js";
 import { ensureChatStartupArtifacts } from "../../util/chat-startup.js";
 import { ensureChatRunState, detectTmux, launchChatCockpit, isCockpitChild } from "../../util/chat-cockpit.js";
-import { buildChatAgentRuntimeMcpAllowlist, prepareChatAgentModeAgent, type ChatAgentModeResources } from "../../util/chat-agent-mode.js";
+import { buildChatAgentRuntimeMcpAllowlist, buildChatAgentRuntimeSkillAllowlist, prepareChatAgentModeAgent, type ChatAgentModeResources } from "../../util/chat-agent-mode.js";
 import { parseRuntimeScopeOption } from "../../util/runtime-scope.js";
 import { queueChatStatePatch } from "../../util/chat-state.js";
 import { initCommand } from "../init.js";
@@ -173,7 +173,8 @@ export async function chatCommand(options: {
   await ensureChatRunState(root, effectiveRunId);
 
   let effectiveAgentFile = agentFile;
-  let chatRuntimeMcpAllowlist: string[] | undefined;
+  let chatRuntimeMcpAllowlist: string[] | undefined = effectiveResources.mcpScope === "none" ? undefined : ["omk-project"];
+  let chatRuntimeSkillAllowlist: string[] | undefined;
   if (!options.agentFile) {
     try {
       const [mcpNames, skillNames, hookNames] = await Promise.all([
@@ -200,6 +201,10 @@ export async function chatCommand(options: {
         hookNames,
       };
       chatRuntimeMcpAllowlist = buildChatAgentRuntimeMcpAllowlist({
+        mode: currentMode,
+        resources: chatAgentResources,
+      });
+      chatRuntimeSkillAllowlist = buildChatAgentRuntimeSkillAllowlist({
         mode: currentMode,
         resources: chatAgentResources,
       });
@@ -361,71 +366,66 @@ export async function chatCommand(options: {
     );
   }
 
-  // ── Print OMK status summary (HUD/TODO preview before entering chat) ──
+  // ── Deferred HUD + history: fire-and-forget, let the agent loop start immediately ──
   if (!isPlain && !isCockpitChild()) {
-    try {
-      const { renderHudDashboard } = await import("../hud.js");
-      const hud = await renderHudDashboard({ runId: effectiveRunId, terminalWidth: process.stdout.columns, fetchQuota: false });
-      const lines = hud.split("\n");
-      // Use terminal height to show as much HUD as possible (reserve 4 lines for prompt)
-      const termRows = process.stdout.rows || 24;
-      const maxLines = Math.max(20, termRows - 4);
-      const summary = lines.slice(0, Math.min(lines.length, maxLines)).join("\n");
-      console.log(summary);
-      console.log(style.gray(t("chat.scrollUpForHud")));
-    } catch {
-      // Ignore HUD failure
-    }
-  }
-
-  // ── Print recent run history so users can scroll back to see past work ──
-  // PERF: consider deferring to after Kimi spawn
-  if (!isPlain && !isCockpitChild()) {
-    try {
-      const { listRunCandidates } = await import("../hud.js");
-      const { pathExists, getRunsDir, getRunPath } = await import("../../util/fs.js");
-      const { readFile } = await import("fs/promises");
-      const runsDir = getRunsDir();
-      if (await pathExists(runsDir)) {
-        const candidates = await listRunCandidates(runsDir);
-        const sorted = candidates
-          .filter((c) => c.name !== effectiveRunId)
-          .sort((a, b) => b.stateUpdatedAtMs - a.stateUpdatedAtMs)
-          .slice(0, 5);
-        if (sorted.length > 0) {
-          console.log("");
-          console.log(style.purpleBold("📜 Recent Work History"));
-          for (const c of sorted) {
-            let statusStr = style.gray("unknown");
-            try {
-              const statePath = getRunPath(c.name, "state.json");
-              const raw = await readFile(statePath, "utf-8");
-              const state = JSON.parse(raw) as Record<string, unknown>;
-              const st = String(state.status ?? "unknown");
-              if (st === "done") statusStr = style.mint(st);
-              else if (st === "running") statusStr = style.purple(st);
-              else if (st === "failed") statusStr = style.red(st);
-              else statusStr = style.gray(st);
-            } catch { /* ignore */ }
-            let goalTitle = "";
-            try {
-              const goalRaw = await readFile(getRunPath(c.name, "goal.md"), "utf-8");
-              const firstLine = goalRaw.split(/\r?\n/)[0]?.trim() ?? "";
-              goalTitle = firstLine.replace(/^#+\s*/, "").slice(0, 30);
-            } catch { /* ignore */ }
-            const date = new Date(c.stateUpdatedAtMs);
-            const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-            const markers = [c.hasGoal ? "📝" : "", c.hasPlan ? "📐" : ""].join("");
-            const name = c.name.length > 34 ? c.name.slice(0, 31) + "…" : c.name;
-            const titlePart = goalTitle ? style.gray(` → ${goalTitle}`) : "";
-            console.log(`  ${style.gray("•")} ${style.cream(name)} ${statusStr} ${style.gray(dateStr)} ${markers}${titlePart}`);
+    // Show a minimal status line while we defer the full HUD
+    const providerLabel = providerPolicy === "auto" ? "auto-detect" : providerPolicy;
+    const modeLabel = currentMode;
+    const mcpLabel = effectiveResources.mcpScope === "none" ? "mcp=off" : `mcp=${effectiveResources.mcpScope}`;
+    console.log(style.phosphorDim(`  ⚡ ${providerLabel} · ${modeLabel} · ${mcpLabel} · workers=${effectiveWorkers}`));
+    console.log(style.gray(`  Run ${style.cream("omk hud")} for dashboard, ${style.cream("omk runs")} for history.`));
+    // Defer full HUD + history rendering to after the agent loop starts (non-blocking)
+    setImmediate(async () => {
+      try {
+        const { renderHudDashboard } = await import("../hud.js");
+        const hud = await renderHudDashboard({ runId: effectiveRunId, terminalWidth: process.stdout.columns, fetchQuota: false });
+        const lines = hud.split("\n");
+        const termRows = process.stdout.rows || 24;
+        const maxLines = Math.max(10, termRows - 4);
+        const summary = lines.slice(0, Math.min(lines.length, maxLines)).join("\n");
+        process.stderr.write(`\n${summary}\n${style.gray(t("chat.scrollUpForHud"))}\n`);
+      } catch { /* ignore */ }
+    });
+    setImmediate(async () => {
+      try {
+        const { listRunCandidates: listRuns } = await import("../hud.js");
+        const { pathExists, getRunsDir, getRunPath } = await import("../../util/fs.js");
+        const { readFile } = await import("fs/promises");
+        const runsDir = getRunsDir();
+        if (await pathExists(runsDir)) {
+          const candidates = await listRuns(runsDir);
+          const sorted = candidates
+            .filter((c) => c.name !== effectiveRunId)
+            .sort((a, b) => b.stateUpdatedAtMs - a.stateUpdatedAtMs)
+            .slice(0, 3);
+          if (sorted.length > 0) {
+            process.stderr.write(`\n${style.purpleBold("📜 Recent Work History")}\n`);
+            for (const c of sorted) {
+              let statusStr = style.gray("unknown");
+              try {
+                const statePath = getRunPath(c.name, "state.json");
+                const raw = await readFile(statePath, "utf-8");
+                const state = JSON.parse(raw) as Record<string, unknown>;
+                const st = String(state.status ?? "unknown");
+                if (st === "done") statusStr = style.mint(st);
+                else if (st === "running") statusStr = style.purple(st);
+                else if (st === "failed") statusStr = style.red(st);
+                else statusStr = style.gray(st);
+              } catch { /* ignore */ }
+              let goalTitle = "";
+              try {
+                const goalRaw = await readFile(getRunPath(c.name, "goal.md"), "utf-8");
+                const firstLine = goalRaw.split(/\r?\n/)[0]?.trim() ?? "";
+                goalTitle = firstLine.replace(/^#+\s*/, "").slice(0, 30);
+              } catch { /* ignore */ }
+              const titlePart = goalTitle ? style.gray(` → ${goalTitle}`) : "";
+              process.stderr.write(`  ${style.gray("•")} ${style.cream(c.name.slice(0, 31))} ${statusStr}${titlePart}\n`);
+            }
+            process.stderr.write(style.gray(`  Run ${style.cream("omk runs")} for full history\n`));
           }
-          console.log(style.gray(`  Run ${style.cream("omk runs")} for full history`));
         }
-      }
-    } catch {
-      // Ignore recent-run rendering failure
-    }
+      } catch { /* ignore */ }
+    });
   }
 
   // ── Resume: show existing TODO summary if resuming ──
@@ -457,6 +457,7 @@ export async function chatCommand(options: {
     executionPrompt,
     ui,
     chatRuntimeMcpAllowlist,
+    chatRuntimeSkillAllowlist,
   });
 
   if (exitCode !== 0) process.exitCode = exitCode;

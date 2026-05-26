@@ -1,7 +1,7 @@
 import type { TaskResult, TaskRunner } from "../contracts/orchestration.js";
 import type { RuntimeRouteDecision, RuntimeId } from "../runtime/adapter.js";
 
-export type KnownProviderId = "codex" | "commandcode" | "deepseek" | "kimi" | "opencode" | "openrouter" | "qwen";
+export type KnownProviderId = "codex" | "commandcode" | "deepseek" | "kimi" | "local-llm" | "opencode" | "openrouter" | "qwen";
 export type ProviderId = KnownProviderId | (string & {});
 export type ProviderPolicy = "auto" | "authority" | KnownProviderId;
 export type ProviderRisk = "read" | "write" | "shell" | "merge";

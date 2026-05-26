@@ -15,30 +15,35 @@ export function createChatAdvisoryRuntime(): AgentRuntime {
       if (process.env.DEEPSEEK_API_KEY) available.push("deepseek");
 
       const sep = "\n" + "─".repeat(60) + "\n";
+      const hasNpm = (() => { try { execSync("which npm", { stdio: "ignore" }); return true; } catch { return false; } })();
+      const hasCargo = (() => { try { execSync("which cargo", { stdio: "ignore" }); return true; } catch { return false; } })();
       const msg = [
         sep,
         "⚠  No AI runtime adapter detected.",
         "",
-        "OMK started in advisory mode. To enable interactive coding:",
+        "OMK is running in advisory mode. To enable the interactive agent:",
         "",
         "  1. Run: omk auth",
-        "     (shows available providers + setup instructions)",
+        "     (shows available providers + guided setup)",
         "",
         "  2. Install a CLI runtime:",
-        "     • npm install -g @openai/codex",
-        "     • npm install -g @anthropic-ai/kimi-code  && kimi login",
-        "     • cargo install opencode",
+        hasNpm ? "     • npm install -g @openai/codex" : undefined,
+        hasNpm ? "     • npm install -g @anthropic-ai/kimi-code  && kimi login" : undefined,
+        hasCargo ? "     • cargo install opencode" : undefined,
         "",
-        "  3. Or set an API key:",
+        "  3. Or set API keys:",
         "     • export DEEPSEEK_API_KEY=\"sk-...\"",
+        "     • export OPENAI_API_KEY=\"sk-...\"",
         "",
-        "  4. Then restart: omk chat --provider auto",
+        "  4. Then try again: omk chat",
         "",
         available.length > 0
           ? `Detected: ${available.join(", ")}`
-          : "No runtimes detected. Install one of the above.",
+          : "No runtimes detected. Install one from step 2.",
+        "",
+        "Quick start: npm install -g @openai/codex && codex login && omk chat",
         sep,
-      ].join("\n");
+      ].filter((line): line is string => line !== undefined).join("\n");
 
       return { success: true, stdout: msg, stderr: "" };
     },

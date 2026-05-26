@@ -46,6 +46,15 @@ function detectProvider(
         authHint: "Set DEEPSEEK_API_KEY env var",
         modelHint: env.DEEPSEEK_MODEL ?? "deepseek-chat",
       };
+    case "local":
+    case "llama":
+    case "local-llm":
+      return {
+        sessionMode: "api-turn",
+        installHint: "LOCAL_LLM_BASE_URL=http://localhost:8080/v1 LOCAL_LLM_MODEL=qwen3-coder-30b-a3b",
+        authHint: "Start llama-server or llama.cpp with --port 8080",
+        modelHint: env.LOCAL_LLM_MODEL ?? "qwen3-coder-30b-a3b",
+      };
     case "commandcode":
       return {
         bin: env.COMMANDCODE_BIN ?? "commandcode",
@@ -88,6 +97,7 @@ async function resolveAutoProvider(env: Record<string, string | undefined>): Pro
 
   const opencodeBin = env.OPENCODE_BIN ?? "opencode";
   if (await checkCommand(opencodeBin).catch(() => false)) return { provider: "opencode", runtimeId: "opencode-cli" };
+  if (env.LOCAL_LLM_BASE_URL) return { provider: "local-llm", runtimeId: "local-llm" };
   if (env.DEEPSEEK_API_KEY) return { provider: "deepseek", runtimeId: "deepseek-api" };
   return undefined;
 }

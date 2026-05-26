@@ -32,6 +32,19 @@ export interface DagNodeRouting {
   assignedProviderAuthority?: "authority" | "direct" | "advisory" | "veto";
   assignedProviderCapabilities?: string[];
   risk?: "read" | "write" | "shell" | "merge";
+  promptMode?: "default" | "dnc-nlp";
+  runtimeSidecar?: {
+    provider: string;
+    model: string;
+    intent: string;
+    risk: string;
+    sandbox: string;
+    requiredMcp: string[];
+    optionalMcp: string[];
+    disabledMcp: string[];
+    selectedSkills: string[];
+    failurePolicy: "required-only" | "strict";
+  };
   executionPrompt?: string;
   approvalPolicy?: string;
   sandboxMode?: "read-only" | "workspace-write";

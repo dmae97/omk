@@ -14,7 +14,7 @@ import type {
 } from "./agent-runtime.js";
 import type { ContextCapsule } from "./context-capsule.js";
 import { capsuleToTask } from "./context-broker-converter.js";
-import { runShell, checkCommand } from "../util/shell.js";
+import { runShell, runShellStreaming, checkCommand } from "../util/shell.js";
 
 export interface CodexRuntimeOptions {
   bin?: string;
@@ -136,14 +136,23 @@ export class CodexRuntime implements AgentRuntime {
     }
 
     try {
-      const shellResult = await runShell(this.bin, args, {
+      const useStreaming = typeof task.context.onOutput === "function";
+      const shellFn = useStreaming ? runShellStreaming : runShell;
+      const shellOptions: Parameters<typeof runShellStreaming>[2] = {
         cwd: this.cwd,
         input: prompt,
         timeout: this.timeoutMs,
         signal: task.context.abortSignal,
         inheritEnv: false,
         env,
-      });
+      };
+      if (useStreaming && task.context.onOutput) {
+        shellOptions.onStdout = (line: string) => {
+          task.context.onOutput?.(line);
+        };
+      }
+
+      const shellResult = await (shellFn as typeof runShell)(this.bin, args, shellOptions as Parameters<typeof runShell>[2]);
 
       if (task.context.abortSignal?.aborted) {
         return {

@@ -23,7 +23,7 @@ import { resolveRuntimeBootstrap } from "../../runtime/runtime-bootstrap.js";
 import { buildOmkToolPlaneManifest } from "../../runtime/tool-plane.js";
 import { runNativeOmkRootLoop } from "./native-root-loop.js";
 import { isCockpitChild } from "../../util/chat-cockpit.js";
-import { status, style } from "../../util/theme.js";
+import { style } from "../../util/theme.js";
 import { PlainModernRenderer } from "../../cli/ui/plain-renderer.js";
 
 export interface ChatRuntimeInput {
@@ -42,6 +42,7 @@ export interface ChatRuntimeInput {
   executionPrompt: string;
   ui: ChatUi;
   chatRuntimeMcpAllowlist: string[] | undefined;
+  chatRuntimeSkillAllowlist: string[] | undefined;
 }
 
 export function shouldUseDirectKimiFallback(
@@ -90,6 +91,12 @@ function buildBaseChatRuntimeEnv(root: string, sessionId: string): Record<string
     if (value !== undefined) env[name] = value;
   }
   return { ...env, ...createOmkSessionEnv(root, sessionId) };
+}
+
+function filterRuntimeCapabilityNames(names: readonly string[], allowlist: readonly string[] | undefined): string[] {
+  if (allowlist === undefined) return [...names];
+  const allowed = new Set(allowlist);
+  return names.filter((name) => allowed.has(name));
 }
 
 function attachSelectedProviderEnv(
@@ -169,9 +176,9 @@ export async function runChatRuntime(
     currentMode,
     ui,
     chatRuntimeMcpAllowlist,
+    chatRuntimeSkillAllowlist,
   } = input;
 
-  const isPlain = layout === "plain";
   const directKimiFallbackEnabled = shouldUseDirectKimiFallback(providerPolicy);
 
   // ── Live heartbeat: keep state.json fresh while chat is active ──
@@ -189,13 +196,6 @@ export async function runChatRuntime(
   env.OMK_WORKERS = effectiveWorkers;
   if (providerPolicy && providerPolicy !== "auto" && providerPolicy !== "kimi") {
     env.OMK_PROVIDER_POLICY = providerPolicy;
-    if (!isPlain && !isCockpitChild()) {
-      console.log(
-        status.warn(
-          `Provider policy '${providerPolicy}' is active in chat mode. Note: omk chat runs the primary CLI natively; external providers work best with \`omk parallel\` or \`omk run\`.`
-        )
-      );
-    }
   }
   if (modelArg.model) {
     env.OMK_PROVIDER_MODEL = modelArg.model;
@@ -295,17 +295,26 @@ export async function runChatRuntime(
           getActiveSkillNames(effectiveResources.skillsScope),
           getActiveHookNames(root),
         ]);
+        const runtimeSkillNames = filterRuntimeCapabilityNames(skillNames, chatRuntimeSkillAllowlist);
         const toolPlane = await buildOmkToolPlaneManifest({
           mcpScope,
           mcpAllowlist: chatRuntimeMcpAllowlist,
-          skills: skillNames,
+          skills: runtimeSkillNames,
           hooks: hookNames,
         });
         if (toolPlane.mcpConfigFile) {
           env.OMK_MCP_CONFIG_FILE = toolPlane.mcpConfigFile;
           env.OMK_MCP_SERVERS = toolPlane.mcpServers.join(",");
         }
-        const runner = await createRuntimeBackedTaskRunner({ cwd: root, env, runId: effectiveRunId, goal: "native-chat" });
+        const runner = await createRuntimeBackedTaskRunner({
+          cwd: root,
+          env,
+          runId: effectiveRunId,
+          goal: "native-chat",
+          onOutput: (text: string) => {
+            process.stdout.write(text);
+          },
+        });
         const renderer = ui === "plain-modern" ? new PlainModernRenderer() : undefined;
         exitCode = await runNativeOmkRootLoop({
           bootstrap,

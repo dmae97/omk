@@ -15,6 +15,8 @@ import { createKimiTaskRunner, type KimiTaskRunnerOptions } from "../kimi/runner
 export type KimiPrintRuntimeOptions = KimiTaskRunnerOptions;
 
 export function createKimiPrintRuntime(options: KimiPrintRuntimeOptions = {}): AgentRuntime {
+  let pendingOnOutput: ((text: string) => void) | undefined;
+
   return {
     id: "kimi-print",
     priority: 100,
@@ -37,6 +39,7 @@ export function createKimiPrintRuntime(options: KimiPrintRuntimeOptions = {}): A
     },
 
     async execute(task: AgentTask): Promise<AgentResult> {
+      pendingOnOutput = task.context.onOutput;
       const toolNames = task.tools.available.map((tool) => tool.name);
       const capsule: ContextCapsule = {
         runId: task.context.runId,
@@ -102,7 +105,12 @@ export function createKimiPrintRuntime(options: KimiPrintRuntimeOptions = {}): A
         };
       }
 
-      const runner = createKimiTaskRunner(options);
+      const runner = createKimiTaskRunner({
+        ...options,
+        onOutput: pendingOnOutput,
+      });
+
+      pendingOnOutput = undefined;
 
       const resources = await getOmkResourceSettings();
       const env: Record<string, string> = {
