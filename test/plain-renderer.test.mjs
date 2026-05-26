@@ -34,6 +34,14 @@ test("renderAssistantCard wraps assistant output without adding ANSI", () => {
   doesNotMatch(output, /\u001b\[[0-9;]*m/);
 });
 
+test("renderAssistantCard sanitizes control-plane leakage", () => {
+  const output = renderAssistantCard("Loop Guard: {\"stop\": true}\nraw metadata");
+
+  match(output, /검증 완료/);
+  doesNotMatch(output, /Loop Guard/);
+  doesNotMatch(output, /raw metadata/);
+});
+
 test("PlainModernRenderer routes status to stderr and assistant output to stdout", () => {
   const stdout = [];
   const stderr = [];
@@ -58,4 +66,22 @@ test("PlainModernRenderer routes status to stderr and assistant output to stdout
   match(statusOutput, /● Finished 3\.4s · exit 0/);
   strictEqual(assistantOutput, "\n● Assistant\nanswer\n");
   ok(!assistantOutput.includes("Route"));
+});
+
+test("PlainModernRenderer sanitizes control and error output", () => {
+  const stdout = [];
+  const stderr = [];
+  const renderer = new PlainModernRenderer({
+    stdout: { write: (chunk) => stdout.push(String(chunk)) },
+    stderr: { write: (chunk) => stderr.push(String(chunk)), isTTY: false },
+  });
+
+  renderer.emit({ type: "control:output", text: "The model may report evidence\nraw payload" });
+  renderer.emit({ type: "turn:error", message: "Loop Guard: {\"stop\": true}" });
+
+  const output = `${stdout.join("")}${stderr.join("")}`;
+  match(output, /검증 완료/);
+  doesNotMatch(output, /The model may report evidence/);
+  doesNotMatch(output, /Loop Guard/);
+  doesNotMatch(output, /raw payload/);
 });
