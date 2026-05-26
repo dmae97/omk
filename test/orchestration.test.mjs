@@ -1703,6 +1703,76 @@ test("executor bypasses ensemble fanout for optional DeepSeek provider lanes", a
   assert.equal(result.state.nodes[0].attempts.at(-1)?.providerParticipation, "direct");
 });
 
+test("executor passes OMK-owned worker context to parallel TaskRunner nodes", async () => {
+  let capturedContext;
+  let capturedEnv;
+  const startedAt = new Date(0).toISOString();
+  const dag = createDag({
+    nodes: [
+      {
+        id: "owned-worker",
+        name: "Implement owned worker context",
+        role: "coder",
+        dependsOn: [],
+        maxRetries: 1,
+        routing: {
+          provider: "codex",
+          readOnly: false,
+          requiresMcp: true,
+          requiresToolCalling: true,
+          skills: ["omk-typescript-strict"],
+          mcpServers: ["omk-project"],
+          hooks: ["protect-secrets.sh"],
+          tools: ["apply_patch"],
+          assignedProviderCapabilities: ["write", "patch", "shell", "mcp"],
+        },
+      },
+    ],
+  });
+  const executor = createExecutor({
+    ensemble: false,
+    resumeFromState: {
+      schemaVersion: 1,
+      runId: "executor-owned-context-test",
+      goalId: "goal-owned-context",
+      goalSnapshot: {
+        title: "Parallel owned context",
+        objective: "Coordinate workers with assigned skills, hooks, and MCP",
+        successCriteria: [],
+      },
+      nodes: dag.nodes.map((node) => ({ ...node })),
+      startedAt,
+    },
+  });
+  const runner = {
+    async run(_node, env, _signal, context) {
+      capturedEnv = env;
+      capturedContext = context;
+      return { success: true, stdout: "## Evidence\nok", stderr: "" };
+    },
+  };
+
+  const result = await executor.execute(dag, runner, {
+    runId: "executor-owned-context-test",
+    workers: 1,
+    approvalPolicy: "yolo",
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(capturedContext.worker.owner, "omk");
+  assert.equal(capturedContext.goal.goalId, "goal-owned-context");
+  assert.equal(capturedContext.goal.objective, "Coordinate workers with assigned skills, hooks, and MCP");
+  assert.deepEqual(capturedContext.worker.toolPlane.mcpServers, ["omk-project"]);
+  assert.deepEqual(capturedContext.worker.toolPlane.skills, ["omk-typescript-strict"]);
+  assert.deepEqual(capturedContext.worker.toolPlane.hooks, ["protect-secrets.sh"]);
+  assert.deepEqual(capturedContext.worker.toolPlane.tools, ["apply_patch"]);
+  assert.equal(capturedEnv.OMK_WORKER_MANIFEST_OWNER, "omk");
+  assert.equal(capturedEnv.OMK_NODE_MCP_SERVERS, "omk-project");
+  assert.equal(capturedEnv.OMK_NODE_SKILLS, "omk-typescript-strict");
+  assert.equal(capturedEnv.OMK_NODE_HOOKS, "protect-secrets.sh");
+  assert.equal(capturedEnv.OMK_NODE_TOOLS, "apply_patch");
+});
+
 test("executor rejects fractional worker counts", async () => {
   const executor = createExecutor({ ensemble: false });
   const dag = createDag({

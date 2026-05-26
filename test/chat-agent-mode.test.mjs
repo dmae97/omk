@@ -430,6 +430,41 @@ test("chat agent harness routes web bridge MCP only to browser-relevant lanes by
   }).text, /Web bridge: route `omk-web-bridge`/);
 });
 
+test("chat agent harness assigns explicit skills hooks and MCP per worker lane", () => {
+  const manifest = buildChatAgentHarnessManifest({
+    mode: "agent",
+    runId: "chat-agent-worker-capabilities",
+    resources: {
+      workers: "2",
+      resourceProfile: "standard",
+      approvalPolicy: "interactive",
+      providerPolicy: "auto",
+      ensembleDefaultEnabled: true,
+      mcpScope: "project",
+      skillsScope: "project",
+      hooksScope: "project",
+      mcpNames: ["omk-project", "github", "omk-web-bridge"],
+      skillNames: ["omk-typescript-strict", "omk-test-debug-loop", "omk-repo-explorer"],
+      hookNames: ["protect-secrets.sh", "subagent-stop-audit.sh"],
+    },
+  });
+
+  const workerNodes = manifest.virtualDag.nodes.filter((node) => node.source === "worker");
+  assert.equal(workerNodes.length, 2);
+  for (const node of workerNodes) {
+    assert.ok(node.assignedCapabilities);
+    assert.equal(node.assignedCapabilities.mcp.includes("omk-web-bridge"), false);
+    assert.ok(node.assignedCapabilities.mcp.includes("omk-project"));
+    assert.ok(node.assignedCapabilities.mcp.includes("github"));
+    assert.ok(node.assignedCapabilities.skills.includes("omk-typescript-strict"));
+    assert.ok(node.assignedCapabilities.skills.includes("omk-test-debug-loop"));
+    assert.ok(node.assignedCapabilities.hooks.includes("protect-secrets.sh"));
+  }
+  assert.equal(manifest.virtualDag.nodes.find((node) => node.id === "capability-skill-agent")?.required, false);
+  assert.equal(manifest.virtualDag.nodes.find((node) => node.id === "capability-mcp-agent")?.required, false);
+  assert.equal(manifest.virtualDag.nodes.find((node) => node.id === "capability-hook-agent")?.required, false);
+});
+
 test("prepareChatAgentModeAgent writes run-scoped wrapper agent and prompt", async () => {
   const root = await mkdtemp(join(tmpdir(), "omk-chat-agent-mode-"));
   try {

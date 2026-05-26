@@ -12,6 +12,7 @@ export interface OmkToolPlaneDiagnostic {
 }
 
 export interface OmkToolPlaneManifest {
+  readonly owner: "omk";
   readonly mcpServers: readonly string[];
   readonly mcpConfigFile?: string;
   readonly skills: readonly string[];
@@ -42,6 +43,7 @@ export async function buildOmkToolPlaneManifest(
     throw new Error(formatRequiredRuntimeMcpError(diagnostics, resolved.mcpConfigFile, runtimeRead.servers));
   }
   const manifest = {
+    owner: "omk" as const,
     mcpServers: runtimeRead.servers,
     mcpConfigFile: resolved.mcpConfigFile ?? undefined,
     skills: unique(input.skills ?? []),

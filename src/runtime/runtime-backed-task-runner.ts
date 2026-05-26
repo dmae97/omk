@@ -8,9 +8,11 @@
  */
 
 import type { TaskRunner, TaskResult } from "../contracts/orchestration.js";
+import type { TaskRunContext } from "../contracts/worker-context.js";
 import type { RuntimeId, AgentResult, AgentRunResult } from "./agent-runtime.js";
 import { toTaskResult } from "./agent-runtime.js";
 import { capsuleToTask } from "./context-broker-converter.js";
+import { applyTaskRunContextToAgentTask, envFromWorkerManifest } from "./worker-manifest.js";
 import { createRuntimeRegistry, type RuntimeRegistry } from "./runtime-registry.js";
 import { createRuntimeRouter } from "./runtime-router.js";
 import { createContextBroker } from "./context-broker.js";
@@ -20,6 +22,7 @@ import { CodexRuntime } from "./codex-runtime.js";
 import { createOpencodeCliAdapter } from "../adapters/opencode/opencode-cli-adapter.js";
 import { createCommandcodeCliAdapter } from "../adapters/commandcode/commandcode-cli-adapter.js";
 import { createChatAdvisoryRuntime } from "./chat-advisory-runtime.js";
+import { LocalLlmRuntime } from "./local-llm-runtime.js";
 import { checkCommand, resolveKimiBin } from "../util/shell.js";
 
 export interface RuntimeBackedTaskRunnerOptions {
@@ -30,6 +33,7 @@ export interface RuntimeBackedTaskRunnerOptions {
   env?: Record<string, string>;
   runId?: string;
   goal?: string;
+  onOutput?: (text: string) => void;
 }
 
 async function createDefaultRuntimeRegistry(
@@ -49,6 +53,16 @@ async function createDefaultRuntimeRegistry(
     registry.register(
       createKimiPrintRuntime({ cwd: options.cwd, env: options.env })
     );
+  }
+
+  // local-llm (OpenAI-compatible local endpoint)
+  const localBaseUrl = options.env?.LOCAL_LLM_BASE_URL ?? process.env.LOCAL_LLM_BASE_URL;
+  if (localBaseUrl) {
+    registry.register(new LocalLlmRuntime({
+      baseUrl: localBaseUrl,
+      model: options.env?.LOCAL_LLM_MODEL ?? process.env.LOCAL_LLM_MODEL,
+      apiKey: options.env?.LOCAL_LLM_API_KEY ?? process.env.LOCAL_LLM_API_KEY,
+    }));
   }
 
   // deepseek-api
@@ -103,7 +117,7 @@ export async function createRuntimeBackedTaskRunner(
   });
 
   const runner: TaskRunner = {
-    async run(node, env, signal): Promise<TaskResult> {
+    async run(node, env, signal, runContext?: TaskRunContext): Promise<TaskResult> {
       const runState = options.runId
         ? {
             schemaVersion: 1 as const,
@@ -119,13 +133,21 @@ export async function createRuntimeBackedTaskRunner(
         ?? (routing?.fallbackProvider ? [routing.fallbackProvider] : []);
       const abortSignal = signal ?? new AbortController().signal;
 
-      const taskEnv = { ...(options.env ?? {}), ...(env ?? {}) };
-      const task = await capsuleToTask(capsule, {
+      const taskEnv = {
+        ...(options.env ?? {}),
+        ...(env ?? {}),
+        ...(runContext ? envFromWorkerManifest(runContext.worker) : {}),
+      };
+      const task = applyTaskRunContextToAgentTask(await capsuleToTask(capsule, {
         signal: abortSignal,
         cwd: options.cwd,
         env: taskEnv,
         fallbackChain: providerFallbackChain,
-      });
+      }), runContext);
+
+      if (options.onOutput) {
+        task.context.onOutput = options.onOutput;
+      }
 
       let taskResult: TaskResult;
       if (typeof runtimeRouter.execute === "function") {
@@ -153,7 +175,8 @@ export async function createRuntimeBackedTaskRunner(
       // Ensure routing metadata is present even if the router failed to attach it
       taskResult.metadata = {
         ...(taskResult.metadata ?? {}),
-        fallbackChain: providerFallbackChain,
+        fallbackChain: task.providerPolicy.fallbackChain,
+        ...(runContext && { workerOwner: runContext.worker.owner }),
       };
 
       return taskResult;

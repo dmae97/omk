@@ -27,12 +27,16 @@ import { buildCapabilityInjection, applyCapabilityInjectionToRouting } from "../
 import { capabilityScopesFromRouting, mergeCapabilityScopes, type NodeCapabilityScopes } from "./capability-routing.js";
 import { assignSkills } from "./skill-assigner.js";
 import { dagNodeRoutingEnv } from "./routing.js";
+import { buildTaskRunContext, envFromWorkerManifest } from "../runtime/worker-manifest.js";
+import type { TaskRunContext, WorkerManifest } from "../contracts/worker-context.js";
 
 import { checkEvidenceGates, type EvidenceGate, type EvidenceResult } from "./evidence-gate.js";
 
 export interface ParallelOrchestratorOptions {
   dag: Dag;
   runId: string;
+  goalId?: string;
+  objective?: string;
   maxWorkers: number;
   cwd?: string;
   timeout?: number;
@@ -72,9 +76,20 @@ export interface ParallelWorkerCapabilityContext {
     hooks: string[];
   };
   readonly env: Record<string, string>;
+  readonly workerManifest: WorkerManifest;
+  readonly runContext: TaskRunContext;
 }
 
-export function buildParallelWorkerCapabilityContext(node: DagNode, dag?: Dag): ParallelWorkerCapabilityContext {
+export function buildParallelWorkerCapabilityContext(
+  node: DagNode,
+  dag?: Dag,
+  options: {
+    readonly runId?: string;
+    readonly root?: string;
+    readonly goalId?: string;
+    readonly objective?: string;
+  } = {}
+): ParallelWorkerCapabilityContext {
   const assigned = assignSkills(node);
   const scopes = mergeCapabilityScopes(assigned, capabilityScopesFromRouting(node.routing));
   const injection = buildCapabilityInjection({
@@ -89,6 +104,20 @@ export function buildParallelWorkerCapabilityContext(node: DagNode, dag?: Dag): 
     ...node,
     routing: applyCapabilityInjectionToRouting(node.routing ?? {}, injection),
   };
+  const runContext = buildTaskRunContext({
+    runId: options.runId ?? "local-parallel",
+    ...(options.goalId ? { goalId: options.goalId } : {}),
+    root: options.root ?? process.cwd(),
+    node: routedNode,
+    objective: options.objective ?? routedNode.name,
+    toolPlane: {
+      mcpServers: scopes.mcpServers,
+      skills: scopes.skills,
+      hooks: scopes.hooks,
+      tools: scopes.tools,
+      requiresRuntimeMcp: routedNode.routing?.requiresMcp,
+    },
+  });
   return {
     node: routedNode,
     scopes,
@@ -101,6 +130,8 @@ export function buildParallelWorkerCapabilityContext(node: DagNode, dag?: Dag): 
       ...dagNodeRoutingEnv(routedNode, dag),
       OMK_NODE_CAPABILITY_SUMMARY: injection.summary.rationale,
     },
+    workerManifest: runContext.worker,
+    runContext,
   };
 }
 
@@ -110,6 +141,7 @@ export function buildParallelWorkerEnv(
   capabilities?: unknown
 ): Record<string, string> {
   const workerEnv: Record<string, string> = {
+    ...envFromWorkerManifest(capabilityContext.workerManifest),
     ...capabilityContext.env,
   };
   if (providerPolicy) {
@@ -124,6 +156,8 @@ export function buildParallelWorkerEnv(
 export class ParallelOrchestrator {
   private dag: Dag;
   private runId: string;
+  private goalId?: string;
+  private objective?: string;
   private maxWorkers: number;
   private cwd: string;
   private timeout: number;
@@ -145,6 +179,8 @@ export class ParallelOrchestrator {
   constructor(options: ParallelOrchestratorOptions) {
     this.dag = options.dag;
     this.runId = options.runId;
+    this.goalId = options.goalId;
+    this.objective = options.objective;
     this.maxWorkers = options.maxWorkers;
     this.cwd = options.cwd ?? process.cwd();
     this.timeout = options.timeout ?? 600000; // 10분 기본
@@ -328,7 +364,12 @@ export class ParallelOrchestrator {
     let workerNode = node;
 
     try {
-      const capabilityContext = buildParallelWorkerCapabilityContext(node, this.dag);
+      const capabilityContext = buildParallelWorkerCapabilityContext(node, this.dag, {
+        runId: this.runId,
+        root: this.cwd,
+        goalId: this.goalId,
+        objective: this.objective,
+      });
       workerNode = capabilityContext.node;
 
       // Intent classification + runtime routing
@@ -340,9 +381,14 @@ export class ParallelOrchestrator {
         node: workerNode,
       } as unknown as ContextCapsule;
 
-      const decision = this.runtimeRouter.select(capsule);
-      const intent = decision.intent;
-      const selectedRuntime = decision.runtime.id;
+      const intent = this.runtimeRouter.classifyIntent(capsule);
+      let selectedRuntime = "runtime-backed";
+      try {
+        selectedRuntime = this.runtimeRouter.select(capsule).runtime.id;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logStreamer.log("warn", `Runtime preselection deferred for ${workerNode.id}: ${message}`);
+      }
       this.logStreamer.log("info", `Node ${workerNode.id} classified as intent: ${intent}, selected runtime: ${selectedRuntime}`);
       this.nodeRuntimeMap.set(workerNode.id, selectedRuntime);
 
@@ -350,9 +396,29 @@ export class ParallelOrchestrator {
       const nodeMeta = this.executionPlan.nodeMeta.get(workerNode.id);
       const providerPolicy = nodeMeta?.providerPolicy;
       const capabilities = nodeMeta?.capabilities;
+      const workerRunContext = buildTaskRunContext({
+        runId: this.runId,
+        ...(this.goalId ? { goalId: this.goalId } : {}),
+        root: this.cwd,
+        node: workerNode,
+        objective: this.objective ?? workerNode.name,
+        toolPlane: {
+          mcpServers: capabilityContext.scopes.mcpServers,
+          skills: capabilityContext.scopes.skills,
+          hooks: capabilityContext.scopes.hooks,
+          tools: capabilityContext.scopes.tools,
+          requiresRuntimeMcp: workerNode.routing?.requiresMcp,
+        },
+        providerPolicy,
+        capabilities,
+        selectedRuntimeId: selectedRuntime,
+      });
 
       // Build worker env with only scoped policy/capability metadata.
-      const workerEnv = buildParallelWorkerEnv(capabilityContext, providerPolicy, capabilities);
+      const workerEnv = {
+        ...buildParallelWorkerEnv(capabilityContext, providerPolicy, capabilities),
+        ...envFromWorkerManifest(workerRunContext.worker),
+      };
 
       // 워커 상태 업데이트: 실행 중
       this.stateManager.startWorker(workerNode.id, capabilityContext.assignment);
@@ -374,6 +440,7 @@ export class ParallelOrchestrator {
       const worker = await createAgentWorker(workerNode, this.runId, logHandle, {
         cwd: this.cwd,
         env: workerEnv,
+        runContext: workerRunContext,
       });
 
       this.activeWorkers.set(workerNode.id, worker);

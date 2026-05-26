@@ -5,7 +5,8 @@
 
 import type { DagNode } from "../../orchestration/dag.js";
 import type { DeepSeekRoutePlan, ProviderAssistMetadata } from "../types.js";
-import type { TaskResult } from "../../contracts/orchestration.js";
+import type { TaskResult, TaskRunner } from "../../contracts/orchestration.js";
+import type { TaskRunContext } from "../../contracts/worker-context.js";
 import { DEEPSEEK_V4_FLASH_MODEL, DEEPSEEK_V4_PRO_MODEL } from "../router.js";
 import { summarizeAdvisory } from "./results.js";
 
@@ -87,12 +88,13 @@ export function parseStructuredAdvisory(stdout: string): DeepSeekAdvisoryOutput 
 export async function runDeepSeekAdvisory(options: {
   node: DagNode;
   env: Record<string, string>;
-  runner: import("../../contracts/orchestration.js").TaskRunner;
+  runner: TaskRunner;
   routeReason: string;
   plan: DeepSeekRoutePlan;
   invocationKey: string;
   traceEnv: Record<string, string>;
   signal?: AbortSignal;
+  context?: TaskRunContext;
 }): Promise<{ success: boolean; result: TaskResult; summary: string; failureReason?: string; structured?: DeepSeekAdvisoryOutput; metadata: ProviderAssistMetadata }> {
   let result: TaskResult;
   const controller = new AbortController();
@@ -114,7 +116,7 @@ export async function runDeepSeekAdvisory(options: {
       OMK_PROVIDER_REQUESTED: "deepseek",
       OMK_PROVIDER_ROUTE_REASON: options.routeReason,
       OMK_PROVIDER_AUTHORITY: "advisory",
-    }, controller.signal);
+    }, controller.signal, options.context);
     const timeoutPromise = new Promise<TaskResult>((resolve) => {
       timeout = setTimeout(() => {
         const reason = new Error(`DeepSeek advisory timed out after ${timeoutMs}ms`);

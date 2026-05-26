@@ -3,6 +3,7 @@
 // Read-only for all other workers. Version-bump only via Integration Worker.
 
 import type { Dag, DagNode } from "./dag.js";
+import type { TaskRunContext } from "./worker-context.js";
 
 export type ApprovalPolicy = "interactive" | "auto" | "yolo" | "block";
 
@@ -177,7 +178,7 @@ export interface RunResult {
 }
 
 export interface TaskRunner {
-  run(node: DagNode, env: Record<string, string>, signal?: AbortSignal): Promise<TaskResult>;
+  run(node: DagNode, env: Record<string, string>, signal?: AbortSignal, context?: TaskRunContext): Promise<TaskResult>;
   /** Optional live-thinking callback so the executor can surface runner progress. */
   onThinking?: (thinking: string) => void;
   /** Create a new runner with an isolated onThinking callback (parallel-safe). */

@@ -31,6 +31,7 @@ import {
   resolveFallbackRuntime,
   resolveRuntimeFallbackChain,
 } from "../dist/providers/index.js";
+import { buildTaskRunContext } from "../dist/runtime/worker-manifest.js";
 
 const monthlyQuotaError = `LLM provider error: Error code: 429 - {'error': {'message': "You've reached kimi monthly usage limit for this billing cycle. Your quota will be refreshed in the next cycle.", 'type': 'exceeded_current_quota_error'}}`;
 
@@ -908,6 +909,83 @@ test("provider-backed runner binds explicit non-Kimi provider as authority witho
     assert.equal(result.metadata.provider, "codex");
     assert.equal(result.metadata.requestedProvider, "codex");
     assert.doesNotMatch(result.stdout, /Kimi/i);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("provider-backed runner forwards OMK worker run context into provider adapters", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-provider-backed-context-"));
+  const calls = [];
+  const node = {
+    ...providerNode(),
+    id: "codex-context-coder",
+    name: "Implement context forwarding",
+    role: "coder",
+    routing: {
+      provider: "auto",
+      readOnly: false,
+      requiresMcp: true,
+      requiresToolCalling: true,
+      mcpServers: ["omk-project"],
+      skills: ["omk-typescript-strict"],
+      hooks: ["protect-secrets.sh"],
+      tools: ["apply_patch"],
+    },
+  };
+  const runContext = buildTaskRunContext({
+    runId: "provider-backed-context-test",
+    goalId: "goal-provider-context",
+    root: projectRoot,
+    node,
+    objective: "Manage a goal with parallel workers",
+    toolPlane: {
+      mcpServers: ["omk-project"],
+      skills: ["omk-typescript-strict"],
+      hooks: ["protect-secrets.sh"],
+      tools: ["apply_patch"],
+      requiresRuntimeMcp: true,
+    },
+  });
+  const codexProvider = {
+    id: "codex",
+    kind: "codex-cli",
+    priority: 100,
+    supports: () => true,
+    async run(input) {
+      calls.push(input);
+      return {
+        success: true,
+        exitCode: 0,
+        stdout: "Codex received OMK worker context",
+        stderr: "",
+      };
+    },
+  };
+
+  try {
+    const runner = await createProviderBackedTaskRunner({
+      cwd: projectRoot,
+      runtimes: [],
+      providerPolicy: "codex",
+      providers: [codexProvider],
+    });
+
+    const result = await runner.run(
+      node,
+      { OMK_TASK_TYPE: "implementation", OMK_COMPLEXITY: "moderate" },
+      undefined,
+      runContext
+    );
+
+    assert.equal(result.success, true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].runContext.goal.goalId, "goal-provider-context");
+    assert.equal(calls[0].runContext.goal.objective, "Manage a goal with parallel workers");
+    assert.equal(calls[0].runContext.worker.owner, "omk");
+    assert.deepEqual(calls[0].runContext.worker.toolPlane.mcpServers, ["omk-project"]);
+    assert.deepEqual(calls[0].runContext.worker.toolPlane.skills, ["omk-typescript-strict"]);
+    assert.deepEqual(calls[0].runContext.worker.toolPlane.hooks, ["protect-secrets.sh"]);
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
   }

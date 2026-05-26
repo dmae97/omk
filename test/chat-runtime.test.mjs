@@ -321,6 +321,25 @@ test("buildNativeRootLoopTurnNode compiles scoped MCP, skills, and hooks through
   ok(node.routing?.rationale?.includes("native-root-loop"));
 });
 
+test("native root loop treats optional MCP as non-required runtime MCP", () => {
+  const node = buildNativeRootLoopTurnNode({
+    bootstrap: codexBootstrap,
+    prompt: "status please",
+    nodeId: "turn-status-optional-mcp",
+    mcpAllowlist: ["omk-project", "memory"],
+    skillNames: ["omk-context-broker", "omk-project-rules"],
+  });
+
+  deepStrictEqual(node.routing?.runtimeSidecar?.intent, "status");
+  deepStrictEqual(node.routing?.runtimeSidecar?.requiredMcp, []);
+  ok(node.routing?.runtimeSidecar?.optionalMcp.includes("omk-project"));
+  ok(node.routing?.runtimeSidecar?.optionalMcp.includes("memory"));
+  ok(node.routing?.mcpServers?.includes("omk-project"));
+  ok(node.routing?.mcpServers?.includes("memory"));
+  deepStrictEqual(node.routing?.requiresMcp, false);
+  ok(node.routing?.rationale?.includes("required-only"));
+});
+
 test("ambiguous native chat turns default to full orchestration authority", async () => {
   for (const prompt of ["g", "ㅎ", "ㅎㅇ", "hello"]) {
     const node = buildNativeRootLoopTurnNode({
@@ -454,6 +473,9 @@ test("native root loop passes OMK-owned scoped tool-plane assignment to TaskRunn
   deepStrictEqual(capture.context.worker.toolPlane.mcpServers, ["omk-project"]);
   deepStrictEqual(capture.context.worker.toolPlane.skills, []);
   deepStrictEqual(capture.context.worker.toolPlane.hooks, ["protect-secrets.sh"]);
+  deepStrictEqual(capture.context.worker.toolPlane.requiresRuntimeMcp, false);
+  deepStrictEqual(capture.routing.runtimeSidecar.requiredMcp, []);
+  ok(capture.routing.runtimeSidecar.optionalMcp.includes("omk-project"));
 });
 
 test("/auth reports provider status without running a provider turn", () => {

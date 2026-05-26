@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import { createRuntimeBackedTaskRunner } from "../dist/runtime/runtime-backed-task-runner.js";
 import { createRuntimeRouter } from "../dist/runtime/runtime-router.js";
+import { buildTaskRunContext } from "../dist/runtime/worker-manifest.js";
 
 test("runtime router prefers Kimi for coding intent when Kimi and Codex are available", async () => {
   const calls = [];
@@ -208,6 +209,93 @@ test("runtime-backed runner forwards per-turn env and routing providerModel", as
     providerModel: "routing-model",
     envModel: "turn-env-model",
   });
+});
+
+test("runtime-backed runner forwards OMK-owned scoped worker manifest into native AgentTask", async () => {
+  const runner = await createRuntimeBackedTaskRunner({ cwd: process.cwd(), env: {}, runId: "local-runtime-backed-owner" });
+  const registry = runner._registry;
+  for (const runtime of [...registry.list()]) registry.unregister(runtime.id);
+
+  let captured;
+  registry.register({
+    id: "codex-cli",
+    priority: 100,
+    capabilities: {
+      read: true,
+      write: true,
+      shell: true,
+      mcp: true,
+      patch: true,
+      review: true,
+      merge: true,
+      vision: false,
+      supportsToolCalling: true,
+    },
+    supports: () => true,
+    async runNode() {
+      throw new Error("execute path expected");
+    },
+    async execute(task) {
+      captured = task;
+      return {
+        output: "ok",
+        exitCode: 0,
+        metadata: { runtime: "codex-cli" },
+      };
+    },
+  });
+
+  const node = {
+    id: "owned-worker",
+    name: "Implement with scoped worker tools",
+    role: "coder",
+    dependsOn: [],
+    status: "running",
+    retries: 0,
+    maxRetries: 1,
+    routing: {
+      provider: "codex",
+      readOnly: false,
+      requiresMcp: true,
+      requiresToolCalling: true,
+      skills: ["omk-typescript-strict", "custom-skill"],
+      mcpServers: ["omk-project", "custom-mcp"],
+      hooks: ["protect-secrets.sh", "custom-hook"],
+      tools: ["custom-tool"],
+      assignedProviderCapabilities: ["write", "patch", "shell", "mcp"],
+      contextBudget: "small",
+    },
+  };
+  const runContext = buildTaskRunContext({
+    runId: "local-runtime-backed-owner",
+    root: process.cwd(),
+    node,
+    toolPlane: {
+      mcpServers: ["omk-project", "custom-mcp"],
+      skills: ["omk-typescript-strict", "custom-skill"],
+      hooks: ["protect-secrets.sh", "custom-hook"],
+      tools: ["custom-tool"],
+      requiresRuntimeMcp: true,
+    },
+    selectedRuntimeId: "codex-cli",
+    model: "codex-cli",
+  });
+
+  const result = await runner.run(node, {}, undefined, runContext);
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.metadata.selectedRuntime, "codex-cli");
+  assert.equal(result.metadata.workerOwner, "omk");
+  assert.deepEqual(captured.tools.mcpServers, ["omk-project", "custom-mcp"]);
+  assert.deepEqual(captured.tools.skills, ["omk-typescript-strict", "custom-skill"]);
+  assert.deepEqual(captured.tools.hooks, ["protect-secrets.sh", "custom-hook"]);
+  assert.deepEqual(captured.tools.available.map((tool) => tool.name), ["custom-tool"]);
+  assert.equal(captured.context.workerManifest.owner, "omk");
+  assert.equal(captured.context.workerManifest.toolPlane.requiresRuntimeMcp, true);
+  assert.equal(captured.context.env.OMK_NODE_SKILLS, "omk-typescript-strict,custom-skill");
+  assert.equal(captured.context.env.OMK_NODE_MCP_SERVERS, "omk-project,custom-mcp");
+  assert.equal(captured.context.env.OMK_NODE_HOOKS, "protect-secrets.sh,custom-hook");
+  assert.equal(captured.context.env.OMK_NODE_TOOLS, "custom-tool");
 });
 
 function fakeRuntime(id, calls, capabilities) {

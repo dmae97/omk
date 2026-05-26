@@ -12,6 +12,7 @@ import { renderScopedAgentYaml, type AgentCapabilityScopes } from "../util/scope
 import { assignSkills, type SkillAssignment } from "./skill-assigner.js";
 import { capabilityScopesFromRouting } from "./capability-routing.js";
 import { buildChildEnv } from "../runtime/child-env.js";
+import type { TaskRunContext } from "../contracts/worker-context.js";
 
 export interface AgentWorkerOptions {
   node: DagNode;
@@ -21,6 +22,7 @@ export interface AgentWorkerOptions {
   cwd?: string;
   env?: Record<string, string>;
   timeout?: number;
+  runContext?: TaskRunContext;
 }
 
 export interface WorkerOutput {
@@ -54,6 +56,7 @@ export class AgentWorker {
   private cwd: string;
   private env: Record<string, string>;
   private timeout: number;
+  private runContext?: TaskRunContext;
   private process: ChildProcess | null = null;
   private abortController: AbortController | null = null;
 
@@ -65,6 +68,7 @@ export class AgentWorker {
     this.cwd = options.cwd ?? process.cwd();
     this.env = options.env ?? {};
     this.timeout = options.timeout ?? 300000; // 5분 기본
+    this.runContext = options.runContext;
   }
 
   /**
@@ -98,7 +102,7 @@ export class AgentWorker {
           : undefined;
 
       try {
-        const taskResult = await runner.run(this.node, this.env, this.abortController.signal);
+        const taskResult = await runner.run(this.node, this.env, this.abortController.signal, this.runContext);
         const duration = Date.now() - startTime;
 
         for (const line of taskResult.stdout.split("\n")) {

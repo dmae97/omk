@@ -19,6 +19,13 @@ test("parallel worker capability context merges role defaults with explicit rout
   assert.ok(context.scopes.hooks.includes("protect-secrets.sh"));
   assert.ok(context.scopes.hooks.includes("custom-hook"));
   assert.deepEqual(context.assignment.mcpServers, [...context.scopes.mcpServers]);
+  assert.equal(context.workerManifest.owner, "omk");
+  assert.equal(context.workerManifest.nodeId, "worker-1");
+  assert.deepEqual(context.workerManifest.toolPlane.mcpServers, [...context.scopes.mcpServers]);
+  assert.deepEqual(context.workerManifest.toolPlane.skills, [...context.scopes.skills]);
+  assert.deepEqual(context.workerManifest.toolPlane.hooks, [...context.scopes.hooks]);
+  assert.deepEqual(context.workerManifest.toolPlane.tools, [...context.scopes.tools]);
+  assert.deepEqual(context.runContext.worker, context.workerManifest);
   assert.equal(context.node.routing?.requiresMcp, true);
   assert.equal(context.node.routing?.requiresToolCalling, true);
   assert.match(context.env.OMK_NODE_SKILLS, /custom-skill/);
@@ -26,7 +33,34 @@ test("parallel worker capability context merges role defaults with explicit rout
   assert.match(context.env.OMK_NODE_TOOLS, /custom-tool/);
   assert.match(context.env.OMK_NODE_HOOKS, /custom-hook/);
   assert.equal(context.env.OMK_ROUTE_REQUIRES_MCP, "true");
+  assert.equal(context.env.OMK_ROUTE_REQUIRES_TOOL_CALLING, "true");
   assert.match(context.env.OMK_NODE_CAPABILITY_SUMMARY, /mcp=/);
+});
+
+test("parallel worker context carries explicit goal and capability assignment into run context", () => {
+  const node = workerNode();
+  const root = "/tmp/omk-parallel-goal";
+  const context = buildParallelWorkerCapabilityContext(node, { nodes: [node] }, {
+    runId: "custom-run",
+    root,
+    goalId: "goal-parallel-agents",
+    objective: "Coordinate parallel subagents with scoped capabilities",
+  });
+
+  assert.equal(context.runContext.goal.runId, "custom-run");
+  assert.equal(context.runContext.goal.goalId, "goal-parallel-agents");
+  assert.equal(context.runContext.goal.objective, "Coordinate parallel subagents with scoped capabilities");
+  assert.equal(context.runContext.goal.root, root);
+  assert.equal(context.runContext.worker.owner, "omk");
+  assert.equal(context.runContext.worker.runId, "custom-run");
+  assert.ok(context.runContext.worker.toolPlane.mcpServers.includes("omk-project"));
+  assert.ok(context.runContext.worker.toolPlane.mcpServers.includes("custom-mcp"));
+  assert.ok(context.runContext.worker.toolPlane.skills.includes("omk-typescript-strict"));
+  assert.ok(context.runContext.worker.toolPlane.skills.includes("custom-skill"));
+  assert.ok(context.runContext.worker.toolPlane.hooks.includes("protect-secrets.sh"));
+  assert.ok(context.runContext.worker.toolPlane.hooks.includes("custom-hook"));
+  assert.ok(context.runContext.worker.toolPlane.tools.includes("custom-tool"));
+  assert.equal(context.runContext.worker.toolPlane.requiresRuntimeMcp, true);
 });
 
 test("parallel worker env excludes parent process env secrets", () => {
@@ -42,6 +76,7 @@ test("parallel worker env excludes parent process env secrets", () => {
 
     assert.equal(env.OMK_PARALLEL_SECRET_TOKEN, undefined);
     assert.equal(env.PATH, undefined);
+    assert.equal(env.OMK_WORKER_MANIFEST_OWNER, "omk");
     assert.match(env.OMK_NODE_SKILLS, /custom-skill/);
     assert.deepEqual(JSON.parse(env.OMK_NODE_PROVIDER_POLICY), {
       provider: "kimi",

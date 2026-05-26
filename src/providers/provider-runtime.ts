@@ -1,4 +1,5 @@
 import type { TaskRunner } from "../contracts/orchestration.js";
+import type { TaskRunContext } from "../contracts/worker-context.js";
 import { createKimiTaskRunner, type KimiTaskRunnerOptions } from "../kimi/runner.js";
 import { style, status } from "../util/theme.js";
 import { getProjectRoot } from "../util/fs.js";
@@ -269,7 +270,7 @@ export async function createProviderBackedTaskRunner(
   const wrappedRunner: TaskRunner = {
     onThinking: baseRunner.onThinking,
     fork: baseRunner.fork,
-    async run(node, env, signal) {
+    async run(node, env, signal, context) {
       let budgetReport: unknown;
       try {
         budgetReport = (await contextBroker.buildCapsule(node)).report;
@@ -277,7 +278,7 @@ export async function createProviderBackedTaskRunner(
         const errorMsg = err instanceof Error ? err.message : String(err);
         process.stderr.write(`[omk] ContextBroker failed for node ${node.id}: ${errorMsg}\n`);
       }
-      const taskResult = await baseRunner.run(node, env, signal);
+      const taskResult = await baseRunner.run(node, env, signal, context);
       taskResult.metadata = {
         ...(taskResult.metadata ?? {}),
         ...(budgetReport ? { _budgetReport: budgetReport } : {}),
@@ -371,7 +372,7 @@ function uniqueProviderIds(providers: ProviderId[]): ProviderId[] {
 
 function taskRunnerFromAgentProvider(provider: AgentProvider): TaskRunner {
   return {
-    async run(node, env, signal) {
+    async run(node, env, signal, context?: TaskRunContext) {
       const fallbackSignal = new AbortController().signal;
       const attempt = Number(env.OMK_PROVIDER_ATTEMPT ?? "1");
       const result = await provider.run({
@@ -379,6 +380,7 @@ function taskRunnerFromAgentProvider(provider: AgentProvider): TaskRunner {
         env,
         signal: signal ?? fallbackSignal,
         attempt: Number.isFinite(attempt) && attempt > 0 ? Math.floor(attempt) : 1,
+        ...(context ? { runContext: context } : {}),
       });
       return toTaskResult(result);
     },
