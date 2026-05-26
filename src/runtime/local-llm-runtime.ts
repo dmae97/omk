@@ -17,6 +17,7 @@ import type {
 } from "./agent-runtime.js";
 import type { ContextCapsule } from "./context-capsule.js";
 import { capsuleToTask } from "./context-broker-converter.js";
+import { sanitizeUserVisibleOutput } from "../util/user-visible-output.js";
 
 interface LocalLlmChatMessage {
   role: "system" | "user" | "assistant";
@@ -243,7 +244,7 @@ export class LocalLlmRuntime implements AgentRuntime {
           const delta = parsed.choices?.[0]?.delta;
           if (delta?.content) {
             output += delta.content;
-            onOutput?.(delta.content);
+            onOutput?.(sanitizeUserVisibleOutput(delta.content));
           }
           if (delta?.reasoning_content) {
             reasoning += delta.reasoning_content;

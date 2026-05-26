@@ -15,6 +15,7 @@ import type {
 import type { ContextCapsule } from "./context-capsule.js";
 import { capsuleToTask } from "./context-broker-converter.js";
 import { runShell, runShellStreaming, checkCommand } from "../util/shell.js";
+import { sanitizeUserVisibleOutput } from "../util/user-visible-output.js";
 
 export interface CodexRuntimeOptions {
   bin?: string;
@@ -148,7 +149,7 @@ export class CodexRuntime implements AgentRuntime {
       };
       if (useStreaming && task.context.onOutput) {
         shellOptions.onStdout = (line: string) => {
-          task.context.onOutput?.(line);
+          task.context.onOutput?.(sanitizeUserVisibleOutput(line));
         };
       }
 
