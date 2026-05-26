@@ -44,11 +44,18 @@ export async function runCli(argv: readonly string[] = process.argv): Promise<vo
       return;
     }
 
-    // Build CommandEnvelope early so theme/output resolve before any output.
-    const { envelope, validation } = await buildCommandEnvelope({ argv });
+    // Keep the new envelope runtime opt-in until its controllers reach parity
+    // with the existing Commander workflow implementations.
+    if (isCliV2Enabled()) {
+      // Build CommandEnvelope early so theme/output resolve before any output.
+      const { envelope, validation } = await buildCommandEnvelope({ argv });
 
-    // Route run/task/plan through the new envelope runtime.
-    if (["run", "task", "plan"].includes(envelope.kind)) {
+      // Route run/task/plan through the new envelope runtime.
+      if (!["run", "task", "plan"].includes(envelope.kind)) {
+        await program.parseAsync([...argv]);
+        return;
+      }
+
       if (!validation.valid) {
         const writer = createCliWriter(envelope.output);
         for (const err of validation.errors) {
@@ -76,6 +83,11 @@ export async function runCli(argv: readonly string[] = process.argv): Promise<vo
   } catch (err) {
     handleCliError(err);
   }
+}
+
+function isCliV2Enabled(): boolean {
+  const value = process.env.OMK_CLI_V2?.trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes" || value === "on";
 }
 
 const defaultErrorProfile: OutputProfile = {
