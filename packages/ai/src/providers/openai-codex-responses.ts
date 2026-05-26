@@ -50,8 +50,9 @@ import { buildBaseOptions } from "./simple-options.ts";
 
 const DEFAULT_CODEX_BASE_URL = "https://chatgpt.com/backend-api";
 const JWT_CLAIM_PATH = "https://api.openai.com/auth" as const;
-const DEFAULT_MAX_RETRIES = 3;
+const DEFAULT_MAX_RETRIES = 0;
 const BASE_DELAY_MS = 1000;
+const DEFAULT_MAX_RETRY_DELAY_MS = 60_000;
 const CODEX_TOOL_CALL_PROVIDERS = new Set(["openai", "openai-codex", "opencode"]);
 const WEBSOCKET_MESSAGE_TOO_BIG_CLOSE_CODE = 1009;
 
@@ -100,11 +101,52 @@ interface RequestBody {
 // Retry Helpers
 // ============================================================================
 
+function isTerminalRateLimitError(errorText: string): boolean {
+	return /GoUsageLimitError|FreeUsageLimitError|Monthly usage limit reached|available balance|insufficient_quota|out of budget|quota exceeded|billing/i.test(
+		errorText,
+	);
+}
+
 function isRetryableError(status: number, errorText: string): boolean {
+	if (status === 429 && isTerminalRateLimitError(errorText)) {
+		return false;
+	}
 	if (status === 429 || status === 500 || status === 502 || status === 503 || status === 504) {
 		return true;
 	}
 	return /rate.?limit|overloaded|service.?unavailable|upstream.?connect|connection.?refused/i.test(errorText);
+}
+
+function getRetryAfterDelayMs(headers: Headers): number | undefined {
+	const retryAfterMs = headers.get("retry-after-ms");
+	if (retryAfterMs !== null) {
+		const millis = Number(retryAfterMs);
+		if (Number.isFinite(millis)) {
+			return Math.max(0, millis);
+		}
+	}
+
+	const retryAfter = headers.get("retry-after");
+	if (!retryAfter) {
+		return undefined;
+	}
+
+	const seconds = Number(retryAfter);
+	if (Number.isFinite(seconds)) {
+		return Math.max(0, seconds * 1000);
+	}
+
+	const date = Date.parse(retryAfter);
+	if (!Number.isNaN(date)) {
+		return Math.max(0, date - Date.now());
+	}
+
+	return undefined;
+}
+
+function capRetryDelayMs(delayMs: number, options?: StreamOptions): number {
+	const maxRetryDelayMs = options?.maxRetryDelayMs ?? DEFAULT_MAX_RETRY_DELAY_MS;
+	return maxRetryDelayMs > 0 ? Math.min(delayMs, maxRetryDelayMs) : delayMs;
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -256,28 +298,13 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 
 					const errorText = await response.text();
 					if (attempt < maxRetries && isRetryableError(response.status, errorText)) {
-						let delayMs = BASE_DELAY_MS * 2 ** attempt;
-
-						const retryAfterMs = response.headers.get("retry-after-ms");
-						if (retryAfterMs !== null) {
-							const millis = Number(retryAfterMs);
-							if (Number.isFinite(millis)) {
-								delayMs = Math.max(0, millis);
-							}
-						} else {
-							const retryAfter = response.headers.get("retry-after");
-							if (retryAfter) {
-								const seconds = Number(retryAfter);
-								if (Number.isFinite(seconds)) {
-									delayMs = Math.max(0, seconds * 1000);
-								} else {
-									const date = Date.parse(retryAfter);
-									if (!Number.isNaN(date)) {
-										delayMs = Math.max(0, date - Date.now());
-									}
-								}
-							}
-						}
+						const retryAfterDelayMs = getRetryAfterDelayMs(response.headers);
+						const delayMs =
+							retryAfterDelayMs === undefined
+								? BASE_DELAY_MS * 2 ** attempt
+								: response.status === 429
+									? capRetryDelayMs(retryAfterDelayMs, options)
+									: retryAfterDelayMs;
 
 						await sleep(delayMs, options?.signal);
 						continue;
