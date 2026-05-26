@@ -25,6 +25,7 @@ import { runNativeOmkRootLoop } from "./native-root-loop.js";
 import { isCockpitChild } from "../../util/chat-cockpit.js";
 import { style } from "../../util/theme.js";
 import { PlainModernRenderer } from "../../cli/ui/plain-renderer.js";
+import { sanitizeUserVisibleOutput } from "../../util/user-visible-output.js";
 
 export interface ChatRuntimeInput {
   root: string;
@@ -312,7 +313,7 @@ export async function runChatRuntime(
           runId: effectiveRunId,
           goal: "native-chat",
           onOutput: (text: string) => {
-            process.stdout.write(text);
+            process.stdout.write(sanitizeUserVisibleOutput(text));
           },
         });
         const renderer = ui === "plain-modern" ? new PlainModernRenderer() : undefined;

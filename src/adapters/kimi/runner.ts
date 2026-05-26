@@ -20,6 +20,7 @@ import { enableRawTerminalInput, restoreTerminalInputState } from "../../util/te
 import { checkCommand, resolveKimiBin } from "../../util/shell.js";
 import { defaultScopedRoleAgentFile, writeScopedAgentFile } from "../../util/scoped-agent-file.js";
 import { terminateProcessTree, type ProcessTreeTarget } from "../../util/process-tree.js";
+import { sanitizeUserVisibleOutput } from "../../util/user-visible-output.js";
 
 const REQUIRED_KIMI_ENV_KEYS = new Set([
   "PATH",
@@ -557,7 +558,7 @@ export async function runKimiInteractive(
   }
 
   function writeStdout(data: string): void {
-    circularPush(data);
+    circularPush(sanitizeUserVisibleOutput(data));
     if (!stdoutWriting) {
       flushStdoutQueue();
     }
@@ -1044,7 +1045,8 @@ export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskR
           input: promptInput,
           logPath,
           onStdout: (chunk, io) => {
-            options.onOutput?.(chunk);
+            const safeChunk = sanitizeUserVisibleOutput(chunk);
+            options.onOutput?.(safeChunk);
             thinkingHandler?.(chunk);
             const decision = continuePromptGuard.process(chunk);
             if (decision.sendEnter) {
