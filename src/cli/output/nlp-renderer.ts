@@ -58,6 +58,49 @@ export function renderNlp(
     );
   }
 
+  const providerCompletions = result.events.filter(
+    (e): e is Extract<NormalizedRunEvent, { type: "provider-request-completed" }> =>
+      e.type === "provider-request-completed"
+  );
+  const providerFailures = result.events.filter(
+    (e): e is Extract<NormalizedRunEvent, { type: "provider-request-failed" }> =>
+      e.type === "provider-request-failed"
+  );
+  const providerFallbacks = result.events.filter(
+    (e): e is Extract<NormalizedRunEvent, { type: "provider-fallback" }> =>
+      e.type === "provider-fallback"
+  );
+  const providerAssists = result.events.filter(
+    (e): e is Extract<NormalizedRunEvent, { type: "provider-assist" }> =>
+      e.type === "provider-assist"
+  );
+  const providerSkips = result.events.filter(
+    (e): e is Extract<NormalizedRunEvent, { type: "provider-skip" }> =>
+      e.type === "provider-skip"
+  );
+
+  if (providerCompletions.length > 0 || providerFailures.length > 0) {
+    const providers = [...new Set([...providerCompletions, ...providerFailures].map((e) => e.provider))];
+    sentences.push(
+      `Provider routing: ${providerCompletions.length} completed, ${providerFailures.length} failed via ${providers.join(", ")}.`
+    );
+  }
+  if (providerFallbacks.length > 0) {
+    sentences.push(
+      `Provider fallback: ${providerFallbacks.map((e) => `${e.from} → ${e.to}`).join(", ")}.`
+    );
+  }
+  if (providerAssists.length > 0) {
+    sentences.push(
+      `Provider advisory: ${providerAssists.length} advisory assist${providerAssists.length > 1 ? "s" : ""} recorded.`
+    );
+  }
+  if (providerSkips.length > 0) {
+    sentences.push(
+      `Provider skips: ${providerSkips.map((e) => e.provider).join(", ")}.`
+    );
+  }
+
   // Task summary
   const tasksStarted = result.events.filter(
     (e): e is Extract<NormalizedRunEvent, { type: "task-started" }> =>

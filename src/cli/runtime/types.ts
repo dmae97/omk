@@ -110,6 +110,12 @@ export interface TokenUsageSummary {
 export type NormalizedRunEvent =
   | AgentStartedEvent
   | AgentCompletedEvent
+  | ProviderRequestStartedEvent
+  | ProviderRequestCompletedEvent
+  | ProviderRequestFailedEvent
+  | ProviderFallbackEvent
+  | ProviderAssistEvent
+  | ProviderSkipEvent
   | TaskStartedEvent
   | TaskCompletedEvent
   | TaskFailedEvent
@@ -128,6 +134,79 @@ export interface AgentCompletedEvent {
   readonly type: "agent-completed";
   readonly agentName: string;
   readonly success: boolean;
+  readonly timestamp: string;
+}
+
+export interface ProviderRequestStartedEvent {
+  readonly type: "provider-request-started";
+  readonly provider: string;
+  readonly taskId: string;
+  readonly taskTitle?: string;
+  readonly role?: string;
+  readonly requestedProvider?: string;
+  readonly authority?: string;
+  readonly reason?: string;
+  readonly timestamp: string;
+}
+
+export interface ProviderRequestCompletedEvent {
+  readonly type: "provider-request-completed";
+  readonly provider: string;
+  readonly taskId: string;
+  readonly taskTitle?: string;
+  readonly role?: string;
+  readonly requestedProvider?: string;
+  readonly authority?: string;
+  readonly durationMs?: number;
+  readonly attempts?: number;
+  readonly timestamp: string;
+}
+
+export interface ProviderRequestFailedEvent {
+  readonly type: "provider-request-failed";
+  readonly provider: string;
+  readonly taskId: string;
+  readonly taskTitle?: string;
+  readonly role?: string;
+  readonly requestedProvider?: string;
+  readonly authority?: string;
+  readonly durationMs?: number;
+  readonly attempts?: number;
+  readonly error: string;
+  readonly timestamp: string;
+}
+
+export interface ProviderFallbackEvent {
+  readonly type: "provider-fallback";
+  readonly taskId: string;
+  readonly from: string;
+  readonly to: string;
+  readonly reason: string;
+  readonly attempts?: number;
+  readonly failureKind?: string;
+  readonly timestamp: string;
+}
+
+export interface ProviderAssistEvent {
+  readonly type: "provider-assist";
+  readonly taskId: string;
+  readonly provider: string;
+  readonly participation: "advisory";
+  readonly success: boolean;
+  readonly model?: string;
+  readonly modelTier?: string;
+  readonly summary?: string;
+  readonly failureReason?: string;
+  readonly timestamp: string;
+}
+
+export interface ProviderSkipEvent {
+  readonly type: "provider-skip";
+  readonly taskId: string;
+  readonly provider: string;
+  readonly reason: string;
+  readonly attempts?: number;
+  readonly failureKind?: string;
   readonly timestamp: string;
 }
 
