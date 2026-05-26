@@ -1,5 +1,6 @@
 import type { CliUiEvent } from "./event.js";
 import type { CliRenderer } from "./renderer.js";
+import { sanitizeUserVisibleOutput } from "../../util/user-visible-output.js";
 
 interface WritableStreamLike {
   write(chunk: string): unknown;
@@ -26,7 +27,8 @@ export function renderRouteCard(input: Extract<CliUiEvent, { type: "turn:route" 
 }
 
 export function renderAssistantCard(text: string): string {
-  const body = text.endsWith("\n") ? text.slice(0, -1) : text;
+  const safeText = sanitizeUserVisibleOutput(text);
+  const body = safeText.endsWith("\n") ? safeText.slice(0, -1) : safeText;
   return body ? `\n● Assistant\n${body}\n` : "";
 }
 
@@ -60,7 +62,7 @@ export class PlainModernRenderer implements CliRenderer {
           this.stderr.write("\n");
           this.heartbeatOpen = false;
         }
-        this.stderr.write(event.text);
+        this.stderr.write(sanitizeUserVisibleOutput(event.text));
         break;
       case "turn:route":
         this.stderr.write(renderRouteCard(event));
@@ -88,7 +90,7 @@ export class PlainModernRenderer implements CliRenderer {
           this.stderr.write("\n");
           this.heartbeatOpen = false;
         }
-        this.stderr.write(`✖ Error\n  ${event.message}\n`);
+        this.stderr.write(`✖ Error\n  ${sanitizeUserVisibleOutput(event.message)}\n`);
         break;
       case "turn:finish": {
         if (this.heartbeatOpen) {
