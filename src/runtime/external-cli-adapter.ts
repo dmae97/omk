@@ -55,6 +55,8 @@ export interface ExternalCliAdapterOptions {
 export function createExternalCliAdapter(
   options: ExternalCliAdapterOptions
 ): AgentRuntime {
+  let pendingOnOutput: ((text: string) => void) | undefined;
+
   return {
     id: options.id,
     displayName: options.displayName,
@@ -77,8 +79,9 @@ export function createExternalCliAdapter(
     },
 
     async execute(task: AgentTask): Promise<AgentResult> {
+      pendingOnOutput = task.context.onOutput;
       const routing = routingFromTask(task);
-      const capsule: ContextCapsule = {
+        const capsule: ContextCapsule = {
         schemaVersion: 1,
         runId: task.context.runId,
         nodeId: task.context.nodeId,
@@ -176,7 +179,12 @@ export function createExternalCliAdapter(
           timeoutMs,
           input,
           signal,
+          onStdout: pendingOnOutput
+            ? (chunk: string) => { pendingOnOutput?.(chunk); }
+            : undefined,
         });
+
+        pendingOnOutput = undefined;
 
         if (signal.aborted) {
           return {

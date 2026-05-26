@@ -18,7 +18,7 @@ import type {
   ProviderWireApi,
 } from "./types.js";
 
-export const KNOWN_PROVIDER_IDS = ["kimi", "deepseek", "qwen", "codex", "opencode", "commandcode", "openrouter"] as const satisfies readonly KnownProviderId[];
+export const KNOWN_PROVIDER_IDS = ["kimi", "deepseek", "qwen", "codex", "opencode", "commandcode", "openrouter", "local-llm"] as const satisfies readonly KnownProviderId[];
 export const QWEN_DASHSCOPE_COMPAT_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
 export const OPENROUTER_COMPAT_BASE_URL = "https://openrouter.ai/api/v1";
 
@@ -140,6 +140,27 @@ const DEFAULT_PROVIDER_CONFIGS: Record<KnownProviderId, Omit<ProviderRegistryEnt
     profileType: "runtime",
     planKind: "runtime",
     routing: "advisory",
+  },
+  "local-llm": {
+    enabled: true,
+    kind: "openai-compatible",
+    baseUrl: "http://localhost:8080/v1",
+    apiKeyEnv: "LOCAL_LLM_API_KEY",
+    defaultModel: "qwen3-coder-30b-a3b",
+    aliases: {
+      default: "qwen3-coder-30b-a3b",
+      local: "qwen3-coder-30b-a3b",
+      llama: "qwen3-coder-30b-a3b",
+      qwen3: "qwen3-coder-30b-a3b",
+      "qwen3-coder": "qwen3-coder-30b-a3b",
+      "local-llm": "qwen3-coder-30b-a3b",
+    },
+    capabilities: ["read", "write", "shell", "patch", "review"],
+    wireApi: "openai-chat-completions",
+    auth: { method: "none" },
+    profileType: "runtime",
+    planKind: "runtime",
+    routing: "runtime",
   },
   codex: {
     enabled: true,

@@ -13,7 +13,7 @@ import { getOmkVersionSync } from "../../util/version.js";
 import { resolveBundledLspBinary } from "../lsp.js";
 import { detectPackageManager } from "../../mcp/quality-gate.js";
 import { buildMcpDoctorReport } from "../mcp.js";
-import { discoverRoutingInventory } from "../../orchestration/routing.js";
+import { discoverRoutingInventory } from "../../orchestration/routing/inventory.js";
 import { validateProjectAgentYaml, formatAgentYamlIssues } from "../../util/agent-schema.js";
 import {
   getGlobalMemoryConfigPath,

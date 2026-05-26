@@ -34,7 +34,12 @@ export async function runCli(argv: readonly string[] = process.argv): Promise<vo
       return;
     }
 
-    if (args.includes("--help") || args.includes("-h")) {
+    if (
+      args.includes("--help") ||
+      args.includes("-h") ||
+      args.includes("--version") ||
+      args.includes("-V")
+    ) {
       await program.parseAsync([...argv]);
       return;
     }

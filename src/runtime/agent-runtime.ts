@@ -11,6 +11,7 @@
  */
 
 import type { TaskResult } from "../contracts/orchestration.js";
+import type { GoalExecutionContext, WorkerManifest } from "../contracts/worker-context.js";
 import type { ContextCapsule } from "./context-capsule.js";
 import type {
   RuntimeId,
@@ -85,6 +86,9 @@ export interface AgentContext {
   approvalPolicy?: string;
   sandboxMode?: string;
   abortSignal?: AbortSignal;
+  goalContext?: GoalExecutionContext;
+  workerManifest?: WorkerManifest;
+  onOutput?: (text: string) => void;
 }
 
 export interface ToolManifest {
