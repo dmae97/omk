@@ -440,6 +440,31 @@ const en: Record<string, string> = {
   "mode.planApproved": "Plan approved — proceeding to execution",
   "mode.planSkipped": "Plan saved. Run 'omk run' or 'omk parallel' to execute later.",
   "cli.menuMode": "mode     — Switch execution mode",
+
+  // NLP Renderer (runtime output)
+  "nlp.turnStarted": "Turn started: intent={0}, provider={1}.",
+  "nlp.progress": "Progress: {0}.",
+  "nlp.progressWithPercent": "Progress: {0} ({1}%).",
+  "nlp.mcpStatus": "MCP server {0} {1}.",
+  "nlp.warning": "Warning: {0}.",
+  "nlp.result": "Result: {0}",
+  "nlp.recoverableError": "Recoverable error: {0}.",
+  "nlp.fatalError": "Fatal error: {0}.",
+  "nlp.turnFinished": "Turn finished in {0}.",
+  "nlp.event": "Event: {0}.",
+
+  // Provider Event Normalizer
+  "normalizer.step": "Step {0}",
+  "normalizer.stepInterrupted": "Step interrupted",
+  "normalizer.compacting": "Compacting context…",
+  "normalizer.compactionComplete": "Context compaction complete",
+  "normalizer.tokens": "Tokens: {0} in / {1} out",
+  "normalizer.toolCall": "Tool call: {0}",
+  "normalizer.toolError": "Tool error: {0}",
+  "normalizer.subagent": "Subagent: {0}",
+  "normalizer.hookBlocked": "Hook blocked: {0}",
+  "normalizer.steerInput": "User steer input received",
+  "normalizer.unknownWireEvent": "Unknown wire event type: {0}",
 };
 
 const ko: Record<string, string> = {
@@ -874,6 +899,31 @@ const ko: Record<string, string> = {
   "mode.planApproved": "계획 승인됨 — 실행을 계속합니다",
   "mode.planSkipped": "계획이 저장되었습니다. 나중에 'omk run' 또는 'omk parallel'로 실행하세요.",
   "cli.menuMode": "mode     — 실행 모드 전환",
+
+  // NLP Renderer (runtime output)
+  "nlp.turnStarted": "턴 시작: intent={0}, provider={1}.",
+  "nlp.progress": "진행: {0}.",
+  "nlp.progressWithPercent": "진행: {0} ({1}%).",
+  "nlp.mcpStatus": "MCP 서버 {0} {1}.",
+  "nlp.warning": "경고: {0}.",
+  "nlp.result": "결과: {0}",
+  "nlp.recoverableError": "복구 가능 오류: {0}.",
+  "nlp.fatalError": "치명적 오류: {0}.",
+  "nlp.turnFinished": "턴 완료 ({0}).",
+  "nlp.event": "이벤트: {0}.",
+
+  // Provider Event Normalizer
+  "normalizer.step": "단계 {0}",
+  "normalizer.stepInterrupted": "단계 중단됨",
+  "normalizer.compacting": "컨텍스트 압축 중…",
+  "normalizer.compactionComplete": "컨텍스트 압축 완료",
+  "normalizer.tokens": "토큰: {0} 입력 / {1} 출력",
+  "normalizer.toolCall": "도구 호출: {0}",
+  "normalizer.toolError": "도구 오류: {0}",
+  "normalizer.subagent": "서브에이전트: {0}",
+  "normalizer.hookBlocked": "후크 차단됨: {0}",
+  "normalizer.steerInput": "사용자 조작 입력 수신",
+  "normalizer.unknownWireEvent": "알 수 없는 와이어 이벤트: {0}",
 };
 
 const dictionaries: Record<string, Record<string, string>> = { en, ko };

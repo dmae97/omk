@@ -140,4 +140,27 @@ export function registerWorkflowCommands(program: Command): void {
         process.exitCode = 1;
       }
     });
+
+  program
+    .command("parallel:interactive [goal]")
+    .description("🔄 Interactive parallel sub-agent orchestration with skills/hooks/MCP assignment")
+    .option("--workers <n>", "Max parallel workers", "auto")
+    .option("--timeout <ms>", "Global timeout in milliseconds", "600000")
+    .option("--auto-confirm", "Skip confirmation prompt")
+    .option("--dry-run", "Show plan without executing")
+    .option("--output <file>", "Save result JSON to file")
+    .option("--provider <provider>", "Provider policy", "auto")
+    .option("--model <model>", "Provider model override")
+    .action(async (goal, options) => {
+      const globalOpts = program.opts();
+      const { interactiveParallelCommand } = await import("../commands/parallel/interactive.js");
+      const result = await interactiveParallelCommand(goal, {
+        ...options,
+        runId: globalOpts.runId,
+        signal: AbortSignal.timeout(parseInt(options.timeout, 10) || 600_000),
+      });
+      if (!result.success && process.exitCode === undefined) {
+        process.exitCode = 1;
+      }
+    });
 }

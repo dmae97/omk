@@ -47,36 +47,12 @@ export async function runCli(argv: readonly string[] = process.argv): Promise<vo
     // Keep the new envelope runtime opt-in until its controllers reach parity
     // with the existing Commander workflow implementations.
     if (isCliV2Enabled()) {
-      // Build CommandEnvelope early so theme/output resolve before any output.
-      const { envelope, validation } = await buildCommandEnvelope({ argv });
-
-      // Route run/task/plan through the new envelope runtime.
-      if (!["run", "task", "plan"].includes(envelope.kind)) {
-        await program.parseAsync([...argv]);
-        return;
-      }
-
-      if (!validation.valid) {
-        const writer = createCliWriter(envelope.output);
-        for (const err of validation.errors) {
-          writer.error(err.message);
-        }
-        process.exitCode = 2;
-        return;
-      }
-
-      const runtime = createCliRuntime();
-      const result = await runtime.execute(envelope);
-      const rendered = routeOutput(result, envelope.output);
-
-      const writer = createCliWriter(envelope.output);
-      if (rendered.content) {
-        writer.rawStdout(rendered.content + "\n");
-      }
-
-      process.exitCode = result.exitCode;
+      // Section 21: Route ALL commands through CLI v2 (Clipanion + RuntimeSidecar pipeline)
+      const { runCliV2 } = await import("../cli/v2/cli-v2-skeleton.js");
+      await runCliV2(argv);
       return;
     }
+
 
     // Fallback to existing Commander for all other commands.
     await program.parseAsync([...argv]);
