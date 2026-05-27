@@ -43,11 +43,15 @@ export {
   type SignalFrame,
   type CapabilitySelection,
   type DebloatedNlpCompileResult,
+  type ProviderRuntimeMode,
   compileBloatToNlp,
   classifyIntent,
+  classifyRisk,
   selectCapabilities,
   resolveFailurePolicy,
   filterMcpConfigForRuntime,
+  filterMcpConfigForTurn,
+  selectProviderRuntime,
   renderUserFacingRoutingNlp,
 } from "./debloat-nlp.js";
 
@@ -124,3 +128,69 @@ export {
   type BuildTaskRunContextInput,
   type WorkerToolPlaneInput,
 } from "./worker-manifest.js";
+
+export {
+  type CommandKind,
+  type CommandSource,
+  type CommandEnvelope,
+  type OutputFormat,
+  type StdoutMode,
+  type OutputProfile,
+  type OmkEventType,
+  type OmkEvent,
+  type OmkEventData,
+  type CapabilityInventory,
+  type McpServerStatus,
+  type FailurePolicy,
+  type CapabilityPlan,
+} from "./contracts/command-envelope.js";
+
+export {
+  type ProviderEventNormalizer,
+  type OmkEventListener,
+  type NormalizerOutcome,
+  KimiEventNormalizer,
+  KimiPrintNormalizer,
+  createProviderEventNormalizer,
+} from "./provider-event-normalizer.js";
+
+export {
+  type OutputRouter,
+  type Renderer,
+  createOutputRouter,
+} from "./output-router.js";
+
+export {
+  type ThemeRenderer,
+  type NlpRenderer,
+  type JsonRenderer,
+  createThemeRenderer,
+  createNlpRenderer,
+  createJsonRenderer,
+} from "./renderers.js";
+
+export {
+  type CommandBus,
+  type CommandBusResult,
+  type CommandHandler,
+  createCommandBus,
+} from "./command-bus.js";
+
+export {
+  type SlashCommandResult,
+  type RuntimeSideEffect,
+  type SlashCommandInput,
+  type SlashCommandHandler,
+  createSlashCommandHandler,
+  registerSlashCommands,
+} from "./slash-commands.js";
+
+export {
+  type CapsuleTodo,
+  type CapsuleDecision,
+  type ProjectStateCapsule,
+  type MemoryStoreOptions,
+  type MemorySearchResult,
+  type PersistentMemoryStore,
+  createPersistentMemoryStore,
+} from "../cli/v2/persistent-memory.js";

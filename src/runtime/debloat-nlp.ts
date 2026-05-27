@@ -162,6 +162,17 @@ export function classifyIntent(userRequest: string): RequestIntent {
   return "chat";
 }
 
+export function classifyRisk(intent: RequestIntent, userRequest: string): DebloatRisk {
+  if (/\brm\s+-rf\b|\bDROP\s+TABLE\b|\bgit\s+push\s+--force\b|\bsudo\b/i.test(userRequest)) return "dangerous";
+  if (/\bcurl\b|\bwget\b|\bfetch\b|\bhttp/i.test(userRequest)) return "network";
+  if (/\b(edit|fix|implement|refactor|modify|update|create|write|delete|remove)\b/i.test(userRequest)) return "write";
+  if (/\b(read|show|list|find|search|grep|cat|ls|status|check)\b/i.test(userRequest)) return "read";
+  if (intent === "code_edit" || intent === "debug_error") return "write";
+  if (intent === "web_research") return "network";
+  if (intent === "repo_read" || intent === "status") return "read";
+  return "read";
+}
+
 export function selectCapabilities(input: {
   readonly intent: RequestIntent;
   readonly availableMcp: readonly string[];
@@ -355,6 +366,42 @@ export function filterMcpConfigForRuntime(input: {
       Object.entries(input.allMcpConfig).filter(([name]) => allowed.has(name) && !disabled.has(name))
     ),
   };
+}
+
+/**
+ * Per-Turn MCP Config Filter (Section 10).
+ * Merges user + project MCP configs, then filters by sidecar allowed set.
+ * allowed = requiredMcp ∪ optionalMcp − disabledMcp
+ */
+export function filterMcpConfigForTurn(input: {
+  readonly userMcpConfig: Record<string, unknown>;
+  readonly projectMcpConfig: Record<string, unknown>;
+  readonly sidecar: RuntimeSidecar;
+}): { mcpServers: Record<string, unknown> } {
+  const merged: Record<string, unknown> = { ...input.projectMcpConfig, ...input.userMcpConfig };
+  const allowed = new Set([...input.sidecar.requiredMcp, ...input.sidecar.optionalMcp]);
+  const disabled = new Set(input.sidecar.disabledMcp);
+  return {
+    mcpServers: Object.fromEntries(
+      Object.entries(merged).filter(([name]) => allowed.has(name) && !disabled.has(name))
+    ),
+  };
+}
+
+/**
+ * Provider Runtime Selector (Section 11).
+ * Returns the provider runtime mode: kimi-print ONLY when debugRaw=true.
+ * Default is kimi-event (structured event stream).
+ */
+export type ProviderRuntimeMode = "kimi-event" | "kimi-print";
+
+export function selectProviderRuntime(input: {
+  readonly provider: string;
+  readonly intent: RequestIntent;
+  readonly debugRaw?: boolean;
+}): ProviderRuntimeMode {
+  if (input.debugRaw === true) return "kimi-print";
+  return "kimi-event";
 }
 
 export function renderUserFacingRoutingNlp(input: {
