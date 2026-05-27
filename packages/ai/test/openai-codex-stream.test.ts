@@ -311,6 +311,65 @@ describe("openai-codex streaming", () => {
 		expect(result.stopReason).toBe("length");
 	});
 
+	it("aborts SSE fetch when response headers do not arrive", async () => {
+		vi.useFakeTimers();
+		const token = mockToken();
+
+		const fetchMock = vi.fn((input: string | URL, init?: RequestInit) => {
+			const url = typeof input === "string" ? input : input.toString();
+			if (url !== "https://chatgpt.com/backend-api/codex/responses") {
+				throw new Error(`Unexpected URL: ${url}`);
+			}
+
+			const signal = init?.signal;
+			if (!signal) {
+				throw new Error("Expected SSE fetch to receive an abort signal");
+			}
+
+			return new Promise<Response>((_, reject) => {
+				const onAbort = () => {
+					const reason = signal.reason;
+					reject(reason instanceof Error ? reason : new Error("SSE fetch aborted"));
+				};
+				if (signal.aborted) {
+					onAbort();
+					return;
+				}
+				signal.addEventListener("abort", onAbort, { once: true });
+			});
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const model: Model<"openai-codex-responses"> = {
+			id: "gpt-5.1-codex",
+			name: "GPT-5.1 Codex",
+			api: "openai-codex-responses",
+			provider: "openai-codex",
+			baseUrl: "https://chatgpt.com/backend-api",
+			reasoning: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 400000,
+			maxTokens: 128000,
+		};
+		const context: Context = {
+			systemPrompt: "You are a helpful assistant.",
+			messages: [{ role: "user", content: "Say hello", timestamp: Date.now() }],
+		};
+
+		const resultPromise = streamOpenAICodexResponses(model, context, {
+			apiKey: token,
+			transport: "sse",
+		}).result();
+		await vi.advanceTimersByTimeAsync(0);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+
+		await vi.advanceTimersByTimeAsync(10_000);
+		const result = await resultPromise;
+		expect(result.stopReason).toBe("error");
+		expect(result.errorMessage).toBe("Codex SSE response headers timed out after 10000ms");
+	});
+
 	it("sets session-id/x-client-request-id headers and prompt_cache_key when sessionId is provided", async () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "pi-codex-stream-"));
 		process.env.PI_CODING_AGENT_DIR = tempDir;
@@ -1480,19 +1539,24 @@ describe("openai-codex streaming", () => {
 			messages: [{ role: "user", content: "Say hello", timestamp: Date.now() }],
 		};
 
+		const retryTimeoutDelays = () =>
+			setTimeoutSpy.mock.calls
+				.map((call) => call[1])
+				.filter((delay): delay is number => delay === 1000 || delay === 2000 || delay === 4000);
+
 		const resultPromise = streamOpenAICodexResponses(model, context, {
 			apiKey: token,
 			transport: "sse",
 			maxRetries: 3,
 		}).result();
 		await vi.advanceTimersByTimeAsync(0);
-		expect(setTimeoutSpy).toHaveBeenNthCalledWith(1, expect.any(Function), 1000);
+		expect(retryTimeoutDelays()).toEqual([1000]);
 
 		await vi.advanceTimersToNextTimerAsync();
-		expect(setTimeoutSpy).toHaveBeenNthCalledWith(2, expect.any(Function), 2000);
+		expect(retryTimeoutDelays()).toEqual([1000, 2000]);
 
 		await vi.advanceTimersToNextTimerAsync();
-		expect(setTimeoutSpy).toHaveBeenNthCalledWith(3, expect.any(Function), 4000);
+		expect(retryTimeoutDelays()).toEqual([1000, 2000, 4000]);
 
 		await vi.advanceTimersToNextTimerAsync();
 		const result = await resultPromise;

@@ -33,6 +33,7 @@ import type {
 	StreamOptions,
 	Usage,
 } from "../types.ts";
+import { combineAbortSignals } from "../utils/abort-signals.ts";
 import {
 	appendAssistantMessageDiagnostic,
 	createAssistantMessageDiagnostic,
@@ -53,6 +54,7 @@ const JWT_CLAIM_PATH = "https://api.openai.com/auth" as const;
 const DEFAULT_MAX_RETRIES = 0;
 const BASE_DELAY_MS = 1000;
 const DEFAULT_MAX_RETRY_DELAY_MS = 60_000;
+const DEFAULT_SSE_HEADER_TIMEOUT_MS = 10_000;
 const DEFAULT_WEBSOCKET_CONNECT_TIMEOUT_MS = 15_000;
 const CODEX_TOOL_CALL_PROVIDERS = new Set(["openai", "openai-codex", "opencode"]);
 const WEBSOCKET_MESSAGE_TOO_BIG_CLOSE_CODE = 1009;
@@ -170,6 +172,20 @@ function normalizeTimeoutMs(value: number | undefined): number | undefined {
 		throw new Error(`Invalid timeoutMs: ${String(value)}`);
 	}
 	return Math.floor(value);
+}
+
+function createSSEHeaderTimeout(): { signal: AbortSignal; clear: () => void; error: () => Error | undefined } {
+	const controller = new AbortController();
+	let error: Error | undefined;
+	const timeout = setTimeout(() => {
+		error = new Error(`Codex SSE response headers timed out after ${DEFAULT_SSE_HEADER_TIMEOUT_MS}ms`);
+		controller.abort(error);
+	}, DEFAULT_SSE_HEADER_TIMEOUT_MS);
+	return {
+		signal: controller.signal,
+		clear: () => clearTimeout(timeout),
+		error: () => error,
+	};
 }
 
 // ============================================================================
@@ -294,12 +310,22 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 				}
 
 				try {
-					response = await fetch(resolveCodexUrl(model.baseUrl), {
-						method: "POST",
-						headers: sseHeaders,
-						body: bodyJson,
-						signal: options?.signal,
-					});
+					const headerTimeout = createSSEHeaderTimeout();
+					const combinedSignal = combineAbortSignals([options?.signal, headerTimeout.signal]);
+					try {
+						response = await fetch(resolveCodexUrl(model.baseUrl), {
+							method: "POST",
+							headers: sseHeaders,
+							body: bodyJson,
+							signal: combinedSignal.signal,
+						});
+					} catch (error) {
+						const timeoutError = headerTimeout.error();
+						throw timeoutError && !options?.signal?.aborted ? timeoutError : error;
+					} finally {
+						combinedSignal.cleanup();
+						headerTimeout.clear();
+					}
 					await options?.onResponse?.(
 						{ status: response.status, headers: headersToRecord(response.headers) },
 						model,
