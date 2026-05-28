@@ -184,6 +184,8 @@ function isAnthropicAdaptiveThinkingModel(modelId: string): boolean {
 		modelId.includes("opus-4.6") ||
 		modelId.includes("opus-4-7") ||
 		modelId.includes("opus-4.7") ||
+		modelId.includes("opus-4-8") ||
+		modelId.includes("opus-4.8") ||
 		modelId.includes("sonnet-4-6") ||
 		modelId.includes("sonnet-4.6")
 	);
@@ -225,10 +227,18 @@ function applyThinkingLevelMetadata(model: Model<any>): void {
 	if (supportsOpenAiXhigh(model.id)) {
 		mergeThinkingLevelMap(model, { xhigh: "xhigh" });
 	}
+	if (model.id.endsWith("gpt-5.5-pro")) {
+		mergeThinkingLevelMap(model, { off: null, minimal: null, low: null });
+	}
 	if (model.id.includes("opus-4-6") || model.id.includes("opus-4.6")) {
 		mergeThinkingLevelMap(model, { xhigh: "max" });
 	}
-	if (model.id.includes("opus-4-7") || model.id.includes("opus-4.7")) {
+	if (
+		model.id.includes("opus-4-7") ||
+		model.id.includes("opus-4.7") ||
+		model.id.includes("opus-4-8") ||
+		model.id.includes("opus-4.8")
+	) {
 		mergeThinkingLevelMap(model, { xhigh: "xhigh" });
 	}
 	if (model.api === "anthropic-messages" && isAnthropicAdaptiveThinkingModel(model.id)) {
@@ -1257,6 +1267,27 @@ async function generateModels() {
 		allModels.push({
 			id: "claude-opus-4-7",
 			name: "Claude Opus 4.7",
+			api: "anthropic-messages",
+			baseUrl: "https://api.anthropic.com",
+			provider: "anthropic",
+			reasoning: true,
+			input: ["text", "image"],
+			cost: {
+				input: 5,
+				output: 25,
+				cacheRead: 0.5,
+				cacheWrite: 6.25,
+			},
+			contextWindow: 1000000,
+			maxTokens: 128000,
+		});
+	}
+
+	// Add missing Claude Opus 4.8
+	if (!allModels.some(m => m.provider === "anthropic" && m.id === "claude-opus-4-8")) {
+		allModels.push({
+			id: "claude-opus-4-8",
+			name: "Claude Opus 4.8",
 			api: "anthropic-messages",
 			baseUrl: "https://api.anthropic.com",
 			provider: "anthropic",
