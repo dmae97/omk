@@ -1493,7 +1493,8 @@ const all = pi.getAllTools();
 // [{
 //   name: "read",
 //   description: "Read file contents...",
-//   parameters: ..., 
+//   parameters: ...,
+//   promptGuidelines: ["Use read to examine files instead of cat or sed."],
 //   sourceInfo: { path: "<builtin:read>", source: "builtin", scope: "temporary", origin: "top-level" }
 // }, ...]
 const names = all.map(t => t.name);
@@ -1502,7 +1503,7 @@ const extensionTools = all.filter((t) => t.sourceInfo.source !== "builtin" && t.
 pi.setActiveTools(["read", "bash"]); // Switch to read-only
 ```
 
-`pi.getAllTools()` returns `name`, `description`, `parameters`, and `sourceInfo`.
+`pi.getAllTools()` returns `name`, `description`, `parameters`, `promptGuidelines`, and `sourceInfo`.
 
 Typical `sourceInfo.source` values:
 - `builtin` for built-in tools
