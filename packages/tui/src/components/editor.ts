@@ -469,8 +469,10 @@ export class Editor implements Component, Focusable {
 		}
 
 		// Render each visible layout line
-		// Emit hardware cursor marker only when focused and not showing autocomplete
-		const emitCursorMarker = this.focused && !this.autocompleteState;
+		// Emit hardware cursor marker when focused so TUI can position the
+		// hardware cursor for IME candidate-window placement even while
+		// autocomplete (e.g. slash-command menu) is visible.
+		const emitCursorMarker = this.focused;
 
 		for (const layoutLine of visibleLines) {
 			let displayText = layoutLine.text;
