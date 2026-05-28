@@ -10,6 +10,10 @@ on:
         description: 'Tag to build (e.g., v0.12.0)'
         required: true
         type: string
+      source_ref:
+        description: 'Source ref to build/publish (defaults to tag; use only for release recovery)'
+        required: false
+        type: string
 
 permissions: {}
 
@@ -20,11 +24,12 @@ jobs:
       contents: write
     env:
       RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      SOURCE_REF: ${{ github.event.inputs.source_ref || github.event.inputs.tag || github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ env.SOURCE_REF }}
           persist-credentials: false
 
       - name: Setup Bun
@@ -91,11 +96,12 @@ jobs:
       id-token: write
     env:
       RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      SOURCE_REF: ${{ github.event.inputs.source_ref || github.event.inputs.tag || github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ env.SOURCE_REF }}
           persist-credentials: false
 
       - name: Setup Node.js
