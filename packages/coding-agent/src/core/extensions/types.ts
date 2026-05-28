@@ -756,6 +756,8 @@ export interface InputEvent {
 	images?: ImageContent[];
 	/** Where the input came from */
 	source: InputSource;
+	/** How the input will be delivered during streaming, or undefined when idle */
+	streamingBehavior?: "steer" | "followUp";
 }
 
 /** Result from input event handler */
