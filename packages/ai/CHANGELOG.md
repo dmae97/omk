@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added OpenAI Codex subscription device-code login as a selectable headless alternative while keeping browser login as the default.
+
 ## [0.76.0] - 2026-05-27
 
 ### Fixed
