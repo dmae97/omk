@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Fixed extension input events to report `streamingBehavior` only for prompts actually queued during streaming ([#5107](https://github.com/earendil-works/pi-mono/pull/5107)).
 - Fixed fenced `diff` code blocks and other highlight.js scopes to keep theme-aware syntax colors after the `cli-highlight` replacement ([#5092](https://github.com/earendil-works/pi/issues/5092)).
 
 ## [0.76.0] - 2026-05-27
