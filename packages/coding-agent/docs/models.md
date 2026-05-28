@@ -330,6 +330,8 @@ By default pi sends per-tool `eager_input_streaming: true`. If a proxy or Anthro
 
 Some Anthropic models require adaptive thinking (`thinking.type: "adaptive"` plus `output_config.effort`) instead of the legacy budget-based thinking payload. Built-in models set this automatically. For custom providers or aliases that route to those models, set `forceAdaptiveThinking` to `true`.
 
+Some Anthropic-compatible providers emit thinking blocks with empty signatures and still expect them on replay. Set `allowEmptySignature` to `true` only for those providers; real Anthropic rejects empty thinking signatures.
+
 ```json
 {
   "providers": {
@@ -340,7 +342,8 @@ Some Anthropic models require adaptive thinking (`thinking.type: "adaptive"` plu
       "compat": {
         "supportsEagerToolInputStreaming": false,
         "supportsLongCacheRetention": true,
-        "forceAdaptiveThinking": true
+        "forceAdaptiveThinking": true,
+        "allowEmptySignature": true
       },
       "models": [
         {
@@ -361,6 +364,7 @@ Some Anthropic models require adaptive thinking (`thinking.type: "adaptive"` plu
 | `sendSessionAffinityHeaders` | Whether to send `x-session-affinity` from the session id when caching is enabled. Default: auto-detected for known providers. |
 | `supportsCacheControlOnTools` | Whether the provider accepts Anthropic-style `cache_control` markers on tool definitions. Default: `true`. |
 | `forceAdaptiveThinking` | Whether to send adaptive thinking (`thinking.type: "adaptive"` plus `output_config.effort`) for this model. Built-in adaptive models set this automatically. Default: `false`. |
+| `allowEmptySignature` | Whether to replay empty thinking signatures as `signature: ""` instead of converting thinking to text. Default: `false`. |
 
 ## OpenAI Compatibility
 

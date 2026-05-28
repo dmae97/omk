@@ -6,6 +6,10 @@
 
 - Added OpenAI Codex subscription device-code login as a selectable headless alternative while keeping browser login as the default.
 
+### Fixed
+
+- Fixed Anthropic-compatible replay for providers that return empty thinking signatures by adding an opt-in `allowEmptySignature` compatibility flag ([#4464](https://github.com/earendil-works/pi/issues/4464)).
+
 ## [0.76.0] - 2026-05-27
 
 ### Fixed
