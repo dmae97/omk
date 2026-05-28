@@ -4,7 +4,7 @@
 
 ### Added
 
-- Added OpenAI Codex subscription device-code login as a selectable headless alternative while keeping browser login as the default.
+- Added OpenAI Codex subscription device-code login as a selectable headless alternative while keeping browser login as the default ([#4911](https://github.com/earendil-works/pi/pull/4911) by [@vegarsti](https://github.com/vegarsti)).
 - Added Claude Opus 4.8 model metadata for Anthropic and updated Opus adaptive-thinking coverage to use it.
 
 ### Fixed
