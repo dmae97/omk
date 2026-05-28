@@ -1256,7 +1256,7 @@ export interface ExtensionAPI {
 	 * // Register a new provider with custom models
 	 * pi.registerProvider("my-proxy", {
 	 *   baseUrl: "https://proxy.example.com",
-	 *   apiKey: "PROXY_API_KEY",
+	 *   apiKey: "$PROXY_API_KEY",
 	 *   api: "anthropic-messages",
 	 *   models: [
 	 *     {
@@ -1322,7 +1322,7 @@ export interface ProviderConfig {
 	name?: string;
 	/** Base URL for the API endpoint. Required when defining models. */
 	baseUrl?: string;
-	/** API key or environment variable name. Required when defining models (unless oauth provided). */
+	/** API key literal, env interpolation ($ENV_VAR or ${ENV_VAR}), or leading !command. Required when defining models (unless oauth provided). */
 	apiKey?: string;
 	/** API type. Required at provider or model level when defining models. */
 	api?: Api;
