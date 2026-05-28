@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Fixed Windows startup crashes under MSYS2 ucrt64 Node.js by updating the native clipboard addon to napi-rs 3.x ([#5028](https://github.com/earendil-works/pi/issues/5028)).
 - Fixed API key and header config resolution to treat plain strings as literals, support `$ENV_VAR` / `${ENV_VAR}` interpolation and `$!` bang escaping, and require explicit env syntax for config files, avoiding Windows case-insensitive env matches corrupting literal keys ([#5095](https://github.com/earendil-works/pi/issues/5095)).
 - Fixed session disposal to abort in-flight agent, compaction, branch summary, retry, and bash work ([#5029](https://github.com/earendil-works/pi/pull/5029) by [@TerminallyChilI](https://github.com/TerminallyChilI)).
 - Fixed `pi.getAllTools()` to expose each tool's `promptGuidelines` for extensions that need per-tool guideline attribution ([#4879](https://github.com/earendil-works/pi/issues/4879)).
