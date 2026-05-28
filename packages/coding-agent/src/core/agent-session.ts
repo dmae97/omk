@@ -947,7 +947,13 @@ export class AgentSession {
 			this._retryAttempt = 0;
 		}
 
-		return await this._checkCompaction(msg);
+		if (await this._checkCompaction(msg)) {
+			return true;
+		}
+
+		// The agent loop drains both queues before emitting agent_end. Any messages
+		// here were queued by agent_end extension handlers and need a continuation.
+		return this.agent.hasQueuedMessages();
 	}
 
 	/**

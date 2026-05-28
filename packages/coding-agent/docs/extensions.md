@@ -2553,6 +2553,7 @@ All examples in [examples/extensions/](../examples/extensions/).
 | `custom-compaction.ts` | Custom compaction summary | `on("session_before_compact")` |
 | `trigger-compact.ts` | Trigger compaction manually | `compact()` |
 | `git-checkpoint.ts` | Git stash on turns | `on("turn_start")`, `on("session_before_fork")`, `exec` |
+| `git-merge-and-resolve.ts` | Fetch, merge, and resolve conflicts | `on("agent_end")`, `exec`, `sendUserMessage` |
 | `auto-commit-on-exit.ts` | Commit on shutdown | `on("session_shutdown")`, `exec` |
 | **UI Components** |||
 | `status-line.ts` | Footer status indicator | `setStatus`, session events |
