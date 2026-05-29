@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed focused visible overlays losing input to base components after focus restoration behind the overlay ([#5129](https://github.com/earendil-works/pi/issues/5129)).
+
 ## [0.78.0] - 2026-05-29
 
 ### Fixed

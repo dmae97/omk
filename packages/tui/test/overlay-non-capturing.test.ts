@@ -235,7 +235,9 @@ describe("TUI overlay non-capturing", () => {
 				// Simulate showExtensionCustom: factory creates timer synchronously,
 				// then .then() pushes controller as a microtask
 				let timerHandle: ReturnType<typeof tui.showOverlay>;
-				let doneFn: () => void;
+				let doneFn: () => void = () => {
+					throw new Error("doneFn was not initialized");
+				};
 
 				const overlayPromise = new Promise<void>((resolve) => {
 					doneFn = () => {
@@ -259,7 +261,7 @@ describe("TUI overlay non-capturing", () => {
 				assert.strictEqual(editor.focused, false);
 
 				// Simulate Esc: cleanup + close (from inside handleInput)
-				doneFn!();
+				doneFn();
 				// Now await the promise (simulating showExtensionCustom resolving)
 				await overlayPromise;
 				await renderAndFlush(tui, terminal);
@@ -300,6 +302,294 @@ describe("TUI overlay non-capturing", () => {
 				assert.deepStrictEqual(nonCapturing.inputs, []);
 				assert.deepStrictEqual(fallbackCapturing.inputs, ["x"]);
 				assert.strictEqual(fallbackCapturing.focused, true);
+			} finally {
+				tui.stop();
+			}
+		});
+
+		it("active base focus replacement receives close input before overlay restore", async () => {
+			const terminal = new VirtualTerminal(80, 24);
+			const tui = new TUI(terminal);
+			const editor = new FocusableOverlay(["EDITOR"]);
+			const replacement = new FocusableOverlay(["REPLACEMENT"]);
+			const overlay = new FocusableOverlay(["OVERLAY"]);
+			overlay.handleInput = (data: string) => {
+				overlay.inputs.push(data);
+				if (data === "b") {
+					tui.setFocus(replacement);
+				}
+			};
+			replacement.handleInput = (data: string) => {
+				replacement.inputs.push(data);
+				if (data === "\r") {
+					tui.setFocus(editor);
+				}
+			};
+			tui.addChild(new EmptyContent());
+			tui.setFocus(editor);
+			tui.start();
+			try {
+				tui.showOverlay(overlay);
+				assert.strictEqual(overlay.focused, true);
+				terminal.sendInput("b");
+				await renderAndFlush(tui, terminal);
+				assert.strictEqual(replacement.focused, true);
+
+				terminal.sendInput("\r");
+				await renderAndFlush(tui, terminal);
+				assert.deepStrictEqual(replacement.inputs, ["\r"]);
+				assert.deepStrictEqual(overlay.inputs, ["b"]);
+				assert.strictEqual(overlay.focused, true);
+
+				terminal.sendInput("x");
+				await renderAndFlush(tui, terminal);
+				assert.deepStrictEqual(overlay.inputs, ["b", "x"]);
+			} finally {
+				tui.stop();
+			}
+		});
+
+		it("active replacement still receives input when it is another overlay preFocus", async () => {
+			const terminal = new VirtualTerminal(80, 24);
+			const tui = new TUI(terminal);
+			const editor = new FocusableOverlay(["EDITOR"]);
+			const replacement = new FocusableOverlay(["REPLACEMENT"]);
+			const passive = new FocusableOverlay(["PASSIVE"]);
+			const overlay = new FocusableOverlay(["OVERLAY"]);
+			overlay.handleInput = (data: string) => {
+				overlay.inputs.push(data);
+				if (data === "b") {
+					tui.setFocus(replacement);
+				}
+			};
+			replacement.handleInput = (data: string) => {
+				replacement.inputs.push(data);
+				if (data === "\r") {
+					tui.setFocus(editor);
+				}
+			};
+			tui.addChild(new EmptyContent());
+			tui.setFocus(editor);
+			tui.start();
+			try {
+				tui.setFocus(replacement);
+				tui.showOverlay(passive, { nonCapturing: true });
+				tui.setFocus(editor);
+				tui.showOverlay(overlay);
+				terminal.sendInput("b");
+				await renderAndFlush(tui, terminal);
+				assert.strictEqual(replacement.focused, true);
+
+				terminal.sendInput("1");
+				terminal.sendInput("\r");
+				await renderAndFlush(tui, terminal);
+				assert.deepStrictEqual(replacement.inputs, ["1", "\r"]);
+				assert.deepStrictEqual(overlay.inputs, ["b"]);
+				assert.strictEqual(overlay.focused, true);
+			} finally {
+				tui.stop();
+			}
+		});
+
+		it("handleInput restores focus to a visible focused overlay after base focus steal", async () => {
+			const terminal = new VirtualTerminal(80, 24);
+			const tui = new TUI(terminal);
+			const editor = new FocusableOverlay(["EDITOR"]);
+			const replacement = new FocusableOverlay(["REPLACEMENT"]);
+			const overlay = new FocusableOverlay(["OVERLAY"]);
+			tui.addChild(new EmptyContent());
+			tui.setFocus(editor);
+			tui.start();
+			try {
+				tui.showOverlay(overlay);
+				assert.strictEqual(overlay.focused, true);
+				tui.setFocus(replacement);
+				tui.setFocus(editor);
+				terminal.sendInput("x");
+				await renderAndFlush(tui, terminal);
+				assert.deepStrictEqual(overlay.inputs, ["x"]);
+				assert.deepStrictEqual(editor.inputs, []);
+				assert.strictEqual(overlay.focused, true);
+			} finally {
+				tui.stop();
+			}
+		});
+
+		it("handleInput restores focus to explicitly focused raw sub-overlay after base focus steal", async () => {
+			const terminal = new VirtualTerminal(80, 24);
+			const tui = new TUI(terminal);
+			const editor = new FocusableOverlay(["EDITOR"]);
+			const controller = new FocusableOverlay(["CONTROLLER"]);
+			const subOverlay = new FocusableOverlay(["SUB"]);
+			tui.addChild(new EmptyContent());
+			tui.setFocus(editor);
+			tui.start();
+			try {
+				tui.showOverlay(controller);
+				const subHandle = tui.showOverlay(subOverlay, { nonCapturing: true });
+				subHandle.focus();
+				tui.setFocus(editor);
+				terminal.sendInput("x");
+				await renderAndFlush(tui, terminal);
+				assert.deepStrictEqual(subOverlay.inputs, ["x"]);
+				assert.deepStrictEqual(controller.inputs, []);
+				assert.deepStrictEqual(editor.inputs, []);
+			} finally {
+				tui.stop();
+			}
+		});
+
+		it("passive non-capturing overlay does not regain input after base focus", async () => {
+			const terminal = new VirtualTerminal(80, 24);
+			const tui = new TUI(terminal);
+			const editor = new FocusableOverlay(["EDITOR"]);
+			const passive = new FocusableOverlay(["PASSIVE"]);
+			tui.addChild(new EmptyContent());
+			tui.setFocus(editor);
+			tui.start();
+			try {
+				tui.showOverlay(passive, { nonCapturing: true });
+				terminal.sendInput("x");
+				await renderAndFlush(tui, terminal);
+				assert.deepStrictEqual(editor.inputs, ["x"]);
+				assert.deepStrictEqual(passive.inputs, []);
+				assert.strictEqual(editor.focused, true);
+			} finally {
+				tui.stop();
+			}
+		});
+
+		it("explicitly focused non-capturing overlay regains input after base focus steal", async () => {
+			const terminal = new VirtualTerminal(80, 24);
+			const tui = new TUI(terminal);
+			const editor = new FocusableOverlay(["EDITOR"]);
+			const overlay = new FocusableOverlay(["NC"]);
+			tui.addChild(new EmptyContent());
+			tui.setFocus(editor);
+			tui.start();
+			try {
+				const handle = tui.showOverlay(overlay, { nonCapturing: true });
+				handle.focus();
+				tui.setFocus(editor);
+				terminal.sendInput("x");
+				await renderAndFlush(tui, terminal);
+				assert.deepStrictEqual(overlay.inputs, ["x"]);
+				assert.deepStrictEqual(editor.inputs, []);
+			} finally {
+				tui.stop();
+			}
+		});
+
+		it("unfocus() prevents visible overlay from regaining input", async () => {
+			const terminal = new VirtualTerminal(80, 24);
+			const tui = new TUI(terminal);
+			const editor = new FocusableOverlay(["EDITOR"]);
+			const overlay = new FocusableOverlay(["OVERLAY"]);
+			tui.addChild(new EmptyContent());
+			tui.setFocus(editor);
+			tui.start();
+			try {
+				const handle = tui.showOverlay(overlay);
+				handle.unfocus();
+				terminal.sendInput("x");
+				await renderAndFlush(tui, terminal);
+				assert.deepStrictEqual(editor.inputs, ["x"]);
+				assert.deepStrictEqual(overlay.inputs, []);
+				assert.strictEqual(editor.focused, true);
+			} finally {
+				tui.stop();
+			}
+		});
+
+		it("temporarily invisible focused overlay falls back without losing restore eligibility", async () => {
+			const terminal = new VirtualTerminal(80, 24);
+			const tui = new TUI(terminal);
+			const editor = new FocusableOverlay(["EDITOR"]);
+			const overlay = new FocusableOverlay(["OVERLAY"]);
+			let visible = true;
+			tui.addChild(new EmptyContent());
+			tui.setFocus(editor);
+			tui.start();
+			try {
+				tui.showOverlay(overlay, { visible: () => visible });
+				tui.setFocus(editor);
+				visible = false;
+				terminal.sendInput("x");
+				await renderAndFlush(tui, terminal);
+				assert.deepStrictEqual(editor.inputs, ["x"]);
+				assert.deepStrictEqual(overlay.inputs, []);
+				visible = true;
+				terminal.sendInput("y");
+				await renderAndFlush(tui, terminal);
+				assert.deepStrictEqual(editor.inputs, ["x"]);
+				assert.deepStrictEqual(overlay.inputs, ["y"]);
+			} finally {
+				tui.stop();
+			}
+		});
+
+		it("temporarily invisible focused overlay with null preFocus restores when visible again", async () => {
+			const terminal = new VirtualTerminal(80, 24);
+			const tui = new TUI(terminal);
+			const overlay = new FocusableOverlay(["OVERLAY"]);
+			let visible = true;
+			tui.addChild(new EmptyContent());
+			tui.start();
+			try {
+				tui.showOverlay(overlay, { visible: () => visible });
+				visible = false;
+				terminal.sendInput("x");
+				await renderAndFlush(tui, terminal);
+				assert.deepStrictEqual(overlay.inputs, []);
+				visible = true;
+				terminal.sendInput("y");
+				await renderAndFlush(tui, terminal);
+				assert.deepStrictEqual(overlay.inputs, ["y"]);
+			} finally {
+				tui.stop();
+			}
+		});
+
+		it("cyclic overlay preFocus ancestry does not hang focus changes", async () => {
+			const terminal = new VirtualTerminal(80, 24);
+			const tui = new TUI(terminal);
+			const editor = new FocusableOverlay(["EDITOR"]);
+			const overlay = new FocusableOverlay(["OVERLAY"]);
+			tui.addChild(new EmptyContent());
+			tui.setFocus(overlay);
+			tui.start();
+			try {
+				const handle = tui.showOverlay(overlay, { nonCapturing: true });
+				handle.focus();
+				tui.setFocus(editor);
+				terminal.sendInput("x");
+				await renderAndFlush(tui, terminal);
+				assert.deepStrictEqual(editor.inputs, ["x"]);
+				assert.deepStrictEqual(overlay.inputs, []);
+			} finally {
+				tui.stop();
+			}
+		});
+
+		it("handleInput restores the focus-order top overlay after base focus steal", async () => {
+			const terminal = new VirtualTerminal(80, 24);
+			const tui = new TUI(terminal);
+			const editor = new FocusableOverlay(["EDITOR"]);
+			const lower = new FocusableOverlay(["LOWER"]);
+			const upper = new FocusableOverlay(["UPPER"]);
+			tui.addChild(new EmptyContent());
+			tui.setFocus(editor);
+			tui.start();
+			try {
+				const lowerHandle = tui.showOverlay(lower);
+				tui.showOverlay(upper);
+				lowerHandle.focus();
+				tui.setFocus(editor);
+				terminal.sendInput("x");
+				await renderAndFlush(tui, terminal);
+				assert.deepStrictEqual(lower.inputs, ["x"]);
+				assert.deepStrictEqual(upper.inputs, []);
+				assert.deepStrictEqual(editor.inputs, []);
 			} finally {
 				tui.stop();
 			}

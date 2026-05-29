@@ -194,6 +194,19 @@ export interface OverlayHandle {
 	isFocused(): boolean;
 }
 
+type ActiveOverlayRestoreFocusState = { status: "eligible" } | { status: "blocked"; blockedBy: Component };
+type OverlayRestoreFocusState = { status: "inactive" } | ActiveOverlayRestoreFocusState;
+type RestorableOverlayStackEntry = OverlayStackEntry & { restoreFocus: ActiveOverlayRestoreFocusState };
+
+type OverlayStackEntry = {
+	component: Component;
+	options: OverlayOptions | undefined;
+	preFocus: Component | null;
+	hidden: boolean;
+	focusOrder: number;
+	restoreFocus: OverlayRestoreFocusState;
+};
+
 /**
  * Container - a component that contains other components
  */
@@ -262,13 +275,7 @@ export class TUI extends Container {
 
 	// Overlay stack for modal components rendered on top of base content
 	private focusOrderCounter = 0;
-	private overlayStack: {
-		component: Component;
-		options?: OverlayOptions;
-		preFocus: Component | null;
-		hidden: boolean;
-		focusOrder: number;
-	}[] = [];
+	private overlayStack: OverlayStackEntry[] = [];
 
 	constructor(terminal: Terminal, showHardwareCursor?: boolean) {
 		super();
@@ -309,17 +316,76 @@ export class TUI extends Container {
 	}
 
 	setFocus(component: Component | null): void {
+		const previousFocus = this.focusedComponent;
+		let nextFocus = component;
+		const previousFocusedOverlay = previousFocus
+			? this.overlayStack.find((entry) => entry.component === previousFocus && this.isOverlayVisible(entry))
+			: undefined;
+		const nextFocusIsOverlay = nextFocus ? this.overlayStack.some((entry) => entry.component === nextFocus) : false;
+		if (nextFocus && !nextFocusIsOverlay) {
+			const restoreOverlay = this.getRestoreFocusOverlay();
+			if (
+				restoreOverlay?.restoreFocus.status === "blocked" &&
+				restoreOverlay.restoreFocus.blockedBy === previousFocus
+			) {
+				restoreOverlay.restoreFocus = { status: "eligible" };
+				nextFocus = restoreOverlay.component;
+			} else if (
+				previousFocusedOverlay &&
+				previousFocusedOverlay.restoreFocus.status !== "inactive" &&
+				!this.isOverlayFocusAncestor(previousFocusedOverlay, nextFocus)
+			) {
+				previousFocusedOverlay.restoreFocus = { status: "blocked", blockedBy: nextFocus };
+			}
+		}
+
 		// Clear focused flag on old component
 		if (isFocusable(this.focusedComponent)) {
 			this.focusedComponent.focused = false;
 		}
 
-		this.focusedComponent = component;
+		this.focusedComponent = nextFocus;
 
 		// Set focused flag on new component
-		if (isFocusable(component)) {
-			component.focused = true;
+		if (isFocusable(nextFocus)) {
+			nextFocus.focused = true;
 		}
+
+		const focusedOverlay = nextFocus
+			? this.overlayStack.find((entry) => entry.component === nextFocus && this.isOverlayVisible(entry))
+			: undefined;
+		if (focusedOverlay) {
+			this.markOverlayRestoreFocusEligible(focusedOverlay);
+		}
+	}
+
+	private markOverlayRestoreFocusEligible(entry: OverlayStackEntry): void {
+		for (const overlay of this.overlayStack) {
+			this.clearOverlayRestoreFocus(overlay);
+		}
+		entry.restoreFocus = { status: "eligible" };
+	}
+
+	private clearOverlayRestoreFocus(entry: OverlayStackEntry): void {
+		entry.restoreFocus = { status: "inactive" };
+	}
+
+	private getRestoreFocusOverlay(): RestorableOverlayStackEntry | undefined {
+		return this.overlayStack.find(
+			(overlay): overlay is RestorableOverlayStackEntry =>
+				overlay.restoreFocus.status !== "inactive" && this.isOverlayVisible(overlay),
+		);
+	}
+
+	private isOverlayFocusAncestor(entry: OverlayStackEntry, component: Component): boolean {
+		const visited = new Set<Component>();
+		let current = entry.preFocus;
+		while (current && !visited.has(current)) {
+			visited.add(current);
+			if (current === component) return true;
+			current = this.overlayStack.find((overlay) => overlay.component === current)?.preFocus ?? null;
+		}
+		return false;
 	}
 
 	/**
@@ -327,12 +393,13 @@ export class TUI extends Container {
 	 * Returns a handle to control the overlay's visibility.
 	 */
 	showOverlay(component: Component, options?: OverlayOptions): OverlayHandle {
-		const entry = {
+		const entry: OverlayStackEntry = {
 			component,
 			options,
 			preFocus: this.focusedComponent,
 			hidden: false,
 			focusOrder: ++this.focusOrderCounter,
+			restoreFocus: { status: "inactive" },
 		};
 		this.overlayStack.push(entry);
 		// Only focus if overlay is actually visible
@@ -347,6 +414,7 @@ export class TUI extends Container {
 			hide: () => {
 				const index = this.overlayStack.indexOf(entry);
 				if (index !== -1) {
+					this.clearOverlayRestoreFocus(entry);
 					this.overlayStack.splice(index, 1);
 					// Restore focus if this overlay had focus
 					if (this.focusedComponent === component) {
@@ -362,6 +430,7 @@ export class TUI extends Container {
 				entry.hidden = hidden;
 				// Update focus when hiding/showing
 				if (hidden) {
+					this.clearOverlayRestoreFocus(entry);
 					// If this overlay had focus, move focus to next visible or preFocus
 					if (this.focusedComponent === component) {
 						const topVisible = this.getTopmostVisibleOverlay();
@@ -379,14 +448,13 @@ export class TUI extends Container {
 			isHidden: () => entry.hidden,
 			focus: () => {
 				if (!this.overlayStack.includes(entry) || !this.isOverlayVisible(entry)) return;
-				if (this.focusedComponent !== component) {
-					this.setFocus(component);
-				}
 				entry.focusOrder = ++this.focusOrderCounter;
+				this.setFocus(component);
 				this.requestRender();
 			},
 			unfocus: () => {
 				if (this.focusedComponent !== component) return;
+				this.clearOverlayRestoreFocus(entry);
 				const topVisible = this.getTopmostVisibleOverlay();
 				this.setFocus(topVisible && topVisible !== entry ? topVisible.component : entry.preFocus);
 				this.requestRender();
@@ -399,6 +467,7 @@ export class TUI extends Container {
 	hideOverlay(): void {
 		const overlay = this.overlayStack.pop();
 		if (!overlay) return;
+		this.clearOverlayRestoreFocus(overlay);
 		if (this.focusedComponent === overlay.component) {
 			// Find topmost visible overlay, or fall back to preFocus
 			const topVisible = this.getTopmostVisibleOverlay();
@@ -414,7 +483,7 @@ export class TUI extends Container {
 	}
 
 	/** Check if an overlay entry is currently visible */
-	private isOverlayVisible(entry: (typeof this.overlayStack)[number]): boolean {
+	private isOverlayVisible(entry: OverlayStackEntry): boolean {
 		if (entry.hidden) return false;
 		if (entry.options?.visible) {
 			return entry.options.visible(this.terminal.columns, this.terminal.rows);
@@ -423,7 +492,7 @@ export class TUI extends Container {
 	}
 
 	/** Find the topmost visible capturing overlay, if any */
-	private getTopmostVisibleOverlay(): (typeof this.overlayStack)[number] | undefined {
+	private getTopmostVisibleOverlay(): OverlayStackEntry | undefined {
 		for (let i = this.overlayStack.length - 1; i >= 0; i--) {
 			if (this.overlayStack[i].options?.nonCapturing) continue;
 			if (this.isOverlayVisible(this.overlayStack[i])) {
@@ -581,6 +650,18 @@ export class TUI extends Container {
 			} else {
 				// No visible overlays, restore to preFocus
 				this.setFocus(focusedOverlay.preFocus);
+			}
+		}
+
+		const focusIsOverlay = this.overlayStack.some((o) => o.component === this.focusedComponent);
+		if (!focusIsOverlay) {
+			const overlayToRestore = this.getRestoreFocusOverlay();
+			if (
+				overlayToRestore &&
+				(overlayToRestore.restoreFocus.status === "eligible" ||
+					overlayToRestore.restoreFocus.blockedBy !== this.focusedComponent)
+			) {
+				this.setFocus(overlayToRestore.component);
 			}
 		}
 

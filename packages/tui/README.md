@@ -119,6 +119,10 @@ handle.focus();             // Focus and bring to visual front
 handle.unfocus();           // Release focus to previous target
 handle.isFocused();         // Check if overlay has focus
 
+// A focused visible overlay keeps keyboard input until hidden or explicitly unfocused.
+// If you want a base component to receive input while the overlay remains visible,
+// call handle.unfocus() before focusing the base component.
+
 // Hide topmost overlay
 tui.hideOverlay();
 
