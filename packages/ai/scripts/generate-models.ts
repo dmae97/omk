@@ -275,7 +275,12 @@ function applyThinkingLevelMetadata(model: Model<any>): void {
 		mergeThinkingLevelMap(model, { off: null });
 	}
 	if (model.provider === "opencode-go" && model.id === "kimi-k2.6") {
-		mergeThinkingLevelMap(model, { off: "none" });
+		// OpenCode Go exposes Kimi K2.6 thinking as on/off, not distinct effort tiers.
+		mergeThinkingLevelMap(model, { minimal: null, low: null, medium: null });
+	}
+	if (model.provider === "opencode" && model.id === "grok-build-0.1") {
+		// OpenCode Zen Grok Build reasons by default but rejects explicit reasoningEffort.
+		mergeThinkingLevelMap(model, { off: null, minimal: null, low: null, medium: null });
 	}
 }
 
@@ -896,6 +901,10 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					baseUrl = `${variant.basePath}/v1`;
 				}
 
+				if (variant.provider === "opencode" && modelId === "grok-build-0.1") {
+					compat = { ...(compat ?? {}), supportsReasoningEffort: false };
+				}
+
 				// Fix known mismatches between models.dev npm data and actual
 				// OpenCode Go endpoint behaviour. models.dev reports these models
 				// as @ai-sdk/anthropic, but the OpenCode Go endpoints either don't
@@ -909,7 +918,9 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 						baseUrl = `${variant.basePath}/v1`;
 					}
 					if (modelId === "kimi-k2.6") {
-						compat = { ...(compat ?? {}), thinkingFormat: "string-thinking" };
+						// OpenCode Go Kimi K2.6 accepts Anthropic-style thinking objects
+						// and rejects string thinking values or combined reasoning_effort.
+						compat = { ...(compat ?? {}), thinkingFormat: "deepseek", supportsReasoningEffort: false };
 					}
 					if (modelId === "qwen3.5-plus" || modelId === "qwen3.6-plus") {
 						api = "openai-completions";

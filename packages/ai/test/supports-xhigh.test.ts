@@ -56,6 +56,18 @@ describe("getSupportedThinkingLevels", () => {
 		expect(getSupportedThinkingLevels(model!)).toEqual(["off", "high", "xhigh"]);
 	});
 
+	it("includes only high plus off for OpenCode Go Kimi K2.6", () => {
+		const model = getModel("opencode-go", "kimi-k2.6");
+		expect(model).toBeDefined();
+		expect(getSupportedThinkingLevels(model!)).toEqual(["off", "high"]);
+	});
+
+	it("includes only high for OpenCode Grok Build", () => {
+		const model = getModel("opencode", "grok-build-0.1");
+		expect(model).toBeDefined();
+		expect(getSupportedThinkingLevels(model!)).toEqual(["high"]);
+	});
+
 	it("includes only high/xhigh plus off for DeepSeek V4 Flash on OpenRouter", () => {
 		const model = getModel("openrouter", "deepseek/deepseek-v4-flash");
 		expect(model).toBeDefined();

@@ -571,7 +571,7 @@ function buildParams(
 		};
 	} else if (compat.thinkingFormat === "deepseek" && model.reasoning) {
 		(params as any).thinking = { type: options?.reasoningEffort ? "enabled" : "disabled" };
-		if (options?.reasoningEffort) {
+		if (options?.reasoningEffort && compat.supportsReasoningEffort) {
 			(params as any).reasoning_effort =
 				model.thinkingLevelMap?.[options.reasoningEffort] ?? options.reasoningEffort;
 		}
