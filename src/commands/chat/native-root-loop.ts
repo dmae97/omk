@@ -1,9 +1,9 @@
-import type { TaskResult, TaskRunner } from "../../contracts/orchestration.js";
+import type { ApprovalPolicy, ExecutionStrategy, TaskResult, TaskRunner } from "../../contracts/orchestration.js";
 import type { RuntimeBootstrap } from "../../runtime/runtime-bootstrap.js";
 import type { ChatLayout } from "./utils.js";
 import { style } from "../../util/theme.js";
 import { runShell } from "../../util/shell.js";
-import type { DagNode } from "../../orchestration/dag.js";
+import { createDag, type Dag, type DagNode } from "../../orchestration/dag.js";
 import { applyCapabilityInjectionToRouting, buildCapabilityInjection } from "../../runtime/capability-injection.js";
 import { compileBloatToNlp, type DebloatRisk } from "../../runtime/debloat-nlp.js";
 import { buildPromptEnvelope, renderPromptEnvelope } from "../../runtime/prompt-envelope.js";
@@ -12,18 +12,24 @@ import { buildTaskRunContext } from "../../runtime/worker-manifest.js";
 import { TerminalOwner } from "../../util/terminal-owner.js";
 import type { CliRenderer } from "../../cli/ui/renderer.js";
 import type { TaskRunContext } from "../../contracts/worker-context.js";
+import { executeHarnessRun } from "../../harness/execute-harness-run.js";
+import type { ProviderPolicy } from "../../providers/types.js";
+import { buildChatTurnDag } from "./chat-turn-dag.js";
 
 export interface NativeRootLoopInput {
   bootstrap: RuntimeBootstrap;
   taskRunner: TaskRunner;
   runId: string;
   root: string;
+  rootSource?: string;
+  activeCwd?: string;
   env: Record<string, string>;
   layout: ChatLayout;
   agentFile: string;
   mcpAllowlist?: readonly string[];
   skillNames?: readonly string[];
   hookNames?: readonly string[];
+  workers?: number;
   executionPrompt?: string;
   renderer?: CliRenderer;
   onData?: (data: string) => void;
@@ -91,21 +97,117 @@ function formatScopedNames(names: readonly string[] | undefined, empty = "none")
   return names.length > 8 ? `${preview}, … +${names.length - 8}` : preview;
 }
 
-function buildTurnToolSummary(routing: import("../../contracts/dag.js").DagNodeRouting | undefined): string {
-  const parts: string[] = [];
-  if (routing?.provider) parts.push(routing.provider);
-  if (routing?.providerModel && routing.providerModel !== "auto") parts.push(routing.providerModel);
-  if (routing?.risk) parts.push(routing.risk);
-  const skills = routing?.skills;
-  const mcpServers = routing?.mcpServers;
-  if (skills && skills.length > 0) parts.push(`${skills.length} skills`);
-  if (mcpServers && mcpServers.length > 0) parts.push(`${mcpServers.length} mcp`);
-  return parts.join(" · ");
-}
-
 function isDisabledEnvValue(value: string | undefined): boolean {
   const normalized = value?.trim().toLowerCase();
   return normalized === "0" || normalized === "false" || normalized === "no" || normalized === "off";
+}
+
+export function shouldRunNativeParallelTurn(executionPrompt: string | undefined): boolean {
+  return executionPrompt?.trim().toLowerCase() === "parallel";
+}
+
+async function runNativeParallelTurn(
+  input: NativeRootLoopInput,
+  prompt: string,
+  renderer?: CliRenderer
+): Promise<number> {
+  const normalizedPrompt = prompt.trim();
+  const message = `\n  Spawning parallel: "${normalizedPrompt}"\n`;
+  if (renderer) {
+    renderer.emit({ type: "control:output", text: message });
+  } else {
+    console.log(style.phosphorDim(message));
+  }
+  const result = await runShell(process.execPath, ["dist/cli.js", "parallel", normalizedPrompt], {
+    cwd: input.root,
+    env: input.env,
+    stdio: "inherit",
+    timeout: 300000,
+  });
+  if (result.failed) {
+    const errorMessage = `Parallel exited with code ${result.exitCode}`;
+    if (renderer) {
+      renderer.emit({ type: "turn:error", message: errorMessage });
+    } else {
+      console.log(style.metricsRed(errorMessage));
+    }
+  }
+  return result.exitCode ?? (result.failed ? 1 : 0);
+}
+
+function nativeApprovalPolicy(executionPrompt: string | undefined): ApprovalPolicy {
+  const normalized = executionPrompt?.trim().toLowerCase();
+  switch (normalized) {
+    case "block":
+      return "block";
+    case "yolo":
+      return "yolo";
+    case "auto":
+    case "parallel":
+    case "sequential":
+      return "auto";
+    case "ask":
+    default:
+      return "interactive";
+  }
+}
+
+function nativeExecutionStrategy(executionPrompt: string | undefined): ExecutionStrategy | undefined {
+  const normalized = executionPrompt?.trim().toLowerCase();
+  if (normalized === "sequential" || normalized === "parallel") return normalized;
+  return undefined;
+}
+
+function bootstrapProviderPolicy(bootstrap: RuntimeBootstrap): ProviderPolicy {
+  const raw = (bootstrap.providerPolicy || bootstrap.provider || "auto").trim().toLowerCase();
+  switch (raw) {
+    case "auto":
+    case "authority":
+    case "codex":
+    case "commandcode":
+    case "deepseek":
+    case "kimi":
+    case "local-llm":
+    case "mimo":
+    case "opencode":
+    case "openrouter":
+    case "qwen":
+      return raw;
+    case "local":
+    case "llama":
+      return "local-llm";
+    default:
+      return "auto";
+  }
+}
+
+function emitNativeTurnRoute(input: {
+  node: DagNode;
+  env: Record<string, string>;
+  heartbeatEnabled: boolean;
+  renderer?: CliRenderer;
+  mcpAllowlist?: readonly string[];
+  skillNames?: readonly string[];
+  hookNames?: readonly string[];
+}): void {
+  if (!input.heartbeatEnabled) return;
+  const routing = input.node.routing;
+  if (input.renderer) {
+    input.renderer.emit({
+      type: "turn:route",
+      provider: routing?.provider ?? "auto",
+      model: routing?.providerModel ?? input.env.OMK_PROVIDER_MODEL,
+      risk: String(routing?.risk ?? "read"),
+      sandbox: String(routing?.sandboxMode ?? "auto"),
+      mcp: input.mcpAllowlist,
+      skills: input.skillNames,
+      hooks: input.hookNames,
+    });
+    return;
+  }
+  process.stderr.write(style.phosphorDim(
+    `  routing: provider=${routing?.provider ?? "auto"} model=${routing?.providerModel ?? input.env.OMK_PROVIDER_MODEL ?? "auto"} risk=${routing?.risk ?? "read"} sandbox=${routing?.sandboxMode ?? "auto"}\n`
+  ));
 }
 
 export function createNativeRootSessionState(input: {
@@ -229,7 +331,8 @@ function buildSlashCommands(input: NativeRootLoopInput, state: NativeRootSession
       console.log(`  Provider: ${style.phosphor(state.provider)} | Model: ${style.phosphorDim(state.model ?? "auto")}`);
       console.log(`  Uptime: ${style.phosphorDim(Math.floor(uptime / 60) + "m " + Math.floor(uptime % 60) + "s")}`);
       console.log(`  Heap: ${style.phosphorDim((mem.heapUsed / 1024 / 1024).toFixed(1) + "M")} / ${style.phosphorDim((mem.heapTotal / 1024 / 1024).toFixed(1) + "M")}`);
-      console.log(`  Layout: ${style.phosphorDim(input.layout)} | Root: ${style.phosphorDim(input.root.slice(-40))}`);
+      console.log(`  Layout: ${style.phosphorDim(input.layout)} | Root: ${style.phosphorDim(input.root)}`);
+      console.log(`  CWD: ${style.phosphorDim(input.activeCwd ?? process.cwd())} | Source: ${style.phosphorDim(input.rootSource ?? "unknown")}`);
       console.log(`  MCP: ${style.phosphorDim(formatScopedNames(input.mcpAllowlist, "none"))}`);
       console.log(`  Skills: ${style.phosphorDim(formatScopedNames(input.skillNames, "none"))}`);
       console.log(`  Hooks: ${style.phosphorDim(formatScopedNames(input.hookNames, "none"))}`);
@@ -292,16 +395,7 @@ function buildSlashCommands(input: NativeRootLoopInput, state: NativeRootSession
         console.log(style.phosphorDim("\n  Usage: /parallel <prompt>\n"));
         return;
       }
-      console.log(style.phosphorDim(`\n  Spawning parallel: "${prompt}"\n`));
-      const result = await runShell(process.execPath, ["dist/cli.js", "parallel", prompt], {
-        cwd: input.root,
-        env: input.env,
-        stdio: "inherit",
-        timeout: 300000,
-      });
-      if (result.failed) {
-        console.log(style.metricsRed(`Parallel exited with code ${result.exitCode}`));
-      }
+      await runNativeParallelTurn(input, prompt);
     }},
   ];
 }
@@ -515,24 +609,7 @@ async function executeNativeRootTurn(input: {
 }): Promise<TaskResult> {
   const startedAt = Date.now();
   const routing = input.node.routing;
-  if (input.heartbeatEnabled) {
-    if (input.renderer) {
-      input.renderer.emit({
-        type: "turn:route",
-        provider: routing?.provider ?? "auto",
-        model: routing?.providerModel ?? input.env.OMK_PROVIDER_MODEL,
-        risk: String(routing?.risk ?? "read"),
-        sandbox: String(routing?.sandboxMode ?? "auto"),
-        mcp: input.mcpAllowlist,
-        skills: input.skillNames,
-        hooks: input.hookNames,
-      });
-    } else {
-      process.stderr.write(style.phosphorDim(
-        `  routing: provider=${routing?.provider ?? "auto"} model=${routing?.providerModel ?? input.env.OMK_PROVIDER_MODEL ?? "auto"} risk=${routing?.risk ?? "read"} sandbox=${routing?.sandboxMode ?? "auto"}\n`
-      ));
-    }
-  }
+  emitNativeTurnRoute(input);
 
   let heartbeatPrinted = false;
   let heartbeatLineClosed = false;
@@ -577,6 +654,129 @@ async function executeNativeRootTurn(input: {
   }
 }
 
+async function buildNativeRootLoopTurnDag(input: {
+  bootstrap: RuntimeBootstrap;
+  prompt: string;
+  mcpAllowlist?: readonly string[];
+  skillNames?: readonly string[];
+  hookNames?: readonly string[];
+  executionPrompt?: string;
+  workers?: number;
+}): Promise<Dag> {
+  const dag = await buildChatTurnDag({
+    prompt: input.prompt,
+    runId: "native-chat-turn",
+    providerPolicy: bootstrapProviderPolicy(input.bootstrap),
+    providerModel: input.bootstrap.selectedModel,
+    workerCount: input.workers,
+    executionStrategy: nativeExecutionStrategy(input.executionPrompt),
+    mcpAllowlist: input.mcpAllowlist,
+    skillNames: input.skillNames,
+    hookNames: input.hookNames,
+  });
+
+  if (dag.nodes.length !== 1) return dag;
+
+  const node = buildNativeRootLoopTurnNode({
+    bootstrap: input.bootstrap,
+    prompt: input.prompt,
+    nodeId: dag.nodes[0]?.id,
+    mcpAllowlist: input.mcpAllowlist,
+    skillNames: input.skillNames,
+    hookNames: input.hookNames,
+    executionPrompt: input.executionPrompt,
+  });
+  return createDag({ nodes: [node] });
+}
+
+function combineNativeHarnessResults(
+  success: boolean,
+  completed: Array<{ node: DagNode; result: TaskResult }>
+): TaskResult {
+  const last = completed.at(-1)?.result;
+  const stdout = completed
+    .map(({ result }) => result.stdout)
+    .filter((text): text is string => Boolean(text))
+    .join("\n\n");
+  const stderr = completed
+    .map(({ result }) => result.stderr)
+    .filter((text): text is string => Boolean(text))
+    .join("\n");
+  return {
+    success,
+    exitCode: success ? 0 : last?.exitCode ?? 1,
+    stdout,
+    stderr,
+    metadata: {
+      ...(last?.metadata ?? {}),
+      harness: "dag-executor",
+      completedNodes: completed.length,
+    },
+  };
+}
+
+async function executeNativeRootHarnessTurn(input: {
+  taskRunner: TaskRunner;
+  bootstrap: RuntimeBootstrap;
+  prompt: string;
+  runId: string;
+  root: string;
+  env: Record<string, string>;
+  signal: AbortSignal;
+  heartbeatEnabled: boolean;
+  renderer?: CliRenderer;
+  mcpAllowlist?: readonly string[];
+  skillNames?: readonly string[];
+  hookNames?: readonly string[];
+  workers?: number;
+  executionPrompt?: string;
+}): Promise<TaskResult> {
+  const dag = await buildNativeRootLoopTurnDag({
+    bootstrap: input.bootstrap,
+    prompt: input.prompt,
+    mcpAllowlist: input.mcpAllowlist,
+    skillNames: input.skillNames,
+    hookNames: input.hookNames,
+    executionPrompt: input.executionPrompt,
+    workers: input.workers,
+  });
+  const completed: Array<{ node: DagNode; result: TaskResult }> = [];
+
+  const run = await executeHarnessRun({
+    root: input.root,
+    runId: input.runId,
+    dag,
+    runner: input.taskRunner,
+    env: input.env,
+    workers: Math.max(1, input.workers ?? 1),
+    approvalPolicy: nativeApprovalPolicy(input.executionPrompt),
+    signal: input.signal,
+    onNodeStart: (node) => {
+      emitNativeTurnRoute({
+        node,
+        env: input.env,
+        heartbeatEnabled: input.heartbeatEnabled,
+        renderer: input.renderer,
+        mcpAllowlist: node.routing?.mcpServers ?? input.mcpAllowlist,
+        skillNames: node.routing?.skills ?? input.skillNames,
+        hookNames: node.routing?.hooks ?? input.hookNames,
+      });
+    },
+    onNodeComplete: (node, result) => {
+      completed.push({ node, result });
+    },
+  });
+
+  const result = combineNativeHarnessResults(run.success, completed);
+  result.metadata = {
+    ...(result.metadata ?? {}),
+    runId: run.state.runId,
+    nodeCount: run.state.nodes.length,
+    failedNodes: run.state.nodes.filter((node) => node.status === "failed" || node.status === "blocked").length,
+  };
+  return result;
+}
+
 export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<number> {
   const { taskRunner, layout, onData } = input;
   const renderer = input.renderer;
@@ -592,44 +792,12 @@ export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<
     provider: state.provider,
     model: state.model,
     layout,
+    root: input.root,
+    cwd: input.activeCwd,
+    rootSource: input.rootSource,
   });
 
-  if (layout !== "plain") {
-    const scoped = formatScopedNames(input.mcpAllowlist, "none");
-    const skillNames = formatScopedNames(input.skillNames, "none");
-    const hookNames = formatScopedNames(input.hookNames, "none");
-    const provider = state.provider;
-    const model = state.model ?? "auto";
-    const providerDisplay = provider === "auto" ? "auto-detect" : provider;
-
-    console.log(style.phosphorBold("\n╭─ OMK Agent Console " + style.phosphorDim(`run ${input.runId.slice(0, 20)}…`) + " ───"));
-    console.log(style.phosphorDim(`│ `) + style.phosphorBold("Provider") + style.phosphorDim(`  ${providerDisplay} · ${model}`));
-    console.log(style.phosphorDim(`│ `) + style.phosphorBold("MCP") + style.phosphorDim(`       ${scoped}`));
-    console.log(style.phosphorDim(`│ `) + style.phosphorBold("Skills") + style.phosphorDim(`    ${skillNames}`));
-    console.log(style.phosphorDim(`│ `) + style.phosphorBold("Hooks") + style.phosphorDim(`     ${hookNames}`));
-
-    // Show TODO summary if available
-    let todoLine = "";
-    try {
-      const { readTodos } = await import("../../util/todo-sync.js");
-      const existingTodos = await readTodos(input.runId).catch(() => null);
-      if (existingTodos && existingTodos.length > 0) {
-        const pending = existingTodos.filter(t => t.status === "pending").length;
-        const active = existingTodos.filter(t => t.status === "in_progress").length;
-        const done = existingTodos.filter(t => t.status === "done").length;
-        const parts = [];
-        if (active > 0) parts.push(style.mint(`${active} active`));
-        if (pending > 0) parts.push(style.phosphorDim(`${pending} pending`));
-        if (done > 0) parts.push(style.phosphorDim(`${done} done`));
-        todoLine = style.phosphorDim(`│ `) + style.phosphorBold("TODO") + style.phosphorDim(`       ${parts.join(" · ")}`);
-      }
-    } catch { /* ignore */ }
-
-    if (todoLine) console.log(todoLine);
-
-    console.log(style.phosphorDim(`│ /help for commands · /exit to quit`));
-    console.log(style.phosphorDim("╰─────────────────────────────────────────────────\n"));
-  }
+  // opencode-style: banner handled by PlainModernRenderer session:start event
 
   const { createInterface } = await import("readline");
   const rl = createInterface({ input: process.stdin, output: renderer ? process.stderr : process.stdout });
@@ -732,58 +900,95 @@ export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<
       continue;
     }
 
+    if (shouldRunNativeParallelTurn(state.approvalPolicy)) {
+      const turnStartedAt = Date.now();
+      try {
+        const exitCode = await terminalOwner.withChildProcess(rl, () => runNativeParallelTurn(input, line, renderer));
+        renderer?.emit({ type: "turn:finish", durationMs: Date.now() - turnStartedAt, exitCode });
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (renderer) {
+          renderer.emit({ type: "turn:error", message: msg });
+        } else {
+          console.error(style.metricsRed(`Error: ${msg}`));
+        }
+      }
+      continue;
+    }
+
     const abort = new AbortController();
     activeTurnAbort = abort;
     const timeout = setTimeout(() => abort.abort(), safeTurnTimeoutMs);
 
     try {
-      const node = buildNativeRootLoopTurnNode({
-        bootstrap: state.bootstrap,
-        prompt: line,
-        mcpAllowlist: input.mcpAllowlist,
-        skillNames: input.skillNames,
-        hookNames: input.hookNames,
-        executionPrompt: state.approvalPolicy,
-      });
-      const turnMcpAllowlist = node.routing?.mcpServers ?? input.mcpAllowlist;
-      const turnSkillNames = node.routing?.skills ?? input.skillNames;
-      const turnHookNames = node.routing?.hooks ?? input.hookNames;
-      const runContext = buildTaskRunContext({
-        runId: input.runId,
-        root: input.root,
-        node,
-        objective: line,
-        toolPlane: {
-          mcpServers: turnMcpAllowlist,
-          mcpConfigFile: input.env.OMK_MCP_CONFIG_FILE,
-          skills: turnSkillNames,
-          hooks: turnHookNames,
-          tools: node.routing?.tools,
-          requiresRuntimeMcp: node.routing?.requiresMcp,
-        },
-        selectedRuntimeId: state.bootstrap.selectedRuntimeId,
-        model: state.bootstrap.selectedModel,
-      });
-
       const turnStartedAt = Date.now();
-      const result = await terminalOwner.withChildProcess(rl, () => executeNativeRootTurn({
-        taskRunner,
-        node,
-        env: input.env,
-        signal: abort.signal,
-        heartbeatEnabled: !isDisabledEnvValue(input.env.OMK_TURN_HEARTBEAT),
-        renderer,
-        mcpAllowlist: turnMcpAllowlist,
-        skillNames: turnSkillNames,
-        hookNames: turnHookNames,
-        runContext,
-      }));
+      let result: TaskResult;
+      if (isDisabledEnvValue(input.env.OMK_CHAT_HARNESS_TURN)) {
+        const node = buildNativeRootLoopTurnNode({
+          bootstrap: state.bootstrap,
+          prompt: line,
+          mcpAllowlist: input.mcpAllowlist,
+          skillNames: input.skillNames,
+          hookNames: input.hookNames,
+          executionPrompt: state.approvalPolicy,
+        });
+        const turnMcpAllowlist = node.routing?.mcpServers ?? input.mcpAllowlist;
+        const turnSkillNames = node.routing?.skills ?? input.skillNames;
+        const turnHookNames = node.routing?.hooks ?? input.hookNames;
+        const runContext = buildTaskRunContext({
+          runId: input.runId,
+          root: input.root,
+          node,
+          objective: line,
+          toolPlane: {
+            mcpServers: turnMcpAllowlist,
+            mcpConfigFile: input.env.OMK_MCP_CONFIG_FILE,
+            skills: turnSkillNames,
+            hooks: turnHookNames,
+            tools: node.routing?.tools,
+            requiresRuntimeMcp: node.routing?.requiresMcp,
+          },
+          selectedRuntimeId: state.bootstrap.selectedRuntimeId,
+          model: state.bootstrap.selectedModel,
+        });
+        result = await terminalOwner.withChildProcess(rl, () => executeNativeRootTurn({
+          taskRunner,
+          node,
+          env: input.env,
+          signal: abort.signal,
+          heartbeatEnabled: !isDisabledEnvValue(input.env.OMK_TURN_HEARTBEAT),
+          renderer,
+          mcpAllowlist: turnMcpAllowlist,
+          skillNames: turnSkillNames,
+          hookNames: turnHookNames,
+          runContext,
+        }));
+      } else {
+        result = await terminalOwner.withChildProcess(rl, () => executeNativeRootHarnessTurn({
+          taskRunner,
+          bootstrap: state.bootstrap,
+          prompt: line,
+          runId: input.runId,
+          root: input.root,
+          env: input.env,
+          signal: abort.signal,
+          heartbeatEnabled: !isDisabledEnvValue(input.env.OMK_TURN_HEARTBEAT),
+          renderer,
+          mcpAllowlist: input.mcpAllowlist,
+          skillNames: input.skillNames,
+          hookNames: input.hookNames,
+          workers: input.workers,
+          executionPrompt: state.approvalPolicy,
+        }));
+      }
 
       if (result.stdout) {
         if (renderer) {
           renderer.emit({ type: "assistant:final", text: result.stdout });
         } else {
-          const toolSummary = buildTurnToolSummary(node.routing);
+          const toolSummary = result.metadata?.harness === "dag-executor"
+            ? `dag ${String(result.metadata.nodeCount ?? 1)} nodes`
+            : "native turn";
           process.stdout.write(style.phosphorDim(`\n  ✓ Done · ${toolSummary}\n`));
         }
         onData?.(result.stdout);
@@ -796,7 +1001,12 @@ export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<
         }
       }
       if (!result.stdout && result.exitCode !== 0) {
-        const message = `Turn exited with code ${result.exitCode}`;
+        const metaError = result.metadata && typeof result.metadata === "object" && "error" in result.metadata
+          ? String((result.metadata as Record<string, unknown>).error)
+          : undefined;
+        const message = metaError
+          ? `Turn exited with code ${result.exitCode}: ${metaError}`
+          : `Turn exited with code ${result.exitCode}`;
         if (renderer) {
           renderer.emit({ type: "turn:error", message });
         } else {

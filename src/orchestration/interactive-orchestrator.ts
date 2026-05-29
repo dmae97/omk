@@ -10,29 +10,15 @@
 
 import { EventEmitter } from "events";
 import type { DagNodeDefinition, DagNodeRouting } from "./dag.js";
-import type { RunState, UserIntent } from "../contracts/orchestration.js";
-import type {
-  WorkerManifest,
-  WorkerToolPlaneManifest,
-  WorkerCapabilityManifest,
-} from "../contracts/worker-context.js";
-import type { TaskRunContext } from "../contracts/worker-context.js";
-import { buildTaskRunContext, envFromWorkerManifest } from "../runtime/worker-manifest.js";
+import type { UserIntent } from "../contracts/orchestration.js";
 import { assignSkills } from "./skill-assigner.js";
 import {
   capabilityScopesFromRouting,
   mergeCapabilityScopes,
-  type NodeCapabilityScopes,
 } from "./capability-routing.js";
-import { buildCapabilityInjection, applyCapabilityInjectionToRouting } from "../runtime/capability-injection.js";
 import { analyzeUserIntent } from "../goal/intake.js";
-import { buildIntentFrame, renderActionDigest } from "../goal/intent-frame.js";
-import type { IntentFrame } from "../contracts/goal.js";
-import {
-  ParallelOrchestrator,
-  type ParallelOrchestratorOptions,
-  type ParallelOrchestrationResult,
-} from "./parallel-orchestrator.js";
+import { buildIntentFrame } from "../goal/intent-frame.js";
+import { ParallelOrchestrator } from "./parallel-orchestrator.js";
 import { createDag, type Dag } from "./dag.js";
 import { createRoutedRunState, routeRunState } from "./run-state.js";
 
@@ -161,6 +147,7 @@ export class InteractiveOrchestrator extends EventEmitter {
       readonly cwd?: string;
       readonly runId?: string;
       readonly autoConfirm?: boolean;
+      readonly dryRun?: boolean;
       readonly onConfirm?: (agents: readonly SubAgentSpec[]) => Promise<boolean>;
     } = {}
   ) {
@@ -204,6 +191,12 @@ export class InteractiveOrchestrator extends EventEmitter {
       this.setPhase("confirming");
       const confirmed = await this.confirmExecution(enrichedSpecs);
       if (!confirmed) {
+        if (this.options.dryRun) {
+          this.state.phase = "completed";
+          this.state.completedAt = new Date().toISOString();
+          this.emit("log", "Dry run completed without execution", "info");
+          return this.state;
+        }
         this.state.phase = "failed";
         this.state.error = "User cancelled orchestration";
         this.emit("log", "Orchestration cancelled by user", "warn");
@@ -321,7 +314,7 @@ export class InteractiveOrchestrator extends EventEmitter {
 
   private assignCapabilities(
     specs: SubAgentSpec[],
-    intent: UserIntent
+    _intent: UserIntent
   ): SubAgentSpec[] {
     return specs.map((spec) => {
       // Use existing skill-assigner for additional capabilities
@@ -374,7 +367,7 @@ export class InteractiveOrchestrator extends EventEmitter {
 
   // ─── Phase 5: Build DAG ─────────────────────────────────────
 
-  private buildDag(specs: SubAgentSpec[], intent: UserIntent): Dag {
+  private buildDag(specs: SubAgentSpec[], _intent: UserIntent): Dag {
     const nodes: DagNodeDefinition[] = specs.map((spec) => ({
       id: spec.id,
       name: spec.name,
@@ -445,7 +438,7 @@ export class InteractiveOrchestrator extends EventEmitter {
       workerCount: maxWorkers,
     });
 
-    const routedState = routeRunState(runState, maxWorkers);
+    routeRunState(runState, maxWorkers);
 
     // Create and run orchestrator
     this.orchestrator = new ParallelOrchestrator({
@@ -564,7 +557,7 @@ export class InteractiveOrchestrator extends EventEmitter {
     return mcpMap[role] ?? [];
   }
 
-  private defaultHooksForRole(role: string): string[] {
+  private defaultHooksForRole(_role: string): string[] {
     return []; // Hooks are project-specific, assigned via skill-assigner
   }
 
@@ -623,6 +616,7 @@ export function createInteractiveOrchestrator(
     readonly cwd?: string;
     readonly runId?: string;
     readonly autoConfirm?: boolean;
+    readonly dryRun?: boolean;
     readonly onConfirm?: (agents: readonly SubAgentSpec[]) => Promise<boolean>;
   }
 ): InteractiveOrchestrator {

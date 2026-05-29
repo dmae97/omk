@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 
 const { shouldUseDirectKimiFallback } = await import("../dist/commands/chat/runtime.js");
-const { buildNativeRootLoopTurnNode } = await import("../dist/commands/chat/native-root-loop.js");
+const { buildNativeRootLoopTurnNode, shouldRunNativeParallelTurn } = await import("../dist/commands/chat/native-root-loop.js");
 const { buildCapabilityInjection, applyCapabilityInjectionToRouting } = await import("../dist/runtime/capability-injection.js");
 const { compileBloatToNlp, filterMcpConfigForRuntime } = await import("../dist/runtime/debloat-nlp.js");
 const { capsuleToTask } = await import("../dist/runtime/context-broker-converter.js");
@@ -61,6 +61,17 @@ function runNativeLoopInput(input) {
       hookNames: ["protect-secrets.sh"],
       executionPrompt: "ask"
     });
+    const { existsSync, readFileSync } = await import("node:fs");
+    const statePath = process.cwd() + "/.omk/runs/slash-test/state.json";
+    console.log("RUN_STATE_EXISTS=" + existsSync(statePath));
+    if (existsSync(statePath)) {
+      const state = JSON.parse(readFileSync(statePath, "utf8"));
+      console.log("RUN_STATE_CAPTURE=" + JSON.stringify({
+        runId: state.runId,
+        nodeCount: state.nodes?.length ?? 0,
+        statuses: (state.nodes ?? []).map((node) => node.status)
+      }));
+    }
     console.log("TASK_RUNNER_CALLS=" + calls.length);
     if (calls[0]) {
       console.log("TASK_RUNNER_CAPTURE=" + JSON.stringify({
@@ -69,6 +80,71 @@ function runNativeLoopInput(input) {
         context: calls[0].context
       }));
     }
+    process.exitCode = code;
+  `;
+  try {
+    return spawnSync(process.execPath, ["--input-type=module", "--eval", evalScript], {
+      cwd: root,
+      input,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        HOME: home,
+        NO_COLOR: "1",
+        OMK_SKIP_UPDATE_CHECK: "1",
+        OMK_MCP_SCOPE: "project",
+        OMK_MCP_PREFLIGHT: "off",
+        OMK_MCP_CONFIG_FILE: join(root, ".kimi", "mcp.json"),
+        OMK_PROJECT_ROOT: root,
+        OMK_ORIGINAL_HOME: home,
+      },
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 60000,
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+  }
+}
+
+function runNativeLoopInputWithParallelExecution(input) {
+  const root = mkdtempSync(join(tmpdir(), "omk-native-parallel-"));
+  const home = mkdtempSync(join(tmpdir(), "omk-native-parallel-home-"));
+  mkdirSync(join(root, ".omk"), { recursive: true });
+  mkdirSync(join(root, ".kimi"), { recursive: true });
+  mkdirSync(join(root, "dist"), { recursive: true });
+  mkdirSync(join(home, ".kimi"), { recursive: true });
+  writeFileSync(join(root, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: {} }, null, 2), "utf-8");
+  writeFileSync(join(home, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: {} }, null, 2), "utf-8");
+  writeFileSync(
+    join(root, "dist", "cli.js"),
+    "console.log('PARALLEL_CLI_CALLED ' + process.argv.slice(2).join('|'));\n",
+    "utf-8"
+  );
+  const evalScript = `
+    import { runNativeOmkRootLoop } from ${JSON.stringify(NATIVE_ROOT_LOOP_MODULE_URL)};
+    const bootstrap = ${JSON.stringify(codexBootstrap)};
+    const calls = [];
+    const taskRunner = {
+      async run(node, env, signal, context) {
+        calls.push({ node, env, context });
+        return { success: true, stdout: "TASK_RUNNER_SHOULD_NOT_RUN", stderr: "", exitCode: 0 };
+      }
+    };
+    const code = await runNativeOmkRootLoop({
+      bootstrap,
+      taskRunner,
+      runId: "parallel-test",
+      root: process.cwd(),
+      env: Object.fromEntries(Object.entries(process.env).filter(([, value]) => value !== undefined)),
+      layout: "plain",
+      agentFile: ".omk/agents/root.yaml",
+      mcpAllowlist: ["omk-project"],
+      skillNames: ["omk-worktree-team"],
+      hookNames: ["protect-secrets.sh"],
+      executionPrompt: "parallel"
+    });
+    console.log("TASK_RUNNER_CALLS=" + calls.length);
     process.exitCode = code;
   `;
   try {
@@ -473,9 +549,24 @@ test("native root loop passes OMK-owned scoped tool-plane assignment to TaskRunn
   deepStrictEqual(capture.context.worker.toolPlane.mcpServers, ["omk-project"]);
   deepStrictEqual(capture.context.worker.toolPlane.skills, []);
   deepStrictEqual(capture.context.worker.toolPlane.hooks, ["protect-secrets.sh"]);
+  deepStrictEqual(capture.context.worker.toolPlane.mcpConfigFile.endsWith("/.kimi/mcp.json"), true);
   deepStrictEqual(capture.context.worker.toolPlane.requiresRuntimeMcp, false);
   deepStrictEqual(capture.routing.runtimeSidecar.requiredMcp, []);
   ok(capture.routing.runtimeSidecar.optionalMcp.includes("omk-project"));
+});
+
+test("native root loop persists chat turns through the shared DAG harness", () => {
+  const result = runNativeLoopInput("hello\n/exit\n");
+
+  const combinedOutput = `${result.stdout}\n${result.stderr}`;
+  deepStrictEqual(result.status, 0, combinedOutput);
+  ok(/RUN_STATE_EXISTS=true/.test(combinedOutput), combinedOutput);
+  const stateMatch = combinedOutput.match(/RUN_STATE_CAPTURE=(.+)/);
+  ok(stateMatch, combinedOutput);
+  const state = JSON.parse(stateMatch[1]);
+  deepStrictEqual(state.runId, "slash-test");
+  deepStrictEqual(state.nodeCount, 1);
+  deepStrictEqual(state.statuses, ["done"]);
 });
 
 test("/auth reports provider status without running a provider turn", () => {
@@ -615,6 +706,24 @@ test("native prompt envelope preserves execution ask policy for selected runtime
   ok(node.name.includes("Execution selection: ask"));
   deepStrictEqual(node.routing?.executionPrompt, "ask");
   deepStrictEqual(node.routing?.approvalPolicy, "ask");
+});
+
+test("native root loop detects explicit parallel execution policy", () => {
+  deepStrictEqual(shouldRunNativeParallelTurn("parallel"), true);
+  deepStrictEqual(shouldRunNativeParallelTurn(" PARALLEL "), true);
+  deepStrictEqual(shouldRunNativeParallelTurn("ask"), false);
+  deepStrictEqual(shouldRunNativeParallelTurn(undefined), false);
+});
+
+test("native root loop execution=parallel routes normal prompts to parallel orchestrator", () => {
+  const result = runNativeLoopInputWithParallelExecution("hello from tui\n/exit\n");
+  const combinedOutput = `${result.stdout}\n${result.stderr}`;
+
+  deepStrictEqual(result.status, 0, combinedOutput);
+  ok(/Spawning parallel: "hello from tui"/.test(combinedOutput), combinedOutput);
+  ok(/PARALLEL_CLI_CALLED parallel\|hello from tui/.test(combinedOutput), combinedOutput);
+  ok(/TASK_RUNNER_CALLS=0/.test(combinedOutput), combinedOutput);
+  ok(!combinedOutput.includes("TASK_RUNNER_SHOULD_NOT_RUN"), combinedOutput);
 });
 
 test("explicit DeepSeek native write prompts stay advisory/read-only", async () => {

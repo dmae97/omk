@@ -191,7 +191,7 @@ export async function runtimeChecks(resources: OmkResourceSettings): Promise<Che
     message: codexExists ? "available" : "not found",
   });
   results.push({
-    name: "kimi-cli",
+    name: "kimi-api",
     status: kimiExists ? "ok" : kimiDisabled ? "info" : "warn",
     message: kimiExists ? "available" : kimiDisabled ? "disabled by OMK_KIMI_ENABLED" : "not found",
   });

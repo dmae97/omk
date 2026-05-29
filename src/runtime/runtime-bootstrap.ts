@@ -30,6 +30,14 @@ function detectProvider(
         authHint: "kimi login",
         modelHint: "kimi-code default",
       };
+    case "mimo":
+      return {
+        envKey: "MIMO_API_KEY",
+        sessionMode: "api-turn",
+        installHint: "Set MIMO_API_KEY env var or configure [providers.mimo] in ~/.kimi/config.toml",
+        authHint: "Set MIMO_API_KEY env var",
+        modelHint: env.MIMO_MODEL ?? "mimo-v2.5-pro",
+      };
     case "codex":
       return {
         bin: env.CODEX_BIN ?? "codex",
@@ -82,8 +90,29 @@ function detectProvider(
 }
 
 async function resolveAutoProvider(env: Record<string, string | undefined>): Promise<{ provider: string; runtimeId: string } | undefined> {
-  const kimiBin = resolveKimiBin(env);
-  if (await checkCommand(kimiBin).catch(() => false)) return { provider: "kimi", runtimeId: "kimi-print" };
+  // 1. Check config.toml for explicit default_model (highest priority)
+  try {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const home = env.HOME ?? env.USERPROFILE ?? "";
+    const configPath = join(home, ".kimi", "config.toml");
+    const configContent = readFileSync(configPath, "utf-8");
+    const defaultModelMatch = configContent.match(/default_model\s*=\s*"([^"]+)"/);
+    if (defaultModelMatch) {
+      const defaultModel = defaultModelMatch[1];
+      if (defaultModel.startsWith("mimo")) return { provider: "mimo", runtimeId: "mimo-api" };
+      if (defaultModel.startsWith("kimi") || defaultModel.startsWith("moonshot")) return { provider: "kimi", runtimeId: "kimi-api" };
+      if (defaultModel.startsWith("deepseek")) return { provider: "deepseek", runtimeId: "deepseek-api" };
+    }
+    if (/\[providers\.mimo\]/.test(configContent)) return { provider: "mimo", runtimeId: "mimo-api" };
+  } catch { /* config not found */ }
+
+  // 2. Check for API keys in env
+  if (env.MIMO_API_KEY) return { provider: "mimo", runtimeId: "mimo-api" };
+  if (env.DEEPSEEK_API_KEY) return { provider: "deepseek", runtimeId: "deepseek-api" };
+  if (env.LOCAL_LLM_BASE_URL) return { provider: "local-llm", runtimeId: "local-llm" };
+
+  // 3. CLI binary detection (lowest priority)
   const codexBin = env.CODEX_BIN ?? "codex";
   if (await checkCommand(codexBin).catch(() => false)) return { provider: "codex", runtimeId: "codex-cli" };
 
@@ -97,8 +126,11 @@ async function resolveAutoProvider(env: Record<string, string | undefined>): Pro
 
   const opencodeBin = env.OPENCODE_BIN ?? "opencode";
   if (await checkCommand(opencodeBin).catch(() => false)) return { provider: "opencode", runtimeId: "opencode-cli" };
-  if (env.LOCAL_LLM_BASE_URL) return { provider: "local-llm", runtimeId: "local-llm" };
-  if (env.DEEPSEEK_API_KEY) return { provider: "deepseek", runtimeId: "deepseek-api" };
+
+  // 4. kimi binary (legacy — lowest priority)
+  const kimiBin = resolveKimiBin(env);
+  if (await checkCommand(kimiBin).catch(() => false)) return { provider: "kimi", runtimeId: "kimi-print" };
+
   return undefined;
 }
 
@@ -124,8 +156,8 @@ export async function resolveRuntimeBootstrap(options: {
 
   if (effectiveProviderPolicy === "auto" && !autoSelection) {
     reasons.push("no runnable runtime detected for auto provider policy");
-    hints.push("Install/login to a runtime: kimi, codex, commandcode, opencode, or deepseek");
-    hints.push("Use an explicit provider, e.g. omk chat --provider kimi --mcp-scope none");
+    hints.push("Configure a provider: mimo, deepseek, codex, commandcode, opencode, or local-llm");
+    hints.push("Use an explicit provider, e.g. omk chat --provider mimo --mcp-scope none");
   } else if (info.bin) {
     runtimeOk = await checkCommand(info.bin).catch(() => false);
     if (!runtimeOk) {
@@ -136,6 +168,17 @@ export async function resolveRuntimeBootstrap(options: {
     }
   } else if (info.envKey) {
     runtimeOk = Boolean(env[info.envKey]);
+    if (!runtimeOk && selectedProvider === "mimo") {
+      // Also check config.toml for mimo API key
+      try {
+        const { readFileSync } = await import("node:fs");
+        const { join } = await import("node:path");
+        const home = env.HOME ?? env.USERPROFILE ?? "";
+        const configPath = join(home, ".kimi", "config.toml");
+        const configContent = readFileSync(configPath, "utf-8");
+        runtimeOk = /\[providers\.mimo\][\s\S]*?api_key\s*=\s*"[^"]+"/.test(configContent);
+      } catch { /* config not found */ }
+    }
     if (!runtimeOk) {
       reasons.push(`${info.envKey} is not set`);
       hints.push(info.installHint);
@@ -176,7 +219,7 @@ function resolveAuthorityProviderPolicy(
   if (providerPolicy !== "authority" && providerPolicy !== "primary" && providerPolicy !== "omk") return undefined;
   const configured = env.OMK_AUTHORITY_PROVIDER?.trim().toLowerCase()
     || env.OMK_DEFAULT_PROVIDER?.trim().toLowerCase()
-    || "kimi";
-  if (configured === "authority" || configured === "primary" || configured === "omk") return "kimi";
-  return configured || "kimi";
+    || "mimo";
+  if (configured === "authority" || configured === "primary" || configured === "omk") return "mimo";
+  return configured || "mimo";
 }

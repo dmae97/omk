@@ -28,6 +28,11 @@ export interface ChatSmokeReport {
     path: string | null;
     exists: boolean;
   };
+  root: {
+    path: string;
+    cwd: string;
+    source: string;
+  };
   diagnostics: {
     toolPlane: readonly OmkToolPlaneDiagnostic[];
   };
@@ -37,6 +42,8 @@ export interface ChatSmokeReport {
 
 export async function buildChatSmokeReport(options: {
   root: string;
+  rootSource?: string;
+  activeCwd?: string;
   runId: string;
   agentFile: string;
   schemaOk: boolean;
@@ -95,6 +102,11 @@ export async function buildChatSmokeReport(options: {
       injected: Boolean(runtimeMcpPath),
       path: runtimeMcpPath ? relative(options.root, runtimeMcpPath) : null,
       exists: runtimeMcpExists,
+    },
+    root: {
+      path: options.root,
+      cwd: options.activeCwd ?? process.cwd(),
+      source: options.rootSource ?? "unknown",
     },
     diagnostics: {
       toolPlane: toolPlane.diagnostics,

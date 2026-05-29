@@ -365,6 +365,27 @@ const ROLE_TEMPLATES: Record<TaskType, string[]> = {
 
 const WRITE_KEYWORDS = ["write", "edit", "implement", "fix", "create", "delete", "modify", "add", "build", "change", "update", "patch", "migrate", "refactor", "rename", "move", "extract", "코드작성", "수정", "구현", "추가", "삭제", "변경"];
 
+const READ_ONLY_DIRECTIVES = [
+  "read-only",
+  "read only",
+  "readonly",
+  "no edits",
+  "no edit",
+  "do not edit",
+  "don't edit",
+  "do not modify",
+  "don't modify",
+  "no file changes",
+  "without changing files",
+  "without edits",
+  "읽기 전용",
+  "수정하지 마",
+  "수정 없이",
+  "편집하지 마",
+  "변경하지 마",
+  "파일 변경 없이",
+];
+
 const RESEARCH_KEYWORDS = ["docs", "official", "paper", "api", "reference", "current", "latest", "version", "release notes", "changelog", "specification", "rfc", "documentation", "browser", "current page", "web page", "active tab", "dom", "chrome", "문서", "공식", "최신", "버전", "스펙"];
 
 const SECURITY_KEYWORDS = ["security", "secret", "auth", "permission", "vulnerability", "credential", "token", "encrypt", "sanitize", "xss", "csrf", "injection", "password", "api key", "보안", "인증", "권한", "취약점", "토큰"];
@@ -494,6 +515,10 @@ function hasAnyKeyword(text: string, keywords: string[]): boolean {
   return keywords.some((kw) => lowered.includes(kw.toLowerCase()));
 }
 
+function hasReadOnlyDirective(text: string): boolean {
+  return hasAnyKeyword(text, READ_ONLY_DIRECTIVES);
+}
+
 function inferComplexity(text: string): "simple" | "moderate" | "complex" {
   const fileRefs = countFileReferences(text);
   const concepts = countConcepts(text);
@@ -554,7 +579,7 @@ export function analyzeUserIntent(rawPrompt: string): UserIntent {
   const scores = scoreTaskTypes(rawPrompt);
   let taskType = scores[0]?.type ?? "general";
   const complexity = inferComplexity(rawPrompt);
-  const readOnly = !hasAnyKeyword(rawPrompt, WRITE_KEYWORDS);
+  const readOnly = hasReadOnlyDirective(rawPrompt) || !hasAnyKeyword(rawPrompt, WRITE_KEYWORDS);
   const needsResearch = hasAnyKeyword(rawPrompt, RESEARCH_KEYWORDS);
   const needsSecurityReview = hasAnyKeyword(rawPrompt, SECURITY_KEYWORDS);
   const needsTesting = hasAnyKeyword(rawPrompt, TEST_KEYWORDS);

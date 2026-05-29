@@ -2063,15 +2063,16 @@ test("resolveAuthorityProvider selects preferred when available", () => {
   assert.strictEqual(resolveAuthorityProvider([], "kimi"), "kimi");
 });
 
-test("runtime fallback defaults are Kimi-first for coding authority", () => {
-  assert.equal(DEFAULT_FALLBACK_RUNTIME, "kimi-print");
-  assert.equal(resolveFallbackRuntime([]), "kimi-print");
-  assert.equal(resolveFallbackRuntime(["kimi-print", "codex-cli"]), "kimi-print");
+test("runtime fallback defaults use direct Kimi API and keep legacy print fallback-only", () => {
+  assert.equal(DEFAULT_FALLBACK_RUNTIME, "kimi-api");
+  assert.equal(resolveFallbackRuntime([]), "kimi-api");
+  assert.equal(resolveFallbackRuntime(["kimi-print", "codex-cli"]), "codex-cli");
   assert.deepEqual(
-    resolveRuntimeFallbackChain(["kimi-print", "deepseek-api", "codex-cli"]),
-    ["kimi-print", "codex-cli", "deepseek-api"]
+    resolveRuntimeFallbackChain(["kimi-print", "deepseek-api", "codex-cli", "kimi-api"]),
+    ["kimi-api", "codex-cli", "deepseek-api", "kimi-print"]
   );
-  assert.ok(DEFAULT_RUNTIME_FALLBACK_CHAIN.indexOf("kimi-print") < DEFAULT_RUNTIME_FALLBACK_CHAIN.indexOf("codex-cli"));
+  assert.ok(DEFAULT_RUNTIME_FALLBACK_CHAIN.indexOf("kimi-api") < DEFAULT_RUNTIME_FALLBACK_CHAIN.indexOf("codex-cli"));
+  assert.equal(DEFAULT_RUNTIME_FALLBACK_CHAIN.includes("kimi-print"), false);
 });
 
 function baseRoute(overrides = {}) {

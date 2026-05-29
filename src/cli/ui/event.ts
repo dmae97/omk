@@ -5,6 +5,9 @@ export type CliUiEvent =
       provider: string;
       model?: string;
       layout?: string;
+      root?: string;
+      cwd?: string;
+      rootSource?: string;
     }
   | {
       type: "input:submitted";

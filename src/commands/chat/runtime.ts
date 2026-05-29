@@ -32,6 +32,8 @@ import { sanitizeUserVisibleOutput } from "../../util/user-visible-output.js";
 
 export interface ChatRuntimeInput {
   root: string;
+  rootSource?: string;
+  activeCwd?: string;
   effectiveRunId: string;
   effectiveAgentFile: string;
   sessionId: string;
@@ -171,6 +173,8 @@ export async function runChatRuntime(
 ): Promise<number> {
   const {
     root,
+    rootSource,
+    activeCwd,
     effectiveRunId,
     effectiveAgentFile,
     sessionId,
@@ -318,6 +322,7 @@ export async function runChatRuntime(
           env.OMK_MCP_CONFIG_FILE = toolPlane.mcpConfigFile;
           env.OMK_MCP_SERVERS = toolPlane.mcpServers.join(",");
         }
+        const nativeWorkers = Number.parseInt(input.effectiveWorkers, 10);
         const runner = await createRuntimeBackedTaskRunner({
           cwd: root,
           env,
@@ -333,12 +338,15 @@ export async function runChatRuntime(
           taskRunner: runner,
           runId: effectiveRunId,
           root,
+          rootSource,
+          activeCwd,
           env,
           layout,
           agentFile: effectiveAgentFile,
           mcpAllowlist: toolPlane.mcpServers,
           skillNames: [...toolPlane.skills],
           hookNames: [...toolPlane.hooks],
+          workers: Number.isFinite(nativeWorkers) && nativeWorkers > 0 ? nativeWorkers : 1,
           executionPrompt: input.executionPrompt,
           renderer,
           onData: (data) => {

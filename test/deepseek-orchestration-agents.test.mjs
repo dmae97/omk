@@ -260,7 +260,7 @@ test("parallel workers default to OMK provider-router authority instead of hard-
   assert.ok(worker);
   assert.equal(worker.routing?.provider, "auto");
   assert.equal(worker.routing?.assignedProvider, undefined);
-  assert.equal(worker.routing?.assignedModel, "kimi-cli");
+  assert.equal(worker.routing?.assignedModel, "kimi-api");
   assert.deepEqual(worker.routing?.candidateProviders, ["kimi", "codex", "qwen", "openrouter"]);
   assert.equal(worker.routing?.fallbackProvider, "kimi");
   assert.match(worker.routing?.providerReason ?? "", /OMK provider router/);

@@ -1,7 +1,7 @@
 import type { TaskResult, TaskRunner } from "../contracts/orchestration.js";
 import type { RuntimeRouteDecision, RuntimeId } from "../runtime/adapter.js";
 
-export type KnownProviderId = "codex" | "commandcode" | "deepseek" | "kimi" | "local-llm" | "opencode" | "openrouter" | "qwen";
+export type KnownProviderId = "codex" | "commandcode" | "deepseek" | "kimi" | "local-llm" | "mimo" | "opencode" | "openrouter" | "qwen";
 export type ProviderId = KnownProviderId | (string & {});
 export type ProviderPolicy = "auto" | "authority" | KnownProviderId;
 export type ProviderRisk = "read" | "write" | "shell" | "merge";
@@ -90,11 +90,9 @@ export const DEFAULT_AUTHORITY_PROVIDER: ProviderId = "kimi";
 /** @deprecated Use resolveFallbackProvider() instead. */
 export const DEFAULT_FALLBACK_PROVIDER: ProviderId = DEFAULT_AUTHORITY_PROVIDER;
 /** @deprecated Use resolveFallbackRuntime() instead. */
-export const DEFAULT_FALLBACK_RUNTIME: RuntimeId = "kimi-print";
+export const DEFAULT_FALLBACK_RUNTIME: RuntimeId = "kimi-api";
 /** @deprecated Use resolveRuntimeFallbackChain() instead. */
 export const DEFAULT_RUNTIME_FALLBACK_CHAIN: RuntimeId[] = [
-  "kimi-print",
-  "kimi-cli",
   "kimi-api",
   "kimi-wire",
   "opencode-cli",
@@ -116,8 +114,8 @@ const AUTHORITY_CAPABLE_PROVIDER_PRIORITY: ProviderId[] = ["kimi", "codex"];
 const EXPLICIT_AUTHORITY_PROVIDERS = new Set<ProviderId>([...AUTHORITY_CAPABLE_PROVIDER_PRIORITY, "kimi"]);
 
 export function resolveFallbackRuntime(availableRuntimes: RuntimeId[]): RuntimeId {
-  // Priority: Kimi is the default coding runtime; non-Kimi runtimes remain explicit/fallback options.
-  const priority: RuntimeId[] = ["kimi-print", "kimi-cli", "kimi-api", "kimi-wire", "codex-cli", "opencode-cli", "commandcode-cli", "qwen-api", "openrouter-api", "deepseek-api"];
+  // Priority: direct Kimi API is the default coding runtime; legacy print mode is fallback-only.
+  const priority: RuntimeId[] = ["kimi-api", "kimi-wire", "codex-cli", "opencode-cli", "commandcode-cli", "qwen-api", "openrouter-api", "deepseek-api"];
   for (const r of priority) {
     if (availableRuntimes.includes(r)) return r;
   }
@@ -125,7 +123,7 @@ export function resolveFallbackRuntime(availableRuntimes: RuntimeId[]): RuntimeI
 }
 
 export function resolveRuntimeFallbackChain(availableRuntimes: RuntimeId[]): RuntimeId[] {
-  const priority: RuntimeId[] = ["kimi-print", "kimi-cli", "kimi-api", "kimi-wire", "codex-cli", "opencode-cli", "commandcode-cli", "qwen-api", "openrouter-api", "deepseek-api"];
+  const priority: RuntimeId[] = ["kimi-api", "kimi-wire", "codex-cli", "opencode-cli", "commandcode-cli", "qwen-api", "openrouter-api", "deepseek-api"];
   const ordered = priority.filter((r) => availableRuntimes.includes(r));
   const remainder = availableRuntimes.filter((r) => !ordered.includes(r));
   return [...ordered, ...remainder];
@@ -234,7 +232,7 @@ export function legacyProviderDecisionToRuntimeDecision(
   decision: ProviderRouteDecision
 ): RuntimeRouteDecision {
   const providerToRuntime = (provider: string): RuntimeId => {
-    if (provider === "kimi") return "kimi-cli";
+    if (provider === "kimi") return "kimi-api";
     if (provider === "codex") return "codex-cli";
     if (provider === "deepseek") return "deepseek-api";
     if (provider === "qwen") return "qwen-api";

@@ -42,7 +42,7 @@ const SECRET_PATTERNS: RegExp[] = [
   /(?:sk|pk|rk)[-_][A-Za-z0-9]{20,}/g,
   /(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}/g,
   /(?:xoxb|xoxp|xoxa|xoxr)-[A-Za-z0-9-]+/g,
-  /Bearer\s+[A-Za-z0-9._\-]{20,}/gi,
+  /Bearer\s+[A-Za-z0-9._-]{20,}/gi,
   /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, // JWT
   /(?:-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----)/g,
 ];

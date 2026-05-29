@@ -18,11 +18,37 @@ export interface PlainRendererStreams {
   stderr?: WritableStreamLike;
 }
 
+function ensureTrailingNewline(text: string): string {
+  return text.endsWith("\n") ? text : `${text}\n`;
+}
+
+function joinList(values: readonly string[] | undefined): string {
+  return values && values.length > 0 ? values.join(", ") : "none";
+}
+
+export function renderRouteCard(event: Extract<CliUiEvent, { type: "turn:route" }>): string {
+  const lines = [
+    "◇ Route",
+    `provider  ${event.provider}`,
+    `model     ${event.model ?? "auto"}`,
+    `risk      ${event.risk}`,
+    `sandbox   ${event.sandbox}`,
+    `mcp       ${joinList(event.mcp)}`,
+    `skills    ${joinList(event.skills)}`,
+    `hooks     ${joinList(event.hooks)}`,
+  ];
+  return `${lines.join("\n")}\n`;
+}
+
+export function renderAssistantCard(text: string): string {
+  return `\n● Assistant\n${ensureTrailingNewline(sanitizeUserVisibleOutput(text))}`;
+}
+
 export class PlainModernRenderer implements CliRenderer {
   private readonly stdout: WritableStreamLike;
   private readonly stderr: WritableStreamLike;
   private heartbeatOpen = false;
-  private headerShown = false;
+  private promptOpen = false;
 
   constructor(streams: PlainRendererStreams = {}) {
     this.stdout = streams.stdout ?? process.stdout;
@@ -34,18 +60,25 @@ export class PlainModernRenderer implements CliRenderer {
   emit(event: CliUiEvent): void {
     switch (event.type) {
       case "session:start": {
-        // opencode style: `> provider · model` — show once before first response
         const provider = event.provider === "auto" ? "omk" : event.provider;
         const model = event.model ?? "auto";
-        this.stderr.write(`\n> ${provider} · ${model}\n\n`);
-        this.headerShown = true;
+        this.stderr.write(`\nOMK Agent Console\n> ${provider} · ${model}\n\n`);
         break;
       }
       case "input:submitted":
-        this.stderr.write(`› ${event.text}\n\n`);
+        if (this.promptOpen) {
+          if (!this.stderr.isTTY) this.stderr.write(event.text);
+          this.stderr.write("\n\n");
+          this.promptOpen = false;
+        } else {
+          this.stderr.write(`› ${event.text}\n\n`);
+        }
         break;
       case "prompt:ready":
-        // No prompt indicator — opencode style is clean
+        if (!this.promptOpen) {
+          this.stderr.write("› ");
+          this.promptOpen = true;
+        }
         break;
       case "control:output":
         if (this.heartbeatOpen) {
@@ -55,14 +88,16 @@ export class PlainModernRenderer implements CliRenderer {
         this.stderr.write(sanitizeUserVisibleOutput(event.text));
         break;
       case "turn:route":
-        // opencode shows no route card — skip entirely
+        this.stderr.write(renderRouteCard(event));
         break;
       case "turn:heartbeat": {
         const seconds = Math.floor(event.elapsedMs / 1000);
-        const line = `  ⠋ ${seconds}s`;
+        const line = `◌ Running ${seconds}s`;
         if (this.stderr.isTTY) {
           this.stderr.write(`\r${line}   `);
           this.heartbeatOpen = true;
+        } else {
+          this.stderr.write(`${line}\n`);
         }
         break;
       }
@@ -71,7 +106,7 @@ export class PlainModernRenderer implements CliRenderer {
           this.stderr.write("\r                    \r");
           this.heartbeatOpen = false;
         }
-        this.stdout.write(event.text.endsWith("\n") ? event.text : `${event.text}\n`);
+        this.stdout.write(renderAssistantCard(event.text));
         break;
       case "turn:error":
         if (this.heartbeatOpen) {
@@ -85,7 +120,7 @@ export class PlainModernRenderer implements CliRenderer {
           this.stderr.write("\r                    \r");
           this.heartbeatOpen = false;
         }
-        // opencode shows nothing on finish — clean exit
+        this.stderr.write(`● Finished ${(event.durationMs / 1000).toFixed(1)}s · exit ${event.exitCode}\n`);
         break;
       case "turn:start":
         break;

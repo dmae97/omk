@@ -286,3 +286,124 @@ export interface RenderedOutput {
   readonly sourceResultHash: string;
   readonly generatedAt: string;
 }
+
+// ──────────────────────────────────────────────────────────────
+// Phase 1.5 — RuntimeSidecar + CapabilityPlan (Architecture Doc §4)
+// ──────────────────────────────────────────────────────────────
+
+/**
+ * Intent classification result — rule-based, no LLM required.
+ * Maps user input to a normalized intent kind for capability selection.
+ */
+export type IntentKind =
+  | "coding"
+  | "review"
+  | "debugging"
+  | "research"
+  | "planning"
+  | "documentation"
+  | "test-generation"
+  | "refactor"
+  | "shell-operation"
+  | "chat"
+  | "unknown";
+
+/**
+ * Classified intent with confidence and metadata.
+ */
+export interface ClassifiedIntent {
+  readonly kind: IntentKind;
+  readonly confidence: number;
+  readonly matchedRules: readonly string[];
+  readonly rawInput: string;
+}
+
+/**
+ * CapabilityPlan — what the runtime sidecar injects for a single turn.
+ * This is the output of CapabilitySelector and the input to RuntimeSidecarBuilder.
+ * Follows the invariant: availableMcp ≠ required activation.
+ */
+export interface CapabilityPlan {
+  readonly skills: readonly string[];
+  readonly mcpServers: readonly string[];
+  readonly hooks: readonly string[];
+  readonly tools: readonly string[];
+  readonly promptMode: "full" | "nlp" | "compact" | "minimal";
+  readonly providerHints: {
+    readonly preferProvider?: string;
+    readonly fallbackProvider?: string;
+    readonly requireToolCalling?: boolean;
+    readonly requireMcp?: boolean;
+  };
+  readonly rationale: string;
+}
+
+/**
+ * RuntimeSidecar — the filtered, per-turn runtime context.
+ * Built from CapabilityPlan + CommandEnvelope.
+ * This replaces the old monolithic config injection.
+ */
+export interface RuntimeSidecar {
+  readonly capabilityPlan: CapabilityPlan;
+  readonly filteredMcpConfig: Record<string, unknown>;
+  readonly promptInjection: string;
+  readonly envOverrides: Record<string, string>;
+  readonly outputProfile: OutputProfile;
+}
+
+/**
+ * ProviderAdapter — abstract interface for any LLM provider.
+ * Replaces Kimi-specific wiring. Each provider implements this.
+ */
+export interface ProviderAdapter {
+  readonly name: string;
+  readonly supportsStreaming: boolean;
+  readonly supportsToolCalling: boolean;
+  readonly supportsMcp: boolean;
+  send(request: ProviderRequest): AsyncIterable<ProviderChunk>;
+  abort?(): void;
+}
+
+export interface ProviderRequest {
+  readonly prompt: string;
+  readonly systemPrompt?: string;
+  readonly tools?: readonly unknown[];
+  readonly mcpConfig?: Record<string, unknown>;
+  readonly sidecar: RuntimeSidecar;
+  readonly signal?: AbortSignal;
+}
+
+export interface ProviderChunk {
+  readonly type: "text" | "tool_call" | "error" | "done" | "mcp_event";
+  readonly content?: string;
+  readonly toolName?: string;
+  readonly toolArgs?: unknown;
+  readonly error?: string;
+  readonly metadata?: Record<string, unknown>;
+}
+
+/**
+ * SubAgentTask — a task dispatched to a parallel sub-agent.
+ * Each sub-agent gets its own CapabilityPlan (skills, hooks, MCP).
+ */
+export interface SubAgentTask {
+  readonly id: string;
+  readonly name: string;
+  readonly role: string;
+  readonly goal: string;
+  readonly capabilityPlan: CapabilityPlan;
+  readonly dependsOn: readonly string[];
+  readonly priority: number;
+  readonly timeout?: number;
+}
+
+/**
+ * OrchestratorGoal — top-level goal managed by the orchestrator.
+ */
+export interface OrchestratorGoal {
+  readonly id: string;
+  readonly objective: string;
+  readonly tasks: readonly SubAgentTask[];
+  readonly maxWorkers: number;
+  readonly status: "pending" | "running" | "completed" | "failed";
+}

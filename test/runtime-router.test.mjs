@@ -5,11 +5,11 @@ import { createRuntimeBackedTaskRunner } from "../dist/runtime/runtime-backed-ta
 import { createRuntimeRouter } from "../dist/runtime/runtime-router.js";
 import { buildTaskRunContext } from "../dist/runtime/worker-manifest.js";
 
-test("runtime router prefers Kimi for coding intent when Kimi and Codex are available", async () => {
+test("runtime router prefers direct Kimi API for coding intent when Kimi API and Codex are available", async () => {
   const calls = [];
   const router = createRuntimeRouter({
     runtimes: [
-      fakeRuntime("kimi-print", calls),
+      fakeRuntime("kimi-api", calls),
       fakeRuntime("codex-cli", calls),
     ],
   });
@@ -17,9 +17,9 @@ test("runtime router prefers Kimi for coding intent when Kimi and Codex are avai
   const result = await router.execute(fakeTask({ prompt: "implement the provider-neutral routing patch" }));
 
   assert.equal(result.exitCode, 0);
-  assert.equal(result.metadata.selectedRuntime, "kimi-print");
-  assert.deepEqual(calls, ["kimi-print"]);
-  assert.deepEqual(result.metadata.fallbackChain, ["kimi-print", "codex-cli"]);
+  assert.equal(result.metadata.selectedRuntime, "kimi-api");
+  assert.deepEqual(calls, ["kimi-api"]);
+  assert.deepEqual(result.metadata.fallbackChain, ["kimi-api", "codex-cli"]);
 });
 
 test("runtime router keeps Kimi as compatibility fallback when preferred runtimes are absent", async () => {

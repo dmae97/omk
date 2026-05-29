@@ -1,4 +1,4 @@
-import { getOmkPath, getProjectRootDiagnostics, displayProjectRootPath } from "../../util/fs.js";
+import { getOmkPath, resolveProjectRoot, displayProjectRootPath, type ProjectRootResolution } from "../../util/fs.js";
 import { style, status, header } from "../../util/theme.js";
 import { t } from "../../util/i18n.js";
 import { createOmkSessionId } from "../../util/session.js";
@@ -15,7 +15,7 @@ import { queueChatStatePatch } from "../../util/chat-state.js";
 import { initCommand } from "../init.js";
 import { checkCommand, resolveKimiBin } from "../../util/shell.js";
 import { readTodos } from "../../util/todo-sync.js";
-import { relative, join } from "path";
+import { relative, join, resolve } from "path";
 import { readFile } from "fs/promises";
 
 import {
@@ -34,6 +34,25 @@ import {
 import { buildChatSmokeReport, failChatBeforeLaunch } from "./startup.js";
 import { runChatRuntime } from "./runtime.js";
 
+function resolveChatProjectRoot(options: {
+  cwd?: string;
+  projectRoot?: string;
+}): ProjectRootResolution {
+  const cwd = resolve(options.cwd ?? process.cwd());
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    OMK_PREFER_CWD_ROOT: process.env.OMK_PREFER_CWD_ROOT ?? "1",
+  };
+
+  if (options.projectRoot) {
+    env.OMK_PROJECT_ROOT = resolve(options.projectRoot);
+  } else if (process.env.OMK_CHAT_RESPECT_PROJECT_ROOT_ENV !== "1") {
+    delete env.OMK_PROJECT_ROOT;
+  }
+
+  return resolveProjectRoot({ cwd, env });
+}
+
 export async function chatCommand(options: {
   agentFile?: string;
   runId?: string;
@@ -45,6 +64,8 @@ export async function chatCommand(options: {
   execution?: string;
   provider?: string;
   model?: string;
+  cwd?: string;
+  projectRoot?: string;
   ui?: ChatUi;
   cockpitRefresh?: string;
   cockpitRedraw?: "diff" | "full" | "append";
@@ -58,9 +79,9 @@ export async function chatCommand(options: {
   reasoningNlp?: boolean;
   reasoningSummary?: string;
 }): Promise<void> {
-  const rootResolution = getProjectRootDiagnostics();
+  const rootResolution = resolveChatProjectRoot(options);
   const root = rootResolution.root;
-  process.env.OMK_PROJECT_ROOT ??= root;
+  process.env.OMK_PROJECT_ROOT = root;
   if (rootResolution.isHomeRoot && rootResolution.warning) {
     const message = `Project root resolved to HOME (${displayProjectRootPath(root) ?? root}). ${rootResolution.recommendation ?? "Set OMK_PROJECT_ROOT or OMK_DEFAULT_PROJECT_ROOT."}`;
     if (process.env.OMK_ALLOW_HOME_PROJECT_ROOT !== "1") {
@@ -151,25 +172,23 @@ export async function chatCommand(options: {
 
   try {
     const bootstrap = await ensureChatStartupArtifacts({ root, runId: effectiveRunId });
-    if (!false && layout !== "plain" && bootstrap.created.length > 0) {
+    if (layout !== "plain" && bootstrap.created.length > 0) {
       console.log(status.ok(t("chat.bootstrapReady", bootstrap.date, bootstrap.created.length)));
     }
   } catch (err) {
-    if (!false && layout !== "plain") {
+    if (layout !== "plain") {
       const message = err instanceof Error ? err.message : String(err);
       console.log(status.warn(t("chat.bootstrapWarning", message)));
     }
   }
 
   // ── Star prompt at chat start (parent only, skipped in cockpit child) ──
-  if (!false) {
-    try {
-      const { maybeAskForGitHubStarAtChatStart } = await import("../../util/first-run-star.js");
-      const { getOmkVersionSync } = await import("../../util/version.js");
-      await maybeAskForGitHubStarAtChatStart({ version: getOmkVersionSync() });
-    } catch {
-      // Swallow star prompt errors so chat entry is preserved.
-    }
+  try {
+    const { maybeAskForGitHubStarAtChatStart } = await import("../../util/first-run-star.js");
+    const { getOmkVersionSync } = await import("../../util/version.js");
+    await maybeAskForGitHubStarAtChatStart({ version: getOmkVersionSync() });
+  } catch {
+    // Swallow star prompt errors so chat entry is preserved.
   }
 
   // Ensure run state exists before launching cockpit so right pane can read it
@@ -225,7 +244,7 @@ export async function chatCommand(options: {
       }).catch(() => {});
     } catch (err) {
       effectiveAgentFile = agentFile;
-      if (!false && layout !== "plain") {
+      if (layout !== "plain") {
         const detail = process.env.OMK_DEBUG === "1" && err instanceof Error ? `: ${err.name}` : "";
         console.log(status.warn(`Chat agent harness unavailable; using base agent${detail}`));
       }
@@ -259,6 +278,8 @@ export async function chatCommand(options: {
   if (options.smoke) {
     const report = await buildChatSmokeReport({
       root,
+      rootSource: rootResolution.source,
+      activeCwd: rootResolution.cwd,
       runId: effectiveRunId,
       agentFile: effectiveAgentFile,
       schemaOk: agentSchema.ok,
@@ -279,7 +300,7 @@ export async function chatCommand(options: {
     return;
   }
 
-  if (!options.json && !false) {
+  if (!options.json) {
     try {
       const { maybePromptForOmkUpdate } = await import("../../util/update-check.js");
       const updatePrompt = await maybePromptForOmkUpdate({ source: "chat" });
@@ -313,7 +334,7 @@ export async function chatCommand(options: {
   }
 
   // ── Deferred HUD + history: fire-and-forget, let the agent loop start immediately ──
-  if (!isPlain && !false) {
+  if (!isPlain) {
     // Show a minimal status line while we defer the full HUD
     const providerLabel = providerPolicy === "auto" ? "auto-detect" : providerPolicy;
     const modeLabel = currentMode;
@@ -375,7 +396,7 @@ export async function chatCommand(options: {
   }
 
   // ── Resume: show existing TODO summary if resuming ──
-  if (!isPlain && !false) {
+  if (!isPlain) {
     try {
       const existingTodos = await readTodos(effectiveRunId).catch(() => null);
       if (existingTodos && existingTodos.length > 0) {
@@ -389,6 +410,8 @@ export async function chatCommand(options: {
 
   const exitCode = await runChatRuntime(options, {
     root,
+    rootSource: rootResolution.source,
+    activeCwd: rootResolution.cwd,
     effectiveRunId,
     effectiveAgentFile,
     sessionId,
