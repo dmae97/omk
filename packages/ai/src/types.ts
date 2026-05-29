@@ -114,8 +114,10 @@ export interface StreamOptions {
 	onResponse?: (response: ProviderResponse, model: Model<Api>) => void | Promise<void>;
 	/**
 	 * Optional custom HTTP headers to include in API requests.
-	 * Merged with provider defaults; can override default headers.
-	 * Not supported by all providers (e.g., AWS Bedrock uses SDK auth).
+	 * Merged with provider defaults; caller values override default headers.
+	 * On AWS Bedrock these are injected via a Smithy `build`-step middleware so
+	 * they are covered by SigV4 signing; reserved headers (`x-amz-*`,
+	 * `authorization`, `host`) are silently ignored to preserve SigV4 / bearer auth.
 	 */
 	headers?: Record<string, string>;
 	/**
