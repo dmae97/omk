@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -317,5 +317,106 @@ test("executeHarnessRun marks the run failed when a required node fails", async 
       await readFile(join(root, ".omk", "runs", "harness-fail", "state.json"), "utf8")
     );
     assert.equal(persisted.nodes[0].status, "failed");
+  });
+});
+
+test("executeHarnessRun propagates external AbortSignal into the running node", async () => {
+  await withTempRoot(async (root) => {
+    const controller = new AbortController();
+    let started;
+    const startedPromise = new Promise((resolve) => {
+      started = resolve;
+    });
+    let sawAbortSignal = false;
+    let sawAbort = false;
+
+    const runPromise = executeHarnessRun({
+      root,
+      runId: "harness-external-abort",
+      dag: createDag({
+        nodes: [
+          { id: "abort-node", name: "Abort node", role: "tester", dependsOn: [], maxRetries: 1 },
+          { id: "after-abort", name: "After abort", role: "tester", dependsOn: ["abort-node"], maxRetries: 1 },
+        ],
+      }),
+      runner: {
+        async run(_node, _env, signal) {
+          sawAbortSignal = signal instanceof AbortSignal;
+          started();
+          return await new Promise((resolve) => {
+            signal?.addEventListener("abort", () => {
+              sawAbort = true;
+              resolve({
+                success: false,
+                stdout: "",
+                stderr: "aborted by external signal",
+              });
+            }, { once: true });
+          });
+        },
+      },
+      env: { CUSTOM_BASE_ENV: "abort-test" },
+      workers: 1,
+      approvalPolicy: "block",
+      signal: controller.signal,
+    });
+
+    await startedPromise;
+    controller.abort(new Error("test abort"));
+    const result = await runPromise;
+
+    assert.equal(result.success, false);
+    assert.equal(sawAbortSignal, true);
+    assert.equal(sawAbort, true);
+    assert.ok(result.state.nodes.some((node) => node.status === "blocked" && node.blockedReason === "cancelled"));
+  });
+});
+
+test("executeHarnessRun wires eventRunDir into executor telemetry", async () => {
+  await withTempRoot(async (root) => {
+    const runId = "harness-telemetry";
+    const runDir = join(root, ".omk", "runs", runId);
+    await mkdir(runDir, { recursive: true });
+
+    const result = await executeHarnessRun({
+      root,
+      runId,
+      dag: createSingleNodeDag("telemetry-node"),
+      runner: {
+        fork(onThinking) {
+          return {
+            async run() {
+              onThinking?.("shared harness activity");
+              await new Promise((resolve) => setTimeout(resolve, 600));
+              return {
+                success: true,
+                stdout: "## Summary\nok\n\n## Evidence\nok",
+                stderr: "",
+              };
+            },
+          };
+        },
+        async run() {
+          return {
+            success: true,
+            stdout: "## Summary\nok\n\n## Evidence\nok",
+            stderr: "",
+          };
+        },
+      },
+      env: { CUSTOM_BASE_ENV: "telemetry-test" },
+      workers: 1,
+      approvalPolicy: "block",
+      eventRunDir: runDir,
+    });
+
+    assert.equal(result.success, true);
+    const lines = (await readFile(join(runDir, "events.jsonl"), "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.equal(lines.some((line) => line.type === "lane.started" && line.runId === runId), true);
+    assert.equal(lines.some((line) => line.type === "lane.activity" && line.runId === runId), true);
+    assert.equal(lines.some((line) => line.type === "lane.completed" && line.runId === runId), true);
   });
 });

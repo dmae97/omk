@@ -606,6 +606,7 @@ test("chat smoke prefers current shell cwd over stale OMK_PROJECT_ROOT", async (
     assert.equal(report.ok, true);
     assert.equal(report.root.path, projectRoot);
     assert.equal(report.root.cwd, projectRoot);
+    assert.equal(report.root.source, "strong-marker");
     assert.equal(existsSync(join(projectRoot, ".omk", "runs", runId)), true);
     assert.equal(existsSync(join(staleRoot, ".omk", "runs", runId)), false);
   } finally {
@@ -767,6 +768,9 @@ test("chat smoke uses OMK_DEFAULT_PROJECT_ROOT when launched from HOME git repo"
     assert.equal(existsSync(join(homeRoot, ".omk", "runs", runId)), false);
     const report = JSON.parse(result.stdout);
     assert.equal(report.ok, true);
+    assert.equal(report.root.path, projectRoot);
+    assert.equal(report.root.cwd, homeRoot);
+    assert.equal(report.root.source, "default-env");
   } finally {
     await rm(homeRoot, { recursive: true, force: true });
     await rm(binRoot, { recursive: true, force: true });
