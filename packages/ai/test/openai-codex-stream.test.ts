@@ -370,6 +370,114 @@ describe("openai-codex streaming", () => {
 		expect(result.errorMessage).toBe("Codex SSE response headers timed out after 10000ms");
 	});
 
+	it("aborts SSE body reads after response headers arrive", async () => {
+		const token = mockToken();
+		const encoder = new TextEncoder();
+		const timers: ReturnType<typeof setTimeout>[] = [];
+		let cancelled = false;
+		const stream = new ReadableStream<Uint8Array>({
+			start(controller) {
+				const enqueue = (chunk: string) => {
+					if (!cancelled) controller.enqueue(encoder.encode(chunk));
+				};
+				enqueue(
+					`${[
+						`data: ${JSON.stringify({
+							type: "response.output_item.added",
+							item: { type: "message", id: "msg_1", role: "assistant", status: "in_progress", content: [] },
+						})}`,
+						`data: ${JSON.stringify({ type: "response.content_part.added", part: { type: "output_text", text: "" } })}`,
+						`data: ${JSON.stringify({ type: "response.output_text.delta", delta: "one" })}`,
+					].join("\n\n")}\n\n`,
+				);
+				timers.push(
+					setTimeout(() => {
+						enqueue(`data: ${JSON.stringify({ type: "response.output_text.delta", delta: "two" })}\n\n`);
+					}, 10),
+				);
+				timers.push(
+					setTimeout(() => {
+						if (cancelled) return;
+						enqueue(
+							`${[
+								`data: ${JSON.stringify({
+									type: "response.output_item.done",
+									item: {
+										type: "message",
+										id: "msg_1",
+										role: "assistant",
+										status: "completed",
+										content: [{ type: "output_text", text: "onetwo" }],
+									},
+								})}`,
+								`data: ${JSON.stringify({
+									type: "response.completed",
+									response: {
+										status: "completed",
+										usage: {
+											input_tokens: 5,
+											output_tokens: 3,
+											total_tokens: 8,
+											input_tokens_details: { cached_tokens: 0 },
+										},
+									},
+								})}`,
+							].join("\n\n")}\n\n`,
+						);
+						controller.close();
+					}, 20),
+				);
+			},
+			cancel() {
+				cancelled = true;
+				for (const timer of timers) clearTimeout(timer);
+			},
+		});
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => new Response(stream, { status: 200, headers: { "content-type": "text/event-stream" } })),
+		);
+
+		const model: Model<"openai-codex-responses"> = {
+			id: "gpt-5.1-codex",
+			name: "GPT-5.1 Codex",
+			api: "openai-codex-responses",
+			provider: "openai-codex",
+			baseUrl: "https://chatgpt.com/backend-api",
+			reasoning: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 400000,
+			maxTokens: 128000,
+		};
+		const context: Context = {
+			systemPrompt: "You are a helpful assistant.",
+			messages: [{ role: "user", content: "Say hello", timestamp: Date.now() }],
+		};
+		const controller = new AbortController();
+		const events: string[] = [];
+
+		const resultStream = streamOpenAICodexResponses(model, context, {
+			apiKey: token,
+			transport: "sse",
+			signal: controller.signal,
+		});
+		for await (const event of resultStream) {
+			events.push(event.type === "text_delta" ? `text_delta:${event.delta}` : event.type);
+			if (event.type === "text_delta" && event.delta === "one") {
+				controller.abort();
+			}
+		}
+
+		const result = await resultStream.result();
+		expect(result.stopReason).toBe("aborted");
+		expect(result.errorMessage).toBe("Request was aborted");
+		expect(events).toContain("text_delta:one");
+		expect(events).not.toContain("text_delta:two");
+		expect(cancelled).toBe(true);
+	});
+
 	it("sets session-id/x-client-request-id headers and prompt_cache_key when sessionId is provided", async () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "pi-codex-stream-"));
 		process.env.PI_CODING_AGENT_DIR = tempDir;
