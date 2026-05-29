@@ -5,6 +5,7 @@
 ### Added
 
 - Exported `convertToPng` for extension authors.
+- Exported `parseArgs` and type `Args` for extension authors.
 
 ## [0.77.0] - 2026-05-28
 

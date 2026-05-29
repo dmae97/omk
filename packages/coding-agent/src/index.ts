@@ -1,5 +1,7 @@
 // Core session management
 
+export { type Args, parseArgs } from "./cli/args.ts";
+
 // Config paths
 export { getAgentDir, VERSION } from "./config.ts";
 export {
