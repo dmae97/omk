@@ -10402,23 +10402,6 @@ export const MODELS = {
 			contextWindow: 128000,
 			maxTokens: 16384,
 		} satisfies Model<"openai-completions">,
-		"openai/gpt-4o-audio-preview": {
-			id: "openai/gpt-4o-audio-preview",
-			name: "OpenAI: GPT-4o Audio",
-			api: "openai-completions",
-			provider: "openrouter",
-			baseUrl: "https://openrouter.ai/api/v1",
-			reasoning: false,
-			input: ["text"],
-			cost: {
-				input: 2.5,
-				output: 10,
-				cacheRead: 0,
-				cacheWrite: 0,
-			},
-			contextWindow: 128000,
-			maxTokens: 16384,
-		} satisfies Model<"openai-completions">,
 		"openai/gpt-4o-mini": {
 			id: "openai/gpt-4o-mini",
 			name: "OpenAI: GPT-4o-mini",
