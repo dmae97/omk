@@ -121,6 +121,8 @@ function mapToolCalls(
 }
 
 export interface KimiApiRuntimeOptions {
+  id?: string;
+  priority?: number;
   apiKey?: string;
   model?: string;
   baseUrl?: string;
@@ -156,9 +158,9 @@ export function createKimiApiRuntime(options: KimiApiRuntimeOptions = {}): Agent
 export const createKimiWireRuntime = createKimiApiRuntime;
 
 export class KimiApiRuntime implements AgentRuntime {
-  readonly id = "kimi-api";
+  readonly id: string;
   readonly kind = "api";
-  readonly priority = 90;
+  readonly priority: number;
   readonly capabilities: RuntimeCapabilities = {
     read: true,
     write: true,
@@ -178,6 +180,8 @@ export class KimiApiRuntime implements AgentRuntime {
   private readonly baseUrl: string;
 
   constructor(options: KimiApiRuntimeOptions = {}) {
+    this.id = options.id ?? "kimi-api";
+    this.priority = options.priority ?? 90;
     this.apiKey = options.apiKey ?? process.env.KIMI_API_KEY;
     this.model = options.model ?? process.env.KIMI_MODEL ?? "kimi-k2-6";
     this.baseUrl = (options.baseUrl ?? "https://api.moonshot.cn/v1").replace(/\/+$/, "");
@@ -258,10 +262,12 @@ export class KimiApiRuntime implements AgentRuntime {
         }))
       : [];
 
+    const useStreaming = task.capabilities.streaming ?? true;
+
     const body: Record<string, unknown> = {
       model: task.context.providerModel ?? task.context.env?.OMK_PROVIDER_MODEL ?? this.model,
       messages,
-      stream: task.capabilities.streaming ?? true,
+      stream: useStreaming,
     };
 
     if (tools.length > 0) {
@@ -293,7 +299,12 @@ export class KimiApiRuntime implements AgentRuntime {
         };
       }
 
-      if (task.capabilities.streaming) {
+      if (useStreaming) {
+        return this.parseStreamResponse(response);
+      }
+
+      const contentType = response.headers.get("content-type") ?? "";
+      if (contentType.includes("text/event-stream")) {
         return this.parseStreamResponse(response);
       }
 

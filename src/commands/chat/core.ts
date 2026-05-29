@@ -8,7 +8,7 @@ import { parseExecutionPromptPolicy } from "../../util/execution-selection.js";
 import { normalizeProviderPolicy, parseProviderModelArg } from "../../providers/model-registry.js";
 import { validateAgentYamlFile, formatAgentYamlIssues } from "../../util/agent-schema.js";
 import { ensureChatStartupArtifacts } from "../../util/chat-startup.js";
-import { ensureChatRunState, detectTmux, launchChatCockpit, isCockpitChild } from "../../util/chat-cockpit.js";
+import { ensureChatRunState } from "../../util/chat-cockpit.js";
 import { buildChatAgentRuntimeMcpAllowlist, buildChatAgentRuntimeSkillAllowlist, prepareChatAgentModeAgent, type ChatAgentModeResources } from "../../util/chat-agent-mode.js";
 import { parseRuntimeScopeOption } from "../../util/runtime-scope.js";
 import { queueChatStatePatch } from "../../util/chat-state.js";
@@ -54,6 +54,9 @@ export async function chatCommand(options: {
   mcpScope?: string;
   smoke?: boolean;
   json?: boolean;
+  showThink?: string;
+  reasoningNlp?: boolean;
+  reasoningSummary?: string;
 }): Promise<void> {
   const rootResolution = getProjectRootDiagnostics();
   const root = rootResolution.root;
@@ -148,18 +151,18 @@ export async function chatCommand(options: {
 
   try {
     const bootstrap = await ensureChatStartupArtifacts({ root, runId: effectiveRunId });
-    if (!isCockpitChild() && layout !== "plain" && bootstrap.created.length > 0) {
+    if (!false && layout !== "plain" && bootstrap.created.length > 0) {
       console.log(status.ok(t("chat.bootstrapReady", bootstrap.date, bootstrap.created.length)));
     }
   } catch (err) {
-    if (!isCockpitChild() && layout !== "plain") {
+    if (!false && layout !== "plain") {
       const message = err instanceof Error ? err.message : String(err);
       console.log(status.warn(t("chat.bootstrapWarning", message)));
     }
   }
 
   // ── Star prompt at chat start (parent only, skipped in cockpit child) ──
-  if (!isCockpitChild()) {
+  if (!false) {
     try {
       const { maybeAskForGitHubStarAtChatStart } = await import("../../util/first-run-star.js");
       const { getOmkVersionSync } = await import("../../util/version.js");
@@ -222,7 +225,7 @@ export async function chatCommand(options: {
       }).catch(() => {});
     } catch (err) {
       effectiveAgentFile = agentFile;
-      if (!isCockpitChild() && layout !== "plain") {
+      if (!false && layout !== "plain") {
         const detail = process.env.OMK_DEBUG === "1" && err instanceof Error ? `: ${err.name}` : "";
         console.log(status.warn(`Chat agent harness unavailable; using base agent${detail}`));
       }
@@ -276,7 +279,7 @@ export async function chatCommand(options: {
     return;
   }
 
-  if (!options.json && !isCockpitChild()) {
+  if (!options.json && !false) {
     try {
       const { maybePromptForOmkUpdate } = await import("../../util/update-check.js");
       const updatePrompt = await maybePromptForOmkUpdate({ source: "chat" });
@@ -286,70 +289,13 @@ export async function chatCommand(options: {
     }
   }
 
-  // ── tmux layout: delegate to cockpit launcher ──
-  if (layout === "tmux") {
-    const hasTmux = await detectTmux();
-    if (!hasTmux) {
-      console.error(status.error(t("chat.cockpitTmuxNotFound")));
-      console.error(style.gray(t("chat.cockpitTmuxInstallHint")));
-      process.exit(1);
-    }
-    if (!process.stdout.isTTY) {
-      console.error(status.error("tmux layout requires a TTY"));
-      process.exit(1);
-    }
-    await launchChatCockpit({
-      runId: effectiveRunId,
-      brand,
-      cwd: root,
-      agentFile: effectiveAgentFile,
-      workers: options.workers ? effectiveWorkers : undefined,
-      maxStepsPerTurn: options.maxStepsPerTurn,
-      mcpScope,
-      provider: providerPolicy,
-      model: options.model,
-      execution: executionPrompt,
-      ui,
-      cockpitRefresh: options.cockpitRefresh,
-      cockpitRedraw: options.cockpitRedraw,
-      cockpitHistory: options.cockpitHistory,
-      cockpitSideWidth: options.cockpitSideWidth,
-      cockpitHeight: options.cockpitHeight,
-    });
-    return;
-  }
-
-  // ── auto layout: tmux if available and TTY, else inline ──
-  if (layout === "auto") {
-    const hasTmux = await detectTmux();
-    if (hasTmux && process.stdout.isTTY) {
-      await launchChatCockpit({
-        runId: effectiveRunId,
-        brand,
-        cwd: root,
-        agentFile: effectiveAgentFile,
-        workers: options.workers ? effectiveWorkers : undefined,
-        maxStepsPerTurn: options.maxStepsPerTurn,
-        mcpScope,
-        provider: providerPolicy,
-        model: options.model,
-        execution: executionPrompt,
-        ui,
-        cockpitRefresh: options.cockpitRefresh,
-        cockpitRedraw: options.cockpitRedraw,
-        cockpitHistory: options.cockpitHistory,
-        cockpitSideWidth: options.cockpitSideWidth,
-        cockpitHeight: options.cockpitHeight,
-      });
-      return;
-    }
-    // fall through to inline
-  }
+  // ── tmux/auto layout: use System24 renderer inline ──
+  // cockpit removed — System24 TUI handles all rendering
 
   // ── plain / inline: run Kimi directly ──
   const isPlain = layout === "plain";
 
-  if (!isPlain && !isCockpitChild()) {
+  if (!isPlain) {
     const trust = `${effectiveResources.mcpScope} MCP / ${effectiveResources.skillsScope} skills`;
     const agentDisplay = relative(root, effectiveAgentFile);
     const { getModePreset } = await import("../../util/mode-preset.js");
@@ -367,7 +313,7 @@ export async function chatCommand(options: {
   }
 
   // ── Deferred HUD + history: fire-and-forget, let the agent loop start immediately ──
-  if (!isPlain && !isCockpitChild()) {
+  if (!isPlain && !false) {
     // Show a minimal status line while we defer the full HUD
     const providerLabel = providerPolicy === "auto" ? "auto-detect" : providerPolicy;
     const modeLabel = currentMode;
@@ -429,7 +375,7 @@ export async function chatCommand(options: {
   }
 
   // ── Resume: show existing TODO summary if resuming ──
-  if (!isPlain && !isCockpitChild()) {
+  if (!isPlain && !false) {
     try {
       const existingTodos = await readTodos(effectiveRunId).catch(() => null);
       if (existingTodos && existingTodos.length > 0) {

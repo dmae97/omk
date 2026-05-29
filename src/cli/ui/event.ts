@@ -53,4 +53,16 @@ export type CliUiEvent =
   | {
       type: "session:stop";
       exitCode: number;
+    }
+  | {
+      type: "turn:todo";
+      total: number;
+      done: number;
+      inProgress: number;
+      items: readonly { title: string; status: string }[];
+    }
+  | {
+      type: "turn:reasoning";
+      summary: string;
+      frames: readonly { text: string; elapsedMs?: number }[];
     };

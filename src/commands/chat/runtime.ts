@@ -24,7 +24,10 @@ import { buildOmkToolPlaneManifest } from "../../runtime/tool-plane.js";
 import { runNativeOmkRootLoop } from "./native-root-loop.js";
 import { isCockpitChild } from "../../util/chat-cockpit.js";
 import { style } from "../../util/theme.js";
+import { normalizeReasoningChunk, extractThinkingSummary, appendReasoningFrames, resolveReasoningVisibility, resolveReasoningSummaryMode, type ReasoningFrame } from "../../util/reasoning-nlp.js";
 import { PlainModernRenderer } from "../../cli/ui/plain-renderer.js";
+import { RichRenderer } from "../../cli/ui/rich-renderer.js";
+import { System24Renderer } from "../../cli/ui/system24-renderer.js";
 import { sanitizeUserVisibleOutput } from "../../util/user-visible-output.js";
 
 export interface ChatRuntimeInput {
@@ -160,6 +163,9 @@ export async function runChatRuntime(
     mcpScope?: string;
     smoke?: boolean;
     json?: boolean;
+    showThink?: string;
+    reasoningNlp?: boolean;
+    reasoningSummary?: string;
   },
   input: ChatRuntimeInput
 ): Promise<number> {
@@ -217,6 +223,11 @@ export async function runChatRuntime(
   process.env.OMK_WORKERS = effectiveWorkers;
 
   let lastThinking = "";
+  const reasoningFrames: ReasoningFrame[] = [];
+  const reasoningVisibility = resolveReasoningVisibility(options.showThink, process.env.OMK_SHOW_THINK);
+  const reasoningSummaryMode = resolveReasoningSummaryMode(options.reasoningSummary, process.env.OMK_REASONING_SUMMARY);
+  const reasoningEnabled = reasoningVisibility !== "off" || options.reasoningNlp || process.env.OMK_REASONING_NLP === "1";
+
   let exitCode = 0;
   let recentChatOutput = "";
   let observedKimiSessionId: string | undefined;
@@ -316,7 +327,7 @@ export async function runChatRuntime(
             process.stdout.write(sanitizeUserVisibleOutput(text));
           },
         });
-        const renderer = ui === "plain-modern" ? new PlainModernRenderer() : undefined;
+        const renderer = ui === "system24" ? new System24Renderer() : ui === "rich" ? new RichRenderer() : new PlainModernRenderer();
         exitCode = await runNativeOmkRootLoop({
           bootstrap,
           taskRunner: runner,
@@ -332,6 +343,45 @@ export async function runChatRuntime(
           renderer,
           onData: (data) => {
             recentChatOutput = appendRecentChatOutput(recentChatOutput, data);
+            // Reasoning NLP normalization for native root loop
+            if (reasoningEnabled) {
+              const frames = normalizeReasoningChunk(data, {
+                visibility: reasoningVisibility,
+                summaryMode: reasoningSummaryMode,
+                provider: options.provider,
+              });
+              if (frames.length > 0) {
+                reasoningFrames.push(...frames);
+                const summary = extractThinkingSummary(frames);
+                if (summary) {
+                  lastThinking = summary;
+                  track(updateChatActivity(effectiveRunId, `🧠 ${summary}`).catch(() => {}));
+                  renderer.setThinkingSummary(summary);
+                  renderer.emit({ type: "turn:reasoning", summary, frames: frames.map(f => ({ text: f.text, elapsedMs: f.elapsedMs })) });
+                }
+                const runDir = `${root}/.omk/runs/${effectiveRunId}`;
+                appendReasoningFrames(runDir, frames).catch(() => {});
+              }
+            }
+            // Parse SetTodoList from output
+            pendingChunks.push(data);
+            pendingLength += data.length;
+            while (pendingLength > 8192 && pendingChunks.length > 1) {
+              const removed = pendingChunks.shift()!;
+              pendingLength -= removed.length;
+            }
+            if (pendingLength > 8192 && pendingChunks.length === 1) {
+              pendingChunks[0] = pendingChunks[0].slice(-4096);
+              pendingLength = pendingChunks[0].length;
+            }
+            const pendingOutput = pendingChunks.join("");
+            const newTodos = parseSetTodoListFromOutput(pendingOutput);
+            if (newTodos && newTodos.length > 0) {
+              scheduleTodoSync(newTodos);
+              const doneCount = newTodos.filter(t => t.status === "done").length;
+              const inProgressCount = newTodos.filter(t => t.status === "in_progress").length;
+              renderer.emit({ type: "turn:todo", total: newTodos.length, done: doneCount, inProgress: inProgressCount, items: newTodos.map(t => ({ title: t.title, status: t.status })) });
+            }
           },
           onTodoSync: (output) => {
             const parsedTodos = parseSetTodoListFromOutput(output);
@@ -390,7 +440,27 @@ export async function runChatRuntime(
         },
         onData: (data) => {
           recentChatOutput = appendRecentChatOutput(recentChatOutput, data);
-          // Lightweight activity sampling: extract short tool/thinking snippets
+          // Reasoning NLP normalization
+          if (reasoningEnabled) {
+            const frames = normalizeReasoningChunk(data, {
+              visibility: reasoningVisibility,
+              summaryMode: reasoningSummaryMode,
+              provider: options.provider,
+            });
+            if (frames.length > 0) {
+              reasoningFrames.push(...frames);
+              const summary = extractThinkingSummary(frames);
+              if (summary) {
+                lastThinking = `🧠 ${summary}`;
+                track(updateChatActivity(effectiveRunId, lastThinking).catch(() => {}));
+              }
+              // Async flush to reasoning.jsonl (non-blocking)
+              const runDir = `${root}/.omk/runs/${effectiveRunId}`;
+              appendReasoningFrames(runDir, frames).catch(() => {});
+            }
+          }
+
+          // Legacy lightweight activity sampling (kept for compatibility)
           const lines = data.split("\n");
           for (const raw of lines) {
             const line = raw.trim();
@@ -402,13 +472,13 @@ export async function runChatRuntime(
             if (!line || line.length < 3) continue;
             if (/read_file|write_file|edit_file|search_files|glob|grep|ctx_read/i.test(line)) {
               const m = line.match(/["']([^"']{1,60})["']/);
-              lastThinking = m ? `📄 ${m[1].split("/").pop() ?? m[1]}` : `🔧 ${line.slice(0, 60)}`;
+              if (!reasoningEnabled) lastThinking = m ? `📄 ${m[1].split("/").pop() ?? m[1]}` : `🔧 ${line.slice(0, 60)}`;
               track(updateChatActivity(effectiveRunId, lastThinking).catch(() => {}));
               continue;
             }
             const explicit = line.match(/^<think(?:ing)?>[\s:]*(.+?)(?:<\/think(?:ing)?>)?$/i);
             if (explicit) {
-              lastThinking = `🧠 ${explicit[1].trim().slice(0, 100)}`;
+              if (!reasoningEnabled) lastThinking = `🧠 ${explicit[1].trim().slice(0, 100)}`;
               track(updateChatActivity(effectiveRunId, lastThinking).catch(() => {}));
               continue;
             }
@@ -463,6 +533,11 @@ export async function runChatRuntime(
         resources: effectiveResources,
       }).catch(() => {});
     }
+    // Flush remaining reasoning frames
+    if (reasoningEnabled && reasoningFrames.length > 0) {
+      const runDir = `${root}/.omk/runs/${effectiveRunId}`;
+      await appendReasoningFrames(runDir, reasoningFrames).catch(() => {});
+    }
     await finalizeChatState(effectiveRunId, exitCode === 0);
     // Update session.json
     try {
@@ -491,7 +566,7 @@ export async function runChatRuntime(
     } catch {
       // ignore session finalize failures
     }
-    if (ui !== "plain-modern") {
+    if (ui !== "plain-modern" && ui !== "rich" && ui !== "system24") {
       await printChatExitBanner({
         runId: effectiveRunId,
         sessionId,

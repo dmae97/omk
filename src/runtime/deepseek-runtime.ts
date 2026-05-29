@@ -243,7 +243,12 @@ export class DeepSeekRuntime implements AgentRuntime {
         };
       }
 
-      if (task.capabilities.streaming) {
+      if (task.capabilities.streaming === true) {
+        return this.parseStreamResponse(response);
+      }
+
+      const contentType = response.headers.get("content-type") ?? "";
+      if (contentType.includes("text/event-stream")) {
         return this.parseStreamResponse(response);
       }
 

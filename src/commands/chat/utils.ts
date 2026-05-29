@@ -7,7 +7,6 @@ import type { TodoItem } from "../../util/todo-sync.js";
 import { readFile, readdir } from "fs/promises";
 import YAML from "yaml";
 import { t } from "../../util/i18n.js";
-import { isCockpitChild } from "../../util/chat-cockpit.js";
 
 export function mergeTodos(existing: TodoItem[], incoming: TodoItem[]): TodoItem[] {
   const map = new Map<string, TodoItem>();
@@ -52,19 +51,19 @@ export function formatResourceCount(count: number, scope: string): string {
 
 export type ChatLayout = "auto" | "tmux" | "inline" | "plain";
 export type ChatBrand = "omk" | "minimal" | "plain" | "kimicat";
-export type ChatUi = "legacy" | "plain-modern";
+export type ChatUi = "legacy" | "plain-modern" | "rich" | "system24";
 
 export function resolveLayout(requested: ChatLayout | undefined): ChatLayout {
   if (requested && requested !== "auto") return requested;
-  // Already inside a tmux cockpit pane — never launch tmux again
-  if (isCockpitChild()) return "inline";
-  return "auto";
+  return "inline";
 }
 
 export function resolveChatUi(requested: string | undefined, env: NodeJS.ProcessEnv = process.env): ChatUi {
-  const raw = requested ?? env.OMK_UI ?? env.OMK_CHAT_UI ?? "legacy";
+  const raw = requested ?? env.OMK_UI ?? env.OMK_CHAT_UI ?? "system24";
   const normalized = raw.trim().toLowerCase();
   if (normalized === "plain-modern" || normalized === "modern" || normalized === "agent-console") return "plain-modern";
+  if (normalized === "rich") return "rich";
+  if (normalized === "system24" || normalized === "s24") return "system24";
   return "legacy";
 }
 

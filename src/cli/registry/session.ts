@@ -75,20 +75,18 @@ export function registerSessionCommands(program: Command): void {
     .option("--model <model>", "provider model or provider/model override")
     .option("--max-steps-per-turn <n>", t("cmd.chatMaxStepsOption"))
     .option("--layout <auto|tmux|inline|plain>", t("cmd.chatLayoutOption"), "auto")
-    .option("--ui <legacy|plain-modern>", "Single-pane chat renderer (legacy | plain-modern)")
+        .option("--ui <legacy|plain-modern|rich|system24>", "Single-pane chat renderer (legacy | plain-modern | rich | system24)")
     .option("--brand <omk|minimal|plain>", t("cmd.chatBrandOption"), "minimal")
     .option("--mode <agent|plan|chat|debugging|review>", "OMK execution mode")
-    .option("--cockpit-refresh <ms>", "Cockpit refresh interval in milliseconds", "2000")
-    .option("--cockpit-redraw <diff|full|append>", "Cockpit redraw mode", "diff")
-    .option("--cockpit-history <off|static|watch>", "Cockpit history pane mode", "static")
-    .option("--cockpit-side-width <percent>", "Cockpit side pane width percentage (default: auto, about 45-50%)")
-    .option("--cockpit-height <rows>", "Cockpit fixed height in rows (default: auto)")
     .option("--smoke", "Run chat startup preflight and runtime MCP merge checks without launching the agent")
+    .option("--show-think <off|summary|debug>", "Thinking visibility mode (off | summary | debug)", "off")
+    .option("--reasoning-nlp", "Enable reasoning NLP normalization")
+    .option("--reasoning-summary <auto|concise|detailed>", "OpenAI reasoning summary mode (auto | concise | detailed)", "auto")
     .option("--json", "With --smoke, output machine-readable JSON")
     .action(async (options) => {
       const globalOpts = program.opts();
       const { chatCommand } = await import("../../commands/chat.js");
-      await chatCommand({ ...options, runId: globalOpts.runId });
+      await chatCommand({ ...options, runId: globalOpts.runId, showThink: options.showThink, reasoningNlp: Boolean(options.reasoningNlp), reasoningSummary: options.reasoningSummary });
     });
 
   program
