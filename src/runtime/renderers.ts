@@ -8,7 +8,7 @@
  * Invariant I-004: provider stdout MUST NOT bypass the router.
  */
 
-import type { OmkEvent, OmkEventData, OutputFormat } from "./contracts/command-envelope.js";
+import type { OmkEvent, OmkEventData } from "./contracts/command-envelope.js";
 import type { ThemePalette, SemanticToken } from "../cli/theme/theme-registry.js";
 import { t } from "../util/i18n.js";
 
@@ -16,20 +16,22 @@ import { t } from "../util/i18n.js";
 
 const ESC = "\x1b[";
 const RESET = `${ESC}0m`;
-const BOLD = `${ESC}1m`;
 const DIM = `${ESC}2m`;
-const CYAN = `${ESC}36m`;
-const MAGENTA = `${ESC}35m`;
+
+// opencode-style spinner frames
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+let spinnerIdx = 0;
+function spinnerNext(): string {
+  const frame = SPINNER_FRAMES[spinnerIdx % SPINNER_FRAMES.length];
+  spinnerIdx++;
+  return frame;
+}
 
 function fallbackColorize(text: string, ...codes: string[]): string {
   return `${codes.join("")}${text}${RESET}`;
 }
 
-function padRight(text: string, width: number): string {
-  return text.length >= width ? text : text + " ".repeat(width - text.length);
-}
-
-function progressBar(percent: number, width = 24): string {
+function progressBar(percent: number, width = 20): string {
   const clamped = Math.max(0, Math.min(100, percent));
   const filled = Math.round((clamped / 100) * width);
   const empty = width - filled;
@@ -38,9 +40,13 @@ function progressBar(percent: number, width = 24): string {
 }
 
 function timestamp(): string {
-  return new Date().toISOString().slice(11, 23);
+  return new Date().toISOString().slice(11, 19);
 }
 
+/** Strip ANSI escape sequences */
+function stripAnsi(text: string): string {
+  return text.replace(/\x1b\[[0-9;]*m/g, "");
+}
 // ─── ThemePalette helpers ───────────────────────────────────────────────────
 
 /**
@@ -60,15 +66,7 @@ function dim(palette: ThemePalette | undefined, text: string): string {
   return palette.render("dim", text);
 }
 
-/**
- * Render text with bold styling.
- */
-function bold(palette: ThemePalette | undefined, text: string): string {
-  if (!palette || !palette.supportsColor) return fallbackColorize(text, BOLD);
-  return palette.render("bold", text);
-}
-
-// ─── ThemeRenderer ───────────────────────────────────────────────────────────
+// ─── ThemeRenderer (opencode-style compact output) ──────────────────────────
 
 export interface ThemeRenderer {
   renderTurnStarted(intent: string, provider: string): void;
@@ -78,6 +76,7 @@ export interface ThemeRenderer {
   renderResult(content: string): void;
   renderError(message: string, recoverable: boolean): void;
   renderTurnFinished(durationMs: number): void;
+  renderStatusBar(provider: string, model: string, intent: string): void;
   flush(): void;
 }
 
@@ -91,67 +90,80 @@ export function createThemeRenderer(
 
   return {
     renderTurnStarted(intent: string, provider: string): void {
-      const tag = themed(palette, "success", padRight(" START ", 8));
+      // opencode-style: compact one-liner with dim timestamp
       const ts = dim(palette, timestamp());
+      const icon = themed(palette, "success", "●");
       const intentColored = themed(palette, "info", intent);
       const providerColored = themed(palette, "agent", provider);
-      emit(`${tag} ${ts} intent=${intentColored} provider=${providerColored}`);
+      emit(`  ${icon} ${ts} ${intentColored} → ${providerColored}`);
     },
 
     renderProgress(message: string, percent?: number): void {
-      const tag = themed(palette, "warning", padRight(" ... ", 8));
-      const ts = dim(palette, timestamp());
+      // opencode-style: spinner + compact message
+      const spin = themed(palette, "warning", spinnerNext());
       const bar = percent !== undefined ? ` ${progressBar(percent)}` : "";
-      emit(`${tag} ${ts} ${message}${bar}`);
+      emit(`  ${spin} ${message}${bar}`);
     },
 
     renderMcpStatus(server: string, status: string): void {
-      const ts = dim(palette, timestamp());
-      let statusColored: string;
+      // opencode-style: inline dot status
+      let dot: string;
       switch (status) {
-        case "connected":
-          statusColored = themed(palette, "success", status);
-          break;
-        case "failed":
-          statusColored = themed(palette, "error", status);
-          break;
-        default:
-          statusColored = themed(palette, "warning", status);
+        case "connected": dot = themed(palette, "success", "●"); break;
+        case "failed": dot = themed(palette, "error", "✖"); break;
+        case "disabled": dot = dim(palette, "○"); break;
+        default: dot = themed(palette, "warning", "◌");
       }
-      const mcpLabel = dim(palette, "MCP");
-      const serverColored = themed(palette, "tool", server);
-      emit(`  ${mcpLabel}  ${ts} ${serverColored} → ${statusColored}`);
+      const srv = themed(palette, "tool", server);
+      emit(`    ${dot} ${srv}`);
     },
 
     renderWarning(message: string): void {
-      const tag = themed(palette, "warning", padRight(" WARN ", 8));
-      const ts = dim(palette, timestamp());
-      emit(`${tag} ${ts} ${message}`);
+      const icon = themed(palette, "warning", "!");
+      emit(`  ${icon} ${themed(palette, "warning", message)}`);
     },
 
     renderResult(content: string): void {
-      const tag = themed(palette, "success", padRight(" OK ", 8));
-      const ts = dim(palette, timestamp());
+      // opencode-style: clean output, no tags
       const lines = content.split("\n");
       for (const line of lines) {
-        emit(`${tag} ${ts} ${line}`);
+        emit(`  ${line}`);
       }
     },
 
     renderError(message: string, recoverable: boolean): void {
-      const label = recoverable ? "RECOVERABLE" : "FATAL";
-      const tag = themed(palette, "error", padRight(` ${label} `, 13));
-      const ts = dim(palette, timestamp());
-      emit(`${tag} ${ts} ${themed(palette, "error", message)}`);
+      // opencode-style: box overlay for errors
+      const label = recoverable ? " Recoverable Error " : " Fatal Error ";
+      const w = Math.max(stripAnsi(message).length + 4, 40);
+      const top = `${"┌".padEnd(w + 1, "─")}┐`;
+      const bot = `${"└".padEnd(w + 1, "─")}┘`;
+      const labelLine = `│ ${themed(palette, "error", label)}${" ".repeat(Math.max(0, w - label.length - 1))}│`;
+      const msgLine = `│ ${message}${" ".repeat(Math.max(0, w - stripAnsi(message).length - 1))}│`;
+      emit("");
+      emit(`  ${dim(palette, top)}`);
+      emit(`  ${dim(palette, labelLine)}`);
+      emit(`  ${dim(palette, msgLine)}`);
+      emit(`  ${dim(palette, bot)}`);
+      emit("");
     },
 
     renderTurnFinished(durationMs: number): void {
-      const tag = themed(palette, "success", padRight(" END ", 8));
       const ts = dim(palette, timestamp());
+      const icon = themed(palette, "success", "●");
       const dur = durationMs >= 1000
         ? `${(durationMs / 1000).toFixed(1)}s`
         : `${durationMs}ms`;
-      emit(`${tag} ${ts} turn finished in ${themed(palette, "info", dur)}`);
+      emit(`  ${icon} ${ts} ${dim(palette, "done in")} ${themed(palette, "info", dur)}`);
+    },
+
+    renderStatusBar(provider: string, model: string, intent: string): void {
+      // opencode-style: bottom status bar
+      const p = themed(palette, "agent", provider);
+      const m = themed(palette, "task", model);
+      const i = themed(palette, "info", intent);
+      const sep = dim(palette, "│");
+      emit("");
+      emit(`  ${sep} ${p} ${sep} ${m} ${sep} ${i} ${sep}`);
     },
 
     flush(): void {

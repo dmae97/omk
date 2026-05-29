@@ -11,7 +11,7 @@ import { ParallelLiveRenderer, renderCompactParallelFrame, type ParallelViewMode
 import { omkCliHero, style, status, label, bullet } from "../../util/theme.js";
 import { formatOmkVersionFooter } from "../../util/version.js";
 import { captureTerminalInputState, restoreTerminalInputState } from "../../util/terminal-input.js";
-import { createProviderBackedTaskRunner } from "../../providers/index.js";
+import { createHarnessTaskRunner } from "../../harness/create-harness-task-runner.js";
 import { getActiveRuntimePreset } from "../../util/resource-profile.js";
 import { createOmkSessionEnv } from "../../util/session.js";
 import { t } from "../../util/i18n.js";
@@ -243,37 +243,38 @@ export async function executeParallelRun(input: {
   }
 
   const activePreset = await getActiveRuntimePreset();
-  const runner = await createProviderBackedTaskRunner({
+  const runner = await createHarnessTaskRunner({
+    root,
+    runId,
+    mode: "parallel",
     providerPolicy,
-    eventRunDir: runDir,
-    deepseekPromptPrefix,
-    allowDeepSeekAdvisoryFileNodes: true,
-    kimi: {
-      cwd: root,
-      timeout: 0,
+    providerOptions: {
+      eventRunDir: runDir,
+      deepseekPromptPrefix,
+      allowDeepSeekAdvisoryFileNodes: true,
       agentFile,
       promptPrefix: promptText,
       mcpScope,
       skillsScope: resources.skillsScope,
-      roleAgentFiles: true,
+      hooksScope: resources.hooksScope,
       mcpNames: activePreset?.mcpServers ?? [],
       skillNames: activePreset?.skills ?? [],
       hookNames: activePreset?.hooks ?? [],
       toolNames: [],
-      env: {
-        ...createOmkSessionEnv(root, runId),
-        OMK_RUN_ID: runId,
-        OMK_FLOW: "parallel",
-        OMK_GOAL: intentFrame.desiredOutcome,
-        OMK_GOAL_CONTEXT: renderActionDigest(intentFrame),
-        OMK_WORKERS: String(workerCount),
-        OMK_DAG_ROUTING: "1",
-        OMK_DAG_STATE_PATH: statePath,
-        OMK_MCP_SCOPE: mcpScope,
-        OMK_SKILLS_SCOPE: resources.skillsScope,
-        OMK_APPROVAL_POLICY: approvalPolicy,
-        ...(modelArg.model ? { OMK_PROVIDER_MODEL: modelArg.model } : {}),
-      },
+    },
+    env: {
+      ...createOmkSessionEnv(root, runId),
+      OMK_RUN_ID: runId,
+      OMK_FLOW: "parallel",
+      OMK_GOAL: intentFrame.desiredOutcome,
+      OMK_GOAL_CONTEXT: renderActionDigest(intentFrame),
+      OMK_WORKERS: String(workerCount),
+      OMK_DAG_ROUTING: "1",
+      OMK_DAG_STATE_PATH: statePath,
+      OMK_MCP_SCOPE: mcpScope,
+      OMK_SKILLS_SCOPE: resources.skillsScope,
+      OMK_APPROVAL_POLICY: approvalPolicy,
+      ...(modelArg.model ? { OMK_PROVIDER_MODEL: modelArg.model } : {}),
     },
   });
 

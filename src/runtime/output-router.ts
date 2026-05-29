@@ -19,6 +19,9 @@ import {
 import type { ThemePalette } from "../cli/theme/theme-registry.js";
 import { getBuiltinTheme } from "../cli/theme/theme-registry.js";
 import { resolveTheme } from "../cli/theme/theme-resolver.js";
+import type { NlgRenderer } from "./nlg-renderer.js";
+import { createNlgRenderer } from "./nlg-renderer.js";
+import type { ReasoningTrace } from "./contracts/reasoning-trace.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -26,6 +29,10 @@ export type Renderer = ThemeRenderer | NlpRenderer | JsonRenderer;
 
 export interface OutputRouter {
   route(event: OmkEvent): void;
+  /** Route a reasoning trace through the NLG renderer */
+  routeTrace(trace: ReasoningTrace): void;
+  /** Render opencode-style status bar at bottom */
+  renderStatusBar(provider: string, model: string, intent: string): void;
   flush(): void;
   getRenderer(): Renderer;
 }
@@ -38,6 +45,7 @@ class OutputRouterImpl implements OutputRouter {
   private readonly themeRenderer: ThemeRenderer | undefined;
   private readonly nlpRenderer: NlpRenderer | undefined;
   private readonly jsonRenderer: JsonRenderer | undefined;
+  private readonly nlgRenderer: NlgRenderer | undefined;
 
   constructor(profile: OutputProfile) {
     this.stdoutMode = profile.stdoutMode;
@@ -51,6 +59,9 @@ class OutputRouterImpl implements OutputRouter {
         return undefined;
       }
     })();
+
+    // Initialize NLG renderer with the resolved palette
+    this.nlgRenderer = createNlgRenderer({ palette, write: process.stdout.write.bind(process.stdout) });
 
     switch (profile.stdoutMode) {
       case "theme":
@@ -104,6 +115,28 @@ class OutputRouterImpl implements OutputRouter {
       this.nlpRenderer.render(event);
     } else if (this.jsonRenderer) {
       this.jsonRenderer.render(event);
+    }
+  }
+
+  routeTrace(trace: ReasoningTrace): void {
+    if (this.nlgRenderer) {
+      this.nlgRenderer.renderTurnResult(trace);
+    } else if (this.themeRenderer) {
+      // Fallback: use trace summary as progress
+      const summary = trace.result.summary;
+      this.themeRenderer.renderProgress(summary);
+    } else if (this.jsonRenderer) {
+      this.jsonRenderer.render({
+        type: "result",
+        timestamp: new Date().toISOString(),
+        data: { kind: "result", content: JSON.stringify(trace), format: "json" },
+      });
+    }
+  }
+
+  renderStatusBar(provider: string, model: string, intent: string): void {
+    if (this.themeRenderer) {
+      this.themeRenderer.renderStatusBar(provider, model, intent);
     }
   }
 

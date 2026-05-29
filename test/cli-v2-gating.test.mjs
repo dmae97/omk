@@ -49,3 +49,38 @@ test("CLI v2 envelope runtime can still be enabled explicitly", () => {
   assert.equal(parsed.command, "run");
   assert.equal(parsed.result.placeholder, true);
 });
+
+// ─────────────────────────────────────────────
+// CLI v2 smoke tests for migrated commands
+// ─────────────────────────────────────────────
+
+test("CLI v2 provider list command is registered and runs", () => {
+  const result = runCli(["provider", "list"], { OMK_CLI_V2: "1" });
+  // Should not fail with unknown command error
+  const output = `${result.stdout}\n${result.stderr}`;
+  assert.doesNotMatch(output, /Unknown command/i, "provider list should be recognized as a valid command");
+});
+
+test("CLI v2 model list command is registered and runs", () => {
+  const result = runCli(["model", "list"], { OMK_CLI_V2: "1" });
+  const output = `${result.stdout}\n${result.stderr}`;
+  assert.doesNotMatch(output, /Unknown command/i, "model list should be recognized as a valid command");
+});
+
+test("CLI v2 consent status command is registered and runs", () => {
+  const result = runCli(["consent", "status"], { OMK_CLI_V2: "1" });
+  const output = `${result.stdout}\n${result.stderr}`;
+  assert.doesNotMatch(output, /Unknown command/i, "consent status should be recognized as a valid command");
+});
+
+test("CLI v2 doctor command is registered and runs", () => {
+  const result = runCli(["doctor"], { OMK_CLI_V2: "1" });
+  const output = `${result.stdout}\n${result.stderr}`;
+  assert.doesNotMatch(output, /Unknown command/i, "doctor should be recognized as a valid command");
+});
+
+test("CLI v2 status command is registered and runs", () => {
+  const result = runCli(["status"], { OMK_CLI_V2: "1" });
+  const output = `${result.stdout}\n${result.stderr}`;
+  assert.doesNotMatch(output, /Unknown command/i, "status should be recognized as a valid command");
+});

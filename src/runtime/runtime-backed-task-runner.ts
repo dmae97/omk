@@ -24,6 +24,8 @@ import { createCommandcodeCliAdapter } from "../adapters/commandcode/commandcode
 import { createChatAdvisoryRuntime } from "./chat-advisory-runtime.js";
 import { LocalLlmRuntime } from "./local-llm-runtime.js";
 import { checkCommand, resolveKimiBin } from "../util/shell.js";
+import { createMimoApiRuntime } from "./mimo-api-runtime.js";
+import { createKimiApiRuntime } from "./kimi-api-runtime.js";
 
 export interface RuntimeBackedTaskRunnerOptions {
   cwd: string;
@@ -41,21 +43,53 @@ async function createDefaultRuntimeRegistry(
 ): Promise<RuntimeRegistry> {
   const registry = createRuntimeRegistry();
 
-  // codex-cli task-aware class
+  // ── MiMo API runtime (Xiaomi MiMo — OpenAI-compatible, highest priority) ──
+  let mimoApiKey = options.env?.MIMO_API_KEY ?? process.env.MIMO_API_KEY;
+  if (!mimoApiKey) {
+    try {
+      const { readFileSync } = await import("node:fs");
+      const { join } = await import("node:path");
+      const { getUserHome } = await import("../util/fs.js");
+      const configPath = join(getUserHome(), ".kimi", "config.toml");
+      const configContent = readFileSync(configPath, "utf-8");
+      const mimoMatch = configContent.match(/\[providers\.mimo\][\s\S]*?api_key\s*=\s*"([^"]+)"/);
+      if (mimoMatch) mimoApiKey = mimoMatch[1];
+    } catch { /* config not found */ }
+  }
+  if (mimoApiKey) {
+    registry.register(createMimoApiRuntime({ apiKey: mimoApiKey }));
+  }
+
+  // ── Kimi API runtime (Moonshot HTTP direct — no binary needed) ──
+  let kimiApiKey = options.env?.KIMI_API_KEY ?? process.env.KIMI_API_KEY;
+  if (!kimiApiKey) {
+    try {
+      const { readFileSync } = await import("node:fs");
+      const { join } = await import("node:path");
+      const { getUserHome } = await import("../util/fs.js");
+      const configPath = join(getUserHome(), ".kimi", "config.toml");
+      const configContent = readFileSync(configPath, "utf-8");
+      const kimiMatch = configContent.match(/\[providers\.kimi\][\s\S]*?api_key\s*=\s*"([^"]+)"/);
+      if (kimiMatch) kimiApiKey = kimiMatch[1];
+    } catch { /* config not found */ }
+  }
+  if (kimiApiKey) {
+    registry.register(createKimiApiRuntime({ apiKey: kimiApiKey }));
+  }
+
+  // ── codex-cli ──
   const codexBin = options.env?.CODEX_BIN ?? process.env.CODEX_BIN ?? "codex";
   if (await checkCommand(codexBin).catch(() => false)) {
     registry.register(new CodexRuntime({ bin: codexBin, cwd: options.cwd }));
   }
 
-  // kimi-print adapter (compatibility runtime; authority is selected by OMK routing)
+  // ── kimi-print adapter (legacy binary — only if kimi CLI installed) ──
   const kimiBin = resolveKimiBin({ ...process.env, ...(options.env ?? {}) });
   if (await checkCommand(kimiBin).catch(() => false)) {
-    registry.register(
-      createKimiPrintRuntime({ cwd: options.cwd, env: options.env })
-    );
+    registry.register(createKimiPrintRuntime({ cwd: options.cwd, env: options.env }));
   }
 
-  // local-llm (OpenAI-compatible local endpoint)
+  // ── local-llm (OpenAI-compatible local endpoint) ──
   const localBaseUrl = options.env?.LOCAL_LLM_BASE_URL ?? process.env.LOCAL_LLM_BASE_URL;
   if (localBaseUrl) {
     registry.register(new LocalLlmRuntime({
@@ -65,18 +99,19 @@ async function createDefaultRuntimeRegistry(
     }));
   }
 
-  // deepseek-api
+  // ── deepseek-api ──
   const deepseekKey = options.env?.DEEPSEEK_API_KEY ?? process.env.DEEPSEEK_API_KEY;
   if (deepseekKey) {
     registry.register(new DeepSeekRuntime({ apiKey: deepseekKey }));
   }
 
-  // opencode-cli
+  // ── opencode-cli ──
   const opencodeBin = options.env?.OPENCODE_BIN ?? process.env.OPENCODE_BIN ?? "opencode";
   if (await checkCommand(opencodeBin).catch(() => false)) {
     registry.register(createOpencodeCliAdapter({ bin: opencodeBin, cwd: options.cwd, env: options.env }));
   }
 
+  // ── commandcode-cli ──
   const configuredCommandcodeBin = options.env?.COMMANDCODE_BIN ?? process.env.COMMANDCODE_BIN;
   let commandcodeBin: string | null = null;
   if (configuredCommandcodeBin) {
@@ -90,7 +125,7 @@ async function createDefaultRuntimeRegistry(
     registry.register(createCommandcodeCliAdapter({ bin: commandcodeBin, cwd: options.cwd, env: options.env }));
   }
 
-  // chat advisory fallback — when no runtime is available, show setup guidance
+  // ── chat advisory fallback ──
   if (registry.list().length === 0) {
     registry.register(createChatAdvisoryRuntime());
   }

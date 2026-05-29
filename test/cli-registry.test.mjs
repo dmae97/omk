@@ -63,6 +63,7 @@ test("sliced CLI registry preserves ordered top-level commands", () => {
     "open-design-agent",
     "cockpit",
     "rail",
+    "consent",
     "plan",
     "feature",
     "bugfix",
@@ -72,6 +73,7 @@ test("sliced CLI registry preserves ordered top-level commands", () => {
     "team",
     "parallel",
     "orchestrate",
+    "parallel:interactive",
     "provider",
     "model",
     "deepseek",
@@ -214,6 +216,40 @@ test("sliced CLI shim keeps open-design-agent smoke path cheap and exact", () =>
     assert.equal(result.stdout, "ok\n");
     assert.equal(result.stderr, "");
   }
+});
+
+test("orchestrate dry-run honors explicit worker count", () => {
+  const result = runCli([
+    "orchestrate",
+    "--workers",
+    "3",
+    "verify TUI input and parallel subagent routing",
+    "--dry-run",
+    "--timeout",
+    "60000",
+  ]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Max workers: 3/);
+  assert.match(result.stdout, /Max Parallelism: 3/);
+  assert.match(result.stdout, /Dry run complete/);
+});
+
+test("parallel interactive dry-run is successful and honors global workers", () => {
+  const result = runCli([
+    "--workers",
+    "2",
+    "parallel:interactive",
+    "verify workers merge",
+    "--dry-run",
+    "--timeout",
+    "60000",
+  ]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Max Workers:\s+2/);
+  assert.match(result.stdout, /Dry run complete/);
+  assert.doesNotMatch(result.stdout, /Orchestration failed/);
 });
 
 test("sliced CLI registry keeps representative JSON command stdout-pure", () => {

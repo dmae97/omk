@@ -3,9 +3,6 @@ import { CliError } from "../util/cli-contract.js";
 import { formatOmkVersionFooter, getOmkVersionSync } from "../util/version.js";
 import { configureRootProgram, runRootOmkControlPlane } from "./root.js";
 import { registerCliCommands } from "./command-registry.js";
-import { buildCommandEnvelope } from "./input/command-envelope.js";
-import { createCliRuntime } from "./runtime/cli-runtime.js";
-import { routeOutput } from "./output/output-router.js";
 import { createCliWriter } from "./runtime/cli-writer.js";
 import type { OutputProfile } from "./runtime/types.js";
 

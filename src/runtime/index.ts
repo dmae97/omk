@@ -71,6 +71,11 @@ export {
 } from "./kimi-api-runtime.js";
 
 export {
+  type MimoApiRuntimeOptions,
+  createMimoApiRuntime,
+} from "./mimo-api-runtime.js";
+
+export {
   type KimiWireProtocolRuntimeOptions,
   createKimiWireProtocolRuntime,
   KimiWireProtocolRuntime,
@@ -194,3 +199,57 @@ export {
   type PersistentMemoryStore,
   createPersistentMemoryStore,
 } from "../cli/v2/persistent-memory.js";
+
+export {
+  type ReasoningTrace,
+  type TraceIntent,
+  type TracePlan,
+  type TraceExecution,
+  type TraceToolCall,
+  type TraceDecision,
+  type TraceEvidence,
+  type TraceTestResult,
+  type TraceResult,
+  type TracePrivacy,
+  type TraceStoreOptions,
+  type TraceSearchResult,
+  type ReasoningTraceStore,
+  type TraceSummary,
+  type ConsentAwareNlgInput,
+  type ConsentAwareNlgOutput,
+} from "./contracts/reasoning-trace.js";
+
+export {
+  createReasoningTrace,
+  redactText,
+  redactTrace,
+  summarizeTrace,
+  generateConsentReport,
+  createReasoningTraceStore,
+} from "./reasoning-trace.js";
+
+export {
+  type StatusCardData,
+  type ProviderCardData,
+  type MemoryCardData,
+  type McpServerHealth,
+  type McpHealthCardData,
+  type ErrorBoxData,
+  type ConsentNoticeData,
+  statusCard,
+  providerCard,
+  memoryCard,
+  mcpHealthCard,
+  errorBox,
+  traceSummaryCard,
+  traceSummaryCompact,
+  consentNotice,
+} from "./ui-components.js";
+
+export {
+  createNlgRenderer,
+} from "./nlg-renderer.js";
+export type {
+  NlgRendererOptions,
+  NlgRenderer,
+} from "./nlg-renderer.js";

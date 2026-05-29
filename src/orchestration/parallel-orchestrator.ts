@@ -22,6 +22,10 @@ import {
 import { LogStreamer, type LogEntry, type WorkerLogHandle } from "./log-streamer.js";
 import { AgentWorker, createAgentWorker, type WorkerOutput } from "./agent-worker.js";
 import { createRuntimeRouter } from "../runtime/runtime-router.js";
+import { classifyIntent } from "../cli/runtime/intent-classifier.js";
+import { selectCapabilities } from "../cli/runtime/capability-selector.js";
+import { createSubAgentSidecar } from "../cli/runtime/runtime-sidecar.js";
+import type { CapabilityPlan, RuntimeSidecar } from "../cli/runtime/types.js";
 import type { ContextCapsule } from "../runtime/context-capsule.js";
 import { buildCapabilityInjection, applyCapabilityInjectionToRouting } from "../runtime/capability-injection.js";
 import { capabilityScopesFromRouting, mergeCapabilityScopes, type NodeCapabilityScopes } from "./capability-routing.js";
@@ -355,6 +359,27 @@ export class ParallelOrchestrator {
       `Batch completed: ${cappedBatch.map((n) => n.id).join(", ")}`
     );
   }
+
+  /**
+   * 노드에 대한 CapabilityPlan 생성
+   * IntentClassifier + CapabilitySelector를 사용하여 per-node capabilities 결정
+   */
+  private buildCapabilityPlanForNode(node: DagNode): CapabilityPlan {
+    const intent = classifyIntent(node.name, node.role);
+    const plan = selectCapabilities(intent, undefined, node.role);
+    this.logStreamer.log("info", `Node ${node.id}: intent=${intent.kind} (conf=${intent.confidence.toFixed(2)}), skills=[${plan.skills.join(",")}], mcp=[${plan.mcpServers.join(",")}]`);
+    return plan;
+  }
+
+  /**
+   * 노드에 대한 RuntimeSidecar 생성
+   * CapabilityPlan을 기반으로 필터링된 런타임 컨텍스트 생성
+   */
+  private buildSidecarForNode(node: DagNode): RuntimeSidecar {
+    const plan = this.buildCapabilityPlanForNode(node);
+    return createSubAgentSidecar(plan, node.name);
+  }
+
 
   /**
    * 개별 워커 실행

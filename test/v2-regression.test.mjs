@@ -183,3 +183,37 @@ test("20.6 filterMcpConfigForTurn respects disabledMcp", () => {
   assert.ok("omk-project" in result.mcpServers, "should include omk-project");
   assert.ok(!("memory" in result.mcpServers), "should exclude disabled memory");
 });
+
+// ─────────────────────────────────────────────
+// 20.7 slash command returns CommandResult through pipeline
+// ─────────────────────────────────────────────────────────
+
+test("20.7 slash command /help returns CommandResult through CommandBus", async () => {
+  const busMod = await import("../dist/runtime/command-bus.js");
+  const slashMod = await import("../dist/runtime/slash-commands.js");
+  const bus = busMod.createCommandBus();
+  slashMod.registerSlashCommands(bus, { provider: "kimi", model: "default" });
+
+  const result = await bus.dispatch({ kind: "chat", source: "cli", rawText: "/help" });
+
+  assert.equal(result.handled, true, "/help should be handled");
+  assert.ok(result.output.length > 0, "should have output");
+  assert.ok(result.events.length > 0, "should have events");
+  const lastEvent = result.events[result.events.length - 1];
+  assert.equal(lastEvent.type, "result", "last event should be result type");
+  assert.equal(lastEvent.data.kind, "result", "event should be result kind");
+});
+
+test("20.7 slash command /model returns provider info", async () => {
+  const busMod = await import("../dist/runtime/command-bus.js");
+  const slashMod = await import("../dist/runtime/slash-commands.js");
+  const bus = busMod.createCommandBus();
+  slashMod.registerSlashCommands(bus, { provider: "kimi", model: "kimi-code" });
+
+  const result = await bus.dispatch({ kind: "chat", source: "cli", rawText: "/model" });
+
+  assert.equal(result.handled, true, "/model should be handled");
+  const payload = JSON.parse(result.output);
+  assert.equal(payload.currentProvider, "kimi", "should show provider");
+  assert.equal(payload.currentModel, "kimi-code", "should show model");
+});

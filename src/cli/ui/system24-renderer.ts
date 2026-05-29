@@ -81,7 +81,8 @@ interface WritableStreamLike {
 }
 
 function termWidth(stream: WritableStreamLike): number {
-  return stream.columns ?? process.stdout.columns ?? 80;
+  const width = stream.columns ?? process.stdout.columns ?? 80;
+  return Number.isFinite(width) ? Math.max(40, width) : 80;
 }
 
 function stripAnsi(s: string): string {
@@ -248,6 +249,7 @@ export class System24Renderer implements CliRenderer {
   private panelWidth = 72;
   private todoPercent = -1;
   private inCodeBlock = false;
+  private promptOpen = false;
   private codeBlockLang = "";
   private codeBlockLines: string[] = [];
 
@@ -270,6 +272,10 @@ export class System24Renderer implements CliRenderer {
         const provider = event.provider === "auto" ? "omk" : event.provider;
         const model = event.model ?? "auto";
         const runShort = event.runId.slice(0, 7);
+        const rootText = event.root ? truncate(event.root, Math.max(12, w - 22)) : undefined;
+        const cwdText = event.cwd && event.cwd !== event.root
+          ? truncate(event.cwd, Math.max(12, w - 21))
+          : undefined;
         const titleLine =
           C.accent + BOLD + "◆" + RST + " " +
           C.accent + "OMK" + RST + C.text5 + " · " + RST +
@@ -282,6 +288,15 @@ export class System24Renderer implements CliRenderer {
         this.err.write("\n");
         this.err.write(renderPanelLine("  " + titleLine + "  " + runLabel, w));
         this.err.write("\n");
+        if (rootText) {
+          const source = event.rootSource ? ` · ${event.rootSource}` : "";
+          this.err.write(renderPanelLine(`  ${C.text5}root${RST} ${C.text3}${rootText}${RST}${C.text5}${source}${RST}`, w));
+          this.err.write("\n");
+        }
+        if (cwdText) {
+          this.err.write(renderPanelLine(`  ${C.text5}cwd ${RST}${C.text3}${cwdText}${RST}`, w));
+          this.err.write("\n");
+        }
         this.err.write(renderPanelBottom(w));
         this.err.write("\n\n");
         break;
@@ -289,12 +304,26 @@ export class System24Renderer implements CliRenderer {
 
       case "input:submitted": {
         const text = event.text.length > w - 8 ? event.text.slice(0, w - 11) + "..." : event.text;
-        this.err.write(renderPanelLine(C.cyan + "  › " + RST + C.text2 + text + RST, w));
-        this.err.write("\n\n");
+        if (this.promptOpen) {
+          if (!this.err.isTTY) this.err.write(C.text2 + text + RST);
+          this.err.write("\n");
+          this.err.write(renderPanelBottom(w));
+          this.err.write("\n\n");
+          this.promptOpen = false;
+        } else {
+          this.err.write(renderPanelLine(C.cyan + "  › " + RST + C.text2 + text + RST, w));
+          this.err.write("\n\n");
+        }
         break;
       }
 
       case "prompt:ready":
+        if (!this.promptOpen) {
+          this.err.write(renderPanelTop(w, "input"));
+          this.err.write("\n");
+          this.err.write(C.border + BORDER_V + RST + C.cyan + "  › " + RST);
+          this.promptOpen = true;
+        }
         break;
 
       case "control:output": {
@@ -479,14 +508,6 @@ export class System24Renderer implements CliRenderer {
         this.err.write(renderPanelLine("  " + statusLine, w));
         this.err.write("\n");
         this.err.write(renderPanelBottom(w));
-        this.err.write("\n");
-        // Input prompt at bottom
-        this.err.write(renderPanelTop(w, "input"));
-        this.err.write("\n");
-        this.err.write(renderPanelLine(C.cyan + "  › " + RST + DIM + "type your message..." + RST, w));
-        this.err.write("\n");
-        this.err.write(renderPanelBottom(w));
-        this.err.write("\n\n");
         this.err.write("\n\n");
         break;
       }

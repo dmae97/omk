@@ -105,6 +105,44 @@ export interface UserIntent {
   rationale: string;
 }
 
+export type UserIntentLanguage = "ko" | "en" | "mixed" | "unknown";
+
+export type UserIntentTargetSurface =
+  | "cli"
+  | "tui"
+  | "nlp"
+  | "harness"
+  | "runtime"
+  | "provider"
+  | "mcp"
+  | "docs"
+  | "tests";
+
+export interface UserIntentAmbiguitySignal {
+  kind: "admin-command" | "repo-target" | "execution-mode" | "provider" | "scope";
+  message: string;
+  severity: "low" | "medium" | "high";
+}
+
+export interface UserIntentRoutingHints {
+  preferredExecutionStrategy?: ExecutionStrategy;
+  preferredProvider?: string;
+  requireEvidence?: boolean;
+  requireHarness?: boolean;
+}
+
+export interface UserIntentV2 extends UserIntent {
+  confidence: number;
+  matchedRules: string[];
+  language: UserIntentLanguage;
+  domainTerms: string[];
+  targetSurfaces: UserIntentTargetSurface[];
+  extractedFiles: string[];
+  extractedCommands: string[];
+  ambiguitySignals: UserIntentAmbiguitySignal[];
+  routingHints: UserIntentRoutingHints;
+}
+
 export type EstimateConfidence = "low" | "medium" | "high";
 
 export interface RunProgressEstimate {

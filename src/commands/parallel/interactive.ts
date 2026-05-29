@@ -11,17 +11,15 @@
 
 import { mkdir, writeFile } from "fs/promises";
 import { join } from "path";
-import { getOmkPath, getProjectRoot, getRunPath, sanitizeRunId } from "../../util/fs.js";
+import { cpus } from "os";
+import { getProjectRoot, getRunPath, sanitizeRunId } from "../../util/fs.js";
 import { header, label, status, style } from "../../util/theme.js";
-import { t } from "../../util/i18n.js";
 import { getOmkResourceSettings } from "../../util/resource-profile.js";
-import { parseRuntimeScopeOption } from "../../util/runtime-scope.js";
 import {
   createInteractiveOrchestrator,
   formatSubAgentPlan,
   type OrchestratorGoal,
   type SubAgentSpec,
-  type SubAgentRole,
 } from "../../orchestration/interactive-orchestrator.js";
 import type { ProviderPolicy } from "../../providers/index.js";
 
@@ -80,6 +78,7 @@ export async function interactiveParallelCommand(
     cwd: root,
     runId,
     autoConfirm: options.autoConfirm ?? false,
+    dryRun: options.dryRun ?? false,
     onConfirm: async (agents: readonly SubAgentSpec[]) => {
       // Display plan
       console.log(formatSubAgentPlan(agents));
@@ -226,7 +225,6 @@ export async function interactiveParallelCommand(
 
 function parseWorkers(workers?: string, maxDefault?: number): number {
   if (!workers || workers === "auto") {
-    const { cpus } = require("os");
     const cpuCount = cpus().length;
     return Math.min(Math.max(2, cpuCount), maxDefault ?? 8);
   }

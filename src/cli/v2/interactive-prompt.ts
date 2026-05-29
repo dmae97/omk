@@ -137,7 +137,7 @@ export async function promptConfirmExecution(
 /**
  * Spinner wrapper for long-running operations.
  */
-export function createSpinner(label: string): ReturnType<typeof clack.spinner> {
+export function createSpinner(_label: string): ReturnType<typeof clack.spinner> {
   return clack.spinner({ indicator: "dots" });
 }
 

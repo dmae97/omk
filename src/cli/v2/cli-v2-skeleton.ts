@@ -12,8 +12,10 @@ import { Cli, Command, Option } from "clipanion";
 import { createCommandBus } from "../../runtime/command-bus.js";
 import { classifyIntent, selectCapabilities, compileBloatToNlp, filterMcpConfigForTurn, selectProviderRuntime } from "../../runtime/debloat-nlp.js";
 import { createOutputRouter } from "../../runtime/output-router.js";
-import { createProviderEventNormalizer } from "../../runtime/provider-event-normalizer.js";
 import { createPersistentMemoryStore } from "./persistent-memory.js";
+import { registerSlashCommands } from "../../runtime/slash-commands.js";
+import { registerProviderCommandsV2 } from "./provider-commands.js";
+import { registerWorkflowCommandsV2 } from "./workflow-commands.js";
 import type { RequestIntent } from "../../runtime/debloat-nlp.js";
 import type { OutputProfile } from "../../runtime/contracts/command-envelope.js";
 /**
@@ -37,6 +39,11 @@ export abstract class OmkCommand extends Command {
    */
   protected async executePipeline(userRequest: string, intent: string): Promise<number> {
     const bus = createCommandBus();
+    registerSlashCommands(bus, {
+      provider: this.provider || undefined,
+      model: this.model || undefined,
+      theme: this.theme || undefined,
+    });
     const busResult = await bus.dispatch({ kind: "chat", source: "cli", rawText: userRequest });
 
     // Intent classification (map non-standard intents to valid RequestIntent)
@@ -74,6 +81,9 @@ export abstract class OmkCommand extends Command {
       projectMcpConfig: {},
       sidecar,
     });
+    const selectedMcpCount = capabilityPlan.requiredMcp.length + capabilityPlan.optionalMcp.length;
+    const selectedSkillCount = capabilityPlan.selectedSkills.length;
+    const filteredMcpCount = Object.keys(mcpConfig.mcpServers).length;
 
     // Route output through ThemeRenderer/NlpRenderer/JsonRenderer
     const outputMode = this.json ? "json" as const : "theme" as const;
@@ -92,7 +102,7 @@ export abstract class OmkCommand extends Command {
       type: "result",
       data: {
         kind: "result",
-        content: `Pipeline: ${effectiveIntent} → ${runtimeMode} (${sidecar.provider}/${sidecar.model})`,
+        content: `Pipeline: ${effectiveIntent} → ${runtimeMode} (${sidecar.provider}/${sidecar.model}); capabilities=${selectedMcpCount} MCP/${selectedSkillCount} skills; mcp=${filteredMcpCount}`,
         format: "nlp",
       },
       turnId: Date.now().toString(),
@@ -164,7 +174,7 @@ export class RunCommand extends OmkCommand {
     const sidecar = result.runtimeSidecar;
     const runtimeMode = selectProviderRuntime({ provider: sidecar.provider || "kimi", intent: classifiedIntent });
     // Output structured JSON envelope to stdout only
-    this.context.stdout.write(JSON.stringify({ command: "run", result: { placeholder: true } }) + "\n");
+    this.context.stdout.write(JSON.stringify({ command: "run", result: { placeholder: true, runtimeMode } }) + "\n");
     return 0;
   }
 }
@@ -319,6 +329,12 @@ export function createCliV2() {
   cli.register(DoctorCommand);
   cli.register(MemoryCommand);
   cli.register(ThemeCommand);
+
+  // Section 21: Register migrated provider/model commands
+  registerProviderCommandsV2(cli);
+
+  // Section 21: Register migrated workflow commands
+  registerWorkflowCommandsV2(cli);
 
   return cli;
 }

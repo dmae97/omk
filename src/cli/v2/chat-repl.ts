@@ -14,11 +14,9 @@ import {
   selectCapabilities,
   compileBloatToNlp,
   selectProviderRuntime,
-  filterMcpConfigForTurn,
 } from "../../runtime/debloat-nlp.js";
 import { createOutputRouter } from "../../runtime/output-router.js";
 import type { OmkEvent, OutputProfile } from "../../runtime/contracts/command-envelope.js";
-import type { RequestIntent } from "../../runtime/debloat-nlp.js";
 
 export interface ChatReplOptions {
   provider?: string;
@@ -128,13 +126,15 @@ export async function startChatRepl(options: ChatReplOptions): Promise<void> {
       provider: sidecar.provider || "kimi",
       intent,
     });
+    const selectedMcpCount = capabilityPlan.requiredMcp.length + capabilityPlan.optionalMcp.length;
+    const selectedSkillCount = capabilityPlan.selectedSkills.length;
 
     // Emit progress event
     const progressEvent: OmkEvent = {
       type: "progress",
       data: {
         kind: "progress",
-        message: `Processing: ${intent} via ${runtimeMode}`,
+        message: `Processing: ${intent} via ${runtimeMode} (${selectedMcpCount} MCP, ${selectedSkillCount} skills)`,
       },
       turnId: Date.now().toString(),
       timestamp: new Date().toISOString(),

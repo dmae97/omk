@@ -10,18 +10,23 @@ Do not restate this file unless the user explicitly asks for project rules.
 
 ---
 
-## Current OMK Runtime Surface
+## Current OMK Runtime Surface (V2)
 
 Keep these surfaces aligned when editing init/runtime docs:
 
 - Init markdown: `AGENTS.md`, `.kimi/AGENTS.md`, `.omk/prompts/root.md`, plus generated companion docs `DESIGN.md`, `GEMINI.md`, `CLAUDE.md`, `ROADMAP.md`, and `SECURITY.md`.
 - Skills: project portable skills live in `.agents/skills`; Kimi runtime skills live in `.kimi/skills`; init templates live under `templates/skills/agents` and `templates/skills/kimi`.
-- Default runtime preset: `.omk/runtime-preset.json` uses `omk-parallel-orchestrator` so agent/non-simple work prefers parallel worker, capability, review, QA, and security lanes; `.omk/runtime-presets.json` keeps `omk-core-verified` as the fallback/baseline preset and also includes `omk-ts-product` for strict TS/React/Next/Nest product work, `omk-worktree-team` for isolated parallel worktree lanes before merge, and `omk-release-guard` for secret/security/release evidence gates with narrowed MCP authority, strong hooks, and no auto-publish authority.
-- MCP: fresh init is project-scoped and writes only local `omk-project` into `.kimi/mcp.json` / `.omk/mcp.json`. `omk init --local-user` or `OMK_MCP_SCOPE=all OMK_SKILLS_SCOPE=all` reads user `~/.kimi/mcp.json` and `~/.kimi/skills` at runtime without copying personal/global files. `--import-user-skills` is a trusted local opt-in copy path.
-- Agents: generated agents extend the Okabe-compatible base with `SendDMail`. Default root aliases are `explorer`/`explore`, `planner`/`plan`, `router`, `architect`, `coder`, `reviewer`, `security`, `qa`, `tester`, `researcher`, `integrator`, `aggregator`, `interviewer`, `ontology`, and `vision-debugger`; each is scaffolded with MCP, skills, and hooks capability flags that are applied only within the active runtime/harness scope. Use additional local roles such as `coordinator`, `docs`, `merger`, or `release` only when the current `.omk/agents/root.yaml` or harness exposes them. **OMK is the root orchestrator; Kimi is one provider adapter.**
-- Transition: transitioning from provider-hosted subagents to OMK-hosted parallel workers. Capability flags, worker limits, and provider routing are owned by OMK; Kimi is one adapter that executes nodes only when selected.
-- Harness: chat agent mode writes `.omk/runs/<run-id>/chat-agent-harness.json`. Prompts carry compact MCP/skills/hooks counts; read the harness manifest for the full inventory, worker limits, authority boundaries, virtual DAG, and gate list.
+- Default runtime preset: `.omk/runtime-preset.json` uses `omk-parallel-orchestrator` so agent/non-simple work prefers parallel worker, capability, review, QA, and security lanes.
+- MCP: fresh init is project-scoped and writes only local `omk-project` into `.kimi/mcp.json` / `.omk/mcp.json`. `omk init --local-user` or `OMK_MCP_SCOPE=all OMK_SKILLS_SCOPE=all` reads user `~/.kimi/mcp.json` and `~/.kimi/skills` at runtime.
+- Providers: `mimo` (default, mimo-v2.5-pro), `kimi` (kimi-api direct HTTP), `deepseek`, `codex`, `opencode`, `openrouter`, `qwen`, `local-llm`. kimi-cli dependency removed — kimi-api uses direct Moonshot HTTP API.
+- Runtime pipeline: User Input → CommandBus → IntentClassifier → CapabilitySelector → RuntimeSidecar → OutputRouter → ThemeRenderer/NlpRenderer/JsonRenderer/NlgRenderer.
+- CLI v2: Clipanion-based (`src/cli/v2/cli-v2-skeleton.ts`), enabled via `OMK_CLI_V2=1`. Commands: ChatCommand, RunCommand, StatusCommand, ModelCommand, DoctorCommand, MemoryCommand, ThemeCommand.
+- Theme: `src/cli/theme/theme-registry.ts` ThemePalette with SemanticToken, 5 palettes (omk/minimal/mono/dark/light). `src/runtime/renderers.ts` integrates ThemePalette + i18n bilingual.
+- Reasoning Trace Engine: `src/runtime/reasoning-trace.ts` stores intent, plan, tools, evidence, results, privacy. Consent-aware NLG via `src/runtime/nlg-renderer.ts`.
+- Harness: chat agent mode writes `.omk/runs/<run-id>/chat-agent-harness.json`. Prompts carry compact MCP/skills/hooks counts; read the harness manifest for the full inventory.
 - Evidence: `scripts/run-tests.mjs` and OMK verification surfaces record sanitized MCP/skill/hook resource metadata. Do not emit resource secrets, headers, or raw env values.
+- Architecture doc: `OMK_CLI_V2_RUNTIME_ARCHITECTURE.md` (2058 lines), ~85% implemented.
+- Obsidian knowledge base: `/home/yu/.openclaw/workspace/llm-wiki/projects/omk/`
 
 ---
 
@@ -264,6 +269,36 @@ Rules:
 * Do not expose or request temperature/top_p tuning from users.
 
 For web-heavy research, prefer a no-thinking research profile when the runtime supports it.
+
+---
+
+## V2 Runtime Architecture Key Files
+
+When modifying the runtime pipeline, reference these files:
+
+```txt
+src/runtime/contracts/command-envelope.ts    # CommandKind, OmkEvent, CapabilityPlan, OutputProfile
+src/runtime/contracts/reasoning-trace.ts    # ReasoningTrace schema, TraceSummary, ConsentAwareNlg
+src/runtime/debloat-nlp.ts                  # classifyIntent, selectCapabilities, compileBloatToNlp, filterMcpConfigForTurn, selectProviderRuntime
+src/runtime/command-bus.ts                  # CommandBus, slash command dispatch
+src/runtime/slash-commands.ts               # /model, /status, /theme, /help handlers
+src/runtime/output-router.ts                # OutputRouter → ThemeRenderer/NlpRenderer/JsonRenderer/NlgRenderer
+src/runtime/renderers.ts                    # ThemeRenderer (ThemePalette), NlpRenderer (i18n bilingual), JsonRenderer
+src/runtime/nlg-renderer.ts                 # Consent-aware NLG, trace summaries
+src/runtime/provider-event-normalizer.ts    # KimiEventNormalizer, KimiPrintNormalizer (i18n)
+src/runtime/reasoning-trace.ts              # createReasoningTrace, redactTrace, summarizeTrace, generateConsentReport
+src/runtime/ui-components.ts                # statusCard, providerCard, mcpHealthCard, errorBox, traceSummaryCard, consentNotice
+src/runtime/context-broker.ts               # ContextCapsule builder (promptMode dnc-nlp check)
+src/runtime/mimo-api-runtime.ts             # MiMo API runtime (extends KimiApiRuntime)
+src/runtime/kimi-api-runtime.ts             # Moonshot API runtime (direct HTTP)
+src/runtime/runtime-router.ts               # runtimeIdsForProviderRef, INTENT_RUNTIME_PREFERENCES
+src/cli/v2/cli-v2-skeleton.ts               # Clipanion CLI v2 (7 commands)
+src/cli/v2/chat-repl.ts                     # Interactive REPL with pipeline
+src/cli/v2/persistent-memory.ts             # .omk/memory/ store
+src/cli/theme/theme-registry.ts             # ThemePalette, SemanticToken, 5 palettes
+src/util/i18n.ts                            # t() bilingual (KO/EN), ~1070 lines
+test/v2-regression.test.mjs                 # 10 regression tests
+```
 
 ---
 

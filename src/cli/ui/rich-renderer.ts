@@ -9,7 +9,6 @@ import type { CliUiEvent } from "./event.js";
 import type { CliRenderer } from "./renderer.js";
 import { sanitizeUserVisibleOutput } from "../../util/user-visible-output.js";
 import { style } from "../../theme/colors.js";
-import { separator, bullet, label, stat } from "../../theme/layout.js";
 
 interface WritableStreamLike {
   write(chunk: string): unknown;
@@ -149,6 +148,7 @@ export class RichRenderer implements CliRenderer {
   private readonly stdout: WritableStreamLike;
   private readonly stderr: WritableStreamLike;
   private heartbeatOpen = false;
+  private promptOpen = false;
   private thinkingSummary: string | undefined;
   private sessionStartTime = 0;
 
@@ -174,12 +174,21 @@ export class RichRenderer implements CliRenderer {
 
       case "input:submitted": {
         const text = event.text.length > 80 ? event.text.slice(0, 77) + "..." : event.text;
-        this.stderr.write(style.mint("  › ") + style.cream(text) + "\n\n");
+        if (this.promptOpen) {
+          if (!this.stderr.isTTY) this.stderr.write(style.cream(text));
+          this.stderr.write("\n\n");
+          this.promptOpen = false;
+        } else {
+          this.stderr.write(style.mint("  › ") + style.cream(text) + "\n\n");
+        }
         break;
       }
 
       case "prompt:ready":
-        // Clean prompt — no indicator needed
+        if (!this.promptOpen) {
+          this.stderr.write(style.mint("  › "));
+          this.promptOpen = true;
+        }
         break;
 
       case "control:output":
@@ -246,9 +255,6 @@ export class RichRenderer implements CliRenderer {
         this.stderr.write(style.gray("  ─ ") + style.phosphorDim(`${secs}s`) + style.gray(" ─") + "\n\n");
         break;
       }
-
-      case "turn:start":
-        break;
 
       case "session:stop":
         break;

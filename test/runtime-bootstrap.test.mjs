@@ -53,7 +53,7 @@ test("resolveRuntimeBootstrap resolves authority provider policy to concrete pro
   assert.equal(bootstrap.selectedRuntimeId, codexBin);
 });
 
-test("resolveRuntimeBootstrap auto mode prefers Kimi when available", async () => {
+test("resolveRuntimeBootstrap auto mode prefers configured API providers before legacy Kimi CLI", async () => {
   const kimiBin = await fakeExecutable("kimi");
   const bootstrap = await resolveRuntimeBootstrap({
     provider: "auto",
@@ -65,6 +65,6 @@ test("resolveRuntimeBootstrap auto mode prefers Kimi when available", async () =
 
   assert.equal(bootstrap.ok, true);
   assert.equal(bootstrap.providerPolicy, "auto");
-  assert.equal(bootstrap.selectedProvider, "kimi");
-  assert.equal(bootstrap.selectedRuntimeId, "kimi-print");
+  assert.equal(bootstrap.selectedProvider, "deepseek");
+  assert.equal(bootstrap.selectedRuntimeId, "deepseek-api");
 });

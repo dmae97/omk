@@ -73,6 +73,8 @@ export function registerSessionCommands(program: Command): void {
     .option("--execution <ask|auto|parallel|sequential>", "Execution selection policy (ask | auto | parallel | sequential)")
     .option("--provider <provider>", "provider policy (auto | kimi | deepseek | codex | qwen)", "auto")
     .option("--model <model>", "provider model or provider/model override")
+    .option("--cwd <path>", "Working directory seed for chat root resolution (defaults to current shell cwd)")
+    .option("--project-root <path>", "Force the OMK project root for this chat session")
     .option("--max-steps-per-turn <n>", t("cmd.chatMaxStepsOption"))
     .option("--layout <auto|tmux|inline|plain>", t("cmd.chatLayoutOption"), "auto")
         .option("--ui <legacy|plain-modern|rich|system24>", "Single-pane chat renderer (legacy | plain-modern | rich | system24)")

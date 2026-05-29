@@ -18,7 +18,7 @@ import type {
   ProviderWireApi,
 } from "./types.js";
 
-export const KNOWN_PROVIDER_IDS = ["kimi", "deepseek", "qwen", "codex", "opencode", "commandcode", "openrouter", "local-llm"] as const satisfies readonly KnownProviderId[];
+export const KNOWN_PROVIDER_IDS = ["kimi", "deepseek", "qwen", "codex", "opencode", "commandcode", "openrouter", "mimo", "local-llm"] as const satisfies readonly KnownProviderId[];
 export const QWEN_DASHSCOPE_COMPAT_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
 export const OPENROUTER_COMPAT_BASE_URL = "https://openrouter.ai/api/v1";
 
@@ -276,13 +276,32 @@ const DEFAULT_PROVIDER_CONFIGS: Record<KnownProviderId, Omit<ProviderRegistryEnt
       "X-OpenRouter-Title": "open_multi-agent_kit",
     },
   },
+  mimo: {
+    enabled: true,
+    kind: "openai-compatible",
+    baseUrl: "https://api.xiaomimimo.com/v1",
+    apiKeyEnv: "MIMO_API_KEY",
+    defaultModel: "mimo-v2.5-pro",
+    aliases: {
+      default: "mimo-v2.5-pro",
+      mimo: "mimo-v2.5-pro",
+      "mimo-v2": "mimo-v2.5-pro",
+      "mimo-v2.5-pro": "mimo-v2.5-pro",
+    },
+    capabilities: ["read", "write", "research", "review", "thinking"],
+    wireApi: "openai-chat-completions",
+    auth: { method: "api-key-env" },
+    profileType: "runtime",
+    planKind: "runtime",
+    routing: "runtime",
+  },
 };
 
 export function normalizeProviderPolicy(value: string | undefined): ProviderPolicy {
   const normalizedText = value?.trim().toLowerCase();
   if (normalizedText === "authority" || normalizedText === "primary" || normalizedText === "omk") return "authority";
   const normalized = normalizeProviderId(value);
-  return normalized === "kimi" || normalized === "deepseek" || normalized === "codex" || normalized === "qwen" || normalized === "openrouter" || normalized === "opencode" || normalized === "commandcode"
+  return normalized === "kimi" || normalized === "deepseek" || normalized === "codex" || normalized === "qwen" || normalized === "openrouter" || normalized === "opencode" || normalized === "commandcode" || normalized === "mimo"
     ? normalized as ProviderPolicy
     : "auto";
 }
@@ -299,6 +318,7 @@ export function normalizeProviderId(value: string | undefined): ProviderId | "au
   if (lower === "commandcode" || lower === "command-code" || lower === "cmd") return "commandcode";
   if (lower === "qwen" || lower === "dashscope" || lower === "qwen3" || lower === "qwen-max") return "qwen";
   if (lower === "openrouter" || lower === "openrouter-ai") return "openrouter";
+  if (lower === "mimo" || lower === "mimo-v2" || lower === "mimo-v2.5-pro") return "mimo";
   if (lower === "claude" || lower === "anthropic") return "openrouter";
   if (lower === "gpt" || lower === "openai") return "openrouter";
   if (lower === "gemini" || lower === "google") return "openrouter";

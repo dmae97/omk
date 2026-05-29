@@ -467,8 +467,8 @@ function defaultModelForProviderPolicy(providerPolicy: ProviderPolicy): string {
   if (providerPolicy === "codex") return "codex-cli";
   if (providerPolicy === "deepseek") return "deepseek-v4-flash";
   if (providerPolicy === "openrouter") return "openrouter/auto";
-  if (providerPolicy === "kimi") return "kimi-cli";
-  return "kimi-cli";
+  if (providerPolicy === "kimi") return "kimi-api";
+  return "kimi-api";
 }
 
 function buildDeepSeekAgentNodes(input: {
