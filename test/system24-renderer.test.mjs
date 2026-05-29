@@ -75,7 +75,7 @@ test("System24Renderer accepts Green Rain theme tokens", () => {
   const renderer = new System24Renderer({
     stdout: { write: (chunk) => stdout.push(String(chunk)), columns: 100 },
     stderr: { write: (chunk) => stderr.push(String(chunk)), isTTY: false, columns: 100 },
-  }, GREEN_RAIN_THEME);
+  }, GREEN_RAIN_THEME, { noColor: false });
 
   renderer.start();
   renderer.emit({
@@ -92,4 +92,28 @@ test("System24Renderer accepts Green Rain theme tokens", () => {
   const output = stderr.join("");
   match(output, /38;2;90;255;120m/);
   match(output, /OMK/);
+});
+
+
+test("System24Renderer honors noColor output option", () => {
+  const stdout = [];
+  const stderr = [];
+  const renderer = new System24Renderer({
+    stdout: { write: (chunk) => stdout.push(String(chunk)), columns: 100 },
+    stderr: { write: (chunk) => stderr.push(String(chunk)), isTTY: false, columns: 100 },
+  }, GREEN_RAIN_THEME, { noColor: true });
+
+  renderer.start();
+  renderer.emit({
+    type: "session:start",
+    runId: "green-rain-no-color",
+    provider: "auto",
+    model: "auto",
+    root: "/tmp/current-bash-root",
+    cwd: "/tmp/current-bash-root",
+    rootSource: "cwd",
+  });
+
+  strictEqual(stdout.join(""), "");
+  doesNotMatch(stderr.join(""), /\x1b\[/);
 });

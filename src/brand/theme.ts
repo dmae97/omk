@@ -5,6 +5,7 @@ function rgb(r: number, g: number, b: number): string {
 }
 
 export type OmkBrandThemeName = "system24" | "green-rain" | "plain" | "high-contrast";
+export type OmkTuiMotion = "off" | "low" | "auto" | "full";
 
 export interface OmkBrandTheme {
   name: OmkBrandThemeName;
@@ -100,4 +101,16 @@ export function resolveOmkBrandTheme(name: string | undefined): OmkBrandTheme {
   const normalized = name?.trim().toLowerCase();
   if (normalized === "green-rain" || normalized === "green" || normalized === "rain") return GREEN_RAIN_THEME;
   return SYSTEM24_THEME;
+}
+
+export function shouldUseAnsiColor(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.NO_COLOR !== undefined || env.TERM === "dumb") return false;
+  return true;
+}
+
+export function resolveTuiMotion(env: NodeJS.ProcessEnv = process.env): OmkTuiMotion {
+  if (env.NO_COLOR !== undefined || env.CI === "true" || env.CI === "1" || env.TERM === "dumb") return "off";
+  const normalized = env.OMK_ANIMATION?.trim().toLowerCase();
+  if (normalized === "off" || normalized === "low" || normalized === "auto" || normalized === "full") return normalized;
+  return "auto";
 }

@@ -1,7 +1,7 @@
 import type { CliUiEvent } from "./event.js";
 import type { CliRenderer } from "./renderer.js";
 import { System24Renderer, type System24RendererStreams } from "./system24-renderer.js";
-import { GREEN_RAIN_THEME } from "../../brand/theme.js";
+import { GREEN_RAIN_THEME, resolveTuiMotion, shouldUseAnsiColor, type OmkTuiMotion } from "../../brand/theme.js";
 import { renderMatrixRain } from "../../brand/matrix-rain.js";
 
 interface WritableStreamLike {
@@ -21,8 +21,8 @@ function visibleLength(value: string): number {
   return stripAnsi(value).length;
 }
 
-function line(stream: WritableStreamLike, text: string): void {
-  stream.write(`${text}\n`);
+function line(stream: WritableStreamLike, text: string, noColor: boolean): void {
+  stream.write(`${noColor ? stripAnsi(text) : text}\n`);
 }
 
 function truncate(value: string, max: number): string {
@@ -37,11 +37,18 @@ function center(text: string, width: number): string {
 export class GreenRainRenderer implements CliRenderer {
   private readonly base: System24Renderer;
   private readonly err: WritableStreamLike;
+  private readonly noColor: boolean;
+  private readonly motion: OmkTuiMotion;
   private started = false;
 
   constructor(streams: System24RendererStreams = {}) {
     this.err = streams.stderr ?? process.stderr;
-    this.base = new System24Renderer(streams, GREEN_RAIN_THEME);
+    this.noColor = !shouldUseAnsiColor();
+    this.motion = resolveTuiMotion();
+    this.base = new System24Renderer(streams, GREEN_RAIN_THEME, {
+      sessionHeader: "compact",
+      noColor: this.noColor,
+    });
   }
 
   start(): void {
@@ -71,16 +78,22 @@ export class GreenRainRenderer implements CliRenderer {
     const hot = GREEN_RAIN_THEME.colors.borderHot;
     const run = event.runId ? `run#${event.runId.slice(0, 7)}` : "run#pending";
     const root = event.root ? truncate(event.root, Math.max(12, width - 16)) : "root:unknown";
-    const rain = this.started && this.err.isTTY !== false && GREEN_RAIN_THEME.motion.rain
+    const shouldRenderRain = this.motion !== "off"
+      && this.started
+      && this.err.isTTY !== false
+      && GREEN_RAIN_THEME.motion.rain;
+    const rain = shouldRenderRain
       ? renderMatrixRain(event.runId ?? "omk", width, 2)
       : "";
+    const routeLine = truncate(`${GREEN_RAIN_THEME.symbols.signal} ${run} · ${event.provider} · ${event.model ?? "auto"}`, width);
+    const rootLine = truncate(`${GREEN_RAIN_THEME.symbols.pending} root ${root}`, width);
 
     if (rain) {
-      for (const rainLine of rain.split("\n")) line(this.err, `${dim}${rainLine}${RST}`);
+      for (const rainLine of rain.split("\n")) line(this.err, `${dim}${rainLine}${RST}`, this.noColor);
     }
-    line(this.err, `${hot}${center(GREEN_RAIN_THEME.label.toUpperCase(), width)}${RST}`);
-    line(this.err, `${color}${center(GREEN_RAIN_THEME.motto, width)}${RST}`);
-    line(this.err, `${dim}${GREEN_RAIN_THEME.symbols.signal} ${run} · ${event.provider} · ${event.model ?? "auto"}${RST}`);
-    line(this.err, `${dim}${GREEN_RAIN_THEME.symbols.pending} root ${root}${RST}`);
+    line(this.err, `${hot}${center(GREEN_RAIN_THEME.label.toUpperCase(), width)}${RST}`, this.noColor);
+    line(this.err, `${color}${center(GREEN_RAIN_THEME.motto, width)}${RST}`, this.noColor);
+    line(this.err, `${dim}${routeLine}${RST}`, this.noColor);
+    line(this.err, `${dim}${rootLine}${RST}`, this.noColor);
   }
 }

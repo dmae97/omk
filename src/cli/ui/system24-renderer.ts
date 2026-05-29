@@ -26,7 +26,7 @@
 import type { CliUiEvent } from "./event.js";
 import type { CliRenderer } from "./renderer.js";
 import type { OmkBrandTheme } from "../../brand/theme.js";
-import { SYSTEM24_THEME } from "../../brand/theme.js";
+import { shouldUseAnsiColor, SYSTEM24_THEME } from "../../brand/theme.js";
 import { sanitizeUserVisibleOutput } from "../../util/user-visible-output.js";
 
 // ── ANSI Helpers ───────────────────────────────────────────────────────────
@@ -147,7 +147,10 @@ function renderPanelDivider(c: System24Palette, width: number, label?: string): 
 
 function renderPanelLine(c: System24Palette, content: string, width: number): string {
   const inner = width - 2;
-  const padded = padRight(content, inner);
+  const safeContent = visibleLen(content) > inner
+    ? `${stripAnsi(content).slice(0, Math.max(0, inner - 1))}…`
+    : content;
+  const padded = padRight(safeContent, inner);
   return c.border + BORDER_V + RST + padded + c.border + BORDER_V + RST;
 }
 
@@ -243,10 +246,17 @@ export interface System24RendererStreams {
   stderr?: WritableStreamLike;
 }
 
+export interface System24RendererOptions {
+  sessionHeader?: "full" | "compact" | "off";
+  noColor?: boolean;
+}
+
 export class System24Renderer implements CliRenderer {
   private readonly out: WritableStreamLike;
   private readonly err: WritableStreamLike;
   private readonly palette: System24Palette;
+  private readonly sessionHeader: "full" | "compact" | "off";
+  private readonly noColor: boolean;
   private heartbeatOpen = false;
   private thinkingSummary: string | undefined;
   private lastRoute: { provider: string; model?: string; risk: string; sandbox: string; mcp?: readonly string[]; skills?: readonly string[] } | null = null;
@@ -260,10 +270,12 @@ export class System24Renderer implements CliRenderer {
   private codeBlockLang = "";
   private codeBlockLines: string[] = [];
 
-  constructor(streams: System24RendererStreams = {}, theme: OmkBrandTheme = SYSTEM24_THEME) {
+  constructor(streams: System24RendererStreams = {}, theme: OmkBrandTheme = SYSTEM24_THEME, options: System24RendererOptions = {}) {
     this.out = streams.stdout ?? process.stdout;
     this.err = streams.stderr ?? process.stderr;
     this.palette = paletteFromTheme(theme);
+    this.sessionHeader = options.sessionHeader ?? "full";
+    this.noColor = options.noColor ?? !shouldUseAnsiColor();
   }
 
   start(): void {
@@ -277,6 +289,7 @@ export class System24Renderer implements CliRenderer {
 
     switch (event.type) {
       case "session:start": {
+        if (this.sessionHeader === "off") break;
         this.runId = event.runId;
         const provider = event.provider === "auto" ? "omk" : event.provider;
         const model = event.model ?? "auto";
@@ -292,57 +305,57 @@ export class System24Renderer implements CliRenderer {
           c.text2 + model + RST;
         const runLabel = c.text5 + "run#" + runShort + RST;
 
-        this.err.write("\n");
-        this.err.write(renderPanelTop(c, w, "session"));
-        this.err.write("\n");
-        this.err.write(renderPanelLine(c, "  " + titleLine + "  " + runLabel, w));
-        this.err.write("\n");
-        if (rootText) {
+        this.writeErr("\n");
+        this.writeErr(renderPanelTop(c, w, this.sessionHeader === "compact" ? "route" : "session"));
+        this.writeErr("\n");
+        this.writeErr(renderPanelLine(c, "  " + titleLine + "  " + runLabel, w));
+        this.writeErr("\n");
+        if (this.sessionHeader === "full" && rootText) {
           const source = event.rootSource ? ` · ${event.rootSource}` : "";
-          this.err.write(renderPanelLine(c, `  ${c.text5}root${RST} ${c.text3}${rootText}${RST}${c.text5}${source}${RST}`, w));
-          this.err.write("\n");
+          this.writeErr(renderPanelLine(c, `  ${c.text5}root${RST} ${c.text3}${rootText}${RST}${c.text5}${source}${RST}`, w));
+          this.writeErr("\n");
         }
-        if (cwdText) {
-          this.err.write(renderPanelLine(c, `  ${c.text5}cwd ${RST}${c.text3}${cwdText}${RST}`, w));
-          this.err.write("\n");
+        if (this.sessionHeader === "full" && cwdText) {
+          this.writeErr(renderPanelLine(c, `  ${c.text5}cwd ${RST}${c.text3}${cwdText}${RST}`, w));
+          this.writeErr("\n");
         }
-        this.err.write(renderPanelBottom(c, w));
-        this.err.write("\n\n");
+        this.writeErr(renderPanelBottom(c, w));
+        this.writeErr("\n\n");
         break;
       }
 
       case "input:submitted": {
         const text = event.text.length > w - 8 ? event.text.slice(0, w - 11) + "..." : event.text;
         if (this.promptOpen) {
-          if (!this.err.isTTY) this.err.write(c.text2 + text + RST);
-          this.err.write("\n");
-          this.err.write(renderPanelBottom(c, w));
-          this.err.write("\n\n");
+          if (!this.err.isTTY) this.writeErr(c.text2 + text + RST);
+          this.writeErr("\n");
+          this.writeErr(renderPanelBottom(c, w));
+          this.writeErr("\n\n");
           this.promptOpen = false;
         } else {
-          this.err.write(renderPanelLine(c, c.cyan + "  › " + RST + c.text2 + text + RST, w));
-          this.err.write("\n\n");
+          this.writeErr(renderPanelLine(c, c.cyan + "  › " + RST + c.text2 + text + RST, w));
+          this.writeErr("\n\n");
         }
         break;
       }
 
       case "prompt:ready":
         if (!this.promptOpen) {
-          this.err.write(renderPanelTop(c, w, "input"));
-          this.err.write("\n");
-          this.err.write(c.border + BORDER_V + RST + c.cyan + "  › " + RST);
+          this.writeErr(renderPanelTop(c, w, "input"));
+          this.writeErr("\n");
+          this.writeErr(c.border + BORDER_V + RST + c.cyan + "  › " + RST);
           this.promptOpen = true;
         }
         break;
 
       case "control:output": {
         if (this.heartbeatOpen) {
-          this.err.write("\r" + " ".repeat(w) + "\r");
+          this.writeErr("\r" + " ".repeat(w) + "\r");
           this.heartbeatOpen = false;
         }
         const sanitized = stripAnsi(sanitizeUserVisibleOutput(event.text));
         for (const line of sanitized.split("\n")) {
-          this.err.write(renderPanelLine(c, "  " + renderInline(c, line), w) + "\n");
+          this.writeErr(renderPanelLine(c, "  " + renderInline(c, line), w) + "\n");
         }
         break;
       }
@@ -365,15 +378,15 @@ export class System24Renderer implements CliRenderer {
         this.inCodeBlock = false;
         this.codeBlockLines = [];
         this.turnStartTime = Date.now();
-        this.err.write(renderPanelTop(c, w, "turn"));
-        this.err.write("\n");
+        this.writeErr(renderPanelTop(c, w, "turn"));
+        this.writeErr("\n");
         break;
 
       case "turn:heartbeat": {
         const line = renderThinking(c, this.thinkingSummary, event.elapsedMs, this.todoPercent >= 0 ? this.todoPercent : undefined);
         if (this.err.isTTY) {
-          this.err.write("\r" + " ".repeat(w) + "\r");
-          this.err.write(c.border + BORDER_V + RST + line);
+          this.writeErr("\r" + " ".repeat(w) + "\r");
+          this.writeErr(c.border + BORDER_V + RST + line);
           this.heartbeatOpen = true;
         }
         break;
@@ -388,15 +401,15 @@ export class System24Renderer implements CliRenderer {
 
       case "turn:reasoning": {
         if (event.summary) {
-          this.err.write(renderPanelLine(c, "  " + c.accent + "🧠 " + RST + DIM + c.text5 + truncate(event.summary, 60) + RST, w));
-          this.err.write("\n");
+          this.writeErr(renderPanelLine(c, "  " + c.accent + "🧠 " + RST + DIM + c.text5 + truncate(event.summary, 60) + RST, w));
+          this.writeErr("\n");
         }
         break;
       }
 
       case "assistant:final": {
         if (this.heartbeatOpen) {
-          this.err.write("\r" + " ".repeat(w) + "\r");
+          this.writeErr("\r" + " ".repeat(w) + "\r");
           this.heartbeatOpen = false;
         }
         const lines = event.text.split("\n");
@@ -406,7 +419,7 @@ export class System24Renderer implements CliRenderer {
             if (this.inCodeBlock) {
               // End code block — flush
               const rendered = renderCodeBlock(c, this.codeBlockLines, this.codeBlockLang, w);
-              for (const rl of rendered) this.out.write(rl + "\n");
+              for (const rl of rendered) this.writeOut(rl + "\n");
               this.codeBlockLines = [];
               this.codeBlockLang = "";
               this.inCodeBlock = false;
@@ -428,35 +441,35 @@ export class System24Renderer implements CliRenderer {
           if (hMatch) {
             const level = hMatch[1].length;
             const text = hMatch[2];
-            if (level === 1) this.out.write(renderPanelLine(c, "  " + BOLD + c.accent + "▋ " + text + RST, w) + "\n");
-            else if (level === 2) this.out.write(renderPanelLine(c, "  " + c.green + "▸ " + text + RST, w) + "\n");
-            else this.out.write(renderPanelLine(c, "  " + c.cyan + "  · " + text + RST, w) + "\n");
+            if (level === 1) this.writeOut(renderPanelLine(c, "  " + BOLD + c.accent + "▋ " + text + RST, w) + "\n");
+            else if (level === 2) this.writeOut(renderPanelLine(c, "  " + c.green + "▸ " + text + RST, w) + "\n");
+            else this.writeOut(renderPanelLine(c, "  " + c.cyan + "  · " + text + RST, w) + "\n");
             continue;
           }
           // List items
           const lMatch = line.match(/^(\s*)[-*]\s+(.+)$/);
           if (lMatch) {
-            this.out.write(renderPanelLine(c, "  " + c.accent + "◆" + RST + " " + renderInline(c, lMatch[2]), w) + "\n");
+            this.writeOut(renderPanelLine(c, "  " + c.accent + "◆" + RST + " " + renderInline(c, lMatch[2]), w) + "\n");
             continue;
           }
           // Horizontal rule
           if (/^[-*_]{3,}$/.test(line.trim())) {
-            this.out.write(renderPanelLine(c, "  " + c.text5 + SEP_CHAR.repeat(Math.min(w - 6, 40)) + RST, w) + "\n");
+            this.writeOut(renderPanelLine(c, "  " + c.text5 + SEP_CHAR.repeat(Math.min(w - 6, 40)) + RST, w) + "\n");
             continue;
           }
           // Empty
           if (line.trim() === "") {
-            this.out.write(renderPanelLine(c, "", w) + "\n");
+            this.writeOut(renderPanelLine(c, "", w) + "\n");
             continue;
           }
           // Regular text
-          this.out.write(renderPanelLine(c, "  " + renderInline(c, line), w) + "\n");
+          this.writeOut(renderPanelLine(c, "  " + renderInline(c, line), w) + "\n");
         }
 
         // Flush unclosed code block
         if (this.inCodeBlock && this.codeBlockLines.length > 0) {
           const rendered = renderCodeBlock(c, this.codeBlockLines, this.codeBlockLang, w);
-          for (const rl of rendered) this.out.write(rl + "\n");
+          for (const rl of rendered) this.writeOut(rl + "\n");
           this.codeBlockLines = [];
           this.codeBlockLang = "";
           this.inCodeBlock = false;
@@ -466,25 +479,25 @@ export class System24Renderer implements CliRenderer {
 
       case "turn:error": {
         if (this.heartbeatOpen) {
-          this.err.write("\r" + " ".repeat(w) + "\r");
+          this.writeErr("\r" + " ".repeat(w) + "\r");
           this.heartbeatOpen = false;
         }
         const errMsg = sanitizeUserVisibleOutput(event.message);
-        this.err.write("\n");
-        this.err.write(renderPanelLine(c, c.red + "  ✖ " + RST + c.text2 + errMsg + RST, w));
-        this.err.write("\n");
+        this.writeErr("\n");
+        this.writeErr(renderPanelLine(c, c.red + "  ✖ " + RST + c.text2 + errMsg + RST, w));
+        this.writeErr("\n");
         break;
       }
 
       case "turn:finish": {
         if (this.heartbeatOpen) {
-          this.err.write("\r" + " ".repeat(w) + "\r");
+          this.writeErr("\r" + " ".repeat(w) + "\r");
           this.heartbeatOpen = false;
         }
         // Flush unclosed code block if any
         if (this.inCodeBlock && this.codeBlockLines.length > 0) {
           const rendered = renderCodeBlock(c, this.codeBlockLines, this.codeBlockLang, w);
-          for (const rl of rendered) this.out.write(rl + "\n");
+          for (const rl of rendered) this.writeOut(rl + "\n");
           this.codeBlockLines = [];
           this.codeBlockLang = "";
           this.inCodeBlock = false;
@@ -512,12 +525,12 @@ export class System24Renderer implements CliRenderer {
           "  " + c.text5 + "─ " + elapsed + " ─" + RST +
           "  " + DIM + c.text5 + "⏱" + uptime + RST;
 
-        this.err.write(renderPanelDivider(c, w, "status"));
-        this.err.write("\n");
-        this.err.write(renderPanelLine(c, "  " + statusLine, w));
-        this.err.write("\n");
-        this.err.write(renderPanelBottom(c, w));
-        this.err.write("\n\n");
+        this.writeErr(renderPanelDivider(c, w, "status"));
+        this.writeErr("\n");
+        this.writeErr(renderPanelLine(c, "  " + statusLine, w));
+        this.writeErr("\n");
+        this.writeErr(renderPanelBottom(c, w));
+        this.writeErr("\n\n");
         break;
       }
 
@@ -528,6 +541,14 @@ export class System24Renderer implements CliRenderer {
 
   setThinkingSummary(summary: string | undefined): void {
     this.thinkingSummary = summary;
+  }
+
+  private writeOut(chunk: string): void {
+    this.out.write(this.noColor ? stripAnsi(chunk) : chunk);
+  }
+
+  private writeErr(chunk: string): void {
+    this.err.write(this.noColor ? stripAnsi(chunk) : chunk);
   }
 
   stop(): void {}
