@@ -15,6 +15,16 @@ import type { TaskRunContext } from "../../contracts/worker-context.js";
 import { executeHarnessRun } from "../../harness/execute-harness-run.js";
 import type { ProviderPolicy } from "../../providers/types.js";
 import { buildChatTurnDag } from "./chat-turn-dag.js";
+import { createSlashCommandContext } from "./slash/context.js";
+import { parseSlashArgs, parseSlashInput, type ParsedSlashInput } from "./slash/parser.js";
+import { createSlashCommandRegistry, type SlashCommandRegistry } from "./slash/registry.js";
+import { emitSlashResult, okSlashResult } from "./slash/result.js";
+import type {
+  LegacySlashCommandSpec,
+  RegisteredSlashCommandSpec,
+  SlashCommandContext,
+  SlashCommandResult,
+} from "./slash/types.js";
 
 export interface NativeRootLoopInput {
   bootstrap: RuntimeBootstrap;
@@ -36,13 +46,6 @@ export interface NativeRootLoopInput {
   onTodoSync?: (output: string) => void;
 }
 
-interface SlashCommand {
-  name: string;
-  aliases: string[];
-  help: string;
-  handler: (args: string) => void | Promise<void>;
-}
-
 export interface NativeRootSessionState {
   bootstrap: RuntimeBootstrap;
   provider: string;
@@ -52,7 +55,7 @@ export interface NativeRootSessionState {
 }
 
 function splitSlashArgs(args: string): string[] {
-  return args.split(/\s+/).map((arg) => arg.trim()).filter(Boolean);
+  return [...parseSlashArgs(args).argv];
 }
 
 function formatConsoleArg(value: unknown): string {
@@ -65,13 +68,21 @@ function formatConsoleArg(value: unknown): string {
 }
 
 async function runSlashHandler(
-  handler: SlashCommand,
-  args: string,
-  renderer?: CliRenderer
-): Promise<void> {
+  handler: RegisteredSlashCommandSpec,
+  parsed: ParsedSlashInput,
+  ctx: SlashCommandContext
+): Promise<SlashCommandResult> {
+  const renderer = ctx.renderer;
   if (!renderer) {
-    await handler.handler(args);
-    return;
+    const result = await runRegisteredSlashCommand(handler, parsed, ctx);
+    const normalized = result ?? okSlashResult();
+    if (normalized.json !== undefined) {
+      console.log(JSON.stringify(normalized.json, null, 2));
+    } else if (normalized.text) {
+      if (normalized.ok) console.log(normalized.text);
+      else console.error(normalized.text);
+    }
+    return normalized;
   }
   const originalLog = console.log;
   const originalWarn = console.warn;
@@ -83,12 +94,31 @@ async function runSlashHandler(
   console.warn = emitLine;
   console.error = emitLine;
   try {
-    await handler.handler(args);
+    const result = await runRegisteredSlashCommand(handler, parsed, ctx);
+    const normalized = result ?? okSlashResult();
+    emitSlashResult(normalized, renderer);
+    return normalized;
   } finally {
     console.log = originalLog;
     console.warn = originalWarn;
     console.error = originalError;
   }
+}
+
+function isLegacySlashCommand(handler: RegisteredSlashCommandSpec): handler is LegacySlashCommandSpec {
+  return "help" in handler;
+}
+
+async function runRegisteredSlashCommand(
+  handler: RegisteredSlashCommandSpec,
+  parsed: ParsedSlashInput,
+  ctx: SlashCommandContext
+): Promise<void | SlashCommandResult> {
+  if (isLegacySlashCommand(handler)) {
+    await handler.handler(parsed.args.raw);
+    return okSlashResult();
+  }
+  return handler.handler(ctx, parsed.args);
 }
 
 function formatScopedNames(names: readonly string[] | undefined, empty = "none"): string {
@@ -222,7 +252,7 @@ export function createNativeRootSessionState(input: {
   };
 }
 
-function buildSlashCommands(input: NativeRootLoopInput, state: NativeRootSessionState): SlashCommand[] {
+function buildSlashCommands(input: NativeRootLoopInput, state: NativeRootSessionState): RegisteredSlashCommandSpec[] {
   return [
     { name: "/exit", aliases: ["/quit", ":q"], help: "Exit chat session", handler: () => {} },
     { name: "/help", aliases: ["/h", "/?"], help: "Show this help", handler: () => {
@@ -783,7 +813,8 @@ export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<
   const turnTimeoutMs = Number.parseInt(input.env.OMK_TURN_TIMEOUT_MS ?? "120000", 10);
   const safeTurnTimeoutMs = Number.isFinite(turnTimeoutMs) && turnTimeoutMs > 0 ? turnTimeoutMs : 120_000;
   const state = createNativeRootSessionState({ bootstrap: input.bootstrap, executionPrompt: input.executionPrompt });
-  const commands = buildSlashCommands(input, state);
+  const slashRegistry: SlashCommandRegistry = createSlashCommandRegistry(buildSlashCommands(input, state));
+  const slashContext = createSlashCommandContext(input, state);
 
   await renderer?.start();
   renderer?.emit({
@@ -866,11 +897,9 @@ export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<
       break;
     }
 
-    if (line.startsWith("/") || line.startsWith(":")) {
-      const spaceIdx = line.indexOf(" ");
-      const cmd = spaceIdx > 0 ? line.slice(0, spaceIdx) : line;
-      const args = spaceIdx > 0 ? line.slice(spaceIdx + 1) : "";
-      const handler = commands.find((c) => c.name === cmd || c.aliases.includes(cmd));
+    const parsedSlash = parseSlashInput(line);
+    if (parsedSlash) {
+      const handler = slashRegistry.resolve(parsedSlash);
 
       if (handler) {
         if (handler.name === "/exit") {
@@ -879,7 +908,8 @@ export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<
         }
         try {
           await terminalOwner.withChildProcess(rl, async () => {
-            await runSlashHandler(handler, args, renderer);
+            const result = await runSlashHandler(handler, parsedSlash, slashContext);
+            if (result.exit) running = false;
           });
         } catch (err: unknown) {
           const m = err instanceof Error ? err.message : String(err);
@@ -891,7 +921,7 @@ export async function runNativeOmkRootLoop(input: NativeRootLoopInput): Promise<
         }
         continue;
       }
-      const message = `Unknown command: ${cmd}. Type /help for commands.`;
+      const message = `Unknown command: ${parsedSlash.command}. Type /help for commands.`;
       if (renderer) {
         renderer.emit({ type: "turn:error", message });
       } else {
