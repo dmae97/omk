@@ -28,6 +28,7 @@ import { normalizeReasoningChunk, extractThinkingSummary, appendReasoningFrames,
 import { PlainModernRenderer } from "../../cli/ui/plain-renderer.js";
 import { RichRenderer } from "../../cli/ui/rich-renderer.js";
 import { System24Renderer } from "../../cli/ui/system24-renderer.js";
+import { GreenRainRenderer } from "../../cli/ui/green-rain-renderer.js";
 import { sanitizeUserVisibleOutput } from "../../util/user-visible-output.js";
 
 export interface ChatRuntimeInput {
@@ -332,7 +333,11 @@ export async function runChatRuntime(
             process.stdout.write(sanitizeUserVisibleOutput(text));
           },
         });
-        const renderer = ui === "system24" ? new System24Renderer() : ui === "rich" ? new RichRenderer() : new PlainModernRenderer();
+        const renderer = ui === "green-rain"
+          ? new GreenRainRenderer()
+          : ui === "system24"
+            ? new System24Renderer()
+            : ui === "rich" ? new RichRenderer() : new PlainModernRenderer();
         exitCode = await runNativeOmkRootLoop({
           bootstrap,
           taskRunner: runner,
@@ -574,7 +579,7 @@ export async function runChatRuntime(
     } catch {
       // ignore session finalize failures
     }
-    if (ui !== "plain-modern" && ui !== "rich" && ui !== "system24") {
+    if (ui !== "plain-modern" && ui !== "rich" && ui !== "system24" && ui !== "green-rain") {
       await printChatExitBanner({
         runId: effectiveRunId,
         sessionId,

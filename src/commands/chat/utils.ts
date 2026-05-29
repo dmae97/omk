@@ -50,8 +50,8 @@ export function formatResourceCount(count: number, scope: string): string {
 }
 
 export type ChatLayout = "auto" | "tmux" | "inline" | "plain";
-export type ChatBrand = "omk" | "minimal" | "plain" | "kimicat";
-export type ChatUi = "legacy" | "plain-modern" | "rich" | "system24";
+export type ChatBrand = "omk" | "minimal" | "plain" | "kimicat" | "green-rain";
+export type ChatUi = "legacy" | "plain-modern" | "rich" | "system24" | "green-rain";
 
 export function resolveLayout(requested: ChatLayout | undefined): ChatLayout {
   if (requested && requested !== "auto") return requested;
@@ -64,6 +64,7 @@ export function resolveChatUi(requested: string | undefined, env: NodeJS.Process
   if (normalized === "plain-modern" || normalized === "modern" || normalized === "agent-console") return "plain-modern";
   if (normalized === "rich") return "rich";
   if (normalized === "system24" || normalized === "s24") return "system24";
+  if (normalized === "green-rain" || normalized === "green" || normalized === "matrix" || normalized === "rain") return "green-rain";
   return "legacy";
 }
 
@@ -82,6 +83,7 @@ export function renderChatIntro(
   const titleKey: Record<ChatBrand, string> = {
     omk: "chat.intro.omk",
     kimicat: "chat.intro.omk",
+    "green-rain": "chat.intro.greenRain",
     minimal: "chat.intro.minimal",
     plain: "chat.intro.plain",
   };
