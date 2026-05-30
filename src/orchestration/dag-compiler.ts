@@ -8,6 +8,10 @@ import { buildIntentFrame } from "../goal/intent-frame.js";
 import type { ProviderPolicy } from "../providers/types.js";
 import type { DagNodeDefinition } from "./dag.js";
 import { createDag } from "./dag.js";
+import {
+  buildRoleSpecificDagNodes,
+  shouldCompileRoleSpecificDag,
+} from "./dag-compiler-presets.js";
 import type {
   BuildDagCompileResultInput,
   DagCompileInput,
@@ -37,11 +41,18 @@ export async function compileInputEnvelopeToDag(
     1,
     input.workerCount ?? intent.estimatedWorkers ?? 1,
   );
-  const dag = createDag({
-    nodes: [
-      buildInputEnvelopeNode({ input: input.input, intent, intentFrame }),
-    ],
-  });
+  const providerPolicy = normalizeProviderPolicy(input.input.provider);
+  const nodes = shouldCompileRoleSpecificDag({ input: input.input })
+    ? buildRoleSpecificDagNodes({
+        input: input.input,
+        intent,
+        intentFrame,
+        workerCount,
+        executionStrategy,
+        providerPolicy,
+      })
+    : [buildInputEnvelopeNode({ input: input.input, intent, intentFrame })];
+  const dag = createDag({ nodes });
 
   return buildDagCompileResult({
     input: input.input,
