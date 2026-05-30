@@ -22,6 +22,15 @@ import {
   renderPromptEnvelope,
 } from "../../runtime/prompt-envelope.js";
 import { buildTaskRunContext } from "../../runtime/worker-manifest.js";
+import {
+  buildInputEnvelope,
+  normalizeMcpScope,
+  type InputEnvelope,
+  type InputSlashCommandEnvelope,
+} from "../../input/input-envelope.js";
+import { persistInputEnvelope } from "../../input/input-artifacts.js";
+import { buildDagCompileResult } from "../../orchestration/dag-compiler.js";
+import { persistDagCompileArtifacts } from "../../orchestration/dag-artifacts.js";
 import { TerminalOwner } from "../../util/terminal-owner.js";
 import type { CliRenderer } from "../../cli/ui/renderer.js";
 import type { TaskRunContext } from "../../contracts/worker-context.js";
@@ -234,6 +243,96 @@ export function createNativeRootSessionState(input: {
     theme: "system24",
     view: "summary",
   };
+}
+
+function buildNativeInputEnvelope(input: {
+  loopInput: NativeRootLoopInput;
+  state: NativeRootSessionState;
+  line: string;
+  parsedSlash?: ParsedSlashInput;
+}): InputEnvelope {
+  return buildInputEnvelope({
+    runId: input.loopInput.runId,
+    kind: input.parsedSlash ? "slash-command" : "plain-prompt",
+    raw: input.line,
+    source: "chat",
+    cwd: input.loopInput.activeCwd ?? process.cwd(),
+    root: input.loopInput.root,
+    rootSource: input.loopInput.rootSource,
+    provider: input.state.provider,
+    model: input.state.model,
+    mcpScope: normalizeMcpScope(input.loopInput.env.OMK_MCP_SCOPE),
+    ui: input.loopInput.env.OMK_UI ?? input.loopInput.env.OMK_CHAT_UI,
+    view: input.state.view ?? input.loopInput.env.OMK_TUI_VIEW,
+    theme: input.state.theme,
+    constraints: [],
+    requestedArtifacts: [],
+    slashCommand: input.parsedSlash
+      ? slashCommandToEnvelope(input.parsedSlash)
+      : undefined,
+  });
+}
+
+function slashCommandToEnvelope(
+  parsed: ParsedSlashInput,
+): InputSlashCommandEnvelope {
+  const flags: Record<string, boolean | string | string[]> = {};
+  for (const [key, value] of Object.entries(parsed.args.flags)) {
+    if (Array.isArray(value)) flags[key] = [...(value as readonly string[])];
+    else if (typeof value === "boolean" || typeof value === "string")
+      flags[key] = value;
+  }
+  return {
+    command: parsed.command,
+    argv: [...parsed.args.argv],
+    positional: [...parsed.args.positional],
+    flags,
+  };
+}
+
+async function persistNativeInputEnvelope(input: {
+  envelope: InputEnvelope;
+  root: string;
+  renderer?: CliRenderer;
+}): Promise<void> {
+  try {
+    await persistInputEnvelope(input.envelope, { root: input.root });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    const text = `InputEnvelope artifact write failed: ${message}`;
+    if (input.renderer)
+      input.renderer.emit({ type: "turn:error", message: text });
+    else process.stderr.write(style.metricsRed(text) + "\n");
+  }
+}
+
+async function persistNativeDagCompileArtifacts(input: {
+  envelope: InputEnvelope;
+  dag: Dag;
+  root: string;
+  workerCount: number;
+  executionStrategy: ExecutionStrategy;
+  explanation: string;
+  renderer?: CliRenderer;
+}): Promise<void> {
+  try {
+    await persistDagCompileArtifacts(
+      buildDagCompileResult({
+        input: input.envelope,
+        dag: input.dag,
+        workerCount: input.workerCount,
+        executionStrategy: input.executionStrategy,
+        explanation: input.explanation,
+      }),
+      { root: input.root },
+    );
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    const text = `DAG compile artifact write failed: ${message}`;
+    if (input.renderer)
+      input.renderer.emit({ type: "turn:error", message: text });
+    else process.stderr.write(style.metricsRed(text) + "\n");
+  }
 }
 
 export type NativeTurnRisk = "read" | "write" | "shell" | "merge";
@@ -565,6 +664,7 @@ async function executeNativeRootHarnessTurn(input: {
   hookNames?: readonly string[];
   workers?: number;
   executionPrompt?: string;
+  inputEnvelope?: InputEnvelope;
 }): Promise<TaskResult> {
   const dag = await buildNativeRootLoopTurnDag({
     bootstrap: input.bootstrap,
@@ -576,6 +676,21 @@ async function executeNativeRootHarnessTurn(input: {
     workers: input.workers,
   });
   const completed: Array<{ node: DagNode; result: TaskResult }> = [];
+  const workerCount = Math.max(1, input.workers ?? 1);
+  const executionStrategy =
+    nativeExecutionStrategy(input.executionPrompt) ?? "sequential";
+
+  if (input.inputEnvelope) {
+    await persistNativeDagCompileArtifacts({
+      envelope: input.inputEnvelope,
+      dag,
+      root: input.root,
+      workerCount,
+      executionStrategy,
+      explanation: "native chat turn compiled for shared harness execution",
+      renderer: input.renderer,
+    });
+  }
 
   const run = await executeHarnessRun({
     root: input.root,
@@ -583,7 +698,7 @@ async function executeNativeRootHarnessTurn(input: {
     dag,
     runner: input.taskRunner,
     env: input.env,
-    workers: Math.max(1, input.workers ?? 1),
+    workers: workerCount,
     approvalPolicy: nativeApprovalPolicy(input.executionPrompt),
     signal: input.signal,
     onNodeStart: (node) => {
@@ -726,6 +841,18 @@ export async function runNativeOmkRootLoop(
     }
 
     const parsedSlash = parseSlashInput(line);
+    const inputEnvelope = buildNativeInputEnvelope({
+      loopInput: input,
+      state,
+      line,
+      parsedSlash,
+    });
+    await persistNativeInputEnvelope({
+      envelope: inputEnvelope,
+      root: input.root,
+      renderer,
+    });
+
     if (parsedSlash) {
       const handler = slashRegistry.resolve(parsedSlash);
 
@@ -799,6 +926,17 @@ export async function runNativeOmkRootLoop(
           hookNames: input.hookNames,
           executionPrompt: state.approvalPolicy,
         });
+        await persistNativeDagCompileArtifacts({
+          envelope: inputEnvelope,
+          dag: { nodes: [node] },
+          root: input.root,
+          workerCount: 1,
+          executionStrategy:
+            nativeExecutionStrategy(state.approvalPolicy) ?? "sequential",
+          explanation:
+            "native direct chat turn compiled to a single-node DAG artifact",
+          renderer,
+        });
         const turnMcpAllowlist = node.routing?.mcpServers ?? input.mcpAllowlist;
         const turnSkillNames = node.routing?.skills ?? input.skillNames;
         const turnHookNames = node.routing?.hooks ?? input.hookNames;
@@ -849,6 +987,7 @@ export async function runNativeOmkRootLoop(
             hookNames: input.hookNames,
             workers: input.workers,
             executionPrompt: state.approvalPolicy,
+            inputEnvelope,
           }),
         );
       }

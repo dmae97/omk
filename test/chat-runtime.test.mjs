@@ -62,7 +62,11 @@ function runNativeLoopInput(input) {
       executionPrompt: "ask"
     });
     const { existsSync, readFileSync } = await import("node:fs");
-    const statePath = process.cwd() + "/.omk/runs/slash-test/state.json";
+    const runDir = process.cwd() + "/.omk/runs/slash-test";
+    const statePath = runDir + "/state.json";
+    const inputEnvelopePath = runDir + "/input-envelope.json";
+    const dagPath = runDir + "/dag.json";
+    const dagReportPath = runDir + "/dag-compile-report.json";
     console.log("RUN_STATE_EXISTS=" + existsSync(statePath));
     if (existsSync(statePath)) {
       const state = JSON.parse(readFileSync(statePath, "utf8"));
@@ -70,6 +74,29 @@ function runNativeLoopInput(input) {
         runId: state.runId,
         nodeCount: state.nodes?.length ?? 0,
         statuses: (state.nodes ?? []).map((node) => node.status)
+      }));
+    }
+    console.log("INPUT_ENVELOPE_EXISTS=" + existsSync(inputEnvelopePath));
+    if (existsSync(inputEnvelopePath)) {
+      const envelope = JSON.parse(readFileSync(inputEnvelopePath, "utf8"));
+      console.log("INPUT_ENVELOPE_CAPTURE=" + JSON.stringify({
+        inputId: envelope.inputId,
+        kind: envelope.kind,
+        raw: envelope.raw,
+        normalized: envelope.normalized,
+        provider: envelope.provider,
+        mcpScope: envelope.mcpScope,
+        command: envelope.slashCommand?.command ?? null,
+        historyExists: existsSync(runDir + "/inputs/" + envelope.inputId + ".json")
+      }));
+    }
+    console.log("DAG_COMPILE_EXISTS=" + (existsSync(dagPath) && existsSync(dagReportPath)));
+    if (existsSync(dagReportPath)) {
+      const report = JSON.parse(readFileSync(dagReportPath, "utf8"));
+      console.log("DAG_COMPILE_CAPTURE=" + JSON.stringify({
+        inputId: report.inputId,
+        nodeCount: report.nodeCount,
+        executionStrategy: report.executionStrategy
       }));
     }
     console.log("TASK_RUNNER_CALLS=" + calls.length);
@@ -567,6 +594,38 @@ test("native root loop persists chat turns through the shared DAG harness", () =
   deepStrictEqual(state.runId, "slash-test");
   deepStrictEqual(state.nodeCount, 1);
   deepStrictEqual(state.statuses, ["done"]);
+  ok(/INPUT_ENVELOPE_EXISTS=true/.test(combinedOutput), combinedOutput);
+  const envelopeMatch = combinedOutput.match(/INPUT_ENVELOPE_CAPTURE=(.+)/);
+  ok(envelopeMatch, combinedOutput);
+  const envelope = JSON.parse(envelopeMatch[1]);
+  deepStrictEqual(envelope.kind, "plain-prompt");
+  deepStrictEqual(envelope.raw, "hello");
+  deepStrictEqual(envelope.provider, "codex");
+  deepStrictEqual(envelope.mcpScope, "project");
+  deepStrictEqual(envelope.historyExists, true);
+  ok(/DAG_COMPILE_EXISTS=true/.test(combinedOutput), combinedOutput);
+  const dagCompileMatch = combinedOutput.match(/DAG_COMPILE_CAPTURE=(.+)/);
+  ok(dagCompileMatch, combinedOutput);
+  const dagCompile = JSON.parse(dagCompileMatch[1]);
+  deepStrictEqual(dagCompile.nodeCount, 1);
+});
+
+test("native slash commands persist InputEnvelope without running a provider turn", () => {
+  const result = runNativeLoopInput("/status\n/exit\n");
+
+  const combinedOutput = `${result.stdout}\n${result.stderr}`;
+  deepStrictEqual(result.status, 0, combinedOutput);
+  ok(/INPUT_ENVELOPE_EXISTS=true/.test(combinedOutput), combinedOutput);
+  const envelopeMatch = combinedOutput.match(/INPUT_ENVELOPE_CAPTURE=(.+)/);
+  ok(envelopeMatch, combinedOutput);
+  const envelope = JSON.parse(envelopeMatch[1]);
+  deepStrictEqual(envelope.kind, "slash-command");
+  deepStrictEqual(envelope.command, "/status");
+  deepStrictEqual(envelope.provider, "codex");
+  deepStrictEqual(envelope.mcpScope, "project");
+  deepStrictEqual(envelope.historyExists, true);
+  ok(/DAG_COMPILE_EXISTS=false/.test(combinedOutput), combinedOutput);
+  ok(/TASK_RUNNER_CALLS=0/.test(combinedOutput), combinedOutput);
 });
 
 test("/auth reports provider status without running a provider turn", () => {
