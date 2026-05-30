@@ -337,6 +337,14 @@ async function persistNativeDagCompileArtifacts(input: {
 
 export type NativeTurnRisk = "read" | "write" | "shell" | "merge";
 
+const API_ADVISORY_PROVIDERS = new Set([
+  "deepseek",
+  "local-llm",
+  "mimo",
+  "openrouter",
+  "qwen",
+]);
+
 function hasExplicitReadOnlyIntent(text: string): boolean {
   return (
     /\b(read|inspect|look|show|list|summarize|explain|describe|review|audit|status|diagnose)\b/.test(
@@ -384,12 +392,12 @@ function nativeTurnRoutingPolicy(
   sandboxMode: "read-only" | "workspace-write";
   providerReasonSuffix?: string;
 } {
-  if (provider === "deepseek" && risk !== "read") {
+  if (isApiAdvisoryProvider(provider) && risk !== "read") {
     return {
-      capabilities: ["read", "review"],
+      capabilities: ["read", "review", "advisory"],
       readOnly: true,
       sandboxMode: "read-only",
-      providerReasonSuffix: `; DeepSeek is advisory/read-only for ${risk} intent`,
+      providerReasonSuffix: `; ${provider} API is advisory/read-only for ${risk} intent; OMK owns write, shell, MCP, and merge authority`,
     };
   }
   if (risk === "read") {
@@ -414,6 +422,10 @@ function nativeTurnRoutingPolicy(
     readOnly: false,
     sandboxMode: "workspace-write",
   };
+}
+
+function isApiAdvisoryProvider(provider: string): boolean {
+  return API_ADVISORY_PROVIDERS.has(provider);
 }
 
 function debloatRiskFromNativeTurnRisk(risk: NativeTurnRisk): DebloatRisk {
@@ -479,7 +491,8 @@ export function buildNativeRootLoopTurnNode(input: {
     skillNames: compiled.runtimeSidecar.selectedSkills,
     hookNames: input.hookNames,
     tools: capabilityInjection.tools,
-    requireMcp: compiled.runtimeSidecar.requiredMcp.length > 0,
+    requireMcp: !isApiAdvisoryProvider(input.bootstrap.provider)
+      && compiled.runtimeSidecar.requiredMcp.length > 0,
     requiresToolCalling: capabilityInjection.requiresToolCalling,
   });
   return {
