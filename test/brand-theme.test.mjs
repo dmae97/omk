@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 const {
   GREEN_RAIN_THEME,
+  NEON_GRID_THEME,
   SYSTEM24_THEME,
   resolveOmkBrandTheme,
   resolveTuiMotion,
@@ -23,12 +24,25 @@ test("green-rain theme is OMK-native and evidence-oriented", () => {
   assert.equal(SYSTEM24_THEME.motion.rain, false);
 });
 
-test("brand resolver accepts green-rain aliases without changing the default", () => {
+test("neon-grid theme defines OMK Control visual language", () => {
+  assert.equal(NEON_GRID_THEME.name, "neon-grid");
+  assert.equal(NEON_GRID_THEME.label, "OMK//CONTROL");
+  assert.match(NEON_GRID_THEME.tagline, /Neon control plane/);
+  assert.match(NEON_GRID_THEME.motto, /Control the loop/);
+  assert.equal(NEON_GRID_THEME.symbols.active, "●");
+  assert.equal(NEON_GRID_THEME.motion.rain, false);
+});
+
+test("brand resolver accepts green-rain and neon-grid aliases without changing the default", () => {
   assert.equal(resolveOmkBrandTheme(undefined).name, "system24");
   assert.equal(resolveOmkBrandTheme("system24").name, "system24");
   assert.equal(resolveOmkBrandTheme("green-rain").name, "green-rain");
   assert.equal(resolveOmkBrandTheme("green").name, "green-rain");
   assert.equal(resolveOmkBrandTheme("rain").name, "green-rain");
+  assert.equal(resolveOmkBrandTheme("neon-grid").name, "neon-grid");
+  assert.equal(resolveOmkBrandTheme("neon").name, "neon-grid");
+  assert.equal(resolveOmkBrandTheme("control").name, "neon-grid");
+  assert.equal(resolveOmkBrandTheme("omk-control").name, "neon-grid");
   assert.equal(resolveOmkBrandTheme("plain").name, "plain");
   assert.equal(resolveOmkBrandTheme("high-contrast").name, "high-contrast");
   assert.equal(resolveOmkBrandTheme("contrast").name, "high-contrast");

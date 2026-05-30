@@ -50,8 +50,8 @@ export function formatResourceCount(count: number, scope: string): string {
 }
 
 export type ChatLayout = "auto" | "tmux" | "inline" | "plain";
-export type ChatBrand = "omk" | "minimal" | "plain" | "kimicat" | "green-rain";
-export type ChatUi = "legacy" | "plain-modern" | "rich" | "system24" | "green-rain";
+export type ChatBrand = "omk" | "minimal" | "plain" | "kimicat" | "green-rain" | "neon-grid";
+export type ChatUi = "legacy" | "plain-modern" | "rich" | "system24" | "green-rain" | "neon-grid";
 
 export function resolveLayout(requested: ChatLayout | undefined): ChatLayout {
   if (requested && requested !== "auto") return requested;
@@ -65,6 +65,7 @@ export function resolveChatUi(requested: string | undefined, env: NodeJS.Process
   if (normalized === "rich") return "rich";
   if (normalized === "system24" || normalized === "s24") return "system24";
   if (normalized === "green-rain" || normalized === "green" || normalized === "matrix" || normalized === "rain") return "green-rain";
+  if (normalized === "neon-grid" || normalized === "neon" || normalized === "grid" || normalized === "control" || normalized === "omk-control") return "neon-grid";
   return "legacy";
 }
 
@@ -84,12 +85,18 @@ export function renderChatIntro(
     omk: "chat.intro.omk",
     kimicat: "chat.intro.omk",
     "green-rain": "chat.intro.greenRain",
+    "neon-grid": "chat.intro.neonGrid",
     minimal: "chat.intro.minimal",
     plain: "chat.intro.plain",
   };
   const title = t(titleKey[brand] ?? titleKey.omk);
   const lines: string[] = [];
-  if (brand !== "plain") {
+  if (brand === "neon-grid") {
+    lines.push(style.phosphorBold("◇ OMK//CONTROL"));
+    lines.push(style.gray("  Route agents. Verify evidence. Control the loop."));
+    lines.push(style.gray("  Agent grid online."));
+    lines.push("");
+  } else if (brand !== "plain") {
     const rainWidth = Math.min(60, process.stdout.columns ?? 80);
     const rain = renderMatrixRain(meta.runId ?? "omk", rainWidth, 4);
     for (const rainLine of rain.split("\n")) {

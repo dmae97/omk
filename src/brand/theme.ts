@@ -7,6 +7,7 @@ function rgb(r: number, g: number, b: number): string {
 export type OmkBrandThemeName =
   | "system24"
   | "green-rain"
+  | "neon-grid"
   | "plain"
   | "high-contrast";
 export type OmkTuiMotion = "off" | "low" | "auto" | "full";
@@ -101,6 +102,36 @@ export const GREEN_RAIN_THEME: OmkBrandTheme = {
   },
 };
 
+export const NEON_GRID_THEME: OmkBrandTheme = {
+  name: "neon-grid",
+  label: "OMK//CONTROL",
+  tagline: "Neon control plane for coding agents.",
+  motto: "Route agents. Verify evidence. Control the loop.",
+  symbols: {
+    prompt: "›",
+    active: "●",
+    done: "✓",
+    failed: "✕",
+    pending: "○",
+    signal: "◇",
+  },
+  colors: {
+    border: rgb(38, 49, 77),
+    borderHot: rgb(0, 229, 255),
+    text: rgb(234, 242, 255),
+    muted: rgb(123, 132, 153),
+    primary: rgb(0, 229, 255),
+    success: rgb(0, 255, 136),
+    warning: rgb(252, 238, 9),
+    danger: rgb(255, 59, 92),
+    info: rgb(139, 92, 246),
+  },
+  motion: {
+    rain: false,
+    spinner: "scanline",
+  },
+};
+
 export const PLAIN_THEME: OmkBrandTheme = {
   name: "plain",
   label: "OMK Plain",
@@ -169,6 +200,14 @@ export function resolveOmkBrandTheme(name: string | undefined): OmkBrandTheme {
     normalized === "rain"
   )
     return GREEN_RAIN_THEME;
+  if (
+    normalized === "neon-grid" ||
+    normalized === "neon" ||
+    normalized === "grid" ||
+    normalized === "control" ||
+    normalized === "omk-control"
+  )
+    return NEON_GRID_THEME;
   if (normalized === "plain") return PLAIN_THEME;
   if (normalized === "high-contrast" || normalized === "contrast")
     return HIGH_CONTRAST_THEME;
