@@ -75,7 +75,7 @@ function renderSlashHelp(): string {
     commandLine("/use", "<ref>", "Provider/model alias"),
     commandLine("/mcp", "[--all]", "MCP Tool Plane status"),
     commandLine("/tools", "", "Scoped MCP/skills/hooks"),
-    commandLine("/theme", "<system24|green-rain|plain|high-contrast>", "Set session theme"),
+    commandLine("/theme", "<system24|green-rain|neon-grid|plain|high-contrast>", "Set session theme"),
     commandLine("/view", "<summary|graph|evidence|tool-plane|events>", "Set control-plane view"),
     commandLine("/animation", "<off|low|auto|full>", "Set animation policy"),
     commandLine("/status", "", "Session status"),

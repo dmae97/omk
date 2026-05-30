@@ -142,10 +142,10 @@ test("slash UI commands patch theme view and animation session state", async () 
 
   const theme = await commands
     .get("/theme")
-    .handler(ctx, parseSlashArgs("green-rain"));
+    .handler(ctx, parseSlashArgs("control"));
   assert.equal(theme.ok, true);
-  assert.equal(theme.statePatch.theme, "green-rain");
-  assert.match(theme.text, /OMK Green Rain/);
+  assert.equal(theme.statePatch.theme, "neon-grid");
+  assert.match(theme.text, /OMK\/\/CONTROL/);
   Object.assign(ctx.state, theme.statePatch);
 
   const view = await commands

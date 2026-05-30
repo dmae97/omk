@@ -316,7 +316,7 @@ export async function chatCommand(options: {
   // ── plain / inline: run Kimi directly ──
   const isPlain = layout === "plain";
 
-  if (!isPlain && ui !== "green-rain") {
+  if (!isPlain && ui !== "green-rain" && ui !== "neon-grid") {
     const trust = `${effectiveResources.mcpScope} MCP / ${effectiveResources.skillsScope} skills`;
     const agentDisplay = relative(root, effectiveAgentFile);
     const { getModePreset } = await import("../../util/mode-preset.js");

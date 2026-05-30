@@ -27,13 +27,13 @@ export function buildUiSlashCommands(): SlashCommandSpec[] {
       aliases: [":theme"],
       group: "ui",
       summary: "Set session theme",
-      usage: "/theme <system24|green-rain|plain|high-contrast>",
+      usage: "/theme <system24|green-rain|neon-grid|plain|high-contrast>",
       examples: ["/theme green-rain"],
       handler: (_ctx, args) => {
         const requested = args.positional[0];
         const theme = normalizeTheme(requested);
         if (!theme) {
-          return okSlashResult({ text: style.phosphorDim("\n  Usage: /theme system24|green-rain|plain|high-contrast\n") });
+          return okSlashResult({ text: style.phosphorDim("\n  Usage: /theme system24|green-rain|neon-grid|plain|high-contrast\n") });
         }
         return okSlashResult({
           statePatch: { theme },
@@ -85,7 +85,8 @@ export function buildUiSlashCommands(): SlashCommandSpec[] {
 function normalizeTheme(value: string | undefined): OmkBrandThemeName | undefined {
   const normalized = value?.trim().toLowerCase();
   if (normalized === "green" || normalized === "rain") return "green-rain";
-  if (normalized === "system24" || normalized === "green-rain" || normalized === "plain" || normalized === "high-contrast") {
+  if (normalized === "neon" || normalized === "grid" || normalized === "control" || normalized === "omk-control") return "neon-grid";
+  if (normalized === "system24" || normalized === "green-rain" || normalized === "neon-grid" || normalized === "plain" || normalized === "high-contrast") {
     return normalized;
   }
   return undefined;
