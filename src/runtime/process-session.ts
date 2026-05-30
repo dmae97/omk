@@ -15,6 +15,8 @@ export interface ProcessSessionOptions {
   readonly parentEnv?: ChildEnvSource;
   readonly inheritParentEnv?: boolean;
   readonly allowedParentEnvNames?: readonly string[];
+  readonly allowedSecretEnvNames?: readonly string[];
+  readonly allowSecretPassthrough?: boolean;
   readonly timeoutMs?: number;
   readonly maxBuffer?: number;
   readonly stdio?: "pipe" | "inherit";
@@ -40,6 +42,8 @@ export async function runProcessSession(
     overrideEnv: options.env,
     inheritParentEnv: options.inheritParentEnv,
     allowedParentEnvNames: options.allowedParentEnvNames,
+    allowedSecretEnvNames: options.allowedSecretEnvNames,
+    allowSecretPassthrough: options.allowSecretPassthrough,
   });
 
   const result = await runShellStreaming(options.command, [...(options.args ?? [])], {

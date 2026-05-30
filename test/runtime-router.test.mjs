@@ -136,6 +136,44 @@ test("runtime router filters runtimes that lack requested task capabilities", as
   assert.deepEqual(result.metadata.fallbackChain, ["codex-cli"]);
 });
 
+test("runtime router explains MCP authority route blocks", async () => {
+  const calls = [];
+  const router = createRuntimeRouter({
+    runtimes: [
+      fakeRuntime("codex-cli", calls, {
+        read: true,
+        write: true,
+        shell: true,
+        mcp: false,
+        patch: true,
+        review: true,
+        merge: false,
+        vision: false,
+        supportsToolCalling: true,
+      }),
+    ],
+  });
+
+  await assert.rejects(
+    () => router.execute(fakeTask({
+      prompt: "execute MCP-backed worker task",
+      capabilities: {
+        read: true,
+        write: true,
+        shell: true,
+        mcp: true,
+        patch: true,
+        review: false,
+        merge: false,
+        vision: false,
+        toolCalling: true,
+      },
+    })),
+    /Node requires MCP authority.*Codex CLI runtime does not receive OMK MCP authority/
+  );
+  assert.deepEqual(calls, []);
+});
+
 test("runtime router honors task provider policy and does not fall back to Kimi implicitly", async () => {
   const calls = [];
   const router = createRuntimeRouter({

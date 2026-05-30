@@ -5,7 +5,12 @@ import { access, chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { buildChildEnv, runtimeMetadataEnv } from "../dist/runtime/child-env.js";
+import {
+  buildChildEnv,
+  buildChildEnvWithMetadata,
+  isSecretLikeEnvName,
+  runtimeMetadataEnv,
+} from "../dist/runtime/child-env.js";
 import { runProcessSession } from "../dist/runtime/process-session.js";
 import { createExternalCliAdapter } from "../dist/runtime/external-cli-adapter.js";
 import { createCommandcodeCliAdapter } from "../dist/adapters/commandcode/commandcode-cli-adapter.js";
@@ -64,6 +69,53 @@ test("buildChildEnv strips denied env even when inheriting parent env", () => {
   assert.equal(env.SSH_AUTH_SOCK, undefined);
   assert.equal(env.KUBECONFIG, undefined);
   assert.equal(env.GITHUB_TOKEN, undefined);
+});
+
+test("buildChildEnv requires explicit grants for secret-like allowlist entries", () => {
+  const parentEnv = {
+    PATH: "/usr/bin",
+    OPENAI_API_KEY: "secret-value",
+    GITHUB_TOKEN: "blocked-even-when-granted",
+  };
+
+  const withoutGrant = buildChildEnv({
+    parentEnv,
+    allowedParentEnvNames: ["PATH", "OPENAI_API_KEY"],
+  });
+  assert.equal(withoutGrant.PATH, "/usr/bin");
+  assert.equal(withoutGrant.OPENAI_API_KEY, undefined);
+
+  const withGrant = buildChildEnvWithMetadata({
+    parentEnv,
+    allowedParentEnvNames: ["PATH", "OPENAI_API_KEY", "GITHUB_TOKEN"],
+    allowedSecretEnvNames: ["OPENAI_API_KEY", "GITHUB_TOKEN"],
+    allowSecretPassthrough: true,
+  });
+  assert.equal(withGrant.env.OPENAI_API_KEY, "secret-value");
+  assert.equal(withGrant.env.GITHUB_TOKEN, undefined);
+  assert.deepEqual(withGrant.metadata.grantedSecretEnvNames, ["OPENAI_API_KEY"]);
+  assert.deepEqual(withGrant.metadata.deniedChildEnvNames, ["GITHUB_TOKEN"]);
+  assert.deepEqual(withGrant.metadata.deniedSecretEnvNames, []);
+});
+
+test("buildChildEnv metadata records denied explicit secrets without values", () => {
+  const result = buildChildEnvWithMetadata({
+    parentEnv: {},
+    overrideEnv: {
+      EXPLICIT_TOKEN: "secret-value",
+      OMK_CAPTURE_PATH: "/tmp/capture.json",
+    },
+  });
+
+  assert.deepEqual(result.env, { OMK_CAPTURE_PATH: "/tmp/capture.json" });
+  assert.deepEqual(result.metadata.deniedSecretEnvNames, ["EXPLICIT_TOKEN"]);
+  assert.equal(JSON.stringify(result.metadata).includes("secret-value"), false);
+});
+
+test("isSecretLikeEnvName treats authorization env names as secret-like", () => {
+  assert.equal(isSecretLikeEnvName("OPENAI_API_KEY"), true);
+  assert.equal(isSecretLikeEnvName("AUTHORIZATION"), true);
+  assert.equal(isSecretLikeEnvName("OMK_CAPTURE_PATH"), false);
 });
 
 test("runtimeMetadataEnv maps runtime session metadata", () => {
@@ -152,6 +204,25 @@ test("runProcessSession strips secret-like explicit child runtime env", async ()
     npm: null,
     dotenv: null,
   });
+});
+
+test("runProcessSession requires explicit grant for secret passthrough", async () => {
+  const script = "console.log(JSON.stringify({key: process.env.OPENAI_API_KEY ?? null}))";
+  const result = await runProcessSession({
+    command: process.execPath,
+    args: ["--eval", script],
+    parentEnv: {
+      PATH: process.env.PATH ?? "",
+      OPENAI_API_KEY: "granted-secret",
+    },
+    allowedParentEnvNames: ["PATH", "OPENAI_API_KEY"],
+    allowedSecretEnvNames: ["OPENAI_API_KEY"],
+    allowSecretPassthrough: true,
+    timeoutMs: 10_000,
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(JSON.parse(result.stdout.trim()), { key: "granted-secret" });
 });
 
 test("runProcessSession sends explicit input to child stdin without argv transport", async () => {

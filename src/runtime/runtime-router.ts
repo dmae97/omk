@@ -177,7 +177,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
     const supporting = sorted.filter((r) => r.supports(capsule));
 
     if (supporting.length === 0) {
-      throw new Error(`No runtime supports node ${capsule.nodeId}`);
+      throw new Error(formatUnsupportedCapsuleMessage(capsule, sorted));
     }
 
     const scores = supporting.map((r) => computeScores(r, intent, history));
@@ -218,7 +218,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
     const supporting = candidateRuntimes.filter((r) => typeof r.execute === "function" && runtimeSupportsTask(r, task));
 
     if (supporting.length === 0) {
-      throw new Error(`No runtime supports task for node ${task.context.nodeId}`);
+      throw new Error(formatUnsupportedTaskMessage(task, candidateRuntimes));
     }
 
     const scores = supporting.map((r) => computeScores(r, intent, history));
@@ -254,7 +254,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
     const supporting = sorted.filter((r) => r.supports(capsule));
 
     if (supporting.length === 0) {
-      throw new Error(`No runtime supports node ${capsule.nodeId}`);
+      throw new Error(formatUnsupportedCapsuleMessage(capsule, sorted));
     }
 
     const preferred = fallbackChain ?? INTENT_RUNTIME_PREFERENCES[intent];
@@ -456,6 +456,87 @@ function computeComposite(
     0.15 * (1 - score.recentFailurePenalty) +
     preferenceBonus
   );
+}
+
+function formatUnsupportedCapsuleMessage(
+  capsule: ContextCapsule,
+  candidates: readonly AgentRuntime[]
+): string {
+  return formatUnsupportedRuntimeMessage(
+    `No runtime supports node ${capsule.nodeId}`,
+    capsuleRoutingRequirements(capsule),
+    candidates
+  );
+}
+
+function formatUnsupportedTaskMessage(
+  task: AgentTask,
+  candidates: readonly AgentRuntime[]
+): string {
+  return formatUnsupportedRuntimeMessage(
+    `No runtime supports task for node ${task.context.nodeId}`,
+    taskCapabilityRequirements(task),
+    candidates
+  );
+}
+
+function formatUnsupportedRuntimeMessage(
+  base: string,
+  requirements: readonly string[],
+  candidates: readonly AgentRuntime[]
+): string {
+  const details = [
+    ...requirements,
+    ...candidateSecurityDetails(requirements, candidates),
+  ];
+  return uniqueStrings([base, ...details]).join("; ");
+}
+
+function capsuleRoutingRequirements(capsule: ContextCapsule): string[] {
+  const routing = capsule.node.routing;
+  const requirements: string[] = [];
+  const assignedCapabilities = new Set(routing?.assignedProviderCapabilities ?? []);
+  if (routing?.requiresMcp === true || assignedCapabilities.has("mcp")) {
+    requirements.push("Node requires MCP authority");
+  }
+  if (routing?.requiresToolCalling === true || assignedCapabilities.has("toolCalling")) {
+    requirements.push("Node requires live tool authority");
+  }
+  for (const capability of assignedCapabilities) {
+    if (capability === "mcp" || capability === "toolCalling") continue;
+    requirements.push(`Node requires provider capability ${capability}`);
+  }
+  return requirements;
+}
+
+function taskCapabilityRequirements(task: AgentTask): string[] {
+  const requirements: string[] = [];
+  if (task.capabilities.mcp) requirements.push("Node requires MCP authority");
+  if (task.capabilities.toolCalling) requirements.push("Node requires live tool authority");
+  const capabilityKeys = ["read", "write", "shell", "patch", "review", "merge", "vision"] as const;
+  for (const key of capabilityKeys) {
+    if (task.capabilities[key]) requirements.push(`Node requires provider capability ${key}`);
+  }
+  return requirements;
+}
+
+function candidateSecurityDetails(
+  requirements: readonly string[],
+  candidates: readonly AgentRuntime[]
+): string[] {
+  const details: string[] = [];
+  const requiresMcp = requirements.some((requirement) => requirement.includes("MCP authority"));
+  const requiresToolAuthority = requirements.some((requirement) => requirement.includes("tool authority"));
+  for (const runtime of candidates) {
+    if (runtime.id === "codex-cli" && requiresMcp) {
+      details.push("Codex CLI runtime does not receive OMK MCP authority");
+      continue;
+    }
+    if (runtime.id === "codex-cli" && requiresToolAuthority && runtime.capabilities?.supportsToolCalling !== true) {
+      details.push("Codex CLI runtime does not receive OMK tool authority");
+    }
+  }
+  return details;
 }
 
 function preferenceRankBonus(preferred: string[], runtimeId: string): number {
