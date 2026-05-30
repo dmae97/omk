@@ -91,12 +91,7 @@ export function renderChatIntro(
   };
   const title = t(titleKey[brand] ?? titleKey.omk);
   const lines: string[] = [];
-  if (brand === "neon-grid") {
-    lines.push(style.phosphorBold("◇ OMK//CONTROL"));
-    lines.push(style.gray("  Route agents. Verify evidence. Control the loop."));
-    lines.push(style.gray("  Agent grid online."));
-    lines.push("");
-  } else if (brand !== "plain") {
+  if (brand === "green-rain") {
     const rainWidth = Math.min(60, process.stdout.columns ?? 80);
     const rain = renderMatrixRain(meta.runId ?? "omk", rainWidth, 4);
     for (const rainLine of rain.split("\n")) {
@@ -106,6 +101,11 @@ export function renderChatIntro(
     for (const artLine of OMK_MATRIX_ASCII_ART.split("\n")) {
       lines.push(style.phosphor(artLine));
     }
+    lines.push("");
+  } else if (brand !== "plain") {
+    lines.push(style.phosphorBold("◇ OMK//CONTROL"));
+    lines.push(style.gray("  NEON GRID ONLINE"));
+    lines.push(style.gray("  Route agents. Verify evidence. Control the loop."));
     lines.push("");
   }
   lines.push(style.phosphorBold(`▸ ${title}`));

@@ -63,7 +63,21 @@ test("neon-grid chat intro uses compact OMK Control copy", () => {
 
   assert.match(output, /OMK\/\/CONTROL ready/);
   assert.match(output, /OMK\/\/CONTROL/);
-  assert.match(output, /Agent grid online/);
+  assert.match(output, /NEON GRID ONLINE/);
+  assert.doesNotMatch(output, /GREEN\s+RAIN\s+MODE|THE\s+MATRIX/i);
+});
+
+test("default OMK chat intro uses Neon Grid copy instead of Matrix splash", () => {
+  const output = renderChatIntro("omk", {
+    agent: "root.yaml",
+    runId: "default-intro",
+    layout: "plain",
+    trust: "bounded",
+    mode: "agent",
+  });
+
+  assert.match(output, /OMK\/\/CONTROL/);
+  assert.match(output, /NEON GRID ONLINE/);
   assert.doesNotMatch(output, /GREEN\s+RAIN\s+MODE|THE\s+MATRIX/i);
 });
 

@@ -9,8 +9,6 @@ import { getOmkResourceSettings } from "../util/resource-profile.js";
 import { formatBytes } from "../util/output-buffer.js";
 import { formatOmkVersionFooter } from "../util/version.js";
 import { t } from "../util/i18n.js";
-import { OMK_MATRIX_ASCII_ART } from "../brand/omk-matrix-art.js";
-import { renderMatrixRain } from "../brand/matrix-rain.js";
 import type { RunState } from "../contracts/orchestration.js";
 import type { GoalSpec, GoalEvidence } from "../contracts/goal.js";
 import {
@@ -308,7 +306,7 @@ function buildSummaryBar(
   width: number
 ): string {
   if (stateError !== "ok") {
-    const warning = `⚠ Latest Run state is ${stateError}. Run: ${stateErrorRecovery(stateError, vm.runId)}`;
+    const warning = `⟁ Latest Run state is ${stateError}. Run: ${stateErrorRecovery(stateError, vm.runId)}`;
     return truncateLine(warning, width);
   }
 
@@ -323,21 +321,23 @@ function buildStateErrorPanel(
   const recovery = stateErrorRecovery(stateError, runId);
   const lines = [
     "",
-    `  ${theme.style.orangeBold("⚠ State:")} ${theme.style.orange(stateError)}`,
+    `  ${theme.style.orangeBold("⟁ State:")} ${theme.style.orange(stateError)}`,
     `  ${theme.style.gray("Suggested recovery:")}`,
     recovery ? `    ${theme.style.cream(recovery)}` : "",
     "",
   ].filter(Boolean);
-  return theme.panel(lines, theme.gradient("Run State Warning"));
+  return theme.panel(lines, "ROUTE WARNING");
 }
 
-function renderMatrixRainHeader(runId: string): string {
-  if (!process.stdout.isTTY) return "";
-  const width = Math.min(60, process.stdout.columns ?? 80);
-  const rain = renderMatrixRain(runId, width, 3);
-  const rainStr = rain.split("\n").map((l) => theme.style.phosphor(l)).join("\n");
-  const artStr = OMK_MATRIX_ASCII_ART.split("\n").map((l) => theme.style.phosphor(l)).join("\n");
-  return `\n${rainStr}\n\n${artStr}\n`;
+function renderNeonControlHeader(runId: string): string {
+  const runLabel = theme.style.gray(`run ${truncateText(runId, 28)}`);
+  return [
+    "",
+    theme.style.phosphor("OMK//HUD") + "  " + runLabel,
+    theme.style.gray("NEON GRID ONLINE"),
+    theme.style.gray("Route agents. Verify evidence. Control the loop."),
+    "",
+  ].join("\n");
 }
 
 export function buildHudSidebar(
@@ -456,7 +456,7 @@ export function buildHudSidebar(
     ? lines.map((l) => truncateLine(l, Math.max(1, options.maxWidth! - 4)))
     : lines;
 
-  return theme.panel(contentLines, theme.gradient("TODO / Changed Files"));
+  return theme.panel(contentLines, "TODO / CHANGED FILES");
 }
 
 export function renderHudColumns(mainPanels: string[], sidebar: string, terminalWidth = defaultHudTerminalWidth()): string {
@@ -634,7 +634,7 @@ async function buildSystemPanel(options: HudRenderOptions = {}): Promise<string>
     "",
   ].filter(Boolean);
 
-  const result = theme.panel(sysLines, theme.gradient("System Usage"));
+  const result = theme.panel(sysLines, "RUNTIME");
   cachedSystemPanel = result;
   cachedSystemPanelTime = now;
   return result;
@@ -671,7 +671,7 @@ async function buildContextUsagePanel(kimiUsage?: UsageStats, fetchQuota = true)
     "",
   ].filter(Boolean);
 
-  return theme.panel(planLines, theme.gradient("Context Usage"));
+  return theme.panel(planLines, "CONTEXT");
 }
 
 async function buildProjectStatusPanel(gitChangesResult: HudGitChange[] | null): Promise<string> {
@@ -680,7 +680,7 @@ async function buildProjectStatusPanel(gitChangesResult: HudGitChange[] | null):
   const projLines: string[] = [""];
 
   projLines.push(
-    `  ${theme.style.purple("🌿 Git")}      ${gitChangesResult === null ? theme.status.warn("unavailable") : gitChanges.length === 0 ? theme.status.ok("clean") : theme.status.warn(`${gitChanges.length} changes`)}`
+    `  ${theme.style.purple("◇ Git")}      ${gitChangesResult === null ? theme.status.warn("unavailable") : gitChanges.length === 0 ? theme.status.ok("clean") : theme.status.warn(`${gitChanges.length} changes`)}`
   );
 
   const [omkExists, agentsMdExists, designMdExists] = await Promise.all([
@@ -688,12 +688,12 @@ async function buildProjectStatusPanel(gitChangesResult: HudGitChange[] | null):
     pathExists(join(root, "AGENTS.md")),
     pathExists(join(root, "DESIGN.md")),
   ]);
-  projLines.push(`  ${theme.style.purple("📁 OMK")}      ${omkExists ? theme.status.ok("initialized") : theme.status.warn("omk init needed")}`);
-  projLines.push(`  ${theme.style.purple("📝 AGENTS")}   ${agentsMdExists ? theme.status.ok("exists") : theme.status.warn("missing")}`);
-  projLines.push(`  ${theme.style.purple("🎨 DESIGN")}   ${designMdExists ? theme.status.ok("exists") : theme.status.info("optional")}`);
+  projLines.push(`  ${theme.style.purple("▣ OMK")}      ${omkExists ? theme.status.ok("initialized") : theme.status.warn("omk init needed")}`);
+  projLines.push(`  ${theme.style.purple("✎ AGENTS")}   ${agentsMdExists ? theme.status.ok("exists") : theme.status.warn("missing")}`);
+  projLines.push(`  ${theme.style.purple("◇ DESIGN")}   ${designMdExists ? theme.status.ok("exists") : theme.status.info("optional")}`);
 
   projLines.push("");
-  return theme.panel(projLines, theme.gradient("Project Status"));
+  return theme.panel(projLines, "PROJECT");
 }
 
 function workerLiveness(ageMs?: number): { label: string; color: (s: string) => string } {
@@ -765,7 +765,7 @@ async function buildLatestRunPanel(
       if (!goalTitle) goalTitle = "N/A";
 
       const staleWorkers = vm.workers.filter((w) => w.state === "running" && (w.lastActivityAgeMs ?? 0) > 90_000).length;
-      const chatBadge = sessionMeta?.type === "chat" ? ` ${theme.style.cream("💬 Chat")}` : "";
+      const chatBadge = sessionMeta?.type === "chat" ? ` ${theme.style.cream("◌ Chat")}` : "";
       const providerLine = formatProviderMetricLine(vm.providerRouting);
       runLines = [
         "",
@@ -889,7 +889,7 @@ async function buildLatestRunPanel(
     runLines = runLines.map((l) => truncateLine(l, contentMaxWidth));
   }
 
-  return theme.panel(runLines, theme.gradient("Latest Run"));
+  return theme.panel(runLines, "LATEST RUN");
 }
 
 async function fetchHudDashboardData(options: HudRenderOptions): Promise<HudDashboardData> {
@@ -944,8 +944,7 @@ function buildHudHeader(
 ): string {
   const width = options.terminalWidth ?? defaultHudTerminalWidth();
   const lines: string[] = [];
-  lines.push(renderMatrixRainHeader(options.runId ?? "omk"));
-  lines.push(theme.matrixHeader("OMK HUD"));
+  lines.push(renderNeonControlHeader(options.runId ?? "omk"));
   lines.push(buildSummaryBar(vm, stateError, goalTitle, width - 4));
   lines.push("");
   return lines.join("\n");

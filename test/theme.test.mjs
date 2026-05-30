@@ -25,6 +25,12 @@ test("terminal text sanitizer strips control sequences from display values", () 
   assert.equal(sanitizeTerminalText(unsafe), "safered");
 });
 
+test("terminal text sanitizer strips broken ANSI fragments", () => {
+  const unsafe = "safe[38;2;0;50;0mred[0m";
+
+  assert.equal(sanitizeTerminalText(unsafe), "safered");
+});
+
 test("sanitizeTerminalText strips standalone ::code-comment directives", () => {
   const raw = "line1\n::code-comment{some note}\nline2\n::code-comment{another}\t \nline3";
 

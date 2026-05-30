@@ -9,6 +9,7 @@ import type { CliUiEvent } from "./event.js";
 import type { CliRenderer } from "./renderer.js";
 import { sanitizeUserVisibleOutput } from "../../util/user-visible-output.js";
 import { style } from "../../theme/colors.js";
+import { isUnsupportedRuntimeError, renderRouteBlockedPanel } from "./route-blocked-panel.js";
 
 interface WritableStreamLike {
   write(chunk: string): unknown;
@@ -242,6 +243,10 @@ export class RichRenderer implements CliRenderer {
           this.heartbeatOpen = false;
         }
         const errMsg = sanitizeUserVisibleOutput(event.message);
+        if (isUnsupportedRuntimeError(errMsg)) {
+          this.stderr.write("\n" + renderRouteBlockedPanel(errMsg) + "\n\n");
+          break;
+        }
         this.stderr.write("\n" + style.red("  ✖ ") + style.white(errMsg) + "\n\n");
         break;
       }

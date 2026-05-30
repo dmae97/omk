@@ -5,14 +5,15 @@
 
 import { totalmem, freemem, loadavg, cpus } from "os";
 import { P } from "../brand/palette.js";
-import { esc, stripAnsi, padEndAnsi, visibleTerminalWidth } from "./ansi.js";
+import { esc, stripAnsi, padEndAnsi, visibleTerminalWidth, sanitizeTerminalText } from "./ansi.js";
 import { style } from "./colors.js";
 
 export function metricsPanel(lines: string[], title?: string): string {
-  const innerWidth = Math.max(...lines.map((l) => stripAnsi(l).length), title ? stripAnsi(title).length + 4 : 0);
+  const rawTitle = title ? sanitizeTerminalText(title) : "";
+  const innerWidth = Math.max(...lines.map((l) => stripAnsi(l).length), rawTitle ? rawTitle.length + 4 : 0);
   const width = innerWidth + 4;
-  const top = title
-    ? style.slate("╭" + "─".repeat(2) + " " + style.cyanBold(title) + " " + "─".repeat(Math.max(0, width - stripAnsi(title).length - 4)) + "╮")
+  const top = rawTitle
+    ? style.slate("╭" + "─".repeat(2) + " " + style.cyanBold(rawTitle) + " " + "─".repeat(Math.max(0, width - rawTitle.length - 4)) + "╮")
     : style.slate("╭" + "─".repeat(width) + "╮");
   const bottom = style.slate("╰" + "─".repeat(width) + "╯");
   const body = lines.map((l) =>
@@ -41,7 +42,7 @@ export function metricsGauge(
 }
 
 export function metricsGradient(text: string): string {
-  const chars = [...text];
+  const chars = [...sanitizeTerminalText(text)];
   const result: string[] = [];
   for (let i = 0; i < chars.length; i++) {
     const t = chars.length === 1 ? 0.5 : i / (chars.length - 1);

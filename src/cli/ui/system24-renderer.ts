@@ -28,6 +28,7 @@ import type { CliRenderer } from "./renderer.js";
 import type { OmkBrandTheme } from "../../brand/theme.js";
 import { shouldUseAnsiColor, SYSTEM24_THEME } from "../../brand/theme.js";
 import { sanitizeUserVisibleOutput } from "../../util/user-visible-output.js";
+import { isUnsupportedRuntimeError, renderRouteBlockedPanel } from "./route-blocked-panel.js";
 
 // ── ANSI Helpers ───────────────────────────────────────────────────────────
 
@@ -484,6 +485,11 @@ export class System24Renderer implements CliRenderer {
         }
         const errMsg = sanitizeUserVisibleOutput(event.message);
         this.writeErr("\n");
+        if (isUnsupportedRuntimeError(errMsg)) {
+          this.writeErr(renderRouteBlockedPanel(errMsg, { width: Math.min(100, w) }));
+          this.writeErr("\n");
+          break;
+        }
         this.writeErr(renderPanelLine(c, c.red + "  ✖ " + RST + c.text2 + errMsg + RST, w));
         this.writeErr("\n");
         break;

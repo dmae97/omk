@@ -20,6 +20,7 @@ export function sanitizeTerminalText(value: string): string {
     .replace(/\x1B\][\s\S]*?(?:\x07|\x1B\\)/g, "")
     .replace(/\x1B[P^_][\s\S]*?\x1B\\/g, "")
     .replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/\[[0-9;]{1,32}m/g, "")
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, "")
     .replace(/^::code-comment\{.*?\}[ \t]*\r?\n?/gm, "");
 }

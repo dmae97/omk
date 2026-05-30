@@ -339,7 +339,7 @@ export async function chatCommand(options: {
     const providerLabel = providerPolicy === "auto" ? "auto-detect" : providerPolicy;
     const modeLabel = currentMode;
     const mcpLabel = effectiveResources.mcpScope === "none" ? "mcp=off" : `mcp=${effectiveResources.mcpScope}`;
-    console.log(style.phosphorDim(`  ⚡ ${providerLabel} · ${modeLabel} · ${mcpLabel} · workers=${effectiveWorkers}`));
+    console.log(style.phosphorDim(`  ⟡ ${providerLabel} · ${modeLabel} · ${mcpLabel} · workers=${effectiveWorkers}`));
     console.log(style.gray(`  Run ${style.cream("omk hud")} for dashboard, ${style.cream("omk runs")} for history.`));
     // Defer full HUD + history rendering to after the agent loop starts (non-blocking)
     setImmediate(async () => {
@@ -366,7 +366,7 @@ export async function chatCommand(options: {
             .sort((a, b) => b.stateUpdatedAtMs - a.stateUpdatedAtMs)
             .slice(0, 3);
           if (sorted.length > 0) {
-            process.stderr.write(`\n${style.purpleBold("📜 Recent Work History")}\n`);
+            process.stderr.write(`\n${style.purpleBold("▣ Recent Runs")}\n`);
             for (const c of sorted) {
               let statusStr = style.gray("unknown");
               try {

@@ -7,6 +7,7 @@
 import type { CliUiEvent } from "./event.js";
 import type { CliRenderer } from "./renderer.js";
 import { sanitizeUserVisibleOutput } from "../../util/user-visible-output.js";
+import { isUnsupportedRuntimeError, renderRouteBlockedPanel } from "./route-blocked-panel.js";
 
 interface WritableStreamLike {
   write(chunk: string): unknown;
@@ -113,7 +114,13 @@ export class PlainModernRenderer implements CliRenderer {
           this.stderr.write("\r                    \r");
           this.heartbeatOpen = false;
         }
-        this.stderr.write(`\n  ✖ ${sanitizeUserVisibleOutput(event.message)}\n\n`);
+        {
+          const errMsg = sanitizeUserVisibleOutput(event.message);
+          const rendered = isUnsupportedRuntimeError(errMsg)
+            ? renderRouteBlockedPanel(errMsg)
+            : `  ✖ ${errMsg}`;
+          this.stderr.write(`\n${rendered}\n\n`);
+        }
         break;
       case "turn:finish":
         if (this.heartbeatOpen) {
