@@ -2371,7 +2371,7 @@ const result = await ctx.ui.custom<string | null>(
 );
 ```
 
-For advanced positioning (anchors, margins, percentages, responsive visibility), pass `overlayOptions`. Use `onHandle` to control visibility programmatically:
+For advanced positioning (anchors, margins, percentages, responsive visibility), pass `overlayOptions`. Use `onHandle` to control focus or visibility programmatically:
 
 ```typescript
 const result = await ctx.ui.custom<string | null>(
@@ -2379,12 +2379,19 @@ const result = await ctx.ui.custom<string | null>(
   {
     overlay: true,
     overlayOptions: { anchor: "top-right", width: "50%", margin: 2 },
-    onHandle: (handle) => { /* handle.setHidden(true/false) */ }
+    onHandle: (handle) => {
+      handle.focus(); // focus this overlay and bring it to the visual front
+      // handle.unfocus({ target: editorComponent }); // release input to a specific component
+      // handle.setHidden(true/false); // toggle visibility
+      // handle.hide(); // permanently remove
+    }
   }
 );
 ```
 
-See [tui.md](tui.md) for the full `OverlayOptions` API and [overlay-qa-tests.ts](../examples/extensions/overlay-qa-tests.ts) for examples.
+A focused visible overlay can reclaim input after temporary non-overlay custom UI closes. If you intentionally want another component to keep input while the overlay stays visible, call `handle.unfocus({ target })`. Passing `{ target: null }` releases the overlay without focusing another component.
+
+See [tui.md](tui.md) for the full `OverlayOptions` and `OverlayHandle` API and [overlay-qa-tests.ts](../examples/extensions/overlay-qa-tests.ts) for examples.
 
 ### Custom Editor
 

@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import type { Component, Focusable } from "../src/tui.ts";
-import { TUI } from "../src/tui.ts";
+import { Container, TUI } from "../src/tui.ts";
 import { VirtualTerminal } from "./virtual-terminal.ts";
 
 class StaticOverlay implements Component {
@@ -222,6 +222,35 @@ describe("TUI overlay non-capturing", () => {
 			}
 		});
 
+		it("removed focused child overlay does not become parent overlay fallback", async () => {
+			const terminal = new VirtualTerminal(80, 24);
+			const tui = new TUI(terminal);
+			const editor = new FocusableOverlay(["EDITOR"]);
+			const child = new FocusableOverlay(["CHILD"]);
+			const parent = new FocusableOverlay(["PARENT"]);
+			tui.addChild(new EmptyContent());
+			tui.setFocus(editor);
+			tui.start();
+			try {
+				const childHandle = tui.showOverlay(child, { nonCapturing: true });
+				childHandle.focus();
+				const parentHandle = tui.showOverlay(parent);
+				assert.strictEqual(parent.focused, true);
+
+				childHandle.hide();
+				parentHandle.hide();
+				terminal.sendInput("x");
+				await renderAndFlush(tui, terminal);
+
+				assert.deepStrictEqual(editor.inputs, ["x"]);
+				assert.deepStrictEqual(child.inputs, []);
+				assert.deepStrictEqual(parent.inputs, []);
+				assert.strictEqual(editor.focused, true);
+			} finally {
+				tui.stop();
+			}
+		});
+
 		it("microtask-deferred sub-overlay pattern (showExtensionCustom simulation) restores focus", async () => {
 			const terminal = new VirtualTerminal(80, 24);
 			const tui = new TUI(terminal);
@@ -234,18 +263,18 @@ describe("TUI overlay non-capturing", () => {
 			try {
 				// Simulate showExtensionCustom: factory creates timer synchronously,
 				// then .then() pushes controller as a microtask
-				let timerHandle: ReturnType<typeof tui.showOverlay>;
+				let timerHandle: ReturnType<typeof tui.showOverlay> | null = null;
 				let doneFn: () => void = () => {
 					throw new Error("doneFn was not initialized");
 				};
 
 				const overlayPromise = new Promise<void>((resolve) => {
 					doneFn = () => {
+						if (!timerHandle) throw new Error("timerHandle was not initialized");
 						timerHandle.hide();
 						tui.hideOverlay();
 						resolve();
 					};
-					// Factory runs synchronously: creates timer sub-overlay
 					timerHandle = tui.showOverlay(timer, { nonCapturing: true });
 					// .then() runs as microtask — same as showExtensionCustom
 					Promise.resolve(controller).then((c) => {
@@ -253,8 +282,7 @@ describe("TUI overlay non-capturing", () => {
 					});
 				});
 
-				// Wait for .then() microtask and renders to settle
-				await new Promise<void>((r) => setTimeout(r, 50));
+				await Promise.resolve();
 				await renderAndFlush(tui, terminal);
 
 				assert.strictEqual(controller.focused, true);
@@ -391,20 +419,110 @@ describe("TUI overlay non-capturing", () => {
 			}
 		});
 
+		it("blocked replacement can move focus internally before overlay restore", async () => {
+			const terminal = new VirtualTerminal(80, 24);
+			const tui = new TUI(terminal);
+			const base = new Container();
+			const editor = new FocusableOverlay(["EDITOR"]);
+			const firstReplacement = new FocusableOverlay(["FIRST"]);
+			const secondReplacement = new FocusableOverlay(["SECOND"]);
+			const overlay = new FocusableOverlay(["OVERLAY"]);
+			overlay.handleInput = (data: string) => {
+				overlay.inputs.push(data);
+				if (data === "b") tui.setFocus(firstReplacement);
+			};
+			firstReplacement.handleInput = (data: string) => {
+				firstReplacement.inputs.push(data);
+				if (data === "n") tui.setFocus(secondReplacement);
+			};
+			secondReplacement.handleInput = (data: string) => {
+				secondReplacement.inputs.push(data);
+				if (data === "\r") {
+					base.clear();
+					base.addChild(editor);
+					tui.setFocus(editor);
+				}
+			};
+			base.addChild(editor);
+			base.addChild(firstReplacement);
+			base.addChild(secondReplacement);
+			tui.addChild(base);
+			tui.setFocus(editor);
+			tui.start();
+			try {
+				tui.showOverlay(overlay);
+				terminal.sendInput("b");
+				await renderAndFlush(tui, terminal);
+				terminal.sendInput("n");
+				await renderAndFlush(tui, terminal);
+				terminal.sendInput("2");
+				terminal.sendInput("\r");
+				await renderAndFlush(tui, terminal);
+
+				assert.deepStrictEqual(overlay.inputs, ["b"]);
+				assert.deepStrictEqual(firstReplacement.inputs, ["n"]);
+				assert.deepStrictEqual(secondReplacement.inputs, ["2", "\r"]);
+				assert.strictEqual(overlay.focused, true);
+			} finally {
+				tui.stop();
+			}
+		});
+
+		it("removed replacement restores overlay even when overlay preFocus differs from next focus", async () => {
+			const terminal = new VirtualTerminal(80, 24);
+			const tui = new TUI(terminal);
+			const base = new Container();
+			const editor = new FocusableOverlay(["EDITOR"]);
+			const palette = new FocusableOverlay(["PALETTE"]);
+			const replacement = new FocusableOverlay(["REPLACEMENT"]);
+			const overlay = new FocusableOverlay(["OVERLAY"]);
+			overlay.handleInput = (data: string) => {
+				overlay.inputs.push(data);
+				if (data === "b") tui.setFocus(replacement);
+			};
+			replacement.handleInput = (data: string) => {
+				replacement.inputs.push(data);
+				if (data === "\r") {
+					base.clear();
+					base.addChild(editor);
+					tui.setFocus(editor);
+				}
+			};
+			base.addChild(editor);
+			base.addChild(palette);
+			base.addChild(replacement);
+			tui.addChild(base);
+			tui.setFocus(palette);
+			tui.start();
+			try {
+				tui.showOverlay(overlay);
+				terminal.sendInput("b");
+				await renderAndFlush(tui, terminal);
+				terminal.sendInput("\r");
+				terminal.sendInput("x");
+				await renderAndFlush(tui, terminal);
+
+				assert.deepStrictEqual(overlay.inputs, ["b", "x"]);
+				assert.deepStrictEqual(replacement.inputs, ["\r"]);
+				assert.deepStrictEqual(editor.inputs, []);
+				assert.strictEqual(overlay.focused, true);
+			} finally {
+				tui.stop();
+			}
+		});
+
 		it("unfocus target releases a blocked overlay while replacement remains focused", async () => {
 			const terminal = new VirtualTerminal(80, 24);
 			const tui = new TUI(terminal);
-			const editor = new FocusableOverlay(["EDITOR"]);
+			const fallback = new FocusableOverlay(["FALLBACK"]);
+			const target = new FocusableOverlay(["TARGET"]);
 			const replacement = new FocusableOverlay(["REPLACEMENT"]);
 			const overlay = new FocusableOverlay(["OVERLAY"]);
 			replacement.handleInput = (data: string) => {
 				replacement.inputs.push(data);
-				if (data === "\r") {
-					tui.setFocus(editor);
-				}
+				if (data === "\r") tui.setFocus(fallback);
 			};
 			tui.addChild(new EmptyContent());
-			tui.setFocus(editor);
 			tui.start();
 			try {
 				const overlayHandle = tui.showOverlay(overlay);
@@ -412,20 +530,21 @@ describe("TUI overlay non-capturing", () => {
 					overlay.inputs.push(data);
 					if (data === "b") {
 						tui.setFocus(replacement);
-						overlayHandle.unfocus({ target: editor });
+						overlayHandle.unfocus({ target });
 					}
 				};
+
 				terminal.sendInput("b");
 				await renderAndFlush(tui, terminal);
 				assert.strictEqual(replacement.focused, true);
-
 				terminal.sendInput("\r");
 				terminal.sendInput("x");
 				await renderAndFlush(tui, terminal);
-				assert.deepStrictEqual(replacement.inputs, ["\r"]);
+
 				assert.deepStrictEqual(overlay.inputs, ["b"]);
-				assert.deepStrictEqual(editor.inputs, ["x"]);
-				assert.strictEqual(editor.focused, true);
+				assert.deepStrictEqual(replacement.inputs, ["\r"]);
+				assert.deepStrictEqual(fallback.inputs, []);
+				assert.deepStrictEqual(target.inputs, ["x"]);
 			} finally {
 				tui.stop();
 			}
@@ -536,6 +655,54 @@ describe("TUI overlay non-capturing", () => {
 				assert.deepStrictEqual(editor.inputs, ["x"]);
 				assert.deepStrictEqual(overlay.inputs, []);
 				assert.strictEqual(editor.focused, true);
+			} finally {
+				tui.stop();
+			}
+		});
+
+		it("setFocus(null) explicitly clears visible overlay restore", async () => {
+			const terminal = new VirtualTerminal(80, 24);
+			const tui = new TUI(terminal);
+			const overlay = new FocusableOverlay(["OVERLAY"]);
+			tui.addChild(new EmptyContent());
+			tui.start();
+			try {
+				tui.showOverlay(overlay);
+				tui.setFocus(null);
+				terminal.sendInput("x");
+				await renderAndFlush(tui, terminal);
+				assert.deepStrictEqual(overlay.inputs, []);
+				assert.strictEqual(overlay.focused, false);
+			} finally {
+				tui.stop();
+			}
+		});
+
+		it("blocked replacement setFocus(null) resumes the visible overlay", async () => {
+			const terminal = new VirtualTerminal(80, 24);
+			const tui = new TUI(terminal);
+			const replacement = new FocusableOverlay(["REPLACEMENT"]);
+			const overlay = new FocusableOverlay(["OVERLAY"]);
+			replacement.handleInput = (data: string) => {
+				replacement.inputs.push(data);
+				if (data === "\r") tui.setFocus(null);
+			};
+			overlay.handleInput = (data: string) => {
+				overlay.inputs.push(data);
+				if (data === "b") tui.setFocus(replacement);
+			};
+			tui.addChild(new EmptyContent());
+			tui.start();
+			try {
+				tui.showOverlay(overlay);
+				terminal.sendInput("b");
+				await renderAndFlush(tui, terminal);
+				terminal.sendInput("\r");
+				terminal.sendInput("x");
+				await renderAndFlush(tui, terminal);
+				assert.deepStrictEqual(replacement.inputs, ["\r"]);
+				assert.deepStrictEqual(overlay.inputs, ["b", "x"]);
+				assert.strictEqual(overlay.focused, true);
 			} finally {
 				tui.stop();
 			}

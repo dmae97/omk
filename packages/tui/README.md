@@ -116,10 +116,16 @@ handle.setHidden(true);     // Temporarily hide (can show again)
 handle.setHidden(false);    // Show again after hiding
 handle.isHidden();          // Check if temporarily hidden
 handle.focus();             // Focus and bring to visual front
-handle.unfocus();           // Release focus to the next visible overlay or previous target
+handle.unfocus();           // Release focus to normal fallback
 handle.unfocus({ target: baseComponent }); // Release this overlay to a specific component
-handle.unfocus({ target: null });   // Release this overlay without focusing another component
+handle.unfocus({ target: null });   // Release this overlay and leave focus empty
 handle.isFocused();         // Check if overlay has focus
+
+handle.unfocus();
+// Overlay loses focus; TUI falls back to another visible capturing overlay or the previous focus target.
+
+handle.unfocus({ target: null });
+// Overlay loses focus; no component receives input until focus is set again.
 
 // A focused visible overlay reclaims keyboard input after temporary replacement UI
 // releases focus. If you want a specific component to receive input while overlays remain

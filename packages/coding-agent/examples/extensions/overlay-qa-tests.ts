@@ -21,7 +21,7 @@
 
 import type { ExtensionAPI, ExtensionCommandContext, Theme } from "@earendil-works/pi-coding-agent";
 import type { Component, OverlayAnchor, OverlayHandle, OverlayOptions, TUI } from "@earendil-works/pi-tui";
-import { CURSOR_MARKER, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { Input, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { spawn } from "child_process";
 
 // Global handle for toggle demo (in real code, use a more elegant pattern)
@@ -1031,77 +1031,66 @@ class TimerPanel extends BaseOverlay {
 
 // === Focus cycling demo ===
 
+type FocusPanelColor = "error" | "success" | "accent";
+type FocusPanelConfig = { label: string; color: FocusPanelColor; options: OverlayOptions };
+type FocusPanelEntry = { panel: FocusPanel; handle: OverlayHandle };
+
+const FOCUS_PANEL_CONFIGS = [
+	{ label: "Alpha", color: "error", options: { row: 2, col: 4, width: 34 } },
+	{ label: "Beta", color: "success", options: { row: 5, col: 28, width: 34 } },
+	{ label: "Gamma", color: "accent", options: { row: 8, col: 52, width: 34 } },
+] satisfies FocusPanelConfig[];
+
 class FocusDemoController extends BaseOverlay {
-	private tui: TUI;
-	private panels: FocusPanel[] = [];
-	private handles: OverlayHandle[] = [];
-	private done: () => void;
+	private readonly tui: TUI;
+	private entries: FocusPanelEntry[] = [];
+	private readonly done: () => void;
+	private closed = false;
 
 	constructor(tui: TUI, theme: Theme, done: () => void) {
 		super(theme);
 		this.tui = tui;
 		this.done = done;
-		const colors = ["error", "success", "accent"] as const;
-		const labels = ["Alpha", "Beta", "Gamma"];
-		const positions = [
-			{ row: 2, col: 4 },
-			{ row: 5, col: 28 },
-			{ row: 8, col: 52 },
-		];
 
-		for (let i = 0; i < 3; i++) {
-			const panel = new FocusPanel(theme, labels[i]!, colors[i]!, this);
-			const handle = this.tui.showOverlay(panel, {
-				nonCapturing: true,
-				...positions[i]!,
-				width: 34,
-			});
-			panel.handle = handle;
-			this.panels.push(panel);
-			this.handles.push(handle);
+		for (const config of FOCUS_PANEL_CONFIGS) {
+			const panel = new FocusPanel({ theme, config, controller: this });
+			const handle = this.tui.showOverlay(panel, { nonCapturing: true, ...config.options });
+			this.entries.push({ panel, handle });
 		}
 
 		this.focusFirstOpenPanel();
 	}
 
 	focusNext(current: FocusPanel, direction: 1 | -1 = 1): void {
-		const open = this.openPanelIndexes();
-		if (open.length === 0) {
-			this.close();
-			return;
-		}
-
-		const currentIndex = this.panels.indexOf(current);
-		const currentOpenPosition = open.indexOf(currentIndex);
-		const nextOpenPosition =
-			currentOpenPosition === -1 ? 0 : (currentOpenPosition + direction + open.length) % open.length;
-		this.handles[open[nextOpenPosition]!]!.focus();
-		this.tui.requestRender();
+		const openEntries = this.openEntries();
+		const currentOpenPosition = openEntries.findIndex((entry) => entry.panel === current);
+		if (currentOpenPosition === -1) throw new Error(`Panel ${current.label} is not open`);
+		const nextOpenPosition = (currentOpenPosition + direction + openEntries.length) % openEntries.length;
+		this.focusEntryAt(openEntries, nextOpenPosition);
 	}
 
 	dismiss(panel: FocusPanel): void {
-		const index = this.panels.indexOf(panel);
-		if (index === -1 || panel.closed) return;
+		const openEntries = this.openEntries();
+		const currentOpenPosition = openEntries.findIndex((candidate) => candidate.panel === panel);
+		if (currentOpenPosition === -1) return;
+		const entry = openEntries[currentOpenPosition];
+		if (!entry) throw new Error(`Invalid focus panel index ${currentOpenPosition}`);
+		const remainingEntries = openEntries.filter((candidate) => candidate.panel !== panel);
 
-		panel.closed = true;
-		this.handles[index]?.hide();
-		if (this.openPanelIndexes().length === 0) {
+		entry.panel.closed = true;
+		entry.handle.hide();
+		if (remainingEntries.length === 0) {
 			this.close();
 			return;
 		}
 
-		this.focusNext(panel);
+		this.focusEntryAt(remainingEntries, currentOpenPosition % remainingEntries.length);
 	}
 
 	close(): void {
-		for (let i = 0; i < this.handles.length; i++) {
-			if (!this.panels[i]?.closed) {
-				this.panels[i]!.closed = true;
-				this.handles[i]!.hide();
-			}
-		}
-		this.handles = [];
-		this.panels = [];
+		if (this.closed) return;
+		this.closed = true;
+		this.hidePanels();
 		this.done();
 	}
 
@@ -1115,7 +1104,7 @@ class FocusDemoController extends BaseOverlay {
 
 	render(width: number): string[] {
 		const th = this.theme;
-		const focused = this.panels.find((panel) => panel.handle?.isFocused())?.label ?? "Controller";
+		const focused = this.entries.find((entry) => entry.handle.isFocused())?.panel.label ?? "Controller";
 		return this.box(
 			[
 				"",
@@ -1139,36 +1128,62 @@ class FocusDemoController extends BaseOverlay {
 	}
 
 	override dispose(): void {
-		for (const handle of this.handles) handle.hide();
+		if (this.closed) return;
+		this.closed = true;
+		this.hidePanels();
 	}
 
 	private focusFirstOpenPanel(): void {
-		const firstOpen = this.openPanelIndexes()[0];
-		if (firstOpen !== undefined) {
-			this.handles[firstOpen]!.focus();
+		const firstOpen = this.openEntries()[0];
+		if (firstOpen) {
+			firstOpen.handle.focus();
 			this.tui.requestRender();
 		}
 	}
 
-	private openPanelIndexes(): number[] {
-		return this.panels.flatMap((panel, index) => (panel.closed ? [] : [index]));
+	private focusEntryAt(entries: FocusPanelEntry[], index: number): void {
+		const entry = entries[index];
+		if (!entry) throw new Error(`Invalid focus panel index ${index}`);
+		entry.handle.focus();
+		this.tui.requestRender();
+	}
+
+	private hidePanels(): void {
+		for (const entry of this.entries) {
+			if (!entry.panel.closed) {
+				entry.panel.closed = true;
+				entry.handle.hide();
+			}
+		}
+		this.entries = [];
+	}
+
+	private openEntries(): FocusPanelEntry[] {
+		return this.entries.filter((entry) => !entry.panel.closed);
 	}
 }
 
 class FocusPanel extends BaseOverlay {
-	handle: OverlayHandle | null = null;
+	focused = false;
 	closed = false;
 	readonly label: string;
-	private color: "error" | "success" | "accent";
-	private controller: FocusDemoController;
-	private text = "";
-	private cursor = 0;
+	private readonly color: FocusPanelColor;
+	private readonly controller: FocusDemoController;
+	private readonly input = new Input();
 	private inputs: string[] = [];
 
-	constructor(theme: Theme, label: string, color: "error" | "success" | "accent", controller: FocusDemoController) {
+	constructor({
+		theme,
+		config,
+		controller,
+	}: {
+		theme: Theme;
+		config: FocusPanelConfig;
+		controller: FocusDemoController;
+	}) {
 		super(theme);
-		this.label = label;
-		this.color = color;
+		this.label = config.label;
+		this.color = config.color;
 		this.controller = controller;
 	}
 
@@ -1181,67 +1196,53 @@ class FocusPanel extends BaseOverlay {
 			this.controller.dismiss(this);
 		} else if (matchesKey(data, "ctrl+c")) {
 			this.controller.close();
-		} else if (matchesKey(data, "backspace")) {
-			if (this.cursor > 0) {
-				this.text = this.text.slice(0, this.cursor - 1) + this.text.slice(this.cursor);
-				this.cursor--;
-			}
-			this.inputs.push("Backspace");
-		} else if (matchesKey(data, "left")) {
-			this.cursor = Math.max(0, this.cursor - 1);
-			this.inputs.push("←");
-		} else if (matchesKey(data, "right")) {
-			this.cursor = Math.min(this.text.length, this.cursor + 1);
-			this.inputs.push("→");
 		} else if (matchesKey(data, "return")) {
 			this.inputs.push("Enter");
 		} else if (matchesKey(data, "up")) {
 			this.inputs.push("↑");
 		} else if (matchesKey(data, "down")) {
 			this.inputs.push("↓");
-		} else if (data.length === 1 && data.charCodeAt(0) >= 32) {
-			this.text = this.text.slice(0, this.cursor) + data + this.text.slice(this.cursor);
-			this.cursor++;
-			this.inputs.push(JSON.stringify(data));
+		} else if (matchesKey(data, "left")) {
+			this.input.handleInput(data);
+			this.inputs.push("←");
+		} else if (matchesKey(data, "right")) {
+			this.input.handleInput(data);
+			this.inputs.push("→");
+		} else if (matchesKey(data, "backspace")) {
+			this.input.handleInput(data);
+			this.inputs.push("Backspace");
 		} else {
+			this.input.handleInput(data);
 			this.inputs.push(JSON.stringify(data));
 		}
 	}
 
 	render(width: number): string[] {
 		const th = this.theme;
-		const focused = this.handle?.isFocused() ?? false;
 		const innerW = Math.max(1, width - 2);
-		const border = (c: string) => th.fg(focused ? this.color : "dim", c);
+		const border = (c: string) => th.fg(this.focused ? this.color : "dim", c);
 		const padLine = (s: string) => truncateToWidth(s, innerW, "...", true);
 		const recent = this.inputs.length === 0 ? "(none)" : this.inputs.slice(-6).join(" ");
 		const lines: string[] = [];
 
+		this.input.focused = this.focused;
+		const [inputLine = ""] = this.input.render(Math.max(1, innerW - 8));
 		lines.push(border(`╭${"─".repeat(innerW)}╮`));
 		lines.push(
 			border("│") +
 				padLine(
-					` ${th.fg(this.color, this.label)} ${focused ? th.fg("success", "FOCUSED") : th.fg("dim", "visible")}`,
+					` ${th.fg(this.color, this.label)} ${this.focused ? th.fg("success", "FOCUSED") : th.fg("dim", "visible")}`,
 				) +
 				border("│"),
 		);
 		lines.push(border("│") + padLine("") + border("│"));
-		lines.push(border("│") + padLine(` Input: ${this.renderInput(focused)}`) + border("│"));
+		lines.push(border("│") + padLine(` Input: ${inputLine}`) + border("│"));
 		lines.push(border("│") + padLine(` Keys: ${recent}`) + border("│"));
 		lines.push(border("│") + padLine(th.fg("dim", " Tab/Shift+Tab focus")) + border("│"));
 		lines.push(border("│") + padLine(th.fg("dim", " Esc/Ctrl+D dismiss")) + border("│"));
 		lines.push(border(`╰${"─".repeat(innerW)}╯`));
 
 		return lines;
-	}
-
-	private renderInput(focused: boolean): string {
-		if (!focused) return this.text || this.theme.fg("dim", "(empty)");
-
-		const before = this.text.slice(0, this.cursor);
-		const cursorChar = this.cursor < this.text.length ? this.text[this.cursor] : " ";
-		const after = this.text.slice(this.cursor + 1);
-		return `${before}${CURSOR_MARKER}\x1b[7m${cursorChar}\x1b[27m${after}`;
 	}
 }
 
