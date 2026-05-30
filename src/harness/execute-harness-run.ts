@@ -1,7 +1,11 @@
 import { join } from "node:path";
 
 import type { ApprovalPolicy, RunOptions, RunResult, RunState, TaskRunner, TaskResult } from "../contracts/orchestration.js";
-import type { TaskRunContext } from "../contracts/worker-context.js";
+import type {
+  EnvMergeTraceEntry,
+  EnvMergeTraceSource,
+  TaskRunContext,
+} from "../contracts/worker-context.js";
 import type { Dag, DagNode } from "../orchestration/dag.js";
 import type { EnsemblePolicy } from "../orchestration/ensemble.js";
 import { createExecutor } from "../orchestration/executor.js";
@@ -51,15 +55,16 @@ function withHarnessEnv(runner: TaskRunner, env: Record<string, string> | undefi
     ...(runner.onThinking ? { onThinking: runner.onThinking } : {}),
     run(node, nodeEnv, signal, context) {
       const nextContext = contextWithBaseEnv(context, env);
+      const merged = mergeEnvWithTrace([
+        { source: "base", env },
+        { source: "node", env: nodeEnv },
+        { source: "worker-manifest", env: nextContext ? envFromWorkerManifest(nextContext.worker) : {} },
+      ]);
       return runner.run(
         node,
-        mergeEnvPreservingNonEmpty(
-          env,
-          nodeEnv,
-          nextContext ? envFromWorkerManifest(nextContext.worker) : {},
-        ),
+        merged.env,
         signal,
-        nextContext,
+        appendEnvMergeTrace(nextContext, merged.trace),
       );
     },
     ...(runner.fork
@@ -72,17 +77,49 @@ function withHarnessEnv(runner: TaskRunner, env: Record<string, string> | undefi
   };
 }
 
-function mergeEnvPreservingNonEmpty(
-  ...sources: Array<Record<string, string>>
-): Record<string, string> {
-  const merged: Record<string, string> = {};
-  for (const source of sources) {
-    for (const [key, value] of Object.entries(source)) {
-      if (value === "" && merged[key]) continue;
-      merged[key] = value;
+export function mergeEnvWithTrace(
+  sources: Array<{ source: EnvMergeTraceSource; env: Record<string, string> }>,
+): { env: Record<string, string>; trace: EnvMergeTraceEntry[] } {
+  const env: Record<string, string> = {};
+  const trace: EnvMergeTraceEntry[] = [];
+
+  for (const { source, env: sourceEnv } of sources) {
+    for (const [key, next] of Object.entries(sourceEnv)) {
+      const previous = env[key];
+      if (next === "" && previous) {
+        trace.push({ key, previous, next, source, action: "preserve-non-empty" });
+        continue;
+      }
+      if (next === "" && previous === undefined) {
+        trace.push({ key, next, source, action: "drop-empty" });
+        continue;
+      }
+      env[key] = next;
+      trace.push({
+        key,
+        previous,
+        next,
+        source,
+        action: previous === undefined ? "set" : "overwrite",
+      });
     }
   }
-  return merged;
+
+  return { env, trace };
+}
+
+function appendEnvMergeTrace(
+  context: TaskRunContext | undefined,
+  envMergeTrace: EnvMergeTraceEntry[],
+): TaskRunContext | undefined {
+  if (!context) return context;
+  return {
+    ...context,
+    diagnostics: {
+      ...context.diagnostics,
+      envMergeTrace,
+    },
+  };
 }
 
 export async function executeHarnessRun(input: ExecuteHarnessRunInput): Promise<RunResult> {

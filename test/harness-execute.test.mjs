@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { executeHarnessRun } from "../dist/harness/execute-harness-run.js";
+import { executeHarnessRun, mergeEnvWithTrace } from "../dist/harness/execute-harness-run.js";
 import { createDag } from "../dist/orchestration/dag.js";
 
 async function withTempRoot(fn) {
@@ -161,6 +161,74 @@ test("executeHarnessRun applies worker manifest env after base and node env", as
         contextModel: "manifest-model",
       },
     ]);
+  });
+});
+
+test("mergeEnvWithTrace preserves non-empty compiled DAG env values", () => {
+  const { env, trace } = mergeEnvWithTrace([
+    {
+      source: "base",
+      env: {
+        OMK_RUN_ID: "run-1",
+        OMK_PROVIDER_MODEL: "deepseek-v4-pro",
+        OMK_MCP_CONFIG_FILE: "/tmp/mcp.json",
+      },
+    },
+    {
+      source: "node",
+      env: {
+        OMK_PROVIDER_MODEL: "",
+        OMK_MCP_CONFIG_FILE: "",
+        OMK_ROUTE_RATIONALE: "",
+      },
+    },
+    {
+      source: "worker-manifest",
+      env: {
+        OMK_WORKER_MANIFEST_NODE_ID: "worker-1",
+        OMK_PROVIDER_PREFERRED: "deepseek",
+      },
+    },
+  ]);
+
+  assert.equal(env.OMK_PROVIDER_MODEL, "deepseek-v4-pro");
+  assert.equal(env.OMK_MCP_CONFIG_FILE, "/tmp/mcp.json");
+  assert.equal(env.OMK_ROUTE_RATIONALE, undefined);
+  assert.equal(trace.some((entry) => entry.key === "OMK_PROVIDER_MODEL" && entry.action === "preserve-non-empty"), true);
+  assert.equal(trace.some((entry) => entry.key === "OMK_ROUTE_RATIONALE" && entry.action === "drop-empty"), true);
+});
+
+test("executeHarnessRun exposes env merge trace in TaskRunContext diagnostics", async () => {
+  await withTempRoot(async (root) => {
+    const calls = [];
+    const result = await executeHarnessRun({
+      root,
+      runId: "harness-env-trace",
+      dag: createSingleNodeDag("env-trace-node"),
+      runner: {
+        async run(_node, env, _signal, context) {
+          calls.push({
+            providerModel: env.OMK_PROVIDER_MODEL,
+            preservedModel: context?.diagnostics?.envMergeTrace?.some(
+              (entry) => entry.key === "OMK_PROVIDER_MODEL" && entry.action === "preserve-non-empty",
+            ),
+          });
+          return {
+            success: true,
+            stdout: "## Summary\nok\n\n## Evidence\nok",
+            stderr: "",
+          };
+        },
+      },
+      env: {
+        OMK_PROVIDER_MODEL: "compiled-model",
+      },
+      workers: 1,
+      approvalPolicy: "block",
+    });
+
+    assert.equal(result.success, true);
+    assert.deepEqual(calls, [{ providerModel: "compiled-model", preservedModel: true }]);
   });
 });
 

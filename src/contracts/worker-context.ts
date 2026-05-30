@@ -58,7 +58,23 @@ export interface WorkerManifest {
   readonly createdAt: string;
 }
 
+export type EnvMergeTraceSource = "base" | "node" | "worker-manifest";
+export type EnvMergeTraceAction = "set" | "overwrite" | "preserve-non-empty" | "drop-empty";
+
+export interface EnvMergeTraceEntry {
+  readonly key: string;
+  readonly previous?: string;
+  readonly next: string;
+  readonly source: EnvMergeTraceSource;
+  readonly action: EnvMergeTraceAction;
+}
+
+export interface TaskRunDiagnostics {
+  readonly envMergeTrace?: readonly EnvMergeTraceEntry[];
+}
+
 export interface TaskRunContext {
   readonly goal: GoalExecutionContext;
   readonly worker: WorkerManifest;
+  readonly diagnostics?: TaskRunDiagnostics;
 }
