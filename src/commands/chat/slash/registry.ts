@@ -1,17 +1,19 @@
 import type { ParsedSlashInput } from "./parser.js";
-import type { RegisteredSlashCommandSpec } from "./types.js";
+import type { SlashCommandSpec } from "./types.js";
 
 export class SlashCommandRegistry {
-  private readonly specs: RegisteredSlashCommandSpec[];
-  private readonly byName = new Map<string, RegisteredSlashCommandSpec>();
+  private readonly specs: SlashCommandSpec[];
+  private readonly byName = new Map<string, SlashCommandSpec>();
 
-  constructor(specs: readonly RegisteredSlashCommandSpec[] = []) {
+  constructor(specs: readonly SlashCommandSpec[] = []) {
     this.specs = [];
     this.registerMany(specs);
   }
 
-  register(spec: RegisteredSlashCommandSpec): void {
-    const names = [spec.name, ...spec.aliases].map((name) => name.toLowerCase());
+  register(spec: SlashCommandSpec): void {
+    const names = [spec.name, ...spec.aliases].map((name) =>
+      name.toLowerCase(),
+    );
     for (const name of names) {
       if (!name.startsWith("/") && !name.startsWith(":")) {
         throw new Error(`Invalid slash command name: ${name}`);
@@ -24,23 +26,25 @@ export class SlashCommandRegistry {
     for (const name of names) this.byName.set(name, spec);
   }
 
-  registerMany(specs: readonly RegisteredSlashCommandSpec[]): void {
+  registerMany(specs: readonly SlashCommandSpec[]): void {
     for (const spec of specs) this.register(spec);
   }
 
-  find(command: string): RegisteredSlashCommandSpec | undefined {
+  find(command: string): SlashCommandSpec | undefined {
     return this.byName.get(command.toLowerCase());
   }
 
-  resolve(parsed: ParsedSlashInput): RegisteredSlashCommandSpec | undefined {
+  resolve(parsed: ParsedSlashInput): SlashCommandSpec | undefined {
     return this.find(parsed.command);
   }
 
-  list(): readonly RegisteredSlashCommandSpec[] {
+  list(): readonly SlashCommandSpec[] {
     return this.specs;
   }
 }
 
-export function createSlashCommandRegistry(specs: readonly RegisteredSlashCommandSpec[]): SlashCommandRegistry {
+export function createSlashCommandRegistry(
+  specs: readonly SlashCommandSpec[],
+): SlashCommandRegistry {
   return new SlashCommandRegistry(specs);
 }

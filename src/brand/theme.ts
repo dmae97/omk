@@ -4,7 +4,11 @@ function rgb(r: number, g: number, b: number): string {
   return `${ESC}38;2;${r};${g};${b}m`;
 }
 
-export type OmkBrandThemeName = "system24" | "green-rain" | "plain" | "high-contrast";
+export type OmkBrandThemeName =
+  | "system24"
+  | "green-rain"
+  | "plain"
+  | "high-contrast";
 export type OmkTuiMotion = "off" | "low" | "auto" | "full";
 
 export interface OmkBrandTheme {
@@ -97,20 +101,104 @@ export const GREEN_RAIN_THEME: OmkBrandTheme = {
   },
 };
 
+export const PLAIN_THEME: OmkBrandTheme = {
+  name: "plain",
+  label: "OMK Plain",
+  tagline: "Provider-neutral agent console.",
+  motto: "Route the work. Verify the evidence.",
+  symbols: {
+    prompt: ">",
+    active: ">",
+    done: "ok",
+    failed: "x",
+    pending: "-",
+    signal: "*",
+  },
+  colors: {
+    border: "",
+    borderHot: "",
+    text: "",
+    muted: "",
+    primary: "",
+    success: "",
+    warning: "",
+    danger: "",
+    info: "",
+  },
+  motion: {
+    rain: false,
+    spinner: "none",
+  },
+};
+
+export const HIGH_CONTRAST_THEME: OmkBrandTheme = {
+  name: "high-contrast",
+  label: "OMK High Contrast",
+  tagline: "High-contrast agent console.",
+  motto: "Route the work. Verify the evidence.",
+  symbols: {
+    prompt: "›",
+    active: "▶",
+    done: "✓",
+    failed: "✕",
+    pending: "□",
+    signal: "◆",
+  },
+  colors: {
+    border: rgb(210, 210, 210),
+    borderHot: rgb(255, 255, 255),
+    text: rgb(255, 255, 255),
+    muted: rgb(210, 210, 210),
+    primary: rgb(255, 255, 255),
+    success: rgb(140, 255, 140),
+    warning: rgb(255, 230, 120),
+    danger: rgb(255, 120, 120),
+    info: rgb(140, 220, 255),
+  },
+  motion: {
+    rain: false,
+    spinner: "braille",
+  },
+};
+
 export function resolveOmkBrandTheme(name: string | undefined): OmkBrandTheme {
   const normalized = name?.trim().toLowerCase();
-  if (normalized === "green-rain" || normalized === "green" || normalized === "rain") return GREEN_RAIN_THEME;
+  if (
+    normalized === "green-rain" ||
+    normalized === "green" ||
+    normalized === "rain"
+  )
+    return GREEN_RAIN_THEME;
+  if (normalized === "plain") return PLAIN_THEME;
+  if (normalized === "high-contrast" || normalized === "contrast")
+    return HIGH_CONTRAST_THEME;
   return SYSTEM24_THEME;
 }
 
-export function shouldUseAnsiColor(env: NodeJS.ProcessEnv = process.env): boolean {
+export function shouldUseAnsiColor(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
   if (env.NO_COLOR !== undefined || env.TERM === "dumb") return false;
   return true;
 }
 
-export function resolveTuiMotion(env: NodeJS.ProcessEnv = process.env): OmkTuiMotion {
-  if (env.NO_COLOR !== undefined || env.CI === "true" || env.CI === "1" || env.TERM === "dumb") return "off";
+export function resolveTuiMotion(
+  env: NodeJS.ProcessEnv = process.env,
+): OmkTuiMotion {
+  if (
+    env.NO_COLOR !== undefined ||
+    env.CI === "true" ||
+    env.CI === "1" ||
+    env.TERM === "dumb"
+  )
+    return "off";
   const normalized = env.OMK_ANIMATION?.trim().toLowerCase();
-  if (normalized === "off" || normalized === "low" || normalized === "auto" || normalized === "full") return normalized;
+  if (
+    normalized === "off" ||
+    normalized === "low" ||
+    normalized === "auto" ||
+    normalized === "full"
+  )
+    return normalized;
   return "auto";
 }

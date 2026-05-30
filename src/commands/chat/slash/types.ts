@@ -1,5 +1,8 @@
 import type { CliUiEvent } from "../../../cli/ui/event.js";
-import type { NativeRootLoopInput, NativeRootSessionState } from "../native-root-loop.js";
+import type {
+  NativeRootLoopInput,
+  NativeRootSessionState,
+} from "../native-root-loop.js";
 import type { ParsedSlashArgs } from "./parser.js";
 
 export type SlashCommandGroup =
@@ -15,6 +18,14 @@ export interface SlashCommandContext {
   state: NativeRootSessionState;
   renderer?: NativeRootLoopInput["renderer"];
   env: Record<string, string>;
+  services?: SlashCommandServices;
+}
+
+export interface SlashCommandServices {
+  runParallelTurn?: (
+    prompt: string,
+    renderer?: NativeRootLoopInput["renderer"],
+  ) => Promise<number>;
 }
 
 export interface SlashCommandResult {
@@ -28,7 +39,7 @@ export interface SlashCommandResult {
 
 export type SlashCommandHandler = (
   ctx: SlashCommandContext,
-  args: ParsedSlashArgs
+  args: ParsedSlashArgs,
 ) => void | SlashCommandResult | Promise<void | SlashCommandResult>;
 
 export interface SlashCommandSpec {
@@ -40,16 +51,3 @@ export interface SlashCommandSpec {
   examples: readonly string[];
   handler: SlashCommandHandler;
 }
-
-export interface LegacySlashCommandSpec {
-  name: string;
-  aliases: readonly string[];
-  help: string;
-  group?: SlashCommandGroup;
-  summary?: string;
-  usage?: string;
-  examples?: readonly string[];
-  handler: (args: string) => void | Promise<void>;
-}
-
-export type RegisteredSlashCommandSpec = SlashCommandSpec | LegacySlashCommandSpec;
