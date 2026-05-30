@@ -4,6 +4,10 @@ import { formatOmkVersionFooter, getOmkVersionSync } from "../util/version.js";
 import { configureRootProgram, runRootOmkControlPlane } from "./root.js";
 import { registerCliCommands } from "./command-registry.js";
 import { createCliWriter } from "./runtime/cli-writer.js";
+import {
+  extractNaturalPromptInvocation,
+  knownCommandNames,
+} from "../ux/natural-entrypoint.js";
 import type { OutputProfile } from "./runtime/types.js";
 
 export function createOmkProgram(): Command {
@@ -38,6 +42,16 @@ export async function runCli(argv: readonly string[] = process.argv): Promise<vo
       args.includes("-V")
     ) {
       await program.parseAsync([...argv]);
+      return;
+    }
+
+    const naturalPrompt = extractNaturalPromptInvocation(args, knownCommandNames(program));
+    if (naturalPrompt) {
+      const { doCommand } = await import("../commands/do.js");
+      const result = await doCommand(naturalPrompt.prompt, naturalPrompt.options);
+      if (!result.success && process.exitCode === undefined) {
+        process.exitCode = 1;
+      }
       return;
     }
 

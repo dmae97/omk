@@ -23,6 +23,40 @@ function mergeWorkflowOptions<T extends WorkflowCommandOptions>(program: Command
 
 export function registerWorkflowCommands(program: Command): void {
   program
+    .command("do <prompt...>")
+    .description("Run a natural-language OMK coding task")
+    .option("--mode <mode>", "UX mode: plan | guided | act | review | autopilot | safe")
+    .option("--provider <provider>", "provider policy (auto | kimi | codex | deepseek | commandcode | opencode | qwen | openrouter)", "auto")
+    .option("--model <model>", "provider model or provider/model override")
+    .option("--mcp-scope <all|project|none>", "MCP scope for this task (all | project | none)")
+    .option("--workers <n>", "Number of workers (integer or 'auto')", "auto")
+    .option("--dry-run", "Compile the task plan and artifacts without executing")
+    .option("--json", "Print JSON summary")
+    .option("--no-watch", "Disable live watch UI")
+    .action(async (promptParts: string[], options) => {
+      const mergedOptions = mergeWorkflowOptions(program, options);
+      const { doCommand } = await import("../commands/do.js");
+      const result = await doCommand(promptParts.join(" "), mergedOptions);
+      if (!result.success && process.exitCode === undefined) {
+        process.exitCode = 1;
+      }
+    });
+
+  program
+    .command("why")
+    .description("Explain why the latest or selected OMK run is stuck")
+    .option("--run-id <id>", "Run id to explain")
+    .option("--json", "Print JSON loop decision")
+    .action(async (options) => {
+      const globalOpts = program.opts();
+      const { whyCommand } = await import("../commands/why.js");
+      await whyCommand({
+        ...options,
+        runId: options.runId ?? globalOpts.runId,
+      });
+    });
+
+  program
     .command("plan <goal>")
     .description(t("cmd.planDesc"))
     .option("--thinking <mode>", "thinking mode", "enabled")
