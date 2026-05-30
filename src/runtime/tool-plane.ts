@@ -3,6 +3,8 @@ import { isAbsolute, relative, resolve, sep } from "path";
 
 import { collectMcpConfigs, getProjectRootAsync, getUserHome, writeBuiltinMcpConfig, writeRuntimeMcpConfig } from "../util/fs.js";
 import type { OmkRuntimeScope } from "../util/resource-profile.js";
+import { stableValueHash } from "./stable-json.js";
+import { type OmkToolPrefixSpec, sortToolPrefixSpecs } from "./tool-registry-contract.js";
 
 export interface OmkToolPlaneDiagnostic {
   readonly level: "warning" | "error";
@@ -18,6 +20,8 @@ export interface OmkToolPlaneManifest {
   readonly skills: readonly string[];
   readonly hooks: readonly string[];
   readonly tools: readonly string[];
+  readonly toolContracts: readonly OmkToolPrefixSpec[];
+  readonly toolSpecsHash: string;
   readonly runtimeOwnsMcp: false;
   readonly requiresRuntimeMcp: boolean;
   readonly diagnostics: readonly OmkToolPlaneDiagnostic[];
@@ -29,6 +33,7 @@ export interface BuildOmkToolPlaneManifestInput {
   readonly skills?: readonly string[];
   readonly hooks?: readonly string[];
   readonly tools?: readonly string[];
+  readonly toolContracts?: readonly OmkToolPrefixSpec[];
   readonly requiresRuntimeMcp?: boolean;
 }
 
@@ -42,6 +47,7 @@ export async function buildOmkToolPlaneManifest(
   if (requiresRuntimeMcp && (diagnostics.some((diagnostic) => diagnostic.level === "error") || !resolved.mcpConfigFile || runtimeRead.servers.length === 0)) {
     throw new Error(formatRequiredRuntimeMcpError(diagnostics, resolved.mcpConfigFile, runtimeRead.servers));
   }
+  const toolContracts = sortToolPrefixSpecs(input.toolContracts ?? []);
   const manifest = {
     owner: "omk" as const,
     mcpServers: runtimeRead.servers,
@@ -49,6 +55,8 @@ export async function buildOmkToolPlaneManifest(
     skills: unique(input.skills ?? []),
     hooks: unique(input.hooks ?? []),
     tools: unique(input.tools ?? []),
+    toolContracts,
+    toolSpecsHash: stableValueHash(toolContracts),
     runtimeOwnsMcp: false as const,
     requiresRuntimeMcp,
     diagnostics,

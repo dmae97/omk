@@ -62,6 +62,48 @@ export {
 } from "./tool-proxy.js";
 
 export {
+  type JsonObject,
+  type JsonPrimitive,
+  type JsonValue,
+  compareCodepoints,
+  stableJsonStringify,
+  sha256Hex,
+  stableValueHash,
+} from "./stable-json.js";
+
+export {
+  type OmkToolContext,
+  type OmkToolDefinition,
+  type OmkToolPrefixSpec,
+  type OmkToolCall,
+  type OmkToolExecutionBatch,
+  type OmkToolExecutionBatchKind,
+  toToolPrefixSpec,
+  sortToolPrefixSpecs,
+  toSortedToolPrefixSpecs,
+  isToolReadOnly,
+  createToolExecutionBatches,
+} from "./tool-registry-contract.js";
+
+export {
+  type ImmutablePrefixInput,
+  type ImmutablePrefixHashes,
+  type ImmutablePrefix,
+  type AppendOnlyLogRole,
+  type AppendOnlyLogEntry,
+  type VolatileScratch,
+  type CacheDiagnosticLevel,
+  type CacheDiagnosticCode,
+  type CacheDiagnostic,
+  type OmkSessionState,
+  buildImmutablePrefix,
+  createOmkSessionState,
+  appendLogEntry,
+  resetScratch,
+  diffImmutablePrefix,
+} from "./cache-stable-session.js";
+
+export {
   type KimiApiRuntimeOptions,
   createKimiApiRuntime,
   /** @deprecated Use KimiApiRuntimeOptions instead */
