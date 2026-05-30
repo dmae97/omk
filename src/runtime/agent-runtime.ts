@@ -91,8 +91,18 @@ export interface AgentContext {
   onOutput?: (text: string) => void;
 }
 
+export interface ToolManifestEntry {
+  readonly name: string;
+  readonly description: string;
+  readonly inputSchema: unknown;
+  readonly readOnly?: boolean;
+  readonly parallelSafe?: boolean;
+  readonly stormExempt?: boolean;
+  readonly skipRetentionSave?: boolean;
+}
+
 export interface ToolManifest {
-  available: Array<{ name: string; description: string; inputSchema: unknown }>;
+  available: ToolManifestEntry[];
   mcpServers?: string[];
   skills?: string[];
   hooks?: string[];

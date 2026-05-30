@@ -86,6 +86,30 @@ export {
 } from "./tool-registry-contract.js";
 
 export {
+  type ProviderToolContractView,
+  type ProviderFunctionToolPayload,
+  type ProviderToolPayloadBuildResult,
+  buildProviderToolPayload,
+  assertToolPlaneHashMatchesPayload,
+} from "./provider-tool-contracts.js";
+
+export {
+  type RawToolCall,
+  type RepairedToolCall,
+  type ToolCallRepairInput,
+  type ToolCallStormState,
+  type ToolCallRepairResult,
+  repairToolCalls,
+  repairTruncatedJson,
+  reNestFlatArgs,
+} from "./tool-call-repair.js";
+
+export {
+  type ToolDispatchResult,
+  dispatchToolCallsByContract,
+} from "./tool-dispatch-contracts.js";
+
+export {
   type ImmutablePrefixInput,
   type ImmutablePrefixHashes,
   type ImmutablePrefix,

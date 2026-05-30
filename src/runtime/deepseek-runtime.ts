@@ -16,6 +16,7 @@ import type {
 } from "./agent-runtime.js";
 import type { ContextCapsule } from "./context-capsule.js";
 import { capsuleToTask } from "./context-broker-converter.js";
+import { buildProviderToolPayload } from "./provider-tool-contracts.js";
 
 interface DeepSeekChatMessage {
   role: "system" | "user" | "assistant" | "tool";
@@ -200,7 +201,8 @@ export class DeepSeekRuntime implements AgentRuntime {
     }
     messages.push({ role: "user", content: task.prompt });
 
-    const tools: DeepSeekTool[] = [];
+    const providerTools = buildProviderToolPayload([]);
+    const tools: DeepSeekTool[] = providerTools.tools as DeepSeekTool[];
 
     const body: Record<string, unknown> = {
       model: task.context.providerModel ?? task.context.env?.OMK_PROVIDER_MODEL ?? this.model,
@@ -239,17 +241,27 @@ export class DeepSeekRuntime implements AgentRuntime {
           output: "",
           exitCode: 1,
           thinking: "",
-          metadata: { error: `DeepSeek API error ${response.status}: ${errorText}` },
+          metadata: {
+            error: `DeepSeek API error ${response.status}: ${errorText}`,
+            toolPlaneHash: providerTools.toolPlaneHash,
+            toolContracts: providerTools.contracts,
+          },
         };
       }
 
       if (task.capabilities.streaming === true) {
-        return this.parseStreamResponse(response);
+        return this.parseStreamResponse(response, {
+          toolPlaneHash: providerTools.toolPlaneHash,
+          toolContracts: providerTools.contracts,
+        });
       }
 
       const contentType = response.headers.get("content-type") ?? "";
       if (contentType.includes("text/event-stream")) {
-        return this.parseStreamResponse(response);
+        return this.parseStreamResponse(response, {
+          toolPlaneHash: providerTools.toolPlaneHash,
+          toolContracts: providerTools.contracts,
+        });
       }
 
       const payload = (await response.json()) as DeepSeekResponse;
@@ -269,6 +281,12 @@ export class DeepSeekRuntime implements AgentRuntime {
               totalTokens: usage.total_tokens,
             }
           : undefined,
+        metadata: {
+          model: payload.model,
+          finishReason: choice?.finish_reason ?? null,
+          toolPlaneHash: providerTools.toolPlaneHash,
+          toolContracts: providerTools.contracts,
+        },
       };
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
@@ -288,7 +306,10 @@ export class DeepSeekRuntime implements AgentRuntime {
     }
   }
 
-  private async parseStreamResponse(response: Response): Promise<AgentResult> {
+  private async parseStreamResponse(
+    response: Response,
+    metadata: { toolPlaneHash: string; toolContracts: unknown },
+  ): Promise<AgentResult> {
     const reader = response.body?.getReader();
     if (!reader) {
       return {
@@ -351,6 +372,7 @@ export class DeepSeekRuntime implements AgentRuntime {
         totalTokens > 0
           ? { inputTokens, outputTokens, totalTokens }
           : undefined,
+      metadata,
     };
   }
 }

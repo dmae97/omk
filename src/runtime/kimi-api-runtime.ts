@@ -17,6 +17,8 @@ import type {
 } from "./agent-runtime.js";
 import type { ContextCapsule } from "./context-capsule.js";
 import { capsuleToTask } from "./context-broker-converter.js";
+import { buildProviderToolPayload } from "./provider-tool-contracts.js";
+import { repairToolCalls, type ToolCallRepairResult } from "./tool-call-repair.js";
 
 interface MoonshotChatMessage {
   role: "system" | "user" | "assistant" | "tool";
@@ -93,6 +95,14 @@ interface MoonshotNonStreamResponse {
   };
 }
 
+interface ToolCallMapResult {
+  readonly toolCalls?: readonly ToolCallRecord[];
+  readonly repair: {
+    readonly suppressed: readonly string[];
+    readonly ignored: readonly string[];
+  };
+}
+
 function mapToolCalls(
   apiToolCalls:
     | Array<{
@@ -100,24 +110,40 @@ function mapToolCalls(
         type: "function";
         function: { name: string; arguments: string };
       }>
-    | undefined
-): ToolCallRecord[] | undefined {
-  if (!apiToolCalls || apiToolCalls.length === 0) return undefined;
-  return apiToolCalls.map((tc) => {
-    let input: unknown;
-    try {
-      input = JSON.parse(tc.function.arguments) as unknown;
-    } catch {
-      input = tc.function.arguments;
-    }
-    return {
+    | undefined,
+  context: {
+    readonly allowedToolNames: ReadonlySet<string>;
+    readonly toolContracts: readonly { name: string }[];
+    readonly reasoningContent?: string;
+    readonly visibleContent?: string;
+  },
+): ToolCallMapResult {
+  const repaired: ToolCallRepairResult = repairToolCalls({
+    declaredCalls: (apiToolCalls ?? []).map((tc) => ({
+      id: tc.id,
       name: tc.function.name,
-      input,
-      output: undefined,
-      durationMs: 0,
-      success: false,
-    };
+      arguments: tc.function.arguments,
+    })),
+    reasoningContent: context.reasoningContent,
+    visibleContent: context.visibleContent,
+    allowedToolNames: context.allowedToolNames,
+    toolContracts: context.toolContracts,
   });
+  return {
+    toolCalls: repaired.calls.length > 0
+      ? repaired.calls.map((call) => ({
+          name: call.name,
+          input: call.input,
+          output: undefined,
+          durationMs: 0,
+          success: false,
+        }))
+      : undefined,
+    repair: {
+      suppressed: repaired.suppressed,
+      ignored: repaired.ignored,
+    },
+  };
 }
 
 export interface KimiApiRuntimeOptions {
@@ -251,16 +277,10 @@ export class KimiApiRuntime implements AgentRuntime {
     }
     messages.push({ role: "user", content: task.prompt });
 
-    const tools: MoonshotTool[] = task.capabilities.toolCalling
-      ? task.tools.available.map((t) => ({
-          type: "function",
-          function: {
-            name: t.name,
-            description: t.description,
-            parameters: t.inputSchema,
-          },
-        }))
-      : [];
+    const providerTools = task.capabilities.toolCalling
+      ? buildProviderToolPayload(task.tools.available)
+      : buildProviderToolPayload([]);
+    const tools: MoonshotTool[] = providerTools.tools as MoonshotTool[];
 
     const useStreaming = task.capabilities.streaming ?? true;
 
@@ -300,12 +320,18 @@ export class KimiApiRuntime implements AgentRuntime {
       }
 
       if (useStreaming) {
-        return this.parseStreamResponse(response);
+        return this.parseStreamResponse(response, {
+          toolPlaneHash: providerTools.toolPlaneHash,
+          toolContracts: providerTools.contracts,
+        });
       }
 
       const contentType = response.headers.get("content-type") ?? "";
       if (contentType.includes("text/event-stream")) {
-        return this.parseStreamResponse(response);
+        return this.parseStreamResponse(response, {
+          toolPlaneHash: providerTools.toolPlaneHash,
+          toolContracts: providerTools.contracts,
+        });
       }
 
       const payload = (await response.json()) as MoonshotNonStreamResponse;
@@ -313,6 +339,12 @@ export class KimiApiRuntime implements AgentRuntime {
       const content = choice?.message?.content ?? "";
       const reasoning = choice?.message?.reasoning_content ?? "";
       const usage = payload.usage;
+      const mappedToolCalls = mapToolCalls(choice?.message?.tool_calls, {
+        allowedToolNames: new Set(providerTools.contracts.map((contract) => contract.name)),
+        toolContracts: providerTools.contracts,
+        reasoningContent: reasoning,
+        visibleContent: content,
+      });
 
       return {
         output: content,
@@ -325,8 +357,14 @@ export class KimiApiRuntime implements AgentRuntime {
               totalTokens: usage.total_tokens,
             }
           : undefined,
-        toolCalls: mapToolCalls(choice?.message?.tool_calls),
-        metadata: { model: payload.model, finishReason: choice?.finish_reason ?? null },
+        toolCalls: mappedToolCalls.toolCalls,
+        metadata: {
+          model: payload.model,
+          finishReason: choice?.finish_reason ?? null,
+          toolPlaneHash: providerTools.toolPlaneHash,
+          toolContracts: providerTools.contracts,
+          toolCallRepair: mappedToolCalls.repair,
+        },
       };
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
@@ -346,7 +384,10 @@ export class KimiApiRuntime implements AgentRuntime {
     }
   }
 
-  private async parseStreamResponse(response: Response): Promise<AgentResult> {
+  private async parseStreamResponse(
+    response: Response,
+    metadata: { toolPlaneHash: string; toolContracts: readonly { name: string }[] },
+  ): Promise<AgentResult> {
     const reader = response.body?.getReader();
     if (!reader) {
       return {
@@ -441,6 +482,13 @@ export class KimiApiRuntime implements AgentRuntime {
       }
     }
 
+    const mappedToolCalls = mapToolCalls(streamedToolCalls, {
+      allowedToolNames: new Set(metadata.toolContracts.map((contract) => contract.name)),
+      toolContracts: metadata.toolContracts,
+      reasoningContent: reasoning,
+      visibleContent: output,
+    });
+
     return {
       output,
       exitCode: 0,
@@ -449,8 +497,13 @@ export class KimiApiRuntime implements AgentRuntime {
         totalTokens > 0
           ? { inputTokens, outputTokens, totalTokens }
           : undefined,
-      toolCalls: mapToolCalls(streamedToolCalls),
-      metadata: { model, finishReason },
+      toolCalls: mappedToolCalls.toolCalls,
+      metadata: {
+        model,
+        finishReason,
+        ...metadata,
+        toolCallRepair: mappedToolCalls.repair,
+      },
     };
   }
 }
