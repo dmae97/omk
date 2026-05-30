@@ -43,6 +43,9 @@ test("evaluateLoopDecision closes when all required gates pass", () => {
   });
 
   assert.equal(decision.action, "close");
+  assert.deepEqual(decision.failedNodes, []);
+  assert.deepEqual(decision.blockedNodes, []);
+  assert.deepEqual(decision.pendingNodes, []);
   assert.equal(decision.failedGates.length, 0);
   assert.equal(decision.requiredEvidenceMissing.length, 0);
 });
@@ -73,6 +76,9 @@ test("evaluateLoopDecision replans on failed nodes and blocks at max iterations"
     maxIterations: 2,
   });
   assert.equal(replan.action, "replan");
+  assert.deepEqual(replan.failedNodes, ["worker-1"]);
+  assert.deepEqual(replan.blockedNodes, []);
+  assert.deepEqual(replan.pendingNodes, []);
   assert.deepEqual(replan.failedGates, ["worker-1:command-pass"]);
 
   const blocked = evaluateLoopDecision({
@@ -83,6 +89,38 @@ test("evaluateLoopDecision replans on failed nodes and blocks at max iterations"
     maxIterations: 2,
   });
   assert.equal(blocked.action, "block");
+  assert.deepEqual(blocked.failedNodes, ["worker-1"]);
+});
+
+test("evaluateLoopDecision defaults to a practical three-iteration loop window", () => {
+  const state = runState([
+    {
+      id: "worker-1",
+      name: "worker",
+      role: "coder",
+      dependsOn: [],
+      status: "failed",
+      retries: 1,
+      maxRetries: 1,
+      outputs: [{ name: "worker output", gate: "summary" }],
+      evidence: [{ gate: "summary", passed: false, message: "summary missing" }],
+    },
+  ]);
+
+  const firstFailure = evaluateLoopDecision({
+    runId: "run-loop",
+    inputId: "input-loop",
+    runState: state,
+  });
+  assert.equal(firstFailure.action, "replan");
+
+  const thirdFailure = evaluateLoopDecision({
+    runId: "run-loop",
+    inputId: "input-loop",
+    runState: state,
+    iteration: 3,
+  });
+  assert.equal(thirdFailure.action, "block");
 });
 
 test("persistLoopArtifacts writes loop state decisions and next input", async () => {
