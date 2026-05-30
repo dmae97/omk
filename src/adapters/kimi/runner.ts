@@ -21,6 +21,7 @@ import { checkCommand, resolveKimiBin } from "../../util/shell.js";
 import { defaultScopedRoleAgentFile, writeScopedAgentFile } from "../../util/scoped-agent-file.js";
 import { terminateProcessTree, type ProcessTreeTarget } from "../../util/process-tree.js";
 import { sanitizeUserVisibleOutput } from "../../util/user-visible-output.js";
+import { isDeniedChildEnvName } from "../../runtime/child-env.js";
 
 const REQUIRED_KIMI_ENV_KEYS = new Set([
   "PATH",
@@ -58,6 +59,7 @@ const TRUSTED_KIMI_EXPLICIT_SECRET_ENV_PATTERN = /^(1|true|yes)$/i;
 const KIMI_EXPLICIT_SECRET_ENV_WARNED = new Set<string>();
 
 function isAllowedInheritedKimiEnvKey(key: string): boolean {
+  if (isDeniedChildEnvName(key)) return false;
   if (NON_SECRET_KIMI_METADATA_ENV_KEYS.has(key)) return true;
   if (SECRET_ENV_KEY_PATTERN.test(key)) return false;
   return REQUIRED_KIMI_ENV_KEYS.has(key) || key.startsWith("LC_") || key.startsWith("KIMI_") || key.startsWith("OMK_");
@@ -72,10 +74,6 @@ function isTrustedExplicitSecretEnvEnabled(env: Record<string, string | undefine
   return TRUSTED_KIMI_EXPLICIT_SECRET_ENV_PATTERN.test(env.OMK_TRUST_KIMI_EXPLICIT_SECRET_ENV ?? "");
 }
 
-function isStrictExplicitSecretEnvEnabled(env: Record<string, string | undefined>): boolean {
-  return TRUSTED_KIMI_EXPLICIT_SECRET_ENV_PATTERN.test(env.OMK_STRICT_KIMI_EXPLICIT_ENV ?? "");
-}
-
 function warnExplicitSecretLikeKimiEnvKey(
   key: string,
   context: string,
@@ -86,8 +84,7 @@ function warnExplicitSecretLikeKimiEnvKey(
   KIMI_EXPLICIT_SECRET_ENV_WARNED.add(warningKey);
   onWarning(
     `[omk] Warning: explicit Kimi child env includes secret-like key "${key}" in ${context}; ` +
-      "explicit env is trusted input. Set OMK_STRICT_KIMI_EXPLICIT_ENV=1 to drop secret-like explicit keys unless " +
-      "OMK_TRUST_KIMI_EXPLICIT_SECRET_ENV=1 is also set."
+      "the key was dropped. Set OMK_TRUST_KIMI_EXPLICIT_SECRET_ENV=1 only inside an isolated runner to pass it through."
   );
 }
 
@@ -110,7 +107,6 @@ export function buildSafeKimiChildEnv(
     }
   }
   const trustedExplicitSecretEnv = isTrustedExplicitSecretEnvEnabled({ ...inheritedEnv, ...explicitEnv, ...forcedEnv });
-  const strictExplicitSecretEnv = isStrictExplicitSecretEnvEnabled({ ...inheritedEnv, ...explicitEnv, ...forcedEnv });
   const explicitEnvContext = options.explicitEnvContext ?? "kimi child env";
   const onWarning = options.onWarning ?? ((message: string) => process.stderr.write(`${message}\n`));
 
@@ -119,14 +115,16 @@ export function buildSafeKimiChildEnv(
       delete safeEnv[key];
       continue;
     }
+    if (isDeniedChildEnvName(key)) {
+      delete safeEnv[key];
+      continue;
+    }
     if (isSecretLikeKimiEnvKey(key) && !trustedExplicitSecretEnv) {
       if (options.warnExplicitSecrets) {
         warnExplicitSecretLikeKimiEnvKey(key, explicitEnvContext, onWarning);
       }
-      if (strictExplicitSecretEnv) {
-        delete safeEnv[key];
-        continue;
-      }
+      delete safeEnv[key];
+      continue;
     }
     safeEnv[key] = value;
   }

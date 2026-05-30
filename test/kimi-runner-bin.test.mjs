@@ -16,6 +16,8 @@ test("Kimi child env builder drops inherited secret-like connection env", () => 
   const env = buildSafeKimiChildEnv(
     {
       PATH: "/usr/bin",
+      AWS_REGION: "us-east-1",
+      SSH_AUTH_SOCK: "/tmp/agent.sock",
       DATABASE_URL: "postgres://secret",
       GITHUB_TOKEN: "token",
       OMK_VISIBLE_RUNTIME: "visible",
@@ -27,6 +29,8 @@ test("Kimi child env builder drops inherited secret-like connection env", () => 
 
   assert.equal(env.PATH, "/usr/bin");
   assert.equal(env.OMK_VISIBLE_RUNTIME, "visible");
+  assert.equal(env.AWS_REGION, undefined);
+  assert.equal(env.SSH_AUTH_SOCK, undefined);
   assert.equal(env.DATABASE_URL, undefined);
   assert.equal(env.GITHUB_TOKEN, undefined);
   assert.equal(env.OMK_SECRET_TOKEN, undefined);
@@ -51,7 +55,7 @@ test("Kimi env secret classifier treats runtime metadata keys as non-secret", ()
   assert.equal(isSecretLikeKimiEnvKey("DATABASE_URL"), true);
 });
 
-test("Kimi child env builder warns for explicit secret-like env and supports strict opt-in", () => {
+test("Kimi child env builder drops explicit secret-like env unless trusted", () => {
   const warnings = [];
   const env = buildSafeKimiChildEnv(
     { PATH: "/usr/bin" },
@@ -68,12 +72,13 @@ test("Kimi child env builder warns for explicit secret-like env and supports str
     }
   );
 
-  assert.equal(env.EXPLICIT_FAKE_SECRET_REGRESSION_TOKEN, "allowed-explicit");
+  assert.equal(env.EXPLICIT_FAKE_SECRET_REGRESSION_TOKEN, undefined);
   assert.equal(env.KIMI_BIN, "/opt/kimi");
   assert.equal(env.OMK_RUN_ID, "run-1");
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /EXPLICIT_FAKE_SECRET_REGRESSION_TOKEN/);
   assert.doesNotMatch(warnings[0], /allowed-explicit/);
+  assert.match(warnings[0], /dropped/);
 
   const strictEnv = buildSafeKimiChildEnv(
     { PATH: "/usr/bin", OMK_STRICT_KIMI_EXPLICIT_ENV: "1" },
@@ -461,7 +466,7 @@ test("agent role resolver labels fallback source and suggests doctor fix", async
 });
 
 
-test("Kimi DAG runner filters inherited secret-like env vars but keeps explicit env", async () => {
+test("Kimi DAG runner filters inherited and explicit secret-like env vars", async () => {
   if (process.platform === "win32") return;
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-kimi-safe-env-project-"));
   const homeRoot = await mkdtemp(join(tmpdir(), "omk-kimi-safe-env-home-"));
@@ -481,7 +486,7 @@ test("Kimi DAG runner filters inherited secret-like env vars but keeps explicit 
       "#!/usr/bin/env sh",
       "if env | grep -q '^FAKE_SECRET_REGRESSION_TOKEN='; then echo inherited-secret-leaked; exit 23; fi",
       "if env | grep -q '^KIMI_AUTH_TOKEN='; then echo kimi-secret-leaked; exit 24; fi",
-      `if [ "$EXPLICIT_FAKE_SECRET_REGRESSION_TOKEN" != "allowed-explicit" ]; then echo explicit-env-missing; exit 25; fi`,
+      "if env | grep -q '^EXPLICIT_FAKE_SECRET_REGRESSION_TOKEN='; then echo explicit-secret-leaked; exit 25; fi",
       `if [ "$OMK_VISIBLE_RUNTIME" != "visible" ]; then echo omk-runtime-missing; exit 26; fi`,
       `if [ "$CODEX_HOME" != "$HOME/.codex" ]; then echo codex-home-not-isolated; exit 27; fi`,
       `if [ "$CODEX_HOME" = "$OMK_ORIGINAL_HOME/.codex" ]; then echo codex-home-leaked; exit 28; fi`,
@@ -514,7 +519,7 @@ test("Kimi DAG runner filters inherited secret-like env vars but keeps explicit 
 
     assert.equal(result.success, true, result.stderr || result.stdout);
     assert.match(result.stdout, /safe-env-ran/);
-    assert.doesNotMatch(result.stdout, /secret-leaked|explicit-env-missing|omk-runtime-missing|codex-home/);
+    assert.doesNotMatch(result.stdout, /secret-leaked|omk-runtime-missing|codex-home/);
   } finally {
     if (previousProjectRoot === undefined) delete process.env.OMK_PROJECT_ROOT;
     else process.env.OMK_PROJECT_ROOT = previousProjectRoot;
