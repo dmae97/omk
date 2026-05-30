@@ -15,9 +15,21 @@ test("route blocked panel explains unsupported runtime errors", () => {
   assert.match(output, /Node\s+chat-turn/);
   assert.match(output, /Provider\s+auto/);
   assert.match(output, /Capability\s+provider capability mismatch/);
+  assert.match(output, /Security\s+OMK blocks runtimes/);
   assert.match(output, /omk doctor/);
   assert.match(output, /\/provider auto/);
   assert.match(output, /\/mode plan/);
+});
+
+test("route blocked panel explains MCP authority mismatches as security boundaries", () => {
+  const message = "No runtime supports task for node chat-turn; Node requires MCP authority";
+  const output = renderRouteBlockedPanel(message, { width: 88 });
+
+  assert.match(output, /ROUTE BLOCKED/);
+  assert.match(output, /Node\s+chat-turn/);
+  assert.match(output, /OMK keeps MCP authority behind approved runtimes/);
+  assert.match(output, /Node requires MCP authority/);
+  assert.match(output, /replan without MCP requirement/);
 });
 
 test("plain renderer renders unsupported runtime errors as recovery panels", () => {

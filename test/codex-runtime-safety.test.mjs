@@ -97,6 +97,16 @@ test("CodexRuntime propagates ask approval and read-only sandbox", async () => {
   assert.match(capture.stdin, /summarize only/);
 });
 
+test("CodexRuntime supports rejects MCP/unsupported provider capability authority", () => {
+  const runtime = new CodexRuntime();
+
+  assert.equal(runtime.supports(capsuleWithRouting({ requiresMcp: true })), false);
+  assert.equal(runtime.supports(capsuleWithRouting({ assignedProviderCapabilities: ["mcp"] })), false);
+  assert.equal(runtime.supports(capsuleWithRouting({ assignedProviderCapabilities: ["merge"] })), false);
+  assert.equal(runtime.supports(capsuleWithRouting({ assignedProviderCapabilities: ["vision"] })), false);
+  assert.equal(runtime.supports(capsuleWithRouting({ assignedProviderCapabilities: ["read", "write", "patch"] })), true);
+});
+
 test("CodexRuntime forces on-request approvals for workspace-write even when env asks for never", async () => {
   const dir = await mkdtemp(join(tmpdir(), "omk-codex-runtime-approval-"));
   const { bin, capturePath } = await fakeCodexBin(dir);
@@ -139,6 +149,39 @@ test("CodexRuntime forces on-request approvals for workspace-write even when env
   const capture = JSON.parse(await readFile(capturePath, "utf8"));
   assert.deepEqual(capture.argv.slice(0, 5), ["exec", "--sandbox", "workspace-write", "--ask-for-approval", "on-request"]);
 });
+
+function capsuleWithRouting(routing = {}) {
+  return {
+    runId: "run-codex-supports",
+    nodeId: "node-codex-supports",
+    goal: "supports check",
+    system: "",
+    task: "check support",
+    dependencySummaries: [],
+    relevantFiles: [],
+    graphMemory: [],
+    priorAttempts: [],
+    evidenceRequirements: [],
+    budget: {
+      maxInputTokens: 1000,
+      reservedOutputTokens: 1000,
+      maxFileTokens: 1000,
+      maxToolResultTokens: 1000,
+      maxMemoryFacts: 1,
+      compression: "normal",
+    },
+    node: {
+      id: "node-codex-supports",
+      name: "check support",
+      role: "tester",
+      dependsOn: [],
+      status: "pending",
+      retries: 0,
+      maxRetries: 1,
+      routing,
+    },
+  };
+}
 
 test("Codex provider runner uses sanitized child env and interactive workspace-write approval", async () => {
   const dir = await mkdtemp(join(tmpdir(), "omk-codex-runner-"));

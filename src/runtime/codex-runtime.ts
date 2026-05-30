@@ -55,7 +55,22 @@ export class CodexRuntime implements AgentRuntime {
     this.timeoutMs = options.timeoutMs ?? 120_000;
   }
 
-  supports(_capsule: ContextCapsule): boolean {
+  supports(capsule: ContextCapsule): boolean {
+    const routing = capsule.node.routing;
+    if (routing?.requiresMcp === true) return false;
+    if (routing?.requiresToolCalling === true && this.capabilities.supportsToolCalling !== true) return false;
+
+    for (const capability of routing?.assignedProviderCapabilities ?? []) {
+      if (capability === "read" && this.capabilities.read !== true) return false;
+      if (capability === "write" && this.capabilities.write !== true) return false;
+      if (capability === "shell" && this.capabilities.shell !== true) return false;
+      if (capability === "mcp" && this.capabilities.mcp !== true) return false;
+      if (capability === "patch" && this.capabilities.patch !== true) return false;
+      if (capability === "review" && this.capabilities.review !== true) return false;
+      if (capability === "merge" && this.capabilities.merge !== true) return false;
+      if (capability === "vision" && this.capabilities.vision !== true) return false;
+    }
+
     return true;
   }
 

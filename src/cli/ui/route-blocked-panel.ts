@@ -16,15 +16,18 @@ export function renderRouteBlockedPanel(message: string, options: { width?: numb
   const innerWidth = width - 4;
   const node = extractUnsupportedRuntimeNode(message) ?? "unknown";
   const safeMessage = sanitizeUserVisibleOutput(message).replace(/\s+/g, " ").trim();
+  const reason = inferSecurityReason(safeMessage);
   const lines = [
     "No runtime supports this task.",
     "",
     `Node        ${node}`,
     "Provider    auto / check configured runtimes",
     "Capability  provider capability mismatch",
+    `Security    ${reason.security}`,
+    reason.detail ? `Reason      ${reason.detail}` : "",
     safeMessage && safeMessage !== message ? `Detail      ${safeMessage}` : "",
     "",
-    "Suggested   omk doctor · /provider auto · /mode plan",
+    `Suggested   ${reason.suggested}`,
     "Inspect     omk runtimes · omk mcp doctor",
   ].filter(Boolean);
 
@@ -33,6 +36,27 @@ export function renderRouteBlockedPanel(message: string, options: { width?: numb
   const bottom = `╰${"─".repeat(width - 2)}╯`;
   const body = lines.map((line) => `│ ${truncate(line, innerWidth).padEnd(innerWidth)} │`);
   return [top, ...body, bottom].join("\n");
+}
+
+function inferSecurityReason(message: string): { security: string; detail?: string; suggested: string } {
+  if (/\bMCP\b|requiresMcp|requires MCP/i.test(message)) {
+    return {
+      security: "OMK keeps MCP authority behind approved runtimes",
+      detail: "Node requires MCP authority; this runtime does not receive OMK MCP authority",
+      suggested: "/provider auto · /mode plan · replan without MCP requirement",
+    };
+  }
+  if (/\btool\b|requiresToolCalling|tool calling/i.test(message)) {
+    return {
+      security: "OMK routes tool calls through its owned tool-plane",
+      detail: "Node requires live tool authority; selected runtime cannot own it",
+      suggested: "/provider auto · /mode plan · replan with OMK tool authority",
+    };
+  }
+  return {
+    security: "OMK blocks runtimes that cannot satisfy node authority",
+    suggested: "omk doctor · /provider auto · /mode plan",
+  };
 }
 
 function truncate(value: string, width: number): string {
