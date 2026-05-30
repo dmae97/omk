@@ -15,7 +15,21 @@ export function errorSlashResult(text: string): SlashCommandResult {
 
 export function emitSlashResult(result: SlashCommandResult, renderer?: CliRenderer): void {
   for (const event of result.events ?? []) renderer?.emit(event);
-  if (!result.text || !renderer) return;
-  if (result.ok) renderer.emit({ type: "control:output", text: result.text });
-  else renderer.emit({ type: "turn:error", message: result.text });
+  if (!renderer) return;
+  if (result.json !== undefined) {
+    renderer.emit({ type: "control:output", text: `${JSON.stringify(result.json, null, 2)}\n` });
+  }
+  if (result.text) {
+    if (result.ok) renderer.emit({ type: "control:output", text: result.text.endsWith("\n") ? result.text : `${result.text}\n` });
+    else renderer.emit({ type: "turn:error", message: result.text });
+  }
+}
+
+export function printSlashResult(result: SlashCommandResult): void {
+  if (result.json !== undefined) {
+    console.log(JSON.stringify(result.json, null, 2));
+  } else if (result.text) {
+    if (result.ok) console.log(result.text);
+    else console.error(result.text);
+  }
 }
