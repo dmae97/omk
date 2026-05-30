@@ -13,6 +13,8 @@ test("route blocked panel explains unsupported runtime errors", () => {
   assert.match(output, /ROUTE BLOCKED/);
   assert.match(output, /No runtime supports this task/);
   assert.match(output, /Node\s+chat-turn/);
+  assert.match(output, /Provider\s+auto/);
+  assert.match(output, /Capability\s+provider capability mismatch/);
   assert.match(output, /omk doctor/);
   assert.match(output, /\/provider auto/);
   assert.match(output, /\/mode plan/);

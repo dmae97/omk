@@ -6,6 +6,18 @@
 import { P } from "../brand/palette.js";
 import { esc, rgb, bgRgb } from "./ansi.js";
 
+export const glyph = {
+  routed: "◇",
+  blocked: "◆",
+  active: "●",
+  queued: "○",
+  verified: "✓",
+  failed: "✕",
+  evidence: "▣",
+  signal: "⟡",
+  warning: "⟁",
+} as const;
+
 export const style = {
   reset: esc("0"),
   bold: esc("1"),
@@ -76,10 +88,10 @@ export const style = {
 };
 
 export const status = {
-  ok: (s: string) => style.mintBold("✔ " + s),
-  warn: (s: string) => style.orange("⚠ " + s),
-  fail: (s: string) => style.red("✖ " + s),
-  info: (s: string) => style.purple("ℹ " + s),
-  success: (s: string) => style.mint("✅ " + s),
-  error: (s: string) => style.red("❌ " + s),
+  ok: (s: string) => style.mintBold(`${glyph.verified} ${s}`),
+  warn: (s: string) => style.orange(`${glyph.warning} ${s}`),
+  fail: (s: string) => style.red(`${glyph.failed} ${s}`),
+  info: (s: string) => style.purple(`${glyph.signal} ${s}`),
+  success: (s: string) => style.mint(`${glyph.verified} ${s}`),
+  error: (s: string) => style.red(`${glyph.failed} ${s}`),
 };

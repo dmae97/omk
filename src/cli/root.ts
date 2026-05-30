@@ -88,15 +88,15 @@ export async function runRootHudFlow(program: Command): Promise<void> {
   if (!hasTty) {
     const c = (k: string) => t(k).replace(/^.*? — /, "");
     console.log(style.gray(`
-    💡 omk parallel "<prompt>" — Run the parallel subagent orchestrator`));
-    console.log(style.gray(`  💡 omk run <flow> "<goal>" — Run a named workflow`));
-    console.log(style.gray(`  💡 omk mcp connect --all — Preflight the MCP tool plane`));
-    console.log(style.gray(`  💡 omk mcp connect --fix — Repair project-local MCP config`));
-    console.log(style.gray(`  💡 omk chat --layout plain --provider auto — Interactive agent (simple terminal)`));
-    console.log(style.gray(`  💡 omk chat --layout tmux  — Interactive agent (split-pane cockpit)`));
-    console.log(style.gray(`  💡 omk hud   — ${c("cli.suggestionHud")}`));
-    console.log(style.gray(`  💡 omk menu  — Show interactive menu`));
-    console.log(style.gray(`  💡 omk --help — ${c("cli.suggestionHelp")}`));
+    ⟡ omk parallel "<prompt>" — Run the parallel subagent orchestrator`));
+    console.log(style.gray(`  ⟡ omk run <flow> "<goal>" — Run a named workflow`));
+    console.log(style.gray(`  ⟡ omk mcp connect --all — Preflight the MCP tool plane`));
+    console.log(style.gray(`  ⟡ omk mcp connect --fix — Repair project-local MCP config`));
+    console.log(style.gray(`  ⟡ omk chat --layout plain --provider auto — Interactive agent (simple terminal)`));
+    console.log(style.gray(`  ⟡ omk chat --layout tmux  — Interactive agent (split-pane cockpit)`));
+    console.log(style.gray(`  ⟡ omk hud   — ${c("cli.suggestionHud")}`));
+    console.log(style.gray(`  ⟡ omk menu  — Show interactive menu`));
+    console.log(style.gray(`  ⟡ omk --help — ${c("cli.suggestionHelp")}`));
     return;
   }
 

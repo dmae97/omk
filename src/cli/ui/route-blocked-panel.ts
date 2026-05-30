@@ -20,14 +20,12 @@ export function renderRouteBlockedPanel(message: string, options: { width?: numb
     "No runtime supports this task.",
     "",
     `Node        ${node}`,
-    "Runtime     no compatible provider/capability route",
+    "Provider    auto / check configured runtimes",
+    "Capability  provider capability mismatch",
     safeMessage && safeMessage !== message ? `Detail      ${safeMessage}` : "",
     "",
-    "Suggested fixes",
-    "1. Run omk doctor",
-    "2. Switch provider: /provider auto",
-    "3. Lower risk: /mode plan",
-    "4. Check runtime config: omk runtimes",
+    "Suggested   omk doctor · /provider auto · /mode plan",
+    "Inspect     omk runtimes · omk mcp doctor",
   ].filter(Boolean);
 
   const label = "ROUTE BLOCKED";

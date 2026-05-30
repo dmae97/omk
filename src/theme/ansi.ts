@@ -15,12 +15,17 @@ export const esc = (codes: string) => colorEnabled ? `\x1b[${codes}m` : "";
 export const rgb = (r: number, g: number, b: number) => `38;2;${r};${g};${b}`;
 export const bgRgb = (r: number, g: number, b: number) => `48;2;${r};${g};${b}`;
 
-export function sanitizeTerminalText(value: string): string {
+export function stripBrokenAnsi(value: string): string {
   return value
-    .replace(/\x1B\][\s\S]*?(?:\x07|\x1B\\)/g, "")
-    .replace(/\x1B[P^_][\s\S]*?\x1B\\/g, "")
     .replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "")
-    .replace(/\[[0-9;]{1,32}m/g, "")
+    .replace(/\[[0-9;]{1,64}m/g, "")
+    .replace(/\[0m/g, "");
+}
+
+export function sanitizeTerminalText(value: string): string {
+  return stripBrokenAnsi(value
+    .replace(/\x1B\][\s\S]*?(?:\x07|\x1B\\)/g, "")
+    .replace(/\x1B[P^_][\s\S]*?\x1B\\/g, ""))
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, "")
     .replace(/^::code-comment\{.*?\}[ \t]*\r?\n?/gm, "");
 }

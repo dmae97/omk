@@ -37,14 +37,16 @@ export function label(key: string, value: string): string {
 export function box(lines: string[], title?: string): string {
   const termWidth = process.stdout.columns || 80;
   const rawTitle = title ? sanitizeTerminalText(title) : "";
+  const rawTitleWidth = rawTitle ? visibleTerminalWidth(rawTitle) : 0;
   const rawInner = Math.max(
     ...lines.map((l) => stripAnsi(l).length),
-    rawTitle ? rawTitle.length + 4 : 0
+    rawTitle ? rawTitleWidth + 4 : 0
   );
   const innerWidth = Math.min(rawInner, Math.max(termWidth - 4, 20));
   const width = innerWidth + 4;
+  const titleText = rawTitle ? style.phosphorBold(rawTitle) : "";
   const top = rawTitle
-    ? style.phosphorDim("╔" + "═".repeat(2) + " " + style.phosphorBold(rawTitle) + " " + "═".repeat(Math.max(0, width - rawTitle.length - 6)) + "╗")
+    ? style.phosphorDim("╔" + "═".repeat(2) + " ") + titleText + style.phosphorDim(" " + "═".repeat(Math.max(0, width - rawTitleWidth - 6)) + "╗")
     : style.phosphorDim("╔" + "═".repeat(width) + "╗");
   const bottom = style.phosphorDim("╚" + "═".repeat(width) + "╝");
   const body = lines.map((l) => style.phosphorDim("║ ") + padEndAnsi(l, innerWidth) + style.phosphorDim(" ║"));
@@ -87,12 +89,15 @@ export function gauge(
 
 /** Matrix green bordered panel with phosphor glow */
 export function panel(lines: string[], title?: string): string {
+  const termWidth = process.stdout.columns || 80;
   const rawTitle = title ? sanitizeTerminalText(title) : "";
-  const innerWidth = Math.max(...lines.map((l) => stripAnsi(l).length), rawTitle ? rawTitle.length + 4 : 0);
+  const rawTitleWidth = rawTitle ? visibleTerminalWidth(rawTitle) : 0;
+  const rawInner = Math.max(...lines.map((l) => stripAnsi(l).length), rawTitle ? rawTitleWidth + 4 : 0);
+  const innerWidth = Math.min(rawInner, Math.max(termWidth - 4, 20));
   const width = innerWidth + 4;
   const titleText = rawTitle ? gradient(rawTitle) : "";
   const top = rawTitle
-    ? style.phosphorDim("┏" + "━".repeat(2) + " ") + titleText + style.phosphorDim(" " + "━".repeat(Math.max(0, width - rawTitle.length - 6)) + "┓")
+    ? style.phosphorDim("┏" + "━".repeat(2) + " ") + titleText + style.phosphorDim(" " + "━".repeat(Math.max(0, width - rawTitleWidth - 6)) + "┓")
     : style.phosphorDim("┏" + "━".repeat(width) + "┓");
   const bottom = style.phosphorDim("┗" + "━".repeat(width) + "┛");
   const body = lines.map((l) =>

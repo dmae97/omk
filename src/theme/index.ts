@@ -12,11 +12,12 @@ export {
   sanitizeTerminalText,
   visibleTerminalWidth,
   stripAnsi,
+  stripBrokenAnsi,
   padEndAnsi,
 } from "./ansi.js";
 
 // Brand colors & semantic status
-export { style, status } from "./colors.js";
+export { style, status, glyph } from "./colors.js";
 
 // Layout primitives
 export {
