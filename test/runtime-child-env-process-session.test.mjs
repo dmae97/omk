@@ -17,10 +17,15 @@ test("buildChildEnv keeps safe parent env and drops unlisted secret-like names",
       PATH: "/usr/bin",
       HOME: "/tmp/omk-home",
       SECRET_TOKEN: "hidden",
+      AWS_REGION: "us-east-1",
+      AWS_ACCESS_KEY_ID: "hidden",
       RANDOM_VALUE: "drop-me",
     },
     overrideEnv: {
       EXPLICIT_TOKEN: "caller-owned",
+      GITHUB_TOKEN: "hidden",
+      NPM_TOKEN: "hidden",
+      DOTENV_CONFIG_PATH: "/repo/.env",
       EMPTY_VALUE: undefined,
       BAD_VALUE: "bad\0value",
     },
@@ -29,10 +34,36 @@ test("buildChildEnv keeps safe parent env and drops unlisted secret-like names",
   assert.equal(env.PATH, "/usr/bin");
   assert.equal(env.HOME, "/tmp/omk-home");
   assert.equal(env.SECRET_TOKEN, undefined);
+  assert.equal(env.AWS_REGION, undefined);
+  assert.equal(env.AWS_ACCESS_KEY_ID, undefined);
   assert.equal(env.RANDOM_VALUE, undefined);
-  assert.equal(env.EXPLICIT_TOKEN, "caller-owned");
+  assert.equal(env.EXPLICIT_TOKEN, undefined);
+  assert.equal(env.GITHUB_TOKEN, undefined);
+  assert.equal(env.NPM_TOKEN, undefined);
+  assert.equal(env.DOTENV_CONFIG_PATH, undefined);
   assert.equal(env.EMPTY_VALUE, undefined);
   assert.equal(env.BAD_VALUE, undefined);
+});
+
+test("buildChildEnv strips denied env even when inheriting parent env", () => {
+  const env = buildChildEnv({
+    inheritParentEnv: true,
+    parentEnv: {
+      PATH: "/usr/bin",
+      AWS_REGION: "us-east-1",
+      SSH_AUTH_SOCK: "/tmp/agent.sock",
+      KUBECONFIG: "/home/user/.kube/config",
+      SAFE_NONSECRET: "kept",
+      GITHUB_TOKEN: "hidden",
+    },
+  });
+
+  assert.equal(env.PATH, "/usr/bin");
+  assert.equal(env.SAFE_NONSECRET, "kept");
+  assert.equal(env.AWS_REGION, undefined);
+  assert.equal(env.SSH_AUTH_SOCK, undefined);
+  assert.equal(env.KUBECONFIG, undefined);
+  assert.equal(env.GITHUB_TOKEN, undefined);
 });
 
 test("runtimeMetadataEnv maps runtime session metadata", () => {
@@ -90,6 +121,36 @@ test("runProcessSession executes with sanitized env and explicit overrides", asy
     explicit: "ok",
     path: process.env.PATH ?? "",
     runId: "run-session",
+  });
+});
+
+test("runProcessSession strips secret-like explicit child runtime env", async () => {
+  const script = `
+    console.log(JSON.stringify({
+      capture: process.env.OMK_CAPTURE_PATH ?? null,
+      github: process.env.GITHUB_TOKEN ?? null,
+      npm: process.env.NPM_TOKEN ?? null,
+      dotenv: process.env.DOTENV_CONFIG_PATH ?? null
+    }));
+  `;
+  const result = await runProcessSession({
+    command: process.execPath,
+    args: ["--eval", script],
+    env: {
+      OMK_CAPTURE_PATH: "/tmp/capture.json",
+      GITHUB_TOKEN: "hidden",
+      NPM_TOKEN: "hidden",
+      DOTENV_CONFIG_PATH: "/repo/.env",
+    },
+    timeoutMs: 10_000,
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(JSON.parse(result.stdout.trim()), {
+    capture: "/tmp/capture.json",
+    github: null,
+    npm: null,
+    dotenv: null,
   });
 });
 
@@ -535,6 +596,9 @@ console.log("ok");
       const captured = JSON.parse(await readFile(scenario.capturePath, "utf8"));
       assert.equal(captured.promptHash, sha256(marker), scenario.name);
       assert.equal(captured.argv.join(" ").includes(marker), false, scenario.name);
+      if (scenario.name === "commandcode") {
+        assert.equal(captured.argv.includes("--trust"), false, scenario.name);
+      }
       assert.ok(captured.promptFile, scenario.name);
       assert.equal(captured.goal, null, scenario.name);
       assert.equal(captured.risk, "write", scenario.name);

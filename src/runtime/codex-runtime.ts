@@ -16,6 +16,7 @@ import type { ContextCapsule } from "./context-capsule.js";
 import { capsuleToTask } from "./context-broker-converter.js";
 import { runShell, runShellStreaming, checkCommand } from "../util/shell.js";
 import { sanitizeUserVisibleOutput } from "../util/user-visible-output.js";
+import { buildChildEnv } from "./child-env.js";
 
 export interface CodexRuntimeOptions {
   bin?: string;
@@ -98,21 +99,23 @@ export class CodexRuntime implements AgentRuntime {
   async execute(task: AgentTask): Promise<AgentResult> {
     const prompt = this.buildPrompt(task);
     const model = task.context.providerModel ?? task.context.env?.OMK_PROVIDER_MODEL ?? this.model ?? process.env.OMK_PROVIDER_MODEL;
-    const env: Record<string, string> = {
-      ...(task.context.env ?? {}),
-      OMK_RUN_ID: task.context.runId,
-      OMK_NODE_ID: task.context.nodeId,
-      OMK_ROLE: task.context.role ?? "",
-      OMK_GOAL: task.context.goal ?? "",
-      OMK_NODE_SKILLS: task.tools.skills?.join(",") ?? "",
-      OMK_NODE_MCP_SERVERS: task.tools.mcpServers?.join(",") ?? "",
-      OMK_NODE_TOOLS: task.tools.available.map((tool) => tool.name).join(","),
-      OMK_NODE_HOOKS: task.tools.hooks?.join(",") ?? "",
-      OMK_APPROVAL_POLICY: task.context.approvalPolicy ?? task.context.env?.OMK_APPROVAL_POLICY ?? "",
-      OMK_SANDBOX_MODE: task.context.sandboxMode ?? task.context.env?.OMK_SANDBOX_MODE ?? "",
-      OMK_TASK_RISK: task.context.risk ?? "",
-      ...(model ? { OMK_PROVIDER_MODEL: model } : {}),
-    };
+    const env: Record<string, string> = buildChildEnv({
+      overrideEnv: {
+        ...(task.context.env ?? {}),
+        OMK_RUN_ID: task.context.runId,
+        OMK_NODE_ID: task.context.nodeId,
+        OMK_ROLE: task.context.role ?? "",
+        OMK_GOAL: task.context.goal ?? "",
+        OMK_NODE_SKILLS: task.tools.skills?.join(",") ?? "",
+        OMK_NODE_MCP_SERVERS: task.tools.mcpServers?.join(",") ?? "",
+        OMK_NODE_TOOLS: task.tools.available.map((tool) => tool.name).join(","),
+        OMK_NODE_HOOKS: task.tools.hooks?.join(",") ?? "",
+        OMK_APPROVAL_POLICY: task.context.approvalPolicy ?? task.context.env?.OMK_APPROVAL_POLICY ?? "",
+        OMK_SANDBOX_MODE: task.context.sandboxMode ?? task.context.env?.OMK_SANDBOX_MODE ?? "",
+        OMK_TASK_RISK: task.context.risk ?? "",
+        ...(model ? { OMK_PROVIDER_MODEL: model } : {}),
+      },
+    });
 
     const sandboxMode =
       task.context.sandboxMode === "read-only" || task.context.sandboxMode === "workspace-write"
@@ -121,7 +124,10 @@ export class CodexRuntime implements AgentRuntime {
       task.capabilities.write || task.capabilities.patch || task.capabilities.shell
         ? "workspace-write"
         : "read-only";
-    const approvalPolicy = codexApprovalPolicy(task.context.approvalPolicy ?? task.context.env?.OMK_APPROVAL_POLICY);
+    const approvalPolicy = codexApprovalPolicy(
+      task.context.approvalPolicy ?? task.context.env?.OMK_APPROVAL_POLICY,
+      sandboxMode
+    );
 
     const args = [
       "exec",
@@ -219,7 +225,11 @@ export class CodexRuntime implements AgentRuntime {
   }
 }
 
-function codexApprovalPolicy(value: string | undefined): "on-request" | "never" {
+function codexApprovalPolicy(
+  value: string | undefined,
+  sandboxMode: "read-only" | "workspace-write"
+): "on-request" | "never" {
+  if (sandboxMode !== "read-only") return "on-request";
   const normalized = value?.trim().toLowerCase();
   if (normalized === "never" || normalized === "yolo") return "never";
   return "on-request";

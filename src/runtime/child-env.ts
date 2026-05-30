@@ -42,6 +42,20 @@ export interface RuntimeChildEnvMetadata {
 const SECRET_LIKE_ENV_NAME =
   /(?:^|_)(?:API_?KEY|AUTH|COOKIE|CREDENTIAL|PASS(?:WORD)?|PRIVATE|SECRET|SESSION|TOKEN)(?:_|$)/iu;
 
+const DENIED_CHILD_ENV_NAME_PATTERNS: readonly RegExp[] = Object.freeze([
+  /^AWS_/iu,
+  /^GOOGLE_APPLICATION_CREDENTIALS$/iu,
+  /^GITHUB_TOKEN$/iu,
+  /^GH_TOKEN$/iu,
+  /^NPM_TOKEN$/iu,
+  /^NODE_AUTH_TOKEN$/iu,
+  /^SSH_AUTH_SOCK$/iu,
+  /^KUBECONFIG$/iu,
+  /(?:^|_)DOTENV(?:_|$)/iu,
+  /(?:^|_)ENV_FILE(?:_|$)/iu,
+  /(?:^|_)ENV_PATH(?:_|$)/iu,
+]);
+
 function normalizeEnvName(name: string): string {
   return process.platform === "win32" ? name.toUpperCase() : name;
 }
@@ -62,6 +76,10 @@ export function isSecretLikeEnvName(name: string): boolean {
   return SECRET_LIKE_ENV_NAME.test(name);
 }
 
+export function isDeniedChildEnvName(name: string): boolean {
+  return DENIED_CHILD_ENV_NAME_PATTERNS.some((pattern) => pattern.test(name));
+}
+
 export function buildChildEnv(options: ChildEnvOptions = {}): Record<string, string> {
   const parentEnv = options.parentEnv ?? process.env;
   const allowedNames = envNameSet(options.allowedParentEnvNames ?? DEFAULT_CHILD_ENV_ALLOWLIST);
@@ -72,6 +90,7 @@ export function buildChildEnv(options: ChildEnvOptions = {}): Record<string, str
     if (!validEnvName(name) || !validEnvValue(value)) continue;
     const normalizedName = normalizeEnvName(name);
     const isAllowed = allowedNames.has(normalizedName);
+    if (isDeniedChildEnvName(name)) continue;
     if (!isAllowed && !inheritParentEnv) continue;
     if (!isAllowed && isSecretLikeEnvName(name)) continue;
     childEnv[name] = value;
@@ -79,6 +98,7 @@ export function buildChildEnv(options: ChildEnvOptions = {}): Record<string, str
 
   for (const [name, value] of Object.entries(options.overrideEnv ?? {})) {
     if (!validEnvName(name) || !validEnvValue(value)) continue;
+    if (isDeniedChildEnvName(name) || isSecretLikeEnvName(name)) continue;
     childEnv[name] = value;
   }
 

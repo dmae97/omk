@@ -64,8 +64,8 @@ export function createExternalCliAdapter(
     priority: options.priority,
     capabilities: options.capabilities,
 
-    supports(_capsule: ContextCapsule): boolean {
-      return true;
+    supports(capsule: ContextCapsule): boolean {
+      return runtimeCapabilitiesSupportCapsule(options.capabilities, capsule);
     },
 
     async health(): Promise<RuntimeHealth> {
@@ -305,6 +305,27 @@ function joinList(values: readonly string[] | undefined): string | undefined {
 
 function unique(values: readonly string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function runtimeCapabilitiesSupportCapsule(
+  capabilities: RuntimeCapabilities,
+  capsule: ContextCapsule
+): boolean {
+  const routing = capsule.node.routing;
+  if (routing?.requiresMcp === true && capabilities.mcp !== true) return false;
+  if (routing?.requiresToolCalling === true && capabilities.supportsToolCalling !== true) return false;
+  const required = routing?.assignedProviderCapabilities ?? [];
+  for (const capability of required) {
+    if (capability === "read" && capabilities.read !== true) return false;
+    if (capability === "write" && capabilities.write !== true) return false;
+    if (capability === "shell" && capabilities.shell !== true) return false;
+    if (capability === "mcp" && capabilities.mcp !== true) return false;
+    if (capability === "patch" && capabilities.patch !== true) return false;
+    if (capability === "review" && capabilities.review !== true) return false;
+    if (capability === "merge" && capabilities.merge !== true) return false;
+    if (capability === "vision" && capabilities.vision !== true) return false;
+  }
+  return true;
 }
 
 function resolveExternalCliTimeoutMs(
