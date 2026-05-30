@@ -109,6 +109,60 @@ test("runtime router honors task provider policy and does not fall back to Kimi 
   assert.deepEqual(result.metadata.fallbackChain, ["codex-cli"]);
 });
 
+test("runtime router accepts explicit MiMo advisory chat turns after authority downgrade", async () => {
+  const calls = [];
+  const router = createRuntimeRouter({
+    runtimes: [
+      fakeRuntime("mimo-api", calls, {
+        read: true,
+        write: false,
+        shell: false,
+        mcp: false,
+        patch: false,
+        review: true,
+        merge: false,
+        vision: true,
+        supportsToolCalling: true,
+      }),
+    ],
+  });
+
+  const result = await router.execute(fakeTask({
+    prompt: "npm run verify 해줘",
+    context: {
+      runId: "local-runtime-router-test",
+      nodeId: "chat-turn",
+      role: "coordinator",
+      goal: "native mimo advisory shell turn",
+      system: "",
+      files: [],
+      memory: [],
+      cwd: process.cwd(),
+      risk: "shell",
+      sandboxMode: "read-only",
+    },
+    providerPolicy: {
+      strategy: "priority-first",
+      preferredProviders: ["mimo"],
+      fallbackChain: [],
+    },
+    capabilities: {
+      read: true,
+      write: false,
+      shell: false,
+      mcp: false,
+      patch: false,
+      review: true,
+      merge: false,
+      vision: false,
+    },
+  }));
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.metadata.selectedRuntime, "mimo-api");
+  assert.deepEqual(calls, ["mimo-api"]);
+});
+
 test("runtime-backed runner routes non-Kimi CLI turns without optional capability over-constraint", async () => {
   const runner = await createRuntimeBackedTaskRunner({ cwd: process.cwd(), env: {}, runId: "local-runtime-backed" });
   const registry = runner._registry;

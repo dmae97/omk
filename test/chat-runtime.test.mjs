@@ -785,7 +785,7 @@ test("native root loop execution=parallel routes normal prompts to parallel orch
   ok(!combinedOutput.includes("TASK_RUNNER_SHOULD_NOT_RUN"), combinedOutput);
 });
 
-test("explicit DeepSeek native write prompts stay advisory/read-only", async () => {
+test("explicit API provider native write prompts stay advisory/read-only", async () => {
   const node = buildNativeRootLoopTurnNode({
     bootstrap: {
       ...codexBootstrap,
@@ -815,10 +815,56 @@ test("explicit DeepSeek native write prompts stay advisory/read-only", async () 
 
   deepStrictEqual(node.routing?.provider, "deepseek");
   deepStrictEqual(node.routing?.readOnly, true);
-  deepStrictEqual(node.routing?.assignedProviderCapabilities, ["read", "review"]);
+  deepStrictEqual(node.routing?.assignedProviderCapabilities, ["read", "review", "advisory"]);
+  deepStrictEqual(node.routing?.requiresMcp, false);
   deepStrictEqual(task.capabilities.write, false);
   deepStrictEqual(task.capabilities.patch, false);
   deepStrictEqual(task.capabilities.shell, false);
+  deepStrictEqual(task.capabilities.review, true);
+});
+
+test("explicit MiMo native shell prompts do not request direct shell or MCP runtime authority", async () => {
+  const node = buildNativeRootLoopTurnNode({
+    bootstrap: {
+      ...codexBootstrap,
+      provider: "mimo",
+      providerPolicy: "mimo",
+      selectedProvider: "mimo",
+      selectedRuntimeId: "mimo-api",
+      selectedModel: "mimo-v2.5-pro",
+      sessionMode: "api-turn",
+    },
+    prompt: "npm run verify 해줘",
+    nodeId: "turn-mimo-shell-advisory",
+    mcpAllowlist: ["omk-project", "memory"],
+    skillNames: ["omk-context-broker"],
+  });
+  const task = await capsuleToTask({
+    schemaVersion: 1,
+    runId: "local-chat-runtime-test",
+    nodeId: node.id,
+    goal: "native mimo advisory shell turn",
+    task: node.name,
+    system: "",
+    node,
+    dependencySummaries: [],
+    relevantFiles: [],
+    graphMemory: [],
+    priorAttempts: [],
+    evidenceRequirements: [],
+    budget: { maxInputTokens: 16000, compression: "normal" },
+  });
+
+  deepStrictEqual(node.routing?.provider, "mimo");
+  deepStrictEqual(node.routing?.risk, "shell");
+  deepStrictEqual(node.routing?.readOnly, true);
+  deepStrictEqual(node.routing?.sandboxMode, "read-only");
+  deepStrictEqual(node.routing?.assignedProviderCapabilities, ["read", "review", "advisory"]);
+  deepStrictEqual(node.routing?.requiresMcp, false);
+  deepStrictEqual(task.capabilities.write, false);
+  deepStrictEqual(task.capabilities.patch, false);
+  deepStrictEqual(task.capabilities.shell, false);
+  deepStrictEqual(task.capabilities.mcp, false);
   deepStrictEqual(task.capabilities.review, true);
 });
 
