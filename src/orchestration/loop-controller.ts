@@ -5,22 +5,35 @@ import type {
   OrchestrationLoopState,
 } from "./loop-state.js";
 
+export const DEFAULT_LOOP_MAX_ITERATIONS = 3;
+export const HARD_LOOP_MAX_ITERATIONS = 8;
+
 export function evaluateLoopDecision(
   input: EvaluateLoopDecisionInput,
 ): LoopDecision {
   const createdAt = (input.now ?? (() => new Date()))().toISOString();
   const iteration = Math.max(1, input.iteration ?? input.runState.iterationCount ?? 1);
-  const maxIterations = Math.max(1, input.maxIterations ?? input.runState.maxIterations ?? 1);
-  const failedNodes = input.runState.nodes.filter((node) => node.status === "failed" || node.status === "blocked");
+  const maxIterations = resolveMaxIterations(input.maxIterations ?? input.runState.maxIterations);
+  const failedNodes = input.runState.nodes.filter((node) => node.status === "failed");
+  const blockedNodes = input.runState.nodes.filter((node) => node.status === "blocked");
   const failedGates = collectFailedGates(input.runState.nodes);
   const pendingNodes = input.runState.nodes.filter((node) => node.status === "pending" || node.status === "running");
   const requiredEvidenceMissing = collectMissingRequiredEvidence(input.runState.nodes);
 
-  if (iteration >= maxIterations && (failedNodes.length > 0 || pendingNodes.length > 0 || requiredEvidenceMissing.length > 0)) {
+  if (
+    iteration >= maxIterations &&
+    (failedNodes.length > 0 ||
+      blockedNodes.length > 0 ||
+      pendingNodes.length > 0 ||
+      requiredEvidenceMissing.length > 0)
+  ) {
     return buildDecision(input, {
       action: "block",
       reason: "Maximum loop iterations reached before required evidence closed",
       confidence: 0.9,
+      failedNodes: failedNodes.map((node) => node.id),
+      blockedNodes: blockedNodes.map((node) => node.id),
+      pendingNodes: pendingNodes.map((node) => node.id),
       failedGates,
       requiredEvidenceMissing,
       iteration,
@@ -33,6 +46,9 @@ export function evaluateLoopDecision(
       action: "verify-only",
       reason: "Operator requested verification-only loop action",
       confidence: 0.85,
+      failedNodes: failedNodes.map((node) => node.id),
+      blockedNodes: blockedNodes.map((node) => node.id),
+      pendingNodes: pendingNodes.map((node) => node.id),
       failedGates,
       requiredEvidenceMissing,
       iteration,
@@ -40,13 +56,21 @@ export function evaluateLoopDecision(
     });
   }
 
-  if (input.requestedAction === "replan" || failedNodes.length > 0 || failedGates.length > 0) {
+  if (
+    input.requestedAction === "replan" ||
+    failedNodes.length > 0 ||
+    blockedNodes.length > 0 ||
+    failedGates.length > 0
+  ) {
     return buildDecision(input, {
       action: "replan",
-      reason: failedNodes.length > 0
-        ? `Run has failed or blocked nodes: ${failedNodes.map((node) => node.id).join(", ")}`
+      reason: failedNodes.length + blockedNodes.length > 0
+        ? `Run has failed or blocked nodes: ${[...failedNodes, ...blockedNodes].map((node) => node.id).join(", ")}`
         : "Operator requested replan or gate failures require a new plan",
       confidence: 0.86,
+      failedNodes: failedNodes.map((node) => node.id),
+      blockedNodes: blockedNodes.map((node) => node.id),
+      pendingNodes: pendingNodes.map((node) => node.id),
       failedGates,
       requiredEvidenceMissing,
       iteration,
@@ -61,6 +85,9 @@ export function evaluateLoopDecision(
         ? `Run still has active or pending nodes: ${pendingNodes.map((node) => node.id).join(", ")}`
         : "Required evidence is not yet recorded",
       confidence: 0.8,
+      failedNodes: failedNodes.map((node) => node.id),
+      blockedNodes: blockedNodes.map((node) => node.id),
+      pendingNodes: pendingNodes.map((node) => node.id),
       failedGates,
       requiredEvidenceMissing,
       iteration,
@@ -72,6 +99,9 @@ export function evaluateLoopDecision(
     action: "close",
     reason: "All required nodes and evidence gates are closed",
     confidence: 0.92,
+    failedNodes: [],
+    blockedNodes: [],
+    pendingNodes: [],
     failedGates,
     requiredEvidenceMissing,
     iteration,
@@ -95,7 +125,7 @@ export function createLoopState(input: {
     parentRunId: input.parentRunId,
     inputId: input.inputId,
     iteration: input.decision.iteration,
-    maxIterations: Math.max(1, input.maxIterations ?? input.runState.maxIterations ?? 1),
+    maxIterations: resolveMaxIterations(input.maxIterations ?? input.runState.maxIterations),
     status: statusFromDecision(input.decision),
     decisions: [input.decision],
     stateSnapshot: {
@@ -124,8 +154,20 @@ function buildDecision(
 function statusFromDecision(decision: LoopDecision): OrchestrationLoopState["status"] {
   if (decision.action === "close") return "closed";
   if (decision.action === "block" || decision.action === "handoff") return "blocked";
-  if (decision.action === "replan" && decision.failedGates.length > 0) return "failed";
+  if (
+    decision.action === "replan" &&
+    (decision.failedNodes.length > 0 ||
+      decision.blockedNodes.length > 0 ||
+      decision.failedGates.length > 0)
+  ) {
+    return "failed";
+  }
   return "running";
+}
+
+function resolveMaxIterations(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) return DEFAULT_LOOP_MAX_ITERATIONS;
+  return Math.min(HARD_LOOP_MAX_ITERATIONS, Math.max(1, Math.trunc(value)));
 }
 
 function collectFailedGates(nodes: DagNode[]): string[] {

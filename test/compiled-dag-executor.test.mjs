@@ -98,7 +98,7 @@ test("executeCompiledDag runs compiled DAGs and persists loop decisions", async 
         inputId: "input-compiled",
         flow: "compiled-dag",
         strategy: "sequential",
-        model: "",
+        model: "test-model",
         mcpScope: "none",
       },
     ]);
@@ -189,7 +189,8 @@ test("executeCompiledDag replans when compiled DAG execution fails", async () =>
     assert.equal(result.run.success, false);
     assert.equal(result.run.state.nodes[0].status, "failed");
     assert.equal(result.loopDecision.action, "replan");
+    assert.deepEqual(result.loopDecision.failedNodes, ["failing-node"]);
     assert.match(result.loopDecision.reason, /failed or blocked nodes/);
-    assert.equal(result.loopState.status, "running");
+    assert.equal(result.loopState.status, "failed");
   });
 });

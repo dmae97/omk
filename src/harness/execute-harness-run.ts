@@ -51,11 +51,16 @@ function withHarnessEnv(runner: TaskRunner, env: Record<string, string> | undefi
     ...(runner.onThinking ? { onThinking: runner.onThinking } : {}),
     run(node, nodeEnv, signal, context) {
       const nextContext = contextWithBaseEnv(context, env);
-      return runner.run(node, {
-        ...env,
-        ...nodeEnv,
-        ...(nextContext ? envFromWorkerManifest(nextContext.worker) : {}),
-      }, signal, nextContext);
+      return runner.run(
+        node,
+        mergeEnvPreservingNonEmpty(
+          env,
+          nodeEnv,
+          nextContext ? envFromWorkerManifest(nextContext.worker) : {},
+        ),
+        signal,
+        nextContext,
+      );
     },
     ...(runner.fork
       ? {
@@ -65,6 +70,19 @@ function withHarnessEnv(runner: TaskRunner, env: Record<string, string> | undefi
         }
       : {}),
   };
+}
+
+function mergeEnvPreservingNonEmpty(
+  ...sources: Array<Record<string, string>>
+): Record<string, string> {
+  const merged: Record<string, string> = {};
+  for (const source of sources) {
+    for (const [key, value] of Object.entries(source)) {
+      if (value === "" && merged[key]) continue;
+      merged[key] = value;
+    }
+  }
+  return merged;
 }
 
 export async function executeHarnessRun(input: ExecuteHarnessRunInput): Promise<RunResult> {

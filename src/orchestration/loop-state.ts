@@ -17,6 +17,9 @@ export interface LoopDecision {
   runId: string;
   iteration: number;
   nextPrompt?: string;
+  failedNodes: string[];
+  blockedNodes: string[];
+  pendingNodes: string[];
   failedGates: string[];
   requiredEvidenceMissing: string[];
   createdAt: string;
