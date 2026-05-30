@@ -9,11 +9,18 @@ export interface PersistLoopArtifactsOptions {
   nextInputEnvelope?: InputEnvelope;
 }
 
+export interface PersistLoopArtifactsResult {
+  runDir: string;
+  statePath: string;
+  decisionsPath: string;
+  nextInputPath?: string;
+}
+
 export async function persistLoopArtifacts(
   state: OrchestrationLoopState,
   decision: LoopDecision,
   options: PersistLoopArtifactsOptions,
-): Promise<{ runDir: string; statePath: string; decisionsPath: string; nextInputPath?: string }> {
+): Promise<PersistLoopArtifactsResult> {
   const runId = options.runId ?? state.runId;
   const runDir = join(options.root, ".omk", "runs", runId);
   await mkdir(runDir, { recursive: true });
