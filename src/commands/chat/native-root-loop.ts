@@ -339,6 +339,7 @@ export type NativeTurnRisk = "read" | "write" | "shell" | "merge";
 
 const API_ADVISORY_PROVIDERS = new Set([
   "deepseek",
+  "kimi",
   "local-llm",
   "mimo",
   "openrouter",

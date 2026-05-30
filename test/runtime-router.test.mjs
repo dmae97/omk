@@ -5,21 +5,72 @@ import { createRuntimeBackedTaskRunner } from "../dist/runtime/runtime-backed-ta
 import { createRuntimeRouter } from "../dist/runtime/runtime-router.js";
 import { buildTaskRunContext } from "../dist/runtime/worker-manifest.js";
 
-test("runtime router prefers direct Kimi API for coding intent when Kimi API and Codex are available", async () => {
+test("runtime router prefers direct Kimi API for advisory coding intent when Kimi API and Codex are available", async () => {
   const calls = [];
   const router = createRuntimeRouter({
     runtimes: [
-      fakeRuntime("kimi-api", calls),
+      fakeRuntime("kimi-api", calls, advisoryApiCapabilities({ vision: true, supportsToolCalling: true })),
       fakeRuntime("codex-cli", calls),
     ],
   });
 
-  const result = await router.execute(fakeTask({ prompt: "implement the provider-neutral routing patch" }));
+  const result = await router.execute(fakeTask({
+    prompt: "implement the provider-neutral routing patch",
+    capabilities: {
+      read: true,
+      write: false,
+      shell: false,
+      mcp: false,
+      patch: false,
+      review: true,
+      merge: false,
+      vision: false,
+    },
+  }));
 
   assert.equal(result.exitCode, 0);
   assert.equal(result.metadata.selectedRuntime, "kimi-api");
   assert.deepEqual(calls, ["kimi-api"]);
   assert.deepEqual(result.metadata.fallbackChain, ["kimi-api", "codex-cli"]);
+});
+
+test("runtime router skips API advisory runtimes for workspace-write tasks", async () => {
+  const calls = [];
+  const router = createRuntimeRouter({
+    runtimes: [
+      fakeRuntime("mimo-api", calls, advisoryApiCapabilities({ vision: true, supportsToolCalling: true })),
+      fakeRuntime("kimi-api", calls, advisoryApiCapabilities({ vision: true, supportsToolCalling: true })),
+      fakeRuntime("local-llm", calls, advisoryApiCapabilities()),
+      fakeRuntime("codex-cli", calls, {
+        read: true,
+        write: true,
+        shell: true,
+        mcp: false,
+        patch: true,
+        review: true,
+        merge: false,
+        vision: false,
+      }),
+    ],
+  });
+
+  const result = await router.execute(fakeTask({
+    prompt: "implement the provider-neutral routing patch",
+    capabilities: {
+      read: true,
+      write: true,
+      shell: false,
+      mcp: false,
+      patch: true,
+      review: false,
+      merge: false,
+      vision: false,
+    },
+  }));
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.metadata.selectedRuntime, "codex-cli");
+  assert.deepEqual(calls, ["codex-cli"]);
 });
 
 test("runtime router keeps Kimi as compatibility fallback when preferred runtimes are absent", async () => {
@@ -375,6 +426,20 @@ function fakeRuntime(id, calls, capabilities) {
         metadata: { runtime: id },
       };
     },
+  };
+}
+
+function advisoryApiCapabilities(overrides = {}) {
+  return {
+    read: true,
+    write: false,
+    shell: false,
+    mcp: false,
+    patch: false,
+    review: true,
+    merge: false,
+    vision: false,
+    ...overrides,
   };
 }
 

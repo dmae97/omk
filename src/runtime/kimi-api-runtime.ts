@@ -189,10 +189,10 @@ export class KimiApiRuntime implements AgentRuntime {
   readonly priority: number;
   readonly capabilities: RuntimeCapabilities = {
     read: true,
-    write: true,
+    write: false,
     shell: false,
     mcp: false,
-    patch: true,
+    patch: false,
     review: true,
     merge: false,
     vision: true,
@@ -215,6 +215,12 @@ export class KimiApiRuntime implements AgentRuntime {
 
   supports(capsule: ContextCapsule): boolean {
     if (!this.apiKey) return false;
+    const requiredCapabilities = capsule.node.routing?.assignedProviderCapabilities ?? [];
+    if (
+      requiredCapabilities.some((capability) =>
+        ["write", "patch", "shell", "mcp", "merge"].includes(capability)
+      )
+    ) return false;
     const requiresVision = capsule.node.routing?.assignedProviderCapabilities?.includes("vision");
     if (requiresVision && !this.capabilities.vision) return false;
     const requiresToolCalling = capsule.node.routing?.requiresToolCalling;
@@ -268,6 +274,23 @@ export class KimiApiRuntime implements AgentRuntime {
         exitCode: 1,
         thinking: "",
         metadata: { error: "KIMI_API_KEY is not set" },
+      };
+    }
+    if (
+      task.capabilities.write ||
+      task.capabilities.patch ||
+      task.capabilities.shell ||
+      task.capabilities.mcp ||
+      task.capabilities.merge
+    ) {
+      return {
+        output: "",
+        exitCode: 1,
+        thinking: "",
+        metadata: {
+          error: `${this.id} is advisory/read-only and does not receive write, shell, MCP, merge, or patch authority`,
+          authorityMode: "advisory",
+        },
       };
     }
 

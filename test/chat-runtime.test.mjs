@@ -868,6 +868,51 @@ test("explicit MiMo native shell prompts do not request direct shell or MCP runt
   deepStrictEqual(task.capabilities.review, true);
 });
 
+test("explicit Kimi API native shell prompts do not request direct shell or MCP runtime authority", async () => {
+  const node = buildNativeRootLoopTurnNode({
+    bootstrap: {
+      ...codexBootstrap,
+      provider: "kimi",
+      providerPolicy: "kimi",
+      selectedProvider: "kimi",
+      selectedRuntimeId: "kimi-api",
+      selectedModel: "kimi-k2-6",
+      sessionMode: "api-turn",
+    },
+    prompt: "npm run verify 해줘",
+    nodeId: "turn-kimi-shell-advisory",
+    mcpAllowlist: ["omk-project", "memory"],
+    skillNames: ["omk-context-broker"],
+  });
+  const task = await capsuleToTask({
+    schemaVersion: 1,
+    runId: "local-chat-runtime-test",
+    nodeId: node.id,
+    goal: "native kimi advisory shell turn",
+    task: node.name,
+    system: "",
+    node,
+    dependencySummaries: [],
+    relevantFiles: [],
+    graphMemory: [],
+    priorAttempts: [],
+    evidenceRequirements: [],
+    budget: { maxInputTokens: 16000, compression: "normal" },
+  });
+
+  deepStrictEqual(node.routing?.provider, "kimi");
+  deepStrictEqual(node.routing?.risk, "shell");
+  deepStrictEqual(node.routing?.readOnly, true);
+  deepStrictEqual(node.routing?.sandboxMode, "read-only");
+  deepStrictEqual(node.routing?.assignedProviderCapabilities, ["read", "review", "advisory"]);
+  deepStrictEqual(node.routing?.requiresMcp, false);
+  deepStrictEqual(task.capabilities.write, false);
+  deepStrictEqual(task.capabilities.patch, false);
+  deepStrictEqual(task.capabilities.shell, false);
+  deepStrictEqual(task.capabilities.mcp, false);
+  deepStrictEqual(task.capabilities.review, true);
+});
+
 test("buildCapabilityInjection normalizes provider-neutral capability metadata", () => {
   const injection = buildCapabilityInjection({
     mcpAllowlist: [" github ", "github", "", "omk-project"],

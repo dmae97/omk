@@ -61,10 +61,10 @@ export class LocalLlmRuntime implements AgentRuntime {
   readonly priority = 35;
   readonly capabilities: RuntimeCapabilities = {
     read: true,
-    write: true,
-    shell: true,
+    write: false,
+    shell: false,
     mcp: false,
-    patch: true,
+    patch: false,
     review: true,
     merge: false,
     vision: false,
@@ -83,7 +83,14 @@ export class LocalLlmRuntime implements AgentRuntime {
     this.baseUrl = (options.baseUrl ?? process.env.LOCAL_LLM_BASE_URL ?? "http://localhost:8080/v1").replace(/\/+$/, "");
   }
 
-  supports(_capsule: ContextCapsule): boolean {
+  supports(capsule: ContextCapsule): boolean {
+    const requiredCapabilities = capsule.node.routing?.assignedProviderCapabilities ?? [];
+    if (
+      requiredCapabilities.some((capability) =>
+        ["write", "patch", "shell", "mcp", "merge", "vision"].includes(capability)
+      )
+    ) return false;
+    if (capsule.node.routing?.requiresToolCalling) return false;
     return true;
   }
 
@@ -139,6 +146,25 @@ export class LocalLlmRuntime implements AgentRuntime {
   }
 
   async execute(task: AgentTask): Promise<AgentResult> {
+    if (
+      task.capabilities.write ||
+      task.capabilities.patch ||
+      task.capabilities.shell ||
+      task.capabilities.mcp ||
+      task.capabilities.merge ||
+      task.capabilities.toolCalling
+    ) {
+      return {
+        output: "",
+        exitCode: 1,
+        thinking: "",
+        metadata: {
+          error: "local-llm is advisory/read-only and does not receive write, shell, MCP, merge, patch, or tool-calling authority",
+          authorityMode: "advisory",
+        },
+      };
+    }
+
     const messages: LocalLlmChatMessage[] = [];
     if (task.context.system) {
       messages.push({ role: "system", content: task.context.system });
