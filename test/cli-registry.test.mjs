@@ -43,6 +43,7 @@ test("sliced CLI registry preserves ordered top-level commands", () => {
     "star",
     "menu",
     "mode",
+    "version",
     "update",
     "init",
     "doctor",

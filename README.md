@@ -2,7 +2,11 @@
 
 Project-aware AI coding runtime.
 
-Install once. Resume every project. Route to the best coding model.
+Install once. Resume every project. Route work through OMK-owned provider adapters.
+
+Current source target: `1.2.0-rc.0` package RC for the `v1.2` runtime contract family. This is not a GA claim; see [versioning](docs/versioning.md) and [provider maturity](docs/provider-maturity.md).
+
+Proof status: `omk.proof-bundle.v1` schema and `npm run proof:check` gate are available; public proof bundles are indexed at `proof/PROOF_INDEX.md` in the source tree. Current proof count: 1 scoped no-Kimi Codex smoke bundle.
 
 ## Install
 
@@ -22,7 +26,7 @@ curl -fsSL https://get.omk.dev/install.sh
 ## What it does
 
 - **Project memory** — resumes context across sessions
-- **Model routing** — auto-selects DeepSeek Flash, MiMo, Kimi, Claude, Codex by task complexity
+- **Provider routing** — routes work across Kimi, MiMo, DeepSeek, Codex, OpenCode, OpenRouter, Qwen, and local adapters when configured
 - **MCP orchestration** — auto-connects project MCP servers, skills, hooks
 - **Consent & governance** — granular opt-in levels (L0-L4), never auto-opt-in
 
@@ -44,4 +48,4 @@ omk consent       # privacy settings
 
 ## License
 
-[Apache-2.0](LICENSE)
+[MIT](LICENSE)

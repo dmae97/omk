@@ -1,7 +1,7 @@
 # OMK Command Maturity Matrix
 
-Last updated: 2026-05-24
-Current source version: v1.1.18
+Last updated: 2026-05-31
+Current source version: v1.2.0-rc.0 package RC (`v1.2` runtime contract family)
 
 | Level | Meaning |
 |-------|---------|
@@ -15,7 +15,7 @@ Current source version: v1.1.18
 |---------|-------|
 | `omk init` | Project scaffold for AGENTS.md, DESIGN.md, and local `.omk/` state. |
 | `omk doctor` | Runtime/toolchain/project diagnostics. Supports `--json` for CI-style consumption. |
-| `omk chat` | Interactive chat coordinator with startup status/HUD preview and run-scoped harness manifest generation. The Kimi-default path is stable; native provider-neutral routing remains gated by the hardening items below. |
+| `omk chat` | Interactive chat coordinator with startup status/HUD preview and run-scoped harness manifest generation. The authority-provider path is the most mature path; provider-neutral routing remains release-candidate gated by the hardening items below. |
 | `omk hud` | Execution status and local system usage HUD. |
 | `omk cockpit` | Sidecar cockpit for run state, TODOs, and ETA. |
 | `omk plan` | Plan-only execution entrypoint. |
@@ -39,7 +39,7 @@ Current source version: v1.1.18
 | `omk sync` | Asset sync with dry-run/diff/rollback support; manifest-backed rollback coverage is still incomplete for some global assets. |
 | `omk verify` | Evidence gate verification for runs. Supports `--json`. |
 | `omk goal` | Codex-style goal create/list/show/run/verify/close/block/continue with generated plan/evidence criteria. |
-| `omk provider` / `omk deepseek` / `omk deepseekset` | DeepSeek availability, enable/disable, API-key setup, and provider-neutral opportunistic routing with Kimi as the most mature adapter. JSON exists for provider doctor and state changes. |
+| `omk provider` / `omk deepseek` / `omk deepseekset` | Provider listing, doctor, enable/disable, auth metadata, API-key environment naming, DeepSeek setup, and provider-neutral opportunistic routing. JSON exists for provider doctor and state changes; see `docs/provider-maturity.md`. |
 | `omk graph view` | Generates HTML from `.omk/memory/graph-state.json`; useful now, but ontology coverage and run-linking are still maturing. |
 | `omk mcp` | Project/global MCP list, doctor, test, serve, add/remove/install/sync-global with structured diagnostics and explicit project/global scope handling. |
 | `omk dag` | Spec DAG validation/show/replay/from-spec. Replay supports provider policy. |
@@ -68,9 +68,10 @@ Current source version: v1.1.18
 | Area | Current state | Next hardening |
 |------|---------------|----------------|
 | JSON output | Present on `doctor`, `runs/history`, `update`, `verify`, `goal` read/verify commands, provider commands, and screenshot subcommands; provider/screenshot JSON contracts are now regression-tested. | Expand consistent JSON to MCP diagnostics, graph, DAG, summary, and workflow entrypoints. |
-| Provider routing | DeepSeek opportunistic worker routing exists for low-risk/read-heavy paths; Kimi remains the most mature adapter, orchestrator, and fallback; run summaries/reports now include provider attempt and fallback totals. | Add HUD provider route metrics and broader release-gate tests for fallback/metadata contracts. |
+| Provider routing | Provider routing exists for low-risk/read-heavy paths and explicit provider policies. Kimi remains the most mature authority/fallback path in this RC line; run summaries/reports include provider attempt and fallback totals. See `docs/provider-maturity.md`. | Add HUD provider route metrics and broader release-gate tests for fallback/metadata contracts. |
 | Native runtime safety | OMK owns the root-orchestrator direction, but native chat must still lock turn-risk inference, approval/sandbox propagation, authority resolution, provider health probes, and DeepSeek read-only enforcement before stable provider-neutral claims. | Treat `docs/native-root-runtime-hardening.md` and `.omk/specs/native-orchestrator-phase1/` as the active hardening contract. |
 | MCP diagnostics | `mcp list/doctor/test` exist; invalid project/global MCP JSON now fails visibly through diagnostics without exposing config contents. | Add machine-readable MCP JSON and structured failure categories for command resolution, timeout, permission, and server health. |
 | Skills and harness templates | `omk skill` exposes current core/TypeScript/review packs, while init templates document project MCP scope, runtime skills, portable `.agents/skills`, and run-scoped harness manifests. | Keep external-inspired skills compact, source-linked, and non-vendored; verify install/sync through `skill-command` tests and package audit. |
-| Release docs and site | README, CHANGELOG, MATURITY, ROADMAP, getting-started docs, package audit, and release-gate commands now distinguish the v1.1.18 source target from the latest published v1.1.17 release while documenting alpha/experimental surfaces, parallel subagent orchestration, typed doctor repair plans, startup update prompts, native safety package readiness, current harness templates, packaged workflow skills, and the public project repository at `https://github.com/dmae97/open_multi-agent_kit`. | Treat `npm run release:check`, native safety packaging, tarball install smoke, GitHub Smoke Test, and GitHub CI evidence on the exact commit as the publish/deploy gate before claiming v1.1.18 as released. Current `6305e2b` Smoke is green but CI is red on Windows jobs. |
+| Release docs and site | README, CHANGELOG, MATURITY, ROADMAP, versioning docs, provider-maturity docs, package audit, and release-gate commands distinguish the `v1.2.0-rc.0` package RC from a stable `v1.2` release while documenting alpha/experimental surfaces, current harness templates, provider limits, and the public project repository at `https://github.com/dmae97/open_multi-agent_kit`. | Treat `npm run release:check`, native safety packaging, tarball install smoke, and CI evidence on the exact commit as the publish/deploy gate before claiming `v1.2.0` stable or release-ready. |
+| Public proof bundles | `omk.proof-bundle.v1`, `npm run proof:check`, `npm run proof:index`, and one scoped no-Kimi Codex smoke bundle exist as RC proof-gate scaffolding. | Expand beyond the scoped smoke proof before broader stability claims; proof bundles must keep checksums, known limitations, and sanitized repo-relative artifacts. |
 | Goal planner | Goal lifecycle exists, including continue, generated plan/evidence criteria, and verification. | Expand planner quality scoring and release evidence. |

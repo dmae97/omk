@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "omk.proof-bundle.v1",
+  "proofId": "001-no-kimi-codex-smoke",
+  "title": "No-Kimi Codex smoke proof bundle",
+  "omkVersion": "1.2.0-rc.0",
+  "runtimeVersion": "v1.2",
+  "commit": "cd3a51f860d2",
+  "runId": "chat-2026-05-31T05-20-57-565Z-3602298",
+  "providerPolicy": "codex pinned; KIMI_BIN=/nonexistent/kimi; MCP preflight off; MCP scope none",
+  "scenario": "no-kimi-smoke",
+  "files": {
+    "rawPrompt": "proof/verified-runs/001-no-kimi-codex-smoke/raw-prompt.md",
+    "commands": "proof/verified-runs/001-no-kimi-codex-smoke/commands.sh",
+    "buildStdout": "proof/verified-runs/001-no-kimi-codex-smoke/build-clean.out",
+    "stdout": "proof/verified-runs/001-no-kimi-codex-smoke/smoke-no-kimi-codex.out",
+    "verifyJson": "proof/verified-runs/001-no-kimi-codex-smoke/verify.json",
+    "decisionsJsonl": "proof/verified-runs/001-no-kimi-codex-smoke/decisions.jsonl",
+    "runManifest": "proof/verified-runs/001-no-kimi-codex-smoke/run-manifest.json",
+    "evidenceJsonl": "proof/verified-runs/001-no-kimi-codex-smoke/evidence.jsonl",
+    "limitations": "proof/verified-runs/001-no-kimi-codex-smoke/limitations.md"
+  },
+  "verdict": "passed",
+  "knownLimitations": [
+    "This bundle proves only the scoped no-Kimi Codex smoke path.",
+    "Output artifacts are sanitized by replacing the workspace root with [repo-root].",
+    "This is not a full release verification and does not replace npm run release:rc."
+  ],
+  "checksums": {
+    "proof/verified-runs/001-no-kimi-codex-smoke/raw-prompt.md": "f6b48fbc234ff64cbfc982d0e719b2e6262339704a098b9578653d5d3bb69c9e",
+    "proof/verified-runs/001-no-kimi-codex-smoke/commands.sh": "1fe3fc9d4796d4f046f77d22020a1757e6857d3ec89ed892a983e6fa0835bf4b",
+    "proof/verified-runs/001-no-kimi-codex-smoke/build-clean.out": "a05c840553e29a2aa5246ae7d6e695e27e006eaf61c44f54747aadc858a97eb3",
+    "proof/verified-runs/001-no-kimi-codex-smoke/smoke-no-kimi-codex.out": "b031081f138636c51b910030636b061000c902e3af4a4d02b0048264ec83f3ad",
+    "proof/verified-runs/001-no-kimi-codex-smoke/verify.json": "c169daf604b3bfc4230d00a447b1d8da0b797073b2e6c2c43385de83d7bbe2e3",
+    "proof/verified-runs/001-no-kimi-codex-smoke/decisions.jsonl": "436680e4edec3d461315c086adfffd36004c43b0b64ffea9881cad479cd98b42",
+    "proof/verified-runs/001-no-kimi-codex-smoke/run-manifest.json": "8f0106d7a90dd378ca737a78f1b48d6224973fd807819f95d31803501d33dc6e",
+    "proof/verified-runs/001-no-kimi-codex-smoke/evidence.jsonl": "56e33f1039aab747fe1fcd830fa8dc8d657317ff707869250001c71179ff3950",
+    "proof/verified-runs/001-no-kimi-codex-smoke/limitations.md": "4bf62541f35cff5009366b35c5a4771429ab48e9fc1a40c8ea7fae27588d7364"
+  }
+}

@@ -4,6 +4,15 @@ import { t } from "../../util/i18n.js";
 
 export function registerSystemCommands(program: Command): void {
   program
+    .command("version")
+    .description("Print OMK version, runtime, contract, and schema status")
+    .option("--json", "Output version report as a JSON envelope")
+    .action(async (options) => {
+      const { versionCommand } = await import("../../commands/version.js");
+      await versionCommand(options);
+    });
+
+  program
     .command("update")
     .description("Check or run OMK package and optional provider adapter updates")
     .argument("[action]", "check (default) | omk | kimi-adapter")

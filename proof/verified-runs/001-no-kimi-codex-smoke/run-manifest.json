@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "omk.run-manifest.v1",
+  "runId": "chat-2026-05-31T05-20-57-565Z-3602298",
+  "createdAt": "2026-05-31T05:20:51.223Z",
+  "completedAt": "2026-05-31T05:21:03.236Z",
+  "status": "passed",
+  "providerPolicy": {
+    "provider": "codex",
+    "mode": "pinned"
+  },
+  "nodes": [
+    {
+      "id": "build-clean",
+      "status": "passed",
+      "evidenceRefs": [
+        "build-clean-command"
+      ]
+    },
+    {
+      "id": "no-kimi-codex-smoke",
+      "status": "passed",
+      "evidenceRefs": [
+        "no-kimi-codex-smoke-command",
+        "sanitized-root-marker"
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "proof/verified-runs/001-no-kimi-codex-smoke/build-clean.out",
+      "kind": "stdout"
+    },
+    {
+      "path": "proof/verified-runs/001-no-kimi-codex-smoke/smoke-no-kimi-codex.out",
+      "kind": "stdout"
+    }
+  ],
+  "evidenceSummary": {
+    "required": 3,
+    "passed": 3,
+    "failed": 0,
+    "missing": 0
+  },
+  "decisionTracePath": "proof/verified-runs/001-no-kimi-codex-smoke/decisions.jsonl"
+}

@@ -25,6 +25,10 @@ jobs:
       - run: npm run secret:scan
       - run: npm run secret:scan:runtime
       - run: npm run check
+      - run: npm run contract:check
+      - run: npm run version:check
+      - run: npm run proof:check
+      - run: npm run verify:no-kimi
       - uses: dtolnay/rust-toolchain@stable
       - run: npm run rust:check
       - name: Run tests

@@ -1,15 +1,17 @@
 # Roadmap
 
-Current source version: v1.1.18
-Last updated: 2026-05-24
+Current source version: v1.2.0-rc.0 package RC (`v1.2` runtime contract family)
+Last updated: 2026-05-31
 
-## 2026-05-24 runtime hardening status
+## 2026-05-31 v1.2 RC status
 
-Latest pushed source on `new-origin/main` is `6305e2b62185c11549f59e2340936769a3027cdd`. This supersedes the earlier native-root pivot commit in the same line. The architecture direction remains OMK-as-root with Kimi as the default coding adapter, but the current line is still hardening-gated:
+The local source tree is aligned to package version `1.2.0-rc.0`, runtime version `v1.2`, and release channel `rc`. The architecture direction is OMK-as-root with providers as adapters. Kimi remains the most mature authority path in this RC line; other providers have narrower or advisory maturity unless tests and contracts say otherwise.
 
-- GitHub Actions Smoke Test is green on `6305e2b`.
-- GitHub Actions CI is red on Windows jobs on `6305e2b`; do not publish/tag v1.1.18 until this is fixed.
-- The active architecture backlog is now tracked in `docs/native-root-runtime-hardening.md`, `docs/native-root-runtime-algorithms.md`, and `.omk/specs/native-orchestrator-phase1/`.
+- Version contract details: `docs/versioning.md`.
+- Provider status and limitations: `docs/provider-maturity.md`.
+- Public proof index: `proof/PROOF_INDEX.md`.
+- Active native-runtime backlog: `docs/native-root-runtime-hardening.md`, `docs/native-root-runtime-algorithms.md`, and `.omk/specs/native-orchestrator-phase1/`.
+- Do not claim stable `v1.2` until release gates pass on the exact target commit and the stable package/tag is published.
 
 ## v1.1.9 reality
 
@@ -17,11 +19,11 @@ Provider routing and graph viewing are no longer purely future work:
 
 - `omk run`, `omk parallel`, and DAG replay expose `--provider auto|kimi`.
 - `omk provider` / `omk deepseek` manage DeepSeek enablement, key setup, availability checks, and default fallback to the most mature adapter.
-- DeepSeek is an opportunistic read-only/advisory worker; Kimi remains the most mature adapter, orchestrator, writer, merger, and final authority.
+- DeepSeek is an opportunistic read-only/advisory worker; Kimi remains the most mature authority adapter in this historical line, while v1.2 RC moves orchestration ownership into OMK.
 - `omk graph view` generates an HTML view from `.omk/memory/graph-state.json`.
 - `omk goal` has a persisted lifecycle, continue loop, generated plan/evidence criteria, and verification flow.
 
-## v1.2 — Native Orchestrator Decoupling
+## v1.2 RC — Native Orchestrator Decoupling
 
 ### Phase 0: Foundation & Spec
 
@@ -60,7 +62,7 @@ Provider routing and graph viewing are no longer purely future work:
 
 - Update `AGENTS.md`, `DESIGN.md`, init templates, and skill docs to reflect OMK-as-root narrative.
 - Deprecate Kimi-only subagent language where OMK `ParallelOrchestrator` is the actual spawn surface.
-- Mark v1.2.x stable once provider fallback, evidence gates, and DAG replay are green across all supported adapters.
+- Mark v1.2.x stable only after provider fallback, evidence gates, DAG replay, version contracts, and provider-maturity docs are green across supported adapters.
 
 ## v1.3 — Hardening the current surface
 
@@ -68,13 +70,15 @@ Provider routing and graph viewing are no longer purely future work:
 
 - Done: YAML validation now runs in local `verify` plus CI/smoke workflows.
 - Done: package dry-pack, package audit, tarball smoke, native safety build, and release matrix gates were re-verified against v1.1.17 artifacts.
-- Required before v1.1.18 publish/tag: regenerate the native safety binary, pass package audit, pass smoke-pack/tarball install smoke, and pass `npm run release:check` on the exact intended release diff.
-- Required before v1.1.18 publish/tag: GitHub Actions CI and Smoke Test must both pass on the exact intended commit.
+- Required before stable v1.2 publish/tag: regenerate the native safety binary, pass package audit, pass smoke-pack/tarball install smoke, and pass `npm run release:check` on the exact intended release diff.
+- Required before stable v1.2 publish/tag: CI and smoke checks must pass on the exact intended commit.
 - Done: provider/deepseek and screenshot JSON command contracts gained hermetic regression tests.
+- Done: proof bundle schema/check/index scaffolding exists, with one scoped no-Kimi Codex smoke bundle.
 - Done: current AGENTS/init templates and packaged workflow skills were aligned with the active skills/MCP/agents/harness surface, including all generated agent MCP/skills/hooks flags and parallel subagent orchestration guidance.
 - Remaining: lock runtime safety gates for native turn risk, approval/sandbox propagation, authority-provider resolution, provider health probes, and DeepSeek read-only routing.
 - Remaining: lock broader provider fallback metadata with tests for rate limit, timeout, and default fallback variants.
 - Remaining: define minimum machine-readable CLI envelopes for the rest of the automation-critical commands.
+- Remaining: promote additional real proof bundles until the public proof index covers release, replay/inspect, evidence-block, and fallback-route scenarios.
 
 ### P1: observability and diagnostics
 
@@ -95,7 +99,7 @@ Provider routing and graph viewing are no longer purely future work:
 
 ### Provider routing maturity
 
-- Keep Kimi as the most mature adapter and main orchestrator, planner, merger, and final synthesis runtime.
+- Keep Kimi as the most mature authority adapter and default fallback until another provider has tested write/merge/MCP authority contracts.
 - Use provider hints for explorer, reviewer, QA, planner, and documentation roles only when preflight is healthy and task risk is low.
 - Record provider attempts, route confidence, fallback reason, and final authority in run evidence.
 
@@ -121,4 +125,5 @@ Provider routing and graph viewing are no longer purely future work:
 | v1.1.15 | Isolated HOME MCP shell-profile hotfix and persistent fetch MCP entrypoint |
 | v1.1.16 | Deterministic IntentFrame/ActionAtom orchestration, chat schema preflight, MCP duplicate policy, agent capability propagation, and doctor/init/pack smoke fixes |
 | v1.1.17 | Full generated-agent MCP/skills/hooks enablement, parallel subagent orchestration emphasis, and v1.1.17 release docs |
-| v1.1.18 | **Last Kimi-wrapper dominant release.** Package source version alignment, latest-published v1.1.17 caveat, native safety package gate, typed doctor repair plans, startup update prompt UX, and parallel subagent orchestration release-doc alignment |
+| v1.1.18 | Historical Kimi-wrapper dominant release-prep line: package source version alignment, native safety package gate, typed doctor repair plans, startup update prompt UX, and parallel subagent orchestration release-doc alignment |
+| v1.2.0-rc.0 | Package RC for the `v1.2` runtime contract family, provider-neutral docs alignment, version contract docs, and provider maturity limits |

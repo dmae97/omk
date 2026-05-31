@@ -1,6 +1,6 @@
 {
   "name": "open-multi-agent-kit",
-  "version": "1.1.18",
+  "version": "1.2.0-rc.0",
   "description": "MCP-native agent control plane for coding workflows. Boots MCP-connected workspaces with provider routing, evidence gates, worktree isolation, and local graph memory.",
   "type": "module",
   "bin": {
@@ -27,7 +27,14 @@
     "smoke:pack": "node scripts/pack-smoke.mjs",
     "prepare": "npm run build",
     "yaml:check": "node scripts/validate-yaml.mjs",
-    "release:check": "npm run verify && npm run native:build && npm run pack:dry && npm run audit:package && npm run smoke:pack",
+    "schema:check": "node scripts/validate-json-contracts.mjs",
+    "proof:index": "node scripts/build-proof-index.mjs",
+    "proof:check": "node scripts/proof-check.mjs",
+    "version:check": "node scripts/check-version-consistency.mjs",
+    "contract:check": "npm run build:clean && npm run schema:check && node scripts/check-json-stdout.mjs",
+    "verify:contracts": "npm run contract:check",
+    "release:check": "npm run verify && npm run contract:check && npm run version:check && npm run proof:check && npm run native:build && npm run pack:dry && npm run audit:package && npm run smoke:pack",
+    "release:rc": "npm run verify && npm run verify:no-kimi && npm run contract:check && npm run version:check && npm run proof:check && npm run native:build && npm run pack:dry && npm run audit:package && npm run smoke:pack",
     "smoke:no-kimi:chat": "KIMI_BIN=/nonexistent/kimi OMK_LEGACY_CHAT=0 OMK_MCP_PREFLIGHT=off OMK_PROJECT_ROOT=\"$PWD\" node dist/cli.js chat --provider auto --mode agent --execution ask --layout plain --mcp-scope none --smoke --json",
     "smoke:no-kimi:codex": "KIMI_BIN=/nonexistent/kimi OMK_LEGACY_CHAT=0 OMK_MCP_PREFLIGHT=off OMK_PROJECT_ROOT=\"$PWD\" node dist/cli.js chat --provider codex --mode agent --execution ask --layout plain --mcp-scope none --smoke --json",
     "smoke:no-kimi:doctor": "KIMI_BIN=/nonexistent/kimi OMK_LEGACY_CHAT=0 OMK_PROJECT_ROOT=\"$PWD\" node dist/cli.js doctor --json",

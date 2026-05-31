@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.2.0-rc.0 — Version and provider documentation alignment (2026-05-31)
+
+### Added
+- `docs/versioning.md` documents the `1.2.0-rc.0` package RC, `v1.2` runtime contract family, `rc` channel, schema versions, and verification commands.
+- `docs/provider-maturity.md` documents provider routing roles, authority limits, auth/config sources, and known RC limitations.
+- `omk.proof-bundle.v1`, `npm run proof:check`, `npm run proof:index`, and a scoped no-Kimi Codex smoke proof bundle introduce the public proof gate surface.
+
+### Improved
+- README, CONTRIBUTING, MATURITY, ROADMAP, and verified-run issue template wording now use provider-neutral OMK identity while keeping Kimi described as the most mature authority path for this RC line.
+- License wording now matches the checked repository `LICENSE` file (`MIT`).
+- `release:check` and `release:rc` now include the proof gate alongside contract and version checks.
+
+### Verification
+- This is a source RC documentation entry. Do not treat it as a stable `v1.2` release or a publish claim.
+
 ## v1.1.18 — Release-prep hardening for parallel orchestration, doctor repair plans, and startup updates (2026-05-22)
 
 ### New

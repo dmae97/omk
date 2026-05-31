@@ -1,0 +1,52 @@
+
+> open-multi-agent-kit@1.2.0-rc.0 smoke:no-kimi:codex
+> KIMI_BIN=/nonexistent/kimi OMK_LEGACY_CHAT=0 OMK_MCP_PREFLIGHT=off OMK_PROJECT_ROOT="$PWD" node dist/cli.js chat --provider codex --mode agent --execution ask --layout plain --mcp-scope none --smoke --json
+
+(node:3602298) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{
+  "ok": true,
+  "command": "chat smoke",
+  "runId": "chat-2026-05-31T05-20-57-565Z-3602298",
+  "agentFile": ".omk/runs/chat-2026-05-31T05-20-57-565Z-3602298/chat-agent.yaml",
+  "schemaOk": true,
+  "mcpScope": "none",
+  "skillsScope": "all",
+  "hooksScope": "all",
+  "runtimeMcpConfig": {
+    "injected": false,
+    "path": null,
+    "exists": false
+  },
+  "root": {
+    "path": "[repo-root]",
+    "cwd": "[repo-root]",
+    "source": "strong-marker"
+  },
+  "diagnostics": {
+    "toolPlane": []
+  },
+  "startupFailureArtifactExists": false,
+  "checks": [
+    {
+      "name": "agent schema",
+      "status": "ok",
+      "message": "agent YAML schema is valid"
+    },
+    {
+      "name": "runtime MCP merge",
+      "status": "ok",
+      "message": "MCP disabled by scope none"
+    },
+    {
+      "name": "startup failure artifact",
+      "status": "ok",
+      "message": "no startup failure artifact"
+    },
+    {
+      "name": "tool-plane diagnostics",
+      "status": "ok",
+      "message": "no tool-plane diagnostics"
+    }
+  ]
+}

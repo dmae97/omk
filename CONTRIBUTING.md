@@ -1,13 +1,13 @@
-# Contributing to OMK (oh-my-kimi)
+# Contributing to OMK
 
-Thanks for your interest in contributing! OMK is a Kimi-native multi-agent orchestration harness. We welcome bug reports, feature suggestions, documentation improvements, and code contributions.
+Thanks for your interest in contributing! OMK is a provider-neutral multi-agent coding runtime. Kimi is one supported provider adapter and remains the most mature authority path in this release-candidate line. We welcome bug reports, feature suggestions, documentation improvements, and code contributions.
 
 ## Quick Start
 
 ```bash
 # Clone and install
-git clone https://github.com/dmae97/oh-my-kimi.git
-cd oh-my-kimi
+git clone https://github.com/dmae97/open_multi-agent_kit.git
+cd open_multi-agent_kit
 npm ci
 
 # Run all quality gates (must pass before PR)
@@ -42,7 +42,7 @@ npm run audit:package
 
 ## Command Maturity
 
-OMK commands have maturity levels. See [`MATURITY.md`](./MATURITY.md) for the current matrix.
+OMK commands have maturity levels. See [`MATURITY.md`](./MATURITY.md), [`docs/versioning.md`](./docs/versioning.md), and [`docs/provider-maturity.md`](./docs/provider-maturity.md) for the current matrices.
 
 | Level | Expectations |
 |-------|-------------|
@@ -129,7 +129,7 @@ When modifying commands that support `--json`:
 
 ## Questions?
 
-- Open a [Discussion](https://github.com/dmae97/oh-my-kimi/discussions)
+- Open a [Discussion](https://github.com/dmae97/open_multi-agent_kit/discussions)
 - Check [`README.md`](./README.md) and [`DESIGN.md`](./DESIGN.md) for architecture context
 
 Thank you for helping make OMK better!

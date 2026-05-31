@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-multi-agent-kit.dev/schemas/omk.provider.v1.schema.json",
+  "title": "OMK Provider Capability",
+  "type": "object",
+  "required": ["schemaVersion", "provider", "maturity", "roles", "features", "health"],
+  "properties": {
+    "schemaVersion": { "const": "omk.provider.v1" },
+    "provider": { "type": "string", "minLength": 1 },
+    "maturity": { "enum": ["stable", "alpha", "experimental", "unsupported"] },
+    "roles": { "type": "object" },
+    "features": { "type": "object" },
+    "health": { "type": "object" }
+  }
+}
