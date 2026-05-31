@@ -5,7 +5,8 @@
 ### Added
 - `docs/versioning.md` documents the `1.2.0-rc.0` package RC, `v1.2` runtime contract family, `rc` channel, schema versions, and verification commands.
 - `docs/provider-maturity.md` documents provider routing roles, authority limits, auth/config sources, and known RC limitations.
-- `omk.proof-bundle.v1`, `npm run proof:check`, `npm run proof:index`, and five scoped RC hardening proof bundles introduce the public proof gate surface.
+- `omk.proof-bundle.v1`, `npm run proof:check`, `npm run proof:index`, and eight scoped RC hardening proof bundles introduce the public proof gate surface, including evidence-block, replay/inspect, and graph-audit axes.
+- `omk graph audit --json` validates graph links between a run manifest, evidence JSONL, decision JSONL, and provider-route nodes for proof artifacts.
 
 ### Improved
 - README, CONTRIBUTING, MATURITY, ROADMAP, and verified-run issue template wording now use provider-neutral OMK identity while keeping Kimi described as the most mature authority path for this RC line.

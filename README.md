@@ -6,7 +6,7 @@ Install once. Resume every project. Route work through OMK-owned provider adapte
 
 Current source target: `1.2.0-rc.0` package RC for the `v1.2` runtime contract family. This is not a GA claim; see [versioning](docs/versioning.md) and [provider maturity](docs/provider-maturity.md).
 
-Proof status: `omk.proof-bundle.v1` schema and `npm run proof:check` gate are available; public proof bundles are indexed at `proof/PROOF_INDEX.md` in the source tree. Current proof count: 5 scoped RC hardening bundles.
+Proof status: `omk.proof-bundle.v1` schema and `npm run proof:check` gate are available; public proof bundles are indexed at `proof/PROOF_INDEX.md` in the source tree. Current proof count: 8 scoped RC hardening bundles.
 
 ## Install
 

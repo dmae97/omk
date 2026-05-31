@@ -1,0 +1,10 @@
+
+╔══✦════════════════✦══╗
+║  OMK Graph View  ║
+╚══✦════════════════✦══╝
+
+  Input: [repo-root]/proof/verified-runs/008-graph-audit/graph-state.json
+  Output: [repo-root]/proof/verified-runs/008-graph-audit/graph-view.html
+  Nodes: 5
+  Edges: 4
+✓ Graph HTML generated

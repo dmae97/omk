@@ -1,0 +1,45 @@
+{
+  "ok": false,
+  "command": "verify",
+  "checkedAt": "2026-05-31T08:08:18.755Z",
+  "errors": [
+    "required-artifact: file-exists ([repo-root]/proof/verified-runs/006-evidence-block/required-output.txt) — File does not exist: [repo-root]/proof/verified-runs/006-evidence-block/required-output.txt"
+  ],
+  "warnings": [],
+  "runId": "proof-006-evidence-block-20260531t080818z",
+  "schemaVersion": 1,
+  "gates": [
+    {
+      "nodeId": "required-artifact",
+      "type": "file-exists",
+      "ref": "proof/verified-runs/006-evidence-block/required-output.txt"
+    }
+  ],
+  "evidence": [
+    {
+      "nodeId": "required-artifact",
+      "gate": "file-exists",
+      "ref": "[repo-root]/proof/verified-runs/006-evidence-block/required-output.txt",
+      "passed": false,
+      "message": "File does not exist: [repo-root]/proof/verified-runs/006-evidence-block/required-output.txt"
+    }
+  ],
+  "passed": [],
+  "failed": [
+    {
+      "nodeId": "required-artifact",
+      "gate": "file-exists",
+      "ref": "[repo-root]/proof/verified-runs/006-evidence-block/required-output.txt",
+      "passed": false,
+      "message": "File does not exist: [repo-root]/proof/verified-runs/006-evidence-block/required-output.txt"
+    }
+  ],
+  "missing": [],
+  "data": {
+    "runId": "proof-006-evidence-block-20260531t080818z",
+    "gates": 1,
+    "passed": 0,
+    "failed": 1,
+    "missing": 0
+  }
+}

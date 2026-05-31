@@ -1,0 +1,98 @@
+{
+  "ontology": {
+    "version": "omk-graph-audit-proof-v1",
+    "classes": [
+      "Run",
+      "Evidence",
+      "Decision",
+      "ProviderRoute",
+      "AuditLink"
+    ],
+    "relationTypes": [
+      "run-evidence",
+      "run-decision",
+      "run-provider"
+    ]
+  },
+  "project": {
+    "key": "omk",
+    "name": "Open Multi-agent Kit",
+    "root": "[repo-root]"
+  },
+  "nodes": [
+    {
+      "id": "run:proof-008-graph-audit-20260531t080818z",
+      "type": "Run",
+      "label": "proof-008-graph-audit-20260531t080818z",
+      "properties": {
+        "runId": "proof-008-graph-audit-20260531t080818z",
+        "status": "passed"
+      }
+    },
+    {
+      "id": "evidence:graph-run-evidence-linked",
+      "type": "Evidence",
+      "label": "graph-run-evidence-linked",
+      "properties": {
+        "runId": "proof-008-graph-audit-20260531t080818z",
+        "evidenceId": "graph-run-evidence-linked",
+        "nodeId": "graph-audit",
+        "status": "passed"
+      }
+    },
+    {
+      "id": "decision:008-graph-audit-verdict",
+      "type": "Decision",
+      "label": "008-graph-audit-verdict",
+      "properties": {
+        "runId": "proof-008-graph-audit-20260531t080818z",
+        "decisionId": "008-graph-audit-verdict",
+        "kind": "evidence-verdict"
+      }
+    },
+    {
+      "id": "provider:local-graph-audit",
+      "type": "ProviderRoute",
+      "label": "local graph audit",
+      "properties": {
+        "runId": "proof-008-graph-audit-20260531t080818z",
+        "provider": "local",
+        "status": "success"
+      }
+    },
+    {
+      "id": "audit:run-evidence-decision",
+      "type": "AuditLink",
+      "label": "run evidence decision audit",
+      "properties": {
+        "runId": "proof-008-graph-audit-20260531t080818z"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-run-evidence",
+      "source": "run:proof-008-graph-audit-20260531t080818z",
+      "target": "evidence:graph-run-evidence-linked",
+      "type": "run-evidence"
+    },
+    {
+      "id": "edge-run-decision",
+      "source": "run:proof-008-graph-audit-20260531t080818z",
+      "target": "decision:008-graph-audit-verdict",
+      "type": "run-decision"
+    },
+    {
+      "id": "edge-run-provider",
+      "source": "run:proof-008-graph-audit-20260531t080818z",
+      "target": "provider:local-graph-audit",
+      "type": "run-provider"
+    },
+    {
+      "id": "edge-audit-run",
+      "source": "audit:run-evidence-decision",
+      "target": "run:proof-008-graph-audit-20260531t080818z",
+      "type": "audit-run"
+    }
+  ]
+}

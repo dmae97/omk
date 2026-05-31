@@ -6,6 +6,7 @@ export type ProofBundleScenario =
   | "fallback-route"
   | "dag-dependent-block"
   | "replay-inspect"
+  | "graph-audit"
   | "example-generation"
   | "doctor-provider"
   | "native-safety"

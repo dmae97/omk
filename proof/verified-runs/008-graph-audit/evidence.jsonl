@@ -1,0 +1,1 @@
+{"schemaVersion":"omk.evidence.v1","runId":"proof-008-graph-audit-20260531t080818z","nodeId":"graph-audit","evidenceId":"graph-run-evidence-linked","kind":"custom","status":"passed","required":true,"path":"proof/verified-runs/008-graph-audit/graph-audit.json","observedAt":"2026-05-31T08:08:18Z","message":"Graph audit linked the run node to evidence and decision nodes."}

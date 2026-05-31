@@ -1,0 +1,1 @@
+{"timestamp":"2026-05-31T08:08:18Z","nodeId":"collect-evidence","attemptId":"collect-evidence__1","gate":"file-exists","passed":true,"ref":"proof/verified-runs/007-replay-inspect/raw-prompt.md","message":"Prompt artifact exists and is linked to the replay attempt."}

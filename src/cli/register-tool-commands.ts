@@ -27,6 +27,18 @@ export function registerToolCommands(program: Command): void {
       const { graphViewCommand } = await import("../commands/graph.js");
       await graphViewCommand(options);
     });
+  graph
+    .command("audit")
+    .description("Validate graph links between a run manifest, evidence, and decisions")
+    .requiredOption("--input <path>", "Input graph-state.json path")
+    .requiredOption("--run-manifest <path>", "Run manifest JSON path")
+    .requiredOption("--evidence <path>", "Evidence JSONL path")
+    .requiredOption("--decisions <path>", "Decision JSONL path")
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const { graphAuditCommand } = await import("../commands/graph.js");
+      await graphAuditCommand(options);
+    });
 
   program
     .command("hud")

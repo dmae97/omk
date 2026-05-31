@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "omk.run-manifest.v1",
+  "runId": "proof-008-graph-audit-20260531t080818z",
+  "createdAt": "2026-05-31T08:08:18Z",
+  "completedAt": "2026-05-31T08:08:18Z",
+  "status": "passed",
+  "providerPolicy": {
+    "provider": "local",
+    "mode": "pinned"
+  },
+  "nodes": [
+    {
+      "id": "graph-audit",
+      "label": "Graph audit fixture",
+      "status": "passed"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "proof/verified-runs/008-graph-audit/graph-audit.json",
+      "kind": "graph-audit-output"
+    },
+    {
+      "path": "proof/verified-runs/008-graph-audit/graph-view.html",
+      "kind": "graph-view"
+    },
+    {
+      "path": "proof/verified-runs/008-graph-audit/graph-state.json",
+      "kind": "graph-state"
+    }
+  ],
+  "evidenceSummary": {
+    "required": 1,
+    "passed": 1,
+    "failed": 0,
+    "missing": 0
+  },
+  "decisionTracePath": "proof/verified-runs/008-graph-audit/decisions.jsonl"
+}

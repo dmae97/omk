@@ -73,20 +73,20 @@ Provider routing and graph viewing are no longer purely future work:
 - Required before stable v1.2 publish/tag: regenerate the native safety binary, pass package audit, pass smoke-pack/tarball install smoke, and pass `npm run release:check` on the exact intended release diff.
 - Required before stable v1.2 publish/tag: CI and smoke checks must pass on the exact intended commit.
 - Done: provider/deepseek and screenshot JSON command contracts gained hermetic regression tests.
-- Done: proof bundle schema/check/index scaffolding exists, with five scoped RC hardening bundles covering no-Kimi smoke, doctor-provider, fallback-route, native-safety, and contract-version gates.
+- Done: proof bundle schema/check/index scaffolding exists, with eight scoped RC hardening bundles covering no-Kimi smoke, doctor-provider, fallback-route, native-safety, contract-version, evidence-block, replay/inspect, and graph-audit gates.
 - Done: current AGENTS/init templates and packaged workflow skills were aligned with the active skills/MCP/agents/harness surface, including all generated agent MCP/skills/hooks flags and parallel subagent orchestration guidance.
 - Remaining: lock runtime safety gates for native turn risk, approval/sandbox propagation, authority-provider resolution, provider health probes, and DeepSeek read-only routing.
 - Remaining: lock broader provider fallback metadata with tests for rate limit, timeout, and default fallback variants.
 - Remaining: define minimum machine-readable CLI envelopes for the rest of the automation-critical commands.
-- Remaining: promote additional real proof bundles until the public proof index covers release, replay/inspect, evidence-block, and graph-audit scenarios.
+- Remaining: promote additional real proof bundles until the public proof index reaches the RC ten-bundle target and deepens no-Kimi plus fallback-routing coverage.
 
 ### P1: observability and diagnostics
 
 - Done: provider route/fallback counts are now emitted in run summaries/reports and summary terminal output.
 - Done: invalid MCP JSON is reported as a visible diagnostic without leaking secret-like config values.
 - Done: `omk mcp doctor --json` exposes structured server status, command resolution, timeout, permission, and config-source fields.
-- Expand JSON output for graph, DAG, summary, and workflow commands where CI or agents consume results.
-- Link graph nodes back to runs, goals, providers, and evidence so `omk graph view` becomes audit evidence, not only visualization.
+- Expand JSON output for DAG, summary, and workflow commands where CI or agents consume results.
+- Link live graph nodes back to runs, goals, providers, and evidence so `omk graph audit` can validate real project graph memory, not only compact proof fixtures.
 
 ### P2: execution depth and planner quality
 

@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "omk.proof-bundle.v1",
+  "proofId": "008-graph-audit",
+  "title": "Graph audit linkage proof bundle",
+  "omkVersion": "1.2.0-rc.0",
+  "runtimeVersion": "v1.2",
+  "commit": "83cb8bdf5de1",
+  "runId": "proof-008-graph-audit-20260531t080818z",
+  "providerPolicy": "local graph audit fixture; no external provider calls",
+  "scenario": "graph-audit",
+  "files": {
+    "rawPrompt": "proof/verified-runs/008-graph-audit/raw-prompt.md",
+    "commands": "proof/verified-runs/008-graph-audit/commands.sh",
+    "verifyJson": "proof/verified-runs/008-graph-audit/verify.json",
+    "decisionsJsonl": "proof/verified-runs/008-graph-audit/decisions.jsonl",
+    "runManifest": "proof/verified-runs/008-graph-audit/run-manifest.json",
+    "evidenceJsonl": "proof/verified-runs/008-graph-audit/evidence.jsonl",
+    "limitations": "proof/verified-runs/008-graph-audit/limitations.md",
+    "graphState": "proof/verified-runs/008-graph-audit/graph-state.json",
+    "graphAuditJson": "proof/verified-runs/008-graph-audit/graph-audit.json",
+    "graphViewHtml": "proof/verified-runs/008-graph-audit/graph-view.html",
+    "graphViewStdout": "proof/verified-runs/008-graph-audit/graph-view.out",
+    "graphViewStderr": "proof/verified-runs/008-graph-audit/graph-view.stderr"
+  },
+  "verdict": "passed",
+  "knownLimitations": [
+    "Uses a compact public graph fixture rather than the live private graph memory store.",
+    "Graph view output is HTML and human stdout; graph audit JSON is the machine-readable proof artifact.",
+    "The proof checks run, evidence, decision, provider route, and edge linkage, not all graph ontology classes."
+  ],
+  "checksums": {
+    "proof/verified-runs/008-graph-audit/raw-prompt.md": "e23ef0836517d0051541268bd934b59770a64cf5c4357da80836647d57dc928a",
+    "proof/verified-runs/008-graph-audit/commands.sh": "1767e27a81217639a00d18fe7fd67be040e4efe81345461fbee43d64a923cddc",
+    "proof/verified-runs/008-graph-audit/verify.json": "e691f699658d2eed104d3394ee88f1a55249587e4c48462bb5d0acdc76253114",
+    "proof/verified-runs/008-graph-audit/decisions.jsonl": "826ba76ad99bcdc94778127c4f6380a0cd02dd018a962c696dfd2b94e987ff81",
+    "proof/verified-runs/008-graph-audit/run-manifest.json": "1f453a253611e489ed4361e0aa40470194e5a6018491025df9201eb4534a16a6",
+    "proof/verified-runs/008-graph-audit/evidence.jsonl": "58e0a03b33be5bfb8b516fadfa88bd2d8dabde3380f5cfa486101a5d15024174",
+    "proof/verified-runs/008-graph-audit/limitations.md": "8bd738122af2551cc47fb8b3c547b747a93f8fee017861e3bc851cb87fa4adf0",
+    "proof/verified-runs/008-graph-audit/graph-state.json": "3c96afa68a6a49ec35d8f78ab603e0695d29427c9897b7c6a987008b66f1172f",
+    "proof/verified-runs/008-graph-audit/graph-audit.json": "fb6e38fdd1be6aa39af2d44829bb9565f8037affcc50245f6ccf13fd2ba22102",
+    "proof/verified-runs/008-graph-audit/graph-view.html": "836fbb017ba12830126ff37a28a7439b229662295ac9c6157645e094dd87c4be",
+    "proof/verified-runs/008-graph-audit/graph-view.out": "81be5304e9087a53c4e8bb433aa1c450d040a84ee4558ddccba77f64b1179c0b",
+    "proof/verified-runs/008-graph-audit/graph-view.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

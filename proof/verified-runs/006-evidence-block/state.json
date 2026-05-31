@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "runId": "proof-006-evidence-block-20260531t080818z",
+  "nodes": [
+    {
+      "id": "required-artifact",
+      "name": "Required artifact gate",
+      "role": "evidence_verifier",
+      "dependsOn": [],
+      "status": "done",
+      "retries": 0,
+      "maxRetries": 0,
+      "outputs": [
+        {
+          "name": "required-output",
+          "ref": "proof/verified-runs/006-evidence-block/required-output.txt",
+          "gate": "file-exists",
+          "required": true
+        }
+      ]
+    }
+  ],
+  "startedAt": "2026-05-31T08:08:18Z",
+  "completedAt": "2026-05-31T08:08:18Z"
+}
