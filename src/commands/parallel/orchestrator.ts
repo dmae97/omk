@@ -1,4 +1,4 @@
-import type { ExecutionPromptPolicy, ExecutionSelectionDecision, ExecutionStrategy, RunState, UserIntent } from "../../contracts/orchestration.js";
+import type { ExecutionPromptPolicy, ExecutionSelectionDecision, ExecutionStrategy, RunRouteDecision, RunState, UserIntent } from "../../contracts/orchestration.js";
 import type { Dag, DagNodeDefinition } from "../../orchestration/dag.js";
 import { createDagFromRunState, createRoutedRunState, refreshRunStateEstimate } from "../../orchestration/run-state.js";
 import { buildCapabilityAgentNodes, isCapabilityAgentNode } from "../../orchestration/capability-agents.js";
@@ -105,7 +105,9 @@ export function createInteractiveRunState(input: {
     startedAt: input.startedAt,
     workerCount: effectiveWorkers,
     goalId: input.goalId,
+    goalObjective: input.goal,
     goalSnapshot: input.goalSnapshot,
+    routeDecision: buildParallelRouteDecision(input.goal, intent),
     nodes,
   });
 
@@ -121,6 +123,58 @@ export function createInteractiveRunState(input: {
     coordinator.startedAt = input.startedAt;
   }
   return refreshRunStateEstimate(state, effectiveWorkers);
+}
+
+export function buildParallelRouteDecision(goal: string, intent: UserIntent | undefined): RunRouteDecision {
+  if (isCriticalIssueScan(goal)) {
+    return {
+      intent: "critical_issue_scan",
+      selectedAgents: [
+        "repo_explorer",
+        "risk_classifier",
+        "runtime_reviewer",
+        "security_reviewer",
+        "test_impact_analyzer",
+        "evidence_verifier",
+      ],
+      reason: "User requested critical issue/risk detection across repository state",
+      requiredEvidence: [
+        { kind: "diff", required: true, description: "Inspect modified file diffs and classify risk" },
+        { kind: "test", required: true, description: "Map changed files to affected tests and run focused checks" },
+        { kind: "diagnostic", required: true, description: "Check runtime/session/auth blockers before merge advice" },
+      ],
+      mode: "read-only",
+    };
+  }
+
+  return {
+    intent: intent?.taskType ?? "general",
+    selectedAgents: intent?.requiredRoles ?? ["planner", "coder", "reviewer"],
+    reason: intent?.rationale ?? "Default parallel route policy",
+    requiredEvidence: [
+      { kind: "file", required: true, description: "Capture changed files and scoped implementation evidence" },
+      { kind: "test", required: intent?.needsTesting ?? true, description: "Run affected checks before final success" },
+    ],
+    mode: intent?.isReadOnly ? "read-only" : "write",
+  };
+}
+
+function isCriticalIssueScan(text: string): boolean {
+  return /critical|크리티컬|심각|위험|리스크|risk|issue|이슈/i.test(text);
+}
+
+function agentRoleToDagRole(agentRole: string): string {
+  const normalized = agentRole.toLowerCase();
+  if (normalized.includes("repo") || normalized.includes("explorer")) return "explorer";
+  if (normalized.includes("security")) return "security";
+  if (normalized.includes("test")) return "tester";
+  if (normalized.includes("evidence")) return "qa";
+  if (normalized.includes("risk") || normalized.includes("runtime") || normalized.includes("merge")) return "reviewer";
+  return normalized.replace(/[^a-z0-9-]+/g, "-") || "reviewer";
+}
+
+function uniqueRoles(values: readonly string[]): string[] {
+  return [...new Set(values.filter((value) => value.trim().length > 0))];
 }
 
 export interface DynamicNodeBuildInput {
@@ -139,9 +193,12 @@ export function buildDynamicNodes(input: DynamicNodeBuildInput): DagNodeDefiniti
   const { flow, goal, startedAt, workerCount, intent, profile, executionStrategy } = input;
   const providerPolicy = input.providerPolicy ?? "auto";
   const intentFrame = input.intentFrame ?? buildIntentFrame(goal);
+  const routeDecision = buildParallelRouteDecision(goal, intent);
   const actionDigest = renderActionDigest(intentFrame, { maxAtoms: 6 });
   const taskType = intent?.taskType ?? "general";
-  const roles = intent?.requiredRoles ?? ["planner", "coder", "reviewer"];
+  const roles = routeDecision.intent === "critical_issue_scan"
+    ? uniqueRoles(routeDecision.selectedAgents.map(agentRoleToDagRole))
+    : intent?.requiredRoles ?? ["planner", "coder", "reviewer"];
   const isSequential = executionStrategy === "sequential";
   const effectiveWorkerCount = isSequential ? 1 : normalizeWorkerCount(String(workerCount), 1);
   const superConfig = getSuperOmkConfig(process.env);

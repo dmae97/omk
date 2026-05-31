@@ -32,6 +32,16 @@ test("route blocked panel explains MCP authority mismatches as security boundari
   assert.match(output, /replan without MCP requirement/);
 });
 
+test("route blocked panel labels write and shell blocks as env-hardened but not OS-sandboxed", () => {
+  const message = "No runtime supports task for node patch-turn; Node requires provider capability write";
+  const output = renderRouteBlockedPanel(message, { width: 96 });
+
+  assert.match(output, /ROUTE BLOCKED/);
+  assert.match(output, /env-hardened but not OS-sandboxed/);
+  assert.match(output, /write or shell capability/);
+  assert.match(output, /provider-native/);
+});
+
 test("plain renderer renders unsupported runtime errors as recovery panels", () => {
   const stderr = [];
   const renderer = new PlainModernRenderer({

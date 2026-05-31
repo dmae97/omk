@@ -108,6 +108,7 @@ test("native chat slash command registry exposes modular control-plane commands"
     "/help",
     "/status",
     "/provider",
+    "/route",
     "/mcp",
     "/tools",
     "/theme",
@@ -125,6 +126,61 @@ test("native chat slash command registry exposes modular control-plane commands"
     commands.every((command) => !("help" in command)),
     true,
   );
+});
+
+test("/route previews route policy, evidence gates, and assigned agent lanes", async () => {
+  const commands = new Map(
+    buildNativeChatSlashCommands().map((command) => [command.name, command]),
+  );
+  const route = commands.get("/route");
+  assert.ok(route, "/route should be registered");
+
+  const ctx = {
+    input: {
+      root: process.cwd(),
+      runId: "slash-route-test",
+      layout: "plain",
+      mcpAllowlist: ["omk-project"],
+      skillNames: ["omk-repo-explorer", "omk-security-review", "omk-quality-gate"],
+      hookNames: ["protect-secrets.sh"],
+      executionPrompt: "parallel",
+    },
+    state: {
+      bootstrap: { provider: "codex", selectedRuntimeId: "codex-cli" },
+      provider: "codex",
+    },
+    env: {},
+  };
+
+  const jsonResult = await route.handler(
+    ctx,
+    parseSlashArgs('"크리티컬 이슈좀 찾아줘" --json'),
+  );
+  assert.equal(jsonResult.ok, true);
+  assert.equal(jsonResult.json.schema, "omk.slash.route-preview.v1");
+  assert.equal(jsonResult.json.route.intent, "critical_issue_scan");
+  assert.equal(jsonResult.json.route.mode, "read-only");
+  assert.deepEqual(jsonResult.json.route.requiredEvidence.map((item) => item.kind), [
+    "diff",
+    "test",
+    "diagnostic",
+  ]);
+  const securityLane = jsonResult.json.assignments.find(
+    (assignment) => assignment.agent === "security_reviewer",
+  );
+  assert.ok(securityLane);
+  assert.deepEqual(securityLane.skills, ["omk-security-review", "omk-secret-guard"]);
+  assert.deepEqual(securityLane.mcpServers, ["omk-project"]);
+  assert.deepEqual(securityLane.hooks, ["protect-secrets.sh"]);
+
+  const textResult = await route.handler(
+    ctx,
+    parseSlashArgs('"크리티컬 이슈좀 찾아줘"'),
+  );
+  assert.equal(textResult.ok, true);
+  assert.match(textResult.text, /Route Policy Preview/);
+  assert.match(textResult.text, /Evidence Gates/);
+  assert.match(textResult.text, /security_reviewer/);
 });
 
 test("slash UI commands patch theme view and animation session state", async () => {

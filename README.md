@@ -36,6 +36,8 @@ omk consent       # privacy settings
 
 ## Security
 
+- Safe by default: child env is sanitized, ambient secrets are dropped, and workspace-write routes require approval.
+- OS-level sandboxing is planned, not claimed; see [SECURITY.md](SECURITY.md).
 - Install script: [get.omk.dev/install.sh](https://get.omk.dev/install.sh)
 - Checksums: [GitHub Releases](https://github.com/dmae97/open_multi-agent_kit/releases)
 - Security policy: [SECURITY.md](SECURITY.md)

@@ -17,6 +17,7 @@ import { capsuleToTask } from "./context-broker-converter.js";
 import { runShell, runShellStreaming, checkCommand } from "../util/shell.js";
 import { sanitizeUserVisibleOutput } from "../util/user-visible-output.js";
 import { buildChildEnv } from "./child-env.js";
+import { createRuntimeSandboxProfile } from "./sandbox-profile.js";
 
 export interface CodexRuntimeOptions {
   bin?: string;
@@ -143,6 +144,20 @@ export class CodexRuntime implements AgentRuntime {
       task.context.approvalPolicy ?? task.context.env?.OMK_APPROVAL_POLICY,
       sandboxMode
     );
+    const sandboxProfile = createRuntimeSandboxProfile({
+      cwd: this.cwd,
+      mode: sandboxMode,
+      enforcement: "provider-native",
+      writableRoots: sandboxMode === "workspace-write" ? [this.cwd] : [],
+      readableRoots: [this.cwd],
+      network: "unspecified",
+      secretEnvPolicy: "drop-by-default",
+      notes: [
+        "OMK sanitizes child env.",
+        "Codex CLI receives provider-native sandbox flags.",
+        "OMK does not yet enforce OS-level filesystem or network isolation.",
+      ],
+    });
 
     const args = [
       "exec",
@@ -190,6 +205,7 @@ export class CodexRuntime implements AgentRuntime {
         metadata: {
           runtime: this.id,
           sandbox: sandboxMode,
+          sandboxProfile,
           approvalPolicy,
           stderr: shellResult.stderr,
           failed: shellResult.failed,

@@ -10,7 +10,7 @@ import { createEnsembleTaskRunner } from "../dist/orchestration/ensemble.js";
 import { createExecutor } from "../dist/orchestration/executor.js";
 import { estimateRunProgress } from "../dist/orchestration/eta.js";
 import { renderCapabilityRoutingArtifact } from "../dist/orchestration/capability-routing.js";
-import { createRoutedRunState, refreshRunStateEstimate, routeRunState, createExecutableDagFromState } from "../dist/orchestration/run-state.js";
+import { createRoutedRunState, refreshRunStateEstimate, routeRunState, createExecutableDagFromState, buildRunGoalState } from "../dist/orchestration/run-state.js";
 import { dagNodeRoutingEnv, discoverRoutingInventory, resetRoutingInventoryCache } from "../dist/orchestration/routing.js";
 import { OMK_RELEASE_GUARD_PRESET } from "../dist/runtime/core-verified-preset.js";
 import { collectMcpConfigs, getUserHome, injectKimiGlobals, normalizeUserHomePath, pruneRuntimeMcpServers } from "../dist/util/fs.js";
@@ -888,6 +888,70 @@ test("run state routing helper enriches synthetic CLI nodes", async () => {
     assert.ok(state.nodes[1].routing?.skills?.includes("omk-quality-gate"));
     assert.equal(state.estimate?.totalNodes, 2);
   });
+});
+
+test("run state binds goal and scoped capability assignments for HUD control loops", () => {
+  const goalSnapshot = {
+    title: "Critical issue scan",
+    objective: "Find critical issues in current repo state",
+    successCriteria: [
+      { id: "evidence", description: "Evidence is collected", requirement: "required" },
+    ],
+  };
+  const state = createRoutedRunState({
+    runId: "goal-assignment-test",
+    startedAt: "2026-05-01T00:00:00.000Z",
+    workerCount: 2,
+    goalId: "goal-1",
+    goalSnapshot,
+    routeDecision: {
+      intent: "critical_issue_scan",
+      selectedAgents: ["repo_explorer", "security_reviewer"],
+      reason: "critical scan",
+      requiredEvidence: [
+        { kind: "diff", required: true, description: "diff evidence" },
+      ],
+      mode: "read-only",
+    },
+    nodes: [
+      {
+        id: "scan",
+        name: "Scan runtime risk",
+        role: "reviewer",
+        dependsOn: [],
+        maxRetries: 1,
+        routing: {
+          skills: ["omk-code-review"],
+          mcpServers: ["omk-project"],
+          hooks: ["stop-verify.sh"],
+          tools: ["omk_run_quality_gate"],
+          rationale: "test assignment",
+        },
+      },
+    ],
+  });
+
+  assert.deepEqual(buildRunGoalState({ goalId: "goal-1", goalSnapshot }), {
+    id: "goal-1",
+    title: "Critical issue scan",
+    objective: "Find critical issues in current repo state",
+    successCriteria: goalSnapshot.successCriteria,
+    status: "planned",
+  });
+  assert.equal(state.goal?.objective, goalSnapshot.objective);
+  assert.equal(state.routeDecision?.intent, "critical_issue_scan");
+  assert.deepEqual(state.capabilityAssignments?.scan, {
+    skills: ["omk-code-review"],
+    mcpServers: ["omk-project"],
+    hooks: ["stop-verify.sh"],
+    tools: ["omk_run_quality_gate"],
+    source: "routing",
+    rationale: "test assignment",
+  });
+
+  const routed = routeRunState(state, 2);
+  assert.equal(routed.goal?.title, "Critical issue scan");
+  assert.equal(routed.capabilityAssignments?.scan?.skills[0], "omk-code-review");
 });
 
 test("run state estimate can be refreshed after synthetic status changes", () => {

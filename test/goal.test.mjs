@@ -203,6 +203,16 @@ test("analyzeUserIntent honors explicit read-only directives over write keywords
   assert.ok(frame.actionAtoms.some((atom) => atom.label === "inspect-read-only-scope"));
 });
 
+test("analyzeUserIntent treats Korean critical issue scan as parallel security review", () => {
+  const intent = analyzeUserIntent("현재 변경사항에서 크리티컬 이슈와 위험을 찾아줘");
+
+  assert.equal(intent.taskType, "review");
+  assert.equal(intent.needsSecurityReview, true);
+  assert.equal(intent.parallelizable, true);
+  assert.ok(intent.requiredRoles.includes("security"));
+  assert.ok(intent.requiredRoles.includes("reviewer"));
+});
+
 test("normalizeGoal creates a GoalSpec with inferred success criteria", () => {
   const spec = normalizeGoal({ rawPrompt: "Add a user authentication feature to the API" });
 

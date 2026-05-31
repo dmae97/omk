@@ -333,6 +333,10 @@ test("createExternalCliAdapter runs through process session with runtime metadat
     hooks: "secret-guard",
     tools: "shell",
   });
+  assert.equal(result.metadata?.sandboxProfile.mode, "workspace-write");
+  assert.equal(result.metadata?.sandboxProfile.enforcement, "env-only");
+  assert.deepEqual(result.metadata?.sandboxProfile.writableRoots, []);
+  assert.match(result.metadata?.sandboxProfile.notes.join(" "), /future work/);
 });
 
 test("createExternalCliAdapter execute preserves AgentTask safety and capability metadata", async () => {
@@ -414,6 +418,9 @@ test("createExternalCliAdapter execute preserves AgentTask safety and capability
   assert.equal(result.metadata?.risk, "write");
   assert.equal(result.metadata?.approvalPolicy, "ask");
   assert.equal(result.metadata?.sandboxMode, "read-only");
+  assert.equal(result.metadata?.sandboxProfile.mode, "read-only");
+  assert.equal(result.metadata?.sandboxProfile.enforcement, "env-only");
+  assert.equal(result.metadata?.sandboxProfile.secretEnvPolicy, "drop-by-default");
 });
 
 test("createExternalCliAdapter returns safety metadata on preflight errors", async () => {
@@ -450,6 +457,7 @@ test("createExternalCliAdapter returns safety metadata on preflight errors", asy
   assert.equal(result.metadata?.risk, "read");
   assert.equal(result.metadata?.approvalPolicy, "ask");
   assert.equal(result.metadata?.sandboxMode, "read-only");
+  assert.equal(result.metadata?.sandboxProfile.enforcement, "env-only");
 });
 
 test("createExternalCliAdapter sends prompt via stdin and omits OMK_GOAL", async () => {

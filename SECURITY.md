@@ -42,6 +42,34 @@ environments in
 - Prefer sanitized `omk mcp doctor --json`, `omk verify --json`, test summaries, and secret scans as shareable evidence.
 - Run `npm run secret:scan:runtime` before release/demo when local `.omk` or `.kimi` trust-boundary files may contain user-added MCP wrappers or hook edits.
 
+## Child Runtime Isolation
+
+OMK currently provides environment hardening for child runtimes.
+
+By default, child runtimes do not inherit the full parent process environment.
+OMK passes an allowlisted environment and drops common secret-bearing variables
+such as cloud provider credentials, GitHub/NPM tokens, SSH agent sockets,
+Kubernetes config, and dotenv/env-file references.
+
+This is not a full OS-level sandbox. Filesystem, process, and network isolation
+are future hardening work and must not be assumed unless explicitly provided by
+the selected runtime or host environment.
+
+Current security claims:
+
+- OMK prevents ambient secret leakage into child runtimes by default.
+- OMK sanitizes child runtime environments.
+- OMK routes tasks according to declared runtime capabilities.
+- OMK forces approval for write-capable Codex workspace runs.
+- OMK exposes sandbox intent/profile metadata for future enforcement.
+
+Non-claims:
+
+- OMK does not fully sandbox child CLIs.
+- OMK does not prevent all filesystem access outside the workspace.
+- OMK does not prevent network exfiltration.
+- OMK does not enforce OS-level process isolation.
+
 ## Public Asset Provenance
 
 - Treat `public/assets/**` as source-only reference material until license, source URL/origin, usage rights, reviewer, and review date are recorded.

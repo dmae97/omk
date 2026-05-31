@@ -340,7 +340,7 @@ const TASK_TYPE_RULES: TaskTypeRule[] = [
   { type: "bugfix", keywords: ["fix", "bug", "error", "crash", "broken", "issue", "regression", "fails", "not working", "버그", "오류", "수정", "고장", "실패"], weight: 1 },
   { type: "refactor", keywords: ["refactor", "clean", "restructure", "rename", "extract", "simplify", "organize", "move", "리팩토링", "정리", "단순화"], weight: 1 },
   { type: "research", keywords: ["research", "investigate", "compare", "evaluate", "survey", "study", "analyze", "benchmark", "조사", "비교", "분석", "연구"], weight: 1 },
-  { type: "review", keywords: ["review", "audit", "check", "look at", "inspect", "assess", "리뷰", "검토", "점검"], weight: 1 },
+  { type: "review", keywords: ["review", "audit", "check", "look at", "inspect", "assess", "critical", "risk", "issue", "리뷰", "검토", "점검", "크리티컬", "심각", "위험", "리스크", "이슈"], weight: 1 },
   { type: "plan", keywords: ["plan", "design", "architecture", "strategy", "roadmap", "structure", "blueprint", "설계", "계획", "구조"], weight: 1 },
   { type: "test", keywords: ["test", "verify", "validate", "coverage", "unit test", "e2e", "integration test", "regression", "테스트", "검증", "커버리지"], weight: 1 },
   { type: "document", keywords: ["doc", "readme", "guide", "document", "changelog", "comment", "wiki", "문서", "가이드", "주석"], weight: 1 },
@@ -388,7 +388,7 @@ const READ_ONLY_DIRECTIVES = [
 
 const RESEARCH_KEYWORDS = ["docs", "official", "paper", "api", "reference", "current", "latest", "version", "release notes", "changelog", "specification", "rfc", "documentation", "browser", "current page", "web page", "active tab", "dom", "chrome", "문서", "공식", "최신", "버전", "스펙"];
 
-const SECURITY_KEYWORDS = ["security", "secret", "auth", "permission", "vulnerability", "credential", "token", "encrypt", "sanitize", "xss", "csrf", "injection", "password", "api key", "보안", "인증", "권한", "취약점", "토큰"];
+const SECURITY_KEYWORDS = ["security", "secret", "auth", "permission", "vulnerability", "credential", "token", "encrypt", "sanitize", "xss", "csrf", "injection", "password", "api key", "critical", "risk", "보안", "인증", "권한", "취약점", "토큰", "크리티컬", "심각", "위험", "리스크"];
 
 const TEST_KEYWORDS = ["test", "verify", "validate", "coverage", "unit test", "e2e", "integration", "regression", "jest", "mocha", "pytest", "테스트", "검증", "커버리지"];
 

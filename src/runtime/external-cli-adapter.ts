@@ -21,6 +21,7 @@ import {
 } from "../util/shell.js";
 import { runtimeMetadataEnv } from "./child-env.js";
 import { runProcessSession } from "./process-session.js";
+import { createRuntimeSandboxProfile } from "./sandbox-profile.js";
 
 export type ExternalCliPromptTransport = "argv" | "stdin" | "tempfile";
 
@@ -131,7 +132,7 @@ export function createExternalCliAdapter(
           exitCode: 1,
           stdout: `[ERROR] ${errorMsg}`,
           stderr: errorMsg,
-          metadata: { ...externalCliMetadata(capsule, options.id), error: errorMsg },
+          metadata: { ...externalCliMetadata(capsule, options.id, undefined, options.cwd), error: errorMsg },
         };
       }
 
@@ -192,7 +193,7 @@ export function createExternalCliAdapter(
             exitCode: 130,
             stdout: shellResult.stdout,
             stderr: "Aborted by signal",
-            metadata: { ...externalCliMetadata(capsule, options.id, shellResult.durationMs), aborted: true },
+            metadata: { ...externalCliMetadata(capsule, options.id, shellResult.durationMs, options.cwd), aborted: true },
           };
         }
 
@@ -201,7 +202,7 @@ export function createExternalCliAdapter(
           return {
             ...parsed,
             metadata: {
-              ...externalCliMetadata(capsule, options.id, shellResult.durationMs),
+              ...externalCliMetadata(capsule, options.id, shellResult.durationMs, options.cwd),
               ...(parsed.metadata ?? {}),
             },
           };
@@ -212,7 +213,7 @@ export function createExternalCliAdapter(
           exitCode: shellResult.exitCode,
           stdout: shellResult.stdout,
           stderr: shellResult.stderr,
-          metadata: externalCliMetadata(capsule, options.id, shellResult.durationMs),
+          metadata: externalCliMetadata(capsule, options.id, shellResult.durationMs, options.cwd),
         };
       } catch (err) {
         const errorMsg = String(err);
@@ -221,7 +222,7 @@ export function createExternalCliAdapter(
           exitCode: 1,
           stdout: `[ERROR] ${errorMsg}`,
           stderr: errorMsg,
-          metadata: { ...externalCliMetadata(capsule, options.id), error: errorMsg },
+          metadata: { ...externalCliMetadata(capsule, options.id, undefined, options.cwd), error: errorMsg },
         };
       } finally {
         if (promptTempDir) {
@@ -277,15 +278,30 @@ function runtimeSafetyEnv(capsule: ContextCapsule): Record<string, string | unde
 function externalCliMetadata(
   capsule: ContextCapsule,
   runtime: string,
-  durationMs?: number
+  durationMs?: number,
+  cwd = process.cwd()
 ): Record<string, unknown> {
   const routing = capsule.node.routing;
+  const sandboxMode = normalizeSandboxMode(routing?.sandboxMode) ?? "read-only";
   return {
     runtime,
     durationMs,
     risk: routing?.risk,
     approvalPolicy: routing?.approvalPolicy ?? routing?.executionPrompt,
-    sandboxMode: routing?.sandboxMode,
+    sandboxMode,
+    sandboxProfile: createRuntimeSandboxProfile({
+      cwd,
+      mode: sandboxMode,
+      enforcement: "env-only",
+      writableRoots: [],
+      readableRoots: [cwd],
+      network: "unspecified",
+      secretEnvPolicy: "drop-by-default",
+      notes: [
+        "External CLI env is sanitized.",
+        "OS-level sandboxing is future work.",
+      ],
+    }),
     providerModel: routing?.providerModel,
   };
 }

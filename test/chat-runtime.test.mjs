@@ -525,6 +525,16 @@ test("/tools shows scoped tools and capability context without running a provide
   ok(/TASK_RUNNER_CALLS=0/.test(result.stdout));
 });
 
+test("/route previews MIMO route policy without running a provider turn", () => {
+  const result = runNativeLoopInput('/route "크리티컬 이슈좀 찾아줘" --json\n/exit\n');
+
+  deepStrictEqual(result.status, 0, result.stderr);
+  ok(/omk\.slash\.route-preview\.v1/.test(result.stdout));
+  ok(/critical_issue_scan/.test(result.stdout));
+  ok(/security_reviewer/.test(result.stdout));
+  ok(/TASK_RUNNER_CALLS=0/.test(result.stdout));
+});
+
 test("/model applies a session model override without running a provider turn", () => {
   const result = runNativeLoopInput("/model codex/codex-cli\n/exit\n");
 

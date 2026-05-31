@@ -53,6 +53,13 @@ function inferSecurityReason(message: string): { security: string; detail?: stri
       suggested: "/provider auto · /mode plan · replan with OMK tool authority",
     };
   }
+  if (/\bworkspace-write\b|\bshell\b|\bwrite\b|\bpatch\b/i.test(message)) {
+    return {
+      security: "This runtime is env-hardened but not OS-sandboxed",
+      detail: "Requested authority requires write or shell capability",
+      suggested: "continue with approval prompts · replan read-only · switch provider-native sandbox · abort",
+    };
+  }
   return {
     security: "OMK blocks runtimes that cannot satisfy node authority",
     suggested: "omk doctor · /provider auto · /mode plan",

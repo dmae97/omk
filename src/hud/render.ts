@@ -9,7 +9,7 @@ import { getOmkResourceSettings } from "../util/resource-profile.js";
 import { formatBytes } from "../util/output-buffer.js";
 import { formatOmkVersionFooter } from "../util/version.js";
 import { t } from "../util/i18n.js";
-import type { RunState } from "../contracts/orchestration.js";
+import type { RunCapabilityAssignment, RunState } from "../contracts/orchestration.js";
 import type { GoalSpec, GoalEvidence } from "../contracts/goal.js";
 import {
   parseRunStateResult,
@@ -220,6 +220,17 @@ function formatProviderMetricLine(metrics: RunViewModel["providerRouting"]): str
   return `${metrics.attempts} attempt${metrics.attempts === 1 ? "" : "s"}${counts ? ` · ${counts}` : ""}${fallback}`;
 }
 
+function formatAssignmentSummary(assignment: RunCapabilityAssignment | undefined, maxItems = 2): string | null {
+  if (!assignment) return null;
+  const parts = [
+    assignment.skills.length > 0 ? `skills:${assignment.skills.slice(0, maxItems).join(",")}` : "",
+    assignment.hooks.length > 0 ? `hooks:${assignment.hooks.slice(0, maxItems).join(",")}` : "",
+    assignment.mcpServers.length > 0 ? `mcp:${assignment.mcpServers.slice(0, maxItems).join(",")}` : "",
+    assignment.tools && assignment.tools.length > 0 ? `tools:${assignment.tools.slice(0, maxItems).join(",")}` : "",
+  ].filter(Boolean);
+  return parts.length > 0 ? sanitizeForDisplay(parts.join(" ")) : null;
+}
+
 function todoItemMarker(statusValue: TodoItem["status"]): string {
   switch (statusValue) {
     case "in_progress": return theme.style.purpleBold("▶");
@@ -365,6 +376,10 @@ export function buildHudSidebar(
     if (vm.health !== "ok") {
       lines.push(`  ${theme.style.gray("health")} ${healthColor(vm.health)(vm.health.toUpperCase())}`);
     }
+    if (vm.routeDecision) {
+      lines.push(`  ${theme.style.gray("intent")} ${theme.style.cream(truncateText(vm.routeDecision.intent, 28))}`);
+      lines.push(`  ${theme.style.gray("mode")} ${theme.style.cream(vm.routeDecision.mode)}`);
+    }
     const providerLine = formatProviderMetricLine(vm.providerRouting);
     if (providerLine) {
       lines.push(`  ${theme.style.gray("provider")} ${theme.style.cream(providerLine)}`);
@@ -424,6 +439,10 @@ export function buildHudSidebar(
               : theme.style.gray("□");
       const live = worker.liveStatus && worker.liveStatus !== worker.state ? theme.style.gray(` ${worker.liveStatus}`) : "";
       lines.push(`  ${stateTag}${live} ${truncateText(sanitizeForDisplay(worker.label), 32)}`);
+      const assignment = formatAssignmentSummary(worker.assignment, 1);
+      if (assignment) {
+        lines.push(`    ${theme.style.gray(truncateText(assignment, 70))}`);
+      }
     }
   }
 
@@ -742,6 +761,9 @@ async function buildLatestRunPanel(
         try {
           const stateContent = await readFile(getRunPath(latestRunName, "state.json"), "utf-8");
           const { state } = parseRunStateResult(stateContent);
+          if (state?.goal?.title) {
+            goalTitle = state.goal.title;
+          }
           if (state?.goalId) {
             goalData = await loadGoalData(state.goalId);
             if (goalData) goalTitle = goalData.title;
@@ -774,6 +796,17 @@ async function buildLatestRunPanel(
         `  ${theme.style.gray("Health:")}  ${healthColor(vm.health)(vm.health.toUpperCase())}`,
         `  ${theme.style.gray("Progress:")} ${theme.style.mintBold(`${vm.progress.settled}/${vm.progress.total}`)} ${theme.style.gray(`(${vm.progress.percent}%)`)}`,
       ];
+      if (vm.routeDecision) {
+        const requiredEvidence = vm.routeDecision.requiredEvidence
+          .filter((item) => item.required)
+          .map((item) => item.kind)
+          .join(",");
+        runLines.push(`  ${theme.style.gray("Intent:")}  ${theme.style.cream(vm.routeDecision.intent)}`);
+        runLines.push(`  ${theme.style.gray("Mode:")}    ${theme.style.cream(vm.routeDecision.mode)}`);
+        if (requiredEvidence) {
+          runLines.push(`  ${theme.style.gray("Evidence:")} ${theme.style.cream(requiredEvidence)}`);
+        }
+      }
       if (providerLine) {
         runLines.push(`  ${theme.style.gray("Provider:")} ${theme.style.cream(providerLine)}`);
       }
@@ -847,6 +880,10 @@ async function buildLatestRunPanel(
           const phaseLine = w.phase ? theme.style.gray(` · ${truncateText(w.phase, 50)}`) : "";
           runLines.push(`    ${stateTag}${elapsed}${activity}${phaseLine}`);
           runLines.push(`      ${theme.style.gray(truncateText(w.label, 40))}`);
+          const assignment = formatAssignmentSummary(w.assignment);
+          if (assignment) {
+            runLines.push(`      ${theme.style.gray(truncateText(assignment, 58))}`);
+          }
         }
         runLines.push("");
       }

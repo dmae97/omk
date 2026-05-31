@@ -73,6 +73,7 @@ function renderSlashHelp(): string {
     commandLine("/provider", "<name>", "Switch provider"),
     commandLine("/model", "<name>", "Set session model"),
     commandLine("/use", "<ref>", "Provider/model alias"),
+    commandLine("/route", "<prompt>", "Preview route policy/evidence/agent lanes"),
     commandLine("/mcp", "[--all]", "MCP Tool Plane status"),
     commandLine("/tools", "", "Scoped MCP/skills/hooks"),
     commandLine("/theme", "<system24|green-rain|neon-grid|plain|high-contrast>", "Set session theme"),

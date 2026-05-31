@@ -143,6 +143,45 @@ export interface UserIntentV2 extends UserIntent {
   routingHints: UserIntentRoutingHints;
 }
 
+export type RunCapabilityAssignmentSource =
+  | "routing"
+  | "skill-assigner"
+  | "capability-router"
+  | "manual";
+
+export interface RunCapabilityAssignment {
+  skills: string[];
+  mcpServers: string[];
+  hooks: string[];
+  tools?: string[];
+  source?: RunCapabilityAssignmentSource;
+  rationale?: string;
+}
+
+export interface RunGoalState {
+  id?: string;
+  title?: string;
+  objective: string;
+  successCriteria: Array<{ id: string; description: string; requirement: string }>;
+  status?: "planned" | "running" | "blocked" | "complete" | "failed";
+}
+
+export type RunEvidenceKind = "file" | "diff" | "test" | "log" | "diagnostic";
+
+export interface RunEvidenceRequirement {
+  kind: RunEvidenceKind;
+  required: boolean;
+  description: string;
+}
+
+export interface RunRouteDecision {
+  intent: string;
+  selectedAgents: string[];
+  reason: string;
+  requiredEvidence: RunEvidenceRequirement[];
+  mode: "read-only" | "write" | "dangerous";
+}
+
 export type EstimateConfidence = "low" | "medium" | "high";
 
 export interface RunProgressEstimate {
@@ -187,11 +226,17 @@ export interface RunState {
   schemaVersion: 1;
   runId: string;
   goalId?: string;
+  /** Goal bound to the run so HUD/control loops do not depend on ad-hoc markdown parsing. */
+  goal?: RunGoalState;
   goalSnapshot?: {
     title: string;
     objective: string;
     successCriteria: Array<{ id: string; description: string; requirement: string }>;
   };
+  /** Per-lane scoped skill/MCP/hook assignment names. Never stores MCP config/env values. */
+  capabilityAssignments?: Record<string, RunCapabilityAssignment>;
+  /** Policy-level route decision used by HUD/control loops to explain why lanes exist. */
+  routeDecision?: RunRouteDecision;
   nodes: DagNode[];
   startedAt: string;
   completedAt?: string;

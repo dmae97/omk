@@ -942,6 +942,28 @@ export async function securityChecks(root: string): Promise<CheckResult[]> {
   const configPath = join(root, ".omk", "config.toml");
   const configExists = await pathExists(configPath);
 
+  results.push({
+    name: "Child Env Isolation",
+    status: "ok",
+    message: "parent env not inherited by default; secret-like env drops require explicit grants",
+    metadata: {
+      inheritEnv: false,
+      secretEnvPolicy: "drop-by-default",
+      explicitSecretGrants: true,
+    },
+  });
+
+  results.push({
+    name: "Sandbox Enforcement",
+    status: "info",
+    message: "env-only active; OS-level filesystem, process, and network sandboxing is not enforced",
+    metadata: {
+      enforcement: "env-only",
+      osSandbox: "not-enforced",
+      networkPolicy: "not-enforced",
+    },
+  });
+
   if (!configExists) {
     results.push({ name: "Config Audit", status: "info", message: ".omk/config.toml not found" });
     return results;

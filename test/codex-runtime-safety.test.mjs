@@ -85,6 +85,10 @@ test("CodexRuntime propagates ask approval and read-only sandbox", async () => {
   assert.equal(result.exitCode, 0);
   assert.equal(result.metadata.sandbox, "read-only");
   assert.equal(result.metadata.approvalPolicy, "on-request");
+  assert.equal(result.metadata.sandboxProfile.mode, "read-only");
+  assert.equal(result.metadata.sandboxProfile.enforcement, "provider-native");
+  assert.equal(result.metadata.sandboxProfile.network, "unspecified");
+  assert.match(result.metadata.sandboxProfile.notes.join(" "), /does not yet enforce OS-level/);
 
   const capture = JSON.parse(await readFile(capturePath, "utf8"));
   assert.deepEqual(capture.argv.slice(0, 5), ["exec", "--sandbox", "read-only", "--ask-for-approval", "on-request"]);
@@ -146,6 +150,9 @@ test("CodexRuntime forces on-request approvals for workspace-write even when env
   assert.equal(result.exitCode, 0);
   assert.equal(result.metadata.sandbox, "workspace-write");
   assert.equal(result.metadata.approvalPolicy, "on-request");
+  assert.equal(result.metadata.sandboxProfile.mode, "workspace-write");
+  assert.equal(result.metadata.sandboxProfile.enforcement, "provider-native");
+  assert.deepEqual(result.metadata.sandboxProfile.writableRoots, [dir]);
   const capture = JSON.parse(await readFile(capturePath, "utf8"));
   assert.deepEqual(capture.argv.slice(0, 5), ["exec", "--sandbox", "workspace-write", "--ask-for-approval", "on-request"]);
 });

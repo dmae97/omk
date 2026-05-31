@@ -4,9 +4,43 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { buildDynamicNodes } from "../dist/commands/parallel.js";
+import { buildDynamicNodes, buildParallelRouteDecision } from "../dist/commands/parallel.js";
 import { buildCapabilityAgentNodes } from "../dist/orchestration/capability-agents.js";
 import { resetRoutingInventoryCache } from "../dist/orchestration/routing.js";
+
+test("critical issue prompts route to explicit read-only evidence-gated agent lanes", () => {
+  const intent = {
+    taskType: "review",
+    complexity: "complex",
+    estimatedWorkers: 6,
+    requiredRoles: ["reviewer", "architect"],
+    isReadOnly: true,
+    needsResearch: false,
+    needsSecurityReview: true,
+    needsTesting: true,
+    needsDesignReview: false,
+    parallelizable: true,
+    rationale: "critical issue scan",
+  };
+  const decision = buildParallelRouteDecision("크리티컬 이슈와 위험을 찾아줘", intent);
+  const nodes = buildDynamicNodes({
+    flow: "parallel",
+    goal: "크리티컬 이슈와 위험을 찾아줘",
+    startedAt: "2026-05-09T00:00:00.000Z",
+    workerCount: 6,
+    intent,
+  });
+
+  assert.equal(decision.intent, "critical_issue_scan");
+  assert.equal(decision.mode, "read-only");
+  assert.deepEqual(decision.requiredEvidence.filter((item) => item.required).map((item) => item.kind), ["diff", "test", "diagnostic"]);
+  assert.ok(decision.selectedAgents.includes("repo_explorer"));
+  assert.ok(decision.selectedAgents.includes("security_reviewer"));
+  assert.ok(nodes.some((node) => node.role === "explorer"));
+  assert.ok(nodes.some((node) => node.role === "security"));
+  assert.ok(nodes.some((node) => node.role === "tester"));
+  assert.ok(nodes.some((node) => node.role === "qa"));
+});
 
 test("initial orchestration spawns dedicated DeepSeek Flash and Pro model-agent nodes", () => {
   const rawGoal = "고도화 된 첫 input -> orchestration DeepSeek 실제 모델 에이전트";

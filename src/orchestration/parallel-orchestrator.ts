@@ -7,6 +7,7 @@
 
 import { join } from "path";
 import type { Dag, DagNode } from "./dag.js";
+import type { RunCapabilityAssignment } from "../contracts/orchestration.js";
 // TaskResult removed — unused in this file
 import {
   createExecutionPlan,
@@ -74,11 +75,7 @@ export interface ParallelOrchestrationResult {
 export interface ParallelWorkerCapabilityContext {
   readonly node: DagNode;
   readonly scopes: NodeCapabilityScopes;
-  readonly assignment: {
-    skills: string[];
-    mcpServers: string[];
-    hooks: string[];
-  };
+  readonly assignment: RunCapabilityAssignment;
   readonly env: Record<string, string>;
   readonly workerManifest: WorkerManifest;
   readonly runContext: TaskRunContext;
@@ -129,6 +126,9 @@ export function buildParallelWorkerCapabilityContext(
       skills: [...scopes.skills],
       mcpServers: [...scopes.mcpServers],
       hooks: [...scopes.hooks],
+      ...(scopes.tools.length > 0 ? { tools: [...scopes.tools] } : {}),
+      source: "skill-assigner",
+      rationale: injection.summary.rationale,
     },
     env: {
       ...dagNodeRoutingEnv(routedNode, dag),
