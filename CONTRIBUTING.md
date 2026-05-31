@@ -10,13 +10,15 @@ git clone https://github.com/dmae97/open_multi-agent_kit.git
 cd open_multi-agent_kit
 npm ci
 
-# Run all quality gates (must pass before PR)
-npm run lint
-npm run check
-npm run build:clean
-npm test
-npm run secret:scan
-npm run audit:package
+# Run the main quality gate (must pass before PR)
+npm run verify
+
+# Run release-candidate gates when touching contracts, proof, versioning, or release docs
+npm run verify:no-kimi
+npm run contract:check
+npm run schema:check
+npm run version:check
+npm run proof:check
 ```
 
 ## Requirements
@@ -34,7 +36,7 @@ npm run audit:package
 | `src/orchestration/` | DAG executor, scheduler, ensemble runner, parallel UI |
 | `src/util/` | Theme, i18n, fs helpers, session/todo sync |
 | `src/goal/` | Goal spec intake, scoring, evidence, persistence |
-| `src/kimi/` | Kimi CLI runner, capability detection, banner replacement |
+| `src/kimi/` | Kimi adapter compatibility, capability detection, banner replacement |
 | `src/mcp/` | MCP server integrations |
 | `src/memory/` | Graph memory backends (local, Neo4j, Kuzu) |
 | `templates/` | Project scaffolding templates |
@@ -76,6 +78,22 @@ npm run build:clean
 npm test
 npm run secret:scan
 npm run audit:package
+```
+
+For release-candidate, contract, proof, provider, or versioning changes, also run:
+
+```bash
+npm run verify:no-kimi
+npm run contract:check
+npm run schema:check
+npm run version:check
+npm run proof:check
+```
+
+Before publish/tag claims, run the full release gate:
+
+```bash
+npm run release:check
 ```
 
 ### 4. Commit

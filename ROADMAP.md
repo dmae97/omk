@@ -13,7 +13,7 @@ The local source tree is aligned to package version `1.2.0-rc.0`, runtime versio
 - Active native-runtime backlog: `docs/native-root-runtime-hardening.md`, `docs/native-root-runtime-algorithms.md`, and `.omk/specs/native-orchestrator-phase1/`.
 - Do not claim stable `v1.2` until release gates pass on the exact target commit and the stable package/tag is published.
 
-## v1.1.9 reality
+## Historical v1.1.9 reality
 
 Provider routing and graph viewing are no longer purely future work:
 
@@ -69,11 +69,12 @@ Provider routing and graph viewing are no longer purely future work:
 ### P0: release and contract gates
 
 - Done: YAML validation now runs in local `verify` plus CI/smoke workflows.
-- Done: package dry-pack, package audit, tarball smoke, native safety build, and release matrix gates were re-verified against v1.1.17 artifacts.
+- Done: package dry-pack, package audit, tarball smoke, native safety build, and release matrix gates were re-verified during the v1.1.x release-prep line; v1.2 RC publish/tag claims now depend on `npm run release:check` on the exact target commit.
 - Required before stable v1.2 publish/tag: regenerate the native safety binary, pass package audit, pass smoke-pack/tarball install smoke, and pass `npm run release:check` on the exact intended release diff.
 - Required before stable v1.2 publish/tag: CI and smoke checks must pass on the exact intended commit.
 - Done: provider/deepseek and screenshot JSON command contracts gained hermetic regression tests.
 - Done: proof bundle schema/check/index scaffolding exists, with ten scoped RC hardening bundles covering no-Kimi smoke, doctor-provider, fallback-route, native-safety, contract-version, evidence-block, replay/inspect, graph-audit, deeper no-Kimi verification, and provider fallback-routing gates.
+- Done: proof integrity now enforces artifact linkage plus per-bundle `sha256sums.txt` hash validation.
 - Done: current AGENTS/init templates and packaged workflow skills were aligned with the active skills/MCP/agents/harness surface, including all generated agent MCP/skills/hooks flags and parallel subagent orchestration guidance.
 - Remaining: lock runtime safety gates for native turn risk, approval/sandbox propagation, authority-provider resolution, provider health probes, and DeepSeek read-only routing.
 - Remaining: lock broader provider fallback metadata with tests for rate limit, timeout, and default fallback variants.

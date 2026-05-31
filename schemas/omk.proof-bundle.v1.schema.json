@@ -18,7 +18,7 @@
     "files": {
       "type": "object",
       "additionalProperties": { "type": "string", "minLength": 1 },
-      "required": ["rawPrompt", "commands", "verifyJson", "decisionsJsonl", "runManifest", "evidenceJsonl", "limitations"]
+      "required": ["rawPrompt", "commands", "verifyJson", "decisionsJsonl", "runManifest", "evidenceJsonl", "limitations", "sha256sums"]
     },
     "verdict": { "enum": ["passed", "failed", "partial"] },
     "knownLimitations": {

@@ -11,8 +11,8 @@
 ### Improved
 - README, CONTRIBUTING, MATURITY, ROADMAP, and verified-run issue template wording now use provider-neutral OMK identity while keeping Kimi described as the most mature authority path for this RC line.
 - License wording now matches the checked repository `LICENSE` file (`MIT`).
-- `release:check` and `release:rc` now include the no-Kimi gate and proof gate alongside contract and version checks.
-- `npm run proof:check` now validates proof artifact runId/commit/version linkage, evidence/decision JSONL record shape, verify references, non-empty limitations, sanitized paths, secret-like strings, and placeholder/fabrication markers.
+- `release:check` and `release:rc` now include the no-Kimi gate and proof gate alongside contract, schema, and version checks.
+- `npm run proof:check` now validates proof artifact runId/commit/version linkage, evidence/decision JSONL record shape, verify references, per-bundle `sha256sums.txt`, non-empty limitations, sanitized paths, secret-like strings, and placeholder/fabrication markers.
 
 ### Verification
 - This is a source RC documentation entry. Do not treat it as a stable `v1.2` release or a publish claim.
