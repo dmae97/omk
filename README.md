@@ -2,11 +2,22 @@
 
 Project-aware AI coding runtime.
 
+[![Proof gate](https://img.shields.io/badge/proof--gate-passing-brightgreen)](proof/PROOF_INDEX.md)
+[![Verified bundles](https://img.shields.io/badge/verified--bundles-10-blue)](proof/PROOF_INDEX.md)
+[![Runtime](https://img.shields.io/badge/runtime-v1.2--RC-purple)](docs/versioning.md)
+[![No--Kimi smoke](https://img.shields.io/badge/no--Kimi--smoke-passing-brightgreen)](proof/verified-runs/009-no-kimi-smoke/proof-bundle.json)
+
 Install once. Resume every project. Route work through OMK-owned provider adapters.
 
 Current source target: `1.2.0-rc.0` package RC for the `v1.2` runtime contract family. This is not a GA claim; see [versioning](docs/versioning.md) and [provider maturity](docs/provider-maturity.md).
 
-Proof status: `omk.proof-bundle.v1` schema and `npm run proof:check` gate are available; public proof bundles are indexed at `proof/PROOF_INDEX.md` in the source tree. Current proof count: 10 scoped RC hardening bundles, including no-Kimi smoke and fallback-routing proof.
+Proof status:
+
+- Gate: `npm run proof:check`
+- Verified bundles: 10 scoped RC hardening bundles (`omk.proof-bundle.v1`)
+- Covered axes: no-Kimi smoke, fallback routing, evidence block, replay/inspect, graph audit, contract/version
+- Integrity: runId/commit/evidence/decision linkage plus per-bundle `sha256sums.txt` artifact checks
+- Index: `proof/PROOF_INDEX.md`
 
 ## Install
 

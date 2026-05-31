@@ -7,7 +7,7 @@ import { dirname, isAbsolute, join, relative } from "node:path";
 const root = process.cwd();
 const proofRoot = "proof/verified-runs";
 const expectedSchemaVersion = "omk.proof-bundle.v1";
-const requiredFileKeys = ["rawPrompt", "commands", "verifyJson", "decisionsJsonl", "runManifest", "evidenceJsonl", "limitations"];
+const requiredFileKeys = ["rawPrompt", "commands", "verifyJson", "decisionsJsonl", "runManifest", "evidenceJsonl", "limitations", "sha256sums"];
 const allowedScenarios = new Set(["no-kimi-smoke", "evidence-block", "fallback-route", "dag-dependent-block", "replay-inspect", "graph-audit", "example-generation", "doctor-provider", "native-safety", "contract-version-smoke"]);
 const allowedVerdicts = new Set(["passed", "failed", "partial"]);
 const allowedEvidenceKinds = new Set(["file-exists", "command-passes", "git-diff-non-empty", "summary-present", "marker-present", "screenshot-present", "custom"]);
@@ -205,6 +205,49 @@ function collectRefs(refs, pathKey, idKey) {
   return result;
 }
 
+async function validateSha256Sums(errors, bundlePath, bundle, referencedPaths) {
+  const sumsPath = bundle.files.sha256sums;
+  if (!isRepoRelative(sumsPath)) return errors.push(`${bundlePath}: files.sha256sums must be repo-relative`);
+  const absoluteSumsPath = resolveRepoPath(sumsPath);
+  if (!absoluteSumsPath || !existsSync(absoluteSumsPath)) return errors.push(`${sumsPath}: missing sha256 sums artifact`);
+
+  const expectedPaths = new Set([...referencedPaths].filter((path) => path !== sumsPath));
+  const seen = new Set();
+  const text = await readFile(absoluteSumsPath, "utf8");
+  scanText(errors, sumsPath, text);
+  const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  if (lines.length === 0) errors.push(`${sumsPath}: sha256sums.txt is empty`);
+
+  for (const [index, line] of lines.entries()) {
+    const match = /^([a-f0-9]{64})  (.+)$/.exec(line);
+    if (!match) {
+      errors.push(`${sumsPath}:${index + 1}: expected '<sha256>  <repo-relative-path>'`);
+      continue;
+    }
+    const [, expectedHash, artifactPath] = match;
+    if (!isRepoRelative(artifactPath)) {
+      errors.push(`${sumsPath}:${index + 1}: artifact path must be repo-relative`);
+      continue;
+    }
+    if (!expectedPaths.has(artifactPath)) errors.push(`${sumsPath}:${index + 1}: unexpected artifact path ${artifactPath}`);
+    if (seen.has(artifactPath)) errors.push(`${sumsPath}:${index + 1}: duplicate artifact path ${artifactPath}`);
+    seen.add(artifactPath);
+
+    const absoluteArtifactPath = resolveRepoPath(artifactPath);
+    if (!absoluteArtifactPath || !existsSync(absoluteArtifactPath)) {
+      errors.push(`${sumsPath}:${index + 1}: missing artifact ${artifactPath}`);
+      continue;
+    }
+    const actualHash = await digest(absoluteArtifactPath);
+    if (expectedHash !== actualHash) errors.push(`${sumsPath}:${index + 1}: hash mismatch for ${artifactPath}`);
+    if (bundle.checksums[artifactPath] !== expectedHash) errors.push(`${sumsPath}:${index + 1}: hash must match proof-bundle checksums for ${artifactPath}`);
+  }
+
+  for (const expectedPath of expectedPaths) {
+    if (!seen.has(expectedPath)) errors.push(`${sumsPath}: missing checksum entry for ${expectedPath}`);
+  }
+}
+
 function enforceLinkage(errors, bundlePath, bundle, verify, manifest, evidenceRecords, decisionRecords) {
   if (verify?.runId !== undefined && verify.runId !== bundle.runId) errors.push(`${bundlePath}: verify.runId must match bundle.runId`);
   if (verify?.commit !== undefined && verify.commit !== bundle.commit) errors.push(`${bundlePath}: verify.commit must match bundle.commit`);
@@ -293,6 +336,7 @@ async function checkBundle(bundlePath) {
   for (const checksumPath of Object.keys(bundle.checksums)) {
     if (!referencedPaths.has(checksumPath)) errors.push(`${bundlePath}: checksum has no matching files entry: ${checksumPath}`);
   }
+  await validateSha256Sums(errors, bundlePath, bundle, referencedPaths);
   const limitationsPath = resolveRepoPath(bundle.files.limitations);
   if (limitationsPath && (await readFile(limitationsPath, "utf8")).trim().length === 0) errors.push(`${bundle.files.limitations}: limitations file is empty`);
 
