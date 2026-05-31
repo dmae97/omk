@@ -28,7 +28,7 @@
   "checksums": {
     "proof/verified-runs/001-no-kimi-codex-smoke/raw-prompt.md": "f6b48fbc234ff64cbfc982d0e719b2e6262339704a098b9578653d5d3bb69c9e",
     "proof/verified-runs/001-no-kimi-codex-smoke/commands.sh": "1fe3fc9d4796d4f046f77d22020a1757e6857d3ec89ed892a983e6fa0835bf4b",
-    "proof/verified-runs/001-no-kimi-codex-smoke/build-clean.out": "a05c840553e29a2aa5246ae7d6e695e27e006eaf61c44f54747aadc858a97eb3",
+    "proof/verified-runs/001-no-kimi-codex-smoke/build-clean.out": "29c76b1e4e54a2aa90dd10b1c67b3037e5fd32cd93289b9b927dcecd7024e6c9",
     "proof/verified-runs/001-no-kimi-codex-smoke/smoke-no-kimi-codex.out": "b031081f138636c51b910030636b061000c902e3af4a4d02b0048264ec83f3ad",
     "proof/verified-runs/001-no-kimi-codex-smoke/verify.json": "c169daf604b3bfc4230d00a447b1d8da0b797073b2e6c2c43385de83d7bbe2e3",
     "proof/verified-runs/001-no-kimi-codex-smoke/decisions.jsonl": "436680e4edec3d461315c086adfffd36004c43b0b64ffea9881cad479cd98b42",
