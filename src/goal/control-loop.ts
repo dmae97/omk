@@ -839,7 +839,7 @@ async function resolveDeepSeekGoalDecisionVote(
           role: "system",
           content: [
             "You are DeepSeek inside the OMK goal-progress ensemble.",
-            "OMK remains the orchestrator and the configured authority provider owns final action.",
+            "The configured OMK authority provider remains the orchestrator and final authority.",
             "You have no file, shell, MCP, secret, or merge authority.",
             "Return JSON only with action, confidence, and reason.",
             "Allowed action values: continue, replan, block, handoff, close.",
@@ -1343,50 +1343,6 @@ async function generateNextPromptInner(
   );
 
   const prompt = lines.join("\n");
-
-  if (runState) {
-    const isDrift = noveltyReport.recommendation === "replan" && progressDelta.value <= 0;
-    if (isDrift) {
-      import("../hooks/hook-bus.js")
-        .then(({ emit }) =>
-          emit({
-            type: "goal.drift.detected",
-            payload: {
-              goalId: goal.goalId,
-              description: `Novelty guard triggered replan with non-positive progress delta: ${noveltyReport.reason}`,
-            },
-          })
-        )
-        .catch(() => {
-          // ignore hook emission failures
-        });
-    }
-
-    const history = getAdaptiveHistory(runState.runId);
-    const recentStallCount = history.progressDeltas.slice(-2).filter((v) => v <= 0).length;
-    if (recentStallCount >= 2 && missingCriteria.length > 0) {
-      const lastActivity = runState.lastActivityAt ?? runState.startedAt;
-      const durationMinutes = Math.max(
-        0,
-        Math.floor((Date.now() - new Date(lastActivity).getTime()) / 60_000)
-      );
-      import("../hooks/hook-bus.js")
-        .then(({ emit }) =>
-          emit({
-            type: "run.stalled",
-            payload: {
-              runId: runState.runId,
-              goalId: goal.goalId,
-              lastActivity,
-              durationMinutes,
-            },
-          })
-        )
-        .catch(() => {
-          // ignore hook emission failures
-        });
-    }
-  }
 
   return {
     prompt,

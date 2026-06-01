@@ -1,5 +1,5 @@
 /**
- * Curated catalog of MCP servers that pair well with open_multi-agent_kit.
+ * Curated catalog of MCP servers that pair well with oh-my-kimi.
  *
  * These servers were discovered via the GitHub MCP ecosystem and verified
  * against the npm registry. They cover categories useful for agentic

@@ -21,7 +21,7 @@ import {
 } from "../util/shell.js";
 import { runtimeMetadataEnv } from "./child-env.js";
 import { runProcessSession } from "./process-session.js";
-import { createRuntimeSandboxProfile } from "./sandbox-profile.js";
+import { createRuntimeSandboxProfile, type RuntimeSandboxMode } from "./sandbox-profile.js";
 
 export type ExternalCliPromptTransport = "argv" | "stdin" | "tempfile";
 
@@ -282,7 +282,7 @@ function externalCliMetadata(
   cwd = process.cwd()
 ): Record<string, unknown> {
   const routing = capsule.node.routing;
-  const sandboxMode = normalizeSandboxMode(routing?.sandboxMode) ?? "read-only";
+  const sandboxMode: RuntimeSandboxMode = normalizeSandboxMode(routing?.sandboxMode) ?? "read-only";
   return {
     runtime,
     durationMs,
@@ -310,7 +310,7 @@ function normalizeRisk(value: string | undefined): DagNodeRouting["risk"] | unde
   return value === "read" || value === "write" || value === "shell" || value === "merge" ? value : undefined;
 }
 
-function normalizeSandboxMode(value: string | undefined): DagNodeRouting["sandboxMode"] | undefined {
+function normalizeSandboxMode(value: string | undefined): RuntimeSandboxMode | undefined {
   return value === "read-only" || value === "workspace-write" ? value : undefined;
 }
 

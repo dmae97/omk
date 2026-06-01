@@ -10,6 +10,7 @@ export * from "./deepseek/deepseek-provider.js";
 export * from "./deepseek/deepseek-super-config.js";
 export * from "./provider-runtime.js";
 export * from "./model-registry.js";
+export * from "./provider-stats.js";
 export * from "./openai-compatible-runner.js";
 export * from "./codex-cli-runner.js";
 // New provider system (provider.ts) — explicit exports to avoid conflicts with types.ts
@@ -29,4 +30,3 @@ export { createKimiProvider } from "./kimi-provider.js";
 export { createDeepSeekProvider } from "./deepseek-provider.js";
 export { createProviderRouter } from "./provider-router.js";
 export { createAttemptRecorder } from "./attempt-recorder.js";
-export * from "./provider-stats.js";

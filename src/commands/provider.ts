@@ -5,14 +5,12 @@ import {
   resolveDeepSeekApiKey,
   setDeepSeekApiKey,
   setDeepSeekEnabled,
-  setDeepSeekProviderOptions,
 } from "../providers/deepseek/deepseek-config.js";
 import {
   normalizeProviderId,
   providerDoctorStatus,
-  resolveUserModelAlias,
-  setProviderDefaults,
   readProviderRegistry,
+  setProviderDefaults,
   setProviderConfig,
   setProviderEnabled,
   type ProviderConfigSetInput,
@@ -40,18 +38,16 @@ export interface ProviderSetOptions extends ProviderJsonOptions {
   apiKeyEnv?: string;
   kind?: ProviderConfigSetInput["kind"];
   authMethod?: ProviderAuthMethod;
-  thinkingMode?: "thinking" | "non-thinking";
-  variant?: "flash" | "pro";
-}
-
-export interface ProviderAuthOptions extends ProviderJsonOptions {
-  method?: ProviderAuthMethod;
-  apiKeyEnv?: string;
 }
 
 export interface ProviderUseOptions extends ProviderJsonOptions {
   model?: string;
   authority?: boolean;
+}
+
+export interface ProviderAuthOptions extends ProviderJsonOptions {
+  method?: ProviderAuthMethod;
+  apiKeyEnv?: string;
 }
 
 export interface ProviderOAuthOptions extends ProviderJsonOptions {
@@ -107,7 +103,7 @@ const PROVIDER_PROFILES: ProviderCompatibilityProfile[] = [
     routing: "advisory",
     authority: "read-only",
     credentialOwner: "omk-env",
-    notes: ["OpenAI-compatible custom providers are advisory/read-only unless primary provider performs the final action."],
+    notes: ["OpenAI-compatible custom providers are advisory/read-only unless Kimi performs the final action."],
   },
   {
     id: "codex-chatgpt-plan",
@@ -201,7 +197,7 @@ export async function providerDoctorCommand(
       if (payload.baseUrl) console.log(label("Base URL", payload.baseUrl));
       if (payload.apiKeyEnv) console.log(label("API key env", payload.apiKeySet ? `${payload.apiKeyEnv} (set)` : `${payload.apiKeyEnv} (missing)`));
       console.log(payload.available ? status.ok("Provider available") : status.warn(payload.reason ?? "Provider unavailable"));
-      console.log(style.gray("Fallback: primary provider remains the final authority."));
+      console.log(style.gray("Fallback: Kimi remains the final authority."));
     }
     if (!payload.available && !options.soft) process.exitCode = 1;
     return;
@@ -225,8 +221,6 @@ export async function providerDoctorCommand(
       disabledBy: providerStatus.disabledBy,
       apiKeySet: providerStatus.apiKeySet,
       apiKeySource: providerStatus.apiKeySource,
-      thinkingMode: providerStatus.thinkingMode,
-      variant: providerStatus.variant,
     }, null, 2));
   } else {
     console.log(header("Provider doctor"));
@@ -234,8 +228,6 @@ export async function providerDoctorCommand(
     console.log(label("Mode", "opportunistic read-only worker"));
     console.log(label("Enabled", providerStatus.enabled ? "yes" : "no"));
     console.log(label("API key", providerStatus.apiKeySet ? `set (${providerStatus.apiKeySource ?? "unknown"})` : "missing"));
-    if (providerStatus.thinkingMode) console.log(label("Thinking mode", providerStatus.thinkingMode));
-    if (providerStatus.variant) console.log(label("Variant", providerStatus.variant));
     if (result.available) {
       console.log(status.ok("DeepSeek is available"));
       const balances = result.balance?.balance_infos ?? [];
@@ -247,7 +239,7 @@ export async function providerDoctorCommand(
       if (!providerStatus.enabled) {
         console.log(style.gray("Run /deepseek-enable or `omk deepseek enable` after fixing the issue."));
       }
-      console.log(style.gray("Fallback: primary provider remains the default for all nodes."));
+      console.log(style.gray("Fallback: Kimi remains the primary provider for all nodes."));
     }
   }
 
@@ -303,12 +295,6 @@ export async function providerSetCommand(
     authMethod: options.authMethod ? normalizeAuthMethodOption(options.authMethod) : undefined,
     enabled: true,
   });
-  if (normalized === "deepseek" && (options.thinkingMode !== undefined || options.variant !== undefined)) {
-    await setDeepSeekProviderOptions({
-      thinkingMode: options.thinkingMode,
-      variant: options.variant,
-    });
-  }
   const payload = {
     provider: entry.id,
     enabled: entry.enabled,
@@ -332,28 +318,25 @@ export async function providerUseCommand(
 ): Promise<void> {
   const normalized = normalizeProviderId(provider);
   if (normalized === "auto") throw new Error("Provider id is required");
-  const entry = await readProviderRegistry().then((providers) => providers.find((candidate) => candidate.id === normalized));
-  const resolvedModel = options.model ? await resolveUserModelAlias(options.model) : undefined;
-  const model = resolvedModel?.model ?? entry?.defaultModel ?? "default";
-  const authorityProvider = options.authority ? normalized : undefined;
-  const result = await setProviderDefaults({
-    provider: normalized,
-    model,
-    authorityProvider,
+  const entry = await setProviderConfig(normalized, {
+    model: options.model,
+    enabled: true,
   });
-  const payload = {
+  const defaults = await setProviderDefaults({
+    provider: entry.id,
+    model: options.model ?? entry.defaultModel,
+  });
+  emitProviderMutation("Provider default updated", {
     ok: true,
     command: "provider use",
-    defaultProvider: result.defaults.provider,
-    defaultModel: result.defaults.model,
-    authorityProvider: result.defaults.authorityProvider,
-    modelSource: resolvedModel?.source,
-    configPath: result.configPath,
+    provider: entry.id,
+    defaultProvider: defaults.defaults.provider,
+    defaultModel: defaults.defaults.model,
+    authority: options.authority === true,
+    configPath: defaults.configPath,
     secretValuesPrinted: false,
     tokenFilesRead: false,
-    projectFilesWritten: false,
-  };
-  emitProviderMutation("Provider default updated", payload, options);
+  }, options);
 }
 
 export async function providerAuthCommand(
@@ -479,7 +462,7 @@ export async function providerDeepSeekEnableCommand(options: ProviderJsonOptions
   } else {
     console.log(header("DeepSeek provider"));
     console.log(status.ok(payload.message));
-    console.log(style.gray("Primary provider remains the orchestrator; DeepSeek is used only for safe read/review/QA/documentation nodes."));
+    console.log(style.gray("Kimi remains the orchestrator; DeepSeek is used only for safe read/review/QA/documentation nodes."));
   }
 }
 
@@ -501,7 +484,7 @@ export async function providerDeepSeekDisableCommand(
     console.log(header("DeepSeek provider"));
     console.log(status.warn("DeepSeek forced disabled"));
     console.log(label("Reason", config.disabledReason ?? reason));
-    console.log(style.gray("Primary fallback remains active."));
+    console.log(style.gray("Configured authority fallback remains active."));
   }
 }
 
@@ -601,7 +584,7 @@ export function buildProviderOAuthResult(
   const apiKeyEnv = normalizeOptionalApiKeyEnv(options.apiKeyEnv ?? defaultApiKeyEnvForProvider(target));
   const commonNotes = [
     "OMK does not read OAuth token files, print token values, or write provider secrets into project files.",
-    "Primary provider remains the final authority for provider-routed work.",
+    "Kimi remains the final authority/fallback for provider-routed work.",
   ];
 
   if (target === "kimi") {

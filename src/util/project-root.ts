@@ -83,6 +83,16 @@ function projectRootRecommendation(): string {
   return "Run with OMK_PROJECT_ROOT=/path/to/project or set OMK_DEFAULT_PROJECT_ROOT for shells launched from HOME.";
 }
 
+function prefersCwdRoot(env: NodeJS.ProcessEnv): boolean {
+  const value = env.OMK_PREFER_CWD_ROOT?.trim().toLowerCase();
+  return Boolean(value && value !== "0" && value !== "false" && value !== "off");
+}
+
+function respectsProjectRootEnv(env: NodeJS.ProcessEnv): boolean {
+  const value = env.OMK_CHAT_RESPECT_PROJECT_ROOT_ENV?.trim().toLowerCase();
+  return Boolean(value && value !== "0" && value !== "false" && value !== "off");
+}
+
 function markerAt(directory: string): string | undefined {
   for (const marker of STRONG_PROJECT_MARKERS) {
     if (existsSync(join(directory, marker))) return marker;
@@ -329,8 +339,25 @@ export function resolveProjectRoot(options: ResolveProjectRootOptions = {}): Pro
   const env = options.env ?? process.env;
   const cwd = resolve(options.cwd ?? process.cwd());
   const home = normalizeHome(env, options.home);
+  const marker = findStrongMarkerRoot(cwd, home);
 
   if (env.OMK_PROJECT_ROOT) {
+    const shouldOverrideEnvRoot = !respectsProjectRootEnv(env)
+      && marker
+      && !isSamePath(marker.root, env.OMK_PROJECT_ROOT)
+      && (
+        prefersCwdRoot(env)
+        || (env.OMK_DEFAULT_PROJECT_ROOT !== undefined && isSamePath(env.OMK_PROJECT_ROOT, env.OMK_DEFAULT_PROJECT_ROOT))
+      );
+    if (shouldOverrideEnvRoot) {
+      return createResolution({
+        root: marker.root,
+        source: "strong-marker",
+        cwd,
+        home,
+        marker: marker.marker,
+      });
+    }
     return createResolution({
       root: env.OMK_PROJECT_ROOT,
       source: "env",
@@ -339,9 +366,16 @@ export function resolveProjectRoot(options: ResolveProjectRootOptions = {}): Pro
     });
   }
 
-  const marker = findStrongMarkerRoot(cwd, home);
-  const skipGitRoot = env.OMK_PREFER_CWD_ROOT === "1";
-  const gitRoot = skipGitRoot ? undefined : gitRootSync(cwd);
+  if (prefersCwdRoot(env)) {
+    return createResolution({
+      root: cwd,
+      source: "cwd",
+      cwd,
+      home,
+    });
+  }
+
+  const gitRoot = gitRootSync(cwd);
   return resolveAfterGitRoot({
     cwd,
     home,
@@ -356,8 +390,25 @@ export async function resolveProjectRootAsync(options: ResolveProjectRootOptions
   const env = options.env ?? process.env;
   const cwd = resolve(options.cwd ?? process.cwd());
   const home = normalizeHome(env, options.home);
+  const marker = findStrongMarkerRoot(cwd, home);
 
   if (env.OMK_PROJECT_ROOT) {
+    const shouldOverrideEnvRoot = !respectsProjectRootEnv(env)
+      && marker
+      && !isSamePath(marker.root, env.OMK_PROJECT_ROOT)
+      && (
+        prefersCwdRoot(env)
+        || (env.OMK_DEFAULT_PROJECT_ROOT !== undefined && isSamePath(env.OMK_PROJECT_ROOT, env.OMK_DEFAULT_PROJECT_ROOT))
+      );
+    if (shouldOverrideEnvRoot) {
+      return createResolution({
+        root: marker.root,
+        source: "strong-marker",
+        cwd,
+        home,
+        marker: marker.marker,
+      });
+    }
     return createResolution({
       root: env.OMK_PROJECT_ROOT,
       source: "env",
@@ -366,9 +417,16 @@ export async function resolveProjectRootAsync(options: ResolveProjectRootOptions
     });
   }
 
-  const marker = findStrongMarkerRoot(cwd, home);
-  const skipGitRoot = env.OMK_PREFER_CWD_ROOT === "1";
-  const gitRoot = skipGitRoot ? undefined : await gitRootAsync(cwd);
+  if (prefersCwdRoot(env)) {
+    return createResolution({
+      root: cwd,
+      source: "cwd",
+      cwd,
+      home,
+    });
+  }
+
+  const gitRoot = await gitRootAsync(cwd);
   return resolveAfterGitRoot({
     cwd,
     home,

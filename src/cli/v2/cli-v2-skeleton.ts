@@ -16,6 +16,7 @@ import { createPersistentMemoryStore } from "./persistent-memory.js";
 import { registerSlashCommands } from "../../runtime/slash-commands.js";
 import { registerProviderCommandsV2 } from "./provider-commands.js";
 import { registerWorkflowCommandsV2 } from "./workflow-commands.js";
+import { DEFAULT_AUTHORITY_PROVIDER } from "../../providers/types.js";
 import type { RequestIntent } from "../../runtime/debloat-nlp.js";
 import type { OutputProfile } from "../../runtime/contracts/command-envelope.js";
 /**
@@ -71,7 +72,7 @@ export abstract class OmkCommand extends Command {
 
     // Select provider runtime mode
     const runtimeMode = selectProviderRuntime({
-      provider: sidecar.provider || "kimi",
+      provider: sidecar.provider || DEFAULT_AUTHORITY_PROVIDER,
       intent: effectiveIntent,
     });
 
@@ -172,7 +173,7 @@ export class RunCommand extends OmkCommand {
     const classifiedIntent = classifyIntent(userRequest);
     const result = compileBloatToNlp({ rawText: userRequest });
     const sidecar = result.runtimeSidecar;
-    const runtimeMode = selectProviderRuntime({ provider: sidecar.provider || "kimi", intent: classifiedIntent });
+    const runtimeMode = selectProviderRuntime({ provider: sidecar.provider || DEFAULT_AUTHORITY_PROVIDER, intent: classifiedIntent });
     // Output structured JSON envelope to stdout only
     this.context.stdout.write(JSON.stringify({ command: "run", result: { placeholder: true, runtimeMode } }) + "\n");
     return 0;

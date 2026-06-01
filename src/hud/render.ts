@@ -222,11 +222,15 @@ function formatProviderMetricLine(metrics: RunViewModel["providerRouting"]): str
 
 function formatAssignmentSummary(assignment: RunCapabilityAssignment | undefined, maxItems = 2): string | null {
   if (!assignment) return null;
+  const skills = assignment.skills ?? [];
+  const hooks = assignment.hooks ?? [];
+  const mcpServers = assignment.mcpServers ?? [];
+  const tools = assignment.tools ?? [];
   const parts = [
-    assignment.skills.length > 0 ? `skills:${assignment.skills.slice(0, maxItems).join(",")}` : "",
-    assignment.hooks.length > 0 ? `hooks:${assignment.hooks.slice(0, maxItems).join(",")}` : "",
-    assignment.mcpServers.length > 0 ? `mcp:${assignment.mcpServers.slice(0, maxItems).join(",")}` : "",
-    assignment.tools && assignment.tools.length > 0 ? `tools:${assignment.tools.slice(0, maxItems).join(",")}` : "",
+    skills.length > 0 ? `skills:${skills.slice(0, maxItems).join(",")}` : "",
+    hooks.length > 0 ? `hooks:${hooks.slice(0, maxItems).join(",")}` : "",
+    mcpServers.length > 0 ? `mcp:${mcpServers.slice(0, maxItems).join(",")}` : "",
+    tools.length > 0 ? `tools:${tools.slice(0, maxItems).join(",")}` : "",
   ].filter(Boolean);
   return parts.length > 0 ? sanitizeForDisplay(parts.join(" ")) : null;
 }

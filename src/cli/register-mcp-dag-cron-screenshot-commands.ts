@@ -11,14 +11,22 @@ export function registerMcpDagCronScreenshotCommands(program: Command): void {
       await mcpListCommand();
     });
   mcp
-    .command("connect")
-    .description("Show the MCP Tool Plane and optionally preflight or repair active servers")
+    .command("connect [server]")
+    .description("Preflight MCP connectivity and optionally apply safe project-local repairs")
     .option("--json", "Output JSON")
-    .option("--fix", "Apply safe project-local MCP repairs before reporting")
-    .option("--all", "Run full MCP preflight for active servers")
-    .action(async (options) => {
-      const { mcpConnectCommand } = await import("../mcp/autoconnect.js");
-      await mcpConnectCommand(options);
+    .option("--all", "Check all active MCP servers")
+    .option("--fix", "Apply safe project-local MCP repairs before checking")
+    .action(async (server, options) => {
+      const { mcpPrewarmCommand, mcpDoctorCommand } = await import("../commands/mcp.js");
+      if (options.fix) {
+        await mcpDoctorCommand({ fix: true, dryRun: false, global: false, json: Boolean(options.json) });
+      }
+      if (!server && !options.all) {
+        console.error("Provide a server name or use --all");
+        process.exitCode = 1;
+        return;
+      }
+      await mcpPrewarmCommand(server, { all: Boolean(options.all), label: "prewarm" });
     });
   mcp
     .command("doctor")
@@ -128,7 +136,7 @@ export function registerMcpDagCronScreenshotCommands(program: Command): void {
     });
   mcp
     .command("sync-global")
-    .description("Import global MCP servers into project-local config")
+    .description("Import global Kimi MCP servers into project-local config")
     .option("--overwrite", "Overwrite existing local definitions with global ones")
     .option("--omk", "Write to .omk/mcp.json instead of .kimi/mcp.json")
     .action(async (options) => {
@@ -186,7 +194,7 @@ export function registerMcpDagCronScreenshotCommands(program: Command): void {
     .option("--node <id>", t("cmd.dagReplayNodeOption"))
     .option("--from-failure", t("cmd.dagReplayFromFailureOption"))
     .option("--dry-run", t("cmd.dagReplayDryRunOption"))
-    .option("--provider <provider>", "provider policy (auto | kimi | deepseek | codex | qwen)", "auto")
+    .option("--provider <provider>", "provider policy (auto | authority | kimi | deepseek | codex | qwen | openrouter)", "auto")
     .option("--model <model>", "provider model or provider/model override")
     .action(async (runId, target, subtarget, options) => {
       const { dagReplayCommand } = await import("../commands/dag.js");

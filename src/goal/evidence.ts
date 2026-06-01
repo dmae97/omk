@@ -1,10 +1,9 @@
 import { access, constants, realpath } from "fs/promises";
-import { isAbsolute, join, relative, resolve } from "path";
+import { isAbsolute, relative, resolve } from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import type { GoalEvidence, GoalSpec, SuccessCriterion, ArtifactEvidence } from "../contracts/goal.js";
 import type { RunState } from "../contracts/orchestration.js";
-import { getProjectRoot } from "../util/fs.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -276,29 +275,6 @@ export async function checkGoalEvidence(
       checkedAt,
       evidenceType: "artifact",
     });
-  }
-
-  const missingCriteria = evidence
-    .filter((e) => !e.passed && e.evidenceType === "criterion" && goal.successCriteria.some((c) => c.id === e.criterionId && c.requirement === "required"))
-    .map((e) => e.criterionId);
-
-  if (missingCriteria.length > 0) {
-    const sanitizedGoalId = goal.goalId.replace(/[^a-zA-Z0-9_.-]/g, "");
-    const evidencePath = join(getProjectRoot(), ".omk", "goals", sanitizedGoalId, "evidence.json");
-    import("../hooks/hook-bus.js")
-      .then(({ emit }) =>
-        emit({
-          type: "goal.evidence.missing",
-          payload: {
-            goalId: goal.goalId,
-            missingCriteria,
-            evidencePath,
-          },
-        })
-      )
-      .catch(() => {
-        // ignore hook emission failures
-      });
   }
 
   return evidence;

@@ -340,7 +340,7 @@ const TASK_TYPE_RULES: TaskTypeRule[] = [
   { type: "bugfix", keywords: ["fix", "bug", "error", "crash", "broken", "issue", "regression", "fails", "not working", "버그", "오류", "수정", "고장", "실패"], weight: 1 },
   { type: "refactor", keywords: ["refactor", "clean", "restructure", "rename", "extract", "simplify", "organize", "move", "리팩토링", "정리", "단순화"], weight: 1 },
   { type: "research", keywords: ["research", "investigate", "compare", "evaluate", "survey", "study", "analyze", "benchmark", "조사", "비교", "분석", "연구"], weight: 1 },
-  { type: "review", keywords: ["review", "audit", "check", "look at", "inspect", "assess", "critical", "risk", "issue", "리뷰", "검토", "점검", "크리티컬", "심각", "위험", "리스크", "이슈"], weight: 1 },
+  { type: "review", keywords: ["review", "audit", "check", "look at", "inspect", "assess", "리뷰", "검토", "점검"], weight: 1 },
   { type: "plan", keywords: ["plan", "design", "architecture", "strategy", "roadmap", "structure", "blueprint", "설계", "계획", "구조"], weight: 1 },
   { type: "test", keywords: ["test", "verify", "validate", "coverage", "unit test", "e2e", "integration test", "regression", "테스트", "검증", "커버리지"], weight: 1 },
   { type: "document", keywords: ["doc", "readme", "guide", "document", "changelog", "comment", "wiki", "문서", "가이드", "주석"], weight: 1 },
@@ -365,30 +365,11 @@ const ROLE_TEMPLATES: Record<TaskType, string[]> = {
 
 const WRITE_KEYWORDS = ["write", "edit", "implement", "fix", "create", "delete", "modify", "add", "build", "change", "update", "patch", "migrate", "refactor", "rename", "move", "extract", "코드작성", "수정", "구현", "추가", "삭제", "변경"];
 
-const READ_ONLY_DIRECTIVES = [
-  "read-only",
-  "read only",
-  "readonly",
-  "no edits",
-  "no edit",
-  "do not edit",
-  "don't edit",
-  "do not modify",
-  "don't modify",
-  "no file changes",
-  "without changing files",
-  "without edits",
-  "읽기 전용",
-  "수정하지 마",
-  "수정 없이",
-  "편집하지 마",
-  "변경하지 마",
-  "파일 변경 없이",
-];
-
 const RESEARCH_KEYWORDS = ["docs", "official", "paper", "api", "reference", "current", "latest", "version", "release notes", "changelog", "specification", "rfc", "documentation", "browser", "current page", "web page", "active tab", "dom", "chrome", "문서", "공식", "최신", "버전", "스펙"];
 
-const SECURITY_KEYWORDS = ["security", "secret", "auth", "permission", "vulnerability", "credential", "token", "encrypt", "sanitize", "xss", "csrf", "injection", "password", "api key", "critical", "risk", "보안", "인증", "권한", "취약점", "토큰", "크리티컬", "심각", "위험", "리스크"];
+const SECURITY_KEYWORDS = ["security", "secret", "auth", "permission", "vulnerability", "credential", "token", "encrypt", "sanitize", "xss", "csrf", "injection", "password", "api key", "보안", "인증", "권한", "취약점", "토큰"];
+const RISK_REVIEW_KEYWORDS = ["critical issue", "critical issues", "risk", "risks", "danger", "dangerous", "risky", "위험", "리스크", "크리티컬 이슈", "중대 이슈"];
+const READ_ONLY_DIRECTIVES = ["read-only", "read only", "readonly", "no edits", "do not edit", "do not modify", "don't edit", "don't modify", "without editing", "inspect only", "review only", "읽기 전용", "수정 금지", "변경 금지", "편집 금지"];
 
 const TEST_KEYWORDS = ["test", "verify", "validate", "coverage", "unit test", "e2e", "integration", "regression", "jest", "mocha", "pytest", "테스트", "검증", "커버리지"];
 
@@ -515,10 +496,6 @@ function hasAnyKeyword(text: string, keywords: string[]): boolean {
   return keywords.some((kw) => lowered.includes(kw.toLowerCase()));
 }
 
-function hasReadOnlyDirective(text: string): boolean {
-  return hasAnyKeyword(text, READ_ONLY_DIRECTIVES);
-}
-
 function inferComplexity(text: string): "simple" | "moderate" | "complex" {
   const fileRefs = countFileReferences(text);
   const concepts = countConcepts(text);
@@ -579,17 +556,22 @@ export function analyzeUserIntent(rawPrompt: string): UserIntent {
   const scores = scoreTaskTypes(rawPrompt);
   let taskType = scores[0]?.type ?? "general";
   const complexity = inferComplexity(rawPrompt);
-  const readOnly = hasReadOnlyDirective(rawPrompt) || !hasAnyKeyword(rawPrompt, WRITE_KEYWORDS);
+  const explicitReadOnly = hasAnyKeyword(rawPrompt, READ_ONLY_DIRECTIVES);
+  const riskReview = hasAnyKeyword(rawPrompt, RISK_REVIEW_KEYWORDS);
+  const readOnly = explicitReadOnly || !hasAnyKeyword(rawPrompt, WRITE_KEYWORDS);
   const needsResearch = hasAnyKeyword(rawPrompt, RESEARCH_KEYWORDS);
-  const needsSecurityReview = hasAnyKeyword(rawPrompt, SECURITY_KEYWORDS);
-  const needsTesting = hasAnyKeyword(rawPrompt, TEST_KEYWORDS);
+  const needsSecurityReview = riskReview || hasAnyKeyword(rawPrompt, SECURITY_KEYWORDS);
+  const needsTesting = riskReview || hasAnyKeyword(rawPrompt, TEST_KEYWORDS);
   const needsDesignReview = hasAnyKeyword(rawPrompt, DESIGN_KEYWORDS);
-  const parallelizable = isParallelizable(taskType, complexity, rawPrompt);
 
   // Override to explore/research if the prompt is clearly a question
   if (isQuestion(rawPrompt) && (taskType === "general" || taskType === "implement")) {
     taskType = needsResearch ? "research" : "explore";
   }
+  if (riskReview && (taskType === "general" || taskType === "explore" || taskType === "research")) {
+    taskType = "review";
+  }
+  const parallelizable = isParallelizable(taskType, complexity, rawPrompt);
 
   const baseRoles = [...(ROLE_TEMPLATES[taskType] ?? ROLE_TEMPLATES.general)];
 

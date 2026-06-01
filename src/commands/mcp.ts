@@ -61,10 +61,6 @@ export interface McpDoctorOptions {
   global?: boolean;
 }
 
-export interface McpDoctorReportOptions {
-  env?: Record<string, string | undefined>;
-}
-
 type McpDoctorSeverity = "ok" | "info" | "warn" | "error";
 
 export interface McpDoctorCheck {
@@ -565,7 +561,7 @@ export async function repairMcpDoctorIssues(
   };
 }
 
-export async function buildMcpDoctorReport(options: McpDoctorReportOptions = {}): Promise<McpDoctorReport> {
+export async function buildMcpDoctorReport(): Promise<McpDoctorReport> {
   const sources = await resolveAllConfigs();
   const servers = collectServers(sources);
   const resources = await getOmkResourceSettings();
@@ -578,7 +574,7 @@ export async function buildMcpDoctorReport(options: McpDoctorReportOptions = {})
     detail?: string;
     packageSpec?: string;
   }>();
-  const preflightOptions = resolveRuntimeMcpPreflightOptions(options.env);
+  const preflightOptions = resolveRuntimeMcpPreflightOptions();
   if (preflightOptions.mode !== "off") {
     const activeServersForPreflight: Record<string, unknown> = {};
     for (const [name, info] of servers) {
@@ -1191,6 +1187,7 @@ export async function mcpPrewarmCommand(
 
     let okCount = 0;
     let failCount = 0;
+    let checkedCount = 0;
     let skipCount = inactive.size;
 
     for (const [name] of servers) {
@@ -1198,6 +1195,7 @@ export async function mcpPrewarmCommand(
         console.log(`${style.gray("-")} ${style.gray(name)} ${style.gray("[inactive]")}`);
         continue;
       }
+      checkedCount++;
 
       const entry = entriesByName.get(name);
       if (!entry || entry.status === "skipped") {
@@ -1219,7 +1217,7 @@ export async function mcpPrewarmCommand(
 
     console.log("");
     if (failCount === 0) {
-      console.log(status.ok(`Checked ${okCount} server(s); ${skipCount} skipped`));
+      console.log(status.ok(`Checked ${checkedCount} server(s); ${skipCount} skipped`));
     } else {
       process.exitCode = 1;
       console.log(status.error(`${failCount} failure(s), ${okCount} ok, ${skipCount} skipped`));

@@ -1,27 +1,19 @@
 /**
- * AgentRuntime — internal runtime implementation interface.
+ * AgentRuntime — interface for runtime implementations.
  *
- * Concrete runtimes (KimiApiRuntime, DeepSeekRuntime, CodexRuntime,
- * KimiWireProtocolRuntime, etc.) implement this interface.
- *
- * It is broader than RuntimeAdapter: runNode operates on ContextCapsule,
- * and execute()/health() are optional extension hooks.
- *
- * For the provider-routing interface, see src/runtime/adapter.ts (RuntimeAdapter).
+ * Each runtime wraps a specific Kimi/provider invocation mode.
  */
 
 import type { TaskResult } from "../contracts/orchestration.js";
-import type { GoalExecutionContext, WorkerManifest } from "../contracts/worker-context.js";
 import type { ContextCapsule } from "./context-capsule.js";
 import type {
+  RuntimeCapabilities as SharedRuntimeCapabilities,
+  RuntimeHealth as SharedRuntimeHealth,
   RuntimeId,
   RuntimeKind,
-  RuntimeAuthority,
-  RuntimeCapabilities,
-  RuntimeHealth,
 } from "./contracts/shared.js";
 
-export type { RuntimeId, RuntimeKind, RuntimeAuthority, RuntimeCapabilities, RuntimeHealth };
+export type { RuntimeAuthority, RuntimeId, RuntimeKind } from "./contracts/shared.js";
 
 export interface TokenUsage {
   readonly inputTokens: number;
@@ -53,48 +45,21 @@ export interface AgentRunResult {
   readonly toolCalls?: readonly ToolCallRecord[];
 }
 
-export interface AgentTask {
-  prompt: string;
-  context: AgentContext;
-  tools: ToolManifest;
-  providerPolicy: ProviderPolicy;
-  capabilities: CapabilityManifest;
+export interface RuntimeCapabilities extends SharedRuntimeCapabilities {
+  readonly toolCalling?: boolean;
+  readonly streaming?: boolean;
+  readonly maxTokens?: number;
+  readonly live?: boolean;
+  readonly advisory?: boolean;
+  readonly dryRun?: boolean;
 }
 
-export interface AgentResult {
-  output: string;
-  exitCode: number;
-  thinking?: string;
-  todos?: Array<{ id: string; title: string; status: "pending" | "in_progress" | "done" }>;
-  tokenUsage?: { inputTokens: number; outputTokens: number; totalTokens: number };
-  toolCalls?: readonly ToolCallRecord[];
-  metadata?: Record<string, unknown>;
-}
-
-export interface AgentContext {
-  runId: string;
-  nodeId: string;
-  role?: string;
-  goal?: string;
-  system?: string;
-  files?: string[];
-  memory?: Array<{ key: string; source: string; summary: string }>;
-  cwd?: string;
-  env?: Record<string, string>;
-  providerModel?: string;
-  risk?: string;
-  approvalPolicy?: string;
-  sandboxMode?: string;
-  abortSignal?: AbortSignal;
-  goalContext?: GoalExecutionContext;
-  workerManifest?: WorkerManifest;
-  onOutput?: (text: string) => void;
-}
+export type RuntimeHealth = SharedRuntimeHealth;
 
 export interface ToolManifestEntry {
   readonly name: string;
-  readonly description: string;
-  readonly inputSchema: unknown;
+  readonly description?: string;
+  readonly inputSchema?: unknown;
   readonly readOnly?: boolean;
   readonly parallelSafe?: boolean;
   readonly stormExempt?: boolean;
@@ -102,33 +67,59 @@ export interface ToolManifestEntry {
 }
 
 export interface ToolManifest {
-  available: ToolManifestEntry[];
-  mcpServers?: string[];
-  skills?: string[];
-  hooks?: string[];
+  readonly available: readonly ToolManifestEntry[];
+  readonly mcpServers?: readonly string[];
+  readonly skills?: readonly string[];
+  readonly hooks?: readonly string[];
+}
+
+export interface AgentContext {
+  readonly runId: string;
+  readonly nodeId: string;
+  readonly role?: string;
+  readonly goal?: string;
+  readonly system?: string;
+  readonly files?: readonly string[];
+  readonly memory?: ReadonlyArray<{ key: string; source: string; summary: string }>;
+  readonly goalContext?: unknown;
+  readonly workerManifest?: unknown;
+  readonly abortSignal?: AbortSignal;
+  readonly cwd?: string;
+  readonly env?: Record<string, string>;
+  readonly providerModel?: string;
+  readonly risk?: string;
+  readonly approvalPolicy?: string;
+  readonly sandboxMode?: string;
+  readonly onOutput?: (text: string) => void;
 }
 
 export interface ProviderPolicy {
-  strategy: "priority-first" | "cost-aware" | "fallback-on-evidence-fail" | "round-robin" | "lowest-latency";
-  preferredProviders: string[];
-  fallbackChain: string[];
-  maxCost?: number;
-  maxLatencyMs?: number;
+  readonly strategy: "priority-first" | "cost-first" | "latency-first" | "manual" | string;
+  readonly preferredProviders: readonly string[];
+  readonly fallbackChain: readonly string[];
+  readonly maxCost?: number;
+  readonly maxLatencyMs?: number;
 }
 
-export interface CapabilityManifest {
-  read: boolean;
-  write: boolean;
-  shell: boolean;
-  mcp: boolean;
-  patch: boolean;
-  review: boolean;
-  merge: boolean;
-  vision: boolean;
-  streaming?: boolean;
-  structuredOutput?: boolean;
-  toolCalling?: boolean;
-  maxTokens?: number;
+export interface CapabilityManifest extends RuntimeCapabilities {
+  readonly structuredOutput?: boolean;
+}
+
+export interface AgentTask {
+  readonly prompt: string;
+  readonly context: AgentContext;
+  readonly tools: ToolManifest;
+  readonly providerPolicy: ProviderPolicy;
+  readonly capabilities: CapabilityManifest;
+}
+
+export interface AgentResult {
+  readonly output: string;
+  readonly exitCode: number;
+  readonly metadata?: Record<string, unknown>;
+  readonly thinking?: string;
+  readonly tokenUsage?: TokenUsage;
+  readonly toolCalls?: readonly ToolCallRecord[];
 }
 
 export interface AgentRuntime {
@@ -138,9 +129,9 @@ export interface AgentRuntime {
   readonly priority: number;
   readonly capabilities?: RuntimeCapabilities;
   supports(capsule: ContextCapsule): boolean;
+  health?(): Promise<RuntimeHealth>;
   runNode(capsule: ContextCapsule, signal: AbortSignal): Promise<AgentRunResult>;
   execute?(task: AgentTask): Promise<AgentResult>;
-  health?(): Promise<RuntimeHealth>;
 }
 
 export function toTaskResult(result: AgentRunResult): TaskResult {

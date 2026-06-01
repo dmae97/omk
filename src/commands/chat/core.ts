@@ -6,6 +6,7 @@ import type { OmkMode } from "../../util/mode-preset.js";
 import { getOmkResourceSettings } from "../../util/resource-profile.js";
 import { parseExecutionPromptPolicy } from "../../util/execution-selection.js";
 import { normalizeProviderPolicy, parseProviderModelArg } from "../../providers/model-registry.js";
+import { DEFAULT_AUTHORITY_PROVIDER } from "../../providers/types.js";
 import { validateAgentYamlFile, formatAgentYamlIssues } from "../../util/agent-schema.js";
 import { ensureChatStartupArtifacts } from "../../util/chat-startup.js";
 import { ensureChatRunState } from "../../util/chat-cockpit.js";
@@ -122,7 +123,7 @@ export async function chatCommand(options: {
   const providerInput = options.provider
     ?? modelArg.provider
     ?? process.env.OMK_DEFAULT_PROVIDER
-    ?? "kimi";
+    ?? DEFAULT_AUTHORITY_PROVIDER;
   const providerPolicy = normalizeProviderPolicy(providerInput);
   const mcpScope = parseRuntimeScopeOption(options.mcpScope, resources.mcpScope, "--mcp-scope");
   const effectiveResources = { ...resources, mcpScope };
@@ -142,7 +143,7 @@ export async function chatCommand(options: {
           `[omk] \`${kimiBin}\` command not found in PATH. ` +
             "Install the primary CLI first: npm i -g @anthropic-ai/kimi-code\n" +
             "If already installed, check your PATH or set KIMI_BIN env var.\n" +
-            "To use a non-Kimi provider: omk chat --provider deepseek (or codex, openrouter, qwen)"
+            "To use a non-Kimi provider: omk chat --provider mimo (or codex, opencode, openrouter, qwen)"
         )
       );
       process.exit(1);

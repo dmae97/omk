@@ -14,11 +14,6 @@ export interface ShellResult {
   failed: boolean;
 }
 
-export interface StreamingShellIo {
-  writeStdin(data: string): boolean;
-  terminate(reason: string): void;
-}
-
 export interface StreamingShellOptions {
   cwd?: string;
   env?: Record<string, string>;
@@ -32,6 +27,11 @@ export interface StreamingShellOptions {
   sudo?: boolean;
   signal?: AbortSignal;
   inheritEnv?: boolean;
+}
+
+export interface StreamingShellIo {
+  writeStdin(input: string): void;
+  terminate(reason?: string): void;
 }
 
 function isExecaError(err: unknown): err is ExecaError {
@@ -132,7 +132,6 @@ function createShellTerminator(
   termination: Promise<never>;
   reason: () => string | undefined;
   clear: () => void;
-  requestTermination?: (reason: string) => void;
 } {
   let terminationReason: string | undefined;
   let rejectTermination: ((error: Error) => void) | undefined;
@@ -172,7 +171,6 @@ function createShellTerminator(
       if (timeoutTimer) clearTimeout(timeoutTimer);
       signal?.removeEventListener("abort", abortHandler);
     },
-    requestTermination,
   };
 }
 
@@ -208,7 +206,6 @@ export async function runShell(
     input,
     ...managedChildProcessOptions(),
   });
-
   const terminator = createShellTerminator(subprocess, timeout, signal);
   cleanupProcessTreeOnParentExit(subprocess);
 
@@ -287,14 +284,12 @@ export async function runShellStreaming(
     input,
     ...managedChildProcessOptions(),
   });
-
   const io: StreamingShellIo = {
-    writeStdin(data: string): boolean {
-      if (!subprocess.stdin || subprocess.stdin.destroyed) return false;
-      return subprocess.stdin.write(data);
+    writeStdin(input: string): void {
+      subprocess.stdin?.write(input);
     },
-    terminate(reason: string): void {
-      terminator.requestTermination?.(reason);
+    terminate(): void {
+      void terminateProcessTree(subprocess);
     },
   };
 

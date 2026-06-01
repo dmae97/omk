@@ -138,57 +138,36 @@ function deriveTodoItemsFromNodes(nodes: unknown[]): TodoItem[] {
 export function parseSetTodoListFromOutput(output: string): TodoItem[] | null {
   if (!output || typeof output !== "string") return null;
 
-  const TODO_TOOL_NAMES = [
-    "SetTodoList",
-    "set_todo_list",
-    "todowrite",
-    "TodoWrite",
-    "todo_write",
-    "setTodoList",
-    "SetTodos",
-    "update_todo_list",
-  ];
+  // Strategy 1: look for name='SetTodoList' or name="SetTodoList" with arguments JSON
+  const toolCallPattern = /name\s*=\s*['"]SetTodoList['"]\s*,\s*arguments\s*=\s*['"](\{[\s\S]*?\})['"]/g;
+  const toolCallPatternAlt = /name\s*=\s*['"]SetTodoList['"]\s*[;,]?\s*arguments\s*[:=]\s*['"](\{[\s\S]*?\})['"]/g;
 
-  // Strategy 1: look for name='<TOOL>' or name="<TOOL>" with arguments JSON
-  for (const toolName of TODO_TOOL_NAMES) {
-    const escaped = toolName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const patterns = [
-      new RegExp(`name\\s*=\\s*['"]${escaped}['"]\\s*,\\s*arguments\\s*=\\s*['"](\\{[\\s\\S]*?\\})['"]`, "g"),
-      new RegExp(`name\\s*=\\s*['"]${escaped}['"]\\s*[;,]?\\s*arguments\\s*[:=]\\s*['"](\\{[\\s\\S]*?\\})['"]`, "g"),
-    ];
-    for (const pattern of patterns) {
-      pattern.lastIndex = 0;
-      let match: RegExpExecArray | null;
-      while ((match = pattern.exec(output)) !== null) {
-        const jsonStr = match[1]
-          .replace(/\\"/g, '"')
-          .replace(/\\'/g, "'")
-          .replace(/\\n/g, "\n")
-          .replace(/\\/g, "\\");
-        const result = tryParseTodosJson(jsonStr);
-        if (result && result.length > 0) return result;
-      }
+  for (const pattern of [toolCallPattern, toolCallPatternAlt]) {
+    pattern.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(output)) !== null) {
+      const jsonStr = match[1]
+        .replace(/\\"/g, '"')
+        .replace(/\\'/g, "'")
+        .replace(/\\n/g, "\n")
+        .replace(/\\/g, "\\");
+      const result = tryParseTodosJson(jsonStr);
+      if (result && result.length > 0) return result;
     }
   }
 
-  // Strategy 2: look for <tool>set_todo_list</tool> (XML-style) with JSON arguments nearby
-  const xmlPattern = /<tool>\s*(?:set_todo_list|todowrite|SetTodoList|todo_write)\s*<\/tool>[\s\S]*?(\{[\s\S]*?\})/g;
+  // Strategy 2: look for <tool>set_todo_list</tool> with JSON arguments nearby
+  const xmlPattern = /<tool>\s*set_todo_list\s*<\/tool>[\s\S]*?(\{[\s\S]*?\})/g;
   let xmlMatch: RegExpExecArray | null;
   while ((xmlMatch = xmlPattern.exec(output)) !== null) {
     const result = tryParseTodosJson(xmlMatch[1]);
     if (result && result.length > 0) return result;
   }
 
-  // Strategy 3: look for any JSON object with a "todos" array near a known tool mention
-  const toolMentionIndex = TODO_TOOL_NAMES.reduce(
-    (best, name) => {
-      const idx = output.indexOf(name);
-      return idx !== -1 && (best === -1 || idx < best) ? idx : best;
-    },
-    -1
-  );
-  if (toolMentionIndex !== -1) {
-    const nearby = output.slice(Math.max(0, toolMentionIndex - 200), toolMentionIndex + 2000);
+  // Strategy 3: look for any JSON object with a "todos" array near a SetTodoList mention
+  const setTodoListIndex = output.indexOf("SetTodoList");
+  if (setTodoListIndex !== -1) {
+    const nearby = output.slice(Math.max(0, setTodoListIndex - 200), setTodoListIndex + 2000);
     const jsonPattern = /\{[\s\S]*?"todos"\s*:\s*\[[\s\S]*?\][\s\S]*?\}/g;
     let jsonMatch: RegExpExecArray | null;
     while ((jsonMatch = jsonPattern.exec(nearby)) !== null) {

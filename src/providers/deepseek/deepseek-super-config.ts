@@ -1,7 +1,7 @@
 import type { DagNode } from "../../orchestration/dag.js";
 
 /**
- * Super OMK DeepSeek + authority-provider Co-Orchestration Preset
+ * Super OMK DeepSeek + Authority-Provider Co-Orchestration Preset
  *
  * This preset maximizes DeepSeek V4 Pro utilization alongside the configured authority provider:
  * - DeepSeek handles: planning, review, analysis, reasoning-heavy tasks
@@ -13,27 +13,23 @@ export interface SuperOmkConfig {
   // Worker settings
   parallelWorkers: number;
   deepseekWorkerCap: number;
-  authorityWorkerCap: number;
-  /** @deprecated Use authorityWorkerCap. */
   kimiWorkerCap: number;
+  authorityWorkerCap: number;
 
   // Routing rules: which node types go to which provider
   deepseekNodeTypes: string[];
-  authorityNodeTypes: string[];
-  /** @deprecated Use authorityNodeTypes. */
   kimiNodeTypes: string[];
+  authorityNodeTypes: string[];
 
   // Model config
   deepseekModel: string;
   deepseekReasoningEffort: "high" | "max";
-  authorityModel: string;
-  /** @deprecated Use authorityModel. */
   kimiModel: string;
+  authorityModel: string;
 
   // Fallback behavior
-  deepseekFallbackToAuthority: boolean;
-  /** @deprecated Use deepseekFallbackToAuthority. */
   deepseekFallbackToKimi: boolean;
+  deepseekFallbackToAuthority: boolean;
   retryEmptyContent: boolean;
 
   // Advisory mode
@@ -44,17 +40,17 @@ export interface SuperOmkConfig {
 export const SUPER_OMK_DEFAULTS: SuperOmkConfig = {
   parallelWorkers: 4,
   deepseekWorkerCap: 3,
-  authorityWorkerCap: 2,
   kimiWorkerCap: 2,
+  authorityWorkerCap: 2,
   deepseekNodeTypes: ["plan", "review", "analyze", "research", "debug"],
-  authorityNodeTypes: ["implement", "edit", "shell", "test", "merge"],
   kimiNodeTypes: ["implement", "edit", "shell", "test", "merge"],
+  authorityNodeTypes: ["implement", "edit", "shell", "test", "merge"],
   deepseekModel: "deepseek-v4-pro",
   deepseekReasoningEffort: "max",
-  authorityModel: "auto",
   kimiModel: "kimi-k2-6",
-  deepseekFallbackToAuthority: true,
+  authorityModel: "kimi-k2-6",
   deepseekFallbackToKimi: true,
+  deepseekFallbackToAuthority: true,
   retryEmptyContent: true,
   deepseekAdvisoryEnabled: true,
   deepseekAdvisoryRatio: 0.7,
@@ -99,37 +95,46 @@ export function getSuperOmkConfig(env?: Record<string, string | undefined>): Sup
   const dsCap = parseIntEnv("OMK_DEEPSEEK_WORKER_CAP", 1);
   if (dsCap !== undefined) config.deepseekWorkerCap = dsCap;
 
-  const authorityCap = parseIntEnv("OMK_AUTHORITY_WORKER_CAP", 1) ?? parseIntEnv("OMK_KIMI_WORKER_CAP", 1);
-  if (authorityCap !== undefined) {
-    config.authorityWorkerCap = authorityCap;
-    config.kimiWorkerCap = authorityCap;
-  }
+  const kmCap = parseIntEnv("OMK_KIMI_WORKER_CAP", 1);
+  if (kmCap !== undefined) config.kimiWorkerCap = kmCap;
+  const authorityCap = parseIntEnv("OMK_AUTHORITY_WORKER_CAP", 1);
+  config.authorityWorkerCap = authorityCap ?? config.kimiWorkerCap;
+  if (authorityCap !== undefined) config.kimiWorkerCap = authorityCap;
 
   if (env.OMK_DEEPSEEK_NODE_TYPES) {
     config.deepseekNodeTypes = env.OMK_DEEPSEEK_NODE_TYPES.split(",")
       .map((s) => s.trim())
       .filter(Boolean);
   }
-  const authorityNodeTypes = env.OMK_AUTHORITY_NODE_TYPES ?? env.OMK_KIMI_NODE_TYPES;
-  if (authorityNodeTypes) {
-    config.authorityNodeTypes = authorityNodeTypes.split(",")
+  if (env.OMK_KIMI_NODE_TYPES) {
+    config.kimiNodeTypes = env.OMK_KIMI_NODE_TYPES.split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    config.kimiNodeTypes = [...config.authorityNodeTypes];
+    config.authorityNodeTypes = config.kimiNodeTypes;
+  }
+  if (env.OMK_AUTHORITY_NODE_TYPES) {
+    config.authorityNodeTypes = env.OMK_AUTHORITY_NODE_TYPES.split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    config.kimiNodeTypes = config.authorityNodeTypes;
   }
   if (env.OMK_DEEPSEEK_MODEL) config.deepseekModel = env.OMK_DEEPSEEK_MODEL;
   if (env.OMK_DEEPSEEK_REASONING_EFFORT === "high" || env.OMK_DEEPSEEK_REASONING_EFFORT === "max") {
     config.deepseekReasoningEffort = env.OMK_DEEPSEEK_REASONING_EFFORT;
   }
-  const authorityModel = env.OMK_AUTHORITY_MODEL ?? env.OMK_KIMI_MODEL;
-  if (authorityModel) {
-    config.authorityModel = authorityModel;
-    config.kimiModel = authorityModel;
+  if (env.OMK_KIMI_MODEL) config.kimiModel = env.OMK_KIMI_MODEL;
+  config.authorityModel = config.kimiModel;
+  if (env.OMK_AUTHORITY_MODEL) {
+    config.authorityModel = env.OMK_AUTHORITY_MODEL;
+    config.kimiModel = env.OMK_AUTHORITY_MODEL;
   }
 
-  const fallback = env.OMK_DEEPSEEK_FALLBACK_TO_AUTHORITY ?? env.OMK_DEEPSEEK_FALLBACK_TO_KIMI;
-  if (fallback !== undefined) {
-    config.deepseekFallbackToAuthority = fallback === "1" || fallback === "true";
+  const fallback = env.OMK_DEEPSEEK_FALLBACK_TO_KIMI;
+  if (fallback !== undefined) config.deepseekFallbackToKimi = fallback === "1" || fallback === "true";
+  config.deepseekFallbackToAuthority = config.deepseekFallbackToKimi;
+  const authorityFallback = env.OMK_DEEPSEEK_FALLBACK_TO_AUTHORITY;
+  if (authorityFallback !== undefined) {
+    config.deepseekFallbackToAuthority = authorityFallback === "1" || authorityFallback === "true";
     config.deepseekFallbackToKimi = config.deepseekFallbackToAuthority;
   }
 

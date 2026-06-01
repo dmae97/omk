@@ -265,7 +265,7 @@ const OPEN_DESIGN_OMK_SETTINGS_FIELD = `  {
   },
 `;
 
-const OPEN_DESIGN_OMK_VISUAL = `  // OMK — purple/mint bridge.
+const OPEN_DESIGN_OMK_VISUAL = `  // OMK — Kimicat purple/mint bridge.
   omk: {
     bg: 'linear-gradient(135deg, #241C32 0%, #7B5BF5 58%, #14B8A6 100%)',
     fg: '#F3E8FF',
@@ -368,7 +368,7 @@ function patchOpenDesignAgentLabelsSource(source: string): string {
 }
 
 function patchOpenDesignAgentIconSource(source: string): string {
-  if (source.includes("OMK — purple/mint bridge") || source.includes("OMK — Kimicat")) return source;
+  if (source.includes("OMK — Kimicat")) return source;
   if (source.includes("const ICON_EXT: Record<string, 'svg' | 'png'>")) {
     if (source.includes("omk: 'svg'")) return source;
     const marker = "  kimi: 'svg',";

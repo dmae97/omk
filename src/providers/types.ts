@@ -1,12 +1,68 @@
 import type { TaskResult, TaskRunner } from "../contracts/orchestration.js";
-import type { RuntimeRouteDecision, RuntimeId } from "../runtime/adapter.js";
 
-export type KnownProviderId = "codex" | "commandcode" | "deepseek" | "kimi" | "local-llm" | "mimo" | "opencode" | "openrouter" | "qwen";
+export type KnownProviderId = "kimi" | "deepseek" | "codex" | "qwen" | "openrouter";
 export type ProviderId = KnownProviderId | (string & {});
-export type ProviderPolicy = "auto" | "authority" | KnownProviderId;
+export type ProviderPolicy = "auto" | ProviderId;
+export const DEFAULT_AUTHORITY_PROVIDER: ProviderId = "mimo";
+export const DEFAULT_FALLBACK_RUNTIME = "mimo-api";
+export const DEFAULT_RUNTIME_FALLBACK_CHAIN = [
+  DEFAULT_FALLBACK_RUNTIME,
+  "kimi-api",
+  "codex-cli",
+  "deepseek-api",
+  "opencode-cli",
+  "commandcode-cli",
+] as const;
+
+const LEGACY_KIMI_CLI_RUNTIME_IDS = new Set(["kimi-cli", "kimi-print", "kimi-wire"]);
+
+export function resolveFallbackProvider(
+  provider?: ProviderId | ProviderPolicy | readonly (ProviderId | ProviderPolicy)[]
+): ProviderId {
+  const candidates = Array.isArray(provider) ? provider : [provider];
+  for (const candidate of candidates) {
+    if (candidate && candidate !== "auto") return candidate as ProviderId;
+  }
+  return DEFAULT_AUTHORITY_PROVIDER;
+}
+
+export function resolveAuthorityProvider(
+  availableProviders: readonly ProviderId[] = [],
+  preferredProvider?: ProviderPolicy
+): ProviderId {
+  if (preferredProvider && preferredProvider !== "auto" && availableProviders.includes(preferredProvider)) {
+    return preferredProvider;
+  }
+
+  const defaultAuthority = availableProviders.find((provider) => provider === DEFAULT_AUTHORITY_PROVIDER);
+  if (defaultAuthority) return defaultAuthority;
+
+  const neutralProvider = availableProviders.find((provider) => provider !== "kimi" && provider !== "deepseek");
+  if (neutralProvider) return neutralProvider;
+
+  return DEFAULT_AUTHORITY_PROVIDER;
+}
+
+export function resolveFallbackRuntime(availableRuntimes: readonly string[] = []): string {
+  return resolveRuntimeFallbackChain(availableRuntimes)[0] ?? DEFAULT_FALLBACK_RUNTIME;
+}
+
+export function resolveRuntimeFallbackChain(availableRuntimes: readonly string[] = []): string[] {
+  const runtimes = availableRuntimes.length > 0
+    ? [...availableRuntimes]
+    : [...DEFAULT_RUNTIME_FALLBACK_CHAIN];
+  return runtimes.sort((left, right) => runtimeFallbackRank(left) - runtimeFallbackRank(right));
+}
+
+function runtimeFallbackRank(runtimeId: string): number {
+  const defaultIndex = DEFAULT_RUNTIME_FALLBACK_CHAIN.indexOf(runtimeId as (typeof DEFAULT_RUNTIME_FALLBACK_CHAIN)[number]);
+  if (defaultIndex >= 0) return defaultIndex;
+  if (LEGACY_KIMI_CLI_RUNTIME_IDS.has(runtimeId)) return 10_000;
+  return 5_000;
+}
 export type ProviderRisk = "read" | "write" | "shell" | "merge";
 export type ProviderComplexity = "simple" | "moderate" | "complex";
-export type ProviderKind = "codex-cli" | "external-cli" | "kimi-native" | "local" | "openai-compatible";
+export type ProviderKind = "kimi-native" | "openai-compatible" | "external-cli" | "codex-cli" | "local";
 export type ProviderWireApi = "kimi-native" | "openai-chat-completions" | "openai-responses" | "external-cli";
 export type ProviderAuthMethod = "api-key-env" | "oauth" | "external-cli" | "none";
 export type ProviderProfileType = "runtime" | "compatibility";
@@ -16,7 +72,6 @@ export type ProviderPlanKind =
   | "chatgpt-plan"
   | "claude-code-plan"
   | "gemini-cli-plan"
-  | "external-cli"
   | "qwen-coding-plan"
   | "openrouter-credits"
   | "openrouter-byok";
@@ -79,73 +134,14 @@ export interface ProviderRouteInput {
   providerModels?: Partial<Record<ProviderId, ProviderModelDefault>>;
   providerHint?: "auto" | ProviderId;
   providerPolicy?: ProviderPolicy;
+  authorityProvider?: ProviderId;
   preferredModel?: string;
   preferredDeepSeekTier?: DeepSeekModelTier;
-  providerModelStats?: Record<string, import("./provider-stats.js").ProviderModelStatsEntry>;
-  /** Configurable authority provider. Defaults to OMK authority resolution. */
-  authorityProvider?: ProviderId;
-}
-
-export const DEFAULT_AUTHORITY_PROVIDER: ProviderId = "kimi";
-/** @deprecated Use resolveFallbackProvider() instead. */
-export const DEFAULT_FALLBACK_PROVIDER: ProviderId = DEFAULT_AUTHORITY_PROVIDER;
-/** @deprecated Use resolveFallbackRuntime() instead. */
-export const DEFAULT_FALLBACK_RUNTIME: RuntimeId = "kimi-api";
-/** @deprecated Use resolveRuntimeFallbackChain() instead. */
-export const DEFAULT_RUNTIME_FALLBACK_CHAIN: RuntimeId[] = [
-  "kimi-api",
-  "kimi-wire",
-  "opencode-cli",
-  "codex-cli",
-  "openrouter-api",
-  "deepseek-api",
-];
-
-export function resolveFallbackProvider(availableProviders: ProviderId[]): ProviderId {
-  // Priority: Kimi is the default coding authority; explicit external providers remain available.
-  const priority: ProviderId[] = ["kimi", "codex", "opencode", "commandcode", "qwen", "openrouter", "deepseek"];
-  for (const p of priority) {
-    if (availableProviders.includes(p)) return p;
-  }
-  return availableProviders[0] ?? DEFAULT_AUTHORITY_PROVIDER;
-}
-
-const AUTHORITY_CAPABLE_PROVIDER_PRIORITY: ProviderId[] = ["kimi", "codex"];
-const EXPLICIT_AUTHORITY_PROVIDERS = new Set<ProviderId>([...AUTHORITY_CAPABLE_PROVIDER_PRIORITY, "kimi"]);
-
-export function resolveFallbackRuntime(availableRuntimes: RuntimeId[]): RuntimeId {
-  // Priority: direct Kimi API is the default coding runtime; legacy print mode is fallback-only.
-  const priority: RuntimeId[] = ["kimi-api", "kimi-wire", "codex-cli", "opencode-cli", "commandcode-cli", "qwen-api", "openrouter-api", "deepseek-api"];
-  for (const r of priority) {
-    if (availableRuntimes.includes(r)) return r;
-  }
-  return availableRuntimes[0] ?? DEFAULT_FALLBACK_RUNTIME;
-}
-
-export function resolveRuntimeFallbackChain(availableRuntimes: RuntimeId[]): RuntimeId[] {
-  const priority: RuntimeId[] = ["kimi-api", "kimi-wire", "codex-cli", "opencode-cli", "commandcode-cli", "qwen-api", "openrouter-api", "deepseek-api"];
-  const ordered = priority.filter((r) => availableRuntimes.includes(r));
-  const remainder = availableRuntimes.filter((r) => !ordered.includes(r));
-  return [...ordered, ...remainder];
-}
-
-/**
- * Resolve the authority provider from available providers.
- * Priority: explicit preferred > OMK authority-capable provider > OMK default authority.
- */
-export function resolveAuthorityProvider(
-  availableProviders: ProviderId[],
-  preferred?: ProviderId
-): ProviderId {
-  if (preferred && (availableProviders.includes(preferred) || EXPLICIT_AUTHORITY_PROVIDERS.has(preferred))) return preferred;
-  const authorityCapable = AUTHORITY_CAPABLE_PROVIDER_PRIORITY.find((provider) => availableProviders.includes(provider));
-  return authorityCapable ?? DEFAULT_AUTHORITY_PROVIDER;
 }
 
 export interface ProviderRouteDecision {
   provider: ProviderId;
   reason: string;
-  /** @deprecated Use RuntimeRouteDecision.fallbackChain instead */
   fallbackProvider: ProviderId;
   confidence: number;
   providerModel?: ProviderModelRef;
@@ -225,29 +221,5 @@ export function withProviderMetadata(
       ...(result.metadata ?? {}),
       ...metadata,
     },
-  };
-}
-
-export function legacyProviderDecisionToRuntimeDecision(
-  decision: ProviderRouteDecision
-): RuntimeRouteDecision {
-  const providerToRuntime = (provider: string): RuntimeId => {
-    if (provider === "kimi") return "kimi-api";
-    if (provider === "codex") return "codex-cli";
-    if (provider === "deepseek") return "deepseek-api";
-    if (provider === "qwen") return "qwen-api";
-    if (provider === "openrouter") return "openrouter-api";
-    return `${provider}-api`;
-  };
-
-  return {
-    selectedRuntime: providerToRuntime(decision.provider),
-    candidateRuntimes: [providerToRuntime(decision.provider)],
-    fallbackChain: decision.fallbackProvider
-      ? [providerToRuntime(decision.fallbackProvider)]
-      : [],
-    authorityMode: (decision.providerModel?.authority ?? "advisory") as RuntimeRouteDecision["authorityMode"],
-    reason: decision.reason,
-    confidence: decision.confidence,
   };
 }

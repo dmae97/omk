@@ -108,7 +108,7 @@ test("chat command fails loudly when Kimi exits immediately with code 0", {
       ``,
     ].join("\n"));
 
-    const result = spawnSync(process.execPath, [CLI, "chat", "--layout", "plain", "--brand", "plain", "--run-id", runId], {
+    const result = spawnSync(process.execPath, [CLI, "chat", "--provider", "kimi", "--layout", "plain", "--brand", "plain", "--run-id", runId], {
       cwd: projectRoot,
       encoding: "utf-8",
       timeout: 20000,
@@ -168,7 +168,7 @@ test("chat command startup watchdog fails a silent Kimi launch", {
       ``,
     ].join("\n"));
 
-    const result = spawnSync(process.execPath, [CLI, "chat", "--layout", "plain", "--brand", "plain", "--run-id", runId], {
+    const result = spawnSync(process.execPath, [CLI, "chat", "--provider", "kimi", "--layout", "plain", "--brand", "plain", "--run-id", runId], {
       cwd: projectRoot,
       encoding: "utf-8",
       timeout: 20000,
@@ -375,7 +375,7 @@ test("chat smoke validates startup without launching Kimi", async () => {
     assert.ok(harness.virtualDag.nodes.some((node) => node.id === "root-coordinator" && node.required === true));
     assert.ok(harness.virtualDag.nodes.some((node) => node.id === "review-merge" && node.required === true));
     assert.ok(harness.virtualDag.failurePolicy.blockingLanes.includes("root-coordinator"));
-    assert.ok(harness.authority.some((line) => /kimi is the configured OMK authority provider/.test(line)));
+    assert.ok(harness.authority.some((line) => /configured OMK authority provider owns edits/.test(line)));
     assert.equal(harness.authority.some((line) => /Kimi\/OMK chat owns edits/.test(line)), false);
     assert.match(await readFile(join(projectRoot, ".omk", "runs", runId, "memory-recall-summary.md"), "utf-8"), /Memory Recall Summary/);
     assert.equal(existsSync(join(projectRoot, ".omk", "runs", runId, "chat-startup-failure.json")), false);

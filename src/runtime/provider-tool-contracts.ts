@@ -57,8 +57,8 @@ export function assertToolPlaneHashMatchesPayload(
 function toPrefixSpec(entry: ToolManifestEntry): OmkToolPrefixSpec {
   return {
     name: entry.name,
-    description: entry.description,
-    parameters: entry.inputSchema as JsonValue,
+    description: entry.description ?? "",
+    parameters: (entry.inputSchema ?? {}) as JsonValue,
     readOnly: entry.readOnly === true,
     parallelSafe: entry.parallelSafe === true,
     stormExempt: entry.stormExempt === true,
@@ -71,8 +71,8 @@ function toProviderPayload(entry: ToolManifestEntry): ProviderFunctionToolPayloa
     type: "function",
     function: {
       name: entry.name,
-      description: entry.description,
-      parameters: entry.inputSchema,
+      description: entry.description ?? "",
+      parameters: entry.inputSchema ?? {},
     },
   };
 }
@@ -81,7 +81,7 @@ function toProviderContractView(entry: ToolManifestEntry): ProviderToolContractV
   const readOnly = entry.readOnly === true;
   return {
     name: entry.name,
-    schemaHash: stableValueHash(entry.inputSchema),
+    schemaHash: stableValueHash(entry.inputSchema ?? {}),
     readOnly,
     parallelSafe: entry.parallelSafe === true,
     mutatesState: !readOnly,

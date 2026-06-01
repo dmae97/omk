@@ -1,95 +1,66 @@
-import type { ProviderAvailability, ProviderId } from "./types.js";
+import type { ProviderAvailability } from "./types.js";
 
 export class ProviderHealthRegistry {
-  private providers = new Map<ProviderId, ProviderAvailability>();
+  private kimi: ProviderAvailability = {
+    provider: "kimi",
+    available: true,
+    checkedAt: Date.now(),
+    disableForRun: false,
+  };
 
-  constructor() {
-    this.register("kimi");
-  }
-
-  register(provider: ProviderId): void {
-    this.providers.set(provider, {
-      provider,
-      available: true,
-      checkedAt: Date.now(),
-      disableForRun: false,
-    });
-  }
-
-  setAvailable(provider: ProviderId): void {
-    const entry = this.providers.get(provider);
-    if (entry) {
-      entry.available = true;
-      entry.checkedAt = Date.now();
-      entry.disableForRun = false;
-      entry.reason = undefined;
-    }
-  }
-
-  setUnavailable(provider: ProviderId, reason: string): void {
-    const entry = this.providers.get(provider);
-    if (entry) {
-      entry.available = false;
-      entry.checkedAt = Date.now();
-      entry.reason = reason;
-      entry.disableForRun = true;
-    }
-  }
-
-  isAvailable(provider: ProviderId): boolean {
-    const entry = this.providers.get(provider);
-    if (!entry) return false;
-    return entry.available !== false && entry.disableForRun !== true;
-  }
-
-  get(provider: ProviderId): ProviderAvailability | undefined {
-    return this.providers.get(provider);
-  }
-
-  list(): ProviderAvailability[] {
-    return Array.from(this.providers.values());
-  }
-
-  // Backward-compatible aliases (delegate to new methods)
+  private deepseek?: ProviderAvailability;
 
   getKimi(): ProviderAvailability {
-    return this.get("kimi")!;
+    return this.kimi;
   }
 
   isKimiAvailable(): boolean {
-    return this.isAvailable("kimi");
+    return this.kimi.available !== false && this.kimi.disableForRun !== true;
   }
 
   markKimiUnavailable(reason: string): void {
-    this.setUnavailable("kimi", reason);
+    this.kimi = {
+      provider: "kimi",
+      available: false,
+      checkedAt: Date.now(),
+      reason,
+      disableForRun: true,
+    };
   }
 
   markKimiAvailable(): void {
-    this.setAvailable("kimi");
+    this.kimi = {
+      provider: "kimi",
+      available: true,
+      checkedAt: Date.now(),
+      disableForRun: false,
+    };
   }
 
   getDeepSeek(): ProviderAvailability | undefined {
-    return this.get("deepseek");
+    return this.deepseek;
   }
 
   isDeepSeekAvailable(): boolean {
-    // Backward compat: before registration, deepseek was implicitly available
-    const entry = this.get("deepseek");
-    if (!entry) return true;
-    return entry.available !== false && entry.disableForRun !== true;
+    return this.deepseek?.available !== false && this.deepseek?.disableForRun !== true;
   }
 
   markDeepSeekUnavailable(reason: string): void {
-    if (!this.providers.has("deepseek")) {
-      this.register("deepseek");
-    }
-    this.setUnavailable("deepseek", reason);
+    this.deepseek = {
+      provider: "deepseek",
+      available: false,
+      checkedAt: Date.now(),
+      reason,
+      disableForRun: true,
+    };
   }
 
   markDeepSeekAvailable(): void {
-    if (!this.providers.has("deepseek")) {
-      this.register("deepseek");
-    }
-    this.setAvailable("deepseek");
+    this.deepseek = {
+      provider: "deepseek",
+      available: true,
+      checkedAt: Date.now(),
+      disableForRun: false,
+    };
   }
 }

@@ -5,12 +5,12 @@ import type { TaskResult, TaskRunner } from "../contracts/orchestration.js";
 import type { DagNode } from "../orchestration/dag.js";
 import { renderPromptDigest } from "../goal/prompt-digest.js";
 import { runShell } from "../util/shell.js";
-import { inferNodeRisk } from "./router.js";
 import { buildChildEnv } from "../runtime/child-env.js";
+import { inferNodeRisk } from "./router.js";
 
 export interface CodexCliRunnerOptions {
-  bin?: string;
   cwd: string;
+  bin?: string;
   model?: string;
   timeoutMs?: number;
 }
@@ -31,23 +31,30 @@ export function createCodexCliAdvisoryTaskRunner(options: CodexCliRunnerOptions)
     },
     async run(node: DagNode, env: Record<string, string>, signal?: AbortSignal): Promise<TaskResult> {
       const risk = inferNodeRisk(node);
-      const authorityMode = env.OMK_PROVIDER_AUTHORITY === "codex" || env.OMK_PROVIDER_AUTHORITY === env.OMK_PROVIDER;
+      const codexAuthority = env.OMK_PROVIDER_AUTHORITY === "codex" || env.OMK_PROVIDER === "codex";
       const advisoryMode = env.OMK_PROVIDER_AUTHORITY === "advisory" && risk === "write";
-      if (risk !== "read" && !advisoryMode && !authorityMode) {
-        return deny(node, "Codex CLI lane is read-only/advisory; write/shell/merge authority stays on the OMK authority provider");
+      if (risk !== "read" && !advisoryMode && !codexAuthority) {
+        return deny(node, "Codex CLI lane is read-only/advisory; write/shell/merge authority stays on the authority provider");
       }
-      if (!authorityMode && (node.routing?.requiresToolCalling === true || node.routing?.requiresMcp === true)) {
+      if (node.routing?.requiresToolCalling === true || node.routing?.requiresMcp === true) {
         return deny(node, "Codex CLI lane does not receive OMK MCP or tool authority");
       }
 
-      currentOnThinking?.(`Codex ${authorityMode ? "authority" : "advisory"} worker: ${node.name}`);
+      currentOnThinking?.(`Codex advisory worker: ${node.name}`);
       const tmp = await mkdtemp(join(tmpdir(), "omk-codex-provider-"));
       const outputPath = join(tmp, "last-message.txt");
       try {
         const prompt = buildCodexPrompt(node, env);
-        const sandboxMode = authorityMode ? "workspace-write" : "read-only";
-        const approvalPolicy = authorityMode ? "on-request" : "never";
-        const childEnv = buildChildEnv({ overrideEnv: env });
+        const sandboxMode = risk === "read" || advisoryMode ? "read-only" : "workspace-write";
+        const approvalPolicy = sandboxMode === "workspace-write" ? "on-request" : "never";
+        const childEnv = buildChildEnv({
+          overrideEnv: {
+            ...env,
+            OMK_APPROVAL_POLICY: approvalPolicy,
+            OMK_SANDBOX_MODE: sandboxMode,
+            OMK_TASK_RISK: risk,
+          },
+        });
         const args = [
           "exec",
           "--sandbox", sandboxMode,
@@ -83,25 +90,18 @@ export function createCodexCliAdvisoryTaskRunner(options: CodexCliRunnerOptions)
 }
 
 function buildCodexPrompt(node: DagNode, env: Record<string, string>): string {
-  const authorityMode = env.OMK_PROVIDER_AUTHORITY === "codex" || env.OMK_PROVIDER_AUTHORITY === env.OMK_PROVIDER;
   return [
-    authorityMode
-      ? "You are the Codex CLI authority lane inside OMK."
-      : "You are a Codex CLI advisory/read-only lane inside OMK.",
-    "OMK is the root orchestrator; the configured authority provider owns final write/merge decisions.",
-    authorityMode
-      ? "Apply only the bounded task requested by this DAG node; do not access secrets."
-      : "Do not modify files, execute writes, access secrets, or use MCP authority.",
-    authorityMode
-      ? "Return concise completion evidence, changed files if any, risks, and verification results."
-      : "Return concise findings, evidence, risks, and recommended authority-provider follow-up.",
+    "You are a Codex CLI advisory/read-only lane inside OMK.",
+    "OMK and the configured authority provider are the root orchestrator and final authority.",
+    "Do not modify files, execute writes, access secrets, or use MCP authority.",
+    "Return concise findings, evidence, risks, and recommended authority-provider follow-up.",
     "",
     `DAG node: ${node.id}`,
     `Name: ${node.name}`,
     `Role: ${node.role}`,
     `Task type: ${env.OMK_TASK_TYPE ?? "general"}`,
     `Authority: ${env.OMK_PROVIDER_AUTHORITY ?? "advisory"}`,
-    renderPromptDigest("Goal context digest from OMK", env.OMK_GOAL_CONTEXT ?? env.OMK_GOAL, {
+    renderPromptDigest("Goal context digest from authority provider", env.OMK_GOAL_CONTEXT ?? env.OMK_GOAL, {
       maxKeywords: 18,
       maxPhrases: 3,
     }),

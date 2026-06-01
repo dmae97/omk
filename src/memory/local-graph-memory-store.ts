@@ -116,7 +116,7 @@ export interface ExtractedConcept {
 export const ONTOLOGY: MemoryOntology = {
   version: "omk-ontology-mindmap-v1",
   description:
-    "Project-local ontology for OMK memory. Memories are decomposed into mind-map nodes for goals, topics, decisions, tasks, risks, commands, files, evidence, provider routes, provider fallbacks, questions, answers, constraints, and concepts.",
+    "Project-local ontology for Kimi/OMK memory. Memories are decomposed into mind-map nodes for goals, topics, decisions, tasks, risks, commands, files, evidence, provider routes, provider fallbacks, questions, answers, constraints, and concepts.",
   classes: [
     "Project",
     "Session",
@@ -955,7 +955,7 @@ function classify(text: string, isBullet: boolean): string {
   if (/\b(risk|blocked|blocker|fail|failure|warning|주의|리스크|위험|실패|차단)\b/i.test(text)) return "Risk";
   if (/\b(evidence|verified|tested|pass|출처|근거|검증|통과)\b/i.test(text)) return "Evidence";
   if (/\b(fallback|failover|fallback-to-kimi|대체|폴백)\b/i.test(text) && /\b(provider|kimi|deepseek|라우팅|공급자)\b/i.test(text)) return "ProviderFallback";
-  if (/\b(provider route|provider routing|routeProvider|provider router|deepseek|kimi-first|라우팅|공급자)\b/i.test(text)) return "ProviderRoute";
+  if (/\b(provider route|provider routing|routeProvider|provider router|deepseek|compatibility-first|라우팅|공급자)\b/i.test(text)) return "ProviderRoute";
   if (/\b(provider|kimi|deepseek|runtime|worker pool|공급자|런타임)\b/i.test(text)) return "Provider";
   if (/\b(constraint|must|must not|required|제약|필수|금지)\b/i.test(text)) return "Constraint";
   if (text.endsWith("?") || /\b(question|질문|의문)\b/i.test(text)) return "Question";

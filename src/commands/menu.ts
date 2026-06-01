@@ -1,4 +1,4 @@
-import { style, omkCliHero, label, separator } from "../util/theme.js";
+import { style, kimicatCliHero, label, separator } from "../util/theme.js";
 import { t, initI18n } from "../util/i18n.js";
 import { orchestratePrompt } from "../orchestration/orchestrate-prompt.js";
 import { getCurrentMode, getModePresets } from "../util/mode-preset.js";
@@ -17,7 +17,7 @@ export async function menuCommand(options: { runId?: string; workers?: string })
     });
     console.log(hud);
   } catch {
-    console.log(omkCliHero());
+    console.log(kimicatCliHero());
   }
 
   // Show current mode badge
@@ -29,9 +29,9 @@ export async function menuCommand(options: { runId?: string; workers?: string })
 
   const hasTty = Boolean(process.stdout.isTTY && process.stdin.isTTY);
   if (!hasTty) {
-    console.log(style.gray("\n  ⟡ omk chat  — " + t("cli.suggestionChat").replace("  ⟡ omk chat  — ", "")));
-    console.log(style.gray("  ⟡ omk hud   — " + t("cli.suggestionHud").replace("  ⟡ omk hud   — ", "")));
-    console.log(style.gray("  ⟡ omk --help — " + t("cli.suggestionHelp").replace("  ⟡ omk --help — ", "").trim()));
+    console.log(style.gray("\n  💡 omk chat  — " + t("cli.suggestionChat").replace("  💡 omk chat  — ", "")));
+    console.log(style.gray("  💡 omk hud   — " + t("cli.suggestionHud").replace("  💡 omk hud   — ", "")));
+    console.log(style.gray("  💡 omk --help — " + t("cli.suggestionHelp").replace("  💡 omk --help — ", "").trim()));
     return;
   }
 
@@ -73,7 +73,7 @@ export async function menuCommand(options: { runId?: string; workers?: string })
   switch (answer) {
     case "1": {
       const { spawnSync } = await import("child_process");
-      const chatArgs = [process.argv[1]!, "chat", "--layout", "auto", "--brand", "minimal"];
+      const chatArgs = [process.argv[1]!, "chat", "--layout", "auto", "--brand", "kimicat"];
       if (options.runId) chatArgs.push("--run-id", options.runId);
       if (options.workers) chatArgs.push("--workers", options.workers);
       const result = spawnSync(process.execPath, chatArgs, { stdio: "inherit" });

@@ -28,13 +28,13 @@ export type TelemetryEventType =
   | "hook.completed"
   | "provider.route"
   | "provider.fallback"
-  | "evidence.result"
   | "provider.request.started"
   | "provider.request.completed"
   | "provider.request.failed"
   | "provider.advisory.started"
   | "provider.advisory.completed"
-  | "provider.advisory.failed";
+  | "provider.advisory.failed"
+  | "evidence.result";
 
 export interface TelemetryEvent {
   schemaVersion: "telemetry.v1";

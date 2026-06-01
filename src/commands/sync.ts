@@ -21,7 +21,7 @@ export async function syncCommand(options?: { dryRun?: boolean; diff?: boolean; 
   }
 
   const root = getProjectRoot();
-  console.log(header("open_multi-agent_kit sync"));
+  console.log(header("oh-my-kimi sync"));
 
   const timestamp = new Date().toISOString();
   const manifest: SyncManifestEntry[] = [];
@@ -96,7 +96,7 @@ export async function syncCommand(options?: { dryRun?: boolean; diff?: boolean; 
 }
 
 async function rollbackSync(): Promise<void> {
-  console.log(header("open_multi-agent_kit sync rollback"));
+  console.log(header("oh-my-kimi sync rollback"));
   const manifest = await readManifest();
   if (manifest.length === 0) {
     console.log("No manifest entries found.");

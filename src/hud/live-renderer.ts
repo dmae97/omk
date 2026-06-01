@@ -1,6 +1,6 @@
 import type { MetricSnapshot, HudRenderer } from "../contracts/hud.js";
 import type { RunState } from "../contracts/orchestration.js";
-import { renderHudDashboard } from "./render.js";
+import { renderHudDashboard } from "../commands/hud.js";
 
 export interface LiveHudRendererOptions {
   runId?: string;

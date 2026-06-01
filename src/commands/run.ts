@@ -13,10 +13,22 @@ import { orchestratePrompt } from "../orchestration/orchestrate-prompt.js";
 import type { ProviderPolicy } from "../providers/types.js";
 import { normalizeProviderPolicy, parseProviderModelArg } from "../providers/model-registry.js";
 
+interface RunCommandOptions {
+  workers?: string;
+  runId?: string;
+  goalId?: string;
+  timeoutPreset?: string;
+  provider?: ProviderPolicy;
+  model?: string;
+  mcpScope?: string;
+  execution?: string;
+  dryRun?: boolean;
+}
+
 export async function runCommand(
   flow: string | undefined,
   goal: string | undefined,
-  options: { workers?: string; runId?: string; goalId?: string; timeoutPreset?: string; provider?: ProviderPolicy; model?: string; mcpScope?: string; execution?: string }
+  options: RunCommandOptions
 ): Promise<void> {
   const root = getProjectRoot();
   const resources = await getOmkResourceSettings();
@@ -32,6 +44,7 @@ export async function runCommand(
   let startedAt: string;
   let isResume = false;
   let goalSnapshot: RunState["goalSnapshot"] | undefined;
+  let currentState: RunState | undefined;
 
   // Load goal if --goal is provided
   if (options.goalId) {
@@ -85,6 +98,7 @@ export async function runCommand(
     }
 
     startedAt = new Date().toISOString();
+    currentState = await readRunState(runDir);
 
     // Update files if new flow/goal provided during resume
     if (goal) {
@@ -147,6 +161,7 @@ export async function runCommand(
       goalId: options.goalId,
       goalSnapshot,
     });
+    currentState = runState;
     await writeFile(join(runDir, "state.json"), JSON.stringify(runState, null, 2));
   }
 
@@ -164,6 +179,28 @@ export async function runCommand(
   if (!rawPrompt) {
     console.error(status.error("No goal text available for orchestration."));
     process.exit(1);
+  }
+
+  if (options.dryRun) {
+    currentState ??= await readRunState(runDir);
+    if (currentState) {
+      finalizeDryRunState(currentState, new Date().toISOString(), workerCount);
+      await writeFile(join(runDir, "state.json"), JSON.stringify(currentState, null, 2));
+    }
+    const dryRunReport = buildRunDryRunReport({
+      runId,
+      flow: resolvedFlow ?? "unknown",
+      goal: rawPrompt,
+      workerCount,
+      mcpScope,
+      providerPolicy,
+      timeoutPreset: options.timeoutPreset,
+      state: currentState,
+      runDir,
+    });
+    await writeFile(join(runDir, "dry-run.json"), `${JSON.stringify(dryRunReport, null, 2)}\n`);
+    renderRunDryRunReport(dryRunReport);
+    return;
   }
 
   if (options.timeoutPreset) {
@@ -213,6 +250,101 @@ export function normalizeWorkerCount(value: string | undefined, fallback: number
   const parsed = Number(effective);
   if (!Number.isInteger(parsed) || parsed < 1) return fallback;
   return Math.min(parsed, 6);
+}
+
+async function readRunState(runDir: string): Promise<RunState | undefined> {
+  try {
+    return JSON.parse(await readFile(join(runDir, "state.json"), "utf-8")) as RunState;
+  } catch {
+    return undefined;
+  }
+}
+
+function finalizeDryRunState(state: RunState, completedAt: string, workerCount: number): void {
+  state.completedAt = completedAt;
+  state.updatedAt = completedAt;
+  for (const node of state.nodes) {
+    if (node.id === "bootstrap" || node.role === "omk") {
+      node.status = "done";
+      node.startedAt ??= state.startedAt;
+      node.completedAt ??= state.startedAt;
+      continue;
+    }
+    if (node.status === "done") continue;
+    node.status = "skipped";
+    delete node.startedAt;
+    node.completedAt = completedAt;
+    node.blockedReason = "dry-run: provider/runtime execution skipped";
+  }
+  refreshRunStateEstimate(state, workerCount);
+}
+
+function buildRunDryRunReport(input: {
+  runId: string;
+  flow: string;
+  goal: string;
+  workerCount: number;
+  mcpScope: string;
+  providerPolicy: ProviderPolicy;
+  timeoutPreset?: string;
+  state?: RunState;
+  runDir: string;
+}): Record<string, unknown> {
+  return {
+    ok: true,
+    mode: "dry-run",
+    providerFree: true,
+    runId: input.runId,
+    flow: input.flow,
+    goal: input.goal,
+    workerCount: input.workerCount,
+    mcpScope: input.mcpScope,
+    providerPolicy: input.providerPolicy,
+    timeoutPreset: input.timeoutPreset ?? null,
+    artifacts: {
+      runDir: input.runDir,
+      state: join(input.runDir, "state.json"),
+      plan: join(input.runDir, "plan.md"),
+      dryRun: join(input.runDir, "dry-run.json"),
+    },
+    nodes: (input.state?.nodes ?? []).map((node) => {
+      const routing = node.routing as Record<string, unknown> | undefined;
+      return {
+        id: node.id,
+        role: node.role,
+        status: node.status,
+        dependsOn: node.dependsOn,
+        requiredCapabilities:
+          routing?.assignedProviderCapabilities ?? routing?.assignedCapabilities ?? [],
+        provider: routing?.assignedProvider ?? routing?.provider ?? input.providerPolicy,
+        evidenceGates: (node.outputs ?? []).map((output) => output.gate ?? "none"),
+        dryRunAction: node.id === "bootstrap" || node.role === "omk"
+          ? "local-system-complete"
+          : "would-route-to-runtime",
+      };
+    }),
+    nextActions: [
+      "Run `omk doctor --providers --json` to inspect live provider availability.",
+      "Re-run without `--dry-run` once a live provider/runtime is configured.",
+      "Inspect state.json and dry-run.json before enabling live execution.",
+    ],
+  };
+}
+
+function renderRunDryRunReport(report: Record<string, unknown>): void {
+  const artifacts = report.artifacts as Record<string, string>;
+  const nodes = report.nodes as Array<Record<string, unknown>>;
+  console.log(header("Run dry-run"));
+  console.log(label("Mode", "dry-run (provider-free)"));
+  console.log(label("State", artifacts.state));
+  console.log(label("Dry-run artifact", artifacts.dryRun));
+  console.log(style.gray("DAG nodes:"));
+  for (const node of nodes) {
+    console.log(
+      style.gray(`  - ${String(node.id)} [${String(node.role)}] ${String(node.dryRunAction)}`)
+    );
+  }
+  console.log(status.ok("Provider/runtime execution skipped; artifacts are inspectable."));
 }
 
 function createInteractiveRunState(input: {

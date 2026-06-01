@@ -114,7 +114,7 @@ export async function modelUseCommand(model: string, options: ModelJsonOptions =
 }
 
 function emitModelPayload(title: string, payload: Record<string, unknown>, options: ModelJsonOptions): void {
-  if (options.json) {
+  if (options.json || process.argv.includes("--json")) {
     console.log(JSON.stringify(payload, null, 2));
     return;
   }

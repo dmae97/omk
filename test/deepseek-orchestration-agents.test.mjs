@@ -72,8 +72,8 @@ test("initial orchestration spawns dedicated DeepSeek Flash and Pro model-agent 
   assert.ok(pro);
   assert.equal(flash.routing?.provider, "deepseek");
   assert.equal(flash.routing?.providerModelTier, "flash");
-  assert.deepEqual(flash.routing?.candidateProviders, ["deepseek", "kimi", "codex", "qwen", "openrouter"]);
-  assert.equal(flash.routing?.fallbackProvider, "kimi");
+  assert.deepEqual(flash.routing?.candidateProviders, ["deepseek", "mimo"]);
+  assert.equal(flash.routing?.fallbackProvider, "mimo");
   assert.equal(pro.routing?.provider, "deepseek");
   assert.equal(pro.routing?.providerModelTier, "pro");
   assert.equal(flash.name, "DeepSeek Flash action decomposition");
@@ -294,9 +294,9 @@ test("parallel workers default to OMK provider-router authority instead of hard-
   assert.ok(worker);
   assert.equal(worker.routing?.provider, "auto");
   assert.equal(worker.routing?.assignedProvider, undefined);
-  assert.equal(worker.routing?.assignedModel, "kimi-api");
-  assert.deepEqual(worker.routing?.candidateProviders, ["kimi", "codex", "qwen", "openrouter"]);
-  assert.equal(worker.routing?.fallbackProvider, "kimi");
+  assert.equal(worker.routing?.assignedModel, "auto");
+  assert.deepEqual(worker.routing?.candidateProviders, ["mimo"]);
+  assert.equal(worker.routing?.fallbackProvider, "mimo");
   assert.match(worker.routing?.providerReason ?? "", /OMK provider router/);
 });
 
