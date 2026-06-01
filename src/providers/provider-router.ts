@@ -12,17 +12,23 @@ export interface ProviderRouterOptions {
 
 export function createProviderRouter(options: ProviderRouterOptions) {
   const { providers, defaultStrategy = "cost-aware" } = options;
-  const sorted = [...providers].sort((a, b) => b.priority - a.priority);
+  const sorted = providers
+    .map((provider, index) => ({ provider, index }))
+    .sort((a, b) => b.provider.priority - a.provider.priority || a.index - b.index)
+    .map((entry) => entry.provider);
 
   function select(input: ProviderRouteInput): ProviderRouteDecision {
     const strategy = input.strategy ?? defaultStrategy;
     const candidates = sorted.filter((p) => p.supports(input.node));
 
     if (candidates.length === 0) {
-      const fallback = sorted.find((p) => p.id === "kimi") ?? sorted[0];
+      const fallback = sorted[0];
+      if (!fallback) {
+        throw new Error("provider-router requires at least one configured provider");
+      }
       return {
         provider: fallback,
-        reason: "no-matching-provider",
+        reason: "no-supported-provider-matched",
         fallbacks: [],
         confidence: 0.5,
         strategy,
@@ -92,18 +98,22 @@ export function createProviderRouter(options: ProviderRouterOptions) {
 
   function selectFallbackOnEvidenceFail(
     candidates: AgentProvider[],
-    _input: ProviderRouteInput
+    input: ProviderRouteInput
   ): ProviderRouteDecision {
-    const kimi = candidates.find((p) => p.id === "kimi");
-    const others = candidates.filter((p) => p.id !== "kimi");
+    const ordered = [...candidates].sort((a, b) => {
+      const priorityDelta = b.priority - a.priority;
+      if (priorityDelta !== 0) return priorityDelta;
 
-    const primary = kimi ?? candidates[0];
-    const fallbacks = kimi ? others : candidates.slice(1);
+      const costDelta = estimateProviderCost(a, input) - estimateProviderCost(b, input);
+      if (costDelta !== 0) return costDelta;
+
+      return String(a.id).localeCompare(String(b.id));
+    });
 
     return {
-      provider: primary,
+      provider: ordered[0],
       reason: "evidence-fail-fallback-ordered",
-      fallbacks,
+      fallbacks: ordered.slice(1),
       confidence: 0.85,
       strategy: "fallback-on-evidence-fail",
     };
@@ -161,5 +171,5 @@ function estimateProviderCost(
 }
 
 function getProviderLatency(provider: AgentProvider): number {
-  return provider.id === "kimi" ? 1000 : 500;
+  return provider.priority > 50 ? 500 : 750;
 }

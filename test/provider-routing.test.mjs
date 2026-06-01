@@ -2163,6 +2163,66 @@ test("computeProviderRouteScore gives read-only safety boost to authority provid
   assert.ok(nonAuthorityScore.score >= 0.5, "external provider should also have decent score for read-only");
 });
 
+test("computeProviderRouteScore is neutral across equal read-only external providers without stats", () => {
+  const baseInput = {
+    role: "explorer",
+    risk: "read",
+    complexity: "simple",
+    estimatedTokens: 1000,
+    needsMcp: false,
+    needsToolCalling: false,
+    readOnly: true,
+    authorityProvider: "mimo",
+  };
+
+  const deepseekScore = computeProviderRouteScore("deepseek", baseInput).score;
+  const qwenScore = computeProviderRouteScore("qwen", baseInput).score;
+  const codexScore = computeProviderRouteScore("codex", baseInput).score;
+  const openrouterScore = computeProviderRouteScore("openrouter", baseInput).score;
+
+  assert.equal(deepseekScore, qwenScore);
+  assert.equal(codexScore, qwenScore);
+  assert.equal(openrouterScore, qwenScore);
+});
+
+test("computeProviderRouteScore uses explicit granular stats without provider-name tier defaults", () => {
+  const baseInput = {
+    role: "explorer",
+    risk: "read",
+    complexity: "simple",
+    estimatedTokens: 1000,
+    needsMcp: false,
+    needsToolCalling: false,
+    readOnly: true,
+    authorityProvider: "mimo",
+  };
+  const neutralScore = computeProviderRouteScore("deepseek", baseInput).score;
+  const granularScore = computeProviderRouteScore("deepseek", {
+    ...baseInput,
+    providerModelStats: {
+      "pro:explorer:unknown:simple": {
+        provider: "deepseek",
+        tier: "pro",
+        role: "explorer",
+        taskType: "unknown",
+        complexity: "simple",
+        attempts: 10,
+        passes: 10,
+        failures: 0,
+        fallbacks: 0,
+        timeouts: 0,
+        meanLatencyMs: 1000,
+        lastAttemptAt: Date.now(),
+        evidencePassRate: 1,
+        fallbackRate: 0,
+        timeoutRate: 0,
+      },
+    },
+  }).score;
+
+  assert.ok(granularScore > neutralScore, "explicit provider metadata should drive granular scoring");
+});
+
 test("resolveAuthorityProvider selects preferred when available", () => {
   assert.strictEqual(resolveAuthorityProvider(["deepseek", "codex"], "codex"), "codex");
   assert.strictEqual(resolveAuthorityProvider(["deepseek", "codex"], "qwen"), "codex");
@@ -2183,6 +2243,22 @@ test("runtime fallback defaults use MiMo API and keep legacy Kimi CLI fallback-o
   );
   assert.ok(DEFAULT_RUNTIME_FALLBACK_CHAIN.indexOf("mimo-api") < DEFAULT_RUNTIME_FALLBACK_CHAIN.indexOf("kimi-api"));
   assert.equal(DEFAULT_RUNTIME_FALLBACK_CHAIN.includes("kimi-print"), false);
+});
+
+test("runtime fallback chain ranks legacy Kimi runtime IDs behind neutral runtimes", () => {
+  const chain = resolveRuntimeFallbackChain([
+    "kimi-wire",
+    "commandcode-cli",
+    "kimi-cli",
+    "opencode-cli",
+    "kimi-print",
+  ]);
+
+  assert.deepEqual(chain.slice(0, 2), ["opencode-cli", "commandcode-cli"]);
+  assert.deepEqual(chain.slice(-3).sort(), ["kimi-cli", "kimi-print", "kimi-wire"]);
+  for (const legacyRuntimeId of ["kimi-cli", "kimi-print", "kimi-wire"]) {
+    assert.equal(DEFAULT_RUNTIME_FALLBACK_CHAIN.includes(legacyRuntimeId), false);
+  }
 });
 
 function baseRoute(overrides = {}) {

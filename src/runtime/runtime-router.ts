@@ -76,16 +76,16 @@ class UnsupportedRuntimeError extends Error {
   }
 }
 
-const INTENT_RUNTIME_PREFERENCES: Record<NodeIntent, string[]> = {
-  research: ["mimo-api", "kimi-api", "deepseek-api", "codex-cli", "opencode-cli", "kimi-print", "kimi-wire"],
-  planning: ["mimo-api", "kimi-api", "deepseek-api", "codex-cli", "opencode-cli", "kimi-print", "kimi-wire"],
-  coding: ["mimo-api", "kimi-api", "codex-cli", "opencode-cli", "commandcode-cli", "kimi-print", "kimi-wire"],
-  debugging: ["mimo-api", "kimi-api", "codex-cli", "opencode-cli", "commandcode-cli", "kimi-print", "kimi-wire"],
-  refactor: ["mimo-api", "kimi-api", "codex-cli", "opencode-cli", "commandcode-cli", "kimi-print", "kimi-wire"],
-  review: ["mimo-api", "kimi-api", "deepseek-api", "codex-cli", "opencode-cli", "kimi-print", "kimi-wire"],
-  "test-generation": ["mimo-api", "kimi-api", "codex-cli", "opencode-cli", "commandcode-cli", "kimi-print", "kimi-wire"],
-  documentation: ["mimo-api", "kimi-api", "deepseek-api", "codex-cli", "opencode-cli", "kimi-print", "kimi-wire"],
-  "shell-operation": ["codex-cli", "opencode-cli", "commandcode-cli", "mimo-api", "kimi-api", "kimi-print", "kimi-wire"],
+const INTENT_CAPABILITY_WEIGHTS: Record<NodeIntent, ReadonlyArray<readonly [keyof RuntimeCapabilities, number]>> = {
+  research: [["read", 0.35], ["review", 0.2], ["toolCalling", 0.15], ["vision", 0.1]],
+  planning: [["read", 0.3], ["review", 0.2], ["toolCalling", 0.15]],
+  coding: [["write", 0.3], ["patch", 0.25], ["shell", 0.15], ["toolCalling", 0.1]],
+  debugging: [["read", 0.2], ["write", 0.2], ["patch", 0.2], ["shell", 0.15], ["toolCalling", 0.1]],
+  refactor: [["write", 0.25], ["patch", 0.25], ["review", 0.15], ["toolCalling", 0.1]],
+  review: [["review", 0.35], ["read", 0.25], ["toolCalling", 0.1]],
+  "test-generation": [["write", 0.25], ["patch", 0.2], ["review", 0.15], ["toolCalling", 0.1]],
+  documentation: [["read", 0.25], ["write", 0.15], ["review", 0.15], ["toolCalling", 0.1]],
+  "shell-operation": [["shell", 0.4], ["read", 0.15], ["write", 0.1]],
 };
 
 const LEGACY_KIMI_CLI_RUNTIME_IDS = new Set(["kimi-cli", "kimi-print", "kimi-wire"]);
@@ -162,7 +162,9 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
 
     const qualityScore = 0.4 * evidencePassRate + 0.4 * intentPassRate + 0.2 * (1 - recentFailurePenalty);
     const costScore = runtime.priority > 50 ? 0.7 : 0.9;
-    const latencyScore = runtime.id === "kimi-print" ? 0.8 : 0.6;
+    const latencyScore = runtime.capabilities?.supportsStreaming === true || runtime.capabilities?.streaming === true
+      ? 0.7
+      : 0.6;
 
     return {
       runtime: runtime.id,
@@ -189,14 +191,13 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
 
     const scores = supporting.map((r) => computeScores(r, intent, history));
 
-    const preferred = INTENT_RUNTIME_PREFERENCES[intent];
     const scored = supporting.map((r, i) => ({
       runtime: r,
       score: scores[i],
-      composite: computeComposite(scores[i], preferred, r.id),
+      composite: computeComposite(scores[i], r, intent),
     }));
 
-    scored.sort((a, b) => b.composite - a.composite);
+    scored.sort((a, b) => compareScoredRuntimes(a, b, intent));
 
     const primary = scored[0].runtime;
     const fallbacks = scored.slice(1).map((s) => s.runtime);
@@ -222,12 +223,11 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
       throw new UnsupportedRuntimeError(capsule, sorted.map((runtime) => runtime.id));
     }
 
-    const preferred = INTENT_RUNTIME_PREFERENCES[intent];
     const scored = supporting.map((r) => ({
       runtime: r,
-      composite: preferred.indexOf(r.id) >= 0 ? r.priority + 10 : r.priority,
+      composite: computeRuntimeCapabilityScore(r, intent),
     }));
-    scored.sort((a, b) => b.composite - a.composite);
+    scored.sort((a, b) => compareRuntimeCandidates(a.runtime, b.runtime, intent));
 
     const primary = scored[0].runtime;
     const fallbacks = scored.slice(1).map((s) => s.runtime);
@@ -425,15 +425,17 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
       throw new UnsupportedRuntimeError(capsule, runtimes.map((runtime) => runtime.id));
     }
 
-    const preferredRuntimeIds = INTENT_RUNTIME_PREFERENCES[intent] ?? [];
+    const preferredRuntimeIds = task.providerPolicy?.fallbackChain ?? options.fallbackChain ?? [];
     candidates.sort((a, b) => {
-      const providerDelta = providerPreferenceIndex(a.id, preferredProviders)
-        - providerPreferenceIndex(b.id, preferredProviders);
-      if (providerDelta !== 0) return providerDelta;
       const runtimeDelta = runtimePreferenceIndex(a.id, preferredRuntimeIds)
         - runtimePreferenceIndex(b.id, preferredRuntimeIds);
-      if (runtimeDelta !== 0) return runtimeDelta;
-      return b.priority - a.priority;
+      if (runtimeDelta !== 0 && Math.abs(runtimeDelta) < Number.MAX_SAFE_INTEGER) return runtimeDelta;
+      if (preferredProviders.length > 0) {
+        const providerDelta = providerPreferenceIndex(a.id, preferredProviders)
+          - providerPreferenceIndex(b.id, preferredProviders);
+        if (providerDelta !== 0) return providerDelta;
+      }
+      return compareRuntimeCandidates(a, b, intent);
     });
 
     let lastError: AgentRunResult | undefined;
@@ -618,18 +620,66 @@ function agentResultToRunResult(result: AgentResult, runtimeId: string): AgentRu
   };
 }
 
-function computeComposite(
-  score: RuntimeScore,
-  preferred: string[],
-  runtimeId: string,
-): number {
-  const preferenceBonus = preferred.indexOf(runtimeId) >= 0 ? 0.15 : 0;
+function computeComposite(score: RuntimeScore, runtime: AgentRuntime, intent: NodeIntent): number {
   return (
     0.35 * score.qualityScore +
     0.25 * score.evidencePassRate +
     0.15 * score.costScore +
     0.1 * score.latencyScore +
     0.15 * (1 - score.recentFailurePenalty) +
-    preferenceBonus
+    0.15 * computeRuntimeCapabilityScore(runtime, intent) +
+    0.05 * runtimePriorityScore(runtime)
   );
+}
+
+function compareScoredRuntimes(
+  a: { runtime: AgentRuntime; composite: number },
+  b: { runtime: AgentRuntime; composite: number },
+  intent: NodeIntent,
+): number {
+  const compositeDelta = b.composite - a.composite;
+  if (compositeDelta !== 0) return compositeDelta;
+  return compareRuntimeCandidates(a.runtime, b.runtime, intent);
+}
+
+function compareRuntimeCandidates(a: AgentRuntime, b: AgentRuntime, intent: NodeIntent): number {
+  const capabilityDelta = computeRuntimeCapabilityScore(b, intent) - computeRuntimeCapabilityScore(a, intent);
+  if (capabilityDelta !== 0) return capabilityDelta;
+  const priorityDelta = b.priority - a.priority;
+  if (priorityDelta !== 0) return priorityDelta;
+  return a.id.localeCompare(b.id);
+}
+
+function computeRuntimeCapabilityScore(runtime: AgentRuntime, intent: NodeIntent): number {
+  const capabilities = runtime.capabilities;
+  if (capabilities == null) return 0;
+
+  let score = 0;
+  for (const [capability, weight] of INTENT_CAPABILITY_WEIGHTS[intent]) {
+    if (runtimeCapabilityEnabled(capabilities, capability)) score += weight;
+  }
+  if (capabilities.maxTokens != null && capabilities.maxTokens > 0) {
+    score += Math.min(0.1, capabilities.maxTokens / 1_000_000);
+  }
+  if (capabilities.maxContextTokens != null && capabilities.maxContextTokens > 0) {
+    score += Math.min(0.1, capabilities.maxContextTokens / 1_000_000);
+  }
+  return score;
+}
+
+function runtimeCapabilityEnabled(
+  capabilities: RuntimeCapabilities,
+  capability: keyof RuntimeCapabilities,
+): boolean {
+  if (capability === "toolCalling") {
+    return capabilities.toolCalling === true || capabilities.supportsToolCalling === true;
+  }
+  if (capability === "streaming") {
+    return capabilities.streaming === true || capabilities.supportsStreaming === true;
+  }
+  return capabilities[capability] === true;
+}
+
+function runtimePriorityScore(runtime: AgentRuntime): number {
+  return Math.max(0, Math.min(1, runtime.priority / 100));
 }

@@ -85,6 +85,8 @@ const CONTEXT_WINDOWS: Record<string, number> = {
   codex: 128_000,
   openrouter: 128_000,
 };
+const DEFAULT_LATENCY_BUDGET = 0.75;
+const DEFAULT_COST_BUDGET = 0.8;
 
 export function buildProviderStatsKey(
   tier: string,
@@ -276,13 +278,7 @@ export function computeProviderRouteScore(
 ): { score: number; reason: string; confidence: number } {
   const authority = input.authorityProvider ?? DEFAULT_AUTHORITY_PROVIDER;
   const stats = input.providerStats?.[provider];
-  const granularKey = buildProviderStatsKey(
-    provider === "deepseek" ? "pro" : provider,
-    input.role,
-    "unknown",
-    input.complexity
-  );
-  const granularStats = input.providerModelStats?.[granularKey];
+  const granularStats = selectProviderModelStats(provider, input);
 
   // readOnlySafety (0.25): read-only tasks score higher for external providers
   const isReadOnlyTask = input.risk === "read" && !input.needsMcp && !input.needsToolCalling;
@@ -315,26 +311,17 @@ export function computeProviderRouteScore(
   }
 
   // latencyBudget (0.10): inverse of meanLatencyMs
-  let latencyBudget = 0.75;
+  let latencyBudget = DEFAULT_LATENCY_BUDGET;
   if (stats && stats.meanLatencyMs > 0) {
     latencyBudget = Math.max(0, Math.min(1, 1 - stats.meanLatencyMs / 10000));
-  } else {
-    if (provider === "deepseek") latencyBudget = 0.85;
-    else if (provider === authority) latencyBudget = 0.7;
-    else latencyBudget = 0.75;
   }
 
   if (granularStats && granularStats.meanLatencyMs > 0) {
     latencyBudget = Math.max(0, Math.min(1, 1 - granularStats.meanLatencyMs / 10000));
   }
 
-  // costBudget (0.10): cheaper providers score higher
-  let costBudget: number;
-  if (provider === "deepseek") costBudget = 0.95;
-  else if (provider === authority) costBudget = 0.6;
-  else if (provider === "codex") costBudget = 0.7;
-  else if (provider === "qwen") costBudget = 0.85;
-  else costBudget = 0.8;
+  // costBudget (0.10): neutral until explicit normalized cost metadata exists
+  const costBudget = DEFAULT_COST_BUDGET;
 
   // fallbackReliability (0.05): 1 - fallback rate
   let fallbackReliability = 0.9;
@@ -373,6 +360,25 @@ export function computeProviderRouteScore(
     reason,
     confidence: clampScore(score),
   };
+}
+
+function selectProviderModelStats(
+  provider: ProviderId,
+  input: ProviderRouteScoreInput
+): ProviderModelStatsEntry | undefined {
+  const entries = input.providerModelStats;
+  if (!entries) return undefined;
+
+  const providerKey = buildProviderStatsKey(provider, input.role, "unknown", input.complexity);
+  const keyedEntry = entries[providerKey];
+  if (keyedEntry) return keyedEntry;
+
+  const matches = Object.values(entries).filter((entry) =>
+    entry.provider === provider &&
+    entry.role === input.role &&
+    (entry.complexity === input.complexity || entry.complexity === "unknown")
+  );
+  return matches.find((entry) => entry.taskType === "unknown") ?? matches[0];
 }
 
 function computeExpectedUtility(provider: ProviderId, role: string, authority: ProviderId): number {

@@ -73,6 +73,77 @@ test("runtime router skips API advisory runtimes for workspace-write tasks", asy
   assert.deepEqual(calls, ["codex-cli"]);
 });
 
+test("runtime router keeps decision class stable when provider ID changes but semantics match", async () => {
+  const task = fakeTask({
+    prompt: "review provider-neutral routing invariants",
+    context: {
+      ...fakeTask().context,
+      nodeId: "review-node",
+      role: "reviewer",
+      goal: "provider-neutral routing invariants",
+    },
+    capabilities: advisoryApiCapabilities({ supportsToolCalling: true }),
+  });
+
+  const knownNeutral = await selectedRuntimeFor({
+    task,
+    runtimes: [
+      fakeRuntime("mimo-api", [], advisoryApiCapabilities({ supportsToolCalling: true }), { priority: 100 }),
+      fakeRuntime("codex-cli", [], workspaceCliCapabilities(), { priority: 60 }),
+    ],
+  });
+  const genericNeutral = await selectedRuntimeFor({
+    task,
+    runtimes: [
+      fakeRuntime("qwen-api", [], advisoryApiCapabilities({ supportsToolCalling: true }), { priority: 100 }),
+      fakeRuntime("codex-cli", [], workspaceCliCapabilities(), { priority: 60 }),
+    ],
+  });
+
+  assert.equal(runtimeDecisionClass(knownNeutral), "advisory-api");
+  assert.equal(
+    runtimeDecisionClass(genericNeutral),
+    runtimeDecisionClass(knownNeutral),
+    "same capability vector and priority must route to the same decision class independent of runtime ID/vendor"
+  );
+});
+
+test("runtime router uses provider ID as a deterministic final tie-break after semantic ties", async () => {
+  const task = fakeTask({
+    prompt: "review provider-neutral tie-break invariants",
+    context: {
+      ...fakeTask().context,
+      nodeId: "tie-break-review-node",
+      role: "reviewer",
+      goal: "provider-neutral tie-break invariants",
+    },
+    capabilities: advisoryApiCapabilities(),
+  });
+  const capabilities = advisoryApiCapabilities();
+
+  const firstOrder = await selectedRuntimeFor({
+    task,
+    runtimes: [
+      fakeRuntime("zeta-api", [], capabilities, { priority: 70 }),
+      fakeRuntime("alpha-api", [], capabilities, { priority: 70 }),
+    ],
+  });
+  const secondOrder = await selectedRuntimeFor({
+    task,
+    runtimes: [
+      fakeRuntime("alpha-api", [], capabilities, { priority: 70 }),
+      fakeRuntime("zeta-api", [], capabilities, { priority: 70 }),
+    ],
+  });
+
+  assert.equal(runtimeDecisionClass(firstOrder), "advisory-api");
+  assert.equal(
+    firstOrder,
+    secondOrder,
+    "provider/runtime ID tie-break must be deterministic and not depend on registration order"
+  );
+});
+
 test("runtime router blocks legacy Kimi CLI in neutral mode and allows it only when explicit", async () => {
   const calls = [];
   const neutralRouter = createRuntimeRouter({
@@ -124,6 +195,52 @@ test("runtime router blocks legacy Kimi CLI in neutral mode and allows it only w
   assert.equal(explicitRuntime.metadata.selectedRuntime, "kimi-cli");
   assert.deepEqual(calls, ["kimi-cli"]);
   assert.deepEqual(explicitRuntime.metadata.fallbackChain, ["kimi-cli"]);
+});
+
+test("runtime router excludes all legacy Kimi runtime IDs from neutral auto selection", async () => {
+  for (const legacyRuntimeId of legacyKimiRuntimeIds()) {
+    const calls = [];
+    const router = createRuntimeRouter({
+      runtimes: [
+        fakeRuntime(legacyRuntimeId, calls, workspaceCliCapabilities(), { priority: 1000 }),
+        fakeRuntime("codex-cli", calls, workspaceCliCapabilities(), { priority: 10 }),
+      ],
+    });
+
+    const result = await router.execute(fakeTask({
+      prompt: `neutral route should skip ${legacyRuntimeId}`,
+    }));
+
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.metadata.selectedRuntime, "codex-cli");
+    assert.deepEqual(result.metadata.fallbackChain, ["codex-cli"]);
+    assert.deepEqual(calls, ["codex-cli"]);
+  }
+});
+
+test("runtime router allows legacy Kimi runtime IDs only through explicit fallback runtime requests", async () => {
+  for (const legacyRuntimeId of legacyKimiRuntimeIds()) {
+    const calls = [];
+    const router = createRuntimeRouter({
+      runtimes: [
+        fakeRuntime(legacyRuntimeId, calls, workspaceCliCapabilities(), { priority: 10 }),
+      ],
+    });
+
+    const result = await router.execute(fakeTask({
+      prompt: `explicit fallback route may use ${legacyRuntimeId}`,
+      providerPolicy: {
+        strategy: "priority-first",
+        preferredProviders: [],
+        fallbackChain: [legacyRuntimeId],
+      },
+    }));
+
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.metadata.selectedRuntime, legacyRuntimeId);
+    assert.deepEqual(result.metadata.fallbackChain, [legacyRuntimeId]);
+    assert.deepEqual(calls, [legacyRuntimeId]);
+  }
 });
 
 test("runtime router filters runtimes that lack requested task capabilities", async () => {
@@ -478,12 +595,19 @@ test("runtime-backed runner forwards OMK-owned scoped worker manifest into nativ
   assert.equal(captured.context.env.OMK_NODE_TOOLS, "custom-tool");
 });
 
-function fakeRuntime(id, calls, capabilities) {
+async function selectedRuntimeFor({ task, runtimes }) {
+  const router = createRuntimeRouter({ runtimes });
+  const result = await router.execute(task);
+  assert.equal(result.exitCode, 0);
+  return result.metadata.selectedRuntime;
+}
+
+function fakeRuntime(id, calls, capabilities, options = {}) {
   return {
     id,
-    priority: id.startsWith("kimi-") ? 100 : 60,
+    priority: options.priority ?? (id.startsWith("kimi-") ? 100 : 60),
     capabilities,
-    supports: () => true,
+    supports: options.supports ?? (() => true),
     async runNode() {
       return {
         success: true,
@@ -504,6 +628,20 @@ function fakeRuntime(id, calls, capabilities) {
   };
 }
 
+function workspaceCliCapabilities(overrides = {}) {
+  return {
+    read: true,
+    write: true,
+    shell: true,
+    mcp: false,
+    patch: true,
+    review: true,
+    merge: false,
+    vision: false,
+    ...overrides,
+  };
+}
+
 function advisoryApiCapabilities(overrides = {}) {
   return {
     read: true,
@@ -516,6 +654,18 @@ function advisoryApiCapabilities(overrides = {}) {
     vision: false,
     ...overrides,
   };
+}
+
+function runtimeDecisionClass(runtimeId) {
+  if (runtimeId.endsWith("-api"))
+    return "advisory-api";
+  if (runtimeId.endsWith("-cli"))
+    return "workspace-cli";
+  return "other-runtime";
+}
+
+function legacyKimiRuntimeIds() {
+  return ["kimi-cli", "kimi-print", "kimi-wire"];
 }
 
 function fakeTask(overrides = {}) {
