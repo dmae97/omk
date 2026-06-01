@@ -1,8 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { createRuntimeBackedTaskRunner } from "../dist/runtime/runtime-backed-task-runner.js";
 import { createRuntimeRouter } from "../dist/runtime/runtime-router.js";
+import { createKimiApiRuntime } from "../dist/runtime/kimi-api-runtime.js";
 import { buildTaskRunContext } from "../dist/runtime/worker-manifest.js";
 
 test("runtime router prefers configured advisory API for advisory coding intent when API and CLI runtimes are available", async () => {
@@ -142,6 +146,15 @@ test("runtime router uses provider ID as a deterministic final tie-break after s
     secondOrder,
     "provider/runtime ID tie-break must be deterministic and not depend on registration order"
   );
+});
+
+
+test("legacy Kimi API runtime advertises explicit legacy metadata", () => {
+  const runtime = createKimiApiRuntime({ apiKey: "test-key" });
+
+  assert.equal(runtime.providerId, "kimi");
+  assert.equal(runtime.legacy, true);
+  assert.equal(runtime.runtimeMode, "api");
 });
 
 test("runtime router blocks legacy provider CLI in neutral mode and allows legacy Kimi only when explicit", async () => {
@@ -534,6 +547,66 @@ test("runtime-backed runner routes non-Kimi CLI turns without optional capabilit
   assert.equal(result.metadata.selectedRuntime, "opencode-cli");
 });
 
+
+test("runtime-backed runner ignores legacy home provider config unless legacy mode is explicit", async () => {
+  const home = await mkdtemp(join(tmpdir(), "omk-runtime-home-"));
+  const previousEnv = {
+    HOME: process.env.HOME,
+    OMK_ORIGINAL_HOME: process.env.OMK_ORIGINAL_HOME,
+    MIMO_API_KEY: process.env.MIMO_API_KEY,
+    KIMI_API_KEY: process.env.KIMI_API_KEY,
+    OMK_LEGACY_KIMI_ENABLED: process.env.OMK_LEGACY_KIMI_ENABLED,
+  };
+
+  try {
+    process.env.HOME = home;
+    delete process.env.OMK_ORIGINAL_HOME;
+    delete process.env.MIMO_API_KEY;
+    delete process.env.KIMI_API_KEY;
+    delete process.env.OMK_LEGACY_KIMI_ENABLED;
+
+    await mkdir(join(home, ".kimi"), { recursive: true });
+    await writeFile(join(home, ".kimi", "config.toml"), [
+      "[providers.mimo]",
+      "api_key = \"legacy-mimo-key\"",
+      "[providers.kimi]",
+      "api_key = \"legacy-kimi-key\"",
+      "",
+    ].join("\n"), "utf8");
+
+    let runner = await createRuntimeBackedTaskRunner({ cwd: process.cwd(), env: { PATH: process.env.PATH ?? "" }, runId: "legacy-home-disabled" });
+    let runtimeIds = runner._registry.list().map((runtime) => runtime.id);
+    assert.equal(runtimeIds.includes("mimo-api"), false, "neutral mode must not read provider keys from legacy .kimi config");
+    assert.equal(runtimeIds.includes("kimi-api"), false, "neutral mode must not register legacy Kimi API from legacy config");
+
+    await mkdir(join(home, ".omk"), { recursive: true });
+    await writeFile(join(home, ".omk", "config.toml"), [
+      "[providers.mimo]",
+      "api_key = \"omk-mimo-key\"",
+      "",
+    ].join("\n"), "utf8");
+
+    runner = await createRuntimeBackedTaskRunner({ cwd: process.cwd(), env: { PATH: process.env.PATH ?? "" }, runId: "omk-home-enabled" });
+    runtimeIds = runner._registry.list().map((runtime) => runtime.id);
+    assert.equal(runtimeIds.includes("mimo-api"), true, "neutral mode should read provider keys from OMK config");
+    assert.equal(runtimeIds.includes("kimi-api"), false, "OMK config should not implicitly enable legacy Kimi");
+
+    runner = await createRuntimeBackedTaskRunner({
+      cwd: process.cwd(),
+      env: { PATH: process.env.PATH ?? "", OMK_LEGACY_KIMI_ENABLED: "true" },
+      runId: "legacy-home-explicit",
+    });
+    runtimeIds = runner._registry.list().map((runtime) => runtime.id);
+    assert.equal(runtimeIds.includes("kimi-api"), true, "legacy Kimi API is allowed only when legacy mode is explicit");
+  } finally {
+    for (const [key, value] of Object.entries(previousEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
 test("runtime-backed runner forwards per-turn env and routing providerModel", async () => {
   const runner = await createRuntimeBackedTaskRunner({ cwd: process.cwd(), env: { OMK_PROVIDER_MODEL: "initial-model" }, runId: "local-runtime-backed-model" });
   const registry = runner._registry;
@@ -755,7 +828,7 @@ function runtimeDecisionClass(runtimeId) {
 }
 
 function legacyCompatibilityRuntimeIds() {
-  return ["kimi-cli", "kimi-print", "kimi-wire"];
+  return ["kimi-api", "kimi-cli", "kimi-print", "kimi-wire"];
 }
 
 function fakeTask(overrides = {}) {

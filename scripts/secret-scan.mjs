@@ -100,6 +100,18 @@ function gitList(args) {
   }
 }
 
+function collectUntrackedDirectoryFiles() {
+  const results = [];
+  for (const entry of gitList(["ls-files", "--others", "--directory", "--exclude-standard", "-z"])) {
+    const path = entry.replace(/\/+$/, "");
+    if (!path || !existsSync(path)) continue;
+    const stat = statSync(path);
+    if (stat.isDirectory()) results.push(...walkDirectory(path, path));
+    else if (stat.isFile()) results.push(path);
+  }
+  return results;
+}
+
 function isRuntimeTrustBoundaryPath(path) {
   return path.startsWith(".omk/runs/") || path.startsWith(".omk/images/");
 }
@@ -129,6 +141,7 @@ function isLikelyBinary(buffer) {
 const files = new Set([
   ...gitList(["ls-files", "-z"]),
   ...gitList(["ls-files", "--others", "--exclude-standard", "-z"]),
+  ...collectUntrackedDirectoryFiles(),
   ...(runtimeMode ? collectRuntimeTrustBoundaryFiles() : []),
 ]);
 

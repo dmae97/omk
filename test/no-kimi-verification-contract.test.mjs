@@ -50,4 +50,8 @@ test("release:check package contract includes no-Kimi, contract, proof, smoke, p
 
   assert.match(String(scripts["verify:no-kimi"] ?? ""), /npm run native:no-kimi:turn/);
   assert.match(String(scripts["verify:no-kimi"] ?? ""), /npm run no-kimi:default-surface/);
+  assert.match(String(scripts["verify:no-kimi"] ?? ""), /npm run test:no-kimi:runtime-routing/);
+  assert.match(String(scripts["test:no-kimi:runtime-routing"] ?? ""), /provider-router\.test\.mjs/);
+  assert.match(String(scripts["test:no-kimi:runtime-routing"] ?? ""), /runtime-router\.test\.mjs/);
+  assert.match(String(scripts["test:no-kimi:runtime-routing"] ?? ""), /provider-routing\.test\.mjs/);
 });

@@ -142,17 +142,19 @@ export async function createProviderBackedTaskRunner(
   // Create runtime instances for the RuntimeRouter
   const runtimes: AgentRuntime[] = [];
   runtimes.push(...(options.runtimes ?? []));
-  const kimiBin = resolveKimiBin(kimiOptions.env as NodeJS.ProcessEnv | undefined);
-  if (legacyKimiRequested && await checkCommand(kimiBin).catch(() => false)) {
-    const kimiPrintRuntime = createKimiPrintRuntime(kimiOptions);
-    runtimes.push(kimiPrintRuntime);
+  if (legacyKimiRequested) {
+    const kimiBin = resolveKimiBin(kimiOptions.env as NodeJS.ProcessEnv | undefined);
+    if (await checkCommand(kimiBin).catch(() => false)) {
+      const kimiPrintRuntime = createKimiPrintRuntime(kimiOptions);
+      runtimes.push(kimiPrintRuntime);
 
-    // Wire runtime is available but lower priority (incomplete tool handling)
-    const kimiWireRuntime = createKimiWireRuntime({
-      cwd: kimiOptions.cwd,
-      env: kimiOptions.env as NodeJS.ProcessEnv | undefined,
-    });
-    runtimes.push(kimiWireRuntime);
+      // Wire runtime is available but lower priority (incomplete tool handling)
+      const kimiWireRuntime = createKimiWireRuntime({
+        cwd: kimiOptions.cwd,
+        env: kimiOptions.env as NodeJS.ProcessEnv | undefined,
+      });
+      runtimes.push(kimiWireRuntime);
+    }
   }
 
   const runtimeRouter = createRuntimeRouter({

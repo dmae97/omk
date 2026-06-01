@@ -28,10 +28,58 @@ for (const file of strictDefaultSurfaceFiles) {
   }
 }
 
+const legacyIsolationChecks = [
+  {
+    file: "src/runtime/runtime-backed-task-runner.ts",
+    checks: [
+      {
+        name: "provider keys prefer OMK config",
+        pattern: /readProviderConfig\("\.omk"\)/,
+      },
+      {
+        name: "legacy home config is gated",
+        pattern: /options\.legacyKimiEnabled\s*\?\s*\[readProviderConfig\("\.kimi"\)\]\s*:\s*\[\]/,
+      },
+      {
+        name: "legacy runtime registration is explicit",
+        pattern: /legacyKimiEnabled\s*&&\s*await checkCommand/,
+      },
+    ],
+  },
+  {
+    file: "src/providers/provider-runtime.ts",
+    checks: [
+      {
+        name: "legacy request is explicit",
+        pattern: /const legacyKimiRequested = shouldEnableLegacyKimi\(providerPolicy, options\.fallbackChain\)/,
+      },
+      {
+        name: "legacy provider registration is gated",
+        pattern: /if \(legacyKimiRequested\) \{[\s\S]*createKimiProvider/,
+      },
+      {
+        name: "legacy CLI runtime registration is gated",
+        pattern: /if \(legacyKimiRequested\) \{[\s\S]*await checkCommand/,
+      },
+    ],
+  },
+];
+
+for (const { file, checks } of legacyIsolationChecks) {
+  const text = readFileSync(file, "utf8");
+  for (const { name, pattern } of checks) {
+    if (!pattern.test(text)) {
+      violations.push(`${file}: missing legacy-isolation guard: ${name}`);
+    }
+  }
+}
+
 if (violations.length > 0) {
   console.error("Default control-plane surface contains legacy KIMI tokens:");
   for (const violation of violations) console.error(`- ${violation}`);
   process.exit(1);
 }
 
-console.log(`Default control-plane surface is provider-neutral (${strictDefaultSurfaceFiles.length} files checked).`);
+console.log(
+  `Default control-plane surface is provider-neutral (${strictDefaultSurfaceFiles.length} files checked; ${legacyIsolationChecks.length} legacy guards checked).`
+);

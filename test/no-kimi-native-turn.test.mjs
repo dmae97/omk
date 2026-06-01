@@ -14,6 +14,7 @@ test("native no-Kimi turn executes OMK-owned worker context through non-Kimi run
     runId: "local-no-kimi-native-turn",
   });
   const registry = runner._registry;
+  assert.equal(registry.list().some((runtime) => runtime.id.includes("kimi")), false, "default no-Kimi registry must not start with Kimi runtimes");
   for (const runtime of [...registry.list()]) registry.unregister(runtime.id);
 
   let captured;
@@ -111,6 +112,7 @@ test("native no-Kimi turn keeps optional MCP available without requiring runtime
     runId: "local-no-kimi-optional-mcp",
   });
   const registry = runner._registry;
+  assert.equal(registry.list().some((runtime) => runtime.id.includes("kimi")), false, "default no-Kimi registry must not start with Kimi runtimes");
   for (const runtime of [...registry.list()]) registry.unregister(runtime.id);
 
   let captured;

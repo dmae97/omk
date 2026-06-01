@@ -107,3 +107,15 @@ coverage/
 *.zip
 *.tgz
 *.tar.gz
+
+# Local scratch / foreign checkout directories (NEVER commit)
+.bg-shell/
+.codegraph/
+.gsd/
+agent-skills/
+continuous-claude-v3/
+lobehub/
+logs/
+*.bak
+*.bak2
+*:Zone.Identifier

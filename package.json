@@ -39,13 +39,14 @@
     "smoke:no-kimi:chat": "KIMI_BIN=/nonexistent/kimi OMK_LEGACY_CHAT=0 OMK_MCP_PREFLIGHT=off OMK_PROJECT_ROOT=\"$PWD\" node dist/cli.js chat --provider auto --mode agent --execution ask --layout plain --mcp-scope none --smoke --json",
     "smoke:no-kimi:codex": "KIMI_BIN=/nonexistent/kimi OMK_LEGACY_CHAT=0 OMK_MCP_PREFLIGHT=off OMK_PROJECT_ROOT=\"$PWD\" node dist/cli.js chat --provider codex --mode agent --execution ask --layout plain --mcp-scope none --smoke --json",
     "smoke:no-kimi:doctor": "KIMI_BIN=/nonexistent/kimi OMK_LEGACY_CHAT=0 OMK_PROJECT_ROOT=\"$PWD\" node dist/cli.js doctor --json",
-    "verify:no-kimi": "npm run build:clean && npm run smoke:no-kimi:doctor && npm run smoke:no-kimi:chat && npm run smoke:no-kimi:codex && npm run native:no-kimi:turn && npm run no-kimi:default-surface",
+    "verify:no-kimi": "npm run build:clean && npm run smoke:no-kimi:doctor && npm run smoke:no-kimi:chat && npm run smoke:no-kimi:codex && npm run native:no-kimi:turn && npm run no-kimi:default-surface && npm run test:no-kimi:runtime-routing",
     "rust:check": "node scripts/rust-safety-check.mjs",
     "rust:build": "cargo build -p omk-safety",
     "native:build": "node scripts/build-native.mjs",
     "native:normalize": "node scripts/normalize-native-artifacts.mjs",
     "native:no-kimi:turn": "KIMI_BIN=/nonexistent/kimi OMK_LEGACY_CHAT=0 OMK_MCP_PREFLIGHT=off OMK_PROJECT_ROOT=\"$PWD\" node --test test/no-kimi-native-turn.test.mjs",
-    "no-kimi:default-surface": "node scripts/no-kimi-default-surface.mjs"
+    "no-kimi:default-surface": "node scripts/no-kimi-default-surface.mjs",
+    "test:no-kimi:runtime-routing": "node --test --test-timeout=300000 test/provider-router.test.mjs test/runtime-router.test.mjs && node --test --test-timeout=300000 --test-name-pattern='authority provider write-risk routes|configured non-Kimi authority|implicit default authority|unavailable DeepSeek|external direct fallback|Super OMK config|scoreProviders includes|computeProviderRouteScore|runtime fallback' test/provider-routing.test.mjs && node --test test/no-kimi-cli-hud-surface.test.mjs test/v2-regression.test.mjs"
   },
   "keywords": [
     "agent-runtime",

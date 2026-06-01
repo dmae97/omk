@@ -9,6 +9,8 @@
 
 import type { TaskRunner, TaskResult } from "../contracts/orchestration.js";
 import type { TaskRunContext } from "../contracts/worker-context.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { AgentRunResult } from "./agent-runtime.js";
 import { toTaskResult } from "./agent-runtime.js";
 import { capsuleToTask } from "./context-broker-converter.js";
@@ -26,6 +28,7 @@ import { LocalLlmRuntime } from "./local-llm-runtime.js";
 import { checkCommand, resolveKimiBin } from "../util/shell.js";
 import { createMimoApiRuntime } from "./mimo-api-runtime.js";
 import { createKimiApiRuntime } from "./kimi-api-runtime.js";
+import { getUserHome } from "../util/fs.js";
 
 export interface RuntimeBackedTaskRunnerOptions {
   cwd: string;
@@ -42,38 +45,21 @@ async function createDefaultRuntimeRegistry(
   options: RuntimeBackedTaskRunnerOptions
 ): Promise<RuntimeRegistry> {
   const registry = createRuntimeRegistry();
+  const legacyKimiEnabled = isLegacyKimiEnabled(options.env);
 
   // ── MiMo API runtime (Xiaomi MiMo — OpenAI-compatible, highest priority) ──
   let mimoApiKey = options.env?.MIMO_API_KEY ?? process.env.MIMO_API_KEY;
   if (!mimoApiKey) {
-    try {
-      const { readFileSync } = await import("node:fs");
-      const { join } = await import("node:path");
-      const { getUserHome } = await import("../util/fs.js");
-      const configPath = join(getUserHome(), ".kimi", "config.toml");
-      const configContent = readFileSync(configPath, "utf-8");
-      const mimoMatch = configContent.match(/\[providers\.mimo\][\s\S]*?api_key\s*=\s*"([^"]+)"/);
-      if (mimoMatch) mimoApiKey = mimoMatch[1];
-    } catch { /* config not found */ }
+    mimoApiKey = readConfiguredProviderApiKey("mimo", { legacyKimiEnabled });
   }
   if (mimoApiKey) {
     registry.register(createMimoApiRuntime({ apiKey: mimoApiKey }));
   }
 
-  const legacyKimiEnabled = isLegacyKimiEnabled(options.env);
-
   // ── Kimi API runtime (Moonshot HTTP direct — no binary needed) ──
   let kimiApiKey = options.env?.KIMI_API_KEY ?? process.env.KIMI_API_KEY;
   if (legacyKimiEnabled && !kimiApiKey) {
-    try {
-      const { readFileSync } = await import("node:fs");
-      const { join } = await import("node:path");
-      const { getUserHome } = await import("../util/fs.js");
-      const configPath = join(getUserHome(), ".kimi", "config.toml");
-      const configContent = readFileSync(configPath, "utf-8");
-      const kimiMatch = configContent.match(/\[providers\.kimi\][\s\S]*?api_key\s*=\s*"([^"]+)"/);
-      if (kimiMatch) kimiApiKey = kimiMatch[1];
-    } catch { /* config not found */ }
+    kimiApiKey = readConfiguredProviderApiKey("kimi", { legacyKimiEnabled });
   }
   if (legacyKimiEnabled && kimiApiKey) {
     registry.register(createKimiApiRuntime({ apiKey: kimiApiKey }));
@@ -138,6 +124,37 @@ async function createDefaultRuntimeRegistry(
 function isLegacyKimiEnabled(env: Record<string, string> | undefined): boolean {
   const merged = { ...process.env, ...(env ?? {}) };
   return /^(1|true|yes)$/i.test(merged.OMK_LEGACY_KIMI_ENABLED ?? "");
+}
+
+function readConfiguredProviderApiKey(
+  providerId: string,
+  options: { legacyKimiEnabled: boolean }
+): string | undefined {
+  const configContents = [
+    readProviderConfig(".omk"),
+    ...(options.legacyKimiEnabled ? [readProviderConfig(".kimi")] : []),
+  ].filter((content): content is string => content !== undefined);
+
+  for (const configContent of configContents) {
+    const match = configContent.match(
+      new RegExp(`\\[providers\\.${escapeRegExp(providerId)}\\][\\s\\S]*?api_key\\s*=\\s*"([^"]+)"`)
+    );
+    if (match?.[1]) return match[1];
+  }
+
+  return undefined;
+}
+
+function readProviderConfig(configDir: ".omk" | ".kimi"): string | undefined {
+  try {
+    return readFileSync(join(getUserHome(), configDir, "config.toml"), "utf-8");
+  } catch {
+    return undefined;
+  }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export async function createRuntimeBackedTaskRunner(
