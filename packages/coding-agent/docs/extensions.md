@@ -860,9 +860,13 @@ All handlers receive `ctx: ExtensionContext`.
 
 UI methods for user interaction. See [Custom UI](#custom-ui) for full details.
 
+### ctx.mode
+
+Current run mode: `"tui"`, `"rpc"`, `"json"`, or `"print"`. Use `ctx.mode === "tui"` to guard terminal-only features such as `custom()`, component factories, terminal input, and direct TUI rendering.
+
 ### ctx.hasUI
 
-`false` in print mode (`-p`) and JSON mode. `true` in interactive and RPC mode. In RPC mode, dialog methods (`select`, `confirm`, `input`, `editor`) work via the extension UI sub-protocol, and fire-and-forget methods (`notify`, `setStatus`, `setWidget`, `setTitle`, `setEditorText`) emit requests to the client. Some TUI-specific methods are no-ops or return defaults (see [rpc.md](rpc.md#extension-ui-protocol)).
+`true` in TUI and RPC modes. `false` in print mode (`-p`) and JSON mode. Use this to guard dialog methods (`select`, `confirm`, `input`, `editor`) and fire-and-forget methods (`notify`, `setStatus`, `setWidget`, `setTitle`, `setEditorText`) that work in both TUI and RPC modes. In RPC mode, some TUI-specific methods are no-ops or return defaults (see [rpc.md](rpc.md#extension-ui-protocol)).
 
 ### ctx.cwd
 
@@ -2516,14 +2520,14 @@ const highlighted = highlightCode(code, lang, theme);
 
 ## Mode Behavior
 
-| Mode | UI Methods | Notes |
-|------|-----------|-------|
-| Interactive | Full TUI | Normal operation |
-| RPC (`--mode rpc`) | JSON protocol | Host handles UI, see [rpc.md](rpc.md) |
-| JSON (`--mode json`) | No-op | Event stream to stdout, see [json.md](json.md) |
-| Print (`-p`) | No-op | Extensions run but can't prompt |
+| Mode | `ctx.mode` | `ctx.hasUI` | Notes |
+|------|------------|-------------|-------|
+| Interactive | `"tui"` | `true` | Full TUI with terminal rendering |
+| RPC (`--mode rpc`) | `"rpc"` | `true` | Dialogs and notifications via JSON protocol; `custom()` returns `undefined`. See [rpc.md](rpc.md) |
+| JSON (`--mode json`) | `"json"` | `false` | Event stream to stdout; UI methods are no-ops |
+| Print (`-p`) | `"print"` | `false` | Extensions run but can't prompt |
 
-In non-interactive modes, check `ctx.hasUI` before using UI methods.
+Use `ctx.mode === "tui"` before TUI-specific features (`custom()`, component factories, terminal input). Use `ctx.hasUI` before dialog and notification methods that work in both TUI and RPC modes.
 
 ## Examples Reference
 
