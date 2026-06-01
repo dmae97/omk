@@ -63,8 +63,7 @@ export interface ProviderRouteInput {
 }
 
 export type ProviderRouteStrategy =
-  | "priority-first"
-  | "kimi-first"
+  | "compatibility-first"
   | "cost-aware"
   | "fallback-on-evidence-fail"
   | "round-robin"

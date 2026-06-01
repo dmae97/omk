@@ -20,6 +20,15 @@ function updateNodeInRunState(runState: RunState, nodeId: string, updater: (node
   };
 }
 
+function getCapabilityAssignment(state: RunState, nodeId: string): WorkerState["assignment"] | undefined {
+  const assignments = state.capabilityAssignments;
+  if (!assignments) return undefined;
+  if (Array.isArray(assignments)) {
+    return assignments.find((assignment) => assignment.nodeId === nodeId);
+  }
+  return assignments[nodeId];
+}
+
 export class OrchestrationStateManager {
   private state: OrchestrationState;
   private persister: StatePersister;
@@ -237,7 +246,7 @@ export class OrchestrationStateManager {
           startedAt: node.startedAt,
           completedAt: node.completedAt,
           durationMs: node.durationMs,
-          assignment: loaded.capabilityAssignments?.[node.id],
+          assignment: getCapabilityAssignment(loaded, node.id),
         });
 
         if (node.status === "done") {

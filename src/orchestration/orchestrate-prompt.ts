@@ -15,6 +15,7 @@ import {
 } from "../goal/intent-frame.js";
 import { style, status } from "../util/theme.js";
 import { MemoryStore } from "../memory/memory-store.js";
+import type { ParallelCommandOptions } from "../commands/parallel.js";
 import type { GoalSpec, IntentFrame } from "../contracts/goal.js";
 import { getCurrentMode } from "../util/mode-preset.js";
 import { t } from "../util/i18n.js";
@@ -25,8 +26,6 @@ import {
   resolveExecutionSelectionDecision,
   resolvePromptExecutionDecision,
 } from "../util/execution-selection.js";
-import { evaluatePreOrchestrationGuard } from "./loop-guard.js";
-import { runVerificationOnly } from "./verification-only.js";
 
 export interface OrchestrateOptions {
   runId?: string;
@@ -174,7 +173,7 @@ function annotatePromptForExecutionDecision(
       )
       .replace(
         "Based on the intent analysis above, assign workers to these roles:",
-        "Based on the intent analysis above, sequence these roles through one agent-owned worker lane:"
+        "Based on the intent analysis above, sequence these roles through one provider-neutral worker lane:"
       );
     updated += [
       "",
@@ -200,34 +199,6 @@ export async function orchestratePrompt(
   rawPrompt: string,
   options: OrchestrateOptions
 ): Promise<void> {
-  // ── Pre-orchestration loop guard ──
-  const guard = await evaluatePreOrchestrationGuard({
-    root: getProjectRoot(),
-    rawPrompt,
-    sourceCommand: options.sourceCommand,
-    goalId: options.goalId,
-    runId: options.runId,
-  });
-
-  if (guard.action === "stop") {
-    if (guard.visibleMessage) {
-      console.log(guard.visibleMessage);
-    }
-    return;
-  }
-
-  if (guard.action === "verify-only") {
-    const report = await runVerificationOnly({
-      root: getProjectRoot(),
-      runId: options.runId,
-      goalId: options.goalId,
-      rawPrompt,
-      checks: guard.checks ?? [],
-    });
-    console.log(report.summary);
-    return;
-  }
-
   const root = getProjectRoot();
   const resources = await getOmkResourceSettings();
   const mcpScope = parseRuntimeScopeOption(options.mcpScope, resources.mcpScope, "--mcp-scope");
@@ -404,8 +375,10 @@ export async function orchestratePrompt(
   const selectedWorkers = executionDecision.strategy === "sequential"
     ? "1"
     : options.workers ?? String(resources.maxWorkers);
-  const selectedProvider = options.provider;
-  const parallelOpts = {
+  const selectedProvider = executionDecision.strategy === "sequential"
+    ? options.provider ?? "auto"
+    : options.provider;
+  const parallelOpts: ParallelCommandOptions = {
     workers: selectedWorkers,
     runId: options.runId,
     approvalPolicy: options.approvalPolicy ?? "interactive",
@@ -643,9 +616,9 @@ export function buildOrchestratedPrompt(input: BuildPromptInput): string {
     ``,
     `## OMK Prompt Adapter`,
     `- Treat the original user input as intent/NLP source, not text to echo back.`,
-    `- Convert that intent into an execution contract: inspect, plan, edit, verify, and report evidence.`,
-    `- The agent reports evidence for the current ActionAtom only.`,
-    `- OMK runtime decides continuation, verification, handoff, or stop. Do not emit control-plane decisions or meta-text such as "STOP", "continue", or loop-guard reasoning.`,
+    `- Convert that intent into a provider-neutral OMK execution contract: inspect, plan, edit, verify, and report evidence.`,
+    `- The configured OMK authority provider owns orchestration, merge decisions, tool/MCP routing, and final synthesis.`,
+    `- Continue automatically while evidence says action=continue/replan and stop only on close/block/handoff/max-iteration guard.`,
     ``,
     `## Source NLP Intake`,
     `- Source command: ${input.sourceCommand}`,
@@ -674,7 +647,7 @@ export function buildOrchestratedPrompt(input: BuildPromptInput): string {
   if (hasDistinctContinuationContext) {
     lines.push(
       `## Current Execution Context`,
-      `You must treat this section as the operative follow-up context for this turn.`,
+      `OMK must treat this section as the operative follow-up context for this turn.`,
       `Do not restart by sending the original goal verbatim; infer the next concrete action from this context, memory, and evidence.`,
       `Preserve completed work and focus the DAG on unresolved criteria, failed gates, or blocked nodes.`,
       ``,
@@ -753,9 +726,9 @@ export function buildOrchestratedPrompt(input: BuildPromptInput): string {
         : `- MCP scope is all: global MCP servers may be available; never expose raw env, tokens, or config.`,
     `- Prefer omk-project MCP tools for checkpoint, memory, and run-state operations when MCP is enabled.`,
     `- Use SearchWeb / FetchURL for external docs, official APIs, or citations.`,
-    `- The agent runtime handles orchestration, planning, merging, and final synthesis.`,
+    `- The configured OMK authority provider remains the main orchestrator, planner, merger, and final synthesis runtime.`,
     `- DeepSeek may only be hinted for low-risk read/review/QA/documentation nodes; never assign it merge, destructive shell, MCP, secret, or write authority.`,
-    `- If provider availability, payment, rate limit, or confidence is uncertain, keep the node on Kimi and continue without blocking the DAG.`,
+    `- If provider availability, payment, rate limit, or confidence is uncertain, keep the node on the configured authority provider and continue without blocking the DAG.`,
     `- Produce concrete evidence, changed files, and verification results.`,
     `- Write final decisions and risks to .omk/memory/decisions.md and .omk/memory/risks.md.`,
     ``,

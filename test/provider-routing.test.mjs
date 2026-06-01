@@ -35,11 +35,11 @@ import { buildTaskRunContext } from "../dist/runtime/worker-manifest.js";
 
 const monthlyQuotaError = `LLM provider error: Error code: 429 - {'error': {'message': "You've reached kimi monthly usage limit for this billing cycle. Your quota will be refreshed in the next cycle.", 'type': 'exceeded_current_quota_error'}}`;
 
-test("provider router keeps compatibility authority on write roles and offloads only low-risk read roles", () => {
-  assert.equal(routeProvider(baseRoute({ role: "orchestrator" })).provider, "kimi");
-  assert.equal(routeProvider(baseRoute({ role: "merger", risk: "merge" })).provider, "kimi");
+test("provider router keeps provider-neutral authority on write roles and offloads only low-risk read roles", () => {
+  assert.equal(routeProvider(baseRoute({ role: "orchestrator" })).provider, "mimo");
+  assert.equal(routeProvider(baseRoute({ role: "merger", risk: "merge" })).provider, "mimo");
   const coderRoute = routeProvider(baseRoute({ role: "coder", risk: "write" }));
-  assert.equal(coderRoute.provider, "kimi");
+  assert.equal(coderRoute.provider, "mimo");
   assert.equal(coderRoute.deepseek?.participation, "advisory");
   assert.equal(coderRoute.deepseek?.model, "deepseek-v4-pro");
   assert.equal(coderRoute.routeEnsemble.winner, "deepseek-pro-advisory");
@@ -51,28 +51,28 @@ test("provider router keeps compatibility authority on write roles and offloads 
   assert.equal(reviewerRoute.provider, "deepseek");
   assert.equal(reviewerRoute.routeEnsemble.winner, "deepseek-direct");
   assert.equal(routeProvider(baseRoute({ role: "explorer" })).provider, "deepseek");
-  assert.equal(routeProvider(baseRoute({ role: "analyst", complexity: "simple", readOnly: false })).provider, "kimi");
+  assert.equal(routeProvider(baseRoute({ role: "analyst", complexity: "simple", readOnly: false })).provider, "mimo");
   assert.equal(routeProvider(baseRoute({ role: "analyst", complexity: "simple", readOnly: true })).provider, "deepseek");
   const mcpRoute = routeProvider(baseRoute({ role: "reviewer", needsMcp: true }));
-  assert.equal(mcpRoute.provider, "kimi");
+  assert.equal(mcpRoute.provider, "mimo");
   assert.equal(mcpRoute.routeEnsemble.winner, "safety-gate");
   assert.equal(
     mcpRoute.routeEnsemble.candidates.some((candidate) => candidate.id === "safety-gate" && candidate.veto),
     true
   );
   assert.equal(routeProvider(baseRoute({ role: "reviewer", providerPolicy: "kimi" })).provider, "kimi");
-  assert.equal(routeProvider(baseRoute({ role: "reviewer", providerHint: "deepseek", complexity: "complex" })).provider, "kimi");
+  assert.equal(routeProvider(baseRoute({ role: "reviewer", providerHint: "deepseek", complexity: "complex" })).provider, "mimo");
 });
 
-test("provider router default authority is Kimi-first for coding authority", () => {
+test("provider router default authority is provider-neutral for coding authority", () => {
   const availability = { codex: true, kimi: true, deepseek: true };
   const orchestrator = routeProvider(baseRoute({
     role: "orchestrator",
     authorityProvider: undefined,
     providerAvailability: availability,
   }));
-  assert.equal(orchestrator.provider, "kimi");
-  assert.equal(orchestrator.fallbackProvider, "kimi");
+  assert.equal(orchestrator.provider, "mimo");
+  assert.equal(orchestrator.fallbackProvider, "mimo");
 
   const mcpRoute = routeProvider(baseRoute({
     role: "reviewer",
@@ -80,11 +80,11 @@ test("provider router default authority is Kimi-first for coding authority", () 
     authorityProvider: undefined,
     providerAvailability: availability,
   }));
-  assert.equal(mcpRoute.provider, "kimi");
+  assert.equal(mcpRoute.provider, "mimo");
   assert.equal(mcpRoute.routeEnsemble.winner, "safety-gate");
 });
 
-test("provider router supports Qwen, Codex, and OpenRouter policies with compatibility authority fallback", () => {
+test("provider router supports Qwen, Codex, and OpenRouter policies with provider-neutral authority fallback", () => {
   const qwenRoute = routeProvider(baseRoute({
     role: "researcher",
     providerPolicy: "qwen",
@@ -127,7 +127,7 @@ test("provider router supports Qwen, Codex, and OpenRouter policies with compati
     providerAvailability: { qwen: true },
     complexity: "complex",
   }));
-  assert.equal(qwenWrite.provider, "kimi");
+  assert.equal(qwenWrite.provider, "mimo");
   assert.equal(qwenWrite.providerModel.provider, "qwen");
   assert.equal(qwenWrite.providerModel.authority, "advisory");
   assert.equal(qwenWrite.routeEnsemble.winner, "qwen-advisory");
@@ -139,7 +139,7 @@ test("provider router supports Qwen, Codex, and OpenRouter policies with compati
     providerAvailability: { openrouter: true },
     complexity: "complex",
   }));
-  assert.equal(openRouterWrite.provider, "kimi");
+  assert.equal(openRouterWrite.provider, "mimo");
   assert.equal(openRouterWrite.providerModel.provider, "openrouter");
   assert.equal(openRouterWrite.providerModel.model, "openrouter/auto");
   assert.equal(openRouterWrite.providerModel.authority, "advisory");
@@ -150,7 +150,7 @@ test("provider router supports Qwen, Codex, and OpenRouter policies with compati
     providerPolicy: "codex",
     providerAvailability: { codex: false },
   }));
-  assert.equal(missingCodex.provider, "kimi");
+  assert.equal(missingCodex.provider, "mimo");
   assert.equal(missingCodex.providerModel.provider, "codex");
   assert.equal(missingCodex.providerModel.authority, "veto");
   assert.equal(missingCodex.routeEnsemble.winner, "safety-gate");
@@ -169,7 +169,7 @@ test("provider model parser normalizes Qwen 3.7 MAX, OpenRouter models, and know
   assert.equal(normalizeProviderPolicy("qwen"), "qwen");
   assert.equal(normalizeProviderPolicy("openrouter"), "openrouter");
   assert.equal(normalizeProviderPolicy("authority"), "authority");
-  assert.equal(normalizeProviderPolicy("unknown"), "auto");
+  assert.equal(normalizeProviderPolicy("unknown"), "unknown");
 });
 
 test("provider router honors configured defaults for generic OpenAI-compatible provider hints", () => {
@@ -237,7 +237,7 @@ test("provider registry stores generic provider metadata without secret values",
 
     const codex = await providerDoctorStatus("codex", { homeDir, env: {} });
     assert.equal(codex.provider, "codex");
-    assert.match(codex.reason, /does not read ~\/\.codex\/auth\.json|primary fallback/);
+    assert.match(codex.reason, /does not read ~\/\.codex\/auth\.json|primary fallback|configured authority fallback/);
   } finally {
     await rm(homeDir, { recursive: true, force: true });
   }
@@ -304,7 +304,7 @@ test("provider health tracks Kimi monthly quota exhaustion for the run", () => {
   assert.match(health.getKimi().reason ?? "", /monthly quota/i);
 });
 
-test("provider task runner falls back from DeepSeek to Kimi and records metadata", async () => {
+test("provider task runner falls back from DeepSeek to configured authority provider and records metadata", async () => {
   const calls = [];
   const disabledEvents = [];
   const deepseekRunner = {
@@ -322,16 +322,28 @@ test("provider task runner falls back from DeepSeek to Kimi and records metadata
     async run(_node, env) {
       calls.push({ provider: "kimi", env });
       return {
+        success: false,
+        exitCode: 1,
+        stdout: "",
+        stderr: "Kimi fallback should not run",
+      };
+    },
+  };
+  const authorityRunner = {
+    async run(_node, env) {
+      calls.push({ provider: "mimo", env });
+      return {
         success: true,
         exitCode: 0,
-        stdout: "Kimi fallback result",
+        stdout: "MiMo authority fallback result",
         stderr: "",
       };
     },
   };
 
   const runner = createProviderTaskRunner({
-    authorityProvider: "kimi",
+    authorityProvider: "mimo",
+    authorityRunner,
     kimiRunner,
     deepseekRunner,
     onDeepSeekDisabled: (event) => {
@@ -341,13 +353,14 @@ test("provider task runner falls back from DeepSeek to Kimi and records metadata
   const result = await runner.run(providerNode(), { OMK_TASK_TYPE: "review" });
 
   assert.equal(result.success, true);
-  assert.deepEqual(calls.map((call) => call.provider), ["deepseek", "kimi"]);
+  assert.deepEqual(calls.map((call) => call.provider), ["deepseek", "mimo"]);
   assert.equal(disabledEvents.length, 1);
   assert.equal(disabledEvents[0].forced, true);
   assert.match(disabledEvents[0].reason, /402/);
-  assert.equal(result.metadata.provider, "kimi");
+  assert.equal(result.metadata.provider, "mimo");
   assert.equal(result.metadata.requestedProvider, "deepseek");
   assert.deepEqual(result.metadata.providerFallback.from, "deepseek");
+  assert.deepEqual(result.metadata.providerFallback.to, "mimo");
   assert.match(result.metadata.providerFallback.reason, /402/);
   assert.equal(calls[1].env.OMK_PROVIDER_FALLBACK_FROM, "deepseek");
 });
@@ -430,7 +443,7 @@ test("provider task runner skips unavailable explicit DeepSeek lanes before Kimi
     },
   };
 
-  const runner = createProviderTaskRunner({ authorityProvider: "kimi", kimiRunner });
+  const runner = createProviderTaskRunner({ authorityProvider: "mimo", kimiRunner });
   const result = await runner.run(node, { OMK_TASK_TYPE: "review", OMK_COMPLEXITY: "complex" });
 
   assert.equal(result.success, false);
@@ -458,7 +471,7 @@ test("provider task runner skips optional generic provider lanes when unavailabl
     },
   };
 
-  const runner = createProviderTaskRunner({ authorityProvider: "kimi", kimiRunner, providerPolicy: "qwen" });
+  const runner = createProviderTaskRunner({ authorityProvider: "mimo", kimiRunner, providerPolicy: "qwen" });
   const result = await runner.run({
     ...providerNode(),
     id: "qwen-review-lane",
@@ -479,7 +492,7 @@ test("provider task runner skips optional generic provider lanes when unavailabl
   assert.equal(result.metadata.providerFallback, undefined);
 });
 
-test("provider task runner routes Qwen read-only lanes and falls back to Kimi when unavailable", async () => {
+test("provider task runner routes Qwen read-only lanes and falls back to configured authority when unavailable", async () => {
   const calls = [];
   const qwenRunner = {
     async run(_node, env) {
@@ -496,16 +509,27 @@ test("provider task runner routes Qwen read-only lanes and falls back to Kimi wh
     async run(_node, env) {
       calls.push({ provider: "kimi", env });
       return {
+        success: false,
+        exitCode: 1,
+        stdout: "",
+        stderr: "Kimi fallback should not run",
+      };
+    },
+  };
+  const authorityRunner = {
+    async run(_node, env) {
+      calls.push({ provider: "mimo", env });
+      return {
         success: true,
         exitCode: 0,
-        stdout: "Kimi fallback result",
+        stdout: "MiMo authority result",
         stderr: "",
       };
     },
   };
 
   const runner = createProviderTaskRunner({
-    authorityProvider: "kimi",
+    authorityProvider: "mimo",
     kimiRunner,
     providerRunners: { qwen: qwenRunner },
     providerPolicy: "qwen",
@@ -525,15 +549,20 @@ test("provider task runner routes Qwen read-only lanes and falls back to Kimi wh
   assert.equal(result.metadata.providerModel, "qwen3-max");
 
   calls.length = 0;
-  const fallbackRunner = createProviderTaskRunner({ authorityProvider: "kimi", kimiRunner, providerPolicy: "qwen" });
+  const fallbackRunner = createProviderTaskRunner({
+    authorityProvider: "mimo",
+    authorityRunner,
+    kimiRunner,
+    providerPolicy: "qwen",
+  });
   const fallback = await fallbackRunner.run({
     ...providerNode(),
     role: "reviewer",
     routing: { provider: "qwen", readOnly: true },
   }, { OMK_TASK_TYPE: "review" });
   assert.equal(fallback.success, true);
-  assert.deepEqual(calls.map((call) => call.provider), ["kimi"]);
-  assert.equal(fallback.metadata.provider, "kimi");
+  assert.deepEqual(calls.map((call) => call.provider), ["mimo"]);
+  assert.equal(fallback.metadata.provider, "mimo");
   assert.equal(fallback.metadata.requestedProvider, "qwen");
   assert.equal(fallback.metadata.providerModelRef.provider, "qwen");
   assert.equal(fallback.metadata.providerModelRef.authority, "veto");
@@ -608,16 +637,28 @@ test("provider task runner runs OpenRouter advisory before authority provider on
     async run(_node, env) {
       calls.push({ provider: "kimi", env });
       return {
+        success: false,
+        exitCode: 1,
+        stdout: "",
+        stderr: "Kimi fallback should not run",
+      };
+    },
+  };
+  const authorityRunner = {
+    async run(_node, env) {
+      calls.push({ provider: "mimo", env });
+      return {
         success: true,
         exitCode: 0,
-        stdout: "Kimi applied bounded patch",
+        stdout: "MiMo applied bounded patch",
         stderr: "",
       };
     },
   };
 
   const runner = createProviderTaskRunner({
-    authorityProvider: "kimi",
+    authorityProvider: "mimo",
+    authorityRunner,
     kimiRunner,
     providerRunners: { openrouter: openrouterRunner },
     providerModels: {
@@ -636,12 +677,12 @@ test("provider task runner runs OpenRouter advisory before authority provider on
   }, { OMK_TASK_TYPE: "implementation", OMK_COMPLEXITY: "complex" });
 
   assert.equal(result.success, true);
-  assert.deepEqual(calls.map((call) => call.provider), ["openrouter", "kimi"]);
+  assert.deepEqual(calls.map((call) => call.provider), ["openrouter", "mimo"]);
   assert.equal(calls[0].env.OMK_PROVIDER_AUTHORITY, "advisory");
   assert.equal(calls[1].env.OMK_PROVIDER_ADVISORY_PROVIDER, "openrouter");
   assert.match(calls[1].env.OMK_PROVIDER_ADVISORY, /only writer/);
   assert.doesNotMatch(calls[1].env.OMK_PROVIDER_ADVISORY, /Kimi/);
-  assert.equal(result.metadata.provider, "kimi");
+  assert.equal(result.metadata.provider, "mimo");
   assert.equal(result.metadata.providerAssist.provider, "openrouter");
   assert.equal(result.metadata.providerAssist.participation, "advisory");
   assert.equal(result.metadata.providerModelRef.provider, "openrouter");
@@ -670,16 +711,28 @@ test("provider task runner records transient fallback metadata for rate limit an
       async run(_node, env) {
         calls.push({ provider: "kimi", env });
         return {
+          success: false,
+          exitCode: 1,
+          stdout: "",
+          stderr: "Kimi fallback should not run",
+        };
+      },
+    };
+    const authorityRunner = {
+      async run(_node, env) {
+        calls.push({ provider: "mimo", env });
+        return {
           success: true,
           exitCode: 0,
-          stdout: "Kimi handled transient fallback",
+          stdout: "MiMo handled transient fallback",
           stderr: "",
         };
       },
     };
 
     const runner = createProviderTaskRunner({
-      authorityProvider: "kimi",
+      authorityProvider: "mimo",
+      authorityRunner,
       kimiRunner,
       deepseekRunner,
       providerHealth: health,
@@ -688,13 +741,13 @@ test("provider task runner records transient fallback metadata for rate limit an
     const result = await runner.run(providerNode(), { OMK_TASK_TYPE: "review" });
 
     assert.equal(result.success, true);
-    assert.deepEqual(calls.map((call) => call.provider), ["deepseek", "kimi"]);
+    assert.deepEqual(calls.map((call) => call.provider), ["deepseek", "mimo"]);
     assert.equal(health.isDeepSeekAvailable(), false);
-    assert.equal(result.metadata.provider, "kimi");
+    assert.equal(result.metadata.provider, "mimo");
     assert.equal(result.metadata.requestedProvider, "deepseek");
     assert.equal(result.metadata.providerAttemptCount, 1);
     assert.equal(result.metadata.providerFallback.from, "deepseek");
-    assert.equal(result.metadata.providerFallback.to, "kimi");
+    assert.equal(result.metadata.providerFallback.to, "mimo");
     assert.equal(result.metadata.providerFallback.attempts, 1);
     assert.equal(result.metadata.providerFallback.failureKind, "transient");
     assert.match(result.metadata.providerFallback.reason, expectedReason);
@@ -703,7 +756,7 @@ test("provider task runner records transient fallback metadata for rate limit an
   }
 });
 
-test("provider task runner preserves fallback metadata when Kimi fallback fails", async () => {
+test("provider task runner preserves fallback metadata when authority fallback fails", async () => {
   const calls = [];
   const deepseekRunner = {
     async run(_node, env) {
@@ -723,20 +776,37 @@ test("provider task runner preserves fallback metadata when Kimi fallback fails"
         success: false,
         exitCode: 1,
         stdout: "",
-        stderr: "Kimi fallback failed",
+        stderr: "Kimi fallback should not run",
+      };
+    },
+  };
+  const authorityRunner = {
+    async run(_node, env) {
+      calls.push({ provider: "mimo", env });
+      return {
+        success: false,
+        exitCode: 1,
+        stdout: "",
+        stderr: "MiMo fallback failed",
       };
     },
   };
 
-  const runner = createProviderTaskRunner({ authorityProvider: "kimi", kimiRunner, deepseekRunner, deepseekMaxRetries: 0 });
+  const runner = createProviderTaskRunner({
+    authorityProvider: "mimo",
+    authorityRunner,
+    kimiRunner,
+    deepseekRunner,
+    deepseekMaxRetries: 0,
+  });
   const result = await runner.run(providerNode(), { OMK_TASK_TYPE: "review" });
 
   assert.equal(result.success, false);
-  assert.deepEqual(calls.map((call) => call.provider), ["deepseek", "kimi"]);
-  assert.equal(result.metadata.provider, "kimi");
+  assert.deepEqual(calls.map((call) => call.provider), ["deepseek", "mimo"]);
+  assert.equal(result.metadata.provider, "mimo");
   assert.equal(result.metadata.requestedProvider, "deepseek");
   assert.equal(result.metadata.providerFallback.from, "deepseek");
-  assert.equal(result.metadata.providerFallback.to, "kimi");
+  assert.equal(result.metadata.providerFallback.to, "mimo");
   assert.equal(result.metadata.providerFallback.failureKind, "transient");
   assert.match(result.metadata.providerFallback.reason, /rate limit/);
   assert.equal(calls[1].env.OMK_PROVIDER_FALLBACK_FROM, "deepseek");
@@ -858,7 +928,7 @@ test("provider-backed runner keeps provider metadata when Kimi runtime is unavai
     assert.equal(result.metadata.requestedProvider, "kimi");
     assert.ok(result.metadata._budgetReport);
     assert.equal(result.metadata.runtime, undefined);
-    assert.match(result.stderr, /Kimi runner not configured/i);
+    assert.match(result.stderr, /Kimi runner not configured|Kimi CLI not found/i);
   } finally {
     if (previousPath === undefined) delete process.env.PATH;
     else process.env.PATH = previousPath;
@@ -1069,7 +1139,7 @@ test("provider task runner retries transient DeepSeek failures before returning 
     },
   };
 
-  const runner = createProviderTaskRunner({ authorityProvider: "kimi", kimiRunner, deepseekRunner, deepseekMaxRetries: 1 });
+  const runner = createProviderTaskRunner({ authorityProvider: "mimo", kimiRunner, deepseekRunner, deepseekMaxRetries: 1 });
   const result = await runner.run(providerNode(), { OMK_TASK_TYPE: "review" });
 
   assert.equal(result.success, true);
@@ -1218,24 +1288,35 @@ test("provider task runner runs DeepSeek advisory for real auto-routed coder nod
     async run(_node, env) {
       calls.push({ provider: "kimi", env });
       return {
+        success: false,
+        exitCode: 1,
+        stdout: "",
+        stderr: "Kimi fallback should not run",
+      };
+    },
+  };
+  const authorityRunner = {
+    async run(_node, env) {
+      calls.push({ provider: "mimo", env });
+      return {
         success: true,
         exitCode: 0,
-        stdout: "Kimi applied advisory safely.",
+        stdout: "MiMo applied advisory safely.",
         stderr: "",
       };
     },
   };
 
-  const runner = createProviderTaskRunner({ authorityProvider: "kimi", kimiRunner, deepseekRunner });
+  const runner = createProviderTaskRunner({ authorityProvider: "mimo", authorityRunner, kimiRunner, deepseekRunner });
   const result = await runner.run(node, { OMK_TASK_TYPE: "implementation" });
 
   assert.equal(result.success, true);
-  assert.deepEqual(calls.map((call) => call.provider), ["deepseek", "kimi"]);
+  assert.deepEqual(calls.map((call) => call.provider), ["deepseek", "mimo"]);
   assert.equal(calls[0].env.OMK_DEEPSEEK_PARTICIPATION, "advisory");
   assert.match(calls[0].env.OMK_PROVIDER_ROUTE_ENSEMBLE, /winner=deepseek-pro-advisory/);
   assert.match(calls[1].env.OMK_PROVIDER_ROUTE_ENSEMBLE, /winner=deepseek-pro-advisory/);
   assert.match(calls[1].env.OMK_DEEPSEEK_ADVISORY, /keep the authority provider as writer/);
-  assert.equal(result.metadata.provider, "kimi");
+  assert.equal(result.metadata.provider, "mimo");
   assert.equal(result.metadata.providerRouteEnsemble.winner, "deepseek-pro-advisory");
   assert.equal(result.metadata.providerAssist.provider, "deepseek");
   assert.equal(result.metadata.providerAssist.participation, "advisory");
@@ -1263,10 +1344,16 @@ test("provider task runner parses authority-provider advisory questions", async 
   const kimiRunner = {
     async run(_node, env) {
       calls.push({ provider: "kimi", env });
+      return { success: false, exitCode: 1, stdout: "", stderr: "Kimi fallback should not run" };
+    },
+  };
+  const authorityRunner = {
+    async run(_node, env) {
+      calls.push({ provider: "mimo", env });
       return { success: true, exitCode: 0, stdout: "authority applied advisory", stderr: "" };
     },
   };
-  const runner = createProviderTaskRunner({ authorityProvider: "kimi", kimiRunner, deepseekRunner });
+  const runner = createProviderTaskRunner({ authorityProvider: "mimo", authorityRunner, kimiRunner, deepseekRunner });
   const result = await runner.run({
     ...providerNode(),
     id: "coder-advisory-json",
@@ -1275,6 +1362,7 @@ test("provider task runner parses authority-provider advisory questions", async 
   }, { OMK_TASK_TYPE: "implementation", OMK_COMPLEXITY: "complex" });
 
   assert.equal(result.success, true);
+  assert.deepEqual(calls.map((call) => call.provider), ["deepseek", "mimo"]);
   const advisoryJson = JSON.parse(calls[1].env.OMK_DEEPSEEK_ADVISORY_JSON);
   assert.deepEqual(advisoryJson.questionsForAuthorityProvider, ["Should the authority provider apply this patch?"]);
   assert.equal(advisoryJson.questionsForKimi, undefined);
@@ -1301,16 +1389,27 @@ test("provider task runner aborts DeepSeek advisory runner after advisory timeou
     async run(_node, env) {
       calls.push({ provider: "kimi", env });
       return {
+        success: false,
+        exitCode: 1,
+        stdout: "",
+        stderr: "Kimi fallback should not run",
+      };
+    },
+  };
+  const authorityRunner = {
+    async run(_node, env) {
+      calls.push({ provider: "mimo", env });
+      return {
         success: true,
         exitCode: 0,
-        stdout: "Kimi continued after advisory timeout.",
+        stdout: "MiMo continued after advisory timeout.",
         stderr: "",
       };
     },
   };
 
   try {
-    const runner = createProviderTaskRunner({ authorityProvider: "kimi", kimiRunner, deepseekRunner });
+    const runner = createProviderTaskRunner({ authorityProvider: "mimo", authorityRunner, kimiRunner, deepseekRunner });
     const result = await runner.run({
       ...providerNode(),
       id: "advisory-timeout-abort",
@@ -1324,7 +1423,7 @@ test("provider task runner aborts DeepSeek advisory runner after advisory timeou
     ]);
 
     assert.equal(result.success, true);
-    assert.deepEqual(calls.map((call) => call.provider), ["deepseek", "kimi"]);
+    assert.deepEqual(calls.map((call) => call.provider), ["deepseek", "mimo"]);
     assert.match(String(abortReason?.message ?? abortReason), /DeepSeek advisory timed out/);
     assert.equal(calls[1].env.OMK_DEEPSEEK_ADVISORY_STATUS, "failed");
     assert.equal(result.metadata.providerAssist.success, false);
@@ -1352,15 +1451,26 @@ test("provider task runner uses DeepSeek V4 Pro Max as advisory for file-affecti
     async run(_node, env) {
       calls.push({ provider: "kimi", env });
       return {
+        success: false,
+        exitCode: 1,
+        stdout: "",
+        stderr: "Kimi fallback should not run",
+      };
+    },
+  };
+  const authorityRunner = {
+    async run(_node, env) {
+      calls.push({ provider: "mimo", env });
+      return {
         success: true,
         exitCode: 0,
-        stdout: "Kimi applied edits",
+        stdout: "MiMo applied edits",
         stderr: "",
       };
     },
   };
 
-  const runner = createProviderTaskRunner({ authorityProvider: "kimi", kimiRunner, deepseekRunner });
+  const runner = createProviderTaskRunner({ authorityProvider: "mimo", authorityRunner, kimiRunner, deepseekRunner });
   const result = await runner.run({
     ...providerNode(),
     id: "file-coder-provider",
@@ -1370,14 +1480,14 @@ test("provider task runner uses DeepSeek V4 Pro Max as advisory for file-affecti
   }, { OMK_TASK_TYPE: "implementation" });
 
   assert.equal(result.success, true);
-  assert.deepEqual(calls.map((call) => call.provider), ["deepseek", "kimi"]);
+  assert.deepEqual(calls.map((call) => call.provider), ["deepseek", "mimo"]);
   assert.equal(calls[0].env.OMK_DEEPSEEK_MODEL, "deepseek-v4-pro");
   assert.equal(calls[0].env.OMK_DEEPSEEK_PARTICIPATION, "advisory");
   assert.match(calls[0].env.OMK_PROVIDER_ROUTE_ENSEMBLE, /winner=deepseek-pro-advisory/);
   assert.match(calls[0].env.OMK_DEEPSEEK_INVOCATION_KEY, /^omk-[0-9a-f]+$/);
   assert.equal(calls[1].env.OMK_PROVIDER_INVOCATION_KEY, calls[0].env.OMK_DEEPSEEK_INVOCATION_KEY);
   assert.match(calls[1].env.OMK_DEEPSEEK_ADVISORY, /patch strategy/);
-  assert.equal(result.metadata.provider, "kimi");
+  assert.equal(result.metadata.provider, "mimo");
   assert.equal(result.metadata.providerRouteEnsemble.winner, "deepseek-pro-advisory");
   assert.equal(result.metadata.providerAssist.provider, "deepseek");
   assert.equal(result.metadata.providerAssist.model, "deepseek-v4-pro");
@@ -1417,7 +1527,7 @@ test("executor marks optional unavailable DeepSeek provider lanes skipped", asyn
     ],
   });
   const runner = createProviderTaskRunner({
-    authorityProvider: "kimi",
+    authorityProvider: "mimo",
     kimiRunner: {
       async run(_node, env) {
         calls.push({ provider: "kimi", env });
@@ -1879,12 +1989,12 @@ test("provider task runner propagates configured non-Kimi authority provider int
   assert.equal(result.metadata.requestedProvider, "codex");
 });
 
-test("provider task runner uses Kimi runner as the default authority", async () => {
+test("provider task runner does not use Kimi CLI runner as implicit default authority", async () => {
   const calls = [];
   const kimiRunner = {
     async run(_node, env) {
       calls.push({ provider: "kimi", env });
-      return { success: true, exitCode: 0, stdout: "Kimi default authority handled write lane", stderr: "" };
+      return { success: true, exitCode: 0, stdout: "Kimi default authority should not run implicitly", stderr: "" };
     },
   };
   const runner = createProviderTaskRunner({ kimiRunner });
@@ -1896,12 +2006,11 @@ test("provider task runner uses Kimi runner as the default authority", async () 
     routing: { provider: "auto", readOnly: false },
   }, { OMK_TASK_TYPE: "implementation", OMK_COMPLEXITY: "moderate" });
 
-  assert.equal(result.success, true);
-  assert.deepEqual(calls.map((call) => call.provider), ["kimi"]);
-  assert.equal(calls[0].env.OMK_PROVIDER, "kimi");
-  assert.equal(calls[0].env.OMK_PROVIDER_AUTHORITY, "kimi");
-  assert.equal(result.metadata.provider, "kimi");
-  assert.equal(result.metadata.requestedProvider, "kimi");
+  assert.equal(result.success, false);
+  assert.deepEqual(calls.map((call) => call.provider), []);
+  assert.equal(result.metadata.provider, "mimo");
+  assert.equal(result.metadata.requestedProvider, "mimo");
+  assert.match(result.stderr, /Kimi CLI fallback is disabled by provider-neutral policy/);
 });
 
 test("provider router does not select unavailable DeepSeek direct or advisory routes", () => {
@@ -1912,7 +2021,7 @@ test("provider router does not select unavailable DeepSeek direct or advisory ro
     deepseekAvailable: false,
     providerAvailability: { kimi: true, deepseek: false },
   }));
-  assert.equal(explicit.provider, "kimi");
+  assert.equal(explicit.provider, "mimo");
   assert.notEqual(explicit.routeEnsemble.winner, "deepseek-direct");
 
   const advisory = routeProvider(baseRoute({
@@ -1923,7 +2032,7 @@ test("provider router does not select unavailable DeepSeek direct or advisory ro
     deepseekAvailable: false,
     providerAvailability: { kimi: true, deepseek: false },
   }));
-  assert.equal(advisory.provider, "kimi");
+  assert.equal(advisory.provider, "mimo");
   assert.equal(advisory.deepseek, undefined);
   assert.notEqual(advisory.routeEnsemble.winner, "deepseek-pro-advisory");
 });
@@ -2057,21 +2166,22 @@ test("computeProviderRouteScore gives read-only safety boost to authority provid
 test("resolveAuthorityProvider selects preferred when available", () => {
   assert.strictEqual(resolveAuthorityProvider(["deepseek", "codex"], "codex"), "codex");
   assert.strictEqual(resolveAuthorityProvider(["deepseek", "codex"], "qwen"), "codex");
-  assert.strictEqual(resolveAuthorityProvider(["deepseek"]), "kimi");
-  assert.strictEqual(resolveAuthorityProvider(["kimi", "deepseek"]), "kimi");
-  assert.strictEqual(resolveAuthorityProvider([]), "kimi");
-  assert.strictEqual(resolveAuthorityProvider([], "kimi"), "kimi");
+  assert.strictEqual(resolveAuthorityProvider(["deepseek"]), "mimo");
+  assert.strictEqual(resolveAuthorityProvider(["kimi", "deepseek"]), "mimo");
+  assert.strictEqual(resolveAuthorityProvider([]), "mimo");
+  assert.strictEqual(resolveAuthorityProvider([], "kimi"), "mimo");
+  assert.strictEqual(resolveAuthorityProvider(["kimi"], "kimi"), "kimi");
 });
 
-test("runtime fallback defaults use direct Kimi API and keep legacy print fallback-only", () => {
-  assert.equal(DEFAULT_FALLBACK_RUNTIME, "kimi-api");
-  assert.equal(resolveFallbackRuntime([]), "kimi-api");
+test("runtime fallback defaults use MiMo API and keep legacy Kimi CLI fallback-only", () => {
+  assert.equal(DEFAULT_FALLBACK_RUNTIME, "mimo-api");
+  assert.equal(resolveFallbackRuntime([]), "mimo-api");
   assert.equal(resolveFallbackRuntime(["kimi-print", "codex-cli"]), "codex-cli");
   assert.deepEqual(
-    resolveRuntimeFallbackChain(["kimi-print", "deepseek-api", "codex-cli", "kimi-api"]),
-    ["kimi-api", "codex-cli", "deepseek-api", "kimi-print"]
+    resolveRuntimeFallbackChain(["kimi-print", "deepseek-api", "codex-cli", "kimi-api", "mimo-api"]),
+    ["mimo-api", "kimi-api", "codex-cli", "deepseek-api", "kimi-print"]
   );
-  assert.ok(DEFAULT_RUNTIME_FALLBACK_CHAIN.indexOf("kimi-api") < DEFAULT_RUNTIME_FALLBACK_CHAIN.indexOf("codex-cli"));
+  assert.ok(DEFAULT_RUNTIME_FALLBACK_CHAIN.indexOf("mimo-api") < DEFAULT_RUNTIME_FALLBACK_CHAIN.indexOf("kimi-api"));
   assert.equal(DEFAULT_RUNTIME_FALLBACK_CHAIN.includes("kimi-print"), false);
 });
 
@@ -2085,7 +2195,7 @@ function baseRoute(overrides = {}) {
     needsMcp: false,
     estimatedTokens: 1000,
     deepseekAvailable: true,
-    authorityProvider: "kimi",
+    authorityProvider: "mimo",
     ...overrides,
   };
 }

@@ -1,4 +1,4 @@
-import { style, omkCliHero } from "../util/theme.js";
+import { style, kimicatCliHero } from "../util/theme.js";
 import { t } from "../util/i18n.js";
 
 function fmtCommand(name: string, desc: string, tag?: string): string {
@@ -10,7 +10,7 @@ function fmtCommand(name: string, desc: string, tag?: string): string {
 export function buildCustomHelp(): string {
   return [
     "",
-    omkCliHero(),
+    kimicatCliHero(),
     "",
     "  " + style.purpleBold("Start Here") + style.gray(" ─────────────────────────────────────────────────────────"),
     "",

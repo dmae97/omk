@@ -133,6 +133,18 @@ async function tempGoalCliFixture({ summary = true } = {}) {
     await writeFile(codexBin, `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(fakeCodexScript)} "$@"\n`, { mode: 0o755 });
   }
   await writeFile(join(workspace, 'package.json'), JSON.stringify({ scripts: { check: 'node -e "process.exit(0)"' } }));
+  const providerConfigPath = join(root, "providers.json");
+  await writeFile(providerConfigPath, JSON.stringify({
+    version: 1,
+    providers: {
+      codex: {
+        enabled: true,
+        kind: "codex-cli",
+        defaultModel: "codex-cli",
+        auth: { method: "external-cli" },
+      },
+    },
+  }));
   const env = {
     ...process.env,
     OMK_PROJECT_ROOT: workspace,
@@ -146,6 +158,7 @@ async function tempGoalCliFixture({ summary = true } = {}) {
     OMK_AUTO_CONTINUE_MAX_ITERATIONS: "0",
     OMK_DEEPSEEK_GOAL_ENSEMBLE: "false",
     OMK_ISOLATED_HOME_INHERIT_AUTH: "0",
+    OMK_PROVIDER_CONFIG_PATH: providerConfigPath,
     KIMI_BIN: kimiBin,
     PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
   };

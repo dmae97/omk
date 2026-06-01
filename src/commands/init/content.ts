@@ -358,7 +358,7 @@ Last updated: 2026-05-24
 
 ## Current runtime stance
 
-OMK is the root orchestrator. Kimi is the default authority-capable provider adapter, not the whole runtime. Codex, DeepSeek, OpenCode, CommandCode, OpenRouter, Qwen, Gemini, and Claude run as adapter lanes only when provider health, capability, approval, sandbox, and harness policy match the task.
+OMK is the root orchestrator. Kimi is an authority-capable compatibility provider adapter, not the whole runtime or implicit default. Codex, DeepSeek, OpenCode, CommandCode, OpenRouter, Qwen, Gemini, and Claude run as adapter lanes only when provider health, capability, approval, sandbox, and harness policy match the task.
 
 - \`omk run\`, \`omk parallel\`, chat harnesses, and DAG replay expose provider routing and evidence-gated lanes.
 - \`omk provider\` / \`omk deepseek\` manage provider enablement, key setup, availability checks, and fallback readiness.
@@ -822,12 +822,28 @@ NODE
 # OMK SubagentStop Audit — leader must verify delegated work
 set -euo pipefail
 
+HOOK_INPUT="$(cat || true)"
+
 if ! command -v node &>/dev/null; then
-  echo '{"hookSpecificOutput":{"hookEventName":"SubagentStop","additionalContext":"Subagent finished. Leader must review changed files, integrate results, and run relevant quality gates before final."}}'
   exit 0
 fi
 
+OMK_HOOK_INPUT="$HOOK_INPUT" \\
 node <<'NODE'
+const inputText = process.env.OMK_HOOK_INPUT || '';
+
+let input = {};
+try {
+  input = inputText.trim() ? JSON.parse(inputText) : {};
+} catch (error) {
+  console.error('[subagent-stop-audit] invalid stdin JSON: ' + String(error));
+  process.exit(0);
+}
+
+if (input.stop_hook_active === true) {
+  process.exit(0);
+}
+
 const context = [
   'OMK subagent completion audit.',
   '- Do not claim success from a subagent report alone.',
@@ -836,10 +852,7 @@ const context = [
 ].join('\\n');
 
 process.stdout.write(JSON.stringify({
-  hookSpecificOutput: {
-    hookEventName: 'SubagentStop',
-    additionalContext: context,
-  },
+  systemMessage: context,
 }) + '\\n');
 NODE
 `,
@@ -1542,12 +1555,28 @@ rm -f "$TMP"
 # Final verification on Stop
 set -euo pipefail
 
+HOOK_INPUT="$(cat || true)"
+
 if ! command -v node &>/dev/null; then
-  echo '{"hookSpecificOutput":{"hookEventName":"Stop","permissionDecision":"allow","additionalContext":"Before final: list changed files, commands run, passed, failed, not run, and remaining risk. Do not claim deploy/publish unless verified."}}'
   exit 0
 fi
 
+OMK_HOOK_INPUT="$HOOK_INPUT" \\
 node <<'NODE'
+const inputText = process.env.OMK_HOOK_INPUT || '';
+
+let input = {};
+try {
+  input = inputText.trim() ? JSON.parse(inputText) : {};
+} catch (error) {
+  console.error('[stop-verify] invalid stdin JSON: ' + String(error));
+  process.exit(0);
+}
+
+if (input.stop_hook_active === true) {
+  process.exit(0);
+}
+
 const context = [
   'OMK final response checklist.',
   '- Changed files: list authored files and note any ignored local runtime files refreshed.',
@@ -1557,11 +1586,7 @@ const context = [
 ].join('\\n');
 
 process.stdout.write(JSON.stringify({
-  hookSpecificOutput: {
-    hookEventName: 'Stop',
-    permissionDecision: 'allow',
-    additionalContext: context,
-  },
+  systemMessage: context,
 }) + '\\n');
 NODE
 `,
@@ -1569,13 +1594,28 @@ NODE
 # OMK Release Guard — final checklist reminder for release/security work
 set +e
 
+HOOK_INPUT="$(cat || true)"
+
 if ! command -v node &>/dev/null; then
-  echo '{"hookSpecificOutput":{"hookEventName":"Stop","permissionDecision":"allow","additionalContext":"OMK release guard: verify secret scan, security review, quality gate, changelog/PR evidence, and do not publish/deploy without exact command evidence."}}'
   exit 0
 fi
 
+OMK_HOOK_INPUT="$HOOK_INPUT" \\
 node <<'NODE'
 const { execSync } = require('node:child_process');
+const inputText = process.env.OMK_HOOK_INPUT || '';
+
+let input = {};
+try {
+  input = inputText.trim() ? JSON.parse(inputText) : {};
+} catch (error) {
+  console.error('[release-check-before-stop] invalid stdin JSON: ' + String(error));
+  process.exit(0);
+}
+
+if (input.stop_hook_active === true) {
+  process.exit(0);
+}
 
 function shell(command) {
   try {
@@ -1597,11 +1637,7 @@ const context = releaseTouched
   : 'OMK release guard: no release file changes detected. Still do not claim push, release, npm publish, or production deploy without exact command evidence.';
 
 process.stdout.write(JSON.stringify({
-  hookSpecificOutput: {
-    hookEventName: 'Stop',
-    permissionDecision: 'allow',
-    additionalContext: context,
-  },
+  systemMessage: context,
 }) + '\\n');
 NODE
 `,
@@ -1609,18 +1645,36 @@ NODE
 # OMK Release Guard — optional npm audit summary for release gates
 set +e
 
+HOOK_INPUT="$(cat || true)"
+
+if command -v node &>/dev/null; then
+  OMK_HOOK_INPUT="$HOOK_INPUT" node <<'NODE'
+const inputText = process.env.OMK_HOOK_INPUT || '';
+try {
+  const input = inputText.trim() ? JSON.parse(inputText) : {};
+  if (input.stop_hook_active === true) process.exit(10);
+} catch (error) {
+  console.error('[npm-audit-summary] invalid stdin JSON: ' + String(error));
+  process.exit(11);
+}
+NODE
+  case "$?" in
+    10|11) exit 0 ;;
+  esac
+fi
+
 if [ ! -f "package.json" ]; then
-  echo '{"hookSpecificOutput":{"hookEventName":"Stop","permissionDecision":"allow","additionalContext":"OMK npm audit summary: skipped because package.json is absent."}}'
+  printf '{"systemMessage":"OMK npm audit summary: skipped because package.json is absent."}\\n'
   exit 0
 fi
 
 if [ "$OMK_RUN_NPM_AUDIT_SUMMARY" != "1" ]; then
-  echo '{"hookSpecificOutput":{"hookEventName":"Stop","permissionDecision":"allow","additionalContext":"OMK npm audit summary: not run automatically. For release/security claims, run npm audit or set OMK_RUN_NPM_AUDIT_SUMMARY=1 and capture the result."}}'
+  printf '{"systemMessage":"OMK npm audit summary: not run automatically. For release/security claims, run npm audit or set OMK_RUN_NPM_AUDIT_SUMMARY=1 and capture the result."}\\n'
   exit 0
 fi
 
 if ! command -v npm &>/dev/null || ! command -v node &>/dev/null; then
-  echo '{"hookSpecificOutput":{"hookEventName":"Stop","permissionDecision":"allow","additionalContext":"OMK npm audit summary: skipped because npm or node is unavailable."}}'
+  printf '{"systemMessage":"OMK npm audit summary: skipped because npm or node is unavailable."}\\n'
   exit 0
 fi
 
@@ -1653,11 +1707,7 @@ try {
 }
 
 process.stdout.write(JSON.stringify({
-  hookSpecificOutput: {
-    hookEventName: 'Stop',
-    permissionDecision: 'allow',
-    additionalContext: context,
-  },
+  systemMessage: context,
 }) + '\\n');
 NODE
 rm -f "$TMP"

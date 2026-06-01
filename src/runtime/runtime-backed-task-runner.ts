@@ -9,7 +9,7 @@
 
 import type { TaskRunner, TaskResult } from "../contracts/orchestration.js";
 import type { TaskRunContext } from "../contracts/worker-context.js";
-import type { RuntimeId, AgentResult, AgentRunResult } from "./agent-runtime.js";
+import type { AgentRunResult } from "./agent-runtime.js";
 import { toTaskResult } from "./agent-runtime.js";
 import { capsuleToTask } from "./context-broker-converter.js";
 import { applyTaskRunContextToAgentTask, envFromWorkerManifest } from "./worker-manifest.js";
@@ -30,7 +30,7 @@ import { createKimiApiRuntime } from "./kimi-api-runtime.js";
 export interface RuntimeBackedTaskRunnerOptions {
   cwd: string;
   runtimePolicy?: string;
-  defaultRuntime?: RuntimeId;
+  defaultRuntime?: string;
   fallbackChain?: string[];
   env?: Record<string, string>;
   runId?: string;
@@ -173,39 +173,18 @@ export async function createRuntimeBackedTaskRunner(
         ...(env ?? {}),
         ...(runContext ? envFromWorkerManifest(runContext.worker) : {}),
       };
-      const task = applyTaskRunContextToAgentTask(await capsuleToTask(capsule, {
+      const baseTask = applyTaskRunContextToAgentTask(await capsuleToTask(capsule, {
         signal: abortSignal,
         cwd: options.cwd,
         env: taskEnv,
         fallbackChain: providerFallbackChain,
       }), runContext);
+      const task = options.onOutput
+        ? { ...baseTask, context: { ...baseTask.context, onOutput: options.onOutput } }
+        : baseTask;
 
-      if (options.onOutput) {
-        task.context.onOutput = options.onOutput;
-      }
-
-      let taskResult: TaskResult;
-      if (typeof runtimeRouter.execute === "function") {
-        const agentResult: AgentResult = await runtimeRouter.execute(task);
-        // Adapt AgentResult -> AgentRunResult so toTaskResult can consume it
-        const adapted: AgentRunResult = {
-          success: agentResult.exitCode === 0,
-          exitCode: agentResult.exitCode,
-          stdout: agentResult.output,
-          stderr: "",
-          metadata: {
-            ...agentResult.metadata,
-            ...(agentResult.thinking && { thinking: agentResult.thinking }),
-            ...(agentResult.todos && { todos: agentResult.todos }),
-          },
-          tokenUsage: agentResult.tokenUsage,
-          toolCalls: agentResult.toolCalls,
-        };
-        taskResult = toTaskResult(adapted);
-      } else {
-        const agentResult = await runtimeRouter.runNode(capsule, abortSignal);
-        taskResult = toTaskResult(agentResult);
-      }
+      const agentResult: AgentRunResult = await runtimeRouter.executeTask(task, capsule, abortSignal);
+      const taskResult = toTaskResult(agentResult);
 
       // Ensure routing metadata is present even if the router failed to attach it
       taskResult.metadata = {

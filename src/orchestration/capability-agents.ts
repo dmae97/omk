@@ -2,7 +2,6 @@ import type { DagNodeDefinition, DagNodeRouting } from "./dag.js";
 import type { RunState } from "../contracts/orchestration.js";
 import type { EnsembleDecisionCandidateVote } from "./ensemble-decision.js";
 import { selectTaskRouting } from "./routing.js";
-import { DEFAULT_AUTHORITY_PROVIDER, resolveFallbackProvider } from "../providers/types.js";
 
 export interface CapabilityAgentBuildInput {
   goal: string;
@@ -80,8 +79,7 @@ function buildCapabilityLanes(goal: string, routing: DagNodeRouting): Capability
       outputName: "skill activation handoff",
       routing: {
         provider: "auto",
-        fallbackProvider: resolveFallbackProvider([DEFAULT_AUTHORITY_PROVIDER]),
-        providerReason: "Authority provider owns skill activation and synthesis for auto-spawned capability lanes",
+        providerReason: "Provider-neutral runtime owns skill activation and synthesis for auto-spawned capability lanes",
         autoSpawned: true,
         spawnReason: "active skill inventory matched the orchestration goal",
         routeSource: "skill",
@@ -114,8 +112,7 @@ function buildCapabilityLanes(goal: string, routing: DagNodeRouting): Capability
       outputName: "mcp tool handoff",
       routing: {
         provider: "auto",
-        fallbackProvider: resolveFallbackProvider([DEFAULT_AUTHORITY_PROVIDER]),
-        providerReason: "Authority provider required because this capability lane may use live MCP/tool authority",
+        providerReason: "Provider-neutral runtime required because this capability lane may use live MCP/tool authority",
         autoSpawned: true,
         spawnReason: "active MCP/tool inventory matched the orchestration goal",
         routeSource: "mcp",
@@ -148,8 +145,7 @@ function buildCapabilityLanes(goal: string, routing: DagNodeRouting): Capability
       outputName: "hook constraint handoff",
       routing: {
         provider: "auto",
-        fallbackProvider: resolveFallbackProvider([DEFAULT_AUTHORITY_PROVIDER]),
-        providerReason: "Authority provider owns hook-aware guardrails and final synthesis for auto-spawned capability lanes",
+        providerReason: "Provider-neutral runtime owns hook-aware guardrails and final synthesis for auto-spawned capability lanes",
         autoSpawned: true,
         spawnReason: "active hook inventory matched the orchestration goal",
         routeSource: "hook",

@@ -166,20 +166,7 @@ export async function launchChatCockpit(options: LaunchChatCockpitOptions = {}):
   const cockpitHeight = parseCockpitHeight(options.cockpitHeight);
   const cockpitPaneHeight = Math.min(cockpitHeight ?? DEFAULT_CHAT_COCKPIT_HEIGHT, terminalHeight - minHistoryPaneHeight);
 
-  const leftCmd = buildLeftPaneCommand({
-    nodeCmd,
-    cliCmd,
-    runId,
-    brand,
-    agentFile: options.agentFile,
-    workers: options.workers,
-    maxStepsPerTurn: options.maxStepsPerTurn,
-    mcpScope: options.mcpScope,
-    provider: options.provider,
-    model: options.model,
-    execution: options.execution,
-    ui: options.ui,
-  });
+  const leftCmd = buildLeftPaneCommand({ nodeCmd, cliCmd, runId, brand, agentFile: options.agentFile, workers: options.workers, maxStepsPerTurn: options.maxStepsPerTurn, mcpScope: options.mcpScope, provider: options.provider, model: options.model, execution: options.execution, ui: options.ui });
   const rightTopCmd = buildRightPaneCommand({ nodeCmd, cliCmd, runId, refreshMs, redraw, height: cockpitPaneHeight });
   const rightBottomCmd = `${nodeCmd} ${cliCmd} runs --watch --limit 15 --refresh 5000`;
 

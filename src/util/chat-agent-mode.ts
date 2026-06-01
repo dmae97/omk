@@ -5,21 +5,20 @@ import type { OmkMode } from "./mode-preset.js";
 import { getRunPath } from "./fs.js";
 import type { OmkRuntimeScope } from "./resource-profile.js";
 import type { ExecutionPromptPolicy, ExecutionSelectionSource } from "../contracts/orchestration.js";
-import { DEFAULT_AUTHORITY_PROVIDER } from "../providers/types.js";
-import { normalizeProviderId } from "../providers/model-registry.js";
 import {
   readRootAgentSubagents,
   writeScopedAgentFile,
   type ScopedSubagentRef,
 } from "./scoped-agent-file.js";
+import { DEFAULT_AUTHORITY_PROVIDER } from "../providers/types.js";
 
 export interface ChatAgentModeResources {
   workers: string;
   maxStepsPerTurn?: string;
   resourceProfile?: string;
   approvalPolicy?: string;
-  providerPolicy?: string;
   authorityProvider?: string;
+  providerPolicy?: string;
   providerModel?: string;
   ensembleDefaultEnabled?: boolean;
   executionPrompt?: ExecutionPromptPolicy;
@@ -207,9 +206,9 @@ export function buildChatAgentModeContract(input: {
     `- Max steps per turn: ${resources.maxStepsPerTurn ?? "runtime-default"}`,
     `- Resource profile: ${resources.resourceProfile ?? "runtime-default"}`,
     `- Approval policy: ${resources.approvalPolicy ?? "interactive"}`,
-    `- Provider policy: ${harness.resources.providerPolicy}`,
+    `- Provider policy: ${resources.providerPolicy ?? "auto"}`,
     `- Authority provider: ${harness.resources.authorityProvider}`,
-    `- Provider model: ${harness.resources.providerModel}`,
+    `- Provider model: ${resources.providerModel ?? "auto"}`,
     `- Execution selection: ${harness.execution.policy} (${harness.execution.source})`,
     `- Ensemble default: ${resources.ensembleDefaultEnabled === false ? "disabled" : "enabled"}`,
     `- MCP scope: ${resources.mcpScope}`,
@@ -306,9 +305,9 @@ export function buildChatAgentHarnessManifest(input: {
       "report changed files, commands, pass/fail, not-run items, remaining risk",
     ],
     authority: [
-      `${resources.authorityProvider} is the configured OMK authority provider for edits, merge, and final synthesis`,
-      "DeepSeek/Qwen/Codex lanes are read-only or advisory unless explicitly selected as authority",
-      "MCP/tool lanes may use live authority only through OMK-owned guarded execution",
+      "The configured OMK authority provider owns edits, merge, and final synthesis",
+      "DeepSeek/Qwen/Codex lanes are read-only or advisory unless explicitly configured otherwise",
+      "MCP/tool lanes may use live authority only through configured OMK authority-provider guarded execution",
       "Hooks are constraints and guardrails, not bypasses",
       "Secrets must never be printed, stored, or copied into artifacts",
     ],
@@ -332,8 +331,8 @@ export function buildParallelAlgorithmInjection(resources: ChatAgentModeResource
   const workerCap = normalized.workerCap;
   const lanePlan = buildSharedLanePlan(normalized);
   const providerPolicy = normalized.providerPolicy;
-  const providerModel = normalized.providerModel;
   const authorityProvider = normalized.authorityProvider;
+  const providerModel = normalized.providerModel;
   const approvalPolicy = normalized.approvalPolicy;
   const resourceProfile = normalized.resourceProfile;
   const ensembleDefault = normalized.ensembleDefault;
@@ -356,9 +355,9 @@ export function buildParallelAlgorithmInjection(resources: ChatAgentModeResource
       "- Worker role selection: remove planner/orchestrator/architect/router from requiredRoles; cycle remaining roles across worker-N lanes; default to coder when no worker role remains.",
       `- Capability-agent routing: when active inventory exists and intent is parallelizable, non-simple, or taskType is bugfix/implement/migrate/plan/refactor/review/security/test/general, allocate up to ${lanePlan.capabilityNodes.length} independent lanes to active MCP, skills, and hooks routing.`,
       "- DeepSeek model-agent routing: for read-only, parallelizable, non-simple, or bugfix/implement/migrate/plan/refactor/review/security/test tasks, spawn read-only Flash quick-decomposition and Pro critique lanes when DeepSeek is available.",
-      "- Multi-provider model routing: lane assignments must name assignedProvider, assignedModel, assignedCapabilities, skills, hooks, and MCP; the configured OMK authority provider keeps root/integrator authority, while external providers default read-only/advisory.",
-      "- Provider lane defaults: explorer may use Qwen/DeepSeek fast read-only; planner may use Codex or authority-provider advisory; coder uses the configured authority provider with external advisory only; reviewer/qa/security may fan out across DeepSeek/Qwen/Codex; integrator is authority-provider only.",
-      "- DeepSeek direct lanes are read-only; Qwen/Codex direct lanes are also read-only unless selected as authority; file-affecting external output is advisory only; OMK owns edits, merge authority, shell/MCP authority, and final verification through the configured authority provider.",
+      "- Multi-provider model routing: lane assignments must name assignedProvider, assignedModel, assignedCapabilities, skills, hooks, and MCP; the configured authority provider keeps root/integrator authority while external providers default read-only/advisory.",
+      "- Provider lane defaults: explorer may use Qwen/DeepSeek fast read-only; planner may use Codex or configured-authority advisory; coder uses the configured authority provider with external advisory only; reviewer/qa/security may fan out across DeepSeek/Qwen/Codex; integrator stays on the configured authority provider.",
+    "- DeepSeek direct lanes are read-only; Qwen/Codex direct lanes are also read-only; file-affecting external output is advisory only; the configured OMK authority provider owns edits, merge authority, shell/MCP authority, and final verification.",
       "- Worker failure policy: worker/deepseek/capability lanes are retryable and may be skipped without blocking synthesis; security-audit blocks dependents; QA/design report risks without widening scope.",
       "- Synthesis: review-merge depends on every model, capability, and worker lane; DeepSeek/capability lane outputs are optional evidence, normal worker outputs are required unless explicitly marked unavailable.",
       "- Quality gate: for implement/bugfix/refactor/migrate/security/test/general, run the smallest proving check first; default command-pass gate is `npm run check`, then targeted tests, then full suite when risk warrants.",
@@ -466,7 +465,7 @@ function normalizeHarnessResources(resources: ChatAgentModeResources): ChatAgent
     resourceProfile: resources.resourceProfile ?? "runtime-default",
     approvalPolicy: resources.approvalPolicy ?? "interactive",
     providerPolicy: resources.providerPolicy ?? "auto",
-    authorityProvider: normalizeAuthorityProvider(resources),
+    authorityProvider: resources.authorityProvider ?? DEFAULT_AUTHORITY_PROVIDER,
     providerModel: resources.providerModel ?? "auto",
     ensembleDefault: resources.ensembleDefaultEnabled === false ? "disabled" : "enabled",
     scopes: {
@@ -647,6 +646,11 @@ export function buildChatAgentRuntimeMcpAllowlist(input: {
   const allowlist = new Set<string>(["omk-project"]);
   const rootMcp = selectRoleNames("coordinator", normalized.active.mcp, "mcp");
   for (const name of rootMcp) allowlist.add(name);
+  if (input.mode !== "chat") {
+    for (const lane of buildLaneCapabilityAssignments(normalized)) {
+      for (const name of lane.mcpServers) allowlist.add(name);
+    }
+  }
   return Array.from(allowlist);
 }
 
@@ -656,11 +660,14 @@ export function buildChatAgentRuntimeSkillAllowlist(input: {
 }): string[] | undefined {
   if (input.resources.skillsScope === "none") return undefined;
   const normalized = normalizeHarnessResources(input.resources);
-  const active = normalized.active.skills;
   const allowlist = new Set<string>();
-  for (const name of selectRoleNames("coordinator", active, "skill")) allowlist.add(name);
-  for (const preferred of ["omk-project-rules", "omk-context-broker", "omk-plan-first"]) {
-    if (active.includes(preferred)) allowlist.add(preferred);
+  for (const name of selectRoleNames("coordinator", normalized.active.skills, "skill")) {
+    allowlist.add(name);
+  }
+  if (input.mode !== "chat") {
+    for (const lane of buildLaneCapabilityAssignments(normalized)) {
+      for (const name of lane.skills) allowlist.add(name);
+    }
   }
   return Array.from(allowlist);
 }
@@ -670,40 +677,34 @@ function selectProviderForLane(
   resources: ChatAgentHarnessManifest["resources"]
 ): HarnessProviderSelection {
   const roleKey = role.replace(/^worker-\d+$/, "coder");
-  const requested = resources.providerPolicy;
   const authorityProvider = resources.authorityProvider;
+  const requested = resources.providerPolicy === "authority" ? authorityProvider : resources.providerPolicy;
   const model = resources.providerModel === "auto" ? "" : resources.providerModel;
-  const authorityModel = model || defaultModelForProvider(authorityProvider);
-  const authorityCandidates = authorityProviderCandidates(authorityProvider);
-
-  if (roleKey === "coder" || roleKey === "integrator" || roleKey === "orchestrator") {
-    return providerSelection(authorityProvider, authorityModel, "authority", authorityCapabilitiesForProvider(authorityProvider), authorityCandidates);
-  }
-  if (roleKey === "security") {
-    if (requested !== "auto" && requested !== "authority" && requested !== authorityProvider) {
-      return providerSelection(requested, model || defaultModelForProvider(requested), "read-only", ["read", "review", "security"], withAuthorityFallback([requested], authorityProvider));
+  if (roleKey === "coder" || roleKey === "integrator" || roleKey === "orchestrator" || roleKey === "security") {
+    if (roleKey === "security" && requested !== authorityProvider && requested !== "auto") {
+      return providerSelection(requested, model || defaultModelForProvider(requested), "read-only", ["read", "review", "security"], [requested, authorityProvider]);
     }
-    return providerSelection(authorityProvider, authorityModel, "authority", authorityCapabilitiesForProvider(authorityProvider), authorityCandidates);
+    return providerSelection(authorityProvider, model || defaultModelForProvider(authorityProvider), "authority", ["write", "shell", "mcp", "merge"], [authorityProvider]);
   }
-  if (requested !== "auto" && requested !== "authority" && requested !== authorityProvider) {
+  if (requested !== "auto" && requested !== authorityProvider) {
     return providerSelection(
       requested,
       model || defaultModelForProvider(requested),
       roleKey === "planner" && requested === "codex" ? "advisory" : "read-only",
       capabilitiesForProvider(requested),
-      withAuthorityFallback([requested], authorityProvider)
+      [requested, authorityProvider]
     );
   }
   if (roleKey === "explorer" || roleKey === "researcher" || roleKey === "vision-debugger") {
-    return providerSelection("deepseek", model || "deepseek-v4-flash", "read-only", ["read", "research", "web"], withAuthorityFallback(["deepseek", "qwen", "openrouter"], authorityProvider));
+    return providerSelection("deepseek", model || "deepseek-v4-flash", "read-only", ["read", "research", "web"], ["deepseek", "qwen", "openrouter", authorityProvider]);
   }
   if (roleKey === "planner") {
-    return providerSelection("codex", model || "codex-cli", "advisory", ["plan", "review"], withAuthorityFallback(["codex"], authorityProvider));
+    return providerSelection("codex", model || "codex-cli", "advisory", ["plan", "review"], ["codex", authorityProvider]);
   }
   if (roleKey === "reviewer" || roleKey === "qa" || roleKey === "tester") {
-    return providerSelection("deepseek", model || "deepseek-v4-pro", "read-only", ["review", "qa", "advisory"], withAuthorityFallback(["deepseek", "qwen", "openrouter", "codex"], authorityProvider));
+    return providerSelection("deepseek", model || "deepseek-v4-pro", "read-only", ["review", "qa", "advisory"], ["deepseek", "qwen", "openrouter", "codex", authorityProvider]);
   }
-  return providerSelection(authorityProvider, authorityModel, "authority", ["authority"], authorityCandidates);
+  return providerSelection(authorityProvider, model || defaultModelForProvider(authorityProvider), "authority", ["authority"], [authorityProvider]);
 }
 
 function providerSelection(
@@ -734,38 +735,13 @@ function uniqueProviderCandidates(values: string[]): string[] {
   return out;
 }
 
-function normalizeAuthorityProvider(resources: ChatAgentModeResources): string {
-  const explicit = normalizeProviderId(resources.authorityProvider ?? process.env.OMK_AUTHORITY_PROVIDER);
-  if (explicit !== "auto") return explicit;
-  const legacy = normalizeProviderId(process.env.OMK_PROVIDER_AUTHORITY);
-  if (legacy !== "auto" && legacy !== "direct" && legacy !== "advisory") return legacy;
-  return DEFAULT_AUTHORITY_PROVIDER;
-}
-
-function withAuthorityFallback(candidates: string[], authorityProvider: string): string[] {
-  return uniqueProviderCandidates([...candidates, ...authorityProviderCandidates(authorityProvider)]);
-}
-
-function authorityProviderCandidates(authorityProvider: string): string[] {
-  const legacyKimiFallback = process.env.OMK_LEGACY_CHAT === "1" || process.env.OMK_LEGACY_KIMI_FALLBACK === "1";
-  if (authorityProvider === "auto") {
-    return uniqueProviderCandidates([DEFAULT_AUTHORITY_PROVIDER, "codex", "qwen", "openrouter", ...(legacyKimiFallback ? ["kimi"] : [])]);
-  }
-  return uniqueProviderCandidates([authorityProvider, ...(legacyKimiFallback && authorityProvider !== "kimi" ? ["kimi"] : [])]);
-}
-
-function authorityCapabilitiesForProvider(_provider: string): string[] {
-  return ["write", "shell", "mcp", "merge"];
-}
-
 function defaultModelForProvider(provider: string): string {
-  if (provider === "auto") return "auto";
   if (provider === "deepseek") return "deepseek-v4-flash";
   if (provider === "qwen") return "qwen3-max";
   if (provider === "codex") return "codex-cli";
   if (provider === "openrouter") return "openrouter/auto";
-  if (provider === "kimi") return "kimi-k2.6";
-  return "auto";
+  if (provider === "mimo") return "mimo-v2.5-pro";
+  return "kimi-k2.6";
 }
 
 function capabilitiesForProvider(provider: string): string[] {
@@ -811,7 +787,6 @@ type CapabilityRouteKind = "skill" | "mcp" | "hook";
 
 const ROLE_ROUTE_KEYWORDS: Record<CapabilityRouteKind, Record<string, string[]>> = {
   skill: {
-    coordinator: ["project", "context", "plan", "repo", "rules"],
     explorer: ["explore", "repo", "context", "research"],
     researcher: ["research", "docs", "context", "repo"],
     "vision-debugger": ["vision", "design", "screenshot", "browser", "web"],
@@ -825,7 +800,6 @@ const ROLE_ROUTE_KEYWORDS: Record<CapabilityRouteKind, Record<string, string[]>>
     ontology: ["memory", "context", "graph"],
   },
   mcp: {
-    coordinator: ["omk", "memory", "filesystem"],
     explorer: ["omk", "filesystem", "git", "github", "web", "bridge", "browser", "chrome"],
     researcher: ["context", "fetch", "firecrawl", "github", "web", "bridge", "browser", "chrome", "page"],
     "vision-debugger": ["web", "bridge", "browser", "chrome", "screenshot", "playwright"],
@@ -944,7 +918,7 @@ function renderChatAgentYaml(baseAgentRel: string, resources: ChatAgentModeResou
     `    OMK_CONTEXT_BUDGET: "normal"`,
     `    OMK_ROUTE_READ_ONLY: "false"`,
     `    OMK_PROVIDER_POLICY: ${JSON.stringify(resources.providerPolicy ?? "auto")}`,
-    `    OMK_PROVIDER_AUTHORITY: ${JSON.stringify(normalizeAuthorityProvider(resources))}`,
+    `    OMK_PROVIDER_AUTHORITY: ${JSON.stringify(resources.authorityProvider ?? DEFAULT_AUTHORITY_PROVIDER)}`,
     `    OMK_PROVIDER_MODEL: ${JSON.stringify(resources.providerModel ?? "auto")}`,
   ];
   if (subagents.length) {
@@ -965,7 +939,7 @@ function defaultRootPrompt(): string {
   return [
     "# open_multi-agent_kit Root Agent",
     "",
-    "You are the OMK root orchestrator for open_multi-agent_kit — a provider-neutral orchestration layer that turns OMK into a bounded coding team.",
+    "You are the open_multi-agent_kit root coordinator — a provider-neutral orchestration layer that turns the configured authority provider into a bounded coding team.",
     "",
     "Apply AGENTS.md silently, keep MCP/skills/hooks scoped by runtime policy, launch independent subagents in parallel for non-trivial work, and verify before completion.",
   ].join("\n");

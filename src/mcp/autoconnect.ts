@@ -62,7 +62,8 @@ export async function runMcpAutoConnect(options: McpAutoConnectOptions = {}): Pr
   const fixes = options.fix
     ? await repairMcpDoctorIssues({ dryRun: Boolean(options.dryRun), global: Boolean(options.global) })
     : undefined;
-  const doctor = await buildMcpDoctorReport({ env });
+  void env;
+  const doctor = await buildMcpDoctorReport();
   return mapDoctorToAutoConnectReport(doctor, { preflight, fixes });
 }
 

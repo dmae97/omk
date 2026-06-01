@@ -1042,29 +1042,25 @@ export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskR
           env: mergedEnv,
           input: promptInput,
           logPath,
-          onStdout: (chunk, io) => {
+          onStdout: (chunk: string) => {
             const safeChunk = sanitizeUserVisibleOutput(chunk);
             options.onOutput?.(safeChunk);
             thinkingHandler?.(chunk);
             const decision = continuePromptGuard.process(chunk);
             if (decision.sendEnter) {
-              io?.writeStdin("\n");
-              process.stderr.write("[omk] auto-entered Kimi continue prompt\n");
+              process.stderr.write("[omk] Kimi continue prompt detected; streaming shell does not expose stdin in this path\n");
             }
             if (decision.exceeded) {
               process.stderr.write(`[omk] ${decision.reason}\n`);
-              io?.terminate(decision.reason ?? "Kimi continue prompt loop detected");
             }
           },
-          onStderr: (chunk, io) => {
+          onStderr: (chunk: string) => {
             const decision = continuePromptGuard.process(chunk);
             if (decision.sendEnter) {
-              io?.writeStdin("\n");
-              process.stderr.write("[omk] auto-entered Kimi continue prompt\n");
+              process.stderr.write("[omk] Kimi continue prompt detected; streaming shell does not expose stdin in this path\n");
             }
             if (decision.exceeded) {
               process.stderr.write(`[omk] ${decision.reason}\n`);
-              io?.terminate(decision.reason ?? "Kimi continue prompt loop detected");
             }
           },
           signal,

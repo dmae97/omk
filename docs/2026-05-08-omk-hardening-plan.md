@@ -7,7 +7,7 @@ Scope: hardening areas found from the current repo/package surface and executed 
 
 - Public version is v1.1.6.
 - Provider routing exists behind `--provider auto|kimi` on run/parallel/DAG replay paths.
-- DeepSeek commands exist for API setup, enable/disable, and availability checks; Kimi remains final authority.
+- DeepSeek commands exist for API setup, enable/disable, and availability checks; the configured authority provider remains final authority.
 - `omk graph view` can render local graph-state HTML.
 - `omk goal` persists goals and now writes actionable planner DAG plans instead of a placeholder `goal plan`.
 

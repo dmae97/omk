@@ -1,4 +1,9 @@
-import type { RunCapabilityAssignment, RunGoalState, RunProgressEstimate, RunState } from "../contracts/orchestration.js";
+import type {
+  RunCapabilityAssignment,
+  RunProgressEstimate,
+  RunRouteDecision,
+  RunState,
+} from "../contracts/orchestration.js";
 import type { Dag, DagNodeDefinition } from "./dag.js";
 import { createDag } from "./dag.js";
 import { estimateRunProgress } from "./eta.js";
@@ -13,7 +18,8 @@ export function createRoutedRunState(input: {
   goal?: RunState["goal"];
   goalObjective?: string;
   goalSnapshot?: RunState["goalSnapshot"];
-  routeDecision?: RunState["routeDecision"];
+  routeDecision?: RunRouteDecision;
+  capabilityAssignments?: RunState["capabilityAssignments"];
 }): RunState {
   const dag = createDag({ nodes: input.nodes });
   const nodes = dag.nodes.map((node) => ({ ...node }));
@@ -29,25 +35,71 @@ export function createRoutedRunState(input: {
       fallbackObjective: input.goalObjective,
     }),
     goalSnapshot: input.goalSnapshot,
-    routeDecision: input.routeDecision,
     nodes,
+    routeDecision: input.routeDecision,
+    capabilityAssignments: input.capabilityAssignments,
     estimate: estimateFor(nodes, input.startedAt, input.workerCount),
   });
+}
+
+export function assignNodeCapabilitiesToRunState(
+  state: RunState,
+  assignments?: RunState["capabilityAssignments"]
+): RunState {
+  const existingAssignments = capabilityAssignmentRecord(state.capabilityAssignments);
+  const explicitAssignments = capabilityAssignmentRecord(assignments);
+  const computedAssignments = Object.fromEntries(
+    state.nodes
+      .map((node): [string, RunCapabilityAssignment] | null => {
+        const routing = node.routing;
+        if (!routing) return null;
+        const assigned = routing.assignedCapabilities;
+        const skills = uniqueCapabilityNames(assigned?.skills ?? routing.skills ?? []);
+        const mcpServers = uniqueCapabilityNames(assigned?.mcpServers ?? routing.mcpServers ?? []);
+        const hooks = uniqueCapabilityNames(assigned?.hooks ?? routing.hooks ?? []);
+        const tools = uniqueCapabilityNames(assigned?.tools ?? routing.tools ?? []);
+        if (skills.length === 0 && mcpServers.length === 0 && hooks.length === 0 && tools.length === 0) {
+          return null;
+        }
+        return [node.id, {
+          skills,
+          mcpServers,
+          hooks,
+          ...(tools.length > 0 ? { tools } : {}),
+          source: routing.autoSpawned ? "capability-router" : "routing",
+          rationale: routing.rationale,
+        }];
+      })
+      .filter((entry): entry is [string, RunCapabilityAssignment] => entry !== null)
+  );
+
+  const capabilityAssignments = {
+    ...existingAssignments,
+    ...computedAssignments,
+    ...explicitAssignments,
+  };
+  return Object.keys(capabilityAssignments).length > 0
+    ? { ...state, capabilityAssignments }
+    : state;
 }
 
 export function createDagFromRunState(state: RunState): Dag {
   return createDag({
     nodes: state.nodes.map((node): DagNodeDefinition => {
-      const definition: Partial<typeof node> = { ...node };
-      delete definition.status;
-      delete definition.retries;
-      delete definition.startedAt;
-      delete definition.completedAt;
-      delete definition.durationMs;
-      delete definition.attempts;
-      delete definition.blockedReason;
-      delete definition.evidence;
-      return definition as DagNodeDefinition;
+      /* eslint-disable @typescript-eslint/no-unused-vars */
+      const {
+        status,
+        retries,
+        startedAt,
+        completedAt,
+        durationMs,
+        attempts,
+        blockedReason,
+        evidence,
+        ...definition
+      } = node;
+      /* eslint-enable @typescript-eslint/no-unused-vars */
+      return definition;
     }),
   });
 }
@@ -115,6 +167,14 @@ function pickRuntimeFields(node: RunState["nodes"][number] | undefined): Partial
   };
 }
 
+export interface RunGoalState {
+  id?: string;
+  title?: string;
+  objective: string;
+  successCriteria: Array<{ id: string; description: string; requirement: string }>;
+  status: "planned";
+}
+
 export function buildRunGoalState(input: {
   goalId?: string;
   goalSnapshot?: RunState["goalSnapshot"];
@@ -135,39 +195,15 @@ export function buildRunGoalState(input: {
   };
 }
 
-export function assignNodeCapabilitiesToRunState(state: RunState): RunState {
-  const computedAssignments = Object.fromEntries(
-    state.nodes
-      .map((node): [string, RunCapabilityAssignment] | null => {
-        const routing = node.routing;
-        if (!routing) return null;
-        const assigned = routing.assignedCapabilities;
-        const skills = uniqueCapabilityNames(assigned?.skills ?? routing.skills ?? []);
-        const mcpServers = uniqueCapabilityNames(assigned?.mcpServers ?? routing.mcpServers ?? []);
-        const hooks = uniqueCapabilityNames(assigned?.hooks ?? routing.hooks ?? []);
-        const tools = uniqueCapabilityNames(assigned?.tools ?? routing.tools ?? []);
-        if (skills.length === 0 && mcpServers.length === 0 && hooks.length === 0 && tools.length === 0) {
-          return null;
-        }
-        return [node.id, {
-          skills,
-          mcpServers,
-          hooks,
-          ...(tools.length > 0 ? { tools } : {}),
-          source: routing.autoSpawned ? "capability-router" : "routing",
-          rationale: routing.rationale,
-        }];
-      })
-      .filter((entry): entry is [string, RunCapabilityAssignment] => entry !== null)
-  );
-
-  const capabilityAssignments = {
-    ...(state.capabilityAssignments ?? {}),
-    ...computedAssignments,
-  };
-  return Object.keys(capabilityAssignments).length > 0
-    ? { ...state, capabilityAssignments }
-    : state;
+function capabilityAssignmentRecord(
+  assignments: RunState["capabilityAssignments"] | undefined
+): Record<string, RunCapabilityAssignment> {
+  if (!assignments) return {};
+  if (!Array.isArray(assignments)) return { ...assignments };
+  return Object.fromEntries(assignments.flatMap((assignment, index) => {
+    const key = assignment.nodeId ?? assignment.agent ?? assignment.role ?? `assignment-${index}`;
+    return key ? [[key, assignment]] : [];
+  }));
 }
 
 function firstNonEmptyLine(value: string | undefined): string | undefined {

@@ -41,13 +41,13 @@ export function createOpenAICompatibleReadOnlyTaskRunner(
       const risk = inferNodeRisk(node);
       const advisoryMode = env.OMK_PROVIDER_AUTHORITY === "advisory" && risk === "write";
       if (risk !== "read" && !advisoryMode) {
-        return deny(node, `${options.provider} runner is read-only/advisory; write/shell/merge authority stays on authority provider`);
+        return deny(node, `${options.provider} runner is read-only/advisory; write/shell/merge authority stays on the authority provider`);
       }
       if (node.routing?.requiresToolCalling === true || node.routing?.requiresMcp === true) {
         return deny(node, `${options.provider} runner does not receive tool or MCP authority`);
       }
       if (!options.apiKey) {
-        return deny(node, `${options.provider} API key is missing (${options.apiKeyEnv ?? "provider env"}); primary fallback is required`);
+        return deny(node, `${options.provider} API key is missing (${options.apiKeyEnv ?? "provider env"}); provider-neutral authority fallback is required`);
       }
 
       const model = env.OMK_PROVIDER_MODEL || options.model;
@@ -61,7 +61,7 @@ export function createOpenAICompatibleReadOnlyTaskRunner(
               role: "system",
               content: [
                 `You are a ${options.provider} read-only/advisory worker inside OMK.`,
-                "OMK is the root orchestrator; the configured authority provider owns final write/merge decisions.",
+                "OMK and the configured authority provider are the root orchestrator and final authority.",
                 "Do not claim file writes, shell execution, secret access, MCP access, or merge authority.",
                 advisoryMode ? "For this file-affecting node, provide advisory strategy only." : "",
                 "Return concise findings, evidence, risks, and recommended authority-provider follow-up.",
@@ -141,13 +141,13 @@ function buildNodePrompt(
     `Authority: ${env.OMK_PROVIDER_AUTHORITY ?? "direct"}`,
     `Provider route reason: ${env.OMK_PROVIDER_ROUTE_REASON ?? ""}`,
     `Routing rationale: ${node.routing?.rationale ?? ""}`,
-    renderPromptDigest("Goal context digest from OMK", env.OMK_GOAL_CONTEXT ?? env.OMK_GOAL, {
+    renderPromptDigest("Goal context digest from authority provider", env.OMK_GOAL_CONTEXT ?? env.OMK_GOAL, {
       maxKeywords: 18,
       maxPhrases: 3,
     }),
-    renderList("Skills visible to the authority provider", node.routing?.skills ?? []),
-    renderList("MCP hints reserved for the authority provider", node.routing?.mcpServers ?? [], { showWhenEmpty: true }),
-    renderList("Tool hints reserved for the authority provider", node.routing?.tools ?? [], { showWhenEmpty: true }),
+    renderList("Skills visible to authority provider", node.routing?.skills ?? []),
+    renderList("MCP hints visible to authority provider only", node.routing?.mcpServers ?? [], { showWhenEmpty: true }),
+    renderList("Tool hints visible to authority provider only", node.routing?.tools ?? [], { showWhenEmpty: true }),
     "Required output:",
     "- Summary",
     "- Evidence or file/symbol references if known",

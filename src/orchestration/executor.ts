@@ -6,14 +6,14 @@ import { createStatePersister } from "./state-persister.js";
 import { createEnsembleTaskRunner, type EnsemblePolicy } from "./ensemble.js";
 import { estimateRunProgress } from "./eta.js";
 import { dagNodeRoutingEnv } from "./routing.js";
-import { buildTaskRunContext, envFromWorkerManifest } from "../runtime/worker-manifest.js";
 import { getOmkResourceSettings } from "../util/resource-profile.js";
 import { checkEvidenceGates } from "./evidence-gate.js";
 import { invalidateTaskDagGraph } from "./task-graph.js";
 import { resolveTimeoutMs } from "../util/timeout-config.js";
 import { createNodeMonitorEngine } from "./node-monitor.js";
-import type { DeepSeekModelTier, DeepSeekParticipation, ProviderAssistMetadata, ProviderId } from "../providers/types.js";
+import type { DeepSeekModelTier, DeepSeekParticipation, ProviderId } from "../providers/types.js";
 import { appendEvent } from "../util/events-logger.js";
+import { buildTaskRunContext, envFromWorkerManifest } from "../runtime/worker-manifest.js";
 
 export interface ExecutorOptions {
   persister?: StatePersister;
@@ -145,6 +145,26 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
     };
   }
 
+  function isLocalSystemNode(node: DagNode): boolean {
+    return node.id === "bootstrap" || node.role === "omk" || node.routing?.actionAtom?.verb === "bootstrap";
+  }
+
+  function markLocalSystemNodesDone(dag: Dag, state: RunState, options: RunOptions): void {
+    let changed = false;
+    for (const node of dag.nodes) {
+      if (!isLocalSystemNode(node)) continue;
+      if (node.status === "done") continue;
+      node.status = "done";
+      node.startedAt ??= state.startedAt;
+      node.completedAt ??= state.startedAt;
+      node.durationMs ??= 0;
+      changed = true;
+    }
+    if (changed) {
+      refreshState(state, dag, options);
+    }
+  }
+
   function refreshState(state: RunState, dag: Dag, options: RunOptions): void {
     state.nodes = dag.nodes.map((n) => ({
       ...n,
@@ -188,7 +208,6 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
 
   async function commitState(state: RunState, opts?: { mustPersist?: boolean }): Promise<void> {
     latestSnapshot = cloneState(state);
-    emit(cloneState(latestSnapshot));
     // Coalesce: skip intermediate snapshots when queue is full,
     // but always persist final/must-persist snapshots.
     if (!opts?.mustPersist && commitQueueSize >= MAX_COMMIT_QUEUE) {
@@ -278,11 +297,6 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
     if (isProviderFallback(fallback)) {
       latestAttempt.fallbackFrom = fallback.from;
       latestAttempt.fallbackReason = fallback.reason;
-    }
-
-    const assist = result.metadata?.providerAssist as ProviderAssistMetadata | undefined;
-    if (assist && assist.participation === "advisory") {
-      latestAttempt.providerAssist = assist;
     }
   }
 
@@ -374,42 +388,40 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
     bumpActivity(state);
     refreshState(state, dag, options);
     await commitState(state);
+    emit(cloneState(state));
     emitTelemetry({ type: "lane.started", runId: options.runId, nodeId: node.id, laneId: node.id, data: { role: node.role, name: node.name } });
     emitNodeStart(node);
 
     const resources = await getOmkResourceSettings();
-    const runContext = buildTaskRunContext({
-      runId: options.runId,
-      ...(state.goalId ? { goalId: state.goalId } : {}),
-      root: options.worktreeRoot ?? process.cwd(),
-      node,
-      objective: state.goalSnapshot?.objective ?? node.name,
-      scopes: {
-        mcp: resources.mcpScope,
-        skills: resources.skillsScope,
-        hooks: resources.hooksScope,
-      },
-      toolPlane: {
-        mcpServers: node.routing?.mcpServers ?? node.routing?.assignedCapabilities?.mcpServers,
-        skills: node.routing?.skills ?? node.routing?.assignedCapabilities?.skills,
-        hooks: node.routing?.hooks ?? node.routing?.assignedCapabilities?.hooks,
-        tools: node.routing?.tools ?? node.routing?.assignedCapabilities?.tools,
-        requiresRuntimeMcp: node.routing?.requiresMcp,
-      },
-      model: node.routing?.providerModel,
-    });
     const env: Record<string, string> = {
       OMK_NODE_ID: node.id,
       OMK_RUN_ID: options.runId,
-      OMK_NODE_ROLE: node.role,
       OMK_ROLE: node.role,
+      OMK_NODE_ROLE: node.role,
+      OMK_PROVIDER_MODEL: node.routing?.providerModel ?? "",
       OMK_MCP_ENABLED: resources.mcpScope === "none" ? "false" : "true",
       OMK_SKILLS_ENABLED: resources.skillsScope === "none" ? "false" : "true",
       OMK_HOOKS_ENABLED: resources.hooksScope === "none" ? "false" : "true",
       ...dagNodeRoutingEnv(node, dag),
-      ...envFromWorkerManifest(runContext.worker),
       ...etaEnv(state.estimate),
     };
+    const runContext = buildTaskRunContext({
+      runId: options.runId,
+      root: options.worktreeRoot ?? process.cwd(),
+      goalId: state.goalId,
+      objective: state.goalSnapshot?.objective ?? state.goal?.objective ?? node.name,
+      node,
+      toolPlane: {
+        mcpServers: node.routing?.mcpServers ?? node.routing?.assignedCapabilities?.mcpServers ?? [],
+        skills: node.routing?.skills ?? node.routing?.assignedCapabilities?.skills ?? [],
+        hooks: node.routing?.hooks ?? node.routing?.assignedCapabilities?.hooks ?? [],
+        tools: node.routing?.tools ?? node.routing?.assignedCapabilities?.tools ?? [],
+        requiresRuntimeMcp: node.routing?.requiresMcp === true,
+      },
+      selectedRuntimeId: node.routing?.providerModel,
+      model: node.routing?.providerModel,
+    });
+    Object.assign(env, envFromWorkerManifest(runContext.worker));
 
     let result: TaskResult;
     let ignoredAbortEvidence: DagNodeEvidence | undefined;
@@ -619,6 +631,7 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
       });
     }
     refreshState(state, dag, options);
+    emit(cloneState(state));
     await commitState(state);
   }
 
@@ -684,6 +697,7 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
       } else {
         state = buildState(dag, options);
       }
+      markLocalSystemNodesDone(dag, state, options);
       await commitState(state);
 
       const runningMap = new Map<string, { promise: Promise<void>; abort: () => void }>();

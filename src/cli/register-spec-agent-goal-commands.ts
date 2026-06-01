@@ -323,17 +323,29 @@ export function registerSpecAgentGoalCommands(program: Command): void {
       }
     });
   goal
-    .command("auto <goal-id>")
-    .description("Start the wake daemon for a goal")
-    .option("--max-iterations <n>", "Maximum daemon iterations")
-    .option("--max-hours <n>", "Maximum wall-clock hours")
-    .option("--approval-policy <policy>", "Approval policy (auto | interactive)", "interactive")
+    .command("auto [goal-id]")
+    .description("Automatically continue/replan a goal within bounded iterations")
+    .option("--workers <n>", "Worker count", "auto")
+    .option("--run-id <id>", "Run ID")
+    .option("--from-run-id <id>", "Run ID to read as continuation context")
+    .option("--mcp-scope <all|project|none>", "MCP scope for this goal auto DAG (all | project | none)")
     .option("--provider <provider>", "provider policy (auto | authority | kimi | deepseek | codex | qwen | openrouter)", "auto")
-    .option("--json", t("cmd.goalJsonOption"))
+    .option("--model <model>", "provider model or provider/model override")
+    .option("--approval-policy <policy>", t("cmd.parallelApprovalOption"), "interactive")
+    .option("--timeout-preset <preset>", t("cmd.runTimeoutPresetOption"))
+    .option("--watch", t("cmd.parallelWatchOption"))
+    .option("--no-watch", t("cmd.parallelNoWatchOption"))
+    .option("--view <mode>", "Display mode: cockpit | table | compact", "cockpit")
+    .option("--max-auto-continue-iterations <n>", "maximum automatic continue/replan iterations")
     .action(async (goalId, options) => {
-      const { goalAutoCommand } = await import("../commands/goal.js");
+      const globalOpts = program.opts();
+      const { goalContinueCommand } = await import("../commands/goal.js");
       try {
-        await goalAutoCommand(goalId, options);
+        await goalContinueCommand(goalId, {
+          ...options,
+          runId: options.runId ?? globalOpts.runId,
+          watch: options.watch,
+        });
       } catch (err) {
         if (err instanceof CliError) {
           if (process.exitCode === undefined) process.exitCode = err.exitCode;
@@ -344,66 +356,61 @@ export function registerSpecAgentGoalCommands(program: Command): void {
     });
   goal
     .command("watch <goal-id>")
-    .description("Print daemon state and wake policy for a goal")
+    .description("Start the in-process goal daemon for a goal")
+    .option("--provider <provider>", "provider policy (auto | authority | kimi | deepseek | codex | qwen | openrouter)", "auto")
+    .option("--approval-policy <policy>", t("cmd.parallelApprovalOption"), "interactive")
+    .option("--interval-ms <ms>", "Daemon loop interval in milliseconds")
+    .option("--max-iterations <n>", "Maximum daemon iterations")
     .option("--json", t("cmd.goalJsonOption"))
     .action(async (goalId, options) => {
-      const { goalWatchCommand } = await import("../commands/goal.js");
-      try {
-        await goalWatchCommand(goalId, options);
-      } catch (err) {
-        if (err instanceof CliError) {
-          if (process.exitCode === undefined) process.exitCode = err.exitCode;
-          return;
-        }
-        throw err;
-      }
+      const { defaultGoalDaemon } = await import("../goal/goal-daemon.js");
+      const { goalVerifyCommand, goalContinueCommand, goalBlockCommand } = await import("../commands/goal.js");
+      const started = defaultGoalDaemon.start(goalId, {
+        provider: options.provider,
+        approvalPolicy: options.approvalPolicy,
+        intervalMs: options.intervalMs ? Number.parseInt(options.intervalMs, 10) : undefined,
+        maxIterations: options.maxIterations ? Number.parseInt(options.maxIterations, 10) : undefined,
+        onVerify: async (id) => { await goalVerifyCommand(id, { json: true }); },
+        onContinue: async (id, runOptions) => { await goalContinueCommand(id, runOptions); },
+        onBlock: async (id, reason) => { await goalBlockCommand(id, { reason, json: true }); },
+      });
+      const payload = { goalId, running: started };
+      if (options.json) console.log(JSON.stringify(payload, null, 2));
+      else console.log(started ? `Goal daemon started for ${goalId}` : `Goal daemon already running for ${goalId}`);
     });
   goal
     .command("wake <goal-id>")
-    .description("Manually wake a sleeping goal daemon")
+    .description("Wake a sleeping goal daemon")
+    .option("--reason <text>", "Wake reason")
     .option("--json", t("cmd.goalJsonOption"))
     .action(async (goalId, options) => {
-      const { goalWakeCommand } = await import("../commands/goal.js");
-      try {
-        await goalWakeCommand(goalId, options);
-      } catch (err) {
-        if (err instanceof CliError) {
-          if (process.exitCode === undefined) process.exitCode = err.exitCode;
-          return;
-        }
-        throw err;
-      }
+      const { defaultGoalDaemon } = await import("../goal/goal-daemon.js");
+      const ok = defaultGoalDaemon.wake(goalId, options.reason);
+      const payload = { goalId, woken: ok };
+      if (options.json) console.log(JSON.stringify(payload, null, 2));
+      else console.log(ok ? `Goal daemon woken for ${goalId}` : `No sleeping daemon for ${goalId}`);
     });
   goal
     .command("sleep <goal-id>")
-    .description("Put a running goal daemon into sleep mode")
+    .description("Pause a running goal daemon until it is woken")
     .option("--json", t("cmd.goalJsonOption"))
     .action(async (goalId, options) => {
-      const { goalSleepCommand } = await import("../commands/goal.js");
-      try {
-        await goalSleepCommand(goalId, options);
-      } catch (err) {
-        if (err instanceof CliError) {
-          if (process.exitCode === undefined) process.exitCode = err.exitCode;
-          return;
-        }
-        throw err;
-      }
+      const { defaultGoalDaemon } = await import("../goal/goal-daemon.js");
+      const ok = defaultGoalDaemon.sleep(goalId);
+      const payload = { goalId, sleeping: ok };
+      if (options.json) console.log(JSON.stringify(payload, null, 2));
+      else console.log(ok ? `Goal daemon sleeping for ${goalId}` : `No running daemon for ${goalId}`);
     });
   goal
-    .command("daemon <subcommand>")
-    .description("Global daemon control: start | stop | status")
+    .command("daemon [goal-id]")
+    .description("Show goal daemon status")
     .option("--json", t("cmd.goalJsonOption"))
-    .action(async (subcommand, options) => {
-      const { goalDaemonCommand } = await import("../commands/goal.js");
-      try {
-        await goalDaemonCommand(subcommand as "start" | "stop" | "status", options);
-      } catch (err) {
-        if (err instanceof CliError) {
-          if (process.exitCode === undefined) process.exitCode = err.exitCode;
-          return;
-        }
-        throw err;
-      }
+    .action(async (goalId, options) => {
+      const { defaultGoalDaemon } = await import("../goal/goal-daemon.js");
+      const payload = goalId
+        ? { goalId, status: defaultGoalDaemon.getStatus(goalId) }
+        : { running: defaultGoalDaemon.listRunning() };
+      if (options.json) console.log(JSON.stringify(payload, null, 2));
+      else console.log(JSON.stringify(payload, null, 2));
     });
 }

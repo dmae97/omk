@@ -32,7 +32,7 @@ export function createDeepSeekReadOnlyTaskRunner(
         env.OMK_DEEPSEEK_PARTICIPATION === "advisory" &&
         risk === "write";
       if (risk !== "read" && !advisoryFileMode) {
-        return deny(node, "DeepSeek runner is read-only; write/shell/merge nodes stay on authority provider");
+        return deny(node, "DeepSeek runner is read-only; write/shell/merge nodes stay on the authority provider");
       }
       if (node.routing?.requiresToolCalling === true || node.routing?.requiresMcp === true) {
         return deny(node, "DeepSeek runner does not receive tool or MCP authority in alpha");
@@ -53,13 +53,13 @@ export function createDeepSeekReadOnlyTaskRunner(
               role: "system",
               content: [
                 "You are a DeepSeek read-only worker inside OMK.",
-                "The authority provider is the main orchestrator and final reviewer.",
+                "The configured authority provider is the main orchestrator and final reviewer.",
                 "Do not claim file writes, shell execution, secret access, MCP access, or merge authority.",
                 "Do not echo the original user input or objective; synthesize from digests, node state, and evidence.",
                 advisoryFileMode
-                  ? "For this file-affecting node, provide advisory patch strategy only; the authority provider will perform actual file edits."
+                  ? "For this file-affecting node, provide advisory patch strategy only; the configured authority provider will perform actual file edits."
                   : "",
-                "Return concise findings, evidence, risks, and recommended authority provider follow-up.",
+                "Return concise findings, evidence, risks, and recommended authority-provider follow-up.",
               ].filter(Boolean).join(" ") || "You are a DeepSeek read-only worker. Provide analysis for the given node.",
             },
             { role: "user", content: buildDeepSeekNodePrompt(node, env, options.promptPrefix) },
@@ -134,7 +134,7 @@ function buildDeepSeekNodePrompt(
     "- Summary",
     "- Evidence or file/symbol references if known",
     "- Risks/unknowns",
-    "- Recommended authority provider follow-up",
+    "- Recommended authority-provider follow-up",
     "- Do not echo the original user input; return synthesized findings only",
   ].filter((section): section is string => Boolean(section)).join("\n");
 

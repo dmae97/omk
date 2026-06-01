@@ -1,8 +1,3 @@
-import { providerDisplayName, isExternalProvider, genericAdvisoryProviderForDecision, requestedProviderForAuthorityDecision } from "./runner/helpers.js";
-import { runGenericProviderAdvisory } from "./runner/execution.js";
-import { providerTraceEnv, buildProviderInvocationKey, deepseekRouteEnv, deepseekMetadata, providerModelEnv, providerModelMetadata } from "./runner/env.js";
-import { providerLaneSkipResult, providerExceptionResult, summarizeFailures, authorityUnavailableResult } from "./runner/results.js";
-import { sleepWithAbort, runDeepSeekAdvisory, deepseekPlanFromNode } from "./runner/deepseek-helpers.js";
 import type { TaskResult, TaskRunner } from "../contracts/orchestration.js";
 import type { TaskRunContext } from "../contracts/worker-context.js";
 import type { DagNode } from "../orchestration/dag.js";
@@ -14,10 +9,11 @@ import {
   normalizeProviderComplexity,
   routeProvider,
   selectDeepSeekModelTier,
-  recordModelOutcome,
 } from "./router.js";
 import type {
   DeepSeekRoutePlan,
+  ProviderAssistMetadata,
+  ProviderFailureKind,
   ProviderId,
   ProviderModelDefault,
   ProviderModelRef,
@@ -26,7 +22,8 @@ import type {
   ProviderRouteInput,
   ProviderTaskMetadata,
 } from "./types.js";
-import { DEFAULT_AUTHORITY_PROVIDER, withProviderMetadata } from "./types.js";
+import { DEFAULT_AUTHORITY_PROVIDER } from "./types.js";
+import { withProviderMetadata } from "./types.js";
 import {
   classifyDeepSeekFailure,
   isDeepSeekPaymentOrAvailabilityFailure,
@@ -38,32 +35,18 @@ import {
   formatKimiProviderFailureHint,
   type KimiProviderFailureDiagnosis,
 } from "../kimi/runner.js";
-import { appendEvent } from "../util/events-logger.js";
-import {
-  buildProviderStatsKey,
-  updateProviderModelStats,
-  saveProviderModelStats,
-  type ProviderModelStats,
-} from "./provider-stats.js";
 
 export interface ProviderTaskRunnerOptions {
-  /** Provider-neutral authority runner for write/shell/merge lanes. */
-  authorityRunner?: TaskRunner;
-  /** Kimi runner. Backward-compatible alias for authorityRunner when authorityProvider is "kimi". */
-  kimiRunner?: TaskRunner;
+  kimiRunner: TaskRunner;
   deepseekRunner?: TaskRunner;
+  authorityProvider?: ProviderId;
+  authorityRunner?: TaskRunner;
   providerRunners?: Partial<Record<ProviderId, TaskRunner>>;
   providerModels?: Partial<Record<ProviderId, ProviderModelDefault>>;
   providerHealth?: ProviderHealthRegistry;
   providerPolicy?: ProviderPolicy;
   deepseekMaxRetries?: number;
   onDeepSeekDisabled?: (event: DeepSeekDisableEvent) => void | Promise<void>;
-  /** Directory to write telemetry events (e.g. runDir for events.jsonl). */
-  eventRunDir?: string;
-  /** In-memory provider model stats for outcome recording. */
-  providerModelStats?: ProviderModelStats;
-  /** Configurable authority provider. Defaults to OMK's provider-neutral authority. */
-  authorityProvider?: ProviderId;
 }
 
 export interface DeepSeekDisableEvent {
@@ -77,7 +60,15 @@ export interface DeepSeekDisableEvent {
 export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): TaskRunner {
   const providerHealth = options.providerHealth ?? new ProviderHealthRegistry();
   const authorityProvider = options.authorityProvider ?? DEFAULT_AUTHORITY_PROVIDER;
-  const authorityRunner = options.authorityRunner ?? (authorityProvider === "kimi" ? options.kimiRunner : undefined);
+  const providerRunners: Partial<Record<ProviderId, TaskRunner>> = {
+    ...(options.providerRunners ?? {}),
+  };
+  const authorityRunner = options.authorityRunner
+    ?? providerRunners[authorityProvider]
+    ?? (authorityProvider === "kimi" ? options.kimiRunner : undefined);
+  if (authorityRunner && authorityProvider !== "kimi") {
+    providerRunners[authorityProvider] = authorityRunner;
+  }
   let deepSeekDisabledCalled = false;
 
   const runWith = async (
@@ -91,62 +82,14 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
     signal?: AbortSignal,
     context?: TaskRunContext
   ): Promise<TaskResult> => {
-    const startTime = Date.now();
-    if (options.eventRunDir) {
-      appendEvent(options.eventRunDir, {
-        type: "provider.request.started",
-        runId: env.OMK_RUN_ID ?? "",
-        nodeId: node.id,
-        seq: 0,
-        provider,
-        data: { role: node.role },
-      }).catch(() => {});
-    }
-    const providerAuthority = provider === authorityProvider
-      ? authorityProvider
-      : String(metadata.providerAuthority ?? env.OMK_PROVIDER_AUTHORITY ?? authorityProvider);
     const result = await runner.run(node, {
       ...env,
       OMK_PROVIDER: provider,
       OMK_PROVIDER_REQUESTED: requestedProvider,
-      OMK_PROVIDER_FALLBACK: authorityProvider,
-      OMK_PROVIDER_AUTHORITY: providerAuthority,
+      OMK_PROVIDER_FALLBACK: provider === "kimi" ? "kimi" : authorityProvider,
+      OMK_PROVIDER_AUTHORITY: provider === authorityProvider ? authorityProvider : env.OMK_PROVIDER_AUTHORITY ?? provider,
       OMK_PROVIDER_ROUTE_REASON: routeReason,
     }, signal, context);
-    const durationMs = Date.now() - startTime;
-    if (options.eventRunDir) {
-      appendEvent(options.eventRunDir, {
-        type: result.success ? "provider.request.completed" : "provider.request.failed",
-        runId: env.OMK_RUN_ID ?? "",
-        nodeId: node.id,
-        seq: 0,
-        provider,
-        data: { role: node.role, durationMs },
-      }).catch(() => {});
-    }
-    const tier = metadata.providerModelTier ?? provider;
-    const role = node.role ?? "unknown";
-    const taskType = env.OMK_TASK_TYPE ?? "unknown";
-    const complexity = normalizeProviderComplexity(env.OMK_COMPLEXITY) ?? "moderate";
-    const statsKey = buildProviderStatsKey(String(tier), role, taskType, complexity);
-    const stats = options.providerModelStats ?? { version: 2, entries: {}, updatedAt: Date.now() };
-    const existing = stats.entries[statsKey];
-    const updatedStats = updateProviderModelStats(
-      stats,
-      statsKey,
-      {
-        attempts: (existing?.attempts ?? 0) + 1,
-        passes: (existing?.passes ?? 0) + (result.success ? 1 : 0),
-        failures: (existing?.failures ?? 0) + (result.success ? 0 : 1),
-        meanLatencyMs:
-          existing && existing.attempts > 0
-            ? Math.round((existing.meanLatencyMs * existing.attempts + durationMs) / (existing.attempts + 1))
-            : durationMs,
-        lastAttemptAt: Date.now(),
-      }
-    );
-    saveProviderModelStats(updatedStats);
-    recordModelOutcome(provider, String(tier), role, taskType, complexity, { success: result.success, latencyMs: durationMs });
     return withProviderMetadata(result, {
       provider,
       requestedProvider,
@@ -172,7 +115,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
     if (diagnosis.kind !== "monthly-quota") return annotatedKimiResult;
 
     providerHealth.markKimiUnavailable(diagnosis.title);
-    if (!canFallbackKimiQuotaToDeepSeek(node, options.providerPolicy, options.deepseekRunner, providerHealth, authorityProvider)) {
+    if (!canFallbackKimiQuotaToDeepSeek(node, options.providerPolicy, options.deepseekRunner, providerHealth)) {
       return annotatedKimiResult;
     }
 
@@ -186,12 +129,12 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
         ...env,
         ...traceEnv,
         ...deepseekRouteEnv(fallbackPlan),
-        OMK_PROVIDER_FALLBACK_FROM: authorityProvider,
+        OMK_PROVIDER_FALLBACK_FROM: "kimi",
         OMK_PROVIDER_FALLBACK_REASON: fallbackReason,
         OMK_KIMI_FAILURE_KIND: diagnosis.kind,
       },
       fallbackReason,
-      authorityProvider,
+      "kimi",
       {
         ...traceMetadata,
         ...deepseekMetadata(fallbackPlan),
@@ -202,13 +145,13 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
 
     return withProviderMetadata(fallback, {
       provider: "deepseek",
-      requestedProvider: authorityProvider,
+      requestedProvider: "kimi",
       providerRouteReason: decision.reason,
       ...traceMetadata,
       providerAttemptCount: 1,
       ...deepseekMetadata(fallbackPlan),
       providerFallback: {
-        from: authorityProvider,
+        from: "kimi",
         to: "deepseek",
         reason: fallbackReason,
         attempts: 1,
@@ -219,30 +162,30 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
 
   const providerRunner: TaskRunner = {
     get onThinking() {
-      return authorityRunner?.onThinking;
+      return options.kimiRunner.onThinking;
     },
     set onThinking(fn) {
-      if (authorityRunner) authorityRunner.onThinking = fn;
-      if (options.kimiRunner) options.kimiRunner.onThinking = fn;
+      options.kimiRunner.onThinking = fn;
       if (options.deepseekRunner) options.deepseekRunner.onThinking = fn;
-      for (const runner of Object.values(options.providerRunners ?? {})) {
+      if (options.authorityRunner) options.authorityRunner.onThinking = fn;
+      for (const runner of Object.values(providerRunners)) {
         if (runner) runner.onThinking = fn;
       }
     },
 
     fork(onThinking) {
-      const providerRunners = Object.fromEntries(
-        Object.entries(options.providerRunners ?? {}).map(([provider, runner]) => [
+      const forkedProviderRunners = Object.fromEntries(
+        Object.entries(providerRunners).map(([provider, runner]) => [
           provider,
           runner?.fork?.(onThinking) ?? runner,
         ])
       ) as Partial<Record<ProviderId, TaskRunner>>;
       return createProviderTaskRunner({
         ...options,
-        authorityRunner: authorityRunner?.fork?.(onThinking) ?? authorityRunner,
-        kimiRunner: options.kimiRunner?.fork?.(onThinking) ?? options.kimiRunner,
+        kimiRunner: options.kimiRunner.fork?.(onThinking) ?? options.kimiRunner,
         deepseekRunner: options.deepseekRunner?.fork?.(onThinking) ?? options.deepseekRunner,
-        providerRunners,
+        authorityRunner: options.authorityRunner?.fork?.(onThinking) ?? options.authorityRunner,
+        providerRunners: forkedProviderRunners,
         providerHealth,
       });
     },
@@ -262,9 +205,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
         node,
         options.providerPolicy ?? "auto",
         deepseekAvailable,
-        options.providerRunners,
-        authorityProvider,
-        Boolean(authorityRunner)
+        providerRunners
       );
       const routeInput: ProviderRouteInput = {
         role: node.role,
@@ -281,10 +222,9 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
         nodeId: node.id,
         providerHint: node.routing?.provider,
         providerPolicy: options.providerPolicy ?? "auto",
+        authorityProvider,
         preferredModel: node.routing?.providerModel ?? env.OMK_PROVIDER_MODEL ?? node.routing?.assignedModel,
         preferredDeepSeekTier: node.routing?.providerModelTier,
-        providerModelStats: options.providerModelStats?.entries,
-        authorityProvider,
       };
       const decision = routeProvider(routeInput);
 
@@ -319,7 +259,6 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
         decision,
         providerPolicy: options.providerPolicy ?? "auto",
         providerAvailability,
-        authorityProvider,
       });
       if (unavailableProviderSkip) {
         return providerLaneSkipResult({
@@ -344,7 +283,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
 
       if (decision.provider === "deepseek" && options.deepseekRunner) {
         const rawMaxRetries = Number(options.deepseekMaxRetries ?? 1);
-        const shouldSkipDeepSeekFallback = shouldSkipProviderFallback(node, "deepseek", authorityProvider);
+        const shouldSkipDeepSeekFallback = shouldSkipProviderFallback(node, "deepseek");
         const maxRetries = shouldSkipDeepSeekFallback ? 0 : Math.max(0, Math.floor(Number.isFinite(rawMaxRetries) ? rawMaxRetries : 1));
         const failures: TaskResult[] = [];
         let result: TaskResult | undefined;
@@ -435,26 +374,26 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
           });
         }
 
-        if (!authorityRunner) {
-          return withProviderMetadata(lastFailure ?? providerExceptionResult(new Error("DeepSeek failed and primary fallback unavailable")), {
+        if (!shouldUseLegacyKimiFallback(options.providerPolicy, decision, authorityProvider) && !(authorityRunner && authorityProvider !== "kimi")) {
+          return providerLaneSkipResult({
+            node,
             provider: "deepseek",
             requestedProvider: "deepseek",
-            providerRouteReason: decision.reason,
-            ...traceMetadata,
-            providerAttemptCount: failures.length,
-            ...deepseekMetadata(decision.deepseek),
-            providerSkip: {
-              provider: "deepseek",
-              reason: `${fallbackReason || "DeepSeek failed"}; primary fallback unavailable`,
-              skippable: true,
-              attempts: failures.length,
-              failureKind,
-            },
+            decision,
+            reason: `${fallbackReason || "DeepSeek provider failed"}; Kimi CLI fallback disabled by provider-neutral policy`,
+            failureKind,
+            attempts: failures.length,
+            traceMetadata,
+            deepseekPlan: decision.deepseek,
+            baseResult: lastFailure,
           });
         }
+
+        const fallbackProvider = authorityRunner && authorityProvider !== "kimi" ? authorityProvider : "kimi";
+        const fallbackRunner = fallbackProvider === "kimi" ? options.kimiRunner : authorityRunner!;
         const fallback = await runWith(
-          authorityProvider,
-          authorityRunner,
+          fallbackProvider,
+          fallbackRunner,
           node,
           {
             ...env,
@@ -469,9 +408,11 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
           context
         );
 
-        const annotatedFallback = authorityProvider === "kimi" ? withKimiProviderFailureIfNeeded(fallback, providerHealth) : fallback;
+        const annotatedFallback = fallbackProvider === "kimi"
+          ? withKimiProviderFailureIfNeeded(fallback, providerHealth)
+          : fallback;
         return withProviderMetadata(annotatedFallback, {
-          provider: authorityProvider,
+          provider: fallbackProvider,
           requestedProvider: "deepseek",
           providerRouteReason: decision.reason,
           ...traceMetadata,
@@ -479,7 +420,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
           ...deepseekMetadata(decision.deepseek),
           providerFallback: {
             from: "deepseek",
-            to: authorityProvider,
+            to: fallbackProvider,
             reason: fallbackReason,
             attempts: failures.length,
             failureKind,
@@ -488,7 +429,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
       }
 
       if (isExternalProvider(decision.provider, authorityProvider)) {
-        const externalRunner = options.providerRunners?.[decision.provider];
+        const externalRunner = providerRunners[decision.provider];
         if (externalRunner) {
           let result: TaskResult;
           try {
@@ -504,7 +445,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
               context
             );
           } catch (error: unknown) {
-            if (!shouldSkipProviderFallback(node, decision.provider, authorityProvider)) throw error;
+            if (!shouldSkipProviderFallback(node, decision.provider)) throw error;
             result = providerExceptionResult(error);
           }
           if (result.success) {
@@ -519,7 +460,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
           }
 
           const fallbackReason = summarizeFailures([result]) || `${decision.provider} provider failed`;
-          if (shouldSkipProviderFallback(node, decision.provider, authorityProvider)) {
+          if (shouldSkipProviderFallback(node, decision.provider)) {
             return providerLaneSkipResult({
               node,
               provider: decision.provider,
@@ -534,13 +475,13 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
             });
           }
 
-          if (!authorityRunner) {
+          if (!shouldUseLegacyKimiFallback(options.providerPolicy, decision, authorityProvider) && !(authorityRunner && authorityProvider !== "kimi")) {
             return providerLaneSkipResult({
               node,
               provider: decision.provider,
               requestedProvider: decision.provider,
               decision,
-              reason: `${fallbackReason}; primary fallback unavailable`,
+              reason: `${fallbackReason}; Kimi CLI fallback disabled by provider-neutral policy`,
               failureKind: "availability",
               attempts: 1,
               traceMetadata,
@@ -548,9 +489,12 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
               baseResult: result,
             });
           }
+
+          const fallbackProvider = authorityRunner && authorityProvider !== "kimi" ? authorityProvider : "kimi";
+          const fallbackRunner = fallbackProvider === "kimi" ? options.kimiRunner : authorityRunner!;
           const fallback = await runWith(
-            authorityProvider,
-            authorityRunner,
+            fallbackProvider,
+            fallbackRunner,
             node,
             {
               ...env,
@@ -565,7 +509,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
             context
           );
           return withProviderMetadata(fallback, {
-            provider: authorityProvider,
+            provider: fallbackProvider,
             requestedProvider: decision.provider,
             providerRouteReason: decision.reason,
             ...traceMetadata,
@@ -573,26 +517,42 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
             providerAttemptCount: 1,
             providerFallback: {
               from: decision.provider,
-              to: authorityProvider,
+              to: fallbackProvider,
               reason: fallbackReason,
               attempts: 1,
               failureKind: "availability",
             },
           });
         }
+        return providerLaneSkipResult({
+          node,
+          provider: decision.provider,
+          requestedProvider: decision.provider,
+          decision,
+          reason: `${providerDisplayName(decision.provider)} runner unavailable; Kimi CLI fallback disabled by provider-neutral policy`,
+          failureKind: "availability",
+          attempts: 0,
+          traceMetadata,
+          providerModel: decision.providerModel,
+          baseResult: {
+            success: false,
+            exitCode: 1,
+            stdout: "",
+            stderr: `${providerDisplayName(decision.provider)} runner unavailable; Kimi CLI fallback disabled by provider-neutral policy`,
+          },
+        });
       }
 
       if (decision.deepseek?.participation === "advisory" && options.deepseekRunner) {
         const advisory = await runDeepSeekAdvisory({
           node,
           env,
-          runner: options.deepseekRunner,
+          deepseekRunner: options.deepseekRunner,
           routeReason: decision.reason,
           plan: decision.deepseek,
           invocationKey,
           traceEnv,
           signal,
-          context,
         });
 
         if (!advisory.success && isDeepSeekPaymentOrAvailabilityFailure(advisory.result)) {
@@ -611,7 +571,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
           providerHealth.markDeepSeekUnavailable(advisory.failureReason || "DeepSeek transient provider failure");
         }
 
-        if (!advisory.success && shouldSkipProviderFallback(node, "deepseek", authorityProvider)) {
+        if (!advisory.success && shouldSkipProviderFallback(node, "deepseek")) {
           return providerLaneSkipResult({
             node,
             provider: "deepseek",
@@ -627,24 +587,71 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
           });
         }
 
-        if (!authorityRunner) {
-          return authorityUnavailableResult(node, decision, traceMetadata, `${authorityProvider} runner not configured; cannot apply DeepSeek advisory`, authorityProvider);
+        if (!shouldUseLegacyKimiFallback(options.providerPolicy, decision, authorityProvider) && !(authorityRunner && authorityProvider !== "kimi")) {
+          return providerLaneSkipResult({
+            node,
+            provider: decision.provider,
+            requestedProvider: decision.provider,
+            decision,
+            reason: "DeepSeek advisory completed, but authority-provider execution is unavailable without explicit Kimi policy",
+            failureKind: "policy",
+            attempts: 0,
+            traceMetadata,
+            deepseekPlan: decision.deepseek,
+            providerAssist: advisory.metadata,
+            baseResult: advisory.result,
+          });
         }
-        const authorityResult = await runWith(
-          authorityProvider,
-          authorityRunner,
+
+        const advisoryJsonEnv: Record<string, string> = advisory.advisoryJson
+          ? { OMK_DEEPSEEK_ADVISORY_JSON: advisory.advisoryJson }
+          : {};
+        const authorityResult = authorityRunner && authorityProvider !== "kimi"
+          ? await runWith(
+            authorityProvider,
+            authorityRunner,
+            node,
+            {
+              ...env,
+              ...traceEnv,
+              OMK_DEEPSEEK_ADVISORY_STATUS: advisory.success ? "success" : "failed",
+              OMK_DEEPSEEK_ADVISORY_MODEL: decision.deepseek.model,
+              OMK_DEEPSEEK_ADVISORY: advisory.summary,
+              ...advisoryJsonEnv,
+            },
+            decision.reason,
+            authorityProvider,
+            {
+              ...traceMetadata,
+              providerAssist: advisory.metadata,
+            },
+            signal
+          )
+          : undefined;
+        if (authorityResult) {
+          return withProviderMetadata(authorityResult, {
+            provider: authorityProvider,
+            requestedProvider: authorityProvider,
+            providerRouteReason: decision.reason,
+            ...traceMetadata,
+            providerAssist: advisory.metadata,
+          });
+        }
+
+        const kimiResult = await runWith(
+          "kimi",
+          options.kimiRunner,
           node,
           {
             ...env,
-            ...traceEnv,
-            OMK_DEEPSEEK_ADVISORY_STATUS: advisory.success ? "success" : "failed",
-            OMK_DEEPSEEK_ADVISORY_MODEL: decision.deepseek.model,
-            OMK_DEEPSEEK_ADVISORY: advisory.structured?.summary ?? advisory.summary,
-            OMK_DEEPSEEK_ADVISORY_JSON: JSON.stringify(advisory.structured ?? { summary: advisory.summary, findings: [], risks: [], questionsForAuthorityProvider: [], confidence: 0 }),
-            OMK_DEEPSEEK_ADVISORY_FINDINGS_COUNT: String(advisory.structured?.findings?.length ?? 0),
-          },
+              ...traceEnv,
+              OMK_DEEPSEEK_ADVISORY_STATUS: advisory.success ? "success" : "failed",
+              OMK_DEEPSEEK_ADVISORY_MODEL: decision.deepseek.model,
+              OMK_DEEPSEEK_ADVISORY: advisory.summary,
+              ...advisoryJsonEnv,
+            },
           decision.reason,
-          authorityProvider,
+          "kimi",
           {
             ...traceMetadata,
             providerAssist: advisory.metadata,
@@ -652,23 +659,23 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
           signal,
           context
         );
-        const recoveredAuthorityResult = authorityProvider === "kimi"
-          ? await recoverFromKimiProviderFailure(
-              authorityResult,
-              node,
-              env,
-              decision,
-              traceEnv,
-              traceMetadata,
-              signal,
-              context
-            )
-          : authorityResult;
-        if (recoveredAuthorityResult.metadata?.provider === "deepseek") return recoveredAuthorityResult;
+        const recoveredKimiResult = await recoverFromKimiProviderFailure(
+          kimiResult,
+          node,
+          env,
+          decision,
+          traceEnv,
+          traceMetadata,
+          signal,
+          context
+        );
+        if (recoveredKimiResult.metadata?.provider === "deepseek") {
+          return recoveredKimiResult;
+        }
 
-        return withProviderMetadata(recoveredAuthorityResult, {
-          provider: authorityProvider,
-          requestedProvider: authorityProvider,
+        return withProviderMetadata(recoveredKimiResult, {
+          provider: "kimi",
+          requestedProvider: "kimi",
           providerRouteReason: decision.reason,
           ...traceMetadata,
           providerAssist: advisory.metadata,
@@ -677,7 +684,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
 
       const genericAdvisoryProvider = genericAdvisoryProviderForDecision(decision, authorityProvider);
       if (genericAdvisoryProvider) {
-        const genericRunner = options.providerRunners?.[genericAdvisoryProvider];
+        const genericRunner = providerRunners[genericAdvisoryProvider];
         if (genericRunner) {
           const advisory = await runGenericProviderAdvisory({
             node,
@@ -688,10 +695,8 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
             invocationKey,
             traceEnv,
             signal,
-            context,
-            authorityProvider,
           });
-          if (!advisory.success && shouldSkipProviderFallback(node, genericAdvisoryProvider, authorityProvider)) {
+          if (!advisory.success && shouldSkipProviderFallback(node, genericAdvisoryProvider)) {
             return providerLaneSkipResult({
               node,
               provider: genericAdvisoryProvider,
@@ -706,12 +711,59 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
               baseResult: advisory.result,
             });
           }
-          if (!authorityRunner) {
-            return authorityUnavailableResult(node, decision, traceMetadata, `${authorityProvider} runner not configured; cannot apply ${genericAdvisoryProvider} advisory`, authorityProvider);
+          if (!shouldUseLegacyKimiFallback(options.providerPolicy, decision, authorityProvider) && !(authorityRunner && authorityProvider !== "kimi")) {
+            return providerLaneSkipResult({
+              node,
+              provider: genericAdvisoryProvider,
+              requestedProvider: genericAdvisoryProvider,
+              decision,
+              reason: "Generic advisory completed, but authority-provider execution is unavailable without explicit Kimi policy",
+              failureKind: "policy",
+              attempts: 0,
+              traceMetadata,
+              providerModel: decision.providerModel,
+              providerAssist: advisory.metadata,
+              baseResult: advisory.result,
+            });
           }
-          const authorityResult = await runWith(
-            authorityProvider,
-            authorityRunner,
+
+          const authorityResult = authorityRunner && authorityProvider !== "kimi"
+            ? await runWith(
+              authorityProvider,
+              authorityRunner,
+              node,
+              {
+                ...env,
+                ...traceEnv,
+                OMK_PROVIDER_ADVISORY_STATUS: advisory.success ? "success" : "failed",
+                OMK_PROVIDER_ADVISORY_PROVIDER: genericAdvisoryProvider,
+                OMK_PROVIDER_ADVISORY_MODEL: decision.providerModel?.model ?? "",
+                OMK_PROVIDER_ADVISORY: advisory.summary,
+              },
+              decision.reason,
+              authorityProvider,
+              {
+                ...traceMetadata,
+                providerAssist: advisory.metadata,
+                ...providerModelMetadata(decision.providerModel),
+              },
+              signal
+            )
+            : undefined;
+          if (authorityResult) {
+            return withProviderMetadata(authorityResult, {
+              provider: authorityProvider,
+              requestedProvider: authorityProvider,
+              providerRouteReason: decision.reason,
+              ...traceMetadata,
+              providerAssist: advisory.metadata,
+              ...providerModelMetadata(decision.providerModel),
+            });
+          }
+
+          const kimiResult = await runWith(
+            "kimi",
+            options.kimiRunner,
             node,
             {
               ...env,
@@ -722,7 +774,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
               OMK_PROVIDER_ADVISORY: advisory.summary,
             },
             decision.reason,
-            authorityProvider,
+            "kimi",
             {
               ...traceMetadata,
               providerAssist: advisory.metadata,
@@ -731,9 +783,9 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
             signal,
             context
           );
-          return withProviderMetadata(authorityResult, {
-            provider: authorityProvider,
-            requestedProvider: authorityProvider,
+          return withProviderMetadata(kimiResult, {
+            provider: "kimi",
+            requestedProvider: "kimi",
             providerRouteReason: decision.reason,
             ...traceMetadata,
             providerAssist: advisory.metadata,
@@ -742,16 +794,80 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
         }
       }
 
-      if (!authorityRunner) {
-        return authorityUnavailableResult(node, decision, traceMetadata, `${authorityProvider} runner not configured`, authorityProvider);
+      if (authorityRunner && decision.provider === authorityProvider) {
+        const requestedProvider = requestedProviderForAuthorityDecision(decision, authorityProvider);
+        const authorityResult = await runWith(
+          authorityProvider,
+          authorityRunner,
+          node,
+          { ...env, ...traceEnv },
+          decision.reason,
+          requestedProvider,
+          {
+            ...traceMetadata,
+            ...providerModelMetadata(decision.providerModel),
+          },
+          signal,
+          context
+        );
+        if (authorityProvider === "kimi") {
+          const recoveredAuthorityResult = await recoverFromKimiProviderFailure(
+            authorityResult,
+            node,
+            env,
+            decision,
+            traceEnv,
+            traceMetadata,
+            signal,
+            context
+          );
+          if (recoveredAuthorityResult.metadata?.provider === "deepseek") {
+            return recoveredAuthorityResult;
+          }
+          return withProviderMetadata(recoveredAuthorityResult, {
+            provider: authorityProvider,
+            requestedProvider,
+            providerRouteReason: decision.reason,
+            ...traceMetadata,
+            ...providerModelMetadata(decision.providerModel),
+          });
+        }
+        return withProviderMetadata(authorityResult, {
+          provider: authorityProvider,
+          requestedProvider,
+          providerRouteReason: decision.reason,
+          ...traceMetadata,
+          ...providerModelMetadata(decision.providerModel),
+        });
       }
-      const authorityResult = await runWith(
-        authorityProvider,
-        authorityRunner,
+
+      if (!shouldUseLegacyKimiFallback(options.providerPolicy, decision, authorityProvider)) {
+        return providerLaneSkipResult({
+          node,
+          provider: decision.provider,
+          requestedProvider: decision.provider,
+          decision,
+          reason: `${providerDisplayName(decision.provider)} selected, but no provider runner is available and Kimi CLI fallback is disabled by provider-neutral policy`,
+          failureKind: "availability",
+          attempts: 0,
+          traceMetadata,
+          providerModel: decision.providerModel,
+          baseResult: {
+            success: false,
+            exitCode: 1,
+            stdout: "",
+            stderr: `${providerDisplayName(decision.provider)} selected, but no provider runner is available and Kimi CLI fallback is disabled by provider-neutral policy`,
+          },
+        });
+      }
+
+      const kimiResult = await runWith(
+        "kimi",
+        options.kimiRunner,
         node,
         { ...env, ...traceEnv },
         decision.reason,
-        requestedProviderForAuthorityDecision(decision, authorityProvider),
+        requestedProviderForKimiDecision(decision, authorityProvider),
         {
           ...traceMetadata,
           ...providerModelMetadata(decision.providerModel),
@@ -759,9 +875,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
         signal,
         context
       );
-      return authorityProvider === "kimi"
-        ? recoverFromKimiProviderFailure(authorityResult, node, env, decision, traceEnv, traceMetadata, signal, context)
-        : authorityResult;
+      return recoverFromKimiProviderFailure(kimiResult, node, env, decision, traceEnv, traceMetadata, signal, context);
     },
   };
 
@@ -813,11 +927,10 @@ function canFallbackKimiQuotaToDeepSeek(
   node: DagNode,
   providerPolicy: ProviderPolicy | undefined,
   deepseekRunner: TaskRunner | undefined,
-  providerHealth: ProviderHealthRegistry,
-  authorityProvider: ProviderId
+  providerHealth: ProviderHealthRegistry
 ): boolean {
   if (!deepseekRunner || !providerHealth.isDeepSeekAvailable()) return false;
-  if (providerPolicy === authorityProvider || node.routing?.provider === authorityProvider) return false;
+  if (providerPolicy === "kimi" || node.routing?.provider === "kimi") return false;
   if (inferNodeRisk(node) !== "read") return false;
   if (node.routing?.readOnly !== true) return false;
   if (node.routing?.requiresMcp === true || node.routing?.requiresToolCalling === true) return false;
@@ -849,19 +962,16 @@ function providerAvailabilityForNode(
   node: DagNode,
   providerPolicy: ProviderPolicy,
   deepseekAvailable: boolean,
-  providerRunners: Partial<Record<ProviderId, TaskRunner>> | undefined,
-  authorityProvider: ProviderId,
-  authorityRunnerAvailable: boolean
+  providerRunners: Partial<Record<ProviderId, TaskRunner>> | undefined
 ): Partial<Record<ProviderId, boolean>> {
   const availability: Partial<Record<ProviderId, boolean>> = {
     ...Object.fromEntries(
       Object.keys(providerRunners ?? {}).map((provider) => [provider, true])
     ),
     deepseek: deepseekAvailable,
-    [authorityProvider]: authorityRunnerAvailable,
   };
   for (const provider of [node.routing?.provider, providerPolicy]) {
-    if (!provider || provider === "auto" || provider === "authority" || provider === authorityProvider) continue;
+    if (!provider || provider === "auto" || provider === "kimi") continue;
     if (availability[provider] !== undefined) continue;
     availability[provider] = provider === "deepseek" ? deepseekAvailable : Boolean(providerRunners?.[provider]);
   }
@@ -874,12 +984,11 @@ function resolveUnavailableSkippableProviderLane(options: {
   decision: ProviderRouteDecision;
   providerPolicy: ProviderPolicy;
   providerAvailability: Partial<Record<ProviderId, boolean>>;
-  authorityProvider: ProviderId;
 }): { provider: ProviderId; reason: string; providerModel?: ProviderModelRef; deepseekPlan?: DeepSeekRoutePlan } | undefined {
-  const explicitProvider = requestedProviderFromNodeOrPolicy(options.node, options.providerPolicy, options.authorityProvider);
+  const explicitProvider = requestedProviderFromNodeOrPolicy(options.node, options.providerPolicy);
   if (
     explicitProvider &&
-    shouldSkipProviderFallback(options.node, explicitProvider, options.authorityProvider) &&
+    shouldSkipProviderFallback(options.node, explicitProvider) &&
     !isProviderAvailableForSkip(explicitProvider, options.providerAvailability)
   ) {
     return {
@@ -895,7 +1004,7 @@ function resolveUnavailableSkippableProviderLane(options: {
   if (
     options.providerPolicy === "auto" &&
     !options.providerAvailability.deepseek &&
-    shouldSkipProviderFallback(options.node, "deepseek", options.authorityProvider)
+    shouldSkipProviderFallback(options.node, "deepseek")
   ) {
     const optimisticDeepSeekDecision = routeProvider({
       ...options.routeInput,
@@ -920,12 +1029,11 @@ function resolveUnavailableSkippableProviderLane(options: {
 
 function requestedProviderFromNodeOrPolicy(
   node: DagNode,
-  providerPolicy: ProviderPolicy,
-  authorityProvider: ProviderId
+  providerPolicy: ProviderPolicy
 ): ProviderId | undefined {
   const routingProvider = node.routing?.provider;
-  if (routingProvider && routingProvider !== "auto" && routingProvider !== authorityProvider) return routingProvider;
-  if (providerPolicy !== "auto" && providerPolicy !== "authority" && providerPolicy !== authorityProvider) return providerPolicy;
+  if (routingProvider && routingProvider !== "auto" && routingProvider !== "kimi") return routingProvider;
+  if (providerPolicy !== "auto" && providerPolicy !== "kimi") return providerPolicy;
   return undefined;
 }
 
@@ -938,8 +1046,8 @@ function isProviderAvailableForSkip(
   return explicit === undefined ? true : explicit;
 }
 
-function shouldSkipProviderFallback(node: DagNode, provider: ProviderId, authorityProvider: ProviderId): boolean {
-  if (provider === authorityProvider) return false;
+function shouldSkipProviderFallback(node: DagNode, provider: ProviderId): boolean {
+  if (provider === "kimi") return false;
   if (provider === "deepseek" && isDeepSeekLaneNode(node)) return true;
   if (node.failurePolicy?.skipOnFailure === true) return true;
   if (hasOnlyOptionalOutputs(node)) return true;
@@ -952,4 +1060,433 @@ function isDeepSeekLaneNode(node: DagNode): boolean {
 
 function hasOnlyOptionalOutputs(node: DagNode): boolean {
   return Boolean(node.outputs?.length) && node.outputs!.every((output) => output.required === false);
+}
+
+function markProviderLaneSkippable(node: DagNode): void {
+  node.failurePolicy = {
+    ...(node.failurePolicy ?? {}),
+    skipOnFailure: true,
+  };
+}
+
+function providerLaneSkipResult(options: {
+  node: DagNode;
+  provider: ProviderId;
+  requestedProvider: ProviderId;
+  decision: ProviderRouteDecision;
+  reason: string;
+  failureKind: ProviderFailureKind;
+  attempts: number;
+  traceMetadata: Partial<ProviderTaskMetadata>;
+  providerModel?: ProviderModelRef;
+  deepseekPlan?: DeepSeekRoutePlan;
+  providerAssist?: ProviderAssistMetadata;
+  baseResult: TaskResult;
+}): TaskResult {
+  markProviderLaneSkippable(options.node);
+  const stdout = options.baseResult.stdout || `[omk] ${providerDisplayName(options.provider)} optional lane skipped: ${options.reason}\n`;
+  const stderr = options.baseResult.stderr || options.reason;
+  const metadata: ProviderTaskMetadata = {
+    provider: options.provider,
+    requestedProvider: options.requestedProvider,
+    providerRouteReason: options.decision.reason,
+    ...options.traceMetadata,
+    providerAttemptCount: options.attempts,
+    ...(options.provider === "deepseek"
+      ? deepseekMetadata(options.deepseekPlan)
+      : providerModelMetadata(options.providerModel)),
+    providerSkip: {
+      provider: options.provider,
+      reason: options.reason,
+      skippable: true,
+      attempts: options.attempts,
+      failureKind: options.failureKind,
+    },
+  };
+  if (options.providerAssist) {
+    metadata.providerAssist = options.providerAssist;
+  }
+
+  return withProviderMetadata({
+    ...options.baseResult,
+    success: false,
+    exitCode: options.baseResult.exitCode ?? 1,
+    stdout,
+    stderr,
+  }, metadata);
+}
+
+function providerExceptionResult(error: unknown): TaskResult {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    success: false,
+    exitCode: 1,
+    stdout: "",
+    stderr: message,
+  };
+}
+
+function deepseekPlanFromNode(node: DagNode): DeepSeekRoutePlan | undefined {
+  if (!isDeepSeekLaneNode(node)) return undefined;
+  const model = [node.routing?.providerModel, node.routing?.assignedModel]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ")
+    .toLowerCase();
+  const tier = node.routing?.providerModelTier
+    ?? (model.includes("pro") ? "pro" : model.includes("flash") ? "flash" : undefined);
+  if (!tier) return undefined;
+  return {
+    provider: "deepseek",
+    model: tier === "flash" ? DEEPSEEK_V4_FLASH_MODEL : DEEPSEEK_V4_PRO_MODEL,
+    tier,
+    participation: "direct",
+    reasoningEffort: "max",
+    ratioBucket: tier === "flash" ? 0 : 9,
+  };
+}
+
+function sleepWithAbort(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason ?? new Error("Aborted"));
+      return;
+    }
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(signal.reason ?? new Error("Aborted"));
+    }, { once: true });
+  });
+}
+
+function resolveDeepSeekAdvisoryTimeoutMs(env: Record<string, string | undefined> = process.env): number {
+  const raw = env.OMK_DEEPSEEK_ADVISORY_TIMEOUT_MS;
+  if (!raw) return 30_000;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 30_000;
+}
+
+async function runDeepSeekAdvisory(options: {
+  node: DagNode;
+  env: Record<string, string>;
+  deepseekRunner: TaskRunner;
+  routeReason: string;
+  plan: DeepSeekRoutePlan;
+  invocationKey: string;
+  traceEnv: Record<string, string>;
+  signal?: AbortSignal;
+}): Promise<{ success: boolean; result: TaskResult; summary: string; advisoryJson?: string; failureReason?: string; metadata: ProviderAssistMetadata }> {
+  const advisoryTimeoutMs = resolveDeepSeekAdvisoryTimeoutMs();
+  const advisoryAbortController = new AbortController();
+  const advisorySignal = options.signal
+    ? AbortSignal.any([options.signal, advisoryAbortController.signal])
+    : advisoryAbortController.signal;
+
+  const advisoryPromise = options.deepseekRunner.run(options.node, {
+    ...options.env,
+    ...options.traceEnv,
+    ...deepseekRouteEnv(options.plan),
+    OMK_PROVIDER: "deepseek",
+    OMK_PROVIDER_REQUESTED: "deepseek",
+    OMK_PROVIDER_FALLBACK: "kimi",
+    OMK_PROVIDER_ROUTE_REASON: options.routeReason,
+  }, advisorySignal);
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let abortListener: (() => void) | undefined;
+
+  const cleanup = (): void => {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      timer = undefined;
+    }
+    if (abortListener !== undefined) {
+      options.signal?.removeEventListener("abort", abortListener);
+      abortListener = undefined;
+    }
+  };
+
+  const timeoutPromise = new Promise<TaskResult>((_, reject) => {
+    if (options.signal?.aborted) {
+      reject(options.signal.reason ?? new Error("Aborted"));
+      return;
+    }
+    timer = setTimeout(() => {
+      const timeoutError = new Error(`DeepSeek advisory timed out after ${advisoryTimeoutMs}ms`);
+      advisoryAbortController.abort(timeoutError);
+      reject(timeoutError);
+    }, advisoryTimeoutMs);
+    abortListener = () => {
+      clearTimeout(timer);
+      const reason = options.signal!.reason ?? new Error("Aborted");
+      advisoryAbortController.abort(reason);
+      reject(reason);
+    };
+    options.signal?.addEventListener("abort", abortListener, { once: true });
+  });
+
+  let result: TaskResult;
+  try {
+    result = await Promise.race([advisoryPromise, timeoutPromise]);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    result = {
+      success: false,
+      exitCode: 1,
+      stdout: "",
+      stderr: message,
+    };
+  } finally {
+    cleanup();
+  }
+
+  const success = result.success;
+  const summary = success
+    ? summarizeAdvisory(result.stdout)
+    : "";
+  const advisoryJson = success ? normalizeAdvisoryJson(result.stdout) : undefined;
+  const failureReason = success ? undefined : summarizeFailures([result]);
+  return {
+    success,
+    result,
+    summary,
+    advisoryJson,
+    failureReason,
+    metadata: {
+      provider: "deepseek",
+      model: options.plan.model,
+      modelTier: options.plan.tier,
+      participation: "advisory",
+      invocationKey: options.invocationKey,
+      success,
+      summary,
+      failureReason,
+    },
+  };
+}
+
+async function runGenericProviderAdvisory(options: {
+  node: DagNode;
+  env: Record<string, string>;
+  runner: TaskRunner;
+  routeReason: string;
+  modelRef?: ProviderModelRef;
+  invocationKey: string;
+  traceEnv: Record<string, string>;
+  signal?: AbortSignal;
+}): Promise<{ success: boolean; result: TaskResult; summary: string; failureReason?: string; metadata: ProviderAssistMetadata }> {
+  let result: TaskResult;
+  try {
+    result = await options.runner.run(options.node, {
+      ...options.env,
+      ...options.traceEnv,
+      ...providerModelEnv(options.modelRef),
+      OMK_PROVIDER: options.modelRef?.provider ?? "external",
+      OMK_PROVIDER_REQUESTED: options.modelRef?.provider ?? "external",
+      OMK_PROVIDER_FALLBACK: "kimi",
+      OMK_PROVIDER_ROUTE_REASON: options.routeReason,
+      OMK_PROVIDER_AUTHORITY: "advisory",
+    }, options.signal);
+  } catch (error: unknown) {
+    result = providerExceptionResult(error);
+  }
+  const success = result.success;
+  const summary = success ? summarizeAdvisory(result.stdout) : "";
+  const failureReason = success ? undefined : summarizeFailures([result]);
+  return {
+    success,
+    result,
+    summary,
+    failureReason,
+    metadata: {
+      provider: options.modelRef?.provider ?? "external",
+      model: options.modelRef?.model,
+      participation: "advisory",
+      invocationKey: options.invocationKey,
+      success,
+      summary,
+      failureReason,
+    },
+  };
+}
+
+function providerTraceEnv(decision: ProviderRouteDecision, invocationKey: string): Record<string, string> {
+  const env: Record<string, string> = {
+    OMK_PROVIDER_ROUTE_CONFIDENCE: decision.confidence.toFixed(2),
+    OMK_PROVIDER_INVOCATION_KEY: invocationKey,
+  };
+  const routeEnsemble = summarizeRouteEnsemble(decision.routeEnsemble);
+  if (routeEnsemble) {
+    env.OMK_PROVIDER_ROUTE_ENSEMBLE = routeEnsemble;
+  }
+  if (decision.deepseek) {
+    env.OMK_DEEPSEEK_INVOCATION_KEY = invocationKey;
+  }
+  if (decision.providerModel) {
+    env.OMK_PROVIDER_MODEL = decision.providerModel.model;
+    env.OMK_PROVIDER_AUTHORITY = decision.providerModel.authority;
+    env.OMK_PROVIDER_CAPABILITIES = decision.providerModel.capabilities.join(",");
+  }
+  return env;
+}
+
+function summarizeRouteEnsemble(decision: ProviderRouteDecision["routeEnsemble"]): string {
+  const candidates = decision.candidates
+    .map((candidate) => [
+      candidate.id,
+      candidate.score.toFixed(2),
+      candidate.selected ? "selected" : undefined,
+      candidate.veto ? "veto" : undefined,
+    ].filter(Boolean).join(":"))
+    .join(",");
+  return [
+    `winner=${decision.winner}`,
+    `confidence=${decision.confidence.toFixed(2)}`,
+    `quorum=${decision.quorum}/${decision.candidates.length}`,
+    `candidates=${candidates}`,
+  ].join(";").slice(0, 1200);
+}
+
+function buildProviderInvocationKey(node: DagNode, decision: ProviderRouteDecision): string {
+  const seed = [
+    node.id,
+    node.role,
+    decision.provider,
+    decision.deepseek?.model ?? decision.providerModel?.model ?? "kimi",
+    decision.deepseek?.participation ?? decision.providerModel?.authority ?? "authoritative",
+    decision.reason,
+  ].join(":");
+  return `omk-${stableHash(seed).toString(16).padStart(8, "0")}`;
+}
+
+function stableHash(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function deepseekRouteEnv(plan: DeepSeekRoutePlan | undefined): Record<string, string> {
+  if (!plan) return {};
+  return {
+    OMK_DEEPSEEK_MODEL: plan.model,
+    OMK_DEEPSEEK_MODEL_TIER: plan.tier,
+    OMK_DEEPSEEK_PARTICIPATION: plan.participation,
+    OMK_DEEPSEEK_REASONING_EFFORT: plan.reasoningEffort,
+    OMK_DEEPSEEK_RATIO_BUCKET: String(plan.ratioBucket),
+  };
+}
+
+function deepseekMetadata(plan: DeepSeekRoutePlan | undefined): Partial<ProviderTaskMetadata> {
+  if (!plan) return {};
+  return {
+    providerModel: plan.model,
+    providerModelTier: plan.tier,
+    providerParticipation: plan.participation,
+    providerAuthority: plan.participation,
+  };
+}
+
+function providerModelEnv(modelRef: ProviderModelRef | undefined): Record<string, string> {
+  if (!modelRef) return {};
+  return {
+    OMK_PROVIDER_MODEL: modelRef.model,
+    OMK_PROVIDER_AUTHORITY: modelRef.authority,
+    OMK_PROVIDER_CAPABILITIES: modelRef.capabilities.join(","),
+  };
+}
+
+function providerModelMetadata(modelRef: ProviderModelRef | undefined): Partial<ProviderTaskMetadata> {
+  if (!modelRef) return {};
+  return {
+    providerModel: modelRef.model,
+    providerParticipation: modelRef.authority === "authority" || modelRef.authority === "veto" ? undefined : modelRef.authority,
+    providerAuthority: modelRef.authority,
+    providerModelRef: modelRef,
+  };
+}
+
+function providerDisplayName(provider: ProviderId): string {
+  if (provider === "deepseek") return "DeepSeek";
+  if (provider === "qwen") return "Qwen";
+  if (provider === "codex") return "Codex";
+  if (provider === "openrouter") return "OpenRouter";
+  if (provider === "kimi") return "Kimi";
+  return provider;
+}
+
+function isExternalProvider(provider: ProviderId, authorityProvider: ProviderId): boolean {
+  return provider !== authorityProvider && provider !== "kimi" && provider !== "deepseek";
+}
+
+function genericAdvisoryProviderForDecision(
+  decision: ProviderRouteDecision,
+  authorityProvider: ProviderId
+): ProviderId | undefined {
+  const modelRef = decision.providerModel;
+  if (!modelRef) return undefined;
+  const provider = modelRef.provider;
+  if (isExternalProvider(provider, authorityProvider) && modelRef.authority === "advisory") return provider;
+  return undefined;
+}
+
+function requestedProviderForKimiDecision(
+  decision: ProviderRouteDecision,
+  authorityProvider: ProviderId
+): ProviderId {
+  return requestedProviderForAuthorityDecision(decision, authorityProvider);
+}
+
+function requestedProviderForAuthorityDecision(
+  decision: ProviderRouteDecision,
+  authorityProvider: ProviderId
+): ProviderId {
+  const modelRef = decision.providerModel;
+  if (!modelRef) return decision.provider;
+  const provider = modelRef.provider;
+  if (isExternalProvider(provider, authorityProvider) && modelRef.authority === "veto") return provider;
+  return decision.provider;
+}
+
+function shouldUseLegacyKimiFallback(
+  providerPolicy: ProviderPolicy | undefined,
+  decision: ProviderRouteDecision,
+  authorityProvider: ProviderId
+): boolean {
+  return providerPolicy === "kimi" || authorityProvider === "kimi" || decision.provider === "kimi" || decision.fallbackProvider === "kimi";
+}
+
+function summarizeAdvisory(stdout: string): string {
+  return stdout
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 6000);
+}
+
+function normalizeAdvisoryJson(stdout: string): string | undefined {
+  try {
+    const parsed = JSON.parse(stdout) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
+    const normalized = { ...(parsed as Record<string, unknown>) };
+    if (normalized.questionsForAuthorityProvider === undefined && normalized.questionsForKimi !== undefined) {
+      normalized.questionsForAuthorityProvider = normalized.questionsForKimi;
+    }
+    delete normalized.questionsForKimi;
+    return JSON.stringify(normalized);
+  } catch {
+    return undefined;
+  }
+}
+
+function summarizeFailures(failures: TaskResult[]): string {
+  if (failures.length === 0) return "";
+  return failures
+    .map((failure, index) => {
+      const text = `${failure.stderr}\n${failure.stdout}`.trim().replace(/\s+/g, " ");
+      return `attempt ${index + 1}: ${text || `exit ${failure.exitCode ?? "unknown"}`}`;
+    })
+    .join(" | ")
+    .slice(0, 500);
 }

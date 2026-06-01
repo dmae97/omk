@@ -22,7 +22,7 @@ export async function starCommand(options: { status?: boolean } = {}): Promise<v
 
   try {
     await starGitHubRepo(OMK_REPO_URL);
-    console.log("Starred! Thanks for supporting open_multi-agent_kit 💜");
+    console.log("Starred! Thanks for supporting oh-my-kimi 💜");
   } catch (e) {
     console.error("Failed to star:", e instanceof Error ? e.message : String(e));
     process.exit(1);

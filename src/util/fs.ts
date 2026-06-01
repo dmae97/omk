@@ -18,16 +18,11 @@ import { rmSync } from "fs";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "path";
 import { homedir } from "os";
 import { execa } from "execa";
-import { style } from "./theme.js";
-import {
-  readQuarantine,
-  writeQuarantine,
-  addQuarantineEntry,
-} from "../mcp/quarantine.js";
 import { GLOBAL_MEMORY_CONFIG_TOML, getGlobalMemoryConfigPath } from "../memory/memory-config.js";
 import { SyncManifestEntry, sha256, simpleDiff } from "./sync-manifest.js";
 import { getOmkResourceSettings, type OmkRuntimeScope } from "./resource-profile.js";
 import { getKimiCapabilities } from "../kimi/capability.js";
+import { resolveRuntimeProfile, buildProfileArgs } from "./runtime-profile.js";
 import {
   getProjectRoot as resolveProjectRootSync,
   getProjectRootAsync as resolveProjectRootAsyncPath,
@@ -39,19 +34,6 @@ import {
   type ProjectRootSource,
 } from "./project-root.js";
 
-import { resolveRuntimeProfile, buildProfileArgs } from "./runtime-profile.js";
-
-import {
-  resolveRuntimeMcpPreflightMode,
-  resolveRuntimeMcpPreflightOptions,
-  type RuntimeMcpPreflightMode,
-  type RuntimeMcpPreflightFailureReason,
-  type RuntimeMcpPreflightEntryStatus,
-  type RuntimeMcpPreflightOptions,
-  type RuntimeMcpPreflightEntry,
-  type RuntimeMcpPreflightResult,
-} from "./mcp-preflight.js";
-
 export {
   getProjectRootDiagnostics,
   resolveProjectRoot,
@@ -59,17 +41,6 @@ export {
   displayProjectRootPath,
   type ProjectRootResolution,
   type ProjectRootSource,
-  resolveRuntimeMcpPreflightMode,
-  resolveRuntimeMcpPreflightOptions,
-};
-
-export type {
-  RuntimeMcpPreflightMode,
-  RuntimeMcpPreflightFailureReason,
-  RuntimeMcpPreflightEntryStatus,
-  RuntimeMcpPreflightOptions,
-  RuntimeMcpPreflightEntry,
-  RuntimeMcpPreflightResult,
 };
 
 type KimiGlobalSyncStepName = "hooks" | "mcp" | "skills" | "memory";
@@ -815,8 +786,8 @@ export async function collectMcpConfigs(scope: OmkRuntimeScope = "project"): Pro
     pathExists(kimiMcp),
     pathExists(omkMcp),
   ]);
-  // .kimi/mcp.json is a legacy Kimi-adapter MCP source.
-  // .omk/mcp.json is the provider-neutral OMK project MCP mirror/fallback.
+  // .kimi/mcp.json remains the Kimi-native project source of truth.
+  // .omk/mcp.json is a compatibility fallback/mirror for older projects.
   if (kimiMcpExists) configs.push(kimiMcp);
   else if (omkMcpExists) configs.push(omkMcp);
 
@@ -973,7 +944,7 @@ export const STALE_PACKAGE_NAMES: Record<string, string> = {
   "@supabase/mcp-server@latest": "@supabase/mcp-server-supabase@latest",
 };
 
-export const QUIET_PACKAGE_MANAGER_ENV: Record<string, string> = {
+const QUIET_PACKAGE_MANAGER_ENV: Record<string, string> = {
   npm_config_loglevel: "error",
   NPM_CONFIG_LOGLEVEL: "error",
   npm_config_progress: "false",
@@ -1003,11 +974,11 @@ export const QUIET_PACKAGE_MANAGER_ENV: Record<string, string> = {
   PIP_PROGRESS_BAR: "off",
 };
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export function basenameOfRuntimeCommand(command: string): string {
+function basenameOfRuntimeCommand(command: string): string {
   return command.replace(/\\/g, "/").split("/").pop()?.toLowerCase() ?? command.toLowerCase();
 }
 
@@ -1063,7 +1034,7 @@ function shouldValidateRuntimeMcpArgPath(server: Record<string, unknown>, arg: u
   return isRuntimePathLike(arg);
 }
 
-export function runtimeShellInlineScripts(server: Record<string, unknown>): string[] {
+function runtimeShellInlineScripts(server: Record<string, unknown>): string[] {
   const args = Array.isArray(server.args) ? server.args : [];
   return args.filter((arg, index): arg is string => typeof arg === "string" && isShellInlineMcpArg(server, index));
 }
@@ -1216,6 +1187,62 @@ function isPackageManagerRuntimeServer(server: Record<string, unknown>): boolean
     const normalized = script.replace(/\\/g, "/");
     return INLINE_PACKAGE_MANAGER_RE.test(normalized) || INLINE_PYTHON_PACKAGE_MANAGER_RE.test(normalized);
   });
+}
+
+export type RuntimeMcpPreflightMode = "warn-skip" | "strict" | "off";
+export type RuntimeMcpPreflightFailureReason = "timeout" | "exit";
+export type RuntimeMcpPreflightEntryStatus = "ok" | "failed" | "skipped";
+
+export interface RuntimeMcpPreflightOptions {
+  timeoutMs: number;
+  concurrency: number;
+}
+
+export interface RuntimeMcpPreflightEntry {
+  name: string;
+  status: RuntimeMcpPreflightEntryStatus;
+  reason?: RuntimeMcpPreflightFailureReason | "not-npm-family" | "no-package-spec";
+  detail?: string;
+  packageSpec?: string;
+}
+
+export interface RuntimeMcpPreflightResult {
+  failed: Set<string>;
+  details: Map<string, { reason: RuntimeMcpPreflightFailureReason; detail: string }>;
+  entries: RuntimeMcpPreflightEntry[];
+}
+
+export function resolveRuntimeMcpPreflightMode(
+  env: Record<string, string | undefined> = process.env
+): RuntimeMcpPreflightMode {
+  const raw = env.OMK_MCP_PREFLIGHT?.trim();
+  if (!raw) return "warn-skip";
+  if (raw === "strict" || raw === "warn-skip") return raw;
+  return "off";
+}
+
+function resolvePreflightTimeout(env: Record<string, string | undefined> = process.env): number {
+  const raw = env.OMK_MCP_PREFLIGHT_TIMEOUT_MS;
+  if (!raw) return 5000;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : 5000;
+}
+
+function resolvePreflightConcurrency(env: Record<string, string | undefined> = process.env): number {
+  const raw = env.OMK_MCP_PREFLIGHT_CONCURRENCY;
+  if (!raw) return 3;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : 3;
+}
+
+export function resolveRuntimeMcpPreflightOptions(
+  env: Record<string, string | undefined> = process.env
+): RuntimeMcpPreflightOptions & { mode: RuntimeMcpPreflightMode } {
+  return {
+    mode: resolveRuntimeMcpPreflightMode(env),
+    timeoutMs: resolvePreflightTimeout(env),
+    concurrency: resolvePreflightConcurrency(env),
+  };
 }
 
 interface PreflightProbe {
@@ -1414,53 +1441,17 @@ function safePreflightProcessEnv(): Record<string, string> {
   return safe;
 }
 
-async function runBoundedPreflightProcess(
-  command: string,
-  args: string[],
-  options: {
-    env: Record<string, string>;
-    extendEnv: boolean;
-    timeoutMs: number;
-  }
-): Promise<{ exitCode: number | null; timedOut: boolean }> {
-  const timeoutMarker = Symbol("runtime-mcp-preflight-timeout");
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-
-  const subprocess = execa(command, args, {
-    env: options.env,
-    extendEnv: options.extendEnv,
-    reject: false,
-    stdio: "ignore",
-  });
-
-  try {
-    const result = await Promise.race([
-      subprocess,
-      new Promise<typeof timeoutMarker>((resolve) => {
-        timeout = setTimeout(() => resolve(timeoutMarker), options.timeoutMs);
-      }),
-    ]);
-    if (result === timeoutMarker) {
-      subprocess.kill("SIGTERM", new Error(`timeout after ${options.timeoutMs}ms`));
-      subprocess.unref();
-      void subprocess.catch(() => {});
-      return { exitCode: null, timedOut: true };
-    }
-    return { exitCode: result.exitCode ?? null, timedOut: Boolean(result.timedOut) };
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
-}
-
 async function runPreflightProbe(
   probe: PreflightProbe,
   timeoutMs: number
 ): Promise<{ failed: boolean; reason?: RuntimeMcpPreflightFailureReason; detail?: string }> {
   try {
-    const result = await runBoundedPreflightProcess(probe.command, probe.args, {
+    const result = await execa(probe.command, probe.args, {
       env: { ...safePreflightProcessEnv(), ...probe.env },
       extendEnv: false,
-      timeoutMs,
+      timeout: timeoutMs,
+      reject: false,
+      stdio: "pipe",
     });
     if (result.timedOut) {
       return { failed: true, reason: "timeout", detail: `timeout after ${timeoutMs}ms` };
@@ -1475,151 +1466,6 @@ async function runPreflightProbe(
   }
 }
 
-function probeMcpEnv(name: string, server: Record<string, unknown>): { missing: string[] } {
-  const missing: string[] = [];
-  const lowerName = name.toLowerCase();
-
-  const knownMappings: [string[], string[]][] = [
-    [["nano-banana", "gemini"], ["GEMINI_API_KEY"]],
-    [["supabase"], ["SUPABASE_ACCESS_TOKEN", "SUPABASE_SERVICE_ROLE_KEY"]],
-    [["railway"], ["RAILWAY_TOKEN", "RAILWAY_API_TOKEN"]],
-    [["github"], ["GITHUB_TOKEN", "GITHUB_PAT"]],
-    [["zai"], ["ZAI_API_KEY", "OPENROUTER_API_KEY"]],
-    [["deepseek"], ["DEEPSEEK_API_KEY"]],
-    [["context7"], []],
-    [["filesystem"], []],
-  ];
-
-  for (const [substrings, requiredVars] of knownMappings) {
-    if (substrings.some((s) => lowerName.includes(s))) {
-      const hasAny = requiredVars.some((v) => process.env[v]);
-      if (requiredVars.length > 0 && !hasAny) {
-        missing.push(requiredVars.join(" or "));
-      }
-      break;
-    }
-  }
-
-  const textToScan: string[] = [];
-  if (typeof server.command === "string") textToScan.push(server.command);
-  if (Array.isArray(server.args)) {
-    textToScan.push(...server.args.filter((arg): arg is string => typeof arg === "string"));
-  }
-
-  const envPattern = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)/g;
-  const foundVars = new Set<string>();
-  for (const text of textToScan) {
-    let match: RegExpExecArray | null;
-    while ((match = envPattern.exec(text)) !== null) {
-      foundVars.add(match[1] ?? match[2]);
-    }
-  }
-
-  for (const v of foundVars) {
-    if (!process.env[v]) {
-      missing.push(v);
-    }
-  }
-
-  return { missing };
-}
-
-async function probeMcpHttpEndpoint(
-  server: Record<string, unknown>,
-  timeoutMs: number
-): Promise<{ ok: boolean; reason?: string; detail?: string }> {
-  const url = typeof server.url === "string" ? server.url : "";
-  if (!url) return { ok: true };
-
-  const transport = String(server.transport ?? server.type ?? "").toLowerCase();
-  const isSse = transport === "sse";
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(url, {
-      method: "HEAD",
-      signal: controller.signal,
-      redirect: "manual",
-    });
-
-    if (!response.ok) {
-      return { ok: false, reason: "http-fail", detail: `HTTP ${response.status}` };
-    }
-
-    if (isSse) {
-      const contentType = response.headers.get("content-type") ?? "";
-      if (!contentType.includes("text/event-stream")) {
-        return {
-          ok: false,
-          reason: "http-fail",
-          detail: `expected text/event-stream, got ${contentType || "none"}`,
-        };
-      }
-    }
-
-    return { ok: true };
-  } catch (err: unknown) {
-    if (err instanceof Error && err.name === "AbortError") {
-      return { ok: false, reason: "http-fail", detail: `timeout after ${timeoutMs}ms` };
-    }
-    // Network-level errors (DNS, connection refused) mean the endpoint is unreachable,
-    // not necessarily broken. Let Kimi handle it at connection time.
-    if (err instanceof TypeError) {
-      return { ok: true };
-    }
-    return { ok: false, reason: "http-fail", detail: err instanceof Error ? err.message : String(err) };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function probeMcpStdioStartup(
-  server: Record<string, unknown>,
-  timeoutMs: number
-): Promise<{ ok: boolean; reason?: string; detail?: string }> {
-  const command = typeof server.command === "string" ? server.command : "";
-  if (!command || typeof server.url === "string") return { ok: true };
-
-  const commandName = basenameOfRuntimeCommand(command);
-  if (NPM_FAMILY_RUNTIME_COMMANDS.has(commandName)) return { ok: true };
-
-  const args = Array.isArray(server.args)
-    ? server.args.filter((arg): arg is string => typeof arg === "string")
-    : [];
-
-  for (const flag of ["--version", "-v", "-h", "--help"]) {
-    try {
-      const result = await runBoundedPreflightProcess(command, [...args, flag], {
-        env: safePreflightProcessEnv(),
-        extendEnv: true,
-        timeoutMs: Math.min(timeoutMs, 3000),
-      });
-      if (result.exitCode === 0 || result.exitCode === 1) {
-        return { ok: true };
-      }
-    } catch {
-      // continue to next flag
-    }
-  }
-
-  try {
-    const result = await runBoundedPreflightProcess(command, args, {
-      env: safePreflightProcessEnv(),
-      extendEnv: true,
-      timeoutMs: 3000,
-    });
-    if (result.timedOut) {
-      return { ok: true };
-    }
-    return { ok: true };
-  } catch (err: unknown) {
-    const code = (err as NodeJS.ErrnoException).code;
-    return { ok: false, reason: "stdio-fail", detail: code ? `spawn failed (${code})` : "spawn failed" };
-  }
-}
-
 export async function preflightRuntimeMcpServers(
   servers: Record<string, unknown>,
   options: RuntimeMcpPreflightOptions
@@ -1630,89 +1476,31 @@ export async function preflightRuntimeMcpServers(
   const results: RuntimeMcpPreflightEntry[] = [];
 
   async function probeOne([name, server]: [string, unknown]): Promise<void> {
-    if (!isRecord(server)) {
+    if (!isRecord(server) || typeof server.url === "string" || !isNpmFamilyRuntimeServer(server)) {
       results.push({ name, status: "skipped", reason: "not-npm-family" });
       return;
     }
-
-    const envPromise = Promise.resolve().then(() => {
-      const envResult = probeMcpEnv(name, server);
-      if (envResult.missing.length > 0) {
-        return {
-          failed: true as const,
-          reason: "missing-env" as RuntimeMcpPreflightFailureReason,
-          detail: `missing ${envResult.missing.join(", ")}`,
-        };
+    const probe = buildPreflightProbeCommand(server, options.concurrency);
+    if (!probe) {
+      results.push({ name, status: "skipped", reason: "no-package-spec" });
+      return;
+    }
+    const result = await runPreflightProbe(probe, options.timeoutMs);
+    if (result.failed) {
+      failed.add(name);
+      if (result.reason && result.detail) {
+        details.set(name, { reason: result.reason, detail: result.detail });
       }
-      return { failed: false as const };
-    });
-
-    let transportPromise: Promise<{
-      failed: boolean;
-      reason?: RuntimeMcpPreflightFailureReason;
-      detail?: string;
-      packageSpec?: string;
-    }>;
-
-    if (typeof server.url === "string") {
-      transportPromise = probeMcpHttpEndpoint(server, options.timeoutMs).then((r) => ({
-        failed: !r.ok,
-        reason: r.reason as RuntimeMcpPreflightFailureReason | undefined,
-        detail: r.detail,
-      }));
-    } else if (isNpmFamilyRuntimeServer(server)) {
-      const probe = buildPreflightProbeCommand(server, options.concurrency);
-      if (!probe) {
-        results.push({ name, status: "skipped", reason: "no-package-spec" });
-        return;
-      }
-      transportPromise = runPreflightProbe(probe, options.timeoutMs).then((result) => ({
-        failed: result.failed,
-        reason: result.reason,
-        detail: result.detail,
+      results.push({
+        name,
+        status: "failed",
+        reason: result.reason ?? "exit",
+        detail: formatPreflightFailureDetail(result.reason, result.detail),
         packageSpec: probe.packageSpec,
-      }));
-    } else {
-      transportPromise = probeMcpStdioStartup(server, options.timeoutMs).then((r) => ({
-        failed: !r.ok,
-        reason: r.reason as RuntimeMcpPreflightFailureReason | undefined,
-        detail: r.detail,
-      }));
-    }
-
-    const [envResult, transportResult] = await Promise.all([envPromise, transportPromise]);
-
-    if (envResult.failed) {
-      failed.add(name);
-      const reason = envResult.reason ?? "missing-env";
-      const detail = envResult.detail ?? "failed";
-      details.set(name, { reason, detail });
-      results.push({
-        name,
-        status: "failed",
-        reason,
-        detail: formatPreflightFailureDetail(reason, detail),
-        packageSpec: transportResult.packageSpec,
       });
       return;
     }
-
-    if (transportResult.failed) {
-      failed.add(name);
-      const reason = transportResult.reason ?? "exit";
-      const detail = transportResult.detail ?? "failed";
-      details.set(name, { reason, detail });
-      results.push({
-        name,
-        status: "failed",
-        reason,
-        detail: formatPreflightFailureDetail(reason, detail),
-        packageSpec: transportResult.packageSpec,
-      });
-      return;
-    }
-
-    results.push({ name, status: "ok", packageSpec: transportResult.packageSpec });
+    results.push({ name, status: "ok", packageSpec: probe.packageSpec });
   }
 
   const concurrency = Math.max(1, options.concurrency);
@@ -1748,7 +1536,7 @@ function emitPreflightSummary(result: RuntimeMcpPreflightResult, removedNames: S
     ? ` Kept ${keptCount} timeout server(s) as prewarm-needed.`
     : "";
   console.warn(
-    style.orange(`[omk] MCP preflight found ${result.failed.size} issue(s): ${shown}${suffix}. `) +
+    `[omk] MCP preflight found ${result.failed.size} issue(s) in npm-family servers: ${shown}${suffix}. ` +
     `${action}.${kept} Run \`omk mcp check --all\` (or \`omk mcp prewarm --all\`) to check caches, ` +
     "or `omk mcp doctor --fix` for durable repairs."
   );
@@ -1847,14 +1635,10 @@ export async function writeRuntimeMcpConfig(
   for (const configPath of uniquePaths) {
     Object.assign(mergedServers, await readMcpServersForRuntime(configPath));
   }
-
-  // Quarantine integration: read existing quarantine and skip known-bad servers early
-  const root = await getProjectRootAsync();
-  const quarantineEntries = await readQuarantine(root);
-  const quarantinedNames = new Set(quarantineEntries.map((e) => e.name));
-
   let targetServers = mergedServers;
-  if (allowlist !== undefined) {
+  if (allowlist !== undefined && allowlist.length === 0) {
+    targetServers = {};
+  } else if (allowlist && allowlist.length > 0) {
     const allowed = new Set(allowlist);
     const missing = allowlist.filter((name) => !mergedServers[name]);
     if (missing.length > 0) {
@@ -1864,19 +1648,12 @@ export async function writeRuntimeMcpConfig(
       Object.entries(mergedServers).filter(([name]) => allowed.has(name))
     );
   }
-
-  // Filter out already-quarantined servers before prune/preflight
-  targetServers = Object.fromEntries(
-    Object.entries(targetServers).filter(([name]) => !quarantinedNames.has(name))
-  );
-
   const { servers: runtimeServers, diagnostics, normalizations } = await pruneRuntimeMcpServers(targetServers);
   emitRuntimeMcpPruneWarning(diagnostics);
   emitRuntimeMcpNormalizationNotice(normalizations);
 
   const preflightOptions = resolveRuntimeMcpPreflightOptions();
   const preflightMode = preflightOptions.mode;
-  let newQuarantineEntries = quarantineEntries;
   if (preflightMode !== "off") {
     const preflightResult = await preflightRuntimeMcpServers(runtimeServers, preflightOptions);
     const removedByPreflight = new Set<string>();
@@ -1902,18 +1679,7 @@ export async function writeRuntimeMcpConfig(
         }
         delete runtimeServers[name];
         removedByPreflight.add(name);
-
-        // Persist new failures to quarantine
-        newQuarantineEntries = addQuarantineEntry(newQuarantineEntries, {
-          name,
-          reason: detail?.reason === "exit" ? "npm-fail" : (detail?.reason ?? "npm-fail"),
-          detail: detail?.detail ?? "failed",
-          configSource: "runtime-preflight",
-        });
       }
-    }
-    if (newQuarantineEntries.length !== quarantineEntries.length) {
-      await writeQuarantine(root, newQuarantineEntries);
     }
     if (preflightResult.failed.size > 0) {
       emitPreflightSummary(preflightResult, removedByPreflight);
@@ -1921,6 +1687,8 @@ export async function writeRuntimeMcpConfig(
   }
 
   if (Object.keys(runtimeServers).length === 0) return null;
+
+  const root = await getProjectRootAsync();
   const cacheDir = join(root, ".omk", "cache");
   await ensureDir(cacheDir);
   await chmod(cacheDir, 0o700).catch(() => undefined);
@@ -2197,12 +1965,10 @@ export async function injectKimiGlobals(
       args.push("--mcp-config-file", runtimeMcp);
     } else if (allowlist && allowlist.length > 0) {
       console.warn(
-        style.orange(
-          `[omk] MCP allowlist resulted in zero available servers. ` +
-            `Allowed: ${allowlist.join(", ")}. ` +
-            `Check that the allowlist matches actual MCP server names in your config. ` +
-            `MCP config will not be passed to Kimi.`
-        )
+        `[omk] MCP allowlist resulted in zero available servers. ` +
+          `Allowed: ${allowlist.join(", ")}. ` +
+          `Check that the allowlist matches actual MCP server names in your config. ` +
+          `MCP config will not be passed to Kimi.`
       );
     }
   }
@@ -2223,8 +1989,6 @@ export async function injectKimiGlobals(
     if (projectSkillsExists) skillDirs.push(projectSkillsDir);
     const modelIdx = args.indexOf("--model");
     const effectiveModel = modelIdx >= 0 ? args[modelIdx + 1] : null;
-    const root = await getProjectRootAsync();
-    const quarantineEntries = await readQuarantine(root);
     console.error("[OMK_DEBUG] injectKimiGlobals:", {
       role: options.role ?? null,
       model: effectiveModel,
@@ -2234,7 +1998,6 @@ export async function injectKimiGlobals(
       skillsScope,
       hooksScope,
       mcpAllowlist: options.mcpAllowlist ?? null,
-      quarantined: quarantineEntries.length,
     });
   }
 }

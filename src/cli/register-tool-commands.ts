@@ -2,17 +2,6 @@ import type { Command } from "commander";
 import { t } from "../util/i18n.js";
 
 export function registerToolCommands(program: Command): void {
-  program.command("auth [provider]")
-    .description("Show provider authentication, runtime, model, and setup status")
-    .option("--json", "Output JSON")
-    .option("--doctor", "Run provider doctor-style status checks")
-    .option("--setup", "Show setup commands")
-    .option("--soft", "Do not fail when the selected provider is unavailable")
-    .action(async (provider, options) => {
-      const { authCommand } = await import("../commands/auth.js");
-      await authCommand(provider, options);
-    });
-
   const graph = program.command("graph").description("Inspect OMK ontology graph");
   graph
     .command("view")
@@ -26,18 +15,6 @@ export function registerToolCommands(program: Command): void {
     .action(async (options) => {
       const { graphViewCommand } = await import("../commands/graph.js");
       await graphViewCommand(options);
-    });
-  graph
-    .command("audit")
-    .description("Validate graph links between a run manifest, evidence, and decisions")
-    .requiredOption("--input <path>", "Input graph-state.json path")
-    .requiredOption("--run-manifest <path>", "Run manifest JSON path")
-    .requiredOption("--evidence <path>", "Evidence JSONL path")
-    .requiredOption("--decisions <path>", "Decision JSONL path")
-    .option("--json", "Output JSON")
-    .action(async (options) => {
-      const { graphAuditCommand } = await import("../commands/graph.js");
-      await graphAuditCommand(options);
     });
 
   program

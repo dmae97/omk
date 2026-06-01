@@ -21,7 +21,7 @@ export async function researchCommand(options: ResearchOptions): Promise<void> {
   // Verify kimi is available
   const kimiCheck = await runShell("kimi", ["--version"], { timeout: 10000 });
   if (kimiCheck.failed) {
-    console.error(style.red("✖ Primary provider CLI (kimi) is not installed or not in PATH."));
+    console.error(style.red("✖ Kimi CLI is not installed or not in PATH."));
     console.error(style.gray(`  ${KIMI_INSTALL_HINT}`));
     process.exit(1);
   }

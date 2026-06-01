@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 import { getProjectRoot, getRunsDir } from "../util/fs.js";
 import { style, header, status, label } from "../util/theme.js";
-import { NotFoundError, VerificationError, CliError, emitError } from "../util/cli-contract.js";
+import { NotFoundError, VerificationError, emitError } from "../util/cli-contract.js";
 
 import { createGoalPersister } from "../goal/persistence.js";
 import { createGoalSpec, updateGoalStatus } from "../goal/intake.js";
@@ -17,10 +17,6 @@ import type { GoalSpec, GoalEvidence } from "../contracts/goal.js";
 import type { RunState } from "../contracts/orchestration.js";
 import type { DagNodeDefinition } from "../orchestration/dag.js";
 import type { ProviderPolicy } from "../providers/types.js";
-import { defaultGoalDaemon } from "../goal/goal-daemon.js";
-import { loadWakePolicy, saveWakePolicy, createDefaultWakePolicy } from "../goal/wake-policy.js";
-
-const DEFAULT_GOAL_PROVIDER_POLICY: ProviderPolicy = "auto";
 
 interface GoalExecutionOptions {
   workers?: string;
@@ -348,7 +344,7 @@ export async function goalRunCommand(
     runId: options.runId,
     workers: options.workers,
     goalId,
-    provider: options.provider ?? DEFAULT_GOAL_PROVIDER_POLICY,
+    provider: options.provider ?? "auto",
     model: options.model,
     approvalPolicy: options.approvalPolicy,
     watch: options.watch,
@@ -581,7 +577,7 @@ export async function goalContinueCommand(
     runId: options.runId,
     workers: options.workers,
     goalId: effectiveGoalId,
-    provider: options.provider ?? DEFAULT_GOAL_PROVIDER_POLICY,
+    provider: options.provider ?? "kimi",
     model: options.model,
     approvalPolicy: options.approvalPolicy,
     watch: options.watch,
@@ -591,293 +587,4 @@ export async function goalContinueCommand(
     maxAutoContinueIterations: options.maxAutoContinueIterations,
     failOnDagFailure: true,
   });
-}
-
-export async function goalAutoCommand(
-  goalId: string,
-  options: {
-    maxIterations?: string;
-    maxHours?: string;
-    approvalPolicy?: string;
-    provider?: string;
-    json?: boolean;
-  }
-): Promise<void> {
-  printAlphaWarning(options.json);
-  const persister = createPersister();
-  const spec = await persister.load(goalId);
-
-  if (!spec) {
-    const msg = `Goal not found: ${goalId}`;
-    emitError(msg, Boolean(options.json));
-    throw new NotFoundError(msg);
-  }
-
-  let policy = await loadWakePolicy(goalId);
-  if (!policy) {
-    policy = createDefaultWakePolicy(goalId);
-    if (options.maxIterations) {
-      policy.budgets.maxIterations = Number(options.maxIterations);
-    }
-    if (options.maxHours) {
-      policy.budgets.maxWallClockHours = Number(options.maxHours);
-    }
-    if (options.approvalPolicy) {
-      policy.approval.write = options.approvalPolicy as "auto" | "interactive";
-      policy.approval.shell = options.approvalPolicy as "auto" | "interactive";
-    }
-    await saveWakePolicy(policy);
-  }
-
-  const started = defaultGoalDaemon.start(goalId, {
-    maxIterations: policy.budgets.maxIterations,
-    maxWallClockHours: policy.budgets.maxWallClockHours,
-    maxDailyCostUsd: policy.budgets.maxDailyCostUsd,
-    maxConsecutiveFailures: policy.budgets.maxConsecutiveFailures,
-    provider: options.provider ?? DEFAULT_GOAL_PROVIDER_POLICY,
-    approvalPolicy: options.approvalPolicy,
-    onVerify: async (gid: string) => {
-      await goalVerifyCommand(gid, { json: true });
-    },
-    onContinue: async (gid: string, opts: { provider?: string; approvalPolicy?: string }) => {
-      await goalContinueCommand(gid, {
-        provider: opts.provider as ProviderPolicy | undefined,
-        approvalPolicy: opts.approvalPolicy,
-        watch: false,
-      });
-    },
-    onBlock: async (gid: string, reason: string) => {
-      await goalBlockCommand(gid, { reason, json: true });
-    },
-  });
-
-  if (!started) {
-    const msg = `Daemon already running for goal: ${goalId}`;
-    emitError(msg, Boolean(options.json));
-    throw new CliError(msg);
-  }
-
-  if (options.json) {
-    console.log(JSON.stringify({ goalId, daemon: "started", policy }, null, 2));
-    return;
-  }
-
-  console.log(header("Goal Daemon Started"));
-  console.log(label("ID", goalId));
-  console.log(label("Status", spec.status));
-  console.log(label("Max iterations", String(policy.budgets.maxIterations)));
-  console.log(label("Max wall-clock hours", String(policy.budgets.maxWallClockHours)));
-}
-
-export async function goalWatchCommand(
-  goalId: string,
-  options: { json?: boolean }
-): Promise<void> {
-  printAlphaWarning(options.json);
-  const persister = createPersister();
-  const spec = await persister.load(goalId);
-
-  if (!spec) {
-    const msg = `Goal not found: ${goalId}`;
-    emitError(msg, Boolean(options.json));
-    throw new NotFoundError(msg);
-  }
-
-  const daemonStatus = defaultGoalDaemon.getStatus(goalId);
-  const policy = await loadWakePolicy(goalId);
-
-  if (options.json) {
-    console.log(JSON.stringify({
-      goalId,
-      goalStatus: spec.status,
-      daemon: daemonStatus,
-      wakePolicy: policy,
-    }, null, 2));
-    return;
-  }
-
-  console.log(header("Goal Watch"));
-  console.log(label("ID", goalId));
-  console.log(label("Goal status", spec.status));
-  console.log(label("Daemon running", daemonStatus ? "yes" : "no"));
-  if (daemonStatus) {
-    console.log(label("Iterations", String(daemonStatus.iterationCount)));
-    console.log(label("Consecutive failures", String(daemonStatus.consecutiveFailures)));
-    console.log(label("Sleeping", daemonStatus.sleeping ? "yes" : "no"));
-  }
-  if (policy) {
-    console.log("");
-    console.log(style.purpleBold("Wake Policy"));
-    console.log(label("Max iterations", String(policy.budgets.maxIterations)));
-    console.log(label("Max hours", String(policy.budgets.maxWallClockHours)));
-    console.log(label("Max consecutive failures", String(policy.budgets.maxConsecutiveFailures)));
-    console.log(label("Write approval", policy.approval.write));
-    console.log(label("Shell approval", policy.approval.shell));
-  } else {
-    console.log("");
-    console.log(style.gray("No wake policy found. Run `goal auto` to create one."));
-  }
-}
-
-export async function goalWakeCommand(
-  goalId: string,
-  options: { json?: boolean }
-): Promise<void> {
-  printAlphaWarning(options.json);
-  const persister = createPersister();
-  const spec = await persister.load(goalId);
-
-  if (!spec) {
-    const msg = `Goal not found: ${goalId}`;
-    emitError(msg, Boolean(options.json));
-    throw new NotFoundError(msg);
-  }
-
-  const woken = defaultGoalDaemon.wake(goalId, "manual-cli-wake");
-
-  if (!woken) {
-    const msg = `No running daemon for goal: ${goalId}`;
-    emitError(msg, Boolean(options.json));
-    throw new NotFoundError(msg);
-  }
-
-  if (options.json) {
-    console.log(JSON.stringify({ goalId, action: "wake" }, null, 2));
-    return;
-  }
-
-  console.log(header("Goal Woken"));
-  console.log(label("ID", goalId));
-  console.log(label("Status", spec.status));
-}
-
-export async function goalSleepCommand(
-  goalId: string,
-  options: { json?: boolean }
-): Promise<void> {
-  printAlphaWarning(options.json);
-  const persister = createPersister();
-  const spec = await persister.load(goalId);
-
-  if (!spec) {
-    const msg = `Goal not found: ${goalId}`;
-    emitError(msg, Boolean(options.json));
-    throw new NotFoundError(msg);
-  }
-
-  const slept = defaultGoalDaemon.sleep(goalId);
-
-  if (!slept) {
-    const msg = `No running daemon for goal: ${goalId}`;
-    emitError(msg, Boolean(options.json));
-    throw new NotFoundError(msg);
-  }
-
-  if (options.json) {
-    console.log(JSON.stringify({ goalId, action: "sleep" }, null, 2));
-    return;
-  }
-
-  console.log(header("Goal Daemon Sleeping"));
-  console.log(label("ID", goalId));
-  console.log(label("Status", spec.status));
-}
-
-export async function goalDaemonCommand(
-  subcommand: "start" | "stop" | "status",
-  options: { json?: boolean } = {}
-): Promise<void> {
-  printAlphaWarning(options.json);
-
-  if (subcommand === "start") {
-    const persister = createPersister();
-    const ids = await persister.list();
-    const activeGoals: GoalSpec[] = [];
-    for (const id of ids) {
-      const s = await persister.load(id);
-      if (s && !["done", "closed", "failed", "cancelled"].includes(s.status)) {
-        activeGoals.push(s);
-      }
-    }
-
-    const started: string[] = [];
-    for (const s of activeGoals) {
-      const policy = (await loadWakePolicy(s.goalId)) ?? createDefaultWakePolicy(s.goalId);
-      await saveWakePolicy(policy);
-      const ok = defaultGoalDaemon.start(s.goalId, {
-        maxIterations: policy.budgets.maxIterations,
-        maxWallClockHours: policy.budgets.maxWallClockHours,
-        maxDailyCostUsd: policy.budgets.maxDailyCostUsd,
-        maxConsecutiveFailures: policy.budgets.maxConsecutiveFailures,
-        onVerify: async (gid: string) => {
-          await goalVerifyCommand(gid, { json: true });
-        },
-        onContinue: async (gid: string, opts: { provider?: string; approvalPolicy?: string }) => {
-          await goalContinueCommand(gid, {
-            provider: opts.provider as ProviderPolicy | undefined,
-            approvalPolicy: opts.approvalPolicy,
-            watch: false,
-          });
-        },
-        onBlock: async (gid: string, reason: string) => {
-          await goalBlockCommand(gid, { reason, json: true });
-        },
-      });
-      if (ok) started.push(s.goalId);
-    }
-
-    if (options.json) {
-      console.log(JSON.stringify({ action: "start", started }, null, 2));
-      return;
-    }
-
-    console.log(header("Daemon Start"));
-    if (started.length === 0) {
-      console.log(style.gray("No active goals to start. All active goals already have a running daemon."));
-    } else {
-      for (const gid of started) {
-        console.log(label("Started", gid));
-      }
-    }
-    return;
-  }
-
-  if (subcommand === "stop") {
-    const running = defaultGoalDaemon.listRunning();
-    defaultGoalDaemon.stopAll();
-
-    if (options.json) {
-      console.log(JSON.stringify({ action: "stop", stopped: running.map((r) => r.goalId) }, null, 2));
-      return;
-    }
-
-    console.log(header("Daemon Stop"));
-    if (running.length === 0) {
-      console.log(style.gray("No running daemons."));
-    } else {
-      for (const { goalId } of running) {
-        console.log(label("Stopped", goalId));
-      }
-    }
-    return;
-  }
-
-  // status
-  const running = defaultGoalDaemon.listRunning();
-  if (options.json) {
-    console.log(JSON.stringify({ action: "status", daemons: running }, null, 2));
-    return;
-  }
-
-  console.log(header("Daemon Status"));
-  if (running.length === 0) {
-    console.log(style.gray("No running daemons."));
-  } else {
-    for (const { goalId, status } of running) {
-      const line = status
-        ? `${goalId}: iterations=${status.iterationCount}, failures=${status.consecutiveFailures}, sleeping=${status.sleeping ? "yes" : "no"}`
-        : goalId;
-      console.log(`  ${line}`);
-    }
-  }
 }

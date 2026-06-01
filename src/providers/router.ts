@@ -13,12 +13,6 @@ import type {
   ProviderRouteInput,
 } from "./types.js";
 import { DEFAULT_AUTHORITY_PROVIDER, resolveFallbackProvider } from "./types.js";
-import {
-  computeProviderRouteScore,
-  buildProviderStatsKey,
-  type ProviderRouteScoreInput,
-  type ProviderModelStatsEntry,
-} from "./provider-stats.js";
 
 const DEEPSEEK_READ_ONLY_ROLES = new Set([
   "explorer",
@@ -31,7 +25,7 @@ const DEEPSEEK_READ_ONLY_ROLES = new Set([
   "planner",
 ]);
 
-const AUTHORITY_ROLES = new Set([
+const AUTHORITY_PROVIDER_ROLES = new Set([
   "orchestrator",
   "coordinator",
   "merger",
@@ -62,19 +56,21 @@ export const QWEN_DEFAULT_MODEL = "qwen3-max";
 export const CODEX_CLI_DEFAULT_MODEL = "codex-cli";
 export const OPENROUTER_DEFAULT_MODEL = "openrouter/auto";
 const DEEPSEEK_FLASH_RATIO_OUT_OF_TEN = 6;
-const AUTHORITY_PROVIDER_CANDIDATE_ID = "authority-provider";
 
 export function routeProvider(input: ProviderRouteInput): ProviderRouteDecision {
-  const authorityProvider = input.authorityProvider ?? DEFAULT_AUTHORITY_PROVIDER;
   const policy: ProviderPolicy = input.providerPolicy ?? "auto";
   const role = input.role.toLowerCase();
   const seed = `${input.nodeId ?? ""}:${role}:${input.taskType}`;
+  const authorityProvider = resolveFallbackProvider(input.authorityProvider);
+  const authorityDecision = (
+    reason: string,
+    confidence: number,
+    deepseek?: DeepSeekRoutePlan,
+    extra: { providerModel?: ProviderModelRef } = {}
+  ): Omit<ProviderRouteDecision, "routeEnsemble"> =>
+    authorityProviderDecision(authorityProvider, reason, confidence, deepseek, extra);
   const directDeepSeekAllowed = canUseDirectDeepSeek(role, input);
   const dedicatedDeepSeekAgent = isDedicatedDeepSeekAgent(input);
-  const availableProviders = Object.entries(input.providerAvailability ?? {})
-    .filter(([, v]) => v === true)
-    .map(([k]) => k as ProviderId);
-  const fallbackProvider = resolveRouteFallbackProvider(authorityProvider, availableProviders);
   const withRouteEnsemble = (
     decision: Omit<ProviderRouteDecision, "routeEnsemble">,
     winner: ProviderRouteEnsembleCandidate["id"]
@@ -89,21 +85,21 @@ export function routeProvider(input: ProviderRouteInput): ProviderRouteDecision 
     }),
   });
 
-  if (policy === "authority" || (policy === "kimi" && authorityProvider === "kimi") || input.providerHint === authorityProvider) {
-    return withRouteEnsemble(authorityProviderDecision(authorityProvider, "Authority provider policy or explicit provider route", 1, undefined, {}, fallbackProvider), "safety-gate");
+  if (policy === "kimi" || input.providerHint === "kimi") {
+    return withRouteEnsemble(authorityProviderDecision("kimi", "Kimi-only provider policy or explicit Kimi route", 1), "safety-gate");
   }
 
   if (role === "orchestrator" || role === "merger" || role === "integrator") {
-    return withRouteEnsemble(authorityProviderDecision(authorityProvider, "Core orchestration and merge authority stay with authority provider", 1, undefined, {}, fallbackProvider), "safety-gate");
+    return withRouteEnsemble(authorityDecision("Core orchestration and merge authority stay with the configured authority provider", 1), "safety-gate");
   }
 
   const externalProvider = requestedExternalProvider(input);
   if (externalProvider) {
     if (!isProviderAvailable(input, externalProvider)) {
       return withRouteEnsemble(
-        authorityProviderDecision(authorityProvider, `${providerLabel(externalProvider)} unavailable; using primary fallback`, 0.86, undefined, {
+        authorityDecision(`${providerLabel(externalProvider)} unavailable; using configured authority fallback`, 0.86, undefined, {
           providerModel: genericProviderModelRef(input, externalProvider, "veto"),
-        }, fallbackProvider),
+        }),
         "safety-gate"
       );
     }
@@ -115,7 +111,7 @@ export function routeProvider(input: ProviderRouteInput): ProviderRouteDecision 
           `${providerLabel(externalProvider)} read-only provider route`,
           externalProvider === "codex" ? 0.74 : 0.78,
           genericProviderModelRef(input, externalProvider, "direct"),
-          fallbackProvider
+          authorityProvider
         ),
         `${externalProvider}-direct`
       );
@@ -123,59 +119,53 @@ export function routeProvider(input: ProviderRouteInput): ProviderRouteDecision 
 
     if (input.risk === "write" && canUseGenericAdvisoryProvider(role, input)) {
       return withRouteEnsemble(
-        authorityProviderDecision(authorityProvider, `Authority provider keeps write authority with ${providerLabel(externalProvider)} advisory`, 0.8, undefined, {
+        authorityDecision(`Configured authority provider keeps write authority with ${providerLabel(externalProvider)} advisory`, 0.8, undefined, {
           providerModel: genericProviderModelRef(input, externalProvider, "advisory"),
-        }, fallbackProvider),
+        }),
         `${externalProvider}-advisory`
       );
     }
 
     return withRouteEnsemble(
-      authorityProviderDecision(authorityProvider, `${providerLabel(externalProvider)} route rejected by authority boundary`, 0.88, undefined, {
+      authorityDecision(`${providerLabel(externalProvider)} route rejected by authority boundary`, 0.88, undefined, {
         providerModel: genericProviderModelRef(input, externalProvider, "veto"),
-      }, fallbackProvider),
+      }),
       "safety-gate"
     );
   }
 
-  const hasAnyExternalProvider =
-    input.deepseekAvailable ||
-    Object.entries(input.providerAvailability ?? {}).some(
-      ([p, v]) => v === true && p !== authorityProvider
-    );
-
-  if (!hasAnyExternalProvider) {
-    return withRouteEnsemble(authorityProviderDecision(authorityProvider, "No external providers available; using primary fallback", 1, undefined, {}, fallbackProvider), "safety-gate");
+  if (!input.deepseekAvailable) {
+    return withRouteEnsemble(authorityDecision("DeepSeek unavailable; using configured authority fallback", 1), "safety-gate");
   }
 
   if (input.risk === "write" && canUseDeepSeekProAdvisory(role, input)) {
     return withRouteEnsemble(
-      authorityProviderDecision(authorityProvider, "Authority provider keeps file-write authority with DeepSeek V4 Pro Max advisory", 0.82, {
+      authorityDecision("Configured authority provider keeps file-write authority with DeepSeek V4 Pro Max advisory", 0.82, {
         provider: "deepseek",
         model: DEEPSEEK_V4_PRO_MODEL,
         tier: "pro",
         participation: "advisory",
         reasoningEffort: "max",
         ratioBucket: 9,
-      }, {}, fallbackProvider),
+      }),
       "deepseek-pro-advisory"
     );
   }
 
   if (input.risk !== "read") {
-    return withRouteEnsemble(authorityProviderDecision(authorityProvider, "High-risk tool execution uses primary runtime", 0.9, undefined, {}, fallbackProvider), "safety-gate");
+    return withRouteEnsemble(authorityDecision("High-risk tool execution uses the configured authority runtime", 0.9), "safety-gate");
   }
 
   if (input.needsMcp || input.needsToolCalling) {
-    return withRouteEnsemble(authorityProviderDecision(authorityProvider, "MCP/tool authority stays with authority provider", 0.85, undefined, {}, fallbackProvider), "safety-gate");
+    return withRouteEnsemble(authorityDecision("MCP/tool authority stays with the configured authority provider in DeepSeek alpha", 0.85), "safety-gate");
   }
 
   if (isDeepSeekRequested(input)) {
     if (!directDeepSeekAllowed) {
-      return withRouteEnsemble(authorityProviderDecision(authorityProvider, "Explicit DeepSeek hint rejected for non-read-only provider role", 0.9, undefined, {}, fallbackProvider), "safety-gate");
+      return withRouteEnsemble(authorityDecision("Explicit DeepSeek hint rejected for non-read-only provider role", 0.9), "safety-gate");
     }
     if (input.complexity === "complex" && !dedicatedDeepSeekAgent) {
-      return withRouteEnsemble(authorityProviderDecision(authorityProvider, "Complex read-only judgment stays with authority provider despite DeepSeek hint", 0.85, undefined, {}, fallbackProvider), AUTHORITY_PROVIDER_CANDIDATE_ID);
+      return withRouteEnsemble(authorityDecision("Complex read-only judgment stays with the configured authority provider despite DeepSeek hint", 0.85), "authority-provider");
     }
     return withRouteEnsemble(
       deepseekDecision(
@@ -183,63 +173,33 @@ export function routeProvider(input: ProviderRouteInput): ProviderRouteDecision 
           ? `Dedicated DeepSeek ${input.preferredDeepSeekTier?.toUpperCase()} model agent route`
           : "Explicit low-risk DeepSeek route",
         dedicatedDeepSeekAgent ? 0.93 : 0.9,
-        selectDeepSeekDirectPlan(seed, role, input.preferredDeepSeekTier, {
-          taskType: input.taskType,
-          complexity: input.complexity,
-          providerModelStats: input.providerModelStats,
-        }),
-        fallbackProvider
+        selectDeepSeekDirectPlan(seed, input.preferredDeepSeekTier),
+        authorityProvider
       ),
       "deepseek-direct"
     );
   }
 
-  if (AUTHORITY_ROLES.has(role)) {
-    return withRouteEnsemble(authorityProviderDecision(authorityProvider, "Role carries write, merge, or final-judgment authority", 0.85, undefined, {}, fallbackProvider), AUTHORITY_PROVIDER_CANDIDATE_ID);
+  if (AUTHORITY_PROVIDER_ROLES.has(role)) {
+    return withRouteEnsemble(authorityDecision("Role carries write, merge, or final-judgment authority", 0.85), "authority-provider");
   }
 
-  // Score-based routing for flexible cases (read-only explorers, reviewers, simple tasks)
-  const candidates = scoreProviders(input);
-  const eligible = candidates.filter((c) => {
-    if (c.provider === "deepseek") {
-      return directDeepSeekAllowed;
-    }
-    return true;
-  });
-
-  const winner = eligible.length > 0
-    ? eligible.reduce((best, c) => (c.score > best.score ? c : best))
-    : candidates.find((c) => c.provider === authorityProvider) ?? candidates[0];
-
-  if (winner.provider === "deepseek") {
-    const plan = selectDeepSeekDirectPlan(seed, role, input.preferredDeepSeekTier, {
-      taskType: input.taskType,
-      complexity: input.complexity,
-      providerModelStats: input.providerModelStats,
-    });
+  if (directDeepSeekAllowed && input.complexity !== "complex") {
+    const confidence = input.estimatedTokens > 120_000 ? 0.7 : 0.8;
     return withRouteEnsemble(
-      deepseekDecision(winner.reason, winner.confidence, plan, fallbackProvider),
+      deepseekDecision("Low-risk parallel worker suitable for DeepSeek", confidence, selectDeepSeekDirectPlan(seed), authorityProvider),
       "deepseek-direct"
     );
   }
 
-  if (winner.provider !== authorityProvider) {
+  if (input.complexity === "simple" && input.risk === "read" && input.readOnly === true) {
     return withRouteEnsemble(
-      genericDirectDecision(
-        winner.provider,
-        winner.reason,
-        winner.confidence,
-        genericProviderModelRef(input, winner.provider, "direct"),
-        fallbackProvider
-      ),
-      `${winner.provider}-direct`
+      deepseekDecision("Explicit simple read-only task can be offloaded to DeepSeek", 0.72, selectDeepSeekDirectPlan(seed), authorityProvider),
+      "deepseek-direct"
     );
   }
 
-  return withRouteEnsemble(
-    authorityProviderDecision(authorityProvider, winner.reason, winner.confidence, undefined, {}, fallbackProvider),
-    AUTHORITY_PROVIDER_CANDIDATE_ID
-  );
+  return withRouteEnsemble(authorityDecision("Default provider-neutral authority route", 0.7), "authority-provider");
 }
 
 export function inferNodeRisk(node: DagNode): ProviderRisk {
@@ -258,125 +218,7 @@ export function normalizeProviderComplexity(value: string | undefined): Provider
   return value === "simple" || value === "moderate" || value === "complex" ? value : "moderate";
 }
 
-const modelStatsStore = new Map<string, ProviderModelStatsEntry>();
-
-export function recordModelOutcome(
-  provider: ProviderId,
-  tier: string,
-  role: string,
-  taskType: string,
-  complexity: string,
-  outcome: { success: boolean; latencyMs: number }
-): void {
-  const key = buildProviderStatsKey(tier, role, taskType, complexity);
-  const existing = modelStatsStore.get(key) ?? {
-    provider,
-    tier,
-    role,
-    taskType: taskType || "unknown",
-    complexity: complexity || "unknown",
-    attempts: 0,
-    passes: 0,
-    failures: 0,
-    fallbacks: 0,
-    timeouts: 0,
-    meanLatencyMs: 0,
-    lastAttemptAt: Date.now(),
-    evidencePassRate: 0.5,
-    fallbackRate: 0,
-    timeoutRate: 0,
-  };
-  existing.attempts += 1;
-  if (outcome.success) {
-    existing.passes += 1;
-  } else {
-    existing.failures += 1;
-  }
-  existing.meanLatencyMs =
-    (existing.meanLatencyMs * (existing.attempts - 1) + outcome.latencyMs) /
-    existing.attempts;
-  existing.evidencePassRate = existing.attempts > 0 ? existing.passes / existing.attempts : 0.5;
-  existing.lastAttemptAt = Date.now();
-  modelStatsStore.set(key, existing);
-}
-
-export function syncModelStatsWithPersisted(entries: Record<string, ProviderModelStatsEntry>): void {
-  for (const [key, entry] of Object.entries(entries)) {
-    modelStatsStore.set(key, entry);
-  }
-}
-
-function computeDeepSeekTierScore(
-  tier: DeepSeekModelTier,
-  stats: ProviderModelStatsEntry | undefined,
-  role: string
-): number {
-  const evidencePassRate = stats && stats.attempts > 0 ? stats.evidencePassRate : 0.5;
-  const meanLatencyMs = stats && stats.attempts > 0 ? stats.meanLatencyMs : 5000;
-  const latencyScore = Math.max(0, Math.min(1, 1 - meanLatencyMs / 10000));
-  const costScore = tier === "flash" ? 1.0 : 0.6;
-  const roleFit = ["reviewer", "planner", "security"].includes(role) ? 1.0 : 0.5;
-  const fallbackRate = stats && stats.attempts > 0 ? stats.fallbackRate : 0.1;
-  const fallbackReliability = Math.max(0, 1 - fallbackRate);
-  const recentFailureRate = stats && stats.attempts > 0 ? stats.failures / stats.attempts : 0;
-  const recentFailurePenalty = recentFailureRate > 0.2 ? 0.3 : 0;
-
-  const score =
-    evidencePassRate * 0.35 +
-    latencyScore * 0.20 +
-    costScore * 0.15 +
-    roleFit * 0.15 +
-    fallbackReliability * 0.10 -
-    recentFailurePenalty;
-
-  return Math.max(0, Math.min(1, Number(score.toFixed(4))));
-}
-
-export function selectDeepSeekModelTier(
-  seed: string,
-  options?: {
-    role?: string;
-    taskType?: string;
-    complexity?: string;
-    providerModelStats?: Record<string, ProviderModelStatsEntry>;
-  }
-): { tier: DeepSeekModelTier; ratioBucket: number; score?: number } {
-  const { role = "unknown", taskType = "unknown", complexity = "unknown", providerModelStats } = options ?? {};
-
-  const flashKey = buildProviderStatsKey("flash", role, taskType, complexity);
-  const proKey = buildProviderStatsKey("pro", role, taskType, complexity);
-  const flashStats = providerModelStats?.[flashKey] ?? modelStatsStore.get(flashKey);
-  const proStats = providerModelStats?.[proKey] ?? modelStatsStore.get(proKey);
-
-  const hasStats = Boolean(flashStats || proStats);
-
-  if (hasStats) {
-    const flashScore = computeDeepSeekTierScore("flash", flashStats, role);
-    const proScore = computeDeepSeekTierScore("pro", proStats, role);
-
-    if (process.env.OMK_DEBUG === "1") {
-      console.error("[OMK_DEBUG] DeepSeek tier score breakdown:", {
-        flash: flashScore,
-        pro: proScore,
-        role,
-        taskType,
-        complexity,
-        flashKey,
-        proKey,
-        flashStatsPresent: !!flashStats,
-        proStatsPresent: !!proStats,
-      });
-    }
-
-    const winner = flashScore >= proScore ? "flash" : "pro";
-    return {
-      tier: winner,
-      ratioBucket: winner === "flash" ? 0 : 9,
-      score: winner === "flash" ? flashScore : proScore,
-    };
-  }
-
-  // Fallback to existing hash-based deterministic selection
+export function selectDeepSeekModelTier(seed: string): { tier: DeepSeekModelTier; ratioBucket: number } {
   const ratioBucket = stableHash(seed) % 10;
   return {
     tier: ratioBucket < DEEPSEEK_FLASH_RATIO_OUT_OF_TEN ? "flash" : "pro",
@@ -384,30 +226,13 @@ export function selectDeepSeekModelTier(
   };
 }
 
-function selectDeepSeekDirectPlan(
-  seed: string,
-  role?: string,
-  preferredTier?: DeepSeekModelTier,
-  options?: {
-    taskType?: string;
-    complexity?: string;
-    providerModelStats?: Record<string, ProviderModelStatsEntry>;
-  }
-): DeepSeekRoutePlan {
+function selectDeepSeekDirectPlan(seed: string, preferredTier?: DeepSeekModelTier): DeepSeekRoutePlan {
   const selected = preferredTier
     ? { tier: preferredTier, ratioBucket: preferredTier === "flash" ? 0 : 9 }
-    : selectDeepSeekModelTier(seed, {
-        role,
-        taskType: options?.taskType,
-        complexity: options?.complexity,
-        providerModelStats: options?.providerModelStats,
-      });
+    : selectDeepSeekModelTier(seed);
   return {
     provider: "deepseek",
-    model:
-      selected.tier === "flash"
-        ? DEEPSEEK_V4_FLASH_MODEL
-        : DEEPSEEK_V4_PRO_MODEL,
+    model: selected.tier === "flash" ? DEEPSEEK_V4_FLASH_MODEL : DEEPSEEK_V4_PRO_MODEL,
     tier: selected.tier,
     participation: "direct",
     reasoningEffort: "max",
@@ -424,14 +249,13 @@ function isDeepSeekRequested(input: ProviderRouteInput): boolean {
 }
 
 function requestedExternalProvider(input: ProviderRouteInput): ProviderId | undefined {
-  const authorityProvider = input.authorityProvider ?? DEFAULT_AUTHORITY_PROVIDER;
-  const policy = isGenericExternalProvider(input.providerPolicy, authorityProvider) ? input.providerPolicy : undefined;
-  const hint = isGenericExternalProvider(input.providerHint, authorityProvider) ? input.providerHint : undefined;
+  const policy = isGenericExternalProvider(input.providerPolicy) ? input.providerPolicy : undefined;
+  const hint = isGenericExternalProvider(input.providerHint) ? input.providerHint : undefined;
   return hint ?? policy;
 }
 
-function isGenericExternalProvider(value: unknown, authorityProvider: ProviderId): value is ProviderId {
-  return typeof value === "string" && value !== "auto" && value !== "authority" && value !== authorityProvider && value !== "deepseek";
+function isGenericExternalProvider(value: unknown): value is ProviderId {
+  return typeof value === "string" && value !== "auto" && value !== "kimi" && value !== "deepseek";
 }
 
 function isProviderAvailable(input: ProviderRouteInput, provider: ProviderId): boolean {
@@ -453,7 +277,6 @@ function canUseGenericAdvisoryProvider(role: string, input: ProviderRouteInput):
 }
 
 function canUseDeepSeekProAdvisory(role: string, input: ProviderRouteInput): boolean {
-  if (!input.deepseekAvailable) return false;
   if (!DEEPSEEK_PRO_ADVISORY_FILE_ROLES.has(role)) return false;
   if (input.complexity === "simple") return false;
   if (input.needsMcp || input.needsToolCalling) return false;
@@ -461,7 +284,6 @@ function canUseDeepSeekProAdvisory(role: string, input: ProviderRouteInput): boo
 }
 
 function canUseDirectDeepSeek(role: string, input: ProviderRouteInput): boolean {
-  if (!input.deepseekAvailable) return false;
   if (input.risk !== "read") return false;
   return input.readOnly === true || DEEPSEEK_READ_ONLY_ROLES.has(role);
 }
@@ -474,11 +296,10 @@ function buildProviderRouteEnsemble(options: {
   directDeepSeekAllowed: boolean;
 }): ProviderRouteEnsembleResult {
   const { input, role, decision, winner, directDeepSeekAllowed } = options;
-  const authorityProvider = input.authorityProvider ?? DEFAULT_AUTHORITY_PROVIDER;
   const advisoryAllowed = input.risk === "write" && canUseDeepSeekProAdvisory(role, input);
   const safetyReason = providerSafetyReason(input, role);
   const dedicatedDeepSeekAgent = isDedicatedDeepSeekAgent(input);
-  const explicitExternalProvider = requestedExternalProvider(input);
+  const externalProvider = requestedExternalProvider(input);
   const directCandidateAllowed =
     !safetyReason &&
     input.deepseekAvailable &&
@@ -488,21 +309,17 @@ function buildProviderRouteEnsemble(options: {
     !input.needsMcp &&
     !input.needsToolCalling;
   const advisoryCandidateAllowed = !safetyReason && advisoryAllowed && input.deepseekAvailable;
-  const genericExternalDirectEligible = !safetyReason && canUseGenericDirectProvider(role, input);
-  const genericExternalAdvisoryEligible = !safetyReason && canUseGenericAdvisoryProvider(role, input);
-
-  const availableExternalProviders = Object.entries(input.providerAvailability ?? {})
-    .filter(([p, v]) => v === true && p !== authorityProvider && p !== "auto" && p !== "deepseek")
-    .map(([p]) => p as ProviderId);
+  const externalDirectAllowed = Boolean(externalProvider) && !safetyReason && canUseGenericDirectProvider(role, input);
+  const externalAdvisoryAllowed = Boolean(externalProvider) && !safetyReason && canUseGenericAdvisoryProvider(role, input);
 
   const candidates: ProviderRouteEnsembleCandidate[] = [
     {
-      id: AUTHORITY_PROVIDER_CANDIDATE_ID,
-      provider: authorityProvider,
+      id: "authority-provider",
+      provider: decision.fallbackProvider,
       participation: "authority",
-      score: winner === AUTHORITY_PROVIDER_CANDIDATE_ID ? decision.confidence : scoreAuthorityProvider(input, role),
+      score: winner === "authority-provider" ? decision.confidence : scoreAuthorityProvider(input, role),
       reason: authorityProviderReason(input, role),
-      selected: winner === AUTHORITY_PROVIDER_CANDIDATE_ID,
+      selected: winner === "authority-provider",
     },
     {
       id: "deepseek-direct",
@@ -523,49 +340,43 @@ function buildProviderRouteEnsemble(options: {
       participation: "advisory",
       score: advisoryCandidateAllowed ? 0.82 : 0,
       reason: advisoryCandidateAllowed
-        ? "File-affecting node can use DeepSeek V4 Pro Max advisory while authority provider keeps write authority"
+        ? "File-affecting node can use DeepSeek V4 Pro Max advisory while the authority provider keeps write authority"
         : safetyReason ?? advisoryRejectionReason(input, role),
       selected: winner === "deepseek-pro-advisory",
       veto: !advisoryCandidateAllowed,
     },
     {
       id: "safety-gate",
-      provider: authorityProvider,
+      provider: decision.fallbackProvider,
       participation: "veto",
       score: winner === "safety-gate" ? decision.confidence : safetyReason ? 0.74 : 0,
-      reason: safetyReason ?? "No safety veto; external providers may participate when other route candidates win",
+      reason: safetyReason ?? "No safety veto; DeepSeek may participate when other route candidates win",
       selected: winner === "safety-gate",
       veto: Boolean(safetyReason),
     },
   ];
 
-  const providersToAdd = explicitExternalProvider
-    ? [explicitExternalProvider, ...availableExternalProviders.filter((p) => p !== explicitExternalProvider)]
-    : availableExternalProviders;
-
-  for (const extProvider of providersToAdd) {
-    const extDirectAllowed = genericExternalDirectEligible;
-    const extAdvisoryAllowed = genericExternalAdvisoryEligible && input.risk === "write";
+  if (externalProvider) {
     candidates.splice(1, 0, {
-      id: `${extProvider}-direct`,
-      provider: extProvider,
+      id: `${externalProvider}-direct`,
+      provider: externalProvider,
       participation: "direct",
-      score: extDirectAllowed ? 0.78 : 0,
-      reason: extDirectAllowed
-        ? `${providerLabel(extProvider)} read-only lane has no write/shell/MCP authority`
-        : safetyReason ?? `${providerLabel(extProvider)} direct lanes require read-only, no-tool scope`,
-      selected: winner === `${extProvider}-direct`,
-      veto: !extDirectAllowed,
+      score: externalDirectAllowed ? 0.78 : 0,
+      reason: externalDirectAllowed
+        ? `${providerLabel(externalProvider)} read-only lane has no write/shell/MCP authority`
+        : safetyReason ?? `${providerLabel(externalProvider)} direct lanes require read-only, no-tool scope`,
+      selected: winner === `${externalProvider}-direct`,
+      veto: !externalDirectAllowed,
     }, {
-      id: `${extProvider}-advisory`,
-      provider: extProvider,
+      id: `${externalProvider}-advisory`,
+      provider: externalProvider,
       participation: "advisory",
-      score: extAdvisoryAllowed ? 0.8 : 0,
-      reason: extAdvisoryAllowed
-        ? `${providerLabel(extProvider)} may advise while authority provider keeps write authority`
-        : safetyReason ?? `${providerLabel(extProvider)} advisory lanes require bounded file-affecting scope`,
-      selected: winner === `${extProvider}-advisory`,
-      veto: !extAdvisoryAllowed,
+      score: externalAdvisoryAllowed ? 0.8 : 0,
+      reason: externalAdvisoryAllowed
+        ? `${providerLabel(externalProvider)} may advise while the authority provider keeps write authority`
+        : safetyReason ?? `${providerLabel(externalProvider)} advisory lanes require bounded file-affecting scope`,
+      selected: winner === `${externalProvider}-advisory`,
+      veto: !externalAdvisoryAllowed,
     });
   }
 
@@ -584,8 +395,7 @@ function buildProviderRouteEnsemble(options: {
 
 function providerSafetyReason(input: ProviderRouteInput, role: string): string | undefined {
   const policy: ProviderPolicy = input.providerPolicy ?? "auto";
-  const authorityProvider = input.authorityProvider ?? DEFAULT_AUTHORITY_PROVIDER;
-  if (policy === "authority" || (policy === "kimi" && authorityProvider === "kimi") || input.providerHint === authorityProvider) return "Authority provider policy or explicit authority provider hint";
+  if (policy === "kimi" || input.providerHint === "kimi") return "Kimi-only policy or explicit Kimi provider hint";
   if (role === "orchestrator" || role === "merger" || role === "integrator") return "Core orchestration and merge authority";
   const externalProvider = requestedExternalProvider(input);
   if (externalProvider) {
@@ -593,24 +403,17 @@ function providerSafetyReason(input: ProviderRouteInput, role: string): string |
     if (input.risk !== "read" && !(input.risk === "write" && canUseGenericAdvisoryProvider(role, input))) {
       return "External provider lanes cannot own non-read execution";
     }
-    if (input.needsMcp || input.needsToolCalling) return "MCP or tool-calling authority stays with authority provider";
+    if (input.needsMcp || input.needsToolCalling) return "MCP or tool-calling authority stays with the authority provider";
     if (input.risk === "read" && !canUseGenericDirectProvider(role, input)) {
       return `${providerLabel(externalProvider)} direct lane is not read-only safe for this role`;
     }
     return undefined;
   }
-  const hasExternalProvider =
-    input.deepseekAvailable ||
-    Object.entries(input.providerAvailability ?? {}).some(
-      ([p, v]) => v === true && p !== authorityProvider && p !== "auto" && p !== "deepseek"
-    );
-
-  if (!hasExternalProvider) return "No external providers available for this run";
-
-  if (input.risk !== "read" && !(input.risk === "write" && canUseGenericAdvisoryProvider(role, input))) {
-    return "Non-read execution requires authority provider authority";
+  if (!input.deepseekAvailable) return "DeepSeek unavailable for this run";
+  if (input.risk !== "read" && !(input.risk === "write" && canUseDeepSeekProAdvisory(role, input))) {
+    return "Non-read execution requires the configured authority provider";
   }
-  if (input.needsMcp || input.needsToolCalling) return "MCP or tool-calling authority stays with authority provider";
+  if (input.needsMcp || input.needsToolCalling) return "MCP or tool-calling authority stays with the authority provider";
   if (isDeepSeekRequested(input) && !canUseDirectDeepSeek(role, input)) {
     return "Explicit DeepSeek hint is not read-only safe for this role";
   }
@@ -618,71 +421,32 @@ function providerSafetyReason(input: ProviderRouteInput, role: string): string |
 }
 
 function authorityProviderReason(input: ProviderRouteInput, role: string): string {
-  if (AUTHORITY_ROLES.has(role)) return "Role carries write, merge, or final-judgment authority";
-  if (input.complexity === "complex") return "Complex judgment benefits from primary provider's full project context";
-  if (input.risk !== "read") return "Authority provider owns side effects, shell, file writes, and final acceptance";
-  return "Primary provider remains the baseline authority and fallback provider";
-}
-
-function toScoreInput(input: ProviderRouteInput): ProviderRouteScoreInput {
-  return {
-    role: input.role,
-    risk: input.risk,
-    complexity: input.complexity,
-    estimatedTokens: input.estimatedTokens,
-    needsMcp: input.needsMcp,
-    needsToolCalling: input.needsToolCalling,
-    readOnly: input.readOnly ?? false,
-    providerModelStats: input.providerModelStats,
-    authorityProvider: input.authorityProvider,
-  };
-}
-
-function scoreProviders(input: ProviderRouteInput): Array<{
-  provider: ProviderId;
-  score: number;
-  reason: string;
-  confidence: number;
-}> {
-  const scoreInput = toScoreInput(input);
-  const authorityProvider = input.authorityProvider ?? DEFAULT_AUTHORITY_PROVIDER;
-  const available = input.providerAvailability ?? {};
-  const candidates: ProviderId[] = [authorityProvider];
-  for (const [provider, isAvailable] of Object.entries(available)) {
-    if (isAvailable && provider !== authorityProvider && !candidates.includes(provider as ProviderId)) {
-      candidates.push(provider as ProviderId);
-    }
-  }
-  // Also add deepseek if deepseekAvailable and not already included
-  if (input.deepseekAvailable && !candidates.includes("deepseek") && available["deepseek"] !== false) {
-    candidates.push("deepseek");
-  }
-  return candidates.map((provider) => ({
-    provider,
-    ...computeProviderRouteScore(provider, scoreInput),
-  }));
+  if (AUTHORITY_PROVIDER_ROLES.has(role)) return "Role carries write, merge, or final-judgment authority";
+  if (input.complexity === "complex") return "Complex judgment uses the configured authority provider's full project context";
+  if (input.risk !== "read") return "The configured authority provider owns side effects, shell, file writes, and final acceptance";
+  return "Configured authority provider remains the baseline authority and fallback provider";
 }
 
 function scoreAuthorityProvider(input: ProviderRouteInput, role: string): number {
-  const authorityProvider = input.authorityProvider ?? DEFAULT_AUTHORITY_PROVIDER;
-  if (AUTHORITY_ROLES.has(role)) return 0.9;
+  if (AUTHORITY_PROVIDER_ROLES.has(role)) return 0.9;
   if (input.risk !== "read") return 0.86;
   if (input.complexity === "complex") return 0.82;
   if (input.needsMcp || input.needsToolCalling) return 0.78;
-  return computeProviderRouteScore(authorityProvider, toScoreInput(input)).score;
+  return 0.58;
 }
 
 function scoreDeepSeekDirect(input: ProviderRouteInput): number {
   if (isDedicatedDeepSeekAgent(input)) return 0.93;
-  return computeProviderRouteScore("deepseek", toScoreInput(input)).score;
+  if (input.estimatedTokens > 120_000) return 0.7;
+  return isDeepSeekRequested(input) ? 0.9 : 0.8;
 }
 
 function directDeepSeekRejectionReason(input: ProviderRouteInput, role: string): string {
   if (!input.deepseekAvailable) return "DeepSeek is unavailable";
   if (input.risk !== "read") return "Direct DeepSeek is limited to read-only risk";
   if (!canUseDirectDeepSeek(role, input)) return "Role is not read-only safe for direct DeepSeek";
-  if (input.complexity === "complex" && !isDedicatedDeepSeekAgent(input)) return "Complex read-only judgment stays with authority provider";
-  if (input.needsMcp || input.needsToolCalling) return "MCP/tool-calling requirements stay with authority provider";
+  if (input.complexity === "complex" && !isDedicatedDeepSeekAgent(input)) return "Complex read-only judgment stays with the configured authority provider";
+  if (input.needsMcp || input.needsToolCalling) return "MCP/tool-calling requirements stay with the configured authority provider";
   return "Direct DeepSeek candidate did not win this route";
 }
 
@@ -691,7 +455,7 @@ function advisoryRejectionReason(input: ProviderRouteInput, role: string): strin
   if (!DEEPSEEK_PRO_ADVISORY_FILE_ROLES.has(role)) return "Role is not a file-affecting advisory role";
   if (input.risk !== "write") return "Advisory Pro Max is reserved for file-affecting write-risk nodes";
   if (input.complexity === "simple") return "Simple write nodes do not need DeepSeek advisory overhead";
-  if (input.needsMcp || input.needsToolCalling) return "MCP/tool-calling requirements stay with authority provider";
+  if (input.needsMcp || input.needsToolCalling) return "MCP/tool-calling requirements stay with the configured authority provider";
   return "Advisory candidate did not win this route";
 }
 
@@ -699,17 +463,25 @@ function clampScore(value: number): number {
   return Math.max(0, Math.min(1, Number(value.toFixed(2))));
 }
 
+function stableHash(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
 function authorityProviderDecision(
-  authorityProvider: ProviderId,
+  provider: ProviderId,
   reason: string,
   confidence: number,
   deepseek?: DeepSeekRoutePlan,
-  extra: { providerModel?: ProviderModelRef } = {},
-  fallbackProvider: ProviderId = resolveFallbackProvider([DEFAULT_AUTHORITY_PROVIDER])
+  extra: { providerModel?: ProviderModelRef } = {}
 ): Omit<ProviderRouteDecision, "routeEnsemble"> {
   return {
-    provider: authorityProvider,
-    fallbackProvider,
+    provider,
+    fallbackProvider: provider,
     confidence,
     reason,
     providerModel: extra.providerModel,
@@ -717,16 +489,11 @@ function authorityProviderDecision(
   };
 }
 
-function resolveRouteFallbackProvider(authorityProvider: ProviderId, availableProviders: ProviderId[]): ProviderId {
-  if (availableProviders.includes(authorityProvider) || availableProviders.length === 0) return authorityProvider;
-  return resolveFallbackProvider([authorityProvider, ...availableProviders]);
-}
-
 function deepseekDecision(
   reason: string,
   confidence: number,
   deepseek: DeepSeekRoutePlan,
-  fallbackProvider: ProviderId
+  fallbackProvider: ProviderId = DEFAULT_AUTHORITY_PROVIDER
 ): Omit<ProviderRouteDecision, "routeEnsemble"> {
   return {
     provider: "deepseek",
@@ -748,7 +515,7 @@ function genericDirectDecision(
   reason: string,
   confidence: number,
   providerModel: ProviderModelRef,
-  fallbackProvider: ProviderId = resolveFallbackProvider([DEFAULT_AUTHORITY_PROVIDER])
+  fallbackProvider: ProviderId = DEFAULT_AUTHORITY_PROVIDER
 ): Omit<ProviderRouteDecision, "routeEnsemble"> {
   return {
     provider,
@@ -777,18 +544,7 @@ function normalizeProviderModelAlias(value: string | undefined): string | undefi
   const trimmed = value?.trim();
   if (!trimmed) return undefined;
   const lower = trimmed.toLowerCase().replace(/[_\s]+/g, "-");
-  if (lower === "qwen-3.7-max" || lower === "qwen3.7-max" || lower === "qwen-3-7-max" || lower === "qwen-max") return QWEN_DEFAULT_MODEL;
-  if (lower === "sonnet") return "claude-sonnet";
-  if (lower === "opus") return "claude-opus";
-  if (lower === "haiku") return "claude-haiku";
-  if (lower === "gpt-4") return "gpt-4";
-  if (lower === "gpt-4o") return "gpt-4o";
-  if (lower === "gpt-4o-mini") return "gpt-4o-mini";
-  if (lower === "gemini-pro") return "gemini-pro";
-  if (lower === "gemini-flash") return "gemini-flash";
-  if (lower === "flash") return "deepseek-v4-flash";
-  if (lower === "pro") return "deepseek-v4-pro";
-  if (lower === "codex") return "codex-cli";
+  if (lower === "qwen-3.7-max" || lower === "qwen3.7-max" || lower === "qwen-3-7-max") return QWEN_DEFAULT_MODEL;
   return trimmed;
 }
 
@@ -813,13 +569,4 @@ function capabilitiesForExternalProvider(provider: ProviderId): string[] {
   if (provider === "openrouter") return ["read", "research", "review", "qa", "advisory"];
   if (provider === "qwen") return ["read", "research", "review", "qa", "advisory"];
   return ["read", "advisory"];
-}
-
-function stableHash(value: string): number {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
 }

@@ -1,5 +1,6 @@
 import { readProviderDefaults, readProviderRegistry, normalizeProviderId, type ProviderRegistryEntry } from "../providers/model-registry.js";
 import type { ProviderId } from "../providers/types.js";
+import { DEFAULT_AUTHORITY_PROVIDER } from "../providers/types.js";
 import { checkCommand, resolveKimiBin } from "../util/shell.js";
 import { style, box } from "../util/theme.js";
 
@@ -66,7 +67,7 @@ export async function buildAuthCenterReport(
   const env = options.env ?? process.env;
   const defaults = await readProviderDefaults({ env });
   const authorityProvider = normalizeProviderId(
-    defaults.authorityProvider ?? env.OMK_AUTHORITY_PROVIDER ?? env.OMK_DEFAULT_PROVIDER ?? "kimi"
+    defaults.authorityProvider ?? env.OMK_AUTHORITY_PROVIDER ?? env.OMK_DEFAULT_PROVIDER ?? DEFAULT_AUTHORITY_PROVIDER
   );
   const defaultProvider = normalizeProviderId(defaults.provider ?? env.OMK_DEFAULT_PROVIDER ?? "auto");
   const target = provider ? normalizeProviderId(provider) : undefined;
@@ -82,7 +83,7 @@ export async function buildAuthCenterReport(
     checkedAt: new Date().toISOString(),
     mode: "metadata-only",
     defaultProvider,
-    authorityProvider: authorityProvider === "auto" ? "kimi" : authorityProvider,
+    authorityProvider: authorityProvider === "auto" ? DEFAULT_AUTHORITY_PROVIDER : authorityProvider,
     model: defaults.model,
     providers,
     tokenFilesRead: false,

@@ -73,20 +73,57 @@ test("runtime router skips API advisory runtimes for workspace-write tasks", asy
   assert.deepEqual(calls, ["codex-cli"]);
 });
 
-test("runtime router keeps Kimi as compatibility fallback when preferred runtimes are absent", async () => {
+test("runtime router blocks legacy Kimi CLI in neutral mode and allows it only when explicit", async () => {
   const calls = [];
-  const router = createRuntimeRouter({
+  const neutralRouter = createRuntimeRouter({
     runtimes: [
       fakeRuntime("kimi-cli", calls),
     ],
   });
 
-  const result = await router.execute(fakeTask({ prompt: "implement a fallback-only patch" }));
+  await assert.rejects(
+    () => neutralRouter.execute(fakeTask({ prompt: "implement a fallback-only patch" })),
+    /No runtime supports task for node coder-node.*Detected runtimes: kimi-cli/
+  );
+  assert.deepEqual(calls, []);
 
-  assert.equal(result.exitCode, 0);
-  assert.equal(result.metadata.selectedRuntime, "kimi-cli");
+  const explicitProviderRouter = createRuntimeRouter({
+    runtimes: [
+      fakeRuntime("kimi-cli", calls),
+    ],
+  });
+  const explicitProvider = await explicitProviderRouter.execute(fakeTask({
+    prompt: "run through explicit Kimi compatibility provider",
+    providerPolicy: {
+      strategy: "priority-first",
+      preferredProviders: ["kimi"],
+      fallbackChain: [],
+    },
+  }));
+
+  assert.equal(explicitProvider.exitCode, 0);
+  assert.equal(explicitProvider.metadata.selectedRuntime, "kimi-cli");
   assert.deepEqual(calls, ["kimi-cli"]);
-  assert.deepEqual(result.metadata.fallbackChain, ["kimi-cli"]);
+
+  calls.length = 0;
+  const explicitRuntimeRouter = createRuntimeRouter({
+    runtimes: [
+      fakeRuntime("kimi-cli", calls),
+    ],
+  });
+  const explicitRuntime = await explicitRuntimeRouter.execute(fakeTask({
+    prompt: "run through explicit legacy Kimi runtime fallback chain",
+    providerPolicy: {
+      strategy: "priority-first",
+      preferredProviders: [],
+      fallbackChain: ["kimi-cli"],
+    },
+  }));
+
+  assert.equal(explicitRuntime.exitCode, 0);
+  assert.equal(explicitRuntime.metadata.selectedRuntime, "kimi-cli");
+  assert.deepEqual(calls, ["kimi-cli"]);
+  assert.deepEqual(explicitRuntime.metadata.fallbackChain, ["kimi-cli"]);
 });
 
 test("runtime router filters runtimes that lack requested task capabilities", async () => {

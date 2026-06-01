@@ -2,8 +2,7 @@
 // Owner: Contract Worker (Phase 0)
 // Read-only for all other workers. Version-bump only via Integration Worker.
 
-import type { DeepSeekModelTier, DeepSeekParticipation, ProviderAssistMetadata, ProviderId } from "../providers/types.js";
-import type { ProviderPolicy } from "../runtime/agent-runtime.js";
+import type { DeepSeekModelTier, DeepSeekParticipation, ProviderAuthority, ProviderId } from "../providers/types.js";
 
 export type TaskStatus = "pending" | "running" | "done" | "failed" | "blocked" | "skipped";
 export type DagContextBudget = "tiny" | "small" | "normal";
@@ -32,36 +31,19 @@ export interface DagNodeRouting {
   assignedProvider?: ProviderId;
   candidateProviders?: ProviderId[];
   assignedModel?: string;
-  assignedProviderAuthority?: "authority" | "direct" | "advisory" | "veto";
+  assignedProviderAuthority?: ProviderAuthority | DeepSeekParticipation;
   assignedProviderCapabilities?: string[];
-  risk?: "read" | "write" | "shell" | "merge";
-  promptMode?: "default" | "dnc-nlp";
-  runtimeSidecar?: {
-    provider: string;
-    model: string;
-    intent: string;
-    risk: string;
-    sandbox: string;
-    requiredMcp: string[];
-    optionalMcp: string[];
-    disabledMcp: string[];
-    selectedSkills: string[];
-    failurePolicy: "required-only" | "strict";
-  };
-  executionPrompt?: string;
-  approvalPolicy?: string;
-  sandboxMode?: "read-only" | "workspace-write";
-  autoSpawned?: boolean;
-  spawnReason?: string;
-  routeSource?: "skill" | "mcp" | "hook" | "provider";
   assignedCapabilities?: {
     skills?: string[];
     mcpServers?: string[];
     tools?: string[];
     hooks?: string[];
   };
+  autoSpawned?: boolean;
+  spawnReason?: string;
+  routeSource?: "skill" | "mcp" | "hook" | "provider";
   /**
-   * Skills/MCP/tools are routing hints for the selected provider adapter by default.
+   * Skills/MCP/tools are routing hints for the Kimi runtime by default.
    * Set these booleans only when a node cannot run without live MCP/tool
    * authority; opportunistic providers can still advise from the hint list.
    */
@@ -73,6 +55,12 @@ export interface DagNodeRouting {
   hooks?: string[];
   contextBudget?: DagContextBudget;
   readOnly?: boolean;
+  risk?: string;
+  sandboxMode?: string;
+  approvalPolicy?: string;
+  executionPrompt?: string;
+  promptMode?: string;
+  runtimeSidecar?: unknown;
   evidenceRequired?: boolean;
   rationale?: string;
   replanHint?: {
@@ -120,7 +108,6 @@ export interface DagNodeAttempt {
   providerModel?: string;
   providerModelTier?: DeepSeekModelTier;
   providerParticipation?: DeepSeekParticipation;
-  providerAssist?: ProviderAssistMetadata;
 }
 
 export interface DagNode {
@@ -143,13 +130,12 @@ export interface DagNode {
   inputs?: DagNodeInput[];
   outputs?: DagNodeOutput[];
   routing?: DagNodeRouting;
+  executionMode?: "local" | "dry-run" | "advisory" | "live" | string;
   failurePolicy?: DagNodeFailurePolicy;
   blockedReason?: string;
   evidence?: DagNodeEvidence[];
   /** Live "thinking" text exposed while the node is running (e.g. ensemble progress). */
   thinking?: string;
-  executionMode?: "in-process" | "subprocess";
-  providerPolicy?: ProviderPolicy;
 }
 
 export interface Dag {

@@ -1,6 +1,6 @@
 import { TaskDagGraph } from "./task-graph.js";
 import { mergeDagNodeRouting, selectTaskRouting } from "./routing.js";
-import type { DeepSeekModelTier, DeepSeekParticipation, ProviderAssistMetadata, ProviderId } from "../providers/types.js";
+import type { DeepSeekModelTier, DeepSeekParticipation, ProviderId } from "../providers/types.js";
 
 export type TaskStatus = "pending" | "running" | "done" | "failed" | "blocked" | "skipped";
 export type DagContextBudget = "tiny" | "small" | "normal";
@@ -31,23 +31,6 @@ export interface DagNodeRouting {
   assignedModel?: string;
   assignedProviderAuthority?: "authority" | "direct" | "advisory" | "veto";
   assignedProviderCapabilities?: string[];
-  risk?: "read" | "write" | "shell" | "merge";
-  promptMode?: "default" | "dnc-nlp";
-  runtimeSidecar?: {
-    provider: string;
-    model: string;
-    intent: string;
-    risk: string;
-    sandbox: string;
-    requiredMcp: string[];
-    optionalMcp: string[];
-    disabledMcp: string[];
-    selectedSkills: string[];
-    failurePolicy: "required-only" | "strict";
-  };
-  executionPrompt?: string;
-  approvalPolicy?: string;
-  sandboxMode?: "read-only" | "workspace-write";
   autoSpawned?: boolean;
   spawnReason?: string;
   routeSource?: "skill" | "mcp" | "hook" | "provider";
@@ -57,8 +40,15 @@ export interface DagNodeRouting {
     tools?: string[];
     hooks?: string[];
   };
+  risk?: string;
+  sandboxMode?: string;
+  approvalPolicy?: string;
+  executionPrompt?: string;
+  promptMode?: string;
+  runtimeSidecar?: unknown;
+  needsIntegration?: boolean;
   /**
-   * Skills/MCP/tools are routing hints for the selected provider adapter by default.
+   * Skills/MCP/tools are routing hints for the Kimi runtime by default.
    * Set these booleans only when a node cannot run without live MCP/tool
    * authority; opportunistic providers can still advise from the hint list.
    */
@@ -78,7 +68,6 @@ export interface DagNodeRouting {
     targetAtomId?: string;
     preserveEvidence?: boolean;
   };
-  needsIntegration?: boolean;
   rejected?: Array<{ id: string; reason: string }>;
   actionAtom?: {
     id: string;
@@ -118,7 +107,6 @@ export interface DagNodeAttempt {
   providerModel?: string;
   providerModelTier?: DeepSeekModelTier;
   providerParticipation?: DeepSeekParticipation;
-  providerAssist?: ProviderAssistMetadata;
 }
 
 export interface DagNode {
@@ -141,6 +129,7 @@ export interface DagNode {
   inputs?: DagNodeInput[];
   outputs?: DagNodeOutput[];
   routing?: DagNodeRouting;
+  executionMode?: "local" | "dry-run" | "advisory" | "live" | string;
   failurePolicy?: DagNodeFailurePolicy;
   blockedReason?: string;
   evidence?: DagNodeEvidence[];

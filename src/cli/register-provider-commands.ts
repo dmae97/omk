@@ -1,6 +1,24 @@
 import type { Command } from "commander";
 
+function commandOptions<T extends Record<string, unknown>>(command: T | { opts(): T }): T {
+  return typeof (command as { opts?: unknown }).opts === "function"
+    ? (command as { opts(): T }).opts()
+    : command as T;
+}
+
 export function registerProviderCommands(program: Command): void {
+  program
+    .command("auth [provider]")
+    .description("Show provider-neutral auth status without reading or printing secret values")
+    .option("--json", "Output JSON")
+    .option("--doctor", "Include setup/doctor guidance in text output")
+    .option("--setup", "Include setup guidance in text output")
+    .option("--soft", "Do not set a failing exit code when unavailable")
+    .action(async (target, options) => {
+      const { authCommand } = await import("../commands/auth.js");
+      await authCommand(target, options);
+    });
+
   const provider = program.command("provider").description("Provider routing and availability utilities");
   provider
     .command("list")
@@ -49,9 +67,9 @@ export function registerProviderCommands(program: Command): void {
     });
   provider
     .command("use <provider>")
-    .description("Set the default provider/model for OMK root and chat sessions")
-    .option("--model <model>", "Model name or alias")
-    .option("--authority", "Also set as authority provider")
+    .description("Set the default provider/model for OMK sessions")
+    .option("--model <model>", "Default model or alias target")
+    .option("--authority", "Also mark this provider as authority metadata")
     .option("--json", "Output JSON")
     .action(async (target, options) => {
       const { providerUseCommand } = await import("../commands/provider.js");
@@ -72,7 +90,7 @@ export function registerProviderCommands(program: Command): void {
     });
   provider
     .command("enable <provider>")
-    .description("Enable a provider for routing while keeping the primary provider as final authority")
+    .description("Enable a provider for routing while keeping the configured authority provider as final authority")
     .option("--json", "Output JSON")
     .action(async (target, options) => {
       const { providerEnableCommand } = await import("../commands/provider.js");
@@ -80,63 +98,12 @@ export function registerProviderCommands(program: Command): void {
     });
   provider
     .command("disable <provider> [reason]")
-    .description("Disable a provider and force primary provider fallback")
+    .description("Disable a provider and force configured authority fallback")
     .option("--json", "Output JSON")
     .action(async (target, reason, options) => {
       const { providerDisableCommand } = await import("../commands/provider.js");
       await providerDisableCommand(target, reason, options);
     });
-  const model = program.command("model").description("Inspect and configure provider/model aliases");
-  model
-    .command("list")
-    .description("List provider model defaults and aliases")
-    .option("--json", "Output JSON")
-    .action(async (options) => {
-      const { modelListCommand } = await import("../commands/model.js");
-      await modelListCommand(options);
-    });
-  model
-    .command("aliases")
-    .description("List user model aliases")
-    .option("--json", "Output JSON")
-    .action(async (options) => {
-      const { modelAliasesCommand } = await import("../commands/model.js");
-      await modelAliasesCommand(options);
-    });
-  model
-    .command("resolve <model>")
-    .description("Resolve a model alias to provider/model metadata")
-    .option("--json", "Output JSON")
-    .action(async (target, options) => {
-      const { modelResolveCommand } = await import("../commands/model.js");
-      await modelResolveCommand(target, options);
-    });
-  model
-    .command("use <model>")
-    .description("Set the default model for OMK root and chat sessions")
-    .option("--json", "Output JSON")
-    .action(async (target, options) => {
-      const { modelUseCommand } = await import("../commands/model.js");
-      await modelUseCommand(target, options);
-    });
-  const modelAlias = model.command("alias").description("Manage user model aliases");
-  modelAlias
-    .command("add <alias> <target>")
-    .description("Add a user model alias, e.g. fast deepseek/flash")
-    .option("--json", "Output JSON")
-    .action(async (alias, target, options) => {
-      const { modelAliasAddCommand } = await import("../commands/model.js");
-      await modelAliasAddCommand(alias, target, options);
-    });
-  modelAlias
-    .command("remove <alias>")
-    .description("Remove a user model alias")
-    .option("--json", "Output JSON")
-    .action(async (alias, options) => {
-      const { modelAliasRemoveCommand } = await import("../commands/model.js");
-      await modelAliasRemoveCommand(alias, options);
-    });
-
   const deepseekProvider = provider.command("deepseek").description("Manage DeepSeek opportunistic workers");
   deepseekProvider
     .command("enable")
@@ -148,7 +115,7 @@ export function registerProviderCommands(program: Command): void {
     });
   deepseekProvider
     .command("disable [reason]")
-    .description("Disable DeepSeek workers and force primary-only fallback")
+    .description("Disable DeepSeek workers and force configured authority fallback")
     .option("--json", "Output JSON")
     .action(async (reason, options) => {
       const { providerDeepSeekDisableCommand } = await import("../commands/provider.js");
@@ -185,7 +152,7 @@ export function registerProviderCommands(program: Command): void {
     });
   deepseek
     .command("disable [reason]")
-    .description("Disable DeepSeek workers and force primary-only fallback")
+    .description("Disable DeepSeek workers and force configured authority fallback")
     .option("--json", "Output JSON")
     .action(async (reason, options) => {
       const { providerDeepSeekDisableCommand } = await import("../commands/provider.js");
@@ -200,6 +167,65 @@ export function registerProviderCommands(program: Command): void {
     .action(async (options) => {
       const { providerDoctorCommand } = await import("../commands/provider.js");
       await providerDoctorCommand("deepseek", options);
+    });
+
+  const model = program
+    .command("model")
+    .description("Provider model defaults and user aliases")
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const { modelListCommand } = await import("../commands/model.js");
+      await modelListCommand(commandOptions(options));
+    });
+
+  model
+    .command("list")
+    .description("List provider model defaults and aliases")
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const { modelListCommand } = await import("../commands/model.js");
+      await modelListCommand(commandOptions(options));
+    });
+  model
+    .command("aliases")
+    .description("List user model aliases")
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const { modelAliasesCommand } = await import("../commands/model.js");
+      await modelAliasesCommand(commandOptions(options));
+    });
+  model
+    .command("resolve <model>")
+    .description("Resolve a model alias to provider/model metadata")
+    .option("--json", "Output JSON")
+    .action(async (target, options) => {
+      const { modelResolveCommand } = await import("../commands/model.js");
+      await modelResolveCommand(target, commandOptions(options));
+    });
+  model
+    .command("use <model>")
+    .description("Set the default model for OMK sessions")
+    .option("--json", "Output JSON")
+    .action(async (target, options) => {
+      const { modelUseCommand } = await import("../commands/model.js");
+      await modelUseCommand(target, commandOptions(options));
+    });
+  const modelAlias = model.command("alias").description("Manage user model aliases");
+  modelAlias
+    .command("add <alias> <target>")
+    .description("Add a user model alias")
+    .option("--json", "Output JSON")
+    .action(async (alias, target, options) => {
+      const { modelAliasAddCommand } = await import("../commands/model.js");
+      await modelAliasAddCommand(alias, target, commandOptions(options));
+    });
+  modelAlias
+    .command("remove <alias>")
+    .description("Remove a user model alias")
+    .option("--json", "Output JSON")
+    .action(async (alias, options) => {
+      const { modelAliasRemoveCommand } = await import("../commands/model.js");
+      await modelAliasRemoveCommand(alias, commandOptions(options));
     });
 
   program

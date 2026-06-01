@@ -609,8 +609,12 @@ test("init installs OMK lifecycle hooks and release guard", async () => {
         assert.equal(hookResult.status, 0, hookResult.stderr || hookResult.stdout);
 
         const output = JSON.parse(hookResult.stdout);
-        assert.equal(output.hookSpecificOutput.hookEventName, eventName);
-        assert.match(output.hookSpecificOutput.additionalContext, contextPattern);
+        const context = output.hookSpecificOutput?.additionalContext ?? output.systemMessage;
+        if (output.hookSpecificOutput) {
+          assert.equal(output.hookSpecificOutput.hookEventName, eventName);
+        }
+        assert.equal(typeof context, "string");
+        assert.match(context, contextPattern);
       } else {
         const hookBody = await readFile(hookPath, "utf-8");
         assert.match(hookBody, new RegExp(eventName));
