@@ -6,6 +6,7 @@
 
 - Fixed Amazon Bedrock requests to replace blank required user/tool-result text with a placeholder and skip blank replay text blocks ([#4975](https://github.com/earendil-works/pi/issues/4975)).
 - Fixed OpenAI GPT-5.5 generated metadata to omit unsupported minimal thinking ([#5243](https://github.com/earendil-works/pi/issues/5243)).
+- Fixed GitHub Copilot and OpenRouter test model references that became stale after model regeneration.
 
 ## [0.78.0] - 2026-05-29
 
