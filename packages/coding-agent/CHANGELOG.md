@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- Fixed HTTP timeout setting not being respected for non-Codex providers (e.g., llama.cpp via OpenAI-compatible API). The `httpIdleTimeoutMs` setting (set via `/settings` HTTP timeout) now applies as the default SDK request timeout for all providers that support it, not just OpenAI Codex Responses. Disabling the timeout (HTTP timeout = false) now correctly disables SDK timeouts for all supported providers ([#5294](https://github.com/earendil-works/pi/issues/5294)).
 - Fixed opening and listing very large JSONL session files by reading session entries line-by-line instead of materializing the full file as one string ([#5231](https://github.com/earendil-works/pi/issues/5231)).
 
 ## [0.78.0] - 2026-05-29
