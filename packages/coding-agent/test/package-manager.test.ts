@@ -33,6 +33,10 @@ interface PackageManagerInternals {
 		options?: { cwd?: string; timeoutMs?: number; env?: Record<string, string> },
 	): Promise<string>;
 	getLocalGitUpdateTarget(installedPath: string): Promise<{ ref: string; head: string; fetchArgs: string[] }>;
+	getGitInstallPath(
+		source: { type: "git"; repo: string; host: string; path: string; pinned: boolean; ref?: string },
+		scope: "user" | "project" | "temporary",
+	): string;
 }
 
 // Helper to check if a resource is enabled
@@ -1135,6 +1139,25 @@ Content`,
 			const dotDotSlash = (packageManager as any).parseSource("../packages/agent-timers");
 			expect(dotDotSlash.type).toBe("local");
 			expect(dotDotSlash.path).toBe("../packages/agent-timers");
+		});
+	});
+
+	describe("git install paths", () => {
+		it("should reject paths outside git install roots", () => {
+			const managerWithInternals = packageManager as unknown as PackageManagerInternals;
+			const traversalSource = {
+				type: "git" as const,
+				repo: "git@evil.example:../../victim/repo",
+				host: "evil.example",
+				path: "../../victim/repo",
+				pinned: false,
+			};
+
+			for (const scope of ["user", "project", "temporary"] as const) {
+				expect(() => managerWithInternals.getGitInstallPath(traversalSource, scope)).toThrow(
+					"outside package install root",
+				);
+			}
 		});
 	});
 
