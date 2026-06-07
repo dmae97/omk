@@ -160,6 +160,7 @@ export function registerMcpDagCronScreenshotCommands(program: Command): void {
     .option("-o, --output <path>", "Output JSON file path")
     .option("-p, --parallel", "Enable intra-phase parallelism")
     .option("-r, --run <id>", "Use spec from run ID (latest)")
+    .option("--json", "Output the DAG artifact as a JSON envelope")
     .action(async (specDir, options) => {
       const { dagFromSpecCommand } = await import("../commands/dag-from-spec.js");
       const root = (await import("../util/fs.js")).getProjectRoot();
@@ -168,6 +169,7 @@ export function registerMcpDagCronScreenshotCommands(program: Command): void {
         output: options.output,
         parallel: Boolean(options.parallel),
         run: options.run,
+        json: Boolean(options.json),
       });
     });
   dag

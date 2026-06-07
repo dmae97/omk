@@ -3,8 +3,10 @@ import { join } from "path";
 import { writeFile, mkdir } from "fs/promises";
 import { getProjectRoot, pathExists, getRunPath, getRunsDir } from "../util/fs.js";
 import { header, label } from "../util/theme.js";
-import { createDag } from "../orchestration/dag.js";
+import { createDag, getExecutionWaves } from "../orchestration/dag.js";
 import type { Dag, DagNodeDefinition, DagNodeOutput, DagOutputGate } from "../orchestration/dag.js";
+import { createOmkJsonEnvelope } from "../util/json-envelope.js";
+import { emitJson } from "../util/cli-contract.js";
 
 export interface ParsedTask {
   id: string;
@@ -293,9 +295,85 @@ export async function loadSpecDag(
   return tasksToDag(tasks, { parallel: options.parallel });
 }
 
+/** Machine-readable payload carried inside the `dag` omk.contract.v1 envelope. */
+interface DagJsonData {
+  inputId: string;
+  nodes: Dag["nodes"];
+  edges: Array<{ from: string; to: string }>;
+  batches: string[][];
+  stats: { nodes: number; edges: number; batches: number };
+}
+
+/**
+ * Project the in-memory DAG artifact into the envelope `data` shape. The inner
+ * dag artifact (nodes) is preserved verbatim; edges/batches/stats are derived
+ * from the existing dependsOn graph (no new data sources).
+ */
+function buildDagJsonData(inputId: string, dag: Dag): DagJsonData {
+  const edges = dag.nodes.flatMap((node) =>
+    node.dependsOn.map((from) => ({ from, to: node.id }))
+  );
+  const batches = getExecutionWaves(dag).map((wave) => wave.map((node) => node.id));
+  return {
+    inputId,
+    nodes: dag.nodes,
+    edges,
+    batches,
+    stats: { nodes: dag.nodes.length, edges: edges.length, batches: batches.length },
+  };
+}
+
+/**
+ * JSON path for `omk dag from-spec --json`.
+ * Emits EXACTLY ONE omk.contract.v1 envelope to stdout (no banner, no ANSI) and
+ * never throws on a missing/empty tasks.md, so JSON stdout stays one envelope.
+ */
+async function emitDagFromSpecJson(
+  targetDir: string,
+  options: { output?: string; parallel?: boolean }
+): Promise<Dag> {
+  const started = Date.now();
+  let dag: Dag;
+  try {
+    dag = await loadSpecDag(targetDir, { parallel: options.parallel });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    const empty: Dag = { nodes: [] };
+    emitJson(
+      createOmkJsonEnvelope<DagJsonData>({
+        command: "dag",
+        status: "not-applicable",
+        ok: false,
+        data: buildDagJsonData(targetDir, empty),
+        warnings: [
+          { code: "RUN_ARTIFACT_MISSING", message, recoverable: true, severity: "warning" },
+        ],
+        durationMs: Date.now() - started,
+      })
+    );
+    return empty;
+  }
+
+  if (options.output) {
+    await mkdir(getRunsDir(getProjectRoot()), { recursive: true });
+    await writeFile(options.output, JSON.stringify(dag, null, 2));
+  }
+
+  emitJson(
+    createOmkJsonEnvelope<DagJsonData>({
+      command: "dag",
+      status: "passed",
+      ok: true,
+      data: buildDagJsonData(targetDir, dag),
+      durationMs: Date.now() - started,
+    })
+  );
+  return dag;
+}
+
 export async function dagFromSpecCommand(
   specDir: string,
-  options: { output?: string; parallel?: boolean; runId?: string; run?: string } = {}
+  options: { output?: string; parallel?: boolean; runId?: string; run?: string; json?: boolean } = {}
 ): Promise<Dag> {
   const root = getProjectRoot();
   let targetDir = specDir;
@@ -318,6 +396,10 @@ export async function dagFromSpecCommand(
     } else {
       targetDir = getRunPath(options.run, undefined, root);
     }
+  }
+
+  if (options.json === true || process.argv.includes("--json")) {
+    return emitDagFromSpecJson(targetDir, { output: options.output, parallel: options.parallel });
   }
 
   const dag = await loadSpecDag(targetDir, { parallel: options.parallel });

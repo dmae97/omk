@@ -9,12 +9,26 @@ import { runQualityGate } from "../mcp/quality-gate.js";
 import { readTextFile } from "../util/fs.js";
 import { getOmkResourceSettings } from "../util/resource-profile.js";
 import { defaultScopedRoleAgentFile, writeScopedAgentFile } from "../util/scoped-agent-file.js";
+import { createOmkJsonEnvelope } from "../util/json-envelope.js";
+import { emitJson } from "../util/cli-contract.js";
+import type { OmkErrorCode } from "../contracts/index.js";
 
 interface MergeOptions {
   run?: string;
   runId?: string;
   strategy?: string;
   dryRun?: boolean;
+  json?: boolean;
+}
+
+/** Machine-readable payload carried inside the `merge` omk.contract.v1 envelope. */
+interface MergeJsonData {
+  runId: string | null;
+  strategy: string;
+  dryRun: boolean;
+  merged: string | null;
+  conflicts: string[];
+  applied: number;
 }
 
 interface WorkerDiff {
@@ -37,7 +51,109 @@ interface MergeReport {
   workers: WorkerDiff[];
 }
 
+/**
+ * JSON path for `omk merge --json`.
+ * Read-only preview: resolves the run, collects worktree diffs (git diff +
+ * `git apply --check`) and selects a winner by strategy, but does NOT run the
+ * reviewer, tests, patch apply, or quality gate. Emits exactly one
+ * omk.contract.v1 envelope (no banner, no ANSI) and never calls process.exit.
+ */
+async function emitMergeJson(options: MergeOptions): Promise<void> {
+  const started = Date.now();
+  const root = getProjectRoot();
+  const strategy = (options.strategy ?? "first").trim().toLowerCase();
+  const dryRun = Boolean(options.dryRun);
+
+  const emitNotApplicable = (runId: string | null, code: OmkErrorCode, message: string): void => {
+    emitJson(
+      createOmkJsonEnvelope<MergeJsonData>({
+        command: "merge",
+        status: "not-applicable",
+        ok: false,
+        ...(runId ? { runId } : {}),
+        data: { runId, strategy, dryRun, merged: null, conflicts: [], applied: 0 },
+        warnings: [{ code, message, recoverable: true, severity: "warning" }],
+        durationMs: Date.now() - started,
+      })
+    );
+  };
+
+  if (!(await isGitRepo())) {
+    emitNotApplicable(null, "INTERNAL_ERROR", "Not a git repository.");
+    return;
+  }
+
+  const runsDir = getOmkPath("runs");
+  if (!(await pathExists(runsDir))) {
+    emitNotApplicable(null, "RUN_ARTIFACT_MISSING", "No runs found.");
+    return;
+  }
+
+  let runId = options.run ?? options.runId ?? "latest";
+  if (runId === "latest") {
+    const entries = await readdir(runsDir, { withFileTypes: true });
+    const runs = entries.filter((e) => e.isDirectory()).sort().reverse();
+    if (runs.length === 0) {
+      emitNotApplicable(null, "RUN_ARTIFACT_MISSING", "No runs found.");
+      return;
+    }
+    runId = runs[0].name;
+  }
+
+  const worktreesDir = getOmkPath(`worktrees/${runId}`);
+  if (!(await pathExists(worktreesDir))) {
+    emitNotApplicable(runId, "RUN_ARTIFACT_MISSING", "No worktrees found for run.");
+    return;
+  }
+
+  const workerNames = await readdir(worktreesDir, { withFileTypes: true }).then((e) =>
+    e.filter((d) => d.isDirectory()).map((d) => d.name)
+  );
+
+  const currentBranch = await getCurrentBranch();
+  if (!currentBranch) {
+    emitNotApplicable(runId, "INTERNAL_ERROR", "Could not determine current branch.");
+    return;
+  }
+
+  const workers: WorkerDiff[] = [];
+  for (const name of workerNames) {
+    const wtPath = join(worktreesDir, name);
+    const diffResult = await runShell("git", ["-C", wtPath, "diff", currentBranch], { timeout: 15000 });
+    if (diffResult.failed || !diffResult.stdout.trim()) continue;
+    const diff = diffResult.stdout;
+    const diffLines = diff.split("\n").length;
+    const applyCheck = await runShell("git", ["apply", "--check"], { cwd: root, input: diff, timeout: 15000 });
+    workers.push({ name, path: wtPath, diff, diffLines, canApply: !applyCheck.failed });
+  }
+
+  const winner = selectWinner(workers, strategy);
+  const data: MergeJsonData = {
+    runId,
+    strategy,
+    dryRun,
+    merged: winner?.name ?? null,
+    conflicts: workers.filter((w) => !w.canApply).map((w) => w.name),
+    applied: 0,
+  };
+  emitJson(
+    createOmkJsonEnvelope<MergeJsonData>({
+      command: "merge",
+      status: workers.length === 0 ? "not-applicable" : "dry-run",
+      ok: workers.length > 0,
+      runId,
+      data,
+      durationMs: Date.now() - started,
+    })
+  );
+}
+
 export async function mergeCommand(options: MergeOptions): Promise<void> {
+  if (options.json === true || process.argv.includes("--json")) {
+    await emitMergeJson(options);
+    return;
+  }
+
   const root = getProjectRoot();
   const strategy = (options.strategy ?? "first").trim().toLowerCase();
   const dryRun = Boolean(options.dryRun);

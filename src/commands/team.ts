@@ -10,7 +10,58 @@ import { refreshRunStateEstimate } from "../orchestration/run-state.js";
 
 import { createInteractiveRunState as createParallelRunState } from "./parallel/orchestrator.js";
 import { ensureCompletionArtifactContract } from "../orchestration/completion-artifacts.js";
-export async function teamCommand(options: { workers?: string; runId?: string } = {}): Promise<void> {
+import { createOmkJsonEnvelope } from "../util/json-envelope.js";
+import { emitJson } from "../util/cli-contract.js";
+
+/** Machine-readable payload carried inside the `team` omk.contract.v1 envelope. */
+interface TeamJsonData {
+  teamId?: string;
+  members?: Array<{ name: string; role: string; nodeId?: string }>;
+  assignments?: Array<{ nodeId: string; member: string }>;
+  statePath?: string;
+}
+
+/**
+ * JSON path for `omk team --json`.
+ * Read-only describe: reports the expected team layout for the resolved run
+ * WITHOUT spawning or attaching tmux, so stdout stays exactly one
+ * omk.contract.v1 envelope (no banner, no ANSI) and never blocks/exits.
+ */
+async function emitTeamJson(options: { workers?: string; runId?: string }): Promise<void> {
+  const started = Date.now();
+  const root = getProjectRoot();
+  const resources = await getOmkResourceSettings();
+  const workerCount = normalizeWorkerCount(options.workers, resources.maxWorkers);
+  const runId = options.runId ?? `team-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+  const statePath = getRunPath(runId, "state.json", root);
+  const expected = buildExpectedTeamRuntimeStatus("omk-team", statePath, workerCount, "starting");
+  const data: TeamJsonData = {
+    teamId: runId,
+    members: expected.windows.map((window) => ({
+      name: window.name,
+      role: window.role,
+      nodeId: window.nodeId,
+    })),
+    statePath,
+  };
+  emitJson(
+    createOmkJsonEnvelope<TeamJsonData>({
+      command: "team",
+      status: "passed",
+      ok: true,
+      runId,
+      data,
+      durationMs: Date.now() - started,
+    })
+  );
+}
+
+export async function teamCommand(options: { workers?: string; runId?: string; json?: boolean } = {}): Promise<void> {
+  if (options.json === true || process.argv.includes("--json")) {
+    await emitTeamJson(options);
+    return;
+  }
+
   const root = getProjectRoot();
   const resources = await getOmkResourceSettings();
   const workerCount = normalizeWorkerCount(options.workers, resources.maxWorkers);
