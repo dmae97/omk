@@ -80,6 +80,7 @@ export function registerWorkflowCommands(program: Command): void {
     .command("team")
     .description(t("cmd.teamDesc"))
     .option("--workers <n>", t("cmd.teamWorkersOption"), "auto")
+    .option("--json", "Output the team layout as a JSON envelope")
     .action(async (options) => {
       const globalOpts = program.opts();
       const { teamCommand } = await import("../commands/team.js");
