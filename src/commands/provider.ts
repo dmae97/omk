@@ -15,6 +15,7 @@ import {
   setProviderEnabled,
   type ProviderConfigSetInput,
 } from "../providers/model-registry.js";
+import { toProviderHealth } from "../providers/provider-health.js";
 import type { ProviderAuthMethod, ProviderId, ProviderPlanKind, ProviderProfileType, ProviderWireApi } from "../providers/types.js";
 import { maskSensitiveText } from "../util/secret-mask.js";
 import { status, label, header, style } from "../util/theme.js";
@@ -188,7 +189,7 @@ export async function providerDoctorCommand(
     const normalized = normalizeProviderId(target);
     const payload = await providerDoctorStatus(normalized === "auto" ? "kimi" : normalized);
     if (options.json) {
-      console.log(JSON.stringify(payload, null, 2));
+      console.log(JSON.stringify({ ...payload, health: toProviderHealth(payload) }, null, 2));
     } else {
       console.log(header("Provider doctor"));
       console.log(label("Provider", payload.provider));
@@ -215,13 +216,14 @@ export async function providerDoctorCommand(
         disableForRun: true,
       };
   if (options.json) {
-    console.log(JSON.stringify({
+    const deepseekDoctor = {
       ...result,
       enabled: providerStatus.enabled,
       disabledBy: providerStatus.disabledBy,
       apiKeySet: providerStatus.apiKeySet,
       apiKeySource: providerStatus.apiKeySource,
-    }, null, 2));
+    };
+    console.log(JSON.stringify({ ...deepseekDoctor, health: toProviderHealth(deepseekDoctor) }, null, 2));
   } else {
     console.log(header("Provider doctor"));
     console.log(label("Provider", "deepseek"));
