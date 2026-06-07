@@ -35,3 +35,23 @@ omk chat
 omk plan "refactor auth module"
 omk run feature-dev "add user dashboard"
 ```
+
+## Updates
+
+On startup OMK checks npm for a newer release and, when one exists, shows an
+interactive prompt (Update now / Skip this version / Remind me later). Choosing
+"Update now" runs `npm i -g open-multi-agent-kit`.
+
+- **Automatic (non-interactive) updates:** set `OMK_AUTO_UPDATE=1` (also accepts
+  `true|yes|on|always`). When OMK is outdated it self-updates on startup without
+  prompting. CI is always skipped, and `OMK_UPDATE_PROMPT=off` disables update
+  checks entirely.
+- Manual check: `omk update check` (add `--refresh` to bypass the cache).
+
+## Support the project (GitHub star)
+
+First-time users get a one-time prompt to star the repository. If the GitHub CLI
+(`gh`) is authenticated the star is applied directly; otherwise OMK prints the
+repo URL and, on a desktop session, opens it in your browser so you can star in
+one click. You can star anytime with `omk star`, check status with
+`omk star --status`, and disable the prompt with `OMK_STAR_PROMPT=off`.
