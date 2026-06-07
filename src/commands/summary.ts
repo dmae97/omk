@@ -3,6 +3,8 @@ import { join } from "path";
 import type { RunState } from "../contracts/orchestration.js";
 import { getProjectRoot, pathExists, getRunsDir, getRunPath } from "../util/fs.js";
 import { style, header, status, label } from "../util/theme.js";
+import { createOmkJsonEnvelope } from "../util/json-envelope.js";
+import { emitJson } from "../util/cli-contract.js";
 
 interface RunSummary {
   runId: string;
@@ -313,7 +315,139 @@ function generateReportMd(s: RunSummary): string {
   return lines.join("\n");
 }
 
-export async function summaryLatestCommand(): Promise<void> {
+export interface SummaryLatestCommandOptions {
+  json?: boolean;
+}
+
+type RunRollupStatus = "passed" | "failed" | "blocked" | "running" | "partial" | "no-runs";
+
+/** Machine-readable payload carried inside the `summary` omk.contract.v1 envelope. */
+interface SummaryJsonData {
+  runId: string | null;
+  status: RunRollupStatus;
+  nodes: { total: number; passed: number; failed: number };
+  successRate: number;
+  durationMs: number;
+  startedAt?: string;
+  completedAt?: string;
+  providerRoute?: {
+    attempts: number;
+    byProvider: Record<string, number>;
+    fallbacks: number;
+  };
+  evidenceRefs?: Array<{ nodeId: string; gate: string; passed: boolean }>;
+}
+
+function deriveRunRollupStatus(s: RunSummary): Exclude<RunRollupStatus, "no-runs"> {
+  if (s.failed > 0) return "failed";
+  if (s.blocked > 0) return "blocked";
+  if (s.running > 0 || s.pending > 0) return "running";
+  if (s.totalNodes > 0 && s.done === s.totalNodes) return "passed";
+  return "partial";
+}
+
+function buildSummaryJsonData(summary: RunSummary): SummaryJsonData {
+  const data: SummaryJsonData = {
+    runId: summary.runId,
+    status: deriveRunRollupStatus(summary),
+    nodes: { total: summary.totalNodes, passed: summary.done, failed: summary.failed },
+    successRate: summary.successRate,
+    durationMs: summary.durationMs,
+    startedAt: summary.startedAt,
+  };
+  if (summary.completedAt) data.completedAt = summary.completedAt;
+  if (summary.providerRouting.attempts > 0) {
+    data.providerRoute = {
+      attempts: summary.providerRouting.attempts,
+      byProvider: summary.providerRouting.byProvider,
+      fallbacks: summary.providerRouting.fallbacks.length,
+    };
+  }
+  const evidenceRefs = summary.nodes.flatMap((node) =>
+    (node.evidence ?? []).map((e) => ({ nodeId: node.id, gate: e.gate, passed: e.passed }))
+  );
+  if (evidenceRefs.length > 0) data.evidenceRefs = evidenceRefs;
+  return data;
+}
+
+function emptySummaryJsonData(runId: string | null): SummaryJsonData {
+  return {
+    runId,
+    status: "no-runs",
+    nodes: { total: 0, passed: 0, failed: 0 },
+    successRate: 0,
+    durationMs: 0,
+  };
+}
+
+/**
+ * Read-only JSON path for `omk summary --json`.
+ * Emits EXACTLY ONE omk.contract.v1 envelope to stdout (no banner, no ANSI),
+ * never calls process.exit, and never writes summary.md/report.md side effects.
+ */
+async function emitSummaryJson(): Promise<void> {
+  const started = Date.now();
+  const root = getProjectRoot();
+  const latestId = await findLatestRunId(root);
+  if (!latestId) {
+    emitJson(
+      createOmkJsonEnvelope<SummaryJsonData>({
+        command: "summary",
+        status: "not-applicable",
+        ok: false,
+        data: emptySummaryJsonData(null),
+        warnings: [
+          { code: "RUN_ARTIFACT_MISSING", message: "No runs found.", recoverable: true, severity: "warning" },
+        ],
+        durationMs: Date.now() - started,
+      })
+    );
+    return;
+  }
+
+  const state = await loadRunState(root, latestId);
+  if (!state) {
+    emitJson(
+      createOmkJsonEnvelope<SummaryJsonData>({
+        command: "summary",
+        status: "not-applicable",
+        ok: false,
+        runId: latestId,
+        data: emptySummaryJsonData(latestId),
+        warnings: [
+          {
+            code: "RUN_ARTIFACT_MISSING",
+            message: `Run state not found for ${latestId}`,
+            recoverable: true,
+            severity: "warning",
+          },
+        ],
+        durationMs: Date.now() - started,
+      })
+    );
+    return;
+  }
+
+  const summary = computeSummary(state);
+  emitJson(
+    createOmkJsonEnvelope<SummaryJsonData>({
+      command: "summary",
+      status: "passed",
+      ok: true,
+      runId: summary.runId,
+      data: buildSummaryJsonData(summary),
+      durationMs: Date.now() - started,
+    })
+  );
+}
+
+export async function summaryLatestCommand(options: SummaryLatestCommandOptions = {}): Promise<void> {
+  const jsonMode = options.json === true || process.argv.includes("--json");
+  if (jsonMode) {
+    await emitSummaryJson();
+    return;
+  }
+
   const root = await getProjectRoot();
   const latestId = await findLatestRunId(root);
   if (!latestId) {

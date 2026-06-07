@@ -281,9 +281,10 @@ export function registerBasicCommands(program: Command): void {
   program
     .command("summary")
     .description(t("cmd.summaryDesc"))
-    .action(async () => {
+    .option("--json", "Output the latest run summary as a JSON envelope")
+    .action(async (options) => {
       const { summaryLatestCommand } = await import("../commands/summary.js");
-      await summaryLatestCommand();
+      await summaryLatestCommand(options);
     });
 
   program

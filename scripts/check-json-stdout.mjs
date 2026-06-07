@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 
 const commands = [
   ["version", "--json"],
+  ["summary", "--json"],
 ];
 
 const ansiPattern = /\u001b\[[0-9;]*m/;
