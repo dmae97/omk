@@ -13,6 +13,12 @@ import {
   applyCapabilityInjectionToRouting,
   buildCapabilityInjection,
 } from "../../runtime/capability-injection.js";
+import { capabilityScopesFromRouting } from "../../orchestration/capability-routing.js";
+import {
+  decideToolAuthority,
+  type ToolOp,
+} from "../../safety/tool-authority-gate.js";
+import { resolveToolAuthorityEnforcement } from "../../runtime/tool-dispatch-contracts.js";
 import {
   compileBloatToNlp,
   type DebloatRisk,
@@ -315,6 +321,62 @@ function bootstrapProviderPolicy(bootstrap: RuntimeBootstrap): ProviderPolicy {
       return "local-llm";
     default:
       return "auto";
+  }
+}
+
+function nativeTurnRiskToToolOp(risk: string | undefined): ToolOp {
+  switch (risk) {
+    case "merge":
+      return "merge";
+    case "shell":
+      return "shell";
+    case "write":
+      return "write";
+    default:
+      return "read";
+  }
+}
+
+/**
+ * Shadow-only tool-authority observability at the live turn dispatch
+ * checkpoint. The kimi runner executes tools inside a spawned CLI, so per-tool
+ * enforcement lives in dispatchToolCallsByContract; here we only compute and
+ * record the turn-level verdict for the trace. Default output is byte-identical
+ * (emitted only under OMK_DEBUG / OMK_TOOL_AUTHORITY_TRACE); this path never
+ * blocks dispatch.
+ */
+function recordNativeTurnToolAuthority(input: {
+  node: DagNode;
+  env: Record<string, string>;
+  renderer?: CliRenderer;
+}): void {
+  const traceEnabled =
+    input.env.OMK_DEBUG === "1" ||
+    /^(1|true|yes|on)$/i.test(input.env.OMK_TOOL_AUTHORITY_TRACE ?? "");
+  if (!traceEnabled) return;
+  const routing = input.node.routing;
+  const scopes = capabilityScopesFromRouting(routing);
+  const op = nativeTurnRiskToToolOp(routing?.risk);
+  const enforce = resolveToolAuthorityEnforcement(input.env);
+  const decision = decideToolAuthority({
+    op,
+    writeAuthority: scopes.writeAuthority,
+    shellAuthority: scopes.shellAuthority,
+    approvalPolicy: nativeApprovalPolicy(
+      routing?.approvalPolicy ?? routing?.executionPrompt,
+    ),
+    sandboxMode:
+      routing?.sandboxMode === "read-only" ? "read-only" : "workspace-write",
+    tty: Boolean(process.stdout.isTTY),
+  });
+  const line =
+    `  tool-authority(${enforce ? "enforce" : "shadow"}): node=${input.node.id} ` +
+    `op=${op} decision=${decision} write=${scopes.writeAuthority} ` +
+    `shell=${scopes.shellAuthority} sandbox=${routing?.sandboxMode ?? "auto"}\n`;
+  if (input.renderer) {
+    input.renderer.emit({ type: "control:output", text: style.phosphorDim(line) });
+  } else {
+    process.stderr.write(style.phosphorDim(line));
   }
 }
 
@@ -686,6 +748,7 @@ async function executeNativeRootTurn(input: {
   const routing = input.node.routing;
   const activity = describeNativeTurnActivity(input.node);
   emitNativeTurnRoute(input);
+  recordNativeTurnToolAuthority({ node: input.node, env: input.env, renderer: input.renderer });
 
   let heartbeatPrinted = false;
   let heartbeatLineClosed = false;
@@ -866,6 +929,7 @@ async function executeNativeRootHarnessTurn(input: {
         skillNames: node.routing?.skills ?? input.skillNames,
         hookNames: node.routing?.hooks ?? input.hookNames,
       });
+      recordNativeTurnToolAuthority({ node, env: input.env, renderer: input.renderer });
     },
     onNodeComplete: (node, result) => {
       completed.push({ node, result });
