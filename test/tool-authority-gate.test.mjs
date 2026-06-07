@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import {
   decideToolAuthority,
   mapToolNameToOp,
-} from "../src/safety/tool-authority-gate.ts";
+} from "../dist/safety/tool-authority-gate.js";
 
 /**
  * Build a ToolAuthorityContext with conservative defaults, overridable per case.

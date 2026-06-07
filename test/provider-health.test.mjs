@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 // Imported directly from source: provider-health.ts only uses type imports,
 // so Node's native type-stripping loads it with no runtime dependencies.
-import { toProviderHealth } from "../src/providers/provider-health.ts";
+import { toProviderHealth } from "../dist/providers/provider-health.js";
 
 const FAILURE_KINDS = new Set([
   "none",
